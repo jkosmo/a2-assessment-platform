@@ -51,7 +51,7 @@ kriterieeditoren og instruksen deler nå kode med Rediger i stedet for å være 
 | Terskler / poengregler | redigerbar | ✅ alle fire: `mcqMinPercent`, `totalMin`, `practicalMinPercent`, `borderlineWindow` (v2.18.9). Tomt felt = ingen overstyring |
 | Gyldighet | redigerbar | ✅ `settingsValidFrom` / `settingsValidTo` |
 | Sertifiseringsnivå | redigerbar | ✅ `settingsCertLevel` |
-| **Vurderingskriterier (rubrikk)** | **redigerbar** | ✅ **flyttet hit** (v2.18.6). Sammendragsrad + sammenslått editor under lista; lagres som inline rubrikk |
+| **Vurderingskriterier (rubrikk)** | **redigerbar** | ✅ **flyttet hit** (v2.18.6), og **bare hit** (v2.18.10 — editoren i Rediger og sammendragsraden er borte). Alltid utvidet; lagres som inline rubrikk |
 | **Vurderingsinstruks (prompt)** | **redigerbar** | ✅ **flyttet hit** (v2.18.7). Ett språk om gangen, de andre flettes |
 | **Innsendingsskjema** | **redigerbar** | ✅ **flyttet hit** (v2.18.8). Første felt redigerbart (#901); øvrige bæres uendret |
 | **Skaleringsregel** | redigerbar | ✅ **praktisk vekt** flyttet hit (v2.18.8). `max_total` utledes av kriteriene og har bevisst ingen egen input |
@@ -60,6 +60,13 @@ De tre editorene var de tyngste i hele Avansert-siden. Kriterieeditoren og vurde
 **deler nå kode** med Rediger (`wireCriteriaEditor`, `buildEditorStateFromCriteriaRecord`,
 `mergeLocaleInto`) i stedet for å være en andre kopi — å bygge nye editorer ved siden av de gamle
 ville løst symptomet og lagt til problemet.
+
+**Omlegging v2.18.10.** Å flytte tre editorer hit gjorde §2 komplett, men panelet ble en haug: elleve
+rader og tre editorer uten nivåer, og kriteriene fantes fire steder fordi flyttingen bare var gjort
+halvveis — editoren ble lagt til i Innstillinger uten å bli fjernet fra Rediger. Panelet er nå fire
+blokker (**Modulen · Vurdering · Innsendingsskjema · Lagrede versjoner**) med én overskrift hver,
+kriteriene ligger ett sted og står alltid åpne, og Lagre er flyttet til etter alle innstillingene og
+før historikken. En e2e fester rekkefølgen og at kriterie-overskriften finnes nøyaktig én gang.
 
 **Rettelse etter QA 2026-08-16:** en tidligere versjon av dette dokumentet påsto «8 av 8» mens
 tabellen samtidig innrømmet at bare `mcqMinPercent` var redigerbar. Det var en overdrivelse.
@@ -139,7 +146,13 @@ ved siden av den gamle» til «den gamle kan fjernes».
 
 ## Kjente avvik som ikke er del av dette
 
-Registrert underveis, med egne saker: **#901** (flerfelts innsendingsskjema), **#902**
-(kriterielokalisering), **#903** (kurs-eierskap — akseptert og dokumentert), **#910**
-(Avansert-fallback), **#914** (engelske valideringsmeldinger), **#915** (falsk kriteriedrift ved
-gjenoppretting). **#905**, **#906**, **#912** og **#913** er løst.
+Registrert underveis, med egne saker: **#918** (samtaleflyten fyller alle tre språk med kildetittelen,
+så publiseringsgaten tror den er oversatt — #892-flaten), **#901** (flerfelts innsendingsskjema), **#903**
+(kurs-eierskap — akseptert og dokumentert), **#910** (Avansert-fallback), **#914** (engelske
+valideringsmeldinger), **#915** (falsk kriteriedrift ved gjenoppretting). **#902**, **#905**,
+**#906**, **#912** og **#913** er løst.
+
+**#902 ble løst i v2.18.10**, ikke fordi den sto for tur, men fordi omleggingen gjorde
+kriterieeditoren til det eneste stedet kriterier redigeres — og alltid åpen. Å redigere ett språk
+skrev tilbake en ren streng og slettet de to andre; eksponeringen gikk opp, ikke ned. Se
+`doc/FEATURE_SURFACE_MAP.md` punkt 21 for regelen og fella i `captureLatestCriteriaState`.

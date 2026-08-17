@@ -507,3 +507,52 @@ the reason the UI can offer the action without a scary confirmation. A restored 
 DRAFT even when its source was published; publishing stays separate and still passes the #896 S4
 translation gate. Guard: same file, "restores a published version as a draft, leaving the live
 version untouched".
+
+## 20. Innstillinger-feltene — én liste, seks lesere (#896 S3c)
+
+Hvert felt i Innstillinger må registreres tre steder for å oppføre seg riktig, og hvert av de tre
+fantes i flere kopier:
+
+| Leser | Hva som går galt uten | Kopier før v2.18.10 |
+|-------|----------------------|---------------------|
+| `stampRenderedValues` | Feltet får ingen `renderedValue`, så de to under ser det aldri som endret | 3 (én per seksjon) |
+| `captureSettingsDraftValues` / `restoreSettingsDraftValues` | Verdien nullstilles stille når panelet rendres på nytt — og panelet rendres på nytt hver gang en seksjon åpnes | 1 |
+| `hasUnsavedSettingsEdits` | Fanebytte forkaster verdien uten advarsel | 1 |
+| Selve lagringen | Verdien sendes aldri | 1 |
+
+Feilen dette produserer er **stille**: verdien står på skjermen, forsvinner ved neste re-render, og
+ingenting advarer. QA 2026-08-16 fant at de fire poengregelfeltene fra v2.18.9 var registrert i
+lagringen, men i **ingen** av de tre andre.
+
+Listen er nå én — `SETTINGS_INPUT_IDS` i `admin-content-shell.js`, gruppert etter hvilken seksjon
+som rendrer feltet — og `stampRenderedValues` / `anyFieldDirty` er de eneste leserne. **Et nytt felt
+skal legges i den listen, ikke ved siden av den.** Felt i sammenslåtte seksjoner (instruks, skjema)
+er ikke i DOM-en før seksjonen åpnes; verdiene deres ligger i `settingsDraftValues` til da, og
+`hasUnsavedSettingsEdits` sjekker begge deler.
+
+**Guard:** `test/e2e/admin-content-workspaces.spec.ts` → "every settings field survives a re-render
+and is seen by the exit guard" — den går gjennom hvert felt hver for seg, fordi en test som bare
+ser på det første feltet er grønn mens resten er stille.
+
+## 21. Lokalisert tekst redigert i ett språk — merge, aldri overskriv (#892/#902/#905)
+
+Komponeringen skriver lokaliserte felt **verbatim**. En editor som viser ett språk og sender
+tilbake det den viser, sletter derfor de to andre. Samme feil er nå gjort fire ganger i #896:
+tittel (#892), beskrivelse og sertifiseringsnivå (S3b), vurderingsinstruks (S3c) og kriterier
+(#902). `mergeLocaleInto` finnes for å gjøre den én gang.
+
+To regler som begge må holde:
+
+1. **Redigert felt flettes.** `mergeLocaleInto(lagret, redigertSpråk, nyTekst)`.
+2. **Urørt felt står uendret, byte for byte.** Å flette en uendret verdi gjør en ren streng — «ett
+   språk, ikke oversatt ennå» — om til en tolokalers map som påstår at samme tekst er gyldig i
+   begge. Det er en oversettelse ingen har gjort. `buildCriteriaRecordFromEditorState` sammenligner
+   derfor mot `localizeValueForLocale(lagret, locale)` før den fletter.
+
+Fella i kriterietilfellet: tilstanden går innom `captureLatestCriteriaState`, som bygger hvert
+element på nytt fra DOM-kortene. Den må bære `storedLabel` / `storedDescription` / `locale` videre
+fra forrige tilstand, ellers er de borte igjen på vei til lagringen — som er nøyaktig hvordan den
+rene strengen overlevde første forsøk på å fikse dette.
+
+**Guards:** e2e "editing a criterion in one language keeps the other two" og "Innstillinger edits
+the assessment instruction in one language and keeps the others".

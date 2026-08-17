@@ -2,6 +2,318 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.18.10 - 2026-08-16
+
+Omlegging av Innstillinger-panelet, etter en presis tilbakemelding fra stage: *«Vurderingskriteria
+ligger nå 4 steder … UI for instillinger er ikke systematisk, det er kun lagt til ting uten hensyn
+til konsistens.»* Begge deler stemte, og de hang sammen — hver ny editor var lagt til der det var
+plass, ikke der den hørte hjemme.
+
+**Kriteriene lå fire steder i den nye flaten. Nå ligger de ett.** Forhåndsvisning viser dem (den
+skal vise alt), mens editoren i **Rediger er fjernet** og de to dublettene i Innstillinger — en
+sammendragsrad og en editor i samme panel — er slått sammen til én. Det var den flyttingen §2
+egentlig ba om; jeg hadde gjort halvparten, lagt editoren inn i Innstillinger uten å ta den ut av
+Rediger.
+
+**Avansert-siden har fortsatt sin egen kriterieeditor.** Den forsvinner når Avansert fjernes
+(S3c-sletting), som er en egen bolk og ikke gjort her. Til da finnes kriteriene to steder:
+Innstillinger og Avansert.
+
+Kriterier genererte fra samtalen parkeres nå på sesjonsutkastet i stedet for i et editorfelt som
+ikke lenger finnes, og plukkes opp av lagringen derfra.
+
+**Kriteriene er alltid utvidet.** De var kollapset bak en «Rediger»-knapp. Produkteier:
+*«av moduler generert er det stor variasjon»* — et felt man må åpne for å vurdere, er et felt man
+ikke vurderer. Vurderingsinstruks og innsendingsskjema beholder sin knapp; de er sjeldnere.
+
+**Panelet har fått en struktur i stedet for en rekkefølge.** Fire blokker, hver med nøyaktig én
+overskrift: **Modulen** (modultype, sertifiseringsnivå, gyldighet), **Vurdering** (poenggrenser,
+praktisk vekt, kriterier, vurderingsinstruks), **Innsendingsskjema** og **Lagrede versjoner**.
+Tidligere fikk en gruppe, en underseksjon og en feltetikett samme visuelle vekt, så nivåene fantes
+bare i hodet på den som skrev dem. Sertifiseringsnivå og gyldighet lå dessuten *etter*
+poenggrensene, som om de var en del av vurderingen.
+
+**Lagre står nå etter alle innstillingene og før historikken.** Knappen lå midt i panelet, med
+felt under seg som dermed så ut til å høre til noe annet. Versjonshistorikken er en logg, ikke en
+innstilling, og hører hjemme på den andre siden av Lagre.
+
+Poenggrensene er beholdt som fire åpne rader etter produkteiers vurdering.
+
+En ny e2e fester rekkefølgen på de fire gruppene, at kriterie-overskriften finnes **nøyaktig én
+gang** i panelet, og at Lagre står mellom innsendingsskjemaet og historikken — det er
+regresjonsvernet mot at neste editor igjen legges «der det er plass». Den **måler** dessuten
+CSS-en: QA fant en ødelagt kommentar som slo ut hele grupperegelen mens testen fortsatt var grønn,
+fordi den bare så på tekst og rekkefølge.
+
+### QA-runden på denne endringen
+
+Kryssmodell-QA ga NO-GO og fant seks feil, hvorav fire var eldre enn denne endringen. Alle er
+rettet:
+
+**Kriterier lekket mellom moduler.** Innstillinger holder editorene i modulnivå-tilstand, og
+`loadModule` nullstilte den ikke. Før denne versjonen måtte man ha åpnet kriterieeditoren på modul
+A; nå står den alltid åpen, så det holdt å *se på* modul A sine innstillinger for å bære rubrikken
+hennes over til modul B — og en lagring der ville skrevet den. Fem variabler nullstilles nå ett
+sted (`resetSettingsPanelState`), fordi å nullstille fire av fem er nøyaktig feilen denne epicen
+gjentar.
+
+**De fire poengregelfeltene fra v2.18.9 var usynlige for både utkastbevaring og dirty-sjekk.** Å
+endre samlet beståttgrense og så åpne vurderingsinstruksen tilbakestilte tallet stille; å bare
+endre det feltet og bytte fane ga ingen advarsel. Årsaken var at id-listen fantes **seks steder**
+og bare to var oppdatert. Den er én nå — `SETTINGS_INPUT_IDS`, med `stampRenderedValues` og
+`anyFieldDirty` som eneste lesere. Nytt punkt 20 i `doc/FEATURE_SURFACE_MAP.md`.
+
+**#902: kriterier redigert i ett språk slettet de to andre.** Editoren viser ett språk og skrev
+tilbake en ren streng. Samme feil som tittel (#892), beskrivelse (S3b) og vurderingsinstruks
+(S3c) — fjerde gang — så `mergeLocaleInto` brukes nå også her. Et **urørt** kriterium skrives ikke
+om i det hele tatt: å flette en uendret verdi ville gjort en ren streng om til en tolokalers map
+som påstår at samme tekst er gyldig i begge, altså en oversettelse ingen har gjort. Fella var at
+`captureLatestCriteriaState` bygger hvert element på nytt fra DOM-kortene og kastet de lokaliserte
+originalene — som er akkurat hvordan den rene strengen overlevde første fiks. Punkt 21 i
+flatekartet.
+
+**Bytte til «Bare flervalg» kastet kriterie-, instruks- og vektendringer i samme lagring.** Grenen
+hoppes over for MCQ-only, så endringen forsvant — og fordi versjonsmodellen bærer *lagret* innhold
+videre, kom det gamle kriteriet tilbake når man byttet tilbake, som om ingenting var skrevet.
+Lagringen avvises nå med beskjed om å lagre eller angre først; begge deler er gjenopprettelige.
+
+**To valideringsavbrudd lot Lagre stå deaktivert.** Ugyldig samlet grense og omvendt datointervall
+viste feilmeldingen og etterlot en død knapp — man måtte laste siden på nytt for å prøve igjen.
+
+**En ødelagt CSS-kommentar** hadde slått ut hele `.settings-group`-regelen. Se over.
+
+### QA-runde 2
+
+Ny NO-GO, fire nye reelle funn — tre av dem varianter av samme lokaliseringsfeil:
+
+**`captureFromDom` var en andre kopi av `captureLatestCriteriaState`.** Da den første lærte å bære
+lokale-metadataene (#902), gjorde ikke den andre det — så **Legg til** eller **Fjern** kastet dem,
+og neste lagring skrev rene strenger igjen. Rettet ved å slette kopien, ikke ved å lappe den: to
+kopier av samme DOM-lesing er hvordan feilen oppsto.
+
+**Sertifiseringsnivå ble sammenlignet mot feil språk.** Feltet rendres med UI-språket, men
+sammenligningen brukte forhåndsvisningsspråket. Med norsk UI og engelsk forhåndsvisning ble et
+**urørt** nivå regnet som endret — og sendt som ren streng, som erstattet hele språkobjektet. To
+språk borte av å trykke Lagre uten å røre feltet. Nivået flettes nå, som alt annet lokalisert.
+
+**Kriterieeditoren fortsatte å redigere forrige språk etter språkbytte.** Tilstanden seedes bare
+når den er `null`, og språkbyttet nullstilte den ikke. Man byttet til bokmål, skrev det man trodde
+var bokmål, og det ble flettet inn i engelsk.
+
+**Kriterier redigert i Innstillinger nådde ikke utkastlagringen.** Med et utkast åpent finnes det
+ingen Lagre-knapp i Innstillinger — men editoren tar fortsatt imot endringer, og de gikk ingen
+steder. Bekreftelse av utkastet leser `sessionDraft.criteria`, så en forfatter som genererte en
+modul og deretter justerte kriteriene, lagret de **genererte** kriteriene. Stille, på hovedflyten
+for nye moduler. Endringen absorberes nå i utkastet på vei ut av fanen.
+
+**Én ting er ikke automatisk dekket.** Jeg fikk ikke skrevet en e2e for utkast-synkroniseringen som
+faktisk beviser noe — testharnessen river chat-menyen ved fanebytte, og alternativene jeg prøvde
+ville vært grønne uansett. Rettelsen står, men **må verifiseres manuelt** på stage; punktet ligger
+i `doc/pilot/STAGE_TEST_896.md`. En grønn test som ikke tester det den sier, er verre enn ingen.
+
+### QA-runde 3
+
+Åtte funn til, og **fire av dem var innført av mine egne runde-2-rettelser.** Det er rundens
+lærdom: å rette en stille datatapsfeil under tidspress er selv en kilde til stille datatapsfeil.
+
+**Min utkast-synkronisering ødela Legg til og Fjern.** Den leser DOM-en, og jeg kalte den fra
+`setState` — altså *før* kortene var tegnet på nytt. Legg til så ett kort for lite og forkastet det
+nye kriteriet; Fjern leste det fjernede kortet rett inn igjen. Synkroniseringen hører hjemme ved
+utgangene, der tilstand og DOM er enige, og er flyttet dit.
+
+**Sammenfoldede seksjoner ble ikke lagret.** `promptDirty` og `schemaDirty` leste bare levende
+DOM-elementer, så «endre instruksen → Ferdig → Lagre» ga «ingen endringer» og ingen POST. Å folde
+sammen er ikke å angre. Lesingen går nå gjennom `settingsFieldValue`, som faller tilbake på cachen
+når feltet ikke er i DOM-en.
+
+**Og cachen slettet seg selv.** `captureSettingsDraftValues` erstattet hele cachen med det som lå
+på skjermen, så en endring i en sammenfoldet seksjon forsvant idet man åpnet nabo-seksjonen. Den
+fletter nå, og fjerner bare en oppføring når feltet er synlig og faktisk tilbakestilt.
+
+**Innstillinger var utilgjengelig i hovedflyten for ny modul.** Flyten setter `selectedModuleId` og
+`sessionDraft`, men laster aldri `bundle` — og panelet nekter uten. Før S3c kostet det ingenting;
+nå ligger kriteriene *bare* der, så «opprett modul → se over kriteriene → juster → lagre» endte på
+«Last inn en modul for å se innstillingene». Modulen hentes nå inn rett etter opprettelsen.
+
+**«Regenerer fra plan» var en død knapp.** Den leste `#previewEditTaskText` og
+`#previewEditGuidanceText` — felt i Rediger-skjemaet, som ikke finnes når Innstillinger er åpen.
+Etter at kriterieeditoren forsvant fra Rediger var dette den eneste Regenerer-knappen igjen, og
+hvert klikk tok «mangler oppgavetekst»-varselet uten å kalle tjenesten. Den bruker nå skjemaet når
+det er åpent, ellers utkastet, ellers det lagrede.
+
+**Kriterier generert i bakgrunnen ble usynlige.** Gikk man inn i Innstillinger mens genereringen
+løp, seedet panelet en tom liste — og seedingen skjer bare én gang. Panelet fortsatte å vise «ingen
+kriterier» over et utkast som hadde dem, og ville lagret den tomheten.
+
+**Etterkontrollen av lagringen løy.** Sertifiseringsnivået er nå et språkobjekt, men kontrollen
+sammenlignet det mot en lokalisert streng — aldri like, så enhver vellykket endring meldte «lagret,
+men visningen kan være utdatert».
+
+### QA-runde 4
+
+Åtte funn til, tre av dem mine fra runde 3. Mønsteret gjentar seg: **hver rettelse av en stille
+datatapsfeil har selv innført én.** Syv er rettet, ett er skilt ut som egen sak.
+
+**Min tilbakestilling ved fullført generering slettet manuelle endringer.** Runde 3 lærte panelet å
+vise kriterier som ankom i bakgrunnen — men den nullstilte editoren *ubetinget*, så en forfatter som
+hadde lagt til eller endret et kriterium mens genereringen løp, mistet det. Én stille tapsfeil byttet
+mot en annen. Nå vinner forfatterens arbeid: tilbakestilling skjer bare når editoren er ren.
+
+**`attachBundleForNewModule` hoppet over nullstillingen.** `loadModule` var det eneste stedet som
+tømte panelstaten, og runde 3 la inn en sti som med vilje går utenom. Å se på modul A sine
+innstillinger, gå til tomt lerret og opprette modul B viste da A sine kriterier på B — og å forlate
+fanen synkroniserte dem inn i B sitt utkast.
+
+**Og den nådde bare én av tre opprettelsesstier.** MCQ-only og ekstern-LLM-import manglet den. Klassisk
+«riktig fiks, ufullstendig flate» — nøyaktig klassen `doc/FEATURE_SURFACE_MAP.md` finnes for.
+
+**Regenerering merket teksten med feil språk.** Forespørselen ba om forhåndsvisningsspråket, mens
+resultatet ble merket med UI-språket. Engelsk forhåndsvisning og norsk UI lagret engelske kriterier
+som norske. Én variabel mater nå begge, så de ikke kan gli fra hverandre igjen.
+
+**Samme feil i søsterstien.** Bakgrunnsgenereringen lagret rene strenger, som kontrakten leser som
+bokmål — så engelsk UI arkiverte engelske kriterier som norske, og en senere engelsk redigering ga
+et tospråks-kart der den norske siden allerede var engelsk tekst. `llmCriteriaArrayToStorageRecord`
+krever nå språket den ble generert for.
+
+**Legg til → fjern → legg til ga duplikate ID-er.** ID-en kom fra listens lengde, og lista krymper.
+`Object.fromEntries` beholder siste oppføring per nøkkel, så ett av to nye kriterier forsvant ved
+lagring. Teller som bare går oppover.
+
+**MCQ-only viste en instruks-editor lagringen alltid kastet.** Å endre instruksen på en
+flervalgs-modul ga en ny, identisk versjon og grønn bekreftelse, med endringen ingen steder.
+Seksjonen skjules nå, slik kriterieeditoren allerede gjorde: kan ikke lagringen bære det, skal det
+ikke tilbys.
+
+**Ikke rettet her: #918.** Samtaleflyten fyller alle tre språk med samme kildetittel, så
+publiseringsgaten tror tittelen er oversatt. Ekte feil, men den hører til #892 sin flate og ville
+utvidet en allerede stor diff. Registrert som egen sak.
+
+### QA-runde 5
+
+Syv funn, og igjen var flere mine fra runde 4. **Den verste var en ren `ReferenceError`:** jeg endret
+drift-forespørselen til å bruke `requestedLocale` uten å deklarere variabelen i den funksjonen — den
+fantes bare i regenereringen. «Vis hva som endres» kastet dermed hver gang, og feilen ble fanget som
+en generatorfeil, så handlingen var død uten å se død ut. Det er den typen feil et søk-og-erstatt gir
+når man ikke leser hvert treffsted.
+
+**Lokaliserte sertifiseringsnivåer brøt en serverkontrakt.** Fra runde 2 kan nivået være et
+språkobjekt, men alle `generate/*`-skjemaene krever enumverdien `basic | intermediate | advanced`.
+Fem kallsteder sendte objektet rått → 400, og ingen kriterier generert. Alle fem går nå gjennom
+`certificationLevelForGeneration()`, som plukker ut en gyldig enumverdi.
+
+**Lokaliserte kriterier brøt drift-diffen.** Den sammenlignet og viste med `String(...)`, som gir
+`[object Object]` for et hvilket som helst språkobjekt — så to *forskjellige* forslag ble like, en
+ren tekstendring ble klassifisert som «uendret», og «godta valgte» utelot den. Diffen lokaliserer nå
+før den sammenligner og viser.
+
+**Kriterie-ID-telleren nullstilles ved sidelasting.** Runde 4 byttet lengdebasert ID mot en teller;
+runde 5 påpekte at telleren starter på null igjen etter reload, så en rubrikk som allerede inneholder
+`new_criterion_1` får den utdelt på nytt. ID-en sjekkes nå mot tilstanden.
+
+**«Forkast» forkastet ikke.** Cachen for sammenfoldede seksjoner ble ikke tømt, så en forkastet
+instruks kom tilbake neste gang seksjonen ble åpnet. Verre ved språkbytte: den engelske cacheverdien
+ble lagt over det norske feltet, og neste lagring kunne arkivere engelsk tekst som `nb`.
+
+**Urørte søskenfelt ble merket som oversatt.** En seksjon lagres som en enhet, så å endre
+systeminstruksen kjørte lokale-fletting over brukerinstruksen også — og gjorde en lagret ren streng
+(«ett språk, ikke oversatt») om til et tospråks-kart som påsto at samme tekst var gyldig engelsk.
+Samme regel som kriteriene allerede følger: bare det som faktisk er endret skrives om.
+
+### Sertifiseringsnivå er en fast skala, ikke oversettbar tekst
+
+Produkteier, 2026-08-17: *«Nivå er ment som en fast skala enkel→medium→vanskelig. I utgangspunktet
+kunne det vært lagret som 1, 2 og 3. Med faste oversettelser til språk. Dette er ikke noe som bør
+oversettes modul for modul.»*
+
+**Det jeg gjorde i runde 2 var feil modell, ikke bare feil format.** QA rapporterte at et *urørt*
+nivå ble overskrevet, og den faktiske årsaken var at sammenligningen leste et annet språk enn det
+som ble vist. Bare den ene linjen trengte fiks. Jeg la i tillegg inn per-språk-fletting, som ga
+verdier som `{"en-GB":"advanced","nb":"basic"}` — altså «modulen er advanced på engelsk og basic på
+norsk». Det er ikke en oversettelse, det er selvmotsigende data om vanskelighetsgrad. Og det brøt
+`generate/*`-endepunktene, som validerer en enum: fem kallsteder sendte objektet rått og fikk 400.
+
+Rullet tilbake. Nivået lagres som **én verdi**, og de tre etikettene oversettes én gang via de
+`shell.certLevel.*`-nøklene som allerede fantes. Feltet er nå en `<select>` med de tre trinnene i
+stedet for fritekst — det var fritekst, i et felt serveren andre steder krever er én av tre verdier.
+Eldre data utenfor skalaen (moduler ble tidligere invitert til å skrive «for eksempel foundation»)
+vises som sitt eget valg, så ingenting skrives om uten at forfatteren velger noe annet.
+
+`certificationLevelForGeneration()` fra runde 5 var en oversetter mellom to modeller som ikke burde
+vært to. Den står igjen som ren lesing av eldre data.
+
+### QA-runde 6
+
+Ni funn, tre av dem mine. Rettet:
+
+**«Forkast» beholdt kriteriene likevel.** Kriterieendringer absorberes i utkastet mens de gjøres, så
+å tømme panelstaten lot dem bli liggende i utkastet — de kom tilbake og ble lagret, etter at
+forfatteren hadde bekreftet forkasting. Utkastets kriterier settes nå tilbake til det de var da
+panelet ble åpnet.
+
+**Synkroniseringen leste DOM-en til feil tid — igjen.** Runde 3 la den i `setState` (før tegning),
+runde 4 fjernet den derfra, og da forsvant Legg til/Fjern fra utkastet helt. Den ligger nå etter
+tegningen og på `change`, som er de to øyeblikkene DOM og tilstand er enige.
+
+**To generatorsvar kunne merkes med feil språk** hvis forfatteren byttet språk mens forespørselen
+gikk. Språket fanges nå før kallet.
+
+**Regenerering slettet de andre språkene.** `storedLabel: null` fortalte lagringen «ingenting å
+flette mot», så å regenerere med engelsk forhåndsvisning beholdt engelsk og slettet nb og nn — stikk
+i strid med det stage-planen lover. Når generatoren gjenbruker en eksisterende ID, flettes det nå
+mot den lagrede verdien.
+
+**Siste kriterium kunne ikke fjernes.** En tom liste bygger `null`, som alle lagringsstier leser som
+«ingen endring» — så slettingen forsvant og det gamle kriteriet kom tilbake, eller Lagre sa «ingen
+endringer». En rubrikk trenger minst ett kriterium; det sies nå i stedet for å ta imot en handling
+som ikke kan gjennomføres.
+
+**Reload på `?tab=settings` viste «Last inn en modul».** Fanen var riktig valgt, men panelet var
+tegnet før modulen kom og ble aldri tegnet på nytt. Testen sjekket bare at fanen var valgt — den
+måler nå innholdet.
+
+**Ikke rettet:** drift-dialogens «godta forslag» har samme manglende språkfletting som regenerering
+hadde. Den ligger i #450-koden, ikke i det jeg har lagt om, og jeg utvider ikke diffen mer nå.
+
+### QA-runde 7 — og en forenkling
+
+Syv funn, fem av dem mine. **Tre kom fra samme linje**, og det er rundens egentlige lærdom:
+synkroniseringen til utkastet flyttet også dirty-baselinen. Da ble spørsmålet «har forfatteren
+endret noe?» alltid besvart med «nei», og tre uavhengige ting gikk galt av det — bakgrunnsgenerering
+overskrev manuelle endringer, språkbytte rullet dem tilbake, og ingen advarsel ble vist.
+
+Maskineriet hadde vokst til fire samvirkende flagg. I stedet for en fjerde lapp er de to spørsmålene
+skilt fra hverandre:
+
+- `settingsCriteriaEdited()` — har forfatteren endret noe siden panelet ble åpnet? Baselinen står
+  stille, så svaret er stabilt.
+- `hasUnsavedCriteriaEdits()` — finnes det arbeid et fane- eller språkbytte ville **ødelagt**? Bare
+  når det ikke finnes et utkast; med utkast absorberes endringene, og dialogen sier nettopp det.
+
+Øvrige funn:
+
+**Kriterier lekket mellom moduler — igjen.** `settingsCriteriaDraftBaseline`, som jeg innførte i
+runde 6, ble ikke nullstilt ved modulbytte. Et senere språkbytte kunne da skrive forrige moduls
+kriterier inn i det nye utkastet, eller slette dem.
+
+**En vist standardverdi ble en ekte sperre.** MCQ-terskelen viste `70` når ingenting var lagret, og
+lagringen skrev tallet inn for alvor. Å endre en gyldighetsdato på en modul uten `assessmentPolicy`
+ga den dermed en MCQ-grense på 70 — en kandidat med god totalscore, men 69 % på flervalg, kunne
+stryke på en modul som ikke hadde den regelen dagen før. Feltet er nå tomt = «ikke satt», som de tre
+andre poengreglene. Det var det siste feltet som oppførte seg annerledes enn naboene sine.
+
+**«Ikke satt» var en handling som alltid feilet.** Valget sendte `certificationLevel: null`, og
+skjemaet tar streng eller kart — ikke null. (`description` rett ved siden av er `.nullable()` og kan
+tømmes; dette feltet er det ikke, og å gjøre det til det er en backend-endring som ikke hører hjemme
+her.) Valget tilbys nå bare når nivået allerede er tomt.
+
+**Regenerering brukte lagret nivå, ikke det valgte.** Rettet — den leser panelet når det står der.
+
+**Ikke rettet: [#920](https://github.com/jkosmo/a2-assessment-platform/issues/920).** §7 krever samme
+advarsel ved språkbytte som ved fanebytte, men vakten dekker bare Innstillinger — et åpent
+redigeringsskjema i Rediger rendres på nytt uten spørsmål. Eldre avvik i Rediger-flaten, og en
+eksisterende e2e fester dagens oppførsel, så rettelsen må ta testen med seg.
+
 ## 2.18.9 - 2026-08-16
 
 QA på S3c. **Rundens viktigste funn var at jeg overdrev:** v2.18.8 sa «§2 er ferdig, alle åtte

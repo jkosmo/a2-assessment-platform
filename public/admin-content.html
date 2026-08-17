@@ -386,10 +386,32 @@
          field does not stretch across the panel. */
       .settings-input { font-family: inherit; font-size: 14px; padding: 4px 8px; border: 1px solid var(--color-border-soft); border-radius: var(--radius-card); background: #fff; max-width: 320px; }
       input.settings-input[type="number"] { max-width: 90px; }
-      /* #896 S3c: the criteria editor lives in Innstillinger now, collapsed by default. Same
-         section rhythm as the version history below it, so the panel reads as one list of
-         settings rather than three unrelated widgets. */
+      /* #896 S3c: four levels, and only four. A group title (Modulen, Vurdering,
+         Innsendingsskjema, Versjonshistorikk) opens a top-level block; a subsection title
+         (Vurderingskriterier, Vurderingsinstruks) sits one step in, under Vurdering. Reported
+         from stage as "UI for instillinger er ikke systematisk" — before this, the same visual
+         weight was used for a group, a subsection and a field label alike.
+
+         A group title carries no rule of its own: half of them share a flex row with a toggle
+         button, where an underline would stop short of the button and read as a mistake. The
+         separator is the block's own border-top, which every top-level block already has. */
+      .settings-group { margin-top: var(--space-3); border-top: 1px solid var(--color-border-soft); padding-top: var(--space-2); }
+      .settings-group:first-child { margin-top: 0; border-top: 0; padding-top: 0; }
+      .settings-group-title { font-size: 13px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase;
+        color: var(--color-meta); margin: 0 0 var(--space-1); }
+      .settings-subsection-title { font-size: 14px; font-weight: 600; margin: 0; }
+      /* One step in, so a subsection of Vurdering cannot be mistaken for a fifth group. The rule
+         is on the left rather than the top: it marks containment, which is what is being said. */
+      .settings-group > .settings-criteria-section { padding-left: var(--space-2); border-left: 2px solid var(--color-border-soft); }
+      /* Lagre closes the settings and opens nothing. Against the heading above it, it read as a
+         button belonging to the submission form. */
+      #settingsSave { margin: var(--space-3) 0; }
+      /* #896 S3c: the criteria editor lives in Innstillinger now. Same section rhythm as the
+         version history below it, so the panel reads as one list of settings rather than three
+         unrelated widgets. Inside a group the rule above already separates the block, so the
+         subsections use spacing rather than a second border. */
       .settings-criteria-section { margin-top: var(--space-3); border-top: 1px solid var(--color-border-soft); padding-top: var(--space-2); }
+      .settings-group .settings-criteria-section { border-top: 0; padding-top: 0; }
       .settings-criteria-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
       .settings-criteria-toggle { width: auto; font-size: 12px; padding: 4px 10px; }
       .settings-criteria-editor { margin-top: var(--space-2); }
@@ -400,7 +422,6 @@
       /* #896 S5: version history. Each row is one saved version; the badges say which one is live
          and which one is loaded, so "Restore" never has to be guessed at. */
       .version-history { margin-top: var(--space-3); border-top: 1px solid var(--color-border-soft); padding-top: var(--space-2); }
-      .version-history-heading { font-size: 14px; margin: 0 0 4px; }
       .version-list { list-style: none; margin: var(--space-1) 0 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
       .version-item { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; font-size: 13px; padding: 6px 8px; border: 1px solid var(--color-border-soft); border-radius: var(--radius-card); }
       .version-no { font-weight: 600; }

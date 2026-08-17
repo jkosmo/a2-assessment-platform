@@ -19,12 +19,72 @@ Test i denne rekkefølgen — hvert punkt bygger på det forrige.
 - [ ] Bytt modultype i Innstillinger og tilbake igjen. Begge veier skal være mulige — det er
       historikken, ikke gjeldende versjon, som avgjør hva som tilbys.
 
+## 1a · Innstillinger er lagt om (v2.18.10) — nytt siden forrige runde
+
+Panelet var «kun lagt til ting uten hensyn til konsistens». Det er nå fire blokker i fast
+rekkefølge. Se på det før du tester noe:
+
+- [ ] Innstillinger har **fire overskrifter**: Modulen · Vurdering · Innsendingsskjema · Lagrede
+      versjoner. Hver ting står under den den hører til — sertifiseringsnivå og gyldighet under
+      *Modulen*, ikke sammen med poenggrensene.
+- [ ] **Lagre står etter alle innstillingene og før historikken.** Ingen innstillingsfelt under
+      knappen.
+- [ ] Kriterier og vurderingsinstruks er **underseksjoner av Vurdering** — visuelt ett hakk inn,
+      ikke sidestilt med de fire overskriftene.
+- [ ] Se på det ved **normal bredde og 200 % zoom**. Hierarkiet skal holde.
+- [ ] **Kriteriene finnes bare ett sted i den nye flaten.** De vises i Forhåndsvisning og
+      redigeres i Innstillinger — ikke lenger i Rediger.
+- [ ] Skriv `101` i samlet beståttgrense og lagre → feilmelding. **Rett tallet og lagre igjen** —
+      knappen skal fortsatt virke. Samme med sluttdato før startdato.
+
 ## 1b · Innstillinger er nå komplett (S3c) — nytt siden forrige runde
 
 Alle åtte feltene spesifikasjonen krever er redigerbare her. Tre av dem er nye:
 
-- [ ] **Kriterier.** «Endre kriterier» åpner editoren. Endre et navn, juster en vekt, lagre.
-      Kontroller at endringen står etter reload — og at totalvekten oppdateres mens du drar.
+- [ ] **Kriterier.** Editoren står **alltid åpen** — det finnes ingen «Endre kriterier»-knapp
+      lenger (v2.18.10). Endre et navn, juster en vekt, lagre. Kontroller at endringen står etter
+      reload — og at totalvekten oppdateres mens du drar.
+- [ ] **Kriterier på ett språk.** Bruk en modul med ulik kriterietekst på en-GB, nb og nn. Endre
+      bare ett språk og lagre. De to andre skal være **byte for byte uendret** (#902). Et
+      kriterium du ikke rørte skal heller ikke skrives om.
+- [ ] **Bytt til «Bare flervalg» med en ulagret kriterieendring.** Du skal få beskjed om å lagre
+      eller angre først — ikke en lagring som stille kaster endringen.
+- [ ] **Legg til / fjern et kriterium på en flerspråklig modul**, lagre, og kontroller at de
+      kriteriene du *ikke* rørte har alle tre språk i behold. (Legg til/Fjern bygger alle kortene
+      på nytt fra skjermen; det var her språkene forsvant.)
+- [ ] **Bytt UI-språk mens Innstillinger er åpen**, rediger så et kriterium og lagre. Teksten skal
+      havne i språket du faktisk står i — ikke i det forrige.
+- [ ] **Trykk Lagre uten å røre sertifiseringsnivået** på en modul som har nivået på flere språk,
+      med UI-språk og forhåndsvisningsspråk satt **ulikt**. Nivået skal være uendret på alle språk
+      etterpå.
+- [ ] **⚠️ Ikke dekket av automatiske tester — må testes her.** Generer eller revider en modul slik
+      at du har et **ulagret utkast**. Gå til Innstillinger (der finnes ingen Lagre-knapp da),
+      juster et kriterium, **legg til ett og fjern ett**, gå tilbake til Rediger og lagre utkastet.
+      Alt du gjorde skal være med — ikke de opprinnelig genererte kriteriene. Dette var stille
+      datatap på hovedflyten for nye moduler, og rettelsen er ikke festet av en e2e.
+- [ ] **⚠️ Ny modul, hele veien.** Opprett en modul gjennom samtaleflyten. Mens kriteriene fortsatt
+      genereres: åpne **Innstillinger**. Den skal vise panelet, ikke «Last inn en modul». Bli
+      stående til genereringen er ferdig og kontroller at kriteriene **dukker opp** der uten at du
+      laster siden på nytt. (Merk: fanen får fortsatt ingen markering — §6 gjenstår.)
+- [ ] **«Regenerer fra plan»** i Innstillinger. Knappen var død etter at kriterieeditoren forsvant
+      fra Rediger — den leste felter som ikke lenger finnes. Den skal nå faktisk kalle tjenesten.
+- [ ] **Endre sertifiseringsnivå og lagre.** Du skal få en vanlig grønn bekreftelse, ikke
+      «lagret, men visningen kan være utdatert».
+- [ ] **Legg til → fjern → legg til** to nye kriterier i samme økt, og lagre. **Begge** skal være
+      der etter reload (de fikk samme interne ID før og overskrev hverandre).
+- [ ] **En «Bare flervalg»-modul skal ikke ha vurderingsinstruks i Innstillinger.** Den ble vist
+      før, men lagringen kastet endringen og meldte likevel grønt.
+- [ ] **Se på modul A sine innstillinger → gå til tomt lerret → opprett modul B** → åpne
+      Innstillinger. B skal vise sine egne kriterier, ikke A sine.
+- [ ] **Opprett en MCQ-only-modul, og importer et ekstern-LLM-utkast.** Begge skal vise
+      Innstillinger før første lagring, ikke «Last inn en modul».
+- [ ] **Sett UI-språk og forhåndsvisningsspråk ulikt, kjør «Regenerer fra plan», lagre og
+      reload.** Kriteriene skal ligge under **forhåndsvisningsspråket** — det er det som ble
+      generert — og de andre språkene skal være urørt.
+
+> **Kjent, ikke rettet i denne runden ([#918](https://github.com/jkosmo/a2-assessment-platform/issues/918)):**
+> moduler opprettet gjennom samtalen får kildetittelen kopiert inn i alle tre språk, så
+> publiseringsgaten ikke ser at tittelen mangler oversettelse. Rapporter det ikke som nytt.
 - [ ] **Vurderingsinstruks.** «Endre instruks». Den viser **ett språk** (ditt UI-språk) og sier
       det. Endre systeminstruksen, lagre, bytt UI-språk og kontroller at **de to andre språkene er
       urørt**. Dette er det viktigste punktet i hele seksjonen — samme feil er gjort tre ganger før.

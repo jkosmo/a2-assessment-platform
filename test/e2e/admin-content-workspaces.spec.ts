@@ -193,11 +193,10 @@ test.describe("admin content browser coverage", () => {
     await page.goto("/admin-content/module/module-1/conversation");
     await page.locator("#tabSettings").click();
 
-    // Collapsed by default — a glance costs nothing.
-    await expect(page.locator("#settingsCriteriaEditor")).toBeHidden();
-    await expect(page.locator("#settingsCriteriaToggle")).toHaveAttribute("aria-expanded", "false");
-
-    await page.locator("#settingsCriteriaToggle").click();
+    // #896 S3c: expanded on arrival, with no toggle at all. Criteria vary enough between
+    // generated modules that the author needs to see them, not be told they exist.
+    await expect(page.locator("#settingsCriteriaEditor")).toBeVisible();
+    await expect(page.locator("#settingsCriteriaToggle")).toHaveCount(0);
     await expect(page.locator("#settingsCriteriaEditor .vk-card")).toHaveCount(2);
 
     await page.locator("#settingsCriteriaEditor .vk-label").first().fill("Klarhet");
@@ -209,7 +208,10 @@ test.describe("admin content browser coverage", () => {
     expect(savedBody.rubricVersionId).toBeUndefined();
     expect(savedBody.rubric?.criteria).toBeTruthy();
     const labels = Object.values(savedBody.rubric.criteria).map((c: any) => c.label);
-    expect(labels).toContain("Klarhet");
+    // #902: edited in en-GB, so the edit lands in en-GB and the stored bare string stays where
+    // the locale contract reads it — nb. The untouched criterion is not rewritten at all.
+    expect(labels).toContainEqual({ "en-GB": "Klarhet", nb: "Clarity" });
+    expect(labels).toContain("Depth");
     // The scaling rule keeps its practical weight and recomputes the total from the criteria.
     expect(savedBody.rubric.scalingRule.practical_weight).toBe(70);
     expect(savedBody.rubric.scalingRule.max_total).toBe(10);
@@ -389,16 +391,17 @@ test.describe("admin content browser coverage", () => {
     await page.goto("/admin-content/module/module-1/conversation");
     await page.locator("#tabSettings").click();
 
-    await page.locator("#settingsCertLevel").fill("advanced");
+    await page.locator("#settingsCertLevel").selectOption("advanced");
     await page.locator("#settingsValidFrom").fill("2027-01-01");
 
-    // Any section will do — all three re-render the panel.
-    await page.locator("#settingsCriteriaToggle").click();
+    // Either collapsible section will do — both re-render the whole panel. (Criteria are always
+    // expanded since S3c, so the prompt section is the one with a toggle left.)
+    await page.locator("#settingsPromptToggle").click();
     await expect(page.locator("#settingsCertLevel")).toHaveValue("advanced");
     await expect(page.locator("#settingsValidFrom")).toHaveValue("2027-01-01");
 
     // And collapsing it again does not revert them either.
-    await page.locator("#settingsCriteriaToggle").click();
+    await page.locator("#settingsPromptToggle").click();
     await expect(page.locator("#settingsCertLevel")).toHaveValue("advanced");
   });
 
@@ -500,7 +503,6 @@ test.describe("admin content browser coverage", () => {
 
     await page.goto("/admin-content/module/module-1/conversation");
     await page.locator("#tabSettings").click();
-    await page.locator("#settingsCriteriaToggle").click();
     await page.locator("#settingsCriteriaEditor .vk-label").first().fill("Endret kriterium");
 
     // Criteria are settings work too. Leaving without saving must warn, or the edit is gone —
@@ -509,6 +511,475 @@ test.describe("admin content browser coverage", () => {
     await expect(page.locator("#dialogUnsavedTabSwitch")).toBeVisible();
     await page.locator("#tabSwitchStay").click();
     await expect(page.locator("#settingsCriteriaEditor .vk-label").first()).toHaveValue("Endret kriterium");
+  });
+
+  // QA 2026-08-16: switching to MCQ-only skips the whole rubric/prompt branch, so a criteria edit
+  // made in the same save vanished — and switching back showed the OLD criteria, so it looked like
+  // the edit had never been typed. Refused rather than guessed.
+  test("switching to MCQ-only refuses to also discard an unsaved criteria edit", async ({ page }) => {
+    let saveCalled = false;
+    const moduleExport = buildMockModuleExport({
+      id: "module-1",
+      title: "Trade unions",
+      moduleVersionId: "module-1-version-1",
+      mcqQuestions: [
+        {
+          stem: localizedText("Question 1"),
+          options: [localizedText("Option A"), localizedText("Option B")],
+          correctAnswer: localizedText("Option B"),
+          rationale: localizedText("Rationale"),
+        },
+      ],
+    });
+    moduleExport.selectedConfiguration.rubricVersion = {
+      id: "rubric-1",
+      versionNo: 1,
+      criteria: { clarity: { label: "Clarity", description: "", maxScore: 5, weight: 1, candidateVisible: true } },
+      scalingRule: { max_total: 5, practical_weight: 70 },
+    };
+
+    await mockCommonApis(page, {
+      modules: [{ id: "module-1", title: "Trade unions" }],
+      moduleExports: { "module-1": moduleExport },
+    });
+    await page.route("**/api/admin/content/modules/module-1/versions", async (route) => {
+      saveCalled = true;
+      await route.fulfill({ status: 201, contentType: "application/json", body: JSON.stringify({ moduleVersion: { id: "v2", versionNo: 2 } }) });
+    });
+
+    await page.goto("/admin-content/module/module-1/conversation");
+    await page.locator("#tabSettings").click();
+    await page.locator("#settingsCriteriaEditor .vk-label").first().fill("Endret kriterium");
+    await page.locator("#settingsModuleType").selectOption("MCQ_ONLY");
+    await page.locator("#settingsSave").click();
+
+    await expect(page.getByText(/Lagre endringene i kriterier|Save your criteria/).first()).toBeVisible();
+    expect(saveCalled).toBe(false);
+    // The edit is still on screen, and Lagre still works — nothing has to be retyped.
+    await expect(page.locator("#settingsCriteriaEditor .vk-label").first()).toHaveValue("Endret kriterium");
+    await expect(page.locator("#settingsSave")).toBeEnabled();
+  });
+
+  // QA 2026-08-16: the four pass-rule fields added in v2.18.9 were missing from the draft
+  // preservation AND the dirty check — the id list lived in six places and only two were updated.
+  // This pins every field in the panel at once, so the next one added fails here rather than on
+  // stage.
+  test("every settings field survives a re-render and is seen by the exit guard", async ({ page }) => {
+    const moduleExport = buildMockModuleExport({
+      id: "module-1",
+      title: "Trade unions",
+      moduleVersionId: "module-1-version-1",
+    });
+    moduleExport.selectedConfiguration.moduleVersion.assessmentPolicy = {
+      passRules: { totalMin: 65, mcqMinPercent: 70, practicalMinPercent: 50, borderlineWindow: { min: 60, max: 64 } },
+    };
+
+    await mockCommonApis(page, {
+      modules: [{ id: "module-1", title: "Trade unions" }],
+      moduleExports: { "module-1": moduleExport },
+    });
+
+    await page.goto("/admin-content/module/module-1/conversation");
+    await page.locator("#tabSettings").click();
+
+    const edits: Record<string, string> = {
+      settingsCertLevel: "advanced",
+      settingsValidFrom: "2027-01-01",
+      settingsValidTo: "2027-12-31",
+      settingsMcqMinPercent: "75",
+      settingsTotalMin: "70",
+      settingsPracticalMin: "55",
+      settingsBorderlineMin: "66",
+      settingsBorderlineMax: "69",
+      settingsPracticalWeight: "60",
+    };
+    const originals: Record<string, string> = {};
+    for (const id of Object.keys(edits)) {
+      originals[id] = await page.locator(`#${id}`).inputValue();
+    }
+
+    // settingsCertLevel is a <select> (the level is a fixed scale), the rest are inputs.
+    const setField = async (id: string, value: string) => {
+      if (id === "settingsCertLevel") await page.locator(`#${id}`).selectOption(value);
+      else await page.locator(`#${id}`).fill(value);
+    };
+    for (const [id, value] of Object.entries(edits)) {
+      await setField(id, value);
+    }
+
+    // Expanding a section rebuilds the whole panel from the bundle.
+    await page.locator("#settingsPromptToggle").click();
+    for (const [id, value] of Object.entries(edits)) {
+      await expect(page.locator(`#${id}`), `${id} reverted on re-render`).toHaveValue(value);
+    }
+
+    // And each one on its own must be enough to trigger the unsaved-changes guard. Checked one at
+    // a time, because a check that only looks at the first field passes while the rest are silent.
+    // Between fields the value is put back, which is what makes the panel clean again.
+    for (const id of Object.keys(edits)) {
+      await setField(id, originals[id]);
+    }
+    await expect(page.locator("#settingsCertLevel")).toHaveValue(originals.settingsCertLevel);
+
+    for (const id of Object.keys(edits)) {
+      await setField(id, edits[id]);
+      await page.locator("#tabEdit").click();
+      await expect(page.locator("#dialogUnsavedTabSwitch"), `${id} did not trigger the exit guard`).toBeVisible();
+      await page.locator("#tabSwitchStay").click();
+      await setField(id, originals[id]);
+    }
+  });
+
+  // #902: the criteria editor shows one language and used to write a bare string back, deleting
+  // the other two. It is now the ONLY place criteria are edited and it is always open, so the
+  // exposure went up rather than down. Same merge rule as the title, description and instruction.
+  test("editing a criterion in one language keeps the other two", async ({ page }) => {
+    let savedBody: any = null;
+    const moduleExport = buildMockModuleExport({
+      id: "module-1",
+      title: "Trade unions",
+      moduleVersionId: "module-1-version-1",
+    });
+    moduleExport.selectedConfiguration.rubricVersion = {
+      id: "rubric-1",
+      versionNo: 1,
+      criteria: {
+        evidence: {
+          label: { "en-GB": "Evidence", nb: "Dokumentasjon", nn: "Dokumentasjon" },
+          description: { "en-GB": "Cites sources", nb: "Viser til kilder", nn: "Viser til kjelder" },
+          maxScore: 5,
+          weight: 1,
+          candidateVisible: true,
+        },
+      },
+      scalingRule: { max_total: 5, practical_weight: 70 },
+    };
+
+    await mockCommonApis(page, {
+      modules: [{ id: "module-1", title: "Trade unions" }],
+      moduleExports: { "module-1": moduleExport },
+    });
+    await page.route("**/api/admin/content/modules/module-1/versions", async (route) => {
+      savedBody = route.request().postDataJSON();
+      await route.fulfill({
+        status: 201,
+        contentType: "application/json",
+        body: JSON.stringify({ moduleVersion: { id: "module-1-version-2", versionNo: 2 } }),
+      });
+    });
+
+    await page.goto("/admin-content/module/module-1/conversation");
+    await page.locator("#tabSettings").click();
+
+    // The panel opens in en-GB, which is the reviewer's own scenario: edit the English label,
+    // and the two Norwegian ones must be exactly as they were.
+    await expect(page.locator("#settingsCriteriaEditor .vk-label").first()).toHaveValue("Evidence");
+    await page.locator("#settingsCriteriaEditor .vk-label").first().fill("Evidence quality");
+    await page.locator("#settingsSave").click();
+
+    await expect.poll(() => savedBody !== null).toBe(true);
+    const saved: any = Object.values(savedBody.rubric.criteria)[0];
+    // Not a bare string: that would read as "one language, untranslated" and lose two.
+    expect(typeof saved.label).toBe("object");
+    expect(saved.label["en-GB"]).toBe("Evidence quality");
+    expect(saved.label.nb).toBe("Dokumentasjon");
+    expect(saved.label.nn).toBe("Dokumentasjon");
+    // The untouched description survives whole, in all three.
+    expect(saved.description["en-GB"]).toBe("Cites sources");
+    expect(saved.description.nb).toBe("Viser til kilder");
+    expect(saved.description.nn).toBe("Viser til kjelder");
+  });
+
+  // QA round 3: my own round-2 fix broke Add and Remove. The draft sync re-reads the DOM, and it
+  // ran from setState — before the redraw — so Add saw one card too few and dropped the new
+  // criterion, and Remove read the removed card straight back in. Both are silent.
+  //
+  // NOTE ON WHAT THIS DOES AND DOES NOT COVER: that bug only fired when a session draft existed,
+  // and this test has none, so it would have been green against the broken code too. It is kept
+  // as a plain guard that Add and Remove reach the save at all — which nothing covered before —
+  // and the draft-specific path stays a manual check in doc/pilot/STAGE_TEST_896.md.
+  test("adding and removing criteria survives to the save", async ({ page }) => {
+    let savedBody: any = null;
+    const moduleExport = buildMockModuleExport({
+      id: "module-1", title: "Trade unions", moduleVersionId: "module-1-version-1",
+    });
+    moduleExport.selectedConfiguration.rubricVersion = {
+      id: "rubric-1",
+      versionNo: 1,
+      criteria: {
+        clarity: { label: "Clarity", description: "", maxScore: 5, weight: 0.5, candidateVisible: true },
+        depth: { label: "Depth", description: "", maxScore: 5, weight: 0.5, candidateVisible: true },
+      },
+      scalingRule: { max_total: 10, practical_weight: 70 },
+    };
+
+    await mockCommonApis(page, {
+      modules: [{ id: "module-1", title: "Trade unions" }],
+      moduleExports: { "module-1": moduleExport },
+    });
+    await page.route("**/api/admin/content/modules/module-1/versions", async (route) => {
+      savedBody = route.request().postDataJSON();
+      await route.fulfill({
+        status: 201, contentType: "application/json",
+        body: JSON.stringify({ moduleVersion: { id: "module-1-version-2", versionNo: 2 } }),
+      });
+    });
+
+    await page.goto("/admin-content/module/module-1/conversation");
+    await page.locator("#tabSettings").click();
+    await expect(page.locator("#settingsCriteriaEditor .vk-card")).toHaveCount(2);
+
+    // Add one...
+    await page.locator("#settingsCriteriaEditor .vk-add").click();
+    await expect(page.locator("#settingsCriteriaEditor .vk-card")).toHaveCount(3);
+    await page.locator("#settingsCriteriaEditor .vk-label").last().fill("Structure");
+
+    // ...and remove the first, so both structural paths are exercised in one save.
+    await page.locator("#settingsCriteriaEditor .vk-remove").first().click();
+    await expect(page.locator("#settingsCriteriaEditor .vk-card")).toHaveCount(2);
+
+    await page.locator("#settingsSave").click();
+    await expect.poll(() => savedBody !== null).toBe(true);
+
+    const labels = Object.values(savedBody.rubric.criteria).map((c: any) =>
+      typeof c.label === "string" ? c.label : c.label?.["en-GB"]);
+    expect(labels, "the added criterion never reached the save").toContain("Structure");
+    expect(labels, "the removed criterion came back").not.toContain("Clarity");
+    expect(labels).toContain("Depth");
+  });
+
+  // QA round 5: a section is saved as a unit, so editing the system instruction ran the locale
+  // merge over the user template too — turning a stored bare string (= "one language, not
+  // translated") into a two-locale map claiming the same text is valid English. A translation
+  // nobody wrote, and the publish gate would then believe it.
+  test("editing one field in a section does not mark its untouched siblings as translated", async ({ page }) => {
+    let savedBody: any = null;
+    const moduleExport = buildMockModuleExport({
+      id: "module-1", title: "Trade unions", moduleVersionId: "module-1-version-1",
+    });
+    moduleExport.selectedConfiguration.promptTemplateVersion = {
+      id: "prompt-1",
+      versionNo: 1,
+      systemPrompt: { "en-GB": "Old system", nb: "Gammel system", nn: "Gammal system" },
+      // A legacy bare string: one language, untranslated.
+      userPromptTemplate: "Vurder: {{answer}}",
+      examples: [],
+    };
+
+    await mockCommonApis(page, {
+      modules: [{ id: "module-1", title: "Trade unions" }],
+      moduleExports: { "module-1": moduleExport },
+    });
+    await page.route("**/api/admin/content/modules/module-1/versions", async (route) => {
+      savedBody = route.request().postDataJSON();
+      await route.fulfill({
+        status: 201, contentType: "application/json",
+        body: JSON.stringify({ moduleVersion: { id: "module-1-version-2", versionNo: 2 } }),
+      });
+    });
+
+    await page.goto("/admin-content/module/module-1/conversation");
+    await page.locator("#tabSettings").click();
+    await page.locator("#settingsPromptToggle").click();
+    await page.locator("#settingsPromptSystem").fill("New system instruction");
+    await page.locator("#settingsSave").click();
+
+    await expect.poll(() => savedBody !== null).toBe(true);
+    expect(savedBody.promptTemplate.systemPrompt["en-GB"]).toBe("New system instruction");
+    // The untouched template is byte-for-byte what it was — still a bare string.
+    expect(savedBody.promptTemplate.userPromptTemplate).toBe("Vurder: {{answer}}");
+  });
+
+  // QA round 5: "Forkast" cleared what was on screen but not the cache holding folded-away
+  // sections, so a discarded instruction came back the next time it was opened.
+  test("discarding settings also discards edits in a collapsed section", async ({ page }) => {
+    const moduleExport = buildMockModuleExport({
+      id: "module-1", title: "Trade unions", moduleVersionId: "module-1-version-1",
+    });
+    moduleExport.selectedConfiguration.promptTemplateVersion = {
+      id: "prompt-1", versionNo: 1,
+      systemPrompt: { "en-GB": "Old system", nb: "Gammel system", nn: "Gammal system" },
+      userPromptTemplate: { "en-GB": "Old user", nb: "Gammel bruker", nn: "Gammal brukar" },
+      examples: [],
+    };
+
+    await mockCommonApis(page, {
+      modules: [{ id: "module-1", title: "Trade unions" }],
+      moduleExports: { "module-1": moduleExport },
+    });
+
+    await page.goto("/admin-content/module/module-1/conversation");
+    await page.locator("#tabSettings").click();
+    await page.locator("#settingsPromptToggle").click();
+    await page.locator("#settingsPromptSystem").fill("Text the author will discard");
+    await page.locator("#settingsPromptToggle").click();
+
+    // Leave the tab and choose Forkast.
+    await page.locator("#tabEdit").click();
+    await expect(page.locator("#dialogUnsavedTabSwitch")).toBeVisible();
+    await page.locator("#tabSwitchDiscard").click();
+
+    await page.locator("#tabSettings").click();
+    await page.locator("#settingsPromptToggle").click();
+    await expect(
+      page.locator("#settingsPromptSystem"),
+      "the discarded text came back",
+    ).toHaveValue("Old system");
+  });
+
+  // QA round 3: a folded-away edit is not an undone edit. `promptDirty` read only live DOM, so
+  // editing the instruction and then collapsing the section meant "ingen endringer" and no POST.
+  // And opening a sibling section wiped the cached value outright.
+  test("a collapsed section keeps its edit, and the save sends it", async ({ page }) => {
+    let savedBody: any = null;
+    const moduleExport = buildMockModuleExport({
+      id: "module-1", title: "Trade unions", moduleVersionId: "module-1-version-1",
+    });
+    moduleExport.selectedConfiguration.promptTemplateVersion = {
+      id: "prompt-1",
+      versionNo: 1,
+      systemPrompt: { "en-GB": "Old system", nb: "Gammel system", nn: "Gammal system" },
+      userPromptTemplate: { "en-GB": "Old user", nb: "Gammel bruker", nn: "Gammal brukar" },
+      examples: [],
+    };
+
+    await mockCommonApis(page, {
+      modules: [{ id: "module-1", title: "Trade unions" }],
+      moduleExports: { "module-1": moduleExport },
+    });
+    await page.route("**/api/admin/content/modules/module-1/versions", async (route) => {
+      savedBody = route.request().postDataJSON();
+      await route.fulfill({
+        status: 201, contentType: "application/json",
+        body: JSON.stringify({ moduleVersion: { id: "module-1-version-2", versionNo: 2 } }),
+      });
+    });
+
+    await page.goto("/admin-content/module/module-1/conversation");
+    await page.locator("#tabSettings").click();
+
+    await page.locator("#settingsPromptToggle").click();
+    await page.locator("#settingsPromptSystem").fill("New system instruction");
+    await page.locator("#settingsPromptToggle").click();
+    await expect(page.locator("#settingsPromptSystem")).toHaveCount(0);
+
+    // Opening a sibling section used to replace the whole cache and drop the folded edit.
+    await page.locator("#settingsSchemaToggle").click();
+    await page.locator("#settingsSchemaToggle").click();
+
+    // Still there when unfolded...
+    await page.locator("#settingsPromptToggle").click();
+    await expect(page.locator("#settingsPromptSystem")).toHaveValue("New system instruction");
+    await page.locator("#settingsPromptToggle").click();
+
+    // ...and sent, even though the field is folded away at the moment of saving.
+    await page.locator("#settingsSave").click();
+    await expect.poll(() => savedBody !== null).toBe(true);
+    expect(savedBody.promptTemplate, "a folded edit was treated as no change").toBeTruthy();
+    expect(savedBody.promptTemplate.systemPrompt["en-GB"]).toBe("New system instruction");
+    // And the languages it never showed are untouched.
+    expect(savedBody.promptTemplate.systemPrompt.nb).toBe("Gammel system");
+    expect(savedBody.promptTemplate.systemPrompt.nn).toBe("Gammal system");
+  });
+
+  // QA round 2: three more ways the one-language editor lost the other two. Add/Remove rebuilt
+  // every item from the DOM and dropped the locale metadata; the certification level compared
+  // against the PREVIEW locale while being rendered in the UI locale; and switching UI language
+  // left the previous language's text on screen tagged with the previous language.
+  test("structural criteria edits and an untouched certification level keep every locale", async ({ page }) => {
+    let savedBody: any = null;
+    const moduleExport = buildMockModuleExport({
+      id: "module-1",
+      title: "Trade unions",
+      moduleVersionId: "module-1-version-1",
+    });
+    // The mock helper types this as a plain string, but the API and the composer both accept a
+    // locale map — which is the whole point of this test.
+    (moduleExport.module as any).certificationLevel = { "en-GB": "advanced", nb: "videregaaende", nn: "vidaregaaande" };
+    moduleExport.selectedConfiguration.rubricVersion = {
+      id: "rubric-1",
+      versionNo: 1,
+      criteria: {
+        evidence: {
+          label: { "en-GB": "Evidence", nb: "Dokumentasjon", nn: "Dokumentasjon" },
+          description: { "en-GB": "Cites sources", nb: "Viser til kilder", nn: "Viser til kjelder" },
+          maxScore: 5, weight: 1, candidateVisible: true,
+        },
+      },
+      scalingRule: { max_total: 5, practical_weight: 70 },
+    };
+
+    await mockCommonApis(page, {
+      modules: [{ id: "module-1", title: "Trade unions" }],
+      moduleExports: { "module-1": moduleExport },
+    });
+    await page.route("**/api/admin/content/modules/module-1/versions", async (route) => {
+      savedBody = route.request().postDataJSON();
+      await route.fulfill({
+        status: 201,
+        contentType: "application/json",
+        body: JSON.stringify({ moduleVersion: { id: "module-1-version-2", versionNo: 2 } }),
+      });
+    });
+
+    await page.goto("/admin-content/module/module-1/conversation");
+    await page.locator("#tabSettings").click();
+
+    // Add a criterion: this rebuilds every existing card from the DOM, which is where the stored
+    // locales used to be dropped.
+    await page.locator("#settingsCriteriaEditor .vk-add").click();
+    await page.locator("#settingsCriteriaEditor .vk-label").last().fill("Structure");
+    await page.locator("#settingsSave").click();
+
+    await expect.poll(() => savedBody !== null).toBe(true);
+    const criteria: any = savedBody.rubric.criteria;
+    const evidence: any = Object.values(criteria).find((c: any) =>
+      typeof c.label === "object" && c.label["en-GB"] === "Evidence");
+    expect(evidence, "the untouched criterion lost its locales on Add").toBeTruthy();
+    expect(evidence.label.nb).toBe("Dokumentasjon");
+    expect(evidence.label.nn).toBe("Dokumentasjon");
+    expect(evidence.description.nn).toBe("Viser til kjelder");
+
+    // The certification level was never touched, so it must not be in the payload at all — and
+    // certainly not as a bare string that replaces the whole locale object.
+    expect(savedBody.certificationLevel).toBeUndefined();
+  });
+
+  // #896 S3c: the Innstillinger editors live in module-level state, and loading another module did
+  // not clear it. Before S3c that needed the author to open the criteria editor first; now the
+  // criteria are always expanded, so simply LOOKING at module 1's settings was enough to carry its
+  // rubric onto module 2 — and a save there would have written it.
+  test("Innstillinger state does not leak from one module to the next", async ({ page }) => {
+    const first = buildMockModuleExport({ id: "module-1", title: "Trade unions", moduleVersionId: "module-1-version-1" });
+    first.selectedConfiguration.rubricVersion = {
+      id: "rubric-1",
+      versionNo: 1,
+      criteria: { clarity: { label: "Kriterium fra modul 1", description: "", maxScore: 5, weight: 1, candidateVisible: true } },
+      scalingRule: { max_total: 5 },
+    };
+    const second = buildMockModuleExport({ id: "module-2", title: "Working time", moduleVersionId: "module-2-version-1" });
+    second.selectedConfiguration.rubricVersion = {
+      id: "rubric-2",
+      versionNo: 1,
+      criteria: { safety: { label: "Kriterium fra modul 2", description: "", maxScore: 5, weight: 1, candidateVisible: true } },
+      scalingRule: { max_total: 5 },
+    };
+
+    await mockCommonApis(page, {
+      modules: [{ id: "module-1", title: "Trade unions" }, { id: "module-2", title: "Working time" }],
+      moduleExports: { "module-1": first, "module-2": second },
+    });
+
+    await page.goto("/admin-content/module/module-1/conversation");
+    await page.locator("#tabSettings").click();
+    await expect(page.locator("#settingsCriteriaEditor .vk-label").first()).toHaveValue("Kriterium fra modul 1");
+
+    await page.goto("/admin-content/module/module-2/conversation");
+    await page.locator("#tabSettings").click();
+    await expect(page.locator("#settingsCriteriaEditor .vk-label").first()).toHaveValue("Kriterium fra modul 2");
+    // And no phantom unsaved-changes warning on the way out, which is what a stale baseline gives.
+    await page.locator("#tabEdit").click();
+    await expect(page.locator("#dialogUnsavedTabSwitch")).toBeHidden();
   });
 
   // #896 S6 QA: the Innstillinger inputs live only in the DOM until Lagre, and every way OUT of
@@ -532,7 +1003,9 @@ test.describe("admin content browser coverage", () => {
     const certInput = page.locator("#settingsCertLevel");
     await expect(certInput).toBeVisible();
     const original = await certInput.inputValue();
-    await certInput.fill("advanced-unsaved");
+    // A select now (the level is a fixed scale), so pick a different option than the stored one.
+    const edited = original === "advanced" ? "basic" : "advanced";
+    await certInput.selectOption(edited);
 
     // Exit 1: tab switch. The dialog must be the DESTRUCTIVE one — settings are not kept, unlike
     // a draft, and telling the author "your draft is kept" here would be a lie about a different
@@ -541,12 +1014,12 @@ test.describe("admin content browser coverage", () => {
     await expect(page.locator("#dialogUnsavedTabSwitch")).toBeVisible();
     await expect(page.locator("#unsavedTabSwitchBody")).toContainText(/forkast|discard/i);
     await page.locator("#tabSwitchStay").click();
-    await expect(certInput).toHaveValue("advanced-unsaved");
+    await expect(certInput).toHaveValue(edited);
 
     // Exit 2: UI language. This one had no guard at all — the panel re-rendered instantly.
     page.once("dialog", (dialog) => dialog.dismiss());
     await page.locator("#localeSelect").selectOption("nb");
-    await expect(certInput).toHaveValue("advanced-unsaved");
+    await expect(certInput).toHaveValue(edited);
     // Declining puts the selector back, so the page is not left claiming a language it did not
     // switch to.
     await expect(page.locator("#localeSelect")).toHaveValue("en-GB");
@@ -556,11 +1029,11 @@ test.describe("admin content browser coverage", () => {
     page.once("dialog", (dialog) => dialog.dismiss());
     await page.locator("#settingsOpenAdvanced").click();
     await expect(page.locator("#tabSettings")).toHaveAttribute("aria-selected", "true");
-    await expect(certInput).toHaveValue("advanced-unsaved");
+    await expect(certInput).toHaveValue(edited);
 
     // And an untouched field must not trigger any of this — a guard that cries wolf gets clicked
     // through without reading.
-    await certInput.fill(original);
+    await certInput.selectOption(original);
     await page.locator("#tabEdit").click();
     await expect(page.locator("#tabEdit")).toHaveAttribute("aria-selected", "true");
   });
@@ -1575,6 +2048,11 @@ test.describe("admin content browser coverage", () => {
     await page.reload();
     await expect(page.locator("#tabSettings")).toHaveAttribute("aria-selected", "true");
     await expect(page.locator("#tabPanelSettings")).toBeVisible();
+    // QA round 6: the tab was selected and the panel visible, but the CONTENT was still "load a
+    // module to see the settings" — the panel is drawn during init, before the module arrives, and
+    // was never redrawn. This assertion is the difference between the two.
+    await expect(page.locator("#settingsSummary")).not.toContainText(/Last inn en modul|Load a module/);
+    await expect(page.locator("#settingsModuleType")).toBeVisible();
 
     // Rediger is the default, so it stays out of the URL rather than pinning the plain route.
     await page.locator("#tabEdit").click();
@@ -1599,7 +2077,7 @@ test.describe("admin content browser coverage", () => {
     await page.goto("/admin-content/module/module-1/conversation");
     await page.locator("#tabSettings").click();
 
-    const list = page.locator("#settingsSummary .settings-list");
+    const list = page.locator("#settingsSummary .settings-list").first();
     await expect(list).toBeVisible();
 
     // Module type is the first row, and reads as a phrase rather than an enum value.
@@ -1608,12 +2086,71 @@ test.describe("admin content browser coverage", () => {
     await expect(list.locator("dd").first()).toHaveText(/Free text and multiple choice|Fritekst og flervalg/);
     await expect(list.locator("dd").first()).not.toHaveText(/FREETEXT_PLUS_MCQ/);
 
-    // Rows the author needs even when unset say so, rather than being missing.
-    await expect(list).toContainText(/Assessment criteria|Vurderingskriterier/);
+    // Certification level belongs to the same group: it describes the module, not the assessment.
     await expect(list).toContainText(/Certification level|Sertifiseringsniv/);
 
     // The hand-off is still there until S3b wires the rows up.
     await expect(page.locator("#settingsOpenAdvanced")).toBeVisible();
+  });
+
+  // #896 S3c: reported from stage — "vurderingskriteria ligger nå 4 steder ... UI for
+  // instillinger er ikke systematisk". The panel is now four blocks in a fixed order, each with
+  // exactly one heading, and Lagre sits after all of them but before the history.
+  test("Innstillinger is grouped, and Lagre comes after the settings but before the history", async ({ page }) => {
+    await mockCommonApis(page, {
+      modules: [{ id: "module-1", title: "Trade unions", activeVersion: { versionNo: 1 } }],
+      moduleExports: {
+        "module-1": buildMockModuleExport({
+          id: "module-1",
+          title: "Trade unions",
+          moduleVersionId: "module-1-version-1",
+          taskText: localizedText("Norsk scenario"),
+        }),
+      },
+    });
+
+    await page.goto("/admin-content/module/module-1/conversation");
+    await page.locator("#tabSettings").click();
+
+    const titles = page.locator("#settingsSummary .settings-group-title");
+    await expect(titles).toHaveText([
+      /The module|Modulen/,
+      /Assessment|Vurdering/,
+      /Submission form|Innsendingsskjema/,
+      /Saved versions|Lagrede versjoner|Lagra versjonar/,
+    ]);
+
+    // Criteria and the assessment instruction sit INSIDE Vurdering, one level down — they are not
+    // peers of the groups. This is the duplication that was reported: the same weight everywhere.
+    const assessment = page.locator("#settingsSummary .settings-group").nth(1);
+    await expect(assessment.locator(".settings-subsection-title")).toHaveText([
+      /Assessment criteria|Vurderingskriterier/,
+      /Assessment instruction|Vurderingsinstruks/,
+    ]);
+    // ...and nowhere else. Criteria appearing twice in one panel is the bug this fixes.
+    await expect(page.locator("#settingsSummary").getByRole("heading", { name: /Vurderingskriterier|Assessment criteria/ }))
+      .toHaveCount(1);
+
+    // QA caught a malformed CSS comment that killed the whole .settings-group rule while this test
+    // still passed — text and document order say nothing about whether the hierarchy is visible.
+    // So measure it: the group title must be visually distinct from a subsection title, and the
+    // second group must carry its separator.
+    const groupTitleWeight = await titles.first().evaluate((el) => getComputedStyle(el).textTransform);
+    expect(groupTitleWeight).toBe("uppercase");
+    const separator = await page.locator("#settingsSummary .settings-group").nth(1)
+      .evaluate((el) => getComputedStyle(el).borderTopWidth);
+    expect(parseFloat(separator)).toBeGreaterThan(0);
+    const subsection = await assessment.locator(".settings-subsection-title").first()
+      .evaluate((el) => getComputedStyle(el).textTransform);
+    expect(subsection).toBe("none");
+
+    // Document order: every setting, then Lagre, then the history.
+    const order = await page.locator("#settingsSummary").evaluate((host) => {
+      const nodes = [...host.querySelectorAll("#settingsSave, .settings-group-title, .settings-criteria-section")];
+      return nodes.map((n) => (n.id === "settingsSave" ? "save" : n.className.includes("group-title") ? `title:${n.textContent?.trim()}` : "section"));
+    });
+    expect(order.indexOf("save")).toBeGreaterThan(order.findIndex((x) => /Innsendingsskjema|Submission/i.test(x)));
+    expect(order.indexOf("save")).toBeLessThan(order.findIndex((x) => /Lagrede versjoner|Lagra versjonar|Saved versions/i.test(x)));
   });
 
   // #896 S3b: module type is editable from Innstillinger, and only the types the module has
@@ -1749,10 +2286,13 @@ test.describe("admin content browser coverage", () => {
     await page.goto("/admin-content/module/module-1/conversation");
     await page.locator("#tabSettings").click();
 
-    await page.locator("#settingsCertLevel").fill("advanced");
+    await page.locator("#settingsCertLevel").selectOption("advanced");
     await page.locator("#settingsValidFrom").fill("2026-09-01");
     await page.locator("#settingsSave").click();
 
+    // ONE value on a fixed scale, replaced outright — not a per-locale patch. An earlier pass
+    // merged it and produced {"en-GB":"advanced",nb:"basic"}, which claims the module is advanced
+    // in English and basic in Norwegian. The three labels are translated; the value is not.
     await expect.poll(() => state.lastModuleVersionBody?.certificationLevel).toBe("advanced");
     expect(state.lastModuleVersionBody.validFrom).toBe("2026-09-01");
     // Untouched fields are omitted, so a settings save never rewrites what it only displayed.

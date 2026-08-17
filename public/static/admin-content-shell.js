@@ -2209,7 +2209,7 @@ async function saveDraftBundleInBackground(options = {}) {
         taskText: String(localizeValueForLocale(taskText, currentLocale) ?? "").trim(),
         assessorExpectedContent: String(localizeValueForLocale(assessorExpectedContent, currentLocale) ?? "").trim(),
         candidateTaskConstraints: String(localizeValueForLocale(candidateTaskConstraints, currentLocale) ?? "").trim() || undefined,
-        certificationLevel: bundle?.module?.certificationLevel ?? "intermediate",
+        certificationLevel: certificationLevelForGeneration(),
         locale: currentLocale,
         ...(blueprintObject ? { blueprint: blueprintObject } : {}),
       };
@@ -3049,6 +3049,11 @@ async function loadModule(moduleId, options = {}) {
   sessionDraft = null;
   previewDraft = null;
   latestSavedModuleVersionId = null;
+  // #896 S3c: the Innstillinger panel keeps its editors in module-level state, and none of it
+  // belonged to this module. Before S3c the criteria state was only seeded once the author opened
+  // the editor; now it is seeded on every visit to the tab, so merely looking at module A's
+  // settings and then switching to B would show — and save — A's criteria on B.
+  resetSettingsPanelState();
   const slot = logProgress("shell.module.loading");
 
   try {
@@ -3084,6 +3089,10 @@ async function loadModule(moduleId, options = {}) {
     ? applyHandoffDraft(handoff.draft)
     : resumeBehavior.shouldCreateDraftFromLoadedModule && createSessionDraftFromLoadedModule();
   renderPreview();
+  // QA round 6: reloading on `?tab=settings` selected the tab, drew the panel before the module
+  // had arrived — "load a module to see the settings" — and then never drew it again. The author
+  // had to switch tabs and back. Only the preview was re-rendered here.
+  renderSettingsPanel();
 
   // Capture data for retranslatable closure
   const capturedTitle = localizeValue(bundle?.module?.title) || moduleId;
@@ -3318,6 +3327,12 @@ function buildEditorStateFromCriteriaRecord(source, locale) {
       description: typeof rawDesc === "string" ? rawDesc : "",
       maxScore: Math.max(1, Math.min(10, initialMaxScore)),
       candidateVisible: Boolean(c.candidateVisible),
+      // #902: the editor shows ONE language, but the stored value may hold three. Carry the whole
+      // stored value and the locale it is being edited in, so the save can merge instead of
+      // replacing — writing back a bare string deleted the two languages never shown.
+      storedLabel: c.label ?? null,
+      storedDescription: c.description ?? null,
+      locale,
     };
   });
 }
@@ -3330,19 +3345,76 @@ function buildEditorStateFromCriteriaRecord(source, locale) {
  * aria upkeep, add/remove/regenerate — is identical, because a second copy of this behaviour is
  * exactly what the epic is trying to get rid of.
  */
+const CERTIFICATION_LEVELS = ["basic", "intermediate", "advanced"];
+
+/**
+ * The certification level as a single plain value.
+ *
+ * The level is a FIXED SCALE — easy, medium, hard — and one module has one of them. It is not
+ * prose, and it is not translated per module: the three labels are translated once, in
+ * `shell.certLevel.*`, and the stored value is the key.
+ *
+ * I got that wrong. QA round 2 reported that an UNTOUCHED level was being overwritten, and the
+ * actual cause was a locale mix-up in the comparison. I fixed that, but also made the save merge
+ * the field per locale — which produced values like `{"en-GB":"advanced","nb":"basic"}`, i.e. "the
+ * module is advanced in English and basic in Norwegian". That is not a translation, it is
+ * contradictory data, and it broke the `generate/*` endpoints, which validate an enum. This
+ * function reads whatever shape is already stored and gives back one value.
+ */
+function certificationLevelValue(raw) {
+  if (typeof raw === "string") return raw.trim();
+  if (!raw || typeof raw !== "object") return "";
+  const values = Object.values(raw).map((v) => String(v ?? "").trim()).filter(Boolean);
+  // A legacy locale object can disagree with itself; a canonical level wins over free text.
+  return values.find((v) => CERTIFICATION_LEVELS.includes(v)) ?? values[0] ?? "";
+}
+
+/**
+ * The level as the GENERATION endpoints want it: one of the three enum values, never a container.
+ *
+ * Five call sites used to send `bundle.module.certificationLevel` raw, so a locale object — or the
+ * free text older modules were invited to type — gave a 400 and no criteria at all. Anything
+ * outside the scale falls back to `intermediate`: the generators use it to pitch difficulty, so a
+ * wrong-but-valid level degrades the output while an invalid one fails the whole call.
+ */
+function certificationLevelForGeneration() {
+  // The level chosen in Innstillinger wins over the stored one while the panel is open. QA round 7:
+  // picking `advanced` and then regenerating asked the service for `basic`, and the same save then
+  // filed the module as `advanced` — the criteria and the level described different difficulties.
+  const selected = document.getElementById("settingsCertLevel")?.value?.trim();
+  if (selected && CERTIFICATION_LEVELS.includes(selected)) return selected;
+  const value = certificationLevelValue(bundle?.module?.certificationLevel);
+  return CERTIFICATION_LEVELS.includes(value) ? value : "intermediate";
+}
+
+/**
+ * A fresh criterion id that collides with nothing already in the editor.
+ *
+ * QA round 4 fixed "add, remove, add reuses an id" with a counter; QA round 5 pointed out the
+ * counter restarts on page load, so a rubric that already contains `new_criterion_1` gets it
+ * handed out a second time — and `Object.fromEntries` keeps only the last one. Check the state.
+ */
+function freshCriterionId(existing) {
+  const taken = new Set((existing ?? []).map((c) => String(c?.id ?? "")));
+  let candidate;
+  do {
+    nextNewCriterionSeq += 1;
+    candidate = `new_criterion_${nextNewCriterionSeq}`;
+  } while (taken.has(candidate));
+  return candidate;
+}
+
+let nextNewCriterionSeq = 0;
+
 function wireCriteriaEditor({ container, getState, setState, rerender, onRegenerate }) {
   if (!container) return;
 
+  // QA 2026-08-16: this was a second, byte-for-byte copy of `captureLatestCriteriaState`, and when
+  // that one learned to carry the locale metadata (#902) this one did not — so Add or Remove threw
+  // `storedLabel` away and the next save wrote bare strings, deleting the other two languages.
+  // Deduplicated rather than patched: two copies of a DOM read is how the bug happened.
   const captureFromDom = () => {
-    const cards = container.querySelectorAll(".vk-card");
-    const previous = getState();
-    setState(Array.from(cards).map((card, idx) => ({
-      id: (previous[idx] ?? {}).id,
-      label: card.querySelector(".vk-label")?.value.trim() ?? "",
-      description: card.querySelector(".vk-description")?.value.trim() ?? "",
-      maxScore: Math.max(1, Math.min(10, Number(card.querySelector(".vk-weight")?.value) || 5)),
-      candidateVisible: card.querySelector(".vk-visible")?.checked ?? false,
-    })));
+    setState(captureLatestCriteriaState(container, getState()));
   };
 
   container.addEventListener("input", (e) => {
@@ -3381,6 +3453,14 @@ function wireCriteriaEditor({ container, getState, setState, rerender, onRegener
     if (!btn) return;
     if (btn.classList.contains("vk-remove")) {
       captureFromDom();
+      // QA round 6: removing the LAST criterion could not be saved. An empty list builds a `null`
+      // record, and every save path reads `null` as "no criteria change" — so the deletion was
+      // dropped and the old criterion came back, or Lagre said "ingen endringer". A rubric needs
+      // at least one criterion, so say that instead of accepting an action that cannot take.
+      if (getState().length <= 1) {
+        showToast(t("shell.criteria.lastCriterionRequired"), "error");
+        return;
+      }
       const idx = Number(btn.dataset.criterionIndex);
       if (Number.isFinite(idx)) {
         const next = getState();
@@ -3391,7 +3471,17 @@ function wireCriteriaEditor({ container, getState, setState, rerender, onRegener
     } else if (btn.classList.contains("vk-add")) {
       captureFromDom();
       const next = getState();
-      next.push({ id: `new_criterion_${next.length + 1}`, label: "", description: "", maxScore: 5, candidateVisible: false });
+      // #902: a new criterion has nothing stored, but it IS being typed in a specific language,
+      // so it is saved as a one-locale map rather than a bare string the reader would have to
+      // guess at. `storedLabel: null` (not undefined) is what selects the merging path.
+      next.push({
+        // QA round 4: the id used to be `new_criterion_${length + 1}`, and the list SHRINKS on
+        // remove — so add, remove, add produced the same id twice. `Object.fromEntries` keeps the
+        // last entry per key, so one of the two new criteria vanished at save time without a word.
+        // A counter that only ever goes up cannot collide.
+        id: freshCriterionId(next), label: "", description: "", maxScore: 5,
+        candidateVisible: false, storedLabel: null, storedDescription: null, locale: currentLocale,
+      });
       setState(next);
       rerender();
       const inputs = container.querySelectorAll(".vk-label");
@@ -3421,6 +3511,12 @@ function captureLatestCriteriaState(container, fallbackState) {
       description: card.querySelector(".vk-description")?.value.trim() ?? "",
       maxScore: Math.max(1, Math.min(10, Number(card.querySelector(".vk-weight")?.value) || 5)),
       candidateVisible: card.querySelector(".vk-visible")?.checked ?? false,
+      // #902: the DOM holds one language; the other two live only on the state object. Rebuilding
+      // the item from the cards alone would drop them again on the way to the save — which is
+      // exactly how the bare-string write survived the first fix.
+      storedLabel: fallback.storedLabel,
+      storedDescription: fallback.storedDescription,
+      locale: fallback.locale,
     };
   });
 }
@@ -3436,9 +3532,23 @@ function buildCriteriaRecordFromEditorState(criteria) {
   const totalMax = valid.reduce((sum, c) => sum + (Number(c.maxScore) || 0), 0) || 1;
   return Object.fromEntries(valid.map((c, idx) => {
     const baseId = c.id ?? slugifyLabel(c.label) ?? `criterion_${idx + 1}`;
+    // #902: merge the edited language into whatever was stored. A criterion the editor never
+    // localized (`storedLabel` absent — a brand-new one, or a caller that does not track it)
+    // keeps the old bare-string behaviour, which the reader still understands as "one language".
+    const locale = c.locale ?? currentLocale;
+    // An UNTOUCHED field keeps its stored value byte for byte. Merging it would turn a bare
+    // string — "one language, not translated yet" — into a two-locale map asserting the same
+    // text is valid in both, which is a translation nobody made.
+    const mergeIfEdited = (stored, edited) => {
+      if (stored === undefined) return edited;
+      if (edited === localizeValueForLocale(stored ?? "", locale)) return stored;
+      return mergeLocaleInto(stored, locale, edited);
+    };
+    const label = mergeIfEdited(c.storedLabel, c.label) ?? c.label;
+    const description = mergeIfEdited(c.storedDescription, c.description ?? "") ?? "";
     return [String(baseId), {
-      label: c.label,
-      description: c.description ?? "",
+      label,
+      description,
       maxScore: Number(c.maxScore),
       weight: Number(((Number(c.maxScore) || 0) / totalMax).toFixed(2)),
       candidateVisible: Boolean(c.candidateVisible),
@@ -3510,7 +3620,7 @@ async function handleDriftRegenerate() {
           taskText,
           assessorExpectedContent: assessorText,
           candidateTaskConstraints: constraintsText || undefined,
-          certificationLevel: bundle?.module?.certificationLevel ?? "intermediate",
+          certificationLevel: certificationLevelForGeneration(),
           locale: previewLocale ?? currentLocale,
           ...(blueprint ? { blueprint } : {}),
           force: true,
@@ -3555,6 +3665,10 @@ async function handleDriftShowDiff() {
   }
   const blueprint = getActiveBlueprint();
 
+  // QA round 5: I changed this request to send `requestedLocale` without declaring it here — it
+  // only existed inside regenerateCriteriaFromTask. Every "show what would change" threw a
+  // ReferenceError that the catch below reported as a generation error, so the action was dead.
+  const requestedLocale = previewLocale ?? currentLocale;
   const slot = logProgress("shell.drift.diff.progress");
   let result;
   try {
@@ -3564,8 +3678,8 @@ async function handleDriftShowDiff() {
         taskText,
         assessorExpectedContent: assessorText,
         candidateTaskConstraints: constraintsText || undefined,
-        certificationLevel: bundle?.module?.certificationLevel ?? "intermediate",
-        locale: previewLocale ?? currentLocale,
+        certificationLevel: certificationLevelForGeneration(),
+        locale: requestedLocale,
         ...(blueprint ? { blueprint } : {}),
       }),
     });
@@ -3578,7 +3692,10 @@ async function handleDriftShowDiff() {
   logResolveSlot(slot, () => escapeHtml(t("shell.drift.diff.computed")));
 
   const newCriteriaArr = Array.isArray(result?.rubric?.criteria) ? result.rubric.criteria : [];
-  const newCriteriaRecord = llmCriteriaArrayToStorageRecord(newCriteriaArr);
+  // QA round 6: the request captured `requestedLocale`, but the response was tagged with the
+  // LIVE locale. Switch language while the call is in flight and the generated text is filed
+  // under a language it was never written in.
+  const newCriteriaRecord = llmCriteriaArrayToStorageRecord(newCriteriaArr, requestedLocale);
   const existing = bundle?.selectedConfiguration?.rubricVersion?.criteria ?? {};
   const diff = computeCriteriaDiff(existing, newCriteriaRecord);
 
@@ -3588,14 +3705,22 @@ async function handleDriftShowDiff() {
 // B3 (#450): mirror of moduleRubricToStoragePayload's criteria branch. LLM returns an array
 // (with .id, .label, .description, .maxScore, .candidateVisible per item); storage wants a
 // record keyed by id with weight derived from maxScore.
-function llmCriteriaArrayToStorageRecord(arr) {
+/**
+ * @param locale the language the generator was ASKED for. Required: the record it produces is
+ *   written straight to storage, and a bare string there means "one language, not translated" —
+ *   which the reader resolves as bokmal. QA round 4: generating with an English UI therefore
+ *   filed English criteria as Norwegian, and a later English edit produced a two-locale map whose
+ *   Norwegian side was already the English text.
+ */
+function llmCriteriaArrayToStorageRecord(arr, locale) {
   const valid = (arr ?? []).filter((c) => c && c.label && c.label.trim());
   const totalMax = valid.reduce((sum, c) => sum + (Number(c.maxScore) || 0), 0) || 1;
+  const tag = (text) => (locale && text ? { [locale]: text } : text);
   return Object.fromEntries(valid.map((c, idx) => {
     const baseId = String(c.id ?? slugifyLabel(c.label) ?? `criterion_${idx + 1}`);
     return [baseId, {
-      label: c.label ?? "",
-      description: c.description ?? "",
+      label: tag(c.label ?? ""),
+      description: tag(c.description ?? ""),
       maxScore: Number(c.maxScore) || 0,
       weight: Number(((Number(c.maxScore) || 0) / totalMax).toFixed(2)),
       candidateVisible: Boolean(c.candidateVisible),
@@ -3608,6 +3733,18 @@ function llmCriteriaArrayToStorageRecord(arr) {
 // or "unchanged". Returns parallel arrays keyed for easy modal rendering. Compares by `id`
 // so an LLM relabeling the same criterion would still match — risk we accept (id stability
 // is the LLM's job, not ours).
+/**
+ * The readable text of a criterion field, whether it is a bare string or a locale map.
+ *
+ * The drift diff both COMPARES and RENDERS these values, and it used `String(...)` for each — fine
+ * while everything was a bare string, useless the moment a locale object appears.
+ */
+function driftText(value) {
+  if (value == null) return "";
+  if (typeof value === "string") return value;
+  return localizeValueForLocale(value, previewLocale ?? currentLocale) ?? "";
+}
+
 function computeCriteriaDiff(existing, next) {
   const existingIds = new Set(Object.keys(existing ?? {}));
   const nextIds = new Set(Object.keys(next ?? {}));
@@ -3623,8 +3760,11 @@ function computeCriteriaDiff(existing, next) {
     }
     const a = existing[id] ?? {};
     const b = next[id] ?? {};
-    const labelChanged = String(a.label ?? "") !== String(b.label ?? "");
-    const descChanged = String(a.description ?? "") !== String(b.description ?? "");
+    // QA round 5: proposals are locale objects now, and `String({...})` is "[object Object]" for
+    // every one of them — so two different proposals compared EQUAL and a text-only change was
+    // filed as unchanged, which "accept selected" then left out. Compare the language on screen.
+    const labelChanged = driftText(a.label) !== driftText(b.label);
+    const descChanged = driftText(a.description) !== driftText(b.description);
     const scoreChanged = Number(a.maxScore ?? 0) !== Number(b.maxScore ?? 0);
     const visChanged = Boolean(a.candidateVisible) !== Boolean(b.candidateVisible);
     if (labelChanged || descChanged || scoreChanged || visChanged) {
@@ -3854,6 +3994,9 @@ async function applyExternalLlmJsonImport(parsed) {
   }
   previewDraft = null;
   sessionState = "draft-pending";
+  // Third creation path: an imported external-LLM draft is a new module too, and Innstillinger
+  // needs the bundle or it shows "load a module".
+  await attachBundleForNewModule(selectedModuleId);
   renderPreviewLocaleBar();
   renderPreview();
 
@@ -3958,25 +4101,25 @@ function buildDriftDiffModalHtml(diff) {
 
   const addedHtml = added.map(({ id, next }) => renderRow(id, "added", `
     <span class="drift-diff-row-tag drift-diff-row-tag--added">${escapeHtml(t("shell.drift.diff.added"))}</span>
-    <strong>${escapeHtml(String(next?.label ?? id))}</strong>
-    ${next?.description ? `<p class="drift-diff-row-desc">${escapeHtml(String(next.description))}</p>` : ""}
+    <strong>${escapeHtml(driftText(next?.label) || id)}</strong>
+    ${driftText(next?.description) ? `<p class="drift-diff-row-desc">${escapeHtml(driftText(next.description))}</p>` : ""}
   `)).join("");
 
   const removedHtml = removed.map(({ id, prev }) => renderRow(id, "removed", `
     <span class="drift-diff-row-tag drift-diff-row-tag--removed">${escapeHtml(t("shell.drift.diff.removed"))}</span>
-    <strong>${escapeHtml(String(prev?.label ?? id))}</strong>
-    ${prev?.description ? `<p class="drift-diff-row-desc">${escapeHtml(String(prev.description))}</p>` : ""}
+    <strong>${escapeHtml(driftText(prev?.label) || id)}</strong>
+    ${driftText(prev?.description) ? `<p class="drift-diff-row-desc">${escapeHtml(driftText(prev.description))}</p>` : ""}
   `)).join("");
 
   const changedHtml = changed.map(({ id, prev, next, fields }) => {
     const parts = [];
-    if (fields.labelChanged) parts.push(`<p class="drift-diff-row-fieldchange"><em>${escapeHtml(t("shell.drift.diff.label"))}:</em> <s>${escapeHtml(String(prev?.label ?? ""))}</s> → <strong>${escapeHtml(String(next?.label ?? ""))}</strong></p>`);
-    if (fields.descChanged) parts.push(`<p class="drift-diff-row-fieldchange"><em>${escapeHtml(t("shell.drift.diff.description"))}:</em> ${escapeHtml(String(next?.description ?? ""))}</p>`);
+    if (fields.labelChanged) parts.push(`<p class="drift-diff-row-fieldchange"><em>${escapeHtml(t("shell.drift.diff.label"))}:</em> <s>${escapeHtml(driftText(prev?.label))}</s> → <strong>${escapeHtml(driftText(next?.label))}</strong></p>`);
+    if (fields.descChanged) parts.push(`<p class="drift-diff-row-fieldchange"><em>${escapeHtml(t("shell.drift.diff.description"))}:</em> ${escapeHtml(driftText(next?.description))}</p>`);
     if (fields.scoreChanged) parts.push(`<p class="drift-diff-row-fieldchange"><em>${escapeHtml(t("shell.drift.diff.maxScore"))}:</em> ${escapeHtml(String(prev?.maxScore ?? ""))} → ${escapeHtml(String(next?.maxScore ?? ""))}</p>`);
     if (fields.visChanged) parts.push(`<p class="drift-diff-row-fieldchange"><em>${escapeHtml(t("shell.drift.diff.candidateVisible"))}:</em> ${Boolean(prev?.candidateVisible) ? "✓" : "—"} → ${Boolean(next?.candidateVisible) ? "✓" : "—"}</p>`);
     return renderRow(id, "changed", `
       <span class="drift-diff-row-tag drift-diff-row-tag--changed">${escapeHtml(t("shell.drift.diff.changed"))}</span>
-      <strong>${escapeHtml(String(next?.label ?? id))}</strong>
+      <strong>${escapeHtml(driftText(next?.label) || id)}</strong>
       ${parts.join("")}
     `);
   }).join("");
@@ -4092,9 +4235,30 @@ async function persistMergedRubric(criteriaRecord) {
 // edited them in this same direct-edit session). Calls onSuccess with the new criteria
 // array so the caller can update its state and re-render.
 async function regenerateCriteriaFromTask(criteriaContainer, onSuccess) {
-  const taskText = document.getElementById("previewEditTaskText")?.value.trim() ?? "";
-  const assessorText = document.getElementById("previewEditGuidanceText")?.value.trim() ?? "";
-  const constraintsText = document.getElementById("previewEditCandidateTaskConstraints")?.value.trim() ?? "";
+  // QA 2026-08-16 round 3: these three inputs belong to the Rediger edit form, and since S3c the
+  // ONLY Regenerate button lives in Innstillinger — where the form is not rendered. Every click
+  // therefore took the "no task text" alert and never called the API: the button was dead.
+  //
+  // The form still wins when it is open (the author may have edited the scenario in this same
+  // session and not saved it yet); otherwise fall back to the draft, then to what is stored.
+  // The language this regeneration is FOR: it decides what text is sent, what the service is
+  // asked to write, and what locale the result is stored under. All three must be the same value.
+  const requestedLocale = previewLocale ?? currentLocale;
+  const fieldOr = (id, stored) => {
+    const el = document.getElementById(id);
+    if (el) return el.value.trim();
+    return localizeValueForLocale(stored ?? "", requestedLocale).trim();
+  };
+  const storedVersion = bundle?.selectedConfiguration?.moduleVersion ?? {};
+  const taskText = fieldOr("previewEditTaskText", sessionDraft?.taskText ?? storedVersion.taskText);
+  const assessorText = fieldOr(
+    "previewEditGuidanceText",
+    sessionDraft?.assessorExpectedContent ?? storedVersion.assessorExpectedContent,
+  );
+  const constraintsText = fieldOr(
+    "previewEditCandidateTaskConstraints",
+    sessionDraft?.candidateTaskConstraints ?? storedVersion.candidateTaskConstraints,
+  );
   if (!taskText || !assessorText) {
     window.alert(t("shell.criteria.regenerateMissingTask"));
     return;
@@ -4118,19 +4282,36 @@ async function regenerateCriteriaFromTask(criteriaContainer, onSuccess) {
         taskText,
         assessorExpectedContent: assessorText,
         candidateTaskConstraints: constraintsText || undefined,
-        certificationLevel: bundle?.module?.certificationLevel ?? "intermediate",
+        certificationLevel: certificationLevelForGeneration(),
         locale: previewLocale ?? currentLocale,
         ...(blueprintObj ? { blueprint: blueprintObj } : {}),
       }),
     });
     const generated = Array.isArray(result?.rubric?.criteria) ? result.rubric.criteria : [];
-    const mapped = generated.map((c) => ({
-      id: String(c.id ?? slugifyLabel(c.label) ?? "criterion"),
-      label: c.label ?? "",
-      description: c.description ?? "",
-      maxScore: Math.max(1, Math.min(10, Number(c.maxScore) || 5)),
-      candidateVisible: Boolean(c.candidateVisible),
-    }));
+    // QA round 6: regeneration produces text in ONE language, and `storedLabel: null` told the
+    // save "nothing to merge onto" — so regenerating with an English preview kept the English
+    // criteria and deleted nb and nn. When the generator reuses an existing id, that criterion
+    // still has the other two languages and they must survive; only a genuinely new id has
+    // nothing behind it. The stage plan promises exactly this ("de andre språkene urørt").
+    const storedCriteria = bundle?.selectedConfiguration?.rubricVersion?.criteria ?? {};
+    const mapped = generated.map((c) => {
+      const id = String(c.id ?? slugifyLabel(c.label) ?? "criterion");
+      const previous = storedCriteria[id];
+      return {
+        id,
+        label: c.label ?? "",
+        description: c.description ?? "",
+        maxScore: Math.max(1, Math.min(10, Number(c.maxScore) || 5)),
+        candidateVisible: Boolean(c.candidateVisible),
+        // #902: one language, so the save writes `{<locale>: "..."}` rather than a bare string the
+        // reader would have to guess the language of. QA round 4: this said `currentLocale` while
+        // the REQUEST asked for `previewLocale`, so English text was filed as Norwegian. One
+        // variable feeds both now.
+        storedLabel: previous?.label ?? null,
+        storedDescription: previous?.description ?? null,
+        locale: requestedLocale,
+      };
+    });
     onSuccess(mapped);
     showToast(t("shell.criteria.regenerated"), "success");
   } catch (err) {
@@ -4165,19 +4346,11 @@ function enterPreviewEditMode() {
   const editMcqMinPercent = Number.isFinite(sessionDraft?.mcqMinPercent)
     ? sessionDraft.mcqMinPercent
     : bundle?.selectedConfiguration?.moduleVersion?.assessmentPolicy?.passRules?.mcqMinPercent;
-  // B2 (#449 redesign): pull criteria from sessionDraft override OR existing rubric. Stored
-  // as record (id-keyed) — normalize to an ordered array for the editor. Mutated locally;
-  // captured back into a record on confirm. Tolerates rich + sparse shapes (#378 vs default).
-  // v1.1.92: extracted as helper so the criteriaReadyCallback can rebuild editor state when
-  // async generation completes mid-edit-session.
-  const sourceCriteria = sessionDraft?.criteria ?? bundle?.selectedConfiguration?.rubricVersion?.criteria ?? null;
-  let criteriaEditorState = buildEditorStateFromCriteriaRecord(sourceCriteria, editingLocale);
-  // #896 S2 baseline: what the form opened with, so Lagre can tell "nothing changed" from
-  // an edit. Criteria can still arrive asynchronously (criteriaReadyCallback); if they land
-  // after this, the baseline is null and the save proceeds - erring toward saving is safe,
-  // erring toward skipping would lose work.
-  const existingCriteriaRecord = buildCriteriaRecordFromEditorState(criteriaEditorState);
-  let nextNewCriterionId = 1;
+  // #896 S2 baseline, #896 S3c: what the criteria were when the form opened, so Lagre can tell
+  // "nothing changed" from an edit. The form no longer EDITS them — the baseline exists only so
+  // criteria that arrive from the conversation mid-session are recognised as a change worth
+  // saving.
+  const existingCriteriaRecord = sessionDraft?.criteria ?? null;
 
   // Lock locale bar and signal edit mode visually
   const previewPaneEl = document.querySelector(".preview-pane");
@@ -4270,22 +4443,20 @@ function enterPreviewEditMode() {
   // v1.1.92: when criteria-generation is in flight AND editor has no criteria yet, show
   // a "Genererer…" placeholder instead of an empty editor. When generation completes,
   // criteriaReadyCallback fires and the placeholder is replaced with real editor cards.
-  const renderCriteriaEditor = () => {
-    if (criteriaEditorState.length === 0 && criteriaGenerationInFlight) {
-      return `<p class="vk-total" style="font-style:italic;color:var(--color-meta);">${escapeHtml(t("shell.criteria.generating"))}</p>`;
-    }
-    return buildCriteriaEditorHtml(criteriaEditorState, t, tf);
-  };
-  // Show criteria section if existing rubric OR editor has criteria OR generation in flight.
-  // The last branch is what makes the placeholder visible in the race-condition scenario.
-  // #665: never for MCQ-only — those modules have no rubric/criteria.
-  const showCriteriaSection = !editIsMcqOnly && (bundle?.selectedConfiguration?.rubricVersion
-    || criteriaEditorState.length > 0
-    || criteriaGenerationInFlight);
-  const criteriaSectionHtml = showCriteriaSection
-    ? `<div class="preview-section-label">${escapeHtml(tf("shell.criteria.title", { count: criteriaEditorState.length }))}</div>
-       <div id="previewEditCriteriaContainer">${renderCriteriaEditor()}</div>`
-    : "";
+  // #896 S3c: NO criteria editor here any more.
+  //
+  // The spec says the criteria move to Innstillinger *from Rediger* — and the reason is in the
+  // spec too: "kriterieeditoren er en hel underredigerer som fyller mye plass, og endres sjelden
+  // etter at den er satt. Den vanlige oppgaven — juster scenarioteksten og lagre — skal ikke
+  // betale for den hver gang."
+  //
+  // An earlier pass mounted the editor in Innstillinger but left this one standing, which made
+  // the criteria editable in two surfaces — the duplication the whole epic exists to remove
+  // (reported from stage 2026-08-16: "vurderingskriteria ligger nå 4 steder").
+  //
+  // Criteria generated asynchronously from the conversation still land in `sessionDraft.criteria`
+  // and are saved by either surface; only the EDITING lives in one place.
+  const criteriaSectionHtml = "";
 
   // #665: free-text fields (task / candidate constraints / assessor guidance) only apply to
   // FREETEXT_PLUS_MCQ and FREETEXT_ONLY. For MCQ-only they are omitted entirely so the author
@@ -4322,44 +4493,16 @@ function enterPreviewEditMode() {
   scrollPreviewToTop();
   document.getElementById("previewEditTitle")?.focus();
 
-  // B2 (#449 redesign): wire up criteria-editor interactions. Captures DOM into state,
-  // mutates, re-renders the criteria container only (not the full preview, since other
-  // fields would lose their unsaved values). Uses event delegation on the container.
-  const criteriaContainer = document.getElementById("previewEditCriteriaContainer");
-  if (criteriaContainer) {
-    // v1.1.92: register callback so async populateSessionDraftCriteriaInBackground can
-    // populate the criteria editor when it completes mid-edit-session. Cleared in exitEditMode.
-    // Title-label count is also updated since it's derived from criteriaEditorState.length.
-    criteriaReadyCallback = (record) => {
-      const fresh = buildEditorStateFromCriteriaRecord(record, editingLocale);
-      if (fresh.length === 0) return;
-      criteriaEditorState = fresh;
-      criteriaContainer.innerHTML = renderCriteriaEditor();
-      // Update the section label's count (it lives just above the container).
-      const sectionLabel = criteriaContainer.previousElementSibling;
-      if (sectionLabel?.classList?.contains("preview-section-label")) {
-        sectionLabel.textContent = tf("shell.criteria.title", { count: criteriaEditorState.length });
-      }
-    };
-
-    const reRenderCriteria = () => {
-      criteriaContainer.innerHTML = renderCriteriaEditor();
-    };
-
-    // #896 S3c: behaviour comes from the shared `wireCriteriaEditor` now, so Innstillinger can
-    // mount the same editor without a second copy of it.
-    wireCriteriaEditor({
-      container: criteriaContainer,
-      getState: () => criteriaEditorState,
-      setState: (next) => { criteriaEditorState = next; },
-      rerender: reRenderCriteria,
-      onRegenerate: () => regenerateCriteriaFromTask(criteriaContainer, (newList) => {
-        criteriaEditorState = newList;
-        reRenderCriteria();
-      }),
-    });
-
-  }
+  // #896 S3c: criteria generated asynchronously from the conversation used to repaint an editor
+  // that lived here. That editor is gone, so they are parked on the session draft instead — kept,
+  // saveable, and visible the moment the author opens Innstillinger.
+  //
+  // Still missing (§6): marking the Innstillinger tab when something lands in a tab the author is
+  // not looking at. Without it, generated criteria arrive silently.
+  criteriaReadyCallback = (record) => {
+    if (!record || Object.keys(record).length === 0) return;
+    sessionDraft = { ...(sessionDraft ?? {}), criteria: record };
+  };
 
   function exitEditMode() {
     if (previewPaneEl) previewPaneEl.classList.remove("preview-pane--editing");
@@ -4389,9 +4532,11 @@ function enterPreviewEditMode() {
     // exitEditMode tears down the DOM. transform to storage shape (id-keyed) with weight
     // derived from maxScore. Empty/blank labels are dropped (matching the validation in
     // the save flow). Returns null when criteria section wasn't rendered (no rubric).
-    const newCriteriaRecord = criteriaContainer
-      ? buildCriteriaRecordFromEditorState(captureLatestCriteriaState(criteriaContainer, criteriaEditorState))
-      : null;
+    // #896 S3c: Rediger no longer edits criteria, so there is nothing to capture here. Whatever
+    // is on the session draft — from the conversation, or from Innstillinger — carries through
+    // untouched. `null` would mean "no override" and send the save to ensure-rubric, which would
+    // discard criteria the author had just generated.
+    const newCriteriaRecord = sessionDraft?.criteria ?? null;
     const newMcqQuestions = currentMcqQuestions.map((question, questionIndex) => {
       const container = previewContent.querySelector(`[data-preview-edit-question="${questionIndex}"]`);
       const optionInputs = Array.from(container?.querySelectorAll("[data-preview-edit-option]") ?? []);
@@ -4887,6 +5032,11 @@ function hasOpenEditForm() {
 // an open form's field values are LOST, while a draft is kept but stays unsaved.
 function unsavedTabSwitchKind() {
   if (hasOpenEditForm()) return "form";
+  // While a draft exists, a criteria edit is not unsaved work that a tab switch would destroy —
+  // it is absorbed into the draft here, which is what makes it survive to the draft save. Doing
+  // this before the check also stops the warning from claiming the edit is about to be lost when
+  // it is not; a warning the author knows is wrong is a warning they learn to click through.
+  syncSettingsCriteriaToDraft();
   // #896 S6 QA: settings BEFORE the draft, deliberately. The Innstillinger inputs are DOM-only
   // until Lagre and are destroyed by the re-render; a draft survives the switch. When both are
   // dirty, checking the draft first showed the reassuring "your draft is kept" message while the
@@ -4901,6 +5051,11 @@ function applyTabState(tab) {
   // boundary needs a re-render. Edit <-> Innstillinger does not - both are the author view,
   // and re-rendering there would be wasted work on every settings visit.
   const audienceChanges = (activeTab === "preview") !== (tab === "preview");
+  // QA 2026-08-16: last chance to read the criteria editor — after this the panel is hidden and
+  // re-rendered from the bundle. Typing into a label never reaches `settingsCriteriaState`, so a
+  // criteria edit made on a fresh draft would otherwise be gone by the time the draft is
+  // confirmed, and the GENERATED criteria would be saved instead. No-op unless a draft exists.
+  if (activeTab === "settings" && tab !== "settings") syncSettingsCriteriaToDraft();
   activeTab = tab;
   for (const [name, button] of Object.entries(tabButtons)) {
     if (!button) continue;
@@ -4986,9 +5141,21 @@ function renderSettingsPanel() {
   const mode = version?.assessmentMode ?? "FREETEXT_PLUS_MCQ";
   const modeLabel = t(`shell.settings.mode.${mode}`);
 
-  const rows = [];
+  // #896 S3c: eleven rows in one undifferentiated list, with three full editors bolted on after
+  // it, told the author nothing about what belongs together. Four groups: what the module IS, how
+  // it is ASSESSED, what the participant SUBMITS, and the history — which is a log, not a setting,
+  // and therefore sits on the far side of Lagre.
+  //
+  // `group()` opens a bucket; `row()` fills the open one. Rendering happens once at the end, so
+  // the order of the groups on screen is the order they are opened here.
+  const groups = new Map();
+  let openGroup = null;
+  const group = (labelKey) => {
+    openGroup = [];
+    groups.set(labelKey, openGroup);
+  };
   const row = (labelKey, valueHtml, isEmpty = false) => {
-    rows.push(`<dt>${escapeHtml(t(labelKey))}</dt><dd${isEmpty ? ' class="settings-empty"' : ""}>${valueHtml}</dd>`);
+    openGroup.push(`<dt>${escapeHtml(t(labelKey))}</dt><dd${isEmpty ? ' class="settings-empty"' : ""}>${valueHtml}</dd>`);
   };
   const emptyText = escapeHtml(t("shell.settings.notSet"));
   // #896 S3c: Innstillinger reads in the UI language, not the preview language. The summary rows
@@ -5030,17 +5197,65 @@ function renderSettingsPanel() {
       return `<option value="${value}"${disabled}${selected}>${escapeHtml(label + suffix)}</option>`;
     })
     .join("");
+  group("shell.settings.groupModule");
   row(
     "shell.settings.moduleType",
     `<select id="settingsModuleType" class="settings-input">${optionsHtml}</select>`,
   );
 
+  // #896 S3b: editable now that the composed save can write module-level fields. They were
+  // create-only before — set once at creation and impossible to correct afterwards.
+  //
+  // A FIXED SCALE, not translatable text (produkteier 2026-08-17: "Nivå er ment som en fast skala
+  // enkel→medium→vanskelig … dette er ikke noe som bør oversettes modul for modul"). The value is
+  // one of three; the LABEL is translated at render, from `shell.certLevel.*`. A free-text input
+  // let an author type anything into a field the generate endpoints validate as an enum.
+  const certLevel = certificationLevelValue(mod.certificationLevel);
+  const certOptions = [
+    // "Not set" is offered only while nothing IS set. QA round 7: as a clearing action it sent
+    // `certificationLevel: null`, and the composed-version schema takes a string or a record but
+    // not null — a 400 every time. `description` right beside it in that schema is `.nullable()`
+    // and can be cleared; this field is not, and making it so is a backend change that does not
+    // belong in this diff. Better to not offer an action than to offer one that fails.
+    ...(certLevel ? [] : [`<option value="" selected>${escapeHtml(t("shell.settings.notSet"))}</option>`]),
+    ...CERTIFICATION_LEVELS.map((level) =>
+      `<option value="${level}"${level === certLevel ? " selected" : ""}>${escapeHtml(t(`shell.certLevel.${level}`))}</option>`),
+    // Existing data may hold something outside the scale — older modules were told "plain text,
+    // e.g. foundation", and imports carry whatever they carry. Offer it back verbatim rather than
+    // silently rewriting it to a neighbouring level the author never chose.
+    ...(certLevel && !CERTIFICATION_LEVELS.includes(certLevel)
+      ? [`<option value="${escapeHtml(certLevel)}" selected>${escapeHtml(certLevel)}</option>`]
+      : []),
+  ].join("");
+  row(
+    "shell.settings.certificationLevel",
+    `<select id="settingsCertLevel" class="settings-input">${certOptions}</select>`,
+  );
+
+  // date inputs need yyyy-mm-dd, not a localized rendering
+  const asDateValue = (d) => (d ? new Date(d).toISOString().slice(0, 10) : "");
+  row(
+    "shell.settings.validity",
+    `<input id="settingsValidFrom" class="settings-input" type="date" value="${escapeHtml(asDateValue(mod.validFrom))}" />
+     <span aria-hidden="true">→</span>
+     <input id="settingsValidTo" class="settings-input" type="date" value="${escapeHtml(asDateValue(mod.validTo))}" />`,
+  );
+
+  group("shell.settings.groupAssessment");
   const mcqMinPercent = policy?.passRules?.mcqMinPercent;
   if (mode !== "FREETEXT_ONLY") {
     row(
       "shell.settings.mcqThreshold",
+      // QA round 7: this used to show 70 when nothing was stored, and the save copied whatever was
+      // on screen into `passRules` — so changing a validity date on a module with no policy at all
+      // silently gave it an MCQ pass mark of 70. A candidate with a good total but 69 % on the
+      // multiple choice would then fail a module that had no such rule the day before.
+      //
+      // Blank means "not set", exactly like the other three pass rules. That consistency is the
+      // point of the redesign; this field was the one left behaving differently.
       `<input id="settingsMcqMinPercent" class="settings-input" type="number" min="0" max="100"
-        value="${Number.isFinite(mcqMinPercent) ? escapeHtml(String(mcqMinPercent)) : 70}" /> %`,
+        value="${Number.isFinite(mcqMinPercent) ? escapeHtml(String(mcqMinPercent)) : ""}"
+        placeholder="${escapeHtml(t("shell.settings.notSet"))}" /> %`,
     );
   }
 
@@ -5073,47 +5288,11 @@ function renderSettingsPanel() {
       placeholder="${escapeHtml(t("shell.settings.notSet"))}" /> %`,
   );
 
-  const criteriaEntries = criteria && typeof criteria === "object" ? Object.entries(criteria) : [];
-  if (criteriaEntries.length > 0) {
-    const items = criteriaEntries
-      .map(([id, raw]) => {
-        const c = raw && typeof raw === "object" ? raw : {};
-        const label = settingsValue(c.label) || humaniseCriterionId(String(id));
-        const maxScore = Number(c.maxScore) > 0 ? ` (${Number(c.maxScore)})` : "";
-        return `<li>${escapeHtml(label)}${escapeHtml(maxScore)}</li>`;
-      })
-      .join("");
-    row("shell.settings.criteria", `<ul class="settings-criteria">${items}</ul>`);
-  } else {
-    row("shell.settings.criteria", emptyText, true);
-  }
-  // #896 S3c: the row above stays as the at-a-glance summary; the editor itself is a collapsed
-  // section below the list. The spec's reason for moving it here — "endres sjelden etter at den
-  // er satt" — is also the reason it opens closed: the common visit is a glance, not an edit.
-
-  row(
-    "shell.settings.assessmentPrompt",
-    hasPrompt ? escapeHtml(tf("shell.settings.promptVersion", { version: cfg.promptTemplateVersion.versionNo })) : emptyText,
-    !hasPrompt,
-  );
-
-  const submissionFields = version?.submissionSchema?.fields;
-  row(
-    "shell.settings.submissionSchema",
-    Array.isArray(submissionFields) && submissionFields.length
-      ? escapeHtml(tf("shell.settings.fieldCount", { count: submissionFields.length }))
-      : emptyText,
-    !(Array.isArray(submissionFields) && submissionFields.length),
-  );
-
-  // #896 S3b: editable now that the composed save can write module-level fields. They were
-  // create-only before — set once at creation and impossible to correct afterwards.
-  const certLevel = settingsValue(mod.certificationLevel);
-  row(
-    "shell.settings.certificationLevel",
-    `<input id="settingsCertLevel" class="settings-input" type="text" value="${escapeHtml(certLevel ?? "")}"
-      placeholder="${escapeHtml(t("shell.settings.notSet"))}" />`,
-  );
+  // #896 S3c: NO summary rows for criteria, assessment instruction or submission schema.
+  //
+  // Each of them used to have a row here showing the value AND a section further down editing it.
+  // Three duplications inside one panel — reported from stage as "vurderingskriteria ligger nå 4
+  // steder". The editors below carry their own summary; the row was the redundant half.
 
   // #896 S3c: the scaling rule's practical weight — the last settings field that existed only on
   // Avansert. `max_total` is NOT editable: it is derived from the criteria and shown there, so an
@@ -5127,15 +5306,6 @@ function renderSettingsPanel() {
     );
   }
 
-  // date inputs need yyyy-mm-dd, not a localized rendering
-  const asDateValue = (d) => (d ? new Date(d).toISOString().slice(0, 10) : "");
-  row(
-    "shell.settings.validity",
-    `<input id="settingsValidFrom" class="settings-input" type="date" value="${escapeHtml(asDateValue(mod.validFrom))}" />
-     <span aria-hidden="true">→</span>
-     <input id="settingsValidTo" class="settings-input" type="date" value="${escapeHtml(asDateValue(mod.validTo))}" />`,
-  );
-
   // An unsaved draft and a settings save would fight over the same next version: the settings
   // save carries the PERSISTED content forward, so it would quietly drop whatever is in the
   // draft. Blocking with a reason beats a silent loss.
@@ -5144,17 +5314,46 @@ function renderSettingsPanel() {
     ? `<p class="settings-empty">${escapeHtml(t("shell.settings.draftBlocks"))}</p>`
     : `<button type="button" id="settingsSave" class="btn-primary">${escapeHtml(t("shell.settings.save"))}</button>`;
 
-  host.innerHTML = `<dl class="settings-list">${rows.join("")}</dl>${renderCriteriaSection()}${renderPromptSection()}${renderSubmissionSchemaSection()}${actionHtml}${renderVersionHistory()}`;
+  // A group with nothing in it is not rendered: MCQ_ONLY has no submission schema and no
+  // criteria, and an empty heading reads as something that failed to load.
+  const settingsGroup = (labelKey, ...parts) => {
+    const body = parts.filter(Boolean).join("");
+    if (!body.trim()) return "";
+    return `<section class="settings-group" aria-labelledby="${labelKey.replace(/\./g, "-")}">
+      <h3 id="${labelKey.replace(/\./g, "-")}" class="settings-group-title">${escapeHtml(t(labelKey))}</h3>
+      ${body}
+    </section>`;
+  };
+  const groupList = (labelKey) => {
+    const items = groups.get(labelKey) ?? [];
+    return items.length > 0 ? `<dl class="settings-list">${items.join("")}</dl>` : "";
+  };
+
+  // Lagre sits after every setting and before the history — the author reads down, edits, saves,
+  // and only then looks at what came before. Putting it mid-panel made the fields below it look
+  // like they belonged to something else.
+  host.innerHTML = [
+    settingsGroup("shell.settings.groupModule", groupList("shell.settings.groupModule")),
+    settingsGroup(
+      "shell.settings.groupAssessment",
+      groupList("shell.settings.groupAssessment"),
+      renderCriteriaSection(),
+      renderPromptSection(),
+    ),
+    // Innsendingsskjema and Versjonshistorikk already carry their own headings, so they ARE the
+    // group — wrapping them would print the same word twice. CSS gives those two headings the
+    // same weight as the group titles above, which is what makes the four levels read as peers.
+    renderSubmissionSchemaSection(),
+    actionHtml,
+    renderVersionHistory(),
+  ].join("");
   mountCriteriaSection();
   mountPromptSection();
   mountSubmissionSchemaSection();
 
   // Stamp what was rendered, so hasUnsavedSettingsEdits can tell an edited field from an
   // untouched one. Without this, restoring silently discarded typed-but-unsaved settings.
-  for (const id of ["settingsCertLevel", "settingsValidFrom", "settingsValidTo", "settingsMcqMinPercent", "settingsModuleType", "settingsPracticalWeight"]) {
-    const el = document.getElementById(id);
-    if (el) el.dataset.renderedValue = el.value;
-  }
+  stampRenderedValues(SETTINGS_INPUT_IDS.panel);
   // #896 S3c: put back anything the author had typed but not saved. Expanding a section re-renders
   // the WHOLE panel, so opening the criteria editor after typing a new validity date silently
   // reverted the date. `renderedValue` above is the stored value; this restores the typed one on
@@ -5215,12 +5414,47 @@ function mergeLocaleInto(stored, locale, text) {
  * Captured before the rebuild, reapplied after. `renderedValue` still holds the STORED value, so
  * `hasUnsavedSettingsEdits` keeps working.
  */
+/**
+ * Every input in Innstillinger, grouped by the section that renders it.
+ *
+ * QA 2026-08-16 found the four pass-rule fields added in v2.18.9 missing from BOTH the draft
+ * preservation and the dirty check: typing a new overall pass mark and then expanding the
+ * assessment instruction silently reverted it, and leaving the tab warned about nothing. The
+ * cause was that this id list existed in six places — a stamping loop per section, a dirty check
+ * per section, and two panel-wide lists — so adding a field meant remembering all six. It is one
+ * list now, and `stampRenderedValues` / `anyFieldDirty` are the only readers.
+ */
+const SETTINGS_INPUT_IDS = {
+  // Rendered by renderSettingsPanel itself, so always present when the tab is open.
+  panel: [
+    "settingsModuleType", "settingsCertLevel", "settingsValidFrom", "settingsValidTo",
+    "settingsMcqMinPercent", "settingsTotalMin", "settingsPracticalMin",
+    "settingsBorderlineMin", "settingsBorderlineMax", "settingsPracticalWeight",
+  ],
+  // Inside collapsible sections: absent from the DOM until the author expands them.
+  prompt: ["settingsPromptSystem", "settingsPromptUser", "settingsPromptExamples"],
+  schema: ["settingsSchemaLabel", "settingsSchemaPlaceholder"],
+};
 const SETTINGS_TEXT_INPUT_IDS = [
-  "settingsCertLevel", "settingsValidFrom", "settingsValidTo", "settingsMcqMinPercent",
-  "settingsModuleType", "settingsPracticalWeight",
-  "settingsPromptSystem", "settingsPromptUser", "settingsPromptExamples",
-  "settingsSchemaLabel", "settingsSchemaPlaceholder",
+  ...SETTINGS_INPUT_IDS.panel, ...SETTINGS_INPUT_IDS.prompt, ...SETTINGS_INPUT_IDS.schema,
 ];
+
+/** Record what the DOM was rendered with, so an edit can be told from an untouched field. */
+function stampRenderedValues(ids) {
+  for (const id of ids) {
+    const el = document.getElementById(id);
+    if (el) el.dataset.renderedValue = el.value;
+  }
+}
+
+/** True when any of `ids` holds something other than what it was rendered with. */
+function anyFieldDirty(ids) {
+  return ids.some((id) => {
+    const el = document.getElementById(id);
+    return el && el.dataset.renderedValue !== undefined && el.value !== el.dataset.renderedValue;
+  });
+}
+
 let settingsDraftValues = null;
 
 // The Save button is disabled on click to stop a double-submit. Every path that returns without
@@ -5231,14 +5465,66 @@ function reenableSettingsSave() {
 }
 
 function captureSettingsDraftValues() {
-  const dirty = {};
+  // QA 2026-08-16 round 3: this REPLACED the cache with whatever was on screen, so an edit made in
+  // a section that is now collapsed — and therefore absent from the DOM — was thrown away the
+  // moment a sibling section was opened. Editing the instruction, folding it, opening the answer
+  // field and unfolding the instruction again silently restored the stored text.
+  //
+  // Start from what is already cached and let the live DOM override it: a field that is present
+  // is authoritative for itself, and one that is absent keeps whatever was last typed into it.
+  const dirty = { ...(settingsDraftValues ?? {}) };
   for (const id of SETTINGS_TEXT_INPUT_IDS) {
     const el = document.getElementById(id);
-    if (el && el.dataset.renderedValue !== undefined && el.value !== el.dataset.renderedValue) {
-      dirty[id] = el.value;
-    }
+    if (!el || el.dataset.renderedValue === undefined) continue;
+    if (el.value !== el.dataset.renderedValue) dirty[id] = el.value;
+    // Present and back to its stored value: the author undid the edit, so drop the stale entry
+    // rather than resurrect it on the next render.
+    else delete dirty[id];
   }
   settingsDraftValues = Object.keys(dirty).length > 0 ? dirty : null;
+}
+
+/**
+ * The value of a settings field, whether or not its section is currently open.
+ *
+ * QA 2026-08-16 round 3: `promptDirty` and `schemaDirty` read only live DOM elements, so an edit
+ * made and then folded away counted as no change at all — "ingen endringer" and no POST if it was
+ * the only edit, or a save that wrote everything except it. Collapsing a section is not undoing it.
+ */
+function settingsFieldValue(id) {
+  const el = document.getElementById(id);
+  if (el) return el.value;
+  return settingsDraftValues?.[id];
+}
+
+/** True when this ONE field differs from what was stored, counting a collapsed section. */
+function fieldIsDirty(id) {
+  const el = document.getElementById(id);
+  if (el) return el.dataset.renderedValue !== undefined && el.value !== el.dataset.renderedValue;
+  return settingsDraftValues?.[id] !== undefined;
+}
+
+/**
+ * Merge an edited localized field, or hand back the stored value untouched.
+ *
+ * QA round 5: a section is saved as a unit, so editing the system instruction ran
+ * `mergeLocaleInto` over the user template too. A stored bare string means "one language, not
+ * translated yet" — merging an untouched one turned it into `{nb: "…", "en-GB": "…"}` with the
+ * same text in both, asserting an English translation nobody wrote. Same rule the criteria editor
+ * already follows: only what changed is rewritten.
+ */
+function mergeSettingsField(id, stored) {
+  if (!fieldIsDirty(id)) return stored;
+  return mergeLocaleInto(stored, currentLocale, settingsFieldValue(id) ?? "");
+}
+
+/** True when any of `ids` differs from its stored value, counting collapsed sections. */
+function anyFieldDirtyIncludingCollapsed(ids) {
+  return ids.some((id) => {
+    const el = document.getElementById(id);
+    if (el) return el.dataset.renderedValue !== undefined && el.value !== el.dataset.renderedValue;
+    return settingsDraftValues?.[id] !== undefined;
+  });
 }
 
 function restoreSettingsDraftValues() {
@@ -5255,7 +5541,11 @@ function restoreSettingsDraftValues() {
 // panel re-renders on every settings change and a closure would lose the author's edits each time.
 // `null` = not opened this visit; an array = opened, and whatever is in it is what will be saved.
 let settingsCriteriaState = null;
-let settingsCriteriaExpanded = false;
+// #896 S3c, forfatterbeslutning 2026-08-16: kriteriene står ALLTID åpne, så det finnes ingen
+// sammenslått tilstand å holde styr på. Spesifikasjonens begrunnelse for å flytte dem hit var at
+// de «endres sjelden etter at den er satt» — men i praksis varierer genererte moduler mye, så de
+// er verdt et blikk hver gang man er innom. Instruks og svarfelt er fortsatt sammenslått: de er
+// lange, og endres faktisk sjelden.
 
 function settingsCriteriaSource() {
   return sessionDraft?.criteria ?? bundle?.selectedConfiguration?.rubricVersion?.criteria ?? null;
@@ -5264,74 +5554,161 @@ function settingsCriteriaSource() {
 // The record the section opened with, so the save can tell an edit from a visit.
 let settingsCriteriaBaseline = null;
 
+// What sessionDraft.criteria held when the panel was opened, so "Forkast" can put it back.
+// undefined = nothing captured yet; null = the draft had no criteria at all.
+let settingsCriteriaDraftBaseline;
+
+/**
+ * #896 S3c: discard everything the Innstillinger panel is holding that is tied to one module.
+ *
+ * Five separate variables, cleared in one place because clearing four of five is the bug this
+ * epic keeps producing. Called when a module is loaded (the state belongs to the previous one)
+ * and after a settings save (what was typed is now what is stored).
+ */
+/**
+ * Throw away unsaved settings work, on purpose, because the author said so.
+ *
+ * Distinct from `resetSettingsPanelState`, which runs when the panel's subject changes. This one
+ * is the answer to "Forkast": the criteria editor AND the cache that holds folded-away fields.
+ * Clearing only what is on screen left the folded edits to reappear later — the author was told
+ * their changes were discarded and they were not.
+ */
+function discardSettingsEdits() {
+  // QA round 6: criteria edits are absorbed into the session draft as they are made, so clearing
+  // only the panel state left them in the draft — they came back and were saved, after the author
+  // had confirmed "Forkast". Put the draft's criteria back to what they were when the panel was
+  // opened, so discarding means the same thing for every field in it.
+  if (sessionDraft && settingsCriteriaDraftBaseline !== undefined) {
+    const restored = { ...sessionDraft };
+    if (settingsCriteriaDraftBaseline === null) delete restored.criteria;
+    else restored.criteria = settingsCriteriaDraftBaseline;
+    sessionDraft = restored;
+  }
+  settingsCriteriaState = null;
+  settingsCriteriaBaseline = null;
+  settingsCriteriaDraftBaseline = undefined;
+  settingsDraftValues = null;
+}
+
+function resetSettingsPanelState() {
+  settingsCriteriaState = null;
+  settingsCriteriaBaseline = null;
+  // QA round 7: left behind, this belonged to the PREVIOUS module — and a later language switch
+  // would write its criteria onto the new draft, or delete them when it was null.
+  settingsCriteriaDraftBaseline = undefined;
+  settingsPromptExpanded = false;
+  settingsSchemaExpanded = false;
+  settingsDraftValues = null;
+}
+
 function renderCriteriaSection() {
   if (!bundle) return "";
-  const count = settingsCriteriaState
-    ? settingsCriteriaState.length
-    : Object.keys(settingsCriteriaSource() ?? {}).length;
+  // #665: MCQ-only modules have no rubric, so no criteria to show.
+  if ((bundle.selectedConfiguration?.moduleVersion?.assessmentMode ?? "FREETEXT_PLUS_MCQ") === "MCQ_ONLY") return "";
 
-  const toggle = `<button type="button" id="settingsCriteriaToggle" class="btn-secondary settings-criteria-toggle"
-      aria-expanded="${settingsCriteriaExpanded ? "true" : "false"}" aria-controls="settingsCriteriaEditor">${
-        escapeHtml(t(settingsCriteriaExpanded ? "shell.settings.criteriaDone" : "shell.settings.criteriaEdit"))
-      }</button>`;
+  // Read the stored criteria the first time the panel renders them. Re-reading on every render
+  // would discard edits, since the panel rebuilds whenever anything else in it changes.
+  if (settingsCriteriaState === null) {
+    settingsCriteriaState = buildEditorStateFromCriteriaRecord(settingsCriteriaSource(), currentLocale);
+    settingsCriteriaBaseline = buildCriteriaRecordFromEditorState(settingsCriteriaState);
+    settingsCriteriaDraftBaseline = sessionDraft?.criteria ?? null;
+  }
 
-  // Rendered but hidden rather than absent when collapsed: the editor keeps DOM state (focus,
-  // scroll, half-typed text) that a rebuild would throw away every time the panel re-renders.
-  const editorHtml = settingsCriteriaExpanded
-    ? `<div id="settingsCriteriaEditor" class="settings-criteria-editor">${
-        buildCriteriaEditorHtml(settingsCriteriaState ?? [], t, tf)
-      }</div>`
-    : `<div id="settingsCriteriaEditor" class="settings-criteria-editor" hidden></div>`;
-
+  // Always open, and therefore no summary row above it: the editor IS the summary. A row listing
+  // the criteria plus a section editing them was the duplication reported from stage.
   return `<section class="settings-criteria-section" aria-labelledby="settingsCriteriaHeading">
-    <div class="settings-criteria-head">
-      <h3 id="settingsCriteriaHeading" class="version-history-heading">${
-        escapeHtml(tf("shell.criteria.title", { count }))
-      }</h3>
-      ${toggle}
-    </div>
-    ${editorHtml}
+    <h3 id="settingsCriteriaHeading" class="settings-subsection-title">${
+      escapeHtml(tf("shell.criteria.title", { count: settingsCriteriaState.length }))
+    }</h3>
+    <div id="settingsCriteriaEditor" class="settings-criteria-editor">${
+      buildCriteriaEditorHtml(settingsCriteriaState, t, tf)
+    }</div>
   </section>`;
 }
 
+/**
+ * QA 2026-08-16: carry a criteria edit into the session draft while one exists.
+ *
+ * While there is an unsaved draft, Innstillinger has NO Lagre button — saving settings would
+ * carry the persisted content forward and drop the draft, so it is deliberately blocked. But the
+ * criteria editor still accepts edits, and they were written only to `settingsCriteriaState`.
+ * Confirming the draft reads `sessionDraft.criteria`, so an author who generated a module and then
+ * adjusted its criteria in Innstillinger saved the GENERATED criteria, silently, every time.
+ *
+ * `settingsCriteriaSource()` already prefers `sessionDraft.criteria` when reading; this is the
+ * matching write. The baseline moves with it, because an edit that is safely in the draft is not
+ * unsaved work and must not raise the exit warning.
+ */
+function syncSettingsCriteriaToDraft() {
+  if (!sessionDraft || settingsCriteriaState === null) return;
+  // Typing into a label never reaches `settingsCriteriaState` — only add/remove do — so the live
+  // DOM is the truth here, exactly as it is on the settings-save path.
+  const state = captureLatestCriteriaState(
+    document.getElementById("settingsCriteriaEditor"),
+    settingsCriteriaState,
+  );
+  const record = buildCriteriaRecordFromEditorState(state);
+  if (!record) return;
+  settingsCriteriaState = state;
+  sessionDraft = { ...sessionDraft, criteria: record };
+  // The baseline deliberately does NOT move. It answers one question — "has the author changed
+  // anything since the panel opened?" — and moving it on every sync made the answer always "no",
+  // which let background generation overwrite manual edits and let a language switch roll them
+  // back (QA round 7, three findings from this one line).
+}
+
 function mountCriteriaSection() {
-  const toggle = document.getElementById("settingsCriteriaToggle");
   const container = document.getElementById("settingsCriteriaEditor");
-  if (!toggle || !container) return;
+  if (!container) return;
 
-  toggle.addEventListener("click", () => {
-    if (!settingsCriteriaExpanded) {
-      // Read the stored criteria only on OPEN. Re-reading on every render would discard edits.
-      settingsCriteriaState = buildEditorStateFromCriteriaRecord(settingsCriteriaSource(), currentLocale);
-      settingsCriteriaBaseline = buildCriteriaRecordFromEditorState(settingsCriteriaState);
-    }
-    captureSettingsDraftValues();
-    settingsCriteriaExpanded = !settingsCriteriaExpanded;
-    renderSettingsPanel();
-  });
-
-  if (!settingsCriteriaExpanded) return;
+  // Typing never reaches the editor state — only Add and Remove do — so `change` (which fires on
+  // blur, including the blur caused by clicking a tab) is when a typed criterion becomes part of
+  // the draft. No-op when there is no draft.
+  container.addEventListener("change", () => { syncSettingsCriteriaToDraft(); });
 
   wireCriteriaEditor({
     container,
     getState: () => settingsCriteriaState ?? [],
+    // NO sync here. QA 2026-08-16 round 3: `syncSettingsCriteriaToDraft` re-reads the DOM, and
+    // `setState` runs BEFORE `rerender` has drawn the new cards — so Add read one card too few and
+    // dropped the new criterion, Remove read the removed card back in, and regeneration replaced
+    // the generated list with the old DOM while still reporting success. The sync belongs at the
+    // exits (`unsavedTabSwitchKind`, `applyTabState`), where state and DOM agree.
     setState: (next) => { settingsCriteriaState = next; },
-    rerender: () => { container.innerHTML = buildCriteriaEditorHtml(settingsCriteriaState ?? [], t, tf); },
+    rerender: () => {
+      container.innerHTML = buildCriteriaEditorHtml(settingsCriteriaState ?? [], t, tf);
+      // After the redraw, so the sync reads the cards that now exist. Add and Remove go through
+      // here, and doing it from setState (round 3) read the DOM one redraw too early.
+      syncSettingsCriteriaToDraft();
+    },
     onRegenerate: () => regenerateCriteriaFromTask(container, (newList) => {
       settingsCriteriaState = newList;
       container.innerHTML = buildCriteriaEditorHtml(settingsCriteriaState, t, tf);
+      // After the redraw, not before: the DOM is what the sync reads.
+      syncSettingsCriteriaToDraft();
     }),
   });
 }
 
 // Criteria count as unsaved settings work, so every exit from Innstillinger warns about them too
 // — the same three exits the tab, language and Avansert guards already cover.
-function hasUnsavedCriteriaEdits() {
-  if (!settingsCriteriaExpanded || settingsCriteriaState === null) return false;
+/** Has the author changed the criteria since the panel opened? Independent of where they land. */
+function settingsCriteriaEdited() {
+  if (settingsCriteriaState === null) return false;
   const current = buildCriteriaRecordFromEditorState(
     captureLatestCriteriaState(document.getElementById("settingsCriteriaEditor"), settingsCriteriaState),
   );
   return JSON.stringify(current) !== JSON.stringify(settingsCriteriaBaseline);
+}
+
+/**
+ * Is there criteria work a tab or language switch would DESTROY?
+ *
+ * Only when there is no session draft. With one, the edits are absorbed into it as they are made,
+ * so the switch keeps them — and the dialog the author then sees says exactly that.
+ */
+function hasUnsavedCriteriaEdits() {
+  return settingsCriteriaEdited() && !sessionDraft;
 }
 
 /**
@@ -5349,13 +5726,20 @@ let settingsPromptExpanded = false;
 
 function renderPromptSection() {
   if (!bundle) return "";
+  // QA round 4: an MCQ-only version has no prompt, and the save omits the whole rubric/prompt
+  // branch for it — but the editor was still drawn. Editing the instruction on an MCQ-only module
+  // produced a new, identical version and a green confirmation, with the edit nowhere in the
+  // payload and gone after reload. Same rule as the criteria editor: if the save cannot carry it,
+  // do not offer it.
+  const promptMode = bundle.selectedConfiguration?.moduleVersion?.assessmentMode ?? "FREETEXT_PLUS_MCQ";
+  if (promptMode === "MCQ_ONLY") return "";
   const prompt = bundle.selectedConfiguration?.promptTemplateVersion ?? null;
   const localeLabel = escapeHtml(tf("shell.settings.editingInLocale", { locale: currentLocale }));
 
   if (!settingsPromptExpanded) {
     return `<section class="settings-criteria-section">
       <div class="settings-criteria-head">
-        <h3 class="version-history-heading">${escapeHtml(t("shell.settings.assessmentPrompt"))}</h3>
+        <h3 class="settings-subsection-title">${escapeHtml(t("shell.settings.assessmentPrompt"))}</h3>
         <button type="button" id="settingsPromptToggle" class="btn-secondary settings-criteria-toggle"
           aria-expanded="false" aria-controls="settingsPromptEditor">${escapeHtml(t("shell.settings.promptEdit"))}</button>
       </div>
@@ -5369,7 +5753,7 @@ function renderPromptSection() {
 
   return `<section class="settings-criteria-section">
     <div class="settings-criteria-head">
-      <h3 class="version-history-heading">${escapeHtml(t("shell.settings.assessmentPrompt"))}</h3>
+      <h3 class="settings-subsection-title">${escapeHtml(t("shell.settings.assessmentPrompt"))}</h3>
       <button type="button" id="settingsPromptToggle" class="btn-secondary settings-criteria-toggle"
         aria-expanded="true" aria-controls="settingsPromptEditor">${escapeHtml(t("shell.settings.criteriaDone"))}</button>
     </div>
@@ -5393,10 +5777,7 @@ function mountPromptSection() {
     settingsPromptExpanded = !settingsPromptExpanded;
     renderSettingsPanel();
   });
-  for (const id of ["settingsPromptSystem", "settingsPromptUser", "settingsPromptExamples"]) {
-    const el = document.getElementById(id);
-    if (el) el.dataset.renderedValue = el.value;
-  }
+  stampRenderedValues(SETTINGS_INPUT_IDS.prompt);
 }
 
 /**
@@ -5416,7 +5797,7 @@ function renderSubmissionSchemaSection() {
   if (!settingsSchemaExpanded) {
     return `<section class="settings-criteria-section">
       <div class="settings-criteria-head">
-        <h3 class="version-history-heading">${escapeHtml(t("shell.settings.submissionSchema"))}</h3>
+        <h3 class="settings-group-title">${escapeHtml(t("shell.settings.submissionSchema"))}</h3>
         <button type="button" id="settingsSchemaToggle" class="btn-secondary settings-criteria-toggle"
           aria-expanded="false" aria-controls="settingsSchemaEditor">${escapeHtml(t("shell.settings.schemaEdit"))}</button>
       </div>
@@ -5428,7 +5809,7 @@ function renderSubmissionSchemaSection() {
   const placeholder = escapeHtml(localizeValueForLocale(field?.placeholder ?? "", currentLocale));
   return `<section class="settings-criteria-section">
     <div class="settings-criteria-head">
-      <h3 class="version-history-heading">${escapeHtml(t("shell.settings.submissionSchema"))}</h3>
+      <h3 class="settings-group-title">${escapeHtml(t("shell.settings.submissionSchema"))}</h3>
       <button type="button" id="settingsSchemaToggle" class="btn-secondary settings-criteria-toggle"
         aria-expanded="true" aria-controls="settingsSchemaEditor">${escapeHtml(t("shell.settings.criteriaDone"))}</button>
     </div>
@@ -5450,10 +5831,7 @@ function mountSubmissionSchemaSection() {
     settingsSchemaExpanded = !settingsSchemaExpanded;
     renderSettingsPanel();
   });
-  for (const id of ["settingsSchemaLabel", "settingsSchemaPlaceholder"]) {
-    const el = document.getElementById(id);
-    if (el) el.dataset.renderedValue = el.value;
-  }
+  stampRenderedValues(SETTINGS_INPUT_IDS.schema);
 }
 
 /**
@@ -5501,7 +5879,7 @@ function renderVersionHistory() {
   });
 
   return `<section class="version-history" aria-labelledby="versionHistoryHeading">
-    <h3 id="versionHistoryHeading" class="version-history-heading">${escapeHtml(t("shell.versions.heading"))}</h3>
+    <h3 id="versionHistoryHeading" class="settings-group-title">${escapeHtml(t("shell.versions.heading"))}</h3>
     <p class="settings-empty">${escapeHtml(t("shell.versions.explainer"))}</p>
     <ul class="version-list">${items.join("")}</ul>
   </section>`;
@@ -5586,18 +5964,17 @@ async function restoreModuleVersionInBackground(sourceVersionId, idempotencyKey 
 // The settings inputs live only in the DOM until Lagre. Their rendered values are stamped on the
 // elements so anything that reloads the module can tell whether it would be throwing away edits.
 function hasUnsavedSettingsEdits() {
-  const ids = [
-    "settingsCertLevel", "settingsValidFrom", "settingsValidTo", "settingsMcqMinPercent", "settingsModuleType",
-    // #896 S3c: the prompt and schema editors' fields are DOM-only too, and leaving the tab
-    // rebuilds them.
-    "settingsPromptSystem", "settingsPromptUser", "settingsPromptExamples",
-    "settingsSchemaLabel", "settingsSchemaPlaceholder", "settingsPracticalWeight",
-  ];
-  const fieldDirty = ids.some((id) => {
-    const el = document.getElementById(id);
-    return el && el.dataset.renderedValue !== undefined && el.value !== el.dataset.renderedValue;
-  });
-  return fieldDirty || hasUnsavedCriteriaEdits();
+  // Every field in the panel — plus the ones inside COLLAPSED sections, which are not in the DOM
+  // at all and whose typed values live only in `settingsDraftValues`.
+  //
+  // Only entries whose field is currently absent count from there. A field that is on screen is
+  // judged by the DOM, because the snapshot is taken before a re-render and goes stale the moment
+  // the author reverts the value by hand — trusting it would warn about an edit that is no longer
+  // there, and a warning the author knows is wrong is a warning they learn to click through.
+  const heldInCollapsedSection = Object.keys(settingsDraftValues ?? {}).some(
+    (id) => document.getElementById(id) === null,
+  );
+  return anyFieldDirty(SETTINGS_TEXT_INPUT_IDS) || heldInCollapsedSection || hasUnsavedCriteriaEdits();
 }
 
 /**
@@ -5624,9 +6001,12 @@ async function saveSettingsInBackground() {
   const isMcqOnly = mode === "MCQ_ONLY";
   const isFreetextOnly = mode === "FREETEXT_ONLY";
 
+  // Blank is a legitimate value — "no per-module override" — and must not be treated as invalid.
+  // Only a filled field that does not parse is the author's mistake to see.
+  const thresholdBlank = !thresholdInput || thresholdInput.value.trim() === "";
   // An out-of-range threshold is the author's mistake to see, not something to quietly turn
   // into 70. parsePercentInRange returns null for 101, for 72.5 and for gibberish alike.
-  if (thresholdInput && !isFreetextOnly && mcqMinPercent === null) {
+  if (thresholdInput && !thresholdBlank && !isFreetextOnly && mcqMinPercent === null) {
     showToast(t("shell.settings.invalidThreshold"), "error");
     thresholdInput.focus();
     reenableSettingsSave();
@@ -5647,7 +6027,9 @@ async function saveSettingsInBackground() {
   // reverting to platform defaults on a mode change.
   const existingPolicy = version?.assessmentPolicy ?? null;
   const passRules = { ...(existingPolicy?.passRules ?? {}) };
-  if (isFreetextOnly) {
+  if (isFreetextOnly || (thresholdInput && thresholdBlank)) {
+    // Blank clears the override, the same as the other three pass rules. Before this, a module
+    // with no policy showed a placeholder 70 that the save wrote in for real.
     delete passRules.mcqMinPercent;
   } else if (mcqMinPercent !== null) {
     passRules.mcqMinPercent = mcqMinPercent;
@@ -5674,6 +6056,9 @@ async function saveSettingsInBackground() {
     if (read.value === null && document.getElementById(id).value.trim() !== "") {
       showToast(t("shell.settings.invalidThreshold"), "error");
       document.getElementById(id).focus();
+      // Without this the author fixes the number and finds Lagre dead — the click handler
+      // disables it, so every early return has to hand it back.
+      reenableSettingsSave();
       return;
     }
     if (read.value === null) delete passRules[key];
@@ -5704,18 +6089,30 @@ async function saveSettingsInBackground() {
   const certInput = document.getElementById("settingsCertLevel");
   const fromInput = document.getElementById("settingsValidFrom");
   const toInput = document.getElementById("settingsValidTo");
-  const currentCert = localizeValue(bundle.module?.certificationLevel) ?? "";
+  // One value, not one per language — see `certificationLevelValue`. The QA-round-2 defect was
+  // that the comparison read a different locale than the one on screen, which made an untouched
+  // level look changed; with a single value there is no locale to get wrong.
+  const currentCert = certificationLevelValue(bundle.module?.certificationLevel);
   const currentFrom = bundle.module?.validFrom ? new Date(bundle.module.validFrom).toISOString().slice(0, 10) : "";
   const currentTo = bundle.module?.validTo ? new Date(bundle.module.validTo).toISOString().slice(0, 10) : "";
 
   if (fromInput?.value && toInput?.value && toInput.value < fromInput.value) {
     showToast(t("shell.settings.invalidValidity"), "error");
     toInput.focus();
+    reenableSettingsSave();
     return;
   }
 
   const moduleFields = {
-    ...(certInput && certInput.value.trim() !== currentCert ? { certificationLevel: certInput.value.trim() } : {}),
+    // Replaced outright, and deliberately: the level is one value on a fixed scale, so there is
+    // nothing from another language to preserve. (This is the opposite of the title, description
+    // and criteria, which ARE prose and must be merged — the difference is what the field means,
+    // not how it happens to be typed.)
+    // Never `null`: the schema does not accept it (see the select above), and a blank selection
+    // is only reachable when the level was already unset — in which case there is no change.
+    ...(certInput && certInput.value.trim() && certInput.value.trim() !== currentCert
+      ? { certificationLevel: certInput.value.trim() }
+      : {}),
     ...(fromInput && fromInput.value !== currentFrom ? { validFrom: fromInput.value || null } : {}),
     ...(toInput && toInput.value !== currentTo ? { validTo: toInput.value || null } : {}),
   };
@@ -5759,30 +6156,29 @@ async function saveSettingsInBackground() {
 
   // #896 S3c: the assessment instruction. Edited in ONE language, merged onto the stored value —
   // the composer writes it verbatim, so sending only the edited locale would delete the other two.
-  const promptDirty = ["settingsPromptSystem", "settingsPromptUser", "settingsPromptExamples"].some((id) => {
-    const el = document.getElementById(id);
-    return el && el.dataset.renderedValue !== undefined && el.value !== el.dataset.renderedValue;
-  });
+  const promptDirty = anyFieldDirtyIncludingCollapsed(SETTINGS_INPUT_IDS.prompt);
   let promptPayload = null;
   if (promptDirty) {
     const stored = cfg.promptTemplateVersion ?? {};
-    const examplesEl = document.getElementById("settingsPromptExamples");
+    const examplesRaw = settingsFieldValue("settingsPromptExamples");
     let examples = stored.examples ?? [];
-    if (examplesEl) {
+    if (examplesRaw !== undefined) {
       try {
-        const parsed = JSON.parse(examplesEl.value || "[]");
+        const parsed = JSON.parse(examplesRaw || "[]");
         if (!Array.isArray(parsed)) throw new Error("not an array");
         examples = parsed;
       } catch {
         // Malformed JSON is the author's to see, not something to silently drop or guess at.
+        // The field may be folded away, in which case there is nothing to focus — the message
+        // still has to appear, or the save fails without a reason.
         showToast(t("shell.settings.promptExamplesInvalid"), "error");
-        examplesEl.focus();
+        document.getElementById("settingsPromptExamples")?.focus();
         reenableSettingsSave();
-    return;
+        return;
       }
     }
-    const systemPrompt = mergeLocaleInto(stored.systemPrompt, currentLocale, document.getElementById("settingsPromptSystem")?.value ?? "");
-    const userPromptTemplate = mergeLocaleInto(stored.userPromptTemplate, currentLocale, document.getElementById("settingsPromptUser")?.value ?? "");
+    const systemPrompt = mergeSettingsField("settingsPromptSystem", stored.systemPrompt);
+    const userPromptTemplate = mergeSettingsField("settingsPromptUser", stored.userPromptTemplate);
     if (!systemPrompt || !userPromptTemplate) {
       showToast(t("shell.settings.promptRequired"), "error");
       reenableSettingsSave();
@@ -5794,24 +6190,33 @@ async function saveSettingsInBackground() {
   // #896 S3c: the submission schema. Only the FIRST field is editable (#901), and the rest are
   // carried through untouched — a module authored via the API can legitimately have several, and
   // rebuilding the array from one input would delete them.
-  const schemaDirty = ["settingsSchemaLabel", "settingsSchemaPlaceholder"].some((id) => {
-    const el = document.getElementById(id);
-    return el && el.dataset.renderedValue !== undefined && el.value !== el.dataset.renderedValue;
-  });
+  const schemaDirty = anyFieldDirtyIncludingCollapsed(SETTINGS_INPUT_IDS.schema);
   let submissionSchemaPayload = null;
   if (schemaDirty) {
     const existing = version?.submissionSchema ?? buildDefaultSubmissionSchema();
     const fields = (existing.fields ?? []).map((f) => ({ ...f }));
     const first = fields[0] ?? { id: "response", type: "textarea", required: true };
-    const label = mergeLocaleInto(first.label, currentLocale, document.getElementById("settingsSchemaLabel")?.value ?? "");
+    const label = mergeSettingsField("settingsSchemaLabel", first.label);
     if (!label) {
       showToast(t("shell.settings.schemaLabelRequired"), "error");
       reenableSettingsSave();
     return;
     }
-    const placeholder = mergeLocaleInto(first.placeholder, currentLocale, document.getElementById("settingsSchemaPlaceholder")?.value ?? "");
+    const placeholder = mergeSettingsField("settingsSchemaPlaceholder", first.placeholder);
     fields[0] = { ...first, label, ...(placeholder ? { placeholder } : {}) };
     submissionSchemaPayload = { ...existing, fields };
+  }
+
+  // QA 2026-08-16: switching to MCQ-only in the SAME save as a criteria, instruction or weight
+  // edit dropped the edit without a word. The version model keeps stored free-text content on the
+  // previous version — switching back brings it into view — but an edit that was never saved has
+  // no previous version to survive on, so it is simply gone, and switching back shows the OLD
+  // criteria as if nothing had been typed. Refusing is the only honest option: the author can
+  // save the edit first, or undo it, and both are recoverable. Guessing is not.
+  if (isMcqOnly && mode !== currentMode && (criteriaRecord || promptPayload || weightChanged)) {
+    showToast(t("shell.settings.mcqOnlyDiscardsEdits"), "error");
+    reenableSettingsSave();
+    return;
   }
 
   if (
@@ -5879,17 +6284,11 @@ async function saveSettingsInBackground() {
       body: JSON.stringify(body),
     });
     await loadModule(moduleId);
-    // The criteria the author typed are now the stored ones. Clearing the editor state makes the
-    // next render read them back from the bundle; leaving it would keep reporting unsaved edits
-    // forever and warn on every exit from a tab with nothing left to lose.
-    settingsCriteriaState = null;
-    settingsCriteriaBaseline = null;
-    settingsCriteriaExpanded = false;
-    settingsPromptExpanded = false;
-    settingsSchemaExpanded = false;
-    // What was typed is now what is stored. Keeping the draft values would restore them on top of
-    // the freshly loaded ones and report unsaved edits that no longer exist.
-    settingsDraftValues = null;
+    // The criteria the author typed are now the stored ones, so the panel state is discarded and
+    // the next render reads them back from the bundle. Keeping it would report unsaved edits
+    // forever and warn on every exit from a tab with nothing left to lose. (loadModule above
+    // already does this; the call is kept so the reset does not depend on that being true.)
+    resetSettingsPanelState();
     renderSettingsPanel();
     // loadModule swallows its own fetch errors, so a 502 on the reload would leave the panel
     // showing the previous version under a green toast. Verify what came back instead of
@@ -5897,8 +6296,14 @@ async function saveSettingsInBackground() {
     const reloadedMode = bundle?.selectedConfiguration?.moduleVersion?.assessmentMode ?? "FREETEXT_PLUS_MCQ";
     // Check the module-level fields too. When certification or validity was the only change,
     // comparing the mode alone always matched and a failed reload still showed green.
-    const reloadedCert = localizeValue(bundle?.module?.certificationLevel) ?? "";
-    const certStale = moduleFields.certificationLevel !== undefined && reloadedCert !== moduleFields.certificationLevel;
+    // Both sides through the same reader, so the comparison cannot be confused by the shape the
+    // value happens to be stored in. (Round 3 had this comparing a locale object against a
+    // localized string, which was never equal — every successful edit reported a stale reload.)
+    const reloadedCert = certificationLevelValue(bundle?.module?.certificationLevel);
+    const savedCert = moduleFields.certificationLevel === undefined
+      ? undefined
+      : certificationLevelValue(moduleFields.certificationLevel);
+    const certStale = savedCert !== undefined && reloadedCert !== savedCert;
     // Validity too. Checking mode and certification only meant a date-only change always compared
     // equal on the two fields that were checked, so a failed reload still showed green over the
     // old date — the exact hole the check was added to close, left open for one more field.
@@ -6001,6 +6406,11 @@ function bindViewTabs() {
       generationAbort?.abort();
       document.getElementById("previewEditCancel")?.click();
     }
+    // QA round 5: "Forkast" did not clear the cache that holds the values of COLLAPSED sections,
+    // so a discarded instruction came back the next time the section was opened. Worse across a
+    // language switch: the English cache was laid over the Norwegian field, and the next save
+    // could file English text as `nb`. Discarding settings has to discard all of them.
+    if (kind === "settings") discardSettingsEdits();
     applyTabState(target);
     syncTabToUrl(target);
     tabButtons[target]?.focus();
@@ -6230,6 +6640,9 @@ async function createMcqOnlyModuleThenGenerate(moduleTitle, sourceMaterial, cert
     candidateTaskConstraints: "",
     mcqQuestions: [],
   };
+  // QA round 4: same as the free-text path — Innstillinger needs the bundle or it shows
+  // "load a module". Three creation paths, and the first fix reached one of them.
+  await attachBundleForNewModule(selectedModuleId);
   renderPreview();
 
   // Reuse the existing MCQ-generation chain; on accept go straight to the draft-ready actions
@@ -6556,9 +6969,42 @@ async function confirmAndGenerate(moduleTitle, existingModuleId, sourceMaterial,
   );
 
   sessionDraft = { title: moduleTitle, taskText: "", assessorExpectedContent: "", candidateTaskConstraints: "", assessmentBlueprint: blueprint ?? undefined, mcqQuestions: [], ...(freetextOnly ? { assessmentMode: "FREETEXT_ONLY" } : {}) };
+  // QA 2026-08-16 round 3: the new-module flow set `selectedModuleId` and `sessionDraft` but never
+  // loaded `bundle`, and `renderSettingsPanel` refuses without one. Before S3c that cost nothing —
+  // the criteria were in Rediger. Now they are ONLY in Innstillinger, so the documented flow
+  // "create a module, check the criteria, adjust one, then save" ended at "load a module to see
+  // the settings". Attach the freshly created module's envelope so the tab works.
+  //
+  // Deliberately NOT loadModule(): that clears `sessionDraft`, which is the draft being generated.
+  await attachBundleForNewModule(selectedModuleId);
   renderPreview();
 
   generateDraftInBackground(sourceMaterial, certLevel, locale, generationMode, onDraftReady, blueprint, scenarioMode);
+}
+
+/**
+ * Load a just-created module's export envelope into `bundle`, leaving everything else alone.
+ *
+ * A brand-new module has no versions yet, so the envelope is nearly empty — but it is enough for
+ * Innstillinger to render, which is the point: the criteria editor lives there now, and the author
+ * is meant to be able to look at the criteria before the first save.
+ *
+ * Failure is silent and non-fatal: the panel falls back to "load a module", which is what it did
+ * before. Generation must not be blocked by a settings panel that could not be drawn.
+ */
+async function attachBundleForNewModule(moduleId) {
+  if (!moduleId) return;
+  // QA round 4: `loadModule` was the only path that cleared the settings panel state, and this one
+  // deliberately bypasses it. Visiting module A's settings, going back to idle and creating module
+  // B therefore showed A's criteria on B — and leaving the tab synced them into B's draft. The
+  // state belongs to whichever module the panel last drew; a different module means none of it.
+  resetSettingsPanelState();
+  try {
+    const exportData = await apiFetch(`/api/admin/content/modules/${encodeURIComponent(moduleId)}/export`, getHeaders);
+    bundle = exportData?.moduleExport ?? bundle;
+  } catch {
+    // Left as it was.
+  }
 }
 
 function askForMcqGeneration(sourceMaterial, certLevel, locale, generationMode) {
@@ -6598,6 +7044,10 @@ async function populateSessionDraftCriteriaInBackground() {
   }
 
   criteriaGenerationInFlight = true;
+  // QA round 6: captured BEFORE the call. The author can switch UI language while generation runs,
+  // and tagging the reply with the live locale files English text as Norwegian — which then looks
+  // like a translation that exists.
+  const generationLocale = currentLocale;
   renderPreview();
   try {
     const result = await apiFetch("/api/admin/content/generate/rubric", getHeaders, {
@@ -6606,14 +7056,18 @@ async function populateSessionDraftCriteriaInBackground() {
         taskText,
         assessorExpectedContent: assessorText,
         candidateTaskConstraints: constraintsText || undefined,
-        certificationLevel: bundle?.module?.certificationLevel ?? "intermediate",
-        locale: currentLocale,
+        certificationLevel: certificationLevelForGeneration(),
+        locale: generationLocale,
         ...(blueprintObject ? { blueprint: blueprintObject } : {}),
       }),
     });
     const generated = Array.isArray(result?.rubric?.criteria) ? result.rubric.criteria : [];
-    const record = llmCriteriaArrayToStorageRecord(generated);
-    if (sessionDraft && Object.keys(record).length > 0) {
+    const record = llmCriteriaArrayToStorageRecord(generated, generationLocale);
+    // QA round 7: the author can open Innstillinger while this is in flight and edit the criteria,
+    // and those edits are synced into the draft as they are made. Overwriting the draft here threw
+    // them away — and because the sync also used to move the dirty baseline, the guard below then
+    // saw a "clean" editor and replaced it with the generated list too. Their work wins.
+    if (sessionDraft && Object.keys(record).length > 0 && !settingsCriteriaEdited()) {
       sessionDraft = { ...sessionDraft, criteria: record };
     }
   } catch {
@@ -6636,6 +7090,20 @@ async function populateSessionDraftCriteriaInBackground() {
       }
     } else {
       renderPreview();
+    }
+    // QA 2026-08-16 round 3: since S3c the criteria live in Innstillinger, and its editor state is
+    // seeded ONCE — on the first render. An author who opened Innstillinger while generation was
+    // still running seeded it to an empty list, and this completion only re-rendered the preview.
+    // The panel then kept showing "no criteria" over a draft that had them, and would have saved
+    // that emptiness. Discard the stale seed so the next render reads the generated criteria.
+    // ...but ONLY when the author has not started editing. QA round 4: an unconditional reset
+    // erased criteria they had added or changed while generation was still running — trading one
+    // silent loss for another. If the editor is dirty, their work wins and the generated criteria
+    // stay on the draft, where the save still reads them.
+    if (sessionDraft?.criteria && !settingsCriteriaEdited()) {
+      settingsCriteriaState = null;
+      settingsCriteriaBaseline = null;
+      if (activeTab === "settings") renderSettingsPanel();
     }
   }
 }
@@ -6823,6 +7291,24 @@ function populateUiLocaleSelect() {
     localStorage.setItem("participant.locale", chosen);
     const prev = currentLocale;
     currentLocale = chosen;
+    // QA 2026-08-16: the criteria editor holds the text of ONE language plus the locale it was
+    // read in, and it only seeds itself when the state is null. Switching language therefore left
+    // the previous language's text on screen, tagged with the previous language — so a "Norwegian"
+    // edit was merged into the English locale. The guard above has already established that there
+    // is nothing unsaved to lose, so discarding and re-seeding is safe.
+    //
+    // Round 5: the folded-section cache had to go too, and this is the dangerous case. Its values
+    // were typed in the OLD language; leaving them behind laid English text over a Norwegian field
+    // the moment the section was reopened, and the next save filed it as `nb`.
+    //
+    // Round 7: but NOT `discardSettingsEdits()`, which also rolls the draft back to what it held
+    // before the panel opened. Criteria already absorbed into a draft are the author's work, not
+    // something they asked to throw away — the guard above only established that nothing is at
+    // risk of being LOST, which is true precisely because the draft is keeping it.
+    settingsCriteriaState = null;
+    settingsCriteriaBaseline = null;
+    settingsCriteriaDraftBaseline = undefined;
+    settingsDraftValues = null;
     // Keep preview locale in sync if it wasn't manually overridden
     if (previewLocale === prev) previewLocale = chosen;
     // Direkte redigering bygges INN i forhåndsvisningsruten, så renderPreview() river den.
