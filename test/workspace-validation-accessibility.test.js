@@ -39,10 +39,12 @@ describe("workspace validation accessibility", () => {
     // Course accordion mount point must exist for the participant course flow
     expect(participantHtml).toContain('id="courseAccordion"');
 
-    // Course tab lives in the advanced editor (admin-content.html is the new conversational shell)
-    const adminContentAdvancedHtml = readFile("public/admin-content-advanced.html");
-    expect(adminContentAdvancedHtml).toContain('id="tabKurs"');
-    expect(adminContentAdvancedHtml).toContain('id="coursesTab"');
+    // #896 S3c: courses used to be a TAB inside the advanced editor (`tabKurs` / `coursesTab`).
+    // That page is deleted and both ids are gone from the codebase — courses have had their own
+    // workspace at /admin-content/courses since #325. Assert the surface that actually exists.
+    const coursesHtml = readFile("public/admin-content-courses.html");
+    expect(coursesHtml).toContain('id="pageContent"');
+    expect(coursesHtml).toContain('id="navKurs"');
 
     const resultsHtml = readFile("public/results.html");
     // Course report body must be present in the results workspace

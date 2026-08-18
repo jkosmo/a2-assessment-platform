@@ -8,7 +8,7 @@ function readFile(relativePath) {
 
 const allAdminContentPages = [
   "public/admin-content.html",
-  "public/admin-content-advanced.html",
+  // #896 S3c: public/admin-content-advanced.html er slettet. Sto her til 2026-08-18.
   "public/admin-content-library.html",
   "public/admin-content-courses.html",
 ];
@@ -25,48 +25,39 @@ describe("admin content workspace UI contracts", () => {
     });
   }
 
-  it("keeps state-rail parity between conversational and advanced module workspaces", () => {
+  // #896 S3c: this was "state-rail parity between the two module workspaces". There is one
+  // workspace now, so parity is not the question — presence is.
+  it("keeps the state rail on the module workspace", () => {
     const shellHtml = readFile("public/admin-content.html");
-    const advancedHtml = readFile("public/admin-content-advanced.html");
-    // QA r7 #1: srModuleName + srLang were removed as redundant; parity is on the remaining slots.
-    const ids = [
-      "stateRail",
-      "srEditing",
-      "srLive",
-      "srChanges",
-      "srPreview",
-    ];
-
-    for (const id of ids) {
+    // QA r7 #1: srModuleName + srLang were removed as redundant.
+    for (const id of ["stateRail", "srEditing", "srLive", "srChanges", "srPreview"]) {
       expect(shellHtml).toContain(`id="${id}"`);
-      expect(advancedHtml).toContain(`id="${id}"`);
     }
   });
 
-  it("keeps explicit handoff hooks between conversational and advanced module editing", () => {
+  // #896 S3c: this test guarded the handoff BETWEEN the shell and Avansert — the mode switch, the
+  // "back to chat" link, `settingsOpenAdvanced`. All of it is deleted; there is nothing to hand
+  // off to. What survives is the structure that replaced it, and the assertion that the handoff
+  // really is gone — a leftover entry point back into a deleted page is a 404 waiting for an
+  // author, and the epic's whole point was one surface rather than two.
+  it("keeps the workspace structure and no route back to the retired editor", () => {
     const shellHtml = readFile("public/admin-content.html");
-    const advancedHtml = readFile("public/admin-content-advanced.html");
-    const advancedJs = readFile("public/admin-content.js");
+    const shellJs = readFile("public/static/admin-content-shell.js");
 
-    // #896 S1: the shell's Samtale/Avansert switch became three view tabs. The hand-off to
-    // the advanced page now hangs off the Innstillinger tab and disappears in S3, when the
-    // fields move into it.
     expect(shellHtml).toContain('id="tabPreview"');
     expect(shellHtml).toContain('id="tabPanelModule"');
     expect(shellHtml).toContain('id="tabEdit"');
     expect(shellHtml).toContain('id="tabSettings"');
-    expect(shellHtml).toContain('id="settingsOpenAdvanced"');
+    expect(shellHtml).toContain('id="tabPanelSettings"');
     expect(shellHtml).toContain('id="chatMessages"');
     expect(shellHtml).toContain('id="previewContent"');
+    // v2.19.0: the fixed action bar replaced buttons parked in the conversation log.
+    expect(shellHtml).toContain('id="workspaceActions"');
 
-    expect(advancedHtml).toContain('id="modeSwitchAdvanced"');
-    expect(advancedHtml).toContain('id="modeSwitchConversation"');
-    // Advanced uses a separate toggle pane (advPreviewContent), not the inline previewContent
-    expect(advancedHtml).toContain('id="advPreviewContent"');
-    expect(advancedJs).toContain('document.getElementById("backToChatLink")');
-    expect(advancedJs).toContain("function updateBackToChatLink()");
-    expect(advancedJs).toContain('buildAdminContentConversationUrl');
-    expect(advancedJs).toContain('resolveConversationModuleId');
+    expect(shellHtml).not.toContain('id="settingsOpenAdvanced"');
+    expect(shellHtml).not.toContain('id="modeSwitchAdvanced"');
+    expect(shellJs).not.toContain("openAdvancedEditor");
+    expect(shellJs).not.toContain("writeHandoff");
   });
 
   it("keeps shared list-view interaction styling between library and courses", () => {
@@ -94,14 +85,12 @@ describe("admin content workspace UI contracts", () => {
     expect(coursesJs).toContain('class="page-header-back"');
   });
 
-  it("keeps GDPR/privacy warning in both module workspaces", () => {
+  it("keeps the GDPR/privacy warning on the module workspace", () => {
     const shellHtml = readFile("public/admin-content.html");
-    const advancedHtml = readFile("public/admin-content-advanced.html");
-    // Both workspaces must carry the same special-category-data warning
     expect(shellHtml).toContain('adminContent.privacy.warning.title');
     expect(shellHtml).toContain('adminContent.privacy.warning.body');
-    expect(advancedHtml).toContain('adminContent.privacy.warning.title');
-    expect(advancedHtml).toContain('adminContent.privacy.warning.body');
+    // Stage-tilbakemelding 2026-08-18: shown on Rediger only, which needs an id to toggle.
+    expect(shellHtml).toContain('id="privacyNotice"');
   });
 });
 
@@ -253,16 +242,75 @@ describe("shell JS contracts", () => {
     expect(js).toContain("entry.initialValue");
   });
 
-  it("deriveShellModuleActionModel includes directEdit action", () => {
+  // v2.18.13 reversed this contract, so the test is inverted rather than deleted — the reason it
+  // is gone matters more than the fact. Stage-tilbakemelding 2026-08-17: *«Åpner modul, den
+  // havner på rediger fanen, men jeg kan ikke redigere før jeg trykker på 'Rediger direkte'.»*
+  // The tab opens in edit mode now, so a "Rediger direkte" action would be a second door into
+  // the room the author is standing in. Both models dropped it.
+  it("no longer offers a directEdit action — the Rediger tab IS the form", () => {
     const js = readFile("public/static/admin-content-shell-state.js");
-    expect(js).toContain('"directEdit"');
+    expect(js).not.toContain('"directEdit"');
   });
 
-  it("deriveShellDraftReadyActionModel includes directEdit action", () => {
-    const js = readFile("public/static/admin-content-shell-state.js");
-    // Must appear in both models so the action is reachable from both states.
-    const matches = (js.match(/"directEdit"/g) ?? []).length;
-    expect(matches).toBeGreaterThanOrEqual(2);
+  // -------------------------------------------------------------------------
+  // #926 (#896 §6): samtalen foreslår — den overskriver aldri.
+  //
+  // The decision itself is one branch. What breaks is the SURFACE: four generation paths write
+  // content back, and a fifth added later would bypass the gate without anyone noticing until an
+  // author lost a scenario they had written by hand. That is the "correct fix, incomplete
+  // surface" class CLAUDE.md names as this repo's recurring one, so the contract is on coverage,
+  // not on the branch.
+  // -------------------------------------------------------------------------
+  describe("§6 — generated content goes through the propose/commit gate", () => {
+    const GENERATORS = [
+      "generateDraftInBackground",
+      "generateMcqInBackground",
+      "reviseDraftInBackground",
+      "reviseMcqInBackground",
+    ];
+
+    for (const fn of GENERATORS) {
+      it(`${fn} lands its result through commitOrProposeGenerated`, () => {
+        const js = readFile("public/static/admin-content-shell.js");
+        const start = js.indexOf(`async function ${fn}(`);
+        expect(start, `${fn} not found`).toBeGreaterThan(-1);
+        // Bounded by the next top-level `async function` so the search cannot wander into the
+        // neighbour's body and pass on ITS gate call.
+        const next = js.indexOf("\nasync function ", start + 1);
+        const body = js.slice(start, next === -1 ? js.length : next);
+
+        expect(body).toContain("commitOrProposeGenerated");
+        // The old shape. A direct assignment here means the result bypasses the gate — which is
+        // precisely how it overwrote unsaved work before.
+        expect(body).not.toMatch(/sessionDraft\s*=\s*buildPreviewCandidate\(/);
+      });
+    }
+
+    it("the gate parks rather than commits while the edit form is dirty", () => {
+      const js = readFile("public/static/admin-content-shell.js");
+      const start = js.indexOf("function commitOrProposeGenerated(");
+      expect(start).toBeGreaterThan(-1);
+      const body = js.slice(start, js.indexOf("\n}", js.indexOf("return false;", start)));
+
+      // `hasOpenEditForm` is the dirty check — `isEditFormOpen` is mere presence, and since
+      // v2.18.13 the form is present the whole time Rediger is, so gating on it would turn every
+      // generation into a proposal.
+      expect(body).toContain("hasOpenEditForm()");
+      expect(body).not.toContain("isEditFormOpen()");
+      expect(body).toContain("shell.proposal.use");
+      expect(body).toContain("shell.proposal.discard");
+    });
+
+    it("marks the Innstillinger tab when generated criteria land out of sight", () => {
+      const js = readFile("public/static/admin-content-shell.js");
+      expect(js).toContain("function markTabAttention(");
+      // The TODO this replaced: "Still missing (§6): marking the Innstillinger tab when something
+      // lands in a tab the author is not looking at."
+      expect(js).not.toContain("Still missing (§6)");
+      expect(js).toContain('markTabAttention("settings")');
+      // Opening the tab is seeing it — the marker must not be able to stick.
+      expect(js).toContain("clearTabAttention(tab)");
+    });
   });
 
   it("shell.directEdit.* i18n keys exist in all three locales", () => {

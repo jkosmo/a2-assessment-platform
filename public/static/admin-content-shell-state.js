@@ -136,7 +136,10 @@ export function deriveShellModuleActionModel({
   //
   // «Rediger direkte» er kuttet av samme grunn: Rediger-fanen åpner nå i redigeringsmodus, så
   // knappen var en andre vei til den fanen man allerede sto i.
-  actionKeys.push("editAdvanced");
+  //
+  // Opprydding 2026-08-18: her sto `actionKeys.push("editAdvanced")`. Handlingskartet i shell-en
+  // mistet oppføringen da Avansert ble slettet i S3c, så nøkkelen ble filtrert bort i det stille
+  // — den var død, men så levende ut for den som leser modellen.
   if (hasDraft) actionKeys.push("saveDraft");
   if (!hasDraft && canPublish) actionKeys.push("publish");
   if (canUnpublish) actionKeys.push("unpublish");
@@ -150,8 +153,11 @@ export function deriveShellModuleActionModel({
 export function deriveShellDraftReadyActionModel({ hasSelectedModule }) {
   // «Rediger direkte» er ute her også: utkastet landes i Rediger, som allerede står i
   // redigeringsmodus. Knappen ville vært en vei inn til fanen man er på.
+  // Samme opprydding: `openEditor` hadde heller ingen oppføring i handlingskartet etter S3c.
+  // Parameteren beholdes fordi kallerne sender den, og fordi den kan bety noe igjen — men den
+  // skal ikke late som den styrer en knapp som ikke finnes.
   const actionKeys = ["revise"];
-  if (hasSelectedModule) actionKeys.push("openEditor");
+  void hasSelectedModule;
   actionKeys.push("restart", "saveDraft");
   return {
     actionKeys,

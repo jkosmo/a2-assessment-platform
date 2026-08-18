@@ -47,14 +47,27 @@ describe("admin content DOM accessibility contracts", () => {
     expect(getByRole(body, "status")).toBeTruthy();
   });
 
-  it("keeps one clear editing-mode switch and preview region in the advanced editor", () => {
-    const body = mountPage("public/admin-content-advanced.html");
+  // #896 S3c: this used to mount `public/admin-content-advanced.html` and assert the
+  // Samtale/Avansert switch. That page is deleted — the tablist above IS the switch now — so the
+  // test read a file that no longer exists and failed with ENOENT rather than a verdict. What it
+  // was actually protecting, and what survives the move, is the privacy warning: it followed the
+  // authoring surface here, and it must not be lost in the shuffle.
+  it("keeps the special-category warning on the authoring surface", () => {
+    const body = mountPage("public/admin-content.html");
 
-    expect(getByRole(body, "group", { name: "Redigeringsmodus" })).toBeTruthy();
-    expect(getByRole(body, "button", { name: "Samtale" })).toBeTruthy();
-    expect(getByRole(body, "button", { name: "Avansert" })).toBeTruthy();
     expect(getByText(body, "Special category data risk")).toBeTruthy();
-    expect(getByRole(body, "button", { name: "Vis forhåndsvisning" })).toBeTruthy();
+    // Stage-tilbakemelding 2026-08-18: shown on Rediger only, so the tab handler needs a handle
+    // on it. Without the id the notice is visible on all three tabs again.
+    expect(body.querySelector("#privacyNotice")).toBeTruthy();
+  });
+
+  // #926 (#896 §6 krav 2): the attention marker is a CSS ::after on [data-attention], so it can
+  // only ever appear if the rule is in the page. A marker that silently stops rendering is worse
+  // than none — the author is told nothing AND believes they would have been.
+  it("styles the tab attention marker", () => {
+    const html = fs.readFileSync(path.join(process.cwd(), "public/admin-content.html"), "utf8");
+
+    expect(html).toContain('.module-tab[data-attention="1"]::after');
   });
 
   it("keeps course delete confirmation accessible and course navigation scaffolded", () => {

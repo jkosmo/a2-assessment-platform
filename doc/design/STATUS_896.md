@@ -19,16 +19,20 @@ kriterieeditoren og instruksen deler nå kode med Rediger i stedet for å være 
 | §1 Tre faner | ✅ Ferdig |
 | §2 Feltkart | ✅ Ferdig — Innstillinger 8 av 8 |
 | §3 Avansert oppløses | ✅ **Ferdig** (v2.19.0) — siden er slettet, rutene redirigerer |
-| §4 Lagringsmodell | ⚠️ Komponert lagring ferdig · **#906 gjenstår**: utkastlagringen kaller `rubric-versions/ensure` i egen transaksjon først |
+| §4 Lagringsmodell | ✅ **Ferdig** (#906 lukket 2026-08-18) — komponert lagring i én transaksjon, festet av `module-version-composer-atomicity.test.ts`. `ensure`-kallet står bevisst utenfor: det kan kalle LLM-en, og det er idempotent |
 | §5 Publiseringsgate | ✅ Ferdig |
-| §6 Utkastversjoner | ⚠️ Versjonshistorikk ferdig · konflikthåndtering → **#926** |
+| §6 Utkastversjoner | ✅ **Ferdig** (#926 lukket 2026-08-18, v2.19.1) — samtalen foreslår i stedet for å overskrive, og fanen merkes ved asynkrone endringer |
 | §7 Språk | ✅ Ferdig — UI-språk og innholdsspråk skilt (v2.18.12) |
 | §8 Faneadferd | ✅ Ferdig |
 | §9 Eksport/import | ✅ Ferdig |
 | §11 Ferdig-kriterier | ⚠️ 3 av 4 — ny-modul-e2e → **#927** |
 
-**Restansen er nå tre saker, ikke en tekstlinje her:** #906, #926, #927. Når de tre er lukket, er
-#896 ferdig etter sin egen spesifikasjon.
+**Restansen er nå én sak: #927** (e2e for ny-modul-flyten). #906 og #926 er lukket 2026-08-18.
+
+**Merk fra oppryddingen:** CI på `dev` hadde vært rød siden S3c ble merget 17. august — 21 tester
+i 8 filer, alle pekende på filer S3c slettet. Grunnen til at det gikk upåaktet hen er at
+QA-porten før deploy kjører `lint` + `test:unit` + `test:dom`, mens kontraktfilene bare lå i den
+fulle `npm test`-kjøringen. De ni statiske kontraktfilene er nå med i `test:unit` (v2.19.1).
 
 Saker som ble funnet under epicen men hører til nabokode, og som IKKE blokkerer lukking: #914
 (engelske valideringsmeldinger), #915 (falsk kriteriedrift), #916 (seksjonseksport), #917 (markdown
@@ -106,17 +110,20 @@ to steder. Rapporter det hvis de to gir ulikt resultat.
 
 ---
 
-## §6 · Konflikt mellom samtale og felt — ikke startet
+## §6 · Konflikt mellom samtale og felt — ferdig (v2.19.1)
 
-Versjonsdelen er ferdig (S5: liste + gjenopprett, append-only). Sesjonsdelen er ikke:
+Versjonsdelen var ferdig fra før (S5: liste + gjenopprett, append-only). Sesjonsdelen kom i #926:
 
-- **«Samtalen foreslår — den overskriver aldri.»** Når feltene har ulagrede endringer, skal et
-  generert resultat lande som et *forslag* med «Bruk» / «Forkast». I dag skriver generering rett
-  inn i utkastet.
-- **Fanemerking.** Kriterier genereres asynkront og lander i Innstillinger. Fanen skal markeres når
-  noe har endret seg i en fane forfatteren ikke ser på. Ingen slik markering finnes.
+- **«Samtalen foreslår — den overskriver aldri.»** Alle fire genereringsstiene går gjennom
+  `commitOrProposeGenerated`. Rent skjema → landes som før. Skittent skjema → parkeres i
+  samtaleloggen med «Bruk»/«Forkast», og utkastet røres ikke.
+- **Fanemerking.** `markTabAttention("settings")` når kriterier lander asynkront i en fane
+  forfatteren ikke ser på. Dobbelt kodet: prikk, `aria-label`-suffiks og live-region-melding.
+  Fjernes idet fanen åpnes.
 
-Dette er mindre enn §2/§3, men det er ekte UI-arbeid.
+Funnet underveis og rettet i samme runde: `populateSessionDraftCriteriaInBackground` kalte
+`renderPreview()` ubetinget før den startet, og rev dermed et åpent Rediger-skjema. Samme klasse
+som §6 selv — innhold som endrer seg uten at forfatteren ba om det.
 
 ---
 

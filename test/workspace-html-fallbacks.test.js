@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 const workspacePages = [
   "public/participant.html",
   "public/admin-content.html",
-  "public/admin-content-advanced.html",
+  // #896 S3c: public/admin-content-advanced.html er slettet. Sto her til 2026-08-18.
   "public/review.html",
   "public/participant-completed.html",
 ];

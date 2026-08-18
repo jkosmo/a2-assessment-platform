@@ -14,6 +14,20 @@ export default defineConfig({
       "test/app-error-middleware.test.ts",
       "test/document-parsing.test.ts",
       "test/sensitive-data-masking.test.ts",
+      // #896-opprydding 2026-08-18: disse leser bare filer fra disk — ingen database, ingen
+      // server. De lå likevel bare i den fulle `npm test`-kjøringen, som krever Postgres og
+      // derfor bare kjører i CI. Resultatet var at S3c etterlot 21 røde tester i et døgn uten
+      // at QA-porten før deploy (lint + test:unit + test:dom) merket noe: den kjørte dem ikke.
+      // En kontrakt som bare kan brytes et sted man ikke ser, er ikke en kontrakt.
+      "test/admin-content-ui-contracts.test.js",
+      "test/admin-content-state-rail.test.js",
+      "test/admin-content-translations.test.js",
+      "test/participant-translations.test.js",
+      "test/calibration-translations.test.js",
+      "test/participant-completed-translations.test.js",
+      "test/workspace-html-fallbacks.test.js",
+      "test/workspace-help-contracts.test.js",
+      "test/workspace-validation-accessibility.test.js",
     ],
     globals: true,
     testTimeout: 20000,

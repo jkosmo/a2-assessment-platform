@@ -163,9 +163,10 @@ describe("deriveModuleStatusChains", () => {
 // ---------------------------------------------------------------------------
 
 describe("state rail HTML structure", () => {
+  // #896 S3c: `public/admin-content-advanced.html` sto her. Den er slettet, og arbeidsflaten er
+  // eneste forfatterflate — det er ikke lenger to sider å holde i takt.
   const pages = [
     "public/admin-content.html",
-    "public/admin-content-advanced.html",
   ];
 
   for (const page of pages) {
@@ -233,14 +234,11 @@ describe("state rail CSS", () => {
 // ---------------------------------------------------------------------------
 
 describe("shared editing-source contract", () => {
+  // #345 was about the shell and Avansert deriving status from ONE source instead of two. #896
+  // S3c settled that question by removing the second consumer entirely — so what is left to hold
+  // is that the shell still derives rather than reimplements.
   it("shell: imports deriveModuleStatusChains from module-status-logic", () => {
     const js = readFile("public/static/admin-content-shell.js");
-    expect(js).toContain("module-status-logic.js");
-    expect(js).toContain("deriveModuleStatusChains");
-  });
-
-  it("advanced: imports deriveModuleStatusChains from module-status-logic", () => {
-    const js = readFile("public/admin-content.js");
     expect(js).toContain("module-status-logic.js");
     expect(js).toContain("deriveModuleStatusChains");
   });
@@ -287,26 +285,7 @@ describe("updateStateRail call sites", () => {
     expect(updateCallIdx).toBeGreaterThan(renderPreviewIdx);
   });
 
-  it("advanced: renderModuleStatus calls updateStateRail", () => {
-    const js = readFile("public/admin-content.js");
-    expect(js).toContain("function updateStateRail(");
-    expect(js).toContain("function renderModuleStatus(");
-    const renderModuleStatusIdx = js.indexOf("function renderModuleStatus(");
-    const updateCallIdx = js.indexOf("updateStateRail()", renderModuleStatusIdx);
-    expect(updateCallIdx).toBeGreaterThan(renderModuleStatusIdx);
-  });
-
-  it("advanced: renderContentCards calls updateStateRail", () => {
-    const js = readFile("public/admin-content.js");
-    expect(js).toContain("function renderContentCards(");
-    const renderContentCardsIdx = js.indexOf("function renderContentCards(");
-    const updateCallIdx = js.indexOf("updateStateRail()", renderContentCardsIdx);
-    expect(updateCallIdx).toBeGreaterThan(renderContentCardsIdx);
-  });
-
-  it("advanced: imports deriveModuleStatusChains from module-status-logic", () => {
-    const js = readFile("public/admin-content.js");
-    expect(js).toContain("deriveModuleStatusChains");
-    expect(js).toContain("module-status-logic.js");
-  });
+  // #896 S3c: three call-site tests for `public/admin-content.js` sat here — renderModuleStatus,
+  // renderContentCards and the shared import. That file is deleted; the shell test above is the
+  // only call site left to guard.
 });

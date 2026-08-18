@@ -1742,6 +1742,91 @@ function commitSessionDraftPatch(patch, { scroll = "top" } = {}) {
   else scrollPreviewToTop();
 }
 
+// ---------------------------------------------------------------------------
+// #926 (#896 §6 krav 1): samtalen foreslår — den overskriver aldri.
+//
+// Spesifikasjonen: har feltene ulagrede endringer, skal et generert resultat lande som et
+// FORSLAG med «Bruk»/«Forkast», ikke skrives rett inn. Uten dette kan forfatteren skrive et
+// scenario for hånd, be om en revisjon i chatten, og få sitt eget arbeid erstattet uten å ha
+// sagt ja.
+//
+// Verre enn som så, før denne endringen: med redigeringsskjemaet åpent ble feltene ikke tegnet
+// på nytt etter en generering. Utkastet under dem var byttet ut, men skjermen viste fortsatt
+// forfatterens egen tekst — overskrivingen ble først synlig ved lagring.
+//
+// Forslaget parkeres i samtaleloggen fordi det er der forfatteren nettopp ba om endringen, og
+// fordi chat-panelet er synlig i begge fanene der dette kan inntreffe. Det holdes UTENFOR
+// `sessionDraft`: et forslag som allerede ligger i utkastet er ikke et forslag, og ville blitt
+// lagret av neste «Lagre».
+//
+// Merk at «ulagrede endringer» her betyr `hasOpenEditForm()` — feltverdier som avviker fra det
+// de ble tegnet med. Et urørt skjema er ikke i bruk, og et forslag der ville bare vært et ekstra
+// klikk foran den handlingen forfatteren nettopp ba om.
+// ---------------------------------------------------------------------------
+let pendingProposal = null;
+
+/**
+ * Commit a generated patch, or park it as a proposal when the edit form holds unsaved typing.
+ *
+ * @param patch      the localized patch, ready for `buildPreviewCandidate`
+ * @param slot       the conversation-log slot the generation is reporting into
+ * @param readyHtml  () => html — what the log says when the patch is applied
+ * @param scroll     "top" | "bottom"
+ * @param onCommit   runs after the patch lands, on both paths. NOT run while parked: it starts
+ *                   criteria generation and moves the session state, and neither should happen
+ *                   for content the author has not accepted.
+ * @returns true if committed, false if parked.
+ */
+function commitOrProposeGenerated({ patch, slot, readyHtml, scroll = "top", onCommit }) {
+  const commit = () => {
+    commitSessionDraftPatch(patch, { scroll });
+    onCommit?.();
+  };
+
+  if (!hasOpenEditForm()) {
+    commit();
+    logResolveSlot(slot, readyHtml);
+    return true;
+  }
+
+  // A second proposal replaces the first rather than queueing: two competing "Bruk"-buttons in
+  // the log, both claiming to be the generated result, is worse than losing the older one — and
+  // the older one is by definition the one the author did not answer.
+  pendingProposal = { commit };
+  const thisProposal = pendingProposal;
+  logResolveSlot(
+    slot,
+    () => `<strong>${escapeHtml(t("shell.proposal.title"))}</strong>
+      <p style="margin:8px 0 0;font-size:13px;color:var(--color-meta)">${escapeHtml(t("shell.proposal.body"))}</p>`,
+    [
+      {
+        labelKey: "shell.proposal.use",
+        action: () => {
+          // Stale guard: the log entry survives a re-render, so an old proposal's button must not
+          // resurrect content the author already answered for.
+          if (pendingProposal !== thisProposal) return;
+          pendingProposal = null;
+          thisProposal.commit();
+          // The fields on screen still hold the author's typing. They said yes, so repaint from
+          // the draft — otherwise the accepted proposal is invisible until the next re-render,
+          // which is the exact failure this whole mechanism exists to remove.
+          if (activeTab === "edit") enterPreviewEditMode({ force: true });
+          logBot(() => escapeHtml(t("shell.proposal.used")));
+        },
+      },
+      {
+        labelKey: "shell.proposal.discard",
+        action: () => {
+          if (pendingProposal !== thisProposal) return;
+          pendingProposal = null;
+          logBot(() => escapeHtml(t("shell.proposal.discarded")));
+        },
+      },
+    ],
+  );
+  return false;
+}
+
 function createSessionDraftFromLoadedModule() {
   const moduleVersion = bundle?.selectedConfiguration?.moduleVersion ?? null;
   const mcqQuestions = bundle?.selectedConfiguration?.mcqSetVersion?.questions ?? [];
@@ -1837,20 +1922,22 @@ async function generateDraftInBackground(sourceMaterial, certLevel, locale, gene
 
   const draft = result?.draft ?? result;
   const localizedDraft = await localizeDraftAcrossLocales(draft.taskText, draft.assessorExpectedContent, locale, draft.candidateTaskConstraints);
-  sessionDraft = buildPreviewCandidate({ taskText: localizedDraft.taskText, assessorExpectedContent: localizedDraft.assessorExpectedContent, candidateTaskConstraints: localizedDraft.candidateTaskConstraints });
-  if (blueprint) {
-    sessionDraft = { ...sessionDraft, assessmentBlueprint: blueprint };
-    // B3 (#450): blueprint changed → may now drift from stored rubric hash.
-    refreshBlueprintHash();
-  }
-  clearPreviewCandidate();
-  scrollPreviewToTop();
-  logResolveSlot(
+  // #926 §6: gjennom porten. Blueprint og hash-oppfriskningen hører til utkastet, ikke til
+  // forslaget, så de skjer først når patchen faktisk landes.
+  commitOrProposeGenerated({
+    patch: { taskText: localizedDraft.taskText, assessorExpectedContent: localizedDraft.assessorExpectedContent, candidateTaskConstraints: localizedDraft.candidateTaskConstraints },
     slot,
-    () => `<strong>${escapeHtml(t("shell.generating.draftReady"))}</strong>
+    readyHtml: () => `<strong>${escapeHtml(t("shell.generating.draftReady"))}</strong>
       <p style="margin:8px 0 0;font-size:13px;color:var(--color-meta)">${escapeHtml(t("shell.generating.reviewPreviewHint"))}</p>`,
-  );
-  onAccept?.(draft, sourceMaterial, certLevel, locale);
+    onCommit: () => {
+      if (blueprint) {
+        sessionDraft = { ...sessionDraft, assessmentBlueprint: blueprint };
+        // B3 (#450): blueprint changed → may now drift from stored rubric hash.
+        refreshBlueprintHash();
+      }
+      onAccept?.(draft, sourceMaterial, certLevel, locale);
+    },
+  });
 }
 
 async function generateMcqInBackground(sourceMaterial, certLevel, locale, generationMode, questionCount, optionCount, onAccept) {
@@ -1902,20 +1989,19 @@ async function generateMcqInBackground(sourceMaterial, certLevel, locale, genera
 
   const questions = result?.questions ?? [];
   const localizedQuestions = await localizeMcqAcrossLocales(questions, locale);
-  sessionDraft = buildPreviewCandidate({ mcqQuestions: localizedQuestions });
-  clearPreviewCandidate();
-  scrollPreviewToBottom();
   // #551: surface MCQ quality warnings (incl. the length-cue check) so the author can review.
   const mcqWarnings = Array.isArray(result?.validation?.issues) ? result.validation.issues : [];
   const mcqWarningsHtml = mcqWarnings.length > 0
     ? `<p style="margin:8px 0 0;font-size:13px;color:var(--color-warning,#b45309)">⚠ ${mcqWarnings.map(escapeHtml).join("<br>")}</p>`
     : "";
-  logResolveSlot(
+  commitOrProposeGenerated({
+    patch: { mcqQuestions: localizedQuestions },
     slot,
-    () => `<strong>${escapeHtml(tf("shell.generating.mcqReady", { count: questions.length }))}</strong>
+    scroll: "bottom",
+    readyHtml: () => `<strong>${escapeHtml(tf("shell.generating.mcqReady", { count: questions.length }))}</strong>
       <p style="margin:8px 0 0;font-size:13px;color:var(--color-meta)">${escapeHtml(t("shell.generating.reviewPreviewHint"))}</p>${mcqWarningsHtml}`,
-  );
-  onAccept?.(questions);
+    onCommit: () => onAccept?.(questions),
+  });
 }
 
 async function reviseDraftInBackground(instruction, onAccept) {
@@ -1960,11 +2046,14 @@ async function reviseDraftInBackground(instruction, onAccept) {
 
   const draft = result?.draft ?? result;
   const localizedDraft = await localizeDraftAcrossLocales(draft.taskText, draft.assessorExpectedContent, currentLocale, draft.candidateTaskConstraints);
-  sessionDraft = buildPreviewCandidate({ taskText: localizedDraft.taskText, assessorExpectedContent: localizedDraft.assessorExpectedContent, candidateTaskConstraints: localizedDraft.candidateTaskConstraints });
-  clearPreviewCandidate();
-  scrollPreviewToTop();
-  logResolveSlot(slot, () => `<strong>${escapeHtml(t("shell.revision.draftReady"))}</strong>`);
-  onAccept?.(draft);
+  // #926 §6: dette er stien saken beskriver ordrett — forfatteren har skrevet i feltene og ber om
+  // en revisjon i chatten. Uten porten kom svaret rett inn over deres eget arbeid.
+  commitOrProposeGenerated({
+    patch: { taskText: localizedDraft.taskText, assessorExpectedContent: localizedDraft.assessorExpectedContent, candidateTaskConstraints: localizedDraft.candidateTaskConstraints },
+    slot,
+    readyHtml: () => `<strong>${escapeHtml(t("shell.revision.draftReady"))}</strong>`,
+    onCommit: () => onAccept?.(draft),
+  });
 }
 
 async function reviseMcqInBackground(instruction, onAccept) {
@@ -2015,11 +2104,13 @@ async function reviseMcqInBackground(instruction, onAccept) {
 
   const questions = result?.questions ?? [];
   const localizedQuestions = await localizeMcqAcrossLocales(questions, currentLocale);
-  sessionDraft = buildPreviewCandidate({ mcqQuestions: localizedQuestions });
-  clearPreviewCandidate();
-  scrollPreviewToBottom();
-  logResolveSlot(slot, () => `<strong>${escapeHtml(tf("shell.revision.mcqReady", { count: questions.length }))}</strong>`);
-  onAccept?.(questions);
+  commitOrProposeGenerated({
+    patch: { mcqQuestions: localizedQuestions },
+    slot,
+    scroll: "bottom",
+    readyHtml: () => `<strong>${escapeHtml(tf("shell.revision.mcqReady", { count: questions.length }))}</strong>`,
+    onCommit: () => onAccept?.(questions),
+  });
 }
 
 async function applyStructuredTitleEditInBackground(newTitle) {
@@ -2146,7 +2237,6 @@ async function saveDraftBundleInBackground(options = {}) {
   const buildSaveRecoveryActions = ({ includeGenerateMcq = false } = {}) => {
     const model = deriveShellDraftReadyActionModel({ hasSelectedModule: !!selectedModuleId });
     const actionMap = {
-      directEdit: { labelKey: "shell.directEdit.action", action: () => startDirectEditFlow() },
       revise: { labelKey: "shell.draftReady.editInChat", action: () => startUnifiedRevisionFlow() },
       restart: { labelKey: "shell.draftReady.restart", action: startIdle },
       saveDraft: { labelKey: "shell.draftReady.saveDraft", action: saveDraftBundleInBackground },
@@ -4566,11 +4656,13 @@ function enterPreviewEditMode({ force = false } = {}) {
   // that lived here. That editor is gone, so they are parked on the session draft instead — kept,
   // saveable, and visible the moment the author opens Innstillinger.
   //
-  // Still missing (§6): marking the Innstillinger tab when something lands in a tab the author is
-  // not looking at. Without it, generated criteria arrive silently.
+  // #926 (§6 krav 2): fanen merkes nå. Kriteriene lander fortsatt stille på utkastet — det er
+  // riktig, de har ingen editor her — men Innstillinger får en prikk så forfatteren vet at de
+  // finnes, i stedet for å oppdage det ved et tilfeldig fanebytte.
   criteriaReadyCallback = (record) => {
     if (!record || Object.keys(record).length === 0) return;
     sessionDraft = { ...(sessionDraft ?? {}), criteria: record };
+    markTabAttention("settings");
   };
 
   function exitEditMode() {
@@ -4850,8 +4942,6 @@ function showModuleActions() {
         }
       },
     },
-    directEdit: { labelKey: "shell.directEdit.action", action: () => startDirectEditFlow() },
-    pickAnother: { labelKey: "shell.module.pickAnother", action: startModulePicker },
     saveDraft: { labelKey: "shell.draftReady.saveDraft", action: saveDraftBundleInBackground },
     publish: {
       // Direct publish — author already confirmed by clicking "Publish". The prior
@@ -5160,7 +5250,53 @@ function unsavedTabSwitchKind() {
   return null;
 }
 
+// ---------------------------------------------------------------------------
+// #926 (#896 §6 krav 2): merk fanen når noe lander i en fane forfatteren ikke ser på.
+//
+// Kriterier genereres asynkront og lander i Innstillinger. Står forfatteren i Rediger, kom de
+// uten et eneste tegn — koden innrømmet det selv i en TODO. Nå settes en prikk på fanen, og
+// merkingen fjernes idet fanen åpnes: den betyr «noe har skjedd du ikke har sett», ikke «noe er
+// galt», så den skal ikke kunne bli hengende.
+//
+// Merkingen er ikke bare farge. `aria-label` får «(endret)» i tillegg, ellers finnes signalet
+// bare for den som ser prikken.
+// ---------------------------------------------------------------------------
+const tabAttention = new Set();
+
+function markTabAttention(tab) {
+  // Ingen grunn til å merke fanen forfatteren står i — der ER endringen synlig.
+  if (tab === activeTab) return;
+  const button = tabButtons[tab];
+  if (!button) return;
+  tabAttention.add(tab);
+  button.dataset.attention = "1";
+  applyTabAttentionLabel(tab);
+  // Prikken er lett å gå glipp av hvis blikket står i venstre kolonne. Skjermleseren får det
+  // uansett; dette er den synlige halvparten.
+  announceStatus(tf("shell.tab.attention.announce", { tab: t(`shell.tab.${tab}`) }));
+}
+
+function clearTabAttention(tab) {
+  if (!tabAttention.delete(tab)) return;
+  const button = tabButtons[tab];
+  if (!button) return;
+  delete button.dataset.attention;
+  applyTabAttentionLabel(tab);
+}
+
+// The tab's accessible name is its own label plus, when marked, the reason. Rebuilt from the
+// label each time rather than appended to, so repeated marking cannot stack the suffix.
+function applyTabAttentionLabel(tab) {
+  const button = tabButtons[tab];
+  if (!button) return;
+  const base = t(`shell.tab.${tab}`);
+  if (tabAttention.has(tab)) button.setAttribute("aria-label", `${base} (${t("shell.tab.attention.suffix")})`);
+  else button.removeAttribute("aria-label");
+}
+
 function applyTabState(tab) {
+  // Opening the tab IS seeing what landed in it.
+  clearTabAttention(tab);
   // Forhaandsvisning renders the same module for a different audience, so crossing that
   // boundary needs a re-render. Edit <-> Innstillinger does not - both are the author view,
   // and re-rendering there would be wasted work on every settings visit.
@@ -7290,7 +7426,14 @@ async function populateSessionDraftCriteriaInBackground() {
   // and tagging the reply with the live locale files English text as Norwegian — which then looks
   // like a translation that exists.
   const generationLocale = currentLocale;
-  renderPreview();
+  // #926: this repaint used to be unconditional, and `renderPreview` writes straight into
+  // `previewContent.innerHTML` — so it tore down an open Rediger form and rebuilt it from the
+  // bundle, throwing away whatever the author had typed. Same class as §6 itself: content
+  // changing without the author asking, this time by a background job nobody saw start.
+  //
+  // The completion handler at the bottom already makes exactly this distinction. It only ever
+  // held for the way OUT; the way IN had no guard at all.
+  if (!isEditFormOpen()) renderPreview();
   try {
     const result = await apiFetch("/api/admin/content/generate/rubric", getHeaders, {
       method: "POST",
@@ -7346,6 +7489,11 @@ async function populateSessionDraftCriteriaInBackground() {
       settingsCriteriaState = null;
       settingsCriteriaBaseline = null;
       if (activeTab === "settings") renderSettingsPanel();
+      // #926 §6 krav 2: dette er selve tilfellet saken beskriver. Kriteriene er generert
+      // asynkront og ligger nå i Innstillinger; står forfatteren i Rediger, kom de uten et
+      // eneste tegn. Merkingen er betinget av `activeTab` inne i `markTabAttention`, så den
+      // uteblir når panelet er synlig — der endringen allerede kan ses.
+      markTabAttention("settings");
     }
   }
 }
@@ -7362,7 +7510,6 @@ function showDraftReadyActions() {
   const mcqCount = sessionDraft?.mcqQuestions?.length ?? 0;
   const model = deriveShellDraftReadyActionModel({ hasSelectedModule: !!selectedModuleId });
   const actionMap = {
-    directEdit: { labelKey: "shell.directEdit.action", action: () => startDirectEditFlow() },
     revise: { labelKey: "shell.draftReady.editInChat", action: () => startUnifiedRevisionFlow() },
     restart: { labelKey: "shell.draftReady.restart", action: startIdle },
     saveDraft: { labelKey: "shell.draftReady.saveDraft", action: saveDraftBundleInBackground },
@@ -7573,6 +7720,10 @@ function populateUiLocaleSelect() {
     renderPreviewLocaleBar();
     renderPreview();
     renderWorkspaceNavigation();
+    // #926: the attention suffix is built from `t()`, so it is stale text after a language change.
+    // `translatePageStaticText` cannot reach it — the tab carries `data-i18n`, not
+    // `data-i18n-aria-label`, and the suffix is not in the markup at all.
+    for (const tab of Object.keys(tabButtons)) applyTabAttentionLabel(tab);
     // #896 S3b: the settings panel is built in JS, so translatePageStaticText cannot reach it.
     // Without this the module types, the "missing component" reasons and the save button stay
     // in the previous language while the page around them switches.

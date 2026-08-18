@@ -1059,12 +1059,11 @@ test.describe("admin content browser coverage", () => {
     // switch to.
     await expect(page.locator("#localeSelect")).toHaveValue("en-GB");
 
-    // Exit 3: "Åpne avansert redigering" calls applyTabState directly, going around switchToTab
-    // and therefore around the guard.
-    page.once("dialog", (dialog) => dialog.dismiss());
-    await page.locator("#settingsOpenAdvanced").click();
-    await expect(page.locator("#tabSettings")).toHaveAttribute("aria-selected", "true");
-    await expect(certInput).toHaveValue(edited);
+    // Exit 3 was "Åpne avansert redigering", which called applyTabState directly and so went
+    // around switchToTab and its guard. S3c deleted the page it opened; the button outlived its
+    // click handler and was removed 2026-08-18. Worth noting that by then this step passed
+    // trivially — clicking a button with no listener cannot leave the tab, so it asserted that
+    // nothing happened after nothing happened.
 
     // And an untouched field must not trigger any of this — a guard that cries wolf gets clicked
     // through without reading.
@@ -1582,7 +1581,10 @@ test.describe("admin content browser coverage", () => {
     await page.locator("#tabSettings").click();
     await expect(page.locator("#tabPanelSettings")).toBeVisible();
     await expect(page.locator("#tabPanelModule")).toBeHidden();
-    await expect(page.locator("#settingsOpenAdvanced")).toBeVisible();
+    // The panel shows the module's setup, not a pointer to somewhere else — the "Åpne avansert
+    // redigering" button that stood here belonged to a page deleted in S3c.
+    await expect(page.locator("#settingsSummary")).toBeVisible();
+    await expect(page.locator("#settingsOpenAdvanced")).toHaveCount(0);
 
     // ...and back, with the preview content still rendered.
     await page.locator("#tabEdit").click();
@@ -1912,8 +1914,10 @@ test.describe("admin content browser coverage", () => {
     // Certification level belongs to the same group: it describes the module, not the assessment.
     await expect(list).toContainText(/Certification level|Sertifiseringsniv/);
 
-    // The hand-off is still there until S3b wires the rows up.
-    await expect(page.locator("#settingsOpenAdvanced")).toBeVisible();
+    // "The hand-off is still there until S3b wires the rows up" — S3b wired them, S3c deleted the
+    // page, and the button was removed 2026-08-18. Assert it stays gone: a link back to a deleted
+    // page is a 404 waiting for an author.
+    await expect(page.locator("#settingsOpenAdvanced")).toHaveCount(0);
   });
 
   // #896 S3c: reported from stage — "vurderingskriteria ligger nå 4 steder ... UI for
@@ -2652,6 +2656,122 @@ test.describe("admin content browser coverage", () => {
 
     // QA r7 #1: module name removed from the status rail; rename verified via the localization + patch bodies.
     await expect.poll(() => state.lastTitlePatchBody?.title?.["en-GB"]).toBe("Trade union dialogue");
+  });
+
+  // #926 (#896 §6 krav 1): «Samtalen foreslår — den overskriver aldri.»
+  //
+  // The exact scenario the issue describes: the author writes a scenario by hand, asks the chat
+  // for a revision, and used to get their own work replaced without ever saying yes. Worse, with
+  // the edit form open the fields were NOT repainted, so the overwrite was invisible until save.
+  //
+  // Two tests, because the two halves fail differently: a gate that never proposes loses work
+  // silently, and a gate that never commits makes every generation cost an extra click.
+  test("a revision lands as a proposal when the fields hold unsaved typing", async ({ page }) => {
+    await mockCommonApis(page, {
+      modules: [{ id: "module-1", title: "Trade unions", activeVersion: { versionNo: 1 } }],
+      moduleExports: {
+        "module-1": buildMockModuleExport({
+          id: "module-1",
+          title: "Trade unions",
+          moduleVersionId: "module-1-version-1",
+          taskText: localizedText("Norsk scenario"),
+          assessorExpectedContent: localizedText("Norsk veiledning"),
+        }),
+      },
+    });
+
+    await page.route("**/generate/module-draft/revise", async (route: Route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          draft: {
+            taskText: "Generert scenario",
+            assessorExpectedContent: "Generert veiledning",
+            candidateTaskConstraints: "",
+          },
+        }),
+      });
+    });
+
+    await page.goto("/admin-content/module/module-1/conversation?resumeEditing=1");
+
+    // Wait for the draft-ready state to settle before typing. `resumeEditing` builds a session
+    // draft and repaints the form, so text filled in before that lands in a textarea that is
+    // about to be replaced — the test would then be measuring the repaint, not the gate.
+    await expect(
+      page.locator("#workspaceActions").getByRole("button", { name: /Request changes in chat|Be om endringer i chat/ }),
+    ).toBeEnabled();
+
+    // The author's own work goes in first — this is what must survive.
+    const taskField = page.locator("#previewEditTaskText");
+    await expect(taskField).not.toHaveValue("");
+    await taskField.fill("Skrevet for hånd");
+    await expect(taskField).toHaveValue("Skrevet for hånd");
+
+    await clickEnabledButton(page, /Request changes in chat|Be om endringer i chat/);
+    await expect(taskField).toHaveValue("Skrevet for hånd");
+    await page.locator(".chat-textarea:enabled").last().fill("Skjerp scenarioet");
+    await clickEnabledButton(page, /Revise|Revider/);
+
+    // The proposal is offered, and the field is untouched. Asserting the VALUE and not just the
+    // presence of the buttons is the point: the old failure wrote the draft underneath a form
+    // that kept showing the author's text, so a presence-only check would have passed then too.
+    await expect(page.locator("#chatMessages").getByText(/Suggestion ready|Forslag klart/)).toBeVisible();
+    await expect(taskField).toHaveValue("Skrevet for hånd");
+
+    // Forkast leaves it that way.
+    await clickEnabledButton(page, /^(Discard|Forkast)$/);
+    await expect(taskField).toHaveValue("Skrevet for hånd");
+
+    // Bruk replaces it — and repaints, so the author sees what they accepted.
+    await clickEnabledButton(page, /Request changes in chat|Be om endringer i chat/);
+    await page.locator(".chat-textarea:enabled").last().fill("Skjerp scenarioet igjen");
+    await clickEnabledButton(page, /Revise|Revider/);
+    await clickEnabledButton(page, /^(Use|Bruk)$/);
+    await expect(page.locator("#previewEditTaskText")).toHaveValue("Generert scenario");
+  });
+
+  test("an untouched form takes the revision straight in, with no extra click", async ({ page }) => {
+    await mockCommonApis(page, {
+      modules: [{ id: "module-1", title: "Trade unions", activeVersion: { versionNo: 1 } }],
+      moduleExports: {
+        "module-1": buildMockModuleExport({
+          id: "module-1",
+          title: "Trade unions",
+          moduleVersionId: "module-1-version-1",
+          taskText: localizedText("Norsk scenario"),
+          assessorExpectedContent: localizedText("Norsk veiledning"),
+        }),
+      },
+    });
+
+    await page.route("**/generate/module-draft/revise", async (route: Route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          draft: {
+            taskText: "Generert scenario",
+            assessorExpectedContent: "Generert veiledning",
+            candidateTaskConstraints: "",
+          },
+        }),
+      });
+    });
+
+    await page.goto("/admin-content/module/module-1/conversation?resumeEditing=1");
+    await page.locator("#previewEditTaskText").waitFor();
+
+    await clickEnabledButton(page, /Request changes in chat|Be om endringer i chat/);
+    await page.locator(".chat-textarea:enabled").last().fill("Skjerp scenarioet");
+    await clickEnabledButton(page, /Revise|Revider/);
+
+    // Since v2.18.13 the Rediger form is open from the moment the tab is, so gating on presence
+    // rather than dirtiness would turn every single generation into a proposal. Nothing was
+    // typed here, so nothing is at risk and nothing should be asked.
+    await expect(page.locator("#chatMessages").getByText(/scenario and guidance ready|scenario og veiledning er klart/)).toBeVisible();
+    await expect(page.locator("#chatMessages").getByText(/Suggestion ready|Forslag klart/)).toHaveCount(0);
   });
 
   test("direct edit keeps MCQ visible and editable through translation and save", async ({ page }) => {

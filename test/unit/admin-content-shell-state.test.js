@@ -91,6 +91,10 @@ describe("admin content shell state helpers", () => {
     });
   });
 
+  // #896 S3c-opprydding 2026-08-18: `editAdvanced` og `openEditor` er ute av begge modellene.
+  // Handlingskartet i shell-en mistet oppføringene sine da Avansert ble slettet, så nøklene ble
+  // filtrert bort i det stille — modellen lovet to knapper som aldri kunne tegnes, og denne
+  // testen holdt løftet i live.
   describe("deriveShellModuleActionModel", () => {
     it("keeps a consistent action order for loaded modules with an unsaved draft", () => {
       expect(
@@ -102,7 +106,7 @@ describe("admin content shell state helpers", () => {
           canUnpublish: false,
         }),
       ).toEqual({
-        actionKeys: ["generateContent", "generateMcq", "editAdvanced", "saveDraft"],
+        actionKeys: ["generateContent", "generateMcq", "saveDraft"],
         shouldOfferUnifiedRevision: true,
       });
     });
@@ -120,7 +124,6 @@ describe("admin content shell state helpers", () => {
         actionKeys: [
           "generateContent",
           "resumeChatEdit",
-          "editAdvanced",
           "publish",
           "unpublish",
         ],
@@ -132,7 +135,7 @@ describe("admin content shell state helpers", () => {
   describe("deriveShellDraftReadyActionModel", () => {
     it("includes revise as an explicit action and does not auto-open the textarea when a module already exists", () => {
       expect(deriveShellDraftReadyActionModel({ hasSelectedModule: true })).toEqual({
-        actionKeys: ["revise", "openEditor", "restart", "saveDraft"],
+        actionKeys: ["revise", "restart", "saveDraft"],
         shouldOpenUnifiedRevision: false,
       });
     });

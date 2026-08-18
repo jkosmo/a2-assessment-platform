@@ -11,8 +11,8 @@
       /* ── Shell layout ─────────────────────────────────────────────────────── */
       .shell-header { display: flex; justify-content: space-between; align-items: baseline; gap: var(--space-2); flex-wrap: wrap; margin-bottom: var(--space-2); }
       .shell-header h1 { margin: 0; font-size: 22px; }
-      .advanced-link { font-size: 13px; color: var(--color-meta); text-decoration: none; white-space: nowrap; }
-      .advanced-link:hover { color: var(--color-link-active); text-decoration: underline; }
+      /* #896 S3c: `.advanced-link` styled the header link to the Avansert page. Ingen elementer
+         bærer klassen lenger — fjernet 2026-08-18. */
 
       .workspace-shell { display: grid; grid-template-columns: 1fr 380px; gap: var(--space-2); align-items: start; }
       /* #360 (200% zoom): bump fra 900px → 1024px slik at 1920×1080 + 200% zoom (effektiv
@@ -408,6 +408,21 @@
       .module-tab.active { background: var(--color-blue); color: #fff; cursor: default; }
       .module-tab:hover:not(.active) { background: var(--color-blue-light); color: var(--color-link-active); }
       .module-tab:focus-visible { outline: 2px solid var(--color-link-active); outline-offset: 2px; }
+      /* #926 §6 krav 2: noe landet i en fane forfatteren ikke ser på. Prikken sitter INNI
+         pillen (position:relative + absolute) i stedet for som en ::after i tekstflyten, så
+         den ikke skyver de andre fanene sidelengs når den dukker opp. Den er dobbelt kodet —
+         prikk OG (·) i aria-label via JS — fordi farge alene ikke er et signal. */
+      .module-tab[data-attention="1"] { position: relative; }
+      .module-tab[data-attention="1"]::after {
+        content: "";
+        position: absolute;
+        top: 4px;
+        right: 6px;
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: var(--color-warning, #b45309);
+      }
       /* Three Norwegian labels plus padding overflow a 320px viewport, and the pill row
          neither shrinks nor wraps. Let it wrap and tighten the padding instead of pushing
          the page into horizontal scrolling. */
@@ -616,16 +631,17 @@
 
       </div>
 
-      <!-- #896 S3a: Innstillinger shows the module's setup, read from the bundle the shell has
-           already loaded. Editing still hands off to the Avansert page; S3b makes each row
-           editable here and S3c retires that page along with this button.
+      <!-- #896: Innstillinger. Alle åtte feltene er redigerbare her siden S3b/v2.18.8.
+           Opprydding 2026-08-18: her sto det fortsatt en «Åpne avansert redigering»-knapp UTEN
+           klikkhåndterer, og over den en setning om at feltene «redigeres foreløpig i den
+           avanserte editoren» og «flyttes hit i neste leveranse». Begge deler var usanne fra
+           v2.18.8, og siden knappen viste til er slettet i S3c. En død knapp med en gal
+           forklaring over seg er verre enn ingen av delene.
            style="display:none", not [hidden]: setHidden() governs this panel by inline display,
            and the hidden ATTRIBUTE would survive setHidden(el, false) and keep it invisible. -->
       <section class="card" id="tabPanelSettings" role="tabpanel" aria-labelledby="tabSettings" style="display:none">
         <h2 style="margin-top:0;font-size:16px" data-i18n="shell.settings.title">Innstillinger</h2>
         <div id="settingsSummary"></div>
-        <p class="small" data-i18n="shell.settings.placeholder">Feltene over redigeres foreløpig i den avanserte editoren. De flyttes hit i neste leveranse.</p>
-        <button type="button" id="settingsOpenAdvanced" class="btn-secondary" data-i18n="shell.settings.openAdvanced">Åpne avansert redigering</button>
       </section>
 
       <dialog id="dialogUnsavedTabSwitch" aria-labelledby="unsavedTabSwitchTitle">

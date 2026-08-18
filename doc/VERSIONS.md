@@ -2,6 +2,99 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.19.1 - 2026-08-18
+
+**#896 §6 er ferdig, og CI er grønn igjen.** To ting i samme runde: konflikthåndteringen samtalen
+skulle ha hatt hele tiden, og oppryddingen etter S3c som viste seg å være større enn antatt.
+
+### Samtalen foreslår — den overskriver aldri (#926)
+
+Spesifikasjonen i §6 sa det rett ut: har feltene ulagrede endringer, skal et generert resultat
+lande som et **forslag** med «Bruk»/«Forkast». Det gjorde det ikke. Forfatteren kunne skrive et
+scenario for hånd, be om en revisjon i chatten, og få sitt eget arbeid erstattet uten å ha sagt ja.
+
+Det var verre enn saken beskrev. Med redigeringsskjemaet åpent ble feltene **ikke tegnet på nytt**
+etter en generering — utkastet under dem var byttet ut, men skjermen viste fortsatt forfatterens
+egen tekst. Overskrivingen ble først synlig ved lagring, altså etter at den var umulig å angre.
+
+Alle fire genereringsstiene går nå gjennom én port, `commitOrProposeGenerated`. Er skjemaet rent,
+landes resultatet som før — det skal ikke koste et ekstra klikk å få det man nettopp ba om. Er det
+skittent, parkeres resultatet i samtaleloggen med to knapper, og **utkastet røres ikke**: et
+forslag som allerede ligger i utkastet er ikke et forslag, det er noe neste «Lagre» skriver.
+
+«Bruk» tegner også feltene på nytt. Uten det ville det aksepterte forslaget vært usynlig til neste
+re-render — nøyaktig feilen mekanismen finnes for å fjerne.
+
+Merk at «ulagrede endringer» her betyr felt som **avviker fra det de ble tegnet med**, ikke at
+skjemaet finnes. Siden v2.18.13 er Rediger-skjemaet åpent hele tiden fanen er det, så en vakt på
+tilstedeværelse ville gjort hver eneste generering til et forslag.
+
+### Fanen merkes når noe lander utenfor synsfeltet (#926)
+
+Kriterier genereres asynkront og lander i Innstillinger. Sto forfatteren i Rediger, kom de uten et
+eneste tegn — koden innrømmet det selv i en TODO. Innstillinger får nå en prikk, dobbelt kodet med
+«(endret)» i `aria-label` og en melding i live-regionen, siden farge alene ikke er et signal.
+Merkingen fjernes idet fanen åpnes: den betyr «noe har skjedd du ikke har sett», ikke «noe er galt».
+
+### En bakgrunnsjobb som rev redigeringsskjemaet
+
+Funnet mens §6-e2e-en ble skrevet, og av samme klasse: `populateSessionDraftCriteriaInBackground`
+kalte `renderPreview()` ubetinget før den startet. `renderPreview` skriver rett i
+`previewContent.innerHTML`, så den rev et åpent Rediger-skjema og bygde det opp igjen fra bunten —
+med forfatterens tekst borte. Fullføringen i samme funksjon skilte allerede på om skjemaet var
+åpent; **veien inn hadde ingen vakt i det hele tatt.**
+
+### #906 — atomisiteten var en påstand uten test
+
+`composeModuleVersion` samler rename, rubrikk, prompt, MCQ-sett og modulversjonen i én
+transaksjon. Det var riktig, men bare festet i en kommentar — `grep composeModuleVersion test/` ga
+null treff. En atomisitetspåstand uten test slutter stille å være sann neste gang noen legger til
+et steg.
+
+Fire tester fester at samme transaksjonsklient tres gjennom hvert skriv (det er dette som avgjør om
+en rollback dekker dem), at en feil i første og siste ledd propagerer, og at et umulig
+gyldighetsvindu avvises før noe skrives.
+
+**Rettelse:** en tidligere kommentar fra meg på #906 påsto at et nytt lagringsforsøk lager enda en
+rubrikkversjon. Det stemmer ikke — `ensureRubricVersion` gjenbruker modulens aktive rubrikk og
+skriver bare når det ikke finnes noen.
+
+### Oppryddingen — CI hadde vært rød i et døgn
+
+Produkteier ba om at vi «kvalitetssikrer til slutt at vi har ryddet bort all gammel morro». Det
+viste seg å være nødvendig: **CI på `dev` har vært rød siden S3c ble merget 17. august**, med 21
+feilende tester i 8 filer. Alle pekte på filer S3c slettet.
+
+Grunnen til at det gikk upåaktet hen er verdt å skrive ned: QA-porten før deploy kjører `lint`,
+`test:unit` og `test:dom`. Kontraktfilene lå bare i den fulle `npm test`-kjøringen, som krever
+Postgres og derfor i praksis bare kjører i CI. **De ni statiske kontraktfilene er nå med i
+`test:unit`** — de leser bare filer fra disk og har aldri trengt en database. En kontrakt som bare
+kan brytes et sted man ikke ser, er ikke en kontrakt.
+
+Ryddet i samme slengen, alt sammen dødt siden S3c:
+
+- **«Åpne avansert redigering»** sto fortsatt i Innstillinger — en synlig knapp uten
+  klikkhåndterer, med en setning over seg om at feltene «redigeres foreløpig i den avanserte
+  editoren» og «flyttes hit i neste leveranse». Begge usanne siden v2.18.8.
+- **`editAdvanced`, `openEditor`, `directEdit`, `pickAnother`** — handlingsnøkler modellene
+  fortsatt produserte, men som handlingskartet ikke lenger kjente. De ble filtrert bort i det
+  stille, så modellen lovet knapper som aldri kunne tegnes.
+- **`.advanced-link`** — CSS uten et eneste element.
+- **`adminContent.help.moduleOverview` / `.importOverview`** — nb og nn hadde oversettelser, men
+  en-GB-utgavene forsvant i den døde-nøkkel-opprydningen. En oversettelse uten baseline er en
+  nøkkel som aldri slår til.
+- En **e2e-«exit 3»** som klikket på den døde knappen og bekreftet at ingenting skjedde etterpå.
+
+`test/admin-content-translations.test.js` krevde 56 nøkler fra Avansert-editorens vokabular. **53
+av dem finnes ikke lenger.** Testen er skrevet om mot flaten som faktisk finnes: fanene,
+redigeringsskjemaet, Innstillinger, genereringssvarene og personvernvarselet.
+
+### Tester
+
+180 e2e (2 nye for §6-porten), 1 017 unit-tester i 117 filer, 6 DOM-tester. Kontrakten som fester
+at alle fire genereringsstiene går gjennom porten ble verifisert ved å bryte én av dem med vilje —
+den ble rød på riktig sti, ikke bare rød.
+
 ## 2.19.0 - 2026-08-18
 
 **Avansert-editoren er fjernet (§3), og høyresiden er lagt om.** Minor-bump fordi en hel flate og

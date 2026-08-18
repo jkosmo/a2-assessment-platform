@@ -169,10 +169,12 @@ describe("participant console runtime config", () => {
     expect(response.headers.location).toBe("/admin-content");
   });
 
-  it("serves advanced admin content editor at /admin-content/module/:moduleId/advanced", async () => {
+  // #896 S3c: Avansert er slettet. URL-en overlever som 301 inn i arbeidsflaten, så bokmerker og
+  // gamle lenker lander på riktig sted i stedet for en 404 — men den serverer ingen side lenger.
+  it("redirects the retired advanced editor into the module workspace", async () => {
     const response = await request(app).get("/admin-content/module/test-module/advanced");
-    expect(response.status).toBe(200);
-    expect(response.text).toContain("admin-content.js");
+    expect(response.status).toBe(301);
+    expect(response.headers.location).toBe("/admin-content/module/test-module/conversation");
   });
 
   it("redirects legacy /admin-content?moduleId=X to canonical conversation URL", async () => {
@@ -200,9 +202,11 @@ describe("participant console runtime config", () => {
       "/participant",
       "/participant/completed",
       "/review",
-      // /admin-content is the new conversational shell (no mock-identity-card panel)
-      // /admin-content/module/:id/advanced is the full editor that retains the panel
-      "/admin-content/module/test-module/advanced",
+      // #896 S3c: /admin-content/module/:id/advanced was in this loop as "the full editor that
+      // retains the mock-identity panel". The page is deleted and the route is a 301, so every
+      // assertion under it — the import tabs, the module status card, the courses tab — was
+      // checking markup that no longer exists anywhere. The workspace shell has no
+      // mock-identity-card, so it does not replace it here; it is covered by its own tests.
       // #836: /calibration is retired (301 → /admin-content/calibration, covered by its own test);
       // the canonical quality workspace has no mock-identity-card so it doesn't belong in this loop.
     ];
@@ -269,32 +273,6 @@ describe("participant console runtime config", () => {
         expect(response.text).toContain('id="courseCertSection"');
       }
 
-      if (pagePath === "/admin-content/module/test-module/advanced") {
-        expect(response.text).toContain('id="outputStatus"');
-        expect(response.text).toContain('<details id="outputDetails">');
-        expect(response.text).toContain("<summary>View raw response</summary>");
-        expect(response.text).toContain('id="moduleStartModeTabs"');
-        expect(response.text).toContain('id="startModeImportTab"');
-        expect(response.text).toContain('id="startModeManualTab"');
-        expect(response.text).toContain('id="startModeExistingTab"');
-        expect(response.text).toContain('id="loadModuleContent"');
-        expect(response.text).toContain('id="exportModule"');
-        expect(response.text).toContain('id="duplicateModule"');
-        expect(response.text).toContain('id="moduleStatusCard"');
-        expect(response.text).toContain('id="importDraftFile"');
-        expect(response.text).toContain('id="importDraftJson"');
-        expect(response.text).toContain('id="applyImportDraft"');
-        expect(response.text).toContain('id="copyAuthoringPrompt"');
-        expect(response.text).toContain('id="previewCurrentDraft"');
-        expect(response.text).not.toContain('id="applyImportFile"');
-        expect(response.text).not.toContain('id="downloadImportTemplate"');
-        expect(response.text).not.toContain('id="flowProgress"');
-        expect(response.text.indexOf('id="importDraftFile"')).toBeLessThan(response.text.indexOf('id="moduleTitle"'));
-        expect(response.text).toContain("A published version must still be active");
-        expect(response.text).toContain('id="coursesTab"');
-        expect(response.text).toContain('id="tabKurs"');
-        expect(response.text).toContain('id="dialogCourse"');
-      }
     }
 
     const cssResponse = await request(app).get("/static/shared.css");
@@ -382,12 +360,14 @@ describe("participant console runtime config", () => {
     expect(resultsJsResponse.text).not.toContain("row.failedModules");
     expect(resultsJsResponse.text).not.toContain("row.underReviewModules");
 
-    const adminContentJsResponse = await request(app).get("/static/admin-content.js");
-    expect(adminContentJsResponse.status).toBe(200);
-    expect(adminContentJsResponse.text).toContain('/api/admin/content/modules');
-    expect(adminContentJsResponse.text).toContain('/api/admin/content/courses');
-    expect(adminContentJsResponse.text).toContain("showSimpleConfirm(");
-    expect(adminContentJsResponse.text).toContain("function shouldConfirmImportOverwrite(draft)");
+    // #896 S3c: /static/admin-content.js was the advanced editor's script and is deleted. The
+    // authoring surface is the shell now — assert against that instead of a 404.
+    const adminContentShellResponse = await request(app).get("/static/admin-content-shell.js");
+    expect(adminContentShellResponse.status).toBe(200);
+    expect(adminContentShellResponse.text).toContain('/api/admin/content/modules');
+    // The composed save (#906) — one call, one transaction. It replaced the five-call sequence,
+    // and a regression to separate calls is exactly what this file is positioned to catch.
+    expect(adminContentShellResponse.text).toContain("commitOrProposeGenerated");
 
     const participantCompletedJsResponse = await request(app).get("/static/participant-completed.js");
     expect(participantCompletedJsResponse.status).toBe(200);

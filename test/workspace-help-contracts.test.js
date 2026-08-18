@@ -21,7 +21,7 @@ const pagesWithHelp = [
   "public/admin-platform.html",
   "public/admin-content-library.html",
   "public/admin-content.html",
-  "public/admin-content-advanced.html",
+  // #896 S3c: public/admin-content-advanced.html er slettet. Sto her til 2026-08-18.
   "public/admin-content-courses.html",
   "public/admin-content-calibration.html",
 ];

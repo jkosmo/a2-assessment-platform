@@ -463,9 +463,17 @@ const adminContentBase = {
   "shell.tab.unsaved.draftBody": "You have a working draft that is not saved. It is kept when you switch view, but stays unsaved until you save it.",
   "shell.tab.unsaved.settingsBody": "You have changed settings that are not saved. Unlike a draft, these are NOT kept when you switch view — leaving now discards them.",
   "shell.tab.unsaved.switchAnyway": "Switch anyway",
+  // #926 (#896 §6): something landed in a tab the author is not looking at.
+  "shell.tab.attention.suffix": "changed",
+  "shell.tab.attention.announce": "New content in {tab}.",
+  // #926 (#896 §6): the conversation proposes; it never overwrites.
+  "shell.proposal.title": "Suggestion ready",
+  "shell.proposal.body": "You have unsaved changes in the fields, so this was not applied. Use it to replace what you have typed, or discard it and keep your own text.",
+  "shell.proposal.use": "Use",
+  "shell.proposal.discard": "Discard",
+  "shell.proposal.used": "The suggestion was applied to the fields.",
+  "shell.proposal.discarded": "The suggestion was discarded. Your text is unchanged.",
   "shell.settings.title": "Settings",
-  "shell.settings.placeholder": "These are edited in the advanced editor for now. They move here in the next delivery.",
-  "shell.settings.openAdvanced": "Open advanced editing",
   "shell.settings.noModule": "Load a module to see its settings.",
   "shell.settings.noLimit": "No limit",
 
@@ -663,10 +671,10 @@ const nnOverrides = {
 
 const adminContentLateOverrides = {
   nb: {
-    "adminContent.help.moduleOverview":
-      "Bruk denne veien n\u00e5r du vil opprette modulgrunnlaget manuelt f\u00f8r du legger til regler, vurderingsinstruks og test.",
-    "adminContent.help.importOverview":
-      "Bruk denne n\u00e5r utkastet allerede inneholder b\u00e5de modulgrunnlag og versjonsinnhold. Import fyller bare editoren. G\u00e5 gjennom, lagre og publiser separat.",
+    // #896 S3c-etterslep: `adminContent.help.moduleOverview` og `.importOverview` l\u00e5 her, men
+    // en-GB-utgavene forsvant i den d\u00f8de-n\u00f8kkel-opprydningen og ingen leser dem lenger. En
+    // oversettelse uten baseline er ikke en oversettelse \u2014 den er en n\u00f8kkel som aldri sl\u00e5r til,
+    // og den br\u00f8t n\u00f8kkelparitet-testen. Fjernet 2026-08-18.
 
     // ── Conversational shell ─────────────────────────────────────────────────
     "shell.page.title": "Modul",
@@ -1055,9 +1063,15 @@ const adminContentLateOverrides = {
     "shell.tab.unsaved.draftBody": "Du har et arbeidsutkast som ikke er lagret. Utkastet beholdes når du bytter visning, men er ikke lagret før du lagrer det.",
     "shell.tab.unsaved.settingsBody": "Du har endret innstillinger som ikke er lagret. I motsetning til et utkast beholdes disse IKKE ved visningsbytte — går du videre nå, forkastes de.",
     "shell.tab.unsaved.switchAnyway": "Bytt likevel",
+    "shell.tab.attention.suffix": "endret",
+    "shell.tab.attention.announce": "Nytt innhold i {tab}.",
+    "shell.proposal.title": "Forslag klart",
+    "shell.proposal.body": "Du har ulagrede endringer i feltene, så dette ble ikke satt inn. Bruk det for å erstatte det du har skrevet, eller forkast det og behold din egen tekst.",
+    "shell.proposal.use": "Bruk",
+    "shell.proposal.discard": "Forkast",
+    "shell.proposal.used": "Forslaget er satt inn i feltene.",
+    "shell.proposal.discarded": "Forslaget ble forkastet. Teksten din står uendret.",
     "shell.settings.title": "Innstillinger",
-    "shell.settings.placeholder": "Feltene over redigeres foreløpig i den avanserte editoren. De flyttes hit i neste leveranse.",
-    "shell.settings.openAdvanced": "Åpne avansert redigering",
     "shell.settings.noModule": "Last inn en modul for å se innstillingene.",
     "shell.settings.noLimit": "Ingen grense",
 
@@ -1111,10 +1125,7 @@ const adminContentLateOverrides = {
     "shell.settings.needsMcq": "krever et MCQ-sett",
   },
   nn: {
-    "adminContent.help.moduleOverview":
-      "Bruk denne vegen n\u00e5r du vil opprette modulgrunnlaget manuelt f\u00f8r du legg til reglar, vurderingsinstruks og test.",
-    "adminContent.help.importOverview":
-      "Bruk denne n\u00e5r utkastet allereie inneheld b\u00e5de modulgrunnlag og versjonsinnhald. Import fyller berre editoren. G\u00e5 gjennom, lagre og publiser separat.",
+    // #896 S3c-etterslep \u2014 sj\u00e5 merknaden i nb-blokka over.
 
     // ── Conversational shell ─────────────────────────────────────────────────
     "shell.page.title": "Modul",
@@ -1503,9 +1514,15 @@ const adminContentLateOverrides = {
     "shell.tab.unsaved.draftBody": "Du har eit arbeidsutkast som ikkje er lagra. Utkastet blir teke vare på når du byter vising, men er ikkje lagra før du lagrar det.",
     "shell.tab.unsaved.settingsBody": "Du har endra innstillingar som ikkje er lagra. I motsetnad til eit utkast blir desse IKKJE tekne vare på ved visingsbyte — går du vidare no, blir dei forkasta.",
     "shell.tab.unsaved.switchAnyway": "Byt likevel",
+    "shell.tab.attention.suffix": "endra",
+    "shell.tab.attention.announce": "Nytt innhald i {tab}.",
+    "shell.proposal.title": "Framlegg klart",
+    "shell.proposal.body": "Du har ulagra endringar i felta, så dette blei ikkje sett inn. Bruk det for å erstatte det du har skrive, eller forkast det og behald din eigen tekst.",
+    "shell.proposal.use": "Bruk",
+    "shell.proposal.discard": "Forkast",
+    "shell.proposal.used": "Framlegget er sett inn i felta.",
+    "shell.proposal.discarded": "Framlegget blei forkasta. Teksten din står uendra.",
     "shell.settings.title": "Innstillingar",
-    "shell.settings.placeholder": "Felta over blir førebels redigerte i den avanserte editoren. Dei blir flytta hit i neste leveranse.",
-    "shell.settings.openAdvanced": "Opne avansert redigering",
     "shell.settings.noModule": "Last inn ein modul for å sjå innstillingane.",
     "shell.settings.noLimit": "Inga grense",
 
