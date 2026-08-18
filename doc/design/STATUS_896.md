@@ -18,14 +18,22 @@ kriterieeditoren og instruksen deler nå kode med Rediger i stedet for å være 
 |---|---|
 | §1 Tre faner | ✅ Ferdig |
 | §2 Feltkart | ✅ Ferdig — Innstillinger 8 av 8 |
-| §3 Avansert oppløses | ⚠️ Ikke lenger blokkert. Gjenstår: fjerne dubletter, handoff, kalibreringsfane, identitetspanel |
-| §4 Lagringsmodell | ✅ Ferdig (inkl. #905, #906) |
+| §3 Avansert oppløses | ✅ **Ferdig** (v2.19.0) — siden er slettet, rutene redirigerer |
+| §4 Lagringsmodell | ⚠️ Komponert lagring ferdig · **#906 gjenstår**: utkastlagringen kaller `rubric-versions/ensure` i egen transaksjon først |
 | §5 Publiseringsgate | ✅ Ferdig |
-| §6 Utkastversjoner | ⚠️ Versjonshistorikk ferdig · konflikthåndtering ikke startet |
-| §7 Språk | ✅ Ferdig |
+| §6 Utkastversjoner | ⚠️ Versjonshistorikk ferdig · konflikthåndtering → **#926** |
+| §7 Språk | ✅ Ferdig — UI-språk og innholdsspråk skilt (v2.18.12) |
 | §8 Faneadferd | ✅ Ferdig |
 | §9 Eksport/import | ✅ Ferdig |
-| §11 Ferdig-kriterier | ⚠️ 3 av 4 |
+| §11 Ferdig-kriterier | ⚠️ 3 av 4 — ny-modul-e2e → **#927** |
+
+**Restansen er nå tre saker, ikke en tekstlinje her:** #906, #926, #927. Når de tre er lukket, er
+#896 ferdig etter sin egen spesifikasjon.
+
+Saker som ble funnet under epicen men hører til nabokode, og som IKKE blokkerer lukking: #914
+(engelske valideringsmeldinger), #915 (falsk kriteriedrift), #916 (seksjonseksport), #917 (markdown
+i fritekstfelt), #918 (tittel-lokalisering i samtaleflyten), #919 (drift-dialogens språkfletting),
+#920 (§7-vakt i Rediger ved språkbytte).
 
 ---
 
