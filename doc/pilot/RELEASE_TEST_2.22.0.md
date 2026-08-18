@@ -1,6 +1,25 @@
 # Release 2.22.0 — testplan før produksjon
 
-**Stage kjører 2.22.0.** Dette er testplanen som avgjør om vi tør ta den til prod.
+**Stage kjører 2.22.0. Kandidaten er nå 2.22.1** — deploy den før du tester (se nederst).
+
+Dette er testplanen som avgjør om vi tør ta releasen til prod.
+
+> ## QA-gjennomgangen ga NO-GO — og fant fire blokkere
+>
+> Gjennomgangen gikk over hele spennet `origin/main`→`dev` (78 commits), med vekt på de tre
+> leveransene som ble laget av parallelle agenter og aldri hadde vært gjennom en review.
+> **Alle fire er rettet i v2.22.1**, to av dem med tester verifisert ved mutasjon:
+>
+> 1. **Kursimport publiserte kurset rundt en tom seksjon.** Deltakeren fikk en blank side og kunne
+>    fortsatt markere den lest mot kursbeviset. Verst av de fire, fordi den rammer deltakeren.
+> 2. **`GET /sections/:id` manglet eierskapsvakt** — og leveransen hadde utvidet hullet til å
+>    lekke andres *upubliserte utkast*, ikke bare publisert tekst.
+> 3. **Revisjon i samtalen skrev i menyspråket**, så et språkbytte kunne erstatte forfatterens
+>    norske originaltekst med en maskinoversettelse av en engelsk revisjon.
+> 4. Konfliktmarkører fra min egen rebase sto i flatekartet.
+>
+> **Restansen er registrert, ikke glemt:** #931 (syv funn som ikke blokkerte) og #932 (vilkår som
+> må avklares før prod — se punkt 0 under, det er tidskritisk).
 
 Prod ligger **78 commits** bak. Det er ikke en vanlig ukesleveranse, og listen under er sortert
 deretter: **prioritet 1 må bestås**, prioritet 2 bør sjekkes, prioritet 3 kan oppdages senere.
@@ -20,6 +39,21 @@ deretter: **prioritet 1 må bestås**, prioritet 2 bør sjekkes, prioritet 3 kan
 - **Prod har innhold laget under den gamle kontrakten** — titler kopiert til alle tre språk,
   seksjoner uten språkmerking. Publiseringsgaten gjelder nå også seksjoner.
 - **Deltakere kan stå midt i et kurs** når lesevisningen legges om.
+
+---
+
+# Prioritet 0 — kjør FØR du tester, og før noen lagrer et kurs
+
+Tre SQL-spørringer mot prod. De tar minutter, og den siste har et vindu som lukker seg.
+
+- [ ] Tell seksjoner og moduler med ettspråks tittel/brødtekst. Det sier hvor mange forfattere den
+      nye seksjonsgaten låser ute. Spørringene står i **#932**.
+- [ ] Tell `DiscussionThread` med `courseItemId IS NOT NULL`.
+
+> ⚠️ **Den siste er tidskritisk.** `replaceCourseItems` sletter og gjenskaper kurselementer ved
+> *hver* lagring av en kurssekvens, og `DiscussionThread.courseItem` er `onDelete: SetNull`. Tråder
+> på elementnivå slettes altså ikke — de **forfremmes til kursnivå** neste gang en SMO lagrer et
+> kurs. Teller du etterpå, er tallet ikke lenger sant. Dette er verifiseringen du selv ba om.
 
 ---
 
@@ -137,3 +171,30 @@ det er last, ikke logikk.
 | `.privacy-notice`-klassen i utrullet HTML | til stede |
 | `settingsOpenAdvanced` i utrullet HTML | borte |
 | `/version` · `/healthz` | 2.22.0 · ok |
+
+
+---
+
+# Før du begynner: deploy 2.22.1
+
+Stage kjører fortsatt 2.22.0, som er kandidaten **uten** QA-rettelsene. Blokker 1 og 3 er direkte
+testbare, så testen er lite verdt mot 2.22.0.
+
+```
+gh workflow run deploy-app.yml --ref main -f git_ref=dev
+```
+
+Verifiser mot `/version` at den svarer **2.22.1** før du starter — workflow-fargen er ikke nok.
+
+## Fire punkter som er nye i 2.22.1 og verdt å teste spesifikt
+
+- [ ] **Kursimport med gammel seksjon.** Eksporter et publisert kurs som inneholder en seksjon med
+      ettspråks tittel, importer det på nytt, og åpne det **som deltaker**. Kurset skal *ikke* være
+      publisert, og du skal ikke møte en blank side.
+- [ ] **Eierskap på tvers.** Logg inn som `jko@a-2.no`, ta ID-en til en seksjon
+      `joakim.kosmo@gmail.com` eier, og kall `GET /api/admin/content/sections/<id>` direkte.
+      Forventet **403**.
+- [ ] **Innholdsspråk vs. menyspråk.** Skriv en oppgavetekst på bokmål i Rediger og lagre. Bytt
+      **menyspråket** til engelsk — innholdsspråket skal bli stående på Bokmål. Be i chatten om
+      «gjør oppgaven kortere». Den norske teksten skal revideres, ikke oversettes bort.
+- [ ] Samme øvelse med **MCQ-revisjon**.
