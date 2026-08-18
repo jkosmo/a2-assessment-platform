@@ -1242,6 +1242,125 @@ test.describe("admin content browser coverage", () => {
     await expect(page.getByText(/Trade unions.*loaded\./)).toBeVisible();
   });
 
+  // #927 (#896 §11): the last uncovered finish criterion — an e2e that follows the NEW-MODULE
+  // journey end to end through the tab surface, not just "create and save".
+  //
+  // The path is not arbitrary. Every single leg of it has had a silent data-loss bug during this
+  // epic, all found by cross-model review or by the product owner on stage, none by the suite:
+  //   - criteria edited in Innstillinger never reached the draft save (QA round 2)
+  //   - the panel was unreachable in the new-module flow because `bundle` never loaded (round 3)
+  //   - background generation overwrote manual edits (round 4)
+  //   - Add/Remove lost locale metadata (round 4)
+  //   - rebuilding the panel erased what had been typed (round 6)
+  //
+  // I gave up on this test three times during the epic: the harness tore the chat menu down on
+  // tab switch. v2.19.0 moved the actions to a fixed bar outside the log, which is what made it
+  // writable — the actions no longer scroll away or get rebuilt when the tab changes.
+  //
+  // The assertion is on the SAVE PAYLOAD, deliberately. Asserting a reload against a mocked API
+  // would only prove the mock echoes what it was handed; the payload is what the server would
+  // actually have persisted.
+  test("a new module carries criteria edited in Innstillinger all the way into the save", async ({ page }) => {
+    await mockCommonApis(page);
+
+    // Held open so Innstillinger can be opened WHILE generation is in flight — the case round 3
+    // and round 7 both broke on, and the one an author hits whenever they are quicker than the LLM.
+    // Seeded with a no-op rather than null: TypeScript cannot see that a Promise executor runs
+    // synchronously, so it narrows a `| null` binding to `never` at the call site below.
+    let releaseRubric: () => void = () => {};
+    const rubricInFlight = new Promise<void>((resolve) => { releaseRubric = resolve; });
+    await page.route("**/api/admin/content/generate/rubric", async (route: Route) => {
+      await rubricInFlight;
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          rubric: {
+            criteria: [
+              { id: "clarity", label: "Generert klarhet", description: "Generert beskrivelse", maxScore: 5 },
+              { id: "depth", label: "Generert dybde", description: "Generert beskrivelse", maxScore: 5 },
+            ],
+          },
+        }),
+      });
+    });
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let versionPayload: any = null;
+    await page.route("**/api/admin/content/modules/*/versions", async (route: Route) => {
+      versionPayload = route.request().postDataJSON();
+      await route.fulfill({
+        status: 201,
+        contentType: "application/json",
+        body: JSON.stringify({ moduleVersion: { id: "module-1-version-1", versionNo: 1 } }),
+      });
+    });
+
+    await page.goto("/admin-content.html");
+
+    await clickEnabledButton(page, "Create new module");
+    await submitActiveChatInput(page, "Trade unions");
+    await submitActiveChatInput(page, "Source notes about labour rights and worker organising.");
+    await clickEnabledButton(page, "Free-text + MCQ");
+    await clickEnabledButton(page, "Let the LLM decide");
+    await clickEnabledButton(page, "Basic");
+    await clickEnabledButton(page, /Use this plan|Bruk denne planen/);
+    await clickEnabledButton(page, "3 questions");
+    await clickEnabledButton(page, "4 options");
+
+    await expect(page.getByText("Module created.")).toBeVisible();
+
+    // Innstillinger opens on a module that has no bundle — it was created in this session, not
+    // loaded. Round 3: the panel was empty here because it read only from `bundle`.
+    //
+    // The tab guard fires on the way: an unsaved draft exists. That dialog is the non-destructive
+    // one — it says the draft is KEPT, which is true — so confirming it is what an author does,
+    // not something the test is working around.
+    await page.locator("#tabSettings").click();
+    await expect(page.locator("#dialogUnsavedTabSwitch")).toBeVisible();
+    await expect(page.locator("#unsavedTabSwitchBody")).toContainText(/kept|beholdes|bevart/i);
+    await page.locator("#tabSwitchDiscard").click();
+    await expect(page.locator("#tabPanelSettings")).toBeVisible();
+
+    // Now let the generated criteria land, into a panel that is already on screen.
+    releaseRubric();
+    await expect(page.locator(".vk-card")).toHaveCount(2);
+    await expect(page.locator(".vk-label").first()).toHaveValue("Generert klarhet");
+
+    // Edit one, add one, remove one — the three operations round 4 lost locale metadata on.
+    await page.locator(".vk-label").first().fill("Redigert klarhet");
+    await clickEnabledButton(page, /Add criterion|Legg til kriterium/);
+    await expect(page.locator(".vk-card")).toHaveCount(3);
+    await page.locator(".vk-label").nth(2).fill("Nytt kriterium");
+    await page.locator(".vk-card").nth(1).locator(".vk-remove").click();
+    await expect(page.locator(".vk-card")).toHaveCount(2);
+
+    // Back to Rediger, then save. Round 2: the edits never left the panel.
+    //
+    // The same non-destructive dialog on the way back. It says the draft is kept — and the
+    // criteria edits are part of what it is promising to keep, because `unsavedTabSwitchKind`
+    // absorbs them into the draft BEFORE it decides what to warn about. The save assertion below
+    // is what proves that promise was honoured.
+    await page.locator("#tabEdit").click();
+    await expect(page.locator("#dialogUnsavedTabSwitch")).toBeVisible();
+    await expect(page.locator("#unsavedTabSwitchBody")).toContainText(/kept|beholdes|bevart/i);
+    await page.locator("#tabSwitchDiscard").click();
+    await expect(page.locator("#previewEditTaskText")).toBeVisible();
+
+    await clickEnabledButton(page, "Save draft");
+
+    // Exactly the two criteria the author left behind — the edited one and the added one, with
+    // the removed one gone. Asserting the SET and not just a count is the point: an earlier bug
+    // saved the right number of criteria with the generated labels.
+    await expect.poll(() => {
+      const criteria = versionPayload?.rubric?.criteria;
+      if (!criteria) return null;
+      return Object.values(criteria)
+        .map((c: any) => (typeof c?.label === "string" ? c.label : c?.label?.nb ?? c?.label?.["en-GB"]))
+        .sort();
+    }).toEqual(["Nytt kriterium", "Redigert klarhet"]);
+  });
+
   // #578: the conversation can author a FREETEXT_ONLY module — free-text + LLM assessment, no MCQ.
   // After source the author picks "Free-text only"; the scenario/blueprint steps run but the MCQ
   // step is skipped, and the saved version sends assessmentMode=FREETEXT_ONLY with no mcqSetVersionId.

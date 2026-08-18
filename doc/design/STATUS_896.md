@@ -25,9 +25,10 @@ kriterieeditoren og instruksen deler nå kode med Rediger i stedet for å være 
 | §7 Språk | ✅ Ferdig — UI-språk og innholdsspråk skilt (v2.18.12) |
 | §8 Faneadferd | ✅ Ferdig |
 | §9 Eksport/import | ✅ Ferdig |
-| §11 Ferdig-kriterier | ⚠️ 3 av 4 — ny-modul-e2e → **#927** |
+| §11 Ferdig-kriterier | ✅ **Ferdig** (#927, v2.19.2) — ny-modul-e2e-en følger hele reisen |
 
-**Restansen er nå én sak: #927** (e2e for ny-modul-flyten). #906 og #926 er lukket 2026-08-18.
+**Restansen er tom. #906, #926 og #927 er lukket 2026-08-18, og #896 er ferdig etter sin egen
+spesifikasjon.**
 
 **Merk fra oppryddingen:** CI på `dev` hadde vært rød siden S3c ble merget 17. august — 21 tester
 i 8 filer, alle pekende på filer S3c slettet. Grunnen til at det gikk upåaktet hen er at
@@ -86,27 +87,28 @@ De øvrige tre poengreglene kom i v2.18.9; først da ble påstanden sann.
 
 ---
 
-## §3 · Avansert oppløses — ikke lenger blokkert
+## §3 · Avansert oppløses — ferdig (v2.19.0)
 
-Avansert-siden serverer fortsatt alt. Det som per spesifikasjon skal bort derfra:
+Siden er slettet, og alle dublettene med den. 8 505 linjer: `admin-content.js`,
+`admin-content-advanced.html`, begge handoff-modulene, hjelpeteksten og 1 309 oversettelser
+ingenting kunne nå. Rutene svarer som permanente redirects inn i arbeidsflaten, siden de ligger i
+bokmerker.
 
-| Funksjon | Nytt sted | Status |
-|---|---|---|
-| Kriterier, vurderingsinstruks, innsendingsskjema | Innstillinger | ✅ flyttet (dubletten i Avansert består) |
-| Modultype, terskler, gyldighet, sertifiseringsnivå | Innstillinger | ✅ flyttet (dubletten i Avansert består) |
-| Beskrivelse | Rediger | ✅ flyttet (dubletten består) |
-| Eksport / import | Rediger | ✅ flyttet (dubletten består) |
-| Opprett / dupliser / slett modul | Modul-lista | ❌ `duplicateModule`, `deleteModule` ligger fortsatt i Avansert |
-| Kalibrering-fane | egen side finnes | ❌ dubletten `tabKalibrering` består |
-| Identitetspanel (mock-bruker) | utviklerverktøy | ❌ `mock-identity-panel` ligger i forfatterflaten |
-| `writeHandoff` / `openAdvancedEditor` | fjernes | ❌ 5 forekomster igjen |
+**Etterslep, ryddet 2026-08-18 (v2.19.1).** Slettingen etterlot mer enn ventet, og det ble ikke
+oppdaget fordi CI var rød i et døgn uten at noen så det:
 
-**Rekkefølgen var tvungen, og forutsetningen er nå oppfylt.** Alt forfatteren trenger finnes i den
-nye flaten, så det som gjenstår er sletting: dublettene, handoff-mekanikken, kalibreringsdubletten
-og identitetspanelet. Det er den siste store bolken i epicen.
+| Rest | Hva den var |
+|---|---|
+| «Åpne avansert redigering» | Synlig knapp i Innstillinger uten klikkhåndterer, med en setning over seg om at feltene «flyttes hit i neste leveranse» — usant siden v2.18.8 |
+| `editAdvanced`, `openEditor`, `directEdit`, `pickAnother` | Handlingsnøkler modellene produserte, men som handlingskartet ikke lenger kjente. Filtrert bort i det stille |
+| `.advanced-link` | CSS uten et eneste element |
+| `adminContent.help.moduleOverview` / `.importOverview` | nb/nn-oversettelser uten en-GB-baseline |
+| 21 tester i 8 filer | Leste filer som ikke finnes |
 
-Merk at dublettene er en **mellomtilstand, ikke en feil** — men den betyr at samme handling finnes
-to steder. Rapporter det hvis de to gir ulikt resultat.
+Lærdommen er verdt å skrive ned: QA-porten før deploy kjører `lint` + `test:unit` + `test:dom`,
+mens kontraktfilene bare lå i den fulle `npm test`-kjøringen som krever Postgres. **En kontrakt som
+bare kan brytes et sted man ikke ser, er ikke en kontrakt.** De ni statiske kontraktfilene er nå
+med i `test:unit`.
 
 ---
 
@@ -134,28 +136,33 @@ som §6 selv — innhold som endrer seg uten at forfatteren ba om det.
 | `admin-content-ui-contracts.test.js` skrevet om | ✅ refererer ikke lenger `previewEditConfirm` |
 | #892 landet først | ✅ |
 | Tittel-eierskap koordinert med #894 | ✅ |
-| **E2E for begge flyter: ny modul og rediger eksisterende** | ⚠️ «rediger eksisterende» er godt dekket (163 e2e). «Ny modul» ende-til-ende gjennom den nye faneflaten er ikke festet som én sammenhengende test |
+| **E2E for begge flyter: ny modul og rediger eksisterende** | ✅ **Ferdig** (#927, v2.19.2) — «ny modul» følger nå hele reisen: opprett i samtalen → åpne Innstillinger mens kriteriene genereres → rediger, legg til, fjern → tilbake til Rediger → lagre, og lagringspayloaden bærer nøyaktig forfatterens kriterier |
 
 ---
 
-## Estimat på gjenstående
+## Gjennomført
 
-Grovt, i den rekkefølgen de må gjøres:
+| Bolk | Levert |
+|---|---|
+| Kriterieeditor → Innstillinger | v2.18.6 — deler kode med Rediger |
+| Vurderingsinstruks → Innstillinger | v2.18.7 |
+| Innsendingsskjema → Innstillinger | v2.18.8 |
+| Skaleringsregel (praktisk vekt) | v2.18.8 |
+| Full `assessmentPolicy` redigerbar | v2.18.9 |
+| Innstillinger omorganisert i fire blokker | v2.18.10 |
+| UI-språk skilt fra innholdsspråk | v2.18.12 |
+| Rediger-fanen redigerbar fra man åpner den | v2.18.13 |
+| S3c: Avansert fjernet, høyresiden lagt om | v2.19.0 |
+| §4 atomisitet festet · §6 forslag og fanemerking · opprydding | v2.19.1 |
+| §11 ny-modul-e2e | v2.19.2 |
 
-| Bolk | Omfang | Merknad |
-|---|---|---|
-| ~~Kriterieeditor → Innstillinger~~ | ~~Stor~~ | ✅ v2.18.6 — deler kode med Rediger |
-| ~~Vurderingsinstruks → Innstillinger~~ | ~~Middels~~ | ✅ v2.18.7 |
-| ~~Innsendingsskjema → Innstillinger~~ | ~~Middels~~ | ✅ v2.18.8 |
-| ~~Skaleringsregel → Innstillinger~~ | ~~Liten~~ | ✅ v2.18.8 (praktisk vekt) |
-| ~~Full `assessmentPolicy` redigerbar~~ | ~~Liten~~ | ✅ v2.18.9 |
-| **S3c: fjern Avansert** | **Middels** | Ren sletting nå — men berører ruter, handoff, modul-lista og e2e-er som navigerer dit |
-| §6 forslag- og fanemerking | Middels | Samtalen skal foreslå, ikke overskrive; fanemerking ved asynkrone endringer |
-| E2E «ny modul» ende-til-ende | Liten | |
+**Vurdering (2026-08-18):** epicen er ferdig etter sin egen spesifikasjon. Den gikk fra «ny flate
+finnes ved siden av den gamle» via «den gamle kan fjernes» til «den gamle er borte, og restene
+etter den også».
 
-**Vurdering (oppdatert 2026-08-16):** §2 er i havn. Det som gjenstår er **to bolker** — å fjerne
-Avansert, og §6-konflikthåndteringen — pluss én e2e. Epicen har flyttet seg fra «ny flate finnes
-ved siden av den gamle» til «den gamle kan fjernes».
+Det som gjenstår er ikke #896, men naboarbeid registrert underveis: se listen over åpne saker
+øverst, og #925 (Seksjoner etter samme mønster), som produkteier selv har bedt om å ikke starte
+før dette er lukket.
 
 ---
 

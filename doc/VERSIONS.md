@@ -2,6 +2,62 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.19.2 - 2026-08-18
+
+**#896 er ferdig.** Siste ferdig-kriterium i §11 var en e2e som følger ny-modul-flyten ende til
+ende gjennom faneflaten. Den finnes nå (#927), og med den er epicen lukket etter sin egen
+spesifikasjon.
+
+### Reisen testen følger
+
+```
+opprett modul i samtalen
+  → åpne Innstillinger MENS kriteriene genereres
+  → rediger ett kriterium, legg til ett, fjern ett
+  → tilbake til Rediger
+  → lagre
+  → lagringspayloaden bærer nøyaktig forfatterens kriterier
+```
+
+Stien er ikke tilfeldig valgt. **Hvert eneste ledd har hatt en stille datatapsfeil i denne
+epicen**, og ingen av dem ble funnet av suiten — de ble funnet av kryssmodell-review eller av
+produkteier på stage:
+
+- kriterier redigert i Innstillinger nådde ikke utkastlagringen (QA-runde 2)
+- panelet var utilgjengelig i ny-modul-flyten fordi `bundle` aldri ble lastet (runde 3)
+- bakgrunnsgenerering overskrev manuelle endringer (runde 4)
+- Legg til/Fjern mistet lokale-metadata (runde 4)
+- gjenoppbygging av panelet slettet det som var skrevet (runde 6)
+
+### Hvorfor den kunne skrives nå
+
+Jeg forsøkte dette tre ganger under epicen og ga opp hver gang: testharnessen rev chat-menyen ved
+fanebytte, og variantene som ble grønne ville vært grønne uten rettelsene også. **v2.19.0 flyttet
+handlingene ut av samtaleloggen og inn i en fast handlingslinje**, og da forsvant hindringen —
+handlingene bygges ikke lenger opp på nytt når fanen skifter.
+
+### Om assertionen
+
+Den er på **lagringspayloaden**, ikke på en reload. En reload mot et mocket API beviser bare at
+mocken gir tilbake det den fikk; payloaden er det serveren faktisk ville skrevet.
+
+Og den sammenligner **settet** av kriterier, ikke antallet. Runde 2-feilen lagret riktig antall
+kriterier med de genererte etikettene — en telling ville gått rett gjennom den.
+
+**Verifisert ved mutasjon.** `syncSettingsCriteriaToDraft` ble slått av med vilje, og testen ble
+rød med nøyaktig runde 2-signaturen: «Generert klarhet, Generert dybde» der forfatterens
+«Redigert klarhet, Nytt kriterium» skulle stått. En test som ikke kan feile på feilen den er
+skrevet for, er verre enn ingen.
+
+### Sidefunn
+
+Fanevakten fyrer to ganger under reisen — inn i Innstillinger og ut igjen. Begge gangene er det
+den ikke-destruktive dialogen, den som sier at utkastet **beholdes**, og det er sant: kriteriene
+absorberes inn i utkastet av `unsavedTabSwitchKind` før den bestemmer hva den skal advare om.
+Testen bekrefter både ordlyden og at løftet holdes.
+
+181 e2e totalt.
+
 ## 2.19.1 - 2026-08-18
 
 **#896 §6 er ferdig, og CI er grønn igjen.** To ting i samme runde: konflikthåndteringen samtalen
