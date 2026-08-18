@@ -159,9 +159,3 @@ export function deriveShellDraftReadyActionModel({ hasSelectedModule }) {
   };
 }
 
-export function resolveShellResumeBehavior({ hasHandoffDraft, resumeEditing }) {
-  return {
-    shouldApplyHandoffDraft: hasHandoffDraft,
-    shouldCreateDraftFromLoadedModule: !hasHandoffDraft && !!resumeEditing,
-  };
-}

@@ -513,7 +513,7 @@ const workspaceContent = {
           items: [
             "Search and filter the list before you open or manage a module.",
             "Create a new module from the button at the top right.",
-            "Open conversation for fast content work, or advanced for full setup and rules.",
+            "Open a module to edit its content, its setup and its assessment rules in one place.",
           ],
         },
         {
@@ -530,7 +530,7 @@ const workspaceContent = {
           items: [
             "Søk og filtrer listen før du åpner eller forvalter en modul.",
             "Opprett ny modul med knappen øverst til høyre.",
-            "Åpne samtale for raskt innholdsarbeid, eller avansert for full oppsett og regler.",
+            "Åpne en modul for å redigere innhold, oppsett og vurderingsregler på ett sted.",
           ],
         },
         {
@@ -547,7 +547,7 @@ const workspaceContent = {
           items: [
             "Søk og filtrer lista før du opnar eller forvaltar ein modul.",
             "Opprett ny modul med knappen øvst til høgre.",
-            "Opne samtale for raskt innhaldsarbeid, eller avansert for fullt oppsett og reglar.",
+            "Opne ein modul for å redigere innhald, oppsett og vurderingsreglar på éin stad.",
           ],
         },
         {
@@ -583,7 +583,7 @@ const workspaceContent = {
           title: "Good to know",
           items: [
             "Conversation editing is best for title, assignment text, guidance, MCQ, and translation refresh.",
-            "Settings is where module type, thresholds, criteria and assessment instructions will live. For now it opens the advanced editor.",
+            "Settings holds the module type, the pass rules, the criteria and the assessment instruction.",
           ],
         },
       ],
@@ -602,7 +602,7 @@ const workspaceContent = {
           title: "Greit å vite",
           items: [
             "Samtaledelen passer best for tittel, oppgavetekst, veiledning, flervalg og oppfrisking av oversettelser.",
-            "Innstillinger er der modultype, terskler, kriterier og vurderingsinstruks skal ligge. Foreløpig åpner den den avanserte editoren.",
+            "Innstillinger holder modultype, poenggrenser, kriterier og vurderingsinstruks.",
           ],
         },
       ],
@@ -621,72 +621,7 @@ const workspaceContent = {
           title: "Greitt å vite",
           items: [
             "Samtaledelen passar best for tittel, oppgåvetekst, rettleiing, flerval og oppfrisking av omsetjingar.",
-            "Innstillingar er der modultype, tersklar, kriterium og vurderingsinstruks skal liggje. Førebels opnar den den avanserte editoren.",
-          ],
-        },
-      ],
-    },
-  },
-  "admin-content-advanced": {
-    title: {
-      "en-GB": "Advanced module editing",
-      nb: "Innholdsforvaltning: avansert",
-      nn: "Innhaldsforvaltning: avansert",
-    },
-    summary: {
-      "en-GB": "Use advanced editing when you need full control of content, scoring rules, and publication settings.",
-      nb: "Bruk avansert redigering når du trenger full kontroll over innhold, vurderingsregler og publiseringsinnstillinger.",
-      nn: "Bruk avansert redigering når du treng full kontroll over innhald, vurderingsreglar og publiseringsinnstillingar.",
-    },
-    sections: {
-      "en-GB": [
-        {
-          title: "What to do here",
-          items: [
-            "Work through the editor sections to update module data, version content, and scoring setup.",
-            "Use the preview toggle and language controls to check what the learner will see.",
-            "Save before you publish so you keep a clean draft history.",
-          ],
-        },
-        {
-          title: "Good to know",
-          items: [
-            "Advanced editing is the right place for rubric, prompt, policy, and schema changes.",
-            "Back to conversation when you want lighter wording work and fast iteration.",
-          ],
-        },
-      ],
-      nb: [
-        {
-          title: "Dette gjør du her",
-          items: [
-            "Jobb deg gjennom editorseksjonene for å oppdatere moduldata, versjonsinnhold og vurderingsoppsett.",
-            "Bruk knappen for forhåndsvisning og språkkontrollene for å kontrollere hva deltakeren vil se.",
-            "Lagre før du publiserer, slik at du beholder en ryddig utkastshistorikk.",
-          ],
-        },
-        {
-          title: "Greit å vite",
-          items: [
-            "Avansert redigering er riktig sted for endringer i vurderingsmatrise, instruksjon, regler og skjema.",
-            "Gå tilbake til samtale når du vil ha lettere ordlydsarbeid og rask iterasjon.",
-          ],
-        },
-      ],
-      nn: [
-        {
-          title: "Dette gjer du her",
-          items: [
-            "Jobb deg gjennom editorseksjonane for å oppdatere moduldata, versjonsinnhald og vurderingsoppsett.",
-            "Bruk knappen for førehandsvising og språkkontrollane for å kontrollere kva deltakaren vil sjå.",
-            "Lagre før du publiserer, slik at du tek vare på ei ryddig utkastshistorikk.",
-          ],
-        },
-        {
-          title: "Greitt å vite",
-          items: [
-            "Avansert redigering er rett stad for endringar i vurderingsmatrise, instruksjon, reglar og skjema.",
-            "Gå tilbake til samtale når du vil ha lettare ordlydsarbeid og rask iterasjon.",
+            "Innstillingar held modultype, poenggrenser, kriterium og vurderingsinstruks.",
           ],
         },
       ],

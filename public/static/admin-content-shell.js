@@ -17,7 +17,6 @@ import {
 } from "/static/participant-console-state.js";
 import { showToast } from "/static/toast.js";
 import { renderWorkspaceNavigationWithProfile } from "./workspace-nav.js";
-import { writeHandoff, readAndClearHandoff } from "/static/admin-content-handoff.js";
 import { localizeValueForLocale, buildPreviewHtml } from "/static/admin-content-preview.js";
 import { setHidden } from "/static/dom-visibility.js";
 import { hashBlueprintAsync, classifyDriftState } from "/static/admin-content-blueprint-hash.js";
@@ -26,9 +25,7 @@ import {
   detectShellRevisionTargets,
   deriveShellModuleActionModel,
   deriveShellDraftReadyActionModel,
-  resolveShellResumeBehavior,
 } from "/static/admin-content-shell-state.js";
-import { buildAdminContentAdvancedUrl } from "/static/admin-content-handoff-routes.js";
 import { deriveModuleStatusChains } from "/static/module-status-logic.js";
 import { renderOwnerPanel } from "/static/owner-panel.js";
 import { makeSrBadge, loadVersion } from "/static/admin-content-shared.js";
@@ -201,7 +198,6 @@ const tabButtons = {
 };
 const tabPanelModule = document.getElementById("tabPanelModule");
 const tabPanelSettings = document.getElementById("tabPanelSettings");
-const settingsOpenAdvancedBtn = document.getElementById("settingsOpenAdvanced");
 const unsavedTabSwitchDialog = document.getElementById("dialogUnsavedTabSwitch");
 const shellStatusAnnouncer = document.getElementById("shellStatusAnnouncer");
 const stateRail = document.getElementById("stateRail");
@@ -1775,44 +1771,6 @@ function createSessionDraftFromLoadedModule() {
   return true;
 }
 
-function applyHandoffDraft(draft) {
-  // v1.2.26 (#361): handoff inkluderer nå title, description, criteria og assessmentBlueprint
-  // i tillegg til eksisterende felt. Tomt-sjekk dekker hele settet — handoff appliseres
-  // hvis noen av feltene har innhold.
-  const hasAnything =
-    draft?.title ||
-    draft?.description ||
-    draft?.taskText ||
-    draft?.assessorExpectedContent ||
-    draft?.candidateTaskConstraints ||
-    (draft?.mcqQuestions?.length > 0) ||
-    (draft?.criteria && typeof draft.criteria === "object" && Object.keys(draft.criteria).length > 0) ||
-    draft?.assessmentBlueprint;
-  if (!hasAnything) {
-    return false;
-  }
-  const patch = {
-    title: draft?.title ?? bundle?.module?.title ?? "",
-    description: draft?.description ?? bundle?.module?.description,
-    taskText: draft?.taskText ?? "",
-    assessorExpectedContent: draft?.assessorExpectedContent ?? "",
-    candidateTaskConstraints: draft?.candidateTaskConstraints ?? "",
-    mcqQuestions: draft?.mcqQuestions ?? [],
-  };
-  if (draft?.criteria && typeof draft.criteria === "object" && Object.keys(draft.criteria).length > 0) {
-    patch.criteria = draft.criteria;
-  }
-  if (draft?.assessmentBlueprint) {
-    patch.assessmentBlueprint = draft.assessmentBlueprint;
-  }
-  sessionDraft = buildPreviewCandidate(patch);
-  previewDraft = null;
-  sessionState = "draft-pending";
-  renderPreviewLocaleBar();
-  renderPreview();
-  return true;
-}
-
 // ---------------------------------------------------------------------------
 // LLM generation — non-blocking, AbortController-guarded
 // ---------------------------------------------------------------------------
@@ -2136,7 +2094,6 @@ async function refreshLocalizedDraftInBackground({ draft, mcq }) {
     const errMsg = String(err?.message ?? err);
     logResolveSlot(slot, () => `${escapeHtml(t("shell.revision.translateErrorPrefix"))}${escapeHtml(errMsg)}`, [
       { labelKey: "shell.action.retry", action: () => refreshLocalizedDraftInBackground({ draft, mcq }) },
-      { labelKey: "shell.module.editAdvanced", action: () => openAdvancedEditor(selectedModuleId) },
     ]);
   }
 }
@@ -2187,7 +2144,6 @@ async function saveDraftBundleInBackground(options = {}) {
     const actionMap = {
       directEdit: { labelKey: "shell.directEdit.action", action: () => startDirectEditFlow() },
       revise: { labelKey: "shell.draftReady.editInChat", action: () => startUnifiedRevisionFlow() },
-      openEditor: { labelKey: "shell.draftReady.openEditor", action: () => openAdvancedEditor(selectedModuleId) },
       restart: { labelKey: "shell.draftReady.restart", action: startIdle },
       saveDraft: { labelKey: "shell.draftReady.saveDraft", action: saveDraftBundleInBackground },
     };
@@ -2329,7 +2285,6 @@ async function saveDraftBundleInBackground(options = {}) {
     const errMsg = String(err?.message ?? err);
     logResolveSlot(slot, () => `${escapeHtml(t("shell.save.errorPrefix"))}${escapeHtml(errMsg)}`, [
       { labelKey: "shell.action.retry", action: () => saveDraftBundleInBackground(options) },
-      { labelKey: "shell.module.editAdvanced", action: () => openAdvancedEditor(moduleId) },
     ]);
   }
 }
@@ -2766,7 +2721,6 @@ async function publishLatestDraftInBackground() {
     const errMsg = String(err?.message ?? err);
     logResolveSlot(slot, () => `${escapeHtml(t("shell.publish.errorPrefix"))}${escapeHtml(errMsg)}`, [
       { labelKey: "shell.action.retry", action: publishLatestDraftInBackground },
-      { labelKey: "shell.module.editAdvanced", action: () => openAdvancedEditor(moduleId) },
     ]);
   }
 }
@@ -3139,24 +3093,11 @@ async function loadModule(moduleId, options = {}) {
   // B3 (#450): recompute blueprint hash so the drift banner can be classified on first render.
   await refreshBlueprintHash();
 
-  // Check for a handoff payload written by the advanced editor (or by ourselves before navigating away).
-  // Handoff wins over resumeEditing: it carries more recent unsaved state than the saved bundle.
-  const handoff = readAndClearHandoff(moduleId);
-  if (handoff?.locale && supportedLocales.includes(handoff.locale) && handoff.locale !== currentLocale) {
-    currentLocale = handoff.locale;
-  }
-  // `previewLocale` is the WIRE name in the handoff payload, shared with the advanced editor.
-  // Renaming the variable does not rename the contract.
-  if (handoff?.previewLocale && supportedLocales.includes(handoff.previewLocale)) {
-    contentLocale = handoff.previewLocale;
-  }
-  const resumeBehavior = resolveShellResumeBehavior({
-    hasHandoffDraft: !!handoff?.draft,
-    resumeEditing,
-  });
-  const resumedIntoDraft = resumeBehavior.shouldApplyHandoffDraft
-    ? applyHandoffDraft(handoff.draft)
-    : resumeBehavior.shouldCreateDraftFromLoadedModule && createSessionDraftFromLoadedModule();
+  // #896 S3c: the handoff is gone with the Avansert editor. It existed to carry an unsaved draft
+  // and the two locales between two surfaces; there is one surface now, so there is nothing to
+  // carry and nothing to keep in sync. `resumeEditing` survives because the module list and old
+  // links still use it to mean "open this module ready to edit".
+  const resumedIntoDraft = resumeEditing && createSessionDraftFromLoadedModule();
   renderPreview();
   // QA round 6: reloading on `?tab=settings` selected the tab, drew the panel before the module
   // had arrived — "load a module to see the settings" — and then never drew it again. The author
@@ -3254,7 +3195,6 @@ async function runUnifiedRevision(instruction) {
       () => `${escapeHtml(t("shell.revision.unsupported"))}<br><span style="font-size:13px;color:var(--color-meta)">${escapeHtml(t("shell.revision.unsupportedHint"))}</span>`,
       [
         { labelKey: "shell.directEdit.action", action: () => startDirectEditFlow() },
-        { labelKey: "shell.module.editAdvanced", action: () => openAdvancedEditor(selectedModuleId) },
       ],
     );
     return;
@@ -3264,7 +3204,6 @@ async function runUnifiedRevision(instruction) {
     logBot(() => escapeHtml(t("shell.revision.clarify")), [
       { labelKey: "shell.revision.tryAgain", action: () => startUnifiedRevisionFlow() },
       { labelKey: "shell.directEdit.action", action: () => startDirectEditFlow() },
-      { labelKey: "shell.module.editAdvanced", action: () => openAdvancedEditor(selectedModuleId) },
     ]);
     return;
   }
@@ -4872,7 +4811,6 @@ function showModuleActions() {
       },
     },
     directEdit: { labelKey: "shell.directEdit.action", action: () => startDirectEditFlow() },
-    editAdvanced: { labelKey: "shell.module.editAdvanced", action: () => openAdvancedEditor(selectedModuleId) },
     pickAnother: { labelKey: "shell.module.pickAnother", action: startModulePicker },
     saveDraft: { labelKey: "shell.draftReady.saveDraft", action: saveDraftBundleInBackground },
     publish: {
@@ -5065,61 +5003,6 @@ async function importModulePackageInBackground(moduleId, file, idempotencyKey = 
   }
 }
 
-function openAdvancedEditor(moduleId) {
-  const url = buildAdminContentAdvancedUrl(moduleId);
-  // Same predicate as the tab-switch warning and the status rail (#896 S1). It used to also
-  // require taskText/guidance/MCQ content, which meant the tab could warn "you have an unsaved
-  // draft" and then this hand-off would navigate away without offering to save it.
-  const hasUnsavedDraft = !!sessionDraft;
-
-  if (!hasUnsavedDraft) {
-    // No unsaved work — carry locale context only so the advanced editor can restore it
-    writeHandoff({ moduleId: moduleId ?? null, source: "shell", draft: null, locale: currentLocale, previewLocale: contentLocale });
-    logBot(() => t("shell.module.openingEditor"));
-    setTimeout(() => { location.href = url; }, 400);
-    return;
-  }
-
-  // Has unsaved work — ask what to do
-  // v1.2.26 (#361): "Take draft" carries the FULL sessionDraft to Avansert as a handoff
-  // so user can continue editing in Avansert without losing unsaved work. Previously
-  // this action discarded the draft.
-  const takeDraftAndNavigate = () => {
-    writeHandoff({
-      moduleId: moduleId ?? null,
-      source: "shell",
-      draft: {
-        title: sessionDraft?.title,
-        description: sessionDraft?.description,
-        taskText: sessionDraft?.taskText,
-        candidateTaskConstraints: sessionDraft?.candidateTaskConstraints,
-        assessorExpectedContent: sessionDraft?.assessorExpectedContent,
-        mcqQuestions: sessionDraft?.mcqQuestions ?? [],
-        criteria: sessionDraft?.criteria ?? null,
-        assessmentBlueprint: sessionDraft?.assessmentBlueprint ?? null,
-      },
-      locale: currentLocale,
-      previewLocale: contentLocale,
-    });
-    logBot(() => t("shell.module.openingEditor"));
-    setTimeout(() => { location.href = url; }, 400);
-  };
-
-  // v1.1.73 (#447 follow-up): default handoff action is "save first, then open" — this avoids
-  // the race condition where Avansert opens for a freshly-created module that isn't yet visible
-  // in /api/admin/content/modules ("Modul ID påkrevd" error). Users who regret can delete the
-  // module after; that's cheaper UX than maintaining the take-draft-to-Avansert code path.
-  const saveAndNavigate = () => {
-    saveDraftBundleInBackground({ afterSave: navigateWithoutDraft });
-  };
-
-  logBot(() => t("handoff.hasDraft.prompt"), [
-    { labelKey: "handoff.hasDraft.saveAndOpen", action: saveAndNavigate },
-    { labelKey: "handoff.hasDraft.discard", action: takeDraftAndNavigate },
-    { labelKey: "shell.action.cancel", action: showModuleActions },
-  ]);
-}
-
 // ---------------------------------------------------------------------------
 // #896 S1: view tabs (Forhaandsvisning / Rediger / Innstillinger)
 //
@@ -5192,6 +5075,17 @@ function hasOpenEditForm() {
     if (el.value !== el.dataset.renderedValue) return true;
   }
   return false;
+}
+
+/**
+ * The module type the settings panel is currently showing — the dropdown's value while the panel
+ * is open, the stored one otherwise. Everything whose visibility depends on the type reads this,
+ * so the panel and the save agree about what is about to happen.
+ */
+function settingsSelectedMode() {
+  const selected = document.getElementById("settingsModuleType")?.value;
+  if (selected) return selected;
+  return bundle?.selectedConfiguration?.moduleVersion?.assessmentMode ?? "FREETEXT_PLUS_MCQ";
 }
 
 /**
@@ -5334,7 +5228,11 @@ function renderSettingsPanel() {
   const policy = version?.assessmentPolicy ?? null;
   const criteria = cfg.rubricVersion?.criteria ?? null;
 
-  const mode = version?.assessmentMode ?? "FREETEXT_PLUS_MCQ";
+  // The type the panel is DRAWING for: whatever is selected in the dropdown right now, falling
+  // back to what is stored. #896 S3c: it read only the stored one, so picking "Bare flervalg" left
+  // the criteria and instruction editors standing — editors the save then refuses to carry. The
+  // panel has to show the consequences of the choice at the moment it is made, not after Lagre.
+  const mode = settingsSelectedMode();
   const modeLabel = t(`shell.settings.mode.${mode}`);
 
   // #896 S3c: eleven rows in one undifferentiated list, with three full editors bolted on after
@@ -5603,6 +5501,23 @@ function renderSettingsPanel() {
   restoreSettingsDraftValues();
   mountSettingsInfoButtons(host);
 
+  // Changing the type changes which fields the save can carry, so the panel redraws to match.
+  // Without this the author picked "Bare flervalg" and kept looking at a criteria editor whose
+  // contents the save would refuse — the choice and its consequences on two different screens.
+  document.getElementById("settingsModuleType")?.addEventListener("change", () => {
+    captureSettingsDraftValues();
+    // The criteria editor lives in the DOM until something reads it, and a re-render throws that
+    // DOM away. Typing in a criterion and then changing the type would have lost the text —
+    // including on the way BACK to a type that has criteria. Read it out first.
+    if (settingsCriteriaState !== null) {
+      settingsCriteriaState = captureLatestCriteriaState(
+        document.getElementById("settingsCriteriaEditor"),
+        settingsCriteriaState,
+      );
+    }
+    renderSettingsPanel();
+  });
+
   document.getElementById("settingsSave")?.addEventListener("click", (event) => {
     // Disabled on the first click, like the restore buttons. A double-click on a slow connection
     // sent two concurrent POSTs and produced either two identical versions or a confusing
@@ -5847,7 +5762,7 @@ function resetSettingsPanelState() {
 function renderCriteriaSection() {
   if (!bundle) return "";
   // #665: MCQ-only modules have no rubric, so no criteria to show.
-  if ((bundle.selectedConfiguration?.moduleVersion?.assessmentMode ?? "FREETEXT_PLUS_MCQ") === "MCQ_ONLY") return "";
+  if (settingsSelectedMode() === "MCQ_ONLY") return "";
 
   // Read the stored criteria the first time the panel renders them. Re-reading on every render
   // would discard edits, since the panel rebuilds whenever anything else in it changes.
@@ -6021,8 +5936,7 @@ function renderPromptSection() {
   // produced a new, identical version and a green confirmation, with the edit nowhere in the
   // payload and gone after reload. Same rule as the criteria editor: if the save cannot carry it,
   // do not offer it.
-  const promptMode = bundle.selectedConfiguration?.moduleVersion?.assessmentMode ?? "FREETEXT_PLUS_MCQ";
-  if (promptMode === "MCQ_ONLY") return "";
+  if (settingsSelectedMode() === "MCQ_ONLY") return "";
   const prompt = bundle.selectedConfiguration?.promptTemplateVersion ?? null;
   const localeLabel = escapeHtml(tf("shell.settings.editingInLocale", { locale: contentLocale }));
 
@@ -6505,6 +6419,13 @@ async function saveSettingsInBackground() {
   // save the edit first, or undo it, and both are recoverable. Guessing is not.
   if (isMcqOnly && mode !== currentMode && (criteriaRecord || promptPayload || weightChanged)) {
     showToast(t("shell.settings.mcqOnlyDiscardsEdits"), "error");
+    // Put the type back and redraw. Since the panel started following the dropdown, picking
+    // MCQ-only hides the criteria and instruction editors — so a refusal that said "save them
+    // first or undo them" left the author with no editor to do either in. Reverting restores the
+    // editors WITH the edit still in them, which is what makes the message actionable.
+    const typeInput = document.getElementById("settingsModuleType");
+    if (typeInput) typeInput.value = currentMode;
+    renderSettingsPanel();
     reenableSettingsSave();
     return;
   }
@@ -6656,7 +6577,11 @@ function bindViewTabs() {
     // Arrowing to a tab focuses it before the dialog opens, so staying would otherwise
     // leave focus on a tab that is not the selected one - or nowhere, in the closed
     // dialog. Put focus back where the selection actually is.
-    tabButtons[activeTab]?.focus();
+    //
+    // Deferred a frame: a native <dialog> restores focus to its invoker as part of closing, and
+    // that restoration runs AFTER this handler. Focusing synchronously meant the browser promptly
+    // moved focus somewhere else — for Escape, nowhere at all.
+    requestAnimationFrame(() => { tabButtons[activeTab]?.focus(); });
   };
 
   document.getElementById("tabSwitchStay")?.addEventListener("click", () => {
@@ -6704,23 +6629,6 @@ function bindViewTabs() {
     applyTabState(target);
     syncTabToUrl(target);
     tabButtons[target]?.focus();
-  });
-
-  // Until S3 moves the fields in, Innstillinger hands off to the Avansert page and
-  // reuses its unsaved-draft handling. That handling asks the author to choose (save
-  // first / take the draft along / cancel) in the CHAT, which Innstillinger hides - so
-  // return to Rediger first, or the button looks dead whenever a draft exists.
-  settingsOpenAdvancedBtn?.addEventListener("click", () => {
-    // #896 S6 QA: the THIRD exit from Innstillinger. It calls applyTabState directly — bypassing
-    // switchToTab and therefore the unsaved-settings guard — so a typed validity date was lost on
-    // the way to Avansert, silently. The guard belongs on every way out, not on the one that was
-    // easiest to find.
-    if (hasUnsavedSettingsEdits() && !window.confirm(t("shell.tab.unsaved.settingsBody"))) return;
-    applyTabState("edit");
-    // The hand-off can be cancelled, or fail, and leave us here - so the URL has to move too,
-    // or a reload would drop the author back into Innstillinger.
-    syncTabToUrl("edit");
-    openAdvancedEditor(selectedModuleId);
   });
 
   // Establish the roving tabindex now. Without this the assignment in applyTabState first
@@ -7241,9 +7149,9 @@ async function confirmAndGenerate(moduleTitle, existingModuleId, sourceMaterial,
       slot,
       () => `${escapeHtml(t("shell.newModule.createError"))}<br><span style="font-size:13px;color:var(--color-meta)">${escapeHtml(t("shell.newModule.createErrorHint"))}</span>`,
       [
-        // v1.2.18 (#352): legacy /admin-content/advanced retired — send brukeren tilbake til
-        // modul-bibliotek der de kan velge en eksisterende modul eller opprette en ny.
-        { labelKey: "shell.action.openAdvancedEditor", action: () => { location.href = "/admin-content"; } },
+        // v1.2.18 (#352) sendte denne til modul-biblioteket, men beholdt etiketten «Åpne avansert
+        // editor». Den har altså løyet i et halvt år. Nå sier den hvor den går.
+        { labelKey: "shell.module.goToLibrary", action: () => { location.href = "/admin-content"; } },
         { labelKey: "shell.action.retry", action: () => confirmAndGenerate(moduleTitle, null, sourceMaterial, certLevel, locale, generationMode, blueprint, scenarioMode, freetextOnly) },
         { labelKey: "shell.action.cancel", action: startIdle },
       ],
@@ -7412,7 +7320,6 @@ function showDraftReadyActions() {
   const actionMap = {
     directEdit: { labelKey: "shell.directEdit.action", action: () => startDirectEditFlow() },
     revise: { labelKey: "shell.draftReady.editInChat", action: () => startUnifiedRevisionFlow() },
-    openEditor: { labelKey: "shell.draftReady.openEditor", action: () => openAdvancedEditor(selectedModuleId) },
     restart: { labelKey: "shell.draftReady.restart", action: startIdle },
     saveDraft: { labelKey: "shell.draftReady.saveDraft", action: saveDraftBundleInBackground },
   };

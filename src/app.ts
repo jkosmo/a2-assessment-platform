@@ -133,12 +133,17 @@ app.get("/certificate", (_request, response) => {
 
 // v1.2.18 (#352): retire transitional routes.
 // - GET /admin-content?moduleId=X → 301 to canonical /admin-content/module/X/conversation
-// - GET /admin-content/advanced (no module context) → 301 to /admin-content (library)
 //
-// Canonical routes (still served below):
+// #896 S3c (v2.19.0): the Avansert editor is gone. Everything it could do is in the workspace —
+// Rediger for content, Innstillinger for setup — and keeping a second surface meant every
+// behaviour had two homes that drifted apart.
+//
+// Its two routes still answer, as permanent redirects into the workspace: they are in bookmarks,
+// in old chat links and in the module list, and a 404 would strand an author who did nothing wrong.
+//
+// Canonical routes (served below):
 // - /admin-content                              → library (module picker)
-// - /admin-content/module/:moduleId/conversation → Samtale-shell
-// - /admin-content/module/:moduleId/advanced     → Avansert editor
+// - /admin-content/module/:moduleId/conversation → the module workspace
 app.get("/admin-content", (request, response) => {
   const legacyModuleId = typeof request.query.moduleId === "string" ? request.query.moduleId.trim() : "";
   if (legacyModuleId) {
@@ -149,8 +154,6 @@ app.get("/admin-content", (request, response) => {
 });
 
 app.get("/admin-content/advanced", (_request, response) => {
-  // Bare entry to Avansert (no module context) is no longer supported — users must
-  // pick a module in the library first, then use the row action "Åpne i Avansert".
   response.redirect(301, "/admin-content");
 });
 
@@ -159,8 +162,10 @@ app.get("/admin-content/module/:moduleId/conversation", (_request, response) => 
   response.sendFile(path.resolve(process.cwd(), "public", "admin-content.html"));
 });
 
-app.get("/admin-content/module/:moduleId/advanced", (_request, response) => {
-  response.sendFile(path.resolve(process.cwd(), "public", "admin-content-advanced.html"));
+// #896 S3c: Avansert is retired. The URL survives as a redirect so bookmarks and old links land
+// in the workspace instead of on a 404.
+app.get("/admin-content/module/:moduleId/advanced", (request, response) => {
+  response.redirect(301, `/admin-content/module/${encodeURIComponent(request.params.moduleId)}/conversation`);
 });
 
 // Courses workspace (Issue #325)

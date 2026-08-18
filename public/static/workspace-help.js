@@ -193,9 +193,8 @@ function resolveHelpContext(location) {
     return "admin-content-courses";
   }
   if (path === "/admin-content/calibration") return "admin-content-calibration";
-  if (path === "/admin-content/advanced" || /^\/admin-content\/module\/[^/]+\/advanced$/.test(path)) {
-    return "admin-content-advanced";
-  }
+  // #896 S3c: the Avansert routes now redirect into the workspace, so this branch could only ever
+  // fire mid-redirect — and it pointed at a help entry that has been deleted with the page.
   // The canonical module route IS the shell - it carries the module in the path, not in a
   // query string, so requiring moduleId/id here handed out module-library help on the very
   // page the shell help was written for (#896 S1).

@@ -67,29 +67,6 @@ function buildMcqOnlyExport(): MockModuleExport {
 }
 
 test.describe("admin content — module-type bugs (#655)", () => {
-  test("module-type radios are not stretched full width", async ({ page }) => {
-    await mockCommonApis(page, {
-      modules: [{ id: "module-1", title: "Trade unions" }],
-      moduleExports: {
-        "module-1": buildMockModuleExport({
-          id: "module-1",
-          title: "Trade unions",
-          moduleVersionId: "module-1-version-1",
-        }),
-      },
-    });
-
-    await page.goto("/admin-content/module/module-1/advanced");
-    await expect(page.locator("#moduleStatusTitle")).toContainText("Trade unions");
-
-    const radio = page.locator('input[name="moduleVersionType"]').first();
-    await expect(radio).toBeVisible();
-    const box = await radio.boundingBox();
-    expect(box).not.toBeNull();
-    // A real radio control is ~13–20px wide. Before the fix it inherited width:100% and
-    // spanned the whole panel (hundreds of px), pushing its label to the far right.
-    expect(box!.width).toBeLessThan(40);
-  });
 
   test("an MCQ-only module can be revised in chat and saved without scenario text", async ({ page }) => {
     await mockCommonApis(page, {

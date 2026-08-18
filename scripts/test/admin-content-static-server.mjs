@@ -32,9 +32,6 @@ function resolvePublicFile(requestPath) {
   if (requestPath === "/" || requestPath === "/admin-content") {
     return path.join(publicRoot, "admin-content-library.html");
   }
-  if (requestPath === "/admin-content/advanced") {
-    return path.join(publicRoot, "admin-content-advanced.html");
-  }
   if (requestPath === "/admin-content/courses" || requestPath === "/admin-content/courses/new") {
     return path.join(publicRoot, "admin-content-courses.html");
   }
@@ -76,8 +73,10 @@ function resolvePublicFile(requestPath) {
   if (/^\/admin-content\/module\/[^/]+\/conversation$/.test(requestPath)) {
     return path.join(publicRoot, "admin-content.html");
   }
+  // #896 S3c: production redirects the Avansert routes into the workspace. Mirror that here, or
+  // an e2e that still navigates to /advanced would 404 instead of behaving like the real thing.
   if (/^\/admin-content\/module\/[^/]+\/advanced$/.test(requestPath)) {
-    return path.join(publicRoot, "admin-content-advanced.html");
+    return path.join(publicRoot, "admin-content.html");
   }
 
   if (requestPath.startsWith("/static/i18n/")) {

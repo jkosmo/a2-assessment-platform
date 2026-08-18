@@ -4,7 +4,6 @@ import {
   detectShellRevisionTargets,
   deriveShellModuleActionModel,
   deriveShellDraftReadyActionModel,
-  resolveShellResumeBehavior,
 } from "../../public/static/admin-content-shell-state.js";
 
 describe("admin content shell state helpers", () => {
@@ -142,32 +141,6 @@ describe("admin content shell state helpers", () => {
       expect(deriveShellDraftReadyActionModel({ hasSelectedModule: false })).toEqual({
         actionKeys: ["revise", "restart", "saveDraft"],
         shouldOpenUnifiedRevision: false,
-      });
-    });
-  });
-
-  describe("resolveShellResumeBehavior", () => {
-    it("lets handoff draft win over resumeEditing flag", () => {
-      expect(
-        resolveShellResumeBehavior({
-          hasHandoffDraft: true,
-          resumeEditing: true,
-        }),
-      ).toEqual({
-        shouldApplyHandoffDraft: true,
-        shouldCreateDraftFromLoadedModule: false,
-      });
-    });
-
-    it("falls back to loaded-module draft creation when only resumeEditing is set", () => {
-      expect(
-        resolveShellResumeBehavior({
-          hasHandoffDraft: false,
-          resumeEditing: true,
-        }),
-      ).toEqual({
-        shouldApplyHandoffDraft: false,
-        shouldCreateDraftFromLoadedModule: true,
       });
     });
   });

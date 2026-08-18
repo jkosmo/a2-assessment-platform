@@ -38,13 +38,14 @@ test.describe("admin content module library", () => {
     await expect(table).toContainText("Trade unions");
     await expect(table).toContainText("Collective bargaining");
 
-    // Each row carries the two "open" links pointing at the canonical module routes.
+    // #896 S3c: one "open" link per row, pointing at the module workspace. There used to be two —
+    // the second went to the Avansert editor, which no longer exists.
     await expect(
       page.locator('.library-table a[href="/admin-content/module/module-1/conversation"]'),
-    ).toBeVisible();
+    ).toHaveText("Åpne");
     await expect(
       page.locator('.library-table a[href="/admin-content/module/module-1/advanced"]'),
-    ).toHaveText("Åpne i Avansert");
+    ).toHaveCount(0);
   });
 
   test("shows an empty state when the library has no modules", async ({ page }) => {
@@ -182,45 +183,6 @@ test.describe("admin content module library", () => {
     // bug had btn.width ≈ 169px vs zero.width ≈ 29px. Allow 1.5px for sub-pixel rounding.
     expect(Math.abs(btnBox!.x - zeroBox!.x)).toBeLessThan(1.5);
     expect(Math.abs(btnBox!.width - zeroBox!.width)).toBeLessThan(1.5);
-  });
-
-  test("clicking 'Åpne i Avansert' navigates to the module's advanced editor", async ({ page }) => {
-    await mockCommonApis(page, {
-      libraryModules: [{ id: "module-1", title: "Trade unions", status: "published" }],
-      modules: [{ id: "module-1", title: "Trade unions" }],
-      moduleExports: {
-        "module-1": {
-          module: {
-            id: "module-1",
-            title: { "en-GB": "Trade unions", nb: "Fagforeninger", nn: "Fagforeiningar" },
-            certificationLevel: "basic",
-            activeVersionId: null,
-            archivedAt: null,
-          },
-          selectedConfiguration: {
-            source: null,
-            moduleVersion: null,
-            rubricVersion: null,
-            promptTemplateVersion: null,
-            mcqSetVersion: null,
-          },
-          versions: {
-            moduleVersions: [],
-            rubricVersions: [],
-            promptTemplateVersions: [],
-            mcqSetVersions: [],
-          },
-          platformDefaults: { totalMin: 70 },
-        },
-      },
-    });
-
-    await page.goto(LIBRARY_PATH);
-
-    await page.locator('.library-table a[href="/admin-content/module/module-1/advanced"]').click();
-
-    await expect(page).toHaveURL(/\/admin-content\/module\/module-1\/advanced$/);
-    await expect(page.locator("#moduleStatusTitle")).toContainText("Trade unions");
   });
 
   // Rapportert fra stage 2026-08-16: import landet i Avansert — den ene flaten epicen

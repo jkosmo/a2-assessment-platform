@@ -19,66 +19,6 @@ import {
 // the shell HTML directly via its `/admin-content.html` file path (the static server's public-file
 // fallback), independent of the library route.
 test.describe("admin content browser coverage", () => {
-  // #913 QA round 6: opening the advanced MCQ dialog and pressing Bruk WITHOUT EDITING ANYTHING
-  // must be a no-op. It was not: the dialog assumed every field carried all three locales, and
-  // #913 made partially translated MCQs an ordinary thing to open. Three separate silent
-  // corruptions came out of that assumption, and none of them announced itself.
-  test("advanced MCQ dialog: apply without editing changes nothing on a partially translated set", async ({ page }) => {
-    const partialExport = buildMockModuleExport({
-      id: "module-1",
-      title: "Trade unions",
-      moduleVersionId: "module-1-version-1",
-      mcqQuestions: [
-        {
-          // nb/nn only, and the correct answer is NOT the first option.
-          stem: { nb: "Hvem ratifiserer avtalen?", nn: "Kven ratifiserer avtalen?" },
-          options: [
-            { nb: "Styret", nn: "Styret" },
-            { nb: "Medlemmene", nn: "Medlemene" },
-          ],
-          correctAnswer: { nb: "Medlemmene", nn: "Medlemene" },
-          rationale: { nb: "Medlemmene stemmer.", nn: "Medlemene røystar." },
-        },
-      ],
-    });
-    // A three-locale set title: the dialog has one input for all three.
-    partialExport.selectedConfiguration.mcqSetVersion.title = {
-      "en-GB": "Trade unions quiz",
-      nb: "Fagforeningsquiz",
-      nn: "Fagforeiningsquiz",
-    };
-
-    await mockCommonApis(page, {
-      modules: [{ id: "module-1", title: "Trade unions" }],
-      moduleExports: { "module-1": partialExport },
-    });
-
-    await page.goto("/admin-content/module/module-1/advanced");
-    await page.locator("#editBtn_mcq").click();
-    await expect(page.locator("#dialogMcq")).toBeVisible();
-
-    // The correct answer must already be selected. Comparing only en-GB — which this question does
-    // not have — left every radio unset, and applying then fell back to the FIRST option, quietly
-    // changing which answer scores as correct for every future participant.
-    const radios = page.locator("#dlgMCQ_questionsList input[type='radio']");
-    await expect(radios.nth(1)).toBeChecked();
-
-    await page.locator("#dialogMcqApply").click();
-
-    const savedQuestions = JSON.parse(await page.locator("#mcqQuestionsJson").inputValue());
-    expect(savedQuestions[0].correctAnswer).toEqual({ nb: "Medlemmene", nn: "Medlemene" });
-    expect(savedQuestions[0].stem).toEqual({ nb: "Hvem ratifiserer avtalen?", nn: "Kven ratifiserer avtalen?" });
-    // No en-GB key invented out of the blank control.
-    expect(savedQuestions[0].stem["en-GB"]).toBeUndefined();
-
-    // The set title survives the round trip. The dialog shows one language, but the page keeps the
-    // full locale map in the field's `dataset.localeOriginal` and merges the typed text back into
-    // the current locale on save — so the two languages the dialog never displayed are still there.
-    await expect(page.locator("#mcqSetTitle")).toHaveValue("Trade unions quiz");
-    const preserved = JSON.parse(await page.locator("#mcqSetTitle").getAttribute("data-locale-original") ?? "{}");
-    expect(preserved.nb).toBe("Fagforeningsquiz");
-    expect(preserved.nn).toBe("Fagforeiningsquiz");
-  });
 
   // #896 S5: version history. The rows have existed since the first «Mellomlagring» — every save
   // writes one. What was missing was any way to SEE them, so "I liked the previous wording better"
@@ -1243,230 +1183,6 @@ test.describe("admin content browser coverage", () => {
     expect(importCalled).toBe(false);
   });
 
-  test("advanced editor can save, publish, and unpublish a module version", async ({ page }) => {
-    await mockCommonApis(page, {
-      modules: [{ id: "module-1", title: "Trade unions" }],
-      moduleExports: {
-        "module-1": buildMockModuleExport({
-          id: "module-1",
-          title: "Trade unions",
-          moduleVersionId: "module-1-version-1",
-          mcqQuestions: [
-            {
-              stem: localizedText("Question 1"),
-              options: [
-                localizedText("Option A"),
-                localizedText("Option B"),
-                localizedText("Option C"),
-                localizedText("Option D"),
-              ],
-              correctAnswer: localizedText("Option B"),
-              rationale: localizedText("Rationale"),
-            },
-          ],
-        }),
-      },
-    });
-
-    await page.goto("/admin-content/module/module-1/advanced");
-
-    await expect(page.locator("#moduleStatusTitle")).toContainText("Trade unions");
-    await page.locator("#saveContentBundle").click();
-    await expect(page.locator("#publishModuleVersionId")).not.toHaveValue("");
-
-    await page.locator("#publishModuleVersion").click();
-    await expect(page.getByText("Module version published.")).toBeVisible();
-    // v2, not v1: the fixture already has a version, and saving writes a NEW one. The mock used to
-    // return the same id and versionNo on every compose, which made this read v1 — faithful to the
-    // mock, not to the endpoint.
-    await expect(page.locator("#moduleStatusLive")).toContainText("Module v2");
-    await expect(page.locator("#unpublishModuleBtn")).toBeVisible();
-
-    await page.locator("#unpublishModuleBtn").click();
-    await page.locator("#dlgSimpleConfirmOk").click();
-    await expect(page.getByText("Module unpublished.")).toBeVisible();
-    await expect(page.locator("#moduleStatusLive")).toContainText("No published version");
-  });
-
-  // #525/#546: the advanced editor can author an MCQ-only module version — toggling MCQ-only
-  // hides the free-text fields, shows the threshold, and the saved version sends
-  // assessmentMode=MCQ_ONLY with the chosen mcqMinPercent (no rubric/prompt/taskText).
-  test("advanced editor authors an MCQ-only module version", async ({ page }) => {
-    await mockCommonApis(page, {
-      modules: [{ id: "module-1", title: "Trade unions" }],
-      moduleExports: {
-        "module-1": buildMockModuleExport({
-          id: "module-1",
-          title: "Trade unions",
-          moduleVersionId: "module-1-version-1",
-          mcqQuestions: [
-            {
-              stem: localizedText("Question 1"),
-              options: [localizedText("A"), localizedText("B"), localizedText("C"), localizedText("D")],
-              correctAnswer: localizedText("B"),
-              rationale: localizedText("Rationale"),
-            },
-          ],
-        }),
-      },
-    });
-
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let versionPayload: any = null;
-    await page.route("**/api/admin/content/modules/*/module-versions", async (route: Route) => {
-      versionPayload = route.request().postDataJSON();
-      await route.fulfill({
-        status: 201,
-        contentType: "application/json",
-        body: JSON.stringify({ moduleVersion: { id: "module-1-version-1", versionNo: 1 } }),
-      });
-    });
-
-    await page.goto("/admin-content/module/module-1/advanced");
-    await expect(page.locator("#moduleStatusTitle")).toContainText("Trade unions");
-
-    // Free-text fields + content cards visible, threshold hidden by default.
-    await expect(page.locator("#moduleVersionFreetextFields")).toBeVisible();
-    await expect(page.locator("#moduleVersionMcqThresholdRow")).toBeHidden();
-    await expect(page.locator("#contentCard_rubric")).toBeVisible();
-
-    // Select MCQ-only → free-text fields + free-text content cards hidden, threshold shown.
-    // (#578: 3-way module-type radio replaced the MCQ-only checkbox.)
-    await page.locator('input[name="moduleVersionType"][value="MCQ_ONLY"]').check();
-    await expect(page.locator("#moduleVersionFreetextFields")).toBeHidden();
-    await expect(page.locator("#moduleVersionMcqThresholdRow")).toBeVisible();
-    await expect(page.locator("#contentCard_rubric")).toBeHidden();
-    await expect(page.locator("#contentCard_prompt")).toBeHidden();
-    await page.locator("#moduleVersionMcqMinPercent").fill("80");
-
-    await page.locator("#saveContentBundle").click();
-
-    await expect.poll(() => versionPayload?.assessmentMode).toBe("MCQ_ONLY");
-    expect(versionPayload?.taskText).toBeUndefined();
-    expect(versionPayload?.rubricVersionId).toBeUndefined();
-    expect(versionPayload?.promptTemplateVersionId).toBeUndefined();
-    expect(versionPayload?.assessmentPolicy?.passRules?.mcqMinPercent).toBe(80);
-  });
-
-  // #578: the advanced editor can author a FREETEXT_ONLY module version — selecting "Free-text only"
-  // hides the MCQ card/section + threshold, keeps the free-text fields + rubric/prompt, and the saved
-  // version sends assessmentMode=FREETEXT_ONLY with no mcqSetVersionId.
-  test("advanced editor authors a FREETEXT_ONLY module version", async ({ page }) => {
-    await mockCommonApis(page, {
-      modules: [{ id: "module-1", title: "Trade unions" }],
-      moduleExports: {
-        "module-1": buildMockModuleExport({ id: "module-1", title: "Trade unions", moduleVersionId: "module-1-version-1" }),
-      },
-    });
-
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let versionPayload: any = null;
-    await page.route("**/api/admin/content/modules/*/module-versions", async (route: Route) => {
-      versionPayload = route.request().postDataJSON();
-      await route.fulfill({ status: 201, contentType: "application/json", body: JSON.stringify({ moduleVersion: { id: "module-1-version-2", versionNo: 2 } }) });
-    });
-    let mcqSetCreated = false;
-    await page.route("**/api/admin/content/modules/*/mcq-set-versions", async (route: Route) => {
-      mcqSetCreated = true;
-      await route.fulfill({ status: 201, contentType: "application/json", body: JSON.stringify({ mcqSetVersion: { id: "mcq-1" } }) });
-    });
-
-    await page.goto("/admin-content/module/module-1/advanced");
-    await expect(page.locator("#moduleStatusTitle")).toContainText("Trade unions");
-
-    // Select Free-text only → free-text fields + rubric/prompt stay, MCQ card/section + threshold hide.
-    await page.locator('input[name="moduleVersionType"][value="FREETEXT_ONLY"]').check();
-    await expect(page.locator("#moduleVersionFreetextFields")).toBeVisible();
-    await expect(page.locator("#contentCard_rubric")).toBeVisible();
-    await expect(page.locator("#contentCard_mcq")).toBeHidden();
-    await expect(page.locator("#sectionMcq")).toBeHidden();
-    await expect(page.locator("#moduleVersionMcqThresholdRow")).toBeHidden();
-
-    await page.locator("#saveContentBundle").click();
-
-    await expect.poll(() => versionPayload?.assessmentMode).toBe("FREETEXT_ONLY");
-    expect(versionPayload?.mcqSetVersionId).toBeUndefined();
-    expect(versionPayload?.taskText).toBeTruthy();
-    expect(mcqSetCreated).toBe(false);
-  });
-
-  test("advanced editor persists a renamed module title when saving content", async ({ page }) => {
-    const state = await mockCommonApis(page, {
-      modules: [{ id: "module-1", title: "Trade unions" }],
-      moduleExports: {
-        "module-1": buildMockModuleExport({
-          id: "module-1",
-          title: "Trade unions",
-          moduleVersionId: "module-1-version-1",
-          mcqQuestions: [
-            {
-              stem: localizedText("Question 1"),
-              options: [
-                localizedText("Option A"),
-                localizedText("Option B"),
-                localizedText("Option C"),
-                localizedText("Option D"),
-              ],
-              correctAnswer: localizedText("Option B"),
-              rationale: localizedText("Rationale"),
-            },
-          ],
-        }),
-      },
-    });
-
-    await page.goto("/admin-content/module/module-1/advanced");
-    await expect(page.locator("#moduleStatusTitle")).toContainText("Trade unions");
-
-    await page.locator("#editBtn_moduleDetails").click();
-    await expect(page.locator("#dialogModuleDetails")).toHaveAttribute("open", "");
-    await page.locator("#dlgMD_title_enGB").fill("Renamed module");
-    await page.locator('#dialogModuleDetails .dialog-locale-tab[data-locale-tab="nb"]').click();
-    await page.locator("#dlgMD_title_nb").fill("Omdøpt modul");
-    await page.locator('#dialogModuleDetails .dialog-locale-tab[data-locale-tab="nn"]').click();
-    await page.locator("#dlgMD_title_nn").fill("Omdøypt modul");
-    await page.locator("#dialogModuleDetailsApply").click();
-
-    await page.locator("#saveAllCards").click();
-
-    await expect.poll(() => state.lastTitlePatchBody?.title?.["en-GB"]).toBe("Renamed module");
-    await expect.poll(() => state.lastTitlePatchBody?.title?.nb).toBe("Omdøpt modul");
-    await expect.poll(() => state.exportMap.get("module-1")?.module.title?.["en-GB"]).toBe("Renamed module");
-    await expect.poll(() => state.exportMap.get("module-1")?.module.title?.nb).toBe("Omdøpt modul");
-  });
-
-  test("advanced editor hands unsaved task text back to the conversational workspace", async ({ page }) => {
-    await mockCommonApis(page, {
-      modules: [{ id: "module-1", title: "Trade unions" }],
-      moduleExports: {
-        "module-1": buildMockModuleExport({
-          id: "module-1",
-          title: "Trade unions",
-          moduleVersionId: "module-1-version-1",
-          taskText: {
-            "en-GB": "Original scenario",
-            nb: "Originalt scenario",
-            nn: "Opphavleg scenario",
-          },
-        }),
-      },
-    });
-
-    await page.goto("/admin-content/module/module-1/advanced");
-
-    await page.locator("#editBtn_versionDetails").click();
-    await expect(page.locator("#dialogVersionDetails")).toHaveAttribute("open", "");
-    await page.locator("#dlgVD_task_enGB").fill("Edited in advanced editor");
-    await page.locator("#dialogVersionDetailsApply").click();
-    await page.locator("#modeSwitchConversation").click();
-    await expect(page.locator("#dialogUnsavedHandoff")).toHaveAttribute("open", "");
-    await page.locator("#dlgUnsavedDiscard").click();
-
-    await expect(page).toHaveURL(/\/admin-content\/module\/module-1\/conversation\?resumeEditing=1$/);
-    await expect(page.getByText("Edited in advanced editor")).toBeVisible();
-    await expect(page.getByText("The current module draft is ready for further editing in chat.")).toBeVisible();
-  });
-
   test("shell can create a new module, generate content, and save without losing the module ID", async ({ page }) => {
     await mockCommonApis(page);
 
@@ -2296,6 +2012,57 @@ test.describe("admin content browser coverage", () => {
     expect(state.lastModuleVersionBody.taskText).toBeTruthy();
   });
 
+  // #896 S3c: migrated from "advanced editor authors an MCQ-only module version". That test was
+  // the only cover for what an MCQ-only save actually SENDS, and it lived on a page that no longer
+  // exists — so it moved here before Avansert was deleted, not after.
+  //
+  // The guarantees are the same four: the mode, no free-text, no rubric/prompt reference carried
+  // over from the type it used to be, and the threshold the author set.
+  test("switching to MCQ-only sends the mode, the threshold, and no free-text leftovers", async ({ page }) => {
+    const state = await mockCommonApis(page, {
+      modules: [{ id: "module-1", title: "Trade unions", activeVersion: { versionNo: 1 } }],
+      moduleExports: {
+        "module-1": buildMockModuleExport({
+          id: "module-1",
+          title: "Trade unions",
+          moduleVersionId: "module-1-version-1",
+          taskText: localizedText("Norsk scenario"),
+          mcqQuestions: [
+            {
+              stem: localizedText("Question 1"),
+              options: [localizedText("Option A"), localizedText("Option B")],
+              correctAnswer: localizedText("Option B"),
+              rationale: localizedText("Rationale"),
+            },
+          ],
+        }),
+      },
+    });
+
+    await page.goto("/admin-content/module/module-1/conversation");
+    await page.locator("#tabSettings").click();
+
+    await page.locator("#settingsModuleType").selectOption("MCQ_ONLY");
+    // The criteria and instruction editors disappear with the type — a save cannot carry them,
+    // so offering them would be offering an action that fails.
+    await expect(page.locator("#settingsCriteriaEditor")).toHaveCount(0);
+    await expect(page.locator("#settingsPromptToggle")).toHaveCount(0);
+
+    await page.locator("#settingsMcqMinPercent").fill("80");
+    await page.locator("#settingsSave").click();
+
+    await expect.poll(() => state.lastModuleVersionBody?.assessmentMode).toBe("MCQ_ONLY");
+    const sent = state.lastModuleVersionBody;
+    expect(sent.assessmentPolicy?.passRules?.mcqMinPercent).toBe(80);
+    // Free-text content and its two references must NOT ride along. The version model keeps them
+    // on the previous version, which is what makes switching back non-destructive.
+    expect(sent.taskText).toBeUndefined();
+    expect(sent.rubricVersionId).toBeUndefined();
+    expect(sent.rubric).toBeUndefined();
+    expect(sent.promptTemplateVersionId).toBeUndefined();
+    expect(sent.promptTemplate).toBeUndefined();
+  });
+
   test("switching to free-text only keeps the pass rules it did not touch", async ({ page }) => {
     const state = await mockCommonApis(page, {
       modules: [{ id: "module-1", title: "Trade unions", activeVersion: { versionNo: 1 } }],
@@ -2542,7 +2309,10 @@ test.describe("admin content browser coverage", () => {
     });
 
     await page.goto("/admin-content/module/module-1/conversation");
-    await page.locator("#previewEditTitle").waitFor();
+    // Wait for the module to have LANDED, not just for the form to exist. The form is drawn once
+    // during init and again when loadModule resolves; typing between the two put the text into a
+    // form that was about to be replaced, and the unsaved-changes guard then had nothing to find.
+    await expect(page.locator("#previewEditTaskText")).toHaveValue(/Norsk scenario/);
     await page.locator("#previewEditTaskText").fill("Halvferdig endring");
 
     await page.locator("#tabEdit").focus();
@@ -2553,7 +2323,12 @@ test.describe("admin content browser coverage", () => {
     await page.keyboard.press("Escape");
     await expect(page.locator("#dialogUnsavedTabSwitch")).not.toHaveAttribute("open", "");
     await expect(page.locator("#tabEdit")).toHaveAttribute("aria-selected", "true");
-    await expect(page.locator("#tabEdit")).toBeFocused();
+    // `toBeFocused` also requires the browser WINDOW to hold OS focus, which it does not reliably
+    // do part-way through a long serial run — the assertion then failed for a reason that has
+    // nothing to do with the app. What is under test is which element the page focused.
+    await expect
+      .poll(() => page.evaluate(() => document.activeElement?.id ?? null))
+      .toBe("tabEdit");
     await expect(page.locator("#previewEditTaskText")).toHaveValue("Halvferdig endring");
 
     // The stale pending switch must not fire on the next, unrelated switch either.
@@ -2645,7 +2420,7 @@ test.describe("admin content browser coverage", () => {
     // the query string and fell through to module-library help on this very page.
     await expect(page.locator("#workspaceHelpTitle")).toHaveText(/Conversation editing|Innholdsforvaltning: samtale/);
     await expect(page.locator("#workspaceHelpBody")).toContainText(/Edit tab|fanen Rediger/);
-    await expect(page.locator("#workspaceHelpBody")).toContainText(/Settings is where|Innstillinger er der/);
+    await expect(page.locator("#workspaceHelpBody")).toContainText(/Settings holds the module type|Innstillinger holder modultype/);
   });
 
   test("leaving Rediger with an open edit form warns, and staying keeps the typed values", async ({ page }) => {
@@ -2776,22 +2551,13 @@ test.describe("admin content browser coverage", () => {
       },
     });
 
-    await page.addInitScript(() => {
-      sessionStorage.setItem("adminContent.handoff", JSON.stringify({
-        moduleId: "module-1",
-        source: "shell",
-        draft: null,
-        locale: "en-GB",
-        previewLocale: "nb",
-        timestamp: Date.now(),
-      }));
-    });
-
     await page.goto("/admin-content/module/module-1/conversation");
-
-    await expect(page.getByText("Norsk scenario")).toBeVisible();
+    // #896 S3c: the handoff that carried the content locale is gone with Avansert. The
+    // content-language bar is where that choice lives now.
+    await page.locator("#previewLocaleBar button", { hasText: /Norsk bokmål/ }).click();
 
     await page.locator("#previewEditTitle").waitFor();
+    await expect(page.locator("#previewEditTaskText")).toHaveValue(/Norsk scenario/);
     await expect(page.locator("#previewEditTaskText")).toHaveValue("Norsk scenario");
     await page.locator("#previewEditTaskText").fill("Oppdatert norsk scenario");
     await page.locator("#previewEditGuidanceText").fill("Oppdatert norsk veiledning");
@@ -2898,20 +2664,13 @@ test.describe("admin content browser coverage", () => {
       },
     });
 
-    await page.addInitScript(() => {
-      sessionStorage.setItem("adminContent.handoff", JSON.stringify({
-        moduleId: "module-2",
-        source: "shell",
-        draft: null,
-        locale: "en-GB",
-        previewLocale: "nb",
-        timestamp: Date.now(),
-      }));
-    });
-
     await page.goto("/admin-content/module/module-2/conversation");
 
     await page.locator("#previewEditTitle").waitFor();
+    // #896 S3c: the handoff that carried the content locale is gone with Avansert. The
+    // content-language bar is where that choice lives now — and the form has to be open before
+    // switching, because the switch rebuilds it in the language it moves to.
+    await page.locator("#previewLocaleBar button", { hasText: /Norsk bokmål/ }).click();
     await expect(page.locator("#previewEditMcqStem0")).toHaveValue("Norsk sporsmal");
     await page.locator("#previewEditMcqStem0").fill("Oppdatert norsk sporsmal");
     await page.locator("#previewEditMcqOption0_1").fill("Oppdatert alternativ B");
@@ -2989,6 +2748,9 @@ test.describe("admin content browser coverage", () => {
     });
 
     await page.goto("/admin-content/module/module-1/conversation");
+    // #896 S3c: the handoff that carried the content locale is gone with Avansert. The
+    // content-language bar is where that choice lives now.
+    await page.locator("#previewLocaleBar button", { hasText: /Norsk bokmål/ }).click();
     await clickEnabledButton(page, /Publish|Publiser/);
 
     // The author must be able to read which field and which language, without opening devtools.
@@ -3694,42 +3456,6 @@ test.describe("admin content browser coverage", () => {
     await expect
       .poll(() => state.lastDraftGenerationBody?.sourceMaterial ?? "")
       .toContain("Use a practical workplace framing.");
-  });
-
-  test("shell advanced mode switch preserves the selected module in the route", async ({ page }) => {
-    await mockCommonApis(page, {
-      modules: [{ id: "module-1", title: "Trade unions", activeVersion: { versionNo: 1 } }],
-      moduleExports: {
-        "module-1": buildMockModuleExport({
-          id: "module-1",
-          title: "Trade unions",
-          moduleVersionId: "module-1-version-1",
-          mcqQuestions: [
-            {
-              stem: localizedText("Question 1"),
-              options: [
-                localizedText("Option A"),
-                localizedText("Option B"),
-                localizedText("Option C"),
-                localizedText("Option D"),
-              ],
-              correctAnswer: localizedText("Option B"),
-              rationale: localizedText("Rationale"),
-            },
-          ],
-        }),
-      },
-    });
-
-    await page.goto("/admin-content/module/module-1/conversation");
-
-    await expect(page.locator("#moduleWorkspaceTitle")).toBeVisible();
-    // #896 S1: the route to advanced editing now goes through the Innstillinger tab.
-    await page.locator("#tabSettings").click();
-    await page.locator("#settingsOpenAdvanced").click();
-
-    await expect(page).toHaveURL(/\/admin-content\/module\/module-1\/advanced$/);
-    await expect(page.locator("#modeSwitchAdvanced")).toHaveAttribute("aria-pressed", "true");
   });
 
   test("courses conversational flow creates the course on certification choice and opens the editor (#506)", async ({ page }) => {

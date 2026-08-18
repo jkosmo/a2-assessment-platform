@@ -277,7 +277,6 @@ function renderLibrary() {
 
   const rows = visible.map(m => {
     const openConvUrl = `/admin-content/module/${encodeURIComponent(m.id)}/conversation`;
-    const openAdvUrl = `/admin-content/module/${encodeURIComponent(m.id)}/advanced`;
     const isArchived = m.status === "archived";
     // #787 slice 5: eier/admin styrer om redigerings-/livssyklus-handlingene vises (speiler eierskaps-
     // vakta). Dupliser/Eksporter beholdes — de er lese-/kopi-handlinger som ikke vaktes av eierskap.
@@ -308,8 +307,10 @@ function renderLibrary() {
       <td class="col-updated">${formatDate(m.updatedAt)}</td>
       <td class="col-actions">
         <div class="row-actions">
-          ${canManage ? `<a href="${openConvUrl}" class="row-action-btn">Åpne i Samtale</a>` : ""}
-          ${canManage ? `<a href="${openAdvUrl}" class="row-action-btn">Åpne i Avansert</a>` : ""}
+          <!-- #896 S3c: "Åpne i Avansert" er borte med Avansert-siden. "Åpne i Samtale" het det da
+               arbeidsflaten VAR en samtale; nå er den tre faner der samtalen er ett panel av flere,
+               så knappen sier hva den gjør: åpner modulen. -->
+          ${canManage ? `<a href="${openConvUrl}" class="row-action-btn">Åpne</a>` : ""}
           <button class="row-action-btn" data-action="duplicate" data-module-id="${escapeHtml(m.id)}">Dupliser</button>
           <button class="row-action-btn" data-action="export" data-module-id="${escapeHtml(m.id)}" data-module-title="${escapeHtml(m.title ?? m.id)}">Eksporter</button>
           ${canManage ? unpublishAction : ""}
