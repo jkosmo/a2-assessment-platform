@@ -160,3 +160,56 @@ Lag en modul der **ett** språk mangler i oppgaveteksten.
 - **#916:** en enslig seksjon kan ikke eksporteres eller importeres for seg — den kan bare reise
   som del av en kurspakke. Funksjonen er aldri bygget; tas etter S3c.
 - ~~#912: eksport/import brytes for moduler uten sertifiseringsnivå~~ — **løst i v2.18.5.**
+
+---
+
+# Runde 4 (v2.19.2) — §6, §11 og oppryddingen
+
+Siste runde før #896 kan lukkes. Det som er nytt siden forrige runde:
+
+## 6 · Samtalen foreslår — den overskriver aldri (#926)
+
+Dette er hovedpunktet. Testes med en **eksisterende** modul.
+
+- [ ] Åpne en modul på **Rediger**. Skriv om scenarioteksten for hånd — ikke lagre.
+- [ ] Be om en revisjon i chatten («skjerp scenarioet»).
+- [ ] Når svaret kommer: teksten din skal stå **urørt** i feltet, og samtaleloggen skal vise
+      **«Forslag klart»** med **Bruk** og **Forkast**.
+- [ ] **Forkast** → teksten din står fortsatt. Ingenting er endret.
+- [ ] Be om en revisjon på nytt, og velg **Bruk** → feltet fylles med forslaget, synlig med én gang.
+      (Uten dette ville det aksepterte forslaget vært usynlig til neste re-render.)
+- [ ] Gjør det samme uten å ha skrevet noe først: da skal revisjonen lande **rett inn**, uten
+      Bruk/Forkast. Et forslag her ville vært et ekstra klikk for noe du nettopp ba om.
+- [ ] Samme to runder for **MCQ** («bytt alternativ 1C»).
+
+**Å se etter:** at «skittent» betyr *feltene avviker fra det de ble tegnet med* — ikke at
+Rediger-fanen er åpen. Får du Bruk/Forkast på en modul du ikke har rørt, er vakten for bred.
+
+## 7 · Fanemerking ved asynkrone endringer (#926)
+
+- [ ] Opprett en **ny modul** fra samtalen. Bli stående på **Rediger** mens kriteriene genereres.
+- [ ] Når de er ferdige: **Innstillinger** skal få en prikk. Åpne fanen → prikken forsvinner.
+- [ ] Gjenta, men stå i **Innstillinger** mens de genereres. Da skal ingen prikk komme — endringen
+      er synlig der du er.
+
+## 8 · Innstillinger etter oppryddingen
+
+- [ ] Knappen **«Åpne avansert redigering»** skal være **borte**, sammen med setningen over den om
+      at feltene «flyttes hit i neste leveranse». Begge var usanne og knappen gjorde ingenting.
+- [ ] Ingen vei tilbake til Avansert noe sted i UI-et. `/admin-content/module/<id>/advanced`
+      i adressefeltet skal redirigere inn i arbeidsflaten, ikke gi 404.
+
+## 9 · Regresjon på ny-modul-flyten (#927)
+
+Dekket av en e2e nå, men verdt én manuell gjennomgang siden hvert ledd har feilet før:
+
+- [ ] Opprett modul → åpne Innstillinger mens kriteriene genereres → rediger ett kriterium, legg
+      til ett, fjern ett → tilbake til Rediger → lagre → **åpne modulen på nytt**.
+- [ ] Nøyaktig dine kriterier skal ligge der. Ikke de genererte, og ikke riktig *antall* med feil
+      etiketter — det var den faktiske feilen i QA-runde 2.
+
+## Rettelser til «Kjente begrensninger» over
+
+- **Avansert-siden mangler «Oversett det som mangler»** — ikke lenger en begrensning. Siden er
+  slettet (v2.19.0), og det finnes én vei til publisering.
+- **#916** (enslig seksjonseksport) står fortsatt, og hører nå til #925-arbeidet med Seksjoner.
