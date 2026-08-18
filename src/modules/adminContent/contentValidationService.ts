@@ -374,3 +374,42 @@ export function validateModuleVersionForPublish(input: {
   const valid = !issues.some((i) => i.severity === "blocking");
   return { valid, issues };
 }
+
+/**
+ * #916: the same publish gate as #896 S4, for learning sections.
+ *
+ * A section is reading material the participant meets directly — there is no assessment wrapped
+ * around it and no fallback surface that re-states the content in another form. A section that
+ * exists only in Norwegian reaches an English participant as Norwegian, which is the exact failure
+ * the module gate was built to stop. So the rule is the same rule, not a section-flavoured one.
+ *
+ * The field set is the section's WHOLE participant-visible surface, which is only two fields:
+ *
+ * | Field | Why |
+ * |-------|-----|
+ * | `title` | Shown in the course spine, the section reader header and the admin list |
+ * | `bodyMarkdown` | The section IS its body — this is the reading material |
+ *
+ * Deliberately NOT gated: the localized SVG variants of the section's figures (#657). They are an
+ * enhancement with a documented fallback (an un-translated drawing renders in its source language
+ * rather than not at all), they are generated from the text rather than authored, and a section
+ * with no figures must not be held to a different standard than one with figures.
+ *
+ * `bodyMarkdown` is gated only when it is present, mirroring the module gate's rule that an absent
+ * optional field is not an untranslated one. A section with no body cannot be published anyway —
+ * `publishSection` rejects it earlier with `section_no_content`.
+ */
+export function validateSectionTranslationCompleteness(
+  input: { title: string | null | undefined; bodyMarkdown: string | null | undefined },
+  sourceLocale = "nb",
+): ValidationIssue[] {
+  return validateTranslationCompleteness(
+    [
+      { field: "title", raw: input.title },
+      ...(input.bodyMarkdown && input.bodyMarkdown.trim().length > 0
+        ? [{ field: "bodyMarkdown", raw: input.bodyMarkdown }]
+        : []),
+    ],
+    sourceLocale,
+  );
+}

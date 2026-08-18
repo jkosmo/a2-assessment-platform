@@ -174,6 +174,31 @@ Feltene — hvert enkelt bare når det finnes, siden et fraværende valgfritt fe
 - Gaten forutsetter #905: før den ble en feilet oversettelse lagret som tre kopier av kildeteksten
   og var ikke til å skille fra en ekte oversettelse.
 
+#### Gaten gjelder også seksjoner (#916)
+
+Vedtatt 2026-08-18. En læringsseksjon er lesestoff deltakeren møter direkte — det finnes ingen
+vurdering rundt den og ingen annen flate som gjentar innholdet — så et språkhull har nøyaktig
+samme konsekvens som i en modul. Samme regel, samme feltdata (`field` + `missingLocales`), samme
+blokkerende oppførsel.
+
+| Felt | Hvorfor |
+|------|---------|
+| `title` | Vises i kursforløpet, i lesevisningen og i seksjonslista |
+| `bodyMarkdown` | Seksjonen **er** innholdet sitt |
+
+Det er hele den deltakersynlige flaten. Lokaliserte SVG-varianter (#657) er bevisst utenfor: de
+genereres fra teksten, de har en dokumentert tilbakefallsvei (en uoversatt tegning vises på
+kildespråket i stedet for ikke i det hele tatt), og en seksjon med figurer skal ikke måles
+strengere enn en uten.
+
+**Én mekanisk forskjell fra modulen, med én konsekvens.** En modul skiller lagring fra
+publisering; en seksjon gjør ikke det — lagring *er* publisering (siste-versjon-vinner). Å avvise
+lagringen ville betydd at en forfatter som skriver på norsk ikke får lagre i det hele tatt, altså
+å bytte en språkfeil mot tapt arbeid. Derfor: **den eksplisitte Publiser-handlingen og
+kurskaskaden blokkerer (422), mens lagring holdes tilbake** — versjonen lagres, men aktiveres
+ikke, og svaret sier hvilke felt × språk som mangler. Det er samme løsning som modulens
+import-dør bruker på samme konflikt. Se `doc/FEATURE_SURFACE_MAP.md` § 23.
+
 ~~**Kjent begrensning — Avansert-siden.**~~ Publiserte du derfra, blokkerte gaten på samme måte,
 men «Oversett det som mangler» fantes ikke der — den bodde i samtaleflaten. Begrunnelsen den gang
 var at Avansert skulle bort i S3c, og at å bygge utbedringsflyten to steder ville være arbeid som

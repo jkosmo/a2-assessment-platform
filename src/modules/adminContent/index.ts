@@ -26,6 +26,7 @@ export {
   listLibraryModules,
   buildModuleExportEnvelope,
   buildCourseExportEnvelope,
+  buildSectionExportEnvelope,
 } from "./adminContentQueries.js";
 export type { ModuleLibraryStatus } from "./adminContentQueries.js";
 

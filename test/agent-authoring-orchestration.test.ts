@@ -210,12 +210,36 @@ describe("#650 agent-friendly authoring orchestration", () => {
   });
 
   it("keeps the default section-create behavior (auto-publish) when draft is not set", async () => {
+    // #916: complete in all three locales — auto-publish-on-save is now conditional on the
+    // translation gate, so a single-language fixture would land as a draft and prove nothing about
+    // the default behaviour this test guards.
+    const stamp = Date.now();
+    const body = { "en-GB": "## Published", nb: "## Publisert", nn: "## Publisert" };
     const response = await request(app)
       .post("/api/admin/content/sections")
       .set(adminHeaders)
-      .send({ title: `AA2 default section ${Date.now()}`, bodyMarkdown: "## Publisert" });
+      .send({
+        title: { "en-GB": `AA2 default section ${stamp}`, nb: `AA2 standardseksjon ${stamp}`, nn: `AA2 standardseksjon ${stamp}` },
+        bodyMarkdown: body,
+      });
     expect(response.status).toBe(201);
     expect(response.body.section.activeVersionId).not.toBeNull();
-    expect(response.body.section.bodyMarkdown).toBe("## Publisert");
+    expect(response.body.translationGate).toBeUndefined();
+    expect(JSON.parse(response.body.section.bodyMarkdown)).toEqual(body);
+  });
+
+  // #916: the other half of the same door — an incomplete section still SAVES, but is not published.
+  it("holds a section-create back from auto-publish when a language is missing", async () => {
+    const stamp = Date.now();
+    const response = await request(app)
+      .post("/api/admin/content/sections")
+      .set(adminHeaders)
+      .send({ title: { nb: `AA2 halvspråklig ${stamp}` }, bodyMarkdown: { nb: "## Bare norsk" } });
+    expect(response.status).toBe(201);
+    expect(response.body.section.activeVersionId).toBeNull();
+    expect(response.body.translationGate?.heldBack).toBe(true);
+    const fields = (response.body.translationGate.issues as Array<{ field: string; missingLocales: string[] }>);
+    expect(fields.map((i) => i.field).sort()).toEqual(["bodyMarkdown", "title"]);
+    expect(fields[0].missingLocales.sort()).toEqual(["en-GB", "nn"]);
   });
 });

@@ -291,30 +291,63 @@ async function buildSectionExportPayload(
   const { loadSectionAssetsForExport, MAX_EXPORT_ASSET_TOTAL_BYTES } = await import("../course/assetCommands.js");
   const section = await getSection(sectionId);
   if (!section) throw new Error("Section not found for export.");
+  // #916: prefer the ACTIVE version, fall back to the newest one. Before the publish gate a section
+  // was published the moment it was saved, so "active" was always present; now a section can
+  // legitimately sit as a draft — in a course, or freshly imported — and reading only the active
+  // version would export an empty body and silently lose the content the file is supposed to carry.
+  // `audit.publishedAt` still reports the truth, so the destination knows it was not live.
+  const sourceVersion = section.activeVersion ?? section.versions[0] ?? null;
+  if (!sourceVersion) {
+    throw new Error("Section has no versions to export.");
+  }
 
   const { assets, totalBytes } = await loadSectionAssetsForExport(sectionId);
   if (assetBudget) {
     assetBudget.total += totalBytes;
     if (assetBudget.total > MAX_EXPORT_ASSET_TOTAL_BYTES) {
       throw new ValidationError(
-        `Course export exceeds the ${MAX_EXPORT_ASSET_TOTAL_BYTES}-byte total-asset cap ` +
-          `(figures sum to ${assetBudget.total} bytes). Reduce or split the course before exporting.`,
+        `Export exceeds the ${MAX_EXPORT_ASSET_TOTAL_BYTES}-byte total-asset cap ` +
+          `(figures sum to ${assetBudget.total} bytes). Reduce or split the content before exporting.`,
       );
     }
   }
 
   return {
     title: (decodeLocalizedText(section.title) as never) ?? (section.title as never),
-    bodyMarkdown: (section.activeVersion?.bodyMarkdown
-      ? decodeLocalizedText(section.activeVersion.bodyMarkdown)
+    bodyMarkdown: (sourceVersion?.bodyMarkdown
+      ? decodeLocalizedText(sourceVersion.bodyMarkdown)
       : "") as never,
     audit: {
-      publishedAt: section.activeVersion?.publishedAt ? new Date(section.activeVersion.publishedAt).toISOString() : null,
+      // The source's publish state travels with the payload but never decides the destination's:
+      // a standalone section import always lands unpublished (#916), and a course import runs the
+      // imported section through the same gate as any other publish.
+      publishedAt: sourceVersion?.publishedAt ? new Date(sourceVersion.publishedAt).toISOString() : null,
       publishedBy: null,
       publishedByEmail: null,
-      sourceVersionNo: section.activeVersion?.versionNo ?? null,
+      sourceVersionNo: sourceVersion?.versionNo ?? null,
     },
     ...(assets.length > 0 ? { assets: assets as never } : {}),
+  };
+}
+
+// Standalone section export envelope (#916). Same inner payload the course envelope already
+// inlines — a section lifted out of a course file and one exported on its own are the same bytes —
+// wrapped in the versioned envelope with `scope: "section"`. Assets travel inline as base64 under
+// the same 25 MB cap as a course export.
+export async function buildSectionExportEnvelope(
+  sectionId: string,
+  exportedBy: { userId?: string | null; email?: string | null },
+): Promise<import("./adminContentSchemas.js").ExportEnvelope> {
+  const assetBudget = { total: 0 };
+  const section = await buildSectionExportPayload(sectionId, assetBudget);
+
+  return {
+    exportFormat: "a2-content-export/v1",
+    exportedAt: new Date().toISOString(),
+    exportedBy: exportedBy.userId ?? null,
+    exportedByEmail: exportedBy.email ?? null,
+    scope: "section",
+    section,
   };
 }
 

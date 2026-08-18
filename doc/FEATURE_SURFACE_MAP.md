@@ -667,6 +667,7 @@ Merkingen er dobbelt kodet (prikk, `aria-label`-suffiks, live-region) og fjernes
   takes the revision straight in, with no extra click». Den andre er ikke pynt: den er vakten mot
   å gate på tilstedeværelse i stedet for på dirty.
 
+<<<<<<< HEAD
 ## 23. Discussion — course level ONLY, but the item-level data still exists (#923)
 
 Discussion used to exist at three levels (course, module, section). Three places to write split a
@@ -700,3 +701,52 @@ eget diskusjonsboard — kursnivået har det" (asserts the reader has no board *
 `test/e2e/participant-discussions.spec.ts` (course-level create/list/reply);
 `participant-course-sequence.spec.ts` → "the course-level discussion stays collapsed until asked
 for". User docs: `doc/DISCUSSIONS_GUIDE.md`. Design: `doc/DISCUSSIONS_DESIGN.md`.
+=======
+## 23. Publishing a learning section — four doors (#916)
+
+The section counterpart to § 18. Same rule, different mechanics: a module has a draft-save that is
+separate from publishing, while **saving a section publishes it** (latest-wins). So the gate cannot
+simply refuse every door — refusing a save would mean an author writing in one language could not
+store their work at all, trading a language bug for lost text.
+
+| Door | Where | Behaviour under the translation gate |
+|------|-------|--------------------------------------|
+| Author's publish action | `POST /sections/:id/publish` → `publishSection` in `src/modules/course/sectionCommands.ts` | 422 `publish_blocked_by_validation` with `translation_incomplete` issues carrying `field` + `missingLocales` |
+| Course cascade | `evaluateSection` in `src/modules/course/coursePublishService.ts` (preview) + `publishSection` (the publish step) | Section reported `publishable: false` in `publish-preview`; cascade returns 422 and publishes **nothing** |
+| Create with auto-publish | `createSection` (no `draft: true`) | The section is created as a DRAFT. Response carries `translationGate: { heldBack: true, issues[] }`; the audit event records `heldBackByTranslationGate` |
+| Content save | `updateSectionContent` | The new version is stored but NOT activated. A live section keeps serving its last complete version; the response carries the same `translationGate` block |
+
+The last two mirror § 18's **import door**, which resolves the identical conflict the same way: the
+write succeeds, the activation does not. Standalone section import (#916) never reaches the gate at
+all — it always lands unpublished by decision, so there is nothing to hold back.
+
+**Gated fields: `title` and `bodyMarkdown` — that is the section's entire participant-visible
+surface.** `bodyMarkdown` only when present, matching § 18's "an absent optional field is not an
+untranslated one". Deliberately NOT gated: the localized SVG variants of a section's figures (#657).
+They are generated from the text rather than authored, they have a documented fallback (an
+untranslated drawing renders in its source language rather than not at all), and gating them would
+hold a section with figures to a standard a section without figures is not held to.
+
+**Two consequences worth knowing before changing this:**
+
+1. **A held-back save must stay visible to its author.** `GET /sections/:id` reads the **newest**
+   version, not only the active one, and reports `hasUnpublishedChanges`. Reading `activeVersion`
+   alone would make the author's own text vanish on reload, which reads as data loss.
+2. **Export must read the newest version too.** `buildSectionExportPayload` falls back from
+   `activeVersion` to the newest version. Before the gate a section was live the moment it was
+   saved, so "active" was always there; now a draft section in a course would otherwise export with
+   an empty body and the file would silently lose the content it exists to carry.
+
+**Not covered (known, and identical for modules):** `PATCH /sections/:id/title` can introduce a gap
+in an already-live section's title without passing a gate, exactly as `PATCH /modules/:id/title`
+can. The title is not versioned, so there is no activation to hold back, and blocking the write
+would make a legacy single-language section's title uneditable. The gap is caught the next time the
+section is published or its content saved.
+
+**Guards:** `test/m2-section-export-import-916.test.ts` (all four doors, both directions),
+`test/unit/section-export-envelope-916.test.ts` (the field set and the locale arithmetic),
+`test/m2-course-cascade-publish.test.ts` (the cascade with complete sections still publishes), and
+`test/e2e/section-portability-916.spec.ts` for the client half — the gate messages must be rendered
+from `field` + `missingLocales` in the author's language, never from the server's English `message`,
+and a held-back save must not show a plain "Seksjon lagret."
+>>>>>>> 44525c4 (#916: frittstående eksport/import av en enkeltseksjon + publiseringsgaten for seksjoner — v2.22.0)

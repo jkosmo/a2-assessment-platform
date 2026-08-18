@@ -51,6 +51,15 @@ downloads the `a2-content-export/v1` envelope from `GET .../export-package`. Imp
 **into the module you are in**, as a new unpublished version — creating a new module is the module
 list's job, and publishing stays an explicit act.
 
+**#916 — a section can now travel on its own.** `/admin-content/sections` gains two deliberately
+thin actions: **Eksporter** per row (owner/admin only — the button is hidden where `canManage` is
+false, and the route enforces it regardless) and **Importer seksjons-pakke** in the page header.
+No new page and no route change; both call the new
+`GET|POST /api/admin/content/sections/:id/export-package | /sections/import`. Kept minimal on
+purpose — #925 will rebuild this page, and the weight of the feature is in the API and the service
+layer, which survive that. An imported section always lands as **Utkast**, and publishing it runs
+the same translation gate as a module (see `doc/FEATURE_SURFACE_MAP.md` § 23).
+
 ## Participant, «Deltakere» and review workspaces
 
 The **«Deltakere»** top-nav area (#765) groups the participant-/outcome-oriented surfaces —

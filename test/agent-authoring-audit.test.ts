@@ -155,11 +155,14 @@ describe("#653 agent authoring audit & partial failure", () => {
   });
 
   it("audits non-agent creates without the agent_authoring marker", async () => {
-    const title = `AA5 manual section ${Date.now()}`;
+    // #916: fully translated so the publish gate does not hold the auto-publish back — this test is
+    // about the agent marker, and `draft: false` below is the auto-publish assertion.
+    const stamp = Date.now();
+    const title = { "en-GB": `AA5 manual section ${stamp}`, nb: `AA5 manuell seksjon ${stamp}`, nn: `AA5 manuell seksjon ${stamp}` };
     const response = await request(app)
       .post("/api/admin/content/sections")
       .set(headers)
-      .send({ title, bodyMarkdown: "## Manuell" });
+      .send({ title, bodyMarkdown: { "en-GB": "## Manual", nb: "## Manuell", nn: "## Manuell" } });
     expect(response.status).toBe(201);
 
     const event = await prisma.auditEvent.findFirst({

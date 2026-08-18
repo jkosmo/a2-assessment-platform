@@ -1,7 +1,7 @@
 import { prisma } from "../../db/prisma.js";
 import { AppError, NotFoundError } from "../../errors/AppError.js";
 import { publishCourse } from "./courseCommands.js";
-import { publishSection } from "./sectionCommands.js";
+import { publishSection, evaluateSectionTranslationGate } from "./sectionCommands.js";
 import { publishModuleVersion } from "../adminContent/adminContentCommands.js";
 import { validateModuleVersionForPublish, validateTranslationCompleteness, validateMcqTranslationCompleteness } from "../adminContent/contentValidationService.js";
 import { courseRepository } from "./courseRepository.js";
@@ -73,6 +73,8 @@ const TRANSLATION_FIELD_LABELS: Record<string, string> = {
   taskText: "oppgavetekst",
   assessorExpectedContent: "fasit",
   candidateTaskConstraints: "rammer for kandidaten",
+  // #916: the section gate's second field. A section's body IS the section.
+  bodyMarkdown: "innhold",
 };
 
 function translationFieldLabel(field: string): string {
@@ -278,13 +280,35 @@ async function evaluateSection(sectionId: string): Promise<SectionEvaluation> {
   const latest = await prisma.courseSectionVersion.findFirst({
     where: { sectionId },
     orderBy: { versionNo: "desc" },
-    select: { id: true },
+    select: { id: true, bodyMarkdown: true },
   });
   if (!latest) {
     return {
       unpublished: true,
       publishable: false,
       blockers: [{ code: "section_no_content", message: "Seksjonen har ikke noe innhold å publisere." }],
+      title,
+    };
+  }
+
+  // #916: the cascade is a door into publishing a SECTION too, and it must agree with the section's
+  // own publish route about what "complete" means — otherwise the author is told different things
+  // depending on which button they pressed. `publishSection` throws on the same condition; reporting
+  // it here means the cascade refuses up front and publishes NOTHING, rather than failing mid-way.
+  const gate = evaluateSectionTranslationGate({ title: section.title, bodyMarkdown: latest.bodyMarkdown });
+  if (!gate.ok) {
+    return {
+      unpublished: true,
+      publishable: false,
+      blockers: gate.issues.map((issue) => ({
+        code: issue.code,
+        message:
+          issue.field && issue.missingLocales
+            ? `Seksjonen mangler oversettelse av «${translationFieldLabel(issue.field)}» på ${issue.missingLocales.join(", ")}. Åpne seksjonen og oversett det som mangler.`
+            : issue.message,
+        field: issue.field,
+        missingLocales: issue.missingLocales,
+      })),
       title,
     };
   }

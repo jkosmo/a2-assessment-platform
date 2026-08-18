@@ -2,6 +2,121 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.22.0 - 2026-08-18
+
+**En seksjon kan reise alene (#916)** — og publiseringsgaten fra #896 S4 gjelder den.
+
+### Det som manglet var eksponering, ikke funksjonalitet
+
+En læringsseksjon kunne bare flyttes mellom miljøer som del av en kurspakke. Årsaken var ikke at
+UI-et manglet en knapp: `adminSectionsRouter` hadde verken `export-package` eller `import`.
+
+Alt det tunge fantes allerede inne i kursimporten — `sectionExportPayloadSchema`,
+`stageSectionAssets` (med SVG-saneringen fra #763), `persistStagedSection`, eierskapsvakta. Så
+dette er i hovedsak en **eksponering** av eksisterende maskineri, ikke en ny implementasjon:
+
+| Nytt endepunkt | Hva det gjør |
+|---|---|
+| `GET /api/admin/content/sections/:id/export-package` | `a2-content-export/v1` med `scope: "section"`. Eierskapsvakt. Figurer inline som base64 |
+| `POST /api/admin/content/sections/import` | `createNew` (ny seksjon) eller `replaceExisting` + `targetId` (ny versjon på en seksjon du eier). Lander alltid upublisert |
+
+Konvolutten fikk et tredje omfang (`module` / `course` / `section`) med refine-regel begge veier,
+så en fil verken kan påstå et innhold den ikke har eller smugle med ett den ikke navngir.
+Formatversjonen er uendret: eldre filer har ikke feltet og validerer nøyaktig som før.
+
+**Seksjons-payloaden er den samme som kurspakken allerede inlinet.** En seksjon løftet ut av en
+kursfil importeres gjennom det nye endepunktet uendret, og omvendt. Det var poenget med å ikke
+bygge en ny vei: assets går fortsatt gjennom `stageSectionAssets`, blobene skrives fortsatt før
+transaksjonen åpnes (#796), og en rullet tilbake import rydder fortsatt opp etter seg.
+
+**Eierskap på begge rutene.** Eksport er vaktet med `requireContentOwnership` — #903 finnes fordi
+kurseksport manglet nettopp det og delte ut andres innhold. Import med `replaceExisting` sjekker
+eierskap på målet før den skriver, som modulimporten har gjort siden #528; `createNew` har
+ingenting å eie ennå, og importøren blir eier av kopien.
+
+**Importen lander upublisert** (#896 §9). Ingenting blir synlig for en deltaker før et menneske i
+dette miljøet har sett på det.
+
+### Publiseringsgaten gjelder seksjoner — og seksjoner har fire dører
+
+Produkteierens beslutning: en seksjon er lesestoff deltakeren møter direkte, så et språkhull har
+samme konsekvens som i en modul. Samme regel, ikke en mildere variant.
+
+**Feltene jeg valgte, og hvorfor:**
+
+| Felt | Begrunnelse |
+|------|-------------|
+| `title` | Vises i kursforløpet, i lesevisningen og i seksjonslista |
+| `bodyMarkdown` | Seksjonen **er** innholdet sitt — det finnes ikke noe annet å falle tilbake på |
+
+Det er hele den deltakersynlige flaten en seksjon har. **Bevisst utenfor:** de lokaliserte
+SVG-variantene (#657). De genereres fra teksten framfor å skrives, de har en dokumentert
+tilbakefallsvei (en uoversatt tegning vises på kildespråket i stedet for ikke i det hele tatt), og
+å gate dem ville målt en seksjon med figurer strengere enn en uten. `bodyMarkdown` gates bare når
+det finnes, som modulgaten gjør med sine valgfrie felt.
+
+**Den mekaniske forskjellen fra modulen, og hva den tvang fram.** En modul skiller lagring fra
+publisering. En seksjon gjør ikke det — lagring *er* publisering. Å avvise lagringen ville betydd
+at en forfatter som skriver på norsk ikke får lagre i det hele tatt: en språkfeil byttet mot tapt
+arbeid. Så dørene oppfører seg ulikt, med vilje:
+
+| Dør | Oppførsel |
+|-----|-----------|
+| `POST /sections/:id/publish` | **422** `publish_blocked_by_validation`, `issues[]` med `field` + `missingLocales` — samme kroppsform som modulruten |
+| Kurskaskaden | Seksjonen rapporteres `publishable: false` i `publish-preview`; kaskaden returnerer 422 og publiserer **ingenting** |
+| Opprettelse med auto-publisering | Seksjonen lagres som **utkast**; svaret bærer `translationGate: { heldBack, issues }` |
+| Lagring av innhold | Versjonen lagres, men aktiveres **ikke**. En publisert seksjon fortsetter å vise siste komplette versjon |
+
+De to siste speiler modulens **import-dør**, som løser nøyaktig samme konflikt på samme måte:
+skrivingen lykkes, aktiveringen gjør det ikke.
+
+### To følgefeil gaten ville skapt hvis den sto alene
+
+1. **En tilbakeholdt lagring må fortsatt være synlig for forfatteren.** `GET /sections/:id` leste
+   bare `activeVersion`. Med gaten ville forfatterens egen tekst forsvunnet ved neste innlasting —
+   det leses som datatap. Detaljruten leser nå **nyeste** versjon og rapporterer
+   `hasUnpublishedChanges`.
+2. **Eksporten måtte lese nyeste versjon også.** Før gaten var en seksjon publisert i det øyeblikket
+   den ble lagret, så «aktiv versjon» fantes alltid. Nå kan en seksjon legitimt være utkast — i et
+   kurs, eller nettopp importert — og en kurs- eller seksjonspakke ville eksportert **tom kropp**
+   og stille mistet innholdet fila finnes for å bære.
+
+**Kjent, og likt for moduler:** `PATCH /sections/:id/title` kan innføre et hull i en allerede
+publisert tittel uten å passere en gate. Tittelen er ikke versjonert, så det finnes ingen
+aktivering å holde tilbake, og å blokkere skrivingen ville gjort tittelen på en gammel enspråklig
+seksjon uredigerbar. Hullet fanges neste gang seksjonen publiseres eller innholdet lagres.
+
+### Knappene er med vilje tynne
+
+`#925` skal legge om seksjons-UI-et og krever design. Derfor: **Eksporter** per rad (skjult der
+`canManage` er false; ruta håndhever uansett) og **Importer seksjons-pakke** i sidehodet — begge
+speiler modulbibliotekets importør. Gate-meldingene rendres fra `field` + `missingLocales`, aldri
+fra serverens `message`, som er engelsk mens siden kjører på tre språk. Utbedringshandlingen
+finnes allerede: **«Oversett fra dette språket»**.
+
+### Dokumentasjon
+
+`doc/API_REFERENCE.md` (begge endepunktene + en tabell over konvoluttens tre omfang),
+`doc/route-map.md`, `doc/FEATURE_SURFACE_MAP.md` § 23 (de fire dørene),
+`doc/design/ADMIN_CONTENT_IA_ARCHITECTURE.md` § 6 (feltvalget og begrunnelsen),
+`doc/LEARNING_SECTIONS_GUIDE.md` (forfatterens side av begge deler).
+
+### Tester
+
+`test/m2-section-export-import-916.test.ts` (13 tester: eksport av egen seksjon, avvist eksport av
+andres, eksport av et utkast, import som lander upublisert, feil `scope`, konvolutt uten payload,
+`replaceExisting` med og uten eierskap, figur-rundtur gjennom `stageSectionAssets`, og gaten på
+alle fire dørene), `test/unit/section-export-envelope-916.test.ts` (omfangs-refine og
+lokalitetsregnestykket) og `test/e2e/section-portability-916.spec.ts` (klientlaget: at knappene
+treffer riktig endepunkt, at Eksporter er skjult der eierskapsvakta ville gitt 403, og at
+gate-meldingene faktisk blir lesbare setninger på forfatterens språk). Eksisterende
+seksjonsfixturer som var enspråklige er rettet der testen faktisk handlet om publiseringstilstand
+— de målte ellers gaten i stedet for det de guarder.
+
+**Kjørt lokalt:** `npm run lint`, `npm run test:unit` (1029), `npm run test:dom` (6), hele
+integrasjonssuiten mot lokal Postgres (102 filer / 481 tester) og hele
+`playwright.admin-content.config.ts` (187). Alt grønt.
+
 ## 2.21.0 - 2026-08-18
 **Tre steder der plattformen påsto noe den ikke visste — to om språk, ett om ulagret arbeid.**
 Alle tre kom fra kryssmodell-QA under #896 (runde 4, 6 og 7) og ble lagt til side der fordi de hørte

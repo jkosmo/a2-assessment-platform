@@ -23,6 +23,7 @@ import {
 } from "./adminContentCommands.js";
 import { adminContentRepository, createAdminContentRepository } from "./adminContentRepository.js";
 import { runInTransaction, type DbTransactionClient } from "../../db/transaction.js";
+import { prisma } from "../../db/prisma.js";
 import { courseRepository } from "../course/courseRepository.js";
 import { createCourse, setCourseModules, setCourseItems, publishCourse, type CourseItemInput } from "../course/courseCommands.js";
 import { randomUUID } from "node:crypto";
@@ -88,8 +89,13 @@ type StagedImportSection = {
 // #796 (staging half — runs BEFORE the import transaction, does blob I/O, no DB writes): pre-generate the
 // section id + its asset row ids, write the asset blobs to storage, and rewrite the markdown's
 // `asset:<sourceId>` refs to the new asset ids so the persisted version never references source ids.
-async function stageSectionForImport(section: SectionExportPayload): Promise<StagedImportSection> {
-  const sectionId = randomUUID();
+async function stageSectionForImport(
+  section: SectionExportPayload,
+  // #916: the standalone `replaceExisting` import stages onto an EXISTING section id, so its asset
+  // blobs land under that section's own `sections/<id>/…` prefix instead of an orphan one.
+  existingSectionId?: string,
+): Promise<StagedImportSection> {
+  const sectionId = existingSectionId ?? randomUUID();
   const serializedMarkdown = serializeRequired(section.bodyMarkdown);
   const title = serializeRequired(section.title);
   const assets = section.assets ?? [];
@@ -131,8 +137,23 @@ async function persistStagedSection(
   tx: DbTransactionClient,
   staged: StagedImportSection,
   actorId: string,
+  // #916: the standalone section import lands UNPUBLISHED (the same rule module import follows
+  // after #896 §9 — imported content is reviewed before it reaches participants). Course import
+  // keeps its existing behaviour (the section is created live and the course cascade governs it),
+  // so the flag defaults to false and only the new door passes true.
+  options?: { draft?: boolean; agent?: AgentAuthoringContext },
 ): Promise<string> {
-  await createSection({ id: staged.sectionId, title: staged.title, bodyMarkdown: staged.bodyMarkdown, actorId }, tx);
+  await createSection(
+    {
+      id: staged.sectionId,
+      title: staged.title,
+      bodyMarkdown: staged.bodyMarkdown,
+      actorId,
+      draft: options?.draft,
+      agent: options?.agent,
+    },
+    tx,
+  );
   for (const asset of staged.stagedAssets) {
     await tx.sectionAsset.create({ data: { id: asset.id, sectionId: staged.sectionId, ...asset.rowData } });
   }
@@ -350,6 +371,125 @@ export async function importModuleFromEnvelope(
     },
     { timeout: IMPORT_TX_TIMEOUT_MS },
   );
+}
+
+// Standalone learning-section import from an `a2-content-export/v1` envelope with `scope: "section"`
+// (#916). Counterpart to GET /sections/:id/export-package.
+//
+// It deliberately reuses the SAME staging path the course import uses — `stageSectionAssets` writes
+// the blobs (with #763's SVG sanitisation) before the transaction opens, and `persistStagedSection`
+// creates the rows inside it. A second asset path for "the same thing but standalone" is exactly the
+// duplication this codebase spent an epic removing.
+//
+// Two deliberate differences from a course-inlined section:
+//   1. It lands UNPUBLISHED (#896 §9's rule for imported content: a human reviews before
+//      participants read it). The publish gate (#916) then applies when the author publishes.
+//   2. `replaceExisting` appends a NEW, inactive version to an existing section, so a live section
+//      keeps serving its current version until the author reviews the import and publishes.
+export async function importSectionFromEnvelope(
+  envelope: ExportEnvelope,
+  options: {
+    actorId: string;
+    mode: ImportMode;
+    targetSectionId?: string;
+    agent?: AgentAuthoringContext;
+  },
+): Promise<{ sectionId: string; sectionVersionId: string; assetCount: number }> {
+  if (envelope.scope !== "section" || !envelope.section) {
+    throw new Error("Envelope is not a section export.");
+  }
+  const payload = envelope.section;
+
+  let targetSectionId: string | undefined;
+  if (options.mode === "replaceExisting") {
+    if (!options.targetSectionId) {
+      throw new Error("targetSectionId is required when mode is replaceExisting.");
+    }
+    const existing = await prisma.courseSection.findUnique({
+      where: { id: options.targetSectionId },
+      select: { id: true },
+    });
+    if (!existing) {
+      throw new Error("Target section not found for replaceExisting.");
+    }
+    targetSectionId = existing.id;
+  }
+
+  // #796's split: blob I/O BEFORE the transaction, DB rows inside it.
+  const staged = await stageSectionForImport(payload, targetSectionId);
+
+  try {
+    return await runInTransaction(
+      async (tx) => {
+        let sectionId: string;
+        if (targetSectionId) {
+          const last = await tx.courseSectionVersion.findFirst({
+            where: { sectionId: targetSectionId },
+            orderBy: { versionNo: "desc" },
+            select: { versionNo: true },
+          });
+          // Title is updated, content becomes a new INACTIVE version — the section's live content
+          // does not change until the author publishes (and passes the gate).
+          await tx.courseSection.update({
+            where: { id: targetSectionId },
+            data: { title: staged.title, updatedAt: new Date() },
+          });
+          await tx.courseSectionVersion.create({
+            data: {
+              sectionId: targetSectionId,
+              versionNo: (last?.versionNo ?? 0) + 1,
+              bodyMarkdown: staged.bodyMarkdown,
+              publishedBy: null,
+              publishedAt: null,
+            },
+          });
+          for (const asset of staged.stagedAssets) {
+            await tx.sectionAsset.create({ data: { id: asset.id, sectionId: targetSectionId, ...asset.rowData } });
+          }
+          sectionId = targetSectionId;
+        } else {
+          sectionId = await persistStagedSection(tx, staged, options.actorId, {
+            draft: true,
+            agent: options.agent,
+          });
+        }
+
+        const latest = await tx.courseSectionVersion.findFirstOrThrow({
+          where: { sectionId },
+          orderBy: { versionNo: "desc" },
+          select: { id: true },
+        });
+
+        await recordAuditEvent(
+          {
+            entityType: auditEntityTypes.courseSection,
+            entityId: sectionId,
+            action: auditActions.adminContent.sectionImported,
+            actorId: options.actorId,
+            metadata: {
+              sectionId,
+              sectionVersionId: latest.id,
+              mode: options.mode,
+              assetCount: staged.stagedAssets.length,
+              sourcePublishedAt: payload.audit?.publishedAt ?? null,
+              sourceVersionNo: payload.audit?.sourceVersionNo ?? null,
+              ...agentAuthoringAuditMetadata(options.agent),
+            },
+          },
+          tx,
+        );
+
+        return { sectionId, sectionVersionId: latest.id, assetCount: staged.stagedAssets.length };
+      },
+      { timeout: IMPORT_TX_TIMEOUT_MS },
+    );
+  } catch (error) {
+    // Same reclaim contract as the course import: a rolled-back import leaves no orphaned blobs.
+    if (staged.blobPaths.length > 0) {
+      await reclaimAssetBlobs(staged.blobPaths);
+    }
+    throw error;
+  }
 }
 
 export async function importCourseFromEnvelope(

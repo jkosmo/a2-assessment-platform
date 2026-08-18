@@ -466,16 +466,35 @@ Course export/import now transport a section's figures/images (`SectionAsset`), 
 - **Export** inlines each `SectionAsset` blob (and every #657 localized SVG variant) as base64. Enforced caps: **5 MB per asset** and a **25 MB total-decoded-asset budget per envelope** — export fails `400 validation_error` if the total is exceeded (a figure is never silently dropped).
 - **Import** decodes each asset, enforces the **mime allowlist** (`image/svg+xml`, `image/png`, `image/jpeg`, `image/gif`, `image/webp`) and the 5 MB per-asset cap, **re-sanitises SVG** (base + variants; scripts/handlers/`foreignObject`/`<a>` stripped — defence in depth), stores it to a fresh blob under the new section, creates the `SectionAsset` row (preserving `sourceLocale`/localized variants), then **rewrites the section's active `bodyMarkdown`** so every `asset:<sourceId>` points at the new asset id. A failing asset surfaces a clear `400` naming the section/asset (no silent skip). Ordering is create-section → create-assets → re-save markdown with remapped refs, so the persisted active version never references source ids. See `doc/design/COURSE_FIGURES_AND_ASSETS.md` (Layer A). Skill figure *design* (Layer B) is a later phase.
 
+#### Envelope scopes (#433, #512, #916)
+
+`a2-content-export/v1` carries exactly one payload, named by `scope`:
+
+| `scope` | Payload field | Endpoints |
+|---|---|---|
+| `module` | `module` | `GET /modules/:id/export-package` · `POST /modules/import` |
+| `course` | `course` (inlines modules **and** sections in order) | `GET /courses/:id/export-package` · `POST /courses/import` |
+| `section` | `section` | `GET /sections/:id/export-package` · `POST /sections/import` |
+
+The schema refines `scope` against the payload in both directions, so an envelope can neither claim
+a payload it lacks nor smuggle one it does not name; each import endpoint additionally rejects a
+foreign scope with `400 scope_mismatch` rather than half-importing it. The `section` payload is the
+**same object** a course envelope inlines under `items[].section` — a section lifted out of a course
+file imports through `POST /sections/import` unchanged, and the reverse holds too. Adding `section`
+did not change the format version: older files have no `section` field and validate exactly as before.
+
 ### Learning sections (#476)
 
 | Method | Route | Description |
 |---|---|---|
-| `POST` | `/api/admin/content/sections` | Create a section (`title` + `bodyMarkdown`) → section + version 1. Optional `draft`, `clientRef`, `agentRunId`, and (#763, Layer B) `assets[]` inline figures/images — imported + `asset:<sourceId>` refs remapped, `assetMap` (`sourceId→assetId`) echoed back. Larger 15 MB body for inlined assets |
+| `POST` | `/api/admin/content/sections` | Create a section (`title` + `bodyMarkdown`) → section + version 1. Optional `draft`, `clientRef`, `agentRunId`, and (#763, Layer B) `assets[]` inline figures/images — imported + `asset:<sourceId>` refs remapped, `assetMap` (`sourceId→assetId`) echoed back. Larger 15 MB body for inlined assets. **Auto-publish-on-save is conditional (#916):** if the translation gate finds a gap the section is created as a DRAFT and the response carries `translationGate: { heldBack: true, issues[] }` |
 | `GET` | `/api/admin/content/sections` | List sections |
-| `GET` | `/api/admin/content/sections/:sectionId` | Section detail (active version's `bodyMarkdown`) |
+| `GET` | `/api/admin/content/sections/:sectionId` | Section detail. `bodyMarkdown` + `versionNo` come from the **newest** version (not only the active one), so a save held back by the gate is still visible to its author; `hasUnpublishedChanges` is true when the newest version is not the published one (#916) |
 | `PATCH` | `/api/admin/content/sections/:sectionId/title` | Update title |
-| `PUT` | `/api/admin/content/sections/:sectionId/content` | Publish a new immutable content version (latest-wins) |
-| `POST` | `/api/admin/content/sections/:sectionId/publish` | Re-point active version to latest (G1 needs content, #705) |
+| `PUT` | `/api/admin/content/sections/:sectionId/content` | Store a new immutable content version. It becomes the active (participant-visible) one unless the translation gate blocks — then the version is stored, `activeVersionId` is left untouched, and the response carries `translationGate: { heldBack: true, issues[] }` (#916) |
+| `POST` | `/api/admin/content/sections/:sectionId/publish` | Re-point active version to latest (G1 needs content, #705). Blocked `422 publish_blocked_by_validation` with `issues[]` (`field` + `missingLocales`) when a participant-visible field lacks a locale (#916) |
+| `GET` | `/api/admin/content/sections/:sectionId/export-package` | **Owner or admin only.** Standalone `a2-content-export/v1` envelope with `scope: "section"` — the same section payload a course export inlines, so the two are interchangeable. Figures/images travel inline as base64 under the 25 MB total-asset cap. A section with no version returns `422 section_not_exportable` (#916) |
+| `POST` | `/api/admin/content/sections/import` | Import a `scope: "section"` envelope. `mode: "createNew"` (default) creates a fresh section; `mode: "replaceExisting"` + `targetId` appends a new version to an **owned** target (403 `content_ownership` otherwise). A wrong scope returns `400 scope_mismatch`. **The import always lands unpublished** (`published: false` in the response) — publishing is an explicit act after review, as for module import (#896 §9). Assets go through the same `stageSectionAssets` path as course import. Response `{ sectionId, sectionVersionId, assetCount, published, links }` (#916) |
 | `POST` | `/api/admin/content/sections/:sectionId/unpublish` | Unpublish. Blocked `400` if the section is used in any course (G2, #705) |
 | `POST` | `/api/admin/content/sections/:sectionId/archive` | Archive. Blocked `400` if used in any course (G2); auto-unpublishes (I3, #705) |
 | `POST` | `/api/admin/content/sections/:sectionId/restore` | Restore an archived section (lands in Utkast, #705) |

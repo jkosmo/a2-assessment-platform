@@ -58,6 +58,19 @@ async function createCourseWithSection(bodyMarkdownJson: string): Promise<{ cour
   return { courseId, sectionId };
 }
 
+// #916: these fixtures are deliberately nb-only (the point is to control the exact serialized
+// markdown, not to exercise translation), so the publish gate now lands the imported section as a
+// draft — `activeVersion` is null. The assertions are about ref remapping, so read the newest
+// version, which is the one the import wrote.
+async function latestBodyOf(sectionId: string): Promise<string> {
+  const version = await prisma.courseSectionVersion.findFirst({
+    where: { sectionId },
+    orderBy: { versionNo: "desc" },
+    select: { bodyMarkdown: true },
+  });
+  return version?.bodyMarkdown ?? "";
+}
+
 async function newSectionIdOf(courseId: string): Promise<string> {
   const itemsRes = await request(app).get(`/api/admin/content/courses/${courseId}/items`).set(adminHeaders);
   expect(itemsRes.status).toBe(200);
@@ -141,8 +154,7 @@ describe("#749 section-asset export/import round-trip", () => {
     expect(newSvg.sourceLocale).toBe("nb");
 
     // bodyMarkdown refs remapped to the NEW ids; source ids no longer present.
-    const newSection = await prisma.courseSection.findUnique({ where: { id: newSectionId }, include: { activeVersion: true } });
-    const newBody = newSection?.activeVersion?.bodyMarkdown ?? "";
+    const newBody = await latestBodyOf(newSectionId);
     expect(newBody).toContain(`asset:${newSvg.id}`);
     expect(newBody).toContain(`asset:${newPng.id}`);
     expect(newBody).not.toContain(`asset:${svg.id}`);
@@ -313,8 +325,7 @@ describe("#749 section-asset export/import round-trip", () => {
     const rows = await prisma.sectionAsset.findMany({ where: { sectionId: newSectionId }, orderBy: { createdAt: "asc" } });
     expect(rows).toHaveLength(2);
 
-    const section = await prisma.courseSection.findUnique({ where: { id: newSectionId }, include: { activeVersion: true } });
-    const body = section?.activeVersion?.bodyMarkdown ?? "";
+    const body = await latestBodyOf(newSectionId);
     // Every ref remapped to a real new asset id; no source token survives.
     for (const row of rows) expect(body).toContain(`asset:${row.id}`);
     expect(body).not.toContain("asset:fig-styringslogikker");
@@ -356,7 +367,6 @@ describe("#749 section-asset export/import round-trip", () => {
     const newSectionId = await newSectionIdOf(importRes.body.courseId);
     const rows = await prisma.sectionAsset.findMany({ where: { sectionId: newSectionId } });
     expect(rows).toHaveLength(0);
-    const section = await prisma.courseSection.findUnique({ where: { id: newSectionId }, include: { activeVersion: true } });
-    expect(section?.activeVersion?.bodyMarkdown ?? "").toContain("Bare tekst");
+    expect(await latestBodyOf(newSectionId)).toContain("Bare tekst");
   });
 });

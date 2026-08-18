@@ -538,15 +538,22 @@ export const exportEnvelopeSchema = z.object({
   exportedAt: z.string().datetime(),
   exportedBy: z.string().nullable().optional(),
   exportedByEmail: z.string().email().nullable().optional(),
-  scope: z.enum(["module", "course"]),
+  // #916: a section can now travel on its own, not only inlined in a course package. The payload
+  // shape is the SAME `sectionExportPayloadSchema` the course envelope already carries, so a
+  // section lifted out of a course file and a standalone export are byte-compatible.
+  scope: z.enum(["module", "course", "section"]),
   module: moduleExportPayloadSchema.optional(),
   course: courseExportPayloadSchema.optional(),
+  section: sectionExportPayloadSchema.optional(),
 }).refine(
   (env) => (env.scope === "module") === (env.module !== undefined),
   { message: "envelope.scope must match payload (module envelopes need a module field)" },
 ).refine(
   (env) => (env.scope === "course") === (env.course !== undefined),
   { message: "envelope.scope must match payload (course envelopes need a course field)" },
+).refine(
+  (env) => (env.scope === "section") === (env.section !== undefined),
+  { message: "envelope.scope must match payload (section envelopes need a section field)" },
 );
 
 export type ExportEnvelope = z.infer<typeof exportEnvelopeSchema>;

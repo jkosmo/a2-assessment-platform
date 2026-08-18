@@ -48,6 +48,9 @@ export const auditActions = {
     moduleImported: "module_imported",
     courseExported: "course_exported",
     courseImported: "course_imported",
+    // #916: a section can now travel on its own, so its import is its own auditable event —
+    // `section_created` alone would not say the content came from a package.
+    sectionImported: "section_imported",
   },
   appeal: {
     created: "appeal_created",
@@ -231,6 +234,15 @@ export type AuditMetadataByAction = {
     mode: "createNew" | "replaceExisting";
     moduleCount: number;
     sourcePublishedAt: string | null;
+  }>;
+  [auditActions.adminContent.sectionImported]: EventMetadata<{
+    sectionId: string;
+    sectionVersionId: string;
+    mode: "createNew" | "replaceExisting";
+    assetCount: number;
+    // Opaque source-environment attribution, display only — never matched against local users.
+    sourcePublishedAt: string | null;
+    sourceVersionNo: number | null;
   }>;
   [auditActions.appeal.created]: EventMetadata<{
     submissionId: string;

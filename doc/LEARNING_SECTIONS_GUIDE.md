@@ -38,6 +38,20 @@ rekkefølgen forfatteren bestemmer.
 - En deltaker ser seksjonen på sitt profilspråk; mangler et språk, faller visningen tilbake til
   et utfylt språk (aldri tomt).
 
+> **Publisering krever alle tre språk (#916).** En seksjon er lesestoff deltakeren møter direkte,
+> så et språkhull har samme konsekvens som i en modul — og samme regel gjelder: **tittel** og
+> **innhold** må finnes på `nb`, `nn` og `en-GB` før seksjonen kan bli synlig for deltakere.
+>
+> Du kan fortsatt **lagre** når som helst — arbeidet ditt går aldri tapt. Men når noe mangler,
+> lagres versjonen **uten å bli publisert**, og du får en melding som sier nøyaktig hvilket felt
+> som mangler hvilke språk («Lagret, men ikke publisert — seksjonen mangler innholdet (nynorsk)»).
+> Bruk **«Oversett fra dette språket»**, lagre på nytt, og seksjonen publiseres.
+>
+> Det samme gjelder alle veier inn til publisering: **Publiser**-knappen, publisering av et kurs
+> som inneholder seksjonen, og lagring som ellers ville publisert. En seksjon som allerede er
+> publisert fortsetter å vise den siste komplette versjonen — deltakerne mister aldri innhold
+> midt i et kurs.
+
 ### 3. Bilder og SVG-tegninger
 
 - **«Last opp bilde»** legger et bilde inn i seksjonen (`![alt](asset:…)`). Støttede formater:
@@ -68,6 +82,20 @@ Andre iframes fjernes av sikkerhetshensyn.
 Kurs-eksport (**«Eksporter»** på et kurs) tar med seksjonene og rekkefølgen i pakkefila, og
 **«Importer kurs-pakke»** gjenskaper dem i målmiljøet. (Eldre pakker uten seksjoner importeres
 fortsatt.)
+
+**En enkelt seksjon kan også reise alene (#916).** På **Seksjoner**-lista:
+
+- **«Eksporter»** på en rad laster ned seksjonen som en JSON-pakke — tittel, innhold på alle
+  språk, og figurene (også de oversatte SVG-variantene). Du kan bare eksportere seksjoner du
+  eier; administrator kan eksportere alle.
+- **«Importer seksjons-pakke»** øverst på siden leser en slik fil og oppretter seksjonen her.
+  **Den lander alltid som «Utkast»** — du går gjennom den og publiserer selv. Det er den samme
+  regelen som for modul-import: ingenting blir synlig for deltakere før et menneske har sett på
+  det i dette miljøet.
+- Du blir **eier** av seksjonen du importerer.
+- Figurene følger med og får nye referanser automatisk — du trenger ikke laste opp bildene på nytt.
+- En seksjons-pakke som er løftet ut av en kurs-pakke fungerer også, og omvendt: det er samme
+  format.
 
 ---
 

@@ -1,11 +1,15 @@
 import { prisma } from "../../db/prisma.js";
 import { runInTransaction, type DbTransactionClient } from "../../db/transaction.js";
-import { NotFoundError, ValidationError } from "../../errors/AppError.js";
+import { AppError, NotFoundError, ValidationError } from "../../errors/AppError.js";
 import { recordAuditEvent } from "../../services/auditService.js";
 import { auditActions, auditEntityTypes, agentAuthoringAuditMetadata, type AgentAuthoringContext } from "../../observability/auditEvents.js";
 import { assertSectionNotInAnyCourse } from "./contentLifecycle.js";
 import { importSectionAssets, collectSectionAssetBlobPaths, reclaimAssetBlobs } from "./assetCommands.js";
 import { addContentOwner } from "../content/contentOwnershipService.js";
+import {
+  validateSectionTranslationCompleteness,
+  type ValidationIssue,
+} from "../adminContent/contentValidationService.js";
 
 // #763 (Layer B): the agent section-create route inlines figures/images (base64), so the JSON body
 // can exceed the 5 MB global parser. Sized to cover a handful of SVG figures + localized variants
@@ -36,6 +40,44 @@ export function remapAssetRefs(serializedMarkdown: string, idMap: Map<string, st
   });
 }
 
+// =========================================================================
+// #916: the translation publish gate for sections (mirrors #896 S4 for modules)
+// =========================================================================
+// A section is reading material the participant meets directly, so a language hole has the same
+// consequence as it does in a module — and therefore the same rule. The gate lives here, in the
+// command layer, rather than on the publish route: a section reaches participants through FOUR
+// doors, and a gate on one of them is a detour sign, not a gate. See
+// doc/FEATURE_SURFACE_MAP.md § 23.
+//
+// | Door | Behaviour |
+// |------|-----------|
+// | `publishSection` (author's button, and the course cascade's publish step) | throws 422 `publish_blocked_by_validation` |
+// | `createSection` with auto-publish (`draft` not set) | held back to DRAFT; the write succeeds |
+// | `updateSectionContent` (saving IS publishing for sections) | the new version is stored but NOT activated |
+// | standalone section import (#916) | always lands unpublished by decision, so it never reaches the gate |
+//
+// Why the two save doors hold back instead of throwing: for a module, saving a draft and
+// publishing are separate actions, so blocking publish costs the author nothing. A section has no
+// draft-save — every save publishes. Failing the save would mean an author writing in Norwegian
+// could not store their work at all, which trades a language bug for data loss. Holding the
+// activation back keeps both the text and the rule, and mirrors the module IMPORT door, which
+// resolves exactly the same conflict the same way.
+export type SectionTranslationGate = {
+  /** True when the section may become (or stay) the participant-visible active version. */
+  ok: boolean;
+  /** Blocking issues carrying `field` + `missingLocales`, ready for the UI's gap-fill action. */
+  issues: ValidationIssue[];
+};
+
+/** Run the gate over a section's stored (serialized) title + body. No DB access, no flattening. */
+export function evaluateSectionTranslationGate(input: {
+  title: string | null | undefined;
+  bodyMarkdown: string | null | undefined;
+}): SectionTranslationGate {
+  const issues = validateSectionTranslationCompleteness(input);
+  return { ok: issues.length === 0, issues };
+}
+
 // Section CRUD + versioning (#485/B1) for course learning sections (#476).
 // Mirrors Module/ModuleVersion: editing content publishes an immutable new
 // version and re-points activeVersionId (latest-wins in v1.3.x). Localized
@@ -57,6 +99,13 @@ export async function createSection(input: {
   // final `sections/<id>/…` path before the graph transaction opens. Omitted → the DB generates the id.
   id?: string;
 }, tx?: DbTransactionClient) {
+  // #916: door 2 of the publish gate. An explicit `draft: true` already keeps the section
+  // unpublished; a language hole now does the same. `heldBackByTranslationGate` distinguishes the
+  // two for the caller — the author asked for one and did not ask for the other.
+  const gate = evaluateSectionTranslationGate({ title: input.title, bodyMarkdown: input.bodyMarkdown });
+  const heldBackByTranslationGate = !input.draft && !gate.ok;
+  const keepAsDraft = Boolean(input.draft) || heldBackByTranslationGate;
+
   const run = async (client: DbTransactionClient) => {
     const section = await client.courseSection.create({
       data: { ...(input.id ? { id: input.id } : {}), title: input.title },
@@ -66,11 +115,11 @@ export async function createSection(input: {
         sectionId: section.id,
         versionNo: 1,
         bodyMarkdown: input.bodyMarkdown,
-        publishedBy: input.draft ? null : input.actorId ?? null,
-        publishedAt: input.draft ? null : new Date(),
+        publishedBy: keepAsDraft ? null : input.actorId ?? null,
+        publishedAt: keepAsDraft ? null : new Date(),
       },
     });
-    const result = input.draft
+    const result = keepAsDraft
       ? await client.courseSection.findUniqueOrThrow({
           where: { id: section.id },
           include: { activeVersion: true },
@@ -88,7 +137,8 @@ export async function createSection(input: {
         actorId: input.actorId,
         metadata: {
           sectionId: result.id,
-          draft: Boolean(input.draft),
+          draft: keepAsDraft,
+          heldBackByTranslationGate,
           ...agentAuthoringAuditMetadata(input.agent),
         },
       },
@@ -98,7 +148,7 @@ export async function createSection(input: {
     if (input.actorId) {
       await addContentOwner({ contentType: "SECTION", contentId: result.id, ownerUserId: input.actorId, actorUserId: input.actorId }, client);
     }
-    return result;
+    return { ...result, heldBackByTranslationGate, translationGateIssues: gate.issues };
   };
   return tx ? run(tx) : runInTransaction(run);
 }
@@ -145,9 +195,18 @@ export async function createSectionWithAssets(input: {
 
   const refreshed = await prisma.courseSection.findUniqueOrThrow({
     where: { id: section.id },
-    include: { activeVersion: true },
+    include: { activeVersion: true, versions: { orderBy: { versionNo: "desc" }, take: 1 } },
   });
-  return { section: refreshed, assetMap: Object.fromEntries(idMap) };
+  // #916: carry the gate verdict from createSection through the refresh, or the caller would see a
+  // section that is quietly a draft with no explanation of why.
+  return {
+    section: {
+      ...refreshed,
+      heldBackByTranslationGate: section.heldBackByTranslationGate,
+      translationGateIssues: section.translationGateIssues,
+    },
+    assetMap: Object.fromEntries(idMap),
+  };
 }
 
 export async function updateSectionTitle(sectionId: string, title: string) {
@@ -160,7 +219,20 @@ export async function updateSectionTitle(sectionId: string, title: string) {
 }
 
 export async function updateSectionContent(sectionId: string, bodyMarkdown: string, actorId?: string, tx?: DbTransactionClient) {
-  await assertSectionExists(sectionId);
+  const existing = await prisma.courseSection.findUnique({
+    where: { id: sectionId },
+    select: { id: true, title: true },
+  });
+  if (!existing) {
+    throw new NotFoundError("CourseSection", "section_not_found", "Course section not found.");
+  }
+
+  // #916: door 3. Saving a section IS publishing it (latest-wins), so the gate belongs here too.
+  // The version is always written — the author's text is never lost — but it only becomes the
+  // active, participant-visible one when every gated field carries all three locales.
+  const gate = evaluateSectionTranslationGate({ title: existing.title, bodyMarkdown });
+  const heldBackByTranslationGate = !gate.ok;
+
   const run = async (client: DbTransactionClient) => {
     const last = await client.courseSectionVersion.findFirst({
       where: { sectionId },
@@ -172,15 +244,21 @@ export async function updateSectionContent(sectionId: string, bodyMarkdown: stri
         sectionId,
         versionNo: (last?.versionNo ?? 0) + 1,
         bodyMarkdown,
-        publishedBy: actorId ?? null,
-        publishedAt: new Date(),
+        publishedBy: heldBackByTranslationGate ? null : actorId ?? null,
+        publishedAt: heldBackByTranslationGate ? null : new Date(),
       },
     });
-    return client.courseSection.update({
+    const section = await client.courseSection.update({
       where: { id: sectionId },
-      data: { activeVersionId: version.id, updatedAt: new Date() },
+      // Held back: activeVersionId is left exactly as it was. A live section keeps serving the
+      // last complete version rather than being silently unpublished (which G2 forbids anyway for
+      // a section that sits in a course); a draft section stays a draft.
+      data: heldBackByTranslationGate
+        ? { updatedAt: new Date() }
+        : { activeVersionId: version.id, updatedAt: new Date() },
       include: { activeVersion: true },
     });
+    return { ...section, heldBackByTranslationGate, translationGateIssues: gate.issues };
   };
   return tx ? run(tx) : runInTransaction(run);
 }
@@ -188,7 +266,13 @@ export async function updateSectionContent(sectionId: string, bodyMarkdown: stri
 export function getSection(sectionId: string) {
   return prisma.courseSection.findUnique({
     where: { id: sectionId },
-    include: { activeVersion: true },
+    include: {
+      activeVersion: true,
+      // #916: the editor must show what the author last SAVED, not only what is live. Since the
+      // gate can hold a save back from activation, reading only `activeVersion` would make the
+      // author's own text vanish on reload — the newest version is the one being edited.
+      versions: { orderBy: { versionNo: "desc" }, take: 1 },
+    },
   });
 }
 
@@ -206,7 +290,7 @@ export function listSections() {
 export async function publishSection(sectionId: string, actorId?: string) {
   const section = await prisma.courseSection.findUnique({
     where: { id: sectionId },
-    select: { id: true, archivedAt: true },
+    select: { id: true, title: true, archivedAt: true },
   });
   if (!section) {
     throw new NotFoundError("CourseSection", "section_not_found", "Course section not found.");
@@ -217,10 +301,23 @@ export async function publishSection(sectionId: string, actorId?: string) {
   const latest = await prisma.courseSectionVersion.findFirst({
     where: { sectionId },
     orderBy: { versionNo: "desc" },
-    select: { id: true },
+    select: { id: true, bodyMarkdown: true },
   });
   if (!latest) {
     throw new ValidationError("Seksjonen har ikke noe innhold å publisere.");
+  }
+  // #916: door 1 — the explicit publish action, and the step the course cascade calls. Blocking,
+  // not a warning: this is the moment the text reaches a participant who may not read the one
+  // language it exists in. The issues carry `field` + `missingLocales` so the UI can offer to
+  // translate exactly the gaps (#896 S4's contract), not re-parse a sentence.
+  const gate = evaluateSectionTranslationGate({ title: section.title, bodyMarkdown: latest.bodyMarkdown });
+  if (!gate.ok) {
+    throw new AppError(
+      "publish_blocked_by_validation",
+      422,
+      "Pre-publish validation found blocking issues. See `issues` for details.",
+      { issues: gate.issues },
+    );
   }
   const updated = await runInTransaction(async (tx) => {
     const section = await tx.courseSection.update({

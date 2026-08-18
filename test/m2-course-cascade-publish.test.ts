@@ -63,7 +63,9 @@ async function makeSection(opts: { published?: boolean } = {}): Promise<string> 
     data: {
       sectionId: section.id,
       versionNo: 1,
-      bodyMarkdown: "Section body content.",
+      // #916: three locales — the cascade now runs the section translation gate, and a bare string
+      // is "one language, unlabelled", which would make every section here un-publishable.
+      bodyMarkdown: JSON.stringify({ "en-GB": "Section body content.", nb: "Seksjonsinnhold.", nn: "Seksjonsinnhald." }),
       publishedAt: opts.published ? new Date() : null,
     },
     select: { id: true },

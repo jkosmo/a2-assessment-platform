@@ -45,8 +45,17 @@ async function makePublishedModule(): Promise<string> {
   return module.id;
 }
 
+// #916: fully translated on purpose. Auto-publish-on-save (and publishSection) now run the
+// translation gate, so a single-language fixture would land as a draft and every lifecycle
+// assertion below would be measuring the gate instead of the lifecycle.
+const LC_LOCALES = (value: string) => JSON.stringify({ "en-GB": value, nb: value, nn: value });
+
 async function makeSection(): Promise<string> {
-  const section = await createSection({ title: "LC Section", bodyMarkdown: "Body", actorId: ACTOR });
+  const section = await createSection({
+    title: LC_LOCALES("LC Section"),
+    bodyMarkdown: LC_LOCALES("Body"),
+    actorId: ACTOR,
+  });
   sectionIds.push(section.id);
   return section.id;
 }

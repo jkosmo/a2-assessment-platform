@@ -46,6 +46,12 @@ const LABELS = {
     translate: "Translate from this language", translating: "Translating…", translated: "Translated — review before saving.",
     translatingImages: "Translating drawings…", imagesTranslated: "SVG drawings translated — verify each language visually.",
     uploadImage: "Upload image", altPrompt: "Alt text (describes the image for screen readers):", saveFirst: "Save the section first, then upload images.", imageInserted: "Image inserted.",
+    // #916 — standalone section portability + the publish gate's author-facing wording.
+    exportSection: "Export", importSection: "Import section package", exported: "Section exported.",
+    imported: "Section package imported as a draft. Review it and publish when it is ready.",
+    gateHeldBack: "Saved, but not published — the section is missing", gateBlocked: "Cannot publish — the section is missing",
+    gateHint: "Use “Translate from this language” to fill the gaps, then save again.",
+    fieldTitle: "the title", fieldBodyMarkdown: "the content",
   },
   nb: {
     heading: "Seksjoner", newSection: "+ Ny seksjon", colTitle: "Tittel", colVersion: "Versjon",
@@ -66,6 +72,12 @@ const LABELS = {
     translate: "Oversett fra dette språket", translating: "Oversetter…", translated: "Oversatt — se over før du lagrer.",
     translatingImages: "Oversetter tegninger…", imagesTranslated: "SVG-tegninger oversatt — verifiser hvert språk visuelt.",
     uploadImage: "Last opp bilde", altPrompt: "Alt-tekst (beskriver bildet for skjermlesere):", saveFirst: "Lagre seksjonen først, så kan du laste opp bilder.", imageInserted: "Bilde satt inn.",
+    // #916 — frittstående seksjons-portabilitet + publiseringsgatens forfattertekst.
+    exportSection: "Eksporter", importSection: "Importer seksjons-pakke", exported: "Seksjon eksportert.",
+    imported: "Seksjons-pakken er importert som utkast. Gå gjennom den og publiser når den er klar.",
+    gateHeldBack: "Lagret, men ikke publisert — seksjonen mangler", gateBlocked: "Kan ikke publisere — seksjonen mangler",
+    gateHint: "Bruk «Oversett fra dette språket» for å fylle hullene, og lagre på nytt.",
+    fieldTitle: "tittelen", fieldBodyMarkdown: "innholdet",
   },
   nn: {
     heading: "Seksjonar", newSection: "+ Ny seksjon", colTitle: "Tittel", colVersion: "Versjon",
@@ -86,6 +98,12 @@ const LABELS = {
     translate: "Omset frå dette språket", translating: "Omset…", translated: "Omsett — sjå over før du lagrar.",
     translatingImages: "Omset teikningar…", imagesTranslated: "SVG-teikningar omsette — kontroller kvart språk visuelt.",
     uploadImage: "Last opp bilete", altPrompt: "Alt-tekst (skildrar biletet for skjermlesarar):", saveFirst: "Lagre seksjonen først, så kan du laste opp bilete.", imageInserted: "Bilete sett inn.",
+    // #916 — frittståande seksjons-portabilitet + publiseringsgata sin forfattartekst.
+    exportSection: "Eksporter", importSection: "Importer seksjons-pakke", exported: "Seksjon eksportert.",
+    imported: "Seksjons-pakken er importert som utkast. Gå gjennom han og publiser når han er klar.",
+    gateHeldBack: "Lagra, men ikkje publisert — seksjonen manglar", gateBlocked: "Kan ikkje publisere — seksjonen manglar",
+    gateHint: "Bruk «Omset frå dette språket» for å fylle hola, og lagre på nytt.",
+    fieldTitle: "tittelen", fieldBodyMarkdown: "innhaldet",
   },
 };
 
@@ -100,6 +118,28 @@ let currentLocale = (() => {
 
 function L(key) {
   return LABELS[currentLocale]?.[key] ?? LABELS["en-GB"][key] ?? key;
+}
+
+// #916: render the publish gate's blockers from `field` + `missingLocales`, never from `message`.
+// The server's message is English; this page runs in three languages, and the author needs to read
+// which field is missing which language — not a leaked internal string. Same contract as the module
+// gate (see doc/FEATURE_SURFACE_MAP.md § 18).
+function translationGateMessage(prefixKey, issues) {
+  const parts = (issues ?? [])
+    .filter((issue) => issue && issue.field && Array.isArray(issue.missingLocales) && issue.missingLocales.length > 0)
+    .map((issue) => {
+      const field = L(`field${issue.field.charAt(0).toUpperCase()}${issue.field.slice(1)}`);
+      const locales = issue.missingLocales.map((code) => localeLabels[code] ?? code).join(", ");
+      return `${field} (${locales})`;
+    });
+  if (parts.length === 0) return null;
+  return `${L(prefixKey)} ${parts.join("; ")}. ${L("gateHint")}`;
+}
+
+// The gate's issues ride along on the thrown error's parsed body (api-client attaches `.body`).
+function gateIssuesFrom(error) {
+  const issues = error?.body?.issues;
+  return Array.isArray(issues) ? issues : [];
 }
 function tNav(key) {
   return adminContentTranslations[currentLocale]?.[key] ?? adminContentTranslations["en-GB"]?.[key] ?? key;
@@ -317,6 +357,7 @@ async function renderListView() {
         <div class="row-actions">
           ${canManage
             ? `<button class="row-action-btn" data-action="edit" data-id="${id}">${escapeHtml(L("edit"))}</button>
+          <button class="row-action-btn" data-action="export" data-id="${id}">${escapeHtml(L("exportSection"))}</button>
           ${lifecycle}`
             : `<span class="row-readonly-note" title="${escapeHtml(L("readonlyHint"))}">${escapeHtml(L("readonly"))}</span>`}
         </div>
@@ -327,7 +368,11 @@ async function renderListView() {
   pageContent.innerHTML = `
     <div class="page-header">
       <h1>${escapeHtml(L("heading"))}</h1>
-      <button type="button" id="newSectionBtn" class="btn btn-primary" style="width:auto">${escapeHtml(L("newSection"))}</button>
+      <div class="row" style="gap:0.5rem">
+        <button type="button" id="importSectionBtn" class="btn" style="width:auto">${escapeHtml(L("importSection"))}</button>
+        <input type="file" id="importSectionFile" accept="application/json,.json" hidden>
+        <button type="button" id="newSectionBtn" class="btn btn-primary" style="width:auto">${escapeHtml(L("newSection"))}</button>
+      </div>
     </div>
     <div class="list-filters-row">${sectionFilterBar()}${sectionCourseFilterBar(sections)}</div>
     ${visible.length === 0
@@ -337,6 +382,13 @@ async function renderListView() {
           <tbody id="sectionsTableBody">${rows}</tbody></table></div>`}`;
 
   document.getElementById("newSectionBtn")?.addEventListener("click", () => goTo("editor", null));
+  // #916: deliberately thin — a visible button driving a hidden file input, exactly like the module
+  // library's importer. #925 will rebuild this page; nothing here is worth carrying over but the
+  // two API calls.
+  const importBtn = document.getElementById("importSectionBtn");
+  const importFile = document.getElementById("importSectionFile");
+  importBtn?.addEventListener("click", () => importFile?.click());
+  importFile?.addEventListener("change", (event) => importSectionPackage(event.target));
   pageContent.querySelector(".list-filters")?.addEventListener("click", (event) => {
     const btn = event.target.closest("[data-filter]");
     if (!btn) return;
@@ -356,6 +408,7 @@ async function renderListView() {
     const id = btn.dataset.id;
     const action = btn.dataset.action;
     if (action === "edit") goTo("editor", id);
+    else if (action === "export") exportSectionPackage(id, btn);
     else if (action === "delete") deleteSection(id);
     else if (action === "publish") sectionLifecycle(id, "publish", "published");
     else if (action === "unpublish") sectionLifecycle(id, "unpublish", "unpublished");
@@ -371,7 +424,75 @@ async function sectionLifecycle(sectionId, action, toastKey) {
     showToast(L(toastKey));
     renderListView();
   } catch (err) {
+    // #916: a publish blocked by the translation gate gets the field × language message, not the
+    // raw "422: {...}" the generic branch would print.
+    const gate = translationGateMessage("gateBlocked", gateIssuesFrom(err));
+    showToast(gate ?? err?.message ?? "Error", "error");
+  }
+}
+
+// #916: per-row export — download the a2-content-export/v1 envelope as JSON. Same shape and file
+// convention as the module/course exporters so all three behave alike for the author.
+async function exportSectionPackage(sectionId, btn) {
+  if (btn) btn.disabled = true;
+  try {
+    const body = await apiFetch(`/api/admin/content/sections/${encodeURIComponent(sectionId)}/export-package`, getHeaders);
+    const envelope = body?.envelope ?? null;
+    if (!envelope) throw new Error("Eksport returnerte tom envelope.");
+    const rawTitle = displayTitle(envelope.section?.title ?? "section");
+    const safeTitle = String(rawTitle).replace(/[^a-z0-9-]+/gi, "-").replace(/^-+|-+$/g, "").toLowerCase() || "section";
+    const blob = new Blob([JSON.stringify(envelope, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `section-${safeTitle}-${new Date().toISOString().slice(0, 10)}.json`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    showToast(L("exported"));
+  } catch (err) {
     showToast(err?.message ?? "Error", "error");
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+// #916: import a section package. It always lands as a draft (server-side rule), so there is no
+// autoPublish flag to get wrong here — unlike the module importer, where two pages had to remember
+// to send `autoPublish: false`.
+async function importSectionPackage(input) {
+  const file = input?.files?.[0] ?? null;
+  if (!file) return;
+  try {
+    const text = await file.text();
+    let payload;
+    try {
+      payload = JSON.parse(text);
+    } catch (parseError) {
+      throw new Error(`Filen er ikke gyldig JSON: ${parseError instanceof Error ? parseError.message : "ukjent feil"}`);
+    }
+    // Friendly guard: point a module/course package at the page that can actually import it,
+    // instead of surfacing the raw scope_mismatch 400.
+    if (payload?.scope && payload.scope !== "section") {
+      throw new Error(
+        payload.scope === "course"
+          ? "Dette er en kurs-pakke. Importer den fra Kurs-siden."
+          : "Dette er en modul-pakke. Importer den fra Moduler-siden.",
+      );
+    }
+    const result = await apiFetch("/api/admin/content/sections/import", getHeaders, {
+      method: "POST",
+      body: JSON.stringify({ payload, mode: "createNew" }),
+    });
+    if (!result?.sectionId) throw new Error("Import-respons mangler sectionId.");
+    showToast(L("imported"));
+    goTo("editor", result.sectionId);
+  } catch (error) {
+    showToast(`${L("importSection")}: ${error instanceof Error ? error.message : "ukjent feil"}`, "error");
+    document.getElementById("importSectionBtn")?.focus();
+  } finally {
+    if (input) input.value = "";
   }
 }
 
@@ -517,7 +638,9 @@ async function toggleSectionLifecycle() {
     showToast(L(action === "publish" ? "published" : "unpublished"));
     refreshSectionLifecycleUI();
   } catch (err) {
-    showToast(err?.message ?? "Error", "error");
+    // #916: same gate rendering as the list's Publiser — both are the same door.
+    const gate = translationGateMessage("gateBlocked", gateIssuesFrom(err));
+    showToast(gate ?? err?.message ?? "Error", "error");
   } finally {
     btn.disabled = false;
   }
@@ -574,14 +697,16 @@ async function persistSection({ silent } = {}) {
     return false;
   }
   try {
+    let heldBack = null;
     if (!editing.id) {
       const data = await apiFetch("/api/admin/content/sections", getHeaders, {
         method: "POST",
         body: JSON.stringify({ title, bodyMarkdown }),
       });
       editing.id = data.section.id;
-      editing.activeVersionId = data.section.activeVersionId ?? editing.activeVersionId;
+      editing.activeVersionId = data.section.activeVersionId ?? null;
       editing.archivedAt = data.section.archivedAt ?? null;
+      heldBack = data.translationGate?.heldBack ? data.translationGate.issues : null;
       history.replaceState({}, "", `/admin-content/sections?id=${encodeURIComponent(editing.id)}`);
     } else {
       await apiFetch(`/api/admin/content/sections/${encodeURIComponent(editing.id)}/title`, getHeaders, {
@@ -593,10 +718,19 @@ async function persistSection({ silent } = {}) {
         body: JSON.stringify({ bodyMarkdown }),
       });
       // Lagring publiserer (latest-wins) — oppdater status så merkelappen blir riktig.
-      editing.activeVersionId = contentRes.section?.activeVersionId ?? editing.activeVersionId;
+      editing.activeVersionId = contentRes.section?.activeVersionId ?? null;
+      heldBack = contentRes.translationGate?.heldBack ? contentRes.translationGate.issues : null;
     }
     // #705: hold status-merkelappen + Publiser/Avpubliser-knappen i editoren i synk etter lagring.
     refreshSectionLifecycleUI();
+    // #916: the save always lands, but the publish gate may have held the activation back. Saying
+    // only "Lagret" would let the author believe participants can read text that is not live.
+    const gateMessage = heldBack ? translationGateMessage("gateHeldBack", heldBack) : null;
+    if (gateMessage) {
+      showToast(gateMessage, "error");
+      if (status) status.textContent = gateMessage;
+      return true;
+    }
     if (!silent) {
       showToast(L("saved"));
       if (status) status.textContent = L("saved");

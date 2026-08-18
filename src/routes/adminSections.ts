@@ -1,6 +1,6 @@
 import { Router, type Request, type RequestHandler } from "express";
 import { requireContentOwnership } from "./requireContentOwnership.js";
-import { listManageableContentIds } from "../modules/content/contentOwnershipService.js";
+import { assertContentOwnership, listManageableContentIds } from "../modules/content/contentOwnershipService.js";
 import multer from "multer";
 import { z } from "zod";
 import {
@@ -21,11 +21,20 @@ import {
   MAX_ASSET_BYTES,
 } from "../modules/course/index.js";
 import { findCoursesForSections } from "../modules/course/contentLifecycle.js";
-import { localizedTextPatchSchema, generationLocaleSchema, clientRefSchema, agentRunIdSchema } from "../modules/adminContent/adminContentSchemas.js";
+import {
+  localizedTextPatchSchema,
+  generationLocaleSchema,
+  clientRefSchema,
+  agentRunIdSchema,
+  importBodySchema,
+  parseRequest,
+} from "../modules/adminContent/adminContentSchemas.js";
 import { authoringSectionAssetSchema } from "../modules/adminContent/agentAuthoringSchemas.js";
 import { sectionAdminLinks } from "../modules/adminContent/adminUiLinks.js";
+import { buildSectionExportEnvelope } from "../modules/adminContent/index.js";
+import { importSectionFromEnvelope } from "../modules/adminContent/contentImportService.js";
 import { localizedTextCodec } from "../codecs/localizedTextCodec.js";
-import { NotFoundError } from "../errors/AppError.js";
+import { AppError, NotFoundError } from "../errors/AppError.js";
 import { renderSectionMarkdown } from "../modules/course/sectionContent.js";
 import { localizeSectionContent } from "../modules/adminContent/llmContentGenerationService.js";
 import { generateLimiter } from "../middleware/rateLimiting.js";
@@ -77,18 +86,42 @@ type SectionWithActiveVersion = {
   activeVersionId: string | null;
   archivedAt: Date | null;
   updatedAt: Date;
-  activeVersion?: { bodyMarkdown?: string; versionNo: number } | null;
+  activeVersion?: { id?: string; bodyMarkdown?: string; versionNo: number } | null;
+  // #916: the newest version, whether or not it is the active one. The editor must show what was
+  // last SAVED — the translation gate can hold a save back from activation, and reading only the
+  // active version would make the author's own text disappear on reload.
+  versions?: Array<{ id: string; bodyMarkdown: string; versionNo: number }>;
 };
 
 function toDetail(section: SectionWithActiveVersion) {
+  const latest = section.versions?.[0] ?? null;
+  const editable = latest ?? section.activeVersion ?? null;
   return {
     id: section.id,
     title: section.title,
     activeVersionId: section.activeVersionId,
-    versionNo: section.activeVersion?.versionNo ?? null,
-    bodyMarkdown: section.activeVersion?.bodyMarkdown ?? null,
+    versionNo: editable?.versionNo ?? null,
+    bodyMarkdown: editable?.bodyMarkdown ?? null,
+    // True when the newest version is not the published one — i.e. a save was held back by the
+    // translation gate. The list/editor can say "lagret, ikke publisert" without guessing.
+    hasUnpublishedChanges: Boolean(latest && section.activeVersionId && latest.id !== section.activeVersionId),
     updatedAt: section.updatedAt.toISOString(),
     archivedAt: section.archivedAt?.toISOString() ?? null,
+  };
+}
+
+// #916: shape the gate's verdict for the API. `heldBack` means the write succeeded but the content
+// was NOT activated; `issues` carry field + missingLocales so the client can name what to translate.
+function translationGatePayload(result: {
+  heldBackByTranslationGate?: boolean;
+  translationGateIssues?: Array<{ code: string; message: string; field?: string; missingLocales?: string[] }>;
+}) {
+  if (!result.heldBackByTranslationGate) return {};
+  return {
+    translationGate: {
+      heldBack: true,
+      issues: result.translationGateIssues ?? [],
+    },
   };
 }
 
@@ -127,6 +160,7 @@ adminSectionsRouter.post("/", idempotency("sections.create"), async (request, re
         section: toDetail(section),
         links: sectionAdminLinks(section.id),
         assetMap,
+        ...translationGatePayload(section),
         ...(parsed.data.clientRef !== undefined ? { clientRef: parsed.data.clientRef } : {}),
       });
       return;
@@ -142,10 +176,80 @@ adminSectionsRouter.post("/", idempotency("sections.create"), async (request, re
     response.status(201).json({
       section: toDetail(section),
       links: sectionAdminLinks(section.id),
+      ...translationGatePayload(section),
       ...(parsed.data.clientRef !== undefined ? { clientRef: parsed.data.clientRef } : {}),
     });
   } catch (error) {
     next(error);
+  }
+});
+
+// Standalone section import from an a2-content-export/v1 envelope with scope "section" (#916).
+// Counterpart to GET /:sectionId/export-package.
+//
+// Ownership: `createNew` has nothing to own yet — the section does not exist, and `createSection`
+// makes the importer its sole owner. `replaceExisting` DOES touch existing content, so the target
+// is ownership-checked here, exactly as module import does after #528. Skipping that is how #903
+// happened; a route that writes into someone else's content must ask first.
+//
+// Registered before the `/:sectionId`-prefixed routes so "import" is never read as a section id.
+adminSectionsRouter.post("/import", idempotency("sections.import"), async (request, response, next) => {
+  const actorId = request.context?.userId;
+  if (!actorId) {
+    response.status(401).json({ error: "unauthorized" });
+    return;
+  }
+  const { data, error } = parseRequest(importBodySchema, request.body);
+  if (error) {
+    response.status(400).json({ error: "validation_error", issues: error });
+    return;
+  }
+  if (data.payload.scope !== "section") {
+    response.status(400).json({ error: "scope_mismatch", message: "Envelope scope must be 'section' for this endpoint." });
+    return;
+  }
+  // AA-3 (#651): agent tokens cannot reach this route at all — `enforceAgentTokenScope`'s allowlist
+  // does not include it, and the allowlist is deliberately the ONE place that decides what a token
+  // may call. A second, route-local token check here would be unreachable code that reads like a
+  // guard, which is worse than no guard.
+  try {
+    const mode = data.mode ?? "createNew";
+    if (mode === "replaceExisting" && data.targetId) {
+      await assertContentOwnership({
+        contentType: "SECTION",
+        contentId: data.targetId,
+        actorUserId: actorId,
+        roles: request.context?.roles ?? [],
+      });
+    }
+    const envelope = data.payload as unknown as Parameters<typeof importSectionFromEnvelope>[0];
+    const result = await importSectionFromEnvelope(envelope, {
+      actorId,
+      mode,
+      targetSectionId: data.targetId,
+      agent: { clientRef: data.clientRef, agentRunId: data.agentRunId },
+    });
+    response.status(201).json({
+      sectionId: result.sectionId,
+      sectionVersionId: result.sectionVersionId,
+      assetCount: result.assetCount,
+      // #896 §9 / #916: imported content is never live on arrival. Stated in the response so the
+      // client does not have to infer it from a missing activeVersionId.
+      published: false,
+      links: sectionAdminLinks(result.sectionId),
+      ...(data.clientRef !== undefined ? { clientRef: data.clientRef } : {}),
+    });
+  } catch (err) {
+    if (err instanceof AppError) {
+      response.status(err.httpStatus).json({ error: err.code, message: err.message, ...(err.details ? { details: err.details } : {}) });
+      return;
+    }
+    const message = err instanceof Error ? err.message : "Unknown error";
+    if (/not found/i.test(message)) {
+      response.status(404).json({ error: "import_target_not_found", message });
+      return;
+    }
+    response.status(400).json({ error: "section_import_failed", message });
   }
 });
 
@@ -219,6 +323,45 @@ adminSectionsRouter.get("/", async (request, response, next) => {
   }
 });
 
+// Standalone section export (#916). Counterpart to POST /import, and the same envelope the course
+// export already inlines — so a section extracted from a course package imports here unchanged.
+//
+// Ownership is enforced: an export envelope is a full copy of the content, and #903 exists because
+// course export shipped without this guard and handed out other authors' material. A section
+// carries no MCQ answer key, but it is still someone else's work.
+adminSectionsRouter.get(
+  "/:sectionId/export-package",
+  requireContentOwnership("SECTION", "sectionId"),
+  async (request, response, next) => {
+    const actorId = request.context?.userId;
+    if (!actorId) {
+      response.status(401).json({ error: "unauthorized" });
+      return;
+    }
+    try {
+      const envelope = await buildSectionExportEnvelope(request.params.sectionId, { userId: actorId });
+      response.json({ envelope });
+    } catch (error) {
+      if (error instanceof AppError) {
+        response.status(error.httpStatus).json({ error: error.code, message: error.message });
+        return;
+      }
+      const message = error instanceof Error ? error.message : "Could not build section export envelope.";
+      // The section exists but has nothing portable in it yet. 422 mirrors the module/course
+      // export routes: 404 is reserved for "does not exist".
+      if (/no versions/i.test(message)) {
+        response.status(422).json({ error: "section_not_exportable", message });
+        return;
+      }
+      if (/not found/i.test(message)) {
+        response.status(404).json({ error: "section_export_failed", message });
+        return;
+      }
+      next(error);
+    }
+  },
+);
+
 adminSectionsRouter.get("/:sectionId", async (request, response, next) => {
   try {
     const section = await getSection(request.params.sectionId);
@@ -260,7 +403,9 @@ adminSectionsRouter.put("/:sectionId/content", requireContentOwnership("SECTION"
       localizedTextCodec.serialize(parsed.data.bodyMarkdown),
       request.context?.userId,
     );
-    response.json({ section: toDetail(section) });
+    // #916: the save always succeeds — but when the gate held it back, the new version was stored
+    // WITHOUT being activated, and the client has to say so instead of showing a plain "Lagret".
+    response.json({ section: toDetail(section), ...translationGatePayload(section) });
   } catch (error) {
     next(error);
   }
@@ -319,6 +464,18 @@ adminSectionsRouter.post("/:sectionId/publish", requireContentOwnership("SECTION
     const section = await publishSection(request.params.sectionId, request.context?.userId);
     response.json({ section: toDetail(section) });
   } catch (error) {
+    // #916: the translation gate blocks with the SAME body shape as the module publish route
+    // (`error` + top-level `issues` carrying field + missingLocales), so a client that already
+    // renders a module's gate message renders a section's without a second code path.
+    if (error instanceof AppError && error.code === "publish_blocked_by_validation") {
+      const details = error.details as { issues?: unknown } | undefined;
+      response.status(error.httpStatus).json({
+        error: error.code,
+        message: error.message,
+        issues: details?.issues ?? [],
+      });
+      return;
+    }
     next(error);
   }
 });
