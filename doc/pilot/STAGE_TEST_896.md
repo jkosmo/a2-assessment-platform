@@ -213,3 +213,60 @@ Dekket av en e2e nå, men verdt én manuell gjennomgang siden hvert ledd har fei
 - **Avansert-siden mangler «Oversett det som mangler»** — ikke lenger en begrensning. Siden er
   slettet (v2.19.0), og det finnes én vei til publisering.
 - **#916** (enslig seksjonseksport) står fortsatt, og hører nå til #925-arbeidet med Seksjoner.
+
+---
+
+# Runde 5 (v2.22.0) — tre spor kjørt i parallell
+
+Tre agenter arbeidet samtidig i hver sin worktree. Alt er flettet, testet og ligger på stage.
+**199 e2e, 1 029 unit-tester.** Rekkefølgen under er ikke tilfeldig — den går fra det som påvirker
+deltakeren, via forfatterflaten, til det nye API-et.
+
+## 10 · Deltakerens lesevisning (#921, #922, #923, #924) — v2.20.0
+
+- [ ] **Mine kurs** viser kurslista **ekspandert** ved åpning. Fremdrift og kursbevis er synlig uten
+      å klikke.
+- [ ] Åpne et kurs → **lista viker helt**, kurset får plassen alene, og det kommer en
+      **«← Alle kurs»** øverst.
+- [ ] Nettleserens **tilbakeknapp** skal gjøre det samme som lenka. Kurset har egen adresse
+      (`?courseId=`), så en delt lenke åpner rett kurs.
+- [ ] I en seksjon: **én** knapp, ikke to. Teksten skal si **«… og gå til testen»** når neste
+      element er en modul, ikke «neste seksjon».
+- [ ] **Siste** element: ingen knapp. ⚠️ Se merknaden under.
+- [ ] **Diskusjon** finnes kun på kursnivå. Ingen diskusjonsboks i seksjonsleseren, ingen
+      avkrysning per element i kurseditoren.
+
+> ⚠️ **Ikke deploy til prod uten å lese dette.** #923 skjuler diskusjon per element — **ingenting er
+> slettet.** API-et, `discussionsEnabled` per element og alle tråder ligger urørt, og verdien leses
+> og skrives tilbake uendret ved lagring. Tell tråder med `courseItemId` før en prod-utrulling, slik
+> du sa du ville verifisere.
+
+> ⚠️ **Midlertidig oppførsel:** siste seksjon markeres nå **lest i det stille** når den åpnes.
+> Uten det ble kursbeviset uoppnåelig for kurs som slutter med lesestoff. Dette erstattes av
+> **«Avslutt kurset»**-knappen i **#929** — test at kursbeviset faktisk utstedes, men vit at
+> mekanismen bak skal byttes.
+
+## 11 · Lokaliseringskontrakten i forfatterflaten (#918, #920, #919) — v2.21.0
+
+- [ ] **#918:** opprett en modul gjennom samtalen. Gå til publisering. Gaten skal si at tittelen
+      mangler språk — før i dag så den en ferdig oversettelse der det bare var én.
+      ⚠️ Den navngir foreløpig **feil to språk** hvis du jobber på engelsk; det er **#930**.
+- [ ] **#920:** skriv i et felt i Rediger uten å lagre, og bytt språk i **begge** velgerne
+      (innholdsspråk i linja over fanene, og menyspråk i topplinja). Begge skal spørre først.
+      Avbryt → teksten står. Bekreft → den er borte, som du valgte.
+- [ ] Bytt språk med et **urørt** skjema: da skal ingenting spørres. En vakt som alltid spør blir
+      klikket bort.
+- [ ] **#919** er rettet, men flaten er ikke nåbar — se **#928**. Hopp over den.
+
+## 12 · Seksjoner kan reise alene (#916) — v2.22.0
+
+- [ ] **Innholdsforvaltning → Seksjoner**: hver rad du eier har **Eksporter**. Rader du ikke eier
+      skal ikke ha knappen — og ruta avviser uansett.
+- [ ] **Importer seksjons-pakke** i sidehodet. Importer en fil du nettopp eksporterte.
+- [ ] Den importerte seksjonen lander som **Utkast**, aldri publisert.
+- [ ] Har seksjonen figurer, skal de følge med og vises.
+- [ ] **Publiseringsgaten gjelder nå seksjoner.** Lag en seksjon med tekst på bare ett språk og
+      prøv å publisere → blokkert, med felt og språk navngitt.
+- [ ] Men *lagring* skal fortsatt gå: skriv en seksjon på norsk og lagre. Den lagres som utkast,
+      ikke aktivert. For en seksjon er lagring publisering, så å avvise lagringen ville gjort det
+      umulig å skrive på ett språk om gangen.

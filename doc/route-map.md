@@ -23,16 +23,23 @@ This map covers all admin-content entry points and their status for pilot. Use i
 | Route | Notes |
 |---|---|
 | `/admin-content?moduleId=...` | Opens conversational editor. Retained for deep links from notifications. Canonical form is `/admin-content/module/:moduleId/conversation`. |
-| `/admin-content/advanced` | Opens advanced editor without a module context — no module is pre-loaded. Canonical form is `/admin-content/module/:moduleId/advanced`. Removal planned post-pilot (V2-05). |
+| `/admin-content/advanced` | **Retired (#896 S3c, v2.19.0)** — 301-redirects to `/admin-content` (the module library). It never had a module context to carry. |
 
-### Mode relationship
+### One authoring surface (#896 S3c, v2.19.0)
 
-The conversational and advanced editors are two modes of the same module workspace, not independent surfaces. Switching between them preserves working draft state. `/admin-content/advanced` as a standalone top-level route has no module context and is a legacy artifact.
+There is no longer a "mode relationship" to describe. The conversational and advanced editors used
+to be two modes of the same workspace; **Avansert is deleted**, and everything it did lives in the
+tabs: **Rediger** (content), **Innstillinger** (setup), **Forhåndsvisning** (the participant's view).
+Both `/advanced` routes survive only as permanent redirects, because they sit in bookmarks.
 
-**#896 S1:** the conversational route no longer has a Samtale/Avansert mode rail. It presents three views of one module — **Forhåndsvisning**, **Rediger** (default) and **Innstillinger** — as tabs within the same page. No route changes, but the active tab IS reflected in the URL as
-`?tab=preview` / `?tab=settings` (Rediger is the default and stays out of the query), so a tab
-survives reload and can be shared. `replaceState` is used, so browser Back still means previous
-page rather than previous tab. Advanced editing is reached from **Innstillinger → «Åpne avansert redigering»**, which keeps the existing draft hand-off. The advanced page keeps its own mode rail for now. Both the tab route to advanced and the `/advanced` page itself disappear in S3, when the settings fields move into the tab.
+The active tab is reflected in the URL as `?tab=preview` / `?tab=settings` — Rediger is the default
+and stays out of the query, so the plain route is canonical. `replaceState` is used, so browser Back
+still means previous page rather than previous tab.
+
+**#926 (v2.19.1):** a generated result no longer overwrites unsaved field edits. When the edit form
+holds typing, the conversation parks the result as a **proposal** with «Bruk»/«Forkast» instead of
+writing it into the draft, and a tab that receives content while the author is looking elsewhere is
+marked. See `doc/FEATURE_SURFACE_MAP.md` § 22.
 
 **#896 S4 — publish gate.** Publishing from **Rediger** blocks when a participant-facing field is
 missing one of the three locales, and the block carries an action («Oversett det som mangler») that
