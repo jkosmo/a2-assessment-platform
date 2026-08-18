@@ -186,6 +186,8 @@ const chatMessages = document.getElementById("chatMessages");
 const previewPane = document.getElementById("previewPane");
 const contentLocaleBar = document.getElementById("previewLocaleBar");
 const previewContent = document.getElementById("previewContent");
+// The fixed action bar above the chat log. See `renderWorkspaceActions`.
+const workspaceActionsBar = document.getElementById("workspaceActions");
 const workspaceNav = document.getElementById("workspaceNav");
 const localePicker = document.querySelector(".locale-picker");
 const appVersionLabel = document.getElementById("appVersion");
@@ -4781,6 +4783,42 @@ function enterPreviewEditMode({ force = false } = {}) {
   logBot(() => escapeHtml(t("shell.directEdit.editingHint")));
 }
 
+/**
+ * Render the module's actions into the fixed bar above the chat log.
+ *
+ * Stage-tilbakemelding 2026-08-17: *«UI i rediger der tidligere knapper vises som inaktive gir
+ * ikke lengre mening nå som dette ikke er et samtale basert UI, den gjør også at høyresiden blir
+ * veldig lang, hvorpå man må skrolle mye opp og ned.»*
+ *
+ * The actions used to be chat bubbles. Every time one was used, its row stayed behind greyed out,
+ * so the pane grew monotonically and the live choices sank to the bottom — after a round trip the
+ * author had to scroll past a museum of spent buttons to find anything they could press.
+ *
+ * They live in one place now, and that place does not scroll. The log below keeps what is actually
+ * a conversation: questions, instructions, generated results, status.
+ */
+function renderWorkspaceActions(actions) {
+  if (!workspaceActionsBar) return;
+  workspaceActionsBar.innerHTML = "";
+  const live = (actions ?? []).filter(Boolean);
+  setHidden(workspaceActionsBar, live.length === 0);
+  if (live.length === 0) return;
+
+  for (const choice of live) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "workspace-action-btn";
+    btn.textContent = resolveChoiceLabel(choice);
+    btn.addEventListener("click", () => { choice.action?.(); });
+    workspaceActionsBar.appendChild(btn);
+  }
+}
+
+/** Nothing to act on — used when a module is unloaded or the flow takes over the conversation. */
+function clearWorkspaceActions() {
+  renderWorkspaceActions([]);
+}
+
 function showModuleActions() {
   const hasDraft = !!sessionDraft;
   const hasMcq = (sessionDraft?.mcqQuestions?.length ?? 0) > 0;
@@ -4835,7 +4873,7 @@ function showModuleActions() {
       { labelKey: "shell.module.importPackage", action: () => startImportPackageFlow() },
     );
   }
-  logBot(() => t("shell.module.actionsPrompt"), actions);
+  renderWorkspaceActions(actions);
   if (model.shouldOfferUnifiedRevision) {
     startUnifiedRevisionFlow();
   }
@@ -7323,12 +7361,15 @@ function showDraftReadyActions() {
     restart: { labelKey: "shell.draftReady.restart", action: startIdle },
     saveDraft: { labelKey: "shell.draftReady.saveDraft", action: saveDraftBundleInBackground },
   };
+  // The message is conversation and stays in the log; the actions go to the fixed bar, where they
+  // do not sink out of reach as the log grows.
   logBot(() => {
     const parts = [t("shell.draftReady.message")];
     if (mcqCount > 0) parts.push(tf("shell.draftReady.mcqCount", { count: mcqCount }));
     parts.push(t("shell.draftReady.hint"));
     return escapeHtml(parts.join(" "));
-  }, model.actionKeys.map((key) => actionMap[key]).filter(Boolean));
+  });
+  renderWorkspaceActions(model.actionKeys.map((key) => actionMap[key]).filter(Boolean));
   if (model.shouldOpenUnifiedRevision) {
     startUnifiedRevisionFlow();
   }

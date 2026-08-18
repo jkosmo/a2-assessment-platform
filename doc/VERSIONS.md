@@ -2,6 +2,65 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.19.0 - 2026-08-18
+
+**Avansert-editoren er fjernet (§3), og høyresiden er lagt om.** Minor-bump fordi en hel flate og
+en rute forsvinner.
+
+### Avansert er borte
+
+Alt den kunne gjøre finnes i arbeidsflaten — Rediger for innhold, Innstillinger for oppsett. To
+flater for samme jobb betydde at hver oppførsel hadde to hjem som gled fra hverandre, og at hver
+retting måtte gjøres to steder. Det er den siste store bolken i #896.
+
+Slettet: `admin-content.js` (5 270 linjer), `admin-content-advanced.html` (1 105), begge
+handoff-modulene, hjelpeteksten for siden, 9 e2e-er — og **1 309 oversettelsesoppføringer** som
+ingenting kunne nå. **8 505 linjer totalt.**
+
+Rutene svarer fortsatt, som permanente redirects inn i arbeidsflaten: de ligger i bokmerker og
+gamle lenker, og en 404 ville strandet en forfatter som ikke har gjort noe galt.
+
+**Migrert før slettingen**, ikke etter: dekningen av at MCQ-only og FREETEXT_ONLY kan forfattes
+ende-til-ende. Den lå bare på Avansert-siden, og var forutsetningen jeg satte for å slette i det
+hele tatt.
+
+**Om nøkkeloppryddingen.** Første forsøk på å finne døde nøkler rapporterte 432 — inkludert
+levende. `t(\`shell.settings.info.${felt}\`)` skriver aldri nøkkelen ned, så en literal-søk
+finner den ikke. Detektoren samler nå prefiksene fra template-literaler (27 av dem) og freder alt
+de dekker. Uten det ville jeg slettet nøkler som er i bruk.
+
+### Høyresiden
+
+Stage-tilbakemelding: *«UI i rediger der tidligere knapper vises som inaktive gir ikke lengre
+mening nå som dette ikke er et samtale basert UI, den gjør også at høyresiden blir veldig lang,
+hvorpå man må skrolle mye opp og ned.»*
+
+Handlingene lå i samtaleloggen. Hver gang en ble brukt, ble raden stående grå — så panelet vokste
+monotont og de gyldige valgene sank til bunns. Etter én tur innom Avansert og tilbake måtte
+forfatteren skrolle forbi et museum av brukte knapper for å finne noe som lot seg trykke på.
+
+De ligger nå i en **fast linje øverst som ikke skroller**. Loggen under er det som faktisk er en
+samtale: spørsmål, instrukser, generert innhold, status.
+
+### Ryddet på veien
+
+- Bibliotekets «Åpne i Samtale» heter **«Åpne»** — flaten er ikke lenger en samtale.
+- Knappen merket «Åpne avansert editor» har navigert til modul-biblioteket siden v1.2.18. Den har
+  altså løyet i et halvt år; nå sier den hvor den går.
+- «Rediger direkte» og «Fortsett å redigere i chat» er ute av begge menyene: den ene var en vei inn
+  til fanen man sto på, den andre lagde et utkast som nå oppstår av seg selv når man skriver.
+- Hjelpeteksten sa at Innstillinger «foreløpig åpner den avanserte editoren». Den holder feltene selv.
+
+### Innstillinger følger valgt modultype
+
+Panelet leste **lagret** type, ikke den i nedtrekket — så å velge «Bare flervalg» lot
+kriterie- og instrukseditoren stå, editorer lagringen så nekter å bære. Nå forsvinner de med
+valget. Blir lagringen likevel avvist, settes typen tilbake, slik at editorene er der å redde
+arbeidet i — meldingen ba om å «lagre eller angre» i en editor som var skjult.
+
+Underveis fant testene en feil dette innførte: å skrive i et kriterium og så bytte type mistet
+teksten, også på vei tilbake. Editoren leses nå av før gjenoppbyggingen.
+
 ## 2.18.13 - 2026-08-17
 
 **Rediger-fanen er redigerbar.** Stage-tilbakemelding: *«Åpner modul, den havner på rediger fanen,

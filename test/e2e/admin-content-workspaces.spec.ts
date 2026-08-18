@@ -3312,12 +3312,13 @@ test.describe("admin content browser coverage", () => {
     // immediately on the first click. Two clicks would race against the next bubble.
     await clickEnabledButton(page, /Publish|Publiser/);
 
-    // v1.2.32 (#361/#442): after publishing, the shell reloads the module (now Live)
-    // and shows the module-actions prompt instead of dropping the author back into the
-    // full module picker. "Pick another module" remains available from there.
-    await expect(
-      page.getByText(/What would you like to do with this module|Hva vil du gjøre med denne modulen/),
-    ).toBeVisible();
+    // v1.2.32 (#361/#442): after publishing, the shell reloads the module (now Live) and offers
+    // its actions again instead of dropping the author back into the full module picker.
+    //
+    // v2.19.0: those actions live in the fixed bar, not in a chat bubble — the prompt sentence
+    // went with the bubble, so the assertion is now that the bar has something to press.
+    await expect(page.locator("#workspaceActions")).toBeVisible();
+    await expect(page.locator("#workspaceActions .workspace-action-btn").first()).toBeEnabled();
     // The full module picker is NOT shown after publish.
     await expect(page.locator(".module-list .module-list-item")).toHaveCount(0);
   });

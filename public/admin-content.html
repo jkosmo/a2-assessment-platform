@@ -111,6 +111,21 @@
 
       /* ── Chat pane ────────────────────────────────────────────────────────── */
       .chat-pane { display: flex; flex-direction: column; min-height: 60vh; }
+      /* Stage-tilbakemelding 2026-08-17: handlingene lå i samtaleloggen og ble stående grå etter
+         bruk, så høyresiden vokste monotont og de gyldige valgene sank til bunns. De står nå
+         øverst og skroller ikke — loggen under er samtalen. */
+      .workspace-actions {
+        display: flex; flex-wrap: wrap; gap: 6px; flex-shrink: 0;
+        padding: 0 0 var(--space-2); margin-bottom: var(--space-2);
+        border-bottom: 1px solid var(--color-border-soft);
+      }
+      .workspace-action-btn {
+        width: auto; min-height: 0; padding: 7px 13px; font-size: 13px; font-weight: 600;
+        background: var(--color-surface); color: var(--color-text); cursor: pointer;
+        border: 1px solid var(--color-border-soft); border-radius: var(--radius-button);
+      }
+      .workspace-action-btn:hover { border-color: var(--color-primary); color: var(--color-link-active); }
+      .workspace-action-btn:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 2px; }
       .chat-messages { flex: 1; display: flex; flex-direction: column; gap: var(--space-1); padding: var(--space-1); overflow-y: auto; min-height: 200px; }
 
       .chat-msg { display: flex; }
@@ -584,6 +599,14 @@
 
         <!-- Chat pane -->
         <section class="card chat-pane" aria-label="Samtaleassistent">
+          <!-- Stage-tilbakemelding 2026-08-17: «UI i rediger der tidligere knapper vises som
+               inaktive gir ikke lengre mening nå som dette ikke er et samtale basert UI, den gjør
+               også at høyresiden blir veldig lang».
+               Handlingene bor her, i en fast linje som ikke skroller. Loggen under er samtalen:
+               spørsmål, instrukser, generert innhold, status. Brukte knapperader forsvinner nå
+               i stedet for å bli stående grå og dytte de gyldige valgene nedover. -->
+          <div id="workspaceActions" class="workspace-actions" role="group" hidden
+               aria-label="Modulhandlinger" data-i18n-aria-label="shell.actions.groupLabel"></div>
           <div id="chatMessages" class="chat-messages" role="log" aria-live="polite" aria-relevant="additions text" aria-atomic="false"></div>
           <div id="shellStatusAnnouncer" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></div>
         </section>
