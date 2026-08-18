@@ -13,8 +13,12 @@ regenerate / re-save):
 
 You pick the type in the **conversation** («Hva slags modul er dette?» after the source step) when
 creating a module, and you can change it later on an existing module from the **Innstillinger**
-tab in the module workspace, where it is the first row (#896 S3b). The advanced editor still has
-its *Module type* radio until that page is retired.
+tab in the module workspace, where it is the first row (#896 S3b).
+
+> **Since v2.19.0 there is one authoring surface.** The advanced editor
+> (`/admin-content/module/<id>/advanced`) is deleted; the URL redirects into the module workspace.
+> Everything it did lives in the workspace tabs: **Rediger** for content, **Innstillinger** for
+> setup, **Forhåndsvisning** for the participant's view.
 
 **Changing the type does not delete anything.** The new version simply references fewer
 components; the content you switched away from stays on the previous version, and switching back
@@ -28,23 +32,20 @@ The rest of this guide focuses on the two non-default types.
 The participant answers multiple-choice questions only, with **no free-text answer and no LLM
 evaluation** — pass/fail is decided purely by the MCQ score against a threshold.
 
-## Create an MCQ-only module (advanced editor)
+## Switch an existing module to MCQ-only
 
-1. Open the module in the **advanced editor** (`/admin-content/module/<id>/advanced`).
-2. Author the **MCQ set** as usual (step 7).
-3. In **step 8 — "Module version shown to participant"**, tick **“MCQ-only module (no free-text
-   answer or LLM assessment)”**.
-   - The free-text fields (assignment text, scoring rules, evaluation instruction) disappear —
-     you don't need them.
-   - A **“MCQ pass threshold (%)”** field appears (default **70**). Set the minimum percentage of
-     correct answers required to pass.
-4. Save the draft version (steps 5–8) and **publish** it. Rubric and evaluation instruction are
-   skipped automatically for MCQ-only modules.
+1. Open the module and go to the **Innstillinger** tab.
+2. Change **Modultype** to **“Bare flervalg”**. The free-text rows — scoring rules, evaluation
+   instruction, criteria — disappear, because an MCQ-only module has no use for them.
+3. Set **“MCQ pass threshold (%)”** (default **70**): the minimum share of correct answers to pass.
+4. **Lagre**, then publish when you are ready.
+
+A type the module has no components for is offered but disabled, with what is missing spelled out
+— so you are never shown a choice that cannot be saved.
 
 ## Create an MCQ-only module (conversation)
 
-You can also create an MCQ-only module in the **conversational workspace** (`/admin-content`).
-Since v1.3.36 (#555) the conversation follows the same order as the advanced editor —
+New modules are created in the **conversation** (`/admin-content`), which asks in the order
 **source → module type → content → publish**:
 
 1. Choose **“Create new module”** and enter a title.
@@ -71,8 +72,9 @@ an answer that the LLM assesses against the rubric, and that's it.
 - **Create (conversation):** choose **“Free-text only”** at the module-type question. The flow runs
   scenario → certification level → assessment plan → draft, then goes straight to save (no MCQ
   generation step). The saved version has `assessmentMode=FREETEXT_ONLY` and no MCQ set.
-- **Create (advanced editor):** pick **“Free-text only”** in the *Module type* radio. The free-text
-  fields + rubric + evaluation instruction stay; the MCQ card/section and pass-threshold disappear.
+- **Switch an existing module:** pick **“Bare fritekst”** under *Modultype* in **Innstillinger**.
+  The free-text fields, criteria and evaluation instruction stay; the MCQ rows and the pass
+  threshold disappear.
 - **Scoring:** the rubric score spans the full **0–100** (there is no MCQ band), and there is no MCQ
   gate. Red flags and manual-review routing work exactly as for free-text + MCQ.
 

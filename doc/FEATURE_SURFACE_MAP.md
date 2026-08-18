@@ -56,10 +56,10 @@ Creating a module is reachable from **two** places; a flow/step change must cove
 
 ## 4. Module-type (assessment mode) selection — 3-way (#525/#578)
 
-`FREETEXT_PLUS_MCQ` / `MCQ_ONLY` / `FREETEXT_ONLY` is chosen in **three** surfaces:
+`FREETEXT_PLUS_MCQ` / `MCQ_ONLY` / `FREETEXT_ONLY` is chosen in **two** surfaces (three until
+#896 S3c deleted the advanced editor's radio fieldset along with the page):
 
 - Conversation new-module step and conversation **regen** step — `public/static/admin-content-shell.js`.
-- Advanced editor radio fieldset — `public/admin-content.js` + `public/admin-content-advanced.html`.
 - **Innstillinger tab (#896 S3b)** — `renderSettingsPanel` / `saveSettingsInBackground` in
   `public/static/admin-content-shell.js`. The only surface that changes the type on an EXISTING
   module. Two rules live here and nowhere else: availability is computed from the module's
@@ -385,10 +385,10 @@ behaviours below has to touch every row here, because they are wired in three di
 |---------|-------|-------|
 | Tab bar + panels | `#tabPreview`/`#tabEdit`/`#tabSettings`, `#tabPanelModule`, `#tabPanelSettings` in `public/admin-content.html` | `role="tablist"`; Forhåndsvisning and Rediger share `#tabPanelModule`, whose `aria-labelledby` follows the active tab |
 | Tab state machine | `applyTabState` / `switchToTab` / `bindViewTabs` in `public/static/admin-content-shell.js` | selection, roving `tabindex` (**initialised on mount**, not on first switch), arrow/Home/End, `setHidden` for every pane |
-| Tab in the URL | `tabFromUrl` / `syncTabToUrl` (`?tab=preview\|settings`) | the tab survives reload and is shareable; Rediger is the default and stays OUT of the query so the plain route is canonical. `replaceState`, not `push` — Back must mean previous page, not previous tab. S3 can redirect `/advanced` to `?tab=settings` |
+| Tab in the URL | `tabFromUrl` / `syncTabToUrl` (`?tab=preview\|settings`) | the tab survives reload and is shareable; Rediger is the default and stays OUT of the query so the plain route is canonical. `replaceState`, not `push` — Back must mean previous page, not previous tab. `/advanced` 301-redirects here since S3c |
 | **Audience filtering** | `audience` option in `public/static/admin-content-preview.js` (`buildPreviewHtml`, `renderPreviewMcqQuestions`, `renderPreviewCriteria`), set from `activeTab` at the shell's call site | `"participant"` withholds assessor expectation, MCQ correct-answer marking **and** the answer meta line, rationale, and `candidateVisible:false` criteria. Any NEW author-only field added to the preview must be gated here too, or it leaks into the tab that promises the learner's view |
 | Unsaved-state guard | `unsavedTabSwitchKind` + `#dialogUnsavedTabSwitch` in the shell | Warns on the **same signal as the status rail**: an open direct-edit form (`"form"`) or any `sessionDraft` (`"draft"`). The two cost different things, so the dialog copy and the confirm button switch with the kind — form values are LOST (`Forkast og bytt`, danger), a draft is only unsaved (`Bytt likevel`, primary) and is carried along. Every dismissal path — button, Escape, backdrop — routes through the dialog's `close` event so focus and selection cannot disagree |
-| Hand-off to Advanced | `settingsOpenAdvanced` → `openAdvancedEditor` | switches back to Rediger **first**: the hand-off asks its question in the chat, which Innstillinger hides |
+| **Attention marker** (#926) | `markTabAttention` / `clearTabAttention` in the shell, `.module-tab[data-attention]` in `public/admin-content.html` | Set when content lands in a tab the author is not looking at (generated criteria → Innstillinger). Cleared on open — it means «something happened you have not seen», so it must not be able to stick. Double-coded: dot, `aria-label` suffix, live region. The suffix is rebuilt from `t()`, so a UI-language switch has to re-apply it |
 | Conditional visibility | `setHidden` from `public/static/dom-visibility.js` | `.workspace-shell` is `display:grid` and the panels are `.card`; note the mirror trap — the `hidden` **attribute** survives `setHidden(el, false)`, so panels must start with inline `style="display:none"` |
 
 **Guards (`test/e2e/admin-content-workspaces.spec.ts`):** "opens on Rediger and the tabs switch
@@ -397,7 +397,7 @@ between the three views", "Forhaandsvisning withholds the answer key and assesso
 staying", "the tablist is one tab stop…", "staying after an arrow-key switch returns focus…", "help
 on the module route explains the tabs…". DOM contract: `test/dom/admin-content-workspaces.dom.test.js`
 ("exposes the three module views as one tablist"). Docs: `doc/route-map.md`,
-`doc/design/ADMIN_CONTENT_IA_ARCHITECTURE.md`, `doc/design/SHELL_ADVANCED_PARITY.md`,
+`doc/design/ADMIN_CONTENT_IA_ARCHITECTURE.md`, `doc/design/STATUS_896.md`,
 `doc/pilot/VERIFICATION_CHECKLIST.md`. **S3 will move the settings fields into the tab and delete
 the Avansert page — update every row above in that PR.**
 
@@ -556,3 +556,50 @@ rene strengen overlevde første forsøk på å fikse dette.
 
 **Guards:** e2e "editing a criterion in one language keeps the other two" og "Innstillinger edits
 the assessment instruction in one language and keeps the others".
+
+## 22. Generert innhold som lander i utkastet — fire produsenter, én port (#896 §6 / #926)
+
+Fire funksjoner produserer innhold som skal inn i `sessionDraft`:
+
+| Produsent | Skriver |
+|---|---|
+| `generateDraftInBackground` | scenario, forventning, rammer |
+| `generateMcqInBackground` | MCQ-spørsmål |
+| `reviseDraftInBackground` | scenario, forventning, rammer |
+| `reviseMcqInBackground` | MCQ-spørsmål |
+
+Alle fire skrev tidligere rett i utkastet med `sessionDraft = buildPreviewCandidate(...)`. Det
+brøt §6 — «samtalen foreslår, den overskriver aldri» — men verre: med Rediger-skjemaet åpent ble
+feltene **ikke tegnet på nytt**, så forfatteren så sin egen tekst over et utkast som var byttet ut.
+Overskrivingen ble først synlig ved lagring.
+
+Alle fire går nå gjennom **`commitOrProposeGenerated`**. Et nytt genereringssteg skal legges der,
+ikke ved siden av. Porten avgjør:
+
+- rent skjema → landes som før (et forslag her ville kostet et klikk for det man nettopp ba om)
+- skittent skjema → parkeres i samtaleloggen med «Bruk»/«Forkast», og `sessionDraft` **røres ikke**
+
+**Den viktigste detaljen:** dirty-sjekken er `hasOpenEditForm()` — felt som avviker fra det de ble
+tegnet med — **ikke** `isEditFormOpen()`. Siden v2.18.13 er skjemaet åpent hele tiden Rediger-fanen
+er det, så en vakt på tilstedeværelse gjør hver eneste generering til et forslag.
+
+### Beslektet: hvem andre river skjemaet?
+
+`renderPreview()` skriver rett i `previewContent.innerHTML` og river dermed et åpent
+redigeringsskjema. Enhver bakgrunnsjobb som kaller den må sjekke `isEditFormOpen()` først.
+`populateSessionDraftCriteriaInBackground` gjorde det på vei UT, men ikke på vei INN — rettet
+2026-08-18. Samme spørsmål gjelder neste bakgrunnsjobb noen skriver.
+
+### Fanemerking
+
+Innhold som lander i en fane forfatteren ikke ser på skal merkes: `markTabAttention(tab)`.
+Merkingen er dobbelt kodet (prikk, `aria-label`-suffiks, live-region) og fjernes idet fanen åpnes.
+
+**Guards:**
+- `test/admin-content-ui-contracts.test.js` → «§6 — generated content goes through the
+  propose/commit gate»: én test per produsent, som også avviser en direkte
+  `sessionDraft = buildPreviewCandidate(...)` i kroppen. Dette er dekningsvakten — det er *en femte
+  produsent lagt til uten porten* som er den sannsynlige regresjonen, ikke at grenen selv blir feil.
+- e2e «a revision lands as a proposal when the fields hold unsaved typing» og «an untouched form
+  takes the revision straight in, with no extra click». Den andre er ikke pynt: den er vakten mot
+  å gate på tilstedeværelse i stedet for på dirty.

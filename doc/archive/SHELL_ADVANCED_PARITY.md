@@ -1,5 +1,17 @@
 # Shell / Advanced editor — feature parity checklist
 
+> ## ⛔ ARKIVERT 2026-08-18 — Avansert-editoren finnes ikke lenger
+>
+> Dette dokumentet er en paritetssjekkliste mellom to flater. Den ene ble slettet i **#896 S3c**
+> (v2.19.0): `public/admin-content.js` og `public/admin-content-advanced.html` er borte, og
+> `/admin-content/module/:id/advanced` er en 301 inn i arbeidsflaten.
+>
+> Paritet var det riktige spørsmålet så lenge begge fantes — den var forutsetningen for i det hele
+> tatt å kunne slette den ene. Nå er den besvart ved at det bare er én flate igjen.
+>
+> Beholdt som historikk. **Ikke bruk den som sjekkliste.** Gjeldende status for forfatterflaten:
+> `doc/design/STATUS_896.md`; distribuerte oppførsler: `doc/FEATURE_SURFACE_MAP.md`.
+
 > **Purpose**: Regression guard for the admin-content redesign (#293, #313–#317).
 > Before merging any change to either mode, verify each item in the relevant column.
 > Update this list whenever a new feature is added to either mode.

@@ -280,10 +280,16 @@ references in one transaction** — rubric, prompt template and MCQ set. Either 
 afterwards, or none of it does.
 
 The granular routes (`/rubric-versions`, `/prompt-template-versions`, `/mcq-set-versions`,
-`/module-versions`) remain: they are what the advanced editor drives card by card, and what
-imports and agents compose. But five separate commits mean a failure on the last one leaves a
-module with orphaned component versions and no version referencing them, and a retry creates a
-second set. Authoring UIs should use this route.
+`/module-versions`) remain: imports, agents and single-component edits compose with them. (Until
+v2.19.0 the advanced editor also drove them card by card; that page is deleted.) But five separate
+commits mean a failure on the last one leaves a module with orphaned component versions and no
+version referencing them. **Authoring UIs should use the composed route.**
+
+One call stays outside the transaction on the workspace's save path: `POST
+/modules/:id/rubric-versions/ensure`, which runs when the author has not edited the criteria
+directly. It may call the LLM to generate a rubric, and an HTTP round trip has no business holding
+a database transaction open. It is idempotent — it returns the module's active rubric with
+`reused: true` when one exists — so a failure downstream leaves a reusable rubric, not an orphan.
 
 Components can be **created** inline (`rubric`, `promptTemplate`, `mcqSet`) or **referenced** by
 id (`rubricVersionId`, `promptTemplateVersionId`, `mcqSetVersionId`) when unchanged. If both are

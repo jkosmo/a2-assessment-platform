@@ -13,8 +13,8 @@ Admin-content er organisert som **fire tydelig adskilte workspaces**, med modulb
 
 ```
 /admin-content                          ← Module library (primær inngang)
-/admin-content/module/:moduleId/conversation  ← Module workspace, Conversation-modus
-/admin-content/module/:moduleId/advanced      ← Module workspace, Advanced-modus
+/admin-content/module/:moduleId/conversation  ← Module workspace (tre faner)
+/admin-content/module/:moduleId/advanced      ← 301 → …/conversation (siden slettet i #896 S3c)
 /admin-content/courses                  ← Courses workspace
 /admin-content/courses/new              ← Opprett kurs
 /admin-content/courses/:courseId        ← Rediger kurs
@@ -31,7 +31,7 @@ Primær inngang for admin-content. Viser alle moduler i en tabell med filter og 
 **Ansvar:**
 - Discovery og oversikt over moduler
 - Opprett ny modul
-- Åpne modul i Conversation eller Advanced
+- Åpne modul i arbeidsflaten
 - Arkiver / gjenopprett modul
 - Dupliser modul
 - Vise antall kurs modulen brukes i
@@ -40,27 +40,26 @@ Primær inngang for admin-content. Viser alle moduler i en tabell med filter og 
 
 ---
 
-### Module workspace — Conversation og Advanced
+### Module workspace
 En delt workspace. Valgt modul er alltid eksplisitt.
 
 **#896 S1:** conversation-ruten har ikke lenger en Samtale/Avansert-modusbryter. Den viser
 tre faner på samme modul — **Forhåndsvisning** (deltakerens lesevisning, uten
 vurdererforventning, fasit eller skjulte kriterier), **Rediger** (standard: samtale +
-innholdsfelt) og **Innstillinger**. Avansert nås fra Innstillinger inntil feltene flyttes
-inn der i S3, og da forsvinner både lenken og den separate siden.
+innholdsfelt) og **Innstillinger**.
 
-**Conversation (`/admin-content/module/:moduleId/conversation`):**
-- Chat-drevet authoring
-- Primær for generering, høy-nivå revisjoner, oversettelse
+**#896 S3c (v2.19.0): Avansert-modusen finnes ikke lenger.** Denne seksjonen beskrev to moduser
+med hver sin styrke — samtale for generering, Avansert for presisjon. Det var to hjem for samme
+oppførsel, som gled fra hverandre og måtte rettes to steder. Presisjonsarbeidet ligger nå i
+**Innstillinger** (kriterier, vurderingsinstruks, innsendingsskjema, poengregler, gyldighet,
+modultype) og **Rediger** (innholdsfeltene). Ruten `/advanced` er en 301 hit.
 
-**Advanced (`/admin-content/module/:moduleId/advanced`):**
-- Strukturert feltredigering
-- Primær for presisjon, inspeksjon, rubric, MCQ-detaljredigering
-
-**Delt i begge moduser:**
-- State rail med seks felt (se nedenfor)
-- Modulheader med navn og modusskifte
-- Publish, unpublish, lagre utkast
+**Modulflaten (`/admin-content/module/:moduleId/conversation`):**
+- Tre faner på én modul, én arbeidsflate
+- Samtalen genererer og reviderer; feltene redigeres direkte
+- Siden v2.19.1: samtalen **foreslår** når feltene har ulagrede endringer — den overskriver aldri
+- Fast handlingslinje (v2.19.0) i stedet for handlinger parkert i samtaleloggen
+- State rail, modulheader, publish/unpublish/lagre utkast
 
 ---
 
@@ -72,7 +71,7 @@ Eget workspace for sammensetting og vedlikehold av kurs.
 - Opprett / rediger kurs
 - Sett moduler i kurs med rekkefølge
 
-**Courses er ikke en tab i advanced** — det er en selvstendig workspace.
+**Courses er ikke en fane i modulflaten** — det er en selvstendig workspace. (Den var en tab i Avansert; den siden er slettet i S3c.)
 
 ---
 
@@ -84,7 +83,7 @@ Ekspert-workspace for kalibrering av moduler. Rolle-beskyttet.
 - Filtrer og inspiser kalibreringssignaler
 - Deep-link inn fra modulworkspace
 
-**Calibration er ikke en tab i advanced** — det er en selvstendig workspace med rollekrav.
+**Calibration er ikke en fane i modulflaten** — det er en selvstendig workspace med rollekrav. (Den var en tab i Avansert; den siden er slettet i S3c.)
 
 ---
 
@@ -109,7 +108,7 @@ Alle admin-content workspaces viser den samme sekundære navigasjonen:
 
 Modulworkspace viser en horisontal full-width state rail **under global top bar, over mode-specific content**.
 
-Seks felt — identisk i Conversation og Advanced:
+Seks felt (QA r7 #1: «Modul» og «Språk» er senere fjernet som overflødige — de står i modulkortet og i språkvelgeren):
 
 | Felt | Verdier |
 |------|---------|
@@ -141,13 +140,12 @@ Seks felt — identisk i Conversation og Advanced:
 
 | Handling | Eies av |
 |----------|---------|
-| Åpne i Samtale | Module library |
-| Åpne i Avansert | Module library |
+| Åpne modul | Module library |
 | Dupliser | Module library |
 | Arkiver / Gjenopprett | Module library |
-| Lagre utkast | Module workspace (begge moduser) |
-| Publiser | Module workspace (begge moduser) |
-| Avpubliser | Module workspace (begge moduser) |
+| Lagre utkast | Module workspace |
+| Publiser | Module workspace |
+| Avpubliser | Module workspace |
 | Slett | Module workspace, sekundær meny (blokkert hvis i kurs) |
 | Import / Export | Module workspace, sekundær meny |
 
@@ -176,11 +174,11 @@ Feltene — hvert enkelt bare når det finnes, siden et fraværende valgfritt fe
 - Gaten forutsetter #905: før den ble en feilet oversettelse lagret som tre kopier av kildeteksten
   og var ikke til å skille fra en ekte oversettelse.
 
-**Kjent begrensning — Avansert-siden.** Publiserer du derfra, blokkerer gaten på samme måte og
-`issues`-detaljene vises, men handlingen «Oversett det som mangler» finnes ikke: den bor i
-samtaleflaten. Dette er et bevisst valg, ikke en glipp — Avansert-siden skal bort i denne epicen
-(S3c), og å bygge utbedringsflyten to steder ville være arbeid som kastes. Forfatteren får vite
-hvilke felt og språk som mangler, og henvises til arbeidsrommet for å fylle hullene.
+~~**Kjent begrensning — Avansert-siden.**~~ Publiserte du derfra, blokkerte gaten på samme måte,
+men «Oversett det som mangler» fantes ikke der — den bodde i samtaleflaten. Begrunnelsen den gang
+var at Avansert skulle bort i S3c, og at å bygge utbedringsflyten to steder ville være arbeid som
+kastes. **Det holdt: siden er slettet (v2.19.0), og begrensningen med den.** Det finnes én vei til
+publisering nå, og den har handlingen.
 
 ---
 
@@ -191,7 +189,7 @@ hvilke felt og språk som mangler, og henvises til arbeidsrommet for å fylle hu
 | Destinasjon | Rute |
 |-------------|------|
 | Åpne i Samtale | `/admin-content/module/:moduleId/conversation` |
-| Åpne i Avansert | `/admin-content/module/:moduleId/advanced` |
+| ~~Åpne i Avansert~~ | 301 → `…/conversation` (siden slettet, S3c) |
 
 Bakoverkompatible overgangsruter (`/admin-content?moduleId=` og `/admin-content/advanced?moduleId=`) støttes fortsatt i overgangsfasen men er ikke lenger primær navigasjon.
 

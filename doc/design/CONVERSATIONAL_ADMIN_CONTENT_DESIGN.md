@@ -477,6 +477,25 @@ No new audit instrumentation is required in Slice 1–2.
 The advanced editor link is never removed without an explicit decision recorded in this
 document. The current plan keeps it accessible throughout all slices.
 
+### Decision recorded 2026-08-18 — the advanced editor is removed (#896 S3c, v2.19.0)
+
+This is that explicit decision. It was made in **#896**, whose §3 required Avansert to be dissolved
+into the module workspace, and executed once — and only once — the precondition this document set
+was met: everything an author needs exists in the new surface. The last gap closed in v2.18.9,
+when the full assessment policy became editable in **Innstillinger**.
+
+What was deleted: `public/admin-content.js`, `public/admin-content-advanced.html`, both handoff
+modules, the page's help content, 9 e2e tests and 1 309 unreachable translation entries — 8 505
+lines. `/admin-content/module/:id/advanced` survives as a **301** into the workspace, because the
+URL is in bookmarks and a 404 would strand an author who did nothing wrong.
+
+The coexistence question this section was written to govern is therefore closed: there is one
+authoring surface, and the fallback link no longer exists to be evaluated. The parity checklist
+that tracked the two modes is archived at `doc/archive/SHELL_ADVANCED_PARITY.md`.
+
+Everything from "Slice 1" down is kept as the record of how the rollout was planned, not as a
+description of the system. Current state: `doc/design/STATUS_896.md`.
+
 ---
 
 ## Design Decision: One Free-Text Submission Per Module
