@@ -2,6 +2,80 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.22.1 - 2026-08-18
+
+**Fire blokkere fra QA-gjennomgangen foran produksjonsutrullingen.** Gjennomgangen gikk over hele
+spennet `origin/main`→`dev` — 78 commits — med vekt på de tre leveransene som ble laget av
+parallelle agenter og aldri hadde vært gjennom en review. Den ga **NO-GO**, og hadde rett på alle
+fire.
+
+### Kursimport publiserte et kurs rundt en tom seksjon
+
+Den verste av dem, fordi den rammer deltakeren.
+
+#916 la publiseringsgaten i `createSection`: `heldBackByTranslationGate = !input.draft && !gate.ok`.
+Den frittstående importen sender `draft: true`. **Kursimporten sendte ingenting.** En seksjon med
+ettspråks tittel — den helt vanlige formen på innhold skrevet før gaten fantes — ble derfor korrekt
+holdt tilbake, mens kalleren aldri fikk vite det. `anyModuleHeldBack` telte bare moduler.
+
+Resultat: kurset ble publisert rundt en seksjon uten aktiv versjon. Deltakeren fikk **200 med tom
+`html`** — blank side, ingen feilmelding — og `POST .../read` telte den fortsatt mot kursbeviset.
+
+Kommentaren i koden påsto det motsatte: «Course import keeps its existing behaviour — the section is
+created live». Det sluttet å være sant i samme commit som la inn gaten.
+
+Flagget returneres nå, som `importModulePayload` alltid har gjort for moduler, og `anyModuleHeldBack`
+heter `anyContentHeldBack` fordi det nå er hva det er.
+
+### Den nye eierskapsvakten kunne omgås av naboruta
+
+`GET /sections/:sectionId` manglet `requireContentOwnership` — alene blant elleve `/:sectionId`-ruter.
+Hullet er **eldre** enn denne leveransen, men leveransen utvidet det: `toDetail` foretrekker nå
+nyeste versjon over den aktive, så en fremmed SMO fikk ikke lenger bare den publiserte teksten, men
+eierens **tilbakeholdte utkast**.
+
+Den nye eksportruta rett over ble vaktet med begrunnelsen «#903 exists because course export shipped
+without this guard». Det hjelper lite når naboruta gir samme kaller samme innhold. `GET
+/:sectionId/assets` hadde samme hull.
+
+### Revisjon i samtalen skrev i menyspråket
+
+Etter v2.18.12 følger ikke innholdsspråket menyspråket — det er hele poenget med skillet. Men
+revisjonsstiene leste fortsatt `currentLocale`.
+
+Forfatteren skriver på bokmål og bytter menyen til engelsk. Ber om «gjør oppgaven kortere».
+Oppslaget faller tilbake til den norske teksten, men merker den `en-GB`. LLM-en svarer på engelsk.
+Oversettingen maskinoversetter tilbake til nb og nn — og forfatterens egen originaltekst er byttet
+mot en maskinoversettelse av en engelsk revisjon.
+
+Dette var utilgjengelig før v2.18.12, fordi forhåndsvisningsspråket fulgte menyen. Nå er divergensen
+normaltilstanden etter ett klikk.
+
+Sytten linjer i `admin-content-shell.js` leste menyspråket der de skulle lest innholdsspråket:
+revisjon av utkast og MCQ, lagringens `ensure-rubric`-body, og kriteriegenereringens språkmerking.
+
+### Konfliktmarkører commitet inn i flatekartet
+
+Min feil, fra rebasen av spor C. `<<<<<<<` / `=======` / `>>>>>>>` sto i
+`doc/FEATURE_SURFACE_MAP.md`, med to punkter nummerert 23. Ingen kodefiler rammet.
+
+Verdt å notere hvorfor det betyr noe: flatekartet er repoets eneste vern mot «riktig fiks,
+ufullstendig flate», og et kart som ikke kan leses er ikke et vern.
+
+### Tester
+
+Begge de to alvorligste er nå festet, og begge er **verifisert ved mutasjon** — fiksen reversert,
+testen rød på riktig assertion:
+
+- Integrasjon: kursimport med ettspråks seksjon → kurset forblir upublisert. **Med kontrollcase**:
+  en komplett seksjon skal fortsatt gå live. Kontrollcasen avslørte at den første versjonen av
+  testen bestod av feil grunn — et kurs uten moduler kan uansett ikke publiseres, så uten en modul
+  i pakken målte den en helt annen regel.
+- E2e: skriv på bokmål, bytt meny til engelsk, be om revisjon → forespørselen bærer den norske
+  teksten merket `nb`.
+
+1 029 unit, 6 DOM, 200 e2e, **483 integrasjon** mot ekte Postgres.
+
 ## 2.22.0 - 2026-08-18
 
 **En seksjon kan reise alene (#916)** — og publiseringsgaten fra #896 S4 gjelder den.

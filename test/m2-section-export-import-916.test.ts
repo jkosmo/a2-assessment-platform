@@ -431,3 +431,100 @@ describe("#916 section publish gate (#896 S4 applied to sections)", () => {
     expect((await prisma.course.findUnique({ where: { id: courseId } }))?.publishedAt).toBeNull();
   });
 });
+
+// ---------------------------------------------------------------------------
+// QA før prod, 2026-08-18. Ingen av testene over dekket KURSIMPORT-stien, og det var der den
+// verste konsekvensen lå.
+//
+// #916 la publiseringsgaten i `createSection`: `heldBackByTranslationGate = !input.draft &&
+// !gate.ok`. Den frittstående importen sender `draft: true`, men kursimporten sendte ingenting —
+// så en seksjon med ettspråks tittel ble korrekt holdt tilbake, mens kalleren aldri fikk vite det.
+// `anyModuleHeldBack` telte bare moduler, så kurset ble publisert rundt en seksjon uten aktiv
+// versjon.
+//
+// Resultatet for deltakeren: 200 med tom `html` — en blank side, ingen feilmelding — og
+// `POST .../read` telte den fortsatt mot kursbeviset.
+// ---------------------------------------------------------------------------
+describe("#916 QA: course import must not publish around a held-back section", () => {
+  function courseEnvelopeWithSection(courseTitle: string, sectionTitle: unknown, body: unknown) {
+    return {
+      exportFormat: "a2-content-export/v1",
+      exportedAt: "2026-08-18T00:00:00.000Z",
+      scope: "course",
+      course: {
+        course: {
+          title: L(courseTitle),
+          description: L("d"),
+          certificationLevel: "foundation",
+          // The source environment had this course published — that is what makes the importer
+          // republish it, and what made the bug reachable.
+          audit: { publishedAt: "2026-08-01T00:00:00.000Z" },
+          // ⚠️ Kurset MÅ ha en modul. Uten en er publisering avvist med «Cannot publish a course
+          // with no modules», og da hadde blokkertesten under bestått av helt feil grunn — den
+          // ville målt en regel som ikke har noe med seksjoner å gjøre. Kontrollcasen avslørte det.
+          items: [
+            {
+              type: "MODULE",
+              sortOrder: 0,
+              module: {
+                module: { title: L("QA modul"), description: L("d"), certificationLevel: "foundation" },
+                activeVersion: {
+                  assessmentMode: "FREETEXT_ONLY",
+                  taskText: L("Gjør oppgaven"),
+                  assessorExpectedContent: L("Forventet"),
+                  rubric: { criteria: { c1: 1 }, scalingRule: { practical_weight: 70 } },
+                  promptTemplate: { systemPrompt: L("system"), userPromptTemplate: L("mal"), examples: [] },
+                  audit: { publishedAt: "2026-08-01T00:00:00.000Z", versionNo: 1 },
+                },
+              },
+            },
+            { type: "SECTION", sortOrder: 1, section: { title: sectionTitle, bodyMarkdown: body } },
+          ],
+        },
+      },
+    };
+  }
+
+  it("leaves the course unpublished when an imported section has a language hole", async () => {
+    const title = `QA blank section ${Date.now()}`;
+    const response = await request(app)
+      .post("/api/admin/content/courses/import")
+      .set(admin)
+      // A one-language title — the ordinary shape of content written before the gate existed, and
+      // exactly what an export of an older course carries.
+      .send({ mode: "createNew", payload: courseEnvelopeWithSection(title, "Kapittel 1", L("Full body")) });
+
+    expect(response.status, JSON.stringify(response.body)).toBe(201);
+
+    const course = await prisma.course.findFirst({ where: { title: { contains: title } } });
+    expect(course).toBeTruthy();
+
+    const item = await prisma.courseItem.findFirst({ where: { courseId: course!.id, sectionId: { not: null } }, select: { sectionId: true } });
+    const section = await prisma.courseSection.findUnique({ where: { id: item!.sectionId! } });
+
+    // The section is held back — that part was already right.
+    expect(section?.activeVersionId).toBeNull();
+    // …and the course must NOT be published around it. This is the half that was missing: a
+    // published course with a section that has no active version serves a blank page.
+    expect(course?.publishedAt).toBeNull();
+  });
+
+  it("still republishes an imported course when every section is complete", async () => {
+    const title = `QA complete section ${Date.now()}`;
+    const response = await request(app)
+      .post("/api/admin/content/courses/import")
+      .set(admin)
+      .send({ mode: "createNew", payload: courseEnvelopeWithSection(title, L("Kapittel 1"), L("Full body")) });
+
+    expect(response.status, JSON.stringify(response.body)).toBe(201);
+
+    const course = await prisma.course.findFirst({ where: { title: { contains: title } } });
+    const item = await prisma.courseItem.findFirst({ where: { courseId: course!.id, sectionId: { not: null } }, select: { sectionId: true } });
+    const section = await prisma.courseSection.findUnique({ where: { id: item!.sectionId! } });
+
+    // The guard must not swing the other way: a complete section still goes live, and so does the
+    // course. A gate that blocks everything is as useless as one that blocks nothing.
+    expect(section?.activeVersionId).not.toBeNull();
+    expect(course?.publishedAt).not.toBeNull();
+  });
+});

@@ -667,7 +667,6 @@ Merkingen er dobbelt kodet (prikk, `aria-label`-suffiks, live-region) og fjernes
   takes the revision straight in, with no extra click». Den andre er ikke pynt: den er vakten mot
   å gate på tilstedeværelse i stedet for på dirty.
 
-<<<<<<< HEAD
 ## 23. Discussion — course level ONLY, but the item-level data still exists (#923)
 
 Discussion used to exist at three levels (course, module, section). Three places to write split a
@@ -701,8 +700,8 @@ eget diskusjonsboard — kursnivået har det" (asserts the reader has no board *
 `test/e2e/participant-discussions.spec.ts` (course-level create/list/reply);
 `participant-course-sequence.spec.ts` → "the course-level discussion stays collapsed until asked
 for". User docs: `doc/DISCUSSIONS_GUIDE.md`. Design: `doc/DISCUSSIONS_DESIGN.md`.
-=======
-## 23. Publishing a learning section — four doors (#916)
+
+## 24. Publishing a learning section — four doors (#916)
 
 The section counterpart to § 18. Same rule, different mechanics: a module has a draft-save that is
 separate from publishing, while **saving a section publishes it** (latest-wins). So the gate cannot
@@ -749,4 +748,3 @@ section is published or its content saved.
 `test/e2e/section-portability-916.spec.ts` for the client half — the gate messages must be rendered
 from `field` + `missingLocales` in the author's language, never from the server's English `message`,
 and a held-back save must not show a plain "Seksjon lagret."
->>>>>>> 44525c4 (#916: frittstående eksport/import av en enkeltseksjon + publiseringsgaten for seksjoner — v2.22.0)

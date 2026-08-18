@@ -362,7 +362,16 @@ adminSectionsRouter.get(
   },
 );
 
-adminSectionsRouter.get("/:sectionId", async (request, response, next) => {
+// #916 QA: denne sto uten eierskapsvakt, alene blant elleve `/:sectionId`-ruter. Hullet er eldre
+// enn denne leveransen — men leveransen utvidet det: `toDetail` foretrekker nå NYESTE versjon over
+// den aktive, så en fremmed SMO fikk ikke lenger bare den publiserte teksten, men eierens
+// tilbakeholdte utkast. Samme klasse som #903, og eksportruta rett over ble vaktet med nettopp den
+// begrunnelsen; det hjelper lite når naboruta gir samme kaller samme innhold.
+//
+// Trygt å stramme: ruta brukes kun av seksjonseditoren (`renderEditorView`), som er der eierskap
+// skal kreves. Lista (`GET /`) merker allerede hver rad med `canManage` og skjuler handlingene en
+// ikke-eier ville fått 403 på.
+adminSectionsRouter.get("/:sectionId", requireContentOwnership("SECTION", "sectionId"), async (request, response, next) => {
   try {
     const section = await getSection(request.params.sectionId);
     if (!section) {
@@ -432,7 +441,9 @@ adminSectionsRouter.post("/:sectionId/assets", requireContentOwnership("SECTION"
   }
 });
 
-adminSectionsRouter.get("/:sectionId/assets", async (request, response, next) => {
+// Samme hull, samme rettelse: figurlista hører til seksjonen, og POST/localize på samme sti er
+// allerede vaktet. En uvoktet GET ved siden av tre voktede skriveruter er en glipp, ikke en policy.
+adminSectionsRouter.get("/:sectionId/assets", requireContentOwnership("SECTION", "sectionId"), async (request, response, next) => {
   try {
     response.json({ assets: await listSectionAssets(request.params.sectionId) });
   } catch (error) {

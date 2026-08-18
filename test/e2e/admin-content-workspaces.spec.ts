@@ -2940,6 +2940,64 @@ test.describe("admin content browser coverage", () => {
     await expect(page.locator("#previewEditTaskText")).toHaveValue("Generert scenario");
   });
 
+  // QA før prod, 2026-08-18. Fanget av ingen av de 199 e2e-ene, fordi ingen av dem lot menyspråket
+  // og innholdsspråket peke hver sin vei — og etter v2.18.12 er nettopp det normaltilstanden så
+  // snart forfatteren bytter meny én gang.
+  //
+  // Feilen: revisjonsstien leste `currentLocale` (MENYspråket) når den hentet teksten som skulle
+  // revideres, og merket den med samme språk. Skriver du på bokmål og bytter menyen til engelsk,
+  // sendes den norske teksten merket `en-GB` — LLM-en svarer på engelsk, oversettingen
+  // maskinoversetter tilbake til nb, og originalteksten din er borte.
+  test("a revision reads and tags the CONTENT language, not the menu language", async ({ page }) => {
+    await mockCommonApis(page, {
+      modules: [{ id: "module-1", title: "Trade unions", activeVersion: { versionNo: 1 } }],
+      moduleExports: {
+        "module-1": buildMockModuleExport({
+          id: "module-1",
+          title: "Trade unions",
+          moduleVersionId: "module-1-version-1",
+          taskText: { "en-GB": "English scenario", nb: "Norsk scenario", nn: "Nynorsk scenario" },
+          assessorExpectedContent: { "en-GB": "English guidance", nb: "Norsk veiledning", nn: "Nynorsk rettleiing" },
+        }),
+      },
+    });
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let revisePayload: any = null;
+    await page.route("**/generate/module-draft/revise", async (route: Route) => {
+      revisePayload = route.request().postDataJSON();
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          draft: { taskText: "Revidert", assessorExpectedContent: "Revidert", candidateTaskConstraints: "" },
+        }),
+      });
+    });
+
+    await page.goto("/admin-content/module/module-1/conversation?resumeEditing=1");
+    await page.locator("#previewEditTaskText").waitFor();
+
+    // Innholdsspråket settes til bokmål — dette er språket modulen skrives i.
+    await page.locator("#previewLocaleBar .preview-locale-btn", { hasText: "Norsk bokmål" }).click();
+    await expect(page.locator("#previewEditTaskText")).toHaveValue(/Norsk scenario/);
+
+    // Menyspråket byttes til engelsk. Innholdsspråket skal IKKE følge med — det er hele poenget
+    // med skillet, og vaktdialogen bekreftes bort her siden vi ikke har ulagrede endringer.
+    await page.locator("#localeSelect").selectOption("en-GB");
+    await expect(page.locator("#tabEdit")).toHaveText(/Edit/);
+
+    await clickEnabledButton(page, /Request changes in chat|Be om endringer i chat/);
+    await page.locator(".chat-textarea:enabled").last().fill("make the task shorter");
+    await clickEnabledButton(page, /Revise|Revider/);
+
+    // Begge halvdelene må holde: teksten som sendes er den NORSKE, og den er merket som norsk.
+    // Uten den andre halvdelen oversettes svaret inn i feil språk og overskriver originalen.
+    await expect.poll(() => revisePayload?.locale).toBe("nb");
+    expect(revisePayload?.taskText).toContain("Norsk scenario");
+    expect(revisePayload?.taskText).not.toContain("English scenario");
+  });
+
   test("an untouched form takes the revision straight in, with no extra click", async ({ page }) => {
     await mockCommonApis(page, {
       modules: [{ id: "module-1", title: "Trade unions", activeVersion: { versionNo: 1 } }],

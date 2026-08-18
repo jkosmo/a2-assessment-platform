@@ -2030,17 +2030,26 @@ async function reviseDraftInBackground(instruction, onAccept) {
 
   let result;
   try {
+    // ⚠️ QA 2026-08-18: dette leste `currentLocale` — MENYspråket. Etter v2.18.12 følger ikke
+    // innholdsspråket menyen, så divergens er normaltilstanden etter ett klikk, og da:
+    // forfatteren skriver på bokmål, bytter menyen til engelsk, ber om en revisjon i chatten.
+    // Oppslaget faller tilbake til den norske teksten, men merker den `en-GB`; LLM-en svarer på
+    // engelsk; oversettingen maskinoversetter tilbake til nb og nn — og forfatterens egen
+    // originaltekst er byttet mot en maskinoversettelse av en engelsk revisjon.
+    //
+    // Alt som LESER eller SKRIVER modulinnhold skal bruke `contentLocale`. Menyspråket styrer
+    // menyer.
     result = await apiFetch(
       "/api/admin/content/generate/module-draft/revise",
       getHeaders,
       {
         method: "POST",
         body: JSON.stringify({
-          taskText: localizeValueForLocale(sessionDraft?.taskText ?? "", currentLocale),
-          assessorExpectedContent: localizeValueForLocale(sessionDraft?.assessorExpectedContent ?? "", currentLocale),
-          candidateTaskConstraints: localizeValueForLocale(sessionDraft?.candidateTaskConstraints ?? "", currentLocale),
+          taskText: localizeValueForLocale(sessionDraft?.taskText ?? "", contentLocale),
+          assessorExpectedContent: localizeValueForLocale(sessionDraft?.assessorExpectedContent ?? "", contentLocale),
+          candidateTaskConstraints: localizeValueForLocale(sessionDraft?.candidateTaskConstraints ?? "", contentLocale),
           instruction,
-          locale: currentLocale,
+          locale: contentLocale,
         }),
         signal: abort.signal,
       },
@@ -2064,7 +2073,7 @@ async function reviseDraftInBackground(instruction, onAccept) {
   sessionState = "draft-pending";
 
   const draft = result?.draft ?? result;
-  const localizedDraft = await localizeDraftAcrossLocales(draft.taskText, draft.assessorExpectedContent, currentLocale, draft.candidateTaskConstraints);
+  const localizedDraft = await localizeDraftAcrossLocales(draft.taskText, draft.assessorExpectedContent, contentLocale, draft.candidateTaskConstraints);
   // #926 §6: dette er stien saken beskriver ordrett — forfatteren har skrevet i feltene og ber om
   // en revisjon i chatten. Uten porten kom svaret rett inn over deres eget arbeid.
   commitOrProposeGenerated({
@@ -2081,10 +2090,10 @@ async function reviseMcqInBackground(instruction, onAccept) {
   slot.abortBtn.addEventListener("click", () => { abort.abort(); slot.abortBtn.disabled = true; });
 
   const currentQuestions = (sessionDraft?.mcqQuestions ?? []).map((question) => ({
-    stem: localizeValueForLocale(question.stem, currentLocale),
-    options: (question.options ?? []).map((option) => localizeValueForLocale(option, currentLocale)),
-    correctAnswer: localizeValueForLocale(question.correctAnswer, currentLocale),
-    rationale: localizeValueForLocale(question.rationale, currentLocale),
+    stem: localizeValueForLocale(question.stem, contentLocale),
+    options: (question.options ?? []).map((option) => localizeValueForLocale(option, contentLocale)),
+    correctAnswer: localizeValueForLocale(question.correctAnswer, contentLocale),
+    rationale: localizeValueForLocale(question.rationale, contentLocale),
   }));
   let result;
   try {
@@ -2096,7 +2105,7 @@ async function reviseMcqInBackground(instruction, onAccept) {
         body: JSON.stringify({
           questions: currentQuestions,
           instruction,
-          locale: currentLocale,
+          locale: contentLocale,
           questionCount: currentQuestions.length,
           optionCount: currentQuestions[0]?.options?.length ?? 4,
         }),
@@ -2122,7 +2131,7 @@ async function reviseMcqInBackground(instruction, onAccept) {
   sessionState = "draft-pending";
 
   const questions = result?.questions ?? [];
-  const localizedQuestions = await localizeMcqAcrossLocales(questions, currentLocale);
+  const localizedQuestions = await localizeMcqAcrossLocales(questions, contentLocale);
   commitOrProposeGenerated({
     patch: { mcqQuestions: localizedQuestions },
     slot,
@@ -2277,7 +2286,7 @@ async function saveDraftBundleInBackground(options = {}) {
     }
     return actions;
   };
-  if (!isMcqOnly && !localizeValueForLocale(taskText, currentLocale).trim()) {
+  if (!isMcqOnly && !localizeValueForLocale(taskText, contentLocale).trim()) {
     logBot(() => t("shell.save.taskRequired"), buildSaveRecoveryActions());
     return;
   }
@@ -2351,11 +2360,11 @@ async function saveDraftBundleInBackground(options = {}) {
       // servert nettopp den strengen i stedet for scenarioet. Bruk lokale-oppslaget: dette
       // endepunktet tar ren tekst i ETT språk, og sender allerede `locale` ved siden av.
       const ensureRubricBody = {
-        taskText: String(localizeValueForLocale(taskText, currentLocale) ?? "").trim(),
-        assessorExpectedContent: String(localizeValueForLocale(assessorExpectedContent, currentLocale) ?? "").trim(),
-        candidateTaskConstraints: String(localizeValueForLocale(candidateTaskConstraints, currentLocale) ?? "").trim() || undefined,
+        taskText: String(localizeValueForLocale(taskText, contentLocale) ?? "").trim(),
+        assessorExpectedContent: String(localizeValueForLocale(assessorExpectedContent, contentLocale) ?? "").trim(),
+        candidateTaskConstraints: String(localizeValueForLocale(candidateTaskConstraints, contentLocale) ?? "").trim() || undefined,
         certificationLevel: certificationLevelForGeneration(),
-        locale: currentLocale,
+        locale: contentLocale,
         ...(blueprintObject ? { blueprint: blueprintObject } : {}),
       };
       rubricBody = await apiFetch(`/api/admin/content/modules/${encodeURIComponent(moduleId)}/rubric-versions/ensure`, getHeaders, {
@@ -7542,7 +7551,7 @@ async function populateSessionDraftCriteriaInBackground() {
   // QA round 6: captured BEFORE the call. The author can switch UI language while generation runs,
   // and tagging the reply with the live locale files English text as Norwegian — which then looks
   // like a translation that exists.
-  const generationLocale = currentLocale;
+  const generationLocale = contentLocale;
   // #926: this repaint used to be unconditional, and `renderPreview` writes straight into
   // `previewContent.innerHTML` — so it tore down an open Rediger form and rebuilt it from the
   // bundle, throwing away whatever the author had typed. Same class as §6 itself: content

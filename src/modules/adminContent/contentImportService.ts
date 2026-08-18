@@ -138,12 +138,21 @@ async function persistStagedSection(
   staged: StagedImportSection,
   actorId: string,
   // #916: the standalone section import lands UNPUBLISHED (the same rule module import follows
-  // after #896 §9 — imported content is reviewed before it reaches participants). Course import
-  // keeps its existing behaviour (the section is created live and the course cascade governs it),
-  // so the flag defaults to false and only the new door passes true.
+  // after #896 §9 — imported content is reviewed before it reaches participants), so the new door
+  // passes `draft: true`.
+  //
+  // ⚠️ QA 2026-08-18: the note that used to sit here said course import "keeps its existing
+  // behaviour — the section is created live". That stopped being true the moment #916 added the
+  // gate to `createSection`: `heldBackByTranslationGate = !input.draft && !gate.ok`, and course
+  // import passes no flag at all. A section with a one-language title is therefore held back —
+  // correctly — but the caller never learned it, so the course was published on top of a section
+  // with `activeVersionId: null`. The participant got 200 with an empty body and could still mark
+  // it read towards their certificate.
+  //
+  // The gate state is returned now, exactly as `importModulePayload` already does for modules.
   options?: { draft?: boolean; agent?: AgentAuthoringContext },
-): Promise<string> {
-  await createSection(
+): Promise<{ sectionId: string; heldBackByTranslationGate: boolean }> {
+  const created = await createSection(
     {
       id: staged.sectionId,
       title: staged.title,
@@ -157,7 +166,7 @@ async function persistStagedSection(
   for (const asset of staged.stagedAssets) {
     await tx.sectionAsset.create({ data: { id: asset.id, sectionId: staged.sectionId, ...asset.rowData } });
   }
-  return staged.sectionId;
+  return { sectionId: staged.sectionId, heldBackByTranslationGate: created.heldBackByTranslationGate };
 }
 
 function serializeLocalized(value: LocalizedText | null | undefined): string | undefined {
@@ -448,10 +457,12 @@ export async function importSectionFromEnvelope(
           }
           sectionId = targetSectionId;
         } else {
-          sectionId = await persistStagedSection(tx, staged, options.actorId, {
+          // Always a draft on this door, so the gate result adds nothing the caller does not
+          // already know — the section is unpublished either way.
+          ({ sectionId } = await persistStagedSection(tx, staged, options.actorId, {
             draft: true,
             agent: options.agent,
-          });
+          }));
         }
 
         const latest = await tx.courseSectionVersion.findFirstOrThrow({
@@ -565,7 +576,7 @@ export async function importCourseFromEnvelope(
         let sectionCount = 0;
         // #896 S4: set when any module in this course could not be auto-published because it is
         // missing a locale. The course must then stay a draft too.
-        let anyModuleHeldBack = false;
+        let anyContentHeldBack = false;
 
         if (orderedItems) {
           const courseItemInputs: CourseItemInput[] = [];
@@ -574,12 +585,15 @@ export async function importCourseFromEnvelope(
             if (entry.type === "SECTION") {
               const staged = stagedSections.get(i);
               if (!staged) throw new Error("Internal: section was not staged before the import transaction.");
-              await persistStagedSection(tx, staged, options.actorId);
+              const persisted = await persistStagedSection(tx, staged, options.actorId);
+              // A held-back section has no active version, so publishing the course around it would
+              // ship a blank page the participant can still mark as read. Same rule as modules.
+              if (persisted.heldBackByTranslationGate) anyContentHeldBack = true;
               courseItemInputs.push({ type: "SECTION", sectionId: staged.sectionId });
               sectionCount += 1;
             } else {
               const imported = await importModulePayload(entry.module, { actorId: options.actorId, mode: "createNew" }, tx);
-              if (imported.heldBackByTranslationGate) anyModuleHeldBack = true;
+              if (imported.heldBackByTranslationGate) anyContentHeldBack = true;
               courseItemInputs.push({ type: "MODULE", moduleId: imported.moduleId });
               importedModuleIds.push(imported.moduleId);
             }
@@ -589,7 +603,7 @@ export async function importCourseFromEnvelope(
           const importedModules: Array<{ moduleId: string; sortOrder: number }> = [];
           for (const item of payload.course.modules ?? []) {
             const imported = await importModulePayload(item.module, { actorId: options.actorId, mode: "createNew" }, tx);
-            if (imported.heldBackByTranslationGate) anyModuleHeldBack = true;
+            if (imported.heldBackByTranslationGate) anyContentHeldBack = true;
             importedModules.push({ moduleId: imported.moduleId, sortOrder: item.sortOrder });
           }
           importedModules.sort((a, b) => a.sortOrder - b.sortOrder);
@@ -609,7 +623,7 @@ export async function importCourseFromEnvelope(
         // live course whose module has no active version — the participant hits "module not
         // available". The course waits with its modules; the author publishes both once the gaps
         // are filled.
-        if (payload.course.audit?.publishedAt && !anyModuleHeldBack) {
+        if (payload.course.audit?.publishedAt && !anyContentHeldBack) {
           await publishCourse(courseId, options.actorId, tx);
         }
 
