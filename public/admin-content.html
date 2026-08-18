@@ -103,6 +103,21 @@
         border-top: 1px solid var(--color-border-soft);
       }
 
+      /* Personvernvarselet. Layouten MÅ ligge i en klasse, ikke i style="".
+         QA 2026-08-18: den lå inline, og `setHidden(el, false)` setter `el.style.display = ""` —
+         samme inline-egenskap. Boksen ble derfor tegnet som `block` fra første visning: ⚠️-ikonet
+         klistret inntil overskriften uten mellomrom, og andrelinja brøt under ikonet i stedet for
+         å henge inn. e2e-en så det ikke, fordi toBeVisible() er sann for `block` også.
+         Speilbildet av .hidden-fella i CLAUDE.md: der taper klassen mot inline, her taper inline
+         mot seg selv. */
+      .privacy-notice {
+        display: flex; gap: 8px; align-items: baseline;
+        border: 1px solid #f0d9b5; background: #fffdf7;
+        border-radius: var(--radius-card); padding: 6px 10px;
+        margin: var(--space-1) 0;
+        font-size: 12px; line-height: 1.4; color: var(--color-meta);
+      }
+
       /* Module status badges (shared with advanced editor) */
       .module-status-badge { display: inline-flex; align-items: center; border-radius: 999px; padding: 4px 12px; font-size: 12px; font-weight: 700; white-space: nowrap; }
       .module-status-badge.live { background: #e6f4ea; color: #12613a; }
@@ -598,7 +613,7 @@
       <!-- Stage-tilbakemelding 2026-08-18: advarselen hører til der oppgaveteksten SKRIVES. På
            Forhåndsvisning og Innstillinger er den bare støy — man kan ikke formulere seg annerledes
            derfra, og en advarsel som står overalt slutter å bli lest der den betyr noe. -->
-      <div id="privacyNotice" role="note" style="display:flex;gap:8px;align-items:baseline;border:1px solid #f0d9b5;background:#fffdf7;border-radius:var(--radius-card);padding:6px 10px;margin:var(--space-1) 0;font-size:12px;line-height:1.4;color:var(--color-meta)">
+      <div id="privacyNotice" class="privacy-notice" role="note">
         <span aria-hidden="true">⚠️</span>
         <span><strong style="color:var(--color-text);font-weight:600" data-i18n="adminContent.privacy.warning.title">Special category data risk</strong> — <span data-i18n="adminContent.privacy.warning.body">Participants may include health information, political views, or other special category data in free-text submissions.</span></span>
       </div>

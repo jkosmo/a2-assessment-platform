@@ -2,6 +2,73 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.19.3 - 2026-08-18
+
+**Tre funn fra QA-gaten på v2.19.2.** Kryssmodell-porten kunne ikke kjøre (Codex tom for kreditt),
+så gjennomgangen ble kjørt av en lokal agent med samme prompt. Den ga **NO-GO**, og hadde rett.
+
+### Porten dekket fire av seks skrivere
+
+`runUnifiedRevision` klassifiserer én fritekstinstruks til fire utfall. To gikk gjennom §6-porten,
+to skrev rett i utkastet:
+
+| intent | funksjon | før |
+|---|---|---|
+| `revision` | `reviseDraftInBackground` / `reviseMcqInBackground` | ✅ gjennom porten |
+| `title` | `applyStructuredTitleEditInBackground` | ❌ `commitSessionDraftPatch` direkte |
+| `translate` | `refreshLocalizedDraftInBackground` | ❌ `commitSessionDraftPatch` direkte |
+
+Begge nås fra **samme chat-boks** som de to som var dekket. Og begge bærer `taskText`,
+`assessorExpectedContent` og `candidateTaskConstraints` fra `resolveCurrentDraftSnapshot()`, som
+leser utkastet og **ikke** de åpne feltene — så «Endre tittelen til X» byttet ut håndskrevet,
+ulagret tekst med den lagrede, re-lokalisert, og tegnet skjemaet på nytt uten å spørre.
+
+Altså nøyaktig feilen #926 ble skrevet for å fjerne, i den ene flyten saken handler om.
+
+**Verst var at dokumentasjonen påsto det motsatte.** `doc/FEATURE_SURFACE_MAP.md` § 22 het «fire
+produsenter, én port», og guarden itererte over en hardkodet liste på fire — med kommentaren om at
+«en femte produsent lagt til uten porten» var den sannsynlige regresjonen. Den femte og sjette
+fantes allerede i filen da kommentaren ble skrevet.
+
+En liste kan ikke oppdage det ingen har tenkt på. Derfor er det nå en **dekningsvakt** ved siden av
+den: den finner hvert kall til `commitSessionDraftPatch`, slår opp hvilken funksjon det står i, og
+krever at funksjonen enten er porten, står i produsentlista, eller er ført opp som et **begrunnet
+unntak**. Ett unntak finnes: «Oversett det som mangler» fra publiseringsgaten, som fyller språk
+forfatteren aldri skrev på en blokkert publisering forfatteren nettopp ba om å få utbedret.
+
+### Personvernvarselet mistet layouten sin i det øyeblikket det ble vist
+
+Boksen bar `display:flex` i `style=""`. `setHidden(el, false)` setter `el.style.display = ""` —
+samme inline-egenskap — så den ble tegnet som `block` fra første visning: ⚠️-ikonet klistret inntil
+overskriften uten de 8 pikslene, og andrelinja brøt under ikonet i stedet for å henge inn.
+
+Dette er speilbildet av `.hidden`-fella i CLAUDE.md. Der taper klassen mot inline; her taper inline
+mot seg selv. Layouten ligger nå i `.privacy-notice`, og `setHidden` faller tilbake på den.
+
+e2e-en fanget det ikke fordi `toBeVisible()` er sann for `block` også — den testet at boksen fantes,
+ikke at den så riktig ut.
+
+### Et parkert forslag kunne bli hengende
+
+`pendingProposal` ble bare nullstilt av de to knappene. Men knappene lever i samtaleloggen, som
+`startIdle` ikke river ned, og handlingslinja deaktiverer ikke chat-valg slik chat-knappene gjør.
+
+**Scenario:** park et forslag → «Start på nytt» i handlingslinja → alt lastes ut → klikk «Bruk».
+Forslaget ble flettet mot `{}`: et ulagret utkast oppsto med forrige moduls tekst, tom tittel og
+ingen modul-ID, statuslinja sa «Ulagrede endringer», og «Lagre utkast» svarte «Velg en modul
+først». Ingen vei ut uten å laste siden på nytt. Samme mekanisme etter «Lagre utkast».
+
+Forslaget stemples nå med modulen det ble laget for, `startIdle` og `loadModule` forkaster det, og
+en «Bruk» som ikke lenger gjelder sier fra i stedet for å gjøre noe.
+
+### Vurdert og beholdt
+
+Agenten gikk også gjennom fanemerkingen, de ni testfilene som ble flyttet inn i `test:unit`
+(87 tester, 606 ms, ingen database) og repaint-vakten i bakgrunnsgenereringen, og fant dem i orden.
+Én observasjon derfra er verdt å notere: på Rediger finnes det nå **ingen «pågår»-indikasjon** mens
+kriteriene genereres — plassholderen lå i lesevisningen, som skjemaet dekker uansett. Fanemerket er
+signalet, og det kommer først ved ferdigstilling.
+
 ## 2.19.2 - 2026-08-18
 
 **#896 er ferdig.** Siste ferdig-kriterium i §11 var en e2e som følger ny-modul-flyten ende til

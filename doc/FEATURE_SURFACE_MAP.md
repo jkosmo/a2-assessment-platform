@@ -557,9 +557,9 @@ rene strengen overlevde første forsøk på å fikse dette.
 **Guards:** e2e "editing a criterion in one language keeps the other two" og "Innstillinger edits
 the assessment instruction in one language and keeps the others".
 
-## 22. Generert innhold som lander i utkastet — fire produsenter, én port (#896 §6 / #926)
+## 22. Generert innhold som lander i utkastet — seks produsenter, én port (#896 §6 / #926)
 
-Fire funksjoner produserer innhold som skal inn i `sessionDraft`:
+Seks funksjoner produserer innhold som skal inn i `sessionDraft`. Alle nås fra samme chat-boks:
 
 | Produsent | Skriver |
 |---|---|

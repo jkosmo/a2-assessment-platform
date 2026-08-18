@@ -1792,7 +1792,12 @@ function commitOrProposeGenerated({ patch, slot, readyHtml, scroll = "top", onCo
   // A second proposal replaces the first rather than queueing: two competing "Bruk"-buttons in
   // the log, both claiming to be the generated result, is worse than losing the older one — and
   // the older one is by definition the one the author did not answer.
-  pendingProposal = { commit };
+  //
+  // #926 QA: the proposal is stamped with the module it was made for. Its buttons live in the
+  // conversation log, which survives `startIdle` and a reload of a DIFFERENT module — so without
+  // the stamp, «Bruk» could merge one module's generated text into another's draft, or into no
+  // module at all.
+  pendingProposal = { commit, moduleId: selectedModuleId };
   const thisProposal = pendingProposal;
   logResolveSlot(
     slot,
@@ -1803,8 +1808,12 @@ function commitOrProposeGenerated({ patch, slot, readyHtml, scroll = "top", onCo
         labelKey: "shell.proposal.use",
         action: () => {
           // Stale guard: the log entry survives a re-render, so an old proposal's button must not
-          // resurrect content the author already answered for.
-          if (pendingProposal !== thisProposal) return;
+          // resurrect content the author already answered for — or content that belongs to a
+          // module that is no longer open.
+          if (pendingProposal !== thisProposal || selectedModuleId !== thisProposal.moduleId) {
+            logBot(() => escapeHtml(t("shell.proposal.stale")));
+            return;
+          }
           pendingProposal = null;
           thisProposal.commit();
           // The fields on screen still hold the author's typing. They said yes, so repaint from
@@ -1825,6 +1834,18 @@ function commitOrProposeGenerated({ patch, slot, readyHtml, scroll = "top", onCo
     ],
   );
   return false;
+}
+
+/**
+ * Drop a parked proposal without applying it. Called wherever the ground it stood on moves:
+ * `startIdle` (everything unloaded) and `loadModule` (a different module, or the same one
+ * reloaded after a save).
+ *
+ * Deliberately silent — this is not the author discarding anything, it is the proposal ceasing to
+ * be applicable. Saying so in the log would report an action nobody took.
+ */
+function discardPendingProposal() {
+  pendingProposal = null;
 }
 
 function createSessionDraftFromLoadedModule() {
@@ -2126,12 +2147,6 @@ async function applyStructuredTitleEditInBackground(newTitle) {
       snapshot.sourceLocale,
       snapshot.candidateTaskConstraints,
     );
-    commitSessionDraftPatch({
-      title: localizedDraft.title,
-      taskText: localizedDraft.taskText,
-      assessorExpectedContent: localizedDraft.assessorExpectedContent,
-      candidateTaskConstraints: localizedDraft.candidateTaskConstraints,
-    });
     // En delvis oversettelse er ikke en suksess. Sier vi «ferdig» her, står forfatteren igjen med en
     // tittel som ser oversatt ut, men som er kildeteksten kopiert inn — og oppdager det først når en
     // deltaker møter feil språk.
@@ -2141,10 +2156,21 @@ async function applyStructuredTitleEditInBackground(newTitle) {
           source: snapshot.sourceLocale,
         })}`
       : "";
-    logResolveSlot(
+    // #926 QA: denne skrev rett i utkastet. En tittelendring er noe forfatteren ba om, så det er
+    // fristende å la den passere — men patchen bærer også taskText, assessorExpectedContent og
+    // candidateTaskConstraints, hentet fra `resolveCurrentDraftSnapshot()`, som leser utkastet og
+    // IKKE de åpne feltene. Ulagret tekst ble derfor byttet ut med den lagrede, re-lokalisert, og
+    // skjemaet tegnet på nytt uten at noe spurte. Nås fra samme chat-boks som revisjonsstiene.
+    commitOrProposeGenerated({
+      patch: {
+        title: localizedDraft.title,
+        taskText: localizedDraft.taskText,
+        assessorExpectedContent: localizedDraft.assessorExpectedContent,
+        candidateTaskConstraints: localizedDraft.candidateTaskConstraints,
+      },
       slot,
-      () => `<strong>${escapeHtml(tf("shell.revision.titleReady", { title: newTitle }))}</strong>${escapeHtml(warning)}`,
-    );
+      readyHtml: () => `<strong>${escapeHtml(tf("shell.revision.titleReady", { title: newTitle }))}</strong>${escapeHtml(warning)}`,
+    });
   } catch (err) {
     const errMsg = String(err?.message ?? err);
     logResolveSlot(slot, () => `${escapeHtml(t("shell.revision.titleErrorPrefix"))}${escapeHtml(errMsg)}`, [
@@ -2183,8 +2209,14 @@ async function refreshLocalizedDraftInBackground({ draft, mcq }) {
     if (localizedMcq) {
       patch.mcqQuestions = localizedMcq;
     }
-    commitSessionDraftPatch(patch, { scroll: localizedMcq && !localizedDraft ? "bottom" : "top" });
-    logResolveSlot(slot, () => `<strong>${escapeHtml(t("shell.revision.translateReady"))}</strong>`);
+    // #926 QA: samme hull som tittelstien. «Oversett til nynorsk» i chatten leser utkastet, ikke
+    // feltene, så en oversettelse skrev håndskrevet, ulagret tekst ut av veien.
+    commitOrProposeGenerated({
+      patch,
+      slot,
+      scroll: localizedMcq && !localizedDraft ? "bottom" : "top",
+      readyHtml: () => `<strong>${escapeHtml(t("shell.revision.translateReady"))}</strong>`,
+    });
   } catch (err) {
     const errMsg = String(err?.message ?? err);
     logResolveSlot(slot, () => `${escapeHtml(t("shell.revision.translateErrorPrefix"))}${escapeHtml(errMsg)}`, [
@@ -3111,6 +3143,11 @@ function startIdle() {
   sessionDraft = null;
   previewDraft = null;
   latestSavedModuleVersionId = null;
+  // #926 QA: a parked proposal belongs to the module that was loaded when it was made. Its
+  // buttons live in the conversation log, which this does not tear down, so «Bruk» stayed
+  // clickable after everything else was unloaded — and merged the previous module's generated
+  // text into an empty draft with no title and no module id. See also `discardPendingProposal`.
+  discardPendingProposal();
   chatLog = [];
   renderPreview();
   logBot(() => t("shell.idle.prompt"), [
@@ -3162,6 +3199,9 @@ async function loadModule(moduleId, options = {}) {
   sessionDraft = null;
   previewDraft = null;
   latestSavedModuleVersionId = null;
+  // #926 QA: covers the save path too — saving reloads the module, and a proposal parked before
+  // the save would otherwise raise a fresh unsaved draft on top of the version just written.
+  discardPendingProposal();
   // #896 S3c: the Innstillinger panel keeps its editors in module-level state, and none of it
   // belonged to this module. Before S3c the criteria state was only seeded once the author opened
   // the editor; now it is seeded on every visit to the tab, so merely looking at module A's

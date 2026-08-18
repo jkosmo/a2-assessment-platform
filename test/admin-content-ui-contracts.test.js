@@ -262,11 +262,22 @@ describe("shell JS contracts", () => {
   // not on the branch.
   // -------------------------------------------------------------------------
   describe("§6 — generated content goes through the propose/commit gate", () => {
+    // QA 2026-08-18 fant at denne lista var på fire mens filen hadde SEKS skrivere. Kommentaren
+    // over sa at «en femte produsent lagt til uten porten» var den sannsynlige regresjonen — den
+    // femte og sjette fantes allerede, og en hardkodet liste kan per definisjon ikke oppdage det.
+    //
+    // Derfor står lista fortsatt, men med en dekningsvakt under: enhver funksjon som skriver til
+    // `sessionDraft` via commitSessionDraftPatch må være her eller være unntatt med begrunnelse.
     const GENERATORS = [
       "generateDraftInBackground",
       "generateMcqInBackground",
       "reviseDraftInBackground",
       "reviseMcqInBackground",
+      // QA-funn F1: begge nås fra samme chat-boks som de fire over, og begge bar taskText fra et
+      // snapshot av utkastet — så en tittelendring eller en oversettelse slettet håndskrevet,
+      // ulagret tekst uten å spørre.
+      "applyStructuredTitleEditInBackground",
+      "refreshLocalizedDraftInBackground",
     ];
 
     for (const fn of GENERATORS) {
@@ -285,6 +296,53 @@ describe("shell JS contracts", () => {
         expect(body).not.toMatch(/sessionDraft\s*=\s*buildPreviewCandidate\(/);
       });
     }
+
+    // Dekningsvakten. Lista over kan ikke oppdage en produsent ingen har tenkt på — denne kan.
+    // Den finner hvert kall til `commitSessionDraftPatch` i filen, slår opp hvilken funksjon det
+    // står i, og krever at funksjonen enten ER porten, står i GENERATORS, eller er ført opp som et
+    // begrunnet unntak. Et nytt kall et sted ingen har vurdert gjør testen rød.
+    it("no writer reaches sessionDraft outside the gate without an explicit exemption", () => {
+      const js = readFile("public/static/admin-content-shell.js");
+
+      // Bevisste unntak, med grunn. Å legge noe til her er en avgjørelse, ikke en formalitet.
+      const EXEMPT = {
+        // Porten selv — den ER stedet patchen landes.
+        commitOrProposeGenerated: "the gate itself",
+        // «Oversett det som mangler» fra publiseringsgaten. Den fyller SPRÅK forfatteren aldri
+        // skrev, på en blokkert publisering forfatteren nettopp ba om å få utbedret, og lagrer
+        // umiddelbart etterpå. Et forslag her ville stått i veien for utbedringen det ble bedt om.
+        // Merk at en åpen Rediger-form med ulagret tekst taper den teksten til lagringen som
+        // følger — det er en egen vakt (advar før publisering med ulagrede endringer), ikke denne.
+        translateMissingLocalesThenPublish: "explicit gap-fill remedy that saves immediately",
+      };
+
+      // Funksjonshoder i filen, i rekkefølge, så et kall kan tilordnes den som omslutter det.
+      const heads = [...js.matchAll(/^(?:async\s+)?function\s+([A-Za-z0-9_$]+)\s*\(/gm)]
+        .map((m) => ({ name: m[1], index: m.index }));
+      const enclosing = (index) => {
+        let found = null;
+        for (const head of heads) {
+          if (head.index > index) break;
+          found = head.name;
+        }
+        return found;
+      };
+
+      const offenders = [];
+      for (const match of js.matchAll(/commitSessionDraftPatch\(/g)) {
+        const fn = enclosing(match.index);
+        // The declaration itself, not a call.
+        if (js.slice(Math.max(0, match.index - 9), match.index).includes("function ")) continue;
+        if (fn && (EXEMPT[fn] || GENERATORS.includes(fn))) continue;
+        offenders.push(fn ?? "<top level>");
+      }
+
+      expect(
+        offenders,
+        `writes to sessionDraft outside the §6 gate: ${offenders.join(", ")}. Route it through `
+          + "commitOrProposeGenerated, or add it to EXEMPT with the reason.",
+      ).toEqual([]);
+    });
 
     it("the gate parks rather than commits while the edit form is dirty", () => {
       const js = readFile("public/static/admin-content-shell.js");
