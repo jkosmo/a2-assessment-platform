@@ -2,6 +2,91 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.20.0 - 2026-08-18
+
+**Deltakerens lesevisning er lagt om.** Fire tilbakemeldinger fra produkteiers stage-testing (#921,
+#922, #923, #924) pekte på det samme: skjermen der deltakeren faktisk skal lese og lære var full av
+ting som konkurrerte med lesingen. Produkteier, ordrett: *«Dette skjermbildet må være optimalisert
+for lesning og konsentrasjon med færrest mulig distraksjoner.»* De fire er behandlet som én
+omlegging, ikke fire løsrevne rettelser.
+
+**Kurslista og det åpne kurset er nå to tilstander, ikke to ting side om side (#921 + #922).**
+
+Før: «Mine kurs» åpnet med en tom side og en knapp som het «Last kurs». Deltakeren kom for å få svar
+på ett spørsmål — *hvilke kurs har jeg?* — og svaret lå bak et klikk. Etter klikket måtte hvert kurs
+foldes ut for seg. Og når man endelig sto inne i et kurs og skulle lese, ble lista over alle de
+andre kursene stående ved siden av: en oppfordring til å gjøre noe annet, midt i det man holdt på
+med.
+
+Nå henter lista seg selv, og hvert kurskort står ekspandert med fremdrift og kursbevis synlig.
+Åpner du et kurs, viker lista **helt** — ikke krympet, ikke dempet, borte — og kurset får flaten
+alene. Tilbake kommer du med **«← Alle kurs»** øverst til venstre, der man leter etter den, eller med
+nettleserens tilbakeknapp: kurset har fått sin egen adresse (`?courseId=`), så Back gjør det samme
+som lenka, og en oppfriskning lander der du sto.
+
+Kursoverskriften er ikke lenger en trekkspill-bryter — den fører inn i kurset. Skjulingen av de
+andre kursene bruker en egen klasse med `display:none`, ikke `.hidden`: `.hidden` mangler
+`!important` og taper cascaden mot elementer med en display-settende klasse, og ville latt kursene
+bli stående synlige (samme felle som CLAUDE.md advarer mot). Tilbake-linja skjules med `setHidden()`,
+og flex-oppsettet ligger i klassen — `setHidden(el, false)` nullstiller `style.display`, så et
+inline `display:flex` ville forsvunnet første gang linja ble vist.
+
+**Én knapp under en ferdiglest seksjon, ikke to (#924).**
+
+Før sto det **«Marker seksjonen som lest»** og **«Gå til neste element»** side om side, med en
+hjelpetekst som forklarte forskjellen. Men den ene fulgte alltid den andre. Det var ikke et valg —
+det var et ekstra klikk forkledd som et, pluss to setninger å lese seg gjennom for å oppdage at det
+ikke spilte noen rolle. Å registrere at en seksjon er lest er noe systemet trenger, ikke noe
+deltakeren har en mening om.
+
+Nå står det **«Marker seksjon lest, og gå videre»**. «Videre» følger kursets **elementrekke**, ikke
+elementtypen: er neste element en modul, sier knappen **«Marker seksjon lest, og gå til testen»** og
+fører dit. En test som er lagt mellom to seksjoner er lagt der med vilje, og en knapp som hoppet til
+«neste seksjon» ville sendt deltakeren utenom vurderingen.
+
+**Siste element i kurset har ingen knapp.** Det finnes ingenting å gå videre til, og en knapp som
+sier noe annet enn de andre knappene sier, er én ting til å lese. Men lesningen må fortsatt
+registreres — kursbeviset krever at *alle* seksjoner er lest, så et kurs som slutter med lesestoff
+ville ellers aldri kunne fullføres. Systemet registrerer den derfor selv når seksjonen åpnes, uten å
+bygge om siden mens deltakeren leser. Fersk fremdrift (og eventuell fullførings-feiring) vises når
+man går tilbake til kurslista.
+
+**Diskusjon finnes nå bare på kursnivå (#923).**
+
+Tre nivåer med diskusjon — kurs, modul, seksjon — delte en samtale som uansett er liten, i tre
+halvdøde tråder. Færre steder å skrive er her det samme som mer samtale. Diskusjonsboardet nederst i
+seksjonsleseren er fjernet, og avkrysningen «Diskusjon» per element i kurs-editoren er fjernet.
+Kursets eget board står som før: sammenklappet til noen ber om det.
+
+⚠️ **Hva som er skjult versus hva som er slettet.** Produkteier har sagt at modul-/seksjonsdiskusjon
+trolig ikke er i aktiv bruk, men vil verifisere det ved produksjonsetting. Derfor er **ingenting
+slettet**:
+
+- **Skjult (kode, reversibelt):** diskusjonspanelet i seksjonsleseren, og «Diskusjon»-avkrysningen
+  per element i kurs-editoren.
+- **Uendret:** API-et (`/api/courses/:id/discussions` tar fortsatt imot `itemId`/`courseItemId` og
+  håndhever fortsatt `CourseItem.discussionsEnabled`), `discussion.*`-varslene, og den lagrede
+  `discussionsEnabled`-verdien per element — den leses og skrives tilbake uendret når en SMO lagrer
+  kursrekkefølgen.
+- **Slettet:** ingenting. Ingen migrasjon. `DiscussionThread.courseItemId` og alle tråder/innlegg på
+  modul- og seksjonsnivå ligger urørt i databasen.
+
+**Sjekk før produksjonsetting** (den eneste delen som ikke lar seg reversere — alt annet er kode
+som kan rulles tilbake):
+
+- [ ] Tell tråder/innlegg med `courseItemId` satt i **prod** før deploy.
+- [ ] Er tallet ikke null: stopp, og avklar med produkteier hva som skjer med dem.
+
+**Vakter.** To nye e2e-er: `participant-course-focus.spec.ts` (lista henter seg selv og står
+ekspandert; et åpnet kurs skjuler de andre og viser tilbake-linja; både lenka og nettleserens
+tilbakeknapp fører til lista) og `participant-section-advance.spec.ts` (én knapp; riktig tekst og
+riktig mål når neste element er en modul; ingen diskusjonsboard i leseren selv når elementet har
+`discussionsEnabled: true`). `participant-section-reader.spec.ts` vokter nå at siste seksjon har
+**ingen** knapp og likevel blir registrert lest. Alle elleve endringene er verifisert ved å
+reversere dem én om gangen og se testen bli rød på riktig assertion.
+
+Tests: tsc 0, e2e 21 (deltakerflaten), dom 5, kontrakter 32. Kun klient + i18n + dokumentasjon —
+ingen skjemaendring, ingen migrasjon, ingen endring i API-kontrakten.
 ## 2.19.3 - 2026-08-18
 
 **Tre funn fra QA-gaten på v2.19.2.** Kryssmodell-porten kunne ikke kjøre (Codex tom for kreditt),

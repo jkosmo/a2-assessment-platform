@@ -1585,9 +1585,6 @@ function renderModuleList() {
         <span class="item-type-badge">${courseItemTypeBadge(m.type)}</span>
         <span class="module-list-item-title">${escapeHtml(m.title)}</span>
         <div class="module-list-item-actions">
-          <label style="display:flex;align-items:center;gap:4px;font-size:12px;color:var(--color-meta);" title="Tillat diskusjon på dette elementet">
-            <input type="checkbox" data-disc-toggle="${i}"${m.discussionsEnabled !== false ? " checked" : ""} /> Diskusjon
-          </label>
           <button class="module-move-btn" data-move="up" data-index="${i}" ${i === 0 ? "disabled" : ""} aria-label="Flytt opp">↑</button>
           <button class="module-move-btn" data-move="down" data-index="${i}" ${i === courseModules.length - 1 ? "disabled" : ""} aria-label="Flytt ned">↓</button>
           <a href="${openHref}" class="module-move-btn" style="text-decoration:none;display:inline-flex;align-items:center" target="_blank" rel="noopener">Åpne</a>
@@ -1598,13 +1595,11 @@ function renderModuleList() {
   </div>`;
 
   document.getElementById("moduleList")?.addEventListener("click", handleModuleListClick);
-  // #495/T-QA-4: per-element diskusjons-toggle oppdaterer state (lagres med sekvensen via PUT /items).
-  document.getElementById("moduleList")?.addEventListener("change", (e) => {
-    const cb = e.target.closest("[data-disc-toggle]");
-    if (!cb) return;
-    const idx = parseInt(cb.dataset.discToggle, 10);
-    if (courseModules[idx]) courseModules[idx].discussionsEnabled = cb.checked;
-  });
+  // #923: per-element diskusjons-toggle er borte. Diskusjon finnes bare på kursnivå, så en bryter
+  // for «diskusjon på akkurat dette elementet» styrte en flate deltakeren ikke lenger har.
+  // Verdien leses fortsatt fra kurset og sendes uendret tilbake i PUT /courses/:id/items ved lagring,
+  // så ingenting i databasen endres av at bryteren forsvant — den kan skrus på igjen ved å
+  // gjenopprette dette feltet.
 }
 
 function handleModuleListClick(e) {

@@ -99,13 +99,13 @@ test("participant: section and module both open inline in-place; only one open a
   await expect(sectionItem.locator(".course-inline-panel")).toBeVisible();
   await expect(sectionItem.locator("#sectionReaderBody")).toContainText("Seksjonstekst");
 
-  // #865 cosmetic guard: the action buttons sit side by side (auto-width), not stacked full-width.
+  // #924: ÉN handlingsknapp, ikke to. Den gamle «marker lest» + «gå til neste»-paret er borte, og
+  // siden neste element her er en MODUL sier knappen det: den fører til testen, ikke til «neste
+  // seksjon». (#865s formguard beholdes: knappen er auto-bred, ikke strukket over hele panelet.)
   const markReadBtn = sectionItem.locator("#sectionReaderMarkRead");
-  const nextBtn = sectionItem.locator('[data-role="next"]');
-  await expect(nextBtn).toBeVisible();
+  await expect(sectionItem.locator(".course-inline-actions button")).toHaveCount(1);
+  await expect(markReadBtn).toHaveText("Marker seksjon lest, og gå til testen");
   const boxA = await markReadBtn.boundingBox();
-  const boxB = await nextBtn.boundingBox();
-  expect(boxA && boxB && Math.abs(boxA.y - boxB.y) < 5).toBe(true); // same horizontal row
   const panelBox = await sectionItem.locator(".course-inline-panel").boundingBox();
   expect(boxA && panelBox && boxA.width < panelBox.width * 0.9).toBe(true); // not full-width
 

@@ -119,10 +119,24 @@
       .course-accordion-header:hover { background: var(--color-blue-light); }
       .course-accordion-title { font-weight: 600; }
       .course-accordion-progress { font-size: 12px; color: var(--color-meta); margin-left: 6px; }
-      .course-accordion-chevron { margin-left: auto; font-size: 12px; color: var(--color-meta); transition: transform 0.15s; flex-shrink: 0; }
-      .course-accordion-item.open .course-accordion-chevron { transform: rotate(180deg); }
-      .course-accordion-body { display: none; padding: var(--space-2); border-top: 1px solid var(--color-border-soft); }
-      .course-accordion-item.open .course-accordion-body { display: grid; gap: var(--space-1); }
+      .course-accordion-chevron { margin-left: auto; font-size: 14px; color: var(--color-meta); flex-shrink: 0; }
+      /* #921: kurslista står ekspandert. Progresjon og kursbevis er svaret på «hvilke kurs har
+         jeg?», og det svaret skal ikke ligge bak et klikk. */
+      .course-accordion-body { display: grid; gap: var(--space-1); padding: var(--space-2); border-top: 1px solid var(--color-border-soft); }
+      /* #922: selve kursinnholdet (sekvensen) hentes og vises først når kurset er åpnet alene. */
+      .course-detail-slot { display: none; }
+      .course-accordion-item.is-focused .course-detail-slot { display: block; }
+      /* #922: ett åpent kurs får flaten alene — de andre kursene viker helt. Egen klasse med
+         display:none (IKKE .hidden, som taper cascaden — se CLAUDE.md / surface map § 7). */
+      .course-accordion--focused .course-accordion-item:not(.is-focused) { display: none; }
+      .course-accordion--focused .course-accordion-header { cursor: default; }
+      .course-accordion--focused .course-accordion-header:hover { background: var(--color-module-surface); }
+      .course-accordion--focused .course-accordion-chevron { display: none; }
+      /* Veien tilbake til kurslista. display:flex ligger i KLASSEN, ikke i style="" — setHidden(el,false)
+         nullstiller style.display, så et inline flex-oppsett ville forsvunnet ved første visning. */
+      .course-back-bar { display: flex; align-items: center; margin-bottom: var(--space-1); }
+      .course-back-btn { display: inline-flex; align-items: center; gap: 6px; background: none; border: none; padding: 4px 0; font-size: 14px; font-weight: 600; color: var(--color-link-active); cursor: pointer; }
+      .course-back-btn:hover { text-decoration: underline; }
       .course-progress-bar { height: 6px; background: var(--color-border-soft); border-radius: 999px; overflow: hidden; }
       .course-progress-fill { height: 100%; background: var(--color-blue); border-radius: 999px; transition: width 0.3s; }
       .course-progress-fill.completed { background: var(--color-success, #1f7a4d); }
@@ -363,7 +377,13 @@
          før noe innhold (prod, 2026-08-12). i18n-nøklene courses.title/courses.hint beholdes for
          andre flater. -->
     <section class="card" id="courseSection">
-      <button id="loadCoursesBtn" class="btn-secondary" data-i18n="courses.load">Last kurs</button>
+      <!-- #922: veien tilbake til kurslista står øverst til venstre, der man leter etter den.
+           Skjult som standard via inline display:none så den ikke blinker inn ved første maling;
+           setHidden() tar den fram (klassen eier flex-oppsettet). -->
+      <div id="courseBackBar" class="course-back-bar" style="display:none">
+        <button type="button" id="courseBackBtn" class="course-back-btn" data-i18n="courses.backToList">All courses</button>
+      </div>
+      <button id="loadCoursesBtn" class="btn-secondary" data-i18n="courses.reload">Refresh course list</button>
       <div id="courseAccordion" class="course-accordion"></div>
     </section>
 

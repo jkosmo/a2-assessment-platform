@@ -112,14 +112,15 @@ are two distinct code paths + a relocated singleton to keep in sync when touchin
 
 | Surface | Where | Notes |
 | --- | --- | --- |
-| Section open | `public/participant.js` `renderSectionReaderInto(panel, courseId, entry)` | Was the `#sectionReaderOverlay` modal (removed). Fetches `/api/courses/:id/sections/:sid`, hydrates asset images, mounts discussion, mark-read. Reuses ids `#sectionReaderTitle`/`#sectionReaderBody`/`#sectionReaderMarkRead`. |
+| Section open | `public/participant.js` `renderSectionReaderInto(panel, courseId, entry)` | Was the `#sectionReaderOverlay` modal (removed). Fetches `/api/courses/:id/sections/:sid`, hydrates asset images. **No discussion board since #923** (course level only) and **one combined action button since #924**. Reuses ids `#sectionReaderTitle`/`#sectionReaderBody`/`#sectionReaderMarkRead`. |
 | Module open | `openInlineItemByEntry` → `openCourseModule` → `renderCourseDetailModules` → `reopenInlineAfterRender` → `buildModuleInlinePanel` | Relocates the singleton `#moduleWorkspace` (wraps `#submissionSection`/`#mcqSection`/`#assessmentSection`/`#appealSection`) into the row's panel. |
 | Re-render safety | `restoreModuleWorkspaceHomeIfInside(container)` before every `innerHTML=""` in `renderCourseDetailModules` **and** `renderParticipantCourseAccordion`; `reopenInlineAfterRender` after | The accordion rebuilds via `innerHTML=""` frequently — the workspace MUST be moved back to `#moduleWorkspaceHome` first or it is destroyed. **Was documented but not enforced** — `renderParticipantCourseAccordion` lacked the call, and v2.11.5 routed the language switch through it, turning a hard-to-reach path into a one-click one. Now guarded: `participant-course-sequence.spec.ts` → "switching language while a module is open does not destroy the module workspace". |
 | Standalone module path | `renderModules` card click | Non-course-only (dev/test) flow uses the workspace at home; the click first `collapseInlineOpen()` + `restoreModuleWorkspaceHome()`. |
 | Home visibility | CSS `body.participant-course-only #moduleWorkspaceHome { display:none }`; set in `applyCourseOnlyMode` | Course-only shows the workspace ONLY inline; standalone keeps the home location. |
-| Shared state | `inlineOpen`, `courseSequences`, `collapseInlineOpen`, `nextEntryAfter` | One-open-at-a-time + «Gå til neste element» nav. |
+| Shared state | `inlineOpen`, `courseSequences`, `collapseInlineOpen`, `nextEntryAfter` | One-open-at-a-time + «Gå til neste element» nav (module panel only — the section reader’s nav is the #924 combined button). |
+| List vs. course state | `focusedCourseId`, `applyCourseFocusState`, `focusCourse`, `unfocusCourse` (#921/#922) | Opening a course hides every OTHER `.course-accordion-item` and reveals `#courseBackBar`. An inline-open item MUST be collapsed before the course is hidden (`unfocusCourse` → `collapseInlineOpen`) or the singleton workspace ends up inside a `display:none` subtree. |
 
-**Pre-deploy gate:** `npx playwright test --config playwright.admin-content.config.ts test/e2e/participant-section-reader.spec.ts test/e2e/participant-mcq-only.spec.ts test/e2e/participant-inline-open.spec.ts test/e2e/participant-course-sequence.spec.ts` (~5s, no Docker/Postgres). `participant-inline-open` is the consistency guard (section + module both inline, one open, workspace relocated); `participant-course-sequence` guards the serial presentation.
+**Pre-deploy gate:** `npx playwright test --config playwright.admin-content.config.ts test/e2e/participant-section-reader.spec.ts test/e2e/participant-mcq-only.spec.ts test/e2e/participant-inline-open.spec.ts test/e2e/participant-course-sequence.spec.ts test/e2e/participant-course-focus.spec.ts test/e2e/participant-section-advance.spec.ts` (~10s, no Docker/Postgres). `participant-inline-open` is the consistency guard (section + module both inline, one open, workspace relocated); `participant-course-sequence` guards the serial presentation; `participant-course-focus` guards list-vs-course state (#921/#922); `participant-section-advance` guards the combined advance button and the absent item-level discussion (#923/#924).
 
 ## 6b-2. Participant course view — the serial sequence (spine)
 
@@ -156,9 +157,24 @@ list of equal buttons. Three mutually exclusive row states, driven by `findNextI
   inherited opacity when it measures.
 - **The course-level discussion is collapsed by default and mounted on first open**
   (`.course-discussion-toggle` / `.course-discussion-body`). Once the sequence went quiet, an
-  always-expanded board outweighed the course content. The **item-level** board inside an opened
-  section reader is untouched — it is contextual there. Guarded by "the course-level discussion
-  stays collapsed until asked for"; `participant-discussions.spec.ts` expands it first.
+  always-expanded board outweighed the course content. Since **#923 it is the ONLY discussion
+  surface** — see entry 16. Guarded by "the course-level discussion stays collapsed until asked
+  for"; `participant-discussions.spec.ts` expands it first.
+- **The list and the open course are two states, not two panes (#921/#922).** The list auto-loads
+  (`loadParticipantConsoleConfig` ends with `loadParticipantCourses()`) and every card is expanded —
+  progress bar + certificate banner are visible without a click; only `.course-detail-slot` (the
+  sequence) waits for the course to be opened. Opening a course hides the other cards entirely
+  (`.course-accordion--focused .course-accordion-item:not(.is-focused){display:none}`), hides
+  `#loadCoursesBtn`, and shows `#courseBackBar`. **The `.course-accordion-header` is no longer a
+  disclosure toggle** — it navigates, and it is idempotent. `?courseId=` + `history.pushState`
+  make the browser Back button do the same thing as the back link.
+- **The section reader's action is ONE button (#924).** «Marker seksjon lest, og gå videre» marks
+  read AND opens the next element in the same click. "Next" is read from `courseSequences`
+  (the course's mixed item order) via `nextEntryAfter` — **never from a section-only list**, or a
+  module deliberately placed between two sections would be skipped. The label changes when the next
+  element is a module (`courses.section.markReadAndTest`). **The final element gets no button at
+  all**; `markFinalSectionReadSilently` then registers the read, because the certificate gate needs
+  every section read (entry 6) and a reading-course's last section would otherwise be unreachable.
 
 ## 6c. Section HTML sinks + client/server sanitizer parity (#814)
 
@@ -603,3 +619,37 @@ Merkingen er dobbelt kodet (prikk, `aria-label`-suffiks, live-region) og fjernes
 - e2e «a revision lands as a proposal when the fields hold unsaved typing» og «an untouched form
   takes the revision straight in, with no extra click». Den andre er ikke pynt: den er vakten mot
   å gate på tilstedeværelse i stedet for på dirty.
+
+## 23. Discussion — course level ONLY, but the item-level data still exists (#923)
+
+Discussion used to exist at three levels (course, module, section). Three places to write split a
+conversation that is small to begin with into three half-dead threads, so **from #923 the only
+entry point is the course-level board**. What changed is the UI; **nothing was deleted**, and that
+distinction is load-bearing for the production check below.
+
+| Surface | Where | State after #923 |
+|---------|-------|------------------|
+| Course-level board (participant) | `public/participant.js` `renderCourseDetailModules` → `mountDiscussionPanel({courseItemId: null})` | **Kept.** Collapsed by default, mounted on first open. |
+| Section-reader board (participant) | `public/participant.js` `renderSectionReaderInto` | **Removed.** No `#sectionReaderDiscussion`, no mount. |
+| Module-inline board (participant) | `buildModuleInlinePanel` | Never existed — the module workspace had no board. |
+| Per-item «Diskusjon» checkbox (SMO) | `public/static/admin-content-courses.js` `renderModuleList` | **Removed.** The stored `discussionsEnabled` per item is still read on load and written back unchanged by `PUT /courses/:id/items`, so existing values survive a course edit. |
+| Course-level «Diskusjon» checkbox (SMO) | `public/static/admin-content-courses.js` (`#discussionsEnabled`) | **Kept** — it still turns the whole course's board off. |
+| API | `GET/POST /api/courses/:id/discussions` with `itemId` / `courseItemId` | **Unchanged.** Still accepts item context; still enforces `CourseItem.discussionsEnabled` (`src/modules/discussion/discussionService.ts`). |
+| Data | `DiscussionThread.courseItemId` | **Untouched.** No migration, no delete. |
+
+**Why the API and data were left alone:** the product owner's own words (#923, 2026-08-18): *«Jeg
+tror ikke dette er i aktivt bruk enda, men jeg kan ved produksjonsetting gå gjennom og verifisere
+dette.»* That verification is only possible if the rows are still there. Rolling the UI back
+restores the old behaviour with no data work.
+
+**Production checklist for this change (the one irreversible part):**
+
+- [ ] Count threads/posts with a non-null `courseItemId` in **production** before deploying.
+- [ ] If the count is not zero: stop, and agree with the product owner what happens to them.
+
+**Guards:** `test/e2e/participant-section-advance.spec.ts` → "seksjonsleseren har ikke lenger sitt
+eget diskusjonsboard — kursnivået har det" (asserts the reader has no board *even when the item has
+`discussionsEnabled: true`*, and that the course board still mounts);
+`test/e2e/participant-discussions.spec.ts` (course-level create/list/reply);
+`participant-course-sequence.spec.ts` → "the course-level discussion stays collapsed until asked
+for". User docs: `doc/DISCUSSIONS_GUIDE.md`. Design: `doc/DISCUSSIONS_DESIGN.md`.

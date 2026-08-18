@@ -1698,6 +1698,15 @@ async function loadParticipantConsoleConfig() {
 
   // Identity form is now populated — safe to allow course loading (#541).
   if (loadCoursesBtn) loadCoursesBtn.disabled = false;
+
+  // #921: kurslista henter seg selv. «Hvilke kurs har jeg?» er hele grunnen til at deltakeren er
+  // her, og svaret lå bak et klikk på «Last kurs». Lastingen må skje ETTER at identiteten er
+  // populert (#541), ellers går forespørselen med tom x-user-id og 403-er. Knappen blir stående
+  // som en eksplisitt oppfrisking (og som stabil e2e-inngang), men er ikke lenger et krav.
+  // Forhåndsvisning viser en admin-kladd, ikke deltakerens egne kurs — der skal ingenting hentes.
+  if (!previewModeEnabled) {
+    loadParticipantCourses().catch(() => {/* stille — knappen er fortsatt der å prøve med */});
+  }
 }
 
 // #495-follow-up: når PARTICIPANT_COURSE_ONLY er på, når deltakere moduler kun via kurs — skjul den
@@ -3016,6 +3025,92 @@ function refreshOpenCourseDetailsForLocale() {
     .catch(() => {/* silent — a failed refresh leaves the previous render rather than an error */});
 }
 
+// ───────────────────────────────────────────────────────────────────────────────
+// #921/#922 — kurslista og det åpne kurset er TO TILSTANDER, ikke to ting side om side.
+//
+//   Lista:  alle kurs, ekspandert (tittel, progresjon, status, kursbevis). Ingen sekvens.
+//   Kurset: ett kurs alene på flaten, med sekvensen, og en tydelig vei tilbake.
+//
+// Produkteier om lesevisningen: «optimalisert for lesning og konsentrasjon med færrest mulig
+// distraksjoner». En liste over de andre kursene deltakeren kunne tatt i stedet er nettopp en slik
+// distraksjon, så den viker helt — ikke krympes, ikke dempes.
+// ───────────────────────────────────────────────────────────────────────────────
+
+let focusedCourseId = null;
+
+// Skjuling gjøres med en egen klasse som setter display:none på søsknene, ikke med .hidden —
+// .hidden mangler !important og taper cascaden mot display-settende klasser (CLAUDE.md, § 7 i
+// FEATURE_SURFACE_MAP). Tilbake-linja toggles med setHidden(), og flex-oppsettet ligger i
+// .course-back-bar-KLASSEN fordi setHidden(el, false) nullstiller style.display.
+function applyCourseFocusState() {
+  const container = document.getElementById("courseAccordion");
+  const focused = Boolean(focusedCourseId);
+  if (container) {
+    container.classList.toggle("course-accordion--focused", focused);
+    for (const item of container.querySelectorAll(".course-accordion-item")) {
+      item.classList.toggle("is-focused", focused && item.dataset.courseId === focusedCourseId);
+    }
+  }
+  setHidden(document.getElementById("courseBackBar"), !focused);
+  // «Oppdater kurslista» hører til lista, ikke til lesingen.
+  setHidden(document.getElementById("loadCoursesBtn"), focused);
+}
+
+// Nettleserens tilbakeknapp skal føre samme sted som tilbake-lenka (#922). Begge retninger legger
+// en historikkoppføring, så Back/Forward vandrer mellom liste og kurs. ?courseId= er samme
+// parameter som dyplenka allerede brukte, så en oppfriskning lander på samme sted.
+function courseFocusUrl(courseId) {
+  const url = new URL(window.location.href);
+  if (courseId) url.searchParams.set("courseId", courseId);
+  else url.searchParams.delete("courseId");
+  return `${url.pathname}${url.search}${url.hash}`;
+}
+
+function pushCourseFocusHistory(courseId) {
+  try {
+    window.history.pushState({ participantCourseId: courseId ?? null }, "", courseFocusUrl(courseId));
+  } catch {/* historikk er en bekvemmelighet, ikke en forutsetning */}
+}
+
+function focusCourse(courseId, options = {}) {
+  if (!courseId) return;
+  const changed = focusedCourseId !== courseId;
+  // Bytter vi kurs (f.eks. via Back/Forward) må et åpent element i det forrige kurset lukkes først,
+  // ellers blir singleton-#moduleWorkspace liggende i et undertre som straks skjules (§ 6b).
+  if (changed && inlineOpen && inlineOpen.courseId !== courseId) collapseInlineOpen();
+  focusedCourseId = courseId;
+  applyCourseFocusState();
+  if (changed && options.pushHistory !== false) pushCourseFocusHistory(courseId);
+  if (courseDetailCache[courseId]) renderCourseDetailModules(courseId, courseDetailCache[courseId]);
+  else loadCourseDetail(courseId);
+  if (changed) {
+    try { document.getElementById("courseSection")?.scrollIntoView({ behavior: "smooth", block: "start" }); }
+    catch {/* ignore */}
+  }
+}
+
+function unfocusCourse(options = {}) {
+  if (!focusedCourseId) return;
+  // Et åpent element må lukkes FØR kurset skjules: en modul som står inline eier singleton-
+  // #moduleWorkspace, og den kan ikke bli liggende i et skjult undertre (§ 6b).
+  collapseInlineOpen();
+  focusedCourseId = null;
+  applyCourseFocusState();
+  if (options.pushHistory !== false) pushCourseFocusHistory(null);
+  // Tilbake til lista er det naturlige tidspunktet å vise fersk progresjon på — og det er her
+  // #550-feiringen lander når siste seksjon ble lest uten en «marker lest»-knapp (#924).
+  loadParticipantCourses().catch(() => {/* stille */});
+}
+
+window.addEventListener("popstate", (event) => {
+  const stateCourseId = event.state && typeof event.state === "object" ? event.state.participantCourseId : undefined;
+  const target = stateCourseId ?? new URLSearchParams(window.location.search).get("courseId");
+  if (target) focusCourse(target, { pushHistory: false });
+  else unfocusCourse({ pushHistory: false });
+});
+
+document.getElementById("courseBackBtn")?.addEventListener("click", () => unfocusCourse());
+
 function renderParticipantCourseAccordion() {
   const container = document.getElementById("courseAccordion");
   if (!container) return;
@@ -3027,13 +3122,11 @@ function renderParticipantCourseAccordion() {
   restoreModuleWorkspaceHomeIfInside(container);
   if (participantCourses.length === 0) {
     container.innerHTML = `<p class="small" style="color:var(--color-meta);margin-top:4px">${escapeHtmlP(t("courses.empty"))}</p>`;
+    // Uten kurs finnes det ikke noe kurs å stå inne i — tilbake-linja skal ikke bli stående igjen.
+    focusedCourseId = null;
+    applyCourseFocusState();
     return;
   }
-  // Preserve which courses the user had expanded across this re-render (e.g. after marking a section read),
-  // so returning to the list doesn't collapse the course they're working in.
-  const previouslyOpen = new Set(
-    Array.from(container.querySelectorAll(".course-accordion-item.open")).map((el) => el.dataset.courseId),
-  );
   const isFirstRender = !courseAccordionInitialized;
 
   container.innerHTML = "";
@@ -3041,15 +3134,14 @@ function renderParticipantCourseAccordion() {
     container.appendChild(buildCourseAccordionItem(course));
   }
 
-  // Re-expand the previously-open courses (their detail is re-fetched since the cache was invalidated).
-  for (const courseId of previouslyOpen) {
-    if (!courseId) continue;
-    const item = container.querySelector(`.course-accordion-item[data-course-id="${courseId}"]`);
-    if (!item) continue;
-    item.classList.add("open");
-    item.querySelector(".course-accordion-header")?.setAttribute("aria-expanded", "true");
-    loadCourseDetail(courseId);
+  // #922: fokuset overlever re-renderen (f.eks. etter at en seksjon ble markert lest), så
+  // deltakeren ikke kastes ut til kurslista midt i lesingen. Detaljen hentes på nytt fordi
+  // courseDetailCache ble tømt.
+  if (focusedCourseId && !participantCourses.some((c) => c.id === focusedCourseId)) {
+    focusedCourseId = null;
   }
+  applyCourseFocusState();
+  if (focusedCourseId) loadCourseDetail(focusedCourseId);
 
   // #550: confetti when a course becomes completed during this session.
   let newlyCompleted = false;
@@ -3070,12 +3162,11 @@ function renderParticipantCourseAccordion() {
   // Deep link: ?courseId=xxx opens that course — only on the FIRST render, so a later re-render (e.g. after
   // marking a section read) doesn't re-toggle it and fight the open-state preservation above.
   const linkedCourseId = new URLSearchParams(window.location.search).get("courseId");
-  if (isFirstRender && linkedCourseId) {
-    const header = container.querySelector(`[data-course-id="${linkedCourseId}"] .course-accordion-header`);
-    if (header) {
-      header.click();
-      setTimeout(() => header.closest(".course-accordion-item").scrollIntoView({ behavior: "smooth", block: "start" }), 100);
-    }
+  if (isFirstRender && linkedCourseId && container.querySelector(`[data-course-id="${linkedCourseId}"]`)) {
+    // Dyplenka ER allerede «kurset alene»-tilstanden, så den skal ikke legge en ekstra
+    // historikkoppføring: nettleserens tilbakeknapp skal føre ut av siden, ikke til en liste
+    // deltakeren aldri sto i.
+    focusCourse(linkedCourseId, { pushHistory: false });
   }
 }
 
@@ -3127,27 +3218,25 @@ function buildCourseAccordionItem(course) {
   const badgeClass = completed ? "completed" : inProgress ? "retake" : "";
 
   item.innerHTML = `
-    <button type="button" class="course-accordion-header" aria-expanded="false">
+    <button type="button" class="course-accordion-header">
       <span>
         <span class="course-accordion-title">${escapeHtmlP(localizePreviewText(course.title))}</span>
         <span class="course-accordion-progress">${escapeHtmlP(formatCourseProgressLabel(course.progress))}</span>
       </span>
       <span class="module-status-badge ${badgeClass}" style="font-size:11px;padding:2px 8px;flex-shrink:0">${escapeHtmlP(statusText)}</span>
-      <span class="course-accordion-chevron">&#9662;</span>
+      <span class="course-accordion-chevron" aria-hidden="true">&#8250;</span>
     </button>
     <div class="course-accordion-body">
       <div class="course-progress-bar"><div class="course-progress-fill${completed ? " completed" : ""}" style="width:${pct}%"></div></div>
       ${completion ? `<div class="course-certificate-banner">${escapeHtmlP(t("courses.certificate.earned"))} - <span style="font-family:monospace;font-size:12px">${escapeHtmlP(completion.certificateId)}</span> · <a href="/certificate?id=${encodeURIComponent(completion.certificateId)}" target="_blank" rel="noopener">${escapeHtmlP(t("courses.certificate.view"))}</a></div>` : ""}
-      <div id="courseDetail_${course.id}"><p class="small" style="color:var(--color-meta)">${escapeHtmlP(t("courses.loadingModules"))}</p></div>
+      <div id="courseDetail_${course.id}" class="course-detail-slot"><p class="small" style="color:var(--color-meta)">${escapeHtmlP(t("courses.loadingModules"))}</p></div>
     </div>
   `;
 
-  item.querySelector(".course-accordion-header").addEventListener("click", async () => {
-    const isOpen = item.classList.toggle("open");
-    item.querySelector(".course-accordion-header").setAttribute("aria-expanded", String(isOpen));
-    if (isOpen && !courseDetailCache[course.id]) {
-      await loadCourseDetail(course.id);
-    }
+  // #921/#922: headeren er ikke lenger en trekkspill-bryter. Lista står allerede ekspandert, så
+  // det eneste klikket kan gjøre er å gi kurset flaten alene.
+  item.querySelector(".course-accordion-header").addEventListener("click", () => {
+    focusCourse(course.id);
   });
 
   return item;
@@ -3384,7 +3473,7 @@ function renderCourseDetailModules(courseId, course) {
 
 // Which item is currently expanded inline (or null). Tracked so we enforce one-open-at-a-time and
 // can re-open it after a course-detail re-render (the accordion rebuilds via innerHTML="").
-let inlineOpen = null; // { courseId, key, type, moduleId?, sectionId?, courseItemId?, discussionsEnabled?, title? }
+let inlineOpen = null; // { courseId, key, type, moduleId?, sectionId?, courseItemId?, read?, title? }
 const courseSequences = {}; // courseId -> ordered items, for "next element" navigation
 
 function courseItemKey(entry) {
@@ -3462,8 +3551,11 @@ async function openInlineItemByEntry(courseId, entry) {
   if (entry.type === "SECTION") {
     inlineOpen = {
       courseId, key, type: "SECTION",
+      // #923: discussionsEnabled bæres ikke lenger videre — seksjonsleseren har ikke noe
+      // diskusjonsboard å skru av eller på. entry.read følger med så en re-render (reopenInline-
+      // AfterRender) ikke sender et nytt «marker lest» for en seksjon som allerede er registrert.
       sectionId: entry.sectionId, courseItemId: entry.courseItemId,
-      discussionsEnabled: entry.discussionsEnabled, title: entry.title,
+      read: entry.read, title: entry.title,
     };
     itemWrap.classList.add("open");
     panel.hidden = false;
@@ -3552,8 +3644,21 @@ function buildModuleInlinePanel(panel, courseId, ctx) {
 // #491/P1 — render a learning section's server-rendered, sanitised HTML inline in the participant's
 // locale (previously a fixed-position modal; #865 made it an in-place disclosure).
 async function renderSectionReaderInto(panel, courseId, entry) {
-  const nextBtnMarkup = nextEntryAfter(courseId, courseItemKey(entry))
-    ? `<button type="button" class="btn-secondary" data-role="next">${escapeHtmlP(t("courses.item.next").replace("{title}", localizePreviewText(nextEntryAfter(courseId, courseItemKey(entry)).title) || ""))}</button>`
+  // #924: én knapp, ikke to. «Marker som lest» og «gå videre» fulgte alltid hverandre, så det andre
+  // klikket var ikke et valg — det var arbeid forkledd som et. Knappen leser kursets ELEMENTREKKE
+  // (courseSequences, satt av renderCourseDetailModules), ikke en seksjonsliste: er neste element en
+  // modul, skal deltakeren dit, ikke forbi vurderingen som var lagt der med vilje. Teksten sier
+  // hvilken av delene det er, for en knapp skal si det den gjør.
+  const nextEntry = nextEntryAfter(courseId, courseItemKey(entry));
+  const advanceLabel = nextEntry
+    ? (nextEntry.type === "MODULE" ? t("courses.section.markReadAndTest") : t("courses.section.markReadAndNext"))
+    : "";
+  // Siste element i kurset får INGEN knapp: det finnes ikke noe å gå videre til, og en knapp som
+  // sier noe annet enn de andre knappene sier, er én ting til å lese seg gjennom. Lesningen
+  // registreres i stedet av systemet (se markFinalSectionReadSilently under) — uten den ville
+  // kursbeviset, som krever at alle seksjoner er lest, blitt uoppnåelig.
+  const actionsMarkup = nextEntry
+    ? `<button type="button" id="sectionReaderMarkRead" class="btn-primary" data-role="markReadNext">${escapeHtmlP(advanceLabel)}</button>`
     : "";
   panel.innerHTML = `
     <div class="course-inline-panel-sticky">
@@ -3563,35 +3668,31 @@ async function renderSectionReaderInto(panel, courseId, entry) {
     </div>
     <div class="course-inline-panel-body">
       <div id="sectionReaderBody" class="section-reader-body">${escapeHtmlP(t("courses.section.loading"))}</div>
-      <div class="course-inline-actions">
-        <button type="button" id="sectionReaderMarkRead" class="btn-primary" data-role="markRead">${escapeHtmlP(t("courses.section.markRead"))}</button>
-        ${nextBtnMarkup}
-        <span class="course-inline-hint">${escapeHtmlP(t("courses.section.progressHint"))}</span>
-      </div>
-      <div id="sectionReaderDiscussion" style="margin-top:16px;"></div>
+      <div class="course-inline-actions">${actionsMarkup}</div>
     </div>`;
 
   panel.querySelector('[data-role="close"]').addEventListener("click", () => collapseInlineOpen());
-  panel.querySelector('[data-role="next"]')?.addEventListener("click", () => {
-    const next = nextEntryAfter(courseId, courseItemKey(entry));
-    if (next) openCourseItemEntry(courseId, next);
-  });
 
-  // Explicit "mark as read" (#492/#550): mark, collapse the panel, and refresh course detail + list
-  // so the read badge, course-level progress, and #550 completion confetti update.
+  // #924: marker lest OG gå videre, i ett. Rekkefølgen er nøye: kursdetaljen hentes på nytt før vi
+  // åpner neste element, så radene i DOM er de ferske openCourseItemEntry slår opp i — og
+  // nextEntryAfter regnes ut på nytt fra den ferske sekvensen, ikke fra et gammelt øyeblikksbilde.
   const markReadBtn = panel.querySelector("#sectionReaderMarkRead");
   markReadBtn?.addEventListener("click", async () => {
     markReadBtn.disabled = true;
     try {
       await apiFetch(`/api/courses/${encodeURIComponent(courseId)}/sections/${encodeURIComponent(entry.sectionId)}/read`, headers, { method: "POST" });
       collapseInlineOpen();
-      loadCourseDetail(courseId);
       loadParticipantCourses().catch(() => {});
+      await loadCourseDetail(courseId);
+      const target = nextEntryAfter(courseId, courseItemKey(entry));
+      if (target) openCourseItemEntry(courseId, target);
     } catch (error) {
       markReadBtn.disabled = false;
       showToast(error instanceof Error ? error.message : t("courses.loadError"), "error");
     }
   });
+
+  if (!nextEntry) markFinalSectionReadSilently(courseId, entry);
 
   try {
     const body = await apiFetch(`/api/courses/${encodeURIComponent(courseId)}/sections/${encodeURIComponent(entry.sectionId)}`, headers);
@@ -3610,16 +3711,22 @@ async function renderSectionReaderInto(panel, courseId, entry) {
     if (bodyEl) bodyEl.textContent = error instanceof Error ? error.message : t("courses.loadError");
   }
 
-  // #495/T-QA-3: per-seksjon diskusjonsboard i leseren (kun når påskrudd for elementet).
-  if (entry.discussionsEnabled && entry.courseItemId) {
-    const discEl = panel.querySelector("#sectionReaderDiscussion");
-    if (discEl) {
-      mountDiscussionPanel({
-        container: discEl, courseId, courseItemId: entry.courseItemId,
-        apiFetch, headers, t, escapeHtml: escapeHtmlP, showToast,
-      });
-    }
-  }
+  // #923: seksjonsleseren har IKKE lenger et eget diskusjonsboard. Tre nivåer med diskusjon delte
+  // en samtale som uansett er liten, i tre halvdøde tråder. Diskusjon finnes nå bare på kursnivå
+  // (renderCourseDetailModules). Ingenting er slettet: API-et tar fortsatt imot courseItemId, og
+  // eksisterende tråder på modul-/seksjonsnivå ligger urørt i databasen — bare inngangen er borte.
+}
+
+// #924-følge: siste element i kurset har ingen knapp, men lesningen må likevel registreres —
+// kursbeviset krever at ALLE seksjoner er lest (#476/#580), så uten dette ville et kurs som slutter
+// med lesestoff aldri kunne fullføres. Endepunktet er idempotent. Ingen re-render her: å bygge om
+// raden mens deltakeren leser ville kastet dem ut av teksten. Fersk progresjon vises når de går
+// tilbake til kurslista (unfocusCourse henter lista på nytt).
+function markFinalSectionReadSilently(courseId, entry) {
+  if (!entry?.sectionId || entry.read) return;
+  apiFetch(`/api/courses/${encodeURIComponent(courseId)}/sections/${encodeURIComponent(entry.sectionId)}/read`, headers, { method: "POST" })
+    .then(() => { entry.read = true; })
+    .catch(() => {/* stille — neste besøk prøver igjen */});
 }
 
 // Escape collapses whatever inline item is open (parity with the old modal's Escape-to-close).

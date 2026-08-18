@@ -46,7 +46,7 @@ async function mockParticipant(page: Page) {
   );
 }
 
-test("participant: open a course section, render its image, and mark it read", async ({ page }) => {
+test("participant: open a course section, render its image, and have the read registered", async ({ page }) => {
   await mockParticipant(page);
   await page.addInitScript(() => {
     try { localStorage.setItem("participant.locale", "nb"); } catch { /* ignore */ }
@@ -113,8 +113,13 @@ test("participant: open a course section, render its image, and mark it read", a
   await expect(img).toHaveCount(1);
   await expect.poll(async () => (await img.getAttribute("src")) ?? "").toMatch(/^blob:/);
 
-  // Mark as read fires the POST and collapses the inline panel (#550 feedback: close on mark-read).
-  await page.locator("#sectionReaderMarkRead").click();
+  // #924: seksjonen er SISTE element i kurset, så den har ingen knapp — det finnes ingenting å gå
+  // videre til. Lesningen registreres likevel: uten den ville kursbeviset, som krever at alle
+  // seksjoner er lest, vært uoppnåelig for et kurs som slutter med lesestoff.
+  await expect(page.locator(".course-inline-actions button")).toHaveCount(0);
+  await expect(page.locator("#sectionReaderMarkRead")).toHaveCount(0);
   await expect.poll(() => markReadCalled).toBe(true);
-  await expect(page.locator("#sectionReaderBody")).toHaveCount(0); // panel content cleared on collapse
+
+  // Leseren blir stående — «registrert lest» skal ikke rive teksten vekk under deltakeren.
+  await expect(page.locator("#sectionReaderBody")).toContainText("Innhold");
 });

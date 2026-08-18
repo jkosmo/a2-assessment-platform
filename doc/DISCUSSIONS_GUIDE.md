@@ -5,12 +5,14 @@ Teknisk referanse: `doc/API_REFERENCE.md` (seksjonen «Discussions / Q&A»). Des
 
 ## For deltakere
 
-Diskusjon finnes to steder i kursspilleren:
+Diskusjon finnes **ett sted** i kursspilleren: et «Diskusjon»-panel nederst i kurset, sammenklappet
+til du åpner det. Der hører alle spørsmål om kurset hjemme — også de som handler om én bestemt
+seksjon.
 
-- **Kurs-nivå:** Et «Diskusjon»-panel nederst når du åpner et kurs. Bruk det for spørsmål som
-  gjelder hele kurset.
-- **Per seksjon:** Når du åpner en lærings­seksjon, ligger et diskusjons­panel nederst i leseren
-  for spørsmål knyttet til akkurat den seksjonen.
+> **Endret i 2.20.0 (#923).** Tidligere fantes egne diskusjons­tråder per seksjon (og per modul).
+> Tre steder å skrive delte en samtale som uansett er liten, i tre halvdøde tråder. Nå er det ett
+> sted, og det er ment å gjøre samtalen mer levende, ikke mindre. Tråder som allerede ble skrevet på
+> seksjons- eller modulnivå er ikke slettet — de vises bare ikke lenger i deltakerflaten.
 
 ### Stille spørsmål eller starte en diskusjon
 1. Klikk **«Spør / diskuter»**.
@@ -36,13 +38,12 @@ raden beholdes for trådens sammenheng).
 ## For innholdsprodusenter (SMO / admin)
 
 ### Skru diskusjon av/på
-I **kurs-editoren**:
-- **Hele kurset:** avkrysningsboksen «Diskusjon på dette kurset». Skrus den av, er all diskusjon
-  (kurs-nivå og alle elementer) skjult for kurset.
-- **Per element:** i sekvens­listen har hver modul/seksjon en **«Diskusjon»**-avkrysning. Skru den
-  av for å hindre diskusjon på akkurat det elementet (kurs-nivå­boardet påvirkes ikke).
+I **kurs-editoren**: avkrysningsboksen «Diskusjon på dette kurset». Skrus den av, er diskusjon
+skjult for kurset. Diskusjon er **på som standard** for nye kurs, og lagres sammen med kurset.
 
-Diskusjon er **på som standard** for nye kurs og elementer. Lagres sammen med kurset/sekvensen.
+Avkrysningen **per element** i sekvens­listen er borte fra og med 2.20.0 (#923): den styrte en flate
+deltakeren ikke lenger har. Verdien som allerede var lagret per element ligger urørt i databasen og
+skrives tilbake uendret når du lagrer sekvensen.
 
 ### Moderering
 Som SMO/admin ser du modererings­knapper inne i hver tråd:

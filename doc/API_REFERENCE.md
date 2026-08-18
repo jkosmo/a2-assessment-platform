@@ -96,6 +96,14 @@ Threads hang on the course (course-level board, `courseItemId` absent) or on a s
 
 The course master toggle is set via the admin course API: `POST`/`PUT /api/admin/content/courses[/:courseId]` accept `discussionsEnabled` (boolean, default `true`); the admin course detail returns it.
 
+> **#923 (v2.20.0) — item-level discussion has no UI any more, but the API is unchanged.** The
+> participant section reader no longer mounts a board, and the SMO course editor no longer shows the
+> per-item «Diskusjon» checkbox; the course-level board is the only entry point. The routes above
+> still accept `itemId`/`courseItemId`, still enforce `CourseItem.discussionsEnabled`, and existing
+> item-level threads are **untouched in the database** (no migration) — the product owner wants to
+> verify the row count in production before anything is decided about them. See
+> `doc/FEATURE_SURFACE_MAP.md` § 16 for the full surface list and the pre-deploy checklist.
+
 ---
 
 ## Manual Review

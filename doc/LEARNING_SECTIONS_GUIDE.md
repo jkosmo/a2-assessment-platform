@@ -73,9 +73,18 @@ fortsatt.)
 
 ## For deltakere
 
-- I et kurs vises seksjoner i forløpet med **«Les»** og et **«Ikke lest»/«Lest»**-merke.
+- **Mine kurs** viser kurslista ferdig utfoldet: kurs, fremdrift og eventuelt kursbevis, uten at du
+  trenger å klikke deg fram til det (#921).
+- Klikk et kurs → kurset får skjermen alene, og de andre kursene forsvinner. Det er lesevisningen,
+  og den skal ha så lite som mulig som konkurrerer om oppmerksomheten. **«← Alle kurs»** øverst til
+  venstre (eller nettleserens tilbakeknapp) fører deg tilbake til lista (#922).
+- I kurset vises seksjoner i forløpet med **«Les»** og et **«Ikke lest»/«Lest»**-merke.
 - Klikk en seksjon → innholdet åpnes i en lesevisning (mobilvennlig).
-- Klikk **«Marker som lest»** når du er ferdig → seksjonen telles som fullført.
+- Nederst står **én** knapp: **«Marker seksjon lest, og gå videre»**. Den registrerer lesningen og
+  åpner neste element i kurset i samme klikk. Er neste element en test, sier knappen det —
+  **«Marker seksjon lest, og gå til testen»** — for da er det dit du skal, ikke forbi (#924).
+- **Siste element i kurset har ingen knapp.** Det er ingenting å gå videre til; lesningen
+  registreres av systemet når du åpner seksjonen.
 - **Fremdrift** teller **alle elementer**: en seksjon som er lest og en modul som er bestått
   teller likt mot «X/Y fullført».
 
