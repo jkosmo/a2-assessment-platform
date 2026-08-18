@@ -45,14 +45,34 @@ The "source" step in the conversational shell has several ways to add material �
 
 **Guards (e2e, `test/e2e/admin-content-workspaces.spec.ts`):** "fetches a single URL…", "can crawl a site…", "accepts a file between 2 and 10 MB". User doc: `doc/SOURCE_MATERIAL_INGEST_GUIDE.md`.
 
-## 3. Module creation — two entry points (#348)
+## 3. Module creation — four callers of `POST /modules` (#348 / #918)
 
-Creating a module is reachable from **two** places; a flow/step change must cover both.
+Creating a module is reachable from **four** places; a flow/step change must cover all of them.
 
 - **Library "create module" dialog** — `public/static/admin-content-library.js` (`createModuleBtn`, `emptyCreateBtn`, `createModuleDialog`, `openCreateDialog`).
-- **Conversation idle "new module"** — `public/static/admin-content-shell.js` (and the regen flow, #579).
+- **Conversation new module, free-text** — `confirmAndGenerate` in `public/static/admin-content-shell.js` (and the regen flow, #579).
+- **Conversation new module, MCQ-only** — `createMcqOnlyModuleThenGenerate`, same file. A separate function that has repeated the other one's mistakes word for word twice now.
+- **External-LLM import** — `applyExternalLlmJsonImport`, same file (#455).
 
-**Guards:** `test/e2e/admin-content-module-library.spec.ts` (library dialog → POST → conversation route); `test/e2e/admin-content-workspaces.spec.ts` "shell can create a new module…".
+### The title's shape is part of the contract (#918)
+
+`localizedTextSchema` is `string | {all three locales}`, and the two shapes mean different things
+(#892/#905): a bare string is «one language, not translated yet»; a full map asserts «this IS
+translated». The conversation typed one language and sent three copies of it, so the publish gate
+(point 18) found no gap in a title nobody had translated — an English module title reached Norwegian
+participants through the gate built to stop exactly that.
+
+So: **send the string as a string.** Only pass an object when the value really is translated — the
+external-LLM import is the one caller that can receive one, and it must pass it through unchanged
+rather than flattening it. Note that the import is also the only path where the lie survives to the
+gate: the other two put a bare string in `sessionDraft.title`, which `normalizeModuleTitlePatch`
+carries to the first save, so the module row corrects itself. The import put the map in both places.
+
+**Guards:** `test/e2e/admin-content-module-library.spec.ts` (library dialog → POST → conversation
+route); in `test/e2e/admin-content-workspaces.spec.ts`: "shell can create a new module…", "the
+conversation creates a module with a one-language title, not three copies of it" (free-text +
+MCQ-only), "an external-LLM import carries the title's real language through to the save" (both
+directions — bare string stays bare, locale object passes through).
 
 ## 4. Module-type (assessment mode) selection — 3-way (#525/#578)
 
@@ -404,6 +424,7 @@ behaviours below has to touch every row here, because they are wired in three di
 | Tab in the URL | `tabFromUrl` / `syncTabToUrl` (`?tab=preview\|settings`) | the tab survives reload and is shareable; Rediger is the default and stays OUT of the query so the plain route is canonical. `replaceState`, not `push` — Back must mean previous page, not previous tab. `/advanced` 301-redirects here since S3c |
 | **Audience filtering** | `audience` option in `public/static/admin-content-preview.js` (`buildPreviewHtml`, `renderPreviewMcqQuestions`, `renderPreviewCriteria`), set from `activeTab` at the shell's call site | `"participant"` withholds assessor expectation, MCQ correct-answer marking **and** the answer meta line, rationale, and `candidateVisible:false` criteria. Any NEW author-only field added to the preview must be gated here too, or it leaks into the tab that promises the learner's view |
 | Unsaved-state guard | `unsavedTabSwitchKind` + `#dialogUnsavedTabSwitch` in the shell | Warns on the **same signal as the status rail**: an open direct-edit form (`"form"`) or any `sessionDraft` (`"draft"`). The two cost different things, so the dialog copy and the confirm button switch with the kind — form values are LOST (`Forkast og bytt`, danger), a draft is only unsaved (`Bytt likevel`, primary) and is carried along. Every dismissal path — button, Escape, backdrop — routes through the dialog's `close` event so focus and selection cannot disagree |
+| **Same guard on the two language switches** (#920) | `confirmLocaleSwitchDiscard` in the shell, called from the content-language bar (`renderPreviewLocaleBar`) and the UI-language selector (`populateUiLocaleSelect`) | §7 requires the same warning on a language change as on a tab change, and for the same reason: both re-render the pane the edit form is built INTO, so its fields are DOM-only work the re-render destroys. The guard used to cover `activeTab === "settings"` ONLY, so «Rediger direkte» + type + switch language replaced the typed text with the stored text of the new language, silently. One deliberate difference from the tab switch: `"draft"` does not ask, because a language switch re-renders FROM the draft and endangers nothing — asking would put a dialog in front of every language switch for the life of the draft. Dirty, never presence: since v2.18.13 the form is open the whole time Rediger is |
 | **Attention marker** (#926) | `markTabAttention` / `clearTabAttention` in the shell, `.module-tab[data-attention]` in `public/admin-content.html` | Set when content lands in a tab the author is not looking at (generated criteria → Innstillinger). Cleared on open — it means «something happened you have not seen», so it must not be able to stick. Double-coded: dot, `aria-label` suffix, live region. The suffix is rebuilt from `t()`, so a UI-language switch has to re-apply it |
 | Conditional visibility | `setHidden` from `public/static/dom-visibility.js` | `.workspace-shell` is `display:grid` and the panels are `.card`; note the mirror trap — the `hidden` **attribute** survives `setHidden(el, false)`, so panels must start with inline `style="display:none"` |
 
@@ -411,7 +432,10 @@ behaviours below has to touch every row here, because they are wired in three di
 between the three views", "Forhaandsvisning withholds the answer key and assessor-only content",
 "leaving Rediger with an open edit form warns…", "Escape on the unsaved-changes dialog behaves like
 staying", "the tablist is one tab stop…", "staying after an arrow-key switch returns focus…", "help
-on the module route explains the tabs…". DOM contract: `test/dom/admin-content-workspaces.dom.test.js`
+on the module route explains the tabs…", "switching language with unsaved edits asks first, and
+staying keeps the typed text" (#920 — both switchers), "switching language with an untouched editor
+is silent, and keeps the editor open" (the other half: a guard on presence would ask every time).
+DOM contract: `test/dom/admin-content-workspaces.dom.test.js`
 ("exposes the three module views as one tablist"). Docs: `doc/route-map.md`,
 `doc/design/ADMIN_CONTENT_IA_ARCHITECTURE.md`, `doc/design/STATUS_896.md`,
 `doc/pilot/VERIFICATION_CHECKLIST.md`. **S3 will move the settings fields into the tab and delete
@@ -570,8 +594,31 @@ element på nytt fra DOM-kortene. Den må bære `storedLabel` / `storedDescripti
 fra forrige tilstand, ellers er de borte igjen på vei til lagringen — som er nøyaktig hvordan den
 rene strengen overlevde første forsøk på å fikse dette.
 
-**Guards:** e2e "editing a criterion in one language keeps the other two" og "Innstillinger edits
-the assessment instruction in one language and keeps the others".
+### Femte gang: drift-dialogen (#919)
+
+Samme feil, ny flate. `/generate/rubric` blir spurt om `contentLocale` og svarer i det;
+`llmCriteriaArrayToStorageRecord` merker svaret `{[locale]: tekst}`. Å godta et forslag skrev det
+ettspråks-kartet rett over et kriterium som hadde tre — og slettet to oversettelser som aldri ble
+vist og aldri redigert. Rettelsen er den samme regelen som over, i `mergeProposedCriterion` /
+`mergeProposedLocalizedField` (`public/static/admin-content-shell.js`).
+
+**To knapper, ikke én.** «Godta valgte» går gjennom `mergeProposedCriteria`; «Godta alle» ga
+`proposedRecord` rett til lagringen og hoppet over flettingen helt. Den går nå samme vei, med alle
+ID-er som «valgte». Et helt nytt kriterium har ingenting å flette mot og lagres som ettspråks-kart —
+å finne på de to andre språkene der er nøyaktig løgnen #892 finnes for å stoppe.
+
+⚠️ **Drift-banneret er i dag ikke synlig noe sted.** `[data-drift-banner]` tegnes av
+`renderPreview()`, men etter #896 S3c / v2.18.13 finnes ingen fane der den utskriften både tegnes og
+vises: Rediger overskriver ruta med redigeringsskjemaet umiddelbart, Forhåndsvisning undertrykker
+banneret (deltakervisning), og Innstillinger skjuler hele panelet. Elementet ligger i DOM-en etter
+Forhåndsvisning → Innstillinger, men `isVisible()` er `false`. E2e-vaktene under må derfor
+`dispatchEvent("click")` i stedet for å klikke. Det er en egen sak — fletting er rettet, men ingen
+forfatter når flaten.
+
+**Guards:** e2e "editing a criterion in one language keeps the other two", "Innstillinger edits
+the assessment instruction in one language and keeps the others", "accepting a drift proposal keeps
+the two languages it was not shown in" og "accept-all merges too, and a brand-new criterion is
+stored as the one language it has".
 
 ## 22. Generert innhold som lander i utkastet — seks produsenter, én port (#896 §6 / #926)
 

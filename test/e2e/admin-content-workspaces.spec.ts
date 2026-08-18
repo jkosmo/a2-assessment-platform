@@ -1242,6 +1242,95 @@ test.describe("admin content browser coverage", () => {
     await expect(page.getByText(/Trade unions.*loaded\./)).toBeVisible();
   });
 
+  // #918: the title an author types into the conversation exists in exactly one language — the one
+  // they typed it in. Sending `{nb, nn, "en-GB"}` filled with that one string is the encoding for
+  // "this IS translated" (#892/#905), so the publish gate found no gap in a title nobody had
+  // translated, and Norwegian participants got the English one. The module library has always sent
+  // a plain string; `localizedTextSchema` is `string | {all three}` and accepts it.
+  //
+  // Two creation paths, one test: free-text and MCQ-only are separate functions that made the same
+  // mistake in the same words, which is precisely the "correct fix, incomplete surface" class.
+  test("the conversation creates a module with a one-language title, not three copies of it", async ({ page }) => {
+    const state = await mockCommonApis(page);
+
+    await page.goto("/admin-content.html");
+    await clickEnabledButton(page, "Create new module");
+    await submitActiveChatInput(page, "Incident response");
+    await submitActiveChatInput(page, "Source notes about handling security incidents.");
+    await clickEnabledButton(page, "Free-text + MCQ");
+    await clickEnabledButton(page, "Let the LLM decide");
+    await clickEnabledButton(page, "Basic");
+    // The module shell is created inside `confirmAndGenerate`, which the blueprint step gates.
+    await clickEnabledButton(page, /Use this plan|Bruk denne planen/);
+
+    await expect.poll(() => state.lastModuleCreateBody?.title).toBe("Incident response");
+    expect(
+      typeof state.lastModuleCreateBody.title,
+      "a three-locale map claims a translation the author never made",
+    ).toBe("string");
+
+    // MCQ-only takes its own route to the same endpoint.
+    await page.goto("/admin-content.html");
+    await clickEnabledButton(page, "Create new module");
+    await submitActiveChatInput(page, "Safety quiz");
+    await submitActiveChatInput(page, "Source notes for an MCQ-only quiz about safety rules.");
+    await clickEnabledButton(page, "MCQ only");
+    await clickEnabledButton(page, "Basic");
+
+    await expect.poll(() => state.lastModuleCreateBody?.title).toBe("Safety quiz");
+    expect(typeof state.lastModuleCreateBody.title).toBe("string");
+  });
+
+  // #918, third creation path. This is the one where the lie survives all the way to the publish
+  // gate: the other two put a bare string in `sessionDraft.title`, so the first save corrects the
+  // module row. The import put the tri-locale map there too, and `normalizeModuleTitlePatch` passed
+  // it on to the save — the gate reads that value, saw three locales, and let the module publish.
+  test("an external-LLM import carries the title's real language through to the save", async ({ page }) => {
+    const state = await mockCommonApis(page);
+
+    const importJson = (title: unknown) => JSON.stringify({
+      module: { title, certificationLevel: "basic" },
+      moduleVersion: {
+        taskText: "Handle a reported security incident from first alert to closure.",
+        assessorExpectedContent: "A strong answer names containment, escalation and reporting.",
+      },
+      mcqSet: {
+        questions: [
+          {
+            stem: "Who must be notified first?",
+            options: ["The duty officer", "The press"],
+            correctAnswer: "The duty officer",
+            rationale: "Escalation starts with the duty officer.",
+          },
+        ],
+      },
+    });
+
+    const runImport = async (payload: string) => {
+      await page.goto("/admin-content.html");
+      await clickEnabledButton(page, "Create new module");
+      await submitActiveChatInput(page, "Ignored — the import carries its own title");
+      await clickEnabledButton(page, "Use external LLM");
+      await page.locator("#externalLlmJsonInput").fill(payload);
+      await page.locator('[data-ext-action="import"]').click();
+      await expect(page.getByText("Module imported.")).toBeVisible();
+    };
+
+    await runImport(importJson("Incident response"));
+    expect(state.lastModuleCreateBody.title).toBe("Incident response");
+
+    await clickEnabledButton(page, "Save draft");
+    // The value the publish gate reads. Three identical copies here is the module telling the gate
+    // it is translated; a bare string is it admitting it is not.
+    await expect.poll(() => state.lastModuleVersionBody?.title).toBe("Incident response");
+
+    // The caveat that makes this a merge and not a downgrade: an import MAY carry a real
+    // translation, and a locale object must pass through untouched rather than being flattened.
+    const translated = { "en-GB": "Incident response", nb: "Hendelseshåndtering", nn: "Hendingshandtering" };
+    await runImport(importJson(translated));
+    expect(state.lastModuleCreateBody.title).toEqual(translated);
+  });
+
   // #927 (#896 §11): the last uncovered finish criterion — an e2e that follows the NEW-MODULE
   // journey end to end through the tab surface, not just "create and save".
   //
@@ -4339,7 +4428,12 @@ test.describe("admin content browser coverage", () => {
   // med en samtale som fortsatt sier «rediger feltene og trykk Bekreft» — mens handlingsknappene
   // er brukt opp og deaktiverte. Ingen vei videre uten å laste siden på nytt. Årsaken er at
   // redigeringen bygges INN i forhåndsvisningsruten, som språkbyttet river.
-  test("switching preview language while editing directly keeps the editor open", async ({ page }) => {
+  //
+  // #920 rewrote this test. It used to switch language with an UNTOUCHED form and conclude that
+  // "the editor stays open" was the whole contract — which is why it stayed green while the
+  // language switch threw away typed text without a word. Openness is now the SECOND half; the
+  // first is that unsaved typing is not discarded behind the author's back.
+  test("switching language with an untouched editor is silent, and keeps the editor open", async ({ page }) => {
     await mockCommonApis(page, {
       modules: [{ id: "module-1", title: "Trade unions", activeVersion: { versionNo: 1 } }],
       moduleExports: {
@@ -4352,6 +4446,13 @@ test.describe("admin content browser coverage", () => {
         }),
       },
     });
+
+    // Not decoration: the guard must fire on DIRTY, not on the form being present. Since v2.18.13
+    // the form is open the entire time Rediger is, so a presence check would put a confirm in
+    // front of every single language switch — the same mistake §6 documents for the generation
+    // port. Any dialog here fails the test.
+    let dialogs = 0;
+    page.on("dialog", async (dialog) => { dialogs += 1; await dialog.accept(); });
 
     await page.goto("/admin-content/module/module-1/conversation");
     await page.locator("#previewEditTitle").waitFor();
@@ -4377,6 +4478,72 @@ test.describe("admin content browser coverage", () => {
     // form stays open after the save (Rediger IS the form), showing the values that were written.
     await page.locator("#previewEditConfirm").click();
     await expect(page.locator("#previewEditTaskText")).toHaveValue("Norsk scenario");
+
+    expect(dialogs, "an untouched form must not be asked about").toBe(0);
+  });
+
+  // #920 (§7): «Rediger direkte» → skriv → bytt språk. §7 requires the same warning on a language
+  // change as on a tab change, and for the same reason: both re-render the pane the edit form is
+  // built INTO, so its fields are DOM-only work that the re-render destroys. The guard covered
+  // `activeTab === "settings"` only, so Rediger lost the typing in silence.
+  //
+  // Both switchers are exercised. They are separate handlers with separate histories — the UI
+  // selector got its guard in #896 S6, the content bar in S3c — and a fix to one is not a fix.
+  test("switching language with unsaved edits asks first, and staying keeps the typed text", async ({ page }) => {
+    await mockCommonApis(page, {
+      modules: [{ id: "module-1", title: "Trade unions", activeVersion: { versionNo: 1 } }],
+      moduleExports: {
+        "module-1": buildMockModuleExport({
+          id: "module-1",
+          title: "Trade unions",
+          moduleVersionId: "module-1-version-1",
+          taskText: { "en-GB": "English scenario", nb: "Norsk scenario", nn: "Nynorsk scenario" },
+          assessorExpectedContent: { "en-GB": "English guidance", nb: "Norsk veiledning", nn: "Nynorsk rettleiing" },
+        }),
+      },
+    });
+
+    const dialogMessages: string[] = [];
+    // Default answer is "stay" — Playwright dismisses a dialog with no listener, and the point of
+    // the first two legs is that staying really does leave everything where it was.
+    let answer: "accept" | "dismiss" = "dismiss";
+    page.on("dialog", async (dialog) => {
+      dialogMessages.push(dialog.message());
+      if (answer === "accept") await dialog.accept();
+      else await dialog.dismiss();
+    });
+
+    await page.goto("/admin-content/module/module-1/conversation");
+    await page.locator("#previewEditTitle").waitFor();
+    await expect(page.locator("#previewEditTaskText")).toHaveValue("English scenario");
+
+    await page.locator("#previewEditTaskText").fill("Unsaved English rewrite");
+
+    // 1. The content-language bar. Staying leaves the typed text AND the language alone.
+    await page.locator("#previewLocaleBar button", { hasText: /Norsk bokmål/ }).click();
+    expect(dialogMessages, "the content-language switch did not ask").toHaveLength(1);
+    expect(dialogMessages[0]).toMatch(/not saved|ikke lagret/i);
+    await expect(page.locator("#previewEditTaskText")).toHaveValue("Unsaved English rewrite");
+    await expect(
+      page.locator("#previewLocaleBar button[aria-pressed='true']"),
+      "staying still moved the content language",
+    ).toHaveText("English (UK)");
+
+    // 2. The UI-language selector, same form, same unsaved text. Staying also puts the selector
+    // itself back — a menu showing "Norsk bokmål" over an English UI is its own small lie.
+    await page.locator("#localeSelect").selectOption("nb");
+    expect(dialogMessages, "the UI-language switch did not ask").toHaveLength(2);
+    await expect(page.locator("#previewEditTaskText")).toHaveValue("Unsaved English rewrite");
+    await expect(page.locator("#localeSelect")).toHaveValue("en-GB");
+
+    // 3. Discarding on purpose: the switch goes through, the fields show the new language, and the
+    // conversation says what was lost rather than leaving the author to notice.
+    answer = "accept";
+    await page.locator("#previewLocaleBar button", { hasText: /Norsk bokmål/ }).click();
+    expect(dialogMessages).toHaveLength(3);
+    await expect(page.locator("#previewEditConfirm")).toBeVisible();
+    await expect(page.locator("#previewEditTaskText")).toHaveValue("Norsk scenario");
+    await expect(page.getByText(/did not confirm is gone|uten å bekrefte, er borte/i).first()).toBeVisible();
   });
 
   // Stage-tilbakemelding 2026-08-17: Innstillinger edited in the UI language while Rediger edited
@@ -4416,5 +4583,146 @@ test.describe("admin content browser coverage", () => {
     // Changing the CONTENT language moves every surface, this one included.
     await bar.locator("button", { hasText: /Norsk bokmål/ }).click();
     await expect(page.locator("#settingsPromptSystem")).toHaveValue("Norsk system");
+  });
+
+  // ---------------------------------------------------------------------------
+  // #919: the drift dialog's accept paths.
+  //
+  // Same class as #892/#902/#905 and the same rule as doc/FEATURE_SURFACE_MAP.md point 21: the
+  // composition writes localized fields VERBATIM, so a surface showing ONE language has to merge
+  // that language in itself. `/generate/rubric` is asked for `contentLocale` and answers in it, so
+  // accepting a proposal wholesale wrote a one-locale map over a criterion that had three and
+  // deleted two translations that were never shown and never edited.
+  //
+  // NOTE on how these two tests reach the banner. `[data-drift-banner]` is rendered by
+  // `renderPreview()`, and since #896 S3c / v2.18.13 there is no tab where that output is both
+  // drawn AND visible: Rediger immediately overwrites the pane with the edit form, Forhåndsvisning
+  // suppresses the banner as a participant view, and Innstillinger hides the whole panel. The
+  // element is in the DOM (count 1 after Forhåndsvisning → Innstillinger) but `isVisible()` is
+  // false, so the click is dispatched rather than performed. That is a REACHABILITY defect in its
+  // own right, reported separately — it is not what these tests are about, and the handler chain
+  // they exercise from there is the real one.
+  // ---------------------------------------------------------------------------
+
+  const CLARITY_LABEL = { "en-GB": "Clarity", nb: "Klarhet", nn: "Klårleik" };
+  const CLARITY_DESCRIPTION = {
+    "en-GB": "Explains the reasoning.",
+    nb: "Forklarer resonnementet.",
+    nn: "Forklarar resonnementet.",
+  };
+  const ACCURACY_LABEL = { "en-GB": "Accuracy", nb: "Nøyaktighet", nn: "Nøyaktigheit" };
+  const ACCURACY_DESCRIPTION = {
+    "en-GB": "Gets the facts right.",
+    nb: "Får fakta riktig.",
+    nn: "Får fakta rett.",
+  };
+
+  async function mockDriftedModule(page: Page) {
+    const moduleExport = buildMockModuleExport({
+      id: "module-1",
+      title: "Trade unions",
+      moduleVersionId: "module-1-version-1",
+    });
+    // Drift is "the plan the criteria were generated from is not the plan that is stored now".
+    // A blueprint plus a stale hash on the rubric is the whole condition.
+    moduleExport.selectedConfiguration.moduleVersion.assessmentBlueprint = {
+      criteria: [{ id: "clarity", label: "Clarity" }, { id: "accuracy", label: "Accuracy" }],
+    };
+    moduleExport.selectedConfiguration.rubricVersion.criteria = {
+      clarity: {
+        label: CLARITY_LABEL, description: CLARITY_DESCRIPTION,
+        maxScore: 5, weight: 0.5, candidateVisible: true,
+      },
+      accuracy: {
+        label: ACCURACY_LABEL, description: ACCURACY_DESCRIPTION,
+        maxScore: 5, weight: 0.5, candidateVisible: true,
+      },
+    };
+    moduleExport.selectedConfiguration.rubricVersion.scalingRule = {
+      generated_from_blueprint_hash: "a-hash-from-the-previous-plan",
+      practical_weight: 70,
+      max_total: 10,
+    };
+
+    const state = await mockCommonApis(page, {
+      modules: [{ id: "module-1", title: "Trade unions", activeVersion: { versionNo: 1 } }],
+      moduleExports: { "module-1": moduleExport },
+    });
+
+    // The generator answers in the ONE language it was asked for — the whole premise of the bug.
+    // `accuracy` comes back identical, so it lands in the diff's "unchanged" bucket: the control
+    // that says an untouched criterion is not quietly rewritten either.
+    await page.route("**/api/admin/content/generate/rubric", async (route: Route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          rubric: {
+            criteria: [
+              { id: "clarity", label: "Clarity of reasoning", description: "Explains the reasoning.", maxScore: 5, candidateVisible: true },
+              { id: "accuracy", label: "Accuracy", description: "Gets the facts right.", maxScore: 5, candidateVisible: true },
+              { id: "structure", label: "Structure", description: "Follows a clear order.", maxScore: 4, candidateVisible: true },
+            ],
+          },
+        }),
+      });
+    });
+
+    return state;
+  }
+
+  async function openDriftDiff(page: Page) {
+    await page.goto("/admin-content/module/module-1/conversation");
+    await page.locator("#previewEditTitle").waitFor();
+    // Forhåndsvisning → Innstillinger is the one transition that re-renders the preview pane and
+    // then leaves it alone; see the NOTE above.
+    await page.locator("#tabPreview").click();
+    await page.locator("#tabSettings").click();
+    await expect(page.locator("[data-drift-banner]")).toHaveCount(1);
+    await page.locator('[data-drift-action="show-diff"]').dispatchEvent("click");
+    await expect(page.locator(".drift-diff-overlay")).toBeVisible();
+  }
+
+  test("accepting a drift proposal keeps the two languages it was not shown in", async ({ page }) => {
+    const state = await mockDriftedModule(page);
+    await openDriftDiff(page);
+
+    // Deselect the new criterion, so this also proves the selective path still selects.
+    await page.locator('input[data-diff-checkbox][data-criterion-id="structure"]').uncheck();
+    await clickEnabledButton(page, "Accept selected");
+
+    await expect.poll(() => state.lastRubricVersionBody?.criteria).toBeTruthy();
+    const criteria = state.lastRubricVersionBody.criteria;
+
+    // The accepted change lands in the language it was proposed in — and ONLY there.
+    expect(criteria.clarity.label).toEqual({ ...CLARITY_LABEL, "en-GB": "Clarity of reasoning" });
+    // The description was not part of the change, so it is byte-for-byte what was stored.
+    expect(criteria.clarity.description).toEqual(CLARITY_DESCRIPTION);
+    // An unchanged criterion is carried over whole.
+    expect(criteria.accuracy.label).toEqual(ACCURACY_LABEL);
+    expect(criteria.accuracy.description).toEqual(ACCURACY_DESCRIPTION);
+    // Deselected, so it is not in the new rubric at all.
+    expect(criteria.structure).toBeUndefined();
+  });
+
+  test("accept-all merges too, and a brand-new criterion is stored as the one language it has", async ({ page }) => {
+    const state = await mockDriftedModule(page);
+    await openDriftDiff(page);
+
+    // «Godta alle» used to hand the raw proposal to the save, skipping the merge entirely — and it
+    // is the button an author in a hurry presses.
+    await clickEnabledButton(page, "Accept all");
+
+    await expect.poll(() => state.lastRubricVersionBody?.criteria).toBeTruthy();
+    const criteria = state.lastRubricVersionBody.criteria;
+
+    expect(criteria.clarity.label).toEqual({ ...CLARITY_LABEL, "en-GB": "Clarity of reasoning" });
+    expect(criteria.clarity.description).toEqual(CLARITY_DESCRIPTION);
+    expect(criteria.accuracy.label).toEqual(ACCURACY_LABEL);
+
+    // A criterion that did not exist before has nothing to merge against, and inventing the other
+    // two languages here would be the very lie #892 exists to stop. One key, honestly.
+    expect(criteria.structure.label).toEqual({ "en-GB": "Structure" });
+    expect(criteria.structure.description).toEqual({ "en-GB": "Follows a clear order." });
   });
 });

@@ -1036,12 +1036,10 @@ function renderPreviewLocaleBar() {
       // Disse knappene er i dag deaktivert under redigering via CSS. Guarden står likevel her, så
       // flaten ikke får tilbake blindveien i det øyeblikket noen fjerner den CSS-regelen.
       const wasEditing = !!document.getElementById("previewEditConfirm");
-      // Innstillinger holds one language's text in DOM-only fields, exactly like the UI-language
-      // switch does — so it needs the same guard, or a typed instruction is lost on the way.
-      if (activeTab === "settings" && hasUnsavedSettingsEdits()
-        && !window.confirm(t("shell.tab.unsaved.settingsBody"))) {
-        return;
-      }
+      // #920: the same question a tab switch asks. It used to ask it only for Innstillinger, so an
+      // open edit form was re-rendered from the new language without a word — the typed text was
+      // simply gone.
+      if (!confirmLocaleSwitchDiscard()) return;
       contentLocale = loc;
       // The panel's editors are seeded once, in the language they were seeded FOR. Discard so the
       // next render re-reads them in the new one; otherwise the author edits Norwegian text that
@@ -4116,12 +4114,12 @@ function openExternalLlmModal({ scenarioMode = "auto", onImportSuccess } = {}) {
 // and land the author in draft-ready. Mirrors the new-module branch of confirmAndGenerate
 // (line ~3759) without the LLM round-trips — the LLM work was done off-platform.
 async function applyExternalLlmJsonImport(parsed) {
-  // Wrap a plain-string title in a tri-locale object so it survives the module-create API
-  // contract (title: localized object). Locale-object titles pass through unchanged.
+  // #918: a plain-string title is sent AS a plain string. `localizedTextSchema` is
+  // `string | {all three locales}`, so the string needs no wrapping — and wrapping it filled all
+  // three languages with the source text, which is the encoding for "this IS translated". The
+  // publish gate then found no gap in a title nobody had translated (#892/#905). A locale OBJECT
+  // from the import is a real translation and passes through untouched.
   const moduleTitle = parsed.moduleTitle;
-  const titleLocalized = typeof moduleTitle === "string"
-    ? { nb: moduleTitle, nn: moduleTitle, "en-GB": moduleTitle }
-    : moduleTitle;
   const certificationLevel = ["basic", "intermediate", "advanced"].includes(parsed.certificationLevel)
     ? parsed.certificationLevel
     : "intermediate";
@@ -4139,7 +4137,7 @@ async function applyExternalLlmJsonImport(parsed) {
     const body = await apiFetch(
       "/api/admin/content/modules",
       getHeaders,
-      { method: "POST", body: JSON.stringify({ title: titleLocalized, certificationLevel }) },
+      { method: "POST", body: JSON.stringify({ title: moduleTitle, certificationLevel }) },
     );
     newModule = body?.module ?? body;
   } catch (err) {
@@ -4166,7 +4164,7 @@ async function applyExternalLlmJsonImport(parsed) {
   // Criteria, if provided, become an explicit override that saveDraftBundleInBackground
   // POSTs as a new RubricVersion (the B2 explicit-criteria branch, not ensure-rubric).
   sessionDraft = buildPreviewCandidate({
-    title: titleLocalized,
+    title: moduleTitle,
     taskText: parsed.taskText,
     assessorExpectedContent: parsed.assessorExpectedContent,
     candidateTaskConstraints: parsed.candidateTaskConstraints,
@@ -4247,7 +4245,16 @@ function openDriftDiffModal(diff, proposedRecord) {
 
   overlay.querySelector('[data-diff-action="accept-all"]')?.addEventListener("click", async () => {
     close();
-    await persistMergedRubric(proposedRecord);
+    // #919: «godta alle» is the same decision as ticking every box, so it takes the same road.
+    // Handing `proposedRecord` straight to the save skipped the locale merge entirely — and it is
+    // the button an author in a hurry presses, so it was the likelier way to lose the two
+    // languages that were not on screen.
+    const allIds = new Set([
+      ...diff.added.map(({ id }) => id),
+      ...diff.removed.map(({ id }) => id),
+      ...diff.changed.map(({ id }) => id),
+    ]);
+    await persistMergedRubric(mergeProposedCriteria(diff, proposedRecord, allIds));
   });
 
   overlay.querySelector('[data-diff-action="accept-selected"]')?.addEventListener("click", async () => {
@@ -4339,7 +4346,7 @@ function buildDriftDiffModalHtml(diff) {
 //   - added id, not accepted → drop (not present in result)
 //   - removed id, accepted   → drop (user accepted the removal)
 //   - removed id, not accepted → keep existing
-//   - changed id, accepted   → use proposed
+//   - changed id, accepted   → proposed MERGED onto existing (#919 — see below)
 //   - changed id, not accepted → keep existing
 //   - unchanged              → keep existing
 // Weights are recomputed from the resulting maxScore totals so scalingRule.max_total stays
@@ -4355,9 +4362,11 @@ function mergeProposedCriteria(diff, proposedRecord, acceptedIds) {
     if (!acceptedIds.has(id)) result[id] = prev;
   }
   for (const { id } of diff.changed) {
-    result[id] = acceptedIds.has(id) ? proposedRecord[id] : existing[id];
+    result[id] = acceptedIds.has(id) ? mergeProposedCriterion(existing[id], proposedRecord[id]) : existing[id];
   }
   for (const { id } of diff.added) {
+    // Nothing to merge against — a brand-new criterion exists in exactly the language the
+    // generator was asked for, and `llmCriteriaArrayToStorageRecord` already tagged it as such.
     if (acceptedIds.has(id)) result[id] = proposedRecord[id];
   }
 
@@ -4367,6 +4376,47 @@ function mergeProposedCriteria(diff, proposedRecord, acceptedIds) {
     result[id] = { ...c, weight: Number((maxScore / totalMax).toFixed(2)) };
   }
   return result;
+}
+
+/**
+ * #919: fold an accepted drift proposal into the criterion it replaces, instead of replacing it.
+ *
+ * Same class as #892/#902/#905, and the same rule as the regeneration path got in v2.18.10: the
+ * composition writes localized fields VERBATIM, so a surface that shows one language must merge
+ * that language in itself. The generator is asked for `contentLocale` and answers in it —
+ * `llmCriteriaArrayToStorageRecord` tags the answer `{[locale]: text}` — so accepting a proposal
+ * wholesale wrote a one-locale map over a criterion that had three, and deleted two translations
+ * the author never saw and never edited. See doc/FEATURE_SURFACE_MAP.md point 21.
+ *
+ * Everything that is NOT localized (maxScore, candidateVisible) comes from the proposal: that is
+ * the change being accepted. Only `label` and `description` are merged.
+ */
+function mergeProposedCriterion(stored, proposed) {
+  if (!proposed || typeof proposed !== "object") return proposed;
+  if (!stored || typeof stored !== "object") return proposed;
+  return {
+    ...proposed,
+    label: mergeProposedLocalizedField(stored.label, proposed.label),
+    description: mergeProposedLocalizedField(stored.description, proposed.description),
+  };
+}
+
+/**
+ * Merge every locale the proposal actually carries into the stored value, and leave the rest of
+ * the stored value byte for byte. A stored value that does not exist has nothing to merge onto,
+ * so the proposal stands as it is.
+ */
+function mergeProposedLocalizedField(stored, proposed) {
+  if (stored === undefined || stored === null || stored === "") return proposed;
+  const entries = typeof proposed === "string"
+    // A bare string from the generator carries no locale marker, and the one language it can
+    // honestly be attributed to is the one it was asked for.
+    ? [[contentLocale, proposed]]
+    : Object.entries(proposed ?? {}).filter(([, text]) => typeof text === "string");
+  if (entries.length === 0) return stored;
+  let next = stored;
+  for (const [locale, text] of entries) next = mergeLocaleInto(next, locale, text);
+  return next ?? proposed;
 }
 
 // B3 (#450): POST the merged criteria as a new RubricVersion. Server-side createRubricVersion
@@ -5288,6 +5338,28 @@ function unsavedTabSwitchKind() {
   if (hasUnsavedSettingsEdits()) return "settings";
   if (sessionDraft) return "draft";
   return null;
+}
+
+/**
+ * #920 (§7): the guard the two language switchers share.
+ *
+ * §7 asks for the same warning on a language change as on a tab change, and the reason is the
+ * same in both places: the surfaces that hold work only in the DOM are torn down and rebuilt from
+ * the other language. Until now only Innstillinger was asked about, so «Rediger direkte» + type +
+ * switch language silently replaced the typed text with the stored text of the new language.
+ *
+ * Same `unsavedTabSwitchKind()` as the tab switch, with one deliberate difference: `"draft"` does
+ * NOT ask. A tab switch warns about a draft because it is unsaved; a language switch does not
+ * endanger it at all — both re-renders read FROM the draft. Warning here would put a dialog in
+ * front of every language switch for the whole life of a draft, and a warning the author knows is
+ * wrong is one they learn to click through.
+ *
+ * Returns true to proceed, false to stay.
+ */
+function confirmLocaleSwitchDiscard() {
+  const kind = activeTab === "edit" || activeTab === "settings" ? unsavedTabSwitchKind() : null;
+  if (kind !== "form" && kind !== "settings") return true;
+  return window.confirm(t(kind === "form" ? "shell.tab.unsaved.body" : "shell.tab.unsaved.settingsBody"));
 }
 
 // ---------------------------------------------------------------------------
@@ -7021,11 +7093,14 @@ async function createMcqOnlyModuleThenGenerate(moduleTitle, sourceMaterial, cert
 
   let newModule;
   try {
-    const titleLocalized = { nb: moduleTitle, nn: moduleTitle, "en-GB": moduleTitle };
+    // #918: the typed title goes out as the plain string it is. Filling all three locales with it
+    // told the publish gate "already translated" about a title written in exactly one language —
+    // see the module library, which has always sent a string, and `localizedTextSchema`, which
+    // accepts one.
     const body = await apiFetch(
       "/api/admin/content/modules",
       getHeaders,
-      { method: "POST", body: JSON.stringify({ title: titleLocalized, certificationLevel: certLevel }) },
+      { method: "POST", body: JSON.stringify({ title: moduleTitle, certificationLevel: certLevel }) },
     );
     newModule = body?.module ?? body;
   } catch (err) {
@@ -7357,11 +7432,13 @@ async function confirmAndGenerate(moduleTitle, existingModuleId, sourceMaterial,
 
   let newModule;
   try {
-    const titleLocalized = { nb: moduleTitle, nn: moduleTitle, "en-GB": moduleTitle };
+    // #918: plain string in, plain string out — see createMcqOnlyModuleThenGenerate. The draft's
+    // own title (`sessionDraft.title` below) has always been the bare string; only the create call
+    // pretended otherwise, so the module row and the draft disagreed from the first second.
     const body = await apiFetch(
       "/api/admin/content/modules",
       getHeaders,
-      { method: "POST", body: JSON.stringify({ title: titleLocalized, certificationLevel: certLevel }) },
+      { method: "POST", body: JSON.stringify({ title: moduleTitle, certificationLevel: certLevel }) },
     );
     newModule = body?.module ?? body;
   } catch (err) {
@@ -7719,7 +7796,11 @@ function populateUiLocaleSelect() {
     // the DOM-only inputs. This is the second exit from Innstillinger and it had no guard at all —
     // a typed validity date vanished the instant the language changed. Ask before, and put the
     // selector back if the author says no.
-    if (activeTab === "settings" && hasUnsavedSettingsEdits() && !window.confirm(t("shell.tab.unsaved.settingsBody"))) {
+    //
+    // #920: and the same for Rediger. `renderPreview()` further down rebuilds the pane the edit
+    // form is built INTO, so an open form's fields are just as DOM-only as the settings inputs —
+    // the guard was simply asking about the wrong tab.
+    if (!confirmLocaleSwitchDiscard()) {
       uiLocaleSelect.value = currentLocale;
       return;
     }

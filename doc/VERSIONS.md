@@ -2,8 +2,80 @@
 
 This document tracks release versions and what each version includes.
 
-## 2.20.0 - 2026-08-18
+## 2.21.0 - 2026-08-18
+**Tre steder der plattformen påsto noe den ikke visste — to om språk, ett om ulagret arbeid.**
+Alle tre kom fra kryssmodell-QA under #896 (runde 4, 6 og 7) og ble lagt til side der fordi de hørte
+til andre flater enn omleggingen.
 
+### #918 — samtalen fylte alle tre språk med kildetittelen
+
+En tittel forfatteren skriver inn i samtalen finnes på nøyaktig ett språk: det de skrev den på.
+Tre opprettelsesstier sendte den likevel som `{nb, nn, "en-GB"}` fylt med samme streng. Etter
+lokale-kontrakten (#892/#905) betyr et fullt trespråks-kart **«dette er oversatt»**, mens en ren
+streng betyr «ett språk, ikke oversatt ennå» — så de tre kopiene var ikke en snarvei, de var en
+påstand.
+
+Konsekvensen er hele grunnen til at publiseringsgaten finnes: engelsk UI → opprett «Incident
+response» gjennom samtalen → «oversett det som mangler» finner ingen hull i tittelen → publiser.
+Norske deltakere får den engelske tittelen, og gaten som skulle stoppe akkurat det så en tittel som
+allerede var i mål. Modulbiblioteket har alltid sendt en ren streng, og `localizedTextSchema` er
+`string | {alle tre}` — så det var ingenting å pakke inn for.
+
+Alle tre stiene sender nå strengen som streng. Ekstern-LLM-importen er den eneste som kan få inn et
+ekte oversatt kart, og det slipper uendret gjennom. Den er også den eneste der løgnen overlevde helt
+til gaten: de to andre la en ren streng i `sessionDraft.title`, som første lagring bar videre og
+rettet opp modulraden med. Importen la kartet begge steder.
+
+### #920 — språkbytte varslet ikke om åpne redigeringsfelt
+
+§7 krever samme advarsel ved språkbytte som ved fanebytte. Vakten spurte bare når man sto i
+**Innstillinger**. Sto man i Rediger med et åpent skjema, ble det tegnet på nytt uten et ord:
+«Rediger direkte» → skriv ny scenariotekst → velg bokmål i toppfeltet, og den engelske teksten var
+borte, erstattet av lagret bokmålstekst.
+
+Årsaken er den samme som for Innstillinger, og det var det som gjorde det lett å overse: begge
+flatene holder arbeid som bare finnes i DOM-en, og begge språkbyttene river ruta og tegner den fra
+det andre språket. Vakten spurte om feil fane, ikke om feil ting. Begge språkvelgerne — den for
+innholdsspråk og den for menyspråk — bruker nå samme `unsavedTabSwitchKind()` som fanebyttet, så
+`"form"` fanges også.
+
+Ett bevisst avvik fra fanebyttet: et **utkast** spør vi ikke om. Fanebyttet advarer om utkastet
+fordi det er ulagret, men et språkbytte tegner ruta *fra* utkastet og setter ingenting i fare — en
+advarsel der ville stått foran hvert eneste språkbytte så lenge utkastet lever, og en advarsel man
+vet er feil er en man lærer seg å klikke bort. Vakten spør på skitne felt, aldri på at skjemaet er
+åpent: siden v2.18.13 er skjemaet åpent hele tiden Rediger er det.
+
+### #919 — «godta forslag» i drift-dialogen slettet de to andre språkene
+
+Et kriterium med tekst på `en-GB`, `nb` og `nn`: vis driftforslag med engelsk forhåndsvisning, godta
+én tekstendring, og den nye rubrikkversjonen har bare `en-GB` for det kriteriet. `nb` og `nn` er
+slettet — språk som aldri ble vist og aldri redigert.
+
+Femte gang samme klasse i #896 (se doc/FEATURE_SURFACE_MAP.md punkt 21): komponeringen skriver
+lokaliserte felt **verbatim**, så en flate som viser ett språk må flette selv. `/generate/rubric`
+blir spurt om ett språk og svarer i det, og forslaget ble skrevet rett over det lagrede kriteriet.
+Når forslaget gjenbruker en eksisterende kriterie-ID, flettes det nå inn i den lagrede verdien i
+stedet — samme rettelse som regenereringsstien fikk. Et helt nytt kriterium har ingenting å flette
+mot og lagres som ettspråks-kart; å finne på de to andre språkene der ville vært nøyaktig den løgnen
+#892 finnes for å stoppe.
+
+«Godta alle» ga forslaget rett til lagringen og hoppet over flettingen helt. Den går nå samme vei
+som «godta valgte» — det er den knappen en forfatter med dårlig tid trykker på, og dermed den
+sannsynligste måten å miste de to språkene på.
+
+### Kjent restanse: drift-banneret er ikke synlig
+
+Under arbeidet med #919 ble det bekreftet at `[data-drift-banner]` ikke vises i noen fane etter
+#896 S3c / v2.18.13. Banneret tegnes av `renderPreview()`, men Rediger overskriver ruta med
+redigeringsskjemaet med én gang, Forhåndsvisning undertrykker banneret som deltakervisning, og
+Innstillinger skjuler hele panelet. Elementet ligger i DOM-en, `isVisible()` er `false`. Flettingen
+er altså rettet, men ingen forfatter når flaten — det er en egen sak, og e2e-vaktene for #919 må
+inntil videre sende klikket som en DOM-hendelse.
+
+Tests: lint 0, unit 1020, dom 6, admin-content e2e 186. Alle tre rettelsene er mutasjonsverifisert —
+fiksen midlertidig reversert, testen sett rød på riktig assert, fiksen lagt tilbake. Kun klient.
+
+## 2.20.0 - 2026-08-18
 **Deltakerens lesevisning er lagt om.** Fire tilbakemeldinger fra produkteiers stage-testing (#921,
 #922, #923, #924) pekte på det samme: skjermen der deltakeren faktisk skal lese og lære var full av
 ting som konkurrerte med lesingen. Produkteier, ordrett: *«Dette skjermbildet må være optimalisert

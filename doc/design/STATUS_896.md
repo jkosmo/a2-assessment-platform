@@ -22,7 +22,7 @@ kriterieeditoren og instruksen deler nå kode med Rediger i stedet for å være 
 | §4 Lagringsmodell | ✅ **Ferdig** (#906 lukket 2026-08-18) — komponert lagring i én transaksjon, festet av `module-version-composer-atomicity.test.ts`. `ensure`-kallet står bevisst utenfor: det kan kalle LLM-en, og det er idempotent |
 | §5 Publiseringsgate | ✅ Ferdig |
 | §6 Utkastversjoner | ✅ **Ferdig** (#926 lukket 2026-08-18, v2.19.1) — samtalen foreslår i stedet for å overskrive, og fanen merkes ved asynkrone endringer |
-| §7 Språk | ✅ Ferdig — UI-språk og innholdsspråk skilt (v2.18.12) |
+| §7 Språk | ✅ Ferdig — UI-språk og innholdsspråk skilt (v2.18.12); vakten mot ulagrede endringer dekker Rediger ved språkbytte fra v2.20.0 (#920) |
 | §8 Faneadferd | ✅ Ferdig |
 | §9 Eksport/import | ✅ Ferdig |
 | §11 Ferdig-kriterier | ✅ **Ferdig** (#927, v2.19.2) — ny-modul-e2e-en følger hele reisen |
@@ -39,6 +39,10 @@ Saker som ble funnet under epicen men hører til nabokode, og som IKKE blokkerer
 (engelske valideringsmeldinger), #915 (falsk kriteriedrift), #916 (seksjonseksport), #917 (markdown
 i fritekstfelt), #918 (tittel-lokalisering i samtaleflyten), #919 (drift-dialogens språkfletting),
 #920 (§7-vakt i Rediger ved språkbytte).
+
+**#918, #919 og #920 er rettet i v2.20.0.** Arbeidet med #919 avdekket at drift-banneret ikke er
+synlig i noen fane etter S3c/v2.18.13 — flettingen er rettet, men flaten er ikke nåbar. Se
+doc/FEATURE_SURFACE_MAP.md punkt 21; det er en egen sak.
 
 ---
 

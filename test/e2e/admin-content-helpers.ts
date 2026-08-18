@@ -284,6 +284,12 @@ export async function mockCommonApis(page: Page, {
     lastTitlePatchBody: null as any,
     // #905: tests need to see exactly which locales a save actually sent.
     lastModuleVersionBody: null as any,
+    // #918: the shape of the title a creation path sends. A bare string means "one language, not
+    // translated yet"; a three-locale map claims a translation. The difference is invisible in the
+    // UI and decides whether the publish gate ever sees the gap.
+    lastModuleCreateBody: null as any,
+    // #919: what the drift dialog actually persists as the new rubric.
+    lastRubricVersionBody: null as any,
     lastSourceMaterialExtraction: null as any,
   };
   const extractionJobs = new Map<string, { fileName: string; extractedText: string }>();
@@ -596,11 +602,16 @@ export async function mockCommonApis(page: Page, {
       await route.fulfill({ status: 404, contentType: "application/json", body: JSON.stringify({ error: "not_found" }) });
       return;
     }
+    // #919: the drift dialog persists through this route, and what it writes here IS the new
+    // rubric. Echoing an empty record back made every assertion about accepted criteria read the
+    // fixture instead of the payload.
+    const body = (route.request().postDataJSON() ?? {}) as { criteria?: unknown; scalingRule?: unknown };
+    state.lastRubricVersionBody = body;
     const rubricVersion = {
       id: `${moduleId}-rubric-1`,
       versionNo: 1,
-      criteria: {},
-      scalingRule: {},
+      criteria: body.criteria ?? {},
+      scalingRule: body.scalingRule ?? {},
     };
     moduleExport.selectedConfiguration.rubricVersion = rubricVersion;
     moduleExport.versions.rubricVersions = [rubricVersion];
@@ -896,11 +907,20 @@ export async function mockCommonApis(page: Page, {
     }
 
     if (route.request().method() === "POST") {
-      const body = route.request().postDataJSON() as { title?: Record<string, string>; certificationLevel?: string };
+      const body = route.request().postDataJSON() as {
+        title?: string | Record<string, string>;
+        certificationLevel?: string;
+      };
+      state.lastModuleCreateBody = body;
       const index = mutableModules.length + 1;
       const id = `module-${index}`;
+      // #918: `localizedTextSchema` is `string | {all three locales}`, and the conversation now
+      // sends the string. Reading only the map shape turned every string title into "Module N",
+      // which is the mock quietly asserting the shape the bug produced.
       const titleMap = body.title ?? localizedText(`Module ${index}`);
-      const title = titleMap["en-GB"] ?? titleMap.nb ?? titleMap.nn ?? `Module ${index}`;
+      const title = typeof titleMap === "string"
+        ? titleMap
+        : (titleMap["en-GB"] ?? titleMap.nb ?? titleMap.nn ?? `Module ${index}`);
       const module = { id, title, activeVersion: undefined };
       mutableModules.push(module);
       exportMap.set(
