@@ -688,6 +688,31 @@ test.describe("admin content browser coverage", () => {
     expect(labels).toContain("Depth");
   });
 
+  // Stage-tilbakemelding 2026-08-18: the special-category warning belongs where the assignment is
+  // written. Standing on all three tabs made it wallpaper.
+  test("the privacy warning shows on Rediger only", async ({ page }) => {
+    await mockCommonApis(page, {
+      modules: [{ id: "module-1", title: "Trade unions", activeVersion: { versionNo: 1 } }],
+      moduleExports: {
+        "module-1": buildMockModuleExport({
+          id: "module-1", title: "Trade unions", moduleVersionId: "module-1-version-1",
+        }),
+      },
+    });
+
+    await page.goto("/admin-content/module/module-1/conversation");
+    await expect(page.locator("#privacyNotice")).toBeVisible();
+
+    await page.locator("#tabPreview").click();
+    await expect(page.locator("#privacyNotice")).toBeHidden();
+
+    await page.locator("#tabSettings").click();
+    await expect(page.locator("#privacyNotice")).toBeHidden();
+
+    await page.locator("#tabEdit").click();
+    await expect(page.locator("#privacyNotice")).toBeVisible();
+  });
+
   // Stage-tilbakemelding 2026-08-17: poengreglene forklarte seg ikke. The explanation lives behind
   // an i-button, opened by CLICK (hover is unreachable on touch and from the keyboard).
   //

@@ -188,6 +188,8 @@ const contentLocaleBar = document.getElementById("previewLocaleBar");
 const previewContent = document.getElementById("previewContent");
 // The fixed action bar above the chat log. See `renderWorkspaceActions`.
 const workspaceActionsBar = document.getElementById("workspaceActions");
+// Shown on Rediger only — see the tab handler.
+const privacyNotice = document.getElementById("privacyNotice");
 const workspaceNav = document.getElementById("workspaceNav");
 const localePicker = document.querySelector(".locale-picker");
 const appVersionLabel = document.getElementById("appVersion");
@@ -5193,6 +5195,10 @@ function applyTabState(tab) {
   // Rendered on entry rather than kept in sync: the panel is a read-out of the loaded
   // bundle, and the bundle cannot change while Innstillinger is the visible tab.
   if (tab === "settings") renderSettingsPanel();
+  // Stage-tilbakemelding 2026-08-18: the special-category warning belongs where the assignment
+  // text is WRITTEN. On Forhåndsvisning and Innstillinger there is nothing to reword, so it is
+  // noise — and a warning that shows everywhere stops being read where it matters.
+  setHidden(privacyNotice, tab !== "edit");
 
   // Stage-tilbakemelding 2026-08-17: *"Åpner modul, den havner på rediger fanen, men jeg kan ikke
   // redigere før jeg trykker på «Rediger direkte»."* A tab called Rediger that does not let you
