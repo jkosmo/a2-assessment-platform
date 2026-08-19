@@ -1,6 +1,6 @@
 # Release 2.22.0 — testplan før produksjon
 
-**Stage kjører 2.22.0. Kandidaten er nå 2.22.1** — deploy den før du tester (se nederst).
+**Stage kjører 2.22.0. Kandidaten er nå 2.22.2** — deploy den før du tester (se nederst).
 
 Dette er testplanen som avgjør om vi tør ta releasen til prod.
 
@@ -8,7 +8,7 @@ Dette er testplanen som avgjør om vi tør ta releasen til prod.
 >
 > Gjennomgangen gikk over hele spennet `origin/main`→`dev` (78 commits), med vekt på de tre
 > leveransene som ble laget av parallelle agenter og aldri hadde vært gjennom en review.
-> **Alle fire er rettet i v2.22.1**, to av dem med tester verifisert ved mutasjon:
+> **Alle fire er rettet i v2.22.1**, og fire funn til i v2.22.2, to av dem med tester verifisert ved mutasjon:
 >
 > 1. **Kursimport publiserte kurset rundt en tom seksjon.** Deltakeren fikk en blank side og kunne
 >    fortsatt markere den lest mot kursbeviset. Verst av de fire, fordi den rammer deltakeren.
@@ -175,7 +175,7 @@ det er last, ikke logikk.
 
 ---
 
-# Før du begynner: deploy 2.22.1
+# Før du begynner: deploy 2.22.2
 
 Stage kjører fortsatt 2.22.0, som er kandidaten **uten** QA-rettelsene. Blokker 1 og 3 er direkte
 testbare, så testen er lite verdt mot 2.22.0.
@@ -184,9 +184,9 @@ testbare, så testen er lite verdt mot 2.22.0.
 gh workflow run deploy-app.yml --ref main -f git_ref=dev
 ```
 
-Verifiser mot `/version` at den svarer **2.22.1** før du starter — workflow-fargen er ikke nok.
+Verifiser mot `/version` at den svarer **2.22.2** før du starter — workflow-fargen er ikke nok.
 
-## Fire punkter som er nye i 2.22.1 og verdt å teste spesifikt
+## Punkter som er nye i 2.22.1 / 2.22.2 og verdt å teste spesifikt
 
 - [ ] **Kursimport med gammel seksjon.** Eksporter et publisert kurs som inneholder en seksjon med
       ettspråks tittel, importer det på nytt, og åpne det **som deltaker**. Kurset skal *ikke* være
@@ -198,3 +198,9 @@ Verifiser mot `/version` at den svarer **2.22.1** før du starter — workflow-f
       **menyspråket** til engelsk — innholdsspråket skal bli stående på Bokmål. Be i chatten om
       «gjør oppgaven kortere». Den norske teksten skal revideres, ikke oversettes bort.
 - [ ] Samme øvelse med **MCQ-revisjon**.
+
+- [ ] **MCQ-settets tittel.** Opprett en modul via samtalen med engelsk menyspråk og lagre. Sjekk i
+      eksporten (eller i Innstillinger) at MCQ-settets tittel *ikke* er den samme teksten i alle tre
+      språk. Den var det før 2.22.2, og ingenting rapporterte hullet.
+- [ ] **Handlingslinja ved innlasting.** Last modulsiden med tom cache og se øverst i chat-panelet:
+      det skal ikke blinke en tom, tynn stripe med bunnramme før knappene kommer.
