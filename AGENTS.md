@@ -82,6 +82,16 @@ These rules exist because their violation caused or worsened the May 2026 produc
   where the costly bugs hide. Exercise the real client→server flow locally (`npm run dev`, local
   Postgres + `AUTH_MODE=mock`) before deploying; staging is an acceptance gate, not a debugger.
   Not "done" until the e2e passes locally + in CI.
+- **Test- og releasemetodikk (standing order, 2026-08-19):** `doc/TEST_AND_RELEASE_PLAYBOOK.md`
+  fanger arbeidsmåten fra release 2.22.x, med **hva hver teknikk faktisk fanget** som begrunnelse.
+  Les den før du planlegger en runde. De fire som sparer mest tid: **(1) mutasjonsverifisering** —
+  reverser fiksen, se testen bli rød på riktig assertion; en test som er grønn både med og uten
+  fiksen er verre enn ingen. **(2) kontrollcase** — en test som bekrefter blokkering trenger en
+  makker som bekrefter at det riktige slipper gjennom, ellers vet du ikke hvilken regel du målte.
+  **(3) dekningsvakt slår hardkodet liste** — en liste over «alle stedene som må gjøre X» kan ikke
+  oppdage stedet ingen tenkte på; la testen finne kallerne. **(4) tre testlag** — mocket e2e,
+  `npm run test:stage` (utrullet artefakt), og autentisert mot reelle data; **en mocket e2e kan
+  aldri fange at mocken er feil**, så manuell test hører hjemme nøyaktig der.
 - **Cross-model QA gate before every stage deploy (standing order, 2026-08-13):** a stage deploy
   costs 16–22 min plus a manual test round, and the bugs that survive the automated suites are the
   ones they were not written for. After the suites are green and **before** the stage deploy, run

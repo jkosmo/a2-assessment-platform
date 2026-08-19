@@ -118,6 +118,25 @@ is built**, and must be runnable **without a staging deploy**:
    first (or at least alongside) forces you to run the real path early, which is where these
    integration bugs surface.
 
+### Test- og releasemetodikk — les den før du planlegger en runde (standing order, 2026-08-19)
+
+`doc/TEST_AND_RELEASE_PLAYBOOK.md` fanger arbeidsmåten fra release 2.22.x, med **hva hver teknikk
+faktisk fanget** som begrunnelse. Den erstatter ikke ordrene under; den forklarer hvordan de
+utføres uten å gjenoppdage det hver gang.
+
+De fire som sparer mest tid:
+
+1. **Mutasjonsverifisering.** Reverser fiksen, se testen bli rød, sjekk at den ble rød på riktig
+   assertion. En test som er grønn både med og uten fiksen er verre enn ingen test.
+2. **Kontrollcase.** En test som bekrefter at noe blokkeres trenger en makker som bekrefter at det
+   riktige slipper gjennom — ellers vet du ikke om du målte regelen din eller en annen.
+3. **Dekningsvakt slår hardkodet liste.** En liste over «alle stedene som må gjøre X» kan ikke
+   oppdage stedet ingen tenkte på. La testen finne kallerne; unntak skal være eksplisitte.
+4. **Tre testlag svarer på tre forskjellige spørsmål** — mocket e2e (gjør klienten riktig?),
+   `npm run test:stage` (er artefaktet det vi tror?), og autentisert mot reelle data (hva finnes
+   der faktisk?). **En mocket e2e kan aldri fange at mocken er feil** — manuell test hører hjemme
+   nøyaktig der.
+
 ### Cross-model QA gate before every stage deploy (standing order, 2026-08-13)
 
 A stage deploy costs 16–22 min plus a manual test round. The automated suites catch what they were
