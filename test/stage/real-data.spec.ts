@@ -239,6 +239,106 @@ test.describe("utrullet stage — reelle data", () => {
     }
   });
 
+  // ── Prioritet 0, tidskritisk: #923-tellingen ──────────────────────────────────────────────
+  //
+  // #923 skjuler diskusjon per element uten å slette noe. Produkteier ville verifisere at
+  // funksjonen ikke er i aktiv bruk før den skjules.
+  //
+  // ⚠️ Vinduet lukker seg: `replaceCourseItems` gjør `deleteMany` + `createMany` ved HVER lagring
+  // av en kurssekvens, og `DiscussionThread.courseItem` er `onDelete: SetNull`. Tråder på
+  // elementnivå slettes ikke — de forfremmes til KURSNIVÅ neste gang en SMO lagrer et kurs, og da
+  // er de ikke lenger tellbare som elementtråder. Tallet må tas før noen lagrer et kurs.
+  test("teller diskusjonstråder på elementnivå før de blir utellelige", async ({ request }) => {
+    const courses: Array<{ id: string; title?: unknown }> =
+      (await (await request.get(`${BASE}/api/admin/content/courses`, { headers: headers() })).json()).courses ?? [];
+    test.skip(courses.length === 0, "ingen kurs på stage");
+
+    let courseLevel = 0;
+    let itemLevel = 0;
+    const itemLevelCourses: string[] = [];
+
+    for (const course of courses) {
+      // Kursnivå: `itemId` utelatt.
+      const atCourse = await request.get(
+        `${BASE}/api/courses/${course.id}/discussions`,
+        { headers: headers() },
+      );
+      if (atCourse.ok()) courseLevel += ((await atCourse.json()).threads ?? []).length;
+
+      // Elementnivå: én forespørsel per element i sekvensen.
+      const detail = await request.get(`${BASE}/api/courses/${course.id}`, { headers: headers() });
+      if (!detail.ok()) continue;
+      const items: Array<{ courseItemId?: string }> = (await detail.json()).course?.items ?? [];
+      for (const item of items) {
+        if (!item.courseItemId) continue;
+        const atItem = await request.get(
+          `${BASE}/api/courses/${course.id}/discussions?itemId=${encodeURIComponent(item.courseItemId)}`,
+          { headers: headers() },
+        );
+        if (!atItem.ok()) continue;
+        const count = ((await atItem.json()).threads ?? []).length;
+        if (count > 0) {
+          itemLevel += count;
+          if (!itemLevelCourses.includes(course.id)) itemLevelCourses.push(course.id);
+        }
+      }
+    }
+
+    console.log(
+      `[stage] diskusjonstråder — kursnivå: ${courseLevel} · ELEMENTNIVÅ: ${itemLevel}`
+      + (itemLevel > 0 ? ` (i kursene: ${itemLevelCourses.join(", ")})` : " — ingen i aktiv bruk"),
+    );
+
+    // Ingen grense: dette er tallet #932 ber om, ikke en test som skal feile. Å feile på det
+    // ville skjult svaret bak en rød kjøring.
+    expect(itemLevel).toBeGreaterThanOrEqual(0);
+  });
+
+  // ── Prioritet 1.2, delvis: får deltakeren en blank seksjon? ────────────────────────────────
+  //
+  // Blokker 1 i QA var at et kurs kunne publiseres rundt en seksjon uten aktiv versjon —
+  // deltakeren fikk 200 med tom `html`. Det er rettet i koden, men spørsmålet her er om det
+  // allerede FINNES slike seksjoner på stage fra før rettelsen.
+  test("ingen publisert seksjon serverer en tom side til deltakeren", async ({ request }) => {
+    const courses: Array<{ id: string }> =
+      (await (await request.get(`${BASE}/api/courses`, { headers: headers() })).json()).courses ?? [];
+    test.skip(courses.length === 0, "ingen publiserte kurs synlige");
+
+    const blank: string[] = [];
+    let checked = 0;
+
+    for (const course of courses) {
+      const detail = await request.get(`${BASE}/api/courses/${course.id}`, { headers: headers() });
+      if (!detail.ok()) continue;
+      // Formen er `course.items[]` med `sectionId` / `moduleId` flatt på elementet — ikke et
+      // nøstet `section`-objekt. Første versjon leste `item.section.id`, fant ingenting, og
+      // «bestod» ved å sjekke null seksjoner. En test som består fordi den ikke fant noe å
+      // sjekke, er en test som lyver.
+      const items: Array<{ type?: string; sectionId?: string }> =
+        (await detail.json()).course?.items ?? [];
+      for (const item of items) {
+        const sectionId = item.sectionId;
+        if (item.type !== "SECTION" || !sectionId) continue;
+        const view = await request.get(
+          `${BASE}/api/courses/${course.id}/sections/${sectionId}`,
+          { headers: headers() },
+        );
+        if (!view.ok()) continue;
+        checked += 1;
+        const html = String((await view.json()).html ?? "");
+        // 200 med tom kropp er den nøyaktige signaturen på blokker 1: siden lastes, deltakeren ser
+        // ingenting, og «marker lest» teller den likevel mot kursbeviset.
+        if (!html.trim()) blank.push(`${course.id}/${sectionId}`);
+      }
+    }
+
+    console.log(`[stage] deltakersynlige seksjoner sjekket: ${checked} · tomme: ${blank.length}`);
+    // Vakt mot en tom bestått test: fant vi ingen seksjoner i det hele tatt, har vi ikke målt
+    // noe — og det skal ikke se ut som et grønt resultat.
+    expect(checked, "fant ingen deltakersynlige seksjoner å sjekke — testen målte ingenting").toBeGreaterThan(0);
+    expect(blank, `disse serverer en tom side: ${blank.join(", ")}`).toEqual([]);
+  });
+
   test("seksjonseksport svarer for egne seksjoner og 404/403 for tull", async ({ request }) => {
     const bogus = await request.get(
       `${BASE}/api/admin/content/sections/not-a-real-section-id/export-package`,
