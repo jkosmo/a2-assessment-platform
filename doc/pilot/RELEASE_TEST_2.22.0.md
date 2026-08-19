@@ -1,6 +1,8 @@
 # Release 2.22.0 — testplan før produksjon
 
-**Stage kjører 2.22.0. Kandidaten er nå 2.22.2** — deploy den før du tester (se nederst).
+**Stage kjører 2.23.0 — det er kandidaten.**
+
+> Tidligere versjoner av dette dokumentet pekte på 2.22.1 / 2.22.2. — deploy den før du tester (se nederst).
 
 Dette er testplanen som avgjør om vi tør ta releasen til prod.
 
@@ -26,8 +28,12 @@ deretter: **prioritet 1 må bestås**, prioritet 2 bør sjekkes, prioritet 3 kan
 
 ## Det som gjør denne trygg
 
-- **Ingen Prisma-endringer i hele spennet.** `git diff origin/main..dev -- prisma/` er tom. Ingen
-  migrasjon, ingen expand/contract-risiko, ingen skjemadrift mellom gamle og nye containere.
+- **Én migrasjon, additiv.** ⚠️ Dette sto som «ingen Prisma-endringer i hele spennet» fram til
+  v2.23.0. Det stemmer ikke lenger: `CourseCompletion.sectionSnapshotJson` er lagt til (#933).
+  Kolonnen er **nullable og ikke bakfylt**, altså rent additiv — gamle containere leser den aldri
+  under en rullering, og nye skriver den bare på nye rader. Expand/contract-trygt, men det er en
+  migrasjon, og prod-utrullingen tar den. Begge containere kjører `prisma migrate deploy` ved
+  oppstart, så en feilet migrasjon stopper oppstarten framfor å gi skjemadrift.
 - **Ingen slettet data.** #923 skjuler diskusjon per element; API, felt og tråder ligger urørt.
 - Automatisk dekning: **1 029 unit**, **6 DOM**, **199 e2e**, **481 integrasjon**, tsc rent.
 
