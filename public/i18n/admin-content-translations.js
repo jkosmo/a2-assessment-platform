@@ -524,9 +524,13 @@ const adminContentBase = {
   "shell.settings.invalidValidity": "The end date cannot be before the start date.",
   "shell.settings.noChanges": "Nothing changed, so no new version was created.",
   "shell.settings.draftBlocks": "You have an unsaved draft in Edit. Save or discard it first — a settings save would write the stored content, not your draft.",
-  "shell.settings.needsBoth": "needs task text, rubric and an MCQ set",
-  "shell.settings.needsFreetext": "needs task text, rubric and assessment instruction",
-  "shell.settings.needsMcq": "needs an MCQ set",
+  // Stage-tilbakemelding 2026-08-19: navngi hullet, ikke kravet.
+  "shell.settings.needsMissing": "missing {missing}",
+  "shell.settings.needs.and": "and",
+  "shell.settings.needs.taskText": "task text",
+  "shell.settings.needs.rubric": "a rubric",
+  "shell.settings.needs.prompt": "an assessment instruction",
+  "shell.settings.needs.mcq": "an MCQ set",
 };
 const nbOverrides = {
   "nav.profile": "Profil",
@@ -1124,9 +1128,12 @@ const adminContentLateOverrides = {
     "shell.settings.invalidValidity": "Sluttdatoen kan ikke være før startdatoen.",
     "shell.settings.noChanges": "Ingenting er endret, så det ble ikke laget noen ny versjon.",
     "shell.settings.draftBlocks": "Du har et ulagret utkast i Rediger. Lagre eller forkast det først — en innstillingslagring ville skrevet det lagrede innholdet, ikke utkastet ditt.",
-    "shell.settings.needsBoth": "krever oppgavetekst, rubrikk og MCQ-sett",
-    "shell.settings.needsFreetext": "krever oppgavetekst, rubrikk og vurderingsinstruks",
-    "shell.settings.needsMcq": "krever et MCQ-sett",
+    "shell.settings.needsMissing": "mangler {missing}",
+    "shell.settings.needs.and": "og",
+    "shell.settings.needs.taskText": "oppgavetekst",
+    "shell.settings.needs.rubric": "rubrikk",
+    "shell.settings.needs.prompt": "vurderingsinstruks",
+    "shell.settings.needs.mcq": "MCQ-sett",
   },
   nn: {
     // #896 S3c-etterslep \u2014 sj\u00e5 merknaden i nb-blokka over.
@@ -1577,9 +1584,12 @@ const adminContentLateOverrides = {
     "shell.settings.invalidValidity": "Sluttdatoen kan ikkje vere før startdatoen.",
     "shell.settings.noChanges": "Ingenting er endra, så det blei ikkje laga nokon ny versjon.",
     "shell.settings.draftBlocks": "Du har eit ulagra utkast i Rediger. Lagre eller forkast det først — ei innstillingslagring ville skrive det lagra innhaldet, ikkje utkastet ditt.",
-    "shell.settings.needsBoth": "krev oppgåvetekst, rubrikk og MCQ-sett",
-    "shell.settings.needsFreetext": "krev oppgåvetekst, rubrikk og vurderingsinstruks",
-    "shell.settings.needsMcq": "krev eit MCQ-sett",
+    "shell.settings.needsMissing": "manglar {missing}",
+    "shell.settings.needs.and": "og",
+    "shell.settings.needs.taskText": "oppgåvetekst",
+    "shell.settings.needs.rubric": "rubrikk",
+    "shell.settings.needs.prompt": "vurderingsinstruks",
+    "shell.settings.needs.mcq": "MCQ-sett",
   },
 };
 

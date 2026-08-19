@@ -5611,15 +5611,45 @@ function renderSettingsPanel() {
   const hasTask = !!settingsValue(version?.taskText) || !!taskHistory;
   const freetextReady = hasTask && hasRubric && hasPrompt;
 
+  // Stage-tilbakemelding 2026-08-19: suffikset listet TYPENS KRAV, ikke det som faktisk mangler.
+  // En modul som er «Bare fritekst» har allerede oppgavetekst, rubrikk og vurderingsinstruks — den
+  // mangler bare MCQ-settet. Likevel sto det «krever oppgavetekst, rubrikk og MCQ-sett» på
+  // «Fritekst og flervalg», så forfatteren leste tre mangler der det var én, og hadde ingen måte å
+  // se hvilken.
+  //
+  // Samme regel som publiseringsgaten i §4: meldingen skal navngi HULLET, ikke gjenta kravet.
+  // Hva som mangler vet vi allerede — det er nettopp det `hasTask`/`hasRubric`/`hasPrompt`/`hasMcq`
+  // er.
+  const requirementsFor = (value) => {
+    const freetext = [
+      { ok: hasTask, key: "shell.settings.needs.taskText" },
+      { ok: hasRubric, key: "shell.settings.needs.rubric" },
+      { ok: hasPrompt, key: "shell.settings.needs.prompt" },
+    ];
+    const mcq = [{ ok: hasMcq, key: "shell.settings.needs.mcq" }];
+    if (value === "MCQ_ONLY") return mcq;
+    if (value === "FREETEXT_ONLY") return freetext;
+    return [...freetext, ...mcq];
+  };
+
+  // «A», «A og B», «A, B og C» — listeform, ikke en kommaliste som slutter brått.
+  const joinMissing = (parts) => {
+    if (parts.length <= 1) return parts.join("");
+    return `${parts.slice(0, -1).join(", ")} ${t("shell.settings.needs.and")} ${parts[parts.length - 1]}`;
+  };
+
   const modeOptions = [
-    { value: "FREETEXT_PLUS_MCQ", ok: freetextReady && hasMcq, missingKey: "shell.settings.needsBoth" },
-    { value: "FREETEXT_ONLY", ok: freetextReady, missingKey: "shell.settings.needsFreetext" },
-    { value: "MCQ_ONLY", ok: hasMcq, missingKey: "shell.settings.needsMcq" },
+    { value: "FREETEXT_PLUS_MCQ", ok: freetextReady && hasMcq },
+    { value: "FREETEXT_ONLY", ok: freetextReady },
+    { value: "MCQ_ONLY", ok: hasMcq },
   ];
   const optionsHtml = modeOptions
-    .map(({ value, ok, missingKey }) => {
+    .map(({ value, ok }) => {
       const label = t(`shell.settings.mode.${value}`);
-      const suffix = ok || value === mode ? "" : ` — ${t(missingKey)}`;
+      const missing = requirementsFor(value).filter((r) => !r.ok).map((r) => t(r.key));
+      const suffix = ok || value === mode || missing.length === 0
+        ? ""
+        : ` — ${tf("shell.settings.needsMissing", { missing: joinMissing(missing) })}`;
       const disabled = !ok && value !== mode ? " disabled" : "";
       const selected = value === mode ? " selected" : "";
       return `<option value="${value}"${disabled}${selected}>${escapeHtml(label + suffix)}</option>`;

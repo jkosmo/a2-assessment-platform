@@ -2191,6 +2191,45 @@ test.describe("admin content browser coverage", () => {
   // #896 S3b: module type is editable from Innstillinger, and only the types the module has
   // components for are offered — the rest are disabled with the reason, instead of being
   // selectable and then rejected by the API.
+  // Stage-tilbakemelding 2026-08-19, med skjermbilde: en modul uten MCQ-sett viste
+  // «Fritekst og fleirval — krev oppgåvetekst, rubrikk og MCQ-sett». Modulen HADDE oppgavetekst og
+  // rubrikk — den er jo «Bare fritekst» — så forfatteren leste tre mangler der det var én, og hadde
+  // ingen måte å se hvilken.
+  //
+  // Suffikset listet typens KRAV. Det skal navngi HULLET, samme regel som publiseringsgaten i §4.
+  //
+  // Merk hvorfor dette ikke ble fanget av testen under: den bygger en modul som har ALT, så ingen
+  // valg er deaktivert og suffikset rendres aldri. Mocken var antakelsen som feilet.
+  test("a disabled module type names what is missing, not what the type requires", async ({ page }) => {
+    await mockCommonApis(page, {
+      modules: [{ id: "module-1", title: "Trade unions", activeVersion: { versionNo: 1 } }],
+      moduleExports: {
+        "module-1": buildMockModuleExport({
+          id: "module-1",
+          title: "Trade unions",
+          moduleVersionId: "module-1-version-1",
+          taskText: localizedText("Norsk scenario"),
+          assessmentMode: "FREETEXT_ONLY",
+          // Ingen MCQ — det er nettopp modulen fra skjermbildet.
+          mcqQuestions: [],
+        }),
+      },
+    });
+
+    await page.goto("/admin-content/module/module-1/conversation");
+    await page.locator("#tabSettings").click();
+
+    const combined = page.locator('#settingsModuleType option[value="FREETEXT_PLUS_MCQ"]');
+    await expect(combined).toBeDisabled();
+
+    const label = (await combined.textContent()) ?? "";
+    // Det som mangler skal stå der …
+    expect(label).toMatch(/MCQ/i);
+    // … og det modulen ALLEREDE har skal ikke stå der, for da leses det som en mangel.
+    expect(label).not.toMatch(/oppgåvetekst|oppgavetekst|task text/i);
+    expect(label).not.toMatch(/rubrikk|rubric/i);
+  });
+
   test("Innstillinger can change the module type, and only offers types the module supports", async ({ page }) => {
     const state = await mockCommonApis(page, {
       modules: [{ id: "module-1", title: "Trade unions", activeVersion: { versionNo: 1 } }],

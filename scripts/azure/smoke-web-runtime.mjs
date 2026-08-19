@@ -21,7 +21,10 @@ const htmlRoutes = [
   { path: "/admin-content/calibration", marker: '/static/admin-content-calibration.js' },
   { path: "/results", marker: '/static/results.js' },
   { path: "/admin-content", marker: '/static/admin-content-shell.js' },
-  { path: "/admin-content/advanced", marker: '/static/admin-content.js' },
+  // #896 S3c: `/admin-content/advanced` sto her og forventet 200 med `/static/admin-content.js`.
+  // Begge er slettet — ruta er en 301 og fila finnes ikke. Denne workflowen er `workflow_dispatch`
+  // og har aldri kjørt, så oppføringen lå død og ville feilet den dagen noen kjørte den før en
+  // prod-utrulling. Rutens redirect er dekket av `test/stage/deployed-surface.spec.ts`.
   { path: "/profile", marker: '/static/profile.js' },
   { path: "/admin-platform", marker: '/static/admin-platform.js' },
 ];
