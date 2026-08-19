@@ -1,0 +1,14 @@
+-- #933: record WHICH sections a course completion covered, not just which modules.
+--
+-- Produkteiers regel: man har bestått et kurs når man «på et gitt tidspunkt har bestått alle
+-- moduler som kurset inneholdt DA, samt har bekreftet lest alle seksjoner kurset inneholdt på det
+-- tidspunkt». Bare modulene ble lagret (`moduleSnapshotJson`), så halve regelen kunne verken
+-- bevises, vises eller etterprøves.
+--
+-- NULLABLE med vilje, og IKKE bakfylt. `NULL` betyr ærlig «utstedt før vi registrerte dette».
+-- Å bakfylle med '[]' ville påstått at gamle kurs var seksjonsfrie — en påstand vi ikke kan
+-- underbygge, og som ville vært umulig å skille fra sannheten senere.
+--
+-- Expand/contract: rent additivt. Gamle containere som kjører side om side under en utrulling
+-- leser aldri kolonnen, og nye skriver den bare på NYE rader.
+ALTER TABLE "CourseCompletion" ADD COLUMN "sectionSnapshotJson" TEXT;

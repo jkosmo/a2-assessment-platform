@@ -222,6 +222,82 @@ describe("Course completion issuance", () => {
     ).toBe(1);
   });
 
+  // #933 (produkteier 2026-08-19). To grep som gjør regelen etterprøvbar:
+  //
+  //   «Kravet for å stå til et kurs er at man på et gitt tidspunkt har bestått alle moduler som
+  //    kurset inneholdt DA, samt har bekreftet lest alle seksjoner kurset inneholdt på det
+  //    tidspunkt. En ny versjon av kurset har ikke tilbakevirkende kraft.»
+  //
+  // Funnet på stage: et kursbevis sto ved siden av «Seksjonar 0/1 · Påbegynt». Kurset ble bygget i
+  // to steg — modulen først (allerede bestått), seksjonen etterpå — og beviset ble utstedt i
+  // mellomtiden av et helt vanlig sidebesøk.
+  it("stores WHICH sections the completion covered, and never issues for an unpublished course", async () => {
+    const suffix = `snap-${Date.now()}`;
+    const headers = {
+      "x-user-id": suffix,
+      "x-user-email": `${suffix}@company.com`,
+      "x-user-name": "Snapshot User",
+      "x-user-roles": "PARTICIPANT",
+      "x-locale": "nb",
+    };
+    const participant = await prisma.user.create({
+      data: { externalId: headers["x-user-id"], email: headers["x-user-email"], name: headers["x-user-name"] },
+      select: { id: true },
+    });
+
+    // UPUBLISERT kurs, med en seksjon som allerede er lest. Alle innholdskrav er oppfylt.
+    const course = await prisma.course.create({
+      data: {
+        title: JSON.stringify({ "en-GB": `Unpublished ${suffix}`, nb: `Upublisert ${suffix}`, nn: `Upublisert ${suffix}` }),
+        description: JSON.stringify({ "en-GB": "x", nb: "x", nn: "x" }),
+      },
+      select: { id: true },
+    });
+    const section = await prisma.courseSection.create({
+      data: { title: JSON.stringify({ "en-GB": "S", nb: "S" }) },
+      select: { id: true },
+    });
+    const version = await prisma.courseSectionVersion.create({
+      data: { sectionId: section.id, versionNo: 1, bodyMarkdown: JSON.stringify({ "en-GB": "Body." }), publishedAt: new Date() },
+      select: { id: true },
+    });
+    await prisma.courseSection.update({ where: { id: section.id }, data: { activeVersionId: version.id } });
+    await prisma.courseItem.create({ data: { courseId: course.id, itemType: "SECTION", sectionId: section.id, sortOrder: 0 } });
+    await prisma.courseSectionRead.create({
+      data: { userId: participant.id, courseId: course.id, sectionId: section.id },
+    });
+
+    // Upublisert kurs skal ALDRI utstede, uansett hvor oppfylt kravene er.
+    //
+    // ⚠️ Ærlig merknad: denne assertion-en dekker OPPFØRSELEN, ikke den nye vakten inne i
+    // `evaluateCourseCompletion`. Verifisert ved mutasjon — fjerner du vakten, forblir dette
+    // grønt, fordi `findPublishedCourses()` allerede har silt bort kurset før det kommer dit.
+    // Vakten er dybdeforsvar mot en fremtidig kaller som ikke forhåndsfiltrerer. Testen står
+    // likevel: den fester regelen produkteier faktisk uttalte, uavhengig av hvem som håndhever den.
+    await request(app).get("/api/courses/completions").set(headers);
+    expect(
+      await prisma.courseCompletion.count({ where: { userId: participant.id, courseId: course.id } }),
+      "et upublisert kurs under oppbygging utstedte kursbevis",
+    ).toBe(0);
+
+    // Publiser, og la reconcile kjøre igjen.
+    await prisma.course.update({ where: { id: course.id }, data: { publishedAt: new Date() } });
+    const after = await request(app).get("/api/courses/completions").set(headers);
+    expect(after.status).toBe(200);
+
+    const completion = await prisma.courseCompletion.findFirst({
+      where: { userId: participant.id, courseId: course.id },
+      select: { moduleSnapshotJson: true, sectionSnapshotJson: true },
+    });
+    expect(completion, "publisert kurs med oppfylte krav utstedte ikke").toBeTruthy();
+
+    // Grep 2: øyeblikksbildet bærer BEGGE halvdelene av regelen. Uten seksjonene kan et bevis
+    // verken vise eller etterprøve hva det dekket.
+    expect(JSON.parse(completion!.moduleSnapshotJson)).toEqual([]);
+    expect(completion!.sectionSnapshotJson, "seksjonene ble ikke lagret").toBeTruthy();
+    expect(JSON.parse(completion!.sectionSnapshotJson!)).toEqual([section.id]);
+  });
+
   // #550: printable certificate view backs onto GET /completions/:certificateId, owner-scoped.
   it("returns a single completion by certificate id for the owner and 404 for others", async () => {
     const suffix = Date.now();

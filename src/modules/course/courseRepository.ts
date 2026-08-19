@@ -98,9 +98,17 @@ export function createCourseRepository(client: CourseRepositoryClient = prisma) 
       });
     },
 
-    createCourseCompletion(userId: string, courseId: string, moduleSnapshotJson: string) {
+    // #933: seksjonene lagres nå ved siden av modulene. Produkteiers regel er «alle moduler kurset
+    // inneholdt DA, samt bekreftet lest alle seksjoner kurset inneholdt på det tidspunkt» — uten
+    // seksjonene var halve regelen uetterprøvbar, og et bevis kunne ikke vise hva det dekket.
+    createCourseCompletion(
+      userId: string,
+      courseId: string,
+      moduleSnapshotJson: string,
+      sectionSnapshotJson?: string,
+    ) {
       return client.courseCompletion.create({
-        data: { userId, courseId, moduleSnapshotJson },
+        data: { userId, courseId, moduleSnapshotJson, sectionSnapshotJson },
       });
     },
 

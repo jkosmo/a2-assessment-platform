@@ -18,9 +18,25 @@ type CourseRepo = ReturnType<typeof createCourseRepository>;
 async function evaluateCourseCompletion(
   repo: CourseRepo,
   userId: string,
-  course: { id: string; modules: { moduleId: string }[] },
+  course: { id: string; modules: { moduleId: string }[]; publishedAt?: Date | null; archivedAt?: Date | null },
   tx?: CompletionTxClient,
 ): Promise<void> {
+  // #933 (produkteier 2026-08-19): «Utstedelse av bestått skal kun skje hvis kurset er publisert.»
+  //
+  // Alle tre inngangene filtrerte allerede på publisert — `findPublishedCoursesContainingModule`,
+  // en eksplisitt sjekk i `checkCourseCompletionForCourse`, og `findPublishedCourses`. Vakten sto
+  // altså tre steder og null steder: en fjerde kaller ville hatt ingenting å treffe.
+  //
+  // Dette er repoets vanligste feilklasse — «riktig regel, ufullstendig flate». Regelen hører
+  // hjemme i den ene funksjonen alle tre passerer, ikke hos hver enkelt kaller. De andre sjekkene
+  // står igjen: de sparer en rundtur, og de er nå redundante på den trygge måten.
+  //
+  // ⚠️ Verifisert ved mutasjon: å fjerne denne linja gjør INGEN test rød, fordi ingen nåværende
+  // sti kan levere et upublisert kurs hit. Den er ren dybdeforsvar mot en fjerde kaller, og det er
+  // skrevet her framfor å late som en test dekker den. Skulle noen legge til en kaller som ikke
+  // forhåndsfiltrerer, er dette linja som redder det — og DA blir den testbar.
+  if (!course.publishedAt || course.archivedAt) return;
+
   const moduleIds = course.modules.map((m) => m.moduleId);
 
   // A course can be pure-reading (no assessment modules) — the LMS Tier 2 markdown-first
@@ -52,7 +68,14 @@ async function evaluateCourseCompletion(
   const existing = await repo.findCourseCompletion(userId, course.id);
   if (existing) return;
 
-  const completion = await repo.createCourseCompletion(userId, course.id, JSON.stringify(moduleIds));
+  // #933: begge halvdelene av regelen lagres nå. `requiredSectionIds` er nettopp «seksjonene kurset
+  // inneholdt på det tidspunkt» — den lista gaten akkurat målte mot, ikke en ny utledning.
+  const completion = await repo.createCourseCompletion(
+    userId,
+    course.id,
+    JSON.stringify(moduleIds),
+    JSON.stringify(requiredSectionIds),
+  );
 
   await recordAuditEvent(
     {

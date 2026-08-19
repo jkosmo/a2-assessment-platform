@@ -621,6 +621,14 @@ model CourseCompletion {
   completedAt        DateTime @default(now())
   certificateId      String   @unique @default(cuid())
   moduleSnapshotJson String // JSON-array av moduleIds som inngikk ved fullføring
+  // #933: JSON-array av sectionIds som inngikk ved fullføring. Produkteiers regel er at man har
+  // bestått «alle moduler kurset inneholdt DA, samt bekreftet lest alle seksjoner kurset inneholdt
+  // på det tidspunkt» — men bare modulene ble lagret, så halve regelen var uetterprøvbar.
+  //
+  // Nullable med vilje: `null` betyr ærlig «utstedt før vi registrerte dette», ikke «ingen
+  // seksjoner». Å bakfylle med `[]` ville påstått at gamle kurs var seksjonsfrie.
+  // Additivt felt — expand/contract-trygt, gamle containere leser det aldri.
+  sectionSnapshotJson String?
   user               User     @relation(fields: [userId], references: [id], onDelete: Restrict)
   course             Course   @relation(fields: [courseId], references: [id], onDelete: Restrict)
 

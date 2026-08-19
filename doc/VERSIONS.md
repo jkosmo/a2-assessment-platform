@@ -2,6 +2,93 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.23.0 - 2026-08-19
+
+**Steg 1 og 2 av kursbevis-regelen (#933/#934).** Produkteier fant på stage at et kursbevis sto
+utstedt ved siden av «Seksjonar 0/1 · Påbegynt», og fastsatte deretter regelen:
+
+> «Kravet for å stå til et kurs er at man **på et gitt tidspunkt** har bestått alle moduler som
+> kurset inneholdt **da**, samt har bekreftet lest alle seksjoner kurset inneholdt på det tidspunkt.
+> En ny versjon av kurset har **ikke tilbakevirkende kraft** for de som allerede har bestått.»
+
+Minor-bump: første skjemaendring på 80 commits.
+
+### Seksjonene lagres nå i øyeblikksbildet
+
+`CourseCompletion.moduleSnapshotJson` fantes. `sectionSnapshotJson` gjorde ikke. **Halve regelen var
+dermed uetterprøvbar** — vi kunne ikke vise, bevise eller kontrollere hvilke seksjoner et bevis
+dekket.
+
+Feltet er **nullable og ikke bakfylt**. `null` betyr ærlig «utstedt før vi registrerte dette»; å
+bakfylle med `[]` ville påstått at gamle kurs var seksjonsfrie, og den påstanden ville vært umulig å
+skille fra sannheten senere.
+
+Migrasjonen er rent additiv — expand/contract-trygt. Gamle containere leser aldri kolonnen under en
+rullering, og nye skriver den bare på nye rader.
+
+### Publisert-vakten flyttet dit alle stiene passerer
+
+Produkteier: «Utstedelse av bestått skal kun skje hvis kurset er publisert.»
+
+Den regelen var **allerede oppfylt** — men håndhevet av hver av de tre inngangene for seg
+(`findPublishedCoursesContainingModule`, en eksplisitt sjekk, og `findPublishedCourses`). Altså tre
+steder og null steder: en fjerde kaller ville hatt ingenting å treffe. Vakten ligger nå i
+`evaluateCourseCompletion` selv.
+
+**Verifisert ved mutasjon — og mutasjonen avslørte at vakten ikke er testbar.** Fjerner man linja,
+blir ingen test rød, fordi ingen nåværende sti kan levere et upublisert kurs dit. Det er skrevet
+inn i koden og i testen framfor å late som dekningen er der. Skulle noen legge til en kaller som
+ikke forhåndsfiltrerer, er dette linja som redder det — og da blir den testbar.
+
+Seksjons-øyeblikksbildet er derimot ekte dekket: mutasjonen ga
+`seksjonene ble ikke lagret: expected null to be truthy`.
+
+### Om kurset i skjermbildet
+
+Det var **riktig utstedt** etter regelen. Da beviset ble gitt inneholdt kurset én modul (bestått) og
+null seksjoner; seksjonen kom etterpå og har ikke tilbakevirkende kraft. Diagnosen jeg først stilte
+— at beviset burde trekkes tilbake — var feil, og er rettet i #933.
+
+Det som gjenstår er at **flaten motsier seg selv**: fremdriften regnes mot kursets nåværende
+innhold, beviset mot innholdet da. Begge er riktige hver for seg. Det, og muligheten til å ta et
+utvidet kurs på nytt, ligger i **#934** — sammen med en vurdering av hva full kursversjonering
+faktisk koster (16 filer rører kursinnhold i dag) og et mellomsteg som gir mesteparten av verdien
+uten ny modell.
+
+484 integrasjonstester, 1 029 unit.
+
+## 2.22.3 - 2026-08-19
+
+**Playwright mot utrullet stage, og en prioritert manuell liste.** Produkteier: *«Releasetest er
+svært omfattende og vil ta tid å gå gjennom. Vi trenger å prioritere hvor det er viktigst at jeg
+gjør manuell test. Alt annet bør testes via Playwright, dette inkluderer å teste mot Stage slik at
+du kan teste mot reelle data.»*
+
+`npm run test:stage` treffer det **utrullede** miljøet, ikke en statisk server med mocker. Den
+dekker klassen ingen mocket e2e kan nå — at artefaktet som kjører er det vi tror. Seks endepunkter
+må svare 401 uten innlogging, mock-headere må ikke gi tilgang, `authMode` må være `entra`, layout må
+ligge i klasser og ikke i inline `style`, og i18n-bundlet må ha nøklene shell-en slår opp. Den
+fanget umiddelbart at en nøkkel lagt til få minutter tidligere ikke var utrullet.
+
+`npm run stage:auth` fanger en ekte Entra-sesjon. Playwrights `storageState` duger ikke — appen
+bruker MSAL med `cacheLocation: sessionStorage` — og agent-tokens duger heller ikke, siden hvitelista
+er skriv-bare og ikke kan lese eksisterende innhold. Tokenet verifiseres mot `/api/me` før noe
+skrives, og de autentiserte testene er **lesende**: stage er der produkteier har innholdet hen
+faktisk tester med.
+
+Målingene mot reelle data ga tallene #932 ventet på: 12 upubliserte seksjoner med språkhull, 3 av 14
+kurs blokkert av gaten, og **0 diskusjonstråder på elementnivå** — produkteiers forutsetning for å
+skjule dem i #923 holder.
+
+**To målefeil underveis, begge med alarmerende utslag.** `typeof title === "string"` rapporterte 47
+av 47 seksjoner som ettspråks; `title` er en tekstkolonne, så uttrykket er sant for begge former.
+Og en feil feltsti ga «0 tomme seksjoner» av null sjekkede. Begge er dokumentert i
+`doc/TEST_AND_RELEASE_PLAYBOOK.md` med regelen som følger: når et tall er urimelig, er målingen
+mistenkt før virkeligheten.
+
+Modultype-meldingen listet også **typens krav** i stedet for **det som manglet** — en modul som
+allerede er «Bare fritekst» fikk «krev oppgåvetekst, rubrikk og MCQ-sett». Navngir nå hullet.
+
 ## 2.22.2 - 2026-08-19
 
 **Fire funn til fra QA-gjennomgangen.** En underagent som gikk dypt i `admin-content-shell.js`
