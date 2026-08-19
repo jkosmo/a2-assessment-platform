@@ -25,6 +25,31 @@ type StageAuth = {
   roles: string[];
 };
 
+// ⚠️ `title` er en TEKSTKOLONNE i databasen. Et språkkart lagres som en JSON-STRENG, så
+// `typeof title === "string"` er sant for BEGGE former og måler ingenting. Første versjon av
+// denne suiten gjorde nettopp den feilen og rapporterte 47 av 47 seksjoner som ettspråks — et
+// alarmerende tall som ikke betydde noe. Serveren gjør det samme som her, i `localizedTextCodec`.
+type LocaleShape = "one-language" | "partial" | "complete" | "identical-copies";
+
+function classifyLocalized(raw: unknown): LocaleShape {
+  if (typeof raw !== "string") return "one-language";
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return "one-language"; // ren tekst, ikke JSON — «ett språk, ikke oversatt ennå»
+  }
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return "one-language";
+  const map = parsed as Record<string, unknown>;
+  const locales = ["en-GB", "nb", "nn"];
+  const present = locales.filter((l) => typeof map[l] === "string" && String(map[l]).trim());
+  if (present.length === 0) return "one-language";
+  if (present.length < locales.length) return "partial";
+  // Alle tre finnes, men identiske: den gamle løgnen fra #892. Gaten ser dem som komplette.
+  const values = locales.map((l) => String(map[l]));
+  return new Set(values).size === 1 ? "identical-copies" : "complete";
+}
+
 function readAuth(): { auth: StageAuth | null; reason: string } {
   const file = path.resolve(process.cwd(), ".stage-auth.json");
   if (!fs.existsSync(file)) {
@@ -77,20 +102,24 @@ test.describe("utrullet stage — reelle data", () => {
     const sections: Array<{ id: string; title: unknown; activeVersionId?: string | null }> =
       (await response.json()).sections ?? [];
 
-    // En ren streng betyr «ett språk, ikke oversatt ennå» — og det er nettopp formen gaten
-    // blokkerer. Et lokale-objekt som mangler et språk gjør det også.
-    const oneLanguage = sections.filter((s) => typeof s.title === "string");
-    const partial = sections.filter((s) => {
-      if (typeof s.title !== "object" || s.title === null) return false;
-      const t = s.title as Record<string, unknown>;
-      return ["en-GB", "nb", "nn"].some((l) => typeof t[l] !== "string" || !String(t[l]).trim());
-    });
+    const tally = { "one-language": 0, partial: 0, complete: 0, "identical-copies": 0 };
+    for (const s of sections) tally[classifyLocalized(s.title)] += 1;
 
-    // Ingen terskel her — dette er en MÅLING, ikke en grense. Tallet er svaret produkteier trenger
-    // for #932, og det å feile på det ville bare skjult det.
+    // Bare seksjoner som er UPUBLISERTE kan låse et kurs — en live gammel seksjon slipper gjennom
+    // kaskaden (`evaluateSection` kortslutter på `if (!unpublished)`). Skill dem, ellers ser tallet
+    // verre ut enn virkeligheten.
+    const blockingShape = sections.filter((s) => ["one-language", "partial"].includes(classifyLocalized(s.title)));
+    const unpublishedAndBlocking = blockingShape.filter((s) => !s.activeVersionId);
+
+    // Ingen terskel — dette er en MÅLING, ikke en grense. Tallet er svaret #932 trenger, og å
+    // feile på det ville bare skjult det.
     console.log(
-      `[stage] seksjoner: ${sections.length} · ettspråks tittel: ${oneLanguage.length}`
-      + ` · delvis oversatt tittel: ${partial.length}`,
+      `[stage] seksjoner: ${sections.length}`
+      + ` · ettspråks: ${tally["one-language"]}`
+      + ` · delvis: ${tally.partial}`
+      + ` · komplett: ${tally.complete}`
+      + ` · tre identiske kopier: ${tally["identical-copies"]}`
+      + ` — av disse UPUBLISERTE med hull (kan låse et kurs): ${unpublishedAndBlocking.length}`,
     );
 
     expect(Array.isArray(sections)).toBe(true);
@@ -101,19 +130,18 @@ test.describe("utrullet stage — reelle data", () => {
     expect(response.ok(), `modules svarte ${response.status()}`).toBe(true);
 
     const modules: Array<{ id: string; title: unknown }> = (await response.json()).modules ?? [];
-    const oneLanguage = modules.filter((m) => typeof m.title === "string");
-    const allThreeIdentical = modules.filter((m) => {
-      if (typeof m.title !== "object" || m.title === null) return false;
-      const t = m.title as Record<string, string>;
-      const values = ["en-GB", "nb", "nn"].map((l) => t[l]).filter(Boolean);
-      return values.length === 3 && new Set(values).size === 1;
-    });
 
-    // Den siste er den gamle løgnen fra #892: tre identiske kopier passerer gaten, men er ikke
-    // oversatt. Gaten kan ikke se dem — men vi kan telle dem her.
+    const tally = { "one-language": 0, partial: 0, complete: 0, "identical-copies": 0 };
+    for (const m of modules) tally[classifyLocalized(m.title)] += 1;
+
+    // `identical-copies` er den gamle løgnen fra #892: tre kopier av samme tekst PASSERER gaten,
+    // men er ikke oversatt. Gaten kan ikke se dem — vi kan telle dem her.
     console.log(
-      `[stage] moduler: ${modules.length} · ettspråks tittel: ${oneLanguage.length}`
-      + ` · tre identiske kopier (#892-arv): ${allThreeIdentical.length}`,
+      `[stage] moduler: ${modules.length}`
+      + ` · ettspråks: ${tally["one-language"]}`
+      + ` · delvis: ${tally.partial}`
+      + ` · komplett: ${tally.complete}`
+      + ` · tre identiske kopier (#892-arv, usynlig for gaten): ${tally["identical-copies"]}`,
     );
 
     expect(Array.isArray(modules)).toBe(true);
@@ -129,12 +157,13 @@ test.describe("utrullet stage — reelle data", () => {
     test.skip(modules.length === 0, "ingen moduler på stage å inspisere");
 
     const bundle = await request.get(
-      `${BASE}/api/admin/content/modules/${modules[0].id}/content-bundle`,
+      `${BASE}/api/admin/content/modules/${modules[0].id}/export`,
       { headers: headers() },
     );
-    expect(bundle.ok(), `content-bundle svarte ${bundle.status()}`).toBe(true);
+    expect(bundle.ok(), `modules/:id/export svarte ${bundle.status()}`).toBe(true);
 
-    const body = (await bundle.json()).moduleExport ?? (await bundle.json());
+    const payload = await bundle.json();
+    const body = payload.moduleExport ?? payload;
     // `renderSettingsPanel` leser tilgjengelige modultyper ut av HISTORIKKEN, ikke ut av gjeldende
     // versjons pekere. Mangler disse i det ekte svaret, er hvert valg deaktivert uansett hva
     // modulen inneholder — og det er akkurat det produkteier så.
