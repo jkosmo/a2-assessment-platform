@@ -34,3 +34,7 @@ doc/pentest/PENTEST-*.md
 # Cross-model QA gate output (scripts/ai-qa.ps1)
 .ai-qa/
 scripts/ai-qa.ps1
+
+# Fanget Entra-sesjon for Playwright mot stage (scripts/test/capture-stage-auth.mjs).
+# Inneholder et EKTE access-token. Skal aldri committes.
+.stage-auth.json
