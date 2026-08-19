@@ -177,6 +177,68 @@ test.describe("utrullet stage — reelle data", () => {
   //
   // #903 finnes fordi en eksportrute gikk i produksjon uten eierskapssjekk. Her er de nye rutene
   // fra #916, mot en ekte innlogget bruker.
+  // ── Det avgjørende spørsmålet før prod ────────────────────────────────────────────────────
+  //
+  // Publiseringsgaten gjelder nå seksjoner (#916), og 12 av de 47 seksjonene på stage er
+  // upubliserte med et språkhull. Spørsmålet er ikke om gaten fyrer — det er dekket av
+  // integrasjonstester — men **hva forfatteren faktisk får se**, og om det finnes en vei videre.
+  //
+  // `publish-preview` er en GET som bare beregner. Ingenting publiseres, ingenting endres. Det er
+  // også nøyaktig det arbeidsflaten kaller før den viser dialogen, så vi ser det forfatteren ser.
+  test("en blokkert kurspublisering navngir felt og språk, ikke bare «det gikk ikke»", async ({ request }) => {
+    const list = await request.get(`${BASE}/api/admin/content/courses`, { headers: headers() });
+    expect(list.ok(), `courses svarte ${list.status()}`).toBe(true);
+    const courses: Array<{ id: string; title?: unknown }> = (await list.json()).courses ?? [];
+    test.skip(courses.length === 0, "ingen kurs på stage");
+
+    const previews: Array<{ id: string; publishable: boolean; items: unknown[] }> = [];
+    for (const course of courses) {
+      const response = await request.get(
+        `${BASE}/api/admin/content/courses/${course.id}/publish-preview`,
+        { headers: headers() },
+      );
+      if (!response.ok()) continue;
+      const body = await response.json();
+      previews.push({
+        id: course.id,
+        publishable: Boolean(body.publishable),
+        items: body.unpublishedItems ?? [],
+      });
+    }
+
+    const blocked = previews.filter((p) => !p.publishable);
+    console.log(
+      `[stage] kurs: ${courses.length} · publiserbare: ${previews.length - blocked.length}`
+      + ` · blokkert av gaten: ${blocked.length}`,
+    );
+
+    test.skip(blocked.length === 0, "ingen kurs er blokkert — ingenting å inspisere");
+
+    // Hent ut blokkeringene for det første blokkerte kurset og se på FORMEN. Det er den som
+    // avgjør om klienten kan skrive en lesbar melding på forfatterens språk, eller må falle
+    // tilbake på serverens engelske `message` — som er #914.
+    const sample = blocked[0];
+    type Blocker = Record<string, unknown> & { itemType?: string };
+    const blockers: Blocker[] = (sample.items as Array<{ type?: string; blockers?: Array<Record<string, unknown>> }>)
+      .flatMap((item) => (item.blockers ?? []).map((b): Blocker => ({ itemType: item.type, ...b })));
+
+    console.log(`[stage] blokkeringer på første blokkerte kurs: ${JSON.stringify(blockers, null, 2)}`);
+
+    expect(blockers.length, "kurset er blokkert, men uten en eneste blokkeringsgrunn").toBeGreaterThan(0);
+
+    // Oversettelseshull MÅ bære strukturerte data. Uten `field` + `missingLocales` kan klienten
+    // ikke bygge «Tittel — mangler nn» på forfatterens språk, og forfatteren får serverens
+    // engelske setning midt i et norsk UI.
+    const translationGaps = blockers.filter((b) => b.code === "translation_incomplete");
+    for (const gap of translationGaps) {
+      expect(gap.field, `translation_incomplete uten felt: ${JSON.stringify(gap)}`).toBeTruthy();
+      expect(
+        Array.isArray(gap.missingLocales) && (gap.missingLocales as unknown[]).length > 0,
+        `translation_incomplete uten missingLocales: ${JSON.stringify(gap)}`,
+      ).toBe(true);
+    }
+  });
+
   test("seksjonseksport svarer for egne seksjoner og 404/403 for tull", async ({ request }) => {
     const bogus = await request.get(
       `${BASE}/api/admin/content/sections/not-a-real-section-id/export-package`,
