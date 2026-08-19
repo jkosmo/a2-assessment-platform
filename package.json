@@ -67,7 +67,8 @@
     "test:watch": "vitest",
     "lint": "tsc --noEmit",
     "test:stage": "playwright test --config playwright.stage.config.ts",
-    "stage:auth": "node scripts/test/capture-stage-auth.mjs"
+    "stage:auth": "node scripts/test/capture-stage-auth.mjs",
+    "stage:token": "node scripts/test/set-stage-token.mjs"
   },
   "dependencies": {
     "@azure/communication-email": "^1.1.0",
