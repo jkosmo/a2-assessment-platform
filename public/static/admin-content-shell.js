@@ -1394,15 +1394,19 @@ function clearPreviewCandidate() {
   renderPreview();
 }
 
-function translateLocalizedText(text) {
-  if (!text) return "";
-  if (typeof text === "object") return text;
-  return {
-    "en-GB": text,
-    nb: text,
-    nn: text,
-  };
-}
+// ⛔ `translateLocalizedText(text)` sto her og returnerte `{"en-GB": text, nb: text, nn: text}`.
+// Slettet 2026-08-19, etter at de to siste kallerne (`resolveMcqTitlePayload` og
+// `resolveCurrentPromptPayload`) ble rettet.
+//
+// Den var maskinen bak løgnen #892, #905 og #918 hver for seg fjernet fra hver sin sti: én tekst i
+// ett språk, kopiert inn i alle tre, slik at innholdet så oversatt ut for publiseringsgaten og for
+// oversettelsesstatusen. Hver gang noen trengte «gjør denne strengen til et lokale-objekt», lå den
+// her og gjorde det på den ene måten som er gal.
+//
+// **Ikke legg den tilbake.** Kodingen for «skrevet i ett språk, ikke oversatt ennå» er en REN
+// STRENG — og `localizedTextMaybeUntranslatedSchema` godtar den overalt der det betyr noe. Skal
+// språket registreres, er svaret et ett-nøkkels kart `{ [contentLocale]: tekst }` (#930), aldri tre
+// kopier.
 
 /**
  * Fjern språk som er tomme fra en lokalisert verdi.
@@ -1681,9 +1685,20 @@ function tryParseJsonTranslation(key, fallback) {
 
 function resolveCurrentPromptPayload() {
   const prompt = bundle?.selectedConfiguration?.promptTemplateVersion;
+  // QA 2026-08-19: samme vifte som i `resolveMcqTitlePayload`. Standardinstruksen hentes med `t()`
+  // — altså i MENYspråket — og ble kopiert inn i alle tre. Resultatet var en lagret instruks som
+  // påsto nb- og nn-oversettelser som i virkeligheten var den engelske standardteksten.
+  //
+  // Det er verre enn det høres ut, fordi det er selvforseglende: Innstillinger leser i
+  // `contentLocale` og viser da den engelske teksten som den norske, og `mergeSettingsField` sin
+  // urørt-sjekk ser en ikke-tom `nb`-verdi og regner den som ekte. Hullet kan aldri oppdages igjen.
+  //
+  // En ren streng er den ærlige kodingen — «ett språk, ikke oversatt ennå» — og
+  // `promptTemplateBodySchema` godtar den. Merk at strengen fortsatt bærer menyspråket og leses som
+  // `nb`; det er #930, som språkmerker denne klassen verdier ved kilden.
   return {
-    systemPrompt: prompt?.systemPrompt ?? translateLocalizedText(t("adminContent.defaults.systemPrompt")),
-    userPromptTemplate: prompt?.userPromptTemplate ?? translateLocalizedText(t("adminContent.defaults.userPromptTemplate")),
+    systemPrompt: prompt?.systemPrompt ?? t("adminContent.defaults.systemPrompt"),
+    userPromptTemplate: prompt?.userPromptTemplate ?? t("adminContent.defaults.userPromptTemplate"),
     examples: prompt?.examples ?? tryParseJsonTranslation("adminContent.defaults.examplesJson", []),
   };
 }
@@ -1692,7 +1707,17 @@ function resolveMcqTitlePayload() {
   const existingTitle = bundle?.selectedConfiguration?.mcqSetVersion?.title;
   if (existingTitle) return existingTitle;
   const moduleTitle = bundle?.module?.title ?? sessionDraft?.title ?? t("shell.newModule.defaultTitle");
-  return typeof moduleTitle === "string" ? translateLocalizedText(moduleTitle) : moduleTitle;
+  // QA 2026-08-19: dette kjørte en ren streng gjennom `translateLocalizedText`, som kopierer den
+  // inn i alle tre språk. Altså nøyaktig #918-løgnen — ett felt til side, på samme lagring: siden
+  // #918 er modultittelen bevisst en REN STRENG, og denne tok den ærlige strengen og gjorde den om
+  // til tre identiske «oversettelser» for MCQ-settets tittel.
+  //
+  // Verre enn på tittelen, fordi klientens `TRANSLATION_GATE_FIELDS` ikke inneholder MCQ-settets
+  // tittel — så ingenting rapporterte hullet, og norske deltakere fikk den engelske.
+  //
+  // `mcqSetBodySchema.title` er `localizedTextMaybeUntranslatedSchema`, så en ren streng er en
+  // gyldig verdi: «ett språk, ikke oversatt ennå». Send den videre som den er.
+  return moduleTitle;
 }
 
 function resolveDraftForSave() {

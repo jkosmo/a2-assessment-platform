@@ -638,7 +638,13 @@
                Handlingene bor her, i en fast linje som ikke skroller. Loggen under er samtalen:
                spørsmål, instrukser, generert innhold, status. Brukte knapperader forsvinner nå
                i stedet for å bli stående grå og dytte de gyldige valgene nedover. -->
-          <div id="workspaceActions" class="workspace-actions" role="group" hidden
+          <!-- style="display:none", ikke [hidden]. QA 2026-08-19: `.workspace-actions` setter
+               `display:flex`, og en forfatter-origin klasseregel slår UA-arkets `[hidden]{display:none}`
+               — så attributtet gjorde ingenting, og en tom handlingslinje med bunnramme og marg ble
+               malt ved første tegning før `renderWorkspaceActions` rakk å kjøre.
+               Samme felle som `tabPanelSettings`, og samme løsning: `setHidden()` styrer den etterpå,
+               og `display:""` faller tilbake på klassens `flex`. -->
+          <div id="workspaceActions" class="workspace-actions" role="group" style="display:none"
                aria-label="Modulhandlinger" data-i18n-aria-label="shell.actions.groupLabel"></div>
           <div id="chatMessages" class="chat-messages" role="log" aria-live="polite" aria-relevant="additions text" aria-atomic="false"></div>
           <div id="shellStatusAnnouncer" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></div>

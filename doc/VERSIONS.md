@@ -2,6 +2,61 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.22.2 - 2026-08-19
+
+**Fire funn til fra QA-gjennomgangen.** En underagent som gikk dypt i `admin-content-shell.js`
+rapporterte åtte timer etter hovedgjennomgangen. Tre av funnene var allerede rettet i v2.22.1 — den
+leste koden før fiksene landet — men fire var nye.
+
+### `translateLocalizedText` er slettet
+
+Den returnerte `{"en-GB": text, nb: text, nn: text}`, og var maskinen bak den samme løgnen #892,
+#905 og #918 hver for seg fjernet fra hver sin sti: én tekst i ett språk, kopiert inn i alle tre,
+slik at innholdet så oversatt ut for publiseringsgaten.
+
+De to siste kallerne er rettet, og funksjonen er borte — med en gravskrift som forklarer hvorfor den
+ikke skal legges tilbake. Så lenge den lå der, lå det en ferdig funksjon for «gjør denne strengen om
+til et lokale-objekt» som gjorde det på den ene måten som er gal.
+
+**MCQ-settets tittel** gjenskapte #918 ett felt til side, på samme lagring. Siden #918 er
+modultittelen bevisst en ren streng — og denne tok den ærlige strengen og blåste den opp til tre
+identiske «oversettelser». Verre enn på tittelen, fordi klientens `TRANSLATION_GATE_FIELDS` ikke
+inneholder MCQ-settets tittel: ingenting rapporterte hullet, og norske deltakere fikk den engelske.
+
+**Standard vurderingsinstruks** ble hentet med `t()` — altså i menyspråket — og kopiert inn i alle
+tre. Det er selvforseglende: Innstillinger leser i innholdsspråket og viser den engelske teksten som
+den norske, og `mergeSettingsField` sin urørt-sjekk ser en ikke-tom `nb`-verdi og regner den som
+ekte. Hullet kunne aldri oppdages igjen.
+
+Begge sender nå en ren streng — kodingen for «ett språk, ikke oversatt ennå», som skjemaene godtar.
+
+### En i18n-nøkkel manglet i alle tre språk
+
+`shell.module.importReloadFailed` fantes ikke i noen lokale, så `t()` returnerte nøkkelen. En
+maskinell gjennomgang av alle 346 `t()`/`tf()`-nøkler i filen fant nøyaktig denne ene.
+
+Verdt å merke seg hvilken gren det er: den som skal si *«importen ble lagret, men arbeidsflaten
+klarte ikke å laste den inn — det du ser er kanskje ikke den importerte versjonen.»* Altså meldingen
+hvis eneste jobb er å fortelle forfatteren at skjermen lyver — og den kom ut som `t()`-nøkkelen selv.
+
+### `#workspaceActions` bar `hidden` under en `display:flex`-klasse
+
+`.hidden`-fella fra CLAUDE.md, i sin rene form: en forfatter-origin klasseregel slår UA-arkets
+`[hidden] { display: none }`, så attributtet gjorde ingenting. En tom handlingslinje med bunnramme og
+marg ble malt ved første tegning, før `renderWorkspaceActions` rakk å kjøre.
+
+`setHidden()` styrer den korrekt etterpå, så det var en blink ved innlasting og ikke en varig feil —
+men det er tredje gang samme felle dukker opp i denne epicen. Nå `style="display:none"`, som
+`tabPanelSettings`.
+
+### Om den som fant dem
+
+Underagenten leste ikke alle 3 651 nye linjene, og sier det selv. Den bekreftet flatekartets punkt
+20, 21 og 22 (og fant at tabellteksten i 22 sa «fire produsenter» der koden hadde seks — rettet), og
+lot punkt 16–19 være. Punkt 18 er det den ville dekket neste gang.
+
+1 029 unit, 6 DOM, 200 e2e, 483 integrasjon.
+
 ## 2.22.1 - 2026-08-18
 
 **Fire blokkere fra QA-gjennomgangen foran produksjonsutrullingen.** Gjennomgangen gikk over hele
