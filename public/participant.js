@@ -3653,13 +3653,28 @@ async function renderSectionReaderInto(panel, courseId, entry) {
   const advanceLabel = nextEntry
     ? (nextEntry.type === "MODULE" ? t("courses.section.markReadAndTest") : t("courses.section.markReadAndNext"))
     : "";
-  // Siste element i kurset får INGEN knapp: det finnes ikke noe å gå videre til, og en knapp som
-  // sier noe annet enn de andre knappene sier, er én ting til å lese seg gjennom. Lesningen
-  // registreres i stedet av systemet (se markFinalSectionReadSilently under) — uten den ville
-  // kursbeviset, som krever at alle seksjoner er lest, blitt uoppnåelig.
-  const actionsMarkup = nextEntry
-    ? `<button type="button" id="sectionReaderMarkRead" class="btn-primary" data-role="markReadNext">${escapeHtmlP(advanceLabel)}</button>`
-    : "";
+  // #929: siste element får «Avslutt kurset» — men BARE når alt annet er ferdig.
+  //
+  // Det sto ingen knapp her før, og lesningen ble registrert stille av systemet. Produkteier
+  // testet flyten 2026-08-20 og meldte den inn som en feil: hen gjorde alt som skulle til, og
+  // ingenting sa at kurset var fullført. Kursbeviset ble utstedt — på et kort hen ikke så på.
+  //
+  // Fullføring skal være noe deltakeren GJØR. Da må den også kunne nektes: står det noe igjen,
+  // sier vi hva, i stedet for å vise ingenting og la deltakeren gjette.
+  const outstanding = nextEntry ? [] : outstandingBeforeFinish(courseId, entry);
+  const canFinish = !nextEntry && outstanding.length === 0;
+  let actionsMarkup = "";
+  if (nextEntry) {
+    actionsMarkup = `<button type="button" id="sectionReaderMarkRead" class="btn-primary" data-role="markReadNext">${escapeHtmlP(advanceLabel)}</button>`;
+  } else if (canFinish) {
+    actionsMarkup = `<button type="button" id="sectionReaderFinish" class="btn-primary" data-role="finishCourse">${escapeHtmlP(t("courses.section.finishCourse"))}</button>`;
+  } else {
+    // Ingen knapp, men en forklaring. En blindvei uten begrunnelse er verre enn en knapp som
+    // mangler — deltakeren vet ikke om det er dem eller systemet det er noe galt med.
+    actionsMarkup = `<p class="small" style="color:var(--color-meta);margin:0">${escapeHtmlP(
+      t("courses.section.finishBlocked").replace("{remaining}", String(outstanding.length)),
+    )}</p>`;
+  }
   panel.innerHTML = `
     <div class="course-inline-panel-sticky">
       <span class="course-inline-panel-tag">${escapeHtmlP(t("courses.section.readerTag"))}</span>
@@ -3692,7 +3707,23 @@ async function renderSectionReaderInto(panel, courseId, entry) {
     }
   });
 
-  if (!nextEntry) markFinalSectionReadSilently(courseId, entry);
+  // #929: «Avslutt kurset». Samme serverkall som «marker lest og gå videre» — det er lesningen som
+  // er den siste porten — men her er den en bevisst handling, og etterpå står deltakeren igjen med
+  // kurslista der kurset har flyttet seg til «Fullført» (#936).
+  const finishBtn = panel.querySelector("#sectionReaderFinish");
+  finishBtn?.addEventListener("click", async () => {
+    finishBtn.disabled = true;
+    try {
+      await apiFetch(`/api/courses/${encodeURIComponent(courseId)}/sections/${encodeURIComponent(entry.sectionId)}/read`, headers, { method: "POST" });
+      collapseInlineOpen();
+      // Vent på lista: det er DEN som viser at kurset er fullført, og som utløser
+      // kursbevis-feiringen. Å ikke vente ga nettopp den stille fullføringen #929 finnes for.
+      await loadParticipantCourses();
+    } catch (error) {
+      finishBtn.disabled = false;
+      showToast(error instanceof Error ? error.message : t("courses.loadError"), "error");
+    }
+  });
 
   try {
     const body = await apiFetch(`/api/courses/${encodeURIComponent(courseId)}/sections/${encodeURIComponent(entry.sectionId)}`, headers);
@@ -3722,11 +3753,24 @@ async function renderSectionReaderInto(panel, courseId, entry) {
 // med lesestoff aldri kunne fullføres. Endepunktet er idempotent. Ingen re-render her: å bygge om
 // raden mens deltakeren leser ville kastet dem ut av teksten. Fersk progresjon vises når de går
 // tilbake til kurslista (unfocusCourse henter lista på nytt).
-function markFinalSectionReadSilently(courseId, entry) {
-  if (!entry?.sectionId || entry.read) return;
-  apiFetch(`/api/courses/${encodeURIComponent(courseId)}/sections/${encodeURIComponent(entry.sectionId)}/read`, headers, { method: "POST" })
-    .then(() => { entry.read = true; })
-    .catch(() => {/* stille — neste besøk prøver igjen */});
+// #929: hva gjenstår i kurset UTENOM elementet deltakeren står i?
+//
+// Regnes mot hele elementrekka, ikke mot posisjon: moduler kan bestås i vilkårlig rekkefølge, og en
+// deltaker kan ha hoppet fram til lesestoffet. «Alt annet er ferdig» må derfor bety alt annet — ikke
+// «alt før dette».
+//
+// ⚠️ Erstattet `markFinalSectionReadSilently`, som registrerte lesningen i det stille når siste
+// element ble ÅPNET. Den var en nødløsning for at kursbeviset ellers ble uoppnåelig uten knapp, og
+// den hadde to problemer: den registrerte lesning på et rent klikk, og den gjorde fullføring til
+// noe som skjedde med deltakeren i stedet for noe hen gjorde.
+function outstandingBeforeFinish(courseId, current) {
+  const seq = courseSequences[courseId] || [];
+  const currentKey = courseItemKey(current);
+  return seq.filter((e) => {
+    if (courseItemKey(e) === currentKey) return false;
+    if (e.type === "MODULE") return e.moduleStatus !== "PASSED";
+    return e.read !== true;
+  });
 }
 
 // Escape collapses whatever inline item is open (parity with the old modal's Escape-to-close).

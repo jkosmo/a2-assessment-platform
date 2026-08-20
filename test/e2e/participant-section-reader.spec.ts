@@ -113,13 +113,24 @@ test("participant: open a course section, render its image, and have the read re
   await expect(img).toHaveCount(1);
   await expect.poll(async () => (await img.getAttribute("src")) ?? "").toMatch(/^blob:/);
 
-  // #924: seksjonen er SISTE element i kurset, så den har ingen knapp — det finnes ingenting å gå
-  // videre til. Lesningen registreres likevel: uten den ville kursbeviset, som krever at alle
-  // seksjoner er lest, vært uoppnåelig for et kurs som slutter med lesestoff.
-  await expect(page.locator(".course-inline-actions button")).toHaveCount(0);
+  // #929: seksjonen er SISTE element, og alt annet er ferdig (den er eneste element) — så her står
+  // «Avslutt kurset». Ingen «gå videre», for det finnes ingenting å gå videre til.
   await expect(page.locator("#sectionReaderMarkRead")).toHaveCount(0);
+  await expect(page.locator("#sectionReaderFinish")).toHaveCount(1);
+
+  // ⚠️ Kjernen i #929: lesningen skal IKKE være registrert ennå. Fram til v2.20.x gjorde
+  // `markFinalSectionReadSilently` det i det øyeblikket panelet åpnet, og produkteier meldte
+  // resultatet inn som en feil — kurset ble fullført uten at noe sa fra. Å ÅPNE en side er ikke
+  // det samme som å ha lest den.
+  await expect.poll(() => markReadCalled).toBe(false);
+
+  // Fullføring er en handling deltakeren gjør.
+  await page.locator("#sectionReaderFinish").click();
   await expect.poll(() => markReadCalled).toBe(true);
 
-  // Leseren blir stående — «registrert lest» skal ikke rive teksten vekk under deltakeren.
-  await expect(page.locator("#sectionReaderBody")).toContainText("Innhold");
+  // #929: etter «Avslutt kurset» LUKKES leseren og kurslista lastes på nytt — deltakeren skal se
+  // resultatet av handlingen sin, ikke bli stående i teksten hen nettopp ble ferdig med. (Fram til
+  // nå ble leseren stående, fordi lesningen ble registrert i det stille og ingenting hadde skjedd
+  // fra deltakerens side.)
+  await expect(page.locator("#sectionReaderBody")).toHaveCount(0);
 });

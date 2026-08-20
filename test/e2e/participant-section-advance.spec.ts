@@ -181,3 +181,94 @@ test("#923: seksjonsleseren har ikke lenger sitt eget diskusjonsboard — kursni
   await page.locator(".course-discussion-toggle").click();
   await expect(page.locator(".course-discussion-body .discussion-panel")).toHaveCount(1);
 });
+
+// ---------------------------------------------------------------------------
+// #929: «Avslutt kurset» på siste element — men bare når alt annet er ferdig.
+//
+// Produkteier testet flyten på stage 2026-08-20 og meldte den inn som en feil: hen besto modulen,
+// leste seksjonen, og det fantes ingen knapp for å fullføre. Kursbeviset BLE utstedt — stille, av
+// `markFinalSectionReadSilently`, på et kort hen ikke så på.
+//
+// Kurset her har modulen FØRST og seksjonen SIST, som produkteiers eget. Det gjør at
+// «alt annet er ferdig» avhenger av modulen, ikke av posisjon.
+// ---------------------------------------------------------------------------
+async function mockCourseWithTrailingSection(page: Page, moduleStatus: string) {
+  await page.route("**/api/courses/c1", (route: Route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        course: {
+          id: "c1",
+          title: "Kurs",
+          discussionsEnabled: true,
+          items: [
+            { type: "MODULE", moduleId: "m1", courseItemId: "ci1", title: "Testen", moduleStatus, available: true, discussionsEnabled: true },
+            { type: "SECTION", sectionId: "s1", courseItemId: "ci2", title: "Lesestoff", read: false, discussionsEnabled: true },
+          ],
+        },
+      }),
+    }),
+  );
+  await page.route("**/api/courses/c1/sections/s1", (route: Route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ title: "Lesestoff", html: "<p>Tekst</p>" }) }),
+  );
+  await page.route("**/api/modules**", (route: Route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ modules: [] }) }),
+  );
+  await page.route("**/api/courses/c1/discussions**", (route: Route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ threads: [], canPost: true }) }),
+  );
+}
+
+test("#929: siste element med alt annet ferdig gir «Avslutt kurset»", async ({ page }) => {
+  await mockBase(page);
+  await mockCourseWithTrailingSection(page, "PASSED");
+
+  let readCalled = false;
+  await page.route("**/api/courses/c1/sections/s1/read", (route: Route) => {
+    readCalled = true;
+    return route.fulfill({ status: 204, body: "" });
+  });
+
+  await openCourse(page);
+  await page.locator('.course-item[data-key="ci2"] .course-module-row').click();
+
+  await expect(page.locator("#sectionReaderFinish")).toBeVisible();
+  await expect(page.locator("#sectionReaderFinish")).toHaveText(/Avslutt kurset/);
+  // Ingen «gå videre»-knapp: det finnes ingenting å gå videre til.
+  await expect(page.locator("#sectionReaderMarkRead")).toHaveCount(0);
+
+  // Lesningen skal ikke være registrert før deltakeren bekrefter. Dette er hele forskjellen fra
+  // den stille varianten #929 erstatter.
+  expect(readCalled).toBe(false);
+
+  await page.locator("#sectionReaderFinish").click();
+  await expect.poll(() => readCalled).toBe(true);
+});
+
+test("#929: gjenstår det noe, er det ingen knapp — men en forklaring", async ({ page }) => {
+  await mockBase(page);
+  await mockCourseWithTrailingSection(page, "NOT_STARTED");
+
+  let readCalled = false;
+  await page.route("**/api/courses/c1/sections/s1/read", (route: Route) => {
+    readCalled = true;
+    return route.fulfill({ status: 204, body: "" });
+  });
+
+  await openCourse(page);
+  await page.locator('.course-item[data-key="ci2"] .course-module-row').click();
+  await expect(page.locator("#sectionReaderBody")).toContainText("Tekst");
+
+  // Modulen er ikke bestått, så kurset kan ikke avsluttes.
+  await expect(page.locator("#sectionReaderFinish")).toHaveCount(0);
+  await expect(page.locator("#sectionReaderMarkRead")).toHaveCount(0);
+
+  // ⚠️ Og deltakeren skal FÅ VITE hvorfor. En blindvei uten begrunnelse er verre enn en manglende
+  // knapp: man vet ikke om det er en selv eller systemet det er noe galt med.
+  await expect(page.locator(".course-inline-actions")).toContainText(/1 igjen/);
+
+  // Og ingenting registreres i det stille bare fordi siden ble åpnet.
+  expect(readCalled).toBe(false);
+});

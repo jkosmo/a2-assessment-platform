@@ -2,6 +2,62 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.24.0 - 2026-08-20
+
+**«Avslutt kurset» — fullføring blir en handling deltakeren gjør (#929).** Produkteier bygde et kurs
+med én modul og én seksjon på stage, besto modulen, leste seksjonen, og meldte inn:
+
+> «Det er ikke noen knapp for å fullføre kurset selv om seksjon er siste element i kurset.»
+
+Verifisert mot ekte data: **ingenting var i stykker.** Kurset sto `COMPLETED`, seksjonen `read: true`,
+og kursbeviset var utstedt 15:49:53 — fem minutter etter publisering. Mekanikken virket hele veien.
+
+Det er den sterkeste formen for belegg en UX-sak kan få: **systemet gjorde jobben, og brukeren kunne
+ikke se det.** Deltakeren sto i leseren; beviset dukket opp på kurskortet, et sted hen ikke så på.
+
+### Hva som var galt
+
+`markFinalSectionReadSilently` registrerte lesningen i det øyeblikket panelet for siste seksjon
+**åpnet**. Nødløsningen fantes for at kursbeviset ikke skulle bli uoppnåelig uten en knapp, og den
+løste akkurat det — men den gjorde handlingen som fullførte kurset til å *åpne en side*. Det fantes
+ikke noe øyeblikk der noe ble avsluttet.
+
+**Å åpne en side er ikke det samme som å ha lest den.**
+
+### Hva som er nytt
+
+Siste element i kurset får nå én av tre ting, avhengig av hva som faktisk gjenstår:
+
+| Situasjon | Før | Nå |
+|---|---|---|
+| Det finnes et neste element | «Marker lest, og gå videre» | uendret |
+| Siste element, alt annet ferdig | *stille markering ved åpning* | **«Avslutt kurset»** |
+| Siste element, noe gjenstår | *stille markering ved åpning* | forklaring: hva som mangler |
+
+`outstandingBeforeFinish()` teller det som faktisk står igjen — moduler som ikke er `PASSED`, og
+seksjoner som ikke er lest — og utelater seksjonen deltakeren står i. Gjenstår det noe, tilbys ikke
+fullføring i det hele tatt; deltakeren får vite hvor mange elementer som mangler i stedet for en
+knapp som ikke ville virket.
+
+Etter klikk lukkes leseren og kurslista lastes på nytt, så deltakeren ser resultatet av handlingen
+sin i stedet for å bli stående i teksten hen nettopp ble ferdig med.
+
+### Verifisering
+
+Begge halvdelene er **mutasjonsverifisert** — ikke bare testet:
+
+- Fjernet man `outstanding`-sjekken, ble én test rød: knappen dukket opp med en ulest seksjon igjen.
+- Gjeninnførte man den stille markeringen, ble tre tester røde på `expected false, received true` —
+  altså på nøyaktig den assertion som sier at lesningen *ikke* skal være registrert ved åpning.
+
+En test som er grønn både med og uten fiksen er verre enn ingen test. Disse er ikke det.
+
+### Gjenstår
+
+#936 er den andre halvdelen av kuren: fullførte kurs skal sorteres nederst i «Kursa mine», med en
+synlig grense, og lista skal skrolles slik at kurset er synlig etter at det flyttet seg. Uten den er
+man delvis tilbake til at noe skjer utenfor synsfeltet.
+
 ## 2.23.0 - 2026-08-19
 
 **Steg 1 og 2 av kursbevis-regelen (#933/#934).** Produkteier fant på stage at et kursbevis sto
