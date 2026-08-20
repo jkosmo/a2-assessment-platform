@@ -3130,8 +3130,26 @@ function renderParticipantCourseAccordion() {
   const isFirstRender = !courseAccordionInitialized;
 
   container.innerHTML = "";
-  for (const course of participantCourses) {
+  // #936: fullførte kurs samles NEDERST, bak en navngitt grense. Rekkefølgen INNAD i hver gruppe er
+  // uendret — dette er en partisjonering, ikke en ny sortering, så backendens rekkefølge (og
+  // dermed all sekundærsortering) overlever.
+  const ongoing = participantCourses.filter((c) => !isCourseCompleted(c));
+  const done = participantCourses.filter((c) => isCourseCompleted(c));
+  for (const course of ongoing) {
     container.appendChild(buildCourseAccordionItem(course));
+  }
+  if (done.length > 0) {
+    // Grensen vises bare når det FINNES noe på begge sider. En «Fullført»-overskrift over hele
+    // lista til en deltaker som har fullført alt sier ingenting.
+    if (ongoing.length > 0) {
+      const divider = document.createElement("div");
+      divider.className = "course-group-divider";
+      divider.textContent = t("courses.list.completedGroup");
+      container.appendChild(divider);
+    }
+    for (const course of done) {
+      container.appendChild(buildCourseAccordionItem(course));
+    }
   }
 
   // #922: fokuset overlever re-renderen (f.eks. etter at en seksjon ble markert lest), så
@@ -3145,17 +3163,25 @@ function renderParticipantCourseAccordion() {
 
   // #550: confetti when a course becomes completed during this session.
   let newlyCompleted = false;
+  let newlyCompletedId = null;
   for (const course of participantCourses) {
-    const isCompleted = Boolean(participantCompletions[course.id]) || course.progress?.courseStatus === "COMPLETED";
-    if (!isCompleted) continue;
+    if (!isCourseCompleted(course)) continue;
     if (!celebratedCompletedCourses.has(course.id)) {
       celebratedCompletedCourses.add(course.id);
-      if (courseAccordionInitialized) newlyCompleted = true;
+      if (courseAccordionInitialized) {
+        newlyCompleted = true;
+        newlyCompletedId = course.id;
+      }
     }
   }
   if (newlyCompleted) {
     launchConfetti();
     showToast(t("courses.celebrateComplete"), "success");
+    // #936/#929: kurset har nettopp flyttet seg ned under «Fullført». Uten dette skjer flyttingen
+    // utenfor synsfeltet, og deltakeren står igjen med inntrykket av at ingenting hendte — som er
+    // nøyaktig klagen #929 kom fra. Handlingen fortjener et synlig resultat.
+    const moved = container.querySelector(`.course-accordion-item[data-course-id="${newlyCompletedId}"]`);
+    moved?.scrollIntoView({ behavior: "smooth", block: "center" });
   }
   courseAccordionInitialized = true;
 
@@ -3197,10 +3223,25 @@ function openCourseItemEntry(courseId, entry) {
   openInlineItemByEntry(courseId, entry);
 }
 
+// ⚠️ ÉN definisjon av «fullført», med vilje. #938 er nettopp det som skjer når to steder svarer
+// forskjellig på det samme spørsmålet: porten som utsteder kursbevis og kurskortet teller ulike
+// seksjoner, og resultatet er et bevis ved siden av «Seksjonar 0/1». Sorteringen (#936), feiringen
+// (#550) og raden (#939) MÅ derfor lese fra samme funksjon — ikke fra hver sin kopi av regelen.
+// Kursbeviset teller også: er det utstedt, ER kurset fullført, uansett hva progresjonen sier.
+function isCourseCompleted(course) {
+  return Boolean(participantCompletions[course.id]) || course.progress?.courseStatus === "COMPLETED";
+}
+
 function buildCourseAccordionItem(course) {
   const courseStatus = course.progress?.courseStatus ?? "NOT_STARTED";
-  const completed = courseStatus === "COMPLETED";
-  const inProgress = courseStatus === "IN_PROGRESS";
+  // ⚠️ MÅ være `isCourseCompleted`, ikke `courseStatus === "COMPLETED"`. De to er IKKE like: et
+  // kursbevis er permanent (`courseCompletionService`: `if (existing) return`), mens `/api/courses`
+  // teller nytt innhold inn i `total`. Legger en forfatter til én seksjon i et publisert kurs, går
+  // statusen tilbake til IN_PROGRESS mens beviset består. Bruker raden bare statusen, blir kurset
+  // sortert under «Fullført» av partisjoneringen og så rendret som pågående — med framdriftslinje
+  // og UTEN sertifikatlenke. Det er #938-klassen: to steder som svarer ulikt på samme spørsmål.
+  const completed = isCourseCompleted(course);
+  const inProgress = !completed && courseStatus === "IN_PROGRESS";
   const passedCount = course.progress?.completed ?? 0;
   const totalCount = course.progress?.total ?? course.moduleCount ?? 0;
   const pct = totalCount > 0 ? Math.round((passedCount / totalCount) * 100) : 0;
@@ -3217,25 +3258,62 @@ function buildCourseAccordionItem(course) {
     : t("courses.status.notStarted");
   const badgeClass = completed ? "completed" : inProgress ? "retake" : "";
 
-  item.innerHTML = `
-    <button type="button" class="course-accordion-header">
-      <span>
-        <span class="course-accordion-title">${escapeHtmlP(localizePreviewText(course.title))}</span>
-        <span class="course-accordion-progress">${escapeHtmlP(formatCourseProgressLabel(course.progress))}</span>
-      </span>
-      <span class="module-status-badge ${badgeClass}" style="font-size:11px;padding:2px 8px;flex-shrink:0">${escapeHtmlP(statusText)}</span>
-      <span class="course-accordion-chevron" aria-hidden="true">&#8250;</span>
-    </button>
-    <div class="course-accordion-body">
-      <div class="course-progress-bar"><div class="course-progress-fill${completed ? " completed" : ""}" style="width:${pct}%"></div></div>
-      ${completion ? `<div class="course-certificate-banner">${escapeHtmlP(t("courses.certificate.earned"))} - <span style="font-family:monospace;font-size:12px">${escapeHtmlP(completion.certificateId)}</span> · <a href="/certificate?id=${encodeURIComponent(completion.certificateId)}" target="_blank" rel="noopener">${escapeHtmlP(t("courses.certificate.view"))}</a></div>` : ""}
-      <div id="courseDetail_${course.id}" class="course-detail-slot"><p class="small" style="color:var(--color-meta)">${escapeHtmlP(t("courses.loadingModules"))}</p></div>
-    </div>
-  `;
+  const detailSlot = `<div id="courseDetail_${course.id}" class="course-detail-slot"><p class="small" style="color:var(--color-meta)">${escapeHtmlP(t("courses.loadingModules"))}</p></div>`;
+
+  if (completed) {
+    // #939: ett fullført kurs = én grønn rad. Statuspillen er droppet — hakemerket og gruppegrensen
+    // sier det allerede, og pillen ville vært det tredje stedet på samme rad.
+    item.classList.add("course-accordion-item--done");
+    item.innerHTML = `
+      <div class="course-done-row">
+        <button type="button" class="course-accordion-header">
+          <span class="course-done-tick" aria-hidden="true">&#10003;</span>
+          <span>
+            <span class="course-accordion-title">${escapeHtmlP(localizePreviewText(course.title))}</span>
+            <span class="course-accordion-progress">${escapeHtmlP(formatCourseProgressLabel(course.progress))}</span>
+            <!-- ⚠️ Statuspillen bar ordet «Fullført» og lå inne i knappen; #939 fjernet den til fordel
+                 for hakemerket og gruppegrensen. Men hakemerket er aria-hidden og grensen er en
+                 naken div utenfor tabb-rekkefølgen — så en skjermleserbruker som tabber gjennom lista
+                 hørte «Kurs X, Seksjonar 4 av 4, knapp», identisk med et uferdig kurs. Farge og form
+                 løser fargeblindhet, ikke dette. -->
+            <span class="sr-only">${escapeHtmlP(t("courses.status.completed"))}</span>
+          </span>
+        </button>
+        ${completion ? `<a class="course-certificate-link" href="/certificate?id=${encodeURIComponent(completion.certificateId)}" target="_blank" rel="noopener">${escapeHtmlP(t("courses.certificate.short"))} · ${escapeHtmlP(t("courses.certificate.view"))}</a>` : ""}
+        <span class="course-accordion-chevron" aria-hidden="true">&#8250;</span>
+      </div>
+      <div class="course-accordion-body">${detailSlot}</div>
+    `;
+  } else {
+    item.innerHTML = `
+      <button type="button" class="course-accordion-header">
+        <span>
+          <span class="course-accordion-title">${escapeHtmlP(localizePreviewText(course.title))}</span>
+          <span class="course-accordion-progress">${escapeHtmlP(formatCourseProgressLabel(course.progress))}</span>
+        </span>
+        <span class="module-status-badge ${badgeClass}" style="font-size:11px;padding:2px 8px;flex-shrink:0">${escapeHtmlP(statusText)}</span>
+        <span class="course-accordion-chevron" aria-hidden="true">&#8250;</span>
+      </button>
+      <div class="course-accordion-body">
+        <div class="course-progress-bar"><div class="course-progress-fill" style="width:${pct}%"></div></div>
+        <div id="courseDetail_${course.id}" class="course-detail-slot"><p class="small" style="color:var(--color-meta)">${escapeHtmlP(t("courses.loadingModules"))}</p></div>
+      </div>
+    `;
+  }
 
   // #921/#922: headeren er ikke lenger en trekkspill-bryter. Lista står allerede ekspandert, så
   // det eneste klikket kan gjøre er å gi kurset flaten alene.
   item.querySelector(".course-accordion-header").addEventListener("click", () => {
+    focusCourse(course.id);
+  });
+
+  // #939: på en fullført rad ligger sjevronen UTENFOR knappen (den måtte det, for at
+  // sertifikatlenka skulle kunne være en ekte <a>). Uten dette ville pila vært det eneste stedet på
+  // raden som så klikkbart ut og ikke var det. Lenka må slippe unna — ellers ville et klikk på
+  // «Vis bevis» både åpnet beviset og navigert lista bak det.
+  const doneRow = item.querySelector(".course-done-row");
+  doneRow?.addEventListener("click", (event) => {
+    if (event.target.closest("a, .course-accordion-header")) return;
     focusCourse(course.id);
   });
 

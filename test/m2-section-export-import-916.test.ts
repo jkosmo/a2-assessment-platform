@@ -527,4 +527,111 @@ describe("#916 QA: course import must not publish around a held-back section", (
     expect(section?.activeVersionId).not.toBeNull();
     expect(course?.publishedAt).not.toBeNull();
   });
+
+  // ————————————————————————————————————————————————————————————————————————————————————————
+  // #937: produkteier løftet én seksjon ut av en kurspakke og importerte fila. Den ble avvist med
+  // rå Zod-utdata. Testene her dekket «konvolutt med FEIL scope», men ikke «fil som ikke er en
+  // konvolutt i det hele tatt» — som er det en forfatter treffer først.
+  // ————————————————————————————————————————————————————————————————————————————————————————
+
+  it("#937: godtar en seksjon løftet ut av en kursfil — kurselementet, ikke bare payloaden", async () => {
+    const stamp = Date.now();
+    // NØYAKTIG formen produkteier hadde: kurselementet, ett nivå OVER konvolutten.
+    const courseItem = {
+      type: "SECTION",
+      sortOrder: 18,
+      section: {
+        title: L(`Løftet ut ${stamp}`),
+        bodyMarkdown: L("# Løftet\n\nInnholdet var aldri feil."),
+        audit: {},
+      },
+    };
+
+    const res = await request(app)
+      .post("/api/admin/content/sections/import")
+      .set(smoOwner)
+      .send({ payload: courseItem, mode: "createNew" });
+
+    expect(res.status, JSON.stringify(res.body)).toBe(201);
+    const imported = await prisma.courseSection.findUnique({ where: { id: res.body.sectionId } });
+    expect(JSON.parse(imported!.title)).toEqual(L(`Løftet ut ${stamp}`));
+    // Innpakket eller ei — importen skal fortsatt lande UPUBLISERT, som enhver annen import.
+    expect(imported?.activeVersionId).toBeNull();
+  });
+
+  it("#937: godtar en bar seksjons-payload uten konvolutt", async () => {
+    const stamp = Date.now();
+    const bare = {
+      title: L(`Bar payload ${stamp}`),
+      bodyMarkdown: L("# Bar\n\nUten konvolutt."),
+      audit: {},
+    };
+
+    const res = await request(app)
+      .post("/api/admin/content/sections/import")
+      .set(smoOwner)
+      .send({ payload: bare, mode: "createNew" });
+
+    expect(res.status, JSON.stringify(res.body)).toBe(201);
+    const imported = await prisma.courseSection.findUnique({ where: { id: res.body.sectionId } });
+    expect(JSON.parse(imported!.title)).toEqual(L(`Bar payload ${stamp}`));
+  });
+
+  it("#937: en fil som ikke er en seksjon i det hele tatt gir en setning, ikke en Zod-dump", async () => {
+    const res = await request(app)
+      .post("/api/admin/content/sections/import")
+      .set(smoOwner)
+      .send({ payload: { hva: "som helst", nested: { tull: true } }, mode: "createNew" });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe("not_an_export_envelope");
+
+    // ⚠️ KODEN er kontrakten, ikke teksten. Konsollet er trespråklig og defaulter til en-GB, så
+    // klienten slår opp `error` i sin egen LABELS-tabell og rendrer på forfatterens språk.
+    // `message` er kun en engelsk reserve for API-konsumenter som ikke har en tabell.
+    expect(res.body.message).toContain("Export");
+    // Og den skal IKKE bære Zod-maskineriet som gjorde den opprinnelige meldingen ubrukelig.
+    expect(res.body.issues).toBeUndefined();
+    expect(JSON.stringify(res.body)).not.toContain("invalid_literal");
+    expect(JSON.stringify(res.body)).not.toContain("invalid_union_discriminator");
+  });
+
+  // KONTROLLCASE. Uten disse vet vi ikke om vi målte toleransen eller bare slo av valideringen:
+  // en «godta alt»-implementasjon ville bestått de tre over og strøket på begge under.
+
+  it("#937 kontroll: en ekte konvolutt med FEIL exportFormat gir fortsatt formatfeilen", async () => {
+    const res = await request(app)
+      .post("/api/admin/content/sections/import")
+      .set(smoOwner)
+      .send({
+        payload: {
+          exportFormat: "a2-content-export/v99",
+          exportedAt: new Date().toISOString(),
+          scope: "section",
+          section: { title: L("S"), bodyMarkdown: L("# S"), audit: {} },
+        },
+        mode: "createNew",
+      });
+
+    // Den utga seg for å være en konvolutt, så den skal måles som en konvolutt — ikke pakkes inn
+    // på nytt slik at forfatteren aldri får vite at formatversjonen er feil.
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe("validation_error");
+  });
+
+  it("#937 kontroll: et kurselement med UGYLDIG seksjonsinnhold avvises fortsatt", async () => {
+    const res = await request(app)
+      .post("/api/admin/content/sections/import")
+      .set(smoOwner)
+      .send({
+        payload: { type: "SECTION", sortOrder: 0, section: { title: L("Bare tittel"), bodyMarkdown: 42 } },
+        mode: "createNew",
+      });
+
+    // Innpakkingen avgjør FORMEN. Innholdet skal fortsatt gjennom skjemaet.
+    expect(res.status).toBe(400);
+    const created = await prisma.courseSection.findFirst({ where: { title: { contains: "Bare tittel" } } });
+    expect(created).toBeNull();
+  });
+
 });

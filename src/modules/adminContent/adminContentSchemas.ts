@@ -562,6 +562,89 @@ export type SectionExportPayload = z.infer<typeof sectionExportPayloadSchema>;
 export type SectionAssetExport = z.infer<typeof sectionAssetExportSchema>;
 export type CourseExportPayload = z.infer<typeof courseExportPayloadSchema>;
 
+// #937: en forfatter som løfter én seksjon ut av en kursfil sitter igjen med kurselementet
+// `{ type: "SECTION", sortOrder, section }` — ett nivå OVER konvolutten. Kommentaren på
+// `exportEnvelopeSchema` sier at «a section lifted out of a course file and a standalone export are
+// byte-compatible», og det stemmer om *payloaden*. Det er bare innpakningen som mangler, og å be
+// forfatteren skrive tre felt for hånd i en teksteditor er et dårlig svar på et problem vi kan løse
+// selv.
+//
+// Tar imot tre former og returnerer alltid en konvolutt:
+//   1. ferdig konvolutt          -> uendret
+//   2. kurselement (SECTION)     -> pakkes inn
+//   3. bar seksjons-payload      -> pakkes inn
+//
+// `wrapped: true` sier at opphavet var et fragment. Det MÅ bæres videre: en innpakket fil har ingen
+// ekte `exportedAt`, og revisjonssporet skal føre det ærlig i stedet for å påstå et
+// eksporttidspunkt vi har funnet på.
+export type NormalizedImport =
+  | { ok: true; envelope: unknown; wrapped: boolean }
+  | { ok: false; reason: "not_recognisable" };
+
+// ⚠️ Gjelder ALLE tre importflatene, ikke bare seksjoner. Vår egen kurseksport skriver
+// `items[]` som `{ type: "MODULE" | "SECTION", sortOrder, ... }` (adminContentQueries.ts:244-248),
+// så en forfatter som løfter ut et MODULE-element treffer nøyaktig samme vegg som produkteier
+// gjorde med et SECTION-element. Å fikse bare seksjonssiden ville vært «riktig fiks, ufullstendig
+// flate» — repoets vanligste feilklasse — med defekten liggende igjen én side unna.
+function looksLikePayload(value: unknown, scope: "module" | "course" | "section"): boolean {
+  if (typeof value !== "object" || value === null) return false;
+  const v = value as Record<string, unknown>;
+  // Bevisst grunn sjekk: her avgjøres BARE hvilken form fila har. Om innholdet er gyldig avgjør
+  // det ekte skjemaet etterpå — og det gir en langt bedre feilmelding for et ekte innholdsproblem
+  // enn en formgjetning ville gjort.
+  if (scope === "section") return v.title !== undefined && v.bodyMarkdown !== undefined;
+  if (scope === "course") return typeof v.course === "object" && v.course !== null;
+  // ⚠️ Sto tidligere som `v.module || v.versions || v.title`. To feil: `versions` finnes ikke i
+  // det vi eksporterer (feltet heter `activeVersion`), og `title` alene fanger enhver JSON med en
+  // tittel — inkludert en seksjonsfil valgt på Moduler-siden. Den ble da pakket inn som modul og
+  // fikk en Zod-dump om `payload.module.module`, altså en DÅRLIGERE melding enn de tre manglende
+  // konvoluttfeltene den fikk før. Toleranse skal aldri gjøre feilmeldingen verre.
+  // `moduleExportPayloadSchema` krever begge feltene, så det er begge vi kjenner den igjen på.
+  return v.module !== undefined && v.activeVersion !== undefined;
+}
+
+export function normalizeImportPayload(
+  raw: unknown,
+  scope: "module" | "course" | "section",
+  now: () => string = () => new Date().toISOString(),
+): NormalizedImport {
+  if (typeof raw !== "object" || raw === null) return { ok: false, reason: "not_recognisable" };
+  const value = raw as Record<string, unknown>;
+
+  // Allerede en konvolutt — send den videre urørt. Er `exportFormat` feil, skal forfatteren få
+  // FORMAT-feilen, ikke en forvirrende innpakking av noe som utga seg for å være en konvolutt.
+  if (value.exportFormat !== undefined || value.scope !== undefined) {
+    return { ok: true, envelope: raw, wrapped: false };
+  }
+
+  // Kurselement løftet ut av en kursfil. `type` er MODULE/SECTION — kurs finnes ikke som element.
+  const itemType = scope === "section" ? "SECTION" : "MODULE";
+  const inner = scope === "section" ? value.section : value.module;
+  if (scope !== "course" && value.type === itemType && looksLikePayload(inner, scope)) {
+    return {
+      ok: true,
+      wrapped: true,
+      envelope: { exportFormat: EXPORT_FORMAT_VERSION, exportedAt: now(), scope, [scope]: inner },
+    };
+  }
+
+  // Bar payload.
+  if (looksLikePayload(value, scope)) {
+    return {
+      ok: true,
+      wrapped: true,
+      envelope: {
+        exportFormat: EXPORT_FORMAT_VERSION,
+        exportedAt: now(),
+        scope,
+        [scope]: raw,
+      },
+    };
+  }
+
+  return { ok: false, reason: "not_recognisable" };
+}
+
 export const importBodySchema = z.object({
   payload: exportEnvelopeSchema,
   // Explicit collision handling — import never silently overwrites (#433 ACL).

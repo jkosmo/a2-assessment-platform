@@ -7,6 +7,7 @@ import { apiFetch, buildConsoleHeaders, getConsoleConfig, hydrateContentAssetIma
 import { initConsentGuard } from "/static/consent-guard.js";
 import { resolveWorkspaceNavigationItems } from "/static/participant-console-state.js";
 import { renderWorkspaceNavigationWithProfile } from "./workspace-nav.js";
+import { describeImportError } from "/static/import-error.js";
 import { showToast } from "/static/toast.js";
 import { lifecycleStatusBadge } from "/static/content-status-badge.js";
 import { renderOwnerPanel } from "/static/owner-panel.js";
@@ -48,6 +49,7 @@ const LABELS = {
     uploadImage: "Upload image", altPrompt: "Alt text (describes the image for screen readers):", saveFirst: "Save the section first, then upload images.", imageInserted: "Image inserted.",
     // #916 — standalone section portability + the publish gate's author-facing wording.
     exportSection: "Export", importSection: "Import section package", exported: "Section exported.",
+    notAnEnvelope: "This does not look like a section package. The file is missing the fields an export adds (exportFormat, exportedAt and scope), and its contents do not look like a section either. Use Export on a section to produce a valid file.",
     imported: "Section package imported as a draft. Review it and publish when it is ready.",
     gateHeldBack: "Saved, but not published — the section is missing", gateBlocked: "Cannot publish — the section is missing",
     gateHint: "Use “Translate from this language” to fill the gaps, then save again.",
@@ -74,6 +76,7 @@ const LABELS = {
     uploadImage: "Last opp bilde", altPrompt: "Alt-tekst (beskriver bildet for skjermlesere):", saveFirst: "Lagre seksjonen først, så kan du laste opp bilder.", imageInserted: "Bilde satt inn.",
     // #916 — frittstående seksjons-portabilitet + publiseringsgatens forfattertekst.
     exportSection: "Eksporter", importSection: "Importer seksjons-pakke", exported: "Seksjon eksportert.",
+    notAnEnvelope: "Dette ser ikke ut som en seksjonspakke. Fila mangler feltene en eksport legger på (exportFormat, exportedAt og scope), og innholdet ligner heller ikke på en seksjon. Bruk «Eksporter» på en seksjon for å lage en gyldig fil.",
     imported: "Seksjons-pakken er importert som utkast. Gå gjennom den og publiser når den er klar.",
     gateHeldBack: "Lagret, men ikke publisert — seksjonen mangler", gateBlocked: "Kan ikke publisere — seksjonen mangler",
     gateHint: "Bruk «Oversett fra dette språket» for å fylle hullene, og lagre på nytt.",
@@ -100,6 +103,7 @@ const LABELS = {
     uploadImage: "Last opp bilete", altPrompt: "Alt-tekst (skildrar biletet for skjermlesarar):", saveFirst: "Lagre seksjonen først, så kan du laste opp bilete.", imageInserted: "Bilete sett inn.",
     // #916 — frittståande seksjons-portabilitet + publiseringsgata sin forfattartekst.
     exportSection: "Eksporter", importSection: "Importer seksjons-pakke", exported: "Seksjon eksportert.",
+    notAnEnvelope: "Dette ser ikkje ut som ein seksjonspakke. Fila manglar felta ein eksport legg på (exportFormat, exportedAt og scope), og innhaldet liknar heller ikkje på ein seksjon. Bruk «Eksporter» på ein seksjon for å lage ei gyldig fil.",
     imported: "Seksjons-pakken er importert som utkast. Gå gjennom han og publiser når han er klar.",
     gateHeldBack: "Lagra, men ikkje publisert — seksjonen manglar", gateBlocked: "Kan ikkje publisere — seksjonen manglar",
     gateHint: "Bruk «Omset frå dette språket» for å fylle hola, og lagre på nytt.",
@@ -474,7 +478,11 @@ async function importSectionPackage(input) {
     }
     // Friendly guard: point a module/course package at the page that can actually import it,
     // instead of surfacing the raw scope_mismatch 400.
-    if (payload?.scope && payload.scope !== "section") {
+    // ⚠️ #937: sto tidligere som `payload?.scope && payload.scope !== "section"`. Den kortsluttet
+    // når `scope` manglet HELT — som er nettopp det en fil løftet ut av en kurspakke gjør — så
+    // vakten slapp fila videre og forfatteren fikk rå Zod-utdata fra serveren i stedet. Vakten var
+    // skrevet for akkurat denne jobben og bommet på én betingelse.
+    if (payload?.scope === "course" || payload?.scope === "module") {
       throw new Error(
         payload.scope === "course"
           ? "Dette er en kurs-pakke. Importer den fra Kurs-siden."
@@ -489,7 +497,14 @@ async function importSectionPackage(input) {
     showToast(L("imported"));
     goTo("editor", result.sectionId);
   } catch (error) {
-    showToast(`${L("importSection")}: ${error instanceof Error ? error.message : "ukjent feil"}`, "error");
+    // #937: `error.message` fra apiFetch er `"<status>: <hele JSON-kroppen>"` — for en
+    // valideringsfeil betyr det en Zod-dump i en toast.
+    //
+    // ⚠️ KODEN slås opp lokalt, serverens tekst brukes ikke. Konsollet er trespråklig og defaulter
+    // til en-GB, så en norsk setning fra serveren ville blitt vist ordrett til en engelsk forfatter.
+    // Samme regel som publiseringsgaten allerede følger (FEATURE_SURFACE_MAP §24).
+    const d = describeImportError(error, { notAnEnvelope: L("notAnEnvelope") });
+    showToast(`${L("importSection")}: ${d.headline}`, "error", d.detail);
     document.getElementById("importSectionBtn")?.focus();
   } finally {
     if (input) input.value = "";

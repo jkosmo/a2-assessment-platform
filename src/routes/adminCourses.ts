@@ -22,7 +22,7 @@ import {
   getCourseCascadeDeletePreview,
   cascadeDeleteCourse,
 } from "../modules/course/index.js";
-import { generationLocaleSchema, importBodySchema, localizedTextPatchSchema, parseRequest, clientRefSchema, agentRunIdSchema } from "../modules/adminContent/adminContentSchemas.js";
+import { generationLocaleSchema, importBodySchema, normalizeImportPayload, localizedTextPatchSchema, parseRequest, clientRefSchema, agentRunIdSchema } from "../modules/adminContent/adminContentSchemas.js";
 import { courseAdminLinks } from "../modules/adminContent/adminUiLinks.js";
 import { buildCourseExportEnvelope } from "../modules/adminContent/index.js";
 import { importCourseFromEnvelope } from "../modules/adminContent/contentImportService.js";
@@ -175,7 +175,18 @@ adminCoursesRouter.post("/import", async (request, response, next) => {
     response.status(401).json({ error: "unauthorized" });
     return;
   }
-  const { data, error } = parseRequest(importBodySchema, request.body);
+  // #937: en kurspakke kan ikke løftes ut av noe større, så her er det bare den bare payloaden som
+  // pakkes inn. Den lesbare feilmeldingen er derimot like nødvendig som på de to andre flatene.
+  const rawBody = (request.body ?? {}) as Record<string, unknown>;
+  const normalized = normalizeImportPayload(rawBody.payload, "course");
+  if (!normalized.ok) {
+    response.status(400).json({
+      error: "not_an_export_envelope",
+      message: "This does not look like a course package. Use Export on a course to produce a valid file.",
+    });
+    return;
+  }
+  const { data, error } = parseRequest(importBodySchema, { ...rawBody, payload: normalized.envelope });
   if (error) {
     response.status(400).json({ error: "validation_error", issues: error });
     return;

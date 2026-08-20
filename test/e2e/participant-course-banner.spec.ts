@@ -87,16 +87,16 @@ test("participant: a completed course shows the certificate banner with a link t
   await page.goto("/participant");
   await page.locator("#loadCoursesBtn").click();
 
-  // The banner is rendered for the completed course (it would be ABSENT if completions weren't
-  // loaded — the regression this guards). It lives in the collapsed accordion body, so assert it
-  // exists in the DOM with the correct printable-certificate link first…
-  const banner = page.locator(".course-certificate-banner");
-  await expect(banner).toHaveCount(1);
-  await expect(banner.locator('a[href="/certificate?id=cert-xyz"]')).toHaveCount(1);
+  // ⚠️ #939 flyttet dette: den egne `.course-certificate-banner`-boksen i trekkspill-kroppen er
+  // erstattet av `.course-certificate-link` PÅ selve raden, fordi et fullført kurs nå er én linje.
+  // Det testen vokter er uendret og fortsatt verdt å vokte — at beviset i det hele tatt vises når
+  // completions er lastet (og ville vært borte om de ikke var det) — bare på et nytt sted.
+  const certLink = page.locator(".course-certificate-link");
+  await expect(certLink).toHaveCount(1);
+  await expect(certLink).toHaveAttribute("href", "/certificate?id=cert-xyz");
 
-  // …then expand the course and assert the link is actually visible/clickable.
-  await page.locator(".course-accordion-header").first().click();
-  await expect(banner.locator('a[href="/certificate?id=cert-xyz"]')).toBeVisible();
+  // Lenka ligger på raden, ikke bak et klikk: den skal være synlig med én gang.
+  await expect(certLink).toBeVisible();
 });
 
 test("participant: a course with no certificate shows no banner", async ({ page }) => {
@@ -131,5 +131,5 @@ test("participant: a course with no certificate shows no banner", async ({ page 
 
   // The course renders, but with no completion there must be no certificate banner.
   await expect(page.locator(".course-accordion-item")).toHaveCount(1);
-  await expect(page.locator(".course-certificate-banner")).toHaveCount(0);
+  await expect(page.locator(".course-certificate-link")).toHaveCount(0);
 });

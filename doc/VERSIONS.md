@@ -2,6 +2,73 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.25.0 - 2026-08-20
+
+Tre saker fra produkteiers stage-runde, og **to QA-runder som begge sa NO-GO**. Det er den
+interessante delen av denne releasen: begge rundene fant «riktig fiks, ufullstendig flate», og andre
+runde fant den i rettelsen fra første.
+
+### #937 — importen godtar det forfatteren faktisk har
+
+Produkteier løftet én seksjon ut av en kurspakke og importerte fila. Svaret var rå Zod-utdata i en
+boks som måtte skrolles vannrett. Innholdet var **helt riktig** — bare de tre konvoluttfeltene
+manglet, fordi et kurselement (`{type, sortOrder, section}`) ligger ett nivå OVER konvolutten.
+
+Alle tre importflatene godtar nå tre former: ferdig konvolutt, kurselement, og bar payload. De to
+siste pakkes inn på serveren.
+
+⚠️ **`envelopeSynthesized: true` føres i revisjonssporet** når vi har pakket inn selv. En innpakket
+fil har ingen ekte `exportedAt` — vi setter importtidspunktet. Å dikte opp et felt er greit; å gjøre
+det i det stille er det ikke.
+
+Feilkoden `not_an_export_envelope` er kontrakten, ikke teksten. Konsollene er trespråklige og
+defaulter til en-GB, så en norsk setning fra serveren ville blitt vist ordrett til en engelsk
+forfatter. `describeImportError` (`public/static/import-error.js`) er **én** delt oversetter for alle
+tre flatene — nettopp fordi «husk å gjøre det tre steder» er en dårlig mekanisme.
+
+### #936 + #939 — «Kursa mine» svarer på hva som gjenstår, før hva som er gjort
+
+Fullførte kurs samles nederst bak grensen «Fullført» (som bare vises når det finnes noe på begge
+sider). Ett fullført kurs er nå **én grønn rad** — uten framdriftslinje, med hakemerke og
+sertifikatlenke, og uten sertifikat-ID-en på 25 tegn.
+
+Sammen med #929 lukker dette sløyfa: deltakeren gjør handlingen, kurset flytter seg, og lista
+skrolles slik at resultatet er synlig.
+
+### Hva QA fanget som testene ikke gjorde
+
+**Runde 1** fant at fiksen lå på seksjonsflaten alene. Vår egen kurseksport skriver `items[]` som
+`{type: "MODULE", …}` — så defekten lå én side unna, med en fil vi selv lagde. Den fant også at
+`wrapped` var et dødt felt: kommentaren lovet at det ble båret videre, og koden leste det aldri.
+
+**Runde 2** fant to ting til, begge i deltakerflaten:
+
+1. **Raden leste ikke fra `isCourseCompleted`.** Partisjoneringen brukte «bevis ELLER status»,
+   raden bare status. Et kursbevis er permanent, mens et kurs som får nytt innhold faller tilbake
+   til `IN_PROGRESS` — så kurset ble sortert under «Fullført» og rendret som pågående, **uten
+   sertifikatlenke i det hele tatt**. Kommentaren over koden advarte mot nøyaktig denne fella.
+2. **«Én rad» var en rad pluss en tom 33px-stripe.** Kroppen hadde padding og topplinje selv om
+   eneste barn var `display:none`. Målt headless, ikke antatt.
+
+Begge var usynlige for en grønn suite på 210 tester.
+
+Runde 2 fant også at nynorsk-teksten var en ordrett kopi av bokmål (nøkkelparitetstesten fanger det
+ikke — nøkkelen *finnes*), og at modul-heuristikken var så bred at en seksjonsfil valgt på
+Moduler-siden ble pakket inn som modul og fikk en **dårligere** feilmelding enn før. Toleranse skal
+aldri gjøre meldingen verre.
+
+### Tilgjengelighet
+
+Statuspillen som bar ordet «Fullført» lå inne i knappen og ble fjernet av #939. Hakemerket er
+`aria-hidden` og gruppegrensen står utenfor tabb-rekkefølgen — så en skjermleserbruker hørte «Emilie,
+Modular 1/1, knapp», identisk med et uferdig kurs. Ordet er nå tilbake som `.sr-only`.
+
+### Verifisering
+
+213 e2e, 1029 unit, 6 dom, 29 integrasjon. Mutasjonsverifisert: partisjoneringen, framdriftslinja,
+innpakkingen, den lesbare feilmeldingen og `isCourseCompleted`-retten gir alle rødt på riktig
+assertion når de reverseres.
+
 ## 2.24.0 - 2026-08-20
 
 **«Avslutt kurset» — fullføring blir en handling deltakeren gjør (#929).** Produkteier bygde et kurs

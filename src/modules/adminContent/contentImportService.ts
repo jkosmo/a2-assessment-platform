@@ -402,6 +402,9 @@ export async function importSectionFromEnvelope(
     mode: ImportMode;
     targetSectionId?: string;
     agent?: AgentAuthoringContext;
+    // #937: sann når konvolutten ble laget av OSS rundt et fragment forfatteren lastet opp, ikke av
+    // eksportøren. Da er `exportedAt` importtidspunktet — ikke et eksporttidspunkt.
+    envelopeSynthesized?: boolean;
   },
 ): Promise<{ sectionId: string; sectionVersionId: string; assetCount: number }> {
   if (envelope.scope !== "section" || !envelope.section) {
@@ -484,6 +487,10 @@ export async function importSectionFromEnvelope(
               assetCount: staged.stagedAssets.length,
               sourcePublishedAt: payload.audit?.publishedAt ?? null,
               sourceVersionNo: payload.audit?.sourceVersionNo ?? null,
+              // Uten dette ville revisjonsraden vært bit for bit lik en import av en EKTE
+              // eksportpakke, og ingen kunne i ettertid sett at opphavsdataene var våre egne.
+              // Føres bare når den er sann, så eksisterende rader ikke endrer form.
+              ...(options.envelopeSynthesized ? { envelopeSynthesized: true, syntheticExportedAt: envelope.exportedAt } : {}),
               ...agentAuthoringAuditMetadata(options.agent),
             },
           },

@@ -27,6 +27,7 @@ import {
   clientRefSchema,
   agentRunIdSchema,
   importBodySchema,
+  normalizeImportPayload,
   parseRequest,
 } from "../modules/adminContent/adminContentSchemas.js";
 import { authoringSectionAssetSchema } from "../modules/adminContent/agentAuthoringSchemas.js";
@@ -199,7 +200,25 @@ adminSectionsRouter.post("/import", idempotency("sections.import"), async (reque
     response.status(401).json({ error: "unauthorized" });
     return;
   }
-  const { data, error } = parseRequest(importBodySchema, request.body);
+  // #937: godta det forfatteren faktisk har. En seksjon løftet ut av en kursfil er et kurselement,
+  // ikke en konvolutt — men payloaden er byte-identisk, så vi pakker inn selv i stedet for å be
+  // forfatteren skrive tre felt for hånd i en teksteditor.
+  const rawBody = (request.body ?? {}) as Record<string, unknown>;
+  const normalized = normalizeImportPayload(rawBody.payload, "section");
+  if (!normalized.ok) {
+    // Rå Zod-utdata er ubrukelig for den som skal handle på det: en forfatter med en fil som
+    // INNEHOLDER en seksjon fikk en liste med stier og lærte ingenting om hva hen skulle gjøre.
+    // ⚠️ KODEN er kontrakten, ikke teksten. Konsollet er trespråklig og defaulter til en-GB, så en
+    // norsk setning herfra ville blitt vist ordrett til en engelsk forfatter. Samme regel som
+    // publiseringsgaten allerede følger (FEATURE_SURFACE_MAP §24): meldinger rendres på klienten,
+    // i forfatterens språk. `message` her er kun en engelsk reserve for API-konsumenter.
+    response.status(400).json({
+      error: "not_an_export_envelope",
+      message: "This does not look like a section package. Use Export on a section to produce a valid file.",
+    });
+    return;
+  }
+  const { data, error } = parseRequest(importBodySchema, { ...rawBody, payload: normalized.envelope });
   if (error) {
     response.status(400).json({ error: "validation_error", issues: error });
     return;
@@ -228,6 +247,11 @@ adminSectionsRouter.post("/import", idempotency("sections.import"), async (reque
       mode,
       targetSectionId: data.targetId,
       agent: { clientRef: data.clientRef, agentRunId: data.agentRunId },
+      // #937: en innpakket fil har INGEN ekte `exportedAt` — vi satte importtidspunktet for å
+      // tilfredsstille skjemaet. Uten dette flagget ville revisjonssporet vært bit for bit likt en
+      // import av en ekte eksportpakke, og ingen kunne i ettertid sett at opphavsdataene var våre
+      // egne. Å diktes opp er greit; å diktes opp i det stille er det ikke.
+      envelopeSynthesized: normalized.wrapped,
     });
     response.status(201).json({
       sectionId: result.sectionId,

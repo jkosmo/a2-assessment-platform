@@ -182,7 +182,7 @@ list of equal buttons. Three mutually exclusive row states, driven by `findNextI
   for"; `participant-discussions.spec.ts` expands it first.
 - **The list and the open course are two states, not two panes (#921/#922).** The list auto-loads
   (`loadParticipantConsoleConfig` ends with `loadParticipantCourses()`) and every card is expanded —
-  progress bar + certificate banner are visible without a click; only `.course-detail-slot` (the
+  progress bar + certificate are visible without a click. **#939:** a COMPLETED course is one green row instead — no progress bar, and the certificate rides on the row as `.course-certificate-link`, not in a `.course-certificate-banner` in the body. ⚠️ "Completed" here means `isCourseCompleted()` — certificate issued OR status COMPLETED — because a certificate is permanent while a course that gains content falls back to IN_PROGRESS. Reading only the status made the row disagree with the sort order and dropped the certificate link entirely (found in QA, 2026-08-20); only `.course-detail-slot` (the
   sequence) waits for the course to be opened. Opening a course hides the other cards entirely
   (`.course-accordion--focused .course-accordion-item:not(.is-focused){display:none}`), hides
   `#loadCoursesBtn`, and shows `#courseBackBar`. **The `.course-accordion-header` is no longer a

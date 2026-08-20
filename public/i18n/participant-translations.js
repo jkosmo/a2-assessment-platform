@@ -384,6 +384,8 @@ export const translations = {
     "courses.module.unavailable": "Module is not available in the participant workspace.",
     "courses.certificate.earned": "Certificate issued",
     "courses.certificate.view": "View certificate",
+    "courses.certificate.short": "Certificate",
+    "courses.list.completedGroup": "Completed",
   },
   nb: {
     "page.title": "Mine kurs",
@@ -764,6 +766,8 @@ export const translations = {
     "courses.module.unavailable": "Modulen er ikke tilgjengelig i deltakerflaten.",
     "courses.certificate.earned": "Sertifikat utstedt",
     "courses.certificate.view": "Vis bevis",
+    "courses.certificate.short": "Sertifikat",
+    "courses.list.completedGroup": "Fullført",
   },
   nn: {
     "page.title": "Kursa mine",
@@ -1144,5 +1148,7 @@ export const translations = {
     "courses.module.unavailable": "Modulen er ikkje tilgjengeleg i deltakarflata.",
     "courses.certificate.earned": "Sertifikat utstedt",
     "courses.certificate.view": "Vis bevis",
+    "courses.certificate.short": "Sertifikat",
+    "courses.list.completedGroup": "Fullført",
   },
 };

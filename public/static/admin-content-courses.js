@@ -19,6 +19,7 @@ import { setHidden } from "/static/dom-visibility.js";
 import {
   resolveWorkspaceNavigationItems,
 } from "/static/participant-console-state.js";
+import { describeImportError } from "/static/import-error.js";
 import { showToast } from "/static/toast.js";
 import {
   detectCoursesRoute,
@@ -697,7 +698,10 @@ async function handleImportCoursePackageFile(event) {
     showToast(`Kurs importert (${result.moduleIds?.length ?? 0} moduler).`);
     window.location.href = `/admin-content/courses/${encodeURIComponent(result.courseId)}`;
   } catch (error) {
-    showToast(`Kurs-import feilet: ${error instanceof Error ? error.message : "ukjent feil"}`, "error");
+    const d = describeImportError(error, {
+      notAnEnvelope: "Dette ser ikke ut som en kurs-pakke. Fila mangler feltene en eksport legger på (exportFormat, exportedAt og scope). Bruk «Eksporter» på et kurs for å lage en gyldig fil.",
+    });
+    showToast(`Kurs-import feilet: ${d.headline}`, "error", d.detail);
   } finally {
     target.value = "";
   }

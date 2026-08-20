@@ -280,3 +280,97 @@ test("held-back save: the author is told it was saved but not published, and how
   await expect(toast).toContainText("tittelen");
   await expect(toast).toContainText("Oversett fra dette språket");
 });
+
+// ————————————————————————————————————————————————————————————————————————————————————————————
+// #937 — klienthalvdelen. Produkteier løftet ett kurselement ut av en kurspakke og fikk rå
+// Zod-utdata. To ting endret seg i klienten, og ingen av dem var dekket:
+//   1. vakten kortsluttet på fil UTEN `scope`, så den slapp forbi uten å bli stoppet lokalt
+//   2. toasten viste `"400: {…}"` i stedet for en setning
+// ————————————————————————————————————————————————————————————————————————————————————————————
+
+test("#937: en fil uten scope stoppes IKKE lokalt — den skal nå serveren, som kan pakke den inn", async ({ page }) => {
+  await mockBaseApis(page);
+  await mockSectionList(page, []);
+
+  let importCalled = false;
+  await page.route("**/api/admin/content/sections/import", (route: Route) => {
+    importCalled = true;
+    return route.fulfill({ status: 201, contentType: "application/json", body: JSON.stringify({ sectionId: "sec-new", published: false }) });
+  });
+
+  await page.goto("/admin-content/sections");
+
+  // Kurselementet produkteier faktisk hadde: ingen `scope`, ingen `exportFormat`.
+  await page.locator("#importSectionFile").setInputFiles({
+    name: "loftet-element.json",
+    mimeType: "application/json",
+    buffer: Buffer.from(
+      JSON.stringify({ type: "SECTION", sortOrder: 18, section: { title: { nb: "Løftet" }, bodyMarkdown: { nb: "# Løftet" } } }),
+      "utf8",
+    ),
+  });
+
+  // ⚠️ Kjernen: vakten sto som `payload?.scope && payload.scope !== "section"` og kortsluttet på
+  // manglende `scope`. Det var riktig oppførsel ved et uhell — men uten denne testen ville en
+  // «opprydding» til `payload?.scope !== "section"` blokkert nøyaktig fila #937 handler om,
+  // lokalt, uten at noen backend-test merket det.
+  await expect.poll(() => importCalled).toBe(true);
+});
+
+test("#937: en fil som ikke er en seksjon gir en setning i toasten — ikke «400: {…}»", async ({ page }) => {
+  await mockBaseApis(page);
+  await mockSectionList(page, []);
+
+  await page.route("**/api/admin/content/sections/import", (route: Route) =>
+    route.fulfill({
+      status: 400,
+      contentType: "application/json",
+      body: JSON.stringify({
+        error: "not_an_export_envelope",
+        message: "This does not look like a section package. Use Export on a section to produce a valid file.",
+      }),
+    }),
+  );
+
+  await page.goto("/admin-content/sections");
+  await page.locator("#importSectionFile").setInputFiles({
+    name: "package.json",
+    mimeType: "application/json",
+    buffer: Buffer.from(JSON.stringify({ name: "a2-assessment-platform", version: "2.24.0" }), "utf8"),
+  });
+
+  const toast = toastOf(page);
+  // Teksten kommer fra klientens egen LABELS-tabell, slått opp på feilKODEN. Serverens setning er
+  // engelsk; konsollet her står på nb. Viser toasten norsk, leser den koden — ikke `message`.
+  await expect(toast).toContainText(/seksjonspakke/i);
+  await expect(toast).not.toContainText(/400:/);
+  await expect(toast).not.toContainText(/exportFormat.*invalid_literal/);
+});
+
+test("#937 kontroll: Zod-dumpen havner i detaljfeltet, ikke i overskriften", async ({ page }) => {
+  await mockBaseApis(page);
+  await mockSectionList(page, []);
+
+  await page.route("**/api/admin/content/sections/import", (route: Route) =>
+    route.fulfill({
+      status: 400,
+      contentType: "application/json",
+      body: JSON.stringify({
+        error: "validation_error",
+        issues: [{ code: "invalid_type", expected: "string", path: ["payload", "section", "bodyMarkdown"] }],
+      }),
+    }),
+  );
+
+  await page.goto("/admin-content/sections");
+  await page.locator("#importSectionFile").setInputFiles({
+    name: "halv.json",
+    mimeType: "application/json",
+    buffer: Buffer.from(JSON.stringify({ title: { nb: "T" }, bodyMarkdown: 42 }), "utf8"),
+  });
+
+  // Overskriften er lesbar prosa. Detaljene finnes fortsatt — i .toast__detail, som har
+  // `white-space: pre-wrap` og derfor ikke klippes ved høyre kant slik overskriften gjør.
+  await expect(toastOf(page)).toContainText(/seksjonspakke/i);
+  await expect(page.locator(".toast__detail")).toContainText("bodyMarkdown");
+});

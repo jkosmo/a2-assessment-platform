@@ -19,6 +19,7 @@ import {
   resolveRoleSwitchState,
   resolveWorkspaceNavigationItems,
 } from "/static/participant-console-state.js";
+import { describeImportError } from "/static/import-error.js";
 import { showToast } from "/static/toast.js";
 import { renderWorkspaceNavigationWithProfile } from "./workspace-nav.js";
 
@@ -864,7 +865,11 @@ async function init() {
       // og den uten publiseringsgatens utbedringshandling. Rapportert fra stage 2026-08-16.
       window.location.href = `/admin-content/module/${encodeURIComponent(result.moduleId)}/conversation`;
     } catch (error) {
-      showToast(`Modul-import feilet: ${error instanceof Error ? error.message : "ukjent feil"}`, "error");
+      // #937: samme lesbare feil som seksjonsimporten, via den delte oversetteren.
+      const d = describeImportError(error, {
+        notAnEnvelope: "Dette ser ikke ut som en modul-pakke. Fila mangler feltene en eksport legger på (exportFormat, exportedAt og scope). Bruk «Eksporter» på en modul for å lage en gyldig fil.",
+      });
+      showToast(`Modul-import feilet: ${d.headline}`, "error", d.detail);
       // v1.2.18 (#458): toast har role="alert" så SR annonserer feilen. I tillegg flytter
       // vi fokus tilbake til importbtn så tastatur-bruker kan re-trigge uten å Tab-e fra
       // den (nå tomme) file-input-en.

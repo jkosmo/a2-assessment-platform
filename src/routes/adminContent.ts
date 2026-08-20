@@ -45,6 +45,7 @@ import {
   mcqRevisionBodySchema,
   sourceMaterialUploadBodySchema,
   importBodySchema,
+  normalizeImportPayload,
   agentTokenCreateBodySchema,
   parseRequest,
   parseOptionalDate,
@@ -417,7 +418,19 @@ adminContentRouter.post("/modules/import", idempotency("modules.import"), async 
     response.status(401).json({ error: "unauthorized" });
     return;
   }
-  const { data, error } = parseRequest(importBodySchema, request.body);
+  // #937: samme toleranse og samme lesbare feil som seksjonsimporten. Vår egen kurseksport skriver
+  // `items[]` som `{ type: "MODULE", sortOrder, module }` — så et modulfragment løftet ut av en fil
+  // VI laget traff nøyaktig den samme Zod-dumpen produkteier meldte inn for seksjoner.
+  const rawBody = (request.body ?? {}) as Record<string, unknown>;
+  const normalized = normalizeImportPayload(rawBody.payload, "module");
+  if (!normalized.ok) {
+    response.status(400).json({
+      error: "not_an_export_envelope",
+      message: "This does not look like a module package. Use Export on a module to produce a valid file.",
+    });
+    return;
+  }
+  const { data, error } = parseRequest(importBodySchema, { ...rawBody, payload: normalized.envelope });
   if (error) {
     response.status(400).json({ error: "validation_error", issues: error });
     return;
