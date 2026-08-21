@@ -1,4 +1,4 @@
-# scripts/ai-qa.ps1
+﻿# scripts/ai-qa.ps1
 #
 # Cross-model QA gate: let Codex review a change AFTER the automated tests are green
 # and BEFORE it is deployed to stage. The point is to catch the "correct fix, incomplete
@@ -31,6 +31,10 @@
 # - Codex prints its banner to stderr, so PowerShell 5.1 may report a non-zero exit code
 #   even on success. The output FILE is the source of truth, not $LASTEXITCODE - but it
 #   only counts if THIS run wrote it (see the staleness guard below).
+# - Denne fila har UTF-8 BOM MED VILJE. PowerShell 5.1 leser en .ps1 uten BOM som ANSI, og da
+#   blir enhver ae/oe/aa i kommentarer OG i Write-Host-tekst til mojibake - og et regex-moenster
+#   med norske tegn slutter aa matche. Originalteksten er derfor translitterert (foer, noeyaktig);
+#   BOM-en lar nyere tillegg bruke ekte norsk. Fjerner du BOM-en, brekker begge deler stille.
 # - The prompt is piped on stdin rather than passed as an argument: it avoids PS 5.1
 #   quote mangling, and it also closes stdin (codex exec hangs on an open TTY stdin).
 
@@ -116,6 +120,28 @@ function Get-MissingSections {
         $missing += 'IKKE VERIFISERBART STATISK'
     }
     return $missing
+}
+
+# Kompleksitetsskanningen er månedlig (doc/COMPLEXITY_SCAN.md). Porten kjøres uansett foran hver
+# stage-deploy, så påminnelsen legges HER — en rutine som krever sin egen rituelle sjekk blir ikke
+# utført. Datoen leses fra fila; den er den eneste kilden, og gjentas ikke i agentfilene.
+#
+# Varsler, blokkerer ikke: en forfalt skanning er ikke en grunn til å stoppe en deploy.
+function Show-ScanDueNotice {
+    $scanDoc = Join-Path $repoRoot 'doc\COMPLEXITY_SCAN.md'
+    if (-not (Test-Path $scanDoc)) { return }
+    $line = Select-String -Path $scanDoc -Pattern 'Sist kjørt:\s*(\d{4}-\d{2}-\d{2})' | Select-Object -First 1
+    if (-not $line) {
+        Write-Host "Fant ingen 'Sist kjoert'-dato i doc/COMPLEXITY_SCAN.md." -ForegroundColor Yellow
+        return
+    }
+    $last = [datetime]::ParseExact($line.Matches[0].Groups[1].Value, 'yyyy-MM-dd', $null)
+    $days = [int]((Get-Date) - $last).TotalDays
+    if ($days -ge 30) {
+        Write-Host ""
+        Write-Host "Kompleksitetsskanningen er $days dager gammel (sist $($last.ToString('yyyy-MM-dd')))." -ForegroundColor Yellow
+        Write-Host "Maanedlig rutine - se doc/COMPLEXITY_SCAN.md. Dette blokkerer ingenting." -ForegroundColor DarkGray
+    }
 }
 
 # -Judge: døm et svar en lokal agent allerede har skrevet. Må stå FØR alt annet — den skal
@@ -249,6 +275,7 @@ Svar paa norsk.
     # Kjører suitene som vanlig (de er porten foran porten), men skriver prompten til fil i
     # stedet for å kalle codex. Exit 4 = «prompten er klar, kjør den».
     if ($Local) {
+        Show-ScanDueNotice
         if (-not $SkipTests) { Invoke-Suites }
 
         $localPrompt = @"
@@ -326,6 +353,8 @@ handling, hva som skal skje) og utelat alt som allerede er dekket av automatiske
     # -----------------------------------------------------------------------
     # 5 - Automated tests must be green before we spend a review on this
     # -----------------------------------------------------------------------
+    Show-ScanDueNotice
+
     if (-not $SkipTests) {
         Invoke-Suites
     }
