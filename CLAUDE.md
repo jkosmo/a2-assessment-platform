@@ -79,6 +79,14 @@ A2 Assessment Platform — Next.js + Prisma + PostgreSQL on Azure App Service.
 - CI/CD: `.github/workflows/deploy-azure.yml`
 - Environments runbook: `doc/AZURE_ENVIRONMENTS.md`
 
+## Beslutninger som ikke kan leses ut av koden
+
+`doc/DECISIONS.md` — regler der et annet valg ville vært like forsvarlig, og som derfor ikke kan
+utledes fra implementasjonen. Skriv beslutningen dit **når den tas**, ikke etterpå.
+
+Dette er en peker, ikke en ny regel: #938 tok en hel kveld fordi ingen kunne si hva regelen var
+*ment* å være, og da måtte diskusjonen starte med å rekonstruere hensikten fra koden.
+
 ## Workflow conventions
 
 - Always bump `package.json` version and `doc/VERSIONS.md` in the same commit as code changes.

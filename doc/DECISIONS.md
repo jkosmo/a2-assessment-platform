@@ -1,0 +1,141 @@
+# Beslutninger
+
+Regler som ikke kan leses ut av koden alene — fordi de er **valg**, ikke konsekvenser.
+
+## Hvorfor denne fila finnes
+
+#938 tok en hel kveld å forstå. Ikke fordi koden var vanskelig, men fordi ingen kunne si hva regelen
+var *ment* å være. Når det ikke står noe sted, kan man ikke avgjøre om et avvik er en feil eller en
+beslutning — og da må hver diskusjon starte med å rekonstruere hensikten fra implementasjonen.
+
+Alle tre reglene som styrte kursbevis lå i koden, ingen av dem sto skrevet:
+
+| Regel | Hvor den bodde |
+|---|---|
+| `EXPIRED` teller som bestått | en kommentar i #820 |
+| Et kursbevis er permanent | `if (existing) return` |
+| Arkivert innhold teller ikke | ett filter på én av fem lesere |
+
+## Hva som hører hjemme her
+
+En beslutning der **et annet valg ville vært like forsvarlig**. Ikke hvordan noe er implementert —
+det står i koden. Ikke hvorfor en feil ble fikset — det står i saken.
+
+Skriv den når beslutningen tas. Én linje er nok; det er *at* den står som betyr noe.
+
+**Format:** hva · hvorfor · hvor den håndheves · sak · dato · status.
+Status er `avklart` eller `åpent spørsmål`.
+
+---
+
+## Kursbevis
+
+### Et kursbevis er permanent og har ikke tilbakevirkende kraft
+
+Har man bestått, forblir man bestått — også om kurset senere får nytt innhold. En ny versjon av
+kurset gjelder pågående og framtidige kandidater, ikke de som allerede er ferdige.
+
+**Hvorfor:** produkteier, 2026-08-20. «Skulle en innholdsprodusent lage en ny versjon av kurset der
+man legger til moduler og seksjoner, vil det ikke ha tilbakevirkende kraft for de som allerede har
+bestått kurset.»
+
+**Håndheves:** `courseCompletionService.ts` — `if (existing) return`.
+**Sak:** #933/#934 · **Dato:** 2026-08-20 · **Status:** avklart
+
+⚠️ Konsekvens som er lett å snuble i: `courseStatus` kan falle tilbake til `IN_PROGRESS` for en
+deltaker som *har* bevis, fordi `/api/courses` teller det nye innholdet inn i `total`. Derfor må
+«er kurset fullført» leses som **bevis ELLER status**, aldri status alene (`isCourseCompleted()` i
+`participant.js`). Å lese bare statusen ga et kurs som sto under «Fullført» og rendret seg som
+pågående, uten sertifikatlenke.
+
+### Kravet måles på utstedelsestidspunktet, og lagres
+
+Man har bestått når man har bestått alle moduler kurset inneholdt **da**, og bekreftet lest alle
+seksjoner kurset inneholdt **på det tidspunkt**.
+
+**Hvorfor:** produkteier, 2026-08-20. Uten et lagret øyeblikksbilde er halve regelen uetterprøvbar.
+
+**Håndheves:** `CourseCompletion.moduleSnapshotJson` + `sectionSnapshotJson` — lista porten faktisk
+målte mot, ikke en ny utledning.
+**Sak:** #933 · **Dato:** 2026-08-19 (v2.23.0) · **Status:** avklart
+
+⚠️ `sectionSnapshotJson` er nullbar med vilje og **ikke bakfylt**. `null` betyr ærlig «utstedt før vi
+registrerte dette» — å bakfylle med `[]` ville påstått at gamle kurs var seksjonsfrie.
+
+### Utstedelse skjer bare for publiserte kurs
+
+**Håndheves:** `courseCompletionService.ts` — `if (!course.publishedAt || course.archivedAt) return`.
+**Sak:** #934 · **Dato:** 2026-08-19 · **Status:** avklart
+
+### Arkivert innhold teller ikke i kravet
+
+Arkivering er måten innhold tas ut av sirkulasjon på. Å kreve at en deltaker leser en arkivert
+seksjon er å kreve noe hen ikke kan gjøre — og et krav som aldri kan oppfylles er verre enn ikke
+noe krav.
+
+**Hvorfor:** produkteier, 2026-08-20, på spørsmål om arkivert innhold skulle telle: «Nei.»
+
+**Håndheves:** i dag inkonsistent — porten filtrerer arkiverte seksjoner, men ikke arkiverte
+moduler, og framdriftsvisningen filtrerer ingen av delene.
+**Sak:** #938 · **Dato:** 2026-08-20 · **Status:** avklart, ikke ferdig implementert
+
+### Innhold som står i et utstedt kursbevis kan aldri slettes
+
+Arkivert materiale var en del av pensum da diplomet ble utdelt og må bevares som grunnlaget for
+det. Arkivering er greit — sletting er det ikke.
+
+**Hvorfor:** produkteier, 2026-08-21. «Arkivert materiale var naturligvis del av pensum når diplom
+ble utdelt og må bevares som grunnlag for diplom, men ellers ikke.»
+
+**Håndheves:** ikke ennå. G2 nekter sletting mens innholdet ligger i et kurs, men når det er fjernet
+derfra er sletting tillatt — og ingenting sjekker om en `CourseCompletion` peker på det.
+**Sak:** #938 · **Dato:** 2026-08-21 · **Status:** avklart, ikke implementert
+
+⚠️ Bevisst bivirkning: innhold noen har fått diplom på blir permanent uslettbart.
+
+---
+
+## Sertifisering
+
+### «Bestått en modul» = enhver livssyklustilstand unntatt `NOT_CERTIFIED`
+
+`CERTIFICATION_PASSED_STATUSES` inneholder `EXPIRED`. En utløpt modulsertifisering teller altså
+fortsatt mot et kursbevis.
+
+**Hvorfor:** #820 formulerer det som robusthet — å liste beståtte tilstander eksplisitt holder
+sjekken riktig hvis en ny ikke-bestått tilstand legges til senere.
+
+**Håndheves:** `certificationRepository.ts:9-18`, brukt av `countPassedModulesForUser`.
+**Sak:** #820, gjenåpnet som #947 · **Dato:** 2026-08-21 · **Status:** **åpent spørsmål**
+
+⚠️ Konsekvensen er ikke uttalt noe sted: hvis «bestått» er en historisk kjensgjerning som ikke
+utløper, betyr resertifisering noe annet enn navnet antyder, og `deriveRecertificationStatus` er
+uten konsekvens for kursporten. Trenger et ja eller nei fra produkteier.
+
+---
+
+## Innhold og språk
+
+### Ren streng betyr «ett språk, ikke oversatt ennå»
+
+Et lokalisert felt som er en **ren streng** betyr at teksten finnes på ett språk og ikke er oversatt.
+Et **objekt** med hull betyr genuint manglende oversettelse. De to må aldri forveksles.
+
+**Hvorfor:** skillet er den eneste kilden til «hva er faktisk oversatt». Kode som fyller alle tre
+språk med kildeteksten ødelegger informasjonen permanent — den kan ikke gjenskapes fra dataene.
+
+**Håndheves:** `localizedTextMaybeUntranslatedSchema` kontra `localizedTextSchema`,
+`missingLocalesFor` (leser en ren streng som `nb`).
+**Sak:** #892 · **Status:** avklart, brytes tre steder i dag (#981, #982)
+
+### Feilkoden er kontrakten, ikke teksten
+
+Backend returnerer en **kode**; klienten slår den opp i sin egen tabell og rendrer på brukerens
+språk. Serverens `message` er en engelsk reserve for API-konsumenter uten tabell — aldri det som
+vises.
+
+**Hvorfor:** konsollene er trespråklige og defaulter til `en-GB`. En norsk setning fra serveren
+vises da ordrett til en engelsk forfatter, og omvendt.
+
+**Håndheves:** `public/static/import-error.js`, publiseringsgatens `issues[]`.
+**Sak:** `FEATURE_SURFACE_MAP` §24, #937 · **Status:** avklart, brutt på mange flater (#972, #980, #983, #985)

@@ -168,6 +168,14 @@ The diff is posted as a PR comment. Staging what-if runs automatically on PR; pr
 
 ---
 
+## Beslutninger som ikke kan leses ut av koden
+
+`doc/DECISIONS.md` — regler der et annet valg ville vært like forsvarlig, og som derfor ikke kan
+utledes fra implementasjonen. Skriv beslutningen dit **når den tas**, ikke etterpå.
+
+Dette er en peker, ikke en ny regel: #938 tok en hel kveld fordi ingen kunne si hva regelen var
+*ment* å være, og da måtte diskusjonen starte med å rekonstruere hensikten fra koden.
+
 ## Agent skills (repo-canonical)
 
 Repo-canonical agent skills live under `skills/`. If a user request matches a skill's
