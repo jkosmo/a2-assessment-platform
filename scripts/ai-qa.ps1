@@ -58,13 +58,96 @@ param(
 
     [string]$OutFile,
 
-    [switch]$DryRun
+    [switch]$DryRun,
+
+    # -Local: ikke kall codex. Kjør suitene, bygg NØYAKTIG samme prompt, og skriv den til fil.
+    # Prompten kjøres så av en lokal agent (Agent-verktøyet i en Claude Code-økt), og svaret
+    # dømmes med -Judge. Finnes fordi codex-kontoen kan være tom for kreditt — men også fordi
+    # sjekklista da har ETT hjem. Kjørte man den lokale runden ved å skrive prompten på nytt fra
+    # hukommelsen (som vi gjorde 2026-08-20), driver den fra hverandre uten at noen ser det.
+    [switch]$Local,
+
+    # -Judge <fil>: valider et ferdig agentsvar mot de samme kravene og gi samme exit-koder.
+    # Skilt fra -Local fordi de to stegene skjer i hver sin prosess.
+    [string]$Judge
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
+
+# De automatiserte suitene er porten foran porten: en gjennomgang av rød kode er bortkastet.
+# Egen funksjon fordi BÅDE codex-stien og -Local trenger den.
+function Invoke-Suites {
+    $suites = @(
+        @{ Name = 'Typecheck (tsc --noEmit)'; Args = @('run', 'lint') },
+        @{ Name = 'Unit tests';               Args = @('run', 'test:unit') },
+        @{ Name = 'DOM tests';                Args = @('run', 'test:dom') }
+    )
+    if ($IncludeE2E) {
+        $suites += @{ Name = 'Admin-content e2e'; Args = @('run', 'test:e2e:admin-content') }
+    }
+    foreach ($suite in $suites) {
+        Write-Host ""
+        Write-Host "-- $($suite.Name) --" -ForegroundColor Cyan
+        & npm @($suite.Args)
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host ""
+            Write-Host "$($suite.Name) failed. Fix it before asking for QA - a review of red code is wasted." -ForegroundColor Red
+            exit 1
+        }
+    }
+    Write-Host ""
+    Write-Host "Automated suites green." -ForegroundColor Green
+}
+
+# Dommen over et ferdig svar. Delt av codex-stien og -Judge, slik at en lokal runde måles mot
+# NØYAKTIG samme krav — ellers ville «lokal GO» og «codex GO» betydd to forskjellige ting.
+# Returnerer navnene på det som mangler; tom liste = fullstendig.
+function Get-MissingSections {
+    param([string]$Answer)
+    $missing = @()
+    if ($Answer -notmatch '(?m)^\s*VERDIKT:\s*(GO|NO-GO)') { $missing += 'VERDIKT' }
+    # Kolonet er påkrevd, ikke valgfritt: med ':?' matchet det avsluttende '\S' selve kolonet, så
+    # en bar overskrift slapp gjennom. (\r?\n[ \t]*)+ fordi modellen som regel legger en BLANK
+    # linje mellom overskriften og første kulepunkt.
+    if ($Answer -notmatch '(?im)^[ \t]*IKKE VERIFISERBART STATISK[ \t]*:[ \t]*(\S|(\r?\n[ \t]*)+\S)') {
+        $missing += 'IKKE VERIFISERBART STATISK'
+    }
+    return $missing
+}
+
+# -Judge: døm et svar en lokal agent allerede har skrevet. Må stå FØR alt annet — den skal
+# verken kjøre suiter, bygge prompter eller kreve at codex finnes.
+if ($Judge) {
+    if (-not (Test-Path $Judge)) {
+        Write-Host "Fant ikke svarfila: $Judge" -ForegroundColor Red
+        exit 1
+    }
+    $answer = Get-Content $Judge -Raw -Encoding UTF8
+    if (-not $answer -or $answer.Trim().Length -eq 0) {
+        Write-Host "Svarfila er tom: $Judge" -ForegroundColor Red
+        exit 1
+    }
+    # @() er ikke pynt: PS 5.1 kollapser en TOM array fra en funksjon til $null, og
+    # $null.Count kaster under StrictMode. Uten den feiler porten på nettopp det svaret
+    # som er i orden.
+    $missingSections = @(Get-MissingSections -Answer $answer)
+    if ($missingSections.Count -gt 0) {
+        Write-Host "Ufullstendig gjennomgang - mangler: $($missingSections -join ', ')." -ForegroundColor Red
+        Write-Host "Doem funnene og planlegg stage-runden selv; ikke behandle dette som en bestaatt port." -ForegroundColor Red
+        exit 2
+    }
+    if ($answer -match '(?m)^\s*VERDIKT:\s*NO-GO') {
+        Write-Host "VERDIKT: NO-GO - fiks foer deploy." -ForegroundColor Red
+        exit 3
+    }
+    Write-Host "VERDIKT: GO." -ForegroundColor Green
+    Write-Host "Husk: en GO her er en gjennomgangs-dom, ikke et testresultat." -ForegroundColor DarkGray
+    exit 0
+}
+
 Push-Location $repoRoot
 
 try {
@@ -147,6 +230,62 @@ Svar paa norsk.
     # -----------------------------------------------------------------------
     # 3 - Build the invocation
     # -----------------------------------------------------------------------
+    # Hvilken diff snakker vi om? Beregnet her fordi BÅDE codex-stien (pass to) og -Local
+    # trenger den — én definisjon, ikke to.
+    $scopeCmd = "git diff $Base...HEAD"
+    $scope = "endringene mot $Base"
+    if ($Uncommitted) {
+        $scopeCmd = 'git status --short; git diff HEAD'
+        $scope = 'de ucommittede endringene i arbeidskopien'
+    }
+    elseif ($Commit) {
+        $scopeCmd = "git show $Commit"
+        $scope = "endringene i commit $Commit"
+    }
+
+    # -----------------------------------------------------------------------
+    # 3b - -Local: samme sjekkliste, kjørt av en lokal agent i stedet for codex
+    # -----------------------------------------------------------------------
+    # Kjører suitene som vanlig (de er porten foran porten), men skriver prompten til fil i
+    # stedet for å kalle codex. Exit 4 = «prompten er klar, kjør den».
+    if ($Local) {
+        if (-not $SkipTests) { Invoke-Suites }
+
+        $localPrompt = @"
+$checklist
+
+ARBEIDSMAATE: se paa $scope selv - start med "$scopeCmd" - og les de beroerte filene og deres
+soeskenfiler. Du har full lesetilgang til repoet; bruk den. Ingen foerste gjennomgang er kjoert,
+saa du er alene om aa finne det som er galt.
+
+Svaret MAA vaere paa norsk og slutte med noeyaktig disse to seksjonene:
+
+VERDIKT: GO
+eller
+VERDIKT: NO-GO
+Foelg linjen med en setnings begrunnelse. NO-GO betyr at minst ett funn boer fikses foer deploy.
+
+IKKE VERIFISERBART STATISK:
+- punktliste over det en person faktisk maa klikke gjennom paa stage for aa avdekke resten.
+Dette blir den reelle testplanen for den manuelle runden, saa vaer konkret (hvilken side, hvilken
+handling, hva som skal skje) og utelat alt som allerede er dekket av automatiske tester. Skriv
+"- ingenting" hvis testene faktisk dekker alt.
+"@
+
+        $promptFile = "$OutFile.prompt.md"
+        if (-not (Test-Path $outDir)) { New-Item -ItemType Directory -Path $outDir | Out-Null }
+        Set-Content -Path $promptFile -Value $localPrompt -Encoding UTF8
+
+        Write-Host ""
+        Write-Host "Lokal QA-runde: prompten er skrevet til" -ForegroundColor Cyan
+        Write-Host "  $promptFile"
+        Write-Host ""
+        Write-Host "Kjoer den med en lokal agent (Agent-verktoeyet i en Claude Code-oekt), lagre" -ForegroundColor Cyan
+        Write-Host "svaret, og doem det med:" -ForegroundColor Cyan
+        Write-Host "  .\scripts\ai-qa.ps1 -Judge <svarfil>"
+        exit 4
+    }
+
     # No PROMPT here, by force: codex rejects one alongside a scope flag. Pass one gets
     # the diff and nothing else; the checklist rides along in pass two.
     $codexArgs = @('exec', 'review')
@@ -188,27 +327,7 @@ Svar paa norsk.
     # 5 - Automated tests must be green before we spend a review on this
     # -----------------------------------------------------------------------
     if (-not $SkipTests) {
-        $suites = @(
-            @{ Name = 'Typecheck (tsc --noEmit)'; Args = @('run', 'lint') },
-            @{ Name = 'Unit tests';               Args = @('run', 'test:unit') },
-            @{ Name = 'DOM tests';                Args = @('run', 'test:dom') }
-        )
-        if ($IncludeE2E) {
-            $suites += @{ Name = 'Admin-content e2e'; Args = @('run', 'test:e2e:admin-content') }
-        }
-
-        foreach ($suite in $suites) {
-            Write-Host ""
-            Write-Host "-- $($suite.Name) --" -ForegroundColor Cyan
-            & npm @($suite.Args)
-            if ($LASTEXITCODE -ne 0) {
-                Write-Host ""
-                Write-Host "$($suite.Name) failed. Fix it before asking for QA - a review of red code is wasted." -ForegroundColor Red
-                exit 1
-            }
-        }
-        Write-Host ""
-        Write-Host "Automated suites green. Handing the diff to Codex." -ForegroundColor Green
+        Invoke-Suites
     }
     else {
         Write-Host "-SkipTests set: assuming the automated suites are already green." -ForegroundColor Yellow
@@ -273,16 +392,8 @@ Svar paa norsk.
     # this repo knows about its own failure modes, sees pass one's findings so it
     # does not repeat them, and owns the output contract.
     # -----------------------------------------------------------------------
-    $scopeCmd = "git diff $Base...HEAD"
-    $scope = "endringene mot $Base"
-    if ($Uncommitted) {
-        $scopeCmd = 'git status --short; git diff HEAD'
-        $scope = 'de ucommittede endringene i arbeidskopien'
-    }
-    elseif ($Commit) {
-        $scopeCmd = "git show $Commit"
-        $scope = "endringene i commit $Commit"
-    }
+    # $scopeCmd / $scope er beregnet EN gang, lenger oppe, og deles med -Local. To kopier av
+    # «hvilken diff snakker vi om» ville vært den samme feilen skriptet er laget for å fange.
 
     $verdictPrompt = @"
 $checklist
@@ -340,15 +451,9 @@ $findings
     # The manual-test section must have a BODY, not just its heading: a pass-two run cut
     # short right after printing the heading would otherwise read as a complete review
     # with an empty test plan - the exact outcome exit code 2 exists to prevent.
-    $missing = @()
-    if ($verdict -notmatch '(?m)^\s*VERDIKT:\s*(GO|NO-GO)') { $missing += 'VERDIKT' }
-    # The colon is required, not optional: with ':?' the trailing '\S' happily matched the
-    # colon itself, so a bare heading passed - verified against both cases before landing.
-    # (\r?\n[ \t]*)+ rather than a single newline: the model usually leaves a BLANK line
-    # between the heading and its first bullet, and the stricter pattern reported a complete
-    # review as incomplete. Table-tested against heading-only, heading+blank, blank-then-item,
-    # item-directly-under, same-line and quoted-mention.
-    if ($verdict -notmatch '(?im)^[ \t]*IKKE VERIFISERBART STATISK[ \t]*:[ \t]*(\S|(\r?\n[ \t]*)+\S)') { $missing += 'IKKE VERIFISERBART STATISK' }
+    # Reglene selv bor i Get-MissingSections, delt med -Judge. Hadde de stått her OG der, ville
+    # «lokal GO» og «codex GO» kunnet bety to forskjellige ting — samme feilklasse skriptet finner.
+    $missing = @(Get-MissingSections -Answer $verdict)
     if ($missing.Count -gt 0) {
         Write-Host ""
         Write-Host "Incomplete review - missing: $($missing -join ', ')." -ForegroundColor Red
