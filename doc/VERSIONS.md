@@ -2,6 +2,69 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.25.1 - 2026-08-21
+
+**Sikkerhetsfiks: kursimport med `replaceExisting` manglet eierskapssjekk (#942).**
+
+Funnet av nattskanningen (#941). De to søsterrutene hadde vakta; kursruta hadde den ikke:
+
+| Rute | Sjekk ved `replaceExisting` |
+|---|---|
+| `POST /modules/import` | `assertModuleOwnership` — kommentert `#528 (security)` |
+| `POST /sections/import` | `assertContentOwnership({contentType: "SECTION", …})` |
+| `POST /courses/import` | **ingen** |
+
+`importCourseFromEnvelope` gjorde kun en eksistenssjekk på `targetCourseId`, og hele
+`contentImportService.ts` hadde null referanser til eierskap. En SUBJECT_MATTER_OWNER kunne hente en
+vilkårlig kurs-ID fra `GET /courses` (også uguardet — #943) og overskrive moduler, seksjoner og
+item-rekkefølge i et publisert kurs deltakere sto midt i.
+
+Kommentaren på modulruta beskriver nøyaktig dette angrepet. **Det ble tettet ett sted av tre.**
+
+### Verifisering
+
+Tre tester, ikke én:
+
+1. **Avslaget** — ikke-eier får 403 `content_ownership`, og kurset har fortsatt sitt opprinnelige
+   element etterpå (ingenting skrevet på veien til avslaget)
+2. **Kontrollcase A** — eieren kan fortsatt `replaceExisting` inn i sitt eget kurs
+3. **Kontrollcase B** — `createNew` er upåvirket, så en for bred vakt ville blitt fanget
+
+Mutasjonsverifisert: slås vakta av, blir avslagstesten rød på `expected 201 to be 403`, mens begge
+kontrollene forblir grønne.
+
+### Tre små funn tatt med i samme slengen
+
+Alle tre krever null manuell testing, og hører til samme integritetsfamilie som sikkerhetsfiksen.
+
+**#954 — dobbel revisjonshendelse ved MCQ-innlevering.** Den samme `mcqSubmitted`-hendelsen ble
+skrevet to ganger: én inne i transaksjonen (#803) og én etter commit. En revisor som teller
+innleveringsforsøk fra revisjonsloggen fikk dobbelt antall. Den etterlatte var dessuten farlig
+plassert — feilet den, kastet `submitMcqAttempt` *etter* at vurderingsjobben var kjørt.
+
+⚠️ **Testen bestod bare på grunn av dubletten.** Den overlevende skrivingen kalles som
+`recordAuditEvent(event, tx)` med to argumenter; assertionen sto med ett, og matchet derfor
+utelukkende post-commit-varianten. Fjernet man dubletten, ble testen rød. Den teller nå kallene
+eksplisitt, så dubletten ikke kan snike seg inn igjen.
+
+**#986 — «Ikke brukt i noe kurs.» i nynorsk-tabellen.** Ordrett bokmål, andre gang på to dager.
+
+**Dekningsvakt mot bokmål i nn-tabeller** (`test/nynorsk-guard.test.js`). Nøkkelparitetstesten kan
+per definisjon ikke fange dette — nøkkelen *finnes*. Den nye testen finner nn-blokkene selv i både
+`public/i18n/` og `LABELS.nn`, og melder fil, nøkkel, ordet og riktig nynorsk-form.
+
+Mutasjonsverifisert i begge kataloger. Under bygging ga min egen markørliste to falske positive på
+ekte nynorsk («Omset frå dette **språket**») — ordet er identisk i begge målformer. Den er fjernet,
+med en kommentar om hvorfor: en markør må ha en annen nynorsk-form, ellers lærer testen folk å
+ignorere seg selv.
+
+### Merk
+
+⚠️ **#943 står fortsatt åpen:** `GET /courses`, `/:courseId`, `/:courseId/items` og
+`/publish-preview` er uguardet, mens tolv skriveruter i samme fil er guardet. Det er rekognoseringen
+som gjorde dette angrepet praktisk. Fikset separat, fordi det er en annen avveining — lesetilgang
+brukes av kursbyggerens UI.
+
 ## 2.25.0 - 2026-08-20
 
 Tre saker fra produkteiers stage-runde, og **to QA-runder som begge sa NO-GO**. Det er den

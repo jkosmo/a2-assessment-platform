@@ -212,6 +212,89 @@ describe("#433 module export-import round-trip", () => {
       .send({ payload: envelope, mode: "replaceExisting", targetId: moduleId });
     expect(ownerRes.status).toBe(201);
   });
+
+  // #942 (security): den samme vakta manglet HELT på kursimport, mens modul- og seksjonsimport
+  // hadde den. Angrepet er identisk med #528 over — bare mot et kurs, som er verre: et kurs
+  // inneholder moduler, seksjoner OG rekkefølgen, så en overskriving treffer alt på én gang.
+  it("blocks replaceExisting import into a course the importer does not own (#942)", async () => {
+    const courseRes = await request(app)
+      .post("/api/admin/content/courses")
+      .set(adminHeaders)
+      .send({ title: { "en-GB": `Sec course ${Date.now()}`, nb: "Kurs", nn: "Kurs" } });
+    expect(courseRes.status).toBe(201);
+    const courseId = courseRes.body.course.id as string;
+
+    const { moduleId } = await setupModule(`sec-course-${Date.now()}`);
+    const itemsRes = await request(app)
+      .put(`/api/admin/content/courses/${courseId}/items`)
+      .set(adminHeaders)
+      .send({ items: [{ type: "MODULE", moduleId }] });
+    expect(itemsRes.status).toBe(204);
+
+    const envelope = (
+      await request(app).get(`/api/admin/content/courses/${courseId}/export-package`).set(adminHeaders)
+    ).body.envelope;
+
+    const otherSmo = {
+      "x-user-id": `sec-course-import-${Date.now()}`,
+      "x-user-email": `ci-${Date.now()}@company.com`,
+      "x-user-name": "Other SMO",
+      "x-user-roles": "SUBJECT_MATTER_OWNER",
+    };
+    const res = await request(app)
+      .post("/api/admin/content/courses/import")
+      .set(otherSmo)
+      .send({ payload: envelope, mode: "replaceExisting", targetId: courseId });
+    expect(res.status).toBe(403);
+    expect(res.body.error).toBe("content_ownership");
+
+    // Ingenting skal ha blitt skrevet på veien til avslaget: kurset har fortsatt sitt ene element.
+    const afterRes = await request(app)
+      .get(`/api/admin/content/courses/${courseId}/items`)
+      .set(adminHeaders);
+    expect(afterRes.status).toBe(200);
+    expect((afterRes.body.items as unknown[]).length).toBe(1);
+
+    // KONTROLLCASE. Uten denne vet vi ikke om vi målte eierskapsregelen eller bare knekte ruta:
+    // en `return 403` uten betingelse ville bestått assertionene over.
+    const ownerRes = await request(app)
+      .post("/api/admin/content/courses/import")
+      .set(adminHeaders)
+      .send({ payload: envelope, mode: "replaceExisting", targetId: courseId });
+    expect(ownerRes.status, JSON.stringify(ownerRes.body)).toBe(201);
+  });
+
+  // KONTROLLCASE nr. 2: createNew har ingen targetId og skal derfor ALDRI treffe eierskapsvakta.
+  // Uten denne kunne en for bred vakt ha stengt normal import for alle andre enn administratorer.
+  it("#942: createNew-import er upåvirket av eierskapsvakta", async () => {
+    const courseRes = await request(app)
+      .post("/api/admin/content/courses")
+      .set(adminHeaders)
+      .send({ title: { "en-GB": `Open course ${Date.now()}`, nb: "Kurs", nn: "Kurs" } });
+    const courseId = courseRes.body.course.id as string;
+    const { moduleId } = await setupModule(`open-course-${Date.now()}`);
+    await request(app)
+      .put(`/api/admin/content/courses/${courseId}/items`)
+      .set(adminHeaders)
+      .send({ items: [{ type: "MODULE", moduleId }] });
+
+    const envelope = (
+      await request(app).get(`/api/admin/content/courses/${courseId}/export-package`).set(adminHeaders)
+    ).body.envelope;
+
+    const otherSmo = {
+      "x-user-id": `open-import-${Date.now()}`,
+      "x-user-email": `oi-${Date.now()}@company.com`,
+      "x-user-name": "Other SMO",
+      "x-user-roles": "SUBJECT_MATTER_OWNER",
+    };
+    const res = await request(app)
+      .post("/api/admin/content/courses/import")
+      .set(otherSmo)
+      .send({ payload: envelope, mode: "createNew" });
+    expect(res.status, JSON.stringify(res.body)).toBe(201);
+    expect(res.body.courseId).not.toBe(courseId);
+  });
 });
 
 describe("#512 course export-import with learning sections", () => {

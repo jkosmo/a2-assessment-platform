@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { requireContentOwnership } from "./requireContentOwnership.js";
 import { idempotency } from "../middleware/idempotency.js";
-import { listManageableContentIds } from "../modules/content/contentOwnershipService.js";
+import { assertContentOwnership, listManageableContentIds } from "../modules/content/contentOwnershipService.js";
 import { z } from "zod";
 import {
   createCourse,
@@ -196,10 +196,27 @@ adminCoursesRouter.post("/import", async (request, response, next) => {
     return;
   }
   try {
+    // #942 (security): `replaceExisting` skriver nye seksjoner, moduler og item-sekvens inn i
+    // targetId. Uten denne vakta kunne en SMO hente en vilkårlig kurs-ID og overskrive et kurs de
+    // ikke eier — også et publisert kurs deltakere står midt i.
+    //
+    // ⚠️ Dette er NØYAKTIG angrepet #528 tettet for modulimport (adminContent.ts:453) og som
+    // seksjonsimport har vakt mot (adminSections.ts:236). Kursruta var den ene av tre som manglet
+    // den. Tjenestelaget hjelper ikke: `importCourseFromEnvelope` gjør kun en eksistenssjekk på
+    // targetCourseId og har ingen referanse til eierskap i det hele tatt.
+    const mode = data.mode ?? "createNew";
+    if (mode === "replaceExisting" && data.targetId) {
+      await assertContentOwnership({
+        contentType: "COURSE",
+        contentId: data.targetId,
+        actorUserId: actorId,
+        roles: request.context?.roles ?? [],
+      });
+    }
     const envelope = data.payload as unknown as Parameters<typeof importCourseFromEnvelope>[0];
     const result = await importCourseFromEnvelope(envelope, {
       actorId,
-      mode: data.mode ?? "createNew",
+      mode,
       targetCourseId: data.targetId,
     });
     // AA-2 (#650): links + clientRef echo make the response agent-orchestrable.

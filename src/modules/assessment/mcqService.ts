@@ -185,18 +185,14 @@ export async function submitMcqAttempt(input: {
     }
   }
 
-  await recordAuditEvent({
-    entityType: auditEntityTypes.mcqAttempt,
-    entityId: attempt.id,
-    action: auditActions.assessment.mcqSubmitted,
-    actorId: input.userId,
-    metadata: {
-      submissionId: submission.id,
-      rawScore,
-      percentScore,
-      scaledScore,
-    },
-  });
+  // ⚠️ #954: her sto en ANDRE `mcqSubmitted`-skriving, bit for bit identisk med den inne i
+  // transaksjonen over (:155-169). Den var resten av mønsteret #803 erstattet — da revisjonen ble
+  // flyttet inn i transaksjonen, ble den gamle stående. Hver innlevering ga to rader, så en revisor
+  // som teller innleveringsforsøk fra revisjonsloggen fikk dobbelt antall.
+  //
+  // Den var dessuten farlig plassert: feilet den, kastet `submitMcqAttempt` ETTER at
+  // vurderingsjobben var kjørt — deltakeren fikk en feilmelding på en innlevering som var
+  // ferdigvurdert. Revisjonen hører hjemme der den commiter sammen med det den beskriver.
 
   return {
     attemptId: completedAttempt.id,

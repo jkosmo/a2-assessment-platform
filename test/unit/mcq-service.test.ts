@@ -197,6 +197,10 @@ describe("mcq service — submitMcqAttempt", () => {
       ],
     });
 
+    // ⚠️ #954: den overlevende skrivingen skjer INNE i transaksjonen og kalles som
+    // `recordAuditEvent(event, tx)` — to argumenter. Assertionen sto tidligere med bare ett, og
+    // matchet derfor utelukkende den etterlatte post-commit-dubletten. Testen bestod altså på grunn
+    // av feilen den skulle vokte mot; fjernet man dubletten, ble den rød.
     expect(recordAuditEvent).toHaveBeenCalledWith(
       expect.objectContaining({
         entityType: "mcq_attempt",
@@ -210,7 +214,17 @@ describe("mcq service — submitMcqAttempt", () => {
           scaledScore: 30,
         }),
       }),
+      expect.anything(),
     );
+
+    // ⚠️ #954: NØYAKTIG én gang. Fram til nå ble den samme hendelsen skrevet to ganger — én i
+    // transaksjonen (#803) og én etter commit — og denne testen så det ikke, fordi
+    // `toHaveBeenCalledWith` er fornøyd med ett treff uansett hvor mange kall som finnes.
+    // En revisor som teller innleveringsforsøk fra revisjonsloggen fikk dobbelt antall.
+    const mcqSubmittedCalls = recordAuditEvent.mock.calls.filter(
+      ([event]) => (event as { action?: string })?.action === "mcq_submitted",
+    );
+    expect(mcqSubmittedCalls).toHaveLength(1);
   });
 
   it.each(["SCORED", "COMPLETED", "UNDER_REVIEW", "REJECTED"] as const)(

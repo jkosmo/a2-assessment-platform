@@ -88,7 +88,7 @@ const LABELS = {
     publish: "Publiser", unpublish: "Avpubliser", archive: "Arkiver", restore: "Gjenopprett",
     showArchived: "Vis arkiverte", hideArchived: "Skjul arkiverte",
     filterAll: "Alle", filterActive: "Aktive", filterPublished: "Publiserte", filterArchived: "Arkiverte",
-    colCourses: "Brukt i kurs", coursesPopoverTitle: "Brukt i kurs", noCourses: "Ikke brukt i noe kurs.",
+    colCourses: "Brukt i kurs", coursesPopoverTitle: "Brukt i kurs", noCourses: "Ikkje brukt i noko kurs.",
     courseFilterLabel: "Kurs:", courseFilterAll: "Alle kurs", courseFilterNone: "Ikkje i noko kurs",
     published: "Seksjon publisert.", unpublished: "Seksjon avpublisert.",
     archived: "Seksjon arkivert.", restored: "Seksjon gjenoppretta.", confirmArchive: "Arkivere denne seksjonen?",
