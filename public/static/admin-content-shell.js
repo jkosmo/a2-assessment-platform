@@ -5326,7 +5326,9 @@ function hasOpenEditForm() {
   if (!form) return false;
   const fields = previewContent?.querySelectorAll("[data-rendered-value]") ?? [];
   for (const el of fields) {
-    if (el.value !== el.dataset.renderedValue) return true;
+    // Same accessor the stamp used, so the two halves of the comparison can never disagree about
+    // what "the value" of a field is (#973).
+    if (fieldStateValue(el) !== el.dataset.renderedValue) return true;
   }
   return false;
 }
@@ -5343,15 +5345,45 @@ function settingsSelectedMode() {
 }
 
 /**
- * Record what every edit-form field was drawn with, so `hasOpenEditForm` can tell a typed value
- * from an untouched one. Checkboxes carry their state as a string for the same comparison.
+ * What a form control HOLDS right now, as one comparable string.
+ *
+ * The type is read off the ELEMENT, never off a list of selectors. #973: the stamp used `el.value`
+ * for everything, and for a tickable input `value` is a constant — `"on"` for a checkbox, the
+ * option index for a radio — so its state was invisible to every dirty check no matter which
+ * selector list it appeared in. The MCQ correct-answer radios are exactly that case: the author
+ * picked a different correct answer, switched tab, got no warning, and the form was rebuilt from
+ * the bundle with the choice gone. Asking the element what kind of field it is means the NEXT
+ * tickable field is covered the day it is added, without anyone remembering a list.
+ */
+function fieldStateValue(el) {
+  if (el.type === "checkbox" || el.type === "radio") return el.checked ? "checked" : "unchecked";
+  return el.value;
+}
+
+/** The inverse of `fieldStateValue`, so a stamped/cached state can be put back on the element. */
+function applyFieldStateValue(el, state) {
+  if (el.type === "checkbox" || el.type === "radio") el.checked = state === "checked";
+  else el.value = state;
+}
+
+// Controls that hold no author input: stamping them would compare a constant with itself, and a
+// file input cannot be restamped from a string at all.
+const UNSTAMPED_INPUT_TYPES = new Set(["button", "submit", "reset", "image", "file", "hidden"]);
+
+/**
+ * Record what every edit-form field was drawn with, so `hasOpenEditForm` can tell a touched field
+ * from an untouched one.
+ *
+ * Every control inside the form is stamped — the query asks the DOM what is there rather than
+ * naming classes, because a class list can only cover the fields someone remembered to add to it,
+ * and the two that were missing (#973) were missing precisely because nobody thought of them.
+ * Tickable inputs are stamped with their checked state, per `fieldStateValue`.
  */
 function stampEditFormValues() {
-  const fields = previewContent?.querySelectorAll(
-    ".preview-edit-title, .preview-edit-input, .preview-edit-textarea, .vk-label, .vk-description, .vk-weight",
-  ) ?? [];
+  const fields = previewContent?.querySelectorAll("input, select, textarea") ?? [];
   for (const el of fields) {
-    el.dataset.renderedValue = el.value;
+    if (UNSTAMPED_INPUT_TYPES.has(el.type)) continue;
+    el.dataset.renderedValue = fieldStateValue(el);
   }
 }
 
@@ -5953,11 +5985,17 @@ const SETTINGS_TEXT_INPUT_IDS = [
   ...SETTINGS_INPUT_IDS.panel, ...SETTINGS_INPUT_IDS.prompt, ...SETTINGS_INPUT_IDS.schema,
 ];
 
-/** Record what the DOM was rendered with, so an edit can be told from an untouched field. */
+/**
+ * Record what the DOM was rendered with, so an edit can be told from an untouched field.
+ *
+ * Goes through `fieldStateValue` (#973) rather than reading `.value`: every field in the panel is
+ * text, a number or a select TODAY, and the day one of them is a checkbox the dirty check must not
+ * quietly start comparing the constant `"on"` with itself.
+ */
 function stampRenderedValues(ids) {
   for (const id of ids) {
     const el = document.getElementById(id);
-    if (el) el.dataset.renderedValue = el.value;
+    if (el) el.dataset.renderedValue = fieldStateValue(el);
   }
 }
 
@@ -5965,7 +6003,7 @@ function stampRenderedValues(ids) {
 function anyFieldDirty(ids) {
   return ids.some((id) => {
     const el = document.getElementById(id);
-    return el && el.dataset.renderedValue !== undefined && el.value !== el.dataset.renderedValue;
+    return el && el.dataset.renderedValue !== undefined && fieldStateValue(el) !== el.dataset.renderedValue;
   });
 }
 
@@ -5990,7 +6028,7 @@ function captureSettingsDraftValues() {
   for (const id of SETTINGS_TEXT_INPUT_IDS) {
     const el = document.getElementById(id);
     if (!el || el.dataset.renderedValue === undefined) continue;
-    if (el.value !== el.dataset.renderedValue) dirty[id] = el.value;
+    if (fieldStateValue(el) !== el.dataset.renderedValue) dirty[id] = fieldStateValue(el);
     // Present and back to its stored value: the author undid the edit, so drop the stale entry
     // rather than resurrect it on the next render.
     else delete dirty[id];
@@ -6007,14 +6045,14 @@ function captureSettingsDraftValues() {
  */
 function settingsFieldValue(id) {
   const el = document.getElementById(id);
-  if (el) return el.value;
+  if (el) return fieldStateValue(el);
   return settingsDraftValues?.[id];
 }
 
 /** True when this ONE field differs from what was stored, counting a collapsed section. */
 function fieldIsDirty(id) {
   const el = document.getElementById(id);
-  if (el) return el.dataset.renderedValue !== undefined && el.value !== el.dataset.renderedValue;
+  if (el) return el.dataset.renderedValue !== undefined && fieldStateValue(el) !== el.dataset.renderedValue;
   return settingsDraftValues?.[id] !== undefined;
 }
 
@@ -6036,7 +6074,7 @@ function mergeSettingsField(id, stored) {
 function anyFieldDirtyIncludingCollapsed(ids) {
   return ids.some((id) => {
     const el = document.getElementById(id);
-    if (el) return el.dataset.renderedValue !== undefined && el.value !== el.dataset.renderedValue;
+    if (el) return el.dataset.renderedValue !== undefined && fieldStateValue(el) !== el.dataset.renderedValue;
     return settingsDraftValues?.[id] !== undefined;
   });
 }
@@ -6047,7 +6085,10 @@ function restoreSettingsDraftValues() {
     const el = document.getElementById(id);
     // A field belonging to a collapsed section is simply not in the DOM; its value stays in
     // `settingsDraftValues` until the section is opened again.
-    if (el) el.value = value;
+    // Symmetrical with `captureSettingsDraftValues`, which stores what `fieldStateValue` read
+    // (#973) — a cache written by one accessor and read back by another is how the state of a
+    // tickable field gets lost on the way through.
+    if (el) applyFieldStateValue(el, value);
   }
 }
 

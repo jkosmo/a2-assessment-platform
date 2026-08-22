@@ -2,6 +2,48 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.25.4 - 2026-08-22
+
+**Dirty-sjekken så aldri et avkryssbart felt (#973).**
+
+`stampEditFormValues` stemplet `el.value` for en håndskrevet klasseliste, og `hasOpenEditForm`
+sammenlignet `el.value` tilbake. For et avkryssbart felt er `value` en konstant — `"on"` for en
+checkbox, alternativindeksen for en radio — så tilstanden endret seg aldri i sammenligningen,
+uansett hvilken selektorliste feltet sto i. Docstringen lovet det motsatte: «Checkboxes carry their
+state as a string for the same comparison.»
+
+Det levende offeret er **MCQ-fasiten**: bytt riktig svaralternativ i Rediger, bytt så fane eller
+innholdsspråk. Ingen advarsel, formen bygges på nytt fra `bundle`, og valget er borte uten spor.
+
+### Fiksen
+
+Én delt aksessor, `fieldStateValue(el)`, som spør ELEMENTET hva slags felt det er i stedet for å slå
+det opp i en liste, pluss `applyFieldStateValue` for veien tilbake. Stemplingen spør nå DOM-en hva
+som finnes (`input, select, textarea` i skjemaet) framfor å navngi klasser — en klasseliste kan bare
+dekke feltene noen husket, og de to som manglet manglet nettopp fordi ingen tenkte på dem.
+
+Antallet definisjoner av «er skjemaet endret» er uendret (fem); aksessoren er delt av dem, ikke en
+sjette.
+
+### De andre dirty-funksjonene
+
+`hasUnsavedSettingsEdits` / `settingsCriteriaEdited` / `hasUnsavedCriteriaEdits` hadde **ikke**
+hullet: kriterieeditoren leses av `captureLatestCriteriaState`, som allerede leste `.checked`, så
+«synlig for kandidat» var dekket der. Innstillingenes stempel/sammenlign/gjenopprett-trio går
+likevel gjennom samme aksessor nå, så neste avkryssingsboks i panelet er dekket den dagen den legges
+inn — ikke den dagen noen husker listen.
+
+### Verifisering
+
+`test/e2e/admin-content-dirty-tickable-fields.spec.ts`, fire tester, hver endringstest med sin
+kontrollcase-makker (urørt skjema varsler ikke). Én av dem er en **dekningsvakt**: hver
+forfatterredigerbar kontroll i skjemaet MÅ bære et stempel, så neste felttype fanges av testen i
+stedet for av en forfatter.
+
+Mutasjonsverifisert to veier: (A) `fieldStateValue` returnerer `el.value` igjen → tre tester røde på
+riktig assertion, kontrollcasene og Innstillinger-testen fortsatt grønne; (B) selektorlista tilbake
+→ dekningsvakta rapporterer de tre ustemplede radioene ved navn.
+
 ## 2.25.3 - 2026-08-22
 
 **En kandidat som glemte ett spørsmål fikk en Zod-dump (#988).** Produkteier forsøkte å levere inn en
