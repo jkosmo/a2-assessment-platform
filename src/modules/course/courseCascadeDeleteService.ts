@@ -6,7 +6,7 @@ import { auditActions, auditEntityTypes } from "../../observability/auditEvents.
 import { localizeContentText } from "../../i18n/content.js";
 import { adminContentRepository } from "../adminContent/adminContentRepository.js";
 import { courseRepository } from "./courseRepository.js";
-import { findCoursesContainingModule, findCoursesContainingSection } from "./contentLifecycle.js";
+import { describeIssuedCertificateBlock, findCoursesContainingModule, findCoursesContainingSection } from "./contentLifecycle.js";
 import { collectSectionAssetBlobPaths, reclaimAssetBlobs } from "./assetCommands.js";
 
 // #762 — ADMINISTRATOR-only destructive cleanup: delete a course together with the modules and
@@ -152,7 +152,19 @@ async function analyzeCourseCascade(courseId: string): Promise<CascadeAnalysis> 
         reason: `Delt med ${otherCourses.length} annet kurs: ${quoteCourseNames(otherCourses)}. Kobles kun fra dette kurset.`,
       });
     } else {
-      deletableSections.push({ id: sectionId, title, reason: "Kun brukt i dette kurset – slettes." });
+      // #938: kaskaden slettet eksklusive seksjoner DIREKTE, uten vakta `deleteSection` har. En
+      // seksjon som sto i et utstedt kursbevis, ble fjernet fra sitt opprinnelige kurs og lagt
+      // eksklusivt i et annet, forsvant når DET kurset ble kaskadeslettet — og beviset mistet
+      // grunnlaget sitt.
+      //
+      // ⚠️ Vakta ligger i ANALYSEN, ikke i slettingen. Da ser forfatteren blokkeringen i
+      // forhåndsvisningen i stedet for å møte et unntak halvveis i en transaksjon.
+      const certificateBlock = await describeIssuedCertificateBlock(sectionId);
+      if (certificateBlock) {
+        blockers.push({ id: sectionId, title, reason: certificateBlock });
+      } else {
+        deletableSections.push({ id: sectionId, title, reason: "Kun brukt i dette kurset – slettes." });
+      }
     }
   }
 

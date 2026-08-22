@@ -78,7 +78,8 @@ coursesRouter.get("/", async (request, response, next) => {
     const startedModuleIds = new Set(latestSubmissions.map((s) => s.moduleId));
 
     const items: CourseListItem[] = courses.map((course) => {
-      const moduleIds = course.modules.map((m) => m.moduleId);
+      // #938/#945: samme filter som kursdetaljen og bevisporten — den tredje telleren.
+      const moduleIds = course.modules.filter((m) => m.module?.archivedAt == null).map((m) => m.moduleId);
       const sectionIds = sectionIdsByCourse.get(course.id) ?? [];
       const passed = moduleIds.filter((id) => passedModuleSet.has(id)).length;
       const readSet = readSectionsByCourse.get(course.id);
@@ -241,7 +242,11 @@ coursesRouter.get("/:courseId", async (request, response, next) => {
       throw new NotFoundError("Course", "course_not_found", "Course not found.");
     }
 
-    const moduleIds = course.modules.map((cm) => cm.moduleId);
+    // #938/#945: arkiverte moduler telles IKKE, fordi bevisporten ikke krever dem. Målt mot ekte
+    // data på stage 2026-08-22: «Samfunnsvitere» viste moduleTotal 5 mens porten krevde 4 — samme
+    // «to tellere er uenige» som saken handlet om, bare på modulsiden. Jeg hadde fikset
+    // seksjonstellingen og glemt denne.
+    const moduleIds = course.modules.filter((cm) => cm.module?.archivedAt == null).map((cm) => cm.moduleId);
     const [certStatuses, passedCount, latestSubmissions] = await Promise.all([
       courseRepository.findUserCertificationStatusesForModules(userId, moduleIds),
       courseRepository.countPassedModulesForUser(userId, moduleIds),

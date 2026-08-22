@@ -2,6 +2,57 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.26.3 - 2026-08-22
+
+**Tre integritetshull QA-porten fant i mine egne fikser (#938, #945).**
+
+Porten var nede for kreditt da 2.25.2–2.26.2 ble bygget. Da den kom tilbake, kjørte jeg den på hele
+bunten `v2.25.1 → dev` og fikk **NO-GO med ti funn**. Dette er de tre alvorligste.
+
+### Kursbevis utstedt før v2.23.0 var ubeskyttet
+
+`sectionSnapshotJson` er nullbar og med vilje ikke bakfylt — jeg skrev det selv i `DECISIONS.md`.
+Et `contains`-oppslag treffer aldri `NULL`, så slettevernet jeg la inn i 2.26.2 beskyttet **ingen av
+de gamle bevisene**.
+
+Vi kan ikke vite hvilke seksjoner et slikt bevis dekket; dataene finnes ikke. Men lesesporet er en
+ærlig stedfortreder: leste deltakeren seksjonen i det kurset hen fikk beviset for, var den en del av
+grunnlaget. Konservativt i riktig retning, og alt dataene tillater.
+
+### Kaskadesletting omgikk vakta
+
+`cascadeDeleteCourse` slettet eksklusive seksjoner direkte. En seksjon som sto i et utstedt bevis,
+ble fjernet fra sitt opprinnelige kurs og lagt eksklusivt i et annet, forsvant når **det** kurset ble
+kaskadeslettet.
+
+⚠️ Vakta ligger nå i **analysen**, ikke i slettingen — forfatteren ser blokkeringen i
+forhåndsvisningen i stedet for å møte et unntak halvveis i en transaksjon. Regelen har fortsatt én
+implementasjon: `describeIssuedCertificateBlock` kaller den kastende varianten og fanger meldingen.
+To kopier ville drevet fra hverandre, og det er nettopp det #938 handlet om.
+
+### Modultelleren var uenig med porten
+
+`moduleTotal` inkluderte arkiverte moduler, mens porten ikke krevde dem. Jeg filtrerte
+seksjonstellingen i 2.26.1 og glemte modulsiden — samme «to tellere er uenige» som saken handlet om,
+i min egen fiks.
+
+**Funnet ved å måle ekte data:** «Samfunnsvitere» på stage viste `moduleTotal: 5` mens porten krevde
+4. QA-porten fant det samme uavhengig, minutter senere.
+
+### Merk om testene
+
+Regresjonstesten for modultelleren finnes fordi alle mine tidligere tester brukte **seksjoner**.
+Modulsiden var udekket, og derfor usynlig.
+
+Første utkast av den testen telte `available === false` og forventet 1 — men den «levende» modulen i
+fikstureringen har ingen publisert versjon og er derfor også utilgjengelig. Å telle ville målt
+fikstureringen, ikke regelen. Assertionen peker nå på den arkiverte modulen ved id.
+
+1051 unit, 220 e2e, 31 kontrakt, 33 integrasjon.
+
+⚠️ Sju av de ti QA-funnene gjenstår — klientsiden respekterer ennå ikke `available`, og toastens
+detaljfelt viser fortsatt rå JSON til deltakeren. Se #992.
+
 ## 2.26.2 - 2026-08-22
 
 **Begge dørene inn til «arkivert innhold i et kurs» er stengt, og diplomgrunnlaget kan ikke slettes (#938).**

@@ -384,3 +384,101 @@ describe("#938: innhold i et utstedt kursbevis kan ikke slettes", () => {
     expect(res.status, JSON.stringify(res.body)).toBe(204);
   });
 });
+
+describe("#938 P1: slettevernet dekker gamle bevis og kaskaden", () => {
+  async function participant(tag: string) {
+    return prisma.user.create({
+      data: { externalId: `p1-${tag}-${Date.now()}`, email: `p1${tag}${Date.now()}@x.no`, name: "P" },
+      select: { id: true },
+    });
+  }
+
+  it("et kursbevis UTEN øyeblikksbilde beskytter fortsatt seksjonen deltakeren leste", async () => {
+    // ⚠️ Kursbevis utstedt før v2.23.0 har sectionSnapshotJson = NULL. Et `contains`-oppslag treffer
+    // aldri NULL, så den første versjonen av vakta beskyttet ingen av dem — og jeg hadde selv skrevet
+    // i beslutningsloggen at kolonnen var nullbar og ikke bakfylt.
+    const section = await prisma.courseSection.create({
+      data: { title: JSON.stringify({ "en-GB": "Legacy basis" }) },
+      select: { id: true },
+    });
+    const course = await prisma.course.create({
+      data: { title: `Legacy Course ${Date.now()}`, publishedAt: new Date() },
+      select: { id: true },
+    });
+    const user = await participant("legacy");
+
+    // Beviset er fra «før»: ingen seksjons-øyeblikksbilde. Lesesporet er alt vi har.
+    await prisma.courseCompletion.create({
+      data: { userId: user.id, courseId: course.id, moduleSnapshotJson: "[]", sectionSnapshotJson: null },
+    });
+    await prisma.courseSectionRead.create({
+      data: { userId: user.id, courseId: course.id, sectionId: section.id },
+    });
+
+    const res = await request(app).delete(`/api/admin/content/sections/${section.id}`).set(adminHeaders);
+    expect(res.status).toBe(400);
+    expect(JSON.stringify(res.body)).toMatch(/før øyeblikksbildet|kursbevis/i);
+    expect(await prisma.courseSection.count({ where: { id: section.id } })).toBe(1);
+  });
+
+  it("KONTROLLCASE: et gammelt bevis for et ANNET kurs beskytter ikke", async () => {
+    // Uten denne ville «blokker hvis det finnes noe NULL-bevis i det hele tatt» bestått testen over.
+    // Regelen er at deltakeren må ha lest seksjonen I DET KURSET hen fikk beviset for.
+    const section = await prisma.courseSection.create({
+      data: { title: JSON.stringify({ "en-GB": "Unrelated" }) },
+      select: { id: true },
+    });
+    const otherCourse = await prisma.course.create({
+      data: { title: `Other Course ${Date.now()}`, publishedAt: new Date() },
+      select: { id: true },
+    });
+    const user = await participant("unrelated");
+    await prisma.courseCompletion.create({
+      data: { userId: user.id, courseId: otherCourse.id, moduleSnapshotJson: "[]", sectionSnapshotJson: null },
+    });
+
+    const res = await request(app).delete(`/api/admin/content/sections/${section.id}`).set(adminHeaders);
+    expect(res.status, JSON.stringify(res.body)).toBe(204);
+  });
+
+  it("kaskadesletting blokkeres når en eksklusiv seksjon står i et bevis for et annet kurs", async () => {
+    // Scenariet QA fant: seksjonen ble fjernet fra sitt opprinnelige kurs, lagt EKSKLUSIVT i et
+    // annet, og det andre kurset kaskadeslettes. Kaskaden slettet seksjonen direkte, uten vakta.
+    const section = await prisma.courseSection.create({
+      data: { title: JSON.stringify({ "en-GB": "Moved but certified" }) },
+      select: { id: true },
+    });
+    const originalCourse = await prisma.course.create({
+      data: { title: `Original ${Date.now()}`, publishedAt: new Date() },
+      select: { id: true },
+    });
+    const user = await participant("cascade");
+    await prisma.courseCompletion.create({
+      data: {
+        userId: user.id,
+        courseId: originalCourse.id,
+        moduleSnapshotJson: "[]",
+        sectionSnapshotJson: JSON.stringify([section.id]),
+      },
+    });
+
+    // Nå ligger seksjonen eksklusivt i et NYTT kurs, som ikke har noen fullføringer selv.
+    const newCourse = await prisma.course.create({
+      data: { title: `New Home ${Date.now()}` },
+      select: { id: true },
+    });
+    await prisma.courseItem.create({
+      data: { courseId: newCourse.id, itemType: "SECTION", sectionId: section.id, sortOrder: 0 },
+    });
+
+    // Forhåndsvisningen skal SI fra, ikke la slettingen kaste halvveis i en transaksjon.
+    const preview = await request(app)
+      .get(`/api/admin/content/courses/${newCourse.id}/cascade-delete-preview`)
+      .set(adminHeaders);
+    expect(preview.status, JSON.stringify(preview.body)).toBe(200);
+    expect(preview.body.deletable, "kurset skal ikke være slettbart").toBe(false);
+    expect(JSON.stringify(preview.body.blockers)).toMatch(/kursbevis/i);
+
+    expect(await prisma.courseSection.count({ where: { id: section.id } })).toBe(1);
+  });
+});

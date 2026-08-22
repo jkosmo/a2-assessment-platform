@@ -126,8 +126,51 @@ export function assertModuleNotInIssuedCertificate(moduleId: string, verb: strin
   return assertNotInIssuedCertificate(moduleId, "moduleSnapshotJson", "Modulen", verb);
 }
 
-export function assertSectionNotInIssuedCertificate(sectionId: string, verb: string): Promise<void> {
-  return assertNotInIssuedCertificate(sectionId, "sectionSnapshotJson", "Seksjonen", verb);
+/**
+ * Samme regel som `assertSectionNotInIssuedCertificate`, men RETURNERER grunnen i stedet for å
+ * kaste — for kaskadeanalysen, som samler blokkeringer og viser dem i en forhåndsvisning.
+ *
+ * ⚠️ Regelen bor ett sted. To kopier — én som kaster og én som rapporterer — ville drevet fra
+ * hverandre, og det er nettopp det #938 handlet om.
+ */
+export async function describeIssuedCertificateBlock(sectionId: string): Promise<string | null> {
+  try {
+    await assertSectionNotInIssuedCertificate(sectionId, "slettes");
+    return null;
+  } catch (error) {
+    if (error instanceof ValidationError) return error.message;
+    throw error;
+  }
+}
+
+export async function assertSectionNotInIssuedCertificate(sectionId: string, verb: string): Promise<void> {
+  await assertNotInIssuedCertificate(sectionId, "sectionSnapshotJson", "Seksjonen", verb);
+
+  // ⚠️ Kursbevis utstedt FØR v2.23.0 har `sectionSnapshotJson = NULL` — kolonnen er nullbar og med
+  // vilje ikke bakfylt (`doc/DECISIONS.md`: NULL betyr ærlig «utstedt før vi registrerte dette»).
+  // Et `contains`-oppslag treffer aldri NULL, så sjekken over beskyttet ingen av dem.
+  //
+  // Vi kan ikke vite hvilke seksjoner et slikt bevis dekket — dataene finnes ikke. Men vi har en
+  // ærlig stedfortreder: leste deltakeren seksjonen i det kurset hen fikk beviset for, var den en
+  // del av grunnlaget. Det er konservativt i riktig retning, og det er alt dataene tillater.
+  const legacy = await prisma.courseCompletion.findMany({
+    where: { sectionSnapshotJson: null },
+    select: { userId: true, courseId: true },
+  });
+  if (legacy.length === 0) return;
+
+  const covered = await prisma.courseSectionRead.count({
+    where: {
+      sectionId,
+      OR: legacy.map((c) => ({ userId: c.userId, courseId: c.courseId })),
+    },
+  });
+  if (covered > 0) {
+    throw new ValidationError(
+      `Seksjonen kan ikke ${verb} fordi den inngår i ${covered} kursbevis utstedt før `
+      + "øyeblikksbildet ble innført. Arkiver den i stedet — et kursbevis må kunne vise hva det dekket.",
+    );
+  }
 }
 
 // Antall deltakere som har PÅBEGYNT (lest en seksjon eller levert et forsøk på en kurs-modul)

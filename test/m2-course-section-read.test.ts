@@ -161,3 +161,69 @@ describe("#944: en uleselig seksjon kan verken åpnes eller markeres lest", () =
     expect(detail.body.course.progress.sectionTotal, "den uleselige skal ikke telle som krav").toBe(0);
   });
 });
+
+describe("#945: arkiverte moduler telles ikke i framdriften", () => {
+  it("moduleTotal utelater en arkivert modul — kortet og porten er enige", async () => {
+    // ⚠️ Denne testen finnes fordi jeg glemte modulsiden. Jeg filtrerte arkiverte SEKSJONER i
+    // kursdetaljen og lot modultellingen stå, så porten krevde 1 modul mens kortet viste 2.
+    //
+    // Funnet ved å måle ekte data på stage 2026-08-22 — kurset «Samfunnsvitere» viste
+    // moduleTotal 5 mens porten krevde 4. Ingen test fanget det, fordi alle testene mine brukte
+    // seksjoner.
+    const course = await prisma.course.create({
+      data: { title: `Archived Module Course ${Date.now()}`, publishedAt: new Date() },
+      select: { id: true },
+    });
+    const live = await prisma.module.create({
+      data: { title: JSON.stringify({ "en-GB": "Live module" }) },
+      select: { id: true },
+    });
+    const archived = await prisma.module.create({
+      data: { title: JSON.stringify({ "en-GB": "Archived module" }), archivedAt: new Date() },
+      select: { id: true },
+    });
+    await prisma.courseItem.createMany({
+      data: [
+        { courseId: course.id, itemType: "MODULE", moduleId: live.id, sortOrder: 0 },
+        { courseId: course.id, itemType: "MODULE", moduleId: archived.id, sortOrder: 1 },
+      ],
+    });
+
+    const detail = await request(app).get(`/api/courses/${course.id}`).set(participantHeaders);
+    expect(detail.status).toBe(200);
+    const p = detail.body.course.progress;
+
+    expect(p.moduleTotal, "den arkiverte skal ikke telle som krav").toBe(1);
+    expect(p.total, "totalen følger av det samme").toBe(1);
+
+    // Elementet vises fortsatt i sekvensen, men markert utilgjengelig — deltakeren skal se at det
+    // er der, ikke lure på om noe forsvant.
+    //
+    // ⚠️ Assertionen peker på DEN ARKIVERTE modulen, ikke på et antall. Første utkast telte
+    // `available === false` og forventet 1 — men den «levende» modulen i fikstureringen har ingen
+    // publisert versjon og er derfor også utilgjengelig. Å telle ville målt fikstureringen min,
+    // ikke regelen.
+    const items = detail.body.course.items as Array<{ type: string; moduleId?: string; available?: boolean }>;
+    expect(items).toHaveLength(2);
+    expect(items.find((i) => i.moduleId === archived.id)?.available).toBe(false);
+  });
+
+  it("KONTROLLCASE: to levende moduler teller begge", async () => {
+    // Uten denne ville «filtrer bort alt» bestått testen over.
+    const course = await prisma.course.create({
+      data: { title: `Live Module Course ${Date.now()}`, publishedAt: new Date() },
+      select: { id: true },
+    });
+    const a = await prisma.module.create({ data: { title: JSON.stringify({ "en-GB": "A" }) }, select: { id: true } });
+    const b = await prisma.module.create({ data: { title: JSON.stringify({ "en-GB": "B" }) }, select: { id: true } });
+    await prisma.courseItem.createMany({
+      data: [
+        { courseId: course.id, itemType: "MODULE", moduleId: a.id, sortOrder: 0 },
+        { courseId: course.id, itemType: "MODULE", moduleId: b.id, sortOrder: 1 },
+      ],
+    });
+
+    const detail = await request(app).get(`/api/courses/${course.id}`).set(participantHeaders);
+    expect(detail.body.course.progress.moduleTotal).toBe(2);
+  });
+});
