@@ -15,22 +15,15 @@
 // they are never written to files or echoed in output.
 
 import { readFile } from "node:fs/promises";
+import { synthesizeModuleEnvelope as buildModuleEnvelope } from "./synthesize-envelopes.mjs";
 import { pathToFileURL } from "node:url";
 import process from "node:process";
 
-// The module payload is wrapped in a module-scoped a2-content-export/v1 envelope with an
-// EMPTY audit: no source publish history means the import can never auto-publish.
-export function synthesizeModuleEnvelope(modulePayload) {
-  return {
-    exportFormat: "a2-content-export/v1",
-    exportedAt: new Date().toISOString(),
-    scope: "module",
-    module: {
-      module: modulePayload.module,
-      activeVersion: { ...modulePayload.activeVersion, audit: {} },
-    },
-  };
-}
+// #987: emitteren bor nå i synthesize-envelopes.mjs og deles med FILVEIEN. Den lå her, altså kun
+// på API-veien, og det er grunnen til at filveien aldri fikk en seksjonsvariant — de to stiene
+// måtte oppdateres hver for seg, og bare denne ble det. Re-eksporteres for bakoverkompatibilitet:
+// test/agent-authoring-skill-import.test.ts importerer navnet herfra.
+export { synthesizeModuleEnvelope } from "./synthesize-envelopes.mjs";
 
 async function requestJson(fetchImpl, method, url, headers, body) {
   const response = await fetchImpl(url, {
@@ -111,7 +104,7 @@ export async function importPackage({ baseUrl, headers, pkg, runId, fetchImpl = 
       }
     } else if (step.op === "create_module") {
       result = await requestJson(fetchImpl, "POST", `${baseUrl}/api/admin/content/modules/import`, headers, {
-        payload: synthesizeModuleEnvelope(object.payload),
+        payload: buildModuleEnvelope(object.payload),
         mode: "createNew",
         autoPublish: false,
         clientRef: step.clientRef,

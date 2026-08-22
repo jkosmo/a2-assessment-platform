@@ -175,11 +175,16 @@ export function validateExportEnvelopeStructure(envelope) {
   }
   if (envelope.exportFormat !== EXPORT_FORMAT_VERSION) err("exportFormat", `must be "${EXPORT_FORMAT_VERSION}"`);
   if (!isStrictDatetime(envelope.exportedAt)) err("exportedAt", "must be Date.toISOString() shape (YYYY-MM-DDTHH:mm:ss.sssZ)");
-  if (!["module", "course"].includes(envelope.scope)) err("scope", 'must be "module" or "course"');
+  // #987: "section" var utelatt. Frittstående seksjonseksport kom med #916, etter at denne
+  // validatoren ble skrevet, og skillet ble aldri oppdatert. Konsekvensen var ikke bare en manglende
+  // streng: skillets egen rule 7 ("valider mot samme skjema som importen") kunne IKKE oppfylles for
+  // seksjoner, fordi validatoren avviste en gyldig seksjonskonvolutt som ukjent scope.
+  if (!["module", "course", "section"].includes(envelope.scope)) err("scope", 'must be "module", "course" or "section"');
 
-  // scope <-> payload must match (mirrors the two .refine()s).
+  // scope <-> payload must match (mirrors the three .refine()s).
   if ((envelope.scope === "module") !== (envelope.module !== undefined)) err("scope", "module scope requires a module payload (and vice versa)");
   if ((envelope.scope === "course") !== (envelope.course !== undefined)) err("scope", "course scope requires a course payload (and vice versa)");
+  if ((envelope.scope === "section") !== (envelope.section !== undefined)) err("scope", "section scope requires a section payload (and vice versa)");
 
   const validateAudit = (audit, path) => {
     if (audit == null) return;
@@ -256,6 +261,10 @@ export function validateExportEnvelopeStructure(envelope) {
       });
     }
   }
+  if (envelope.scope === "section" && envelope.section) {
+    validateSectionPayload(envelope.section, "section");
+  }
+
   if (envelope.scope === "module" && envelope.module) {
     validateModulePayload(envelope.module, "module");
   }

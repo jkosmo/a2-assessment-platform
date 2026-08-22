@@ -114,6 +114,28 @@ uten konsekvens for kursporten. Trenger et ja eller nei fra produkteier.
 
 ---
 
+## Innholdsleveranse fra agent
+
+### Fil-eksport/-import er hovedveien; API-veien beholdes som mulighet
+
+Agent-authoring-API-et (`/agent-authoring/validate` + opprettelse) er bygd, testet og utrullet på
+både stage og prod. Det er likevel **ikke** veien innhold faktisk kommer inn: produkteier bruker
+fil-eksport og -import, og det fungerer godt for kurs.
+
+**Hvorfor:** API-veien krever et agent-token som aldri er utstedt, og at agenten har nettverk til
+verten — noe en agent i en sandkasse-chat ikke har. Filveien har ingen av delene som forutsetning.
+
+**Beslutning (produkteier, 2026-08-22):** behold API-veien som en mulighet for framtiden, ikke fjern
+den. Men **filveien er den som skal virke**, og den må dekke isolerte moduler og seksjoner — ikke
+bare kurs.
+
+⚠️ Konsekvens for skillet: det som `SKILL.md` kaller «fallback» er i praksis hovedveien. Den ble
+aldri oppdatert da frittstående seksjonseksport kom (#916), og derfor finnes `scope: "section"`
+ingen steder i skillet. Det er årsaken til #987 — ikke en glipp i én fil, men at den mest brukte
+stien var dokumentert som unntaket.
+
+**Sak:** #987 · **Dato:** 2026-08-22 · **Status:** avklart, ikke implementert
+
 ## Innhold og språk
 
 ### Ren streng betyr «ett språk, ikke oversatt ennå»
