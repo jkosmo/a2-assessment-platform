@@ -5,7 +5,7 @@ import { runInTransaction } from "../../db/transaction.js";
 import type { LlmStructuredAssessment } from "./llmAssessmentService.js";
 import { recordAuditEvent } from "../../services/auditService.js";
 import { auditActions, auditEntityTypes } from "../../observability/auditEvents.js";
-import { upsertRecertificationStatusFromDecision } from "../certification/index.js";
+import { upsertCertificationStatusFromDecision } from "../certification/index.js";
 import {
   hasForcingRedFlag,
   hasInsufficientEvidenceSignal,
@@ -242,7 +242,7 @@ export async function createMcqOnlyDecision(input: BuildMcqOnlyDecisionInput) {
 
     await repo.updateSubmissionStatus(input.submissionId, SubmissionStatus.COMPLETED);
 
-    await upsertRecertificationStatusFromDecision({
+    await upsertCertificationStatusFromDecision({
       decisionId: decision.id,
       actorId: input.userId,
     }, tx);
@@ -314,7 +314,7 @@ export async function createAssessmentDecision(input: BuildDecisionInput) {
     );
 
     if (!resolved.needsManualReview) {
-      await upsertRecertificationStatusFromDecision({
+      await upsertCertificationStatusFromDecision({
         decisionId: decision.id,
         actorId: input.userId,
       }, tx);

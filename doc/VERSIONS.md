@@ -2,6 +2,60 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.26.0 - 2026-08-22
+
+**Resertifisering av moduler er fjernet (#989).** En bestått modul gjelder til den revideres —
+ingen utløpsdato, ingen resertifisering. Produkteier 2026-08-22.
+
+Mekanismen kostet uten å virke:
+
+| | |
+|---|---|
+| **Alle** moduler utløp etter 365 dager | én global `validityDays`, ikke per modul |
+| Utløpt blokkerte **ingenting** | `EXPIRED` sto i `CERTIFICATION_PASSED_STATUSES` og telte som bestått |
+| Følgen | påminnelser om å fornye noe ingenting krevde fornyet |
+
+### Fjernet
+
+- `recertificationService.ts` → `certificationStatusService.ts`. `deriveRecertificationStatus`,
+  `runRecertificationReminderSchedule` og hele påminnelses-utsendelsen er borte; igjen står
+  `upsertCertificationStatusFromDecision`, som skriver `ACTIVE`/`NOT_CERTIFIED` + `passedAt`.
+- `recertification`-blokka i `config/assessment-rules.json` og i `assessmentRules.ts`.
+- `certificationRepository.findCertificationsForReminderSchedule` (spørringen på `expiryDate`).
+- `POST /api/reports/recertification/reminders/run` → 404.
+- Operasjonelle hendelser `recertification_reminder_sent` / `_failed`.
+
+### Beholdt — og hvorfor
+
+- **`passedAt`.** Når en modul ble bestått har verdi i seg selv.
+- **Kolonnene `expiryDate` og `recertificationDueDate`.** Expand/contract: de slutter å skrives,
+  eksisterende rader beholder verdiene som historikk. Ingen destruktiv migrasjon nå.
+- **`DUE_SOON`/`DUE`/`EXPIRED` i `CERTIFICATION_PASSED_STATUSES`.** Det er DETTE som gjør fjerningen
+  konsekvensfri. Historiske rader står med de verdiene; krymper man lista til `["ACTIVE"]` mister de
+  kursbeviset sitt — en bestått-avgjørelse ville endret seg.
+- **Audit-handlingsnavnene med «recertification».** Persisterte verdier på eksisterende rader, og
+  `auditPiiScrub` trenger navnene for å kunne vaske e-post ut av gamle påminnelsesrader.
+- **Kursfrister (`CourseEnrollment.dueAt`).** En frist for å bli *ferdig*, ikke en utløpsdato på
+  kunnskap. Helt urørt.
+
+### API-endring
+
+`GET /api/reports/recertification` beholder URL-en, men rapporterer nå lagret tilstand i stedet for
+utledet utløpsstatus: `reportType` → `certification-status`, `status` → `ACTIVE`/`NOT_CERTIFIED`,
+utløpsfeltene og tellingen per livssyklustilstand er borte. Se `doc/API_REFERENCE.md`.
+
+### Verifisering
+
+Den bærende testen er skrevet først: `test/unit/course-certificate-gate-invariant.test.ts` kjører
+kursbevisporten (`courseCompletionService` → `countPassedModulesForUser`) mot en Prisma-dobbel som
+faktisk tolker `status: { in: … }`, og pinner at historiske rader med `EXPIRED`/`DUE`/`DUE_SOON`
+fortsatt gir kursbevis — med `ACTIVE` og `NOT_CERTIFIED` som kontrollcaser.
+
+**Mutasjonsverifisert:** krymp `CERTIFICATION_PASSED_STATUSES` til `["ACTIVE"]` → de tre
+legacy-casene blir røde på utstedelses-assertionen, kontrollcasene forblir grønne. Tilsvarende for
+utløpsfeltene (skriv `expiryDate` igjen → repository-testen blir rød) og for config-blokka (legg
+`recertification` tilbake i skjemaet → schema-testen blir rød).
+
 ## 2.25.5 - 2026-08-22
 
 **`normalizeLocalizedTitleSeed` viftet kildeteksten ut i alle tre språk (#981).**

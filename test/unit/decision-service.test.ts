@@ -6,7 +6,7 @@ const assessmentDecisionCreate = vi.fn();
 const manualReviewCreate = vi.fn();
 const submissionUpdate = vi.fn();
 const recordAuditEvent = vi.fn();
-const upsertRecertificationStatusFromDecision = vi.fn();
+const upsertCertificationStatusFromDecision = vi.fn();
 
 vi.mock("../../src/db/prisma.js", () => ({
   prisma: { $transaction: vi.fn((cb: (tx: unknown) => unknown) => cb({})) },
@@ -30,7 +30,7 @@ vi.mock("../../src/services/auditService.js", () => ({
 }));
 
 vi.mock("../../src/modules/certification/index.js", () => ({
-  upsertRecertificationStatusFromDecision,
+  upsertCertificationStatusFromDecision,
 }));
 
 // Default rubric_scores: 5 criteria summing to 14 — must equal rubric_total to avoid
@@ -73,10 +73,10 @@ describe("decision service", () => {
     manualReviewCreate.mockReset();
     submissionUpdate.mockReset();
     recordAuditEvent.mockReset();
-    upsertRecertificationStatusFromDecision.mockReset();
+    upsertCertificationStatusFromDecision.mockReset();
   });
 
-  it("creates an automatic completion decision and updates recertification when review is not needed", async () => {
+  it("creates an automatic completion decision and updates certification status when review is not needed", async () => {
     assessmentDecisionCreate.mockResolvedValue({
       id: "decision-1",
       passFailTotal: true,
@@ -107,7 +107,7 @@ describe("decision service", () => {
     );
     expect(manualReviewCreate).not.toHaveBeenCalled();
     expect(submissionUpdate).toHaveBeenCalledWith("submission-1", SubmissionStatus.COMPLETED);
-    expect(upsertRecertificationStatusFromDecision).toHaveBeenCalledWith({
+    expect(upsertCertificationStatusFromDecision).toHaveBeenCalledWith({
       decisionId: "decision-1",
       actorId: "user-1",
     }, expect.anything());
@@ -128,7 +128,7 @@ describe("decision service", () => {
     });
   });
 
-  it("opens manual review and skips recertification when manual review is forced", async () => {
+  it("opens manual review and skips the certification write when manual review is forced", async () => {
     assessmentDecisionCreate.mockResolvedValue({
       id: "decision-2",
       passFailTotal: true,
@@ -166,7 +166,7 @@ describe("decision service", () => {
       reviewStatus: "OPEN",
     });
     expect(submissionUpdate).toHaveBeenCalledWith("submission-2", SubmissionStatus.UNDER_REVIEW);
-    expect(upsertRecertificationStatusFromDecision).not.toHaveBeenCalled();
+    expect(upsertCertificationStatusFromDecision).not.toHaveBeenCalled();
     expect(recordAuditEvent).toHaveBeenCalledWith(
       expect.objectContaining({
         entityType: "manual_review",
@@ -237,7 +237,7 @@ describe("decision service", () => {
     );
     expect(manualReviewCreate).not.toHaveBeenCalled();
     expect(submissionUpdate).toHaveBeenCalledWith("submission-3", SubmissionStatus.COMPLETED);
-    expect(upsertRecertificationStatusFromDecision).toHaveBeenCalledWith({
+    expect(upsertCertificationStatusFromDecision).toHaveBeenCalledWith({
       decisionId: "decision-3",
       actorId: "user-3",
     }, expect.anything());

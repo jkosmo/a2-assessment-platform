@@ -131,16 +131,6 @@
       "manualReviewRecommendationMismatch": true
     }
   },
-  "recertification": {
-    "validityDays": 365,
-    "dueOffsetDays": 30,
-    "dueSoonDays": 14,
-    "reminderDaysBefore": [
-      30,
-      7,
-      1
-    ]
-  },
   "aiInfluence": {
     "enabled": true,
     "shadowMode": false,

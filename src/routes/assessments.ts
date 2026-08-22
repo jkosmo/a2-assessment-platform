@@ -33,7 +33,7 @@ assessmentsRouter.post("/:submissionId/run", assessmentRunLimiter, async (reques
   if (submission.submissionStatus === "COMPLETED" && submission.decisions.length > 0 && submission.decisions[0].passFailTotal === true) {
     response.status(409).json({
       error: "conflict",
-      message: "This submission has already been completed and passed. Cannot re-run for recertification.",
+      message: "This submission has already been completed and passed. Cannot re-run.",
     });
     return;
   }

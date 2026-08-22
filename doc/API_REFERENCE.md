@@ -147,12 +147,31 @@ The course master toggle is set via the admin course API: `POST`/`PUT /api/admin
 | `GET` | `/api/reports/appeals` | ADMINISTRATOR, REPORT_READER, SUBJECT_MATTER_OWNER |
 | `GET` | `/api/reports/mcq-quality` | ADMINISTRATOR, REPORT_READER, SUBJECT_MATTER_OWNER |
 | `GET` | `/api/reports/recertification` | ADMINISTRATOR, REPORT_READER, SUBJECT_MATTER_OWNER |
-| `POST` | `/api/reports/recertification/reminders/run?asOf=<ISO-date>` | ADMINISTRATOR |
 | `GET` | `/api/reports/analytics/semantic-model` | ADMINISTRATOR, REPORT_READER, SUBJECT_MATTER_OWNER |
 | `GET` | `/api/reports/analytics/trends?granularity=<day\|week\|month>` | ADMINISTRATOR, REPORT_READER, SUBJECT_MATTER_OWNER |
 | `GET` | `/api/reports/analytics/cohorts?cohortBy=<month\|department>` | ADMINISTRATOR, REPORT_READER, SUBJECT_MATTER_OWNER |
 | `GET` | `/api/reports/analytics/data-quality` | ADMINISTRATOR, REPORT_READER, SUBJECT_MATTER_OWNER |
 | `GET` | `/api/reports/export?type=<report>&format=csv` | ADMINISTRATOR, REPORT_READER, SUBJECT_MATTER_OWNER |
+
+### #989 — recertification removed
+
+`POST /api/reports/recertification/reminders/run` is **gone** (404). Modules no longer expire, so
+there is nothing to remind anyone to renew. Course due-date reminders are a separate mechanism and
+are unaffected (`CourseReminderMonitor`).
+
+`GET /api/reports/recertification` **remains** — the URL keeps its historical name, but the response
+now reports stored certification state instead of a derived expiry state:
+
+| | Before | After |
+|---|---|---|
+| `reportType` | `recertification-status` | `certification-status` |
+| `rows[].status` | `ACTIVE` \| `DUE_SOON` \| `DUE` \| `EXPIRED` \| `NOT_CERTIFIED` | `ACTIVE` \| `NOT_CERTIFIED` |
+| `rows[]` expiry fields | `expiryDate`, `recertificationDueDate`, `daysUntilDue`, `daysUntilExpiry` | removed |
+| `totals` | one count per lifecycle value | `certificationCount`, `ACTIVE`, `NOT_CERTIFIED` |
+
+Historical rows still holding `DUE_SOON`/`DUE`/`EXPIRED` are reported as `ACTIVE` — they counted as
+passed before and still do. `?status=` filtering accepts the two remaining values. The CSV export
+token is unchanged (`/api/reports/export?type=recertification`).
 
 ---
 

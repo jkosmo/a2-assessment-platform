@@ -132,6 +132,9 @@ meRouter.get("/data", async (request, response, next) => {
           roleAssignments: {
             select: { appRole: true, validFrom: true, validTo: true, createdAt: true, createdBy: true },
           },
+          // #989: `expiryDate` skrives ikke lenger (moduler utløper ikke), men kolonnen står igjen og
+          // eldre rader har verdier. Innsynseksporten skal vise det som FAKTISK er lagret om
+          // personen, så feltet blir med — det er historikk, ikke en gjeldende utløpsdato.
           certifications: {
             select: { moduleId: true, status: true, passedAt: true, expiryDate: true, updatedAt: true },
           },

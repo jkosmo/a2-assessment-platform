@@ -21,9 +21,6 @@ vi.mock("../../src/config/assessmentRules.js", () => ({
       discriminationMin: 0.15,
       distractorPickRateMin: 0.05,
     },
-    recertification: {
-      dueSoonDays: 30,
-    },
   }),
 }));
 
@@ -40,7 +37,8 @@ vi.mock("../../src/config/reportingAnalytics.js", () => ({
 }));
 
 vi.mock("../../src/modules/certification/index.js", () => ({
-  deriveRecertificationStatus: vi.fn(),
+  isCertificationPassed: (status: string | null | undefined) =>
+    status != null && status !== "NOT_CERTIFIED",
 }));
 
 describe("reporting service", () => {

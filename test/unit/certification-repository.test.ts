@@ -16,8 +16,6 @@ describe("certification repository", () => {
       latestDecisionId: "decision-1",
       status: "ACTIVE",
       passedAt: new Date("2026-03-11T00:00:00.000Z"),
-      expiryDate: new Date("2027-03-11T00:00:00.000Z"),
-      recertificationDueDate: new Date("2027-02-09T00:00:00.000Z"),
     });
 
     expect(upsert).toHaveBeenCalledWith(
@@ -41,27 +39,38 @@ describe("certification repository", () => {
     );
   });
 
-  it("queries reminder-schedule certifications with user and module context", async () => {
-    const findMany = vi.fn().mockResolvedValue([]);
+  // #989: utløpsfeltene skal ikke lenger SKRIVES. Kolonnene står igjen (expand/contract), så en
+  // regresjon her ville vært stille — derfor pinnes fraværet, ikke bare nærværet av resten.
+  it("skriver hverken expiryDate eller recertificationDueDate", async () => {
+    const upsert = vi.fn().mockResolvedValue({ id: "cert-1" });
     const repository = createCertificationRepository({
-      certificationStatus: {
-        findMany,
-      },
+      certificationStatus: { upsert },
     } as never);
 
-    const upperBound = new Date("2026-08-01T00:00:00.000Z");
-    await repository.findCertificationsForReminderSchedule(upperBound);
+    await repository.upsertCertificationStatus({
+      userId: "user-1",
+      moduleId: "module-1",
+      latestDecisionId: "decision-1",
+      status: "ACTIVE",
+      passedAt: new Date("2026-03-11T00:00:00.000Z"),
+    });
 
-    expect(findMany).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: {
-          expiryDate: { not: null, lte: upperBound },
-        },
-        include: expect.objectContaining({
-          user: expect.any(Object),
-          module: expect.any(Object),
-        }),
-      }),
-    );
+    const call = upsert.mock.calls[0][0] as {
+      update: Record<string, unknown>;
+      create: Record<string, unknown>;
+    };
+    expect(call.update).not.toHaveProperty("expiryDate");
+    expect(call.update).not.toHaveProperty("recertificationDueDate");
+    expect(call.create).not.toHaveProperty("expiryDate");
+    expect(call.create).not.toHaveProperty("recertificationDueDate");
+    // Kontrollcase: `passedAt` BEHOLDES — når modulen ble bestått har verdi i seg selv.
+    expect(call.update).toMatchObject({ passedAt: new Date("2026-03-11T00:00:00.000Z") });
+    expect(call.create).toMatchObject({ passedAt: new Date("2026-03-11T00:00:00.000Z") });
+  });
+
+  it("har ingen spørring for påminnelsesplanen lenger (#989)", () => {
+    const repository = createCertificationRepository({ certificationStatus: {} } as never);
+
+    expect(repository).not.toHaveProperty("findCertificationsForReminderSchedule");
   });
 });

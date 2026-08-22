@@ -130,6 +130,12 @@ export const auditActions = {
     courseUnassigned: "class_course_unassigned",
   },
   certification: {
+    // #989: begrepet «resertifisering» er fjernet fra koden, men disse handlingsnavnene er
+    // PERSISTERTE verdier på eksisterende AuditEvent-rader. De beholdes uendret:
+    //  - `recertification_status_upserted` skrives fortsatt (nå uten utløpsfelter i metadata) og
+    //    står i retensjonsfilteret (`auditRetentionService`).
+    //  - de to påminnelses-handlingene skrives ALDRI mer, men gamle rader finnes, og
+    //    `auditPiiScrub` trenger navnene for å kunne vaske e-post ut av dem (#843/#806).
     recertificationStatusUpserted: "recertification_status_upserted",
     recertificationReminderSent: "recertification_reminder_sent",
     recertificationReminderFailed: "recertification_reminder_failed",
@@ -321,6 +327,8 @@ export type AuditMetadataByAction = {
     moduleId: string;
     decisionId: string;
   }>;
+  // #989: HISTORISK. Ingenting skriver disse to lenger — formen står igjen fordi gamle rader har den,
+  // og fordi PII-vasken (`auditPiiScrub`) fortsatt må kunne lese og rydde dem.
   // #806 (GDPR): recipient PII (email/name) must NOT be persisted in indefinitely-retained audit
   // metadata — store userId only and resolve details at read time. Other fields (moduleId, channel,
   // reminderDaysBefore, asOfDate, expiryDate, delivered, failureReason) are also recorded by the writer.

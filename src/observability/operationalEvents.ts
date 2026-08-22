@@ -20,9 +20,10 @@ export const operationalEvents = {
     participantNotificationFailed: "participant_notification_failed",
     participantNotificationPipelineFailed: "participant_notification_pipeline_failed",
     participantNotificationSent: "participant_notification_sent",
-    recertificationDowngradeSkipped: "recertification_downgrade_skipped",
-    recertificationReminderSent: "recertification_reminder_sent",
-    recertificationReminderFailed: "recertification_reminder_failed",
+    // #989: resertifiseringspåminnelsene er borte. Dette er vakta mot at en sen FAIL fra en ELDRE
+    // innlevering overskriver en bestått sertifisering — den har aldri handlet om resertifisering,
+    // og heter nå det den gjør.
+    certificationDowngradeSkipped: "certification_downgrade_skipped",
   },
   http: {
     request: "http_request",
@@ -97,17 +98,10 @@ export type OperationalEventMetadataByName = {
   [operationalEvents.certification.participantNotificationSent]: EventMetadata<{
     channel: string;
   }>;
-  [operationalEvents.certification.recertificationDowngradeSkipped]: EventMetadata<{
+  [operationalEvents.certification.certificationDowngradeSkipped]: EventMetadata<{
     userId: string;
     moduleId: string;
     decisionId: string;
-  }>;
-  [operationalEvents.certification.recertificationReminderSent]: EventMetadata<{
-    channel: string;
-  }>;
-  [operationalEvents.certification.recertificationReminderFailed]: EventMetadata<{
-    channel: string;
-    failureReason: string;
   }>;
   [operationalEvents.http.request]: EventMetadata<{
     method: string;

@@ -12,7 +12,7 @@ export {
 export {
   getManualReviewQueueReport,
   getAppealsReport,
-  getRecertificationStatusReport,
+  getCertificationStatusReport,
 } from "./reviewAppealReport.js";
 
 export {

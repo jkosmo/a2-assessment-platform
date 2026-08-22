@@ -185,22 +185,30 @@ A `CertificationStatus` is maintained per `(userId, moduleId)`.
 
 Current behavior:
 - every new authoritative decision updates `latestDecisionId`
-- passing decisions produce a recertification lifecycle state
+- passing decisions produce `ACTIVE`
 - failing decisions produce `NOT_CERTIFIED`
 
-Current lifecycle values:
+#989: **modules do not expire.** A passed module stays passed until the module is revised — there is
+no expiry date and no recertification. Course due dates (`CourseEnrollment.dueAt`) are a different
+thing and are unaffected.
+
+Lifecycle values that are written:
 - `ACTIVE`
+- `NOT_CERTIFIED`
+
+Lifecycle values that still exist in the `CertificationLifecycleStatus` enum but are never written
+(expand/contract — historical rows keep them, and they still count as passed):
 - `DUE_SOON`
 - `DUE`
 - `EXPIRED`
-- `NOT_CERTIFIED`
 
 Fields maintained from the latest authoritative decision:
 - `latestDecisionId`
 - `status`
 - `passedAt`
-- `expiryDate`
-- `recertificationDueDate`
+
+Columns kept but no longer written (historical values remain): `expiryDate`,
+`recertificationDueDate`.
 
 This is why a later manual override or appeal resolution can replace the effective certification outcome without mutating older decisions.
 

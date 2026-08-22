@@ -1,7 +1,7 @@
 import type { DecisionType as DecisionTypeType } from "@prisma/client";
 import { SubmissionStatus } from "../../db/prismaRuntime.js";
 import { createDecisionRepository } from "../../repositories/decisionRepository.js";
-import { upsertRecertificationStatusFromDecision } from "../certification/index.js";
+import { upsertCertificationStatusFromDecision } from "../certification/index.js";
 import { recordAuditEvent } from "../../services/auditService.js";
 import type { DbTransactionClient } from "../../db/transaction.js";
 import { auditEntityTypes, type AuditAction, type AuditMetadataByAction } from "../../observability/auditEvents.js";
@@ -69,7 +69,7 @@ export async function appendDecisionWithLineage(
 
   await repo.updateSubmissionStatus(input.parentDecision.submissionId, SubmissionStatus.COMPLETED);
 
-  await upsertRecertificationStatusFromDecision(
+  await upsertCertificationStatusFromDecision(
     { decisionId: decision.id, actorId: input.actorId },
     tx,
   );
