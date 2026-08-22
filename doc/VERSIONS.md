@@ -2,6 +2,60 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.25.2 - 2026-08-22
+
+**Tre dekningsvakter, og de to feilene den tredje fant (#941).** Mekanisme 2 fra
+kompleksitetsbremsen — den billigste av de fire, og den eneste som virker uten at noen husker noe.
+
+### Hva en dekningsvakt er
+
+En liste over «alle stedene som må gjøre X» kan per definisjon ikke oppdage stedet ingen tenkte på.
+En test som **finner kallerne selv** kan. Unntakslista er poenget: den hindrer ikke drift, den gjør
+den synlig — og hver oppføring må ha en grunn noen har skrevet ned.
+
+| Vakt | Finner | Unntak |
+|---|---|---|
+| `findCourseById` avgjør synlighet | 8 kallere | 4, hver med grunn |
+| Rå servertekst i toast (ratsj) | 35 i 8 filer | baseline per fil |
+| `.hidden` på display-settende klasse | 2 ekte feil | ingen — **fikset** |
+
+### Den tredje fant to ekte feil, uten å få dem fortalt
+
+`.hidden { display: none }` står uten `!important` og taper cascaden mot enhver klasse som setter
+`display` senere. `participant.html` hadde `class="module-brief hidden"` mot
+`.module-brief { display: grid }` — så en tom OPPGAVE/VEILEDNING-boks med ramme og gradient sto
+synlig ved **hver sidelast**, til `renderSelectedModuleSummary()` rakk å rette den med `setHidden`.
+
+Rettet i markup, ikke unntatt: `.hidden` → inline `style="display:none"`. Begge elementene styres
+allerede av `setHidden`, som nuller `style.display`, så de virker nå fra første render.
+
+⚠️ Vakta utleder de display-settende klassene **fra CSS-en**. Mitt første utkast av stage-testen
+brukte en hardkodet liste og ga fem falske positive på `class="card hidden"` — `.card` setter ikke
+`display` i det hele tatt. Og `CLAUDE.md` sin egen fellelist nevner både `.card` og `.content-card`;
+ingen av dem setter display. **En nedskrevet liste råtner. En som utledes gjør ikke det.**
+
+### Ratsjen
+
+Rå servertekst er en **ratsj**, ikke en forbudsliste: gjelden finnes fra før (#972), og en vakt som
+er rød fra dag én blir slått av. Baselinen fryser antallet per fil — nye forekomster feiler, og
+*fikser* man noen, feiler den også, med beskjed om å sette tallet ned. Et tall som bare kan stå
+stille er ikke en ratsj.
+
+Første forsøk brukte en enlinjes regex og fant **5**. Skanningen sa 40+. Forskjellen var flerlinjede
+kall — og det er nettopp de lange som dumper JSON. Med balansert parentes-lesing: **35**. Hadde
+baselinen frosset på 5, ville vakta sluppet gjennom 30 eksisterende mens den så grønn ut.
+
+### Utrullingskontroller mot stage og prod
+
+`test/stage/release-surface.spec.ts` måler om endringene faktisk **kom ut** — ikke om de virker. De
+fleste punktene på en manuell testliste er egentlig det spørsmålet.
+
+⚠️ Stiene der er dyrekjøpte. På ett døgn bommet jeg på fem: `/participant.js` (riktig
+`/static/participant.js`), `/healthz` på parseren (riktig `/health`), `/participant.html` (riktig
+`/participant`), og spec-en havnet først i feil repo-mappe. **Hver bom så ut som et funn** — null
+treff på en grep leser som «endringen mangler». `fetchText` feiler derfor på ikke-200 **og** på tom
+kropp.
+
 ## 2.25.1 - 2026-08-21
 
 **Sikkerhetsfiks: kursimport med `replaceExisting` manglet eierskapssjekk (#942).**
