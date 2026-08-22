@@ -1,3 +1,4 @@
+import { isSectionAvailableToParticipant } from "./sectionAvailability.js";
 import { prisma } from "../../db/prisma.js";
 import { createCourseRepository } from "./courseRepository.js";
 import { recordAuditEvent } from "../../services/auditService.js";
@@ -18,7 +19,15 @@ type CourseRepo = ReturnType<typeof createCourseRepository>;
 async function evaluateCourseCompletion(
   repo: CourseRepo,
   userId: string,
-  course: { id: string; modules: { moduleId: string }[]; publishedAt?: Date | null; archivedAt?: Date | null },
+  // #945: `module.archivedAt` er PÅKREVD i typen, ikke valgfri. Alle tre repository-veiene bærer
+  // det nå, og en fjerde kaller som glemmer det skal ikke kompilere — da ville arkivfilteret under
+  // stille ha sluppet gjennom alt.
+  course: {
+    id: string;
+    modules: { moduleId: string; module: { archivedAt: Date | null } | null }[];
+    publishedAt?: Date | null;
+    archivedAt?: Date | null;
+  },
   tx?: CompletionTxClient,
 ): Promise<void> {
   // #933 (produkteier 2026-08-19): «Utstedelse av bestått skal kun skje hvis kurset er publisert.»
@@ -37,7 +46,11 @@ async function evaluateCourseCompletion(
   // forhåndsfiltrerer, er dette linja som redder det — og DA blir den testbar.
   if (!course.publishedAt || course.archivedAt) return;
 
-  const moduleIds = course.modules.map((m) => m.moduleId);
+  // #945: arkiverte moduler filtreres nå bort, slik arkiverte seksjoner alltid har vært. Asymmetrien
+  // var utilsiktet og hadde en levende konsekvens: en arkivert modul i et publisert kurs blokkerte
+  // fullføring FOR ALLTID — deltakeren kom aldri over 4/5, fikk aldri bevis, og så ingen feilmelding.
+  // Bekreftet på stage 2026-08-21: kurset «Samfunnsvitere» hadde nøyaktig den tilstanden.
+  const moduleIds = course.modules.filter((m) => m.module?.archivedAt == null).map((m) => m.moduleId);
 
   // A course can be pure-reading (no assessment modules) — the LMS Tier 2 markdown-first
   // courses (#476). For those, reading every learning section is the only certification gate,
@@ -47,8 +60,15 @@ async function evaluateCourseCompletion(
   // counted modules, so reading-only courses showed "Fullført" in the list yet never issued a
   // certificate (#580 follow-up).
   const courseItems = await repo.findCourseItems(course.id);
+  // #944/#938: kravet er de seksjonene deltakeren FAKTISK KAN LESE — samme predikat som lesestien
+  // og DTO-en bruker. Sto tidligere som `archivedAt == null` alene, og fanget derfor ikke en
+  // seksjon oversettelsesgaten hadde holdt tilbake.
+  //
+  // ⚠️ Produkteiers regel (doc/DECISIONS.md): arkivert innhold teller ikke i kravet, fordi et krav
+  // som ALDRI kan oppfylles er verre enn ikke noe krav. Nøyaktig samme argument gjelder en
+  // tilbakeholdt seksjon: deltakeren får 404 på lesestien, så å kreve den er en blindvei.
   const requiredSectionIds = courseItems
-    .filter((item) => item.itemType === "SECTION" && item.section != null && item.section.archivedAt == null)
+    .filter((item) => item.itemType === "SECTION" && item.section != null && isSectionAvailableToParticipant(item.section))
     .map((item) => item.section!.id);
 
   // Truly empty course (no modules AND no sections) is never completable.

@@ -2,6 +2,72 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.26.1 - 2026-08-22
+
+**En uleselig seksjon kunne markeres lest og utløse kursbevis (#944, #938, #945).**
+
+En seksjon uten aktiv versjon ga deltakeren **200 med tom side**. Hen trykket «lest», lesningen ble
+registrert, og kursbeviset utstedt for innhold som aldri ble publisert.
+
+To helt ulike årsaker traff samme sti:
+
+| Årsak | Hva som skjer |
+|---|---|
+| Arkivert | `archiveSection` nuller `activeVersionId` |
+| Holdt av oversettelsesgaten | versjonen lagres, `activeVersionId` settes aldri |
+
+### Fem lesere, fire regler
+
+Spørsmålet «kan en deltaker lese denne seksjonen» ble besvart ulikt fem steder — og to av dem
+svarte ingenting i det hele tatt:
+
+| Sted | Krevde |
+|---|---|
+| Hent innhold | ingenting — kun medlemskap i kurset |
+| Marker lest | ingenting — kun medlemskap |
+| Bevisporten | `archivedAt == null` |
+| Publiseringsgaten | `activeVersionId !== null` |
+| MODUL i samme løkke | alle tre leddene |
+
+Seksjoner fikk ikke engang et `available`-felt i DTO-en, så klienten satte det til `true` for alle.
+
+`isSectionAvailableToParticipant` er nå den ene definisjonen alle bruker: lesestien, marker-lest,
+bevisporten, kursdetaljen og kurslista.
+
+### Tre tellere som var uenige
+
+Å fikse porten alene var ikke nok — testen fanget at kursdetaljen fortsatt talte `sectionTotal: 1`
+for en seksjon porten ikke krevde. Det er #938 i miniatyr: kortet kunne vise «Seksjonar 0/1» ved
+siden av et utstedt kursbevis.
+
+Alle tre tellerne — porten, kursdetaljen og kurslista — bruker nå samme regel. Lista filtrerer i
+spørringen, så batchen fortsatt er én runde.
+
+### #945: arkiverte moduler blokkerer ikke lenger
+
+Porten filtrerte arkiverte **seksjoner** bort, men ikke arkiverte **moduler**. En arkivert modul i
+et publisert kurs blokkerte fullføring **for alltid** — deltakeren kom aldri over 4/5, fikk aldri
+bevis, og så ingen feilmelding. Bekreftet på stage 2026-08-21: kurset «Samfunnsvitere».
+
+Modulene kom fra tre ulike spørringer og bare én hentet `archivedAt`. Alle tre bærer det nå, og
+typen krever det — en fjerde kaller som glemmer det kompilerer ikke.
+
+### ⚠️ Mutasjonsverifiseringen avslørte en test som målte feil ledd
+
+Predikatet har to ledd. Å fjerne versjons-leddet gjorde tre integrasjonstester røde. Å fjerne
+**arkiv-leddet gjorde ingen av dem røde.**
+
+Årsaken: `archiveSection` setter begge feltene samtidig, så en arkivert seksjon feiler
+versjons-leddet uansett. Min «arkiverte seksjon»-test målte i praksis det andre leddet, og ville
+vært grønn selv om arkiv-sjekken ikke fantes.
+
+Arkiv-leddet er beholdt som forsvar i dybden — databasen tillater kombinasjonen, importen kan
+skrive den, og #938 sin inngangsdør er ikke stengt ennå — men det er nå dekket der det faktisk kan
+avgjøres: `test/unit/section-availability.test.ts` konstruerer tilstanden direkte. Begge ledd gir
+nå rødt på nøyaktig én test hver når de fjernes.
+
+1051 unit, 220 e2e, 31 kontrakt, 6 dom.
+
 ## 2.26.0 - 2026-08-22
 
 **Resertifisering av moduler er fjernet (#989).** En bestått modul gjelder til den revideres —

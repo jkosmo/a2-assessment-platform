@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { isSectionAvailableToParticipant } from "../modules/course/sectionAvailability.js";
 import { courseRepository, computeCourseStatus, getSection, checkCourseCompletionForCourse, reconcileCourseCompletionsForUser } from "../modules/course/index.js";
 import { renderSectionMarkdown } from "../modules/course/sectionContent.js";
 import { localizeContentText } from "../i18n/content.js";
@@ -272,6 +273,10 @@ coursesRouter.get("/:courseId", async (request, response, next) => {
           courseItemId: item.id,
           title: localizeContentText(locale, item.section.title) ?? item.section.title,
           read,
+          // #944: seksjoner hadde ikke dette feltet i det hele tatt, så klienten satte det til true
+          // for alle — og et uleselig element så ut som et helt vanlig, klikkbart et. Samme flagg
+          // og samme navn som MODULE under, så klienten ikke trenger to regler.
+          available: isSectionAvailableToParticipant(item.section),
           discussionsEnabled: item.discussionsEnabled,
         };
       }
@@ -298,7 +303,11 @@ coursesRouter.get("/:courseId", async (request, response, next) => {
 
     // All elements count toward progress: passed modules + read sections (#492).
     // Module count derived from CourseItem (itemType MODULE); sections from CourseItem too.
-    const sectionCount = items.filter((i) => i.type === "SECTION").length;
+    // #944/#938: framdriften teller de seksjonene som FAKTISK KREVES — de deltakeren kan lese.
+    // Sto tidligere som en ren telling av SECTION-elementer, og var derfor uenig med bevisporten:
+    // kortet kunne vise «Seksjonar 0/1» ved siden av et utstedt kursbevis. Feltet `available`
+    // kommer fra samme predikat som porten og lesestien bruker.
+    const sectionCount = items.filter((i) => i.type === "SECTION" && i.available).length;
     const totalElements = moduleIds.length + sectionCount;
     const completedElements = passedCount + readSectionCount;
 
@@ -359,10 +368,17 @@ coursesRouter.get("/:courseId/sections/:sectionId", async (request, response, ne
       throw new NotFoundError("Course", "course_not_found", "Course not found.");
     }
     const courseItems = await courseRepository.findCourseItems(course.id);
-    const belongs = courseItems.some(
-      (item) => item.itemType === "SECTION" && item.sectionId === request.params.sectionId,
+    const item = courseItems.find(
+      (i) => i.itemType === "SECTION" && i.sectionId === request.params.sectionId,
     );
-    if (!belongs) {
+    if (!item) {
+      throw new NotFoundError("CourseSection", "section_not_found", "Section not found in this course.");
+    }
+    // #944: medlemskap i kurset er IKKE nok. En arkivert seksjon, eller en som oversettelsesgaten
+    // har holdt tilbake, har ingen aktiv versjon — og ga tidligere 200 med tom side. 404 fordi
+    // seksjonen ikke finnes å lese for denne deltakeren; vi bekrefter ikke at den finnes i det hele
+    // tatt, på samme måte som synlighetssjekken over.
+    if (!item.section || !isSectionAvailableToParticipant(item.section)) {
       throw new NotFoundError("CourseSection", "section_not_found", "Section not found in this course.");
     }
     const section = await getSection(request.params.sectionId);
@@ -394,10 +410,17 @@ coursesRouter.post("/:courseId/sections/:sectionId/read", async (request, respon
       throw new NotFoundError("Course", "course_not_found", "Course not found.");
     }
     const courseItems = await courseRepository.findCourseItems(course.id);
-    const belongs = courseItems.some(
-      (item) => item.itemType === "SECTION" && item.sectionId === request.params.sectionId,
+    const item = courseItems.find(
+      (i) => i.itemType === "SECTION" && i.sectionId === request.params.sectionId,
     );
-    if (!belongs) {
+    if (!item) {
+      throw new NotFoundError("CourseSection", "section_not_found", "Section not found in this course.");
+    }
+    // #944: medlemskap i kurset er IKKE nok. En arkivert seksjon, eller en som oversettelsesgaten
+    // har holdt tilbake, har ingen aktiv versjon — og ga tidligere 200 med tom side. 404 fordi
+    // seksjonen ikke finnes å lese for denne deltakeren; vi bekrefter ikke at den finnes i det hele
+    // tatt, på samme måte som synlighetssjekken over.
+    if (!item.section || !isSectionAvailableToParticipant(item.section)) {
       throw new NotFoundError("CourseSection", "section_not_found", "Section not found in this course.");
     }
     await courseRepository.markSectionRead(userId, course.id, request.params.sectionId);

@@ -62,13 +62,16 @@ export function createCourseRepository(client: CourseRepositoryClient = prisma) 
           items: {
             where: { itemType: "MODULE" },
             orderBy: { sortOrder: "asc" },
-            select: { moduleId: true },
+            // #945: `module.archivedAt` er med fordi bevisporten filtrerer arkiverte moduler bort.
+            // Uten det ville filteret virket på den ene veien inn (findCourseById) og ikke på de to
+            // andre — samme «to steder svarer ulikt» som saken handler om.
+            select: { moduleId: true, module: { select: { archivedAt: true } } },
           },
         },
       });
       return courses.map(({ items, ...rest }) => ({
         ...rest,
-        modules: items.filter((i) => i.moduleId).map((i) => ({ moduleId: i.moduleId as string })),
+        modules: items.filter((i) => i.moduleId).map((i) => ({ moduleId: i.moduleId as string, module: i.module })),
       }));
     },
 
@@ -161,8 +164,17 @@ export function createCourseRepository(client: CourseRepositoryClient = prisma) 
     findCourseItemSectionIdsForCourses(courseIds: string[]) {
       if (courseIds.length === 0) return Promise.resolve([] as Array<{ courseId: string; sectionId: string }>);
       return client.courseItem
+        // #944/#938: lista teller de seksjonene deltakeren FAKTISK KAN LESE — samme regel som
+        // bevisporten og kursdetaljen. Sto tidligere uten filter, og var derfor den tredje telleren
+        // som svarte noe annet enn de to andre: et kort kunne vise «Seksjonar 0/1» ved siden av et
+        // utstedt kursbevis. Filtreres i spørringen, ikke i minnet, så batchen fortsatt er én runde.
         .findMany({
-          where: { courseId: { in: courseIds }, itemType: "SECTION", sectionId: { not: null } },
+          where: {
+            courseId: { in: courseIds },
+            itemType: "SECTION",
+            sectionId: { not: null },
+            section: { archivedAt: null, activeVersionId: { not: null } },
+          },
           select: { courseId: true, sectionId: true },
         })
         .then((rows) =>
@@ -188,7 +200,10 @@ export function createCourseRepository(client: CourseRepositoryClient = prisma) 
               activeVersion: { select: { publishedAt: true } },
             },
           },
-          section: { select: { id: true, title: true, archivedAt: true } },
+          // #944: `activeVersionId` er med fordi tilgjengelighet krever BEGGE leddene — arkivert
+          // ELLER aldri publisert gjør seksjonen uleselig for en deltaker. Uten feltet kunne
+          // kallerne ikke avgjøre det, og resultatet var 200 med tom side.
+          section: { select: { id: true, title: true, archivedAt: true, activeVersionId: true } },
         },
       });
     },
@@ -227,7 +242,10 @@ export function createCourseRepository(client: CourseRepositoryClient = prisma) 
           items: {
             where: { itemType: "MODULE" },
             orderBy: { sortOrder: "asc" },
-            select: { moduleId: true },
+            // #945: `module.archivedAt` er med fordi bevisporten filtrerer arkiverte moduler bort.
+            // Uten det ville filteret virket på den ene veien inn (findCourseById) og ikke på de to
+            // andre — samme «to steder svarer ulikt» som saken handler om.
+            select: { moduleId: true, module: { select: { archivedAt: true } } },
           },
         },
       });
@@ -235,7 +253,7 @@ export function createCourseRepository(client: CourseRepositoryClient = prisma) 
         ...rest,
         modules: items
           .filter((item) => item.moduleId)
-          .map((item) => ({ moduleId: item.moduleId as string })),
+          .map((item) => ({ moduleId: item.moduleId as string, module: item.module })),
       }));
     },
 

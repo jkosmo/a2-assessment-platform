@@ -31,7 +31,10 @@ export interface CourseModuleEntry {
 // det konkrete CourseItem og skjule panelet når diskusjon er avskrudd for elementet.
 export type CourseSequenceItem =
   | { type: "MODULE"; sortOrder: number; moduleId: string; courseItemId: string; title: string; moduleStatus: "NOT_STARTED" | "PASSED" | "IN_PROGRESS"; discussionsEnabled: boolean; available: boolean }
-  | { type: "SECTION"; sortOrder: number; sectionId: string; courseItemId: string; title: string; read: boolean; discussionsEnabled: boolean };
+  // #944: `available` er PÅKREVD på begge variantene. Var det valgfritt på SECTION, ville en kaller
+  // som glemte det fått `undefined` — som er falsy, men også umulig å skille fra «ikke vurdert».
+  // Typen tvinger nå fram et svar, slik at neste sti ikke kan la det stå åpent i stillhet.
+  | { type: "SECTION"; sortOrder: number; sectionId: string; courseItemId: string; title: string; read: boolean; discussionsEnabled: boolean; available: boolean };
 
 export interface CourseDetail extends CourseListItem {
   certificationLevel: string | null;
