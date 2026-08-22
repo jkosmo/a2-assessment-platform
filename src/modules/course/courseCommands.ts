@@ -255,13 +255,38 @@ export async function setCourseItems(
   if (new Set(sectionIds).size !== sectionIds.length) {
     throw new ValidationError("A section may appear only once in a course.");
   }
+  // #938: inngangsdøra. Sjekken var «finnes elementet?» — ikke «kan det brukes?».
+  //
+  // G2 (`contentLifecycle.ts`) nekter å arkivere innhold som ligger i et kurs, så den ene veien inn
+  // var allerede stengt. Den andre sto åpen: allerede arkivert innhold kunne LEGGES INN. Det er
+  // slik «Samfunnsvitere» på stage fikk en arkivert modul som blokkerte fullføring for alltid.
+  //
+  // ⚠️ Poenget er ikke å legge til et filter til. Med begge dører stengt kan tilstanden «arkivert
+  // innhold i et kurs» ikke oppstå — og da trenger ikke de fem leserne hver sin regel for å
+  // håndtere den. Å lære 25 lesere en regel er dyrere enn å gjøre tilstanden uoppnåelig.
+  //
+  // Produkteier 2026-08-21: «Det er ingen legitim grunn til at arkiverte objekter skal bli i et kurs.»
   if (moduleIds.length > 0) {
-    const found = await reader.module.count({ where: { id: { in: moduleIds } } });
-    if (found !== moduleIds.length) throw new ValidationError("One or more modules do not exist.");
+    const usable = await reader.module.count({ where: { id: { in: moduleIds }, archivedAt: null } });
+    if (usable !== moduleIds.length) {
+      const found = await reader.module.count({ where: { id: { in: moduleIds } } });
+      throw new ValidationError(
+        found === moduleIds.length
+          ? "One or more modules are archived and cannot be added to a course."
+          : "One or more modules do not exist.",
+      );
+    }
   }
   if (sectionIds.length > 0) {
-    const found = await reader.courseSection.count({ where: { id: { in: sectionIds } } });
-    if (found !== sectionIds.length) throw new ValidationError("One or more sections do not exist.");
+    const usable = await reader.courseSection.count({ where: { id: { in: sectionIds }, archivedAt: null } });
+    if (usable !== sectionIds.length) {
+      const found = await reader.courseSection.count({ where: { id: { in: sectionIds } } });
+      throw new ValidationError(
+        found === sectionIds.length
+          ? "One or more sections are archived and cannot be added to a course."
+          : "One or more sections do not exist.",
+      );
+    }
   }
 
   // #502: CourseItem er eneste sannhetskilde — ingen dual-write til CourseModule lenger.

@@ -96,7 +96,7 @@ noe krav.
 
 **Håndheves:** i dag inkonsistent — porten filtrerer arkiverte seksjoner, men ikke arkiverte
 moduler, og framdriftsvisningen filtrerer ingen av delene.
-**Sak:** #938 · **Dato:** 2026-08-20 · **Status:** avklart, ikke ferdig implementert
+**Sak:** #938/#944/#945 · **Dato:** 2026-08-20 · **Status:** **implementert** i v2.26.1/v2.26.2
 
 ### Innhold som står i et utstedt kursbevis kan aldri slettes
 
@@ -108,7 +108,7 @@ ble utdelt og må bevares som grunnlag for diplom, men ellers ikke.»
 
 **Håndheves:** ikke ennå. G2 nekter sletting mens innholdet ligger i et kurs, men når det er fjernet
 derfra er sletting tillatt — og ingenting sjekker om en `CourseCompletion` peker på det.
-**Sak:** #938 · **Dato:** 2026-08-21 · **Status:** avklart, ikke implementert
+**Sak:** #938 · **Dato:** 2026-08-21 · **Status:** **implementert** i v2.26.2 (kun seksjoner — moduler var allerede dekket av `certificationStatuses`-sjekken i `deleteModule`)
 
 ⚠️ Bevisst bivirkning: innhold noen har fått diplom på blir permanent uslettbart.
 

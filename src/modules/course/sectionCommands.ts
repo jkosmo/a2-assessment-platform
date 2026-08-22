@@ -3,7 +3,7 @@ import { runInTransaction, type DbTransactionClient } from "../../db/transaction
 import { AppError, NotFoundError, ValidationError } from "../../errors/AppError.js";
 import { recordAuditEvent } from "../../services/auditService.js";
 import { auditActions, auditEntityTypes, agentAuthoringAuditMetadata, type AgentAuthoringContext } from "../../observability/auditEvents.js";
-import { assertSectionNotInAnyCourse } from "./contentLifecycle.js";
+import { assertSectionNotInAnyCourse, assertSectionNotInIssuedCertificate } from "./contentLifecycle.js";
 import { importSectionAssets, collectSectionAssetBlobPaths, reclaimAssetBlobs } from "./assetCommands.js";
 import { addContentOwner } from "../content/contentOwnershipService.js";
 import {
@@ -436,6 +436,9 @@ export async function deleteSection(sectionId: string) {
   await assertSectionExists(sectionId);
   // G2: navngir kursene (konsistent med modul-sletting).
   await assertSectionNotInAnyCourse(sectionId, "slettes");
+  // #938: G2 over dekker «ligger i et kurs NÅ». Denne dekker «sto i et kursbevis DA» — innhold
+  // som er fjernet fra kurset, men som et utstedt diplom fortsatt hviler på.
+  await assertSectionNotInIssuedCertificate(sectionId, "slettes");
   // #758: capture the section's asset blob paths before the delete — SectionAsset rows cascade away
   // with the section, so afterwards there is nothing left to look them up from.
   const blobPaths = await collectSectionAssetBlobPaths([sectionId]);

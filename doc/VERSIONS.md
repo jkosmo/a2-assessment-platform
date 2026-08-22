@@ -2,6 +2,54 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.26.2 - 2026-08-22
+
+**Begge dørene inn til «arkivert innhold i et kurs» er stengt, og diplomgrunnlaget kan ikke slettes (#938).**
+
+### Inngangsdøra
+
+G2 nektet allerede å arkivere innhold som **ligger** i et kurs. Den andre døra sto åpen: allerede
+arkivert innhold kunne **legges inn**. Validering i `setCourseItems` spurte «finnes elementet?», ikke
+«kan det brukes?».
+
+Det er slik «Samfunnsvitere» på stage fikk en arkivert modul som blokkerte fullføring for alltid.
+
+⚠️ **Poenget er ikke et filter til.** Med begge dører stengt kan tilstanden ikke oppstå — og da
+trenger ikke de fem leserne hver sin regel for å håndtere den. Å lære 25 lesere en regel er dyrere
+enn å gjøre tilstanden uoppnåelig.
+
+Feilmeldingen skiller de to tilfellene: «is archived and cannot be added» kontra «does not exist».
+En sammenslått melding ville tatt fra forfatteren informasjonen om hvilken av dem det er — og det
+var nettopp uklare feilmeldinger som ga oss #937.
+
+### Slettevernet
+
+Produkteier, 2026-08-21: *«Arkivert materiale var naturligvis del av pensum når diplom ble utdelt og
+må bevares som grunnlag for diplom, men ellers ikke.»*
+
+G2 dekket «ligger i et kurs **nå**». Ingenting dekket «sto i et kursbevis **da**». En seksjon som var
+fjernet fra kurset kunne slettes, og snapshotet ble hengende med en død id — et utstedt diplom kunne
+ikke lenger begrunnes.
+
+Skillet er med vilje: **arkivere** er ut av sirkulasjon og diplomet tåler det; **slette** er borte.
+Bivirkningen — at innhold noen har fått diplom på blir permanent uslettbart — er godtatt som prisen
+for at et kursbevis skal kunne etterprøves.
+
+### Ingen modulvakt, med vilje
+
+`deleteModule` blokkerer allerede på `certificationStatuses > 0`. Et kursbevis krever at deltakeren
+besto modulen, så raden finnes, og sletting stoppes. En egen
+`assertModuleNotInIssuedCertificate` ville **aldri kunne fyre** — og en vakt som leser som en vakt
+uten å kunne virke er verre enn ingen vakt (#960).
+
+Seksjoner har ingen tilsvarende avhengighet: `courseSectionRead` sjekkes ikke ved sletting. Der er
+vakta reell. Asymmetrien er nå skrevet ned begge steder.
+
+Mutasjonsverifisert hver for seg: åpnes inngangsdøra blir to tester røde, fjernes slettevernet blir
+én — og kontrollcasene forblir grønne i begge tilfeller.
+
+1051 unit, 220 e2e, 31 kontrakt, 23 integrasjon.
+
 ## 2.26.1 - 2026-08-22
 
 **En uleselig seksjon kunne markeres lest og utløse kursbevis (#944, #938, #945).**

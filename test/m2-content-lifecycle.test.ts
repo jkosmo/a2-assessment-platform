@@ -243,3 +243,144 @@ describe("Unified content lifecycle (#705)", () => {
     expect(res.body.message).toContain("«LC Kurs»");
   });
 });
+
+// ──────────────────────────────────────────────────────────────────────────────
+// #938 — de to dørene inn til «arkivert innhold i et kurs».
+//
+// G2 stengte den ene: innhold som LIGGER i et kurs kan ikke arkiveres. Den andre sto åpen:
+// allerede arkivert innhold kunne LEGGES INN. Det er slik «Samfunnsvitere» på stage fikk en
+// arkivert modul som blokkerte fullføring for alltid.
+//
+// ⚠️ Poenget er ikke et filter til. Med begge dører stengt kan tilstanden ikke oppstå — og da
+// slipper de fem leserne å ha hver sin regel for å håndtere den.
+// ──────────────────────────────────────────────────────────────────────────────
+
+describe("#938: arkivert innhold kan ikke legges inn i et kurs", () => {
+  it("en arkivert seksjon avvises, og feilmeldingen sier HVORFOR", async () => {
+    const course = await prisma.course.create({
+      data: { title: `Door Course ${Date.now()}` },
+      select: { id: true },
+    });
+    const section = await prisma.courseSection.create({
+      data: { title: JSON.stringify({ "en-GB": "Archived" }), archivedAt: new Date() },
+      select: { id: true },
+    });
+
+    const res = await request(app)
+      .put(`/api/admin/content/courses/${course.id}/items`)
+      .set(adminHeaders)
+      .send({ items: [{ type: "SECTION", sectionId: section.id }] });
+
+    expect(res.status).toBe(400);
+    // «One or more sections do not exist» ville vært en løgn — den finnes, den kan bare ikke brukes.
+    expect(JSON.stringify(res.body)).toMatch(/archived/i);
+
+    const items = await prisma.courseItem.count({ where: { courseId: course.id } });
+    expect(items, "ingenting skal være skrevet på veien til avslaget").toBe(0);
+  });
+
+  it("en arkivert modul avvises på samme måte", async () => {
+    const course = await prisma.course.create({
+      data: { title: `Door Course M ${Date.now()}` },
+      select: { id: true },
+    });
+    const mod = await prisma.module.create({
+      data: { title: JSON.stringify({ "en-GB": "Archived module" }), archivedAt: new Date() },
+      select: { id: true },
+    });
+
+    const res = await request(app)
+      .put(`/api/admin/content/courses/${course.id}/items`)
+      .set(adminHeaders)
+      .send({ items: [{ type: "MODULE", moduleId: mod.id }] });
+
+    expect(res.status).toBe(400);
+    expect(JSON.stringify(res.body)).toMatch(/archived/i);
+  });
+
+  it("KONTROLLCASE: ikke-arkivert innhold legges inn som før", async () => {
+    // Uten denne vet vi ikke om vi målte arkivregelen eller bare knekte ruta. En `return 400` uten
+    // betingelse ville bestått begge testene over.
+    const course = await prisma.course.create({
+      data: { title: `Door Course OK ${Date.now()}` },
+      select: { id: true },
+    });
+    const section = await prisma.courseSection.create({
+      data: { title: JSON.stringify({ "en-GB": "Live" }) },
+      select: { id: true },
+    });
+
+    const res = await request(app)
+      .put(`/api/admin/content/courses/${course.id}/items`)
+      .set(adminHeaders)
+      .send({ items: [{ type: "SECTION", sectionId: section.id }] });
+
+    expect(res.status, JSON.stringify(res.body)).toBe(204);
+    expect(await prisma.courseItem.count({ where: { courseId: course.id } })).toBe(1);
+  });
+
+  it("KONTROLLCASE: en id som ikke finnes gir fortsatt «does not exist», ikke «archived»", async () => {
+    // De to feilene må kunne skilles. Slår man dem sammen, mister forfatteren informasjonen om
+    // hvilken av dem det er — og det var nettopp uklare feilmeldinger som ga oss #937.
+    const course = await prisma.course.create({
+      data: { title: `Door Course X ${Date.now()}` },
+      select: { id: true },
+    });
+
+    const res = await request(app)
+      .put(`/api/admin/content/courses/${course.id}/items`)
+      .set(adminHeaders)
+      .send({ items: [{ type: "SECTION", sectionId: "finnes-ikke-i-det-hele-tatt" }] });
+
+    expect(res.status).toBe(400);
+    expect(JSON.stringify(res.body)).toMatch(/do not exist/i);
+    expect(JSON.stringify(res.body)).not.toMatch(/archived/i);
+  });
+});
+
+describe("#938: innhold i et utstedt kursbevis kan ikke slettes", () => {
+  it("en seksjon som står i et kursbevis nektes slettet — og bes arkivert i stedet", async () => {
+    const section = await prisma.courseSection.create({
+      data: { title: JSON.stringify({ "en-GB": "In a certificate" }) },
+      select: { id: true },
+    });
+    const course = await prisma.course.create({
+      data: { title: `Cert Course ${Date.now()}`, publishedAt: new Date() },
+      select: { id: true },
+    });
+    const user = await prisma.user.create({
+      data: { externalId: `cert-user-${Date.now()}`, email: `cu${Date.now()}@x.no`, name: "U" },
+      select: { id: true },
+    });
+    // Beviset peker på seksjonen. Seksjonen er IKKE lenger i kurset — G2 slipper den derfor gjennom.
+    await prisma.courseCompletion.create({
+      data: {
+        userId: user.id,
+        courseId: course.id,
+        moduleSnapshotJson: "[]",
+        sectionSnapshotJson: JSON.stringify([section.id]),
+      },
+    });
+
+    const res = await request(app)
+      .delete(`/api/admin/content/sections/${section.id}`)
+      .set(adminHeaders);
+
+    expect(res.status).toBe(400);
+    const body = JSON.stringify(res.body);
+    expect(body).toMatch(/kursbevis/i);
+    // Meldingen skal peke på veien videre, ikke bare nekte.
+    expect(body).toMatch(/arkiver/i);
+
+    expect(await prisma.courseSection.count({ where: { id: section.id } }), "seksjonen skal fortsatt finnes").toBe(1);
+  });
+
+  it("KONTROLLCASE: en seksjon uten kursbevis slettes fortsatt", async () => {
+    const section = await prisma.courseSection.create({
+      data: { title: JSON.stringify({ "en-GB": "Free to delete" }) },
+      select: { id: true },
+    });
+    const res = await request(app).delete(`/api/admin/content/sections/${section.id}`).set(adminHeaders);
+    expect(res.status, JSON.stringify(res.body)).toBe(204);
+  });
+});

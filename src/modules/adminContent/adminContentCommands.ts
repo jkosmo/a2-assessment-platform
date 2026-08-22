@@ -343,6 +343,15 @@ export async function deleteModule(moduleId: string, actorId: string) {
     ["certification statuses", module._count.certificationStatuses],
   ].filter(([, count]) => typeof count === "number" && count > 0);
 
+  // #938: en modul som står i et utstedt kursbevis er ALLEREDE beskyttet her — `certificationStatuses`
+  // over blokkerer. Et kursbevis krever at deltakeren besto modulen, så raden finnes, og sletting
+  // stoppes. Derfor er det bevisst IKKE lagt til en egen `assertModuleNotInIssuedCertificate`:
+  // den ville aldri kunne fyre, og en vakt som leser som en vakt uten å kunne virke er verre enn
+  // ingen vakt (#960).
+  //
+  // Seksjoner har ingen tilsvarende avhengighet — `courseSectionRead` sjekkes ikke ved sletting —
+  // så DER er vakta reell. Se `assertSectionNotInIssuedCertificate` i contentLifecycle.ts.
+
   if (module.activeVersionId || dependencyChecks.length > 0) {
     const dependencySummary = [
       module.activeVersionId ? "active published version" : null,

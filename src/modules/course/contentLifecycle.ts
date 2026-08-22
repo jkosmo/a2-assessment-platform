@@ -87,6 +87,49 @@ export async function assertSectionNotInAnyCourse(sectionId: string, verb: strin
   }
 }
 
+// #938: innhold som står i et UTSTEDT kursbevis kan aldri slettes.
+//
+// Produkteier 2026-08-21: «Arkivert materiale var naturligvis del av pensum når diplom ble utdelt
+// og må bevares som grunnlag for diplom, men ellers ikke.»
+//
+// G2 over nekter sletting mens innholdet ligger i et kurs — men når det er FJERNET derfra, var
+// sletting tillatt, og ingenting sjekket om et kursbevis pekte på det. Snapshotet ville da bære en
+// død id, og et utstedt diplom kunne ikke lenger begrunnes.
+//
+// ⚠️ Arkivering er fortsatt tillatt. Skillet er med vilje:
+//   arkivere = ut av sirkulasjon, raden består, diplomet tåler det
+//   slette    = borte, og da mister diplomet grunnlaget sitt
+//
+// ⚠️ Bevisst bivirkning: innhold noen har fått diplom på blir permanent uslettbart. Det er prisen
+// for at et kursbevis skal kunne etterprøves, og den er godtatt.
+//
+// Implementasjonsnote: snapshotene er JSON-arrayer av id-er lagret som TEXT, så vi kan ikke joine.
+// `contains` på id-en er derfor riktig verktøy — id-ene er cuid-er, så en delstreng-kollisjon med
+// en ANNEN id er praktisk talt umulig. Skulle snapshot-formatet en dag bli en relasjon, bør denne
+// sjekken bli en join.
+async function assertNotInIssuedCertificate(
+  id: string,
+  column: "moduleSnapshotJson" | "sectionSnapshotJson",
+  noun: string,
+  verb: string,
+): Promise<void> {
+  const count = await prisma.courseCompletion.count({ where: { [column]: { contains: id } } });
+  if (count > 0) {
+    throw new ValidationError(
+      `${noun} kan ikke ${verb} fordi den inngår i ${count} utstedt${count === 1 ? "" : "e"} kursbevis. `
+      + "Arkiver den i stedet — et kursbevis må kunne vise hva det dekket.",
+    );
+  }
+}
+
+export function assertModuleNotInIssuedCertificate(moduleId: string, verb: string): Promise<void> {
+  return assertNotInIssuedCertificate(moduleId, "moduleSnapshotJson", "Modulen", verb);
+}
+
+export function assertSectionNotInIssuedCertificate(sectionId: string, verb: string): Promise<void> {
+  return assertNotInIssuedCertificate(sectionId, "sectionSnapshotJson", "Seksjonen", verb);
+}
+
 // Antall deltakere som har PÅBEGYNT (lest en seksjon eller levert et forsøk på en kurs-modul)
 // men IKKE fullført (ingen CourseCompletion). Brukt av G3-vakta for kurs.
 export async function countCourseInProgressParticipants(courseId: string): Promise<number> {
