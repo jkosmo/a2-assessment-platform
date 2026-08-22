@@ -2,6 +2,65 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.25.5 - 2026-08-22
+
+**`normalizeLocalizedTitleSeed` viftet kildeteksten ut i alle tre språk (#981).**
+
+#892 fjernet vifta fra *patch*-siden av `updateModuleTitle`. Den overlevde 20 linjer over, på
+*seed*-siden — grunnlaget en objekt-patch flettes inn på:
+
+```js
+return { "en-GB": fallback, nb: fallback, nn: fallback };
+```
+
+Ligger en modultittel som ren streng («Tryggleik i praksis» — ett språk, ikke oversatt) og
+forfatteren oversetter kun nynorsk med `PATCH {nn: "…"}`, ble resultatet
+`{en-GB: kildetekst, nb: kildetekst, nn: oversatt}`. `missingLocalesFor` rapporterte **0 manglende**,
+publiseringsgaten slapp modulen gjennom, og en en-GB-deltaker fikk norsk tittel som systemet mente
+var oversatt.
+
+### Hvorfor grenen fantes — og hva som erstatter den
+
+Den ble skrevet da `updateModuleTitle` gikk fra `title: string` til en lokalisert patch. Grunnlaget
+måtte være et objekt for at spredningen skulle virke, og vifta var den enkleste måten å unngå at et
+språk sto tomt. Fallback-argumentet holder ikke: `localizeContentText` slår opp
+`map[locale] ?? map["en-GB"] ?? første verdi`, så et delvis kart viser tekst i alle språk uansett.
+
+Grunnlaget er nå ærlig: **et lagret objekt** navngir språkene sine og er et gyldig grunnlag å flette
+på; **en lagret ren streng** sier «ett språk, og dataene sier ikke hvilket», så den bidrar med
+ingenting og patchen står alene. Dette er nøyaktig regelen `mergeLocalized` i
+`moduleVersionComposer` allerede følger for `description` og `certificationLevel` — tittelen er nå
+enig med sine egne søsken i samme forespørsel.
+
+Gjetningen «hvilket språk er dette?» hører hjemme i forfatterklienten, der forfatteren ser
+kildespråket forhåndsutfylt og kan rette det før lagring (`LEGACY_STRING_LOCALE` i
+`admin-content-shell.js`). Backend skal ikke ta den stille.
+
+`normalizeLocalizedTitlePatch` rett under hadde **ikke** samme feil — den ble ryddet i #892 og
+filtrerer nå bare bort blanke oppføringer.
+
+### Verifisering
+
+Fem nye unit-caser pluss én integrasjonstest som går hele veien gjennom ruta:
+
+1. **Feilen** — ren streng → `PATCH {nn}` → `missingLocalesFor` gir `["en-GB", "nb"]`
+2. **Kontrollcase** — samme utgangspunkt, patch som faktisk fyller alle tre → `[]`
+3. **Kontrollcase** — fletting på et ekte språkkart er urørt, de andre språkene overlever
+4. **Kontrollcase** — et delvis oversatt kart forblir delvis og rapporterer fortsatt hullet sitt
+5. **Ny kant** — en patch der alle oppføringer er blanke lar tittelen stå (uten seed kunne
+   sammenslåingen bli tom, og `serialize({})` ville lagret strengen `"{}"` som *alle* språk viste)
+
+Mutasjonsverifisert begge veier: settes vifta tilbake, blir både unit- og integrasjonstesten røde på
+`expected [] to deeply equal [ 'en-GB', 'nb' ]` — nøyaktig påstanden i saken. Returnerer grunnlaget
+alltid `{}` (overkorreksjon), blir de to flettekontrollene røde i stedet.
+
+### ⚠️ Eksisterende data er skadet, og opprydningsskriptet fanger det ikke
+
+`maint:collapse-duplicated-titles` (v2.11.4) kollapser bare kart der **alle** verdiene er like.
+Denne feilen produserer `{en-GB: X, nb: X, nn: Y}` — to like og én ulik, som skriptet bevisst lar
+være fordi det normalt betyr reelt oversettelsesarbeid. Rader skrevet av seed-vifta ser derfor
+fortsatt fullt oversatte ut. Ikke undersøkt mot stage/prod her.
+
 ## 2.25.4 - 2026-08-22
 
 **Dirty-sjekken så aldri et avkryssbart felt (#973).**

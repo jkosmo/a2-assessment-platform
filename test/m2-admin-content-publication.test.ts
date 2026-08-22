@@ -2,6 +2,7 @@ import request from "supertest";
 import { app } from "../src/app.js";
 import { localizedTextCodec } from "../src/codecs/localizedTextCodec.js";
 import { localizeContentText } from "../src/i18n/content.js";
+import { missingLocalesFor } from "../src/modules/adminContent/contentValidationService.js";
 import { prisma } from "../src/db/prisma.js";
 
 const adminHeaders = {
@@ -496,6 +497,65 @@ describe("MVP admin content management and publication", () => {
     // The untouched locales must survive — that is the whole point of merging.
     expect(parsedTitle.nb).toBe("Fletteoppdatering modul");
     expect(parsedTitle["en-GB"]).toBe(englishTitle);
+
+    await request(app).delete(`/api/admin/content/modules/${moduleId}`).set(adminHeaders);
+  });
+
+  // #981: the case neither test above covered — a locale patch landing on a title that is still a
+  // PLAIN STRING. The merge base used to be that string copied into all three locales, so the
+  // author translating only nn produced {en-GB: source, nb: source, nn: translation}, the publish
+  // gate saw a fully translated module, and an en-GB participant got the Norwegian title. Run all
+  // the way through the route so the schema, the command and the gate are measured together.
+  it("translating one locale of a plain-string title leaves the other two reported missing", async () => {
+    const sourceTitle = `Tryggleik i praksis ${Date.now()}`;
+    const createModuleResponse = await request(app)
+      .post("/api/admin/content/modules")
+      .set(adminHeaders)
+      // A plain string: written in one language, not translated yet.
+      .send({ title: sourceTitle });
+
+    expect(createModuleResponse.status).toBe(201);
+    const moduleId = createModuleResponse.body.module.id as string;
+
+    const patchResponse = await request(app)
+      .patch(`/api/admin/content/modules/${moduleId}/title`)
+      .set(adminHeaders)
+      .send({ title: { nn: "Tryggleik i praksis (nynorsk)" } });
+
+    expect(patchResponse.status).toBe(200);
+
+    const storedModule = await prisma.module.findUnique({
+      where: { id: moduleId },
+      select: { title: true },
+    });
+
+    // The consequence that matters: the gate must still see two holes. This was [] before the fix.
+    expect(missingLocalesFor(storedModule?.title ?? null).sort()).toEqual(["en-GB", "nb"]);
+    expect(localizedTextCodec.parse(storedModule?.title ?? null)).toEqual({
+      nn: "Tryggleik i praksis (nynorsk)",
+    });
+    expect(storedModule?.title).not.toContain(sourceTitle);
+
+    // CONTROL: the same starting point, translated properly, must still count as complete —
+    // otherwise the test above would only prove that merging was switched off.
+    const completeResponse = await request(app)
+      .patch(`/api/admin/content/modules/${moduleId}/title`)
+      .set(adminHeaders)
+      .send({
+        title: {
+          "en-GB": "Safety in practice",
+          nb: "Trygghet i praksis",
+          nn: "Tryggleik i praksis (nynorsk)",
+        },
+      });
+
+    expect(completeResponse.status).toBe(200);
+
+    const completeModule = await prisma.module.findUnique({
+      where: { id: moduleId },
+      select: { title: true },
+    });
+    expect(missingLocalesFor(completeModule?.title ?? null)).toEqual([]);
 
     await request(app).delete(`/api/admin/content/modules/${moduleId}`).set(adminHeaders);
   });
