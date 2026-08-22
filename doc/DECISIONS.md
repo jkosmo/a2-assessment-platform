@@ -48,6 +48,25 @@ deltaker som *har* bevis, fordi `/api/courses` teller det nye innholdet inn i `t
 `participant.js`). Å lese bare statusen ga et kurs som sto under «Fullført» og rendret seg som
 pågående, uten sertifikatlenke.
 
+### En fullført rad kan fortsatt åpnes — og skal kunne det
+
+Et fullført kurs vises som én grønn rad (#939), men raden er ikke en blindvei: den kan ekspanderes,
+og innhold som er lagt til ETTER at beviset ble utstedt er synlig og kan tas frivillig.
+
+**Hvorfor:** verifisert av produkteier mot ekte data 2026-08-22, med begrunnelsen «kan ta dette
+skulle jeg ønske». Beviset er permanent og skal ikke kreve mer arbeid — men nytt innhold skal
+heller ikke være utilgjengelig for den som vil ha det.
+
+**Håndheves:** `.course-done-row` beholder sjevronen og `focusCourse`-handleren
+(`participant.js`); `.course-accordion-item--done:not(.is-focused) .course-accordion-body` skjuler
+bare kroppen når kurset ikke er fokusert.
+
+**Sak:** #939 · **Dato:** 2026-08-22 · **Status:** avklart
+
+⚠️ Verdt å vite for den som senere vil «forenkle» den fullførte raden: å fjerne ekspanderingen ville
+gjøre nytt kursinnhold utilgjengelig for alle som allerede har bestått. Raden ser ferdig ut, men
+den er en inngang.
+
 ### Kravet måles på utstedelsestidspunktet, og lagres
 
 Man har bestått når man har bestått alle moduler kurset inneholdt **da**, og bekreftet lest alle
