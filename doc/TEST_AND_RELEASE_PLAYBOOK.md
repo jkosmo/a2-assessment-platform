@@ -8,6 +8,36 @@
 
 ---
 
+## Før du ber produkteier teste noe manuelt
+
+Produkteiers tid er den knappeste ressursen i dette prosjektet. Et manuelt testpunkt som kunne vært
+automatisert er derfor ikke bare sløsing — det fortrenger den testingen bare et menneske kan gjøre.
+
+**Regelen: en manuell test er bare berettiget hvis en automatisk test ikke KAN svare på spørsmålet.**
+
+Det er én kategori som kvalifiserer, og den er skarp:
+
+> **En mocket e2e kan aldri fange at mocken er feil.**
+
+Alt som handler om hva som faktisk ligger i basen, hvordan ekte data ser ut, eller om API-et svarer
+noe annet enn testen later som — det må et menneske se på. Alt annet skal automatiseres.
+
+| Spørsmål | Hvem svarer |
+|---|---|
+| Virker klientlogikken? | mocket e2e |
+| Kom endringen med i utrullingen? | `npm run test:stage` |
+| Svarer serveren som skjemaet lover? | integrasjonstest |
+| Finnes det data i denne tilstanden? | **menneske** |
+| Ser dette riktig ut? | **menneske** |
+| Er mocken en løgn? | **menneske** |
+
+⚠️ **Sjekk før du spør.** 2026-08-22 ba jeg produkteier teste manuelt at en ubesvart MCQ gir en
+lesbar melding og markert kort — etter selv å ha skrevet tre e2e-tester for nøyaktig det scenariet
+(`participant-mcq-only.spec.ts`, #988). Punktet var dekket før det ble foreslått.
+
+Vanen som forhindrer det: før et manuelt punkt foreslås, søk etter saksnummeret i `test/`. Finnes
+det en test, er punktet dekket — si det i stedet for å be om det.
+
 ## 1 · Testtopologien: tre lag, tre forskjellige spørsmål
 
 Vi hadde ett lag. Nå har vi tre, og de svarer på hver sin ting. Å vite hvilket lag som kan svare på
