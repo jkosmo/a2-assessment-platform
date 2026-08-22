@@ -116,6 +116,35 @@ derfra er sletting tillatt — og ingenting sjekker om en `CourseCompletion` pek
 
 ## Sertifisering
 
+### Moduler utløper ikke — de gjelder til de revideres
+
+En bestått modul forblir bestått. Det finnes ingen utløpsdato og ingen resertifisering. Vil man at
+innhold skal gjelde på nytt, reviderer man modulen.
+
+**Kurs kan fortsatt ha tidsrom.** Innmeldinger har `dueAt` — en frist for å bli *ferdig*. Det er noe
+annet enn en utløpsdato på kunnskap, og den røres ikke.
+
+**Hvorfor:** produkteier, 2026-08-22. «Å tvinge folk å ta samme modul om og om igjen er bare mas.»
+
+Avgjørende for beslutningen var at mekanismen kostet uten å virke:
+
+| | |
+|---|---|
+| Alle moduler utløp etter 365 dager | global verdi i `config/assessment-rules.json`, ikke per modul |
+| Utløpt blokkerte **ingenting** | `EXPIRED` telte som bestått i kursbevisporten |
+| Følgen | påminnelser om å fornye noe ingenting krevde fornyet |
+
+⚠️ **Å fjerne resertifisering endrer derfor ingen bestått-avgjørelse.** Ikke én. Porten ignorerte
+allerede utløp, så mekanismen kan tas ut uten at noen får et annet resultat enn i dag.
+
+**`passedAt` beholdes** — når en modul ble bestått har verdi i seg selv. Det er bare utregningen av
+utløp og forfall som forsvinner.
+
+**Ingen krav utenfra** krever dokumentert resertifisering (bekreftet med produkteier). Skulle det
+komme et slikt krav, er dette beslutningen som må gjøres om.
+
+**Sak:** #989, oppløser #947 · **Dato:** 2026-08-22 · **Status:** avklart, ikke implementert
+
 ### «Bestått en modul» = enhver livssyklustilstand unntatt `NOT_CERTIFIED`
 
 `CERTIFICATION_PASSED_STATUSES` inneholder `EXPIRED`. En utløpt modulsertifisering teller altså
