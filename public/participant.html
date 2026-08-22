@@ -140,8 +140,12 @@
       /* #936/#939: et fullført kurs er ÉN grønn rad. Framdriftslinja er droppet — en linje som
          alltid er 100 % full bærer null informasjon, og den brukte den kraftigste visuelle
          ressursen i lista på å gjenta «Fullført» som allerede står to andre steder.
-         ⚠ Sertifikatlenka er en <a> og kan derfor IKKE ligge inne i .course-accordion-header, som
-         er en <button> — en lenke inni en knapp er ugyldig HTML og bryter tastaturnavigasjonen.
+         ⚠ Sertifikatlenka er en ankertagg og kan derfor IKKE ligge inne i
+         .course-accordion-header, som er en knapp — en lenke inni en knapp er ugyldig HTML og
+         bryter tastaturnavigasjonen.
+         (Taggnavnene er skrevet ut med ord med vilje: kontraktstesten i
+         test/participant-console-config.test.ts skanner denne fila etter knapper og plukket opp
+         literalen i denne kommentaren som om den var et ekte element.)
          Derfor er raden en flex-container med knappen og lenka som SØSKEN. */
       .course-accordion-item--done { border-color: #b8d9c6; }
       /* ⚠️ Uten dette er «én rad» en rad PLUSS en tom, innrammet 33px-stripe: kroppen har padding
