@@ -1756,16 +1756,58 @@ function headers() {
   });
 }
 
+// #988: `apiFetch` bygger `error.message` som `"<status>: <hele JSON-kroppen>"` (api-client.js:167).
+// Havner den strengen i `log()`, ser DELTAKEREN rå JSON — og på denne flaten er det verst: en
+// kandidat midt i en test fikk `{"code":"too_small","path":["responses",3]}` og kunne ikke vite at
+// det betydde «du glemte spørsmål 4».
+//
+// ⚠️ Oversettelsen ligger HER, i den delte loggeren, ikke i den ene knappen som utløste saken.
+// participant.js har tre kjente steder som sender `error.message` videre (baselinen i
+// test/raw-server-error-guard.test.js). Å fikse kallstedet ville løst ett av tre og latt de to
+// andre stå — nøyaktig «riktig fiks, ufullstendig flate».
+//
+// Detaljene kastes ikke: de går i toastens detaljfelt, som har `white-space: pre-wrap`.
+function humanizeApiError(text) {
+  const match = /^(\d{3}):\s*(\{[\s\S]*\})$/.exec(text);
+  if (!match) return null;
+  let body;
+  try {
+    body = JSON.parse(match[2]);
+  } catch {
+    return null;
+  }
+  const code = typeof body?.error === "string" ? body.error : null;
+  const key = code === "validation_error" ? "errors.apiValidation" : "errors.apiGeneric";
+  return {
+    headline: t(key).replace("{status}", match[1]),
+    detail: JSON.stringify(body, null, 2),
+  };
+}
+
+// #988: samme oversettelse som `log()` bruker, for de kallstedene som går rett til showToast.
+// De tre i kursflytene under er baselinen for participant.js i test/raw-server-error-guard.test.js.
+function participantErrorToast(error, fallbackKey) {
+  const humanized = typeof error?.message === "string" ? humanizeApiError(error.message) : null;
+  if (humanized) {
+    showToast(humanized.headline, "error", humanized.detail);
+    return;
+  }
+  showToast(error instanceof Error ? error.message : t(fallbackKey), "error");
+}
+
 function log(data, options = {}) {
+
   const { notify = true, detail = "" } = options;
-  const statusText = summarizeParticipantResponse(data);
+  const humanized = typeof data === "string" ? humanizeApiError(data) : null;
+  const statusText = humanized ? humanized.headline : summarizeParticipantResponse(data);
+  const toastDetail = detail || humanized?.detail || "";
 
   output.dataset.hasContent = "true";
   outputStatus.dataset.hasContent = "true";
   outputStatus.textContent = statusText;
 
   if (notify) {
-    showToast(statusText, inferParticipantToastType(data), detail);
+    showToast(statusText, humanized ? "error" : inferParticipantToastType(data), toastDetail);
   }
 
   if (!isRawDebugEnabled()) {
@@ -2684,13 +2726,35 @@ submitMcqButton.addEventListener("click", async () => {
         throw new Error(t("errors.startMcqFirst"));
       }
 
-      const responses = currentQuestions.map((q) => {
-        const selected = document.querySelector(`input[name='q_${q.id}']:checked`);
-        return {
-          questionId: q.id,
-          selectedAnswer: selected ? selected.value : "",
-        };
-      });
+      // #988: ubesvarte spørsmål ble tidligere sendt som tom streng, og serveren avviste dem med
+      // en Zod-dump deltakeren ikke kunne handle på. Kontrollen hører hjemme her: den vet HVILKET
+      // spørsmål som mangler, og den koster ingen nettverksrundtur.
+      //
+      // Serversjekken (`selectedAnswer: z.string().min(1)`) beholdes uendret — den er siste
+      // forsvarslinje, ikke den som skal snakke med brukeren.
+      const answers = currentQuestions.map((q) => ({
+        question: q,
+        selected: document.querySelector(`input[name='q_${q.id}']:checked`),
+      }));
+      const missing = answers
+        .map((a, index) => ({ ...a, number: index + 1 }))
+        .filter((a) => !a.selected);
+
+      markUnansweredQuestions(missing.map((m) => m.number));
+
+      if (missing.length > 0) {
+        const numbers = missing.map((m) => m.number);
+        throw new Error(
+          numbers.length === 1
+            ? t("mcq.unansweredOne").replace("{n}", String(numbers[0]))
+            : t("mcq.unansweredMany").replace("{list}", numbers.join(", ")),
+        );
+      }
+
+      const responses = answers.map(({ question, selected }) => ({
+        questionId: question.id,
+        selectedAnswer: selected.value,
+      }));
 
       const body = await apiFetch(`/api/modules/${moduleId}/mcq/submit`, headers, {
         method: "POST",
@@ -2898,6 +2962,21 @@ window.addEventListener("beforeunload", () => {
   persistCurrentModuleDraft(false);
 });
 
+// #988: marker de ubesvarte visuelt og rull til det første. En melding som sier «spørsmål 4» hjelper
+// lite i en liste på tjue — deltakeren skal se hvor det er, ikke telle seg fram.
+//
+// ⚠️ Markeringen ryddes ved HVER innsending, ikke bare når den settes. Uten det ville et spørsmål
+// deltakeren nettopp besvarte blitt stående rødt, og hen ville lett etter en feil som var borte.
+function markUnansweredQuestions(numbers) {
+  const cards = mcqQuestions.querySelectorAll(".mcq-question-card");
+  const wanted = new Set(numbers);
+  cards.forEach((card, index) => {
+    card.classList.toggle("mcq-question-card--unanswered", wanted.has(index + 1));
+  });
+  if (numbers.length === 0) return;
+  cards[numbers[0] - 1]?.scrollIntoView({ behavior: "smooth", block: "center" });
+}
+
 function renderQuestions(selectedResponses = {}) {
   mcqQuestions.innerHTML = "";
   for (const [index, question] of currentQuestions.entries()) {
@@ -2930,6 +3009,10 @@ function renderQuestions(selectedResponses = {}) {
       input.value = option;
       input.checked = selectedResponses[question.id] === option;
       input.addEventListener("change", () => {
+        // #988: svarer deltakeren på et spørsmål som er markert som ubesvart, forsvinner markeringen
+        // med én gang. Uten dette ville kortet blitt stående rødt til neste innsending, og hen ville
+        // lett etter en feil som allerede var rettet.
+        input.closest(".mcq-question-card")?.classList.remove("mcq-question-card--unanswered");
         scheduleDraftAutosave();
       });
       input.className = "mcq-option-input";
@@ -3654,7 +3737,7 @@ async function openInlineItemByEntry(courseId, entry) {
   } catch (error) {
     inlineOpen = null;
     if (row) row.disabled = false;
-    showToast(error instanceof Error ? error.message : t("courses.loadError"), "error");
+    participantErrorToast(error, "courses.loadError");
     return;
   }
   const fresh = document.getElementById(`courseDetail_${courseId}`)?.querySelector(`.course-item[data-key="${key}"]`);
@@ -3781,7 +3864,7 @@ async function renderSectionReaderInto(panel, courseId, entry) {
       if (target) openCourseItemEntry(courseId, target);
     } catch (error) {
       markReadBtn.disabled = false;
-      showToast(error instanceof Error ? error.message : t("courses.loadError"), "error");
+      participantErrorToast(error, "courses.loadError");
     }
   });
 
@@ -3799,7 +3882,7 @@ async function renderSectionReaderInto(panel, courseId, entry) {
       await loadParticipantCourses();
     } catch (error) {
       finishBtn.disabled = false;
-      showToast(error instanceof Error ? error.message : t("courses.loadError"), "error");
+      participantErrorToast(error, "courses.loadError");
     }
   });
 

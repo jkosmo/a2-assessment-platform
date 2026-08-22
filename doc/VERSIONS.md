@@ -2,6 +2,62 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.25.3 - 2026-08-22
+
+**En kandidat som glemte ett spørsmål fikk en Zod-dump (#988).** Produkteier forsøkte å levere inn en
+MCQ-modul i prod og fikk:
+
+```
+400: {"error":"validation_error","issues":[{"code":"too_small","path":["responses",3,…
+```
+
+Det fjerde spørsmålet var ubesvart. Klienten sendte det som tom streng, serveren avviste det — og
+deltakeren fikk maskineriet i fanget uten å få vite hvilket spørsmål som manglet.
+
+### Sjekken fantes allerede, på feil sti
+
+`participant.js` hadde nøyaktig denne kontrollen — men bak `if (previewModeEnabled)`. En **forfatter**
+som testet modulen fikk «Svar på alle preview-MCQ-spørsmål før du fortsetter». En **kandidat midt i en
+test** fikk rå JSON.
+
+Plattformen visste at kontrollen trengtes. Den ble bare aldri lagt på veien ekte brukere går.
+
+### To fikser
+
+**Lokal kontroll før innsending.** Ubesvarte spørsmål navngis («Spørsmål 4 mangler svar»), kortet
+markeres med ramme *og* venstrestrek, og siden ruller til det første. Ingen nettverksrundtur — og
+markeringen forsvinner i det øyeblikket spørsmålet besvares, så ingen leter etter en feil som er
+rettet.
+
+Serversjekken er urørt. Den er siste forsvarslinje, ikke den som skal snakke med brukeren.
+
+**Rå servertekst oversettes i `log()`**, ikke i knappen som utløste saken. `apiFetch` bygger
+`error.message` som `"<status>: <hele JSON-kroppen>"`, og `participant.js` har **tre** steder som
+sender den videre. Å fikse kallstedet ville løst ett av tre — «riktig fiks, ufullstendig flate».
+Detaljene kastes ikke; de går i toastens detaljfelt.
+
+### Verifisering
+
+Tre nye e2e, mutasjonsverifisert begge veier: fjerner man den lokale sjekken blir «stoppes lokalt»
+rød, og slår man av oversettelsen blir «vises som en setning» rød. Kontrollcase på at det *besvarte*
+spørsmålet ikke markeres — uten det ville «marker alle» bestått.
+
+216 e2e, 1036 unit, 6 dom.
+
+### Ratsjen fanget en påstand jeg tok feil om
+
+Første utkast av denne teksten sa at endringen fikset alle tre kjente rå bruk i `participant.js`
+«på én gang, siden oversettelsen ligger i den delte loggeren». **Det stemte ikke.** De tre lå i
+kursflytene og kalte `showToast` direkte — ikke via `log()`. Dekningsvakta sto uendret på 3 og
+avslørte det.
+
+De er nå rutet gjennom `participantErrorToast`, og baselinen er satt **3 → 1**. Den ene som står
+igjen er oversetterens egen fallback: den viser en allerede oversatt melding, som «Spørsmål 4
+mangler svar», og skal være der.
+
+Verdt å merke seg som argument for ratsjen: den fanget både at gjelden ble mindre *og* at jeg
+beskrev den feil.
+
 ## 2.25.2 - 2026-08-22
 
 **Tre dekningsvakter, og de to feilene den tredje fant (#941).** Mekanisme 2 fra

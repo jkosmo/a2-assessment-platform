@@ -331,3 +331,118 @@ test("participant: FREETEXT_PLUS_MCQ result shows both the MCQ and practical sco
   await expect(result).toContainText("MCQ-poeng");
   await expect(result).toContainText("Praktisk poeng");
 });
+
+// #988 — en kandidat som glemte ett spørsmål fikk `{"code":"too_small","path":["responses",3]}`.
+//
+// Sjekken FANTES allerede, men bare i forhåndsvisningsmodus (`previewModeEnabled`): en forfatter som
+// testet modulen fikk en vennlig melding, mens en ekte kandidat fikk rå Zod. Plattformen visste at
+// kontrollen trengtes og la den på feil sti.
+
+async function startTwoQuestionMcq(page: Page) {
+  await page.route("**/api/submissions", (route: Route) =>
+    route.fulfill({ status: 201, contentType: "application/json", body: JSON.stringify({ submission: { id: "s1" } }) }),
+  );
+  await page.route("**/api/modules/*/mcq/start**", (route: Route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        attemptId: "a1",
+        questions: [
+          { id: "q1", stem: "Spørsmål 1", options: ["A", "B"] },
+          { id: "q2", stem: "Spørsmål 2", options: ["A", "B"] },
+        ],
+      }),
+    }),
+  );
+  await page.goto("/participant");
+  await page.locator("#loadModules").click();
+  await page.locator(".module-card", { hasText: "MCQ Modul" }).click();
+}
+
+test("#988: ubesvart spørsmål stoppes lokalt, navngis, og markeres", async ({ page }) => {
+  await mockBase(page);
+  await page.addInitScript(() => {
+    try { localStorage.setItem("participant.locale", "nb"); } catch { /* ignore */ }
+  });
+
+  let submitCalled = false;
+  await page.route("**/api/modules/*/mcq/submit", (route: Route) => {
+    submitCalled = true;
+    return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ assessmentComplete: true }) });
+  });
+
+  await startTwoQuestionMcq(page);
+
+  // Svar bare på det FØRSTE, og lever inn.
+  await page.locator("input[name='q_q1']").first().check();
+  await page.locator("#submitMcq").click();
+
+  // ⚠️ Kjernen: ingen nettverksrundtur. Serveren skal aldri se en ufullstendig besvarelse, og
+  // deltakeren skal ikke vente på et svar for å få vite noe klienten allerede visste.
+  await expect.poll(() => submitCalled).toBe(false);
+
+  // Meldingen navngir spørsmålet. «Fyll ut alle feltene» hjelper ikke i en liste på tjue.
+  await expect(page.locator("#outputStatus")).toContainText("Spørsmål 2");
+  await expect(page.locator("#outputStatus")).not.toContainText("too_small");
+
+  // Og kortet er markert, så deltakeren ser HVOR det er.
+  const cards = page.locator(".mcq-question-card");
+  await expect(cards.nth(1)).toHaveClass(/mcq-question-card--unanswered/);
+  // Kontrollcase: det besvarte skal IKKE markeres. Uten dette ville «marker alle» bestått.
+  await expect(cards.nth(0)).not.toHaveClass(/mcq-question-card--unanswered/);
+});
+
+test("#988: markeringen forsvinner idet spørsmålet besvares", async ({ page }) => {
+  await mockBase(page);
+  await page.addInitScript(() => {
+    try { localStorage.setItem("participant.locale", "nb"); } catch { /* ignore */ }
+  });
+  await page.route("**/api/modules/*/mcq/submit", (route: Route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ assessmentComplete: true }) }),
+  );
+
+  await startTwoQuestionMcq(page);
+  await page.locator("input[name='q_q1']").first().check();
+  await page.locator("#submitMcq").click();
+
+  const second = page.locator(".mcq-question-card").nth(1);
+  await expect(second).toHaveClass(/mcq-question-card--unanswered/);
+
+  // Uten dette ville kortet blitt stående rødt til neste innsending, og deltakeren ville lett etter
+  // en feil som allerede var rettet.
+  await page.locator("input[name='q_q2']").first().check();
+  await expect(second).not.toHaveClass(/mcq-question-card--unanswered/);
+});
+
+test("#988: en servervalideringsfeil vises som en setning, ikke som Zod-utdata", async ({ page }) => {
+  await mockBase(page);
+  await page.addInitScript(() => {
+    try { localStorage.setItem("participant.locale", "nb"); } catch { /* ignore */ }
+  });
+
+  // Serveren avviser likevel — f.eks. fordi forsøket er utløpt. Deltakeren skal ikke se maskineriet.
+  await page.route("**/api/modules/*/mcq/submit", (route: Route) =>
+    route.fulfill({
+      status: 400,
+      contentType: "application/json",
+      body: JSON.stringify({
+        error: "validation_error",
+        issues: [{ code: "too_small", minimum: 1, path: ["responses", 1, "selectedAnswer"] }],
+      }),
+    }),
+  );
+
+  await startTwoQuestionMcq(page);
+  await page.locator("input[name='q_q1']").first().check();
+  await page.locator("input[name='q_q2']").first().check();
+  await page.locator("#submitMcq").click();
+
+  const status = page.locator("#outputStatus");
+  await expect(status).toContainText(/skjemaet/i);
+  // ⚠️ Ingenting av maskineriet skal nå deltakeren. Dette er #972-klassen på den flaten der den er
+  // verst: en kandidat midt i en test kan ikke tyde en Zod-sti.
+  await expect(status).not.toContainText("too_small");
+  await expect(status).not.toContainText("responses");
+  await expect(status).not.toContainText("400:");
+});

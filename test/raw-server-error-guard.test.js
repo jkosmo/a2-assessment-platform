@@ -29,7 +29,10 @@ const PUBLIC = fileURLToPath(new URL("../public", import.meta.url));
 // Fil -> antall kjente rå bruk. Arbeidslista for #972; hver linje som forsvinner herfra er en
 // flate som har fått lesbar feiltekst.
 const BASELINE = {
-  "participant.js": 3,
+  // #988: nede fra 3. De to gjenværende var kursflytenes rå `error.message`; de går nå gjennom
+  // `participantErrorToast`. Den ene som står igjen er oversetterens EGEN fallback — den viser en
+  // allerede oversatt melding (f.eks. «Spørsmål 4 mangler svar»), og skal være der.
+  "participant.js": 1,
   "static/admin-content-calibration.js": 1,
   "static/admin-content-classes.js": 9,
   "static/admin-content-courses.js": 8,

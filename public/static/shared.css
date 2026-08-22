@@ -683,6 +683,14 @@ body.auth-resolving .mock-identity-card {
   background: linear-gradient(180deg, #fffdf8 0%, #f7f4ec 100%);
 }
 
+/* #988: et ubesvart spørsmål ved innsending. Ramme OG venstrestrek — fargen alene kan ikke bære
+   meldingen for den som ikke skiller rødt fra grått, og kortene ligger tett. */
+.mcq-question-card--unanswered {
+  border-color: var(--color-error);
+  border-left: 4px solid var(--color-error);
+  background: linear-gradient(180deg, #fdf6f5 0%, #f8eeec 100%);
+}
+
 .mcq-question-header {
   display: grid;
   grid-template-columns: auto 1fr;
