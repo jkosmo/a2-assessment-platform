@@ -2,6 +2,128 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.27.0 - 2026-08-23
+
+**Første runde med kompleksitetsbremsen brukt som verktøy, ikke bare som måling.** Fire agenter tok
+hvert sitt område fra nattskanningens epic (#941), parallelt, hver i egen worktree. Ti saker
+adressert.
+
+⚠️ **Det som gjør denne releasen verdt å lese: tre av de fire agentene fant at oppgaven de fikk var
+feil beskrevet.** Ikke i detaljene — i premisset.
+
+### #958 — «hva inneholder dette kurset?» går nå gjennom to navngitte dører
+
+`findCourseItems` hentet nøyaktig feltene som avgjør tilgjengelighet og **filtrerte ingenting**. Åtte
+kallere tok hver sin avgjørelse, med fem ulike regler. Det er roten til #938, #944, #945 og #992.
+
+| Dør | Hva den gjør |
+|---|---|
+| `findCourseItemsForParticipant` | filtrerer bort utilgjengelige seksjoner i SQL; moduler får et ferdig avgjort `available` |
+| `findAllCourseItems` | alt — forfatter, publisering, sletting, eksport |
+
+Begge sluttet å returnere `archivedAt`, `activeVersionId` og `publishedAt` til kallerne. **Råmaterialet
+for regelen når ikke lenger ut**, så ingen kaller kan tolke det selv.
+
+**Tallet saken handlet om: 7 → 3, og kallersiden 5 → 0.**
+
+Ingen tredje dør for publiseringsgaten. Saken påsto at den hadde en `activeVersionId === null`-regel;
+den finnes ikke der. Gaten vil ha hele inventaret, og en egen dør ville lagt til et sted, ikke fjernet
+ett.
+
+### #972 + #965 + #980 + #985 — én oversetter fra feilKODE til lesbar tekst
+
+`showToast`-ratsjen: **33 → 1**. Den ene som står igjen er oversetterens egen fallback.
+
+Vakta var for smal — den så bare `showToast`. De samme feilene sto i tomtilstander, feilbannere,
+`log()` og chat-loggen. Med den utvidede skanningen: **123 → 37**.
+
+⚠️ De to tallene er ikke sammenlignbare. Utgangspunktet er målt på nytt med den nye skanningen,
+nettopp for å ha en ærlig baseline framover.
+
+**Antall oversettere gikk fra fem til én.** `describeImportError`, shell-ens `parseApiErrorMessage`,
+review-ens to og `owner-panel.js:errorMessage` delegerer nå alle til `api-error.js`. Kodetabellen
+ligger i participant-bunten, som åtte andre bunter sprer inn — derfor fikk `review.js` fiksen gratis.
+
+38 nye nøkler × 3 språk. En test nekter at kildeteksten står i nb eller nn (#892/#981).
+
+### #975 — fella er ikke `.hidden`-klassen, den er `hidden`-ATTRIBUTTET
+
+⚠️ **Saken tok feil, og korreksjonen er det mest verdifulle i den.**
+
+`.hidden` er en forfatter-regel og taper bare mot regler som kommer senere. **Null av
+klasse-togglingene er ødelagt.** `hidden`-attributtet har bare nettleserens eget ark bak seg, og
+origin slår spesifisitet — det taper mot *enhver* regel som setter `display`.
+
+Så «144 togglinger» var feil måltall. Det reelle var **10 elementer på 16 steder**, hvert eneste ett
+verifisert i Chromium med `getComputedStyle()`, ikke gjettet fra filsøk.
+
+Verste synlige feil: en saksbehandler med bare én rolle så fanen for rollen hun ikke har, klikkbar,
+med en «0»-plakett.
+
+`setHidden` setter nå **både** attributtet og inline `display` — og fjerner dermed en felle til: et
+`hidden` fra markupen overlevde `setHidden(el, false)` og holdt elementet usynlig.
+
+Tre CSS-lapper for samme felle er fjernet. To av dem var aldri nødvendige; de gjorde bare at ingen
+kunne se det.
+
+**Anbefaling fulgt: de resterende ~230 er ikke konvertert.** De er ikke ødelagte, og vakta beviser
+det for hver av dem ved hver kjøring.
+
+### #969 — fullføringsgraden kunne vise 400 %
+
+`enrolledParticipants` het innmeldte og talte *innleveringer*. Med datofilter kunne fullføringene
+ligge innenfor og innleveringene utenfor: `12 / 3` i CSV-en som går til ledelsen.
+
+Nevneren er nå kursets faktiske publikum (`resolveCourseAudience` — samme kilde som
+kullstatus-dashbordet), unionert med dem som fullførte i vinduet.
+
+⚠️ **Unionen er poenget, ikke en klipping til 100 %.** En klipping ville skjult uenigheten; unionen
+gjør telleren til en delmengde av nevneren *per konstruksjon*.
+
+**Tall før og etter denne versjonen kan ikke sammenlignes direkte.**
+
+### #961 og #957
+
+Sletting av en seksjon logges nå — i samme transaksjon som slettingen, etter #803-mønsteret. Tittelen
+hentes før slettingen, for etterpå finnes den ingen steder.
+
+Kursimporten rapporterer `heldBackByTranslationGate`, slik modul- og seksjonsimporten alltid har
+gjort. Kommentaren i tjenesten lovet det; koden gjorde det ikke.
+
+### Om metoden
+
+**Fire agenter, hver med en eksplisitt sperreliste over de andres filer.** Den virket: da #957 trengte
+en linje i en sperret fil, rapporterte agenten nøyaktig hvilken linje — den gjettet ikke. Det tok ett
+minutt å legge inn, i stedet for å bli oppdaget på stage.
+
+**Mutasjonstestingen fanget to ting som ellers hadde gått ut:**
+
+- En **ekte regresjon** i #975: en uomvendt `panel.hidden = false` gjorde at kurspaneler aldri ville
+  åpnet seg igjen. Sju e2e-tester ble røde.
+- En **feil i en vakt** — filene er CRLF, og i JS-regex matcher ikke `.` en `\r`, så
+  kommentar-strippingen virket aldri og vakta leste sin egen kommentar som kode.
+
+⚠️ **Én kontrakttest var grønn hele tiden på en linje som ikke gjorde noe.** Den festet at
+`ackCheckbox.hidden = hideAck` FANTES, ikke at den virket — mens `.inline` slo attributtet og boksen
+bare ble usynlig fordi label-en rundt ble skjult. Den er nå erstattet av en e2e som måler
+`getComputedStyle().display`.
+
+Alt integrert på nytt av meg, med sju konflikter løst i #958 alene. Der min egen mellomløsning fra
+2.26.4 overlappet med agentens, vant agentens: mitt `visibleItems`-filter i ruta ble en ANDRE
+anvendelse av regelen så snart filteret flyttet inn i døra, og er slettet med en kommentar om at det
+ikke skal tilbake.
+
+1123 unit, 241 e2e, 31 kontrakt, 6 dom, 110 integrasjonsfiler.
+
+### Nye saker fra funn underveis
+
+- **#993** — seksjonsfigurer kan hentes selv om seksjonen er arkivert. #944 sin fjerde dør, oversett
+  fordi den går via en annen tjeneste.
+- **#994** — pre-stage-porten gir tilfeldige røde tester under last. Fem «unit»-tester går egentlig
+  mot Postgres. ⚠️ En port som gir tilfeldig rødt lærer folk å kjøre den om igjen i stedet for å lese
+  den.
+
+
 ## 2.26.4 - 2026-08-23
 
 **De sju gjenstående QA-funnene (#992), en produkteierbeslutning som forenkler dem, og fire funn
