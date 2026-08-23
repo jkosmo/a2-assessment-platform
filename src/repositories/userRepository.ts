@@ -150,6 +150,19 @@ export async function findActiveParticipants(at = new Date()) {
   });
 }
 
+// #969: kursrapporten snevrer alle sine tall til én avdeling når `orgUnit`-filteret er satt.
+// Kursets publikum (`resolveCourseAudience`) kjenner bare bruker-ID-er — avdelingen må derfor slås
+// opp separat. Uten denne ville nevneren i fullføringsgraden vært hele organisasjonen mens telleren
+// var én avdeling, og graden systematisk for lav.
+export async function findUserIdsInDepartment(userIds: string[], department: string): Promise<string[]> {
+  if (userIds.length === 0) return [];
+  const users = await prisma.user.findMany({
+    where: { id: { in: userIds }, department },
+    select: { id: true },
+  });
+  return users.map((user) => user.id);
+}
+
 export async function getActiveRoles(userId: string, at = new Date()): Promise<AppRoleType[]> {
   const assignments = await prisma.roleAssignment.findMany({
     where: {

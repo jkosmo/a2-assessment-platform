@@ -1,4 +1,6 @@
 import { courseRepository } from "./courseRepository.js";
+import { resolveCourseAudience } from "./cohortStatusService.js";
+import { findUserIdsInDepartment } from "../../repositories/userRepository.js";
 import { localizeContentText } from "../../i18n/content.js";
 import type { SupportedLocale } from "../../i18n/locale.js";
 import type { ReportFilters } from "../reporting/types.js";
@@ -40,6 +42,31 @@ type CourseLearnerRow = {
   certificateId: string | null;
 };
 
+// #969: «hvem er med i dette kurset» besvares ETT sted — `resolveCourseAudience` (#498), det samme
+// publikummet kullstatus-dashbordet og påminnelsesjobben bruker. Rapporten hadde sin egen, fjerde
+// definisjon: distinkte brukere med INNLEVERING på kursets moduler. Navnet lovet innmelding,
+// telleren målte aktivitet, og de to sprikte på to måter som begge nådde ledelsen:
+//   - et rent lesekurs uten moduler ga enrolled = 0 samtidig med 25 fullføringer
+//   - med datofilteret «siste 30 dager» kunne fullføringene ligge innenfor vinduet og
+//     innleveringene utenfor: 12 / 3 = 400 % fullføringsgrad i CSV-en.
+//
+// Nevneren er publikummet UNIONERT med dem som faktisk har fullført i vinduet. Unionen er ikke
+// pynt: en deltaker kan ha fått innmeldingen trukket tilbake, eller ha falt ut av en klasse, etter
+// at beviset ble utstedt — da ville nevneren igjen vært mindre enn telleren. Med unionen er
+// «fullført» en delmengde av «med i kurset» per konstruksjon, så graden KAN ikke overstige 100 %.
+// Det er med vilje løst slik og ikke ved å klippe tallet til 1: en klipping ville skjult
+// uenigheten mellom de to tallene i stedet for å fjerne den.
+//
+// Publikummet er bevisst IKKE datofiltrert (det finnes ingen «var innmeldt i vinduet»-tilstand å
+// filtrere på — `resolveCourseAudience` beskriver nåsituasjonen). Fullføringsgraden med datofilter
+// leses derfor som «andelen av dagens publikum som fullførte i vinduet».
+async function resolveReportAudienceIds(courseId: string, orgUnit: string | undefined): Promise<string[]> {
+  const audience = await resolveCourseAudience(courseId);
+  const userIds = audience.map((member) => member.userId);
+  if (!orgUnit) return userIds;
+  return findUserIdsInDepartment(userIds, orgUnit);
+}
+
 export async function getCourseReport(
   filters: Pick<ReportFilters, "courseId" | "dateFrom" | "dateTo" | "orgUnit"> = {},
   locale: SupportedLocale = "en-GB",
@@ -48,13 +75,26 @@ export async function getCourseReport(
 
   const rows: CourseReportRow[] = await Promise.all(
     courses.map(async (course) => {
-      const moduleIds = course.modules.map((cm) => cm.moduleId);
-
-      const [enrolled, completed] = await Promise.all([
-        courseRepository.countDistinctEnrolledUsersForModules(moduleIds, filters),
-        courseRepository.countCourseCompletions(course.id, filters),
+      // Fullføringene hentes som RADER, ikke som `countCourseCompletions`, fordi nevneren trenger
+      // bruker-ID-ene for unionen over. CourseCompletion er unik per (userId, courseId), så
+      // radantallet er fortsatt antall distinkte deltakere — `completedParticipants` betyr det
+      // samme som før.
+      const [audienceUserIds, completions] = await Promise.all([
+        resolveReportAudienceIds(course.id, filters.orgUnit),
+        courseRepository.findCourseCompletionsForLearnerReport(course.id, filters),
       ]);
+      const participantIds = new Set(audienceUserIds);
+      for (const completion of completions) {
+        participantIds.add(completion.userId);
+      }
+      const enrolled = participantIds.size;
+      const completed = completions.length;
 
+      // ⚠️ `moduleBreakdown.enrolledUsers` er IKKE det samme publikummet som `enrolledParticipants`
+      // over: det er fortsatt «brukere med innlevering på modulen i vinduet». Modulnivået har ingen
+      // egen innmelding — man meldes inn i et KURS — så den rette nevneren her er kursets publikum,
+      // ikke en modulvariant. Den delen krever en ny teller i `courseRepository`; se #969-rapporten.
+      // Inntil da kan `passRate` fortsatt overstige 1 av nøyaktig samme grunn som kursgraden kunne.
       const moduleBreakdown = await Promise.all(
         course.modules.map(async (cm) => {
           const [passedUsers, enrolledUsers] = await Promise.all([

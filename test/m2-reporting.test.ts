@@ -168,6 +168,28 @@ describe("MVP reporting endpoints", () => {
       },
     });
 
+    // #969: `enrolledParticipants` er kursets PUBLIKUM (resolveCourseAudience), ikke «brukere med
+    // innlevering på kursets moduler». Testen hadde ingen innmeldinger i det hele tatt og fikk
+    // likevel 3 — det var nettopp feilen. Meld inn de tre deltakerne eksplisitt, så er tallet
+    // etterprøvbart.
+    const participantBUser = await prisma.user.findUnique({
+      where: { externalId: participantBHeaders["x-user-id"] },
+      select: { id: true },
+    });
+    const participantCUser = await prisma.user.findUnique({
+      where: { externalId: participantCHeaders["x-user-id"] },
+      select: { id: true },
+    });
+    expect(participantBUser).toBeTruthy();
+    expect(participantCUser).toBeTruthy();
+    await prisma.courseEnrollment.createMany({
+      data: [participantAUser!.id, participantBUser!.id, participantCUser!.id].map((userId) => ({
+        userId,
+        courseId: reportingCourse.id,
+        source: "INDIVIDUAL" as const,
+      })),
+    });
+
     const completionResponse = await request(app)
       .get(`/api/reports/completion?moduleId=${encodeURIComponent(moduleId)}&orgUnit=Engineering`)
       .set(reportReaderHeaders);
@@ -271,6 +293,7 @@ describe("MVP reporting endpoints", () => {
         courseId: reportingCourse.id,
         enrolledParticipants: 3,
         completedParticipants: 1,
+        completionRate: 0.33,
       }),
     ]);
     expect(courseReportResponse.body.rows[0].moduleBreakdown).toEqual([
@@ -331,11 +354,16 @@ describe("MVP reporting endpoints", () => {
       .get(`/api/reports/courses?courseId=${encodeURIComponent(reportingCourse.id)}&dateTo=2000-01-01`)
       .set(reportReaderHeaders);
     expect(emptyWindowCourseReportResponse.status).toBe(200);
+    // #969: datofilteret gjelder FULLFØRINGENE, ikke publikummet — et kurs mister ikke deltakerne
+    // sine fordi man snevrer vinduet. Nevneren blir stående på 3 og graden på 0, i stedet for det
+    // gamle 0/0 = null. Det er også dette som gjør 12 / 3 = 400 % umulig: telleren er per
+    // konstruksjon en delmengde av nevneren.
     expect(emptyWindowCourseReportResponse.body.rows).toEqual([
       expect.objectContaining({
         courseId: reportingCourse.id,
-        enrolledParticipants: 0,
+        enrolledParticipants: 3,
         completedParticipants: 0,
+        completionRate: 0,
       }),
     ]);
 
