@@ -8,6 +8,7 @@ import { initConsentGuard } from "/static/consent-guard.js";
 import { resolveWorkspaceNavigationItems } from "/static/participant-console-state.js";
 import { renderWorkspaceNavigationWithProfile } from "./workspace-nav.js";
 import { describeImportError } from "/static/import-error.js";
+import { describeApiError } from "/static/api-error.js";
 import { showToast } from "/static/toast.js";
 import { lifecycleStatusBadge } from "/static/content-status-badge.js";
 import { renderOwnerPanel } from "/static/owner-panel.js";
@@ -147,6 +148,20 @@ function gateIssuesFrom(error) {
 }
 function tNav(key) {
   return adminContentTranslations[currentLocale]?.[key] ?? adminContentTranslations["en-GB"]?.[key] ?? key;
+}
+
+// #972/#965: syv toaster og to tomtilstander sto på `err?.message ?? "Error"`. Publiseringsgaten
+// var alt kodet riktig her (`translationGateMessage` over) — alt ANNET, blant annet eierskapsvaktas
+// 403, gikk rått ut. Samme flate, to regler. Nå går restene gjennom den delte kodetabellen.
+//
+// LABELS eier denne sidens egen ordlyd; feilKODENE bor i den delte bunten, så `tNav` er oppslaget.
+function apiErrorToast(error) {
+  const { headline, detail } = describeApiError(error, tNav);
+  showToast(headline, "error", detail);
+}
+
+function apiErrorText(error) {
+  return describeApiError(error, tNav).headline;
 }
 
 let participantRuntimeConfig = {};
@@ -324,7 +339,7 @@ async function renderListView() {
     sections = data.sections ?? [];
     allSections = sections;
   } catch (err) {
-    pageContent.innerHTML = `<div class="empty-state"><p class="empty-state-title">${escapeHtml(L("loadError"))}</p><p class="empty-state-text">${escapeHtml(err?.message ?? "")}</p></div>`;
+    pageContent.innerHTML = `<div class="empty-state"><p class="empty-state-title">${escapeHtml(L("loadError"))}</p><p class="empty-state-text">${escapeHtml(apiErrorText(err))}</p></div>`;
     return;
   }
 
@@ -431,7 +446,7 @@ async function sectionLifecycle(sectionId, action, toastKey) {
     // #916: a publish blocked by the translation gate gets the field × language message, not the
     // raw "422: {...}" the generic branch would print.
     const gate = translationGateMessage("gateBlocked", gateIssuesFrom(err));
-    showToast(gate ?? err?.message ?? "Error", "error");
+    if (gate) showToast(gate, "error"); else apiErrorToast(err);
   }
 }
 
@@ -456,7 +471,7 @@ async function exportSectionPackage(sectionId, btn) {
     URL.revokeObjectURL(url);
     showToast(L("exported"));
   } catch (err) {
-    showToast(err?.message ?? "Error", "error");
+    apiErrorToast(err);
   } finally {
     if (btn) btn.disabled = false;
   }
@@ -518,7 +533,7 @@ async function deleteSection(sectionId) {
     showToast(L("deleted"));
     renderListView();
   } catch (err) {
-    showToast(err?.message ?? "Error", "error");
+    apiErrorToast(err);
   }
 }
 
@@ -540,7 +555,7 @@ async function renderEditorView(sectionId) {
       editing.activeVersionId = data.section.activeVersionId ?? null;
       editing.archivedAt = data.section.archivedAt ?? null;
     } catch (err) {
-      pageContent.innerHTML = `<div class="empty-state"><p class="empty-state-title">${escapeHtml(err?.message ?? "Error")}</p></div>`;
+      pageContent.innerHTML = `<div class="empty-state"><p class="empty-state-title">${escapeHtml(apiErrorText(err))}</p></div>`;
       return;
     }
   }
@@ -607,7 +622,7 @@ async function renderEditorView(sectionId) {
   // #787: content-owner management for an existing section (new sections have no id yet).
   if (sectionId) {
     const ownerHost = document.getElementById("ownerPanelHost");
-    if (ownerHost) renderOwnerPanel({ container: ownerHost, contentType: "SECTION", contentId: sectionId, getHeaders }).catch(() => {});
+    if (ownerHost) renderOwnerPanel({ container: ownerHost, contentType: "SECTION", contentId: sectionId, getHeaders, t: tNav }).catch(() => {});
   }
 }
 
@@ -655,7 +670,7 @@ async function toggleSectionLifecycle() {
   } catch (err) {
     // #916: same gate rendering as the list's Publiser — both are the same door.
     const gate = translationGateMessage("gateBlocked", gateIssuesFrom(err));
-    showToast(gate ?? err?.message ?? "Error", "error");
+    if (gate) showToast(gate, "error"); else apiErrorToast(err);
   } finally {
     btn.disabled = false;
   }
@@ -752,7 +767,7 @@ async function persistSection({ silent } = {}) {
     }
     return true;
   } catch (err) {
-    showToast(err?.message ?? "Error", "error");
+    apiErrorToast(err);
     return false;
   }
 }
@@ -805,13 +820,13 @@ async function translateFromCurrent() {
         });
         if (assetRes?.localizedAssetCount > 0) showToast(L("imagesTranslated"));
       } catch (assetErr) {
-        showToast(assetErr?.message ?? "Image translation failed", "error");
+        apiErrorToast(assetErr);
       }
     }
     showToast(L("translated"));
     renderEditorFields();
   } catch (err) {
-    showToast(err?.message ?? "Error", "error");
+    apiErrorToast(err);
   } finally {
     setLocked(false);
     if (btn) btn.textContent = L("translate");
@@ -856,7 +871,7 @@ async function uploadImage(file) {
     schedulePreview();
     showToast(L("imageInserted"));
   } catch (err) {
-    showToast(err?.message ?? "Error", "error");
+    apiErrorToast(err);
   } finally {
     if (btn) btn.disabled = false;
   }

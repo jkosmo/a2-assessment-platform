@@ -9,12 +9,20 @@
 // en-GB, så en setning fra serveren ville blitt vist ordrett på feil språk. Serverens `message` er
 // kun en reserve for API-konsumenter uten en egen tabell.
 
+// #985: «alt annet»-grenen returnerte `body.message` som overskrift — fila skrev ned regelen på
+// linje 8-10 og brøt den fire linjer senere. Den grenen går nå gjennom den delte kodetabellen i
+// api-error.js, som er den eneste som kjenner `content_ownership`, `item_archived` og resten.
+// Importfeilene beholder sin egen ordlyd her, fordi de skal snakke om FILA («dette ser ikke ut som
+// en seksjonspakke»), ikke om et API-kall.
+import { describeApiError } from "/static/api-error.js";
+
 /**
  * @param {unknown} error   feilen fra apiFetch — bærer `.body` (parset) og `.message` ("<status>: <json>")
  * @param {{ notAnEnvelope: string }} labels  tekster på brukerens språk
+ * @param {(key: string) => string} [t]  konsollets i18n-oppslag, for kodene importen ikke eier selv
  * @returns {{ headline: string, detail: string | undefined }}
  */
-export function describeImportError(error, labels) {
+export function describeImportError(error, labels, t) {
   const body = error?.body;
   const code = body?.error;
 
@@ -31,12 +39,8 @@ export function describeImportError(error, labels) {
     };
   }
 
-  // Alt annet: serverens egen melding hvis den finnes som ren tekst, ellers apiFetch-strengen.
-  if (typeof body?.message === "string" && body.message.length > 0) {
-    return { headline: body.message, detail: undefined };
-  }
-  return {
-    headline: error instanceof Error ? error.message : "ukjent feil",
-    detail: undefined,
-  };
+  // Alt annet — typisk `content_ownership` eller `import_target_not_found` — er ikke en
+  // fil-feil, men et vanlig API-avslag. Den delte tabellen eier de kodene.
+  const described = describeApiError(error, t);
+  return { headline: described.headline, detail: described.detail };
 }

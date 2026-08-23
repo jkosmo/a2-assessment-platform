@@ -16,6 +16,7 @@ import {
   resolveWorkspaceNavigationItems,
 } from "/static/participant-console-state.js";
 import { showToast } from "/static/toast.js";
+import { describeApiError } from "/static/api-error.js";
 import { renderWorkspaceNavigationWithProfile } from "./workspace-nav.js";
 import { localizeValueForLocale, buildPreviewHtml } from "/static/admin-content-preview.js";
 import { setHidden } from "/static/dom-visibility.js";
@@ -50,6 +51,14 @@ let currentLocale = (() => {
 function t(key) {
   const map = adminContentTranslations[currentLocale] ?? adminContentTranslations["en-GB"] ?? {};
   return map[key] ?? key;
+}
+
+// #972: samtale-skallet flettet `String(err?.message ?? err)` inn i chat-loggen 19 steder. Det
+// er "<status>: <hele JSON-kroppen>" fra apiFetch — rå JSON midt i en samtale, på serverens språk.
+// `apiErrorText` slår opp KODEN i den delte tabellen (api-error.js) og gir en setning på
+// forfatterens språk. En feil klienten selv kastet slipper uendret gjennom: den teksten er vår.
+function apiErrorText(error) {
+  return describeApiError(error, t).headline;
 }
 
 // Template translation: replaces {varName} placeholders in the translated string.
@@ -293,21 +302,19 @@ function focusFirstEnabledChoice(container) {
   setTimeout(() => firstChoice.focus(), 40);
 }
 
+// #972/#985: returnerte `parsed.message || parsed.error` — altså serverens engelske setning, eller
+// i verste fall den rå kodestrengen (`content_ownership`) som overskrift. Begge deler er brudd på
+// «feilkoden er kontrakten, ikke teksten»: dette konsollet defaulter til en-GB og kjøres på tre
+// språk. Nå slås koden opp i den delte tabellen; `fallbackKey` brukes bare når feilen ikke er en
+// server-konvolutt i det hele tatt.
 function parseApiErrorMessage(error, fallbackKey) {
-  const fallback = t(fallbackKey);
-  if (!(error instanceof Error) || typeof error.message !== "string") {
-    return fallback;
-  }
-
-  const match = error.message.match(/^\d+:\s*(\{[\s\S]*\})$/);
-  if (!match) return fallback;
-
-  try {
-    const parsed = JSON.parse(match[1]);
-    return parsed.message || parsed.error || fallback;
-  } catch {
-    return fallback;
-  }
+  const described = describeApiError(error, t);
+  // ⚠️ `code === null` betyr at feilen ikke er en server-konvolutt i det hele tatt — en FileReader
+  // som feilet, en avbrutt fetch. Da er `headline` feilens egen, ofte interne, streng
+  // («file_reader_failed»), og kallstedets `fallbackKey` er den eneste som er skrevet for et
+  // menneske. Uten dette ville lokaliseringen av API-feilene kostet oss lokaliseringen av de andre.
+  if (described.code === null) return t(fallbackKey);
+  return described.headline;
 }
 
 function isSupportedSourceMaterialFile(file) {
@@ -1241,7 +1248,7 @@ function updateStateRail() {
     } else if (ownerHost.dataset.moduleId !== selectedModuleId) {
       ownerHost.dataset.moduleId = selectedModuleId;
       ownerHost.hidden = false;
-      renderOwnerPanel({ container: ownerHost, contentType: "MODULE", contentId: selectedModuleId, getHeaders }).catch(() => {});
+      renderOwnerPanel({ container: ownerHost, contentType: "MODULE", contentId: selectedModuleId, getHeaders, t }).catch(() => {});
     }
   }
   if (!hasModule) return;
@@ -1954,7 +1961,7 @@ async function generateDraftInBackground(sourceMaterial, certLevel, locale, gene
       logResolveSlot(slot, () => escapeHtml(t("shell.generating.draftAborted")));
       return;
     }
-    const errMsg = String(err?.message ?? err);
+    const errMsg = apiErrorText(err);
     logResolveSlot(slot, () => `${escapeHtml(t("shell.generating.draftErrorPrefix"))}${escapeHtml(errMsg)}`, [
       { labelKey: "shell.action.retry", action: () => generateDraftInBackground(sourceMaterial, certLevel, locale, generationMode, onAccept, blueprint, scenarioMode) },
     ]);
@@ -2021,7 +2028,7 @@ async function generateMcqInBackground(sourceMaterial, certLevel, locale, genera
       logResolveSlot(slot, () => escapeHtml(t("shell.generating.mcqAborted")));
       return;
     }
-    const errMsg = String(err?.message ?? err);
+    const errMsg = apiErrorText(err);
     logResolveSlot(slot, () => `${escapeHtml(t("shell.generating.mcqErrorPrefix"))}${escapeHtml(errMsg)}`, [
       { labelKey: "shell.action.retry", action: () => generateMcqInBackground(sourceMaterial, certLevel, locale, generationMode, questionCount, optionCount, onAccept) },
     ]);
@@ -2087,7 +2094,7 @@ async function reviseDraftInBackground(instruction, onAccept) {
       logResolveSlot(slot, () => escapeHtml(t("shell.revision.draftAborted")));
       return;
     }
-    const errMsg = String(err?.message ?? err);
+    const errMsg = apiErrorText(err);
     logResolveSlot(slot, () => `${escapeHtml(t("shell.revision.draftErrorPrefix"))}${escapeHtml(errMsg)}`, [
       { labelKey: "shell.action.retry", action: () => reviseDraftInBackground(instruction, onAccept) },
     ]);
@@ -2145,7 +2152,7 @@ async function reviseMcqInBackground(instruction, onAccept) {
       logResolveSlot(slot, () => escapeHtml(t("shell.revision.mcqAborted")));
       return;
     }
-    const errMsg = String(err?.message ?? err);
+    const errMsg = apiErrorText(err);
     logResolveSlot(slot, () => `${escapeHtml(t("shell.revision.mcqErrorPrefix"))}${escapeHtml(errMsg)}`, [
       { labelKey: "shell.action.retry", action: () => reviseMcqInBackground(instruction, onAccept) },
     ]);
@@ -2204,7 +2211,7 @@ async function applyStructuredTitleEditInBackground(newTitle) {
       readyHtml: () => `<strong>${escapeHtml(tf("shell.revision.titleReady", { title: newTitle }))}</strong>${escapeHtml(warning)}`,
     });
   } catch (err) {
-    const errMsg = String(err?.message ?? err);
+    const errMsg = apiErrorText(err);
     logResolveSlot(slot, () => `${escapeHtml(t("shell.revision.titleErrorPrefix"))}${escapeHtml(errMsg)}`, [
       { labelKey: "shell.action.retry", action: () => applyStructuredTitleEditInBackground(newTitle) },
       { labelKey: "shell.directEdit.action", action: () => startDirectEditFlow() },
@@ -2250,7 +2257,7 @@ async function refreshLocalizedDraftInBackground({ draft, mcq }) {
       readyHtml: () => `<strong>${escapeHtml(t("shell.revision.translateReady"))}</strong>`,
     });
   } catch (err) {
-    const errMsg = String(err?.message ?? err);
+    const errMsg = apiErrorText(err);
     logResolveSlot(slot, () => `${escapeHtml(t("shell.revision.translateErrorPrefix"))}${escapeHtml(errMsg)}`, [
       { labelKey: "shell.action.retry", action: () => refreshLocalizedDraftInBackground({ draft, mcq }) },
     ]);
@@ -2440,7 +2447,7 @@ async function saveDraftBundleInBackground(options = {}) {
     announceStatus(t("shell.save.success"));
     if (afterSave) afterSave();
   } catch (err) {
-    const errMsg = String(err?.message ?? err);
+    const errMsg = apiErrorText(err);
     logResolveSlot(slot, () => `${escapeHtml(t("shell.save.errorPrefix"))}${escapeHtml(errMsg)}`, [
       { labelKey: "shell.action.retry", action: () => saveDraftBundleInBackground(options) },
     ]);
@@ -2876,7 +2883,7 @@ async function publishLatestDraftInBackground() {
       ]);
       return;
     }
-    const errMsg = String(err?.message ?? err);
+    const errMsg = apiErrorText(err);
     logResolveSlot(slot, () => `${escapeHtml(t("shell.publish.errorPrefix"))}${escapeHtml(errMsg)}`, [
       { labelKey: "shell.action.retry", action: publishLatestDraftInBackground },
     ]);
@@ -2900,7 +2907,7 @@ async function unpublishModuleInBackground() {
     showToast(t("shell.unpublish.success"), "success");
     announceStatus(t("shell.unpublish.success"));
   } catch (err) {
-    const errMsg = String(err?.message ?? err);
+    const errMsg = apiErrorText(err);
     logResolveSlot(slot, () => `${escapeHtml(t("shell.unpublish.errorPrefix"))}${escapeHtml(errMsg)}`, [
       { labelKey: "shell.action.retry", action: unpublishModuleInBackground },
     ]);
@@ -2931,7 +2938,7 @@ async function archiveModuleInBackground() {
     announceStatus(t("shell.archive.success"));
     startIdle();
   } catch (err) {
-    const errMsg = String(err?.message ?? err);
+    const errMsg = apiErrorText(err);
     logResolveSlot(slot, () => `${escapeHtml(t("shell.archive.errorPrefix"))}${escapeHtml(errMsg)}`, [
       { labelKey: "shell.action.retry", action: archiveModuleInBackground },
     ]);
@@ -2952,7 +2959,7 @@ async function restoreArchivedModuleInBackground(moduleId, moduleTitle) {
     announceStatus(tf("shell.restore.success", { module: moduleTitle ?? moduleId }));
     await loadModule(moduleId);
   } catch (err) {
-    const errMsg = String(err?.message ?? err);
+    const errMsg = apiErrorText(err);
     logResolveSlot(slot, () => `${escapeHtml(t("shell.restore.errorPrefix"))}${escapeHtml(errMsg)}`, [
       { labelKey: "shell.action.retry", action: () => restoreArchivedModuleInBackground(moduleId, moduleTitle) },
       { labelKey: "shell.action.cancel", action: startIdle },
@@ -2986,7 +2993,7 @@ async function startArchivedModulePicker() {
       ],
     );
   } catch (err) {
-    const errMsg = String(err?.message ?? err);
+    const errMsg = apiErrorText(err);
     logResolveSlot(slot, () => `${escapeHtml(t("shell.archive.errorPrefix"))}${escapeHtml(errMsg)}`, [
       { labelKey: "shell.action.retry", action: startArchivedModulePicker },
       { labelKey: "shell.action.cancel", action: startIdle },
@@ -3095,7 +3102,7 @@ async function duplicateCurrentModuleInBackground() {
     showToast(tf("shell.duplicate.success", { module: sourceLabel }), "success");
     announceStatus(tf("shell.duplicate.success", { module: sourceLabel }));
   } catch (err) {
-    const errMsg = String(err?.message ?? err);
+    const errMsg = apiErrorText(err);
     logResolveSlot(slot, () => `${escapeHtml(t("shell.duplicate.errorPrefix"))}${escapeHtml(errMsg)}`, [
       { labelKey: "shell.action.retry", action: duplicateCurrentModuleInBackground },
     ]);
@@ -3125,7 +3132,7 @@ async function deleteModuleInBackground() {
     announceStatus(t("shell.delete.success"));
     startIdle();
   } catch (err) {
-    const errMsg = String(err?.message ?? err);
+    const errMsg = apiErrorText(err);
     logResolveSlot(slot, () => `${escapeHtml(t("shell.delete.errorPrefix"))}${escapeHtml(errMsg)}`, [
       { labelKey: "shell.action.retry", action: deleteModuleInBackground },
     ]);
@@ -3793,7 +3800,7 @@ async function handleDriftKeep() {
     renderPreview();
     showToast(t("shell.drift.keep.success"), "success");
   } catch (err) {
-    showToast(`${t("shell.drift.keep.error")}: ${String(err?.message ?? err)}`, "error");
+    showToast(`${t("shell.drift.keep.error")}: ${apiErrorText(err)}`, "error");
   }
 }
 
@@ -3851,7 +3858,7 @@ async function handleDriftRegenerate() {
     await refreshBlueprintHash();
   } catch (err) {
     logResolveSlot(slot, () =>
-      `${escapeHtml(t("shell.drift.regenerate.error"))}: ${escapeHtml(String(err?.message ?? err))}`,
+      `${escapeHtml(t("shell.drift.regenerate.error"))}: ${escapeHtml(apiErrorText(err))}`,
     );
   }
 }
@@ -3900,7 +3907,7 @@ async function handleDriftShowDiff() {
     });
   } catch (err) {
     logResolveSlot(slot, () =>
-      `${escapeHtml(t("shell.drift.diff.error"))}: ${escapeHtml(String(err?.message ?? err))}`,
+      `${escapeHtml(t("shell.drift.diff.error"))}: ${escapeHtml(apiErrorText(err))}`,
     );
     return;
   }
@@ -4126,7 +4133,7 @@ function openExternalLlmModal({ scenarioMode = "auto", onImportSuccess } = {}) {
     try {
       parsed = parseExternalLlmJson(raw);
     } catch (err) {
-      setError(err?.message ?? t("shell.externalLlm.parseError"));
+      setError(apiErrorText(err) || t("shell.externalLlm.parseError"));
       return;
     }
     importBtn.disabled = true;
@@ -4135,7 +4142,7 @@ function openExternalLlmModal({ scenarioMode = "auto", onImportSuccess } = {}) {
       onImportSuccess?.();
       close();
     } catch (err) {
-      setError(err?.message ?? t("shell.externalLlm.importError"));
+      setError(apiErrorText(err) || t("shell.externalLlm.importError"));
       importBtn.disabled = false;
     }
   });
@@ -4175,7 +4182,7 @@ async function applyExternalLlmJsonImport(parsed) {
     );
     newModule = body?.module ?? body;
   } catch (err) {
-    const errMsg = String(err?.message ?? err);
+    const errMsg = apiErrorText(err);
     logResolveSlot(
       slot,
       () => `${escapeHtml(t("shell.newModule.createError"))}<br><span style="font-size:13px;color:var(--color-meta)">${escapeHtml(errMsg)}</span>`,
@@ -4492,7 +4499,7 @@ async function persistMergedRubric(criteriaRecord) {
     await refreshBlueprintHash();
   } catch (err) {
     logResolveSlot(slot, () =>
-      `${escapeHtml(t("shell.drift.diff.persistError"))}: ${escapeHtml(String(err?.message ?? err))}`,
+      `${escapeHtml(t("shell.drift.diff.persistError"))}: ${escapeHtml(apiErrorText(err))}`,
     );
   }
 }
@@ -4582,7 +4589,7 @@ async function regenerateCriteriaFromTask(criteriaContainer, onSuccess) {
     onSuccess(mapped);
     showToast(t("shell.criteria.regenerated"), "success");
   } catch (err) {
-    const errMsg = String(err?.message ?? err);
+    const errMsg = apiErrorText(err);
     criteriaContainer.innerHTML = originalHtml;
     showToast(`${t("shell.criteria.regenerateError")}: ${errMsg}`, "error");
   }
@@ -5142,7 +5149,7 @@ async function exportModulePackageInBackground() {
     // left the author on Rediger with no actions at all until they reloaded the page.
     showModuleActions();
   } catch (err) {
-    const errMsg = String(err?.message ?? err);
+    const errMsg = apiErrorText(err);
     logResolveSlot(slot, () => `${escapeHtml(t("shell.module.exportError"))}${escapeHtml(errMsg)}`, [
       { labelKey: "shell.action.retry", action: () => exportModulePackageInBackground() },
     ]);
@@ -5243,7 +5250,7 @@ async function importModulePackageInBackground(moduleId, file, idempotencyKey = 
     showToast(t("shell.module.importSuccess"), "success");
     announceStatus(t("shell.module.importSuccess"));
   } catch (err) {
-    const errMsg = String(err?.message ?? err);
+    const errMsg = apiErrorText(err);
     logResolveSlot(slot, () => `${escapeHtml(t("shell.module.importError"))}${escapeHtml(errMsg)}`, [
       // Two different recoveries, because there are two different failures. A transient one
       // (network, 502) is fixed by retrying the SAME file with the SAME key — no double import.
@@ -6551,7 +6558,7 @@ async function restoreModuleVersionInBackground(sourceVersionId, idempotencyKey 
     showToast(t("shell.versions.restoreSuccess"), "success");
     announceStatus(t("shell.versions.restoreSuccess"));
   } catch (err) {
-    const errMsg = String(err?.message ?? err);
+    const errMsg = apiErrorText(err);
     // The click disabled every restore button to stop a double-click. A success path reloads and
     // re-renders them; a failure has to put them back by hand, or the list is dead until reload.
     document.querySelectorAll("[data-restore-version]").forEach((button) => { button.disabled = false; });
@@ -6933,9 +6940,11 @@ async function saveSettingsInBackground() {
     logResolveSlot(slot, () => `<strong>${escapeHtml(t("shell.settings.saved"))}</strong>`);
     showToast(t("shell.settings.saved"), "success");
   } catch (error) {
-    // The composed save is all-or-nothing, so the module is untouched. Say what the server
-    // said rather than a generic failure - the reason is usually actionable.
-    const message = error?.body?.message || error?.message || t("shell.settings.saveFailed");
+    // The composed save is all-or-nothing, so the module is untouched. Årsaken er som regel
+    // handlingsbar, så den skal med — men #972: den skal komme fra klientens egen kodetabell, ikke
+    // fra serverens `body.message`. Den forrige varianten (`error?.body?.message || …`) viste
+    // engelsk servertekst i et konsoll forfatteren kanskje har satt til nynorsk.
+    const message = apiErrorText(error);
     logResolveSlot(slot, () => escapeHtml(`${t("shell.settings.saveFailed")} ${message}`));
     showToast(t("shell.settings.saveFailed"), "error");
     reenableSettingsSave();

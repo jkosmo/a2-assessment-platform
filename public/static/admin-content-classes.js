@@ -3,6 +3,7 @@ import { initConsentGuard } from "/static/consent-guard.js";
 import { resolveWorkspaceNavigationItems } from "/static/participant-console-state.js";
 import { renderWorkspaceNavigationWithProfile } from "./workspace-nav.js";
 import { showToast } from "/static/toast.js";
+import { describeApiError } from "/static/api-error.js";
 import { supportedLocales, localeLabels, translations as adminContentTranslations } from "/static/i18n/admin-content-translations.js";
 import { renderOwnerPanel } from "/static/owner-panel.js";
 
@@ -25,6 +26,20 @@ let currentLocale = (() => {
 })();
 function tNav(key) {
   return adminContentTranslations[currentLocale]?.[key] ?? adminContentTranslations["en-GB"]?.[key] ?? key;
+}
+
+// #972/#965: ni toaster og to tomtilstander viste `err.message` — som apiFetch bygger som
+// `"<status>: <hele JSON-kroppen>"`. En norsk forfatter som ikke eier klassen fikk altså
+// `403: {"error":"content_ownership","message":"You can only modify content you own."}` og lærte
+// verken at årsaken var eierskap eller at løsningen er å be om å bli lagt til som eier.
+// De norske `?? "Kunne ikke arkivere."`-fallbackene var død kode — apiFetch setter alltid `message`.
+function apiErrorToast(error) {
+  const { headline, detail } = describeApiError(error, tNav);
+  showToast(headline, "error", detail);
+}
+
+function apiErrorText(error) {
+  return describeApiError(error, tNav).headline;
 }
 
 let _headerValues = {};
@@ -132,7 +147,7 @@ async function renderListView() {
   try {
     classesCache = (await apiFetch("/api/admin/content/classes", getHeaders)).classes ?? [];
   } catch (err) {
-    pageContent.innerHTML = `<p>Kunne ikke laste klasser: ${escapeHtml(err?.message ?? "")}</p>`;
+    pageContent.innerHTML = `<p>Kunne ikke laste klasser: ${escapeHtml(apiErrorText(err))}</p>`;
     return;
   }
   pageContent.innerHTML = `
@@ -175,7 +190,7 @@ async function syncEntraUsers() {
     const imported = res?.importedUsers ?? res?.run?.createdCount ?? 0;
     showToast(`Synk fullført — ${imported} brukere importert/oppdatert.`, "success");
   } catch (err) {
-    showToast(err?.message ?? "Kunne ikke synke brukere fra Entra.", "error");
+    apiErrorToast(err);
   } finally {
     if (btn) { btn.disabled = false; btn.textContent = "Synk brukere fra Entra"; }
   }
@@ -210,7 +225,7 @@ async function importUsersFromFile(input) {
     const failed = run.failedCount ?? 0;
     showToast(`Import fullført — ${created} opprettet, ${updated} oppdatert${failed ? `, ${failed} feilet` : ""}.`, failed ? "error" : "success");
   } catch (err) {
-    showToast(err?.message ?? "Kunne ikke importere brukere.", "error");
+    apiErrorToast(err);
   } finally {
     if (btn) { btn.disabled = false; btn.textContent = "Importer brukere fra fil"; }
     input.value = ""; // allow re-selecting the same file
@@ -225,7 +240,7 @@ async function createClassFlow() {
     showToast("Klasse opprettet.", "success");
     await renderListView();
   } catch (err) {
-    showToast(err?.message ?? "Kunne ikke opprette klasse.", "error");
+    apiErrorToast(err);
   }
 }
 
@@ -236,7 +251,7 @@ async function archiveClass(id, name) {
     showToast("Klasse arkivert.", "success");
     await renderListView();
   } catch (err) {
-    showToast(err?.message ?? "Kunne ikke arkivere.", "error");
+    apiErrorToast(err);
   }
 }
 
@@ -248,7 +263,7 @@ async function restoreClassInAdmin(id, name) {
     showToast("Klasse gjenopprettet.", "success");
     await renderListView();
   } catch (err) {
-    showToast(err?.message ?? "Kunne ikke gjenopprette.", "error");
+    apiErrorToast(err);
   }
 }
 
@@ -262,7 +277,7 @@ async function openClass(id) {
       apiFetch("/api/admin/content/courses", getHeaders).then((r) => r.courses ?? []),
     ]);
   } catch (err) {
-    pageContent.innerHTML = `<p>Kunne ikke laste klassen: ${escapeHtml(err?.message ?? "")}</p>`;
+    pageContent.innerHTML = `<p>Kunne ikke laste klassen: ${escapeHtml(apiErrorText(err))}</p>`;
     return;
   }
   // QA r6 #3: rows instead of grey chips — same visual language as the owner rows (name + meta,
@@ -312,7 +327,7 @@ async function openClass(id) {
 
   // #787: content-owner management for the class.
   const ownerHost = document.getElementById("classOwnerPanelHost");
-  if (ownerHost) renderOwnerPanel({ container: ownerHost, contentType: "CLASS", contentId: id, getHeaders }).catch(() => {});
+  if (ownerHost) renderOwnerPanel({ container: ownerHost, contentType: "CLASS", contentId: id, getHeaders, t: tNav }).catch(() => {});
 
   // Member add via search.
   const searchInput = document.getElementById("studentSearch");
@@ -336,7 +351,7 @@ async function openClass(id) {
       await apiFetch(`/api/admin/content/classes/${encodeURIComponent(id)}/members`, getHeaders, { method: "POST", body: JSON.stringify({ userId: li.dataset.addUser }) });
       showToast("Student lagt til.", "success");
       openClass(id);
-    } catch (err) { showToast(err?.message ?? "Kunne ikke legge til.", "error"); }
+    } catch (err) { apiErrorToast(err); }
   });
   document.getElementById("memberChips").addEventListener("click", async (e) => {
     const btn = e.target.closest("[data-remove-member]");
@@ -344,7 +359,7 @@ async function openClass(id) {
     try {
       await apiFetch(`/api/admin/content/classes/${encodeURIComponent(id)}/members/${encodeURIComponent(btn.dataset.removeMember)}`, getHeaders, { method: "DELETE" });
       openClass(id);
-    } catch (err) { showToast(err?.message ?? "Feil", "error"); }
+    } catch (err) { apiErrorToast(err); }
   });
 
   // Course assignment.
@@ -358,7 +373,7 @@ async function openClass(id) {
       await apiFetch(`/api/admin/content/classes/${encodeURIComponent(id)}/courses`, getHeaders, { method: "POST", body: JSON.stringify(body) });
       showToast("Kurs tildelt.", "success");
       openClass(id);
-    } catch (err) { showToast(err?.message ?? "Kunne ikke tildele.", "error"); }
+    } catch (err) { apiErrorToast(err); }
   });
   document.getElementById("courseChips").addEventListener("click", async (e) => {
     const btn = e.target.closest("[data-remove-course]");
@@ -366,7 +381,7 @@ async function openClass(id) {
     try {
       await apiFetch(`/api/admin/content/classes/${encodeURIComponent(id)}/courses/${encodeURIComponent(btn.dataset.removeCourse)}`, getHeaders, { method: "DELETE" });
       openClass(id);
-    } catch (err) { showToast(err?.message ?? "Feil", "error"); }
+    } catch (err) { apiErrorToast(err); }
   });
 }
 

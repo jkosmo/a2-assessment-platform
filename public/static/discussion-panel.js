@@ -9,6 +9,8 @@
 // en egen, dempet modererings-verktøylinje (.disc-mod-toolbar) med fare-farge på Lås/Slett.
 // Moderatorkontroller vises ut fra server-flaggene canModerate/canDelete/canAccept.
 
+import { describeApiError } from "/static/api-error.js";
+
 /**
  * @param {object} opts
  * @param {HTMLElement} opts.container   tom node panelet eier
@@ -37,8 +39,13 @@ export function mountDiscussionPanel(opts) {
   const bodyEl = container.querySelector("[data-disc-body]");
   const newBtn = container.querySelector("[data-disc-new]");
 
+  // #972: panelet står på DELTAKERflaten. Serverens `error.message` er `"<status>: <hele
+  // JSON-kroppen>"` og på engelsk — begge deler feil her. Vi slår opp feilKODEN og viser bare
+  // overskriften: `detail` fra oversetteren er diagnostikk for forfattere, og en deltaker midt i
+  // et kurs har ingen bruk for `{"error":"thread_locked"}`.
   function err(error) {
-    showToast(error instanceof Error ? error.message : t("discussion.error.generic"), "error");
+    const { headline } = describeApiError(error, t);
+    showToast(headline || t("discussion.error.generic"), "error");
   }
 
   // Liten, auto-bredde knapp i panelet (ikke app-ens fullbredde .btn-*).

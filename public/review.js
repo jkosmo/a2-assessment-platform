@@ -8,6 +8,7 @@ import { apiFetch, buildConsoleHeaders, getConsoleConfig, applyNavReviewBadge } 
 import { initConsentGuard } from "/static/consent-guard.js";
 import { hideLoading, showEmpty, showLoading } from "/static/loading.js";
 import { showToast } from "/static/toast.js";
+import { describeApiError } from "/static/api-error.js";
 import {
   findMatchingPreset,
   resolveRoleSwitchState,
@@ -196,7 +197,10 @@ function logDebug(data) {
   output.dataset.hasContent = "true";
   outputStatus.dataset.hasContent = "true";
   const text = typeof data === "string" ? data : JSON.stringify(data, null, 2);
-  outputStatus.textContent = typeof data === "string" ? data : (data?.message ?? "Request completed.");
+  // #985: sto `data?.message ?? "Request completed."` — serverens engelske svartekst rett i
+  // statuslinja, på en side som kjøres på tre språk. Statuslinja er nå alltid vår egen tekst;
+  // hele svaret ligger fortsatt i debug-feltet under når rå-debug er på.
+  outputStatus.textContent = typeof data === "string" ? data : t("review.status.requestCompleted");
   if (rawDebugEnabled) output.textContent = text;
 }
 
@@ -244,30 +248,24 @@ function parseLlmStructuredResponse(rawJson) {
   try { return JSON.parse(rawJson); } catch { return null; }
 }
 
+// #985: begge disse returnerte serverens egen tekst — `payload.message` (som er engelsk) og en
+// sammenslåing av Zods `issue.message`-strenger. En vurderer med nynorsk grensesnitt som overstyrte
+// en score utenfor 0-100 fikk altså en engelsk Zod-setning i toasten.
+//
+// De går nå gjennom den delte kodetabellen (api-error.js), som review-bunten arver via
+// manual-review → participant. Funksjonene beholdes som navn fordi tolv kallsteder bruker dem, men
+// de er nå tynne innpakninger — ikke en fjerde oversetter.
 function toActionableErrorMessage(error) {
-  if (!(error instanceof Error)) return "Unexpected error.";
-  const raw = error.message ?? "";
-  const splitIndex = raw.indexOf(":");
-  if (splitIndex === -1) return raw;
-  const payloadText = raw.slice(splitIndex + 1).trim();
-  try {
-    const payload = JSON.parse(payloadText);
-    if (typeof payload.message === "string" && payload.message.trim().length > 0) return payload.message;
-    return raw;
-  } catch { return raw; }
+  return describeApiError(error, t).headline;
 }
 
+// Returnerer null når feilen ikke er en valideringsfeil, slik at kallstedet kan velge en annen
+// melding. Detaljene (Zod-utdataet) er diagnostikk for en vurderer og hører hjemme i feltet under,
+// ikke i overskriften.
 function toValidationErrorMessage(error) {
-  if (!(error instanceof Error)) return null;
-  const raw = error.message ?? "";
-  const splitIndex = raw.indexOf(":");
-  if (splitIndex === -1) return null;
-  const payloadText = raw.slice(splitIndex + 1).trim();
-  try {
-    const payload = JSON.parse(payloadText);
-    if (payload?.error !== "validation_error" || !Array.isArray(payload.issues) || payload.issues.length === 0) return null;
-    return payload.issues.map((issue) => (typeof issue?.message === "string" ? issue.message : "Validation error.")).join(" ");
-  } catch { return null; }
+  const described = describeApiError(error, t);
+  if (described.code !== "validation_error") return null;
+  return described.detail ? `${described.headline}\n${described.detail}` : described.headline;
 }
 
 function getCheckedPillValues(container) {
@@ -942,7 +940,7 @@ async function loadReviewDetails(reviewId) {
     showToast(toActionableErrorMessage(error), "error");
     selectedReviewDetails = null;
     renderManualReviewDetails(null);
-    logDebug(error.message);
+    logDebug(toActionableErrorMessage(error));
   }
 }
 
@@ -971,7 +969,7 @@ async function loadReviewQueue() {
       latestReviewQueue = [];
       renderReviewQueue();
       showToast(toActionableErrorMessage(error), "error");
-      logDebug(error.message);
+      logDebug(toActionableErrorMessage(error));
     } finally {
       activeReviewQueueLoad = null;
     }
@@ -1368,7 +1366,7 @@ async function loadAppealDetails(appealId, options = {}) {
     logDebug(body);
   } catch (error) {
     showToast(toActionableErrorMessage(error), "error");
-    logDebug(error.message);
+    logDebug(toActionableErrorMessage(error));
   }
 }
 
@@ -1402,7 +1400,7 @@ async function loadAppealQueue(options = {}) {
       updateReviewTabCounts();
       showEmpty(appealQueueBody, toActionableErrorMessage(error), { columns: 9 });
       showToast(toActionableErrorMessage(error), "error");
-      logDebug(error.message);
+      logDebug(toActionableErrorMessage(error));
     } finally {
       activeAppealQueueLoad = null;
     }
@@ -1510,7 +1508,7 @@ loadMeButton.addEventListener("click", async () => {
       const body = await apiFetch("/api/me", headers);
       logDebug(body);
     } catch (error) {
-      logDebug(error.message);
+      logDebug(toActionableErrorMessage(error));
     }
   });
 });
@@ -1534,7 +1532,7 @@ claimReviewButton.addEventListener("click", async () => {
       await loadReviewDetails(selectedReviewId);
     } catch (error) {
       setOverrideValidationError(toActionableErrorMessage(error));
-      logDebug(error.message);
+      logDebug(toActionableErrorMessage(error));
     }
   });
   renderReviewActionState();
@@ -1575,7 +1573,7 @@ overrideReviewButton.addEventListener("click", async () => {
     } catch (error) {
       const validationMsg = toValidationErrorMessage(error);
       setOverrideValidationError(validationMsg ?? toActionableErrorMessage(error));
-      logDebug(error.message);
+      logDebug(toActionableErrorMessage(error));
     }
   });
   renderReviewActionState();
@@ -1607,7 +1605,7 @@ claimAppealButton.addEventListener("click", async () => {
       await loadAppealDetails(selectedAppealId);
     } catch (error) {
       showToast(toActionableErrorMessage(error), "error");
-      logDebug(error.message);
+      logDebug(toActionableErrorMessage(error));
     }
   });
 });
@@ -1644,7 +1642,7 @@ resolveAppealButton.addEventListener("click", async () => {
       const validationMsg = toValidationErrorMessage(error);
       if (validationMsg) setResolveValidationError(validationMsg);
       else showToast(toActionableErrorMessage(error), "error");
-      logDebug(error.message);
+      logDebug(toActionableErrorMessage(error));
     }
   });
 });

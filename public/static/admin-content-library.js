@@ -20,6 +20,7 @@ import {
   resolveWorkspaceNavigationItems,
 } from "/static/participant-console-state.js";
 import { describeImportError } from "/static/import-error.js";
+import { describeApiError } from "/static/api-error.js";
 import { showToast } from "/static/toast.js";
 import { renderWorkspaceNavigationWithProfile } from "./workspace-nav.js";
 
@@ -46,6 +47,19 @@ function tf(key, vars = {}) {
   let s = t(key);
   for (const [k, v] of Object.entries(vars)) s = s.replaceAll(`{${k}}`, String(v));
   return s;
+}
+
+// #972: fem toaster og fire tekstfelt her viste `err.message` — altså `"<status>: <hele
+// JSON-kroppen>"` fra apiFetch. De norske `?? "Kunne ikke arkivere modul."`-fallbackene var død
+// kode: apiFetch setter ALLTID `message`, så de kunne aldri kjøre. Nå slås KODEN opp.
+// Forfatterflate, så diagnostikken beholdes i toastens detaljfelt.
+function apiErrorToast(error) {
+  const { headline, detail } = describeApiError(error, t);
+  showToast(headline, "error", detail);
+}
+
+function apiErrorText(error) {
+  return describeApiError(error, t).headline;
 }
 
 // ---------------------------------------------------------------------------
@@ -393,7 +407,7 @@ async function deleteModuleFromRow(moduleId, moduleTitle, btn) {
     showToast("Modul slettet.", "success");
     await loadModules();
   } catch (err) {
-    showToast(err?.message ?? "Kunne ikke slette modul.", "error");
+    apiErrorToast(err);
     btn.disabled = false;
   }
 }
@@ -421,8 +435,8 @@ async function exportModulePackage(moduleId, moduleTitle, btn) {
     URL.revokeObjectURL(url);
     showToast(`Modul «${moduleTitle}» er eksportert.`);
   } catch (err) {
-    const msg = err?.message ?? "Kunne ikke eksportere modul.";
-    showToast(`Modul-eksport feilet: ${msg}`, "error");
+    const msg = apiErrorText(err);
+    showToast(tf("adminContent.library.exportFailed", { reason: msg }), "error");
   } finally {
     btn.disabled = false;
   }
@@ -439,7 +453,7 @@ async function archiveModule(moduleId, btn) {
     showToast("Modul arkivert.", "success");
     await loadModules();
   } catch (err) {
-    showToast(err?.message ?? "Kunne ikke arkivere modul.", "error");
+    apiErrorToast(err);
     btn.disabled = false;
   }
 }
@@ -451,7 +465,7 @@ async function restoreModule(moduleId, btn) {
     showToast("Modul gjenopprettet.", "success");
     await loadModules();
   } catch (err) {
-    showToast(err?.message ?? "Kunne ikke gjenopprette modul.", "error");
+    apiErrorToast(err);
     btn.disabled = false;
   }
 }
@@ -471,7 +485,7 @@ async function unpublishModuleFromRow(moduleId, moduleTitle, btn) {
     showToast(`«${moduleTitle}» avpublisert.`, "success");
     await loadModules();
   } catch (err) {
-    showToast(err?.message ?? "Kunne ikke avpublisere modul.", "error");
+    apiErrorToast(err);
     btn.disabled = false;
   }
 }
@@ -520,7 +534,7 @@ async function duplicateModule(moduleId, btn) {
     showToast(`Full kopi av «${sourceTitle}» opprettet.`, "success");
     await loadModules();
   } catch (err) {
-    showToast(err?.message ?? "Kunne ikke duplisere modul.", "error");
+    apiErrorToast(err);
   } finally {
     btn.disabled = false;
   }
@@ -610,7 +624,7 @@ async function openPurgeDialog() {
   } catch (error) {
     purgePreviewLoading.hidden = true;
     purgeError.hidden = false;
-    purgeError.textContent = `Klarte ikke hente forhåndsvisning: ${error instanceof Error ? error.message : "ukjent feil"}`;
+    purgeError.textContent = `Klarte ikke hente forhåndsvisning: ${apiErrorText(error)}`;
   }
 }
 
@@ -635,7 +649,7 @@ async function runPurge() {
     await loadModules();
   } catch (error) {
     purgeError.hidden = false;
-    purgeError.textContent = `Sletting feilet: ${error instanceof Error ? error.message : "ukjent feil"}`;
+    purgeError.textContent = `Sletting feilet: ${apiErrorText(error)}`;
     purgeConfirmBtn.disabled = false;
   } finally {
     purgeConfirmBtn.textContent = originalLabel;
@@ -663,7 +677,7 @@ async function createAndNavigate() {
     createModuleDialog.close();
     window.location.href = `/admin-content/module/${encodeURIComponent(newId)}/conversation`;
   } catch (err) {
-    createModuleError.textContent = err?.message ?? "Kunne ikke opprette modul.";
+    createModuleError.textContent = apiErrorText(err);
     createModuleError.hidden = false;
     createOpenConversation.disabled = false;
   }
@@ -681,7 +695,7 @@ async function loadModules() {
     rebuildCourseFilterOptions();
     renderLibrary();
   } catch (err) {
-    libraryContent.innerHTML = `<div class="library-empty"><p class="library-empty-title">Kunne ikke laste moduler.</p><p class="library-empty-text">${escapeHtml(err?.message ?? "")}</p></div>`;
+    libraryContent.innerHTML = `<div class="library-empty"><p class="library-empty-title">Kunne ikke laste moduler.</p><p class="library-empty-text">${escapeHtml(apiErrorText(err))}</p></div>`;
   }
 }
 
@@ -867,9 +881,9 @@ async function init() {
     } catch (error) {
       // #937: samme lesbare feil som seksjonsimporten, via den delte oversetteren.
       const d = describeImportError(error, {
-        notAnEnvelope: "Dette ser ikke ut som en modul-pakke. Fila mangler feltene en eksport legger på (exportFormat, exportedAt og scope). Bruk «Eksporter» på en modul for å lage en gyldig fil.",
-      });
-      showToast(`Modul-import feilet: ${d.headline}`, "error", d.detail);
+        notAnEnvelope: t("adminContent.library.importNotAnEnvelope"),
+      }, t);
+      showToast(tf("adminContent.library.importFailed", { reason: d.headline }), "error", d.detail);
       // v1.2.18 (#458): toast har role="alert" så SR annonserer feilen. I tillegg flytter
       // vi fokus tilbake til importbtn så tastatur-bruker kan re-trigge uten å Tab-e fra
       // den (nå tomme) file-input-en.

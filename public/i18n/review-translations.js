@@ -11,6 +11,8 @@ const pageTranslations = {
     "review.section.appeal": "Appeals",
     "review.tab.manualReview": "Manual assessment",
     "review.tab.appeal": "Appeals",
+    // #985: statuslinja over debug-feltet viste serverens `message` ordrett. Den er nå vår egen.
+    "review.status.requestCompleted": "Request completed.",
   },
   nb: {
     "reviewPage.title": "Manuell behandling",
@@ -19,6 +21,7 @@ const pageTranslations = {
     "review.section.appeal": "Ankebehandling",
     "review.tab.manualReview": "Manuell vurdering",
     "review.tab.appeal": "Anke",
+    "review.status.requestCompleted": "Forespørselen er utført.",
   },
   nn: {
     "reviewPage.title": "Manuell handsaming",
@@ -27,6 +30,7 @@ const pageTranslations = {
     "review.section.appeal": "Ankebehandling",
     "review.tab.manualReview": "Manuell vurdering",
     "review.tab.appeal": "Anke",
+    "review.status.requestCompleted": "Førespurnaden er utført.",
   },
 };
 
