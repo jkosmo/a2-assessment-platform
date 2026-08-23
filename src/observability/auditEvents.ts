@@ -111,6 +111,10 @@ export const auditActions = {
     unpublished: "section_unpublished",
     archived: "section_archived",
     restored: "section_restored",
+    // #961: sletting av seksjon var den ENE livssyklushandlingen uten spor — modul- og kurssletting
+    // har alltid hatt sitt. En `CourseCompletion.sectionSnapshotJson` kan peke på en seksjons-id som
+    // ikke finnes noe sted lenger; uten dette sporet kan et utstedt bevis ikke begrunnes i ettertid.
+    deleted: "section_deleted",
   },
   enrollment: {
     assigned: "course_enrollment_assigned",
@@ -363,11 +367,21 @@ export type AuditMetadataByAction = {
     sparedModuleIds: string[];
     sparedSectionIds: string[];
   }>;
-  [auditActions.section.created]: EventMetadata<{ sectionId: string; draft: boolean }>;
+  // #961 (bonus): kontrakten lovet `{ sectionId, draft }`, men skriveren (sectionCommands.ts:141)
+  // har siden #916 også lagt ved `heldBackByTranslationGate` — den skiller «forfatteren ba om
+  // utkast» fra «språkporten holdt den tilbake». Kontrakten sier nå det koden faktisk gjør.
+  [auditActions.section.created]: EventMetadata<{
+    sectionId: string;
+    draft: boolean;
+    heldBackByTranslationGate: boolean;
+  }>;
   [auditActions.section.published]: EventMetadata<{ sectionId: string }>;
   [auditActions.section.unpublished]: EventMetadata<{ sectionId: string }>;
   [auditActions.section.archived]: EventMetadata<{ sectionId: string }>;
   [auditActions.section.restored]: EventMetadata<{ sectionId: string }>;
+  // #961: `title` er med fordi raden er det eneste som er igjen etter slettingen — en id alene lar
+  // ingen kjenne igjen hva som forsvant. Tittelen er forfatterinnhold, ikke deltaker-PII.
+  [auditActions.section.deleted]: EventMetadata<{ sectionId: string; title: string }>;
   [auditActions.course.completionIssued]: EventMetadata<{
     userId: string;
     courseId: string;

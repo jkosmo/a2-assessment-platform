@@ -432,8 +432,17 @@ export async function restoreSection(sectionId: string, actorId?: string) {
   return updated;
 }
 
-export async function deleteSection(sectionId: string) {
-  await assertSectionExists(sectionId);
+export async function deleteSection(sectionId: string, actorId?: string) {
+  // #961: tittelen hentes FØR slettingen. Etterpå finnes den ingen steder — revisjonsraden er alt
+  // som er igjen, og en id alene lar ingen kjenne igjen hva som forsvant (samme form som
+  // modul-sletting, adminContentCommands.ts:376).
+  const section = await prisma.courseSection.findUnique({
+    where: { id: sectionId },
+    select: { id: true, title: true },
+  });
+  if (!section) {
+    throw new NotFoundError("CourseSection", "section_not_found", "Course section not found.");
+  }
   // G2: navngir kursene (konsistent med modul-sletting).
   await assertSectionNotInAnyCourse(sectionId, "slettes");
   // #938: G2 over dekker «ligger i et kurs NÅ». Denne dekker «sto i et kursbevis DA» — innhold
@@ -447,6 +456,20 @@ export async function deleteSection(sectionId: string) {
     await tx.courseSection.update({ where: { id: sectionId }, data: { activeVersionId: null } });
     await tx.courseSectionVersion.deleteMany({ where: { sectionId } });
     await tx.courseSection.delete({ where: { id: sectionId } });
+    // #961: sporet committes i SAMME transaksjon som slettingen — mønsteret fra #803
+    // (courseCommands.deleteCourse). Et spor som committes utenfor transaksjonen er verre enn
+    // ingen: da kan det finnes et spor for noe som ble rullet tilbake, eller mangle for noe som
+    // faktisk ble slettet. Sletting var den siste livssyklushandlingen på en seksjon uten spor.
+    await recordAuditEvent(
+      {
+        entityType: auditEntityTypes.courseSection,
+        entityId: sectionId,
+        action: auditActions.section.deleted,
+        actorId,
+        metadata: { sectionId, title: section.title },
+      },
+      tx,
+    );
   });
   // After commit: reclaim the storage (best-effort — a failed blob delete never fails the delete).
   await reclaimAssetBlobs(blobPaths);

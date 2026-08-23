@@ -142,7 +142,36 @@ describe("Unified content lifecycle (#705)", () => {
 
     await expect(unpublishSection(sectionId, ACTOR)).rejects.toThrow(/i bruk i 1 kurs/);
     await expect(archiveSection(sectionId, ACTOR)).rejects.toThrow(/i bruk i 1 kurs/);
-    await expect(deleteSection(sectionId)).rejects.toThrow(/i bruk i 1 kurs/);
+    await expect(deleteSection(sectionId, ACTOR)).rejects.toThrow(/i bruk i 1 kurs/);
+
+    // #961: en blokkert sletting skal heller ikke etterlate et spor — sporet og handlingen står og
+    // faller sammen.
+    const blocked = await prisma.auditEvent.count({
+      where: { entityType: "course_section", entityId: sectionId, action: "section_deleted" },
+    });
+    expect(blocked).toBe(0);
+  });
+
+  // #961: sletting av en seksjon var den ENE livssyklushandlingen uten revisjonsspor. Uten den kan
+  // ingen i ettertid se hvem som fjernet innhold et utstedt bevis hviler på
+  // (CourseCompletion.sectionSnapshotJson beholder id-en).
+  it("etterlater et revisjonsspor når en seksjon slettes (#961)", async () => {
+    const sectionId = await makeSection();
+    const before = await prisma.courseSection.findUniqueOrThrow({
+      where: { id: sectionId },
+      select: { title: true },
+    });
+
+    await deleteSection(sectionId, ACTOR);
+
+    expect(await prisma.courseSection.findUnique({ where: { id: sectionId } })).toBeNull();
+    const events = await prisma.auditEvent.findMany({
+      where: { entityType: "course_section", entityId: sectionId, action: "section_deleted" },
+    });
+    expect(events).toHaveLength(1);
+    expect(events[0].actorId).toBe(ACTOR);
+    // Sporet er committet sammen med slettingen, så det finnes NÅ — ikke «etter hvert».
+    expect(JSON.parse(events[0].metadataJson)).toMatchObject({ sectionId, title: before.title });
   });
 
   // Seksjon-livssyklus utenfor kurs: full symmetri.

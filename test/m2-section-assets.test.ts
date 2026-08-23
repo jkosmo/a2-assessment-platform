@@ -217,5 +217,17 @@ describe("Section asset upload + serve", () => {
     // Rows cascaded AND blobs physically reclaimed.
     expect(await prisma.sectionAsset.count({ where: { sectionId } })).toBe(0);
     for (const p of blobPaths) await expect(getAsset(p)).rejects.toThrow();
+
+    // #961: ruta må sende AKTØREN videre — et spor uten «hvem» svarer ikke på spørsmålet det
+    // finnes for. Dette er den eneste testen som går gjennom HTTP-laget for sletting.
+    const actor = await prisma.user.findUnique({
+      where: { externalId: adminHeaders["x-user-id"] },
+      select: { id: true },
+    });
+    const deleteEvents = await prisma.auditEvent.findMany({
+      where: { entityType: "course_section", entityId: sectionId, action: "section_deleted" },
+    });
+    expect(deleteEvents).toHaveLength(1);
+    expect(deleteEvents[0].actorId).toBe(actor?.id);
   });
 });
