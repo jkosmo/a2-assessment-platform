@@ -2,6 +2,57 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.27.1 - 2026-08-23
+
+**QA-porten, femte runde — og den første med klassifisering.** Justeringen virket etter hensikten:
+av seks funn var **ett** en regresjon fra bunten. Resten var eksisterende hull eller
+dokumentasjonsdrift, og er registrert i stedet for rettet.
+
+⚠️ Det er hele poenget med å be porten klassifisere. De fire foregående rundene behandlet alt som
+blokkerende, og hver runde fant noe i forrige rundes fiks.
+
+### [REGRESJON] Legacy-`modules[]` sa noe annet enn tellerne i samme respons
+
+Tellerne ble filtrert for arkiverte moduler i 2.26.3. Den dokumenterte legacy-lista ble det ikke, og
+da kunne én respons påstå `moduleCount: 0` og `progress 0/0` samtidig som `modules[]` inneholdt en
+modul.
+
+⚠️ Verre enn et skjevt tall: sertifiseringsoppslaget bygges bare for ikke-arkiverte moduler, så en
+modul deltakeren **faktisk besto** før arkiveringen kom tilbake som `NOT_STARTED`. En eldre klient
+viste da en klikkbar modul som resten av responsen sa ikke fantes i kravet.
+
+Lista leser nå fra `moduleIds` — den samme filtrerte lista bevisporten bruker. Én kilde, ikke to.
+
+### [DOKUMENTASJON] `required` var ikke dokumentert
+
+`available` sto i API-referansen, `required` ikke. Skillet er ikke kosmetisk: en integrasjonsklient
+som tolker «utilgjengelig» som «ikke påkrevd» tilbyr fullføring på et kurs serveren ikke vil
+sertifisere — klikket registrerer lesningen, og ingenting skjer.
+
+### [DOKUMENTASJON] Versjonen dekket ikke de to siste commitene
+
+`2.27.0` ble satt, og så kom to kodecommits til. Artefaktet fra begge rapporterte samme versjon på
+`/version`, så drift kunne ikke se hvilken variant som kjørte. Derfor denne.
+
+### Registrert i stedet for rettet
+
+| Funn | Hvorfor ikke nå |
+|---|---|
+| Entra-tildelte uten aktivitet mangler i rapporten | ENTRA-medlemskap er ikke lagret hos oss. Var like usynlig før #969 — ikke en regresjon, men et ekte hull som krever at vi kan slå opp gruppemedlemskap |
+| «Bestått gjelder til modulen revideres» er halvveis | Publisering av ny versjon flytter `activeVersionId`, men rører ingen `CertificationStatus`. Beslutningen fra #989 er dermed ikke implementert. Egen, større sak |
+| Serverens norske tekst vises i engelsk forfattergrensesnitt | Bevisst avveining, dokumentert i koden: en forståelig setning på feil språk slår en misvisende setning på riktig. Den ekte kuren er en feilKODE for slettevernet |
+
+### Om metoden
+
+⚠️ **Flaken i #994 kaskaderer, og det gjør den farligere enn antatt.** `TC-POL-RED-001` timet ut på
+20 s men fortsatte i 60; spionen dens registrerte enda et kall, og nabotesten så to der den ventet
+ett. Bare den første er en flake — den andre er en følgefeil som *ser ut som* en logikkfeil.
+«Spionen ble kalt to ganger» leser som dobbeltkjøring i produksjonskoden. Det kostet en time å
+avkrefte.
+
+1153 unit, 243 e2e, 110 integrasjonsfiler.
+
+
 ## 2.27.0 - 2026-08-23
 
 **Første runde med kompleksitetsbremsen brukt som verktøy, ikke bare som måling.** Fire agenter tok

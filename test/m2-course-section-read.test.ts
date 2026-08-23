@@ -329,3 +329,74 @@ describe("#992: framdriftsbrøken bruker samme predikat i teller og nevner", () 
     expect(p.courseStatus).toBe("COMPLETED");
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// #996: legacy-`modules[]` sa noe annet enn tellerne i SAMME respons.
+//
+// Tellerne ble filtrert for arkiverte moduler i 2.26.3. Denne lista ble det ikke, og da kunne én
+// respons påstå `moduleCount: 0` og `progress 0/0` samtidig som `modules[]` inneholdt en modul.
+//
+// ⚠️ Verre enn et skjevt tall: `certStatusByModuleId` bygges bare for ikke-arkiverte moduler, så en
+// modul deltakeren FAKTISK BESTO før arkiveringen kom tilbake som «ikke påbegynt». En eldre klient
+// som leser denne dokumenterte flaten viser da en klikkbar modul som resten av responsen sier ikke
+// finnes i kravet.
+// ─────────────────────────────────────────────────────────────────────────────
+describe("#996: legacy-modules[] er filtrert som tellerne", () => {
+  afterAll(async () => {
+    await prisma.$disconnect();
+  });
+
+  async function courseWithArchivedAndLiveModule() {
+    const course = await prisma.course.create({
+      data: { title: `Legacy Modules ${Date.now()}-${Math.random()}`, publishedAt: new Date() },
+      select: { id: true },
+    });
+    const archived = await prisma.module.create({
+      data: { title: JSON.stringify({ "en-GB": "Arkivert" }), archivedAt: new Date() },
+      select: { id: true },
+    });
+    const live = await prisma.module.create({
+      data: { title: JSON.stringify({ "en-GB": "Levende" }) },
+      select: { id: true },
+    });
+    await prisma.courseItem.createMany({
+      data: [
+        { courseId: course.id, itemType: "MODULE", moduleId: archived.id, sortOrder: 0 },
+        { courseId: course.id, itemType: "MODULE", moduleId: live.id, sortOrder: 1 },
+      ],
+    });
+    return { courseId: course.id, archivedId: archived.id, liveId: live.id };
+  }
+
+  it("den arkiverte modulen er ute av modules[], slik den er ute av moduleTotal", async () => {
+    const { courseId, archivedId, liveId } = await courseWithArchivedAndLiveModule();
+    const detail = await request(app).get(`/api/courses/${courseId}`).set(participantHeaders);
+    const modules = detail.body.course.modules as Array<{ moduleId: string }>;
+
+    expect(modules.map((m) => m.moduleId), "kun den levende").toEqual([liveId]);
+    expect(modules.some((m) => m.moduleId === archivedId)).toBe(false);
+
+    // ⚠️ Kjernen: lista og telleren skal si det SAMME. Det var uenigheten som var feilen.
+    expect(modules).toHaveLength(detail.body.course.progress.moduleTotal);
+    expect(detail.body.course.moduleCount).toBe(modules.length);
+  });
+
+  it("KONTROLLCASE: en levende modul står fortsatt i modules[]", async () => {
+    // Uten denne ville «filtrer bort alt» bestått testen over, og eldre klienter hadde fått en tom
+    // modulliste for helt normale kurs.
+    const course = await prisma.course.create({
+      data: { title: `Legacy Modules OK ${Date.now()}`, publishedAt: new Date() },
+      select: { id: true },
+    });
+    const live = await prisma.module.create({
+      data: { title: JSON.stringify({ "en-GB": "Bare levende" }) },
+      select: { id: true },
+    });
+    await prisma.courseItem.create({
+      data: { courseId: course.id, itemType: "MODULE", moduleId: live.id, sortOrder: 0 },
+    });
+
+    const detail = await request(app).get(`/api/courses/${course.id}`).set(participantHeaders);
+    expect((detail.body.course.modules as Array<{ moduleId: string }>).map((m) => m.moduleId)).toEqual([live.id]);
+  });
+});

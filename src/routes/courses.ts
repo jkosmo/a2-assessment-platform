@@ -366,17 +366,30 @@ coursesRouter.get("/:courseId", async (request, response, next) => {
         sectionCompleted: readSectionCount,
         sectionTotal: sectionCount,
       },
-      modules: course.modules.map((cm) => {
-        const certStatus = certStatusByModuleId.get(cm.moduleId);
-        const passed = isCertificationPassed(certStatus);
-        const hasStarted = latestSubmissionByModuleId.has(cm.moduleId);
-        return {
-          moduleId: cm.moduleId,
-          sortOrder: cm.sortOrder,
-          title: localizeContentText(locale, cm.module.title) ?? cm.module.title,
-          moduleStatus: passed ? "PASSED" : hasStarted ? "IN_PROGRESS" : "NOT_STARTED",
-        };
-      }),
+      // ⚠️ #996: legacy-`modules[]` MÅ filtreres som tellerne over. De ble filtrert i 2.26.3, denne
+      // ikke — og da sa samme respons to ting samtidig: `moduleCount: 0` og `progress 0/0`, mens
+      // `modules[]` inneholdt en arkivert modul som `NOT_STARTED`.
+      //
+      // Verre enn et skjevt tall: sertifiseringsoppslaget (`certStatusByModuleId`) bygges bare for
+      // ikke-arkiverte moduler, så en modul deltakeren FAKTISK BESTO før arkiveringen kom tilbake
+      // som «ikke påbegynt». En eldre klient som leser denne flaten viser da en klikkbar modul som
+      // resten av responsen sier ikke finnes i kravet.
+      //
+      // `moduleIds` er allerede den filtrerte lista bevisporten bruker. Å lese fra den i stedet for
+      // fra `course.modules` er hele fiksen — én kilde, ikke to.
+      modules: course.modules
+        .filter((cm) => moduleIds.includes(cm.moduleId))
+        .map((cm) => {
+          const certStatus = certStatusByModuleId.get(cm.moduleId);
+          const passed = isCertificationPassed(certStatus);
+          const hasStarted = latestSubmissionByModuleId.has(cm.moduleId);
+          return {
+            moduleId: cm.moduleId,
+            sortOrder: cm.sortOrder,
+            title: localizeContentText(locale, cm.module.title) ?? cm.module.title,
+            moduleStatus: passed ? "PASSED" : hasStarted ? "IN_PROGRESS" : "NOT_STARTED",
+          };
+        }),
       items,
     };
 
