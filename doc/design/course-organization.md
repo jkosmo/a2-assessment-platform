@@ -235,7 +235,7 @@ er de av dem som besto modulen.
 ⚠️ **Dette erstatter den gamle regelen** («alle brukere med minst én submission på minst én modul»),
 og tall før og etter v2.27.0 kan ikke sammenlignes direkte. Den gamle nevneren het innmeldte og talte
 innleveringer: med et datofilter kunne fullføringene ligge innenfor vinduet og innleveringene utenfor,
-slik at eksporten til ledelsen viste **400 % fullføringsgrad** (#969, #995).
+slik at eksporten til ledelsen viste **400 % fullføringsgrad** (#969, #996).
 
 Unionen med fullførerne er bevisst, og er ikke det samme som å klippe grafen til 100 %: en klipping
 ville skjult at de to tallene var uenige. Nå er telleren en delmengde av nevneren per konstruksjon.

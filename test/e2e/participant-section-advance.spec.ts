@@ -312,7 +312,7 @@ test("#992: en ARKIVERT modul foran siste seksjon skal ikke blokkere «Avslutt k
   // Serverens bevisport filtrerer den bort og er klar til å utstede beviset.
   //
   // ⚠️ `required: false` sto ikke her da testen ble skrevet — den mocket «arkivert» som bare
-  // `available: false`, altså den sammenblandingen #995 skiller. Testen ble rød av fiksen, og det
+  // `available: false`, altså den sammenblandingen #996 skiller. Testen ble rød av fiksen, og det
   // var riktig: mocken beskrev en tilstand serveren aldri sender.
   await mockCourseWithUnavailable(
     page,
@@ -449,7 +449,7 @@ test("#992: serverens JSON når aldri deltakerens toast", async ({ page }) => {
 });
 
 // ---------------------------------------------------------------------------
-// #995: en AVPUBLISERT modul er ikke det samme som en ARKIVERT.
+// #996: en AVPUBLISERT modul er ikke det samme som en ARKIVERT.
 //
 // QA-porten fant at #992 blandet dem. Klienten utledet «ikke påkrevd» fra `available: false`, mens
 // serverens bevisport bare filtrerer på `archivedAt`. Utfallet var en STILLE blindvei: «Avslutt
@@ -460,7 +460,7 @@ test("#992: serverens JSON når aldri deltakerens toast", async ({ page }) => {
 // variant av den. Derfor står disse to testene ved siden av #992-testen over: forskjellen mellom dem
 // er ETT felt, og det er hele poenget.
 // ---------------------------------------------------------------------------
-test("#995: en AVPUBLISERT modul blokkerer «Avslutt kurset» — den teller fortsatt", async ({ page }) => {
+test("#996: en AVPUBLISERT modul blokkerer «Avslutt kurset» — den teller fortsatt", async ({ page }) => {
   await mockBase(page);
   await mockCourseWithUnavailable(
     page,
@@ -494,7 +494,7 @@ test("#995: en AVPUBLISERT modul blokkerer «Avslutt kurset» — den teller for
   await expect(page.locator('.course-item[data-key="ci1"] .course-module-row')).toBeDisabled();
 });
 
-test("#995 KONTROLLCASE: en ARKIVERT modul blokkerer IKKE — den er tatt ut av kurset", async ({ page }) => {
+test("#996 KONTROLLCASE: en ARKIVERT modul blokkerer IKKE — den er tatt ut av kurset", async ({ page }) => {
   // Samme oppsett, ETT felt forskjellig. Uten denne ville «behandle alt utilgjengelig som påkrevd»
   // bestått testen over — og da hadde vi gjeninnført #945: en arkivert modul som blokkerer
   // fullføring for alltid.

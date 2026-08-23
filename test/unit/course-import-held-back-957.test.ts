@@ -48,7 +48,7 @@ vi.mock("../../src/modules/course/courseCommands.js", () => ({
 
 vi.mock("../../src/services/auditService.js", () => ({ recordAuditEvent }));
 
-// ⚠️ #995: tx-dobbelen var `{}`. Da importen begynte å AVPUBLISERE et målkurs som holdes tilbake,
+// ⚠️ #996: tx-dobbelen var `{}`. Da importen begynte å AVPUBLISERE et målkurs som holdes tilbake,
 // falt testen på `tx.course.update` — og det var riktig av den. En dobbel som ikke kan feile på en
 // ny skriving, kan heller ikke bekrefte at skrivingen skjer.
 const courseUpdate = vi.fn();
@@ -155,7 +155,7 @@ describe("#957 importCourseFromEnvelope reports heldBackByTranslationGate", () =
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// #995: å HOPPE OVER publisering er ikke det samme som å AVPUBLISERE.
+// #996: å HOPPE OVER publisering er ikke det samme som å AVPUBLISERE.
 //
 // Betingelsen `if (publishedAt && !anyContentHeldBack)` var skrevet med `createNew` i tankene, der
 // et nytt kurs starter upublisert uansett. Ved `replaceExisting` finnes målkurset fra før og kan
@@ -164,7 +164,7 @@ describe("#957 importCourseFromEnvelope reports heldBackByTranslationGate", () =
 // ⚠️ Deltakeren møter «modul ikke tilgjengelig» i et kurs som ser helt normalt ut. Det er
 // publiseringsinvarianten brutt, og det er stille: ingen feilmelding noe sted.
 // ─────────────────────────────────────────────────────────────────────────────
-describe("#995 importCourseFromEnvelope avpubliserer et målkurs som holdes tilbake", () => {
+describe("#996 importCourseFromEnvelope avpubliserer et målkurs som holdes tilbake", () => {
   beforeEach(resetMocks);
 
   it("avpubliserer når innhold holdes tilbake", async () => {

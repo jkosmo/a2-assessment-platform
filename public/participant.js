@@ -3316,7 +3316,7 @@ function formatCourseProgressLabel(progress) {
 
 // #492: finn neste uferdige element i sekvensen (uleste seksjoner / ikke-beståtte tilgjengelige moduler).
 //
-// ⚠️ #995: her gjelder TILGJENGELIG, ikke PÅKREVD — og det er nettopp fordi de to spørsmålene skiller
+// ⚠️ #996: her gjelder TILGJENGELIG, ikke PÅKREVD — og det er nettopp fordi de to spørsmålene skiller
 // lag. Denne peker ut steget deltakeren skal gjøre NÅ, og en avpublisert modul kan ikke åpnes selv om
 // beviset fortsatt krever den. Å utheve den ville sendt deltakeren mot en rad som ikke lar seg
 // klikke.

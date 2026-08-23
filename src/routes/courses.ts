@@ -319,7 +319,7 @@ coursesRouter.get("/:courseId", async (request, response, next) => {
       // #502-followup/#958: regelen bor nå i `findCourseItemsForParticipant`. Ruta leser en
       // avgjørelse i stedet for å ta en — feltene den ble regnet ut av finnes ikke her lenger.
       //
-      // ⚠️ #995: BEGGE avgjørelsene. En avpublisert modul er `available: false` men fortsatt
+      // ⚠️ #996: BEGGE avgjørelsene. En avpublisert modul er `available: false` men fortsatt
       // `required: true` — den er midlertidig nede, ikke tatt ut av kurset. Klienten skal ikke
       // utlede det ene av det andre.
       const available = item.available;

@@ -52,7 +52,7 @@ describe("#992: sekvenspredikatene", () => {
   });
 
   // ───────────────────────────────────────────────────────────────────────────
-  // #995: «utestående» henger på PÅKREVD, ikke på TILGJENGELIG.
+  // #996: «utestående» henger på PÅKREVD, ikke på TILGJENGELIG.
   //
   // ⚠️ Disse testene sa tidligere at enhver utilgjengelig modul er ikke-utestående, og de var
   // grønne. QA-porten fant at det er feil: serverens bevisport filtrerer bare på `archivedAt`, så en
@@ -109,7 +109,7 @@ const CLAUSES = [
   { re: /\.available\s*!==\s*false/g, use: "isEntryAvailable(entry)" },
   { re: /moduleStatus\s*[!=]==\s*"PASSED"/g, use: "isEntryDone(entry) / isEntryOutstanding(entry)" },
   { re: /\.read\s*!==\s*true/g, use: "isEntryDone(entry)" },
-  // #995: `required` er det nye leddet, og akkurat like lett å skrive for hånd som de tre over.
+  // #996: `required` er det nye leddet, og akkurat like lett å skrive for hånd som de tre over.
   { re: /\.required\s*!==\s*false/g, use: "isEntryRequired(entry) / isEntryOutstanding(entry)" },
 ];
 

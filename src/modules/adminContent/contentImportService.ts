@@ -637,7 +637,7 @@ export async function importCourseFromEnvelope(
         if (payload.course.audit?.publishedAt && !anyContentHeldBack) {
           await publishCourse(courseId, options.actorId, tx);
         } else if (anyContentHeldBack) {
-          // ⚠️ #995: å HOPPE OVER publiseringen er ikke det samme som å sørge for at kurset er
+          // ⚠️ #996: å HOPPE OVER publiseringen er ikke det samme som å sørge for at kurset er
           // upublisert.
           //
           // Ved `mode: "replaceExisting"` finnes målkurset fra før, og kan allerede være publisert.

@@ -436,7 +436,7 @@ export function createCourseRepository(client: CourseRepositoryClient = prisma) 
     /**
      * HVEM som besto modulen, ikke bare hvor mange.
      *
-     * ⚠️ #995: `countPassedUsersForModule` gir et TALL, og et tall kan ikke unioneres eller
+     * ⚠️ #996: `countPassedUsersForModule` gir et TALL, og et tall kan ikke unioneres eller
      * snittes mot kursets publikum. Det var derfor `moduleBreakdown.passRate` fortsatt kunne vise
      * 400 %: telleren var sertifiseringer i vinduet, nevneren var innleveringer i vinduet, og de to
      * målte ulike mennesker.

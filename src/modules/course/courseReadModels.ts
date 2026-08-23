@@ -29,7 +29,7 @@ export interface CourseModuleEntry {
 // learning section (#491/P1), in sortOrder.
 // courseItemId + discussionsEnabled (#495/T-QA-3): lar deltaker-UI feste diskusjonstråder på
 // det konkrete CourseItem og skjule panelet når diskusjon er avskrudd for elementet.
-// ⚠️ #995: `available` og `required` er TO spørsmål, og en modul kan svare ulikt på dem.
+// ⚠️ #996: `available` og `required` er TO spørsmål, og en modul kan svare ulikt på dem.
 //
 //   arkivert      → available: false, required: false   (tatt ut av sirkulasjon)
 //   avpublisert   → available: false, required: TRUE    (midlertidig nede, teller fortsatt)

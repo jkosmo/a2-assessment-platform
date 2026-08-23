@@ -740,7 +740,7 @@ async function handleImportCoursePackageFile(event) {
       body: JSON.stringify({ payload, mode: "createNew" }),
     });
     if (!result?.courseId) throw new Error("Import-respons mangler courseId.");
-    // ⚠️ #957/#995: responsen BÆRER forklaringen; her ble den kastet.
+    // ⚠️ #957/#996: responsen BÆRER forklaringen; her ble den kastet.
     //
     // Forfatteren fikk «Kurs importert» og ble sendt til et kurs som lå som utkast, uten et ord om
     // hvorfor. Serveren regnet ut `heldBackByTranslationGate`, brukte det til å holde kurset

@@ -90,7 +90,7 @@ export async function getCourseReport(
       const enrolled = participantIds.size;
       const completed = completions.length;
 
-      // ⚠️ #969/#995: modulraden hadde nøyaktig samme feil som kursraden, én etasje ned — telleren
+      // ⚠️ #969/#996: modulraden hadde nøyaktig samme feil som kursraden, én etasje ned — telleren
       // var sertifiseringer i vinduet, nevneren innleveringer i vinduet, og de to målte ULIKE
       // mennesker. Med «siste 30 dager» kunne 12 beståtte deles på 3 innleveringer: 400 %.
       //

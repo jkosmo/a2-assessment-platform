@@ -347,7 +347,7 @@ export function isEntryDone(entry) {
 /**
  * Krever kursbeviset dette elementet?
  *
- * ⚠️ #995: dette er IKKE det samme som `isEntryAvailable`, og å blande dem var en blindvei.
+ * ⚠️ #996: dette er IKKE det samme som `isEntryAvailable`, og å blande dem var en blindvei.
  *
  *   arkivert modul     tilgjengelig: nei   påkrevd: NEI    (tatt ut av sirkulasjon)
  *   avpublisert modul  tilgjengelig: nei   påkrevd: JA     (midlertidig nede, teller fortsatt)
