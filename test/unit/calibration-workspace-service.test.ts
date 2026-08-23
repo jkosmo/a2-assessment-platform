@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { NotFoundError } from "../../src/errors/AppError.js";
+import { warmModuleGraph } from "../support/moduleGraphWarmup.js";
 
 const findModuleSummary = vi.fn();
 const findSubmissionsForWorkspace = vi.fn();
@@ -17,6 +18,9 @@ vi.mock("../../src/modules/calibration/calibrationRepository.js", () => ({
 vi.mock("../../src/services/auditService.js", () => ({
   recordAuditEvent,
 }));
+
+// #994: modulgrafen leses her, ikke i første test. Se test/support/moduleGraphWarmup.ts.
+warmModuleGraph(() => import("../../src/modules/calibration/index.js"));
 
 describe("calibration workspace service", () => {
   beforeEach(() => {

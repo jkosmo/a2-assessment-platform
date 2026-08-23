@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { warmModuleGraph } from "../support/moduleGraphWarmup.js";
 
 const findUnique = vi.fn();
 const create = vi.fn();
@@ -31,6 +32,9 @@ afterEach(() => {
   vi.resetModules();
   vi.clearAllMocks();
 });
+
+// #994: modulgrafen leses her, ikke i første test. Se test/support/moduleGraphWarmup.ts.
+warmModuleGraph(() => import("../../src/repositories/userRepository.js"));
 
 describe("user repository", () => {
   it("recovers from a concurrent create on externalId collision without reactivating the user", async () => {

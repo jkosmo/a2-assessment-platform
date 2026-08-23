@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { warmModuleGraph } from "../support/moduleGraphWarmup.js";
 
 // #958: de to dørene inn til et kurs' elementer, målt gjennom den ekte aksessoren.
 //
@@ -156,6 +157,14 @@ async function allItems(items: ItemRow[]) {
   const { createCourseRepository } = await import("../../src/modules/course/courseRepository.js");
   return createCourseRepository(createClient(items) as never).findAllCourseItems(COURSE_ID);
 }
+
+// #994: modulgrafen leses her, ikke i første test. Se test/support/moduleGraphWarmup.ts.
+// ⚠️ Begge, ikke bare den ene. `courseRepository` lastes av hjelperne over — de er DEKLARERT
+// før første `it(`, men KJØRER inne i en test, og belastes derfor testens budsjett.
+warmModuleGraph(async () => {
+  await import("../../src/modules/course/courseCompletionService.js");
+  await import("../../src/modules/course/courseRepository.js");
+});
 
 describe("#958 findCourseItemsForParticipant — seksjoner deltakeren ikke kan åpne er utelatt", () => {
   it("utelater en seksjon oversettelsesgaten har holdt tilbake", async () => {

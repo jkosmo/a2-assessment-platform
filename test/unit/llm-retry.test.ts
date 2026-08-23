@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { warmModuleGraph } from "../support/moduleGraphWarmup.js";
 
 // #479: end-to-end coverage of the Azure OpenAI 429/5xx retry loop in callLlm — exercised through
 // the exported condenseSourceMaterial (the simplest single-call consumer). Pins the actual fix:
@@ -12,6 +13,9 @@ function okPayload(condensedText: string): Response {
     { status: 200, headers: { "content-type": "application/json" } },
   );
 }
+
+// #994: modulgrafen leses her, ikke i første test. Se test/support/moduleGraphWarmup.ts.
+warmModuleGraph(() => import("../../src/modules/adminContent/llmContentGenerationService.js"));
 
 describe("callLlm Azure OpenAI retry (via condenseSourceMaterial)", () => {
   beforeEach(() => {

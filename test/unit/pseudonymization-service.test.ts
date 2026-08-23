@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { warmModuleGraph } from "../support/moduleGraphWarmup.js";
 
 // ── Mocks ─────────────────────────────────────────────────────────────────────
 
@@ -69,6 +70,9 @@ afterEach(() => {
 });
 
 // ── pseudonymizeUser ──────────────────────────────────────────────────────────
+
+// #994: modulgrafen leses her, ikke i første test. Se test/support/moduleGraphWarmup.ts.
+warmModuleGraph(() => import("../../src/modules/user/pseudonymizationService.js"));
 
 describe("pseudonymizeUser", () => {
   beforeEach(() => {

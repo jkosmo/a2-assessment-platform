@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { warmModuleGraph } from "../support/moduleGraphWarmup.js";
 
 // #906 § 4: «Lagre» er én knapp, men var fem transaksjoner. `composeModuleVersion` samlet dem, og
 // koden sier at rename, rubrikk, prompt, MCQ-sett og modulversjonen deler transaksjon — men
@@ -57,6 +58,9 @@ function baseInput(overrides: Record<string, unknown> = {}) {
     ...overrides,
   } as never;
 }
+
+// #994: modulgrafen leses her, ikke i første test. Se test/support/moduleGraphWarmup.ts.
+warmModuleGraph(() => import("../../src/modules/adminContent/moduleVersionComposer.js"));
 
 describe("#906 composeModuleVersion is one transaction", () => {
   beforeEach(() => {

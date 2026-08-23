@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { warmModuleGraph } from "../support/moduleGraphWarmup.js";
 
 const findNextRunnableJob = vi.fn();
 const tryLockPendingJob = vi.fn();
@@ -49,6 +50,9 @@ vi.mock("../../src/services/auditService.js", () => ({
 vi.mock("../../src/observability/operationalLog.js", () => ({
   logOperationalEvent,
 }));
+
+// #994: modulgrafen leses her, ikke i første test. Se test/support/moduleGraphWarmup.ts.
+warmModuleGraph(() => import("../../src/modules/assessment/AssessmentJobRunner.js"));
 
 describe("AssessmentJobRunner", () => {
   beforeEach(() => {

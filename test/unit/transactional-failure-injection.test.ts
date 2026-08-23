@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AppealStatus, DecisionType, ReviewStatus } from "../../src/db/prismaRuntime.js";
 import type { LlmStructuredAssessment } from "../../src/modules/assessment/llmAssessmentService.js";
+import { warmModuleGraph } from "../support/moduleGraphWarmup.js";
 
 // ─── Shared mocks ────────────────────────────────────────────────────────────
 
@@ -227,6 +228,14 @@ const BASE_APPEAL = {
 };
 
 // ─── Tests ────────────────────────────────────────────────────────────────────
+
+// #994: modulgrafene leses her, ikke i første test. Se test/support/moduleGraphWarmup.ts.
+warmModuleGraph(async () => {
+  await import("../../src/modules/appeal/appealService.js");
+  await import("../../src/modules/assessment/decisionService.js");
+  await import("../../src/modules/review/manualReviewService.js");
+  await import("../../src/modules/submission/submissionService.js");
+});
 
 describe("transactional failure injection", () => {
   beforeEach(() => {

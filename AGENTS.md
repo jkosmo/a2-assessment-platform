@@ -205,8 +205,15 @@ Praktisk:
 
 1. **Del opp etter begrep, ikke etter mappe.** Overlapper to saker i begrep, kjør dem etter
    hverandre — også når filene er disjunkte.
-2. **Maks to agenter som kjører tester samtidig.** De deler én lokal Postgres; utover to får du
-   tilfeldige røde tester og bruker tiden på å avkrefte dem (#994).
+2. **Maks to agenter som kjører tester samtidig.** De deler én lokal Postgres, og utover to bruker
+   du tiden på å avkrefte tilfeldige røde tester.
+
+   ⚠️ **Rettet 2026-08-23:** denne linja begrunnet seg opprinnelig med #994, og den begrunnelsen
+   var feil. #994 var ikke databasekontanse — det var kald lesing av modulgrafen fra OneDrive som
+   ble belastet den første testens `testTimeout` (51 903 ms kald, 1 395 ms varm, med prisma mocket
+   hele veien). Ordren står fortsatt, men på egne ben. Poenget generalisert: **en stående ordre som
+   bærer en gjettet årsak er verre enn en uten**, fordi neste feilsøking starter i gjetningen. Det
+   var nøyaktig det som skjedde her.
 3. **Flaskehalsen er gjennomgangen, ikke agentene.** Fire leveranser skal rebases, forenes,
    integrasjonstestes og gjennom QA-porten av én person. Fem agenter gir fem bunter i kø.
 4. **Les agentenes «funnet, men ikke fikset»-liste som en risikoliste**, ikke som en restanse. Det

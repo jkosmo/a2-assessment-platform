@@ -8,6 +8,7 @@
 // Uten det andre paret ville «alltid null» eller «alltid 1» bestått den første testen.
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { warmModuleGraph } from "../support/moduleGraphWarmup.js";
 
 const findPublishedCoursesWithModuleDetails = vi.fn();
 const findCourseCompletionsForLearnerReport = vi.fn();
@@ -76,6 +77,9 @@ function completions(...userIds: string[]) {
     user: { id: userId, name: userId, email: `${userId}@example.com`, department: "Legal" },
   }));
 }
+
+// #994: modulgrafen leses her, ikke i første test. Se test/support/moduleGraphWarmup.ts.
+warmModuleGraph(() => import("../../src/modules/course/courseReport.js"));
 
 describe("#969 course report — enrolledParticipants is the course audience", () => {
   beforeEach(() => {

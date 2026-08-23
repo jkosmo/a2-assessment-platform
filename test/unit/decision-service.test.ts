@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { DecisionType, SubmissionStatus } from "../../src/db/prismaRuntime.js";
 import type { LlmStructuredAssessment } from "../../src/modules/assessment/llmAssessmentService.js";
+import { warmModuleGraph } from "../support/moduleGraphWarmup.js";
 
 const assessmentDecisionCreate = vi.fn();
 const manualReviewCreate = vi.fn();
@@ -66,6 +67,9 @@ function buildLlmResult(overrides: Partial<LlmStructuredAssessment> = {}): LlmSt
     ...overrides,
   };
 }
+
+// #994: modulgrafen leses her, ikke i første test. Se test/support/moduleGraphWarmup.ts.
+warmModuleGraph(() => import("../../src/modules/assessment/decisionService.js"));
 
 describe("decision service", () => {
   beforeEach(() => {

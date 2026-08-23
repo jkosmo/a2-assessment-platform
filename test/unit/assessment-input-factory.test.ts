@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { warmModuleGraph } from "../support/moduleGraphWarmup.js";
 
 vi.mock("../../src/modules/assessment/sensitiveDataMaskingService.js", () => ({
   preprocessSensitiveDataForLlm: vi.fn((input) => ({
@@ -14,6 +15,9 @@ vi.mock("../../src/modules/assessment/sensitiveDataMaskingService.js", () => ({
 vi.mock("../../src/i18n/content.js", () => ({
   localizeContentText: vi.fn((_locale, text) => text ?? null),
 }));
+
+// #994: modulgrafen leses her, ikke i første test. Se test/support/moduleGraphWarmup.ts.
+warmModuleGraph(() => import("../../src/modules/assessment/AssessmentInputFactory.js"));
 
 describe("AssessmentInputFactory", () => {
   describe("parseRubricCriteriaIds", () => {

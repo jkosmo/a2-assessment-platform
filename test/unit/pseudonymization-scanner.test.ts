@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { warmModuleGraph } from "../support/moduleGraphWarmup.js";
 
 // ── Mocks ─────────────────────────────────────────────────────────────────────
 
@@ -36,6 +37,9 @@ vi.mock("../../src/config/retention.js", () => ({
 }));
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
+
+// #994: modulgrafen leses her, ikke i første test. Se test/support/moduleGraphWarmup.ts.
+warmModuleGraph(() => import("../../src/modules/user/pseudonymizationScanner.js"));
 
 describe("pseudonymization scanner", () => {
   beforeEach(() => {

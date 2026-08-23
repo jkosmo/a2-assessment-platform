@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { missingLocalesFor } from "../../src/modules/adminContent/contentValidationService.js";
+import { warmModuleGraph } from "../support/moduleGraphWarmup.js";
 
 // #892: renaming a module used to write the author's single title into en-GB, nb AND nn. Every
 // title then looked translated, participants were served the wrong language with no signal, and
@@ -35,6 +36,9 @@ async function rename(existingTitle: string | null, patch: unknown) {
   await updateModuleTitle("m1", patch as never, "actor-1");
   return updateModuleTitleRepo.mock.calls.at(-1)?.[1] as string;
 }
+
+// #994: modulgrafen leses her, ikke i første test. Se test/support/moduleGraphWarmup.ts.
+warmModuleGraph(() => import("../../src/modules/adminContent/adminContentCommands.js"));
 
 describe("updateModuleTitle — localization honesty (#892)", () => {
   beforeEach(() => {

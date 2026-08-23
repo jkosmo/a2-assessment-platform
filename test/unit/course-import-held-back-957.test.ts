@@ -9,6 +9,7 @@
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ExportEnvelope } from "../../src/modules/adminContent/adminContentSchemas.js";
+import { warmModuleGraph } from "../support/moduleGraphWarmup.js";
 
 const createModule = vi.fn();
 const createRubricVersion = vi.fn();
@@ -112,6 +113,9 @@ function buildCourseEnvelope({ fullyTranslated }: { fullyTranslated: boolean }):
     },
   } as unknown as ExportEnvelope;
 }
+
+// #994: modulgrafen leses her, ikke i første test. Se test/support/moduleGraphWarmup.ts.
+warmModuleGraph(() => import("../../src/modules/adminContent/contentImportService.js"));
 
 describe("#957 importCourseFromEnvelope reports heldBackByTranslationGate", () => {
   beforeEach(() => {

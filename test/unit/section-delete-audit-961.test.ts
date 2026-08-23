@@ -10,6 +10,7 @@
 // for noe som ble rullet tilbake, eller mangle for noe som faktisk ble slettet.
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { warmModuleGraph } from "../support/moduleGraphWarmup.js";
 
 const recordAuditEvent = vi.fn();
 const sectionFindUnique = vi.fn();
@@ -53,6 +54,12 @@ vi.mock("../../src/modules/course/assetCommands.js", () => ({
 }));
 
 vi.mock("../../src/modules/content/contentOwnershipService.js", () => ({ addContentOwner: vi.fn() }));
+
+// #994: modulgrafen leses her, ikke i første test. Se test/support/moduleGraphWarmup.ts.
+warmModuleGraph(async () => {
+  await import("../../src/modules/course/sectionCommands.js");
+  await import("../../src/observability/auditEvents.js");
+});
 
 describe("#961 deleteSection leaves an audit trail", () => {
   beforeEach(() => {

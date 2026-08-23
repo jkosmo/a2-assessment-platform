@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { warmModuleGraph } from "../support/moduleGraphWarmup.js";
 
 const getOrgSyncConfig = vi.fn();
 const findUserForOrgSyncByExternalId = vi.fn();
@@ -30,6 +31,9 @@ vi.mock("../../src/services/auditService.js", () => ({
 vi.mock("../../src/observability/operationalLog.js", () => ({
   logOperationalEvent,
 }));
+
+// #994: modulgrafen leses her, ikke i første test. Se test/support/moduleGraphWarmup.ts.
+warmModuleGraph(() => import("../../src/modules/orgSync/index.js"));
 
 describe("org sync service", () => {
   beforeEach(() => {

@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { warmModuleGraph } from "../support/moduleGraphWarmup.js";
 
 // #989: resertifisering fjernes. Den bærende påstanden i saken er at fjerningen **ikke endrer én
 // eneste bestått-avgjørelse** — kursbevisporten ignorerte allerede utløp, fordi `EXPIRED` (og `DUE`,
@@ -81,6 +82,9 @@ async function issueCompletionsFor(status: string | null) {
   await checkAndIssueCourseCompletions({ userId: USER_ID, moduleId: MODULE_ID }, client as never);
   return created;
 }
+
+// #994: modulgrafen leses her, ikke i første test. Se test/support/moduleGraphWarmup.ts.
+warmModuleGraph(() => import("../../src/modules/course/courseCompletionService.js"));
 
 describe("kursbevisporten er uendret av at resertifisering fjernes (#989)", () => {
   beforeEach(() => {

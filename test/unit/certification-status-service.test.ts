@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { NotFoundError } from "../../src/errors/AppError.js";
+import { warmModuleGraph } from "../support/moduleGraphWarmup.js";
 
 // #989: het `recertification-service.test.ts`. Testene for utløpsdatoer, DUE_SOON-utledning og
 // påminnelsesplanen er borte sammen med mekanismen. Det som står igjen er det som faktisk avgjorde
@@ -35,6 +36,9 @@ vi.mock("../../src/services/auditService.js", () => ({
 vi.mock("../../src/observability/operationalLog.js", () => ({
   logOperationalEvent,
 }));
+
+// #994: modulgrafen leses her, ikke i første test. Se test/support/moduleGraphWarmup.ts.
+warmModuleGraph(() => import("../../src/modules/certification/index.js"));
 
 describe("certification status service", () => {
   beforeEach(() => {

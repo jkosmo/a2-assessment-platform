@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { SubmissionStatus } from "../../src/db/prismaRuntime.js";
 import { ValidationError } from "../../src/errors/AppError.js";
+import { warmModuleGraph } from "../support/moduleGraphWarmup.js";
 
 const getModuleWithActiveVersion = vi.fn();
 const submissionCreate = vi.fn();
@@ -39,6 +40,9 @@ vi.mock("../../src/modules/review/index.js", () => ({
 vi.mock("../../src/modules/appeal/index.js", () => ({
   supersedeEligibleAppealsForRetake,
 }));
+
+// #994: modulgrafen leses her, ikke i første test. Se test/support/moduleGraphWarmup.ts.
+warmModuleGraph(() => import("../../src/modules/submission/index.js"));
 
 describe("submission service", () => {
   beforeEach(() => {

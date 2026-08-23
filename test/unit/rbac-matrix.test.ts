@@ -13,6 +13,7 @@ import supertest from "supertest";
 import { AppRole } from "../../src/db/prismaRuntime.js";
 import { rolesFor } from "../../src/config/capabilities.js";
 import { getParticipantConsoleRuntimeConfig } from "../../src/config/participantConsole.js";
+import { warmModuleGraph } from "../support/moduleGraphWarmup.js";
 
 const mockUpsertUser = vi.fn().mockResolvedValue({ id: "mock-user-id" });
 const mockSyncEntraGroupRoles = vi.fn().mockResolvedValue(undefined);
@@ -82,6 +83,9 @@ beforeEach(() => {
   mockUpsertUser.mockResolvedValue({ id: "mock-user-id" });
   mockGetActiveRoles.mockResolvedValue([]);
 });
+
+// #994: modulgrafen leses her, ikke i første test. Se test/support/moduleGraphWarmup.ts.
+warmModuleGraph(() => import("../../src/app.js"));
 
 describe("RBAC - /api/submissions", () => {
   it.each(deniedHeadersFor(rolesFor("submissions")))("403 - %s", async (_, headers) => {

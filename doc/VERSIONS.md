@@ -88,6 +88,51 @@ hele poenget med den slags assertion.
 | Er dette forsøket bestått? | 8 | **urørt** |
 
 
+### #994 — den flakete porten målte lesehastighet, ikke logikk
+
+Test-only, derfor ingen versjonsbump. Men den beit **seks ganger** 2026-08-23 og kostet en time på
+feil spor, så den hører hjemme i loggen.
+
+Saken gjettet på databasekontanse mellom parallelle vitest-prosesser. Målingen sa noe annet:
+
+| | første test i fila | de øvrige |
+|---|---|---|
+| kald graf | **51 903 ms** | momentane |
+| varm graf | 1 395 ms | momentane |
+
+Samme fil, samme maskin, ingen last, to minutter mellom kjøringene. Prisma er mocket i alle seks
+filene, så databasen var aldri inne i bildet.
+
+Kostnaden er å **lese modulgrafen fra disk**. `appealService` trekker inn `modules/course/index.js`,
+en barrel på flere hundre filer, og repoet ligger i OneDrive. Andre gang ligger alt i OS-ens
+filcache — derfor «passerer når den kjøres alene», som egentlig er «passerer andre gang».
+
+⚠️ **Det gjorde `testTimeout: 20000` til en måler av lesehastighet.** Og verre: vitest kan ikke
+STOPPE en utløpt test. TC-POL-RED-001 gikk over 20 s, men fortsatte til ~60 s, spionen registrerte
+enda et kall, og TC-POL-RED-002 så 2 der den ventet 1. Symptomet så ut som en logikkfeil i
+vurderingspolicyen. Det var der timen gikk.
+
+**Kuren har #958-formen:** `warmModuleGraph` gir lastingen ett navngitt sted med eget budsjett, så
+ingen test *kan* belastes for den. Testkroppene er urørt — de treffer nå et varmt register.
+`testTimeout` fortsetter å bety «denne logikken henger».
+
+**Ett unntak, med grunn:** `authenticate-middleware.test.ts` bruker `vi.doMock`, som ikke heises.
+Oppvarming ville gitt første test den umockede modulen. Jeg konverterte fila maskinelt sammen med
+de andre; integrasjonskjøringen fant den.
+
+#### Vakta fant seks ganger så mye som håndlista
+
+Håndlista mi var på **seks** filer — de som faktisk hadde feilet. `module-graph-warmup-guard` fant
+**37**. De seks var bare de med dypest graf, altså de som traff 20 s først.
+
+⚠️ Og første utkast av vakta var selv for slapp. QA-porten avviste den med to moteksempler fra
+repoet: `return import(...).then(...)` ble ikke matchet, og en hjelpefunksjon *deklarert* over
+første `it(` ble filtrert bort selv om den *kjører* inne i en test. Posisjon i fila sier ingenting
+om når koden kjører. Den strengere vakta — per spesifikator, uten posisjonslogikk — fant **åtte
+nye hull**, blant dem `rbac-matrix.test.ts` som laster hele Express-appen.
+
+Vakta så altså grønn ut mens nøyaktig regresjonen den skulle hindre lå i filene den godkjente.
+
 ## 2.27.1 - 2026-08-23
 
 **QA-porten, femte runde — og den første med klassifisering.** Justeringen virket etter hensikten:

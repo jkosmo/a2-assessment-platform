@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { warmModuleGraph } from "../support/moduleGraphWarmup.js";
 
 const findExpiredRunningJobs = vi.fn();
 const resetExpiredJob = vi.fn();
@@ -26,6 +27,9 @@ vi.mock("../../src/config/env.js", () => ({
 
 vi.mock("../../src/services/auditService.js", () => ({ recordAuditEvent }));
 vi.mock("../../src/observability/operationalLog.js", () => ({ logOperationalEvent }));
+
+// #994: modulgrafen leses her, ikke i første test. Se test/support/moduleGraphWarmup.ts.
+warmModuleGraph(() => import("../../src/modules/assessment/staleLockScanner.js"));
 
 describe("stale-lock scanner", () => {
   beforeEach(() => {

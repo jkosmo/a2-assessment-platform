@@ -7,6 +7,7 @@
  * and staleLockScanner across a single processNextJob call.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { warmModuleGraph } from "../support/moduleGraphWarmup.js";
 
 const findNextRunnableJob = vi.fn();
 const tryLockPendingJob = vi.fn();
@@ -53,6 +54,9 @@ vi.mock("../../src/config/env.js", () => ({
     ASSESSMENT_JOB_LEASE_DURATION_MS: 300_000,
   },
 }));
+
+// #994: modulgrafen leses her, ikke i første test. Se test/support/moduleGraphWarmup.ts.
+warmModuleGraph(() => import("../../src/modules/assessment/AssessmentJobRunner.js"));
 
 describe("stale-lock recovery path", () => {
   beforeEach(() => {

@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
+import { warmModuleGraph } from "../support/moduleGraphWarmup.js";
 
 // #479 Slice B: same-domain crawl. Pure robots/url helpers are tested directly; the crawl
 // itself runs against a mocked global.fetch with an IP-literal host (no DNS dependency — the
@@ -38,6 +39,9 @@ const {
   crawlUrlAsSourceMaterial,
   checkAndConsumeCrawlRateLimit,
 } = await import("../../src/modules/adminContent/urlFetchService.js");
+
+// #994: modulgrafen leses her, ikke i første test. Se test/support/moduleGraphWarmup.ts.
+warmModuleGraph(() => import("../../src/modules/adminContent/urlFetchService.js"));
 
 describe("parseRobotsTxt + isPathAllowedByRobots", () => {
   it("applies wildcard Disallow rules", () => {
