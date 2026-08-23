@@ -517,7 +517,11 @@ export async function importCourseFromEnvelope(
     mode: ImportMode;
     targetCourseId?: string;
   },
-): Promise<{ courseId: string; moduleIds: string[] }> {
+  // #957: samme form som søsterfunksjonene — `importModulePayload` (:336) og `persistStagedSection`
+  // (:169) rapporterer begge `heldBackByTranslationGate` oppover. Kursimporten regnet ut flagget,
+  // brukte det til å holde kurset som utkast, og kastet det så. Kommentaren over `anyContentHeldBack`
+  // lovet at flagget «is reported to the caller, not just acted on locally» — nå gjør det det.
+): Promise<{ courseId: string; moduleIds: string[]; heldBackByTranslationGate: boolean }> {
   if (envelope.scope !== "course" || !envelope.course) {
     throw new Error("Envelope is not a course export.");
   }
@@ -651,7 +655,11 @@ export async function importCourseFromEnvelope(
           tx,
         );
 
-        return { courseId, moduleIds: importedModuleIds };
+        // #957: uten flagget her får forfatteren `201 Created` og et kurs som ligger som utkast,
+        // uten et ord om hvorfor. `anyContentHeldBack` er den ENESTE kilden til den forklaringen —
+        // den utledes ikke av kursets tilstand alene (et kurs kan også være utkast fordi kilden
+        // var det).
+        return { courseId, moduleIds: importedModuleIds, heldBackByTranslationGate: anyContentHeldBack };
       },
       { timeout: IMPORT_TX_TIMEOUT_MS },
     );
