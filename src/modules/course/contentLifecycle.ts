@@ -153,18 +153,34 @@ export async function assertSectionNotInIssuedCertificate(sectionId: string, ver
   // Vi kan ikke vite hvilke seksjoner et slikt bevis dekket — dataene finnes ikke. Men vi har en
   // ærlig stedfortreder: leste deltakeren seksjonen i det kurset hen fikk beviset for, var den en
   // del av grunnlaget. Det er konservativt i riktig retning, og det er alt dataene tillater.
+  // ⚠️ #996: spørringen går fra LESNINGENE, ikke fra bevisene. Første utkast lastet ALLE bevis med
+  // NULL-snapshot og bygde én `OR`-gren per bevis — to bindeparametre hver. Med nok historikk
+  // sprenger det Prismas parametergrense, og kaskade-forhåndsvisningen ble seksjoner × alle gamle
+  // bevis. En vakt som slutter å virke når installasjonen blir stor, er en vakt som svikter presis
+  // når den trengs mest.
+  //
+  // Snudd er mengden naturlig avgrenset: hvor mange har lest DENNE ene seksjonen. To `IN`-lister
+  // i stedet for N `OR`-grener, og det eksakte par-treffet gjøres i minnet på et lite resultat.
+  const reads = await prisma.courseSectionRead.findMany({
+    where: { sectionId },
+    select: { userId: true, courseId: true },
+  });
+  if (reads.length === 0) return;
+
   const legacy = await prisma.courseCompletion.findMany({
-    where: { sectionSnapshotJson: null },
+    where: {
+      sectionSnapshotJson: null,
+      userId: { in: [...new Set(reads.map((r) => r.userId))] },
+      courseId: { in: [...new Set(reads.map((r) => r.courseId))] },
+    },
     select: { userId: true, courseId: true },
   });
   if (legacy.length === 0) return;
 
-  const covered = await prisma.courseSectionRead.count({
-    where: {
-      sectionId,
-      OR: legacy.map((c) => ({ userId: c.userId, courseId: c.courseId })),
-    },
-  });
+  // `IN × IN` er et kryssprodukt-supersett: den treffer også par som ikke finnes sammen. Derfor
+  // avgjøres det EKSAKTE paret her, på et resultat som allerede er lite.
+  const readPairs = new Set(reads.map((r) => `${r.userId}|${r.courseId}`));
+  const covered = legacy.filter((c) => readPairs.has(`${c.userId}|${c.courseId}`)).length;
   if (covered > 0) {
     throw new ValidationError(
       `Seksjonen kan ikke ${verb} fordi den inngår i ${covered} kursbevis utstedt før `

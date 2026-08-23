@@ -1,6 +1,6 @@
 import { courseRepository } from "./courseRepository.js";
 import { resolveCourseAudience } from "./cohortStatusService.js";
-import { findUserIdsInDepartment } from "../../repositories/userRepository.js";
+import { findUserIdsInDepartment, findUsersByIds } from "../../repositories/userRepository.js";
 import { localizeContentText } from "../../i18n/content.js";
 import type { SupportedLocale } from "../../i18n/locale.js";
 import type { ReportFilters } from "../reporting/types.js";
@@ -67,6 +67,48 @@ async function resolveReportAudienceIds(courseId: string, orgUnit: string | unde
   return findUserIdsInDepartment(userIds, orgUnit);
 }
 
+/**
+ * ⚠️ #996: ÉN definisjon av «hvem er med i dette kurset», for BEGGE rapportflatene.
+ *
+ * Sammendraget og drilldownen hadde hver sin: sammendraget brukte publikummet (etter #969),
+ * drilldownen bygde radene sine av innleveringer. Utfallet var to tall som motsa hverandre i samme
+ * klikk — «10 innmeldte» på kursraden, 0 personer i detaljvisningen, tom CSV.
+ *
+ * Definisjonen er en UNION av tre kilder, og hver av dem er der av en grunn:
+ *
+ *   tildelt      `resolveCourseAudience` — individuelle innmeldinger + MANUAL/system-klasser
+ *   fullført     har et kursbevis i vinduet — kan ha mistet tildelingen etterpå
+ *   aktiv        har levert på en av kursets moduler — dekker ENTRA-klasser, som ikke er
+ *                oppløsbare hos oss, og som derfor ikke finnes i den første kilden
+ *
+ * Den siste er lagt til etter at #969 alene KRYMPET nevneren for Entra-tildelte kurs: deltakere som
+ * talte før (via innlevering) forsvant. Én fiks gjorde ett tall riktigere og et annet galere.
+ *
+ * At telleren er en delmengde av nevneren følger nå av konstruksjonen, ikke av en klipping — en
+ * klipping ville skjult uenigheten i stedet for å fjerne den.
+ */
+async function resolveCourseParticipantIds(
+  courseId: string,
+  moduleIds: string[],
+  filters: Pick<ReportFilters, "dateFrom" | "dateTo" | "orgUnit">,
+): Promise<{
+  participantIds: Set<string>;
+  completions: Awaited<ReturnType<typeof courseRepository.findCourseCompletionsForLearnerReport>>;
+  submissions: Awaited<ReturnType<typeof courseRepository.findLearnerSubmissionsForModules>>;
+}> {
+  const [audienceUserIds, completions, submissions] = await Promise.all([
+    resolveReportAudienceIds(courseId, filters.orgUnit),
+    courseRepository.findCourseCompletionsForLearnerReport(courseId, filters),
+    courseRepository.findLearnerSubmissionsForModules(moduleIds, filters),
+  ]);
+
+  const participantIds = new Set(audienceUserIds);
+  for (const completion of completions) participantIds.add(completion.userId);
+  for (const submission of submissions) participantIds.add(submission.userId);
+
+  return { participantIds, completions, submissions };
+}
+
 export async function getCourseReport(
   filters: Pick<ReportFilters, "courseId" | "dateFrom" | "dateTo" | "orgUnit"> = {},
   locale: SupportedLocale = "en-GB",
@@ -79,14 +121,11 @@ export async function getCourseReport(
       // bruker-ID-ene for unionen over. CourseCompletion er unik per (userId, courseId), så
       // radantallet er fortsatt antall distinkte deltakere — `completedParticipants` betyr det
       // samme som før.
-      const [audienceUserIds, completions] = await Promise.all([
-        resolveReportAudienceIds(course.id, filters.orgUnit),
-        courseRepository.findCourseCompletionsForLearnerReport(course.id, filters),
-      ]);
-      const participantIds = new Set(audienceUserIds);
-      for (const completion of completions) {
-        participantIds.add(completion.userId);
-      }
+      const { participantIds, completions } = await resolveCourseParticipantIds(
+        course.id,
+        course.modules.map((cm) => cm.moduleId),
+        filters,
+      );
       const enrolled = participantIds.size;
       const completed = completions.length;
 
@@ -161,10 +200,17 @@ export async function getCourseLearnerReport(
   }
 
   const moduleIds = course.modules.map((moduleEntry) => moduleEntry.moduleId);
-  const [submissions, completions] = await Promise.all([
-    courseRepository.findLearnerSubmissionsForModules(moduleIds, filters),
-    courseRepository.findCourseCompletionsForLearnerReport(course.id, filters),
-  ]);
+  // ⚠️ #996: SAMME definisjon som sammendraget. Drilldownen bygde tidligere radene sine av
+  // innleveringer og fullføringer alene, så en tildelt deltaker som ikke hadde startet fantes ikke
+  // her — kursraden sa «10 innmeldte», detaljvisningen viste 0 personer, og CSV-en var tom.
+  //
+  // To tall som motsier hverandre i samme klikk er verre enn ett tall som er litt feil: brukeren vet
+  // ikke hvilket å tro på, og begge ser autoritative ut.
+  const { participantIds, completions, submissions } = await resolveCourseParticipantIds(
+    course.id,
+    moduleIds,
+    filters,
+  );
 
   const learners = new Map<string, {
     participantId: string;
@@ -216,6 +262,27 @@ export async function getCourseLearnerReport(
       current.latestActivityAt = completion.completedAt;
     }
     learners.set(completion.userId, current);
+  }
+
+  // ⚠️ #996: de TILDELTE som ikke har rørt kurset ennå. De har verken innlevering eller kursbevis,
+  // så de fantes ikke i noen av løkkene over — og det var nettopp derfor detaljvisningen kunne være
+  // tom mens kursraden sa «10 innmeldte».
+  //
+  // De hentes til slutt, og bare de som mangler: en deltaker med aktivitet har allerede bedre data
+  // fra sin egen innlevering. Ett oppslag, avgrenset til dem som faktisk trengs.
+  const missingIds = [...participantIds].filter((id) => !learners.has(id));
+  if (missingIds.length > 0) {
+    for (const user of await findUsersByIds(missingIds)) {
+      learners.set(user.id, {
+        participantId: user.id,
+        participantName: user.name,
+        participantEmail: user.email,
+        participantDepartment: user.department,
+        completion: null,
+        latestActivityAt: null,
+        latestByModule: new Map<string, (typeof submissions)[number]>(),
+      });
+    }
   }
 
   const rows: CourseLearnerRow[] = Array.from(learners.values()).map((learner) => {

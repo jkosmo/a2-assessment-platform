@@ -173,3 +173,59 @@ describe("errors.api.*-tabellen", () => {
     }
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// #996: `validation_error` er to ulike ting, og oversetteren behandlet dem likt.
+//
+// ⚠️ Konsekvensen var en REGRESJON mot før #972: rå JSON ble byttet mot feil diagnose. Forfatteren
+// som prøver å slette en seksjon i et utstedt kursbevis fikk «Noe i skjemaet mangler eller er feil
+// utfylt» — en setning som sender hen for å lete i et skjema som ikke har noe galt med seg.
+//
+// Zod produserer ALLTID `issues`. Fraværet er derfor signalet om at dette er en domeneregel, ikke
+// en formfeil.
+// ─────────────────────────────────────────────────────────────────────────────
+describe("#996: validation_error uten issues bærer sin egen forklaring", () => {
+  const t = (key) => ({
+    "errors.apiValidation": "Noe i skjemaet mangler eller er feil utfylt.",
+    "errors.apiGeneric": "Forespørselen kunne ikke fullføres ({status}).",
+  })[key] ?? key;
+
+  const err = (status, body) => new Error(`${status}: ${JSON.stringify(body)}`);
+
+  it("viser domenemeldingen når issues mangler", () => {
+    const d = describeApiError(
+      err(400, {
+        error: "validation_error",
+        message: "Seksjonen kan ikke slettes fordi den inngår i 3 kursbevis. Arkiver den i stedet.",
+      }),
+      t,
+    );
+
+    expect(d.headline).toContain("kursbevis");
+    expect(d.headline).toContain("Arkiver");
+    // Ingen detaljdump: setningen ER forklaringen, og det er ikke noe mer å vise.
+    expect(d.detail).toBeUndefined();
+  });
+
+  it("KONTROLLCASE: MED issues er det en skjemafeil, og Zod-utdataet blir detalj", () => {
+    // Uten denne ville «vis alltid body.message» bestått testen over — og da hadde vi vært tilbake
+    // til rå servertekst i overskriften, som er nøyaktig det #972 fjernet.
+    const d = describeApiError(
+      err(400, {
+        error: "validation_error",
+        message: "Invalid request body",
+        issues: [{ code: "too_small", path: ["title"] }],
+      }),
+      t,
+    );
+
+    expect(d.headline).toBe("Noe i skjemaet mangler eller er feil utfylt.");
+    expect(d.headline).not.toContain("Invalid request body");
+    expect(d.detail).toContain("too_small");
+  });
+
+  it("KONTROLLCASE: tom message faller tilbake på den generiske setningen", () => {
+    const d = describeApiError(err(400, { error: "validation_error", message: "   " }), t);
+    expect(d.headline).toBe("Noe i skjemaet mangler eller er feil utfylt.");
+  });
+});

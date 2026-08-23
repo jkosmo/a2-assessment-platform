@@ -186,6 +186,45 @@ utledes fra implementasjonen. Skriv beslutningen dit **når den tas**, ikke ette
 Dette er en peker, ikke en ny regel: #938 tok en hel kveld fordi ingen kunne si hva regelen var
 *ment* å være, og da måtte diskusjonen starte med å rekonstruere hensikten fra koden.
 
+## Parallelle agenter: ikke på tilgrensende flater (standing order, 2026-08-23)
+
+Fire agenter jobbet parallelt på #941-epicen 2026-08-23, hver i egen worktree, hver med en eksplisitt
+sperreliste over de andres filer. **Sperrelistene virket** — ingen kollisjon i arbeidstreet, og da én
+agent trengte en linje i en sperret fil, rapporterte den nøyaktig hvilken i stedet for å gjette.
+
+⚠️ **Det som IKKE virket var semantisk nærhet.** Agent 4 skrev i rapporten sin at
+`resolveCourseAudience` hopper over ENTRA-klasser. Jeg leste det, integrerte arbeidet, og koblet
+likevel ikke det til at nevneren i rapporten dermed krymper for Entra-tildelte kurs. QA-porten fant
+regresjonen i neste runde.
+
+**Regelen:** to agenter skal ikke samtidig endre **betydningen av samme begrep**, selv når de rører
+ulike filer. «Hvem er med i kurset», «kan deltakeren bruke dette», «er dette bestått» — dette er
+begreper, ikke filer, og en sperreliste over filer fanger dem ikke.
+
+Praktisk:
+
+1. **Del opp etter begrep, ikke etter mappe.** Overlapper to saker i begrep, kjør dem etter
+   hverandre — også når filene er disjunkte.
+2. **Maks to agenter som kjører tester samtidig.** De deler én lokal Postgres; utover to får du
+   tilfeldige røde tester og bruker tiden på å avkrefte dem (#994).
+3. **Flaskehalsen er gjennomgangen, ikke agentene.** Fire leveranser skal rebases, forenes,
+   integrasjonstestes og gjennom QA-porten av én person. Fem agenter gir fem bunter i kø.
+4. **Les agentenes «funnet, men ikke fikset»-liste som en risikoliste**, ikke som en restanse. Det
+   er der neste regresjon står beskrevet før den skjer — den sto der denne gangen.
+
+## Når QA-porten går i løkke
+
+Finner porten funn i fiksen mot forrige runde, er det sjelden porten som tar feil. Sjekk i stedet om
+endringene **endrer betydningen av et delt felt**: da må hver leser gjennomgås, og «rett utregningen
+der den er» vil fortsette å feile.
+
+Kuren som har holdt i dette repoet er #958-formen: flytt avgjørelsen til skriveren, slik at leserne
+ikke *kan* avvike. Kuren som har feilet tre ganger er å rette utregningen på stedet som feilet.
+
+Porten klassifiserer nå hvert funn — `[REGRESJON]`, `[UFULLSTENDIG]`, `[EKSISTERENDE]`,
+`[DOKUMENTASJON]` — nettopp for at man skal kunne stoppe løkka rasjonelt: en regresjon stopper en
+deploy, en eksisterende feil blir en sak.
+
 ## Kompleksitetsskanning — MÅNEDLIG (standing order, 2026-08-21)
 
 `doc/COMPLEXITY_SCAN.md` — seks agenter, seks områder, seks mønstre. Måler om kodebasen samler opp

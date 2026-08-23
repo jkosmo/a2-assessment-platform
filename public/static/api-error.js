@@ -132,7 +132,30 @@ export function describeApiError(error, t, options = {}) {
   // ikke i overskriften, som klippes ved høyre kant i en 360px-bred toast.
   const issues = Array.isArray(body?.issues) && body.issues.length > 0 ? body.issues : null;
 
+  // ⚠️ #996: `validation_error` er TO ting, og å behandle dem likt gjorde meldingen verre enn før.
+  //
+  //   MED `issues`   → Zod avviste formen. Utdataet hører i detaljfeltet, og overskriften er den
+  //                    generiske «noe i skjemaet mangler» — for det er alt vi vet.
+  //   UTEN `issues`  → en DOMENEREGEL sa nei, og serverens `message` ER forklaringen. Zod
+  //                    produserer alltid `issues`, så fraværet er signalet.
+  //
+  // Konkret skade før fiksen: forfatteren som prøver å slette en seksjon i et utstedt kursbevis fikk
+  // «Noe i skjemaet mangler eller er feil utfylt» i stedet for «den inngår i N kursbevis — arkiver
+  // den i stedet». Vi byttet rå JSON (#972) mot FEIL DIAGNOSE, som er verre: rå JSON ser i det
+  // minste ut som en systemfeil.
+  //
+  // ⚠️ At vi viser serverens `message` her er et bevisst unntak fra «koden er kontrakten»
+  // (`FEATURE_SURFACE_MAP` §24), ikke en oppmykning av regelen. Den riktige kuren er at
+  // slettevernet får sin egen feilKODE, slik importfeilene har. Til den finnes, er en forståelig
+  // setning på feil språk bedre enn en misvisende setning på riktig språk. Det står som eget punkt
+  // i #995.
   if (code === "validation_error") {
+    const domainMessage = !issues && typeof body?.message === "string" && body.message.trim().length > 0
+      ? body.message.trim()
+      : null;
+    if (domainMessage) {
+      return { code, headline: domainMessage, detail: undefined };
+    }
     return {
       code,
       headline: translated(t, API_ERROR_VALIDATION_KEY) ?? "The request was rejected as invalid.",

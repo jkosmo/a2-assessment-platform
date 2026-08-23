@@ -163,6 +163,21 @@ export async function findUserIdsInDepartment(userIds: string[], department: str
   return users.map((user) => user.id);
 }
 
+/**
+ * Navn/e-post/avdeling for et sett bruker-ID-er.
+ *
+ * ⚠️ #996: kursdrilldownen bygde radene sine fra INNLEVERINGER, som bærer `user`-relasjonen gratis.
+ * Den som er tildelt kurset men ikke har startet, hadde derfor ingen rad — rapporten sa «10
+ * innmeldte» og detaljvisningen viste 0 personer. Nå slås de opp her.
+ */
+export async function findUsersByIds(userIds: string[]) {
+  if (userIds.length === 0) return [];
+  return prisma.user.findMany({
+    where: { id: { in: userIds } },
+    select: { id: true, name: true, email: true, department: true },
+  });
+}
+
 export async function getActiveRoles(userId: string, at = new Date()): Promise<AppRoleType[]> {
   const assignments = await prisma.roleAssignment.findMany({
     where: {

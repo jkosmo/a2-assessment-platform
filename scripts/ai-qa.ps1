@@ -285,12 +285,29 @@ ARBEIDSMAATE: se paa $scope selv - start med "$scopeCmd" - og les de beroerte fi
 soeskenfiler. Du har full lesetilgang til repoet; bruk den. Ingen foerste gjennomgang er kjoert,
 saa du er alene om aa finne det som er galt.
 
+KLASSIFISER HVERT FUNN. Start hvert funn med EN av disse merkelappene, i klammer, etter
+alvorlighetsgraden:
+
+  [REGRESJON]  diffen INNFOERER dette. Virket foer, virker ikke naa.
+  [UFULLSTENDIG] diffen retter noe, men lar en soesterflate staa igjen med den gamle feilen.
+  [EKSISTERENDE] feilen fantes foer denne diffen og er uroert av den.
+  [DOKUMENTASJON] koden er riktig, men et dokument eller en spesifikasjon lover noe annet.
+
+Skriv ogsaa REKKEVIDDE paa en egen linje per funn: hvem rammes (deltaker / forfatter / rapportleser
+/ drift), og om det er stille (ingen feilmelding) eller synlig.
+
+Dette er IKKE en oppfordring til aa vaere mildere - er du i tvil, skriv [UKLART] og si hvorfor.
+
 Svaret MAA vaere paa norsk og slutte med noeyaktig disse to seksjonene:
 
 VERDIKT: GO
 eller
 VERDIKT: NO-GO
 Foelg linjen med en setnings begrunnelse. NO-GO betyr at minst ett funn boer fikses foer deploy.
+
+⚠️ Vekt verdiktet etter klassifiseringen: [REGRESJON] og [UFULLSTENDIG] er grunn til NO-GO.
+[EKSISTERENDE] og [DOKUMENTASJON] er det normalt IKKE alene. Si eksplisitt hvilke funn som driver
+verdiktet.
 
 IKKE VERIFISERBART STATISK:
 - punktliste over det en person faktisk maa klikke gjennom paa stage for aa avdekke resten.
@@ -431,6 +448,21 @@ ARBEIDSMAATE: se paa $scope selv - start med "$scopeCmd" - og les de beroerte fi
 soesterfiler. En foerste, prosjektblind gjennomgang er allerede kjoert, og funnene staar nederst.
 Ikke gjenta dem; let etter det den ikke kunne vite, altsaa punktene i sjekklista over.
 
+KLASSIFISER HVERT FUNN. Start hvert funn med EN av disse merkelappene, i klammer, etter
+alvorlighetsgraden:
+
+  [REGRESJON]  diffen INNFOERER dette. Virket foer, virker ikke naa.
+  [UFULLSTENDIG] diffen retter noe, men lar en soesterflate staa igjen med den gamle feilen.
+  [EKSISTERENDE] feilen fantes foer denne diffen og er uroert av den.
+  [DOKUMENTASJON] koden er riktig, men et dokument eller en spesifikasjon lover noe annet.
+
+Skriv ogsaa REKKEVIDDE paa en egen linje per funn: hvem rammes (deltaker / forfatter / rapportleser
+/ drift), og om det er stille (ingen feilmelding) eller synlig.
+
+Dette er IKKE en oppfordring til aa vaere mildere. Det er for at mottakeren skal kunne triagere:
+en [REGRESJON] stopper en deploy, en [EKSISTERENDE] blir en sak. Feilklassifisering er verre enn
+ingen klassifisering - er du i tvil, skriv [UKLART] og si hvorfor.
+
 Svaret MAA vaere paa norsk og slutte med noeyaktig disse to seksjonene:
 
 VERDIKT: GO
@@ -438,6 +470,10 @@ eller
 VERDIKT: NO-GO
 Foelg linjen med en setnings begrunnelse. NO-GO betyr at minst ett funn boer fikses foer deploy -
 vurder bade dine egne funn og de fra foerste gjennomgang.
+
+⚠️ Vekt verdiktet etter klassifiseringen: [REGRESJON] og [UFULLSTENDIG] er grunn til NO-GO.
+[EKSISTERENDE] og [DOKUMENTASJON] er det normalt IKKE alene - de hoerer i en sak. Si eksplisitt
+hvilke funn som driver verdiktet, saa mottakeren ikke maa gjette.
 
 IKKE VERIFISERBART STATISK:
 - punktliste over det en person faktisk maa klikke gjennom paa stage for aa avdekke resten.

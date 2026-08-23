@@ -16,9 +16,13 @@ const countDistinctEnrolledUsersForModules = vi.fn();
 const countPassedUsersForModule = vi.fn();
 const countUsersWithSubmissionsForModule = vi.fn();
 const findPassedUserIdsForModule = vi.fn();
+// #996: kursets publikum er nå en UNION av tildelte, fullførere og AKTIVE — det siste dekker
+// ENTRA-klasser, som ikke er oppløsbare via `resolveCourseAudience`.
+const findLearnerSubmissionsForModules = vi.fn();
 
 const resolveCourseAudience = vi.fn();
 const findUserIdsInDepartment = vi.fn();
+const findUsersByIds = vi.fn();
 
 vi.mock("../../src/modules/course/courseRepository.js", () => ({
   courseRepository: {
@@ -29,6 +33,7 @@ vi.mock("../../src/modules/course/courseRepository.js", () => ({
     countPassedUsersForModule,
     countUsersWithSubmissionsForModule,
     findPassedUserIdsForModule,
+    findLearnerSubmissionsForModules,
   },
 }));
 
@@ -38,6 +43,7 @@ vi.mock("../../src/modules/course/cohortStatusService.js", () => ({
 
 vi.mock("../../src/repositories/userRepository.js", () => ({
   findUserIdsInDepartment,
+  findUsersByIds,
 }));
 
 function course(id: string, moduleIds: string[] = []) {
@@ -80,8 +86,10 @@ describe("#969 course report — enrolledParticipants is the course audience", (
     countPassedUsersForModule.mockReset().mockResolvedValue(0);
     countUsersWithSubmissionsForModule.mockReset().mockResolvedValue(0);
     findPassedUserIdsForModule.mockReset().mockResolvedValue([]);
+    findLearnerSubmissionsForModules.mockReset().mockResolvedValue([]);
     resolveCourseAudience.mockReset().mockResolvedValue([]);
     findUserIdsInDepartment.mockReset().mockResolvedValue([]);
+    findUsersByIds.mockReset().mockResolvedValue([]);
   });
 
   // Scenario B i #969: datofilteret slipper fullføringene inn og innleveringene ut.
@@ -193,5 +201,133 @@ describe("#969 course report — enrolledParticipants is the course audience", (
     await getCourseReport();
 
     expect(countDistinctEnrolledUsersForModules).not.toHaveBeenCalled();
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// #996: to rapportflater, ÉN definisjon av «hvem er med i kurset».
+//
+// ⚠️ #969 alene gjorde ett tall riktigere og et annet galere. Da nevneren ble publikummet, forsvant
+// Entra-tildelte deltakere som ikke hadde fullført — `resolveCourseAudience` kan ikke løse opp
+// ENTRA-klasser, og de talte før via innlevering.
+//
+// Unionen dekker nå tre kilder, og hver test under fjerner én av dem for å vise at den trengs.
+// ─────────────────────────────────────────────────────────────────────────────
+describe("#996: publikummet dekker også dem som bare har vært aktive", () => {
+  beforeEach(() => {
+    findPublishedCoursesWithModuleDetails.mockReset();
+    findCourseCompletionsForLearnerReport.mockReset().mockResolvedValue([]);
+    countPassedUsersForModule.mockReset().mockResolvedValue(0);
+    findPassedUserIdsForModule.mockReset().mockResolvedValue([]);
+    findLearnerSubmissionsForModules.mockReset().mockResolvedValue([]);
+    resolveCourseAudience.mockReset().mockResolvedValue([]);
+    findUserIdsInDepartment.mockReset().mockResolvedValue([]);
+    findUsersByIds.mockReset().mockResolvedValue([]);
+  });
+
+  const submission = (userId: string, moduleId: string) => ({
+    userId,
+    moduleId,
+    submittedAt: new Date("2026-08-01T00:00:00Z"),
+    submissionStatus: "COMPLETED",
+    decisions: [],
+    user: { id: userId, name: userId, email: `${userId}@example.com`, department: "Legal" },
+  });
+
+  it("en Entra-tildelt deltaker med innlevering teller, selv om publikumsoppslaget er tomt", async () => {
+    // ENTRA-klasser er ikke oppløsbare: `resolveCourseAudience` gir tom liste for et slikt kurs.
+    // Uten innleverings-kilden ville denne deltakeren vært usynlig — og det var regresjonen.
+    findPublishedCoursesWithModuleDetails.mockResolvedValue([course("c1", ["m1"])]);
+    findLearnerSubmissionsForModules.mockResolvedValue([submission("entra-user", "m1")]);
+
+    const { getCourseReport } = await import("../../src/modules/course/courseReport.js");
+    const { rows } = await getCourseReport({});
+
+    expect(rows[0].enrolledParticipants, "deltakeren finnes, selv om tildelingen ikke kan slås opp").toBe(1);
+  });
+
+  it("KONTROLLCASE: uten aktivitet OG uten tildeling er kurset tomt", async () => {
+    // Uten denne ville «tell alltid minst én» bestått testen over.
+    findPublishedCoursesWithModuleDetails.mockResolvedValue([course("c1", ["m1"])]);
+
+    const { getCourseReport } = await import("../../src/modules/course/courseReport.js");
+    const { rows } = await getCourseReport({});
+
+    expect(rows[0].enrolledParticipants).toBe(0);
+    expect(rows[0].completionRate, "ingen i kurset — ingen grad å regne ut").toBeNull();
+  });
+
+  it("samme person teller ÉN gang selv om hen både er tildelt, aktiv og fullført", async () => {
+    // Unionen er et sett. Var det en liste, ville en aktiv fullfører talt tre ganger og nevneren
+    // blitt større enn antall mennesker.
+    findPublishedCoursesWithModuleDetails.mockResolvedValue([course("c1", ["m1"])]);
+    resolveCourseAudience.mockResolvedValue(audience("u1"));
+    findLearnerSubmissionsForModules.mockResolvedValue([submission("u1", "m1")]);
+    findCourseCompletionsForLearnerReport.mockResolvedValue(completions("u1"));
+
+    const { getCourseReport } = await import("../../src/modules/course/courseReport.js");
+    const { rows } = await getCourseReport({});
+
+    expect(rows[0].enrolledParticipants).toBe(1);
+    expect(rows[0].completionRate, "én av én").toBe(1);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// #996: drilldownen viser de samme menneskene som kursraden teller.
+//
+// ⚠️ Feilen var stille og tydelig på én gang: kursraden sa «10 innmeldte», og detaljvisningen under
+// samme klikk viste 0 personer. To tall som motsier hverandre er verre enn ett upresist — brukeren
+// vet ikke hvilket å tro på, og begge ser autoritative ut.
+// ─────────────────────────────────────────────────────────────────────────────
+describe("#996: kursdrilldownen bruker samme publikum som sammendraget", () => {
+  beforeEach(() => {
+    findPublishedCoursesWithModuleDetails.mockReset();
+    findCourseCompletionsForLearnerReport.mockReset().mockResolvedValue([]);
+    findLearnerSubmissionsForModules.mockReset().mockResolvedValue([]);
+    findPassedUserIdsForModule.mockReset().mockResolvedValue([]);
+    resolveCourseAudience.mockReset().mockResolvedValue([]);
+    findUserIdsInDepartment.mockReset().mockResolvedValue([]);
+    findUsersByIds.mockReset().mockResolvedValue([]);
+  });
+
+  it("en tildelt deltaker uten aktivitet får en NOT_STARTED-rad", async () => {
+    findPublishedCoursesWithModuleDetails.mockResolvedValue([course("c1", ["m1"])]);
+    resolveCourseAudience.mockResolvedValue(audience("venter"));
+    findUsersByIds.mockResolvedValue([
+      { id: "venter", name: "Venter Ventesen", email: "venter@example.com", department: "Legal" },
+    ]);
+
+    const { getCourseLearnerReport } = await import("../../src/modules/course/courseReport.js");
+    const report = await getCourseLearnerReport("c1");
+
+    expect(report.rows, "raden fantes ikke i det hele tatt før fiksen").toHaveLength(1);
+    expect(report.rows[0].participantId).toBe("venter");
+    expect(report.rows[0].status).toBe("NOT_STARTED");
+    expect(report.totals.learners).toBe(1);
+  });
+
+  it("KONTROLLCASE: en deltaker med aktivitet får radene sine fra innleveringen, ikke fra oppslaget", async () => {
+    // Uten denne kunne fiksen ha slått ut de ekte radene og erstattet dem med tomme oppslag.
+    // `findUsersByIds` skal bare kalles for dem som MANGLER — ikke for alle.
+    findPublishedCoursesWithModuleDetails.mockResolvedValue([course("c1", ["m1"])]);
+    resolveCourseAudience.mockResolvedValue(audience("aktiv"));
+    findLearnerSubmissionsForModules.mockResolvedValue([
+      {
+        userId: "aktiv",
+        moduleId: "m1",
+        submittedAt: new Date("2026-08-01T00:00:00Z"),
+        submissionStatus: "COMPLETED",
+        decisions: [],
+        user: { id: "aktiv", name: "Aktiv Aktivsen", email: "aktiv@example.com", department: "Legal" },
+      },
+    ]);
+
+    const { getCourseLearnerReport } = await import("../../src/modules/course/courseReport.js");
+    const report = await getCourseLearnerReport("c1");
+
+    expect(report.rows).toHaveLength(1);
+    expect(report.rows[0].participantName).toBe("Aktiv Aktivsen");
+    expect(findUsersByIds, "ingen mangler — da skal oppslaget ikke gjøres").not.toHaveBeenCalled();
   });
 });
