@@ -223,6 +223,14 @@ adminCoursesRouter.post("/import", async (request, response, next) => {
     response.status(201).json({
       courseId: result.courseId,
       moduleIds: result.moduleIds,
+      // #957: forfatteren skal vite HVORFOR kurset ligger som utkast. Flagget er den eneste kilden
+      // til den forklaringen — et kurs kan også være utkast fordi KILDEN var det, og de to sier
+      // helt ulike ting om hva forfatteren må gjøre videre.
+      //
+      // ⚠️ `importCourseFromEnvelope` regnet ut flagget, brukte det til å holde kurset tilbake, og
+      // slapp det så på gulvet i sin egen retur — mens modul- og seksjonsimporten rapporterte det.
+      // Kommentaren i `contentImportService.ts` lovet at det ble rapportert. Nå gjør det det.
+      heldBackByTranslationGate: result.heldBackByTranslationGate,
       links: courseAdminLinks(result.courseId),
       ...(data.clientRef !== undefined ? { clientRef: data.clientRef } : {}),
     });
