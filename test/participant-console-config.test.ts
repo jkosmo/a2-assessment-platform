@@ -345,7 +345,15 @@ describe("participant console runtime config", () => {
     expect(participantJsResponse.text).toContain('submission-field-readonly');
     expect(participantJsResponse.text).toContain("ackCheckbox.disabled = readOnly");
     // #525: ack hidden in read mode OR for MCQ-only modules (hideAck = readOnly || mcqOnly).
-    expect(participantJsResponse.text).toContain("ackCheckbox.hidden = hideAck");
+    //
+    // ⚠️ #975 endret stavemåten fra `ackCheckbox.hidden = hideAck` til `setHidden(...)`, og det er
+    // ikke kosmetikk: `.inline{display:inline-block}` slo `hidden`-attributtet, så den gamle linja
+    // skjulte INGENTING. Avkrysningsboksen ble bare usynlig fordi <label>-en rundt ble skjult.
+    //
+    // At denne testen var grønn hele tiden er poenget verdt å ta med seg: den festet at LINJA
+    // fantes, ikke at den virket. Oppførselen dekkes av `test/e2e/hidden-cascade.spec.ts`, som
+    // måler `getComputedStyle().display` i Chromium.
+    expect(participantJsResponse.text).toContain("setHidden(ackCheckbox, hideAck)");
     expect(participantJsResponse.text).toContain("el.rows = 1");
 
     const resultsJsResponse = await request(app).get("/static/results.js");
