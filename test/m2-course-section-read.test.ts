@@ -141,30 +141,38 @@ describe("#944: en uleselig seksjon kan verken åpnes eller markeres lest", () =
     expect(mark.status).toBe(204);
   });
 
-  it("#992: en upublisert seksjon er IKKE med i deltakerens sekvens", async () => {
-    // ⚠️ Denne testen forventet tidligere `available: false` — altså at raden var med, men nedtonet.
-    // Produkteier 2026-08-23: «utkastseksjoner skal ikke ha konsekvenser for kandidater før de er
-    // publisert». For en kandidat som aldri har sett seksjonen er en nedtonet rad ikke en
-    // forklaring; den er en beskjed om vår egen redigeringstilstand.
+  it("#958/#992: kurssekvensen viser ikke uleselige seksjoner i det hele tatt", async () => {
+    // Historikk, fordi assertionen er SNUDD: #944 ga seksjonene et `available`-flagg, siden de før
+    // det ikke hadde feltet og klienten satte det til true for alle. #992 viste at klienten
+    // ignorerer flagget for seksjoner likevel (`const available = isSection || …`), så raden så
+    // klikkbar ut og endte i den 404-en testene over pinner.
+    //
+    // ⚠️ Produkteier avgjorde 2026-08-23: «utkastseksjoner skal ikke ha konsekvenser for kandidater
+    // før de er publisert». For en kandidat som aldri har sett seksjonen er en nedtonet rad ikke en
+    // forklaring — den er en beskjed om VÅR redigeringstilstand.
+    //
+    // #958 flyttet avgjørelsen til `findCourseItemsForParticipant`: en seksjon deltakeren ikke kan
+    // åpne er ikke lenger MERKET, den er UTELATT. Samme svar som lesestien, markeringen,
+    // bevisporten og framdriftstelleren allerede ga — nå fra én dør i stedet for fem regler.
     //
     // Se `doc/DECISIONS.md` → «Upublisert innhold vises ikke for kandidater i det hele tatt».
     const { courseId } = await courseWithSection({ withActiveVersion: false });
     const detail = await request(app).get(`/api/courses/${courseId}`).set(participantHeaders);
-    const items = detail.body.course.items as Array<{ type: string }>;
 
-    expect(items.filter((i) => i.type === "SECTION")).toHaveLength(0);
+    expect(detail.status).toBe(200);
+    expect(detail.body.course.items.filter((i: { type: string }) => i.type === "SECTION")).toEqual([]);
   });
 
-  it("#992 KONTROLLCASE: en PUBLISERT seksjon er fortsatt med", async () => {
-    // Uten denne ville «filtrer bort alle seksjoner» bestått testen over — og kurs med lesestoff
-    // hadde blitt tomme for deltakeren.
+  it("KONTROLLCASE: en publisert seksjon står i sekvensen, med available:true", async () => {
+    // Uten denne ville «returner en tom sekvens» bestått testen over — da hadde vi målt at ruta var
+    // knekt, ikke at regelen virket. Feltet `available` beholdes for MODULER og for eldre klienter.
     const { courseId, sectionId } = await courseWithSection({});
     const detail = await request(app).get(`/api/courses/${courseId}`).set(participantHeaders);
-    const items = detail.body.course.items as Array<{ type: string; sectionId?: string; available?: boolean }>;
 
-    const section = items.find((i) => i.type === "SECTION");
-    expect(section?.sectionId).toBe(sectionId);
-    expect(section?.available, "feltet beholdes for moduler og for eldre klienter").toBe(true);
+    const sections = detail.body.course.items.filter((i: { type: string }) => i.type === "SECTION");
+    expect(sections).toHaveLength(1);
+    expect(sections[0].sectionId).toBe(sectionId);
+    expect(sections[0].available).toBe(true);
   });
 
   it("#944/#938: en uleselig seksjon KREVES ikke for kursbeviset", async () => {

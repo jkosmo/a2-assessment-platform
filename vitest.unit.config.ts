@@ -44,6 +44,8 @@ export default defineConfig({
       "test/course-archive-entry-guard.test.js",
       "test/participant-sequence-predicate-guard.test.js",
       "test/environment-identifier-guard.test.js",
+      // #958: nekter en niende kaller som går utenom de to navngitte dørene.
+      "test/course-items-accessor-guard.test.js",
     ],
     globals: true,
     testTimeout: 20000,

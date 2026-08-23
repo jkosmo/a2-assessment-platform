@@ -226,7 +226,9 @@ export async function buildCourseExportEnvelope(
   }
 
   // Full mixed sequence — modules + learning sections in order (#512).
-  const courseItems = await courseRepo.findCourseItems(courseId);
+  // #958: eksporten må se ALT. En eksport som droppet det arkiverte ville stille endret kurset ved
+  // import — filveien er hovedveien innhold flyttes på (doc/DECISIONS.md), så tap her er permanent.
+  const courseItems = await courseRepo.findAllCourseItems(courseId);
   if (courseItems.length === 0) {
     throw new Error("Course has no items to export.");
   }

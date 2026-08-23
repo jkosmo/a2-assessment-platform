@@ -112,6 +112,31 @@ derfra er sletting tillatt — og ingenting sjekker om en `CourseCompletion` pek
 
 ⚠️ Bevisst bivirkning: innhold noen har fått diplom på blir permanent uslettbart.
 
+### En seksjon deltakeren ikke kan åpne vises ikke i sekvensen i det hele tatt
+
+Upublisert og arkivert lesestoff **utelates** fra deltakersekvensen. Det merkes ikke som
+utilgjengelig — det er ikke der.
+
+**Hvorfor:** hvert annet svar var allerede «nei». Begge deltakerrutene (`GET`/`POST
+.../sections/:id`) svarer 404, bevisporten krever den ikke, og framdriften teller den ikke. #944 ga
+seksjonen et `available`-flagg i stedet, men #992 viste at klienten ignorerer flagget for seksjoner
+(`const available = isSection || entry.available !== false`) — raden så klikkbar ut og endte i 404.
+Et halvt løfte er verre enn ingen: enten er elementet der og virker, eller så er det ikke der.
+
+⚠️ **Moduler er UNNTATT, og det er en annen beslutning.** En avpublisert modul står igjen i
+sekvensen med `available: false`, fordi klienten faktisk rendrer den som deaktivert, tilstanden er
+midlertidig, og modulen teller i `moduleTotal` og i kursbevisets krav. Å skjule den ville endret hva
+beviset krever.
+
+**Håndheves:** `courseRepository.findCourseItemsForParticipant` — regelen er i spørringen, og
+returtypen bærer ikke feltene den bygger på, så ingen kaller kan utlede en egen variant.
+**Sak:** #958, utløst av #992 · **Dato:** 2026-08-23 · **Status:** avklart
+
+⚠️ Ikke bekreftet med produkteier — skrevet ned som den regelen refaktoreringen i #958 håndhever, ut
+fra at alle andre flater allerede oppførte seg slik. Skulle produkteier heller ville se det
+utilgjengelige lesestoffet, er det klientens `available`-håndtering som må fikses (#992), ikke denne
+døra som må åpnes.
+
 ---
 
 ## Sertifisering

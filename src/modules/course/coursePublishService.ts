@@ -322,7 +322,11 @@ export async function getCoursePublishPreview(courseId: string): Promise<CourseP
   const course = await prisma.course.findUnique({ where: { id: courseId }, select: { id: true } });
   if (!course) throw new NotFoundError("Course", "course_not_found", "Course not found.");
 
-  const items = await courseRepository.findCourseItems(courseId);
+  // #958: gaten må se ALT — dens spørsmål er «hva er ikke publisert ennå», og den døra som skjuler
+  // det upubliserte ville gitt den ingenting å rapportere. Hva som er publiserbart avgjøres i
+  // `evaluateModule`/`evaluateSection`, som henter versjonsradene de uansett trenger. Det er en
+  // ANNEN regel enn deltakerens, og skal ikke kunne forveksles med den.
+  const items = await courseRepository.findAllCourseItems(courseId);
   const unpublishedItems: CourseUnpublishedItem[] = [];
 
   for (const item of items) {

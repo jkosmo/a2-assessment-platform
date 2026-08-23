@@ -174,7 +174,8 @@ export function createCourseRepository(client: CourseRepositoryClient = prisma) 
             courseId: { in: courseIds },
             itemType: "SECTION",
             sectionId: { not: null },
-            // #992: samme regel som lesestien og bevisporten, i where-form. Se sectionAvailability.ts.
+            // #958/#992: samme filter som `findCourseItemsForParticipant`, fra samme konstant. Sto
+            // tidligere som en egen literal her — den andre formuleringen av setningen.
             section: sectionAvailableWhere,
           },
           select: { courseId: true, sectionId: true },
@@ -186,26 +187,103 @@ export function createCourseRepository(client: CourseRepositoryClient = prisma) 
         );
     },
 
-    findCourseItems(courseId: string) {
+    // ─────────────────────────────────────────────────────────────────────────────────────────
+    // #958: TO navngitte dører inn til et kurs' elementer — «det deltakeren kan bruke» og «alt».
+    //
+    // ⚠️ Hvorfor det ikke lenger finnes én `findCourseItems`.
+    //
+    // Den hentet `archivedAt`, `activeVersionId` og `activeVersion.publishedAt` — nøyaktig feltene
+    // som avgjør tilgjengelighet — og filtrerte INGENTING. Åtte kallere tok hver sin avgjørelse, med
+    // fem ulike regler, og samme rad ga «tilgjengelig», «påkrevd», «publiserbar» og «slettbar» ulike
+    // svar. Det er roten til #938, #944, #945 og #992.
+    //
+    // Kuren er ikke et filter til: det er at kalleren ikke lenger KAN unnlate å ta stilling. Man
+    // velger dør i det man kaller, og deltakerdøra leverer ikke feltene regelen bygger på — så en
+    // niende variant av regelen kan ikke skrives der uten å hente dataene på nytt, synlig.
+    // ─────────────────────────────────────────────────────────────────────────────────────────
+
+    /**
+     * Kursets elementer slik de gjelder for en DELTAKER.
+     *
+     * - Seksjoner deltakeren ikke kan åpne er **utelatt**, ikke merket. Begge deltakerrutene
+     *   (`GET`/`POST .../sections/:id`) svarer allerede 404 på dem, bevisporten krever dem ikke, og
+     *   framdriften teller dem ikke — en rad i sekvensen som ingen av delene støtter er en blindvei.
+     *   #992 viste at klienten dessuten ignorerer `available` på seksjoner (`isSection || …`), så
+     *   flagget beskyttet ingen: raden så klikkbar ut og endte i 404.
+     * - Moduler er ALLE med, hver med et ferdig avgjort `available`. En avpublisert modul er en
+     *   midlertidig tilstand deltakeren skal se at finnes (`FEATURE_SURFACE_MAP` §6b-2), klienten
+     *   rendrer den som deaktivert, og den teller fortsatt i `moduleTotal`. Å skjule den ville
+     *   endret hva kursbeviset krever — en policy-endring, ikke en opprydding.
+     *
+     * Returtypen bærer med vilje verken `archivedAt`, `activeVersionId` eller `publishedAt`.
+     */
+    findCourseItemsForParticipant(courseId: string) {
+      return client.courseItem
+        .findMany({
+          where: {
+            courseId,
+            OR: [
+              { itemType: "MODULE" },
+              // Filtreres i databasen, ikke i minnet: kalleren får aldri radene den ikke skal bruke.
+              { itemType: "SECTION", section: sectionAvailableWhere },
+            ],
+          },
+          orderBy: { sortOrder: "asc" },
+          include: {
+            module: {
+              select: {
+                id: true,
+                title: true,
+                archivedAt: true,
+                activeVersionId: true,
+                activeVersion: { select: { publishedAt: true } },
+              },
+            },
+            section: { select: { id: true, title: true } },
+          },
+        })
+        .then((items) =>
+          items.map((item) => ({
+            id: item.id,
+            courseId: item.courseId,
+            itemType: item.itemType,
+            sortOrder: item.sortOrder,
+            moduleId: item.moduleId,
+            sectionId: item.sectionId,
+            discussionsEnabled: item.discussionsEnabled,
+            // #502-followup, flyttet hit fra `courses.ts`: en modul er tilgjengelig når den har en
+            // PUBLISERT aktiv versjon og ikke er arkivert. Seksjonene som kom gjennom `where`-en
+            // over er tilgjengelige ved konstruksjon — derfor `true`, ikke en ny utregning.
+            available:
+              item.itemType === "SECTION"
+                ? true
+                : Boolean(item.module?.activeVersionId && item.module.activeVersion?.publishedAt && !item.module.archivedAt),
+            module: item.module ? { id: item.module.id, title: item.module.title } : null,
+            section: item.section,
+          })),
+        );
+    },
+
+    /**
+     * Alle elementer, ufiltrert — forfatterflater, publiseringsgaten, kaskadesletting og eksport.
+     *
+     * Disse skal nettopp SE det arkiverte og upubliserte: en publiseringsgate som ikke fikk se det
+     * upubliserte hadde ingenting å rapportere, og en sletting som ikke fikk se det arkiverte ville
+     * etterlatt foreldreløse rader.
+     *
+     * `activeVersionId`/`activeVersion.publishedAt` er TATT UT: ingen av de fire kallerne leste dem,
+     * og de er byggeklossene i deltakerregelen. Publiseringsgaten henter selv sin egen «er dette
+     * publisert»-tilstand (`evaluateModule`/`evaluateSection`) sammen med versjonsradene den uansett
+     * trenger — den regelen er en annen enn deltakerens, og skal ikke kunne forveksles med den.
+     * `archivedAt` blir stående fordi `GET /admin/content/courses/:id/items` sender det videre.
+     */
+    findAllCourseItems(courseId: string) {
       return client.courseItem.findMany({
         where: { courseId },
         orderBy: { sortOrder: "asc" },
         include: {
-          // activeVersion.publishedAt (#502-followup): lar deltaker-UI markere avpubliserte moduler
-          // som «ikke tilgjengelig» i stedet for en blindvei-klikk.
-          module: {
-            select: {
-              id: true,
-              title: true,
-              archivedAt: true,
-              activeVersionId: true,
-              activeVersion: { select: { publishedAt: true } },
-            },
-          },
-          // #944: `activeVersionId` er med fordi tilgjengelighet krever BEGGE leddene — arkivert
-          // ELLER aldri publisert gjør seksjonen uleselig for en deltaker. Uten feltet kunne
-          // kallerne ikke avgjøre det, og resultatet var 200 med tom side.
-          section: { select: { id: true, title: true, archivedAt: true, activeVersionId: true } },
+          module: { select: { id: true, title: true, archivedAt: true } },
+          section: { select: { id: true, title: true, archivedAt: true } },
         },
       });
     },

@@ -1,4 +1,3 @@
-import { isSectionAvailableToParticipant } from "./sectionAvailability.js";
 import { prisma } from "../../db/prisma.js";
 import { createCourseRepository } from "./courseRepository.js";
 import { recordAuditEvent } from "../../services/auditService.js";
@@ -59,17 +58,18 @@ async function evaluateCourseCompletion(
   // (passed === all modules AND read === all sections). The old `if (total === 0) return` only
   // counted modules, so reading-only courses showed "Fullført" in the list yet never issued a
   // certificate (#580 follow-up).
-  const courseItems = await repo.findCourseItems(course.id);
-  // #944/#938: kravet er de seksjonene deltakeren FAKTISK KAN LESE — samme predikat som lesestien
-  // og DTO-en bruker. Sto tidligere som `archivedAt == null` alene, og fanget derfor ikke en
-  // seksjon oversettelsesgaten hadde holdt tilbake.
+  // #944/#938/#958: kravet er de seksjonene deltakeren FAKTISK KAN LESE — og porten spør nå den
+  // SAMME døra som lesestien og kursdetaljen. Sto tidligere som `archivedAt == null` alene, og
+  // fanget derfor ikke en seksjon oversettelsesgaten hadde holdt tilbake; deretter som et eget
+  // predikatkall her, som var riktig men fortsatt en fjerde kopi av setningen.
   //
   // ⚠️ Produkteiers regel (doc/DECISIONS.md): arkivert innhold teller ikke i kravet, fordi et krav
   // som ALDRI kan oppfylles er verre enn ikke noe krav. Nøyaktig samme argument gjelder en
   // tilbakeholdt seksjon: deltakeren får 404 på lesestien, så å kreve den er en blindvei.
+  const courseItems = await repo.findCourseItemsForParticipant(course.id);
   const requiredSectionIds = courseItems
-    .filter((item) => item.itemType === "SECTION" && item.section != null && isSectionAvailableToParticipant(item.section))
-    .map((item) => item.section!.id);
+    .filter((item) => item.itemType === "SECTION" && item.sectionId != null)
+    .map((item) => item.sectionId as string);
 
   // Truly empty course (no modules AND no sections) is never completable.
   if (moduleIds.length === 0 && requiredSectionIds.length === 0) return;

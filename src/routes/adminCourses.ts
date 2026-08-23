@@ -356,7 +356,11 @@ adminCoursesRouter.put("/:courseId/modules", requireContentOwnership("COURSE", "
 // Mixed item ordering — modules and learning sections interleaved (#486/B2).
 adminCoursesRouter.get("/:courseId/items", async (request, response, next) => {
   try {
-    const items = await courseRepository.findCourseItems(request.params.courseId);
+    // #958: forfatterlista skal se ALT — den er verktøyet man rydder opp arkivert innhold MED.
+    // ⚠️ `archivedAt` sendes videre og regelen overlates til klienten. Det er fortsatt en åpen
+    // flate (#992: kursbyggeren tilbyr arkiverte seksjoner backend avviser), men det er en
+    // klientside-regel og hører ikke i denne aksessoren.
+    const items = await courseRepository.findAllCourseItems(request.params.courseId);
     response.json({
       items: items.map((item) => ({
         id: item.id,

@@ -1,5 +1,4 @@
 import { Router } from "express";
-import { isSectionAvailableToParticipant } from "../modules/course/sectionAvailability.js";
 import { courseRepository, computeCourseStatus, getSection, checkCourseCompletionForCourse, reconcileCourseCompletionsForUser } from "../modules/course/index.js";
 import { renderSectionMarkdown } from "../modules/course/sectionContent.js";
 import { localizeContentText } from "../i18n/content.js";
@@ -264,7 +263,9 @@ coursesRouter.get("/:courseId", async (request, response, next) => {
     }
 
     // Mixed module/section sequence (#491/P1) with per-section read state (#492).
-    const courseItems = await courseRepository.findCourseItems(course.id);
+    // #958: deltakerdøra. Seksjoner deltakeren ikke kan åpne er allerede filtrert bort, og hvert
+    // element bærer et ferdig avgjort `available` — ruta har ikke lenger noen egen regel å glemme.
+    const courseItems = await courseRepository.findCourseItemsForParticipant(course.id);
     const readSectionIds = new Set(await courseRepository.findReadSectionIds(userId, course.id));
     let readSectionCount = 0;
     // ⚠️ #992: upubliserte seksjoner UTELATES fra deltakerens sekvens — de vises ikke som en
@@ -275,18 +276,17 @@ coursesRouter.get("/:courseId", async (request, response, next) => {
     // for kandidater før de er publisert». For en kandidat som ALDRI har sett seksjonen finnes det
     // ingenting å forklare — raden var en beskjed om vår egen redigeringstilstand.
     //
-    // Merk at dette gjør klientens `available`-håndtering til forsvar i dybden for seksjoner. Den
-    // beholdes: MODULER sender fortsatt `available: false` (se under), og en klient som møter en
-    // eldre server skal fortsatt oppføre seg riktig.
+    // ⚠️ Her sto det først et `visibleItems`-filter i denne ruta. #958 flyttet det inn i døra, og da
+    // ble filteret her en ANDRE anvendelse av samme regel — nøyaktig mønsteret begge sakene finnes
+    // for å fjerne. Det er slettet med vilje: legg det ikke tilbake.
+    //
+    // Klientens `available`-håndtering er dermed forsvar i dybden for seksjoner. Den beholdes:
+    // MODULER sender fortsatt `available: false` (se under), og en klient kan møte en eldre server.
     //
     // Moduler filtreres IKKE bort. Forskjellen er historikk: deltakeren kan allerede ha bestått en
     // modul som senere ble avpublisert, og da er raden hens egen fortid, ikke vår redigering.
     // Se `doc/DECISIONS.md`.
-    const visibleItems = courseItems.filter(
-      (item) => item.itemType !== "SECTION" || (item.section != null && isSectionAvailableToParticipant(item.section)),
-    );
-
-    const items: CourseSequenceItem[] = visibleItems.map((item) => {
+    const items: CourseSequenceItem[] = courseItems.map((item) => {
       if (item.itemType === "SECTION" && item.section) {
         const read = readSectionIds.has(item.section.id);
         // #992: teller og nevner leser nå fra SAMME liste — `visibleItems`. Før filtreringen var de
@@ -304,10 +304,10 @@ coursesRouter.get("/:courseId", async (request, response, next) => {
           courseItemId: item.id,
           title: localizeContentText(locale, item.section.title) ?? item.section.title,
           read,
-          // #944: seksjoner hadde ikke dette feltet i det hele tatt, så klienten satte det til true
-          // for alle — og et uleselig element så ut som et helt vanlig, klikkbart et. Samme flagg
-          // og samme navn som MODULE under, så klienten ikke trenger to regler.
-          available: isSectionAvailableToParticipant(item.section),
+          // #944/#958: flagget står igjen i DTO-en fordi klienten leser det på MODULE, og et felt
+          // som forsvinner for én av to typer er en ny regel klienten må kjenne. For seksjoner er
+          // det alltid `true` — de uleselige kommer ikke ut av deltakerdøra i det hele tatt.
+          available: item.available,
           discussionsEnabled: item.discussionsEnabled,
         };
       }
@@ -315,11 +315,9 @@ coursesRouter.get("/:courseId", async (request, response, next) => {
       const certStatus = certStatusByModuleId.get(moduleId);
       const passed = isCertificationPassed(certStatus);
       const hasStarted = latestSubmissionByModuleId.has(moduleId);
-      // #502-followup: en modul er «tilgjengelig» for deltaker når den har en publisert aktiv
-      // versjon og ikke er arkivert. Avpubliserte moduler markeres i UI (ikke en blindvei).
-      const available = Boolean(
-        item.module?.activeVersionId && item.module?.activeVersion?.publishedAt && !item.module?.archivedAt,
-      );
+      // #502-followup/#958: regelen bor nå i `findCourseItemsForParticipant`. Ruta leser en
+      // avgjørelse i stedet for å ta en — feltene den ble regnet ut av finnes ikke her lenger.
+      const available = item.available;
       return {
         type: "MODULE",
         sortOrder: item.sortOrder,
@@ -334,12 +332,13 @@ coursesRouter.get("/:courseId", async (request, response, next) => {
 
     // All elements count toward progress: passed modules + read sections (#492).
     // Module count derived from CourseItem (itemType MODULE); sections from CourseItem too.
-    // #944/#938: framdriften teller de seksjonene som FAKTISK KREVES — de deltakeren kan lese.
-    // Sto tidligere som en ren telling av SECTION-elementer, og var derfor uenig med bevisporten:
-    // kortet kunne vise «Seksjonar 0/1» ved siden av et utstedt kursbevis.
+    // #944/#938/#958: framdriften teller de seksjonene som FAKTISK KREVES — de deltakeren kan lese.
+    // Kortet kunne før vise «Seksjonar 0/1» ved siden av et utstedt kursbevis, fordi telleren og
+    // bevisporten filtrerte ulikt.
     //
-    // #992: `items` inneholder nå bare tilgjengelige seksjoner, så tellingen er igjen enkel — og
-    // enig med bevisporten fordi den leser fra samme filtrerte liste, ikke fordi den gjentar regelen.
+    // ⚠️ Nå er dette ikke lenger en telling MED filter. Sekvensen inneholder bare det som kreves,
+    // fordi telleren og bevisporten har fått radene fra SAMME dør. Legg ikke et predikat tilbake
+    // her — det ville gjeninnført nettopp uenigheten linja finnes for å ha fjernet.
     const sectionCount = items.filter((i) => i.type === "SECTION").length;
     const totalElements = moduleIds.length + sectionCount;
     const completedElements = passedCount + readSectionCount;
@@ -400,18 +399,16 @@ coursesRouter.get("/:courseId/sections/:sectionId", async (request, response, ne
     if (!(await isCourseVisibleToUser({ course, userId, roles: request.context?.roles ?? [], groupIds: request.context?.principal?.groupIds }))) {
       throw new NotFoundError("Course", "course_not_found", "Course not found.");
     }
-    const courseItems = await courseRepository.findCourseItems(course.id);
+    // #944/#958: medlemskap i kurset er IKKE nok. En arkivert seksjon, eller en som
+    // oversettelsesgaten har holdt tilbake, har ingen aktiv versjon — og ga tidligere 200 med tom
+    // side. Deltakerdøra leverer den ikke, så «finnes ikke i kurset» og «kan ikke leses» er nå det
+    // samme oppslaget og kan ikke svare hver sin ting. 404 fordi vi ikke bekrefter at seksjonen
+    // finnes i det hele tatt, på samme måte som synlighetssjekken over.
+    const courseItems = await courseRepository.findCourseItemsForParticipant(course.id);
     const item = courseItems.find(
       (i) => i.itemType === "SECTION" && i.sectionId === request.params.sectionId,
     );
     if (!item) {
-      throw new NotFoundError("CourseSection", "section_not_found", "Section not found in this course.");
-    }
-    // #944: medlemskap i kurset er IKKE nok. En arkivert seksjon, eller en som oversettelsesgaten
-    // har holdt tilbake, har ingen aktiv versjon — og ga tidligere 200 med tom side. 404 fordi
-    // seksjonen ikke finnes å lese for denne deltakeren; vi bekrefter ikke at den finnes i det hele
-    // tatt, på samme måte som synlighetssjekken over.
-    if (!item.section || !isSectionAvailableToParticipant(item.section)) {
       throw new NotFoundError("CourseSection", "section_not_found", "Section not found in this course.");
     }
     const section = await getSection(request.params.sectionId);
@@ -442,18 +439,14 @@ coursesRouter.post("/:courseId/sections/:sectionId/read", async (request, respon
     if (!(await isCourseVisibleToUser({ course, userId, roles: request.context?.roles ?? [], groupIds: request.context?.principal?.groupIds }))) {
       throw new NotFoundError("Course", "course_not_found", "Course not found.");
     }
-    const courseItems = await courseRepository.findCourseItems(course.id);
+    // #944/#958: samme dør som lesestien. Var dette to oppslag med hver sin regel, kunne markeringen
+    // gå gjennom for en seksjon lesestien nektet — og kursbeviset bli utstedt for innhold som aldri
+    // ble publisert. Det var nøyaktig hullet i #944.
+    const courseItems = await courseRepository.findCourseItemsForParticipant(course.id);
     const item = courseItems.find(
       (i) => i.itemType === "SECTION" && i.sectionId === request.params.sectionId,
     );
     if (!item) {
-      throw new NotFoundError("CourseSection", "section_not_found", "Section not found in this course.");
-    }
-    // #944: medlemskap i kurset er IKKE nok. En arkivert seksjon, eller en som oversettelsesgaten
-    // har holdt tilbake, har ingen aktiv versjon — og ga tidligere 200 med tom side. 404 fordi
-    // seksjonen ikke finnes å lese for denne deltakeren; vi bekrefter ikke at den finnes i det hele
-    // tatt, på samme måte som synlighetssjekken over.
-    if (!item.section || !isSectionAvailableToParticipant(item.section)) {
       throw new NotFoundError("CourseSection", "section_not_found", "Section not found in this course.");
     }
     await courseRepository.markSectionRead(userId, course.id, request.params.sectionId);

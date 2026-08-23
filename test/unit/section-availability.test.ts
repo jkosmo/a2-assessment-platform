@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { isSectionAvailableToParticipant, sectionAvailableWhere } from "../../src/modules/course/sectionAvailability.js";
+import {
+  isSectionAvailableToParticipant,
+  sectionAvailableWhere,
+} from "../../src/modules/course/sectionAvailability.js";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // #944: predikatet testes DIREKTE her, fordi det ene leddet ikke kan nås gjennom API-et.
@@ -41,34 +44,42 @@ describe("#944: isSectionAvailableToParticipant", () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// #992: regelen finnes i TO former — som predikat og som Prisma-where. Den ene kan ikke kjøre i
-// databasen, så duplikatet er uunngåelig. Da må det i det minste være bevist enig med seg selv.
+// #958: predikatet er ORAKELET for Prisma-filteret.
+//
+// Etter #958 er det `sectionAvailableWhere` som faktisk kjører — filtreringen skjer i databasen, i
+// `findCourseItemsForParticipant`. Predikatet over er den lesbare formen av samme setning, og to
+// formuleringer av samme regel er nøyaktig feilklassen #938 handlet om.
+//
+// Derfor står de ikke bare ved siden av hverandre: predikatet er spesifikasjonen filteret måles mot,
+// over alle fire kombinasjonene. Endrer noen den ene uten den andre, blir dette rødt.
 // ─────────────────────────────────────────────────────────────────────────────
 
-describe("#992: where-formen sier det samme som predikatet", () => {
-  // Simulerer hva Prisma ville sluppet gjennom for `{ archivedAt: null, activeVersionId: { not: null } }`.
-  // Ikke en ekte spørring — men den leser where-objektet, så en endring DER slår ut her.
-  function matchesWhere(row: { archivedAt: Date | null; activeVersionId: string | null }): boolean {
-    const w = sectionAvailableWhere as { archivedAt: null; activeVersionId: { not: null } };
-    if (Object.keys(w).length !== 2) throw new Error("where-formen har fått felt predikatet ikke kjenner");
-    return row.archivedAt === w.archivedAt && row.activeVersionId !== w.activeVersionId.not;
+describe("#958: sectionAvailableWhere svarer likt som predikatet, på alle fire kombinasjonene", () => {
+  /** Evaluerer `sectionAvailableWhere` slik Prisma ville gjort — de to operatorene den bruker. */
+  function whereAccepts(section: { archivedAt: Date | null; activeVersionId: string | null }) {
+    return (
+      section.archivedAt === sectionAvailableWhere.archivedAt
+      && section.activeVersionId !== sectionAvailableWhere.activeVersionId.not
+    );
   }
 
-  const rows = [
+  const combinations = [
     { archivedAt: null, activeVersionId: "v1" },
     { archivedAt: null, activeVersionId: null },
     { archivedAt: new Date(), activeVersionId: "v1" },
     { archivedAt: new Date(), activeVersionId: null },
   ];
 
-  it.each(rows)("enige om %o", (row) => {
-    expect(matchesWhere(row)).toBe(isSectionAvailableToParticipant(row));
-  });
+  for (const section of combinations) {
+    it(`archivedAt=${section.archivedAt ? "satt" : "null"}, activeVersionId=${section.activeVersionId ?? "null"}`, () => {
+      expect(whereAccepts(section)).toBe(isSectionAvailableToParticipant(section));
+    });
+  }
 
-  it("KONTROLL: de fire radene dekker begge utfall", () => {
-    // Uten denne kunne begge sider vært konstant false og «enige» om ingenting.
-    const results = rows.map(isSectionAvailableToParticipant);
-    expect(results).toContain(true);
-    expect(results).toContain(false);
+  it("KONTROLLCASE: de fire kombinasjonene gir ikke samme svar", () => {
+    // Uten denne ville testene over bestått hvis begge formene alltid sa «ja» (eller alltid «nei»).
+    // Da måler man at to konstanter er like, ikke at to regler er enige.
+    const answers = combinations.map(isSectionAvailableToParticipant);
+    expect(answers).toEqual([true, false, false, false]);
   });
 });

@@ -749,62 +749,105 @@ section is published or its content saved.
 from `field` + `missingLocales` in the author's language, never from the server's English `message`,
 and a held-back save must not show a plain "Seksjon lagret."
 
-## 25. «Kan deltakeren bruke dette?» — én regel, fem stavemåter, to lag (#944/#992)
+## 25. «Hva inneholder dette kurset?» — to navngitte dører, ikke åtte kallere (#958)
 
-Spørsmålet «er dette innholdet tilgjengelig for deltakeren» besvares på **begge sider av HTTP** og i
-**to skriveformer**. Det gjør det til den vanskeligste flaten i kodebasen å holde samstemt — og det
-har sviktet to ganger på rad, begge ganger i fiksen mot forrige svikt.
+Fram til v2.26.x fantes én aksessor, `courseRepository.findCourseItems(courseId)`. Den hentet
+`module.archivedAt`, `module.activeVersionId`, `module.activeVersion.publishedAt`,
+`section.archivedAt` og `section.activeVersionId` — nøyaktig feltene som avgjør tilgjengelighet — og
+**filtrerte ingenting**. Åtte kallere tok hver sin avgjørelse, med fem ulike regler. Samme rad ga
+«tilgjengelig», «påkrevd», «publiserbar» og «slettbar» ulike svar. Det er roten til #938, #944, #945
+og #992, og mønster 2 («ueid policy») i `doc/COMPLEXITY_SCAN.md`.
 
-### Server
+**Kuren er ikke et filter til.** Det er at kalleren ikke lenger *kan* unnlate å ta stilling: man
+velger dør i det man kaller, og deltakerdøra leverer ikke feltene regelen bygger på.
 
-| Sted | Form | Merknad |
+| Dør | For hvem | Hva den gjør med det utilgjengelige |
 |---|---|---|
-| `sectionAvailability.ts` `isSectionAvailableToParticipant` | TS-predikat | **Sannheten.** |
-| `sectionAvailability.ts` `sectionAvailableWhere` | Prisma `where` | Kan ikke unngås — predikatet kan ikke kjøre i databasen. |
-| `courses.ts` lesestien | predikat | 404 på utilgjengelig |
-| `courses.ts` marker-lest | predikat | 404 — hullet #944 fant |
-| `courses.ts` `visibleItems` | predikat | **⚠️ Den viktigste.** Filtrerer upubliserte seksjoner UT av deltakerens sekvens (#992). Alt under leser fra denne lista. |
-| `courses.ts` DTO `available` | predikat | Alltid `true` for seksjoner nå — feltet lever videre for MODULER og for eldre klienter. |
-| `courses.ts` nevner `sectionTotal` | *ingen* | Teller `visibleItems`. Predikatet er fjernet herfra med vilje. |
-| `courses.ts` teller `sectionCompleted` | *ingen* | Samme. Var **glemt til #992**; kuren var å slette regelen begge steder, ikke å skrive den to ganger til. |
-| `courseRepository.ts` listevisningen | `where`-form | |
-| `courseCompletionService.ts` bevisporten | predikat | den som avgjør |
+| `findCourseItemsForParticipant` | deltakerflatene + bevisporten | Seksjoner deltakeren ikke kan åpne er **utelatt**. Moduler er alle med, hver med et ferdig avgjort `available`. Returnerer verken `archivedAt`, `activeVersionId` eller `publishedAt` |
+| `findAllCourseItems` | forfatterlista, publiseringsgaten, kaskadesletting, eksport | Alt. Bærer `archivedAt` (forfatterlista sender det videre), men ikke `activeVersionId` |
 
-### Klient
+### Kallerne
 
-| Sted | Form |
+| Kaller | Regelen den hadde | Dør nå |
+|---|---|---|
+| `routes/courses.ts` — deltakerdetalj | modul: 3-ledds `available`; seksjon: `isSectionAvailableToParticipant`; telleren: `&& i.available` | deltaker (tre filtre slettet) |
+| `routes/courses.ts` — les seksjon | `isSectionAvailableToParticipant` → 404 | deltaker (slettet — oppslaget ER regelen) |
+| `routes/courses.ts` — marker lest | `isSectionAvailableToParticipant` → 404 | deltaker (slettet) |
+| `courseCompletionService.ts` — bevisporten | `isSectionAvailableToParticipant` | deltaker (slettet) |
+| `coursePublishService.ts` — publiseringsgaten | ingen på elementnivå | alt |
+| `courseCascadeDeleteService.ts` — sletting | ingen | alt |
+| `routes/adminCourses.ts` — forfatterlista | ingen; sender `archivedAt` til klienten | alt |
+| `adminContent/adminContentQueries.ts` — eksport | ingen | alt |
+
+### Hvorfor moduler og seksjoner behandles ULIKT
+
+Asymmetrien er bevisst, og den er den eneste delen av dette som er et *valg*:
+
+- En **seksjon** deltakeren ikke kan åpne har ingen fungerende representasjon. Begge deltakerrutene
+  svarer 404, bevisporten krever den ikke, framdriften teller den ikke — og #992 viste at klienten
+  ignorerer `available` for seksjoner (`const available = isSection || entry.available !== false`).
+  Raden så klikkbar ut og endte i 404. Å utelate den er å slutte å love noe vi ikke holder.
+- En **modul** uten publisert versjon er en midlertidig tilstand deltakeren skal se at finnes
+  (§ 6b-2), klienten rendrer den som deaktivert med «Ikke tilgjengelig», og den teller fortsatt i
+  `moduleTotal` og i kursbevisets krav. Å skjule den ville endret **hva beviset krever** — en
+  policy-endring, ikke en opprydding.
+
+### Regelen bor i `sectionAvailability.ts`, i to former som må svare likt
+
+`isSectionAvailableToParticipant(section)` for rader man allerede har lest, og
+`sectionAvailableWhere` som Prisma-filter når filtreringen kan skje i databasen. Den andre fantes
+tidligere som en anonym `where`-literal i `findCourseItemSectionIdsForCourses` — to formuleringer av
+samme setning, uten noe som holdt dem i takt.
+
+### Guards
+
+- `test/course-items-accessor-guard.test.js` — **dekningsvakt**: nekter `courseItem.findMany`
+  utenfor `courseRepository.ts`, så en niende kaller ikke kan oppstå utenom dørene. Unntakslista er
+  poenget (omvendte oppslag innhold→kurs, og `setCourseModules` som leser rader for å skrive dem
+  tilbake). ⚠️ Ligger i `test/` og MÅ stå i `include`-lista i `vitest.unit.config.ts`, ellers kjører
+  den bare i full CI og ikke i QA-porten før deploy.
+- `test/unit/course-items-accessor.test.ts` — begge dørene, med en falsk Prisma-klient som faktisk
+  tolker `where` og `select`. Kontrollcase i hver gruppe.
+- `test/m2-course-section-read.test.ts` — 404 på begge deltakerrutene, sekvensen uten den uleselige
+  seksjonen, og kontrollcaset med den publiserte.
+- `test/m2-course-module-availability.test.ts` — avpublisert modul er med, `available:false`.
+
+### Klientsiden — samme spørsmål, andre siden av HTTP
+
+| Sted | Rolle |
 |---|---|
-| `participant-console-state.js` `isEntryAvailable` / `isEntryDone` / `isEntryOutstanding` | **Sannheten på klienten.** |
+| `participant-console-state.js` `isEntryAvailable` / `isEntryDone` / `isEntryOutstanding` | **Sannheten på klienten** |
 | `participant.js` raden, `findNextIncompleteEntry`, `nextEntryAfter`, `outstandingBeforeFinish` | kaller predikatene |
 
-⚠️ Etter #992 er klientsiden **forsvar i dybden for seksjoner**, ikke bærende: serveren sender dem
-ikke lenger. Den beholdes fordi MODULER fortsatt sender `available: false`, og fordi en klient kan
-møte en eldre server midt i en utrulling. Ikke slett den fordi «serveren ordner det» — det var
-nettopp den begrunnelsen som lot #944-hullet stå åpent i alle stier utenom importen.
+Fram til #992 svarte disse fire ulikt, og tre av dem antok at enhver seksjon er tilgjengelig —
+`const available = isSection || entry.available !== false`, korrekt den dagen den ble skrevet, en
+løgn fra det øyeblikket #944 ga seksjoner feltet. Utfallet var en blindvei: «1 gjenstår» og ingen
+«Avslutt kurset», mens serveren gjerne ville utstedt beviset.
 
-### ⚠️ Det som gjør denne flaten spesiell
+⚠️ **Etter #958 er klientsiden forsvar i dybden for SEKSJONER, ikke bærende** — serveren sender dem
+ikke lenger. Den skal likevel ikke slettes: MODULER sender fortsatt `available: false`, og en klient
+kan møte en eldre server midt i en utrulling. Begrunnelsen «serveren ordner det» var nettopp det som
+lot #944-hullet stå åpent i alle stier utenom importen.
+
+### Tre lærdommer fra fire runder på samme regel
 
 **Modul-siden og seksjons-siden er ulike, og det er lett å fikse bare den ene.** #944 filtrerte
 seksjonstellingen og glemte modultelleren; 2.26.3 filtrerte modultelleren og glemte at telleren i
 brøken ikke fulgte nevneren. Hver gang så fiksen komplett ut fordi den ene halvdelen var grønn.
 
-**Klienten hadde en antakelse skrevet før feltet fantes.** `isSection || entry.available !== false`
-var korrekt den dagen den ble skrevet — bare moduler hadde `available`. Da seksjoner fikk feltet, ble
-linjen en løgn uten at noen rørte den. Slike linjer er usynlige for grep etter «mangler filter»: de
-HAR et filter, det er bare feil.
+**En antakelse skrevet før feltet fantes er usynlig for grep.** `isSection || …` HAR et filter — det
+er bare feil. Leter man etter «steder som mangler filter», finner man den aldri.
 
-**Å legge til et filter på det stedet som feilet, øker antallet steder.** Kuren er å la stedet kalle
-predikatet, ikke å gi det sin egen kopi.
+**Den beste kuren fjerner spørsmålet.** Produkteiers beslutning om at upublisert innhold ikke skal nå
+kandidaten gjorde at to tellere kunne slutte å kjenne regelen i det hele tatt, og #958 flyttet resten
+inn i døra. En avklaring om produktet gjorde mer for denne flaten enn tre runder med filtre.
 
-**Den beste kuren fjerner spørsmålet.** #992 endte med at produkteier bestemte at upublisert innhold
-ikke skal nå kandidaten i det hele tatt. Da ble to av radene over til *ingen* — teller og nevner
-leser fra `visibleItems` og trenger ikke kjenne regelen. En beslutning om produktet gjorde mer for
-denne flaten enn tre runder med filtre gjorde.
+### Ikke ryddet, med vilje
 
-**Vakter:** `test/unit/section-availability.test.ts` (predikatet, inkludert leddet som ikke kan nås
-via API-et, og at `where`-formen er enig for alle fire kombinasjoner),
-`test/participant-sequence-predicate-guard.test.js` (klientpredikatene + dekningsvakt mot
-håndskrevne ledd i `participant.js`), `test/course-visibility-guard.test.js`,
-`test/m2-course-section-read.test.ts` (teller og nevner), `test/e2e/participant-section-advance.spec.ts`
-(blindveien: arkivert modul foran siste seksjon, og «gå videre» som hopper over).
+«Er denne modulen arkivert» er en **annen** regel og lever fortsatt tre steder
+(`routes/courses.ts` × 2, `courseCompletionService.ts`), fordi den bæres av `findCourseById` og
+`findPublishedCourses*` — søsteraksessorene i #959. Den hører hjemme der, ikke her.
 
+**Asset-ruta spør ikke** (#993): `isSectionInAccessibleCourse` sjekker at kurset er synlig, aldri om
+seksjonen er tilgjengelig. Figurer i en arkivert seksjon kan hentes av den som har id-en. Samme
+klasse som #944, en fjerde dør — funnet under dette arbeidet, ikke fikset her.

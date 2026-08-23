@@ -22,6 +22,17 @@
 // Merk at `contentImportService.ts:149-151` beskriver nøyaktig dette scenariet som oppdaget en gang
 // før. Fiksen ble den gangen lagt i IMPORTEN, ikke i lesestien — så alle andre veier til samme
 // tilstand sto åpne.
+//
+// ── #958, oppfølgingen ───────────────────────────────────────────────────────────────────────
+// Predikatet var riktig, men det var fortsatt kallerne som måtte huske å bruke det: `findCourseItems`
+// leverte råmaterialet til alle åtte, og fire av dem tok hver sin avgjørelse. Nå bor regelen i
+// `courseRepository.findCourseItemsForParticipant`, som filtrerer i spørringen og IKKE returnerer
+// feltene under. Ingen av deltakerflatene kaller lenger predikatet direkte — de kan ikke, for de får
+// ikke `archivedAt`/`activeVersionId` å regne på.
+//
+// Predikatet blir stående fordi det er den lesbare formen av regelen (og fordi det er formen som er
+// direkte enhetstestbar, se kommentaren på arkiv-leddet under). `sectionAvailableWhere` er det som
+// faktisk kjører.
 
 /** Det minimale en seksjon må ha for at predikatet skal kunne avgjøres. */
 export type SectionAvailabilityInput = {
@@ -54,14 +65,20 @@ export function isSectionAvailableToParticipant(section: SectionAvailabilityInpu
 }
 
 /**
- * Samme regel som `isSectionAvailableToParticipant`, i den formen Prisma forstår.
+ * Samme regel som predikatet over, uttrykt som et Prisma-filter på `CourseSection`.
  *
- * ⚠️ #992: dette er ikke en bekvemmelighet, det er en nødvendighet. Predikatet over kan ikke kjøre
- * i databasen, så et sted MÅ regelen finnes i where-form — og da er den per definisjon en andre
- * staving av samme tanke. Den ene tingen vi kan gjøre er å la de to stavemåtene bo ved siden av
+ * ⚠️ Duplikatet er uunngåelig, ikke slurv: predikatet kan ikke kjøre i databasen, så et sted MÅ
+ * regelen finnes i where-form. Det eneste vi kan gjøre er å la de to stavemåtene bo ved siden av
  * hverandre, slik at den som endrer den ene ser den andre.
  *
- * `test/unit/section-availability.test.ts` sjekker at de to er enige for alle fire kombinasjonene.
+ * ⚠️ Hvorfor den bor HER og ikke i spørringene: #958. Regelen sto som en anonym `where`-literal i
+ * `findCourseItemSectionIdsForCourses` mens predikatet sto i denne fila — to formuleringer av samme
+ * setning, uten noe som holdt dem i takt. Endrer man den ene, tier den andre.
+ *
+ * Bruk `sectionAvailableWhere` når filtreringen kan skje i databasen (én rundtur, og kalleren får
+ * aldri se radene den ikke skal bruke), og `isSectionAvailableToParticipant` når raden allerede er
+ * lest. De to MÅ svare likt — `test/unit/section-availability.test.ts` sjekker det for alle fire
+ * kombinasjonene, og er det eneste som holder dem i takt.
  */
 export const sectionAvailableWhere = {
   archivedAt: null,

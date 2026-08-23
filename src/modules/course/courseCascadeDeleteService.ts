@@ -78,7 +78,9 @@ async function analyzeCourseCascade(courseId: string): Promise<CascadeAnalysis> 
   if (!course) throw new NotFoundError("Course", "course_not_found", "Course not found.");
   const courseTitle = displayTitle(course.title);
 
-  const items = await courseRepository.findCourseItems(courseId);
+  // #958: sletting må se ALT. Ville den arkiverte seksjonen ikke kommet med, ville den blitt stående
+  // igjen som en foreldreløs rad etter at kurset var borte.
+  const items = await courseRepository.findAllCourseItems(courseId);
   const moduleIds = Array.from(
     new Set(items.filter((i) => i.itemType === "MODULE" && i.moduleId).map((i) => i.moduleId as string)),
   );
