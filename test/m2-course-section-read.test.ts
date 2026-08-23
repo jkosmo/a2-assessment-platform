@@ -141,14 +141,30 @@ describe("#944: en uleselig seksjon kan verken åpnes eller markeres lest", () =
     expect(mark.status).toBe(204);
   });
 
-  it("kurssekvensen merker uleselige seksjoner som utilgjengelige", async () => {
+  it("#992: en upublisert seksjon er IKKE med i deltakerens sekvens", async () => {
+    // ⚠️ Denne testen forventet tidligere `available: false` — altså at raden var med, men nedtonet.
+    // Produkteier 2026-08-23: «utkastseksjoner skal ikke ha konsekvenser for kandidater før de er
+    // publisert». For en kandidat som aldri har sett seksjonen er en nedtonet rad ikke en
+    // forklaring; den er en beskjed om vår egen redigeringstilstand.
+    //
+    // Se `doc/DECISIONS.md` → «Upublisert innhold vises ikke for kandidater i det hele tatt».
     const { courseId } = await courseWithSection({ withActiveVersion: false });
     const detail = await request(app).get(`/api/courses/${courseId}`).set(participantHeaders);
-    const item = (detail.body.course.items as Array<{ type: string; available?: boolean }>).find((i) => i.type === "SECTION");
+    const items = detail.body.course.items as Array<{ type: string }>;
 
-    // Seksjoner hadde ikke feltet i det hele tatt, så klienten satte det til true for alle — et
-    // uleselig element så ut som et helt vanlig, klikkbart et.
-    expect(item?.available).toBe(false);
+    expect(items.filter((i) => i.type === "SECTION")).toHaveLength(0);
+  });
+
+  it("#992 KONTROLLCASE: en PUBLISERT seksjon er fortsatt med", async () => {
+    // Uten denne ville «filtrer bort alle seksjoner» bestått testen over — og kurs med lesestoff
+    // hadde blitt tomme for deltakeren.
+    const { courseId, sectionId } = await courseWithSection({});
+    const detail = await request(app).get(`/api/courses/${courseId}`).set(participantHeaders);
+    const items = detail.body.course.items as Array<{ type: string; sectionId?: string; available?: boolean }>;
+
+    const section = items.find((i) => i.type === "SECTION");
+    expect(section?.sectionId).toBe(sectionId);
+    expect(section?.available, "feltet beholdes for moduler og for eldre klienter").toBe(true);
   });
 
   it("#944/#938: en uleselig seksjon KREVES ikke for kursbeviset", async () => {
@@ -225,5 +241,83 @@ describe("#945: arkiverte moduler telles ikke i framdriften", () => {
 
     const detail = await request(app).get(`/api/courses/${course.id}`).set(participantHeaders);
     expect(detail.body.course.progress.moduleTotal).toBe(2);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// #992: telleren i framdriftsbrøken, ikke bare nevneren.
+//
+// #944 filtrerte `sectionTotal` på tilgjengelighet, men lot `sectionCompleted` telle ENHVER
+// registrert lesning. En lesning fra før seksjonen ble utilgjengelig telte dermed mot en nevner
+// som ikke lenger inneholdt den.
+//
+// ⚠️ Utfallet er verre enn et skjevt tall: med én lest, nå-utilgjengelig seksjon og én ulest,
+// tilgjengelig seksjon rapporterte detaljen 1/1 og COMPLETED — mens bevisporten korrekt nektet.
+// Kortet sa «ferdig», systemet sa «ikke ferdig», og deltakeren satt igjen mellom de to. Det er
+// #938 om igjen, i #944 sin fiks.
+// ─────────────────────────────────────────────────────────────────────────────
+describe("#992: framdriftsbrøken bruker samme predikat i teller og nevner", () => {
+  afterAll(async () => {
+    await prisma.$disconnect();
+  });
+
+  async function courseWithReadButUnavailable() {
+    const course = await prisma.course.create({
+      data: { title: `Numerator Course ${Date.now()}-${Math.random()}`, publishedAt: new Date() },
+      select: { id: true },
+    });
+    const user = await prisma.user.findFirst({ where: { externalId: participantHeaders["x-user-id"] }, select: { id: true } });
+    if (!user) throw new Error("fant ikke deltakeren fikstureringen bygger på");
+
+    // Seksjon A: LEST, men uten aktiv versjon — altså ikke lenger tilgjengelig.
+    const gone = await prisma.courseSection.create({
+      data: { title: JSON.stringify({ "en-GB": "Read before it was pulled" }) },
+      select: { id: true },
+    });
+    // Seksjon B: tilgjengelig og ULEST. Det er DEN bevisporten venter på.
+    const live = await prisma.courseSection.create({
+      data: { title: JSON.stringify({ "en-GB": "Still required" }) },
+      select: { id: true },
+    });
+    const v = await prisma.courseSectionVersion.create({
+      data: { sectionId: live.id, versionNo: 1, bodyMarkdown: JSON.stringify({ "en-GB": "Body." }), publishedAt: new Date() },
+      select: { id: true },
+    });
+    await prisma.courseSection.update({ where: { id: live.id }, data: { activeVersionId: v.id } });
+    await prisma.courseItem.createMany({
+      data: [
+        { courseId: course.id, itemType: "SECTION", sectionId: gone.id, sortOrder: 0 },
+        { courseId: course.id, itemType: "SECTION", sectionId: live.id, sortOrder: 1 },
+      ],
+    });
+    await prisma.courseSectionRead.create({
+      data: { userId: user.id, courseId: course.id, sectionId: gone.id },
+    });
+    return { courseId: course.id, goneId: gone.id, liveId: live.id };
+  }
+
+  it("en lesning av en nå-utilgjengelig seksjon teller ikke som fullført", async () => {
+    const { courseId } = await courseWithReadButUnavailable();
+    const detail = await request(app).get(`/api/courses/${courseId}`).set(participantHeaders);
+    const p = detail.body.course.progress;
+
+    expect(p.sectionTotal, "bare den tilgjengelige seksjonen kreves").toBe(1);
+    expect(p.sectionCompleted, "den uleselige lesningen skal ikke telle").toBe(0);
+    // Og da er kurset ikke fullført — samme svar som bevisporten gir.
+    expect(p.courseStatus).not.toBe("COMPLETED");
+  });
+
+  it("KONTROLLCASE: en lesning av en TILGJENGELIG seksjon teller fortsatt", async () => {
+    // Uten denne ville «tell aldri lesninger» bestått testen over — og da ville ingen noensinne
+    // fullført et kurs.
+    const { courseId, liveId } = await courseWithReadButUnavailable();
+    const mark = await request(app).post(`/api/courses/${courseId}/sections/${liveId}/read`).set(participantHeaders);
+    expect(mark.status, JSON.stringify(mark.body)).toBe(204);
+
+    const detail = await request(app).get(`/api/courses/${courseId}`).set(participantHeaders);
+    const p = detail.body.course.progress;
+    expect(p.sectionCompleted).toBe(1);
+    expect(p.sectionTotal).toBe(1);
+    expect(p.courseStatus).toBe("COMPLETED");
   });
 });

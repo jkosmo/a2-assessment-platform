@@ -302,3 +302,49 @@ export function sanitizeAppealStatuses(value, fallback = ["OPEN", "IN_REVIEW"]) 
 
   return Array.from(new Set(statuses));
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// #992: ÉN definisjon av «tilgjengelig» og «ferdig» i kurssekvensen — klientens speilbilde av
+// `src/modules/course/sectionAvailability.ts`.
+//
+// Fram til nå svarte fire steder i participant.js ulikt på det samme spørsmålet:
+//
+//   findNextIncompleteEntry   seksjon: !read           modul: !PASSED && available
+//   raden (`available`)       seksjon: ALLTID true     modul: available !== false
+//   nextEntryAfter            ingen sjekk              ingen sjekk
+//   outstandingBeforeFinish   seksjon: !read           modul: !PASSED
+//
+// `isSection || entry.available !== false` ble skrevet den gang bare moduler hadde feltet. Da #944
+// ga seksjoner ekte `available`, ble antakelsen en løgn — og klienten begynte å være uenig med
+// serverens bevisport.
+//
+// ⚠️ Utfallet var en BLINDVEI som ikke fantes før 2.26.1: et kurs med en arkivert modul ga
+// deltakeren «1 gjenstår» og ingen «Avslutt kurset»-knapp, mens serveren filtrerte samme modul bort
+// og gjerne ville utstedt beviset. Lå modulen ETTER seksjonen, prøvde «Marker lest og gå videre» å
+// åpne den — rett i 404-en #944 innførte.
+//
+// De bor her, ikke i participant.js, fordi de da kan testes som det de er: rene funksjoner.
+// `test/participant-sequence-predicate-guard.test.js` holder dem alene om jobben.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Kan deltakeren åpne dette elementet?
+ *
+ * ⚠️ `undefined` betyr «vis den», ikke «ukjent». DTO-en (`courseReadModels.ts`) har `available`
+ * PÅKREVD på begge variantene, så feltet mangler bare når vi snakker med en eldre server — og all
+ * oppførsel før #944 var nettopp å vise alt. Å tolke `undefined` som utilgjengelig ville skjult
+ * hele kurset ved en versjonsmismatch, som er langt verre enn den blindveien vi retter.
+ */
+export function isEntryAvailable(entry) {
+  return entry?.available !== false;
+}
+
+/** Ferdig: seksjon lest, eller modul bestått. */
+export function isEntryDone(entry) {
+  return entry?.type === "SECTION" ? entry.read === true : entry?.moduleStatus === "PASSED";
+}
+
+/** Uferdig OG tilgjengelig — det eneste som skal kunne stoppe eller lede deltakeren videre. */
+export function isEntryOutstanding(entry) {
+  return isEntryAvailable(entry) && !isEntryDone(entry);
+}

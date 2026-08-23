@@ -162,4 +162,94 @@ describe("#762 fallback export vs the REAL src schema", () => {
     expect(envelope.course.course.audit).toEqual({});
     expect(exportEnvelopeSchema.safeParse(envelope).success).toBe(true);
   });
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // #992: `scope: "section"` — validatoren meldte GYLDIG det importen avviser.
+  //
+  // Rule 7 i skillet lover «valider mot samme skjema som importen». For seksjoner holdt løftet
+  // ikke: tittelsjekken var `!gyldig && tittel == null`, som bare kan slå til når tittelen er BÅDE
+  // ugyldig OG fraværende — altså aldri for en tom streng. `bodyMarkdown` ble ikke sett på.
+  //
+  // ⚠️ Hver test her kjører BEGGE: det ekte Zod-skjemaet og den medfølgende validatoren, og krever
+  // samme svar. Det er den eneste formen som fanger drift — en test som bare spør validatoren
+  // ville vært grønn hele veien gjennom denne feilen.
+  // ───────────────────────────────────────────────────────────────────────────
+
+  const sectionEnvelope = (section: Record<string, unknown>) => ({
+    exportFormat: "a2-content-export/v1",
+    exportedAt: "2026-08-22T10:00:00.000Z",
+    scope: "section",
+    section: { audit: {}, ...section },
+  });
+
+  const bothAgree = (envelope: unknown) => ({
+    real: exportEnvelopeSchema.safeParse(envelope).success,
+    bundled: validateExportEnvelopeStructure(envelope).valid,
+  });
+
+  it("#992: tom tittel avvises av BEGGE", () => {
+    const r = bothAgree(sectionEnvelope({ title: "", bodyMarkdown: { nb: "Tekst" } }));
+    expect(r.real).toBe(false);
+    expect(r.bundled).toBe(false);
+  });
+
+  it("#992: tom bodyMarkdown avvises av BEGGE", () => {
+    const r = bothAgree(sectionEnvelope({ title: { nb: "T" }, bodyMarkdown: "" }));
+    expect(r.real).toBe(false);
+    expect(r.bundled).toBe(false);
+  });
+
+  it("#992: manglende bodyMarkdown avvises av BEGGE", () => {
+    const r = bothAgree(sectionEnvelope({ title: { nb: "T" } }));
+    expect(r.real).toBe(false);
+    expect(r.bundled).toBe(false);
+  });
+
+  it("#992: et tomt lokaliseringsobjekt avvises av BEGGE", () => {
+    const r = bothAgree(sectionEnvelope({ title: { nb: "   " }, bodyMarkdown: { nb: "Tekst" } }));
+    expect(r.real).toBe(false);
+    expect(r.bundled).toBe(false);
+  });
+
+  it("#992 KONTROLLCASE: ETT språk er nok — begge godtar", () => {
+    // ⚠️ Den viktigste testen her. Seksjoner bruker `localizedTextPatchSchema`, ikke
+    // `localizedTextSchema`: innhold skrevet på ett språk og ennå ikke oversatt SKAL kunne
+    // uttrykkes (#905). Hadde jeg gjenbrukt modulenes `isNonEmptyLocalized` — som krever alle tre —
+    // ville validatoren avvist ekte, gyldige filer. Da hadde jeg byttet en feil mot en verre.
+    const r = bothAgree(sectionEnvelope({ title: { nb: "Tittel" }, bodyMarkdown: { nb: "## Tekst" } }));
+    expect(r.real).toBe(true);
+    expect(r.bundled).toBe(true);
+  });
+
+  it("#992 KONTROLLCASE: rene strenger godtas fortsatt av begge", () => {
+    const r = bothAgree(sectionEnvelope({ title: "Tittel", bodyMarkdown: "## Tekst" }));
+    expect(r.real).toBe(true);
+    expect(r.bundled).toBe(true);
+  });
+
+  // ⚠️ Andre runde av samme funn. Min første fiks sjekket bare at MINST ETT språk var gyldig, og
+  // slapp derfor gjennom en konvolutt der et ANNET språk var søppel. `.partial()` gjør nøklene
+  // valgfrie — den gjør dem ikke frivillige å fylle riktig.
+  //
+  // En halvferdig validering er verre enn ingen: den flytter feilen til etter at forfatteren har
+  // sluttet å lete etter den.
+  it("#992: et ugyldig NABOSPRÅK avvises av BEGGE", () => {
+    const r = bothAgree(sectionEnvelope({ title: { nb: "Tittel", nn: 42 }, bodyMarkdown: { nb: "T" } }));
+    expect(r.real).toBe(false);
+    expect(r.bundled).toBe(false);
+  });
+
+  it("#992: et TOMT nabospråk avvises av BEGGE", () => {
+    const r = bothAgree(sectionEnvelope({ title: { nb: "Tittel", "en-GB": "   " }, bodyMarkdown: { nb: "T" } }));
+    expect(r.real).toBe(false);
+    expect(r.bundled).toBe(false);
+  });
+
+  it("#992 KONTROLLCASE: en UKJENT nøkkel er ikke en feil — importen stripper den", () => {
+    // `z.object` fjerner ukjente nøkler i stillhet i stedet for å avvise. Validatoren må gjøre det
+    // samme, ellers melder den feil på en fil importen tar imot — motsatt retning, samme skade.
+    const r = bothAgree(sectionEnvelope({ title: { nb: "Tittel", sv: "Titel" }, bodyMarkdown: { nb: "T" } }));
+    expect(r.real).toBe(true);
+    expect(r.bundled).toBe(true);
+  });
 });

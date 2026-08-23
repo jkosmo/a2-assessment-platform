@@ -52,3 +52,18 @@ export type SectionAvailabilityInput = {
 export function isSectionAvailableToParticipant(section: SectionAvailabilityInput): boolean {
   return section.archivedAt === null && section.activeVersionId !== null;
 }
+
+/**
+ * Samme regel som `isSectionAvailableToParticipant`, i den formen Prisma forstår.
+ *
+ * ⚠️ #992: dette er ikke en bekvemmelighet, det er en nødvendighet. Predikatet over kan ikke kjøre
+ * i databasen, så et sted MÅ regelen finnes i where-form — og da er den per definisjon en andre
+ * staving av samme tanke. Den ene tingen vi kan gjøre er å la de to stavemåtene bo ved siden av
+ * hverandre, slik at den som endrer den ene ser den andre.
+ *
+ * `test/unit/section-availability.test.ts` sjekker at de to er enige for alle fire kombinasjonene.
+ */
+export const sectionAvailableWhere = {
+  archivedAt: null,
+  activeVersionId: { not: null },
+} as const;

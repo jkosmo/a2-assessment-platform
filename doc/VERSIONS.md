@@ -2,6 +2,143 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.26.4 - 2026-08-23
+
+**De sju gjenstående QA-funnene (#992), en produkteierbeslutning som forenkler dem, og fire funn
+til fra en andre QA-runde.** Bunten 2.25.2–2.26.2 ble bygget mens QA-porten var nede for kreditt. Da
+den kom tilbake ga den NO-GO med ti funn; 2.26.3 tok de tre alvorligste, dette tar resten.
+
+⚠️ **Tre av dem er regresjoner vi innførte selv i 2.26.1**, ikke gammel gjeld.
+
+### Upublisert innhold vises ikke for kandidater i det hele tatt
+
+Produkteier 2026-08-23, på spørsmål om vi heller burde nekte forfatteren å legge et utkast inn i et
+publisert kurs: *«La oss ikke vise utkastseksjoner for kandidater før de er publisert, SMOer kan se
+dem … utkastseksjoner skal ikke ha konsekvenser for kandidater før de er publisert.»*
+
+Deltakerens kurssekvens utelater derfor upubliserte seksjoner helt. Ikke nedtonet — borte.
+
+⚠️ Dette **erstatter** #944-valget, som viste en nedtonet rad så deltakeren skulle se at «det er noe
+her». For en kandidat som aldri har sett seksjonen finnes det ingenting å forklare; raden var en
+beskjed om vår egen redigeringstilstand.
+
+Beslutningen **forenkler koden framfor å legge til**: teller og nevner i framdriftsbrøken leser nå
+fra samme filtrerte liste i stedet for å gjenta predikatet hver for seg. At bare tilgjengelige
+seksjoner telles er blitt en egenskap ved lista, ikke en regel hvert uttrykk må huske.
+
+Moduler endres ikke — en avpublisert modul vises fortsatt som en ikke-klikkbar rad. Forskjellen er
+historikk: deltakeren kan allerede ha bestått den, og da er raden hens egen fortid.
+
+### Klienten kunne sende deltakeren inn i en blindvei
+
+#944 ga seksjoner et ekte `available`-felt og lot serveren svare 404 på utilgjengelige. Men klienten
+hadde `const available = isSection || entry.available !== false` — skrevet den gang bare moduler
+hadde feltet — og tre andre steder med hver sin variant:
+
+| Sted | Seksjon | Modul |
+|---|---|---|
+| `findNextIncompleteEntry` | `!read` | `!PASSED && available` |
+| raden | ALLTID tilgjengelig | `available !== false` |
+| `nextEntryAfter` | ingen sjekk | ingen sjekk |
+| `outstandingBeforeFinish` | `!read` | `!PASSED` |
+
+Et kurs med en arkivert modul ga deltakeren «1 gjenstår» og **ingen «Avslutt kurset»-knapp**, mens
+serveren filtrerte samme modul bort og gjerne ville utstedt beviset. Lå modulen etter seksjonen,
+prøvde «Marker lest og gå videre» å åpne den — rett i 404-en vi nettopp hadde innført.
+
+Kuren er tre predikater i `participant-console-state.js` som alle fire stedene går gjennom. De bor i
+det rene modul-laget, ikke i `participant.js`, nettopp for å kunne testes som rene funksjoner.
+
+### Rå JSON nådde fortsatt deltakerens skjerm
+
+#988 flyttet Zod-dumpen fra toastens overskrift til dens `detail`. Det løste ingenting: `showToast`
+rendrer `detail` som et synlig avsnitt, så kandidaten så hele kroppen — bare i grått.
+
+Detaljen heter nå `diagnostic` og går til konsollet. Feltet heter med vilje noe annet enn
+`showToast`-parameteren det ikke skal inn i. **Forfatterflatene beholder detaljfeltet** — en
+forfatter kan bruke `path: ["bodyMarkdown"]` til noe; en kandidat midt i en test kan ikke.
+
+### Legacy-ruta omgikk arkivvakta
+
+`setCourseItems` sjekket arkivstatus. `PUT /api/admin/content/courses/:id/modules` går via
+`setCourseModules`, som skriver de samme radene uten den — så den ugyldige «Samfunnsvitere»-
+tilstanden #938 skulle gjøre uoppnåelig kunne fortsatt lages.
+
+Altså feilklassen #938 handler om, i #938 sin egen fiks. Begge kaller nå
+`assertContentUsableInCourse`, og `test/course-archive-entry-guard.test.js` finner selv hver
+funksjon som skriver `courseItem`-rader og krever at den kaller vakta. **En liste ville ikke funnet
+den andre døra — ingen visste at den fantes.**
+
+### Framdriftsbrøken brukte to predikater
+
+`sectionTotal` var filtrert på tilgjengelighet; `sectionCompleted` telte enhver registrert lesning.
+Med én lest, nå-utilgjengelig seksjon og én ulest, tilgjengelig rapporterte detaljen `1/1` og
+`COMPLETED` mens bevisporten korrekt nektet.
+
+### Kursbyggeren tilbød det backend avviser
+
+Seksjonsvelgeren filtrerte bort seksjoner som allerede lå i kurset, men ikke arkiverte. Siden
+`/items` skriver hele sekvensen, feilet ikke bare den ene raden — **hele lagringen rullet tilbake**,
+og forfatteren mistet også endringene som var i orden.
+
+### `export-validate` godkjente det importen avviser
+
+Seksjonens tittelsjekk var `!gyldig && tittel == null` — den kan bare slå til når tittelen er både
+ugyldig og fraværende, altså aldri for en tom streng. `bodyMarkdown` ble ikke validert i det hele
+tatt. Skillets **rule 7** lover «valider mot samme skjema som importen»; for seksjoner holdt løftet
+ikke.
+
+⚠️ Den nærliggende fiksen var feil: seksjoner bruker `localizedTextPatchSchema`, ikke
+`localizedTextSchema`. Hadde jeg gjenbrukt modulenes helper — som krever alle tre språk — ville
+validatoren avvist gyldige én-språks-filer og brutt #905-invarianten. Ny helper,
+`isNonEmptyLocalizedPartial`. Testene kjører **både** validatoren og det ekte Zod-skjemaet og krever
+samme svar.
+
+### Andre QA-runde: fire funn til
+
+Porten ble kjørt på nytt etter alt over, og fant fire ting. Tre var mine å rette:
+
+**⚠️ Ingen av dekningsvaktene kjørte i den obligatoriske pre-stage-porten.** Ikke bare mine to nye —
+også de fire eldre. `vitest.unit.config.ts` tar `test/unit/**` pluss en håndskrevet liste over
+rot-filer, og seks vakter sto utenfor. De kunne altså først bli røde i den fulle kjøringen, i CI,
+etter at deployen var bestemt.
+
+Configen har en kommentar som forteller om nøyaktig denne fella fra #896 S3c. Jeg leste den og gikk i
+den likevel. **En kommentar som forklarer en felle stopper den ikke** — derfor er alle seks lagt inn,
+pluss `test/unit/unit-suite-coverage-guard.test.js`, som nekter en ny `*-guard`-fil i test-rota som
+ikke står i lista.
+
+**Eksportvalidatoren var fortsatt uenig med importen**, i andre runde av samme funn: min første fiks
+sjekket bare at *minst ett* språk var gyldig, så `{ nb: "Tittel", nn: 42 }` gikk gjennom lokalt og
+fikk 400 ved import. `.partial()` gjør nøklene valgfrie — den gjør dem ikke frivillige å fylle
+riktig.
+
+**API-referansen** beskrev fortsatt legacy-ruta som en ubetinget setter, og som en «dual-write» til
+`CourseItem` — det siste har ikke vært sant siden #502.
+
+Det fjerde funnet — at utkastseksjoner kan legges inn i publiserte kurs — ble lagt fram for
+produkteier i stedet for rettet, fordi den nærliggende fiksen ville endret forfatterflyten. Se over.
+
+### Om metoden
+
+Elleve mutasjoner verifisert, hver mot sin egen test, alle kontrollcase grønne. **To av mutasjonene
+fanget testfeil hos meg:**
+
+- Kursbygger-testen var grønn med filteret fjernet — den sjekket at den arkiverte var borte før
+  velgeren i det hele tatt var fylt, og målte en tom liste. Rekkefølgen er nå omvendt, med en
+  kommentar om hvorfor.
+- Kontrollassertionen i sekvensvakta sammenlignet leddene tekstlig med modulen og var rød:
+  `isEntryDone` skriver `read === true`, ikke `.read !== true`. En kontroll som krever at kuren
+  staves som sykdommen måler ingenting.
+
+⚠️ **Og én gang tok jeg feil om en rød test.** `m2-certification-status-flow` feilet to ganger på
+rad; jeg avfeide det først som forurenset testbase, konkluderte så motsatt da ren `dev` var grønn, og
+landet til slutt på at nullstillingen av basen hadde feilet stille begge gangene. På en ordentlig
+nullstilt base er suiten grønn med endringene. Lærdommen er at «jeg nullstilte» ikke er det samme som
+«nullstillingen lyktes» — kommandoen skrev en Prisma-feil jeg leste forbi.
+
+Nytt: 14 unit, 7 integrasjon, 5 e2e. Totalt 1088 unit, 225 e2e, 31 kontrakt.
+
 ## 2.26.3 - 2026-08-22
 
 **Tre integritetshull QA-porten fant i mine egne fikser (#938, #945).**

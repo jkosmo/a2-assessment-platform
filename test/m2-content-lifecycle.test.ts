@@ -336,7 +336,73 @@ describe("#938: arkivert innhold kan ikke legges inn i et kurs", () => {
     expect(JSON.stringify(res.body)).toMatch(/do not exist/i);
     expect(JSON.stringify(res.body)).not.toMatch(/archived/i);
   });
+
+  // ⚠️ #992: DEN ANDRE DØRA INN. QA-porten fant den i #938 sin egen fiks.
+  //
+  // Vakta lå i `setCourseItems`. Men `PUT /:courseId/modules` går via `setCourseModules`, som
+  // sletter elementene og skriver modulene direkte — uten samme kontroll. Ruta er dokumentert som
+  // legacy, men den er ikke stengt: både admin-UI-et og importen bruker den.
+  //
+  // Altså nøyaktig feilklassen #938 handler om — to steder som svarer ulikt på samme spørsmål —
+  // denne gangen i fiksen mot den. Begge kaller nå `assertContentUsableInCourse`.
+  it("legacy-ruta /modules avviser en arkivert modul på samme måte som /items", async () => {
+    const course = await prisma.course.create({
+      data: { title: `Legacy Door ${Date.now()}` },
+      select: { id: true },
+    });
+    const mod = await prisma.module.create({
+      data: { title: JSON.stringify({ "en-GB": "Archived legacy" }), archivedAt: new Date() },
+      select: { id: true },
+    });
+
+    const res = await request(app)
+      .put(`/api/admin/content/courses/${course.id}/modules`)
+      .set(adminHeaders)
+      .send({ modules: [{ moduleId: mod.id, sortOrder: 0 }] });
+
+    expect(res.status).toBe(400);
+    expect(JSON.stringify(res.body)).toMatch(/archived/i);
+    expect(await prisma.courseItem.count({ where: { courseId: course.id } })).toBe(0);
+  });
+
+  it("KONTROLLCASE: legacy-ruta tar fortsatt imot en ikke-arkivert modul", async () => {
+    // Uten denne kunne vakta ha stengt ruta helt, og både importen og admin-UI-et ville sluttet å
+    // virke — mens begge testene over fortsatt var grønne.
+    const course = await prisma.course.create({
+      data: { title: `Legacy Door OK ${Date.now()}` },
+      select: { id: true },
+    });
+    const mod = await prisma.module.create({
+      data: { title: JSON.stringify({ "en-GB": "Live legacy" }) },
+      select: { id: true },
+    });
+
+    const res = await request(app)
+      .put(`/api/admin/content/courses/${course.id}/modules`)
+      .set(adminHeaders)
+      .send({ modules: [{ moduleId: mod.id, sortOrder: 0 }] });
+
+    expect(res.status, JSON.stringify(res.body)).toBe(204);
+    expect(await prisma.courseItem.count({ where: { courseId: course.id, itemType: "MODULE" } })).toBe(1);
+  });
+
+  it("KONTROLLCASE: legacy-ruta skiller «finnes ikke» fra «arkivert»", async () => {
+    const course = await prisma.course.create({
+      data: { title: `Legacy Door X ${Date.now()}` },
+      select: { id: true },
+    });
+
+    const res = await request(app)
+      .put(`/api/admin/content/courses/${course.id}/modules`)
+      .set(adminHeaders)
+      .send({ modules: [{ moduleId: "finnes-ikke", sortOrder: 0 }] });
+
+    expect(res.status).toBe(400);
+    expect(JSON.stringify(res.body)).toMatch(/do not exist/i);
+    expect(JSON.stringify(res.body)).not.toMatch(/archived/i);
+  });
 });
+
 
 describe("#938: innhold i et utstedt kursbevis kan ikke slettes", () => {
   it("en seksjon som står i et kursbevis nektes slettet — og bes arkivert i stedet", async () => {

@@ -447,9 +447,9 @@ have nothing to do with, not about partitioning content inside a course you asse
 | `POST` | `/api/admin/content/courses` | Create a course |
 | `GET` | `/api/admin/content/courses/:courseId` | Course detail (modules) |
 | `PUT` | `/api/admin/content/courses/:courseId` | Update course metadata |
-| `PUT` | `/api/admin/content/courses/:courseId/modules` | Set module list (legacy; dual-writes CourseItem) |
+| `PUT` | `/api/admin/content/courses/:courseId/modules` | Set the module list (legacy). Writes `CourseItem` MODULE-rader — det er ikke lenger en dual-write, `CourseItem` er eneste sannhetskilde (#502). Eventuelle SECTION-elementer bevares og re-indekseres etter modulene. **`400` hvis en modul er arkivert** (#992) — samme regel som `/items`; se under. |
 | `GET` | `/api/admin/content/courses/:courseId/items` | Read the ordered mixed module/section sequence (#486/B2) |
-| `PUT` | `/api/admin/content/courses/:courseId/items` | Set the ordered sequence — body `{ items: [{type:"MODULE",moduleId} \| {type:"SECTION",sectionId}] }`. Re-syncs CourseModule (#486). |
+| `PUT` | `/api/admin/content/courses/:courseId/items` | Set the ordered sequence — body `{ items: [{type:"MODULE",moduleId} \| {type:"SECTION",sectionId}] }`. Re-syncs CourseModule (#486). **`400` hvis noe av innholdet er arkivert** (#938); se under. |
 | `GET` | `/api/admin/content/courses/:courseId/publish-preview` | Inspect unpublished items before publishing (#734). Returns `{ courseId, allPublished, publishable, unpublishedItems: [{ type, id, title, publishable, blockers: [{code,message}] }] }`. Read-only; the UI calls it to drive the cascade-publish confirm dialog. |
 | `POST` | `/api/admin/content/courses/:courseId/publish` | Publish course (#734). Body `{ publishItems?: boolean }`. If the course has unpublished modules/sections: without `publishItems:true` returns `409 course_has_unpublished_items` (with the preview) so the UI can confirm; with `publishItems:true` cascade-publishes the items (items → course) — but returns `422 course_publish_blocked_by_items` (with `details.unpublishedItems`) and publishes nothing if any item is un-publishable (module fails validation / no content, archived item). Enforces I1: a published course never contains unavailable content. Response `{ course, publishedItems }`. |
 | `POST` | `/api/admin/content/courses/:courseId/unpublish` | Unpublish course (reversible soft take-down; no G3 lock, #705) |
@@ -476,6 +476,27 @@ Classes (cohorts) assign a course to a group of participants dynamically: a part
 | `GET` | `/api/admin/content/courses/:courseId/export-package` | **Owner or admin only (#903).** Export envelope (inlines modules **and** sections in order, #512). An empty course returns `422 course_not_exportable`. Section figures/images travel inline as base64 (#749, see below) |
 | `POST` | `/api/admin/content/courses/import` | Import a course envelope (recreates sections via `items`, falls back to modules-only v1). Recreates section assets + remaps `asset:` refs (#749). Larger 35 MB body limit to carry inlined assets. **#937:** also accepts a bare course payload `{ course: {…} }`; anything unrecognisable returns `400 not_an_export_envelope` (a code, not prose — clients render it in the author's language). **#942 (security):** `mode: "replaceExisting"` requires ownership of `targetId` (403 `content_ownership` otherwise) — the same guard module and section import already had. |
 | `DELETE` | `/api/admin/content/courses/:courseId` | Delete course |
+
+#### Arkivert innhold kan ikke legges inn i et kurs (#938/#992)
+
+Både `PUT /:courseId/items` og legacy-ruta `PUT /:courseId/modules` avviser arkiverte moduler og
+seksjoner med `400`. De to feilene er **med vilje forskjellige**, fordi de krever ulik handling av
+klienten:
+
+| Situasjon | Melding |
+|---|---|
+| Elementet finnes, men er arkivert | `One or more modules/sections are archived and cannot be added to a course.` |
+| Elementet finnes ikke | `One or more modules/sections do not exist.` |
+
+Ingenting skrives på veien til avslaget — kontrollen skjer før transaksjonen, så en avvist forespørsel
+lar kursets sekvens stå urørt.
+
+⚠️ **Merk for integrasjonsklienter:** legacy-ruta svarte tidligere `204` uansett modulstatus. En
+klient som sender en arkivert modul-ID får nå `400`. Regelen finnes fordi arkivert innhold i et
+publisert kurs blokkerte fullføring permanent (#938).
+
+Regelen gjelder **ikke** upubliserte utkast — de kan legges inn, og utelates i stedet fra deltakerens
+sekvens (se `doc/DECISIONS.md`, «Upublisert innhold vises ikke for kandidater i det hele tatt»).
 
 #### Section figures/images carried through export/import (#749, Layer A)
 

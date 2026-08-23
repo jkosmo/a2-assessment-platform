@@ -267,9 +267,35 @@ coursesRouter.get("/:courseId", async (request, response, next) => {
     const courseItems = await courseRepository.findCourseItems(course.id);
     const readSectionIds = new Set(await courseRepository.findReadSectionIds(userId, course.id));
     let readSectionCount = 0;
-    const items: CourseSequenceItem[] = courseItems.map((item) => {
+    // ⚠️ #992: upubliserte seksjoner UTELATES fra deltakerens sekvens — de vises ikke som en
+    // nedtonet rad, de er borte.
+    //
+    // #944 valgte det motsatte: raden skulle fortelle deltakeren at «det er noe her» i stedet for at
+    // noe forsvant. Produkteier 2026-08-23 snudde det: «utkastseksjoner skal ikke ha konsekvenser
+    // for kandidater før de er publisert». For en kandidat som ALDRI har sett seksjonen finnes det
+    // ingenting å forklare — raden var en beskjed om vår egen redigeringstilstand.
+    //
+    // Merk at dette gjør klientens `available`-håndtering til forsvar i dybden for seksjoner. Den
+    // beholdes: MODULER sender fortsatt `available: false` (se under), og en klient som møter en
+    // eldre server skal fortsatt oppføre seg riktig.
+    //
+    // Moduler filtreres IKKE bort. Forskjellen er historikk: deltakeren kan allerede ha bestått en
+    // modul som senere ble avpublisert, og da er raden hens egen fortid, ikke vår redigering.
+    // Se `doc/DECISIONS.md`.
+    const visibleItems = courseItems.filter(
+      (item) => item.itemType !== "SECTION" || (item.section != null && isSectionAvailableToParticipant(item.section)),
+    );
+
+    const items: CourseSequenceItem[] = visibleItems.map((item) => {
       if (item.itemType === "SECTION" && item.section) {
         const read = readSectionIds.has(item.section.id);
+        // #992: teller og nevner leser nå fra SAMME liste — `visibleItems`. Før filtreringen var de
+        // to uavhengige uttrykk, og telleren glemte tilgjengelighet: en lesning fra før seksjonen
+        // ble upublisert talte mot en nevner som ikke lenger inneholdt den, så detaljen rapporterte
+        // «1/1» og COMPLETED mens bevisporten korrekt nektet.
+        //
+        // ⚠️ Ikke legg et predikat til her. At bare tilgjengelige seksjoner kan telles er nå en
+        // egenskap ved lista, ikke en regel hvert uttrykk må huske.
         if (read) readSectionCount += 1;
         return {
           type: "SECTION",
@@ -310,9 +336,11 @@ coursesRouter.get("/:courseId", async (request, response, next) => {
     // Module count derived from CourseItem (itemType MODULE); sections from CourseItem too.
     // #944/#938: framdriften teller de seksjonene som FAKTISK KREVES — de deltakeren kan lese.
     // Sto tidligere som en ren telling av SECTION-elementer, og var derfor uenig med bevisporten:
-    // kortet kunne vise «Seksjonar 0/1» ved siden av et utstedt kursbevis. Feltet `available`
-    // kommer fra samme predikat som porten og lesestien bruker.
-    const sectionCount = items.filter((i) => i.type === "SECTION" && i.available).length;
+    // kortet kunne vise «Seksjonar 0/1» ved siden av et utstedt kursbevis.
+    //
+    // #992: `items` inneholder nå bare tilgjengelige seksjoner, så tellingen er igjen enkel — og
+    // enig med bevisporten fordi den leser fra samme filtrerte liste, ikke fordi den gjentar regelen.
+    const sectionCount = items.filter((i) => i.type === "SECTION").length;
     const totalElements = moduleIds.length + sectionCount;
     const completedElements = passedCount + readSectionCount;
 

@@ -209,3 +209,81 @@ vises da ordrett til en engelsk forfatter, og omvendt.
 
 **Håndheves:** `public/static/import-error.js`, publiseringsgatens `issues[]`.
 **Sak:** `FEATURE_SURFACE_MAP` §24, #937 · **Status:** avklart, brutt på mange flater (#972, #980, #983, #985)
+
+## Tilgjengelighet av innhold
+
+### Upublisert innhold vises ikke for kandidater i det hele tatt
+
+En seksjon uten aktiv versjon — utkast, eller holdt tilbake av oversettelsesgaten — **utelates fra
+deltakerens kurssekvens**. Ikke nedtonet, ikke merket «utilgjengelig»: borte. SMO ser den i
+kursbyggeren som før.
+
+Den skal heller ikke ha konsekvenser: ikke telle i framdriften, ikke kreves for kursbeviset, ikke
+stoppe «Avslutt kurset».
+
+**Hvorfor:** produkteier 2026-08-23, på spørsmål om vi heller burde nekte forfatteren å legge et
+utkast inn i et publisert kurs: *«La oss ikke vise utkastseksjoner for kandidater før de er
+publisert, SMOer kan se dem … utkastseksjoner skal ikke ha konsekvenser for kandidater før de er
+publisert.»*
+
+Det er det motsatte valget av å blokkere, og det er begrunnet i arbeidsflyten: forfatteren skal
+kunne sette sammen et kurs og fylle det med innhold i den rekkefølgen hen vil. Prisen for å blokkere
+ville vært å tvinge fram «skriv ferdig først, sett sammen etterpå».
+
+⚠️ Dette **erstatter** #944-tilnærmingen, som viste en nedtonet rad. Den var et kompromiss: raden
+skulle fortelle deltakeren at «det er noe her» i stedet for at noe forsvant. Men for en kandidat som
+aldri har sett seksjonen, finnes det ingenting å forklare — raden var en beskjed om vår egen
+redigeringstilstand.
+
+⚠️ **Moduler er ikke det samme, og endres ikke.** En avpublisert eller arkivert modul vises fortsatt
+som en ikke-klikkbar rad (#502-followup). Forskjellen er historikk: deltakeren kan allerede ha
+bestått modulen, og da er raden hens egen fortid, ikke vår redigering. Den teller likevel ikke som
+krav (#945).
+
+**Håndheves:** `courses.ts` (sekvensen filtreres), `isSectionAvailableToParticipant`,
+`test/m2-course-section-read.test.ts`.
+**Sak:** #944, #992 · **Status:** avklart 2026-08-23
+
+### Manglende `available` fra serveren betyr «vis den», ikke «skjul den»
+
+Klientens `isEntryAvailable` tolker `undefined` som tilgjengelig. Bare et eksplisitt `false` skjuler
+noe.
+
+**Hvorfor:** feltet er PÅKREVD i DTO-en, så det mangler bare når klienten snakker med en eldre
+server — typisk midt i en utrulling. Tolket vi `undefined` som utilgjengelig, ville en
+versjonsmismatch skjult **hele kurset** for deltakeren. Det er verre enn den blindveien regelen
+finnes for å hindre, og feilen ville sett ut som datatap.
+
+Det motsatte valget er like forsvarlig i teorien («feil på den sikre siden»), men her er «den sikre
+siden» å vise for mye, ikke for lite: serveren nekter uansett med 404 på lesestien, så en klient som
+viser en rad for mye gir en feilmelding — en klient som skjuler alt gir et tomt kurs.
+
+**Håndheves:** `public/participant-console-state.js`,
+`test/participant-sequence-predicate-guard.test.js`.
+**Sak:** #992 · **Status:** avklart
+
+### «Neste» hopper over utilgjengelig innhold i stedet for å stoppe
+
+`nextEntryAfter` går videre til første tilgjengelige element, ikke til neste rad.
+
+**Hvorfor:** alternativet — å stoppe ved det utilgjengelige — låser deltakeren bak innhold hen ikke
+kan gjøre noe med. Regelen «et krav som aldri kan oppfylles er verre enn ikke noe krav» (#944) er
+den samme; her gjelder den navigasjonen. Elementet vises fortsatt i sekvensen, men som ikke-klikkbart:
+deltakeren skal se at det er der, ikke lure på om noe forsvant.
+
+**Håndheves:** `test/e2e/participant-section-advance.spec.ts`.
+**Sak:** #992 · **Status:** avklart
+
+### Detaljer fra serveren vises til forfattere, ikke til deltakere
+
+Toastens detaljfelt beholder Zod-utdata på admin-flatene og er fjernet på deltakerflaten.
+
+**Hvorfor:** ikke et sikkerhetsskille, men et nyttighetsskille. En forfatter kan bruke
+`path: ["bodyMarkdown"]` til å finne feilen i fila si; en kandidat midt i en test kan ikke, og for
+hen er dumpen bare støy som ser ut som en systemfeil. Å fjerne feltet begge steder ville gjort
+importfeil vanskeligere å diagnostisere uten å hjelpe noen.
+
+**Håndheves:** `test/e2e/participant-section-advance.spec.ts` (deltaker, ingen `.toast__detail`),
+`test/e2e/section-portability-916.spec.ts` (forfatter, detaljfeltet skal være der).
+**Sak:** #988, #992 · **Status:** avklart
+

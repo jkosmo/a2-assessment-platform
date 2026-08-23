@@ -1401,9 +1401,17 @@ async function renderDetailView(courseId) {
   }
 
   // Load library sections for the section picker (#490)
+  //
+  // #992: arkiverte seksjoner filtreres bort — samme grep som modul-søsteren over gjør med
+  // upubliserte. Uten det tilbød nedtrekkslista noe `/items` avviser med 400, og fordi ruta skriver
+  // HELE sekvensen, feilet da ikke bare den ene raden: forfatteren mistet alle endringene i lagringen.
+  //
+  // ⚠️ Dette er ikke sannheten om regelen, bare høfligheten. Backend eier avslaget
+  // (`assertContentUsableInCourse`), og skal fortsette å gjøre det — en klient som filtrerer er en
+  // klient som kan bli utdatert. Poenget er å ikke by fram noe vi vet blir avvist.
   try {
     const secData = await apiFetch("/api/admin/content/sections", getHeaders);
-    allLibrarySections = secData.sections ?? [];
+    allLibrarySections = (secData.sections ?? []).filter(s => !s.archivedAt);
   } catch {
     allLibrarySections = [];
   }

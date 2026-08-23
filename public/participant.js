@@ -22,6 +22,11 @@ import {
   resolveWorkspaceNavigationItems,
   resolveSelectedModule,
   upsertModuleDraft,
+  // #992: kurssekvensens tilgjengelighets- og ferdig-predikater. Se modulen for hvorfor de
+  // bor der og ikke her: de er rene funksjoner, og skal kunne testes som det.
+  isEntryAvailable,
+  isEntryDone,
+  isEntryOutstanding,
 } from "/static/participant-console-state.js";
 
 const output = document.getElementById("output");
@@ -1766,7 +1771,14 @@ function headers() {
 // test/raw-server-error-guard.test.js). Å fikse kallstedet ville løst ett av tre og latt de to
 // andre stå — nøyaktig «riktig fiks, ufullstendig flate».
 //
-// Detaljene kastes ikke: de går i toastens detaljfelt, som har `white-space: pre-wrap`.
+// ⚠️ #992: detaljene går IKKE i toastens detaljfelt. Det var min første fiks, og den løste
+// ingenting: `showToast` rendrer `detail` som et synlig `<p class="toast__detail">` (toast.js:84),
+// så kandidaten så fortsatt hele Zod-dumpen — bare i grått, under den lokaliserte overskriften.
+//
+// Forskjellen mot forfatterflaten er hvem som leser. En forfatter kan bruke `path: ["bodyMarkdown"]`
+// til noe; en kandidat midt i en test kan ikke, og for hen er dumpen bare støy som ser ut som en
+// systemfeil. Derfor beholder admin-flatene detaljfeltet (`section-portability-916.spec.ts`), mens
+// deltakerflaten sender det til `diagnostic` — konsollet, og råpanelet når feilsøking er slått på.
 function humanizeApiError(text) {
   const match = /^(\d{3}):\s*(\{[\s\S]*\})$/.exec(text);
   if (!match) return null;
@@ -1780,7 +1792,10 @@ function humanizeApiError(text) {
   const key = code === "validation_error" ? "errors.apiValidation" : "errors.apiGeneric";
   return {
     headline: t(key).replace("{status}", match[1]),
-    detail: JSON.stringify(body, null, 2),
+    // Navnet er `diagnostic`, ikke `detail`, med vilje: `showToast(msg, type, detail)` tar en
+    // `detail` som tredje argument, og et felt med det navnet inviterer neste kaller til å sende det
+    // rett dit. Feltet heter nå noe annet enn parameteren det ikke skal inn i.
+    diagnostic: JSON.stringify(body, null, 2),
   };
 }
 
@@ -1789,7 +1804,8 @@ function humanizeApiError(text) {
 function participantErrorToast(error, fallbackKey) {
   const humanized = typeof error?.message === "string" ? humanizeApiError(error.message) : null;
   if (humanized) {
-    showToast(humanized.headline, "error", humanized.detail);
+    console.warn("[participant] API error", humanized.diagnostic);
+    showToast(humanized.headline, "error");
     return;
   }
   showToast(error instanceof Error ? error.message : t(fallbackKey), "error");
@@ -1800,7 +1816,10 @@ function log(data, options = {}) {
   const { notify = true, detail = "" } = options;
   const humanized = typeof data === "string" ? humanizeApiError(data) : null;
   const statusText = humanized ? humanized.headline : summarizeParticipantResponse(data);
-  const toastDetail = detail || humanized?.detail || "";
+  // #992: `detail` fra kalleren er vår egen, lokaliserte prosa og hører hjemme i toasten. Serverens
+  // JSON gjør ikke det — den går til konsollet, og til råpanelet under når feilsøking er på.
+  if (humanized) console.warn("[participant] API error", humanized.diagnostic);
+  const toastDetail = detail || "";
 
   output.dataset.hasContent = "true";
   outputStatus.dataset.hasContent = "true";
@@ -3294,9 +3313,7 @@ function formatCourseProgressLabel(progress) {
 // #492: finn neste uferdige element i sekvensen (uleste seksjoner / ikke-beståtte tilgjengelige moduler).
 function findNextIncompleteEntry(sequence) {
   if (!Array.isArray(sequence)) return null;
-  return sequence.find((e) =>
-    e.type === "SECTION" ? !e.read : e.moduleStatus !== "PASSED" && e.available !== false,
-  ) ?? null;
+  return sequence.find(isEntryOutstanding) ?? null;
 }
 
 function openCourseItemEntry(courseId, entry) {
@@ -3477,10 +3494,11 @@ function renderCourseDetailModules(courseId, course) {
     // #865: wrap each row in a .course-item so its inline disclosure panel can live directly under it.
     const key = courseItemKey(entry);
     const isSection = entry.type === "SECTION";
-    const done = isSection ? Boolean(entry.read) : entry.moduleStatus === "PASSED";
+    const done = isEntryDone(entry);
     const isNow = entry === nextEntry;
     // #502-followup: avpubliserte/utilgjengelige moduler vises som ikke-klikkbare (ingen blindvei).
-    const available = isSection || entry.available !== false;
+    // #992: gjelder nå seksjoner også — `isSection ||` sto her og gjorde enhver seksjon klikkbar.
+    const available = isEntryAvailable(entry);
     const title = localizePreviewText(entry.title);
     const kindText = isSection ? t("courses.kind.reading") : t("courses.kind.test");
     // Tittelen skjules visuelt, men blir stående i DOM som sr-only: raden er en knapp og må ha et
@@ -3641,10 +3659,14 @@ function courseItemKey(entry) {
   return entry.courseItemId || (entry.type === "SECTION" ? `s:${entry.sectionId}` : `m:${entry.moduleId}`);
 }
 
+// #992: «neste» er neste TILGJENGELIGE element, ikke neste rad. Returnerte denne en utilgjengelig
+// seksjon, fikk deltakeren en knapp som bare kunne føre til 404 — og lå det et lesbart element bak
+// den, ble hen aldri tilbudt det.
 function nextEntryAfter(courseId, key) {
   const seq = courseSequences[courseId] || [];
   const i = seq.findIndex((e) => courseItemKey(e) === key);
-  return i >= 0 && i + 1 < seq.length ? seq[i + 1] : null;
+  if (i < 0) return null;
+  return seq.slice(i + 1).find(isEntryAvailable) ?? null;
 }
 
 function restoreModuleWorkspaceHome() {
@@ -3924,14 +3946,14 @@ async function renderSectionReaderInto(panel, courseId, entry) {
 // element ble ÅPNET. Den var en nødløsning for at kursbeviset ellers ble uoppnåelig uten knapp, og
 // den hadde to problemer: den registrerte lesning på et rent klikk, og den gjorde fullføring til
 // noe som skjedde med deltakeren i stedet for noe hen gjorde.
+//
+// ⚠️ #992: «alt annet» betyr alt annet TILGJENGELIG. Telte vi arkiverte moduler og tilbakeholdte
+// seksjoner med, ville vi nekte å avslutte et kurs serveren står klar til å utstede bevis for — og
+// deltakeren fikk «1 gjenstår» uten noe hen kunne gjøre med det.
 function outstandingBeforeFinish(courseId, current) {
   const seq = courseSequences[courseId] || [];
   const currentKey = courseItemKey(current);
-  return seq.filter((e) => {
-    if (courseItemKey(e) === currentKey) return false;
-    if (e.type === "MODULE") return e.moduleStatus !== "PASSED";
-    return e.read !== true;
-  });
+  return seq.filter((e) => courseItemKey(e) !== currentKey && isEntryOutstanding(e));
 }
 
 // Escape collapses whatever inline item is open (parity with the old modal's Escape-to-close).

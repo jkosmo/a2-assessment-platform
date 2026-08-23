@@ -748,3 +748,63 @@ section is published or its content saved.
 `test/e2e/section-portability-916.spec.ts` for the client half — the gate messages must be rendered
 from `field` + `missingLocales` in the author's language, never from the server's English `message`,
 and a held-back save must not show a plain "Seksjon lagret."
+
+## 25. «Kan deltakeren bruke dette?» — én regel, fem stavemåter, to lag (#944/#992)
+
+Spørsmålet «er dette innholdet tilgjengelig for deltakeren» besvares på **begge sider av HTTP** og i
+**to skriveformer**. Det gjør det til den vanskeligste flaten i kodebasen å holde samstemt — og det
+har sviktet to ganger på rad, begge ganger i fiksen mot forrige svikt.
+
+### Server
+
+| Sted | Form | Merknad |
+|---|---|---|
+| `sectionAvailability.ts` `isSectionAvailableToParticipant` | TS-predikat | **Sannheten.** |
+| `sectionAvailability.ts` `sectionAvailableWhere` | Prisma `where` | Kan ikke unngås — predikatet kan ikke kjøre i databasen. |
+| `courses.ts` lesestien | predikat | 404 på utilgjengelig |
+| `courses.ts` marker-lest | predikat | 404 — hullet #944 fant |
+| `courses.ts` `visibleItems` | predikat | **⚠️ Den viktigste.** Filtrerer upubliserte seksjoner UT av deltakerens sekvens (#992). Alt under leser fra denne lista. |
+| `courses.ts` DTO `available` | predikat | Alltid `true` for seksjoner nå — feltet lever videre for MODULER og for eldre klienter. |
+| `courses.ts` nevner `sectionTotal` | *ingen* | Teller `visibleItems`. Predikatet er fjernet herfra med vilje. |
+| `courses.ts` teller `sectionCompleted` | *ingen* | Samme. Var **glemt til #992**; kuren var å slette regelen begge steder, ikke å skrive den to ganger til. |
+| `courseRepository.ts` listevisningen | `where`-form | |
+| `courseCompletionService.ts` bevisporten | predikat | den som avgjør |
+
+### Klient
+
+| Sted | Form |
+|---|---|
+| `participant-console-state.js` `isEntryAvailable` / `isEntryDone` / `isEntryOutstanding` | **Sannheten på klienten.** |
+| `participant.js` raden, `findNextIncompleteEntry`, `nextEntryAfter`, `outstandingBeforeFinish` | kaller predikatene |
+
+⚠️ Etter #992 er klientsiden **forsvar i dybden for seksjoner**, ikke bærende: serveren sender dem
+ikke lenger. Den beholdes fordi MODULER fortsatt sender `available: false`, og fordi en klient kan
+møte en eldre server midt i en utrulling. Ikke slett den fordi «serveren ordner det» — det var
+nettopp den begrunnelsen som lot #944-hullet stå åpent i alle stier utenom importen.
+
+### ⚠️ Det som gjør denne flaten spesiell
+
+**Modul-siden og seksjons-siden er ulike, og det er lett å fikse bare den ene.** #944 filtrerte
+seksjonstellingen og glemte modultelleren; 2.26.3 filtrerte modultelleren og glemte at telleren i
+brøken ikke fulgte nevneren. Hver gang så fiksen komplett ut fordi den ene halvdelen var grønn.
+
+**Klienten hadde en antakelse skrevet før feltet fantes.** `isSection || entry.available !== false`
+var korrekt den dagen den ble skrevet — bare moduler hadde `available`. Da seksjoner fikk feltet, ble
+linjen en løgn uten at noen rørte den. Slike linjer er usynlige for grep etter «mangler filter»: de
+HAR et filter, det er bare feil.
+
+**Å legge til et filter på det stedet som feilet, øker antallet steder.** Kuren er å la stedet kalle
+predikatet, ikke å gi det sin egen kopi.
+
+**Den beste kuren fjerner spørsmålet.** #992 endte med at produkteier bestemte at upublisert innhold
+ikke skal nå kandidaten i det hele tatt. Da ble to av radene over til *ingen* — teller og nevner
+leser fra `visibleItems` og trenger ikke kjenne regelen. En beslutning om produktet gjorde mer for
+denne flaten enn tre runder med filtre gjorde.
+
+**Vakter:** `test/unit/section-availability.test.ts` (predikatet, inkludert leddet som ikke kan nås
+via API-et, og at `where`-formen er enig for alle fire kombinasjoner),
+`test/participant-sequence-predicate-guard.test.js` (klientpredikatene + dekningsvakt mot
+håndskrevne ledd i `participant.js`), `test/course-visibility-guard.test.js`,
+`test/m2-course-section-read.test.ts` (teller og nevner), `test/e2e/participant-section-advance.spec.ts`
+(blindveien: arkivert modul foran siste seksjon, og «gå videre» som hopper over).
+

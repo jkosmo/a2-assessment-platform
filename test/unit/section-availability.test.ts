@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isSectionAvailableToParticipant } from "../../src/modules/course/sectionAvailability.js";
+import { isSectionAvailableToParticipant, sectionAvailableWhere } from "../../src/modules/course/sectionAvailability.js";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // #944: predikatet testes DIREKTE her, fordi det ene leddet ikke kan nås gjennom API-et.
@@ -37,5 +37,38 @@ describe("#944: isSectionAvailableToParticipant", () => {
     // Tilstanden `archiveSection` faktisk produserer. Begge ledd feiler; testen sier ingenting om
     // hvilket, og det er greit så lenge de tre over dekker hver for seg.
     expect(isSectionAvailableToParticipant({ archivedAt: new Date(), activeVersionId: null })).toBe(false);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// #992: regelen finnes i TO former — som predikat og som Prisma-where. Den ene kan ikke kjøre i
+// databasen, så duplikatet er uunngåelig. Da må det i det minste være bevist enig med seg selv.
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("#992: where-formen sier det samme som predikatet", () => {
+  // Simulerer hva Prisma ville sluppet gjennom for `{ archivedAt: null, activeVersionId: { not: null } }`.
+  // Ikke en ekte spørring — men den leser where-objektet, så en endring DER slår ut her.
+  function matchesWhere(row: { archivedAt: Date | null; activeVersionId: string | null }): boolean {
+    const w = sectionAvailableWhere as { archivedAt: null; activeVersionId: { not: null } };
+    if (Object.keys(w).length !== 2) throw new Error("where-formen har fått felt predikatet ikke kjenner");
+    return row.archivedAt === w.archivedAt && row.activeVersionId !== w.activeVersionId.not;
+  }
+
+  const rows = [
+    { archivedAt: null, activeVersionId: "v1" },
+    { archivedAt: null, activeVersionId: null },
+    { archivedAt: new Date(), activeVersionId: "v1" },
+    { archivedAt: new Date(), activeVersionId: null },
+  ];
+
+  it.each(rows)("enige om %o", (row) => {
+    expect(matchesWhere(row)).toBe(isSectionAvailableToParticipant(row));
+  });
+
+  it("KONTROLL: de fire radene dekker begge utfall", () => {
+    // Uten denne kunne begge sider vært konstant false og «enige» om ingenting.
+    const results = rows.map(isSectionAvailableToParticipant);
+    expect(results).toContain(true);
+    expect(results).toContain(false);
   });
 });

@@ -1,6 +1,7 @@
 import { prisma } from "../../db/prisma.js";
 import type { ReportFilters } from "../reporting/types.js";
 import { CERTIFICATION_PASSED_STATUSES } from "../certification/certificationRepository.js";
+import { sectionAvailableWhere } from "./sectionAvailability.js";
 
 function buildSubmissionWhere(filters: Pick<ReportFilters, "dateFrom" | "dateTo" | "orgUnit"> = {}) {
   return {
@@ -173,7 +174,8 @@ export function createCourseRepository(client: CourseRepositoryClient = prisma) 
             courseId: { in: courseIds },
             itemType: "SECTION",
             sectionId: { not: null },
-            section: { archivedAt: null, activeVersionId: { not: null } },
+            // #992: samme regel som lesestien og bevisporten, i where-form. Se sectionAvailability.ts.
+            section: sectionAvailableWhere,
           },
           select: { courseId: true, sectionId: true },
         })

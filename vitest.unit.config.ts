@@ -28,6 +28,21 @@ export default defineConfig({
       "test/workspace-html-fallbacks.test.js",
       "test/workspace-help-contracts.test.js",
       "test/workspace-validation-accessibility.test.js",
+      // #992 2026-08-23: og igjen. QA-porten fant at mine to nye vakter ikke kjørte i den
+      // obligatoriske pre-stage-porten — og da jeg så etter, gjorde ingen av de FIRE eldre det
+      // heller. Seks dekningsvakter som bare kunne bli røde i den fulle kjøringen, altså først
+      // i CI, altså etter at deployen var i gang.
+      //
+      // ⚠️ En vakt som ikke kjører i porten den skal vokte, er ikke en vakt. Kommentaren over
+      // sier nøyaktig dette om #896 S3c — jeg leste den og gikk i fella likevel. Derfor er
+      // `test/unit/unit-suite-coverage-guard.test.js` lagt til: den nekter en ny `*-guard`-fil
+      // i test-rota som ikke står her.
+      "test/course-visibility-guard.test.js",
+      "test/hidden-cascade-guard.test.js",
+      "test/nynorsk-guard.test.js",
+      "test/raw-server-error-guard.test.js",
+      "test/course-archive-entry-guard.test.js",
+      "test/participant-sequence-predicate-guard.test.js",
     ],
     globals: true,
     testTimeout: 20000,
