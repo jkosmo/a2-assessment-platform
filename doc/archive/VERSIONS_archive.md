@@ -3249,7 +3249,7 @@ fix: deploy-environment.ps1 oppdaterer SPA redirect URI automatisk etter deploy
 fix: MSAL redirect URI — use stable origin "/" + sessionStorage destination restore
 
 - public/api-client.js: redirectUri changed from window.location.origin + window.location.pathname to window.location.origin + "/"; before loginRedirect, current URL is saved to sessionStorage("auth_intended_url"); after handleRedirectPromise returns, URL is restored and sessionStorage entry cleared. Fixes AADSTS50011 for any new route that was never registered as a redirect URI in Azure AD (e.g. /admin-content/courses/new added in v0.10.3).
-- Azure AD action required: register https://a2-assessment-platform-stg-app-ci3vny.azurewebsites.net/ as a SPA redirect URI in app registration 1a4af641-f452-4761-8dff-1b2783929359.
+- Azure AD action required: register https://a2-assessment-platform-stg-app-ci3vny.azurewebsites.net/ as a SPA redirect URI in app registration <ARCHIVED_RUN_ID>.
 
 ## 0.10.6 - 2026-04-18
 

@@ -9,25 +9,36 @@
 
 **THIS IS THE SINGLE MOST IMPORTANT THING TO KNOW BEFORE RUNNING ANY `az` CLI COMMANDS.**
 
-| Environment | Azure Tenant ID | Subscription | Subscription Name |
-|-------------|-----------------|--------------|-------------------|
-| **staging** | `c6e381fa-eb4b-42ba-b358-fe83e1166c40` | `df46af7a-1806-4bda-a24b-0b3c112bd261` | Betale for forbruk |
-| **production** | `a018856e-8cf2-4ec4-bbc8-ab18058027dc` | `5b3f760b-42d4-4d78-812c-c059278d1086` | Pay-As-You-Go (A-2) |
+| Environment | Azure Tenant ID | Subscription |
+|-------------|-----------------|--------------|
+| **staging** | `<STAGING_TENANT_ID>` | `<STAGING_SUBSCRIPTION_ID>` |
+| **production** | `<PROD_TENANT_ID>` | `<PROD_SUBSCRIPTION_ID>` |
+
+> ⚠️ **The concrete values are NOT in this repository.** It is public (GPL-3), and tenant +
+> subscription + resource-group names + production hostnames + the operator account together
+> describe the target precisely enough to make a phishing message read like it came from inside.
+> No single one of them is a credential; the aggregate is the risk.
+>
+> Maintainers: the filled-in table is in `doc/ENVIRONMENTS.local.md` (gitignored). Everyone else:
+> copy `doc/ENVIRONMENTS.example.md` and fill in your own.
+>
+> `test/environment-identifier-guard.test.js` fails the build if a real identifier reappears in a
+> tracked file.
 
 ### WHY THIS MATTERS
 
-The local Azure CLI defaults to the **staging tenant** (`c6e381fa-...`). If you run `az` commands to inspect production resources without switching subscription first, YOU WILL QUERY THE WRONG TENANT AND GET EMPTY OR MISLEADING RESULTS. This has caused multiple incidents where deployment hangs were misdiagnosed.
+The local Azure CLI defaults to the **staging tenant**. If you run `az` commands to inspect production resources without switching subscription first, YOU WILL QUERY THE WRONG TENANT AND GET EMPTY OR MISLEADING RESULTS. This has caused multiple incidents where deployment hangs were misdiagnosed.
 
 ### MANDATORY PATTERN FOR PRODUCTION AZ COMMANDS
 
 ```powershell
 # Always switch to production subscription before querying production resources
-az account set --subscription 5b3f760b-42d4-4d78-812c-c059278d1086
+az account set --subscription <PROD_SUBSCRIPTION_ID>
 
 # ... run az commands ...
 
 # Switch back to staging when done
-az account set --subscription df46af7a-1806-4bda-a24b-0b3c112bd261
+az account set --subscription <STAGING_SUBSCRIPTION_ID>
 ```
 
 ### HOW TO VERIFY WHICH TENANT YOU ARE ON
@@ -36,8 +47,7 @@ az account set --subscription df46af7a-1806-4bda-a24b-0b3c112bd261
 az account show --query "{subscription:id,tenantId:tenantId,name:name}" -o table
 ```
 
-- Tenant `c6e381fa-...` = staging
-- Tenant `a018856e-...` = production
+Compare the output against the table in `doc/ENVIRONMENTS.local.md`.
 
 ### ENTRA vs AZURE TENANT
 
@@ -60,9 +70,9 @@ The script now throws immediately if `$IsLinux` and `$IsMacOS` are both false.
 Both staging and production have `PARTICIPANT_NOTIFICATION_CHANNEL=acs_email`. The `Microsoft.Communication/emailServices/domains` resource takes **20–40 minutes to provision** on first creation or recreation. This is NORMAL. Do not cancel deploys just because they run 30+ minutes — check the ARM deployment operations first:
 
 ```bash
-az account set --subscription 5b3f760b-42d4-4d78-812c-c059278d1086  # production
+az account set --subscription <PROD_SUBSCRIPTION_ID>  # production
 az deployment operation group list \
-  --resource-group rg-a2-assessment-production \
+  --resource-group <PROD_RESOURCE_GROUP> \
   --name <deployment-name> \
   --query "[?properties.provisioningState!='Succeeded'].{resource:properties.targetResource.resourceType,state:properties.provisioningState}" \
   -o table

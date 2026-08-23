@@ -348,7 +348,7 @@ strings. Covers `Module.title`, `CourseSection.title`, `Course.title`, `Course.d
 **Against staging** the resource group has no lock, so the firewall step is straightforward:
 
 ```powershell
-az account set --subscription df46af7a-1806-4bda-a24b-0b3c112bd261
+az account set --subscription <STAGING_SUBSCRIPTION_ID>
 az postgres flexible-server firewall-rule create -g rg-a2-assessment-stg `
   --server-name a2-assessment-platform-stg-pg-x6eyx4 --name tmp-<you> `
   --start-ip-address <your-ip> --end-ip-address <your-ip>

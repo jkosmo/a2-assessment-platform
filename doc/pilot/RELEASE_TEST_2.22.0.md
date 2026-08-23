@@ -197,8 +197,8 @@ Verifiser mot `/version` at den svarer **2.22.2** før du starter — workflow-f
 - [ ] **Kursimport med gammel seksjon.** Eksporter et publisert kurs som inneholder en seksjon med
       ettspråks tittel, importer det på nytt, og åpne det **som deltaker**. Kurset skal *ikke* være
       publisert, og du skal ikke møte en blank side.
-- [ ] **Eierskap på tvers.** Logg inn som `jko@a-2.no`, ta ID-en til en seksjon
-      `joakim.kosmo@gmail.com` eier, og kall `GET /api/admin/content/sections/<id>` direkte.
+- [ ] **Eierskap på tvers.** Logg inn som `<PROD_ADMIN_UPN>`, ta ID-en til en seksjon
+      `<STAGING_ADMIN_UPN>` eier, og kall `GET /api/admin/content/sections/<id>` direkte.
       Forventet **403**.
 - [ ] **Innholdsspråk vs. menyspråk.** Skriv en oppgavetekst på bokmål i Rediger og lagre. Bytt
       **menyspråket** til engelsk — innholdsspråket skal bli stående på Bokmål. Be i chatten om

@@ -43,6 +43,7 @@ export default defineConfig({
       "test/raw-server-error-guard.test.js",
       "test/course-archive-entry-guard.test.js",
       "test/participant-sequence-predicate-guard.test.js",
+      "test/environment-identifier-guard.test.js",
     ],
     globals: true,
     testTimeout: 20000,

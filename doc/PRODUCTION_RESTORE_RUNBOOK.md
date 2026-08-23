@@ -20,7 +20,7 @@ Related documents:
 ## Current Production Baseline
 
 Current production PostgreSQL runtime:
-- resource group: `rg-a2-assessment-production`
+- resource group: `<PROD_RESOURCE_GROUP>`
 - server: `a2-assessment-platform-prd-pg-hea5kl`
 - FQDN: `a2-assessment-platform-prd-pg-hea5kl.postgres.database.azure.com`
 - location: `Norway East`
@@ -163,14 +163,14 @@ Record these before you restore:
 Current source server resource ID:
 
 ```text
-/subscriptions/5b3f760b-42d4-4d78-812c-c059278d1086/resourceGroups/rg-a2-assessment-production/providers/Microsoft.DBforPostgreSQL/flexibleServers/a2-assessment-platform-prd-pg-hea5kl
+/subscriptions/<PROD_SUBSCRIPTION_ID>/resourceGroups/<PROD_RESOURCE_GROUP>/providers/Microsoft.DBforPostgreSQL/flexibleServers/a2-assessment-platform-prd-pg-hea5kl
 ```
 
 Query current backup window before choosing the restore time:
 
 ```powershell
 az postgres flexible-server show `
-  -g rg-a2-assessment-production `
+  -g <PROD_RESOURCE_GROUP> `
   -n a2-assessment-platform-prd-pg-hea5kl `
   --query "{server:name, earliestRestoreDate:backup.earliestRestoreDate, retentionDays:backup.backupRetentionDays, geoRedundantBackup:backup.geoRedundantBackup}" `
   -o yaml
@@ -191,9 +191,9 @@ Create a restored server at a specific UTC point in time:
 
 ```powershell
 az postgres flexible-server restore `
-  -g rg-a2-assessment-production `
+  -g <PROD_RESOURCE_GROUP> `
   -n a2-assessment-platform-prd-pg-restore-<yyyymmddhhmm> `
-  --source-server /subscriptions/5b3f760b-42d4-4d78-812c-c059278d1086/resourceGroups/rg-a2-assessment-production/providers/Microsoft.DBforPostgreSQL/flexibleServers/a2-assessment-platform-prd-pg-hea5kl `
+  --source-server /subscriptions/<PROD_SUBSCRIPTION_ID>/resourceGroups/<PROD_RESOURCE_GROUP>/providers/Microsoft.DBforPostgreSQL/flexibleServers/a2-assessment-platform-prd-pg-hea5kl `
   --restore-time "<UTC-ISO8601>" `
   --yes
 ```
@@ -202,9 +202,9 @@ Example:
 
 ```powershell
 az postgres flexible-server restore `
-  -g rg-a2-assessment-production `
+  -g <PROD_RESOURCE_GROUP> `
   -n a2-assessment-platform-prd-pg-restore-202604151030 `
-  --source-server /subscriptions/5b3f760b-42d4-4d78-812c-c059278d1086/resourceGroups/rg-a2-assessment-production/providers/Microsoft.DBforPostgreSQL/flexibleServers/a2-assessment-platform-prd-pg-hea5kl `
+  --source-server /subscriptions/<PROD_SUBSCRIPTION_ID>/resourceGroups/<PROD_RESOURCE_GROUP>/providers/Microsoft.DBforPostgreSQL/flexibleServers/a2-assessment-platform-prd-pg-hea5kl `
   --restore-time "2026-04-15T10:30:00Z" `
   --yes
 ```
@@ -213,7 +213,7 @@ Track restore status:
 
 ```powershell
 az postgres flexible-server show `
-  -g rg-a2-assessment-production `
+  -g <PROD_RESOURCE_GROUP> `
   -n a2-assessment-platform-prd-pg-restore-<yyyymmddhhmm> `
   --query "{name:name,state:state,fqdn:fullyQualifiedDomainName}" `
   -o yaml
@@ -231,7 +231,7 @@ Example metadata check:
 
 ```powershell
 az postgres flexible-server db list `
-  -g rg-a2-assessment-production `
+  -g <PROD_RESOURCE_GROUP> `
   -s a2-assessment-platform-prd-pg-restore-<yyyymmddhhmm> `
   -o table
 ```
@@ -349,9 +349,9 @@ List the protected datasource and backup jobs:
 
 ```powershell
 az dataprotection backup-instance show `
-  -g rg-a2-assessment-production `
+  -g <PROD_RESOURCE_GROUP> `
   --vault-name a2-assessment-platform-prd-bkv-hea5kl `
-  -n a2-assessment-platform-prd-pg-hea5kl-a2-assessment-platform-prd-pg-hea5kl-50c463e8-38b3-11f1-b542-80b6551ef4aa `
+  -n a2-assessment-platform-prd-pg-hea5kl-a2-assessment-platform-prd-pg-hea5kl-<PROD_PG_BACKUP_INSTANCE_ID> `
   -o yaml
 ```
 
@@ -365,9 +365,9 @@ List available recovery points:
 
 ```powershell
 az dataprotection recovery-point list `
-  -g rg-a2-assessment-production `
+  -g <PROD_RESOURCE_GROUP> `
   --vault-name a2-assessment-platform-prd-bkv-hea5kl `
-  --backup-instance-name a2-assessment-platform-prd-pg-hea5kl-a2-assessment-platform-prd-pg-hea5kl-50c463e8-38b3-11f1-b542-80b6551ef4aa `
+  --backup-instance-name a2-assessment-platform-prd-pg-hea5kl-a2-assessment-platform-prd-pg-hea5kl-<PROD_PG_BACKUP_INSTANCE_ID> `
   -o table
 ```
 Expected operator steps:
@@ -419,9 +419,9 @@ only single-quote string literals). A freshly restored server has empty planner 
 **Deleting a throwaway restored server (prod RG is delete-locked).** The production resource group
 carries a `CanNotDelete` lock (`rg-production-do-not-delete`, #405) that blocks deleting the restored
 server and its firewall rules. Teardown, as one guarded block:
-1. `az lock delete --name rg-production-do-not-delete -g rg-a2-assessment-production`
+1. `az lock delete --name rg-production-do-not-delete -g <PROD_RESOURCE_GROUP>`
 2. Wait ~60s — lock removal is eventually-consistent; deleting sooner still fails `ScopeLocked`.
-3. `az postgres flexible-server delete -g rg-a2-assessment-production -n <restored-server> --yes`
+3. `az postgres flexible-server delete -g <PROD_RESOURCE_GROUP> -n <restored-server> --yes`
 4. **Immediately recreate the identical lock** (`az lock create ... --lock-type CanNotDelete`) and
    verify with `az lock list`. Never leave the lock off.
 

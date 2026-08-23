@@ -12,21 +12,31 @@
 
 **THIS IS THE SINGLE MOST IMPORTANT THING TO KNOW BEFORE TOUCHING ANY AZURE OR INFRA CODE.**
 
-| Environment | Azure Tenant ID | Subscription | Subscription Name |
-|-------------|-----------------|--------------|-------------------|
-| **staging** | `c6e381fa-eb4b-42ba-b358-fe83e1166c40` | `df46af7a-1806-4bda-a24b-0b3c112bd261` | Betale for forbruk |
-| **production** | `a018856e-8cf2-4ec4-bbc8-ab18058027dc` | `5b3f760b-42d4-4d78-812c-c059278d1086` | Pay-As-You-Go (A-2) |
+| Environment | Azure Tenant ID | Subscription |
+|-------------|-----------------|--------------|
+| **staging** | `<STAGING_TENANT_ID>` | `<STAGING_SUBSCRIPTION_ID>` |
+| **production** | `<PROD_TENANT_ID>` | `<PROD_SUBSCRIPTION_ID>` |
+
+> ⚠️ **The concrete values are NOT in this repository.** It is public (GPL-3), and tenant +
+> subscription + resource-group names + production hostnames + the operator account together
+> describe the target precisely enough to make a phishing message read like it came from inside.
+> No single one of them is a credential; the aggregate is the risk.
+>
+> Maintainers: `doc/ENVIRONMENTS.local.md` (gitignored). Everyone else: copy
+> `doc/ENVIRONMENTS.example.md` and fill in your own.
+>
+> `test/environment-identifier-guard.test.js` fails the build if a real identifier reappears in a
+> tracked file.
 
 The local Azure CLI defaults to the **staging tenant**. Always switch subscription before querying production:
 
 ```powershell
-az account set --subscription 5b3f760b-42d4-4d78-812c-c059278d1086  # production
+az account set --subscription <PROD_SUBSCRIPTION_ID>  # production
 # ... run az commands ...
-az account set --subscription df46af7a-1806-4bda-a24b-0b3c112bd261  # back to staging
+az account set --subscription <STAGING_SUBSCRIPTION_ID>  # back to staging
 ```
 
-**Prod human account:** `jko@a-2.no` (tenant `a018856e-...`)
-**Staging/personal account:** `joakim.kosmo@gmail.com` (tenant `c6e381fa-...`)
+**Prod human account:** `<PROD_ADMIN_UPN>` · **Staging/personal account:** `<STAGING_ADMIN_UPN>`
 
 ---
 

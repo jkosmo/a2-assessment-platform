@@ -31,7 +31,7 @@ This drill did **not** aim to:
 
 ## Production Source
 - source server: `a2-assessment-platform-prd-pg-hea5kl`
-- resource group: `rg-a2-assessment-production`
+- resource group: `<PROD_RESOURCE_GROUP>`
 - vault: `a2-assessment-platform-prd-bkv-hea5kl`
 - backup policy: `a2-assessment-platform-prd-pg-weekly-3m-v1`
 
@@ -56,7 +56,7 @@ Storage target properties:
 Phase-2 validation target:
 - PostgreSQL server: `a2-assessment-drill-pg-hea5kl`
 - FQDN: `a2-assessment-drill-pg-hea5kl.postgres.database.azure.com`
-- resource group: `rg-a2-assessment-production`
+- resource group: `<PROD_RESOURCE_GROUP>`
 - version: `16`
 - SKU: `Standard_B1ms`
 - app validation port: `4312`
@@ -76,9 +76,9 @@ Protected datasource and policy:
 
 ```powershell
 az dataprotection backup-instance show `
-  -g rg-a2-assessment-production `
+  -g <PROD_RESOURCE_GROUP> `
   --vault-name a2-assessment-platform-prd-bkv-hea5kl `
-  -n a2-assessment-platform-prd-pg-hea5kl-a2-assessment-platform-prd-pg-hea5kl-50c463e8-38b3-11f1-b542-80b6551ef4aa `
+  -n a2-assessment-platform-prd-pg-hea5kl-a2-assessment-platform-prd-pg-hea5kl-<PROD_PG_BACKUP_INSTANCE_ID> `
   -o yaml
 ```
 
@@ -86,9 +86,9 @@ Recovery point lookup:
 
 ```powershell
 az dataprotection recovery-point list `
-  -g rg-a2-assessment-production `
+  -g <PROD_RESOURCE_GROUP> `
   --vault-name a2-assessment-platform-prd-bkv-hea5kl `
-  --backup-instance-name a2-assessment-platform-prd-pg-hea5kl-a2-assessment-platform-prd-pg-hea5kl-50c463e8-38b3-11f1-b542-80b6551ef4aa `
+  --backup-instance-name a2-assessment-platform-prd-pg-hea5kl-a2-assessment-platform-prd-pg-hea5kl-<PROD_PG_BACKUP_INSTANCE_ID> `
   -o table
 ```
 
@@ -108,13 +108,13 @@ Restore permission propagation:
 
 ```powershell
 az dataprotection backup-instance update-msi-permissions `
-  --resource-group rg-a2-assessment-production `
+  --resource-group <PROD_RESOURCE_GROUP> `
   --vault-name a2-assessment-platform-prd-bkv-hea5kl `
   --datasource-type AzureDatabaseForPostgreSQLFlexibleServer `
   --operation Restore `
   --permissions-scope Resource `
   --restore-request-object @<restore-request-json> `
-  --target-storage-account-id /subscriptions/5b3f760b-42d4-4d78-812c-c059278d1086/resourceGroups/rg-a2-assessment-production/providers/Microsoft.Storage/storageAccounts/a2prdrestorehea5kl `
+  --target-storage-account-id /subscriptions/<PROD_SUBSCRIPTION_ID>/resourceGroups/<PROD_RESOURCE_GROUP>/providers/Microsoft.Storage/storageAccounts/a2prdrestorehea5kl `
   --yes
 ```
 
@@ -122,9 +122,9 @@ Restore trigger:
 
 ```powershell
 az dataprotection backup-instance restore trigger `
-  -g rg-a2-assessment-production `
+  -g <PROD_RESOURCE_GROUP> `
   --vault-name a2-assessment-platform-prd-bkv-hea5kl `
-  --backup-instance-name a2-assessment-platform-prd-pg-hea5kl-a2-assessment-platform-prd-pg-hea5kl-50c463e8-38b3-11f1-b542-80b6551ef4aa `
+  --backup-instance-name a2-assessment-platform-prd-pg-hea5kl-a2-assessment-platform-prd-pg-hea5kl-<PROD_PG_BACKUP_INSTANCE_ID> `
   --restore-request-object @<restore-request-json> `
   --no-wait
 ```
@@ -146,7 +146,7 @@ pg_restore `
 ## Measured Result
 
 Restore job:
-- job id: `b54a24a7-0c7d-41b9-9e65-8650e721bc22`
+- job id: `<RESTORE_DRILL_JOB_ID>`
 - operation: `Restore`
 - status: `Completed`
 - start time: `2026-04-15T10:57:37.3897923Z`
@@ -198,8 +198,8 @@ Observed restored counts:
 - certifications: `1`
 
 Known participant history used for validation:
-- participant external ID: `16a6dfa1-351f-40e6-adc5-b8519b9e4eb6`
-- participant email: `jko@a-2.no`
+- participant external ID: `<RESTORE_DRILL_USER_OID>`
+- participant email: `<PROD_ADMIN_UPN>`
 - module ID: `cmnyu47pa0000oafg7p89vusz`
 - module title (nb): `Hormuzstredet: geografi og strategisk betydning`
 - submission ID: `cmnyu6gmt000hoafgxqbxl4ox`

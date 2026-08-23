@@ -39,14 +39,23 @@ jobs:
       # destructive, staging-only workflow tears down the App Service layer. The May 2026 incident
       # was exactly this kind of operation running against prod. Abort hard if the active context
       # is the production subscription, before any deletion happens.
+      #
+      # ⚠️ FEILER LUKKET. Verdien ligger i repo-variabelen PROD_SUBSCRIPTION_ID, ikke i fila (repoet
+      # er offentlig). Er variabelen tom, ville sammenligningen blitt stille usann og denne
+      # DESTRUKTIVE workflowen sluppet gjennom — «vakta som aldri kan fyre» (#960).
       - name: Assert staging subscription
         shell: pwsh
+        env:
+          PROD_SUBSCRIPTION_ID: ${{ vars.PROD_SUBSCRIPTION_ID }}
         run: |
-          $current = (az account show --query id -o tsv).Trim()
-          if ($current -eq '5b3f760b-42d4-4d78-812c-c059278d1086') {
-            throw "SAFETY ABORT: this workflow is authenticated against the PRODUCTION subscription (5b3f760b-...). It must only run against staging."
+          if ([string]::IsNullOrWhiteSpace($env:PROD_SUBSCRIPTION_ID)) {
+            throw "SAFETY ABORT: repository variable PROD_SUBSCRIPTION_ID is not set, so the production guard cannot be evaluated. Set it with: gh variable set PROD_SUBSCRIPTION_ID"
           }
-          Write-Host "Subscription guard OK — active subscription $current is not production."
+          $current = (az account show --query id -o tsv).Trim()
+          if ($current -eq $env:PROD_SUBSCRIPTION_ID) {
+            throw "SAFETY ABORT: this workflow is authenticated against the PRODUCTION subscription. It must only run against staging."
+          }
+          Write-Host "Subscription guard OK — the active subscription is not production."
 
       - name: Deactivate staging app layer
         shell: pwsh

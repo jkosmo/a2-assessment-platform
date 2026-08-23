@@ -6,14 +6,14 @@
 
 | Environment | Azure Tenant ID | Subscription ID | Subscription Name |
 |-------------|-----------------|-----------------|-------------------|
-| **staging** | `c6e381fa-eb4b-42ba-b358-fe83e1166c40` | `df46af7a-1806-4bda-a24b-0b3c112bd261` | Betale for forbruk |
-| **production** | `a018856e-8cf2-4ec4-bbc8-ab18058027dc` | `5b3f760b-42d4-4d78-812c-c059278d1086` | Pay-As-You-Go (A-2) |
+| **staging** | `<STAGING_TENANT_ID>` | `<STAGING_SUBSCRIPTION_ID>` | Betale for forbruk |
+| **production** | `<PROD_TENANT_ID>` | `<PROD_SUBSCRIPTION_ID>` | <PROD_SUBSCRIPTION_NAME> |
 
 Switch before querying production:
 ```bash
-az account set --subscription 5b3f760b-42d4-4d78-812c-c059278d1086
+az account set --subscription <PROD_SUBSCRIPTION_ID>
 # ... az commands ...
-az account set --subscription df46af7a-1806-4bda-a24b-0b3c112bd261  # back to staging
+az account set --subscription <STAGING_SUBSCRIPTION_ID>  # back to staging
 ```
 
 Verify current tenant: `az account show --query "{subscription:id,tenantId:tenantId}" -o table`
@@ -62,13 +62,13 @@ Current baseline note:
 - Production backup and recovery target architecture is documented in `doc/design/PRODUCTION_POSTGRES_BACKUP_AND_RECOVERY.md`.
 - Current production decision: prioritize backup/recovery hardening ahead of PostgreSQL HA; HA is intentionally deferred while the service remains a non-critical internal application.
 - Current production PostgreSQL profile should be represented explicitly in environment variables/IaC rather than portal-only drift.
-- Production Azure Backup vault is now codified in `infra/azure/backup-vault.bicep` and deployed to the isolated resource group `rg-a2-assessment-backup` (separate from `rg-a2-assessment-production` so it survives app infra teardown). The vault uses a daily backup policy (`P1D`) with 3-month retention and `LocallyRedundant` storage.
+- Production Azure Backup vault is now codified in `infra/azure/backup-vault.bicep` and deployed to the isolated resource group `rg-a2-assessment-backup` (separate from `<PROD_RESOURCE_GROUP>` so it survives app infra teardown). The vault uses a daily backup policy (`P1D`) with 3-month retention and `LocallyRedundant` storage.
 - Current production logical pre-change exports use storage account `a2prdrestorehea5kl` and container `logical-exports`; this is an operator-run fallback path, not an automatic backup layer.
 - `PROCESS_ROLE`, `PORT`, and `DATABASE_URL` are platform-managed at deploy/runtime and are not expected as user-managed GitHub Environment variables.
 
 ## Environment separation
-- Staging resource group example: `rg-a2-assessment-staging`
-- Production resource group example: `rg-a2-assessment-production`
+- Staging resource group example: `<STAGING_RESOURCE_GROUP>`
+- Production resource group example: `<PROD_RESOURCE_GROUP>`
 - Production backup vault resource group: `rg-a2-assessment-backup` (persistent; not torn down with app infra)
 - No shared resource group between environments.
 
@@ -157,11 +157,11 @@ environment is a no-op.
 
 ```powershell
 ./scripts/azure/bootstrap-sp-permissions.ps1 `
-  -SubscriptionId 5b3f760b-42d4-4d78-812c-c059278d1086 `
-  -ResourceGroupName rg-a2-assessment-production `
+  -SubscriptionId <PROD_SUBSCRIPTION_ID> `
+  -ResourceGroupName <PROD_RESOURCE_GROUP> `
   -BackupResourceGroupName rg-a2-assessment-backup `
-  -ServicePrincipalObjectId cba285e6-680c-4e00-abd1-ac0eaa2d313a `
-  -TenantId a018856e-8cf2-4ec4-bbc8-ab18058027dc
+  -ServicePrincipalObjectId <DEPLOY_SP_OBJECT_ID> `
+  -TenantId <PROD_TENANT_ID>
 ```
 
 What this grants:
@@ -295,12 +295,12 @@ Teardown should remove the whole environment resource group to avoid orphaned co
 
 Staging example:
 ```powershell
-az group delete --name rg-a2-assessment-staging --yes --no-wait
+az group delete --name <STAGING_RESOURCE_GROUP> --yes --no-wait
 ```
 
 Production example:
 ```powershell
-az group delete --name rg-a2-assessment-production --yes --no-wait
+az group delete --name <PROD_RESOURCE_GROUP> --yes --no-wait
 ```
 
 After teardown:
@@ -386,16 +386,16 @@ How a real user gets into prod (`AUTH_MODE=entra`). Established 2026-06-29 when 
 external user. There is **no in-app "assign role" UI** — roles come only from the two mechanisms below
 (`src/auth/authenticate.ts`: token `roles` claim is merged with DB roles from group-sync).
 
-**Prod app IDs (tenant `a018856e-8cf2-4ec4-bbc8-ab18058027dc`, domain `a-2.no`):**
-- Client SPA `a2-assessment-client-prod`: `c614110a-03b2-4799-bfed-7fbee03e7ce0`
-- API `a2-assessment-api-prod`: appId `3a5644c4-e5cd-4439-b5b7-9048b615eef9`, SP `536d1154-dcd5-4e72-8cd0-64da68fe6b59`
-- App role IDs (on the API app): `ADMINISTRATOR=0b490fe8-de0c-4de7-8854-feb5b8038152`, `SUBJECT_MATTER_OWNER=c032b455-384b-48fa-81d7-dc97afa847b3`
+**Prod app IDs (tenant `<PROD_TENANT_ID>`, domain `a-2.no`):**
+- Client SPA `a2-assessment-client-prod`: `<PROD_CLIENT_APP_ID>`
+- API `a2-assessment-api-prod`: appId `<PROD_API_APP_ID>`, SP `<PROD_API_SP_OBJECT_ID>`
+- App role IDs (on the API app): `ADMINISTRATOR=<APP_ROLE_ID_ADMINISTRATOR>`, `SUBJECT_MATTER_OWNER=<APP_ROLE_ID_SUBJECT_MATTER_OWNER>`
 
 **One-time setup (done):**
 1. **Admin consent** for the client app (`User.Read` + the `access_as_user` API scope). Application
    Administrator is sufficient (these are not privileged permissions). Portal: Enterprise applications
    → `a2-assessment-client-prod` → Permissions → *Grant admin consent*; or `az ad app permission
-   admin-consent --id c614110a-...`.
+   admin-consent --id <PROD_CLIENT_APP_ID>`.
 2. **Groups claim** must be emitted or group-sync sees nothing: `groupMembershipClaims=All` on BOTH
    apps (`az ad app update --id <appId> --set groupMembershipClaims=All`).
    - **Use `All`, not `SecurityGroup`** — the participant group "Alle i A-2 Norge" is a **mail-enabled
@@ -406,7 +406,7 @@ external user. There is **no in-app "assign role" UI** — roles come only from 
 
 **Role model:**
 - **PARTICIPANT (everyone):** Entra group-sync. Prod vars `ENTRA_SYNC_GROUP_ROLES=true` +
-  `ENTRA_GROUP_ROLE_MAP_JSON={"8bab5ab4-c7db-4c9c-baad-316e1ff63504":"PARTICIPANT"}` (the existing
+  `ENTRA_GROUP_ROLE_MAP_JSON={"<ENTRA_SYNC_APP_OBJECT_ID>":"PARTICIPANT"}` (the existing
   "Alle i A-2 Norge" group → PARTICIPANT). These are **app settings applied by Bicep**, so changing
   them requires a **full `deploy-azure.yml` deploy** (not code-only `deploy-app.yml`) before they take
   effect. `syncEntraGroupRoles` runs on each login and writes `roleAssignment` rows.
@@ -417,7 +417,7 @@ external user. There is **no in-app "assign role" UI** — roles come only from 
   OID=$(az ad user show --id person@a-2.no --query id -o tsv)
   az rest --method POST --url "https://graph.microsoft.com/v1.0/users/$OID/appRoleAssignments" \
     --headers "Content-Type=application/json" \
-    --body "{\"principalId\":\"$OID\",\"resourceId\":\"536d1154-dcd5-4e72-8cd0-64da68fe6b59\",\"appRoleId\":\"<ROLE_ID>\"}"
+    --body "{\"principalId\":\"$OID\",\"resourceId\":\"<PROD_API_SP_OBJECT_ID>\",\"appRoleId\":\"<ROLE_ID>\"}"
   ```
 - `appRoleAssignmentRequired=false` on the API SP — keep it false, otherwise group-sync participants
   (who are NOT app-role-assigned) would be blocked from getting a token.

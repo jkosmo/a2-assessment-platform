@@ -1,10 +1,18 @@
+# ⚠️ 2026-08-23: abonnement, ressursgruppe, tenant og SP-objekt-ID sto tidligere som
+# STANDARDVERDIER her. Repoet er offentlig (GPL-3), så de er flyttet til
+# `doc/ENVIRONMENTS.local.md` (gitignorert).
+#
+# Parameterne er nå PÅKREVDE, ikke plassholdere. Grunnen er viktig: en plassholderstreng som
+# standardverdi ville gjort at skriptet kjørte videre og feilet et sted lenger nede, mot et
+# abonnement som ikke finnes — eller, verre, mot feil abonnement hvis noen fylte inn halvparten.
+# `Mandatory` gjør at PowerShell spør, og at et glemt argument stopper alt før første `az`-kall.
 param(
-  [string]$SubscriptionId = "5b3f760b-42d4-4d78-812c-c059278d1086",
-  [string]$ResourceGroupName = "rg-a2-assessment-production",
+  [Parameter(Mandatory = $true)][string]$SubscriptionId,
+  [Parameter(Mandatory = $true)][string]$ResourceGroupName,
+  [Parameter(Mandatory = $true)][string]$TenantId,
+  [Parameter(Mandatory = $true)][string]$ServicePrincipalObjectId,
   [string]$BackupResourceGroupName = "rg-a2-assessment-backup",
-  [string]$Location = "norwayeast",
-  [string]$ServicePrincipalObjectId = "cba285e6-680c-4e00-abd1-ac0eaa2d313a",
-  [string]$TenantId = "a018856e-8cf2-4ec4-bbc8-ab18058027dc"
+  [string]$Location = "norwayeast"
 )
 
 # One-shot bootstrap, idempotent: brings the GitHub Actions service principal into the state
@@ -12,7 +20,7 @@ param(
 # environment, OR after the resource group(s) are deleted and recreated.
 #
 # What this grants:
-#   - Main RG (e.g. rg-a2-assessment-production): Role Based Access Control Administrator
+#   - Main RG (e.g. <PROD_RESOURCE_GROUP>): Role Based Access Control Administrator
 #     (lets Bicep create Key Vault role assignments for managed identities -- #404).
 #   - Backup RG (e.g. rg-a2-assessment-backup): Contributor (lets deploy create the backup
 #     vault and PostgreSQL backup policy -- #439). Backup vault must live in a DIFFERENT RG
