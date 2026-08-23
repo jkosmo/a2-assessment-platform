@@ -13,6 +13,7 @@ import {
   resolveIncludeCompletedForAvailableModules,
 } from "../modules/module/index.js";
 import { t } from "../i18n/messages.js";
+import { hasAnyRole, CONTENT_AUTHORS } from "../auth/roleSets.js";
 import { mcqSubmitLimiter } from "../middleware/rateLimiting.js";
 
 const modulesRouter = Router();
@@ -67,7 +68,7 @@ modulesRouter.get("/", async (request, response) => {
   const userId = request.context?.userId;
   const locale = request.context?.locale ?? "en-GB";
   const adminFacingRequested = parsed.data.adminFacing === "true";
-  const hasElevatedRole = roles.some((r) => r === "ADMINISTRATOR" || r === "SUBJECT_MATTER_OWNER");
+  const hasElevatedRole = hasAnyRole(roles, CONTENT_AUTHORS);
   const participantFacing = adminFacingRequested && hasElevatedRole ? false : true;
   const modules = await listModules(roles, userId, locale, {
     includeCompleted,

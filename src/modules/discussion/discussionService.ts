@@ -1,6 +1,7 @@
 import type { AppRole as AppRoleType } from "@prisma/client";
 import { AppRole } from "../../db/prismaRuntime.js";
 import { prisma } from "../../db/prisma.js";
+import { hasAnyRole, DISCUSSION_MODERATORS } from "../../auth/roleSets.js";
 import { runInTransaction, type DbTransactionClient } from "../../db/transaction.js";
 import { ForbiddenError, NotFoundError } from "../../errors/AppError.js";
 import { recordAuditEvent } from "../../services/auditService.js";
@@ -36,10 +37,9 @@ export type AccessContext = {
   groupIds?: string[];
 };
 
-const MODERATOR_ROLES: AppRoleType[] = [AppRole.SUBJECT_MATTER_OWNER, AppRole.ADMINISTRATOR];
-
+// #962: settet bor nå i `src/auth/roleSets.ts`. Uendret innhold.
 function isModerator(roles: AppRoleType[]): boolean {
-  return roles.some((role) => MODERATOR_ROLES.includes(role));
+  return hasAnyRole(roles, DISCUSSION_MODERATORS);
 }
 
 function viewerOf(access: AccessContext): ViewerContext {

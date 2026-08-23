@@ -4,6 +4,7 @@ import { NotFoundError, ValidationError } from "../../errors/AppError.js";
 import { recordAuditEvent } from "../../services/auditService.js";
 import { auditActions, auditEntityTypes } from "../../observability/auditEvents.js";
 import { localizeContentText } from "../../i18n/content.js";
+import { hasAnyRole, PARTICIPANTS } from "../../auth/roleSets.js";
 import { sendCourseAssignmentNotification } from "../certification/participantNotificationService.js";
 import { classRepository, createClassRepository, SYSTEM_ALL_PARTICIPANTS_CLASS_ID } from "./classRepository.js";
 import { isClassEntraLinkingEnabled } from "./classConfig.js";
@@ -231,7 +232,10 @@ export interface UserMembershipContext {
  */
 export async function getUserClassIds(ctx: UserMembershipContext): Promise<Set<string>> {
   const ids = new Set<string>();
-  if (ctx.roles.includes("PARTICIPANT")) ids.add(SYSTEM_ALL_PARTICIPANTS_CLASS_ID);
+  // #962: går gjennom det delte oppslaget som alt annet. Merk at dette IKKE er en tilgangsvakt —
+  // det er medlemskapsutledning: «er denne personen deltaker» avgjør om systemklassen gjelder.
+  // Skillet er verdt å holde: en vakt nekter, dette utvider.
+  if (hasAnyRole(ctx.roles, PARTICIPANTS)) ids.add(SYSTEM_ALL_PARTICIPANTS_CLASS_ID);
 
   const manual = await classRepository.findManualMembership(ctx.userId);
   for (const m of manual) ids.add(m.classId);

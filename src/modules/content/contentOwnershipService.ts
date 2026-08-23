@@ -5,6 +5,7 @@
 
 import type { AppRole as AppRoleType, ContentOwnerType } from "@prisma/client";
 import { prisma } from "../../db/prisma.js";
+import { hasAnyRole, ADMIN_ONLY } from "../../auth/roleSets.js";
 import { runInTransaction, type DbTransactionClient } from "../../db/transaction.js";
 import { ForbiddenError, NotFoundError } from "../../errors/AppError.js";
 import { recordAuditEvent } from "../../services/auditService.js";
@@ -49,7 +50,7 @@ export async function listManageableContentIds(input: {
   actorUserId: string;
   roles: string[];
 }): Promise<Set<string>> {
-  if (input.roles.includes("ADMINISTRATOR")) return new Set(input.contentIds);
+  if (hasAnyRole(input.roles, ADMIN_ONLY)) return new Set(input.contentIds);
   if (input.contentIds.length === 0 || !input.actorUserId) return new Set();
   const rows = await prisma.contentOwner.findMany({
     where: { contentType: input.contentType, contentId: { in: input.contentIds }, userId: input.actorUserId },
@@ -70,7 +71,7 @@ export async function assertContentOwnership(input: {
   // module-guard delegate pass without a cast.
   roles: string[];
 }): Promise<void> {
-  const isAdmin = input.roles.includes("ADMINISTRATOR");
+  const isAdmin = hasAnyRole(input.roles, ADMIN_ONLY);
   // Admin short-circuits before any DB read.
   const ownerUserIds = isAdmin ? [] : await listContentOwnerUserIds(input.contentType, input.contentId);
   const decision = decideOwnershipAccess({ isAdmin, ownerUserIds, actorUserId: input.actorUserId });

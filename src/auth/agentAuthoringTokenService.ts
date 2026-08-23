@@ -13,6 +13,7 @@ import { runInTransaction } from "../db/transaction.js";
 import { sha256 } from "../utils/hash.js";
 import { recordAuditEvent } from "../services/auditService.js";
 import { auditActions, auditEntityTypes } from "../observability/auditEvents.js";
+import { hasAnyRole, ADMIN_ONLY } from "./roleSets.js";
 
 export const AGENT_TOKEN_PREFIX = "aat_";
 export const AGENT_TOKEN_DEFAULT_TTL_MINUTES = 60;
@@ -101,7 +102,7 @@ export async function revokeAgentAuthoringToken(input: {
 }) {
   const token = await prisma.agentAuthoringToken.findUnique({ where: { id: input.tokenId } });
   if (!token) return null;
-  if (token.userId !== input.actorUserId && !input.roles.includes("ADMINISTRATOR")) return null;
+  if (token.userId !== input.actorUserId && !hasAnyRole(input.roles, ADMIN_ONLY)) return null;
   if (token.revokedAt) return token;
 
   const revoked = await runInTransaction(async (tx) => {

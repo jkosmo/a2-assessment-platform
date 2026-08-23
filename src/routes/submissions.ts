@@ -9,7 +9,7 @@ import {
 import { createSubmissionAppeal } from "../modules/appeal/index.js";
 import { isModuleInAccessibleCourse } from "../modules/course/index.js";
 import { env } from "../config/env.js";
-import { AppRole } from "../db/prismaRuntime.js";
+import { hasAnyRole, CONTENT_AUTHORS } from "../auth/roleSets.js";
 import { submissionCreateLimiter } from "../middleware/rateLimiting.js";
 
 // #475: AI-use process signals — aggregate-only declaration + reflective-nudge choice. No keystroke
@@ -57,7 +57,7 @@ submissionsRouter.post("/", submissionCreateLimiter, async (request, response, n
   // publisert kurs de har tilgang til. Modul tatt via course player passerer (modulen er i kurset).
   // SMO/ADMIN er unntatt (authoring/testing). Hard grense — gjelder alle nye innleveringer når på.
   const roles = request.context?.roles ?? [];
-  const isContentRole = roles.includes(AppRole.SUBJECT_MATTER_OWNER) || roles.includes(AppRole.ADMINISTRATOR);
+  const isContentRole = hasAnyRole(roles, CONTENT_AUTHORS);
   if (env.PARTICIPANT_COURSE_ONLY && !isContentRole) {
     const allowed = await isModuleInAccessibleCourse({
       moduleId: parsed.data.moduleId,

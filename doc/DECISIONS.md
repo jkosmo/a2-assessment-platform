@@ -312,3 +312,42 @@ importfeil vanskeligere å diagnostisere uten å hjelpe noen.
 `test/e2e/section-portability-916.spec.ts` (forfatter, detaljfeltet skal være der).
 **Sak:** #988, #992 · **Status:** avklart
 
+## Roller og innsyn
+
+### Revisjonssporet leses av alle med et oppfølgingsforhold til kandidaten
+
+`SUBMISSION_AUDIT_READERS` (`src/auth/roleSets.ts`) inneholder fem roller: ADMINISTRATOR,
+SUBJECT_MATTER_OWNER, REVIEWER, APPEAL_HANDLER og REPORT_READER. Det er et valg, ikke en
+forglemmelse.
+
+**Hvorfor:** produkteier 2026-08-23 begrunnet de to som så uventede ut:
+
+- **SUBJECT_MATTER_OWNER** er *«å regne som en lærer som har det praktiske pedagogiske ansvaret for
+  oppfølging av kandidater.»*
+- **REPORT_READER** er *«potensielt kandidaters mentorer som skal kunne følge opp kompetansemål
+  avtalt i eksempelvis medarbeidersamtaler.»*
+
+Settet er altså ikke «alle som er litt privilegerte». Det er alle med et **oppfølgingsforhold** til
+en kandidat. Et revisjonsspor viser hva som faktisk skjedde med en innlevering — når den kom, hvem
+som vurderte, hva som ble overstyrt — og det er nettopp det de fem trenger.
+
+⚠️ QA-porten meldte dette som en divergens mot `/api/reports`, som kun er ADMINISTRATOR og
+REPORT_READER. Den er tilsynelatende: de to svarer på **ulike spørsmål**. `/api/reports` er analyse
+på tvers av organisasjonen; revisjonssporet er oppfølging av ett menneske. At mentoren finnes begge
+steder, og læreren bare det ene, følger av nettopp det.
+
+### ⚠️ Det avgjørelsen ikke løser — og som den gjør skarpere
+
+Begge begrunnelsene hviler på et **forhold**: «mine kandidater», «mine mentees». Det forholdet
+finnes ikke i datamodellen.
+
+Konsekvensen er at hver av de fem rollene ser **enhver** innlevering i **ethvert** kurs. En mentor
+med ansvar for tre personer kan lese revisjonssporet til alle. REVIEWER og APPEAL_HANDLER får alt,
+ikke bare saker de er tildelt.
+
+**Rollene er riktige. Avgrensningen mangler.** Det er et datamodellspørsmål, ikke et
+rollespørsmål — og derfor en egen sak, ikke en justering av dette settet.
+
+**Håndheves:** `test/role-set-guard.test.js` fester settene, så en endring må gjøres bevisst i
+stedet for å oppdages i en nattskanning.
+**Sak:** #962, #1000, #941 · **Status:** avklart 2026-08-23

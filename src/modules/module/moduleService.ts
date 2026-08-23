@@ -1,5 +1,6 @@
 import type { AppRole as AppRoleType } from "@prisma/client";
 import { AppRole } from "../../db/prismaRuntime.js";
+import { hasAnyRole, MODULE_ADMIN_READERS } from "../../auth/roleSets.js";
 import type { SupportedLocale } from "../../i18n/locale.js";
 import { localizeContentText } from "../../i18n/content.js";
 import { assessmentPolicyCodec } from "../../codecs/assessmentPolicyCodec.js";
@@ -18,16 +19,11 @@ import {
   isSubmissionStatusCompleted,
 } from "./moduleCompletionPolicyService.js";
 
-const ADMIN_READ_ROLES: AppRoleType[] = [
-  AppRole.ADMINISTRATOR,
-  AppRole.SUBJECT_MATTER_OWNER,
-  AppRole.REVIEWER,
-  AppRole.APPEAL_HANDLER,
-  AppRole.REPORT_READER,
-];
-
+// #962: settet bor nå i `src/auth/roleSets.ts`, sammen med de nitten andre rollesjekkene. Det er
+// UENDRET — poenget med flyttingen er at man skal kunne lese hele policyen ett sted og se hvor
+// settene er uenige, ikke at noen skal miste eller få tilgang.
 function hasAdminRead(roles: AppRoleType[]) {
-  return roles.some((role) => ADMIN_READ_ROLES.includes(role));
+  return hasAnyRole(roles, MODULE_ADMIN_READERS);
 }
 
 type ListModulesOptions = {

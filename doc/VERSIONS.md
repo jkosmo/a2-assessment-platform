@@ -2,6 +2,92 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.28.0 - 2026-08-23
+
+**To motorer til fra kompleksitetsepicen (#959, #962).** Med #958 fra tidligere i dag er tre av
+fire konvertert.
+
+⚠️ Dette er den formen som **ikke** har generert nye funn. Fire runder med «rett utregningen der den
+er» ga hver gang en ny runde; #958 ga null. Begge sakene her har samme form: flytt avgjørelsen til
+skriveren, så leserne ikke *kan* avvike.
+
+### #959 — «får denne deltakeren se dette kurset?»
+
+`findCourseById` returnerte kurset uansett hvem som spurte. Regelen bodde hos kalleren, i fire
+varianter, og de tre deltakerrutene hadde hver sin etterkontroll.
+
+⚠️ Strukturen hadde allerede kostet ett hull: #778/#785 — de direkte endepunktene gatet bare på
+`publishedAt`, så en deltaker uten innmelding kunne lese et RESTRICTED kurs hen hadde id-en til.
+Fiksen den gangen la til en **fjerde kopi** av regelen i stedet for å flytte den ned.
+
+`findCourseForParticipant({ courseId, userId, roles, groupIds })` krever identiteten i signaturen.
+Synligheten kan ikke lenger glemmes — bare aktivt velges bort. **Kallersiden: 3 → 0.**
+
+`null` dekker med vilje alle tre årsakene (finnes ikke / ikke publisert / ikke synlig), fordi å
+skille dem ville lekket at et RESTRICTED kurs eksisterer.
+
+**Ett unntak, funnet ved å gjøre feil:** jeg konverterte også selv-innmelding, og `m2-enrollment` ble
+rød — 404 der ruta skal svare 400. Ruta finnes nettopp for deltakere som *ennå ikke* har tilgang, og
+`selfEnroll` svarer «dette krever tildeling». Gjennom døra ville deltakeren fått vite at kurset ikke
+finnes, framfor hvordan hen får tilgang. En ekte oppførselsendring smuglet inn i en opprydding.
+
+### #962 — «får denne brukeren gjøre dette?»
+
+Tjue rollesjekker samlet i `src/auth/roleSets.ts`. Tre hadde navn fra før, men hvert sitt sted.
+Sytten var `roles.includes("ADMINISTRATOR")` skrevet på stedet — **inkludert i `requireAnyRole`
+selv**, middlewaren som skulle vært den delte vakta.
+
+**Ingen tilgang er endret.** Hvert sett er nøyaktig det kallstedet hadde.
+
+⚠️ Skaden var ikke gjentakelsen, men at policyen ikke kunne **leses**. For å svare på «hvem ser en
+deltakers revisjonsspor» måtte man finne `auditService.ts` — og for å se at svaret er fem roller mens
+`/api/reports` er to, måtte man tilfeldigvis lese begge.
+
+### Divergensen som viste seg å være to roller
+
+Nattskanningen meldte de fem mot de to som et hull: «den svakeste definisjonen ligger på den mest
+granulære ruta». Produkteier avklarte at begge er riktige:
+
+- **SMO** er «å regne som en lærer som har det praktiske pedagogiske ansvaret for oppfølging av
+  kandidater»
+- **REPORT_READER** er «potensielt kandidaters mentorer som skal kunne følge opp kompetansemål
+  avtalt i eksempelvis medarbeidersamtaler»
+
+Settet er alle med et **oppfølgingsforhold** til en kandidat. `/api/reports` er noe annet: analyse på
+tvers av organisasjonen. `/api/cohort-status` sa dette allerede, med SMO inkludert med vilje.
+
+⚠️ **Lærdom for skanningene:** to sett som er uenige er ikke automatisk en feil. Her var uenigheten
+en policy ingen hadde skrevet ned, og kuren var `doc/DECISIONS.md` — ikke kode.
+
+Avklaringen gjorde derimot restproblemet skarpere, og det er registrert som **#1000**: begge
+begrunnelsene hviler på et *forhold* — «mine kandidater», «mine mentees» — som ikke finnes i
+datamodellen. Derfor ser hver av de fem alle kandidater i alle kurs. Rollene er riktige;
+avgrensningen mangler.
+
+### Vakter
+
+- `course-visibility-guard` har byttet rolle: fra å gjøre drift synlig til å **låse inn gevinsten**.
+  `findCourseById` i en deltakerrute er nå en regresjon, ikke en forglemmelse.
+- `role-set-guard` (ny) nekter en tjueførste innebygd rollesjekk, og **fester audit/report-
+  forskjellen** så en framtidig endring gjøres bevisst.
+
+Begge er mutasjonsverifisert, og begge har en kontrollassertion som feiler hvis vakta ikke finner
+noe å måle. ⚠️ Den i `role-set-guard` var rød i første utkast: regexen min stoppet på klammen i
+`readonly AppRoleType[]` og målte null roller. Den nektet å passere mens den målte ingenting, som er
+hele poenget med den slags assertion.
+
+1156 unit, 243 e2e, 110 integrasjonsfiler.
+
+### Status på de fire motorene
+
+| Spørsmål | Steder | Etter |
+|---|---|---|
+| Hva inneholder dette kurset? | 25 | 3 |
+| Er kurset synlig for deltakeren? | 8 | 1 dør + 1 begrunnet unntak |
+| Er brukeren privilegert nok? | 20 | 1 fil |
+| Er dette forsøket bestått? | 8 | **urørt** |
+
+
 ## 2.27.1 - 2026-08-23
 
 **QA-porten, femte runde — og den første med klassifisering.** Justeringen virket etter hensikten:

@@ -24,6 +24,8 @@ import {
 } from "../modules/course/index.js";
 import { generationLocaleSchema, importBodySchema, normalizeImportPayload, localizedTextPatchSchema, parseRequest, clientRefSchema, agentRunIdSchema } from "../modules/adminContent/adminContentSchemas.js";
 import { courseAdminLinks } from "../modules/adminContent/adminUiLinks.js";
+import type { AppRole as AppRoleType } from "@prisma/client";
+import { hasAnyRole, ADMIN_ONLY } from "../auth/roleSets.js";
 import { buildCourseExportEnvelope } from "../modules/adminContent/index.js";
 import { importCourseFromEnvelope } from "../modules/adminContent/contentImportService.js";
 import { localizedTextCodec } from "../codecs/localizedTextCodec.js";
@@ -515,8 +517,9 @@ adminCoursesRouter.delete("/:courseId", requireContentOwnership("COURSE", "cours
 // #762: ADMINISTRATOR-only destructive cleanup — delete a course together with the modules/sections
 // it exclusively owns. The admin_content mount already lets SMO+ADMIN in; this per-route
 // ADMINISTRATOR gate is the extra guard because the action can destroy content, not just a course.
-function isAdministrator(roles: string[] | undefined): boolean {
-  return roles?.includes("ADMINISTRATOR") ?? false;
+// #962: bruker det delte settet i stedet for sin egen streng. Uendret betydning.
+function isAdministrator(roles: AppRoleType[] | undefined): boolean {
+  return hasAnyRole(roles, ADMIN_ONLY);
 }
 
 // Read-only preview of what would be deleted, spared (shared with other courses), or block the

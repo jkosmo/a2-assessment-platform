@@ -1,16 +1,14 @@
 import { Router } from "express";
-import { AppRole } from "../db/prismaRuntime.js";
 import { prisma } from "../db/prisma.js";
+import { hasAnyRole, REVIEW_HANDLERS, APPEAL_HANDLERS } from "../auth/roleSets.js";
 
 const queueCountsRouter = Router();
 
 queueCountsRouter.get("/", async (request, response, next) => {
   try {
     const roles = request.context?.roles ?? [];
-    const canReview =
-      roles.includes(AppRole.REVIEWER) || roles.includes(AppRole.ADMINISTRATOR);
-    const canHandleAppeals =
-      roles.includes(AppRole.APPEAL_HANDLER) || roles.includes(AppRole.ADMINISTRATOR);
+    const canReview = hasAnyRole(roles, REVIEW_HANDLERS);
+    const canHandleAppeals = hasAnyRole(roles, APPEAL_HANDLERS);
 
     const [reviews, appeals] = await Promise.all([
       canReview

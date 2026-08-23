@@ -1,5 +1,6 @@
 import { Router, type Response } from "express";
 import { z } from "zod";
+import { hasAnyRole, ADMIN_ONLY } from "../auth/roleSets.js";
 import type { ContentOwnerType } from "@prisma/client";
 import {
   assertContentOwnership,
@@ -39,7 +40,7 @@ contentOwnersRouter.get("/:contentType/:contentId", async (request, response, ne
     // transparency — the panel must render on content you don't own too. Only an owner or admin may
     // CHANGE owners (POST/DELETE stay ownership-gated). `canManage` tells the UI whether to show controls.
     const owners = await listContentOwners(contentType, request.params.contentId);
-    const canManage = roles.includes("ADMINISTRATOR") || owners.some((o) => o.userId === userId);
+    const canManage = hasAnyRole(roles, ADMIN_ONLY) || owners.some((o) => o.userId === userId);
     response.json({ owners, canManage });
   } catch (error) {
     if (!sendAppError(response, error)) next(error);
@@ -77,7 +78,7 @@ contentOwnersRouter.delete("/:contentType/:contentId/:ownerUserId", async (reque
       contentId: request.params.contentId,
       ownerUserId: request.params.ownerUserId,
       actorUserId: userId,
-      isAdmin: roles.includes("ADMINISTRATOR"),
+      isAdmin: hasAnyRole(roles, ADMIN_ONLY),
     });
     response.json({ owners: await listContentOwners(contentType, request.params.contentId) });
   } catch (error) {

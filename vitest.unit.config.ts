@@ -62,6 +62,8 @@ export default defineConfig({
       "test/environment-identifier-guard.test.js",
       // #958: nekter en niende kaller som går utenom de to navngitte dørene.
       "test/course-items-accessor-guard.test.js",
+      // #962: nekter en tjueførste innebygd rollesjekk.
+      "test/role-set-guard.test.js",
     ],
     globals: true,
     testTimeout: 20000,

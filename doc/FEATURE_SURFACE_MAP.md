@@ -903,3 +903,68 @@ kontrollassertion på at døra faktisk er i bruk (ellers ville testen vært grø
 hente kurs). Unntakslista krever en skreven grunn per oppføring. `test/m2-enrollment.test.ts` pinner
 400-en fra selv-innmelding; `test/m2-course-restricted-visibility.test.ts` pinner 404-en fra
 lesestiene.
+
+## 27. «Får denne brukeren gjøre dette?» — tjue steder, ett hjem (#962)
+
+Spørsmålet ble besvart **tjue steder**. Tre hadde et navngitt sett — men hvert sitt, i hver sin
+modul. De sytten andre var `roles.includes("ADMINISTRATOR")` skrevet på stedet, **inkludert i
+`requireAnyRole` selv**, middlewaren som skulle vært den delte vakta.
+
+⚠️ **Skaden var ikke gjentakelsen. Den var at policyen ikke kunne LESES.**
+
+For å svare på «hvem ser en deltakers revisjonsspor» måtte man finne `auditService.ts:216`. For å
+oppdage at svaret er fem roller mens `/api/reports` er to, måtte man tilfeldigvis lese begge — og
+det var nøyaktig det nattskanningen gjorde, to måneder senere.
+
+### Settene
+
+Alle i `src/auth/roleSets.ts`, med `hasAnyRole(roles, SETT)` som eneste oppslag.
+
+| Sett | Roller | Merknad |
+|---|---|---|
+| `ADMIN_ONLY` | ADMIN | drift og overstyring |
+| `CONTENT_AUTHORS` | ADMIN, SMO | forfatting; ADMIN er aldri mindre privilegert enn SMO |
+| `REVIEW_HANDLERS` | ADMIN, REVIEWER | vurderingskøen |
+| `APPEAL_HANDLERS` | ADMIN, APPEAL_HANDLER | ankekøen |
+| `DISCUSSION_MODERATORS` | ADMIN, SMO | slette andres innlegg |
+| `REPORT_READERS` | ADMIN, REPORT_READER | analyse på tvers av organisasjonen |
+| `SUBMISSION_AUDIT_READERS` | fem roller | **oppfølging av ett menneske** — se under |
+| `MODULE_ADMIN_READERS` | fem roller | modul-lesing for admin-flatene |
+| `PARTICIPANTS` | PARTICIPANT | ⚠️ medlemskapsutledning, ikke en vakt |
+
+**Ingen tilgang ble endret.** Hvert sett er nøyaktig det kallstedet hadde — også der settene er
+uenige. Å samle dem er første steg; å avgjøre om de *bør* være uenige er en produktbeslutning.
+
+### Den «divergensen» som viste seg å være to roller
+
+Nattskanningen meldte `SUBMISSION_AUDIT_READERS` (fem) mot `REPORT_READERS` (to) som et hull: «den
+svakeste definisjonen ligger på den mest granulære ruta».
+
+Produkteier 2026-08-23 avklarte at begge er riktige, og hvorfor:
+
+- **SMO** er *«å regne som en lærer som har det praktiske pedagogiske ansvaret for oppfølging av
+  kandidater»*
+- **REPORT_READER** er *«potensielt kandidaters mentorer som skal kunne følge opp kompetansemål
+  avtalt i eksempelvis medarbeidersamtaler»*
+
+Settet er altså alle med et **oppfølgingsforhold** til en kandidat. `/api/reports` er noe annet:
+analyse på tvers. At mentoren finnes begge steder og læreren bare det ene følger av nettopp det —
+og `/api/cohort-status` sa dette allerede, med SMO inkludert med vilje.
+
+⚠️ **Lærdom for skanninger:** to sett som er uenige er ikke automatisk en feil. Her var uenigheten
+en policy ingen hadde skrevet ned. Kuren var `doc/DECISIONS.md`, ikke kode.
+
+### Det som IKKE er løst
+
+Begge begrunnelsene hviler på et **forhold** — «mine kandidater», «mine mentees» — og det forholdet
+finnes ikke i datamodellen. Derfor ser hver av de fem rollene **alle** kandidater i **alle** kurs.
+REVIEWER og APPEAL_HANDLER får også saker de ikke er tildelt.
+
+Rollene er riktige; avgrensningen mangler. Det er et datamodellspørsmål (#1000), ikke et
+rollespørsmål — og ⚠️ **innskrenkning må vente til forholdet finnes**, ellers gir avgrensningen null
+tilgang til alle.
+
+**Vakter:** `test/role-set-guard.test.js` — nekter nye innebygde rollesjekker (mutasjonsverifisert:
+fanger `roles.includes("REVIEWER")` med fil, linje og hva man skal gjøre), krever at unntakslista
+peker på filer som finnes, og **fester audit/report-forskjellen** i en egen test, så en framtidig
+endring gjøres bevisst i stedet for å oppdages i en skanning.

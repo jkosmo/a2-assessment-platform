@@ -3,6 +3,7 @@ import { auditRepository } from "../repositories/auditRepository.js";
 import { sha256 } from "../utils/hash.js";
 import type { AppRole as AppRoleType } from "@prisma/client";
 import { AppRole } from "../db/prismaRuntime.js";
+import { hasAnyRole, SUBMISSION_AUDIT_READERS } from "../auth/roleSets.js";
 import { prisma } from "../db/prisma.js";
 import { runInTransaction, type DbTransactionClient } from "../db/transaction.js";
 import type { AuditAction, AuditEventInput } from "../observability/auditEvents.js";
@@ -213,16 +214,16 @@ export async function backfillAuditChain(): Promise<{ resealed: number }> {
   );
 }
 
-const ADMIN_AUDIT_ROLES: AppRoleType[] = [
-  AppRole.ADMINISTRATOR,
-  AppRole.SUBJECT_MATTER_OWNER,
-  AppRole.REVIEWER,
-  AppRole.APPEAL_HANDLER,
-  AppRole.REPORT_READER,
-];
-
+// ⚠️ #962: settet bor nå i `src/auth/roleSets.ts` som `SUBMISSION_AUDIT_READERS` — UENDRET, fem
+// roller som før.
+//
+// Flyttingen er hele poenget: der står det rett over `REPORT_READERS`, som er TO roller for samme
+// datakategori i aggregert form. En SMO leser altså enhver deltakers fulle revisjonsspor med navn
+// og e-post, men får 403 på rapporten. Den uenigheten var usynlig så lenge settet lå her.
+//
+// Om den BØR innskrenkes er en produktbeslutning, ikke en opprydding. Den står åpen i #962.
 function hasAuditReadAccess(roles: AppRoleType[]) {
-  return roles.some((role) => ADMIN_AUDIT_ROLES.includes(role));
+  return hasAnyRole(roles, SUBMISSION_AUDIT_READERS);
 }
 
 type SubmissionAuditTrailInput = {
