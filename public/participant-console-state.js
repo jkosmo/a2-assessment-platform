@@ -344,7 +344,33 @@ export function isEntryDone(entry) {
   return entry?.type === "SECTION" ? entry.read === true : entry?.moduleStatus === "PASSED";
 }
 
-/** Uferdig OG tilgjengelig — det eneste som skal kunne stoppe eller lede deltakeren videre. */
+/**
+ * Krever kursbeviset dette elementet?
+ *
+ * ⚠️ #995: dette er IKKE det samme som `isEntryAvailable`, og å blande dem var en blindvei.
+ *
+ *   arkivert modul     tilgjengelig: nei   påkrevd: NEI    (tatt ut av sirkulasjon)
+ *   avpublisert modul  tilgjengelig: nei   påkrevd: JA     (midlertidig nede, teller fortsatt)
+ *
+ * Bevisporten på serveren filtrerer bare på `archivedAt`. Da `isEntryOutstanding` utledet «ikke
+ * påkrevd» fra `available: false`, tilbød klienten «Avslutt kurset» i kurs serveren ikke ville
+ * utstedt bevis for: klikket registrerte lesningen, og så skjedde ingenting. Nøyaktig samme stille
+ * blindvei som #929 ble skrevet for å fjerne.
+ *
+ * `undefined` betyr «påkrevd», av samme grunn som `isEntryAvailable` defaulter til synlig: feltet er
+ * påkrevd i DTO-en, så det mangler bare mot en eldre server. Da er «still kravet» det trygge svaret
+ * — vi tilbyr heller ikke å avslutte enn å love et bevis som ikke kommer.
+ */
+export function isEntryRequired(entry) {
+  return entry?.required !== false;
+}
+
+/**
+ * Uferdig OG påkrevd — det eneste som skal kunne stoppe «Avslutt kurset».
+ *
+ * Merk at dette bruker `isEntryRequired`, ikke `isEntryAvailable`. Et element kan være utilgjengelig
+ * og likevel stå i veien; da er riktig svar å nekte fullføring, ikke å late som kravet er borte.
+ */
 export function isEntryOutstanding(entry) {
-  return isEntryAvailable(entry) && !isEntryDone(entry);
+  return isEntryRequired(entry) && !isEntryDone(entry);
 }

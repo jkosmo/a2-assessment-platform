@@ -740,7 +740,21 @@ async function handleImportCoursePackageFile(event) {
       body: JSON.stringify({ payload, mode: "createNew" }),
     });
     if (!result?.courseId) throw new Error("Import-respons mangler courseId.");
-    showToast(`Kurs importert (${result.moduleIds?.length ?? 0} moduler).`);
+    // ⚠️ #957/#995: responsen BÆRER forklaringen; her ble den kastet.
+    //
+    // Forfatteren fikk «Kurs importert» og ble sendt til et kurs som lå som utkast, uten et ord om
+    // hvorfor. Serveren regnet ut `heldBackByTranslationGate`, brukte det til å holde kurset
+    // tilbake, og rapporterte det — og så leste ingen det. Et flagg ingen leser er samme klasse som
+    // en vakt som ikke kjører.
+    //
+    // Teksten sier også hva forfatteren skal GJØRE. «Lagret som utkast» uten neste steg er en
+    // beskjed om systemets tilstand, ikke hjelp.
+    const count = result.moduleIds?.length ?? 0;
+    if (result.heldBackByTranslationGate) {
+      showToast(tf("adminContent.courses.importedHeldBack", { count }), "warning");
+    } else {
+      showToast(tf("adminContent.courses.imported", { count }));
+    }
     window.location.href = `/admin-content/courses/${encodeURIComponent(result.courseId)}`;
   } catch (error) {
     const d = describeImportError(error, {

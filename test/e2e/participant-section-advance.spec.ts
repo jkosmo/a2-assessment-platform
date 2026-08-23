@@ -310,11 +310,15 @@ test("#992: en ARKIVERT modul foran siste seksjon skal ikke blokkere «Avslutt k
   await mockBase(page);
   // Produkteiers «Samfunnsvitere»-tilstand: en arkivert modul ligger igjen i et publisert kurs.
   // Serverens bevisport filtrerer den bort og er klar til å utstede beviset.
+  //
+  // ⚠️ `required: false` sto ikke her da testen ble skrevet — den mocket «arkivert» som bare
+  // `available: false`, altså den sammenblandingen #995 skiller. Testen ble rød av fiksen, og det
+  // var riktig: mocken beskrev en tilstand serveren aldri sender.
   await mockCourseWithUnavailable(
     page,
     [
-      { type: "MODULE", moduleId: "m1", courseItemId: "ci1", title: "Arkivert test", moduleStatus: "NOT_STARTED", available: false, discussionsEnabled: false },
-      { type: "SECTION", sectionId: "s1", courseItemId: "ci2", title: "Lesestoff", read: false, available: true, discussionsEnabled: false },
+      { type: "MODULE", moduleId: "m1", courseItemId: "ci1", title: "Arkivert test", moduleStatus: "NOT_STARTED", available: false, required: false, discussionsEnabled: false },
+      { type: "SECTION", sectionId: "s1", courseItemId: "ci2", title: "Lesestoff", read: false, available: true, required: true, discussionsEnabled: false },
     ],
     ["s1"],
   );
@@ -442,4 +446,79 @@ test("#992: serverens JSON når aldri deltakerens toast", async ({ page }) => {
   // ⚠️ KONTROLL: knappen må bli klikkbar igjen. En feilmelding som etterlater deltakeren med en
   // død knapp er en blindvei av samme slag som resten av denne saken.
   await expect(page.locator("#sectionReaderMarkRead")).toBeEnabled();
+});
+
+// ---------------------------------------------------------------------------
+// #995: en AVPUBLISERT modul er ikke det samme som en ARKIVERT.
+//
+// QA-porten fant at #992 blandet dem. Klienten utledet «ikke påkrevd» fra `available: false`, mens
+// serverens bevisport bare filtrerer på `archivedAt`. Utfallet var en STILLE blindvei: «Avslutt
+// kurset» dukket opp, klikket registrerte lesningen, og så skjedde ingenting — ingen bevis, ingen
+// feilmelding, ingen forklaring.
+//
+// ⚠️ Det er nøyaktig tilstanden #929 ble skrevet for å fjerne, gjenskapt av fiksen mot en annen
+// variant av den. Derfor står disse to testene ved siden av #992-testen over: forskjellen mellom dem
+// er ETT felt, og det er hele poenget.
+// ---------------------------------------------------------------------------
+test("#995: en AVPUBLISERT modul blokkerer «Avslutt kurset» — den teller fortsatt", async ({ page }) => {
+  await mockBase(page);
+  await mockCourseWithUnavailable(
+    page,
+    [
+      // Ikke arkivert, bare uten publisert versjon. Serveren krever den fortsatt.
+      { type: "MODULE", moduleId: "m1", courseItemId: "ci1", title: "Midlertidig nede", moduleStatus: "NOT_STARTED", available: false, required: true, discussionsEnabled: false },
+      { type: "SECTION", sectionId: "s1", courseItemId: "ci2", title: "Lesestoff", read: false, available: true, required: true, discussionsEnabled: false },
+    ],
+    ["s1"],
+  );
+
+  let readCalled = false;
+  await page.route("**/api/courses/c1/sections/s1/read", (route: Route) => {
+    readCalled = true;
+    return route.fulfill({ status: 204, body: "" });
+  });
+
+  await openCourse(page);
+  await page.locator('.course-item[data-key="ci2"] .course-module-row').click();
+  await expect(page.locator("#sectionReaderBody")).toContainText("Tekst i s1");
+
+  // Ingen knapp — og en forklaring, ikke en blindvei.
+  await expect(page.locator("#sectionReaderFinish")).toHaveCount(0);
+  await expect(page.locator(".course-inline-actions")).toContainText(/1 igjen/);
+
+  // ⚠️ Kjernen: ingenting registreres. Før fiksen ble lesningen skrevet av et klikk som ikke førte
+  // til noe, og deltakeren mistet den siste handlingen som kunne gitt en forklaring.
+  expect(readCalled).toBe(false);
+
+  // Raden er heller ikke klikkbar — modulen kan ikke åpnes, den kan bare vente på forfatteren.
+  await expect(page.locator('.course-item[data-key="ci1"] .course-module-row')).toBeDisabled();
+});
+
+test("#995 KONTROLLCASE: en ARKIVERT modul blokkerer IKKE — den er tatt ut av kurset", async ({ page }) => {
+  // Samme oppsett, ETT felt forskjellig. Uten denne ville «behandle alt utilgjengelig som påkrevd»
+  // bestått testen over — og da hadde vi gjeninnført #945: en arkivert modul som blokkerer
+  // fullføring for alltid.
+  await mockBase(page);
+  await mockCourseWithUnavailable(
+    page,
+    [
+      { type: "MODULE", moduleId: "m1", courseItemId: "ci1", title: "Arkivert", moduleStatus: "NOT_STARTED", available: false, required: false, discussionsEnabled: false },
+      { type: "SECTION", sectionId: "s1", courseItemId: "ci2", title: "Lesestoff", read: false, available: true, required: true, discussionsEnabled: false },
+    ],
+    ["s1"],
+  );
+
+  let readCalled = false;
+  await page.route("**/api/courses/c1/sections/s1/read", (route: Route) => {
+    readCalled = true;
+    return route.fulfill({ status: 204, body: "" });
+  });
+
+  await openCourse(page);
+  await page.locator('.course-item[data-key="ci2"] .course-module-row').click();
+  await expect(page.locator("#sectionReaderBody")).toContainText("Tekst i s1");
+
+  await expect(page.locator("#sectionReaderFinish")).toBeVisible();
+  await page.locator("#sectionReaderFinish").click();
+  await expect.poll(() => readCalled).toBe(true);
 });

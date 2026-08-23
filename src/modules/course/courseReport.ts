@@ -90,17 +90,21 @@ export async function getCourseReport(
       const enrolled = participantIds.size;
       const completed = completions.length;
 
-      // ⚠️ `moduleBreakdown.enrolledUsers` er IKKE det samme publikummet som `enrolledParticipants`
-      // over: det er fortsatt «brukere med innlevering på modulen i vinduet». Modulnivået har ingen
-      // egen innmelding — man meldes inn i et KURS — så den rette nevneren her er kursets publikum,
-      // ikke en modulvariant. Den delen krever en ny teller i `courseRepository`; se #969-rapporten.
-      // Inntil da kan `passRate` fortsatt overstige 1 av nøyaktig samme grunn som kursgraden kunne.
+      // ⚠️ #969/#995: modulraden hadde nøyaktig samme feil som kursraden, én etasje ned — telleren
+      // var sertifiseringer i vinduet, nevneren innleveringer i vinduet, og de to målte ULIKE
+      // mennesker. Med «siste 30 dager» kunne 12 beståtte deles på 3 innleveringer: 400 %.
+      //
+      // Modulnivået har ingen egen innmelding — man meldes inn i et KURS — så nevneren er kursets
+      // publikum, det samme `participantIds` kursraden over bruker. Telleren er de av dem som
+      // faktisk besto.
+      //
+      // Snittet er poenget, ikke en klipping til 100 %: en klipping ville skjult at de to tallene
+      // var uenige. Nå er telleren en delmengde av nevneren per konstruksjon.
       const moduleBreakdown = await Promise.all(
         course.modules.map(async (cm) => {
-          const [passedUsers, enrolledUsers] = await Promise.all([
-            courseRepository.countPassedUsersForModule(cm.moduleId, filters),
-            courseRepository.countUsersWithSubmissionsForModule(cm.moduleId, filters),
-          ]);
+          const passedIds = await courseRepository.findPassedUserIdsForModule(cm.moduleId, filters);
+          const passedUsers = passedIds.filter((id) => participantIds.has(id)).length;
+          const enrolledUsers = participantIds.size;
           return {
             moduleId: cm.moduleId,
             moduleTitle: localizeContentText(locale, cm.module.title) ?? cm.module.title,

@@ -48,11 +48,17 @@ vi.mock("../../src/modules/course/courseCommands.js", () => ({
 
 vi.mock("../../src/services/auditService.js", () => ({ recordAuditEvent }));
 
+// ⚠️ #995: tx-dobbelen var `{}`. Da importen begynte å AVPUBLISERE et målkurs som holdes tilbake,
+// falt testen på `tx.course.update` — og det var riktig av den. En dobbel som ikke kan feile på en
+// ny skriving, kan heller ikke bekrefte at skrivingen skjer.
+const courseUpdate = vi.fn();
+
 vi.mock("../../src/db/transaction.js", () => ({
-  runInTransaction: (cb: (tx: unknown) => unknown) => cb({}),
+  runInTransaction: (cb: (tx: unknown) => unknown) => cb({ course: { update: courseUpdate } }),
 }));
 
 function resetMocks() {
+  courseUpdate.mockReset().mockResolvedValue({});
   createModule.mockReset().mockResolvedValue({ id: "new-module-id" });
   createRubricVersion.mockReset().mockResolvedValue({ id: "rubric-id" });
   createPromptTemplateVersion.mockReset().mockResolvedValue({ id: "prompt-id" });
@@ -145,5 +151,56 @@ describe("#957 importCourseFromEnvelope reports heldBackByTranslationGate", () =
     expect(result.heldBackByTranslationGate).toBe(false);
     expect(publishCourse).toHaveBeenCalledTimes(1);
     expect(publishModuleVersion).toHaveBeenCalledTimes(1);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// #995: å HOPPE OVER publisering er ikke det samme som å AVPUBLISERE.
+//
+// Betingelsen `if (publishedAt && !anyContentHeldBack)` var skrevet med `createNew` i tankene, der
+// et nytt kurs starter upublisert uansett. Ved `replaceExisting` finnes målkurset fra før og kan
+// allerede være publisert — og da lot vi det stå levende med en modul uten aktiv versjon.
+//
+// ⚠️ Deltakeren møter «modul ikke tilgjengelig» i et kurs som ser helt normalt ut. Det er
+// publiseringsinvarianten brutt, og det er stille: ingen feilmelding noe sted.
+// ─────────────────────────────────────────────────────────────────────────────
+describe("#995 importCourseFromEnvelope avpubliserer et målkurs som holdes tilbake", () => {
+  beforeEach(resetMocks);
+
+  it("avpubliserer når innhold holdes tilbake", async () => {
+    const { importCourseFromEnvelope } = await import(
+      "../../src/modules/adminContent/contentImportService.js"
+    );
+
+    await importCourseFromEnvelope(buildCourseEnvelope({ fullyTranslated: false }), {
+      actorId: "actor-1",
+      mode: "createNew",
+    });
+
+    expect(publishCourse, "kurset skal ikke publiseres når noe mangler et språk").not.toHaveBeenCalled();
+    // ⚠️ Det er DENNE som er ny. Før skjedde det ingenting her — og for et eksisterende, publisert
+    // målkurs betydde «ingenting» at det ble stående levende.
+    expect(courseUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ publishedAt: null }) }),
+    );
+  });
+
+  it("KONTROLLCASE: en komplett pakke publiseres, og avpubliseres IKKE", async () => {
+    // Uten denne ville «avpubliser alltid» bestått testen over — og da hadde ingen import kunnet
+    // levere et publisert kurs igjen.
+    const { importCourseFromEnvelope } = await import(
+      "../../src/modules/adminContent/contentImportService.js"
+    );
+
+    await importCourseFromEnvelope(buildCourseEnvelope({ fullyTranslated: true }), {
+      actorId: "actor-1",
+      mode: "createNew",
+    });
+
+    expect(publishCourse).toHaveBeenCalledTimes(1);
+    const unpublished = courseUpdate.mock.calls.some(
+      ([arg]) => (arg as { data?: { publishedAt?: unknown } })?.data?.publishedAt === null,
+    );
+    expect(unpublished, "en komplett pakke skal ikke avpubliseres").toBe(false);
   });
 });

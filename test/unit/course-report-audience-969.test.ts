@@ -15,6 +15,7 @@ const countCourseCompletions = vi.fn();
 const countDistinctEnrolledUsersForModules = vi.fn();
 const countPassedUsersForModule = vi.fn();
 const countUsersWithSubmissionsForModule = vi.fn();
+const findPassedUserIdsForModule = vi.fn();
 
 const resolveCourseAudience = vi.fn();
 const findUserIdsInDepartment = vi.fn();
@@ -27,6 +28,7 @@ vi.mock("../../src/modules/course/courseRepository.js", () => ({
     countDistinctEnrolledUsersForModules,
     countPassedUsersForModule,
     countUsersWithSubmissionsForModule,
+    findPassedUserIdsForModule,
   },
 }));
 
@@ -77,6 +79,7 @@ describe("#969 course report — enrolledParticipants is the course audience", (
     countDistinctEnrolledUsersForModules.mockReset().mockResolvedValue(0);
     countPassedUsersForModule.mockReset().mockResolvedValue(0);
     countUsersWithSubmissionsForModule.mockReset().mockResolvedValue(0);
+    findPassedUserIdsForModule.mockReset().mockResolvedValue([]);
     resolveCourseAudience.mockReset().mockResolvedValue([]);
     findUserIdsInDepartment.mockReset().mockResolvedValue([]);
   });

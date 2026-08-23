@@ -636,6 +636,19 @@ export async function importCourseFromEnvelope(
         // are filled.
         if (payload.course.audit?.publishedAt && !anyContentHeldBack) {
           await publishCourse(courseId, options.actorId, tx);
+        } else if (anyContentHeldBack) {
+          // ⚠️ #995: å HOPPE OVER publiseringen er ikke det samme som å sørge for at kurset er
+          // upublisert.
+          //
+          // Ved `mode: "replaceExisting"` finnes målkurset fra før, og kan allerede være publisert.
+          // Da lot vi det stå levende med en modul som mangler aktiv versjon — deltakeren møter
+          // «modul ikke tilgjengelig», og publiseringsinvarianten er brutt. Betingelsen over var
+          // skrevet med `createNew` i tankene, der et nytt kurs starter upublisert uansett.
+          //
+          // Vi avpubliserer i stedet for å nekte importen: forfatteren skal kunne oppdatere et kurs
+          // med ufullstendig oversettelse og fylle hullene etterpå. Det er samme valg som for
+          // moduler (#896 S4) — hold tilbake, ikke avvis.
+          await tx.course.update({ where: { id: courseId }, data: { publishedAt: null } });
         }
 
         await recordAuditEvent(

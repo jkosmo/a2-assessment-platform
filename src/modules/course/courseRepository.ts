@@ -258,6 +258,21 @@ export function createCourseRepository(client: CourseRepositoryClient = prisma) 
               item.itemType === "SECTION"
                 ? true
                 : Boolean(item.module?.activeVersionId && item.module.activeVersion?.publishedAt && !item.module.archivedAt),
+            // ⚠️ «Tilgjengelig» og «påkrevd» er IKKE det samme for moduler, og å blande dem er en
+            // blindvei.
+            //
+            // Bevisporten (`courseCompletionService`) filtrerer bare på `archivedAt`. En AVPUBLISERT
+            // modul er altså fortsatt PÅKREVD — den er bare ikke åpnbar akkurat nå. En ARKIVERT
+            // modul er tatt ut av sirkulasjon og kreves ikke.
+            //
+            // QA-porten fant at klienten utledet «ikke påkrevd» fra `available: false` og dermed
+            // tilbød «Avslutt kurset» i et kurs serveren ikke ville utstedt bevis for: klikket
+            // registrerte lesningen, og ingenting skjedde. Nøyaktig #929 om igjen.
+            //
+            // Kuren er at DØRA svarer på begge spørsmålene, fra samme regel porten bruker — ikke at
+            // klienten gjetter det ene ut fra det andre. Seksjoner som er med er påkrevd ved
+            // konstruksjon; de utilgjengelige er allerede filtrert bort.
+            required: item.itemType === "SECTION" ? true : item.module?.archivedAt == null,
             module: item.module ? { id: item.module.id, title: item.module.title } : null,
             section: item.section,
           })),
@@ -416,6 +431,30 @@ export function createCourseRepository(client: CourseRepositoryClient = prisma) 
           ...buildCertificationWhere(filters),
         },
       });
+    },
+
+    /**
+     * HVEM som besto modulen, ikke bare hvor mange.
+     *
+     * ⚠️ #995: `countPassedUsersForModule` gir et TALL, og et tall kan ikke unioneres eller
+     * snittes mot kursets publikum. Det var derfor `moduleBreakdown.passRate` fortsatt kunne vise
+     * 400 %: telleren var sertifiseringer i vinduet, nevneren var innleveringer i vinduet, og de to
+     * målte ulike mennesker.
+     *
+     * Med ID-ene kan brøken bli det den utgir seg for: «av dem som er med i kurset, hvor mange
+     * besto denne modulen». Samme kur som #969 én etasje ned.
+     */
+    findPassedUserIdsForModule(moduleId: string, filters: Pick<ReportFilters, "dateFrom" | "dateTo" | "orgUnit"> = {}) {
+      return client.certificationStatus
+        .findMany({
+          where: {
+            moduleId,
+            status: { in: CERTIFICATION_PASSED_STATUSES },
+            ...buildCertificationWhere(filters),
+          },
+          select: { userId: true },
+        })
+        .then((rows) => rows.map((r) => r.userId));
     },
 
     countUsersWithSubmissionsForModule(

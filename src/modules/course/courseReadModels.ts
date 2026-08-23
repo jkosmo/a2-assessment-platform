@@ -29,12 +29,23 @@ export interface CourseModuleEntry {
 // learning section (#491/P1), in sortOrder.
 // courseItemId + discussionsEnabled (#495/T-QA-3): lar deltaker-UI feste diskusjonstråder på
 // det konkrete CourseItem og skjule panelet når diskusjon er avskrudd for elementet.
+// ⚠️ #995: `available` og `required` er TO spørsmål, og en modul kan svare ulikt på dem.
+//
+//   arkivert      → available: false, required: false   (tatt ut av sirkulasjon)
+//   avpublisert   → available: false, required: TRUE    (midlertidig nede, teller fortsatt)
+//   publisert     → available: true,  required: true
+//
+// Klienten utledet før «ikke påkrevd» fra `available: false` og tilbød «Avslutt kurset» i kurs
+// serveren ikke ville utstedt bevis for. Feltet finnes for at den ikke skal måtte gjette.
 export type CourseSequenceItem =
-  | { type: "MODULE"; sortOrder: number; moduleId: string; courseItemId: string; title: string; moduleStatus: "NOT_STARTED" | "PASSED" | "IN_PROGRESS"; discussionsEnabled: boolean; available: boolean }
+  | { type: "MODULE"; sortOrder: number; moduleId: string; courseItemId: string; title: string; moduleStatus: "NOT_STARTED" | "PASSED" | "IN_PROGRESS"; discussionsEnabled: boolean; available: boolean; required: boolean }
   // #944: `available` er PÅKREVD på begge variantene. Var det valgfritt på SECTION, ville en kaller
   // som glemte det fått `undefined` — som er falsy, men også umulig å skille fra «ikke vurdert».
   // Typen tvinger nå fram et svar, slik at neste sti ikke kan la det stå åpent i stillhet.
-  | { type: "SECTION"; sortOrder: number; sectionId: string; courseItemId: string; title: string; read: boolean; discussionsEnabled: boolean; available: boolean };
+  // Seksjoner som i det hele tatt er med er både tilgjengelige og påkrevd ved konstruksjon (#958
+  // filtrerer resten bort i døra), men feltene er PÅKREVD i typen på begge variantene — ellers ville
+  // klienten fått `undefined`, som er falsy og umulig å skille fra «ikke vurdert».
+  | { type: "SECTION"; sortOrder: number; sectionId: string; courseItemId: string; title: string; read: boolean; discussionsEnabled: boolean; available: boolean; required: boolean };
 
 export interface CourseDetail extends CourseListItem {
   certificationLevel: string | null;

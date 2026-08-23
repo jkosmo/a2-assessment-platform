@@ -518,7 +518,14 @@ async function importSectionPackage(input) {
     // ⚠️ KODEN slås opp lokalt, serverens tekst brukes ikke. Konsollet er trespråklig og defaulter
     // til en-GB, så en norsk setning fra serveren ville blitt vist ordrett til en engelsk forfatter.
     // Samme regel som publiseringsgaten allerede følger (FEATURE_SURFACE_MAP §24).
-    const d = describeImportError(error, { notAnEnvelope: L("notAnEnvelope") });
+    // ⚠️ #995: `L` som tredje argument sto ikke her, og fraværet var stille. Uten oversetteren
+    // faller `describeApiError` tilbake på sin hardkodede engelske generiske tekst — så en
+    // eierskapsfeil (`content_ownership`) ble engelsk på en side som ellers er trespråklig, mens
+    // kurs- og modulimporten fikk den lokaliserte, handlingsrettede setningen.
+    //
+    // Feilklassen er verdt navnet: et VALGFRITT argument som stille degraderer kvaliteten. Ingenting
+    // feiler, ingen test blir rød, teksten blir bare dårligere for én av tre flater.
+    const d = describeImportError(error, { notAnEnvelope: L("notAnEnvelope") }, L);
     showToast(`${L("importSection")}: ${d.headline}`, "error", d.detail);
     document.getElementById("importSectionBtn")?.focus();
   } finally {

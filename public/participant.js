@@ -3315,9 +3315,17 @@ function formatCourseProgressLabel(progress) {
 }
 
 // #492: finn neste uferdige element i sekvensen (uleste seksjoner / ikke-beståtte tilgjengelige moduler).
+//
+// ⚠️ #995: her gjelder TILGJENGELIG, ikke PÅKREVD — og det er nettopp fordi de to spørsmålene skiller
+// lag. Denne peker ut steget deltakeren skal gjøre NÅ, og en avpublisert modul kan ikke åpnes selv om
+// beviset fortsatt krever den. Å utheve den ville sendt deltakeren mot en rad som ikke lar seg
+// klikke.
+//
+// `outstandingBeforeFinish` spør det motsatte spørsmålet og bruker derfor `isEntryOutstanding`: den
+// avpubliserte modulen SKAL blokkere «Avslutt kurset», for serveren teller den fortsatt.
 function findNextIncompleteEntry(sequence) {
   if (!Array.isArray(sequence)) return null;
-  return sequence.find(isEntryOutstanding) ?? null;
+  return sequence.find((e) => isEntryAvailable(e) && !isEntryDone(e)) ?? null;
 }
 
 function openCourseItemEntry(courseId, entry) {

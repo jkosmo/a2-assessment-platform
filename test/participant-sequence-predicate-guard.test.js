@@ -5,6 +5,7 @@ import {
   isEntryAvailable,
   isEntryDone,
   isEntryOutstanding,
+  isEntryRequired,
 } from "../public/participant-console-state.js";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -50,20 +51,46 @@ describe("#992: sekvenspredikatene", () => {
     expect(isEntryDone(mod({ moduleStatus: "IN_PROGRESS" }))).toBe(false);
   });
 
-  it("en ULEST men UTILGJENGELIG seksjon er ikke utestående", () => {
-    // Den som ga «1 gjenstår» uten knapp. Serveren teller den ikke; nå gjør ikke klienten det heller.
-    expect(isEntryOutstanding(section({ read: false, available: false }))).toBe(false);
+  // ───────────────────────────────────────────────────────────────────────────
+  // #995: «utestående» henger på PÅKREVD, ikke på TILGJENGELIG.
+  //
+  // ⚠️ Disse testene sa tidligere at enhver utilgjengelig modul er ikke-utestående, og de var
+  // grønne. QA-porten fant at det er feil: serverens bevisport filtrerer bare på `archivedAt`, så en
+  // AVPUBLISERT modul teller fortsatt. Klienten tilbød «Avslutt kurset» i kurs serveren ikke ville
+  // utstedt bevis for — klikket registrerte lesningen, og så skjedde ingenting.
+  //
+  // Testene under er derfor SNUDD på det ene tilfellet, og det er verdt å legge merke til: de
+  // pinnet en oppførsel som var gal. En test kan bare fange det den ble skrevet for å fange.
+  // ───────────────────────────────────────────────────────────────────────────
+
+  it("en AVPUBLISERT modul ER utestående — den er nede, ikke fjernet", () => {
+    // `available: false` uten `required: false`. Dette er tilstanden som ga blindveien.
+    expect(isEntryOutstanding(mod({ moduleStatus: "NOT_STARTED", available: false, required: true }))).toBe(true);
   });
 
-  it("en IKKE-BESTÅTT men ARKIVERT modul er ikke utestående", () => {
-    expect(isEntryOutstanding(mod({ moduleStatus: "NOT_STARTED", available: false }))).toBe(false);
+  it("en ARKIVERT modul er IKKE utestående — den er tatt ut av kurset", () => {
+    // Ett felt forskjellig fra testen over, og det er hele skillet.
+    expect(isEntryOutstanding(mod({ moduleStatus: "NOT_STARTED", available: false, required: false }))).toBe(false);
   });
 
-  it("KONTROLLCASE: ulest tilgjengelig seksjon ER utestående", () => {
-    // Ellers måler vi ikke tilgjengelighet, bare at funksjonen alltid sier nei — og da ville
-    // «Avslutt kurset» dukket opp midt i et halvferdig kurs.
+  it("KONTROLLCASE: ulest tilgjengelig innhold ER utestående", () => {
+    // Ellers måler vi ikke regelen, bare at funksjonen alltid sier nei — og da ville «Avslutt
+    // kurset» dukket opp midt i et halvferdig kurs.
     expect(isEntryOutstanding(section({ read: false }))).toBe(true);
     expect(isEntryOutstanding(mod({ moduleStatus: "NOT_STARTED" }))).toBe(true);
+  });
+
+  it("KONTROLLCASE: ferdig innhold er aldri utestående, uansett flagg", () => {
+    expect(isEntryOutstanding(section({ read: true }))).toBe(false);
+    expect(isEntryOutstanding(mod({ moduleStatus: "PASSED", available: false, required: true }))).toBe(false);
+  });
+
+  it("manglende `required` betyr PÅKREVD — vi lover ikke et bevis som ikke kommer", () => {
+    // ⚠️ Motsatt default av `isEntryAvailable`, og med vilje. Mangler feltet, snakker vi med en
+    // eldre server; da er «still kravet» det trygge svaret. Å tilby «Avslutt kurset» og så ikke
+    // utstede beviset er den stille blindveien #929 ble skrevet for å fjerne.
+    expect(isEntryRequired({ type: "MODULE", moduleStatus: "NOT_STARTED" })).toBe(true);
+    expect(isEntryRequired(undefined)).toBe(true);
   });
 });
 
@@ -82,6 +109,8 @@ const CLAUSES = [
   { re: /\.available\s*!==\s*false/g, use: "isEntryAvailable(entry)" },
   { re: /moduleStatus\s*[!=]==\s*"PASSED"/g, use: "isEntryDone(entry) / isEntryOutstanding(entry)" },
   { re: /\.read\s*!==\s*true/g, use: "isEntryDone(entry)" },
+  // #995: `required` er det nye leddet, og akkurat like lett å skrive for hånd som de tre over.
+  { re: /\.required\s*!==\s*false/g, use: "isEntryRequired(entry) / isEntryOutstanding(entry)" },
 ];
 
 describe("#992: participant.js skriver ikke sine egne sekvensledd", () => {
@@ -106,11 +135,14 @@ describe("#992: participant.js skriver ikke sine egne sekvensledd", () => {
     // `read === true`, ikke `.read !== true`. Det er riktig av modulen og feil av vakta — en
     // kontroll som krever at kuren staves som sykdommen måler ingenting.
     const state = readFileSync(STATE, "utf8");
-    for (const name of ["isEntryAvailable", "isEntryDone", "isEntryOutstanding"]) {
+    for (const name of ["isEntryAvailable", "isEntryDone", "isEntryRequired", "isEntryOutstanding"]) {
       expect(state, `${name} er ikke lenger eksportert fra participant-console-state.js`)
         .toContain(`export function ${name}(`);
     }
     const src = readFileSync(PARTICIPANT, "utf8");
+    // ⚠️ `isEntryRequired` står med vilje IKKE i denne lista: den kalles av `isEntryOutstanding`
+    // inne i modulen, ikke av `participant.js`. Å kreve at ruta importerer den ville presset fram
+    // en ubrukt import bare for å gjøre vakta grønn — og en vakt man tilpasser seg er ikke en vakt.
     for (const name of ["isEntryAvailable", "isEntryDone", "isEntryOutstanding"]) {
       // Importlinje + minst ett kallsted. Bare importert = ingen som spør.
       const uses = [...src.matchAll(new RegExp(`\\b${name}\\b`, "g"))].length;
