@@ -7,6 +7,7 @@ import { localeLabels, supportedLocales, translations } from "/static/i18n/revie
 import { apiFetch, buildConsoleHeaders, getConsoleConfig, applyNavReviewBadge } from "/static/api-client.js";
 import { initConsentGuard } from "/static/consent-guard.js";
 import { hideLoading, showEmpty, showLoading } from "/static/loading.js";
+import { setHidden } from "/static/dom-visibility.js";
 import { showToast } from "/static/toast.js";
 import { describeApiError } from "/static/api-error.js";
 import {
@@ -405,7 +406,10 @@ function renderTabBadge(element, count) {
     return;
   }
 
-  element.hidden = count <= 0;
+  // #975: `.workspace-section-tab-badge` setter `display:inline-flex` i <style>-blokka i
+  // review.html, altså SENERE i cascaden enn både `.hidden` og UA-arkets `[hidden]`. `element.hidden
+  // = true` skjulte derfor ingenting, og fanene sto med en «0»-plakett hele tiden.
+  setHidden(element, count <= 0);
   element.textContent = String(count);
 }
 
@@ -436,11 +440,15 @@ function renderReviewWorkspaceTabs() {
     return;
   }
 
+  // #975: hele fanestripa styres med setHidden. `.workspace-section-tabs{display:flex}` og
+  // `.workspace-section-tab{display:inline-flex}` står i <style>-blokka i review.html og vant over
+  // `hidden`-attributtet — en saksbehandler med bare ÉN rolle fikk likevel se hele fanerada, og
+  // fanen for rollen hun ikke har sto klikkbar ved siden av.
   const visibleTabs = getVisibleReviewTabs();
   if (visibleTabs.length === 0) {
-    reviewWorkspaceTabs.hidden = true;
-    manualReviewTabPanel.hidden = true;
-    appealTabPanel.hidden = true;
+    setHidden(reviewWorkspaceTabs, true);
+    setHidden(manualReviewTabPanel, true);
+    setHidden(appealTabPanel, true);
     return;
   }
 
@@ -449,23 +457,23 @@ function renderReviewWorkspaceTabs() {
   }
 
   const showTabs = visibleTabs.length > 1;
-  reviewWorkspaceTabs.hidden = !showTabs;
+  setHidden(reviewWorkspaceTabs, !showTabs);
 
   const manualActive = activeReviewTab === "manualReview" && visibleTabs.includes("manualReview");
   const appealActive = activeReviewTab === "appeal" && visibleTabs.includes("appeal");
 
-  reviewTabManualButton.hidden = !visibleTabs.includes("manualReview");
+  setHidden(reviewTabManualButton, !visibleTabs.includes("manualReview"));
   reviewTabManualButton.classList.toggle("active", manualActive);
   reviewTabManualButton.setAttribute("aria-selected", manualActive ? "true" : "false");
   reviewTabManualButton.tabIndex = manualActive ? 0 : -1;
 
-  reviewTabAppealButton.hidden = !visibleTabs.includes("appeal");
+  setHidden(reviewTabAppealButton, !visibleTabs.includes("appeal"));
   reviewTabAppealButton.classList.toggle("active", appealActive);
   reviewTabAppealButton.setAttribute("aria-selected", appealActive ? "true" : "false");
   reviewTabAppealButton.tabIndex = appealActive ? 0 : -1;
 
-  manualReviewTabPanel.hidden = !manualActive;
-  appealTabPanel.hidden = !appealActive;
+  setHidden(manualReviewTabPanel, !manualActive);
+  setHidden(appealTabPanel, !appealActive);
 }
 
 function updateReviewTabCounts() {

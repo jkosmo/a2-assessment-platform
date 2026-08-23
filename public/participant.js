@@ -580,14 +580,18 @@ function applySubmissionReadMode() {
   const hideAck = readOnly || mcqOnly;
   if (ackCheckbox) {
     ackCheckbox.disabled = readOnly;
-    ackCheckbox.hidden = hideAck;
+    // #975: `.inline{display:inline-block}` slår `hidden`-attributtet, så denne linja skjulte
+    // ingenting — avkrysningsboksen ble bare usynlig fordi <label>-en rundt ble skjult (under).
+    // En linje som ser ut som den gjør jobben, men ikke gjør den, er verre enn ingen linje.
+    setHidden(ackCheckbox, hideAck);
   }
   if (draftStatus) draftStatus.hidden = hideAck;
   if (draftBrowserNote) draftBrowserNote.hidden = hideAck;
   if (submissionValidationHint) submissionValidationHint.hidden = hideAck;
-  // The ack <input> carries the `.inline` class whose CSS display overrides the [hidden]
-  // attribute, so hide the wrapping <label> via style.display (beats the class rule) — #525.
-  if (submissionAckLabel) submissionAckLabel.style.display = hideAck ? "none" : "";
+  // #525: <label>-en rundt må skjules for seg — den er en egen boks med ramme, ikke bare et hylster
+  // rundt avkrysningsboksen. #975: den brukte allerede style.display, som er riktig mekanisme;
+  // setHidden gjør det samme og holder `hidden`-attributtet i takt.
+  setHidden(submissionAckLabel, hideAck);
   // #475: the whole "Før du leverer" group (label + ack tile + KI) follows the ack's visibility.
   if (attestGroup) attestGroup.style.display = hideAck ? "none" : "";
   if (submissionIdRow) submissionIdRow.hidden = readOnly;
@@ -3576,7 +3580,10 @@ function renderCourseDetailModules(courseId, course) {
     const panel = document.createElement("div");
     panel.className = "course-inline-panel";
     panel.id = `inlinePanel_${courseId}_${key.replace(/[^a-zA-Z0-9_-]/g, "_")}`;
-    panel.hidden = true;
+    // #975: `.course-inline-panel[hidden]{display:none}` sto i <style>-blokka som en lapp mot
+    // .hidden-fella. `.course-inline-panel` setter ingen display, så lappen var aldri nødvendig —
+    // men den gjorde at ingen kunne se det. setHidden eier skjulingen; lappen er fjernet.
+    setHidden(panel, true);
     row.setAttribute("aria-expanded", "false");
     row.setAttribute("aria-controls", panel.id);
 
@@ -3600,7 +3607,7 @@ function renderCourseDetailModules(courseId, course) {
 
     const body = document.createElement("div");
     body.className = "course-discussion-body";
-    body.hidden = true;
+    setHidden(body, true);
 
     const toggle = document.createElement("button");
     toggle.type = "button";
@@ -3614,8 +3621,10 @@ function renderCourseDetailModules(courseId, course) {
 
     let mounted = false;
     toggle.addEventListener("click", () => {
+      // setHidden holder attributtet i takt med inline display, så `body.hidden` er fremdeles en
+      // sann avlesning av om panelet er kollapset (#975).
       const open = body.hidden;
-      body.hidden = !open;
+      setHidden(body, !open);
       disc.classList.toggle("open", open);
       toggle.setAttribute("aria-expanded", String(open));
       if (open && !mounted) {
@@ -3707,7 +3716,7 @@ function collapseInlineOpen() {
   if (itemWrap) {
     const panel = itemWrap.querySelector(".course-inline-panel");
     const row = itemWrap.querySelector(".course-module-row");
-    if (panel) { panel.innerHTML = ""; panel.hidden = true; }
+    if (panel) { panel.innerHTML = ""; setHidden(panel, true); }
     itemWrap.classList.remove("open");
     if (row) { row.setAttribute("aria-expanded", "false"); row.disabled = false; }
   }
@@ -3741,7 +3750,7 @@ async function openInlineItemByEntry(courseId, entry) {
       read: entry.read, title: entry.title,
     };
     itemWrap.classList.add("open");
-    panel.hidden = false;
+    setHidden(panel, false);
     row?.setAttribute("aria-expanded", "true");
     scrollItemIntoView(itemWrap);
     await renderSectionReaderInto(panel, courseId, entry);
@@ -3782,7 +3791,7 @@ function reopenInlineAfterRender(courseId, container) {
   const panel = itemWrap.querySelector(".course-inline-panel");
   const row = itemWrap.querySelector(".course-module-row");
   itemWrap.classList.add("open");
-  panel.hidden = false;
+  setHidden(panel, false);
   row?.setAttribute("aria-expanded", "true");
   if (row) row.disabled = false;
   if (inlineOpen.type === "MODULE") {

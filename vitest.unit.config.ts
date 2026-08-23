@@ -1,6 +1,22 @@
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
 
+const rootDir = path.dirname(fileURLToPath(import.meta.url));
+
 export default defineConfig({
+  // #975: `test/unit/auth-redirect-safety.test.ts` importerer public/api-client.js, som nå henter
+  // `setHidden` fra /static/dom-visibility.js. To ting måtte på plass, begge de samme som i
+  // vitest.dom.config.ts: Vite behandler `public/` som en ren asset-mappe og nekter modulimport
+  // derfra (publicDir), og nettleser-stiene `/static/…` finnes ikke på disk (alias). Testene
+  // serverer ingenting, så publicDir har ingen jobb her.
+  publicDir: false,
+  resolve: {
+    alias: [
+      { find: /^\/static\/i18n\/(.*)$/, replacement: `${path.join(rootDir, "public", "i18n")}${path.sep}$1` },
+      { find: /^\/static\/(.*)$/, replacement: `${path.join(rootDir, "public", "static")}${path.sep}$1` },
+    ],
+  },
   test: {
     environment: "node",
     env: { AUTH_MODE: "mock" },

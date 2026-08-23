@@ -57,7 +57,10 @@ test("cohort dashboard: pick a course → status counts + per-class breakdown, w
 
   // Empty state until a course is chosen.
   await expect(page.locator("#cohortEmpty")).toBeVisible();
-  await expect(page.locator("#statusCards")).toBeHidden();
+  // #975: `toBeHidden()` sto her og var grønn av feil grunn. `.status-grid{display:grid}` slo
+  // `hidden`-attributtet, så rutenettet var ALDRI skjult — det var bare tomt, og et tomt grid har
+  // høyde 0, som Playwright regner som skjult. Mål display direkte, ellers måler vi tomheten.
+  await expect(page.locator("#statusCards")).toHaveCSS("display", "none");
 
   // Pick the course.
   await expect(page.locator("#courseSelect option[value='c1']")).toHaveCount(1);
@@ -66,6 +69,8 @@ test("cohort dashboard: pick a course → status counts + per-class breakdown, w
   // Status cards render with the counts.
   const cards = page.locator("#statusCards");
   await expect(cards).toBeVisible();
+  // Makkeren til display-sjekken over: rutenettet skal faktisk komme TILBAKE som grid.
+  await expect(cards).toHaveCSS("display", "grid");
   await expect(cards.locator(".status-card--total .status-value")).toHaveText("5");
   await expect(cards.locator(".status-card--assigned .status-value")).toHaveText("2");
   await expect(cards.locator(".status-card--in_progress .status-value")).toHaveText("1");

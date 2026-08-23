@@ -585,7 +585,10 @@
 
       <!-- QA r7 #1: dropped the redundant «Modul» (shown in the module card) and «Språk» (in the locale
            picker) items from the status rail. -->
-      <div id="stateRail" class="state-rail" hidden aria-label="Modulstatus">
+      <!-- #975: `hidden` + inline display. `.state-rail{display:flex}` slår attributtet alene, og
+           CSS-lappen `.state-rail[hidden]` som pleide å dekke over det er fjernet. setHidden()
+           i admin-content-shell.js rydder begge deler når en modul velges. -->
+      <div id="stateRail" class="state-rail" hidden style="display:none" aria-label="Modulstatus">
         <div class="state-rail-item">
           <span class="state-rail-label" data-i18n="stateRail.label.editing">Du redigerer</span>
           <span id="srEditing"></span>

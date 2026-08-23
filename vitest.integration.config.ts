@@ -1,6 +1,19 @@
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
 
+const rootDir = path.dirname(fileURLToPath(import.meta.url));
+
 export default defineConfig({
+  // #975: se vitest.unit.config.ts — public/api-client.js importerer /static/dom-visibility.js.
+  // Vite nekter modulimport fra publicDir, og nettleser-stien `/static/…` finnes ikke på disk.
+  publicDir: false,
+  resolve: {
+    alias: [
+      { find: /^\/static\/i18n\/(.*)$/, replacement: `${path.join(rootDir, "public", "i18n")}${path.sep}$1` },
+      { find: /^\/static\/(.*)$/, replacement: `${path.join(rootDir, "public", "static")}${path.sep}$1` },
+    ],
+  },
   test: {
     environment: "node",
     include: ["test/**/*.test.ts", "test/**/*.test.js"],

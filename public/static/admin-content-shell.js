@@ -533,7 +533,9 @@ function _domFormFields(entry) {
     // får sin egen rad med × for fjerning. uploadHint vises kun når lista er tom.
     const sourceList = document.createElement("ul");
     sourceList.className = "source-chip-list";
-    sourceList.hidden = true;
+    // #975: `.source-chip-list{display:flex}` (admin-content.html) slår `hidden`-attributtet, så
+    // den tomme lista beholdt padding og luft over «Last opp»-hintet.
+    setHidden(sourceList, true);
 
     const refreshUploadHint = () => {
       sourceList.innerHTML = "";
@@ -541,8 +543,8 @@ function _domFormFields(entry) {
         ...uploadedFileSources.map((f, i) => ({ kind: "file", index: i, label: f.fileName })),
         ...fetchedUrlSources.map((s, i) => ({ kind: "url", index: i, label: s.hostname })),
       ];
-      sourceList.hidden = items.length === 0;
-      uploadHint.hidden = items.length > 0;
+      setHidden(sourceList, items.length === 0);
+      setHidden(uploadHint, items.length > 0);
       for (const item of items) {
         const li = document.createElement("li");
         li.className = "source-chip";
@@ -1237,7 +1239,10 @@ function scrollPreviewToBottom() {
 function updateStateRail() {
   if (!stateRail) return;
   const hasModule = !!selectedModuleId;
-  stateRail.hidden = !hasModule;
+  // #975: her sto `stateRail.hidden = !hasModule` alene, og `.state-rail{display:flex}` slo
+  // attributtet. Lappen var en egen CSS-regel, `.state-rail[hidden]{display:none}` — en fiks oppå
+  // fella i stedet for kuren. Regelen er fjernet; setHidden gjør jobben for alle tilstander.
+  setHidden(stateRail, !hasModule);
   // #787: content-owner panel for the loaded module. Render once per module (guard on the last id) so
   // the frequent updateStateRail calls don't re-fetch/reset it; hide when no module is loaded.
   const ownerHost = document.getElementById("moduleOwnerPanelHost");

@@ -875,7 +875,9 @@ dialog::backdrop {
   border-radius: var(--radius-card);
 }
 
-.state-rail[hidden] { display: none; }
+/* #975: her sto `.state-rail[hidden] { display: none; }` — en lapp som patchet symptomet av at
+   `.state-rail{display:flex}` slår `hidden`-attributtet. Skjulingen eies nå av setHidden() i
+   admin-content-shell.js og av inline display i markupen, så lappen er borte. */
 
 .state-rail-item {
   display: flex;

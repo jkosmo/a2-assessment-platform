@@ -313,7 +313,9 @@
       .course-discussion-label { font-weight: 600; flex-shrink: 0; }
       .course-discussion-hint { font-size: 12px; color: var(--color-meta); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
       .course-discussion-body { margin-top: 8px; }
-      .course-discussion-body[hidden] { display: none; }
+      /* #975: her sto `.course-discussion-body[hidden] { display: none; }`. Klassen setter ingen
+         display, så UA-arkets `[hidden]` holdt hele tiden — lappen skjulte bare at ingen visste
+         det. Utfoldingen styres av setHidden() i participant.js. */
       /* Når den først er åpen trenger den ikke egen aksentstripe — den står allerede i fokus. */
       .course-discussion-body .discussion-panel { border-left-width: 1px; border-left-color: var(--color-border-soft); }
       /* Utfoldingslinjen navngir allerede panelet; panelets egen overskrift ville sagt «Diskusjon» to
@@ -326,7 +328,8 @@
       .course-item { position: relative; display: grid; gap: 4px; }
       .course-item .course-module-row { width: 100%; }
       .course-inline-panel { border-left: 3px solid var(--color-blue); background: var(--color-blue-light); border-radius: 0 8px 8px 0; overflow: hidden; }
-      .course-inline-panel[hidden] { display: none; }
+      /* #975: `.course-inline-panel[hidden] { display: none; }` er fjernet — samme grunn som for
+         .course-discussion-body: klassen setter ingen display, og setHidden() eier skjulingen. */
       .course-inline-panel-sticky { position: sticky; top: 0; z-index: 2; display: flex; align-items: center; gap: var(--space-1); padding: 8px 12px; background: var(--color-blue-light); border-bottom: 1px solid var(--color-border-soft); }
       .course-inline-panel-tag { font-size: 10px; font-weight: 800; letter-spacing: 0.05em; text-transform: uppercase; color: var(--color-link-active); flex-shrink: 0; }
       .course-inline-panel-title { font-size: 13px; font-weight: 700; color: var(--color-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
