@@ -851,3 +851,55 @@ inn i døra. En avklaring om produktet gjorde mer for denne flaten enn tre runde
 **Asset-ruta spør ikke** (#993): `isSectionInAccessibleCourse` sjekker at kurset er synlig, aldri om
 seksjonen er tilgjengelig. Figurer i en arkivert seksjon kan hentes av den som har id-en. Samme
 klasse som #944, en fjerde dør — funnet under dette arbeidet, ikke fikset her.
+
+## 26. «Får denne deltakeren se dette kurset?» — én dør, ett unntak (#959)
+
+`findCourseById` returnerer kurset uansett hvem som spør. Regelen «hvem får se hva» bodde derfor hos
+kalleren, i **fire varianter** i `enrollmentService.ts` alene — og de tre deltakerrutene hadde hver
+sin etterkontroll.
+
+⚠️ **Dette hadde allerede kostet ett hull.** #778/#785: de direkte endepunktene gatet bare på
+`publishedAt`, så en deltaker uten innmelding kunne lese et RESTRICTED kurs hen hadde id-en til.
+Fiksen den gangen la til en **fjerde kopi** av regelen i stedet for å flytte den ned.
+
+### Døra
+
+| Funksjon | For hvem |
+|---|---|
+| `findCourseForParticipant({ courseId, userId, roles, groupIds })` | deltakerflatene. Returnerer `null` for finnes-ikke / ikke-publisert / ikke-synlig |
+| `courseRepository.findCourseById` | forfatter, eksport, systemevaluering. Ufiltrert, og skal være det |
+
+**Signaturen krever identiteten.** Det er hele mekanismen: man kan ikke hente et kurs på deltakerens
+vegne uten å oppgi hvem deltakeren er, så synligheten kan ikke bli glemt — bare aktivt valgt bort.
+
+`null` dekker med vilje alle tre årsakene. Å skille dem i responsen ville lekket at et RESTRICTED
+kurs eksisterer til noen som ikke skal vite det.
+
+### Det ene unntaket
+
+**Selv-innmelding** (`POST /:courseId/enroll`) bruker den ufiltrerte aksessoren, og det er riktig.
+
+Ruta finnes nettopp for deltakere som **ennå ikke** har tilgang. Gjennom døra ville et RESTRICTED
+kurs blitt `404 «finnes ikke»` i stedet for `selfEnroll` sin `400 «dette krever tildeling»` — og
+deltakeren fikk vite at kurset ikke finnes framfor hvordan hen får tilgang.
+
+⚠️ Jeg konverterte den først, og `m2-enrollment` ble rød på 404 der den ventet 400. En ekte
+oppførselsendring smuglet inn i en opprydding — samme feilklasse som resten av #941. Synligheten er
+ikke glemt der; den er **flyttet til `selfEnroll`**, som eier regelen om hvem som kan melde seg på
+selv.
+
+### Fire varianter som fortsatt finnes — og hvorfor
+
+`filterVisibleCourseIds` er kjernen. `isCourseVisibleToUser` er én-kurs-innpakningen.
+`isModuleInAccessibleCourse` og `isSectionInAccessibleCourse` er **byte-like** bortsett fra
+oppslagsfeltet (`moduleId` vs `sectionId`) — de løser innhold → kurs → synlighet.
+
+De to siste er ikke slått sammen ennå. De hører til #993, som uansett må røre
+`isSectionInAccessibleCourse`: den sjekker at kurset er synlig, men aldri om **seksjonen** er
+tilgjengelig, så figurer i en arkivert seksjon kan hentes av den som har id-en.
+
+**Vakter:** `test/course-visibility-guard.test.js` — nekter `findCourseById` i deltakerrutene, med
+kontrollassertion på at døra faktisk er i bruk (ellers ville testen vært grønn om ruta sluttet å
+hente kurs). Unntakslista krever en skreven grunn per oppføring. `test/m2-enrollment.test.ts` pinner
+400-en fra selv-innmelding; `test/m2-course-restricted-visibility.test.ts` pinner 404-en fra
+lesestiene.

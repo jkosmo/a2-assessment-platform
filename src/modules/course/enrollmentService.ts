@@ -7,6 +7,9 @@ import { enrollmentRepository, createEnrollmentRepository } from "./enrollmentRe
 import { runInTransaction } from "../../db/transaction.js";
 import { deriveEnrollmentStatus, type EnrollmentStatus } from "./enrollmentStatus.js";
 import { getUserClassIds, getClassAssignedCourseDueDates } from "./classService.js";
+// #959: deltakerdøra bor her, ved siden av regelen den håndhever. `courseRepository` importerer
+// ikke denne fila, så retningen er entydig og det finnes ingen sirkel.
+import { courseRepository } from "./courseRepository.js";
 
 // #496/EN-2: enrollment service — assign/revoke/list + self-enroll + course visibility. Status is
 // always DERIVED here (never stored) from CourseCompletion + progress + dueAt, so it cannot drift.
@@ -355,4 +358,55 @@ export async function isSectionInAccessibleCourse(input: {
   const classCourseDue = await getClassAssignedCourseDueDates(classIds);
   const visible = await filterVisibleCourseIds(input.userId, courses, new Set(classCourseDue.keys()));
   return courses.some((c) => visible.has(c.id));
+}
+
+// ─────────────────────────────────────────────────────────────────────────────────────────────
+// #959: ÉN dør inn til «dette kurset, sett av denne deltakeren».
+//
+// ⚠️ Hvorfor denne finnes.
+//
+// `findCourseById` returnerer kurset uansett hvem som spør. Åtte kallere avgjorde selv om
+// deltakeren fikk se det, og regelen sto i fire varianter. Kommentaren over
+// `isCourseVisibleToUser` dokumenterer at strukturen ALLEREDE har produsert ett hull: #778/#785 —
+// de direkte endepunktene gatet bare på `publishedAt`, så en deltaker uten innmelding kunne lese
+// et RESTRICTED kurs hen hadde id-en til.
+//
+// Fiksen den gangen la til en FJERDE kopi av regelen i stedet for å flytte den ned. Neste kaller
+// som glemmer sjekken gjenskaper #778 nøyaktig — og en glemt autorisasjonssjekk er et
+// sikkerhetshull, ikke et skjevt tall.
+//
+// Kuren er at man ikke lenger KAN hente et kurs på deltakerens vegne uten å oppgi hvem deltakeren
+// er. Signaturen krever identiteten; da kan ingen kaller la spørsmålet stå åpent i stillhet.
+//
+// `test/course-visibility-guard.test.js` nekter `findCourseById` i deltakerrutene.
+// ─────────────────────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Kurset slik det gjelder for DENNE deltakeren, eller `null`.
+ *
+ * `null` dekker med vilje tre ulike årsaker — finnes ikke, er ikke publisert, er ikke synlig for
+ * deg — fordi kalleren skal svare 404 på alle tre. Å skille dem i responsen ville lekket at et
+ * RESTRICTED kurs eksisterer til noen som ikke skal vite det.
+ */
+export async function findCourseForParticipant(input: {
+  courseId: string;
+  userId: string;
+  roles: AppRoleType[];
+  groupIds?: string[];
+}) {
+  const course = await courseRepository.findCourseById(input.courseId);
+  if (!course || !course.publishedAt || course.archivedAt) return null;
+
+  const visible = await isCourseVisibleToUser({
+    course,
+    userId: input.userId,
+    roles: input.roles,
+    groupIds: input.groupIds,
+  });
+  if (!visible) return null;
+
+  // ⚠️ `publishedAt` skrives ut eksplisitt for at TYPEN skal bære garantien, ikke bare
+  // kontrollflyten over. Kallerne rendrer `publishedAt.toISOString()`, og uten dette ville de måttet
+  // sjekke på nytt — altså gjenta en del av regelen døra finnes for å eie.
+  return { ...course, publishedAt: course.publishedAt };
 }

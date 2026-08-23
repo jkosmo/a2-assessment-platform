@@ -8,7 +8,9 @@ import {
   listUserEnrollments,
   selfEnroll,
   filterVisibleCourseIds,
-  isCourseVisibleToUser,
+  // #959: deltakerrutene henter kurs GJENNOM denne. `findCourseById` er ufiltrert og hører til
+  // forfatter-/systemflatene; `course-visibility-guard` nekter den i denne fila.
+  findCourseForParticipant,
   getUserClassIds,
   getClassAssignedCourseDueDates,
   deriveStatus,
@@ -231,13 +233,16 @@ coursesRouter.get("/:courseId", async (request, response, next) => {
   const locale = normalizeLocale(request.context?.locale) ?? "en-GB";
 
   try {
-    const course = await courseRepository.findCourseById(request.params.courseId);
-    if (!course || !course.publishedAt || course.archivedAt) {
-      throw new NotFoundError("Course", "course_not_found", "Course not found.");
-    }
-    // #778/#785: RESTRICTED courses are visible only to enrolled/class-assigned users. Gate the direct
-    // detail endpoint the same way the list endpoint does; 404 (not 403) so we don't confirm existence.
-    if (!(await isCourseVisibleToUser({ course, userId, roles: request.context?.roles ?? [], groupIds: request.context?.principal?.groupIds }))) {
+    // #959: ÉN dør. Signaturen krever hvem som spør, så synligheten kan ikke bli glemt her —
+    // og `null` dekker alle tre årsakene (finnes ikke / ikke publisert / ikke synlig for deg)
+    // med vilje, slik at 404-en ikke lekker at et RESTRICTED kurs eksisterer.
+    const course = await findCourseForParticipant({
+      courseId: request.params.courseId,
+      userId,
+      roles: request.context?.roles ?? [],
+      groupIds: request.context?.principal?.groupIds,
+    });
+    if (!course) {
       throw new NotFoundError("Course", "course_not_found", "Course not found.");
     }
 
@@ -410,12 +415,16 @@ coursesRouter.get("/:courseId/sections/:sectionId", async (request, response, ne
   }
   const locale = normalizeLocale(request.context?.locale) ?? "en-GB";
   try {
-    const course = await courseRepository.findCourseById(request.params.courseId);
-    if (!course || !course.publishedAt || course.archivedAt) {
-      throw new NotFoundError("Course", "course_not_found", "Course not found.");
-    }
-    // #778/#785: gate RESTRICTED-course section content on enrolment/class visibility.
-    if (!(await isCourseVisibleToUser({ course, userId, roles: request.context?.roles ?? [], groupIds: request.context?.principal?.groupIds }))) {
+    // #959: ÉN dør. Signaturen krever hvem som spør, så synligheten kan ikke bli glemt her —
+    // og `null` dekker alle tre årsakene (finnes ikke / ikke publisert / ikke synlig for deg)
+    // med vilje, slik at 404-en ikke lekker at et RESTRICTED kurs eksisterer.
+    const course = await findCourseForParticipant({
+      courseId: request.params.courseId,
+      userId,
+      roles: request.context?.roles ?? [],
+      groupIds: request.context?.principal?.groupIds,
+    });
+    if (!course) {
       throw new NotFoundError("Course", "course_not_found", "Course not found.");
     }
     // #944/#958: medlemskap i kurset er IKKE nok. En arkivert seksjon, eller en som
@@ -450,12 +459,16 @@ coursesRouter.post("/:courseId/sections/:sectionId/read", async (request, respon
     return;
   }
   try {
-    const course = await courseRepository.findCourseById(request.params.courseId);
-    if (!course || !course.publishedAt || course.archivedAt) {
-      throw new NotFoundError("Course", "course_not_found", "Course not found.");
-    }
-    // #778/#785: gate RESTRICTED-course read-progress writes on enrolment/class visibility.
-    if (!(await isCourseVisibleToUser({ course, userId, roles: request.context?.roles ?? [], groupIds: request.context?.principal?.groupIds }))) {
+    // #959: ÉN dør. Signaturen krever hvem som spør, så synligheten kan ikke bli glemt her —
+    // og `null` dekker alle tre årsakene (finnes ikke / ikke publisert / ikke synlig for deg)
+    // med vilje, slik at 404-en ikke lekker at et RESTRICTED kurs eksisterer.
+    const course = await findCourseForParticipant({
+      courseId: request.params.courseId,
+      userId,
+      roles: request.context?.roles ?? [],
+      groupIds: request.context?.principal?.groupIds,
+    });
+    if (!course) {
       throw new NotFoundError("Course", "course_not_found", "Course not found.");
     }
     // #944/#958: samme dør som lesestien. Var dette to oppslag med hver sin regel, kunne markeringen
@@ -485,6 +498,19 @@ coursesRouter.post("/:courseId/enroll", async (request, response, next) => {
     return;
   }
   try {
+    // ⚠️ #959 UNNTAK, og det eneste: selv-innmelding bruker IKKE deltakerdøra.
+    //
+    // Døra svarer «finnes ikke» på et RESTRICTED kurs du ikke er meldt på — som er riktig for
+    // lesestiene, men galt her. Poenget med denne ruta er nettopp at du ENNÅ IKKE har tilgang, og
+    // `selfEnroll` svarer 400 med «dette kurset krever tildeling». Tvinger man den gjennom døra,
+    // blir den beskjeden til 404, og deltakeren får vite at kurset ikke finnes framfor hvordan hen
+    // får tilgang.
+    //
+    // Jeg konverterte den først, og `m2-enrollment` ble rød på 404 der den ventet 400. Det var en
+    // ekte oppførselsendring smuglet inn i en opprydding — samme feilklasse som resten av #941.
+    //
+    // Synligheten er altså ikke glemt her; den er FLYTTET til `selfEnroll`, som eier regelen om
+    // hvem som kan melde seg på selv. Unntaket står i `course-visibility-guard`.
     const course = await courseRepository.findCourseById(request.params.courseId);
     if (!course || !course.publishedAt || course.archivedAt) {
       throw new NotFoundError("Course", "course_not_found", "Course not found.");

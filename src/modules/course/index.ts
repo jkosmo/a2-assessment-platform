@@ -80,6 +80,8 @@ export {
   listCourseEnrollments,
   filterVisibleCourseIds,
   isCourseVisibleToUser,
+  // #959: den ene døra inn til «dette kurset, sett av denne deltakeren».
+  findCourseForParticipant,
   isModuleInAccessibleCourse,
   isSectionInAccessibleCourse,
   deriveStatus,

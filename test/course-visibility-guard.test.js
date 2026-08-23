@@ -17,10 +17,17 @@ import { describe, expect, it } from "vitest";
 // Fiksen den gangen la til en FJERDE kopi av regelen i stedet for å flytte den ned i aksessoren.
 // Kaller nummer ni vil gjenskape #778 nøyaktig, og ingenting stopper den.
 //
-// Vakta erstatter ikke den riktige kuren (aksessoren bør kreve at kalleren tar stilling — se
-// doc/COMPLEXITY_SCAN.md, mekanisme 1). Den gjør noe billigere og umiddelbart: den lar ikke et
-// NYTT kallsted oppstå i stillhet. Unntakslista er poenget — den gjør drift synlig i stedet for
-// å hindre den, og hver oppføring må ha en grunn noen har skrevet ned.
+// ⚠️ OPPDATERT #959, 2026-08-23: den riktige kuren ER nå gjort.
+//
+// `findCourseForParticipant` (enrollmentService) er den ene døra inn til «dette kurset, sett av
+// denne deltakeren». Signaturen KREVER identiteten, så synligheten kan ikke lenger glemmes — og de
+// tre deltakerrutene som hver hadde sin egen etterkontroll bruker den nå.
+//
+// Vakta har dermed byttet rolle. Den er ikke lenger en nødløsning som gjør drift synlig; den låser
+// inn gevinsten: `findCourseById` er ufiltrert og hører til forfatter-, eksport- og systemflatene.
+// Dukker den opp i en deltakerrute igjen, er det en regresjon.
+//
+// Unntakslista er fortsatt poenget for resten. Hver oppføring må ha en grunn noen har skrevet ned.
 // ─────────────────────────────────────────────────────────────────────────────
 
 const SRC = fileURLToPath(new URL("../src", import.meta.url));
@@ -43,8 +50,10 @@ const EXCEPTIONS = [
     file: "routes/courses.ts",
     route: 'post("/:courseId/enroll"',
     reason:
-      "Selvpåmelding delegerer til selfEnroll, som måler enrollmentPolicy !== 'OPEN' — en FJERDE "
-      + "formulering av synlighet. Bevisst notert, ikke godkjent: hører til opprydningen i #959.",
+      "#959: det ENESTE bevisste unntaket. Selvpåmelding må kunne SE et RESTRICTED kurs for å kunne "
+      + "svare «dette krever tildeling» (400). Gjennom deltakerdøra ville svaret blitt 404, og "
+      + "deltakeren fikk vite at kurset ikke finnes framfor hvordan hen får tilgang. Regelen er "
+      + "flyttet til selfEnroll, ikke glemt — m2-enrollment pinner 400-en.",
   },
   {
     file: "modules/adminContent/adminContentQueries.ts",
@@ -140,6 +149,29 @@ describe("findCourseById: hver kaller avgjør synlighet, eller står på unntaks
         + "Enten kall isCourseVisibleToUser, eller legg kallstedet i EXCEPTIONS med en GRUNN:\n"
         + uncovered.join("\n"),
     ).toEqual([]);
+  });
+
+  it("#959: deltakerrutene henter kurs gjennom døra, ikke gjennom den ufiltrerte aksessoren", () => {
+    // ⚠️ Dette er låsen. `findCourseForParticipant` krever hvem som spør; `findCourseById` gjør det
+    // ikke. Så lenge deltakerrutene bare bruker den første, kan #778 ikke gjenskapes ved en
+    // forglemmelse — man må aktivt velge feil dør.
+    const sites = findCallSites().filter((s) => s.file === "routes/courses.ts");
+    const notExcepted = sites.filter((s) => !isExcepted(s)).map((s) => `courses.ts:${s.line}`);
+
+    expect(
+      notExcepted,
+      "findCourseById i en deltakerrute. Bruk findCourseForParticipant — den KREVER identiteten,\n"
+        + "så synligheten kan ikke bli glemt. Er dette et ekte unntak (som selvpåmelding), før det\n"
+        + "opp i EXCEPTIONS med en grunn.\n"
+        + notExcepted.join("\n"),
+    ).toEqual([]);
+
+    // KONTROLLASSERTION: døra må faktisk være i bruk. Uten denne ville testen vært grønn hvis noen
+    // slettet alle kallene — altså hvis ruta sluttet å hente kurs i det hele tatt.
+    const routeSrc = readFileSync(join(SRC, "routes", "courses.ts"), "utf8");
+    const uses = [...routeSrc.matchAll(/findCourseForParticipant\(/g)].length;
+    expect(uses, "deltakerdøra brukes ikke i courses.ts — måler vakta noe i det hele tatt?")
+      .toBeGreaterThanOrEqual(3);
   });
 
   it("unntakslista er ikke foreldet", () => {
