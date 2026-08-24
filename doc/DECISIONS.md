@@ -351,3 +351,36 @@ rollespørsmål — og derfor en egen sak, ikke en justering av dette settet.
 **Håndheves:** `test/role-set-guard.test.js` fester settene, så en endring må gjøres bevisst i
 stedet for å oppdages i en nattskanning.
 **Sak:** #962, #1000, #941 · **Status:** avklart 2026-08-23
+
+## Publisering av kurs
+
+### Et kurs kan publiseres uten moduler — seksjoner alene er nok
+
+`publishCourse` krevde minst ett element med `itemType: "MODULE"`. Et kurs som bare består av
+lesestoff kunne ikke publiseres, uansett hvor mange publiserte seksjoner det hadde.
+
+Regelen fjernes. Kravet blir **minst ett element**, av hvilken som helst type.
+
+**Hvorfor:** produkteier 2026-08-24, på spørsmål om dette var tilsiktet: *«jeg tviler på at rene
+seksjonskurs vil trengs, men det krever kompleksitet å aktivt hindre det samt at vi ville måtte
+forklare brukere begrensningen som også krever mer.»*
+
+⚠️ Merk formen på begrunnelsen: beslutningen er ikke at rene lesekurs er *ønsket*. Den er at
+**å hindre dem koster mer enn å tillate dem** — kode som skal vedlikeholdes, pluss en forklaring
+til brukeren om hvorfor knappen ikke virker. En regel må tjene til livets opphold.
+
+Regelen ga mening da et kurs var en beholder for moduler. Etter #916 er seksjoner likeverdige
+kurselementer med egen publiseringsgate, og da var kravet blitt vilkårlig.
+
+⚠️ **Kodebasen motsa seg selv i mellomtiden**, og det er slik dette ble oppdaget:
+
+- `courseReport.ts` har en test som heter *«reports a completion rate for a module-free reading
+  course»* — #969 fikset nevneren nettopp for det tilfellet. Rapporten regnet altså ut
+  fullføringsgrad for et kurs porten nektet å publisere.
+- `test/m2-section-export-import-916.test.ts` måtte legge inn en dummy-modul kalt «QA modul» for å
+  komme forbi porten, med en kommentar om at blokkertesten ellers ville bestått av feil grunn.
+
+**Det kravet IKKE blir:** null elementer. Et tomt kurs skal fortsatt ikke kunne publiseres — den
+delen av den gamle porten var reell beskyttelse, ikke vilkårlighet, og den beholdes.
+
+**Sak:** #1001 · **Status:** avklart 2026-08-24
