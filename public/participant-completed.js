@@ -8,6 +8,13 @@ import { localeLabels, supportedLocales, translations } from "/static/i18n/parti
 import { apiFetch, buildConsoleHeaders, getConsoleConfig, fetchQueueCounts, applyNavReviewBadge } from "/static/api-client.js";
 import { initConsentGuard } from "/static/consent-guard.js";
 import {
+  OUTCOME_FAILED,
+  OUTCOME_PASSED,
+  deriveOutcome,
+  isAppealableFail,
+  outcomeClass,
+} from "/static/outcome.js";
+import {
   findMatchingPreset,
   resolveRoleSwitchState,
   resolveWorkspaceNavigationItems,
@@ -237,17 +244,25 @@ function renderCompletedModules(body) {
 
   for (const module of modules) {
     const row = document.createElement("tr");
-    const passFailRaw = module?.latestDecision?.passFailTotal;
-    const passFailValue = passFailRaw === true
+    // #978: denne fila hadde sin EGEN tri-state-mapping som ignorerte statusen, så en innlevering
+    // under vurdering ble vist rød «Ikke bestått» her mens resultatbanneret holdt den nøytral.
+    const outcome = deriveOutcome({
+      passFailTotal: module?.latestDecision?.passFailTotal,
+      submissionStatus: module?.latestStatus,
+    });
+    const passFailValue = outcome === OUTCOME_PASSED
       ? t("completed.value.pass")
-      : passFailRaw === false
+      : outcome === OUTCOME_FAILED
         ? t("completed.value.fail")
         : "-";
-    const passFailClass = passFailRaw === true ? "outcome--pass" : passFailRaw === false ? "outcome--fail" : "";
+    const passFailClass = outcomeClass(outcome);
+    // ⚠️ Denne var allerede riktig — den krevde COMPLETED — og er derfor regelen `isAppealableFail`
+    // kanoniserte. Resultatbanneret i participant.js manglet statuskravet.
     const canAppeal =
-      module?.latestStatus === "COMPLETED" &&
-      module?.latestDecision?.passFailTotal === false &&
-      module?.latestSubmissionId;
+      isAppealableFail({
+        passFailTotal: module?.latestDecision?.passFailTotal,
+        submissionStatus: module?.latestStatus,
+      }) && module?.latestSubmissionId;
     const labels = [
       t("completed.table.module"),
       t("completed.table.completedAt"),

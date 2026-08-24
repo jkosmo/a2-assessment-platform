@@ -18,6 +18,7 @@ import { resolveWorkspaceNavigationItems } from "/static/participant-console-sta
 import { showToast } from "/static/toast.js";
 import { describeApiError } from "/static/api-error.js";
 import { renderWorkspaceNavigationWithProfile } from "./workspace-nav.js";
+import { OUTCOME_FAILED, OUTCOME_PASSED, rawPassFailState } from "/static/outcome.js";
 
 // #836: "Vurderingskvalitet" (tidl. Kalibrering) — les hvordan en modul scorer (signaler + fordeling)
 // og juster bestått-grensa med en klient-side konsekvens-preview. Erstatter de tre gamle
@@ -495,7 +496,10 @@ function renderOutcomes(outcomes) {
   }
   el.qOutcomesBody.innerHTML = outcomes
     .map((o) => {
-      const pf = o?.decision?.passFailTotal === true ? t("quality.value.pass") : o?.decision?.passFailTotal === false ? t("quality.value.fail") : "-";
+      // #978: praktikerflate — rå tilstand, ikke kandidatregelen. Statusen står i kolonnen ved
+      // siden av (`localizeStatus(o.submissionStatus)`), så konteksten er allerede synlig.
+      const pfState = rawPassFailState(o?.decision?.passFailTotal);
+      const pf = pfState === OUTCOME_PASSED ? t("quality.value.pass") : pfState === OUTCOME_FAILED ? t("quality.value.fail") : "-";
       const mr = o?.llm?.manualReviewRecommended === true ? t("quality.value.yes") : t("quality.value.no");
       return `<tr>
         <td>${escapeHtml(formatDateTimeValue(o.submittedAt))}</td>

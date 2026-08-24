@@ -66,6 +66,8 @@ export default defineConfig({
       "test/role-set-guard.test.js",
       // #994: nekter en ny fil som laster src/-grafen inne i en testkropp uten oppvarming.
       "test/module-graph-warmup-guard.test.js",
+      // #978: nekter at en bundle utleder «bestått» på egen hånd.
+      "test/outcome-derivation-guard.test.js",
     ],
     globals: true,
     testTimeout: 20000,

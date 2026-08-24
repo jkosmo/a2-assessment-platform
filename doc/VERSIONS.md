@@ -2,6 +2,60 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.29.0 - 2026-08-24
+
+**Den fjerde motoren: «er dette forsøket bestått» (#978).** Med #958, #959 og #962 er alle fire
+konvertert.
+
+Spørsmålet ble besvart åtte steder i klienten etter **tre** regelsett. Bare ett av dem leste
+`submissionStatus`, så samme deltaker kunne få to svar i samme økt: rød «Ikke bestått» på `/profile`
+og `/participant/completed`, nøytral i resultatbanneret — for den samme innleveringen.
+
+### ⚠️ «Bestått?» viste seg å være fem spørsmål, ikke ett
+
+Kartleggingen av alle 24 kallstedene var det viktigste i denne runden. En felles `erBestått()` ville
+vært å gjenta feilen i motsatt retning: **ett** svar der det trengs flere. `public/static/outcome.js`
+har derfor fem navngitte innganger, hver med sin begrunnelse:
+
+| Spørsmål | Teller statusen? |
+|---|---|
+| `deriveOutcome` — hva skal jeg vise? | **ja** — en uavgjort sak er ikke en stryk |
+| `isAppealableFail` — kan hen anke? | **ja**, og krever `COMPLETED` |
+| `isSettledPass` — skal vi feire? | **ja** — konfetti kan ikke trekkes tilbake |
+| `hasPassingDecision` — finnes det alt en bestått? | **nei**, med vilje |
+| `rawPassFailState` — hva sier vedtaket? | **nei** — praktikerflate |
+
+⚠️ De to siste er de lærerike. `hasPassingDecision` hindrer at en MCQ-only-modul autostarter et nytt
+forsøk; krevde den avgjort status, ville en bestått-men-under-vurdering modul startet et retake av
+seg selv — det motsatte av hensikten. Og `rawPassFailState` brukes av vurderer-, anke- og
+kalibreringsflatene, der jobben nettopp **er** å inspisere den automatiske beslutningen. Å skjule
+den bak «under vurdering» der ville fjernet informasjonen brukeren er der for å vurdere. Begge
+flatene viser dessuten status i egen kolonne.
+
+### To bevisste oppførselsendringer
+
+- **Anke krever nå `COMPLETED`.** `/participant/completed` krevde det allerede; resultatbanneret
+  gjorde det ikke, og tilbød anke på en innlevering som fortsatt var under vurdering. To innganger
+  til samme handling, to svar — den strengeste var den riktige. ⚠️ Merk retningen: hadde den delte
+  funksjonen bare speilet `deriveOutcome`, ville divergensen blitt rettet ved å **løsne** regelen.
+  Et kontrollcase fester det.
+- **Feiringen krever et avgjort bestått.**
+
+### Vakt og verifisering
+
+`test/outcome-derivation-guard.test.js` nekter en ny rå `passFailTotal ===` utenfor `outcome.js`, og
+har en kontrollassertion som feiler hvis regexen slutter å måle noe. Skrivingene i `review.js`
+(skjemafeltene som **sender** verdien) er med vilje ikke fanget.
+
+Mutasjonsverifisert i to lag. Vakta navngir synderen når regelen skrives på nytt. Og e2e-en —
+`test/e2e/outcome-under-review-978.spec.ts` — feiler med `"Module under review…Fail"` når den
+status-blinde regelen gjeninnføres, mens kontrollcaset forblir grønt.
+
+⚠️ En unit-test på `deriveOutcome` alene hadde ikke fanget dette: feilen var ikke at regelen var
+gal, men at flatene aldri **spurte**. Derfor kjøres den ekte bundlen i Chromium.
+
+1171 unit, 246 e2e.
+
 ## 2.28.2 - 2026-08-24
 
 **#993 — en figur arves ikke av en seksjon deltakeren ikke kan lese.**

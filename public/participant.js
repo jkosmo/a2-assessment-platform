@@ -10,6 +10,16 @@ import { localeLabels, supportedLocales, translations } from "/static/i18n/parti
 import { apiFetch, buildConsoleHeaders, getConsoleConfig, fetchQueueCounts, applyNavReviewBadge, hydrateContentAssetImages } from "/static/api-client.js";
 import { initConsentGuard } from "/static/consent-guard.js";
 import { hideLoading, showEmpty, showLoading } from "/static/loading.js";
+import {
+  OUTCOME_FAILED,
+  OUTCOME_PASSED,
+  OUTCOME_PENDING,
+  deriveOutcome,
+  hasPassingDecision,
+  isAppealableFail,
+  isSettledPass,
+  outcomeClass as outcomeClassFor,
+} from "/static/outcome.js";
 import { showToast } from "/static/toast.js";
 import { setHidden } from "/static/dom-visibility.js";
 import {
@@ -980,8 +990,13 @@ function renderModules() {
     button.classList.toggle("completed", module.completed === true);
     // If the latest decision was a fail, mark the card so the green-success styling
     // doesn't visually mislead students who haven't passed yet.
+    // #978: presentasjon — samme regel som resultatbanneret. En modul som fortsatt vurderes
+    // skal ikke males rød på kortet mens banneret holder den nøytral.
     const latestFailed = module.completed === true
-      && module.participantStatus?.latestDecision?.passFailTotal === false;
+      && deriveOutcome({
+        passFailTotal: module.participantStatus?.latestDecision?.passFailTotal,
+        submissionStatus: module.participantStatus?.latestStatus,
+      }) === OUTCOME_FAILED;
     button.classList.toggle("failed", latestFailed);
     button.setAttribute("aria-pressed", module.selected ? "true" : "false");
     button.addEventListener("click", () => {
@@ -1136,7 +1151,9 @@ function activateParticipantModule(moduleId, options = {}) {
   // creating the (empty) submission + starting the MCQ immediately, so the participant never sees
   // a "create submission" step. Covers both entry points (module card + course → openCourseModule).
   // #2 fix: don't auto-start for an already-passed module (avoids a needless retake / 409).
-  const alreadyPassed = nextModule.participantStatus?.latestDecision?.passFailTotal === true;
+  // #978: ⚠️ dette er det ENE stedet som med vilje ser bort fra statusen. En bestått-men-under-
+  // vurdering modul skal ikke autostarte et nytt forsøk. Se begrunnelsen i /static/outcome.js.
+  const alreadyPassed = hasPassingDecision(nextModule.participantStatus?.latestDecision?.passFailTotal);
   if (moduleIsMcqOnly(nextModule) && !alreadyPassed && !previewModeEnabled && !flowState.hasSubmission && !createSubmissionButton.disabled) {
     createSubmissionButton.click();
   }
@@ -1910,25 +1927,23 @@ function localizeAppealStatus(value) {
   return t(`appeal.statusValue.${normalized || "UNKNOWN"}`);
 }
 
+// #978: regelen bor nå i /static/outcome.js. Denne var den ENESTE av de tre variantene i
+// klienten som så statusen, og er derfor den som ble kanonisert.
 function outcomeClass(passFailTotal, submissionStatus) {
-  const status = typeof submissionStatus === "string" ? submissionStatus.toUpperCase() : "";
-  if (status === "UNDER_REVIEW") return "outcome--review";
-  if (passFailTotal === true) return "outcome--pass";
-  if (passFailTotal === false) return "outcome--fail";
-  return "";
+  return outcomeClassFor(deriveOutcome({ passFailTotal, submissionStatus }));
 }
 
 function localizeDecisionType(value, submissionStatus, passFailTotal) {
-  const normalizedStatus = typeof submissionStatus === "string" ? submissionStatus.toUpperCase() : "";
-  if (normalizedStatus === "UNDER_REVIEW") {
+  const outcome = deriveOutcome({ passFailTotal, submissionStatus });
+  if (outcome === OUTCOME_PENDING) {
     return t("result.decisionValue.MANUAL_REVIEW_PENDING");
   }
 
   const normalized = typeof value === "string" ? value.toUpperCase() : "";
   if (normalized === "AUTOMATIC") {
-    return passFailTotal === true
+    return outcome === OUTCOME_PASSED
       ? t("result.decisionValue.AUTOMATIC_PASS")
-      : passFailTotal === false
+      : outcome === OUTCOME_FAILED
         ? t("result.decisionValue.AUTOMATIC_FAIL")
         : t("result.decisionValue.AUTOMATIC");
   }
@@ -2170,7 +2185,13 @@ function renderAppealState() {
   }
 
   const hasAppeal = latestAppeal && typeof latestAppeal.id === "string";
-  const isNegativeResult = latestResult?.decision?.passFailTotal === false;
+  // #978: ⚠️ OPPFØRSELSENDRING, med vilje. Denne tilbød anke på en innlevering som fortsatt var
+  // UNDER_REVIEW, mens /participant/completed krevde COMPLETED for den samme handlingen. To
+  // innganger, to svar — den strengeste var den riktige.
+  const isNegativeResult = isAppealableFail({
+    passFailTotal: latestResult?.decision?.passFailTotal,
+    submissionStatus: latestResult?.status,
+  });
   const shouldShowAppealSection = hasAppeal || isNegativeResult;
 
   appealSection.classList.toggle("hidden", !shouldShowAppealSection);
@@ -2389,7 +2410,9 @@ function renderResultSummary(body) {
   // #549: celebrate an automatic/confirmed pass — confetti + a clear "passed" banner, shown once
   // per result (the result view re-renders on each poll). De-emphasising retry is handled in
   // renderFlowGating.
-  if (body.decision?.passFailTotal === true && !celebrationShown) {
+  // #978: bare et AVGJORT bestått. Konfetti på noe som fortsatt vurderes måtte i verste fall
+  // trekkes tilbake.
+  if (isSettledPass({ passFailTotal: body.decision?.passFailTotal, submissionStatus: body.status }) && !celebrationShown) {
     celebrationShown = true;
     const banner = document.createElement("div");
     banner.className = "celebrate-banner";

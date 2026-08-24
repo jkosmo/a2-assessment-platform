@@ -12,6 +12,7 @@ import {
 } from "/static/participant-console-state.js";
 import { initConsentGuard } from "/static/consent-guard.js";
 import { setHidden } from "/static/dom-visibility.js";
+import { OUTCOME_FAILED, OUTCOME_PASSED, deriveOutcome, outcomeClass } from "/static/outcome.js";
 
 // ── DOM refs ─────────────────────────────────────────────────────────────────
 
@@ -286,13 +287,18 @@ function renderModules(body) {
 
   for (const mod of modules) {
     const row = document.createElement("tr");
-    const passFailRaw = mod?.latestDecision?.passFailTotal;
-    const passFailText = passFailRaw === true
+    // #978: `latestStatus` lå i svaret fra /api/modules/completed hele tiden — denne fila leste
+    // det bare aldri, og viste derfor rød «Ikke bestått» på saker som fortsatt vurderes.
+    const outcome = deriveOutcome({
+      passFailTotal: mod?.latestDecision?.passFailTotal,
+      submissionStatus: mod?.latestStatus,
+    });
+    const passFailText = outcome === OUTCOME_PASSED
       ? t("profile.modules.value.pass")
-      : passFailRaw === false
+      : outcome === OUTCOME_FAILED
         ? t("profile.modules.value.fail")
         : "—";
-    const passFailClass = passFailRaw === true ? "outcome--pass" : passFailRaw === false ? "outcome--fail" : "";
+    const passFailClass = outcomeClass(outcome);
 
     const cells = [
       { text: mod.moduleTitle ?? mod.moduleId ?? "—" },

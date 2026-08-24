@@ -10,6 +10,7 @@ import { hideLoading, showEmpty, showLoading } from "/static/loading.js";
 import { setHidden } from "/static/dom-visibility.js";
 import { showToast } from "/static/toast.js";
 import { describeApiError } from "/static/api-error.js";
+import { OUTCOME_FAILED, OUTCOME_PASSED, rawPassFailState } from "/static/outcome.js";
 import {
   findMatchingPreset,
   resolveRoleSwitchState,
@@ -673,9 +674,16 @@ function buildMrCriterionRationaleLines(criteria) {
   return entries.map(([, rationale], i) => `${i + 1}. ${String(rationale)}`);
 }
 
+// #978: begge formatterne i denne fila leser nå den samme delte tilstanden. De beholder hver sin
+// i18n-nøkkel fordi køene har ulik ordlyd, men REGELEN er én.
+//
+// ⚠️ Bevisst `rawPassFailState` og ikke `deriveOutcome`: dette er en praktikerflate. Vurdereren
+// skal se hva maskinen foreslo, også — særlig — mens saken er under vurdering. Statusen vises i
+// egen kolonne.
 function formatMrPassFail(value) {
-  if (value === true) return t("manualReview.pass");
-  if (value === false) return t("manualReview.fail");
+  const state = rawPassFailState(value);
+  if (state === OUTCOME_PASSED) return t("manualReview.pass");
+  if (state === OUTCOME_FAILED) return t("manualReview.fail");
   return "-";
 }
 
@@ -1149,9 +1157,11 @@ function buildAppealCriterionRationaleLines(criteria) {
   return entries.map(([criterion, rationale]) => `- ${criterion}: ${String(rationale)}`);
 }
 
+// #978: samme regel som formatMrPassFail — se merknaden der.
 function formatAppealPassFail(value) {
-  if (value === true) return t("appealHandler.pass");
-  if (value === false) return t("appealHandler.fail");
+  const state = rawPassFailState(value);
+  if (state === OUTCOME_PASSED) return t("appealHandler.pass");
+  if (state === OUTCOME_FAILED) return t("appealHandler.fail");
   return "-";
 }
 
