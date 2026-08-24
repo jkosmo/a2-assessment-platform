@@ -1,5 +1,7 @@
 import { SubmissionStatus } from "../../db/prismaRuntime.js";
 import { getAssessmentRules } from "../../config/assessmentRules.js";
+import { assessmentPolicyCodec } from "../../codecs/assessmentPolicyCodec.js";
+import { deriveMcqPassFail, resolveMcqMinPercent } from "./mcqPassRule.js";
 import { assessmentJobRepository } from "./assessmentJobRepository.js";
 import { mcqRepository, createMcqRepository } from "./mcqRepository.js";
 import { enqueueAssessmentJob, processSubmissionJobNow } from "./assessmentJobService.js";
@@ -116,7 +118,15 @@ export async function submitMcqAttempt(input: {
   const percentScore = (rawScore / totalQuestions) * 100;
   const rules = getAssessmentRules();
   const scaledScore = (rawScore / totalQuestions) * rules.weights.mcqMaxScore;
-  const passFailMcq = percentScore >= 50;
+  // #949: var `percentScore >= 50` — en hardkodet grense ingen hadde valgt, som motsa vedtaket
+  // i ankebehandlerens skjermbilde. Regelen bor nå ett sted, sammen med den vedtaket bruker.
+  const passFailMcq = deriveMcqPassFail(
+    percentScore,
+    resolveMcqMinPercent(
+      submission.moduleVersion.assessmentMode,
+      assessmentPolicyCodec.parse(submission.moduleVersion.assessmentPolicyJson),
+    ),
+  );
 
   // #794: finalize atomically — replace the responses, guard-complete the attempt (only while still open),
   // and move the submission to PROCESSING in ONE transaction. A failure can no longer leave a completed

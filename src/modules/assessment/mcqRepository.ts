@@ -62,7 +62,9 @@ export function createMcqRepository(client: McqRepositoryClient = prisma) {
       rawScore: number;
       percentScore: number;
       scaledScore: number;
-      passFailMcq: boolean;
+      // #949: `null` = «ikke aktuelt» — modulen har ingen MCQ-port å bestå. Kolonnen er nullable i
+      // skjemaet fra før; det var denne typen som var strengere enn databasen.
+      passFailMcq: boolean | null;
     }) {
       return client.mCQAttempt.updateMany({
         where: { id: data.attemptId, completedAt: null },

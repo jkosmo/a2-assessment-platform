@@ -68,6 +68,8 @@ export default defineConfig({
       "test/module-graph-warmup-guard.test.js",
       // #978: nekter at en bundle utleder «bestått» på egen hånd.
       "test/outcome-derivation-guard.test.js",
+      // #949: nekter at en tjeneste avgjør MCQ-grensen på egen hånd.
+      "test/mcq-pass-rule-guard.test.js",
     ],
     globals: true,
     testTimeout: 20000,

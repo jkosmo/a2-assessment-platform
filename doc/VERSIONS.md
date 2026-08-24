@@ -2,6 +2,70 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.29.1 - 2026-08-24
+
+**#949 — MCQ-grensen bestemmes ett sted.**
+
+Visningsfeltet `passFailMcq` ble regnet ut med en **hardkodet 50 %-grense** mens vedtaket ble fattet
+etter modulens policy. En kandidat med 60 % på en MCQ_ONLY-modul fikk vedtaket «ikke bestått, under
+70 %» side om side med raden **«MCQ bestått: Ja»** — i ankebehandlerens skjermbilde, som er der saken
+faktisk avgjøres. Samme felt mater kalibreringsdataene modul-eiere justerer terskler etter.
+
+⚠️ **Hvor 50-tallet kom fra.** Linja ble stående igjen av
+`refactor: forenkle vurderingsmodell til én terskel (#257)`. **Commiten som forenklet til én terskel
+er den som etterlot den andre.** En opprydding som fjerner en modell må lete etter avledede verdier
+som fortsatt regnes etter den gamle.
+
+### ⚠️ Korreksjonen som gjorde arbeidet riktig
+
+Jeg presenterte først dette for produkteier som «vedtaket bruker 70 %, feltet bruker 50 %». Det var
+ufullstendig, og en implementasjon på det grunnlaget ville innført en ny feil:
+
+| Modustype | Grense i vedtaket |
+|---|---|
+| MCQ_ONLY | `mcqMinPercent ?? 70` — grensen avgjør bestått |
+| FREETEXT_PLUS_MCQ | `?? null` — **ingen MCQ-port**; flervalget bidrar til totalskåren |
+| FREETEXT_ONLY | ingen flervalgsdel |
+
+«70 % overalt» ville gitt **«MCQ bestått: Nei»** på en blandet modul uten MCQ-krav — ett feil svar
+byttet mot et annet. Produkteier: *«La oss ikke finne opp nye regler hvis vi kan unngå det.»*
+`mcqPassRule.ts` gjengir derfor nøyaktig reglene `decisionService` allerede hadde. **Ingen vedtak
+endres.** Feltet er nå tre-tilstands, så «ikke aktuelt» er et ekte svar.
+
+### Enda en test som festet feilen — tredje gang samme dag
+
+```
+expect(result.percentScore).toBe(50);
+expect(result.passFailMcq).toBe(true);   ← påsto at 50 % er bestått
+```
+
+Fiksturen satte **ingen `assessmentMode`** og var dermed stum om hvilken regel som gjaldt. Den sier
+det nå eksplisitt, og 50 % er `false`.
+
+### Gamle rader rettes IKKE — og det er en beslutning
+
+Et backfill-skript var bygget og testet, og ble så forkastet. Produkteier stilte spørsmålet som
+avgjorde det: *«Et vedlikeholdsskript som endrer sensur av tidligere vurderte moduler?»*
+
+Teknisk gjorde det ikke det — `AssessmentDecision` er sensuren, og **ingen beslutningslogikk leser
+`passFailMcq`**; det er verifisert, ikke antatt. Men spørsmålet traff to ting:
+
+⚠️ Repoet har prinsippet *«Et kursbevis er permanent og har ikke tilbakevirkende kraft»*. Å omskrive
+rader i vurderingsdata står ubehagelig nær det, selv når feltet er kosmetisk. Og begrunnelsen min
+for backfill framfor utledning var **implementasjonsbekvemmelighet** — utledning rører tre
+tjenester — ikke et prinsipielt argument.
+
+⚠️ Dessuten: et vedlikeholdsskript som muterer vurderingsdata og som ikke bør kjøres, er en felle
+som ligger i repoet og venter på noen som ikke leser hele historikken.
+
+Produkteier avgjorde: *«Det er så lite reelle data både på stage og prod at noen unøyaktigheter ikke
+har betydning, vi er fortsatt kun i tidlig pilot, det viktige er at ting blir riktig fremover.»*
+
+Skrivingen er rettet, så nye forsøk er riktige. Gamle rader står som de står. Utledning ved lesing
+og å droppe kolonnen er **#1005**, og haster ikke.
+
+1623 integrasjon, 10 nye regeltester, 19 i `mcq-service`.
+
 ## 2.29.0 - 2026-08-24
 
 **Den fjerde motoren: «er dette forsøket bestått» (#978).** Med #958, #959 og #962 er alle fire
