@@ -65,7 +65,7 @@ All routes use the `courses` capability: PARTICIPANT, SUBJECT_MATTER_OWNER, ADMI
 | `GET` | `/api/courses` | Published courses with progress. `progress.total` counts **all elements** (modules + learning sections); `completed` = passed modules + read sections. |
 | `GET` | `/api/courses/completions` | The user's course completions / certificates |
 | `GET` | `/api/courses/completions/:certificateId` | A single completion by certificate ID, for the printable certificate view (#550). Owner-scoped — `404` for another user's certificate. Returns `certificateId`, `courseId`, `courseTitle` (localized), `certificationLevel`, `completedAt`, `participantName`, `moduleCount`. |
-| `GET` | `/api/courses/:courseId` | Course detail. Returns `modules[]` (legacy) and `items[]` — the ordered mixed module/section sequence; SECTION items carry a `read` flag (#491/#492). |
+| `GET` | `/api/courses/:courseId` | Course detail. Returns `modules[]` (legacy) and `items[]` — the ordered mixed module/section sequence; SECTION items carry a `read` flag (#491/#492). **#958:** SECTION items the participant cannot open (archived, or no active version) are **omitted entirely** — `available` is therefore always `true` on sections. MODULE items are all present, each carrying **two** independent flags. **#996: `available` and `required` are not the same question, and conflating them is a dead end.** `available:false` means the participant cannot open it right now. `required:false` means the certificate gate does not ask for it. An **unpublished** module is `available:false, required:true` — temporarily down, still counted. An **archived** module is `available:false, required:false` — taken out of circulation. A client that infers the second from the first will offer "Finish course" on a course the server will not certify: the click records the read and nothing happens. See `doc/DECISIONS.md` and `FEATURE_SURFACE_MAP` §25. |
 | `GET` | `/api/courses/:courseId/sections/:sectionId` | Sanitised HTML + title of a learning section in the participant's locale. Validates the section belongs to the published course (#491). |
 | `POST` | `/api/courses/:courseId/sections/:sectionId/read` | Mark a section as read (idempotent). `204` on success (#492). |
 | `GET` | `/api/courses/enrollments` | The user's own active enrollments (assigned courses) with `dueAt` + derived `status` (ASSIGNED/IN_PROGRESS/OVERDUE/COMPLETED) (#496/EN-2). |
@@ -147,12 +147,31 @@ The course master toggle is set via the admin course API: `POST`/`PUT /api/admin
 | `GET` | `/api/reports/appeals` | ADMINISTRATOR, REPORT_READER, SUBJECT_MATTER_OWNER |
 | `GET` | `/api/reports/mcq-quality` | ADMINISTRATOR, REPORT_READER, SUBJECT_MATTER_OWNER |
 | `GET` | `/api/reports/recertification` | ADMINISTRATOR, REPORT_READER, SUBJECT_MATTER_OWNER |
-| `POST` | `/api/reports/recertification/reminders/run?asOf=<ISO-date>` | ADMINISTRATOR |
 | `GET` | `/api/reports/analytics/semantic-model` | ADMINISTRATOR, REPORT_READER, SUBJECT_MATTER_OWNER |
 | `GET` | `/api/reports/analytics/trends?granularity=<day\|week\|month>` | ADMINISTRATOR, REPORT_READER, SUBJECT_MATTER_OWNER |
 | `GET` | `/api/reports/analytics/cohorts?cohortBy=<month\|department>` | ADMINISTRATOR, REPORT_READER, SUBJECT_MATTER_OWNER |
 | `GET` | `/api/reports/analytics/data-quality` | ADMINISTRATOR, REPORT_READER, SUBJECT_MATTER_OWNER |
 | `GET` | `/api/reports/export?type=<report>&format=csv` | ADMINISTRATOR, REPORT_READER, SUBJECT_MATTER_OWNER |
+
+### #989 — recertification removed
+
+`POST /api/reports/recertification/reminders/run` is **gone** (404). Modules no longer expire, so
+there is nothing to remind anyone to renew. Course due-date reminders are a separate mechanism and
+are unaffected (`CourseReminderMonitor`).
+
+`GET /api/reports/recertification` **remains** — the URL keeps its historical name, but the response
+now reports stored certification state instead of a derived expiry state:
+
+| | Before | After |
+|---|---|---|
+| `reportType` | `recertification-status` | `certification-status` |
+| `rows[].status` | `ACTIVE` \| `DUE_SOON` \| `DUE` \| `EXPIRED` \| `NOT_CERTIFIED` | `ACTIVE` \| `NOT_CERTIFIED` |
+| `rows[]` expiry fields | `expiryDate`, `recertificationDueDate`, `daysUntilDue`, `daysUntilExpiry` | removed |
+| `totals` | one count per lifecycle value | `certificationCount`, `ACTIVE`, `NOT_CERTIFIED` |
+
+Historical rows still holding `DUE_SOON`/`DUE`/`EXPIRED` are reported as `ACTIVE` — they counted as
+passed before and still do. `?status=` filtering accepts the two remaining values. The CSV export
+token is unchanged (`/api/reports/export?type=recertification`).
 
 ---
 
@@ -428,9 +447,9 @@ have nothing to do with, not about partitioning content inside a course you asse
 | `POST` | `/api/admin/content/courses` | Create a course |
 | `GET` | `/api/admin/content/courses/:courseId` | Course detail (modules) |
 | `PUT` | `/api/admin/content/courses/:courseId` | Update course metadata |
-| `PUT` | `/api/admin/content/courses/:courseId/modules` | Set module list (legacy; dual-writes CourseItem) |
+| `PUT` | `/api/admin/content/courses/:courseId/modules` | Set the module list (legacy). Writes `CourseItem` MODULE-rader — det er ikke lenger en dual-write, `CourseItem` er eneste sannhetskilde (#502). Eventuelle SECTION-elementer bevares og re-indekseres etter modulene. **`400` hvis en modul er arkivert** (#992) — samme regel som `/items`; se under. |
 | `GET` | `/api/admin/content/courses/:courseId/items` | Read the ordered mixed module/section sequence (#486/B2) |
-| `PUT` | `/api/admin/content/courses/:courseId/items` | Set the ordered sequence — body `{ items: [{type:"MODULE",moduleId} \| {type:"SECTION",sectionId}] }`. Re-syncs CourseModule (#486). |
+| `PUT` | `/api/admin/content/courses/:courseId/items` | Set the ordered sequence — body `{ items: [{type:"MODULE",moduleId} \| {type:"SECTION",sectionId}] }`. Re-syncs CourseModule (#486). **`400` hvis noe av innholdet er arkivert** (#938); se under. |
 | `GET` | `/api/admin/content/courses/:courseId/publish-preview` | Inspect unpublished items before publishing (#734). Returns `{ courseId, allPublished, publishable, unpublishedItems: [{ type, id, title, publishable, blockers: [{code,message}] }] }`. Read-only; the UI calls it to drive the cascade-publish confirm dialog. |
 | `POST` | `/api/admin/content/courses/:courseId/publish` | Publish course (#734). Body `{ publishItems?: boolean }`. If the course has unpublished modules/sections: without `publishItems:true` returns `409 course_has_unpublished_items` (with the preview) so the UI can confirm; with `publishItems:true` cascade-publishes the items (items → course) — but returns `422 course_publish_blocked_by_items` (with `details.unpublishedItems`) and publishes nothing if any item is un-publishable (module fails validation / no content, archived item). Enforces I1: a published course never contains unavailable content. Response `{ course, publishedItems }`. |
 | `POST` | `/api/admin/content/courses/:courseId/unpublish` | Unpublish course (reversible soft take-down; no G3 lock, #705) |
@@ -455,8 +474,29 @@ have nothing to do with, not about partitioning content inside a course you asse
 Classes (cohorts) assign a course to a group of participants dynamically: a participant is assigned a course if they belong to a class it is assigned to (evaluated at read time, never materialised). The built-in **"Alle deltakere"** system class covers all PARTICIPANT users. `GET /api/courses` and `GET /api/courses/enrollments` reflect class assignments (the latter with `source: "CLASS"`). Entra-linked classes (`kind=ENTRA`) are gated by the `classEntraLinkingEnabled` platform config (default off, CL-5).
 | `POST` | `/api/admin/content/courses/:courseId/localize-copy` | LLM-translate course title/description |
 | `GET` | `/api/admin/content/courses/:courseId/export-package` | **Owner or admin only (#903).** Export envelope (inlines modules **and** sections in order, #512). An empty course returns `422 course_not_exportable`. Section figures/images travel inline as base64 (#749, see below) |
-| `POST` | `/api/admin/content/courses/import` | Import a course envelope (recreates sections via `items`, falls back to modules-only v1). Recreates section assets + remaps `asset:` refs (#749). Larger 35 MB body limit to carry inlined assets. **#937:** also accepts a bare course payload `{ course: {…} }`; anything unrecognisable returns `400 not_an_export_envelope` (a code, not prose — clients render it in the author's language). **#942 (security):** `mode: "replaceExisting"` requires ownership of `targetId` (403 `content_ownership` otherwise) — the same guard module and section import already had. |
+| `POST` | `/api/admin/content/courses/import` | Import a course envelope (recreates sections via `items`, falls back to modules-only v1). Recreates section assets + remaps `asset:` refs (#749). Larger 35 MB body limit to carry inlined assets. **#937:** also accepts a bare course payload `{ course: {…} }`; anything unrecognisable returns `400 not_an_export_envelope` (a code, not prose — clients render it in the author's language). **#942 (security):** `mode: "replaceExisting"` requires ownership of `targetId` (403 `content_ownership` otherwise) — the same guard module and section import already had. **#957/#996:** responsen bærer `heldBackByTranslationGate: boolean`. `true` betyr at kurset ble lagret som **utkast** fordi minst én modul eller seksjon mangler et språk — selv om kilden var publisert, og selv om et eksisterende målkurs var publisert før importen (da avpubliseres det, ellers ville deltakere møtt «modul ikke tilgjengelig» i et levende kurs). Uten feltet fikk forfatteren `201 Created` uten forklaring. |
 | `DELETE` | `/api/admin/content/courses/:courseId` | Delete course |
+
+#### Arkivert innhold kan ikke legges inn i et kurs (#938/#992)
+
+Både `PUT /:courseId/items` og legacy-ruta `PUT /:courseId/modules` avviser arkiverte moduler og
+seksjoner med `400`. De to feilene er **med vilje forskjellige**, fordi de krever ulik handling av
+klienten:
+
+| Situasjon | Melding |
+|---|---|
+| Elementet finnes, men er arkivert | `One or more modules/sections are archived and cannot be added to a course.` |
+| Elementet finnes ikke | `One or more modules/sections do not exist.` |
+
+Ingenting skrives på veien til avslaget — kontrollen skjer før transaksjonen, så en avvist forespørsel
+lar kursets sekvens stå urørt.
+
+⚠️ **Merk for integrasjonsklienter:** legacy-ruta svarte tidligere `204` uansett modulstatus. En
+klient som sender en arkivert modul-ID får nå `400`. Regelen finnes fordi arkivert innhold i et
+publisert kurs blokkerte fullføring permanent (#938).
+
+Regelen gjelder **ikke** upubliserte utkast — de kan legges inn, og utelates i stedet fra deltakerens
+sekvens (se `doc/DECISIONS.md`, «Upublisert innhold vises ikke for kandidater i det hele tatt»).
 
 #### Section figures/images carried through export/import (#749, Layer A)
 

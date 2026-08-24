@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { warmModuleGraph } from "../support/moduleGraphWarmup.js";
 
 const findModuleSummary = vi.fn();
 const findModuleDeleteSummary = vi.fn();
@@ -67,6 +68,9 @@ vi.mock("../../src/config/benchmarkExamples.js", () => ({
     maxTextLength: 100,
   }),
 }));
+
+// #994: modulgrafen leses her, ikke i første test. Se test/support/moduleGraphWarmup.ts.
+warmModuleGraph(() => import("../../src/modules/adminContent/index.js"));
 
 describe("admin content service", () => {
   beforeEach(() => {

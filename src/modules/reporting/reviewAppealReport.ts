@@ -1,9 +1,8 @@
 import { ReviewStatus, AppealStatus } from "../../db/prismaRuntime.js";
 import { localizeContentText } from "../../i18n/content.js";
-import { getAssessmentRules } from "../../config/assessmentRules.js";
 import { reportingRepository } from "../../repositories/reportingRepository.js";
 import { buildAppealSlaSnapshot } from "../../modules/appeal/index.js";
-import { deriveRecertificationStatus } from "../certification/index.js";
+import { isCertificationPassed } from "../certification/index.js";
 import type {
   ReviewStatus as ReviewStatusType,
   AppealStatus as AppealStatusType,
@@ -51,7 +50,10 @@ type AppealRow = {
   slaState: "ON_TRACK" | "AT_RISK" | "OVERDUE" | "RESOLVED";
 };
 
-type RecertificationStatusRow = {
+// #989: raden hadde `recertificationDueDate`, `expiryDate`, `daysUntilDue` og `daysUntilExpiry`.
+// Alle fire kom fra en utløpsmekanikk som ikke lenger finnes, og `status` ble UTLEDET fra dem ved
+// lesing. Nå rapporteres den lagrede tilstanden, normalisert til de to som betyr noe.
+type CertificationStatusRow = {
   certificationId: string;
   userId: string;
   participantEmail: string;
@@ -59,12 +61,8 @@ type RecertificationStatusRow = {
   moduleId: string;
   moduleTitle: string;
   latestDecisionId: string;
-  status: string;
+  status: "ACTIVE" | "NOT_CERTIFIED";
   passedAt: Date | null;
-  recertificationDueDate: Date | null;
-  expiryDate: Date | null;
-  daysUntilDue: number | null;
-  daysUntilExpiry: number | null;
   updatedAt: Date;
 };
 
@@ -155,9 +153,7 @@ export async function getAppealsReport(filters: ReportFilters) {
   };
 }
 
-export async function getRecertificationStatusReport(filters: ReportFilters) {
-  const rules = getAssessmentRules().recertification;
-  const now = new Date();
+export async function getCertificationStatusReport(filters: ReportFilters) {
   const statuses = new Set((filters.statuses ?? []).map((value) => value.toUpperCase()));
 
   const certifications = await reportingRepository.findCertificationsForStatusReport({
@@ -168,13 +164,7 @@ export async function getRecertificationStatusReport(filters: ReportFilters) {
   });
 
   const rows = certifications
-    .map((certification): RecertificationStatusRow => {
-      const derivedStatus = deriveRecertificationStatus({
-        now,
-        expiryDate: certification.expiryDate,
-        recertificationDueDate: certification.recertificationDueDate,
-        dueSoonDays: rules.dueSoonDays,
-      });
+    .map((certification): CertificationStatusRow => {
       return {
         certificationId: certification.id,
         userId: certification.user.id,
@@ -183,14 +173,10 @@ export async function getRecertificationStatusReport(filters: ReportFilters) {
         moduleId: certification.module.id,
         moduleTitle: localizeContentText("en-GB", certification.module.title) ?? certification.module.title,
         latestDecisionId: certification.latestDecisionId,
-        status: derivedStatus,
+        // Historiske rader kan stå med DUE_SOON/DUE/EXPIRED. De talte som bestått den gang og teller
+        // som bestått nå — samme regel som kursbevisporten bruker, én kilde (`isCertificationPassed`).
+        status: isCertificationPassed(certification.status) ? "ACTIVE" : "NOT_CERTIFIED",
         passedAt: certification.passedAt,
-        recertificationDueDate: certification.recertificationDueDate,
-        expiryDate: certification.expiryDate,
-        daysUntilDue: certification.recertificationDueDate
-          ? diffUtcDays(now, certification.recertificationDueDate)
-          : null,
-        daysUntilExpiry: certification.expiryDate ? diffUtcDays(now, certification.expiryDate) : null,
         updatedAt: certification.updatedAt,
       };
     })
@@ -198,14 +184,11 @@ export async function getRecertificationStatusReport(filters: ReportFilters) {
 
   const statusCounts = {
     ACTIVE: rows.filter((row) => row.status === "ACTIVE").length,
-    DUE_SOON: rows.filter((row) => row.status === "DUE_SOON").length,
-    DUE: rows.filter((row) => row.status === "DUE").length,
-    EXPIRED: rows.filter((row) => row.status === "EXPIRED").length,
     NOT_CERTIFIED: rows.filter((row) => row.status === "NOT_CERTIFIED").length,
   };
 
   return {
-    reportType: "recertification-status",
+    reportType: "certification-status",
     filters: normalizeFilters(filters),
     totals: {
       certificationCount: rows.length,
@@ -229,11 +212,5 @@ function asAppealStatuses(input?: string[]) {
   }
   const valid = new Set<string>(Object.values(AppealStatus));
   return input.filter((item) => valid.has(item)) as AppealStatusType[];
-}
-
-function diffUtcDays(from: Date, to: Date) {
-  const fromDate = Date.UTC(from.getUTCFullYear(), from.getUTCMonth(), from.getUTCDate());
-  const toDate = Date.UTC(to.getUTCFullYear(), to.getUTCMonth(), to.getUTCDate());
-  return Math.floor((toDate - fromDate) / (24 * 60 * 60 * 1000));
 }
 

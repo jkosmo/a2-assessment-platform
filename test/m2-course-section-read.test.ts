@@ -61,3 +61,342 @@ describe("Participant section read progress", () => {
     await prisma.courseSection.delete({ where: { id: section.id } });
   });
 });
+
+// ──────────────────────────────────────────────────────────────────────────────
+// #944 — en seksjon uten aktiv versjon ga 200 med TOM SIDE, kunne markeres lest, og utløste
+// kursbeviset. To helt ulike årsaker traff samme sti:
+//
+//   arkivert                        `archiveSection` nuller activeVersionId
+//   holdt av oversettelsesgaten     versjonen lagres, activeVersionId settes ikke
+//
+// Derfor er dekningen ikke komplett før BEGGE årsakene er testet. En test på bare arkivering ville
+// vært grønn mens den andre halvparten sto åpen — og det var nettopp den halvparten
+// `contentImportService.ts:149-151` hadde beskrevet som oppdaget, uten at lesestien ble tettet.
+// ──────────────────────────────────────────────────────────────────────────────
+
+async function courseWithSection(opts: { archived?: boolean; withActiveVersion?: boolean }) {
+  const course = await prisma.course.create({
+    data: { title: `Gate Course ${Date.now()}-${Math.random()}`, publishedAt: new Date() },
+    select: { id: true },
+  });
+  const section = await prisma.courseSection.create({
+    data: {
+      title: JSON.stringify({ "en-GB": "Gated" }),
+      ...(opts.archived ? { archivedAt: new Date() } : {}),
+    },
+    select: { id: true },
+  });
+  if (opts.withActiveVersion !== false) {
+    const version = await prisma.courseSectionVersion.create({
+      data: {
+        sectionId: section.id,
+        versionNo: 1,
+        bodyMarkdown: JSON.stringify({ "en-GB": "Body." }),
+        publishedAt: new Date(),
+      },
+      select: { id: true },
+    });
+    await prisma.courseSection.update({ where: { id: section.id }, data: { activeVersionId: version.id } });
+  }
+  await prisma.courseItem.create({
+    data: { courseId: course.id, itemType: "SECTION", sectionId: section.id, sortOrder: 0 },
+  });
+  return { courseId: course.id, sectionId: section.id };
+}
+
+describe("#944: en uleselig seksjon kan verken åpnes eller markeres lest", () => {
+  it("en seksjon holdt tilbake av oversettelsesgaten gir 404, ikke tom side", async () => {
+    // Versjonen finnes IKKE som aktiv — nøyaktig tilstanden gaten etterlater.
+    const { courseId, sectionId } = await courseWithSection({ withActiveVersion: false });
+
+    const read = await request(app).get(`/api/courses/${courseId}/sections/${sectionId}`).set(participantHeaders);
+    expect(read.status, JSON.stringify(read.body)).toBe(404);
+
+    // ⚠️ Kjernen: markeringen skal heller ikke gå gjennom. Fram til nå var dette 204, lesningen ble
+    // registrert, og kursbeviset utstedt for innhold som aldri ble publisert.
+    const mark = await request(app).post(`/api/courses/${courseId}/sections/${sectionId}/read`).set(participantHeaders);
+    expect(mark.status).toBe(404);
+
+    const reads = await prisma.courseSectionRead.count({ where: { courseId, sectionId } });
+    expect(reads, "ingen lesning skal være registrert").toBe(0);
+  });
+
+  it("en arkivert seksjon gir 404 — den andre årsaken, samme sti", async () => {
+    const { courseId, sectionId } = await courseWithSection({ archived: true, withActiveVersion: false });
+
+    expect((await request(app).get(`/api/courses/${courseId}/sections/${sectionId}`).set(participantHeaders)).status).toBe(404);
+    expect((await request(app).post(`/api/courses/${courseId}/sections/${sectionId}/read`).set(participantHeaders)).status).toBe(404);
+  });
+
+  it("KONTROLLCASE: en publisert seksjon leses og markeres som før", async () => {
+    // Uten denne vet vi ikke om vi målte tilgjengelighetsregelen eller bare knekte ruta. En
+    // `return 404` uten betingelse ville bestått begge testene over.
+    const { courseId, sectionId } = await courseWithSection({});
+
+    const read = await request(app).get(`/api/courses/${courseId}/sections/${sectionId}`).set(participantHeaders);
+    expect(read.status, JSON.stringify(read.body)).toBe(200);
+    expect(read.body.html).toContain("Body.");
+
+    const mark = await request(app).post(`/api/courses/${courseId}/sections/${sectionId}/read`).set(participantHeaders);
+    expect(mark.status).toBe(204);
+  });
+
+  it("#958/#992: kurssekvensen viser ikke uleselige seksjoner i det hele tatt", async () => {
+    // Historikk, fordi assertionen er SNUDD: #944 ga seksjonene et `available`-flagg, siden de før
+    // det ikke hadde feltet og klienten satte det til true for alle. #992 viste at klienten
+    // ignorerer flagget for seksjoner likevel (`const available = isSection || …`), så raden så
+    // klikkbar ut og endte i den 404-en testene over pinner.
+    //
+    // ⚠️ Produkteier avgjorde 2026-08-23: «utkastseksjoner skal ikke ha konsekvenser for kandidater
+    // før de er publisert». For en kandidat som aldri har sett seksjonen er en nedtonet rad ikke en
+    // forklaring — den er en beskjed om VÅR redigeringstilstand.
+    //
+    // #958 flyttet avgjørelsen til `findCourseItemsForParticipant`: en seksjon deltakeren ikke kan
+    // åpne er ikke lenger MERKET, den er UTELATT. Samme svar som lesestien, markeringen,
+    // bevisporten og framdriftstelleren allerede ga — nå fra én dør i stedet for fem regler.
+    //
+    // Se `doc/DECISIONS.md` → «Upublisert innhold vises ikke for kandidater i det hele tatt».
+    const { courseId } = await courseWithSection({ withActiveVersion: false });
+    const detail = await request(app).get(`/api/courses/${courseId}`).set(participantHeaders);
+
+    expect(detail.status).toBe(200);
+    expect(detail.body.course.items.filter((i: { type: string }) => i.type === "SECTION")).toEqual([]);
+  });
+
+  it("KONTROLLCASE: en publisert seksjon står i sekvensen, med available:true", async () => {
+    // Uten denne ville «returner en tom sekvens» bestått testen over — da hadde vi målt at ruta var
+    // knekt, ikke at regelen virket. Feltet `available` beholdes for MODULER og for eldre klienter.
+    const { courseId, sectionId } = await courseWithSection({});
+    const detail = await request(app).get(`/api/courses/${courseId}`).set(participantHeaders);
+
+    const sections = detail.body.course.items.filter((i: { type: string }) => i.type === "SECTION");
+    expect(sections).toHaveLength(1);
+    expect(sections[0].sectionId).toBe(sectionId);
+    expect(sections[0].available).toBe(true);
+  });
+
+  it("#944/#938: en uleselig seksjon KREVES ikke for kursbeviset", async () => {
+    // Produkteiers regel: et krav som aldri kan oppfylles er verre enn ikke noe krav. Deltakeren får
+    // 404 på lesestien, så å kreve seksjonen ville gjort kurset umulig å fullføre — #945s form.
+    const { courseId } = await courseWithSection({ withActiveVersion: false });
+
+    const detail = await request(app).get(`/api/courses/${courseId}`).set(participantHeaders);
+    expect(detail.status).toBe(200);
+    expect(detail.body.course.progress.sectionTotal, "den uleselige skal ikke telle som krav").toBe(0);
+  });
+});
+
+describe("#945: arkiverte moduler telles ikke i framdriften", () => {
+  it("moduleTotal utelater en arkivert modul — kortet og porten er enige", async () => {
+    // ⚠️ Denne testen finnes fordi jeg glemte modulsiden. Jeg filtrerte arkiverte SEKSJONER i
+    // kursdetaljen og lot modultellingen stå, så porten krevde 1 modul mens kortet viste 2.
+    //
+    // Funnet ved å måle ekte data på stage 2026-08-22 — kurset «Samfunnsvitere» viste
+    // moduleTotal 5 mens porten krevde 4. Ingen test fanget det, fordi alle testene mine brukte
+    // seksjoner.
+    const course = await prisma.course.create({
+      data: { title: `Archived Module Course ${Date.now()}`, publishedAt: new Date() },
+      select: { id: true },
+    });
+    const live = await prisma.module.create({
+      data: { title: JSON.stringify({ "en-GB": "Live module" }) },
+      select: { id: true },
+    });
+    const archived = await prisma.module.create({
+      data: { title: JSON.stringify({ "en-GB": "Archived module" }), archivedAt: new Date() },
+      select: { id: true },
+    });
+    await prisma.courseItem.createMany({
+      data: [
+        { courseId: course.id, itemType: "MODULE", moduleId: live.id, sortOrder: 0 },
+        { courseId: course.id, itemType: "MODULE", moduleId: archived.id, sortOrder: 1 },
+      ],
+    });
+
+    const detail = await request(app).get(`/api/courses/${course.id}`).set(participantHeaders);
+    expect(detail.status).toBe(200);
+    const p = detail.body.course.progress;
+
+    expect(p.moduleTotal, "den arkiverte skal ikke telle som krav").toBe(1);
+    expect(p.total, "totalen følger av det samme").toBe(1);
+
+    // Elementet vises fortsatt i sekvensen, men markert utilgjengelig — deltakeren skal se at det
+    // er der, ikke lure på om noe forsvant.
+    //
+    // ⚠️ Assertionen peker på DEN ARKIVERTE modulen, ikke på et antall. Første utkast telte
+    // `available === false` og forventet 1 — men den «levende» modulen i fikstureringen har ingen
+    // publisert versjon og er derfor også utilgjengelig. Å telle ville målt fikstureringen min,
+    // ikke regelen.
+    const items = detail.body.course.items as Array<{ type: string; moduleId?: string; available?: boolean }>;
+    expect(items).toHaveLength(2);
+    expect(items.find((i) => i.moduleId === archived.id)?.available).toBe(false);
+  });
+
+  it("KONTROLLCASE: to levende moduler teller begge", async () => {
+    // Uten denne ville «filtrer bort alt» bestått testen over.
+    const course = await prisma.course.create({
+      data: { title: `Live Module Course ${Date.now()}`, publishedAt: new Date() },
+      select: { id: true },
+    });
+    const a = await prisma.module.create({ data: { title: JSON.stringify({ "en-GB": "A" }) }, select: { id: true } });
+    const b = await prisma.module.create({ data: { title: JSON.stringify({ "en-GB": "B" }) }, select: { id: true } });
+    await prisma.courseItem.createMany({
+      data: [
+        { courseId: course.id, itemType: "MODULE", moduleId: a.id, sortOrder: 0 },
+        { courseId: course.id, itemType: "MODULE", moduleId: b.id, sortOrder: 1 },
+      ],
+    });
+
+    const detail = await request(app).get(`/api/courses/${course.id}`).set(participantHeaders);
+    expect(detail.body.course.progress.moduleTotal).toBe(2);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// #992: telleren i framdriftsbrøken, ikke bare nevneren.
+//
+// #944 filtrerte `sectionTotal` på tilgjengelighet, men lot `sectionCompleted` telle ENHVER
+// registrert lesning. En lesning fra før seksjonen ble utilgjengelig telte dermed mot en nevner
+// som ikke lenger inneholdt den.
+//
+// ⚠️ Utfallet er verre enn et skjevt tall: med én lest, nå-utilgjengelig seksjon og én ulest,
+// tilgjengelig seksjon rapporterte detaljen 1/1 og COMPLETED — mens bevisporten korrekt nektet.
+// Kortet sa «ferdig», systemet sa «ikke ferdig», og deltakeren satt igjen mellom de to. Det er
+// #938 om igjen, i #944 sin fiks.
+// ─────────────────────────────────────────────────────────────────────────────
+describe("#992: framdriftsbrøken bruker samme predikat i teller og nevner", () => {
+  afterAll(async () => {
+    await prisma.$disconnect();
+  });
+
+  async function courseWithReadButUnavailable() {
+    const course = await prisma.course.create({
+      data: { title: `Numerator Course ${Date.now()}-${Math.random()}`, publishedAt: new Date() },
+      select: { id: true },
+    });
+    const user = await prisma.user.findFirst({ where: { externalId: participantHeaders["x-user-id"] }, select: { id: true } });
+    if (!user) throw new Error("fant ikke deltakeren fikstureringen bygger på");
+
+    // Seksjon A: LEST, men uten aktiv versjon — altså ikke lenger tilgjengelig.
+    const gone = await prisma.courseSection.create({
+      data: { title: JSON.stringify({ "en-GB": "Read before it was pulled" }) },
+      select: { id: true },
+    });
+    // Seksjon B: tilgjengelig og ULEST. Det er DEN bevisporten venter på.
+    const live = await prisma.courseSection.create({
+      data: { title: JSON.stringify({ "en-GB": "Still required" }) },
+      select: { id: true },
+    });
+    const v = await prisma.courseSectionVersion.create({
+      data: { sectionId: live.id, versionNo: 1, bodyMarkdown: JSON.stringify({ "en-GB": "Body." }), publishedAt: new Date() },
+      select: { id: true },
+    });
+    await prisma.courseSection.update({ where: { id: live.id }, data: { activeVersionId: v.id } });
+    await prisma.courseItem.createMany({
+      data: [
+        { courseId: course.id, itemType: "SECTION", sectionId: gone.id, sortOrder: 0 },
+        { courseId: course.id, itemType: "SECTION", sectionId: live.id, sortOrder: 1 },
+      ],
+    });
+    await prisma.courseSectionRead.create({
+      data: { userId: user.id, courseId: course.id, sectionId: gone.id },
+    });
+    return { courseId: course.id, goneId: gone.id, liveId: live.id };
+  }
+
+  it("en lesning av en nå-utilgjengelig seksjon teller ikke som fullført", async () => {
+    const { courseId } = await courseWithReadButUnavailable();
+    const detail = await request(app).get(`/api/courses/${courseId}`).set(participantHeaders);
+    const p = detail.body.course.progress;
+
+    expect(p.sectionTotal, "bare den tilgjengelige seksjonen kreves").toBe(1);
+    expect(p.sectionCompleted, "den uleselige lesningen skal ikke telle").toBe(0);
+    // Og da er kurset ikke fullført — samme svar som bevisporten gir.
+    expect(p.courseStatus).not.toBe("COMPLETED");
+  });
+
+  it("KONTROLLCASE: en lesning av en TILGJENGELIG seksjon teller fortsatt", async () => {
+    // Uten denne ville «tell aldri lesninger» bestått testen over — og da ville ingen noensinne
+    // fullført et kurs.
+    const { courseId, liveId } = await courseWithReadButUnavailable();
+    const mark = await request(app).post(`/api/courses/${courseId}/sections/${liveId}/read`).set(participantHeaders);
+    expect(mark.status, JSON.stringify(mark.body)).toBe(204);
+
+    const detail = await request(app).get(`/api/courses/${courseId}`).set(participantHeaders);
+    const p = detail.body.course.progress;
+    expect(p.sectionCompleted).toBe(1);
+    expect(p.sectionTotal).toBe(1);
+    expect(p.courseStatus).toBe("COMPLETED");
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// #996: legacy-`modules[]` sa noe annet enn tellerne i SAMME respons.
+//
+// Tellerne ble filtrert for arkiverte moduler i 2.26.3. Denne lista ble det ikke, og da kunne én
+// respons påstå `moduleCount: 0` og `progress 0/0` samtidig som `modules[]` inneholdt en modul.
+//
+// ⚠️ Verre enn et skjevt tall: `certStatusByModuleId` bygges bare for ikke-arkiverte moduler, så en
+// modul deltakeren FAKTISK BESTO før arkiveringen kom tilbake som «ikke påbegynt». En eldre klient
+// som leser denne dokumenterte flaten viser da en klikkbar modul som resten av responsen sier ikke
+// finnes i kravet.
+// ─────────────────────────────────────────────────────────────────────────────
+describe("#996: legacy-modules[] er filtrert som tellerne", () => {
+  afterAll(async () => {
+    await prisma.$disconnect();
+  });
+
+  async function courseWithArchivedAndLiveModule() {
+    const course = await prisma.course.create({
+      data: { title: `Legacy Modules ${Date.now()}-${Math.random()}`, publishedAt: new Date() },
+      select: { id: true },
+    });
+    const archived = await prisma.module.create({
+      data: { title: JSON.stringify({ "en-GB": "Arkivert" }), archivedAt: new Date() },
+      select: { id: true },
+    });
+    const live = await prisma.module.create({
+      data: { title: JSON.stringify({ "en-GB": "Levende" }) },
+      select: { id: true },
+    });
+    await prisma.courseItem.createMany({
+      data: [
+        { courseId: course.id, itemType: "MODULE", moduleId: archived.id, sortOrder: 0 },
+        { courseId: course.id, itemType: "MODULE", moduleId: live.id, sortOrder: 1 },
+      ],
+    });
+    return { courseId: course.id, archivedId: archived.id, liveId: live.id };
+  }
+
+  it("den arkiverte modulen er ute av modules[], slik den er ute av moduleTotal", async () => {
+    const { courseId, archivedId, liveId } = await courseWithArchivedAndLiveModule();
+    const detail = await request(app).get(`/api/courses/${courseId}`).set(participantHeaders);
+    const modules = detail.body.course.modules as Array<{ moduleId: string }>;
+
+    expect(modules.map((m) => m.moduleId), "kun den levende").toEqual([liveId]);
+    expect(modules.some((m) => m.moduleId === archivedId)).toBe(false);
+
+    // ⚠️ Kjernen: lista og telleren skal si det SAMME. Det var uenigheten som var feilen.
+    expect(modules).toHaveLength(detail.body.course.progress.moduleTotal);
+    expect(detail.body.course.moduleCount).toBe(modules.length);
+  });
+
+  it("KONTROLLCASE: en levende modul står fortsatt i modules[]", async () => {
+    // Uten denne ville «filtrer bort alt» bestått testen over, og eldre klienter hadde fått en tom
+    // modulliste for helt normale kurs.
+    const course = await prisma.course.create({
+      data: { title: `Legacy Modules OK ${Date.now()}`, publishedAt: new Date() },
+      select: { id: true },
+    });
+    const live = await prisma.module.create({
+      data: { title: JSON.stringify({ "en-GB": "Bare levende" }) },
+      select: { id: true },
+    });
+    await prisma.courseItem.create({
+      data: { courseId: course.id, itemType: "MODULE", moduleId: live.id, sortOrder: 0 },
+    });
+
+    const detail = await request(app).get(`/api/courses/${course.id}`).set(participantHeaders);
+    expect((detail.body.course.modules as Array<{ moduleId: string }>).map((m) => m.moduleId)).toEqual([live.id]);
+  });
+});

@@ -16,6 +16,7 @@ import {
   resolveWorkspaceNavigationItems,
 } from "/static/participant-console-state.js";
 import { showToast } from "/static/toast.js";
+import { describeApiError } from "/static/api-error.js";
 import { renderWorkspaceNavigationWithProfile } from "./workspace-nav.js";
 import { localizeValueForLocale, buildPreviewHtml } from "/static/admin-content-preview.js";
 import { setHidden } from "/static/dom-visibility.js";
@@ -50,6 +51,14 @@ let currentLocale = (() => {
 function t(key) {
   const map = adminContentTranslations[currentLocale] ?? adminContentTranslations["en-GB"] ?? {};
   return map[key] ?? key;
+}
+
+// #972: samtale-skallet flettet `String(err?.message ?? err)` inn i chat-loggen 19 steder. Det
+// er "<status>: <hele JSON-kroppen>" fra apiFetch — rå JSON midt i en samtale, på serverens språk.
+// `apiErrorText` slår opp KODEN i den delte tabellen (api-error.js) og gir en setning på
+// forfatterens språk. En feil klienten selv kastet slipper uendret gjennom: den teksten er vår.
+function apiErrorText(error) {
+  return describeApiError(error, t).headline;
 }
 
 // Template translation: replaces {varName} placeholders in the translated string.
@@ -293,21 +302,19 @@ function focusFirstEnabledChoice(container) {
   setTimeout(() => firstChoice.focus(), 40);
 }
 
+// #972/#985: returnerte `parsed.message || parsed.error` — altså serverens engelske setning, eller
+// i verste fall den rå kodestrengen (`content_ownership`) som overskrift. Begge deler er brudd på
+// «feilkoden er kontrakten, ikke teksten»: dette konsollet defaulter til en-GB og kjøres på tre
+// språk. Nå slås koden opp i den delte tabellen; `fallbackKey` brukes bare når feilen ikke er en
+// server-konvolutt i det hele tatt.
 function parseApiErrorMessage(error, fallbackKey) {
-  const fallback = t(fallbackKey);
-  if (!(error instanceof Error) || typeof error.message !== "string") {
-    return fallback;
-  }
-
-  const match = error.message.match(/^\d+:\s*(\{[\s\S]*\})$/);
-  if (!match) return fallback;
-
-  try {
-    const parsed = JSON.parse(match[1]);
-    return parsed.message || parsed.error || fallback;
-  } catch {
-    return fallback;
-  }
+  const described = describeApiError(error, t);
+  // ⚠️ `code === null` betyr at feilen ikke er en server-konvolutt i det hele tatt — en FileReader
+  // som feilet, en avbrutt fetch. Da er `headline` feilens egen, ofte interne, streng
+  // («file_reader_failed»), og kallstedets `fallbackKey` er den eneste som er skrevet for et
+  // menneske. Uten dette ville lokaliseringen av API-feilene kostet oss lokaliseringen av de andre.
+  if (described.code === null) return t(fallbackKey);
+  return described.headline;
 }
 
 function isSupportedSourceMaterialFile(file) {
@@ -526,7 +533,9 @@ function _domFormFields(entry) {
     // får sin egen rad med × for fjerning. uploadHint vises kun når lista er tom.
     const sourceList = document.createElement("ul");
     sourceList.className = "source-chip-list";
-    sourceList.hidden = true;
+    // #975: `.source-chip-list{display:flex}` (admin-content.html) slår `hidden`-attributtet, så
+    // den tomme lista beholdt padding og luft over «Last opp»-hintet.
+    setHidden(sourceList, true);
 
     const refreshUploadHint = () => {
       sourceList.innerHTML = "";
@@ -534,8 +543,8 @@ function _domFormFields(entry) {
         ...uploadedFileSources.map((f, i) => ({ kind: "file", index: i, label: f.fileName })),
         ...fetchedUrlSources.map((s, i) => ({ kind: "url", index: i, label: s.hostname })),
       ];
-      sourceList.hidden = items.length === 0;
-      uploadHint.hidden = items.length > 0;
+      setHidden(sourceList, items.length === 0);
+      setHidden(uploadHint, items.length > 0);
       for (const item of items) {
         const li = document.createElement("li");
         li.className = "source-chip";
@@ -1230,7 +1239,10 @@ function scrollPreviewToBottom() {
 function updateStateRail() {
   if (!stateRail) return;
   const hasModule = !!selectedModuleId;
-  stateRail.hidden = !hasModule;
+  // #975: her sto `stateRail.hidden = !hasModule` alene, og `.state-rail{display:flex}` slo
+  // attributtet. Lappen var en egen CSS-regel, `.state-rail[hidden]{display:none}` — en fiks oppå
+  // fella i stedet for kuren. Regelen er fjernet; setHidden gjør jobben for alle tilstander.
+  setHidden(stateRail, !hasModule);
   // #787: content-owner panel for the loaded module. Render once per module (guard on the last id) so
   // the frequent updateStateRail calls don't re-fetch/reset it; hide when no module is loaded.
   const ownerHost = document.getElementById("moduleOwnerPanelHost");
@@ -1241,7 +1253,7 @@ function updateStateRail() {
     } else if (ownerHost.dataset.moduleId !== selectedModuleId) {
       ownerHost.dataset.moduleId = selectedModuleId;
       ownerHost.hidden = false;
-      renderOwnerPanel({ container: ownerHost, contentType: "MODULE", contentId: selectedModuleId, getHeaders }).catch(() => {});
+      renderOwnerPanel({ container: ownerHost, contentType: "MODULE", contentId: selectedModuleId, getHeaders, t }).catch(() => {});
     }
   }
   if (!hasModule) return;
@@ -1954,7 +1966,7 @@ async function generateDraftInBackground(sourceMaterial, certLevel, locale, gene
       logResolveSlot(slot, () => escapeHtml(t("shell.generating.draftAborted")));
       return;
     }
-    const errMsg = String(err?.message ?? err);
+    const errMsg = apiErrorText(err);
     logResolveSlot(slot, () => `${escapeHtml(t("shell.generating.draftErrorPrefix"))}${escapeHtml(errMsg)}`, [
       { labelKey: "shell.action.retry", action: () => generateDraftInBackground(sourceMaterial, certLevel, locale, generationMode, onAccept, blueprint, scenarioMode) },
     ]);
@@ -2021,7 +2033,7 @@ async function generateMcqInBackground(sourceMaterial, certLevel, locale, genera
       logResolveSlot(slot, () => escapeHtml(t("shell.generating.mcqAborted")));
       return;
     }
-    const errMsg = String(err?.message ?? err);
+    const errMsg = apiErrorText(err);
     logResolveSlot(slot, () => `${escapeHtml(t("shell.generating.mcqErrorPrefix"))}${escapeHtml(errMsg)}`, [
       { labelKey: "shell.action.retry", action: () => generateMcqInBackground(sourceMaterial, certLevel, locale, generationMode, questionCount, optionCount, onAccept) },
     ]);
@@ -2087,7 +2099,7 @@ async function reviseDraftInBackground(instruction, onAccept) {
       logResolveSlot(slot, () => escapeHtml(t("shell.revision.draftAborted")));
       return;
     }
-    const errMsg = String(err?.message ?? err);
+    const errMsg = apiErrorText(err);
     logResolveSlot(slot, () => `${escapeHtml(t("shell.revision.draftErrorPrefix"))}${escapeHtml(errMsg)}`, [
       { labelKey: "shell.action.retry", action: () => reviseDraftInBackground(instruction, onAccept) },
     ]);
@@ -2145,7 +2157,7 @@ async function reviseMcqInBackground(instruction, onAccept) {
       logResolveSlot(slot, () => escapeHtml(t("shell.revision.mcqAborted")));
       return;
     }
-    const errMsg = String(err?.message ?? err);
+    const errMsg = apiErrorText(err);
     logResolveSlot(slot, () => `${escapeHtml(t("shell.revision.mcqErrorPrefix"))}${escapeHtml(errMsg)}`, [
       { labelKey: "shell.action.retry", action: () => reviseMcqInBackground(instruction, onAccept) },
     ]);
@@ -2204,7 +2216,7 @@ async function applyStructuredTitleEditInBackground(newTitle) {
       readyHtml: () => `<strong>${escapeHtml(tf("shell.revision.titleReady", { title: newTitle }))}</strong>${escapeHtml(warning)}`,
     });
   } catch (err) {
-    const errMsg = String(err?.message ?? err);
+    const errMsg = apiErrorText(err);
     logResolveSlot(slot, () => `${escapeHtml(t("shell.revision.titleErrorPrefix"))}${escapeHtml(errMsg)}`, [
       { labelKey: "shell.action.retry", action: () => applyStructuredTitleEditInBackground(newTitle) },
       { labelKey: "shell.directEdit.action", action: () => startDirectEditFlow() },
@@ -2250,7 +2262,7 @@ async function refreshLocalizedDraftInBackground({ draft, mcq }) {
       readyHtml: () => `<strong>${escapeHtml(t("shell.revision.translateReady"))}</strong>`,
     });
   } catch (err) {
-    const errMsg = String(err?.message ?? err);
+    const errMsg = apiErrorText(err);
     logResolveSlot(slot, () => `${escapeHtml(t("shell.revision.translateErrorPrefix"))}${escapeHtml(errMsg)}`, [
       { labelKey: "shell.action.retry", action: () => refreshLocalizedDraftInBackground({ draft, mcq }) },
     ]);
@@ -2440,7 +2452,7 @@ async function saveDraftBundleInBackground(options = {}) {
     announceStatus(t("shell.save.success"));
     if (afterSave) afterSave();
   } catch (err) {
-    const errMsg = String(err?.message ?? err);
+    const errMsg = apiErrorText(err);
     logResolveSlot(slot, () => `${escapeHtml(t("shell.save.errorPrefix"))}${escapeHtml(errMsg)}`, [
       { labelKey: "shell.action.retry", action: () => saveDraftBundleInBackground(options) },
     ]);
@@ -2876,7 +2888,7 @@ async function publishLatestDraftInBackground() {
       ]);
       return;
     }
-    const errMsg = String(err?.message ?? err);
+    const errMsg = apiErrorText(err);
     logResolveSlot(slot, () => `${escapeHtml(t("shell.publish.errorPrefix"))}${escapeHtml(errMsg)}`, [
       { labelKey: "shell.action.retry", action: publishLatestDraftInBackground },
     ]);
@@ -2900,7 +2912,7 @@ async function unpublishModuleInBackground() {
     showToast(t("shell.unpublish.success"), "success");
     announceStatus(t("shell.unpublish.success"));
   } catch (err) {
-    const errMsg = String(err?.message ?? err);
+    const errMsg = apiErrorText(err);
     logResolveSlot(slot, () => `${escapeHtml(t("shell.unpublish.errorPrefix"))}${escapeHtml(errMsg)}`, [
       { labelKey: "shell.action.retry", action: unpublishModuleInBackground },
     ]);
@@ -2931,7 +2943,7 @@ async function archiveModuleInBackground() {
     announceStatus(t("shell.archive.success"));
     startIdle();
   } catch (err) {
-    const errMsg = String(err?.message ?? err);
+    const errMsg = apiErrorText(err);
     logResolveSlot(slot, () => `${escapeHtml(t("shell.archive.errorPrefix"))}${escapeHtml(errMsg)}`, [
       { labelKey: "shell.action.retry", action: archiveModuleInBackground },
     ]);
@@ -2952,7 +2964,7 @@ async function restoreArchivedModuleInBackground(moduleId, moduleTitle) {
     announceStatus(tf("shell.restore.success", { module: moduleTitle ?? moduleId }));
     await loadModule(moduleId);
   } catch (err) {
-    const errMsg = String(err?.message ?? err);
+    const errMsg = apiErrorText(err);
     logResolveSlot(slot, () => `${escapeHtml(t("shell.restore.errorPrefix"))}${escapeHtml(errMsg)}`, [
       { labelKey: "shell.action.retry", action: () => restoreArchivedModuleInBackground(moduleId, moduleTitle) },
       { labelKey: "shell.action.cancel", action: startIdle },
@@ -2986,7 +2998,7 @@ async function startArchivedModulePicker() {
       ],
     );
   } catch (err) {
-    const errMsg = String(err?.message ?? err);
+    const errMsg = apiErrorText(err);
     logResolveSlot(slot, () => `${escapeHtml(t("shell.archive.errorPrefix"))}${escapeHtml(errMsg)}`, [
       { labelKey: "shell.action.retry", action: startArchivedModulePicker },
       { labelKey: "shell.action.cancel", action: startIdle },
@@ -3095,7 +3107,7 @@ async function duplicateCurrentModuleInBackground() {
     showToast(tf("shell.duplicate.success", { module: sourceLabel }), "success");
     announceStatus(tf("shell.duplicate.success", { module: sourceLabel }));
   } catch (err) {
-    const errMsg = String(err?.message ?? err);
+    const errMsg = apiErrorText(err);
     logResolveSlot(slot, () => `${escapeHtml(t("shell.duplicate.errorPrefix"))}${escapeHtml(errMsg)}`, [
       { labelKey: "shell.action.retry", action: duplicateCurrentModuleInBackground },
     ]);
@@ -3125,7 +3137,7 @@ async function deleteModuleInBackground() {
     announceStatus(t("shell.delete.success"));
     startIdle();
   } catch (err) {
-    const errMsg = String(err?.message ?? err);
+    const errMsg = apiErrorText(err);
     logResolveSlot(slot, () => `${escapeHtml(t("shell.delete.errorPrefix"))}${escapeHtml(errMsg)}`, [
       { labelKey: "shell.action.retry", action: deleteModuleInBackground },
     ]);
@@ -3793,7 +3805,7 @@ async function handleDriftKeep() {
     renderPreview();
     showToast(t("shell.drift.keep.success"), "success");
   } catch (err) {
-    showToast(`${t("shell.drift.keep.error")}: ${String(err?.message ?? err)}`, "error");
+    showToast(`${t("shell.drift.keep.error")}: ${apiErrorText(err)}`, "error");
   }
 }
 
@@ -3851,7 +3863,7 @@ async function handleDriftRegenerate() {
     await refreshBlueprintHash();
   } catch (err) {
     logResolveSlot(slot, () =>
-      `${escapeHtml(t("shell.drift.regenerate.error"))}: ${escapeHtml(String(err?.message ?? err))}`,
+      `${escapeHtml(t("shell.drift.regenerate.error"))}: ${escapeHtml(apiErrorText(err))}`,
     );
   }
 }
@@ -3900,7 +3912,7 @@ async function handleDriftShowDiff() {
     });
   } catch (err) {
     logResolveSlot(slot, () =>
-      `${escapeHtml(t("shell.drift.diff.error"))}: ${escapeHtml(String(err?.message ?? err))}`,
+      `${escapeHtml(t("shell.drift.diff.error"))}: ${escapeHtml(apiErrorText(err))}`,
     );
     return;
   }
@@ -4126,7 +4138,7 @@ function openExternalLlmModal({ scenarioMode = "auto", onImportSuccess } = {}) {
     try {
       parsed = parseExternalLlmJson(raw);
     } catch (err) {
-      setError(err?.message ?? t("shell.externalLlm.parseError"));
+      setError(apiErrorText(err) || t("shell.externalLlm.parseError"));
       return;
     }
     importBtn.disabled = true;
@@ -4135,7 +4147,7 @@ function openExternalLlmModal({ scenarioMode = "auto", onImportSuccess } = {}) {
       onImportSuccess?.();
       close();
     } catch (err) {
-      setError(err?.message ?? t("shell.externalLlm.importError"));
+      setError(apiErrorText(err) || t("shell.externalLlm.importError"));
       importBtn.disabled = false;
     }
   });
@@ -4175,7 +4187,7 @@ async function applyExternalLlmJsonImport(parsed) {
     );
     newModule = body?.module ?? body;
   } catch (err) {
-    const errMsg = String(err?.message ?? err);
+    const errMsg = apiErrorText(err);
     logResolveSlot(
       slot,
       () => `${escapeHtml(t("shell.newModule.createError"))}<br><span style="font-size:13px;color:var(--color-meta)">${escapeHtml(errMsg)}</span>`,
@@ -4492,7 +4504,7 @@ async function persistMergedRubric(criteriaRecord) {
     await refreshBlueprintHash();
   } catch (err) {
     logResolveSlot(slot, () =>
-      `${escapeHtml(t("shell.drift.diff.persistError"))}: ${escapeHtml(String(err?.message ?? err))}`,
+      `${escapeHtml(t("shell.drift.diff.persistError"))}: ${escapeHtml(apiErrorText(err))}`,
     );
   }
 }
@@ -4582,7 +4594,7 @@ async function regenerateCriteriaFromTask(criteriaContainer, onSuccess) {
     onSuccess(mapped);
     showToast(t("shell.criteria.regenerated"), "success");
   } catch (err) {
-    const errMsg = String(err?.message ?? err);
+    const errMsg = apiErrorText(err);
     criteriaContainer.innerHTML = originalHtml;
     showToast(`${t("shell.criteria.regenerateError")}: ${errMsg}`, "error");
   }
@@ -5142,7 +5154,7 @@ async function exportModulePackageInBackground() {
     // left the author on Rediger with no actions at all until they reloaded the page.
     showModuleActions();
   } catch (err) {
-    const errMsg = String(err?.message ?? err);
+    const errMsg = apiErrorText(err);
     logResolveSlot(slot, () => `${escapeHtml(t("shell.module.exportError"))}${escapeHtml(errMsg)}`, [
       { labelKey: "shell.action.retry", action: () => exportModulePackageInBackground() },
     ]);
@@ -5243,7 +5255,7 @@ async function importModulePackageInBackground(moduleId, file, idempotencyKey = 
     showToast(t("shell.module.importSuccess"), "success");
     announceStatus(t("shell.module.importSuccess"));
   } catch (err) {
-    const errMsg = String(err?.message ?? err);
+    const errMsg = apiErrorText(err);
     logResolveSlot(slot, () => `${escapeHtml(t("shell.module.importError"))}${escapeHtml(errMsg)}`, [
       // Two different recoveries, because there are two different failures. A transient one
       // (network, 502) is fixed by retrying the SAME file with the SAME key — no double import.
@@ -5326,7 +5338,9 @@ function hasOpenEditForm() {
   if (!form) return false;
   const fields = previewContent?.querySelectorAll("[data-rendered-value]") ?? [];
   for (const el of fields) {
-    if (el.value !== el.dataset.renderedValue) return true;
+    // Same accessor the stamp used, so the two halves of the comparison can never disagree about
+    // what "the value" of a field is (#973).
+    if (fieldStateValue(el) !== el.dataset.renderedValue) return true;
   }
   return false;
 }
@@ -5343,15 +5357,45 @@ function settingsSelectedMode() {
 }
 
 /**
- * Record what every edit-form field was drawn with, so `hasOpenEditForm` can tell a typed value
- * from an untouched one. Checkboxes carry their state as a string for the same comparison.
+ * What a form control HOLDS right now, as one comparable string.
+ *
+ * The type is read off the ELEMENT, never off a list of selectors. #973: the stamp used `el.value`
+ * for everything, and for a tickable input `value` is a constant — `"on"` for a checkbox, the
+ * option index for a radio — so its state was invisible to every dirty check no matter which
+ * selector list it appeared in. The MCQ correct-answer radios are exactly that case: the author
+ * picked a different correct answer, switched tab, got no warning, and the form was rebuilt from
+ * the bundle with the choice gone. Asking the element what kind of field it is means the NEXT
+ * tickable field is covered the day it is added, without anyone remembering a list.
+ */
+function fieldStateValue(el) {
+  if (el.type === "checkbox" || el.type === "radio") return el.checked ? "checked" : "unchecked";
+  return el.value;
+}
+
+/** The inverse of `fieldStateValue`, so a stamped/cached state can be put back on the element. */
+function applyFieldStateValue(el, state) {
+  if (el.type === "checkbox" || el.type === "radio") el.checked = state === "checked";
+  else el.value = state;
+}
+
+// Controls that hold no author input: stamping them would compare a constant with itself, and a
+// file input cannot be restamped from a string at all.
+const UNSTAMPED_INPUT_TYPES = new Set(["button", "submit", "reset", "image", "file", "hidden"]);
+
+/**
+ * Record what every edit-form field was drawn with, so `hasOpenEditForm` can tell a touched field
+ * from an untouched one.
+ *
+ * Every control inside the form is stamped — the query asks the DOM what is there rather than
+ * naming classes, because a class list can only cover the fields someone remembered to add to it,
+ * and the two that were missing (#973) were missing precisely because nobody thought of them.
+ * Tickable inputs are stamped with their checked state, per `fieldStateValue`.
  */
 function stampEditFormValues() {
-  const fields = previewContent?.querySelectorAll(
-    ".preview-edit-title, .preview-edit-input, .preview-edit-textarea, .vk-label, .vk-description, .vk-weight",
-  ) ?? [];
+  const fields = previewContent?.querySelectorAll("input, select, textarea") ?? [];
   for (const el of fields) {
-    el.dataset.renderedValue = el.value;
+    if (UNSTAMPED_INPUT_TYPES.has(el.type)) continue;
+    el.dataset.renderedValue = fieldStateValue(el);
   }
 }
 
@@ -5953,11 +5997,17 @@ const SETTINGS_TEXT_INPUT_IDS = [
   ...SETTINGS_INPUT_IDS.panel, ...SETTINGS_INPUT_IDS.prompt, ...SETTINGS_INPUT_IDS.schema,
 ];
 
-/** Record what the DOM was rendered with, so an edit can be told from an untouched field. */
+/**
+ * Record what the DOM was rendered with, so an edit can be told from an untouched field.
+ *
+ * Goes through `fieldStateValue` (#973) rather than reading `.value`: every field in the panel is
+ * text, a number or a select TODAY, and the day one of them is a checkbox the dirty check must not
+ * quietly start comparing the constant `"on"` with itself.
+ */
 function stampRenderedValues(ids) {
   for (const id of ids) {
     const el = document.getElementById(id);
-    if (el) el.dataset.renderedValue = el.value;
+    if (el) el.dataset.renderedValue = fieldStateValue(el);
   }
 }
 
@@ -5965,7 +6015,7 @@ function stampRenderedValues(ids) {
 function anyFieldDirty(ids) {
   return ids.some((id) => {
     const el = document.getElementById(id);
-    return el && el.dataset.renderedValue !== undefined && el.value !== el.dataset.renderedValue;
+    return el && el.dataset.renderedValue !== undefined && fieldStateValue(el) !== el.dataset.renderedValue;
   });
 }
 
@@ -5990,7 +6040,7 @@ function captureSettingsDraftValues() {
   for (const id of SETTINGS_TEXT_INPUT_IDS) {
     const el = document.getElementById(id);
     if (!el || el.dataset.renderedValue === undefined) continue;
-    if (el.value !== el.dataset.renderedValue) dirty[id] = el.value;
+    if (fieldStateValue(el) !== el.dataset.renderedValue) dirty[id] = fieldStateValue(el);
     // Present and back to its stored value: the author undid the edit, so drop the stale entry
     // rather than resurrect it on the next render.
     else delete dirty[id];
@@ -6007,14 +6057,14 @@ function captureSettingsDraftValues() {
  */
 function settingsFieldValue(id) {
   const el = document.getElementById(id);
-  if (el) return el.value;
+  if (el) return fieldStateValue(el);
   return settingsDraftValues?.[id];
 }
 
 /** True when this ONE field differs from what was stored, counting a collapsed section. */
 function fieldIsDirty(id) {
   const el = document.getElementById(id);
-  if (el) return el.dataset.renderedValue !== undefined && el.value !== el.dataset.renderedValue;
+  if (el) return el.dataset.renderedValue !== undefined && fieldStateValue(el) !== el.dataset.renderedValue;
   return settingsDraftValues?.[id] !== undefined;
 }
 
@@ -6036,7 +6086,7 @@ function mergeSettingsField(id, stored) {
 function anyFieldDirtyIncludingCollapsed(ids) {
   return ids.some((id) => {
     const el = document.getElementById(id);
-    if (el) return el.dataset.renderedValue !== undefined && el.value !== el.dataset.renderedValue;
+    if (el) return el.dataset.renderedValue !== undefined && fieldStateValue(el) !== el.dataset.renderedValue;
     return settingsDraftValues?.[id] !== undefined;
   });
 }
@@ -6047,7 +6097,10 @@ function restoreSettingsDraftValues() {
     const el = document.getElementById(id);
     // A field belonging to a collapsed section is simply not in the DOM; its value stays in
     // `settingsDraftValues` until the section is opened again.
-    if (el) el.value = value;
+    // Symmetrical with `captureSettingsDraftValues`, which stores what `fieldStateValue` read
+    // (#973) — a cache written by one accessor and read back by another is how the state of a
+    // tickable field gets lost on the way through.
+    if (el) applyFieldStateValue(el, value);
   }
 }
 
@@ -6510,7 +6563,7 @@ async function restoreModuleVersionInBackground(sourceVersionId, idempotencyKey 
     showToast(t("shell.versions.restoreSuccess"), "success");
     announceStatus(t("shell.versions.restoreSuccess"));
   } catch (err) {
-    const errMsg = String(err?.message ?? err);
+    const errMsg = apiErrorText(err);
     // The click disabled every restore button to stop a double-click. A success path reloads and
     // re-renders them; a failure has to put them back by hand, or the list is dead until reload.
     document.querySelectorAll("[data-restore-version]").forEach((button) => { button.disabled = false; });
@@ -6892,9 +6945,11 @@ async function saveSettingsInBackground() {
     logResolveSlot(slot, () => `<strong>${escapeHtml(t("shell.settings.saved"))}</strong>`);
     showToast(t("shell.settings.saved"), "success");
   } catch (error) {
-    // The composed save is all-or-nothing, so the module is untouched. Say what the server
-    // said rather than a generic failure - the reason is usually actionable.
-    const message = error?.body?.message || error?.message || t("shell.settings.saveFailed");
+    // The composed save is all-or-nothing, so the module is untouched. Årsaken er som regel
+    // handlingsbar, så den skal med — men #972: den skal komme fra klientens egen kodetabell, ikke
+    // fra serverens `body.message`. Den forrige varianten (`error?.body?.message || …`) viste
+    // engelsk servertekst i et konsoll forfatteren kanskje har satt til nynorsk.
+    const message = apiErrorText(error);
     logResolveSlot(slot, () => escapeHtml(`${t("shell.settings.saveFailed")} ${message}`));
     showToast(t("shell.settings.saveFailed"), "error");
     reenableSettingsSave();

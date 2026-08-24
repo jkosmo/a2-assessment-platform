@@ -112,19 +112,9 @@ export const rulesSchema = z.object({
         manualReviewRecommendationMismatch: true,
       },
     }),
-  recertification: z
-    .object({
-      validityDays: z.number().int().positive().default(365),
-      dueOffsetDays: z.number().int().min(0).default(30),
-      dueSoonDays: z.number().int().min(0).default(14),
-      reminderDaysBefore: z.array(z.number().int().min(0)).default([30, 7, 1]),
-    })
-    .default({
-      validityDays: 365,
-      dueOffsetDays: 30,
-      dueSoonDays: 14,
-      reminderDaysBefore: [30, 7, 1],
-    }),
+  // #989: `recertification` (validityDays/dueOffsetDays/dueSoonDays/reminderDaysBefore) er fjernet —
+  // moduler utløper ikke lenger. Skjemaet stripper ukjente nøkler, så en gammel `recertification`-
+  // blokk i en utrullet config-fil er harmløs.
   // #497: kurs-frist-påminnelser. `reminderDaysBefore` = offsets (dager før dueAt) for
   // "frist nærmer seg"-påminnelser; standard 7 og 1 dag før forfall.
   courseReminders: z

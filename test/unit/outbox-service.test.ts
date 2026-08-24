@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { warmModuleGraph } from "../support/moduleGraphWarmup.js";
 
 // #795-followup: a hung delivery must not wedge the worker — processNextOutboxEvent bounds each delivery
 // with OUTBOX_DELIVERY_TIMEOUT_MS, and on timeout retries the row instead of hanging forever.
@@ -13,6 +14,9 @@ vi.mock("../../src/db/prisma.js", () => ({
 }));
 vi.mock("../../src/modules/certification/index.js", () => ({ notifyAssessmentResult }));
 vi.mock("../../src/modules/course/index.js", () => ({ checkAndIssueCourseCompletions }));
+
+// #994: modulgrafen leses her, ikke i første test. Se test/support/moduleGraphWarmup.ts.
+warmModuleGraph(() => import("../../src/modules/outbox/outboxService.js"));
 
 describe("outbox delivery timeout (#795-followup)", () => {
   beforeEach(() => {

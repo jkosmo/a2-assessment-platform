@@ -683,6 +683,14 @@ body.auth-resolving .mock-identity-card {
   background: linear-gradient(180deg, #fffdf8 0%, #f7f4ec 100%);
 }
 
+/* #988: et ubesvart spørsmål ved innsending. Ramme OG venstrestrek — fargen alene kan ikke bære
+   meldingen for den som ikke skiller rødt fra grått, og kortene ligger tett. */
+.mcq-question-card--unanswered {
+  border-color: var(--color-error);
+  border-left: 4px solid var(--color-error);
+  background: linear-gradient(180deg, #fdf6f5 0%, #f8eeec 100%);
+}
+
 .mcq-question-header {
   display: grid;
   grid-template-columns: auto 1fr;
@@ -867,7 +875,9 @@ dialog::backdrop {
   border-radius: var(--radius-card);
 }
 
-.state-rail[hidden] { display: none; }
+/* #975: her sto `.state-rail[hidden] { display: none; }` — en lapp som patchet symptomet av at
+   `.state-rail{display:flex}` slår `hidden`-attributtet. Skjulingen eies nå av setHidden() i
+   admin-content-shell.js og av inline display i markupen, så lappen er borte. */
 
 .state-rail-item {
   display: flex;

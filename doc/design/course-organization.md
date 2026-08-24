@@ -226,7 +226,22 @@ GET /api/reports/courses
 Returnerer per kurs: `enrolledParticipants`, `completedParticipants`, `completionRate`,
 `moduleBreakdown[]` med `passRate` per modul.
 
-Nevner (`enrolledParticipants`): alle brukere med minst én submission på minst én modul i kurset.
+**Nevner (`enrolledParticipants`), fra v2.27.0:** kursets effektive publikum — individuelle
+`CourseEnrollment`-rader pluss MANUAL/system-klassetildelinger (`resolveCourseAudience`, samme kilde
+som kullstatus-dashbordet) — unionert med brukere som har en `CourseCompletion` innenfor filteret.
+`orgUnit` snevrer begge. `moduleBreakdown[].enrolledUsers` bruker samme publikum, og `passedUsers`
+er de av dem som besto modulen.
+
+⚠️ **Dette erstatter den gamle regelen** («alle brukere med minst én submission på minst én modul»),
+og tall før og etter v2.27.0 kan ikke sammenlignes direkte. Den gamle nevneren het innmeldte og talte
+innleveringer: med et datofilter kunne fullføringene ligge innenfor vinduet og innleveringene utenfor,
+slik at eksporten til ledelsen viste **400 % fullføringsgrad** (#969, #996).
+
+Unionen med fullførerne er bevisst, og er ikke det samme som å klippe grafen til 100 %: en klipping
+ville skjult at de to tallene var uenige. Nå er telleren en delmengde av nevneren per konstruksjon.
+
+Publikummet er **ikke** datofiltrert — graden leses som «andelen av dagens publikum som fullførte i
+vinduet».
 
 ---
 

@@ -1,5 +1,6 @@
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { prisma } from "../src/db/prisma.js";
+import { warmModuleGraph } from "./support/moduleGraphWarmup.js";
 
 // #803: audit writes now commit in the SAME transaction as the domain mutation they record. This proves
 // the guarantee against a real Postgres: when the audit write fails, the domain mutation is rolled back
@@ -13,6 +14,9 @@ async function seedCourse(title: string) {
   const course = await prisma.course.create({ data: { title }, select: { id: true, title: true } });
   return course;
 }
+
+// #994: modulgrafen leses her, ikke i første test. Se test/support/moduleGraphWarmup.ts.
+warmModuleGraph(() => import("../src/modules/course/courseCommands.js"));
 
 describe("audit writes are transactional with the domain mutation (#803)", () => {
   beforeEach(() => {

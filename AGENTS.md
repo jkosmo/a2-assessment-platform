@@ -12,21 +12,31 @@
 
 **THIS IS THE SINGLE MOST IMPORTANT THING TO KNOW BEFORE TOUCHING ANY AZURE OR INFRA CODE.**
 
-| Environment | Azure Tenant ID | Subscription | Subscription Name |
-|-------------|-----------------|--------------|-------------------|
-| **staging** | `c6e381fa-eb4b-42ba-b358-fe83e1166c40` | `df46af7a-1806-4bda-a24b-0b3c112bd261` | Betale for forbruk |
-| **production** | `a018856e-8cf2-4ec4-bbc8-ab18058027dc` | `5b3f760b-42d4-4d78-812c-c059278d1086` | Pay-As-You-Go (A-2) |
+| Environment | Azure Tenant ID | Subscription |
+|-------------|-----------------|--------------|
+| **staging** | `<STAGING_TENANT_ID>` | `<STAGING_SUBSCRIPTION_ID>` |
+| **production** | `<PROD_TENANT_ID>` | `<PROD_SUBSCRIPTION_ID>` |
+
+> ⚠️ **The concrete values are NOT in this repository.** It is public (GPL-3), and tenant +
+> subscription + resource-group names + production hostnames + the operator account together
+> describe the target precisely enough to make a phishing message read like it came from inside.
+> No single one of them is a credential; the aggregate is the risk.
+>
+> Maintainers: `doc/ENVIRONMENTS.local.md` (gitignored). Everyone else: copy
+> `doc/ENVIRONMENTS.example.md` and fill in your own.
+>
+> `test/environment-identifier-guard.test.js` fails the build if a real identifier reappears in a
+> tracked file.
 
 The local Azure CLI defaults to the **staging tenant**. Always switch subscription before querying production:
 
 ```powershell
-az account set --subscription 5b3f760b-42d4-4d78-812c-c059278d1086  # production
+az account set --subscription <PROD_SUBSCRIPTION_ID>  # production
 # ... run az commands ...
-az account set --subscription df46af7a-1806-4bda-a24b-0b3c112bd261  # back to staging
+az account set --subscription <STAGING_SUBSCRIPTION_ID>  # back to staging
 ```
 
-**Prod human account:** `jko@a-2.no` (tenant `a018856e-...`)
-**Staging/personal account:** `joakim.kosmo@gmail.com` (tenant `c6e381fa-...`)
+**Prod human account:** `<PROD_ADMIN_UPN>` · **Staging/personal account:** `<STAGING_ADMIN_UPN>`
 
 ---
 
@@ -175,6 +185,54 @@ utledes fra implementasjonen. Skriv beslutningen dit **når den tas**, ikke ette
 
 Dette er en peker, ikke en ny regel: #938 tok en hel kveld fordi ingen kunne si hva regelen var
 *ment* å være, og da måtte diskusjonen starte med å rekonstruere hensikten fra koden.
+
+## Parallelle agenter: ikke på tilgrensende flater (standing order, 2026-08-23)
+
+Fire agenter jobbet parallelt på #941-epicen 2026-08-23, hver i egen worktree, hver med en eksplisitt
+sperreliste over de andres filer. **Sperrelistene virket** — ingen kollisjon i arbeidstreet, og da én
+agent trengte en linje i en sperret fil, rapporterte den nøyaktig hvilken i stedet for å gjette.
+
+⚠️ **Det som IKKE virket var semantisk nærhet.** Agent 4 skrev i rapporten sin at
+`resolveCourseAudience` hopper over ENTRA-klasser. Jeg leste det, integrerte arbeidet, og koblet
+likevel ikke det til at nevneren i rapporten dermed krymper for Entra-tildelte kurs. QA-porten fant
+regresjonen i neste runde.
+
+**Regelen:** to agenter skal ikke samtidig endre **betydningen av samme begrep**, selv når de rører
+ulike filer. «Hvem er med i kurset», «kan deltakeren bruke dette», «er dette bestått» — dette er
+begreper, ikke filer, og en sperreliste over filer fanger dem ikke.
+
+Praktisk:
+
+1. **Del opp etter begrep, ikke etter mappe.** Overlapper to saker i begrep, kjør dem etter
+   hverandre — også når filene er disjunkte.
+2. **Maks to agenter som kjører tester samtidig.** De deler én lokal Postgres, og utover to bruker
+   du tiden på å avkrefte tilfeldige røde tester.
+
+   ⚠️ **Rettet 2026-08-23:** denne linja begrunnet seg opprinnelig med #994, og den begrunnelsen
+   var feil. #994 var ikke databasekontanse — det var kald lesing av modulgrafen som ble belastet
+   den første testens `testTimeout` (51 903 ms kald, 1 395 ms varm, med prisma mocket hele veien).
+   OneDrive gjorde det akutt, og arbeidskopien ble flyttet til lokal disk samme dag; kuren i
+   `test/support/moduleGraphWarmup.ts` gjelder uansett disk. Ordren står fortsatt, men på egne
+   ben. Poenget generalisert: **en stående ordre som
+   bærer en gjettet årsak er verre enn en uten**, fordi neste feilsøking starter i gjetningen. Det
+   var nøyaktig det som skjedde her.
+3. **Flaskehalsen er gjennomgangen, ikke agentene.** Fire leveranser skal rebases, forenes,
+   integrasjonstestes og gjennom QA-porten av én person. Fem agenter gir fem bunter i kø.
+4. **Les agentenes «funnet, men ikke fikset»-liste som en risikoliste**, ikke som en restanse. Det
+   er der neste regresjon står beskrevet før den skjer — den sto der denne gangen.
+
+## Når QA-porten går i løkke
+
+Finner porten funn i fiksen mot forrige runde, er det sjelden porten som tar feil. Sjekk i stedet om
+endringene **endrer betydningen av et delt felt**: da må hver leser gjennomgås, og «rett utregningen
+der den er» vil fortsette å feile.
+
+Kuren som har holdt i dette repoet er #958-formen: flytt avgjørelsen til skriveren, slik at leserne
+ikke *kan* avvike. Kuren som har feilet tre ganger er å rette utregningen på stedet som feilet.
+
+Porten klassifiserer nå hvert funn — `[REGRESJON]`, `[UFULLSTENDIG]`, `[EKSISTERENDE]`,
+`[DOKUMENTASJON]` — nettopp for at man skal kunne stoppe løkka rasjonelt: en regresjon stopper en
+deploy, en eksisterende feil blir en sak.
 
 ## Kompleksitetsskanning — MÅNEDLIG (standing order, 2026-08-21)
 

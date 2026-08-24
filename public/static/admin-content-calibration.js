@@ -16,7 +16,9 @@ import {
 } from "/static/api-client.js";
 import { resolveWorkspaceNavigationItems } from "/static/participant-console-state.js";
 import { showToast } from "/static/toast.js";
+import { describeApiError } from "/static/api-error.js";
 import { renderWorkspaceNavigationWithProfile } from "./workspace-nav.js";
+import { OUTCOME_FAILED, OUTCOME_PASSED, rawPassFailState } from "/static/outcome.js";
 
 // #836: "Vurderingskvalitet" (tidl. Kalibrering) — les hvordan en modul scorer (signaler + fordeling)
 // og juster bestått-grensa med en klient-side konsekvens-preview. Erstatter de tre gamle
@@ -45,6 +47,17 @@ function tf(key, vars = {}) {
   let s = t(key);
   for (const [k, v] of Object.entries(vars)) s = s.replaceAll(`{${k}}`, String(v));
   return s;
+}
+
+// #972: kalibreringsarbeidsflaten viste `err.message` — "<status>: <hele JSON-kroppen>" — både i
+// publiser-toasten og i metalinja over resultatene. Nå slås feilKODEN opp i den delte tabellen.
+function apiErrorToast(error) {
+  const { headline, detail } = describeApiError(error, t);
+  showToast(headline, "error", detail);
+}
+
+function apiErrorText(error) {
+  return describeApiError(error, t).headline;
 }
 
 // ---------------------------------------------------------------------------
@@ -212,8 +225,7 @@ async function loadQuality() {
     snapshotBody = await apiFetch(`/api/calibration/workspace?${params.toString()}`, getHeaders);
     renderWorkspace();
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    el.qMeta.textContent = message;
+    el.qMeta.textContent = apiErrorText(error);
     hideResults();
   } finally {
     el.qLoad.disabled = false;
@@ -484,7 +496,10 @@ function renderOutcomes(outcomes) {
   }
   el.qOutcomesBody.innerHTML = outcomes
     .map((o) => {
-      const pf = o?.decision?.passFailTotal === true ? t("quality.value.pass") : o?.decision?.passFailTotal === false ? t("quality.value.fail") : "-";
+      // #978: praktikerflate — rå tilstand, ikke kandidatregelen. Statusen står i kolonnen ved
+      // siden av (`localizeStatus(o.submissionStatus)`), så konteksten er allerede synlig.
+      const pfState = rawPassFailState(o?.decision?.passFailTotal);
+      const pf = pfState === OUTCOME_PASSED ? t("quality.value.pass") : pfState === OUTCOME_FAILED ? t("quality.value.fail") : "-";
       const mr = o?.llm?.manualReviewRecommended === true ? t("quality.value.yes") : t("quality.value.no");
       return `<tr>
         <td>${escapeHtml(formatDateTimeValue(o.submittedAt))}</td>
@@ -535,7 +550,7 @@ async function publish() {
     showToast(t("quality.publish.success"), "success");
     await loadQuality(); // reload so the new effective threshold + version show
   } catch (err) {
-    showToast(err?.message ?? t("quality.publish.error"), "error");
+    apiErrorToast(err);
   } finally {
     el.qPublish.disabled = false;
     el.qPublish.textContent = orig;

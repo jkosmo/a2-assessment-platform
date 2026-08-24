@@ -3,9 +3,14 @@ import { prisma } from "../../db/prisma.js";
 
 type CertificationRepositoryClient = Pick<typeof prisma, "certificationStatus">;
 
-// #820: "passed a module" = any certification lifecycle state except NOT_CERTIFIED. Listing the passing
-// states explicitly (rather than the old `status != 'NOT_CERTIFIED'`) keeps the check correct if a future
-// non-passing state is ever added — the CertificationLifecycleStatus enum makes this set authoritative.
+// #820: "passed a module" = any certification lifecycle state except NOT_CERTIFIED.
+//
+// #989: resertifisering er fjernet — bare ACTIVE og NOT_CERTIFIED skrives nå. Lista beholder likevel
+// DUE_SOON/DUE/EXPIRED, og det er nettopp DET som gjør fjerningen konsekvensfri: eksisterende rader
+// står med de verdiene (kolonnene er ikke migrert bort), og de talte som bestått før. Krymper du
+// lista til ["ACTIVE"], mister historiske rader kursbeviset sitt — en bestått-avgjørelse endres, og
+// det er akkurat det #989 ikke skal gjøre. Pinnet av
+// `test/unit/course-certificate-gate-invariant.test.ts`.
 export const CERTIFICATION_PASSED_STATUSES: CertificationLifecycleStatus[] = [
   "ACTIVE",
   "DUE_SOON",
@@ -19,14 +24,15 @@ export function isCertificationPassed(status: CertificationLifecycleStatus | nul
 
 export function createCertificationRepository(client: CertificationRepositoryClient = prisma) {
   return {
+    // #989: `expiryDate` og `recertificationDueDate` skrives ikke lenger. Kolonnene står igjen
+    // (expand/contract, ingen destruktiv migrasjon nå) og beholder verdiene sine på gamle rader —
+    // de sier hva regelen var da raden ble skrevet.
     upsertCertificationStatus(data: {
       userId: string;
       moduleId: string;
       latestDecisionId: string;
-      status: "ACTIVE" | "DUE_SOON" | "DUE" | "EXPIRED" | "NOT_CERTIFIED";
+      status: "ACTIVE" | "NOT_CERTIFIED";
       passedAt: Date | null;
-      expiryDate: Date | null;
-      recertificationDueDate: Date | null;
     }) {
       return client.certificationStatus.upsert({
         where: {
@@ -39,8 +45,6 @@ export function createCertificationRepository(client: CertificationRepositoryCli
           latestDecisionId: data.latestDecisionId,
           status: data.status,
           passedAt: data.passedAt,
-          expiryDate: data.expiryDate,
-          recertificationDueDate: data.recertificationDueDate,
         },
         create: data,
       });
@@ -50,34 +54,6 @@ export function createCertificationRepository(client: CertificationRepositoryCli
       return client.certificationStatus.findUnique({
         where: {
           userId_moduleId: { userId, moduleId },
-        },
-      });
-    },
-
-    // #798: only load certifications whose expiry is within the reminder horizon (`expiryDate <=
-    // upperBound`, where upperBound = asOf + the largest offset + a day). Recert reminders fire BEFORE
-    // expiry, so every candidate expiry is at or after asOf; far-future active certs (the bulk of the
-    // table) are pruned by the DB instead of loaded and discarded in memory. Backed by an index on
-    // expiryDate. Behaviour-preserving: no row that could match a reminder day is excluded.
-    findCertificationsForReminderSchedule(upperBound: Date) {
-      return client.certificationStatus.findMany({
-        where: {
-          expiryDate: { not: null, lte: upperBound },
-        },
-        include: {
-          user: {
-            select: {
-              id: true,
-              email: true,
-              name: true,
-            },
-          },
-          module: {
-            select: {
-              id: true,
-              title: true,
-            },
-          },
         },
       });
     },

@@ -123,7 +123,10 @@ test.describe("course cascade publish (#734)", () => {
 
     const dialog = page.locator("#cascadePublishDialog");
     await expect(dialog).toBeVisible();
-    await expect(dialog).toContainText("The module has no content to publish.");
+    // #980: assertionen sto på serverens `message` ordrett. Den er skrevet i bokmål på serversiden
+    // for de seks andre blokkeringskodene, så «den stemmer på engelsk» var et sammentreff i denne
+    // ene fikstur-teksten. Dialogen leser nå KODEN og henter setningen fra klientens egen tabell.
+    await expect(dialog).toContainText("The module has no version with content to publish.");
     // No cascade action offered; publish is never sent.
     await expect(page.locator("#cascadePublishConfirmBtn")).toBeHidden();
 

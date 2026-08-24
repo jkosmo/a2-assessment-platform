@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { warmModuleGraph } from "./support/moduleGraphWarmup.js";
 
 const logOperationalEvent = vi.fn();
 
@@ -9,6 +10,9 @@ vi.mock("../src/observability/operationalLog.js", () => ({
 afterEach(() => {
   logOperationalEvent.mockReset();
 });
+
+// #994: modulgrafen leses her, ikke i første test. Se test/support/moduleGraphWarmup.ts.
+warmModuleGraph(() => import("../src/process/processErrorHandlers.js"));
 
 describe("process error handlers", () => {
   it("logs unhandled rejections and requests shutdown (#813)", async () => {

@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { warmModuleGraph } from "../support/moduleGraphWarmup.js";
 
 // shuffleArray is a private function in mcqService. It is tested indirectly via
 // startMcqAttempt: the returned options must contain all the same elements as the
@@ -51,6 +52,9 @@ vi.mock("../../src/modules/assessment/assessmentJobService.js", () => ({
 vi.mock("../../src/services/auditService.js", () => ({
   recordAuditEvent,
 }));
+
+// #994: modulgrafen leses her, ikke i første test. Se test/support/moduleGraphWarmup.ts.
+warmModuleGraph(() => import("../../src/modules/assessment/mcqService.js"));
 
 describe("mcq service — submitMcqAttempt", () => {
   const baseSubmission = {

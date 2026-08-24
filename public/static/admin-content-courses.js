@@ -20,6 +20,7 @@ import {
   resolveWorkspaceNavigationItems,
 } from "/static/participant-console-state.js";
 import { describeImportError } from "/static/import-error.js";
+import { apiErrorCodeText, describeApiError } from "/static/api-error.js";
 import { showToast } from "/static/toast.js";
 import {
   detectCoursesRoute,
@@ -46,6 +47,30 @@ let currentLocale = (() => {
 
 function t(key) {
   return adminContentTranslations[currentLocale]?.[key] ?? adminContentTranslations["en-GB"]?.[key] ?? key;
+}
+
+function tf(key, vars = {}) {
+  let s = t(key);
+  for (const [k, v] of Object.entries(vars)) s = s.replaceAll(`{${k}}`, String(v));
+  return s;
+}
+
+// #972: én vei ut for hver fanget apiFetch-feil på denne siden. Åtte steder sendte tidligere
+// `err.message` rett i en toast, med en norsk setning som `??`-reserve — og viste dermed
+// `403: {"error":"content_ownership",…}`, mens reserven aldri kunne kjøre (apiFetch setter alltid
+// `message`). Nå slås KODEN opp i den delte tabellen.
+//
+// Dette er en FORFATTERflate, så serverens diagnostikk beholdes i toastens detaljfelt: en forfatter
+// kan bruke `path: ["bodyMarkdown"]` til å finne feilen i fila si. Deltakerflaten gjør det ikke.
+function apiErrorToast(error) {
+  const { headline, detail } = describeApiError(error, t);
+  showToast(headline, "error", detail);
+}
+
+// Samme oversettelse for de flatene som ikke er en toast: feilbannere og tomtilstander. De sto
+// utenfor showToast-vakta i #972 og viste derfor fortsatt rå JSON etter at toastene var fikset.
+function apiErrorText(error) {
+  return describeApiError(error, t).headline;
 }
 
 // ---------------------------------------------------------------------------
@@ -366,7 +391,7 @@ async function publishCourseInAdmin(courseId, triggerButton = null) {
       getHeaders,
     );
   } catch (err) {
-    showToast(err?.message ?? "Kunne ikke sjekke kursinnhold.", "error");
+    apiErrorToast(err);
     if (triggerButton) triggerButton.disabled = false;
     return;
   }
@@ -397,7 +422,7 @@ async function commitCoursePublish(courseId, publishItems, triggerButton = null)
       await renderDetailView(courseId);
     }
   } catch (err) {
-    showToast(err?.message ?? "Kunne ikke publisere kurs.", "error");
+    apiErrorToast(err);
     if (triggerButton) triggerButton.disabled = false;
   }
 }
@@ -415,11 +440,30 @@ function cascadeItemTypeLabel(type) {
 }
 
 // #896 S4: translation blockers arrive with `field` + `missingLocales` so they can be rendered in
-// the viewer's language. The server's `message` is Norwegian — correct for most of this page's
-// blockers, wrong in an English or Nynorsk UI — so it is the fallback, not the first choice.
-function blockerText(blocker) {
+// the viewer's language.
+//
+// #980: gaten var kodet RIKTIG for `translation_incomplete` og FEIL for de seks andre kodene på
+// samme flate — de falt tilbake på `blocker.message`, som coursePublishService skriver i hardkodet
+// bokmål («Modulen er arkivert. Gjenopprett den før du publiserer.»). En innholdsansvarlig med
+// konsollet på en-GB (default) fikk altså en engelsk dialog med én norsk linje i; en nn-bruker fikk
+// bokmål. Nå slås hver kode opp i den delte tabellen, som denne siden allerede bruker for toaster.
+//
+// ⚠️ `item_archived` sendes for BÅDE moduler og seksjoner med hver sin norske setning. Koden alene
+// kan ikke skille dem — men klienten vet hvilken rad den tegner, så typen sendes inn som variant.
+//
+// ⚠️ Det som fortsatt ikke er oversatt: blokkeringene fra contentValidationService
+// (MCQ_COUNT_FAR_BELOW_BLUEPRINT m.fl.). De bærer ingen `params`, så tallene og tersklene finnes
+// bare inne i den engelske setningen. Å erstatte den med en kodenavn-setning ville fjernet
+// informasjonen forfatteren trenger. Rammen er lokalisert, årsaken er serverens tekst — det er
+// nøyaktig #914, og sømmen skal være synlig til den er gjort.
+function blockerText(blocker, itemType) {
   if (blocker?.code !== "translation_incomplete" || !blocker.field || !Array.isArray(blocker.missingLocales)) {
-    return blocker?.message ?? "";
+    const variant = typeof itemType === "string" ? itemType.toLowerCase() : null;
+    const known = apiErrorCodeText(blocker?.code ?? null, t, variant ? [variant] : []);
+    if (known) return known;
+    const reason = typeof blocker?.message === "string" ? blocker.message : "";
+    if (!reason) return "";
+    return tf("adminContent.courses.cascadePublish.blockerUnknown", { reason });
   }
   const mcq = /^mcq\.question(\d+)$/.exec(String(blocker.field));
   const label = mcq
@@ -437,7 +481,7 @@ function renderCascadeItemList(items, { showBlockers }) {
       const badge = `<span class="item-type-badge">${escapeHtml(cascadeItemTypeLabel(item.type))}</span>`;
       const blocked = showBlockers && !item.publishable && Array.isArray(item.blockers) && item.blockers.length > 0;
       const blockerNote = blocked
-        ? `<span class="cascade-publish-blocker">${escapeHtml(item.blockers.map(blockerText).join(" "))}</span>`
+        ? `<span class="cascade-publish-blocker">${escapeHtml(item.blockers.map((b) => blockerText(b, item.type)).join(" "))}</span>`
         : "";
       // #896 S4: a blocked module needs a way OUT of the dialog, not just an explanation of why
       // it is stuck. Every blocker here — untranslated, archived, no content — is fixed in the
@@ -534,7 +578,7 @@ async function renderListView() {
     pageContent.innerHTML = `
       <div class="empty-state">
         <p class="empty-state-title">Kunne ikke laste kurs.</p>
-        <p class="empty-state-text">${escapeHtml(err?.message ?? "")}</p>
+        <p class="empty-state-text">${escapeHtml(apiErrorText(err))}</p>
       </div>`;
     return;
   }
@@ -672,7 +716,8 @@ async function exportCoursePackage(courseId, courseTitle) {
     URL.revokeObjectURL(url);
     showToast(`Kurs «${courseTitle}» er eksportert.`);
   } catch (error) {
-    showToast(`Kurs-eksport feilet: ${error instanceof Error ? error.message : "ukjent feil"}`, "error");
+    const described = describeApiError(error, t);
+    showToast(tf("adminContent.courses.exportFailed", { reason: described.headline }), "error", described.detail);
   }
 }
 
@@ -695,13 +740,27 @@ async function handleImportCoursePackageFile(event) {
       body: JSON.stringify({ payload, mode: "createNew" }),
     });
     if (!result?.courseId) throw new Error("Import-respons mangler courseId.");
-    showToast(`Kurs importert (${result.moduleIds?.length ?? 0} moduler).`);
+    // ⚠️ #957/#996: responsen BÆRER forklaringen; her ble den kastet.
+    //
+    // Forfatteren fikk «Kurs importert» og ble sendt til et kurs som lå som utkast, uten et ord om
+    // hvorfor. Serveren regnet ut `heldBackByTranslationGate`, brukte det til å holde kurset
+    // tilbake, og rapporterte det — og så leste ingen det. Et flagg ingen leser er samme klasse som
+    // en vakt som ikke kjører.
+    //
+    // Teksten sier også hva forfatteren skal GJØRE. «Lagret som utkast» uten neste steg er en
+    // beskjed om systemets tilstand, ikke hjelp.
+    const count = result.moduleIds?.length ?? 0;
+    if (result.heldBackByTranslationGate) {
+      showToast(tf("adminContent.courses.importedHeldBack", { count }), "warning");
+    } else {
+      showToast(tf("adminContent.courses.imported", { count }));
+    }
     window.location.href = `/admin-content/courses/${encodeURIComponent(result.courseId)}`;
   } catch (error) {
     const d = describeImportError(error, {
-      notAnEnvelope: "Dette ser ikke ut som en kurs-pakke. Fila mangler feltene en eksport legger på (exportFormat, exportedAt og scope). Bruk «Eksporter» på et kurs for å lage en gyldig fil.",
-    });
-    showToast(`Kurs-import feilet: ${d.headline}`, "error", d.detail);
+      notAnEnvelope: t("adminContent.courses.importNotAnEnvelope"),
+    }, t);
+    showToast(tf("adminContent.courses.importFailed", { reason: d.headline }), "error", d.detail);
   } finally {
     target.value = "";
   }
@@ -751,7 +810,7 @@ async function archiveCourseInAdmin(courseId, courseTitle, triggerButton = null)
     showToast("Kurset ble arkivert.", "success");
     await renderListView();
   } catch (err) {
-    showToast(err?.message ?? "Kunne ikke arkivere kurs.", "error");
+    apiErrorToast(err);
     if (triggerButton) triggerButton.disabled = false;
   }
 }
@@ -768,7 +827,7 @@ async function unpublishCourseInAdmin(courseId, courseTitle, triggerButton = nul
     showToast("Kurset ble avpublisert.", "success");
     await renderListView();
   } catch (err) {
-    showToast(err?.message ?? "Kunne ikke avpublisere kurs.", "error");
+    apiErrorToast(err);
     if (triggerButton) triggerButton.disabled = false;
   }
 }
@@ -781,7 +840,7 @@ async function restoreCourseInAdmin(courseId, courseTitle, triggerButton = null)
     showToast(`Kurset «${courseTitle}» ble gjenopprettet.`, "success");
     await renderListView();
   } catch (err) {
-    showToast(err?.message ?? "Kunne ikke gjenopprette kurs.", "error");
+    apiErrorToast(err);
     if (triggerButton) triggerButton.disabled = false;
   }
 }
@@ -807,7 +866,7 @@ async function confirmDelete() {
     showToast("Kurset ble slettet.", "success");
     await renderListView();
   } catch (err) {
-    showToast(err?.message ?? "Kunne ikke slette kurs.", "error");
+    apiErrorToast(err);
     deleteConfirmBtn.disabled = false;
   }
 }
@@ -896,7 +955,7 @@ async function openCascadeDeleteDialog(courseId, courseTitle) {
     );
     renderCascadeDeletePreview(preview);
   } catch (err) {
-    if (textEl) textEl.textContent = err?.message ?? "Kunne ikke hente forhåndsvisning.";
+    if (textEl) textEl.textContent = apiErrorText(err);
   }
 }
 
@@ -920,7 +979,7 @@ function initCascadeDeleteDialog() {
       showToast(`Kurset ble slettet (${modCount} modul(er), ${secCount} seksjon(er)).`, "success");
       await renderListView();
     } catch (err) {
-      showToast(err?.message ?? "Kunne ikke slette kurs og innhold.", "error");
+      apiErrorToast(err);
       confirmBtn.disabled = false;
     }
   });
@@ -1328,7 +1387,7 @@ async function convCreateCourse() {
     window.location.href = `/admin-content/courses/${encodeURIComponent(savedCourseId)}`;
   } catch (err) {
     if (after) {
-      after.innerHTML = `<div class="error-banner">${escapeHtml(err?.message ?? "Kunne ikke opprette kurs.")}</div>`;
+      after.innerHTML = `<div class="error-banner">${escapeHtml(apiErrorText(err))}</div>`;
     }
     if (createBtn) createBtn.disabled = false;
   }
@@ -1381,7 +1440,7 @@ async function renderDetailView(courseId) {
       pageContent.innerHTML = `
         <div class="empty-state">
           <p class="empty-state-title">Kunne ikke laste kurs.</p>
-          <p class="empty-state-text">${escapeHtml(err?.message ?? "")}</p>
+          <p class="empty-state-text">${escapeHtml(apiErrorText(err))}</p>
           <a href="/admin-content/courses" class="btn btn-secondary">Tilbake til kursliste</a>
         </div>`;
       return;
@@ -1401,9 +1460,17 @@ async function renderDetailView(courseId) {
   }
 
   // Load library sections for the section picker (#490)
+  //
+  // #992: arkiverte seksjoner filtreres bort — samme grep som modul-søsteren over gjør med
+  // upubliserte. Uten det tilbød nedtrekkslista noe `/items` avviser med 400, og fordi ruta skriver
+  // HELE sekvensen, feilet da ikke bare den ene raden: forfatteren mistet alle endringene i lagringen.
+  //
+  // ⚠️ Dette er ikke sannheten om regelen, bare høfligheten. Backend eier avslaget
+  // (`assertContentUsableInCourse`), og skal fortsette å gjøre det — en klient som filtrerer er en
+  // klient som kan bli utdatert. Poenget er å ikke by fram noe vi vet blir avvist.
   try {
     const secData = await apiFetch("/api/admin/content/sections", getHeaders);
-    allLibrarySections = secData.sections ?? [];
+    allLibrarySections = (secData.sections ?? []).filter(s => !s.archivedAt);
   } catch {
     allLibrarySections = [];
   }
@@ -1553,7 +1620,7 @@ async function renderDetailView(courseId) {
   // #787 slice 5: content-owner management for this course.
   const ownerHost = document.getElementById("ownerPanelHost");
   if (ownerHost) {
-    renderOwnerPanel({ container: ownerHost, contentType: "COURSE", contentId: courseId, getHeaders }).catch(() => {});
+    renderOwnerPanel({ container: ownerHost, contentType: "COURSE", contentId: courseId, getHeaders, t }).catch(() => {});
   }
 }
 
@@ -1924,7 +1991,7 @@ async function saveCourse(courseId) {
     }
   } catch (err) {
     if (errorBanner) {
-      errorBanner.innerHTML = `<div class="error-banner">${escapeHtml(err?.message ?? "Kunne ikke lagre kurs.")}</div>`;
+      errorBanner.innerHTML = `<div class="error-banner">${escapeHtml(apiErrorText(err))}</div>`;
       errorBanner.hidden = false;
     }
     if (saveBtn) saveBtn.disabled = false;

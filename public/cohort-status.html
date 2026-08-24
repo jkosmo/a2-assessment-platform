@@ -80,7 +80,9 @@
 
       <section class="card">
         <div id="cohortEmpty" class="small" data-i18n="cohort.empty">Select a course to see its cohort status.</div>
-        <div id="statusCards" class="status-grid" aria-live="polite" hidden></div>
+        <!-- #975: `.status-grid` setter display:grid, som slår UA-arkets `[hidden]`. Attributtet
+             blir stående for semantikken, men det er inline display som faktisk skjuler. -->
+        <div id="statusCards" class="status-grid" aria-live="polite" hidden style="display:none"></div>
 
         <div id="byClassSection" hidden>
           <h2 data-i18n="cohort.byClass.title" style="font-size:16px;margin-top:var(--space-2)">By class</h2>

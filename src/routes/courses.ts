@@ -8,7 +8,9 @@ import {
   listUserEnrollments,
   selfEnroll,
   filterVisibleCourseIds,
-  isCourseVisibleToUser,
+  // #959: deltakerrutene henter kurs GJENNOM denne. `findCourseById` er ufiltrert og hører til
+  // forfatter-/systemflatene; `course-visibility-guard` nekter den i denne fila.
+  findCourseForParticipant,
   getUserClassIds,
   getClassAssignedCourseDueDates,
   deriveStatus,
@@ -77,7 +79,8 @@ coursesRouter.get("/", async (request, response, next) => {
     const startedModuleIds = new Set(latestSubmissions.map((s) => s.moduleId));
 
     const items: CourseListItem[] = courses.map((course) => {
-      const moduleIds = course.modules.map((m) => m.moduleId);
+      // #938/#945: samme filter som kursdetaljen og bevisporten — den tredje telleren.
+      const moduleIds = course.modules.filter((m) => m.module?.archivedAt == null).map((m) => m.moduleId);
       const sectionIds = sectionIdsByCourse.get(course.id) ?? [];
       const passed = moduleIds.filter((id) => passedModuleSet.has(id)).length;
       const readSet = readSectionsByCourse.get(course.id);
@@ -230,17 +233,24 @@ coursesRouter.get("/:courseId", async (request, response, next) => {
   const locale = normalizeLocale(request.context?.locale) ?? "en-GB";
 
   try {
-    const course = await courseRepository.findCourseById(request.params.courseId);
-    if (!course || !course.publishedAt || course.archivedAt) {
-      throw new NotFoundError("Course", "course_not_found", "Course not found.");
-    }
-    // #778/#785: RESTRICTED courses are visible only to enrolled/class-assigned users. Gate the direct
-    // detail endpoint the same way the list endpoint does; 404 (not 403) so we don't confirm existence.
-    if (!(await isCourseVisibleToUser({ course, userId, roles: request.context?.roles ?? [], groupIds: request.context?.principal?.groupIds }))) {
+    // #959: ÉN dør. Signaturen krever hvem som spør, så synligheten kan ikke bli glemt her —
+    // og `null` dekker alle tre årsakene (finnes ikke / ikke publisert / ikke synlig for deg)
+    // med vilje, slik at 404-en ikke lekker at et RESTRICTED kurs eksisterer.
+    const course = await findCourseForParticipant({
+      courseId: request.params.courseId,
+      userId,
+      roles: request.context?.roles ?? [],
+      groupIds: request.context?.principal?.groupIds,
+    });
+    if (!course) {
       throw new NotFoundError("Course", "course_not_found", "Course not found.");
     }
 
-    const moduleIds = course.modules.map((cm) => cm.moduleId);
+    // #938/#945: arkiverte moduler telles IKKE, fordi bevisporten ikke krever dem. Målt mot ekte
+    // data på stage 2026-08-22: «Samfunnsvitere» viste moduleTotal 5 mens porten krevde 4 — samme
+    // «to tellere er uenige» som saken handlet om, bare på modulsiden. Jeg hadde fikset
+    // seksjonstellingen og glemt denne.
+    const moduleIds = course.modules.filter((cm) => cm.module?.archivedAt == null).map((cm) => cm.moduleId);
     const [certStatuses, passedCount, latestSubmissions] = await Promise.all([
       courseRepository.findUserCertificationStatusesForModules(userId, moduleIds),
       courseRepository.countPassedModulesForUser(userId, moduleIds),
@@ -258,12 +268,39 @@ coursesRouter.get("/:courseId", async (request, response, next) => {
     }
 
     // Mixed module/section sequence (#491/P1) with per-section read state (#492).
-    const courseItems = await courseRepository.findCourseItems(course.id);
+    // #958: deltakerdøra. Seksjoner deltakeren ikke kan åpne er allerede filtrert bort, og hvert
+    // element bærer et ferdig avgjort `available` — ruta har ikke lenger noen egen regel å glemme.
+    const courseItems = await courseRepository.findCourseItemsForParticipant(course.id);
     const readSectionIds = new Set(await courseRepository.findReadSectionIds(userId, course.id));
     let readSectionCount = 0;
+    // ⚠️ #992: upubliserte seksjoner UTELATES fra deltakerens sekvens — de vises ikke som en
+    // nedtonet rad, de er borte.
+    //
+    // #944 valgte det motsatte: raden skulle fortelle deltakeren at «det er noe her» i stedet for at
+    // noe forsvant. Produkteier 2026-08-23 snudde det: «utkastseksjoner skal ikke ha konsekvenser
+    // for kandidater før de er publisert». For en kandidat som ALDRI har sett seksjonen finnes det
+    // ingenting å forklare — raden var en beskjed om vår egen redigeringstilstand.
+    //
+    // ⚠️ Her sto det først et `visibleItems`-filter i denne ruta. #958 flyttet det inn i døra, og da
+    // ble filteret her en ANDRE anvendelse av samme regel — nøyaktig mønsteret begge sakene finnes
+    // for å fjerne. Det er slettet med vilje: legg det ikke tilbake.
+    //
+    // Klientens `available`-håndtering er dermed forsvar i dybden for seksjoner. Den beholdes:
+    // MODULER sender fortsatt `available: false` (se under), og en klient kan møte en eldre server.
+    //
+    // Moduler filtreres IKKE bort. Forskjellen er historikk: deltakeren kan allerede ha bestått en
+    // modul som senere ble avpublisert, og da er raden hens egen fortid, ikke vår redigering.
+    // Se `doc/DECISIONS.md`.
     const items: CourseSequenceItem[] = courseItems.map((item) => {
       if (item.itemType === "SECTION" && item.section) {
         const read = readSectionIds.has(item.section.id);
+        // #992: teller og nevner leser nå fra SAMME liste — `visibleItems`. Før filtreringen var de
+        // to uavhengige uttrykk, og telleren glemte tilgjengelighet: en lesning fra før seksjonen
+        // ble upublisert talte mot en nevner som ikke lenger inneholdt den, så detaljen rapporterte
+        // «1/1» og COMPLETED mens bevisporten korrekt nektet.
+        //
+        // ⚠️ Ikke legg et predikat til her. At bare tilgjengelige seksjoner kan telles er nå en
+        // egenskap ved lista, ikke en regel hvert uttrykk må huske.
         if (read) readSectionCount += 1;
         return {
           type: "SECTION",
@@ -272,6 +309,11 @@ coursesRouter.get("/:courseId", async (request, response, next) => {
           courseItemId: item.id,
           title: localizeContentText(locale, item.section.title) ?? item.section.title,
           read,
+          // #944/#958: flagget står igjen i DTO-en fordi klienten leser det på MODULE, og et felt
+          // som forsvinner for én av to typer er en ny regel klienten må kjenne. For seksjoner er
+          // det alltid `true` — de uleselige kommer ikke ut av deltakerdøra i det hele tatt.
+          available: item.available,
+          required: item.required,
           discussionsEnabled: item.discussionsEnabled,
         };
       }
@@ -279,11 +321,13 @@ coursesRouter.get("/:courseId", async (request, response, next) => {
       const certStatus = certStatusByModuleId.get(moduleId);
       const passed = isCertificationPassed(certStatus);
       const hasStarted = latestSubmissionByModuleId.has(moduleId);
-      // #502-followup: en modul er «tilgjengelig» for deltaker når den har en publisert aktiv
-      // versjon og ikke er arkivert. Avpubliserte moduler markeres i UI (ikke en blindvei).
-      const available = Boolean(
-        item.module?.activeVersionId && item.module?.activeVersion?.publishedAt && !item.module?.archivedAt,
-      );
+      // #502-followup/#958: regelen bor nå i `findCourseItemsForParticipant`. Ruta leser en
+      // avgjørelse i stedet for å ta en — feltene den ble regnet ut av finnes ikke her lenger.
+      //
+      // ⚠️ #996: BEGGE avgjørelsene. En avpublisert modul er `available: false` men fortsatt
+      // `required: true` — den er midlertidig nede, ikke tatt ut av kurset. Klienten skal ikke
+      // utlede det ene av det andre.
+      const available = item.available;
       return {
         type: "MODULE",
         sortOrder: item.sortOrder,
@@ -293,11 +337,19 @@ coursesRouter.get("/:courseId", async (request, response, next) => {
         moduleStatus: passed ? "PASSED" : hasStarted ? "IN_PROGRESS" : "NOT_STARTED",
         discussionsEnabled: item.discussionsEnabled,
         available,
+        required: item.required,
       };
     });
 
     // All elements count toward progress: passed modules + read sections (#492).
     // Module count derived from CourseItem (itemType MODULE); sections from CourseItem too.
+    // #944/#938/#958: framdriften teller de seksjonene som FAKTISK KREVES — de deltakeren kan lese.
+    // Kortet kunne før vise «Seksjonar 0/1» ved siden av et utstedt kursbevis, fordi telleren og
+    // bevisporten filtrerte ulikt.
+    //
+    // ⚠️ Nå er dette ikke lenger en telling MED filter. Sekvensen inneholder bare det som kreves,
+    // fordi telleren og bevisporten har fått radene fra SAMME dør. Legg ikke et predikat tilbake
+    // her — det ville gjeninnført nettopp uenigheten linja finnes for å ha fjernet.
     const sectionCount = items.filter((i) => i.type === "SECTION").length;
     const totalElements = moduleIds.length + sectionCount;
     const completedElements = passedCount + readSectionCount;
@@ -319,17 +371,30 @@ coursesRouter.get("/:courseId", async (request, response, next) => {
         sectionCompleted: readSectionCount,
         sectionTotal: sectionCount,
       },
-      modules: course.modules.map((cm) => {
-        const certStatus = certStatusByModuleId.get(cm.moduleId);
-        const passed = isCertificationPassed(certStatus);
-        const hasStarted = latestSubmissionByModuleId.has(cm.moduleId);
-        return {
-          moduleId: cm.moduleId,
-          sortOrder: cm.sortOrder,
-          title: localizeContentText(locale, cm.module.title) ?? cm.module.title,
-          moduleStatus: passed ? "PASSED" : hasStarted ? "IN_PROGRESS" : "NOT_STARTED",
-        };
-      }),
+      // ⚠️ #996: legacy-`modules[]` MÅ filtreres som tellerne over. De ble filtrert i 2.26.3, denne
+      // ikke — og da sa samme respons to ting samtidig: `moduleCount: 0` og `progress 0/0`, mens
+      // `modules[]` inneholdt en arkivert modul som `NOT_STARTED`.
+      //
+      // Verre enn et skjevt tall: sertifiseringsoppslaget (`certStatusByModuleId`) bygges bare for
+      // ikke-arkiverte moduler, så en modul deltakeren FAKTISK BESTO før arkiveringen kom tilbake
+      // som «ikke påbegynt». En eldre klient som leser denne flaten viser da en klikkbar modul som
+      // resten av responsen sier ikke finnes i kravet.
+      //
+      // `moduleIds` er allerede den filtrerte lista bevisporten bruker. Å lese fra den i stedet for
+      // fra `course.modules` er hele fiksen — én kilde, ikke to.
+      modules: course.modules
+        .filter((cm) => moduleIds.includes(cm.moduleId))
+        .map((cm) => {
+          const certStatus = certStatusByModuleId.get(cm.moduleId);
+          const passed = isCertificationPassed(certStatus);
+          const hasStarted = latestSubmissionByModuleId.has(cm.moduleId);
+          return {
+            moduleId: cm.moduleId,
+            sortOrder: cm.sortOrder,
+            title: localizeContentText(locale, cm.module.title) ?? cm.module.title,
+            moduleStatus: passed ? "PASSED" : hasStarted ? "IN_PROGRESS" : "NOT_STARTED",
+          };
+        }),
       items,
     };
 
@@ -350,19 +415,28 @@ coursesRouter.get("/:courseId/sections/:sectionId", async (request, response, ne
   }
   const locale = normalizeLocale(request.context?.locale) ?? "en-GB";
   try {
-    const course = await courseRepository.findCourseById(request.params.courseId);
-    if (!course || !course.publishedAt || course.archivedAt) {
+    // #959: ÉN dør. Signaturen krever hvem som spør, så synligheten kan ikke bli glemt her —
+    // og `null` dekker alle tre årsakene (finnes ikke / ikke publisert / ikke synlig for deg)
+    // med vilje, slik at 404-en ikke lekker at et RESTRICTED kurs eksisterer.
+    const course = await findCourseForParticipant({
+      courseId: request.params.courseId,
+      userId,
+      roles: request.context?.roles ?? [],
+      groupIds: request.context?.principal?.groupIds,
+    });
+    if (!course) {
       throw new NotFoundError("Course", "course_not_found", "Course not found.");
     }
-    // #778/#785: gate RESTRICTED-course section content on enrolment/class visibility.
-    if (!(await isCourseVisibleToUser({ course, userId, roles: request.context?.roles ?? [], groupIds: request.context?.principal?.groupIds }))) {
-      throw new NotFoundError("Course", "course_not_found", "Course not found.");
-    }
-    const courseItems = await courseRepository.findCourseItems(course.id);
-    const belongs = courseItems.some(
-      (item) => item.itemType === "SECTION" && item.sectionId === request.params.sectionId,
+    // #944/#958: medlemskap i kurset er IKKE nok. En arkivert seksjon, eller en som
+    // oversettelsesgaten har holdt tilbake, har ingen aktiv versjon — og ga tidligere 200 med tom
+    // side. Deltakerdøra leverer den ikke, så «finnes ikke i kurset» og «kan ikke leses» er nå det
+    // samme oppslaget og kan ikke svare hver sin ting. 404 fordi vi ikke bekrefter at seksjonen
+    // finnes i det hele tatt, på samme måte som synlighetssjekken over.
+    const courseItems = await courseRepository.findCourseItemsForParticipant(course.id);
+    const item = courseItems.find(
+      (i) => i.itemType === "SECTION" && i.sectionId === request.params.sectionId,
     );
-    if (!belongs) {
+    if (!item) {
       throw new NotFoundError("CourseSection", "section_not_found", "Section not found in this course.");
     }
     const section = await getSection(request.params.sectionId);
@@ -385,19 +459,26 @@ coursesRouter.post("/:courseId/sections/:sectionId/read", async (request, respon
     return;
   }
   try {
-    const course = await courseRepository.findCourseById(request.params.courseId);
-    if (!course || !course.publishedAt || course.archivedAt) {
+    // #959: ÉN dør. Signaturen krever hvem som spør, så synligheten kan ikke bli glemt her —
+    // og `null` dekker alle tre årsakene (finnes ikke / ikke publisert / ikke synlig for deg)
+    // med vilje, slik at 404-en ikke lekker at et RESTRICTED kurs eksisterer.
+    const course = await findCourseForParticipant({
+      courseId: request.params.courseId,
+      userId,
+      roles: request.context?.roles ?? [],
+      groupIds: request.context?.principal?.groupIds,
+    });
+    if (!course) {
       throw new NotFoundError("Course", "course_not_found", "Course not found.");
     }
-    // #778/#785: gate RESTRICTED-course read-progress writes on enrolment/class visibility.
-    if (!(await isCourseVisibleToUser({ course, userId, roles: request.context?.roles ?? [], groupIds: request.context?.principal?.groupIds }))) {
-      throw new NotFoundError("Course", "course_not_found", "Course not found.");
-    }
-    const courseItems = await courseRepository.findCourseItems(course.id);
-    const belongs = courseItems.some(
-      (item) => item.itemType === "SECTION" && item.sectionId === request.params.sectionId,
+    // #944/#958: samme dør som lesestien. Var dette to oppslag med hver sin regel, kunne markeringen
+    // gå gjennom for en seksjon lesestien nektet — og kursbeviset bli utstedt for innhold som aldri
+    // ble publisert. Det var nøyaktig hullet i #944.
+    const courseItems = await courseRepository.findCourseItemsForParticipant(course.id);
+    const item = courseItems.find(
+      (i) => i.itemType === "SECTION" && i.sectionId === request.params.sectionId,
     );
-    if (!belongs) {
+    if (!item) {
       throw new NotFoundError("CourseSection", "section_not_found", "Section not found in this course.");
     }
     await courseRepository.markSectionRead(userId, course.id, request.params.sectionId);
@@ -417,6 +498,19 @@ coursesRouter.post("/:courseId/enroll", async (request, response, next) => {
     return;
   }
   try {
+    // ⚠️ #959 UNNTAK, og det eneste: selv-innmelding bruker IKKE deltakerdøra.
+    //
+    // Døra svarer «finnes ikke» på et RESTRICTED kurs du ikke er meldt på — som er riktig for
+    // lesestiene, men galt her. Poenget med denne ruta er nettopp at du ENNÅ IKKE har tilgang, og
+    // `selfEnroll` svarer 400 med «dette kurset krever tildeling». Tvinger man den gjennom døra,
+    // blir den beskjeden til 404, og deltakeren får vite at kurset ikke finnes framfor hvordan hen
+    // får tilgang.
+    //
+    // Jeg konverterte den først, og `m2-enrollment` ble rød på 404 der den ventet 400. Det var en
+    // ekte oppførselsendring smuglet inn i en opprydding — samme feilklasse som resten av #941.
+    //
+    // Synligheten er altså ikke glemt her; den er FLYTTET til `selfEnroll`, som eier regelen om
+    // hvem som kan melde seg på selv. Unntaket står i `course-visibility-guard`.
     const course = await courseRepository.findCourseById(request.params.courseId);
     if (!course || !course.publishedAt || course.archivedAt) {
       throw new NotFoundError("Course", "course_not_found", "Course not found.");

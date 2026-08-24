@@ -87,6 +87,108 @@ export async function assertSectionNotInAnyCourse(sectionId: string, verb: strin
   }
 }
 
+// #938: innhold som står i et UTSTEDT kursbevis kan aldri slettes.
+//
+// Produkteier 2026-08-21: «Arkivert materiale var naturligvis del av pensum når diplom ble utdelt
+// og må bevares som grunnlag for diplom, men ellers ikke.»
+//
+// G2 over nekter sletting mens innholdet ligger i et kurs — men når det er FJERNET derfra, var
+// sletting tillatt, og ingenting sjekket om et kursbevis pekte på det. Snapshotet ville da bære en
+// død id, og et utstedt diplom kunne ikke lenger begrunnes.
+//
+// ⚠️ Arkivering er fortsatt tillatt. Skillet er med vilje:
+//   arkivere = ut av sirkulasjon, raden består, diplomet tåler det
+//   slette    = borte, og da mister diplomet grunnlaget sitt
+//
+// ⚠️ Bevisst bivirkning: innhold noen har fått diplom på blir permanent uslettbart. Det er prisen
+// for at et kursbevis skal kunne etterprøves, og den er godtatt.
+//
+// Implementasjonsnote: snapshotene er JSON-arrayer av id-er lagret som TEXT, så vi kan ikke joine.
+// `contains` på id-en er derfor riktig verktøy — id-ene er cuid-er, så en delstreng-kollisjon med
+// en ANNEN id er praktisk talt umulig. Skulle snapshot-formatet en dag bli en relasjon, bør denne
+// sjekken bli en join.
+async function assertNotInIssuedCertificate(
+  id: string,
+  column: "moduleSnapshotJson" | "sectionSnapshotJson",
+  noun: string,
+  verb: string,
+): Promise<void> {
+  const count = await prisma.courseCompletion.count({ where: { [column]: { contains: id } } });
+  if (count > 0) {
+    throw new ValidationError(
+      `${noun} kan ikke ${verb} fordi den inngår i ${count} utstedt${count === 1 ? "" : "e"} kursbevis. `
+      + "Arkiver den i stedet — et kursbevis må kunne vise hva det dekket.",
+    );
+  }
+}
+
+export function assertModuleNotInIssuedCertificate(moduleId: string, verb: string): Promise<void> {
+  return assertNotInIssuedCertificate(moduleId, "moduleSnapshotJson", "Modulen", verb);
+}
+
+/**
+ * Samme regel som `assertSectionNotInIssuedCertificate`, men RETURNERER grunnen i stedet for å
+ * kaste — for kaskadeanalysen, som samler blokkeringer og viser dem i en forhåndsvisning.
+ *
+ * ⚠️ Regelen bor ett sted. To kopier — én som kaster og én som rapporterer — ville drevet fra
+ * hverandre, og det er nettopp det #938 handlet om.
+ */
+export async function describeIssuedCertificateBlock(sectionId: string): Promise<string | null> {
+  try {
+    await assertSectionNotInIssuedCertificate(sectionId, "slettes");
+    return null;
+  } catch (error) {
+    if (error instanceof ValidationError) return error.message;
+    throw error;
+  }
+}
+
+export async function assertSectionNotInIssuedCertificate(sectionId: string, verb: string): Promise<void> {
+  await assertNotInIssuedCertificate(sectionId, "sectionSnapshotJson", "Seksjonen", verb);
+
+  // ⚠️ Kursbevis utstedt FØR v2.23.0 har `sectionSnapshotJson = NULL` — kolonnen er nullbar og med
+  // vilje ikke bakfylt (`doc/DECISIONS.md`: NULL betyr ærlig «utstedt før vi registrerte dette»).
+  // Et `contains`-oppslag treffer aldri NULL, så sjekken over beskyttet ingen av dem.
+  //
+  // Vi kan ikke vite hvilke seksjoner et slikt bevis dekket — dataene finnes ikke. Men vi har en
+  // ærlig stedfortreder: leste deltakeren seksjonen i det kurset hen fikk beviset for, var den en
+  // del av grunnlaget. Det er konservativt i riktig retning, og det er alt dataene tillater.
+  // ⚠️ #996: spørringen går fra LESNINGENE, ikke fra bevisene. Første utkast lastet ALLE bevis med
+  // NULL-snapshot og bygde én `OR`-gren per bevis — to bindeparametre hver. Med nok historikk
+  // sprenger det Prismas parametergrense, og kaskade-forhåndsvisningen ble seksjoner × alle gamle
+  // bevis. En vakt som slutter å virke når installasjonen blir stor, er en vakt som svikter presis
+  // når den trengs mest.
+  //
+  // Snudd er mengden naturlig avgrenset: hvor mange har lest DENNE ene seksjonen. To `IN`-lister
+  // i stedet for N `OR`-grener, og det eksakte par-treffet gjøres i minnet på et lite resultat.
+  const reads = await prisma.courseSectionRead.findMany({
+    where: { sectionId },
+    select: { userId: true, courseId: true },
+  });
+  if (reads.length === 0) return;
+
+  const legacy = await prisma.courseCompletion.findMany({
+    where: {
+      sectionSnapshotJson: null,
+      userId: { in: [...new Set(reads.map((r) => r.userId))] },
+      courseId: { in: [...new Set(reads.map((r) => r.courseId))] },
+    },
+    select: { userId: true, courseId: true },
+  });
+  if (legacy.length === 0) return;
+
+  // `IN × IN` er et kryssprodukt-supersett: den treffer også par som ikke finnes sammen. Derfor
+  // avgjøres det EKSAKTE paret her, på et resultat som allerede er lite.
+  const readPairs = new Set(reads.map((r) => `${r.userId}|${r.courseId}`));
+  const covered = legacy.filter((c) => readPairs.has(`${c.userId}|${c.courseId}`)).length;
+  if (covered > 0) {
+    throw new ValidationError(
+      `Seksjonen kan ikke ${verb} fordi den inngår i ${covered} kursbevis utstedt før `
+      + "øyeblikksbildet ble innført. Arkiver den i stedet — et kursbevis må kunne vise hva det dekket.",
+    );
+  }
+}
+
 // Antall deltakere som har PÅBEGYNT (lest en seksjon eller levert et forsøk på en kurs-modul)
 // men IKKE fullført (ingen CourseCompletion). Brukt av G3-vakta for kurs.
 export async function countCourseInProgressParticipants(courseId: string): Promise<number> {

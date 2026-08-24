@@ -3,10 +3,11 @@ import type { AppRole as AppRoleType } from "@prisma/client";
 import { prisma } from "../../db/prisma.js";
 import { NotFoundError, ValidationError } from "../../errors/AppError.js";
 import { putAsset, getAsset, deleteAsset } from "./assetStorage.js";
-import { isSectionInAccessibleCourse } from "./enrollmentService.js";
+import { canParticipantReadSection } from "./enrollmentService.js";
 import { sanitizeSvg, svgHasText, extractSvgTexts, applySvgTextTranslations } from "./svgSanitizer.js";
 import { localizeSvgTexts, type GenerationLocale } from "../adminContent/llmContentGenerationService.js";
 import { SUPPORTED_LOCALES, type SupportedLocale } from "../../i18n/locale.js";
+import { hasAnyRole, CONTENT_AUTHORS } from "../../auth/roleSets.js";
 
 export const SVG_MIME_TYPE = "image/svg+xml";
 // Raster images plus SVG. SVG is accepted ONLY after server-side sanitisation strips its
@@ -136,9 +137,9 @@ export async function getSectionAssetContent(
   // bypass so they can preview assets in unpublished/draft sections in the editor. 404 (not 403) so we
   // never confirm the asset's existence to an unauthorized caller.
   const isAuthor =
-    viewer.roles.includes("SUBJECT_MATTER_OWNER") || viewer.roles.includes("ADMINISTRATOR");
+    hasAnyRole(viewer.roles, CONTENT_AUTHORS);
   if (!isAuthor) {
-    const accessible = await isSectionInAccessibleCourse({
+    const accessible = await canParticipantReadSection({
       sectionId: asset.sectionId,
       userId: viewer.userId,
       roles: viewer.roles,

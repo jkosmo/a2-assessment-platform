@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { warmModuleGraph } from "../support/moduleGraphWarmup.js";
 
 const findNextRunnableJob = vi.fn();
 const tryLockPendingJob = vi.fn();
@@ -170,6 +171,9 @@ function buildLlmResult(overrides: Record<string, unknown> = {}) {
     ...overrides,
   };
 }
+
+// #994: modulgrafen leses her, ikke i første test. Se test/support/moduleGraphWarmup.ts.
+warmModuleGraph(() => import("../../src/modules/assessment/assessmentJobService.js"));
 
 describe("assessment job service traffic-light policy", () => {
   beforeEach(() => {

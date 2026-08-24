@@ -14,16 +14,7 @@
 // tydelig merket sandkasse.
 
 import { expect, test } from "@playwright/test";
-import fs from "node:fs";
-import path from "node:path";
-
-type StageAuth = {
-  baseUrl: string;
-  accessToken: string;
-  expiresOn: number;
-  username: string | null;
-  roles: string[];
-};
+import { readAuth, stageBaseUrl } from "./stageAuth.js";
 
 // ⚠️ `title` er en TEKSTKOLONNE i databasen. Et språkkart lagres som en JSON-STRENG, så
 // `typeof title === "string"` er sant for BEGGE former og måler ingenting. Første versjon av
@@ -50,28 +41,8 @@ function classifyLocalized(raw: unknown): LocaleShape {
   return new Set(values).size === 1 ? "identical-copies" : "complete";
 }
 
-function readAuth(): { auth: StageAuth | null; reason: string } {
-  const file = path.resolve(process.cwd(), ".stage-auth.json");
-  if (!fs.existsSync(file)) {
-    return { auth: null, reason: "ingen .stage-auth.json — kjør `npm run stage:auth` først" };
-  }
-  let parsed: StageAuth;
-  try {
-    parsed = JSON.parse(fs.readFileSync(file, "utf8")) as StageAuth;
-  } catch {
-    return { auth: null, reason: ".stage-auth.json kunne ikke leses" };
-  }
-  if (!parsed.accessToken) return { auth: null, reason: ".stage-auth.json mangler token" };
-  if (parsed.expiresOn && parsed.expiresOn < Date.now()) {
-    return { auth: null, reason: "sesjonen er utløpt — kjør `npm run stage:auth` på nytt" };
-  }
-  return { auth: parsed, reason: "" };
-}
-
 const { auth, reason } = readAuth();
-const BASE = auth?.baseUrl
-  ?? process.env.STAGE_BASE_URL
-  ?? "https://a2-assessment-platform-stg-app-x6eyx4.azurewebsites.net";
+const BASE = stageBaseUrl(auth);
 
 test.describe("utrullet stage — reelle data", () => {
   test.skip(!auth, `Hopper over: ${reason}`);

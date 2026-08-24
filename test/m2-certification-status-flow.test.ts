@@ -2,6 +2,10 @@ import request from "supertest";
 import { app } from "../src/app.js";
 import { prisma } from "../src/db/prisma.js";
 
+// #989: het `m2-recertification-flow.test.ts` og verifiserte utløpsdatoer + påminnelseskjøringer.
+// Nå verifiserer den det motsatte: en bestått modul får ACTIVE og `passedAt`, INGEN utløpsdato, og
+// påminnelses-endepunktet finnes ikke lenger.
+
 const participantHeaders = {
   "x-user-id": "participant-recert-1",
   "x-user-email": "participant.recert@company.com",
@@ -16,12 +20,12 @@ const adminHeaders = {
   "x-user-roles": "ADMINISTRATOR",
 };
 
-describe("Recertification status and reminders", () => {
+describe("Certification status without expiry", () => {
   afterAll(async () => {
     await prisma.$disconnect();
   });
 
-  it("calculates recertification dates, reports status, and sends scheduled reminders", async () => {
+  it("records a passing module as ACTIVE with passedAt and no expiry", async () => {
     const modulesResponse = await request(app).get("/api/modules").set(participantHeaders);
     expect(modulesResponse.status).toBe(200);
     const seedModule = (modulesResponse.body.modules as Array<{ id: string; title: string }>).find(
@@ -88,47 +92,44 @@ describe("Recertification status and reminders", () => {
 
     const reportResponse = await request(app).get("/api/reports/recertification").set(adminHeaders);
     expect(reportResponse.status).toBe(200);
+    expect(reportResponse.body.reportType).toBe("certification-status");
+    // Tellingen per livssyklustilstand er ryddet: bare de to som betyr noe står igjen.
+    expect(Object.keys(reportResponse.body.totals).sort()).toEqual([
+      "ACTIVE",
+      "NOT_CERTIFIED",
+      "certificationCount",
+    ]);
+
     const participantRow = (reportResponse.body.rows as Array<Record<string, unknown>>).find(
       (entry) =>
         entry.moduleId === moduleId &&
         entry.participantEmail === participantHeaders["x-user-email"],
-    ) as { certificationId: string; status: string; expiryDate: string | null } | undefined;
+    ) as { certificationId: string; status: string; passedAt: string | null } | undefined;
 
     expect(participantRow).toBeDefined();
     expect(participantRow?.status).toBe("ACTIVE");
-    expect(participantRow?.expiryDate).toBeTruthy();
+    // Krav 1: `passedAt` beholdes.
+    expect(participantRow?.passedAt).toBeTruthy();
+    // Utløpsfeltene er ute av rapporten.
+    expect(participantRow).not.toHaveProperty("expiryDate");
+    expect(participantRow).not.toHaveProperty("recertificationDueDate");
+    expect(participantRow).not.toHaveProperty("daysUntilExpiry");
 
-    const expiryDate = new Date(participantRow!.expiryDate!);
-    const reminderAsOf = new Date(expiryDate);
-    reminderAsOf.setUTCDate(reminderAsOf.getUTCDate() - 30);
-
-    const firstReminderRunResponse = await request(app)
-      .post("/api/reports/recertification/reminders/run")
-      .query({ asOf: reminderAsOf.toISOString() })
-      .set(adminHeaders);
-    expect(firstReminderRunResponse.status).toBe(200);
-    expect(firstReminderRunResponse.body.run.sent).toBeGreaterThanOrEqual(1);
-
-    const secondReminderRunResponse = await request(app)
-      .post("/api/reports/recertification/reminders/run")
-      .query({ asOf: reminderAsOf.toISOString() })
-      .set(adminHeaders);
-    expect(secondReminderRunResponse.status).toBe(200);
-    expect(secondReminderRunResponse.body.run.skippedAlreadySent).toBeGreaterThanOrEqual(1);
-
-    const reminderAuditEvents = await prisma.auditEvent.findMany({
-      where: {
-        entityType: "certification_status",
-        action: "recertification_reminder_sent",
-      },
+    // Krav 2: kolonnene står igjen i skjemaet — de skrives bare ikke.
+    const stored = await prisma.certificationStatus.findUnique({
+      where: { id: participantRow!.certificationId },
     });
-    expect(reminderAuditEvents.length).toBeGreaterThan(0);
-    // #806 (GDPR): the reminder audit must record the event but NOT persist the recipient's email in
-    // indefinitely-retained metadata — it should carry userId only, so a pseudonymized user stays
-    // un-linkable. (The email is still used to send the reminder and appears in the live report above.)
-    for (const event of reminderAuditEvents) {
-      expect(event.metadataJson).not.toContain(participantHeaders["x-user-email"]);
-      expect(event.metadataJson).toContain("userId");
-    }
+    expect(stored?.status).toBe("ACTIVE");
+    expect(stored?.passedAt).toBeTruthy();
+    expect(stored?.expiryDate).toBeNull();
+    expect(stored?.recertificationDueDate).toBeNull();
+  });
+
+  it("no longer exposes the recertification reminder endpoint", async () => {
+    const response = await request(app)
+      .post("/api/reports/recertification/reminders/run")
+      .set(adminHeaders);
+
+    expect(response.status).toBe(404);
   });
 });

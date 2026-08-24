@@ -1,11 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AppealStatus, DecisionType, ReviewStatus } from "../../src/db/prismaRuntime.js";
 import type { LlmStructuredAssessment } from "../../src/modules/assessment/llmAssessmentService.js";
+import { warmModuleGraph } from "../support/moduleGraphWarmup.js";
 
 // ─── Shared mocks ────────────────────────────────────────────────────────────
 
 const recordAuditEvent = vi.fn();
-const upsertRecertificationStatusFromDecision = vi.fn();
+const upsertCertificationStatusFromDecision = vi.fn();
 const logOperationalEvent = vi.fn();
 
 // ─── createSubmission / retake supersede mocks ────────────────────────────────
@@ -102,7 +103,7 @@ vi.mock("../../src/modules/appeal/appealRepository.js", () => ({
 
 vi.mock("../../src/services/auditService.js", () => ({ recordAuditEvent }));
 vi.mock("../../src/modules/certification/index.js", () => ({
-  upsertRecertificationStatusFromDecision,
+  upsertCertificationStatusFromDecision,
   notifyAssessmentResult,
   notifyAppealStatusTransition,
 }));
@@ -117,12 +118,6 @@ vi.mock("../../src/config/assessmentRules.js", () => ({
     manualReview: {
       borderlineWindow: { min: 55, max: 59 },
       redFlagSeverities: ["HIGH", "CRITICAL"],
-    },
-    recertification: {
-      validityDays: 365,
-      dueOffsetDays: 30,
-      dueSoonDays: 14,
-      reminderDaysBefore: [30, 7],
     },
   }),
 }));
@@ -234,10 +229,18 @@ const BASE_APPEAL = {
 
 // ─── Tests ────────────────────────────────────────────────────────────────────
 
+// #994: modulgrafene leses her, ikke i første test. Se test/support/moduleGraphWarmup.ts.
+warmModuleGraph(async () => {
+  await import("../../src/modules/appeal/appealService.js");
+  await import("../../src/modules/assessment/decisionService.js");
+  await import("../../src/modules/review/manualReviewService.js");
+  await import("../../src/modules/submission/submissionService.js");
+});
+
 describe("transactional failure injection", () => {
   beforeEach(() => {
     recordAuditEvent.mockReset().mockResolvedValue(undefined);
-    upsertRecertificationStatusFromDecision.mockReset().mockResolvedValue(undefined);
+    upsertCertificationStatusFromDecision.mockReset().mockResolvedValue(undefined);
     logOperationalEvent.mockReset();
     assessmentDecisionCreate.mockReset();
     manualReviewCreate.mockReset();
@@ -273,7 +276,7 @@ describe("transactional failure injection", () => {
       ).rejects.toThrow("DB connection lost");
 
       expect(decisionSubmissionUpdate).not.toHaveBeenCalled();
-      expect(upsertRecertificationStatusFromDecision).not.toHaveBeenCalled();
+      expect(upsertCertificationStatusFromDecision).not.toHaveBeenCalled();
       expect(recordAuditEvent).not.toHaveBeenCalled();
     });
 
@@ -291,24 +294,24 @@ describe("transactional failure injection", () => {
         createAssessmentDecision({ ...BASE_DECISION_INPUT, llmResult: buildPassingLlmResult() }),
       ).rejects.toThrow("Unique constraint violation");
 
-      expect(upsertRecertificationStatusFromDecision).not.toHaveBeenCalled();
+      expect(upsertCertificationStatusFromDecision).not.toHaveBeenCalled();
       expect(recordAuditEvent).not.toHaveBeenCalled();
     });
 
-    it("halts the pipeline when recertification upsert fails mid-transaction", async () => {
+    it("halts the pipeline when the certification upsert fails mid-transaction", async () => {
       assessmentDecisionCreate.mockResolvedValue({
         id: "decision-1",
         passFailTotal: true,
         decisionReason: "Automatic pass by threshold rules.",
       });
       decisionSubmissionUpdate.mockResolvedValue({ id: "submission-1" });
-      upsertRecertificationStatusFromDecision.mockRejectedValue(new Error("Recert write failed"));
+      upsertCertificationStatusFromDecision.mockRejectedValue(new Error("Certification write failed"));
 
       const { createAssessmentDecision } = await import("../../src/modules/assessment/decisionService.js");
 
       await expect(
         createAssessmentDecision({ ...BASE_DECISION_INPUT, llmResult: buildPassingLlmResult() }),
-      ).rejects.toThrow("Recert write failed");
+      ).rejects.toThrow("Certification write failed");
 
       expect(recordAuditEvent).not.toHaveBeenCalled();
     });
@@ -336,7 +339,7 @@ describe("transactional failure injection", () => {
       // #791: the guarded transition runs FIRST; the later failure rolls the whole transaction back.
       expect(resolveManualReviewGuarded).toHaveBeenCalled();
       expect(decisionSubmissionUpdate).not.toHaveBeenCalled();
-      expect(upsertRecertificationStatusFromDecision).not.toHaveBeenCalled();
+      expect(upsertCertificationStatusFromDecision).not.toHaveBeenCalled();
       expect(recordAuditEvent).not.toHaveBeenCalled();
       expect(notifyAssessmentResult).not.toHaveBeenCalled();
     });
@@ -389,7 +392,7 @@ describe("transactional failure injection", () => {
 
       // #791: the guarded transition runs FIRST; the later failure rolls the whole transaction back.
       expect(resolveManualReviewGuarded).toHaveBeenCalled();
-      expect(upsertRecertificationStatusFromDecision).not.toHaveBeenCalled();
+      expect(upsertCertificationStatusFromDecision).not.toHaveBeenCalled();
       expect(recordAuditEvent).not.toHaveBeenCalled();
       expect(notifyAssessmentResult).not.toHaveBeenCalled();
     });
@@ -449,7 +452,7 @@ describe("transactional failure injection", () => {
       // (nothing persists), but the guard call itself was made before the failure.
       expect(markAppealResolvedGuarded).toHaveBeenCalled();
       expect(decisionSubmissionUpdate).not.toHaveBeenCalled();
-      expect(upsertRecertificationStatusFromDecision).not.toHaveBeenCalled();
+      expect(upsertCertificationStatusFromDecision).not.toHaveBeenCalled();
       expect(recordAuditEvent).not.toHaveBeenCalled();
       expect(notifyAppealStatusTransition).not.toHaveBeenCalled();
     });
@@ -503,7 +506,7 @@ describe("transactional failure injection", () => {
       // #790: the guarded transition runs FIRST now; the later failure rolls the whole transaction back
       // (nothing persists), but the guard call itself was made before the failure.
       expect(markAppealResolvedGuarded).toHaveBeenCalled();
-      expect(upsertRecertificationStatusFromDecision).not.toHaveBeenCalled();
+      expect(upsertCertificationStatusFromDecision).not.toHaveBeenCalled();
       expect(recordAuditEvent).not.toHaveBeenCalled();
       expect(notifyAppealStatusTransition).not.toHaveBeenCalled();
     });

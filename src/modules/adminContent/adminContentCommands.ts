@@ -143,22 +143,32 @@ export async function createModule(input: CreateModuleInput, tx?: DbTransactionC
   return tx ? run(tx) : runInTransaction(run);
 }
 
-function normalizeLocalizedTitleSeed(title: string | null | undefined): LocalizedTextObject {
+/**
+ * #981: the base an object patch merges onto.
+ *
+ * A stored OBJECT names exactly the locales it has, so it is a coherent base: the patch changes
+ * the locales it names and the rest survive.
+ *
+ * A stored PLAIN STRING is "one language, and the data does not say which" (#892, DECISIONS.md
+ * «Ren streng betyr ett språk, ikke oversatt ennå»). There is nothing coherent to merge onto —
+ * putting it in a locale slot is a guess, and a guess written into the data is indistinguishable
+ * from a real translation forever after. So it contributes nothing to the base and the patch
+ * stands alone. This is the rule `mergeLocalized` in `moduleVersionComposer` already applies to
+ * `description` and `certificationLevel`; the title now agrees with its own siblings.
+ *
+ * This function used to fan the plain string out into `en-GB`, `nb` AND `nn`. `PATCH {nn}` onto an
+ * untranslated title then produced three filled locales, `missingLocalesFor` reported nothing
+ * missing, the publish gate let the module through, and an en-GB participant was served a
+ * Norwegian title the system believed was translated. The fan-out was removed from the patch side
+ * in #892 (see the note on `updateModuleTitle`) but survived here on the seed side.
+ *
+ * The one place the "which language is this?" guess is legitimate is the authoring client, where
+ * the author sees the source language prefilled and can correct it before saving
+ * (`LEGACY_STRING_LOCALE` in `admin-content-shell.js`). The backend must not make it silently.
+ */
+function localizedTitleMergeBase(title: string | null | undefined): LocalizedTextObject {
   const parsed = localizedTextCodec.parse(title);
-  if (parsed && typeof parsed === "object") {
-    return { ...parsed };
-  }
-
-  const fallback = typeof parsed === "string" ? parsed.trim() : "";
-  if (!fallback) {
-    return {};
-  }
-
-  return {
-    "en-GB": fallback,
-    nb: fallback,
-    nn: fallback,
-  };
+  return parsed && typeof parsed === "object" ? { ...parsed } : {};
 }
 
 function normalizeLocalizedTitlePatch(titlePatch: LocalizedTextObject): LocalizedTextObject {
@@ -166,6 +176,23 @@ function normalizeLocalizedTitlePatch(titlePatch: LocalizedTextObject): Localize
     ([, value]) => typeof value === "string" && value.trim().length > 0,
   );
   return Object.fromEntries(normalizedEntries) as LocalizedTextObject;
+}
+
+function resolveNextModuleTitle(storedTitle: string, titlePatch: LocalizedText): string {
+  // A plain-string patch replaces outright: it says "the whole title is this, in one language".
+  if (typeof titlePatch === "string") {
+    return localizedTextCodec.serialize(titlePatch);
+  }
+
+  const merged = {
+    ...localizedTitleMergeBase(storedTitle),
+    ...normalizeLocalizedTitlePatch(titlePatch),
+  };
+
+  // A patch whose every entry was blank must not blank the title. `serialize({})` stores the
+  // literal "{}", which parses back as that same two-character string and is what every locale
+  // would then display. Nothing to change means leave the stored value alone.
+  return Object.keys(merged).length > 0 ? localizedTextCodec.serialize(merged) : storedTitle;
 }
 
 /**
@@ -182,6 +209,9 @@ function normalizeLocalizedTitlePatch(titlePatch: LocalizedTextObject): Localize
  * every locale), but the data is honest and a translation-status check becomes possible (#894).
  * A localized OBJECT patch still merges onto the existing map, so translating one language never
  * disturbs the others.
+ *
+ * #981: it merges onto the existing MAP — never onto an existing plain string, which carries no
+ * locale to merge with. See `localizedTitleMergeBase`.
  */
 export async function updateModuleTitle(
   moduleId: string,
@@ -197,13 +227,7 @@ export async function updateModuleTitle(
     throw new NotFoundError("Module", "module_not_found", "Module not found.");
   }
 
-  const title =
-    typeof titlePatch === "string"
-      ? localizedTextCodec.serialize(titlePatch)
-      : localizedTextCodec.serialize({
-          ...normalizeLocalizedTitleSeed(existingModule.title),
-          ...normalizeLocalizedTitlePatch(titlePatch),
-        });
+  const title = resolveNextModuleTitle(existingModule.title, titlePatch);
   const applyIn = async (tx: DbTransactionClient) => {
     const repo = createAdminContentRepository(tx);
     const updated = await repo.updateModuleTitle(moduleId, title);
@@ -318,6 +342,15 @@ export async function deleteModule(moduleId: string, actorId: string) {
     ["submissions", module._count.submissions],
     ["certification statuses", module._count.certificationStatuses],
   ].filter(([, count]) => typeof count === "number" && count > 0);
+
+  // #938: en modul som står i et utstedt kursbevis er ALLEREDE beskyttet her — `certificationStatuses`
+  // over blokkerer. Et kursbevis krever at deltakeren besto modulen, så raden finnes, og sletting
+  // stoppes. Derfor er det bevisst IKKE lagt til en egen `assertModuleNotInIssuedCertificate`:
+  // den ville aldri kunne fyre, og en vakt som leser som en vakt uten å kunne virke er verre enn
+  // ingen vakt (#960).
+  //
+  // Seksjoner har ingen tilsvarende avhengighet — `courseSectionRead` sjekkes ikke ved sletting —
+  // så DER er vakta reell. Se `assertSectionNotInIssuedCertificate` i contentLifecycle.ts.
 
   if (module.activeVersionId || dependencyChecks.length > 0) {
     const dependencySummary = [

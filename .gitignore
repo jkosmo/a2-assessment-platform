@@ -38,3 +38,11 @@ scripts/ai-qa.ps1
 # Fanget Entra-sesjon for Playwright mot stage (scripts/test/capture-stage-auth.mjs).
 # Inneholder et EKTE access-token. Skal aldri committes.
 .stage-auth.json
+
+# Miljøidentifikatorer for A-2s egne Azure-abonnementer: tenant-/subscription-ID-er,
+# ressursgruppenavn, driftskontoer. Ikke hemmeligheter i kryptografisk forstand, men til sammen et
+# målkart — og dette repoet er OFFENTLIG (GPL-3).
+#
+# Malen `doc/ENVIRONMENTS.example.md` er committet; den utfylte kopien er ikke.
+# `test/environment-identifier-guard.test.js` nekter at verdiene sniker seg inn i sporede filer.
+doc/ENVIRONMENTS.local.md

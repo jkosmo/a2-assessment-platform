@@ -7,6 +7,10 @@ import { enrollmentRepository, createEnrollmentRepository } from "./enrollmentRe
 import { runInTransaction } from "../../db/transaction.js";
 import { deriveEnrollmentStatus, type EnrollmentStatus } from "./enrollmentStatus.js";
 import { getUserClassIds, getClassAssignedCourseDueDates } from "./classService.js";
+// #959: deltakerdøra bor her, ved siden av regelen den håndhever. `courseRepository` importerer
+// ikke denne fila, så retningen er entydig og det finnes ingen sirkel.
+import { courseRepository } from "./courseRepository.js";
+import { sectionAvailableWhere } from "./sectionAvailability.js";
 
 // #496/EN-2: enrollment service — assign/revoke/list + self-enroll + course visibility. Status is
 // always DERIVED here (never stored) from CourseCompletion + progress + dueAt, so it cannot drift.
@@ -324,16 +328,42 @@ export async function isModuleInAccessibleCourse(input: {
   return courses.some((c) => visible.has(c.id));
 }
 
-// #778/#786: is a section part of a published course this participant can access? Backs object-level
-// authz on the section-asset endpoint (assets are referenced from section markdown as `asset:<id>`).
-// Mirrors isModuleInAccessibleCourse but resolves via CourseItem.sectionId. Authors (SMO/ADMIN) bypass
-// this at the call site so they can preview assets in unpublished/draft sections.
-export async function isSectionInAccessibleCourse(input: {
+// ─────────────────────────────────────────────────────────────────────────────────────────────
+// #993: «kan denne deltakeren LESE denne seksjonen?» — ett spørsmål, ikke to halve.
+//
+// ⚠️ Denne het `isSectionInAccessibleCourse`, og den gjorde nøyaktig det navnet lovet: løste
+// seksjon → kurs → synlighet. Feilen lå i at det er et SVAKERE spørsmål enn kalleren trengte.
+// Asset-ruta spurte «er kurset tilgjengelig», og behandlet svaret som «seksjonen kan leses».
+//
+// Konsekvensen var en tilgangslekkasje: en deltaker som hadde lest en seksjon og notert seg en
+// `asset:`-id, kunne fortsatt hente figurene etter at seksjonen ble arkivert eller holdt tilbake
+// av oversettelsesgaten. Lesestien svarte 404; asset-ruta svarte 200.
+//
+// ⚠️ Det er #944 sin TREDJE dør. De to første ble lukket ved å filtrere seksjonen ut av
+// sekvensen og av lesestien — men en ressurs som henger under seksjonen har sin egen rute, og
+// den arvet ingenting.
+//
+// Kuren har #958-formen: døra bærer navnet på spørsmålet den faktisk svarer på, og kontrollerer
+// BEGGE ledd. Den svakere varianten finnes ikke lenger, så ingen kaller kan velge den ved et
+// uhell. Forfattere (SMO/ADMIN) går fortsatt utenom på kallstedet, med vilje: de skal kunne
+// forhåndsvise figurer i utkast.
+// ─────────────────────────────────────────────────────────────────────────────────────────────
+export async function canParticipantReadSection(input: {
   sectionId: string;
   userId: string;
   roles: AppRoleType[];
   groupIds?: string[];
 }): Promise<boolean> {
+  // Ledd 1: er seksjonen i det hele tatt tilgjengelig? Billigst, og kortslutter hele resten.
+  // `sectionAvailableWhere` er den samme regelen lesestien bruker — se sectionAvailability.ts om
+  // hvorfor den finnes i både predikat- og where-form.
+  const available = await prisma.courseSection.findFirst({
+    where: { id: input.sectionId, ...sectionAvailableWhere },
+    select: { id: true },
+  });
+  if (!available) return false;
+
+  // Ledd 2: ligger den i et kurs deltakeren kan se?
   const links = await prisma.courseItem.findMany({
     where: { sectionId: input.sectionId },
     select: { courseId: true },
@@ -355,4 +385,55 @@ export async function isSectionInAccessibleCourse(input: {
   const classCourseDue = await getClassAssignedCourseDueDates(classIds);
   const visible = await filterVisibleCourseIds(input.userId, courses, new Set(classCourseDue.keys()));
   return courses.some((c) => visible.has(c.id));
+}
+
+// ─────────────────────────────────────────────────────────────────────────────────────────────
+// #959: ÉN dør inn til «dette kurset, sett av denne deltakeren».
+//
+// ⚠️ Hvorfor denne finnes.
+//
+// `findCourseById` returnerer kurset uansett hvem som spør. Åtte kallere avgjorde selv om
+// deltakeren fikk se det, og regelen sto i fire varianter. Kommentaren over
+// `isCourseVisibleToUser` dokumenterer at strukturen ALLEREDE har produsert ett hull: #778/#785 —
+// de direkte endepunktene gatet bare på `publishedAt`, så en deltaker uten innmelding kunne lese
+// et RESTRICTED kurs hen hadde id-en til.
+//
+// Fiksen den gangen la til en FJERDE kopi av regelen i stedet for å flytte den ned. Neste kaller
+// som glemmer sjekken gjenskaper #778 nøyaktig — og en glemt autorisasjonssjekk er et
+// sikkerhetshull, ikke et skjevt tall.
+//
+// Kuren er at man ikke lenger KAN hente et kurs på deltakerens vegne uten å oppgi hvem deltakeren
+// er. Signaturen krever identiteten; da kan ingen kaller la spørsmålet stå åpent i stillhet.
+//
+// `test/course-visibility-guard.test.js` nekter `findCourseById` i deltakerrutene.
+// ─────────────────────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Kurset slik det gjelder for DENNE deltakeren, eller `null`.
+ *
+ * `null` dekker med vilje tre ulike årsaker — finnes ikke, er ikke publisert, er ikke synlig for
+ * deg — fordi kalleren skal svare 404 på alle tre. Å skille dem i responsen ville lekket at et
+ * RESTRICTED kurs eksisterer til noen som ikke skal vite det.
+ */
+export async function findCourseForParticipant(input: {
+  courseId: string;
+  userId: string;
+  roles: AppRoleType[];
+  groupIds?: string[];
+}) {
+  const course = await courseRepository.findCourseById(input.courseId);
+  if (!course || !course.publishedAt || course.archivedAt) return null;
+
+  const visible = await isCourseVisibleToUser({
+    course,
+    userId: input.userId,
+    roles: input.roles,
+    groupIds: input.groupIds,
+  });
+  if (!visible) return null;
+
+  // ⚠️ `publishedAt` skrives ut eksplisitt for at TYPEN skal bære garantien, ikke bare
+  // kontrollflyten over. Kallerne rendrer `publishedAt.toISOString()`, og uten dette ville de måttet
+  // sjekke på nytt — altså gjenta en del av regelen døra finnes for å eie.
+  return { ...course, publishedAt: course.publishedAt };
 }

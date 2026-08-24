@@ -7,27 +7,25 @@
 import { apiFetch } from "/static/api-client.js";
 import { escapeHtml } from "/static/html-escape.js";
 import { showToast } from "/static/toast.js";
+import { describeApiError } from "/static/api-error.js";
 
 function ownersPath(contentType, contentId) {
   return `/api/admin/content-owners/${contentType}/${encodeURIComponent(contentId)}`;
 }
 
-// Turn apiFetch's `"<status>: <json>"` error into the server's human message when present.
-function errorMessage(error, fallback) {
-  const raw = error instanceof Error ? error.message : "";
-  const match = raw.match(/^\d+:\s*(\{.*\})$/);
-  if (match) {
-    try {
-      const parsed = JSON.parse(match[1]);
-      if (parsed && typeof parsed.message === "string") return parsed.message;
-    } catch {
-      /* ignore */
-    }
-  }
-  return fallback;
+// #972/#965: dette var en FEMTE halve oversetter, og den plukket ut `parsed.message` — serverens
+// engelske setning. Panelet er nettopp der eierskapsfeilene oppstår (`last_owner`,
+// `owner_not_found`, `content_ownership`), så det var her en norsk forfatter fikk «You cannot
+// remove the last owner.» Nå slås KODEN opp i den delte tabellen i api-error.js.
+//
+// `t` kommer fra siden som monterer panelet — panelet har ingen egen i18n-bunt. Uten `t` faller
+// oversetteren tilbake på kallstedets `fallback`, som før.
+function errorMessage(error, fallback, t) {
+  const { headline } = describeApiError(error, t);
+  return headline || fallback;
 }
 
-export async function renderOwnerPanel({ container, contentType, contentId, getHeaders }) {
+export async function renderOwnerPanel({ container, contentType, contentId, getHeaders, t }) {
   let owners = [];
   let canManage = false; // only owners/admin may change owners; everyone with access can view
   // Ownership is mostly read, rarely edited — so the panel is a compact one-line summary by default and
@@ -161,7 +159,7 @@ export async function renderOwnerPanel({ container, contentType, contentId, getH
       showToast("Eier lagt til.");
       paint();
     } catch (error) {
-      showToast(errorMessage(error, "Kunne ikke legge til eier."), "error");
+      showToast(errorMessage(error, "Kunne ikke legge til eier.", t), "error");
     }
   }
 
@@ -174,7 +172,7 @@ export async function renderOwnerPanel({ container, contentType, contentId, getH
       showToast("Eier fjernet.");
       paint();
     } catch (error) {
-      showToast(errorMessage(error, "Kunne ikke fjerne eier."), "error");
+      showToast(errorMessage(error, "Kunne ikke fjerne eier.", t), "error");
     }
   }
 

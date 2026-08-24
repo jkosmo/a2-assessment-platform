@@ -748,3 +748,268 @@ section is published or its content saved.
 `test/e2e/section-portability-916.spec.ts` for the client half — the gate messages must be rendered
 from `field` + `missingLocales` in the author's language, never from the server's English `message`,
 and a held-back save must not show a plain "Seksjon lagret."
+
+## 25. «Hva inneholder dette kurset?» — to navngitte dører, ikke åtte kallere (#958)
+
+Fram til v2.26.x fantes én aksessor, `courseRepository.findCourseItems(courseId)`. Den hentet
+`module.archivedAt`, `module.activeVersionId`, `module.activeVersion.publishedAt`,
+`section.archivedAt` og `section.activeVersionId` — nøyaktig feltene som avgjør tilgjengelighet — og
+**filtrerte ingenting**. Åtte kallere tok hver sin avgjørelse, med fem ulike regler. Samme rad ga
+«tilgjengelig», «påkrevd», «publiserbar» og «slettbar» ulike svar. Det er roten til #938, #944, #945
+og #992, og mønster 2 («ueid policy») i `doc/COMPLEXITY_SCAN.md`.
+
+**Kuren er ikke et filter til.** Det er at kalleren ikke lenger *kan* unnlate å ta stilling: man
+velger dør i det man kaller, og deltakerdøra leverer ikke feltene regelen bygger på.
+
+| Dør | For hvem | Hva den gjør med det utilgjengelige |
+|---|---|---|
+| `findCourseItemsForParticipant` | deltakerflatene + bevisporten | Seksjoner deltakeren ikke kan åpne er **utelatt**. Moduler er alle med, hver med et ferdig avgjort `available`. Returnerer verken `archivedAt`, `activeVersionId` eller `publishedAt` |
+| `findAllCourseItems` | forfatterlista, publiseringsgaten, kaskadesletting, eksport | Alt. Bærer `archivedAt` (forfatterlista sender det videre), men ikke `activeVersionId` |
+
+### Kallerne
+
+| Kaller | Regelen den hadde | Dør nå |
+|---|---|---|
+| `routes/courses.ts` — deltakerdetalj | modul: 3-ledds `available`; seksjon: `isSectionAvailableToParticipant`; telleren: `&& i.available` | deltaker (tre filtre slettet) |
+| `routes/courses.ts` — les seksjon | `isSectionAvailableToParticipant` → 404 | deltaker (slettet — oppslaget ER regelen) |
+| `routes/courses.ts` — marker lest | `isSectionAvailableToParticipant` → 404 | deltaker (slettet) |
+| `courseCompletionService.ts` — bevisporten | `isSectionAvailableToParticipant` | deltaker (slettet) |
+| `coursePublishService.ts` — publiseringsgaten | ingen på elementnivå | alt |
+| `courseCascadeDeleteService.ts` — sletting | ingen | alt |
+| `routes/adminCourses.ts` — forfatterlista | ingen; sender `archivedAt` til klienten | alt |
+| `adminContent/adminContentQueries.ts` — eksport | ingen | alt |
+
+### Hvorfor moduler og seksjoner behandles ULIKT
+
+Asymmetrien er bevisst, og den er den eneste delen av dette som er et *valg*:
+
+- En **seksjon** deltakeren ikke kan åpne har ingen fungerende representasjon. Begge deltakerrutene
+  svarer 404, bevisporten krever den ikke, framdriften teller den ikke — og #992 viste at klienten
+  ignorerer `available` for seksjoner (`const available = isSection || entry.available !== false`).
+  Raden så klikkbar ut og endte i 404. Å utelate den er å slutte å love noe vi ikke holder.
+- En **modul** uten publisert versjon er en midlertidig tilstand deltakeren skal se at finnes
+  (§ 6b-2), klienten rendrer den som deaktivert med «Ikke tilgjengelig», og den teller fortsatt i
+  `moduleTotal` og i kursbevisets krav. Å skjule den ville endret **hva beviset krever** — en
+  policy-endring, ikke en opprydding.
+
+### Regelen bor i `sectionAvailability.ts`, i to former som må svare likt
+
+`isSectionAvailableToParticipant(section)` for rader man allerede har lest, og
+`sectionAvailableWhere` som Prisma-filter når filtreringen kan skje i databasen. Den andre fantes
+tidligere som en anonym `where`-literal i `findCourseItemSectionIdsForCourses` — to formuleringer av
+samme setning, uten noe som holdt dem i takt.
+
+### Guards
+
+- `test/course-items-accessor-guard.test.js` — **dekningsvakt**: nekter `courseItem.findMany`
+  utenfor `courseRepository.ts`, så en niende kaller ikke kan oppstå utenom dørene. Unntakslista er
+  poenget (omvendte oppslag innhold→kurs, og `setCourseModules` som leser rader for å skrive dem
+  tilbake). ⚠️ Ligger i `test/` og MÅ stå i `include`-lista i `vitest.unit.config.ts`, ellers kjører
+  den bare i full CI og ikke i QA-porten før deploy.
+- `test/unit/course-items-accessor.test.ts` — begge dørene, med en falsk Prisma-klient som faktisk
+  tolker `where` og `select`. Kontrollcase i hver gruppe.
+- `test/m2-course-section-read.test.ts` — 404 på begge deltakerrutene, sekvensen uten den uleselige
+  seksjonen, og kontrollcaset med den publiserte.
+- `test/m2-course-module-availability.test.ts` — avpublisert modul er med, `available:false`.
+
+### Klientsiden — samme spørsmål, andre siden av HTTP
+
+| Sted | Rolle |
+|---|---|
+| `participant-console-state.js` `isEntryAvailable` / `isEntryDone` / `isEntryOutstanding` | **Sannheten på klienten** |
+| `participant.js` raden, `findNextIncompleteEntry`, `nextEntryAfter`, `outstandingBeforeFinish` | kaller predikatene |
+
+Fram til #992 svarte disse fire ulikt, og tre av dem antok at enhver seksjon er tilgjengelig —
+`const available = isSection || entry.available !== false`, korrekt den dagen den ble skrevet, en
+løgn fra det øyeblikket #944 ga seksjoner feltet. Utfallet var en blindvei: «1 gjenstår» og ingen
+«Avslutt kurset», mens serveren gjerne ville utstedt beviset.
+
+⚠️ **Etter #958 er klientsiden forsvar i dybden for SEKSJONER, ikke bærende** — serveren sender dem
+ikke lenger. Den skal likevel ikke slettes: MODULER sender fortsatt `available: false`, og en klient
+kan møte en eldre server midt i en utrulling. Begrunnelsen «serveren ordner det» var nettopp det som
+lot #944-hullet stå åpent i alle stier utenom importen.
+
+### Tre lærdommer fra fire runder på samme regel
+
+**Modul-siden og seksjons-siden er ulike, og det er lett å fikse bare den ene.** #944 filtrerte
+seksjonstellingen og glemte modultelleren; 2.26.3 filtrerte modultelleren og glemte at telleren i
+brøken ikke fulgte nevneren. Hver gang så fiksen komplett ut fordi den ene halvdelen var grønn.
+
+**En antakelse skrevet før feltet fantes er usynlig for grep.** `isSection || …` HAR et filter — det
+er bare feil. Leter man etter «steder som mangler filter», finner man den aldri.
+
+**Den beste kuren fjerner spørsmålet.** Produkteiers beslutning om at upublisert innhold ikke skal nå
+kandidaten gjorde at to tellere kunne slutte å kjenne regelen i det hele tatt, og #958 flyttet resten
+inn i døra. En avklaring om produktet gjorde mer for denne flaten enn tre runder med filtre.
+
+### Ikke ryddet, med vilje
+
+«Er denne modulen arkivert» er en **annen** regel og lever fortsatt tre steder
+(`routes/courses.ts` × 2, `courseCompletionService.ts`), fordi den bæres av `findCourseById` og
+`findPublishedCourses*` — søsteraksessorene i #959. Den hører hjemme der, ikke her.
+
+**Asset-ruta spør ikke** (#993): `isSectionInAccessibleCourse` sjekker at kurset er synlig, aldri om
+seksjonen er tilgjengelig. Figurer i en arkivert seksjon kan hentes av den som har id-en. Samme
+klasse som #944, en fjerde dør — funnet under dette arbeidet, ikke fikset her.
+
+## 26. «Får denne deltakeren se dette kurset?» — én dør, ett unntak (#959)
+
+`findCourseById` returnerer kurset uansett hvem som spør. Regelen «hvem får se hva» bodde derfor hos
+kalleren, i **fire varianter** i `enrollmentService.ts` alene — og de tre deltakerrutene hadde hver
+sin etterkontroll.
+
+⚠️ **Dette hadde allerede kostet ett hull.** #778/#785: de direkte endepunktene gatet bare på
+`publishedAt`, så en deltaker uten innmelding kunne lese et RESTRICTED kurs hen hadde id-en til.
+Fiksen den gangen la til en **fjerde kopi** av regelen i stedet for å flytte den ned.
+
+### Døra
+
+| Funksjon | For hvem |
+|---|---|
+| `findCourseForParticipant({ courseId, userId, roles, groupIds })` | deltakerflatene. Returnerer `null` for finnes-ikke / ikke-publisert / ikke-synlig |
+| `courseRepository.findCourseById` | forfatter, eksport, systemevaluering. Ufiltrert, og skal være det |
+
+**Signaturen krever identiteten.** Det er hele mekanismen: man kan ikke hente et kurs på deltakerens
+vegne uten å oppgi hvem deltakeren er, så synligheten kan ikke bli glemt — bare aktivt valgt bort.
+
+`null` dekker med vilje alle tre årsakene. Å skille dem i responsen ville lekket at et RESTRICTED
+kurs eksisterer til noen som ikke skal vite det.
+
+### Det ene unntaket
+
+**Selv-innmelding** (`POST /:courseId/enroll`) bruker den ufiltrerte aksessoren, og det er riktig.
+
+Ruta finnes nettopp for deltakere som **ennå ikke** har tilgang. Gjennom døra ville et RESTRICTED
+kurs blitt `404 «finnes ikke»` i stedet for `selfEnroll` sin `400 «dette krever tildeling»` — og
+deltakeren fikk vite at kurset ikke finnes framfor hvordan hen får tilgang.
+
+⚠️ Jeg konverterte den først, og `m2-enrollment` ble rød på 404 der den ventet 400. En ekte
+oppførselsendring smuglet inn i en opprydding — samme feilklasse som resten av #941. Synligheten er
+ikke glemt der; den er **flyttet til `selfEnroll`**, som eier regelen om hvem som kan melde seg på
+selv.
+
+### Fire varianter som fortsatt finnes — og hvorfor
+
+`filterVisibleCourseIds` er kjernen. `isCourseVisibleToUser` er én-kurs-innpakningen.
+`isModuleInAccessibleCourse` og `isSectionInAccessibleCourse` er **byte-like** bortsett fra
+oppslagsfeltet (`moduleId` vs `sectionId`) — de løser innhold → kurs → synlighet.
+
+De to siste er ikke slått sammen ennå. De hører til #993, som uansett må røre
+`isSectionInAccessibleCourse`: den sjekker at kurset er synlig, men aldri om **seksjonen** er
+tilgjengelig, så figurer i en arkivert seksjon kan hentes av den som har id-en.
+
+**Vakter:** `test/course-visibility-guard.test.js` — nekter `findCourseById` i deltakerrutene, med
+kontrollassertion på at døra faktisk er i bruk (ellers ville testen vært grønn om ruta sluttet å
+hente kurs). Unntakslista krever en skreven grunn per oppføring. `test/m2-enrollment.test.ts` pinner
+400-en fra selv-innmelding; `test/m2-course-restricted-visibility.test.ts` pinner 404-en fra
+lesestiene.
+
+## 27. «Får denne brukeren gjøre dette?» — tjue steder, ett hjem (#962)
+
+Spørsmålet ble besvart **tjue steder**. Tre hadde et navngitt sett — men hvert sitt, i hver sin
+modul. De sytten andre var `roles.includes("ADMINISTRATOR")` skrevet på stedet, **inkludert i
+`requireAnyRole` selv**, middlewaren som skulle vært den delte vakta.
+
+⚠️ **Skaden var ikke gjentakelsen. Den var at policyen ikke kunne LESES.**
+
+For å svare på «hvem ser en deltakers revisjonsspor» måtte man finne `auditService.ts:216`. For å
+oppdage at svaret er fem roller mens `/api/reports` er to, måtte man tilfeldigvis lese begge — og
+det var nøyaktig det nattskanningen gjorde, to måneder senere.
+
+### Settene
+
+Alle i `src/auth/roleSets.ts`, med `hasAnyRole(roles, SETT)` som eneste oppslag.
+
+| Sett | Roller | Merknad |
+|---|---|---|
+| `ADMIN_ONLY` | ADMIN | drift og overstyring |
+| `CONTENT_AUTHORS` | ADMIN, SMO | forfatting; ADMIN er aldri mindre privilegert enn SMO |
+| `REVIEW_HANDLERS` | ADMIN, REVIEWER | vurderingskøen |
+| `APPEAL_HANDLERS` | ADMIN, APPEAL_HANDLER | ankekøen |
+| `DISCUSSION_MODERATORS` | ADMIN, SMO | slette andres innlegg |
+| `REPORT_READERS` | ADMIN, REPORT_READER | analyse på tvers av organisasjonen |
+| `SUBMISSION_AUDIT_READERS` | fem roller | **oppfølging av ett menneske** — se under |
+| `MODULE_ADMIN_READERS` | fem roller | modul-lesing for admin-flatene |
+| `PARTICIPANTS` | PARTICIPANT | ⚠️ medlemskapsutledning, ikke en vakt |
+
+**Ingen tilgang ble endret.** Hvert sett er nøyaktig det kallstedet hadde — også der settene er
+uenige. Å samle dem er første steg; å avgjøre om de *bør* være uenige er en produktbeslutning.
+
+### Den «divergensen» som viste seg å være to roller
+
+Nattskanningen meldte `SUBMISSION_AUDIT_READERS` (fem) mot `REPORT_READERS` (to) som et hull: «den
+svakeste definisjonen ligger på den mest granulære ruta».
+
+Produkteier 2026-08-23 avklarte at begge er riktige, og hvorfor:
+
+- **SMO** er *«å regne som en lærer som har det praktiske pedagogiske ansvaret for oppfølging av
+  kandidater»*
+- **REPORT_READER** er *«potensielt kandidaters mentorer som skal kunne følge opp kompetansemål
+  avtalt i eksempelvis medarbeidersamtaler»*
+
+Settet er altså alle med et **oppfølgingsforhold** til en kandidat. `/api/reports` er noe annet:
+analyse på tvers. At mentoren finnes begge steder og læreren bare det ene følger av nettopp det —
+og `/api/cohort-status` sa dette allerede, med SMO inkludert med vilje.
+
+⚠️ **Lærdom for skanninger:** to sett som er uenige er ikke automatisk en feil. Her var uenigheten
+en policy ingen hadde skrevet ned. Kuren var `doc/DECISIONS.md`, ikke kode.
+
+### Det som IKKE er løst
+
+Begge begrunnelsene hviler på et **forhold** — «mine kandidater», «mine mentees» — og det forholdet
+finnes ikke i datamodellen. Derfor ser hver av de fem rollene **alle** kandidater i **alle** kurs.
+REVIEWER og APPEAL_HANDLER får også saker de ikke er tildelt.
+
+Rollene er riktige; avgrensningen mangler. Det er et datamodellspørsmål (#1000), ikke et
+rollespørsmål — og ⚠️ **innskrenkning må vente til forholdet finnes**, ellers gir avgrensningen null
+tilgang til alle.
+
+**Vakter:** `test/role-set-guard.test.js` — nekter nye innebygde rollesjekker (mutasjonsverifisert:
+fanger `roles.includes("REVIEWER")` med fil, linje og hva man skal gjøre), krever at unntakslista
+peker på filer som finnes, og **fester audit/report-forskjellen** i en egen test, så en framtidig
+endring gjøres bevisst i stedet for å oppdages i en skanning.
+
+---
+
+## 28. «Er dette forsøket bestått?» — fem spørsmål, ett hjem (#978)
+
+**Hjem:** `public/static/outcome.js` · **Vakt:** `test/outcome-derivation-guard.test.js`
+
+Spørsmålet ble besvart åtte steder i klienten etter **tre** regelsett. Bare ett leste
+`submissionStatus`, så samme innlevering kunne vises rød «Ikke bestått» på én flate og nøytral på en
+annen i samme økt.
+
+⚠️ **Kartleggingen viste at «bestått?» ikke er ett spørsmål.** En felles `erBestått()` ville vært å
+gjenta feilen i motsatt retning: ett svar der det trengs flere.
+
+| Inngang | Spørsmål | Teller statusen? |
+|---|---|---|
+| `deriveOutcome` | hva skal jeg vise? | ja — `UNDER_REVIEW` og `SCORED` er uavklart |
+| `isAppealableFail` | kan hen anke? | ja, og krever `COMPLETED` |
+| `isSettledPass` | skal vi feire? | ja |
+| `hasPassingDecision` | finnes det alt en bestått? | **nei**, med vilje |
+| `rawPassFailState` | hva sier vedtaket? | **nei** — praktikerflate |
+
+**Flatene:**
+
+| Fil | Inngang | Merknad |
+|---|---|---|
+| `participant.js` | `deriveOutcome`, `isSettledPass`, `isAppealableFail`, `hasPassingDecision` | resultatbanner, kortstyling, feiring, anke, autostart |
+| `participant-completed.js` | `deriveOutcome`, `isAppealableFail` | ⚠️ se konfigurasjonsmerknaden |
+| `profile.js` | `deriveOutcome` | ⚠️ se konfigurasjonsmerknaden |
+| `review.js` | `rawPassFailState` | to formattere, én regel |
+| `static/admin-content-calibration.js` | `rawPassFailState` | status i egen kolonne |
+
+⚠️ **Konfigurasjonsmerknad.** `/api/modules/completed` filtrerer på `completedSubmissionStatuses`
+(`config/module-completion.json`), i dag `["COMPLETED"]` alene. `profile.js` og
+`participant-completed.js` kan derfor ikke motta en uavklart rad med dagens oppsett — konverteringen
+er riktig, men uvirksom til nøkkelen utvides. Den ekte feilen på de flatene er at raden **forsvinner**
+når en anke setter innleveringen tilbake til `UNDER_REVIEW`: #1002.
+
+⚠️ **Aliaser er fella.** Første utkast av vakta lette etter `passFailTotal` og overså
+`flowState.resultPassFail === true` i `participant.js` — samme verdi, annet navn, vakta grønn.
+Regexen matcher nå ethvert navn som inneholder «passFail». Skrivinger (`passFailTotal:` i
+`review.js` sine skjemafelt) er med vilje ikke fanget.
+
+⚠️ **Regelen håndheves bare i klienten.** `appealService` krever ikke `COMPLETED`, så API-et
+aksepterer fortsatt en anke på en innlevering under vurdering: #1002.

@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { SubmissionStatus } from "../../src/db/prismaRuntime.js";
+import { warmModuleGraph } from "../support/moduleGraphWarmup.js";
 
 const findSubmissionsForPassRatesReport = vi.fn();
 const findMcqResponsesForQualityReport = vi.fn();
@@ -21,9 +22,6 @@ vi.mock("../../src/config/assessmentRules.js", () => ({
       discriminationMin: 0.15,
       distractorPickRateMin: 0.05,
     },
-    recertification: {
-      dueSoonDays: 30,
-    },
   }),
 }));
 
@@ -40,8 +38,12 @@ vi.mock("../../src/config/reportingAnalytics.js", () => ({
 }));
 
 vi.mock("../../src/modules/certification/index.js", () => ({
-  deriveRecertificationStatus: vi.fn(),
+  isCertificationPassed: (status: string | null | undefined) =>
+    status != null && status !== "NOT_CERTIFIED",
 }));
+
+// #994: modulgrafen leses her, ikke i første test. Se test/support/moduleGraphWarmup.ts.
+warmModuleGraph(() => import("../../src/modules/reporting/index.js"));
 
 describe("reporting service", () => {
   beforeEach(() => {

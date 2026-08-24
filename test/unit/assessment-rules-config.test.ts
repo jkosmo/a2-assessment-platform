@@ -68,7 +68,6 @@ describe("rulesSchema — baseline validity", () => {
         triggerRules: { manualReviewRecommended: true, confidenceNotePatterns: [], redFlagCodes: [], redFlagSeverities: ["high"] },
         disagreementRules: { practicalScoreDeltaMin: 8, rubricTotalDeltaMin: 3, manualReviewRecommendationMismatch: true },
       },
-      recertification: { validityDays: 365, dueOffsetDays: 30, dueSoonDays: 14, reminderDaysBefore: [30, 7, 1] },
     };
     expect(rulesSchema.safeParse(full).success).toBe(true);
   });
@@ -174,31 +173,28 @@ describe("rulesSchema — mcqQuality constraints", () => {
 });
 
 // ---------------------------------------------------------------------------
-// recertification — optional section, positive integer constraints
+// recertification — fjernet i #989
 // ---------------------------------------------------------------------------
 
-describe("rulesSchema — recertification constraints", () => {
-  function withRecertification(overrides: Record<string, unknown>) {
-    return {
-      ...valid,
-      recertification: { validityDays: 365, dueOffsetDays: 30, dueSoonDays: 14, reminderDaysBefore: [30, 7, 1], ...overrides },
-    };
-  }
+describe("rulesSchema — recertification er fjernet (#989)", () => {
+  const withLegacyRecertification = {
+    ...valid,
+    recertification: { validityDays: 365, dueOffsetDays: 30, dueSoonDays: 14, reminderDaysBefore: [30, 7, 1] },
+  };
 
-  it("rejects validityDays = 0 (must be positive)", () => {
-    expect(rulesSchema.safeParse(withRecertification({ validityDays: 0 })).success).toBe(false);
+  it("gir ingen recertification-regler ut, uansett hva som står i fila", () => {
+    expect(rulesSchema.parse(withLegacyRecertification)).not.toHaveProperty("recertification");
   });
 
-  it("rejects validityDays = -1", () => {
-    expect(rulesSchema.safeParse(withRecertification({ validityDays: -1 })).success).toBe(false);
+  // Kontrollcase: en utrullet config med den gamle blokka må fortsatt PARSE. Blokka ignoreres, den
+  // avvises ikke — ellers ville en gammel fil i et miljø blitt en oppstartsfeil.
+  it("avviser ikke en gammel config-fil som fortsatt har blokka", () => {
+    expect(rulesSchema.safeParse(withLegacyRecertification).success).toBe(true);
   });
 
-  it("rejects dueOffsetDays < 0", () => {
-    expect(rulesSchema.safeParse(withRecertification({ dueOffsetDays: -1 })).success).toBe(false);
-  });
-
-  it("accepts dueOffsetDays = 0 (boundary — same-day due)", () => {
-    expect(rulesSchema.safeParse(withRecertification({ dueOffsetDays: 0 })).success).toBe(true);
+  // Kontrollcase: kursfrister er en ANNEN mekanisme og er urørt av #989.
+  it("beholder courseReminders", () => {
+    expect(rulesSchema.parse(valid).courseReminders.reminderDaysBefore).toEqual([7, 1]);
   });
 });
 

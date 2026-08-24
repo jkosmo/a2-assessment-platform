@@ -7,7 +7,10 @@ import { localeLabels, supportedLocales, translations } from "/static/i18n/revie
 import { apiFetch, buildConsoleHeaders, getConsoleConfig, applyNavReviewBadge } from "/static/api-client.js";
 import { initConsentGuard } from "/static/consent-guard.js";
 import { hideLoading, showEmpty, showLoading } from "/static/loading.js";
+import { setHidden } from "/static/dom-visibility.js";
 import { showToast } from "/static/toast.js";
+import { describeApiError } from "/static/api-error.js";
+import { OUTCOME_FAILED, OUTCOME_PASSED, rawPassFailState } from "/static/outcome.js";
 import {
   findMatchingPreset,
   resolveRoleSwitchState,
@@ -196,7 +199,10 @@ function logDebug(data) {
   output.dataset.hasContent = "true";
   outputStatus.dataset.hasContent = "true";
   const text = typeof data === "string" ? data : JSON.stringify(data, null, 2);
-  outputStatus.textContent = typeof data === "string" ? data : (data?.message ?? "Request completed.");
+  // #985: sto `data?.message ?? "Request completed."` — serverens engelske svartekst rett i
+  // statuslinja, på en side som kjøres på tre språk. Statuslinja er nå alltid vår egen tekst;
+  // hele svaret ligger fortsatt i debug-feltet under når rå-debug er på.
+  outputStatus.textContent = typeof data === "string" ? data : t("review.status.requestCompleted");
   if (rawDebugEnabled) output.textContent = text;
 }
 
@@ -244,30 +250,24 @@ function parseLlmStructuredResponse(rawJson) {
   try { return JSON.parse(rawJson); } catch { return null; }
 }
 
+// #985: begge disse returnerte serverens egen tekst — `payload.message` (som er engelsk) og en
+// sammenslåing av Zods `issue.message`-strenger. En vurderer med nynorsk grensesnitt som overstyrte
+// en score utenfor 0-100 fikk altså en engelsk Zod-setning i toasten.
+//
+// De går nå gjennom den delte kodetabellen (api-error.js), som review-bunten arver via
+// manual-review → participant. Funksjonene beholdes som navn fordi tolv kallsteder bruker dem, men
+// de er nå tynne innpakninger — ikke en fjerde oversetter.
 function toActionableErrorMessage(error) {
-  if (!(error instanceof Error)) return "Unexpected error.";
-  const raw = error.message ?? "";
-  const splitIndex = raw.indexOf(":");
-  if (splitIndex === -1) return raw;
-  const payloadText = raw.slice(splitIndex + 1).trim();
-  try {
-    const payload = JSON.parse(payloadText);
-    if (typeof payload.message === "string" && payload.message.trim().length > 0) return payload.message;
-    return raw;
-  } catch { return raw; }
+  return describeApiError(error, t).headline;
 }
 
+// Returnerer null når feilen ikke er en valideringsfeil, slik at kallstedet kan velge en annen
+// melding. Detaljene (Zod-utdataet) er diagnostikk for en vurderer og hører hjemme i feltet under,
+// ikke i overskriften.
 function toValidationErrorMessage(error) {
-  if (!(error instanceof Error)) return null;
-  const raw = error.message ?? "";
-  const splitIndex = raw.indexOf(":");
-  if (splitIndex === -1) return null;
-  const payloadText = raw.slice(splitIndex + 1).trim();
-  try {
-    const payload = JSON.parse(payloadText);
-    if (payload?.error !== "validation_error" || !Array.isArray(payload.issues) || payload.issues.length === 0) return null;
-    return payload.issues.map((issue) => (typeof issue?.message === "string" ? issue.message : "Validation error.")).join(" ");
-  } catch { return null; }
+  const described = describeApiError(error, t);
+  if (described.code !== "validation_error") return null;
+  return described.detail ? `${described.headline}\n${described.detail}` : described.headline;
 }
 
 function getCheckedPillValues(container) {
@@ -407,7 +407,10 @@ function renderTabBadge(element, count) {
     return;
   }
 
-  element.hidden = count <= 0;
+  // #975: `.workspace-section-tab-badge` setter `display:inline-flex` i <style>-blokka i
+  // review.html, altså SENERE i cascaden enn både `.hidden` og UA-arkets `[hidden]`. `element.hidden
+  // = true` skjulte derfor ingenting, og fanene sto med en «0»-plakett hele tiden.
+  setHidden(element, count <= 0);
   element.textContent = String(count);
 }
 
@@ -438,11 +441,15 @@ function renderReviewWorkspaceTabs() {
     return;
   }
 
+  // #975: hele fanestripa styres med setHidden. `.workspace-section-tabs{display:flex}` og
+  // `.workspace-section-tab{display:inline-flex}` står i <style>-blokka i review.html og vant over
+  // `hidden`-attributtet — en saksbehandler med bare ÉN rolle fikk likevel se hele fanerada, og
+  // fanen for rollen hun ikke har sto klikkbar ved siden av.
   const visibleTabs = getVisibleReviewTabs();
   if (visibleTabs.length === 0) {
-    reviewWorkspaceTabs.hidden = true;
-    manualReviewTabPanel.hidden = true;
-    appealTabPanel.hidden = true;
+    setHidden(reviewWorkspaceTabs, true);
+    setHidden(manualReviewTabPanel, true);
+    setHidden(appealTabPanel, true);
     return;
   }
 
@@ -451,23 +458,23 @@ function renderReviewWorkspaceTabs() {
   }
 
   const showTabs = visibleTabs.length > 1;
-  reviewWorkspaceTabs.hidden = !showTabs;
+  setHidden(reviewWorkspaceTabs, !showTabs);
 
   const manualActive = activeReviewTab === "manualReview" && visibleTabs.includes("manualReview");
   const appealActive = activeReviewTab === "appeal" && visibleTabs.includes("appeal");
 
-  reviewTabManualButton.hidden = !visibleTabs.includes("manualReview");
+  setHidden(reviewTabManualButton, !visibleTabs.includes("manualReview"));
   reviewTabManualButton.classList.toggle("active", manualActive);
   reviewTabManualButton.setAttribute("aria-selected", manualActive ? "true" : "false");
   reviewTabManualButton.tabIndex = manualActive ? 0 : -1;
 
-  reviewTabAppealButton.hidden = !visibleTabs.includes("appeal");
+  setHidden(reviewTabAppealButton, !visibleTabs.includes("appeal"));
   reviewTabAppealButton.classList.toggle("active", appealActive);
   reviewTabAppealButton.setAttribute("aria-selected", appealActive ? "true" : "false");
   reviewTabAppealButton.tabIndex = appealActive ? 0 : -1;
 
-  manualReviewTabPanel.hidden = !manualActive;
-  appealTabPanel.hidden = !appealActive;
+  setHidden(manualReviewTabPanel, !manualActive);
+  setHidden(appealTabPanel, !appealActive);
 }
 
 function updateReviewTabCounts() {
@@ -667,9 +674,16 @@ function buildMrCriterionRationaleLines(criteria) {
   return entries.map(([, rationale], i) => `${i + 1}. ${String(rationale)}`);
 }
 
+// #978: begge formatterne i denne fila leser nå den samme delte tilstanden. De beholder hver sin
+// i18n-nøkkel fordi køene har ulik ordlyd, men REGELEN er én.
+//
+// ⚠️ Bevisst `rawPassFailState` og ikke `deriveOutcome`: dette er en praktikerflate. Vurdereren
+// skal se hva maskinen foreslo, også — særlig — mens saken er under vurdering. Statusen vises i
+// egen kolonne.
 function formatMrPassFail(value) {
-  if (value === true) return t("manualReview.pass");
-  if (value === false) return t("manualReview.fail");
+  const state = rawPassFailState(value);
+  if (state === OUTCOME_PASSED) return t("manualReview.pass");
+  if (state === OUTCOME_FAILED) return t("manualReview.fail");
   return "-";
 }
 
@@ -942,7 +956,7 @@ async function loadReviewDetails(reviewId) {
     showToast(toActionableErrorMessage(error), "error");
     selectedReviewDetails = null;
     renderManualReviewDetails(null);
-    logDebug(error.message);
+    logDebug(toActionableErrorMessage(error));
   }
 }
 
@@ -971,7 +985,7 @@ async function loadReviewQueue() {
       latestReviewQueue = [];
       renderReviewQueue();
       showToast(toActionableErrorMessage(error), "error");
-      logDebug(error.message);
+      logDebug(toActionableErrorMessage(error));
     } finally {
       activeReviewQueueLoad = null;
     }
@@ -1143,9 +1157,11 @@ function buildAppealCriterionRationaleLines(criteria) {
   return entries.map(([criterion, rationale]) => `- ${criterion}: ${String(rationale)}`);
 }
 
+// #978: samme regel som formatMrPassFail — se merknaden der.
 function formatAppealPassFail(value) {
-  if (value === true) return t("appealHandler.pass");
-  if (value === false) return t("appealHandler.fail");
+  const state = rawPassFailState(value);
+  if (state === OUTCOME_PASSED) return t("appealHandler.pass");
+  if (state === OUTCOME_FAILED) return t("appealHandler.fail");
   return "-";
 }
 
@@ -1368,7 +1384,7 @@ async function loadAppealDetails(appealId, options = {}) {
     logDebug(body);
   } catch (error) {
     showToast(toActionableErrorMessage(error), "error");
-    logDebug(error.message);
+    logDebug(toActionableErrorMessage(error));
   }
 }
 
@@ -1402,7 +1418,7 @@ async function loadAppealQueue(options = {}) {
       updateReviewTabCounts();
       showEmpty(appealQueueBody, toActionableErrorMessage(error), { columns: 9 });
       showToast(toActionableErrorMessage(error), "error");
-      logDebug(error.message);
+      logDebug(toActionableErrorMessage(error));
     } finally {
       activeAppealQueueLoad = null;
     }
@@ -1510,7 +1526,7 @@ loadMeButton.addEventListener("click", async () => {
       const body = await apiFetch("/api/me", headers);
       logDebug(body);
     } catch (error) {
-      logDebug(error.message);
+      logDebug(toActionableErrorMessage(error));
     }
   });
 });
@@ -1534,7 +1550,7 @@ claimReviewButton.addEventListener("click", async () => {
       await loadReviewDetails(selectedReviewId);
     } catch (error) {
       setOverrideValidationError(toActionableErrorMessage(error));
-      logDebug(error.message);
+      logDebug(toActionableErrorMessage(error));
     }
   });
   renderReviewActionState();
@@ -1575,7 +1591,7 @@ overrideReviewButton.addEventListener("click", async () => {
     } catch (error) {
       const validationMsg = toValidationErrorMessage(error);
       setOverrideValidationError(validationMsg ?? toActionableErrorMessage(error));
-      logDebug(error.message);
+      logDebug(toActionableErrorMessage(error));
     }
   });
   renderReviewActionState();
@@ -1607,7 +1623,7 @@ claimAppealButton.addEventListener("click", async () => {
       await loadAppealDetails(selectedAppealId);
     } catch (error) {
       showToast(toActionableErrorMessage(error), "error");
-      logDebug(error.message);
+      logDebug(toActionableErrorMessage(error));
     }
   });
 });
@@ -1644,7 +1660,7 @@ resolveAppealButton.addEventListener("click", async () => {
       const validationMsg = toValidationErrorMessage(error);
       if (validationMsg) setResolveValidationError(validationMsg);
       else showToast(toActionableErrorMessage(error), "error");
-      logDebug(error.message);
+      logDebug(toActionableErrorMessage(error));
     }
   });
 });

@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { DecisionType, ReviewStatus } from "../../src/db/prismaRuntime.js";
 import { ConflictError, NotFoundError } from "../../src/errors/AppError.js";
+import { warmModuleGraph } from "../support/moduleGraphWarmup.js";
 
 const findManualReviewForClaim = vi.fn();
 const markManualReviewClaimedGuarded = vi.fn();
@@ -54,6 +55,9 @@ vi.mock("../../src/modules/certification/index.js", () => ({
 vi.mock("../../src/observability/operationalLog.js", () => ({
   logOperationalEvent,
 }));
+
+// #994: modulgrafen leses her, ikke i første test. Se test/support/moduleGraphWarmup.ts.
+warmModuleGraph(() => import("../../src/modules/review/manualReviewService.js"));
 
 describe("manual review service", () => {
   beforeEach(() => {

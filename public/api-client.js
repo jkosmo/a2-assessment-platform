@@ -1,3 +1,5 @@
+import { setHidden } from "/static/dom-visibility.js";
+
 // ---------------------------------------------------------------------------
 // MSAL (Entra auth)
 // ---------------------------------------------------------------------------
@@ -230,7 +232,10 @@ export function applyNavReviewBadge(navEl, counts) {
     link.appendChild(badge);
   }
 
-  badge.hidden = total <= 0;
+  // #975: `.nav-queue-badge{display:inline-flex}` (shared.css) er en forfatter-regel, og origin slår
+  // spesifisitet — så den vinner over UA-arkets `[hidden]`. Uten setHidden sto det en «0»-plakett på
+  // Vurdering-lenka i toppmenyen for alle med tom kø.
+  setHidden(badge, total <= 0);
   badge.textContent = String(total);
   badge.setAttribute("aria-label", `${total} ubehandlet`);
 }

@@ -544,7 +544,8 @@ adminSectionsRouter.post("/:sectionId/restore", requireContentOwnership("SECTION
 
 adminSectionsRouter.delete("/:sectionId", requireContentOwnership("SECTION", "sectionId"), async (request, response, next) => {
   try {
-    await deleteSection(request.params.sectionId);
+    // #961: aktøren må følge med, ellers står slettingen i revisjonssporet uten hvem.
+    await deleteSection(request.params.sectionId, request.context?.userId);
     response.status(204).send();
   } catch (error) {
     next(error);

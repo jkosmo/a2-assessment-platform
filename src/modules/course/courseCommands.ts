@@ -6,6 +6,53 @@ import { auditActions, auditEntityTypes, agentAuthoringAuditMetadata, type Agent
 import { assertCourseHasNoInProgressParticipants } from "./contentLifecycle.js";
 import { addContentOwner } from "../content/contentOwnershipService.js";
 
+// #938/#992: inngangsdøra til «arkivert innhold i et kurs» — ÉN gang, for alle innganger.
+//
+// Sjekken var «finnes elementet?», ikke «kan det brukes?». G2 (`contentLifecycle.ts`) nekter å
+// arkivere innhold som ligger i et kurs, så den ene veien inn var stengt. Den andre sto åpen:
+// allerede arkivert innhold kunne LEGGES INN. Det er slik «Samfunnsvitere» på stage fikk en
+// arkivert modul som blokkerte fullføring for alltid.
+//
+// ⚠️ Vakta lå i `setCourseItems` alene. QA-porten fant at `setCourseModules` — legacy-inngangen bak
+// `PUT /api/admin/content/courses/:courseId/modules` — skriver de samme radene UTEN den. Altså
+// nøyaktig feilklassen #938 handler om, i #938 sin egen fiks: to steder som svarer ulikt på samme
+// spørsmål. Derfor er den nå en delt funksjon begge kaller, ikke en kopiert blokk.
+//
+// `test/course-archive-entry-guard.test.js` nekter nye skrivere som ikke kaller den.
+//
+// Produkteier 2026-08-21: «Det er ingen legitim grunn til at arkiverte objekter skal bli i et kurs.»
+export async function assertContentUsableInCourse(
+  reader: DbTransactionClient | typeof prisma,
+  ids: { moduleIds?: string[]; sectionIds?: string[] },
+) {
+  const moduleIds = ids.moduleIds ?? [];
+  const sectionIds = ids.sectionIds ?? [];
+  if (moduleIds.length > 0) {
+    const usable = await reader.module.count({ where: { id: { in: moduleIds }, archivedAt: null } });
+    if (usable !== moduleIds.length) {
+      const found = await reader.module.count({ where: { id: { in: moduleIds } } });
+      // ⚠️ To feil som MÅ kunne skilles. «Finnes ikke» om noe som finnes er en løgn, og forfatteren
+      // mister informasjonen om hva hen skal gjøre — det var uklare feilmeldinger som ga oss #937.
+      throw new ValidationError(
+        found === moduleIds.length
+          ? "One or more modules are archived and cannot be added to a course."
+          : "One or more modules do not exist.",
+      );
+    }
+  }
+  if (sectionIds.length > 0) {
+    const usable = await reader.courseSection.count({ where: { id: { in: sectionIds }, archivedAt: null } });
+    if (usable !== sectionIds.length) {
+      const found = await reader.courseSection.count({ where: { id: { in: sectionIds } } });
+      throw new ValidationError(
+        found === sectionIds.length
+          ? "One or more sections are archived and cannot be added to a course."
+          : "One or more sections do not exist.",
+      );
+    }
+  }
+}
+
 export async function createCourse(input: {
   title: string;
   description?: string | null;
@@ -255,14 +302,7 @@ export async function setCourseItems(
   if (new Set(sectionIds).size !== sectionIds.length) {
     throw new ValidationError("A section may appear only once in a course.");
   }
-  if (moduleIds.length > 0) {
-    const found = await reader.module.count({ where: { id: { in: moduleIds } } });
-    if (found !== moduleIds.length) throw new ValidationError("One or more modules do not exist.");
-  }
-  if (sectionIds.length > 0) {
-    const found = await reader.courseSection.count({ where: { id: { in: sectionIds } } });
-    if (found !== sectionIds.length) throw new ValidationError("One or more sections do not exist.");
-  }
+  await assertContentUsableInCourse(reader, { moduleIds, sectionIds });
 
   // #502: CourseItem er eneste sannhetskilde — ingen dual-write til CourseModule lenger.
   const run = async (client: DbTransactionClient) => {
@@ -306,6 +346,11 @@ export async function setCourseModules(
   modules: Array<{ moduleId: string; sortOrder: number }>,
   tx?: DbTransactionClient,
 ) {
+  // #992: samme dør som `setCourseItems`. Denne ruta er dokumentert som legacy, men den er ikke
+  // stengt — importklienter og `PUT /api/admin/content/courses/:id/modules` bruker den — og uten
+  // vakta kunne den gjenskape den ugyldige tilstanden #938 skulle gjøre uoppnåelig.
+  await assertContentUsableInCourse(tx ?? prisma, { moduleIds: modules.map((m) => m.moduleId) });
+
   const run = async (client: DbTransactionClient) => {
     const sections = await client.courseItem.findMany({
       where: { courseId, itemType: "SECTION" },

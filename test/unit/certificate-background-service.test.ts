@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { warmModuleGraph } from "../support/moduleGraphWarmup.js";
 
 // #580: unit-test the platform certificate-background service in isolation — blob storage and the
 // platform key-value config are mocked, so no Azure/DB is needed.
@@ -26,6 +27,9 @@ vi.mock("../../src/modules/platformConfig/platformConfigRepository.js", () => ({
 }));
 
 const svc = await import("../../src/modules/platformConfig/certificateBackgroundService.js");
+
+// #994: modulgrafen leses her, ikke i første test. Se test/support/moduleGraphWarmup.ts.
+warmModuleGraph(() => import("../../src/modules/platformConfig/certificateBackgroundService.js"));
 
 describe("certificateBackgroundService (#580)", () => {
   beforeEach(() => {

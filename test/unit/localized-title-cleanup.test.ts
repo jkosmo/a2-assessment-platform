@@ -1,9 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { collapsibleTitle } from "../../src/services/localizedTitleCleanup.js";
+import { warmModuleGraph } from "../support/moduleGraphWarmup.js";
 
 // #892 clean-up. The dangerous direction here is over-collapsing: turning a real partial
 // translation into a plain string would silently destroy an author's work. Most of these cases
 // therefore assert that the script leaves a row ALONE.
+
+// #994: modulgrafen leses her, ikke i første test. Se test/support/moduleGraphWarmup.ts.
+warmModuleGraph(() => import("../../src/i18n/content.js"));
 
 describe("collapsibleTitle — what the clean-up may touch", () => {
   it("collapses a map whose locales all hold the same string", () => {

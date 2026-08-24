@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { warmModuleGraph } from "./support/moduleGraphWarmup.js";
 
 const originalNodeEnv = process.env.NODE_ENV;
 
@@ -11,6 +12,9 @@ afterEach(() => {
   vi.resetModules();
   vi.unstubAllEnvs();
 });
+
+// #994: modulgrafen leses her, ikke i første test. Se test/support/moduleGraphWarmup.ts.
+warmModuleGraph(() => import("../src/config/participantConsole.js"));
 
 describe("participant console runtime config in production mode", () => {
   it("returns debugMode false when NODE_ENV is production", async () => {

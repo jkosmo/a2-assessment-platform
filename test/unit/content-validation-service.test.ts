@@ -17,6 +17,7 @@ import {
   validateMcqTranslationCompleteness,
 } from "../../src/modules/adminContent/contentValidationService.js";
 import type { GeneratedMcqQuestion } from "../../src/modules/adminContent/llmContentGenerationService.js";
+import { warmModuleGraph } from "../support/moduleGraphWarmup.js";
 
 // Minimal MCQ factory — fields default to a "clean" low-risk question with no
 // distractor metadata so each test can isolate the branch under test.
@@ -29,6 +30,9 @@ function mcq(overrides: Partial<GeneratedMcqQuestion> = {}): GeneratedMcqQuestio
     ...overrides,
   };
 }
+
+// #994: modulgrafen leses her, ikke i første test. Se test/support/moduleGraphWarmup.ts.
+warmModuleGraph(() => import("../../src/modules/adminContent/adminContentSchemas.js"));
 
 describe("validateBlueprintAgainstContent", () => {
   it("returns no issues when blueprint is null", () => {

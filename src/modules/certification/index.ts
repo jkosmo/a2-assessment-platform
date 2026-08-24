@@ -1,9 +1,5 @@
-export {
-  upsertRecertificationStatusFromDecision,
-  deriveRecertificationStatus,
-  runRecertificationReminderSchedule,
-} from "./recertificationService.js";
-export type { RecertificationLifecycleStatus } from "./recertificationService.js";
+export { upsertCertificationStatusFromDecision } from "./certificationStatusService.js";
+export type { CertificationStatusOutcome } from "./certificationStatusService.js";
 
 export {
   notifyAssessmentResult,
@@ -16,4 +12,9 @@ export type {
   AssessmentResultNotificationInput,
 } from "./participantNotificationService.js";
 
-export { certificationRepository, createCertificationRepository } from "./certificationRepository.js";
+export {
+  certificationRepository,
+  createCertificationRepository,
+  isCertificationPassed,
+  CERTIFICATION_PASSED_STATUSES,
+} from "./certificationRepository.js";

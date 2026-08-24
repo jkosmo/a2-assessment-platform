@@ -142,7 +142,36 @@ describe("Unified content lifecycle (#705)", () => {
 
     await expect(unpublishSection(sectionId, ACTOR)).rejects.toThrow(/i bruk i 1 kurs/);
     await expect(archiveSection(sectionId, ACTOR)).rejects.toThrow(/i bruk i 1 kurs/);
-    await expect(deleteSection(sectionId)).rejects.toThrow(/i bruk i 1 kurs/);
+    await expect(deleteSection(sectionId, ACTOR)).rejects.toThrow(/i bruk i 1 kurs/);
+
+    // #961: en blokkert sletting skal heller ikke etterlate et spor — sporet og handlingen står og
+    // faller sammen.
+    const blocked = await prisma.auditEvent.count({
+      where: { entityType: "course_section", entityId: sectionId, action: "section_deleted" },
+    });
+    expect(blocked).toBe(0);
+  });
+
+  // #961: sletting av en seksjon var den ENE livssyklushandlingen uten revisjonsspor. Uten den kan
+  // ingen i ettertid se hvem som fjernet innhold et utstedt bevis hviler på
+  // (CourseCompletion.sectionSnapshotJson beholder id-en).
+  it("etterlater et revisjonsspor når en seksjon slettes (#961)", async () => {
+    const sectionId = await makeSection();
+    const before = await prisma.courseSection.findUniqueOrThrow({
+      where: { id: sectionId },
+      select: { title: true },
+    });
+
+    await deleteSection(sectionId, ACTOR);
+
+    expect(await prisma.courseSection.findUnique({ where: { id: sectionId } })).toBeNull();
+    const events = await prisma.auditEvent.findMany({
+      where: { entityType: "course_section", entityId: sectionId, action: "section_deleted" },
+    });
+    expect(events).toHaveLength(1);
+    expect(events[0].actorId).toBe(ACTOR);
+    // Sporet er committet sammen med slettingen, så det finnes NÅ — ikke «etter hvert».
+    expect(JSON.parse(events[0].metadataJson)).toMatchObject({ sectionId, title: before.title });
   });
 
   // Seksjon-livssyklus utenfor kurs: full symmetri.
@@ -241,5 +270,310 @@ describe("Unified content lifecycle (#705)", () => {
     expect(res.body.courseCount).toBe(1);
     expect(res.body.message).toContain("i bruk i 1 kurs");
     expect(res.body.message).toContain("«LC Kurs»");
+  });
+});
+
+// ──────────────────────────────────────────────────────────────────────────────
+// #938 — de to dørene inn til «arkivert innhold i et kurs».
+//
+// G2 stengte den ene: innhold som LIGGER i et kurs kan ikke arkiveres. Den andre sto åpen:
+// allerede arkivert innhold kunne LEGGES INN. Det er slik «Samfunnsvitere» på stage fikk en
+// arkivert modul som blokkerte fullføring for alltid.
+//
+// ⚠️ Poenget er ikke et filter til. Med begge dører stengt kan tilstanden ikke oppstå — og da
+// slipper de fem leserne å ha hver sin regel for å håndtere den.
+// ──────────────────────────────────────────────────────────────────────────────
+
+describe("#938: arkivert innhold kan ikke legges inn i et kurs", () => {
+  it("en arkivert seksjon avvises, og feilmeldingen sier HVORFOR", async () => {
+    const course = await prisma.course.create({
+      data: { title: `Door Course ${Date.now()}` },
+      select: { id: true },
+    });
+    const section = await prisma.courseSection.create({
+      data: { title: JSON.stringify({ "en-GB": "Archived" }), archivedAt: new Date() },
+      select: { id: true },
+    });
+
+    const res = await request(app)
+      .put(`/api/admin/content/courses/${course.id}/items`)
+      .set(adminHeaders)
+      .send({ items: [{ type: "SECTION", sectionId: section.id }] });
+
+    expect(res.status).toBe(400);
+    // «One or more sections do not exist» ville vært en løgn — den finnes, den kan bare ikke brukes.
+    expect(JSON.stringify(res.body)).toMatch(/archived/i);
+
+    const items = await prisma.courseItem.count({ where: { courseId: course.id } });
+    expect(items, "ingenting skal være skrevet på veien til avslaget").toBe(0);
+  });
+
+  it("en arkivert modul avvises på samme måte", async () => {
+    const course = await prisma.course.create({
+      data: { title: `Door Course M ${Date.now()}` },
+      select: { id: true },
+    });
+    const mod = await prisma.module.create({
+      data: { title: JSON.stringify({ "en-GB": "Archived module" }), archivedAt: new Date() },
+      select: { id: true },
+    });
+
+    const res = await request(app)
+      .put(`/api/admin/content/courses/${course.id}/items`)
+      .set(adminHeaders)
+      .send({ items: [{ type: "MODULE", moduleId: mod.id }] });
+
+    expect(res.status).toBe(400);
+    expect(JSON.stringify(res.body)).toMatch(/archived/i);
+  });
+
+  it("KONTROLLCASE: ikke-arkivert innhold legges inn som før", async () => {
+    // Uten denne vet vi ikke om vi målte arkivregelen eller bare knekte ruta. En `return 400` uten
+    // betingelse ville bestått begge testene over.
+    const course = await prisma.course.create({
+      data: { title: `Door Course OK ${Date.now()}` },
+      select: { id: true },
+    });
+    const section = await prisma.courseSection.create({
+      data: { title: JSON.stringify({ "en-GB": "Live" }) },
+      select: { id: true },
+    });
+
+    const res = await request(app)
+      .put(`/api/admin/content/courses/${course.id}/items`)
+      .set(adminHeaders)
+      .send({ items: [{ type: "SECTION", sectionId: section.id }] });
+
+    expect(res.status, JSON.stringify(res.body)).toBe(204);
+    expect(await prisma.courseItem.count({ where: { courseId: course.id } })).toBe(1);
+  });
+
+  it("KONTROLLCASE: en id som ikke finnes gir fortsatt «does not exist», ikke «archived»", async () => {
+    // De to feilene må kunne skilles. Slår man dem sammen, mister forfatteren informasjonen om
+    // hvilken av dem det er — og det var nettopp uklare feilmeldinger som ga oss #937.
+    const course = await prisma.course.create({
+      data: { title: `Door Course X ${Date.now()}` },
+      select: { id: true },
+    });
+
+    const res = await request(app)
+      .put(`/api/admin/content/courses/${course.id}/items`)
+      .set(adminHeaders)
+      .send({ items: [{ type: "SECTION", sectionId: "finnes-ikke-i-det-hele-tatt" }] });
+
+    expect(res.status).toBe(400);
+    expect(JSON.stringify(res.body)).toMatch(/do not exist/i);
+    expect(JSON.stringify(res.body)).not.toMatch(/archived/i);
+  });
+
+  // ⚠️ #992: DEN ANDRE DØRA INN. QA-porten fant den i #938 sin egen fiks.
+  //
+  // Vakta lå i `setCourseItems`. Men `PUT /:courseId/modules` går via `setCourseModules`, som
+  // sletter elementene og skriver modulene direkte — uten samme kontroll. Ruta er dokumentert som
+  // legacy, men den er ikke stengt: både admin-UI-et og importen bruker den.
+  //
+  // Altså nøyaktig feilklassen #938 handler om — to steder som svarer ulikt på samme spørsmål —
+  // denne gangen i fiksen mot den. Begge kaller nå `assertContentUsableInCourse`.
+  it("legacy-ruta /modules avviser en arkivert modul på samme måte som /items", async () => {
+    const course = await prisma.course.create({
+      data: { title: `Legacy Door ${Date.now()}` },
+      select: { id: true },
+    });
+    const mod = await prisma.module.create({
+      data: { title: JSON.stringify({ "en-GB": "Archived legacy" }), archivedAt: new Date() },
+      select: { id: true },
+    });
+
+    const res = await request(app)
+      .put(`/api/admin/content/courses/${course.id}/modules`)
+      .set(adminHeaders)
+      .send({ modules: [{ moduleId: mod.id, sortOrder: 0 }] });
+
+    expect(res.status).toBe(400);
+    expect(JSON.stringify(res.body)).toMatch(/archived/i);
+    expect(await prisma.courseItem.count({ where: { courseId: course.id } })).toBe(0);
+  });
+
+  it("KONTROLLCASE: legacy-ruta tar fortsatt imot en ikke-arkivert modul", async () => {
+    // Uten denne kunne vakta ha stengt ruta helt, og både importen og admin-UI-et ville sluttet å
+    // virke — mens begge testene over fortsatt var grønne.
+    const course = await prisma.course.create({
+      data: { title: `Legacy Door OK ${Date.now()}` },
+      select: { id: true },
+    });
+    const mod = await prisma.module.create({
+      data: { title: JSON.stringify({ "en-GB": "Live legacy" }) },
+      select: { id: true },
+    });
+
+    const res = await request(app)
+      .put(`/api/admin/content/courses/${course.id}/modules`)
+      .set(adminHeaders)
+      .send({ modules: [{ moduleId: mod.id, sortOrder: 0 }] });
+
+    expect(res.status, JSON.stringify(res.body)).toBe(204);
+    expect(await prisma.courseItem.count({ where: { courseId: course.id, itemType: "MODULE" } })).toBe(1);
+  });
+
+  it("KONTROLLCASE: legacy-ruta skiller «finnes ikke» fra «arkivert»", async () => {
+    const course = await prisma.course.create({
+      data: { title: `Legacy Door X ${Date.now()}` },
+      select: { id: true },
+    });
+
+    const res = await request(app)
+      .put(`/api/admin/content/courses/${course.id}/modules`)
+      .set(adminHeaders)
+      .send({ modules: [{ moduleId: "finnes-ikke", sortOrder: 0 }] });
+
+    expect(res.status).toBe(400);
+    expect(JSON.stringify(res.body)).toMatch(/do not exist/i);
+    expect(JSON.stringify(res.body)).not.toMatch(/archived/i);
+  });
+});
+
+
+describe("#938: innhold i et utstedt kursbevis kan ikke slettes", () => {
+  it("en seksjon som står i et kursbevis nektes slettet — og bes arkivert i stedet", async () => {
+    const section = await prisma.courseSection.create({
+      data: { title: JSON.stringify({ "en-GB": "In a certificate" }) },
+      select: { id: true },
+    });
+    const course = await prisma.course.create({
+      data: { title: `Cert Course ${Date.now()}`, publishedAt: new Date() },
+      select: { id: true },
+    });
+    const user = await prisma.user.create({
+      data: { externalId: `cert-user-${Date.now()}`, email: `cu${Date.now()}@x.no`, name: "U" },
+      select: { id: true },
+    });
+    // Beviset peker på seksjonen. Seksjonen er IKKE lenger i kurset — G2 slipper den derfor gjennom.
+    await prisma.courseCompletion.create({
+      data: {
+        userId: user.id,
+        courseId: course.id,
+        moduleSnapshotJson: "[]",
+        sectionSnapshotJson: JSON.stringify([section.id]),
+      },
+    });
+
+    const res = await request(app)
+      .delete(`/api/admin/content/sections/${section.id}`)
+      .set(adminHeaders);
+
+    expect(res.status).toBe(400);
+    const body = JSON.stringify(res.body);
+    expect(body).toMatch(/kursbevis/i);
+    // Meldingen skal peke på veien videre, ikke bare nekte.
+    expect(body).toMatch(/arkiver/i);
+
+    expect(await prisma.courseSection.count({ where: { id: section.id } }), "seksjonen skal fortsatt finnes").toBe(1);
+  });
+
+  it("KONTROLLCASE: en seksjon uten kursbevis slettes fortsatt", async () => {
+    const section = await prisma.courseSection.create({
+      data: { title: JSON.stringify({ "en-GB": "Free to delete" }) },
+      select: { id: true },
+    });
+    const res = await request(app).delete(`/api/admin/content/sections/${section.id}`).set(adminHeaders);
+    expect(res.status, JSON.stringify(res.body)).toBe(204);
+  });
+});
+
+describe("#938 P1: slettevernet dekker gamle bevis og kaskaden", () => {
+  async function participant(tag: string) {
+    return prisma.user.create({
+      data: { externalId: `p1-${tag}-${Date.now()}`, email: `p1${tag}${Date.now()}@x.no`, name: "P" },
+      select: { id: true },
+    });
+  }
+
+  it("et kursbevis UTEN øyeblikksbilde beskytter fortsatt seksjonen deltakeren leste", async () => {
+    // ⚠️ Kursbevis utstedt før v2.23.0 har sectionSnapshotJson = NULL. Et `contains`-oppslag treffer
+    // aldri NULL, så den første versjonen av vakta beskyttet ingen av dem — og jeg hadde selv skrevet
+    // i beslutningsloggen at kolonnen var nullbar og ikke bakfylt.
+    const section = await prisma.courseSection.create({
+      data: { title: JSON.stringify({ "en-GB": "Legacy basis" }) },
+      select: { id: true },
+    });
+    const course = await prisma.course.create({
+      data: { title: `Legacy Course ${Date.now()}`, publishedAt: new Date() },
+      select: { id: true },
+    });
+    const user = await participant("legacy");
+
+    // Beviset er fra «før»: ingen seksjons-øyeblikksbilde. Lesesporet er alt vi har.
+    await prisma.courseCompletion.create({
+      data: { userId: user.id, courseId: course.id, moduleSnapshotJson: "[]", sectionSnapshotJson: null },
+    });
+    await prisma.courseSectionRead.create({
+      data: { userId: user.id, courseId: course.id, sectionId: section.id },
+    });
+
+    const res = await request(app).delete(`/api/admin/content/sections/${section.id}`).set(adminHeaders);
+    expect(res.status).toBe(400);
+    expect(JSON.stringify(res.body)).toMatch(/før øyeblikksbildet|kursbevis/i);
+    expect(await prisma.courseSection.count({ where: { id: section.id } })).toBe(1);
+  });
+
+  it("KONTROLLCASE: et gammelt bevis for et ANNET kurs beskytter ikke", async () => {
+    // Uten denne ville «blokker hvis det finnes noe NULL-bevis i det hele tatt» bestått testen over.
+    // Regelen er at deltakeren må ha lest seksjonen I DET KURSET hen fikk beviset for.
+    const section = await prisma.courseSection.create({
+      data: { title: JSON.stringify({ "en-GB": "Unrelated" }) },
+      select: { id: true },
+    });
+    const otherCourse = await prisma.course.create({
+      data: { title: `Other Course ${Date.now()}`, publishedAt: new Date() },
+      select: { id: true },
+    });
+    const user = await participant("unrelated");
+    await prisma.courseCompletion.create({
+      data: { userId: user.id, courseId: otherCourse.id, moduleSnapshotJson: "[]", sectionSnapshotJson: null },
+    });
+
+    const res = await request(app).delete(`/api/admin/content/sections/${section.id}`).set(adminHeaders);
+    expect(res.status, JSON.stringify(res.body)).toBe(204);
+  });
+
+  it("kaskadesletting blokkeres når en eksklusiv seksjon står i et bevis for et annet kurs", async () => {
+    // Scenariet QA fant: seksjonen ble fjernet fra sitt opprinnelige kurs, lagt EKSKLUSIVT i et
+    // annet, og det andre kurset kaskadeslettes. Kaskaden slettet seksjonen direkte, uten vakta.
+    const section = await prisma.courseSection.create({
+      data: { title: JSON.stringify({ "en-GB": "Moved but certified" }) },
+      select: { id: true },
+    });
+    const originalCourse = await prisma.course.create({
+      data: { title: `Original ${Date.now()}`, publishedAt: new Date() },
+      select: { id: true },
+    });
+    const user = await participant("cascade");
+    await prisma.courseCompletion.create({
+      data: {
+        userId: user.id,
+        courseId: originalCourse.id,
+        moduleSnapshotJson: "[]",
+        sectionSnapshotJson: JSON.stringify([section.id]),
+      },
+    });
+
+    // Nå ligger seksjonen eksklusivt i et NYTT kurs, som ikke har noen fullføringer selv.
+    const newCourse = await prisma.course.create({
+      data: { title: `New Home ${Date.now()}` },
+      select: { id: true },
+    });
+    await prisma.courseItem.create({
+      data: { courseId: newCourse.id, itemType: "SECTION", sectionId: section.id, sortOrder: 0 },
+    });
+
+    // Forhåndsvisningen skal SI fra, ikke la slettingen kaste halvveis i en transaksjon.
+    const preview = await request(app)
+      .get(`/api/admin/content/courses/${newCourse.id}/cascade-delete-preview`)
+      .set(adminHeaders);
+    expect(preview.status, JSON.stringify(preview.body)).toBe(200);
+    expect(preview.body.deletable, "kurset skal ikke være slettbart").toBe(false);
+    expect(JSON.stringify(preview.body.blockers)).toMatch(/kursbevis/i);
+
+    expect(await prisma.courseSection.count({ where: { id: section.id } })).toBe(1);
   });
 });

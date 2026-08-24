@@ -8,9 +8,9 @@ All config files live in `config/` at the project root. They are loaded at start
 
 **Loaded by:** `src/config/assessmentRules.ts`
 **Env override:** `ASSESSMENT_RULES_FILE` (default: `config/assessment-rules.json`)
-**Used by:** `decisionService`, `assessmentJobService`, `assessmentRedFlagPolicy`, `sensitiveDataMaskingService`, `secondaryAssessmentService`, `recertificationService`, `mcqService`
+**Used by:** `decisionService`, `assessmentJobService`, `assessmentRedFlagPolicy`, `sensitiveDataMaskingService`, `secondaryAssessmentService`, `courseReminderService`, `mcqService`
 
-Core decision engine configuration. Controls pass/fail thresholds, manual review routing, red flag handling, MCQ quality gating, sensitive data masking patterns, secondary assessment triggers, and recertification validity.
+Core decision engine configuration. Controls pass/fail thresholds, manual review routing, red flag handling, MCQ quality gating, sensitive data masking patterns, secondary assessment triggers, and course due-date reminders.
 
 ### Sections
 
@@ -81,14 +81,10 @@ Core decision engine configuration. Controls pass/fail thresholds, manual review
 | `disagreementRules.passFailMismatch` | `true` | Flag when primary and secondary disagree on pass/fail |
 | `disagreementRules.manualReviewRecommendationMismatch` | `true` | Flag when primary and secondary disagree on manual review |
 
-**`recertification`** *(optional, has defaults)* - Validity and reminder schedule for completed certifications.
-
-| Field | Default | Description |
-|---|---|---|
-| `validityDays` | `365` | Days a certification is valid before recertification is required |
-| `dueOffsetDays` | `30` | Days before expiry when "due" state activates |
-| `dueSoonDays` | `14` | Days before expiry when "due soon" state activates |
-| `reminderDaysBefore` | `[30, 7, 1]` | Days before expiry to send reminder notifications |
+**`recertification`** — **removed in #989.** Modules no longer expire: a passed module stays passed
+until the module is revised. The block is gone from `config/assessment-rules.json` and from the
+schema; an old deployed config file that still contains it parses fine (unknown keys are stripped).
+Course due dates are a separate mechanism — see `courseReminders` below.
 
 **`courseReminders`** *(optional, has defaults)* - #497: schedule for course due-date reminders. Covers
 both individual `CourseEnrollment.dueAt` and class-assigned `CourseGroupAssignment.dueAt` (MANUAL classes

@@ -3,6 +3,7 @@ import { z } from "zod";
 import type { SubmissionStatus as SubmissionStatusType } from "@prisma/client";
 import { SubmissionStatus } from "../db/prismaRuntime.js";
 import { getParticipantConsoleRuntimeConfig } from "../config/participantConsole.js";
+import { hasAnyRole, CONTENT_AUTHORS } from "../auth/roleSets.js";
 import { getCalibrationWorkspaceSnapshot } from "../modules/calibration/index.js";
 import { publishModuleVersionWithThresholds } from "../modules/adminContent/index.js";
 import { assertContentOwnership } from "../modules/content/contentOwnershipService.js";
@@ -92,9 +93,8 @@ const publishThresholdsBodySchema = z.object({
 });
 
 calibrationRouter.post("/workspace/publish-thresholds", async (request, response, next) => {
-  const roles: string[] = (request.context?.roles as string[] | undefined) ?? [];
-  const isAllowed =
-    roles.includes("ADMINISTRATOR") || roles.includes("SUBJECT_MATTER_OWNER");
+  const roles = request.context?.roles ?? [];
+  const isAllowed = hasAnyRole(roles, CONTENT_AUTHORS);
 
   if (!isAllowed) {
     response.status(403).json({ error: "forbidden", message: "Only ADMINISTRATOR or SUBJECT_MATTER_OWNER may publish thresholds." });

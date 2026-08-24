@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AppealStatus, DecisionType, SubmissionStatus } from "../../src/db/prismaRuntime.js";
 import { ConflictError, NotFoundError } from "../../src/errors/AppError.js";
 import { prisma as mockPrisma } from "../../src/db/prisma.js";
+import { warmModuleGraph } from "../support/moduleGraphWarmup.js";
 
 const findOwnedSubmissionWithLatestDecision = vi.fn();
 const findActiveAppealForSubmission = vi.fn();
@@ -60,6 +61,9 @@ vi.mock("../../src/modules/certification/index.js", () => ({
 vi.mock("../../src/observability/operationalLog.js", () => ({
   logOperationalEvent,
 }));
+
+// #994: modulgrafen leses her, ikke i første test. Se test/support/moduleGraphWarmup.ts.
+warmModuleGraph(() => import("../../src/modules/appeal/appealService.js"));
 
 describe("appeal service", () => {
   beforeEach(() => {

@@ -15,6 +15,10 @@ import { auditActions, auditEntityTypes } from "../observability/auditEvents.js"
 
 // The retained actions that embedded person-PII (the #806/#4b forward-fix sites) → the metadata key to
 // remove. Keep in sync with any future field added to (then removed from) retained audit metadata.
+//
+// ⚠️ #989 fjernet resertifiseringspåminnelsene. De to `recertification_reminder_*`-radene under må
+// likevel BLI STÅENDE: handlingene skrives aldri mer, men de gamle radene finnes og kan fortsatt
+// inneholde e-post. Fjernes de herfra, blir historisk PII stående uvasket.
 const SCRUB_TARGETS: ReadonlyArray<{ action: string; field: string }> = [
   { action: auditActions.certification.recertificationReminderSent, field: "recipientEmail" },
   { action: auditActions.certification.recertificationReminderFailed, field: "recipientEmail" },

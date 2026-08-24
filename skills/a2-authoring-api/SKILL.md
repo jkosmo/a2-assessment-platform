@@ -158,9 +158,29 @@ Report each created object's admin link and the `agentRunId`, and close with:
 **On partial failure:** stop at the failed step; report per step (done/failed/skipped), what was
 created (IDs + links), the error, and the `agentRunId`. Never delete anything.
 
-**If you cannot reach the API** (sandboxed chat): emit an `a2-content-export/v1` **course
-envelope** to a file and tell the author to import it via the admin-UI course import (playbook §6,
-Fallback). No token or network needed. **The fallback file counts as validated only after the
+**If you cannot reach the API** (sandboxed chat): emit `a2-content-export/v1` envelope(s) to
+file(s). No token or network needed.
+
+⚠️ **This is the path most authors actually use** — it is called "fallback" for historical reasons
+only. The API route needs an agent token (rarely issued) and network access to the host (a sandboxed
+chat has none). Treat this section as a main road, not an edge case: when it lags behind the export
+format, authors get files the import rejects. That is exactly what happened in #987.
+
+**Use the shared emitters — never hand-write an envelope.** `scripts/synthesize-envelopes.mjs`:
+
+| Deliverable | Emitter | Author imports via |
+|---|---|---|
+| one standalone section | `synthesizeSectionEnvelope(payload)` → `scope: "section"` | **Sections** page → "Import section package" |
+| one standalone module | `synthesizeModuleEnvelope(payload)` → `scope: "module"` | **Modules** page → "Import module package" |
+| a whole course | course envelope (playbook §6) | **Courses** page → course import |
+| several at once | `synthesizeStandaloneEnvelopes(pkg)` → one file per object | as above, one at a time |
+
+The same emitters back the API route, so the two cannot drift apart. Hand-writing an envelope
+reintroduces the second authoring path this replaced.
+
+**Name the destination in your report.** "Import it" is not enough — the three import buttons live
+on three different pages, and picking the wrong one gives a `scope_mismatch` the author cannot act
+on. **The fallback file counts as validated only after the
 finished file is read back and checked against the same schema as A2's import** (rule 7,
 export-validation.md); there is **no import dry-run endpoint**, so report the named checks and do
 not claim a live platform verdict.

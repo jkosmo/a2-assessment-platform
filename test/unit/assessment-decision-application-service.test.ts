@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { warmModuleGraph } from "../support/moduleGraphWarmup.js";
 
 const createAssessmentDecision = vi.fn();
 const createMcqOnlyDecision = vi.fn();
@@ -78,6 +79,9 @@ const BASE_INPUT = {
   recipientEmail: "participant@example.com",
   recipientName: "Test User",
 };
+
+// #994: modulgrafen leses her, ikke i første test. Se test/support/moduleGraphWarmup.ts.
+warmModuleGraph(() => import("../../src/modules/assessment/AssessmentDecisionApplicationService.js"));
 
 describe("AssessmentDecisionApplicationService — applyAssessmentDecision", () => {
   beforeEach(() => {

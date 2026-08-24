@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { warmModuleGraph } from "../support/moduleGraphWarmup.js";
 
 // #497 — CourseReminderMonitor is env-gated on PARTICIPANT_NOTIFICATION_CHANNEL and must never crash
 // the worker when a schedule run throws. We toggle the channel via a mutable mock env object.
@@ -19,6 +20,9 @@ afterEach(() => {
   mockEnv.PARTICIPANT_NOTIFICATION_CHANNEL = "log";
   vi.clearAllMocks();
 });
+
+// #994: modulgrafen leses her, ikke i første test. Se test/support/moduleGraphWarmup.ts.
+warmModuleGraph(() => import("../../src/modules/course/CourseReminderMonitor.js"));
 
 describe("CourseReminderMonitor (#497)", () => {
   it("does not schedule when the notification channel is disabled", () => {

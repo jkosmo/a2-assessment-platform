@@ -2,6 +2,1043 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.29.0 - 2026-08-24
+
+**Den fjerde motoren: «er dette forsøket bestått» (#978).** Med #958, #959 og #962 er alle fire
+konvertert.
+
+Spørsmålet ble besvart åtte steder i klienten etter **tre** regelsett. Bare ett av dem leste
+`submissionStatus`, så samme deltaker kunne få to svar i samme økt: rød «Ikke bestått» på `/profile`
+og `/participant/completed`, nøytral i resultatbanneret — for den samme innleveringen.
+
+### ⚠️ «Bestått?» viste seg å være fem spørsmål, ikke ett
+
+Kartleggingen av alle 24 kallstedene var det viktigste i denne runden. En felles `erBestått()` ville
+vært å gjenta feilen i motsatt retning: **ett** svar der det trengs flere. `public/static/outcome.js`
+har derfor fem navngitte innganger, hver med sin begrunnelse:
+
+| Spørsmål | Teller statusen? |
+|---|---|
+| `deriveOutcome` — hva skal jeg vise? | **ja** — en uavgjort sak er ikke en stryk |
+| `isAppealableFail` — kan hen anke? | **ja**, og krever `COMPLETED` |
+| `isSettledPass` — skal vi feire? | **ja** — konfetti kan ikke trekkes tilbake |
+| `hasPassingDecision` — finnes det alt en bestått? | **nei**, med vilje |
+| `rawPassFailState` — hva sier vedtaket? | **nei** — praktikerflate |
+
+⚠️ De to siste er de lærerike. `hasPassingDecision` hindrer at en MCQ-only-modul autostarter et nytt
+forsøk; krevde den avgjort status, ville en bestått-men-under-vurdering modul startet et retake av
+seg selv — det motsatte av hensikten. Og `rawPassFailState` brukes av vurderer-, anke- og
+kalibreringsflatene, der jobben nettopp **er** å inspisere den automatiske beslutningen. Å skjule
+den bak «under vurdering» der ville fjernet informasjonen brukeren er der for å vurdere. Begge
+flatene viser dessuten status i egen kolonne.
+
+### To bevisste oppførselsendringer
+
+- **Anke krever nå `COMPLETED`.** `/participant/completed` krevde det allerede; resultatbanneret
+  gjorde det ikke, og tilbød anke på en innlevering som fortsatt var under vurdering. To innganger
+  til samme handling, to svar — den strengeste var den riktige. ⚠️ Merk retningen: hadde den delte
+  funksjonen bare speilet `deriveOutcome`, ville divergensen blitt rettet ved å **løsne** regelen.
+  Et kontrollcase fester det.
+- **Feiringen krever et avgjort bestått.**
+
+### Vakt og verifisering
+
+`test/outcome-derivation-guard.test.js` nekter en ny rå `passFailTotal ===` utenfor `outcome.js`, og
+har en kontrollassertion som feiler hvis regexen slutter å måle noe. Skrivingene i `review.js`
+(skjemafeltene som **sender** verdien) er med vilje ikke fanget.
+
+Mutasjonsverifisert i to lag. Vakta navngir synderen når regelen skrives på nytt. Og e2e-en —
+`test/e2e/outcome-under-review-978.spec.ts` — feiler med `"Module under review…Fail"` når den
+status-blinde regelen gjeninnføres, mens kontrollcaset forblir grønt.
+
+⚠️ En unit-test på `deriveOutcome` alene hadde ikke fanget dette: feilen var ikke at regelen var
+gal, men at flatene aldri **spurte**. Derfor kjøres den ekte bundlen i Chromium.
+
+### ⚠️ QA-porten ga NO-GO, og tre av funnene var mine
+
+Verdt å skrive ned, fordi to av dem er samme feilklasse jeg nettopp hadde beskrevet i en annen sak.
+
+**Vakta hadde en blindsone — for tredje gang i dag.** `flowState.resultPassFail === true` i
+`participant.js` er den samme verdien under et alias, og regexen lette etter `passFailTotal`. Vakta
+var grønn mens en statusblind avledning sto igjen: banneret holdt en bestått-under-vurdering nøytral
+uten konfetti, mens den samme renderingen gjorde retake-knappen diskret som om utfallet var endelig.
+Regexen matcher nå ethvert navn som inneholder «passFail», og er mutasjonsverifisert mot aliaset.
+
+**`SCORED` var ikke med.** Den betyr at poengene er satt, men at rutingsbeslutningen ikke er anvendt.
+Bare `COMPLETED` bærer et autoritativt utfall. Statusen skrives ikke i dag (#953), men klienten
+regner den som lastbar, så en migrert rad ville fått konfetti før rutingen var avgjort.
+
+**E2e-en min testet en respons serveren ikke kan sende.** `/api/modules/completed` filtrerer på
+`completedSubmissionStatuses`, i dag `["COMPLETED"]` alene. Konverteringen av `profile.js` og
+`participant-completed.js` er riktig og **uvirksom på samme tid**. Testen er beholdt som en
+klientkontrakt — nøkkelen er konfigurerbar — men forskjellen står nå i testen selv.
+
+⚠️ Og den ekte feilen på de to flatene er en annen: når en anke setter innleveringen tilbake til
+`UNDER_REVIEW`, **forsvinner modulen helt** fra `/profile` og «Mine kurs → Fullførte». Sammen med at
+`appealService` ikke håndhever `COMPLETED` — så API-et godtar anken klienten nekter — er det
+registrert som **#1002**.
+
+⚠️ Merk retningen på den siste: en regel som er strengere i klienten enn i API-et *ser* håndhevet
+ut. Enhver kaller som ikke er vår egen nettleser går rundt den.
+
+Flatekartet har fått §28, per stående ordre.
+
+1173 unit, 246 e2e.
+
+## 2.28.2 - 2026-08-24
+
+**#993 — en figur arves ikke av en seksjon deltakeren ikke kan lese.**
+
+`isSectionInAccessibleCourse` gjorde nøyaktig det navnet lovet: seksjon → kurs → synlighet. Feilen
+var at det er et **svakere spørsmål enn kalleren trengte** — asset-ruta spurte «er kurset
+tilgjengelig» og behandlet svaret som «seksjonen kan leses».
+
+Konsekvensen var #944 sin **tredje dør**: en deltaker som hadde lest en seksjon og sett
+`asset:`-id-en i markdown-en, kunne fortsatt hente figurene etter at seksjonen ble arkivert eller
+holdt tilbake av oversettelsesgaten. Lesestien svarte 404; asset-ruta svarte 200.
+
+Kuren har #958-formen: døra heter nå `canParticipantReadSection` og kontrollerer begge ledd. Den
+svakere varianten finnes ikke lenger, så ingen kaller kan velge den ved et uhell. Forfatteres
+omgåelse er uendret — de skal kunne forhåndsvise figurer i utkast.
+
+### ⚠️ Funnet som var større enn saken
+
+Fiksen gjorde to eksisterende tester røde. Første tanke var at innstrammingen var for hard.
+Målingen sa noe annet:
+
+```
+ved opprettelse:  { archivedAt: null, activeVersionId: null }
+publish status:   422  translation_incomplete — title: missing en-GB, nn
+```
+
+Begge fiksturene fylte bare `nb` og publiserte aldri. Seksjonene sto dermed **holdt tilbake av
+oversettelsesgaten** — nøyaktig tilstanden saken handler om — mens tre tester påsto at en
+**deltaker** fikk `200` på figurene i dem.
+
+**Testene kodet inn lekkasjen som forventet oppførsel.** De ville aldri fanget den, fordi de
+beskrev den som riktig. Begge fyller nå alle tre språk og publiserer. De ti andre filene som
+oppretter seksjoner henter ingen deltaker-figurer, så flaten er komplett.
+
+Mutasjonsverifisert: med tilgjengelighetsleddet fjernet feiler begge lekkasjetestene på
+`expected 200 to be 404`, mens begge kontrollcasene forblir grønne.
+
+## 2.28.1 - 2026-08-24
+
+**`npm ci` genererer Prisma-klienten igjen — uansett npm-versjon.**
+
+npm 11.16 blokkerer avhengighetenes install-skript. Etter en fersk `npm ci` var
+`@prisma/client` ugenerert, og `tsc` ga 127 feil av typen «Module '@prisma/client' has no exported
+member 'AppRole'». Det traff da arbeidskopien ble reinstallert etter flyttingen ut av OneDrive, og
+det ville truffet enhver ny utvikler og CI den dagen den oppgraderer npm.
+
+⚠️ **Avhengigheten var implisitt.** Klienten ble generert av `@prisma/client` sin egen
+`postinstall` — en sideeffekt ingen hadde skrevet ned, og som npm nå slår av som standard.
+Deploy-workflowene var trygge fordi de allerede kjører `npm ci --ignore-scripts` etterfulgt av et
+eksplisitt `npm run prisma:generate`; det var **`ci.yml` sin playwright-jobb** og enhver lokal
+installasjon som lente seg på sideeffekten.
+
+**Kuren:** et `postinstall` i rotprosjektets egen `package.json`:
+
+```json
+"postinstall": "npm run prisma:generate"
+```
+
+Målt, ikke gjettet: npm 11 blokkerer *avhengighetenes* livssyklusskript, men kjører **rotpakkens
+egne**. Verifisert med en isolert prøve, og deretter med en fersk `rm -rf node_modules && npm ci` i
+repoet — klienten kom av seg selv.
+
+Deploy-stien er uendret: `--ignore-scripts` hopper også over dette, og det eksplisitte
+`prisma:generate` står der fortsatt. Eksplisitt slår implisitt begge veier.
+
+## 2.28.0 - 2026-08-23
+
+**To motorer til fra kompleksitetsepicen (#959, #962).** Med #958 fra tidligere i dag er tre av
+fire konvertert.
+
+⚠️ Dette er den formen som **ikke** har generert nye funn. Fire runder med «rett utregningen der den
+er» ga hver gang en ny runde; #958 ga null. Begge sakene her har samme form: flytt avgjørelsen til
+skriveren, så leserne ikke *kan* avvike.
+
+### #959 — «får denne deltakeren se dette kurset?»
+
+`findCourseById` returnerte kurset uansett hvem som spurte. Regelen bodde hos kalleren, i fire
+varianter, og de tre deltakerrutene hadde hver sin etterkontroll.
+
+⚠️ Strukturen hadde allerede kostet ett hull: #778/#785 — de direkte endepunktene gatet bare på
+`publishedAt`, så en deltaker uten innmelding kunne lese et RESTRICTED kurs hen hadde id-en til.
+Fiksen den gangen la til en **fjerde kopi** av regelen i stedet for å flytte den ned.
+
+`findCourseForParticipant({ courseId, userId, roles, groupIds })` krever identiteten i signaturen.
+Synligheten kan ikke lenger glemmes — bare aktivt velges bort. **Kallersiden: 3 → 0.**
+
+`null` dekker med vilje alle tre årsakene (finnes ikke / ikke publisert / ikke synlig), fordi å
+skille dem ville lekket at et RESTRICTED kurs eksisterer.
+
+**Ett unntak, funnet ved å gjøre feil:** jeg konverterte også selv-innmelding, og `m2-enrollment` ble
+rød — 404 der ruta skal svare 400. Ruta finnes nettopp for deltakere som *ennå ikke* har tilgang, og
+`selfEnroll` svarer «dette krever tildeling». Gjennom døra ville deltakeren fått vite at kurset ikke
+finnes, framfor hvordan hen får tilgang. En ekte oppførselsendring smuglet inn i en opprydding.
+
+### #962 — «får denne brukeren gjøre dette?»
+
+Tjue rollesjekker samlet i `src/auth/roleSets.ts`. Tre hadde navn fra før, men hvert sitt sted.
+Sytten var `roles.includes("ADMINISTRATOR")` skrevet på stedet — **inkludert i `requireAnyRole`
+selv**, middlewaren som skulle vært den delte vakta.
+
+**Ingen tilgang er endret.** Hvert sett er nøyaktig det kallstedet hadde.
+
+⚠️ Skaden var ikke gjentakelsen, men at policyen ikke kunne **leses**. For å svare på «hvem ser en
+deltakers revisjonsspor» måtte man finne `auditService.ts` — og for å se at svaret er fem roller mens
+`/api/reports` er to, måtte man tilfeldigvis lese begge.
+
+### Divergensen som viste seg å være to roller
+
+Nattskanningen meldte de fem mot de to som et hull: «den svakeste definisjonen ligger på den mest
+granulære ruta». Produkteier avklarte at begge er riktige:
+
+- **SMO** er «å regne som en lærer som har det praktiske pedagogiske ansvaret for oppfølging av
+  kandidater»
+- **REPORT_READER** er «potensielt kandidaters mentorer som skal kunne følge opp kompetansemål
+  avtalt i eksempelvis medarbeidersamtaler»
+
+Settet er alle med et **oppfølgingsforhold** til en kandidat. `/api/reports` er noe annet: analyse på
+tvers av organisasjonen. `/api/cohort-status` sa dette allerede, med SMO inkludert med vilje.
+
+⚠️ **Lærdom for skanningene:** to sett som er uenige er ikke automatisk en feil. Her var uenigheten
+en policy ingen hadde skrevet ned, og kuren var `doc/DECISIONS.md` — ikke kode.
+
+Avklaringen gjorde derimot restproblemet skarpere, og det er registrert som **#1000**: begge
+begrunnelsene hviler på et *forhold* — «mine kandidater», «mine mentees» — som ikke finnes i
+datamodellen. Derfor ser hver av de fem alle kandidater i alle kurs. Rollene er riktige;
+avgrensningen mangler.
+
+### Vakter
+
+- `course-visibility-guard` har byttet rolle: fra å gjøre drift synlig til å **låse inn gevinsten**.
+  `findCourseById` i en deltakerrute er nå en regresjon, ikke en forglemmelse.
+- `role-set-guard` (ny) nekter en tjueførste innebygd rollesjekk, og **fester audit/report-
+  forskjellen** så en framtidig endring gjøres bevisst.
+
+Begge er mutasjonsverifisert, og begge har en kontrollassertion som feiler hvis vakta ikke finner
+noe å måle. ⚠️ Den i `role-set-guard` var rød i første utkast: regexen min stoppet på klammen i
+`readonly AppRoleType[]` og målte null roller. Den nektet å passere mens den målte ingenting, som er
+hele poenget med den slags assertion.
+
+1156 unit, 243 e2e, 110 integrasjonsfiler.
+
+### Status på de fire motorene
+
+| Spørsmål | Steder | Etter |
+|---|---|---|
+| Hva inneholder dette kurset? | 25 | 3 |
+| Er kurset synlig for deltakeren? | 8 | 1 dør + 1 begrunnet unntak |
+| Er brukeren privilegert nok? | 20 | 1 fil |
+| Er dette forsøket bestått? | 8 | **urørt** |
+
+
+### #994 — den flakete porten målte lesehastighet, ikke logikk
+
+Test-only, derfor ingen versjonsbump. Men den beit **seks ganger** 2026-08-23 og kostet en time på
+feil spor, så den hører hjemme i loggen.
+
+Saken gjettet på databasekontanse mellom parallelle vitest-prosesser. Målingen sa noe annet:
+
+| | første test i fila | de øvrige |
+|---|---|---|
+| kald graf | **51 903 ms** | momentane |
+| varm graf | 1 395 ms | momentane |
+
+Samme fil, samme maskin, ingen last, to minutter mellom kjøringene. Prisma er mocket i alle seks
+filene, så databasen var aldri inne i bildet.
+
+Kostnaden er å **lese modulgrafen fra disk**. `appealService` trekker inn `modules/course/index.js`,
+en barrel på flere hundre filer, og repoet ligger i OneDrive. Andre gang ligger alt i OS-ens
+filcache — derfor «passerer når den kjøres alene», som egentlig er «passerer andre gang».
+
+⚠️ **Det gjorde `testTimeout: 20000` til en måler av lesehastighet.** Og verre: vitest kan ikke
+STOPPE en utløpt test. TC-POL-RED-001 gikk over 20 s, men fortsatte til ~60 s, spionen registrerte
+enda et kall, og TC-POL-RED-002 så 2 der den ventet 1. Symptomet så ut som en logikkfeil i
+vurderingspolicyen. Det var der timen gikk.
+
+**Kuren har #958-formen:** `warmModuleGraph` gir lastingen ett navngitt sted med eget budsjett, så
+ingen test *kan* belastes for den. Testkroppene er urørt — de treffer nå et varmt register.
+`testTimeout` fortsetter å bety «denne logikken henger».
+
+**Ett unntak, med grunn:** `authenticate-middleware.test.ts` bruker `vi.doMock`, som ikke heises.
+Oppvarming ville gitt første test den umockede modulen. Jeg konverterte fila maskinelt sammen med
+de andre; integrasjonskjøringen fant den.
+
+#### Vakta fant seks ganger så mye som håndlista
+
+Håndlista mi var på **seks** filer — de som faktisk hadde feilet. `module-graph-warmup-guard` fant
+**37**. De seks var bare de med dypest graf, altså de som traff 20 s først.
+
+⚠️ Og første utkast av vakta var selv for slapp. QA-porten avviste den med to moteksempler fra
+repoet: `return import(...).then(...)` ble ikke matchet, og en hjelpefunksjon *deklarert* over
+første `it(` ble filtrert bort selv om den *kjører* inne i en test. Posisjon i fila sier ingenting
+om når koden kjører. Den strengere vakta — per spesifikator, uten posisjonslogikk — fant **åtte
+nye hull**, blant dem `rbac-matrix.test.ts` som laster hele Express-appen.
+
+Vakta så altså grønn ut mens nøyaktig regresjonen den skulle hindre lå i filene den godkjente.
+
+#### Etterspill: arbeidskopien flyttet ut av OneDrive
+
+Målingene over er gjort i OneDrive, og samme kveld ble arbeidskopien flyttet til lokal disk.
+Filkopi av hele treet inkludert `.git` — en `git clone` ville mistet `doc/ENVIRONMENTS.local.md`,
+`.env.test.local` og ti grener uten upstream.
+
+Målt gevinst er beskjeden når cachen er varm: unit 15,2 s → **13,2 s**, integrasjon 230,4 s →
+**210,8 s**. To andre ting betydde mer. OneDrive hadde satt `ReadOnly` på **1876 kataloger**, som
+var den virkelige årsaken til «Permission denied» ved `git worktree prune` — støy i hver eneste
+commit i ukevis. Og `npm ci` under npm 11.16 blokkerer install-skript, så `prisma generate` må
+kjøres eksplisitt etter en frisk installasjon; uten den gir `tsc` 127 feil om at `@prisma/client`
+mangler `AppRole`.
+
+⚠️ **Oppvarmingen skal ikke fjernes med flyttingen som begrunnelse.** Første kjøring på det kalde
+treet på ny disk brukte `collect 125 s` og `tests 181 s` — og hadde null timeouts. Uten
+`warmModuleGraph` ville seks filer sprengt 20-sekundersbudsjettet på nøyaktig den kjøringen.
+OneDrive gjorde problemet akutt; det skapte det ikke. En kald CI-runner er samme sak.
+
+## 2.27.1 - 2026-08-23
+
+**QA-porten, femte runde — og den første med klassifisering.** Justeringen virket etter hensikten:
+av seks funn var **ett** en regresjon fra bunten. Resten var eksisterende hull eller
+dokumentasjonsdrift, og er registrert i stedet for rettet.
+
+⚠️ Det er hele poenget med å be porten klassifisere. De fire foregående rundene behandlet alt som
+blokkerende, og hver runde fant noe i forrige rundes fiks.
+
+### [REGRESJON] Legacy-`modules[]` sa noe annet enn tellerne i samme respons
+
+Tellerne ble filtrert for arkiverte moduler i 2.26.3. Den dokumenterte legacy-lista ble det ikke, og
+da kunne én respons påstå `moduleCount: 0` og `progress 0/0` samtidig som `modules[]` inneholdt en
+modul.
+
+⚠️ Verre enn et skjevt tall: sertifiseringsoppslaget bygges bare for ikke-arkiverte moduler, så en
+modul deltakeren **faktisk besto** før arkiveringen kom tilbake som `NOT_STARTED`. En eldre klient
+viste da en klikkbar modul som resten av responsen sa ikke fantes i kravet.
+
+Lista leser nå fra `moduleIds` — den samme filtrerte lista bevisporten bruker. Én kilde, ikke to.
+
+### [DOKUMENTASJON] `required` var ikke dokumentert
+
+`available` sto i API-referansen, `required` ikke. Skillet er ikke kosmetisk: en integrasjonsklient
+som tolker «utilgjengelig» som «ikke påkrevd» tilbyr fullføring på et kurs serveren ikke vil
+sertifisere — klikket registrerer lesningen, og ingenting skjer.
+
+### [DOKUMENTASJON] Versjonen dekket ikke de to siste commitene
+
+`2.27.0` ble satt, og så kom to kodecommits til. Artefaktet fra begge rapporterte samme versjon på
+`/version`, så drift kunne ikke se hvilken variant som kjørte. Derfor denne.
+
+### Registrert i stedet for rettet
+
+| Funn | Hvorfor ikke nå |
+|---|---|
+| Entra-tildelte uten aktivitet mangler i rapporten | ENTRA-medlemskap er ikke lagret hos oss. Var like usynlig før #969 — ikke en regresjon, men et ekte hull som krever at vi kan slå opp gruppemedlemskap |
+| «Bestått gjelder til modulen revideres» er halvveis | Publisering av ny versjon flytter `activeVersionId`, men rører ingen `CertificationStatus`. Beslutningen fra #989 er dermed ikke implementert. Egen, større sak |
+| Serverens norske tekst vises i engelsk forfattergrensesnitt | Bevisst avveining, dokumentert i koden: en forståelig setning på feil språk slår en misvisende setning på riktig. Den ekte kuren er en feilKODE for slettevernet |
+
+### Om metoden
+
+⚠️ **Flaken i #994 kaskaderer, og det gjør den farligere enn antatt.** `TC-POL-RED-001` timet ut på
+20 s men fortsatte i 60; spionen dens registrerte enda et kall, og nabotesten så to der den ventet
+ett. Bare den første er en flake — den andre er en følgefeil som *ser ut som* en logikkfeil.
+«Spionen ble kalt to ganger» leser som dobbeltkjøring i produksjonskoden. Det kostet en time å
+avkrefte.
+
+1153 unit, 243 e2e, 110 integrasjonsfiler.
+
+
+## 2.27.0 - 2026-08-23
+
+**Første runde med kompleksitetsbremsen brukt som verktøy, ikke bare som måling.** Fire agenter tok
+hvert sitt område fra nattskanningens epic (#941), parallelt, hver i egen worktree. Ti saker
+adressert.
+
+⚠️ **Det som gjør denne releasen verdt å lese: tre av de fire agentene fant at oppgaven de fikk var
+feil beskrevet.** Ikke i detaljene — i premisset.
+
+### #958 — «hva inneholder dette kurset?» går nå gjennom to navngitte dører
+
+`findCourseItems` hentet nøyaktig feltene som avgjør tilgjengelighet og **filtrerte ingenting**. Åtte
+kallere tok hver sin avgjørelse, med fem ulike regler. Det er roten til #938, #944, #945 og #992.
+
+| Dør | Hva den gjør |
+|---|---|
+| `findCourseItemsForParticipant` | filtrerer bort utilgjengelige seksjoner i SQL; moduler får et ferdig avgjort `available` |
+| `findAllCourseItems` | alt — forfatter, publisering, sletting, eksport |
+
+Begge sluttet å returnere `archivedAt`, `activeVersionId` og `publishedAt` til kallerne. **Råmaterialet
+for regelen når ikke lenger ut**, så ingen kaller kan tolke det selv.
+
+**Tallet saken handlet om: 7 → 3, og kallersiden 5 → 0.**
+
+Ingen tredje dør for publiseringsgaten. Saken påsto at den hadde en `activeVersionId === null`-regel;
+den finnes ikke der. Gaten vil ha hele inventaret, og en egen dør ville lagt til et sted, ikke fjernet
+ett.
+
+### #972 + #965 + #980 + #985 — én oversetter fra feilKODE til lesbar tekst
+
+`showToast`-ratsjen: **33 → 1**. Den ene som står igjen er oversetterens egen fallback.
+
+Vakta var for smal — den så bare `showToast`. De samme feilene sto i tomtilstander, feilbannere,
+`log()` og chat-loggen. Med den utvidede skanningen: **123 → 37**.
+
+⚠️ De to tallene er ikke sammenlignbare. Utgangspunktet er målt på nytt med den nye skanningen,
+nettopp for å ha en ærlig baseline framover.
+
+**Antall oversettere gikk fra fem til én.** `describeImportError`, shell-ens `parseApiErrorMessage`,
+review-ens to og `owner-panel.js:errorMessage` delegerer nå alle til `api-error.js`. Kodetabellen
+ligger i participant-bunten, som åtte andre bunter sprer inn — derfor fikk `review.js` fiksen gratis.
+
+38 nye nøkler × 3 språk. En test nekter at kildeteksten står i nb eller nn (#892/#981).
+
+### #975 — fella er ikke `.hidden`-klassen, den er `hidden`-ATTRIBUTTET
+
+⚠️ **Saken tok feil, og korreksjonen er det mest verdifulle i den.**
+
+`.hidden` er en forfatter-regel og taper bare mot regler som kommer senere. **Null av
+klasse-togglingene er ødelagt.** `hidden`-attributtet har bare nettleserens eget ark bak seg, og
+origin slår spesifisitet — det taper mot *enhver* regel som setter `display`.
+
+Så «144 togglinger» var feil måltall. Det reelle var **10 elementer på 16 steder**, hvert eneste ett
+verifisert i Chromium med `getComputedStyle()`, ikke gjettet fra filsøk.
+
+Verste synlige feil: en saksbehandler med bare én rolle så fanen for rollen hun ikke har, klikkbar,
+med en «0»-plakett.
+
+`setHidden` setter nå **både** attributtet og inline `display` — og fjerner dermed en felle til: et
+`hidden` fra markupen overlevde `setHidden(el, false)` og holdt elementet usynlig.
+
+Tre CSS-lapper for samme felle er fjernet. To av dem var aldri nødvendige; de gjorde bare at ingen
+kunne se det.
+
+**Anbefaling fulgt: de resterende ~230 er ikke konvertert.** De er ikke ødelagte, og vakta beviser
+det for hver av dem ved hver kjøring.
+
+### #969 — fullføringsgraden kunne vise 400 %
+
+`enrolledParticipants` het innmeldte og talte *innleveringer*. Med datofilter kunne fullføringene
+ligge innenfor og innleveringene utenfor: `12 / 3` i CSV-en som går til ledelsen.
+
+Nevneren er nå kursets faktiske publikum (`resolveCourseAudience` — samme kilde som
+kullstatus-dashbordet), unionert med dem som fullførte i vinduet.
+
+⚠️ **Unionen er poenget, ikke en klipping til 100 %.** En klipping ville skjult uenigheten; unionen
+gjør telleren til en delmengde av nevneren *per konstruksjon*.
+
+**Tall før og etter denne versjonen kan ikke sammenlignes direkte.**
+
+### #961 og #957
+
+Sletting av en seksjon logges nå — i samme transaksjon som slettingen, etter #803-mønsteret. Tittelen
+hentes før slettingen, for etterpå finnes den ingen steder.
+
+Kursimporten rapporterer `heldBackByTranslationGate`, slik modul- og seksjonsimporten alltid har
+gjort. Kommentaren i tjenesten lovet det; koden gjorde det ikke.
+
+### Om metoden
+
+**Fire agenter, hver med en eksplisitt sperreliste over de andres filer.** Den virket: da #957 trengte
+en linje i en sperret fil, rapporterte agenten nøyaktig hvilken linje — den gjettet ikke. Det tok ett
+minutt å legge inn, i stedet for å bli oppdaget på stage.
+
+**Mutasjonstestingen fanget to ting som ellers hadde gått ut:**
+
+- En **ekte regresjon** i #975: en uomvendt `panel.hidden = false` gjorde at kurspaneler aldri ville
+  åpnet seg igjen. Sju e2e-tester ble røde.
+- En **feil i en vakt** — filene er CRLF, og i JS-regex matcher ikke `.` en `\r`, så
+  kommentar-strippingen virket aldri og vakta leste sin egen kommentar som kode.
+
+⚠️ **Én kontrakttest var grønn hele tiden på en linje som ikke gjorde noe.** Den festet at
+`ackCheckbox.hidden = hideAck` FANTES, ikke at den virket — mens `.inline` slo attributtet og boksen
+bare ble usynlig fordi label-en rundt ble skjult. Den er nå erstattet av en e2e som måler
+`getComputedStyle().display`.
+
+Alt integrert på nytt av meg, med sju konflikter løst i #958 alene. Der min egen mellomløsning fra
+2.26.4 overlappet med agentens, vant agentens: mitt `visibleItems`-filter i ruta ble en ANDRE
+anvendelse av regelen så snart filteret flyttet inn i døra, og er slettet med en kommentar om at det
+ikke skal tilbake.
+
+1123 unit, 241 e2e, 31 kontrakt, 6 dom, 110 integrasjonsfiler.
+
+### Nye saker fra funn underveis
+
+- **#993** — seksjonsfigurer kan hentes selv om seksjonen er arkivert. #944 sin fjerde dør, oversett
+  fordi den går via en annen tjeneste.
+- **#994** — pre-stage-porten gir tilfeldige røde tester under last. Fem «unit»-tester går egentlig
+  mot Postgres. ⚠️ En port som gir tilfeldig rødt lærer folk å kjøre den om igjen i stedet for å lese
+  den.
+
+
+## 2.26.4 - 2026-08-23
+
+**De sju gjenstående QA-funnene (#992), en produkteierbeslutning som forenkler dem, og fire funn
+til fra en andre QA-runde.** Bunten 2.25.2–2.26.2 ble bygget mens QA-porten var nede for kreditt. Da
+den kom tilbake ga den NO-GO med ti funn; 2.26.3 tok de tre alvorligste, dette tar resten.
+
+⚠️ **Tre av dem er regresjoner vi innførte selv i 2.26.1**, ikke gammel gjeld.
+
+### Upublisert innhold vises ikke for kandidater i det hele tatt
+
+Produkteier 2026-08-23, på spørsmål om vi heller burde nekte forfatteren å legge et utkast inn i et
+publisert kurs: *«La oss ikke vise utkastseksjoner for kandidater før de er publisert, SMOer kan se
+dem … utkastseksjoner skal ikke ha konsekvenser for kandidater før de er publisert.»*
+
+Deltakerens kurssekvens utelater derfor upubliserte seksjoner helt. Ikke nedtonet — borte.
+
+⚠️ Dette **erstatter** #944-valget, som viste en nedtonet rad så deltakeren skulle se at «det er noe
+her». For en kandidat som aldri har sett seksjonen finnes det ingenting å forklare; raden var en
+beskjed om vår egen redigeringstilstand.
+
+Beslutningen **forenkler koden framfor å legge til**: teller og nevner i framdriftsbrøken leser nå
+fra samme filtrerte liste i stedet for å gjenta predikatet hver for seg. At bare tilgjengelige
+seksjoner telles er blitt en egenskap ved lista, ikke en regel hvert uttrykk må huske.
+
+Moduler endres ikke — en avpublisert modul vises fortsatt som en ikke-klikkbar rad. Forskjellen er
+historikk: deltakeren kan allerede ha bestått den, og da er raden hens egen fortid.
+
+### Klienten kunne sende deltakeren inn i en blindvei
+
+#944 ga seksjoner et ekte `available`-felt og lot serveren svare 404 på utilgjengelige. Men klienten
+hadde `const available = isSection || entry.available !== false` — skrevet den gang bare moduler
+hadde feltet — og tre andre steder med hver sin variant:
+
+| Sted | Seksjon | Modul |
+|---|---|---|
+| `findNextIncompleteEntry` | `!read` | `!PASSED && available` |
+| raden | ALLTID tilgjengelig | `available !== false` |
+| `nextEntryAfter` | ingen sjekk | ingen sjekk |
+| `outstandingBeforeFinish` | `!read` | `!PASSED` |
+
+Et kurs med en arkivert modul ga deltakeren «1 gjenstår» og **ingen «Avslutt kurset»-knapp**, mens
+serveren filtrerte samme modul bort og gjerne ville utstedt beviset. Lå modulen etter seksjonen,
+prøvde «Marker lest og gå videre» å åpne den — rett i 404-en vi nettopp hadde innført.
+
+Kuren er tre predikater i `participant-console-state.js` som alle fire stedene går gjennom. De bor i
+det rene modul-laget, ikke i `participant.js`, nettopp for å kunne testes som rene funksjoner.
+
+### Rå JSON nådde fortsatt deltakerens skjerm
+
+#988 flyttet Zod-dumpen fra toastens overskrift til dens `detail`. Det løste ingenting: `showToast`
+rendrer `detail` som et synlig avsnitt, så kandidaten så hele kroppen — bare i grått.
+
+Detaljen heter nå `diagnostic` og går til konsollet. Feltet heter med vilje noe annet enn
+`showToast`-parameteren det ikke skal inn i. **Forfatterflatene beholder detaljfeltet** — en
+forfatter kan bruke `path: ["bodyMarkdown"]` til noe; en kandidat midt i en test kan ikke.
+
+### Legacy-ruta omgikk arkivvakta
+
+`setCourseItems` sjekket arkivstatus. `PUT /api/admin/content/courses/:id/modules` går via
+`setCourseModules`, som skriver de samme radene uten den — så den ugyldige «Samfunnsvitere»-
+tilstanden #938 skulle gjøre uoppnåelig kunne fortsatt lages.
+
+Altså feilklassen #938 handler om, i #938 sin egen fiks. Begge kaller nå
+`assertContentUsableInCourse`, og `test/course-archive-entry-guard.test.js` finner selv hver
+funksjon som skriver `courseItem`-rader og krever at den kaller vakta. **En liste ville ikke funnet
+den andre døra — ingen visste at den fantes.**
+
+### Framdriftsbrøken brukte to predikater
+
+`sectionTotal` var filtrert på tilgjengelighet; `sectionCompleted` telte enhver registrert lesning.
+Med én lest, nå-utilgjengelig seksjon og én ulest, tilgjengelig rapporterte detaljen `1/1` og
+`COMPLETED` mens bevisporten korrekt nektet.
+
+### Kursbyggeren tilbød det backend avviser
+
+Seksjonsvelgeren filtrerte bort seksjoner som allerede lå i kurset, men ikke arkiverte. Siden
+`/items` skriver hele sekvensen, feilet ikke bare den ene raden — **hele lagringen rullet tilbake**,
+og forfatteren mistet også endringene som var i orden.
+
+### `export-validate` godkjente det importen avviser
+
+Seksjonens tittelsjekk var `!gyldig && tittel == null` — den kan bare slå til når tittelen er både
+ugyldig og fraværende, altså aldri for en tom streng. `bodyMarkdown` ble ikke validert i det hele
+tatt. Skillets **rule 7** lover «valider mot samme skjema som importen»; for seksjoner holdt løftet
+ikke.
+
+⚠️ Den nærliggende fiksen var feil: seksjoner bruker `localizedTextPatchSchema`, ikke
+`localizedTextSchema`. Hadde jeg gjenbrukt modulenes helper — som krever alle tre språk — ville
+validatoren avvist gyldige én-språks-filer og brutt #905-invarianten. Ny helper,
+`isNonEmptyLocalizedPartial`. Testene kjører **både** validatoren og det ekte Zod-skjemaet og krever
+samme svar.
+
+### Andre QA-runde: fire funn til
+
+Porten ble kjørt på nytt etter alt over, og fant fire ting. Tre var mine å rette:
+
+**⚠️ Ingen av dekningsvaktene kjørte i den obligatoriske pre-stage-porten.** Ikke bare mine to nye —
+også de fire eldre. `vitest.unit.config.ts` tar `test/unit/**` pluss en håndskrevet liste over
+rot-filer, og seks vakter sto utenfor. De kunne altså først bli røde i den fulle kjøringen, i CI,
+etter at deployen var bestemt.
+
+Configen har en kommentar som forteller om nøyaktig denne fella fra #896 S3c. Jeg leste den og gikk i
+den likevel. **En kommentar som forklarer en felle stopper den ikke** — derfor er alle seks lagt inn,
+pluss `test/unit/unit-suite-coverage-guard.test.js`, som nekter en ny `*-guard`-fil i test-rota som
+ikke står i lista.
+
+**Eksportvalidatoren var fortsatt uenig med importen**, i andre runde av samme funn: min første fiks
+sjekket bare at *minst ett* språk var gyldig, så `{ nb: "Tittel", nn: 42 }` gikk gjennom lokalt og
+fikk 400 ved import. `.partial()` gjør nøklene valgfrie — den gjør dem ikke frivillige å fylle
+riktig.
+
+**API-referansen** beskrev fortsatt legacy-ruta som en ubetinget setter, og som en «dual-write» til
+`CourseItem` — det siste har ikke vært sant siden #502.
+
+Det fjerde funnet — at utkastseksjoner kan legges inn i publiserte kurs — ble lagt fram for
+produkteier i stedet for rettet, fordi den nærliggende fiksen ville endret forfatterflyten. Se over.
+
+### Om metoden
+
+Elleve mutasjoner verifisert, hver mot sin egen test, alle kontrollcase grønne. **To av mutasjonene
+fanget testfeil hos meg:**
+
+- Kursbygger-testen var grønn med filteret fjernet — den sjekket at den arkiverte var borte før
+  velgeren i det hele tatt var fylt, og målte en tom liste. Rekkefølgen er nå omvendt, med en
+  kommentar om hvorfor.
+- Kontrollassertionen i sekvensvakta sammenlignet leddene tekstlig med modulen og var rød:
+  `isEntryDone` skriver `read === true`, ikke `.read !== true`. En kontroll som krever at kuren
+  staves som sykdommen måler ingenting.
+
+⚠️ **Og én gang tok jeg feil om en rød test.** `m2-certification-status-flow` feilet to ganger på
+rad; jeg avfeide det først som forurenset testbase, konkluderte så motsatt da ren `dev` var grønn, og
+landet til slutt på at nullstillingen av basen hadde feilet stille begge gangene. På en ordentlig
+nullstilt base er suiten grønn med endringene. Lærdommen er at «jeg nullstilte» ikke er det samme som
+«nullstillingen lyktes» — kommandoen skrev en Prisma-feil jeg leste forbi.
+
+Nytt: 14 unit, 7 integrasjon, 5 e2e. Totalt 1088 unit, 225 e2e, 31 kontrakt.
+
+## 2.26.3 - 2026-08-22
+
+**Tre integritetshull QA-porten fant i mine egne fikser (#938, #945).**
+
+Porten var nede for kreditt da 2.25.2–2.26.2 ble bygget. Da den kom tilbake, kjørte jeg den på hele
+bunten `v2.25.1 → dev` og fikk **NO-GO med ti funn**. Dette er de tre alvorligste.
+
+### Kursbevis utstedt før v2.23.0 var ubeskyttet
+
+`sectionSnapshotJson` er nullbar og med vilje ikke bakfylt — jeg skrev det selv i `DECISIONS.md`.
+Et `contains`-oppslag treffer aldri `NULL`, så slettevernet jeg la inn i 2.26.2 beskyttet **ingen av
+de gamle bevisene**.
+
+Vi kan ikke vite hvilke seksjoner et slikt bevis dekket; dataene finnes ikke. Men lesesporet er en
+ærlig stedfortreder: leste deltakeren seksjonen i det kurset hen fikk beviset for, var den en del av
+grunnlaget. Konservativt i riktig retning, og alt dataene tillater.
+
+### Kaskadesletting omgikk vakta
+
+`cascadeDeleteCourse` slettet eksklusive seksjoner direkte. En seksjon som sto i et utstedt bevis,
+ble fjernet fra sitt opprinnelige kurs og lagt eksklusivt i et annet, forsvant når **det** kurset ble
+kaskadeslettet.
+
+⚠️ Vakta ligger nå i **analysen**, ikke i slettingen — forfatteren ser blokkeringen i
+forhåndsvisningen i stedet for å møte et unntak halvveis i en transaksjon. Regelen har fortsatt én
+implementasjon: `describeIssuedCertificateBlock` kaller den kastende varianten og fanger meldingen.
+To kopier ville drevet fra hverandre, og det er nettopp det #938 handlet om.
+
+### Modultelleren var uenig med porten
+
+`moduleTotal` inkluderte arkiverte moduler, mens porten ikke krevde dem. Jeg filtrerte
+seksjonstellingen i 2.26.1 og glemte modulsiden — samme «to tellere er uenige» som saken handlet om,
+i min egen fiks.
+
+**Funnet ved å måle ekte data:** «Samfunnsvitere» på stage viste `moduleTotal: 5` mens porten krevde
+4. QA-porten fant det samme uavhengig, minutter senere.
+
+### Merk om testene
+
+Regresjonstesten for modultelleren finnes fordi alle mine tidligere tester brukte **seksjoner**.
+Modulsiden var udekket, og derfor usynlig.
+
+Første utkast av den testen telte `available === false` og forventet 1 — men den «levende» modulen i
+fikstureringen har ingen publisert versjon og er derfor også utilgjengelig. Å telle ville målt
+fikstureringen, ikke regelen. Assertionen peker nå på den arkiverte modulen ved id.
+
+1051 unit, 220 e2e, 31 kontrakt, 33 integrasjon.
+
+⚠️ Sju av de ti QA-funnene gjenstår — klientsiden respekterer ennå ikke `available`, og toastens
+detaljfelt viser fortsatt rå JSON til deltakeren. Se #992.
+
+## 2.26.2 - 2026-08-22
+
+**Begge dørene inn til «arkivert innhold i et kurs» er stengt, og diplomgrunnlaget kan ikke slettes (#938).**
+
+### Inngangsdøra
+
+G2 nektet allerede å arkivere innhold som **ligger** i et kurs. Den andre døra sto åpen: allerede
+arkivert innhold kunne **legges inn**. Validering i `setCourseItems` spurte «finnes elementet?», ikke
+«kan det brukes?».
+
+Det er slik «Samfunnsvitere» på stage fikk en arkivert modul som blokkerte fullføring for alltid.
+
+⚠️ **Poenget er ikke et filter til.** Med begge dører stengt kan tilstanden ikke oppstå — og da
+trenger ikke de fem leserne hver sin regel for å håndtere den. Å lære 25 lesere en regel er dyrere
+enn å gjøre tilstanden uoppnåelig.
+
+Feilmeldingen skiller de to tilfellene: «is archived and cannot be added» kontra «does not exist».
+En sammenslått melding ville tatt fra forfatteren informasjonen om hvilken av dem det er — og det
+var nettopp uklare feilmeldinger som ga oss #937.
+
+### Slettevernet
+
+Produkteier, 2026-08-21: *«Arkivert materiale var naturligvis del av pensum når diplom ble utdelt og
+må bevares som grunnlag for diplom, men ellers ikke.»*
+
+G2 dekket «ligger i et kurs **nå**». Ingenting dekket «sto i et kursbevis **da**». En seksjon som var
+fjernet fra kurset kunne slettes, og snapshotet ble hengende med en død id — et utstedt diplom kunne
+ikke lenger begrunnes.
+
+Skillet er med vilje: **arkivere** er ut av sirkulasjon og diplomet tåler det; **slette** er borte.
+Bivirkningen — at innhold noen har fått diplom på blir permanent uslettbart — er godtatt som prisen
+for at et kursbevis skal kunne etterprøves.
+
+### Ingen modulvakt, med vilje
+
+`deleteModule` blokkerer allerede på `certificationStatuses > 0`. Et kursbevis krever at deltakeren
+besto modulen, så raden finnes, og sletting stoppes. En egen
+`assertModuleNotInIssuedCertificate` ville **aldri kunne fyre** — og en vakt som leser som en vakt
+uten å kunne virke er verre enn ingen vakt (#960).
+
+Seksjoner har ingen tilsvarende avhengighet: `courseSectionRead` sjekkes ikke ved sletting. Der er
+vakta reell. Asymmetrien er nå skrevet ned begge steder.
+
+Mutasjonsverifisert hver for seg: åpnes inngangsdøra blir to tester røde, fjernes slettevernet blir
+én — og kontrollcasene forblir grønne i begge tilfeller.
+
+1051 unit, 220 e2e, 31 kontrakt, 23 integrasjon.
+
+## 2.26.1 - 2026-08-22
+
+**En uleselig seksjon kunne markeres lest og utløse kursbevis (#944, #938, #945).**
+
+En seksjon uten aktiv versjon ga deltakeren **200 med tom side**. Hen trykket «lest», lesningen ble
+registrert, og kursbeviset utstedt for innhold som aldri ble publisert.
+
+To helt ulike årsaker traff samme sti:
+
+| Årsak | Hva som skjer |
+|---|---|
+| Arkivert | `archiveSection` nuller `activeVersionId` |
+| Holdt av oversettelsesgaten | versjonen lagres, `activeVersionId` settes aldri |
+
+### Fem lesere, fire regler
+
+Spørsmålet «kan en deltaker lese denne seksjonen» ble besvart ulikt fem steder — og to av dem
+svarte ingenting i det hele tatt:
+
+| Sted | Krevde |
+|---|---|
+| Hent innhold | ingenting — kun medlemskap i kurset |
+| Marker lest | ingenting — kun medlemskap |
+| Bevisporten | `archivedAt == null` |
+| Publiseringsgaten | `activeVersionId !== null` |
+| MODUL i samme løkke | alle tre leddene |
+
+Seksjoner fikk ikke engang et `available`-felt i DTO-en, så klienten satte det til `true` for alle.
+
+`isSectionAvailableToParticipant` er nå den ene definisjonen alle bruker: lesestien, marker-lest,
+bevisporten, kursdetaljen og kurslista.
+
+### Tre tellere som var uenige
+
+Å fikse porten alene var ikke nok — testen fanget at kursdetaljen fortsatt talte `sectionTotal: 1`
+for en seksjon porten ikke krevde. Det er #938 i miniatyr: kortet kunne vise «Seksjonar 0/1» ved
+siden av et utstedt kursbevis.
+
+Alle tre tellerne — porten, kursdetaljen og kurslista — bruker nå samme regel. Lista filtrerer i
+spørringen, så batchen fortsatt er én runde.
+
+### #945: arkiverte moduler blokkerer ikke lenger
+
+Porten filtrerte arkiverte **seksjoner** bort, men ikke arkiverte **moduler**. En arkivert modul i
+et publisert kurs blokkerte fullføring **for alltid** — deltakeren kom aldri over 4/5, fikk aldri
+bevis, og så ingen feilmelding. Bekreftet på stage 2026-08-21: kurset «Samfunnsvitere».
+
+Modulene kom fra tre ulike spørringer og bare én hentet `archivedAt`. Alle tre bærer det nå, og
+typen krever det — en fjerde kaller som glemmer det kompilerer ikke.
+
+### ⚠️ Mutasjonsverifiseringen avslørte en test som målte feil ledd
+
+Predikatet har to ledd. Å fjerne versjons-leddet gjorde tre integrasjonstester røde. Å fjerne
+**arkiv-leddet gjorde ingen av dem røde.**
+
+Årsaken: `archiveSection` setter begge feltene samtidig, så en arkivert seksjon feiler
+versjons-leddet uansett. Min «arkiverte seksjon»-test målte i praksis det andre leddet, og ville
+vært grønn selv om arkiv-sjekken ikke fantes.
+
+Arkiv-leddet er beholdt som forsvar i dybden — databasen tillater kombinasjonen, importen kan
+skrive den, og #938 sin inngangsdør er ikke stengt ennå — men det er nå dekket der det faktisk kan
+avgjøres: `test/unit/section-availability.test.ts` konstruerer tilstanden direkte. Begge ledd gir
+nå rødt på nøyaktig én test hver når de fjernes.
+
+1051 unit, 220 e2e, 31 kontrakt, 6 dom.
+
+## 2.26.0 - 2026-08-22
+
+**Resertifisering av moduler er fjernet (#989).** En bestått modul gjelder til den revideres —
+ingen utløpsdato, ingen resertifisering. Produkteier 2026-08-22.
+
+Mekanismen kostet uten å virke:
+
+| | |
+|---|---|
+| **Alle** moduler utløp etter 365 dager | én global `validityDays`, ikke per modul |
+| Utløpt blokkerte **ingenting** | `EXPIRED` sto i `CERTIFICATION_PASSED_STATUSES` og telte som bestått |
+| Følgen | påminnelser om å fornye noe ingenting krevde fornyet |
+
+### Fjernet
+
+- `recertificationService.ts` → `certificationStatusService.ts`. `deriveRecertificationStatus`,
+  `runRecertificationReminderSchedule` og hele påminnelses-utsendelsen er borte; igjen står
+  `upsertCertificationStatusFromDecision`, som skriver `ACTIVE`/`NOT_CERTIFIED` + `passedAt`.
+- `recertification`-blokka i `config/assessment-rules.json` og i `assessmentRules.ts`.
+- `certificationRepository.findCertificationsForReminderSchedule` (spørringen på `expiryDate`).
+- `POST /api/reports/recertification/reminders/run` → 404.
+- Operasjonelle hendelser `recertification_reminder_sent` / `_failed`.
+
+### Beholdt — og hvorfor
+
+- **`passedAt`.** Når en modul ble bestått har verdi i seg selv.
+- **Kolonnene `expiryDate` og `recertificationDueDate`.** Expand/contract: de slutter å skrives,
+  eksisterende rader beholder verdiene som historikk. Ingen destruktiv migrasjon nå.
+- **`DUE_SOON`/`DUE`/`EXPIRED` i `CERTIFICATION_PASSED_STATUSES`.** Det er DETTE som gjør fjerningen
+  konsekvensfri. Historiske rader står med de verdiene; krymper man lista til `["ACTIVE"]` mister de
+  kursbeviset sitt — en bestått-avgjørelse ville endret seg.
+- **Audit-handlingsnavnene med «recertification».** Persisterte verdier på eksisterende rader, og
+  `auditPiiScrub` trenger navnene for å kunne vaske e-post ut av gamle påminnelsesrader.
+- **Kursfrister (`CourseEnrollment.dueAt`).** En frist for å bli *ferdig*, ikke en utløpsdato på
+  kunnskap. Helt urørt.
+
+### API-endring
+
+`GET /api/reports/recertification` beholder URL-en, men rapporterer nå lagret tilstand i stedet for
+utledet utløpsstatus: `reportType` → `certification-status`, `status` → `ACTIVE`/`NOT_CERTIFIED`,
+utløpsfeltene og tellingen per livssyklustilstand er borte. Se `doc/API_REFERENCE.md`.
+
+### Verifisering
+
+Den bærende testen er skrevet først: `test/unit/course-certificate-gate-invariant.test.ts` kjører
+kursbevisporten (`courseCompletionService` → `countPassedModulesForUser`) mot en Prisma-dobbel som
+faktisk tolker `status: { in: … }`, og pinner at historiske rader med `EXPIRED`/`DUE`/`DUE_SOON`
+fortsatt gir kursbevis — med `ACTIVE` og `NOT_CERTIFIED` som kontrollcaser.
+
+**Mutasjonsverifisert:** krymp `CERTIFICATION_PASSED_STATUSES` til `["ACTIVE"]` → de tre
+legacy-casene blir røde på utstedelses-assertionen, kontrollcasene forblir grønne. Tilsvarende for
+utløpsfeltene (skriv `expiryDate` igjen → repository-testen blir rød) og for config-blokka (legg
+`recertification` tilbake i skjemaet → schema-testen blir rød).
+
+## 2.25.5 - 2026-08-22
+
+**`normalizeLocalizedTitleSeed` viftet kildeteksten ut i alle tre språk (#981).**
+
+#892 fjernet vifta fra *patch*-siden av `updateModuleTitle`. Den overlevde 20 linjer over, på
+*seed*-siden — grunnlaget en objekt-patch flettes inn på:
+
+```js
+return { "en-GB": fallback, nb: fallback, nn: fallback };
+```
+
+Ligger en modultittel som ren streng («Tryggleik i praksis» — ett språk, ikke oversatt) og
+forfatteren oversetter kun nynorsk med `PATCH {nn: "…"}`, ble resultatet
+`{en-GB: kildetekst, nb: kildetekst, nn: oversatt}`. `missingLocalesFor` rapporterte **0 manglende**,
+publiseringsgaten slapp modulen gjennom, og en en-GB-deltaker fikk norsk tittel som systemet mente
+var oversatt.
+
+### Hvorfor grenen fantes — og hva som erstatter den
+
+Den ble skrevet da `updateModuleTitle` gikk fra `title: string` til en lokalisert patch. Grunnlaget
+måtte være et objekt for at spredningen skulle virke, og vifta var den enkleste måten å unngå at et
+språk sto tomt. Fallback-argumentet holder ikke: `localizeContentText` slår opp
+`map[locale] ?? map["en-GB"] ?? første verdi`, så et delvis kart viser tekst i alle språk uansett.
+
+Grunnlaget er nå ærlig: **et lagret objekt** navngir språkene sine og er et gyldig grunnlag å flette
+på; **en lagret ren streng** sier «ett språk, og dataene sier ikke hvilket», så den bidrar med
+ingenting og patchen står alene. Dette er nøyaktig regelen `mergeLocalized` i
+`moduleVersionComposer` allerede følger for `description` og `certificationLevel` — tittelen er nå
+enig med sine egne søsken i samme forespørsel.
+
+Gjetningen «hvilket språk er dette?» hører hjemme i forfatterklienten, der forfatteren ser
+kildespråket forhåndsutfylt og kan rette det før lagring (`LEGACY_STRING_LOCALE` i
+`admin-content-shell.js`). Backend skal ikke ta den stille.
+
+`normalizeLocalizedTitlePatch` rett under hadde **ikke** samme feil — den ble ryddet i #892 og
+filtrerer nå bare bort blanke oppføringer.
+
+### Verifisering
+
+Fem nye unit-caser pluss én integrasjonstest som går hele veien gjennom ruta:
+
+1. **Feilen** — ren streng → `PATCH {nn}` → `missingLocalesFor` gir `["en-GB", "nb"]`
+2. **Kontrollcase** — samme utgangspunkt, patch som faktisk fyller alle tre → `[]`
+3. **Kontrollcase** — fletting på et ekte språkkart er urørt, de andre språkene overlever
+4. **Kontrollcase** — et delvis oversatt kart forblir delvis og rapporterer fortsatt hullet sitt
+5. **Ny kant** — en patch der alle oppføringer er blanke lar tittelen stå (uten seed kunne
+   sammenslåingen bli tom, og `serialize({})` ville lagret strengen `"{}"` som *alle* språk viste)
+
+Mutasjonsverifisert begge veier: settes vifta tilbake, blir både unit- og integrasjonstesten røde på
+`expected [] to deeply equal [ 'en-GB', 'nb' ]` — nøyaktig påstanden i saken. Returnerer grunnlaget
+alltid `{}` (overkorreksjon), blir de to flettekontrollene røde i stedet.
+
+### ⚠️ Eksisterende data er skadet, og opprydningsskriptet fanger det ikke
+
+`maint:collapse-duplicated-titles` (v2.11.4) kollapser bare kart der **alle** verdiene er like.
+Denne feilen produserer `{en-GB: X, nb: X, nn: Y}` — to like og én ulik, som skriptet bevisst lar
+være fordi det normalt betyr reelt oversettelsesarbeid. Rader skrevet av seed-vifta ser derfor
+fortsatt fullt oversatte ut. Ikke undersøkt mot stage/prod her.
+
+## 2.25.4 - 2026-08-22
+
+**Dirty-sjekken så aldri et avkryssbart felt (#973).**
+
+`stampEditFormValues` stemplet `el.value` for en håndskrevet klasseliste, og `hasOpenEditForm`
+sammenlignet `el.value` tilbake. For et avkryssbart felt er `value` en konstant — `"on"` for en
+checkbox, alternativindeksen for en radio — så tilstanden endret seg aldri i sammenligningen,
+uansett hvilken selektorliste feltet sto i. Docstringen lovet det motsatte: «Checkboxes carry their
+state as a string for the same comparison.»
+
+Det levende offeret er **MCQ-fasiten**: bytt riktig svaralternativ i Rediger, bytt så fane eller
+innholdsspråk. Ingen advarsel, formen bygges på nytt fra `bundle`, og valget er borte uten spor.
+
+### Fiksen
+
+Én delt aksessor, `fieldStateValue(el)`, som spør ELEMENTET hva slags felt det er i stedet for å slå
+det opp i en liste, pluss `applyFieldStateValue` for veien tilbake. Stemplingen spør nå DOM-en hva
+som finnes (`input, select, textarea` i skjemaet) framfor å navngi klasser — en klasseliste kan bare
+dekke feltene noen husket, og de to som manglet manglet nettopp fordi ingen tenkte på dem.
+
+Antallet definisjoner av «er skjemaet endret» er uendret (fem); aksessoren er delt av dem, ikke en
+sjette.
+
+### De andre dirty-funksjonene
+
+`hasUnsavedSettingsEdits` / `settingsCriteriaEdited` / `hasUnsavedCriteriaEdits` hadde **ikke**
+hullet: kriterieeditoren leses av `captureLatestCriteriaState`, som allerede leste `.checked`, så
+«synlig for kandidat» var dekket der. Innstillingenes stempel/sammenlign/gjenopprett-trio går
+likevel gjennom samme aksessor nå, så neste avkryssingsboks i panelet er dekket den dagen den legges
+inn — ikke den dagen noen husker listen.
+
+### Verifisering
+
+`test/e2e/admin-content-dirty-tickable-fields.spec.ts`, fire tester, hver endringstest med sin
+kontrollcase-makker (urørt skjema varsler ikke). Én av dem er en **dekningsvakt**: hver
+forfatterredigerbar kontroll i skjemaet MÅ bære et stempel, så neste felttype fanges av testen i
+stedet for av en forfatter.
+
+Mutasjonsverifisert to veier: (A) `fieldStateValue` returnerer `el.value` igjen → tre tester røde på
+riktig assertion, kontrollcasene og Innstillinger-testen fortsatt grønne; (B) selektorlista tilbake
+→ dekningsvakta rapporterer de tre ustemplede radioene ved navn.
+
+## 2.25.3 - 2026-08-22
+
+**En kandidat som glemte ett spørsmål fikk en Zod-dump (#988).** Produkteier forsøkte å levere inn en
+MCQ-modul i prod og fikk:
+
+```
+400: {"error":"validation_error","issues":[{"code":"too_small","path":["responses",3,…
+```
+
+Det fjerde spørsmålet var ubesvart. Klienten sendte det som tom streng, serveren avviste det — og
+deltakeren fikk maskineriet i fanget uten å få vite hvilket spørsmål som manglet.
+
+### Sjekken fantes allerede, på feil sti
+
+`participant.js` hadde nøyaktig denne kontrollen — men bak `if (previewModeEnabled)`. En **forfatter**
+som testet modulen fikk «Svar på alle preview-MCQ-spørsmål før du fortsetter». En **kandidat midt i en
+test** fikk rå JSON.
+
+Plattformen visste at kontrollen trengtes. Den ble bare aldri lagt på veien ekte brukere går.
+
+### To fikser
+
+**Lokal kontroll før innsending.** Ubesvarte spørsmål navngis («Spørsmål 4 mangler svar»), kortet
+markeres med ramme *og* venstrestrek, og siden ruller til det første. Ingen nettverksrundtur — og
+markeringen forsvinner i det øyeblikket spørsmålet besvares, så ingen leter etter en feil som er
+rettet.
+
+Serversjekken er urørt. Den er siste forsvarslinje, ikke den som skal snakke med brukeren.
+
+**Rå servertekst oversettes i `log()`**, ikke i knappen som utløste saken. `apiFetch` bygger
+`error.message` som `"<status>: <hele JSON-kroppen>"`, og `participant.js` har **tre** steder som
+sender den videre. Å fikse kallstedet ville løst ett av tre — «riktig fiks, ufullstendig flate».
+Detaljene kastes ikke; de går i toastens detaljfelt.
+
+### Verifisering
+
+Tre nye e2e, mutasjonsverifisert begge veier: fjerner man den lokale sjekken blir «stoppes lokalt»
+rød, og slår man av oversettelsen blir «vises som en setning» rød. Kontrollcase på at det *besvarte*
+spørsmålet ikke markeres — uten det ville «marker alle» bestått.
+
+216 e2e, 1036 unit, 6 dom.
+
+### Ratsjen fanget en påstand jeg tok feil om
+
+Første utkast av denne teksten sa at endringen fikset alle tre kjente rå bruk i `participant.js`
+«på én gang, siden oversettelsen ligger i den delte loggeren». **Det stemte ikke.** De tre lå i
+kursflytene og kalte `showToast` direkte — ikke via `log()`. Dekningsvakta sto uendret på 3 og
+avslørte det.
+
+De er nå rutet gjennom `participantErrorToast`, og baselinen er satt **3 → 1**. Den ene som står
+igjen er oversetterens egen fallback: den viser en allerede oversatt melding, som «Spørsmål 4
+mangler svar», og skal være der.
+
+Verdt å merke seg som argument for ratsjen: den fanget både at gjelden ble mindre *og* at jeg
+beskrev den feil.
+
+## 2.25.2 - 2026-08-22
+
+**Tre dekningsvakter, og de to feilene den tredje fant (#941).** Mekanisme 2 fra
+kompleksitetsbremsen — den billigste av de fire, og den eneste som virker uten at noen husker noe.
+
+### Hva en dekningsvakt er
+
+En liste over «alle stedene som må gjøre X» kan per definisjon ikke oppdage stedet ingen tenkte på.
+En test som **finner kallerne selv** kan. Unntakslista er poenget: den hindrer ikke drift, den gjør
+den synlig — og hver oppføring må ha en grunn noen har skrevet ned.
+
+| Vakt | Finner | Unntak |
+|---|---|---|
+| `findCourseById` avgjør synlighet | 8 kallere | 4, hver med grunn |
+| Rå servertekst i toast (ratsj) | 35 i 8 filer | baseline per fil |
+| `.hidden` på display-settende klasse | 2 ekte feil | ingen — **fikset** |
+
+### Den tredje fant to ekte feil, uten å få dem fortalt
+
+`.hidden { display: none }` står uten `!important` og taper cascaden mot enhver klasse som setter
+`display` senere. `participant.html` hadde `class="module-brief hidden"` mot
+`.module-brief { display: grid }` — så en tom OPPGAVE/VEILEDNING-boks med ramme og gradient sto
+synlig ved **hver sidelast**, til `renderSelectedModuleSummary()` rakk å rette den med `setHidden`.
+
+Rettet i markup, ikke unntatt: `.hidden` → inline `style="display:none"`. Begge elementene styres
+allerede av `setHidden`, som nuller `style.display`, så de virker nå fra første render.
+
+⚠️ Vakta utleder de display-settende klassene **fra CSS-en**. Mitt første utkast av stage-testen
+brukte en hardkodet liste og ga fem falske positive på `class="card hidden"` — `.card` setter ikke
+`display` i det hele tatt. Og `CLAUDE.md` sin egen fellelist nevner både `.card` og `.content-card`;
+ingen av dem setter display. **En nedskrevet liste råtner. En som utledes gjør ikke det.**
+
+### Ratsjen
+
+Rå servertekst er en **ratsj**, ikke en forbudsliste: gjelden finnes fra før (#972), og en vakt som
+er rød fra dag én blir slått av. Baselinen fryser antallet per fil — nye forekomster feiler, og
+*fikser* man noen, feiler den også, med beskjed om å sette tallet ned. Et tall som bare kan stå
+stille er ikke en ratsj.
+
+Første forsøk brukte en enlinjes regex og fant **5**. Skanningen sa 40+. Forskjellen var flerlinjede
+kall — og det er nettopp de lange som dumper JSON. Med balansert parentes-lesing: **35**. Hadde
+baselinen frosset på 5, ville vakta sluppet gjennom 30 eksisterende mens den så grønn ut.
+
+### Utrullingskontroller mot stage og prod
+
+`test/stage/release-surface.spec.ts` måler om endringene faktisk **kom ut** — ikke om de virker. De
+fleste punktene på en manuell testliste er egentlig det spørsmålet.
+
+⚠️ Stiene der er dyrekjøpte. På ett døgn bommet jeg på fem: `/participant.js` (riktig
+`/static/participant.js`), `/healthz` på parseren (riktig `/health`), `/participant.html` (riktig
+`/participant`), og spec-en havnet først i feil repo-mappe. **Hver bom så ut som et funn** — null
+treff på en grep leser som «endringen mangler». `fetchText` feiler derfor på ikke-200 **og** på tom
+kropp.
+
 ## 2.25.1 - 2026-08-21
 
 **Sikkerhetsfiks: kursimport med `replaceExisting` manglet eierskapssjekk (#942).**

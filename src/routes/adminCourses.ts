@@ -24,6 +24,8 @@ import {
 } from "../modules/course/index.js";
 import { generationLocaleSchema, importBodySchema, normalizeImportPayload, localizedTextPatchSchema, parseRequest, clientRefSchema, agentRunIdSchema } from "../modules/adminContent/adminContentSchemas.js";
 import { courseAdminLinks } from "../modules/adminContent/adminUiLinks.js";
+import type { AppRole as AppRoleType } from "@prisma/client";
+import { hasAnyRole, ADMIN_ONLY } from "../auth/roleSets.js";
 import { buildCourseExportEnvelope } from "../modules/adminContent/index.js";
 import { importCourseFromEnvelope } from "../modules/adminContent/contentImportService.js";
 import { localizedTextCodec } from "../codecs/localizedTextCodec.js";
@@ -223,6 +225,14 @@ adminCoursesRouter.post("/import", async (request, response, next) => {
     response.status(201).json({
       courseId: result.courseId,
       moduleIds: result.moduleIds,
+      // #957: forfatteren skal vite HVORFOR kurset ligger som utkast. Flagget er den eneste kilden
+      // til den forklaringen — et kurs kan også være utkast fordi KILDEN var det, og de to sier
+      // helt ulike ting om hva forfatteren må gjøre videre.
+      //
+      // ⚠️ `importCourseFromEnvelope` regnet ut flagget, brukte det til å holde kurset tilbake, og
+      // slapp det så på gulvet i sin egen retur — mens modul- og seksjonsimporten rapporterte det.
+      // Kommentaren i `contentImportService.ts` lovet at det ble rapportert. Nå gjør det det.
+      heldBackByTranslationGate: result.heldBackByTranslationGate,
       links: courseAdminLinks(result.courseId),
       ...(data.clientRef !== undefined ? { clientRef: data.clientRef } : {}),
     });
@@ -356,7 +366,11 @@ adminCoursesRouter.put("/:courseId/modules", requireContentOwnership("COURSE", "
 // Mixed item ordering — modules and learning sections interleaved (#486/B2).
 adminCoursesRouter.get("/:courseId/items", async (request, response, next) => {
   try {
-    const items = await courseRepository.findCourseItems(request.params.courseId);
+    // #958: forfatterlista skal se ALT — den er verktøyet man rydder opp arkivert innhold MED.
+    // ⚠️ `archivedAt` sendes videre og regelen overlates til klienten. Det er fortsatt en åpen
+    // flate (#992: kursbyggeren tilbyr arkiverte seksjoner backend avviser), men det er en
+    // klientside-regel og hører ikke i denne aksessoren.
+    const items = await courseRepository.findAllCourseItems(request.params.courseId);
     response.json({
       items: items.map((item) => ({
         id: item.id,
@@ -503,8 +517,9 @@ adminCoursesRouter.delete("/:courseId", requireContentOwnership("COURSE", "cours
 // #762: ADMINISTRATOR-only destructive cleanup — delete a course together with the modules/sections
 // it exclusively owns. The admin_content mount already lets SMO+ADMIN in; this per-route
 // ADMINISTRATOR gate is the extra guard because the action can destroy content, not just a course.
-function isAdministrator(roles: string[] | undefined): boolean {
-  return roles?.includes("ADMINISTRATOR") ?? false;
+// #962: bruker det delte settet i stedet for sin egen streng. Uendret betydning.
+function isAdministrator(roles: AppRoleType[] | undefined): boolean {
+  return hasAnyRole(roles, ADMIN_ONLY);
 }
 
 // Read-only preview of what would be deleted, spared (shared with other courses), or block the

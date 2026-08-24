@@ -10,6 +10,7 @@ import {
   startMcq,
   submitMcqWithAnswerSelector,
 } from "./support/participantFlow.js";
+import { warmModuleGraph } from "./support/moduleGraphWarmup.js";
 
 const mockEvaluatePracticalWithLlm = vi.hoisted(() => vi.fn());
 // #475 Phase 2: the content-similarity "model answer" generator lives in the same module, so it is
@@ -64,6 +65,20 @@ function buildAssessment(overrides: Partial<LlmStructuredAssessment> = {}): LlmS
     ...overrides,
   };
 }
+
+// #994: `loadFreshApp` kaller `vi.resetModules()` med vilje — hver test skal ha en ren
+// modulinstans. Det som IKKE var med vilje, er at den første av dem også betaler den KALDE
+// gjennomlesingen av hele app-grafen fra disk, inne i sitt eget `testTimeout`.
+//
+// ⚠️ Det var denne som kostet en time 2026-08-23. TC-POL-RED-001 gikk over 20 s, men vitest kan
+// ikke stoppe en løpende promise: testen fortsatte til ~60 s, spionen registrerte enda et kall, og
+// TC-POL-RED-002 — som teller kall — så 2 der den ventet 1. Symptomet så ut som en logikkfeil i
+// policyen, og feilsøkingen startet derfor på helt feil sted.
+//
+// Oppvarmingen her endrer ingenting for `loadFreshApp`: hver test får fortsatt sitt eget register.
+// Den flytter bare den kalde disklesingen til en hook med eget budsjett. OS-ens filcache er
+// prosessdelt, så hver senere `resetModules`-import treffer varme filer.
+warmModuleGraph(() => import("../src/app.js"));
 
 async function loadFreshApp(): Promise<Express> {
   vi.resetModules();

@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { warmModuleGraph } from "../support/moduleGraphWarmup.js";
 
 // ── Mocks ────────────────────────────────────────────────────────────────────
 
@@ -38,6 +39,9 @@ afterEach(() => {
   vi.clearAllMocks();
   vi.unstubAllEnvs();
 });
+
+// #994: modulgrafen leses her, ikke i første test. Se test/support/moduleGraphWarmup.ts.
+warmModuleGraph(() => import("../../src/middleware/consentMiddleware.js"));
 
 describe("consent middleware", () => {
   beforeEach(() => {

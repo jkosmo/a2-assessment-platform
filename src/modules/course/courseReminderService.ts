@@ -16,14 +16,15 @@ import { enrollmentRepository } from "./enrollmentRepository.js";
 import { classRepository } from "./classRepository.js";
 import { findActiveParticipants } from "../../repositories/userRepository.js";
 
-// #497: automatiske kurs-frist-påminnelser (Epic #478, siste «Done når»-pilar). Klon av
-// recert-påminnelses-mønsteret (recertificationService.ts): audit-basert dedup gjør re-kjøring
-// idempotent og restart-trygg. Dekker to kilder til kurs-frister:
+// #497: automatiske kurs-frist-påminnelser (Epic #478, siste «Done når»-pilar). Audit-basert dedup
+// gjør re-kjøring idempotent og restart-trygg. Dekker to kilder til kurs-frister:
 //   1. INDIVIDUELLE (eksplisitt tildelte) CourseEnrollment.dueAt.
 //   2. KLASSE-tildelte CourseGroupAssignment.dueAt (fase 2), ekspandert til medlemmer — MANUAL-
 //      klasser (ClassMember-rader) + system-klassen «Alle deltakere» (alle aktive deltakere).
 //      ENTRA-klasser kan ikke oppløses i en bakgrunnsjobb (ingen token/lagrede medlemskanter) og
 //      hoppes over, på samme måte som tildelings-e-posten (classService).
+// ⚠️ #989 fjernet resertifisering av moduler. DETTE er ikke det: en kursfrist er en frist for å bli
+// FERDIG med et kurs, ikke en utløpsdato på kunnskap. Kursfrister er uendret og skal forbli det.
 // Per (bruker, kurs) beregnes ÉN effektiv frist: individuell frist vinner over klasse; ved flere
 // klasse-frister vinner den tidligste. Slik unngås dobbel-varsling. Ingen per-bruker locale finnes
 // ennå → org-default (nb), samme som diskusjonsvarsler.

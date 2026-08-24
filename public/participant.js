@@ -10,6 +10,16 @@ import { localeLabels, supportedLocales, translations } from "/static/i18n/parti
 import { apiFetch, buildConsoleHeaders, getConsoleConfig, fetchQueueCounts, applyNavReviewBadge, hydrateContentAssetImages } from "/static/api-client.js";
 import { initConsentGuard } from "/static/consent-guard.js";
 import { hideLoading, showEmpty, showLoading } from "/static/loading.js";
+import {
+  OUTCOME_FAILED,
+  OUTCOME_PASSED,
+  OUTCOME_PENDING,
+  deriveOutcome,
+  hasPassingDecision,
+  isAppealableFail,
+  isSettledPass,
+  outcomeClass as outcomeClassFor,
+} from "/static/outcome.js";
 import { showToast } from "/static/toast.js";
 import { setHidden } from "/static/dom-visibility.js";
 import {
@@ -22,6 +32,11 @@ import {
   resolveWorkspaceNavigationItems,
   resolveSelectedModule,
   upsertModuleDraft,
+  // #992: kurssekvensens tilgjengelighets- og ferdig-predikater. Se modulen for hvorfor de
+  // bor der og ikke her: de er rene funksjoner, og skal kunne testes som det.
+  isEntryAvailable,
+  isEntryDone,
+  isEntryOutstanding,
 } from "/static/participant-console-state.js";
 
 const output = document.getElementById("output");
@@ -575,14 +590,18 @@ function applySubmissionReadMode() {
   const hideAck = readOnly || mcqOnly;
   if (ackCheckbox) {
     ackCheckbox.disabled = readOnly;
-    ackCheckbox.hidden = hideAck;
+    // #975: `.inline{display:inline-block}` slår `hidden`-attributtet, så denne linja skjulte
+    // ingenting — avkrysningsboksen ble bare usynlig fordi <label>-en rundt ble skjult (under).
+    // En linje som ser ut som den gjør jobben, men ikke gjør den, er verre enn ingen linje.
+    setHidden(ackCheckbox, hideAck);
   }
   if (draftStatus) draftStatus.hidden = hideAck;
   if (draftBrowserNote) draftBrowserNote.hidden = hideAck;
   if (submissionValidationHint) submissionValidationHint.hidden = hideAck;
-  // The ack <input> carries the `.inline` class whose CSS display overrides the [hidden]
-  // attribute, so hide the wrapping <label> via style.display (beats the class rule) — #525.
-  if (submissionAckLabel) submissionAckLabel.style.display = hideAck ? "none" : "";
+  // #525: <label>-en rundt må skjules for seg — den er en egen boks med ramme, ikke bare et hylster
+  // rundt avkrysningsboksen. #975: den brukte allerede style.display, som er riktig mekanisme;
+  // setHidden gjør det samme og holder `hidden`-attributtet i takt.
+  setHidden(submissionAckLabel, hideAck);
   // #475: the whole "Før du leverer" group (label + ack tile + KI) follows the ack's visibility.
   if (attestGroup) attestGroup.style.display = hideAck ? "none" : "";
   if (submissionIdRow) submissionIdRow.hidden = readOnly;
@@ -971,8 +990,13 @@ function renderModules() {
     button.classList.toggle("completed", module.completed === true);
     // If the latest decision was a fail, mark the card so the green-success styling
     // doesn't visually mislead students who haven't passed yet.
+    // #978: presentasjon — samme regel som resultatbanneret. En modul som fortsatt vurderes
+    // skal ikke males rød på kortet mens banneret holder den nøytral.
     const latestFailed = module.completed === true
-      && module.participantStatus?.latestDecision?.passFailTotal === false;
+      && deriveOutcome({
+        passFailTotal: module.participantStatus?.latestDecision?.passFailTotal,
+        submissionStatus: module.participantStatus?.latestStatus,
+      }) === OUTCOME_FAILED;
     button.classList.toggle("failed", latestFailed);
     button.setAttribute("aria-pressed", module.selected ? "true" : "false");
     button.addEventListener("click", () => {
@@ -1127,7 +1151,9 @@ function activateParticipantModule(moduleId, options = {}) {
   // creating the (empty) submission + starting the MCQ immediately, so the participant never sees
   // a "create submission" step. Covers both entry points (module card + course → openCourseModule).
   // #2 fix: don't auto-start for an already-passed module (avoids a needless retake / 409).
-  const alreadyPassed = nextModule.participantStatus?.latestDecision?.passFailTotal === true;
+  // #978: ⚠️ dette er det ENE stedet som med vilje ser bort fra statusen. En bestått-men-under-
+  // vurdering modul skal ikke autostarte et nytt forsøk. Se begrunnelsen i /static/outcome.js.
+  const alreadyPassed = hasPassingDecision(nextModule.participantStatus?.latestDecision?.passFailTotal);
   if (moduleIsMcqOnly(nextModule) && !alreadyPassed && !previewModeEnabled && !flowState.hasSubmission && !createSubmissionButton.disabled) {
     createSubmissionButton.click();
   }
@@ -1228,7 +1254,17 @@ function renderFlowGating() {
   // Feedback (#549): once the participant has passed, retry/«delete & start over» should be a
   // discreet secondary action — not compete with the pass celebration. A failed result keeps it
   // at normal prominence so a retake is easy.
-  resetSubmissionFlowButton.classList.toggle("reset-flow-discreet", hasResultStatus && flowState.resultPassFail === true);
+  // #978 F3: dette var en STATUSBLIND avledning som overlevde konverteringen, fordi verdien er
+  // aliasert til `resultPassFail` og vakta lette etter `passFailTotal`. Resultatet var
+  // selvmotsigende: banneret holdt en bestått-under-vurdering noeytral uten konfetti, mens den
+  // samme renderingen gjorde retake-knappen diskret som om utfallet var endelig.
+  resetSubmissionFlowButton.classList.toggle(
+    "reset-flow-discreet",
+    hasResultStatus && isSettledPass({
+      passFailTotal: flowState.resultPassFail,
+      submissionStatus: flowState.resultStatus,
+    }),
+  );
 
   const createSubmissionBusy = createSubmissionButton.dataset.busy === "true";
   const submitMcqBusy = submitMcqButton.dataset.busy === "true";
@@ -1756,16 +1792,72 @@ function headers() {
   });
 }
 
+// #988: `apiFetch` bygger `error.message` som `"<status>: <hele JSON-kroppen>"` (api-client.js:167).
+// Havner den strengen i `log()`, ser DELTAKEREN rå JSON — og på denne flaten er det verst: en
+// kandidat midt i en test fikk `{"code":"too_small","path":["responses",3]}` og kunne ikke vite at
+// det betydde «du glemte spørsmål 4».
+//
+// ⚠️ Oversettelsen ligger HER, i den delte loggeren, ikke i den ene knappen som utløste saken.
+// participant.js har tre kjente steder som sender `error.message` videre (baselinen i
+// test/raw-server-error-guard.test.js). Å fikse kallstedet ville løst ett av tre og latt de to
+// andre stå — nøyaktig «riktig fiks, ufullstendig flate».
+//
+// ⚠️ #992: detaljene går IKKE i toastens detaljfelt. Det var min første fiks, og den løste
+// ingenting: `showToast` rendrer `detail` som et synlig `<p class="toast__detail">` (toast.js:84),
+// så kandidaten så fortsatt hele Zod-dumpen — bare i grått, under den lokaliserte overskriften.
+//
+// Forskjellen mot forfatterflaten er hvem som leser. En forfatter kan bruke `path: ["bodyMarkdown"]`
+// til noe; en kandidat midt i en test kan ikke, og for hen er dumpen bare støy som ser ut som en
+// systemfeil. Derfor beholder admin-flatene detaljfeltet (`section-portability-916.spec.ts`), mens
+// deltakerflaten sender det til `diagnostic` — konsollet, og råpanelet når feilsøking er slått på.
+function humanizeApiError(text) {
+  const match = /^(\d{3}):\s*(\{[\s\S]*\})$/.exec(text);
+  if (!match) return null;
+  let body;
+  try {
+    body = JSON.parse(match[2]);
+  } catch {
+    return null;
+  }
+  const code = typeof body?.error === "string" ? body.error : null;
+  const key = code === "validation_error" ? "errors.apiValidation" : "errors.apiGeneric";
+  return {
+    headline: t(key).replace("{status}", match[1]),
+    // Navnet er `diagnostic`, ikke `detail`, med vilje: `showToast(msg, type, detail)` tar en
+    // `detail` som tredje argument, og et felt med det navnet inviterer neste kaller til å sende det
+    // rett dit. Feltet heter nå noe annet enn parameteren det ikke skal inn i.
+    diagnostic: JSON.stringify(body, null, 2),
+  };
+}
+
+// #988: samme oversettelse som `log()` bruker, for de kallstedene som går rett til showToast.
+// De tre i kursflytene under er baselinen for participant.js i test/raw-server-error-guard.test.js.
+function participantErrorToast(error, fallbackKey) {
+  const humanized = typeof error?.message === "string" ? humanizeApiError(error.message) : null;
+  if (humanized) {
+    console.warn("[participant] API error", humanized.diagnostic);
+    showToast(humanized.headline, "error");
+    return;
+  }
+  showToast(error instanceof Error ? error.message : t(fallbackKey), "error");
+}
+
 function log(data, options = {}) {
+
   const { notify = true, detail = "" } = options;
-  const statusText = summarizeParticipantResponse(data);
+  const humanized = typeof data === "string" ? humanizeApiError(data) : null;
+  const statusText = humanized ? humanized.headline : summarizeParticipantResponse(data);
+  // #992: `detail` fra kalleren er vår egen, lokaliserte prosa og hører hjemme i toasten. Serverens
+  // JSON gjør ikke det — den går til konsollet, og til råpanelet under når feilsøking er på.
+  if (humanized) console.warn("[participant] API error", humanized.diagnostic);
+  const toastDetail = detail || "";
 
   output.dataset.hasContent = "true";
   outputStatus.dataset.hasContent = "true";
   outputStatus.textContent = statusText;
 
   if (notify) {
-    showToast(statusText, inferParticipantToastType(data), detail);
+    showToast(statusText, humanized ? "error" : inferParticipantToastType(data), toastDetail);
   }
 
   if (!isRawDebugEnabled()) {
@@ -1845,25 +1937,23 @@ function localizeAppealStatus(value) {
   return t(`appeal.statusValue.${normalized || "UNKNOWN"}`);
 }
 
+// #978: regelen bor nå i /static/outcome.js. Denne var den ENESTE av de tre variantene i
+// klienten som så statusen, og er derfor den som ble kanonisert.
 function outcomeClass(passFailTotal, submissionStatus) {
-  const status = typeof submissionStatus === "string" ? submissionStatus.toUpperCase() : "";
-  if (status === "UNDER_REVIEW") return "outcome--review";
-  if (passFailTotal === true) return "outcome--pass";
-  if (passFailTotal === false) return "outcome--fail";
-  return "";
+  return outcomeClassFor(deriveOutcome({ passFailTotal, submissionStatus }));
 }
 
 function localizeDecisionType(value, submissionStatus, passFailTotal) {
-  const normalizedStatus = typeof submissionStatus === "string" ? submissionStatus.toUpperCase() : "";
-  if (normalizedStatus === "UNDER_REVIEW") {
+  const outcome = deriveOutcome({ passFailTotal, submissionStatus });
+  if (outcome === OUTCOME_PENDING) {
     return t("result.decisionValue.MANUAL_REVIEW_PENDING");
   }
 
   const normalized = typeof value === "string" ? value.toUpperCase() : "";
   if (normalized === "AUTOMATIC") {
-    return passFailTotal === true
+    return outcome === OUTCOME_PASSED
       ? t("result.decisionValue.AUTOMATIC_PASS")
-      : passFailTotal === false
+      : outcome === OUTCOME_FAILED
         ? t("result.decisionValue.AUTOMATIC_FAIL")
         : t("result.decisionValue.AUTOMATIC");
   }
@@ -2105,7 +2195,13 @@ function renderAppealState() {
   }
 
   const hasAppeal = latestAppeal && typeof latestAppeal.id === "string";
-  const isNegativeResult = latestResult?.decision?.passFailTotal === false;
+  // #978: ⚠️ OPPFØRSELSENDRING, med vilje. Denne tilbød anke på en innlevering som fortsatt var
+  // UNDER_REVIEW, mens /participant/completed krevde COMPLETED for den samme handlingen. To
+  // innganger, to svar — den strengeste var den riktige.
+  const isNegativeResult = isAppealableFail({
+    passFailTotal: latestResult?.decision?.passFailTotal,
+    submissionStatus: latestResult?.status,
+  });
   const shouldShowAppealSection = hasAppeal || isNegativeResult;
 
   appealSection.classList.toggle("hidden", !shouldShowAppealSection);
@@ -2324,7 +2420,9 @@ function renderResultSummary(body) {
   // #549: celebrate an automatic/confirmed pass — confetti + a clear "passed" banner, shown once
   // per result (the result view re-renders on each poll). De-emphasising retry is handled in
   // renderFlowGating.
-  if (body.decision?.passFailTotal === true && !celebrationShown) {
+  // #978: bare et AVGJORT bestått. Konfetti på noe som fortsatt vurderes måtte i verste fall
+  // trekkes tilbake.
+  if (isSettledPass({ passFailTotal: body.decision?.passFailTotal, submissionStatus: body.status }) && !celebrationShown) {
     celebrationShown = true;
     const banner = document.createElement("div");
     banner.className = "celebrate-banner";
@@ -2684,13 +2782,35 @@ submitMcqButton.addEventListener("click", async () => {
         throw new Error(t("errors.startMcqFirst"));
       }
 
-      const responses = currentQuestions.map((q) => {
-        const selected = document.querySelector(`input[name='q_${q.id}']:checked`);
-        return {
-          questionId: q.id,
-          selectedAnswer: selected ? selected.value : "",
-        };
-      });
+      // #988: ubesvarte spørsmål ble tidligere sendt som tom streng, og serveren avviste dem med
+      // en Zod-dump deltakeren ikke kunne handle på. Kontrollen hører hjemme her: den vet HVILKET
+      // spørsmål som mangler, og den koster ingen nettverksrundtur.
+      //
+      // Serversjekken (`selectedAnswer: z.string().min(1)`) beholdes uendret — den er siste
+      // forsvarslinje, ikke den som skal snakke med brukeren.
+      const answers = currentQuestions.map((q) => ({
+        question: q,
+        selected: document.querySelector(`input[name='q_${q.id}']:checked`),
+      }));
+      const missing = answers
+        .map((a, index) => ({ ...a, number: index + 1 }))
+        .filter((a) => !a.selected);
+
+      markUnansweredQuestions(missing.map((m) => m.number));
+
+      if (missing.length > 0) {
+        const numbers = missing.map((m) => m.number);
+        throw new Error(
+          numbers.length === 1
+            ? t("mcq.unansweredOne").replace("{n}", String(numbers[0]))
+            : t("mcq.unansweredMany").replace("{list}", numbers.join(", ")),
+        );
+      }
+
+      const responses = answers.map(({ question, selected }) => ({
+        questionId: question.id,
+        selectedAnswer: selected.value,
+      }));
 
       const body = await apiFetch(`/api/modules/${moduleId}/mcq/submit`, headers, {
         method: "POST",
@@ -2898,6 +3018,21 @@ window.addEventListener("beforeunload", () => {
   persistCurrentModuleDraft(false);
 });
 
+// #988: marker de ubesvarte visuelt og rull til det første. En melding som sier «spørsmål 4» hjelper
+// lite i en liste på tjue — deltakeren skal se hvor det er, ikke telle seg fram.
+//
+// ⚠️ Markeringen ryddes ved HVER innsending, ikke bare når den settes. Uten det ville et spørsmål
+// deltakeren nettopp besvarte blitt stående rødt, og hen ville lett etter en feil som var borte.
+function markUnansweredQuestions(numbers) {
+  const cards = mcqQuestions.querySelectorAll(".mcq-question-card");
+  const wanted = new Set(numbers);
+  cards.forEach((card, index) => {
+    card.classList.toggle("mcq-question-card--unanswered", wanted.has(index + 1));
+  });
+  if (numbers.length === 0) return;
+  cards[numbers[0] - 1]?.scrollIntoView({ behavior: "smooth", block: "center" });
+}
+
 function renderQuestions(selectedResponses = {}) {
   mcqQuestions.innerHTML = "";
   for (const [index, question] of currentQuestions.entries()) {
@@ -2930,6 +3065,10 @@ function renderQuestions(selectedResponses = {}) {
       input.value = option;
       input.checked = selectedResponses[question.id] === option;
       input.addEventListener("change", () => {
+        // #988: svarer deltakeren på et spørsmål som er markert som ubesvart, forsvinner markeringen
+        // med én gang. Uten dette ville kortet blitt stående rødt til neste innsending, og hen ville
+        // lett etter en feil som allerede var rettet.
+        input.closest(".mcq-question-card")?.classList.remove("mcq-question-card--unanswered");
         scheduleDraftAutosave();
       });
       input.className = "mcq-option-input";
@@ -3209,11 +3348,17 @@ function formatCourseProgressLabel(progress) {
 }
 
 // #492: finn neste uferdige element i sekvensen (uleste seksjoner / ikke-beståtte tilgjengelige moduler).
+//
+// ⚠️ #996: her gjelder TILGJENGELIG, ikke PÅKREVD — og det er nettopp fordi de to spørsmålene skiller
+// lag. Denne peker ut steget deltakeren skal gjøre NÅ, og en avpublisert modul kan ikke åpnes selv om
+// beviset fortsatt krever den. Å utheve den ville sendt deltakeren mot en rad som ikke lar seg
+// klikke.
+//
+// `outstandingBeforeFinish` spør det motsatte spørsmålet og bruker derfor `isEntryOutstanding`: den
+// avpubliserte modulen SKAL blokkere «Avslutt kurset», for serveren teller den fortsatt.
 function findNextIncompleteEntry(sequence) {
   if (!Array.isArray(sequence)) return null;
-  return sequence.find((e) =>
-    e.type === "SECTION" ? !e.read : e.moduleStatus !== "PASSED" && e.available !== false,
-  ) ?? null;
+  return sequence.find((e) => isEntryAvailable(e) && !isEntryDone(e)) ?? null;
 }
 
 function openCourseItemEntry(courseId, entry) {
@@ -3394,10 +3539,11 @@ function renderCourseDetailModules(courseId, course) {
     // #865: wrap each row in a .course-item so its inline disclosure panel can live directly under it.
     const key = courseItemKey(entry);
     const isSection = entry.type === "SECTION";
-    const done = isSection ? Boolean(entry.read) : entry.moduleStatus === "PASSED";
+    const done = isEntryDone(entry);
     const isNow = entry === nextEntry;
     // #502-followup: avpubliserte/utilgjengelige moduler vises som ikke-klikkbare (ingen blindvei).
-    const available = isSection || entry.available !== false;
+    // #992: gjelder nå seksjoner også — `isSection ||` sto her og gjorde enhver seksjon klikkbar.
+    const available = isEntryAvailable(entry);
     const title = localizePreviewText(entry.title);
     const kindText = isSection ? t("courses.kind.reading") : t("courses.kind.test");
     // Tittelen skjules visuelt, men blir stående i DOM som sr-only: raden er en knapp og må ha et
@@ -3475,7 +3621,10 @@ function renderCourseDetailModules(courseId, course) {
     const panel = document.createElement("div");
     panel.className = "course-inline-panel";
     panel.id = `inlinePanel_${courseId}_${key.replace(/[^a-zA-Z0-9_-]/g, "_")}`;
-    panel.hidden = true;
+    // #975: `.course-inline-panel[hidden]{display:none}` sto i <style>-blokka som en lapp mot
+    // .hidden-fella. `.course-inline-panel` setter ingen display, så lappen var aldri nødvendig —
+    // men den gjorde at ingen kunne se det. setHidden eier skjulingen; lappen er fjernet.
+    setHidden(panel, true);
     row.setAttribute("aria-expanded", "false");
     row.setAttribute("aria-controls", panel.id);
 
@@ -3499,7 +3648,7 @@ function renderCourseDetailModules(courseId, course) {
 
     const body = document.createElement("div");
     body.className = "course-discussion-body";
-    body.hidden = true;
+    setHidden(body, true);
 
     const toggle = document.createElement("button");
     toggle.type = "button";
@@ -3513,8 +3662,10 @@ function renderCourseDetailModules(courseId, course) {
 
     let mounted = false;
     toggle.addEventListener("click", () => {
+      // setHidden holder attributtet i takt med inline display, så `body.hidden` er fremdeles en
+      // sann avlesning av om panelet er kollapset (#975).
       const open = body.hidden;
-      body.hidden = !open;
+      setHidden(body, !open);
       disc.classList.toggle("open", open);
       toggle.setAttribute("aria-expanded", String(open));
       if (open && !mounted) {
@@ -3558,10 +3709,14 @@ function courseItemKey(entry) {
   return entry.courseItemId || (entry.type === "SECTION" ? `s:${entry.sectionId}` : `m:${entry.moduleId}`);
 }
 
+// #992: «neste» er neste TILGJENGELIGE element, ikke neste rad. Returnerte denne en utilgjengelig
+// seksjon, fikk deltakeren en knapp som bare kunne føre til 404 — og lå det et lesbart element bak
+// den, ble hen aldri tilbudt det.
 function nextEntryAfter(courseId, key) {
   const seq = courseSequences[courseId] || [];
   const i = seq.findIndex((e) => courseItemKey(e) === key);
-  return i >= 0 && i + 1 < seq.length ? seq[i + 1] : null;
+  if (i < 0) return null;
+  return seq.slice(i + 1).find(isEntryAvailable) ?? null;
 }
 
 function restoreModuleWorkspaceHome() {
@@ -3602,7 +3757,7 @@ function collapseInlineOpen() {
   if (itemWrap) {
     const panel = itemWrap.querySelector(".course-inline-panel");
     const row = itemWrap.querySelector(".course-module-row");
-    if (panel) { panel.innerHTML = ""; panel.hidden = true; }
+    if (panel) { panel.innerHTML = ""; setHidden(panel, true); }
     itemWrap.classList.remove("open");
     if (row) { row.setAttribute("aria-expanded", "false"); row.disabled = false; }
   }
@@ -3636,7 +3791,7 @@ async function openInlineItemByEntry(courseId, entry) {
       read: entry.read, title: entry.title,
     };
     itemWrap.classList.add("open");
-    panel.hidden = false;
+    setHidden(panel, false);
     row?.setAttribute("aria-expanded", "true");
     scrollItemIntoView(itemWrap);
     await renderSectionReaderInto(panel, courseId, entry);
@@ -3654,7 +3809,7 @@ async function openInlineItemByEntry(courseId, entry) {
   } catch (error) {
     inlineOpen = null;
     if (row) row.disabled = false;
-    showToast(error instanceof Error ? error.message : t("courses.loadError"), "error");
+    participantErrorToast(error, "courses.loadError");
     return;
   }
   const fresh = document.getElementById(`courseDetail_${courseId}`)?.querySelector(`.course-item[data-key="${key}"]`);
@@ -3677,7 +3832,7 @@ function reopenInlineAfterRender(courseId, container) {
   const panel = itemWrap.querySelector(".course-inline-panel");
   const row = itemWrap.querySelector(".course-module-row");
   itemWrap.classList.add("open");
-  panel.hidden = false;
+  setHidden(panel, false);
   row?.setAttribute("aria-expanded", "true");
   if (row) row.disabled = false;
   if (inlineOpen.type === "MODULE") {
@@ -3781,7 +3936,7 @@ async function renderSectionReaderInto(panel, courseId, entry) {
       if (target) openCourseItemEntry(courseId, target);
     } catch (error) {
       markReadBtn.disabled = false;
-      showToast(error instanceof Error ? error.message : t("courses.loadError"), "error");
+      participantErrorToast(error, "courses.loadError");
     }
   });
 
@@ -3799,7 +3954,7 @@ async function renderSectionReaderInto(panel, courseId, entry) {
       await loadParticipantCourses();
     } catch (error) {
       finishBtn.disabled = false;
-      showToast(error instanceof Error ? error.message : t("courses.loadError"), "error");
+      participantErrorToast(error, "courses.loadError");
     }
   });
 
@@ -3841,14 +3996,14 @@ async function renderSectionReaderInto(panel, courseId, entry) {
 // element ble ÅPNET. Den var en nødløsning for at kursbeviset ellers ble uoppnåelig uten knapp, og
 // den hadde to problemer: den registrerte lesning på et rent klikk, og den gjorde fullføring til
 // noe som skjedde med deltakeren i stedet for noe hen gjorde.
+//
+// ⚠️ #992: «alt annet» betyr alt annet TILGJENGELIG. Telte vi arkiverte moduler og tilbakeholdte
+// seksjoner med, ville vi nekte å avslutte et kurs serveren står klar til å utstede bevis for — og
+// deltakeren fikk «1 gjenstår» uten noe hen kunne gjøre med det.
 function outstandingBeforeFinish(courseId, current) {
   const seq = courseSequences[courseId] || [];
   const currentKey = courseItemKey(current);
-  return seq.filter((e) => {
-    if (courseItemKey(e) === currentKey) return false;
-    if (e.type === "MODULE") return e.moduleStatus !== "PASSED";
-    return e.read !== true;
-  });
+  return seq.filter((e) => courseItemKey(e) !== currentKey && isEntryOutstanding(e));
 }
 
 // Escape collapses whatever inline item is open (parity with the old modal's Escape-to-close).

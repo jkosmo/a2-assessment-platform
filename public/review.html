@@ -71,11 +71,15 @@
       <div id="reviewWorkspaceTabs" class="workspace-section-tabs" role="tablist" aria-label="Review workspace sections">
         <button type="button" id="reviewTabManual" class="workspace-section-tab active" role="tab" aria-selected="true" aria-controls="manualReviewTabPanel">
           <span data-i18n="review.tab.manualReview">Manual assessment</span>
-          <span id="reviewTabManualCount" class="workspace-section-tab-badge" hidden>0</span>
+          <!-- #975: `hidden` ALENE holder ikke — `.workspace-section-tab-badge` under setter
+               display:inline-flex, og en forfatter-regel slår UA-arkets `[hidden]`. Uten inline
+               display sto en tom «0»-plakett på fanen fra første maling til JS rakk å telle.
+               Attributtet blir stående for semantikken; setHidden() styrer begge deler etterpå. -->
+          <span id="reviewTabManualCount" class="workspace-section-tab-badge" hidden style="display:none">0</span>
         </button>
         <button type="button" id="reviewTabAppeal" class="workspace-section-tab" role="tab" aria-selected="false" aria-controls="appealTabPanel">
           <span data-i18n="review.tab.appeal">Appeals</span>
-          <span id="reviewTabAppealCount" class="workspace-section-tab-badge" hidden>0</span>
+          <span id="reviewTabAppealCount" class="workspace-section-tab-badge" hidden style="display:none">0</span>
         </button>
       </div>
 

@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { warmModuleGraph } from "./support/moduleGraphWarmup.js";
 
 const findNextRunnableJob = vi.fn();
 const logOperationalEvent = vi.fn();
@@ -16,6 +17,12 @@ vi.mock("../src/modules/assessment/assessmentJobRepository.js", () => ({
 vi.mock("../src/observability/operationalLog.js", () => ({
   logOperationalEvent,
 }));
+
+// #994: modulgrafen leses her, ikke i første test. Se test/support/moduleGraphWarmup.ts.
+warmModuleGraph(async () => {
+  await import("../src/process/processErrorHandlers.js");
+  await import("../src/modules/assessment/AssessmentWorker.js");
+});
 
 describe("assessment worker process error handling", () => {
   const originalNodeEnv = process.env.NODE_ENV;

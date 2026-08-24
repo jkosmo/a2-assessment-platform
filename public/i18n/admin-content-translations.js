@@ -531,6 +531,23 @@ const adminContentBase = {
   "shell.settings.needs.rubric": "a rubric",
   "shell.settings.needs.prompt": "an assessment instruction",
   "shell.settings.needs.mcq": "an MCQ set",
+
+  // #972/#980 — eksport-/import-rammene rundt feilteksten var hardkodet bokmål («Kurs-eksport
+  // feilet: …») på en side som defaulter til en-GB. Selve årsaken kommer fra den delte
+  // kodetabellen (`errors.api.*` i participant-bunten); disse nøklene er bare rammen.
+  "adminContent.courses.exportFailed": "Course export failed: {reason}",
+  "adminContent.courses.imported": "Course imported ({count} modules).",
+  "adminContent.courses.importedHeldBack": "Course imported ({count} modules), but saved as a DRAFT: some content is missing a language and cannot go live yet. Open the course and fill the gaps, then publish.",
+  "adminContent.courses.importFailed": "Course import failed: {reason}",
+  "adminContent.courses.importNotAnEnvelope": "This does not look like a course package. The file is missing the fields an export adds (exportFormat, exportedAt and scope). Use Export on a course to produce a valid file.",
+  "adminContent.library.exportFailed": "Module export failed: {reason}",
+  "adminContent.library.importFailed": "Module import failed: {reason}",
+  "adminContent.library.importNotAnEnvelope": "This does not look like a module package. The file is missing the fields an export adds (exportFormat, exportedAt and scope). Use Export on a module to produce a valid file.",
+
+  // #980/#914: rammen rundt en blokkering klienten ikke har en egen setning for. Blokkeringene fra
+  // contentValidationService bærer ennå ingen `params`, så årsaken er serverens engelske setning —
+  // det er #914, og sømmen skal være synlig heller enn skjult bak en påstått oversettelse.
+  "adminContent.courses.cascadePublish.blockerUnknown": "Cannot be published yet: {reason}",
 };
 const nbOverrides = {
   "nav.profile": "Profil",
@@ -602,6 +619,17 @@ const nbOverrides = {
   "stateRail.live.none": "Ingen publisert versjon",
   "stateRail.changes.unsaved": "Ulagrede endringer",
   "stateRail.changes.saved": "Alt lagret",
+
+  // #972/#980 — se merknaden i en-GB-tabellen.
+  "adminContent.courses.exportFailed": "Kurs-eksporten feilet: {reason}",
+  "adminContent.courses.imported": "Kurs importert ({count} moduler).",
+  "adminContent.courses.importedHeldBack": "Kurset er importert ({count} moduler), men lagret som UTKAST: noe innhold mangler et språk og kan ikke publiseres ennå. Åpne kurset, fyll hullene, og publiser.",
+  "adminContent.courses.importFailed": "Kurs-importen feilet: {reason}",
+  "adminContent.courses.importNotAnEnvelope": "Dette ser ikke ut som en kurs-pakke. Fila mangler feltene en eksport legger på (exportFormat, exportedAt og scope). Bruk «Eksporter» på et kurs for å lage en gyldig fil.",
+  "adminContent.library.exportFailed": "Modul-eksporten feilet: {reason}",
+  "adminContent.library.importFailed": "Modul-importen feilet: {reason}",
+  "adminContent.library.importNotAnEnvelope": "Dette ser ikke ut som en modul-pakke. Fila mangler feltene en eksport legger på (exportFormat, exportedAt og scope). Bruk «Eksporter» på en modul for å lage en gyldig fil.",
+  "adminContent.courses.cascadePublish.blockerUnknown": "Kan ikke publiseres ennå: {reason}",
 };
 const nnOverrides = {
   "nav.profile": "Profil",
@@ -673,6 +701,17 @@ const nnOverrides = {
   "stateRail.live.none": "Ingen publisert versjon",
   "stateRail.changes.unsaved": "Ulagra endringar",
   "stateRail.changes.saved": "Alt lagra",
+
+  // #972/#980 — sjå merknaden i en-GB-tabellen.
+  "adminContent.courses.exportFailed": "Kurs-eksporten feila: {reason}",
+  "adminContent.courses.imported": "Kurset er importert ({count} modular).",
+  "adminContent.courses.importedHeldBack": "Kurset er importert ({count} modular), men lagra som UTKAST: noko innhald manglar eit språk og kan ikkje publiserast enno. Opne kurset, fyll hola, og publiser.",
+  "adminContent.courses.importFailed": "Kurs-importen feila: {reason}",
+  "adminContent.courses.importNotAnEnvelope": "Dette ser ikkje ut som ein kurs-pakke. Fila manglar felta ein eksport legg på (exportFormat, exportedAt og scope). Bruk «Eksporter» på eit kurs for å lage ei gyldig fil.",
+  "adminContent.library.exportFailed": "Modul-eksporten feila: {reason}",
+  "adminContent.library.importFailed": "Modul-importen feila: {reason}",
+  "adminContent.library.importNotAnEnvelope": "Dette ser ikkje ut som ein modul-pakke. Fila manglar felta ein eksport legg på (exportFormat, exportedAt og scope). Bruk «Eksporter» på ei modul for å lage ei gyldig fil.",
+  "adminContent.courses.cascadePublish.blockerUnknown": "Kan ikkje publiserast enno: {reason}",
 };
 
 const adminContentLateOverrides = {

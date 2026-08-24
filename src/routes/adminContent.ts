@@ -24,6 +24,7 @@ import {
   listUnpublishedPurgeCandidates,
   purgeUnpublishedModules,
 } from "../modules/adminContent/index.js";
+import { hasAnyRole, ADMIN_ONLY } from "../auth/roleSets.js";
 import {
   moduleCreateBodySchema,
   moduleTitleUpdateBodySchema,
@@ -248,7 +249,7 @@ adminContentRouter.get("/modules/library", async (request, response) => {
     const modules = await listLibraryModules(
       locale as Parameters<typeof listLibraryModules>[0],
       request.context?.userId,
-      request.context?.roles?.includes("ADMINISTRATOR") ?? false,
+      hasAnyRole(request.context?.roles, ADMIN_ONLY),
     );
     response.json({ modules });
   } catch {
@@ -320,7 +321,7 @@ adminContentRouter.delete("/modules/:moduleId", async (request, response) => {
 // sletter alle uplubliserte moduler (activeVersionId=null, ikke arkivert, ingen kurs/
 // submissions). ADMINISTRATOR-only fordi det er en destruktiv batch-operasjon.
 adminContentRouter.get("/modules/purge-unpublished/preview", async (request, response) => {
-  if (!request.context?.roles?.includes("ADMINISTRATOR")) {
+  if (!hasAnyRole(request.context?.roles, ADMIN_ONLY)) {
     response.status(403).json({ error: "forbidden", message: "Only ADMINISTRATOR can preview the bulk purge list." });
     return;
   }
@@ -333,7 +334,7 @@ adminContentRouter.get("/modules/purge-unpublished/preview", async (request, res
 });
 
 adminContentRouter.post("/modules/purge-unpublished", async (request, response) => {
-  if (!request.context?.roles?.includes("ADMINISTRATOR")) {
+  if (!hasAnyRole(request.context?.roles, ADMIN_ONLY)) {
     response.status(403).json({ error: "forbidden", message: "Only ADMINISTRATOR can purge unpublished modules." });
     return;
   }

@@ -34,6 +34,15 @@ afterEach(() => {
   vi.unstubAllEnvs();
 });
 
+// ⚠️ #994: denne fila skal IKKE varme opp modulgrafen, og det er et unntak med en grunn.
+//
+// Testene bruker `vi.doMock`, som i motsetning til `vi.mock` IKKE heises — den virker bare på
+// importer som skjer ETTER kallet. En oppvarming i `beforeAll` ville lagt den ekte `authenticate`
+// i registeret først, og første test ville fått den umockede instansen. `afterEach` rydder, så
+// nøyaktig én test feiler: den første. Jeg konverterte fila maskinelt sammen med de 36 andre, og
+// integrasjonskjøringen fant den.
+//
+// Unntaket står også i `test/module-graph-warmup-guard.test.js`.
 describe("authenticate middleware", () => {
   it("returns 401 for missing bearer token in entra mode", async () => {
     vi.doMock("../src/config/env.js", () => ({

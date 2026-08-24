@@ -517,7 +517,11 @@ export async function importCourseFromEnvelope(
     mode: ImportMode;
     targetCourseId?: string;
   },
-): Promise<{ courseId: string; moduleIds: string[] }> {
+  // #957: samme form som søsterfunksjonene — `importModulePayload` (:336) og `persistStagedSection`
+  // (:169) rapporterer begge `heldBackByTranslationGate` oppover. Kursimporten regnet ut flagget,
+  // brukte det til å holde kurset som utkast, og kastet det så. Kommentaren over `anyContentHeldBack`
+  // lovet at flagget «is reported to the caller, not just acted on locally» — nå gjør det det.
+): Promise<{ courseId: string; moduleIds: string[]; heldBackByTranslationGate: boolean }> {
   if (envelope.scope !== "course" || !envelope.course) {
     throw new Error("Envelope is not a course export.");
   }
@@ -632,6 +636,19 @@ export async function importCourseFromEnvelope(
         // are filled.
         if (payload.course.audit?.publishedAt && !anyContentHeldBack) {
           await publishCourse(courseId, options.actorId, tx);
+        } else if (anyContentHeldBack) {
+          // ⚠️ #996: å HOPPE OVER publiseringen er ikke det samme som å sørge for at kurset er
+          // upublisert.
+          //
+          // Ved `mode: "replaceExisting"` finnes målkurset fra før, og kan allerede være publisert.
+          // Da lot vi det stå levende med en modul som mangler aktiv versjon — deltakeren møter
+          // «modul ikke tilgjengelig», og publiseringsinvarianten er brutt. Betingelsen over var
+          // skrevet med `createNew` i tankene, der et nytt kurs starter upublisert uansett.
+          //
+          // Vi avpubliserer i stedet for å nekte importen: forfatteren skal kunne oppdatere et kurs
+          // med ufullstendig oversettelse og fylle hullene etterpå. Det er samme valg som for
+          // moduler (#896 S4) — hold tilbake, ikke avvis.
+          await tx.course.update({ where: { id: courseId }, data: { publishedAt: null } });
         }
 
         await recordAuditEvent(
@@ -651,7 +668,11 @@ export async function importCourseFromEnvelope(
           tx,
         );
 
-        return { courseId, moduleIds: importedModuleIds };
+        // #957: uten flagget her får forfatteren `201 Created` og et kurs som ligger som utkast,
+        // uten et ord om hvorfor. `anyContentHeldBack` er den ENESTE kilden til den forklaringen —
+        // den utledes ikke av kursets tilstand alene (et kurs kan også være utkast fordi kilden
+        // var det).
+        return { courseId, moduleIds: importedModuleIds, heldBackByTranslationGate: anyContentHeldBack };
       },
       { timeout: IMPORT_TX_TIMEOUT_MS },
     );

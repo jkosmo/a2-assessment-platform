@@ -77,8 +77,12 @@ Use correlation IDs first when diagnosing single-request or single-user failures
 - `participant_notification_sent`
 - `participant_notification_failed`
 - `participant_notification_pipeline_failed`
-- `recertification_reminder_sent`
-- `recertification_reminder_failed`
+
+#989: `recertification_reminder_sent` / `recertification_reminder_failed` are **no longer emitted** —
+recertification of modules was removed. `certification_downgrade_skipped` (previously
+`recertification_downgrade_skipped`) is unrelated to expiry and is still emitted: it fires when a
+late-resolving FAIL from an *older* submission would have downgraded a certification earned by a
+newer one.
 
 ## Alert Baseline
 
@@ -128,7 +132,10 @@ The pilot alert baseline is intentionally small and focused on failures that oth
 - Source: log query over:
   - `participant_notification_failed`
   - `participant_notification_pipeline_failed`
-  - `recertification_reminder_failed`
+  - `recertification_reminder_failed` — **dead clause since #989**; nothing emits it any more. The
+    Bicep query (`infra/azure/main.bicep`) still contains it. Harmless (the alert still fires on the
+    two live events); tidy it up on the next infra-touching deploy rather than dragging a Bicep
+    change into a code-only release.
 - Severity: Sev2
 
 ## Signals Without Dedicated Azure Alerts
@@ -138,7 +145,7 @@ These events are useful today but are not described as first-class Azure alerts 
 - `assessment_job_stuck_alert`
 - `submission_document_parse`
 - notification success events
-- recertification reminder success events
+- `certification_downgrade_skipped`
 
 They should still be queried during incident response.
 

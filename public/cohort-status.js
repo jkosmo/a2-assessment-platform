@@ -4,6 +4,7 @@ import { escapeHtml } from "/static/html-escape.js";
 import { localeLabels, supportedLocales, translations } from "/static/i18n/cohort-status-translations.js";
 import { apiFetch, buildConsoleHeaders, getConsoleConfig } from "/static/api-client.js";
 import { initConsentGuard } from "/static/consent-guard.js";
+import { setHidden } from "/static/dom-visibility.js";
 import {
   findMatchingPreset,
   resolveRoleSwitchState,
@@ -151,7 +152,10 @@ function statusCard(cls, value, label) {
 function renderCohort(summary) {
   if (cohortEmpty) cohortEmpty.hidden = true;
   if (statusCards) {
-    statusCards.hidden = false;
+    // #975: `.status-grid{display:grid}` står i <style>-blokka i cohort-status.html og slår
+    // `hidden`-attributtet. Rutenettet ble aldri skjult — det var bare tomt, og et tomt grid har
+    // høyde 0. Derfor så det riktig ut, og derfor sa `toBeHidden()` i e2e-en at alt var i orden.
+    setHidden(statusCards, false);
     const c = summary.counts ?? {};
     statusCards.innerHTML = [
       statusCard("total", summary.total ?? 0, t("cohort.total")),
@@ -182,7 +186,7 @@ function renderCohort(summary) {
 
 function showCohortEmpty() {
   if (cohortEmpty) cohortEmpty.hidden = false;
-  if (statusCards) statusCards.hidden = true;
+  if (statusCards) setHidden(statusCards, true);
   if (byClassSection) byClassSection.hidden = true;
   if (cohortMeta) cohortMeta.textContent = "";
 }

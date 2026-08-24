@@ -63,7 +63,7 @@ forslaget er *nyttig*, eller om det traff riktig språk.
 **Hvorfor du:** krever to ekte Entra-kontoer. Stage bruker `authMode: entra`, og mock-headere
 ignoreres — det kan ikke automatiseres uten ekte innlogging.
 
-- [ ] Som `jko@a-2.no`: prøv å åpne en seksjon `joakim.kosmo@gmail.com` eier. Forventet **403**.
+- [ ] Som `<PROD_ADMIN_UPN>`: prøv å åpne en seksjon `<STAGING_ADMIN_UPN>` eier. Forventet **403**.
 - [ ] Seksjonslista skal ikke vise **Eksporter** på rader du ikke eier.
 
 ## 5 · Ser det riktig ut?

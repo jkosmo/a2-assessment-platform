@@ -150,6 +150,34 @@ export async function findActiveParticipants(at = new Date()) {
   });
 }
 
+// #969: kursrapporten snevrer alle sine tall til én avdeling når `orgUnit`-filteret er satt.
+// Kursets publikum (`resolveCourseAudience`) kjenner bare bruker-ID-er — avdelingen må derfor slås
+// opp separat. Uten denne ville nevneren i fullføringsgraden vært hele organisasjonen mens telleren
+// var én avdeling, og graden systematisk for lav.
+export async function findUserIdsInDepartment(userIds: string[], department: string): Promise<string[]> {
+  if (userIds.length === 0) return [];
+  const users = await prisma.user.findMany({
+    where: { id: { in: userIds }, department },
+    select: { id: true },
+  });
+  return users.map((user) => user.id);
+}
+
+/**
+ * Navn/e-post/avdeling for et sett bruker-ID-er.
+ *
+ * ⚠️ #996: kursdrilldownen bygde radene sine fra INNLEVERINGER, som bærer `user`-relasjonen gratis.
+ * Den som er tildelt kurset men ikke har startet, hadde derfor ingen rad — rapporten sa «10
+ * innmeldte» og detaljvisningen viste 0 personer. Nå slås de opp her.
+ */
+export async function findUsersByIds(userIds: string[]) {
+  if (userIds.length === 0) return [];
+  return prisma.user.findMany({
+    where: { id: { in: userIds } },
+    select: { id: true, name: true, email: true, department: true },
+  });
+}
+
 export async function getActiveRoles(userId: string, at = new Date()): Promise<AppRoleType[]> {
   const assignments = await prisma.roleAssignment.findMany({
     where: {

@@ -20,7 +20,7 @@ login maps to the same row.
 ## Config (per environment)
 | Setting | Value |
 |---|---|
-| `ENTRA_USER_SYNC_GROUP_ID` | prod «Alle i A-2 Norge» = `8bab5ab4-c7db-4c9c-baad-316e1ff63504` |
+| `ENTRA_USER_SYNC_GROUP_ID` | prod «Alle i A-2 Norge» = `<ENTRA_SYNC_APP_OBJECT_ID>` |
 | `ENTRA_USER_SYNC_INTERVAL_MS` | optional, default `86400000` (24h) |
 
 Set as a (non-secret) app setting on **both web and worker** apps. Add to `infra/azure/main.bicep`
@@ -35,23 +35,23 @@ Grant `GroupMember.Read.All` (and `User.Read.All` for `department`/`accountEnabl
 managed identity (run against the **production** tenant):
 
 ```bash
-az account set --subscription 5b3f760b-42d4-4d78-812c-c059278d1086   # prod
+az account set --subscription <PROD_SUBSCRIPTION_ID>   # prod
 
-MI=$(az webapp identity show -n a2-assessment-platform-prd-app-hea5kl -g rg-a2-assessment-production --query principalId -o tsv)
+MI=$(az webapp identity show -n a2-assessment-platform-prd-app-hea5kl -g <PROD_RESOURCE_GROUP> --query principalId -o tsv)
 GRAPH=$(az ad sp list --filter "appId eq '00000003-0000-0000-c000-000000000000'" --query "[0].id" -o tsv)
 
 # GroupMember.Read.All
 az rest --method POST --uri "https://graph.microsoft.com/v1.0/servicePrincipals/$MI/appRoleAssignments" \
   --headers "Content-Type=application/json" \
-  --body "{\"principalId\":\"$MI\",\"resourceId\":\"$GRAPH\",\"appRoleId\":\"98830695-27a2-44f7-8c18-0c3ebc9698f6\"}"
+  --body "{\"principalId\":\"$MI\",\"resourceId\":\"$GRAPH\",\"appRoleId\":\"<ENTRA_SYNC_SP_OBJECT_ID>\"}"
 # User.Read.All
 az rest --method POST --uri "https://graph.microsoft.com/v1.0/servicePrincipals/$MI/appRoleAssignments" \
   --headers "Content-Type=application/json" \
-  --body "{\"principalId\":\"$MI\",\"resourceId\":\"$GRAPH\",\"appRoleId\":\"df021288-bdef-4463-88db-98f22de89214\"}"
+  --body "{\"principalId\":\"$MI\",\"resourceId\":\"$GRAPH\",\"appRoleId\":\"<ENTRA_SYNC_EXTRA_OBJECT_ID>\"}"
 ```
 
-(App-role ids: `GroupMember.Read.All` = `98830695-27a2-44f7-8c18-0c3ebc9698f6`, `User.Read.All` =
-`df021288-bdef-4463-88db-98f22de89214` — verify against the Graph SP's `appRoles` if Microsoft
+(App-role ids: `GroupMember.Read.All` = `<ENTRA_SYNC_SP_OBJECT_ID>`, `User.Read.All` =
+`<ENTRA_SYNC_EXTRA_OBJECT_ID>` — verify against the Graph SP's `appRoles` if Microsoft
 changes them.) Repeat for the worker app's managed identity if the scheduled monitor runs there.
 
 ## Stopgap: manual export + import (no Graph consent needed) ✅ works today
@@ -62,8 +62,8 @@ is granted, seed the users with an **admin's own delegated access**:
 
 1. **Export** the group's members (any directory member can read group membership):
    ```bash
-   az account set --subscription 5b3f760b-42d4-4d78-812c-c059278d1086   # prod
-   az ad group member list --group 8bab5ab4-c7db-4c9c-baad-316e1ff63504 \
+   az account set --subscription <PROD_SUBSCRIPTION_ID>   # prod
+   az ad group member list --group <ENTRA_SYNC_APP_OBJECT_ID> \
      --query "[].{externalId:id, email:mail, name:displayName, upn:userPrincipalName}" -o json > members.json
    ```
    Shape the file as `{ "source": "entra_manual_export", "users": [ {externalId, email, name, activeStatus:true}, … ] }`

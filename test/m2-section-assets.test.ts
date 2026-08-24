@@ -28,13 +28,26 @@ describe("Section asset upload + serve", () => {
     await prisma.$disconnect();
   });
 
+  // ⚠️ #993: fiksturen fylte tidligere bare `nb` og publiserte aldri. Seksjonen sto dermed med
+  // `activeVersionId: null` — holdt tilbake av oversettelsesgaten — mens tre tester påsto at en
+  // DELTAKER fikk `200` på figurene i den. Det var lekkasjen, kodet inn som forventet oppførsel.
+  //
+  // En seksjon en deltaker faktisk kan se er publisert, så det er den fiksturen skal lage.
   async function createSection(): Promise<string> {
+    const stamp = Date.now();
+    const three = (base: string) => ({ nb: `${base} nb`, nn: `${base} nn`, "en-GB": `${base} en` });
     const res = await request(app)
       .post("/api/admin/content/sections")
       .set(adminHeaders)
-      .send({ title: { nb: `Asset-seksjon ${Date.now()}` }, bodyMarkdown: { nb: "# Hei" } });
+      .send({ title: three(`Asset-seksjon ${stamp}`), bodyMarkdown: three("# Hei") });
     expect(res.status).toBe(201);
-    return res.body.section.id as string;
+    const sectionId = res.body.section.id as string;
+
+    const published = await request(app)
+      .post(`/api/admin/content/sections/${sectionId}/publish`)
+      .set(adminHeaders);
+    expect(published.status, `publisering feilet: ${JSON.stringify(published.body)}`).toBe(200);
+    return sectionId;
   }
 
   // Sections can't be deleted while their version FK (Restrict) holds; detach + drop versions
@@ -217,5 +230,17 @@ describe("Section asset upload + serve", () => {
     // Rows cascaded AND blobs physically reclaimed.
     expect(await prisma.sectionAsset.count({ where: { sectionId } })).toBe(0);
     for (const p of blobPaths) await expect(getAsset(p)).rejects.toThrow();
+
+    // #961: ruta må sende AKTØREN videre — et spor uten «hvem» svarer ikke på spørsmålet det
+    // finnes for. Dette er den eneste testen som går gjennom HTTP-laget for sletting.
+    const actor = await prisma.user.findUnique({
+      where: { externalId: adminHeaders["x-user-id"] },
+      select: { id: true },
+    });
+    const deleteEvents = await prisma.auditEvent.findMany({
+      where: { entityType: "course_section", entityId: sectionId, action: "section_deleted" },
+    });
+    expect(deleteEvents).toHaveLength(1);
+    expect(deleteEvents[0].actorId).toBe(actor?.id);
   });
 });
