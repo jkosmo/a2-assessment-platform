@@ -36,8 +36,15 @@ export const OUTCOME_PENDING = "pending";
 /** Ingen beslutning finnes. */
 export const OUTCOME_UNKNOWN = "unknown";
 
-/** Statusen som betyr «ikke avgjort ennå». */
-const UNDER_REVIEW = "UNDER_REVIEW";
+/**
+ * Statusene som betyr «ikke avgjort ennå».
+ *
+ * ⚠️ `SCORED` er med fordi den betyr at poengene er satt, men at rutingsbeslutningen — skal saken
+ * til manuell vurdering? — ennå ikke er anvendt. Bare `COMPLETED` bærer et autoritativt utfall.
+ * Statusen skrives ikke i dag (#953), men klienten regner den som et resultat som kan lastes, så
+ * en migrert eller gammel rad ville fått konfetti før rutingen var avgjort.
+ */
+const UNSETTLED_STATUSES = new Set(["UNDER_REVIEW", "SCORED"]);
 
 function normalizeStatus(submissionStatus) {
   return typeof submissionStatus === "string" ? submissionStatus.toUpperCase() : "";
@@ -58,7 +65,7 @@ function normalizeStatus(submissionStatus) {
  */
 export function deriveOutcome(input) {
   const { passFailTotal, submissionStatus } = input ?? {};
-  if (normalizeStatus(submissionStatus) === UNDER_REVIEW) return OUTCOME_PENDING;
+  if (UNSETTLED_STATUSES.has(normalizeStatus(submissionStatus))) return OUTCOME_PENDING;
   if (passFailTotal === true) return OUTCOME_PASSED;
   if (passFailTotal === false) return OUTCOME_FAILED;
   return OUTCOME_UNKNOWN;

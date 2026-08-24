@@ -10,6 +10,21 @@ import { test, expect, type Page, type Route } from "@playwright/test";
 // En unit-test på `deriveOutcome` fanger ikke dette: feilen var at flatene aldri SPURTE. Derfor
 // kjøres den ekte bundlen i Chromium her.
 //
+// ⚠️ HVA DENNE TESTEN IKKE BEVISER, funnet av QA-porten på v2.29.0.
+//
+// `/api/modules/completed` filtrerer på `completedSubmissionStatuses`, som i
+// `config/module-completion.json` i dag er `["COMPLETED"]` alene. Med det oppsettet kan endepunktet
+// ALDRI sende raden som mockes under, og renderingen som testes her fyrer aldri i produksjon.
+//
+// Testen er likevel ikke fiksjon: nøkkelen er KONFIGURERBAR, og kontrakten «får du denne formen,
+// render den slik» er reell. Men den er en klientkontrakt, ikke et bevis på en flate deltakeren ser
+// i dag — og forskjellen skal stå her, ikke oppdages av neste som leser den.
+//
+// ⚠️ Den ekte feilen på disse to flatene er en ANNEN, og den er ikke rettet her: når en anke setter
+// en COMPLETED innlevering tilbake til UNDER_REVIEW, faller raden ut av filteret og modulen
+// FORSVINNER fra /profile og «Mine kurs → Fullførte». Ingen feilmelding, ingen nøytral rad — borte.
+// Det er en serverside-sak, registrert som #1002.
+//
 // Hver blokkering har en makker: kontrollcaset bekrefter at en AVGJORT stryk fortsatt vises rød.
 // Uten den ville testen bestått av at cellen var tom uansett.
 

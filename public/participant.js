@@ -1254,7 +1254,17 @@ function renderFlowGating() {
   // Feedback (#549): once the participant has passed, retry/«delete & start over» should be a
   // discreet secondary action — not compete with the pass celebration. A failed result keeps it
   // at normal prominence so a retake is easy.
-  resetSubmissionFlowButton.classList.toggle("reset-flow-discreet", hasResultStatus && flowState.resultPassFail === true);
+  // #978 F3: dette var en STATUSBLIND avledning som overlevde konverteringen, fordi verdien er
+  // aliasert til `resultPassFail` og vakta lette etter `passFailTotal`. Resultatet var
+  // selvmotsigende: banneret holdt en bestått-under-vurdering noeytral uten konfetti, mens den
+  // samme renderingen gjorde retake-knappen diskret som om utfallet var endelig.
+  resetSubmissionFlowButton.classList.toggle(
+    "reset-flow-discreet",
+    hasResultStatus && isSettledPass({
+      passFailTotal: flowState.resultPassFail,
+      submissionStatus: flowState.resultStatus,
+    }),
+  );
 
   const createSubmissionBusy = createSubmissionButton.dataset.busy === "true";
   const submitMcqBusy = submitMcqButton.dataset.busy === "true";

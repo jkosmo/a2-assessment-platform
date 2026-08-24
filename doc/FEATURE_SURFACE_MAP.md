@@ -968,3 +968,48 @@ tilgang til alle.
 fanger `roles.includes("REVIEWER")` med fil, linje og hva man skal gjøre), krever at unntakslista
 peker på filer som finnes, og **fester audit/report-forskjellen** i en egen test, så en framtidig
 endring gjøres bevisst i stedet for å oppdages i en skanning.
+
+---
+
+## 28. «Er dette forsøket bestått?» — fem spørsmål, ett hjem (#978)
+
+**Hjem:** `public/static/outcome.js` · **Vakt:** `test/outcome-derivation-guard.test.js`
+
+Spørsmålet ble besvart åtte steder i klienten etter **tre** regelsett. Bare ett leste
+`submissionStatus`, så samme innlevering kunne vises rød «Ikke bestått» på én flate og nøytral på en
+annen i samme økt.
+
+⚠️ **Kartleggingen viste at «bestått?» ikke er ett spørsmål.** En felles `erBestått()` ville vært å
+gjenta feilen i motsatt retning: ett svar der det trengs flere.
+
+| Inngang | Spørsmål | Teller statusen? |
+|---|---|---|
+| `deriveOutcome` | hva skal jeg vise? | ja — `UNDER_REVIEW` og `SCORED` er uavklart |
+| `isAppealableFail` | kan hen anke? | ja, og krever `COMPLETED` |
+| `isSettledPass` | skal vi feire? | ja |
+| `hasPassingDecision` | finnes det alt en bestått? | **nei**, med vilje |
+| `rawPassFailState` | hva sier vedtaket? | **nei** — praktikerflate |
+
+**Flatene:**
+
+| Fil | Inngang | Merknad |
+|---|---|---|
+| `participant.js` | `deriveOutcome`, `isSettledPass`, `isAppealableFail`, `hasPassingDecision` | resultatbanner, kortstyling, feiring, anke, autostart |
+| `participant-completed.js` | `deriveOutcome`, `isAppealableFail` | ⚠️ se konfigurasjonsmerknaden |
+| `profile.js` | `deriveOutcome` | ⚠️ se konfigurasjonsmerknaden |
+| `review.js` | `rawPassFailState` | to formattere, én regel |
+| `static/admin-content-calibration.js` | `rawPassFailState` | status i egen kolonne |
+
+⚠️ **Konfigurasjonsmerknad.** `/api/modules/completed` filtrerer på `completedSubmissionStatuses`
+(`config/module-completion.json`), i dag `["COMPLETED"]` alene. `profile.js` og
+`participant-completed.js` kan derfor ikke motta en uavklart rad med dagens oppsett — konverteringen
+er riktig, men uvirksom til nøkkelen utvides. Den ekte feilen på de flatene er at raden **forsvinner**
+når en anke setter innleveringen tilbake til `UNDER_REVIEW`: #1002.
+
+⚠️ **Aliaser er fella.** Første utkast av vakta lette etter `passFailTotal` og overså
+`flowState.resultPassFail === true` i `participant.js` — samme verdi, annet navn, vakta grønn.
+Regexen matcher nå ethvert navn som inneholder «passFail». Skrivinger (`passFailTotal:` i
+`review.js` sine skjemafelt) er med vilje ikke fanget.
+
+⚠️ **Regelen håndheves bare i klienten.** `appealService` krever ikke `COMPLETED`, så API-et
+aksepterer fortsatt en anke på en innlevering under vurdering: #1002.

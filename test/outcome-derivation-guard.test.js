@@ -23,7 +23,12 @@ const HOME = "static/outcome.js";
 // En rå sammenligning mot beslutningsverdien. Fanger `=== true`, `=== false`, `!== true` osv.
 // ⚠️ Fanger med vilje IKKE `passFailTotal:` — det er en SKRIVING (skjemafeltene i review.js
 // sender verdien til serveren), ikke en utledning av et utfall.
-const RAW_COMPARISON = /passFailTotal\s*[!=]==/g;
+//
+// ⚠️ Matcher ETHVERT navn som inneholder «passFail», ikke bare `passFailTotal`. Første utkast var
+// bundet til feltnavnet, og QA-porten fant at `flowState.resultPassFail === true` i participant.js
+// dermed slapp unna: verdien var kopiert rått fra `passFailTotal`, men under et alias. Vakta var
+// grønn mens nøyaktig regresjonen den skulle hindre sto i fila.
+const RAW_COMPARISON = /\b\w*[Pp]assFail\w*\s*[!=]==\s*(?:true|false)\b/g;
 
 function collectJs(dir) {
   const out = [];

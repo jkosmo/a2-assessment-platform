@@ -54,7 +54,36 @@ status-blinde regelen gjeninnføres, mens kontrollcaset forblir grønt.
 ⚠️ En unit-test på `deriveOutcome` alene hadde ikke fanget dette: feilen var ikke at regelen var
 gal, men at flatene aldri **spurte**. Derfor kjøres den ekte bundlen i Chromium.
 
-1171 unit, 246 e2e.
+### ⚠️ QA-porten ga NO-GO, og tre av funnene var mine
+
+Verdt å skrive ned, fordi to av dem er samme feilklasse jeg nettopp hadde beskrevet i en annen sak.
+
+**Vakta hadde en blindsone — for tredje gang i dag.** `flowState.resultPassFail === true` i
+`participant.js` er den samme verdien under et alias, og regexen lette etter `passFailTotal`. Vakta
+var grønn mens en statusblind avledning sto igjen: banneret holdt en bestått-under-vurdering nøytral
+uten konfetti, mens den samme renderingen gjorde retake-knappen diskret som om utfallet var endelig.
+Regexen matcher nå ethvert navn som inneholder «passFail», og er mutasjonsverifisert mot aliaset.
+
+**`SCORED` var ikke med.** Den betyr at poengene er satt, men at rutingsbeslutningen ikke er anvendt.
+Bare `COMPLETED` bærer et autoritativt utfall. Statusen skrives ikke i dag (#953), men klienten
+regner den som lastbar, så en migrert rad ville fått konfetti før rutingen var avgjort.
+
+**E2e-en min testet en respons serveren ikke kan sende.** `/api/modules/completed` filtrerer på
+`completedSubmissionStatuses`, i dag `["COMPLETED"]` alene. Konverteringen av `profile.js` og
+`participant-completed.js` er riktig og **uvirksom på samme tid**. Testen er beholdt som en
+klientkontrakt — nøkkelen er konfigurerbar — men forskjellen står nå i testen selv.
+
+⚠️ Og den ekte feilen på de to flatene er en annen: når en anke setter innleveringen tilbake til
+`UNDER_REVIEW`, **forsvinner modulen helt** fra `/profile` og «Mine kurs → Fullførte». Sammen med at
+`appealService` ikke håndhever `COMPLETED` — så API-et godtar anken klienten nekter — er det
+registrert som **#1002**.
+
+⚠️ Merk retningen på den siste: en regel som er strengere i klienten enn i API-et *ser* håndhevet
+ut. Enhver kaller som ikke er vår egen nettleser går rundt den.
+
+Flatekartet har fått §28, per stående ordre.
+
+1173 unit, 246 e2e.
 
 ## 2.28.2 - 2026-08-24
 
