@@ -37,13 +37,32 @@ async function makeUser(tag: string) {
 }
 
 // Create a section + a real (blob-backed) PNG asset via the admin API.
-async function makeSectionWithAsset(): Promise<{ sectionId: string; assetId: string }> {
+//
+// ⚠️ #993: fiksturen fylte tidligere BARE `nb`, og publiserte aldri. Resultatet var en seksjon med
+// `activeVersionId: null` — altså holdt tilbake av oversettelsesgaten — og testen under påsto at en
+// deltaker fikk `200` på figuren i den. Fiksturen kodet inn nøyaktig lekkasjen saken handler om.
+//
+// Nå fylles alle tre språk og seksjonen publiseres, slik en seksjon en deltaker faktisk kan se ser
+// ut. `available: false`-tilfellene testes eksplisitt lenger ned i stedet for å snike seg inn som
+// en utilsiktet standardtilstand.
+async function makeSectionWithAsset(
+  options: { publish?: boolean } = {},
+): Promise<{ sectionId: string; assetId: string }> {
+  const stamp = Date.now();
+  const three = (base: string) => ({ nb: `${base} nb`, nn: `${base} nn`, "en-GB": `${base} en` });
   const secRes = await request(app)
     .post("/api/admin/content/sections")
     .set(adminHeaders)
-    .send({ title: { nb: `authz-asset ${Date.now()}` }, bodyMarkdown: { nb: "# x" } });
+    .send({ title: three(`authz-asset ${stamp}`), bodyMarkdown: three("# x") });
   expect(secRes.status).toBe(201);
   const sectionId = secRes.body.section.id as string;
+
+  if (options.publish !== false) {
+    const published = await request(app)
+      .post(`/api/admin/content/sections/${sectionId}/publish`)
+      .set(adminHeaders);
+    expect(published.status, `publisering feilet: ${JSON.stringify(published.body)}`).toBe(200);
+  }
   const upload = await request(app)
     .post(`/api/admin/content/sections/${sectionId}/assets`)
     .set(adminHeaders)
@@ -115,5 +134,77 @@ describe("Section asset object-level authorization (#786)", () => {
     expect(author.headers["content-type"]).toContain("image/png");
 
     await cleanup(sectionId);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────────────────────
+// #993 — #944 sin TREDJE dør.
+//
+// De to første ble lukket ved å filtrere en utilgjengelig seksjon ut av deltakerens sekvens og av
+// lesestien. En figur henger under seksjonen, men har sin egen rute — og den arvet ingenting.
+//
+// ⚠️ Scenariet er ikke hypotetisk: en deltaker som HAR lest seksjonen har allerede sett
+// `asset:`-id-en i markdown-en. Etter at seksjonen arkiveres eller holdes tilbake svarer lesestien
+// 404, mens asset-ruta svarte 200 — fordi den bare spurte om KURSET var synlig.
+//
+// Hver blokkering har en makker som bekrefter at det riktige fortsatt slipper gjennom. Uten den
+// vet vi ikke om vi målte den nye regelen eller bare knakk ruta.
+// ─────────────────────────────────────────────────────────────────────────────────────────────
+describe("#993 en figur arves ikke av en seksjon deltakeren ikke kan lese", () => {
+  it("KONTROLL: en publisert seksjon i et OPEN kurs serverer figuren", async () => {
+    const { sectionId, assetId } = await makeSectionWithAsset();
+    const courseId = await linkToCourse(sectionId, "OPEN");
+    const reader = await makeUser("asset-993-control");
+
+    const res = await request(app).get(`/api/content-assets/${assetId}`).set(participant(reader.externalId));
+    expect(res.status, "en tilgjengelig seksjon skal fortsatt servere figuren").toBe(200);
+
+    await cleanup(sectionId, courseId);
+  });
+
+  it("en ARKIVERT seksjon serverer den ikke lenger — heller ikke til den som leste den før", async () => {
+    const { sectionId, assetId } = await makeSectionWithAsset();
+    const courseId = await linkToCourse(sectionId, "OPEN");
+    const reader = await makeUser("asset-993-archived");
+
+    // Deltakeren rekker å lese seksjonen, og har dermed sett asset-id-en.
+    const before = await request(app).get(`/api/content-assets/${assetId}`).set(participant(reader.externalId));
+    expect(before.status, "forutsetningen: figuren var lesbar før arkiveringen").toBe(200);
+
+    await prisma.courseSection.update({ where: { id: sectionId }, data: { archivedAt: new Date() } });
+
+    const after = await request(app).get(`/api/content-assets/${assetId}`).set(participant(reader.externalId));
+    expect(after.status, "arkivert seksjon skal ikke lenger servere figuren").toBe(404);
+
+    await prisma.courseSection.update({ where: { id: sectionId }, data: { archivedAt: null } });
+    await cleanup(sectionId, courseId);
+  });
+
+  it("en seksjon HOLDT TILBAKE av oversettelsesgaten serverer den ikke", async () => {
+    const { sectionId, assetId } = await makeSectionWithAsset();
+    const courseId = await linkToCourse(sectionId, "OPEN");
+    const reader = await makeUser("asset-993-heldback");
+
+    // Avpublisering: versjonen finnes, men ingen er aktiv — samme tilstand gaten etterlater.
+    await prisma.courseSection.update({ where: { id: sectionId }, data: { activeVersionId: null } });
+
+    const res = await request(app).get(`/api/content-assets/${assetId}`).set(participant(reader.externalId));
+    expect(res.status, "tilbakeholdt seksjon skal ikke servere figuren").toBe(404);
+
+    await cleanup(sectionId, courseId);
+  });
+
+  it("forfatteren kan fortsatt forhåndsvise figuren i en arkivert seksjon", async () => {
+    // ⚠️ Kontrollcase for omgåelsen: innstrammingen skal ramme deltakere, ikke forfattere. En
+    // SMO som rydder i arkivert innhold må fortsatt kunne se hva som ligger der.
+    const { sectionId, assetId } = await makeSectionWithAsset();
+    const courseId = await linkToCourse(sectionId, "OPEN");
+    await prisma.courseSection.update({ where: { id: sectionId }, data: { archivedAt: new Date() } });
+
+    const author = await request(app).get(`/api/content-assets/${assetId}`).set(adminHeaders);
+    expect(author.status, "forfatterens omgåelse skal være uendret").toBe(200);
+
+    await prisma.courseSection.update({ where: { id: sectionId }, data: { archivedAt: null } });
+    await cleanup(sectionId, courseId);
   });
 });

@@ -10,6 +10,7 @@ import { getUserClassIds, getClassAssignedCourseDueDates } from "./classService.
 // #959: deltakerdøra bor her, ved siden av regelen den håndhever. `courseRepository` importerer
 // ikke denne fila, så retningen er entydig og det finnes ingen sirkel.
 import { courseRepository } from "./courseRepository.js";
+import { sectionAvailableWhere } from "./sectionAvailability.js";
 
 // #496/EN-2: enrollment service — assign/revoke/list + self-enroll + course visibility. Status is
 // always DERIVED here (never stored) from CourseCompletion + progress + dueAt, so it cannot drift.
@@ -327,16 +328,42 @@ export async function isModuleInAccessibleCourse(input: {
   return courses.some((c) => visible.has(c.id));
 }
 
-// #778/#786: is a section part of a published course this participant can access? Backs object-level
-// authz on the section-asset endpoint (assets are referenced from section markdown as `asset:<id>`).
-// Mirrors isModuleInAccessibleCourse but resolves via CourseItem.sectionId. Authors (SMO/ADMIN) bypass
-// this at the call site so they can preview assets in unpublished/draft sections.
-export async function isSectionInAccessibleCourse(input: {
+// ─────────────────────────────────────────────────────────────────────────────────────────────
+// #993: «kan denne deltakeren LESE denne seksjonen?» — ett spørsmål, ikke to halve.
+//
+// ⚠️ Denne het `isSectionInAccessibleCourse`, og den gjorde nøyaktig det navnet lovet: løste
+// seksjon → kurs → synlighet. Feilen lå i at det er et SVAKERE spørsmål enn kalleren trengte.
+// Asset-ruta spurte «er kurset tilgjengelig», og behandlet svaret som «seksjonen kan leses».
+//
+// Konsekvensen var en tilgangslekkasje: en deltaker som hadde lest en seksjon og notert seg en
+// `asset:`-id, kunne fortsatt hente figurene etter at seksjonen ble arkivert eller holdt tilbake
+// av oversettelsesgaten. Lesestien svarte 404; asset-ruta svarte 200.
+//
+// ⚠️ Det er #944 sin TREDJE dør. De to første ble lukket ved å filtrere seksjonen ut av
+// sekvensen og av lesestien — men en ressurs som henger under seksjonen har sin egen rute, og
+// den arvet ingenting.
+//
+// Kuren har #958-formen: døra bærer navnet på spørsmålet den faktisk svarer på, og kontrollerer
+// BEGGE ledd. Den svakere varianten finnes ikke lenger, så ingen kaller kan velge den ved et
+// uhell. Forfattere (SMO/ADMIN) går fortsatt utenom på kallstedet, med vilje: de skal kunne
+// forhåndsvise figurer i utkast.
+// ─────────────────────────────────────────────────────────────────────────────────────────────
+export async function canParticipantReadSection(input: {
   sectionId: string;
   userId: string;
   roles: AppRoleType[];
   groupIds?: string[];
 }): Promise<boolean> {
+  // Ledd 1: er seksjonen i det hele tatt tilgjengelig? Billigst, og kortslutter hele resten.
+  // `sectionAvailableWhere` er den samme regelen lesestien bruker — se sectionAvailability.ts om
+  // hvorfor den finnes i både predikat- og where-form.
+  const available = await prisma.courseSection.findFirst({
+    where: { id: input.sectionId, ...sectionAvailableWhere },
+    select: { id: true },
+  });
+  if (!available) return false;
+
+  // Ledd 2: ligger den i et kurs deltakeren kan se?
   const links = await prisma.courseItem.findMany({
     where: { sectionId: input.sectionId },
     select: { courseId: true },

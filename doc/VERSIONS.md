@@ -2,6 +2,43 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.28.2 - 2026-08-24
+
+**#993 — en figur arves ikke av en seksjon deltakeren ikke kan lese.**
+
+`isSectionInAccessibleCourse` gjorde nøyaktig det navnet lovet: seksjon → kurs → synlighet. Feilen
+var at det er et **svakere spørsmål enn kalleren trengte** — asset-ruta spurte «er kurset
+tilgjengelig» og behandlet svaret som «seksjonen kan leses».
+
+Konsekvensen var #944 sin **tredje dør**: en deltaker som hadde lest en seksjon og sett
+`asset:`-id-en i markdown-en, kunne fortsatt hente figurene etter at seksjonen ble arkivert eller
+holdt tilbake av oversettelsesgaten. Lesestien svarte 404; asset-ruta svarte 200.
+
+Kuren har #958-formen: døra heter nå `canParticipantReadSection` og kontrollerer begge ledd. Den
+svakere varianten finnes ikke lenger, så ingen kaller kan velge den ved et uhell. Forfatteres
+omgåelse er uendret — de skal kunne forhåndsvise figurer i utkast.
+
+### ⚠️ Funnet som var større enn saken
+
+Fiksen gjorde to eksisterende tester røde. Første tanke var at innstrammingen var for hard.
+Målingen sa noe annet:
+
+```
+ved opprettelse:  { archivedAt: null, activeVersionId: null }
+publish status:   422  translation_incomplete — title: missing en-GB, nn
+```
+
+Begge fiksturene fylte bare `nb` og publiserte aldri. Seksjonene sto dermed **holdt tilbake av
+oversettelsesgaten** — nøyaktig tilstanden saken handler om — mens tre tester påsto at en
+**deltaker** fikk `200` på figurene i dem.
+
+**Testene kodet inn lekkasjen som forventet oppførsel.** De ville aldri fanget den, fordi de
+beskrev den som riktig. Begge fyller nå alle tre språk og publiserer. De ti andre filene som
+oppretter seksjoner henter ingen deltaker-figurer, så flaten er komplett.
+
+Mutasjonsverifisert: med tilgjengelighetsleddet fjernet feiler begge lekkasjetestene på
+`expected 200 to be 404`, mens begge kontrollcasene forblir grønne.
+
 ## 2.28.1 - 2026-08-24
 
 **`npm ci` genererer Prisma-klienten igjen — uansett npm-versjon.**

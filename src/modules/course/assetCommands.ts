@@ -3,7 +3,7 @@ import type { AppRole as AppRoleType } from "@prisma/client";
 import { prisma } from "../../db/prisma.js";
 import { NotFoundError, ValidationError } from "../../errors/AppError.js";
 import { putAsset, getAsset, deleteAsset } from "./assetStorage.js";
-import { isSectionInAccessibleCourse } from "./enrollmentService.js";
+import { canParticipantReadSection } from "./enrollmentService.js";
 import { sanitizeSvg, svgHasText, extractSvgTexts, applySvgTextTranslations } from "./svgSanitizer.js";
 import { localizeSvgTexts, type GenerationLocale } from "../adminContent/llmContentGenerationService.js";
 import { SUPPORTED_LOCALES, type SupportedLocale } from "../../i18n/locale.js";
@@ -139,7 +139,7 @@ export async function getSectionAssetContent(
   const isAuthor =
     hasAnyRole(viewer.roles, CONTENT_AUTHORS);
   if (!isAuthor) {
-    const accessible = await isSectionInAccessibleCourse({
+    const accessible = await canParticipantReadSection({
       sectionId: asset.sectionId,
       userId: viewer.userId,
       roles: viewer.roles,
