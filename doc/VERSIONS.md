@@ -133,6 +133,24 @@ nye hull**, blant dem `rbac-matrix.test.ts` som laster hele Express-appen.
 
 Vakta så altså grønn ut mens nøyaktig regresjonen den skulle hindre lå i filene den godkjente.
 
+#### Etterspill: arbeidskopien flyttet ut av OneDrive
+
+Målingene over er gjort i OneDrive, og samme kveld ble arbeidskopien flyttet til lokal disk.
+Filkopi av hele treet inkludert `.git` — en `git clone` ville mistet `doc/ENVIRONMENTS.local.md`,
+`.env.test.local` og ti grener uten upstream.
+
+Målt gevinst er beskjeden når cachen er varm: unit 15,2 s → **13,2 s**, integrasjon 230,4 s →
+**210,8 s**. To andre ting betydde mer. OneDrive hadde satt `ReadOnly` på **1876 kataloger**, som
+var den virkelige årsaken til «Permission denied» ved `git worktree prune` — støy i hver eneste
+commit i ukevis. Og `npm ci` under npm 11.16 blokkerer install-skript, så `prisma generate` må
+kjøres eksplisitt etter en frisk installasjon; uten den gir `tsc` 127 feil om at `@prisma/client`
+mangler `AppRole`.
+
+⚠️ **Oppvarmingen skal ikke fjernes med flyttingen som begrunnelse.** Første kjøring på det kalde
+treet på ny disk brukte `collect 125 s` og `tests 181 s` — og hadde null timeouts. Uten
+`warmModuleGraph` ville seks filer sprengt 20-sekundersbudsjettet på nøyaktig den kjøringen.
+OneDrive gjorde problemet akutt; det skapte det ikke. En kald CI-runner er samme sak.
+
 ## 2.27.1 - 2026-08-23
 
 **QA-porten, femte runde — og den første med klassifisering.** Justeringen virket etter hensikten:

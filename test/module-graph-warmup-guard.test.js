@@ -12,8 +12,12 @@ import { describe, expect, it } from "vitest";
 //     kald graf   →  51 903 ms      varm graf  →  1 395 ms
 //
 // Samme fil, samme maskin, ingen last. Prisma er mocket i alle seks, så databasen — som saken
-// gjettet på — var aldri inne i bildet. Kostnaden er å LESE modulgrafen fra disk, og repoet
-// ligger i OneDrive.
+// gjettet på — var aldri inne i bildet. Kostnaden er å LESE modulgrafen fra disk.
+//
+// ⚠️ Tallene er målt i OneDrive, som repoet ble flyttet ut av 2026-08-23. Vakta gjelder likevel:
+// første kjøring på det kalde treet på lokal disk brukte `collect 125 s` / `tests 181 s` uten
+// én eneste timeout. OneDrive gjorde problemet akutt, men skapte det ikke — se
+// test/support/moduleGraphWarmup.ts.
 //
 // ⚠️ Det gjør `testTimeout` til en måler av lesehastighet i stedet for av hengende logikk, og
 // verre: vitest kan ikke STOPPE en utløpt test. Den fortsetter å kjøre, og kallene den rekker å

@@ -14,9 +14,16 @@ import { beforeAll } from "vitest";
  * seks, så databasen var aldri inne i bildet.
  *
  * Kostnaden er å LESE modulgrafen. `appealService` trekker inn `modules/course/index.js`, en
- * barrel på flere hundre filer, og repoet ligger i OneDrive. Kald gjennomlesing tar titalls
- * sekunder; andre gang ligger alt i OS-ens filcache. Derfor «passerer når den kjøres alene» —
- * det er egentlig «passerer andre gang».
+ * barrel på flere hundre filer. Kald gjennomlesing tar titalls sekunder; andre gang ligger alt i
+ * OS-ens filcache. Derfor «passerer når den kjøres alene» — det er egentlig «passerer andre gang».
+ *
+ * ⚠️ MÅLINGENE OVER ER FRA OneDrive, og repoet ble flyttet til lokal disk 2026-08-23 nettopp av
+ * denne grunn. IKKE fjern oppvarmingen med den begrunnelsen. Første kjøring på det kalde treet
+ * på ny sti brukte `collect 125 s` og `tests 181 s` — og hadde null timeouts. Uten oppvarmingen
+ * ville seks filer sprengt 20-sekundersbudsjettet på nøyaktig den kjøringen.
+ *
+ * OneDrive gjorde problemet akutt. Det skapte det ikke: en byggekostnad skal ikke ligge i en
+ * tests budsjett, uansett hvor disken står. En kald CI-runner er samme sak.
  *
  * ⚠️ POENGET: dette er en BYGGEKOSTNAD, ikke en egenskap ved koden som testes. Fordi filene
  * gjør `await import(...)` inne i testkroppen, blir den belastet den testen som tilfeldigvis
