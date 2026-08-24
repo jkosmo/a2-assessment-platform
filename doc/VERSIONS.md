@@ -2,6 +2,34 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.28.1 - 2026-08-24
+
+**`npm ci` genererer Prisma-klienten igjen — uansett npm-versjon.**
+
+npm 11.16 blokkerer avhengighetenes install-skript. Etter en fersk `npm ci` var
+`@prisma/client` ugenerert, og `tsc` ga 127 feil av typen «Module '@prisma/client' has no exported
+member 'AppRole'». Det traff da arbeidskopien ble reinstallert etter flyttingen ut av OneDrive, og
+det ville truffet enhver ny utvikler og CI den dagen den oppgraderer npm.
+
+⚠️ **Avhengigheten var implisitt.** Klienten ble generert av `@prisma/client` sin egen
+`postinstall` — en sideeffekt ingen hadde skrevet ned, og som npm nå slår av som standard.
+Deploy-workflowene var trygge fordi de allerede kjører `npm ci --ignore-scripts` etterfulgt av et
+eksplisitt `npm run prisma:generate`; det var **`ci.yml` sin playwright-jobb** og enhver lokal
+installasjon som lente seg på sideeffekten.
+
+**Kuren:** et `postinstall` i rotprosjektets egen `package.json`:
+
+```json
+"postinstall": "npm run prisma:generate"
+```
+
+Målt, ikke gjettet: npm 11 blokkerer *avhengighetenes* livssyklusskript, men kjører **rotpakkens
+egne**. Verifisert med en isolert prøve, og deretter med en fersk `rm -rf node_modules && npm ci` i
+repoet — klienten kom av seg selv.
+
+Deploy-stien er uendret: `--ignore-scripts` hopper også over dette, og det eksplisitte
+`prisma:generate` står der fortsatt. Eksplisitt slår implisitt begge veier.
+
 ## 2.28.0 - 2026-08-23
 
 **To motorer til fra kompleksitetsepicen (#959, #962).** Med #958 fra tidligere i dag er tre av
