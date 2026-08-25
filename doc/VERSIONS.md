@@ -2,6 +2,51 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.31.0 - 2026-08-25
+
+**QA-porten ga NO-GO på 2.30.0. Fem funn, alle reelle — og to av dem var i arbeid jeg hadde meldt
+som ferdig.**
+
+### #953: jeg byttet én evig tilstand mot en annen
+
+Kuren min satte `UNDER_REVIEW` og opprettet en køsak. Men `finalizeManualReviewOverride` krever et
+**foreldrevedtak** for avstamningen, og her finnes ingen — vurderingen kom aldri så langt. Vurdereren
+kunne kreve saken, men aldri løse den.
+
+⚠️ QA-portens eget forslag — lag et grunnvedtak — ble forkastet: enhver `passFailTotal` er en **dom**,
+og å stryke kandidaten for vår infrastrukturfeil er verre enn å la være.
+
+Innleveringen slippes nå tilbake til `SUBMITTED` (ikke i `TERMINAL_SUBMISSION_STATUSES`, så nytt
+forsøk er mulig) og drift varsles. ⚠️ Skrivingen er **betinget av `PROCESSING`**: er vedtaket
+allerede lagret og feilen kom i en sideeffekt etterpå, ville en ubetinget skriving overskrevet et
+gyldig `COMPLETED` — også det funnet av porten.
+
+Fire av de fem funnene forsvant med dette grepet, fordi køsaken ikke lenger finnes.
+
+⚠️ **Unit-testen kunne ikke bevise det viktigste.** Vernet ligger i `where`-klausulen, og testen
+mocker repositoriet bort. Derfor er det lagt til en integrasjonstest som kjører mot databasen.
+
+### #952 var ikke en feil — flaten er av
+
+Skanningen leste serverens standardoppførsel og utledet at en kandidat mister inngangen til å ta en
+strøket modul om igjen. Verifisert at premisset ikke holder: **ingen klient kaller `/api/modules`
+uten `includeCompleted=true`**, og den frittstående modul-lista er dessuten skjult av
+`PARTICIPANT_COURSE_ONLY` — som er `true` som standard.
+
+Produkteier: *«fjern frittstående modul flyt, bruker har ingen annen vei inn for å ta en modul enn
+via «Mine Kurs» siden.»*
+
+Serversiden er fjernet i denne releasen: `includeCompleted`, `hideCompletedInAvailableByDefault`,
+`isSubmissionStatusCompleted`, `resolveIncludeCompletedForAvailableModules` og filtergrenen — og med
+den **min egen #952-fiks**, som var bygget på det gale premisset.
+
+⚠️ **Klientsiden er bevisst utsatt.** Kartleggingen sa lista, knappen og flagget; da jeg gikk inn,
+brukte også SMO-ens forhåndsvisningsmodus de samme funksjonene. Å legge en 150-linjers fjerning i en
+release med fire feilrettinger gjør enhver prod-feil tvetydig — se `CLAUDE.md`, «én released versjon
+per bekreftet fiks».
+
+1195 unit, 246 e2e.
+
 ## 2.30.0 - 2026-08-25
 
 **#952 og #948 — «bestått» avgjøres nå ett sted også på serveren.** Med dette er hele

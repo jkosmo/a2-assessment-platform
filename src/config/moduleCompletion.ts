@@ -13,7 +13,6 @@ const submissionStatusSchema = z.enum([
 
 const moduleCompletionConfigSchema = z.object({
   completedSubmissionStatuses: z.array(submissionStatusSchema).min(1),
-  hideCompletedInAvailableByDefault: z.boolean().default(true),
   defaultCompletedHistoryLimit: z.number().int().min(1).max(500).default(50),
   maxCompletedHistoryLimit: z.number().int().min(1).max(1000).default(200),
 });

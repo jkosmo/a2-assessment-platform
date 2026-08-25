@@ -1,6 +1,5 @@
 import type { AppRole as AppRoleType } from "@prisma/client";
 import { AppRole } from "../../db/prismaRuntime.js";
-import { isSettledPass } from "../assessment/submissionOutcome.js";
 import { hasAnyRole, MODULE_ADMIN_READERS } from "../../auth/roleSets.js";
 import type { SupportedLocale } from "../../i18n/locale.js";
 import { localizeContentText } from "../../i18n/content.js";
@@ -17,7 +16,6 @@ import {
 } from "../submission/submissionRepository.js";
 import {
   getCompletedSubmissionStatuses,
-  isSubmissionStatusCompleted,
 } from "./moduleCompletionPolicyService.js";
 
 // #962: settet bor nå i `src/auth/roleSets.ts`, sammen med de nitten andre rollesjekkene. Det er
@@ -106,28 +104,11 @@ export async function listModules(
     };
   });
 
-  if (options.includeCompleted === true) {
-    return mapped;
-  }
-
-  // ⚠️ #952: skjulte tidligere enhver modul med en FULLFØRT innlevering — uansett utfall. En
-  // deltaker som STRØK på en frittstående modul mistet dermed enhver inngang til å ta den på nytt:
-  // den forsvant fra /api/modules og dukket opp under «Fullførte moduler». Eneste vei tilbake var
-  // via kurs-spilleren, og bare hvis modulen tilfeldigvis lå i et kurs.
-  //
-  // Nå skjules bare det som faktisk er BESTÅTT. En stryk blir stående tilgjengelig, som er hele
-  // poenget med et nytt forsøk.
-  //
-  // ⚠️ Statusen alene holder ikke — se `submissionOutcome.ts` om hvordan et vedtak kan bære
-  // `passFailTotal: true` mens innleveringen fortsatt er under vurdering.
-  return mapped.filter((module) => {
-    const status = module.participantStatus?.latestStatus ?? null;
-    if (!isSubmissionStatusCompleted(status)) return true;
-    return !isSettledPass({
-      passFailTotal: module.participantStatus?.latestDecision?.passFailTotal ?? null,
-      submissionStatus: status,
-    });
-  });
+  // #952: lista returnerer nå ALT. Skjulingen av «fullførte» fantes bare for den frittstående
+  // modul-lista i deltakerkonsollet, og den flaten er fjernet — deltakeren når moduler gjennom
+  // «Mine kurs». Konfigurerbarheten kostet oppmerksomhet uten å gi noen noe: hver leser måtte
+  // sjekke kallstedet for å vite om filteret var på.
+  return mapped;
 }
 
 export async function listCompletedModulesForUser(

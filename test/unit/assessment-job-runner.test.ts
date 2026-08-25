@@ -14,9 +14,7 @@ const countJobsByStatus = vi.fn();
 const findExpiredRunningJobs = vi.fn();
 const resetExpiredJob = vi.fn();
 const findLongRunningJobs = vi.fn();
-const createManualReview = vi.fn();
-const updateSubmissionStatus = vi.fn();
-const findOpenManualReviewForSubmission = vi.fn();
+const releaseProcessingSubmission = vi.fn();
 const recordAuditEvent = vi.fn();
 const logOperationalEvent = vi.fn();
 
@@ -47,11 +45,7 @@ vi.mock("../../src/db/transaction.js", () => ({
 }));
 
 vi.mock("../../src/repositories/decisionRepository.js", () => ({
-  createDecisionRepository: () => ({
-    createManualReview,
-    updateSubmissionStatus,
-    findOpenManualReviewForSubmission,
-  }),
+  createDecisionRepository: () => ({ releaseProcessingSubmission }),
 }));
 
 vi.mock("../../src/services/auditService.js", () => ({
@@ -78,11 +72,8 @@ describe("AssessmentJobRunner", () => {
     markJobForRetryOrFailure.mockResolvedValue({ count: 1 });
     renewLease.mockReset();
     renewLease.mockResolvedValue({ count: 1 });
-    createManualReview.mockReset();
-    updateSubmissionStatus.mockReset();
-    findOpenManualReviewForSubmission.mockReset();
-    // Standard: ingen åpen sak fra før. Den ene testen som trenger det, overstyrer selv.
-    findOpenManualReviewForSubmission.mockResolvedValue(null);
+    releaseProcessingSubmission.mockReset();
+    releaseProcessingSubmission.mockResolvedValue({ count: 1 });
     findAssessmentJobOrThrow.mockReset();
     findPendingOrRunningJobForSubmission.mockReset();
     findPendingOrRunningJobIdForSubmission.mockReset();
@@ -195,9 +186,11 @@ describe("AssessmentJobRunner", () => {
       // ⚠️ #953: dette var det som manglet. Jobben ble FAILED, men innleveringen sto igjen som
       // PROCESSING — for alltid. Deltakeren så «vurderes» som aldri gikk over, og kunne heller
       // ikke starte et nytt MCQ-forsøk fordi PROCESSING blokkerer det. Ingen ble varslet.
-      expect(updateSubmissionStatus).toHaveBeenCalledWith("sub-1", "UNDER_REVIEW");
-      expect(createManualReview).toHaveBeenCalledWith(
-        expect.objectContaining({ submissionId: "sub-1", reviewStatus: "OPEN" }),
+      expect(releaseProcessingSubmission).toHaveBeenCalledWith("sub-1");
+      expect(logOperationalEvent).toHaveBeenCalledWith(
+        "assessment_job_abandoned_submission_reset",
+        expect.objectContaining({ submissionId: "sub-1" }),
+        "error",
       );
     });
 
@@ -217,11 +210,10 @@ describe("AssessmentJobRunner", () => {
 
       await processNextJob(vi.fn().mockRejectedValue(new Error("Transient error")));
 
-      expect(updateSubmissionStatus).not.toHaveBeenCalled();
-      expect(createManualReview).not.toHaveBeenCalled();
+      expect(releaseProcessingSubmission).not.toHaveBeenCalled();
     });
 
-    it("#953 to endelige feil gir ikke to køsaker for samme innlevering", async () => {
+    it("#953 et allerede AVGJORT vedtak overskrives ikke", async () => {
       findNextRunnableJob.mockResolvedValue({ id: "job-1", submissionId: "sub-1" });
       tryLockPendingJob.mockResolvedValue({ count: 1 });
       findAssessmentJobOrThrow.mockResolvedValue({
@@ -231,15 +223,22 @@ describe("AssessmentJobRunner", () => {
         availableAt: new Date(),
       });
       markJobForRetryOrFailure.mockResolvedValue({ count: 1 });
-      // Det finnes allerede en åpen sak — vurdereren skal ikke få dobbeltarbeid.
-      findOpenManualReviewForSubmission.mockResolvedValue({ id: "review-1" });
+      // ⚠️ Funnet av QA-porten: hvis vedtaket ALLEREDE er lagret og feilen kom i en sideeffekt
+      // etterpå, når retryene til slutt hit — og en ubetinget skriving ville gjort et gyldig
+      // COMPLETED om til noe annet. Skrivingen er betinget av PROCESSING, så den treffer ingenting.
+      releaseProcessingSubmission.mockResolvedValue({ count: 0 });
       const { processNextJob } = await import("../../src/modules/assessment/AssessmentJobRunner.js");
 
       await processNextJob(vi.fn().mockRejectedValue(new Error("Persistent error")));
 
-      expect(createManualReview).not.toHaveBeenCalled();
-      // Statusen settes likevel — den er det som løser deltakerens blokkering.
-      expect(updateSubmissionStatus).toHaveBeenCalledWith("sub-1", "UNDER_REVIEW");
+      // Forsøket gjøres, men treffer ingen rad — og da varsles heller ikke drift om en reset
+      // som ikke skjedde.
+      expect(releaseProcessingSubmission).toHaveBeenCalledWith("sub-1");
+      expect(logOperationalEvent).not.toHaveBeenCalledWith(
+        "assessment_job_abandoned_submission_reset",
+        expect.anything(),
+        expect.anything(),
+      );
     });
 
     // #856: a job whose runAssessment never returns within the runtime cap must NOT wedge the worker —

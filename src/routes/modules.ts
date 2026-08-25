@@ -10,15 +10,15 @@ import { startMcqAttempt, submitMcqAttempt } from "../modules/assessment/index.j
 import {
   getCompletedSubmissionStatuses,
   resolveCompletedHistoryLimit,
-  resolveIncludeCompletedForAvailableModules,
 } from "../modules/module/index.js";
 import { t } from "../i18n/messages.js";
 import { hasAnyRole, CONTENT_AUTHORS } from "../auth/roleSets.js";
 import { mcqSubmitLimiter } from "../middleware/rateLimiting.js";
 
 const modulesRouter = Router();
+// #952: `includeCompleted` er fjernet. Den fantes bare for den frittstående modul-lista i
+// deltakerkonsollet, og den flaten er borte — deltakeren når moduler gjennom «Mine kurs».
 const modulesListQuerySchema = z.object({
-  includeCompleted: z.string().trim().optional(),
   adminFacing: z.string().trim().optional(),
 });
 const completedModulesQuerySchema = z.object({
@@ -50,35 +50,17 @@ modulesRouter.get("/", async (request, response) => {
     return;
   }
 
-  let requestedIncludeCompleted: boolean | undefined;
-  if (parsed.data.includeCompleted !== undefined) {
-    const normalized = parsed.data.includeCompleted.toLowerCase();
-    if (normalized !== "true" && normalized !== "false") {
-      response.status(400).json({
-        error: "validation_error",
-        message: "includeCompleted must be true or false.",
-      });
-      return;
-    }
-    requestedIncludeCompleted = normalized === "true";
-  }
-
-  const includeCompleted = resolveIncludeCompletedForAvailableModules(requestedIncludeCompleted);
   const roles = request.context?.roles ?? [];
   const userId = request.context?.userId;
   const locale = request.context?.locale ?? "en-GB";
   const adminFacingRequested = parsed.data.adminFacing === "true";
   const hasElevatedRole = hasAnyRole(roles, CONTENT_AUTHORS);
   const participantFacing = adminFacingRequested && hasElevatedRole ? false : true;
-  const modules = await listModules(roles, userId, locale, {
-    includeCompleted,
-    participantFacing,
-  });
+  const modules = await listModules(roles, userId, locale, { participantFacing });
 
   response.json({
     modules,
     filters: {
-      includeCompleted,
       completedSubmissionStatuses: getCompletedSubmissionStatuses(),
     },
   });

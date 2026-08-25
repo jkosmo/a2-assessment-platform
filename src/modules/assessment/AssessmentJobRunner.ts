@@ -198,25 +198,36 @@ export async function processNextJob(runAssessment: AssessmentRunFn, submissionI
       // Ingen ble varslet, og rapportene telte innleveringen verken som bestått, strøket eller
       // under vurdering. Den var usynlig i alle tre retninger.
       //
-      // Kuren finner ikke opp en ny tilstand: dette er nettopp «maskinen klarte ikke avgjøre», og
-      // den veien finnes — UNDER_REVIEW pluss en rad i vurdererkøen. Samme maskineri som når en
-      // vurdering rutes til manuell behandling av andre grunner.
+      // ⚠️ FØRSTE FORSØK PÅ KUR VAR FEIL, og QA-porten fant det. Den satte `UNDER_REVIEW` og
+      // opprettet en køsak — men `finalizeManualReviewOverride` krever et FORELDREVEDTAK for
+      // avstamningen, og her finnes ingen: vurderingen kom aldri så langt. Vurdereren kunne kreve
+      // saken, men aldri løse den. Jeg byttet «PROCESSING for alltid» mot «UNDER_REVIEW for
+      // alltid».
       //
-      // ⚠️ Å sette REJECTED ville vært galt: det leses som en dom mot kandidaten, og her har
-      // ingen vurdert noe. Feilen er vår, ikke hens.
+      // ⚠️ Å skrive et grunnvedtak i stedet ble forkastet: enhver `passFailTotal` er en DOM, og
+      // her har ingen vurdert noe. Å stryke kandidaten for vår infrastrukturfeil er verre enn å
+      // la være.
+      //
+      // Kuren er å slippe kandidaten løs igjen. `SUBMITTED` er ikke i
+      // `TERMINAL_SUBMISSION_STATUSES`, så et nytt forsøk er mulig, og drift varsles.
+      //
+      // ⚠️ Bare fra `PROCESSING`. Er vedtaket allerede lagret og feilen kom i en SIDEEFFEKT
+      // etterpå, ville en ubetinget skriving her overskrevet et gyldig `COMPLETED` — også det
+      // funnet av QA-porten.
       if (!willRetry) {
-        const decisionRepo = createDecisionRepository(tx);
-        // Idempotent: en jobb kan i prinsippet nå hit to ganger, og to køsaker for samme
-        // innlevering ville gitt vurdereren dobbeltarbeid.
-        const openReview = await decisionRepo.findOpenManualReviewForSubmission(candidate.submissionId);
-        if (!openReview) {
-          await decisionRepo.createManualReview({
-            submissionId: candidate.submissionId,
-            triggerReason: "Automatic assessment failed — routed to manual review (#953).",
-            reviewStatus: ReviewStatus.OPEN,
-          });
+        const reset = await createDecisionRepository(tx).releaseProcessingSubmission(candidate.submissionId);
+        if (reset.count > 0) {
+          logOperationalEvent(
+            operationalEvents.assessment.jobAbandonedSubmissionReset,
+            {
+              jobId: candidate.id,
+              submissionId: candidate.submissionId,
+              attempts: job.attempts,
+              errorMessage: error instanceof Error ? error.message : "Unknown assessment error",
+            },
+            "error",
+          );
         }
-        await decisionRepo.updateSubmissionStatus(candidate.submissionId, SubmissionStatus.UNDER_REVIEW);
       }
 
       await recordAuditEvent(

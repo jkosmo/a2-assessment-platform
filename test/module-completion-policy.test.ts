@@ -1,23 +1,16 @@
 import { describe, expect, it } from "vitest";
 import {
   getCompletedSubmissionStatuses,
-  isSubmissionStatusCompleted,
   resolveCompletedHistoryLimit,
-  resolveIncludeCompletedForAvailableModules,
 } from "../src/modules/module/index.js";
 
-describe("module completion policy service", () => {
-  it("classifies completed submission statuses from config", () => {
-    const completedStatuses = getCompletedSubmissionStatuses();
-    expect(completedStatuses).toContain("COMPLETED");
-    expect(isSubmissionStatusCompleted("COMPLETED")).toBe(true);
-    expect(isSubmissionStatusCompleted("UNDER_REVIEW")).toBe(false);
-  });
+// #952: `isSubmissionStatusCompleted` og `resolveIncludeCompletedForAvailableModules` er fjernet
+// sammen med den frittstående modul-lista de tjente. Det som står igjen gjelder «Fullførte
+// moduler»-historikken på /profile og «Mine kurs → Fullførte», som er levende flater.
 
-  it("resolves include-completed default and explicit query overrides", () => {
-    expect(resolveIncludeCompletedForAvailableModules(undefined)).toBe(false);
-    expect(resolveIncludeCompletedForAvailableModules(true)).toBe(true);
-    expect(resolveIncludeCompletedForAvailableModules(false)).toBe(false);
+describe("module completion policy service", () => {
+  it("leser hvilke statuser som teller som fullført fra konfigurasjonen", () => {
+    expect(getCompletedSubmissionStatuses()).toContain("COMPLETED");
   });
 
   it("bounds completed history limit to config max", () => {
