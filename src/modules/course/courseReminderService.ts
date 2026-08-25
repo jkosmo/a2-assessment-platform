@@ -321,44 +321,10 @@ export async function runCourseReminderSchedule(input?: {
       continue;
     }
 
-    let status = await deriveStatus(candidate.userId, candidate.courseId, candidate.dueAt, asOf);
-
-    // ⚠️ #966: `deriveStatus` spør bare «finnes det en CourseCompletion-rad?». Utstedelsen er
-    // hendelsesdrevet — den fyrer når siste modul bestås eller siste seksjon leses — og en tapt
-    // hendelse etterlater en kandidat som HAR oppfylt kravene, men mangler raden.
-    //
-    // Konsekvensen var levende og pinlig: kurskortet hennes viste «Fullført», og samme natt sendte
-    // denne jobben «fristen er forfalt». SMO-en så henne som forsinket. Ingenting rettet seg før
-    // hun tilfeldigvis åpnet bevissiden sin — som er det ENESTE stedet sveipen kjørte fra.
-    //
-    // Reparasjonen gjøres her, rett før vi ville sagt «forfalt», og bare for de som IKKE allerede
-    // er registrert som fullført. En kandidat med raden på plass koster ingenting ekstra; porten
-    // evalueres bare der svaret kan være galt.
-    //
-    // Utstedelsen er idempotent og sender ingen varsling — den skriver raden og et revisjonsspor.
-    let repaired = false;
-    if (status !== "COMPLETED") {
-      try {
-        await checkCourseCompletionForCourse({ userId: candidate.userId, courseId: candidate.courseId });
-        const after = await deriveStatus(candidate.userId, candidate.courseId, candidate.dueAt, asOf);
-        repaired = after === "COMPLETED";
-        status = after;
-      } catch (error) {
-        // Best effort, per kandidat: én ødelagt rad skal ikke stoppe hele nattjobben. Da sender vi
-        // heller en purring for mye enn ingen purringer i det hele tatt.
-        logOperationalEvent(
-          operationalEvents.course.completionReconcileFailed,
-          { userId: candidate.userId, courseId: candidate.courseId, errorMessage: String(error) },
-          "error",
-        );
-      }
-    }
+    const status = await deriveStatus(candidate.userId, candidate.courseId, candidate.dueAt, asOf);
 
     if (status === "COMPLETED") {
       summary.skippedCompleted += 1;
-      // Teller BARE de som faktisk manglet raden. Uten skillet ville tallet vært «alle fullførte»,
-      // og da sier det ingenting om hvor ofte utstedelsen svikter — som er det man vil vite.
-      if (repaired) summary.repairedCompletions += 1;
       continue;
     }
 
@@ -398,6 +364,35 @@ export async function runCourseReminderSchedule(input?: {
       continue;
     }
 
+    // ⚠️ #966: utstedelsen av kursbevis er hendelsesdrevet, og en tapt hendelse etterlot en
+    // kandidat som HADDE oppfylt kravene uten fullføringsrad. Kurskortet viste «Fullført» mens
+    // denne jobben sendte «fristen er forfalt» samme natt.
+    //
+    // ⚠️ Reparasjonen står HER, ikke ved statusberegningen, og det er QA-portens fortjeneste:
+    // kandidatlista inneholder hver forfalt innmelding for alltid, så en sveip før utløser- og
+    // dedup-sjekken ville kjørt hele fullføringsporten for hver eneste historiske rad, hver natt.
+    // Her kjører den bare for dem vi faktisk er i ferd med å purre.
+    try {
+      await checkCourseCompletionForCourse({ userId, courseId: candidate.courseId });
+      // ⚠️ Statusen leses på nytt UANSETT om kallet kastet: en samtidig utstedelse treffer
+      // unikhetskravet på (userId, courseId) og gir en feil, selv om kandidaten NÅ er fullført.
+      // Å beholde den gamle statusen i catch-grenen ville sendt nøyaktig purringen dette skal
+      // hindre.
+    } catch (error) {
+      logOperationalEvent(
+        operationalEvents.course.completionReconcileFailed,
+        { userId, courseId: candidate.courseId, errorMessage: String(error) },
+        "error",
+      );
+    }
+    const statusAfterRepair = await deriveStatus(userId, candidate.courseId, candidate.dueAt, asOf);
+    if (statusAfterRepair === "COMPLETED") {
+      summary.skippedCompleted += 1;
+      // Teller BARE de som faktisk manglet raden. Uten skillet ville tallet vært «alle fullførte»,
+      // og da sier det ingenting om hvor ofte utstedelsen svikter — som er det man vil vite.
+      summary.repairedCompletions += 1;
+      continue;
+    }
     summary.processed += 1;
 
     const result = await send({

@@ -34,6 +34,39 @@ nøyaktig den divergensen jeg hadde satt meg fore å fjerne. Funnet av QA-porten
 `resultPassFail`. Den festet «bestått er ankbart» uten å si det. Nå kreves et strykvedtak, med
 kontrollcase.
 
+### ⚠️ Tredje QA-runde: min egen «kanoniske» regel var en svarteliste
+
+`deriveOutcome` listet `UNDER_REVIEW` og `SCORED` som uavklarte og regnet **alt annet** som avgjort.
+Reprodusert: en innlevering med `submissionStatus: "PROCESSING"` og `passFailTotal: true` ble vist
+som **bestått, med konfetti**. Det samme for `SUBMITTED` og for en hvilken som helst ukjent streng.
+
+⚠️ Retningen er poenget. En svarteliste antar at **alt ukjent er trygt** — feil vei for en regel om
+hva som er *endelig*. En ny status i enumet ville automatisk blitt «avgjort». Nå en hvitliste:
+`COMPLETED` og `REJECTED`.
+
+Den eksisterende testen fanget en svakhet i første retting: uten status i det hele tatt ga hvitlista
+`pending`, altså «under behandling» — men da vet vi ingenting. Skillet mellom `pending` og `unknown`
+er gjenopprettet, og det er ikke kosmetisk.
+
+**Påminnelsesjobben** kjørte hele fullføringsporten for hver historisk forfalt innmelding, hver natt.
+Reparasjonen står nå etter utløser- og dedup-sjekken. Og statusen leses på nytt **uansett om kallet
+kastet**: en samtidig utstedelse treffer unikhetskravet på `(userId, courseId)` og gir en feil selv
+når kandidaten nå *er* fullført — å beholde den gamle statusen ville sendt nøyaktig purringen dette
+skal hindre.
+
+### #948 gjenåpnet — en kanonisk regel uten kallere
+
+`submissionOutcome.ts` hadde **én** kaller: modulfilteret. Da #952 ble kuttet senere i samme
+release, forsvant den — og en kanonisk regel uten kallere er død kode med tester. Fila er fjernet.
+
+⚠️ Lukkepåstanden min var sann da den ble skrevet, og ble ugyldiggjort av en endring jeg gjorde
+etterpå **i samme release**. Verdt å merke seg som felle: å lukke en sak midt i en release, og så
+endre koden som gjorde den sann.
+
+Kalibrerings-KPI-en trenger en produktbeslutning: måler den maskinens råvedtak eller det endelige
+utfallet? Dokumentasjonen min motsa seg selv på nettopp dette, og det er nå presisert i
+flatekartet §28.
+
 ### Innhold
 
 **QA-porten ga NO-GO på 2.30.0. Fem funn, alle reelle — og to av dem var i arbeid jeg hadde meldt

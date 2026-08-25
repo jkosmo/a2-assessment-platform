@@ -1006,6 +1006,12 @@ gjenta feilen i motsatt retning: ett svar der det trengs flere.
 er riktig, men uvirksom til nøkkelen utvides. Den ekte feilen på de flatene er at raden **forsvinner**
 når en anke setter innleveringen tilbake til `UNDER_REVIEW`: #1002.
 
+⚠️ **Serversiden er IKKE konvertert.** En kanonisk `submissionOutcome.ts` ble laget og deretter
+fjernet igjen: dens eneste kaller — modulfilteret — forsvant da den frittstående flyten ble kuttet i
+samme release, og en «kanonisk regel» uten kallere er bare død kode. Kalibreringsflaten teller
+fortsatt `passFailTotal` uten status. Om KPI-en skal måle maskinens råvedtak eller det endelige
+utfallet er en åpen produktbeslutning — se #948.
+
 ⚠️ **Aliaser er fella.** Første utkast av vakta lette etter `passFailTotal` og overså
 `flowState.resultPassFail === true` i `participant.js` — samme verdi, annet navn, vakta grønn.
 Regexen matcher nå ethvert navn som inneholder «passFail». Skrivinger (`passFailTotal:` i

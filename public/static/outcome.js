@@ -37,14 +37,23 @@ export const OUTCOME_PENDING = "pending";
 export const OUTCOME_UNKNOWN = "unknown";
 
 /**
- * Statusene som betyr «ikke avgjort ennå».
+ * Statusene som bærer et AUTORITATIVT utfall. Alt annet er uavklart.
  *
- * ⚠️ `SCORED` er med fordi den betyr at poengene er satt, men at rutingsbeslutningen — skal saken
- * til manuell vurdering? — ennå ikke er anvendt. Bare `COMPLETED` bærer et autoritativt utfall.
- * Statusen skrives ikke i dag (#953), men klienten regner den som et resultat som kan lastes, så
- * en migrert eller gammel rad ville fått konfetti før rutingen var avgjort.
+ * ⚠️ DETTE VAR EN SVARTELISTE, og QA-porten fant feilen. Den listet `UNDER_REVIEW` og `SCORED` som
+ * uavklarte og regnet ALT annet som avgjort — inkludert `PROCESSING`, `SUBMITTED` og en hvilken
+ * som helst ukjent streng.
+ *
+ * Konsekvensen var levende: en innlevering under behandling med `passFailTotal: true` ble vist som
+ * BESTÅTT, med konfetti, før vurderingen var ferdig. Verdien finnes allerede på det tidspunktet —
+ * det er nettopp derfor statusen må bestemme.
+ *
+ * En hvitliste kan ikke feile på den måten: en ny status i enumet er uavklart til noen aktivt
+ * legger den til her. En svarteliste antar at alt ukjent er trygt, som er feil retning for en
+ * regel om hva som er endelig.
+ *
+ * `REJECTED` er med fordi den ER et endelig utfall, selv om ingen kodesti skriver den i dag (#953).
  */
-const UNSETTLED_STATUSES = new Set(["UNDER_REVIEW", "SCORED"]);
+const SETTLED_STATUSES = new Set(["COMPLETED", "REJECTED"]);
 
 function normalizeStatus(submissionStatus) {
   return typeof submissionStatus === "string" ? submissionStatus.toUpperCase() : "";
@@ -65,7 +74,15 @@ function normalizeStatus(submissionStatus) {
  */
 export function deriveOutcome(input) {
   const { passFailTotal, submissionStatus } = input ?? {};
-  if (UNSETTLED_STATUSES.has(normalizeStatus(submissionStatus))) return OUTCOME_PENDING;
+  const hasDecision = passFailTotal === true || passFailTotal === false;
+
+  if (!SETTLED_STATUSES.has(normalizeStatus(submissionStatus))) {
+    // ⚠️ Skillet mellom `pending` og `unknown` er ikke kosmetisk: `pending` sier «dette behandles»,
+    // `unknown` sier «vi vet ingenting». En rad uten beslutning OG uten avgjort status er det
+    // siste — å vise den som «under behandling» ville vært en påstand vi ikke har dekning for.
+    return hasDecision ? OUTCOME_PENDING : OUTCOME_UNKNOWN;
+  }
+
   if (passFailTotal === true) return OUTCOME_PASSED;
   if (passFailTotal === false) return OUTCOME_FAILED;
   return OUTCOME_UNKNOWN;

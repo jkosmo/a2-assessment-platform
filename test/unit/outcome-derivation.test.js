@@ -35,6 +35,19 @@ describe("#978 deriveOutcome — statusen sjekkes først", () => {
     expect(deriveOutcome({ passFailTotal: false, submissionStatus: "under_review" })).toBe(OUTCOME_PENDING);
   });
 
+  it("⚠️ bare COMPLETED og REJECTED bærer et endelig utfall", () => {
+    // QA-porten fant at dette var en SVARTELISTE: den listet UNDER_REVIEW og SCORED som uavklarte
+    // og regnet alt annet som avgjort — inkludert PROCESSING. Konsekvensen var levende: en
+    // innlevering under behandling med passFailTotal: true ble vist som BESTÅTT, med konfetti.
+    //
+    // En hvitliste kan ikke feile slik: en ny status i enumet er uavklart til noen legger den til.
+    for (const status of ["PROCESSING", "SUBMITTED", "UNDER_REVIEW", "SCORED", "TULLESTATUS"]) {
+      expect(deriveOutcome({ passFailTotal: true, submissionStatus: status }), status).toBe(OUTCOME_PENDING);
+    }
+    expect(deriveOutcome({ passFailTotal: true, submissionStatus: "COMPLETED" })).toBe(OUTCOME_PASSED);
+    expect(deriveOutcome({ passFailTotal: false, submissionStatus: "REJECTED" })).toBe(OUTCOME_FAILED);
+  });
+
   it("ingen beslutning er unknown, ikke failed", () => {
     // ⚠️ `null`/`undefined` MÅ ikke kollapse til «ikke bestått». Et forsøk uten vedtak er ikke
     // et strøket forsøk, og en `!passFailTotal`-test ville sagt det motsatte.
