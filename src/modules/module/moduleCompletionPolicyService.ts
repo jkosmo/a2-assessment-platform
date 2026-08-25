@@ -1,23 +1,9 @@
 import { getModuleCompletionConfig } from "../../config/moduleCompletion.js";
 import type { SubmissionStatus as SubmissionStatusType } from "@prisma/client";
 
-export function isSubmissionStatusCompleted(status: SubmissionStatusType | null | undefined) {
-  if (!status) {
-    return false;
-  }
-
-  const config = getModuleCompletionConfig();
-  return config.completedSubmissionStatuses.includes(status);
-}
-
-export function resolveIncludeCompletedForAvailableModules(requestedIncludeCompleted?: boolean) {
-  if (typeof requestedIncludeCompleted === "boolean") {
-    return requestedIncludeCompleted;
-  }
-
-  const config = getModuleCompletionConfig();
-  return !config.hideCompletedInAvailableByDefault;
-}
+// #952: `isSubmissionStatusCompleted` og `resolveIncludeCompletedForAvailableModules` er fjernet
+// sammen med den frittstående modul-lista de tjente. Det som står igjen gjelder «Fullførte
+// moduler»-historikken, som er en levende flate.
 
 export function resolveCompletedHistoryLimit(requestedLimit?: number) {
   const config = getModuleCompletionConfig();

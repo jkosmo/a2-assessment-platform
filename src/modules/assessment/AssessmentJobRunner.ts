@@ -188,6 +188,7 @@ export async function processNextJob(runAssessment: AssessmentRunFn, submissionI
       if (res.count === 0) {
         return res;
       }
+
       await recordAuditEvent(
         {
           entityType: auditEntityTypes.assessmentJob,

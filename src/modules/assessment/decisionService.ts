@@ -13,7 +13,12 @@ import {
   recommendsManualReview,
 } from "./assessmentDecisionSignals.js";
 import { redFlagsCodec } from "../../codecs/redFlagsCodec.js";
+import { AssessmentMode } from "../../db/prismaRuntime.js";
 import type { ModuleAssessmentPolicy } from "../../codecs/assessmentPolicyCodec.js";
+import {
+  DEFAULT_MCQ_ONLY_MIN_PERCENT as DEFAULT_MCQ_ONLY_MIN_PERCENT_VALUE,
+  resolveMcqMinPercent,
+} from "./mcqPassRule.js";
 export type { ModuleAssessmentPolicy };
 
 type BuildDecisionInput = {
@@ -187,7 +192,9 @@ export function resolveAssessmentDecision(input: ResolveAssessmentDecisionInput)
 
 // Default MCQ pass threshold (percent) for MCQ-only modules when the author has not set an
 // explicit assessmentPolicy.passRules.mcqMinPercent (#525).
-export const DEFAULT_MCQ_ONLY_MIN_PERCENT = 70;
+// #949: konstanten bor nå i mcqPassRule.ts, sammen med regelen som bruker den. Re-eksporteres
+// her fordi eksisterende kallsteder og tester importerer den herfra.
+export { DEFAULT_MCQ_ONLY_MIN_PERCENT } from "./mcqPassRule.js";
 
 type BuildMcqOnlyDecisionInput = {
   submissionId: string;
@@ -218,8 +225,10 @@ export function resolveMcqOnlyDecision(
 }
 
 export async function createMcqOnlyDecision(input: BuildMcqOnlyDecisionInput) {
+  // #949: samme oppslag som visningsfeltet, så de to ikke kan komme i utakt igjen.
   const mcqMinPercent =
-    input.assessmentPolicy?.passRules?.mcqMinPercent ?? DEFAULT_MCQ_ONLY_MIN_PERCENT;
+    resolveMcqMinPercent(AssessmentMode.MCQ_ONLY, input.assessmentPolicy)
+    ?? DEFAULT_MCQ_ONLY_MIN_PERCENT_VALUE;
   const { passFailTotal, decisionReason } = resolveMcqOnlyDecision(input.mcqPercentScore, mcqMinPercent);
 
   return runInTransaction(async (tx) => {

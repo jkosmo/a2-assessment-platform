@@ -177,6 +177,8 @@ describe("AssessmentJobRunner", () => {
       );
     });
 
+
+
     // #856: a job whose runAssessment never returns within the runtime cap must NOT wedge the worker —
     // the deadline fires, the tick takes the (fenced) failure path, and processNextJob returns.
     it("fails a job that exceeds the runtime deadline instead of running forever", async () => {

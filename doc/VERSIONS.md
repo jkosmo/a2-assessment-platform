@@ -2,6 +2,379 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.31.0 - 2026-08-25
+
+⚠️ **#953 ble TRUKKET fra denne releasen etter andre NO-GO fra QA-porten.** Se under.
+
+### #953 trukket — to forsøk, to NO-GO
+
+Fiksen frigjorde databasen, men ikke deltakeren. QA-porten fant i andre runde tre nye P1-er:
+
+- **Kappløp med den forlatte kjøringen.** `runWithDeadline` gir opp, men `runAssessment` fortsetter
+  å kjøre. Å frigi innleveringen med én gang lot den forlatte kjøringen lagre et vedtak og sette
+  `COMPLETED` oppå et nytt forsøk.
+- **Nullstilte et allerede avgjort vedtak.** `runAssessment` setter `PROCESSING` først, så vakta mi
+  (`where: PROCESSING`) traff også en innlevering som ble reprosessert med et vedtak fra før.
+- **Klienten viste ingen vei videre.** `SUBMITTED` regnes ikke som resultatklar, så pollingen gikk
+  til timeout og kandidaten satt igjen uten synlig handling.
+
+⚠️ **Begge mine forsøk løste datalaget og antok at flaten fulgte etter.** Neste runde må starte med
+deltakerreisen: hva ser kandidaten, og hvilken knapp trykker hen.
+
+Den underliggende feilen står — en innlevering kan fortsatt bli hengende i `PROCESSING` hvis
+vurderingen bruker opp alle forsøk. Det er status quo, ikke en regresjon.
+
+### #1002 fullført — regelen var løsnet ett sted og låst et annet
+
+`isAppealableFail` styrer om anke-SEKSJONEN vises. `deriveParticipantFlowGateState` styrer om
+KNAPPEN virker, og krevde fortsatt `COMPLETED`. Jeg løsnet den første og lot den andre stå — altså
+nøyaktig den divergensen jeg hadde satt meg fore å fjerne. Funnet av QA-porten.
+
+⚠️ Fiksturen i den eksisterende testen var **stum om utfallet**: `resultStatus: "COMPLETED"` uten
+`resultPassFail`. Den festet «bestått er ankbart» uten å si det. Nå kreves et strykvedtak, med
+kontrollcase.
+
+### ⚠️ Tredje QA-runde: min egen «kanoniske» regel var en svarteliste
+
+`deriveOutcome` listet `UNDER_REVIEW` og `SCORED` som uavklarte og regnet **alt annet** som avgjort.
+Reprodusert: en innlevering med `submissionStatus: "PROCESSING"` og `passFailTotal: true` ble vist
+som **bestått, med konfetti**. Det samme for `SUBMITTED` og for en hvilken som helst ukjent streng.
+
+⚠️ Retningen er poenget. En svarteliste antar at **alt ukjent er trygt** — feil vei for en regel om
+hva som er *endelig*. En ny status i enumet ville automatisk blitt «avgjort». Nå en hvitliste:
+`COMPLETED` og `REJECTED`.
+
+Den eksisterende testen fanget en svakhet i første retting: uten status i det hele tatt ga hvitlista
+`pending`, altså «under behandling» — men da vet vi ingenting. Skillet mellom `pending` og `unknown`
+er gjenopprettet, og det er ikke kosmetisk.
+
+**Påminnelsesjobben** kjørte hele fullføringsporten for hver historisk forfalt innmelding, hver natt.
+Reparasjonen står nå etter utløser- og dedup-sjekken. Og statusen leses på nytt **uansett om kallet
+kastet**: en samtidig utstedelse treffer unikhetskravet på `(userId, courseId)` og gir en feil selv
+når kandidaten nå *er* fullført — å beholde den gamle statusen ville sendt nøyaktig purringen dette
+skal hindre.
+
+### #948 gjenåpnet — en kanonisk regel uten kallere
+
+`submissionOutcome.ts` hadde **én** kaller: modulfilteret. Da #952 ble kuttet senere i samme
+release, forsvant den — og en kanonisk regel uten kallere er død kode med tester. Fila er fjernet.
+
+⚠️ Lukkepåstanden min var sann da den ble skrevet, og ble ugyldiggjort av en endring jeg gjorde
+etterpå **i samme release**. Verdt å merke seg som felle: å lukke en sak midt i en release, og så
+endre koden som gjorde den sann.
+
+Kalibrerings-KPI-en trenger en produktbeslutning: måler den maskinens råvedtak eller det endelige
+utfallet? Dokumentasjonen min motsa seg selv på nettopp dette, og det er nå presisert i
+flatekartet §28.
+
+### ⚠️ #966 trukket — reparasjonen har ikke et hjem
+
+Etterslepssveipen ble forsøkt kjørt fra påminnelsesjobben. QA-porten viste at **begge plasseringer
+er gale**:
+
+| Plassering | Konsekvens |
+|---|---|
+| Før dedup-sjekken | Hele fullføringsporten for hver historisk forfalt innmelding, hver natt |
+| Etter dedup-sjekken | Billig, men reparerer bare dem som er i ferd med å bli purret |
+
+⚠️ Og uansett plassering: **kandidater uten frist kommer aldri inn i lista** — spørringene krever
+`dueAt`. Påminnelsesjobben ser en delmengde, ikke populasjonen.
+
+⚠️ Releasenotatet lovet at kandidater som ble ferdige før fiksen fikk beviset første natt. Mine
+egne skip-grener motsa det — en påstand min egen retting ugyldiggjorde.
+
+Saken er gjenåpnet med tre alternativer og avveiningene: egen planlagt sveip, reparasjon ved lesing,
+eller robust utstedelse ved kilden. Det siste løser årsaken; de to første behandler symptomet.
+
+### Pre-flight-sjekklisten (`CLAUDE.md`, `AGENTS.md`)
+
+Fire QA-runder og fire NO-GO ga **ett** mønster, ikke tolv: ingen av feilene var i selve endringen.
+De lå i sømmene — hvem kaller dette, hvem leser det jeg skriver, hva skjer med det jeg ikke listet.
+
+⚠️ Derfor er sjekklisten **kommandoer, ikke prinsipper**. Lærdommene ble skrevet ned gjennom hele
+dagen, og fellene gjentatt etterpå: importen inn i en flerlinjes importblokk tre ganger, den stumme
+fiksturen seks, backticks i en bash-streng rett etter at sjekklisten var skrevet. En regel man
+KJENNER er ikke en sjekk man KJØRER.
+
+### Innhold
+
+**QA-porten ga NO-GO på 2.30.0. Fem funn, alle reelle — og to av dem var i arbeid jeg hadde meldt
+som ferdig.**
+
+### #953: jeg byttet én evig tilstand mot en annen
+
+Kuren min satte `UNDER_REVIEW` og opprettet en køsak. Men `finalizeManualReviewOverride` krever et
+**foreldrevedtak** for avstamningen, og her finnes ingen — vurderingen kom aldri så langt. Vurdereren
+kunne kreve saken, men aldri løse den.
+
+⚠️ QA-portens eget forslag — lag et grunnvedtak — ble forkastet: enhver `passFailTotal` er en **dom**,
+og å stryke kandidaten for vår infrastrukturfeil er verre enn å la være.
+
+Innleveringen slippes nå tilbake til `SUBMITTED` (ikke i `TERMINAL_SUBMISSION_STATUSES`, så nytt
+forsøk er mulig) og drift varsles. ⚠️ Skrivingen er **betinget av `PROCESSING`**: er vedtaket
+allerede lagret og feilen kom i en sideeffekt etterpå, ville en ubetinget skriving overskrevet et
+gyldig `COMPLETED` — også det funnet av porten.
+
+Fire av de fem funnene forsvant med dette grepet, fordi køsaken ikke lenger finnes.
+
+⚠️ **Unit-testen kunne ikke bevise det viktigste.** Vernet ligger i `where`-klausulen, og testen
+mocker repositoriet bort. Derfor er det lagt til en integrasjonstest som kjører mot databasen.
+
+### #952 var ikke en feil — flaten er av
+
+Skanningen leste serverens standardoppførsel og utledet at en kandidat mister inngangen til å ta en
+strøket modul om igjen. Verifisert at premisset ikke holder: **ingen klient kaller `/api/modules`
+uten `includeCompleted=true`**, og den frittstående modul-lista er dessuten skjult av
+`PARTICIPANT_COURSE_ONLY` — som er `true` som standard.
+
+Produkteier: *«fjern frittstående modul flyt, bruker har ingen annen vei inn for å ta en modul enn
+via «Mine Kurs» siden.»*
+
+Serversiden er fjernet i denne releasen: `includeCompleted`, `hideCompletedInAvailableByDefault`,
+`isSubmissionStatusCompleted`, `resolveIncludeCompletedForAvailableModules` og filtergrenen — og med
+den **min egen #952-fiks**, som var bygget på det gale premisset.
+
+⚠️ **Klientsiden er bevisst utsatt.** Kartleggingen sa lista, knappen og flagget; da jeg gikk inn,
+brukte også SMO-ens forhåndsvisningsmodus de samme funksjonene. Å legge en 150-linjers fjerning i en
+release med fire feilrettinger gjør enhver prod-feil tvetydig — se `CLAUDE.md`, «én released versjon
+per bekreftet fiks».
+
+1195 unit, 246 e2e.
+
+## 2.30.0 - 2026-08-25
+
+**#952 og #948 — «bestått» avgjøres nå ett sted også på serveren.** Med dette er hele
+kompleksitetsepicens motorserie ferdig.
+
+### #952: en strøket modul kunne ikke tas på nytt
+
+Filteret skjulte enhver modul med `latestStatus === "COMPLETED"` — men **både bestått og strøket**
+gir `COMPLETED` på innleveringen. En kandidat som strøk på en frittstående modul mistet dermed
+enhver inngang til å prøve igjen: modulen forsvant fra `/api/modules` og dukket opp under «Fullførte
+moduler». Eneste vei tilbake var kurs-spilleren, og bare hvis modulen tilfeldigvis lå i et kurs.
+
+⚠️ Klienten kompenserte allerede i presentasjonslaget — `participant.js` la på klassen `failed` med
+en kommentar om at den grønne stilen ellers ville villede. Et symptom noen hadde sett og lappet på
+uten å gå til roten.
+
+### #948: samme par, fire tolkninger
+
+`decisionService` kan sette `needsManualReview = true` samtidig som `passFailTotal = true`.
+Tilstanden er ikke gal — maskinen mener bestått, et menneske må bekrefte — men **leserne tolket
+paret ulikt**. Samme forsøk kunne telles som PASS i kalibreringsrapporten mens kursvisningen sa
+IN_PROGRESS.
+
+`src/modules/assessment/submissionOutcome.ts` er serverens motstykke til `public/static/outcome.js`,
+med samme regel: `passFailTotal: true` alene er ikke nok, statusen må være avgjort. `SCORED` er
+uavklart av samme grunn som i klienten.
+
+### ⚠️ En test som ikke måler det den ser ut til å måle
+
+Mutasjonstesting avslørte at #948-testen er grønn **også med den gamle regelen**:
+`completedSubmissionStatuses` er i dag `["COMPLETED"]` alene, så en `UNDER_REVIEW`-innlevering
+stoppes av statusfilteret og når aldri `isSettledPass`.
+
+Den er beholdt, men **omdøpt til karakterisering**, med forklaringen i testen. Den fanger noe først
+hvis nøkkelen utvides. Å la den stå merket som et bevis den ikke er, ville vært verre enn å slette
+den.
+
+De to andre er ekte og mutasjonsverifisert: uten fiksen forsvinner den strøkne modulen, mens
+kontrollcaset — en bestått modul skjules fortsatt — forblir grønt.
+
+1196 unit, 1640 integrasjon.
+
+## 2.29.4 - 2026-08-25
+
+**#953 — en innlevering blir ikke lenger stående «vurderes» for alltid.**
+
+Når vurderingsjobben ga opp — LLM-kallet feilet `maxAttempts` ganger, eller traff
+`ASSESSMENT_JOB_MAX_RUNTIME_MS` — ble **jobben** markert `FAILED`, men **innleveringen** ble stående
+`PROCESSING`.
+
+For kandidaten: «Assessment is still processing» som aldri gikk over, og hun kunne ikke starte et
+nytt MCQ-forsøk heller, fordi `PROCESSING` blokkerer det. Ingen ble varslet, og rapportene telte
+innleveringen verken som bestått, strøket eller under vurdering.
+
+⚠️ **Usynlig i alle tre retninger samtidig.** Ingen mekanisme ville noensinne funnet den — ikke
+påminnelsesjobben, ikke rapportene, ikke vurdererkøen.
+
+### Kuren finner ikke opp en tilstand
+
+Dette *er* «maskinen klarte ikke avgjøre», og den veien finnes: `UNDER_REVIEW` pluss en rad i
+vurdererkøen — samme maskineri som når en vurdering rutes til manuell behandling av andre grunner.
+
+⚠️ Å sette `REJECTED` ville vært galt. Den leses som en dom mot kandidaten, og her har ingen vurdert
+noe. **Feilen er vår, ikke hennes.**
+
+`SCORED` og `REJECTED` skrives fortsatt ikke av noen kodesti — det er en egen opprydding, og
+`deriveOutcome` behandler allerede `SCORED` som uavklart (#978).
+
+### Tre tester, to av dem kontrollcase
+
+- Endelig feil → `UNDER_REVIEW` + køsak
+- **Kontroll:** et forsøk som skal prøves igjen rutes *ikke*. Uten den kunne fiksen sendt hver
+  eneste midlertidige feil til vurdererkøen og fortsatt bestått
+- **Kontroll:** to endelige feil gir ikke to køsaker, men statusen settes likevel
+
+Mutasjonsverifisert: fjernes fiksen, feiler begge på at `UNDER_REVIEW` aldri ble satt.
+
+⚠️ Underveis gikk første utkast rett på `tx.manualReview` fra jobbkjøreren. Det er feil form —
+oppslag hører i repositoriet — og **testmocken avslørte det** ved at transaksjonen er mocket som et
+tomt objekt. Oppslaget ligger nå i `decisionRepository`.
+
+1630 integrasjon.
+
+## 2.29.3 - 2026-08-25
+
+**#966 — en kandidat som har gjort alt, purres ikke lenger.**
+
+Utstedelsen av kursbevis er hendelsesdrevet: den fyrer når siste modul bestås eller siste seksjon
+leses. En tapt hendelse etterlot en kandidat som **hadde** oppfylt kravene, men manglet
+fullføringsraden. Konsekvensen var levende: kurskortet hennes viste «Fullført», og samme natt sendte
+påminnelsesjobben **«fristen er forfalt»**. SMO-en så henne som forsinket. Ingenting rettet seg før
+hun tilfeldigvis åpnet bevissiden — det eneste stedet etterslepssveipen kjørte fra.
+
+### Mindre enn saken antydet
+
+Saken beskrev «fem steder, fire regler». Kartleggingen viste **tre forskjellige spørsmål**:
+
+| Sted | Spørsmål |
+|---|---|
+| `courseCompletionService` | Er kravene oppfylt? — den ekte porten |
+| `deriveStatus` | Er beviset utstedt? |
+| `computeCourseStatus` | Hvor langt er framdriften? |
+
+⚠️ Feilen var ikke fire konkurrerende regler, men at forbrukere brukte dem om hverandre. Og
+påminnelsesjobben og kull-dashbordet deler samme dør — `deriveStatus` — så fiksen sitter ett sted.
+
+Sveipen kjører nå i påminnelsesjobben, rett før den avgjør «forfalt», og **bare for kandidater som
+ikke allerede står som fullført**. Feiler den for én, logges det og jobben går videre: én purring for
+mye er bedre enn ingen purringer.
+
+⚠️ **Valgt bort:** å la `deriveStatus` utlede kravene selv. Det ville betydd en skriving fra en
+lesesti — å åpne et dashbord ville utstedt kursbevis. Produkteier bekreftet retningen, og at
+kandidater som ble ferdige før fiksen får beviset utstedt første natt etter deploy: *«Det er greit
+og riktig.»*
+
+### To funn underveis
+
+⚠️ **Et tomt kurs er aldri fullførbart** — det står eksplisitt i porten, og det var flaks.
+Påminnelsestestene lager kurs uten elementer; uten den linja ville alle blitt «fullført» av
+endringen. Testene måtte få en egen hjelper for et kurs som faktisk kan fullføres.
+
+⚠️ Jeg gjenbrukte først `course.completionCheckFailed`, som har en typet metadata-form for
+**moduler**. Typecheck fanget det. Ny hendelse er registrert i registeret med riktig form.
+
+`repairedCompletions` i sammendraget teller **bare** de som faktisk manglet raden. Uten skillet
+ville tallet vært «alle fullførte», og da sier det ingenting om hvor ofte utstedelsen svikter — som
+er nettopp det man vil vite etter en slik fiks.
+
+Mutasjonsverifisert: fjernes reparasjonen, feiler testen på at purringen ble sendt, mens
+kontrollcaset — en kandidat som ikke er ferdig purres fortsatt — forblir grønt.
+
+1628 integrasjon.
+
+## 2.29.2 - 2026-08-24
+
+**#1002 lukket — uten en eneste kodeendring på serveren.** Begge QA-funnene løste seg av
+produktbeslutninger, og begge gikk i motsatt retning av det jeg foreslo.
+
+### «Modulen forsvinner under anke» var riktig oppførsel
+
+Produkteier: *«Hvis en kandidat har tatt alle moduler, men en eller flere er under ankebehandling,
+så vises kurset blant de uferdige kursene. Kandidat skal kunne ta en modul på nytt i stedet for
+vente på anke.»*
+
+Verifisert at begge deler **allerede stemte**: `computeCourseStatus` gir `COMPLETED` bare når
+`passedCount >= total`, og `isAssessmentResultReady` inkluderer `UNDER_REVIEW`, så retake tilbys
+under anken. At modulen ikke står i «Fullførte» er da korrekt — den *er* ikke fullført, og ligger
+fortsatt i kurssekvensen som uferdig.
+
+⚠️ Funnet så ut som en feil fordi produktbeslutningen ikke fantes ennå. **QA-porten kan ikke skille
+«feil» fra «ubesluttet».** Det er derfor klassifiseringen finnes.
+
+### Ankeregelen ble løsnet, ikke strammet
+
+Produkteier: *«Anke er kraftigere lut enn manuell behandling, jeg kan heller ikke se negative
+konsekvenser av dette, så la oss ikke lage en regel uten skjellig grunn.»*
+
+`isAppealableFail` krevde `COMPLETED` etter #978. Kravet er fjernet; serveren er urørt.
+
+⚠️ Det jeg tok feil av: jeg kanoniserte den strengeste av to divergerende regler med begrunnelsen
+«man kan ikke anke noe som fortsatt vurderes». Den hørtes riktig ut, men **var en regel jeg fant
+på** — den sto ingen steder, og ingen hadde bedt om den.
+
+⚠️ **Retningen betyr noe, og prinsippet er skrevet ned:** klienten var i ferd med å bli strengere
+enn serveren, og det er den farlige varianten — regelen *ser* håndhevet ut mens ethvert kall som
+ikke er vår egen nettleser går rundt den. Er de to uenige, skal de bringes i takt, ikke låses fast
+hver for seg.
+
+1187 unit, 1626 integrasjon.
+
+## 2.29.1 - 2026-08-24
+
+**#949 — MCQ-grensen bestemmes ett sted.**
+
+Visningsfeltet `passFailMcq` ble regnet ut med en **hardkodet 50 %-grense** mens vedtaket ble fattet
+etter modulens policy. En kandidat med 60 % på en MCQ_ONLY-modul fikk vedtaket «ikke bestått, under
+70 %» side om side med raden **«MCQ bestått: Ja»** — i ankebehandlerens skjermbilde, som er der saken
+faktisk avgjøres. Samme felt mater kalibreringsdataene modul-eiere justerer terskler etter.
+
+⚠️ **Hvor 50-tallet kom fra.** Linja ble stående igjen av
+`refactor: forenkle vurderingsmodell til én terskel (#257)`. **Commiten som forenklet til én terskel
+er den som etterlot den andre.** En opprydding som fjerner en modell må lete etter avledede verdier
+som fortsatt regnes etter den gamle.
+
+### ⚠️ Korreksjonen som gjorde arbeidet riktig
+
+Jeg presenterte først dette for produkteier som «vedtaket bruker 70 %, feltet bruker 50 %». Det var
+ufullstendig, og en implementasjon på det grunnlaget ville innført en ny feil:
+
+| Modustype | Grense i vedtaket |
+|---|---|
+| MCQ_ONLY | `mcqMinPercent ?? 70` — grensen avgjør bestått |
+| FREETEXT_PLUS_MCQ | `?? null` — **ingen MCQ-port**; flervalget bidrar til totalskåren |
+| FREETEXT_ONLY | ingen flervalgsdel |
+
+«70 % overalt» ville gitt **«MCQ bestått: Nei»** på en blandet modul uten MCQ-krav — ett feil svar
+byttet mot et annet. Produkteier: *«La oss ikke finne opp nye regler hvis vi kan unngå det.»*
+`mcqPassRule.ts` gjengir derfor nøyaktig reglene `decisionService` allerede hadde. **Ingen vedtak
+endres.** Feltet er nå tre-tilstands, så «ikke aktuelt» er et ekte svar.
+
+### Enda en test som festet feilen — tredje gang samme dag
+
+```
+expect(result.percentScore).toBe(50);
+expect(result.passFailMcq).toBe(true);   ← påsto at 50 % er bestått
+```
+
+Fiksturen satte **ingen `assessmentMode`** og var dermed stum om hvilken regel som gjaldt. Den sier
+det nå eksplisitt, og 50 % er `false`.
+
+### Gamle rader rettes IKKE — og det er en beslutning
+
+Et backfill-skript var bygget og testet, og ble så forkastet. Produkteier stilte spørsmålet som
+avgjorde det: *«Et vedlikeholdsskript som endrer sensur av tidligere vurderte moduler?»*
+
+Teknisk gjorde det ikke det — `AssessmentDecision` er sensuren, og **ingen beslutningslogikk leser
+`passFailMcq`**; det er verifisert, ikke antatt. Men spørsmålet traff to ting:
+
+⚠️ Repoet har prinsippet *«Et kursbevis er permanent og har ikke tilbakevirkende kraft»*. Å omskrive
+rader i vurderingsdata står ubehagelig nær det, selv når feltet er kosmetisk. Og begrunnelsen min
+for backfill framfor utledning var **implementasjonsbekvemmelighet** — utledning rører tre
+tjenester — ikke et prinsipielt argument.
+
+⚠️ Dessuten: et vedlikeholdsskript som muterer vurderingsdata og som ikke bør kjøres, er en felle
+som ligger i repoet og venter på noen som ikke leser hele historikken.
+
+Produkteier avgjorde: *«Det er så lite reelle data både på stage og prod at noen unøyaktigheter ikke
+har betydning, vi er fortsatt kun i tidlig pilot, det viktige er at ting blir riktig fremover.»*
+
+Skrivingen er rettet, så nye forsøk er riktige. Gamle rader står som de står. Utledning ved lesing
+og å droppe kolonnen er **#1005**, og haster ikke.
+
+1623 integrasjon, 10 nye regeltester, 19 i `mcq-service`.
+
 ## 2.29.0 - 2026-08-24
 
 **Den fjerde motoren: «er dette forsøket bestått» (#978).** Med #958, #959 og #962 er alle fire

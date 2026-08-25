@@ -152,7 +152,9 @@ Controls how completed modules are displayed and paginated in the participant wo
 | Field | Description |
 |---|---|
 | `completedSubmissionStatuses` | Submission statuses considered "completed" for history display |
-| `hideCompletedInAvailableByDefault` | Whether completed modules are hidden from the available modules list by default |
+<!-- #952: `hideCompletedInAvailableByDefault` er FJERNET. Den skjulte fullførte moduler fra
+     `GET /api/modules`, en liste bare den frittstående deltakerflyten brukte — og den flaten er
+     skjult av `PARTICIPANT_COURSE_ONLY` og besluttet fjernet. Endepunktet returnerer nå alt. -->
 | `defaultCompletedHistoryLimit` | Default page size for completed module history |
 | `maxCompletedHistoryLimit` | Hard cap on completed module history page size |
 

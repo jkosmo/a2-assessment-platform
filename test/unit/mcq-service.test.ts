@@ -60,7 +60,14 @@ describe("mcq service — submitMcqAttempt", () => {
   const baseSubmission = {
     id: "submission-1",
     submissionStatus: "SUBMITTED" as const,
-    moduleVersion: { mcqSetVersionId: "mcq-set-1" },
+    // #949: fiksturen sa ingenting om modustype, og var derfor stum om hvilken MCQ-regel som
+    // gjaldt. Testene under festet i praksis den hardkodede 50 %-grensen — 50 % ble påstått
+    // «bestått», side om side med et vedtak som ville sagt det motsatte.
+    moduleVersion: {
+      mcqSetVersionId: "mcq-set-1",
+      assessmentMode: "MCQ_ONLY" as const,
+      assessmentPolicyJson: null,
+    },
   };
   const baseAttempt = {
     id: "attempt-1",
@@ -126,6 +133,7 @@ describe("mcq service — submitMcqAttempt", () => {
     expect(result.percentScore).toBe(100);
     // scaledScore = (2/2) * mcqMaxScore; default mcqMaxScore is 30
     expect(result.scaledScore).toBe(30);
+    // MCQ_ONLY uten egen policy → 70 %. 100 % består.
     expect(result.passFailMcq).toBe(true);
   });
 
@@ -146,7 +154,38 @@ describe("mcq service — submitMcqAttempt", () => {
     expect(result.rawScore).toBe(1);
     expect(result.percentScore).toBe(50);
     expect(result.scaledScore).toBe(15);
-    expect(result.passFailMcq).toBe(true);
+    // ⚠️ #949: var `true` her. 50 % består IKKE en MCQ_ONLY-modul — grensen er 70 %, og vedtaket
+    // sa allerede «ikke bestått». Det var visningsfeltet som løy.
+    expect(result.passFailMcq).toBe(false);
+  });
+
+  it("#949 en BLANDET modul uten egen grense gir «ikke aktuelt», ikke bestått/ikke bestått", async () => {
+    // ⚠️ Dette er standardtilfellet for enhver FREETEXT_PLUS_MCQ-modul: flervalget bidrar til
+    // totalskåren, det er ingen egen port. `false` ville sagt at kandidaten strøk på et krav som
+    // ikke finnes; `true` var det den hardkodede 50 %-grensen sa.
+    findSubmissionForModuleMcq.mockResolvedValue({
+      ...baseSubmission,
+      moduleVersion: {
+        mcqSetVersionId: "mcq-set-1",
+        assessmentMode: "FREETEXT_PLUS_MCQ" as const,
+        assessmentPolicyJson: null,
+      },
+    });
+    const { submitMcqAttempt } = await import("../../src/modules/assessment/mcqService.js");
+
+    const result = await submitMcqAttempt({
+      moduleId: "module-1",
+      submissionId: "submission-1",
+      attemptId: "attempt-1",
+      userId: "user-1",
+      responses: [
+        { questionId: "q-1", selectedAnswer: "4" },
+        { questionId: "q-2", selectedAnswer: "Bergen" }, // feil → 50 %
+      ],
+    });
+
+    expect(result.percentScore).toBe(50);
+    expect(result.passFailMcq).toBeNull();
   });
 
   it("ignores responses for unknown question IDs and does not count them", async () => {

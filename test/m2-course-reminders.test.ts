@@ -43,6 +43,7 @@ describe("Course due-date reminders (#497)", () => {
   const courseIds: string[] = [];
   const userIds: string[] = [];
   const classIds: string[] = [];
+  const sectionIds: string[] = [];
 
   async function makeCourse(): Promise<string> {
     const course = await prisma.course.create({
@@ -99,11 +100,41 @@ describe("Course due-date reminders (#497)", () => {
     await prisma.courseGroupAssignment.create({ data: { courseId, classId, dueAt } });
   }
 
+  /**
+   * #966: et kurs som FAKTISK kan fullføres — én publisert seksjon. Fikstur-kurset over har ingen
+   * elementer, og et tomt kurs er aldri fullførbart (`courseCompletionService`), så det kunne ikke
+   * brukes til å vise scenariet.
+   */
+  async function makeCompletableCourse(): Promise<{ courseId: string; sectionId: string }> {
+    const courseId = await makeCourse();
+    seq += 1;
+    const section = await prisma.courseSection.create({
+      data: { title: JSON.stringify({ "en-GB": `Reminder section ${stamp}-${seq}` }) },
+      select: { id: true },
+    });
+    const version = await prisma.courseSectionVersion.create({
+      data: {
+        sectionId: section.id,
+        versionNo: 1,
+        bodyMarkdown: JSON.stringify({ "en-GB": "Body." }),
+        publishedAt: new Date(),
+      },
+      select: { id: true },
+    });
+    await prisma.courseSection.update({ where: { id: section.id }, data: { activeVersionId: version.id } });
+    await prisma.courseItem.create({
+      data: { courseId, itemType: "SECTION", sectionId: section.id, sortOrder: 0 },
+    });
+    sectionIds.push(section.id);
+    return { courseId, sectionId: section.id };
+  }
+
   afterEach(async () => {
     await prisma.auditEvent.deleteMany({
       where: { entityType: auditEntityTypes.course, entityId: { in: courseIds } },
     });
     await prisma.courseCompletion.deleteMany({ where: { courseId: { in: courseIds } } });
+    await prisma.courseSectionRead.deleteMany({ where: { sectionId: { in: sectionIds } } });
     await prisma.courseEnrollment.deleteMany({ where: { courseId: { in: courseIds } } });
     await prisma.courseGroupAssignment.deleteMany({
       where: { OR: [{ courseId: { in: courseIds } }, { classId: { in: classIds } }] },
@@ -112,11 +143,19 @@ describe("Course due-date reminders (#497)", () => {
     await prisma.roleAssignment.deleteMany({ where: { userId: { in: userIds } } });
     if (classIds.length) await prisma.class.deleteMany({ where: { id: { in: classIds } } });
     if (courseIds.length) await prisma.course.deleteMany({ where: { id: { in: courseIds } } });
+    if (sectionIds.length) {
+      await prisma.courseSection.updateMany({ where: { id: { in: sectionIds } }, data: { activeVersionId: null } });
+      await prisma.courseSectionVersion.deleteMany({ where: { sectionId: { in: sectionIds } } });
+      await prisma.courseSection.deleteMany({ where: { id: { in: sectionIds } } });
+    }
     if (userIds.length) await prisma.user.deleteMany({ where: { id: { in: userIds } } });
     courseIds.length = 0;
     userIds.length = 0;
     classIds.length = 0;
+    sectionIds.length = 0;
   });
+
+
 
   it("individual: sends due-soon + overdue to the right participants and is idempotent", async () => {
     const courseId = await makeCourse();

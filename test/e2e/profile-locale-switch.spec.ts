@@ -48,6 +48,10 @@ async function mockProfile(page: Page) {
           {
             moduleTitle: "Module A",
             latestCompletedAt: "2026-06-20T10:00:00.000Z",
+            // ⚠️ #978: `latestStatus` manglet, og fiksturen festet dermed stilltiende at et vedtak
+            // ALENE er nok til å vise «Pass». Det ekte endepunktet returnerer alltid statusen, og
+            // regelen krever den: bare COMPLETED og REJECTED bærer et endelig utfall.
+            latestStatus: "COMPLETED",
             latestDecision: { totalScore: 100, passFailTotal: true },
           },
         ],

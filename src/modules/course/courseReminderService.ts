@@ -318,6 +318,7 @@ export async function runCourseReminderSchedule(input?: {
     }
 
     const status = await deriveStatus(candidate.userId, candidate.courseId, candidate.dueAt, asOf);
+
     if (status === "COMPLETED") {
       summary.skippedCompleted += 1;
       continue;

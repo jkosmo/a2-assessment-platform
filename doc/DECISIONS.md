@@ -384,3 +384,77 @@ kurselementer med egen publiseringsgate, og da var kravet blitt vilkårlig.
 delen av den gamle porten var reell beskyttelse, ikke vilkårlighet, og den beholdes.
 
 **Sak:** #1001 · **Status:** avklart 2026-08-24
+
+## Vurdering
+
+### MCQ-beståttgrensen er 70 %, med mindre modulen sier noe annet
+
+`assessmentPolicy.passRules.mcqMinPercent` avgjør. Mangler den, er grensen **70 %**.
+
+**Hvorfor:** produkteier 2026-08-24: *«50% er veeeldig lavt. MCQ spørsmålene er jevnt over for enkle,
+så 70% er et minimum med mindre noe annet er eksplisitt satt for modulen.»*
+
+⚠️ Dette er ikke en ny regel — det er regelen `decisionService` allerede brukte for å fatte vedtaket.
+Det som var galt, var at `mcqService` regnet ut visningsfeltet `passFailMcq` med en **hardkodet
+50 %-grense** og lagret den. En kandidat med 60 % fikk dermed vedtaket «ikke bestått, under 70 %»
+side om side med raden «MCQ bestått: Ja» i ankebehandlerens skjermbilde.
+
+⚠️ **Hvor 50-tallet kom fra, og hvorfor det er lærerikt:** linja ble stående igjen av commiten
+`refactor: forenkle vurderingsmodell til én terskel (#257)`. Commiten som forenklet til ÉN terskel
+er den som etterlot den andre. En opprydding som fjerner en modell må lete etter avledede verdier
+som fortsatt regnes etter den gamle.
+
+**Konsekvens for lagrede rader:** `passFailMcq` er en avledet verdi som lagres, og det er selve
+feilklassen. Riktig kur er å utlede den ved lesing fra `percentScore` + policyen, ikke å bakfylle.
+Produkteier bemerket at bare siste forsøk har konsekvens, og lesestedene viser allerede bare det.
+
+**Sak:** #949 · **Status:** avklart 2026-08-24
+
+### Historiske vurderingsdata rettes ikke retroaktivt i pilotfasen
+
+Et feil beregnet visningsfelt på gamle rader (#949 sitt `passFailMcq`) rettes **ikke** med et
+backfill-skript. Skrivingen rettes, og gamle rader står som de står.
+
+**Hvorfor:** produkteier 2026-08-24: *«Det er så lite reelle data både på stage og prod at noen
+unøyaktigheter ikke har betydning, vi er fortsatt kun i tidlig pilot, det viktige er at ting blir
+riktig fremover.»*
+
+⚠️ Beslutningen kom av spørsmålet *«Et vedlikeholdsskript som endrer sensur av tidligere vurderte
+moduler?»* — stilt om et skript som var ferdig bygget og testet. Skriptet endret teknisk sett ingen
+sensur (`AssessmentDecision` er urørt, og ingen beslutningslogikk leser feltet), men spørsmålet
+avdekket at begrunnelsen for å velge backfill framfor utledning var **implementasjonsbekvemmelighet**,
+ikke et prinsipielt argument.
+
+⚠️ **Generaliseringen, som er den varige verdien her:** et vedlikeholdsskript som muterer
+vurderingsdata og som ikke bør kjøres, er en felle som ligger i repoet og venter på noen som ikke
+leser hele historikken. Bygg det ikke «for sikkerhets skyld».
+
+Dette gjelder pilotfasen. Med reelle volumer må avveiningen tas på nytt — da kan et feil visningsfelt
+i en ankesak ha konsekvenser en tørrkjørt, reverserbar retting ikke har.
+
+**Sak:** #949, #1005 · **Status:** avklart 2026-08-24
+
+### Anke kan sendes også mens saken er til manuell vurdering
+
+`appealService` krever ikke at innleveringen er `COMPLETED`, og **det skal den ikke**. Klienten
+tilbyr anke så snart det finnes et strykvedtak, uansett status.
+
+**Hvorfor:** produkteier 2026-08-24: *«Anke er kraftigere lut enn manuell behandling, jeg kan heller
+ikke se negative konsekvenser av dette, så la oss ikke lage en regel uten skjellig grunn.»*
+
+En anke er altså ikke et NESTE steg etter manuell vurdering — den er et sterkere virkemiddel, og
+kandidaten skal kunne velge det med en gang.
+
+⚠️ **Dette er en korreksjon av #978.** To innganger til samme handling ga to svar: resultatbanneret
+tilbød anke under vurdering, `participant-completed.js` krevde `COMPLETED`. Jeg kanoniserte den
+strengeste, med begrunnelsen «man kan ikke anke noe som fortsatt vurderes» — som hørtes riktig ut,
+men var en regel jeg fant på. Divergensen er nå løst i **permissiv** retning.
+
+⚠️ **Retningen betyr noe.** Klienten var i ferd med å bli strengere enn serveren, og det er den
+farlige varianten: regelen SER håndhevet ut, mens ethvert kall som ikke er vår egen nettleser går
+rundt den. Er de to uenige, skal de bringes i takt — ikke låses fast hver for seg.
+
+⚠️ Dobbeltanke er ikke en risiko: `appealService` avviser en ny anke når det allerede finnes en åpen
+på innleveringen. Sperren ligger der den skal.
+
+**Sak:** #978, #1002 · **Status:** avklart 2026-08-24

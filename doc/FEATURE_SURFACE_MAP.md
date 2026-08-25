@@ -985,7 +985,7 @@ gjenta feilen i motsatt retning: ett svar der det trengs flere.
 | Inngang | Spørsmål | Teller statusen? |
 |---|---|---|
 | `deriveOutcome` | hva skal jeg vise? | ja — `UNDER_REVIEW` og `SCORED` er uavklart |
-| `isAppealableFail` | kan hen anke? | ja, og krever `COMPLETED` |
+| `isAppealableFail` | kan hen anke? | **nei** — et strykvedtak holder |
 | `isSettledPass` | skal vi feire? | ja |
 | `hasPassingDecision` | finnes det alt en bestått? | **nei**, med vilje |
 | `rawPassFailState` | hva sier vedtaket? | **nei** — praktikerflate |
@@ -1006,10 +1006,18 @@ gjenta feilen i motsatt retning: ett svar der det trengs flere.
 er riktig, men uvirksom til nøkkelen utvides. Den ekte feilen på de flatene er at raden **forsvinner**
 når en anke setter innleveringen tilbake til `UNDER_REVIEW`: #1002.
 
+⚠️ **Serversiden er IKKE konvertert.** En kanonisk `submissionOutcome.ts` ble laget og deretter
+fjernet igjen: dens eneste kaller — modulfilteret — forsvant da den frittstående flyten ble kuttet i
+samme release, og en «kanonisk regel» uten kallere er bare død kode. Kalibreringsflaten teller
+fortsatt `passFailTotal` uten status. Om KPI-en skal måle maskinens råvedtak eller det endelige
+utfallet er en åpen produktbeslutning — se #948.
+
 ⚠️ **Aliaser er fella.** Første utkast av vakta lette etter `passFailTotal` og overså
 `flowState.resultPassFail === true` i `participant.js` — samme verdi, annet navn, vakta grønn.
 Regexen matcher nå ethvert navn som inneholder «passFail». Skrivinger (`passFailTotal:` i
 `review.js` sine skjemafelt) er med vilje ikke fanget.
 
-⚠️ **Regelen håndheves bare i klienten.** `appealService` krever ikke `COMPLETED`, så API-et
-aksepterer fortsatt en anke på en innlevering under vurdering: #1002.
+⚠️ **Klienten var i ferd med å bli strengere enn serveren, og det ble rettet ved å LØSNE klienten,
+ikke ved å stramme serveren.** `isAppealableFail` krevde `COMPLETED` i første utkast. Produkteier
+2026-08-24: anke er kraftigere lut enn manuell behandling, og en regel uten skjellig grunn skal ikke
+lages. Se `doc/DECISIONS.md` → «Anke kan sendes også mens saken er til manuell vurdering».

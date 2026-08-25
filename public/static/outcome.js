@@ -37,14 +37,23 @@ export const OUTCOME_PENDING = "pending";
 export const OUTCOME_UNKNOWN = "unknown";
 
 /**
- * Statusene som betyr «ikke avgjort ennå».
+ * Statusene som bærer et AUTORITATIVT utfall. Alt annet er uavklart.
  *
- * ⚠️ `SCORED` er med fordi den betyr at poengene er satt, men at rutingsbeslutningen — skal saken
- * til manuell vurdering? — ennå ikke er anvendt. Bare `COMPLETED` bærer et autoritativt utfall.
- * Statusen skrives ikke i dag (#953), men klienten regner den som et resultat som kan lastes, så
- * en migrert eller gammel rad ville fått konfetti før rutingen var avgjort.
+ * ⚠️ DETTE VAR EN SVARTELISTE, og QA-porten fant feilen. Den listet `UNDER_REVIEW` og `SCORED` som
+ * uavklarte og regnet ALT annet som avgjort — inkludert `PROCESSING`, `SUBMITTED` og en hvilken
+ * som helst ukjent streng.
+ *
+ * Konsekvensen var levende: en innlevering under behandling med `passFailTotal: true` ble vist som
+ * BESTÅTT, med konfetti, før vurderingen var ferdig. Verdien finnes allerede på det tidspunktet —
+ * det er nettopp derfor statusen må bestemme.
+ *
+ * En hvitliste kan ikke feile på den måten: en ny status i enumet er uavklart til noen aktivt
+ * legger den til her. En svarteliste antar at alt ukjent er trygt, som er feil retning for en
+ * regel om hva som er endelig.
+ *
+ * `REJECTED` er med fordi den ER et endelig utfall, selv om ingen kodesti skriver den i dag (#953).
  */
-const UNSETTLED_STATUSES = new Set(["UNDER_REVIEW", "SCORED"]);
+const SETTLED_STATUSES = new Set(["COMPLETED", "REJECTED"]);
 
 function normalizeStatus(submissionStatus) {
   return typeof submissionStatus === "string" ? submissionStatus.toUpperCase() : "";
@@ -65,7 +74,15 @@ function normalizeStatus(submissionStatus) {
  */
 export function deriveOutcome(input) {
   const { passFailTotal, submissionStatus } = input ?? {};
-  if (UNSETTLED_STATUSES.has(normalizeStatus(submissionStatus))) return OUTCOME_PENDING;
+  const hasDecision = passFailTotal === true || passFailTotal === false;
+
+  if (!SETTLED_STATUSES.has(normalizeStatus(submissionStatus))) {
+    // ⚠️ Skillet mellom `pending` og `unknown` er ikke kosmetisk: `pending` sier «dette behandles»,
+    // `unknown` sier «vi vet ingenting». En rad uten beslutning OG uten avgjort status er det
+    // siste — å vise den som «under behandling» ville vært en påstand vi ikke har dekning for.
+    return hasDecision ? OUTCOME_PENDING : OUTCOME_UNKNOWN;
+  }
+
   if (passFailTotal === true) return OUTCOME_PASSED;
   if (passFailTotal === false) return OUTCOME_FAILED;
   return OUTCOME_UNKNOWN;
@@ -88,24 +105,30 @@ export function outcomeClass(outcome) {
 /**
  * «Kan deltakeren anke dette forsøket?»
  *
- * ⚠️ Denne fantes allerede — riktig — ett sted: `participant-completed.js` krevde
- * `latestStatus === "COMPLETED"` før anke-lenka ble vist. Resultatbanneret i participant.js gjorde
- * det IKKE, og tilbød anke på en innlevering som fortsatt var under vurdering.
+ * Det finnes et strykvedtak å anke. Statusen teller IKKE.
  *
- * To innganger til samme handling, to svar. Den strengeste var den riktige: en sak som allerede
- * behandles kan ikke ankes — ankebehandleren ville fått en anke på et vedtak som ikke er endelig.
+ * ⚠️ DETTE VAR OMVENDT I FØRSTE UTKAST, og korreksjonen er verdt å lese.
  *
- * ⚠️ Merk at kravet er `COMPLETED`, ikke bare «ikke UNDER_REVIEW». Det er bevisst strengere enn
- * `deriveOutcome`: en innlevering i en hvilken som helst mellomtilstand har ikke et endelig
- * vedtak å anke. Å bruke `deriveOutcome` alene her ville LØSNET regelen fra
- * `participant-completed.js`, altså rettet divergensen i feil retning.
+ * `participant-completed.js` krevde `latestStatus === "COMPLETED"`; resultatbanneret gjorde det
+ * ikke. Jeg kanoniserte den strengeste med begrunnelsen «man kan ikke anke noe som fortsatt
+ * vurderes» — som hørtes riktig ut, men var en regel jeg fant på.
+ *
+ * Produkteier 2026-08-24: *«Anke er kraftigere lut enn manuell behandling, jeg kan heller ikke se
+ * negative konsekvenser av dette, så la oss ikke lage en regel uten skjellig grunn.»*
+ *
+ * En anke er altså ikke et NESTE steg etter manuell vurdering — den er et sterkere virkemiddel,
+ * og kandidaten skal kunne velge det med en gang. Serveren har alltid tillatt det; det var
+ * klienten som var i ferd med å bli strengere enn serveren, og det er den farlige retningen:
+ * regelen SER håndhevet ut mens ethvert annet kall går rundt den.
+ *
+ * ⚠️ Dobbeltanke er ikke en risiko her: `appealService` avviser en ny anke når det allerede
+ * finnes en åpen på innleveringen. Sperren ligger der den skal.
  *
  * @param {{ passFailTotal?: unknown, submissionStatus?: unknown }} input
  * @returns {boolean}
  */
 export function isAppealableFail(input) {
-  const settled = normalizeStatus(input?.submissionStatus) === "COMPLETED";
-  return settled && deriveOutcome(input) === OUTCOME_FAILED;
+  return rawPassFailState(input?.passFailTotal) === OUTCOME_FAILED;
 }
 
 /**

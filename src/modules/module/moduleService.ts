@@ -16,7 +16,6 @@ import {
 } from "../submission/submissionRepository.js";
 import {
   getCompletedSubmissionStatuses,
-  isSubmissionStatusCompleted,
 } from "./moduleCompletionPolicyService.js";
 
 // #962: settet bor nå i `src/auth/roleSets.ts`, sammen med de nitten andre rollesjekkene. Det er
@@ -105,13 +104,11 @@ export async function listModules(
     };
   });
 
-  if (options.includeCompleted === true) {
-    return mapped;
-  }
-
-  return mapped.filter(
-    (module) => !isSubmissionStatusCompleted(module.participantStatus?.latestStatus ?? null),
-  );
+  // #952: lista returnerer nå ALT. Skjulingen av «fullførte» fantes bare for den frittstående
+  // modul-lista i deltakerkonsollet, og den flaten er fjernet — deltakeren når moduler gjennom
+  // «Mine kurs». Konfigurerbarheten kostet oppmerksomhet uten å gi noen noe: hver leser måtte
+  // sjekke kallstedet for å vite om filteret var på.
+  return mapped;
 }
 
 export async function listCompletedModulesForUser(
