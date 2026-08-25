@@ -2,6 +2,48 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.30.0 - 2026-08-25
+
+**#952 og #948 — «bestått» avgjøres nå ett sted også på serveren.** Med dette er hele
+kompleksitetsepicens motorserie ferdig.
+
+### #952: en strøket modul kunne ikke tas på nytt
+
+Filteret skjulte enhver modul med `latestStatus === "COMPLETED"` — men **både bestått og strøket**
+gir `COMPLETED` på innleveringen. En kandidat som strøk på en frittstående modul mistet dermed
+enhver inngang til å prøve igjen: modulen forsvant fra `/api/modules` og dukket opp under «Fullførte
+moduler». Eneste vei tilbake var kurs-spilleren, og bare hvis modulen tilfeldigvis lå i et kurs.
+
+⚠️ Klienten kompenserte allerede i presentasjonslaget — `participant.js` la på klassen `failed` med
+en kommentar om at den grønne stilen ellers ville villede. Et symptom noen hadde sett og lappet på
+uten å gå til roten.
+
+### #948: samme par, fire tolkninger
+
+`decisionService` kan sette `needsManualReview = true` samtidig som `passFailTotal = true`.
+Tilstanden er ikke gal — maskinen mener bestått, et menneske må bekrefte — men **leserne tolket
+paret ulikt**. Samme forsøk kunne telles som PASS i kalibreringsrapporten mens kursvisningen sa
+IN_PROGRESS.
+
+`src/modules/assessment/submissionOutcome.ts` er serverens motstykke til `public/static/outcome.js`,
+med samme regel: `passFailTotal: true` alene er ikke nok, statusen må være avgjort. `SCORED` er
+uavklart av samme grunn som i klienten.
+
+### ⚠️ En test som ikke måler det den ser ut til å måle
+
+Mutasjonstesting avslørte at #948-testen er grønn **også med den gamle regelen**:
+`completedSubmissionStatuses` er i dag `["COMPLETED"]` alene, så en `UNDER_REVIEW`-innlevering
+stoppes av statusfilteret og når aldri `isSettledPass`.
+
+Den er beholdt, men **omdøpt til karakterisering**, med forklaringen i testen. Den fanger noe først
+hvis nøkkelen utvides. Å la den stå merket som et bevis den ikke er, ville vært verre enn å slette
+den.
+
+De to andre er ekte og mutasjonsverifisert: uten fiksen forsvinner den strøkne modulen, mens
+kontrollcaset — en bestått modul skjules fortsatt — forblir grønt.
+
+1196 unit, 1640 integrasjon.
+
 ## 2.29.4 - 2026-08-25
 
 **#953 — en innlevering blir ikke lenger stående «vurderes» for alltid.**

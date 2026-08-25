@@ -1,5 +1,6 @@
 import type { AppRole as AppRoleType } from "@prisma/client";
 import { AppRole } from "../../db/prismaRuntime.js";
+import { isSettledPass } from "../assessment/submissionOutcome.js";
 import { hasAnyRole, MODULE_ADMIN_READERS } from "../../auth/roleSets.js";
 import type { SupportedLocale } from "../../i18n/locale.js";
 import { localizeContentText } from "../../i18n/content.js";
@@ -109,9 +110,24 @@ export async function listModules(
     return mapped;
   }
 
-  return mapped.filter(
-    (module) => !isSubmissionStatusCompleted(module.participantStatus?.latestStatus ?? null),
-  );
+  // ⚠️ #952: skjulte tidligere enhver modul med en FULLFØRT innlevering — uansett utfall. En
+  // deltaker som STRØK på en frittstående modul mistet dermed enhver inngang til å ta den på nytt:
+  // den forsvant fra /api/modules og dukket opp under «Fullførte moduler». Eneste vei tilbake var
+  // via kurs-spilleren, og bare hvis modulen tilfeldigvis lå i et kurs.
+  //
+  // Nå skjules bare det som faktisk er BESTÅTT. En stryk blir stående tilgjengelig, som er hele
+  // poenget med et nytt forsøk.
+  //
+  // ⚠️ Statusen alene holder ikke — se `submissionOutcome.ts` om hvordan et vedtak kan bære
+  // `passFailTotal: true` mens innleveringen fortsatt er under vurdering.
+  return mapped.filter((module) => {
+    const status = module.participantStatus?.latestStatus ?? null;
+    if (!isSubmissionStatusCompleted(status)) return true;
+    return !isSettledPass({
+      passFailTotal: module.participantStatus?.latestDecision?.passFailTotal ?? null,
+      submissionStatus: status,
+    });
+  });
 }
 
 export async function listCompletedModulesForUser(
