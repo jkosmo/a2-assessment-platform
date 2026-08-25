@@ -433,3 +433,28 @@ Dette gjelder pilotfasen. Med reelle volumer må avveiningen tas på nytt — da
 i en ankesak ha konsekvenser en tørrkjørt, reverserbar retting ikke har.
 
 **Sak:** #949, #1005 · **Status:** avklart 2026-08-24
+
+### Anke kan sendes også mens saken er til manuell vurdering
+
+`appealService` krever ikke at innleveringen er `COMPLETED`, og **det skal den ikke**. Klienten
+tilbyr anke så snart det finnes et strykvedtak, uansett status.
+
+**Hvorfor:** produkteier 2026-08-24: *«Anke er kraftigere lut enn manuell behandling, jeg kan heller
+ikke se negative konsekvenser av dette, så la oss ikke lage en regel uten skjellig grunn.»*
+
+En anke er altså ikke et NESTE steg etter manuell vurdering — den er et sterkere virkemiddel, og
+kandidaten skal kunne velge det med en gang.
+
+⚠️ **Dette er en korreksjon av #978.** To innganger til samme handling ga to svar: resultatbanneret
+tilbød anke under vurdering, `participant-completed.js` krevde `COMPLETED`. Jeg kanoniserte den
+strengeste, med begrunnelsen «man kan ikke anke noe som fortsatt vurderes» — som hørtes riktig ut,
+men var en regel jeg fant på. Divergensen er nå løst i **permissiv** retning.
+
+⚠️ **Retningen betyr noe.** Klienten var i ferd med å bli strengere enn serveren, og det er den
+farlige varianten: regelen SER håndhevet ut, mens ethvert kall som ikke er vår egen nettleser går
+rundt den. Er de to uenige, skal de bringes i takt — ikke låses fast hver for seg.
+
+⚠️ Dobbeltanke er ikke en risiko: `appealService` avviser en ny anke når det allerede finnes en åpen
+på innleveringen. Sperren ligger der den skal.
+
+**Sak:** #978, #1002 · **Status:** avklart 2026-08-24

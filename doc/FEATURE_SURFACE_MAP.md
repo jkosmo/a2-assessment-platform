@@ -985,7 +985,7 @@ gjenta feilen i motsatt retning: ett svar der det trengs flere.
 | Inngang | Spørsmål | Teller statusen? |
 |---|---|---|
 | `deriveOutcome` | hva skal jeg vise? | ja — `UNDER_REVIEW` og `SCORED` er uavklart |
-| `isAppealableFail` | kan hen anke? | ja, og krever `COMPLETED` |
+| `isAppealableFail` | kan hen anke? | **nei** — et strykvedtak holder |
 | `isSettledPass` | skal vi feire? | ja |
 | `hasPassingDecision` | finnes det alt en bestått? | **nei**, med vilje |
 | `rawPassFailState` | hva sier vedtaket? | **nei** — praktikerflate |
@@ -1011,5 +1011,7 @@ når en anke setter innleveringen tilbake til `UNDER_REVIEW`: #1002.
 Regexen matcher nå ethvert navn som inneholder «passFail». Skrivinger (`passFailTotal:` i
 `review.js` sine skjemafelt) er med vilje ikke fanget.
 
-⚠️ **Regelen håndheves bare i klienten.** `appealService` krever ikke `COMPLETED`, så API-et
-aksepterer fortsatt en anke på en innlevering under vurdering: #1002.
+⚠️ **Klienten var i ferd med å bli strengere enn serveren, og det ble rettet ved å LØSNE klienten,
+ikke ved å stramme serveren.** `isAppealableFail` krevde `COMPLETED` i første utkast. Produkteier
+2026-08-24: anke er kraftigere lut enn manuell behandling, og en regel uten skjellig grunn skal ikke
+lages. Se `doc/DECISIONS.md` → «Anke kan sendes også mens saken er til manuell vurdering».

@@ -88,24 +88,30 @@ export function outcomeClass(outcome) {
 /**
  * «Kan deltakeren anke dette forsøket?»
  *
- * ⚠️ Denne fantes allerede — riktig — ett sted: `participant-completed.js` krevde
- * `latestStatus === "COMPLETED"` før anke-lenka ble vist. Resultatbanneret i participant.js gjorde
- * det IKKE, og tilbød anke på en innlevering som fortsatt var under vurdering.
+ * Det finnes et strykvedtak å anke. Statusen teller IKKE.
  *
- * To innganger til samme handling, to svar. Den strengeste var den riktige: en sak som allerede
- * behandles kan ikke ankes — ankebehandleren ville fått en anke på et vedtak som ikke er endelig.
+ * ⚠️ DETTE VAR OMVENDT I FØRSTE UTKAST, og korreksjonen er verdt å lese.
  *
- * ⚠️ Merk at kravet er `COMPLETED`, ikke bare «ikke UNDER_REVIEW». Det er bevisst strengere enn
- * `deriveOutcome`: en innlevering i en hvilken som helst mellomtilstand har ikke et endelig
- * vedtak å anke. Å bruke `deriveOutcome` alene her ville LØSNET regelen fra
- * `participant-completed.js`, altså rettet divergensen i feil retning.
+ * `participant-completed.js` krevde `latestStatus === "COMPLETED"`; resultatbanneret gjorde det
+ * ikke. Jeg kanoniserte den strengeste med begrunnelsen «man kan ikke anke noe som fortsatt
+ * vurderes» — som hørtes riktig ut, men var en regel jeg fant på.
+ *
+ * Produkteier 2026-08-24: *«Anke er kraftigere lut enn manuell behandling, jeg kan heller ikke se
+ * negative konsekvenser av dette, så la oss ikke lage en regel uten skjellig grunn.»*
+ *
+ * En anke er altså ikke et NESTE steg etter manuell vurdering — den er et sterkere virkemiddel,
+ * og kandidaten skal kunne velge det med en gang. Serveren har alltid tillatt det; det var
+ * klienten som var i ferd med å bli strengere enn serveren, og det er den farlige retningen:
+ * regelen SER håndhevet ut mens ethvert annet kall går rundt den.
+ *
+ * ⚠️ Dobbeltanke er ikke en risiko her: `appealService` avviser en ny anke når det allerede
+ * finnes en åpen på innleveringen. Sperren ligger der den skal.
  *
  * @param {{ passFailTotal?: unknown, submissionStatus?: unknown }} input
  * @returns {boolean}
  */
 export function isAppealableFail(input) {
-  const settled = normalizeStatus(input?.submissionStatus) === "COMPLETED";
-  return settled && deriveOutcome(input) === OUTCOME_FAILED;
+  return rawPassFailState(input?.passFailTotal) === OUTCOME_FAILED;
 }
 
 /**

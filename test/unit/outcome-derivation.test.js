@@ -68,10 +68,14 @@ describe("#978 de fire spørsmålene svarer ulikt der de skal", () => {
     expect(isSettledPass(passUnderReview)).toBe(false);
   });
 
-  it("en ikke-bestått under vurdering kan ikke ankes ennå", () => {
-    // Resultatbanneret tilbød anke her; /participant/completed gjorde det ikke. Den strengeste
-    // var den riktige — ankebehandleren skal ikke få en anke på et vedtak som ikke er endelig.
-    expect(isAppealableFail(failUnderReview)).toBe(false);
+  it("⚠️ en ikke-bestått under vurdering KAN ankes", () => {
+    // Snudd 2026-08-24. Første utkast krevde COMPLETED, med begrunnelsen «man kan ikke anke noe
+    // som fortsatt vurderes». Produkteier: «Anke er kraftigere lut enn manuell behandling … la
+    // oss ikke lage en regel uten skjellig grunn.»
+    //
+    // Anken er ikke et neste steg etter manuell vurdering — den er et sterkere virkemiddel.
+    // Serveren har alltid tillatt det; det var klienten som holdt på å bli strengere enn serveren.
+    expect(isAppealableFail(failUnderReview)).toBe(true);
     expect(isAppealableFail({ passFailTotal: false, submissionStatus: "COMPLETED" })).toBe(true);
   });
 
@@ -79,12 +83,12 @@ describe("#978 de fire spørsmålene svarer ulikt der de skal", () => {
     expect(isAppealableFail({ passFailTotal: true, submissionStatus: "COMPLETED" })).toBe(false);
   });
 
-  it("⚠️ anke krever COMPLETED, ikke bare «ikke under vurdering»", () => {
-    // Kontrollcase mot å rette divergensen i feil retning. `participant-completed.js` krevde
-    // COMPLETED; hadde den delte funksjonen bare speilet `deriveOutcome`, ville en innlevering i
-    // en mellomtilstand blitt ankbar — altså en LØSNING av regelen, ikke en innstramming.
-    expect(isAppealableFail({ passFailTotal: false, submissionStatus: "SUBMITTED" })).toBe(false);
-    expect(isAppealableFail({ passFailTotal: false, submissionStatus: undefined })).toBe(false);
+  it("KONTROLLCASE: anke krever et STRYKVEDTAK, ikke bare en status", () => {
+    // ⚠️ Regelen er løsnet på status, ikke fjernet. Uten et strykvedtak finnes det ingenting å
+    // anke — og uten denne kunne `isAppealableFail` returnert true for alt og fortsatt vært grønn.
+    expect(isAppealableFail({ passFailTotal: null, submissionStatus: "COMPLETED" })).toBe(false);
+    expect(isAppealableFail({ passFailTotal: undefined, submissionStatus: "UNDER_REVIEW" })).toBe(false);
+    expect(isAppealableFail({})).toBe(false);
   });
 
   it("feiringen krever et avgjort bestått", () => {

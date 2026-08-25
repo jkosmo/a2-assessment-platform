@@ -2195,9 +2195,9 @@ function renderAppealState() {
   }
 
   const hasAppeal = latestAppeal && typeof latestAppeal.id === "string";
-  // #978: ⚠️ OPPFØRSELSENDRING, med vilje. Denne tilbød anke på en innlevering som fortsatt var
-  // UNDER_REVIEW, mens /participant/completed krevde COMPLETED for den samme handlingen. To
-  // innganger, to svar — den strengeste var den riktige.
+  // #978: to innganger til samme handling ga to svar. Divergensen er løst — i den PERMISSIVE
+  // retningen: anke er tillatt også mens saken er under manuell vurdering, slik serveren alltid
+  // har gjort. Se /static/outcome.js for hvorfor det ble omvendt av første utkast.
   const isNegativeResult = isAppealableFail({
     passFailTotal: latestResult?.decision?.passFailTotal,
     submissionStatus: latestResult?.status,

@@ -256,8 +256,9 @@ function renderCompletedModules(body) {
         ? t("completed.value.fail")
         : "-";
     const passFailClass = outcomeClass(outcome);
-    // ⚠️ Denne var allerede riktig — den krevde COMPLETED — og er derfor regelen `isAppealableFail`
-    // kanoniserte. Resultatbanneret i participant.js manglet statuskravet.
+    // ⚠️ Denne krevde `COMPLETED` fram til 2026-08-24. Kravet er fjernet: en anke er et STERKERE
+    // virkemiddel enn manuell vurdering, ikke et neste steg etter den, og serveren har alltid
+    // tillatt begge. Se begrunnelsen i /static/outcome.js.
     const canAppeal =
       isAppealableFail({
         passFailTotal: module?.latestDecision?.passFailTotal,

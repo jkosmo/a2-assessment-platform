@@ -2,6 +2,43 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.29.2 - 2026-08-24
+
+**#1002 lukket — uten en eneste kodeendring på serveren.** Begge QA-funnene løste seg av
+produktbeslutninger, og begge gikk i motsatt retning av det jeg foreslo.
+
+### «Modulen forsvinner under anke» var riktig oppførsel
+
+Produkteier: *«Hvis en kandidat har tatt alle moduler, men en eller flere er under ankebehandling,
+så vises kurset blant de uferdige kursene. Kandidat skal kunne ta en modul på nytt i stedet for
+vente på anke.»*
+
+Verifisert at begge deler **allerede stemte**: `computeCourseStatus` gir `COMPLETED` bare når
+`passedCount >= total`, og `isAssessmentResultReady` inkluderer `UNDER_REVIEW`, så retake tilbys
+under anken. At modulen ikke står i «Fullførte» er da korrekt — den *er* ikke fullført, og ligger
+fortsatt i kurssekvensen som uferdig.
+
+⚠️ Funnet så ut som en feil fordi produktbeslutningen ikke fantes ennå. **QA-porten kan ikke skille
+«feil» fra «ubesluttet».** Det er derfor klassifiseringen finnes.
+
+### Ankeregelen ble løsnet, ikke strammet
+
+Produkteier: *«Anke er kraftigere lut enn manuell behandling, jeg kan heller ikke se negative
+konsekvenser av dette, så la oss ikke lage en regel uten skjellig grunn.»*
+
+`isAppealableFail` krevde `COMPLETED` etter #978. Kravet er fjernet; serveren er urørt.
+
+⚠️ Det jeg tok feil av: jeg kanoniserte den strengeste av to divergerende regler med begrunnelsen
+«man kan ikke anke noe som fortsatt vurderes». Den hørtes riktig ut, men **var en regel jeg fant
+på** — den sto ingen steder, og ingen hadde bedt om den.
+
+⚠️ **Retningen betyr noe, og prinsippet er skrevet ned:** klienten var i ferd med å bli strengere
+enn serveren, og det er den farlige varianten — regelen *ser* håndhevet ut mens ethvert kall som
+ikke er vår egen nettleser går rundt den. Er de to uenige, skal de bringes i takt, ikke låses fast
+hver for seg.
+
+1187 unit, 1626 integrasjon.
+
 ## 2.29.1 - 2026-08-24
 
 **#949 — MCQ-grensen bestemmes ett sted.**
