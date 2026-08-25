@@ -110,7 +110,7 @@ describe("MVP manual review workspace", () => {
     // #946: samme krav som i ankeflyten — overstyringen skal selv legge kursfullførings-sjekken
     // holdbart på outboxen, inne i transaksjonen. Måles som differanse, ikke som eksistens.
     const owner = await submissionOwner(submissionId);
-    const completionChecksBeforeOverride = await countCourseCompletionChecks(owner.userId, owner.moduleId);
+    const overrideWindowStart = new Date();
 
     const overrideResponse = await request(app)
       .post(`/api/reviews/${reviewId}/override`)
@@ -122,9 +122,7 @@ describe("MVP manual review workspace", () => {
       });
     expect(overrideResponse.status).toBe(200);
 
-    expect(await countCourseCompletionChecks(owner.userId, owner.moduleId)).toBe(
-      completionChecksBeforeOverride + 1,
-    );
+    expect(await countCourseCompletionChecks(owner.userId, owner.moduleId, overrideWindowStart)).toBe(1);
     expect(overrideResponse.body.overrideDecision.decisionType).toBe("MANUAL_OVERRIDE");
     expect(overrideResponse.body.overrideDecision.parentDecisionId).toBeTruthy();
 

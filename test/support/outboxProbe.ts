@@ -7,9 +7,20 @@ import { OUTBOX_EVENT_TYPES } from "../../src/modules/outbox/outboxService.js";
 // Den automatiske vurderingen (AssessmentDecisionApplicationService) legger allerede en slik
 // hendelse tidligere i de samme testene, så en eksistens-sjekk ville vært grønn uansett — også
 // med fiksen reversert. Det er nøyaktig den vakten-som-ikke-måler-noe vi har gått på før.
-export async function countCourseCompletionChecks(userId: string, moduleId: string): Promise<number> {
+// ⚠️ `since` er ikke pynt. `m2-appeal-flow` og `m2-manual-review` kjører parallelt på SAMME
+// deltaker (participant-1) og SAMME seedede modul, og begge påstår nå «nøyaktig én ny hendelse».
+// Uten et tidsvindu deler de teller: den enes overstyring lander midt i den andres måling, og
+// testen faller på +2. Vinduet snevrer målingen fra hele testen til selve HTTP-kallet.
+export async function countCourseCompletionChecks(
+  userId: string,
+  moduleId: string,
+  since?: Date,
+): Promise<number> {
   const rows = await prisma.outboxEvent.findMany({
-    where: { type: OUTBOX_EVENT_TYPES.courseCompletionCheck },
+    where: {
+      type: OUTBOX_EVENT_TYPES.courseCompletionCheck,
+      ...(since ? { createdAt: { gte: since } } : {}),
+    },
     select: { payloadJson: true },
   });
 

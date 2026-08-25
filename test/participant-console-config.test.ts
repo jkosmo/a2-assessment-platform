@@ -364,7 +364,11 @@ describe("participant console runtime config", () => {
     expect(resultsJsResponse.text).toContain('apiFetch(`/api/reports/courses/details?${params}`, headers)');
     expect(resultsJsResponse.text).toContain('function renderCourseLearners(rows)');
     expect(resultsJsResponse.text).toContain('tr.tabIndex = 0');
-    expect(resultsJsResponse.text).toContain('colspan="7"');
+    // #966: åtte kolonner nå — «Leste seksjoner» kom til fordi den AVGJØR statusen. Tomraden må
+    // spenne like mange som radmalen har, ellers står den tomme tabellen skjevt.
+    expect(resultsJsResponse.text).toContain('colspan="8"');
+    expect(resultsJsResponse.text).toContain("row.readSections");
+    expect(resultsJsResponse.text).toContain("row.totalSections");
     expect(resultsJsResponse.text).not.toContain("row.failedModules");
     expect(resultsJsResponse.text).not.toContain("row.underReviewModules");
 

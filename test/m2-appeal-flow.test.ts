@@ -137,7 +137,7 @@ describe("MVP appeal flow", () => {
     // Måles som differanse — den automatiske vurderingen over har allerede lagt én hendelse for
     // samme deltaker og modul, så en «finnes rad?»-sjekk ville ikke målt noe som helst.
     const owner = await submissionOwner(submissionId);
-    const completionChecksBeforeResolve = await countCourseCompletionChecks(owner.userId, owner.moduleId);
+    const resolveWindowStart = new Date();
 
     const resolveResponse = await request(app)
       .post(`/api/appeals/${appealId}/resolve`)
@@ -149,9 +149,7 @@ describe("MVP appeal flow", () => {
       });
     expect(resolveResponse.status).toBe(200);
 
-    expect(await countCourseCompletionChecks(owner.userId, owner.moduleId)).toBe(
-      completionChecksBeforeResolve + 1,
-    );
+    expect(await countCourseCompletionChecks(owner.userId, owner.moduleId, resolveWindowStart)).toBe(1);
     expect(resolveResponse.body.appeal.createdAt).toBeTruthy();
     expect(resolveResponse.body.appeal.claimedAt).toBeTruthy();
     expect(resolveResponse.body.appeal.resolvedAt).toBeTruthy();
