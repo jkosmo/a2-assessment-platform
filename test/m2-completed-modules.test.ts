@@ -11,7 +11,7 @@ const participantHeaders = {
 };
 
 describe("Participant completed modules and available list filtering", () => {
-  it("hides completed modules from available list by default and exposes them in completed endpoint", async () => {
+  it("lists a completed module with its latest decision, and exposes it in the completed endpoint", async () => {
     const participant = await prisma.user.findUnique({
       where: { externalId: "participant-1" },
       select: { id: true },
@@ -96,23 +96,21 @@ describe("Participant completed modules and available list filtering", () => {
       },
     });
 
+    // ⚠️ #952: testen påsto tidligere at en fullført modul SKJULES fra lista, og at
+    // `filters.includeCompleted` var `false`. Begge deler er fjernet sammen med den frittstående
+    // modul-lista de tjente — deltakeren når moduler gjennom «Mine kurs», og lista returnerer alt.
+    //
+    // Det som fortsatt betyr noe, og som testen nå måler: modulen er MED i lista, og
+    // `participantStatus` bærer det siste vedtaket slik flatene trenger.
     const availableResponse = await request(app).get("/api/modules").set(participantHeaders);
     expect(availableResponse.status).toBe(200);
-    const availableModuleIds = (availableResponse.body.modules as Array<{ id: string }>).map((entry) => entry.id);
-    expect(availableModuleIds).not.toContain(module.id);
+    const availableModules = availableResponse.body.modules as Array<Record<string, unknown>>;
+    expect(availableModules.map((entry) => entry.id as string)).toContain(module.id);
     expect(availableResponse.body.filters).toMatchObject({
-      includeCompleted: false,
       completedSubmissionStatuses: ["COMPLETED"],
     });
 
-    const includeCompletedResponse = await request(app)
-      .get("/api/modules?includeCompleted=true")
-      .set(participantHeaders);
-    expect(includeCompletedResponse.status).toBe(200);
-    const includeCompletedModules = includeCompletedResponse.body.modules as Array<Record<string, unknown>>;
-    const includeCompletedIds = includeCompletedModules.map((entry) => entry.id as string);
-    expect(includeCompletedIds).toContain(module.id);
-    const includedModule = includeCompletedModules.find((entry) => entry.id === module.id);
+    const includedModule = availableModules.find((entry) => entry.id === module.id);
     expect(includedModule?.participantStatus).toMatchObject({
       latestStatus: "COMPLETED",
       latestSubmissionId: submission.id,
