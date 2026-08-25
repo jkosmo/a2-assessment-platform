@@ -3,6 +3,7 @@ import type {
   ReviewStatus as ReviewStatusType,
   SubmissionStatus as SubmissionStatusType,
 } from "@prisma/client";
+import { ReviewStatus } from "../db/prismaRuntime.js";
 import { prisma } from "../db/prisma.js";
 
 export type CreateAssessmentDecisionInput = {
@@ -55,6 +56,14 @@ export function createDecisionRepository(client: DecisionRepositoryClient = pris
       reviewStatus: ReviewStatusType;
     }) {
       return client.manualReview.create({ data });
+    },
+
+    /** #953: brukes til å unngå to køsaker for samme innlevering når en jobb feiler endelig. */
+    findOpenManualReviewForSubmission(submissionId: string) {
+      return client.manualReview.findFirst({
+        where: { submissionId, reviewStatus: ReviewStatus.OPEN },
+        select: { id: true },
+      });
     },
 
     updateSubmissionStatus(submissionId: string, submissionStatus: SubmissionStatusType) {

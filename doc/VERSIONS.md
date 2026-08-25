@@ -2,6 +2,47 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.29.4 - 2026-08-25
+
+**#953 — en innlevering blir ikke lenger stående «vurderes» for alltid.**
+
+Når vurderingsjobben ga opp — LLM-kallet feilet `maxAttempts` ganger, eller traff
+`ASSESSMENT_JOB_MAX_RUNTIME_MS` — ble **jobben** markert `FAILED`, men **innleveringen** ble stående
+`PROCESSING`.
+
+For kandidaten: «Assessment is still processing» som aldri gikk over, og hun kunne ikke starte et
+nytt MCQ-forsøk heller, fordi `PROCESSING` blokkerer det. Ingen ble varslet, og rapportene telte
+innleveringen verken som bestått, strøket eller under vurdering.
+
+⚠️ **Usynlig i alle tre retninger samtidig.** Ingen mekanisme ville noensinne funnet den — ikke
+påminnelsesjobben, ikke rapportene, ikke vurdererkøen.
+
+### Kuren finner ikke opp en tilstand
+
+Dette *er* «maskinen klarte ikke avgjøre», og den veien finnes: `UNDER_REVIEW` pluss en rad i
+vurdererkøen — samme maskineri som når en vurdering rutes til manuell behandling av andre grunner.
+
+⚠️ Å sette `REJECTED` ville vært galt. Den leses som en dom mot kandidaten, og her har ingen vurdert
+noe. **Feilen er vår, ikke hennes.**
+
+`SCORED` og `REJECTED` skrives fortsatt ikke av noen kodesti — det er en egen opprydding, og
+`deriveOutcome` behandler allerede `SCORED` som uavklart (#978).
+
+### Tre tester, to av dem kontrollcase
+
+- Endelig feil → `UNDER_REVIEW` + køsak
+- **Kontroll:** et forsøk som skal prøves igjen rutes *ikke*. Uten den kunne fiksen sendt hver
+  eneste midlertidige feil til vurdererkøen og fortsatt bestått
+- **Kontroll:** to endelige feil gir ikke to køsaker, men statusen settes likevel
+
+Mutasjonsverifisert: fjernes fiksen, feiler begge på at `UNDER_REVIEW` aldri ble satt.
+
+⚠️ Underveis gikk første utkast rett på `tx.manualReview` fra jobbkjøreren. Det er feil form —
+oppslag hører i repositoriet — og **testmocken avslørte det** ved at transaksjonen er mocket som et
+tomt objekt. Oppslaget ligger nå i `decisionRepository`.
+
+1630 integrasjon.
+
 ## 2.29.3 - 2026-08-25
 
 **#966 — en kandidat som har gjort alt, purres ikke lenger.**

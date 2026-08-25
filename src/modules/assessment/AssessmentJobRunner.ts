@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { AssessmentJobStatus } from "../../db/prismaRuntime.js";
+import { AssessmentJobStatus, ReviewStatus, SubmissionStatus } from "../../db/prismaRuntime.js";
 import { env } from "../../config/env.js";
 
 /**
@@ -10,6 +10,7 @@ import { env } from "../../config/env.js";
 const WORKER_INSTANCE_ID = randomUUID();
 import { assessmentJobRepository, createAssessmentJobRepository } from "./assessmentJobRepository.js";
 import { runInTransaction } from "../../db/transaction.js";
+import { createDecisionRepository } from "../../repositories/decisionRepository.js";
 import { recordAuditEvent } from "../../services/auditService.js";
 import { logOperationalEvent } from "../../observability/operationalLog.js";
 import { auditActions, auditEntityTypes } from "../../observability/auditEvents.js";
@@ -188,6 +189,36 @@ export async function processNextJob(runAssessment: AssessmentRunFn, submissionI
       if (res.count === 0) {
         return res;
       }
+
+      // ⚠️ #953: ved ENDELIG feil ble bare jobben oppdatert. Innleveringen ble stående `PROCESSING`
+      // — for alltid.
+      //
+      // Konsekvensen for kandidaten: «Assessment is still processing» som aldri gikk over, og hen
+      // kunne ikke starte et nytt MCQ-forsøk heller, fordi `mcqService` blokkerer på `PROCESSING`.
+      // Ingen ble varslet, og rapportene telte innleveringen verken som bestått, strøket eller
+      // under vurdering. Den var usynlig i alle tre retninger.
+      //
+      // Kuren finner ikke opp en ny tilstand: dette er nettopp «maskinen klarte ikke avgjøre», og
+      // den veien finnes — UNDER_REVIEW pluss en rad i vurdererkøen. Samme maskineri som når en
+      // vurdering rutes til manuell behandling av andre grunner.
+      //
+      // ⚠️ Å sette REJECTED ville vært galt: det leses som en dom mot kandidaten, og her har
+      // ingen vurdert noe. Feilen er vår, ikke hens.
+      if (!willRetry) {
+        const decisionRepo = createDecisionRepository(tx);
+        // Idempotent: en jobb kan i prinsippet nå hit to ganger, og to køsaker for samme
+        // innlevering ville gitt vurdereren dobbeltarbeid.
+        const openReview = await decisionRepo.findOpenManualReviewForSubmission(candidate.submissionId);
+        if (!openReview) {
+          await decisionRepo.createManualReview({
+            submissionId: candidate.submissionId,
+            triggerReason: "Automatic assessment failed — routed to manual review (#953).",
+            reviewStatus: ReviewStatus.OPEN,
+          });
+        }
+        await decisionRepo.updateSubmissionStatus(candidate.submissionId, SubmissionStatus.UNDER_REVIEW);
+      }
+
       await recordAuditEvent(
         {
           entityType: auditEntityTypes.assessmentJob,
