@@ -9,6 +9,11 @@ export const operationalEvents = {
   },
   course: {
     completionCheckFailed: "course_completion_check_failed",
+    // #966: utstedelsen er hendelsesdrevet, og en tapt hendelse lot en kandidat som HADDE oppfylt
+    // kravene stå uten fullføringsrad — hvorpå påminnelsesjobben sendte «fristen er forfalt».
+    // Reparasjonen kjører nå i den jobben. Feiler den for én kandidat, logges det her og jobben
+    // fortsetter: én purring for mye er bedre enn ingen purringer i det hele tatt.
+    completionReconcileFailed: "course_completion_reconcile_failed",
   },
   assessment: {
     queueBacklog: "assessment_queue_backlog",
@@ -58,6 +63,11 @@ export type OperationalEventMetadataByName = {
   [operationalEvents.course.completionCheckFailed]: EventMetadata<{
     userId: string;
     moduleId: string;
+    errorMessage: string;
+  }>;
+  [operationalEvents.course.completionReconcileFailed]: EventMetadata<{
+    userId: string;
+    courseId: string;
     errorMessage: string;
   }>;
   [operationalEvents.appeal.slaBacklog]: EventMetadata<{

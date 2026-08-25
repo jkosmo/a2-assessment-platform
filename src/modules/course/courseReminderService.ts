@@ -11,6 +11,7 @@ import { operationalEvents } from "../../observability/operationalEvents.js";
 import { auditRepository } from "../../repositories/auditRepository.js";
 import { recordAuditEvent } from "../../services/auditService.js";
 import { sendViaAcs } from "../certification/participantNotificationService.js";
+import { checkCourseCompletionForCourse } from "./courseCompletionService.js";
 import { deriveStatus } from "./enrollmentService.js";
 import { enrollmentRepository } from "./enrollmentRepository.js";
 import { classRepository } from "./classRepository.js";
@@ -61,6 +62,8 @@ export type CourseReminderScheduleSummary = {
   skippedAlreadySent: number;
   skippedNoTrigger: number;
   skippedCompleted: number;
+  /** #966: kandidater som HADDE oppfylt kravene, men manglet fullføringsraden til vi rettet den. */
+  repairedCompletions: number;
   skippedInactive: number;
   skippedEntraClass: number;
 };
@@ -301,6 +304,7 @@ export async function runCourseReminderSchedule(input?: {
     skippedAlreadySent: 0,
     skippedNoTrigger: 0,
     skippedCompleted: 0,
+    repairedCompletions: 0,
     skippedInactive: 0,
     skippedEntraClass: 0,
   };
@@ -317,9 +321,44 @@ export async function runCourseReminderSchedule(input?: {
       continue;
     }
 
-    const status = await deriveStatus(candidate.userId, candidate.courseId, candidate.dueAt, asOf);
+    let status = await deriveStatus(candidate.userId, candidate.courseId, candidate.dueAt, asOf);
+
+    // ⚠️ #966: `deriveStatus` spør bare «finnes det en CourseCompletion-rad?». Utstedelsen er
+    // hendelsesdrevet — den fyrer når siste modul bestås eller siste seksjon leses — og en tapt
+    // hendelse etterlater en kandidat som HAR oppfylt kravene, men mangler raden.
+    //
+    // Konsekvensen var levende og pinlig: kurskortet hennes viste «Fullført», og samme natt sendte
+    // denne jobben «fristen er forfalt». SMO-en så henne som forsinket. Ingenting rettet seg før
+    // hun tilfeldigvis åpnet bevissiden sin — som er det ENESTE stedet sveipen kjørte fra.
+    //
+    // Reparasjonen gjøres her, rett før vi ville sagt «forfalt», og bare for de som IKKE allerede
+    // er registrert som fullført. En kandidat med raden på plass koster ingenting ekstra; porten
+    // evalueres bare der svaret kan være galt.
+    //
+    // Utstedelsen er idempotent og sender ingen varsling — den skriver raden og et revisjonsspor.
+    let repaired = false;
+    if (status !== "COMPLETED") {
+      try {
+        await checkCourseCompletionForCourse({ userId: candidate.userId, courseId: candidate.courseId });
+        const after = await deriveStatus(candidate.userId, candidate.courseId, candidate.dueAt, asOf);
+        repaired = after === "COMPLETED";
+        status = after;
+      } catch (error) {
+        // Best effort, per kandidat: én ødelagt rad skal ikke stoppe hele nattjobben. Da sender vi
+        // heller en purring for mye enn ingen purringer i det hele tatt.
+        logOperationalEvent(
+          operationalEvents.course.completionReconcileFailed,
+          { userId: candidate.userId, courseId: candidate.courseId, errorMessage: String(error) },
+          "error",
+        );
+      }
+    }
+
     if (status === "COMPLETED") {
       summary.skippedCompleted += 1;
+      // Teller BARE de som faktisk manglet raden. Uten skillet ville tallet vært «alle fullførte»,
+      // og da sier det ingenting om hvor ofte utstedelsen svikter — som er det man vil vite.
+      if (repaired) summary.repairedCompletions += 1;
       continue;
     }
 

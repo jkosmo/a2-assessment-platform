@@ -2,6 +2,56 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.29.3 - 2026-08-25
+
+**#966 — en kandidat som har gjort alt, purres ikke lenger.**
+
+Utstedelsen av kursbevis er hendelsesdrevet: den fyrer når siste modul bestås eller siste seksjon
+leses. En tapt hendelse etterlot en kandidat som **hadde** oppfylt kravene, men manglet
+fullføringsraden. Konsekvensen var levende: kurskortet hennes viste «Fullført», og samme natt sendte
+påminnelsesjobben **«fristen er forfalt»**. SMO-en så henne som forsinket. Ingenting rettet seg før
+hun tilfeldigvis åpnet bevissiden — det eneste stedet etterslepssveipen kjørte fra.
+
+### Mindre enn saken antydet
+
+Saken beskrev «fem steder, fire regler». Kartleggingen viste **tre forskjellige spørsmål**:
+
+| Sted | Spørsmål |
+|---|---|
+| `courseCompletionService` | Er kravene oppfylt? — den ekte porten |
+| `deriveStatus` | Er beviset utstedt? |
+| `computeCourseStatus` | Hvor langt er framdriften? |
+
+⚠️ Feilen var ikke fire konkurrerende regler, men at forbrukere brukte dem om hverandre. Og
+påminnelsesjobben og kull-dashbordet deler samme dør — `deriveStatus` — så fiksen sitter ett sted.
+
+Sveipen kjører nå i påminnelsesjobben, rett før den avgjør «forfalt», og **bare for kandidater som
+ikke allerede står som fullført**. Feiler den for én, logges det og jobben går videre: én purring for
+mye er bedre enn ingen purringer.
+
+⚠️ **Valgt bort:** å la `deriveStatus` utlede kravene selv. Det ville betydd en skriving fra en
+lesesti — å åpne et dashbord ville utstedt kursbevis. Produkteier bekreftet retningen, og at
+kandidater som ble ferdige før fiksen får beviset utstedt første natt etter deploy: *«Det er greit
+og riktig.»*
+
+### To funn underveis
+
+⚠️ **Et tomt kurs er aldri fullførbart** — det står eksplisitt i porten, og det var flaks.
+Påminnelsestestene lager kurs uten elementer; uten den linja ville alle blitt «fullført» av
+endringen. Testene måtte få en egen hjelper for et kurs som faktisk kan fullføres.
+
+⚠️ Jeg gjenbrukte først `course.completionCheckFailed`, som har en typet metadata-form for
+**moduler**. Typecheck fanget det. Ny hendelse er registrert i registeret med riktig form.
+
+`repairedCompletions` i sammendraget teller **bare** de som faktisk manglet raden. Uten skillet
+ville tallet vært «alle fullførte», og da sier det ingenting om hvor ofte utstedelsen svikter — som
+er nettopp det man vil vite etter en slik fiks.
+
+Mutasjonsverifisert: fjernes reparasjonen, feiler testen på at purringen ble sendt, mens
+kontrollcaset — en kandidat som ikke er ferdig purres fortsatt — forblir grønt.
+
+1628 integrasjon.
+
 ## 2.29.2 - 2026-08-24
 
 **#1002 lukket — uten en eneste kodeendring på serveren.** Begge QA-funnene løste seg av
