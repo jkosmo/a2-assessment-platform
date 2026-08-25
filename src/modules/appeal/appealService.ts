@@ -10,7 +10,7 @@ import { logOperationalEvent } from "../../observability/operationalLog.js";
 import { auditActions, auditEntityTypes } from "../../observability/auditEvents.js";
 import { operationalEvents } from "../../observability/operationalEvents.js";
 import { appendDecisionWithLineage } from "../assessment/decisionLineageService.js";
-import { checkAndIssueCourseCompletions } from "../course/index.js";
+import { enqueueOutboxEvents, OUTBOX_EVENT_TYPES } from "../outbox/outboxService.js";
 import { localizeContentText } from "../../i18n/content.js";
 import { normalizeLocale } from "../../i18n/locale.js";
 import { toAppealWorkspaceView } from "./appealReadModels.js";
@@ -285,21 +285,10 @@ export async function resolveAppeal(input: {
     resolutionNote: input.resolutionNote,
   });
 
-  checkAndIssueCourseCompletions({
-    userId: appeal.submission.userId,
-    moduleId: appeal.submission.moduleId,
-  }).catch((error: unknown) => {
-    logOperationalEvent(
-      operationalEvents.course.completionCheckFailed,
-      {
-        userId: appeal.submission.userId,
-        moduleId: appeal.submission.moduleId,
-        errorMessage: error instanceof Error ? error.message : "Unknown error",
-      },
-      "error",
-    );
-  });
-
+  // #946: kursfullføringen ligger nå på outboxen, lagt der inne i transaksjonen i
+  // `resolveAppealCommand`. Den sto tidligere her som et fire-and-forget-kall etter at svaret
+  // var sendt: feilet det, var utstedelsen tapt og bare en loggrad visste om det — mens
+  // påminnelsesjobben og kull-dashbordet spør «finnes rad?» og dermed så kandidaten som forfalt.
   return { appeal: resolvedAppeal, resolutionDecision };
 }
 
@@ -367,6 +356,19 @@ async function resolveAppealCommand(
         appealStatus: resolvedAppeal.appealStatus,
       },
     }, tx);
+
+    // #946: samme dør som den automatiske stien (AssessmentDecisionApplicationService). Hendelsen
+    // commiter sammen med vedtaket, så en krasj gir enten begge eller ingen av dem — aldri et
+    // bestått vedtak uten at noen kommer til å sjekke kursfullføringen.
+    await enqueueOutboxEvents(
+      [
+        {
+          type: OUTBOX_EVENT_TYPES.courseCompletionCheck,
+          payload: { userId: appeal.submission.userId, moduleId: appeal.submission.moduleId },
+        },
+      ],
+      tx,
+    );
 
     return { resolutionDecision, resolvedAppeal };
   });

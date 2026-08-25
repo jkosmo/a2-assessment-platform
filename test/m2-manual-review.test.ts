@@ -2,6 +2,7 @@ import request from "supertest";
 import { app } from "../src/app.js";
 import { prisma } from "../src/db/prisma.js";
 import { findModuleIdByTitle } from "./support/participantFlow.js";
+import { countCourseCompletionChecks, submissionOwner } from "./support/outboxProbe.js";
 
 const participantHeaders = {
   "x-user-id": "participant-1",
@@ -106,6 +107,11 @@ describe("MVP manual review workspace", () => {
     expect(claimResponse.status).toBe(200);
     expect(claimResponse.body.review.reviewStatus).toBe("IN_REVIEW");
 
+    // #946: samme krav som i ankeflyten — overstyringen skal selv legge kursfullførings-sjekken
+    // holdbart på outboxen, inne i transaksjonen. Måles som differanse, ikke som eksistens.
+    const owner = await submissionOwner(submissionId);
+    const completionChecksBeforeOverride = await countCourseCompletionChecks(owner.userId, owner.moduleId);
+
     const overrideResponse = await request(app)
       .post(`/api/reviews/${reviewId}/override`)
       .set(reviewerHeaders)
@@ -115,6 +121,10 @@ describe("MVP manual review workspace", () => {
         overrideReason: "Insufficient practical depth despite automatic score.",
       });
     expect(overrideResponse.status).toBe(200);
+
+    expect(await countCourseCompletionChecks(owner.userId, owner.moduleId)).toBe(
+      completionChecksBeforeOverride + 1,
+    );
     expect(overrideResponse.body.overrideDecision.decisionType).toBe("MANUAL_OVERRIDE");
     expect(overrideResponse.body.overrideDecision.parentDecisionId).toBeTruthy();
 

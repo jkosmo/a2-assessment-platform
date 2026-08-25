@@ -5,7 +5,7 @@ import { runInTransaction, type DbTransactionClient } from "../../db/transaction
 import { recordAuditEvent } from "../../services/auditService.js";
 import { appendDecisionWithLineage } from "../assessment/decisionLineageService.js";
 import { notifyAssessmentResult } from "../certification/index.js";
-import { checkAndIssueCourseCompletions } from "../course/index.js";
+import { enqueueOutboxEvents, OUTBOX_EVENT_TYPES } from "../outbox/outboxService.js";
 import { logOperationalEvent } from "../../observability/operationalLog.js";
 import { auditActions, auditEntityTypes } from "../../observability/auditEvents.js";
 import { operationalEvents } from "../../observability/operationalEvents.js";
@@ -172,21 +172,8 @@ export async function finalizeManualReviewOverride(input: {
     );
   });
 
-  checkAndIssueCourseCompletions({
-    userId: review.submission.userId,
-    moduleId: review.submission.moduleId,
-  }).catch((error: unknown) => {
-    logOperationalEvent(
-      operationalEvents.course.completionCheckFailed,
-      {
-        userId: review.submission.userId,
-        moduleId: review.submission.moduleId,
-        errorMessage: error instanceof Error ? error.message : "Unknown error",
-      },
-      "error",
-    );
-  });
-
+  // #946: kursfullføringen ligger nå på outboxen, lagt der inne i transaksjonen i
+  // `finalizeManualReviewOverrideCommand`. Se samme begrunnelse i appealService.
   return { review: resolvedReview, overrideDecision };
 }
 
@@ -253,6 +240,17 @@ async function finalizeManualReviewOverrideCommand(
         overrideDecision: resolvedReview.overrideDecision,
       },
     }, tx);
+
+    // #946: samme dør som den automatiske stien og ankestien. Commiter sammen med vedtaket.
+    await enqueueOutboxEvents(
+      [
+        {
+          type: OUTBOX_EVENT_TYPES.courseCompletionCheck,
+          payload: { userId: review.submission.userId, moduleId: review.submission.moduleId },
+        },
+      ],
+      tx,
+    );
 
     return { overrideDecision, resolvedReview };
   });

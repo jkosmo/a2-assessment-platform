@@ -2,6 +2,7 @@ import request from "supertest";
 import { app } from "../src/app.js";
 import { prisma } from "../src/db/prisma.js";
 import { findModuleIdByTitle } from "./support/participantFlow.js";
+import { countCourseCompletionChecks, submissionOwner } from "./support/outboxProbe.js";
 
 const participantHeaders = {
   "x-user-id": "participant-1",
@@ -132,6 +133,12 @@ describe("MVP appeal flow", () => {
     expect(inReviewDetail.status).toBe(200);
     expect(inReviewDetail.body.sla.firstResponseDurationHours).not.toBeNull();
 
+    // #946: kursfullføringen skal legges holdbart på outboxen av selve resolve-transaksjonen.
+    // Måles som differanse — den automatiske vurderingen over har allerede lagt én hendelse for
+    // samme deltaker og modul, så en «finnes rad?»-sjekk ville ikke målt noe som helst.
+    const owner = await submissionOwner(submissionId);
+    const completionChecksBeforeResolve = await countCourseCompletionChecks(owner.userId, owner.moduleId);
+
     const resolveResponse = await request(app)
       .post(`/api/appeals/${appealId}/resolve`)
       .set(appealHandlerHeaders)
@@ -141,6 +148,10 @@ describe("MVP appeal flow", () => {
         resolutionNote: "Original decision was adjusted after detailed second review.",
       });
     expect(resolveResponse.status).toBe(200);
+
+    expect(await countCourseCompletionChecks(owner.userId, owner.moduleId)).toBe(
+      completionChecksBeforeResolve + 1,
+    );
     expect(resolveResponse.body.appeal.createdAt).toBeTruthy();
     expect(resolveResponse.body.appeal.claimedAt).toBeTruthy();
     expect(resolveResponse.body.appeal.resolvedAt).toBeTruthy();

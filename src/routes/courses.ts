@@ -1,5 +1,6 @@
 import { Router } from "express";
-import { courseRepository, computeCourseStatus, getSection, checkCourseCompletionForCourse, reconcileCourseCompletionsForUser } from "../modules/course/index.js";
+import { courseRepository, createCourseRepository, computeCourseStatus, getSection, checkCourseCompletionForCourse, reconcileCourseCompletionsForUser } from "../modules/course/index.js";
+import { runInTransaction } from "../db/transaction.js";
 import { renderSectionMarkdown } from "../modules/course/sectionContent.js";
 import { localizeContentText } from "../i18n/content.js";
 import { normalizeLocale } from "../i18n/locale.js";
@@ -481,9 +482,19 @@ coursesRouter.post("/:courseId/sections/:sectionId/read", async (request, respon
     if (!item) {
       throw new NotFoundError("CourseSection", "section_not_found", "Section not found in this course.");
     }
-    await courseRepository.markSectionRead(userId, course.id, request.params.sectionId);
-    // Reading the final section can be the last gate for certification (#476/#525) — re-check.
-    await checkCourseCompletionForCourse({ userId, courseId: course.id });
+    // #946: markeringen og bevisporten commiter sammen. Sto tidligere som to uavhengige skriv:
+    // seksjonen ble markert lest, og feilet porten etterpå, var kurset ferdig uten at noe bevis
+    // ble utstedt — og ingenting rettet det før deltakeren selv åpnet bevissiden.
+    //
+    // ⚠️ Bevisst IKKE flyttet til outboxen slik de tre andre veiene er. Deltakeren står på siden
+    // og leser ferdig siste seksjon; her skal beviset finnes med én gang, ikke når worker-en
+    // rekker det. Transaksjonen gir holdbarheten uten å gjøre utstedelsen asynkron.
+    await runInTransaction(async (tx) => {
+      const txRepo = createCourseRepository(tx);
+      await txRepo.markSectionRead(userId, course.id, request.params.sectionId);
+      // Reading the final section can be the last gate for certification (#476/#525) — re-check.
+      await checkCourseCompletionForCourse({ userId, courseId: course.id }, tx);
+    });
     response.status(204).send();
   } catch (error) {
     next(error);

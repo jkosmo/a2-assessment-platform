@@ -2,6 +2,37 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.31.1 - 2026-08-25
+
+### #946 — fire veier utsteder kursbevis, nå er alle fire holdbare
+
+Utstedelsen av kursbevis skjedde på fire steder med tre ulike holdbarheter. To av dem var
+fire-and-forget: `checkAndIssueCourseCompletions(...).catch(log)` ble avfyrt etter at svaret var
+sendt, utenfor transaksjonen. Restartet containeren under en utrulling før den flytende promisen
+fullførte, var beviset tapt — ingen outbox-rad, ingen retry, kun en loggrad. Deltakeren sto igjen
+som OVERDUE og fikk forfalt-purring til hen selv åpnet bevissiden, som er det eneste stedet
+etterslepssveipen kjøres fra.
+
+| Vei | Før | Nå |
+|---|---|---|
+| Automatisk vurdering | outbox | uendret |
+| Anke (`appealService`) | `.catch(log)`, ikke ventet | outbox, inne i vedtakstransaksjonen |
+| Manuell behandling (`manualReviewService`) | `.catch(log)`, ikke ventet | outbox, inne i vedtakstransaksjonen |
+| Seksjon lest (`courses.ts`) | direkte kall, ikke atomisk | i transaksjon med `markSectionRead` |
+
+De to vedtaksveiene bruker den outbox-døra den automatiske stien allerede gikk gjennom
+(`OUTBOX_EVENT_TYPES.courseCompletionCheck`) — ingen ny hendelsestype, ingen ny håndterer, ingen
+migrasjon. Hendelsen commiter sammen med vedtaket: en krasj gir enten begge eller ingen.
+
+⚠️ Leseruten ble bevisst **ikke** flyttet til outboxen. Deltakeren står på siden og leser ferdig
+siste seksjon; der skal beviset finnes med én gang, ikke når workeren rekker det. Transaksjonen
+gir holdbarheten uten å gjøre utstedelsen asynkron.
+
+**Vakten er mutasjonsverifisert.** Testene måler differansen i antall `course_completion_check`-rader
+rundt selve kallet, ikke om det finnes en rad. Den automatiske vurderingen tidligere i samme test
+har allerede lagt sju slike rader for samme deltaker og modul — en eksistens-sjekk ville vært grønn
+også med fiksen reversert. Med fiksen reversert faller begge testene på `expected 7 to be 8`.
+
 ## 2.31.0 - 2026-08-25
 
 ⚠️ **#953 ble TRUKKET fra denne releasen etter andre NO-GO fra QA-porten.** Se under.
