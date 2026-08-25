@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { AssessmentJobStatus, ReviewStatus, SubmissionStatus } from "../../db/prismaRuntime.js";
+import { AssessmentJobStatus } from "../../db/prismaRuntime.js";
 import { env } from "../../config/env.js";
 
 /**
@@ -10,7 +10,6 @@ import { env } from "../../config/env.js";
 const WORKER_INSTANCE_ID = randomUUID();
 import { assessmentJobRepository, createAssessmentJobRepository } from "./assessmentJobRepository.js";
 import { runInTransaction } from "../../db/transaction.js";
-import { createDecisionRepository } from "../../repositories/decisionRepository.js";
 import { recordAuditEvent } from "../../services/auditService.js";
 import { logOperationalEvent } from "../../observability/operationalLog.js";
 import { auditActions, auditEntityTypes } from "../../observability/auditEvents.js";
@@ -188,46 +187,6 @@ export async function processNextJob(runAssessment: AssessmentRunFn, submissionI
       );
       if (res.count === 0) {
         return res;
-      }
-
-      // ⚠️ #953: ved ENDELIG feil ble bare jobben oppdatert. Innleveringen ble stående `PROCESSING`
-      // — for alltid.
-      //
-      // Konsekvensen for kandidaten: «Assessment is still processing» som aldri gikk over, og hen
-      // kunne ikke starte et nytt MCQ-forsøk heller, fordi `mcqService` blokkerer på `PROCESSING`.
-      // Ingen ble varslet, og rapportene telte innleveringen verken som bestått, strøket eller
-      // under vurdering. Den var usynlig i alle tre retninger.
-      //
-      // ⚠️ FØRSTE FORSØK PÅ KUR VAR FEIL, og QA-porten fant det. Den satte `UNDER_REVIEW` og
-      // opprettet en køsak — men `finalizeManualReviewOverride` krever et FORELDREVEDTAK for
-      // avstamningen, og her finnes ingen: vurderingen kom aldri så langt. Vurdereren kunne kreve
-      // saken, men aldri løse den. Jeg byttet «PROCESSING for alltid» mot «UNDER_REVIEW for
-      // alltid».
-      //
-      // ⚠️ Å skrive et grunnvedtak i stedet ble forkastet: enhver `passFailTotal` er en DOM, og
-      // her har ingen vurdert noe. Å stryke kandidaten for vår infrastrukturfeil er verre enn å
-      // la være.
-      //
-      // Kuren er å slippe kandidaten løs igjen. `SUBMITTED` er ikke i
-      // `TERMINAL_SUBMISSION_STATUSES`, så et nytt forsøk er mulig, og drift varsles.
-      //
-      // ⚠️ Bare fra `PROCESSING`. Er vedtaket allerede lagret og feilen kom i en SIDEEFFEKT
-      // etterpå, ville en ubetinget skriving her overskrevet et gyldig `COMPLETED` — også det
-      // funnet av QA-porten.
-      if (!willRetry) {
-        const reset = await createDecisionRepository(tx).releaseProcessingSubmission(candidate.submissionId);
-        if (reset.count > 0) {
-          logOperationalEvent(
-            operationalEvents.assessment.jobAbandonedSubmissionReset,
-            {
-              jobId: candidate.id,
-              submissionId: candidate.submissionId,
-              attempts: job.attempts,
-              errorMessage: error instanceof Error ? error.message : "Unknown assessment error",
-            },
-            "error",
-          );
-        }
       }
 
       await recordAuditEvent(

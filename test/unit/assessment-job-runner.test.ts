@@ -14,7 +14,6 @@ const countJobsByStatus = vi.fn();
 const findExpiredRunningJobs = vi.fn();
 const resetExpiredJob = vi.fn();
 const findLongRunningJobs = vi.fn();
-const releaseProcessingSubmission = vi.fn();
 const recordAuditEvent = vi.fn();
 const logOperationalEvent = vi.fn();
 
@@ -44,10 +43,6 @@ vi.mock("../../src/db/transaction.js", () => ({
   runInTransaction: (cb: (tx: unknown) => unknown) => cb({}),
 }));
 
-vi.mock("../../src/repositories/decisionRepository.js", () => ({
-  createDecisionRepository: () => ({ releaseProcessingSubmission }),
-}));
-
 vi.mock("../../src/services/auditService.js", () => ({
   recordAuditEvent,
 }));
@@ -72,8 +67,6 @@ describe("AssessmentJobRunner", () => {
     markJobForRetryOrFailure.mockResolvedValue({ count: 1 });
     renewLease.mockReset();
     renewLease.mockResolvedValue({ count: 1 });
-    releaseProcessingSubmission.mockReset();
-    releaseProcessingSubmission.mockResolvedValue({ count: 1 });
     findAssessmentJobOrThrow.mockReset();
     findPendingOrRunningJobForSubmission.mockReset();
     findPendingOrRunningJobIdForSubmission.mockReset();
@@ -182,64 +175,9 @@ describe("AssessmentJobRunner", () => {
         expect.objectContaining({ action: "assessment_job_failed" }),
         expect.anything(),
       );
-
-      // ⚠️ #953: dette var det som manglet. Jobben ble FAILED, men innleveringen sto igjen som
-      // PROCESSING — for alltid. Deltakeren så «vurderes» som aldri gikk over, og kunne heller
-      // ikke starte et nytt MCQ-forsøk fordi PROCESSING blokkerer det. Ingen ble varslet.
-      expect(releaseProcessingSubmission).toHaveBeenCalledWith("sub-1");
-      expect(logOperationalEvent).toHaveBeenCalledWith(
-        "assessment_job_abandoned_submission_reset",
-        expect.objectContaining({ submissionId: "sub-1" }),
-        "error",
-      );
     });
 
-    it("#953 KONTROLLCASE: et forsøk som skal prøves igjen rutes IKKE til manuell vurdering", async () => {
-      // Uten denne kunne fiksen ha rutet hver eneste midlertidige feil til vurdererkøen, og
-      // fortsatt bestått testen over.
-      findNextRunnableJob.mockResolvedValue({ id: "job-1", submissionId: "sub-1" });
-      tryLockPendingJob.mockResolvedValue({ count: 1 });
-      findAssessmentJobOrThrow.mockResolvedValue({
-        id: "job-1",
-        attempts: 1,
-        maxAttempts: 3,
-        availableAt: new Date(),
-      });
-      markJobForRetryOrFailure.mockResolvedValue({ count: 1 });
-      const { processNextJob } = await import("../../src/modules/assessment/AssessmentJobRunner.js");
 
-      await processNextJob(vi.fn().mockRejectedValue(new Error("Transient error")));
-
-      expect(releaseProcessingSubmission).not.toHaveBeenCalled();
-    });
-
-    it("#953 et allerede AVGJORT vedtak overskrives ikke", async () => {
-      findNextRunnableJob.mockResolvedValue({ id: "job-1", submissionId: "sub-1" });
-      tryLockPendingJob.mockResolvedValue({ count: 1 });
-      findAssessmentJobOrThrow.mockResolvedValue({
-        id: "job-1",
-        attempts: 3,
-        maxAttempts: 3,
-        availableAt: new Date(),
-      });
-      markJobForRetryOrFailure.mockResolvedValue({ count: 1 });
-      // ⚠️ Funnet av QA-porten: hvis vedtaket ALLEREDE er lagret og feilen kom i en sideeffekt
-      // etterpå, når retryene til slutt hit — og en ubetinget skriving ville gjort et gyldig
-      // COMPLETED om til noe annet. Skrivingen er betinget av PROCESSING, så den treffer ingenting.
-      releaseProcessingSubmission.mockResolvedValue({ count: 0 });
-      const { processNextJob } = await import("../../src/modules/assessment/AssessmentJobRunner.js");
-
-      await processNextJob(vi.fn().mockRejectedValue(new Error("Persistent error")));
-
-      // Forsøket gjøres, men treffer ingen rad — og da varsles heller ikke drift om en reset
-      // som ikke skjedde.
-      expect(releaseProcessingSubmission).toHaveBeenCalledWith("sub-1");
-      expect(logOperationalEvent).not.toHaveBeenCalledWith(
-        "assessment_job_abandoned_submission_reset",
-        expect.anything(),
-        expect.anything(),
-      );
-    });
 
     // #856: a job whose runAssessment never returns within the runtime cap must NOT wedge the worker —
     // the deadline fires, the tick takes the (fenced) failure path, and processNextJob returns.

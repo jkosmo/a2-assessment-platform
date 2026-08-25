@@ -3,7 +3,6 @@ import type {
   ReviewStatus as ReviewStatusType,
   SubmissionStatus as SubmissionStatusType,
 } from "@prisma/client";
-import { ReviewStatus, SubmissionStatus } from "../db/prismaRuntime.js";
 import { prisma } from "../db/prisma.js";
 
 export type CreateAssessmentDecisionInput = {
@@ -56,27 +55,6 @@ export function createDecisionRepository(client: DecisionRepositoryClient = pris
       reviewStatus: ReviewStatusType;
     }) {
       return client.manualReview.create({ data });
-    },
-
-    /** #953: brukes til å unngå to køsaker for samme innlevering når en jobb feiler endelig. */
-    findOpenManualReviewForSubmission(submissionId: string) {
-      return client.manualReview.findFirst({
-        where: { submissionId, reviewStatus: ReviewStatus.OPEN },
-        select: { id: true },
-      });
-    },
-
-    /**
-     * #953: slipper en innlevering tilbake fra PROCESSING slik at kandidaten kan forsøke igjen.
-     *
-     * ⚠️ Betinget med vilje. Er vedtaket allerede lagret og feilen kom i en sideeffekt etterpå,
-     * ville en ubetinget skriving overskrevet et gyldig COMPLETED.
-     */
-    releaseProcessingSubmission(submissionId: string) {
-      return client.submission.updateMany({
-        where: { id: submissionId, submissionStatus: SubmissionStatus.PROCESSING },
-        data: { submissionStatus: SubmissionStatus.SUBMITTED },
-      });
     },
 
     updateSubmissionStatus(submissionId: string, submissionStatus: SubmissionStatusType) {

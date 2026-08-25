@@ -145,15 +145,55 @@ describe("participant console state helpers", () => {
     expect(afterMcq.checkAssessmentUnlocked).toBe(false);
     expect(afterMcq.checkAssessmentHintKey).toBe("flow.checkAssessmentLockedNeedsQueue");
 
-    const completed = deriveParticipantFlowGateState({
+    // ⚠️ #1002: gaten krevde tidligere bare `resultStatus === "COMPLETED"`. Nå kreves et
+    // STRYKVEDTAK — en bestått innlevering har ingenting å anke, og fiksturen var stum om utfallet.
+    const completedFail = deriveParticipantFlowGateState({
       hasSubmission: true,
       hasMcqSubmission: true,
       assessmentQueued: true,
       resultStatus: "COMPLETED",
+      resultPassFail: false,
     });
-    expect(completed.checkAssessmentUnlocked).toBe(true);
-    expect(completed.appealUnlocked).toBe(true);
-    expect(completed.appealHintKey).toBe("flow.appealReady");
+    expect(completedFail.checkAssessmentUnlocked).toBe(true);
+    expect(completedFail.appealUnlocked).toBe(true);
+    expect(completedFail.appealHintKey).toBe("flow.appealReady");
+  });
+
+  it("#1002 anke er mulig OGSÅ mens saken er til manuell vurdering", () => {
+    // Produkteier 2026-08-24: «Anke er kraftigere lut enn manuell behandling … la oss ikke lage en
+    // regel uten skjellig grunn.» Serveren har alltid tillatt det.
+    //
+    // ⚠️ Første forsøk løsnet bare regelen som styrer om SEKSJONEN vises. Denne gaten styrer om
+    // KNAPPEN virker, og sto igjen låst — funnet av QA-porten.
+    const underReview = deriveParticipantFlowGateState({
+      hasSubmission: true,
+      hasMcqSubmission: true,
+      assessmentQueued: true,
+      resultStatus: "UNDER_REVIEW",
+      resultPassFail: false,
+    });
+    expect(underReview.appealUnlocked).toBe(true);
+  });
+
+  it("#1002 KONTROLLCASE: uten et strykvedtak er anke fortsatt låst", () => {
+    // Uten denne kunne gaten returnert true for alt og fortsatt vært grønn.
+    const passed = deriveParticipantFlowGateState({
+      hasSubmission: true,
+      hasMcqSubmission: true,
+      assessmentQueued: true,
+      resultStatus: "COMPLETED",
+      resultPassFail: true,
+    });
+    expect(passed.appealUnlocked).toBe(false);
+
+    const noDecision = deriveParticipantFlowGateState({
+      hasSubmission: true,
+      hasMcqSubmission: true,
+      assessmentQueued: true,
+      resultStatus: "COMPLETED",
+      resultPassFail: null,
+    });
+    expect(noDecision.appealUnlocked).toBe(false);
   });
 
   it("unlocks assessment without MCQ for FREETEXT_ONLY modules (#578)", () => {

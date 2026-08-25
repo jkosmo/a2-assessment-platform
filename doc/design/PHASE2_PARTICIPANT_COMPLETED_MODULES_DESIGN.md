@@ -1,5 +1,15 @@
 # Phase 2 Participant Completed Modules Design
 
+> ⚠️ **DELVIS UTGÅTT 2026-08-25 (#952).** Skjulingen av fullførte moduler fra `GET /api/modules`, og
+> parameteren `includeCompleted`, er **fjernet**. De tjente den frittstående modul-lista i
+> deltakerkonsollet — en flate som er skjult av `PARTICIPANT_COURSE_ONLY` (standard `true`) og som
+> produkteier har besluttet å fjerne: deltakeren når moduler gjennom «Mine kurs».
+>
+> `GET /api/modules` returnerer nå alle moduler. `GET /api/modules/completed` og
+> `/participant/completed` er uendret og fortsatt i bruk.
+>
+> Beskrivelsen under er bevart som historikk for hvorfor mekanismen fantes.
+
 ## Context
 Issue #66 requires a participant-facing overview of completed modules and a stricter available-module list that hides completed modules by default.
 

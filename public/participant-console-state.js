@@ -1,3 +1,5 @@
+import { isAppealableFail } from "/static/outcome.js";
+
 const allowedMockRoles = new Set([
   "PARTICIPANT",
   "APPEAL_HANDLER",
@@ -262,7 +264,17 @@ export function deriveParticipantFlowGateState(flowState, options = {}) {
 
   const assessmentUnlocked = hasSubmission && (!requiresMcq || hasMcqSubmission);
   const checkAssessmentUnlocked = assessmentUnlocked && assessmentQueued;
-  const appealUnlocked = resultStatus === "COMPLETED";
+  // ⚠️ #1002: krevde `COMPLETED`. Produkteier 2026-08-24: *«Anke er kraftigere lut enn manuell
+  // behandling … la oss ikke lage en regel uten skjellig grunn.»* Anken er ikke et neste steg etter
+  // manuell vurdering — den er et sterkere virkemiddel, og serveren har alltid tillatt begge.
+  //
+  // ⚠️ Første forsøk løsnet bare `isAppealableFail`, som styrer om SEKSJONEN vises. Denne gaten
+  // styrer om KNAPPEN virker, og den sto igjen — så regelen var løsnet ett sted og fortsatt låst
+  // et annet. Funnet av QA-porten. De to leser nå samme regel.
+  const appealUnlocked = isAppealableFail({
+    passFailTotal: flowState?.resultPassFail ?? null,
+    submissionStatus: resultStatus,
+  });
 
   let assessmentHintKey = "flow.assessmentReady";
   if (!hasSubmission) {
@@ -275,6 +287,7 @@ export function deriveParticipantFlowGateState(flowState, options = {}) {
     ? "flow.checkAssessmentReady"
     : "flow.checkAssessmentLockedNeedsQueue";
 
+  // Hint-nøkkelen står: låst betyr fortsatt «det finnes ikke et strykvedtak å anke».
   const appealHintKey = appealUnlocked ? "flow.appealReady" : "flow.appealLockedNeedsCompleted";
 
   return {

@@ -4,6 +4,38 @@ This document tracks release versions and what each version includes.
 
 ## 2.31.0 - 2026-08-25
 
+⚠️ **#953 ble TRUKKET fra denne releasen etter andre NO-GO fra QA-porten.** Se under.
+
+### #953 trukket — to forsøk, to NO-GO
+
+Fiksen frigjorde databasen, men ikke deltakeren. QA-porten fant i andre runde tre nye P1-er:
+
+- **Kappløp med den forlatte kjøringen.** `runWithDeadline` gir opp, men `runAssessment` fortsetter
+  å kjøre. Å frigi innleveringen med én gang lot den forlatte kjøringen lagre et vedtak og sette
+  `COMPLETED` oppå et nytt forsøk.
+- **Nullstilte et allerede avgjort vedtak.** `runAssessment` setter `PROCESSING` først, så vakta mi
+  (`where: PROCESSING`) traff også en innlevering som ble reprosessert med et vedtak fra før.
+- **Klienten viste ingen vei videre.** `SUBMITTED` regnes ikke som resultatklar, så pollingen gikk
+  til timeout og kandidaten satt igjen uten synlig handling.
+
+⚠️ **Begge mine forsøk løste datalaget og antok at flaten fulgte etter.** Neste runde må starte med
+deltakerreisen: hva ser kandidaten, og hvilken knapp trykker hen.
+
+Den underliggende feilen står — en innlevering kan fortsatt bli hengende i `PROCESSING` hvis
+vurderingen bruker opp alle forsøk. Det er status quo, ikke en regresjon.
+
+### #1002 fullført — regelen var løsnet ett sted og låst et annet
+
+`isAppealableFail` styrer om anke-SEKSJONEN vises. `deriveParticipantFlowGateState` styrer om
+KNAPPEN virker, og krevde fortsatt `COMPLETED`. Jeg løsnet den første og lot den andre stå — altså
+nøyaktig den divergensen jeg hadde satt meg fore å fjerne. Funnet av QA-porten.
+
+⚠️ Fiksturen i den eksisterende testen var **stum om utfallet**: `resultStatus: "COMPLETED"` uten
+`resultPassFail`. Den festet «bestått er ankbart» uten å si det. Nå kreves et strykvedtak, med
+kontrollcase.
+
+### Innhold
+
 **QA-porten ga NO-GO på 2.30.0. Fem funn, alle reelle — og to av dem var i arbeid jeg hadde meldt
 som ferdig.**
 

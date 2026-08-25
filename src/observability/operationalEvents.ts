@@ -19,10 +19,6 @@ export const operationalEvents = {
     queueBacklog: "assessment_queue_backlog",
     jobStaleLockDetected: "assessment_job_stale_lock_detected",
     jobStuckAlert: "assessment_job_stuck_alert",
-    // #953: jobben ga opp for godt, og innleveringen ble sluppet tilbake til SUBMITTED slik at
-    // kandidaten kan forsøke igjen. Drift bør se dette: gjentar det seg, er det ikke kandidaten
-    // som gjør noe galt.
-    jobAbandonedSubmissionReset: "assessment_job_abandoned_submission_reset",
     llmEvaluationFailed: "llm_evaluation_failed",
   },
   certification: {
@@ -91,12 +87,6 @@ export type OperationalEventMetadataByName = {
   [operationalEvents.assessment.jobStaleLockDetected]: EventMetadata<{
     jobId: string;
     submissionId: string;
-  }>;
-  [operationalEvents.assessment.jobAbandonedSubmissionReset]: EventMetadata<{
-    jobId: string;
-    submissionId: string;
-    attempts: number;
-    errorMessage: string;
   }>;
   [operationalEvents.assessment.jobStuckAlert]: EventMetadata<{
     jobId: string;
