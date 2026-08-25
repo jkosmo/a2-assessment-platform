@@ -11,7 +11,6 @@ import { operationalEvents } from "../../observability/operationalEvents.js";
 import { auditRepository } from "../../repositories/auditRepository.js";
 import { recordAuditEvent } from "../../services/auditService.js";
 import { sendViaAcs } from "../certification/participantNotificationService.js";
-import { checkCourseCompletionForCourse } from "./courseCompletionService.js";
 import { deriveStatus } from "./enrollmentService.js";
 import { enrollmentRepository } from "./enrollmentRepository.js";
 import { classRepository } from "./classRepository.js";
@@ -62,8 +61,6 @@ export type CourseReminderScheduleSummary = {
   skippedAlreadySent: number;
   skippedNoTrigger: number;
   skippedCompleted: number;
-  /** #966: kandidater som HADDE oppfylt kravene, men manglet fullføringsraden til vi rettet den. */
-  repairedCompletions: number;
   skippedInactive: number;
   skippedEntraClass: number;
 };
@@ -304,7 +301,6 @@ export async function runCourseReminderSchedule(input?: {
     skippedAlreadySent: 0,
     skippedNoTrigger: 0,
     skippedCompleted: 0,
-    repairedCompletions: 0,
     skippedInactive: 0,
     skippedEntraClass: 0,
   };
@@ -364,35 +360,6 @@ export async function runCourseReminderSchedule(input?: {
       continue;
     }
 
-    // ⚠️ #966: utstedelsen av kursbevis er hendelsesdrevet, og en tapt hendelse etterlot en
-    // kandidat som HADDE oppfylt kravene uten fullføringsrad. Kurskortet viste «Fullført» mens
-    // denne jobben sendte «fristen er forfalt» samme natt.
-    //
-    // ⚠️ Reparasjonen står HER, ikke ved statusberegningen, og det er QA-portens fortjeneste:
-    // kandidatlista inneholder hver forfalt innmelding for alltid, så en sveip før utløser- og
-    // dedup-sjekken ville kjørt hele fullføringsporten for hver eneste historiske rad, hver natt.
-    // Her kjører den bare for dem vi faktisk er i ferd med å purre.
-    try {
-      await checkCourseCompletionForCourse({ userId, courseId: candidate.courseId });
-      // ⚠️ Statusen leses på nytt UANSETT om kallet kastet: en samtidig utstedelse treffer
-      // unikhetskravet på (userId, courseId) og gir en feil, selv om kandidaten NÅ er fullført.
-      // Å beholde den gamle statusen i catch-grenen ville sendt nøyaktig purringen dette skal
-      // hindre.
-    } catch (error) {
-      logOperationalEvent(
-        operationalEvents.course.completionReconcileFailed,
-        { userId, courseId: candidate.courseId, errorMessage: String(error) },
-        "error",
-      );
-    }
-    const statusAfterRepair = await deriveStatus(userId, candidate.courseId, candidate.dueAt, asOf);
-    if (statusAfterRepair === "COMPLETED") {
-      summary.skippedCompleted += 1;
-      // Teller BARE de som faktisk manglet raden. Uten skillet ville tallet vært «alle fullførte»,
-      // og da sier det ingenting om hvor ofte utstedelsen svikter — som er det man vil vite.
-      summary.repairedCompletions += 1;
-      continue;
-    }
     summary.processed += 1;
 
     const result = await send({

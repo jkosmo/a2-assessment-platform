@@ -153,6 +153,58 @@ is built**, and must be runnable **without a staging deploy**:
    first (or at least alongside) forces you to run the real path early, which is where these
    integration bugs surface.
 
+### Pre-flight: fem oppslag FØR koden skrives (standing order, 2026-08-25)
+
+⚠️ Innført etter en dag med **fire QA-runder og fire NO-GO**. Gjennomgangen av alle tolv funnene ga
+ett mønster, ikke tolv:
+
+> **Ingen av feilene var i selve endringen.** Endringene var riktige isolert sett. Feilene lå i
+> sømmene — hvem kaller dette, hvem leser det jeg skriver, hva skjer med det jeg ikke listet.
+
+⚠️ Og derfor er dette **ikke** en oppfordring til å tenke lenger. Ville mer grubling avdekket at
+ingen klient kaller `/api/modules` uten `includeCompleted`? Nei. Det krever å **se etter**. Alle
+fem punktene under er oppslag som tar under et minutt, og de ville fanget ni av tolv.
+
+**1. Hvem kaller det jeg endrer?**
+
+```bash
+grep -rn "funksjonsnavn" src/ public/ test/ --include=*.ts --include=*.js
+```
+
+Fant du null kallere utenfor fila selv, endrer du død kode. #952 var en fiks i en gren ingen klient
+treffer; #948 laget en «kanonisk regel» som mistet sin eneste kaller senere samme dag.
+
+**2. Hvem leser tilstanden jeg skriver?**
+
+Skriver du en ny status, et nytt felt eller en ny rad: finn konsumenten og les hva den gjør med den.
+#953 satte `UNDER_REVIEW` og opprettet en køsak — men `finalizeManualReviewOverride` krever et
+foreldrevedtak, så vurdereren kunne kreve saken og aldri løse den. Én evig tilstand byttet mot en
+annen.
+
+**3. Hva skjer med tilfellene jeg IKKE listet?**
+
+⚠️ Hvitliste, ikke svarteliste, når regelen handler om hva som er *endelig* eller *tillatt*.
+`deriveOutcome` listet `UNDER_REVIEW` og `SCORED` som uavklarte og regnet alt annet som avgjort — så
+`PROCESSING` med `passFailTotal: true` ble vist som bestått, med konfetti. En svarteliste antar at
+alt ukjent er trygt; for denne regelklassen er det feil vei.
+
+**4. Sier fiksturen ALT regelen leser?**
+
+⚠️ Seks fiksturer på én dag var stumme om et felt, og festet dermed stilltiende at standardverdien
+var regelen. `profile-locale-switch` satte `passFailTotal: true` uten `latestStatus`;
+`mcq-service` satte ingen `assessmentMode`. Skriv hvert felt regelen slår opp, også der verdien
+«åpenbart» ikke betyr noe.
+
+**5. Er påstandene jeg allerede har lukket, fortsatt sanne?**
+
+Etter en senere endring i samme runde: sjekk sakene du lukket tidligere. #948 ble lukket med
+«serversiden er løst» — sant da det ble skrevet, ugyldiggjort en time senere av min egen fjerning i
+#952. Å lukke en sak midt i en release og så endre koden som gjorde den sann er en egen feilklasse.
+
+⚠️ **Hvorfor sjekkliste og ikke prinsipper:** lærdommene ble skrevet ned gjennom hele dagen, og
+fellene ble gjentatt etterpå — importen inn i en flerlinjes importblokk tre ganger, den stumme
+fiksturen seks. En stående ordre man LESER er ikke det samme som en sjekk man KJØRER.
+
 ### Test- og releasemetodikk — les den før du planlegger en runde (standing order, 2026-08-19)
 
 `doc/TEST_AND_RELEASE_PLAYBOOK.md` fanger arbeidsmåten fra release 2.22.x, med **hva hver teknikk

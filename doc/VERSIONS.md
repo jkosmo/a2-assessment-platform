@@ -67,6 +67,35 @@ Kalibrerings-KPI-en trenger en produktbeslutning: måler den maskinens råvedtak
 utfallet? Dokumentasjonen min motsa seg selv på nettopp dette, og det er nå presisert i
 flatekartet §28.
 
+### ⚠️ #966 trukket — reparasjonen har ikke et hjem
+
+Etterslepssveipen ble forsøkt kjørt fra påminnelsesjobben. QA-porten viste at **begge plasseringer
+er gale**:
+
+| Plassering | Konsekvens |
+|---|---|
+| Før dedup-sjekken | Hele fullføringsporten for hver historisk forfalt innmelding, hver natt |
+| Etter dedup-sjekken | Billig, men reparerer bare dem som er i ferd med å bli purret |
+
+⚠️ Og uansett plassering: **kandidater uten frist kommer aldri inn i lista** — spørringene krever
+`dueAt`. Påminnelsesjobben ser en delmengde, ikke populasjonen.
+
+⚠️ Releasenotatet lovet at kandidater som ble ferdige før fiksen fikk beviset første natt. Mine
+egne skip-grener motsa det — en påstand min egen retting ugyldiggjorde.
+
+Saken er gjenåpnet med tre alternativer og avveiningene: egen planlagt sveip, reparasjon ved lesing,
+eller robust utstedelse ved kilden. Det siste løser årsaken; de to første behandler symptomet.
+
+### Pre-flight-sjekklisten (`CLAUDE.md`, `AGENTS.md`)
+
+Fire QA-runder og fire NO-GO ga **ett** mønster, ikke tolv: ingen av feilene var i selve endringen.
+De lå i sømmene — hvem kaller dette, hvem leser det jeg skriver, hva skjer med det jeg ikke listet.
+
+⚠️ Derfor er sjekklisten **kommandoer, ikke prinsipper**. Lærdommene ble skrevet ned gjennom hele
+dagen, og fellene gjentatt etterpå: importen inn i en flerlinjes importblokk tre ganger, den stumme
+fiksturen seks, backticks i en bash-streng rett etter at sjekklisten var skrevet. En regel man
+KJENNER er ikke en sjekk man KJØRER.
+
 ### Innhold
 
 **QA-porten ga NO-GO på 2.30.0. Fem funn, alle reelle — og to av dem var i arbeid jeg hadde meldt

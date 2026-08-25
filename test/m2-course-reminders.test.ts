@@ -155,53 +155,7 @@ describe("Course due-date reminders (#497)", () => {
     sectionIds.length = 0;
   });
 
-  it("#966 en kandidat som HAR oppfylt kravene, men mangler fullføringsraden, purres ikke", async () => {
-    // ⚠️ Scenariet fra saken, og det var levende: utstedelsen er hendelsesdrevet, og en tapt
-    // hendelse etterlot raden borte. Kurskortet viste «Fullført» mens denne jobben sendte «fristen
-    // er forfalt» samme natt. SMO-en så kandidaten som forsinket. Ingenting rettet seg før hun
-    // tilfeldigvis åpnet bevissiden sin.
-    const { courseId, sectionId } = await makeCompletableCourse();
-    const finished = await makeUser("finished");
-    await enrol(finished, courseId, daysFromT(-3)); // forfalt for tre dager siden
 
-    // Hun har lest den eneste seksjonen — kravet ER oppfylt.
-    await prisma.courseSectionRead.create({ data: { userId: finished, courseId, sectionId } });
-    // ...men fullføringsraden mangler, som om utstedelsen aldri fyrte.
-    const before = await prisma.courseCompletion.findUnique({
-      where: { userId_courseId: { userId: finished, courseId } },
-      select: { id: true },
-    });
-    expect(before, "forutsetningen: ingen fullføringsrad ennå").toBeNull();
-
-    const cap = makeCapture();
-    const summary = await runCourseReminderSchedule({ asOf: T, sendImpl: cap.sendImpl });
-
-    // Ingen purring.
-    expect(ownedSends(cap.sent, [finished]).size).toBe(0);
-    // Og raden er reparert, ikke bare undertrykt.
-    const after = await prisma.courseCompletion.findUnique({
-      where: { userId_courseId: { userId: finished, courseId } },
-      select: { id: true },
-    });
-    expect(after, "fullføringen skal være utstedt").not.toBeNull();
-    expect(summary.repairedCompletions).toBeGreaterThanOrEqual(1);
-  });
-
-  it("#966 KONTROLLCASE: en kandidat som IKKE er ferdig purres fortsatt", async () => {
-    // ⚠️ Uten denne kunne reparasjonen ha undertrykt alle purringer og fortsatt bestått testen over.
-    const { courseId } = await makeCompletableCourse();
-    const unfinished = await makeUser("unfinished");
-    await enrol(unfinished, courseId, daysFromT(-3));
-    // Ingen leseregistrering — kravet er ikke oppfylt.
-
-    const cap = makeCapture();
-    const summary = await runCourseReminderSchedule({ asOf: T, sendImpl: cap.sendImpl });
-
-    const sent = ownedSends(cap.sent, [unfinished]);
-    expect(sent.size).toBe(1);
-    expect(sent.get(unfinished)?.kind).toBe("overdue");
-    expect(summary.repairedCompletions).toBe(0);
-  });
 
   it("individual: sends due-soon + overdue to the right participants and is idempotent", async () => {
     const courseId = await makeCourse();
