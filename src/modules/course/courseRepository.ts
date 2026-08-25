@@ -364,7 +364,11 @@ export function createCourseRepository(client: CourseRepositoryClient = prisma) 
           items: {
             where: { itemType: "MODULE" },
             orderBy: { sortOrder: "asc" },
-            include: { module: { select: { id: true, title: true } } },
+            // #966: `archivedAt` hentes nå, fordi rapporten må kunne stille SAMME krav som
+            // bevisporten. Uten feltet kunne den ikke filtrere arkiverte moduler, og en arkivert
+            // modul i et publisert kurs gjorde kravet uoppfyllelig — nøyaktig feilen #945
+            // rettet i porten, som sto igjen her.
+            include: { module: { select: { id: true, title: true, archivedAt: true } } },
           },
         },
       });
@@ -374,6 +378,39 @@ export function createCourseRepository(client: CourseRepositoryClient = prisma) 
           .filter((item) => item.moduleId && item.module)
           .map((item) => ({ moduleId: item.moduleId as string, sortOrder: item.sortOrder, module: item.module! })),
       }));
+    },
+
+    // #966: leste seksjoner for ETT kurs på tvers av MANGE deltakere. `findReadSectionIdsForCourses`
+    // over er speilvendt (én deltaker, mange kurs) og duger ikke for rapporten, som har hele kullet.
+    //
+    // ⚠️ Datofiltreres på SAMME vindu som innleveringene og fullføringene. Sto den ufiltrert, ville
+    // rapporten blandet to vinduer i ett regnestykke: modultallene fra vinduet, seksjonstallene
+    // all-time. En deltaker som ble ferdig i juni ville med filteret «fra 1. august» vist
+    // «0/4 moduler» ved siden av «12/12 seksjoner», status «Pågår» og «Siste aktivitet: —»
+    // — pågående aktivitet i et vindu uten aktivitet.
+    findReadSectionIdsForCourseParticipants(
+      courseId: string,
+      userIds: string[],
+      filters: Pick<ReportFilters, "dateFrom" | "dateTo"> = {},
+    ) {
+      if (userIds.length === 0) {
+        return Promise.resolve([] as Array<{ userId: string; sectionId: string; readAt: Date }>);
+      }
+      return client.courseSectionRead.findMany({
+        where: {
+          courseId,
+          userId: { in: userIds },
+          ...(filters.dateFrom || filters.dateTo
+            ? {
+                readAt: {
+                  ...(filters.dateFrom ? { gte: filters.dateFrom } : {}),
+                  ...(filters.dateTo ? { lte: filters.dateTo } : {}),
+                },
+              }
+            : {}),
+        },
+        select: { userId: true, sectionId: true, readAt: true },
+      });
     },
 
     findUserCourseCompletions(userId: string) {

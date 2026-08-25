@@ -65,6 +65,8 @@ const extraTranslations = {
     "results.courses.detail.empty": "No learners match the current filters.",
     "results.courses.detail.status": "Course status",
     "results.courses.detail.completedModules": "Completed modules",
+
+    "results.courses.detail.readSections": "Sections read",
     "results.courses.detail.failedModules": "Failed modules",
     "results.courses.detail.underReviewModules": "Under review",
     "results.courses.detail.latestActivityAt": "Latest activity",
@@ -145,6 +147,8 @@ const extraTranslations = {
     "results.courses.detail.empty": "Ingen deltakere matcher gjeldende filter.",
     "results.courses.detail.status": "Kursstatus",
     "results.courses.detail.completedModules": "Fullførte moduler",
+
+    "results.courses.detail.readSections": "Leste seksjoner",
     "results.courses.detail.failedModules": "Ikke bestått",
     "results.courses.detail.underReviewModules": "Under vurdering",
     "results.courses.detail.latestActivityAt": "Siste aktivitet",
@@ -225,6 +229,8 @@ const extraTranslations = {
     "results.courses.detail.empty": "Ingen deltakarar passar gjeldande filter.",
     "results.courses.detail.status": "Kursstatus",
     "results.courses.detail.completedModules": "Fullførte modular",
+
+    "results.courses.detail.readSections": "Lesne seksjonar",
     "results.courses.detail.failedModules": "Ikkje bestått",
     "results.courses.detail.underReviewModules": "Under vurdering",
     "results.courses.detail.latestActivityAt": "Siste aktivitet",

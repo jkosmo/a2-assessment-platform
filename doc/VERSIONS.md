@@ -2,6 +2,57 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.32.0 - 2026-08-25
+
+### #966 — kursrapporten stiller nå samme krav som bevisporten
+
+Produkteier 2026-08-25: **alle seksjoner må være lest.**
+
+«Fullført kurs» ble besvart fem steder. Fire var enige; SMO-rapporten var ikke. Den telte bare
+moduler, så en deltaker med alle moduler bestått men uleste seksjoner sto som «Fullført» i
+rapporten — uten bevis, og uten å være ferdig. To visninger som sier ulikt om samme person.
+
+- `courseReport` regner nå `moduler + seksjoner`, som bevisporten og kurslista.
+- Seksjonskravet hentes fra SAMME dør som porten bruker (`findCourseItemsForParticipant`), så
+  seksjoner deltakeren ikke kan åpne ikke kan bli et uoppfyllelig krav.
+- `hasStarted` teller nå også lesing: den som bare har lest er i gang, ikke «ikke startet».
+
+⚠️ **Arkiverte moduler filtreres også bort her nå.** Porten har gjort det siden #945; rapporten
+kunne ikke — `findPublishedCoursesWithModuleDetails` hentet ikke `archivedAt`. Et kurs med en
+arkivert modul hadde derfor et uoppfyllelig krav i rapporten. Feltet hentes nå.
+
+Raden har fått `readSections` / `totalSections`, og tabellen en kolonne «Leste seksjoner» (tre
+språk). Uten den ville raden kunnet si «4/4 moduler» ved siden av «Pågår», og rapportleseren
+hadde ingen måte å se hvorfor. CSV-en er nøkkel-generisk og får feltene automatisk.
+
+**Vakten er mutasjonsverifisert — etter at første utgave ble avslørt som verdiløs.** Den hadde
+null moduler og én seksjon, var grønn, og FORBLE grønn da regelen ble reversert:
+`computeCourseStatus(0, 0)` gir NOT_STARTED uansett regel, og etter lesing kortslutter
+`learner.completion` til COMPLETED før regelen i det hele tatt kalles. Fiksturen har derfor nå en
+faktisk bestått modul. Med regelen reversert faller testen på
+`expected 'COMPLETED' to be 'IN_PROGRESS'`.
+
+
+### QA-runden: to regresjoner jeg innførte selv
+
+Porten ga NO-GO. Begge funnene var mine egne, og begge produserte tall som motsa hverandre i samme
+skjermbilde — feilen `resolveCourseParticipantIds`-kommentaren i samme fil sier ikke skal oppstå.
+
+- **Seksjonslesing var ikke datofiltrert.** Innleveringer og fullføringer er det. Med filteret «fra
+  1. august» ville en deltaker som ble ferdig i juni vist «0/4 moduler» ved siden av
+  «12/12 seksjoner», status «Pågår» og «Siste aktivitet: —» — pågående aktivitet i et vindu uten
+  aktivitet. `findReadSectionIdsForCourseParticipants` filtrerer nå på `readAt` i samme vindu.
+- **Arkivfilteret sto bare i drilldownen.** Sammendraget regnet unionen «aktiv = har levert på en av
+  kursets moduler» over det ufiltrerte modulsettet. Kursraden kunne si «10 innmeldte» mens
+  detaljvisningen viste 9 personer, og modullista fem moduler ved siden av rader som sa «4/4».
+  Begge flatene bruker nå `activeModules`.
+
+Et tredje funn ble også rettet: `hasStarted` telte lesing, men `latestActivityAt` gjorde det ikke,
+så en deltaker som bare hadde lest sto som «Pågår» med «Siste aktivitet: —». Lesetidspunktet
+inngår nå.
+
+Testen har fått en påstand om datovinduet, så funn 1 ikke kan komme tilbake.
+
 ## 2.31.1 - 2026-08-25
 
 ### #946 — fire veier utsteder kursbevis, nå er alle fire holdbare
