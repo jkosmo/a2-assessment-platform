@@ -2,6 +2,174 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.33.0 - 2026-08-26
+
+### #953 — en vurdering som gir opp er ikke lenger en blindvei
+
+Produkteier 2026-08-26: *«Vurdering skal kunne kjøre offline, og bruker varsles per e-post senere om
+resultat. Derfor vil jeg ved avvik avvente noen minutter for å se om det er LLM-tjenesten som har
+problem, og så prøve på nytt igjen. Hvis mange vurderinger begynner å hope seg opp bør administrator
+varsles.»*
+
+⚠️ **De to trukne forsøkene løste feil problem.** Begge prøvde å håndtere at vurderingen *ga opp* —
+ved å skrive en ny tilstand i databasen. Men gjenforsøk fantes allerede: 3 forsøk med **fast 30
+sekunders venting**, altså et samlet vindu på under ett minutt. En LLM-nedetid på to minutter brukte
+opp alt. Tallet var ikke feil i seg selv; det var for tett til å måle det det skulle måle — «er
+tjenesten nede, eller er denne besvarelsen umulig å vurdere?». Under ett minutt kan ikke skille de to.
+
+**A — gjenforsøkene dekker nå en nedetid.** 6 forsøk med eksponentiell venting fra ett minutt
+(1+2+4+8+16 = 31 min), tak på 30 min. Begge tall er miljøvariabler.
+
+**B — vedtaket bæres av kjøringen som eide jobben.** Når en kjøring forlates på tidsgrensen (#856)
+fortsetter den i bakgrunnen og kan lande et vedtak lenge etterpå — på en besvarelse et gjenforsøk
+allerede har begynt på. Resultatet ville vært to dommer på samme besvarelse.
+
+⚠️ **Jobb-id duger ikke som gjerde.** Den forlatte kjøringen og gjenforsøket har SAMME jobb-id. Det
+eneste som skiller dem er `lockedAt`, som settes på nytt ved hver låsing. Gjerdet er derfor
+`{ lockedBy, lockedAt }`, tredd fra runneren ned i vedtakstransaksjonen, og det er **påkrevd i
+signaturen** — en framtidig kaller kan ikke skrive et vedtak uten å ta stilling til hvilken kjøring
+det tilhører.
+
+**C — administrator ser og kan handle.** Ny seksjon på `/admin-platform`: «Vurderinger som ga opp»,
+med én handling per rad — kjør vurderingen på nytt, via `POST /api/admin/platform/failed-assessments/:submissionId/retry`. Seksjonen rendres KUN når lista har rader.
+Telleren ligger i `/api/queue-counts` som `failedAssessments`, rollegatet til administrator.
+
+E-post til alle med administrator-rolle når antallet passerer terskelen (3), med en karenstid på ett
+døgn. ⚠️ Karenstiden lagres i `PlatformConfig`, ikke i minnet: worker-en restartes ved hver
+utrulling, så et minnebasert tak ville nullstilt seg selv og gitt en ny e-post per restart — nøyaktig
+støyen taket finnes for. Loggraden skrives uansett om det finnes mottakere, så en plattform uten
+administrator-tildelinger ikke er helt stille i nettopp den situasjonen varselet er laget for.
+
+**Ikke endret:** den synkrone MCQ-stien. `mcqService` fanger feil og faller tilbake til
+bakgrunnsarbeideren, så gjenforsøkstigen styrer kun worker-en — ingen deltaker venter lenger i
+nettleseren.
+
+Mutasjonsverifisert på tre punkter: ventingen (`expected 30000 to be greater than 54001.8`),
+karenstiden (`expected "spy" to not be called at all, but actually been called 2 times`), og
+kontrollcaset som beviser at varselet kommer igjen etter karenstiden.
+
+### QA-runden: NO-GO, og knappen jeg nettopp bygde kunne ikke virke
+
+Porten fant tre P1-er. Alle tre satt i FLATEN, ikke i motoren — gjerdet, gjenforsøkstigen og
+varslingslogikken ble bekreftet som riktige.
+
+**F1 — «kjør på nytt» fikk 404, hver gang.** Knappen kalte deltakerruta
+`POST /api/assessments/:id/run`, som henter innleveringen med `getOwnedSubmission(submissionId, userId)`
+— filtrert på `where: { id, userId }`, uten administrator-unntak. En administrator eier ikke
+deltakerens innlevering. Hele handlingsflaten var død ved levering.
+
+⚠️ Testen min gjorde det verre: den sjekket at strengen `/run` fantes i skriptet. Den målte at jeg
+hadde skrevet noe, ikke at det virket. Administratorhandlingen har nå sin EGEN rute på
+administratorflaten, bak dens egen rollegate. Å myke opp eierskapssjekken ville løst symptomet og
+svekket en invariant som gjelder alle de andre kallerne.
+
+**F2 — «feilet» friskmeldte seg aldri.** Lista og telleren spurte «finnes det en FAILED-jobbrad?».
+Det spørsmålet kan aldri bli nei: et gjenforsøk oppretter en NY rad, og den gamle blir stående.
+Lista tømte seg aldri, telleren sank aldri, og døgnvarselet ville gått til alle administratorer i
+all framtid etter én enkelt nedetid — nøyaktig støyen karenstiden finnes for.
+
+Riktig spørsmål er «venter denne innleveringen fortsatt på et menneske?»: vurderingen ga opp, det
+finnes ikke noe vedtak, og ingen ny kjøring er i gang. Da friskmelder tilstanden seg selv.
+
+**F3 — e2e-en spesifikasjonen krevde manglet.** Den finnes nå, og den er mutasjonsverifisert mot
+selve F1: kobles knappen tilbake til deltakerruta, faller den på `Expected "sub-1", Received null`.
+Den ville altså fanget feilen med én gang.
+
+⚠️ Første utgave av e2e-en besto mot en side som ga 404, fordi `toBeHidden()` er sann også for et
+element som ikke finnes. Den krever nå at kortet FINNES i DOM-en før den sjekker at det er skjult —
+forskjellen på «skjult» og «aldri lastet». Testserveren manglet dessuten ruta for `/admin-platform`.
+
+Også rettet: varselet respekterer nå `PARTICIPANT_NOTIFICATION_CHANNEL` i stedet for å gå rett på
+ACS (F5), karenstiden skrives også når ingen kunne varsles så error-loggraden ikke gjentas hver
+fjerde sekund (F7), og de to nye rutene er dokumentert (F8).
+
+### Andre QA-runde: én linje objektspredning som spiste et helt filter
+
+Porten ga NO-GO igjen. F1–F3 var reelt rettet, men counter-halvdelen av F2 var fortsatt gal:
+
+```ts
+where: {
+  ...STUCK_SUBMISSION_FILTER,                      // assessmentJobs: { none: aktiv }
+  assessmentJobs: { some: { status: "FAILED" } },  // overskriver linja over
+}
+```
+
+Senere nøkkel vinner i JS. «Ingen aktiv jobb» forsvant STILLE fra telleren, mens lista beholdt det.
+Kommentaren rett over konstanten påsto at de to ikke KAN komme i utakt — og de kom i utakt tre
+linjer lenger nede, i samme funksjon.
+
+Konsekvensen var presis: administratoren trykker «kjør på nytt» på tre saker, gjenforsøkene ligger i
+kø, og neste worker-runde sender e-post om at tre vurderinger venter på at noen kjører dem på nytt.
+Hen åpner siden e-posten ber om, og kortet er tomt.
+
+**Kuren er ikke et filter til.** Lista og telleren spør nå over samme ENHET — innleveringer, ikke
+jobbrader — med samme `where`. Da finnes det ikke to spørringer å holde i takt. Filteret er skrevet
+som `AND: [...]` framfor flere nøkler i samme objekt, nettopp fordi den ene kan spise den andre.
+
+Det løste samtidig et funn til: `distinct` + `take` tar `take` i databasen på JOBBRADER og
+dedupliserer i minnet etterpå, så lista kunne vise færre saker enn telleren sa.
+
+**Krav 2 er nå oppfylt i motoren, ikke bare i admin-ruta.** Gjerdet lukket én retning av kappløpet;
+den motsatte sto åpen. Vedtakstransaksjonen kan COMMITE rett før tidsgrensen utløper uten at
+kjøringen rekker å returnere — runneren ser en deadline-feil, setter jobben PENDING, og gjenforsøket
+starter med friskt gjerde. `runAssessment` spør nå om innleveringen allerede har et vedtak FØR den
+rører noe, og avslutter jobben som ferdig hvis den har det. Vedtaket er predikatet, ikke statusen.
+
+Også rettet: telleren i `queue-counts` hadde ingen leser — den driver nå merket på plattformlenka i
+toppmenyen, så en administrator ser opphopningen uten å gå innom siden.
+
+⚠️ Og kontraktsvakta hadde gjeninnført den vakuøse målingen i miniatyr: `toContain("/run")` besto
+kun fordi strengen fantes i en KODEKOMMENTAR. Den krever nå den faktiske admin-ruta og forbyr
+deltakerruta eksplisitt.
+
+### Tredje QA-runde: GO, og de tre siste funnene tatt med
+
+Porten bekreftet at krav 2-vakta ikke stopper noe legitimt: et nytt forsøk lager en ny innlevering,
+og anke og manuell overprøving går aldri gjennom `runAssessment`. Den fant også noe jeg ikke hadde
+tenkt på — `renewLease` rører ikke `lockedAt`, bare `leaseExpiresAt`. En lang, lovlig kjøring
+beholder derfor gjerdet sitt gjennom alle fornyelser og kan ikke bli avvist av seg selv.
+
+De tre gjenstående funnene er rettet:
+
+- **Deltakerruta lovet noe motoren nekter.** En strøket innlevering fikk 202 «lagt i kø», men
+  motoren stopper på vedtaket. Ruta svarer nå 409 for ETHVERT vedtak. Å kjøre vurderingen om igjen
+  på et strøket forsøk er dessuten karaktershopping — veien videre er et nytt forsøk.
+- **Lista er avkortet, telleren er ikke.** Ved over hundre samtidige ville merket sagt 140 og siden
+  vist 100 rader. Svaret bærer nå `total` og `shown`, og siden sier «Viser 100 / 140».
+- **Driftshåndboka sa fortsatt tre forsøk.** Env-tabellen er oppdatert med alle fem verdiene, med
+  begrunnelsen for karenstiden der drift faktisk leter.
+
+Nav-merket oppdateres nå også etter «kjør på nytt», så det ikke står igjen med et tall
+administratoren nettopp har gjort noe med.
+
+### Rotårsak, per stående ordre
+
+Tre runder, tolv funn. De faller i to grupper, og bare den ene er interessant.
+
+**Motoren var riktig hele veien.** Gjerdet, gjenforsøksstigen og karenstiden ble bekreftet i runde
+én og sto uendret gjennom alle tre rundene.
+
+**Alle tolv funnene satt i flaten eller i målingen av den.** Knappen som ikke kunne virke. Filteret
+som spiste seg selv i en objektspredning. Lista og telleren som spurte om ulike ting. Fire tester
+som var grønne uten å måle noe.
+
+Fellesnevneren er ikke uoppmerksomhet — det er at jeg **verifiserte at jeg hadde skrevet noe, ikke
+at det virket**. `toContain("/run")` fant strengen i en kommentar. `toBeHidden()` var sann fordi
+elementet ikke fantes. Begge er grønne av en grunn jeg ikke hadde tenkt på.
+
+Rutinen som følger av det er registrert som **#1013**: en vakt som avviser testpåstander som ikke
+kan bli røde. Ikke en regel til — `CLAUDE.md` sa allerede at tester skal kunne bli røde, og ordren
+ble brutt fire ganger dagen etter at den ble skrevet, av den som skrev den.
+
+### Enhetssuiten sto rød siden #946
+
+Fem testfiler feilet, oppdaget først nå. Ingen produktfeil — alle var attrapper som ikke kjente de
+nye kallene (en falsk transaksjonsklient uten `outboxEvent`, et kursrepo-mock uten
+`findCourseItemsForParticipant`). De sto røde fordi #946 og #966 kun ble kjørt mot
+integrasjonssuiten, aldri mot enhetssuiten, og QA-porten kjørte med `-SkipTests`.
+
+Samme feilform som sakene selv handler om, ett nivå opp: én flate verifisert, den andre antatt.
+
 ## 2.32.0 - 2026-08-25
 
 ### #966 — kursrapporten stiller nå samme krav som bevisporten

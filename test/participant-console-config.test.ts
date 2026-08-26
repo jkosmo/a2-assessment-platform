@@ -183,6 +183,43 @@ describe("participant console runtime config", () => {
     expect(response.headers.location).toBe("/admin-content/module/test-module/conversation");
   });
 
+  // #953: «vurderinger som ga opp» er en driftsflate for administrator. Vakta pinner tre ting som
+  // hver har veltet en flate i dette repoet før:
+  //   1. seksjonen finnes i DOM-en (den rendres betinget, men skal ikke mangle)
+  //   2. den skjules med setHidden(), IKKE .hidden-klassen — `.card` setter display, og en
+  //      forfatter-regel taper mot den, så elementet ville aldri blitt skjult
+  //   3. knappen kaller ADMINISTRATORENS rute — deltakerens `/api/assessments/:id/run` er
+  //      eierskapssjekket mot innsenderen og gir 404 for en administrator (#953 QA-F1)
+  it("serves the failed-assessments admin surface, hidden by default (#953)", async () => {
+    const page = await request(app).get("/admin-platform");
+    expect(page.status).toBe(200);
+    expect(page.text).toContain('id="failedAssessmentsCard"');
+    expect(page.text).toContain('id="failedAssessmentsBody"');
+    expect(page.text).toContain('data-i18n="adminPlatform.section.failedAssessments"');
+
+    const script = await request(app).get("/static/admin-platform.js");
+    expect(script.status).toBe(200);
+    expect(script.text).toContain("setHidden(failedAssessmentsCard, true)");
+    expect(script.text).toContain("setHidden(failedAssessmentsCard, false)");
+    expect(script.text).not.toContain('failedAssessmentsCard.classList.add("hidden")');
+    expect(script.text).toContain("/api/admin/platform/failed-assessments");
+    // ⚠️ Sto som `toContain("/run")` med kommentar om at knappen kaller det eksisterende
+    // run-endepunktet. Den påstanden besto kun fordi strengen «/run» fantes i en KODEKOMMENTAR —
+    // den vakuøse målingen som var rotårsaken til at F1 slapp gjennom, gjeninnført i miniatyr.
+    // Nå kreves den faktiske admin-ruta, og deltakerruta forbys eksplisitt.
+    expect(script.text).toContain("/api/admin/platform/failed-assessments/${encodeURIComponent(submissionId)}/retry");
+    expect(script.text).not.toContain("`/api/assessments/${encodeURIComponent(submissionId)}/run`");
+
+    const bundle = await request(app).get("/static/i18n/admin-platform-translations.js");
+    expect(bundle.status).toBe(200);
+    // Tre språk, tre FORSKJELLIGE verdier — en kildetekst viftet ut i alle tre ville bestått en
+    // ren «finnes nøkkelen?»-sjekk (#892/#981).
+    const retryLabels = [...bundle.text.matchAll(/"adminPlatform\.failedAssessments\.retry":\s*"([^"]*)"/g)]
+      .map((match) => match[1]);
+    expect(retryLabels).toHaveLength(3);
+    expect(new Set(retryLabels).size).toBe(3);
+  });
+
   it("serves dedicated results workspace page", async () => {
     const response = await request(app).get("/results");
 

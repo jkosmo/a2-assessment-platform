@@ -108,7 +108,7 @@ describe("AssessmentDecisionApplicationService — applyAssessmentDecision", () 
     });
 
     const { applyAssessmentDecision } = await import("../../src/modules/assessment/AssessmentDecisionApplicationService.js");
-    await applyAssessmentDecision({ ...BASE_INPUT, llmResult: buildLlmResult() });
+    await applyAssessmentDecision({ fence: { lockedBy: "worker-test", lockedAt: new Date(0) }, ...BASE_INPUT, llmResult: buildLlmResult() });
 
     expect(createAssessmentDecision).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -144,7 +144,7 @@ describe("AssessmentDecisionApplicationService — applyAssessmentDecision", () 
     });
 
     const { applyAssessmentDecision } = await import("../../src/modules/assessment/AssessmentDecisionApplicationService.js");
-    await applyAssessmentDecision({
+    await applyAssessmentDecision({ fence: { lockedBy: "worker-test", lockedAt: new Date(0) },
       ...BASE_INPUT,
       llmResult: buildLlmResult(),
       forceManualReviewReason: "Escalated for review.",
@@ -168,7 +168,7 @@ describe("AssessmentDecisionApplicationService — applyAssessmentDecision", () 
     const { applyAssessmentDecision } = await import("../../src/modules/assessment/AssessmentDecisionApplicationService.js");
 
     await expect(
-      applyAssessmentDecision({ ...BASE_INPUT, llmResult: buildLlmResult() }),
+      applyAssessmentDecision({ fence: { lockedBy: "worker-test", lockedAt: new Date(0) }, ...BASE_INPUT, llmResult: buildLlmResult() }),
     ).rejects.toThrow("DB unavailable");
     // The job-completed audit must NOT be written when the side effects weren't durably enqueued.
     expect(recordAuditEvent).not.toHaveBeenCalled();
@@ -181,7 +181,7 @@ describe("AssessmentDecisionApplicationService — applyAssessmentDecision", () 
     });
 
     const { applyAssessmentDecision } = await import("../../src/modules/assessment/AssessmentDecisionApplicationService.js");
-    await applyAssessmentDecision({
+    await applyAssessmentDecision({ fence: { lockedBy: "worker-test", lockedAt: new Date(0) },
       ...BASE_INPUT,
       llmResult: buildLlmResult(),
       forceManualReviewReason: "Disagreement between primary and secondary assessments.",
@@ -202,6 +202,7 @@ describe("AssessmentDecisionApplicationService — applyAssessmentDecision", () 
 describe("AssessmentDecisionApplicationService — applyMcqOnlyDecision", () => {
   const MCQ_INPUT = {
     jobId: "job-mcq-1",
+    fence: { lockedBy: "worker-test", lockedAt: new Date(0) },
     submissionId: "sub-mcq-1",
     userId: "user-1",
     moduleId: "module-mcq",

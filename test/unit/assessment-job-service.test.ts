@@ -10,6 +10,7 @@ const markJobSucceeded = vi.fn();
 const countJobsByStatus = vi.fn();
 const markJobForRetryOrFailure = vi.fn();
 const findAssessmentJobOrThrow = vi.fn();
+const findDecisionIdForSubmission = vi.fn();
 const createAssessmentDecision = vi.fn();
 const evaluatePracticalWithLlm = vi.fn();
 const generateModelAnswer = vi.fn();
@@ -28,6 +29,10 @@ vi.mock("../../src/modules/assessment/assessmentJobRepository.js", () => {
     countJobsByStatus,
     markJobForRetryOrFailure,
     findAssessmentJobOrThrow,
+    // #953 krav 2: motoren spør nå om innleveringen allerede er avgjort før den rører den.
+    // Standard er «ingen vedtak» — ellers ville testene under stoppet før de måler noe.
+    findDecisionIdForSubmission,
+    countStuckFailedAssessments: vi.fn().mockResolvedValue(0),
     findExpiredRunningJobs: vi.fn().mockResolvedValue([]),
     resetExpiredJob: vi.fn().mockResolvedValue(undefined),
     findLongRunningJobs: vi.fn().mockResolvedValue([]),
@@ -187,6 +192,9 @@ describe("assessment job service traffic-light policy", () => {
     countJobsByStatus.mockReset();
     markJobForRetryOrFailure.mockReset();
     findAssessmentJobOrThrow.mockReset();
+    // #953 krav 2: standard er «ingen vedtak fra før» — ellers ville motoren stoppet før
+    // testene under måler noe som helst.
+    findDecisionIdForSubmission.mockReset().mockResolvedValue(null);
     createAssessmentDecision.mockReset();
     evaluatePracticalWithLlm.mockReset();
     recordAuditEvent.mockReset();
@@ -213,6 +221,33 @@ describe("assessment job service traffic-light policy", () => {
 
   afterEach(() => {
     vi.clearAllMocks();
+  });
+
+  // #953, spesifikasjonens krav 2: «Ikke rør en innlevering med et endelig vedtak fra før.»
+  //
+  // ⚠️ Scenarioet er ikke teoretisk. Vedtakstransaksjonen kan COMMITE rett før tidsgrensen utløper
+  // uten at kjøringen rekker å returnere. Runneren ser en deadline-feil, setter jobben PENDING, og
+  // gjenforsøket starter med friskt gjerde — uten denne vakta ville det overskrevet COMPLETED med
+  // PROCESSING og skrevet dom nummer to, som kan være motsatt av den første.
+  it("rører ikke en innlevering som allerede har et vedtak (#953 krav 2)", async () => {
+    findDecisionIdForSubmission.mockResolvedValue({ id: "decision-fra-foer" });
+    // Rigg resten slik at kjøringen VILLE gått igjennom uten vakta. Ellers stopper den på en
+    // umocket avhengighet, og testen blir rød av feil grunn — den ville målt at fiksturen er
+    // mangelfull, ikke at vakta virker.
+    evaluatePracticalWithLlm.mockResolvedValue(buildLlmResult({}));
+    findAssessmentJobOrThrow.mockResolvedValue({ id: "job-1", attempts: 1, maxAttempts: 6, availableAt: new Date() });
+    markJobForRetryOrFailure.mockResolvedValue({ count: 1 });
+
+    const { processNextJob } = await import("../../src/modules/assessment/assessmentJobService.js");
+
+    await processNextJob();
+
+    expect(updateSubmissionStatus).not.toHaveBeenCalled();
+    expect(evaluatePracticalWithLlm).not.toHaveBeenCalled();
+    expect(createAssessmentDecision).not.toHaveBeenCalled();
+    // Jobben skal regnes som FERDIG, ikke feilet — en feilet jobb ville blitt forsøkt igjen i evighet.
+    expect(markJobSucceeded).toHaveBeenCalled();
+    expect(markJobForRetryOrFailure).not.toHaveBeenCalled();
   });
 
   it("keeps clearly insufficient submissions red even when primary and secondary disagree", async () => {

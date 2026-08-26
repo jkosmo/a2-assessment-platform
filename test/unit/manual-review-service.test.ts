@@ -17,7 +17,7 @@ const notifyAssessmentResult = vi.fn();
 const logOperationalEvent = vi.fn();
 
 vi.mock("../../src/db/prisma.js", () => ({
-  prisma: { $transaction: vi.fn((cb: (tx: unknown) => unknown) => cb({})) },
+  prisma: { $transaction: vi.fn((cb: (tx: unknown) => unknown) => cb({ outboxEvent: { createMany: vi.fn().mockResolvedValue({ count: 1 }) } })) },
 }));
 
 vi.mock("../../src/modules/review/manualReviewRepository.js", () => ({

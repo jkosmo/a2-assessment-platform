@@ -13,6 +13,11 @@ import {
   hasCertificateBackground,
   CERTIFICATE_BACKGROUND_MAX_BYTES,
 } from "../modules/platformConfig/certificateBackgroundService.js";
+import { assessmentJobRepository } from "../modules/assessment/assessmentJobRepository.js";
+import { enqueueAssessmentJob } from "../modules/assessment/AssessmentJobRunner.js";
+import { prisma } from "../db/prisma.js";
+import { recordAuditEvent } from "../services/auditService.js";
+import { auditActions, auditEntityTypes } from "../observability/auditEvents.js";
 import { AppError } from "../errors/AppError.js";
 import { DEFAULT_CONSENT_BODY } from "../config/consent.js";
 
@@ -108,6 +113,97 @@ adminPlatformRouter.put("/", async (request, response, next) => {
     }
 
     response.json({ saved: true, ...(newConsentVersion !== undefined ? { consentVersion: newConsentVersion } : {}) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// ── GET /api/admin/platform/failed-assessments (#953) ─────────────────────────
+// #953: vurderinger som ga opp etter alle gjenforsøk. Lista er et LESEVINDU inn i jobber som
+// allerede er `FAILED` — den oppfinner ingen tilstand og eier ingen kø. Eneste handling er å kjøre
+// vurderingen på nytt, og den går gjennom `POST /api/assessments/:submissionId/run`, som fantes fra
+// før. Derfor ingen skriveendepunkt her.
+adminPlatformRouter.get("/failed-assessments", async (_request, response, next) => {
+  try {
+    // #953: lista er begrenset, telleren er ikke. Uten `total` ville en administrator sett «140» i
+    // merket og 100 rader på siden, og trodd tallene var i utakt igjen.
+    const LIST_LIMIT = 100;
+    const [stuck, total] = await Promise.all([
+      assessmentJobRepository.findStuckFailedAssessments(LIST_LIMIT),
+      assessmentJobRepository.countStuckFailedAssessments(),
+    ]);
+    response.json({
+      total,
+      shown: stuck.length,
+      failedAssessments: stuck.map((submission) => {
+        // Nyeste feilede forsøk. Lista er per INNLEVERING, så flere feilede kjøringer er én sak
+        // for administratoren — ikke én rad per forsøk.
+        const lastFailure = submission.assessmentJobs[0] ?? null;
+        return {
+          jobId: lastFailure?.id ?? null,
+          submissionId: submission.id,
+          attempts: lastFailure?.attempts ?? null,
+          maxAttempts: lastFailure?.maxAttempts ?? null,
+          errorMessage: lastFailure?.errorMessage ?? null,
+          failedAt: lastFailure?.updatedAt.toISOString() ?? null,
+          submissionStatus: submission.submissionStatus,
+          submittedAt: submission.submittedAt.toISOString(),
+          participantName: submission.user.name,
+          participantEmail: submission.user.email,
+          moduleId: submission.module.id,
+          moduleTitle: submission.module.title,
+        };
+      }),
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// ── POST /api/admin/platform/failed-assessments/:submissionId/retry (#953) ────
+//
+// ⚠️ Hvorfor en EGEN rute og ikke deltakerens `POST /api/assessments/:id/run`:
+// den ruten henter innleveringen med `getOwnedSubmission(submissionId, userId)`, som filtrerer på
+// `where: { id, userId }` UTEN administrator-unntak. En administrator eier ikke deltakerens
+// innlevering, så knappen fikk 404 hver eneste gang — hele handlingsflaten var død ved levering.
+//
+// Å myke opp eierskapssjekken der ville løst symptomet og svekket en invariant som gjelder alle de
+// andre kallerne. Administratorhandlingen hører hjemme på administratorflaten, bak dens egen
+// rollegate, og gjør nøyaktig én ting: legger jobben i kø igjen.
+adminPlatformRouter.post("/failed-assessments/:submissionId/retry", async (request, response, next) => {
+  const actorId = request.context?.userId;
+  if (!actorId) {
+    response.status(401).json({ error: "unauthorized" });
+    return;
+  }
+  try {
+    const submission = await prisma.submission.findUnique({
+      where: { id: request.params.submissionId },
+      select: { id: true, decisions: { select: { id: true }, take: 1 } },
+    });
+    if (!submission) {
+      response.status(404).json({ error: "not_found", message: "Submission not found." });
+      return;
+    }
+    // Spesifikasjonens krav 2: en innlevering som ALLEREDE har et vedtak skal ikke reprosesseres.
+    // Statusen alene duger ikke som predikat — vedtaket er det som avgjør at noen har dømt.
+    if (submission.decisions.length > 0) {
+      response.status(409).json({
+        error: "conflict",
+        message: "This submission already has a decision and will not be re-assessed.",
+      });
+      return;
+    }
+
+    const job = await enqueueAssessmentJob(submission.id);
+    await recordAuditEvent({
+      entityType: auditEntityTypes.assessmentJob,
+      entityId: job.id,
+      action: auditActions.assessment.assessmentJobEnqueued,
+      actorId,
+      metadata: { submissionId: submission.id, source: "admin_failed_assessment_retry" },
+    });
+    response.status(202).json({ queued: true, jobId: job.id });
   } catch (error) {
     next(error);
   }

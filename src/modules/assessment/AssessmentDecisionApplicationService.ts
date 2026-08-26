@@ -1,4 +1,5 @@
 import { createAssessmentDecision, createMcqOnlyDecision, type ModuleAssessmentPolicy } from "./decisionService.js";
+import type { AssessmentRunFence } from "./AssessmentJobRunner.js";
 import { recordAuditEvent } from "../../services/auditService.js";
 import { auditActions, auditEntityTypes } from "../../observability/auditEvents.js";
 import { enqueueOutboxEvents, OUTBOX_EVENT_TYPES } from "../outbox/outboxService.js";
@@ -8,6 +9,7 @@ import type { SupportedLocale } from "../../i18n/locale.js";
 
 type ApplyDecisionInput = {
   jobId: string;
+  fence: AssessmentRunFence;
   submissionId: string;
   userId: string;
   moduleId: string;
@@ -46,6 +48,8 @@ type ApplyDecisionInput = {
  */
 export async function applyAssessmentDecision(input: ApplyDecisionInput): Promise<void> {
   const decisionResult = await createAssessmentDecision({
+    jobId: input.jobId,
+    fence: input.fence,
     submissionId: input.submissionId,
     userId: input.userId,
     moduleVersionId: input.moduleVersionId,
@@ -72,6 +76,7 @@ export async function applyAssessmentDecision(input: ApplyDecisionInput): Promis
 
 type ApplyMcqOnlyDecisionInput = {
   jobId: string;
+  fence: AssessmentRunFence;
   submissionId: string;
   userId: string;
   moduleId: string;
@@ -99,6 +104,8 @@ type ApplyMcqOnlyDecisionInput = {
  */
 export async function applyMcqOnlyDecision(input: ApplyMcqOnlyDecisionInput): Promise<void> {
   const decisionResult = await createMcqOnlyDecision({
+    jobId: input.jobId,
+    fence: input.fence,
     submissionId: input.submissionId,
     userId: input.userId,
     moduleVersionId: input.moduleVersionId,

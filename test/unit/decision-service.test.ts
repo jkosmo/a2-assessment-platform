@@ -26,6 +26,14 @@ vi.mock("../../src/repositories/decisionRepository.js", () => ({
   }),
 }));
 
+// #953: vedtaksskrivingen gjerdes nå mot kjøringen som eier jobben. Standard er «vi eier den» slik
+// at de eksisterende testene måler det de alltid har målt; egne tester setter count 0.
+const claimDecisionWrite = vi.fn();
+vi.mock("../../src/modules/assessment/assessmentJobRepository.js", () => ({
+  assessmentJobRepository: { claimDecisionWrite },
+  createAssessmentJobRepository: () => ({ claimDecisionWrite }),
+}));
+
 vi.mock("../../src/services/auditService.js", () => ({
   recordAuditEvent,
 }));
@@ -73,6 +81,8 @@ warmModuleGraph(() => import("../../src/modules/assessment/decisionService.js"))
 
 describe("decision service", () => {
   beforeEach(() => {
+    claimDecisionWrite.mockReset();
+    claimDecisionWrite.mockResolvedValue({ count: 1 });
     assessmentDecisionCreate.mockReset();
     manualReviewCreate.mockReset();
     submissionUpdate.mockReset();
@@ -90,7 +100,7 @@ describe("decision service", () => {
 
     const { createAssessmentDecision } = await import("../../src/modules/assessment/decisionService.js");
 
-    const result = await createAssessmentDecision({
+    const result = await createAssessmentDecision({ jobId: "job-fence", fence: { lockedBy: "worker-test", lockedAt: new Date(0) },
       submissionId: "submission-1",
       userId: "user-1",
       moduleVersionId: "module-version-1",
@@ -146,7 +156,7 @@ describe("decision service", () => {
 
     const { createAssessmentDecision } = await import("../../src/modules/assessment/decisionService.js");
 
-    const result = await createAssessmentDecision({
+    const result = await createAssessmentDecision({ jobId: "job-fence", fence: { lockedBy: "worker-test", lockedAt: new Date(0) },
       submissionId: "submission-2",
       userId: "user-2",
       moduleVersionId: "module-version-2",
@@ -205,7 +215,7 @@ describe("decision service", () => {
 
     const { createAssessmentDecision } = await import("../../src/modules/assessment/decisionService.js");
 
-    const result = await createAssessmentDecision({
+    const result = await createAssessmentDecision({ jobId: "job-fence", fence: { lockedBy: "worker-test", lockedAt: new Date(0) },
       submissionId: "submission-3",
       userId: "user-3",
       moduleVersionId: "module-version-3",
@@ -269,7 +279,7 @@ describe("decision service", () => {
 
     const { createAssessmentDecision } = await import("../../src/modules/assessment/decisionService.js");
 
-    const result = await createAssessmentDecision({
+    const result = await createAssessmentDecision({ jobId: "job-fence", fence: { lockedBy: "worker-test", lockedAt: new Date(0) },
       submissionId: "submission-4",
       userId: "user-4",
       moduleVersionId: "module-version-4",
@@ -315,7 +325,7 @@ describe("decision service", () => {
 
     const { createAssessmentDecision } = await import("../../src/modules/assessment/decisionService.js");
 
-    const result = await createAssessmentDecision({
+    const result = await createAssessmentDecision({ jobId: "job-fence", fence: { lockedBy: "worker-test", lockedAt: new Date(0) },
       submissionId: "submission-4b",
       userId: "user-4b",
       moduleVersionId: "module-version-4b",
@@ -370,7 +380,7 @@ describe("decision service", () => {
 
     const { createAssessmentDecision } = await import("../../src/modules/assessment/decisionService.js");
 
-    const result = await createAssessmentDecision({
+    const result = await createAssessmentDecision({ jobId: "job-fence", fence: { lockedBy: "worker-test", lockedAt: new Date(0) },
       submissionId: "submission-4c",
       userId: "user-4c",
       moduleVersionId: "module-version-4c",
@@ -420,7 +430,7 @@ describe("decision service", () => {
 
     const { createAssessmentDecision } = await import("../../src/modules/assessment/decisionService.js");
 
-    const result = await createAssessmentDecision({
+    const result = await createAssessmentDecision({ jobId: "job-fence", fence: { lockedBy: "worker-test", lockedAt: new Date(0) },
       submissionId: "submission-5",
       userId: "user-5",
       moduleVersionId: "module-version-5",
@@ -468,7 +478,7 @@ describe("decision service", () => {
 
     const { createAssessmentDecision } = await import("../../src/modules/assessment/decisionService.js");
 
-    const result = await createAssessmentDecision({
+    const result = await createAssessmentDecision({ jobId: "job-fence", fence: { lockedBy: "worker-test", lockedAt: new Date(0) },
       submissionId: "submission-6",
       userId: "user-6",
       moduleVersionId: "module-version-6",
@@ -907,7 +917,7 @@ describe("decision service", () => {
 
     const { createAssessmentDecision } = await import("../../src/modules/assessment/decisionService.js");
 
-    const result = await createAssessmentDecision({
+    const result = await createAssessmentDecision({ jobId: "job-fence", fence: { lockedBy: "worker-test", lockedAt: new Date(0) },
       submissionId: "submission-7",
       userId: "user-7",
       moduleVersionId: "module-version-7",

@@ -14,6 +14,8 @@ export const operationalEvents = {
     queueBacklog: "assessment_queue_backlog",
     jobStaleLockDetected: "assessment_job_stale_lock_detected",
     jobStuckAlert: "assessment_job_stuck_alert",
+    failedBacklogAlert: "assessment_failed_backlog_alert",
+    decisionAlreadyPresent: "assessment_decision_already_present",
     llmEvaluationFailed: "llm_evaluation_failed",
   },
   certification: {
@@ -81,6 +83,22 @@ export type OperationalEventMetadataByName = {
   [operationalEvents.assessment.jobStuckAlert]: EventMetadata<{
     jobId: string;
     submissionId: string;
+  }>;
+  // #953: opphopning av vurderinger som ga opp. Ingen jobId — dette er et TALL over flere jobber,
+  // ikke en hendelse om én av dem. `recipientCount` er med fordi «varselet gikk ut» og «noen fikk
+  // det» ikke er samme sak: en plattform uten administrator-tildelinger har null mottakere.
+  [operationalEvents.assessment.failedBacklogAlert]: EventMetadata<{
+    failedCount: number;
+    threshold: number;
+    recipientCount: number;
+  }>;
+  // #953 krav 2: kjøringen stanset fordi innleveringen allerede var avgjort. Ikke en feil — en
+  // jobb som kom for sent. Loggnivået er info — dette er en vakt som gjorde jobben sin, ikke en
+  // driftsfeil. Skjer det ofte, er DET funnet, og telleren i loggen bærer mønsteret.
+  [operationalEvents.assessment.decisionAlreadyPresent]: EventMetadata<{
+    jobId: string;
+    submissionId: string;
+    decisionId: string;
   }>;
   [operationalEvents.assessment.llmEvaluationFailed]: EventMetadata<{
     jobId: string;

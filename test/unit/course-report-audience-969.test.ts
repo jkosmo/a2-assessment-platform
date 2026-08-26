@@ -20,6 +20,10 @@ const findPassedUserIdsForModule = vi.fn();
 // #996: kursets publikum er nå en UNION av tildelte, fullførere og AKTIVE — det siste dekker
 // ENTRA-klasser, som ikke er oppløsbare via `resolveCourseAudience`.
 const findLearnerSubmissionsForModules = vi.fn();
+// #966: rapporten stiller nå SAMME krav som bevisporten, så den henter kursets seksjoner fra
+// deltakerdøra og deltakernes lesing. Uten disse to i mocken faller testen på «is not a function».
+const findCourseItemsForParticipant = vi.fn();
+const findReadSectionIdsForCourseParticipants = vi.fn();
 
 const resolveCourseAudience = vi.fn();
 const findUserIdsInDepartment = vi.fn();
@@ -35,6 +39,8 @@ vi.mock("../../src/modules/course/courseRepository.js", () => ({
     countUsersWithSubmissionsForModule,
     findPassedUserIdsForModule,
     findLearnerSubmissionsForModules,
+    findCourseItemsForParticipant,
+    findReadSectionIdsForCourseParticipants,
   },
 }));
 
@@ -83,6 +89,8 @@ warmModuleGraph(() => import("../../src/modules/course/courseReport.js"));
 
 describe("#969 course report — enrolledParticipants is the course audience", () => {
   beforeEach(() => {
+    findCourseItemsForParticipant.mockResolvedValue([]);
+    findReadSectionIdsForCourseParticipants.mockResolvedValue([]);
     findPublishedCoursesWithModuleDetails.mockReset();
     findCourseCompletionsForLearnerReport.mockReset().mockResolvedValue([]);
     countCourseCompletions.mockReset().mockResolvedValue(0);

@@ -1,6 +1,8 @@
 import { SubmissionStatus } from "../../db/prismaRuntime.js";
 import { assessmentJobRepository } from "./assessmentJobRepository.js";
 import { recordAuditEvent } from "../../services/auditService.js";
+import { logOperationalEvent } from "../../observability/operationalLog.js";
+import { operationalEvents } from "../../observability/operationalEvents.js";
 import { auditActions, auditEntityTypes } from "../../observability/auditEvents.js";
 import { normalizeLocale } from "../../i18n/locale.js";
 import { buildAssessmentInputContext } from "./AssessmentInputFactory.js";
@@ -21,6 +23,7 @@ import {
   processAssessmentJobsNow as runnerProcessAssessmentJobsNow,
   processSubmissionJobNow as runnerProcessSubmissionJobNow,
   processNextJob as runnerProcessNextJob,
+  type AssessmentRunFence,
 } from "./AssessmentJobRunner.js";
 
 export { enqueueAssessmentJob } from "./AssessmentJobRunner.js";
@@ -35,7 +38,7 @@ export async function processAssessmentJobsNow(maxJobs = 1) {
 // false, so a participant who never saw the UI verdict is still notified by e-mail.
 export async function processSubmissionJobNow(submissionId: string, maxCycles = 25) {
   return runnerProcessSubmissionJobNow(
-    (jobId) => runAssessment(jobId, { gradedSynchronously: true }),
+    (jobId, fence) => runAssessment(jobId, fence, { gradedSynchronously: true }),
     submissionId,
     maxCycles,
   );
@@ -45,7 +48,11 @@ export async function processNextJob(submissionId?: string): Promise<boolean> {
   return runnerProcessNextJob(runAssessment, submissionId);
 }
 
-async function runAssessment(jobId: string, options: { gradedSynchronously?: boolean } = {}) {
+async function runAssessment(
+  jobId: string,
+  fence: AssessmentRunFence,
+  options: { gradedSynchronously?: boolean } = {},
+) {
   const job = await assessmentJobRepository.findAssessmentJobWithSubmissionOrThrow(jobId);
 
   const submission = job.submission;
@@ -66,6 +73,27 @@ async function runAssessment(jobId: string, options: { gradedSynchronously?: boo
     mcqPercentScore = mcqAttempt.percentScore;
   }
 
+  // #953, spesifikasjonens krav 2: «Ikke rør en innlevering med et endelig vedtak fra før. Statusen
+  // alene er ikke nok som predikat.»
+  //
+  // ⚠️ Gjerdet (claimDecisionWrite) lukker ÉN retning av kappløpet: en forlatt kjøring som våkner
+  // etter at et gjenforsøk tok over. Den motsatte rekkefølgen sto åpen: vedtakstransaksjonen
+  // COMMITER rett før tidsgrensen utløper, men `runAssessment` rekker ikke returnere (utboks og
+  // revisjon skjer etter transaksjonen). Runneren ser da en deadline-feil, setter jobben PENDING,
+  // og gjenforsøket starter med friskt gjerde — overskriver COMPLETED med PROCESSING og skriver
+  // dom nummer to, som kan være motsatt av den første.
+  //
+  // Vedtaket er predikatet, ikke statusen. Finnes det ett, er jobben ferdig — den skal ikke feile,
+  // for da ville den blitt forsøkt igjen i det uendelige.
+  const existingDecision = await assessmentJobRepository.findDecisionIdForSubmission(submission.id);
+  if (existingDecision) {
+    logOperationalEvent(
+      operationalEvents.assessment.decisionAlreadyPresent,
+      { jobId, submissionId: submission.id, decisionId: existingDecision.id },
+    );
+    return;
+  }
+
   await assessmentJobRepository.updateSubmissionStatus(submission.id, SubmissionStatus.PROCESSING);
 
   // MCQ_ONLY modules (#525): no free-text, no LLM evaluation. Decide pass/fail purely from the
@@ -73,6 +101,7 @@ async function runAssessment(jobId: string, options: { gradedSynchronously?: boo
   if (assessmentMode === "MCQ_ONLY") {
     await applyMcqOnlyDecision({
       jobId,
+      fence,
       submissionId: submission.id,
       userId: submission.userId,
       moduleId: submission.moduleId,
@@ -162,6 +191,7 @@ async function runAssessment(jobId: string, options: { gradedSynchronously?: boo
 
   await applyAssessmentDecision({
     jobId,
+    fence,
     submissionId: submission.id,
     userId: submission.userId,
     moduleId: submission.moduleId,

@@ -117,7 +117,12 @@ describe("AssessmentJobRunner", () => {
       const result = await processNextJob(runAssessment);
 
       expect(result).toBe(true);
-      expect(runAssessment).toHaveBeenCalledWith("job-1");
+      // #953: kjoeringen baerer na sitt eget gjerde — jobb-id alene skiller ikke en forlatt
+      // kjoering fra gjenforsoeket, som har SAMME jobb-id men ny lockedAt.
+      expect(runAssessment).toHaveBeenCalledWith("job-1", {
+        lockedBy: expect.any(String),
+        lockedAt: expect.any(Date),
+      });
       // #792: fenced terminal write — job id + the lock owner + the lock timestamp.
       expect(markJobSucceeded).toHaveBeenCalledWith("job-1", expect.any(String), expect.any(Date));
     });
@@ -148,6 +153,43 @@ describe("AssessmentJobRunner", () => {
         expect.objectContaining({ action: "assessment_job_retry_scheduled" }),
         expect.anything(),
       );
+    });
+
+    // #953 (produkteier 2026-08-26): vurderingen kjører offline, og ved avvik skal vi «avvente noen
+    // minutter for å se om det er LLM-tjenesten som har problem, og så prøve på nytt igjen».
+    //
+    // ⚠️ Den siste påstanden er den som betyr noe. De to første måler bare FORMEN (at ventingen
+    // vokser); den tredje måler HENSIKTEN — at det samlede vinduet er langt nok til å skille «tjenesten
+    // er nede» fra «denne besvarelsen er umulig å vurdere». Med den gamle faste ventingen på 30
+    // sekunder var summen 90 sekunder, og den kunne ikke skille de to. En test på formen alene ville
+    // vært grønn for 1 ms, 2 ms, 4 ms.
+    it("venter eksponentielt lenger for hvert gjenforsøk, og vinduet overlever en LLM-nedetid", async () => {
+      const waits: number[] = [];
+
+      for (const attempts of [1, 2, 3]) {
+        findNextRunnableJob.mockResolvedValue({ id: "job-backoff", submissionId: "sub-backoff" });
+        tryLockPendingJob.mockResolvedValue({ count: 1 });
+        findAssessmentJobOrThrow.mockResolvedValue({
+          id: "job-backoff",
+          attempts,
+          maxAttempts: 6,
+          availableAt: new Date(),
+        });
+        markJobForRetryOrFailure.mockClear();
+        markJobForRetryOrFailure.mockResolvedValue({ count: 1 });
+
+        const { processNextJob } = await import("../../src/modules/assessment/AssessmentJobRunner.js");
+        const startedAt = Date.now();
+        await processNextJob(vi.fn().mockRejectedValue(new Error("LLM-tjenesten svarer ikke")));
+
+        const call = markJobForRetryOrFailure.mock.calls.at(-1);
+        expect(call?.[3]).toMatchObject({ status: "PENDING" });
+        waits.push((call?.[3].availableAt as Date).getTime() - startedAt);
+      }
+
+      expect(waits[1]).toBeGreaterThan(waits[0] * 1.8);
+      expect(waits[2]).toBeGreaterThan(waits[1] * 1.8);
+      expect(waits[0] + waits[1] + waits[2]).toBeGreaterThan(5 * 60_000);
     });
 
     it("marks job as FAILED when attempts >= maxAttempts", async () => {

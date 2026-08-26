@@ -1,6 +1,9 @@
 import { DecisionType, SubmissionStatus } from "../../db/prismaRuntime.js";
 import { getAssessmentRules } from "../../config/assessmentRules.js";
 import { createDecisionRepository } from "../../repositories/decisionRepository.js";
+import { createAssessmentJobRepository } from "./assessmentJobRepository.js";
+import type { AssessmentRunFence } from "./AssessmentJobRunner.js";
+import { ConflictError } from "../../errors/AppError.js";
 import { runInTransaction } from "../../db/transaction.js";
 import type { LlmStructuredAssessment } from "./llmAssessmentService.js";
 import { recordAuditEvent } from "../../services/auditService.js";
@@ -22,6 +25,8 @@ import {
 export type { ModuleAssessmentPolicy };
 
 type BuildDecisionInput = {
+  jobId: string;
+  fence: AssessmentRunFence;
   submissionId: string;
   userId: string;
   moduleVersionId: string;
@@ -197,6 +202,8 @@ export function resolveAssessmentDecision(input: ResolveAssessmentDecisionInput)
 export { DEFAULT_MCQ_ONLY_MIN_PERCENT } from "./mcqPassRule.js";
 
 type BuildMcqOnlyDecisionInput = {
+  jobId: string;
+  fence: AssessmentRunFence;
   submissionId: string;
   userId: string;
   moduleVersionId: string;
@@ -233,6 +240,21 @@ export async function createMcqOnlyDecision(input: BuildMcqOnlyDecisionInput) {
 
   return runInTransaction(async (tx) => {
     const repo = createDecisionRepository(tx);
+    // #953: gjerdet FØRST i transaksjonen. Er dette en forlatt kjøring (#856) som våknet etter at
+    // et gjenforsøk overtok, eier den ikke lenger jobben — og da skal vedtaket ikke skrives. Kastes
+    // her, ruller hele transaksjonen tilbake, så ingen halv dom blir liggende.
+    const stillOurs = await createAssessmentJobRepository(tx).claimDecisionWrite(
+      input.jobId,
+      input.fence.lockedBy,
+      input.fence.lockedAt,
+    );
+    if (stillOurs.count === 0) {
+      throw new ConflictError(
+        "assessment_run_superseded",
+        "This assessment run no longer owns its job — a newer run has taken over. Discarding the verdict.",
+      );
+    }
+
 
     const decision = await repo.createAssessmentDecision({
       submissionId: input.submissionId,
@@ -280,6 +302,21 @@ export async function createAssessmentDecision(input: BuildDecisionInput) {
 
   return runInTransaction(async (tx) => {
     const repo = createDecisionRepository(tx);
+    // #953: gjerdet FØRST i transaksjonen. Er dette en forlatt kjøring (#856) som våknet etter at
+    // et gjenforsøk overtok, eier den ikke lenger jobben — og da skal vedtaket ikke skrives. Kastes
+    // her, ruller hele transaksjonen tilbake, så ingen halv dom blir liggende.
+    const stillOurs = await createAssessmentJobRepository(tx).claimDecisionWrite(
+      input.jobId,
+      input.fence.lockedBy,
+      input.fence.lockedAt,
+    );
+    if (stillOurs.count === 0) {
+      throw new ConflictError(
+        "assessment_run_superseded",
+        "This assessment run no longer owns its job — a newer run has taken over. Discarding the verdict.",
+      );
+    }
+
 
     const decision = await repo.createAssessmentDecision({
       submissionId: input.submissionId,

@@ -220,8 +220,17 @@ export async function fetchQueueCounts(headers) {
 
 export function applyNavReviewBadge(navEl, counts) {
   if (!navEl) return;
-  const total = (counts?.reviews ?? 0) + (counts?.appeals ?? 0);
-  const link = navEl.querySelector('a[href="/review"]');
+  applyNavBadge(navEl, 'a[href="/review"]', (counts?.reviews ?? 0) + (counts?.appeals ?? 0));
+  // #953: vurderinger som ga opp er ADMINISTRATORENS kø, ikke vurdererens — derfor et eget merke
+  // på plattformlenka og ikke lagt til i summen over. En administrator skal se at det finnes noe
+  // uten å måtte gå innom siden; produkteier 2026-08-26: «vis dette kun hvis det er noe å vise».
+  //
+  // ⚠️ Serveren gir 0 til alle som ikke er administrator, så merket kan ikke lekke tallet.
+  applyNavBadge(navEl, 'a[href="/admin-platform"]', counts?.failedAssessments ?? 0);
+}
+
+function applyNavBadge(navEl, selector, total) {
+  const link = navEl.querySelector(selector);
   if (!link) return;
 
   let badge = link.querySelector(".nav-queue-badge");

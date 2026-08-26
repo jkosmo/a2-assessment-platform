@@ -68,6 +68,13 @@ Use correlation IDs first when diagnosing single-request or single-user failures
 - `llm_evaluation_failed`
 - `assessment_job_stale_lock_detected`
 - `assessment_job_stuck_alert`
+- `assessment_failed_backlog_alert` — error. Assessments that used up every retry and are still
+  waiting for a human (#953). Carries `failedCount`, `threshold` and `recipientCount`. ⚠️ A
+  `recipientCount` of 0 means nobody could be e-mailed — the platform has no active ADMINISTRATOR
+  role assignment. The backlog is real regardless; this is the line that says so.
+- `assessment_decision_already_present` — info. A run stopped because the submission already had a
+  decision (#953, requirement 2). Not a fault: a job that arrived too late. Frequent occurrences are
+  themselves the finding — it means runs are being abandoned near the runtime deadline.
 
 ### Appeal monitoring events
 - `appeal_sla_backlog`

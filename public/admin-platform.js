@@ -5,6 +5,7 @@ import { apiFetch, buildConsoleHeaders, getConsoleConfig, fetchQueueCounts, appl
 import { initConsentGuard } from "/static/consent-guard.js";
 import { showToast } from "/static/toast.js";
 import { escapeHtml } from "/static/html-escape.js";
+import { setHidden } from "/static/dom-visibility.js";
 import {
   findMatchingPreset,
   resolveRoleSwitchState,
@@ -174,6 +175,7 @@ async function loadSettings() {
     consentBodyEnGb.value = data.consentBody?.["en-GB"] ?? "";
     if (data.consentVersion) consentVersionBadge.textContent = data.consentVersion;
     renderCertBackground(Boolean(data.certificateBackground));
+    await loadFailedAssessments();
     settingsContent.style.display = "";
   } catch (err) {
     if (settingsContent) {
@@ -354,3 +356,115 @@ initTabs();
   }
   await loadSettings();
 })();
+
+
+// ── #953 Vurderinger som ga opp ───────────────────────────────────────────────
+//
+// ⚠️ Seksjonen skjules med setHidden(), IKKE .hidden-klassen. `.card` setter display, og en
+// forfatter-regel som .hidden taper mot den — elementet ville aldri blitt skjult. Det er
+// .hidden-fella dokumentert i FEATURE_SURFACE_MAP.
+//
+// Kortet er skjult som utgangspunkt og vises KUN når lista har rader (produkteier 2026-08-26).
+// Feiler oppslaget, forblir det skjult: en administrator skal ikke få et tomt kort som ser ut som
+// «alt er bra» når vi faktisk ikke vet.
+
+const failedAssessmentsCard = document.getElementById("failedAssessmentsCard");
+const failedAssessmentsBody = document.getElementById("failedAssessmentsBody");
+
+async function loadFailedAssessments() {
+  if (!failedAssessmentsCard || !failedAssessmentsBody) return;
+  setHidden(failedAssessmentsCard, true);
+
+  let rows = [];
+  let total = 0;
+  try {
+    const data = await apiFetch("/api/admin/platform/failed-assessments", headers);
+    rows = Array.isArray(data?.failedAssessments) ? data.failedAssessments : [];
+    total = typeof data?.total === "number" ? data.total : rows.length;
+  } catch {
+    return;
+  }
+
+  if (rows.length === 0) return;
+
+  failedAssessmentsBody.innerHTML = "";
+  for (const row of rows) {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${escapeHtml(row.participantName ?? "—")}<br><span class="small">${escapeHtml(row.participantEmail ?? "")}</span></td>
+      <td>${escapeHtml(moduleTitleOf(row.moduleTitle))}</td>
+      <td>${escapeHtml(formatWhen(row.failedAt))}</td>
+      <td>${escapeHtml(`${row.attempts ?? "?"}/${row.maxAttempts ?? "?"}`)}</td>
+      <td class="small">${escapeHtml(row.errorMessage ?? "—")}</td>
+      <td></td>
+    `;
+    const actionCell = tr.lastElementChild;
+    const button = document.createElement("button");
+    button.className = "btn-secondary";
+    button.textContent = t("adminPlatform.failedAssessments.retry");
+    button.addEventListener("click", () => retryAssessment(row.submissionId, button));
+    actionCell.appendChild(button);
+    failedAssessmentsBody.appendChild(tr);
+  }
+
+  // Lista er avkortet, telleren er ikke. Si det, i stedet for å la administratoren lure på hvorfor
+  // merket i menyen viser et større tall enn antall rader.
+  const truncationNote = document.getElementById("failedAssessmentsTruncated");
+  if (truncationNote) {
+    const truncated = total > rows.length;
+    setHidden(truncationNote, !truncated);
+    truncationNote.textContent = truncated
+      ? `${t("adminPlatform.failedAssessments.showing")} ${rows.length} / ${total}`
+      : "";
+  }
+
+  setHidden(failedAssessmentsCard, false);
+}
+
+async function retryAssessment(submissionId, button) {
+  button.disabled = true;
+  button.textContent = t("adminPlatform.failedAssessments.retrying");
+  try {
+    // #953: administratorens EGEN rute. Deltakerruta `/api/assessments/:id/run` er eierskaps-
+    // sjekket mot innsenderen, så en administrator fikk 404 der — knappen virket aldri.
+    await apiFetch(`/api/admin/platform/failed-assessments/${encodeURIComponent(submissionId)}/retry`, headers, {
+      method: "POST",
+      body: JSON.stringify({}),
+    });
+    button.textContent = t("adminPlatform.failedAssessments.retryQueued");
+    showToast(t("adminPlatform.failedAssessments.retryQueued"));
+    // Merket i toppmenyen leser samme teller — oppdater det, ellers står det igjen med et tall
+    // administratoren nettopp har gjort noe med.
+    if (workspaceNav) {
+      fetchQueueCounts(headers).then((counts) => applyNavReviewBadge(workspaceNav, counts)).catch(() => {});
+    }
+    // Raden er ikke lenger «fast» — en aktiv jobb finnes. Hent lista på nytt så kortet
+    // friskmelder seg selv i stedet for å vise en sak som er tatt hånd om.
+    await loadFailedAssessments();
+  } catch (err) {
+    button.disabled = false;
+    button.textContent = t("adminPlatform.failedAssessments.retryFailed");
+    showToast(String(err));
+  }
+}
+
+// Modultittelen er lokalisert JSON lagret som TEKST. `typeof === "string"` er sant for BEGGE
+// former og måler ingenting — samme felle som stage-suiten gikk i.
+function moduleTitleOf(raw) {
+  if (typeof raw !== "string") return "—";
+  try {
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === "object") {
+      return parsed[currentLocale] ?? parsed["en-GB"] ?? parsed.nb ?? raw;
+    }
+  } catch {
+    /* ren streng = ett språk, ikke oversatt */
+  }
+  return raw;
+}
+
+function formatWhen(iso) {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? "—" : d.toLocaleString();
+}

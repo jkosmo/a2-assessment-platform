@@ -29,11 +29,17 @@ assessmentsRouter.post("/:submissionId/run", assessmentRunLimiter, async (reques
     return;
   }
 
-  // Prevent re-running submissions that are already completed and passed, or are under review (#16)
-  if (submission.submissionStatus === "COMPLETED" && submission.decisions.length > 0 && submission.decisions[0].passFailTotal === true) {
+  // #953: ETHVERT vedtak sperrer, ikke bare et bestått.
+  //
+  // ⚠️ Sto tidligere som «COMPLETED og bestått». En strøket innlevering fikk da 202 «lagt i kø» —
+  // men motoren nekter nå å røre en innlevering som har et vedtak (spesifikasjonens krav 2), så
+  // ruta lovet noe som ikke skjedde. Kandidaten så det gamle resultatet og trodde en ny vurdering
+  // var kjørt. Å kunne kjøre vurderingen om igjen på et strøket forsøk er dessuten karaktershopping;
+  // veien videre er et nytt forsøk, som lager en ny innlevering.
+  if (submission.decisions.length > 0) {
     response.status(409).json({
       error: "conflict",
-      message: "This submission has already been completed and passed. Cannot re-run.",
+      message: "This submission already has a decision. Start a new attempt instead of re-running this one.",
     });
     return;
   }

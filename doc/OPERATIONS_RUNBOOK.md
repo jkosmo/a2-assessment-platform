@@ -480,7 +480,11 @@ Relevant env vars:
 | Var | Default | Meaning |
 |---|---|---|
 | `ASSESSMENT_JOB_POLL_INTERVAL_MS` | `4000` | Worker poll interval |
-| `ASSESSMENT_JOB_MAX_ATTEMPTS` | `3` | Retry ceiling |
+| `ASSESSMENT_JOB_MAX_ATTEMPTS` | `6` | Retry ceiling. Raised from 3 in #953 — three attempts 30 s apart gave a total window under one minute, too tight to survive an LLM outage. |
+| `ASSESSMENT_JOB_RETRY_BASE_MS` | `60000` | First wait between retries; doubles each attempt (1+2+4+8+16 = 31 min over six attempts). |
+| `ASSESSMENT_JOB_RETRY_CAP_MS` | `1800000` | Ceiling on a single wait. |
+| `ASSESSMENT_FAILED_ALERT_THRESHOLD` | `3` | Stuck assessments before administrators are e-mailed (#953). One is a single case; the pile-up is the signal. |
+| `ASSESSMENT_FAILED_ALERT_COOLDOWN_MS` | `86400000` | Minimum gap between those e-mails. ⚠️ Raise this during a known outage — without a cap every failing submission would mail every administrator, and a filtered alert is worse than none. Persisted in `PlatformConfig`, so it survives a worker restart. |
 | `ASSESSMENT_JOB_LEASE_DURATION_MS` | `300000` | Lease duration before a running job is considered stale |
 | `ASSESSMENT_JOB_STUCK_THRESHOLD_MS` | `600000` | Threshold for emitting stuck-job alerts |
 

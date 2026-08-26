@@ -569,6 +569,8 @@ The participant/preview serve endpoint `GET /api/content-assets/:assetId` accept
 | `PUT` | `/api/admin/platform` | ADMINISTRATOR |
 | `POST` | `/api/admin/platform/certificate-background` | ADMINISTRATOR — multipart `file` (PNG/JPEG/GIF/WebP, max 15 MB). Sets the platform-wide diploma background (#580). |
 | `DELETE` | `/api/admin/platform/certificate-background` | ADMINISTRATOR — clears the diploma background (#580). |
+| `GET` | `/api/admin/platform/failed-assessments` | ADMINISTRATOR — submissions still STUCK after assessment gave up: a FAILED job, no decision, no active job (#953). Self-clearing — a queued retry or a decision removes the row. |
+| `POST` | `/api/admin/platform/failed-assessments/:submissionId/retry` | ADMINISTRATOR — re-queues the assessment. 409 if the submission already has a decision. Separate from `POST /api/assessments/:id/run`, which is ownership-scoped to the submitter and returns 404 for an administrator (#953). |
 
 **Certificate background image (#580):** the uploaded image is stored in blob (reusing F4 asset
 storage) and referenced from platform key-value config — no new model. It is served

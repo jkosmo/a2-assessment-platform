@@ -67,6 +67,12 @@ function resolvePublicFile(requestPath) {
   if (requestPath === "/profile") {
     return path.join(publicRoot, "profile.html");
   }
+  // #953: administratorflaten «Vurderinger som ga opp» ligger her. Uten ruta faller /admin-platform
+  // gjennom til en katalog og gir 404 — og en e2e som spør «er kortet skjult?» ville bestått, fordi
+  // et element som ikke finnes også er skjult.
+  if (requestPath === "/admin-platform") {
+    return path.join(publicRoot, "admin-platform.html");
+  }
   if (/^\/admin-content\/courses\/[^/]+$/.test(requestPath)) {
     return path.join(publicRoot, "admin-content-courses.html");
   }
