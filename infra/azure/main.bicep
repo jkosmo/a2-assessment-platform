@@ -166,8 +166,14 @@ param skipPostgresUpdate bool = false
 @description('Assessment worker polling interval in milliseconds.')
 param assessmentJobPollIntervalMs int = 4000
 
-@description('Assessment worker max attempts.')
-param assessmentJobMaxAttempts int = 3
+// #953: MÅ følge kodens standard i src/config/env.ts. Sto på 3 mens koden ble endret til 6, og
+// infrastrukturen vinner — så hele gjenforsøksutvidelsen var uten effekt i utrullede miljøer.
+// Oppdaget først ved en ekte nedetidstest på stage: jobben viste «forsøk 3/3» der koden lovet 6.
+//
+// ⚠️ Endres denne, må src/config/env.ts endres likt. To standardverdier for samme tall er en
+// felle: enhetstestene måler kodens, og miljøet kjører infrastrukturens.
+@description('Assessment worker max attempts. Keep in sync with ASSESSMENT_JOB_MAX_ATTEMPTS in src/config/env.ts.')
+param assessmentJobMaxAttempts int = 6
 
 @description('Optional email receiver for observability alerts.')
 param observabilityAlertEmail string = ''

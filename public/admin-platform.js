@@ -393,10 +393,10 @@ async function loadFailedAssessments() {
     tr.innerHTML = `
       <td>${escapeHtml(row.participantName ?? "—")}<br><span class="small">${escapeHtml(row.participantEmail ?? "")}</span></td>
       <td>${escapeHtml(moduleTitleOf(row.moduleTitle))}</td>
-      <td>${escapeHtml(formatWhen(row.failedAt))}</td>
-      <td>${escapeHtml(`${row.attempts ?? "?"}/${row.maxAttempts ?? "?"}`)}</td>
-      <td class="small">${escapeHtml(row.errorMessage ?? "—")}</td>
-      <td></td>
+      <td class="failed-when">${escapeHtml(formatWhen(row.failedAt))}</td>
+      <td class="failed-attempts">${escapeHtml(`${row.attempts ?? "?"}/${row.maxAttempts ?? "?"}`)}</td>
+      <td class="small failed-reason">${escapeHtml(row.errorMessage ?? "—")}</td>
+      <td class="failed-action"></td>
     `;
     const actionCell = tr.lastElementChild;
     const button = document.createElement("button");
@@ -463,8 +463,16 @@ function moduleTitleOf(raw) {
   return raw;
 }
 
+// Dato og klokkeslett uten sekunder. `toLocaleString()` ga «26.8.2026, 21:43:21» — sekundene
+// hjelper ingen som skal avgjøre om en vurdering skal kjøres på nytt, og lengden presset kolonnen.
 function formatWhen(iso) {
   if (!iso) return "—";
   const d = new Date(iso);
-  return Number.isNaN(d.getTime()) ? "—" : d.toLocaleString();
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleString(currentLocale === "en-GB" ? "en-GB" : "nb-NO", {
+    day: "2-digit",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }

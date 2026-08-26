@@ -2,6 +2,48 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.33.1 - 2026-08-26
+
+### #953 — to funn fra stage som ingen test kunne gitt
+
+**Gjenforsøksutvidelsen var uten effekt i miljøet.** Jobben viste «forsøk 3/3» der koden lover 6.
+`infra/azure/main.bicep` hadde `assessmentJobMaxAttempts = 3` som standard, og app-innstillingen
+med samme verdi. Infrastrukturen vinner over kodens standard.
+
+⚠️ **To standardverdier for samme tall er en felle:** enhetstestene måler kodens, og miljøet kjører
+infrastrukturens. Alle testene var grønne mens hele del A av #953 sto død i utrullede miljøer.
+Bicep-parameteren er nå 6, med en kommentar om at de to må endres sammen.
+
+⚠️ **`deploy-app.yml` kjører ikke Bicep.** Stage er satt direkte; PROD MÅ SETTES ved neste
+prod-runde, ellers gjelder ikke #953 der.
+
+**Verifisert ende til ende mot ekte data:** med ugyldig LLM-endepunkt brukte innleveringen opp
+forsøkene og dukket opp i «Vurderinger som ga opp» med årsak `fetch failed`. Administrator trykket
+«kjør på nytt» → 202 med ny jobb → COMPLETED med vedtak på 90 sekunder → raden borte, telleren
+1 → 0, lista og telleren fortsatt enige.
+
+### UI-en var funksjonell og stygg
+
+Produkteier 2026-08-26: *«Når vi lager UI-elementer så bør de visuelt inspiseres som en del av
+kvalitetskontroll.»*
+
+`shared.css` har ingen grunnstil for `table` utenfor mobil-media-queryen, så tabellen arvet
+nettleserens standard: sentrerte overskrifter, ingen luft, ingen justering. Det ble tydelig her
+fordi raden har et langt tidsstempel, en teknisk feiltekst OG en knapp ved siden av hverandre.
+
+Stilen er SCOPET til kortet. En grunnstil for `table` ville truffet hver eneste tabell i appen, og
+de er ikke inspisert.
+
+**`scripts/dev/inspect-failed-assessments-card.mjs`** rendrer kortet med realistiske verdier — et
+langt navn, en lang feilmelding — tar skjermbilde og måler kolonner, justering og overflyt. Den er
+lagt inn som verktøy, ikke som en engangsfil, per den stående ordren om at en lærdom skal bli en
+sjekk som KJØRER framfor en setning som skal huskes.
+
+⚠️ Skriptet fanget seg selv to ganger: det satte feil localStorage-nøkkel (`locale` i stedet for
+`participant.locale`), så begge skjermbildene ble på norsk mens det meldte at to språk var sjekket.
+Det skriver nå ut overskriften som bevis på at språket faktisk skiftet. Og et av målene sammenlignet
+bokskanter der luften ligger i cellens padding — det målte ingenting og er fjernet.
+
 ## 2.33.0 - 2026-08-26
 
 ### #953 — en vurdering som gir opp er ikke lenger en blindvei

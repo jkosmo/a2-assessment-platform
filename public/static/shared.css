@@ -809,6 +809,75 @@ pre.pre-content {
   overflow-y: auto;
 }
 
+/* #953: «Vurderinger som ga opp».
+ *
+ * ⚠️ shared.css har ingen grunnstil for `table` utenfor mobil-media-queryen, så tabeller arver
+ * nettleserens standard: sentrerte overskrifter, ingen luft, ingen justering. Det blir tydelig her
+ * fordi raden har et langt tidsstempel, en teknisk feiltekst OG en knapp ved siden av hverandre.
+ *
+ * Stilen er SCOPET til kortet med vilje. En grunnstil for `table` ville truffet hver eneste tabell
+ * i appen, og jeg har ikke sett på dem. Blir dette mønsteret ønsket flere steder, er det en egen
+ * runde der hver flate faktisk inspiseres.
+ */
+#failedAssessmentsCard table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+#failedAssessmentsCard th {
+  text-align: left;
+  font-size: 0.85rem;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--color-meta);
+  font-weight: 600;
+  padding: 0 var(--space-2) var(--space-1) 0;
+  border-bottom: 1px solid var(--color-table-border);
+  white-space: nowrap;
+}
+
+#failedAssessmentsCard td {
+  text-align: left;
+  vertical-align: top;
+  padding: var(--space-2) var(--space-2) var(--space-2) 0;
+  border-bottom: 1px solid var(--color-table-border);
+}
+
+#failedAssessmentsCard tr:last-child td {
+  border-bottom: none;
+}
+
+/* Deltakerens e-post under navnet — sekundær, ikke like tung som navnet. */
+#failedAssessmentsCard td .small {
+  color: var(--color-meta);
+}
+
+/* Årsaken er en teknisk melding. Den skal kunne leses, men ikke dominere raden, og den skal ikke
+   presse knappen ut av syne når teksten er lang. */
+#failedAssessmentsCard td.failed-reason {
+  color: var(--color-meta);
+  max-width: 22rem;
+  word-break: break-word;
+}
+
+/* Handlingen står ytterst og holdes samlet, så knappen ikke klistrer seg til årsaksteksten. */
+#failedAssessmentsCard td.failed-action {
+  text-align: right;
+  white-space: nowrap;
+  padding-right: 0;
+}
+
+/* Tidspunktet brakk over to linjer («26. aug.,» / «21:43») fordi kolonnen er smal. Datoen er ett
+   tall å lese, ikke to — den skal stå samlet. */
+#failedAssessmentsCard td.failed-when {
+  white-space: nowrap;
+}
+
+#failedAssessmentsCard .failed-attempts {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
 tr.selected {
   box-shadow: inset 3px 0 0 var(--color-blue);
 }
