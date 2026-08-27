@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { DecisionType, SubmissionStatus } from "../../src/db/prismaRuntime.js";
 import type { LlmStructuredAssessment } from "../../src/modules/assessment/llmAssessmentService.js";
 import { warmModuleGraph } from "../support/moduleGraphWarmup.js";
+import { decisionReason, decisionReasonCodes } from "../../src/modules/assessment/decisionReason.js";
 
 const assessmentDecisionCreate = vi.fn();
 const manualReviewCreate = vi.fn();
@@ -165,12 +166,16 @@ describe("decision service", () => {
       mcqScaledScore: 30,
       mcqPercentScore: 100,
       llmResult: buildLlmResult(),
-      forceManualReviewReason: "Escalated for human review.",
+      forceManualReviewReason: decisionReason(decisionReasonCodes.manualReviewRedFlagOrConfidence, "Escalated for human review."),
     });
 
     expect(assessmentDecisionCreate).toHaveBeenCalledWith(
       expect.objectContaining({
         decisionReason: "Escalated for human review.",
+        // #950: koden MÅ lagres, ikke bare regnes ut. Uten denne påstanden kunne linjen som
+        // sender den til databasen slettes uten at én eneste test ble rød — og da ville hele
+        // oversettelsen vært død for nye avgjørelser.
+        decisionReasonCode: "MANUAL_REVIEW_RED_FLAG_OR_CONFIDENCE",
         passFailTotal: true,
       }),
     );
@@ -1014,5 +1019,69 @@ describe("resolveAssessmentDecision — FREETEXT_ONLY (#578)", () => {
       freetextOnly: true,
     });
     expect(resolved.needsManualReview).toBe(true);
+  });
+});
+
+// ── #950: den vanligste veien gjennom systemet ──────────────────────────────────────────────────
+//
+// ⚠️ En ren flervalgsmodul er der de fleste avgjørelsene blir til, og grunnen har TALL i seg — den
+// kunne aldri oversettes ved tekstoppslag. QA-porten påpekte at ingenting pinnet at koden faktisk
+// blir SKREVET: sletter man feltet i skrivekallet, regnes koden fortsatt ut, alt er grønt, og
+// oversettelsen er død for alle nye avgjørelser uten at noe sier fra.
+describe("createMcqOnlyDecision — grunnkoden lagres, ikke bare regnes ut", () => {
+  beforeEach(() => {
+    assessmentDecisionCreate.mockReset();
+    assessmentDecisionCreate.mockResolvedValue({ id: "decision-mcq", decisionReason: "x", passFailTotal: true });
+    submissionUpdate.mockReset();
+    recordAuditEvent.mockReset();
+    upsertCertificationStatusFromDecision.mockReset();
+    claimDecisionWrite.mockReset();
+    claimDecisionWrite.mockResolvedValue({ count: 1 });
+  });
+
+  it("skriver koden OG tallene setningen trenger", async () => {
+    const { createMcqOnlyDecision } = await import("../../src/modules/assessment/decisionService.js");
+
+    await createMcqOnlyDecision({
+      jobId: "job-mcq",
+      fence: { lockedBy: "worker-test", lockedAt: new Date(0) },
+      submissionId: "submission-mcq",
+      userId: "user-1",
+      moduleVersionId: "module-version-1",
+      mcqScaledScore: 30,
+      mcqPercentScore: 100,
+    });
+
+    const written = assessmentDecisionCreate.mock.calls[0][0] as {
+      decisionReasonCode: string;
+      decisionReasonParams: string | null;
+    };
+
+    expect(written.decisionReasonCode).toBe("MCQ_ONLY_PASS");
+    // Tallene lagres som JSON. Påstanden er på VERDIENE, ikke på at feltet finnes — et tomt
+    // objekt ville bestått en ren eksistenssjekk og gitt deltakeren «{scorePercent}» på skjermen.
+    expect(JSON.parse(written.decisionReasonParams ?? "null")).toEqual({ scorePercent: 100, minPercent: 70 });
+  });
+
+  it("skriver strykkoden med de samme tallene når kravet ikke er nådd", async () => {
+    const { createMcqOnlyDecision } = await import("../../src/modules/assessment/decisionService.js");
+
+    await createMcqOnlyDecision({
+      jobId: "job-mcq",
+      fence: { lockedBy: "worker-test", lockedAt: new Date(0) },
+      submissionId: "submission-mcq",
+      userId: "user-1",
+      moduleVersionId: "module-version-1",
+      mcqScaledScore: 18,
+      mcqPercentScore: 60,
+    });
+
+    const written = assessmentDecisionCreate.mock.calls[0][0] as {
+      decisionReasonCode: string;
+      decisionReasonParams: string | null;
+    };
+
+    expect(written.decisionReasonCode).toBe("MCQ_ONLY_FAIL");
+    expect(JSON.parse(written.decisionReasonParams ?? "null")).toEqual({ scorePercent: 60, minPercent: 70 });
   });
 });

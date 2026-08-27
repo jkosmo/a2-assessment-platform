@@ -1,6 +1,7 @@
 import { llmResponseCodec } from "../../codecs/llmResponseCodec.js";
 import { localizeContentText } from "../../i18n/content.js";
 import { normalizeLocale } from "../../i18n/locale.js";
+import { parseDecisionReasonParams } from "../assessment/decisionReason.js";
 
 export type SubmissionHistoryItem = {
   id: string;
@@ -37,6 +38,9 @@ export type OwnedSubmission = {
   decisions: Array<{
     id: string;
     decisionReason: string;
+    // #950: null når et menneske skrev grunnen selv, eller når raden er eldre enn feltet.
+    decisionReasonCode?: string | null;
+    decisionReasonParams?: string | null;
     mcqScaledScore: number;
     practicalScaledScore: number;
     totalScore: number;
@@ -125,6 +129,11 @@ export function toSubmissionResultView(submission: OwnedSubmission) {
     latestAppeal,
     participantGuidance: {
       decisionReason: decision?.decisionReason ?? null,
+      // #950: koden og tallene, slik at klienten kan skrive setningen på deltakerens språk i stedet
+      // for å slå opp serverens engelske prosa i et kart. Null kode = et menneskes egne ord (eller
+      // en rad fra før feltet fantes) — da vises `decisionReason` ordrett.
+      decisionReasonCode: decision?.decisionReasonCode ?? null,
+      decisionReasonParams: parseDecisionReasonParams(decision?.decisionReasonParams),
       confidenceNote: llmEvaluation?.confidenceNote ?? null,
       improvementAdvice: llmStructured?.improvement_advice ?? [],
       criterionRationales: llmStructured?.criterion_rationales ?? null,

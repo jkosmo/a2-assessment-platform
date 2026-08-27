@@ -62,6 +62,11 @@ export async function appendDecisionWithLineage(
     passFailTotal: input.passFailTotal,
     decisionType: input.decisionType,
     decisionReason: input.decisionReason,
+    // #950: INGEN kode her, med vilje. Denne veien brukes av manuell vurdering og klagebehandling,
+    // der grunnen er fritekst et menneske har skrevet. En kode ville sagt at teksten kunne byttes
+    // ut med en oversatt setning — den kan den ikke. Uten kode vises personens egne ord ordrett.
+    decisionReasonCode: null,
+    decisionReasonParams: null,
     finalisedAt: input.finalisedAt,
     finalisedById: input.finalisedById,
     parentDecisionId: input.parentDecision.id,

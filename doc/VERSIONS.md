@@ -2,6 +2,68 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.36.0 - 2026-08-27
+
+### #950 — serveren sender HVA som avgjorde, ikke en engelsk setning
+
+En norsk deltaker som bestod en flervalgsmodul fikk «Automatic pass: MCQ score 100% meets the
+required minimum of 70%.» under BEGRUNNELSE, i et skjermbilde der alt annet var oversatt.
+
+Klienten prøvde å oversette ved å slå serverens engelske prosa opp i et kart. Det kan ikke holde:
+
+- **Kartet driftet.** Nøkkelen på klienten sa «... red flag / confidence / borderline rule.» lenge
+  etter at serveren sluttet å skrive «borderline» i den strengen. Ingenting sa fra — oppslaget
+  bommet bare.
+- **Grunner med tall i seg kan aldri slås opp som tekst.** «Poengsummen 64 ligger i vinduet [60, 70]»
+  finnes ikke i noe kart. Det gjelder også den vanligste grunnen av alle: den for en ren
+  flervalgsmodul.
+- **Feltet har to slags innhold.** Sensor og klagebehandler skriver fritekst i det SAMME feltet
+  (`reviews.ts:32`, `appeals.ts:28`). Kartet kunne ikke se forskjell, og risikerte å bytte ut et
+  menneskes egne ord med en standardsetning.
+
+Serveren sender nå en KODE og tallene setningen trenger. `AssessmentDecision` har fått
+`decisionReasonCode` og `decisionReasonParams` (additive, nullbare, ingen backfill). Klienten
+formulerer setningen på deltakerens språk i `public/static/decision-reason.js`.
+
+**Fravær av kode ER signalet:** en grunn uten kode er et menneskes egne ord — eller en rad fra før
+feltet fantes — og vises ordrett. `decisionLineageService.ts` setter derfor `null` eksplisitt, ikke
+ved forglemmelse.
+
+Sidegevinst: KI-signalene i `aiInfluence.ts` sendte **norsk** i samme felt, fordi teksten også går
+til sensor. Nå bærer de en kode, og begge målgruppene kan få sitt eget språk.
+
+### Rotårsak, per stående ordre
+
+**Tre av fire QA-funn var tester som var grønne uansett.** Ikke fordi de var slurvete skrevet, men
+fordi jeg testet det jeg hadde SKREVET, ikke det som måtte holde:
+
+1. Plassholdertesten sammenlignet språkfilene **mot hverandre**. Den fanget at nynorsk manglet et
+   tall bokmål hadde, men ikke at serveren hadde byttet navn på det. Døper man om `scorePercent` i
+   `decisionService.ts`, forble alt grønt mens deltakeren så `{scorePercent}` på skjermen — altså
+   nøyaktig driften saken handlet om, i en test som skulle vokte mot den.
+2. **Ingenting pinnet at koden faktisk ble SKREVET.** Sletter man feltet i skrivekallet, regnes
+   koden fortsatt ut, alt er grønt, og oversettelsen er død for alle nye avgjørelser.
+3. En egen `if (!code)`-gren kunne ikke observeres — oppslaget under ga uansett null. Mutasjonen
+   avslørte den: testene besto med grenen fjernet.
+
+Rettet ved at testene nå kjører de EKTE serverfunksjonene for hver grunn med tall i seg, og krever
+at setningen kommer ut ferdig utfylt. Fire mutasjoner er verifisert røde: slettet skrivefelt,
+omdøpt `scorePercent`, omdøpt `min`, omdøpt `similarityPercent`.
+
+⚠️ **Sveipen var også ufullstendig,** samme feilklasse som #982. Jeg fant to av tre renderpunkter
+på sensorflaten, og overså at `ManualReview.triggerReason` er en **tekstkopi uten kode** — så selv
+en oversatt sensorflate ville vist engelsk. Ført i #1018.
+
+En bifangst til: revisjonsloggens `forceManualReviewReason` gikk fra streng til objekt da typen ble
+strammet. Typen `AuditMetadataByAction` pinner bare `submissionId`, så kompilatoren sa ingenting.
+Rettet til `.text`, med koden som eget felt.
+
+### Registrert underveis
+
+- **#1017** — halvbygget Entra-klassekobling leses som en virkende funksjon
+- **#1018** — sensor og klagebehandler ser begrunnelsen rått på engelsk
+- **#1019** — konfidensnotatet gjettes fra engelsk prosa, raden rett under den vi nettopp fikset
+
 ## 2.35.0 - 2026-08-27
 
 ### #982 — en oversettelse som ikke kom, fylles ikke lenger med kildetekst

@@ -1,5 +1,6 @@
 import { renderWorkspaceNavigationWithProfile } from "/static/workspace-nav.js";
 import { resolveInitialLocale } from "/static/i18n-locale.js";
+import { localizeDecisionReason } from "/static/decision-reason.js";
 import { createNumberFormatter, createDateTimeFormatter } from "/static/format-display.js";
 const formatDateTime = createDateTimeFormatter(() => currentLocale);
 const formatNumber = createNumberFormatter(() => currentLocale);
@@ -2023,19 +2024,6 @@ function localizeKnownContent(value, map) {
   return value;
 }
 
-function localizeDecisionReason(value) {
-  return localizeKnownContent(value, {
-    "Automatically routed to manual review due to red flag / confidence / borderline rule.":
-      "result.decisionReasonValue.autoManualReview",
-    "Automatically routed to manual review due to disagreement between primary and secondary LLM assessments.":
-      "result.decisionReasonValue.autoManualReview",
-    "Automatic pass by threshold rules.": "result.decisionReasonValue.autoPass",
-    "Automatic fail by threshold rules.": "result.decisionReasonValue.autoFail",
-    "Automatic fail due to insufficient submission evidence.":
-      "result.decisionReasonValue.autoFailInsufficientEvidence",
-  });
-}
-
 function localizeConfidence(value) {
   if (typeof value === "string") {
     const normalized = value.trim().toLowerCase();
@@ -2384,7 +2372,7 @@ function renderResultSummary(body) {
   appendSummaryRow(
     summaryGrid,
     t("result.decisionReason"),
-    localizeDecisionReason(body.participantGuidance?.decisionReason),
+    localizeDecisionReason(body.participantGuidance, t),
   );
   appendSummaryRow(
     summaryGrid,

@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { warmModuleGraph } from "../support/moduleGraphWarmup.js";
+import { decisionReason, decisionReasonCodes } from "../../src/modules/assessment/decisionReason.js";
 
 vi.mock("../../src/config/env.js", () => ({
   env: {
@@ -222,8 +223,10 @@ describe("AssessmentEvaluator — runLlmEvaluationPipeline", () => {
       inputContext: buildInputContext(),
     });
 
-    expect(result.forceManualReviewReason).toBe(
-      "Automatically routed to manual review due to disagreement between primary and secondary LLM assessments.",
+    // #950: grunnen bærer nå koden sin. Påstanden krever BEGGE — bare teksten ville vært grønn
+    // igjen om koden falt bort, og da ville deltakeren fått engelsk uten at noe sa fra.
+    expect(result.forceManualReviewReason).toEqual(
+      decisionReason(decisionReasonCodes.manualReviewLlmDisagreement, "Automatically routed to manual review due to disagreement between primary and secondary LLM assessments."),
     );
   });
 

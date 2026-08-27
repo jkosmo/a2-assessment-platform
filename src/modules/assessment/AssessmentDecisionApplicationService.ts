@@ -6,6 +6,8 @@ import { enqueueOutboxEvents, OUTBOX_EVENT_TYPES } from "../outbox/outboxService
 import { localizeContentText } from "../../i18n/content.js";
 import type { LlmStructuredAssessment } from "./llmAssessmentService.js";
 import type { SupportedLocale } from "../../i18n/locale.js";
+import type { AiInfluenceDecision } from "./aiInfluence.js";
+import type { DecisionReason } from "./decisionReason.js";
 
 type ApplyDecisionInput = {
   jobId: string;
@@ -19,14 +21,14 @@ type ApplyDecisionInput = {
   mcqScaledScore: number;
   mcqPercentScore: number;
   llmResult: LlmStructuredAssessment;
-  forceManualReviewReason: string | undefined;
+  forceManualReviewReason: DecisionReason | undefined;
   assessmentPolicy: ModuleAssessmentPolicy | null;
   rubricMaxTotal: number;
   rubricCriteriaIds: string[];
   /** #578: FREETEXT_ONLY — practical/LLM-only scoring, no MCQ component. */
   freetextOnly?: boolean;
   /** #475: AI-influence review trigger (undefined = no trigger). Routes to review, never fails. */
-  aiInfluence?: { forcesReview: boolean; reason: string };
+  aiInfluence?: AiInfluenceDecision;
   /** #475 Phase 2: computed AI-influence signals JSON persisted on the decision (null when none). */
   aiInfluenceJson?: string | null;
   /** Localized module title text (may be a raw localization JSON string). */

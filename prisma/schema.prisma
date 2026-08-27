@@ -286,30 +286,30 @@ model ModuleVersion {
 }
 
 model Submission {
-  id               String               @id @default(cuid())
-  userId           String
-  moduleId         String
-  moduleVersionId  String
-  locale           String               @default("en-GB")
-  deliveryType     String
-  responseJson     String               @default("{}")
+  id                 String               @id @default(cuid())
+  userId             String
+  moduleId           String
+  moduleVersionId    String
+  locale             String               @default("en-GB")
+  deliveryType       String
+  responseJson       String               @default("{}")
   // #475: AI-use process signals — the participant's AI-use declaration + nudge choice. Additive,
   // nullable, aggregate-only (no keystroke/paste telemetry). Shape: aiInfluenceSignalsCodec.
   processSignalsJson String?
-  attachmentUri    String?
-  submittedAt      DateTime             @default(now())
-  submissionStatus SubmissionStatus     @default(SUBMITTED)
-  createdAt        DateTime             @default(now())
-  updatedAt        DateTime             @updatedAt
-  user             User                 @relation(fields: [userId], references: [id], onDelete: Restrict)
-  module           Module               @relation(fields: [moduleId], references: [id], onDelete: Restrict)
-  moduleVersion    ModuleVersion        @relation(fields: [moduleVersionId], references: [id], onDelete: Restrict)
-  mcqAttempts      MCQAttempt[]
-  llmEvaluations   LLMEvaluation[]
-  decisions        AssessmentDecision[]
-  appeals          Appeal[]
-  manualReviews    ManualReview[]
-  assessmentJobs   AssessmentJob[]
+  attachmentUri      String?
+  submittedAt        DateTime             @default(now())
+  submissionStatus   SubmissionStatus     @default(SUBMITTED)
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime             @updatedAt
+  user               User                 @relation(fields: [userId], references: [id], onDelete: Restrict)
+  module             Module               @relation(fields: [moduleId], references: [id], onDelete: Restrict)
+  moduleVersion      ModuleVersion        @relation(fields: [moduleVersionId], references: [id], onDelete: Restrict)
+  mcqAttempts        MCQAttempt[]
+  llmEvaluations     LLMEvaluation[]
+  decisions          AssessmentDecision[]
+  appeals            Appeal[]
+  manualReviews      ManualReview[]
+  assessmentJobs     AssessmentJob[]
 
   @@index([userId, submittedAt])
   @@index([moduleId, submittedAt])
@@ -456,6 +456,13 @@ model AssessmentDecision {
   passFailTotal           Boolean
   decisionType            DecisionType
   decisionReason          String
+  // #950: HVA som avgjorde, som data. decisionReason er én tekst som serveren skriver på engelsk;
+  // klienten kan ikke oversette den ved å slå den opp, og feltet inneholder dessuten fritekst en
+  // sensor har skrevet selv. En rad MED kode er maskinskrevet og formuleres på deltakerens språk;
+  // en rad UTEN kode er et menneskes egne ord (eller eldre enn dette feltet) og vises ordrett.
+  decisionReasonCode      String?
+  // Tallene setningen trenger (terskler, poeng), som JSON. Null når grunnen ikke har tall.
+  decisionReasonParams    String?
   finalisedAt             DateTime               @default(now())
   finalisedById           String?
   parentDecisionId        String?
@@ -520,7 +527,7 @@ enum CertificationLifecycleStatus {
 }
 
 model CertificationStatus {
-  id                     String             @id @default(cuid())
+  id                     String                       @id @default(cuid())
   userId                 String
   moduleId               String
   latestDecisionId       String
@@ -528,11 +535,11 @@ model CertificationStatus {
   passedAt               DateTime?
   expiryDate             DateTime?
   recertificationDueDate DateTime?
-  createdAt              DateTime           @default(now())
-  updatedAt              DateTime           @updatedAt
-  user                   User               @relation(fields: [userId], references: [id], onDelete: Restrict)
-  module                 Module             @relation(fields: [moduleId], references: [id], onDelete: Restrict)
-  latestDecision         AssessmentDecision @relation(fields: [latestDecisionId], references: [id], onDelete: Restrict)
+  createdAt              DateTime                     @default(now())
+  updatedAt              DateTime                     @updatedAt
+  user                   User                         @relation(fields: [userId], references: [id], onDelete: Restrict)
+  module                 Module                       @relation(fields: [moduleId], references: [id], onDelete: Restrict)
+  latestDecision         AssessmentDecision           @relation(fields: [latestDecisionId], references: [id], onDelete: Restrict)
 
   @@unique([userId, moduleId])
   @@index([moduleId, status])
@@ -615,12 +622,12 @@ model Course {
 }
 
 model CourseCompletion {
-  id                 String   @id @default(cuid())
-  userId             String
-  courseId           String
-  completedAt        DateTime @default(now())
-  certificateId      String   @unique @default(cuid())
-  moduleSnapshotJson String // JSON-array av moduleIds som inngikk ved fullføring
+  id                  String   @id @default(cuid())
+  userId              String
+  courseId            String
+  completedAt         DateTime @default(now())
+  certificateId       String   @unique @default(cuid())
+  moduleSnapshotJson  String // JSON-array av moduleIds som inngikk ved fullføring
   // #933: JSON-array av sectionIds som inngikk ved fullføring. Produkteiers regel er at man har
   // bestått «alle moduler kurset inneholdt DA, samt bekreftet lest alle seksjoner kurset inneholdt
   // på det tidspunkt» — men bare modulene ble lagret, så halve regelen var uetterprøvbar.
@@ -629,8 +636,8 @@ model CourseCompletion {
   // seksjoner». Å bakfylle med `[]` ville påstått at gamle kurs var seksjonsfrie.
   // Additivt felt — expand/contract-trygt, gamle containere leser det aldri.
   sectionSnapshotJson String?
-  user               User     @relation(fields: [userId], references: [id], onDelete: Restrict)
-  course             Course   @relation(fields: [courseId], references: [id], onDelete: Restrict)
+  user                User     @relation(fields: [userId], references: [id], onDelete: Restrict)
+  course              Course   @relation(fields: [courseId], references: [id], onDelete: Restrict)
 
   @@unique([userId, courseId])
   @@index([courseId, completedAt])

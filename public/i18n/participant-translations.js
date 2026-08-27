@@ -273,12 +273,34 @@ export const translations = {
     "result.decisionValue.APPEAL_RESOLUTION": "Appeal resolution",
     "result.decisionValue.UNKNOWN": "Unknown",
     "result.decisionReason": "Decision reason",
-    "result.decisionReasonValue.autoManualReview":
-      "Automatically sent to manual review because confidence, red flags, or borderline rules were triggered.",
-    "result.decisionReasonValue.autoPass": "Automatically passed based on threshold rules.",
-    "result.decisionReasonValue.autoFail": "Automatically failed based on threshold rules.",
-    "result.decisionReasonValue.autoFailInsufficientEvidence":
+    // #950: one entry per decision reason code the server can send. A code with no entry here falls
+    // back to the server's English sentence - see decision-reason.js.
+    "result.decisionReasonCode.llmDisagreement":
+      "Sent to manual review because two independent assessments disagreed.",
+    "result.decisionReasonCode.scoreInconsistency":
+      "Sent to manual review because the scores did not add up consistently.",
+    "result.decisionReasonCode.borderline":
+      "Sent to manual review because the total score {totalScore} falls in the borderline range {min}–{max}, where an assessor decides.",
+    "result.decisionReasonCode.redFlagOrConfidence":
+      "Sent to manual review because confidence or red-flag rules were triggered.",
+    "result.decisionReasonCode.aiDeclaration":
+      "Sent to manual review: you declared extensive autonomous AI use and chose to submit after being encouraged to work further with the material. An assessor decides — this is not an automatic fail.",
+    "result.decisionReasonCode.aiDeclarationDescribed":
+      "Sent to manual review: you declared extensive autonomous AI use and chose to submit after being encouraged to work further with the material. An assessor decides — this is not an automatic fail. Your own description: «{description}»",
+    "result.decisionReasonCode.contentSimilarity":
+      "Sent to manual review because the answer closely resembles an independently generated model answer ({similarityPercent}% against a threshold of {thresholdPercent}%). This is one signal, not proof — an assessor decides, and this is not an automatic fail.",
+    "result.decisionReasonCode.insufficientEvidence":
       "Automatically failed because the submission did not contain enough evidence to assess reliably.",
+    "result.decisionReasonCode.mcqBelowMinimum":
+      "Automatically failed because the multiple-choice score was below the required minimum.",
+    "result.decisionReasonCode.practicalBelowMinimum":
+      "Automatically failed because the practical score was below the required minimum.",
+    "result.decisionReasonCode.autoFail": "Automatically failed based on threshold rules.",
+    "result.decisionReasonCode.autoPass": "Automatically passed based on threshold rules.",
+    "result.decisionReasonCode.mcqOnlyPass":
+      "Passed: you scored {scorePercent}%, and {minPercent}% was required.",
+    "result.decisionReasonCode.mcqOnlyFail":
+      "Not passed: you scored {scorePercent}%, and {minPercent}% was required.",
     "result.confidence": "Confidence note",
     "result.confidenceValue.low":
       "Low confidence due to sparse content; assessment is based on partial evidence.",
@@ -695,12 +717,34 @@ export const translations = {
     "result.decisionValue.APPEAL_RESOLUTION": "Ankeavgjørelse",
     "result.decisionValue.UNKNOWN": "Ukjent",
     "result.decisionReason": "Begrunnelse",
-    "result.decisionReasonValue.autoManualReview":
-      "Automatisk sendt til manuell vurdering på grunn av konfidens, røde flagg eller grenseverdi-regler.",
-    "result.decisionReasonValue.autoPass": "Automatisk bestått etter terskelregler.",
-    "result.decisionReasonValue.autoFail": "Automatisk ikke bestått etter terskelregler.",
-    "result.decisionReasonValue.autoFailInsufficientEvidence":
+    // #950: én oppføring per grunnkode serveren kan sende. En kode uten oppføring her faller tilbake
+    // til serverens engelske setning — se decision-reason.js.
+    "result.decisionReasonCode.llmDisagreement":
+      "Sendt til manuell vurdering fordi to uavhengige vurderinger var uenige.",
+    "result.decisionReasonCode.scoreInconsistency":
+      "Sendt til manuell vurdering fordi poengsummene ikke gikk opp.",
+    "result.decisionReasonCode.borderline":
+      "Sendt til manuell vurdering fordi poengsummen {totalScore} ligger i grenseområdet {min}–{max}, der en sensor avgjør.",
+    "result.decisionReasonCode.redFlagOrConfidence":
+      "Sendt til manuell vurdering fordi regler for konfidens eller røde flagg slo til.",
+    "result.decisionReasonCode.aiDeclaration":
+      "Sendt til manuell vurdering: du oppga omfattende autonom KI-bruk og valgte å levere etter å ha blitt oppfordret til å bearbeide stoffet videre. En sensor vurderer — dette er ikke en automatisk stryk.",
+    "result.decisionReasonCode.aiDeclarationDescribed":
+      "Sendt til manuell vurdering: du oppga omfattende autonom KI-bruk og valgte å levere etter å ha blitt oppfordret til å bearbeide stoffet videre. En sensor vurderer — dette er ikke en automatisk stryk. Din egen beskrivelse: «{description}»",
+    "result.decisionReasonCode.contentSimilarity":
+      "Sendt til manuell vurdering fordi besvarelsen ligner sterkt på et uavhengig generert modellsvar ({similarityPercent} % mot en terskel på {thresholdPercent} %). Dette er ett signal, ikke bevis — en sensor vurderer, og dette er ikke en automatisk stryk.",
+    "result.decisionReasonCode.insufficientEvidence":
       "Automatisk ikke bestått fordi innleveringen ikke ga nok grunnlag for en pålitelig vurdering.",
+    "result.decisionReasonCode.mcqBelowMinimum":
+      "Automatisk ikke bestått fordi poengsummen på flervalgsdelen var under kravet.",
+    "result.decisionReasonCode.practicalBelowMinimum":
+      "Automatisk ikke bestått fordi poengsummen på den praktiske delen var under kravet.",
+    "result.decisionReasonCode.autoFail": "Automatisk ikke bestått etter terskelregler.",
+    "result.decisionReasonCode.autoPass": "Automatisk bestått etter terskelregler.",
+    "result.decisionReasonCode.mcqOnlyPass":
+      "Bestått: du fikk {scorePercent} %, og kravet var {minPercent} %.",
+    "result.decisionReasonCode.mcqOnlyFail":
+      "Ikke bestått: du fikk {scorePercent} %, og kravet var {minPercent} %.",
     "result.confidence": "Konfidensnotat",
     "result.confidenceValue.low":
       "Lav konfidens på grunn av lite innhold; vurderingen bygger på delvis dokumentasjon.",
@@ -1121,12 +1165,34 @@ export const translations = {
     "result.decisionValue.APPEAL_RESOLUTION": "Ankeavgjerd",
     "result.decisionValue.UNKNOWN": "Ukjend",
     "result.decisionReason": "Grunngjeving",
-    "result.decisionReasonValue.autoManualReview":
-      "Automatisk sendt til manuell vurdering på grunn av konfidens, raude flagg eller grenseverdi-reglar.",
-    "result.decisionReasonValue.autoPass": "Automatisk bestått etter terskelreglar.",
-    "result.decisionReasonValue.autoFail": "Automatisk ikkje bestått etter terskelreglar.",
-    "result.decisionReasonValue.autoFailInsufficientEvidence":
+    // #950: éi oppføring per grunnkode serveren kan sende. Ein kode utan oppføring her fell tilbake
+    // til den engelske setninga frå serveren — sjå decision-reason.js.
+    "result.decisionReasonCode.llmDisagreement":
+      "Sendt til manuell vurdering fordi to uavhengige vurderingar var ueinige.",
+    "result.decisionReasonCode.scoreInconsistency":
+      "Sendt til manuell vurdering fordi poengsummane ikkje gjekk opp.",
+    "result.decisionReasonCode.borderline":
+      "Sendt til manuell vurdering fordi poengsummen {totalScore} ligg i grenseområdet {min}–{max}, der ein sensor avgjer.",
+    "result.decisionReasonCode.redFlagOrConfidence":
+      "Sendt til manuell vurdering fordi reglar for konfidens eller raude flagg slo til.",
+    "result.decisionReasonCode.aiDeclaration":
+      "Sendt til manuell vurdering: du oppgav omfattande autonom KI-bruk og valde å levere etter å ha blitt oppmoda til å arbeide vidare med stoffet. Ein sensor vurderer — dette er ikkje ein automatisk stryk.",
+    "result.decisionReasonCode.aiDeclarationDescribed":
+      "Sendt til manuell vurdering: du oppgav omfattande autonom KI-bruk og valde å levere etter å ha blitt oppmoda til å arbeide vidare med stoffet. Ein sensor vurderer — dette er ikkje ein automatisk stryk. Di eiga skildring: «{description}»",
+    "result.decisionReasonCode.contentSimilarity":
+      "Sendt til manuell vurdering fordi svaret liknar sterkt på eit uavhengig generert modellsvar ({similarityPercent} % mot ein terskel på {thresholdPercent} %). Dette er eitt signal, ikkje bevis — ein sensor vurderer, og dette er ikkje ein automatisk stryk.",
+    "result.decisionReasonCode.insufficientEvidence":
       "Automatisk ikkje bestått fordi innleveringa ikkje gav nok grunnlag for ei påliteleg vurdering.",
+    "result.decisionReasonCode.mcqBelowMinimum":
+      "Automatisk ikkje bestått fordi poengsummen på fleirvalsdelen var under kravet.",
+    "result.decisionReasonCode.practicalBelowMinimum":
+      "Automatisk ikkje bestått fordi poengsummen på den praktiske delen var under kravet.",
+    "result.decisionReasonCode.autoFail": "Automatisk ikkje bestått etter terskelreglar.",
+    "result.decisionReasonCode.autoPass": "Automatisk bestått etter terskelreglar.",
+    "result.decisionReasonCode.mcqOnlyPass":
+      "Bestått: du fekk {scorePercent} %, og kravet var {minPercent} %.",
+    "result.decisionReasonCode.mcqOnlyFail":
+      "Ikkje bestått: du fekk {scorePercent} %, og kravet var {minPercent} %.",
     "result.confidence": "Konfidensnotat",
     "result.confidenceValue.low":
       "Låg konfidens på grunn av lite innhald; vurderinga byggjer på delvis dokumentasjon.",

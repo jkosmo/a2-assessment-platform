@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { warmModuleGraph } from "../support/moduleGraphWarmup.js";
+import { decisionReason, decisionReasonCodes } from "../../src/modules/assessment/decisionReason.js";
 
 const findNextRunnableJob = vi.fn();
 const tryLockPendingJob = vi.fn();
@@ -420,8 +421,10 @@ describe("assessment job service traffic-light policy", () => {
     expect(createAssessmentDecision).toHaveBeenCalledWith(
       expect.objectContaining({
         submissionId: "submission-1",
-        forceManualReviewReason:
+        forceManualReviewReason: decisionReason(
+          decisionReasonCodes.manualReviewLlmDisagreement,
           "Automatically routed to manual review due to disagreement between primary and secondary LLM assessments.",
+        ),
         llmResult: expect.objectContaining({
           practical_score_scaled: 45.5,
           pass_fail_practical: true,

@@ -14,6 +14,7 @@
 import type { ModuleAssessmentPolicy } from "../../codecs/assessmentPolicyCodec.js";
 import type { SupportedLocale } from "../../i18n/locale.js";
 import { lexicalCosineSimilarity } from "./contentSimilarity.js";
+import { decisionReasonCodes, type DecisionReasonCode, type DecisionReasonParams } from "./decisionReason.js";
 
 export const AI_DECLARATION_VALUES = ["none", "ideas", "improve", "autonomous"] as const;
 export type AiDeclaration = (typeof AI_DECLARATION_VALUES)[number];
@@ -38,6 +39,9 @@ export type AiInfluenceRules = {
 export type AiInfluenceDecision = {
   forcesReview: true;
   reason: string;
+  /** #950: hva som utløste, som data — slik at deltakeren kan få setningen på sitt eget språk. */
+  code: DecisionReasonCode;
+  params: DecisionReasonParams;
 };
 
 // Norwegian (bokmål): this becomes the ManualReview.triggerReason shown to the (Norwegian-speaking)
@@ -105,7 +109,14 @@ export function evaluateAiInfluence(args: {
     ? `${AUTONOMOUS_REVIEW_REASON} Deltakerens beskrivelse: «${description.slice(0, 600)}»`
     : AUTONOMOUS_REVIEW_REASON;
 
-  return { forcesReview: true, reason };
+  return {
+    forcesReview: true,
+    reason,
+    code: decisionReasonCodes.manualReviewAiDeclaration,
+    // Deltakerens egen beskrivelse er deltakerens egne ord — den settes inn i setningen, ikke
+    // oversatt. Tom streng når hen ikke skrev noe, slik at klienten kan utelate den delen.
+    params: { description: description ? description.slice(0, 600) : "" },
+  };
 }
 
 // ── #475 Phase 2: content-similarity signal ─────────────────────────────────────────────────────
@@ -262,7 +273,15 @@ export function buildAiInfluenceOutcome(args: {
   if (declarationForcesReview && declarationResult) {
     decision = declarationResult;
   } else if (contentSignal?.forcesReview) {
-    decision = { forcesReview: true, reason: contentSimilarityReason(contentSignal) };
+    decision = {
+      forcesReview: true,
+      reason: contentSimilarityReason(contentSignal),
+      code: decisionReasonCodes.manualReviewContentSimilarity,
+      params: {
+        similarityPercent: Math.round(contentSignal.similarity * 100),
+        thresholdPercent: Math.round(contentSignal.threshold * 100),
+      },
+    };
   }
 
   return { signalsJson: JSON.stringify(persisted), decision };

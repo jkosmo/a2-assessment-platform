@@ -6,6 +6,7 @@ import {
   evaluateSecondaryAssessmentTrigger,
 } from "../modules/assessment/secondaryAssessmentService.js";
 import { shouldSuppressManualReviewForInsufficientEvidenceDisagreement } from "../modules/assessment/assessmentDecisionSignals.js";
+import { decisionReason, decisionReasonCodes, type DecisionReason } from "../modules/assessment/decisionReason.js";
 import { assessmentBatchCases, type AssessmentBatchCase, type BatchExpectedOutcome } from "./assessmentBatchCases.js";
 
 type BatchRunRecord = {
@@ -67,7 +68,7 @@ async function runSingleIteration(
 
   let finalResult = primaryResult;
   let secondaryRan = false;
-  let forceManualReviewReason: string | undefined;
+  let forceManualReviewReason: DecisionReason | undefined;
 
   const secondaryTrigger = evaluateSecondaryAssessmentTrigger({
     moduleId: assessmentCase.moduleId,
@@ -92,7 +93,10 @@ async function runSingleIteration(
       !shouldSuppressManualReviewForInsufficientEvidenceDisagreement(primaryResult, secondaryResult)
     ) {
       forceManualReviewReason =
-        "Automatically routed to manual review due to disagreement between primary and secondary LLM assessments.";
+        decisionReason(
+          decisionReasonCodes.manualReviewLlmDisagreement,
+          "Automatically routed to manual review due to disagreement between primary and secondary LLM assessments.",
+        );
     }
   }
 

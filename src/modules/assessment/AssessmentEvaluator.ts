@@ -14,6 +14,7 @@ import {
 } from "./secondaryAssessmentService.js";
 import { shouldSuppressManualReviewForInsufficientEvidenceDisagreement } from "./assessmentDecisionSignals.js";
 import type { AssessmentInputContext } from "./AssessmentInputFactory.js";
+import { decisionReason, decisionReasonCodes, type DecisionReason } from "./decisionReason.js";
 
 export type EvaluationResult = {
   /** The final LLM result to use for decision-making (secondary result when run, otherwise primary). */
@@ -21,8 +22,11 @@ export type EvaluationResult = {
   /**
    * Set when the primary and secondary assessments disagree in a way that requires manual review.
    * Undefined otherwise.
+   *
+   * #950: bærer koden sammen med teksten. Var en naken streng, og da måtte mottakeren GJETTE hvilken
+   * grunn det var for å kunne oversette den. Typen gjør gjettingen umulig.
    */
-  forceManualReviewReason: string | undefined;
+  forceManualReviewReason: DecisionReason | undefined;
 };
 
 type EvaluatorContext = {
@@ -142,7 +146,7 @@ export async function runLlmEvaluationPipeline(ctx: EvaluatorContext): Promise<E
 
   // --- Secondary assessment pass (conditional) ---
   let finalLlmResult: LlmStructuredAssessment = primaryLlmResult;
-  let forceManualReviewReason: string | undefined;
+  let forceManualReviewReason: DecisionReason | undefined;
 
   const secondaryTrigger = evaluateSecondaryAssessmentTrigger({
     moduleId,
@@ -211,8 +215,10 @@ export async function runLlmEvaluationPipeline(ctx: EvaluatorContext): Promise<E
       disagreement.hasDisagreement &&
       !shouldSuppressManualReviewForInsufficientEvidenceDisagreement(primaryLlmResult, secondaryLlmResult)
     ) {
-      forceManualReviewReason =
-        "Automatically routed to manual review due to disagreement between primary and secondary LLM assessments.";
+      forceManualReviewReason = decisionReason(
+        decisionReasonCodes.manualReviewLlmDisagreement,
+        "Automatically routed to manual review due to disagreement between primary and secondary LLM assessments.",
+      );
     }
   }
 
