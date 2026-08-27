@@ -31,6 +31,11 @@ import { deriveModuleStatusChains } from "/static/module-status-logic.js";
 import { renderOwnerPanel } from "/static/owner-panel.js";
 import { makeSrBadge, loadVersion } from "/static/admin-content-shared.js";
 import {
+  buildLocalizedCopyValue,
+  isPartialLocalizedMap,
+  selectTranslatedDraftFields,
+} from "/static/admin-content-localized-copy.js";
+import {
   buildExternalLlmAuthoringPrompt,
   parseExternalLlmJson,
 } from "/static/admin-content-external-llm.js";
@@ -1461,6 +1466,22 @@ function dropLocale(localized, locale) {
   }
 }
 
+/**
+ * #982: si fra om språk som ikke ble oversatt.
+ *
+ * ⚠️ Egen tekst fra `shell.revision.titleNotTranslated`, som sier at språkene «står fortsatt med
+ * kildeteksten». Etter at lokalen slippes er de TOMME, og en melding som beskriver feil tilstand
+ * sender forfatteren til å lete etter noe som ikke er der.
+ */
+function describeFailedLocales(failedLocales, sourceLocale) {
+  if (!failedLocales?.length) return "";
+  const text = tf("shell.generating.draftNotTranslated", {
+    locales: failedLocales.join(", "),
+    source: sourceLocale,
+  });
+  return `<p style="margin:8px 0 0;font-size:13px;color:var(--color-warning,#8a5f10)">${escapeHtml(text)}</p>`;
+}
+
 function buildLocalizedTextMap(baseLocale, baseText, translatedEntries = {}) {
   const result = {};
   for (const locale of supportedLocales) {
@@ -1497,27 +1518,58 @@ function normalizeModuleTitlePatch(title) {
   return Object.keys(normalized).length > 0 ? normalized : null;
 }
 
+/**
+ * #982: en oversettelse som ikke kom, skal se ut som en oversettelse som ikke kom.
+ *
+ * ⚠️ Skrev tidligere `draft?.taskText ?? taskText` — altså KILDETEKSTEN — inn i mållokalen når
+ * svaret var tomt eller manglet felt, og kastet ikke engang ved nettverksfeil. Kartet så komplett
+ * ut, `missingLocalesFor` fant ingenting å savne, publiseringsgaten slapp modulen gjennom, og en
+ * nynorskdeltaker fikk bokmål uten at noe sa fra. Det er #892-invarianten brutt stille.
+ *
+ * Søstermetoden `localizeDraftAcrossLocalesWithTitle` gjorde dette riktig allerede (#905): den
+ * SLIPPER lokalen og fører den opp i `failedLocales`. Denne gjør nå det samme, og returnerer
+ * `failedLocales` slik at kalleren kan si fra i stedet for å vise «ferdig».
+ */
 async function localizeDraftAcrossLocales(taskText, assessorExpectedContent, sourceLocale, candidateTaskConstraints) {
   const localized = {
     taskText: buildLocalizedTextMap(sourceLocale, taskText),
     assessorExpectedContent: buildLocalizedTextMap(sourceLocale, assessorExpectedContent),
     candidateTaskConstraints: buildLocalizedTextMap(sourceLocale, candidateTaskConstraints ?? ""),
+    failedLocales: [],
   };
 
   for (const targetLocale of supportedLocales) {
     if (targetLocale === sourceLocale) continue;
-    const result = await apiFetch(
-      "/api/admin/content/generate/module-draft/localize",
-      getHeaders,
-      {
-        method: "POST",
-        body: JSON.stringify({ taskText, assessorExpectedContent, candidateTaskConstraints: candidateTaskConstraints ?? "", sourceLocale, targetLocale }),
-      },
-    );
-    const draft = result?.draft ?? result;
-    localized.taskText[targetLocale] = draft?.taskText ?? taskText;
-    localized.assessorExpectedContent[targetLocale] = draft?.assessorExpectedContent ?? assessorExpectedContent;
-    localized.candidateTaskConstraints[targetLocale] = draft?.candidateTaskConstraints ?? candidateTaskConstraints ?? "";
+
+    let result;
+    try {
+      result = await apiFetch(
+        "/api/admin/content/generate/module-draft/localize",
+        getHeaders,
+        {
+          method: "POST",
+          body: JSON.stringify({ taskText, assessorExpectedContent, candidateTaskConstraints: candidateTaskConstraints ?? "", sourceLocale, targetLocale }),
+        },
+      );
+    } catch {
+      dropLocale(localized, targetLocale);
+      localized.failedLocales.push(targetLocale);
+      continue;
+    }
+
+    const fields = selectTranslatedDraftFields(result?.draft ?? result);
+    // Et svar uten oppgavetekst er ingen oversettelse. Samme behandling som en kastet feil.
+    if (!fields) {
+      dropLocale(localized, targetLocale);
+      localized.failedLocales.push(targetLocale);
+      continue;
+    }
+
+    // ⚠️ Felter som mangler i svaret fylles IKKE med kildeteksten — de slippes for den lokalen.
+    for (const field of ["taskText", "assessorExpectedContent", "candidateTaskConstraints"]) {
+      if (fields[field]) localized[field][targetLocale] = fields[field];
+      else delete localized[field][targetLocale];
+    }
   }
 
   return localized;
@@ -1812,7 +1864,16 @@ let pendingProposal = null;
  *                   for content the author has not accepted.
  * @returns true if committed, false if parked.
  */
-function commitOrProposeGenerated({ patch, slot, readyHtml, scroll = "top", onCommit }) {
+/**
+ * #982: `warningHtml` er et EGET argument, ikke en del av `readyHtml`.
+ *
+ * ⚠️ Advarselen om språk som ikke ble oversatt lå først inne i `readyHtml`. Den rendres bare når
+ * patchen landes med én gang — er en redigeringsflate åpen, parkeres forslaget og en helt annen
+ * tekst vises. Forfatteren som HAR skrevet i feltene, altså den som oftest ber om en revisjon, fikk
+ * dermed aldri vite at en oversettelse manglet. Advarselen må høre til beskjeden, ikke til én av to
+ * måter å vise den på.
+ */
+function commitOrProposeGenerated({ patch, slot, readyHtml, warningHtml = "", scroll = "top", onCommit }) {
   const commit = () => {
     commitSessionDraftPatch(patch, { scroll });
     onCommit?.();
@@ -1820,7 +1881,7 @@ function commitOrProposeGenerated({ patch, slot, readyHtml, scroll = "top", onCo
 
   if (!hasOpenEditForm()) {
     commit();
-    logResolveSlot(slot, readyHtml);
+    logResolveSlot(slot, () => `${readyHtml()}${warningHtml}`);
     return true;
   }
 
@@ -1836,7 +1897,7 @@ function commitOrProposeGenerated({ patch, slot, readyHtml, scroll = "top", onCo
   const thisProposal = pendingProposal;
   logResolveSlot(
     slot,
-    () => `<strong>${escapeHtml(t("shell.proposal.title"))}</strong>
+    () => `<strong>${escapeHtml(t("shell.proposal.title"))}</strong>${warningHtml}
       <p style="margin:8px 0 0;font-size:13px;color:var(--color-meta)">${escapeHtml(t("shell.proposal.body"))}</p>`,
     [
       {
@@ -1978,6 +2039,10 @@ async function generateDraftInBackground(sourceMaterial, certLevel, locale, gene
 
   const draft = result?.draft ?? result;
   const localizedDraft = await localizeDraftAcrossLocales(draft.taskText, draft.assessorExpectedContent, locale, draft.candidateTaskConstraints);
+  // #982: en delvis oversettelse er ikke «ferdig». Språk som ikke ble oversatt står nå tomme —
+  // sier vi ingenting, oppdager forfatteren det først når publiseringsgaten stopper modulen, eller
+  // verre: aldri, fordi hen tror alt er på plass.
+  const localizeWarning = describeFailedLocales(localizedDraft.failedLocales, locale);
   // #926 §6: gjennom porten. Blueprint og hash-oppfriskningen hører til utkastet, ikke til
   // forslaget, så de skjer først når patchen faktisk landes.
   commitOrProposeGenerated({
@@ -1985,6 +2050,7 @@ async function generateDraftInBackground(sourceMaterial, certLevel, locale, gene
     slot,
     readyHtml: () => `<strong>${escapeHtml(t("shell.generating.draftReady"))}</strong>
       <p style="margin:8px 0 0;font-size:13px;color:var(--color-meta)">${escapeHtml(t("shell.generating.reviewPreviewHint"))}</p>`,
+    warningHtml: localizeWarning,
     onCommit: () => {
       if (blueprint) {
         sessionDraft = { ...sessionDraft, assessmentBlueprint: blueprint };
@@ -2054,8 +2120,12 @@ async function generateMcqInBackground(sourceMaterial, certLevel, locale, genera
     patch: { mcqQuestions: localizedQuestions },
     slot,
     scroll: "bottom",
+    // #982: kvalitetsadvarslene fra #551 lå også inne i `readyHtml`, og forsvant dermed når
+    // forslaget ble parkert bak åpne felter — spørsmål med kjente problemer kunne landes uten at
+    // advarselen noen gang var synlig. Fjerde advarsel i samme fil med samme feil.
     readyHtml: () => `<strong>${escapeHtml(tf("shell.generating.mcqReady", { count: questions.length }))}</strong>
-      <p style="margin:8px 0 0;font-size:13px;color:var(--color-meta)">${escapeHtml(t("shell.generating.reviewPreviewHint"))}</p>${mcqWarningsHtml}`,
+      <p style="margin:8px 0 0;font-size:13px;color:var(--color-meta)">${escapeHtml(t("shell.generating.reviewPreviewHint"))}</p>`,
+    warningHtml: mcqWarningsHtml,
     onCommit: () => onAccept?.(questions),
   });
 }
@@ -2111,12 +2181,15 @@ async function reviseDraftInBackground(instruction, onAccept) {
 
   const draft = result?.draft ?? result;
   const localizedDraft = await localizeDraftAcrossLocales(draft.taskText, draft.assessorExpectedContent, contentLocale, draft.candidateTaskConstraints);
+  // #982: samme som ved generering — språk som ikke ble oversatt står tomme, og det skal sies.
+  const localizeWarning = describeFailedLocales(localizedDraft.failedLocales, contentLocale);
   // #926 §6: dette er stien saken beskriver ordrett — forfatteren har skrevet i feltene og ber om
   // en revisjon i chatten. Uten porten kom svaret rett inn over deres eget arbeid.
   commitOrProposeGenerated({
     patch: { taskText: localizedDraft.taskText, assessorExpectedContent: localizedDraft.assessorExpectedContent, candidateTaskConstraints: localizedDraft.candidateTaskConstraints },
     slot,
     readyHtml: () => `<strong>${escapeHtml(t("shell.revision.draftReady"))}</strong>`,
+    warningHtml: localizeWarning,
     onCommit: () => onAccept?.(draft),
   });
 }
@@ -2213,7 +2286,12 @@ async function applyStructuredTitleEditInBackground(newTitle) {
         candidateTaskConstraints: localizedDraft.candidateTaskConstraints,
       },
       slot,
-      readyHtml: () => `<strong>${escapeHtml(tf("shell.revision.titleReady", { title: newTitle }))}</strong>${escapeHtml(warning)}`,
+      // #982: advarselen som EGET argument. Lå den i `readyHtml`, forsvant den i det øyeblikket
+      // forfatteren hadde en redigeringsflate åpen — og da parkeres forslaget i stedet.
+      readyHtml: () => `<strong>${escapeHtml(tf("shell.revision.titleReady", { title: newTitle }))}</strong>`,
+      warningHtml: warning
+        ? `<p style="margin:8px 0 0;font-size:13px;color:var(--color-warning,#8a5f10)">${escapeHtml(warning)}</p>`
+        : "",
     });
   } catch (err) {
     const errMsg = apiErrorText(err);
@@ -2255,11 +2333,16 @@ async function refreshLocalizedDraftInBackground({ draft, mcq }) {
     }
     // #926 QA: samme hull som tittelstien. «Oversett til nynorsk» i chatten leser utkastet, ikke
     // feltene, så en oversettelse skrev håndskrevet, ulagret tekst ut av veien.
+    //
+    // ⚠️ #982: denne sto helt stum — den ignorerte `failedLocales` og sa «Oversettelse klar»
+    // uansett. Det er RE-oversettelsesflaten, altså stedet der feilede språk er mest sannsynlige,
+    // og der en forfatter minst av alt bør tro at jobben er gjort.
     commitOrProposeGenerated({
       patch,
       slot,
       scroll: localizedMcq && !localizedDraft ? "bottom" : "top",
       readyHtml: () => `<strong>${escapeHtml(t("shell.revision.translateReady"))}</strong>`,
+      warningHtml: describeFailedLocales(localizedDraft?.failedLocales, snapshot.sourceLocale),
     });
   } catch (err) {
     const errMsg = apiErrorText(err);
@@ -3006,22 +3089,6 @@ async function startArchivedModulePicker() {
   }
 }
 
-function buildLocalizedCopyValue(value) {
-  if (value && typeof value === "object") {
-    return Object.fromEntries(
-      supportedLocales.map((locale) => {
-        const localizedValue = localizeValueForLocale(value, locale) || localizeValueForLocale(value, "en-GB") || "";
-        return [locale, `${localizedValue} ${t("shell.duplicate.copySuffix")}`.trim()];
-      }),
-    );
-  }
-  const fallback = String(value ?? "").trim();
-  const label = fallback || t("shell.newModule.defaultTitle");
-  return Object.fromEntries(
-    supportedLocales.map((locale) => [locale, `${label} ${t("shell.duplicate.copySuffix")}`.trim()]),
-  );
-}
-
 async function duplicateCurrentModuleInBackground() {
   const sourceModule = bundle?.module;
   const sourceConfig = bundle?.selectedConfiguration ?? {};
@@ -3033,6 +3100,16 @@ async function duplicateCurrentModuleInBackground() {
   const slot = logProgress("shell.duplicate.progress");
   slot.abortBtn.remove();
 
+  const copyTitle = buildLocalizedCopyValue(sourceModule.title, {
+    locales: supportedLocales,
+    suffix: t("shell.duplicate.copySuffix"),
+    fallbackLabel: t("shell.newModule.defaultTitle"),
+  });
+  const copyTitleIsPartial = isPartialLocalizedMap(copyTitle, supportedLocales);
+  const copyTitleSeed = copyTitleIsPartial
+    ? copyTitle[supportedLocales.find((locale) => copyTitle[locale])]
+    : copyTitle;
+
   try {
     const createBody = await apiFetch(
       "/api/admin/content/modules",
@@ -3040,7 +3117,12 @@ async function duplicateCurrentModuleInBackground() {
       {
         method: "POST",
         body: JSON.stringify({
-          title: buildLocalizedCopyValue(sourceModule.title),
+          // #982: et DELVIS kart kan ikke sendes ved opprettelse — `localizedTextSchema` godtar
+          // streng eller alle tre. Da opprettes modulen med teksten fra det første språket som
+          // faktisk har innhold, og kartet settes med en PATCH like etter. Serveren fletter et
+          // objekt-patch på KARTET, aldri på en streng (#981), så resultatet blir nøyaktig de
+          // språkene originalen hadde.
+          title: copyTitleIsPartial ? copyTitleSeed : copyTitle,
           description: sourceModule.description ?? undefined,
           certificationLevel: sourceModule.certificationLevel ?? "intermediate",
           validFrom: sourceModule.validFrom ?? undefined,
@@ -3052,6 +3134,16 @@ async function duplicateCurrentModuleInBackground() {
     const duplicatedModuleId = duplicatedModule?.id;
     if (!duplicatedModuleId) {
       throw new Error(t("shell.duplicate.errorUnknown"));
+    }
+
+    // #982: gjenopprett de språkene originalen faktisk hadde. Uten dette ville en delvis oversatt
+    // modul blitt kopiert som ettspråklig — motsatt feil av den vi rettet, men samme klasse:
+    // kopien forteller noe annet om innholdet enn det som er sant.
+    if (copyTitleIsPartial) {
+      await apiFetch(`/api/admin/content/modules/${encodeURIComponent(duplicatedModuleId)}/title`, getHeaders, {
+        method: "PATCH",
+        body: JSON.stringify({ title: copyTitle }),
+      });
     }
 
     const rubricVersion = sourceConfig.rubricVersion

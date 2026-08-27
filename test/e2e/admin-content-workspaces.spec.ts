@@ -2735,6 +2735,49 @@ test.describe("admin content browser coverage", () => {
   // #905: a locale whose translation failed must be ABSENT from what is saved. Leaving the
   // source copy behind is what made "not translated yet" invisible to the publish gate (#896 S4)
   // and to the translation-status list (#894).
+  // #982: en oversettelse som feiler skal sies fra om, ikke fylles med kildetekst.
+  //
+  // ⚠️ HVA DENNE MÅLER: direkte-redigering (`#previewEditConfirm`), som skriver til loggen selv og
+  // ikke går gjennom `commitOrProposeGenerated`. Oppdaget ved mutasjonstesting — jeg fjernet
+  // advarselen fra de tre kallerne jeg hadde endret, og denne forble grønn.
+  //
+  // Den parkerte grenen dekkes av «… også når forslaget parkeres bak åpne felter» lenger nede.
+  test("en feilet oversettelse sier fra i loggen", async ({ page }) => {
+    await mockCommonApis(page, {
+      modules: [{ id: "module-1", title: "Trade unions", activeVersion: { versionNo: 1 } }],
+      moduleExports: {
+        "module-1": buildMockModuleExport({
+          id: "module-1",
+          title: "Trade unions",
+          moduleVersionId: "module-1-version-1",
+          taskText: localizedText("Norsk scenario"),
+          mcqQuestions: [
+            {
+              stem: localizedText("Question 1"),
+              options: [localizedText("Option A"), localizedText("Option B")],
+              correctAnswer: localizedText("Option B"),
+              rationale: localizedText("Rationale"),
+            },
+          ],
+        }),
+      },
+    });
+
+    // Begge målspråkene feiler, så advarselen MÅ komme.
+    await page.route("**/generate/module-draft/localize", (route: Route) =>
+      route.fulfill({ status: 500, contentType: "application/json", body: "{}" }));
+
+    await page.goto("/admin-content/module/module-1/conversation");
+    await page.locator("#previewEditTitle").waitFor();
+    await page.locator("#previewEditTaskText").fill("Bearbeidet scenario");
+    await page.locator("#previewEditConfirm").click();
+
+    await expect(page.locator("#chatMessages")).toContainText(
+      /Ikke oversatt til|Not translated to|Ikkje omsett til/,
+      { timeout: 10000 },
+    );
+  });
+
   test("a failed locale is left out of the saved draft, not filled with the source text", async ({ page }) => {
     const state = await mockCommonApis(page, {
       modules: [{ id: "module-1", title: "Trade unions", activeVersion: { versionNo: 1 } }],
@@ -2913,6 +2956,66 @@ test.describe("admin content browser coverage", () => {
   //
   // Two tests, because the two halves fail differently: a gate that never proposes loses work
   // silently, and a gate that never commits makes every generation cost an extra click.
+  // #982: advarselen om språk som ikke ble oversatt må vises OGSÅ når forslaget parkeres bak
+  // åpne felter — det er den forfatteren som oftest ber om en revisjon møter.
+  //
+  // ⚠️ Jeg påsto først at denne grenen ikke kunne testes «fordi den krever chat-klassifisering».
+  // Det var feil: klassifiseringen er klient-side og deterministisk, og testen rett under driver
+  // allerede nøyaktig denne grenen. Påstanden var en antakelse, ikke et funn.
+  test("en feilet oversettelse sier fra også når forslaget parkeres bak åpne felter", async ({ page }) => {
+    await mockCommonApis(page, {
+      modules: [{ id: "module-1", title: "Trade unions", activeVersion: { versionNo: 1 } }],
+      moduleExports: {
+        "module-1": buildMockModuleExport({
+          id: "module-1",
+          title: "Trade unions",
+          moduleVersionId: "module-1-version-1",
+          taskText: localizedText("Norsk scenario"),
+          assessorExpectedContent: localizedText("Norsk veiledning"),
+        }),
+      },
+    });
+
+    await page.route("**/generate/module-draft/revise", (route: Route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          draft: {
+            taskText: "Generert scenario",
+            assessorExpectedContent: "Generert veiledning",
+            candidateTaskConstraints: "",
+          },
+        }),
+      }));
+
+    // Begge målspråkene feiler. Denne overstyrer default-mocken i `mockCommonApis`.
+    await page.route("**/generate/module-draft/localize", (route: Route) =>
+      route.fulfill({ status: 500, contentType: "application/json", body: "{}" }));
+
+    await page.goto("/admin-content/module/module-1/conversation?resumeEditing=1");
+    await expect(
+      page.locator("#workspaceActions").getByRole("button", { name: /Request changes in chat|Be om endringer i chat/ }),
+    ).toBeEnabled();
+
+    const taskField = page.locator("#previewEditTaskText");
+    await expect(taskField).not.toHaveValue("");
+    await taskField.fill("Skrevet for hånd");
+
+    await clickEnabledButton(page, /Request changes in chat|Be om endringer i chat/);
+    await page.locator(".chat-textarea:enabled").last().fill("Skjerp scenarioet");
+    await clickEnabledButton(page, /Revise|Revider/);
+
+    // Forutsetningen: forslaget ER parkert. Uten denne ville påstanden under kunne vært grønn
+    // fordi vi målte den direkte stien i stedet.
+    await expect(page.locator("#chatMessages").getByText(/Suggestion ready|Forslag klart/)).toBeVisible();
+
+    // Og advarselen skal stå i den parkerte beskjeden.
+    await expect(page.locator("#chatMessages")).toContainText(
+      /Ikke oversatt til|Not translated to|Ikkje omsett til/,
+    );
+  });
+
   test("a revision lands as a proposal when the fields hold unsaved typing", async ({ page }) => {
     await mockCommonApis(page, {
       modules: [{ id: "module-1", title: "Trade unions", activeVersion: { versionNo: 1 } }],

@@ -2,6 +2,65 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.35.0 - 2026-08-27
+
+### #982 — en oversettelse som ikke kom, fylles ikke lenger med kildetekst
+
+`localizeDraftAcrossLocales` skrev `draft?.taskText ?? taskText` — altså KILDETEKSTEN — inn i
+mållokalen når oversettelsen svarte tomt, og fanget ikke nettverksfeil i det hele tatt. Kartet så
+komplett ut, `missingLocalesFor` fant ingenting å savne, publiseringsgaten slapp modulen gjennom, og
+en nynorskdeltaker fikk bokmål uten at noe sa fra. Det er #892-invarianten brutt stille, i
+hovedflyten for innholdsproduksjon.
+
+Lokalen slippes nå og føres i `failedLocales`, slik søstermetoden har gjort siden #905. Regelen for
+hva som beholdes fra et oversettelsessvar ligger i `selectTranslatedDraftFields`
+(`public/static/admin-content-localized-copy.js`), fordi den lå inne i en funksjon som gjør
+nettverkskall — **en regel som bare kan prøves gjennom hele flaten, blir i praksis ikke prøvd.**
+
+⚠️ Sidegevinst porten fant: kallet lå UTENFOR try-blokkene i begge kallerne, så en nettverksfeil
+under lokalisering ga en uhåndtert rejection og en fremdriftsboble som aldri løste seg.
+Per-lokale-fangsten retter også det.
+
+### Advarselen nådde ikke fram — fire ganger, samme mekanisme
+
+Advarselen om språk som ikke ble oversatt lå inne i `readyHtml`. Den rendres bare når endringen
+landes med én gang. Har forfatteren skrevet i feltene, PARKERES forslaget og en helt annen tekst
+vises — så den som oftest ber om en revisjon, fikk aldri vite at et språk manglet.
+
+`warningHtml` er nå et eget argument til `commitOrProposeGenerated` og rendres i BEGGE grenene. Fire
+advarsler er flyttet over: generer utkast, revider utkast, tittelrevisjon, og MCQ-kvalitet (#551).
+Den siste ble funnet først i fjerde QA-runde — jeg hadde flyttet tre og latt den fjerde stå.
+
+Oversett-kommandoen (`refreshLocalizedDraftInBackground`) var i tillegg **helt stum**: den ignorerte
+`failedLocales` og sa «Oversettelse klar» uansett, på nettopp den flaten der oversettelser feiler
+oftest.
+
+Ny tekstnøkkel `shell.generating.draftNotTranslated` i tre språk. Den eksisterende sier at språkene
+«står fortsatt med kildeteksten», som er feil etter at lokalen slippes — en melding som beskriver
+feil tilstand sender forfatteren for å lete etter noe som ikke er der.
+
+### Rotårsak, per stående ordre
+
+Fire QA-runder, og hver runde fant SAMME feilklasse ett nytt sted:
+
+1. Jeg fikset `buildLocalizedCopyValue` — som viste seg å være **død kode**. Funksjonen har ingen
+   utløser; den levende dupliseringen ligger i biblioteket og var allerede ærlig. Jeg sjekket aldri
+   om funksjonen hadde en kaller.
+2. Jeg rettet den levende stien, men bare to av tre kallere fikk advarselen fram.
+3. Jeg påsto at den parkerte grenen ikke kunne testes «fordi den krever chat-klassifisering».
+   Klassifiseringen er klient-side og deterministisk, og det fantes allerede en test som drev
+   nøyaktig den grenen. Dekningen var femten linjer unna.
+4. Den fjerde advarselen sto igjen.
+
+⚠️ Og en test til som var grønn av feil grunn: e2e-en jeg skrev for advarsels-wiringen målte et
+FJERDE sted — direkte-redigering, som skriver til loggen selv. Jeg fjernet advarselen fra alle tre
+kallerne jeg hadde endret, og den forble grønn.
+
+**Fellesnevneren er ikke uoppmerksomhet.** Jeg fikser det jeg ser på, og sjekker ikke systematisk
+hvem andre som gjør det samme — pre-flight-oppslag nummer to. Fjerde runde ble derfor bedt om å lete
+etter FLERE av samme slag, ikke bare vurdere fiksen. Den gikk gjennom alle seks kallerne og bekreftet
+at det ikke finnes en femte. Det spørsmålet burde vært stilt i første runde.
+
 ## 2.34.0 - 2026-08-27
 
 ### #1012 — erstatt innholdet i en seksjon fra fil
