@@ -17,6 +17,8 @@ export const operationalEvents = {
     failedBacklogAlert: "assessment_failed_backlog_alert",
     decisionAlreadyPresent: "assessment_decision_already_present",
     llmEvaluationFailed: "llm_evaluation_failed",
+    // #1023: skyggemåling av utløseren for andre vurdering. Logges BARE ved uenighet.
+    secondaryTriggerShadowDiff: "secondary_trigger_shadow_diff",
   },
   certification: {
     participantNotificationFailed: "participant_notification_failed",
@@ -106,6 +108,25 @@ export type OperationalEventMetadataByName = {
     assessmentPass: string;
     llmMode: string;
     errorMessage: string;
+  }>;
+  // #1023: dagens utløser leter etter delstrenger i språkmodellens frie tekst («medium confidence»,
+  // «low confidence»). Den strukturerte regelen leser felt modellen faktisk fyller ut. Denne
+  // hendelsen logges når de to er UENIGE, slik at vi kan måle før vi bytter — et bytte endrer hvor
+  // ofte vi betaler for en ekstra LLM-kjøring.
+  //
+  // ⚠️ Ingen fritekst i metadataen. Notatet kan i teorien gjengi noe kandidaten skrev; her lagres
+  // bare hvilke MØNSTRE som traff, og hvilke strukturerte verdier som lå bak.
+  [operationalEvents.assessment.secondaryTriggerShadowDiff]: EventMetadata<{
+    jobId: string;
+    submissionId: string;
+    moduleId: string;
+    liveConfidenceTrigger: boolean;
+    shadowConfidenceTrigger: boolean;
+    liveShouldRun: boolean;
+    shadowShouldRun: boolean;
+    matchedPatterns: string[];
+    evidenceSufficiency: string;
+    manualReviewReasonCode: string;
   }>;
   [operationalEvents.certification.participantNotificationFailed]: EventMetadata<{
     channel: string;

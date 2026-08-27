@@ -2,6 +2,51 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.39.0 - 2026-08-27
+
+### #1023 — utløseren for andre vurdering måles før den byttes
+
+Om en besvarelse skal vurderes en gang til avgjøres delvis av om språkmodellens FRIE TEKST
+inneholder «medium confidence» eller «low confidence». Formulerer modellen seg om, slutter
+utløseren å fyre, og en besvarelse som skulle fått et andre blikk får det ikke. Ingenting feiler.
+
+Begge reglene regnes nå ut. **Dagens avgjør fortsatt alt** — et bytte endrer hvor ofte vi betaler
+for en ekstra LLM-kjøring og hvor lenge deltakeren venter, og det er en produktbeslutning. Ved
+uenighet logges `secondary_trigger_shadow_diff`, uten fritekst: bare hvilke mønstre som traff og
+hvilke strukturerte verdier som lå bak.
+
+⚠️ Fiksturet fra #1025 viser at den strukturerte regelen aldri fyrer i de ti ekte vurderingene vi
+har. Uenighetene vi logger vil derfor nesten bare gå én vei. Det er en reell observasjon, men den
+betyr at måledataene ikke kan svare på hovedspørsmålet før `uncertain` eller `low_confidence` er
+sett i ekte trafikk. Ført i sakens kommentar, så tallene ikke leses feil.
+
+### #1025 — fiksturer bygget på ekte LLM-svar, ikke på hva jeg tror modellen svarer
+
+`scripts/dev/capture-llm-shapes.mjs` henter FORMEN på ekte svar fra stage: strukturerte felt,
+tellinger, og nøkkelord fra en fast liste. Ingen fritekst, ingen id-er, ingen e-post — fiksturet
+havner i et offentlig repo.
+
+Første kjøring bekreftet umiddelbart det som avslørte feilen i #1019: **2 av 10 vurderinger har
+utilstrekkelig grunnlag OG høy sikkerhet i samme svar.** Det er nå festet som en test.
+
+⚠️ Stemplet bærer modellnavn, ikke bare appversjon. Modellen kan byttes uten at appen bumpes, og et
+utdatert fikstur er en NY kilde til falsk trygghet.
+
+⚠️ Personvernvakta matcher på `c` pluss lengde, ikke `cm`. Dagens cuid-prefiks ruller til `cn`
+rundt februar 2027, og en vakt som lette etter «cm» ville da sluttet STILLE å matche.
+
+### Sveipen fant noe verre enn saken
+
+`hasInsufficientEvidenceSignal` faller også tilbake på delstrenger — mot `confidence_note`,
+kriteriebegrunnelser OG **forbedringsrådene**. Mønstrene inkluderer «additional material» og
+«detailed reflection», som er helt vanlige fraser i et råd til en god besvarelse.
+
+Et treff undertrykker en andre vurdering, og inngår i `autoFailForInsufficientEvidence` — som igjen
+**undertrykker manuell vurdering**. Anbefaler modellen at et menneske ser på saken, men et
+forbedringsråd tilfeldigvis inneholder «additional material», blir det automatisk stryk i stedet.
+
+Ført som **#1026**, p1. Ikke rørt her: det krever samme måling først.
+
 ## 2.38.0 - 2026-08-27
 
 ### #1019 — konfidensnotatet gjettes ikke lenger fra engelsk prosa

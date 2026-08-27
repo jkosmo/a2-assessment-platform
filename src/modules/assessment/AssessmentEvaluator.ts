@@ -153,6 +153,29 @@ export async function runLlmEvaluationPipeline(ctx: EvaluatorContext): Promise<E
     primaryResult: primaryLlmResult,
   });
 
+  // #1023: mål den foreslåtte regelen mot den levende, FØR vi vurderer å bytte.
+  //
+  // ⚠️ Logges bare ved UENIGHET. Er de enige, er det ingen informasjon i hendelsen, og en logg full
+  // av «alt som forventet» blir ikke lest. Er de uenige, er det nettopp det vi vil vite: hvor ofte,
+  // og i hvilken retning.
+  //
+  // Ingen fritekst i metadataen — bare hvilke mønstre som traff og hvilke strukturerte verdier som
+  // lå bak. Notatet kan i teorien gjengi noe kandidaten skrev.
+  if (secondaryTrigger.shadow && !secondaryTrigger.shadow.agrees) {
+    logOperationalEvent(operationalEvents.assessment.secondaryTriggerShadowDiff, {
+      jobId,
+      submissionId,
+      moduleId,
+      liveConfidenceTrigger: secondaryTrigger.shadow.liveConfidenceTrigger,
+      shadowConfidenceTrigger: secondaryTrigger.shadow.shadowConfidenceTrigger,
+      liveShouldRun: secondaryTrigger.shouldRun,
+      shadowShouldRun: secondaryTrigger.shadow.shadowShouldRun,
+      matchedPatterns: secondaryTrigger.shadow.matchedPatterns,
+      evidenceSufficiency: primaryLlmResult.evidence_sufficiency ?? "(ikke satt)",
+      manualReviewReasonCode: primaryLlmResult.manual_review_reason_code ?? "(ikke satt)",
+    });
+  }
+
   if (secondaryTrigger.shouldRun) {
     await recordAuditEvent({
       entityType: auditEntityTypes.assessmentJob,
