@@ -100,12 +100,21 @@ export function isExplicitAutomaticFailRecommendation(input: LlmStructuredAssess
 export function deriveConfidenceLevel(
   input: Pick<LlmStructuredAssessment, "evidence_sufficiency" | "manual_review_reason_code">,
 ): "low" | "medium" | null {
+  // ⚠️ BARE ekte usikkerhet. To felt som ser like ut betyr helt ulike ting:
+  //
+  //   evidence_sufficiency  = var det NOK I BESVARELSEN til å vurdere?
+  //   low_confidence        = hvor sikker er modellen på DOMMEN sin?
+  //
+  // Et første utkast lot `insufficient` gi «lav konfidens». Ekte data fra stage 2026-08-27 viste at
+  // det er FEIL, og ofte det motsatte: i tre av tre slike vurderinger skrev modellen selv «Det er
+  // høy sikkerhet i vurderingen på grunn av svarets svært begrensede innhold». Leverer noen noe
+  // tomt, er modellen nettopp SIKKER på at det stryker.
+  //
+  // Å si «vurderingen ble gjort med lav sikkerhet, en sensor kan se på den igjen om du klager» til
+  // den deltakeren er usant, og inviterer til en klage uten grunnlag. At det ikke var nok i
+  // besvarelsen står allerede i BEGRUNNELSEN (`AUTO_FAIL_INSUFFICIENT_EVIDENCE`) — det hører hjemme
+  // der, ikke som et forbehold om vurderingens sikkerhet.
   if (input.manual_review_reason_code === "low_confidence") return "low";
-  // ⚠️ QA-porten: `insufficient_evidence` som KODE ga insuffisienssignal andre steder
-  // (`hasInsufficientEvidenceSignal`), men ikke lavt nivå her. Samme tilstand måtte gi samme svar —
-  // ellers avhenger det av hvilket av to felt modellen tilfeldigvis fylte ut.
-  if (input.manual_review_reason_code === "insufficient_evidence") return "low";
-  if (input.evidence_sufficiency === "insufficient") return "low";
   if (input.evidence_sufficiency === "uncertain") return "medium";
   return null;
 }

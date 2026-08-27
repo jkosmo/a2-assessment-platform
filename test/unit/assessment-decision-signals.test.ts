@@ -12,16 +12,26 @@ describe("#1019 — konfidensnivået utledes av strukturerte felt, ikke av prosa
     expect(deriveConfidenceLevel({ manual_review_reason_code: "low_confidence" })).toBe("low");
   });
 
-  it("utilstrekkelig grunnlag er også lavt — vurderingen bygger på delvis dokumentasjon", () => {
-    expect(deriveConfidenceLevel({ evidence_sufficiency: "insufficient" })).toBe("low");
+
+  // ⚠️ DEN VIKTIGSTE, OG DEN BLE FUNNET AV EKTE DATA — ikke av resonnement.
+  //
+  // Et første utkast lot «utilstrekkelig grunnlag» bety «lav konfidens». Ti ekte vurderinger på
+  // stage viste at det er feil, og ofte det motsatte: der grunnlaget var utilstrekkelig, skrev
+  // modellen selv «Det er høy sikkerhet i vurderingen på grunn av svarets svært begrensede
+  // innhold». Leverer noen noe tomt, er modellen nettopp SIKKER på at det stryker.
+  //
+  // De to feltene svarer på ulike spørsmål: «var det nok i besvarelsen?» og «hvor sikker er
+  // dommen?». Å si «lav sikkerhet, du kan klage» til en som leverte tomt, er usant.
+  it("utilstrekkelig grunnlag er IKKE lav konfidens — det er et utsagn om besvarelsen", () => {
+    expect(deriveConfidenceLevel({ evidence_sufficiency: "insufficient" })).toBeNull();
+    expect(deriveConfidenceLevel({ manual_review_reason_code: "insufficient_evidence" })).toBeNull();
   });
 
-  // ⚠️ Samme tilstand, to felt. Modellen kan melde utilstrekkelig grunnlag enten som
-  // `evidence_sufficiency` eller som `manual_review_reason_code`. Svarer vi ulikt på de to, avhenger
-  // det deltakeren ser av hvilket felt modellen tilfeldigvis fylte ut.
-  it("utilstrekkelig grunnlag gir lavt nivå uansett hvilket felt det står i", () => {
-    expect(deriveConfidenceLevel({ evidence_sufficiency: "insufficient" })).toBe("low");
-    expect(deriveConfidenceLevel({ manual_review_reason_code: "insufficient_evidence" })).toBe("low");
+  // Blokkeringens makker: ekte usikkerhet skal fortsatt gi et nivå, ellers ville testen over vært
+  // grønn for en funksjon som alltid svarer null.
+  it("men ekte usikkerhet gir det fortsatt", () => {
+    expect(deriveConfidenceLevel({ manual_review_reason_code: "low_confidence" })).toBe("low");
+    expect(deriveConfidenceLevel({ evidence_sufficiency: "uncertain" })).toBe("medium");
   });
 
   it("usikkert grunnlag er middels", () => {

@@ -50,6 +50,35 @@ blikk får det ikke. Ingen feiler, ingenting logges.
 endrer hvor ofte vi betaler for en ekstra LLM-kjøring og hvor lenge deltakeren venter. Det er en
 produktbeslutning. Ført i **#1023** med forslag om skyggemåling først, samme grep som #475 brukte.
 
+### Ekte data omgjorde regelen
+
+⚠️ **Det viktigste funnet i denne runden kom ikke fra porten, men fra ti EKTE vurderinger på stage.**
+
+Første utkast lot «utilstrekkelig grunnlag» (`evidence_sufficiency: insufficient`) bety «lav
+konfidens». Dataene viste at det er feil, og ofte det motsatte. I tre av tre slike vurderinger skrev
+modellen selv:
+
+> «Det er høy sikkerhet i vurderingen på grunn av svarets svært begrensede innhold.»
+
+Leverer noen noe tomt, er modellen nettopp SIKKER på at det stryker. De to feltene svarer på ulike
+spørsmål:
+
+| Felt | Spørsmål |
+|---|---|
+| `evidence_sufficiency` | var det NOK I BESVARELSEN til å vurdere? |
+| `manual_review_reason_code: low_confidence` | hvor sikker er modellen på DOMMEN sin? |
+
+Å si «vurderingen ble gjort med lav sikkerhet, en sensor kan se på den igjen om du klager» til en
+som leverte tomt, er usant — og inviterer til en klage uten grunnlag. **Det ville vært verre enn
+feilen jeg rettet.** At det ikke var nok i besvarelsen står allerede i BEGRUNNELSEN
+(`AUTO_FAIL_INSUFFICIENT_EVIDENCE`), der det hører hjemme.
+
+Regelen er nå bare ekte usikkerhet: `low_confidence` → lav, `uncertain` → middels, ellers ingen rad.
+
+⚠️ Verifiseringen bekreftet også at feltene FAKTISK fylles ut: `evidence_sufficiency` var satt i
+10 av 10 vurderinger. Uten den sjekken kunne fiksen ha byttet en rad som noen ganger var feil, mot
+en rad som aldri vises.
+
 ### QA-porten: setningene diktet opp en årsak
 
 ⚠️ **NO-GO på noe jeg selv innførte.** «Middels konfidens **på grunn av mulig uklarhet i ansvarlig
