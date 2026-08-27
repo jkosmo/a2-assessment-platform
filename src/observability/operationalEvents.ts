@@ -19,6 +19,9 @@ export const operationalEvents = {
     llmEvaluationFailed: "llm_evaluation_failed",
     // #1023: skyggemåling av utløseren for andre vurdering. Logges BARE ved uenighet.
     secondaryTriggerShadowDiff: "secondary_trigger_shadow_diff",
+    // #1026: delstreng-reserven for «utilstrekkelig grunnlag». Logges når den er ALENE om
+    // å fyre — da er den det eneste som står mellom en manuell vurdering og automatisk stryk.
+    insufficientEvidencePatternOnly: "insufficient_evidence_pattern_only",
   },
   certification: {
     participantNotificationFailed: "participant_notification_failed",
@@ -116,6 +119,22 @@ export type OperationalEventMetadataByName = {
   //
   // ⚠️ Ingen fritekst i metadataen. Notatet kan i teorien gjengi noe kandidaten skrev; her lagres
   // bare hvilke MØNSTRE som traff, og hvilke strukturerte verdier som lå bak.
+  // #1026: reserven søker i FORBEDRINGSRÅDENE, med mønstre som «additional material» — vanlige
+  // fraser i et råd til en god besvarelse. Et treff undertrykker manuell vurdering og gir
+  // automatisk stryk i stedet. Denne hendelsen sier hvor ofte reserven er alene om å fyre.
+  //
+  // ⚠️ Ingen fritekst: bare hvilke mønstre som traff, og hvor de traff.
+  [operationalEvents.assessment.insufficientEvidencePatternOnly]: EventMetadata<{
+    jobId: string;
+    submissionId: string;
+    moduleId: string;
+    /** «primary» eller «secondary» — hvilken vurdering treffet kom fra. */
+    assessmentPass: string;
+    matchedPatterns: string[];
+    evidenceSufficiency: string;
+    manualReviewReasonCode: string;
+    llmRecommendedManualReview: boolean;
+  }>;
   [operationalEvents.assessment.secondaryTriggerShadowDiff]: EventMetadata<{
     jobId: string;
     submissionId: string;

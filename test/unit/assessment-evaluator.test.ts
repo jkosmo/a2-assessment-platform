@@ -20,8 +20,16 @@ vi.mock("../../src/modules/assessment/secondaryAssessmentService.js", () => ({
   evaluateSecondaryAssessmentDisagreement,
 }));
 
+// #1026: evaluatoren måler nå om delstreng-reserven er ALENE om å melde utilstrekkelig grunnlag.
+// Standarden her er «strukturert signal finnes», slik at målingen ikke fyrer og de eksisterende
+// testene måler nøyaktig det de alltid har målt.
+const hasStructuredInsufficientEvidenceSignal = vi.fn(() => true);
+const matchedInsufficientEvidencePatterns = vi.fn(() => [] as string[]);
+
 vi.mock("../../src/modules/assessment/assessmentDecisionSignals.js", () => ({
   shouldSuppressManualReviewForInsufficientEvidenceDisagreement,
+  hasStructuredInsufficientEvidenceSignal,
+  matchedInsufficientEvidencePatterns,
 }));
 
 const createLlmEvaluation = vi.fn();
@@ -271,5 +279,61 @@ describe("AssessmentEvaluator — runLlmEvaluationPipeline", () => {
       expect.objectContaining({ assessmentPass: "secondary" }),
       "error",
     );
+  });
+});
+
+// ── #1026: måleblokka ──────────────────────────────────────────────────────────────────────────
+//
+// ⚠️ QA-porten fant at denne blokka var UTESTET. En invertert betingelse ville vært grønn, og da
+// hadde vi hatt en måling som aldri fyrte — verre enn ingen måling, fordi tausheten ville blitt
+// lest som «problemet finnes ikke».
+describe("#1026 — måling av delstreng-reserven", () => {
+  // Kjører rørledningen uten andre vurdering — måleblokka er uavhengig av den.
+  async function runPipeline() {
+    evaluatePracticalWithLlm.mockResolvedValue(buildLlmResult());
+    evaluateSecondaryAssessmentTrigger.mockReturnValue({ enabled: true, shouldRun: false, reasons: [] });
+    const { runLlmEvaluationPipeline } = await import("../../src/modules/assessment/AssessmentEvaluator.js");
+    return runLlmEvaluationPipeline({ ...BASE_CTX, inputContext: buildInputContext() });
+  }
+
+  beforeEach(() => {
+    hasStructuredInsufficientEvidenceSignal.mockReturnValue(true);
+    matchedInsufficientEvidencePatterns.mockReturnValue([]);
+    logOperationalEvent.mockClear();
+  });
+
+  const patternOnlyEvents = () =>
+    logOperationalEvent.mock.calls.filter((c) => c[0] === "insufficient_evidence_pattern_only");
+
+  it("logger når reserven er ALENE om å fyre", async () => {
+    hasStructuredInsufficientEvidenceSignal.mockReturnValue(false);
+    matchedInsufficientEvidencePatterns.mockReturnValue(["additional material"]);
+
+    await runPipeline();
+
+    const events = patternOnlyEvents();
+    expect(events).toHaveLength(1);
+    expect(events[0][1].matchedPatterns).toEqual(["additional material"]);
+    // ⚠️ Nivået er en del av kontrakten: havner dette i info-strømmen, blir det aldri lest.
+    expect(events[0][2]).toBe("error");
+  });
+
+  // Blokkeringens makker — uten den ville testen over vært grønn for en blokk som alltid logger.
+  it("logger IKKE når de strukturerte feltene er enige", async () => {
+    hasStructuredInsufficientEvidenceSignal.mockReturnValue(true);
+    matchedInsufficientEvidencePatterns.mockReturnValue(["additional material"]);
+
+    await runPipeline();
+
+    expect(patternOnlyEvents()).toHaveLength(0);
+  });
+
+  it("logger IKKE når ingen mønstre traff", async () => {
+    hasStructuredInsufficientEvidenceSignal.mockReturnValue(false);
+    matchedInsufficientEvidencePatterns.mockReturnValue([]);
+
+    await runPipeline();
+
+    expect(patternOnlyEvents()).toHaveLength(0);
   });
 });

@@ -75,6 +75,21 @@ Use correlation IDs first when diagnosing single-request or single-user failures
 - `assessment_decision_already_present` — info. A run stopped because the submission already had a
   decision (#953, requirement 2). Not a fault: a job that arrived too late. Frequent occurrences are
   themselves the finding — it means runs are being abandoned near the runtime deadline.
+- `insufficient_evidence_pattern_only` — **error, and worth reading.** The substring fallback in
+  `hasInsufficientEvidenceSignal` was the ONLY thing reporting "insufficient evidence" — the
+  structured fields (`evidence_sufficiency`, `manual_review_reason_code`) said otherwise (#1026).
+  ⚠️ That signal feeds `autoFailForInsufficientEvidence`, which **suppresses manual review**. When
+  `llmRecommendedManualReview` is true in the payload, a phrase in the model's own improvement
+  advice — patterns like `additional material` or `detailed reflection` — may have turned a case a
+  human should have seen into an automatic fail.
+  Carries `assessmentPass` (`primary`/`secondary`), `matchedPatterns`, and the structured values.
+  **What to do:** these are the measurements that decide whether the fallback can be removed. Count
+  them; if `llmRecommendedManualReview` is true in any of them, treat that submission as one to
+  re-check by hand.
+- `secondary_trigger_shadow_diff` — info. The live trigger for a second assessment (substrings in
+  the model's free text) and the proposed structured rule disagreed (#1023). Behaviour is unchanged;
+  this is measurement only. ⚠️ Read the comment on #1023 before interpreting: as of 2026-08-27 the
+  structured rule never fires in our sample, so disagreements will almost all point one way.
 
 ### Appeal monitoring events
 - `appeal_sla_backlog`

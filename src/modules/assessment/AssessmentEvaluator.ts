@@ -12,7 +12,11 @@ import {
   evaluateSecondaryAssessmentDisagreement,
   evaluateSecondaryAssessmentTrigger,
 } from "./secondaryAssessmentService.js";
-import { shouldSuppressManualReviewForInsufficientEvidenceDisagreement } from "./assessmentDecisionSignals.js";
+import {
+  hasStructuredInsufficientEvidenceSignal,
+  matchedInsufficientEvidencePatterns,
+  shouldSuppressManualReviewForInsufficientEvidenceDisagreement,
+} from "./assessmentDecisionSignals.js";
 import type { AssessmentInputContext } from "./AssessmentInputFactory.js";
 import { decisionReason, decisionReasonCodes, type DecisionReason } from "./decisionReason.js";
 
@@ -243,6 +247,47 @@ export async function runLlmEvaluationPipeline(ctx: EvaluatorContext): Promise<E
         "Automatically routed to manual review due to disagreement between primary and secondary LLM assessments.",
       );
     }
+  }
+
+  // #1026: er delstreng-reserven ALENE om å melde «utilstrekkelig grunnlag»?
+  //
+  // ⚠️ Da er den det eneste som står mellom en manuell vurdering og automatisk stryk: signalet
+  // inngår i `autoFailForInsufficientEvidence` (decisionService.ts), som undertrykker
+  // `llmRecommendsManualReview`. Et mønster som «additional material» er en vanlig frase i et
+  // forbedringsråd til en GOD besvarelse.
+  //
+  // ⚠️ MÅLT PÅ `finalLlmResult`, ikke på primærresultatet. QA-porten fant at et første utkast så på
+  // primæren — men vedtaket fattes på det ENDELIGE resultatet, som er sekundærvurderingen når en
+  // slik kjørte. Et treff som bare finnes i sekundærens råd ville da gitt automatisk stryk uten at
+  // noe ble logget, og nettopp de tilfellene saken handler om ville blitt undertalt.
+  //
+  // Logges bare når reserven er alene. Er de strukturerte feltene enige, er det ingen informasjon
+  // i hendelsen.
+  const patternOnlyMatches = hasStructuredInsufficientEvidenceSignal(finalLlmResult)
+    ? []
+    : matchedInsufficientEvidencePatterns(finalLlmResult);
+  if (patternOnlyMatches.length > 0) {
+    logOperationalEvent(
+      operationalEvents.assessment.insufficientEvidencePatternOnly,
+      {
+        jobId,
+        submissionId,
+        moduleId,
+        // Hvilken vurdering treffet kom fra — primæren eller den andre. Uten dette kan vi ikke se
+        // om problemet henger sammen med at en andre vurdering kjørte.
+        assessmentPass: finalLlmResult === primaryLlmResult ? "primary" : "secondary",
+        matchedPatterns: patternOnlyMatches,
+        evidenceSufficiency: finalLlmResult.evidence_sufficiency ?? "(ikke satt)",
+        manualReviewReasonCode: finalLlmResult.manual_review_reason_code ?? "(ikke satt)",
+        // Det er NÅR denne er sann at treffet koster noe: da fjernes sensoren fra sløyfa.
+        llmRecommendedManualReview: finalLlmResult.manual_review_recommended === true,
+      },
+      // ⚠️ «error», ikke «info». Loggnivåene er bare info og error, og dette er ikke rutine: det er
+      // et tilfelle der en frase i et forbedringsråd kan ha fjernet sensoren fra sløyfa. Havner det
+      // i info-strømmen, blir det aldri lest. Ingen Azure-alarm matcher på nivå, bare på eventnavn,
+      // så det drukner heller ikke ekte feil.
+      "error",
+    );
   }
 
   return { finalLlmResult, forceManualReviewReason };

@@ -35,14 +35,34 @@ const insufficientEvidencePatterns = [
   "missing assessment artifacts",
 ];
 
-export function hasInsufficientEvidenceSignal(input: LlmStructuredAssessment): boolean {
-  if (
+/**
+ * De STRUKTURERTE feltene alene. Dette er signalet slik det bør være.
+ *
+ * #1025 viser at modellen alltid fyller ut `evidence_sufficiency` (10 av 10 i ekte data), så denne
+ * dekker det reelle tilfellet uten å tolke fri tekst.
+ */
+export function hasStructuredInsufficientEvidenceSignal(input: LlmStructuredAssessment): boolean {
+  return (
     input.evidence_sufficiency === "insufficient" ||
     input.manual_review_reason_code === "insufficient_evidence"
-  ) {
-    return true;
-  }
+  );
+}
 
+/**
+ * Delstreng-reserven, skilt ut for å kunne MÅLES.
+ *
+ * ⚠️ #1026: den søker i `improvement_advice` — altså i FORBEDRINGSRÅDENE. Mønstrene inkluderer
+ * «additional material» og «detailed reflection», som er helt vanlige fraser i et råd til en GOD
+ * besvarelse: «add a more detailed reflection on your process».
+ *
+ * Et treff er ikke uskyldig. Det undertrykker en andre vurdering
+ * (`secondaryAssessmentService.ts`), og det inngår i `autoFailForInsufficientEvidence` — som igjen
+ * undertrykker MANUELL VURDERING. Anbefaler modellen at et menneske ser på saken, kan en frase i et
+ * råd gjøre det om til automatisk stryk i stedet.
+ *
+ * Returnerer hvilke mønstre som traff, ikke bare om noe traff — måledataene trenger å vite hvilke.
+ */
+export function matchedInsufficientEvidencePatterns(input: LlmStructuredAssessment): string[] {
   const searchableTexts = [
     input.confidence_note,
     ...Object.values(input.criterion_rationales ?? {}),
@@ -51,8 +71,19 @@ export function hasInsufficientEvidenceSignal(input: LlmStructuredAssessment): b
     .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
     .map((value) => value.toLowerCase());
 
-  return searchableTexts.some((text) =>
-    insufficientEvidencePatterns.some((pattern) => text.includes(pattern)),
+  return insufficientEvidencePatterns.filter((pattern) =>
+    searchableTexts.some((text) => text.includes(pattern)),
+  );
+}
+
+/**
+ * ⚠️ OPPFØRSELEN ER UENDRET: strukturert ELLER delstrengtreff, som før. Delingen over er der for at
+ * reserven skal kunne måles før den eventuelt fjernes (#1026).
+ */
+export function hasInsufficientEvidenceSignal(input: LlmStructuredAssessment): boolean {
+  return (
+    hasStructuredInsufficientEvidenceSignal(input)
+    || matchedInsufficientEvidencePatterns(input).length > 0
   );
 }
 

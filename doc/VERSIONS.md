@@ -2,6 +2,50 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.40.0 - 2026-08-28
+
+### #1026 — et forbedringsråd kan fjerne sensoren fra sløyfa
+
+`hasInsufficientEvidenceSignal` sjekker strukturerte felt, og faller så tilbake på delstrengsøk i
+språkmodellens frie tekst — inkludert i **forbedringsrådene**. Mønstrene inkluderer «additional
+material» og «detailed reflection».
+
+⚠️ Det er helt vanlige fraser i et råd til en GOD besvarelse: «add a more detailed reflection on
+your process». Og et treff er ikke uskyldig — signalet inngår i `autoFailForInsufficientEvidence`,
+som **undertrykker manuell vurdering**:
+
+```
+needsManualReview = … || (llmRecommendsManualReview && !autoFailForInsufficientEvidence) || …
+```
+
+Anbefaler modellen at et menneske ser på saken, men et råd inneholder «additional material», blir
+det automatisk stryk i stedet. **Ingen sensor ser den.**
+
+Oppførselen er **uendret**. Funksjonen er delt i `hasStructuredInsufficientEvidenceSignal` og
+`matchedInsufficientEvidencePatterns` slik at reserven kan MÅLES før den eventuelt fjernes. Er den
+alene om å fyre, logges `insufficient_evidence_pattern_only` på feilnivå, med hvilke mønstre som
+traff og om modellen anbefalte manuell vurdering. Det siste er nøkkelen: det er da treffet koster
+noe.
+
+### QA-porten: jeg målte feil resultat
+
+⚠️ **NO-GO, og funnet er min gjentakende feil.** Første utkast målte PRIMÆRresultatet. Men vedtaket
+fattes på `finalLlmResult` — som er sekundærvurderingen når en slik kjørte.
+
+Scenario: primæren har intet signal, en andre vurdering kjøres fordi modellen anbefaler manuell
+behandling, og sekundærens råd inneholder «additional material». Da gis automatisk stryk på
+mønsteret alene — **uten at noe logges.** Nettopp tilfellene saken skal telle, ville blitt undertalt.
+
+Målingen leser nå `finalLlmResult`, og bærer `assessmentPass` så vi kan se om problemet henger
+sammen med at en andre vurdering kjørte.
+
+Porten fant også at måleblokka var **utestet**: en invertert betingelse ville vært grønn, og da
+hadde vi hatt en måling som aldri fyrte. Det er verre enn ingen måling, fordi tausheten leses som
+«problemet finnes ikke». Tre tester dekker den nå, mutasjonsverifisert.
+
+Begge hendelsene er ført inn i `doc/OBSERVABILITY_RUNBOOK.md`, med hva man skal gjøre når de dukker
+opp — en driftshendelse ingen vet hva betyr, blir ikke handlet på.
+
 ## 2.39.0 - 2026-08-27
 
 ### #1023 — utløseren for andre vurdering måles før den byttes
