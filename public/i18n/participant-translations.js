@@ -323,9 +323,12 @@ export const translations = {
     "result.decisionReasonCode.mcqOnlyFail":
       "Not passed: you scored {scorePercent}%, and {minPercent}% was required.",
     "result.confidence": "Confidence note",
+    // #1019: ÅRSAKSNØYTRALT. Nivået kommer fra strukturerte felt og sier hvor sikker vurderingen
+    // var — ikke hvorfor. En oppgitt grunn vi ikke har dekning for, er verre enn ingen grunn.
     "result.confidenceValue.low":
-      "Low confidence due to sparse content; assessment is based on partial evidence.",
-    "result.confidenceValue.medium": "Medium confidence due to potential responsible-use ambiguity.",
+      "The assessment was made with low confidence. An assessor can look at it again if you appeal.",
+    "result.confidenceValue.medium":
+      "The assessment was made with some uncertainty.",
     "result.confidenceValue.high": "High confidence: structured and sufficiently detailed submission.",
     "result.improvementAdvice": "Improvement advice",
     "result.improvementAdviceValue.beforeAfter": "Provide clearer before/after examples.",
@@ -788,10 +791,12 @@ export const translations = {
     "result.decisionReasonCode.mcqOnlyFail":
       "Ikke bestått: du fikk {scorePercent} %, og kravet var {minPercent} %.",
     "result.confidence": "Konfidensnotat",
+    // #1019: ÅRSAKSNØYTRALT. Nivået kommer fra strukturerte felt og sier hvor sikker vurderingen
+    // var — ikke hvorfor. En oppgitt grunn vi ikke har dekning for, er verre enn ingen grunn.
     "result.confidenceValue.low":
-      "Lav konfidens på grunn av lite innhold; vurderingen bygger på delvis dokumentasjon.",
+      "Vurderingen ble gjort med lav sikkerhet. En sensor kan se på den igjen om du klager.",
     "result.confidenceValue.medium":
-      "Middels konfidens på grunn av mulig uklarhet i ansvarlig bruk.",
+      "Vurderingen ble gjort med noe usikkerhet.",
     "result.confidenceValue.high": "Høy konfidens: strukturert og tilstrekkelig detaljert innlevering.",
     "result.improvementAdvice": "Forbedringsråd",
     "result.improvementAdviceValue.beforeAfter": "Vis tydeligere før/etter-eksempler.",
@@ -1257,10 +1262,11 @@ export const translations = {
     "result.decisionReasonCode.mcqOnlyFail":
       "Ikkje bestått: du fekk {scorePercent} %, og kravet var {minPercent} %.",
     "result.confidence": "Konfidensnotat",
+    // #1019: ÅRSAKSNØYTRALT — sjå kommentaren i bokmålsblokka.
     "result.confidenceValue.low":
-      "Låg konfidens på grunn av lite innhald; vurderinga byggjer på delvis dokumentasjon.",
+      "Vurderinga vart gjord med låg tryggleik. Ein sensor kan sjå på ho igjen om du klagar.",
     "result.confidenceValue.medium":
-      "Middels konfidens på grunn av mogleg uklarheit i ansvarleg bruk.",
+      "Vurderinga vart gjord med noko uvisse.",
     "result.confidenceValue.high": "Høg konfidens: strukturert og tilstrekkeleg detaljert innlevering.",
     "result.improvementAdvice": "Forbetringsråd",
     "result.improvementAdviceValue.beforeAfter": "Vis tydelegare før/etter-døme.",

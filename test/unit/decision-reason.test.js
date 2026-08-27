@@ -9,6 +9,7 @@ import {
 // ".js" videre til TypeScript-kilden slik den gjør fra en .ts-fil. Kilden må navngis som den er.
 import { ALL_DECISION_REASON_CODES } from "../../src/modules/assessment/decisionReason.ts";
 import { translations } from "../../public/i18n/participant-translations.js";
+import { translations as reviewTranslations } from "../../public/i18n/review-translations.js";
 import {
   resolveAssessmentDecision,
   resolveMcqOnlyDecision,
@@ -49,34 +50,54 @@ describe("#950 — vakten mot at kart og server driver fra hverandre", () => {
     expect(missing).toEqual([]);
   });
 
-  it("hver nøkkel finnes på alle tre språk", () => {
+  // ⚠️ To målgrupper, to sett formuleringer. Deltakerens står i andreperson («du fikk»), som er
+  // direkte feil på en sensors skjerm der teksten handler om en annen person. Vakten må derfor
+  // dekke BEGGE — ellers kan en ny grunnkode nå produksjon med tekst til bare den ene (#1018).
+  const AUDIENCES = [
+    { prefix: "result.decisionReasonCode.", table: () => translations },
+    { prefix: "assessor.decisionReasonCode.", table: () => reviewTranslations },
+  ];
+
+  it("hver nøkkel finnes på alle tre språk, for begge målgrupper", () => {
     const missing = [];
-    for (const key of Object.values(DECISION_REASON_KEYS)) {
-      for (const locale of LOCALES) {
-        if (!translations[locale][key]) missing.push(`${locale}: ${key}`);
+    for (const { prefix, table } of AUDIENCES) {
+      for (const stem of Object.values(DECISION_REASON_KEYS)) {
+        for (const locale of LOCALES) {
+          if (!table()[locale][`${prefix}${stem}`]) missing.push(`${locale}: ${prefix}${stem}`);
+        }
       }
     }
     expect(missing).toEqual([]);
   });
 
-  // KI-erklæringen har to varianter — med og uten deltakerens egen beskrivelse. Varianten med
-  // beskrivelse står ikke i kartet, så den forrige testen dekker den ikke.
-  it("varianten med deltakerens egen beskrivelse finnes også på alle tre språk", () => {
-    const key = decisionReasonKeyFor("MANUAL_REVIEW_AI_DECLARATION", { description: "noe" });
-    expect(key).toBe("result.decisionReasonCode.aiDeclarationDescribed");
-    for (const locale of LOCALES) {
-      expect(translations[locale][key]).toBeTruthy();
+  it("varianten med deltakerens egen beskrivelse finnes for begge målgrupper", () => {
+    for (const { prefix, table } of AUDIENCES) {
+      const key = decisionReasonKeyFor("MANUAL_REVIEW_AI_DECLARATION", { description: "noe" }, prefix);
+      expect(key).toBe(`${prefix}aiDeclarationDescribed`);
+      for (const locale of LOCALES) {
+        expect(`${locale} ${key}`).toBe(table()[locale][key] ? `${locale} ${key}` : `MANGLER ${locale} ${key}`);
+      }
     }
   });
 
+
+
   // Denne sammenligner bare språkfilene MOT HVERANDRE. Den fanger at nn har glemt et tall bokmål
   // har, men ikke at serveren har byttet navn på det. Det gjør testene lenger nede.
-  it("plassholderne i oversettelsene har samme navn på alle tre språk", () => {
+  // ⚠️ QA-porten: denne dekket bare DELTAKERENS prefiks. Sensorens strenger var uvoktet — en
+  // omdøpt plassholder der ville stått synlig på skjermen uten at noe ble rødt. Nå går den gjennom
+  // begge målgruppene.
+  it("plassholderne har samme navn på alle tre språk, for begge målgrupper", () => {
     const namesIn = (text) => (text.match(/\{(\w+)\}/g) ?? []).sort().join(",");
-    for (const key of [...Object.values(DECISION_REASON_KEYS), "result.decisionReasonCode.aiDeclarationDescribed"]) {
-      const expected = namesIn(translations["en-GB"][key]);
-      for (const locale of LOCALES) {
-        expect(`${locale} ${key}: ${namesIn(translations[locale][key])}`).toBe(`${locale} ${key}: ${expected}`);
+    const stems = [...Object.values(DECISION_REASON_KEYS), "aiDeclarationDescribed"];
+
+    for (const { prefix, table } of AUDIENCES) {
+      for (const stem of stems) {
+        const key = `${prefix}${stem}`;
+        const expected = namesIn(table()["en-GB"][key]);
+        for (const locale of LOCALES) {
+          expect(`${locale} ${key}: ${namesIn(table()[locale][key])}`).toBe(`${locale} ${key}: ${expected}`);
+        }
       }
     }
   });
@@ -92,7 +113,7 @@ describe("#950 — koden avgjør, ikke teksten", () => {
         decisionReasonCode: "MCQ_ONLY_PASS",
         decisionReasonParams: { scorePercent: 100, minPercent: 70 },
       },
-      translatorFor("nb"),
+      { translate: translatorFor("nb") },
     );
 
     expect(shown).toBe("Bestått: du fikk 100 %, og kravet var 70 %.");
@@ -106,7 +127,7 @@ describe("#950 — koden avgjør, ikke teksten", () => {
         decisionReasonCode: "MANUAL_REVIEW_BORDERLINE",
         decisionReasonParams: { totalScore: 64, min: 60, max: 70 },
       },
-      translatorFor("nn"),
+      { translate: translatorFor("nn") },
     );
 
     expect(shown).toContain("64");
@@ -122,7 +143,7 @@ describe("#950 — koden avgjør, ikke teksten", () => {
     const written = "Vurdert på nytt etter klage: kandidaten dokumenterte praksisen godt nok.";
     const shown = localizeDecisionReason(
       { decisionReason: written, decisionReasonCode: null, decisionReasonParams: {} },
-      translatorFor("nb"),
+      { translate: translatorFor("nb") },
     );
 
     expect(shown).toBe(written);
@@ -133,15 +154,15 @@ describe("#950 — koden avgjør, ikke teksten", () => {
   it("en gammel rad uten kode viser den lagrede teksten", () => {
     const shown = localizeDecisionReason(
       { decisionReason: "Automatic pass by threshold rules." },
-      translatorFor("nb"),
+      { translate: translatorFor("nb") },
     );
 
     expect(shown).toBe("Automatic pass by threshold rules.");
   });
 
   it("ingen grunn i det hele tatt gir en strek, ikke «undefined»", () => {
-    expect(localizeDecisionReason(null, translatorFor("nb"))).toBe("-");
-    expect(localizeDecisionReason({}, translatorFor("nb"))).toBe("-");
+    expect(localizeDecisionReason(null, { translate: translatorFor("nb") })).toBe("-");
+    expect(localizeDecisionReason({}, { translate: translatorFor("nb") })).toBe("-");
   });
 
   // ⚠️ En klient som er eldre enn serveren møter en kode den ikke kjenner. Da er serverens engelske
@@ -153,7 +174,7 @@ describe("#950 — koden avgjør, ikke teksten", () => {
         decisionReasonCode: "SOMETHING_ADDED_LATER",
         decisionReasonParams: {},
       },
-      translatorFor("nb"),
+      { translate: translatorFor("nb") },
     );
 
     expect(shown).toBe("Automatic fail for some new reason.");
@@ -168,7 +189,7 @@ describe("#950 — koden avgjør, ikke teksten", () => {
         decisionReasonCode: "AUTO_PASS_THRESHOLDS",
         decisionReasonParams: {},
       },
-      (key) => key,
+      { translate: (key) => key },
     );
 
     expect(shown).toBe("Automatic pass by threshold rules.");
@@ -177,11 +198,11 @@ describe("#950 — koden avgjør, ikke teksten", () => {
   it("KI-erklæringen uten beskrivelse får ingen tomme anførselstegn hengende bakerst", () => {
     const withoutDescription = localizeDecisionReason(
       { decisionReason: "x", decisionReasonCode: "MANUAL_REVIEW_AI_DECLARATION", decisionReasonParams: { description: "" } },
-      translatorFor("nb"),
+      { translate: translatorFor("nb") },
     );
     const withDescription = localizeDecisionReason(
       { decisionReason: "x", decisionReasonCode: "MANUAL_REVIEW_AI_DECLARATION", decisionReasonParams: { description: "Brukte KI til alt" } },
-      translatorFor("nb"),
+      { translate: translatorFor("nb") },
     );
 
     expect(withoutDescription).not.toContain("«");
@@ -208,7 +229,7 @@ describe("#950 — serverens parameternavn mot de ekte setningene", () => {
     LOCALES.map((locale) =>
       localizeDecisionReason(
         { decisionReason: "kildetekst", decisionReasonCode: code, decisionReasonParams: params },
-        translatorFor(locale),
+        { translate: translatorFor(locale) },
       ),
     );
 
@@ -294,5 +315,92 @@ describe("#950 — serverens parameternavn mot de ekte setningene", () => {
         expect(`${code}: ${sentence}`).not.toMatch(/\{\w+\}/);
       }
     }
+  });
+});
+
+// ── #1018: to målgrupper, to former på dataene ─────────────────────────────────────────────────
+describe("#1018 — sensorens formuleringer, og databasens form på parametrene", () => {
+  const assessorFor = (locale) => ({
+    translate: (key) => reviewTranslations[locale][key] ?? key,
+    keyPrefix: "assessor.decisionReasonCode.",
+  });
+
+  // ⚠️ DEN VIKTIGSTE. Sensorflaten får avgjørelsesraden RÅTT fra databasen, der parametrene er en
+  // JSON-STRENG. `Object.entries` på en streng gir tegn-par, ingen plassholder blir fylt, og
+  // «poengsummen {totalScore} ligger i …» ville stått på skjermen.
+  it("tåler at parametrene er en JSON-streng, slik databasen lagrer dem", () => {
+    const shown = localizeDecisionReason(
+      {
+        decisionReason: "Routed to manual review: total score 64 …",
+        decisionReasonCode: "MANUAL_REVIEW_BORDERLINE",
+        decisionReasonParams: JSON.stringify({ totalScore: 64, min: 60, max: 70 }),
+      },
+      assessorFor("nb"),
+    );
+
+    expect(shown).toContain("64");
+    expect(shown).toContain("60");
+    expect(shown).not.toMatch(/\{\w+\}/);
+  });
+
+  // ⚠️ Sensorens tekst må IKKE stå i andreperson — den handler om en annen person.
+  it("sensoren får tredjeperson, ikke deltakerens «du»", () => {
+    const guidance = {
+      decisionReason: "Automatic pass …",
+      decisionReasonCode: "MCQ_ONLY_PASS",
+      decisionReasonParams: { scorePercent: 100, minPercent: 80 },
+    };
+
+    const assessor = localizeDecisionReason(guidance, assessorFor("nb"));
+    const participant = localizeDecisionReason(guidance, { translate: translatorFor("nb") });
+
+    expect(assessor).not.toContain("du ");
+    expect(participant).toContain("du ");
+    // Blokkeringens makker: begge skal faktisk si noe, og ikke være samme setning.
+    expect(assessor).toContain("100");
+    expect(assessor).not.toBe(participant);
+  });
+
+  // Fritekst skrevet av et menneske har ingen kode, og skal vises ordrett — også for sensor.
+  it("et menneskes egne ord byttes ikke ut på sensorflaten heller", () => {
+    const written = "Vurdert på nytt etter klage: kandidaten dokumenterte praksisen godt nok.";
+    const shown = localizeDecisionReason(
+      { decisionReason: written, decisionReasonCode: null, decisionReasonParams: null },
+      assessorFor("nb"),
+    );
+    expect(shown).toBe(written);
+  });
+
+  // ⚠️ QA-porten fant at denne var falskt grønn: `not.toThrow()` består også uten fiksen, fordi
+  // `Object.entries` på en streng ikke kaster — den gir bare tegn-par. Testen målte ingenting, og
+  // navnet lovet noe den ikke sjekket.
+  //
+  // Og oppførselen var feil: med ødelagt JSON sto «{scorePercent}» synlig på skjermen. Nå faller
+  // setningen tilbake på serverens lagrede tekst — engelsk, men sann, og med tallene i seg.
+  it("ødelagt JSON gir serverens setning, ikke en synlig plassholder", () => {
+    const stored = "Automatic pass: MCQ score 100% meets the required minimum of 80%.";
+    const shown = localizeDecisionReason(
+      { decisionReason: stored, decisionReasonCode: "MCQ_ONLY_PASS", decisionReasonParams: "{ikke json" },
+      assessorFor("nb"),
+    );
+
+    expect(shown).not.toMatch(/\{\w+\}/);
+    expect(shown).toBe(stored);
+  });
+
+  // Blokkeringens makker: en GYLDIG JSON-streng skal fortsatt gi den norske setningen, ellers ville
+  // testen over vært grønn for en modul som alltid falt tilbake på engelsk.
+  it("gyldige parametre gir fortsatt sensorens norske setning", () => {
+    const shown = localizeDecisionReason(
+      {
+        decisionReason: "Automatic pass: MCQ score 100% …",
+        decisionReasonCode: "MCQ_ONLY_PASS",
+        decisionReasonParams: JSON.stringify({ scorePercent: 100, minPercent: 80 }),
+      },
+      assessorFor("nb"),
+    );
+
+    expect(shown).toContain("Automatisk bestått");
+    expect(shown).toContain("100");
   });
 });

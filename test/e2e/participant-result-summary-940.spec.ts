@@ -257,6 +257,40 @@ test.describe("#940 — utfallet avgjør hva som står åpent", () => {
     await expect(page.locator("#resetSubmissionFlow")).toHaveClass(/reset-flow-discreet/);
   });
 
+  // ⚠️ #1019: konfidensraden gjettet tidligere på delstrenger i språkmodellens engelske frittekst.
+  // Serveren sender nå nivået, og `null` når det ikke er noe forbehold. Testen krever BEGGE
+  // retninger — bare den ene ville vært grønn for en rad som aldri vises, eller alltid vises.
+  test("forbeholdet vises på norsk når det finnes, og ikke i det hele tatt når det ikke gjør det", async ({ page }) => {
+    await mockBase(page);
+
+    const withCaveat = await showResult(page, resultBody({
+      participantGuidance: {
+        decisionReason: null, decisionReasonCode: null, decisionReasonParams: {},
+        // Fritteksten er fortsatt engelsk fra modellen — poenget er at den IKKE lenger vises.
+        confidenceNote: "Low confidence due to sparse content; assessment is based on partial evidence.",
+        confidenceLevel: "low",
+      },
+    }));
+    await withCaveat.locator(".result-details summary").click();
+    // #1019: setningen er ÅRSAKSNØYTRAL. Den gamle sa «på grunn av lite innhold» — en grunn
+    // dataene ikke inneholder, og som QA-porten fant at vi dermed diktet opp.
+    await expect(withCaveat).toContainText("lav sikkerhet");
+    await expect(withCaveat).not.toContainText("Low confidence");
+    await expect(withCaveat).not.toContainText("lite innhold");
+
+    const without = await showResult(page, resultBody({
+      participantGuidance: {
+        decisionReason: null, decisionReasonCode: null, decisionReasonParams: {},
+        confidenceNote: "High confidence: structured and sufficiently detailed submission.",
+        confidenceLevel: null,
+      },
+    }));
+    await without.locator(".result-details summary").click();
+    await expect(without.locator(".result-headline")).toContainText("Bestått");
+    await expect(without).not.toContainText("Konfidensnotat");
+    await expect(without).not.toContainText("High confidence");
+  });
+
   test("forsøks-ID-en er flyttet bak detaljene, ikke fjernet", async ({ page }) => {
     await mockBase(page);
     const result = await showResult(page, FAILED);

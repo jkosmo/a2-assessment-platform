@@ -2,6 +2,90 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.38.0 - 2026-08-27
+
+### #1019 — konfidensnotatet gjettes ikke lenger fra engelsk prosa
+
+Etter hver vurdering skriver språkmodellen en fritekstsetning om hvor sikker den var. Klienten leste
+den setningen og lette etter ord i den: «low confidence» pluss «sparse», «limited cues» eller
+«partial evidence», med et kart over fire setninger modellen kanskje skrev ordrett.
+
+⚠️ Notatet er GENERERT. Det kan formuleres om når som helst uten at noe i repoet endres — en
+gjetning på fri tekst kan ikke være stabil. Bommet den, sto engelsk i et norsk skjermbilde.
+
+Modellen svarer allerede på faste spørsmål ved siden av fritteksten (`evidence_sufficiency`,
+`manual_review_reason_code`), og prompten ber om dem. `deriveConfidenceLevel` leser dem og gir
+«lav», «middels» eller ingenting.
+
+**Ingenting betyr ingen rad.** «Høy konfidens» er ikke et forbehold — en rad som forteller
+deltakeren at alt er som det skal, bruker plass uten å si noe. Samme regel som #940 innførte.
+
+### #1018 — sensor og klagebehandler leser begrunnelsen på sitt eget språk
+
+Seks steder i `review.js` viste serverens engelske setning ordrett, i et ellers norsk grensesnitt.
+
+Formuleringene er EGNE, ikke deltakerens: «Sendt til vurdering: poengsummen 64 ligger i
+grenseområdet 60–70». Deltakerens tekst står i andreperson — «du fikk 100 %» — og det er direkte
+feil på en skjerm der teksten handler om en annen person. Det var derfor dette ikke bare var å
+importere språkfila.
+
+`localizeDecisionReason` tar nå et opsjonsobjekt med `keyPrefix`, så samme regel tjener begge
+målgrupper. Vakttesten dekker begge, på alle tre språk.
+
+⚠️ **En felle datatypen avslørte, ikke testene:** sensorflaten får avgjørelsesraden RÅTT fra
+databasen, der `decisionReasonParams` er en JSON-STRENG. Deltakerflaten får den tolket av
+lesemodellen. Uten tolkning ville `Object.entries` på en streng gitt tegn-par, ingen plassholder
+blitt fylt, og «poengsummen {totalScore} ligger i …» stått på skjermen.
+
+### Sveipen fant noe større enn saken
+
+Samme delstreng-gjetting finnes i BESLUTNINGSVEIEN: om en andre, uavhengig vurdering skal kjøres
+avgjøres delvis av om notatet inneholder «medium confidence» eller «low confidence»
+(`secondaryAssessmentService.ts:59-63`).
+
+Formulerer modellen seg om, slutter utløseren å fyre, og en besvarelse som skulle fått et andre
+blikk får det ikke. Ingen feiler, ingenting logges.
+
+⚠️ **Ikke rørt, med vilje.** `deriveConfidenceLevel` er en ferdig erstatning, men å bytte utløser
+endrer hvor ofte vi betaler for en ekstra LLM-kjøring og hvor lenge deltakeren venter. Det er en
+produktbeslutning. Ført i **#1023** med forslag om skyggemåling først, samme grep som #475 brukte.
+
+### QA-porten: setningene diktet opp en årsak
+
+⚠️ **NO-GO på noe jeg selv innførte.** «Middels konfidens **på grunn av mulig uklarhet i ansvarlig
+bruk**» ble nå utløst av at grunnlaget var *usikkert* — som ikke sier noe om ansvarlig bruk. Samme
+for «lav konfidens **på grunn av lite innhold**», utløst av modellens lavkonfidens-kode.
+
+Før dukket setningene bare opp ved eksakt treff mot en original som FAKTISK hadde den årsaken. Ved å
+knytte dem til et NIVÅ gjorde jeg dem til påstander vi ikke har dekning for. **En oppgitt grunn vi
+ikke kan stå inne for, er verre enn ingen grunn.** Begge er nå årsaksnøytrale.
+
+Porten fant tre ting til:
+
+- **En asymmetri:** utilstrekkelig grunnlag meldt som `evidence_sufficiency` ga lavt nivå; meldt som
+  `manual_review_reason_code` gjorde det ikke. Da avhang det deltakeren så av hvilket felt modellen
+  tilfeldigvis fylte ut.
+- **En falskt grønn test av mine:** «ødelagt JSON … ikke et kast» besto også uten fiksen, fordi
+  `Object.entries` på en streng ikke kaster. Navnet lovet noe den ikke sjekket. Oppførselen var
+  dessuten feil — med ødelagt JSON sto «{scorePercent}» synlig. Setningen faller nå tilbake på
+  serverens lagrede tekst: engelsk, men sann.
+- **Vakten dekket bare deltakerens strenger.** Sensorens var uvoktet; en omdøpt plassholder der
+  ville stått synlig uten at noe ble rødt.
+
+### Rotårsak: tre mutasjoner som ikke traff
+
+Tre ganger i denne runden endret jeg noe uten å bekrefte at endringen traff:
+
+1. En mutasjon «fjernet» en nynorsk oversettelse — men strengen i fila hadde `–` der jeg skrev
+   en bokstavelig tankestrek. Ingen assert fanget det, og jeg holdt på å konkludere med at vakten
+   var ødelagt.
+2. `git checkout` på fila for å reversere mutasjonen forkastet HELE fila, inkludert alle
+   oversettelsene jeg nettopp hadde skrevet.
+3. Jeg «gjenopprettet» en linje som aldri var fjernet, og la inn et duplikat.
+
+Alle tre er samme vane: å anta at en endring traff. **Enhver mutasjon skal ha en assert som feiler
+hvis mønsteret ikke finnes** — ellers måler man ingenting og tror man har målt noe.
+
 ## 2.37.1 - 2026-08-27
 
 ### #1021 — integrasjonssuiten feilet tilfeldig, og det var ikke tilfeldig

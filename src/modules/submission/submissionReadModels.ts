@@ -3,6 +3,7 @@ import { localizeContentText } from "../../i18n/content.js";
 import { normalizeLocale } from "../../i18n/locale.js";
 import { parseDecisionReasonParams } from "../assessment/decisionReason.js";
 import { resolveMcqMinPercent, resolveTotalMin } from "../assessment/mcqPassRule.js";
+import { deriveConfidenceLevel } from "../assessment/assessmentDecisionSignals.js";
 import type { ModuleAssessmentPolicy } from "../../codecs/assessmentPolicyCodec.js";
 
 /**
@@ -182,6 +183,9 @@ export function toSubmissionResultView(submission: OwnedSubmission) {
       decisionReasonCode: decision?.decisionReasonCode ?? null,
       decisionReasonParams: parseDecisionReasonParams(decision?.decisionReasonParams),
       confidenceNote: llmEvaluation?.confidenceNote ?? null,
+      // #1019: nivået som en verdi. Klienten gjettet tidligere på delstrenger i den engelske
+      // fritteksten over — se `deriveConfidenceLevel`.
+      confidenceLevel: llmStructured ? deriveConfidenceLevel(llmStructured) : null,
       improvementAdvice: llmStructured?.improvement_advice ?? [],
       criterionRationales: llmStructured?.criterion_rationales ?? null,
       decisionMetadata: llmStructured

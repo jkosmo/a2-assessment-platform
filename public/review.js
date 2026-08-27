@@ -8,6 +8,7 @@ import { apiFetch, buildConsoleHeaders, getConsoleConfig, applyNavReviewBadge } 
 import { initConsentGuard } from "/static/consent-guard.js";
 import { hideLoading, showEmpty, showLoading } from "/static/loading.js";
 import { setHidden } from "/static/dom-visibility.js";
+import { localizeDecisionReason } from "/static/decision-reason.js";
 import { showToast } from "/static/toast.js";
 import { describeApiError } from "/static/api-error.js";
 import { OUTCOME_FAILED, OUTCOME_PASSED, rawPassFailState } from "/static/outcome.js";
@@ -238,6 +239,41 @@ async function runWithBusyButton(button, action) {
 }
 
 
+
+/**
+ * #1018: avgjørelsens begrunnelse, på sensorens språk.
+ *
+ * ⚠️ Sto tidligere rått på engelsk fire steder i denne fila, i et ellers norsk grensesnitt. #950 ga
+ * serveren en KODE å sende; her brukes den med SENSORENS formuleringer — teksten handler om en
+ * annen person, så deltakerens «du fikk 100 %» ville vært direkte feil.
+ *
+ * ⚠️ Fritekst skrevet av et menneske har ingen kode, og vises da ordrett. Det er hele poenget: en
+ * sensors eller klagebehandlers egne ord skal ikke byttes ut med en standardsetning.
+ */
+function assessorDecisionReason(decision) {
+  if (!decision) return "-";
+  return localizeDecisionReason(
+    {
+      decisionReason: decision.decisionReason,
+      decisionReasonCode: decision.decisionReasonCode,
+      decisionReasonParams: decision.decisionReasonParams,
+    },
+    { translate: t, formatNumber, keyPrefix: "assessor.decisionReasonCode." },
+  );
+}
+
+/**
+ * Utløseren for manuell vurdering er en TEKSTKOPI av avgjørelsens begrunnelse, tatt før kodene
+ * fantes (`decisionService.ts:405`). Finnes avgjørelsen, formuleres den derfor derfra; ellers
+ * vises kopien som den er.
+ *
+ * ⚠️ Kopien er selve problemet, og den bør fjernes — ført i #1018. Å lese fra kilden her er en
+ * visningsfiks, ikke en opprydding i datamodellen.
+ */
+function assessorTriggerReason(review, decision) {
+  const fromDecision = decision?.decisionReasonCode ? assessorDecisionReason(decision) : null;
+  return fromDecision ?? normalizeMultilineText(review?.triggerReason);
+}
 
 function normalizeMultilineText(value) {
   if (typeof value !== "string") return "-";
@@ -710,7 +746,7 @@ function renderManualReviewDetails(details) {
     `=== ${t("manualReview.details.section.review")} ===`,
     `${t("manualReview.details.reviewId")}: ${review.id ?? "-"}`,
     `${t("manualReview.details.reviewStatus")}: ${localizeReviewStatus(review.reviewStatus)}`,
-    `${t("manualReview.details.triggerReason")}: ${normalizeMultilineText(review.triggerReason)}`,
+    `${t("manualReview.details.triggerReason")}: ${assessorTriggerReason(review, latestDecision)}`,
     `${t("manualReview.details.reviewer")}: ${review.reviewer?.name ?? "-"} (${review.reviewer?.email ?? "-"})`,
     `${t("manualReview.details.createdAt")}: ${formatDateTime(review.createdAt)}`,
     `${t("manualReview.details.reviewedAt")}: ${formatDateTime(review.reviewedAt)}`,
@@ -749,7 +785,7 @@ function renderManualReviewDetails(details) {
     `${t("manualReview.details.decisionType")}: ${latestDecision?.decisionType ?? "-"}`,
     `${t("manualReview.details.totalScore")}: ${formatNumber(latestDecision?.totalScore)}`,
     `${t("manualReview.details.passFailTotal")}: ${formatMrPassFail(latestDecision?.passFailTotal)}`,
-    `${t("manualReview.details.decisionReason")}: ${normalizeMultilineText(latestDecision?.decisionReason)}`,
+    `${t("manualReview.details.decisionReason")}: ${assessorDecisionReason(latestDecision)}`,
     `${t("manualReview.details.finalisedAt")}: ${formatDateTime(latestDecision?.finalisedAt)}`,
     `${t("manualReview.details.llmEvaluationId")}: ${latestLlmEvaluation?.id ?? t("manualReview.details.none")}`,
     `${t("manualReview.details.llmPracticalScore")}: ${formatNumber(latestLlmEvaluation?.practicalScoreScaled)}`,
@@ -814,7 +850,7 @@ function renderManualReviewDetails(details) {
       actor: t("case.history.review"),
       when: formatDateTime(latestDecision.finalisedAt),
       decision: `${formatMrPassFail(latestDecision.passFailTotal)} · ${t("manualReview.details.totalScore")}: ${formatNumber(latestDecision.totalScore)}`,
-      reason: latestDecision.decisionReason,
+      reason: assessorDecisionReason(latestDecision),
     });
   }
   if (latestAppeal) {
@@ -1234,7 +1270,7 @@ function renderAppealHandlerDetails(details) {
     `${t("appealHandler.details.decisionType")}: ${latestDecision?.decisionType ?? "-"}`,
     `${t("appealHandler.details.totalScore")}: ${formatNumber(latestDecision?.totalScore)}`,
     `${t("appealHandler.details.passFailTotal")}: ${formatAppealPassFail(latestDecision?.passFailTotal)}`,
-    `${t("appealHandler.details.decisionReason")}: ${normalizeMultilineText(latestDecision?.decisionReason)}`,
+    `${t("appealHandler.details.decisionReason")}: ${assessorDecisionReason(latestDecision)}`,
     `${t("appealHandler.details.finalisedAt")}: ${formatDateTime(latestDecision?.finalisedAt)}`,
     `${t("appealHandler.details.llmEvaluationId")}: ${latestLlmEvaluation?.id ?? t("appealHandler.details.none")}`,
     `${t("appealHandler.details.llmPracticalScore")}: ${formatNumber(latestLlmEvaluation?.practicalScoreScaled)}`,
@@ -1253,7 +1289,7 @@ function renderAppealHandlerDetails(details) {
   if (latestManualReview) {
     lines.push(`${t("appealHandler.details.manualReviewId")}: ${latestManualReview.id ?? t("appealHandler.details.none")}`);
     lines.push(`${t("appealHandler.details.manualReviewStatus")}: ${localizeManualReviewStatus(latestManualReview.reviewStatus)}`);
-    lines.push(`${t("appealHandler.details.manualReviewTriggerReason")}: ${normalizeMultilineText(latestManualReview.triggerReason)}`);
+    lines.push(`${t("appealHandler.details.manualReviewTriggerReason")}: ${assessorTriggerReason(latestManualReview, latestDecision)}`);
     lines.push(`${t("appealHandler.details.manualReviewReviewerId")}: ${latestManualReview.reviewerId ?? "-"}`);
     lines.push(`${t("appealHandler.details.manualReviewCreatedAt")}: ${formatDateTime(latestManualReview.createdAt)}`);
     lines.push(`${t("appealHandler.details.manualReviewReviewedAt")}: ${formatDateTime(latestManualReview.reviewedAt)}`);

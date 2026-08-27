@@ -2044,29 +2044,21 @@ function localizeKnownContent(value, map) {
   return value;
 }
 
-function localizeConfidence(value) {
-  if (typeof value === "string") {
-    const normalized = value.trim().toLowerCase();
-    if (
-      normalized.includes("low confidence") &&
-      (normalized.includes("sparse") ||
-        normalized.includes("limited cues") ||
-        normalized.includes("partial evidence"))
-    ) {
-      return t("result.confidenceValue.low");
-    }
-  }
-
-  return localizeKnownContent(value, {
-    "Low confidence due to sparse content; assessment based on partial evidence; more details would improve accuracy.":
-      "result.confidenceValue.low",
-    "Low confidence in alignment due to sparse content; assessment based on limited cues.":
-      "result.confidenceValue.low",
-    "Medium confidence due to potential responsible-use ambiguity.":
-      "result.confidenceValue.medium",
-    "High confidence: structured and sufficiently detailed submission.":
-      "result.confidenceValue.high",
-  });
+/**
+ * #1019: forbeholdet fra vurderingen, på deltakerens språk.
+ *
+ * ⚠️ Dette gjettet tidligere på delstrenger i språkmodellens engelske frittekst — «low confidence»
+ * pluss «sparse» eller «limited cues» — med et kart over fire setninger modellen kanskje skrev
+ * ordrett. Bommet det, sto engelsk tekst i et norsk skjermbilde. Notatet er GENERERT og kan
+ * formuleres om når som helst; en gjetning på fri tekst kan ikke være stabil.
+ *
+ * Serveren sender nå nivået som en verdi (`deriveConfidenceLevel`), og `null` når det ikke er noe
+ * forbehold å melde — da vises ingen rad. Samme mønster som #950 innførte for begrunnelsen.
+ */
+function localizeConfidence(level) {
+  if (level === "low") return t("result.confidenceValue.low");
+  if (level === "medium") return t("result.confidenceValue.medium");
+  return null;
 }
 
 function localizeImprovementAdvice(values) {
@@ -2318,9 +2310,11 @@ function resultRowContent(row, body) {
         valueClass: outcomeClass(body.decision?.passFailTotal, body.status),
       };
     case "decisionReason":
-      return { label: t("result.decisionReason"), value: localizeDecisionReason(body.participantGuidance, t, formatNumber) };
-    case "confidence":
-      return { label: t("result.confidence"), value: localizeConfidence(body.participantGuidance?.confidenceNote) };
+      return { label: t("result.decisionReason"), value: localizeDecisionReason(body.participantGuidance, { translate: t, formatNumber }) };
+    case "confidence": {
+      const confidence = localizeConfidence(body.participantGuidance?.confidenceLevel);
+      return confidence ? { label: t("result.confidence"), value: confidence } : null;
+    }
     case "submissionId":
       // ⚠️ null, ikke "-". En rad som viser en strek bruker plass på å si at den er tom.
       // ⚠️ Dette er INNLEVERINGENS id, ikke forsøkets. «Forsøks-ID» er navnet på `attemptId` ellers
@@ -2358,13 +2352,14 @@ function buildResultCard(body) {
     isFreetextOnly,
   });
 
-  const reasonText = localizeDecisionReason(body.participantGuidance, t, formatNumber);
-  const confidenceText = localizeConfidence(body.participantGuidance?.confidenceNote);
+  const reasonText = localizeDecisionReason(body.participantGuidance, { translate: t, formatNumber });
+  const confidenceText = localizeConfidence(body.participantGuidance?.confidenceLevel);
   const plan = planRows(outcome, {
     isMcqOnly,
     isFreetextOnly,
     hasDecisionReason: Boolean(reasonText) && reasonText !== "-",
-    hasConfidence: Boolean(confidenceText) && confidenceText !== "-",
+    // #1019: null betyr «ingenting å melde». Raden planlegges da ikke i det hele tatt.
+    hasConfidence: Boolean(confidenceText),
   });
 
   const card = createSummaryCard("");

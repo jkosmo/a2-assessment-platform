@@ -19,34 +19,54 @@
  * Trukket ut av participant.js fordi regelen ellers bare kunne prøves gjennom hele resultatflaten.
  */
 
-/** Kode → oversettelsesnøkkel. Én oppføring per kode serveren kan sende. */
+/**
+ * Kode → nøkkelSTAMME. Prefikset settes av kalleren, fordi de to målgruppene trenger ULIKE
+ * setninger for samme kode:
+ *
+ *   deltaker: «Bestått: du fikk 100 %, og kravet var 80 %.»
+ *   sensor:   «Bestått automatisk: 100 % mot et krav på 80 %.»
+ *
+ * Deltakerens tekst står i andreperson. På en sensors skjerm handler den om en annen person, og
+ * «du fikk» ville vært direkte feil. Det er derfor #1018 ikke bare var å importere språkfila.
+ */
 export const DECISION_REASON_KEYS = {
-  MANUAL_REVIEW_LLM_DISAGREEMENT: "result.decisionReasonCode.llmDisagreement",
-  MANUAL_REVIEW_SCORE_INCONSISTENCY: "result.decisionReasonCode.scoreInconsistency",
-  MANUAL_REVIEW_BORDERLINE: "result.decisionReasonCode.borderline",
-  MANUAL_REVIEW_RED_FLAG_OR_CONFIDENCE: "result.decisionReasonCode.redFlagOrConfidence",
-  MANUAL_REVIEW_AI_DECLARATION: "result.decisionReasonCode.aiDeclaration",
-  MANUAL_REVIEW_CONTENT_SIMILARITY: "result.decisionReasonCode.contentSimilarity",
-  AUTO_FAIL_INSUFFICIENT_EVIDENCE: "result.decisionReasonCode.insufficientEvidence",
-  AUTO_FAIL_MCQ_BELOW_MINIMUM: "result.decisionReasonCode.mcqBelowMinimum",
-  AUTO_FAIL_PRACTICAL_BELOW_MINIMUM: "result.decisionReasonCode.practicalBelowMinimum",
-  AUTO_FAIL_THRESHOLDS: "result.decisionReasonCode.autoFail",
-  AUTO_PASS_THRESHOLDS: "result.decisionReasonCode.autoPass",
-  MCQ_ONLY_PASS: "result.decisionReasonCode.mcqOnlyPass",
-  MCQ_ONLY_FAIL: "result.decisionReasonCode.mcqOnlyFail",
+  MANUAL_REVIEW_LLM_DISAGREEMENT: "llmDisagreement",
+  MANUAL_REVIEW_SCORE_INCONSISTENCY: "scoreInconsistency",
+  MANUAL_REVIEW_BORDERLINE: "borderline",
+  MANUAL_REVIEW_RED_FLAG_OR_CONFIDENCE: "redFlagOrConfidence",
+  MANUAL_REVIEW_AI_DECLARATION: "aiDeclaration",
+  MANUAL_REVIEW_CONTENT_SIMILARITY: "contentSimilarity",
+  AUTO_FAIL_INSUFFICIENT_EVIDENCE: "insufficientEvidence",
+  AUTO_FAIL_MCQ_BELOW_MINIMUM: "mcqBelowMinimum",
+  AUTO_FAIL_PRACTICAL_BELOW_MINIMUM: "practicalBelowMinimum",
+  AUTO_FAIL_THRESHOLDS: "autoFail",
+  AUTO_PASS_THRESHOLDS: "autoPass",
+  MCQ_ONLY_PASS: "mcqOnlyPass",
+  MCQ_ONLY_FAIL: "mcqOnlyFail",
 };
 
 /**
  * Deltakerens egen beskrivelse av KI-bruken følger med som parameter. Er den tom, skal setningen
  * ikke ha et tomt sitat hengende bakerst — da brukes en variant uten.
  */
-export function decisionReasonKeyFor(code, params) {
-  if (code === "MANUAL_REVIEW_AI_DECLARATION") {
-    return String(params?.description ?? "").trim()
-      ? "result.decisionReasonCode.aiDeclarationDescribed"
-      : "result.decisionReasonCode.aiDeclaration";
+export function decisionReasonKeyFor(code, params, prefix = "result.decisionReasonCode.") {
+  const stem = code === "MANUAL_REVIEW_AI_DECLARATION"
+    ? (String(params?.description ?? "").trim() ? "aiDeclarationDescribed" : "aiDeclaration")
+    : DECISION_REASON_KEYS[code];
+  return stem ? `${prefix}${stem}` : null;
+}
+
+/** Tåler både objekt, JSON-streng, null og ugyldig JSON. En ødelagt rad skal gi en setning uten
+ *  tall, ikke et kastet unntak midt i en saksvisning. */
+export function parseReasonParams(value) {
+  if (value && typeof value === "object" && !Array.isArray(value)) return value;
+  if (typeof value !== "string") return {};
+  try {
+    const parsed = JSON.parse(value);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+  } catch {
+    return {};
   }
-  return DECISION_REASON_KEYS[code] ?? null;
 }
 
 /**
@@ -67,16 +87,21 @@ export function fillReasonPlaceholders(template, params, formatNumber = String) 
 }
 
 /**
- * @param guidance     participantGuidance fra resultatsvaret
- * @param translate    en funksjon (nøkkel) → tekst på gjeldende språk
- * @param formatNumber en funksjon (tall) → tekst på deltakerens språk. Utelates den, skrives tall
- *                     med `String`, altså med punktum — se advarselen i fillReasonPlaceholders.
+ * @param guidance participantGuidance fra resultatsvaret, eller en avgjørelsesrad
+ * @param options  { translate, formatNumber, keyPrefix } — `translate` slår opp en nøkkel,
+ *                 `formatNumber` skriver tall på brukerens språk (uten den blir det punktum), og
+ *                 `keyPrefix` velger MÅLGRUPPE: deltakerens setninger eller sensorens.
  * @returns setningen som skal vises, eller "-" når det ikke finnes noen grunn
  */
-export function localizeDecisionReason(guidance, translate, formatNumber = String) {
+export function localizeDecisionReason(guidance, options) {
+  const { translate, formatNumber = String, keyPrefix = "result.decisionReasonCode." } = options ?? {};
   const text = typeof guidance?.decisionReason === "string" ? guidance.decisionReason : null;
   const code = guidance?.decisionReasonCode ?? null;
-  const params = guidance?.decisionReasonParams ?? {};
+  // ⚠️ Parametrene kan være et OBJEKT eller en JSON-STRENG. Deltakerflaten får dem tolket av
+  // lesemodellen; sensorflaten får avgjørelsesraden rått fra databasen, der kolonnen er tekst.
+  // Uten dette ville `Object.entries` på en streng gitt tegn-par, ingen plassholder ville blitt
+  // fylt, og «poengsummen {totalScore} ligger i …» hadde stått på skjermen.
+  const params = parseReasonParams(guidance?.decisionReasonParams);
 
   // Ingen kode, eller en kode denne klienten ikke kjenner: vis serverens tekst ordrett.
   //
@@ -88,7 +113,7 @@ export function localizeDecisionReason(guidance, translate, formatNumber = Strin
   // ⚠️ De to tilfellene deler én gren med vilje. Et tidligere utkast hadde en egen `if (!code)`
   // FORAN denne, og den kunne ikke observeres: oppslaget under gir uansett null for en manglende
   // kode. En mutasjonstest avslørte at grenen var død — testene besto med den fjernet.
-  const key = code ? decisionReasonKeyFor(code, params) : null;
+  const key = code ? decisionReasonKeyFor(code, params, keyPrefix) : null;
   if (!key) return text ?? "-";
 
   const translated = translate(key);
@@ -96,5 +121,9 @@ export function localizeDecisionReason(guidance, translate, formatNumber = Strin
   // til en deltaker er verre enn å vise serverens engelske setning.
   if (translated === key) return text ?? "-";
 
-  return fillReasonPlaceholders(translated, params, formatNumber);
+  const filled = fillReasonPlaceholders(translated, params, formatNumber);
+  // ⚠️ Får vi ikke fylt inn tallene — ødelagt JSON, eller en kode hvis parametre mangler — ville
+  // «du fikk {scorePercent} %» stått på skjermen. Serverens lagrede setning har tallene i seg, på
+  // engelsk. Den er ikke bra, men den er sann, og en synlig plassholder er verken.
+  return /\{\w+\}/.test(filled) ? (text ?? filled) : filled;
 }

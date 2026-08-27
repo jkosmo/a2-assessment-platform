@@ -82,6 +82,34 @@ export function isExplicitAutomaticFailRecommendation(input: LlmStructuredAssess
   return input.recommended_outcome === "fail";
 }
 
+/**
+ * #1019: hvor sikker vurderingen var, som en VERDI — ikke som en engelsk setning å gjette på.
+ *
+ * ⚠️ Klienten leste tidligere `confidence_note` og lette etter delstrenger: «low confidence» pluss
+ * «sparse» eller «limited cues» eller «partial evidence». Bommet den, sto språkmodellens engelske
+ * setning ordrett i et norsk skjermbilde. Og notatet er GENERERT — det kan formuleres om når som
+ * helst, uten at noe i repoet endres. En gjetning på fri tekst kan ikke være stabil.
+ *
+ * Feltene under er derimot strukturerte, og prompten ber allerede om dem
+ * (`llmAssessmentService.ts:556-558`).
+ *
+ * Returnerer `null` når det ikke er noe forbehold å melde. ⚠️ Det inkluderer «høy konfidens»: en
+ * rad som forteller deltakeren at alt er som det skal, bruker plass uten å si noe — samme regel
+ * som #940 innførte for de tomme radene.
+ */
+export function deriveConfidenceLevel(
+  input: Pick<LlmStructuredAssessment, "evidence_sufficiency" | "manual_review_reason_code">,
+): "low" | "medium" | null {
+  if (input.manual_review_reason_code === "low_confidence") return "low";
+  // ⚠️ QA-porten: `insufficient_evidence` som KODE ga insuffisienssignal andre steder
+  // (`hasInsufficientEvidenceSignal`), men ikke lavt nivå her. Samme tilstand måtte gi samme svar —
+  // ellers avhenger det av hvilket av to felt modellen tilfeldigvis fylte ut.
+  if (input.manual_review_reason_code === "insufficient_evidence") return "low";
+  if (input.evidence_sufficiency === "insufficient") return "low";
+  if (input.evidence_sufficiency === "uncertain") return "medium";
+  return null;
+}
+
 export function hasLowConfidenceManualReviewSignal(input: LlmStructuredAssessment): boolean {
   return input.manual_review_reason_code === "low_confidence";
 }
