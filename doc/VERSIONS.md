@@ -2,6 +2,45 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.37.1 - 2026-08-27
+
+### #1021 — integrasjonssuiten feilet tilfeldig, og det var ikke tilfeldig
+
+Seks kjøringer, seks ulike feilende tester, hver av dem grønn alene. Filene kjørte i PARALLELL mot
+én delt Postgres.
+
+⚠️ **Racet var dokumentert fra før.** #513 fant mekanismen i mars — «integration files that touch the
+same seed fixtures race: one file mutates state another is mid-assessment on, intermittently flipping
+a decision» — og satte `fileParallelism: false` i `vitest.config.ts`, altså for CI. Den lokale
+konfigurasjonen beholdt parallelliteten, og racet ble omgått ved å EKSKLUDERE de to filene som feilet
+mest (#804). Mekanismen sto igjen for de andre 113.
+
+Målt på samme ferske, seedede database: parallelt feilet 6 av 6 kjøringer med 1–4 tester, serielt
+576/576 grønt i 3 av 3. Den lokale kommandoen kjører nå serielt, som CI alltid har gjort.
+
+Prisen er 4 minutter mot 1.
+
+### Hvorfor dette var verdt en p1
+
+En suite som feiler tilfeldig er verre enn en som feiler alltid: den lærer leseren å se bort fra
+rødt. I løpet av dagen kostet den meg en runde der jeg stashet bort mine egne endringer for å
+«bevise» at en feil ikke var min — beviset var verdiløst, for begge kjøringene traff samme race.
+
+⚠️ Og én av de tilfeldige feilene var `TC-POL-AIINFLUENCE-002`, som holder på at et KI-signal skal
+rute til gjennomgang og aldri til stryk. Lærer man seg å avfeie røde kjøringer som støy, avfeier man
+den regelen også.
+
+### Rotårsak: å lappe der det gjorde vondt
+
+#513 fant årsaken og fikset symptomet to steder. Det er samme mønster som gikk igjen i #982, #950 og
+#940 samme dag, og som QA-porten fant hos meg fire ganger: **jeg endrer stedet jeg ser på, og sveiper
+ikke etter hvem andre som har samme problem.** Her sto det fem måneder.
+
+⚠️ Tre av mine egne eksperimenter i denne saken var dessuten ugyldige, fordi `npx vitest` hopper over
+npm sin `pretest`-hook — den som nullstiller og seeder databasen. Jeg presenterte to av dem som
+bekreftelser før jeg hadde kontroll på hva jeg kjørte mot. **Kjør den kommandoen som faktisk
+brukes**, ikke en håndlaget variant av den.
+
 ## 2.37.0 - 2026-08-27
 
 ### #940 — utfallet avgjør hva som står åpent
