@@ -1,6 +1,7 @@
 import { AssessmentMode } from "../../db/prismaRuntime.js";
 import type { AssessmentMode as AssessmentModeType } from "@prisma/client";
 import type { ModuleAssessmentPolicy } from "../../codecs/assessmentPolicyCodec.js";
+import { getAssessmentRules } from "../../config/assessmentRules.js";
 
 // ─────────────────────────────────────────────────────────────────────────────────────────────
 // #949: ETT sted som svarer på «hva er MCQ-grensen for denne modulen».
@@ -44,6 +45,20 @@ export const DEFAULT_MCQ_ONLY_MIN_PERCENT = 70;
  * ikke — `decisionService` skriver det eksplisitt (`mcqMinPercent === null || ...`). Å innføre en
  * 70 %-port der ville strøket kandidater som består i dag.
  */
+/**
+ * Den effektive totalterskelen: modulens egen, ellers plattformens standard.
+ *
+ * ⚠️ QA-porten 2026-08-27: visningen (#940) leste `passRules.totalMin ?? null` mens vedtaket leste
+ * `?? rules.thresholds.totalMin`. En blandet modul UTEN eksplisitt grense ble dermed avgjort mot 70
+ * mens skjermen ikke viste noe krav i det hele tatt. Det er #949-feilen i utelatelsesform: to
+ * oppslag for samme tall, der det ene glemmer reservverdien.
+ *
+ * Begge sider skal kalle denne. Da kan de ikke komme i utakt.
+ */
+export function resolveTotalMin(assessmentPolicy: ModuleAssessmentPolicy | null | undefined): number {
+  return assessmentPolicy?.passRules?.totalMin ?? getAssessmentRules().thresholds.totalMin;
+}
+
 export function resolveMcqMinPercent(
   assessmentMode: AssessmentModeType | string | null | undefined,
   assessmentPolicy: ModuleAssessmentPolicy | null | undefined,

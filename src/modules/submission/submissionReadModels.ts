@@ -2,6 +2,26 @@ import { llmResponseCodec } from "../../codecs/llmResponseCodec.js";
 import { localizeContentText } from "../../i18n/content.js";
 import { normalizeLocale } from "../../i18n/locale.js";
 import { parseDecisionReasonParams } from "../assessment/decisionReason.js";
+import { resolveMcqMinPercent, resolveTotalMin } from "../assessment/mcqPassRule.js";
+import type { ModuleAssessmentPolicy } from "../../codecs/assessmentPolicyCodec.js";
+
+/**
+ * #940: modulens regler, lest tolerant.
+ *
+ * ⚠️ En ødelagt policy-JSON skal gi en resultatskjerm UTEN krav-tall, ikke en 500 på resultatsiden.
+ * Deltakeren har bestått eller ikke uansett hva som står i dette feltet.
+ */
+function parseAssessmentPolicy(value: string | null | undefined): ModuleAssessmentPolicy | null {
+  if (!value) return null;
+  try {
+    const parsed: unknown = JSON.parse(value);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      ? (parsed as ModuleAssessmentPolicy)
+      : null;
+  } catch {
+    return null;
+  }
+}
 
 export type SubmissionHistoryItem = {
   id: string;
@@ -54,6 +74,9 @@ export type OwnedSubmission = {
   mcqAttempts: Array<{
     id: string;
     scaledScore: number | null;
+    // #940: prosenten er det deltakeren skal se — «du fikk 60 %» sier noe, «du fikk 18» gjør det
+    // ikke uten en nevner, og nevneren finnes ikke lagret noe sted.
+    percentScore: number | null;
     completedAt: Date | null;
   }>;
   llmEvaluations: Array<{
@@ -62,6 +85,12 @@ export type OwnedSubmission = {
     confidenceNote: string | null;
     responseJson: string;
   }>;
+  // #940: modulens vurderingsmodus og regler. Dataene har alltid fulgt med spørringen
+  // (`include: { moduleVersion: true }`); typen nevnte dem bare ikke.
+  moduleVersion?: {
+    assessmentMode?: string | null;
+    assessmentPolicyJson?: string | null;
+  } | null;
 };
 
 function parseStructuredLlmResponse(responseJson: string | null | undefined) {
@@ -116,12 +145,30 @@ export function toSubmissionResultView(submission: OwnedSubmission) {
   const mcqAttempt = submission.mcqAttempts.find((attempt) => attempt.completedAt !== null) ?? null;
   const llmStructured = parseStructuredLlmResponse(llmEvaluation?.responseJson);
 
+  // #940: resultatskjermen skal si «kravet var 80 %», og det tallet fantes ikke på klienten.
+  //
+  // ⚠️ Oppslaget MÅ være det samme som avgjørelsen brukte. Regner visningen ut kravet på egen hånd,
+  // kan skjermen si 70 % mens vedtaket ble fattet på 80 — nøyaktig utakten #949 rettet.
+  const assessmentPolicy = parseAssessmentPolicy(submission.moduleVersion?.assessmentPolicyJson);
+  const assessmentMode = submission.moduleVersion?.assessmentMode ?? null;
+
   return {
     submissionId: submission.id,
     status: submission.submissionStatus,
     statusExplanation: getSubmissionStatusExplanation(submission.submissionStatus),
+    assessmentMode,
+    requirement: {
+      // null = ikke aktuelt for denne modultypen, ikke «ingen grense». Klienten må kunne skille
+      // «kravet var 80 %» fra «denne modulen har ingen flervalgsport».
+      mcqMinPercent: resolveMcqMinPercent(assessmentMode, assessmentPolicy),
+      // ⚠️ SAMME oppslag som vedtaket. `?? null` her ville skjult kravet for enhver modul uten
+      // eksplisitt grense — mens vedtaket ble fattet mot plattformens standard.
+      totalMin: resolveTotalMin(assessmentPolicy),
+      practicalMinPercent: assessmentPolicy?.passRules?.practicalMinPercent ?? null,
+    },
     scoreComponents: {
       mcqScaledScore: decision?.mcqScaledScore ?? mcqAttempt?.scaledScore ?? null,
+      mcqPercentScore: mcqAttempt?.percentScore ?? null,
       practicalScaledScore: decision?.practicalScaledScore ?? llmEvaluation?.practicalScoreScaled ?? null,
       totalScore: decision?.totalScore ?? null,
     },

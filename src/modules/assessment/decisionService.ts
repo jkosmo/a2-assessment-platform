@@ -30,6 +30,7 @@ import {
 import {
   DEFAULT_MCQ_ONLY_MIN_PERCENT as DEFAULT_MCQ_ONLY_MIN_PERCENT_VALUE,
   resolveMcqMinPercent,
+  resolveTotalMin,
 } from "./mcqPassRule.js";
 export type { ModuleAssessmentPolicy };
 
@@ -82,7 +83,7 @@ type ResolveAssessmentDecisionInput = Pick<
 
 export function resolveAssessmentDecision(input: ResolveAssessmentDecisionInput): ResolvedAssessmentDecision {
   const rules = getAssessmentRules();
-  const totalMin = input.assessmentPolicy?.passRules?.totalMin ?? rules.thresholds.totalMin;
+  const totalMin = resolveTotalMin(input.assessmentPolicy);
   const rubricMaxTotal = input.rubricMaxTotal ?? 20;
 
   // Recompute rubric total server-side: filter to known criteria (if provided),

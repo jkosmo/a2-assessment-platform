@@ -136,10 +136,14 @@ test("participant: MCQ-only auto-pass shows a discreet retry button", async ({ p
   await expect(retry).toBeVisible();
   await expect(retry).toHaveClass(/reset-flow-discreet/);
 
-  // #591: MCQ-only result shows the MCQ score but NOT the (always-0) practical score row.
+  // #591: en ren flervalgsmodul viser IKKE den (alltid 0) praktiske poengsummen.
+  //
+  // ⚠️ #940 flyttet poengsummen fra en rad til overskrifta, så invarianten prøves der den nå står.
+  // Blokkeringen har en makker: uten «Bestått»-påstanden ville «ingen praktisk poengsum» vært sann
+  // også for et kort som aldri ble rendret.
   const result = page.locator("#resultSummary");
-  await expect(result).toContainText("MCQ-poeng");
-  await expect(result).not.toContainText("Praktisk poeng");
+  await expect(result.locator(".result-headline")).toContainText("Bestått");
+  await expect(result).not.toContainText("Praktisk");
 });
 
 // #578: FREETEXT_ONLY — the participant fills in free text (no MCQ section) and the assessment runs
@@ -269,10 +273,15 @@ test("participant: FREETEXT_ONLY result hides the MCQ score row, shows the pract
   await page.locator("#createSubmission").click();
   await page.locator("#checkResult").click();
 
-  // The practical score row is shown; the (always-0) MCQ score row is hidden.
+  // #940: for en fritekstmodul ER den praktiske poengsummen totalen, og den står i overskrifta.
+  // Å vise den to ganger — som total OG som delpoeng — er nøyaktig gjentakelsen saken fjernet.
+  //
+  // ⚠️ Påstanden er på TALLET, ikke på at overskrifta finnes. En `toBeVisible` ville vært grønn
+  // for et kort som viste hva som helst.
   const result = page.locator("#resultSummary");
-  await expect(result).toContainText("Praktisk poeng");
-  await expect(result).not.toContainText("MCQ-poeng");
+  await expect(result.locator(".result-headline")).toContainText("85");
+  // Den (alltid 0) flervalgsdelen finnes ikke for denne modultypen, verken som rad eller delpoeng.
+  await expect(result).not.toContainText("Flervalg");
 });
 
 // #591/#599 characterization: the default FREETEXT_PLUS_MCQ journey shows BOTH score rows — the
@@ -326,10 +335,13 @@ test("participant: FREETEXT_PLUS_MCQ result shows both the MCQ and practical sco
   await page.locator("input[name='q_q1']").first().check();
   await page.locator("#submitMcq").click();
 
-  // Both score rows are shown for the combined free-text + MCQ mode.
+  // #940: en blandet modul har EKTE delpoeng, og de blir stående — nå på underlinja under
+  // totalen, ikke som to egne rader. Påstanden er på underlinja, ikke på kortet som helhet: en
+  // treffordet-hvor-som-helst-sjekk ville også vært grønn om de sto som rader igjen.
   const result = page.locator("#resultSummary");
-  await expect(result).toContainText("MCQ-poeng");
-  await expect(result).toContainText("Praktisk poeng");
+  const subline = result.locator(".result-subline");
+  await expect(subline).toContainText("Flervalg");
+  await expect(subline).toContainText("Praktisk");
 });
 
 // #988 — en kandidat som glemte ett spørsmål fikk `{"code":"too_small","path":["responses",3]}`.

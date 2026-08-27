@@ -2,6 +2,221 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.37.0 - 2026-08-27
+
+### #940 — utfallet avgjør hva som står åpent
+
+Produkteier, stage 2026-08-20, rett etter en ren flervalgsmodul: *«Dette er ikke optimal bruk av
+skjermen og kan gjøres på en mer konsis og enklere måte.»* Åtte likestilte elementer for å si
+«bestått, 100 %». Det som betydde noe var to av dem.
+
+Nå bestemmer utfallet hva som er utfoldet:
+
+| Tilstand | Åpent |
+|---|---|
+| Bestått | «Bestått — 100 %. Kravet var 80 %.» |
+| Ikke bestått | begrunnelsen — den er selve svaret |
+| Til manuell vurdering | «En sensor ser på besvarelsen din. Du får e-post når den er ferdig.» |
+| Blandet modul | totalen, med delpoengene på underlinja |
+
+Den tredje beskjeden fantes ikke i det hele tatt før nå. «Sendt til manuell vurdering» sto som én
+rad blant sju likestilte, og det som betyr noe — *at du ikke skal gjøre noe, og at du får beskjed* —
+sto ingen steder.
+
+Reglene bor i `public/static/result-summary.js`, ikke i participant.js, fordi de ellers bare kunne
+prøves ved å rendre hele flaten (#982-lærdommen).
+
+⚠️ **Utfallet utledes ikke her.** Første utkast gjorde det, og `test/outcome-derivation-guard.test.js`
+fanget det — #978-vakten gjorde nøyaktig jobben sin. `deriveOutcome` i `outcome.js` er fortsatt det
+ene stedet; `resolve­Outcome` legger bare til ett visningsskille: «en sensor ser på den» mot
+«maskinen jobber», som er to helt ulike beskjeder for deltakeren.
+
+**Serverendring:** «Kravet var 80 %» fantes ikke på klienten. `toSubmissionResultView` sender nå
+`requirement` og `mcqPercentScore`, og terskelen hentes med `resolveTotalMin` /
+`resolveMcqMinPercent` — samme oppslag som vedtaket bruker.
+
+### Rotårsak: samme feilklasse, tredje gang på én dag
+
+QA-porten ga **NO-GO**: **seks av sakens åtte elementer sto fortsatt på skjermen.** Jeg byttet ut
+innholdet i resultatkortet og lot flyten rundt stå — «Sjekk framdrift», hintet som forklarer den,
+«Vurderingshandlinger er tilgjengelige.», «Vurdering er ferdig.», «Vis resultat» og etiketten
+«Resultatoppsummering:» lå alle UTENFOR kortet.
+
+Alle testene var grønne. De målte kortet; elementene lå ikke i det.
+
+**Saken listet de åtte elementene eksplisitt, og jeg fjernet to.** Det er ikke uoppmerksomhet — det
+er at jeg leser en sak som en beskrivelse og ikke som en sjekkliste. Tiltaket er mekanisk, ikke en
+ny regel å huske: `test/e2e/participant-result-summary-940.spec.ts` går gjennom listen ordrett, mot
+hele siden, med en makker som krever at kontrollene kommer TILBAKE når resultatet forsvinner.
+
+To testhull til, begge funnet av porten:
+
+- **Fiksturet kunne ikke nå påstanden.** Testen «gjentar ikke samme tall» utelot
+  `practicalScaledScore`, som API-et faktisk sender som `0`. Vakten sto utestet, og en mutasjon som
+  fjernet den forble grønn.
+- **Hele servertillegget sto uten påstander.** Alle e2e-ene mocker `/result`, så de ville vært
+  grønne uansett hva serveren sendte — og skjermen sier «Kravet var 80 %» på grunnlag av nettopp de
+  feltene.
+
+Porten fant også at visningen leste `totalMin ?? null` mens vedtaket leste `?? standarden (70)`. En
+blandet modul uten eksplisitt grense ble avgjort mot 70 mens skjermen ikke viste noe krav. Det er
+#949-feilen i utelatelsesform: to oppslag for samme tall, der det ene glemmer reservverdien.
+
+⚠️ Og en påstand jeg *ikke* kunne si noe om: en avgjort status uten vedtak (`REJECTED`) ga
+overskrifta «Besvarelsen din blir vurdert». Ingenting vurderes, og det kommer ikke mer. Nå sier
+skjermen mindre, og lar statusen stå åpent.
+
+### Andre runde: en dødlås jeg selv innførte
+
+Fiksen på funnet over skjulte kontrollene når «det står et kort der». Men et resultat som fortsatt
+BEHANDLES rendrer også et kort. Da forsvant «Start vurdering», «Sjekk framdrift» og «Vis resultat» —
+samtidig som «Slett innlevering og start på nytt» er skjult av gatingen fordi statusen ikke er
+ferdig. **Null kontroller igjen, og ingen vei videre.**
+
+Veien inn er ikke eksotisk: autoløkka gir opp etter 90 sekunder, som er vanlig LLM-tid på en delt
+B1-instans, og deltakeren klikker «Vis resultat».
+
+⚠️ **Feilen er at jeg nøklet på TILSTEDEVÆRELSE der spørsmålet var TILSTAND.** «Finnes det et
+resultat» og «er utfallet avgjort» er ikke samme spørsmål, og de fire tilstandene i #940 er nettopp
+et svar på det skillet — jeg hadde regelen i hånden og brukte den ikke i den tilstøtende koden.
+Krommet skjules nå bare for avgjort/ukjent/til-vurdering, aldri mens noe holder på.
+
+To testpåstander var dessuten svakere enn de så ut:
+
+- `toBeHidden()` er sant også for et element som IKKE FINNES, og skjulingen hopper stille over
+  null-noder. En omdøpt id i HTML ville gitt en synlig knapp og en grønn test. Hver skjul-påstand
+  har nå `toHaveCount(1)` foran seg.
+- Returretningen låste fire av åtte elementer. Listen ligger nå ett sted, som data, og begge
+  retningene måler nøyaktig de samme åtte.
+
+Detaljraden kalte dessuten innleveringens id «Forsøks-ID» — samme navn som `attemptId` bruker ellers
+på siden. To ulike verdier under ett navn er verre enn ingen av dem.
+
+### Tredje runde: tallene sto på feil språk
+
+Overskrifta gikk utenom tallformateringen. En norsk deltaker så «Ikke bestått — 66.67 %» med
+PUNKTUM, mens delpoengene på SAMME underlinje sto med komma — de gikk gjennom `formatNumber`,
+overskrifta ikke. Det rammer enhver flervalgsmodul der antall spørsmål ikke går opp i 100, altså de
+fleste.
+
+Porten fant også en latent felle: en avgjort status uten vedtak (`REJECTED`) ville fått krommet
+skjult mens reset-knappen også er skjult — dødlåsen én gang til, gjennom en annen dør. Ingen kodesti
+skriver `REJECTED` i dag (#953), men `unknown`-grenen er ny kode, og et utfall vi ikke kjenner skal
+ikke rydde bort deltakerens siste vei ut.
+
+⚠️ **Tre runder, tre funn jeg trodde var ferdig.** Fellesnevneren for runde 2 og 3 er den samme som
+for runde 1: jeg endrer ett sted og sjekker ikke hva som gjelder rundt det. Det som faktisk fant
+dem, var ikke en ny regel å huske — det var at porten fikk beskjed om å LETE etter det tredje, og at
+den kjørte flaten i en ekte nettleser i stedet for å lese diffen.
+
+### Fjerde runde: strekene levde videre der ingen så etter dem
+
+`resultRowContent` lovet i sin egen kommentar å returnere null når en rad ikke har noe å si. Bare
+ÉN av grenene holdt det. `formatNumber(null)` gir «-», så vente-tilstandene viste «Total poengsum –»,
+«MCQ-poeng –» og «Beslutning Ukjent» bak «Vis detaljer» — og siden utfellingen huskes, så en
+deltaker som hadde åpnet detaljene før, dette uten å klikke.
+
+⚠️ **Min egen test for nettopp dette var falskt grønn.** Fiksturet var et BESTÅTT resultat, og for
+et avgjort utfall planlegges poengradene aldri. Testen kunne ikke nå påstanden sin — samme
+fikstur-felle som runde 2 fant ett annet sted, i en test jeg skrev for å vokte mot problemet.
+
+Testen kjører nå begge tilstandene, og påstanden navngir hvilke rader som viser strek i stedet for
+å bare telle dem.
+
+To påstander til var svakere enn de så ut: `toBeGreaterThan(0)` på en terskel pinner ingen verdi,
+og `not.toThrow()` sier bare at det ikke smalt — ikke at svaret er brukbart. Begge måler nå den
+verdien vedtaket faktisk bruker.
+
+### Femte runde: verktøyet løy igjen, og en test målte sin egen timing
+
+Begge funnene satt i test- og verktøylaget; produktkoden var ren.
+
+**Inspeksjonsskriptet viste rå nøkkel i alle 24 kortene.** `result.submissionId` ble døpt om til
+`result.submissionIdLabel` i runde 2, og skriptet fortsatte å slå opp det gamle navnet — mens det
+meldte «Ingen avvik målt».
+
+⚠️ Dette er ANDRE gang inspeksjonen viste noe annet enn produktet. Første gang satte jeg inn en
+vakt — men bare for statusraden, altså akkurat den ene som hadde feilet. Nå sier oppslaget selv fra
+for enhver manglende nøkkel, og målingen behandler det som et avvik. **En lapp på det som gikk galt
+sist er ikke en vakt.**
+
+**«Vis detaljer huskes»-testen målte sin egen timing.** Lagringen skjer i `toggle`, som er en kølagt
+oppgave; testen navigerte før den rakk å kjøre. Grønn alene, rød når fila kjøres samlet — den verste
+formen, fordi den ser stabil ut når man sjekker den. Testen venter nå på at verdien FAKTISK er
+skrevet.
+
+⚠️ Første fiks la til en `click`-lytter i produktet i tillegg. En mutasjon avslørte at ingen test
+kunne skille de to skrivemåtene — altså kompleksitet uten dekning, for å løse et problem som lå i
+testen. Fjernet igjen.
+
+### Sjette runde: to hull ingen runde hadde sett etter
+
+- **Overskriftene hadde ingen vakt.** `t()` gir nøkkelen tilbake når den mangler, og
+  «result.headline.passedPercent» på skjermen ser ut som en feilmelding for deltakeren. #950 fikk en
+  slik vakt for begrunnelsene; overskriftene fikk den aldri. Nå kreves hver av de tolv
+  overskrift/underlinje-kombinasjonene på alle tre språk, med plassholderne fylt.
+- **«Vis detaljer» sa det samme åpen som lukket.** En seende bruker ser pila snu; en
+  skjermleserbruker hører bare det samme igjen. Etiketten forteller nå hva et klikk vil gjøre.
+
+### Inspeksjonen sluttet å være en kopi
+
+Verktøyet løy to ganger i denne saken, og begge gangene av samme grunn: skriptet BYGDE KORTET PÅ
+NYTT. Det importerte reglene, men gjenskapte rader, etiketter og verdier selv — og divergerte fra
+produktet uten at noe sa fra.
+
+Første gang satte jeg inn en vakt for akkurat den raden som hadde feilet. Den neste divergensen kom
+et annet sted. **En lapp på det som gikk galt sist er ikke en vakt.**
+
+Skriptet laster nå den ekte deltakersiden med participant.js, mockede API-svar og de ekte
+språkfilene, i fire tilstander × tre språk × to bredder. Det finnes ingen kopi å divergere fra, og
+det som måles er det deltakeren ser. Sidefeil telles også som avvik — uten det kunne kortet vært
+tomt fordi noe kastet, og skjermdumpen ville bare vist et tomt felt.
+
+### To funn som bare kunne SES
+
+Da inspeksjonen viste den ekte siden, kom to ting fram som ingen måling hadde fanget:
+
+- **«TOTAL POENGSUM 64» og «MCQ-POENG 64» sto rett under hverandre** i vente-tilstandene.
+  Overskrifta hadde slått sammen like tall siden første utkast; detaljradene gjorde det ikke. To
+  like tall er ikke et avvik i seg selv, så ingen automatisk sjekk kunne funnet det.
+- **Den røde «Slett innlevering»-knappen ropte høyest på skjermen** under beskjeden «Ingenting mer å
+  gjøre nå». Den motsier beskjeden, og et nytt forsøk er dessuten umulig mens en sensor har saken.
+  Regelen er nå den den alltid handlet om: fremtredende BARE etter en avgjort stryk.
+
+⚠️ Begge er argumenter for at måling og øyne løser ulike problemer. Målingen finner det som er galt
+på en måte man kan definere på forhånd. Øynene finner det som bare er *dårlig*.
+
+### Sjette runde: GO, og ett tall til på riktig språk
+
+Porten frikjente de tre sporene jeg var usikker på: en anke setter status til UNDER_REVIEW, så
+knappen blir diskret og kortet sier «en sensor ser på den» — riktig for både anket stryk og anket
+bestått. Sammenslåingen av poengrader kan ikke skjule et ekte tall, fordi MCQ_ONLY skriver
+`totalScore = mcqScaledScore` og FREETEXT_ONLY `total = praktisk`. Og `result-summary.js` importeres
+bare av participant.js, så ingenting lekker til de tre flatene jeg ikke har rørt.
+
+Ett funn sto igjen, i #950-kode denne diffen ikke rørte: begrunnelseslinja skrev «du fikk 66.67 %»
+med PUNKTUM, rett under en overskrift som sa «66,67 %» med komma. To skrivemåter for samme tall, på
+samme kort — bare synlig fordi #940 la de to linjene ved siden av hverandre. `localizeDecisionReason`
+tar nå en tallformaterer, som `fillPlaceholders` gjør.
+
+### Fem runder — hva som faktisk fant feilene
+
+Ingen av de fire funnene ble funnet av at jeg husket bedre. Det som fant dem:
+
+1. **Å be porten lete etter «det neste»,** i stedet for å be den vurdere fiksen. Runde 2 til 5 ble
+   alle bestilt med den formuleringen, og hver av dem fant noe.
+2. **Å kjøre flaten i en ekte nettleser** i stedet for å lese diffen. Dødlåsen og strek-radene ble
+   MÅLT, ikke resonnert fram.
+3. **Mutasjonstesting.** Nitten mutasjoner er verifisert i denne saken. Tre av dem OVERLEVDE først
+   — og hver overlevende mutasjon avslørte enten en test som ikke målte det den påsto, eller kode
+   ingen test kunne skille fra sitt eget fravær.
+
+### Registrert underveis
+
+- **#1020** — «Slik kommer du videre» for den som ikke bestod, skilt ut fra denne saken
+- **#1021** — `m2-appeal-flow` feiler ujevnt under full integrasjonskjøring, også uten disse
+  endringene
+
 ## 2.36.0 - 2026-08-27
 
 ### #950 — serveren sender HVA som avgjorde, ikke en engelsk setning

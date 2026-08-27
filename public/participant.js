@@ -1,6 +1,13 @@
 import { renderWorkspaceNavigationWithProfile } from "/static/workspace-nav.js";
 import { resolveInitialLocale } from "/static/i18n-locale.js";
 import { localizeDecisionReason } from "/static/decision-reason.js";
+import {
+  buildHeadline,
+  planRows,
+  readDetailsOpen,
+  resolveOutcome,
+  writeDetailsOpen,
+} from "/static/result-summary.js";
 import { createNumberFormatter, createDateTimeFormatter } from "/static/format-display.js";
 const formatDateTime = createDateTimeFormatter(() => currentLocale);
 const formatNumber = createNumberFormatter(() => currentLocale);
@@ -65,6 +72,10 @@ const selectedModuleCandidateConstraintsSection = document.getElementById("selec
 const selectedModuleCandidateTaskConstraints = document.getElementById("selectedModuleCandidateTaskConstraints");
 const submissionIdLabel = document.getElementById("submissionId");
 const attemptIdLabel = document.getElementById("attemptId");
+// #940: flytkrommet rundt resultatet. Se `applyResultChrome`.
+const attemptIdLine = document.getElementById("attemptIdLine");
+const submissionIdLine = document.getElementById("submissionIdLine");
+const resultSummaryLabel = document.getElementById("resultSummaryLabel");
 const appealIdLabel = document.getElementById("appealId");
 const appVersionLabel = document.getElementById("appVersion");
 const resultSummary = document.getElementById("resultSummary");
@@ -1259,13 +1270,19 @@ function renderFlowGating() {
   // aliasert til `resultPassFail` og vakta lette etter `passFailTotal`. Resultatet var
   // selvmotsigende: banneret holdt en bestått-under-vurdering noeytral uten konfetti, mens den
   // samme renderingen gjorde retake-knappen diskret som om utfallet var endelig.
-  resetSubmissionFlowButton.classList.toggle(
-    "reset-flow-discreet",
-    hasResultStatus && isSettledPass({
-      passFailTotal: flowState.resultPassFail,
-      submissionStatus: flowState.resultStatus,
-    }),
-  );
+  //
+  // #940: regelen snudd, og gjort til det den alltid handlet om. Knappen skal være FREMTREDENDE
+  // bare når et nytt forsøk er det åpenbare neste steget — altså etter en avgjort stryk. Alt annet
+  // er diskret.
+  //
+  // ⚠️ Funnet ved å SE på den ekte siden: under «Ingenting mer å gjøre nå» sto en rød knapp som
+  // ropte høyest på skjermen. Den motsier beskjeden, og et nytt forsøk er dessuten ikke mulig mens
+  // en sensor har saken.
+  const settledFail = deriveOutcome({
+    passFailTotal: flowState.resultPassFail,
+    submissionStatus: flowState.resultStatus,
+  }) === "failed";
+  resetSubmissionFlowButton.classList.toggle("reset-flow-discreet", hasResultStatus && !settledFail);
 
   const createSubmissionBusy = createSubmissionButton.dataset.busy === "true";
   const submitMcqBusy = submitMcqButton.dataset.busy === "true";
@@ -1327,6 +1344,9 @@ function renderFlowGating() {
   assessmentGateHint.textContent = t(gate.assessmentHintKey);
   checkAssessmentHint.textContent = t(gate.checkAssessmentHintKey);
   appealGateHint.textContent = t(gate.appealHintKey);
+  // #940: gating kjører på hver tilstandsendring. Uten dette ville et nytt forsøk etter et
+  // resultat starte med kontrollene fortsatt skjult — de skal tilbake når resultatet er borte.
+  applyResultChrome(resultSummary?.dataset.hasResult === "true");
   renderAppealState();
   applySubmissionReadMode();
 }
@@ -2226,6 +2246,274 @@ function clearSummaryContainer(element) {
   element.innerHTML = "";
 }
 
+// ── #940: resultatskjermen ──────────────────────────────────────────────────────────────────────
+//
+// Åtte likestilte rader for å si «bestått, 100 %». Nå avgjør UTFALLET hva som står åpent, og resten
+// ligger bak «Vis detaljer». Reglene selv bor i result-summary.js, fordi de ellers bare kunne prøves
+// ved å rendre hele flaten (#982).
+
+/**
+ * Setter inn {navn}, samme konvensjon som resten av fila.
+ *
+ * ⚠️ TALL formateres med `formatNumber`, ikke med `String()`. QA-porten runde 3 målte at
+ * overskrifta sa «Ikke bestått — 66.67 %» med PUNKTUM, mens delpoengene på SAMME underlinje sto med
+ * komma — de gikk gjennom formatNumber, overskrifta ikke. Det rammer enhver flervalgsmodul der
+ * antall spørsmål ikke går opp i 100.
+ */
+function fillPlaceholders(template, params) {
+  let out = String(template ?? "");
+  for (const [key, value] of Object.entries(params ?? {})) {
+    const shown = typeof value === "number" ? formatNumber(value) : String(value);
+    out = out.split(`{${key}}`).join(shown);
+  }
+  return out;
+}
+
+/** «Flervalg 28 · Praktisk 48» — delpoengene som én tekst, på deltakerens språk. */
+function formatScoreParts(parts) {
+  return (parts ?? []).map((part) => `${t(part.labelKey)} ${formatNumber(part.value)}`).join(" · ");
+}
+
+function buildHeadlineText(headline) {
+  const text = fillPlaceholders(t(headline.key), headline.params);
+  if (!headline.subKey) return { text, sub: "" };
+  const subParams = { ...headline.subParams };
+  if (Array.isArray(subParams.parts)) subParams.parts = formatScoreParts(subParams.parts);
+  return { text, sub: fillPlaceholders(t(headline.subKey), subParams) };
+}
+
+/**
+ * Verdien for én rad. Radene er navngitt i result-summary.js; her slås de opp.
+ *
+ * ⚠️ Returnerer null når raden ikke har noe å si. En rad som viser «–» bruker plass på å fortelle
+ * at den er tom — det var ett av de åtte elementene som skulle bort.
+ */
+function resultRowContent(row, body) {
+  // ⚠️ QA-porten runde 4: doc-kommentaren over lovet dette, men bare `submissionId`-grenen holdt
+  // det. `formatNumber(null)` gir «-», så poengradene viste en strek i alle vente-tilstandene — og
+  // siden utfellingen HUSKES, så en deltaker som hadde åpnet detaljene før dette uten å klikke.
+  //
+  // Min egen e2e for «ingen strek-rader» var falskt grønn: fiksturet var et BESTÅTT resultat, der
+  // poengradene aldri planlegges i det hele tatt. Testen kunne ikke nå påstanden sin.
+  const score = (key, labelKey) => {
+    const value = body.scoreComponents?.[key];
+    return typeof value === "number" ? { label: t(labelKey), value: formatNumber(value) } : null;
+  };
+
+  switch (row) {
+    case "status":
+      return { label: t("result.status"), value: localizeSubmissionStatus(body.status) };
+    case "totalScore":
+      return score("totalScore", "result.totalScore");
+    case "mcqScore":
+      return score("mcqScaledScore", "result.mcqScore");
+    case "practicalScore":
+      return score("practicalScaledScore", "result.practicalScore");
+    case "decision":
+      // Uten et vedtak sa raden «Ukjent», som er en rad som bruker plass på å si at den er tom.
+      if (!body.decision) return null;
+      return {
+        label: t("result.decision"),
+        value: localizeDecisionType(body.decision?.decisionType, body.status, body.decision?.passFailTotal),
+        valueClass: outcomeClass(body.decision?.passFailTotal, body.status),
+      };
+    case "decisionReason":
+      return { label: t("result.decisionReason"), value: localizeDecisionReason(body.participantGuidance, t, formatNumber) };
+    case "confidence":
+      return { label: t("result.confidence"), value: localizeConfidence(body.participantGuidance?.confidenceNote) };
+    case "submissionId":
+      // ⚠️ null, ikke "-". En rad som viser en strek bruker plass på å si at den er tom.
+      // ⚠️ Dette er INNLEVERINGENS id, ikke forsøkets. «Forsøks-ID» er navnet på `attemptId` ellers
+      // på siden, og to ulike verdier under samme navn er verre enn ingen av dem.
+      return body.submissionId
+        ? { label: t("result.submissionIdLabel"), value: body.submissionId, valueClass: "machine-id" }
+        : null;
+    default:
+      return null;
+  }
+}
+
+function appendPlannedRows(grid, rows, body) {
+  for (const row of rows) {
+    const content = resultRowContent(row, body);
+    if (!content) continue;
+    appendSummaryRow(grid, content.label, content.value, content.valueClass);
+  }
+}
+
+const OUTCOME_MARKS = { passed: "\u2713", failed: "\u2715", review: "\u25F7", pending: "\u25F7" };
+
+function buildResultCard(body) {
+  const isMcqOnly = body.assessmentMode ? body.assessmentMode === "MCQ_ONLY" : selectedModuleIsMcqOnly();
+  const isFreetextOnly = body.assessmentMode
+    ? body.assessmentMode === "FREETEXT_ONLY"
+    : selectedModuleIsFreetextOnly();
+
+  const outcome = resolveOutcome(body.status, body.decision?.passFailTotal ?? null);
+  lastResultOutcome = outcome;
+  const headline = buildHeadline(outcome, {
+    scoreComponents: body.scoreComponents ?? {},
+    requirement: body.requirement ?? {},
+    isMcqOnly,
+    isFreetextOnly,
+  });
+
+  const reasonText = localizeDecisionReason(body.participantGuidance, t, formatNumber);
+  const confidenceText = localizeConfidence(body.participantGuidance?.confidenceNote);
+  const plan = planRows(outcome, {
+    isMcqOnly,
+    isFreetextOnly,
+    hasDecisionReason: Boolean(reasonText) && reasonText !== "-",
+    hasConfidence: Boolean(confidenceText) && confidenceText !== "-",
+  });
+
+  const card = createSummaryCard("");
+
+  const verdict = document.createElement("div");
+  verdict.className = "result-verdict";
+
+  const mark = document.createElement("span");
+  mark.className = `result-mark result-mark-${outcome}`;
+  mark.textContent = OUTCOME_MARKS[outcome] ?? "";
+  // Dekorativ: utfallet står i teksten ved siden av, og en skjermleser skal ikke lese «hake».
+  mark.setAttribute("aria-hidden", "true");
+
+  const texts = buildHeadlineText(headline);
+  const headlineNode = document.createElement("span");
+  headlineNode.className = "result-headline";
+  headlineNode.textContent = texts.text;
+
+  if (texts.sub) {
+    const subNode = document.createElement("span");
+    subNode.className = "result-subline";
+    subNode.textContent = texts.sub;
+    headlineNode.appendChild(subNode);
+  }
+
+  verdict.append(mark, headlineNode);
+  card.appendChild(verdict);
+
+  if (plan.open.length > 0) {
+    const openGrid = document.createElement("div");
+    openGrid.className = "summary-grid result-open";
+    appendPlannedRows(openGrid, plan.open, body);
+    card.appendChild(openGrid);
+  }
+
+  if (plan.detail.length > 0) {
+    const details = document.createElement("details");
+    details.className = "result-details";
+    // Åpnet du detaljene på ett resultat, vil du sannsynligvis ha dem åpne på neste.
+    details.open = readDetailsOpen(safeLocalStorage());
+    // `toggle` er den riktige hendelsen: den fanger både klikk og tastatur.
+    //
+    // ⚠️ Et utkast la til en `click`-lytter i tillegg, fordi QA-porten målte at lagringen sto tom
+    // rett etter et klikk. Men det var TESTEN som navigerte før den kølagte oppgaven rakk å kjøre —
+    // ikke produktet som mistet valget. En mutasjon bekreftet det: fjernes click-lytteren, merker
+    // ingen test det. To skrivemåter ingen kan skille fra hverandre er kompleksitet uten dekning,
+    // og testen venter nå på at verdien FAKTISK er skrevet i stedet.
+    details.addEventListener("toggle", () => writeDetailsOpen(safeLocalStorage(), details.open));
+
+    const summary = document.createElement("summary");
+    summary.textContent = t("result.details.show");
+    details.appendChild(summary);
+
+    // ⚠️ Teksten «Vis detaljer» er den samme enten panelet er åpent eller lukket. En seende bruker
+    // ser pila snu; en skjermleserbruker hører bare det samme igjen. <details> eksponerer riktignok
+    // expanded-tilstanden selv, men det er ikke sant i alle nettleser/skjermleser-par — og en
+    // beskrivende etikett koster ingenting.
+    const syncSummaryLabel = () => {
+      summary.setAttribute("aria-label", t(details.open ? "result.details.hide" : "result.details.show"));
+    };
+    syncSummaryLabel();
+    details.addEventListener("toggle", syncSummaryLabel);
+
+    const detailGrid = document.createElement("div");
+    detailGrid.className = "summary-grid";
+    appendPlannedRows(detailGrid, plan.detail, body);
+    details.appendChild(detailGrid);
+
+    card.appendChild(details);
+  }
+
+  return card;
+}
+
+/**
+ * ⚠️ Selve OPPSLAGET av localStorage kaster i en nettleser som har lagring avslått — ikke bare
+ * kallene på den. Derfor er også dette pakket inn.
+ */
+function safeLocalStorage() {
+  try {
+    return window.localStorage;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * #940: når resultatet står på skjermen, er kontrollene som produserte det ferdige.
+ *
+ * ⚠️ QA-porten fant dette: første runde byttet ut INNHOLDET i resultatkortet og lot alt rundt stå.
+ * Seks av de åtte elementene saken lister lå i flyten utenfor kortet, ikke i det — «Sjekk framdrift»
+ * som ikke kan sjekke noe, hintet som forklarer den, «Vurdering er ferdig» rett over et kort som
+ * sier utfallet, «Vis resultat» som ber deg vise det som allerede vises, og etiketten
+ * «Resultatoppsummering:» over en boks som selv sier hva den er.
+ *
+ * Det er samme feil som i #982: jeg fikset stedet jeg så på, og sjekket ikke hvem andre som gjorde
+ * det samme. Saken listet elementene eksplisitt, og jeg fjernet to av åtte.
+ *
+ * ⚠️ `setHidden`, ikke `.hidden` — knappene har klasser som setter `display`, og de vinner over
+ * `[hidden]` i kaskaden.
+ *
+ * Det som IKKE skjules: «Slett innlevering og start på nytt» (#549 — den skal være der, bare
+ * nedtonet), og ankeseksjonen, som er neste steg for den som er uenig.
+ */
+// Utfallet fra siste rendring. `applyResultChrome` trenger det, og gating kjører uavhengig av
+// resultatrenderingen — derfor må det holdes her og ikke leses ut av DOM-en.
+let lastResultOutcome = null;
+
+function applyResultChrome(hasResult) {
+  // ⚠️ QA-porten runde 2: første utkast nøklet på «står det et kort der», og det var en DØDLÅS.
+  //
+  // Et resultat som fortsatt BEHANDLES rendrer også et kort («Besvarelsen din blir vurdert»). Da
+  // skjulte vi «Start vurdering», «Sjekk framdrift» og «Vis resultat» — samtidig som «Slett
+  // innlevering og start på nytt» er skjult av gatingen fordi statusen ikke er ferdig
+  // (participant.js:~1264/1380). Null kontroller igjen.
+  //
+  // Realistisk vei inn: autoløkka gir opp etter 90 sekunder — som er en helt vanlig LLM-tid på en
+  // delt B1-instans — deltakeren klikker «Vis resultat», og sitter fast.
+  //
+  // Kontrollene skal derfor bare bort når det ikke er mer å gjøre: bestått, ikke bestått, ukjent
+  // utfall, eller til manuell vurdering (der kortet lover en e-post som faktisk sendes,
+  // manualReviewService.ts:155). ALDRI mens noe holder på.
+  //
+  // ⚠️ «unknown» regnes IKKE som avgjort. En avgjort status uten vedtak — REJECTED er den ene i
+  // enumet — ville ellers fått krommet skjult mens reset-knappen også er skjult av gatingen, altså
+  // samme dødlås en gang til. Ingen kodesti skriver REJECTED i dag (#953), men vet vi ikke hva som
+  // skjedde, er kontrollene nettopp det ærlige å la stå.
+  const settled = hasResult
+    && lastResultOutcome !== null
+    && lastResultOutcome !== "pending"
+    && lastResultOutcome !== "unknown";
+  applySettledChrome(settled);
+}
+
+function applySettledChrome(hasResult) {
+  for (const node of [checkAssessmentButton, checkAssessmentHint, queueAssessmentButton, checkResultButton, resultSummaryLabel]) {
+    if (node) setHidden(node, hasResult);
+  }
+  // Maskin-ID-ene: forsøks-ID-en ligger nå bak «Vis detaljer» i kortet, der den trengs når noe skal
+  // ettergås (#939). To ID-linjer i tillegg er støy over et ferdig resultat.
+  for (const node of [attemptIdLine, submissionIdLine]) {
+    if (node) setHidden(node, hasResult);
+  }
+  // «Vurderingshandlinger er tilgjengelige.» og «Vurdering er ferdig.» sier begge noe kortet
+  // allerede har sagt tydeligere.
+  if (assessmentGateHint) setHidden(assessmentGateHint, hasResult);
+  if (assessmentProgressStatus) setHidden(assessmentProgressStatus, hasResult);
+}
+
 function createSummaryCard(title) {
   const card = document.createElement("section");
   card.className = "summary-card";
@@ -2339,6 +2627,8 @@ function renderResultSummary(body) {
     resultSummary.dataset.hasResult = "";
     clearSummaryContainer(resultSummary);
     resultSummary.textContent = t("result.none");
+    lastResultOutcome = null;
+    applyResultChrome(false);
     renderAppealState();
     return;
   }
@@ -2353,34 +2643,7 @@ function renderResultSummary(body) {
   flowState.resultPassFail = body?.decision?.passFailTotal ?? null;
 
   clearSummaryContainer(resultSummary);
-  const summaryCard = createSummaryCard("");
-  const summaryGrid = document.createElement("div");
-  summaryGrid.className = "summary-grid";
-  appendSummaryRow(summaryGrid, t("result.status"), localizeSubmissionStatus(body.status));
-  appendSummaryRow(summaryGrid, t("result.statusExplanation"), localizeStatusExplanation(body.status));
-  appendSummaryRow(summaryGrid, t("result.totalScore"), formatNumber(body.scoreComponents?.totalScore));
-  // #591: only show the score components that actually count for the module type — a 0 from a
-  // component the module doesn't have (MCQ for free-text-only, practical for MCQ-only) just confuses
-  // the participant. Principle: don't show information the user doesn't need.
-  if (!selectedModuleIsFreetextOnly()) {
-    appendSummaryRow(summaryGrid, t("result.mcqScore"), formatNumber(body.scoreComponents?.mcqScaledScore));
-  }
-  if (!selectedModuleIsMcqOnly()) {
-    appendSummaryRow(summaryGrid, t("result.practicalScore"), formatNumber(body.scoreComponents?.practicalScaledScore));
-  }
-  appendSummaryRow(summaryGrid, t("result.decision"), localizeDecisionType(body.decision?.decisionType, body.status, body.decision?.passFailTotal), outcomeClass(body.decision?.passFailTotal, body.status));
-  appendSummaryRow(
-    summaryGrid,
-    t("result.decisionReason"),
-    localizeDecisionReason(body.participantGuidance, t),
-  );
-  appendSummaryRow(
-    summaryGrid,
-    t("result.confidence"),
-    localizeConfidence(body.participantGuidance?.confidenceNote),
-  );
-  summaryCard.appendChild(summaryGrid);
-  resultSummary.appendChild(summaryCard);
+  resultSummary.appendChild(buildResultCard(body));
 
   appendSummaryList(
     resultSummary,
@@ -2425,6 +2688,7 @@ function renderResultSummary(body) {
   }
 
   resultSummary.dataset.hasResult = "true";
+  applyResultChrome(true);
   renderAppealState();
 }
 

@@ -49,22 +49,31 @@ export function decisionReasonKeyFor(code, params) {
   return DECISION_REASON_KEYS[code] ?? null;
 }
 
-/** Setter inn {navn} fra parametrene. Samme konvensjon som resten av participant.js. */
-export function fillReasonPlaceholders(template, params) {
+/**
+ * Setter inn {navn} fra parametrene. Samme konvensjon som resten av participant.js.
+ *
+ * ⚠️ TALL skal gjennom kallerens tallformatering. QA-porten runde 6 (#940) så «du fikk 66.67 %» med
+ * PUNKTUM her, rett under en overskrift som sa «66,67 %» med komma — to skrivemåter for samme tall
+ * på samme kort. Uten en formatterer faller den tilbake på `String`, som er det den gjorde før.
+ */
+export function fillReasonPlaceholders(template, params, formatNumber = String) {
   if (typeof template !== "string") return "";
   let out = template;
   for (const [key, value] of Object.entries(params ?? {})) {
-    out = out.split(`{${key}}`).join(String(value));
+    const shown = typeof value === "number" ? formatNumber(value) : String(value);
+    out = out.split(`{${key}}`).join(shown);
   }
   return out;
 }
 
 /**
- * @param guidance  participantGuidance fra resultatsvaret
- * @param translate en funksjon (nøkkel) → tekst på gjeldende språk
+ * @param guidance     participantGuidance fra resultatsvaret
+ * @param translate    en funksjon (nøkkel) → tekst på gjeldende språk
+ * @param formatNumber en funksjon (tall) → tekst på deltakerens språk. Utelates den, skrives tall
+ *                     med `String`, altså med punktum — se advarselen i fillReasonPlaceholders.
  * @returns setningen som skal vises, eller "-" når det ikke finnes noen grunn
  */
-export function localizeDecisionReason(guidance, translate) {
+export function localizeDecisionReason(guidance, translate, formatNumber = String) {
   const text = typeof guidance?.decisionReason === "string" ? guidance.decisionReason : null;
   const code = guidance?.decisionReasonCode ?? null;
   const params = guidance?.decisionReasonParams ?? {};
@@ -87,5 +96,5 @@ export function localizeDecisionReason(guidance, translate) {
   // til en deltaker er verre enn å vise serverens engelske setning.
   if (translated === key) return text ?? "-";
 
-  return fillReasonPlaceholders(translated, params);
+  return fillReasonPlaceholders(translated, params, formatNumber);
 }

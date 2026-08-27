@@ -492,14 +492,14 @@
       </div>
       <button id="createSubmission" class="btn-primary" data-i18n="submission.create">Create submission</button>
       <div class="hint" id="submissionValidationHint" data-hint-key="submission.validation.ready"></div>
-      <div class="small"><span data-i18n="submission.submissionId">Submission ID:</span> <span id="submissionId">-</span></div>
+      <div class="small" id="submissionIdLine"><span data-i18n="submission.submissionId">Submission ID:</span> <span id="submissionId">-</span></div>
     </section>
 
     <section class="card hidden" id="mcqSection">
       <h2 data-i18n="mcq.title">MCQ</h2>
       <div id="mcqQuestions"></div>
       <button id="submitMcq" class="btn-primary" data-i18n="mcq.submit">Submit MCQ</button>
-      <div class="small"><span data-i18n="mcq.attemptId">Attempt ID:</span> <span id="attemptId">-</span></div>
+      <div class="small" id="attemptIdLine"><span data-i18n="mcq.attemptId">Attempt ID:</span> <span id="attemptId">-</span></div>
     </section>
 
     <section class="card hidden" id="assessmentSection">
@@ -511,7 +511,7 @@
       <div id="assessmentProgressStatus" class="assessment-progress" aria-live="polite" aria-atomic="true"></div>
       <div id="assessmentProgressSeconds" class="assessment-progress-seconds hidden"></div>
       <button id="checkResult" class="btn-primary" data-i18n="assessment.checkResult">View result</button>
-      <div class="small" data-i18n="assessment.resultSummary">Result summary:</div>
+      <div class="small" id="resultSummaryLabel" data-i18n="assessment.resultSummary">Result summary:</div>
       <div id="resultSummary" class="summary-stack"></div>
       <button id="resetSubmissionFlow" class="btn-danger" data-i18n="submission.resetFlow">Delete submission and start over</button>
     </section>
