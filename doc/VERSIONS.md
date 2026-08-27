@@ -2,6 +2,48 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.34.0 - 2026-08-27
+
+### #1012 — erstatt innholdet i en seksjon fra fil
+
+Produkteier 2026-08-26: *«Vi trenger å kunne importere json direkte inn i en seksjon og erstatte
+innholdet.»*
+
+⚠️ **Saken var delvis feil da den ble skrevet, og feilen var min.** Den påsto at ingen klientkode
+poster til `/sections/import`. Søket gikk mot `public/*.js`, som ikke treffer `public/static/` —
+og `admin-content-sections.js:507` gjorde nettopp det. Ett sted sjekket, konklusjon trukket for alle.
+
+Det ekte gapet var smalere: klienten sendte `mode: "createNew"` hardkodet. Man kunne lage en NY
+seksjon fra fil, aldri oppdatere en som fantes.
+
+**«Erstatt fra fil»** ligger nå i seksjonsredigeringen, ved siden av Lagre og Oversett. Den vises
+kun når man står i en seksjon som finnes — «erstatt» har ingenting å erstatte i et tomt skjema.
+
+⚠️ **Ikke destruktivt.** Serveren lager en ny versjon som UTKAST (`publishedAt: null`), og den
+aktive versjonen står urørt til forfatteren publiserer og passerer oversettelsesgaten (#916).
+Forrige versjon overlever. Bekreftelsen sier det, i stedet for bare å spørre «er du sikker» — en
+dialog som ikke forklarer hva som skjer, lærer folk å klikke ja uten å lese.
+
+Modul- og kurspakker stoppes FØR de når serveren, med en beskjed som peker til riktig side. Samme
+vakt som importen i lista, inkludert `L` som tredje argument til `describeImportError` — uten den
+faller feilteksten tilbake på hardkodet engelsk på en trespråklig side (#996).
+
+**Testen påstår HVA som sendes, ikke at knappen finnes.** Med `createNew` faller den på
+`Expected "replaceExisting", Received "createNew"`. En test som bare klikket og så at kallet gikk,
+ville vært grønn for nøyaktig den feilen — knappen ville «virket» og laget en ny seksjon.
+
+Testen for at knappen IKKE finnes på en ny seksjon krever først at Lagre-knappen finnes. Uten det
+ville den vært grønn bare fordi siden aldri rendret redigeringen.
+
+### UI-en ble inspisert før den ble vist fram
+
+`scripts/dev/inspect-section-replace-button.mjs` rendrer verktøylinja i begge språk, tar skjermbilde
+og måler knappeavstand og overflyt.
+
+Den fanget to ting: etiketten «Erstatt innhold fra fil» var så lang at knappen brakk stygt (kortet
+til «Erstatt fra fil»), og rute-formatet jeg gjettet på var feil — appen bruker `?id=`, ikke
+`#editor/`. Uten rendering ville jeg trodd knappen manglet.
+
 ## 2.33.1 - 2026-08-26
 
 ### #953 — to funn fra stage som ingen test kunne gitt
