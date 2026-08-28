@@ -70,12 +70,19 @@ export function createEnrollmentRepository(client: EnrollmentRepositoryClient = 
     // participant + the (localized) course title so no extra per-row lookups are needed.
     // #798: bound to the reminder horizon (dueAt <= upperBound). Includes all overdue rows (dueAt < asOf),
     // so no reminder is missed; prunes far-future-dated enrolments at the DB. Backed by an index on dueAt.
+    // #967: `publishedAt`/`archivedAt` er med fordi tjenesten skal kunne se om kurset i det hele
+    // tatt er naabart for deltakeren. Uten dem KUNNE ikke jobben sjekke det, uansett hvor gjerne
+    // den ville — og sendte «7 dager til frist» for kurs som var avpublisert eller arkivert.
+    //
+    // ⚠️ Filteret ligger i TJENESTEN, ikke i spoerringen. Et spoerringsfilter ville skjult hvor
+    // mange varsler som ble holdt tilbake; et stille undertrykt varsel er like vanskelig aa
+    // oppdage som et feilsendt. Tjenesten teller dem i stedet (`skippedCourseUnavailable`).
     findIndividualEnrollmentsWithDueDate(upperBound: Date) {
       return client.courseEnrollment.findMany({
         where: { revokedAt: null, dueAt: { not: null, lte: upperBound } },
         include: {
           user: { select: { id: true, name: true, email: true, activeStatus: true, isAnonymized: true } },
-          course: { select: { id: true, title: true } },
+          course: { select: { id: true, title: true, publishedAt: true, archivedAt: true } },
         },
       });
     },

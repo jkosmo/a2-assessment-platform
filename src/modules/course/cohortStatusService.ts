@@ -87,6 +87,15 @@ export type CohortStatusSummary = {
   counts: CohortStatusCounts;
   byClass: CohortClassBreakdown[];
   generatedAt: string;
+  // #967: ⚠️ publikum filtreres IKKE naar kurset er utilgjengelig — det ville tomt hele dashbordet
+  // for en fagansvarlig som uttrykkelig spurte om DETTE kurset, uten aa si hvorfor. Tilstanden
+  // rapporteres i stedet, saa flaten kan forklare hvorfor ingen beveger seg.
+  //
+  // Dette er motsatt av hva paaminnelsene gjoer med det samme faktumet, og med vilje: en
+  // paaminnelse er en handling rettet mot en deltaker som ikke kan svare paa den. Et dashbord er
+  // et spoersmaal fra en fagansvarlig som fortjener et aerlig svar.
+  coursePublished: boolean;
+  courseArchived: boolean;
 };
 
 function emptyCounts(): CohortStatusCounts {
@@ -96,7 +105,10 @@ function emptyCounts(): CohortStatusCounts {
 // NOTE: deriveStatus runs 1–2 queries per audience member (completion lookup + started probe). Fine for
 // typical cohorts; batch the completion/started lookups if cohorts grow large.
 export async function getCohortStatus(courseId: string, now: Date = new Date()): Promise<CohortStatusSummary> {
-  const course = await prisma.course.findUnique({ where: { id: courseId }, select: { id: true } });
+  const course = await prisma.course.findUnique({
+    where: { id: courseId },
+    select: { id: true, publishedAt: true, archivedAt: true },
+  });
   if (!course) throw new NotFoundError("Course", "course_not_found", "Course not found.");
 
   const audience = await resolveCourseAudience(courseId);
@@ -124,5 +136,7 @@ export async function getCohortStatus(courseId: string, now: Date = new Date()):
     counts,
     byClass: Array.from(byClassMap.values()),
     generatedAt: now.toISOString(),
+    coursePublished: course.publishedAt !== null,
+    courseArchived: course.archivedAt !== null,
   };
 }

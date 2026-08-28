@@ -9,6 +9,8 @@ import { sendCourseAssignmentNotification } from "../certification/participantNo
 import { classRepository, createClassRepository, SYSTEM_ALL_PARTICIPANTS_CLASS_ID } from "./classRepository.js";
 import { isClassEntraLinkingEnabled } from "./classConfig.js";
 import { addContentOwner } from "../content/contentOwnershipService.js";
+import { logOperationalEvent } from "../../observability/operationalLog.js";
+import { operationalEvents } from "../../observability/operationalEvents.js";
 
 // #645/CL-2: class (cohort) business logic — CRUD + membership + course assignment + dynamic
 // membership evaluation. Course→class assignment is dynamic: a participant is assigned a course if
@@ -140,12 +142,23 @@ export async function listClassMembers(classId: string) {
 export async function listClassCourseAssignments(classId: string) {
   await requireClass(classId);
   const rows = await classRepository.listCourseAssignmentsForClass(classId);
-  return rows.map((r) => ({ courseId: r.courseId, title: r.course.title, dueAt: r.dueAt ? r.dueAt.toISOString() : null }));
+  return rows.map((r) => ({
+    courseId: r.courseId,
+    title: r.course.title,
+    dueAt: r.dueAt ? r.dueAt.toISOString() : null,
+    // #967: en tildeling til et kurs deltakeren ikke kan aapne er ikke feil i seg selv — men den
+    // forklarer hvorfor ingen i klassen beveger seg, og det skal ikke kreve detektivarbeid.
+    coursePublished: r.course.publishedAt !== null,
+    courseArchived: r.course.archivedAt !== null,
+  }));
 }
 
 export async function assignCourseToClass(courseId: string, classId: string, dueAt: Date | null, actorId: string | null) {
   const klass = await requireClass(classId);
-  const course = await prisma.course.findUnique({ where: { id: courseId }, select: { id: true, title: true, archivedAt: true } });
+  const course = await prisma.course.findUnique({
+    where: { id: courseId },
+    select: { id: true, title: true, archivedAt: true, publishedAt: true },
+  });
   if (!course) throw new NotFoundError("Course", "course_not_found", "Course not found.");
   // #688: archived courses are retired and must not be assignable to a class.
   if (course.archivedAt) throw new ValidationError("Cannot assign an archived course.");
@@ -167,8 +180,39 @@ export async function assignCourseToClass(courseId: string, classId: string, due
   // #684: email the members that their class was assigned a course. Skipped for the "Alle deltakere"
   // system class (would email the whole org) and for ENTRA classes (no stored member rows). Fire-and-
   // forget so the assignment is not blocked or failed by email delivery.
+  //
+  // #967: ⚠️ men ikke for et UPUBLISERT kurs. E-posten sier «Logg inn på plattformen for å starte»,
+  // og medlemmet logger inn og finner ingenting — kurset er usynlig for deltakere til det
+  // publiseres. Med #967 er påminnelsene dessuten stille, så denne e-posten ville vært det ENESTE
+  // deltakeren noensinne hørte om kurset.
+  //
+  // Tildelingen blokkeres IKKE: «tildel utkast nå, publiser senere» er en legitim arbeidsflyt, og
+  // #688 blokkerer allerede det som virkelig er feil (arkiverte kurs). Det er varselet som er
+  // feiltimet, ikke tildelingen. Undertrykkelsen logges — en e-post som aldri kom er stille.
   if (klass.kind === "MANUAL" && !klass.isSystem) {
-    void notifyClassMembersOfCourseAssignment(classId, klass.name, course.title, dueAt);
+    if (course.publishedAt === null) {
+      void suppressAssignmentMail(courseId, classId);
+    } else {
+      void notifyClassMembersOfCourseAssignment(classId, klass.name, course.title, dueAt);
+    }
+  }
+}
+
+async function suppressAssignmentMail(courseId: string, classId: string): Promise<void> {
+  try {
+    const members = await classRepository.listMembers(classId);
+    logOperationalEvent(
+      operationalEvents.course.assignmentMailSuppressed,
+      {
+        courseId,
+        classId,
+        recipientCount: members.filter((m) => m.user.email).length,
+        reason: "unpublished",
+      },
+      "info",
+    );
+  } catch {
+    /* en uteblitt logglinje skal aldri velte en tildeling som allerede er skrevet */
   }
 }
 

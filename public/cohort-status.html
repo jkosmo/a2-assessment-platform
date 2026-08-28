@@ -6,6 +6,10 @@
     <title>A2 Cohort status</title>
     <link rel="stylesheet" href="/static/shared.css" />
     <style>
+      /* #967: dempet varsel, ikke en feilmelding — kurset er ikke ødelagt, det er bare ikke
+         tilgjengelig for deltakerne akkurat nå. Samme farge som resten av flaten bruker. */
+      .cohort-unavailable { color: var(--color-warning); border-left: 3px solid var(--color-warning);
+        padding: var(--space-1) var(--space-2); margin-top: var(--space-1); font-size: 13.5px; }
       .status-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: var(--space-1); margin-top: var(--space-1); }
       .status-card { border: 1px solid var(--color-border-soft); border-radius: var(--radius-card); padding: var(--space-2); background: var(--color-surface, #fff); }
       .status-card .status-value { font-size: 32px; font-weight: 800; line-height: 1; }
@@ -80,6 +84,10 @@
 
       <section class="card">
         <div id="cohortEmpty" class="small" data-i18n="cohort.empty">Select a course to see its cohort status.</div>
+        <!-- #967: si hvorfor tallene står stille. Uten denne viser dashbordet «OVERDUE 7» for et
+             kurs deltakerne ikke kan åpne, og fagansvarlig leter etter en forklaring som ikke
+             finnes noe sted. role="status" fordi den dukker opp etter et valg. -->
+        <div id="cohortUnavailable" class="cohort-unavailable" role="status" hidden></div>
         <!-- #975: `.status-grid` setter display:grid, som slår UA-arkets `[hidden]`. Attributtet
              blir stående for semantikken, men det er inline display som faktisk skjuler. -->
         <div id="statusCards" class="status-grid" aria-live="polite" hidden style="display:none"></div>

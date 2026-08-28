@@ -153,6 +153,30 @@ The course master toggle is set via the admin course API: `POST`/`PUT /api/admin
 | `GET` | `/api/reports/analytics/data-quality` | ADMINISTRATOR, REPORT_READER, SUBJECT_MATTER_OWNER |
 | `GET` | `/api/reports/export?type=<report>&format=csv` | ADMINISTRATOR, REPORT_READER, SUBJECT_MATTER_OWNER |
 
+## Cohort status (#498)
+
+Teacher/SMO dashboard: enrollment status counts over a course's effective audience (individual
+enrolments + class-assigned members), evaluated at read time.
+
+| Method | Route | Roles |
+|---|---|---|
+| `GET` | `/api/cohort-status/courses` | ADMINISTRATOR, REPORT_READER, SUBJECT_MATTER_OWNER |
+| `GET` | `/api/cohort-status/course/:courseId` | ADMINISTRATOR, REPORT_READER, SUBJECT_MATTER_OWNER |
+
+`GET /course/:courseId` returns `{ courseId, total, counts, byClass, generatedAt, coursePublished,
+courseArchived }`.
+
+**#967 — reminders and this dashboard treat an unreachable course in opposite ways, deliberately.**
+The reminder schedule **suppresses** due-date mail for a course that is unpublished or archived (the
+participant cannot open it, so the mail asks for something they cannot do) and counts each suppression
+as `skippedCourseUnavailable`. This dashboard does the opposite: it never filters the audience — that
+would empty the screen for a teacher who explicitly asked about *this* course — and reports
+`coursePublished` / `courseArchived` instead. The course list includes unreachable courses for the
+same reason, flagged rather than hidden.
+
+The distinction is who is asking: a reminder is an action aimed at a participant who cannot act on it;
+a dashboard is a question from a teacher who deserves an honest answer.
+
 ### #989 — recertification removed
 
 `POST /api/reports/recertification/reminders/run` is **gone** (404). Modules no longer expire, so
@@ -477,7 +501,7 @@ have nothing to do with, not about partitioning content inside a course you asse
 | `GET` | `/api/admin/content/classes/:classId/members` | List class members (#645/CL-2) — returns **name and e-mail**. **`403 content_ownership`** for a non-owner SMO, **`403 content_unowned`** on system classes (#943) |
 | `POST` | `/api/admin/content/classes/:classId/members` | Add a member — body `{ userId }` (#645/CL-2) |
 | `DELETE` | `/api/admin/content/classes/:classId/members/:userId` | Remove a member (#645/CL-2) |
-| `GET` | `/api/admin/content/classes/:classId/courses` | List courses assigned to the class (#645/CL-2). **`403 content_ownership`** for a non-owner SMO (#943) |
+| `GET` | `/api/admin/content/classes/:classId/courses` | List courses assigned to the class (#645/CL-2). **`403 content_ownership`** for a non-owner SMO (#943). Each row carries `coursePublished` / `courseArchived` (#967) — assignments to an unreachable course are **not** hidden (a hidden row is a row nobody can remove), they are flagged so the screen can explain why nobody is progressing |
 | `POST` | `/api/admin/content/classes/:classId/courses` | Assign a course — body `{ courseId, dueAt?\|null }` (#645/CL-2) |
 | `DELETE` | `/api/admin/content/classes/:classId/courses/:courseId` | Unassign a course (#645/CL-2) |
 | `GET` | `/api/admin/content/users/search?q=` | Search users by name/email (min 2 chars, capped 20) for class membership (#645/CL-3) |

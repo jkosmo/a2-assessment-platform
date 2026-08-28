@@ -118,11 +118,13 @@ export function createClassRepository(client: ClassRepositoryClient = prisma) {
       });
     },
 
+    // #967: tildelingene skjules IKKE naar kurset er utilgjengelig — de maa kunne forvaltes, og en
+    // skjult rad er en rad ingen kan fjerne. Tilstanden foelger med saa flaten kan merke raden.
     listCourseAssignmentsForClass(classId: string) {
       return client.courseGroupAssignment.findMany({
         where: { classId },
         orderBy: { createdAt: "desc" },
-        include: { course: { select: { id: true, title: true } } },
+        include: { course: { select: { id: true, title: true, publishedAt: true, archivedAt: true } } },
       });
     },
 
@@ -164,7 +166,8 @@ export function createClassRepository(client: ClassRepositoryClient = prisma) {
       return client.courseGroupAssignment.findMany({
         where: { dueAt: { not: null, lte: upperBound }, class: { archivedAt: null } },
         include: {
-          course: { select: { id: true, title: true } },
+          // #967: se begrunnelsen i enrollmentRepository — tjenesten filtrerer og teller.
+          course: { select: { id: true, title: true, publishedAt: true, archivedAt: true } },
           class: {
             select: {
               id: true,

@@ -81,6 +81,40 @@ describe("Course due-date reminders (#497)", () => {
     });
   }
 
+  /**
+   * Hvor mange frist-rader peker på et kurs deltakeren ikke kan åpne? Utledet fra databasen, slik
+   * at påstanden om telleren er eksakt og ikke bare «minst én».
+   *
+   * Én rad = én undertrykkelse: individuelle innmeldinger telles per rad, klasse-tildelinger per
+   * TILDELING (ikke per medlem) — samme enhet som tjenesten bruker.
+   */
+  async function countSuppressibleDueRows(): Promise<number> {
+    const unreachable = { OR: [{ publishedAt: null }, { archivedAt: { not: null } }] };
+    const [individual, classAssigned] = await Promise.all([
+      prisma.courseEnrollment.count({
+        where: { revokedAt: null, dueAt: { not: null }, course: unreachable },
+      }),
+      prisma.courseGroupAssignment.count({
+        where: { dueAt: { not: null }, class: { archivedAt: null }, course: unreachable },
+      }),
+    ]);
+    return individual + classAssigned;
+  }
+
+  /** #967: et kurs deltakeren IKKE kan åpne — upublisert eller arkivert. */
+  async function makeUnreachableCourse(how: "unpublished" | "archived"): Promise<string> {
+    const course = await prisma.course.create({
+      data: {
+        title: JSON.stringify({ "en-GB": "Unreachable course", nb: "Utilgjengelig kurs", nn: "Utilgjengeleg kurs" }),
+        publishedAt: how === "archived" ? new Date() : null,
+        archivedAt: how === "archived" ? new Date() : null,
+      },
+      select: { id: true },
+    });
+    courseIds.push(course.id);
+    return course.id;
+  }
+
   async function makeClass(kind: "MANUAL" | "ENTRA", memberUserIds: string[]): Promise<string> {
     seq += 1;
     const cls = await prisma.class.create({
@@ -249,5 +283,82 @@ describe("Course due-date reminders (#497)", () => {
 
     expect(sentTo.get(participant)?.kind).toBe("due_soon");
     expect(sentTo.get(participant)?.daysBefore).toBe(1);
+  });
+
+  // ── #967: et kurs deltakeren ikke kan åpne, skal ikke sende påminnelser ────────────────────────
+  //
+  // Scenarioet fra saken: kurset avpubliseres midt i en kullkjøring. Deltakeren ser det ikke lenger
+  // under «Mine kurs» og kan ikke fullføre det — men fikk «7 dager til frist», deretter «forfalt»,
+  // og ble stående som OVERDUE for alltid. For et kurs som ikke lenger fantes for hen.
+  //
+  // ⚠️ Hver test har en KONTROLLDELTAKER på et publisert kurs med samme frist. Uten den ville
+  // «ikke send noe i det hele tatt» også vært grønt — og da hadde ingen fått påminnelser lenger.
+  it("#967: upublisert kurs gir ingen påminnelse, og undertrykkelsen telles", async () => {
+    const hiddenCourse = await makeUnreachableCourse("unpublished");
+    const openCourse = await makeCourse();
+    const onHidden = await makeUser("hidden");
+    const control = await makeUser("control");
+
+    await enrol(onHidden, hiddenCourse, daysFromT(7));
+    await enrol(control, openCourse, daysFromT(7));
+
+    // ⚠️ Forventet antall utledes fra DATABASEN, ikke gjettes. En `>= 1`-påstand ville vært
+    // tilfredsstilt av en hvilken som helst fremmed rad i den delte test-databasen — og da måler
+    // testen at noe ble undertrykt, ikke at MITT kurs ble det.
+    const expectedSuppressed = await countSuppressibleDueRows();
+
+    const capture = makeCapture();
+    const summary = await runCourseReminderSchedule({ asOf: T, sendImpl: capture.sendImpl });
+    const sentTo = ownedSends(capture.sent, [onHidden, control]);
+
+    expect(sentTo.has(onHidden)).toBe(false);
+    expect(sentTo.has(control)).toBe(true);
+    // Et stille undertrykt varsel er like vanskelig å oppdage som et feilsendt. Det skal telles.
+    expect(expectedSuppressed).toBeGreaterThanOrEqual(1);
+    expect(summary.skippedCourseUnavailable).toBe(expectedSuppressed);
+  });
+
+  it("#967: arkivert kurs gir ingen påminnelse", async () => {
+    const retired = await makeUnreachableCourse("archived");
+    const openCourse = await makeCourse();
+    const onRetired = await makeUser("retired");
+    const control = await makeUser("control2");
+
+    await enrol(onRetired, retired, daysFromT(-3));
+    await enrol(control, openCourse, daysFromT(-3));
+
+    const capture = makeCapture();
+    await runCourseReminderSchedule({ asOf: T, sendImpl: capture.sendImpl });
+    const sentTo = ownedSends(capture.sent, [onRetired, control]);
+
+    expect(sentTo.has(onRetired)).toBe(false);
+    expect(sentTo.get(control)?.kind).toBe("overdue");
+  });
+
+  it("#967: klasse-tildelt frist på et upublisert kurs når ingen av medlemmene", async () => {
+    const hiddenCourse = await makeUnreachableCourse("unpublished");
+    const openCourse = await makeCourse();
+    const memberA = await makeUser("cls-a");
+    const memberB = await makeUser("cls-b");
+    const control = await makeUser("cls-control");
+
+    const cls = await makeClass("MANUAL", [memberA, memberB]);
+    await assignClass(hiddenCourse, cls, daysFromT(7));
+
+    const openCls = await makeClass("MANUAL", [control]);
+    await assignClass(openCourse, openCls, daysFromT(7));
+
+    const expectedSuppressed = await countSuppressibleDueRows();
+
+    const capture = makeCapture();
+    const summary = await runCourseReminderSchedule({ asOf: T, sendImpl: capture.sendImpl });
+    const sentTo = ownedSends(capture.sent, [memberA, memberB, control]);
+
+    expect(sentTo.has(memberA)).toBe(false);
+    expect(sentTo.has(memberB)).toBe(false);
+    expect(sentTo.has(control)).toBe(true);
+    // ⚠️ ÉN tildeling = ÉN undertrykkelse, ikke én per medlem. Klassen har to medlemmer, så en
+    // teller som løp per medlem ville gitt 2 her og blandet to ulike enheter i samme tall.
+    expect(summary.skippedCourseUnavailable).toBe(expectedSuppressed);
   });
 });

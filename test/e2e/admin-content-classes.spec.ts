@@ -306,3 +306,54 @@ test("classes admin: importing a users file posts to the delta sync endpoint", a
   expect((deltaBody as { source: string }).source).toBe("entra_manual_export");
   expect((deltaBody as { users: unknown[] }).users).toHaveLength(2);
 });
+
+// #967: en tildeling til et kurs deltakerne ikke kan åpne skjules IKKE — en skjult rad er en rad
+// ingen kan fjerne — men den merkes, så fagansvarlig forstår hvorfor ingen i klassen beveger seg.
+//
+// ⚠️ Merket var fram til nå bare voktet av et manuelt inspeksjonsskript. Et UI-element som ingen
+// automatisk test ser, kan forsvinne i en refaktorering uten at noe blir rødt.
+test("#967: klasseskjermen merker tildelinger til upubliserte og arkiverte kurs", async ({ page }) => {
+  await mockBaseApis(page, ["ADMINISTRATOR"]);
+  await page.route("**/api/admin/content/classes", (route: Route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        classes: [{ id: "cls-1", name: "Kull 2026 vår", kind: "MANUAL", isSystem: false, archivedAt: null, canManage: true, _count: { members: 2, courseAssignments: 3 } }],
+      }),
+    }),
+  );
+  await page.route("**/api/admin/content/classes/*/members", (route: Route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ members: [] }) }),
+  );
+  await page.route("**/api/admin/content/classes/*/courses", (route: Route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        courses: [
+          { courseId: "c-ok", title: JSON.stringify({ nb: "Publisert kurs" }), dueAt: null, coursePublished: true, courseArchived: false },
+          { courseId: "c-unpub", title: JSON.stringify({ nb: "Utkastkurs" }), dueAt: null, coursePublished: false, courseArchived: false },
+          { courseId: "c-arch", title: JSON.stringify({ nb: "Gammelt kurs" }), dueAt: null, coursePublished: true, courseArchived: true },
+        ],
+      }),
+    }),
+  );
+  await page.route("**/api/admin/content/courses", (route: Route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ courses: [] }) }),
+  );
+  await page.addInitScript(() => { try { localStorage.setItem("participant.locale", "nb"); } catch { /* ignore */ } });
+
+  await page.goto("/deltakere/klasser");
+  await page.locator('[data-action="open"]').first().click();
+  await expect(page.locator(".assign-row").first()).toBeVisible();
+
+  const warnings = page.locator(".assign-meta--warn");
+  await expect(warnings).toHaveCount(2);
+  await expect(warnings.nth(0)).toContainText(/Ikke publisert/i);
+  await expect(warnings.nth(1)).toContainText(/Arkivert/i);
+  // Det publiserte kurset skal IKKE merkes — ellers betyr merket ingenting.
+  await expect(page.locator(".assign-row").first().locator(".assign-meta--warn")).toHaveCount(0);
+  // Et varsel ingen ser er ikke et varsel.
+  await expect(warnings.first()).toHaveCSS("color", "rgb(122, 75, 0)");
+});

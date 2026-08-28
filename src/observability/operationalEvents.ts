@@ -9,6 +9,9 @@ export const operationalEvents = {
   },
   course: {
     completionCheckFailed: "course_completion_check_failed",
+    // #967: tildelings-e-posten ble holdt tilbake fordi kurset ikke var publisert. Tildelingen
+    // gikk gjennom — det er VARSELET som ikke ble sendt, og en e-post som aldri kom er stille.
+    assignmentMailSuppressed: "course_assignment_mail_suppressed",
   },
   audit: {
     // #1000: tilgangsloggen for et revisjonsspor kunne ikke skrives. Skjer typisk mens
@@ -72,6 +75,13 @@ export type OperationalEventMetadataByName = {
     userId: string;
     moduleId: string;
     errorMessage: string;
+  }>;
+  // #967: hvor mange medlemmer som IKKE fikk «nytt kurs tildelt», og hvorfor.
+  [operationalEvents.course.assignmentMailSuppressed]: EventMetadata<{
+    courseId: string;
+    classId: string;
+    recipientCount: number;
+    reason: "unpublished";
   }>;
   [operationalEvents.appeal.slaBacklog]: EventMetadata<{
     openAppeals: number;

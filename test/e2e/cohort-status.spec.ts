@@ -82,3 +82,63 @@ test("cohort dashboard: pick a course → status counts + per-class breakdown, w
   await expect(classRow).toHaveCount(1);
   await expect(classRow).toContainText("Kull 2026");
 });
+
+// #967: ⚠️ QA-porten sa det rett ut: uten denne testen finnes det ingen automatisert kontroll som
+// ser det brukeren ser. Feltene `coursePublished`/`courseArchived` kunne blitt død last i UI-et
+// uten at noe ble rødt — og da ville dashbordhalvparten av #967 ikke levert verdi til noen.
+//
+// To ting krever den, og begge må holde: kurset skal STÅ i velgeren (merket), og skjermen skal SI
+// hvorfor tallene står stille.
+test("#967: et avpublisert kurs står merket i velgeren, og dashbordet sier hvorfor tallene står stille", async ({ page }) => {
+  await mockBase(page);
+  await page.route("**/api/cohort-status/courses", (route: Route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        courses: [
+          { id: "c-ok", title: "Publisert kurs", published: true, archived: false },
+          { id: "c-unpub", title: "Avpublisert kurs", published: false, archived: false },
+          { id: "c-arch", title: "Arkivert kurs", published: true, archived: true },
+        ],
+      }),
+    }),
+  );
+  await page.route("**/api/cohort-status/course/c-unpub", (route: Route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        courseId: "c-unpub",
+        total: 7,
+        counts: { ASSIGNED: 0, IN_PROGRESS: 0, OVERDUE: 7, COMPLETED: 0 },
+        byClass: [],
+        generatedAt: "2026-08-28T12:00:00.000Z",
+        coursePublished: false,
+        courseArchived: false,
+      }),
+    }),
+  );
+  await page.addInitScript(() => { try { localStorage.setItem("participant.locale", "nb"); } catch { /* ignore */ } });
+  await page.goto("/deltakere/status");
+
+  // ⚠️ Kjernen i F1: kurset FANTES ikke i velgeren før. Da så skjermen helt normal ut — kurset var
+  // bare borte, og fagansvarlig hadde ingenting å lete etter.
+  await expect(page.locator("#courseSelect option[value='c-unpub']")).toHaveCount(1);
+  await expect(page.locator("#courseSelect option[value='c-unpub']")).toHaveText(/ikke publisert/i);
+  await expect(page.locator("#courseSelect option[value='c-arch']")).toHaveText(/arkivert/i);
+  // Et vanlig kurs skal IKKE merkes — ellers er merket støy og betyr ingenting.
+  await expect(page.locator("#courseSelect option[value='c-ok']")).toHaveText("Publisert kurs");
+
+  await expect(page.locator("#cohortUnavailable")).toBeHidden();
+
+  await page.locator("#courseSelect").selectOption("c-unpub");
+
+  // Tallene vises fortsatt — publikum tømmes ikke — men nå med en forklaring ved siden av.
+  await expect(page.locator("#statusCards")).toContainText("7");
+  const warning = page.locator("#cohortUnavailable");
+  await expect(warning).toBeVisible();
+  await expect(warning).toContainText(/ikke publisert/i);
+  // Fargen skal skille den fra vanlig brødtekst — et varsel ingen ser, er ikke et varsel.
+  await expect(warning).toHaveCSS("color", "rgb(122, 75, 0)");
+});

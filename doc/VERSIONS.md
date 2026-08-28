@@ -2,6 +2,96 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.45.0 - 2026-08-28
+
+### #967 — påminnelser slutter å mase om kurs deltakeren ikke kan åpne
+
+Påminnelsesjobben hentet frister uten å se på kurset i det hele tatt. `include` hentet bare
+`{ id, title }`, så jobben **kunne** ikke sjekke publiseringsstatus — uansett hvor gjerne den ville.
+
+Scenarioet er konkret: kurset avpubliseres midt i en kullkjøring. Deltakeren ser det ikke lenger
+under «Mine kurs» og kan ikke fullføre det. Hen får likevel «7 dager til frist», deretter
+«forfalt» — og blir stående som OVERDUE i fagansvarliges dashbord for alltid, for et kurs som ikke
+lenger finnes for hen.
+
+Samme regel som deltakerflaten allerede bruker: publisert **og** ikke arkivert. Avpublisering er
+reversibel, så fristen forsvinner ikke — den varsles igjen når kurset publiseres på nytt.
+
+### Undertrykte varsler telles
+
+⚠️ Filteret ligger i **tjenesten**, ikke i spørringen. Et spørringsfilter ville vært billigere, men
+det ville skjult hvor mange varsler som ble holdt tilbake — og et stille undertrykt varsel er like
+vanskelig å oppdage som et feilsendt.
+
+Kjøresammendraget har allerede `skippedAlreadySent`, `skippedCompleted`, `skippedInactive`,
+`skippedEntraClass`. Nå også **`skippedCourseUnavailable`**. Det er husets eget mønster, ikke et
+nytt påfunn.
+
+### ⚠️ Kull-dashbordet gjør det MOTSATTE, og det er med vilje
+
+Saken slår sammen påminnelser og kullpublikum. De trenger motsatt fiks.
+
+Å filtrere bort publikum på dashbordet ville tømt hele skjermen for en fagansvarlig som uttrykkelig
+spurte om **dette** kurset — uten å si hvorfor. Det ville vært verre enn dagens feil.
+
+Forskjellen er hvem som spør: **en påminnelse er en handling rettet mot en deltaker som ikke kan
+svare på den. Et dashbord er et spørsmål fra en fagansvarlig som fortjener et ærlig svar.**
+
+`getCohortStatus` slo opp kurset med `select: { id: true }` og kunne derfor ikke si noe. Svaret
+bærer nå `coursePublished` og `courseArchived`, så flaten kan forklare hvorfor ingen beveger seg.
+
+Samme resonnement på klasseskjermens kurstildelinger: de skjules ikke — en skjult rad er en rad
+ingen kan fjerne — men de merkes «Ikke publisert – deltakerne ser det ikke».
+
+### UI-et er inspisert, ikke bare skrevet
+
+`scripts/dev/inspect-class-course-badge.mjs` laster den ekte klasseskjermen i headless Chromium på
+1280 og 480 px og måler merkets farge mot den nøytrale metateksten.
+
+⚠️ Vakta meldte først avvik: «merket har samme farge som vanlig metatekst». **Det var detektoren som
+var feil** — den plukket første `.assign-meta`, og varselelementet bærer begge klassene, så den
+sammenlignet merket med seg selv. Tredje gang på én dag at et måleverktøy villeder. Vakta velger nå
+uttrykkelig bort varselelementet, og grunnen står i koden.
+
+### QA-porten sa NO-GO, og hadde rett
+
+Første runde leverte **halve saken**. Dashbordet fikk `coursePublished`/`courseArchived` — men
+klienten brukte dem ikke, og `GET /api/cohort-status/courses` listet uansett bare publiserte kurs.
+
+⚠️ **Kurset forsvant altså stille fra velgeren.** Det er nøyaktig «tømt skjerm uten å si hvorfor»
+— utfallet hele begrunnelsen min argumenterte mot — bare ett hakk tidligere i flyten. Feltene var
+død last: nåbare for et API-kall, usynlige for et menneske.
+
+Velgeren tar nå med unåbare kurs, merket «(ikke publisert)» / «(arkivert)», og dashbordet viser én
+linje som sier hvorfor tallene står stille.
+
+Porten fant også at **tildelings-e-posten** (#684) fortsatt gikk ut for upubliserte kurs: «Logg inn
+på plattformen for å starte» for et kurs medlemmet ikke kan se — tjue linjer over koden jeg endret.
+Med #967 er påminnelsene stille, så den e-posten ville vært det ENESTE deltakeren noensinne hørte om
+kurset. Tildelingen blokkeres ikke — «tildel utkast, publiser senere» er en legitim arbeidsflyt —
+men varselet holdes tilbake og logges som `course_assignment_mail_suppressed`.
+
+Og en regresjon som var min egen: #967-avsnittet i `API_REFERENCE.md` var satt inn **midt i**
+Reporting-tabellen og brakk den. Rettet, og `/api/cohort-status/*` er nå dokumentert i det hele tatt
+— det manglet fra før.
+
+### Testene ble strammet der de var slappe
+
+- `skippedCourseUnavailable` ble målt med `>= 1`. **Enhver fremmed rad i den delte test-databasen
+  ville tilfredsstilt den.** Forventet antall utledes nå fra databasen, så påstanden er eksakt.
+- Klasse-testen krever nå «én undertrykkelse per TILDELING, ikke én per medlem». Klassen har to
+  medlemmer, så en teller som løp per medlem ville gitt 2 og blandet to enheter i samme tall.
+- To e2e-tester ser nå det brukeren ser. Porten sa det rett ut: merkene var bare voktet av et
+  manuelt inspeksjonsskript, og et UI-element ingen automatisk test ser, kan forsvinne i en
+  refaktorering uten at noe blir rødt.
+
+### Etterslep, ført som oppfølging
+
+- **#1035** — individuell innmelding mangler vakta mot arkiverte kurs som klasse-tildeling har.
+- **#1036** — frist som passerer mens kurset er avpublisert. Porten korrigerte min egen modell:
+  «forfalt» går IKKE tapt, bare forvarslene. Beskrivelsen står i saken fordi den er lett å «fikse»
+  i feil retning.
+
 ## 2.44.0 - 2026-08-28
 
 ### #948 — ingen «bestått» mens sensor ikke har sett saken

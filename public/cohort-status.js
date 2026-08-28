@@ -29,6 +29,7 @@ const debugOutputSection = document.getElementById("debugOutputSection");
 const courseSelect = document.getElementById("courseSelect");
 const cohortMeta = document.getElementById("cohortMeta");
 const cohortEmpty = document.getElementById("cohortEmpty");
+const cohortUnavailable = document.getElementById("cohortUnavailable");
 const statusCards = document.getElementById("statusCards");
 const byClassSection = document.getElementById("byClassSection");
 const byClassEmpty = document.getElementById("byClassEmpty");
@@ -178,6 +179,18 @@ function renderCohort(summary) {
         .join("");
     }
   }
+  // #967: ⚠️ den viktigste linja paa skjermen naar den gjelder. Uten den viser dashbordet
+  // «OVERDUE 7» uten ett ord om at kurset ikke finnes for de sju — og fagansvarlig leter etter en
+  // forklaring som ikke staar noe sted.
+  if (cohortUnavailable) {
+    const message = summary.courseArchived === true
+      ? t("cohort.unavailable.archived")
+      : summary.coursePublished === false
+        ? t("cohort.unavailable.unpublished")
+        : "";
+    cohortUnavailable.textContent = message;
+    cohortUnavailable.hidden = message === "";
+  }
   if (cohortMeta) {
     const when = summary.generatedAt ? new Date(summary.generatedAt).toLocaleString(currentLocale) : "";
     cohortMeta.textContent = `${t("cohort.generatedAt")}: ${when}`;
@@ -185,6 +198,7 @@ function renderCohort(summary) {
 }
 
 function showCohortEmpty() {
+  if (cohortUnavailable) cohortUnavailable.hidden = true;
   if (cohortEmpty) cohortEmpty.hidden = false;
   if (statusCards) setHidden(statusCards, true);
   if (byClassSection) byClassSection.hidden = true;
@@ -203,7 +217,16 @@ async function loadCourses() {
     courseSelect.disabled = false;
     courseSelect.innerHTML =
       `<option value="">${escapeHtml(t("cohort.picker.placeholder"))}</option>` +
-      courses.map((c) => `<option value="${escapeHtml(c.id)}">${escapeHtml(c.title)}</option>`).join("");
+      // #967: et unaabart kurs staar i lista, men merkes — ellers ville fagansvarlig valgt det
+      // uten aa vite hvorfor ingen beveger seg.
+      courses.map((c) => {
+        const mark = c.archived === true
+          ? ` (${t("cohort.course.archived")})`
+          : c.published === false
+            ? ` (${t("cohort.course.unpublished")})`
+            : "";
+        return `<option value="${escapeHtml(c.id)}">${escapeHtml(c.title)}${escapeHtml(mark)}</option>`;
+      }).join("");
   } catch (error) {
     setMessage(error?.message ?? t("cohort.error"), "error");
   }
