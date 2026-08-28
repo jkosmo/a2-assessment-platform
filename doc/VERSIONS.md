@@ -2,6 +2,61 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.44.0 - 2026-08-28
+
+### #948 — ingen «bestått» mens sensor ikke har sett saken
+
+Seks ting kan sende en innlevering til manuell vurdering. Bare to av dem tvang vedtaket til å la
+være å si «bestått». De øvrige lot et vedtak bære `passFailTotal: true` mens innleveringen sto som
+`UNDER_REVIEW`.
+
+Scenarioet er konkret: språkmodellen rapporterer feil delsum. Vedtaket lagres som bestått, saken
+går til sensor, og sertifiseringen hoppes korrekt over. **Deltakeren ser modulkortet som bestått.**
+Kurset slipper hen ikke videre. Sensor har ennå ikke sett saken.
+
+### Invarianten hører i kilden, ikke hos leserne
+
+Tolv steder leser dette flagget — deltakerens modulkort, kalibreringsrapporten, kursrapporten,
+sertifiseringen, e-postvarslene, sensorkøen. De tolket det ulikt, og noen sjekket ikke status i det
+hele tatt.
+
+⚠️ **Å lappe tolv lesere ville vært feil form.** Én ville blitt glemt, og den ene ville vært den
+som fortalte en kandidat noe usant. Ett uttrykk i `decisionService` gjør alle tolv riktige samtidig:
+`passFailTotal: passesThresholds && !needsManualReview`.
+
+Dette gjør ikke en bestått til en strøket. `passFailTotal: false` sammen med `UNDER_REVIEW` leses
+som «til vurdering» — samme mønster #475 etablerte for ai-influence, med den uttrykkelige
+begrunnelsen at et signal aldri skal kunne felle noen.
+
+### En test hadde festet feilen som om den var tilsiktet
+
+En eksisterende test forventet `passFailTotal: true` sammen med `UNDER_REVIEW`. Invarianten ble
+altså ikke bare brutt ved uhell — den var skrevet ned som riktig oppførsel. Den er rettet, og tre
+nye tester krever at flagget snur for hver enkelt utløser. Alle har **en terskel som passerer** —
+uten det ville de vært grønne uansett hva koden gjorde.
+
+### QA-porten fant retningen jeg hadde snudd uten å merke det
+
+⚠️ Kalibreringen teller `passFailTotal === false` som strøket. Før denne endringen ble en ventende
+sak talt som **bestått** — en smigrende feil. Etter den ble den talt som **strøket** — en
+alarmerende feil, og kvalitetsflagget `LOW_PASS_RATE` fyrte på et forsøk maskinen ga 72 av terskel
+70, som ingen hadde strøket.
+
+Begge er feil på samme måte: **de gjør en ikke-avgjort sak om til et datapunkt.** Ventende saker
+holdes nå utenfor både teller og nevner, på alle fire tellestedene i kalibreringen og
+analyserapporten. Det avgjør ikke den åpne spørsmålet om raten skal måle råvedtaket eller det
+endelige utfallet — det gjelder saker som ER avgjort.
+
+Porten kjørte dessuten hele flaten i ekte nettleser: deltakeren ser «En sensor ser på besvarelsen
+din», ikke «Ikke bestått», og en sak sensor godkjenner ender som «Bestått · 72».
+
+### Etterslep, ført som oppfølging
+
+- Sensorens historikk merker det automatiske vedtaket «Vurderer-overstyring» før sensor har gjort
+  noe. Feil etikett fra før, men verdien ved siden av peker nå motsatt vei.
+- Gamle rader med `true` + `UNDER_REVIEW` konverteres ikke. Vedtak er uforanderlige, så en
+  bakfylling ville omskrevet historikk — de avgjøres av sensor som før.
+
 ## 2.43.0 - 2026-08-28
 
 ### #943 — lesing av kurs og klasser er vaktet som skrivingen

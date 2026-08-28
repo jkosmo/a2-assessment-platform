@@ -990,6 +990,15 @@ gjenta feilen i motsatt retning: ett svar der det trengs flere.
 | `hasPassingDecision` | finnes det alt en bestått? | **nei**, med vilje |
 | `rawPassFailState` | hva sier vedtaket? | **nei** — praktikerflate |
 
+⚠️ **`rawPassFailState` er IKKE lenger «hva maskinen foreslo» (#948).** Et vedtak som rutes til
+manuell vurdering bærer nå `passFailTotal: false` uansett hvilken utløser som sendte det dit — også
+når terskelen passerte. Flagget sier altså «ikke avgjort som bestått», ikke «maskinen ville strøket
+hen». For en sensor betyr det at raden kan vise «Ikke bestått · 72» ved siden av en poengsum over
+terskelen; maskinens faktiske forslag må leses av totalScore og begrunnelsen, ikke av flagget.
+
+Invarianten er at et vedtak aldri sier «bestått» mens sensor ikke har sett saken — den står ett
+sted, i `decisionService`, fordi tolv lesere ellers ville tolket den hver for seg.
+
 **Flatene:**
 
 | Fil | Inngang | Merknad |

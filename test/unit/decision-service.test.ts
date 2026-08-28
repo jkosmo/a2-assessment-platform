@@ -146,7 +146,7 @@ describe("decision service", () => {
   it("opens manual review and skips the certification write when manual review is forced", async () => {
     assessmentDecisionCreate.mockResolvedValue({
       id: "decision-2",
-      passFailTotal: true,
+      passFailTotal: false,
       decisionReason: "Escalated for human review.",
     });
     manualReviewCreate.mockResolvedValue({
@@ -176,7 +176,10 @@ describe("decision service", () => {
         // sender den til databasen slettes uten at én eneste test ble rød — og da ville hele
         // oversettelsen vært død for nye avgjørelser.
         decisionReasonCode: "MANUAL_REVIEW_RED_FLAG_OR_CONFIDENCE",
-        passFailTotal: true,
+        // #948: sto tidligere som `true`. ⚠️ Testen festet feilen som om den var tilsiktet — et
+        // vedtak som baerer «bestaatt» mens innleveringen gaar til sensor. Terskelen passerer
+        // fortsatt; det er nettopp derfor det var farlig.
+        passFailTotal: false,
       }),
     );
     expect(manualReviewCreate).toHaveBeenCalledWith({
@@ -203,7 +206,7 @@ describe("decision service", () => {
     expect(result).toEqual({
       decision: {
         id: "decision-2",
-        passFailTotal: true,
+        passFailTotal: false,
         decisionReason: "Escalated for human review.",
       },
       needsManualReview: true,
@@ -954,6 +957,104 @@ describe("decision service", () => {
     );
     expect(result.needsManualReview).toBe(false);
   });
+  // ── #948: invarianten — ingen «bestått» mens sensor ikke har sett saken ────────────────────────
+  //
+  // ⚠️ Begge disse har en TERSKEL SOM PASSERER. Det er hele poenget: uten det ville
+  // `passFailTotal` vært false av en helt annen grunn, og testen ville vært grønn uansett hva
+  // linja i kilden gjorde. En test som ikke kan bli rød måler ingenting.
+  //
+  // Leserne er tolv, og de tolket flagget ulikt: deltakerens modulkort, kalibreringsrapporten,
+  // kursrapporten, sertifiseringen. Derfor står vakta i kilden og ikke hos dem.
+
+  it("#948: en uenig sum gir ikke bestått, selv når terskelen passerer", async () => {
+    assessmentDecisionCreate.mockResolvedValue({
+      id: "decision-948a",
+      passFailTotal: false,
+      decisionReason: "Routed to manual review: rubric totals are inconsistent.",
+    });
+    manualReviewCreate.mockResolvedValue({ id: "review-948a", triggerReason: "totals" });
+    submissionUpdate.mockResolvedValue({ id: "submission-948a" });
+
+    const { createAssessmentDecision } = await import("../../src/modules/assessment/decisionService.js");
+
+    await createAssessmentDecision({ jobId: "job-fence", fence: { lockedBy: "worker-test", lockedAt: new Date(0) },
+      submissionId: "submission-948a",
+      userId: "user-948a",
+      moduleVersionId: "module-version-1",
+      rubricVersionId: "rubric-version-1",
+      promptTemplateVersionId: "prompt-version-1",
+      mcqScaledScore: 30,
+      mcqPercentScore: 100,
+      // Kriteriene summerer til 14, men modellen rapporterer 15. Poengene regnes fra den
+      // GJENBEREGNEDE summen, så terskelen passerer fortsatt — og det er nettopp det farlige.
+      llmResult: buildLlmResult({ rubric_total: 15 }),
+    });
+
+    expect(assessmentDecisionCreate).toHaveBeenCalledWith(
+      expect.objectContaining({ totalScore: 79, passFailTotal: false }),
+    );
+    expect(submissionUpdate).toHaveBeenCalledWith("submission-948a", SubmissionStatus.UNDER_REVIEW);
+    expect(upsertCertificationStatusFromDecision).not.toHaveBeenCalled();
+  });
+
+  it("#948: en modell som ber om menneskeblikk gir ikke bestått, selv når terskelen passerer", async () => {
+    assessmentDecisionCreate.mockResolvedValue({
+      id: "decision-948b",
+      passFailTotal: false,
+      decisionReason: "Routed to manual review.",
+    });
+    manualReviewCreate.mockResolvedValue({ id: "review-948b", triggerReason: "llm" });
+    submissionUpdate.mockResolvedValue({ id: "submission-948b" });
+
+    const { createAssessmentDecision } = await import("../../src/modules/assessment/decisionService.js");
+
+    await createAssessmentDecision({ jobId: "job-fence", fence: { lockedBy: "worker-test", lockedAt: new Date(0) },
+      submissionId: "submission-948b",
+      userId: "user-948b",
+      moduleVersionId: "module-version-1",
+      rubricVersionId: "rubric-version-1",
+      promptTemplateVersionId: "prompt-version-1",
+      mcqScaledScore: 30,
+      mcqPercentScore: 100,
+      llmResult: buildLlmResult({ manual_review_recommended: true }),
+    });
+
+    expect(assessmentDecisionCreate).toHaveBeenCalledWith(
+      expect.objectContaining({ totalScore: 79, passFailTotal: false }),
+    );
+    expect(submissionUpdate).toHaveBeenCalledWith("submission-948b", SubmissionStatus.UNDER_REVIEW);
+    expect(upsertCertificationStatusFromDecision).not.toHaveBeenCalled();
+  });
+
+  // Motprøven. Uten den ville «sett passFailTotal til false alltid» også vært grønt — og da hadde
+  // ingen kunnet bestå noe.
+  it("#948: et rent auto-bestått vedtak er fortsatt bestått", async () => {
+    assessmentDecisionCreate.mockResolvedValue({
+      id: "decision-948c",
+      passFailTotal: true,
+      decisionReason: "Automatic pass by threshold rules.",
+    });
+    submissionUpdate.mockResolvedValue({ id: "submission-948c" });
+
+    const { createAssessmentDecision } = await import("../../src/modules/assessment/decisionService.js");
+
+    await createAssessmentDecision({ jobId: "job-fence", fence: { lockedBy: "worker-test", lockedAt: new Date(0) },
+      submissionId: "submission-948c",
+      userId: "user-948c",
+      moduleVersionId: "module-version-1",
+      rubricVersionId: "rubric-version-1",
+      promptTemplateVersionId: "prompt-version-1",
+      mcqScaledScore: 30,
+      mcqPercentScore: 100,
+      llmResult: buildLlmResult(),
+    });
+
+    expect(assessmentDecisionCreate).toHaveBeenCalledWith(
+      expect.objectContaining({ passFailTotal: true }),
+    );
+    expect(manualReviewCreate).not.toHaveBeenCalled();
+    expect(submissionUpdate).toHaveBeenCalledWith("submission-948c", SubmissionStatus.COMPLETED);
+  });
 });
 
 // #578 — FREETEXT_ONLY: free-text + LLM assessment, no MCQ. The rubric spans the full 0–100
@@ -1084,4 +1185,5 @@ describe("createMcqOnlyDecision — grunnkoden lagres, ikke bare regnes ut", () 
     expect(written.decisionReasonCode).toBe("MCQ_ONLY_FAIL");
     expect(JSON.parse(written.decisionReasonParams ?? "null")).toEqual({ scorePercent: 60, minPercent: 70 });
   });
+
 });

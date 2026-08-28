@@ -232,7 +232,20 @@ export function resolveAssessmentDecision(input: ResolveAssessmentDecisionInput)
     // ikke automatisk bestått selv om threshold-rules ellers passerte. Assessor må
     // bekrefte. #475: samme for AI-influence review — en besvarelse rutet til review er
     // ikke automatisk bestått.
-    passFailTotal: passesThresholds && !isInBorderlineWindow && !aiInfluenceForcesReview,
+    // #948: et vedtak kan ALDRI baere `passFailTotal: true` mens innleveringen gaar til manuell
+    // vurdering. Seks ting kan utloese en slik vurdering; foer denne linja tvang bare to av dem
+    // (`isInBorderlineWindow` og `aiInfluenceForcesReview`) flagget til false. De oevrige — et
+    // paatvunget `forceManualReviewReason`, `totalsInconsistent`, og en modell som ber om
+    // menneskeblikk — lot et «bestaatt» vedtak staa mens sensor ennaa ikke hadde sett saken.
+    //
+    // ⚠️ Konsekvensen laa hos LESERNE, og de er tolv: deltakeren saa modulkortet som bestaatt,
+    // kalibreringsrapporten talte forsoeket som PASS, kursrapporten sa IN_PROGRESS. Aa lappe tolv
+    // lesere ville vaert feil form — og én ville blitt glemt. Invarianten hoerer i kilden.
+    //
+    // Dette gjoer ikke en bestaatt til en stroeket: `passFailTotal: false` + UNDER_REVIEW leses som
+    // «til vurdering», ikke som «ikke bestaatt» — samme moenster #475 allerede etablerte for
+    // ai-influence, med den uttrykkelige begrunnelsen at et signal aldri skal kunne felle noen.
+    passFailTotal: passesThresholds && !needsManualReview,
     decisionReason,
     decisionReasonCode: resolvedReason.code,
     decisionReasonParams: resolvedReason.params,

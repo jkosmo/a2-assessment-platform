@@ -229,4 +229,95 @@ describe("calibration workspace service", () => {
       },
     });
   });
+
+  // ⚠️ #948 / QA-funn F1: en sak som VENTER på sensor er verken bestått eller strøket.
+  //
+  // Før #948 bar et ventende vedtak `passFailTotal: true` og ble talt som BESTÅTT — smigrende.
+  // Etter #948 bærer det `false` og ble talt som STRØKET — alarmerende: kvalitetsflagget
+  // LOW_PASS_RATE fyrte på et forsøk maskinen ga 72 av terskel 70, som ingen hadde strøket.
+  //
+  // Denne testen krever at den ventende saken holdes UTENFOR både telleren og nevneren. Fiksturen
+  // har derfor én avgjort STRØKET og én ventende — hadde den ventende talt med, ville passRate
+  // vært 0 i stedet for null, og flagget hadde fyrt.
+  it("#948: en sak som venter på sensor teller verken som bestått eller strøket", async () => {
+    findModuleSummary.mockResolvedValue({ id: "module-1", title: "Module One" });
+    findPromptTemplateVersionsForBenchmarkAnchors.mockResolvedValue([]);
+    findSubmissionsForWorkspace.mockResolvedValue([
+      {
+        id: "submission-pending",
+        submittedAt: new Date("2026-03-11T10:00:00.000Z"),
+        // Terskelen passerte (72 ≥ 70), men saken er rutet til sensor.
+        submissionStatus: "UNDER_REVIEW",
+        moduleVersion: { id: "module-version-1", versionNo: 1, promptTemplateVersionId: "prompt-1" },
+        user: { id: "user-pending" },
+        decisions: [
+          {
+            decisionType: "AUTOMATIC",
+            totalScore: 72,
+            passFailTotal: false,
+            practicalScaledScore: 42,
+            mcqScaledScore: 30,
+            finalisedAt: new Date("2026-03-11T11:00:00.000Z"),
+            redFlagsJson: "[]",
+          },
+        ],
+        llmEvaluations: [],
+        mcqAttempts: [],
+      },
+    ]);
+
+    const { getCalibrationWorkspaceSnapshot } = await import("../../src/modules/calibration/index.js");
+    const snapshot = await getCalibrationWorkspaceSnapshot({
+      filters: { moduleId: "module-1", statuses: ["COMPLETED", "UNDER_REVIEW"], limit: 50 },
+      signalThresholds: { passRateMinimum: 0.7, manualReviewRateMaximum: 0.4, benchmarkCoverageMinimum: 0.8 },
+    });
+
+    expect(snapshot.signals).toMatchObject({
+      outcomeCount: 1,
+      passCount: 0,
+      failCount: 0,
+      underReviewCount: 1,
+      // Ingen avgjorte saker ⇒ ingen rate. IKKE 0 — det ville påstått at ingen består.
+      passRate: null,
+    });
+    // Og da skal kvalitetsflagget for lav bestått-rate ikke fyre.
+    expect(snapshot.signals.flags.map((flag: { code: string }) => flag.code)).not.toContain("LOW_PASS_RATE");
+  });
+
+  // Motprøven: en AVGJORT strøket sak skal fortsatt telle. Uten den ville «hopp over alt» også
+  // vært grønt, og da hadde kalibreringen sluttet å måle noe som helst.
+  it("#948: en avgjort strøket sak teller fortsatt som strøket", async () => {
+    findModuleSummary.mockResolvedValue({ id: "module-1", title: "Module One" });
+    findPromptTemplateVersionsForBenchmarkAnchors.mockResolvedValue([]);
+    findSubmissionsForWorkspace.mockResolvedValue([
+      {
+        id: "submission-settled-fail",
+        submittedAt: new Date("2026-03-11T10:00:00.000Z"),
+        submissionStatus: "COMPLETED",
+        moduleVersion: { id: "module-version-1", versionNo: 1, promptTemplateVersionId: "prompt-1" },
+        user: { id: "user-settled" },
+        decisions: [
+          {
+            decisionType: "AUTOMATIC",
+            totalScore: 40,
+            passFailTotal: false,
+            practicalScaledScore: 20,
+            mcqScaledScore: 20,
+            finalisedAt: new Date("2026-03-11T11:00:00.000Z"),
+            redFlagsJson: "[]",
+          },
+        ],
+        llmEvaluations: [],
+        mcqAttempts: [],
+      },
+    ]);
+
+    const { getCalibrationWorkspaceSnapshot } = await import("../../src/modules/calibration/index.js");
+    const snapshot = await getCalibrationWorkspaceSnapshot({
+      filters: { moduleId: "module-1", statuses: ["COMPLETED"], limit: 50 },
+      signalThresholds: { passRateMinimum: 0.7, manualReviewRateMaximum: 0.4, benchmarkCoverageMinimum: 0.8 },
+    });
+
+    expect(snapshot.signals).toMatchObject({ passCount: 0, failCount: 1, passRate: 0 });
+  });
 });
