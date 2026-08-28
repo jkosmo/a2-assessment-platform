@@ -312,6 +312,43 @@ importfeil vanskeligere å diagnostisere uten å hjelpe noen.
 `test/e2e/section-portability-916.spec.ts` (forfatter, detaljfeltet skal være der).
 **Sak:** #988, #992 · **Status:** avklart
 
+## Kapasitet og drift
+
+### Piloten kjøres ferdig på B1 — oppskalering venter til etter den
+
+**Hvorfor:** produkteier 2026-08-28, etter at målingen under ble lagt fram: *«vi avventer til vi er
+ferdig med pilot og skal oppskalere»*.
+
+Web, worker og parser deler én B1-instans (1,75 GB) i prod. Målt over et døgn ligger minnet på
+**79,5 % i snitt og topper på 92 %**, med CPU-topper på 100 %. Det er ikke driftsmargin, det er en
+terskel — og en utrulling starter en ny prosess ved siden av den gamle, altså når det er minst plass.
+
+Det er likevel en bevisst avveining, ikke en forglemmelse: piloten har få samtidige brukere, og
+kostnaden ved å bytte plattform midt i en pilot er større enn ubehaget den gir. **Utløseren er
+oppskaleringen etter pilot**, og hva som skal kjøpes står i #808.
+
+⚠️ **Kjøp B2, ikke S1.** S1 koster 560 kr mer i måneden og gir *nøyaktig like mye minne som i dag* —
+det man betaler for er utrullingsspor. #808 ble opprinnelig skrevet om nedetid ved utrulling, og da
+var spor riktig svar. Målingen viser at også den daglige driften er trang, og for det problemet
+kjøper S1 ingenting. B2 dobler minnet for under halvparten av prisen.
+
+**Sak:** #808 · **Status:** utsatt 2026-08-28, utløses av oppskalering etter pilot
+
+### ⚠️ Databasen skal ikke oppgraderes — symptomet peker feil vei
+
+Opplevelsen er at «databasen sliter hver gang vi gjør ting». Den første hypotesen — også min — var
+kredittstruping: prod-databasen er `Standard_B1ms` i Burstable-klassen, som kjører på CPU-kreditter
+og strupes hardt når de tar slutt. Det er en god forklaring.
+
+**Den er feil.** Kredittene står på 288 av 288 hver eneste time i 24 timer, uten et eneste dropp, og
+CPU ligger på 8,5 % i snitt. Databasen er uvirksom. Årsaken er apptjenesten over.
+
+Dette står her fordi feilslutningen er lett å gjøre om igjen: symptomet — trege eller feilende
+forespørsler — ser ut som en database under press uansett hvor flaskehalsen faktisk er. **Sjekk
+begge før du konkluderer**, og ikke betal for et problem som ikke finnes.
+
+**Sak:** #808 · **Status:** målt 2026-08-28
+
 ## Roller og innsyn
 
 ### Revisjonssporet leses av alle med et oppfølgingsforhold til kandidaten
