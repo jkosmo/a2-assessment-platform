@@ -93,6 +93,34 @@ body {
   padding: 0 var(--space-5);
 }
 
+/* ─── Overskrifter ────────────────────────────────────────────────────────────────────────────
+ *
+ * Produkteier 2026-08-28, med skjermbilde av modul-arbeidsflaten: «Det er noe feil med størrelsen
+ * av font og skala på boksene her i forhold til hva som blir brukt for selve listen.»
+ *
+ * ⚠️ Målt årsak: overskriftene var ikke stilsatt I DET HELE TATT. `h2` målte 24px/700 med 19,92px
+ * marger — nøyaktig nettleserens standard (1,5em og 0,83em). De var altså ikke for store i forhold
+ * til et designvalg; de sto utenfor designsystemet. Alt annet på siden bruker tokens og en skala
+ * som topper seg på 17px (`.result-headline`), mens `h2` arvet 24.
+ *
+ * Verdiene under er ikke funnet på: de sto allerede INLINE i markupen, satt for hånd der noen
+ * merket problemet — h1 22px (`admin-content.html:566`), h2 16px (`:667`, `:672`,
+ * `cohort-status.html:96`), h3 15px (`admin-content-calibration.html:177`). Dette skriver dem inn
+ * ett sted i stedet for fem, og lar de gjenværende inline-verdiene stemme overens i stedet for å
+ * overstyre.
+ *
+ * Margene bruker mellomrom-tokens. Standardens 0,83em skalerte med fontstørrelsen og ga et
+ * luftsprang mellom kortene som ikke fantes noe annet sted.
+ */
+h1, h2, h3 {
+  font-weight: 700;
+  line-height: 1.3;
+  text-wrap: balance;
+}
+h1 { font-size: 22px; margin: 0 0 var(--space-2); }
+h2 { font-size: 16px; margin: 0 0 var(--space-1); }
+h3 { font-size: 15px; margin: var(--space-2) 0 var(--space-1); }
+
 .card {
   background: var(--color-surface);
   border-radius: var(--radius-card);
@@ -426,9 +454,13 @@ button:focus-visible {
   color: var(--color-link-active);
 }
 
+/* ⚠️ Sto på 24px. Det var mindre enn sidens h1 den gang h1 arvet nettleserens 32 — men da
+   overskriftsskalaen ble skrevet inn (h1 22px), snudde forholdet: hjelpepanelet ropte høyere enn
+   siden det ligger over. Følger nå `.dialog-title` (18px), som er samme flatetype: et panel som
+   legger seg oppå. */
 .workspace-help-title {
   margin: 4px 0 0;
-  font-size: 24px;
+  font-size: 18px;
 }
 
 .workspace-help-close {

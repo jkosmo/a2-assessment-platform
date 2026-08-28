@@ -148,13 +148,25 @@ export function resolveAssessmentDecision(input: ResolveAssessmentDecisionInput)
   // v1.2.20 (#464): borderline-window — totalScore i [min, max] router til manuell
   // vurdering. Overstyrer auto-pass selv om threshold-rules ellers passerer. Brukes til
   // grensetilfeller forfatter vil ha assessor til å se på.
-  const borderlineWindow = input.assessmentPolicy?.passRules?.borderlineWindow;
+  // Modulens eget vindu vinner. Ellers gjelder standardbaandet fra regelfila, regnet ut fra
+  // modulens EFFEKTIVE terskel — ikke et fast tallpar, som ville vaert galt for enhver modul med
+  // egen `totalMin`. Foer dette fantes ingen standard, saa vakta var moerk for 98 av 101 moduler.
+  //
+  // Baandet er aapent oppad (`< totalMin`): noeyaktig paa terskelen er bestaatt, ikke grensetilfelle.
+  const defaultBelow = rules.thresholds.borderlineBelowMin;
+  const borderlineWindow =
+    input.assessmentPolicy?.passRules?.borderlineWindow ??
+    (defaultBelow != null && defaultBelow > 0
+      ? { min: Math.max(0, totalMin - defaultBelow), max: totalMin, exclusiveMax: true }
+      : undefined);
   const isInBorderlineWindow =
     borderlineWindow !== undefined &&
     typeof borderlineWindow.min === "number" &&
     typeof borderlineWindow.max === "number" &&
     totalScore >= borderlineWindow.min &&
-    totalScore <= borderlineWindow.max;
+    ("exclusiveMax" in borderlineWindow && borderlineWindow.exclusiveMax
+      ? totalScore < borderlineWindow.max
+      : totalScore <= borderlineWindow.max);
 
   // #475: AI-influence is a review TRIGGER only. It feeds `needsManualReview` (below) and forces
   // `passFailTotal` to false so a would-pass submission is not auto-passed — mirroring borderlineWindow.

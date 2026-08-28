@@ -62,7 +62,7 @@ function buildMcqOnlyExport(): MockModuleExport {
       promptTemplateVersions: [],
       mcqSetVersions: [mcqSetVersion],
     },
-    platformDefaults: { totalMin: 70 },
+    platformDefaults: { totalMin: 70, borderlineBelowMin: 10 },
   };
 }
 

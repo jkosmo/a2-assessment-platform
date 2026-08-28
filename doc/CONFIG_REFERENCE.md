@@ -19,8 +19,27 @@ Core decision engine configuration. Controls pass/fail thresholds, manual review
 | Field | Type | Description |
 |---|---|---|
 | `totalMin` | `number (0-100)` | Minimum combined score (practical + MCQ) to pass |
+| `borderlineBelowMin` | `number (0-100)`, optional | How many points **below the effective threshold** route to manual review instead of an automatic fail. `10` with `totalMin: 70` sends 60–69.99 to an assessor. |
 | `practicalMinPercent` | `number (0-100)` | Minimum practical component percentage |
 | `mcqMinPercent` | `number (0-100)` | Minimum MCQ percentage score |
+
+**`borderlineBelowMin` — three things that are load-bearing:**
+
+- **Relative, not absolute.** The band is computed from the module's *effective* `totalMin`
+  (`passRules.totalMin` when the author set one, otherwise the global). A fixed pair like `60–70`
+  lands in the wrong place for any module with its own threshold — a module requiring 65 would get a
+  band partly *above* its own pass mark.
+- **Open at the top.** A score exactly on the threshold is a pass, not a borderline case. Without
+  this, every just-barely-pass would go to an assessor.
+- **Never stored on the module.** The value is derived at decision time. An earlier attempt wrote it
+  into each module's `assessmentPolicy` on save; it then went stale the moment an author calibrated
+  the threshold, and had to be kept in sync across four write paths. The authoring UI *shows* the
+  effective band instead: `platformDefaults.borderlineBelowMin` on the module bundle, which the
+  settings panel turns into a placeholder like `60 (platform default) → 70`. A placeholder, not a
+  value — filling the field in would turn a deliberate default into a per-module override nobody chose.
+
+A module may still set `passRules.borderlineWindow` explicitly (#464). That wins, and it is
+inclusive at both ends.
 
 **`weights`** - Maximum raw scores for each component.
 

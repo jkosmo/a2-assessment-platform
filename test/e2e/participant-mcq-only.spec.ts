@@ -131,6 +131,14 @@ test("participant: MCQ-only auto-pass shows a discreet retry button", async ({ p
   await page.locator("input[name='q_q1']").first().check();
   await page.locator("#submitMcq").click();
 
+  // Produkteier 2026-08-28, med skjermbilde: flervalgskortet sto igjen TOMT etter innsending —
+  // bare en overskrift og luft, rett over vurderingskortet.
+  //
+  // ⚠️ Forhåndsvisningsstien skjulte det allerede; den vanlige flyten gjorde det ikke. To steder
+  // svarte ulikt på samme spørsmål. Uten denne påstanden ville skjulingen bare vært voktet av et
+  // manuelt inspeksjonsskript.
+  await expect(page.locator("#mcqSection")).toBeHidden();
+
   // The retry button is visible (result is ready) and discreet (passed) — not the prominent danger button.
   const retry = page.locator("#resetSubmissionFlow");
   await expect(retry).toBeVisible();

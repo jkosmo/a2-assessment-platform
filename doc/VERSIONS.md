@@ -2,6 +2,90 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.46.0 - 2026-08-28
+
+### Et resultat like under grensa går til sensor, ikke rett i strykbunken
+
+Produkteier så et ekte resultat på stage: «Ikkje bestått — 66,67 poeng. Kravet var 70 poeng.» og
+sa at det burde vært vurdert av et menneske.
+
+Mekanismen fantes fra #464 — men bare per modulversjon, og uten noen standardverdi.
+
+⚠️ **Målt på stage: 3 av 101 modulversjoner hadde et vindu satt. Alle tre sto på 0–90** — altså
+«vurder alt manuelt», rester fra da sensorgrensesnittet ble testet. Prod: 0 av 45. **Vakta hadde
+aldri vært i drift noe sted.** Funksjonen feilet på to motsatte måter samtidig: mørk nesten overalt,
+og altfor vid der den var på.
+
+Standarden er nå `borderlineBelowMin: 10` i regelfila — ti poeng under den gjeldende terskelen.
+
+### Formen måtte endres to ganger, og begge gangene fant testene det
+
+**Første forsøk var et absolutt «60–70».** Fem eksisterende tester ble røde med én gang, og de
+hadde rett: en modul kan ha sin egen terskel, og for en modul med krav 65 ligger 60–70 delvis over
+bestått-grensa. Et resultat på nøyaktig 70 havnet dessuten inne i vinduet og ble sendt til sensor
+selv om det er bestått.
+
+Båndet er derfor **relativt og åpent oppad**.
+
+**Andre forsøk festet verdien i modulen ved hver redigering.** QA-porten fant tre uavhengige feil,
+og alle tre kom av det samme: vinduet er en **avledet** verdi, og en avledet verdi som skrives inn
+i innhold blir gammel.
+
+- Det festede vinduet manglet den åpne øvre grensa, så nøyaktig 70 ble bestått uten policy og sendt
+  til sensor med policy.
+- Kalibrerte forfatteren terskelen fra 70 til 60, sto vinduet igjen på 60–70 — *over* terskelen.
+- Festingen dekket ikke ruta forfatterne faktisk lagrer gjennom.
+
+⚠️ Å fikse alle tre ville etterlatt en denormalisert verdi som kunne bli utdatert igjen. Standarden
+gjelder derfor **kun i kjøretid**, der terskelen uansett er kjent. Forfatterflaten **viser** den
+gjeldende verdien i stedet. Innstillingspanelet får båndet gjennom `platformDefaults`, den samme
+inngangen det allerede brukte for `totalMin`, og regner plassholderen selv: «60 (plattformstandard)
+→ 70». En plassholder, ikke en verdi — å fylle inn tallene ville gjort standarden om til en
+overstyring ingen valgte.
+
+### En test festet den gamle policyen
+
+En eksisterende test brukte 69 poeng — ett poeng under grensa — og krevde automatisk stryk. Samme
+klasse som testen #948 avdekket: en policy skrevet ned som riktig oppførsel. Den er endret bevisst,
+og 69-tilfellet er nå en egen test som krever det motsatte.
+
+⚠️ **Ingen dødlås.** QA-porten kjørte flaten i ekte nettleser med 66,67-tallene: deltakeren ser «En
+sensor ser på besvarelsen din», og reset-knappen står aktiv, så et nytt forsøk supersederer den
+åpne saken.
+
+**Gjenstår:** rene flervalgsmoduler treffes ikke — `resolveMcqOnlyDecision` har ingen
+manuell-vurdering-sti i det hele tatt. Egen sak.
+
+### Overskriftene var ikke stilsatt
+
+⚠️ `h1/h2/h3` arvet nettleserens 32/24/18 med em-baserte marger, mens designet ellers topper seg på
+17px. De var altså ikke *for store* i forhold til et designvalg — de sto utenfor designsystemet.
+
+Verdiene som er skrevet inn (22/16/15) er ikke funnet på: de sto allerede **inline fem steder** i
+markupen, håndsatt der noen merket problemet. Et sveipeskript vokter nå skalaen over alle flatene,
+med en kort liste bevisste unntak.
+
+Ett funn på kjøpet: hjelpepanelets tittel var 24px — mindre enn `h1` den gang `h1` arvet 32. Da
+skalaen ble skrevet inn, **snudde forholdet**, og panelet ropte høyere enn siden det ligger over.
+Den følger nå dialogene på 18px.
+
+### «Les» åpnet ikke seksjonen med starten øverst
+
+To feil samtidig: `scrollIntoView` sto på `block: "nearest"`, som ruller minst mulig, **og** kallet
+lå før innholdet var rendret — altså mot et tomt panel.
+
+⚠️ Mutasjonstesten avslørte at den første testen bare bandt rekkefølgen: en lang seksjon er høyere
+enn skjermen, så «nearest» ruller toppen til toppen av seg selv. Det trengtes en test til med en
+**kort** seksjon for å binde valget av `start`.
+
+### Tomt flervalgskort, og en teller større enn alle overskrifter
+
+Flervalgskortet sto igjen tomt etter innsending — bare en overskrift og luft. Forhåndsvisningsstien
+skjulte det allerede; den vanlige flyten gjorde det ikke. To steder svarte ulikt på samme spørsmål.
+
+«Forløpt 15s» var 28px/800 — sidens største element. Den står nå på linje med «Vurdering», begge
+16px, og leser fortsatt som «det skjer noe».
+
 ## 2.45.0 - 2026-08-28
 
 ### #967 — påminnelser slutter å mase om kurs deltakeren ikke kan åpne

@@ -1254,7 +1254,18 @@ function renderFlowGating() {
 
   assessmentSection.classList.toggle("hidden", !hasAssessmentContext);
   // FREETEXT_ONLY has no MCQ section.
-  mcqSection.classList.toggle("hidden", !hasSelectedModule || !flowState.hasSubmission || freetextOnly);
+  //
+  // Produkteier 2026-08-28, med skjermbilde: flervalgskortet sto igjen TOMT etter innsending — bare
+  // en overskrift og luft, rett over vurderingskortet.
+  //
+  // ⚠️ Forhaandsvisningsstien loeste dette allerede (se `previewModeEnabled`-grenen under), den
+  // vanlige flyten gjorde det ikke. To steder svarte ulikt paa samme spoersmaal; regelen er nå
+  // den samme begge steder: er testen levert og det ikke er noe aa vise, er kortet borte.
+  const mcqHasNothingToShow = flowState.hasMcqSubmission && currentQuestions.length === 0;
+  mcqSection.classList.toggle(
+    "hidden",
+    !hasSelectedModule || !flowState.hasSubmission || freetextOnly || mcqHasNothingToShow,
+  );
   setSectionLocked(assessmentSection, !gate.assessmentUnlocked);
   setSectionLocked(appealSection, !gate.appealUnlocked);
   queueAssessmentButton.classList.toggle("hidden", autoAssessmentEnabled);
@@ -3990,7 +4001,16 @@ function focusInlinePanel(panel) {
 }
 
 function scrollItemIntoView(itemWrap) {
-  try { itemWrap.scrollIntoView({ behavior: "smooth", block: "nearest" }); } catch { /* ignore */ }
+  // Produkteier 2026-08-28: «Når jeg trykker på Les, så åpner ikke seksjonen med starten i toppen
+  // av skjermen.»
+  //
+  // ⚠️ Sto som `block: "nearest"`, som ruller MINST MULIG. Var raden allerede så vidt synlig,
+  // flyttet den seg ikke i det hele tatt — og når panelet så utvidet seg til full seksjonstekst,
+  // sto deltakeren midt i eller nederst i teksten og måtte rulle oppover for å finne begynnelsen.
+  //
+  // `start` legger radens topp øverst. `.course-item` har `scroll-margin-top` så den ikke klistrer
+  // seg helt inntil kanten.
+  try { itemWrap.scrollIntoView({ behavior: "smooth", block: "start" }); } catch { /* ignore */ }
 }
 
 function collapseInlineOpen() {
@@ -4040,8 +4060,10 @@ async function openInlineItemByEntry(courseId, entry) {
     itemWrap.classList.add("open");
     setHidden(panel, false);
     row?.setAttribute("aria-expanded", "true");
-    scrollItemIntoView(itemWrap);
+    // ⚠️ Rull ETTER at innholdet er rendret. Sto før `await`-en, altså mot et tomt panel — og da
+    // regnet nettleseren ut hvor den skulle rulle basert på en høyde som ikke fantes ennå.
     await renderSectionReaderInto(panel, courseId, entry);
+    scrollItemIntoView(itemWrap);
     focusInlinePanel(panel);
     return;
   }

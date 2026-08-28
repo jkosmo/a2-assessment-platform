@@ -5900,19 +5900,38 @@ function renderSettingsPanel() {
       "practicalMin",
     );
   }
-  const borderline = policy?.passRules?.borderlineWindow;
-  row(
-    "shell.settings.borderlineWindow",
-    `<input id="settingsBorderlineMin" class="settings-input" type="number" min="0" max="100"
-      value="${Number.isFinite(Number(borderline?.min)) ? escapeHtml(String(borderline.min)) : ""}"
-      placeholder="${escapeHtml(t("shell.settings.noneShort"))}" />
-     <span aria-hidden="true">→</span>
-     <input id="settingsBorderlineMax" class="settings-input" type="number" min="0" max="100"
-      value="${Number.isFinite(Number(borderline?.max)) ? escapeHtml(String(borderline.max)) : ""}"
-      placeholder="${escapeHtml(t("shell.settings.noneShort"))}" /> %`,
-    false,
-    "borderlineWindow",
-  );
+  // ⚠️ Grensesonen gjelder IKKE for rene flervalgsmoduler — `resolveMcqOnlyDecision` har ingen
+  // manuell-vurdering-sti i det hele tatt. Feltet sto her og lot som om det virket.
+  if (mode !== "MCQ_ONLY") {
+    const borderline = policy?.passRules?.borderlineWindow;
+    // Hva skjer hvis feltet står tomt? Plattformen sender da et bånd under terskelen til sensor —
+    // og båndet regnes fra MODULENS terskel, ikke den globale. Plassholderen viser det tallparet.
+    //
+    // ⚠️ Plassholder, ikke verdi. Å fylle inn tallene ville gjort en bevisst standard om til en
+    // per-modul-overstyring ingen valgte — nøyaktig feilen QA fant på MCQ-feltet i runde 7.
+    const below = bundle?.platformDefaults?.borderlineBelowMin;
+    const effectiveMin = policy?.passRules?.totalMin ?? bundle?.platformDefaults?.totalMin;
+    const hasDefault = Number.isFinite(Number(below)) && Number(below) > 0 && Number.isFinite(Number(effectiveMin));
+    const defaultLow = hasDefault ? Math.max(0, Number(effectiveMin) - Number(below)) : null;
+    const placeholderLow = hasDefault
+      ? tf("shell.settings.platformDefault", { value: defaultLow })
+      : t("shell.settings.noneShort");
+    const placeholderHigh = hasDefault
+      ? tf("shell.settings.platformDefault", { value: effectiveMin })
+      : t("shell.settings.noneShort");
+    row(
+      "shell.settings.borderlineWindow",
+      `<input id="settingsBorderlineMin" class="settings-input settings-input--wide" type="number" min="0" max="100"
+        value="${Number.isFinite(Number(borderline?.min)) ? escapeHtml(String(borderline.min)) : ""}"
+        placeholder="${escapeHtml(placeholderLow)}" />
+       <span aria-hidden="true">→</span>
+       <input id="settingsBorderlineMax" class="settings-input settings-input--wide" type="number" min="0" max="100"
+        value="${Number.isFinite(Number(borderline?.max)) ? escapeHtml(String(borderline.max)) : ""}"
+        placeholder="${escapeHtml(placeholderHigh)}" /> %`,
+      false,
+      "borderlineWindow",
+    );
+  }
 
   // #896 S3c: NO summary rows for criteria, assessment instruction or submission schema.
   //

@@ -6,6 +6,24 @@ import { env } from "./env.js";
 export const rulesSchema = z.object({
   thresholds: z.object({
     totalMin: z.number().min(0).max(100),
+    // Produkteierbeslutning 2026-08-28: et resultat like UNDER terskelen gaar til sensor i stedet
+    // for aa strykes av maskinen. Tallet er hvor mange poeng baandet strekker seg — 10 gir 60-70
+    // med dagens terskel paa 70.
+    //
+    // ⚠️ Funksjonen fantes fra #464, men bare per modulversjon og uten standard. Maalt paa stage:
+    // 3 av 101 modulversjoner hadde et vindu satt — og de tre sto paa 0-90, altsaa «vurder alt
+    // manuelt». Vakta som skulle fange grensetilfeller hadde dermed aldri vaert i drift noe sted.
+    //
+    // ⚠️ RELATIVT, ikke absolutt. Foerste forsoek satte «60-70» rett inn, og fem eksisterende
+    // tester ble roede med en gang: en modul kan ha sin EGEN terskel (`passRules.totalMin`), og da
+    // er 60-70 meningsloest — for en modul med krav 50 ligger hele vinduet over bestaatt-grensa.
+    //
+    // Baandet er dessuten AApent oppad: et resultat paa noeyaktig terskelen er bestaatt, ikke et
+    // grensetilfelle. Uten det ble hver eneste akkurat-bestaatt sendt til sensor.
+    //
+    // 10 poeng er bevisst vidt: en kandidat som blir feilaktig stroeket er en dyrere feil enn en
+    // som blir feilaktig bestaatt. Strammes inn hvis sensorlasten blir for hoey.
+    borderlineBelowMin: z.number().min(0).max(100).optional(),
   }),
   weights: z.object({
     practicalMaxScore: z.number().min(1),

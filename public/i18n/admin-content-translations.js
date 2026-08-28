@@ -494,7 +494,7 @@ const adminContentBase = {
 
   "shell.settings.info.practicalMin": "Lowest accepted score on the free-text answer alone. Stops a strong multiple choice from covering a weak practical answer. Leave blank for no limit.",
 
-  "shell.settings.info.borderlineWindow": "A total score inside this band neither passes nor fails — it goes to manual review. Leave blank to send nothing to review on score alone.",
+  "shell.settings.info.borderlineWindow": "A total score inside this band neither passes nor fails — it goes to an assessor. Leave blank to use the platform band, which covers the points just below this module’s pass mark. Set values here only to override it.",
 
   "shell.settings.info.practicalWeight": "How much the free-text answer counts towards the total. The rest is the multiple choice.",
 
@@ -1138,7 +1138,7 @@ const adminContentLateOverrides = {
 
     "shell.settings.info.practicalMin": "Laveste godtatte score på fritekstsvaret alene. Hindrer at et sterkt flervalg dekker over et svakt praktisk svar. Tomt felt betyr ingen grense.",
 
-    "shell.settings.info.borderlineWindow": "Totalscore i dette båndet verken består eller stryker — den sendes til manuell vurdering. Tomt felt sender ingenting til vurdering på score alene.",
+    "shell.settings.info.borderlineWindow": "Totalscore i dette båndet verken består eller stryker — den sendes til sensor. Tomt felt bruker plattformens bånd, som dekker poengene rett under modulens bestått-grense. Sett verdier her bare for å overstyre det.",
 
     "shell.settings.info.practicalWeight": "Hvor mye fritekstsvaret teller i totalen. Resten er flervalget.",
 
@@ -1595,7 +1595,7 @@ const adminContentLateOverrides = {
 
     "shell.settings.info.practicalMin": "Lågaste godtekne score på fritekstsvaret åleine. Hindrar at eit sterkt fleirval dekkjer over eit svakt praktisk svar. Tomt felt tyder inga grense.",
 
-    "shell.settings.info.borderlineWindow": "Totalscore i dette bandet korkje består eller stryk — han blir sendt til manuell vurdering. Tomt felt sender ingenting til vurdering på score åleine.",
+    "shell.settings.info.borderlineWindow": "Totalscore i dette bandet korkje består eller stryk — han blir sendt til sensor. Tomt felt brukar plattforma sitt band, som dekkjer poenga rett under bestått-grensa til modulen. Sett verdiar her berre for å overstyre det.",
 
     "shell.settings.info.practicalWeight": "Kor mykje fritekstsvaret tel i totalen. Resten er fleirvalet.",
 

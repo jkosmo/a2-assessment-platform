@@ -1,6 +1,7 @@
 {
   "thresholds": {
-    "totalMin": 70
+    "totalMin": 70,
+    "borderlineBelowMin": 10
   },
   "weights": {
     "practicalMaxScore": 70,

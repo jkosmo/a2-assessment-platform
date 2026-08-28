@@ -775,11 +775,17 @@ test.describe("admin content browser coverage", () => {
     await page.goto("/admin-content/module/module-1/conversation");
     await page.locator("#tabSettings").click();
 
-    // The three gates are OFF when blank — decisionService resolves them to null.
+    // The two component gates are OFF when blank — decisionService resolves them to null.
     await expect(page.locator("#settingsMcqMinPercent")).toHaveAttribute("placeholder", /No limit|Ingen grense|Inga grense/);
     await expect(page.locator("#settingsPracticalMin")).toHaveAttribute("placeholder", /No limit|Ingen grense|Inga grense/);
-    await expect(page.locator("#settingsBorderlineMin")).toHaveAttribute("placeholder", /None|Ingen/);
-    // Only the overall pass mark falls back to a platform value, and it names the number.
+    // ⚠️ Grensesonen sto her og krevde «Ingen» — altså «tomt betyr av». Det sluttet å være sant da
+    // plattformen fikk et standardbånd: tomt felt betyr nå at båndet under modulens terskel gjelder.
+    // En plassholder som sa «Ingen» ville fortalt forfatteren at ingen saker rutes på score alene,
+    // mens de faktisk gjør det.
+    //
+    // Grensesonen hører nå sammen med totalMin: begge navngir tallet de faller tilbake på.
+    await expect(page.locator("#settingsBorderlineMin")).toHaveAttribute("placeholder", /60/);
+    await expect(page.locator("#settingsBorderlineMax")).toHaveAttribute("placeholder", /70/);
     await expect(page.locator("#settingsTotalMin")).toHaveAttribute("placeholder", /70/);
   });
 

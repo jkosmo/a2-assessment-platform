@@ -9,6 +9,7 @@ import { getAssessmentRules } from "../../config/assessmentRules.js";
 // publisert (unpublished_draft) og (b) modul som er live med eldre publisert versjon
 // pluss en nyere upublisert draft. Sistnevnte vises fortsatt til participants
 // (activeVersion er publisert), så label må kommunisere det tydelig.
+
 export type ModuleLibraryStatus =
   | "archived"
   | "unpublished_draft"
@@ -195,6 +196,14 @@ export async function getModuleContentBundle(moduleId: string) {
     // som kan ha andre regler, og dette er ikke modulinnhold.
     platformDefaults: {
       totalMin: getAssessmentRules().thresholds.totalMin,
+      // #464-standard: hvor mange poeng UNDER terskelen som gaar til sensor naar modulen ikke har
+      // sitt eget vindu. Sendes som selve baandet, ikke som et ferdig regnet vindu — forfatterflaten
+      // kjenner modulens terskel og regner plassholderen selv.
+      //
+      // ⚠️ Foerste forsoek la et ferdig `effectiveBorderlineWindow` paa hver modulversjon. QA-porten
+      // fant at INGEN klient leste det — samme feil som #967 — og at dette panelet allerede har
+      // moensteret for nettopp dette (`platformDefaults.totalMin` → «70 (plattformstandard)»).
+      borderlineBelowMin: getAssessmentRules().thresholds.borderlineBelowMin ?? null,
     },
   };
 }

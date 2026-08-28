@@ -871,10 +871,16 @@ describe("decision service", () => {
 
     it("returns 'Automatic fail by threshold rules.' for a score below threshold with no insufficient signal", async () => {
       const { resolveAssessmentDecision } = await import("../../src/modules/assessment/decisionService.js");
-      // Default sum=14: recomputedPractical=49; mcqScaled=20 → total=49+20=69 < 70; confidence has no patterns
+      // ⚠️ Sto på total=69 — ett poeng under grensa. Etter at standard-grensebåndet (10 poeng under
+      // terskelen) ble innført, er det nettopp et tilfelle som skal til SENSOR, ikke strykes
+      // automatisk. Testen festet altså den gamle policyen.
+      //
+      // Den måler fortsatt det navnet sitt sier — automatisk stryk under terskelen — men med et
+      // resultat som ligger UNDER båndet. Grensetilfellet er dekket av egne tester lenger opp.
+      // Default sum=14: recomputedPractical=49; mcqScaled=0 → total=49 < 60.
       const result = resolveAssessmentDecision({
-        mcqScaledScore: 20,
-        mcqPercentScore: 67,
+        mcqScaledScore: 0,
+        mcqPercentScore: 0,
         llmResult: buildLlmResult({
           evidence_sufficiency: "sufficient",
           recommended_outcome: "fail",
@@ -884,7 +890,7 @@ describe("decision service", () => {
         }),
         assessmentPolicy: null,
       });
-      expect(result.totalScore).toBe(69);
+      expect(result.totalScore).toBe(49);
       expect(result.autoFailForInsufficientEvidence).toBe(false);
       expect(result.needsManualReview).toBe(false);
       expect(result.decisionReason).toBe("Automatic fail by threshold rules.");
@@ -1054,6 +1060,175 @@ describe("decision service", () => {
     );
     expect(manualReviewCreate).not.toHaveBeenCalled();
     expect(submissionUpdate).toHaveBeenCalledWith("submission-948c", SubmissionStatus.COMPLETED);
+  });
+
+  // ── Grensevinduet, nå med en standard (produkteier 2026-08-28) ─────────────────────────────────
+  //
+  // Utløseren var et ekte skjermbilde fra stage: «Ikkje bestått — 66,67 poeng. Kravet var 70.»
+  // ⚠️ Funksjonen fantes fra #464, men bare per modulversjon og uten standard. Målt på stage: 3 av
+  // 101 modulversjoner hadde et vindu — og de tre sto på 0-90, altså «vurder alt manuelt». Vakta
+  // hadde dermed aldri vært i drift noe sted.
+  //
+  // 60-70 er bevisst vidt: en kandidat som blir feilaktig strøket er en dyrere feil enn en som blir
+  // feilaktig bestått.
+
+  it("standardvinduet ruter 66,67 til sensor i stedet for å stryke automatisk", async () => {
+    assessmentDecisionCreate.mockResolvedValue({
+      id: "decision-bl1",
+      passFailTotal: false,
+      decisionReason: "Routed to manual review: borderline result.",
+    });
+    manualReviewCreate.mockResolvedValue({ id: "review-bl1", triggerReason: "borderline" });
+    submissionUpdate.mockResolvedValue({ id: "submission-bl1" });
+
+    const { createAssessmentDecision } = await import("../../src/modules/assessment/decisionService.js");
+
+    await createAssessmentDecision({ jobId: "job-fence", fence: { lockedBy: "worker-test", lockedAt: new Date(0) },
+      submissionId: "submission-bl1",
+      userId: "user-bl1",
+      moduleVersionId: "module-version-1",
+      rubricVersionId: "rubric-version-1",
+      promptTemplateVersionId: "prompt-version-1",
+      // 10/20 rubrikk = 35 praktisk, + 20 MCQ (66,7 %) ⇒ 55. Under 70, innenfor 60-70? Nei — vi
+      // trenger et tall MELLOM 60 og 70. 12/20 = 42 praktisk + 24,67 MCQ ⇒ 66,67.
+      mcqScaledScore: 24.67,
+      mcqPercentScore: 82,
+      llmResult: buildLlmResult({
+        rubric_scores: { a: 3, b: 3, c: 2, d: 2, e: 2 },
+        rubric_total: 12,
+      }),
+      // Ingen modulpolicy ⇒ standarden fra regelfila skal gjelde.
+    });
+
+    const written = assessmentDecisionCreate.mock.calls[0][0] as { totalScore: number; passFailTotal: boolean };
+    expect(written.totalScore).toBeGreaterThanOrEqual(60);
+    expect(written.totalScore).toBeLessThanOrEqual(70);
+    expect(written.passFailTotal).toBe(false);
+    // ⚠️ Kjernen: den skal til SENSOR, ikke settes som automatisk stryk.
+    expect(manualReviewCreate).toHaveBeenCalled();
+    expect(submissionUpdate).toHaveBeenCalledWith("submission-bl1", SubmissionStatus.UNDER_REVIEW);
+    expect(upsertCertificationStatusFromDecision).not.toHaveBeenCalled();
+  });
+
+  // Motprøven. Uten den ville «rut alt til sensor» også vært grønt — og det er nøyaktig feilen de
+  // tre 0-90-modulene på stage gjør.
+  it("et resultat godt under vinduet strykes fortsatt automatisk", async () => {
+    assessmentDecisionCreate.mockResolvedValue({
+      id: "decision-bl2",
+      passFailTotal: false,
+      decisionReason: "Automatic fail by threshold rules.",
+    });
+    submissionUpdate.mockResolvedValue({ id: "submission-bl2" });
+
+    const { createAssessmentDecision } = await import("../../src/modules/assessment/decisionService.js");
+
+    await createAssessmentDecision({ jobId: "job-fence", fence: { lockedBy: "worker-test", lockedAt: new Date(0) },
+      submissionId: "submission-bl2",
+      userId: "user-bl2",
+      moduleVersionId: "module-version-1",
+      rubricVersionId: "rubric-version-1",
+      promptTemplateVersionId: "prompt-version-1",
+      mcqScaledScore: 0,
+      mcqPercentScore: 0,
+      llmResult: buildLlmResult({ rubric_scores: { a: 1, b: 1, c: 1, d: 1, e: 1 }, rubric_total: 5 }),
+    });
+
+    const written = assessmentDecisionCreate.mock.calls[0][0] as { totalScore: number };
+    expect(written.totalScore).toBeLessThan(60);
+    expect(manualReviewCreate).not.toHaveBeenCalled();
+    expect(submissionUpdate).toHaveBeenCalledWith("submission-bl2", SubmissionStatus.COMPLETED);
+  });
+
+  // Modulens eget vindu skal fortsatt vinne — standarden er en bunnplanke, ikke en overstyring.
+  it("modulens eget vindu vinner over standarden", async () => {
+    assessmentDecisionCreate.mockResolvedValue({ id: "decision-bl3", passFailTotal: false, decisionReason: "x" });
+    submissionUpdate.mockResolvedValue({ id: "submission-bl3" });
+
+    const { createAssessmentDecision } = await import("../../src/modules/assessment/decisionService.js");
+
+    await createAssessmentDecision({ jobId: "job-fence", fence: { lockedBy: "worker-test", lockedAt: new Date(0) },
+      submissionId: "submission-bl3",
+      userId: "user-bl3",
+      moduleVersionId: "module-version-1",
+      rubricVersionId: "rubric-version-1",
+      promptTemplateVersionId: "prompt-version-1",
+      mcqScaledScore: 24.67,
+      mcqPercentScore: 82,
+      llmResult: buildLlmResult({ rubric_scores: { a: 3, b: 3, c: 2, d: 2, e: 2 }, rubric_total: 12 }),
+      // Et smalt vindu som IKKE dekker 66,67 ⇒ ingen manuell vurdering. Standardbåndet (60-70)
+      // ville fanget den; modulens eget vindu skal vinne.
+      assessmentPolicy: { passRules: { borderlineWindow: { min: 69, max: 69.5 } } },
+    });
+
+    expect(manualReviewCreate).not.toHaveBeenCalled();
+    expect(submissionUpdate).toHaveBeenCalledWith("submission-bl3", SubmissionStatus.COMPLETED);
+  });
+
+  // Det skarpeste tilfellet: ETT poeng under grensa. En eksisterende test festet dette som
+  // «automatisk stryk» — den er endret, og dette er påstanden som erstatter den.
+  it("ett poeng under terskelen går til sensor, ikke automatisk stryk", async () => {
+    const { resolveAssessmentDecision } = await import("../../src/modules/assessment/decisionService.js");
+    const result = resolveAssessmentDecision({
+      mcqScaledScore: 20,
+      mcqPercentScore: 67,
+      llmResult: buildLlmResult({
+        evidence_sufficiency: "sufficient",
+        recommended_outcome: "fail",
+        manual_review_recommended: false,
+        manual_review_reason_code: "none",
+        confidence_note: "High confidence; score falls below the pass threshold.",
+      }),
+      assessmentPolicy: null,
+    });
+    expect(result.totalScore).toBe(69);
+    expect(result.needsManualReview).toBe(true);
+    expect(result.passFailTotal).toBe(false);
+  });
+
+  // Og motstykket: NØYAKTIG på terskelen er bestått, ikke et grensetilfelle. Uten den åpne øvre
+  // grensa ville hver eneste akkurat-bestått blitt sendt til sensor.
+  it("nøyaktig på terskelen er bestått, ikke grensetilfelle", async () => {
+    const { resolveAssessmentDecision } = await import("../../src/modules/assessment/decisionService.js");
+    const result = resolveAssessmentDecision({
+      mcqScaledScore: 21,
+      mcqPercentScore: 70,
+      llmResult: buildLlmResult(),
+      assessmentPolicy: null,
+    });
+    expect(result.totalScore).toBe(70);
+    expect(result.needsManualReview).toBe(false);
+    expect(result.passFailTotal).toBe(true);
+  });
+
+  // ⚠️ Selve «relativt»-poenget, som QA-porten pekte på at ingen test bandt.
+  //
+  // Modulen har SIN EGEN terskel på 50. Standardbåndet skal da dekke 40-50 — ikke 60-70. Et fast
+  // tallpar ville lagt hele vinduet OVER bestått-grensa for denne modulen, og da ville hver
+  // bestått i 60-70 gått til sensor mens det tiltenkte båndet ble strøket automatisk.
+  it("standardbåndet følger modulens EGEN terskel, ikke den globale", async () => {
+    const { resolveAssessmentDecision } = await import("../../src/modules/assessment/decisionService.js");
+
+    // 45 poeng: under modulens terskel (50), innenfor båndet 40-50 ⇒ sensor.
+    const inBand = resolveAssessmentDecision({
+      mcqScaledScore: 0,
+      mcqPercentScore: 0,
+      llmResult: buildLlmResult({ rubric_scores: { a: 3, b: 3, c: 3, d: 2, e: 2 }, rubric_total: 13 }),
+      assessmentPolicy: { passRules: { totalMin: 50 } },
+    });
+    expect(inBand.totalScore).toBeGreaterThanOrEqual(40);
+    expect(inBand.totalScore).toBeLessThan(50);
+    expect(inBand.needsManualReview).toBe(true);
+
+    // 65 poeng: over modulens terskel ⇒ bestått. Ville vært INNE i et fast 60-70-vindu.
+    const above = resolveAssessmentDecision({
+      mcqScaledScore: 20,
+      mcqPercentScore: 67,
+      llmResult: buildLlmResult(),
+      assessmentPolicy: { passRules: { totalMin: 50 } },
+    });
+    expect(above.totalScore).toBeGreaterThan(50);
+    expect(above.needsManualReview).toBe(false);
+    expect(above.passFailTotal).toBe(true);
   });
 });
 

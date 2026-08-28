@@ -587,7 +587,9 @@ describe("MVP admin content management and publication", () => {
         moduleId: seedModule.id,
         deliveryType: "text",
         responseJson: {
-          response: "Completed module should still remain visible after later publication.",
+          // ⚠️ Lengden er load-bearing — se kommentaren i teksten.
+          response:
+            "Completed module should still remain visible after later publication. Denne teksten er bevisst lang nok til at den hermetiske LLM-stubben gir toppscore (over 800 tegn gir 4 per kriterium), slik at resultatet lander KLART over bestaatt-grensa og ikke inne i grensebaandet paa ti poeng under terskelen. Uten det ville denne testen — som handler om SYNLIGHET av fullfoerte moduler etter en publisering, ikke om vurderingspolicy — blitt roed hver gang noen justerer baandet. Fiksturen sier altsaa noe om hva testen maaler: den trenger en fullfoert innlevering, og da maa den score som en fullfoert innlevering. Teksten gjentar seg med vilje for aa naa lengden. Den unngaar dessuten ord som utloeser roede flagg i stubben — foerste utkast forklarte nettopp det, og brukte da selv et av ordene. Lengden er load-bearing, og det samme er ordvalget.",
           reflection: "Creating a completed module baseline before publishing a new module.",
           promptExcerpt: "Document baseline completion before publication test.",
         },
@@ -844,6 +846,9 @@ describe("MVP admin content management and publication", () => {
         assessmentPolicy,
       });
     expect(moduleVersionResponse.status).toBe(201);
+    // ⚠️ Policyen lagres NØYAKTIG som sendt. Grensevinduet festes bevisst IKKE her — det er en
+    // avledet verdi, og en avledet verdi i innholdet blir gammel når terskelen endres. Se
+    // begrunnelsen i assessmentPolicyCodec.ts.
     expect(moduleVersionResponse.body.moduleVersion.assessmentPolicyJson).toBe(JSON.stringify(assessmentPolicy));
 
     await request(app)

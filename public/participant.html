@@ -9,7 +9,11 @@
     <link rel="stylesheet" href="/static/toast.css" />
     <style>
       .assessment-progress { margin-top: calc(var(--space-1) * 1.25); font-size: 16px; font-weight: 600; color: var(--color-progress-text); }
-      .assessment-progress-seconds { margin-top: calc(var(--space-1) * 0.75); font-size: 28px; font-weight: 800; color: var(--color-blue); letter-spacing: 0.3px; }
+      /* Telleren staar nå på linje med overskriften. Den skal fortsatt lese som «det skjer noe» —
+         derfor aksentfargen og halvfet — men 28px/800 gjorde den til sidens største element. */
+      .assessment-head { display: flex; align-items: baseline; gap: var(--space-1); flex-wrap: wrap; }
+      .assessment-head h2 { margin-bottom: 0; }
+      .assessment-progress-seconds { font-size: 16px; font-weight: 700; color: var(--color-blue); letter-spacing: 0.2px; }
       .inline { display: inline-block; width: auto; }
       /* #475: pre-submit attestation group — responsibility + KI declaration share ONE tile language,
          under a quiet "Før du leverer" group. Understated: the answer field earns the space; this is a
@@ -325,7 +329,9 @@
       /* #865: moduler OG seksjoner åpner inline, in-place under raden (nested disclosure) — ingen
          modal, ingen arbeidsflate langt nede. Panelet får INNHOLDETS EGEN HØYDE (ingen intern scroll),
          med en klebrig topplinje (tittel + Lukk) og «Gå til neste element» på slutten. */
-      .course-item { position: relative; display: grid; gap: 4px; }
+      /* scroll-margin-top: når en seksjon åpnes rulles radens topp til toppen av skjermen
+         (participant.js: scrollItemIntoView). Uten litt luft klistrer den seg inntil kanten. */
+      .course-item { position: relative; display: grid; gap: 4px; scroll-margin-top: var(--space-2); }
       .course-item .course-module-row { width: 100%; }
       .course-inline-panel { border-left: 3px solid var(--color-blue); background: var(--color-blue-light); border-radius: 0 8px 8px 0; overflow: hidden; }
       /* #975: `.course-inline-panel[hidden] { display: none; }` er fjernet — samme grunn som for
@@ -503,13 +509,18 @@
     </section>
 
     <section class="card hidden" id="assessmentSection">
-      <h2 data-i18n="assessment.title">Assessment</h2>
+      <!-- Produkteier 2026-08-28: «Vurdering & forløpt 15 s kan skrives på en linje.» Telleren sto
+           som egen blokk under, i 28px/800 — større enn noen overskrift i appen. Den hører sammen
+           med overskriften, ikke under den. -->
+      <div class="assessment-head">
+        <h2 data-i18n="assessment.title">Assessment</h2>
+        <div id="assessmentProgressSeconds" class="assessment-progress-seconds hidden"></div>
+      </div>
       <div class="small" id="assessmentGateHint"></div>
       <button id="queueAssessment" class="btn-secondary" data-i18n="assessment.queue">Start assessment</button>
       <button id="checkAssessment" class="btn-secondary" data-i18n="assessment.checkAssessment">Check progress</button>
       <div class="small" id="checkAssessmentHint"></div>
       <div id="assessmentProgressStatus" class="assessment-progress" aria-live="polite" aria-atomic="true"></div>
-      <div id="assessmentProgressSeconds" class="assessment-progress-seconds hidden"></div>
       <button id="checkResult" class="btn-primary" data-i18n="assessment.checkResult">View result</button>
       <div class="small" id="resultSummaryLabel" data-i18n="assessment.resultSummary">Result summary:</div>
       <div id="resultSummary" class="summary-stack"></div>
