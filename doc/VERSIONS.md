@@ -2,6 +2,56 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.41.0 - 2026-08-28
+
+### #1022 — modultittelen lokaliseres på serveren
+
+⚠️ **Saken hadde feil premiss, og undersøkelsen rettet den.** Jeg skrev at administratoren så en
+JSON-blobb. Det gjorde hen ikke — klienten parset den.
+
+Men det ekte problemet var vanskeligere å se: TO implementasjoner av «hvilket språk viser vi», med
+ulik reservekjede.
+
+```
+server:  inline[locale] ?? inline["en-GB"] ?? førsteTilgjengelige ?? input
+klient:  parsed[locale] ?? parsed["en-GB"] ?? parsed.nb          ?? raw
+```
+
+En tittel som **bare er oversatt til nynorsk** — en lovlig tilstand etter #892 — har verken `en-GB`
+eller `nb`. Klienten falt da helt ned på rådata, og DA fikk administratoren JSON-blobben.
+
+Serveren lokaliserer nå med `localizeContentText`. Klienten tolker ingenting.
+
+### Rotårsak: jeg kjørte ikke alle suitene
+
+QA-porten ga NO-GO på en **regresjon i en eksisterende e2e-test** som stubbet den gamle kontrakten.
+Den ville jeg fanget selv — hvis jeg hadde kjørt e2e-suiten. Jeg kjørte enhet og integrasjon, og
+antok resten.
+
+⚠️ Det er samme feilklasse som resten av denne runden, bare på prosessnivå: **jeg sjekket der jeg
+så, og antok om resten.** Sveipen min etter eksisterende tester lette dessuten bare i `test/`, ikke
+i `test/e2e/`.
+
+Porten fant også at begge mine nye tester kjørte UTEN språk-header og ble grønne via reservekjeden —
+en mutant som hardkodet «nb» ville bestått. En tredje test krever nå at språket følger forespørselen.
+
+### Og min egen test veltet fire andre
+
+Første utgave av integrasjonstesten hentet en vilkårlig seedet bruker med `findFirst()` og hengte
+innleveringer på hen. Det veltet fire tester i tre helt andre filer — GDPR, påminnelser og outbox —
+som teller rader for den brukeren.
+
+⚠️ Feilene så ut som flakingen fra #1021, men var mine. Testen lager nå sin egen bruker og rydder
+etter seg i `afterAll`.
+
+Det er samme lærdom som #1021, fra motsatt side: **en test som legger igjen tilstand ødelegger for
+andre, og symptomet dukker opp et helt annet sted enn årsaken.**
+
+### Sveipen fant tre flater til
+
+Klagekøen (⚠️ der **søkefeltet søker i den rå JSON-strengen**), rapportene (som hardkoder `en-GB`,
+så en norsk leser får engelske titler), og `certificationLevel`. Ført som **#1027**.
+
 ## 2.40.0 - 2026-08-28
 
 ### #1026 — et forbedringsråd kan fjerne sensoren fra sløyfa

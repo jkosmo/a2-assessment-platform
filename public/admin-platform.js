@@ -450,17 +450,17 @@ async function retryAssessment(submissionId, button) {
 
 // Modultittelen er lokalisert JSON lagret som TEKST. `typeof === "string"` er sant for BEGGE
 // former og måler ingenting — samme felle som stage-suiten gikk i.
-function moduleTitleOf(raw) {
-  if (typeof raw !== "string") return "—";
-  try {
-    const parsed = JSON.parse(raw);
-    if (parsed && typeof parsed === "object") {
-      return parsed[currentLocale] ?? parsed["en-GB"] ?? parsed.nb ?? raw;
-    }
-  } catch {
-    /* ren streng = ett språk, ikke oversatt */
-  }
-  return raw;
+/**
+ * #1022: serveren lokaliserer nå tittelen, så her skal det ikke tolkes noe.
+ *
+ * ⚠️ Denne parset tidligere JSON-strengen selv, med en ANNEN reservekjede enn serverens: den falt
+ * tilbake på `nb`, og fantes ikke nb, viste den den rå JSON-strengen. En tittel som bare er
+ * oversatt til nynorsk — en helt lovlig tilstand etter #892 — traff nøyaktig det.
+ *
+ * To implementasjoner av «hvilket språk viser vi» er én for mye. Serveren eier spørsmålet.
+ */
+function moduleTitleOf(value) {
+  return typeof value === "string" && value.trim() ? value : "—";
 }
 
 // Dato og klokkeslett uten sekunder. `toLocaleString()` ga «26.8.2026, 21:43:21» — sekundene

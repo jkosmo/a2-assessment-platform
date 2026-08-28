@@ -26,7 +26,9 @@ const FAILED_ROW = {
   participantName: "Kari Nordmann",
   participantEmail: "kari@company.com",
   moduleId: "module-1",
-  moduleTitle: JSON.stringify({ "en-GB": "Module One", nb: "Modul Én", nn: "Modul Éin" }),
+  // #1022: SERVEREN lokaliserer nå tittelen. Stubben speiler den nye kontrakten — en ferdig
+  // streng, ikke et lokalisert kart klienten må tolke.
+  moduleTitle: "Modul Én",
 };
 
 async function mockAdminApis(page: Page, failedAssessments: unknown[]) {
@@ -120,7 +122,12 @@ test.describe("#953 — vurderinger som ga opp", () => {
     const card = page.locator("#failedAssessmentsCard");
     await expect(card).toBeVisible();
     await expect(card).toContainText("Kari Nordmann");
-    // Modultittelen er lokalisert JSON lagret som TEKST — den skal slås opp, ikke vises rå.
+    // #1022: tittelen kommer ferdig lokalisert fra serveren og skal vises som den er.
+    //
+    // ⚠️ Påstanden er nå på INNHOLDET. Den gamle sjekket bare at «{"en-GB"» ikke sto der — og den
+    // ville vært grønn for en kolonne som var helt tom, eller viste «—». Det er samme
+    // eksistenssjekk-felle som resten av denne runden.
+    await expect(card).toContainText("Modul Én");
     await expect(card).not.toContainText('{"en-GB"');
 
     await page.locator("#failedAssessmentsBody button").first().click();

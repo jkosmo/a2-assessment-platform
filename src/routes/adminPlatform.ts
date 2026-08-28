@@ -20,6 +20,8 @@ import { recordAuditEvent } from "../services/auditService.js";
 import { auditActions, auditEntityTypes } from "../observability/auditEvents.js";
 import { AppError } from "../errors/AppError.js";
 import { DEFAULT_CONSENT_BODY } from "../config/consent.js";
+import { localizeContentText } from "../i18n/content.js";
+import { normalizeLocale } from "../i18n/locale.js";
 
 const adminPlatformRouter = Router();
 
@@ -123,10 +125,13 @@ adminPlatformRouter.put("/", async (request, response, next) => {
 // allerede er `FAILED` — den oppfinner ingen tilstand og eier ingen kø. Eneste handling er å kjøre
 // vurderingen på nytt, og den går gjennom `POST /api/assessments/:submissionId/run`, som fantes fra
 // før. Derfor ingen skriveendepunkt her.
-adminPlatformRouter.get("/failed-assessments", async (_request, response, next) => {
+adminPlatformRouter.get("/failed-assessments", async (request, response, next) => {
   try {
     // #953: lista er begrenset, telleren er ikke. Uten `total` ville en administrator sett «140» i
     // merket og 100 rader på siden, og trodd tallene var i utakt igjen.
+    // #1022: tittelen er en lokalisert JSON-streng i databasen. Sendes den rått, må hver klient
+    // tolke den selv — og da får vi to implementasjoner av «hvilket språk viser vi».
+    const locale = normalizeLocale(request.context?.locale) ?? "nb";
     const LIST_LIMIT = 100;
     const [stuck, total] = await Promise.all([
       assessmentJobRepository.findStuckFailedAssessments(LIST_LIMIT),
@@ -151,7 +156,10 @@ adminPlatformRouter.get("/failed-assessments", async (_request, response, next) 
           participantName: submission.user.name,
           participantEmail: submission.user.email,
           moduleId: submission.module.id,
-          moduleTitle: submission.module.title,
+          // ⚠️ Klienten HADDE en egen parser her, med en annen reservekjede enn serverens: den
+          // falt tilbake på `nb`, og fantes ikke nb, viste den den rå JSON-strengen. En tittel som
+          // bare er oversatt til nynorsk — en helt lovlig tilstand etter #892 — traff nøyaktig det.
+          moduleTitle: localizeContentText(locale, submission.module.title),
         };
       }),
     });
