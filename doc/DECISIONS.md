@@ -352,6 +352,54 @@ rollespørsmål — og derfor en egen sak, ikke en justering av dette settet.
 stedet for å oppdages i en nattskanning.
 **Sak:** #962, #1000, #941 · **Status:** avklart 2026-08-23
 
+### Sensor og klagebehandler avgrenses IKKE til tildelte saker
+
+**Hvorfor:** produkteier 2026-08-28, på spørsmålet om `REVIEWER` og `APPEAL_HANDLER` bør begrenses
+til saker de faktisk er tildelt: **nei.**
+
+Koblingen finnes i datamodellen — `ManualReview.reviewerId` og `Appeal.resolvedById` — så
+avgrensningen ville vært den billigste av alle å innføre. Den skal likevel ikke innføres.
+
+⚠️ **Grunnen er at det å se på en kollegas sak er en LEGITIM arbeidsflyt**, ikke et smutthull:
+kalibrering, opplæring, og å steppe inn ved sykdom. En avgrensning her ville brutt noe som virker,
+for å lukke et hull som ikke er der.
+
+Dette snevrer inn #1000: spørsmålet om «hvem hører til hvem» gjelder bare `SUBJECT_MATTER_OWNER` og
+`REPORT_READER`.
+
+**Sak:** #1000 · **Status:** avklart 2026-08-28
+
+### «Mine mentees» har ingen datakilde i dag — og det blokkerer avgrensningen
+
+**Hvorfor:** produkteier 2026-08-28: `User.manager` er **ikke fylt** i produksjon i dag, men *«det
+vil være ønskelig å populere det i fremtiden»*.
+
+Feltet finnes (`prisma/schema.prisma:74`) og HR-synken kan skrive til det
+(`orgSyncService.ts:171`), men det står tomt.
+
+⚠️ **Rekkefølgen følger av dette, og den er ikke valgfri:** en avgrensning av `REPORT_READER` mot en
+tom relasjon gir **null tilgang til alle**. Ingen mentor ville kunne følge opp noen. Feltet må
+fylles først, og forholdet må vise seg å være det riktige, før håndhevingen kan skrus på.
+
+Inntil da er tilgangen **bevisst åpen og målt**, ikke uregulert: hver lesing av et revisjonsspor
+logges med hvilket forhold som faktisk knyttet leseren til innleveringen, og `roleOnly: true` når
+ingen gjorde det (#1000, v2.42.0).
+
+**Sak:** #1000 · **Status:** avklart 2026-08-28, avventer at `manager` fylles
+
+### Tilgangen står åpen mens den måles
+
+**Hvorfor:** produkteier 2026-08-28, på spørsmålet om det er greit å la de fem rollene beholde full
+lesetilgang mens vi samler måledata: **ja.**
+
+Avveiningen er mellom personvern og at systemet virker. Å stramme inn først ville betydd at en
+lærer ikke får se en kandidat hen faktisk følger opp — og det oppdages først når noen klager.
+
+⚠️ Dette er et **tidsavgrenset** valg, ikke en permanent tilstand. Det henger på at målingen faktisk
+leses: se `roleOnly` i hendelsen `submission_audit_trail_read`.
+
+**Sak:** #1000 · **Status:** avklart 2026-08-28
+
 ## Publisering av kurs
 
 ### Et kurs kan publiseres uten moduler — seksjoner alene er nok

@@ -2,6 +2,71 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.42.0 - 2026-08-28
+
+### #1000 — lesing av et revisjonsspor logges nå, med forholdet
+
+Fem roller kan lese ETHVERT revisjonsspor. To av dem er begrunnet med et forhold til kandidaten —
+«mine kandidater», «mine mentees» — som datamodellen ikke har.
+
+⚠️ **Et funn saken ikke nevnte: lesingen ble ikke logget i det hele tatt.** Sporet bærer navn og
+e-post til både kandidaten og alle som har behandlet saken. Ingen kunne se hvem som hadde lest det.
+
+Hver lesing logges nå med hvilket forhold som faktisk knyttet leseren til innleveringen — tildelt
+vurderer, behandlet anke, eier av modulinnholdet, eller kandidaten selv — og `roleOnly: true` når
+INGEN av dem gjaldt.
+
+**`roleOnly` er tallet saken hviler på.** Om noen uker finnes det data på hvor ofte et spor leses
+uten at noe forhold finnes, og mønsteret vil vise hva «mine kandidater» betyr i praksis.
+
+⚠️ **Ingen innstramming.** En avgrensning mot en relasjon som ikke finnes gir null tilgang til alle
+— da kunne ingen lærer fulgt opp noen. Modellen først, håndhevingen etterpå.
+
+To detaljer:
+
+- Metadatanøkkelen er `subjectSubmissionId`, **ikke** `submissionId`. Sistnevnte ville fylt den
+  denormaliserte kolonnen (`auditService.ts:88`), lagt tilgangshendelsen inn i deltakerens eget spor
+  og skapt lesinger-av-lesinger. Mutasjonsverifisert.
+- Loggingen kan aldri velte lesingen. En manglende tilgangslogg er et hull i sporbarheten, ikke en
+  grunn til å nekte en lærer å se en sak.
+
+### QA-porten fant hullet som teller
+
+⚠️ **Ingen av de tre første testene SKAPTE et forhold.** `findReaderRelations` kunne vært koblet til
+`appealedById` i stedet for `resolvedById` — kandidaten som anker, ikke den som behandler — og alle
+ville vært grønne. Da ville `roleOnly` vært stille feil, og det er tallet hele GDPR-beslutningen
+skal hvile på.
+
+En måling som er feil er verre enn ingen måling: den ville fortalt at ingen leser noe uten et
+forhold, mens sannheten var motsatt. Tre nye tester lager nå forholdene på ekte, mutasjonsverifisert
+med nøyaktig det scenarioet.
+
+Porten fant også at den tomme `catch {}` mistet tilgangsloggen i **stillhet** under backfill, der
+kjedelåsen holdes i opptil to minutter. Et hull i en tilgangslogg oppdages ellers først når noen
+spør hvem som har lest hva. Tapet logges nå som en driftshendelse.
+
+To ting den flagget som ikke er blokkere, men hører i en DPIA: radene kan **aldri slettes** (enhver
+sletting bryter hashkjeden), og **403-forsøk logges ikke** — den som prøver seg og blir avvist,
+etterlater ingen spor.
+
+### Tre beslutninger ført i DECISIONS.md
+
+Produkteier 2026-08-28: sensor og klagebehandler avgrenses **ikke** til tildelte saker (å se en
+kollegas sak er en legitim arbeidsflyt); `User.manager` er ikke fylt i dag, men ønskes fylt — det
+gjør saken **blokkert på data, ikke på en beslutning**; og tilgangen står bevisst åpen mens den
+måles.
+
+Det snevrer inn #1000 til `SUBJECT_MATTER_OWNER` og `REPORT_READER`.
+
+### Sakslista ryddet: 93 → 78
+
+Femten åpne saker beskrev noe koden allerede motbeviser. Alle verifisert i kildekoden, ikke bare mot
+endringsloggen — og tre stikkprøvd for hånd før lukking.
+
+⚠️ Gjennomgangen fant også at familiene er større enn antatt: den kjente «LLM-fritekst styrer en
+beslutning» har seks saker, men **lokalisert-tekst-familien har rundt tretten**. Lista vokser fordi
+noen få rotårsaker kartlegges, ikke fordi kvaliteten faller.
+
 ## 2.41.0 - 2026-08-28
 
 ### #1022 — modultittelen lokaliseres på serveren

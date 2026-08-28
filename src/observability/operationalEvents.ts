@@ -10,6 +10,12 @@ export const operationalEvents = {
   course: {
     completionCheckFailed: "course_completion_check_failed",
   },
+  audit: {
+    // #1000: tilgangsloggen for et revisjonsspor kunne ikke skrives. Skjer typisk mens
+    // backfill/skrubbing holder kjedelåsen. Lesingen gikk gjennom — det er SPORET av den som
+    // mangler, og et hull i en tilgangslogg oppdages ellers først når noen spør hvem som har lest hva.
+    trailAccessLogFailed: "audit_trail_access_log_failed",
+  },
   assessment: {
     queueBacklog: "assessment_queue_backlog",
     jobStaleLockDetected: "assessment_job_stale_lock_detected",
@@ -124,6 +130,11 @@ export type OperationalEventMetadataByName = {
   // automatisk stryk i stedet. Denne hendelsen sier hvor ofte reserven er alene om å fyre.
   //
   // ⚠️ Ingen fritekst: bare hvilke mønstre som traff, og hvor de traff.
+  [operationalEvents.audit.trailAccessLogFailed]: EventMetadata<{
+    subjectSubmissionId: string;
+    readerUserId: string;
+    errorMessage: string;
+  }>;
   [operationalEvents.assessment.insufficientEvidencePatternOnly]: EventMetadata<{
     jobId: string;
     submissionId: string;

@@ -4,6 +4,11 @@ type NestedValue<T> = T extends string ? T : { [K in keyof T]: NestedValue<T[K]>
 
 export const auditEntityTypes = {
   agentAuthoringToken: "agent_authoring_token",
+  // #1000: en LESING av et revisjonsspor. ⚠️ Egen type med vilje — ikke «submission». Den
+  // denormaliserte `submissionId`-kolonnen fylles bare når typen ER «submission» eller metadataen
+  // bærer nøkkelen `submissionId`, så en tilgangshendelse med `subjectSubmissionId` havner IKKE i
+  // deltakerens eget spor. Da slipper vi både støy og lesinger-av-lesinger.
+  submissionAuditAccess: "submission_audit_access",
   appeal: "appeal",
   assessmentDecision: "assessment_decision",
   assessmentJob: "assessment_job",
@@ -171,6 +176,9 @@ export const auditActions = {
   audit: {
     // #843/#806: records a historical PII scrub of audit metadata (re-seal approach A). No PII itself.
     metadataScrubbed: "audit_metadata_scrubbed",
+    // #1000: noen leste et revisjonsspor. Sporet inneholder navn og e-post til både kandidaten og
+    // alle som har behandlet saken — altså personopplysninger. At det leses skal kunne etterprøves.
+    submissionTrailRead: "submission_audit_trail_read",
   },
   submission: {
     created: "submission_created",
@@ -477,6 +485,27 @@ export type AuditMetadataByAction = {
   [auditActions.manualReview.superseded]: EventMetadata<{
     newSubmissionId: string;
     supersededAt: string;
+  }>;
+  // #1000: hvem leste hvilket spor, med hvilken rolle — og om noe FORHOLD i datamodellen faktisk
+  // knyttet dem til innleveringen.
+  //
+  // ⚠️ Det siste er hele poenget. Fem roller kan lese alt, men to av dem er begrunnet med et
+  // forhold («mine kandidater», «mine mentees») som datamodellen ikke har. Uten å måle hvor ofte
+  // lesingen faktisk skjer UTEN et forhold, blir enhver innstramming en gjetning.
+  [auditActions.audit.submissionTrailRead]: EventMetadata<{
+    /** ⚠️ IKKE `submissionId` — den nøkkelen ville lagt hendelsen inn i deltakerens eget spor. */
+    subjectSubmissionId: string;
+    readerRoles: string[];
+    /** Leseren er kandidaten selv. */
+    isOwnSubmission: boolean;
+    /** En ManualReview på denne innleveringen er tildelt leseren. */
+    isAssignedReviewer: boolean;
+    /** En Appeal på denne innleveringen er behandlet av leseren. */
+    isAssignedAppealHandler: boolean;
+    /** Leseren eier innholdet i modulen innleveringen gjelder. */
+    ownsModuleContent: boolean;
+    /** Sant når INGEN av forholdene over gjaldt — lesingen hvilte da bare på rollen. */
+    roleOnly: boolean;
   }>;
   [auditActions.audit.metadataScrubbed]: EventMetadata<{
     scrubbedCount: number;
