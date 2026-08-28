@@ -429,10 +429,21 @@ fields (`title`, `bodyMarkdown`) accept a string or a partial `{en-GB,nb,nn}` ob
 
 **The role is not the whole check.** Routes on `:courseId` additionally require that the caller
 **owns the course** (or is ADMINISTRATOR) — `requireContentOwnership("COURSE", "courseId")`.
-That now includes the two read routes it was missing on (#903): `GET .../export-package`, whose
-envelope inlines each module’s full payload including MCQ answer keys, and
-`GET .../enrollments`, which returns participant names, e-mail, department and progress. Both
-return `403 content_ownership` for a non-owner SMO.
+**Reads are guarded too, not only writes.** #903 closed `GET .../export-package` (the envelope
+inlines each module’s full payload, MCQ answer keys included) and `GET .../enrollments`
+(participant names, e-mail, department, progress). #943 closed the rest of the same surface:
+`GET /:courseId`, `GET /:courseId/items` and `GET /:courseId/publish-preview` — course detail is
+the reconnaissance that makes the other holes usable, and publish-preview reveals which items the
+owner is still holding back. All return `403 content_ownership` for a non-owner SMO, or
+`403 content_unowned` when the course has no `ContentOwner` row at all (legacy content — admin-only
+until an owner is assigned).
+
+The **list** endpoints stay open by design: they are how an author finds their own content, and
+each row carries `canManage` so the UI hides the actions the guard would reject. The line is
+between the list and the detail.
+
+The same asymmetry existed on classes and is closed by #943: `GET /:classId/members` returned the
+name and e-mail of every member of any class while both writes on that path were guarded.
 
 Course ownership is deliberately **not** module ownership: a course owner exporting their own
 course receives the inlined payload of every module in it, including modules authored by someone
@@ -445,12 +456,12 @@ have nothing to do with, not about partitioning content inside a course you asse
 |---|---|---|
 | `GET` | `/api/admin/content/courses` | List courses (with module count) |
 | `POST` | `/api/admin/content/courses` | Create a course |
-| `GET` | `/api/admin/content/courses/:courseId` | Course detail (modules) |
+| `GET` | `/api/admin/content/courses/:courseId` | Course detail (modules). **`403 content_ownership`** for a non-owner SMO (#943) |
 | `PUT` | `/api/admin/content/courses/:courseId` | Update course metadata |
 | `PUT` | `/api/admin/content/courses/:courseId/modules` | Set the module list (legacy). Writes `CourseItem` MODULE-rader — det er ikke lenger en dual-write, `CourseItem` er eneste sannhetskilde (#502). Eventuelle SECTION-elementer bevares og re-indekseres etter modulene. **`400` hvis en modul er arkivert** (#992) — samme regel som `/items`; se under. |
-| `GET` | `/api/admin/content/courses/:courseId/items` | Read the ordered mixed module/section sequence (#486/B2) |
+| `GET` | `/api/admin/content/courses/:courseId/items` | Read the ordered mixed module/section sequence (#486/B2). **`403 content_ownership`** for a non-owner SMO (#943) |
 | `PUT` | `/api/admin/content/courses/:courseId/items` | Set the ordered sequence — body `{ items: [{type:"MODULE",moduleId} \| {type:"SECTION",sectionId}] }`. Re-syncs CourseModule (#486). **`400` hvis noe av innholdet er arkivert** (#938); se under. |
-| `GET` | `/api/admin/content/courses/:courseId/publish-preview` | Inspect unpublished items before publishing (#734). Returns `{ courseId, allPublished, publishable, unpublishedItems: [{ type, id, title, publishable, blockers: [{code,message}] }] }`. Read-only; the UI calls it to drive the cascade-publish confirm dialog. |
+| `GET` | `/api/admin/content/courses/:courseId/publish-preview` | Inspect unpublished items before publishing (#734). **`403 content_ownership`** for a non-owner SMO (#943) — the preview reveals which items the owner is still holding back. Returns `{ courseId, allPublished, publishable, unpublishedItems: [{ type, id, title, publishable, blockers: [{code,message}] }] }`. Read-only; the UI calls it to drive the cascade-publish confirm dialog. |
 | `POST` | `/api/admin/content/courses/:courseId/publish` | Publish course (#734). Body `{ publishItems?: boolean }`. If the course has unpublished modules/sections: without `publishItems:true` returns `409 course_has_unpublished_items` (with the preview) so the UI can confirm; with `publishItems:true` cascade-publishes the items (items → course) — but returns `422 course_publish_blocked_by_items` (with `details.unpublishedItems`) and publishes nothing if any item is un-publishable (module fails validation / no content, archived item). Enforces I1: a published course never contains unavailable content. Response `{ course, publishedItems }`. |
 | `POST` | `/api/admin/content/courses/:courseId/unpublish` | Unpublish course (reversible soft take-down; no G3 lock, #705) |
 | `POST` | `/api/admin/content/courses/:courseId/archive` | Archive course. Blocked `400` if a participant is mid-course (G3 — suggests unpublish instead); auto-unpublishes (I3, #705) |
@@ -463,10 +474,10 @@ have nothing to do with, not about partitioning content inside a course you asse
 | `GET` | `/api/admin/content/classes` | List classes (cohorts) with member + assigned-course counts (#645/CL-2) |
 | `POST` | `/api/admin/content/classes` | Create a class — body `{ name, description? }` (#645/CL-2) |
 | `DELETE` | `/api/admin/content/classes/:classId` | Archive a class (soft). System classes rejected `400` (#645/CL-2) |
-| `GET` | `/api/admin/content/classes/:classId/members` | List class members (#645/CL-2) |
+| `GET` | `/api/admin/content/classes/:classId/members` | List class members (#645/CL-2) — returns **name and e-mail**. **`403 content_ownership`** for a non-owner SMO, **`403 content_unowned`** on system classes (#943) |
 | `POST` | `/api/admin/content/classes/:classId/members` | Add a member — body `{ userId }` (#645/CL-2) |
 | `DELETE` | `/api/admin/content/classes/:classId/members/:userId` | Remove a member (#645/CL-2) |
-| `GET` | `/api/admin/content/classes/:classId/courses` | List courses assigned to the class (#645/CL-2) |
+| `GET` | `/api/admin/content/classes/:classId/courses` | List courses assigned to the class (#645/CL-2). **`403 content_ownership`** for a non-owner SMO (#943) |
 | `POST` | `/api/admin/content/classes/:classId/courses` | Assign a course — body `{ courseId, dueAt?\|null }` (#645/CL-2) |
 | `DELETE` | `/api/admin/content/classes/:classId/courses/:courseId` | Unassign a course (#645/CL-2) |
 | `GET` | `/api/admin/content/users/search?q=` | Search users by name/email (min 2 chars, capped 20) for class membership (#645/CL-3) |

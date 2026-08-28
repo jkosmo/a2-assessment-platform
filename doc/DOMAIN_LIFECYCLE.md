@@ -245,14 +245,25 @@ Current application roles:
 
 ### Content ownership (#787) — authoring guard + list annotation
 
-Course/Section/Class/Module authoring mutations are gated by `requireContentOwnership` →
+Course/Section/Class/Module authoring **and detail reads** are gated by `requireContentOwnership` →
 `assertContentOwnership` (`decideOwnershipAccess`): `ADMINISTRATOR` bypasses; an owner (a `ContentOwner`
 row) is allowed; content with no owner is admin-only (`content_unowned`); any other non-owner is blocked
 (`content_ownership`). To keep the UI honest, the four admin list endpoints (`GET /api/admin/content/{courses,sections,classes,modules/library}`)
 annotate each row with **`canManage`** — the batch equivalent of the same decision (`listManageableContentIds`:
 admin ⇒ all; non-admin ⇒ only rows they own). The front-end hides edit/lifecycle actions (and the editor
 entry points) when `canManage=false`, showing a read-only marker instead, so a non-owner never sees a
-button the guard would 403. Read/copy actions (export, duplicate) stay available.
+button the guard would 403.
+
+⚠️ **Reads are guarded too — this section used to say they were not.** Export was closed first
+(#903 for courses, #916 for sections), then the rest of the read surface (#943): course detail,
+`/items`, `/publish-preview`, and on classes `/members` (name + e-mail) and `/courses`. The line
+now runs between the **list** and the **detail**: lists stay open — annotated with `canManage`, so
+an author can find their own work — and everything behind them requires ownership.
+
+Consequence worth knowing: content with no `ContentOwner` row (system classes, and content older
+than #787) is unreadable for a non-admin, not just unwritable. No screen lost anything — the UI
+has hidden those entry points since slice 5 — but a direct API read that worked before now returns
+`403 content_unowned`.
 
 ## Domain Invariants
 

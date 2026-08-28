@@ -2,6 +2,63 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.43.0 - 2026-08-28
+
+### #943 — lesing av kurs og klasser er vaktet som skrivingen
+
+Tolv skriveruter på `/:courseId` krevde eierskap. Fire lese-ruter på samme sti krevde ingenting.
+
+Det som lakk var ikke bare titler: kursdetaljen gir hele oppsettet — moduler, seksjoner,
+publiseringsstatus, `enrollmentPolicy` — og `publish-preview` gir hvilke elementer eieren ennå
+holder TILBAKE. Det er rekognoseringen som gjør resten utnyttbart, og eksportruta rett ved siden
+av ble vaktet med nettopp den begrunnelsen (#903).
+
+⚠️ **Sveipen fant mer enn saken navnga.** Saken pekte på kurs. Klassene har samme form én ruter
+bortenfor, og lesingen der lekker mer: `GET /:classId/members` ga **navn og e-post** til hvert
+medlem av en hvilken som helst klasse, til enhver SMO. Begge skriverutene på samme sti var vaktet.
+Det er nøyaktig hullet #903-oppfølgingen lukket for `/:courseId/enrollments` — det sto fortsatt
+åpent for klasser.
+
+Fem ruter vaktet: kursdetalj, `/items`, `/publish-preview`, `/:classId/members`, `/:classId/courses`.
+
+### Linja går mellom lista og detaljen
+
+**Listene forblir åpne.** Du må kunne finne dine egne kurs, og hver rad bærer allerede `canManage`
+slik at «Rediger» ikke rendres for den som ville fått 403. Det er detaljen som er stengt, ikke
+oversikten.
+
+Det er et valg, ikke en forglemmelse — så én test fester det. Uten den kunne en senere «stram
+alt»-runde lukket lista uten at noe ble rødt, og da fant ingen SMO fram til noe som helst.
+
+### Ingenting blir uarbeidbart
+
+Ueid innhold — systemklasser, og kurs eldre enn eierskapsmodellen — gir `403 content_unowned` for
+en ikke-admin. Det høres ut som et tap, men UI-veien dit har vært skjult siden #787: raden har vist
+«Skrivebeskyttet» uten Rediger-knapp hele tiden. API-et gjør nå bare det UI-et alltid har sagt.
+
+En SMO trenger heller ikke klassens medlemsliste for å nå alle — det gjøres med
+`enrollmentPolicy: OPEN` på kurset. QA-porten kjørte flaten i ekte nettleser som eier, fremmed SMO
+og administrator: ingen skjerm knakk, og en dyplenke som ikke-eier gir en lesbar tomtilstand, ikke
+rå JSON.
+
+### Hver vakt mutasjonsverifisert for seg
+
+Fem vakter fjernet én om gangen. Hver ga en rød test som navnga akkurat den ruta. Gjenoppretting
+fra filkopi, ikke søk-og-erstatt.
+
+⚠️ Deteksjonsskriptet mitt leste vitest-utdataen feil og meldte «grønn» på alle fem — det var
+skriptet som var galt, ikke testene. Verdt å merke seg: **et måleverktøy som feiler stille er
+farligere enn ingen måling**, og dette er andre gang på to dager det gjelder (jf. `tail -1` som
+skjulte «1 failed» i 2.42.0).
+
+### Etterslep, ført som oppfølging
+
+- Tekstene sier «endre» der handlingen nå er å **lese** — både `content_ownership`-setningen og
+  listemerket «Skrivebeskyttet», som lover en lesetilgang som ikke lenger finnes.
+- Vakta kjører før eksistenssjekken, så et **slettet** kurs gir 403 «har ingen eier ennå» der
+  admin får 404. Eldre enn denne leveransen, men leserutene er der dyplenker lander.
+- `GET /source-material/extract/:jobId` sjekker ikke hvem som eier jobben.
+
 ## 2.42.0 - 2026-08-28
 
 ### #1000 — lesing av et revisjonsspor logges nå, med forholdet

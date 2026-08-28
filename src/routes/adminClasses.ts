@@ -76,7 +76,14 @@ adminClassesRouter.post("/:classId/restore", requireContentOwnership("CLASS", "c
   }
 });
 
-adminClassesRouter.get("/:classId/members", async (request: Request<{ classId: string }>, response, next) => {
+// #943 (samme klasse, én ruter bortenfor det saken navnga): begge skriverutene på `/members` var
+// vaktet, lesingen var ikke. ⚠️ Og lesingen er den som lekker: den gir NAVN og E-POST til hvert
+// medlem av en hvilken som helst klasse. Nøyaktig det hullet #903-oppfølgingen lukket for
+// `/:courseId/enrollments` — det sto fortsatt åpent her.
+//
+// Trygt å stramme: «Administrer» er eneste vei inn i `openClass`, og den knappen rendres bare når
+// `canManage` er sann. Systemklasser er ueide og forvaltes dermed bare av administrator, som før.
+adminClassesRouter.get("/:classId/members", requireContentOwnership("CLASS", "classId"), async (request: Request<{ classId: string }>, response, next) => {
   try {
     response.json({ members: await listClassMembers(request.params.classId) });
   } catch (error) {
@@ -107,7 +114,9 @@ adminClassesRouter.delete("/:classId/members/:userId", requireContentOwnership("
   }
 });
 
-adminClassesRouter.get("/:classId/courses", async (request: Request<{ classId: string }>, response, next) => {
+// #943: makkeren til `/members` — samme skjerm, samme kall, samme vakt. Uten den kunne en fremmed
+// SMO lese hvilke kurs en klasse er tildelt, og med hvilke frister.
+adminClassesRouter.get("/:classId/courses", requireContentOwnership("CLASS", "classId"), async (request: Request<{ classId: string }>, response, next) => {
   try {
     response.json({ courses: await listClassCourseAssignments(request.params.classId) });
   } catch (error) {

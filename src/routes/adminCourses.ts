@@ -298,7 +298,16 @@ adminCoursesRouter.get("/:courseId/export-package", requireContentOwnership("COU
   }
 });
 
-adminCoursesRouter.get("/:courseId", async (request, response, next) => {
+// #943: tolv skriveruter på `/:courseId` var vaktet, denne lesingen var det ikke. Den gir hele
+// oppsettet til et fremmed kurs — moduler, seksjoner, publiseringsstatus, `enrollmentPolicy`. Det
+// er rekognoseringen som gjør resten utnyttbart, og eksportruta rett over ble vaktet med nettopp
+// den begrunnelsen (#903).
+//
+// Trygt å stramme: ruta brukes kun av kursredigeringen (`renderDetailView`), og lista merker
+// allerede hver rad med `canManage` — «Rediger» rendres ikke for den som ville fått 403.
+// Samme grep som seksjonene fikk i #916, og linja går der: LISTA er åpen (du må kunne finne dine
+// egne), DETALJEN er ikke.
+adminCoursesRouter.get("/:courseId", requireContentOwnership("COURSE", "courseId"), async (request, response, next) => {
   try {
     const course = await courseRepository.findCourseById(request.params.courseId);
     if (!course) {
@@ -364,7 +373,9 @@ adminCoursesRouter.put("/:courseId/modules", requireContentOwnership("COURSE", "
 });
 
 // Mixed item ordering — modules and learning sections interleaved (#486/B2).
-adminCoursesRouter.get("/:courseId/items", async (request, response, next) => {
+// #943: samme vakt som søsteren `PUT /items` og som detaljruta over — kursbyggeren er det eneste
+// kallstedet, og den åpnes bare for en eier.
+adminCoursesRouter.get("/:courseId/items", requireContentOwnership("COURSE", "courseId"), async (request, response, next) => {
   try {
     // #958: forfatterlista skal se ALT — den er verktøyet man rydder opp arkivert innhold MED.
     // ⚠️ `archivedAt` sendes videre og regelen overlates til klienten. Det er fortsatt en åpen
@@ -421,7 +432,9 @@ adminCoursesRouter.put("/:courseId/items", requireContentOwnership("COURSE", "co
 // #734: preview the unpublished modules/sections in a course before publishing, and whether each is
 // currently publishable. The UI calls this before opening the cascade-publish confirm dialog. Read-
 // only; agent tokens cannot reach it (not in the agent-token allowlist — enforceAgentTokenScope).
-adminCoursesRouter.get("/:courseId/publish-preview", async (request, response, next) => {
+// #943: vaktet som `POST /publish` den er forspillet til. Uten vakta kunne enhver SMO lese hvilke
+// elementer i et fremmed kurs som ennå er UPUBLISERTE — altså hva eieren holder tilbake.
+adminCoursesRouter.get("/:courseId/publish-preview", requireContentOwnership("COURSE", "courseId"), async (request, response, next) => {
   try {
     const preview = await getCoursePublishPreview(request.params.courseId);
     response.json(preview);
