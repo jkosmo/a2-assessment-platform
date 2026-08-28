@@ -123,6 +123,29 @@ async function createAssessedSubmission(
   );
 
   await runAssessmentSync(app, participantHeaders, submissionId);
+
+  // #1028: si fra HVA som gikk galt, ikke bare at noe gjorde det.
+  //
+  // ⚠️ Mocken av `evaluatePracticalWithLlm` er noen ganger ikke i kraft etter `vi.resetModules()`.
+  // Da kjører den EKTE tjenesten, som kaster med en gang (ingen Azure-nøkkel i testmiljøet), og
+  // #953-stien gjør akkurat det den skal: en vurdering som gir opp blir en manuell vurdering i
+  // stedet for en blindvei. Jobben ender SUCCEEDED, et vedtak skrives, og innleveringen står som
+  // UNDER_REVIEW.
+  //
+  // Resultatet var at en vilkårlig test feilet med «expected UNDER_REVIEW to be COMPLETED» —
+  // altså det som ser ut som en feil i vurderingspolicyen. Ingenting pekte mot mocken. Fila har
+  // allerede kostet en time på nøyaktig denne forvekslingen én gang (se kommentaren over
+  // `warmModuleGraph`); denne vakta skal spare den neste.
+  //
+  // Den fikser IKKE årsaken (#1028) — den gjør symptomet mulig å lese.
+  if (mockEvaluatePracticalWithLlm.mock.calls.length === 0) {
+    throw new Error(
+      "#1028: språkmodell-mocken ble aldri kalt, så vurderingen kjørte mot den ekte tjenesten og " +
+        "falt til #953-stien (gir opp → manuell vurdering). Dette er IKKE en feil i " +
+        "vurderingspolicyen. Kjør fila på nytt; se #1028 for status på rotårsaken.",
+    );
+  }
+
   const resultResponse = await request(app).get(`/api/submissions/${submissionId}/result`).set(participantHeaders);
   expect(resultResponse.status).toBe(200);
   return resultResponse.body as {
