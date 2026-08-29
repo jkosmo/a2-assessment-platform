@@ -1269,11 +1269,17 @@ test.describe("admin content browser coverage", () => {
     // The module shell is created inside `confirmAndGenerate`, which the blueprint step gates.
     await clickEnabledButton(page, /Use this plan|Bruk denne planen/);
 
-    await expect.poll(() => state.lastModuleCreateBody?.title).toBe("Incident response");
+    // ⚠️ #918 krevde en REN STRENG her, for å bevise at tittelen ikke var kopiert til tre språk.
+    // #930 går ett skritt videre: en ren streng bærer ikke noe språkmerke, og leses som bokmål. En
+    // tittel skrevet på engelsk ble dermed lagret som norsk, og publiseringsgaten navnga feil språk
+    // som manglende.
+    //
+    // Påstanden er derfor STRENGERE nå, ikke svakere: ett språk, og vi vet hvilket.
+    await expect.poll(() => state.lastModuleCreateBody?.title).toEqual({ "en-GB": "Incident response" });
     expect(
-      typeof state.lastModuleCreateBody.title,
-      "a three-locale map claims a translation the author never made",
-    ).toBe("string");
+      Object.keys(state.lastModuleCreateBody.title),
+      "et trespråkskart påstår en oversettelse forfatteren aldri laget",
+    ).toEqual(["en-GB"]);
 
     // MCQ-only takes its own route to the same endpoint.
     await page.goto("/admin-content.html");
@@ -1283,8 +1289,8 @@ test.describe("admin content browser coverage", () => {
     await clickEnabledButton(page, "MCQ only");
     await clickEnabledButton(page, "Basic");
 
-    await expect.poll(() => state.lastModuleCreateBody?.title).toBe("Safety quiz");
-    expect(typeof state.lastModuleCreateBody.title).toBe("string");
+    await expect.poll(() => state.lastModuleCreateBody?.title).toEqual({ "en-GB": "Safety quiz" });
+    expect(Object.keys(state.lastModuleCreateBody.title)).toEqual(["en-GB"]);
   });
 
   // #918, third creation path. This is the one where the lie survives all the way to the publish
@@ -1323,7 +1329,7 @@ test.describe("admin content browser coverage", () => {
     };
 
     await runImport(importJson("Incident response"));
-    expect(state.lastModuleCreateBody.title).toBe("Incident response");
+    expect(state.lastModuleCreateBody.title).toEqual({ "en-GB": "Incident response" });
 
     await clickEnabledButton(page, "Save draft");
     // The value the publish gate reads. Three identical copies here is the module telling the gate

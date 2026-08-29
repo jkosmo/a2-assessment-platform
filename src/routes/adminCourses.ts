@@ -34,6 +34,7 @@ import { NotFoundError, AppError } from "../errors/AppError.js";
 import type { AdminCourseListItem, AdminCourseDetail } from "../modules/course/index.js";
 import { countCourseInProgressParticipants } from "../modules/course/contentLifecycle.js";
 import { generateLimiter } from "../middleware/rateLimiting.js";
+import { respondWithAppError } from "./helpers/respondWithAppError.js";
 
 const adminCoursesRouter = Router();
 
@@ -238,7 +239,7 @@ adminCoursesRouter.post("/import", async (request, response, next) => {
     });
   } catch (err) {
     if (err instanceof AppError) {
-      response.status(err.httpStatus).json({ error: err.code, message: err.message });
+      respondWithAppError(response, err);
       return;
     }
     const message = err instanceof Error ? err.message : "Unknown error";
@@ -275,7 +276,7 @@ adminCoursesRouter.get("/:courseId/export-package", requireContentOwnership("COU
     response.json({ envelope });
   } catch (error) {
     if (error instanceof AppError) {
-      response.status(error.httpStatus).json({ error: error.code, message: error.message });
+      respondWithAppError(response, error);
       return;
     }
     const message = error instanceof Error ? error.message : "Unknown error";

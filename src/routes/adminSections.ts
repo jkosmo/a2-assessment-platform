@@ -40,6 +40,7 @@ import { renderSectionMarkdown } from "../modules/course/sectionContent.js";
 import { localizeSectionContent } from "../modules/adminContent/llmContentGenerationService.js";
 import { generateLimiter } from "../middleware/rateLimiting.js";
 import { idempotency } from "../middleware/idempotency.js";
+import { respondWithAppError } from "./helpers/respondWithAppError.js";
 
 const adminSectionsRouter = Router();
 
@@ -367,7 +368,7 @@ adminSectionsRouter.get(
       response.json({ envelope });
     } catch (error) {
       if (error instanceof AppError) {
-        response.status(error.httpStatus).json({ error: error.code, message: error.message });
+        respondWithAppError(response, error);
         return;
       }
       const message = error instanceof Error ? error.message : "Could not build section export envelope.";

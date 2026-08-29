@@ -88,6 +88,13 @@ export const translations = {
     // serverens setning. Det er med vilje: en manglende oversettelse skal se ut som en manglende
     // oversettelse, ikke som engelsk lekkasje i et norsk grensesnitt.
     "errors.api.content_ownership": "You can only change content you own. Ask an owner or an administrator to add you as an owner of this item.",
+    // #999: livssyklusvaktene kaster nå DomainRuleError med egen kode, så setningen kan
+    // formuleres her i stedet for å komme som norsk prosa fra serveren.
+    // {count} og {courseTitles} fylles fra feilsvarets `details`.
+    "errors.api.content_in_use": "This content is used in {count} course(s): {courseTitles}. Remove it from them first, or unpublish those courses.",
+    "errors.api.content_in_issued_certificate": "This content is part of {count} issued certificate(s) and cannot be deleted. Archive it instead — a certificate has to be able to show what it covered.",
+    "errors.api.content_in_legacy_certificate": "This section is part of {count} certificate(s) issued before we recorded what they covered, and cannot be deleted. Archive it instead.",
+    "errors.api.course_has_active_participants": "{count} participant(s) are part-way through this course, so it cannot be retired. Unpublish it instead — that hides it without retiring it — or wait until they finish.",
     "errors.api.content_unowned": "This content has no owner yet. Only an administrator can change it until an owner has been assigned.",
     "errors.api.last_owner": "You cannot remove the last owner. Add another owner first, or ask an administrator.",
     "errors.api.owner_not_found": "That user is not an owner of this content.",
@@ -557,6 +564,10 @@ export const translations = {
     "errors.apiGeneric": "Forespørselen kunne ikke fullføres ({status}). Prøv igjen — vedvarer det, kontakt administrator.",
 
     // #972/#965/#980 — se merknaden i en-GB-tabellen.
+    "errors.api.content_in_use": "Innholdet er i bruk i {count} kurs: {courseTitles}. Fjern det fra kursene først, eller avpubliser dem.",
+    "errors.api.content_in_issued_certificate": "Innholdet inngår i {count} utstedte kursbevis og kan ikke slettes. Arkiver det i stedet — et kursbevis må kunne vise hva det dekket.",
+    "errors.api.content_in_legacy_certificate": "Seksjonen inngår i {count} kursbevis utstedt før vi registrerte hva de dekket, og kan ikke slettes. Arkiver den i stedet.",
+    "errors.api.course_has_active_participants": "{count} deltakere er midt i en gjennomføring, så kurset kan ikke pensjoneres. Avpubliser det i stedet — det skjuler kurset uten å pensjonere det — eller vent til de er ferdige.",
     "errors.api.content_ownership": "Du kan bare endre innhold du eier. Be en eier eller en administrator om å legge deg til som eier av dette elementet.",
     "errors.api.content_unowned": "Dette innholdet har ingen eier ennå. Bare en administrator kan endre det til en eier er satt.",
     "errors.api.last_owner": "Du kan ikke fjerne den siste eieren. Legg til en eier til først, eller spør en administrator.",
@@ -1027,6 +1038,10 @@ export const translations = {
     "errors.apiValidation": "Noko i skjemaet manglar eller er feil utfylt. Sjå på felta som er markerte, og prøv igjen.",
     "errors.apiGeneric": "Førespurnaden kunne ikkje fullførast ({status}). Prøv igjen — varer det ved, kontakt administrator.",
 
+"errors.api.content_in_use": "Innhaldet er i bruk i {count} kurs: {courseTitles}. Fjern det frå kursa først, eller avpubliser dei.",
+"errors.api.content_in_issued_certificate": "Innhaldet inngår i {count} utstedte kursbevis og kan ikkje slettast. Arkiver det i staden — eit kursbevis må kunne vise kva det dekte.",
+"errors.api.content_in_legacy_certificate": "Seksjonen inngår i {count} kursbevis utstedt før vi registrerte kva dei dekte, og kan ikkje slettast. Arkiver han i staden.",
+"errors.api.course_has_active_participants": "{count} deltakarar er midt i ei gjennomføring, så kurset kan ikkje pensjonerast. Avpubliser det i staden — det skjuler kurset utan å pensjonere det — eller vent til dei er ferdige.",
     // #972/#965/#980 — sjå merknaden i en-GB-tabellen.
     "errors.api.content_ownership": "Du kan berre endre innhald du eig. Be ein eigar eller ein administrator om å leggje deg til som eigar av dette elementet.",
     "errors.api.content_unowned": "Dette innhaldet har ingen eigar enno. Berre ein administrator kan endre det til ein eigar er sett.",

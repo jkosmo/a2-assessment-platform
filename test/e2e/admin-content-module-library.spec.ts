@@ -146,7 +146,13 @@ test.describe("admin content module library", () => {
       title?: string;
       certificationLevel?: string;
     };
-    expect(postBody.title).toBe("Workplace safety");
+    // ⚠️ #918 krevde en REN STRENG her, for å bevise at tittelen ikke var kopiert til tre språk.
+    // #930 går ett skritt videre: en ren streng bærer ikke noe språkmerke, og leses som bokmål. En
+    // tittel skrevet på engelsk ble dermed lagret som norsk, og publiseringsgaten navnga feil språk
+    // som manglende.
+    //
+    // Påstanden er derfor STRENGERE nå, ikke svakere: ett språk, og vi vet hvilket.
+    expect(postBody.title).toEqual({ "en-GB": "Workplace safety" });
     expect(postBody.certificationLevel).toBe("intermediate");
 
     // The mock module POST returns id "module-1"; the page navigates to its conversation route.

@@ -11,7 +11,6 @@
 
 import { z } from "zod";
 import {
-  localizedTextSchema,
   localizedTextMaybeUntranslatedSchema,
   localizedTextPatchSchema,
   certificationLevelInputSchema,
@@ -66,8 +65,11 @@ export const authoringModulePayloadSchema = z
   .object({
     module: z
       .object({
-        title: localizedTextSchema,
-        description: localizedTextSchema.nullable().optional(),
+        // #930: en agent skriver innhold i ETT språk om gangen, som alle andre. Sto dette igjen
+        // på streng-eller-alle-tre, måtte agenten enten fylle tre språk med samme tekst — løgnen
+        // #918 fjernet — eller sende en ren streng, som leses som bokmål.
+        title: localizedTextMaybeUntranslatedSchema,
+        description: localizedTextMaybeUntranslatedSchema.nullable().optional(),
         certificationLevel: certificationLevelInputSchema,
       })
       .strict(),
@@ -128,8 +130,11 @@ export const authoringCoursePayloadSchema = z
   .object({
     course: z
       .object({
-        title: localizedTextSchema,
-        description: localizedTextSchema.nullable().optional(),
+        // #930: en agent skriver innhold i ETT språk om gangen, som alle andre. Sto dette igjen
+        // på streng-eller-alle-tre, måtte agenten enten fylle tre språk med samme tekst — løgnen
+        // #918 fjernet — eller sende en ren streng, som leses som bokmål.
+        title: localizedTextMaybeUntranslatedSchema,
+        description: localizedTextMaybeUntranslatedSchema.nullable().optional(),
         certificationLevel: certificationLevelInputSchema,
       })
       .strict(),

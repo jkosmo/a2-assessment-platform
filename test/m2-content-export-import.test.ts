@@ -23,12 +23,12 @@ const adminHeaders = {
 
 const otherAdminHeaders = adminHeaders;
 
-async function setupModule(suffix: string) {
+async function setupModule(suffix: string, titleOverride?: Record<string, string>) {
   const createResponse = await request(app)
     .post("/api/admin/content/modules")
     .set(adminHeaders)
     .send({
-      title: { "en-GB": `Export source ${suffix}`, nb: `Eksport kilde ${suffix}`, nn: `Eksport kjelde ${suffix}` },
+      title: titleOverride ?? { "en-GB": `Export source ${suffix}`, nb: `Eksport kilde ${suffix}`, nn: `Eksport kjelde ${suffix}` },
       description: { "en-GB": "Source module for round-trip", nb: "Kilde-modul", nn: "Kjelde-modul" },
       certificationLevel: "basic",
     });
@@ -138,6 +138,40 @@ describe("#433 module export-import round-trip", () => {
     // that requires either email lookup or stable external IDs).
     expect(typeof verifyEnvelope.exportedBy).toBe("string");
     expect((verifyEnvelope.exportedBy as string).length).toBeGreaterThan(0);
+  });
+
+  // ⚠️ #930 QA-runde 2: en modul skrevet i ETT språk kunne eksporteres, men ikke importeres igjen.
+  //
+  // Eksporten skriver tittelen slik den er lagret. Etter #930 kan det være et delvis kart —
+  // «skrevet på engelsk, ikke oversatt ennå». Importskjemaet krevde fortsatt streng eller alle tre,
+  // så eksporten lyktes og importen avviste fila den nettopp hadde laget.
+  //
+  // Nøyaktig samme feil som #912 rettet i det samme skjemaet, den gangen for `certificationLevel:
+  // null`. Rundturen brytes hver gang skrivesiden får lov til noe lesesiden ikke.
+  it("#930: en modul med tittel på ETT språk overlever rundturen eksport → import", async () => {
+    const suffix = `one-locale-${Date.now()}`;
+    // Bare engelsk. Ingen løgn om at den er oversatt.
+    const { moduleId } = await setupModule(suffix, { "en-GB": `Single locale ${suffix}` });
+
+    const exported = await request(app)
+      .get(`/api/admin/content/modules/${moduleId}/export-package`)
+      .set(adminHeaders);
+    expect(exported.status).toBe(200);
+    // Kartet skal komme UT som det står — eksporten skal ikke fylle hull den ikke har.
+    expect(exported.body.envelope.module.module.title).toEqual({ "en-GB": `Single locale ${suffix}` });
+
+    const imported = await request(app)
+      .post("/api/admin/content/modules/import")
+      .set(adminHeaders)
+      .send({ payload: exported.body.envelope, mode: "createNew" });
+
+    // Kjernen: fila systemet selv laget skal kunne leses inn igjen.
+    expect(imported.status).toBe(201);
+    const newModuleId = imported.body.moduleId as string;
+    expect(newModuleId).toBeTruthy();
+
+    const stored = await prisma.module.findUnique({ where: { id: newModuleId }, select: { title: true } });
+    expect(JSON.parse(stored?.title ?? "null")).toEqual({ "en-GB": `Single locale ${suffix}` });
   });
 
   it("rejects an envelope whose scope does not match the endpoint", async () => {

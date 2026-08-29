@@ -643,3 +643,28 @@ These URLs are not role-gated by Express itself; access is enforced by the authe
 | `/results` | SUBJECT_MATTER_OWNER, ADMINISTRATOR, REPORT_READER |
 | `/profile` | any authenticated |
 | `/admin-platform` | ADMINISTRATOR |
+
+## Domain-rule error codes (#999)
+
+A rule in the domain said no — as opposed to Zod rejecting the request shape. These return `400`
+with a code the client can look up, and the numbers the sentence needs as **fields**, not as prose
+interpolated into `message`.
+
+| Code | Meaning | `details` |
+|---|---|---|
+| `content_in_use` | The module or section is part of a course and cannot be unpublished, archived or deleted | `{ count, courseTitles }` |
+| `content_in_issued_certificate` | The content is named in an issued certificate and can never be deleted | `{ count }` |
+| `content_in_legacy_certificate` | The section is in a certificate issued before we recorded what it covered | `{ count }` |
+| `course_has_active_participants` | Someone is part-way through the course, so it cannot be retired | `{ count }` |
+
+`message` is unchanged and still carries a Norwegian sentence. It is logged, and it is what an API
+consumer without a translation table gets. **It is no longer what a user sees** — the client
+formats the sentence from the code and `details`.
+
+⚠️ Every route renders these through one helper (`routes/helpers/respondWithAppError.ts`), which
+matches the global error middleware. Fourteen routes previously wrote `{ error, message }` by hand
+and dropped `details`; the placeholders then reached the screen unfilled.
+
+Other guards still throw `validation_error` with prose, and the client still falls back to showing
+that `message`. That fallback shrinks as more guards get codes — it is not a licence to add new
+prose-only errors.

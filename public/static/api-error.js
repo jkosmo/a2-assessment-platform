@@ -92,14 +92,40 @@ function translated(t, key) {
  *   klienten vet hvilken av dem raden er (#980).
  * @returns {string | null}
  */
-export function apiErrorCodeText(code, t, variants = []) {
+export function apiErrorCodeText(code, t, variants = [], details = null) {
   if (!code) return null;
+  let template = null;
   for (const variant of variants) {
     if (!variant) continue;
     const hit = translated(t, `${API_ERROR_KEY_PREFIX}${code}.${variant}`);
-    if (hit) return hit;
+    if (hit) { template = hit; break; }
   }
-  return translated(t, `${API_ERROR_KEY_PREFIX}${code}`);
+  if (template === null) template = translated(t, `${API_ERROR_KEY_PREFIX}${code}`);
+  return template === null ? null : fillErrorPlaceholders(template, details);
+}
+
+/**
+ * #999: setter tallene fra `details` inn i den oversatte setningen.
+ *
+ * ⚠️ Serveren sender TALL, ikke ferdig prosa. Sendte den setningen, ville klienten måttet lese
+ * tallet ut av en tekst på et språk den ikke valgte — som er nøyaktig problemet #999 retter.
+ *
+ * Samme mønster som `fillReasonPlaceholders` i decision-reason.js (#950). Lister blir kommaseparert
+ * her; skal de skilles annerledes på et språk, hører det i oversettelsen, ikke her.
+ *
+ * @param {string} template
+ * @param {Record<string, unknown> | null} details
+ * @returns {string}
+ */
+export function fillErrorPlaceholders(template, details) {
+  if (typeof template !== "string") return "";
+  if (!details || typeof details !== "object") return template;
+  let out = template;
+  for (const [key, value] of Object.entries(details)) {
+    const shown = Array.isArray(value) ? value.join(", ") : String(value);
+    out = out.split(`{${key}}`).join(shown);
+  }
+  return out;
 }
 
 /**
@@ -145,10 +171,16 @@ export function describeApiError(error, t, options = {}) {
   // minste ut som en systemfeil.
   //
   // ⚠️ At vi viser serverens `message` her er et bevisst unntak fra «koden er kontrakten»
-  // (`FEATURE_SURFACE_MAP` §24), ikke en oppmykning av regelen. Den riktige kuren er at
-  // slettevernet får sin egen feilKODE, slik importfeilene har. Til den finnes, er en forståelig
-  // setning på feil språk bedre enn en misvisende setning på riktig språk. Det står som eget punkt
-  // i #995.
+  // (`FEATURE_SURFACE_MAP` §24), ikke en oppmykning av regelen. En forståelig setning på feil språk
+  // slår en misvisende setning på riktig språk.
+  //
+  // #999 krympet unntaket: de fire livssyklusvaktene — innhold i bruk i et kurs, innhold i et
+  // utstedt kursbevis, gammelt bevis uten øyeblikksbilde, kurs med påbegynt deltaker — kaster nå
+  // `DomainRuleError` med egen kode og treffer derfor kodeoppslaget lenger ned.
+  //
+  // Unntaket er IKKE fjernet, og det var ikke mulig: 35 andre `ValidationError`-steder kaster
+  // fortsatt prosa. Fjernes unntaket nå, faller alle 35 tilbake til «noe i skjemaet er feil
+  // utfylt» — nøyaktig regresjonen #996 rettet. Det krymper etter hvert som flere vakter får kode.
   if (code === "validation_error") {
     const domainMessage = !issues && typeof body?.message === "string" && body.message.trim().length > 0
       ? body.message.trim()
@@ -163,7 +195,7 @@ export function describeApiError(error, t, options = {}) {
     };
   }
 
-  const known = apiErrorCodeText(code, t, options.variants ?? []);
+  const known = apiErrorCodeText(code, t, options.variants ?? [], body?.details ?? null);
   if (known) {
     // Kjent kode: setningen ER forklaringen. Å legge serverens JSON i detaljfeltet i tillegg ville
     // bare gitt tilbake det vi nettopp fjernet fra overskriften.

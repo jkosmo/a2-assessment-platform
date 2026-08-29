@@ -32,7 +32,6 @@ import { renderOwnerPanel } from "/static/owner-panel.js";
 import { makeSrBadge, loadVersion } from "/static/admin-content-shared.js";
 import {
   buildLocalizedCopyValue,
-  isPartialLocalizedMap,
   selectTranslatedDraftFields,
 } from "/static/admin-content-localized-copy.js";
 import {
@@ -130,6 +129,22 @@ let bundle = null;
  * authoring in the language they read.
  */
 let contentLocale = currentLocale;
+
+// #930: en tittel skrevet i ÉTT språk skal sendes som {[contentLocale]: tittel} — ikke som en ren
+// streng.
+//
+// ⚠️ En ren streng bærer ikke noe språkmerke, og `missingLocalesFor` leser den som bokmål.
+// Oppretter forfatteren en modul mens arbeidsflaten står på engelsk, lagres «Incident response»
+// som norsk: publiseringsgaten melder at en-GB og nn mangler, når det er nb og nn som mangler, og
+// «oversett det som mangler» oversetter til feil språk fra en kilde den tror er norsk.
+//
+// Er verdien allerede et kart, står den urørt — den bærer sitt eget språk fra før.
+function titleInContentLocale(value) {
+  if (value && typeof value === "object") return value;
+  const text = typeof value === "string" ? value.trim() : "";
+  if (!text) return value;
+  return { [contentLocale]: text };
+}
 
 // Generation state
 let generationAbort = null; // AbortController for active generation
@@ -3105,11 +3120,6 @@ async function duplicateCurrentModuleInBackground() {
     suffix: t("shell.duplicate.copySuffix"),
     fallbackLabel: t("shell.newModule.defaultTitle"),
   });
-  const copyTitleIsPartial = isPartialLocalizedMap(copyTitle, supportedLocales);
-  const copyTitleSeed = copyTitleIsPartial
-    ? copyTitle[supportedLocales.find((locale) => copyTitle[locale])]
-    : copyTitle;
-
   try {
     const createBody = await apiFetch(
       "/api/admin/content/modules",
@@ -3117,12 +3127,14 @@ async function duplicateCurrentModuleInBackground() {
       {
         method: "POST",
         body: JSON.stringify({
-          // #982: et DELVIS kart kan ikke sendes ved opprettelse — `localizedTextSchema` godtar
-          // streng eller alle tre. Da opprettes modulen med teksten fra det første språket som
-          // faktisk har innhold, og kartet settes med en PATCH like etter. Serveren fletter et
-          // objekt-patch på KARTET, aldri på en streng (#981), så resultatet blir nøyaktig de
-          // språkene originalen hadde.
-          title: copyTitleIsPartial ? copyTitleSeed : copyTitle,
+          // #982 måtte opprette med en ren streng og sette kartet med en PATCH etterpå, fordi
+          // opprettelsen ikke tok imot et delvis kart. #930 fjernet den begrensningen, så kartet
+          // sendes nå direkte.
+          //
+          // ⚠️ Omveien var ikke bare omstendelig. Frøet var en ren streng uten språkmerke, så i
+          // vinduet mellom opprettelsen og PATCH-en sto kopien registrert som bokmål uansett hvilket
+          // språk originalen var skrevet på. Feilet PATCH-en, ble den stående slik.
+          title: copyTitle,
           description: sourceModule.description ?? undefined,
           certificationLevel: sourceModule.certificationLevel ?? "intermediate",
           validFrom: sourceModule.validFrom ?? undefined,
@@ -3134,16 +3146,6 @@ async function duplicateCurrentModuleInBackground() {
     const duplicatedModuleId = duplicatedModule?.id;
     if (!duplicatedModuleId) {
       throw new Error(t("shell.duplicate.errorUnknown"));
-    }
-
-    // #982: gjenopprett de språkene originalen faktisk hadde. Uten dette ville en delvis oversatt
-    // modul blitt kopiert som ettspråklig — motsatt feil av den vi rettet, men samme klasse:
-    // kopien forteller noe annet om innholdet enn det som er sant.
-    if (copyTitleIsPartial) {
-      await apiFetch(`/api/admin/content/modules/${encodeURIComponent(duplicatedModuleId)}/title`, getHeaders, {
-        method: "PATCH",
-        body: JSON.stringify({ title: copyTitle }),
-      });
     }
 
     const rubricVersion = sourceConfig.rubricVersion
@@ -4275,7 +4277,7 @@ async function applyExternalLlmJsonImport(parsed) {
     const body = await apiFetch(
       "/api/admin/content/modules",
       getHeaders,
-      { method: "POST", body: JSON.stringify({ title: moduleTitle, certificationLevel }) },
+      { method: "POST", body: JSON.stringify({ title: titleInContentLocale(moduleTitle), certificationLevel }) },
     );
     newModule = body?.module ?? body;
   } catch (err) {
@@ -7323,14 +7325,13 @@ async function createMcqOnlyModuleThenGenerate(moduleTitle, sourceMaterial, cert
 
   let newModule;
   try {
-    // #918: the typed title goes out as the plain string it is. Filling all three locales with it
-    // told the publish gate "already translated" about a title written in exactly one language —
-    // see the module library, which has always sent a string, and `localizedTextSchema`, which
-    // accepts one.
+    // #918 fjernet løgnen om at tittelen var oversatt til tre språk. #930 fjerner den som ble
+    // igjen: en ren streng leses som bokmål, så en tittel skrevet på engelsk ble lagret som norsk.
+    // Nå følger språket med.
     const body = await apiFetch(
       "/api/admin/content/modules",
       getHeaders,
-      { method: "POST", body: JSON.stringify({ title: moduleTitle, certificationLevel: certLevel }) },
+      { method: "POST", body: JSON.stringify({ title: titleInContentLocale(moduleTitle), certificationLevel: certLevel }) },
     );
     newModule = body?.module ?? body;
   } catch (err) {
@@ -7662,13 +7663,16 @@ async function confirmAndGenerate(moduleTitle, existingModuleId, sourceMaterial,
 
   let newModule;
   try {
-    // #918: plain string in, plain string out — see createMcqOnlyModuleThenGenerate. The draft's
-    // own title (`sessionDraft.title` below) has always been the bare string; only the create call
-    // pretended otherwise, so the module row and the draft disagreed from the first second.
+    // #918 sluttet å fylle tre språk med samme tekst. #930 legger til hvilket språk teksten
+    // faktisk er skrevet i — en ren streng leses som bokmål, så en engelsk tittel ble lagret som
+    // norsk.
+    //
+    // ⚠️ Fjerde og siste opprettelsessti. De tre andre ble rettet først, og bare denne testen
+    // fanget at den fantes. Fire veier til samme endepunkt er én for mange.
     const body = await apiFetch(
       "/api/admin/content/modules",
       getHeaders,
-      { method: "POST", body: JSON.stringify({ title: moduleTitle, certificationLevel: certLevel }) },
+      { method: "POST", body: JSON.stringify({ title: titleInContentLocale(moduleTitle), certificationLevel: certLevel }) },
     );
     newModule = body?.module ?? body;
   } catch (err) {

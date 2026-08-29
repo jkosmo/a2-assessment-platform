@@ -1869,7 +1869,14 @@ function collectLocaleValues() {
 function normalizeLocalizedRequestValue(valueMap) {
   const entries = Object.entries(valueMap).filter(([, value]) => typeof value === "string" && value.trim());
   if (entries.length === 0) return undefined;
-  if (entries.length === 1 && entries[0][0] === "en-GB") return entries[0][1];
+  // ⚠️ Her sto: er ENGELSK det eneste utfylte språket, send en ren streng i stedet for kartet.
+  //
+  // En ren streng bærer ikke noe språkmerke, og serveren leser den som bokmål (#930). Et kurs med
+  // bare engelsk tittel ble derfor registrert som norsk, og publiseringsgaten navnga feil språk som
+  // manglende — nøyaktig feilen #930 rettet for moduler.
+  //
+  // Merk asymmetrien den skapte: bare-norsk beholdt kartet, bare-engelsk mistet det. Serveren
+  // godtar delvise kart (`localizedTextPatchSchema`), så kollapsen var aldri nødvendig.
   return Object.fromEntries(entries);
 }
 

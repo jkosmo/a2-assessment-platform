@@ -2,6 +2,70 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.47.0 - 2026-08-29
+
+### #930 — en tittel skrevet på ett språk bærer nå hvilket
+
+#918 fjernet den første løgnen: tre språk fylt med samme kildetekst påsto «dette er oversatt».
+Klienten sendte deretter en ren streng. Men en ren streng er ikke nøytral.
+
+⚠️ `missingLocalesFor` leser en ren streng som **bokmål**, fordi feltet ikke bærer noe språkmerke.
+Oppretter du en modul mens arbeidsflaten står på engelsk, ble «Incident response» lagret som norsk.
+Gaten meldte at `en-GB` og `nn` manglet — det er `nb` og `nn` som mangler. «Oversett det som
+mangler» oversatte da til feil språk, fra en kilde den trodde var norsk.
+
+Opprettelsen tar nå imot et delvis språkkart, og klienten sender `{[contentLocale]: tittel}`.
+
+**Fire opprettelsesstier, ikke én.** Jeg fant tre. Den fjerde fanget bare en e2e-test. Fire veier
+til samme endepunkt er én for mange, og det står notert i koden.
+
+**En omvei forsvant.** Dupliseringen opprettet modulen med en ren streng og satte språkkartet med
+en PATCH etterpå, fordi opprettelsen ikke tok imot delvise kart. I vinduet mellom de to sto kopien
+registrert som bokmål uansett originalens språk — og feilet PATCH-en, ble den stående slik.
+
+### #999 — domenevaktene har egne feilkoder
+
+`ValidationError` gir alltid koden `validation_error`. Klienten kunne derfor ikke skille «Zod
+avviste formen» fra «en domeneregel sa nei», og viste serverens `message` ordrett. Satte du
+grensesnittet til engelsk og prøvde å arkivere en modul som lå i et kurs, sto den norske setningen
+der som den var.
+
+Ny klasse `DomainRuleError` med kode og data. Fire koder i livssyklusvaktene. **Tallene sendes som
+felt, ikke som interpolert prosa** — ellers måtte klienten lese tallet ut av en setning på et språk
+den ikke valgte.
+
+⚠️ **Unntaket i `api-error.js` er krympet, ikke fjernet.** Saken ba om å fjerne det. Det gikk ikke:
+35 andre steder kaster fortsatt `ValidationError` med prosa, og uten fallbacken faller de tilbake
+til «noe i skjemaet mangler eller er feil utfylt» — nøyaktig regresjonen #996 rettet.
+
+### QA-porten fant to regresjoner, og begge var samme feil i ny form
+
+**Fjorten ruter skrev feilkroppen for hånd** som `{ error, message }`, uten `details`. Det gikk bra
+så lenge ingen feil bar data. Med #999 viste de rutene «used in {count} course(s): {courseTitles}»
+med plassholderne stående — verre enn den norske prosaen de erstattet.
+
+Porten fant to av dem. Å lappe de to ville vært samme feil på nytt: alle fjorten bruker nå én felles
+hjelper, som gjengir en `AppError` likt den globale feilhåndteringen.
+
+⚠️ **Min egen test var falskt grønn.** Den gikk på tjenestenivå og så feilobjektet direkte, ikke
+HTTP-svaret — der forskjellen faktisk lå. Testen går nå over HTTP.
+
+**Eksport til import røk.** Eksporten skriver tittelen slik den er lagret, og etter #930 kan det
+være et delvis kart. Importskjemaet krevde fortsatt streng eller alle tre, så eksporten lyktes og
+importen avviste fila den nettopp hadde laget.
+
+Nøyaktig samme feil som #912 rettet i det samme skjemaet, den gangen for `certificationLevel: null`.
+**Rundturen brytes hver gang skrivesiden får lov til noe lesesiden ikke.**
+
+### To flater som gjeninnførte feilen
+
+**Kursklienten kollapset aktivt `{en-GB: X}` til ren streng** når engelsk var eneste utfylte språk.
+Bare engelsk — norsk-alene beholdt kartet. Serveren leste så strengen som bokmål. Kollapsen var
+aldri nødvendig; kursskjemaet har alltid godtatt delvise kart.
+
+**Agent-ruta** krevde fortsatt streng eller alle tre. En agent skriver i ett språk om gangen, som
+alle andre, og måtte derfor velge mellom løgnen #918 fjernet og strengen #930 fjerner.
+
 ## 2.46.0 - 2026-08-28
 
 ### Et resultat like under grensa går til sensor, ikke rett i strykbunken

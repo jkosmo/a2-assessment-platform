@@ -95,6 +95,7 @@ import { adminSectionsRouter } from "./adminSections.js";
 import { generateLimiter, extractLimiter, intentLogLimiter } from "../middleware/rateLimiting.js";
 import { ForbiddenError, NotFoundError, AppError } from "../errors/AppError.js";
 import { assertContentOwnership } from "../modules/content/contentOwnershipService.js";
+import { respondWithAppError } from "./helpers/respondWithAppError.js";
 
 const adminContentRouter = Router();
 
@@ -279,7 +280,7 @@ adminContentRouter.patch("/modules/:moduleId/title", async (request, response) =
     response.json({ module });
   } catch (error) {
     if (error instanceof AppError) {
-      response.status(error.httpStatus).json({ error: error.code, message: error.message });
+      respondWithAppError(response, error);
       return;
     }
     response.status(400).json({ error: "update_title_failed", message: "Could not update module title." });
@@ -310,7 +311,7 @@ adminContentRouter.delete("/modules/:moduleId", async (request, response) => {
     response.json({ deletedModule });
   } catch (error) {
     if (error instanceof AppError) {
-      response.status(error.httpStatus).json({ error: error.code, message: error.message });
+      respondWithAppError(response, error);
       return;
     }
     response.status(400).json({ error: "delete_module_failed", message: "Could not delete module." });
@@ -402,7 +403,7 @@ adminContentRouter.get("/modules/:moduleId/export", async (request, response) =>
     response.json({ moduleExport: bundle });
   } catch (error) {
     if (error instanceof AppError) {
-      response.status(error.httpStatus).json({ error: error.code, message: error.message });
+      respondWithAppError(response, error);
       return;
     }
     response.status(404).json({ error: "module_export_failed", message: "Could not export module." });
@@ -478,7 +479,7 @@ adminContentRouter.post("/modules/import", idempotency("modules.import"), async 
     });
   } catch (err) {
     if (err instanceof AppError) {
-      response.status(err.httpStatus).json({ error: err.code, message: err.message });
+      respondWithAppError(response, err);
       return;
     }
     const message = err instanceof Error ? err.message : "Unknown error";
@@ -516,7 +517,7 @@ adminContentRouter.get("/modules/:moduleId/export-package", async (request, resp
     response.json({ envelope });
   } catch (error) {
     if (error instanceof AppError) {
-      response.status(error.httpStatus).json({ error: error.code, message: error.message });
+      respondWithAppError(response, error);
       return;
     }
     const message = error instanceof Error ? error.message : "Could not build module export envelope.";
@@ -768,7 +769,7 @@ adminContentRouter.post("/modules/:moduleId/versions", idempotency((req) => `mod
     response.status(201).json(result);
   } catch (err) {
     if (err instanceof AppError) {
-      response.status(err.httpStatus).json({ error: err.code, message: err.message });
+      respondWithAppError(response, err);
       return;
     }
     // The transaction rolled back, so the module is exactly as it was. Say what failed rather
@@ -829,7 +830,7 @@ adminContentRouter.post(
       response.status(201).json({ moduleVersion });
     } catch (error) {
       if (error instanceof AppError) {
-        response.status(error.httpStatus).json({ error: error.code, message: error.message });
+        respondWithAppError(response, error);
         return;
       }
       response.status(400).json({
@@ -952,7 +953,7 @@ adminContentRouter.post("/modules/:moduleId/module-versions/:moduleVersionId/pub
     response.json({ moduleVersion, validationWarnings: validation.issues });
   } catch (error) {
     if (error instanceof AppError) {
-      response.status(error.httpStatus).json({ error: error.code, message: error.message });
+      respondWithAppError(response, error);
       return;
     }
     response.status(400).json({ error: "publish_module_version_failed", message: "Could not publish module version." });
@@ -972,7 +973,7 @@ adminContentRouter.post("/modules/:moduleId/unpublish", async (request, response
     response.json({ moduleId: result.moduleId, previousActiveVersionId: result.previousActiveVersionId });
   } catch (error) {
     if (error instanceof AppError) {
-      response.status(error.httpStatus).json({ error: error.code, message: error.message });
+      respondWithAppError(response, error);
       return;
     }
     const message = error instanceof Error ? error.message : "Could not unpublish module.";
@@ -1009,7 +1010,7 @@ adminContentRouter.post("/modules/:moduleId/archive", async (request, response) 
     response.json({ moduleId: result.id, archivedAt: result.archivedAt });
   } catch (error) {
     if (error instanceof AppError) {
-      response.status(error.httpStatus).json({ error: error.code, message: error.message });
+      respondWithAppError(response, error);
       return;
     }
     const message = error instanceof Error ? error.message : "Could not archive module.";
@@ -1030,7 +1031,7 @@ adminContentRouter.post("/modules/:moduleId/restore", async (request, response) 
     response.json({ moduleId: result.id });
   } catch (error) {
     if (error instanceof AppError) {
-      response.status(error.httpStatus).json({ error: error.code, message: error.message });
+      respondWithAppError(response, error);
       return;
     }
     const message = error instanceof Error ? error.message : "Could not restore module.";
@@ -1122,7 +1123,7 @@ adminContentRouter.post("/source-material/fetch-url", generateLimiter, async (re
               : err.code === "http_error"
                 ? 502
                 : 500;
-      response.status(status).json({ error: err.code, message: err.message });
+      respondWithAppError(response, err, status);
       return;
     }
     const message = err instanceof Error ? err.message : "Unknown error";
@@ -1175,7 +1176,7 @@ adminContentRouter.post("/source-material/crawl-url", generateLimiter, async (re
                 : err.code === "http_error"
                   ? 502
                   : 500;
-      response.status(status).json({ error: err.code, message: err.message });
+      respondWithAppError(response, err, status);
       return;
     }
     const message = err instanceof Error ? err.message : "Unknown error";

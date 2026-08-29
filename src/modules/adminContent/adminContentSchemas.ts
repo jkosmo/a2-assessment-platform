@@ -83,9 +83,20 @@ export const agentTokenCreateBodySchema = z.object({
   ttlMinutes: z.number().int().min(5).max(60).optional(),
 });
 
+// #930: opprettelse tar imot et DELVIS spraakkart, ikke bare «alt eller en ren streng».
+//
+// ⚠️ En ren streng er ikke noeytral. `missingLocalesFor` leser den som bokmaal
+// (`contentValidationService.ts`, `sourceLocale = "nb"`), fordi feltet ikke baerer noe spraakmerke.
+// Oppretter du en modul mens arbeidsflaten staar paa engelsk, lagres «Incident response» som norsk:
+// gaten melder at en-GB og nn mangler, naar det er nb og nn som mangler, og «oversett det som
+// mangler» oversetter til feil spraak fra en kilde den tror er norsk.
+//
+// `localizedTextMaybeUntranslatedSchema` har vaert kontrakten for broedtekstfeltene siden #905/#913
+// og godtar {"en-GB": "..."} alene. Ingen ny datamodell, ingen migrasjon, og rene strenger leses
+// fortsatt som foer — dette gjelder hva som SKRIVES fra naa av.
 export const moduleCreateBodySchema = z.object({
-  title: localizedTextSchema,
-  description: localizedTextSchema.optional(),
+  title: localizedTextMaybeUntranslatedSchema,
+  description: localizedTextMaybeUntranslatedSchema.optional(),
   certificationLevel: certificationLevelInputSchema,
   validFrom: z.string().trim().optional(),
   validTo: z.string().trim().optional(),
@@ -111,9 +122,10 @@ export const rubricBodySchema = z.object({
   active: z.boolean().default(true),
 });
 
+// #930: samme skjema, samme problem — se moduleCreateBodySchema over.
 export const promptTemplateBodySchema = z.object({
-  systemPrompt: localizedTextSchema,
-  userPromptTemplate: localizedTextSchema,
+  systemPrompt: localizedTextMaybeUntranslatedSchema,
+  userPromptTemplate: localizedTextMaybeUntranslatedSchema,
   examples: z.array(z.record(z.unknown())).optional(),
   active: z.boolean().optional(),
 });
@@ -444,8 +456,16 @@ const exportAuditSchema = z.object({
 // historical versions; only the currently active one is exported.
 export const moduleExportPayloadSchema = z.object({
   module: z.object({
-    title: localizedTextSchema,
-    description: localizedTextSchema.nullable().optional(),
+    // #930: eksporten skriver tittelen slik den er lagret, og etter #930 kan den vaere et DELVIS
+    // kart — «skrevet paa engelsk, ikke oversatt ennaa». Sto dette igjen paa
+    // `localizedTextSchema` (streng eller alle tre), avviste importen fila eksporten nettopp
+    // hadde laget.
+    //
+    // ⚠️ Noeyaktig samme feil som #912 rettet i dette skjemaet, se kommentaren under. Den gangen
+    // gjaldt det `certificationLevel: null`; naa tittelen. Rundturen brytes hver gang skrivesiden
+    // faar lov til noe lesesiden ikke.
+    title: localizedTextMaybeUntranslatedSchema,
+    description: localizedTextMaybeUntranslatedSchema.nullable().optional(),
     // #912: nullable, matching the COURSE export payload below and matching what the exporter
     // actually writes. `certificationLevel` is optional at module creation, the export emits
     // `null` when it was never set, and the importer already handles null — only this schema
@@ -515,8 +535,16 @@ export const sectionExportPayloadSchema = z.object({
 // kept (now optional) so v1 importers that only understand modules still work.
 export const courseExportPayloadSchema = z.object({
   course: z.object({
-    title: localizedTextSchema,
-    description: localizedTextSchema.nullable().optional(),
+    // #930: eksporten skriver tittelen slik den er lagret, og etter #930 kan den vaere et DELVIS
+    // kart — «skrevet paa engelsk, ikke oversatt ennaa». Sto dette igjen paa
+    // `localizedTextSchema` (streng eller alle tre), avviste importen fila eksporten nettopp
+    // hadde laget.
+    //
+    // ⚠️ Noeyaktig samme feil som #912 rettet i dette skjemaet, se kommentaren under. Den gangen
+    // gjaldt det `certificationLevel: null`; naa tittelen. Rundturen brytes hver gang skrivesiden
+    // faar lov til noe lesesiden ikke.
+    title: localizedTextMaybeUntranslatedSchema,
+    description: localizedTextMaybeUntranslatedSchema.nullable().optional(),
     certificationLevel: certificationLevelInputSchema.nullable(),
     audit: exportAuditSchema,
     modules: z.array(z.object({

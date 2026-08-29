@@ -22,6 +22,7 @@ import { AppError } from "../errors/AppError.js";
 import { DEFAULT_CONSENT_BODY } from "../config/consent.js";
 import { localizeContentText } from "../i18n/content.js";
 import { normalizeLocale } from "../i18n/locale.js";
+import { respondWithAppError } from "./helpers/respondWithAppError.js";
 
 const adminPlatformRouter = Router();
 
@@ -233,7 +234,7 @@ adminPlatformRouter.post("/certificate-background", uploadBackground, async (req
     response.status(201).json({ saved: true });
   } catch (error) {
     if (error instanceof AppError) {
-      response.status(error.httpStatus).json({ error: error.code, message: error.message });
+      respondWithAppError(response, error);
       return;
     }
     next(error);
