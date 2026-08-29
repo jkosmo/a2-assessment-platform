@@ -88,9 +88,21 @@ describe("API rate limiting", () => {
 
     expect(rateLimitedResponse.status).toBe(429);
     expect(rateLimitedResponse.headers["retry-after"]).toBeDefined();
-    expect(rateLimitedResponse.body).toEqual({
+    expect(rateLimitedResponse.body).toMatchObject({
       error: "rate_limited",
       message: "Too many assessment requests. Retry in 60 seconds.",
     });
+
+    // #983: sekundene som DATA, ikke bare i den engelske setningen og i en HTTP-header.
+    //
+    // ⚠️ Uten denne raden måler klienttesten bare seg selv: den mater inn et tall og sjekker at
+    // setningen kommer ut på riktig språk, men ingenting sa at serveren faktisk SENDER tallet.
+    //
+    // ⚠️ Merk at det ekte tallet ikke er 60. Det regnes fra når vinduet nullstilles, så den
+    // engelske setningen løy allerede om det — den sa alltid 60.
+    const retryAfterSeconds = rateLimitedResponse.body.details?.retryAfterSeconds;
+    expect(typeof retryAfterSeconds).toBe("number");
+    expect(retryAfterSeconds).toBeGreaterThan(0);
+    expect(retryAfterSeconds).toBe(Number(rateLimitedResponse.headers["retry-after"]));
   }, 20000);
 });

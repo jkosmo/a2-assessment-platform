@@ -102,6 +102,8 @@ export function apiErrorCodeText(code, t, variants = [], details = null) {
   }
   if (template === null) template = translated(t, `${API_ERROR_KEY_PREFIX}${code}`);
   return template === null ? null : fillErrorPlaceholders(template, details);
+  // (null herfra betyr «vi har en setning, men ikke dataene den krever» — kalleren faller da
+  // tilbake paa den generiske, lokaliserte setningen i stedet for aa vise en oedelagt.)
 }
 
 /**
@@ -119,13 +121,19 @@ export function apiErrorCodeText(code, t, variants = [], details = null) {
  */
 export function fillErrorPlaceholders(template, details) {
   if (typeof template !== "string") return "";
-  if (!details || typeof details !== "object") return template;
   let out = template;
-  for (const [key, value] of Object.entries(details)) {
+  for (const [key, value] of Object.entries(details ?? {})) {
     const shown = Array.isArray(value) ? value.join(", ") : String(value);
     out = out.split(`{${key}}`).join(shown);
   }
-  return out;
+  // ⚠️ Overlever en plassholder, mangler avsenderen dataene setningen krever. Da er den oversatte
+  // teksten OEDELAGT, og «Prøv igjen om {retryAfterSeconds} sekunder» er verre enn ingen
+  // oversettelse i det hele tatt.
+  //
+  // Dette skjedde: nøkkelen ble endret til å navngi sekundene, men to håndrullede 429-svar sendte
+  // dem ikke. Samme mønster som `localizeDecisionReason` (#950), og av samme grunn — en delt nøkkel
+  // har alltid flere avsendere enn den som endret den.
+  return /\{\w+\}/.test(out) ? null : out;
 }
 
 /**

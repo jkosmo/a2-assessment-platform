@@ -57,12 +57,22 @@ const EXEMPT = [
 const RENDER_BASELINE = {
   "admin-platform.js": 2,
   "cohort-status.js": 3,
-  // #983: deltakerkonsollet. `log()`, `showEmpty()` og tre kursflyter. `humanizeApiError` selv
-  // ligger i denne fila, så to av de 18 er oversetteren og ikke gjeld.
-  "participant.js": 18,
-  "participant-completed.js": 3,
-  "profile.js": 6,
-  "results.js": 4,
+  // #983 er LØST for denne fila, og tallet er nede fra 18.
+  //
+  // ⚠️ Roten var at deltakerkonsollet hadde SIN EGEN feiloversetter, som bare kjente to nøkler og
+  // aldri slo opp `errors.api.<kode>`. Den delte tabellen fantes hele tiden — konsollet spurte den
+  // bare aldri, og var den eneste skjermen som ikke gjorde det.
+  //
+  // De fleste som står igjen er `log(error.message)`. `log()` oversetter selv, gjennom den samme
+  // funksjonen som nå er koblet til den delte tabellen.
+  //
+  // ⚠️ Men ikke alle: 3738 (innerHTML) og 4248 (textContent) går IKKE gjennom `log()`. Min første
+  // formulering her påsto at alle femten var trygge. Det var feil. De to er eksisterende gjeld.
+  "participant.js": 15,
+  // #983: de tre søsterflatene brukte serverens engelske `message` rått, med hardkodede engelske
+  // reserver som «Error». `profile.js` arvet i tillegg ikke feilkodetabellen i det hele tatt.
+  "participant-completed.js": 2,
+  "profile.js": 2,
   // Kaster videre en lokal parse-feil; teksten er vår egen, ikke serverens.
   "static/admin-content-external-llm.js": 1,
 };

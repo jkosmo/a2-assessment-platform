@@ -1,4 +1,5 @@
 import { renderWorkspaceNavigationWithProfile } from "/static/workspace-nav.js";
+import { describeApiError } from "/static/api-error.js";
 import { resolveInitialLocale } from "/static/i18n-locale.js";
 import { createNumberFormatter, createDateTimeFormatter } from "/static/format-display.js";
 const formatDateTime = createDateTimeFormatter(() => currentLocale);
@@ -434,7 +435,8 @@ completedSubmitAppeal.addEventListener("click", async () => {
       completedAppealFeedback.hidden = false;
       completedSubmitAppeal.disabled = true;
     } catch (error) {
-      completedAppealFeedback.textContent = `${t("completed.appeal.error")} ${error.message ?? ""}`.trim();
+      // #983: serverens engelske setning sto her ordrett, etter en norsk innledning.
+      completedAppealFeedback.textContent = `${t("completed.appeal.error")} ${describeApiError(error, t).headline}`.trim();
       completedAppealFeedback.className = "small field-error";
       completedAppealFeedback.hidden = false;
     }

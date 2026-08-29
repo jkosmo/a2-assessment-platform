@@ -2,6 +2,71 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.48.0 - 2026-08-29
+
+### #983 — deltakerkonsollet spurte aldri den delte oversettelsestabellen
+
+En deltaker med bokmål som leverte to ganger raskt fikk «Too many submission requests. Retry in 60
+seconds.» midt i et ellers norsk grensesnitt. **Og modul-lista ble tømt** og erstattet av den
+engelske setningen — tomtilstand og feilmelding i ett.
+
+⚠️ **Roten var ikke en manglende oversettelse.** Nøkkelen `errors.api.rate_limited` fantes på alle
+tre språk hele tiden. Deltakerkonsollet hadde bare **sin egen feiloversetter**, `humanizeApiError`,
+som kjente to nøkler og aldri slo opp `errors.api.<kode>`.
+
+Deltakerkonsollet var den **eneste** skjermen som ikke brukte den delte `describeApiError`. Alle de
+andre gjorde det. En andre kopi av en oversetter driver alltid fra originalen, og denne hadde rukket
+å bli to nøkler bak.
+
+### Tallet var heller ikke sant
+
+Sekundene sto bare i den engelske prosaen og i `Retry-After`-headeren. En klient som ville skrive
+setningen på brukerens språk måtte enten lese headeren eller parse en engelsk setning.
+
+⚠️ Og setningen løy: den sa alltid «60 seconds», mens det faktiske tallet regnes ut fra når vinduet
+nullstilles. Serveren sender nå `details.retryAfterSeconds`, og setningen navngir det ekte tallet.
+
+### Skrallen ga beskjed
+
+`raw-server-error-guard` teller rå bruk av serverens `message` per fil og feiler i **begge**
+retninger. Da tallet for `participant.js` falt fra 18 til 15, sa den ifra at baselinen skulle ned —
+«Bra jobba».
+
+De fleste som står igjen er `log(error.message)`, og `log()` oversetter selv gjennom den samme
+funksjonen som nå er koblet til den delte tabellen.
+
+⚠️ **Men ikke alle.** QA-porten fant at `participant.js:3738` (innerHTML) og `:4248` (textContent)
+IKKE går gjennom `log()`. Min første formulering her sa at alle femten var trygge. Det var feil, og
+den feilen sto i både ratsj-kommentaren og denne fila. De to er eksisterende gjeld, ikke innført nå.
+
+### Søsterflatene hadde ingen oversetter i det hele tatt
+
+`participant-completed.js`, `results.js` og `profile.js` viste serverens engelske `message` rått,
+med hardkodede engelske reserver — «Error», «Export failed.», «Error loading data». De bruker nå den
+delte oversetteren.
+
+`profile.js` arvet i tillegg **ikke feilkodetabellen**, i motsetning til de to andre. Nøklene fantes
+hele tiden; profilen sto bare utenfor.
+
+`results.js` er nå nede på **null** rå bruk og er fjernet fra baselinen.
+
+### En plassholder skal aldri nå skjermen
+
+⚠️ Da nøkkelen ble endret til å navngi sekundene, sluttet den å virke for avsendere som ikke sender
+tallet. To håndrullede 429-svar gjorde ikke det, og forfatteren fikk «Prøv igjen om
+{retryAfterSeconds} sekunder» ordrett.
+
+Begge avsenderne sender nå tallet. Og utfyllingen returnerer `null` hvis en plassholder overlever,
+slik at kalleren faller tilbake på den generiske setningen — samme mønster som `localizeDecisionReason`
+(#950), og av samme grunn: **en delt nøkkel har alltid flere avsendere enn den som endret den.**
+
+### En import kan ødelegge en hel skjerm
+
+Skriptet mitt satte importlinja etter «siste linje som starter med `import`» — som landet **inni** et
+flerlinjers importuttrykk. Tre skjermer rendret da ingenting.
+
+E2E fanget det. Uten den testen ville de gått til stage ødelagt.
+
 ## 2.47.0 - 2026-08-29
 
 ### #930 — en tittel skrevet på ett språk bærer nå hvilket

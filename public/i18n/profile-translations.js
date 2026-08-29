@@ -1,3 +1,13 @@
+import { translations as participantTranslations } from "./participant-translations.js";
+
+// #983: arver feilkodetabellen (`errors.api.*`) fra deltakerbunten.
+//
+// ⚠️ Profilskjermen var den eneste av de tre søsterflatene som IKKE arvet. De to andre gjorde det
+// fra før, så nøklene var der — profilen sto bare utenfor, og viste serverens engelske `message`
+// med hardkodede reserver som «Error» der den ikke hadde noe.
+//
+// Egne nøkler vinner over de arvede, som i `participant-completed-translations.js`.
+
 export const supportedLocales = ["en-GB", "nb", "nn"];
 
 export const localeLabels = {
@@ -6,7 +16,7 @@ export const localeLabels = {
   nn: "Norsk nynorsk",
 };
 
-export const translations = {
+const own = {
   "en-GB": {
     "nav.skipToContent": "Skip to main content",
     "nav.participant": "My courses",
@@ -354,3 +364,10 @@ export const translations = {
     "dataview.empty": "Ingen.",
   },
 };
+
+export const translations = Object.fromEntries(
+  supportedLocales.map((locale) => [
+    locale,
+    { ...(participantTranslations[locale] ?? {}), ...(own[locale] ?? {}) },
+  ]),
+);

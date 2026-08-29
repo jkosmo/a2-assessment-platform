@@ -1,6 +1,7 @@
 import { renderWorkspaceNavigationWithProfile } from "/static/workspace-nav.js";
 import { resolveInitialLocale } from "/static/i18n-locale.js";
 import { localizeDecisionReason } from "/static/decision-reason.js";
+import { describeApiError } from "/static/api-error.js";
 import {
   buildHeadline,
   planRows,
@@ -1842,24 +1843,24 @@ function headers() {
 // til noe; en kandidat midt i en test kan ikke, og for hen er dumpen bare støy som ser ut som en
 // systemfeil. Derfor beholder admin-flatene detaljfeltet (`section-portability-916.spec.ts`), mens
 // deltakerflaten sender det til `diagnostic` — konsollet, og råpanelet når feilsøking er slått på.
+// #983: deltakerkonsollet hadde SIN EGEN feiloversetter. Den kjente to nøkler —
+// `errors.apiValidation` og `errors.apiGeneric` — og slo aldri opp `errors.api.<kode>`.
+//
+// ⚠️ Den delte tabellen fantes hele tiden, med `rate_limited` på tre språk. Konsollet spurte den
+// bare aldri. Resultatet: en deltaker med bokmål som leverte to ganger raskt fikk «Too many
+// submission requests. Retry in 60 seconds.» — og modul-lista ble tømt og erstattet av den
+// engelske setningen. Tomtilstand og feilmelding i ett, på feil språk.
+//
+// ⚠️ Deltakerkonsollet var den ENESTE skjermen som ikke brukte `describeApiError`. Alle de andre
+// gjorde det. En andre kopi av en oversetter driver alltid fra originalen; denne rakk å bli to
+// nøkler bak.
+//
+// `diagnostic` beholder navnet sitt: `showToast(msg, type, detail)` tar en `detail` som tredje
+// argument, og et felt med det navnet inviterer neste kaller til å sende det rett dit.
 function humanizeApiError(text) {
-  const match = /^(\d{3}):\s*(\{[\s\S]*\})$/.exec(text);
-  if (!match) return null;
-  let body;
-  try {
-    body = JSON.parse(match[2]);
-  } catch {
-    return null;
-  }
-  const code = typeof body?.error === "string" ? body.error : null;
-  const key = code === "validation_error" ? "errors.apiValidation" : "errors.apiGeneric";
-  return {
-    headline: t(key).replace("{status}", match[1]),
-    // Navnet er `diagnostic`, ikke `detail`, med vilje: `showToast(msg, type, detail)` tar en
-    // `detail` som tredje argument, og et felt med det navnet inviterer neste kaller til å sende det
-    // rett dit. Feltet heter nå noe annet enn parameteren det ikke skal inn i.
-    diagnostic: JSON.stringify(body, null, 2),
-  };
+  const described = describeApiError(text?.body ? text : { message: text }, t);
+  if (!described.code) return null;
+  return { headline: described.headline, diagnostic: described.detail ?? described.headline };
 }
 
 // #988: samme oversettelse som `log()` bruker, for de kallstedene som går rett til showToast.
@@ -2865,7 +2866,10 @@ loadModulesButton.addEventListener("click", async () => {
       syncParticipantModuleWorkspace({ restoreDraft: true });
       log(body);
     } catch (error) {
-      showEmpty(moduleList, error.message);
+      // #983: ⚠️ dette tømte lista OG satte serverens engelske setning i stedet — tomtilstand og
+      // feilmelding i ett, på feil språk. Setningen er nå oversatt; er koden ukjent, faller
+      // `describeApiError` tilbake til en lokalisert generisk med statuskoden i.
+      showEmpty(moduleList, describeApiError(error, t).headline);
       log(error.message);
     }
   });
@@ -3161,7 +3165,7 @@ checkAssessmentButton.addEventListener("click", async () => {
       renderAssessmentProgress();
       log(body);
     } catch (error) {
-      showEmpty(assessmentProgressStatus, error.message);
+      showEmpty(assessmentProgressStatus, describeApiError(error, t).headline);
       assessmentProgressSeconds.textContent = "";
       assessmentProgressSeconds.classList.add("hidden");
       log(error.message);
@@ -3221,7 +3225,7 @@ loadHistoryButton?.addEventListener("click", async () => {
       renderHistorySummary(body);
       log(body);
     } catch (error) {
-      showEmpty(historySummary, error.message);
+      showEmpty(historySummary, describeApiError(error, t).headline);
       log(error.message);
     }
   });

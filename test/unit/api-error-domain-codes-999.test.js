@@ -68,10 +68,29 @@ describe("#999 — domenevaktenes feilkoder", () => {
     expect(en.detail).toContain("title");
   });
 
-  it("utfyllingen tåler manglende data uten å legge igjen plassholdere", () => {
+  it("utfyllingen legger aldri igjen en plassholder på skjermen", () => {
     expect(fillErrorPlaceholders("{count} kurs", { count: 2 })).toBe("2 kurs");
-    expect(fillErrorPlaceholders("{count} kurs", null)).toBe("{count} kurs");
     expect(apiErrorCodeText("content_in_use", t("nb"), [], { count: 1, courseTitles: ["X"] }))
       .toContain("1 kurs: X");
+
+    // ⚠️ Denne påstanden sto tidligere som «plassholderen blir stående». Det viste seg å være feil
+    // oppførsel, ikke en egenskap: to håndrullede 429-svar sendte ikke tallet, og forfatteren fikk
+    // «Prøv igjen om {retryAfterSeconds} sekunder» ordrett på skjermen.
+    //
+    // Mangler dataene setningen krever, er den oversatte teksten ØDELAGT. Da er `null` riktig svar
+    // — kalleren faller tilbake på den generiske, lokaliserte setningen.
+    expect(fillErrorPlaceholders("{count} kurs", null)).toBeNull();
+    expect(fillErrorPlaceholders("{count} kurs", {})).toBeNull();
+    expect(apiErrorCodeText("content_in_use", t("nb"), [], null)).toBeNull();
+  });
+
+  // Og at fallbacken faktisk brukes: en 429 uten tallet skal gi en lokalisert generisk setning,
+  // ikke en ødelagt en.
+  it("en kode uten dataene sine faller tilbake på den generiske setningen", () => {
+    const err = new Error("429: x");
+    err.body = { error: "rate_limited", message: "Too many requests." };
+    const nb = describeApiError(err, t("nb"));
+    expect(nb.headline).not.toContain("{retryAfterSeconds}");
+    expect(nb.headline).not.toContain("Too many requests.");
   });
 });

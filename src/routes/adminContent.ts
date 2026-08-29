@@ -1104,6 +1104,9 @@ adminContentRouter.post("/source-material/fetch-url", generateLimiter, async (re
     response.status(429).json({
       error: "rate_limited",
       message: `Too many URL fetches. Retry in ~${retryAfterSec}s.`,
+      // #983: tallet MAA foelge med. Oversettelsen for `rate_limited` er delt med resten av
+      // plattformen og navngir sekundene, saa et svar uten `details` viser plassholderen ordrett.
+      details: { retryAfterSeconds: retryAfterSec },
     });
     return;
   }
@@ -1156,6 +1159,9 @@ adminContentRouter.post("/source-material/crawl-url", generateLimiter, async (re
     response.status(429).json({
       error: "rate_limited",
       message: `Too many crawls. Retry in ~${retryAfterSec}s.`,
+      // #983: tallet MAA foelge med. Oversettelsen for `rate_limited` er delt med resten av
+      // plattformen og navngir sekundene, saa et svar uten `details` viser plassholderen ordrett.
+      details: { retryAfterSeconds: retryAfterSec },
     });
     return;
   }

@@ -1,4 +1,5 @@
 import { renderWorkspaceNavigationWithProfile } from "/static/workspace-nav.js";
+import { describeApiError } from "/static/api-error.js";
 import { resolveInitialLocale } from "/static/i18n-locale.js";
 import { createNumberFormatter, createDateTimeFormatter } from "/static/format-display.js";
 const formatDateTime = createDateTimeFormatter(() => currentLocale, "—");
@@ -468,7 +469,8 @@ function renderAgentTokens(tokens) {
             window.showToast?.(t("agentTokens.revoked.toast"), "success");
             await loadAgentTokens();
           } catch (error) {
-            window.showToast?.(error.message ?? "Error", "error");
+            // #983: «Error» var hardkodet engelsk, og hovedveien viste serverens setning.
+            window.showToast?.(describeApiError(error, t).headline, "error");
           }
         });
       });
@@ -560,7 +562,7 @@ async function submitDeletion(immediate) {
         setTimeout(() => { window.location.reload(); }, 1500);
       }
     } catch (error) {
-      deletionFeedback.textContent = error.message ?? "Error";
+      deletionFeedback.textContent = describeApiError(error, t).headline;
       deletionFeedback.style.cssText = "color:var(--color-error);display:block";
     }
   });
@@ -677,7 +679,7 @@ viewDataBtn.addEventListener("click", async () => {
       dataViewSection.style.display = "";
       dataViewSection.scrollIntoView({ behavior: "smooth", block: "start" });
     } catch (error) {
-      window.showToast?.(error.message ?? "Error loading data", "error");
+      window.showToast?.(describeApiError(error, t).headline, "error");
     }
   });
 });
@@ -697,7 +699,7 @@ downloadDataBtn.addEventListener("click", async () => {
       a.remove();
       URL.revokeObjectURL(url);
     } catch (error) {
-      window.showToast?.(error.message ?? "Error downloading data", "error");
+      window.showToast?.(describeApiError(error, t).headline, "error");
     }
   });
 });

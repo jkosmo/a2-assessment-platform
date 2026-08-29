@@ -1,4 +1,5 @@
 import { renderWorkspaceNavigationWithProfile } from "/static/workspace-nav.js";
+import { describeApiError } from "/static/api-error.js";
 import { createDateTimeFormatter } from "/static/format-display.js";
 const formatDateTime = createDateTimeFormatter(() => currentLocale, "—");
 import { resolveInitialLocale } from "/static/i18n-locale.js";
@@ -285,7 +286,8 @@ async function loadResults() {
     resultsMeta.textContent = t("results.filters.loaded");
     log({ passRates: passRatesData, completion: completionData, courses: courseData });
   } catch (error) {
-    setMessage(error.message ?? "Error loading results.", "warning");
+    // #983: reserven var hardkodet engelsk, og hovedveien viste serverens engelske setning.
+    setMessage(describeApiError(error, t).headline, "warning");
     log(error);
   } finally {
     hideLoading(loadResultsButton);
@@ -311,7 +313,7 @@ async function exportCsv(type) {
     a.click();
     URL.revokeObjectURL(a.href);
   } catch (error) {
-    setMessage(error.message ?? "Export failed.", "warning");
+    setMessage(describeApiError(error, t).headline, "warning");
   }
 }
 
@@ -605,7 +607,7 @@ async function loadModuleLearners() {
     });
     renderParticipants(data.rows ?? []);
   } catch (error) {
-    moduleDetailMeta.textContent = error.message ?? t("results.participants.empty");
+    moduleDetailMeta.textContent = describeApiError(error, t).headline;
     renderParticipants([]);
   }
 }
@@ -627,7 +629,7 @@ async function loadCourseLearners() {
     });
     renderCourseLearners(data.rows ?? []);
   } catch (error) {
-    courseDetailMeta.textContent = error.message ?? t("results.courses.detail.empty");
+    courseDetailMeta.textContent = describeApiError(error, t).headline;
     renderCourseLearners([]);
   }
 }
