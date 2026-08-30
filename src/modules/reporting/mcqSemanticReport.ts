@@ -1,4 +1,5 @@
 import { SubmissionStatus } from "../../db/prismaRuntime.js";
+import type { SupportedLocale } from "../../i18n/locale.js";
 import { localizeContentText } from "../../i18n/content.js";
 import { getAssessmentRules } from "../../config/assessmentRules.js";
 import { getReportingAnalyticsConfig } from "../../config/reportingAnalytics.js";
@@ -54,7 +55,7 @@ type AnalyticsCohortRow = {
   passRate: number | null;
 };
 
-export async function getMcqQualityReport(filters: ReportFilters) {
+export async function getMcqQualityReport(filters: ReportFilters, locale: SupportedLocale = "en-GB") {
   const rules = getAssessmentRules();
   const submissionWhere = {
     ...(filters.moduleId ? { moduleId: filters.moduleId } : {}),
@@ -93,8 +94,14 @@ export async function getMcqQualityReport(filters: ReportFilters) {
   for (const response of responses) {
     const existing = perQuestion.get(response.questionId) ?? {
       moduleId: response.question.module.id,
-      moduleTitle: localizeContentText("en-GB", response.question.module.title) ?? response.question.module.title,
-      certificationLevel: response.question.module.certificationLevel ?? null,
+      moduleTitle: localizeContentText(locale, response.question.module.title) ?? response.question.module.title,
+      // #1027: samme felt som `courses.ts` lokaliserer tre steder. Her gikk det rått ut som
+      // lagringsformatet — i den SAMME raden der tittelen ble lokalisert riktig. En rapport med
+      // norsk tittel og en JSON-blob i nivåkolonnen er verre enn to engelske felt.
+      certificationLevel:
+        localizeContentText(locale, response.question.module.certificationLevel) ??
+        response.question.module.certificationLevel ??
+        null,
       questionId: response.question.id,
       questionStem: response.question.stem,
       optionsJson: response.question.optionsJson,

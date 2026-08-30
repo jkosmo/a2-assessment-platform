@@ -1,4 +1,5 @@
 import { DecisionType, ReviewStatus, SubmissionStatus } from "../../db/prismaRuntime.js";
+import { allLocaleValues } from "../../i18n/allLocaleValues.js";
 import { ConflictError, NotFoundError } from "../../errors/AppError.js";
 import { manualReviewRepository, createManualReviewRepository } from "./manualReviewRepository.js";
 import { runInTransaction, type DbTransactionClient } from "../../db/transaction.js";
@@ -37,6 +38,9 @@ export async function listManualReviewQueue(input: {
         title:
           localizeContentText(normalizeLocale(input.locale) ?? "en-GB", review.submission.module.title) ??
           review.submission.module.title,
+        // #1027: se klagekøen. #1022 lokaliserte tittelen her, men gjorde samtidig køsøket
+        // smalere — det gikk før over den rå JSON-strengen og traff på tvers av alle språk.
+        titleSearch: allLocaleValues(review.submission.module.title),
       },
       latestDecision: review.submission.decisions[0] ?? null,
     },

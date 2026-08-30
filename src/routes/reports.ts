@@ -105,7 +105,7 @@ reportsRouter.get("/completion", async (request, response) => {
     return;
   }
 
-  const report = await getCompletionReport(filters);
+  const report = await getCompletionReport(filters, request.context?.locale ?? "nb");
   response.json(report);
 });
 
@@ -136,7 +136,7 @@ reportsRouter.get("/pass-rates", async (request, response) => {
     return;
   }
 
-  const report = await getPassRatesReport(filters);
+  const report = await getPassRatesReport(filters, request.context?.locale ?? "nb");
   response.json(report);
 });
 
@@ -147,7 +147,7 @@ reportsRouter.get("/manual-review-queue", async (request, response) => {
     return;
   }
 
-  const report = await getManualReviewQueueReport(filters);
+  const report = await getManualReviewQueueReport(filters, request.context?.locale ?? "nb");
   response.json(report);
 });
 
@@ -158,7 +158,7 @@ reportsRouter.get("/appeals", async (request, response) => {
     return;
   }
 
-  const report = await getAppealsReport(filters);
+  const report = await getAppealsReport(filters, request.context?.locale ?? "nb");
   response.json(report);
 });
 
@@ -169,7 +169,10 @@ reportsRouter.get("/mcq-quality", async (request, response) => {
     return;
   }
 
-  const report = await getMcqQualityReport(filters);
+  // ⚠️ #1027: denne ruta ble glemt i første runde, mens CSV-eksporten av SAMME rapport fikk
+  // språket. Resultatet var engelsk JSON og norsk fil — nøyaktig spriket kommentaren i
+  // eksportgrenen under kaller verre enn å ta feil begge steder.
+  const report = await getMcqQualityReport(filters, request.context?.locale ?? "nb");
   response.json(report);
 });
 
@@ -184,7 +187,7 @@ reportsRouter.get("/recertification", async (request, response) => {
     return;
   }
 
-  const report = await getCertificationStatusReport(filters);
+  const report = await getCertificationStatusReport(filters, request.context?.locale ?? "nb");
   response.json(report);
 });
 
@@ -262,27 +265,31 @@ reportsRouter.get("/export", async (request, response) => {
   let rows: Array<Record<string, unknown>>;
   let filenameBase = parsed.data.type;
 
+  // #1027: eksporten skal ha SAMME språk som skjermen. Uten dette ville en norsk leser fått en
+  // norsk rapport på skjermen og en engelsk CSV — verre enn om begge var engelske, fordi ingen
+  // ville sett at de sprikte.
+  const reportLocale = request.context?.locale ?? "nb";
   if (parsed.data.type === "completion") {
-    rows = (await getCompletionReport(filters)).rows;
+    rows = (await getCompletionReport(filters, reportLocale)).rows;
   } else if (parsed.data.type === "pass-rates") {
-    rows = (await getPassRatesReport(filters)).rows;
+    rows = (await getPassRatesReport(filters, reportLocale)).rows;
   } else if (parsed.data.type === "manual-review-queue") {
-    rows = (await getManualReviewQueueReport(filters)).rows;
+    rows = (await getManualReviewQueueReport(filters, reportLocale)).rows;
   } else if (parsed.data.type === "mcq-quality") {
-    rows = (await getMcqQualityReport(filters)).rows;
+    rows = (await getMcqQualityReport(filters, reportLocale)).rows;
   } else if (parsed.data.type === "recertification") {
-    rows = (await getCertificationStatusReport(filters)).rows;
+    rows = (await getCertificationStatusReport(filters, reportLocale)).rows;
   } else if (parsed.data.type === "analytics-trends") {
     rows = (await getAnalyticsTrendsReport(filters)).rows;
   } else if (parsed.data.type === "analytics-cohorts") {
     rows = (await getAnalyticsCohortsReport(filters)).rows;
   } else if (parsed.data.type === "module-summary") {
     // v1.2.24 (#358): alias for completion (én rad per modul, aggregert).
-    rows = (await getCompletionReport(filters)).rows;
+    rows = (await getCompletionReport(filters, reportLocale)).rows;
   } else if (parsed.data.type === "module-learners") {
     // v1.2.24 (#358): learner-level på tvers av moduler i aktive filters. Bruker
     // getModuleLearnersReport som tolererer manglende moduleId-filter.
-    rows = (await getModuleLearnersReport(filters)).rows;
+    rows = (await getModuleLearnersReport(filters, reportLocale)).rows;
   } else if (parsed.data.type === "course-summary") {
     // v1.2.24 (#358): aggregert per kurs. Eksisterende getCourseReport flatset for CSV —
     // moduleBreakdown serialiseres som komma-separert liste i én kolonne for å holde
@@ -292,7 +299,7 @@ reportsRouter.get("/export", async (request, response) => {
       dateFrom: filters.dateFrom,
       dateTo: filters.dateTo,
       orgUnit: filters.orgUnit,
-    });
+    }, reportLocale);
     rows = courseReport.rows.map((row) => ({
       scopeType: "course" as const,
       courseId: row.courseId,
@@ -313,7 +320,7 @@ reportsRouter.get("/export", async (request, response) => {
         dateFrom: filters.dateFrom,
         dateTo: filters.dateTo,
         orgUnit: filters.orgUnit,
-      });
+      }, reportLocale);
       // CourseLearnerRow inkluderer allerede courseId — ikke duplikat-spesifiser.
       rows = courseLearnerReport.rows.map((row) => ({
         scopeType: "course" as const,
@@ -321,7 +328,7 @@ reportsRouter.get("/export", async (request, response) => {
       }));
     }
   } else {
-    rows = (await getAppealsReport(filters)).rows;
+    rows = (await getAppealsReport(filters, reportLocale)).rows;
   }
 
   const csv = toCsv(rows);

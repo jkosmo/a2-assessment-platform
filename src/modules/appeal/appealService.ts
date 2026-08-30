@@ -1,4 +1,5 @@
 import { AppealStatus, DecisionType, SubmissionStatus } from "../../db/prismaRuntime.js";
+import { allLocaleValues } from "../../i18n/allLocaleValues.js";
 import { ConflictError, NotFoundError } from "../../errors/AppError.js";
 import { appealRepository, createAppealRepository } from "./appealRepository.js";
 import { runInTransaction, type DbTransactionClient } from "../../db/transaction.js";
@@ -91,6 +92,7 @@ export async function createSubmissionAppeal(input: {
 export async function listAppealQueue(input: {
   statuses: Array<"OPEN" | "IN_REVIEW" | "RESOLVED" | "REJECTED" | "SUPERSEDED">;
   limit: number;
+  locale?: string;
 }) {
   const appeals = await appealRepository.findAppealsForQueue(input.statuses, input.limit);
 
@@ -114,7 +116,23 @@ export async function listAppealQueue(input: {
       submittedAt: appeal.submission.submittedAt,
       submissionStatus: appeal.submission.submissionStatus,
       user: appeal.submission.user,
-      module: appeal.submission.module,
+      // #1027: serveren eier spørsmålet «hvilket språk viser vi». Klagekøen sendte
+      // lagringsformatet og lot klienten tolke det selv — med en annen reservekjede enn serverens.
+      // Køen for manuell vurdering ble rettet i #1022; denne sto igjen.
+      module: {
+        ...appeal.submission.module,
+        title:
+          localizeContentText(normalizeLocale(input.locale) ?? "en-GB", appeal.submission.module.title) ??
+          appeal.submission.module.title,
+        // ⚠️ Søket i køen gikk over den RÅ JSON-strengen, og traff derfor på tvers av alle språk.
+        // Utilsiktet, men nyttig: en behandler fant saken uansett hvilket språk tittelen ble
+        // skrevet på. Sender vi bare den lokaliserte tittelen, blir søket SMALERE enn før — og det
+        // skjedde allerede for manuell vurdering i #1022 uten at noen merket det.
+        //
+        // Alle variantene følger derfor med som et eget felt. Visningen blir riktig, og søket
+        // finner det man leter etter.
+        titleSearch: allLocaleValues(appeal.submission.module.title),
+      },
       latestDecision: appeal.submission.decisions[0] ?? null,
     },
   }));

@@ -101,12 +101,14 @@ let latestReviewQueue = [];
 let selectedReviewId = "";
 let selectedReviewDetails = null;
 let activeReviewQueueLoad = null;
+let activeReviewQueueLocale = null;
 
 // Appeal state
 let latestAppealQueue = [];
 let selectedAppealId = "";
 let selectedAppealDetails = null;
 let activeAppealQueueLoad = null;
+let activeAppealQueueLocale = null;
 
 let participantRuntimeConfig = {
   authMode: "mock",
@@ -148,6 +150,18 @@ function setLocale(locale) {
   localStorage.setItem("participant.locale", currentLocale);
   document.documentElement.lang = currentLocale;
   applyTranslations();
+
+  // ⚠️ #1027: serveren baker nå inn språket når køen HENTES, ikke når den rendres. Uten en ny
+  // henting ville titlene blitt stående på språket de ble hentet i — engelsk side, norske titler.
+  //
+  // Det var en regresjon endringen selv innførte: klientparseren kjørte per rendering, så byttet
+  // slo inn umiddelbart. Å flytte ansvaret til serveren er riktig, men flyttingen tar med seg en
+  // forutsetning ingen hadde skrevet ned.
+  //
+  // ⚠️ Første forsøk sjekket om kø-elementene FANTES i DOM-en. Begge finnes alltid, uansett rolle,
+  // så en bruker med bare REVIEWER-rollen hentet klagekøen ved hvert språkbytte og fikk 403 og en
+  // rød feiltoast. `refreshVisibleReviewQueues` spør om ROLLER, som er det spørsmålet som gjelder.
+  void refreshVisibleReviewQueues();
 }
 
 function applyTranslations() {
@@ -588,6 +602,9 @@ function filterReviewsBySearch(reviews) {
       review.reviewer?.name, review.reviewer?.email,
       review.submission?.user?.name, review.submission?.user?.email,
       review.submission?.module?.title, review.submission?.module?.id,
+      // #1027: se klagekøen. #1022 lokaliserte tittelen her og gjorde søket smalere uten at det
+      // ble lagt merke til.
+      ...(review.submission?.module?.titleSearch ?? []),
     ].filter(Boolean).join(" ").toLowerCase();
     return haystack.includes(needle);
   });
@@ -997,7 +1014,17 @@ async function loadReviewDetails(reviewId) {
 }
 
 async function loadReviewQueue() {
-  if (activeReviewQueueLoad) return activeReviewQueueLoad;
+  // ⚠️ #1027: enkeltflyt-vakta slukte et språkbytte. Byttet du språk mens køen lastet, fikk du
+  // hentingen som allerede var i gang — den som spurte serveren om det FORRIGE språket — og
+  // titlene ble stille stående feil. Ingen feilmelding, bare gammel tekst.
+  //
+  // Vakta er riktig for to like hentinger. To hentinger i ULIKE språk er ikke like, så da venter vi
+  // på den som går og henter på nytt etterpå.
+  if (activeReviewQueueLoad) {
+    if (activeReviewQueueLocale === currentLocale) return activeReviewQueueLoad;
+    return activeReviewQueueLoad.then(() => loadReviewQueue());
+  }
+  activeReviewQueueLocale = currentLocale;
   activeReviewQueueLoad = (async () => {
     try {
       const statuses = getSelectedReviewStatuses();
@@ -1024,6 +1051,7 @@ async function loadReviewQueue() {
       logDebug(toActionableErrorMessage(error));
     } finally {
       activeReviewQueueLoad = null;
+      activeReviewQueueLocale = null;
     }
   })();
   return activeReviewQueueLoad;
@@ -1091,6 +1119,10 @@ function filterAppealsBySearch(appeals) {
       appeal.appealedBy?.name, appeal.appealedBy?.email,
       appeal.submission?.user?.name, appeal.submission?.user?.email,
       appeal.submission?.module?.title, appeal.submission?.module?.id,
+      // #1027: søket gikk før over den RÅ JSON-strengen, og traff derfor på tvers av alle språk.
+      // Serveren lokaliserer nå tittelen, så uten språkvariantene ville søket blitt smalere enn
+      // det var — en behandler ville sluttet å finne saker skrevet på et annet språk.
+      ...(appeal.submission?.module?.titleSearch ?? []),
     ].filter(Boolean).join(" ").toLowerCase();
     return haystack.includes(needle);
   });
@@ -1098,18 +1130,16 @@ function filterAppealsBySearch(appeals) {
 
 // ── Appeal: queue rendering ────────────────────────────────────────────────────
 
+// #1027: serveren lokaliserer tittelen nå, som den gjør for køen for manuell vurdering (#1022).
+//
+// ⚠️ Her sto en egen parser med reservekjeden `locale ?? en-GB ?? første verdi`. Serverens kjede er
+// en annen, og to implementasjoner av «hvilket språk viser vi» driver alltid fra hverandre — det
+// var nettopp det #1022 viste. Funksjonen beholdes som en tynn vakt for rader fra en eldre
+// server-versjon, men den skal ikke vokse igjen.
 function resolveModuleTitle(title) {
   if (!title) return "-";
-  if (typeof title === "object") {
-    return title[currentLocale] ?? title["en-GB"] ?? Object.values(title)[0] ?? "-";
-  }
-  try {
-    const parsed = JSON.parse(title);
-    if (parsed && typeof parsed === "object") {
-      return parsed[currentLocale] ?? parsed["en-GB"] ?? Object.values(parsed)[0] ?? title;
-    }
-  } catch { /* not JSON */ }
-  return title;
+  if (typeof title === "string") return title;
+  return String(title);
 }
 
 function renderAppealQueue() {
@@ -1425,7 +1455,12 @@ async function loadAppealDetails(appealId, options = {}) {
 }
 
 async function loadAppealQueue(options = {}) {
-  if (activeAppealQueueLoad) return activeAppealQueueLoad;
+  // #1027: se kommentaren i `loadReviewQueue` — samme vakt, samme slukte språkbytte.
+  if (activeAppealQueueLoad) {
+    if (activeAppealQueueLocale === currentLocale) return activeAppealQueueLoad;
+    return activeAppealQueueLoad.then(() => loadAppealQueue());
+  }
+  activeAppealQueueLocale = currentLocale;
   activeAppealQueueLoad = (async () => {
     try {
       showLoading(appealQueueBody, { rows: 5, columns: 9 });
@@ -1457,6 +1492,7 @@ async function loadAppealQueue(options = {}) {
       logDebug(toActionableErrorMessage(error));
     } finally {
       activeAppealQueueLoad = null;
+      activeAppealQueueLocale = null;
     }
   })();
   return activeAppealQueueLoad;

@@ -54,6 +54,7 @@ let participantRuntimeConfig = {
   },
 };
 let roleSwitchState = resolveRoleSwitchState(participantRuntimeConfig);
+let hasLoadedResults = false;
 let selectedModuleRow = null;
 let selectedCourseRow = null;
 
@@ -284,6 +285,7 @@ async function loadResults() {
       selectedCourseRow ? loadCourseLearners() : Promise.resolve(renderCourseLearners([])),
     ]);
     resultsMeta.textContent = t("results.filters.loaded");
+    hasLoadedResults = true;
     log({ passRates: passRatesData, completion: completionData, courses: courseData });
   } catch (error) {
     // #983: reserven var hardkodet engelsk, og hovedveien viste serverens engelske setning.
@@ -322,6 +324,16 @@ function setLocale(locale) {
   localStorage.setItem("participant.locale", currentLocale);
   document.documentElement.lang = currentLocale;
   applyTranslations();
+
+  // ⚠️ #1027: serveren baker inn språket når rapporten HENTES. Uten en ny henting oversetter
+  // `applyTranslations` etikettene, mens modul- og kurstitlene i tabellen blir stående på det
+  // forrige språket — engelsk side, norske titler.
+  //
+  // Nøyaktig samme feil som i vurderingskøene. Den fulgte med flyttingen av ansvaret til serveren:
+  // klientparseren kjørte per rendering, så byttet slo inn av seg selv. Det gjør det ikke lenger.
+  //
+  // Bare når noe faktisk ER hentet — ved oppstart kalles denne før brukeren har trykket «hent».
+  if (hasLoadedResults) void loadResults();
 }
 
 function applyTranslations() {

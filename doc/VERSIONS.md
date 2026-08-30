@@ -2,6 +2,93 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.49.0 - 2026-08-30
+
+### #1027 — serveren eier spørsmålet «hvilket språk viser vi»
+
+Serveren sendte lagringsformatet, og hver klient tolket det selv. Da får vi flere implementasjoner
+av samme spørsmål, og de driver fra hverandre — som #1022 viste, der klientens reservekjede falt
+tilbake på `nb` og serverens på første tilgjengelige.
+
+⚠️ **#892 gjør dette til noe som faktisk skjer:** en delvis oversatt tittel er en lovlig tilstand,
+ikke en teoretisk kant.
+
+Saken navnga to hardkodede `localizeContentText("en-GB", …)`. **Det var seks.** Og to steder for
+`certificationLevel`. **Det var tre.**
+
+### Søket ble smalere i #1022, uten at noen merket det
+
+Køene søkte over den **rå JSON-strengen**, og traff derfor på tvers av alle språk. Utilsiktet, men
+nyttig: en behandler fant saken uansett hvilket språk tittelen ble skrevet på.
+
+⚠️ #1022 lokaliserte tittelen i køen for manuell vurdering — og gjorde samtidig søket smalere. Ingen
+la merke til det. Begge køene sender nå språkvariantene som eget felt, så visningen er riktig **og**
+søket finner det man leter etter.
+
+### Å flytte ansvaret til serveren tar med seg en forutsetning
+
+QA-porten fant at språkbytte på sensorsiden sluttet å virke. Serveren baker inn språket når køen
+**hentes**; klientparseren kjørte per **rendering**. Byttet slo derfor ikke inn før neste henting —
+engelsk side, norske titler.
+
+Flyttingen er riktig. Men den forutsetningen sto ingen steder, og jeg tenkte ikke på den.
+
+### Og jeg skapte selv spriket kommentaren min fordømmer
+
+`/api/reports/mcq-quality` ga **engelsk JSON og norsk CSV**. Kommentaren jeg hadde skrevet to
+skjermer lenger opp sier at det er verre enn å ta feil begge steder — fordi ingen ser at de spriker.
+
+Fire eksportveier til hadde samme sprik. Alle er rettet.
+
+### Testen var grønn før fiksen
+
+⚠️ Den sammenlignet bare nb mot en-GB og krevde at de var **ulike**. Seed-modulene har rene strenger
+som titler — ingen lokalisering i det hele tatt — så påstanden målte ikke det den skulle. Den ville
+også vært grønn med språkene byttet om.
+
+Testen lager nå sin egen modul med kjent tittel per språk, og sier **hvilken** tekst hver leser skal
+få. Mutasjonsverifisert: tilbake til hardkodet engelsk gir tre røde, mot null før.
+
+**En test som lener seg på data den ikke lager, måler det den håper finnes.**
+
+### Andre runde hos porten: fiksen min hadde sin egen regresjon
+
+⚠️ **Språkbyttet spurte DOM-en, ikke brukeren.** Første utgave sjekket om kø-elementene *fantes*.
+Begge finnes alltid, uansett rolle. En bruker med bare sensorrollen hentet derfor klagekøen ved hvert
+språkbytte og fikk 403 og en rød feilmelding. Koden spør nå om **rolle**, gjennom funksjonen som
+allerede fantes for nettopp det spørsmålet.
+
+Tre ting til fulgte av samme flytting:
+
+- **Resultatsiden** hadde nøyaktig samme feil som køene — engelsk side, norske titler.
+- **Sertifiseringsnivået** gikk fortsatt rått ut i mcq-rapporten, i samme rad der tittelen ble
+  lokalisert riktig.
+- **Enkeltflyt-vakta slukte et språkbytte** som skjedde mens køen lastet. Vakta er riktig for to
+  like hentinger; to hentinger i ulike språk er ikke like.
+
+### Tre av testene mine kunne ikke bli røde
+
+Verre enn koden de skulle dekke:
+
+- `if (firstTitle)` hoppet over hele påstanden når rapporten var tom. Ruta som **var** feilen hadde
+  dermed ingen test som kunne feile.
+- En løkke over klager den aldri lagde. Tom kø betyr null runder, og null runder er grønt.
+- Den gamle svake CSV-testen ble aldri slettet — to `it` med samme navn i samme fil.
+- I den nye e2e-testen sto velgeren `.toast.error`. Klassen heter `toast--error`. En velger som ikke
+  treffer, gjør `toHaveCount(0)` sann uansett hva siden gjør.
+
+**En betinget påstand er ikke en test. Den er en test som spør om lov.**
+
+Alle er nå mutasjonsverifisert: de blir røde på den gamle koden og grønne igjen etter gjenoppretting
+fra filkopi.
+
+### Funnet underveis: #1039
+
+En ren sensor får 403 mot klagekøen allerede ved **sidelasting**, fordi mock-innloggingens
+standardroller i `review.html` står som `REVIEWER,APPEAL_HANDLER` og rekker å bestemme oppførsel før
+`/api/me` er lest. Egen sak — men den er grunnen til at e2e-testen måler differanse rundt
+språkbyttet i stedet for totalen.
+
 ## 2.48.0 - 2026-08-29
 
 ### #983 — deltakerkonsollet spurte aldri den delte oversettelsestabellen

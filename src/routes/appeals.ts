@@ -42,6 +42,8 @@ appealsRouter.get("/", async (request, response) => {
         ? parsed.data.status
         : (["OPEN", "IN_REVIEW"] as Array<"OPEN" | "IN_REVIEW">),
     limit: parsed.data.limit,
+    // #1027: behandlerens språk. Uten dette lokaliserer tjenesten til engelsk uansett.
+    locale: request.context?.locale,
   });
   response.json({ appeals });
 });

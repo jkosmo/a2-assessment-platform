@@ -1,4 +1,5 @@
 import { ReviewStatus, AppealStatus } from "../../db/prismaRuntime.js";
+import type { SupportedLocale } from "../../i18n/locale.js";
 import { localizeContentText } from "../../i18n/content.js";
 import { reportingRepository } from "../../repositories/reportingRepository.js";
 import { buildAppealSlaSnapshot } from "../../modules/appeal/index.js";
@@ -66,7 +67,7 @@ type CertificationStatusRow = {
   updatedAt: Date;
 };
 
-export async function getManualReviewQueueReport(filters: ReportFilters) {
+export async function getManualReviewQueueReport(filters: ReportFilters, locale: SupportedLocale = "en-GB") {
   const statuses = asReviewStatuses(filters.statuses);
   const rows = await reportingRepository.findManualReviewsForQueueReport({
     statuses,
@@ -83,7 +84,7 @@ export async function getManualReviewQueueReport(filters: ReportFilters) {
     createdAt: review.createdAt,
     reviewedAt: review.reviewedAt,
     moduleId: review.submission.module.id,
-    moduleTitle: localizeContentText("en-GB", review.submission.module.title) ?? review.submission.module.title,
+    moduleTitle: localizeContentText(locale, review.submission.module.title) ?? review.submission.module.title,
     submissionId: review.submission.id,
     submissionStatus: review.submission.submissionStatus,
     participantEmail: review.submission.user.email,
@@ -105,7 +106,7 @@ export async function getManualReviewQueueReport(filters: ReportFilters) {
   };
 }
 
-export async function getAppealsReport(filters: ReportFilters) {
+export async function getAppealsReport(filters: ReportFilters, locale: SupportedLocale = "en-GB") {
   const statuses = asAppealStatuses(filters.statuses);
   const appeals = await reportingRepository.findAppealsForReport({
     statuses,
@@ -128,7 +129,7 @@ export async function getAppealsReport(filters: ReportFilters) {
     claimedAt: appeal.claimedAt,
     resolvedAt: appeal.resolvedAt,
     moduleId: appeal.submission.module.id,
-    moduleTitle: localizeContentText("en-GB", appeal.submission.module.title) ?? appeal.submission.module.title,
+    moduleTitle: localizeContentText(locale, appeal.submission.module.title) ?? appeal.submission.module.title,
     submissionId: appeal.submission.id,
     participantEmail: appeal.submission.user.email,
     participantDepartment: appeal.submission.user.department,
@@ -153,7 +154,7 @@ export async function getAppealsReport(filters: ReportFilters) {
   };
 }
 
-export async function getCertificationStatusReport(filters: ReportFilters) {
+export async function getCertificationStatusReport(filters: ReportFilters, locale: SupportedLocale = "en-GB") {
   const statuses = new Set((filters.statuses ?? []).map((value) => value.toUpperCase()));
 
   const certifications = await reportingRepository.findCertificationsForStatusReport({
@@ -171,7 +172,7 @@ export async function getCertificationStatusReport(filters: ReportFilters) {
         participantEmail: certification.user.email,
         participantDepartment: certification.user.department,
         moduleId: certification.module.id,
-        moduleTitle: localizeContentText("en-GB", certification.module.title) ?? certification.module.title,
+        moduleTitle: localizeContentText(locale, certification.module.title) ?? certification.module.title,
         latestDecisionId: certification.latestDecisionId,
         // Historiske rader kan stå med DUE_SOON/DUE/EXPIRED. De talte som bestått den gang og teller
         // som bestått nå — samme regel som kursbevisporten bruker, én kilde (`isCertificationPassed`).
