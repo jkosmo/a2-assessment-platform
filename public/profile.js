@@ -1,4 +1,5 @@
 import { renderWorkspaceNavigationWithProfile } from "/static/workspace-nav.js";
+import { renderRolePresetControl as delRenderRolePresetControl } from "/static/role-preset-control.js";
 import { runWithBusyButton } from "/static/busy-button.js";
 import { showToast } from "/static/toast.js";
 // ⚠️ #1046: denne fila kalte `window.showToast?.(…)` seks steder. Globalen ble ALDRI satt — heller
@@ -130,32 +131,15 @@ function populateLocaleSelect() {
 // ── Navigation ────────────────────────────────────────────────────────────────
 
 function renderRolePresetControl() {
-  mockRolePresetSelect.innerHTML = "";
-  const manual = document.createElement("option");
-  manual.value = "";
-  manual.textContent = t("identity.rolePresetManual") ?? "— manual —";
-  mockRolePresetSelect.appendChild(manual);
-
-  for (const role of roleSwitchState.presets) {
-    const option = document.createElement("option");
-    option.value = role;
-    option.textContent = role;
-    mockRolePresetSelect.appendChild(option);
-  }
-
-  const matchingPreset = findMatchingPreset(rolesInput.value, roleSwitchState.presets);
-  mockRolePresetSelect.value = matchingPreset;
-
-  const disabled = !roleSwitchState.enabled;
-  mockRolePresetSelect.disabled = disabled;
-  if (mockRolePresetHint) {
-    mockRolePresetHint.textContent = disabled
-      ? (t("identity.rolePresetDisabledEntra") ?? "")
-      : (t("identity.rolePresetHint") ?? "");
-  }
-  if (mockRolePresetContainer) {
-    mockRolePresetContainer.hidden = roleSwitchState.presets.length === 0;
-  }
+  // #1046: fire identiske kopier, to ulike oppforsler. Se `/static/role-preset-control.js`.
+  delRenderRolePresetControl({
+    select: mockRolePresetSelect,
+    hint: mockRolePresetHint,
+    container: mockRolePresetContainer,
+    roleSwitchState,
+    currentRoles: rolesInput.value,
+    t,
+  });
 }
 
 function renderWorkspaceNavigation() {

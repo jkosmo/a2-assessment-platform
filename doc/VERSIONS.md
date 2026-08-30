@@ -2,6 +2,49 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.60.0 - 2026-08-30
+
+### Generalisering: rollevelgeren lå i fire kopier med to oppførsler
+
+`scripts/dev/similar-function-scan.mjs` sammenligner funksjoners **form** — nodetyper uten navn og
+literaler — så to funksjoner som gjør det samme med ulike variabelnavn får samme signatur.
+
+Den fant 13 par med ≥85 % lik form. Det sterkeste: `renderRolePresetControl`, **100 % identisk
+struktur i fire filer**.
+
+⚠️ **Og de hadde driftet fra hverandre:**
+
+| Variant | Dato | Oppførsel |
+|---|---|---|
+| `participant`, `participant-completed` | 9. mars | Ingen null-vakter, ingen reservetekst |
+| `profile`, `admin-platform` | 22. mars | Null-vakter og `?? ""`-reserver |
+
+Den eldste ville **kastet** hvis `mockRolePresetHint` manglet. Fire kopier, to oppførsler, ingen
+som visste om forskjellen. `/static/role-preset-control.js` tar den nyeste, altså den forsvarlige.
+
+### ⚠️ Og jeg brakk 87 tester underveis uten å oppdage det på første forsøk
+
+Skriptet mitt sa: «legg til importen hvis `role-preset-control.js` ikke finnes i fila». Men
+kommentaren jeg nettopp hadde satt inn **inneholder den strengen**. Sjekken ble usann, importen kom
+aldri, og fire flater kastet `delRenderRolePresetControl is not defined` ved lasting.
+
+**Jeg sjekket på en streng der jeg mente en importsetning.** Samme klasse som en påstand tidligere
+i dag som traff min egen kommentar.
+
+### Og jeg leste feilen feil
+
+E2E rapporterte «225 passed (10.1m)» mot vanlige «312 passed (1.3m)». Jeg konkluderte at **87
+tester manglet**, og lette etter en stille delvis kjøring.
+
+De feilet. Jeg hadde pipet til `tail -3`, som kuttet «12 failed»-linja — og «exit code 0» kom fra
+røret, ikke fra Playwright.
+
+⚠️ **Det er andre gang samme dag.** Første gang var integrasjonssuiten i morges, og jeg skrev det
+ned da. Notatet var ikke nok.
+
+Kjøretiden var forresten symptomet, ikke en egen feil: hver feilende test brukte 30 sekunder på å
+vente på innhold som aldri kom.
+
 ## 2.59.0 - 2026-08-30
 
 ### Nåbarhetsanalyse med ekte parser — og resten av de gamle skjermbildene
