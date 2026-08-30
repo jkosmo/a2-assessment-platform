@@ -1,4 +1,5 @@
 import { renderWorkspaceNavigationWithProfile } from "/static/workspace-nav.js";
+import { applyIdentityDefaults as delApplyIdentityDefaults } from "/static/identity-defaults.js";
 import { lagLokalisertRessurs } from "/static/localized-resource.js";
 import { resolveInitialLocale } from "/static/i18n-locale.js";
 import { createNumberFormatter, createDateTimeFormatter } from "/static/format-display.js";
@@ -1505,15 +1506,13 @@ async function loadVersion() {
 }
 
 function applyIdentityDefaults() {
-  const defaults =
+  // #1046: se `/static/identity-defaults.js`. HVILKEN rolle som leses er flatens eget valg —
+  // sensorflaten har to arbeidsflater bak samme side, og faller tilbake fra den ene til den andre.
+  delApplyIdentityDefaults(
     participantRuntimeConfig?.identityDefaults?.reviewWorkspace ??
-    participantRuntimeConfig?.identityDefaults?.reviewer;
-  if (!defaults) return;
-  document.getElementById("userId").value = defaults.userId ?? "";
-  document.getElementById("email").value = defaults.email ?? "";
-  document.getElementById("name").value = defaults.name ?? "";
-  document.getElementById("department").value = defaults.department ?? "";
-  rolesInput.value = Array.isArray(defaults.roles) ? defaults.roles.join(",") : "";
+      participantRuntimeConfig?.identityDefaults?.reviewer,
+    rolesInput,
+  );
 }
 
 async function loadParticipantConsoleConfig() {

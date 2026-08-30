@@ -2,6 +2,33 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.61.0 - 2026-08-30
+
+### Identitetsfeltene: seks kopier, én forsvarlig
+
+`applyIdentityDefaults` lå i **sju filer**. Likhetsskanningen fant bare **to** av dem som 100 %
+like — og det er selve poenget: resten hadde driftet nok til å slippe under grensen.
+
+⚠️ **Og de hadde ulik forsvarlighet.** `results.js` null-sjekker hvert felt før det settes. De
+andre gjør `document.getElementById("userId").value = …` rett fram og **kaster** hvis feltet ikke
+finnes på siden. Den delte modulen tar den forsvarlige varianten.
+
+### Hva som IKKE ble felles, med vilje
+
+**Hvilken rolle som leses.** Sensorflaten bruker `reviewWorkspace ?? reviewer`, kohortstatus
+`contentAdmin ?? reportReader`, deltakerflaten `participant`.
+
+Det er en reell forskjell mellom flatene, ikke drift — så den ble værende hos hver enkelt. En felles
+funksjon som gjemte det ville skjult noe som faktisk betyr noe.
+
+**Likhetsskanningen peker på form. Den kan ikke se hva forskjellen betyr.** Det må leses.
+
+### Status for generaliseringen
+
+13 par ved start, **10 igjen**. De som står er par *innenfor* én fil — sensorkø mot klagekø,
+modul-liste mot kurs-liste — der symmetrien trolig er tilsiktet. De lar vi ligge til vi har en
+grunn.
+
 ## 2.60.0 - 2026-08-30
 
 ### Generalisering: rollevelgeren lå i fire kopier med to oppførsler

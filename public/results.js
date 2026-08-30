@@ -1,4 +1,5 @@
 import { renderWorkspaceNavigationWithProfile } from "/static/workspace-nav.js";
+import { applyIdentityDefaults as delApplyIdentityDefaults } from "/static/identity-defaults.js";
 import { runWithBusyButton } from "/static/busy-button.js";
 import { showToast } from "/static/toast.js";
 import { lagLokalisertRessurs } from "/static/localized-resource.js";
@@ -425,17 +426,8 @@ function renderWorkspaceNavigation() {
 }
 
 function applyIdentityDefaults() {
-  const defaults = participantRuntimeConfig?.identityDefaults?.reportReader;
-  if (!defaults) return;
-  const userId = document.getElementById("userId");
-  const email = document.getElementById("email");
-  const name = document.getElementById("name");
-  const department = document.getElementById("department");
-  if (userId) userId.value = defaults.userId ?? "";
-  if (email) email.value = defaults.email ?? "";
-  if (name) name.value = defaults.name ?? "";
-  if (department) department.value = defaults.department ?? "";
-  rolesInput.value = Array.isArray(defaults.roles) ? defaults.roles.join(",") : "";
+  // #1046: se `/static/identity-defaults.js`. HVILKEN rolle som leses er flatens eget valg.
+  delApplyIdentityDefaults(participantRuntimeConfig?.identityDefaults?.reportReader , rolesInput);
 }
 
 async function loadVersion() {
