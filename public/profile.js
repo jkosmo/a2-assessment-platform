@@ -1,4 +1,5 @@
 import { renderWorkspaceNavigationWithProfile } from "/static/workspace-nav.js";
+import { hideLoading, showEmpty, showLoading } from "/static/loading.js";
 import { lagLokalisertRessurs } from "/static/localized-resource.js";
 import { describeApiError } from "/static/api-error.js";
 import { resolveInitialLocale } from "/static/i18n-locale.js";
@@ -258,12 +259,9 @@ function renderModules(body) {
   modulesBody.innerHTML = "";
 
   if (modules.length === 0) {
-    const row = document.createElement("tr");
-    const cell = document.createElement("td");
-    cell.colSpan = 4;
-    cell.textContent = t("profile.modules.empty");
-    row.appendChild(cell);
-    modulesBody.appendChild(row);
+    // #1046: den delte tomtilstanden. Den håndlagde varianten her gjorde det samme, men uten
+    // `.empty-state`-stilen — så tomme tabeller så ulike ut fra flate til flate.
+    showEmpty(modulesBody, t("profile.modules.empty"), { columns: 4 });
     return;
   }
 
@@ -304,12 +302,9 @@ function renderCourses(body) {
   coursesBody.innerHTML = "";
 
   if (courses.length === 0) {
-    const row = document.createElement("tr");
-    const cell = document.createElement("td");
-    cell.colSpan = 4;
-    cell.textContent = t("profile.courses.empty");
-    row.appendChild(cell);
-    coursesBody.appendChild(row);
+    // #1046: den delte tomtilstanden. Den håndlagde varianten her gjorde det samme, men uten
+    // `.empty-state`-stilen — så tomme tabeller så ulike ut fra flate til flate.
+    showEmpty(coursesBody, t("profile.courses.empty"), { columns: 4 });
     return;
   }
 
@@ -650,11 +645,19 @@ localeSelect.addEventListener("change", () => {
 // tatt for settet.
 const profillister = lagLokalisertRessurs({
   hentSpråk: () => currentLocale,
-  hent: () =>
-    Promise.allSettled([
+  hent: () => {
+    // #1046: flaten viste ingenting mens den lastet. De tre flatene som HAR lastetilstand fikk
+    // den i mars; denne ble aldri rørt.
+    showLoading(modulesBody, { rows: 3, columns: 4 });
+    showLoading(coursesBody, { rows: 2, columns: 4 });
+    return Promise.allSettled([
       apiFetch("/api/modules/completed", headers),
       apiFetch("/api/courses/completions", headers),
-    ]),
+    ]).finally(() => {
+      hideLoading(modulesBody);
+      hideLoading(coursesBody);
+    });
+  },
   tegn: ([modulesResult, coursesResult]) => {
     if (modulesResult.status === "fulfilled") {
       cachedModulesData = modulesResult.value;

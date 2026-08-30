@@ -2,6 +2,41 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.56.0 - 2026-08-30
+
+### #1046 steg 2 — delte laste- og tomtilstander
+
+| | Før | Etter |
+|---|---|---|
+| `showEmpty` | 2/8 | **5/8** |
+| `showLoading` | 3/8 | **5/8** |
+
+`profile`, `participant-completed` og `results` hadde håndlagde tomtilstander som gjorde det samme
+som den delte — bare uten `.empty-state`-stilen. Profilsiden viste dessuten **ingenting** mens den
+lastet.
+
+⚠️ **De tre som står igjen har grunner, og skal ikke tvinges:** `admin-platform` skjuler hele kortet
+når det ikke finnes feilede vurderinger, `cohort-status` har en `<select>` og ikke en tabell, og
+`certificate` viser én post med egne tilstander.
+
+**Uniformitet er ikke målet. Å ikke ha ulike svar på det samme spørsmålet er målet.**
+
+### ⚠️ Metoden måtte justeres: dater AVGJØRELSEN, ikke fila
+
+| | Opprettet | Delt? |
+|---|---|---|
+| `toast.js` | 11. mars | ✅ delt |
+| `setMessage` i `results.js` | 17. mars | lokal kopi |
+| `setMessage` i `cohort-status.js` | **19. juli** | kopi av kopien |
+
+Kohortstatus er fire måneder nyere enn `toast.js`, men kopierte en eldre lokal løsning framfor å
+bruke den delte.
+
+**Filen er ny. Tenkningen er gammel.** «Nyeste vinner» ville her gitt feil svar.
+
+Toast mot inline melding er dessuten **to ulike ideer om hvordan man sier fra**, ikke to kvaliteter
+av samme idé. Det venter på en beslutning fra produkteier — se `doc/UI_INVENTORY_1046.md`.
+
 ## 2.55.0 - 2026-08-30
 
 ### #1046 steg 1 — den delte feiloversetteren spredt til flatene som manglet den

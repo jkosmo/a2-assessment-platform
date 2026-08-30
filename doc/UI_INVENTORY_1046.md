@@ -89,6 +89,73 @@ finnes, ville skjult at premissen var flyttet.
 
 ---
 
+## Framgang 30.08.2026
+
+### Steg 1: `api-error` — ferdig
+
+| Fil | Rå servertekster før | Etter |
+|---|---|---|
+| `admin-platform.js` | 2 | **0** |
+| `cohort-status.js` | 2 | **0** |
+| `profile.js` | 2 | **0** |
+| `participant-completed.js` | 2 | **0** |
+| `participant.js` | 15 | **13** |
+
+Totalt nede fra 37 (23.08) til 14. De 13 som står igjen er `log()`-kall, og `log()` oversetter selv.
+
+### Steg 2: `loading` og `showEmpty` — delvis
+
+| | Før | Etter |
+|---|---|---|
+| `showEmpty` | 2/8 | **5/8** |
+| `showLoading` | 3/8 | **5/8** |
+
+⚠️ **De tre som står igjen har grunner, og skal ikke tvinges:**
+
+- **`admin-platform`** skjuler hele kortet når det ikke finnes feilede vurderinger. «Ingenting å se»
+  er riktigere enn en tom tabell med en melding i.
+- **`cohort-status`** har en `<select>`, ikke en tabell. `showEmpty` skriver en tabellrad; her er en
+  plassholder-option riktig form.
+- **`certificate`** viser én post, ikke en liste, og har `showState` for de tre utfallene.
+
+**Uniformitet er ikke målet. Å ikke ha ULIKE svar på det samme spørsmålet er målet.**
+
+---
+
+## ⚠️ Metoden måtte justeres: dater AVGJØRELSEN, ikke fila
+
+Tilbakemelding til brukeren finnes i to leirer:
+
+| | Opprettet | Delt? |
+|---|---|---|
+| `toast.js` | 2026-03-11 | ✅ delt modul |
+| `setMessage` i `results.js` | 2026-03-17 | lokal kopi |
+| `setMessage` i `cohort-status.js` | **2026-07-19** | kopi av kopien |
+
+Kohortstatus er **fire måneder nyere** enn `toast.js` — men kopierte en eldre lokal løsning framfor
+å bruke den delte.
+
+**Filen er ny. Tenkningen er gammel.** «Nyeste vinner» ville her gitt feil svar. Dateringen må
+gjelde avgjørelsen, ikke tidspunktet noen sist skrev i fila.
+
+### Dette er en åpen avgjørelse, ikke en spredning
+
+Toast og inline melding er **to ulike ideer om hvordan man sier fra**, ikke to kvaliteter av samme
+idé:
+
+| | Toast | Inline melding |
+|---|---|---|
+| Oppførsel | Legger seg over, forsvinner selv | Står til noe endres |
+| Passer til | «Lagret», «14 saker lastet» | Status for det du ser på |
+| Brukt av | deltaker, sensor, admin | resultater, kohortstatus |
+
+⚠️ Og tre flater har **ingen av delene**: profil, fullførte moduler, kursbevis sier ingenting når
+noe lykkes eller går galt.
+
+Dette trenger en beslutning fra produkteier før spredning.
+
+---
+
 ## Foreslått rekkefølge, med begrunnelse
 
 | # | Egenskap | Hvorfor først |

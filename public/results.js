@@ -8,7 +8,7 @@ import { escapeHtml as escapeHtmlR } from "/static/html-escape.js";
 import { localeLabels, supportedLocales, translations } from "/static/i18n/results-translations.js";
 import { apiFetch, buildConsoleHeaders, getConsoleConfig, getAccessToken, fetchQueueCounts, applyNavReviewBadge } from "/static/api-client.js";
 import { initConsentGuard } from "/static/consent-guard.js";
-import { hideLoading, showLoading } from "/static/loading.js";
+import { hideLoading, showEmpty, showLoading } from "/static/loading.js";
 import {
   findMatchingPreset,
   resolveRoleSwitchState,
@@ -180,12 +180,8 @@ function renderCompletion(passRatesRows, completionRows) {
   }
 
   if (rows.length === 0) {
-    const tr = document.createElement("tr");
-    const td = document.createElement("td");
-    td.colSpan = 8;
-    td.textContent = t("results.completion.empty");
-    tr.appendChild(td);
-    completionBody.appendChild(tr);
+    // #1046: den delte tomtilstanden — samme stil som resten av flatene.
+    showEmpty(completionBody, t("results.completion.empty"), { columns: 8 });
     return;
   }
 
@@ -248,14 +244,11 @@ function renderCompletion(passRatesRows, completionRows) {
 function renderParticipants(rows) {
   participantBody.innerHTML = "";
   if (!rows || rows.length === 0) {
-    const tr = document.createElement("tr");
-    const td = document.createElement("td");
-    td.colSpan = 6;
-    td.textContent = selectedModuleRow
-      ? t("results.participants.empty")
-      : t("results.participants.placeholder");
-    tr.appendChild(td);
-    participantBody.appendChild(tr);
+    showEmpty(
+      participantBody,
+      selectedModuleRow ? t("results.participants.empty") : t("results.participants.placeholder"),
+      { columns: 6 },
+    );
     return;
   }
   for (const row of rows) {

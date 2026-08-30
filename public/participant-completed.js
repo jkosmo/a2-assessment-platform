@@ -1,4 +1,5 @@
 import { renderWorkspaceNavigationWithProfile } from "/static/workspace-nav.js";
+import { hideLoading, showEmpty, showLoading } from "/static/loading.js";
 import { lagLokalisertRessurs } from "/static/localized-resource.js";
 import { describeApiError } from "/static/api-error.js";
 import { resolveInitialLocale } from "/static/i18n-locale.js";
@@ -240,7 +241,8 @@ function renderCompletedModules(body) {
   completedMeta.textContent = `${t("completed.meta.loadedPrefix")}: ${modules.length}`;
 
   if (modules.length === 0) {
-    completedBody.innerHTML = `<tr><td colspan="6">${t("completed.empty")}</td></tr>`;
+    // #1046: den delte tomtilstanden, med `.empty-state`-stilen de andre flatene bruker.
+    showEmpty(completedBody, t("completed.empty"), { columns: 6 });
     return;
   }
 
@@ -404,7 +406,8 @@ const fullførteModuler = lagLokalisertRessurs({
   hent: () => {
     const limit = Number(completedLimit.value);
     const query = Number.isFinite(limit) && limit > 0 ? `?limit=${encodeURIComponent(limit)}` : "";
-    return apiFetch(`/api/modules/completed${query}`, headers);
+    showLoading(completedBody, { rows: 3, columns: 6 });
+    return apiFetch(`/api/modules/completed${query}`, headers).finally(() => hideLoading(completedBody));
   },
   tegn: (body) => {
     renderCompletedModules(body);
@@ -477,7 +480,7 @@ const courseCertList = document.getElementById("courseCertList");
 function renderCourseCertificates(completions) {
   courseCertList.innerHTML = "";
   if (!Array.isArray(completions) || completions.length === 0) {
-    courseCertList.innerHTML = `<p class="small">${escapeHtmlC(t("courseCert.empty"))}</p>`;
+    showEmpty(courseCertList, t("courseCert.empty"));
     return;
   }
   for (const cc of completions) {
