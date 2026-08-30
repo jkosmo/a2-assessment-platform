@@ -1,4 +1,5 @@
 import { renderWorkspaceNavigationWithProfile } from "/static/workspace-nav.js";
+import { lagLokalisertRessurs } from "./static/localized-resource.js";
 import { describeApiError } from "/static/api-error.js";
 import { createDateTimeFormatter } from "/static/format-display.js";
 const formatDateTime = createDateTimeFormatter(() => currentLocale, "—");
@@ -54,9 +55,6 @@ let participantRuntimeConfig = {
   },
 };
 let roleSwitchState = resolveRoleSwitchState(participantRuntimeConfig);
-let hasLoadedResults = false;
-let activeResultsLoad = null;
-let activeResultsLocale = null;
 let selectedModuleRow = null;
 let selectedCourseRow = null;
 
@@ -274,44 +272,24 @@ function renderParticipants(rows) {
   }
 }
 
-async function loadResults() {
-  // ⚠️ #1027: samme vakt som køene i review.js fikk. Uten den vinner det svaret som lander SIST,
-  // ikke det språket brukeren står i: bytt til nb (tregt svar), bytt raskt tilbake til en-GB
-  // (raskt svar) — og det norske svaret overskriver det engelske. Siden sier `lang="en-GB"` med
-  // norske titler, uten en eneste feilmelding.
-  //
-  // Og en henting i ETT språk kan ikke gjenbrukes for et ANNET, for serveren baker inn språket
-  // ved henting. To hentinger i ulike språk er ikke like, selv om de spør etter samme rapport.
-  if (activeResultsLoad) {
-    if (activeResultsLocale === currentLocale) return activeResultsLoad;
-    return activeResultsLoad.then(() => loadResults());
-  }
-  activeResultsLocale = currentLocale;
-  activeResultsLoad = runLoadResults();
-  try {
-    return await activeResultsLoad;
-  } finally {
-    activeResultsLoad = null;
-    activeResultsLocale = null;
-  }
-}
-
-async function runLoadResults() {
-  // ⚠️ Settes når hentingen STARTER, ikke når den er ferdig. Med den ved ferdigstillelse ville et
-  // språkbytte midt i den aller første hentingen blitt slukt: `setLocale` så et falskt «ingenting
-  // er hentet ennå» og lot være å hente på nytt. Resultatet var engelsk side med norske titler,
-  // stille, til brukeren selv trykket «Last resultater» på nytt.
-  hasLoadedResults = true;
-  const params = buildFilterParams();
-  showLoading(loadResultsButton);
-  setMessage("");
-  try {
-    const [passRatesData, completionData, courseData] = await Promise.all([
+// #1042: rapportene hentes gjennom den delte ressursen, som eier kappløpsvakta, enkeltflyten og
+// regelen om at ingenting hentes før noe faktisk ER hentet.
+//
+// ⚠️ Den håndlagde utgaven her var en av tre ulike dybder på samme mønster (#1027): køene hadde
+// alt, denne hadde alt, profilsiden manglet enkeltflyt. Det er den ujevnheten modulen fjerner.
+const rapporter = lagLokalisertRessurs({
+  hentSpråk: () => currentLocale,
+  hent: () => {
+    const params = buildFilterParams();
+    showLoading(loadResultsButton);
+    setMessage("");
+    return Promise.all([
       apiFetch(`/api/reports/pass-rates?${params}`, headers),
       apiFetch(`/api/reports/completion?${params}`, headers),
       apiFetch(`/api/reports/courses?${params}`, headers),
-    ]);
-
+    ]).finally(() => hideLoading(loadResultsButton));
+  },
+  tegn: async ([passRatesData, completionData, courseData]) => {
     renderPassRates(passRatesData.rows);
     renderCompletion(passRatesData.rows, completionData.rows);
     renderCourseReport(courseData.rows ?? []);
@@ -321,13 +299,16 @@ async function runLoadResults() {
     ]);
     resultsMeta.textContent = t("results.filters.loaded");
     log({ passRates: passRatesData, completion: completionData, courses: courseData });
-  } catch (error) {
+  },
+  påFeil: (error) => {
     // #983: reserven var hardkodet engelsk, og hovedveien viste serverens engelske setning.
     setMessage(describeApiError(error, t).headline, "warning");
     log(error);
-  } finally {
-    hideLoading(loadResultsButton);
-  }
+  },
+});
+
+async function loadResults() {
+  await rapporter.last();
 }
 
 async function exportCsv(type) {
@@ -500,7 +481,7 @@ async function loadParticipantConsoleConfig() {
 localeSelect.addEventListener("change", () => {
   setLocale(localeSelect.value);
   // Bare når noe faktisk ER hentet — før første «Last resultater» finnes det ingenting å oppdatere.
-  if (hasLoadedResults) void loadResults();
+  rapporter.oppdaterVedSpråkbytte();
 });
 
 mockRolePresetSelect.addEventListener("change", () => {

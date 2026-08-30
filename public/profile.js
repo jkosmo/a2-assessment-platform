@@ -1,4 +1,5 @@
 import { renderWorkspaceNavigationWithProfile } from "/static/workspace-nav.js";
+import { lagLokalisertRessurs } from "./static/localized-resource.js";
 import { describeApiError } from "/static/api-error.js";
 import { resolveInitialLocale } from "/static/i18n-locale.js";
 import { createNumberFormatter, createDateTimeFormatter } from "/static/format-display.js";
@@ -608,23 +609,13 @@ async function loadProfileData() {
     localeSelect.value = serverLocale;
   }
 
-  // Load completed modules (non-blocking — render empty state first, fill in on success)
-  const requestedLocale = currentLocale;
-  const [modulesResult, coursesResult] = await Promise.allSettled([
-    apiFetch("/api/modules/completed", headers),
-    apiFetch("/api/courses/completions", headers),
-  ]);
-
-  // ⚠️ #1027: samme kappløpsvakt som `refreshProfileForLocale` har. Jeg ga oppdateringen vakta og
-  // glemte FØRSTEHENTINGEN — bytter du språk mens den går, landet det gamle svaret sist og vant:
-  // «nb» på siden, «Change management … Advanced» i tabellen, stille.
+  // ⚠️ #1042: FØRSTEHENTINGEN går gjennom den samme ressursen som språkbyttet. Første forsøk lot
+  // den ligge igjen som en egen `Promise.allSettled` her — da visste ressursen ikke at noe var
+  // hentet, og `oppdaterVedSpråkbytte` gjorde ingenting. Sertifiseringsnivået sluttet å følge
+  // språket på nytt, av nøyaktig samme grunn som i #1027.
   //
-  // Én fiks i et sett er ikke settet. Det er tredje gang i denne saken.
-  if (requestedLocale !== currentLocale) return;
-  cachedModulesData = modulesResult.status === "fulfilled" ? modulesResult.value : null;
-  cachedCoursesData = coursesResult.status === "fulfilled" ? coursesResult.value : null;
-  renderModules(cachedModulesData);
-  renderCourses(cachedCoursesData);
+  // To lastere for samme data er selve feilen modulen finnes for å fjerne.
+  await profillister.last();
 
   // Agent access (AA-3, #731) — gated on the /api/me roles.
   await refreshAgentTokensSection(cachedMeData);
@@ -651,34 +642,30 @@ localeSelect.addEventListener("change", () => {
   if (cachedMeData) renderProfile(cachedMeData);
   renderModules(cachedModulesData);
   renderCourses(cachedCoursesData);
-  void refreshProfileForLocale();
+  profillister.oppdaterVedSpråkbytte();
 });
 
-/**
- * #1027: henter listene på nytt fordi serveren nå avgjør språket ved henting.
- *
- * Bare når noe ER hentet: ved oppstart står listene tomme, og en henting her ville vært et kall
- * ingen har bedt om.
- */
-async function refreshProfileForLocale() {
-  if (!cachedMeData) return;
-  const requested = currentLocale;
-  const [modulesResult, coursesResult] = await Promise.allSettled([
-    apiFetch("/api/modules/completed", headers),
-    apiFetch("/api/courses/completions", headers),
-  ]);
-  // ⚠️ Samme kappløp som resultatsiden hadde: bytter brukeren videre mens hentingen går, skal det
-  // trege svaret ikke overskrive språket hen står i nå.
-  if (requested !== currentLocale) return;
-  if (modulesResult.status === "fulfilled") {
-    cachedModulesData = modulesResult.value;
-    renderModules(cachedModulesData);
-  }
-  if (coursesResult.status === "fulfilled") {
-    cachedCoursesData = coursesResult.value;
-    renderCourses(cachedCoursesData);
-  }
-}
+// #1042: listene hentes gjennom den delte ressursen. Den eier kappløpsvakta OG enkeltflyten —
+// profilsiden manglet enkeltflyt selv etter #1027, nok et tilfelle av at én fiks i settet ble
+// tatt for settet.
+const profillister = lagLokalisertRessurs({
+  hentSpråk: () => currentLocale,
+  hent: () =>
+    Promise.allSettled([
+      apiFetch("/api/modules/completed", headers),
+      apiFetch("/api/courses/completions", headers),
+    ]),
+  tegn: ([modulesResult, coursesResult]) => {
+    if (modulesResult.status === "fulfilled") {
+      cachedModulesData = modulesResult.value;
+      renderModules(cachedModulesData);
+    }
+    if (coursesResult.status === "fulfilled") {
+      cachedCoursesData = coursesResult.value;
+      renderCourses(cachedCoursesData);
+    }
+  },
+});
 
 rolesInput.addEventListener("input", () => {
   const matching = findMatchingPreset(rolesInput.value, roleSwitchState.presets);

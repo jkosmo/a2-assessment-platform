@@ -2,6 +2,43 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.51.0 - 2026-08-30
+
+### #1042 fullført — alle seks flatene på den delte modulen
+
+`review`, `results` og `profile` er nå over sammen med de tre fra 2.50.0. **Null håndlagde
+kappløps- eller enkeltflytvakter står igjen i `public/`.**
+
+Feilklassen «rettet ett sted, glemte de andre» har truffet sju ganger. Den forsvant ikke med mer
+disiplin — den forsvinner fordi mønsteret nå finnes ett sted.
+
+### ⚠️ Profilen ble halvkonvertert først, og feilen kom rett tilbake
+
+Jeg flyttet språkbyttet til ressursen og lot **førstehentingen** ligge igjen som en egen
+`Promise.allSettled`. Da visste ressursen ikke at noe var hentet, `oppdaterVedSpråkbytte` gjorde
+ingenting, og sertifiseringsnivået sluttet å følge språket — av nøyaktig samme grunn som i #1027.
+
+E2E-testen fanget det umiddelbart.
+
+**To lastere for samme data er selve feilen modulen finnes for å fjerne — og jeg holdt på å innføre
+den mens jeg fjernet den.**
+
+### review.js avviker med vilje
+
+Der kalles den rollestyrte `refreshVisibleReviewQueues`, ikke ressursen direkte: flaten har to køer
+bak hver sin rolle, og en ren sensor skal aldri hente klagekøen. Regel 2 krever at et slikt avvik
+begrunnes på stedet, og begrunnelsen står i koden.
+
+### Kappløpstestene måler nå glimtet
+
+⚠️ Tredje gang samme falskt grønne form i dag: å måle SLUTTILSTANDEN beviser ingenting når modulen
+serialiserer — uten kappløpsvakt tegnes feil språk og deretter riktig over, så slutten er riktig
+uansett.
+
+Testene samler nå hver mellomtilstand med en `MutationObserver`.
+
+**Det brukeren ser i et kappløp er glimtet, ikke slutten.**
+
 ## 2.50.0 - 2026-08-30
 
 ### #1043 — skralletest mot klientside språkvalg

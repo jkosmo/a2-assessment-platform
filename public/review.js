@@ -1,4 +1,5 @@
 import { renderWorkspaceNavigationWithProfile } from "/static/workspace-nav.js";
+import { lagLokalisertRessurs } from "./static/localized-resource.js";
 import { resolveInitialLocale } from "/static/i18n-locale.js";
 import { createNumberFormatter, createDateTimeFormatter } from "/static/format-display.js";
 const formatDateTime = createDateTimeFormatter(() => currentLocale);
@@ -100,15 +101,11 @@ let activeReviewTab = "manualReview";
 let latestReviewQueue = [];
 let selectedReviewId = "";
 let selectedReviewDetails = null;
-let activeReviewQueueLoad = null;
-let activeReviewQueueLocale = null;
 
 // Appeal state
 let latestAppealQueue = [];
 let selectedAppealId = "";
 let selectedAppealDetails = null;
-let activeAppealQueueLoad = null;
-let activeAppealQueueLocale = null;
 
 let participantRuntimeConfig = {
   authMode: "mock",
@@ -1018,48 +1015,42 @@ async function loadReviewDetails(reviewId) {
   }
 }
 
-async function loadReviewQueue() {
-  // ⚠️ #1027: enkeltflyt-vakta slukte et språkbytte. Byttet du språk mens køen lastet, fikk du
-  // hentingen som allerede var i gang — den som spurte serveren om det FORRIGE språket — og
-  // titlene ble stille stående feil. Ingen feilmelding, bare gammel tekst.
-  //
-  // Vakta er riktig for to like hentinger. To hentinger i ULIKE språk er ikke like, så da venter vi
-  // på den som går og henter på nytt etterpå.
-  if (activeReviewQueueLoad) {
-    if (activeReviewQueueLocale === currentLocale) return activeReviewQueueLoad;
-    return activeReviewQueueLoad.then(() => loadReviewQueue());
-  }
-  activeReviewQueueLocale = currentLocale;
-  activeReviewQueueLoad = (async () => {
-    try {
-      const statuses = getSelectedReviewStatuses();
-      const limit = getMrWorkspaceSettings().queuePageSize;
-      const body = await apiFetch(
-        `/api/reviews?status=${encodeURIComponent(statuses.join(","))}&limit=${encodeURIComponent(limit)}`,
-        headers,
-      );
-      latestReviewQueue = Array.isArray(body.reviews) ? body.reviews : [];
-      renderReviewQueue();
-      showToast(`${t("manualReview.loadedPrefix")}: ${latestReviewQueue.length}`, "info");
-      if (selectedReviewId && latestReviewQueue.some((r) => r.id === selectedReviewId)) {
-        await loadReviewDetails(selectedReviewId);
-      } else {
-        setSelectedReview("", false);
-        selectedReviewDetails = null;
-        renderManualReviewDetails(null);
-      }
-      logDebug(body);
-    } catch (error) {
-      latestReviewQueue = [];
-      renderReviewQueue();
-      showToast(toActionableErrorMessage(error), "error");
-      logDebug(toActionableErrorMessage(error));
-    } finally {
-      activeReviewQueueLoad = null;
-      activeReviewQueueLocale = null;
+// #1042: køene hentes gjennom den delte ressursen. Den eier enkeltflyten nøklet på SPRÅK, som
+// var den håndlagde vakta her — og som slukte et språkbytte i #1027 fordi den bare spurte «pågår
+// en henting?».
+const sensorkø = lagLokalisertRessurs({
+  hentSpråk: () => currentLocale,
+  hent: () => {
+    const statuses = getSelectedReviewStatuses();
+    const limit = getMrWorkspaceSettings().queuePageSize;
+    return apiFetch(
+      `/api/reviews?status=${encodeURIComponent(statuses.join(","))}&limit=${encodeURIComponent(limit)}`,
+      headers,
+    );
+  },
+  tegn: async (body) => {
+    latestReviewQueue = Array.isArray(body.reviews) ? body.reviews : [];
+    renderReviewQueue();
+    showToast(`${t("manualReview.loadedPrefix")}: ${latestReviewQueue.length}`, "info");
+    if (selectedReviewId && latestReviewQueue.some((r) => r.id === selectedReviewId)) {
+      await loadReviewDetails(selectedReviewId);
+    } else {
+      setSelectedReview("", false);
+      selectedReviewDetails = null;
+      renderManualReviewDetails(null);
     }
-  })();
-  return activeReviewQueueLoad;
+    logDebug(body);
+  },
+  påFeil: (error) => {
+    latestReviewQueue = [];
+    renderReviewQueue();
+    showToast(toActionableErrorMessage(error), "error");
+    logDebug(toActionableErrorMessage(error));
+  },
+});
+
+async function loadReviewQueue() {
+  await sensorkø.last();
 }
 
 // ── Appeal: workspace settings ─────────────────────────────────────────────────
@@ -1459,48 +1450,45 @@ async function loadAppealDetails(appealId, options = {}) {
   }
 }
 
-async function loadAppealQueue(options = {}) {
-  // #1027: se kommentaren i `loadReviewQueue` — samme vakt, samme slukte språkbytte.
-  if (activeAppealQueueLoad) {
-    if (activeAppealQueueLocale === currentLocale) return activeAppealQueueLoad;
-    return activeAppealQueueLoad.then(() => loadAppealQueue());
-  }
-  activeAppealQueueLocale = currentLocale;
-  activeAppealQueueLoad = (async () => {
-    try {
-      showLoading(appealQueueBody, { rows: 5, columns: 9 });
-      const statuses = getSelectedAppealStatuses();
-      const limit = getAppealWorkspaceSettings().queuePageSize;
-      const body = await apiFetch(
-        `/api/appeals?status=${encodeURIComponent(statuses.join(","))}&limit=${encodeURIComponent(limit)}`,
-        headers,
-      );
-      latestAppealQueue = Array.isArray(body.appeals) ? body.appeals : [];
-      renderAppealQueue();
-      showToast(`${t("appealHandler.loadedPrefix")}: ${latestAppealQueue.length}`, "info");
-      if (selectedAppealId && latestAppealQueue.some((a) => a.id === selectedAppealId)) {
-        await loadAppealDetails(selectedAppealId, { notify: false });
-      } else {
-        setSelectedAppeal("", false);
-        selectedAppealDetails = null;
-        renderAppealHandlerDetails(null);
-      }
-      logDebug(body);
-    } catch (error) {
-      latestAppealQueue = [];
-      appealQueueCountLabel.textContent = "0";
+// #1042: se `sensorkø` — samme mønster, samme modul.
+const klagekø = lagLokalisertRessurs({
+  hentSpråk: () => currentLocale,
+  hent: () => {
+    showLoading(appealQueueBody, { rows: 5, columns: 9 });
+    const statuses = getSelectedAppealStatuses();
+    const limit = getAppealWorkspaceSettings().queuePageSize;
+    return apiFetch(
+      `/api/appeals?status=${encodeURIComponent(statuses.join(","))}&limit=${encodeURIComponent(limit)}`,
+      headers,
+    );
+  },
+  tegn: async (body) => {
+    latestAppealQueue = Array.isArray(body.appeals) ? body.appeals : [];
+    renderAppealQueue();
+    showToast(`${t("appealHandler.loadedPrefix")}: ${latestAppealQueue.length}`, "info");
+    if (selectedAppealId && latestAppealQueue.some((a) => a.id === selectedAppealId)) {
+      await loadAppealDetails(selectedAppealId, { notify: false });
+    } else {
+      setSelectedAppeal("", false);
       selectedAppealDetails = null;
       renderAppealHandlerDetails(null);
-      updateReviewTabCounts();
-      showEmpty(appealQueueBody, toActionableErrorMessage(error), { columns: 9 });
-      showToast(toActionableErrorMessage(error), "error");
-      logDebug(toActionableErrorMessage(error));
-    } finally {
-      activeAppealQueueLoad = null;
-      activeAppealQueueLocale = null;
     }
-  })();
-  return activeAppealQueueLoad;
+    logDebug(body);
+  },
+  påFeil: (error) => {
+    latestAppealQueue = [];
+    appealQueueCountLabel.textContent = "0";
+    selectedAppealDetails = null;
+    renderAppealHandlerDetails(null);
+    updateReviewTabCounts();
+    showEmpty(appealQueueBody, toActionableErrorMessage(error), { columns: 9 });
+    showToast(toActionableErrorMessage(error), "error");
+    logDebug(toActionableErrorMessage(error));
+  },
+});
+
+async function loadAppealQueue() {
+  await klagekø.last();
 }
 
 // ── Boot / config ──────────────────────────────────────────────────────────────
@@ -1581,6 +1569,15 @@ localeSelect.addEventListener("change", () => {
   setLocale(localeSelect.value);
   // #1027: serveren baker inn språket ved henting, så køene må hentes på nytt. Her, og ikke inne i
   // `setLocale`, fordi oppstarten også kaller den — se kommentaren der.
+  //
+  // ⚠️ #1042, avvik fra de andre flatene, med vilje: her kalles IKKE `ressurs.oppdaterVedSpråkbytte()`
+  // direkte. Denne flaten har to køer bak hver sin rolle, og en bruker med bare sensorrollen skal
+  // aldri hente klagekøen — det ga 403 og en rød feilmelding i #1027 runde 2.
+  //
+  // `refreshVisibleReviewQueues` spør om ROLLER først og kaller bare de køene brukeren har lov til.
+  // Ressursenes egen «bare når noe er hentet»-regel er derfor ikke i spill her; rolleporten er det
+  // som avgjør. Regel 2 i `doc/CHANGE_DESIGN_RULES.md` krever at et slikt avvik begrunnes — dette
+  // er begrunnelsen.
   void refreshVisibleReviewQueues();
 });
 reviewTabManualButton?.addEventListener("click", () => setActiveReviewTab("manualReview"));

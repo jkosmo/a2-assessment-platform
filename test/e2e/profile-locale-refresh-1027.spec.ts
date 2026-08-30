@@ -62,6 +62,20 @@ test.describe("#1027 — profilsiden henter på nytt ved språkbytte", () => {
 
   test("det trege svaret kan ikke overskrive språket deltakeren står i", async ({ page }) => {
     await mockProfile(page, { delayFor: "nb", delayMs: 900 });
+    // ⚠️ Samler HVER tekst tabellen har hatt. Å måle sluttilstanden beviser ingenting: ressursen
+    // serialiserer, så uten kappløpsvakt tegnes norsk og deretter engelsk over — slutten er
+    // engelsk uansett. Det brukeren ser er GLIMTET.
+    await page.addInitScript(() => {
+      const w = window as unknown as { __glimt: string[] };
+      w.__glimt = [];
+      const start = () => {
+        const el = document.getElementById("coursesBody");
+        if (!el) return false;
+        new MutationObserver(() => w.__glimt.push(el.textContent ?? "")).observe(el, { childList: true, subtree: true, characterData: true });
+        return true;
+      };
+      if (!start()) document.addEventListener("DOMContentLoaded", start);
+    });
     await page.goto("/profile");
     await expect(page.locator("#coursesBody")).toContainText("Advanced");
 
@@ -69,8 +83,10 @@ test.describe("#1027 — profilsiden henter på nytt ved språkbytte", () => {
     await page.selectOption("#localeSelect", "en-GB");
 
     await page.waitForTimeout(1400);
+    const glimt = await page.evaluate(() => (window as unknown as { __glimt: string[] }).__glimt);
+    expect(glimt.some((t) => t.includes("Viderekommen")), `så norsk tekst i ${JSON.stringify(glimt)}`).toBe(false);
+
     await expect(page.locator("#coursesBody")).toContainText("Advanced");
-    await expect(page.locator("#coursesBody")).not.toContainText("Viderekommen");
     await expect(page.locator("html")).toHaveAttribute("lang", "en-GB");
   });
 
