@@ -109,6 +109,31 @@ Unntaket er regresjon: fant porten noe vi selv innførte, rettes det og porten k
 
 ---
 
+## 8. Sjekk om begrunnelsen for prioriteringen fortsatt holder
+
+En sak prioriteres på et argument. Løser du underveis nettopp det som gjorde den viktig, er
+argumentet dødt — og da skal saken revurderes, ikke fullføres av treghet.
+
+To spørsmål før du fortsetter i en sak som drar ut:
+
+- **Rammer den produksjon?** Nei → nesten alltid p2, uansett hvor interessant den er.
+- **Holder begrunnelsen fortsatt?** Eller løste jeg den for tjue minutter siden?
+
+⚠️ Tidsboks betyr stopp. Ikke «stopp og fortsett likevel fordi vi er nære». To mislykkede
+fiksforsøk på rad er også et stoppsignal.
+
+> ⚠️ #1028 fikk to timer. Jeg satte den foran #1041-eposet med argumentet «du kan ikke verifisere
+> en tverrgående endring mot en suite som lyver tilfeldig». Det var riktig **før** jeg laget vakta
+> som navngir flaken — etterpå tok det under ett minutt å avvise en slik feil.
+>
+> Argumentet overlevde ikke sin egen løsning, og jeg merket det ikke fordi jeg allerede gravde.
+> Feilen rammet dessuten bare testriggen; produksjonskoden var uberørt hele tiden.
+>
+> **Med mye teknisk gjeld er tid brukt på uvesentligheter ikke nøytral — den er lånt fra
+> opprydding som fjerner en hel feilklasse.**
+
+---
+
 ## Hva reglene ikke løser
 
 Reglene er disiplin. De veier opp for at frontend mangler en delt abstraksjon for tverrgående ting
