@@ -55,6 +55,8 @@ let participantRuntimeConfig = {
 };
 let roleSwitchState = resolveRoleSwitchState(participantRuntimeConfig);
 let hasLoadedResults = false;
+let activeResultsLoad = null;
+let activeResultsLocale = null;
 let selectedModuleRow = null;
 let selectedCourseRow = null;
 
@@ -267,6 +269,33 @@ function renderParticipants(rows) {
 }
 
 async function loadResults() {
+  // ⚠️ #1027: samme vakt som køene i review.js fikk. Uten den vinner det svaret som lander SIST,
+  // ikke det språket brukeren står i: bytt til nb (tregt svar), bytt raskt tilbake til en-GB
+  // (raskt svar) — og det norske svaret overskriver det engelske. Siden sier `lang="en-GB"` med
+  // norske titler, uten en eneste feilmelding.
+  //
+  // Og en henting i ETT språk kan ikke gjenbrukes for et ANNET, for serveren baker inn språket
+  // ved henting. To hentinger i ulike språk er ikke like, selv om de spør etter samme rapport.
+  if (activeResultsLoad) {
+    if (activeResultsLocale === currentLocale) return activeResultsLoad;
+    return activeResultsLoad.then(() => loadResults());
+  }
+  activeResultsLocale = currentLocale;
+  activeResultsLoad = runLoadResults();
+  try {
+    return await activeResultsLoad;
+  } finally {
+    activeResultsLoad = null;
+    activeResultsLocale = null;
+  }
+}
+
+async function runLoadResults() {
+  // ⚠️ Settes når hentingen STARTER, ikke når den er ferdig. Med den ved ferdigstillelse ville et
+  // språkbytte midt i den aller første hentingen blitt slukt: `setLocale` så et falskt «ingenting
+  // er hentet ennå» og lot være å hente på nytt. Resultatet var engelsk side med norske titler,
+  // stille, til brukeren selv trykket «Last resultater» på nytt.
+  hasLoadedResults = true;
   const params = buildFilterParams();
   showLoading(loadResultsButton);
   setMessage("");
@@ -285,7 +314,6 @@ async function loadResults() {
       selectedCourseRow ? loadCourseLearners() : Promise.resolve(renderCourseLearners([])),
     ]);
     resultsMeta.textContent = t("results.filters.loaded");
-    hasLoadedResults = true;
     log({ passRates: passRatesData, completion: completionData, courses: courseData });
   } catch (error) {
     // #983: reserven var hardkodet engelsk, og hovedveien viste serverens engelske setning.

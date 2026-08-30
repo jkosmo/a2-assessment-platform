@@ -2,6 +2,37 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.49.1 - 2026-08-30
+
+### #1027, tredje QA-runde: jeg rettet ett sted grundig og det andre halvveis
+
+Køene i `review.js` fikk en ordentlig vakt som kjenner språk. Resultatsiden fikk bare flagget.
+**Samme feil, to flater, to ulike kvaliteter på fiksen** — og bare den ene ble prøvd.
+
+To ting fulgte av det:
+
+- **Språkbytte under den FØRSTE hentingen ble slukt.** Flagget «noe er hentet» ble satt når lasten
+  var ferdig. Bytter du språk mens den går, ser `setLocale` et falskt «ingenting hentet ennå» og
+  lar være. Engelsk side, norske titler, stille — til brukeren selv trykker «Last resultater».
+  Flagget settes nå når hentingen **starter**.
+- **Det trege svaret vant over det brukeren valgte sist.** Bytt til nb (tregt svar), bytt raskt
+  tilbake til en-GB (raskt svar) — og det norske svaret lander sist og overskriver. Resultatsiden
+  har nå samme språkvakt som køene.
+
+### ⚠️ Påstanden «alle mutasjonsverifisert» i 2.49.0 var ikke sann
+
+QA-porten fjernet språksjekken i vakta og kjørte alle suitene: enhet 1306, DOM 6 og e2e forble
+**grønne**. Ingen test i repoet åpnet `/results` overhodet.
+
+Jeg hadde mutasjonsverifisert de fiksene som *hadde* tester, og skrevet «alle» om hele settet. Det
+er ikke en unøyaktighet i formuleringen — det er å påstå dekning jeg ikke hadde sjekket at fantes.
+
+`test/e2e/results-locale-refresh-1027.spec.ts` dekker nå flaten med tre tester, og de er
+mutasjonsverifisert hver for seg: vakt uten språk gir 2 røde, flagg ved slutt gir 1 rød, og
+`setLocale` uten ny henting gir 2 røde. Gjenoppretting fra filkopi gir 3 grønne igjen.
+
+**Mutasjonsverifisering som ikke omfatter alle fiksene i settet, er ikke verifisering av settet.**
+
 ## 2.49.0 - 2026-08-30
 
 ### #1027 — serveren eier spørsmålet «hvilket språk viser vi»
