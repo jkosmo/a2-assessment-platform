@@ -2,6 +2,38 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.55.0 - 2026-08-30
+
+### #1046 steg 1 — den delte feiloversetteren spredt til flatene som manglet den
+
+Inventarets første anbefaling: `api-error` er nyeste tenkning (29. august, etter #972 og #983) og
+manglet hos tre flater. Nå har alle den.
+
+Skralletesten i `raw-server-error-guard` målte framgangen underveis:
+
+| Fil | Før | Etter |
+|---|---|---|
+| `admin-platform.js` | 2 | **0** |
+| `cohort-status.js` | 2 | **0** |
+| `profile.js` | 2 | **0** |
+| `participant-completed.js` | 2 | **0** |
+| `participant.js` | 15 | **13** |
+
+Totalt nede fra 37 (23. august) til 14.
+
+### ⚠️ De to i participant.js er de mest lærerike
+
+De var de eneste som **ikke** gikk gjennom `log()` — en `innerHTML` og en `textContent` som viste
+`"<status>: <hele JSON-kroppen>"` rett på skjermen, på serverens språk.
+
+De hadde stått der siden mars. Ingen så dem, fordi de så ut som alle de andre.
+
+### Og en hardkodet engelsk reserve forsvant
+
+`profile.js` hadde `error.message ?? "Error"` og `?? "Error downloading data"` — engelske reserver
+i et grensesnitt som ellers er oversatt. De kunne bare vises hvis `message` manglet, som betyr at
+ingen noensinne så dem, som igjen betyr at ingen oppdaget at de var på feil språk.
+
 ## 2.54.0 - 2026-08-30
 
 ### #1046 — UI-inventaret, og en syvende flate med språkfeilen

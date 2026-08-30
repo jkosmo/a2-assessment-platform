@@ -735,7 +735,8 @@ issueAgentTokenBtn.addEventListener("click", async () => {
       agentTokenLabelInput.value = "";
       await loadAgentTokens();
     } catch (error) {
-      window.showToast?.(error.message ?? "Error", "error");
+      // #1046: siste to rå bruk på denne flaten. Reserven «Error» var dessuten hardkodet engelsk.
+      window.showToast?.(describeApiError(error, t).headline, "error");
     }
   });
 });
@@ -780,7 +781,7 @@ downloadFullBtn.addEventListener("click", async () => {
       a.remove();
       URL.revokeObjectURL(url);
     } catch (error) {
-      window.showToast?.(error.message ?? "Error downloading data", "error");
+      window.showToast?.(describeApiError(error, t).headline, "error");
     }
   });
 });

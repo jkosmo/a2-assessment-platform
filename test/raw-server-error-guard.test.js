@@ -55,10 +55,10 @@ const EXEMPT = [
 // Fil -> antall linjer som fortsatt rører `err.message` utenfor de delte oversetterne, uansett
 // hvilken flate teksten havner på.
 const RENDER_BASELINE = {
-  "admin-platform.js": 2,
-  // #1042: nede fra 3. `loadCourses` viste serverens `error.message` rått i en feilmelding;
-  // konverteringen til `lagLokalisertRessurs` erstattet den med den oversatte `cohort.error`.
-  "cohort-status.js": 2,
+  // #1046: nede fra 2 til NULL. Flaten fikk aldri den delte oversetteren i #972/#983 — den var
+  // et eldre lag. `String(err?.message ?? err)` viste serverens språk i et grensesnitt som
+  // defaulter til brukerens.
+  // #1042 tok den fra 3 til 2; #1046 tok den til NULL ved å gi flaten den delte oversetteren.
   // #983 er LØST for denne fila, og tallet er nede fra 18.
   //
   // ⚠️ Roten var at deltakerkonsollet hadde SIN EGEN feiloversetter, som bare kjente to nøkler og
@@ -70,11 +70,14 @@ const RENDER_BASELINE = {
   //
   // ⚠️ Men ikke alle: 3738 (innerHTML) og 4248 (textContent) går IKKE gjennom `log()`. Min første
   // formulering her påsto at alle femten var trygge. Det var feil. De to er eksisterende gjeld.
-  "participant.js": 15,
+  // #1046: nede fra 15 til 13. De to som forsvant var nettopp de som IKKE gikk gjennom `log()` —
+  // en `innerHTML` og en `textContent` som viste `"<status>: <hele JSON-kroppen>"` rett i
+  // grensesnittet. De 13 som står igjen ER `log()`-kall, og `log()` oversetter selv.
+  "participant.js": 13,
   // #983: de tre søsterflatene brukte serverens engelske `message` rått, med hardkodede engelske
   // reserver som «Error». `profile.js` arvet i tillegg ikke feilkodetabellen i det hele tatt.
-  "participant-completed.js": 2,
-  "profile.js": 2,
+  // #1046: begge nede fra 2 til NULL. Reserven på profilsiden var dessuten hardkodet engelsk
+  // («Error», «Error downloading data») i et grensesnitt som ellers er oversatt.
   // Kaster videre en lokal parse-feil; teksten er vår egen, ikke serverens.
   "static/admin-content-external-llm.js": 1,
 };

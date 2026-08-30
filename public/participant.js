@@ -3735,7 +3735,10 @@ async function loadCourseDetail(courseId) {
     renderCourseDetailModules(courseId, body.course);
   } catch (error) {
     if (container) {
-      container.innerHTML = `<p class="small" style="color:var(--color-error)">${escapeHtmlP(error instanceof Error ? error.message : t("courses.loadError"))}</p>`;
+      // #1046: serverens `message` er `"<status>: <hele JSON-kroppen>"` (api-client.js:167) — altså
+      // JSON rett i grensesnittet, på serverens språk. Den delte oversetteren gir kodens setning på
+      // brukerens språk. Dette var ett av to steder i fila som IKKE går gjennom `log()`.
+      container.innerHTML = `<p class="small" style="color:var(--color-error)">${escapeHtmlP(describeApiError(error, t).headline)}</p>`;
     }
   }
 }
@@ -4245,7 +4248,7 @@ async function renderSectionReaderInto(panel, courseId, entry) {
     }
   } catch (error) {
     const bodyEl = panel.querySelector("#sectionReaderBody");
-    if (bodyEl) bodyEl.textContent = error instanceof Error ? error.message : t("courses.loadError");
+    if (bodyEl) bodyEl.textContent = describeApiError(error, t).headline;
   }
 
   // #923: seksjonsleseren har IKKE lenger et eget diskusjonsboard. Tre nivåer med diskusjon delte

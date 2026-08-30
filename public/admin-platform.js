@@ -1,4 +1,5 @@
 import { renderWorkspaceNavigationWithProfile } from "/static/workspace-nav.js";
+import { describeApiError } from "/static/api-error.js";
 import { lagLokalisertRessurs } from "/static/localized-resource.js";
 import { resolveInitialLocale } from "/static/i18n-locale.js";
 import { localeLabels, supportedLocales, translations } from "/static/i18n/admin-platform-translations.js";
@@ -230,7 +231,8 @@ async function uploadCertBackground() {
     renderCertBackground(true);
     showCertBgFeedback(t("adminPlatform.certBackground.uploaded"), false);
   } catch (err) {
-    showCertBgFeedback(String(err?.message ?? err), true);
+    // #1046: se `cohort-status` — serverens språk i et grensesnitt som defaulter til brukerens.
+    showCertBgFeedback(describeApiError(err, t).headline, true);
   } finally {
     certBgUpload.disabled = false;
   }
@@ -243,7 +245,8 @@ async function removeCertBackground() {
     renderCertBackground(false);
     showCertBgFeedback(t("adminPlatform.certBackground.removed"), false);
   } catch (err) {
-    showCertBgFeedback(String(err?.message ?? err), true);
+    // #1046: se `cohort-status` — serverens språk i et grensesnitt som defaulter til brukerens.
+    showCertBgFeedback(describeApiError(err, t).headline, true);
   } finally {
     certBgRemove.disabled = false;
   }
@@ -455,7 +458,7 @@ async function retryAssessment(submissionId, button) {
   } catch (err) {
     button.disabled = false;
     button.textContent = t("adminPlatform.failedAssessments.retryFailed");
-    showToast(String(err));
+    showToast(describeApiError(err, t).headline, "error");
   }
 }
 

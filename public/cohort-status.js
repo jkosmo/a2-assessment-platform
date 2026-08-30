@@ -1,4 +1,5 @@
 import { renderWorkspaceNavigationWithProfile } from "/static/workspace-nav.js";
+import { describeApiError } from "/static/api-error.js";
 import { lagLokalisertRessurs } from "/static/localized-resource.js";
 import { resolveInitialLocale } from "/static/i18n-locale.js";
 import { escapeHtml } from "/static/html-escape.js";
@@ -254,7 +255,10 @@ async function loadCohort(courseId) {
     log(summary);
     setMessage("", "info");
   } catch (error) {
-    setMessage(error?.message ?? t("cohort.error"), "error");
+    // #1046: serverens `message` er skrevet på SERVERENS språk. Den delte oversetteren slår opp
+    // `errors.api.<kode>` på brukerens språk, og faller tilbake til vår egen tekst når koden er
+    // ukjent. Alle andre flater fikk den i #972/#983; denne ble ikke rørt før nå.
+    setMessage(describeApiError(error, t).headline, "error");
     showCohortEmpty();
   }
 }
@@ -322,7 +326,7 @@ rolesInput?.addEventListener("input", () => {
 });
 courseSelect?.addEventListener("change", () => loadCohort(courseSelect.value));
 loadMeButton?.addEventListener("click", async () => {
-  try { log(await apiFetch("/api/me", headers)); } catch (error) { log(error?.message ?? "Error"); }
+  try { log(await apiFetch("/api/me", headers)); } catch (error) { log(describeApiError(error, t).headline); }
 });
 if (debugOutputSection) debugOutputSection.hidden = new URLSearchParams(window.location.search).get("debug") !== "1";
 

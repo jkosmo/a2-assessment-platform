@@ -392,7 +392,7 @@ loadMeButton.addEventListener("click", async () => {
       const body = await apiFetch("/api/me", headers);
       log(body);
     } catch (error) {
-      log(error.message);
+      log(describeApiError(error, t).headline);
     }
   });
 });
@@ -410,7 +410,7 @@ const fullførteModuler = lagLokalisertRessurs({
     renderCompletedModules(body);
     log(body);
   },
-  påFeil: (error) => log(error.message),
+  påFeil: (error) => log(describeApiError(error, t).headline),
 });
 
 loadCompletedButton.addEventListener("click", async () => {
