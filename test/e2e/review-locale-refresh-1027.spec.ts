@@ -37,7 +37,7 @@ function reviewRow(locale: string) {
   };
 }
 
-async function mockReviewerOnly(page: Page, appealCalls: string[]) {
+async function mockReviewerOnly(page: Page, appealCalls: string[], opts: { delayFor?: string; delayMs?: number } = {}) {
   await page.addInitScript(() => {
     try { localStorage.setItem("participant.locale", "nb"); } catch { /* standardspråk */ }
   });
@@ -55,8 +55,11 @@ async function mockReviewerOnly(page: Page, appealCalls: string[]) {
   await page.route("**/api/queue-counts", (r: Route) => r.fulfill(json({ counts: {} })));
 
   // Serveren svarer etter x-locale, slik den ekte gjør.
-  await page.route("**/api/reviews?**", (r: Route) => {
+  await page.route("**/api/reviews?**", async (r: Route) => {
     const locale = r.request().headers()["x-locale"] ?? "en-GB";
+    if (opts.delayFor && locale === opts.delayFor) {
+      await new Promise((res) => setTimeout(res, opts.delayMs ?? 900));
+    }
     return r.fulfill(json({ reviews: [reviewRow(locale)] }));
   });
   await page.route("**/api/reviews/rev-1", (r: Route) => r.fulfill(json({ review: reviewRow("nb") })));
@@ -110,5 +113,37 @@ test.describe("#1027 — språkbytte henter køen på nytt, uten å be om det ma
     // en rød toast av seg selv (#1039). Med absolutt telling var testen først grønn av feil grunn,
     // så rød av feil grunn.
     await expect(page.locator(".toast--error")).toHaveCount(redToastsBeforeSwitch);
+  });
+
+  // ⚠️ QA-runde 4: språkvakta i `loadReviewQueue` hadde INGEN test som kunne bli rød. Porten
+  // fjernet språksjekken i begge vaktene, og hele e2e-suiten forble grønn — 280 av 280.
+  //
+  // Jeg hadde mutasjonsverifisert DOM-sjekken (funn A) og skrevet at vakta var dekket. Det var to
+  // ulike fikser, og bare den ene ble prøvd.
+  test("et språkbytte MENS køen lastes blir ikke slukt av enkeltflyt-vakta", async ({ page }) => {
+    const appealCalls: string[] = [];
+    await mockReviewerOnly(page, appealCalls, { delayFor: "nb", delayMs: 900 });
+    await page.goto("/review");
+
+    // Første henting går i nb og er treg. Vi bytter mens den fortsatt går.
+    await page.selectOption("#localeSelect", "en-GB");
+
+    // Uten språkvakta returnerer vakta den PÅGÅENDE norske hentingen, og køen blir stående på nb.
+    await expect(page.locator("#manualReviewQueueBody")).toContainText("Incident response");
+  });
+
+  test("det trege svaret kan ikke overskrive språket sensoren står i", async ({ page }) => {
+    const appealCalls: string[] = [];
+    await mockReviewerOnly(page, appealCalls, { delayFor: "nb", delayMs: 900 });
+    await page.goto("/review");
+    await expect(page.locator("#manualReviewQueueBody")).toContainText("Hendelseshåndtering");
+
+    await page.selectOption("#localeSelect", "en-GB");
+    await expect(page.locator("#manualReviewQueueBody")).toContainText("Incident response");
+
+    // Og den skal BLI stående engelsk etter at et tregt norsk svar eventuelt lander.
+    await page.waitForTimeout(1400);
+    await expect(page.locator("#manualReviewQueueBody")).toContainText("Incident response");
+    await expect(page.locator("#manualReviewQueueBody")).not.toContainText("Hendelseshåndtering");
   });
 });

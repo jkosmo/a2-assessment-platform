@@ -118,15 +118,13 @@ function formatScore(value) {
   }).format(value);
 }
 
-function localizeTitle(value) {
-  if (!value) return "";
-  try {
-    const parsed = JSON.parse(value);
-    return parsed[currentLocale] ?? parsed["en-GB"] ?? value;
-  } catch {
-    return value;
-  }
-}
+// #1027: `localizeTitle` er borte. Den tolket lagringsformatet på klienten, med sin egen
+// reservekjede — den samme klassen som ga #1022 to ulike svar på «hvilket språk viser vi».
+//
+// Alle tre feltene den ble brukt på kommer nå ferdig lokalisert fra serveren:
+// `moduleTitle` fra completionReport.ts (fire steder) og `courseTitle` fra courseReport.ts.
+// Å beholde parseren ville betydd at et lagringsformat som slipper gjennom, blir stille reparert
+// på klienten med en annen regel enn serverens — og da ser ingen at serveren tok feil.
 
 function renderPassRates(rows) {
   passRateGrid.innerHTML = "";
@@ -143,7 +141,7 @@ function renderPassRates(rows) {
 
     const title = document.createElement("div");
     title.className = "module-title";
-    title.textContent = localizeTitle(row.moduleTitle) || row.moduleId;
+    title.textContent = row.moduleTitle || row.moduleId;
 
     const rateValue = document.createElement("div");
     rateValue.className = "rate-value";
@@ -173,6 +171,14 @@ function renderCompletion(passRatesRows, completionRows) {
   const rows = completionRows ?? [];
   if (selectedModuleRow && !rows.some((row) => row.moduleId === selectedModuleRow.moduleId)) {
     selectedModuleRow = null;
+  } else if (selectedModuleRow) {
+    // ⚠️ #1027: den valgte raden bar tittelen fra det øyeblikket den ble KLIKKET. Etter et
+    // språkbytte ga det blandet språk i detaljlinja: «1 learners for Hendelseshåndtering».
+    //
+    // Fikset her, i den ene renderingen, i stedet for i de to stedene som SKRIVER linja. Å lappe
+    // leserne ville betydd at neste leser av `selectedModuleRow.moduleTitle` arvet feilen på nytt.
+    const fresh = rows.find((row) => row.moduleId === selectedModuleRow.moduleId);
+    if (fresh) selectedModuleRow.moduleTitle = fresh.moduleTitle || selectedModuleRow.moduleId;
   }
 
   if (rows.length === 0) {
@@ -195,7 +201,7 @@ function renderCompletion(passRatesRows, completionRows) {
     const activateRow = async () => {
       selectedModuleRow = {
         moduleId: row.moduleId,
-        moduleTitle: localizeTitle(row.moduleTitle) || row.moduleId,
+        moduleTitle: row.moduleTitle || row.moduleId,
       };
       renderCompletion(passRatesRows, completionRows);
       await loadModuleLearners();
@@ -215,7 +221,7 @@ function renderCompletion(passRatesRows, completionRows) {
     const titleButton = document.createElement("button");
     titleButton.type = "button";
     titleButton.className = "report-row-button";
-    titleButton.textContent = localizeTitle(row.moduleTitle) || row.moduleId;
+    titleButton.textContent = row.moduleTitle || row.moduleId;
     titleButton.setAttribute("aria-pressed", selectedModuleRow?.moduleId === row.moduleId ? "true" : "false");
     titleButton.addEventListener("click", (event) => {
       event.stopPropagation();
@@ -534,6 +540,10 @@ function renderCourseReport(rows) {
   courseReportBody.innerHTML = "";
   if (selectedCourseRow && Array.isArray(rows) && !rows.some((row) => row.courseId === selectedCourseRow.courseId)) {
     selectedCourseRow = null;
+  } else if (selectedCourseRow && Array.isArray(rows)) {
+    // #1027: se `renderCompletion` — samme cache, samme blandede språk i detaljlinja.
+    const fresh = rows.find((row) => row.courseId === selectedCourseRow.courseId);
+    if (fresh) selectedCourseRow.courseTitle = fresh.courseTitle || selectedCourseRow.courseId;
   }
   if (!Array.isArray(rows) || rows.length === 0) {
     const tr = document.createElement("tr");

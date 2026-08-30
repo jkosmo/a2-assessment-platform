@@ -51,6 +51,9 @@ async function mockResultsWorkspace(page: Page, opts: { delayFor?: string; delay
     respond(r, { rows: completionRows(r.request().headers()["x-locale"] ?? "en-GB") }));
   await page.route("**/api/reports/courses**", (r: Route) => r.fulfill(json({ rows: [] })));
   await page.route("**/api/reports/participants**", (r: Route) => r.fulfill(json({ rows: [] })));
+  await page.route("**/api/reports/completion/details**", (r: Route) =>
+    r.fulfill(json({ rows: [{ userId: "u-1", userName: "Kandidat", email: "k@x.no", moduleId: "m-1", status: "COMPLETED" }] })));
+  await page.route("**/api/reports/courses/details**", (r: Route) => r.fulfill(json({ rows: [] })));
 }
 
 test.describe("#1027 — resultatsiden henter rapportene på nytt ved språkbytte", () => {
@@ -92,5 +95,28 @@ test.describe("#1027 — resultatsiden henter rapportene på nytt ved språkbytt
     await expect(page.locator("#completionBody")).toContainText("Incident response");
     await expect(page.locator("#completionBody")).not.toContainText("Hendelseshåndtering");
     await expect(page.locator("html")).toHaveAttribute("lang", "en-GB");
+  });
+
+  // ⚠️ QA-runde 4: detaljlinja blandet språk etter bytte — «1 learners for Hendelseshåndtering».
+  // Den valgte raden bar tittelen fra det øyeblikket den ble KLIKKET, og den fulgte ikke med når
+  // rapporten ble hentet på nytt.
+  //
+  // Fikset i renderingen, ikke i de to stedene som skriver linja: en fiks hos leserne ville betydd
+  // at neste leser av `selectedModuleRow.moduleTitle` arvet feilen på nytt.
+  test("detaljlinja blander ikke språk etter et bytte", async ({ page }) => {
+    await mockResultsWorkspace(page);
+    await page.goto("/results");
+    await page.click("#loadResults");
+    await expect(page.locator("#completionBody")).toContainText("Incident response");
+
+    await page.locator("#completionBody tr").first().click();
+    await expect(page.locator("#moduleDetailMeta")).toContainText("Incident response");
+
+    await page.selectOption("#localeSelect", "nb");
+
+    await expect(page.locator("#moduleDetailMeta")).toContainText("Hendelseshåndtering");
+    // Selve poenget: den ENGELSKE tittelen skal ikke stå igjen inne i den norske setningen.
+    await expect(page.locator("#moduleDetailMeta")).not.toContainText("Incident response");
+    await expect(page.locator("#moduleDetailMeta")).not.toContainText("learners");
   });
 });

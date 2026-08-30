@@ -197,36 +197,16 @@ function formatDate(value) {
 
 const formatNumber = createNumberFormatter(() => currentLocale, "—");
 
-function localizeContentValue(value) {
-  if (!value) return "â€”";
-  if (typeof value === "string") {
-    const trimmed = value.trim();
-    if (trimmed.startsWith("{")) {
-      try {
-        const parsed = JSON.parse(trimmed);
-        if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-          return (
-            parsed[currentLocale] ??
-            parsed["en-GB"] ??
-            Object.values(parsed).find((entry) => typeof entry === "string" && entry.trim().length > 0) ??
-            "â€”"
-          );
-        }
-      } catch {
-        return value;
-      }
-    }
-    return value;
-  }
-  if (typeof value === "object" && !Array.isArray(value)) {
-    return (
-      value[currentLocale] ??
-      value["en-GB"] ??
-      Object.values(value).find((entry) => typeof entry === "string" && entry.trim().length > 0) ??
-      "â€”"
-    );
-  }
-  return "â€”";
+// #1027: den fjerde klientparseren i denne saken er fjernet herfra.
+//
+// ⚠️ Den var verre enn de andre, for den var STILLE. Serveren sender nå `courseTitle` og
+// `certificationLevel` ferdig lokalisert (courses.ts), så parseren fikk aldri et lagringsformat å
+// tolke og gjorde ingenting. Nivåkolonnen fulgte språkbyttet før, og sluttet å gjøre det — uten at
+// noe ble rødt, fordi #736 sin re-rendering fra cache fortsatt kjørte og «virket».
+//
+// En parser som ikke lenger har noe å parse, ser ut som om den gjør jobben sin.
+function showValue(value) {
+  return typeof value === "string" && value.trim().length > 0 ? value : "—";
 }
 
 async function runWithBusyButton(button, action) {
@@ -336,7 +316,7 @@ function renderCourses(body) {
     const row = document.createElement("tr");
 
     const titleTd = document.createElement("td");
-    titleTd.textContent = localizeContentValue(course.courseTitle ?? course.courseId);
+    titleTd.textContent = showValue(course.courseTitle ?? course.courseId);
     row.appendChild(titleTd);
 
     const dateTd = document.createElement("td");
@@ -344,7 +324,7 @@ function renderCourses(body) {
     row.appendChild(dateTd);
 
     const levelTd = document.createElement("td");
-    levelTd.textContent = localizeContentValue(course.certificationLevel);
+    levelTd.textContent = showValue(course.certificationLevel);
     row.appendChild(levelTd);
 
     // #550: certificate ID + link to the printable certificate view (was ID text only).
@@ -653,10 +633,45 @@ localeSelect.addEventListener("change", () => {
   setLocale(localeSelect.value);
   // #736: re-render the dynamically built content so table values follow the new locale, not just
   // the static [data-i18n] labels that applyTranslations() handles.
+  //
+  // ⚠️ #1027 gjorde halve premissen for #736 usann. Den bygde på at listene bar LAGRINGSFORMATET,
+  // slik at en ny rendering kunne velge språk på nytt fra data siden allerede hadde. Nå baker
+  // serveren inn språket ved HENTING, og en ny rendering av de samme radene gir nøyaktig samme
+  // tekst. Sertifiseringsnivået fulgte språkbyttet før 2.49.0 og sluttet å gjøre det.
+  //
+  // Renderingen beholdes — den gjør fortsatt jobben for det som formes på klienten (datoer, tall,
+  // etiketter). Men det som kommer ferdig fra serveren må HENTES på nytt.
   if (cachedMeData) renderProfile(cachedMeData);
   renderModules(cachedModulesData);
   renderCourses(cachedCoursesData);
+  void refreshProfileForLocale();
 });
+
+/**
+ * #1027: henter listene på nytt fordi serveren nå avgjør språket ved henting.
+ *
+ * Bare når noe ER hentet: ved oppstart står listene tomme, og en henting her ville vært et kall
+ * ingen har bedt om.
+ */
+async function refreshProfileForLocale() {
+  if (!cachedMeData) return;
+  const requested = currentLocale;
+  const [modulesResult, coursesResult] = await Promise.allSettled([
+    apiFetch("/api/modules/completed", headers),
+    apiFetch("/api/courses/completions", headers),
+  ]);
+  // ⚠️ Samme kappløp som resultatsiden hadde: bytter brukeren videre mens hentingen går, skal det
+  // trege svaret ikke overskrive språket hen står i nå.
+  if (requested !== currentLocale) return;
+  if (modulesResult.status === "fulfilled") {
+    cachedModulesData = modulesResult.value;
+    renderModules(cachedModulesData);
+  }
+  if (coursesResult.status === "fulfilled") {
+    cachedCoursesData = coursesResult.value;
+    renderCourses(cachedCoursesData);
+  }
+}
 
 rolesInput.addEventListener("input", () => {
   const matching = findMatchingPreset(rolesInput.value, roleSwitchState.presets);

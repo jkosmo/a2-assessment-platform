@@ -2,6 +2,46 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.49.2 - 2026-08-30
+
+### #1027, fjerde QA-runde: en regresjon jeg innførte og ikke så
+
+⚠️ **Profilsidens nivåkolonne fulgte språkbyttet før 2.49.0, og sluttet å gjøre det.**
+
+#736 bygde med vilje en re-rendering fra cache slik at tabellverdier skulle følge språket. Den
+bygde på at listene bar **lagringsformatet**, så en ny rendering kunne velge språk på nytt fra data
+siden allerede hadde. Da språkvalget flyttet til serveren, ble den re-renderingen en no-op: samme
+rader inn, samme tekst ut.
+
+Ingenting ble rødt. Renderingen kjørte fortsatt og så ut som den virket.
+
+**Å flytte et ansvar bryter forutsetningene til kode som aldri nevnte dem.** #736 sa hva den gjorde,
+ikke hva den hvilte på.
+
+### To døde klientparsere fjernet
+
+`localizeTitle` i resultatsiden og `localizeContentValue` i profilsiden fikk begge bare ferdige
+strenger fra serveren og reparerte ingenting.
+
+⚠️ Den i profilsiden var den verste, fordi den var stille: en parser som ikke lenger har noe å
+parse, ser ut som om den gjør jobben sin.
+
+### Detaljlinja på resultatsiden blandet språk
+
+«1 learners for Hendelseshåndtering». Den valgte raden bar tittelen fra det øyeblikket den ble
+**klikket**. Rettet i renderingen, ikke i de to stedene som skriver linja — en fiks hos leserne
+ville betydd at neste leser arvet feilen på nytt.
+
+### Vakta i review.js hadde ingen test som kunne bli rød
+
+QA-porten fjernet språksjekken i begge vaktene, og hele e2e-suiten forble grønn: **280 av 280**.
+
+Jeg hadde mutasjonsverifisert DOM-sjekken fra funn A og skrevet at vakta var dekket. Det var to
+ulike fikser, og bare den ene ble prøvd.
+
+**Å verifisere én fiks i et sett og rapportere «settet er verifisert», er samme feil som å rette
+ett sted og si at saken er lukket.** Fem fikser denne runden, fem mutasjoner, hver for seg.
+
 ## 2.49.1 - 2026-08-30
 
 ### #1027, tredje QA-runde: jeg rettet ett sted grundig og det andre halvveis
