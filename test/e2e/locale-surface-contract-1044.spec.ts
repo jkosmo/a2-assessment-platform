@@ -132,6 +132,39 @@ const FLATER: Flate[] = [
     ],
     forbered: async (page) => { await page.click("#loadResults"); },
   },
+  {
+    navn: "feilede vurderinger",
+    rute: "/admin-platform",
+    roller: ["ADMINISTRATOR"],
+    beholder: "#failedAssessmentsBody",
+    tekst: TITTEL,
+    data: [{
+      mønster: "**/api/admin/platform/failed-assessments**",
+      svar: (locale) => ({
+        total: 1,
+        failedAssessments: [{
+          submissionId: "sub-1", participantName: "Kandidat", participantEmail: "k@x.no",
+          moduleTitle: TITTEL[locale] ?? TITTEL["en-GB"],
+          failedAt: "2026-08-27T10:00:00.000Z", attempts: 3, maxAttempts: 3, errorMessage: "timeout",
+        }],
+      }),
+    }],
+    ekstra: [{ mønster: "**/api/admin/platform", svar: { settings: {} } }],
+  },
+  {
+    navn: "kohortstatus",
+    rute: "/deltakere/status",
+    roller: ["SUBJECT_MATTER_OWNER"],
+    // ⚠️ Kursvelgeren ER innholdet her: titlene kommer fra serveren og skal følge språket.
+    beholder: "#courseSelect",
+    tekst: { nb: "Endringsledelse", "en-GB": "Change management" },
+    data: [{
+      mønster: "**/api/cohort-status/courses**",
+      svar: (locale) => ({
+        courses: [{ id: "c-1", title: locale === "nb" ? "Endringsledelse" : "Change management", published: true, archived: false }],
+      }),
+    }],
+  },
 ];
 
 async function mock(page: Page, flate: Flate, opts: { tregtSpråk?: string; tregMs?: number } = {}) {

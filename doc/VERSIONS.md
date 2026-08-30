@@ -2,6 +2,30 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.53.0 - 2026-08-30
+
+### #1044 fullført — kontrakten dekker alle seks flatene
+
+`admin-platform` og `deltakere/status` er inne. 24 tester, fire punkter per flate, alle
+mutasjonsverifisert: kappløpsvakt fjernet gir røde, enkeltflyt uten språk gir røde, ingen ny
+henting gir røde.
+
+⚠️ På kohortstatus er det **kursvelgeren** som er innholdet — titlene der kommer fra serveren og
+skal følge språket. En kontrakt som bare ser på tabeller ville hoppet over den flaten.
+
+### Epos #1041: kjernen er levert
+
+| Sak | |
+|---|---|
+| #1043 skralletest mot klientside språkvalg | ✅ |
+| #1042 delt ressursmodul, seks flater | ✅ |
+| #1044 flatekontrakt, seks flater | ✅ |
+| #1028 ustabil vurderingssuite | p2, åpen |
+
+Feilklassen «rettet ett sted, glemte de andre» har truffet sju ganger. Den er nå strukturelt borte:
+mønsteret finnes ett sted, en skralletest hindrer at klientparsere sniker seg inn, og kontrakten
+gjør «husket jeg flate nr. 5» om fra disiplin til en liste.
+
 ## 2.52.0 - 2026-08-30
 
 ### #1044 — én flatekontrakt for alle flater med språkvelger
