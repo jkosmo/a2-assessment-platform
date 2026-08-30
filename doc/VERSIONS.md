@@ -2,6 +2,52 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.58.1 - 2026-08-30
+
+### Død kode i forfatterkonsollet — 327 linjer, funnet med nåbarhetsanalyse
+
+Produkteierens hypotese: konsollet er bygget om flere ganger (enkelt UI → avansert → samtalebasert
+→ Forhåndsvis/Rediger/Innstillinger), så det ligger trolig rester av gamle skjermbilder.
+
+⚠️ **Referansetelling fant dem ikke.** Død kode i klynger refererer til seg selv og ser levende ut.
+Det som skulle til var **nåbarhetsanalyse** fra inngangspunktene: bygg kallgrafen, start i
+toppnivåkoden, se hva som aldri nås.
+
+Resultat i `admin-content-shell.js`: 204 av 210 funksjoner nås. De seks som ikke gjorde det var en
+sammenhengende klynge — **modulhåndtering**: arkiver, slett, dupliser, gjenopprett, velg arkivert.
+
+Funksjonaliteten hadde flyttet til `admin-content-library.js` (`archiveModule`, `restoreModule`,
+`duplicateModule`, `deleteModuleFromRow`). Restene refererte bare hverandre, som «prøv igjen»-valg.
+
+**247 linjer fjernet, og null unådde funksjoner igjen.**
+
+Pluss 7 funksjoner uten en eneste referanse i `courses.js` og `shell.js` — navn som
+`certBadgeLegacy` og `certBadgeLocalizedTemp` sier selv hva de var.
+
+### ⚠️ Fire råmålinger overrapporterte grovt før filtrering
+
+| Måling | Først | Etter |
+|---|---|---|
+| Kobling mot manglende elementer | 96 | **5** |
+| Ubrukte oversettelsesnøkler | 349 | 219 |
+| Tester uten påstand | 2025 | **~0** |
+| Unådde funksjoner i to filer | 104 | **søppel — ikke meldt** |
+
+Den siste er verdt å merke seg: klammertellingen brekker på `{` inne i strenger og maler, så en
+funksjon ble «761 linjer» og masken slukte inngangspunktet. **Tallene for `courses.js` og
+`library.js` er derfor ikke brukt.**
+
+Fjerningen i `shell.js` står på uavhengig grunnlag: null treff på navnene i hele repoet,
+erstatningene funnet i biblioteket, og alle suiter grønne.
+
+### Nøkkelrydding forsøkt og rullet tilbake
+
+219 «ubrukte» oversettelsesnøkler viste seg ikke å være ubrukte: nøkler bygges med
+strengsammenslåing og standardargument (`decisionReasonKeyFor(code, params, prefix = "…")`), ikke
+maler. Vakta i `decision-reason.test.js` fanget det umiddelbart — seks røde.
+
+**Statisk skanning er ikke godt nok grunnlag for å slette. Nåbarhet er.**
+
 ## 2.58.0 - 2026-08-30
 
 ### ⚠️ «Last resultater» mistet teksten sin ved første klikk

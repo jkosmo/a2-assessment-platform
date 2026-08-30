@@ -300,12 +300,6 @@ async function localizeCourseCopyAcrossLocales({ titleValues, descriptionValues,
 }
 
 const CERT_LABELS = { basic: "Basic", intermediate: "Intermediate", advanced: "Advanced" };
-
-function certBadgeLegacy(level) {
-  if (!level) return `<span class="cert-badge">—</span>`;
-  return `<span class="cert-badge">${CERT_LABELS[level] ?? level}</span>`;
-}
-
 // ---------------------------------------------------------------------------
 // Route detection
 // ---------------------------------------------------------------------------
@@ -322,12 +316,6 @@ function certLabel(level) {
           : null;
   return key ? t(key) : localizedText(level) || level;
 }
-
-function certBadgeLocalizedTemp(level) {
-  if (!level) return `<span class="cert-badge">â€”</span>`;
-  return `<span class="cert-badge">${escapeHtml(certLabel(level))}</span>`;
-}
-
 function detectRoute() {
   return detectCoursesRoute(window.location.pathname);
 }
@@ -1104,45 +1092,6 @@ function appendConvCertBubble(label) {
   bubble.textContent = label;
   certChoices.parentNode.insertBefore(bubble, document.getElementById("convAfterCert"));
 }
-
-function showConvModuleSearch() {
-  const after = document.getElementById("convAfterCert");
-  if (!after) return;
-
-  convModules = [];
-  comboboxQuery = "";
-  comboboxSelectedId = null;
-  comboboxOpen = false;
-
-  after.innerHTML = `
-    <div class="conv-bot-msg" role="status" aria-live="polite">
-      <p>Søk etter moduler og legg dem til i kurset. Du kan opprette kurset direkte — etterpå åpnes editoren der du kan legge til <strong>seksjoner</strong> og justere rekkefølgen.</p>
-    </div>
-    <div id="convModuleListContainer"></div>
-    <div class="combobox-row" style="margin-bottom:var(--space-2)">
-      <div class="combobox-wrap" id="convComboboxWrap">
-        <input id="convComboboxInput" type="text" class="combobox-input"
-          placeholder="Søk på modulnavn eller modul-ID…"
-          aria-label="Søk etter modul"
-          autocomplete="off" role="combobox" aria-expanded="false"
-          aria-autocomplete="list" aria-controls="convComboboxDropdown" />
-        <div id="convComboboxDropdown" class="combobox-dropdown" role="listbox" hidden></div>
-      </div>
-      <button id="convAddModuleItemBtn" class="btn btn-secondary" disabled>Legg til</button>
-    </div>
-    <div class="form-actions">
-      <button id="convCreateBtn" class="btn btn-primary">Opprett kurs</button>
-    </div>
-    <div class="conv-step" id="convAfterModules"></div>`;
-
-  renderConvModuleList();
-  initConvCombobox();
-
-  document.getElementById("convCreateBtn")?.addEventListener("click", convCreateCourse);
-  // v1.2.16 (#353 part 2): focus the search input so keyboard users start in the new step.
-  setTimeout(() => document.getElementById("convComboboxInput")?.focus(), 60);
-}
-
 function renderConvModuleList() {
   const container = document.getElementById("convModuleListContainer");
   if (!container) return;

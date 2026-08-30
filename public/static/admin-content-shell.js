@@ -1413,13 +1413,6 @@ function buildPreviewCandidate(patch) {
           : sessionDraft?.criteria,
   };
 }
-
-function setPreviewCandidate(patch) {
-  previewDraft = buildPreviewCandidate(patch);
-  renderPreviewLocaleBar();
-  renderPreview();
-}
-
 function clearPreviewCandidate() {
   previewDraft = null;
   renderPreviewLocaleBar();
@@ -1705,16 +1698,6 @@ async function localizeMcqAcrossLocales(questions, sourceLocale) {
 
   return localizedQuestions;
 }
-
-function buildLocalizedMcqDraft(questions, sourceLocale) {
-  return (questions ?? []).map((question) => ({
-    stem: buildLocalizedTextMap(sourceLocale, question?.stem ?? ""),
-    options: (question?.options ?? []).map((option) => buildLocalizedTextMap(sourceLocale, option ?? "")),
-    correctAnswer: buildLocalizedTextMap(sourceLocale, question?.correctAnswer ?? ""),
-    rationale: buildLocalizedTextMap(sourceLocale, question?.rationale ?? ""),
-  }));
-}
-
 function resolveEditableMcqQuestions(locale) {
   const sourceQuestions = sessionDraft?.mcqQuestions?.length
     ? sessionDraft.mcqQuestions
@@ -3016,253 +2999,6 @@ async function unpublishModuleInBackground() {
     ]);
   }
 }
-
-async function archiveModuleInBackground() {
-  const moduleId = selectedModuleId;
-  if (!moduleId) return;
-
-  const slot = logProgress("shell.archive.progress");
-  slot.abortBtn.remove();
-
-  try {
-    await apiFetch(`/api/admin/content/modules/${encodeURIComponent(moduleId)}/archive`, getHeaders, {
-      method: "POST",
-      body: JSON.stringify({}),
-    });
-    bundle = null;
-    selectedModuleId = null;
-    sessionDraft = null;
-    previewDraft = null;
-    latestSavedModuleVersionId = null;
-    renderPreviewLocaleBar();
-    renderPreview();
-    logResolveSlot(slot, () => `<strong>${escapeHtml(t("shell.archive.success"))}</strong>`);
-    showToast(t("shell.archive.success"), "success");
-    announceStatus(t("shell.archive.success"));
-    startIdle();
-  } catch (err) {
-    const errMsg = apiErrorText(err);
-    logResolveSlot(slot, () => `${escapeHtml(t("shell.archive.errorPrefix"))}${escapeHtml(errMsg)}`, [
-      { labelKey: "shell.action.retry", action: archiveModuleInBackground },
-    ]);
-  }
-}
-
-async function restoreArchivedModuleInBackground(moduleId, moduleTitle) {
-  const slot = logProgress("shell.restore.progress");
-  slot.abortBtn.remove();
-
-  try {
-    await apiFetch(`/api/admin/content/modules/${encodeURIComponent(moduleId)}/restore`, getHeaders, {
-      method: "POST",
-      body: JSON.stringify({}),
-    });
-    logResolveSlot(slot, () => `<strong>${escapeHtml(tf("shell.restore.success", { module: moduleTitle ?? moduleId }))}</strong>`);
-    showToast(tf("shell.restore.success", { module: moduleTitle ?? moduleId }), "success");
-    announceStatus(tf("shell.restore.success", { module: moduleTitle ?? moduleId }));
-    await loadModule(moduleId);
-  } catch (err) {
-    const errMsg = apiErrorText(err);
-    logResolveSlot(slot, () => `${escapeHtml(t("shell.restore.errorPrefix"))}${escapeHtml(errMsg)}`, [
-      { labelKey: "shell.action.retry", action: () => restoreArchivedModuleInBackground(moduleId, moduleTitle) },
-      { labelKey: "shell.action.cancel", action: startIdle },
-    ]);
-  }
-}
-
-async function startArchivedModulePicker() {
-  const slot = logProgress("shell.archive.loading");
-  slot.abortBtn.remove();
-
-  try {
-    const data = await apiFetch(`/api/admin/content/modules/archive?locale=${encodeURIComponent(currentLocale)}`, getHeaders);
-    const archivedModules = Array.isArray(data?.modules) ? data.modules : [];
-    if (archivedModules.length === 0) {
-      logResolveSlot(slot, () => escapeHtml(t("shell.archive.empty")), [
-        { labelKey: "shell.action.cancel", action: startIdle },
-      ]);
-      return;
-    }
-
-    logResolveSlot(slot, () => `<strong>${escapeHtml(t("shell.archive.prompt"))}</strong>`);
-    logBot(
-      () => escapeHtml(t("shell.archive.pickHint")),
-      [
-        ...archivedModules.map((module) => ({
-          label: module.title || module.id,
-          action: () => restoreArchivedModuleInBackground(module.id, module.title || module.id),
-        })),
-        { labelKey: "shell.action.cancel", action: startIdle },
-      ],
-    );
-  } catch (err) {
-    const errMsg = apiErrorText(err);
-    logResolveSlot(slot, () => `${escapeHtml(t("shell.archive.errorPrefix"))}${escapeHtml(errMsg)}`, [
-      { labelKey: "shell.action.retry", action: startArchivedModulePicker },
-      { labelKey: "shell.action.cancel", action: startIdle },
-    ]);
-  }
-}
-
-async function duplicateCurrentModuleInBackground() {
-  const sourceModule = bundle?.module;
-  const sourceConfig = bundle?.selectedConfiguration ?? {};
-  if (!sourceModule) {
-    logBot(() => t("shell.duplicate.moduleRequired"));
-    return;
-  }
-
-  const slot = logProgress("shell.duplicate.progress");
-  slot.abortBtn.remove();
-
-  const copyTitle = buildLocalizedCopyValue(sourceModule.title, {
-    locales: supportedLocales,
-    suffix: t("shell.duplicate.copySuffix"),
-    fallbackLabel: t("shell.newModule.defaultTitle"),
-  });
-  try {
-    const createBody = await apiFetch(
-      "/api/admin/content/modules",
-      getHeaders,
-      {
-        method: "POST",
-        body: JSON.stringify({
-          // #982 måtte opprette med en ren streng og sette kartet med en PATCH etterpå, fordi
-          // opprettelsen ikke tok imot et delvis kart. #930 fjernet den begrensningen, så kartet
-          // sendes nå direkte.
-          //
-          // ⚠️ Omveien var ikke bare omstendelig. Frøet var en ren streng uten språkmerke, så i
-          // vinduet mellom opprettelsen og PATCH-en sto kopien registrert som bokmål uansett hvilket
-          // språk originalen var skrevet på. Feilet PATCH-en, ble den stående slik.
-          title: copyTitle,
-          description: sourceModule.description ?? undefined,
-          certificationLevel: sourceModule.certificationLevel ?? "intermediate",
-          validFrom: sourceModule.validFrom ?? undefined,
-          validTo: sourceModule.validTo ?? undefined,
-        }),
-      },
-    );
-    const duplicatedModule = createBody?.module ?? createBody;
-    const duplicatedModuleId = duplicatedModule?.id;
-    if (!duplicatedModuleId) {
-      throw new Error(t("shell.duplicate.errorUnknown"));
-    }
-
-    const rubricVersion = sourceConfig.rubricVersion
-      ? await apiFetch(`/api/admin/content/modules/${encodeURIComponent(duplicatedModuleId)}/rubric-versions`, getHeaders, {
-        method: "POST",
-        body: JSON.stringify({
-          criteria: sourceConfig.rubricVersion.criteria,
-          scalingRule: sourceConfig.rubricVersion.scalingRule,
-        }),
-      })
-      : null;
-
-    const promptTemplateVersion = sourceConfig.promptTemplateVersion
-      ? await apiFetch(`/api/admin/content/modules/${encodeURIComponent(duplicatedModuleId)}/prompt-template-versions`, getHeaders, {
-        method: "POST",
-        body: JSON.stringify({
-          systemPrompt: sourceConfig.promptTemplateVersion.systemPrompt,
-          userPromptTemplate: sourceConfig.promptTemplateVersion.userPromptTemplate,
-          examples: sourceConfig.promptTemplateVersion.examples ?? [],
-        }),
-      })
-      : null;
-
-    const mcqSetVersion = sourceConfig.mcqSetVersion
-      ? await apiFetch(`/api/admin/content/modules/${encodeURIComponent(duplicatedModuleId)}/mcq-set-versions`, getHeaders, {
-        method: "POST",
-        body: JSON.stringify({
-          title: sourceConfig.mcqSetVersion.title,
-          questions: sourceConfig.mcqSetVersion.questions ?? [],
-        }),
-      })
-      : null;
-
-    if (sourceConfig.moduleVersion) {
-      await apiFetch(`/api/admin/content/modules/${encodeURIComponent(duplicatedModuleId)}/module-versions`, getHeaders, {
-        method: "POST",
-        body: JSON.stringify({
-          taskText: sourceConfig.moduleVersion.taskText,
-          assessorExpectedContent: sourceConfig.moduleVersion.assessorExpectedContent,
-          candidateTaskConstraints: sourceConfig.moduleVersion.candidateTaskConstraints || undefined,
-          rubricVersionId: rubricVersion?.rubricVersion?.id,
-          promptTemplateVersionId: promptTemplateVersion?.promptTemplateVersion?.id,
-          mcqSetVersionId: mcqSetVersion?.mcqSetVersion?.id,
-          submissionSchema: sourceConfig.moduleVersion.submissionSchema ?? buildDefaultSubmissionSchema(),
-          assessmentPolicy: sourceConfig.moduleVersion.assessmentPolicy ?? undefined,
-        }),
-      });
-    }
-
-    const sourceLabel = localizeValue(sourceModule.title) || sourceModule.id;
-    await loadModule(duplicatedModuleId);
-    logResolveSlot(slot, () => `<strong>${escapeHtml(tf("shell.duplicate.success", { module: sourceLabel }))}</strong>`);
-    showToast(tf("shell.duplicate.success", { module: sourceLabel }), "success");
-    announceStatus(tf("shell.duplicate.success", { module: sourceLabel }));
-  } catch (err) {
-    const errMsg = apiErrorText(err);
-    logResolveSlot(slot, () => `${escapeHtml(t("shell.duplicate.errorPrefix"))}${escapeHtml(errMsg)}`, [
-      { labelKey: "shell.action.retry", action: duplicateCurrentModuleInBackground },
-    ]);
-  }
-}
-
-async function deleteModuleInBackground() {
-  const moduleId = selectedModuleId;
-  if (!moduleId) return;
-
-  const slot = logProgress("shell.delete.progress");
-  slot.abortBtn.remove();
-
-  try {
-    await apiFetch(`/api/admin/content/modules/${encodeURIComponent(moduleId)}`, getHeaders, {
-      method: "DELETE",
-    });
-    bundle = null;
-    selectedModuleId = null;
-    sessionDraft = null;
-    previewDraft = null;
-    latestSavedModuleVersionId = null;
-    renderPreviewLocaleBar();
-    renderPreview();
-    logResolveSlot(slot, () => `<strong>${escapeHtml(t("shell.delete.success"))}</strong>`);
-    showToast(t("shell.delete.success"), "success");
-    announceStatus(t("shell.delete.success"));
-    startIdle();
-  } catch (err) {
-    const errMsg = apiErrorText(err);
-    logResolveSlot(slot, () => `${escapeHtml(t("shell.delete.errorPrefix"))}${escapeHtml(errMsg)}`, [
-      { labelKey: "shell.action.retry", action: deleteModuleInBackground },
-    ]);
-  }
-}
-
-function confirmModuleDeletion() {
-  const moduleLabel = localizeValue(bundle?.module?.title) || selectedModuleId || "";
-  if (!moduleLabel) {
-    logBot(() => t("shell.delete.moduleRequired"));
-    return;
-  }
-
-  logForm(
-    "text",
-    () => `<strong>${escapeHtml(tf("shell.delete.confirmPrompt", { module: moduleLabel }))}</strong>`,
-    "shell.delete.confirmPlaceholder",
-    "shell.delete.confirmSubmit",
-    (typedValue) => {
-      if (typedValue.trim() !== moduleLabel) {
-        logBot(() => t("shell.delete.confirmMismatch"), [
-          { labelKey: "shell.action.retry", action: confirmModuleDeletion },
-          { labelKey: "shell.action.cancel", action: showModuleActions },
-        ]);
-        return;
-      }
-      deleteModuleInBackground();
-    },
-  );
-}
-
 function confirmHighImpactAction(promptKey, confirmKey, action, cancelAction = showModuleActions, vars = {}) {
   logBot(() => escapeHtml(tf(promptKey, vars)), [
     { labelKey: confirmKey, action },
@@ -3403,14 +3139,6 @@ async function loadModule(moduleId, options = {}) {
   }
   showModuleActions();
 }
-
-function detectRevisionTargets(instruction) {
-  return detectShellRevisionTargets(instruction, {
-    hasDraft: !!(sessionDraft?.taskText || sessionDraft?.assessorExpectedContent),
-    hasMcq: (sessionDraft?.mcqQuestions?.length ?? 0) > 0,
-  });
-}
-
 function describeStructuredEditIntent(intent) {
   if (intent.kind === "title") {
     return tf("shell.revision.intent.title", { title: intent.title });
@@ -5139,10 +4867,6 @@ function renderWorkspaceActions(actions) {
 }
 
 /** Nothing to act on — used when a module is unloaded or the flow takes over the conversation. */
-function clearWorkspaceActions() {
-  renderWorkspaceActions([]);
-}
-
 function showModuleActions() {
   const hasDraft = !!sessionDraft;
   const hasMcq = (sessionDraft?.mcqQuestions?.length ?? 0) > 0;
