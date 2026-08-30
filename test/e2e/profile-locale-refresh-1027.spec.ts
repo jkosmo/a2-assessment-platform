@@ -73,4 +73,25 @@ test.describe("#1027 — profilsiden henter på nytt ved språkbytte", () => {
     await expect(page.locator("#coursesBody")).not.toContainText("Viderekommen");
     await expect(page.locator("html")).toHaveAttribute("lang", "en-GB");
   });
+
+  // ⚠️ QA-runde 5: jeg ga OPPDATERINGEN kappløpsvakt og glemte FØRSTEHENTINGEN. Bytter du språk
+  // mens siden laster første gang, landet det gamle svaret sist og vant. Stille.
+  test("et bytte under FØRSTE henting blir ikke overkjørt av det gamle svaret", async ({ page }) => {
+    await mockProfile(page, { delayFor: "en-GB", delayMs: 900 });
+    await page.goto("/profile");
+    // Første henting går i en-GB og er treg. Vi bytter mens den fortsatt går.
+    await page.selectOption("#localeSelect", "nb");
+
+    await expect(page.locator("#coursesBody")).toContainText("Viderekommen");
+
+    // ⚠️ Første utgave stoppet her og var GRØNN også uten vakta: byttet rekker å rendre nb med én
+    // gang, og testen var ferdig før det trege engelske svaret landet. Den målte at nb kom fram,
+    // ikke at en-GB lot være å overskrive.
+    //
+    // Overskrivingen skjer etter forsinkelsen. Da må påstanden stå etter den også.
+    await page.waitForTimeout(1400);
+    await expect(page.locator("#coursesBody")).toContainText("Viderekommen");
+    await expect(page.locator("#coursesBody")).not.toContainText("Advanced");
+    await expect(page.locator("html")).toHaveAttribute("lang", "nb");
+  });
 });

@@ -37,7 +37,7 @@ function reviewRow(locale: string) {
   };
 }
 
-async function mockReviewerOnly(page: Page, appealCalls: string[], opts: { delayFor?: string; delayMs?: number } = {}) {
+async function mockReviewerOnly(page: Page, appealCalls: string[], opts: { delayFor?: string; delayMs?: number; reviewCalls?: string[] } = {}) {
   await page.addInitScript(() => {
     try { localStorage.setItem("participant.locale", "nb"); } catch { /* standardspråk */ }
   });
@@ -56,6 +56,7 @@ async function mockReviewerOnly(page: Page, appealCalls: string[], opts: { delay
 
   // Serveren svarer etter x-locale, slik den ekte gjør.
   await page.route("**/api/reviews?**", async (r: Route) => {
+    opts.reviewCalls?.push(r.request().url());
     const locale = r.request().headers()["x-locale"] ?? "en-GB";
     if (opts.delayFor && locale === opts.delayFor) {
       await new Promise((res) => setTimeout(res, opts.delayMs ?? 900));
@@ -144,6 +145,73 @@ test.describe("#1027 — språkbytte henter køen på nytt, uten å be om det ma
     // Og den skal BLI stående engelsk etter at et tregt norsk svar eventuelt lander.
     await page.waitForTimeout(1400);
     await expect(page.locator("#manualReviewQueueBody")).toContainText("Incident response");
+    await expect(page.locator("#manualReviewQueueBody")).not.toContainText("Hendelseshåndtering");
+  });
+
+  // ⚠️ QA-runde 5, og den skarpeste hittil: språkfiksen la en BIVIRKNING i `setLocale`, som
+  // oppstarten også kaller. Kallet gikk ut 1 ms etter config-forespørselen — før roller og token
+  // fantes. I mock ga det 403 fra HTML-ens reserveroller; med ekte pålogging går kallet uten
+  // Bearer og gir 401. Rød feilmelding ved HVER lasting av siden, for alle.
+  //
+  // ⚠️ Og jeg meldte dette som en EKSISTERENDE sak (#1039). Det var det ikke — kallstien kom med
+  // min egen commit. Ingen test målte kall ved sidelasting, bare rundt språkbyttet.
+  test("oppstarten sender ikke kø-kall før roller og token finnes", async ({ page }) => {
+    const appealCalls: string[] = [];
+    const reviewCalls: string[] = [];
+    let configSeenAt = 0;
+    const callTimes: number[] = [];
+
+    await page.route("**/participant/config", async () => { /* erstattes under */ });
+    await page.unroute("**/participant/config");
+    await mockReviewerOnly(page, appealCalls, { reviewCalls });
+
+    // Merk når config svarer, og når kø-kallene går ut.
+    page.on("request", (req) => {
+      const u = req.url();
+      if (u.includes("/participant/config")) configSeenAt = Date.now();
+      if (u.includes("/api/reviews?") || u.includes("/api/appeals")) callTimes.push(Date.now());
+    });
+
+    await page.goto("/review");
+    await expect(page.locator("#manualReviewQueueBody")).toContainText("Hendelseshåndtering");
+
+    // Oppstarten skal hente køen ÉN gang, gjennom den rollestyrte stien — ikke to ganger fordi
+    // `setLocale` også fyrte. To kall her er signaturen på bivirkningen.
+    expect(reviewCalls.length, `køen ble hentet ${reviewCalls.length} ganger ved oppstart`).toBe(1);
+    expect(appealCalls, "en ren sensor skal ikke hente klagekøen ved oppstart").toEqual([]);
+    expect(configSeenAt, "config skal være forespurt").toBeGreaterThan(0);
+  });
+
+  test("ingen rød feilmelding ved ren sidelasting", async ({ page }) => {
+    // ⚠️ Dette er brukerens opplevelse av feilen: hen laster siden og får en rød boks hen ikke kan
+    // gjøre noe med. Ingen av mine tester målte den tilstanden — de målte rundt språkbyttet.
+    const appealCalls: string[] = [];
+    await mockReviewerOnly(page, appealCalls);
+    await page.goto("/review");
+    await expect(page.locator("#manualReviewQueueBody")).toContainText("Hendelseshåndtering");
+    await page.waitForTimeout(600);
+
+    await expect(page.locator(".toast--error")).toHaveCount(0);
+  });
+
+  // ⚠️ QA-runde 5, falskt grønt nr. 7: porten fjernet `titleSearch` fra BEGGE søkefiltrene og hele
+  // e2e-suiten forble grønn, 285 av 285. Klient-halvdelen av søkefiksen — det saken eksplisitt
+  // handler om — hadde ingen test som kunne bli rød.
+  //
+  // Serveren sender variantene; ingen målte at klienten faktisk BRUKER dem.
+  test("en sensor på norsk finner saken ved å søke på den engelske tittelen", async ({ page }) => {
+    const appealCalls: string[] = [];
+    await mockReviewerOnly(page, appealCalls);
+    await page.goto("/review");
+    await expect(page.locator("#manualReviewQueueBody")).toContainText("Hendelseshåndtering");
+
+    // Søket gjøres på ENGELSK mens siden står på norsk. Uten `titleSearch` blir køen tom.
+    await page.fill("#mrQueueSearch", "Incident response");
+    await expect(page.locator("#manualReviewQueueBody")).toContainText("Hendelseshåndtering");
+
+    // Kontrollcase: et ord som ikke finnes i noen språkvariant skal faktisk tømme køen. Uten
+    // denne ville testen vært grønn også for et filter som aldri filtrerer.
+    await page.fill("#mrQueueSearch", "zzz-finnes-ikke");
     await expect(page.locator("#manualReviewQueueBody")).not.toContainText("Hendelseshåndtering");
   });
 });

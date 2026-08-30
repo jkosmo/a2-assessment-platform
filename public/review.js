@@ -161,7 +161,12 @@ function setLocale(locale) {
   // ⚠️ Første forsøk sjekket om kø-elementene FANTES i DOM-en. Begge finnes alltid, uansett rolle,
   // så en bruker med bare REVIEWER-rollen hentet klagekøen ved hvert språkbytte og fikk 403 og en
   // rød feiltoast. `refreshVisibleReviewQueues` spør om ROLLER, som er det spørsmålet som gjelder.
-  void refreshVisibleReviewQueues();
+  //
+  // ⚠️ Hentingen ligger IKKE her lenger. `setLocale` kalles også ved oppstart, før config, roller
+  // og MSAL er lastet. Da gikk kallene ut med HTML-ens reserveroller og uten token — 403 i mock,
+  // 401 med ekte pålogging, og en rød feilmelding ved HVER lasting av siden, for alle.
+  //
+  // `setLocale` setter språk. Den som BYTTER språk, henter. To ansvar, to steder.
 }
 
 function applyTranslations() {
@@ -1572,7 +1577,12 @@ async function loadParticipantConsoleConfig() {
 
 // ── Event wiring ───────────────────────────────────────────────────────────────
 
-localeSelect.addEventListener("change", () => setLocale(localeSelect.value));
+localeSelect.addEventListener("change", () => {
+  setLocale(localeSelect.value);
+  // #1027: serveren baker inn språket ved henting, så køene må hentes på nytt. Her, og ikke inne i
+  // `setLocale`, fordi oppstarten også kaller den — se kommentaren der.
+  void refreshVisibleReviewQueues();
+});
 reviewTabManualButton?.addEventListener("click", () => setActiveReviewTab("manualReview"));
 reviewTabAppealButton?.addEventListener("click", () => setActiveReviewTab("appeal"));
 

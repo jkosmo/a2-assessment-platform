@@ -2,6 +2,50 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.49.3 - 2026-08-30
+
+### #1027, femte QA-runde: bivirkningen som fyrte ved oppstart
+
+⚠️ **Språkfiksen la en henting inne i `setLocale`. Oppstarten kaller også `setLocale`** — før
+config, roller og MSAL er lastet. Kallet gikk ut omtrent 1 ms etter config-forespørselen.
+
+- I mock-modus kom rollene fra `review.html`, som står med `REVIEWER,APPEAL_HANDLER`. En ren
+  sensor hentet klagekøen og fikk 403.
+- **Med ekte pålogging er det verre:** `getAccessToken()` er null før MSAL er initialisert, så
+  begge kallene gikk uten Bearer og ga 401. Rød feilmelding ved hver lasting av `/review`, for
+  alle. Det lå ute på stage i 2.49.0–2.49.2.
+
+`setLocale` setter nå bare språk. Den som **bytter** språk, henter. To ansvar, to steder.
+
+### ⚠️ Og jeg meldte feilen som en eksisterende sak
+
+#1039 ble skrevet som en svakhet i mock-innloggingens standardroller. Kallstien kom med **9227b25b**
+— min egen commit i denne leveransen. På `main` finnes den ikke.
+
+Jeg så ett uventet kall, antok at det hadde ligget der hele tiden, og skrev en sak om det. Jeg
+spurte aldri om jeg nettopp hadde laget det selv.
+
+**Et funn som dukker opp i samme runde som en endring, skal sammenlignes mot `main` før det meldes
+som eksisterende.**
+
+### Profilens FØRSTE henting manglet vakta oppdateringen fikk
+
+Bytter du språk mens siden laster første gang, landet det gamle svaret sist og vant. Tredje gang i
+denne saken at én fiks i et sett ble tatt for settet.
+
+### Søket hadde ingen test på klientsiden
+
+QA-porten fjernet `titleSearch` fra begge søkefiltrene, og hele e2e-suiten forble grønn — 285 av
+285. Serveren sendte variantene; ingen målte at klienten faktisk brukte dem. Det var det saken
+eksplisitt handlet om.
+
+### Og testen jeg skrev for førstehentingen var selv falskt grønn
+
+Den målte at det nye språket kom fram, ikke at det gamle lot være å overskrive — og var ferdig før
+det trege svaret landet. Min egen mutasjonssjekk fanget den.
+
+**En kappløpstest som ikke venter til taperen har landet, måler ikke kappløpet.**
+
 ## 2.49.2 - 2026-08-30
 
 ### #1027, fjerde QA-runde: en regresjon jeg innførte og ikke så

@@ -609,11 +609,18 @@ async function loadProfileData() {
   }
 
   // Load completed modules (non-blocking — render empty state first, fill in on success)
+  const requestedLocale = currentLocale;
   const [modulesResult, coursesResult] = await Promise.allSettled([
     apiFetch("/api/modules/completed", headers),
     apiFetch("/api/courses/completions", headers),
   ]);
 
+  // ⚠️ #1027: samme kappløpsvakt som `refreshProfileForLocale` har. Jeg ga oppdateringen vakta og
+  // glemte FØRSTEHENTINGEN — bytter du språk mens den går, landet det gamle svaret sist og vant:
+  // «nb» på siden, «Change management … Advanced» i tabellen, stille.
+  //
+  // Én fiks i et sett er ikke settet. Det er tredje gang i denne saken.
+  if (requestedLocale !== currentLocale) return;
   cachedModulesData = modulesResult.status === "fulfilled" ? modulesResult.value : null;
   cachedCoursesData = coursesResult.status === "fulfilled" ? coursesResult.value : null;
   renderModules(cachedModulesData);

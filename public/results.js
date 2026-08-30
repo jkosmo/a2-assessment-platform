@@ -366,8 +366,8 @@ function setLocale(locale) {
   // Nøyaktig samme feil som i vurderingskøene. Den fulgte med flyttingen av ansvaret til serveren:
   // klientparseren kjørte per rendering, så byttet slo inn av seg selv. Det gjør det ikke lenger.
   //
-  // Bare når noe faktisk ER hentet — ved oppstart kalles denne før brukeren har trykket «hent».
-  if (hasLoadedResults) void loadResults();
+  // ⚠️ Hentingen ligger IKKE her. `setLocale` kalles også ved oppstart, og en bivirkning der
+  // sendte kall av gårde før roller og token fantes — se review.js. `setLocale` setter språk.
 }
 
 function applyTranslations() {
@@ -497,7 +497,11 @@ async function loadParticipantConsoleConfig() {
 }
 
 // Event listeners
-localeSelect.addEventListener("change", () => setLocale(localeSelect.value));
+localeSelect.addEventListener("change", () => {
+  setLocale(localeSelect.value);
+  // Bare når noe faktisk ER hentet — før første «Last resultater» finnes det ingenting å oppdatere.
+  if (hasLoadedResults) void loadResults();
+});
 
 mockRolePresetSelect.addEventListener("change", () => {
   if (!mockRolePresetSelect.value || !roleSwitchState.enabled) return;

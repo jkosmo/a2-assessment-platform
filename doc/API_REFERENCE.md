@@ -115,6 +115,22 @@ The course master toggle is set via the admin course API: `POST`/`PUT /api/admin
 | `POST` | `/api/reviews/:reviewId/claim` | ADMINISTRATOR, REVIEWER |
 | `POST` | `/api/reviews/:reviewId/override` | ADMINISTRATOR, REVIEWER |
 
+### `submission.module` i køsvaret (#1027)
+
+Gjelder både `/api/reviews` og `/api/appeals`.
+
+- `title` — **ferdig lokalisert streng** på leserens språk (`x-locale`), ikke lagringsformatet.
+  Klienten skal vise den som den er, ikke tolke den.
+- `titleSearch` — **alle språkvariantene** av tittelen, som en liste.
+
+⚠️ `titleSearch` finnes fordi køsøket før gikk over den rå JSON-strengen og derfor traff på tvers
+av alle språk. Det var utilsiktet, men nyttig: en behandler fant saken uansett hvilket språk
+tittelen ble skrevet på. Da #1022 begynte å lokalisere `title`, ble søket smalere uten at noen la
+merke til det.
+
+Et klientsidefilter som søker i køen **skal ta med `titleSearch`**, ellers blir søket smalere enn
+det var før serveren lokaliserte.
+
 ---
 
 ## Appeals
