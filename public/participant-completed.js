@@ -1,4 +1,5 @@
 import { renderWorkspaceNavigationWithProfile } from "/static/workspace-nav.js";
+import { lagLokalisertRessurs } from "./static/localized-resource.js";
 import { describeApiError } from "/static/api-error.js";
 import { resolveInitialLocale } from "/static/i18n-locale.js";
 import { createNumberFormatter, createDateTimeFormatter } from "/static/format-display.js";
@@ -396,22 +397,32 @@ loadMeButton.addEventListener("click", async () => {
   });
 });
 
+// #1042: serveren avgjør hvilket språk innhold vises på når data HENTES (#1027). Ressursen eier
+// ny henting ved språkbytte, kappløpsvakt og enkeltflyt per språk — flaten skal ikke ha sin egen.
+const fullførteModuler = lagLokalisertRessurs({
+  hentSpråk: () => currentLocale,
+  hent: () => {
+    const limit = Number(completedLimit.value);
+    const query = Number.isFinite(limit) && limit > 0 ? `?limit=${encodeURIComponent(limit)}` : "";
+    return apiFetch(`/api/modules/completed${query}`, headers);
+  },
+  tegn: (body) => {
+    renderCompletedModules(body);
+    log(body);
+  },
+  påFeil: (error) => log(error.message),
+});
+
 loadCompletedButton.addEventListener("click", async () => {
-  await runWithBusyButton(loadCompletedButton, async () => {
-    try {
-      const limit = Number(completedLimit.value);
-      const query = Number.isFinite(limit) && limit > 0 ? `?limit=${encodeURIComponent(limit)}` : "";
-      const body = await apiFetch(`/api/modules/completed${query}`, headers);
-      renderCompletedModules(body);
-      log(body);
-    } catch (error) {
-      log(error.message);
-    }
-  });
+  await runWithBusyButton(loadCompletedButton, () => fullførteModuler.last());
 });
 
 localeSelect.addEventListener("change", () => {
   setLocale(localeSelect.value);
+  // ⚠️ Hentingen ligger HER, ikke i `setLocale`. Den kalles også ved oppstart, og en bivirkning
+  // der sender kall av gårde før roller og token finnes — det var #1039.
+  fullførteModuler.oppdaterVedSpråkbytte();
+  kursbevis.oppdaterVedSpråkbytte();
 });
 
 completedCancelAppeal.addEventListener("click", () => {
@@ -483,13 +494,17 @@ function renderCourseCertificates(completions) {
   }
 }
 
+// #1042: kursbevisene viser `courseTitle` og `certificationLevel`, som serveren lokaliserer ved
+// henting. Uten ny henting ble de stående på forrige språk — engelsk side, norske titler (#1040).
+const kursbevis = lagLokalisertRessurs({
+  hentSpråk: () => currentLocale,
+  hent: () => apiFetch("/api/courses/completions", headers),
+  tegn: (body) => renderCourseCertificates(body?.completions ?? []),
+  påFeil: () => renderCourseCertificates([]),
+});
+
 async function loadCourseCertificates() {
-  try {
-    const body = await apiFetch("/api/courses/completions", headers);
-    renderCourseCertificates(body?.completions ?? []);
-  } catch {
-    renderCourseCertificates([]);
-  }
+  await kursbevis.last();
 }
 
 // Refresh course certs when the completed button is clicked too.

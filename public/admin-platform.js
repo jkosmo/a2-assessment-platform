@@ -1,4 +1,5 @@
 import { renderWorkspaceNavigationWithProfile } from "/static/workspace-nav.js";
+import { lagLokalisertRessurs } from "./static/localized-resource.js";
 import { resolveInitialLocale } from "/static/i18n-locale.js";
 import { localeLabels, supportedLocales, translations } from "/static/i18n/admin-platform-translations.js";
 import { apiFetch, buildConsoleHeaders, getConsoleConfig, fetchQueueCounts, applyNavReviewBadge } from "/static/api-client.js";
@@ -324,7 +325,11 @@ async function loadConsoleConfig() {
 
 // ── Event wiring ──────────────────────────────────────────────────────────────
 
-localeSelect.addEventListener("change", () => setLocale(localeSelect.value));
+localeSelect.addEventListener("change", () => {
+  setLocale(localeSelect.value);
+  // ⚠️ Hentingen ligger HER, ikke i `setLocale` — den kalles også ved oppstart (#1039).
+  feiledeVurderinger.oppdaterVedSpråkbytte();
+});
 rolesInput.addEventListener("input", () => {
   const matching = findMatchingPreset(rolesInput.value, roleSwitchState.presets);
   mockRolePresetSelect.value = matching;
@@ -371,19 +376,25 @@ initTabs();
 const failedAssessmentsCard = document.getElementById("failedAssessmentsCard");
 const failedAssessmentsBody = document.getElementById("failedAssessmentsBody");
 
+// #1042: modultitlene i lista over feilede vurderinger lokaliseres av serveren ved HENTING
+// (#1022/#1027). Uten ny henting ved språkbytte ble de stående på forrige språk (#1040).
+const feiledeVurderinger = lagLokalisertRessurs({
+  hentSpråk: () => currentLocale,
+  hent: () => apiFetch("/api/admin/platform/failed-assessments", headers),
+  tegn: (data) => tegnFeiledeVurderinger(data),
+  påFeil: () => { /* kortet forblir skjult, som før */ },
+});
+
 async function loadFailedAssessments() {
+  await feiledeVurderinger.last();
+}
+
+function tegnFeiledeVurderinger(data) {
   if (!failedAssessmentsCard || !failedAssessmentsBody) return;
   setHidden(failedAssessmentsCard, true);
 
-  let rows = [];
-  let total = 0;
-  try {
-    const data = await apiFetch("/api/admin/platform/failed-assessments", headers);
-    rows = Array.isArray(data?.failedAssessments) ? data.failedAssessments : [];
-    total = typeof data?.total === "number" ? data.total : rows.length;
-  } catch {
-    return;
-  }
+  const rows = Array.isArray(data?.failedAssessments) ? data.failedAssessments : [];
+  const total = typeof data?.total === "number" ? data.total : rows.length;
 
   if (rows.length === 0) return;
 

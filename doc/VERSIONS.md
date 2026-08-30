@@ -2,6 +2,50 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.50.0 - 2026-08-30
+
+### #1043 — skralletest mot klientside språkvalg
+
+Vakta teller reservekjeder på klienten og feiler i **begge** retninger. Den ser ikke etter
+`JSON.parse`, men etter kjeden `parsed[currentLocale] ?? parsed["en-GB"]` — det er kjeden som gir
+drift, fordi hver kopi har sin egen rekkefølge.
+
+⚠️ Baselinen er 4. Mitt eget designnotat sa 2. Grep med noen linjers kontekst fant ikke kjedene som
+sto alene på en linje. **En ratsj teller uten å bli lei; et håndsveip blir det.**
+
+⚠️ To treff var falske: `adminContentTranslations` og `TOAST_CLOSE_LABELS` er grensesnittets EGNE
+oversettelsestabeller. En vakt som roper på riktig kode blir slått av.
+
+### #1042 — delt modul for språkbytte og henting
+
+`lagLokalisertRessurs` eier fire ting ingen flate lenger implementerer selv: ny henting bare når noe
+er hentet, kappløpsvakt, enkeltflyt nøklet på språk, og at `setLocale` forblir uten bivirkning.
+
+Sveipet viste hvorfor: `review.js` hadde hele mønsteret, `results.js` hadde det, `profile.js`
+manglet enkeltflyt, og tre flater hadde ingenting. **Tre ulike dybder på samme mønster.**
+
+Tre flater er konvertert — de som faktisk hadde brukersynlig feil: `participant-completed`,
+`admin-platform` og `cohort-status`.
+
+### To funn under konverteringen
+
+`loadCourses` i `cohort-status` viste **serverens feilmelding rått**. Konverteringen fjernet den, og
+skralletesten fra #1043 fyrte i riktig retning samme dag den ble laget: «sett baselinen ned. Bra
+jobba.»
+
+⚠️ Og kursvalget måtte bevares eksplisitt: uten det ville et språkbytte bygget lista på nytt og
+nullstilt hvilket kurs som var valgt, så sammendraget sto igjen på et kurs ingen hadde valgt.
+
+### Kappløpstesten var falskt grønn — nummer ti
+
+Modulen serialiserer, så sluttilstanden blir riktig uansett. Testen så aldri **glimtet** av feil
+språk, og forble grønn da kappløpsvakta ble fjernet.
+
+Den samler nå hver mellomtilstand med en `MutationObserver`.
+
+**Det brukeren ser i et kappløp er glimtet, ikke sluttilstanden. En test som bare måler slutten,
+måler ikke kappløpet.**
+
 ## 2.49.3 - 2026-08-30
 
 ### #1027, femte QA-runde: bivirkningen som fyrte ved oppstart

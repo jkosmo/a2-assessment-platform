@@ -1,4 +1,5 @@
 import { renderWorkspaceNavigationWithProfile } from "/static/workspace-nav.js";
+import { lagLokalisertRessurs } from "./static/localized-resource.js";
 import { resolveInitialLocale } from "/static/i18n-locale.js";
 import { escapeHtml } from "/static/html-escape.js";
 import { localeLabels, supportedLocales, translations } from "/static/i18n/cohort-status-translations.js";
@@ -206,8 +207,19 @@ function showCohortEmpty() {
 }
 
 async function loadCourses() {
-  try {
-    const data = await apiFetch("/api/cohort-status/courses", headers);
+  await kursliste.last();
+}
+
+function tegnKurslisteFeil() {
+  setMessage(t("cohort.error"), "error");
+}
+
+function tegnKursliste(data) {
+  // ⚠️ Den valgte verdien må overleve at lista bygges på nytt ved språkbytte. Uten dette ville
+  // et språkbytte nullstilt kursvalget, og sammendraget under blitt stående på et kurs som ikke
+  // lenger er valgt.
+  const valgt = courseSelect.value;
+  {
     const courses = data.courses ?? [];
     if (courses.length === 0) {
       courseSelect.innerHTML = `<option value="">${escapeHtml(t("cohort.picker.empty"))}</option>`;
@@ -227,8 +239,7 @@ async function loadCourses() {
             : "";
         return `<option value="${escapeHtml(c.id)}">${escapeHtml(c.title)}${escapeHtml(mark)}</option>`;
       }).join("");
-  } catch (error) {
-    setMessage(error?.message ?? t("cohort.error"), "error");
+    if (valgt) courseSelect.value = valgt;
   }
 }
 
@@ -282,7 +293,24 @@ async function init() {
   await loadCourses();
 }
 
-localeSelect?.addEventListener("change", () => setLocale(localeSelect.value));
+// #1042: kursvelgeren og kohortsammendraget viser kurs- og modultitler, som serveren lokaliserer
+// ved HENTING (#1027). Uten ny henting ble de stående på forrige språk (#1040).
+//
+// ⚠️ Ressursene ligger her, etter at lasterne er definert, og hentingen kalles fra lytteren —
+// ikke fra `setLocale`, som også kjører ved oppstart (#1039).
+const kursliste = lagLokalisertRessurs({
+  hentSpråk: () => currentLocale,
+  hent: () => apiFetch("/api/cohort-status/courses", headers),
+  tegn: (data) => tegnKursliste(data),
+  påFeil: () => tegnKurslisteFeil(),
+});
+
+localeSelect?.addEventListener("change", () => {
+  setLocale(localeSelect.value);
+  kursliste.oppdaterVedSpråkbytte();
+  // Sammendraget hentes bare når et kurs faktisk er valgt.
+  if (courseSelect?.value) void loadCohort();
+});
 mockRolePresetSelect?.addEventListener("change", () => {
   if (!mockRolePresetSelect.value || !roleSwitchState.enabled) return;
   rolesInput.value = mockRolePresetSelect.value;

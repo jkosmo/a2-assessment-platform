@@ -56,7 +56,9 @@ const EXEMPT = [
 // hvilken flate teksten havner på.
 const RENDER_BASELINE = {
   "admin-platform.js": 2,
-  "cohort-status.js": 3,
+  // #1042: nede fra 3. `loadCourses` viste serverens `error.message` rått i en feilmelding;
+  // konverteringen til `lagLokalisertRessurs` erstattet den med den oversatte `cohort.error`.
+  "cohort-status.js": 2,
   // #983 er LØST for denne fila, og tallet er nede fra 18.
   //
   // ⚠️ Roten var at deltakerkonsollet hadde SIN EGEN feiloversetter, som bare kjente to nøkler og
