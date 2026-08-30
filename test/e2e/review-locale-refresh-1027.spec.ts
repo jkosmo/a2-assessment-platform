@@ -214,4 +214,64 @@ test.describe("#1027 — språkbytte henter køen på nytt, uten å be om det ma
     await page.fill("#mrQueueSearch", "zzz-finnes-ikke");
     await expect(page.locator("#manualReviewQueueBody")).not.toContainText("Hendelseshåndtering");
   });
+
+  // ⚠️ QA-runde 6, falskt grønt nr. 9: porten fjernet `titleSearch` fra KLAGEKØENS filter alene, og
+  // hele e2e-suiten forble grønn — 289 av 289. Testen over dekket bare sensorkøen.
+  //
+  // To like filtre, to like linjer kode, én test. Nøyaktig samme form som feilen saken handler om:
+  // rettet begge steder, prøvd ett av dem.
+  test("en klagebehandler på norsk finner saken ved å søke på den engelske tittelen", async ({ page }) => {
+    await page.addInitScript(() => {
+      try { localStorage.setItem("participant.locale", "nb"); } catch { /* standardspråk */ }
+    });
+    const handler = { userId: "app-user", email: "a@x.no", name: "Klagebehandler", roles: ["APPEAL_HANDLER"] };
+    await page.route("**/participant/config", (r: Route) => r.fulfill(json({
+      authMode: "mock",
+      navigation: { items: [], workspaceItems: [] },
+      identityDefaults: { reviewer: handler },
+      calibrationWorkspace: { accessRoles: [] },
+    })));
+    await page.route("**/version", (r: Route) => r.fulfill(json({ version: "test" })));
+    await page.route("**/api/me", (r: Route) => r.fulfill(json({
+      user: { id: "app-user", roles: ["APPEAL_HANDLER"] },
+      consent: { accepted: true, currentVersion: "1.0" },
+    })));
+    await page.route("**/api/queue-counts", (r: Route) => r.fulfill(json({ counts: {} })));
+    await page.route("**/api/reviews?**", (r: Route) => r.fulfill(json({ reviews: [] })));
+    await page.route("**/api/appeals**", (r: Route) => r.fulfill(json({
+      appeals: [{
+        id: "ap-1",
+        appealStatus: "OPEN",
+        appealReason: "Uenig i vurderingen",
+        createdAt: "2026-08-27T10:00:00.000Z",
+        claimedAt: null,
+        resolvedAt: null,
+        appealedBy: { id: "u-1", name: "Kandidat", email: "k@x.no" },
+        resolvedBy: null,
+        sla: { state: "ok" },
+        submission: {
+          id: "sub-1",
+          submittedAt: "2026-08-27T09:00:00.000Z",
+          submissionStatus: "UNDER_REVIEW",
+          user: { id: "u-1", name: "Kandidat", email: "k@x.no", department: "Fag" },
+          // Serveren sender ferdig tittel PLUSS alle variantene til søk.
+          module: { id: "m-1", title: TITLES.nb, titleSearch: Object.values(TITLES), description: null },
+          latestDecision: null,
+        },
+      }],
+    })));
+
+    await page.goto("/review");
+    // ⚠️ Ingen faneklikk: #975 skjuler hele fanestripa når brukeren har bare ÉN rolle, og viser
+    // panelet direkte. Første utgave av testen klikket på fanen og gikk i tidsavbrudd.
+    await expect(page.locator("#appealQueueBody")).toContainText("Hendelseshåndtering");
+
+    // Søk på ENGELSK mens siden står på norsk. Uten `titleSearch` blir køen tom.
+    await page.fill("#appealQueueSearch", "Incident response");
+    await expect(page.locator("#appealQueueBody")).toContainText("Hendelseshåndtering");
+
+    // Kontrollcase: filteret skal faktisk filtrere.
+    await page.fill("#appealQueueSearch", "zzz-finnes-ikke");
+    await expect(page.locator("#appealQueueBody")).not.toContainText("Hendelseshåndtering");
+  });
 });
