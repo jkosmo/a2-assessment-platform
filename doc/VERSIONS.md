@@ -2,6 +2,35 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.52.0 - 2026-08-30
+
+### #1044 — én flatekontrakt for alle flater med språkvelger
+
+En ny flate legges til ved å utvide **lista**, ikke ved å kopiere en testfil. Fire punkter per
+flate: lesbar tekst uten rå JSON og uten rød feilmelding, innholdet følger språkbyttet, ingen
+**glimt** av feil språk når et tregt svar lander, og et bytte under første henting blir ikke slukt.
+
+### ⚠️ Punkt 4 manglet, og mutasjonstesten avslørte det
+
+Designnotatet listet fire sjekker. Jeg implementerte tre og trodde jeg var ferdig. Mutasjonen
+«enkeltflyt uten språk» drepte **null** tester — det var beviset på at et helt ansvar var udekket.
+
+**En kontrakt som ikke er mutasjonsverifisert per ansvar, er en liste over gode intensjoner.**
+
+### Duplikater fjernet
+
+To testfiler slettet, to trimmet fra 12 til 6 tester. Det som står igjen dekker det kontrakten ikke
+gjør: rollestyringen på sensorflaten, oppstartsregresjonen fra #1039, søket på `titleSearch` og
+detaljlinja på resultatsiden.
+
+⚠️ Punktet sto i saken fordi en gammel svak test aldri ble slettet i #1027 — to `it` med samme navn
+i samme fil.
+
+### Kontrakten fant noe med en gang
+
+Punkt 1 feilet på sensorflaten med **404 og rød feilmelding**: konsollet autovelger første rad og
+henter detaljene. Ingen lette etter det.
+
 ## 2.51.0 - 2026-08-30
 
 ### #1042 fullført — alle seks flatene på den delte modulen

@@ -116,38 +116,6 @@ test.describe("#1027 — språkbytte henter køen på nytt, uten å be om det ma
     await expect(page.locator(".toast--error")).toHaveCount(redToastsBeforeSwitch);
   });
 
-  // ⚠️ QA-runde 4: språkvakta i `loadReviewQueue` hadde INGEN test som kunne bli rød. Porten
-  // fjernet språksjekken i begge vaktene, og hele e2e-suiten forble grønn — 280 av 280.
-  //
-  // Jeg hadde mutasjonsverifisert DOM-sjekken (funn A) og skrevet at vakta var dekket. Det var to
-  // ulike fikser, og bare den ene ble prøvd.
-  test("et språkbytte MENS køen lastes blir ikke slukt av enkeltflyt-vakta", async ({ page }) => {
-    const appealCalls: string[] = [];
-    await mockReviewerOnly(page, appealCalls, { delayFor: "nb", delayMs: 900 });
-    await page.goto("/review");
-
-    // Første henting går i nb og er treg. Vi bytter mens den fortsatt går.
-    await page.selectOption("#localeSelect", "en-GB");
-
-    // Uten språkvakta returnerer vakta den PÅGÅENDE norske hentingen, og køen blir stående på nb.
-    await expect(page.locator("#manualReviewQueueBody")).toContainText("Incident response");
-  });
-
-  test("det trege svaret kan ikke overskrive språket sensoren står i", async ({ page }) => {
-    const appealCalls: string[] = [];
-    await mockReviewerOnly(page, appealCalls, { delayFor: "nb", delayMs: 900 });
-    await page.goto("/review");
-    await expect(page.locator("#manualReviewQueueBody")).toContainText("Hendelseshåndtering");
-
-    await page.selectOption("#localeSelect", "en-GB");
-    await expect(page.locator("#manualReviewQueueBody")).toContainText("Incident response");
-
-    // Og den skal BLI stående engelsk etter at et tregt norsk svar eventuelt lander.
-    await page.waitForTimeout(1400);
-    await expect(page.locator("#manualReviewQueueBody")).toContainText("Incident response");
-    await expect(page.locator("#manualReviewQueueBody")).not.toContainText("Hendelseshåndtering");
-  });
-
   // ⚠️ QA-runde 5, og den skarpeste hittil: språkfiksen la en BIVIRKNING i `setLocale`, som
   // oppstarten også kaller. Kallet gikk ut 1 ms etter config-forespørselen — før roller og token
   // fantes. I mock ga det 403 fra HTML-ens reserveroller; med ekte pålogging går kallet uten
@@ -180,18 +148,6 @@ test.describe("#1027 — språkbytte henter køen på nytt, uten å be om det ma
     expect(reviewCalls.length, `køen ble hentet ${reviewCalls.length} ganger ved oppstart`).toBe(1);
     expect(appealCalls, "en ren sensor skal ikke hente klagekøen ved oppstart").toEqual([]);
     expect(configSeenAt, "config skal være forespurt").toBeGreaterThan(0);
-  });
-
-  test("ingen rød feilmelding ved ren sidelasting", async ({ page }) => {
-    // ⚠️ Dette er brukerens opplevelse av feilen: hen laster siden og får en rød boks hen ikke kan
-    // gjøre noe med. Ingen av mine tester målte den tilstanden — de målte rundt språkbyttet.
-    const appealCalls: string[] = [];
-    await mockReviewerOnly(page, appealCalls);
-    await page.goto("/review");
-    await expect(page.locator("#manualReviewQueueBody")).toContainText("Hendelseshåndtering");
-    await page.waitForTimeout(600);
-
-    await expect(page.locator(".toast--error")).toHaveCount(0);
   });
 
   // ⚠️ QA-runde 5, falskt grønt nr. 7: porten fjernet `titleSearch` fra BEGGE søkefiltrene og hele

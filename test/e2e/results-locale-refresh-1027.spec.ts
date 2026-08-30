@@ -57,45 +57,6 @@ async function mockResultsWorkspace(page: Page, opts: { delayFor?: string; delay
 }
 
 test.describe("#1027 — resultatsiden henter rapportene på nytt ved språkbytte", () => {
-  test("titlene bytter språk uten at brukeren må trykke «Last resultater» igjen", async ({ page }) => {
-    await mockResultsWorkspace(page);
-    await page.goto("/results");
-    await page.click("#loadResults");
-    await expect(page.locator("#completionBody")).toContainText("Incident response");
-
-    await page.selectOption("#localeSelect", "nb");
-    await expect(page.locator("#completionBody")).toContainText("Hendelseshåndtering");
-    await expect(page.locator("#completionBody")).not.toContainText("Incident response");
-  });
-
-  test("et språkbytte MENS den første hentingen pågår blir ikke slukt", async ({ page }) => {
-    // ⚠️ Dette var feilen: flagget «noe er hentet» ble satt når lasten var FERDIG, så et bytte
-    // midt i den første hentingen så et falskt «ingenting er hentet ennå» og ble ignorert.
-    await mockResultsWorkspace(page, { delayFor: "en-GB", delayMs: 900 });
-    await page.goto("/results");
-    await page.click("#loadResults");
-    await page.selectOption("#localeSelect", "nb");
-
-    await expect(page.locator("#completionBody")).toContainText("Hendelseshåndtering");
-  });
-
-  test("det trege svaret kan ikke overskrive det språket brukeren står i", async ({ page }) => {
-    // ⚠️ Uten språkvakta vinner svaret som lander SIST, ikke språket brukeren valgte sist.
-    await mockResultsWorkspace(page, { delayFor: "nb", delayMs: 900 });
-    await page.goto("/results");
-    await page.click("#loadResults");
-    await expect(page.locator("#completionBody")).toContainText("Incident response");
-
-    await page.selectOption("#localeSelect", "nb");
-    await page.selectOption("#localeSelect", "en-GB");
-
-    // Siden skal ende på engelsk — og BLI der etter at det trege norske svaret har landet.
-    await expect(page.locator("#completionBody")).toContainText("Incident response");
-    await page.waitForTimeout(1400);
-    await expect(page.locator("#completionBody")).toContainText("Incident response");
-    await expect(page.locator("#completionBody")).not.toContainText("Hendelseshåndtering");
-    await expect(page.locator("html")).toHaveAttribute("lang", "en-GB");
-  });
 
   // ⚠️ QA-runde 4: detaljlinja blandet språk etter bytte — «1 learners for Hendelseshåndtering».
   // Den valgte raden bar tittelen fra det øyeblikket den ble KLIKKET, og den fulgte ikke med når
