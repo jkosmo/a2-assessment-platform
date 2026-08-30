@@ -1,5 +1,5 @@
 import { renderWorkspaceNavigationWithProfile } from "/static/workspace-nav.js";
-import { lagLokalisertRessurs } from "./static/localized-resource.js";
+import { lagLokalisertRessurs } from "/static/localized-resource.js";
 import { resolveInitialLocale } from "/static/i18n-locale.js";
 import { escapeHtml } from "/static/html-escape.js";
 import { localeLabels, supportedLocales, translations } from "/static/i18n/cohort-status-translations.js";

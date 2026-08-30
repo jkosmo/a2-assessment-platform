@@ -1,5 +1,5 @@
 import { renderWorkspaceNavigationWithProfile } from "/static/workspace-nav.js";
-import { lagLokalisertRessurs } from "./static/localized-resource.js";
+import { lagLokalisertRessurs } from "/static/localized-resource.js";
 import { describeApiError } from "/static/api-error.js";
 import { createDateTimeFormatter } from "/static/format-display.js";
 const formatDateTime = createDateTimeFormatter(() => currentLocale, "—");

@@ -1,5 +1,5 @@
 import { renderWorkspaceNavigationWithProfile } from "/static/workspace-nav.js";
-import { lagLokalisertRessurs } from "./static/localized-resource.js";
+import { lagLokalisertRessurs } from "/static/localized-resource.js";
 import { resolveInitialLocale } from "/static/i18n-locale.js";
 import { localeLabels, supportedLocales, translations } from "/static/i18n/admin-platform-translations.js";
 import { apiFetch, buildConsoleHeaders, getConsoleConfig, fetchQueueCounts, applyNavReviewBadge } from "/static/api-client.js";

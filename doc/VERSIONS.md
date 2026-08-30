@@ -2,6 +2,42 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.54.0 - 2026-08-30
+
+### #1046 — UI-inventaret, og en syvende flate med språkfeilen
+
+Produkteierens diagnose: **variasjonen er lag i tid.** Skjermbildene er utviklet på ulike
+tidspunkt, og endringer gjort ett sted er ikke tatt andre steder.
+
+Dateringen bekrefter den. `doc/UI_INVENTORY_1046.md` har tallene.
+
+### ⚠️ Inventaret fant en flate sveipet mitt hadde bommet på
+
+`certificate.js` — sist rørt 23. juni, bruker **to av elleve** delte moduler — hadde samme feil som
+#1040: den henter `/api/courses/completions/{id}`, som serveren lokaliserer ved henting, og
+språkbyttet kalte bare `applyTranslations()`.
+
+**Kursnavnet på et utskrevet bevis sto på feil språk.**
+
+Den sto ikke i QA-funnet som startet #1027, så den kom aldri med i lista over flater. Dateringen
+fant den på første forsøk: dypeste lag, mangler alt.
+
+Rettet, mutasjonsverifisert, og lagt i kontrakten — som nå dekker **sju** flater med 28 tester.
+
+### Metoden videre: spre, ikke design
+
+Er variasjonen lag i tid, finnes den beste versjonen allerede — den nyeste. Standardisering blir da
+å spre den siste avgjørelsen, ikke å tegne noe nytt. Billigere, mindre risikabelt, og etterprøvbart
+med `git log` per mønster.
+
+### Og jeg innførte selv et nytt lag i dag
+
+⚠️ `lagLokalisertRessurs` ble importert med `./static/…` mens hele resten av kodebasen bruker
+`/static/…`. Den virket, men var en avvikende variant — altså nøyaktig det vi rydder opp i. Rettet
+i alle sju flatene.
+
+**Et lag oppstår ikke av uenighet. Det oppstår av at noen ikke visste hva som allerede fantes.**
+
 ## 2.53.0 - 2026-08-30
 
 ### #1044 fullført — kontrakten dekker alle seks flatene

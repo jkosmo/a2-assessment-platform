@@ -1,4 +1,5 @@
 import { resolveInitialLocale } from "/static/i18n-locale.js";
+import { lagLokalisertRessurs } from "/static/localized-resource.js";
 import { localeLabels, supportedLocales, translations } from "/static/i18n/certificate-translations.js";
 import { apiFetch, buildConsoleHeaders, getConsoleConfig } from "/static/api-client.js";
 
@@ -123,18 +124,28 @@ async function loadIdentityDefaults() {
   }
 }
 
+// #1046: kursbeviset viser `courseTitle` fra serveren, som lokaliseres ved HENTING (#1027).
+//
+// ⚠️ Denne flaten var IKKE med i sveipet for #1042 — den sto ikke i QA-funnet, og ingen hadde rørt
+// fila siden juni. Inventaret i #1046 fant den: det dypeste laget manglet alt, akkurat som
+// produkteierens diagnose forutså. Kursnavnet på et utskrevet bevis sto på feil språk.
+const bevis = lagLokalisertRessurs({
+  hentSpråk: () => currentLocale,
+  hent: () => {
+    const id = new URLSearchParams(window.location.search).get("id");
+    return apiFetch(`/api/courses/completions/${encodeURIComponent(id)}`, headers);
+  },
+  tegn: (data) => renderCertificate(data),
+  påFeil: () => showState("certificate.notFound"),
+});
+
 async function loadCertificate() {
   const id = new URLSearchParams(window.location.search).get("id");
   if (!id) {
     showState("certificate.missingId");
     return;
   }
-  try {
-    const data = await apiFetch(`/api/courses/completions/${encodeURIComponent(id)}`, headers);
-    renderCertificate(data);
-  } catch {
-    showState("certificate.notFound");
-  }
+  await bevis.last();
 }
 
 printBtn.addEventListener("click", () => window.print());
@@ -142,6 +153,8 @@ localeSelect.addEventListener("change", () => {
   currentLocale = supportedLocales.includes(localeSelect.value) ? localeSelect.value : "en-GB";
   localStorage.setItem("participant.locale", currentLocale);
   applyTranslations();
+  // ⚠️ `applyTranslations` oversetter bare etikettene. Kursnavnet kommer fra serveren og må hentes.
+  bevis.oppdaterVedSpråkbytte();
 });
 
 populateLocaleSelect();

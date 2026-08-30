@@ -152,6 +152,23 @@ const FLATER: Flate[] = [
     ekstra: [{ mønster: "**/api/admin/platform", svar: { settings: {} } }],
   },
   {
+    // ⚠️ #1046: denne flaten var IKKE med i sveipet for #1042. Inventaret fant den — ingen hadde
+    // rørt fila siden juni, og den manglet alt. Kursnavnet på et utskrevet bevis sto på feil språk.
+    navn: "kursbeviset",
+    rute: "/certificate?id=cert-1",
+    roller: [],
+    beholder: "#certCourse",
+    tekst: { nb: "Endringsledelse", "en-GB": "Change management" },
+    data: [{
+      mønster: "**/api/courses/completions/**",
+      svar: (locale) => ({
+        courseId: "c-1", participantName: "Deltaker", completedAt: "2026-08-01T10:00:00.000Z",
+        courseTitle: locale === "nb" ? "Endringsledelse" : "Change management",
+        certificationLevel: "basic", moduleCount: 3,
+      }),
+    }],
+  },
+  {
     navn: "kohortstatus",
     rute: "/deltakere/status",
     roller: ["SUBJECT_MATTER_OWNER"],
