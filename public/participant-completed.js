@@ -1,4 +1,5 @@
 import { renderWorkspaceNavigationWithProfile } from "/static/workspace-nav.js";
+import { showToast } from "/static/toast.js";
 import { hideLoading, showEmpty, showLoading } from "/static/loading.js";
 import { lagLokalisertRessurs } from "/static/localized-resource.js";
 import { describeApiError } from "/static/api-error.js";
@@ -503,7 +504,12 @@ const kursbevis = lagLokalisertRessurs({
   hentSpråk: () => currentLocale,
   hent: () => apiFetch("/api/courses/completions", headers),
   tegn: (body) => renderCourseCertificates(body?.completions ?? []),
-  påFeil: () => renderCourseCertificates([]),
+  påFeil: (error) => {
+    // ⚠️ #1046: her sto bare `renderCourseCertificates([])`. En feil ble altså vist som «du har
+    // ingen kursbevis» — en tom liste er ikke det samme som at hentingen mislyktes.
+    renderCourseCertificates([]);
+    showToast(describeApiError(error, t).headline, "error");
+  },
 });
 
 async function loadCourseCertificates() {

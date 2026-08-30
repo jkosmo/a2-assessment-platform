@@ -1,4 +1,6 @@
 import { resolveInitialLocale } from "/static/i18n-locale.js";
+import { showToast } from "/static/toast.js";
+import { describeApiError } from "/static/api-error.js";
 import { lagLokalisertRessurs } from "/static/localized-resource.js";
 import { localeLabels, supportedLocales, translations } from "/static/i18n/certificate-translations.js";
 import { apiFetch, buildConsoleHeaders, getConsoleConfig } from "/static/api-client.js";
@@ -136,7 +138,12 @@ const bevis = lagLokalisertRessurs({
     return apiFetch(`/api/courses/completions/${encodeURIComponent(id)}`, headers);
   },
   tegn: (data) => renderCertificate(data),
-  påFeil: () => showState("certificate.notFound"),
+  påFeil: (error) => {
+    // ⚠️ #1046: alle feil ble vist som «beviset finnes ikke». En 403 og en nettverksfeil er ikke
+    // det samme som at beviset er borte — tilstanden beholdes, men årsaken sies nå.
+    showState("certificate.notFound");
+    showToast(describeApiError(error, t).headline, "error");
+  },
 });
 
 async function loadCertificate() {

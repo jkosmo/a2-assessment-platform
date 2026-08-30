@@ -1,4 +1,11 @@
 import { renderWorkspaceNavigationWithProfile } from "/static/workspace-nav.js";
+import { showToast } from "/static/toast.js";
+// ⚠️ #1046: denne fila kalte `window.showToast?.(…)` seks steder. Globalen ble ALDRI satt — heller
+// ikke i committen som innførte mønsteret (332283db, 22. mars). Med valgfri kjeding forsvant hvert
+// eneste kall stille, så profilsiden har vært stum ved feil i fem måneder mens koden så ut som den
+// snakket.
+//
+// Det er lag-i-tid i sin reneste form: mønsteret ble skrevet for en global noen antok fantes.
 import { hideLoading, showEmpty, showLoading } from "/static/loading.js";
 import { lagLokalisertRessurs } from "/static/localized-resource.js";
 import { describeApiError } from "/static/api-error.js";
@@ -442,11 +449,11 @@ function renderAgentTokens(tokens) {
             await apiFetch(`/api/admin/content/agent-authoring/tokens/${encodeURIComponent(token.id)}/revoke`, headers, {
               method: "POST",
             });
-            window.showToast?.(t("agentTokens.revoked.toast"), "success");
+            showToast(t("agentTokens.revoked.toast"), "success");
             await loadAgentTokens();
           } catch (error) {
             // #983: «Error» var hardkodet engelsk, og hovedveien viste serverens setning.
-            window.showToast?.(describeApiError(error, t).headline, "error");
+            showToast(describeApiError(error, t).headline, "error");
           }
         });
       });
@@ -691,7 +698,7 @@ viewDataBtn.addEventListener("click", async () => {
       dataViewSection.style.display = "";
       dataViewSection.scrollIntoView({ behavior: "smooth", block: "start" });
     } catch (error) {
-      window.showToast?.(describeApiError(error, t).headline, "error");
+      showToast(describeApiError(error, t).headline, "error");
     }
   });
 });
@@ -711,7 +718,7 @@ downloadDataBtn.addEventListener("click", async () => {
       a.remove();
       URL.revokeObjectURL(url);
     } catch (error) {
-      window.showToast?.(describeApiError(error, t).headline, "error");
+      showToast(describeApiError(error, t).headline, "error");
     }
   });
 });
@@ -739,7 +746,7 @@ issueAgentTokenBtn.addEventListener("click", async () => {
       await loadAgentTokens();
     } catch (error) {
       // #1046: siste to rå bruk på denne flaten. Reserven «Error» var dessuten hardkodet engelsk.
-      window.showToast?.(describeApiError(error, t).headline, "error");
+      showToast(describeApiError(error, t).headline, "error");
     }
   });
 });
@@ -784,7 +791,7 @@ downloadFullBtn.addEventListener("click", async () => {
       a.remove();
       URL.revokeObjectURL(url);
     } catch (error) {
-      window.showToast?.(describeApiError(error, t).headline, "error");
+      showToast(describeApiError(error, t).headline, "error");
     }
   });
 });

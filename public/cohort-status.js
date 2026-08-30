@@ -1,4 +1,5 @@
 import { renderWorkspaceNavigationWithProfile } from "/static/workspace-nav.js";
+import { showToast } from "/static/toast.js";
 import { describeApiError } from "/static/api-error.js";
 import { lagLokalisertRessurs } from "/static/localized-resource.js";
 import { resolveInitialLocale } from "/static/i18n-locale.js";
@@ -61,11 +62,7 @@ function log(data) {
   output.textContent = typeof data === "string" ? data : JSON.stringify(data, null, 2);
 }
 
-function setMessage(text, type = "info") {
-  if (!outputStatus) return;
-  outputStatus.textContent = text;
-  outputStatus.className = `small field-${type}`;
-}
+// #1046: se `results.js` — dette var den andre lokale kopien av samme funksjon.
 
 function applyTranslations() {
   for (const el of document.querySelectorAll("[data-i18n]")) {
@@ -212,7 +209,7 @@ async function loadCourses() {
 }
 
 function tegnKurslisteFeil() {
-  setMessage(t("cohort.error"), "error");
+  showToast(t("cohort.error"), "error");
 }
 
 function tegnKursliste(data) {
@@ -253,12 +250,11 @@ async function loadCohort(courseId) {
     const summary = await apiFetch(`/api/cohort-status/course/${encodeURIComponent(courseId)}`, headers);
     renderCohort(summary);
     log(summary);
-    setMessage("", "info");
   } catch (error) {
     // #1046: serverens `message` er skrevet på SERVERENS språk. Den delte oversetteren slår opp
     // `errors.api.<kode>` på brukerens språk, og faller tilbake til vår egen tekst når koden er
     // ukjent. Alle andre flater fikk den i #972/#983; denne ble ikke rørt før nå.
-    setMessage(describeApiError(error, t).headline, "error");
+    showToast(describeApiError(error, t).headline, "error");
     showCohortEmpty();
   }
 }

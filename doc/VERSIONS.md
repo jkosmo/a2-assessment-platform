@@ -2,6 +2,47 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.57.0 - 2026-08-30
+
+### #1046 steg 3 — toast som eneste tilbakemeldingsform
+
+Produkteierens argument avgjorde det:
+
+> «Inline tar plass, og det har gradvis akkumulert. I utgangspunktet når vi gjør ting i UI gir det
+> en permanent effekt — et felt oppdateres, en status endres. Toast gir en midlertidig
+> tydeliggjøring av at noe har skjedd.»
+
+⚠️ **Og jeg tok feil i min egen innvending.** Jeg hevdet at «en feilmelding som forsvinner er en
+feilmelding brukeren ikke fikk» — uten å lese `toast.js`. Den auto-lukker ikke feil og advarsler i
+det hele tatt (`error: 0`, `warning: 0`), avgjort i #601 etter en brukertilbakemelding.
+
+Jeg argumenterte mot koden uten å lese den. Samme feil som jeg har rettet flere ganger i testene i
+dag: en påstand som høres riktig ut, uten måling bak.
+
+### To lokale kopier av `setMessage` er borte
+
+`results.js` og `cohort-status.js` hadde nesten identiske lokale funksjoner. Feil går nå som toast;
+**«Resultater lastet» er bare fjernet** — tabellen som nettopp ble fylt sier det samme, og
+inline-varianten ble stående.
+
+### ⚠️ Profilsiden har vært stum ved feil i fem måneder
+
+`profile.js` kalte `window.showToast?.(…)` seks steder. **Globalen har aldri vært satt** — ikke i
+noen commit, heller ikke den som innførte mønsteret 22. mars (332283db).
+
+Med valgfri kjeding forsvant hvert eneste kall stille. Koden så ut som den snakket.
+
+`consent-guard.js` hadde samme sjekk, med samme resultat.
+
+**Det er lag-i-tid i sin reneste form: et mønster skrevet for en global noen antok fantes.**
+
+### To flater skilte ikke feil fra tomt
+
+- `participant-completed` viste en feil som «du har ingen kursbevis»
+- `certificate` viste alle feil som «beviset finnes ikke» — også en 403 eller nettverksfeil
+
+Tilstanden beholdes, men årsaken sies nå.
+
 ## 2.56.0 - 2026-08-30
 
 ### #1046 steg 2 — delte laste- og tomtilstander

@@ -1,4 +1,5 @@
 import { renderWorkspaceNavigationWithProfile } from "/static/workspace-nav.js";
+import { showToast } from "/static/toast.js";
 import { lagLokalisertRessurs } from "/static/localized-resource.js";
 import { describeApiError } from "/static/api-error.js";
 import { createDateTimeFormatter } from "/static/format-display.js";
@@ -67,11 +68,16 @@ function tf(key, values = {}) {
   return t(key).replace(/\{(\w+)\}/g, (_, token) => String(values[token] ?? ""));
 }
 
-function setMessage(text, type = "info") {
-  outputStatus.textContent = text;
-  outputStatus.className = `small field-${type}`;
-  outputStatus.dataset.hasContent = text ? "1" : "";
-}
+// #1046: `setMessage` er borte. Den var en LOKAL kopi — `cohort-status.js` hadde en nesten
+// identisk — og den skrev til et felt som ble stående til noe annet overskrev det.
+//
+// ⚠️ Produkteierens innvending, og den er riktig: inline meldinger TAR PLASS, og plassen
+// akkumulerer. En handling i grensesnittet har allerede en permanent virkning — feltet oppdateres,
+// tabellen fylles. Å skrive «Resultater lastet» ved siden av en tabell som nettopp ble fylt, er å
+// si det samme to ganger, og det ene av dem blir stående.
+//
+// Toast markerer at noe SKJEDDE, og forsvinner. Feil og advarsler auto-lukkes ikke i det hele tatt
+// (`toast.js`, #601), så en feil brukeren må handle på blir stående til den bekreftes.
 
 function log(data) {
   output.textContent = typeof data === "string" ? data : JSON.stringify(data, null, 2);
@@ -275,7 +281,6 @@ const rapporter = lagLokalisertRessurs({
   hent: () => {
     const params = buildFilterParams();
     showLoading(loadResultsButton);
-    setMessage("");
     return Promise.all([
       apiFetch(`/api/reports/pass-rates?${params}`, headers),
       apiFetch(`/api/reports/completion?${params}`, headers),
@@ -290,12 +295,11 @@ const rapporter = lagLokalisertRessurs({
       selectedModuleRow ? loadModuleLearners() : Promise.resolve(renderParticipants([])),
       selectedCourseRow ? loadCourseLearners() : Promise.resolve(renderCourseLearners([])),
     ]);
-    resultsMeta.textContent = t("results.filters.loaded");
     log({ passRates: passRatesData, completion: completionData, courses: courseData });
   },
   påFeil: (error) => {
     // #983: reserven var hardkodet engelsk, og hovedveien viste serverens engelske setning.
-    setMessage(describeApiError(error, t).headline, "warning");
+    showToast(describeApiError(error, t).headline, "error");
     log(error);
   },
 });
@@ -323,7 +327,7 @@ async function exportCsv(type) {
     a.click();
     URL.revokeObjectURL(a.href);
   } catch (error) {
-    setMessage(describeApiError(error, t).headline, "warning");
+    showToast(describeApiError(error, t).headline, "error");
   }
 }
 
