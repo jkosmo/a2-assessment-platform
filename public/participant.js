@@ -403,10 +403,6 @@ function applyPreviewModeUi() {
   }
 }
 
-function isDebugModeEnabled() {
-  return participantRuntimeConfig?.debugMode !== false;
-}
-
 function isRawDebugEnabled() {
   return rawDebugEnabled;
 }
@@ -1973,17 +1969,6 @@ function localizeDecisionType(value, submissionStatus, passFailTotal) {
   return t(`result.decisionValue.${normalized || "UNKNOWN"}`);
 }
 
-function localizeStatusExplanation(status) {
-  const normalized = typeof status === "string" ? status.toUpperCase() : "";
-  if (normalized === "UNDER_REVIEW") {
-    return t("result.statusExplanation.underReview");
-  }
-  if (normalized === "COMPLETED") {
-    return t("result.statusExplanation.completed");
-  }
-  return t("result.statusExplanation.processing");
-}
-
 function localizeCriterionName(criterion) {
   const key = typeof criterion === "string" ? criterion : "";
   const translationKey = `result.criterion.${key}`;
@@ -2051,10 +2036,6 @@ function localizeConfidence(level) {
   if (level === "low") return t("result.confidenceValue.low");
   if (level === "medium") return t("result.confidenceValue.medium");
   return null;
-}
-
-function localizeImprovementAdvice(values) {
-  return localizeImprovementAdviceItems(values).join("; ");
 }
 
 function localizeImprovementAdviceItems(values) {

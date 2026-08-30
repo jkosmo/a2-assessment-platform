@@ -2,6 +2,47 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.59.0 - 2026-08-30
+
+### Nåbarhetsanalyse med ekte parser — og resten av de gamle skjermbildene
+
+Produkteierens historikk: konsollet gikk fra enkelt UI, til avansert, til samtalebasert, til
+Forhåndsvis/Rediger/Innstillinger. Hypotesen var at det ligger rester av gamle skjermbilder.
+
+`scripts/dev/dead-code-scan.mjs` bygger kallgrafen med TypeScript-parseren og går bredde-først fra
+inngangspunktene.
+
+⚠️ **Verktøyet ble validert før det ble brukt:** kjørt på fila slik den var FØR gårsdagens
+opprydding, og den fant nøyaktig de seks funksjonene som allerede var verifisert manuelt — samme
+navn, samme linjetall. Uten den kontrollen ville jeg bare visst at verktøyet er enig med seg selv.
+
+### Funnet: den samtalebaserte modulvelgeren
+
+Seks funksjoner i `admin-content-courses.js`, alle med `Conv`-prefiks:
+`initConvCombobox`, `updateConvComboboxDropdown`, `renderConvModuleList`,
+`handleConvModuleListClick`, `getVisibleComboboxOptions`, `addConvSelectedModule`.
+
+**To uavhengige bevis:** de refererer bare hverandre, og DOM-elementene de opererer på —
+`comboboxDropdown`, `comboboxInput`, `convModuleList`, `convAddModuleItemBtn` — finnes **ikke i
+noen HTML**. Skjermen er borte; koden ble igjen.
+
+196 linjer. Pluss 16 linjer i `participant.js`.
+
+### ⚠️ Hvorfor grep ikke fant dem, og parseren gjorde det
+
+`localizeImprovementAdvice` er en tre-linjers innpakning som aldri kalles. `grep -c` ga fire treff
+— men de var i hovedsak `localizeImprovementAdvice**Items**`, en annen funksjon som *er* i bruk.
+
+**Grep ser prefikser. Parseren ser identiteter.**
+
+### Status
+
+Null unådde deklarasjoner igjen i hele `public/`. Samlet frontend nede fra 27 502 til 26 954
+linjer i dag — 548 linjer, alle verifisert enkeltvis.
+
+⚠️ Det er 2 %, ikke 20. **Konsollet er ikke oppblåst av død kode.** 17 500 linjer er hva en
+samtaledrevet innholdsassistent med seks arbeidsflater faktisk koster.
+
 ## 2.58.1 - 2026-08-30
 
 ### Død kode i forfatterkonsollet — 327 linjer, funnet med nåbarhetsanalyse
