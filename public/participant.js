@@ -1,4 +1,5 @@
 import { renderWorkspaceNavigationWithProfile } from "/static/workspace-nav.js";
+import { runWithBusyButton } from "/static/busy-button.js";
 import { resolveInitialLocale } from "/static/i18n-locale.js";
 import { localizeDecisionReason } from "/static/decision-reason.js";
 import { describeApiError } from "/static/api-error.js";
@@ -1901,27 +1902,6 @@ function log(data, options = {}) {
   output.textContent = formatOutputDetail(data);
 }
 
-async function runWithBusyButton(button, action, after = () => {}) {
-  if (!button || button.dataset.busy === "true") {
-    return;
-  }
-
-  const wasDisabled = button.disabled;
-  button.dataset.busy = "true";
-  button.disabled = true;
-  button.classList.add("button-busy");
-  button.setAttribute("aria-busy", "true");
-
-  try {
-    await action();
-  } finally {
-    button.dataset.busy = "";
-    button.classList.remove("button-busy");
-    button.removeAttribute("aria-busy");
-    button.disabled = wasDisabled;
-    after();
-  }
-}
 
 async function loadVersion() {
   try {

@@ -1,4 +1,5 @@
 import { renderWorkspaceNavigationWithProfile } from "/static/workspace-nav.js";
+import { runWithBusyButton } from "/static/busy-button.js";
 import { showToast } from "/static/toast.js";
 import { lagLokalisertRessurs } from "/static/localized-resource.js";
 import { describeApiError } from "/static/api-error.js";
@@ -280,12 +281,20 @@ const rapporter = lagLokalisertRessurs({
   hentSpråk: () => currentLocale,
   hent: () => {
     const params = buildFilterParams();
-    showLoading(loadResultsButton);
+    // ⚠️ #1046: her sto `showLoading(loadResultsButton)`. Den erstatter elementets innhold med
+    // skjelettlinjer, og `hideLoading` rydder bare klasser — den skriver ikke innholdet tilbake.
+    // Teksten på knappen forsvant derfor PERMANENT ved første klikk, helt til et språkbytte kalte
+    // `applyTranslations()`.
+    //
+    // Feilen har ligget der siden mars og ble funnet av produkteier, ikke av en test.
+    //
+    // `showLoading` er for BEHOLDERE som skal fylles. En knapp har allerede innholdet sitt og skal
+    // bare markeres som opptatt — det er `runWithBusyButton` sin jobb, og den brukes fra lytteren.
     return Promise.all([
       apiFetch(`/api/reports/pass-rates?${params}`, headers),
       apiFetch(`/api/reports/completion?${params}`, headers),
       apiFetch(`/api/reports/courses?${params}`, headers),
-    ]).finally(() => hideLoading(loadResultsButton));
+    ]);
   },
   tegn: async ([passRatesData, completionData, courseData]) => {
     renderPassRates(passRatesData.rows);
@@ -493,7 +502,7 @@ rolesInput.addEventListener("input", () => {
   renderWorkspaceNavigation();
 });
 
-loadResultsButton.addEventListener("click", () => loadResults());
+loadResultsButton.addEventListener("click", () => runWithBusyButton(loadResultsButton, () => loadResults()));
 exportCompletionButton.addEventListener("click", () => exportCsv("completion"));
 exportPassRatesButton.addEventListener("click", () => exportCsv("pass-rates"));
 // v1.2.24 (#358): scoped learner-level eksporter — bruker samme exportCsv-helper.

@@ -2,6 +2,38 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.58.0 - 2026-08-30
+
+### ⚠️ «Last resultater» mistet teksten sin ved første klikk
+
+Funnet av produkteier under manuell test. Feilen har ligget der siden **mars**.
+
+`showLoading(knappen)` erstatter elementets `innerHTML` med skjelettlinjer, og `hideLoading` rydder
+bare klasser — den skriver ikke innholdet tilbake. Teksten forsvant derfor permanent, helt til et
+språkbytte kalte `applyTranslations()` og skrev den inn igjen.
+
+**`showLoading` er for BEHOLDERE som skal fylles. En knapp har allerede innholdet sitt** og skal
+bare markeres som opptatt.
+
+⚠️ **Ingen test så på knappen etter et klikk.** Det gjør de nå, og mutasjonen gjenskaper feilen
+nøyaktig: «Load results» → «».
+
+### `runWithBusyButton` var tre lokale kopier
+
+`participant.js`, `participant-completed.js` og `profile.js` hadde hver sin, nesten identiske —
+eneste forskjell var et `after`-kall. `results.js` hadde ingen, og brukte feil verktøy i stedet.
+
+Nå én delt modul, `public/static/busy-button.js`.
+
+**Det er samme historie som resten av #1046: den riktige løsningen fantes allerede, tre steder, og
+det fjerde stedet visste ikke om den.**
+
+### Kursbeviset skjuler tomt nivå
+
+Fant i utskriftsmodus: beviset viste «Certification level: -» når nivået manglet, mens modultallet
+rett under skjules helt i samme tilfelle. To ulike svar på samme spørsmål, i samme fil, på et
+dokument som skrives ut og arkiveres.
+
 ## 2.57.0 - 2026-08-30
 
 ### #1046 steg 3 — toast som eneste tilbakemeldingsform

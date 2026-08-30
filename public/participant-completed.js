@@ -1,4 +1,5 @@
 import { renderWorkspaceNavigationWithProfile } from "/static/workspace-nav.js";
+import { runWithBusyButton } from "/static/busy-button.js";
 import { showToast } from "/static/toast.js";
 import { hideLoading, showEmpty, showLoading } from "/static/loading.js";
 import { lagLokalisertRessurs } from "/static/localized-resource.js";
@@ -165,26 +166,6 @@ function headers() {
   });
 }
 
-async function runWithBusyButton(button, action) {
-  if (!button || button.dataset.busy === "true") {
-    return;
-  }
-
-  const wasDisabled = button.disabled;
-  button.dataset.busy = "true";
-  button.disabled = true;
-  button.classList.add("button-busy");
-  button.setAttribute("aria-busy", "true");
-
-  try {
-    await action();
-  } finally {
-    button.dataset.busy = "";
-    button.classList.remove("button-busy");
-    button.removeAttribute("aria-busy");
-    button.disabled = wasDisabled;
-  }
-}
 
 
 

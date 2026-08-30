@@ -73,7 +73,12 @@ function renderCertificate(data) {
   document.getElementById("certName").textContent = data.participantName ?? "-";
   document.getElementById("certCourse").textContent = data.courseTitle ?? data.courseId ?? "-";
   document.getElementById("certCompletedAt").textContent = formatDate(data.completedAt);
-  document.getElementById("certLevel").textContent = localizeCertLevel(data.certificationLevel);
+  // ⚠️ #1046: linja sto med «Certification level: -» når nivået manglet, mens modultallet rett
+  // under skjules helt i samme tilfelle. To ulike svar på samme spørsmål, i samme fil — og på et
+  // dokument som skrives ut og arkiveres.
+  const nivå = data.certificationLevel ? localizeCertLevel(data.certificationLevel) : "";
+  document.getElementById("certLevel").textContent = nivå;
+  document.getElementById("certLevelWrap").hidden = !nivå;
   const modulesWrap = document.getElementById("certModulesWrap");
   if (typeof data.moduleCount === "number" && data.moduleCount > 0) {
     document.getElementById("certModules").textContent = String(data.moduleCount);

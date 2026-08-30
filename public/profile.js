@@ -1,4 +1,5 @@
 import { renderWorkspaceNavigationWithProfile } from "/static/workspace-nav.js";
+import { runWithBusyButton } from "/static/busy-button.js";
 import { showToast } from "/static/toast.js";
 // ⚠️ #1046: denne fila kalte `window.showToast?.(…)` seks steder. Globalen ble ALDRI satt — heller
 // ikke i committen som innførte mønsteret (332283db, 22. mars). Med valgfri kjeding forsvant hvert
@@ -218,22 +219,6 @@ function showValue(value) {
   return typeof value === "string" && value.trim().length > 0 ? value : "—";
 }
 
-async function runWithBusyButton(button, action) {
-  if (!button || button.dataset.busy === "true") return;
-  const wasDisabled = button.disabled;
-  button.dataset.busy = "true";
-  button.disabled = true;
-  button.classList.add("button-busy");
-  button.setAttribute("aria-busy", "true");
-  try {
-    await action();
-  } finally {
-    button.dataset.busy = "";
-    button.classList.remove("button-busy");
-    button.removeAttribute("aria-busy");
-    button.disabled = wasDisabled;
-  }
-}
 
 // ── Profile rendering ─────────────────────────────────────────────────────────
 

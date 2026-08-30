@@ -291,3 +291,71 @@ for (const flate of FLATER) {
     });
   });
 }
+
+// ⚠️ #1046: funnet i utskriftsmodus mot ekte stage-data. Beviset viste «Certification level: -»
+// når nivået manglet, mens modultallet rett under skjules helt i samme tilfelle. To ulike svar på
+// samme spørsmål, i samme fil — og på et dokument som skrives ut og arkiveres.
+test.describe("#1046 — kursbeviset skjuler tomme felt", () => {
+  const json = (body: unknown) => ({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
+
+  async function mockBevis(page: Page, nivå: string | null) {
+    await page.route("**/participant/config", (r: Route) => r.fulfill(json({
+      authMode: "mock", navigation: { items: [], workspaceItems: [] },
+      identityDefaults: { participant: { userId: "u-1", email: "u@x.no", name: "Deltaker", roles: [] } },
+      calibrationWorkspace: { accessRoles: [] },
+    })));
+    await page.route("**/version", (r: Route) => r.fulfill(json({ version: "test" })));
+    await page.route("**/api/courses/completions/**", (r: Route) => r.fulfill(json({
+      courseId: "c-1", participantName: "Deltaker", completedAt: "2026-08-01T10:00:00.000Z",
+      courseTitle: "Change management", certificationLevel: nivå, moduleCount: 3,
+    })));
+  }
+
+  test("uten nivå står ikke linja der med en tankestrek", async ({ page }) => {
+    await mockBevis(page, null);
+    await page.goto("/certificate?id=cert-1");
+    await expect(page.locator("#certCourse")).toHaveText("Change management");
+    await expect(page.locator("#certLevelWrap")).toBeHidden();
+  });
+
+  test("MED nivå står linja der — kontrollcase", async ({ page }) => {
+    // ⚠️ Uten denne ville testen over vært grønn også for en linje som ALDRI vises.
+    await mockBevis(page, "basic");
+    await page.goto("/certificate?id=cert-1");
+    await expect(page.locator("#certLevelWrap")).toBeVisible();
+    await expect(page.locator("#certLevel")).not.toBeEmpty();
+  });
+});
+
+// ⚠️ #1046, funnet av produkteier og ikke av noen test: teksten på «Last resultater» forsvant ved
+// første klikk. `showLoading(knappen)` erstatter innholdet med skjelettlinjer, og `hideLoading`
+// rydder bare klasser — den skriver ikke innholdet tilbake.
+//
+// Feilen hadde ligget der siden mars. Ingen test så på knappen etter et klikk.
+test.describe("#1046 — knapper mister ikke teksten sin", () => {
+  const json = (body: unknown) => ({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
+
+  test("«Last resultater» har fortsatt tekst etter et klikk", async ({ page }) => {
+    await page.route("**/participant/config", (r: Route) => r.fulfill(json({
+      authMode: "mock", navigation: { items: [], workspaceItems: [] },
+      identityDefaults: { reviewer: { userId: "u-1", email: "u@x.no", name: "Bruker", roles: ["REPORT_READER"] } },
+      calibrationWorkspace: { accessRoles: [] },
+    })));
+    await page.route("**/version", (r: Route) => r.fulfill(json({ version: "test" })));
+    await page.route("**/api/me", (r: Route) => r.fulfill(json({ user: { id: "u-1", roles: ["REPORT_READER"] }, consent: { accepted: true, currentVersion: "1.0" } })));
+    await page.route("**/api/queue-counts", (r: Route) => r.fulfill(json({ counts: {} })));
+    await page.route("**/api/reports/**", (r: Route) => r.fulfill(json({ rows: [] })));
+
+    await page.goto("/results");
+    const knapp = page.locator("#loadResults");
+    const før = (await knapp.textContent())?.trim() ?? "";
+    expect(før.length, "knappen skal ha tekst før klikket").toBeGreaterThan(0);
+
+    await knapp.click();
+    await expect(page.locator("#completionBody")).not.toBeEmpty();
+
+    // ⚠️ Selve påstanden. Uten den ville alt annet på siden vært grønt mens knappen sto tom.
+    const etter = (await knapp.textContent())?.trim() ?? "";
+    expect(etter, `knappeteksten forsvant: «${før}» → «${etter}»`).toBe(før);
+  });
+});
