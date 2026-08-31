@@ -11,6 +11,13 @@ export type ValidationIssue = {
   // re-parse an English sentence to know what to do is an action that breaks on the next reword.
   field?: string;
   missingLocales?: string[];
+  // #914: tallene setningen trenger, som DATA. `message` er skrevet paa serverens sprak og var det
+  // eneste klienten hadde — saa en norsk forfatter fikk «Blueprint suggested 10 MCQ questions but
+  // the module has 2» midt i et ellers norsk grensesnitt.
+  //
+  // Samme kontrakt som `missingLocales` over: koden og dataene er sannheten, `message` er reserve
+  // for en klient som ikke kjenner koden.
+  params?: Record<string, string | number>;
 };
 
 export type McqValidationResult = {
@@ -35,6 +42,7 @@ export function validateMcqDistractors(questions: GeneratedMcqQuestion[]): McqVa
       issues.push({
         severity: "blocking",
         code: "DISTRACTOR_ELIMINATION_RISK_HIGH",
+        params: { questionNumber: index + 1 },
         message: `Question ${index + 1}: one or more options can be eliminated without domain reasoning (eliminationRisk: high). Regenerate or revise this question.`,
         questionIndex: index,
       });
@@ -43,6 +51,7 @@ export function validateMcqDistractors(questions: GeneratedMcqQuestion[]): McqVa
       issues.push({
         severity: "warning",
         code: "DISTRACTOR_ELIMINATION_RISK_MEDIUM",
+        params: { questionNumber: index + 1 },
         message: `Question ${index + 1}: at least one option may be eliminable without full domain reasoning (eliminationRisk: medium). Consider revising.`,
         questionIndex: index,
       });
@@ -56,6 +65,7 @@ export function validateMcqDistractors(questions: GeneratedMcqQuestion[]): McqVa
         issues.push({
           severity: "warning",
           code: "DISTRACTOR_METADATA_INCOMPLETE",
+          params: { questionNumber: index + 1, count: weakDistractors.length },
           message: `Question ${index + 1}: ${weakDistractors.length} distractor(s) have incomplete quality metadata. Plausibility may be insufficient.`,
           questionIndex: index,
         });
@@ -67,6 +77,7 @@ export function validateMcqDistractors(questions: GeneratedMcqQuestion[]): McqVa
     issues.push({
       severity: "warning",
       code: "DISTRACTOR_QUALITY_PATTERN",
+      params: { count: mediumRiskCount, total: questions.length },
       message: `${mediumRiskCount} of ${questions.length} questions have medium elimination risk. The overall MCQ set may be easier than intended.`,
     });
   }
@@ -93,6 +104,7 @@ export function validateModuleDraft(
     issues.push({
       severity: "warning",
       code: "MISSING_CANDIDATE_TASK_CONSTRAINTS",
+      params: {},
       message: "Assessor content (assessorExpectedContent) is set but candidateTaskConstraints is empty. Candidates will only see the task text with no scope guidance.",
     });
   }
@@ -101,6 +113,7 @@ export function validateModuleDraft(
     issues.push({
       severity: "warning",
       code: "CANDIDATE_TASK_CONSTRAINTS_TOO_LONG",
+      params: {},
       message: "candidateTaskConstraints exceeds 80 words. It should be 1–3 short sentences so it does not function as an answer outline.",
     });
   }
@@ -109,6 +122,7 @@ export function validateModuleDraft(
     issues.push({
       severity: "blocking",
       code: "TASK_TEXT_TOO_SHORT",
+      params: {},
       message: "taskText is too short to constitute a meaningful assessment task.",
     });
   }
@@ -132,6 +146,7 @@ export function validateScenarioDraft(
     issues.push({
       severity: "blocking",
       code: "MISSING_ASSESSOR_EXPECTED_CONTENT",
+      params: {},
       message: "assessorExpectedContent is required. It must describe what a strong response contains so assessors have grading support.",
     });
   }
@@ -184,12 +199,14 @@ export function validateBlueprintAgainstContent(
       issues.push({
         severity: "blocking",
         code: "MCQ_COUNT_FAR_BELOW_BLUEPRINT",
+        params: { suggested: suggestedCount, actual, percent: Math.round(ratio * 100) },
         message: `Blueprint suggested ${suggestedCount} MCQ questions but only ${actual} are present (${Math.round(ratio * 100)}%). This likely means the MCQ set was not regenerated after blueprint changes.`,
       });
     } else if (ratio < 0.8 || ratio > 1.5) {
       issues.push({
         severity: "warning",
         code: "MCQ_COUNT_DEVIATES_FROM_BLUEPRINT",
+        params: { suggested: suggestedCount, actual },
         message: `Blueprint suggested ${suggestedCount} MCQ questions but ${actual} are present. Calibration may drift; consider revising.`,
       });
     }
@@ -212,6 +229,7 @@ export function validateBlueprintAgainstContent(
       issues.push({
         severity: "warning",
         code: "BLUEPRINT_OBJECTIVES_NOT_REFERENCED",
+        params: { count: objectives.length },
         message: `None of the ${objectives.length} learning objective(s) from the blueprint appear in taskText or assessor guidance. Check that the generation actually consumed the blueprint.`,
       });
     }

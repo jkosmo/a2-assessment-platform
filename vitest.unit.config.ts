@@ -58,6 +58,7 @@ export default defineConfig({
       "test/nynorsk-guard.test.js",
       "test/raw-server-error-guard.test.js",
     "test/client-locale-parser-guard.test.js",
+    "test/gate-message-locale-guard.test.js",
       "test/course-archive-entry-guard.test.js",
       "test/participant-sequence-predicate-guard.test.js",
       "test/environment-identifier-guard.test.js",

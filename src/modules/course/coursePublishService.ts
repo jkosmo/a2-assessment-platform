@@ -28,7 +28,20 @@ import { courseRepository } from "./courseRepository.js";
 // render them in the viewer's language. `message` stays as a server-side fallback — it is written
 // in Norwegian like every other blocker here, which is wrong in an English or Nynorsk UI, and the
 // client prefers the structured fields whenever they are present.
-export type PublishBlocker = { code: string; message: string; field?: string; missingLocales?: string[] };
+// #914: `params` baerer det setningen trenger, som DATA.
+//
+// ⚠️ Meldingene her var hardkodet NORSK, mens `contentValidationService` skrev hardkodet ENGELSK.
+// Publiseringsgaten ga altsaa feil sprak til begge grupper, avhengig av hvilken gate som fyrte.
+//
+// ⚠️ Og `item_archived` brukes for BADE modul og seksjon, med ulik tekst. En klient som
+// lokaliserer paa kode alene kan ikke skille dem — derfor baerer den `itemType`.
+export type PublishBlocker = {
+  code: string;
+  message: string;
+  field?: string;
+  missingLocales?: string[];
+  params?: Record<string, string | number>;
+};
 
 export type CourseUnpublishedItem = {
   type: "MODULE" | "SECTION";
@@ -128,7 +141,7 @@ async function evaluateModule(moduleId: string): Promise<ModuleEvaluation> {
     return {
       unpublished: true,
       publishable: false,
-      blockers: [{ code: "module_not_found", message: "Modulen finnes ikke lenger." }],
+      blockers: [{ code: "module_not_found", message: "Modulen finnes ikke lenger.", params: {} }],
       title: null,
       latestVersionId: null,
     };
@@ -145,7 +158,7 @@ async function evaluateModule(moduleId: string): Promise<ModuleEvaluation> {
     return {
       unpublished: true,
       publishable: false,
-      blockers: [{ code: "item_archived", message: "Modulen er arkivert. Gjenopprett den før du publiserer." }],
+      blockers: [{ code: "item_archived", message: "Modulen er arkivert. Gjenopprett den før du publiserer.", params: { itemType: "module" } }],
       title,
       latestVersionId: null,
     };
@@ -156,7 +169,7 @@ async function evaluateModule(moduleId: string): Promise<ModuleEvaluation> {
     return {
       unpublished: true,
       publishable: false,
-      blockers: [{ code: "module_no_content", message: "Modulen har ingen versjon med innhold å publisere." }],
+      blockers: [{ code: "module_no_content", message: "Modulen har ingen versjon med innhold å publisere.", params: {} }],
       title,
       latestVersionId: null,
     };
@@ -256,7 +269,7 @@ async function evaluateSection(sectionId: string): Promise<SectionEvaluation> {
     return {
       unpublished: true,
       publishable: false,
-      blockers: [{ code: "section_not_found", message: "Seksjonen finnes ikke lenger." }],
+      blockers: [{ code: "section_not_found", message: "Seksjonen finnes ikke lenger.", params: {} }],
       title: null,
     };
   }
@@ -272,7 +285,7 @@ async function evaluateSection(sectionId: string): Promise<SectionEvaluation> {
     return {
       unpublished: true,
       publishable: false,
-      blockers: [{ code: "item_archived", message: "Seksjonen er arkivert. Gjenopprett den før du publiserer." }],
+      blockers: [{ code: "item_archived", message: "Seksjonen er arkivert. Gjenopprett den før du publiserer.", params: { itemType: "section" } }],
       title,
     };
   }
@@ -286,7 +299,7 @@ async function evaluateSection(sectionId: string): Promise<SectionEvaluation> {
     return {
       unpublished: true,
       publishable: false,
-      blockers: [{ code: "section_no_content", message: "Seksjonen har ikke noe innhold å publisere." }],
+      blockers: [{ code: "section_no_content", message: "Seksjonen har ikke noe innhold å publisere.", params: {} }],
       title,
     };
   }

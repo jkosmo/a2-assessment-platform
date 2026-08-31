@@ -440,14 +440,19 @@ function cascadeItemTypeLabel(type) {
 // kan ikke skille dem — men klienten vet hvilken rad den tegner, så typen sendes inn som variant.
 //
 // ⚠️ Det som fortsatt ikke er oversatt: blokkeringene fra contentValidationService
-// (MCQ_COUNT_FAR_BELOW_BLUEPRINT m.fl.). De bærer ingen `params`, så tallene og tersklene finnes
-// bare inne i den engelske setningen. Å erstatte den med en kodenavn-setning ville fjernet
-// informasjonen forfatteren trenger. Rammen er lokalisert, årsaken er serverens tekst — det er
-// nøyaktig #914, og sømmen skal være synlig til den er gjort.
+// (MCQ_COUNT_FAR_BELOW_BLUEPRINT m.fl.). De bar ingen `params`, så tallene og tersklene fantes
+// bare inne i den engelske setningen, og å erstatte den med en kodenavn-setning ville fjernet
+// informasjonen forfatteren trenger.
+//
+// #914 er nå gjort: hver kode bærer `params`, og `describeGateIssue` bygger setningen på leserens
+// språk. Reservekjeden under står igjen for koder som ennå ikke har en nøkkel — den er sømmen som
+// gjør et hull synlig i stedet for stille.
 function blockerText(blocker, itemType) {
   if (blocker?.code !== "translation_incomplete" || !blocker.field || !Array.isArray(blocker.missingLocales)) {
+    // #914: `params` sendes naa med, saa setninger med tall (MCQ_COUNT_*, DISTRACTOR_*) kan
+    // lokaliseres. Varianten fra raden beholdes for `item_archived`, som #980 innfoerte.
     const variant = typeof itemType === "string" ? itemType.toLowerCase() : null;
-    const known = apiErrorCodeText(blocker?.code ?? null, t, variant ? [variant] : []);
+    const known = apiErrorCodeText(blocker?.code ?? null, t, variant ? [variant] : [], blocker?.params ?? null);
     if (known) return known;
     const reason = typeof blocker?.message === "string" ? blocker.message : "";
     if (!reason) return "";

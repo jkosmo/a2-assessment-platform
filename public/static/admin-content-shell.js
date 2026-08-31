@@ -16,7 +16,7 @@ import {
   resolveWorkspaceNavigationItems,
 } from "/static/participant-console-state.js";
 import { showToast } from "/static/toast.js";
-import { describeApiError } from "/static/api-error.js";
+import { apiErrorCodeText, describeApiError } from "/static/api-error.js";
 import { renderWorkspaceNavigationWithProfile } from "./workspace-nav.js";
 import { localizeValueForLocale, buildPreviewHtml } from "/static/admin-content-preview.js";
 import { setHidden } from "/static/dom-visibility.js";
@@ -2644,7 +2644,27 @@ function describeTranslationGate(issues, otherBlockers = []) {
   // A publish response can carry a blueprint mismatch alongside the translation gaps. Showing only
   // the gaps meant the author translated, retried, and failed again on a blocker they were never
   // told about — the gate would have taught them to distrust it.
-  const others = otherBlockers.map((issue) => issue?.message).filter(Boolean);
+  // #914: koden og `params` er sannheten; serverens `message` er reserve.
+  //
+  // Bruker den DELTE `apiErrorCodeText`, som #980 alt hadde bygget for publiseringsdialogen. Den
+  // slaar opp `errors.api.<kode>` (med variant naar koden trenger det) og fyller plassholderne.
+  //
+  // Foerste utgave av #914 lagde en egen `describeGateIssue` med egne `adminContent.validation.*`
+  // -noekler. Det var en ANDRE mekanisme for samme jobb, med sin egen ordlyd — «Restore it before
+  // publishing» mot #980 sin «Restore it before you publish». Nettopp den driften saken skal fjerne.
+  const others = otherBlockers
+    .map((issue) => {
+      // `item_archived` slaas opp som `errors.api.item_archived.module` / `.section`, fordi den
+      // brukes for begge med ulik tekst (#980). Varianten staar i `params.itemType`.
+      //
+      // ⚠️ Uten dette faller nettopp den koden tilbake paa serverens `message` — som er hardkodet
+      // NORSK. En engelsk forfatter fikk da norsk tekst for arkiverte moduler, mens alt annet paa
+      // samme skjerm var oversatt. Kursvisningen tok varianten fra RADEN og var derfor riktig, saa
+      // feilen fantes bare i denne ene veien.
+      const variant = typeof issue?.params?.itemType === "string" ? [issue.params.itemType.toLowerCase()] : [];
+      return apiErrorCodeText(issue?.code ?? null, t, variant, issue?.params ?? null) || issue?.message;
+    })
+    .filter(Boolean);
   return `<strong>${escapeHtml(t("shell.publish.translationGate.heading"))}</strong><ul>${
     [...lines, ...others].map((line) => `<li>${escapeHtml(line)}</li>`).join("")
   }</ul>`;
