@@ -86,3 +86,81 @@ export function selectTranslatedDraftFields(draft) {
   if (draft.candidateTaskConstraints) fields.candidateTaskConstraints = draft.candidateTaskConstraints;
   return fields;
 }
+
+/**
+ * #1014: samme invariant, men for MCQ — og med én kobling til som ikke finnes i utkastet.
+ *
+ * ⚠️ Trukket ut av `admin-content-shell.js` av samme grunn som resten av denne fila: regelen var en
+ * modul-lokal funksjon bak et `apiFetch`, og en test måtte laste et helt modulbunt for å nå den.
+ * Da jeg fjernet kildefyllingen sto alle fire suitene grønne — 1321 enhet, 6 DOM, 312 e2e — over
+ * deltakervendt innhold jeg nettopp hadde endret. En regel som bare kan prøves gjennom hele flaten,
+ * blir i praksis ikke prøvd.
+ */
+
+/** Hvor det riktige svaret ligger blant alternativene. -1 hvis det ikke er ett av dem. */
+export function mcqCorrectAnswerIndexes(questions) {
+  return (questions ?? []).map((question) =>
+    (question?.options ?? []).findIndex((option) => option === question?.correctAnswer));
+}
+
+/** Fjerner ett språk fra et spørsmål — stem, svar, rasjonale og alle alternativer. */
+export function dropMcqQuestionLocale(question, locale) {
+  if (!question) return;
+  delete question.stem?.[locale];
+  delete question.correctAnswer?.[locale];
+  delete question.rationale?.[locale];
+  (question.options ?? []).forEach((option) => delete option?.[locale]);
+}
+
+/**
+ * Fletter én oversettelse inn i språkkartene. Muterer `localizedQuestions`, som er formen kalleren
+ * bygger opp over flere språk.
+ *
+ * ⚠️ `options` og `correctAnswer` FLYTTER SAMMEN, og det er ikke pynt. `localizedTextIdentity`
+ * bygger identiteten av hele språkkartet, og svaret må være identisk med ett av alternativene.
+ * Slippes et språk fra svaret mens alternativet beholder det, matcher svaret ingen — og da blir
+ * spørsmålet, med skjemaets egne ord, stille ubesvarbart for ALLE, ikke bare for det språket.
+ *
+ * Derfor hentes svaret for målspråket fra det oversatte ALTERNATIVET på kildesvarets plass, ikke
+ * fra modellens egen oversettelse av svaret: identiteten holder av konstruksjon, ikke fordi
+ * modellen tilfeldigvis oversatte de to likt.
+ *
+ * `stem` og `rationale` er ikke koblet til noe og behandles hver for seg — et manglende rasjonale
+ * skal ikke koste et ellers godt oversatt spørsmål.
+ */
+export function applyMcqTranslation(localizedQuestions, translatedQuestions, { targetLocale, correctIndexes }) {
+  const oversatte = Array.isArray(translatedQuestions) ? translatedQuestions : [];
+
+  (localizedQuestions ?? []).forEach((lokalisert, index) => {
+    const oversatt = oversatte[index];
+    if (!oversatt) {
+      dropMcqQuestionLocale(lokalisert, targetLocale);
+      return;
+    }
+
+    if (oversatt.stem) lokalisert.stem[targetLocale] = oversatt.stem;
+    else delete lokalisert.stem[targetLocale];
+
+    if (oversatt.rationale) lokalisert.rationale[targetLocale] = oversatt.rationale;
+    else delete lokalisert.rationale[targetLocale];
+
+    const oversatteAlternativer = Array.isArray(oversatt.options) ? oversatt.options : [];
+    const svarplass = correctIndexes?.[index] ?? -1;
+    const kanBygges = lokalisert.options.length > 0
+      && oversatteAlternativer.length === lokalisert.options.length
+      && oversatteAlternativer.every((option) => typeof option === "string" && option.trim())
+      && svarplass >= 0
+      && svarplass < oversatteAlternativer.length;
+
+    if (!kanBygges) {
+      lokalisert.options.forEach((option) => delete option[targetLocale]);
+      delete lokalisert.correctAnswer[targetLocale];
+      return;
+    }
+
+    oversatteAlternativer.forEach((option, optionIndex) => {
+      lokalisert.options[optionIndex][targetLocale] = option;
+    });
+    lokalisert.correctAnswer[targetLocale] = oversatteAlternativer[svarplass];
+  });
+}

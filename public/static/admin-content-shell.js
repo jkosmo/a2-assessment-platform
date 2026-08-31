@@ -33,6 +33,9 @@ import { makeSrBadge, loadVersion } from "/static/admin-content-shared.js";
 import {
   buildLocalizedCopyValue,
   selectTranslatedDraftFields,
+  applyMcqTranslation,
+  dropMcqQuestionLocale,
+  mcqCorrectAnswerIndexes,
 } from "/static/admin-content-localized-copy.js";
 import {
   buildExternalLlmAuthoringPrompt,
@@ -1477,9 +1480,9 @@ function dropLocale(localized, locale) {
 /**
  * #982: si fra om språk som ikke ble oversatt.
  *
- * ⚠️ Egen tekst fra `shell.revision.titleNotTranslated`, som sier at språkene «står fortsatt med
- * kildeteksten». Etter at lokalen slippes er de TOMME, og en melding som beskriver feil tilstand
- * sender forfatteren til å lete etter noe som ikke er der.
+ * ⚠️ #1016: det fantes to tekster, og hver beskrev sin halvdel av virkeligheten — «står fortsatt
+ * med {source}-teksten» mot «står tomme». De var dessuten koblet MOTSATT flere steder. Nå slipper
+ * alle veier lokalen, så det finnes én sannhet og én tekst; den andre nøkkelen er fjernet.
  */
 function describeFailedLocales(failedLocales, sourceLocale) {
   if (!failedLocales?.length) return "";
@@ -1608,9 +1611,9 @@ async function localizeDraftAcrossLocalesWithTitle(title, taskText, assessorExpe
     taskText: buildLocalizedTextMap(sourceLocale, taskText),
     assessorExpectedContent: buildLocalizedTextMap(sourceLocale, assessorExpectedContent),
     candidateTaskConstraints: buildLocalizedTextMap(sourceLocale, candidateTaskConstraints ?? ""),
-    // Lokaler som IKKE ble oversatt. De står nå med kildeteksten, som er nødvendig for at lagring
-    // skal gå gjennom — men kalleren MÅ si fra, ellers ser forfatteren «ferdig» på en tittel som i
-    // praksis er kopiert. Stillhet her var halve #892.
+    // Lokaler som IKKE ble oversatt. De SLIPPES nå, som i søsterfunksjonen — begrunnelsen for å la
+    // kildeteksten stå («nødvendig for at lagring skal gå gjennom») falt bort med #930, som myknet
+    // skjemaene til å ta imot et delvis kart. Kalleren må fortsatt si fra: stillhet her var halve #892.
     failedLocales: [],
   };
   const hasDraftBody = Boolean(taskText?.trim() && assessorExpectedContent?.trim());
@@ -1622,9 +1625,17 @@ async function localizeDraftAcrossLocalesWithTitle(title, taskText, assessorExpe
       // Ingen oppgavetekst å oversette (MCQ-only) — bare tittelen skal flyttes over.
       try {
         const translatedTitle = await localizeTitleOnly(title, sourceLocale, targetLocale);
-        if (translatedTitle) localized.title[targetLocale] = translatedTitle;
-        else localized.failedLocales.push(targetLocale);
+        if (translatedTitle) {
+          localized.title[targetLocale] = translatedTitle;
+        } else {
+          // ⚠️ #1016: her sto det bare `failedLocales.push`. Tittelen ble staaende KILDEFYLT fra
+          // `buildLocalizedTextMap`, altsaa nøyaktig den tilstanden #892 forbyr — den ser oversatt
+          // ut. Feilstien tre linjer ned slapp lokalen; denne gjorde det ikke. Samme funksjon.
+          dropLocale(localized, targetLocale);
+          localized.failedLocales.push(targetLocale);
+        }
       } catch {
+        dropLocale(localized, targetLocale);
         localized.failedLocales.push(targetLocale);
       }
       continue;
@@ -1656,15 +1667,42 @@ async function localizeDraftAcrossLocalesWithTitle(title, taskText, assessorExpe
       localized.failedLocales.push(targetLocale);
       continue;
     }
+    // ⚠️ #1016: sto `?? taskText` osv. — KILDETEKSTEN inn i mållokalen for felt svaret utelot.
+    // Det er samme feil #982 fjernet i `localizeDraftAcrossLocales`, som ligger ÉN FUNKSJON unna og
+    // gjør det riktig. Rettet ett sted, glemt det andre; sjuende gang i samme klasse.
     localized.title[targetLocale] = draft.title;
-    localized.taskText[targetLocale] = draft?.taskText ?? taskText;
-    localized.assessorExpectedContent[targetLocale] = draft?.assessorExpectedContent ?? assessorExpectedContent;
-    localized.candidateTaskConstraints[targetLocale] = draft?.candidateTaskConstraints ?? candidateTaskConstraints ?? "";
+    for (const field of ["taskText", "assessorExpectedContent", "candidateTaskConstraints"]) {
+      if (draft?.[field]) localized[field][targetLocale] = draft[field];
+      else delete localized[field][targetLocale];
+    }
   }
 
   return localized;
 }
 
+/**
+ * #1014: oversett MCQ-settet til de andre språkene — og la et språk som IKKE ble oversatt, se ut
+ * som et språk som ikke ble oversatt.
+ *
+ * ⚠️ Skrev tidligere `?? …[sourceLocale]` på alle fire feltene, altså KILDETEKSTEN inn i mållokalen
+ * når svaret manglet noe. Det er samme feil som #982 fjernet i `localizeDraftAcrossLocales`, men på
+ * DELTAKERVENDT innhold: kartet så komplett ut, publiseringsgaten fant ingenting å savne, og en
+ * nynorskdeltaker fikk bokmålsspørsmål som så oversatt ut.
+ *
+ * ⚠️ `options` og `correctAnswer` flytter SAMMEN, og det er ikke pynt. `localizedTextIdentity`
+ * bygger identiteten av hele språkkartet, og svaret må være identisk med ett av alternativene.
+ * Slippes et språk fra svaret mens alternativet beholder det, matcher svaret ingen — og da blir
+ * spørsmålet, med skjemaets egne ord, stille ubesvarbart for alle. Derfor:
+ *   - språket tas bare hvis ALLE alternativene kom tilbake, og
+ *   - svaret for det språket hentes fra det oversatte ALTERNATIVET på kildesvarets plass, ikke fra
+ *     modellens egen oversettelse av svaret. Identiteten holder da av konstruksjon.
+ *
+ * `stem` og `rationale` er ikke koblet til noe og behandles hver for seg — et manglende rasjonale
+ * skal ikke koste et ellers godt oversatt spørsmål.
+ *
+ * Returnerer `{ questions, failedLocales }`, samme form som søsterfunksjonene, slik at kalleren kan
+ * si fra i stedet for å vise «ferdig».
+ */
 async function localizeMcqAcrossLocales(questions, sourceLocale) {
   const localizedQuestions = questions.map((question) => ({
     stem: buildLocalizedTextMap(sourceLocale, question.stem),
@@ -1672,32 +1710,47 @@ async function localizeMcqAcrossLocales(questions, sourceLocale) {
     correctAnswer: buildLocalizedTextMap(sourceLocale, question.correctAnswer),
     rationale: buildLocalizedTextMap(sourceLocale, question.rationale),
   }));
+  const correctIndexes = mcqCorrectAnswerIndexes(questions);
+  const failedLocales = [];
 
   for (const targetLocale of supportedLocales) {
     if (targetLocale === sourceLocale) continue;
-    const result = await apiFetch(
-      "/api/admin/content/generate/mcq/localize",
-      getHeaders,
-      {
-        method: "POST",
-        body: JSON.stringify({ questions, sourceLocale, targetLocale }),
-      },
-    );
-    const translatedQuestions = result?.questions ?? [];
-    translatedQuestions.forEach((question, index) => {
-      if (!localizedQuestions[index]) return;
-      localizedQuestions[index].stem[targetLocale] = question?.stem ?? localizedQuestions[index].stem[sourceLocale];
-      localizedQuestions[index].correctAnswer[targetLocale] = question?.correctAnswer ?? localizedQuestions[index].correctAnswer[sourceLocale];
-      localizedQuestions[index].rationale[targetLocale] = question?.rationale ?? localizedQuestions[index].rationale[sourceLocale];
-      (question?.options ?? []).forEach((option, optionIndex) => {
-        if (!localizedQuestions[index].options[optionIndex]) return;
-        localizedQuestions[index].options[optionIndex][targetLocale] = option ?? localizedQuestions[index].options[optionIndex][sourceLocale];
-      });
-    });
+
+    let result;
+    try {
+      result = await apiFetch(
+        "/api/admin/content/generate/mcq/localize",
+        getHeaders,
+        {
+          method: "POST",
+          body: JSON.stringify({ questions, sourceLocale, targetLocale }),
+        },
+      );
+    } catch {
+      // ⚠️ Fantes ikke før: funksjonen hadde ingen try/catch, og BEGGE de opprinnelige kallerne
+      // kaller den utenfor sine try-blokker. Et 500-svar ga derfor en uhåndtert rejection og en
+      // fremdriftsboble som ble stående. Nå er utfallet et manglende språk — noe dataene kan
+      // uttrykke og publiseringsgaten måler — og de genererte spørsmålene kastes ikke bort fordi
+      // oversettelsen feilet.
+      localizedQuestions.forEach((q) => dropMcqQuestionLocale(q, targetLocale));
+      failedLocales.push(targetLocale);
+      continue;
+    }
+
+    const oversatte = Array.isArray(result?.questions) ? result.questions : [];
+    if (oversatte.length === 0) {
+      // Et svar uten spørsmål er ingen oversettelse. Samme behandling som en kastet feil.
+      localizedQuestions.forEach((q) => dropMcqQuestionLocale(q, targetLocale));
+      failedLocales.push(targetLocale);
+      continue;
+    }
+
+    applyMcqTranslation(localizedQuestions, oversatte, { targetLocale, correctIndexes });
   }
 
-  return localizedQuestions;
+  return { questions: localizedQuestions, failedLocales };
 }
+
 function resolveEditableMcqQuestions(locale) {
   const sourceQuestions = sessionDraft?.mcqQuestions?.length
     ? sessionDraft.mcqQuestions
@@ -2108,7 +2161,7 @@ async function generateMcqInBackground(sourceMaterial, certLevel, locale, genera
   sessionState = "draft-pending";
 
   const questions = result?.questions ?? [];
-  const localizedQuestions = await localizeMcqAcrossLocales(questions, locale);
+  const { questions: localizedQuestions, failedLocales } = await localizeMcqAcrossLocales(questions, locale);
   // #551: surface MCQ quality warnings (incl. the length-cue check) so the author can review.
   const mcqWarnings = Array.isArray(result?.validation?.issues) ? result.validation.issues : [];
   const mcqWarningsHtml = mcqWarnings.length > 0
@@ -2123,7 +2176,8 @@ async function generateMcqInBackground(sourceMaterial, certLevel, locale, genera
     // advarselen noen gang var synlig. Fjerde advarsel i samme fil med samme feil.
     readyHtml: () => `<strong>${escapeHtml(tf("shell.generating.mcqReady", { count: questions.length }))}</strong>
       <p style="margin:8px 0 0;font-size:13px;color:var(--color-meta)">${escapeHtml(t("shell.generating.reviewPreviewHint"))}</p>`,
-    warningHtml: mcqWarningsHtml,
+    // #1014: kvalitetsadvarslene fra #551 OG spraakene som ikke ble oversatt, i samme spor.
+    warningHtml: `${mcqWarningsHtml}${describeFailedLocales(failedLocales, locale)}`,
     onCommit: () => onAccept?.(questions),
   });
 }
@@ -2239,12 +2293,18 @@ async function reviseMcqInBackground(instruction, onAccept) {
   sessionState = "draft-pending";
 
   const questions = result?.questions ?? [];
-  const localizedQuestions = await localizeMcqAcrossLocales(questions, contentLocale);
+  const { questions: localizedQuestions, failedLocales } = await localizeMcqAcrossLocales(questions, contentLocale);
   commitOrProposeGenerated({
     patch: { mcqQuestions: localizedQuestions },
     slot,
     scroll: "bottom",
     readyHtml: () => `<strong>${escapeHtml(tf("shell.revision.mcqReady", { count: questions.length }))}</strong>`,
+    // #1014: et språk som ikke ble oversatt skal stå i kvitteringen — ellers sier flaten «klart»
+    // over et sett der ett språk mangler.
+    //
+    // ⚠️ I `warningHtml`, ikke i `readyHtml`. #982: advarsler lagt i `readyHtml` forsvinner når
+    // forslaget parkeres bak åpne felter, og kunne landes uten at de noen gang var synlige.
+    warningHtml: describeFailedLocales(failedLocales, contentLocale),
     onCommit: () => onAccept?.(questions),
   });
 }
@@ -2265,8 +2325,11 @@ async function applyStructuredTitleEditInBackground(newTitle) {
     // En delvis oversettelse er ikke en suksess. Sier vi «ferdig» her, står forfatteren igjen med en
     // tittel som ser oversatt ut, men som er kildeteksten kopiert inn — og oppdager det først når en
     // deltaker møter feil språk.
+    // ⚠️ #1016: brukte `shell.revision.titleNotTranslated`, som sier at språkene «står fortsatt med
+    // kildeteksten». Koden over SLIPPER lokalen, så de står tomme. Teksten sendte forfatteren for å
+    // lete etter noe som ikke er der. Det finnes nå bare én oppførsel, og derfor bare én tekst.
     const warning = localizedDraft.failedLocales?.length
-      ? ` ${tf("shell.revision.titleNotTranslated", {
+      ? ` ${tf("shell.generating.draftNotTranslated", {
           locales: localizedDraft.failedLocales.join(", "),
           source: snapshot.sourceLocale,
         })}`
@@ -2327,7 +2390,7 @@ async function refreshLocalizedDraftInBackground({ draft, mcq }) {
       patch.candidateTaskConstraints = localizedDraft.candidateTaskConstraints;
     }
     if (localizedMcq) {
-      patch.mcqQuestions = localizedMcq;
+      patch.mcqQuestions = localizedMcq.questions;
     }
     // #926 QA: samme hull som tittelstien. «Oversett til nynorsk» i chatten leser utkastet, ikke
     // feltene, så en oversettelse skrev håndskrevet, ulagret tekst ut av veien.
@@ -2340,7 +2403,13 @@ async function refreshLocalizedDraftInBackground({ draft, mcq }) {
       slot,
       scroll: localizedMcq && !localizedDraft ? "bottom" : "top",
       readyHtml: () => `<strong>${escapeHtml(t("shell.revision.translateReady"))}</strong>`,
-      warningHtml: describeFailedLocales(localizedDraft?.failedLocales, snapshot.sourceLocale),
+      // #1014: MCQ-oversettelsen kan feile for et sprak uten at utkastveien gjorde det. Sto her
+      // bare `localizedDraft`, rapporterte re-oversettelsesflaten halve sannheten — og det er
+      // nettopp flaten der feilede sprak er mest sannsynlige.
+      warningHtml: describeFailedLocales(
+        [...new Set([...(localizedDraft?.failedLocales ?? []), ...(localizedMcq?.failedLocales ?? [])])],
+        snapshot.sourceLocale,
+      ),
     });
   } catch (err) {
     const errMsg = apiErrorText(err);
@@ -4812,8 +4881,9 @@ function enterPreviewEditMode({ force = false } = {}) {
       clearPreviewCandidate();
       // A locale that failed to translate stays UNTRANSLATED rather than being filled with a
       // copy of the source text (#892). The hole is named here and blocks publishing in S4.
+      // #1016: samme tekst som alle andre veier — lokalen slippes, altså står språket tomt.
       const warning = failedLocales?.length
-        ? ` ${tf("shell.revision.titleNotTranslated", {
+        ? ` ${tf("shell.generating.draftNotTranslated", {
             locales: failedLocales.join(", "),
             source: editingLocale,
           })}`
@@ -4824,11 +4894,16 @@ function enterPreviewEditMode({ force = false } = {}) {
 
     Promise.all([
       localizeDraftAcrossLocalesWithTitle(newTitle, newTaskText, newGuidanceText, editingLocale, newCandidateTaskConstraints),
-      currentMcqQuestions.length ? localizeMcqAcrossLocales(newMcqQuestions, editingLocale) : Promise.resolve([]),
+      currentMcqQuestions.length
+        ? localizeMcqAcrossLocales(newMcqQuestions, editingLocale)
+        : Promise.resolve({ questions: [], failedLocales: [] }),
     ])
-      .then(([localizedDraft, localizedMcqQuestions]) => {
+      .then(([localizedDraft, localizedMcq]) => {
         if (abort.signal.aborted) return;
-        commit(localizedDraft, localizedMcqQuestions, localizedDraft.failedLocales);
+        // #1014: MCQ-veien kan naa feile for ETT sprak uten at utkastveien gjorde det. Sprakene fra
+        // begge slaas sammen, ellers rapporterer flaten bare halve sannheten.
+        const alleFeilede = [...new Set([...(localizedDraft.failedLocales ?? []), ...localizedMcq.failedLocales])];
+        commit(localizedDraft, localizedMcq.questions, alleFeilede);
       })
       .catch(() => {
         // Already handled by the abort listener above - the form is back and the slot is
