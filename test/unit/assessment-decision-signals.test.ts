@@ -92,28 +92,51 @@ describe("#1026 — en frase i et forbedringsråd kan fjerne sensoren fra sløyf
     ...overrides,
   });
 
-  // ⚠️ DEN VIKTIGSTE. Et helt vanlig råd til en besvarelse som kunne vært bedre — ikke en tom
-  // besvarelse — utløser signalet, selv om de strukturerte feltene sier at grunnlaget var
-  // TILSTREKKELIG.
-  it("et vanlig forbedringsråd utløser signalet, tvers imot de strukturerte feltene", () => {
+  // ⚠️ DENNE MÅLTE FEILEN, OG MÅLER NÅ FIKSEN. Et helt vanlig råd til en besvarelse som kunne vært
+  // bedre — ikke en tom besvarelse — traff mønsterlista og styrte vedtaket, selv om de strukturerte
+  // feltene sa at grunnlaget var TILSTREKKELIG.
+  //
+  // Reserven er tatt ut av vedtaket (#1026). Mønsteret treffer fortsatt — det er skyggemålingen —
+  // men det avgjør ingenting lenger.
+  it("et vanlig forbedringsråd styrer IKKE lenger vedtaket", () => {
     const result = base({
       evidence_sufficiency: "sufficient",
       improvement_advice: ["Add a more detailed reflection on your own process."],
     });
 
     expect(hasStructuredInsufficientEvidenceSignal(result)).toBe(false);
+    // Skyggen ser det fortsatt, så vi kan telle hva vi ga slipp på.
     expect(matchedInsufficientEvidencePatterns(result)).toContain("detailed reflection");
-    // Og det samlede signalet — det som faktisk styrer — sier likevel «utilstrekkelig».
-    expect(hasInsufficientEvidenceSignal(result)).toBe(true);
+    // Men signalet som styrer, følger de strukturerte feltene.
+    expect(hasInsufficientEvidenceSignal(result)).toBe(false);
   });
 
-  it("«additional material» i et råd gjør det samme", () => {
+  it("«additional material» i et råd gjør heller ikke lenger noe", () => {
     const result = base({
       improvement_advice: ["Consider including additional material to support your argument."],
     });
 
     expect(hasStructuredInsufficientEvidenceSignal(result)).toBe(false);
-    expect(hasInsufficientEvidenceSignal(result)).toBe(true);
+    expect(hasInsufficientEvidenceSignal(result)).toBe(false);
+  });
+
+  // ⚠️ De to over er halve saken. Dette er den andre halvparten: at fjerningen faktisk gir MER
+  // menneskelig vurdering, og ikke bare et annet tall.
+  //
+  // Signalet har tre lesere, og alle tre bruker det til å fjerne kontroll — automatisk stryk,
+  // undertrykt manuell vurdering, og oversprunget andre vurdering. Blir signalet usant, går alle
+  // tre kandidatens vei. Testen låser retningen, så en senere «opprydding» ikke kan snu den.
+  it("et råd med en fangfrase peker nå mot menneske, ikke mot automatikk", () => {
+    const medRåd = base({
+      evidence_sufficiency: "sufficient",
+      manual_review_reason_code: "none",
+      improvement_advice: ["Consider requesting additional material from the vendor."],
+    });
+    const utenRåd = base({ evidence_sufficiency: "sufficient", improvement_advice: [] });
+
+    // Rådet skal ikke gjøre noen forskjell i det hele tatt. Det var nettopp forskjellen som var feilen.
+    expect(hasInsufficientEvidenceSignal(medRåd)).toBe(hasInsufficientEvidenceSignal(utenRåd));
+    expect(hasInsufficientEvidenceSignal(medRåd)).toBe(false);
   });
 
   // Blokkeringens makker: et ekte tomt svar skal fortsatt gi signalet, og det skal komme fra de
@@ -125,16 +148,22 @@ describe("#1026 — en frase i et forbedringsråd kan fjerne sensoren fra sløyf
     expect(matchedInsufficientEvidencePatterns(result)).toEqual([]);
   });
 
-  // ⚠️ OPPFØRSELEN ER UENDRET. Delingen er der for å måle reserven, ikke for å skru den av. Uten
-  // denne kunne en «opprydding» stille ha endret hvilke besvarelser som stryker automatisk.
-  it("det samlede signalet er fortsatt strukturert ELLER mønster", () => {
+  // ⚠️ SANNHETSTABELLEN. Sto tidligere som «strukturert ELLER mønster» og voktet at delingen ikke
+  // stille skrudde reserven av. Nå er reserven skrudd av med vilje, og tabellen vokter det motsatte:
+  // at INGEN frase i fri tekst kan gjøre signalet sant.
+  //
+  // De tre siste radene er de som byttet verdi. De er beholdt nettopp derfor — en tabell uten dem
+  // ville ikke kunne bli rød om reserven kom tilbake.
+  it("bare de strukturerte feltene kan gjøre signalet sant", () => {
     const cases: Array<[LlmStructuredAssessment, boolean]> = [
       [base(), false],
       [base({ evidence_sufficiency: "insufficient" }), true],
       [base({ manual_review_reason_code: "insufficient_evidence" }), true],
-      [base({ improvement_advice: ["needs additional material"] }), true],
-      [base({ confidence_note: "requires resubmission" }), true],
-      [base({ criterion_rationales: { c1: "no qa checks documented" } }), true],
+      [base({ improvement_advice: ["needs additional material"] }), false],
+      [base({ confidence_note: "requires resubmission" }), false],
+      [base({ criterion_rationales: { c1: "no qa checks documented" } }), false],
+      // Fri tekst OG strukturert: den strukturerte bærer den, ikke frasen.
+      [base({ evidence_sufficiency: "insufficient", improvement_advice: ["placeholder"] }), true],
     ];
 
     for (const [result, expected] of cases) {

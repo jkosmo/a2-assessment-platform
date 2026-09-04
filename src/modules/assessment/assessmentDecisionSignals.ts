@@ -77,14 +77,32 @@ export function matchedInsufficientEvidencePatterns(input: LlmStructuredAssessme
 }
 
 /**
- * ⚠️ OPPFØRSELEN ER UENDRET: strukturert ELLER delstrengtreff, som før. Delingen over er der for at
- * reserven skal kunne måles før den eventuelt fjernes (#1026).
+ * #1026: delstreng-reserven er TATT UT av vedtaket. Bare de strukturerte feltene teller.
+ *
+ * ⚠️ HVORFOR DETTE KUNNE AVGJØRES UTEN Å VENTE PÅ SKYGGEMÅLINGEN. Signalet har tre lesere, og alle
+ * tre bruker det til å FJERNE kontroll:
+ *   - `autoFailForInsufficientEvidence` gjør «stryker på terskel» om til automatisk stryk i stedet
+ *     for manuell vurdering
+ *   - `shouldSuppressManualReviewForInsufficientEvidenceDisagreement` undertrykker manuell vurdering
+ *   - `evaluateSecondaryAssessmentTrigger` hopper over den andre vurderingen helt
+ *
+ * Å ta reserven ut gir derfor MER menneskelig vurdering, aldri mindre. Endringen er ensrettet mot
+ * kandidatens fordel, og prisen er sensorarbeid i de tilfellene reserven traff.
+ *
+ * ⚠️ OG DEN TRAFF IKKE. Målt mot ekte data i repoet: 0 treff i 239 modellsvars `criterionRationales`
+ * (`doc/benchmarks/model-comparison-2026-03-23.jsonl`), og 0 treff i 22 ekte forbedringsråd. Mens
+ * seks helt vanlige råd utløser den — «Add a more detailed reflection on your process», «Du har
+ * delvis dokumentasjon av testene». To av de seks er NORSKE, så språkinstruksjonen beskytter ikke.
+ *
+ * #1025 målte at modellen fyller `evidence_sufficiency` i 10 av 10 ekte svar, så det strukturerte
+ * feltet finnes å lene seg på.
+ *
+ * `matchedInsufficientEvidencePatterns` blir stående: skyggehendelsen
+ * `assessment.insufficientEvidencePatternOnly` er nå protokollen over hva vi IKKE lenger handler på.
+ * Sletter vi lista, mister vi muligheten til å se hva vi ga slipp på.
  */
 export function hasInsufficientEvidenceSignal(input: LlmStructuredAssessment): boolean {
-  return (
-    hasStructuredInsufficientEvidenceSignal(input)
-    || matchedInsufficientEvidencePatterns(input).length > 0
-  );
+  return hasStructuredInsufficientEvidenceSignal(input);
 }
 
 export function isInsufficientEvidenceRedFlag(flag: AssessmentRedFlag): boolean {
