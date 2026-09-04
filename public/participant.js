@@ -1973,33 +1973,19 @@ function localizeCriterionName(criterion) {
     .replace(/^./, (c) => c.toUpperCase());
 }
 
-function localizeKnownContent(value, map) {
-  if (typeof value !== "string") {
-    return value ?? "-";
-  }
-
-  const trimmed = value.trim();
-  const directKey = map[trimmed];
-  if (directKey) {
-    return t(directKey);
-  }
-
-  const normalize = (text) =>
-    text
-      .trim()
-      .replace(/[.;!]+$/g, "")
-      .replace(/\s+/g, " ")
-      .toLowerCase();
-
-  const normalized = normalize(trimmed);
-  for (const [candidate, translationKey] of Object.entries(map)) {
-    if (normalize(candidate) === normalized) {
-      return t(translationKey);
-    }
-  }
-
-  return value;
-}
+// #1024: her lå `localizeKnownContent` og to gjettekart — 19 engelske forbedringsråd og fem
+// stub-begrunnelser — som slo opp modellens frie tekst mot en oversatt nøkkel.
+//
+// ⚠️ De var lag fra tiden FØR `buildResponseLanguageInstruction`. Serveren ber nå modellen skrive
+// `improvement_advice` og `criterion_rationales` på deltakerens språk, og `responseLocale` er
+// koblet til besvarelsens språk. Et engelsk oppslag kan da ikke treffe.
+//
+// Målt før fjerning: kriteriekartet lette etter «Stub: submission appears relevant to the module
+// task.», mens serveren sender «Stub: assessed criterion <id>.» — teksten ble endret, kartet ikke,
+// og oppslaget kunne aldri matche. Stubbens tre forbedringsråd traff 0 av de 19 oppføringene.
+//
+// Teksten vises nå slik den er lagret. Rader vurdert før språkinstruksjonen står med engelsk tekst
+// i databasen, og det er den ærlige visningen av dem (produkteier 2026-09-04).
 
 /**
  * #1019: forbeholdet fra vurderingen, på deltakerens språk.
@@ -2016,68 +2002,6 @@ function localizeConfidence(level) {
   if (level === "low") return t("result.confidenceValue.low");
   if (level === "medium") return t("result.confidenceValue.medium");
   return null;
-}
-
-function localizeImprovementAdviceItems(values) {
-  if (!Array.isArray(values) || values.length === 0) {
-    return [];
-  }
-
-  const mapping = {
-    "Provide clearer before/after examples.": "result.improvementAdviceValue.beforeAfter",
-    "Describe concrete validation checks you performed.":
-      "result.improvementAdviceValue.validationChecks",
-    "Reference responsible-use constraints explicitly.":
-      "result.improvementAdviceValue.responsibleUse",
-    "Specify concrete risk scenarios, owners, and mitigations tied to the module.":
-      "result.improvementAdviceValue.riskScenarios",
-    "Add a data handling and privacy section, including logging and retention.":
-      "result.improvementAdviceValue.dataHandling",
-    "Define a human-in-the-loop process and approval steps.":
-      "result.improvementAdviceValue.humanInLoop",
-    "Include measurable QA metrics and acceptance criteria.":
-      "result.improvementAdviceValue.qaMetrics",
-    "Provide a concrete improvement loop with iterations and feedback capture.":
-      "result.improvementAdviceValue.improvementLoop",
-    "Clarify responsible-use guidelines and safeguards against prompt leakage.":
-      "result.improvementAdviceValue.promptLeakage",
-    "Define governance scope, risk owners, and monitoring cadence.":
-      "result.improvementAdviceValue.governanceScope",
-    "Map content to risk categories (STRIDE, CIA triad, or equivalent).":
-      "result.improvementAdviceValue.riskCategories",
-    "Incorporate a concrete QA process with checklists and independent review.":
-      "result.improvementAdviceValue.qaChecklist",
-    "Specify data handling, privacy, retention, and security controls.":
-      "result.improvementAdviceValue.dataControls",
-    "Articulate acceptance criteria and thresholds for quality and risk.":
-      "result.improvementAdviceValue.qualityThresholds",
-    "Outline an iteration plan with feedback loops and versioning.":
-      "result.improvementAdviceValue.iterationVersioning",
-    "Clarify escalation procedures and decision rights.":
-      "result.improvementAdviceValue.escalationDecisionRights",
-    "Include artefacts like risk register, control mapping, and audit trails.":
-      "result.improvementAdviceValue.artifactsEvidence",
-    "Align prompts with responsible AI principles and misuse safeguards.":
-      "result.improvementAdviceValue.responsibleAiMisuse",
-    "Provide example outputs and mitigations for common failure modes.":
-      "result.improvementAdviceValue.examplesFailureModes",
-  };
-
-  return values.map((value) => localizeKnownContent(value, mapping));
-}
-
-function localizeCriterionRationale(value) {
-  return localizeKnownContent(value, {
-    "Stub: submission appears relevant to the module task.":
-      "result.rationaleValue.relevance_for_case",
-    "Stub: output shows practical utility.": "result.rationaleValue.quality_and_utility",
-    "Stub: at least one improvement iteration is visible.":
-      "result.rationaleValue.iteration_and_improvement",
-    "Stub: includes human QA/reflection markers.":
-      "result.rationaleValue.human_quality_assurance",
-    "Stub: responsible-use checks inferred from provided content.":
-      "result.rationaleValue.responsible_use",
-  });
 }
 
 function deriveAssessmentProgressKeyFromSubmissionStatus(status, latestJobStatus) {
@@ -2596,7 +2520,7 @@ function renderResultSummary(body) {
   appendSummaryList(
     resultSummary,
     t("result.improvementAdvice"),
-    localizeImprovementAdviceItems(body.participantGuidance?.improvementAdvice),
+    Array.isArray(body.participantGuidance?.improvementAdvice) ? body.participantGuidance.improvementAdvice : [],
   );
 
   const rationales = body.participantGuidance?.criterionRationales ?? {};
@@ -2608,7 +2532,7 @@ function renderResultSummary(body) {
 
     for (const [criterion, rationale] of rationaleEntries) {
       const item = document.createElement("li");
-      item.textContent = `${localizeCriterionName(criterion)}: ${localizeCriterionRationale(String(rationale))}`;
+      item.textContent = `${localizeCriterionName(criterion)}: ${String(rationale)}`;
       rationaleList.appendChild(item);
     }
 

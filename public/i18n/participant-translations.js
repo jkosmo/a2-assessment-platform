@@ -355,41 +355,6 @@ export const translations = {
       "The assessment was made with some uncertainty.",
     "result.confidenceValue.high": "High confidence: structured and sufficiently detailed submission.",
     "result.improvementAdvice": "Improvement advice",
-    "result.improvementAdviceValue.beforeAfter": "Provide clearer before/after examples.",
-    "result.improvementAdviceValue.validationChecks": "Describe specific validation checks you performed.",
-    "result.improvementAdviceValue.responsibleUse": "Reference responsible-use constraints explicitly.",
-    "result.improvementAdviceValue.riskScenarios":
-      "Specify concrete risk scenarios, owners, and mitigations tied to the module.",
-    "result.improvementAdviceValue.dataHandling":
-      "Add a data handling and privacy section, including logging and retention.",
-    "result.improvementAdviceValue.humanInLoop":
-      "Define a human-in-the-loop process and approval steps.",
-    "result.improvementAdviceValue.qaMetrics":
-      "Include measurable QA metrics and acceptance criteria.",
-    "result.improvementAdviceValue.improvementLoop":
-      "Provide a concrete improvement loop with iterations and feedback capture.",
-    "result.improvementAdviceValue.promptLeakage":
-      "Clarify responsible-use guidelines and safeguards against prompt leakage.",
-    "result.improvementAdviceValue.governanceScope":
-      "Define governance scope, risk owners, and monitoring cadence.",
-    "result.improvementAdviceValue.riskCategories":
-      "Map content to risk categories (STRIDE, CIA triad, or equivalent).",
-    "result.improvementAdviceValue.qaChecklist":
-      "Incorporate a concrete QA process with checklists and independent review.",
-    "result.improvementAdviceValue.dataControls":
-      "Specify data handling, privacy, retention, and security controls.",
-    "result.improvementAdviceValue.qualityThresholds":
-      "Articulate acceptance criteria and thresholds for quality and risk.",
-    "result.improvementAdviceValue.iterationVersioning":
-      "Outline an iteration plan with feedback loops and versioning.",
-    "result.improvementAdviceValue.escalationDecisionRights":
-      "Clarify escalation procedures and decision rights.",
-    "result.improvementAdviceValue.artifactsEvidence":
-      "Include artefacts like risk register, control mapping, and audit trails.",
-    "result.improvementAdviceValue.responsibleAiMisuse":
-      "Align prompts with responsible AI principles and misuse safeguards.",
-    "result.improvementAdviceValue.examplesFailureModes":
-      "Provide example outputs and mitigations for common failure modes.",
     "result.rationales": "Criterion rationales",
     "result.criterion.relevance_for_case": "Relevance for case",
     "result.criterion.quality_and_utility": "Quality and utility",
@@ -403,14 +368,6 @@ export const translations = {
     "result.criterion.communication": "Communication",
     "result.criterion.critical_thinking": "Critical thinking",
     "result.criterion.problem_solving": "Problem solving",
-    "result.rationaleValue.relevance_for_case": "The answer is relevant to the module task.",
-    "result.rationaleValue.quality_and_utility": "The answer demonstrates practical utility.",
-    "result.rationaleValue.iteration_and_improvement":
-      "At least one visible iteration or improvement is documented.",
-    "result.rationaleValue.human_quality_assurance":
-      "The submission shows manual quality-assurance checks.",
-    "result.rationaleValue.responsible_use":
-      "Responsible-use checks are described in the submission.",
     "result.none": "No result loaded.",
     "result.celebratePass": "🎉 Congratulations — you passed!",
     "courses.celebrateComplete": "🎉 Course completed — well done!",
@@ -838,43 +795,6 @@ export const translations = {
       "Vurderingen ble gjort med noe usikkerhet.",
     "result.confidenceValue.high": "Høy konfidens: strukturert og tilstrekkelig detaljert innlevering.",
     "result.improvementAdvice": "Forbedringsråd",
-    "result.improvementAdviceValue.beforeAfter": "Vis tydeligere før/etter-eksempler.",
-    "result.improvementAdviceValue.validationChecks":
-      "Beskriv konkrete kvalitetssjekker du gjennomførte.",
-    "result.improvementAdviceValue.responsibleUse":
-      "Vis tydelig hvilke rammer for ansvarlig bruk du fulgte.",
-    "result.improvementAdviceValue.riskScenarios":
-      "Beskriv konkrete risikoscenarioer, eiere og tiltak knyttet til modulen.",
-    "result.improvementAdviceValue.dataHandling":
-      "Legg til en seksjon om datahåndtering og personvern, inkludert logging og lagringstid.",
-    "result.improvementAdviceValue.humanInLoop":
-      "Beskriv en human-in-the-loop-prosess med godkjenningstrinn.",
-    "result.improvementAdviceValue.qaMetrics":
-      "Ta med målbare QA-metrikker og akseptansekriterier.",
-    "result.improvementAdviceValue.improvementLoop":
-      "Beskriv en konkret forbedringssløyfe med iterasjoner og tilbakemeldinger.",
-    "result.improvementAdviceValue.promptLeakage":
-      "Presiser retningslinjer for ansvarlig bruk og vern mot prompt-lekkasje.",
-    "result.improvementAdviceValue.governanceScope":
-      "Beskriv styringsomfang, risikoeiere og rytme for oppfølging.",
-    "result.improvementAdviceValue.riskCategories":
-      "Knytt innholdet til risikokategorier (STRIDE, CIA-triaden eller tilsvarende).",
-    "result.improvementAdviceValue.qaChecklist":
-      "Bruk en konkret QA-prosess med sjekklister og uavhengig gjennomgang.",
-    "result.improvementAdviceValue.dataControls":
-      "Beskriv datahåndtering, personvern, lagringstid og sikkerhetskontroller.",
-    "result.improvementAdviceValue.qualityThresholds":
-      "Definer akseptansekriterier og terskler for kvalitet og risiko.",
-    "result.improvementAdviceValue.iterationVersioning":
-      "Skisser en iterasjonsplan med tilbakemeldingssløyfer og versjonering.",
-    "result.improvementAdviceValue.escalationDecisionRights":
-      "Klartgjør eskaleringsrutiner og beslutningsmyndighet.",
-    "result.improvementAdviceValue.artifactsEvidence":
-      "Legg ved artefakter som risikoregister, kontrollkartlegging og revisjonsspor.",
-    "result.improvementAdviceValue.responsibleAiMisuse":
-      "Sørg for at promptene følger prinsipper for ansvarlig KI og vern mot misbruk.",
-    "result.improvementAdviceValue.examplesFailureModes":
-      "Ta med eksempelutdata og tiltak for vanlige feilmønstre.",
     "result.rationales": "Kriteriebegrunnelser",
     "result.criterion.relevance_for_case": "Relevans for oppgaven",
     "result.criterion.quality_and_utility": "Kvalitet og nytte",
@@ -888,14 +808,6 @@ export const translations = {
     "result.criterion.communication": "Kommunikasjon",
     "result.criterion.critical_thinking": "Kritisk tenkning",
     "result.criterion.problem_solving": "Problemløsning",
-    "result.rationaleValue.relevance_for_case": "Svaret er relevant for moduloppgaven.",
-    "result.rationaleValue.quality_and_utility": "Svaret viser praktisk nytte.",
-    "result.rationaleValue.iteration_and_improvement":
-      "Minst én synlig iterasjon eller forbedring er dokumentert.",
-    "result.rationaleValue.human_quality_assurance":
-      "Innleveringen viser manuelle kvalitetssikringskontroller.",
-    "result.rationaleValue.responsible_use":
-      "Kontroller for ansvarlig bruk er beskrevet i innleveringen.",
     "result.none": "Ingen resultat lastet.",
     "result.celebratePass": "🎉 Gratulerer — du bestod!",
     "courses.celebrateComplete": "🎉 Kurs fullført — godt jobbet!",
@@ -1323,43 +1235,6 @@ export const translations = {
       "Vurderinga vart gjord med noko uvisse.",
     "result.confidenceValue.high": "Høg konfidens: strukturert og tilstrekkeleg detaljert innlevering.",
     "result.improvementAdvice": "Forbetringsråd",
-    "result.improvementAdviceValue.beforeAfter": "Vis tydelegare før/etter-døme.",
-    "result.improvementAdviceValue.validationChecks":
-      "Skildr konkrete kvalitetssjekkar du gjennomførte.",
-    "result.improvementAdviceValue.responsibleUse":
-      "Vis tydeleg kva rammer for ansvarleg bruk du følgde.",
-    "result.improvementAdviceValue.riskScenarios":
-      "Skildr konkrete risikoscenario, eigarar og tiltak knytte til modulen.",
-    "result.improvementAdviceValue.dataHandling":
-      "Legg til ein seksjon om datahandsaming og personvern, inkludert logging og lagringstid.",
-    "result.improvementAdviceValue.humanInLoop":
-      "Skildr ein human-in-the-loop-prosess med godkjenningstrinn.",
-    "result.improvementAdviceValue.qaMetrics":
-      "Ta med målbare QA-metrikkar og akseptkriterium.",
-    "result.improvementAdviceValue.improvementLoop":
-      "Skildr ei konkret forbetringssløyfe med iterasjonar og tilbakemeldingar.",
-    "result.improvementAdviceValue.promptLeakage":
-      "Presiser retningslinjer for ansvarleg bruk og vern mot prompt-lekkasje.",
-    "result.improvementAdviceValue.governanceScope":
-      "Skildr styringsomfang, risikoeigarar og rytme for oppfølging.",
-    "result.improvementAdviceValue.riskCategories":
-      "Knyt innhaldet til risikokategoriar (STRIDE, CIA-triaden eller tilsvarande).",
-    "result.improvementAdviceValue.qaChecklist":
-      "Bruk ein konkret QA-prosess med sjekklister og uavhengig gjennomgang.",
-    "result.improvementAdviceValue.dataControls":
-      "Skildr datahandsaming, personvern, lagringstid og tryggleikskontrollar.",
-    "result.improvementAdviceValue.qualityThresholds":
-      "Definer akseptkriterium og tersklar for kvalitet og risiko.",
-    "result.improvementAdviceValue.iterationVersioning":
-      "Skisser ein iterasjonsplan med tilbakemeldingssløyfer og versjonering.",
-    "result.improvementAdviceValue.escalationDecisionRights":
-      "Klårgjer eskaleringsrutinar og avgjerdsmynde.",
-    "result.improvementAdviceValue.artifactsEvidence":
-      "Legg ved artefaktar som risikoregister, kontrollkartlegging og revisjonsspor.",
-    "result.improvementAdviceValue.responsibleAiMisuse":
-      "Sørg for at promptane følgjer prinsipp for ansvarleg KI og vern mot misbruk.",
-    "result.improvementAdviceValue.examplesFailureModes":
-      "Ta med eksempelutdata og tiltak for vanlege feilmønster.",
     "result.rationales": "Kriteriegrunngjevingar",
     "result.criterion.relevance_for_case": "Relevans for oppgåva",
     "result.criterion.quality_and_utility": "Kvalitet og nytte",
@@ -1373,14 +1248,6 @@ export const translations = {
     "result.criterion.communication": "Kommunikasjon",
     "result.criterion.critical_thinking": "Kritisk tenking",
     "result.criterion.problem_solving": "Problemløysing",
-    "result.rationaleValue.relevance_for_case": "Svaret er relevant for moduloppgåva.",
-    "result.rationaleValue.quality_and_utility": "Svaret viser praktisk nytte.",
-    "result.rationaleValue.iteration_and_improvement":
-      "Minst éin synleg iterasjon eller forbetring er dokumentert.",
-    "result.rationaleValue.human_quality_assurance":
-      "Innleveringa viser manuelle kvalitetssikringskontrollar.",
-    "result.rationaleValue.responsible_use":
-      "Kontrollar for ansvarleg bruk er skildra i innleveringa.",
     "result.none": "Ingen resultat lasta.",
     "result.celebratePass": "🎉 Gratulerer — du bestod!",
     "courses.celebrateComplete": "🎉 Kurs fullført — godt jobba!",
