@@ -1,3 +1,5 @@
+import { logOperationalEvent } from "../observability/operationalLog.js";
+import { operationalEvents } from "../observability/operationalEvents.js";
 import fs from "node:fs";
 import path from "node:path";
 import { z } from "zod";
@@ -217,5 +219,22 @@ export function getAssessmentRules(): AssessmentRules {
   }
 
   cached = rules;
+
+  // ⚠️ HVILKE REGLER KJØRER DENNE INSTANSEN? Uten dette kunne vi ikke svare på det.
+  //
+  // 2026-09-05 la vi bruksKRITERIER for `low_confidence` i regelfila (#1023), deployet til stage, og
+  // målte at modellen fortsatt aldri satte koden. Da sto to forklaringer igjen — «kriteriene virket
+  // ikke» og «kriteriene nådde aldri instansen» — og INGEN av dem kunne utelukkes. Kudu kjører i en
+  // egen container og ser ikke appens filsystem, så fila kunne ikke leses utenfra.
+  //
+  // Bare nøklene og antallet logges, aldri tekstene: linja skal kunne leses i en driftslogg.
+  const d = rules.llmDecisionReliability;
+  logOperationalEvent(operationalEvents.assessment.rulesLoaded, {
+    rulesPath,
+    redFlagCodes: Object.keys(d.canonicalRedFlags ?? {}).length,
+    manualReviewReasonKeys: Object.keys(d.manualReviewReasonDescriptions ?? {}),
+    evidenceSufficiencyKeys: Object.keys(d.evidenceSufficiencyDescriptions ?? {}),
+  });
+
   return cached;
 }

@@ -31,6 +31,8 @@ export const operationalEvents = {
     // #1026: delstreng-reserven for «utilstrekkelig grunnlag». Logges når den er ALENE om
     // å fyre — da er den det eneste som står mellom en manuell vurdering og automatisk stryk.
     insufficientEvidencePatternOnly: "insufficient_evidence_pattern_only",
+    // #1023: hvilke regler instansen faktisk lastet. Logges én gang ved oppstart.
+    rulesLoaded: "assessment_rules_loaded",
   },
   certification: {
     participantNotificationFailed: "participant_notification_failed",
@@ -155,6 +157,13 @@ export type OperationalEventMetadataByName = {
     evidenceSufficiency: string;
     manualReviewReasonCode: string;
     llmRecommendedManualReview: boolean;
+  }>;
+  [operationalEvents.assessment.rulesLoaded]: EventMetadata<{
+    rulesPath: string;
+    redFlagCodes: number;
+    /** Bare nøklene, aldri tekstene — linja skal kunne leses i en driftslogg. */
+    manualReviewReasonKeys: string[];
+    evidenceSufficiencyKeys: string[];
   }>;
   [operationalEvents.assessment.secondaryTriggerShadowDiff]: EventMetadata<{
     jobId: string;
