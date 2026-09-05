@@ -62,39 +62,73 @@ async function api(metode, sti, kropp) {
   return res.json();
 }
 
-// Sakene. Den første er en kontroll: en tydelig god besvarelse skal IKKE gjøre modellen usikker.
-// Uten den vet vi ikke om et fravær av treff betyr «aldri usikker» eller «alltid usikker».
+// SAKENE. Skrevet mot modulens FAKTISKE oppgavetekst, som krever mål, kilder, steg, output og
+// kontrollpunkt, forklart for en ikke-teknisk prosjekteier.
+//
+// ⚠️ FØRSTE RUNDE HADDE INGEN VIRKENDE KONTROLL. Sakene handlet om KI-bruk generelt og ble levert
+// til denne modulen, så ingen av dem traff oppgaven: alle tjue fikk `evidence_sufficiency:
+// insufficient`, også den «tydelig gode». Da måler man bare én hjørne av inngangsrommet, og et
+// fravær av utslag kan like gjerne bety at instrumentet ikke virker.
+//
+// Derfor et KONTROLLPAR: én besvarelse som dekker alle fem kravene og bør gi `sufficient`, og én
+// som åpenbart ikke gjør det og bør gi `insufficient`. Spriker de to, virker målingen. Gjør de det
+// ikke, sier tallene fra de tvetydige sakene ingenting.
 const SAKER = [
   {
-    id: "kontroll_tydelig_god",
-    hensikt: "kontrollcase — modellen skal være sikker",
+    id: "kontroll_oppad_komplett",
+    hensikt: "dekker alle fem kravene — skal gi sufficient",
     response:
-      "Jeg brukte språkmodellen til å omarbeide en workshop-agenda. Første utkast inneholdt tre punkter som ikke sto i notatene mine, så jeg strammet ledeteksten til å bare bruke vedlagte beslutninger. Andre utkast var korrekt, og jeg sammenlignet det punkt for punkt mot referatet før jeg sendte det.",
+      "Mål: at prosjekteier får en statusrapport hver fredag uten at jeg bruker en halv dag på den. " +
+      "Kilder: oppgavelista i Jira, referatene fra ukemøtet, og budsjettarket. " +
+      "Steg: 1) hent alle oppgaver som endret status siste uke, 2) hent beslutninger fra siste referat, " +
+      "3) sammenstill avvik mellom plan og faktisk framdrift, 4) skriv et utkast på én side. " +
+      "Output: et utkast med tre faste avsnitt — framdrift, risiko, og hva jeg trenger svar på. " +
+      "Kontrollpunkt: jeg leser gjennom utkastet før det sendes, og flyten stopper og spør meg hvis " +
+      "et tall avviker mer enn ti prosent fra forrige uke. Ingenting går ut uten at jeg har godkjent det.",
     reflection:
-      "Den viktigste endringen var å begrense modellen til kildematerialet. Jeg loggførte begge utkastene og hva jeg endret mellom dem, slik at en kollega kan etterprøve vurderingen.",
+      "Jeg prøvde først uten stoppunktet, og da foreslo den en risiko som ikke fantes i kildene. " +
+      "Etter at jeg la inn kontrollen fant jeg to slike før de nådde rapporten.",
   },
   {
-    id: "tvetydig_delvis_belagt",
-    hensikt: "på tema, men bare halve påstanden er belagt",
-    response:
-      "Jeg brukte modellen til å lage et utkast, og det ble ganske bra. Jeg sjekket det etterpå. Noen av forslagene brukte jeg, andre ikke. Kvaliteten var nok bedre enn om jeg skrev det selv, men jeg har ikke målt det.",
-    reflection:
-      "Jeg tror prosessen ble raskere. Jeg har ikke tall på det, og jeg husker ikke nøyaktig hva jeg endret.",
+    id: "kontroll_nedad_tom",
+    hensikt: "åpenbart utilstrekkelig — skal gi insufficient",
+    response: "Jeg ville laget en flyt som lager statusrapporten automatisk.",
+    reflection: "Det ville spart tid.",
   },
   {
-    id: "tvetydig_selvmotsigende",
-    hensikt: "sier både at den kontrollerte og at den ikke gjorde det",
+    id: "tvetydig_mangler_kontrollpunkt",
+    hensikt: "fire av fem krav er godt dekket, kontrollpunktet mangler helt",
     response:
-      "Jeg kontrollerte alle påstandene mot kildene. Det var for mange til å gå gjennom alt, så jeg stolte på modellen for de fleste. Resultatet ble sendt videre uten flere endringer.",
+      "Mål: automatisk oppdatert risikobilde før hvert styringsmøte. " +
+      "Kilder: risikoregisteret, avviksmeldingene fra siste måned og leverandørens statusbrev. " +
+      "Steg: 1) hent nye avvik, 2) koble hvert avvik til en eksisterende risiko eller opprett en ny, " +
+      "3) oppdater sannsynlighet og konsekvens, 4) lag en kort oppsummering av hva som har endret seg. " +
+      "Output: oppdatert risikoregister og et sammendrag på ti linjer til styringsmøtet.",
     reflection:
-      "Jeg mener kvalitetssikringen var god nok, selv om jeg ikke rakk å gå gjennom hele teksten.",
+      "Jeg tror dette ville fungert bra. Jeg har ikke tenkt så mye på hva som skjer hvis den kobler " +
+      "et avvik til feil risiko.",
   },
   {
-    id: "tvetydig_kort_men_konkret",
-    hensikt: "kort nok til å ligne «utilstrekkelig», men inneholder et konkret bevis",
+    id: "tvetydig_paastaatt_kontroll",
+    hensikt: "sier at det finnes et kontrollpunkt, men beskriver ikke noe",
     response:
-      "Jeg ba modellen om et sammendrag, og den fant én feil i tallgrunnlaget som jeg rettet: summen i tabell 3 var 240 mot fakturaens 204.",
-    reflection: "Feilen ville jeg trolig ikke oppdaget selv.",
+      "Mål: følge opp aksjoner etter prosjektmøtet. Kilder: møtereferatet og aksjonslista. " +
+      "Steg: les referatet, finn nye aksjoner, legg dem i lista med frist og ansvarlig, og send påminnelse. " +
+      "Output: oppdatert aksjonsliste og en påminnelse til hver ansvarlig. " +
+      "Kontrollpunkt: kvaliteten sikres underveis, og det er lagt inn kontroll i flyten.",
+    reflection: "Kontrollen er viktig, så den er med.",
+  },
+  {
+    id: "tvetydig_teknisk_register",
+    hensikt: "faglig komplett, men bryter kravet om å forklare for en ikke-teknisk eier",
+    response:
+      "Orkestrering via en scheduler som trigger en DAG hver fredag 0600. Node 1 poller Jira REST v3 " +
+      "med JQL på updated >= -7d, node 2 embedder referatene og gjør top-k retrieval mot en vektorindeks, " +
+      "node 3 kjører en LLM-kall med structured output mot et JSON-skjema, node 4 validerer mot skjemaet " +
+      "og ruter til en human-in-the-loop-kø ved schema-avvik eller lav confidence. Idempotens sikres med " +
+      "en hash av inputsettet.",
+    reflection:
+      "Arkitekturen er robust. Jeg har ikke skrevet om det til et språk prosjekteier bruker.",
   },
 ];
 
@@ -145,29 +179,35 @@ for (const sak of SAKER) {
       console.log(`  ${merkelapp}: kunne ikke leveres (${svar._feil}) ${svar._tekst}`);
       continue;
     }
-    console.log(`  ${merkelapp}: levert`);
-    rapport.push({ caseId: sak.id, hensikt: sak.hensikt, submissionId: null });
+    // ⚠️ ID-EN HENTES RETT ETTER HVER INNLEVERING, ikke ved å pare to lister til slutt.
+    //
+    // Første utgave leverte alt og paret så historikken mot rapporten på INDEKS. Én innlevering
+    // feilet, og da fikk alle etter hullet feil etikett: den tomme besvarelsen sto som «sufficient»
+    // og den grundige som «insufficient». En forskyvning ser ut som et faglig funn, og det er verre
+    // enn ingen etikett.
+    const h = await api("GET", "/api/submissions/history?limit=5");
+    const nyeste = (h?.history ?? [])[0];
+    console.log(`  ${merkelapp}: levert (${nyeste?.submissionId ?? "id ikke funnet"})`);
+    rapport.push({ caseId: sak.id, hensikt: sak.hensikt, submissionId: nyeste?.submissionId ?? null });
     await sov(7000);
   }
 }
 
 console.log(`
-${rapport.length} innleveringer sendt. Henter id-ene fra historikken…
+${rapport.length} innleveringer sendt.
 `);
 
-// ⚠️ POST /api/submissions returnerer IKKE id-en. Første utgave leste `svar.submissionId ?? svar.id`
-// — begge `undefined` — og pollet `/api/submissions/undefined/result` i tjue minutter uten å si fra.
-// Historikken er kilden, og den er allerede veien `capture-llm-shapes.mjs` bruker.
-const historikk = await api("GET", "/api/submissions/history?limit=100");
-const mine = (historikk?.history ?? [])
-  .filter((r) => new Date(r.submittedAt) >= new Date(startet))
-  .sort((a, b) => new Date(a.submittedAt) - new Date(b.submittedAt));
-console.log(`  fant ${mine.length} av ${rapport.length} i historikken`);
-if (mine.length !== rapport.length) {
-  console.log("  ⚠️ Avvik mellom sendte og gjenfunne. Tallene under gjelder de gjenfunne.");
+// ⚠️ Koblingen sak→innlevering. Uten den kan vi telle FORDELINGER, men ikke si om KONTROLLSAKENE
+// oppførte seg som kontroller — og en forskjøvet etikett ser ut som et faglig funn.
+//
+// Fila ligger utenfor repoet: den peker på innleveringer, og slike id-er hører ikke hjemme i et
+// offentlig repo, heller ikke for testdata.
+const kartsti = process.env.MEASURE_MAP ?? "";
+if (kartsti) {
+  fs.writeFileSync(kartsti, JSON.stringify(
+    rapport.filter((r) => r.submissionId).map((r) => ({ submissionId: r.submissionId, caseId: r.caseId })), null, 2));
+  console.log(`  kobling sak→innlevering skrevet til ${kartsti}`);
 }
-// Rekkefølgen er den vi leverte i, så saks-merkelappen følger med.
-mine.forEach((r, i) => { if (rapport[i]) rapport[i].submissionId = r.submissionId; });
 
 console.log(`
 Starter vurderingene…

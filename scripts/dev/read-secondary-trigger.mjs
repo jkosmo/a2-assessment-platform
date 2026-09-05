@@ -65,6 +65,17 @@ if (ferdige.length === 0) {
   process.exit(1);
 }
 
+// Kobling sak→innlevering, hvis måleskriptet skrev en.
+//
+// ⚠️ Uten den kan vi telle FORDELINGER, men ikke si om KONTROLLSAKENE oppførte seg som kontroller.
+// «11 sufficient, 3 insufficient» beviser ingenting hvis den tomme besvarelsen er blant de elleve.
+const kart = new Map();
+const kartsti = process.env.MEASURE_MAP ?? "";
+if (kartsti && fs.existsSync(kartsti)) {
+  for (const x of JSON.parse(fs.readFileSync(kartsti, "utf8"))) kart.set(x.submissionId, x.caseId);
+  console.log(`(bruker kobling sak→innlevering fra ${kartsti})\n`);
+}
+
 const rader = [];
 for (const r of ferdige) {
   const res = await get(`/api/submissions/${r.submissionId}/result`);
@@ -72,6 +83,7 @@ for (const r of ferdige) {
   if (!g) continue;
   const notat = String(g.confidenceNote ?? "").toLowerCase();
   rader.push({
+    caseId: kart.get(r.submissionId) ?? "(ukjent)",
     status: r.status,
     manualReviewReasonCode: g.decisionMetadata?.manualReviewReasonCode ?? null,
     evidenceSufficiency: g.decisionMetadata?.evidenceSufficiency ?? null,
@@ -105,6 +117,33 @@ const engelske = rader.filter((r) => r.engelskeTraff.length > 0).length;
 const lav = rader.filter((r) => r.manualReviewReasonCode === "low_confidence").length;
 console.log(`engelske delstrengmønstre traff: ${engelske} av ${rader.length}`);
 console.log(`low_confidence:                  ${lav} av ${rader.length}\n`);
+
+if (kart.size > 0) {
+  console.log("=== PER SAK — virker kontrollparet? ===");
+  const perSak = new Map();
+  for (const r of rader) {
+    if (!perSak.has(r.caseId)) perSak.set(r.caseId, []);
+    perSak.get(r.caseId).push(r);
+  }
+  for (const [sak, rs] of [...perSak.entries()].sort()) {
+    const bevis = rs.map((x) => x.evidenceSufficiency).join(",");
+    const grunn = rs.map((x) => x.manualReviewReasonCode).join(",");
+    const eng = rs.filter((x) => x.engelskeTraff.length > 0).length;
+    console.log(`  ${sak.padEnd(30)} bevis=[${bevis}]  grunn=[${grunn}]  engelsktreff=${eng}/${rs.length}`);
+  }
+  const opp = perSak.get("kontroll_oppad_komplett") ?? [];
+  const ned = perSak.get("kontroll_nedad_tom") ?? [];
+  if (opp.length && ned.length) {
+    const oppOk = opp.every((x) => x.evidenceSufficiency === "sufficient");
+    const nedOk = ned.every((x) => x.evidenceSufficiency === "insufficient");
+    console.log(`  kontroll oppad gir sufficient:   ${oppOk ? "JA" : "NEI"}`);
+    console.log(`  kontroll nedad gir insufficient: ${nedOk ? "JA" : "NEI"}`);
+    console.log(oppOk && nedOk
+      ? "  → instrumentet skiller. Tallene over betyr noe."
+      : "  ⚠️ KONTROLLPARET SPRIKER IKKE. Tallene over sier lite om de tvetydige sakene.");
+  }
+  console.log();
+}
 
 console.log("=== TOLKNING ===");
 if (lav === 0 && engelske === 0) {
