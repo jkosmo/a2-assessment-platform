@@ -33,6 +33,8 @@ export const operationalEvents = {
     insufficientEvidencePatternOnly: "insufficient_evidence_pattern_only",
     // #1023: hvilke regler instansen faktisk lastet. Logges én gang ved oppstart.
     rulesLoaded: "assessment_rules_loaded",
+    // #1023: HVORFOR en andre vurdering ble kjørt. Uten dette kan vi ikke se om en ny utløser virker.
+    secondaryAssessmentRan: "secondary_assessment_ran",
   },
   certification: {
     participantNotificationFailed: "participant_notification_failed",
@@ -164,6 +166,15 @@ export type OperationalEventMetadataByName = {
     /** Bare nøklene, aldri tekstene — linja skal kunne leses i en driftslogg. */
     manualReviewReasonKeys: string[];
     evidenceSufficiencyKeys: string[];
+  }>;
+  [operationalEvents.assessment.secondaryAssessmentRan]: EventMetadata<{
+    jobId: string;
+    submissionId: string;
+    moduleId: string;
+    /** Utløserne som slo til, fra konfigurasjonen — ingen fritekst. */
+    reasons: string[];
+    /** Primærvurderingens samlede poengsum, eller null når den ikke kunne regnes ut. */
+    totalScore: number | null;
   }>;
   [operationalEvents.assessment.secondaryTriggerShadowDiff]: EventMetadata<{
     jobId: string;

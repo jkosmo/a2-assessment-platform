@@ -14,6 +14,16 @@ export type SecondaryAssessmentPolicy = ReturnType<typeof getAssessmentRules>["s
 type TriggerInput = {
   moduleId: string;
   primaryResult: LlmStructuredAssessment;
+  /**
+   * #1023: den samlede poengsummen for PRIMÆRvurderingen, regnet ut av `resolveAssessmentDecision`.
+   *
+   * ⚠️ Sendes inn, ikke regnet ut her. Formelen skalerer rubrikken mot 70 eller 100 avhengig av
+   * modus, og vekter inn MCQ etter modulens policy — å gjenskape den her ville gitt to steder som
+   * kan gli fra hverandre, og utløseren ville stille målt mot et annet tall enn vedtaket bruker.
+   *
+   * `null` når kalleren ikke kan regne den ut. Da fyrer ikke grenseregelen, og de andre gjelder.
+   */
+  totalScore?: number | null;
 };
 
 export type SecondaryTriggerDecision = {
@@ -51,6 +61,37 @@ export type SecondaryDisagreementDecision = {
   hasDisagreement: boolean;
   reasons: string[];
 };
+
+/**
+ * Hvilke sonegrenser poengsummen ligger nær nok til å fortjene en ny vurdering.
+ *
+ * Båndene står i regelfila og kan justeres uten kodeendring; `null` slår av den grensen.
+ */
+function boundaryTriggers(
+  totalScore: number | null | undefined,
+  policy: SecondaryAssessmentPolicy,
+): string[] {
+  // `NaN` og `Infinity` trenger ingen egen vakt: `Math.abs(NaN - 60) <= 5` er usann, og det samme
+  // for uendelig. Mutasjonstesting viste at en `Number.isFinite`-sjekk her ikke kunne bli rød —
+  // altså kode som ikke kan observeres. Testen låser oppførselen uansett hvordan den er skrevet.
+  if (typeof totalScore !== "number") return [];
+  // ⚠️ Båndene kommer fra POLICYEN som sendes inn, ikke fra den globale regelfila. Første utgave
+  // leste globalt, og da kunne regelen ikke overstyres — verken av en modul eller av en test. Tre
+  // tester ble røde med én gang, og det er nettopp den slags stille kobling de er der for.
+  const bånd = policy.triggerRules.scoreBoundaryBands;
+  const rules = getAssessmentRules();
+  const totalMin = rules.thresholds.totalMin;
+  const gulRødGrense = totalMin - (rules.thresholds.borderlineBelowMin ?? 0);
+
+  const ut: string[] = [];
+  if (typeof bånd?.greenYellow === "number" && Math.abs(totalScore - totalMin) <= bånd.greenYellow) {
+    ut.push("score_near_pass_boundary");
+  }
+  if (typeof bånd?.yellowRed === "number" && Math.abs(totalScore - gulRødGrense) <= bånd.yellowRed) {
+    ut.push("score_near_fail_boundary");
+  }
+  return ut;
+}
 
 export function evaluateSecondaryAssessmentTrigger(
   input: TriggerInput,
@@ -100,6 +141,19 @@ export function evaluateSecondaryAssessmentTrigger(
   );
   if (hasFlagSeverityTrigger) {
     reasons.push("primary_result_red_flag_trigger");
+  }
+
+  // #1023: nærhet til en sonegrense.
+  //
+  // ⚠️ Dette er utløseren som ERSTATTER konfidensgjettingen i praksis. Målt over 63 ekte vurderinger
+  // satte modellen aldri `low_confidence`, og delstrengene er engelske mens notatet skrives på
+  // deltakerens språk. Poengsummen er derimot vår egen, og den er den samme uansett språk.
+  //
+  // Grensene kommer fra de samme tallene vedtaket bruker: `totalMin` og, under den,
+  // `totalMin - borderlineBelowMin`. Den nederste er den viktigste — der går utfallet fra «et
+  // menneske ser på det» til «automatisk stryk».
+  for (const grense of boundaryTriggers(input.totalScore, policy)) {
+    reasons.push(grense);
   }
 
   // Skyggeavgjørelsen: samme regnestykke, men med den strukturerte konfidensregelen.

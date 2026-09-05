@@ -1,3 +1,4 @@
+import { resolveAssessmentDecision } from "./decisionService.js";
 import { SubmissionStatus } from "../../db/prismaRuntime.js";
 import { assessmentJobRepository } from "./assessmentJobRepository.js";
 import { recordAuditEvent } from "../../services/auditService.js";
@@ -170,6 +171,27 @@ async function runAssessment(
   // is the slower of the two, not the sum.
   const [{ finalLlmResult, forceManualReviewReason }, contentSignal] = await Promise.all([
     runLlmEvaluationPipeline({
+      // #1023: samme formel som vedtaket bruker, kalt på primærresultatet. `resolveAssessmentDecision`
+      // er ren, så dette koster ingenting og kan ikke gli fra vedtaket.
+      beregnTotalPoeng: (resultat) => {
+        try {
+          return resolveAssessmentDecision({
+            mcqScaledScore,
+            mcqPercentScore,
+            llmResult: resultat,
+            forceManualReviewReason: undefined,
+            assessmentPolicy: inputContext.assessmentPolicy,
+            rubricMaxTotal: inputContext.rubricMaxTotal,
+            rubricCriteriaIds: inputContext.rubricCriteriaIds,
+            freetextOnly: assessmentMode === "FREETEXT_ONLY",
+            aiInfluence: undefined,
+          }).totalScore;
+        } catch {
+          // ⚠️ En feil her skal ALDRI stoppe vurderingen. Utfallet er at grenseregelen ikke fyrer,
+          // altså at vi går glipp av en ekstra vurdering — ikke at kandidaten blir stående uten svar.
+          return null;
+        }
+      },
       jobId,
       submissionId: submission.id,
       userId: submission.userId,

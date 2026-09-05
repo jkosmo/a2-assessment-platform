@@ -138,7 +138,11 @@
       "redFlagSeverities": [
         "medium",
         "high"
-      ]
+      ],
+      "scoreBoundaryBands": {
+        "greenYellow": null,
+        "yellowRed": 5
+      }
     },
     "disagreementRules": {
       "practicalScoreDeltaMin": 8,

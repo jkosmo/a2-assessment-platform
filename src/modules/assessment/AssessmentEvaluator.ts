@@ -41,6 +41,14 @@ type EvaluatorContext = {
   moduleVersionId: string;
   promptTemplateVersionId: string;
   inputContext: AssessmentInputContext;
+  /**
+   * #1023: regner ut den samlede poengsummen for et LLM-resultat.
+   *
+   * ⚠️ Sendes inn som en funksjon, ikke som et tall, fordi primærresultatet først finnes HER — og
+   * ikke som en kopi av formelen, fordi den skalerer rubrikken ulikt per modus og vekter inn MCQ
+   * etter modulens policy. Kalleren har alle delene og lukker over dem; da finnes formelen ett sted.
+   */
+  beregnTotalPoeng?: (resultat: LlmStructuredAssessment) => number | null;
 };
 
 /**
@@ -155,6 +163,9 @@ export async function runLlmEvaluationPipeline(ctx: EvaluatorContext): Promise<E
   const secondaryTrigger = evaluateSecondaryAssessmentTrigger({
     moduleId,
     primaryResult: primaryLlmResult,
+    // #1023: nærhet til en sonegrense. `null` når kalleren ikke kan regne den ut — da fyrer ikke
+    // grenseregelen, og de øvrige utløserne gjelder som før.
+    totalScore: ctx.beregnTotalPoeng ? ctx.beregnTotalPoeng(primaryLlmResult) : null,
   });
 
   // #1023: mål den foreslåtte regelen mot den levende, FØR vi vurderer å bytte.
@@ -181,6 +192,15 @@ export async function runLlmEvaluationPipeline(ctx: EvaluatorContext): Promise<E
   }
 
   if (secondaryTrigger.shouldRun) {
+    // #1023: hvorfor den kjørte. Uten dette kan vi ikke se om en ny utløser virker — vi kunne bare
+    // telle at en andre vurdering skjedde, ikke hva som utløste den.
+    logOperationalEvent(operationalEvents.assessment.secondaryAssessmentRan, {
+      jobId,
+      submissionId,
+      moduleId,
+      reasons: secondaryTrigger.reasons,
+      totalScore: ctx.beregnTotalPoeng ? ctx.beregnTotalPoeng(primaryLlmResult) : null,
+    });
     await recordAuditEvent({
       entityType: auditEntityTypes.assessmentJob,
       entityId: jobId,

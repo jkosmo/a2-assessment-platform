@@ -114,12 +114,35 @@ export const rulesSchema = z.object({
           confidenceNotePatterns: z.array(z.string().min(1)).default(["medium confidence", "low confidence"]),
           redFlagCodes: z.array(z.string().min(1)).default([]),
           redFlagSeverities: z.array(z.string().min(1)).default(["medium", "high"]),
+          // #1023: nærhet til en SONEGRENSE utløser en ny vurdering.
+          //
+          // ⚠️ Bakgrunn: konfidensutløseren over er målt død. `low_confidence` forekom 0 av 63 ekte
+          // vurderinger, og delstrengene er engelske mens modellen skriver på deltakerens språk. Vi
+          // ba modellen introspektere — noe modeller er dårlige på — for å avgjøre om vi skulle
+          // gjøre den ene tingen som faktisk måler usikkerhet: vurdere en gang til.
+          //
+          // Poengsummen er derimot et tall vi eier selv, og den er språkuavhengig. Målt på 88 ekte
+          // vurderinger kommer den i hopp på fem (rubrikken er 5 kriterier à 0–4, skalert til 100),
+          // mens grensene er skarpe. Én kandidat på 55 stryker automatisk; én på 60 går til et
+          // menneske. Det er ETT trinn på rutenettet.
+          //
+          // Båndene er i poeng og gjelder på hver side av grensen. `null` slår av.
+          scoreBoundaryBands: z
+            .object({
+              // Grensen bestått/grensetilfelle, altså `totalMin`.
+              greenYellow: z.number().min(0).nullable().default(null),
+              // Grensen grensetilfelle/stryk, `totalMin - borderlineBelowMin`. Den viktigste: det er
+              // her utfallet går fra «et menneske ser på det» til «automatisk stryk».
+              yellowRed: z.number().min(0).nullable().default(null),
+            })
+            .default({ greenYellow: null, yellowRed: null }),
         })
         .default({
           manualReviewRecommended: true,
           confidenceNotePatterns: ["medium confidence", "low confidence"],
           redFlagCodes: [],
           redFlagSeverities: ["medium", "high"],
+          scoreBoundaryBands: { greenYellow: null, yellowRed: null },
         }),
       disagreementRules: z
         .object({
