@@ -68,6 +68,20 @@
         "responsible_use_violation",
         "responsible_use_risk"
       ]
+    },
+    "manualReviewReasonDescriptions": {
+      "none": "Use when no human review is needed.",
+      "red_flag": "Use when you raised a red flag that a human should confirm.",
+      "borderline": "Use when the submission sits close to the pass threshold and a small change in judgement would change the outcome.",
+      "low_confidence": "Use when you COULD assess the submission but are genuinely unsure your own judgement is right: the evidence supports more than one defensible score, or the submission makes claims you cannot verify from what was provided. This is about YOUR certainty, not the submission's quality. Do NOT use it when the submission is simply weak, short or empty — that is insufficient_evidence.",
+      "disagreement": "Use when parts of the submission contradict each other so the overall judgement is unstable.",
+      "insufficient_evidence": "Use when there was not enough in the submission to assess it at all. Note that this often comes WITH high certainty: an empty submission is easy to judge.",
+      "policy": "Use when a platform policy requires a human to look at the submission."
+    },
+    "evidenceSufficiencyDescriptions": {
+      "sufficient": "Use when the submission contains enough to judge every rubric criterion.",
+      "insufficient": "Use when there is too little to judge, regardless of how certain you are of that.",
+      "uncertain": "Use when there is material to judge, but you cannot tell whether it actually addresses the task — for example when it is on an adjacent topic, or when the connection to the assignment is implied rather than stated."
     }
   },
   "mcqQuality": {
@@ -75,9 +89,9 @@
     "difficultyMin": 0.2,
     "difficultyMax": 0.9,
     "difficultyMaxByLevel": {
-      "basic": 0.90,
+      "basic": 0.9,
       "intermediate": 0.85,
-      "advanced": 0.80
+      "advanced": 0.8
     },
     "discriminationMin": 0.1,
     "distractorPickRateMin": 0.05

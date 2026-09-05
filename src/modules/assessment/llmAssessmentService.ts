@@ -1,3 +1,4 @@
+import { getAssessmentRules } from "../../config/assessmentRules.js";
 import { env } from "../../config/env.js";
 import { fetchAzureOpenAiWithRetry } from "../llm/azureOpenAiRetry.js";
 import type { SupportedLocale } from "../../i18n/locale.js";
@@ -535,7 +536,25 @@ function buildResponseLanguageInstruction(locale: SupportedLocale) {
   return localeInstructionMap[locale] ?? localeInstructionMap["en-GB"];
 }
 
-function buildRequiredResponseContract(criteriaIds: string[]): string {
+/**
+ * #1023: gjengi bruksKRITERIENE for en verdiliste, slik `red_flags` alt gjorde.
+ *
+ * ⚠️ Kontrakten listet `manual_review_reason_code` og `evidence_sufficiency` som rene lister over
+ * tillatte verdier. Målt over 48 ekte vurderinger satte modellen ALDRI `low_confidence` og aldri
+ * `uncertain` — den fikk aldri vite når de gjelder, mens `red_flags` fikk kriterier per kode og ble
+ * brukt. Tomt objekt gir tom streng, så en regelfil uten kriterier oppfører seg som før.
+ */
+function describeEnumForPrompt(
+  felt: "manualReviewReasonDescriptions" | "evidenceSufficiencyDescriptions",
+): string {
+  const beskrivelser = getAssessmentRules().llmDecisionReliability[felt] ?? {};
+  const linjer = Object.entries(beskrivelser).map(([kode, tekst]) => `  - ${kode} — ${tekst}`);
+  return linjer.length > 0 ? `  Usage criteria:\n${linjer.join("\n")}` : "";
+}
+
+// Eksportert BARE for vakta i test/unit/response-contract-criteria.test.ts. Kriteriene kan finnes i
+// regelfila og likevel aldri nå modellen — det er samme stille feil som saken retter, ett lag ned.
+export function buildRequiredResponseContract(criteriaIds: string[]): string {
   const criteriaList = criteriaIds.map((id) => `  - ${id}`).join("\n");
   return `
 JSON response contract:
@@ -554,8 +573,10 @@ ${criteriaList}
 - manual_review_recommended: boolean
 - confidence_note: string
 - evidence_sufficiency: one of sufficient, insufficient, uncertain
+${describeEnumForPrompt("evidenceSufficiencyDescriptions")}
 - recommended_outcome: one of pass, fail, manual_review
 - manual_review_reason_code: one of none, red_flag, borderline, low_confidence, disagreement, insufficient_evidence, policy
+${describeEnumForPrompt("manualReviewReasonDescriptions")}
 Do not include markdown, comments, or any wrapper text outside JSON.
 `.trim();
 }

@@ -41,12 +41,28 @@ export const rulesSchema = z.object({
         .record(z.string().min(1), z.string().min(1))
         .optional()
         .default({}),
+      // #1023: samme mekanisme, for de to feltene som bærer USIKKERHET.
+      //
+      // ⚠️ Målt 2026-09-05: `manual_review_reason_code = low_confidence` forekom 0 av 48 ekte
+      // vurderinger, og `evidence_sufficiency = uncertain` 0 av 48. Begge sto i kontrakten som en
+      // ren liste over tillatte verdier, uten ett ord om NÅR de gjelder — mens `red_flags` rett over
+      // fikk kriterier per kode. Modellen fikk aldri vite hva den skulle se etter.
+      manualReviewReasonDescriptions: z
+        .record(z.string().min(1), z.string().min(1))
+        .optional()
+        .default({}),
+      evidenceSufficiencyDescriptions: z
+        .record(z.string().min(1), z.string().min(1))
+        .optional()
+        .default({}),
       canonicalRedFlags: z.record(z.string().min(1), z.array(z.string().min(1))).default({}),
     })
     .default({
       unknownRedFlagHandling: "downgrade_to_unclassified",
       unknownRedFlagCanonicalCode: "unclassified_model_warning",
       redFlagDescriptions: {},
+      manualReviewReasonDescriptions: {},
+      evidenceSufficiencyDescriptions: {},
       canonicalRedFlags: {},
     }),
   mcqQuality: z
