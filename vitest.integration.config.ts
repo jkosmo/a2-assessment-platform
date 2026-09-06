@@ -20,6 +20,14 @@ export default defineConfig({
     exclude: [
       "test/unit/**/*.test.ts",
       "test/unit/**/*.test.js",
+      // ⚠️ DOM-testene har sin egen kjøring med jsdom (`vitest.dom.config.ts`). Uten denne
+      // utelukkelsen kjører de OGSÅ her, i Node uten `document`, og feiler med «document is not
+      // defined» — en rød suite som ikke sier noe om produktet.
+      //
+      // `test/dom/api-client-formdata.dom.test.js` slapp unna fordi den aldri rører `document`.
+      // Feilen dukket derfor først opp da en test som faktisk bygger noder ble lagt til.
+      "test/dom/**/*.test.ts",
+      "test/dom/**/*.test.js",
       "test/module-completion-policy.test.ts",
       "test/secondary-assessment.test.ts",
       "test/process-error-handlers.test.ts",
