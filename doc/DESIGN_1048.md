@@ -104,3 +104,41 @@ svaret skulle være, kan vi ikke stryke noen for å ha skrevet kort.
 insufficiency-saker på slike moduler til sensor i stedet for automatisk stryk. På stage var det
 21 av 78 vurderinger — og alle 21 ble tidligere strøket uten at et menneske så dem. Det er nettopp
 det saken ble åpnet for, men volumet bør måles etter deploy.
+
+## Målt på stage 2026-09-06 etter deploy
+
+Seks ekte innleveringer med ekte LLM-vurderinger, modul på nivå `basic` (minimum 100 ord,
+terskel 50).
+
+| Sak | Ord | LLM-dom | Utfall |
+|---|---|---|---|
+| `kort_tynt` ×2 | 12 | insufficient / fail / insufficient_evidence | `COMPLETED` — auto-stryk står |
+| `lang_tynt` ×2 | 160 | insufficient / fail / insufficient_evidence | `UNDER_REVIEW` — mennesket vinner |
+| `kontroll_godt` ×2 | 137 | sufficient / pass / none | `COMPLETED` |
+
+⚠️ **Det som gjør målingen gyldig:** de to første radene har IDENTISK LLM-dom. Eneste forskjell er
+ordtellingen. Endte de likt, ville tallet vært grønt uten å bety noe — derfor roper skriptet
+eksplisitt hvis kort og lang havner samme sted.
+
+`kontroll_godt` er den andre halvdelen: uten en sak som gir `sufficient` kan vi ikke skille «regelen
+virker» fra «alt stemples utilstrekkelig», som er nøyaktig feilen første runde av #1023 gikk i.
+
+### ⚠️ Retting av påstanden over om at «kan ikke måle» er normalen
+
+Avsnittet lenger opp bygget på testsuitens fikstursvar, der `foundation` er den vanlige verdien.
+Ekte data fra stage sier noe annet:
+
+| Nivå | Moduler |
+|---|---|
+| `basic` | 66 |
+| `advanced` | 17 |
+| `intermediate` | 2 |
+| `Nivå 1` (fritekst) | 1 |
+
+**85 av 86 moduler er målbare.** Forfattere bruker nedtrekkslista, som bare tilbyr de tre gyldige
+nivåene. «Kan ikke måle» gjelder én modul, ikke flertallet, og endringen er dermed så smal som
+saken beskrev.
+
+⚠️ Første søk ga «51 av 51 ikke målbare» — men `/api/admin/content/modules` returnerer bare
+`id/title/description/activeVersion`. Feltet manglet i SVARET, ikke i dataen. `/modules/library`
+bærer det. Et negativt resultat trenger sin egen instrumentering (regel 9).
