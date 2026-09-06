@@ -52,8 +52,16 @@ const BASELINE = {
   "static/admin-content-courses.js": 2,
   // Tittelvisning i seksjonslista.
   "static/admin-content-sections.js": 1,
+  // #1043: `localizeValueForLocale` og `pickFirstNonEmpty` — kjeden [locale, "nb", "en-GB"] og så
+  // «første ikke-tomme». Gjelden er ikke ny; den var USYNLIG for vakta fram til 2026-09-06, fordi
+  // kjeden er skrevet som en ordnet LISTE til en hjelper og ikke som en `??`-kjede.
+  //
+  // ⚠️ Forhåndsvisningen har et reelt behov — den skal vise forfatteren hva en deltaker ser på et
+  // valgt språk. Men rekkefølgen er dens egen, og det er nettopp det som gir drift mot serverens.
+  // Fjernes den, må ruta lokalisere først, som for #1038. Egen endring, ikke en opprydding her.
+  "static/admin-content-preview.js": 2,
 };
-// 4 til sammen, per 2026-08-30.
+// 6 til sammen, per 2026-09-06.
 //
 // ⚠️ Mitt eget håndsveip før denne vakta sa 2. Det var halvparten. Grep med noen linjers kontekst
 // fant ikke kjedene som sto alene på en linje — verdien var allerede tolket lenger opp, så det sto
@@ -103,6 +111,15 @@ const CHAIN = [
   /\[\s*locale\s*\]\s*(\?\?|\|\|)\s*[\w.[\]"'-]*\[\s*["']en-GB["']\s*\]/,
   /\.nb\s*(\?\?|\|\|)\s*[\w.[\]"'-]*\[\s*["']en-GB["']\s*\]/,
   /\[\s*["']nb["']\s*\]\s*(\?\?|\|\|)\s*[\w.[\]"'-]*\[\s*["']en-GB["']\s*\]/,
+  // ⚠️ KJEDEN TRENGER IKKE VÆRE EN `??`-KJEDE. Den kan være en ORDNET LISTE sendt til en hjelper:
+  //
+  //     pickFirstNonEmpty(parsed, [locale, "nb", "en-GB"])
+  //
+  // Samme rekkefølge, samme drift, samme stillhet — men usynlig for mønstrene over. Den sto i
+  // `admin-content-preview.js` og ble ikke talt før 2026-09-06, fordi vakta lette etter syntaksen
+  // og ikke etter det som gjør skade: at klienten har en MENING om rekkefølgen.
+  /\[\s*[\w.]*locale\s*,\s*["'](?:nb|nn|en-GB)["']\s*,/,
+  /\[\s*["'](?:nb|nn)["']\s*,\s*["'](?:nb|nn|en-GB)["']\s*\]/,
 ];
 
 // ⚠️ Grensesnittets EGEN oversettelsestabell er ikke lagret innhold. `adminContentTranslations` og
