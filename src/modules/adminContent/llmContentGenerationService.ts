@@ -459,9 +459,12 @@ const GENERATION_MODE_GUIDELINES: Record<GenerationMode, { moduleDraft: string; 
 };
 
 // v1.2.8: scenario decision can be author-locked. "auto" preserves the legacy LLM-decides
-// flow; "include" requires a scenario; "exclude" forbids one. Same three-state contract is
-// used by the client-side external-LLM prompt (admin-content-external-llm.js) — keep the
-// directives semantically aligned across both prompts so author intent survives the handoff.
+// flow; "include" requires a scenario; "exclude" forbids one.
+//
+// ⚠️ Kommentaren ba tidligere om å holde denne «semantisk på linje» med en klientside-prompt i
+// admin-content-external-llm.js. Den fila og hele den veien er fjernet 2026-09-06 — ekstern LLM
+// går gjennom Skill-en. Kravet om å holde to prompter i takt gjelder ikke lenger, og en kommentar
+// som ber om det ville sendt neste leser på leting etter en fil som ikke finnes.
 function renderScenarioDirective(scenarioMode: ScenarioMode): string {
   if (scenarioMode === "include") {
     return `## Scenario (required)
