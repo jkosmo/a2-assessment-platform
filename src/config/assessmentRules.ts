@@ -257,6 +257,12 @@ export function getAssessmentRules(): AssessmentRules {
     redFlagCodes: Object.keys(d.canonicalRedFlags ?? {}).length,
     manualReviewReasonKeys: Object.keys(d.manualReviewReasonDescriptions ?? {}),
     evidenceSufficiencyKeys: Object.keys(d.evidenceSufficiencyDescriptions ?? {}),
+    // ⚠️ Manglet i første utgave. Loggen ble laget for å svare på «hvilke regler kjører denne
+    // instansen», og hadde med én gang et hull av samme type: den viste beskrivelsene, men ikke
+    // båndene som avgjør om grenseregelen fyrer.
+    scoreBoundaryBands: rules.secondaryAssessment.triggerRules.scoreBoundaryBands,
+    totalMin: rules.thresholds.totalMin,
+    borderlineBelowMin: rules.thresholds.borderlineBelowMin ?? null,
   });
 
   return cached;

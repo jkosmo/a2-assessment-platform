@@ -170,6 +170,25 @@ export async function runLlmEvaluationPipeline(ctx: EvaluatorContext): Promise<E
     assessmentPolicy: ctx.inputContext.assessmentPolicy,
   });
 
+  // #1023: grenseregelens INNGANGER, for hver vurdering — ikke bare når den fyrer.
+  //
+  // ⚠️ Regelen fyrte fire ganger før terskelfiksen og null etter, og jeg kunne ikke se hvorfor:
+  // «fyrte ikke» kan bety at poengsummen ble null, at grensene lå et annet sted enn jeg trodde,
+  // eller at båndet var for smalt. De tre ser like ut i en logg som bare registrerer treff.
+  //
+  // Ingen fritekst, bare tall og navngitte utløsere.
+  {
+    const totalScore = ctx.beregnTotalPoeng ? ctx.beregnTotalPoeng(primaryLlmResult) : null;
+    logOperationalEvent(operationalEvents.assessment.secondaryTriggerEvaluated, {
+      jobId,
+      submissionId,
+      moduleId,
+      totalScore,
+      ...(secondaryTrigger.boundary ?? { passBoundary: 0, failBoundary: null, bandGreenYellow: null, bandYellowRed: null }),
+      reasons: secondaryTrigger.reasons,
+    });
+  }
+
   // #1023: mål den foreslåtte regelen mot den levende, FØR vi vurderer å bytte.
   //
   // ⚠️ Logges bare ved UENIGHET. Er de enige, er det ingen informasjon i hendelsen, og en logg full

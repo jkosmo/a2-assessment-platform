@@ -30,10 +30,41 @@ type TriggerInput = {
   assessmentPolicy?: ModuleAssessmentPolicy | null;
 };
 
+/**
+ * #1023: grensene og båndene slik utløseren SÅ dem, for logging. Eksportert framfor at kalleren
+ * regner dem ut på nytt — det var nettopp en slik dobbel utregning som la båndet feil sted.
+ */
+export function boundaryInputs(
+  policy: SecondaryAssessmentPolicy,
+  assessmentPolicy: ModuleAssessmentPolicy | null | undefined,
+) {
+  const { pass, fail } = resolveZoneBoundaries(assessmentPolicy);
+  const bånd = policy.triggerRules.scoreBoundaryBands;
+  return {
+    passBoundary: pass,
+    failBoundary: fail,
+    bandGreenYellow: bånd?.greenYellow ?? null,
+    bandYellowRed: bånd?.yellowRed ?? null,
+  };
+}
+
 export type SecondaryTriggerDecision = {
   enabled: boolean;
   shouldRun: boolean;
   reasons: string[];
+  /**
+   * #1023: grensene og båndene utløseren FAKTISK brukte.
+   *
+   * ⚠️ Bæres med i avgjørelsen framfor å regnes ut på nytt der den skal logges. Et første utkast lot
+   * evaluatoren kalle `getAssessmentRules()` selv — da kunne de loggede tallene i prinsippet være
+   * andre enn de som avgjorde, og loggen ville vært verdiløs nettopp når den trengs.
+   */
+  boundary?: {
+    passBoundary: number;
+    failBoundary: number | null;
+    bandGreenYellow: number | null;
+    bandYellowRed: number | null;
+  };
   /**
    * #1023: hva den STRUKTURERTE regelen ville valgt. Påvirker ingenting — den er her for å måles.
    *
@@ -71,7 +102,7 @@ export type SecondaryDisagreementDecision = {
  *
  * Båndene står i regelfila og kan justeres uten kodeendring; `null` slår av den grensen.
  */
-function boundaryTriggers(
+export function boundaryTriggers(
   totalScore: number | null | undefined,
   policy: SecondaryAssessmentPolicy,
   assessmentPolicy: ModuleAssessmentPolicy | null | undefined,
@@ -109,6 +140,7 @@ export function evaluateSecondaryAssessmentTrigger(
       enabled: false,
       shouldRun: false,
       reasons: ["secondary assessment disabled by policy"],
+      boundary: boundaryInputs(policy, input.assessmentPolicy),
     };
   }
 
@@ -121,6 +153,7 @@ export function evaluateSecondaryAssessmentTrigger(
       enabled: true,
       shouldRun: false,
       reasons: ["primary_result_insufficient_evidence_auto_fail"],
+      boundary: boundaryInputs(policy, input.assessmentPolicy),
     };
   }
 
@@ -171,6 +204,7 @@ export function evaluateSecondaryAssessmentTrigger(
     enabled: true,
     shouldRun: reasons.length > 0,
     reasons,
+    boundary: boundaryInputs(policy, input.assessmentPolicy),
     shadow: {
       liveConfidenceTrigger: hasConfidenceTrigger,
       shadowConfidenceTrigger,

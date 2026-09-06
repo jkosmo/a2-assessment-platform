@@ -145,4 +145,26 @@ describe("#1023 — poengsum nær en sonegrense utløser en ny vurdering", () =>
     );
     expect(d.reasons).toContain("score_near_fail_boundary");
   });
+  it("avgjørelsen bærer grensene den faktisk brukte", () => {
+    // ⚠️ Loggen skal kunne svare på HVORFOR regelen ikke fyrte. Regner den som logger ut grensene
+    // på nytt, kan de i prinsippet bli andre enn de som avgjorde — og loggen ville vært verdiløs
+    // nettopp når den trengs. Derfor bæres de med i avgjørelsen.
+    const modulpolicy = { passRules: { totalMin: 50 } } as never;
+    const d = evaluateSecondaryAssessmentTrigger(
+      { moduleId: "m1", primaryResult: resultat(), totalScore: 40, assessmentPolicy: modulpolicy },
+      bareGrenser({ greenYellow: null, yellowRed: 5 }),
+    );
+    expect(d.boundary?.passBoundary, "modulens egen terskel").toBe(50);
+    expect(d.boundary?.failBoundary, "stryk-grensen under den").toBe(40);
+    expect(d.boundary?.bandYellowRed).toBe(5);
+    expect(d.boundary?.bandGreenYellow).toBeNull();
+  });
+
+  it("grensene bæres også når utløseren sier nei", () => {
+    // Det er nettopp NÅR den ikke fyrer at vi trenger tallene.
+    const d = kjør(100, { greenYellow: null, yellowRed: 5 });
+    expect(d.reasons).not.toContain("score_near_fail_boundary");
+    expect(d.boundary, "grensene skal finnes selv om ingenting slo til").toBeDefined();
+    expect(typeof d.boundary?.passBoundary).toBe("number");
+  });
 });

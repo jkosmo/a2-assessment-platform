@@ -35,6 +35,10 @@ export const operationalEvents = {
     rulesLoaded: "assessment_rules_loaded",
     // #1023: HVORFOR en andre vurdering ble kjørt. Uten dette kan vi ikke se om en ny utløser virker.
     secondaryAssessmentRan: "secondary_assessment_ran",
+    // #1023: grenseregelens INNGANGER, logget for hver vurdering — ikke bare når den fyrer.
+    // Uten dette er «fyrte ikke» uten forklaring: var poengsummen null, lå grensene feil, eller var
+    // båndet for smalt? Det spørsmålet kostet en deploy å ikke kunne svare på.
+    secondaryTriggerEvaluated: "secondary_trigger_evaluated",
   },
   certification: {
     participantNotificationFailed: "participant_notification_failed",
@@ -166,6 +170,25 @@ export type OperationalEventMetadataByName = {
     /** Bare nøklene, aldri tekstene — linja skal kunne leses i en driftslogg. */
     manualReviewReasonKeys: string[];
     evidenceSufficiencyKeys: string[];
+    /** Båndene som avgjør om grenseregelen fyrer, og tersklene de regnes fra. */
+    scoreBoundaryBands: { greenYellow: number | null; yellowRed: number | null };
+    totalMin: number;
+    borderlineBelowMin: number | null;
+  }>;
+  [operationalEvents.assessment.secondaryTriggerEvaluated]: EventMetadata<{
+    jobId: string;
+    submissionId: string;
+    moduleId: string;
+    /** Primærvurderingens samlede poengsum, eller null når den ikke lot seg regne ut. */
+    totalScore: number | null;
+    /** Grensene slik utløseren så dem — de samme vedtaket bruker. */
+    passBoundary: number;
+    failBoundary: number | null;
+    /** Båndene fra regelfila. `null` betyr at grensen er slått av. */
+    bandGreenYellow: number | null;
+    bandYellowRed: number | null;
+    /** Utløserne som slo til. Tom liste = ingen. */
+    reasons: string[];
   }>;
   [operationalEvents.assessment.secondaryAssessmentRan]: EventMetadata<{
     jobId: string;
