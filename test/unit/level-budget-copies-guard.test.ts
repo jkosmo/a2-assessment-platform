@@ -40,6 +40,44 @@ describe("#1049 — kopiene av nivågrensene er enige med kilden", () => {
   // Kopien forsvant med den. Det er den beste utgangen for en kopi: ikke en vakt som holder den i
   // sjakk, men at den ikke finnes.
 
+  it("SKILL-en viser de samme tallene", () => {
+    // ⚠️ Produkteier 2026-09-06: «Skillen trenger å kjenne både nivå og omfang, begge deler er
+    // viktige dimensjoner når man designer både opplæringsmateriell og testmateriell.»
+    //
+    // Skill-en pakkes som en zip og distribueres til flere modeller. Den kan ikke importere fra
+    // serveren, så tallene MÅ stå der — og da må de holdes i takt. En Skill som er ute av takt er
+    // verre enn de andre kopiene: den kjører hos noen andre, og vi ser ikke hva den produserer
+    // før en JSON kommer tilbake.
+    const kilde = les("../../skills/a2-authoring-api/SKILL.md");
+    const avvik: string[] = [];
+
+    for (const nivå of NIVÅER) {
+      const rader = kilde.split("\n").filter((l) => l.trim().startsWith(`| ${nivå}`));
+      if (rader.length < 2) {
+        avvik.push(`${nivå}: ventet både en kompleksitets- og en omfangsrad, fant ${rader.length}`);
+        continue;
+      }
+      const tall = rader.flatMap((r) => (r.match(/\d+/g) ?? []).map(Number));
+      for (const [navn, verdi] of [
+        ["actorsMax", LEVEL_COMPLEXITY[nivå].actorsMax],
+        ["conceptsMax", LEVEL_COMPLEXITY[nivå].conceptsMax],
+        ["tradeoffsMax", LEVEL_COMPLEXITY[nivå].tradeoffsMax],
+        ["minWords", LEVEL_SCOPE[nivå].minWords],
+        ["maxWords", LEVEL_SCOPE[nivå].maxWords],
+      ] as const) {
+        if (!tall.includes(verdi)) avvik.push(`${nivå}.${navn}=${verdi} står ikke i SKILL.md`);
+      }
+    }
+
+    expect(
+      avvik.join("\n"),
+      "SKILL.md og plattformens grenser er uenige.\n" +
+        "Skill-en kjører hos en ekstern modell og produserer innhold vi importerer — er tallene\n" +
+        "ute av takt, får vi kurs bygget mot grenser vi ikke har.\n" +
+        "Husk `npm run skill:package` og redeploy etter endring.",
+    ).toBe("");
+  });
+
   it("benchmark-skriptet bruker de samme tallene", () => {
     const kilde = les("../../scripts/run-generation-benchmark.mjs");
     const avvik: string[] = [];

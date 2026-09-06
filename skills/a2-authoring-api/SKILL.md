@@ -111,6 +111,39 @@ the three references above.
    proposed at the **Structure gate** and drafted at the **Per-element gate**; an approved figure
    is **unique content** the preservation audit (#762) must never drop. (figure-design.md.)
 
+## Level and scope
+
+Every module carries `certificationLevel`. It is not a label — the platform reads it, and it sets
+two independent things. **Agree both with the author at gate 3, before writing anything.**
+
+**Complexity** — how tangled the material may be. This follows the level, and it governs *both*
+sections and modules: a basic section explains one situation plainly; an advanced one may hold
+competing considerations.
+
+| Level | Max actors | Max concepts | Max trade-offs |
+|--------------|---|---|---|
+| basic | 1 | 2 | 0 |
+| intermediate | 2 | 3 | 1 |
+| advanced | 3 | 4 | 2 |
+
+**Scope** — how much the candidate is expected to *write* in a free-text task. This is the
+platform's default per level, and the author may override it.
+
+| Level | Expected answer |
+|--------------|------------------|
+| basic | 100–200 words |
+| intermediate | 250–450 words |
+| advanced | 400–700 words |
+
+⚠️ **Scope is not difficulty.** Writing long is not harder than being concise — often the reverse.
+A demanding question can deserve a short, precise answer. So if the author wants shorter answers at
+an advanced level, that is a legitimate choice, not a contradiction. Ask; do not assume the table.
+
+⚠️ **Sections have no length number, and you must not invent one.** The platform sets expected
+length for *answers*, not for reading material. Use the principle instead: a section should be
+proportionate to the module it prepares for. A section that prepares a candidate to write 150 words
+should not be a 3 000-word essay — the reader will not find the 150 words in it.
+
 ## Two tracks (choose by the user's opening)
 
 **Mode priority:** use `auto` **only** when the user explicitly asks for it (e.g. "auto",
@@ -131,7 +164,7 @@ is not approval of the next step.** Per-gate craft is in the playbook.
 |---|------|------------------------------|
 | 1 | **Source** | "What should this course be built on? Upload/paste material, or shall I help you search the web?" If nothing is provided: run a web search, **present the sources found, and get the author to confirm which to use** before anything is built on them. (Playbook §1.) |
 | 2 | **Learning objectives** | "From the source, I propose these objectives ('after this, a learner can …'). Are they right?" (Playbook §2.) |
-| 3 | **Structure** | "Here's the proposed structure — these modules, these sections, this order and assessment modes. Is it right?" Iterate until confirmed. (Playbook §3.) |
+| 3 | **Structure** | "Here's the proposed structure — these modules, these sections, this order and assessment modes. Is it right?" Iterate until confirmed. **Agree the certification level and the expected answer length here** — see [Level and scope](#level-and-scope); both shape what you write at gate 4. (Playbook §3.) |
 | 4 | **Each element** | One item at a time: "Here's the content for Module/Section X (task/rubric/MCQs). Approved?" → next. Never write all elements at once. (Playbook §4.) |
 | 5 | **External QA** | An independent check that the course meets the objectives — re-derive the objectives from the source in isolation, verify each is taught **and** assessed, flag gaps/overclaims. **Prefer a separate agent** (fresh context) where the environment allows it; otherwise a deliberate fresh-context pass. (Playbook §5.) |
 | 6 | **Produce** | Only with a **complete course master in final order** (rule 6): run the loss audit + localization check, build the JSON, validate, and create the drafts (or emit the round-trip-validated fallback file). (Playbook §6 + api-flow.md; rules 6–8.) |
