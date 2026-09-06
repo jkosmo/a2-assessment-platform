@@ -24,12 +24,16 @@ test.skip(!auth, `hopper over: ${reason}`);
 
 /** Flatene, med hva som skal stå der og hvor det står. */
 const FLATER = [
-  { navn: "sensorkøen", rute: "/review", beholder: "#manualReviewQueueBody" },
-  { navn: "resultatsiden", rute: "/results", beholder: "#completionBody", forbered: "#loadResults" },
-  { navn: "profilen", rute: "/profile", beholder: "#coursesBody" },
-  { navn: "fullførte moduler", rute: "/participant/completed", beholder: "#courseCertList" },
-  { navn: "admin-plattform", rute: "/admin-platform", beholder: "body" },
-  { navn: "kohortstatus", rute: "/deltakere/status", beholder: "#courseSelect" },
+  { navn: "sensorkøen", rute: "/review", beholder: "#manualReviewQueueBody", innhold: "#manualReviewQueueBody" },
+  { navn: "resultatsiden", rute: "/results", beholder: "#completionBody", forbered: "#loadResults", innhold: "#completionBody" },
+  { navn: "profilen", rute: "/profile", beholder: "#coursesBody", innhold: "#coursesBody" },
+  { navn: "fullførte moduler", rute: "/participant/completed", beholder: "#courseCertList", innhold: "#courseCertList" },
+  // ⚠️ `beholder` er `body` her fordi flaten ikke har én samlende node å vente på. Men `innhold`
+  // MÅ være smalere: `body` inneholder grensesnittets egne etiketter, som oversettes uansett om
+  // serverens innhold følger med. En påstand mot `body` ville vært grønn av rammen alene — altså
+  // nøyaktig blind for feilen #1040 beskriver.
+  { navn: "admin-plattform", rute: "/admin-platform", beholder: "body", innhold: "#failedAssessmentsBody" },
+  { navn: "kohortstatus", rute: "/deltakere/status", beholder: "#courseSelect", innhold: "#courseSelect" },
 ];
 
 async function forberedSide(page: Page) {
@@ -88,6 +92,50 @@ for (const flate of FLATER) {
     expect(feiltoaster, `røde feilmeldinger ved lasting: ${JSON.stringify(feiltoaster)}`).toEqual([]);
 
     expect(konsollfeil, `ubehandlede feil i konsollet: ${JSON.stringify(konsollfeil)}`).toEqual([]);
+  });
+
+  test(`${flate.navn}: HENTER PÅ NYTT ved språkbytte`, async ({ page }) => {
+    // ⚠️ DETTE ER PÅSTANDEN #1040 HANDLER OM. Etter #1027 avgjør SERVEREN hvilket språk innhold
+    // vises på, og den gjør det ved HENTING. En flate som bare tegner om det den allerede har,
+    // følger derfor ikke et språkbytte. Feilen er at det ikke gjøres et nytt kall.
+    //
+    // ⚠️ FØRSTE UTGAVE MÅLTE FEIL TING. Den sammenlignet beholderens TEKST før og etter byttet. På
+    // /results er innholdet en tabell med modultitler, og hver modul har én tittel på det språket
+    // den ble skrevet i — «Modul 2: Kort KS1-case» ved siden av «Module 1: Fundamental
+    // understanding». Teksten er den samme uansett språk, helt korrekt, og påstanden kunne ikke
+    // skille «hentet ikke på nytt» fra «hentet på nytt, men teksten er språkuavhengig».
+    //
+    // Å telle kall er uavhengig av hva testdataene tilfeldigvis inneholder.
+    await forberedSide(page);
+
+    const kall: string[] = [];
+    page.on("request", (r) => {
+      const u = r.url();
+      if (u.includes("/api/") && !u.includes("/participant/config")) kall.push(u);
+    });
+
+    await page.goto(`${BASE}${flate.rute}`, { waitUntil: "domcontentloaded" });
+    if (flate.forbered) await page.click(flate.forbered);
+    await expect(page.locator(flate.beholder)).not.toBeEmpty({ timeout: 20000 });
+
+    const velger = page.locator("#localeSelect");
+    if ((await velger.count()) === 0) test.skip(true, "ingen språkvelger på denne flaten");
+
+    // Kontrollcase: flaten må ha hentet noe i det hele tatt. Uten dette ville en flate som ALDRI
+    // kaller APIet bestå påstanden under ved at null forblir null.
+    expect(kall.length, "flaten skal ha hentet innhold ved lasting").toBeGreaterThan(0);
+
+    const førBytte = kall.length;
+    await velger.selectOption(await velger.inputValue() === "nb" ? "en-GB" : "nb");
+
+    await expect
+      .poll(() => kall.length - førBytte, {
+        timeout: 20000,
+        message:
+          `${flate.rute} gjorde ingen nye API-kall etter språkbytte. Da tegner flaten om det den ` +
+          "allerede har, og serverens språkvalg (#1027) når aldri fram — det er nettopp #1040.",
+      })
+      .toBeGreaterThan(0);
   });
 
   test(`${flate.navn}: språkbytte gir ikke rå JSON eller feil`, async ({ page }) => {
