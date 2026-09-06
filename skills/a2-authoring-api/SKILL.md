@@ -139,10 +139,10 @@ platform's default per level, and the author may override it.
 A demanding question can deserve a short, precise answer. So if the author wants shorter answers at
 an advanced level, that is a legitimate choice, not a contradiction. Ask; do not assume the table.
 
-⚠️ **Sections have no length number, and you must not invent one.** The platform sets expected
-length for *answers*, not for reading material. Use the principle instead: a section should be
-proportionate to the module it prepares for. A section that prepares a candidate to write 150 words
-should not be a 3 000-word essay — the reader will not find the 150 words in it.
+⚠️ **Sections have no length number, and none is coming from here.** The platform sets expected
+length for *answers*, not for reading material. How long a section should be is the author's call,
+made with you in the dialogue — they know their readers ("consultants who fit this between
+assignments" is a sharper constraint than any table). Ask, follow, and shorten on request.
 
 ## Two tracks (choose by the user's opening)
 
