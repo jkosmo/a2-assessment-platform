@@ -3835,7 +3835,7 @@ async function handleDriftShowDiff() {
   // under a language it was never written in.
   const newCriteriaRecord = llmCriteriaArrayToStorageRecord(newCriteriaArr, requestedLocale);
   const existing = bundle?.selectedConfiguration?.rubricVersion?.criteria ?? {};
-  const diff = computeCriteriaDiff(existing, newCriteriaRecord);
+  const diff = computeCriteriaDiff(existing, newCriteriaRecord, contentLocale);
 
   openDriftDiffModal(diff, newCriteriaRecord);
 }
@@ -3877,13 +3877,23 @@ function llmCriteriaArrayToStorageRecord(arr, locale) {
  * The drift diff both COMPARES and RENDERS these values, and it used `String(...)` for each — fine
  * while everything was a bare string, useless the moment a locale object appears.
  */
-function driftText(value) {
+/**
+ * #1049-oppfoelging / uttrekksplanen steg 1: spraaket sendes INN, det leses ikke fra modulen.
+ *
+ * ⚠️ Denne leste `contentLocale` — en modulnivaa-binding — og gjorde dermed BAADE
+ * `computeCriteriaDiff` og `buildDriftDiffModalHtml` urene gjennom et mellomledd.
+ * Renhetsskanneren saa det ikke, fordi den bare leser funksjonens egen tekst. Nettopp det advarer
+ * `doc/SHELL_EXTRACTION_PLAN.md` mot.
+ *
+ * Ingen atferdsendring: kallerne sender den samme `contentLocale` som foer.
+ */
+function driftText(value, locale) {
   if (value == null) return "";
   if (typeof value === "string") return value;
-  return localizeValueForLocale(value, contentLocale) ?? "";
+  return localizeValueForLocale(value, locale) ?? "";
 }
 
-function computeCriteriaDiff(existing, next) {
+function computeCriteriaDiff(existing, next, locale) {
   const existingIds = new Set(Object.keys(existing ?? {}));
   const nextIds = new Set(Object.keys(next ?? {}));
   const added = [];
@@ -3901,8 +3911,8 @@ function computeCriteriaDiff(existing, next) {
     // QA round 5: proposals are locale objects now, and `String({...})` is "[object Object]" for
     // every one of them — so two different proposals compared EQUAL and a text-only change was
     // filed as unchanged, which "accept selected" then left out. Compare the language on screen.
-    const labelChanged = driftText(a.label) !== driftText(b.label);
-    const descChanged = driftText(a.description) !== driftText(b.description);
+    const labelChanged = driftText(a.label, locale) !== driftText(b.label, locale);
+    const descChanged = driftText(a.description, locale) !== driftText(b.description, locale);
     const scoreChanged = Number(a.maxScore ?? 0) !== Number(b.maxScore ?? 0);
     const visChanged = Boolean(a.candidateVisible) !== Boolean(b.candidateVisible);
     if (labelChanged || descChanged || scoreChanged || visChanged) {
@@ -4157,7 +4167,7 @@ function openDriftDiffModal(diff, proposedRecord) {
   overlay.setAttribute("role", "dialog");
   overlay.setAttribute("aria-modal", "true");
   overlay.setAttribute("aria-labelledby", "driftDiffTitle");
-  overlay.innerHTML = buildDriftDiffModalHtml(diff);
+  overlay.innerHTML = buildDriftDiffModalHtml(diff, contentLocale);
   document.body.appendChild(overlay);
 
   // B4 a11y: focus trap + ESC handler. The trap is implemented as a Tab/Shift-Tab handler
@@ -4233,7 +4243,7 @@ function openDriftDiffModal(diff, proposedRecord) {
   initial?.focus?.();
 }
 
-function buildDriftDiffModalHtml(diff) {
+function buildDriftDiffModalHtml(diff, locale) {
   const { added, removed, changed } = diff;
   const totalChanges = added.length + removed.length + changed.length;
 
@@ -4248,25 +4258,25 @@ function buildDriftDiffModalHtml(diff) {
 
   const addedHtml = added.map(({ id, next }) => renderRow(id, "added", `
     <span class="drift-diff-row-tag drift-diff-row-tag--added">${escapeHtml(t("shell.drift.diff.added"))}</span>
-    <strong>${escapeHtml(driftText(next?.label) || id)}</strong>
-    ${driftText(next?.description) ? `<p class="drift-diff-row-desc">${escapeHtml(driftText(next.description))}</p>` : ""}
+    <strong>${escapeHtml(driftText(next?.label, locale) || id)}</strong>
+    ${driftText(next?.description, locale) ? `<p class="drift-diff-row-desc">${escapeHtml(driftText(next.description, locale))}</p>` : ""}
   `)).join("");
 
   const removedHtml = removed.map(({ id, prev }) => renderRow(id, "removed", `
     <span class="drift-diff-row-tag drift-diff-row-tag--removed">${escapeHtml(t("shell.drift.diff.removed"))}</span>
-    <strong>${escapeHtml(driftText(prev?.label) || id)}</strong>
-    ${driftText(prev?.description) ? `<p class="drift-diff-row-desc">${escapeHtml(driftText(prev.description))}</p>` : ""}
+    <strong>${escapeHtml(driftText(prev?.label, locale) || id)}</strong>
+    ${driftText(prev?.description, locale) ? `<p class="drift-diff-row-desc">${escapeHtml(driftText(prev.description, locale))}</p>` : ""}
   `)).join("");
 
   const changedHtml = changed.map(({ id, prev, next, fields }) => {
     const parts = [];
-    if (fields.labelChanged) parts.push(`<p class="drift-diff-row-fieldchange"><em>${escapeHtml(t("shell.drift.diff.label"))}:</em> <s>${escapeHtml(driftText(prev?.label))}</s> → <strong>${escapeHtml(driftText(next?.label))}</strong></p>`);
-    if (fields.descChanged) parts.push(`<p class="drift-diff-row-fieldchange"><em>${escapeHtml(t("shell.drift.diff.description"))}:</em> ${escapeHtml(driftText(next?.description))}</p>`);
+    if (fields.labelChanged) parts.push(`<p class="drift-diff-row-fieldchange"><em>${escapeHtml(t("shell.drift.diff.label"))}:</em> <s>${escapeHtml(driftText(prev?.label, locale))}</s> → <strong>${escapeHtml(driftText(next?.label, locale))}</strong></p>`);
+    if (fields.descChanged) parts.push(`<p class="drift-diff-row-fieldchange"><em>${escapeHtml(t("shell.drift.diff.description"))}:</em> ${escapeHtml(driftText(next?.description, locale))}</p>`);
     if (fields.scoreChanged) parts.push(`<p class="drift-diff-row-fieldchange"><em>${escapeHtml(t("shell.drift.diff.maxScore"))}:</em> ${escapeHtml(String(prev?.maxScore ?? ""))} → ${escapeHtml(String(next?.maxScore ?? ""))}</p>`);
     if (fields.visChanged) parts.push(`<p class="drift-diff-row-fieldchange"><em>${escapeHtml(t("shell.drift.diff.candidateVisible"))}:</em> ${Boolean(prev?.candidateVisible) ? "✓" : "—"} → ${Boolean(next?.candidateVisible) ? "✓" : "—"}</p>`);
     return renderRow(id, "changed", `
       <span class="drift-diff-row-tag drift-diff-row-tag--changed">${escapeHtml(t("shell.drift.diff.changed"))}</span>
-      <strong>${escapeHtml(driftText(next?.label) || id)}</strong>
+      <strong>${escapeHtml(driftText(next?.label, locale) || id)}</strong>
       ${parts.join("")}
     `);
   }).join("");
