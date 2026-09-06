@@ -45,6 +45,8 @@ import {
   applyMcqTranslation,
   dropMcqQuestionLocale,
   mcqCorrectAnswerIndexes,
+  normalizeModuleTitlePatch,
+  strictLocaleValue,
 } from "/static/admin-content-localized-copy.js";
 import {
   buildExternalLlmAuthoringPrompt,
@@ -1514,29 +1516,6 @@ function buildLocalizedTextMap(baseLocale, baseText, translatedEntries = {}) {
   return result;
 }
 
-function normalizeModuleTitlePatch(title) {
-  if (!title) return null;
-  if (typeof title === "string") {
-    const normalized = title.trim();
-    if (!normalized) return null;
-    // #892: en uoversatt tittel sendes som streng. Tidligere fylte buildLocalizedTextMap alle tre
-    // språk med samme tekst, som fikk tittelen til å se oversatt ut og skjulte at den ikke var det.
-    // Utkast som FAKTISK er oversatt kommer hit som objekt (localizeDraftAcrossLocales) og merges.
-    return normalized;
-  }
-  if (typeof title !== "object") {
-    return null;
-  }
-
-  const normalized = {};
-  for (const locale of supportedLocales) {
-    const value = title?.[locale];
-    if (typeof value === "string" && value.trim()) {
-      normalized[locale] = value.trim();
-    }
-  }
-  return Object.keys(normalized).length > 0 ? normalized : null;
-}
 
 /**
  * #982: en oversettelse som ikke kom, skal se ut som en oversettelse som ikke kom.
@@ -2621,24 +2600,6 @@ async function saveDraftBundleInBackground(options = {}) {
 // #896 S4: which locale a value ACTUALLY has, with no fallback. localizeValueForLocale falls
 // back to nb/en-GB by design so the preview is never blank — exactly wrong when the question is
 // "is this locale missing?", because the fallback answers "no" for every locale.
-function strictLocaleValue(value, locale) {
-  if (!value) return "";
-  let parsed = value;
-  if (typeof parsed === "string") {
-    try {
-      const maybe = JSON.parse(parsed);
-      parsed = maybe && typeof maybe === "object" && !Array.isArray(maybe) ? maybe : null;
-    } catch {
-      // A plain string is written in one language. It belongs to no locale in particular, so
-      // the caller decides what the source locale is — it is not "present" under any of them.
-      parsed = null;
-    }
-    if (parsed === null) return "";
-  }
-  if (typeof parsed !== "object" || Array.isArray(parsed)) return "";
-  const candidate = parsed[locale];
-  return typeof candidate === "string" ? candidate : "";
-}
 
 // The stored value read as one language.
 //

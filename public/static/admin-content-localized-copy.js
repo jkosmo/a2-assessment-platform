@@ -1,3 +1,5 @@
+import { supportedLocales } from "/static/i18n/admin-content-translations.js";
+
 /**
  * #982: hva en KOPI skal si om innholdets oversettelsesstatus.
  *
@@ -163,4 +165,53 @@ export function applyMcqTranslation(localizedQuestions, translatedQuestions, { t
     });
     lokalisert.correctAnswer[targetLocale] = oversatteAlternativer[svarplass];
   });
+}
+
+/**
+ * Uttrekksplanen steg 3: de to normalisererne som handler om SEMANTIKKEN i lagret flerspråklig
+ * tekst. De hører hjemme her, sammen med resten av reglene om hva et delvis oversatt felt betyr —
+ * ikke i en 7 700-linjers skallfil der de bare var nådd gjennom e2e.
+ */
+
+export function normalizeModuleTitlePatch(title) {
+  if (!title) return null;
+  if (typeof title === "string") {
+    const normalized = title.trim();
+    if (!normalized) return null;
+    // #892: en uoversatt tittel sendes som streng. Tidligere fylte buildLocalizedTextMap alle tre
+    // språk med samme tekst, som fikk tittelen til å se oversatt ut og skjulte at den ikke var det.
+    // Utkast som FAKTISK er oversatt kommer hit som objekt (localizeDraftAcrossLocales) og merges.
+    return normalized;
+  }
+  if (typeof title !== "object") {
+    return null;
+  }
+
+  const normalized = {};
+  for (const locale of supportedLocales) {
+    const value = title?.[locale];
+    if (typeof value === "string" && value.trim()) {
+      normalized[locale] = value.trim();
+    }
+  }
+  return Object.keys(normalized).length > 0 ? normalized : null;
+}
+
+export function strictLocaleValue(value, locale) {
+  if (!value) return "";
+  let parsed = value;
+  if (typeof parsed === "string") {
+    try {
+      const maybe = JSON.parse(parsed);
+      parsed = maybe && typeof maybe === "object" && !Array.isArray(maybe) ? maybe : null;
+    } catch {
+      // A plain string is written in one language. It belongs to no locale in particular, so
+      // the caller decides what the source locale is — it is not "present" under any of them.
+      parsed = null;
+    }
+    if (parsed === null) return "";
+  }
+  if (typeof parsed !== "object" || Array.isArray(parsed)) return "";
+  const candidate = parsed[locale];
+  return typeof candidate === "string" ? candidate : "";
 }
