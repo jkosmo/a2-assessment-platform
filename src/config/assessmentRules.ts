@@ -67,6 +67,19 @@ export const rulesSchema = z.object({
       evidenceSufficiencyDescriptions: {},
       canonicalRedFlags: {},
     }),
+  // #1048: når «det er ikke nok her» skal vinne over «et menneske bør se på den».
+  //
+  // ⚠️ Produkteier 2026-09-06: automatisk stryk er UNNTAKET, og må begrunnes med et målbart faktum.
+  // Andelen er av forventet minimum (modulens eget omfang, ellers nivåets standard). 0,5 betyr
+  // «under halvparten av det som var ventet».
+  //
+  // En besvarelse på 40 ord der 100 var ventet er noe annet enn 280 der 300 var ventet, og det er
+  // grunnen til at dette er en ANDEL og ikke et fast ordtall.
+  insufficientEvidence: z
+    .object({
+      autoFailBelowScopeRatio: z.number().min(0).max(1).default(0.5),
+    })
+    .default({ autoFailBelowScopeRatio: 0.5 }),
   mcqQuality: z
     .object({
       minAttemptCount: z.number().int().positive().default(5),

@@ -125,6 +125,11 @@ vi.mock("../../src/config/assessmentRules.js", () => ({
   getAssessmentRules: () => ({
     thresholds: { totalMin: 60, practicalMinPercent: 40, mcqMinPercent: 60 },
     weights: { practicalMaxScore: 50 },
+    // ⚠️ #1048: mocken må speile skjemaet. Uten denne seksjonen leser vedtaket `undefined` og
+    // kaster — og testen feiler med «Cannot read properties of undefined» i stedet for den
+    // databasefeilen den faktisk måler. Samme felle som en mock uten `boundaryInputs` i
+    // assessment-evaluator: en mock som ikke speiler modulen, måler noe annet enn den tror.
+    insufficientEvidence: { autoFailBelowScopeRatio: 0.5 },
     manualReview: {
       borderlineWindow: { min: 55, max: 59 },
       redFlagSeverities: ["HIGH", "CRITICAL"],

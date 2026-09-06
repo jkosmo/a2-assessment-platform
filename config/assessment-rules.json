@@ -158,5 +158,8 @@
       "shadowMode": true,
       "similarityThreshold": 0.82
     }
+  },
+  "insufficientEvidence": {
+    "autoFailBelowScopeRatio": 0.5
   }
 }

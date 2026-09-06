@@ -1,3 +1,5 @@
+import { localizedTextCodec } from "../../codecs/localizedTextCodec.js";
+import { LEVEL_SCOPE } from "../adminContent/llmContentGenerationService.js";
 import { resolveAssessmentDecision } from "./decisionService.js";
 import { SubmissionStatus } from "../../db/prismaRuntime.js";
 import { assessmentJobRepository } from "./assessmentJobRepository.js";
@@ -28,6 +30,32 @@ import {
 } from "./AssessmentJobRunner.js";
 
 export { enqueueAssessmentJob } from "./AssessmentJobRunner.js";
+
+/** #1048: ord i besvarelsen. `null` når det ikke er noe å telle — da kan vi ikke begrunne unntaket. */
+function tellOrd(tekst: string): number | null {
+  const ord = tekst.trim().split(/\s+/).filter(Boolean);
+  return ord.length > 0 ? ord.length : null;
+}
+
+/**
+ * #1048: forventet minimum for denne modulen.
+ *
+ * Modulens eget omfang (#1049) vinner. Ellers nivåets standard — men BARE når nivået er en av de
+ * tre kjente. Importert innhold kan bære et hvilket som helst nivånavn, og å gjette på et av våre
+ * for et ukjent ville gitt et tall vi ikke kan stå inne for.
+ *
+ * `null` betyr «ingen forventning», og da vinner mennesket.
+ */
+function resolveExpectedMinWords(modul: {
+  scopeMinWords?: number | null;
+  certificationLevel?: string | null;
+}): number | null {
+  if (typeof modul.scopeMinWords === "number" && modul.scopeMinWords > 0) return modul.scopeMinWords;
+  const rå = localizedTextCodec.parse(modul.certificationLevel ?? null);
+  const nivå = (typeof rå === "string" ? rå : Object.values(rå ?? {}).find(Boolean) ?? "").trim().toLowerCase();
+  if (nivå !== "basic" && nivå !== "intermediate" && nivå !== "advanced") return null;
+  return LEVEL_SCOPE[nivå].minWords;
+}
 
 export async function processAssessmentJobsNow(maxJobs = 1) {
   return runnerProcessAssessmentJobsNow(runAssessment, maxJobs);
@@ -211,7 +239,18 @@ async function runAssessment(
   const aiInfluence = aiOutcome.decision;
   const aiInfluenceJson = aiOutcome.signalsJson;
 
+  // #1048: tallene automatisk stryk må begrunnes med. Begge finnes allerede her — svarteksten
+  // hentes tre linjer over til innholdslikhet, og hele modulraden er lastet.
+  //
+  // ⚠️ Nivåets standard brukes bare når modulen ikke har sitt eget omfang (#1049), og bare når
+  // nivået faktisk er en av de tre kjente. Er det noe annet — importert innhold bærer det det
+  // bærer — får vi ingen forventning, og da vinner mennesket.
+  const svarOrd = tellOrd(extractAnswerText(JSON.parse(submission.responseJson) as Record<string, unknown>));
+  const forventetMin = resolveExpectedMinWords(submission.moduleVersion.module);
+
   await applyAssessmentDecision({
+    answerWordCount: svarOrd,
+    expectedMinWords: forventetMin,
     jobId,
     fence,
     submissionId: submission.id,

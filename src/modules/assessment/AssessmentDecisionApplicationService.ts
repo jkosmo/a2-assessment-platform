@@ -27,6 +27,9 @@ type ApplyDecisionInput = {
   rubricCriteriaIds: string[];
   /** #578: FREETEXT_ONLY — practical/LLM-only scoring, no MCQ component. */
   freetextOnly?: boolean;
+  /** #1048: tallene automatisk stryk må begrunnes med. `null` = kan ikke måles, og da vinner mennesket. */
+  answerWordCount?: number | null;
+  expectedMinWords?: number | null;
   /** #475: AI-influence review trigger (undefined = no trigger). Routes to review, never fails. */
   aiInfluence?: AiInfluenceDecision;
   /** #475 Phase 2: computed AI-influence signals JSON persisted on the decision (null when none). */
@@ -65,6 +68,8 @@ export async function applyAssessmentDecision(input: ApplyDecisionInput): Promis
     rubricMaxTotal: input.rubricMaxTotal,
     rubricCriteriaIds: input.rubricCriteriaIds,
     freetextOnly: input.freetextOnly,
+    answerWordCount: input.answerWordCount,
+    expectedMinWords: input.expectedMinWords,
     aiInfluence: input.aiInfluence,
     aiInfluenceJson: input.aiInfluenceJson,
   });

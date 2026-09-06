@@ -52,6 +52,10 @@ type BuildDecisionInput = {
   // #578: FREETEXT_ONLY — practical/LLM-only scoring, no MCQ component. The rubric score spans the
   // full 0–100 and there is no MCQ gate.
   freetextOnly?: boolean;
+  /** #1048: antall ord i besvarelsen. `null` når den ikke lot seg måle. */
+  answerWordCount?: number | null;
+  /** #1048: modulens eget omfang (#1049), ellers nivåets standard. `null` når ingen finnes. */
+  expectedMinWords?: number | null;
   // #475: AI-influence review trigger. When present with forcesReview, routes to UNDER_REVIEW —
   // NEVER contributes to a FAIL (feeds `needsManualReview` only). Computed upstream from the
   // participant's AI-use declaration + content-similarity; see aiInfluence.ts.
@@ -78,8 +82,28 @@ export type ResolvedAssessmentDecision = {
 
 type ResolveAssessmentDecisionInput = Pick<
   BuildDecisionInput,
-  "mcqScaledScore" | "mcqPercentScore" | "llmResult" | "forceManualReviewReason" | "assessmentPolicy" | "rubricMaxTotal" | "rubricCriteriaIds" | "freetextOnly" | "aiInfluence"
+  "mcqScaledScore" | "mcqPercentScore" | "llmResult" | "forceManualReviewReason" | "assessmentPolicy" | "rubricMaxTotal" | "rubricCriteriaIds" | "freetextOnly" | "aiInfluence" | "answerWordCount" | "expectedMinWords"
 >;
+
+/**
+ * #1048: er besvarelsen vesentlig kortere enn det oppgaven ba om?
+ *
+ * ⚠️ Returnerer `false` når vi ikke kan måle — uten svarlengde eller uten forventet minimum finnes
+ * ikke faktumet som skal begrunne automatisk stryk. `false` betyr da «mennesket vinner», som er
+ * hovedregelen og retningen i kandidatens favør.
+ *
+ * Andelen er av det forventede minimumet, ikke et fast ordtall: 40 ord der 100 var ventet er noe
+ * helt annet enn 280 der 300 var ventet.
+ */
+export function isSubstantiallyShort(
+  answerWordCount: number | null | undefined,
+  expectedMinWords: number | null | undefined,
+  ratio: number,
+): boolean {
+  if (typeof answerWordCount !== "number" || typeof expectedMinWords !== "number") return false;
+  if (expectedMinWords <= 0) return false;
+  return answerWordCount < expectedMinWords * ratio;
+}
 
 export function resolveAssessmentDecision(input: ResolveAssessmentDecisionInput): ResolvedAssessmentDecision {
   const rules = getAssessmentRules();
@@ -139,11 +163,39 @@ export function resolveAssessmentDecision(input: ResolveAssessmentDecisionInput)
 
   const llmRecommendsManualReview = recommendsManualReview(input.llmResult);
 
+  // #1048: modellens anmodning om et MENNESKE er hovedregelen. Automatisk stryk er unntaket, og
+  // unntaket må begrunnes med et målbart faktum: at besvarelsen er vesentlig kortere enn ventet.
+  //
+  // ⚠️ MÅLT PROBLEM. 21 av 78 ekte vurderinger på stage ba om menneskelig vurdering. Null nådde en
+  // sensor — alle 21 ble automatisk strøket. Modellen sier to ting samtidig, «det var for lite her»
+  // og «et menneske bør se på dette», og vi hørte bare det ene.
+  //
+  // ⚠️ ENDRINGEN KAN BARE GÅ ÉN VEI. Betingelsen er den gamle OG den nye; en `&&` kan bare gjøre
+  // mengden mindre. Uansett hvilket minimum en forfatter setter, kan resultatet aldri bli strengere
+  // enn før — bare mildere. Derfor trenger dette ingen egen aktivering.
+  //
+  // ⚠️ KAN VI IKKE MÅLE, VINNER MENNESKET. Uten forventet minimum eller uten svarlengde finnes ikke
+  // faktumet som skal begrunne unntaket, og da står hovedregelen.
+  const vesentligForKort = isSubstantiallyShort(
+    input.answerWordCount,
+    input.expectedMinWords,
+    rules.insufficientEvidence.autoFailBelowScopeRatio,
+  );
+
   const autoFailForInsufficientEvidence =
     !input.forceManualReviewReason &&
     !hasOpenRedFlag &&
     !passesThresholds &&
-    (hasInsufficientEvidenceSignal(input.llmResult) || hasOnlyInsufficientEvidenceFlags);
+    (hasInsufficientEvidenceSignal(input.llmResult) || hasOnlyInsufficientEvidenceFlags) &&
+    // ⚠️ LENGDEKRAVET GJELDER BARE NÅR DET ER EN KONFLIKT Å LØSE. Ba ikke modellen om et menneske,
+    // finnes ingen anmodning å overstyre, og auto-stryk står som før.
+    //
+    // Første utgave manglet denne betingelsen og gjaldt alltid. Integrasjonssuiten avslørte det:
+    // seks policy-tester der modellen IKKE hadde bedt om et menneske gikk fra COMPLETED til
+    // UNDER_REVIEW, bare fordi modulen manglet et nivå og vi derfor ikke kunne måle. Det ville
+    // sendt saker til sensor uten at noen hadde bedt om det — en helt annen endring enn den
+    // produkteier beskrev.
+    (!llmRecommendsManualReview || vesentligForKort);
 
   // v1.2.20 (#464): borderline-window — totalScore i [min, max] router til manuell
   // vurdering. Overstyrer auto-pass selv om threshold-rules ellers passerer. Brukes til

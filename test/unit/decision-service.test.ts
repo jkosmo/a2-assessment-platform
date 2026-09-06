@@ -102,6 +102,8 @@ describe("decision service", () => {
     const { createAssessmentDecision } = await import("../../src/modules/assessment/decisionService.js");
 
     const result = await createAssessmentDecision({ jobId: "job-fence", fence: { lockedBy: "worker-test", lockedAt: new Date(0) },
+      answerWordCount: 20,
+      expectedMinWords: 100,
       submissionId: "submission-1",
       userId: "user-1",
       moduleVersionId: "module-version-1",
@@ -158,6 +160,8 @@ describe("decision service", () => {
     const { createAssessmentDecision } = await import("../../src/modules/assessment/decisionService.js");
 
     const result = await createAssessmentDecision({ jobId: "job-fence", fence: { lockedBy: "worker-test", lockedAt: new Date(0) },
+      answerWordCount: 20,
+      expectedMinWords: 100,
       submissionId: "submission-2",
       userId: "user-2",
       moduleVersionId: "module-version-2",
@@ -213,6 +217,9 @@ describe("decision service", () => {
     });
   });
 
+  // ⚠️ #1048: denne krever nå at besvarelsen er VESENTLIG for kort. Automatisk stryk er ikke lenger
+  // noe som følger av signalet alene — det må begrunnes med et målbart faktum. Testen sender derfor
+  // 20 ord der 100 var ventet; uten de tallene ville mennesket vunnet, som er den nye hovedregelen.
   it("fails automatically when confidence indicates insufficient evidence without other review triggers", async () => {
     assessmentDecisionCreate.mockResolvedValue({
       id: "decision-3",
@@ -224,6 +231,8 @@ describe("decision service", () => {
     const { createAssessmentDecision } = await import("../../src/modules/assessment/decisionService.js");
 
     const result = await createAssessmentDecision({ jobId: "job-fence", fence: { lockedBy: "worker-test", lockedAt: new Date(0) },
+      answerWordCount: 20,
+      expectedMinWords: 100,
       submissionId: "submission-3",
       userId: "user-3",
       moduleVersionId: "module-version-3",
@@ -288,6 +297,8 @@ describe("decision service", () => {
     const { createAssessmentDecision } = await import("../../src/modules/assessment/decisionService.js");
 
     const result = await createAssessmentDecision({ jobId: "job-fence", fence: { lockedBy: "worker-test", lockedAt: new Date(0) },
+      answerWordCount: 20,
+      expectedMinWords: 100,
       submissionId: "submission-4",
       userId: "user-4",
       moduleVersionId: "module-version-4",
@@ -334,6 +345,8 @@ describe("decision service", () => {
     const { createAssessmentDecision } = await import("../../src/modules/assessment/decisionService.js");
 
     const result = await createAssessmentDecision({ jobId: "job-fence", fence: { lockedBy: "worker-test", lockedAt: new Date(0) },
+      answerWordCount: 20,
+      expectedMinWords: 100,
       submissionId: "submission-4b",
       userId: "user-4b",
       moduleVersionId: "module-version-4b",
@@ -389,6 +402,8 @@ describe("decision service", () => {
     const { createAssessmentDecision } = await import("../../src/modules/assessment/decisionService.js");
 
     const result = await createAssessmentDecision({ jobId: "job-fence", fence: { lockedBy: "worker-test", lockedAt: new Date(0) },
+      answerWordCount: 20,
+      expectedMinWords: 100,
       submissionId: "submission-4c",
       userId: "user-4c",
       moduleVersionId: "module-version-4c",
@@ -439,6 +454,8 @@ describe("decision service", () => {
     const { createAssessmentDecision } = await import("../../src/modules/assessment/decisionService.js");
 
     const result = await createAssessmentDecision({ jobId: "job-fence", fence: { lockedBy: "worker-test", lockedAt: new Date(0) },
+      answerWordCount: 20,
+      expectedMinWords: 100,
       submissionId: "submission-5",
       userId: "user-5",
       moduleVersionId: "module-version-5",
@@ -487,6 +504,8 @@ describe("decision service", () => {
     const { createAssessmentDecision } = await import("../../src/modules/assessment/decisionService.js");
 
     const result = await createAssessmentDecision({ jobId: "job-fence", fence: { lockedBy: "worker-test", lockedAt: new Date(0) },
+      answerWordCount: 20,
+      expectedMinWords: 100,
       submissionId: "submission-6",
       userId: "user-6",
       moduleVersionId: "module-version-6",
@@ -902,6 +921,11 @@ describe("decision service", () => {
       const result = resolveAssessmentDecision({
         mcqScaledScore: 0,
         mcqPercentScore: 0,
+        // ⚠️ #1048: automatisk stryk krever nå et målbart faktum — at besvarelsen er vesentlig
+        // kortere enn ventet. 15 av 100 ord. Uten tallene ville mennesket vunnet, som er den nye
+        // hovedregelen, og denne begrunnelsen ville aldri oppstått.
+        answerWordCount: 15,
+        expectedMinWords: 100,
         llmResult: buildLlmResult({
           rubric_scores: { relevance_for_case: 0, quality_and_utility: 0, iteration_and_improvement: 0, human_quality_assurance: 0, responsible_use: 0 },
           rubric_total: 0,
@@ -932,6 +956,8 @@ describe("decision service", () => {
     const { createAssessmentDecision } = await import("../../src/modules/assessment/decisionService.js");
 
     const result = await createAssessmentDecision({ jobId: "job-fence", fence: { lockedBy: "worker-test", lockedAt: new Date(0) },
+      answerWordCount: 20,
+      expectedMinWords: 100,
       submissionId: "submission-7",
       userId: "user-7",
       moduleVersionId: "module-version-7",
