@@ -79,7 +79,9 @@ const RENDER_BASELINE = {
   // #1046: begge nede fra 2 til NULL. Reserven på profilsiden var dessuten hardkodet engelsk
   // («Error», «Error downloading data») i et grensesnitt som ellers er oversatt.
   // Kaster videre en lokal parse-feil; teksten er vår egen, ikke serverens.
-  "static/admin-content-external-llm.js": 1,
+  // Fjernet 2026-09-06: hele kopier-prompt-veien for ekstern LLM er slettet. Bruk av ekstern LLM
+  // skjer gjennom Skill-en, og to måter å gjøre det samme på er én for mange (produkteier).
+  // Baselinen går ned fordi fila er borte, ikke fordi noen ryddet i den.
 };
 // 37 til sammen, per 2026-08-23. Restene er #983 (deltaker/resultat/profil) og admin-platform.
 

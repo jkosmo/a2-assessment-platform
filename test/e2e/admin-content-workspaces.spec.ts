@@ -1293,55 +1293,14 @@ test.describe("admin content browser coverage", () => {
     expect(Object.keys(state.lastModuleCreateBody.title)).toEqual(["en-GB"]);
   });
 
-  // #918, third creation path. This is the one where the lie survives all the way to the publish
-  // gate: the other two put a bare string in `sessionDraft.title`, so the first save corrects the
-  // module row. The import put the tri-locale map there too, and `normalizeModuleTitlePatch` passed
-  // it on to the save — the gate reads that value, saw three locales, and let the module publish.
-  test("an external-LLM import carries the title's real language through to the save", async ({ page }) => {
-    const state = await mockCommonApis(page);
-
-    const importJson = (title: unknown) => JSON.stringify({
-      module: { title, certificationLevel: "basic" },
-      moduleVersion: {
-        taskText: "Handle a reported security incident from first alert to closure.",
-        assessorExpectedContent: "A strong answer names containment, escalation and reporting.",
-      },
-      mcqSet: {
-        questions: [
-          {
-            stem: "Who must be notified first?",
-            options: ["The duty officer", "The press"],
-            correctAnswer: "The duty officer",
-            rationale: "Escalation starts with the duty officer.",
-          },
-        ],
-      },
-    });
-
-    const runImport = async (payload: string) => {
-      await page.goto("/admin-content.html");
-      await clickEnabledButton(page, "Create new module");
-      await submitActiveChatInput(page, "Ignored — the import carries its own title");
-      await clickEnabledButton(page, "Use external LLM");
-      await page.locator("#externalLlmJsonInput").fill(payload);
-      await page.locator('[data-ext-action="import"]').click();
-      await expect(page.getByText("Module imported.")).toBeVisible();
-    };
-
-    await runImport(importJson("Incident response"));
-    expect(state.lastModuleCreateBody.title).toEqual({ "en-GB": "Incident response" });
-
-    await clickEnabledButton(page, "Save draft");
-    // The value the publish gate reads. Three identical copies here is the module telling the gate
-    // it is translated; a bare string is it admitting it is not.
-    await expect.poll(() => state.lastModuleVersionBody?.title).toBe("Incident response");
-
-    // The caveat that makes this a merge and not a downgrade: an import MAY carry a real
-    // translation, and a locale object must pass through untouched rather than being flattened.
-    const translated = { "en-GB": "Incident response", nb: "Hendelseshåndtering", nn: "Hendingshandtering" };
-    await runImport(importJson(translated));
-    expect(state.lastModuleCreateBody.title).toEqual(translated);
-  });
+  // ⚠️ HER STO «#918, third creation path» — importen fra ekstern LLM.
+  //
+  // Den veien er fjernet 2026-09-06: bruk av ekstern LLM skjer gjennom Skill-en, og to måter å
+  // gjøre det samme på er én for mange (produkteier). Testen dekket en flate som ikke finnes.
+  //
+  // Regelen den voktet lever videre, og på et bedre nivå: `normalizeModuleTitlePatch` ble trukket
+  // ut til admin-content-localized-copy.js og har nå tolv enhetstester, blant dem den som låser at
+  // en uoversatt tittel BLIR VÆRENDE en streng i stedet for tre like kopier.
 
   // #927 (#896 §11): the last uncovered finish criterion — an e2e that follows the NEW-MODULE
   // journey end to end through the tab surface, not just "create and save".

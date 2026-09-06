@@ -6,21 +6,15 @@ import { LEVEL_COMPLEXITY, LEVEL_SCOPE } from "../../src/modules/adminContent/ll
 // ─────────────────────────────────────────────────────────────────────────────
 // VAKT (#1049): grensene per nivå finnes FLERE steder, og de skal si det samme.
 //
-// `LEVEL_COMPLEXITY` og `LEVEL_SCOPE` er kilden. Men to kopier kan ikke fjernes:
+// `LEVEL_COMPLEXITY` og `LEVEL_SCOPE` er kilden. Én kopi kan ikke fjernes:
+// `scripts/run-generation-benchmark.mjs` er et frittstående skript og må bære tallene selv.
 //
-//   `public/static/admin-content-external-llm.js`  bygger prompten forfatteren limer inn i en
-//                                                  ekstern modell. Den er modul-uavhengig — modellen
-//                                                  velger nivå selv — så hele tabellen må stå der,
-//                                                  og den kjører i nettleseren uten tilgang til
-//                                                  serverens TypeScript.
-//   `scripts/run-generation-benchmark.mjs`         er et frittstående skript.
+// ⚠️ DA DENNE SAKEN STARTET STO TALLENE TO STEDER. Undersøkelsen fant et tredje, produkteier minnet
+// om et fjerde, og det fjerde viste seg å være en hel forfatterVEI fra førsteversjonen — en knapp
+// som kopierte en prompt med hele tabellen. Den er nå fjernet, og kopien forsvant med den.
 //
-// ⚠️ HVORFOR DETTE ER EN VAKT OG IKKE EN OPPRYDDING. Da denne saken startet sto tallene to steder;
-// undersøkelsen fant et tredje, og produkteier minnet om et fjerde. Hver kopi er skrevet i god tro,
-// og hver av dem er usynlig for de andre. En endring i kilden ville ikke nådd dem — modellen ville
-// fått motstridende grenser, og vi ville ikke visst hvilken den fulgte.
-//
-// Vakta krever ikke at kopiene forsvinner. Den krever at de er ENIGE.
+// Det er den beste utgangen for en kopi: ikke en vakt som holder den i sjakk, men at den ikke
+// finnes. Vakta står igjen for de kopiene vi faktisk må leve med.
 // ─────────────────────────────────────────────────────────────────────────────
 
 const les = (rel: string) => readFileSync(fileURLToPath(new URL(rel, import.meta.url)), "utf8");
@@ -37,41 +31,14 @@ describe("#1049 — kopiene av nivågrensene er enige med kilden", () => {
     }
   });
 
-  it("den eksterne LLM-prompten viser de samme tallene", () => {
-    const kilde = les("../../public/static/admin-content-external-llm.js");
-    const avvik: string[] = [];
-
-    for (const nivå of NIVÅER) {
-      const c = LEVEL_COMPLEXITY[nivå];
-      const s = LEVEL_SCOPE[nivå];
-      // Raden slik den står i markdown-tabellen i prompten.
-      const rad = kilde
-        .split("\n")
-        .find((l) => l.trim().startsWith(`| ${nivå}`) || l.trim().startsWith(`|${nivå}`));
-
-      if (!rad) {
-        avvik.push(`${nivå}: fant ingen rad i tabellen`);
-        continue;
-      }
-      const tall = (rad.match(/\d+/g) ?? []).map(Number);
-      for (const [navn, verdi] of [
-        ["actorsMax", c.actorsMax],
-        ["conceptsMax", c.conceptsMax],
-        ["tradeoffsMax", c.tradeoffsMax],
-        ["minWords", s.minWords],
-        ["maxWords", s.maxWords],
-      ] as const) {
-        if (!tall.includes(verdi)) avvik.push(`${nivå}.${navn}=${verdi} står ikke i raden: ${rad.trim()}`);
-      }
-    }
-
-    expect(
-      avvik.join("\n"),
-      "Den eksterne prompten og LEVEL_COMPLEXITY/LEVEL_SCOPE er uenige.\n" +
-        "Forfatteren limer den prompten inn i en ekstern modell, så uenigheten gir et utkast\n" +
-        "bygget mot andre grenser enn plattformens egne — uten at noe sier fra.",
-    ).toBe("");
-  });
+  // ⚠️ HER STO EN PÅSTAND OM `public/static/admin-content-external-llm.js`.
+  //
+  // Den fila hadde en femte kopi av tabellen: prompten forfatteren kopierte og limte inn i en
+  // ekstern modell. Hele den veien er fjernet 2026-09-06 — bruk av ekstern LLM skjer gjennom
+  // Skill-en, og to måter å gjøre det samme på er én for mange (produkteier).
+  //
+  // Kopien forsvant med den. Det er den beste utgangen for en kopi: ikke en vakt som holder den i
+  // sjakk, men at den ikke finnes.
 
   it("benchmark-skriptet bruker de samme tallene", () => {
     const kilde = les("../../scripts/run-generation-benchmark.mjs");
