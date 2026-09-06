@@ -315,7 +315,26 @@ test.describe("utrullet stage — reelle data", () => {
       `${BASE}/api/admin/content/sections/not-a-real-section-id/export-package`,
       { headers: headers() },
     );
-    // Enten «finnes ikke» eller «ikke din» — men aldri 200, og aldri 500.
-    expect([403, 404]).toContain(bogus.status());
+    // ⚠️ 429 ER OGSÅ ET AVSLAG, og suiten framkaller det selv.
+    //
+    // Testen sto rød etter en full kjøring 2026-09-06: den ventet 403/404 og fikk 429, fordi
+    // suiten på det tidspunktet hadde brukt opp sin egen ratebegrensningskvote. Endepunktet gjorde
+    // nøyaktig det den skal — det avviste — men med en annen kode.
+    //
+    // Det som faktisk skal håndheves er at tull ALDRI gir 200 og ALDRI gir 500: ingen data ut, og
+    // ingen krasj. Å låse svaret til to koder gjorde at en rød test betydde «suiten er sliten»
+    // like ofte som «vakta er borte» — og en port man må tolke er ikke en port.
+    const status = bogus.status();
+    expect(
+      [403, 404, 429],
+      `tull-id ga ${status}. 200 = data lekket ut, 500 = krasj; begge er ekte feil.`,
+    ).toContain(status);
+
+    // ⚠️ Og kontrollen på at avslaget er ekte: uansett kode skal det ikke følge en kropp med
+    // eksportinnhold. Uten denne ville en 403 med full pakke i kroppen sett grønn ut.
+    if (status !== 429) {
+      const kropp = await bogus.text();
+      expect(kropp, "et avslag skal ikke bære eksportinnhold").not.toContain("\"sections\"");
+    }
   });
 });
