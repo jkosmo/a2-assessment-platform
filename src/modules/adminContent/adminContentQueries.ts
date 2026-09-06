@@ -170,6 +170,9 @@ export async function getModuleContentBundle(moduleId: string) {
       validFrom: module.validFrom,
       validTo: module.validTo,
       activeVersionId: module.activeVersionId,
+      // #955: bunten bar ikke arkivstatus videre, så publiseringsruta kunne ikke håndheve
+      // invarianten «arkivert men publisert oppstår aldri» — fire andre steder gjorde det.
+      archivedAt: module.archivedAt,
       createdAt: module.createdAt,
       updatedAt: module.updatedAt,
     },

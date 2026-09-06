@@ -250,6 +250,9 @@ export function createAdminContentRepository(client: AdminContentRepositoryClien
           validFrom: true,
           validTo: true,
           activeVersionId: true,
+          // #955: uten dette KAN publiseringsruta ikke sjekke arkivstatus, og invarianten
+          // «arkivert men publisert oppstår aldri» var uhåndhevbar der.
+          archivedAt: true,
           createdAt: true,
           updatedAt: true,
           versions: {

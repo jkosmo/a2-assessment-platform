@@ -936,6 +936,25 @@ adminContentRouter.post("/modules/:moduleId/module-versions/:moduleVersionId/pub
       validation.issues.push(...translationIssues);
       validation.valid = false;
     }
+
+    // #955: I3 — «arkivert men publisert» skal aldri finnes.
+    //
+    // ⚠️ Fire andre steder håndhevet dette; denne ruta gjorde det ikke, og KUNNE ikke:
+    // `findModuleContentBundle` selekterte ikke `archivedAt`. Uten sjekken kunne man arkivere en
+    // modul (som nullstiller `activeVersionId`) og så publisere en versjon direkte her. Da ser
+    // `evaluateModule` en aktiv versjon, melder `publishable: true`, og utelater modulen fra
+    // kursets `unpublishedItems` — kurset publiseres uten kaskade, og deltakeren møter en blindvei.
+    //
+    // Samme kode som de fire andre stedene bruker, så klienten kan vise den samme setningen (#914).
+    if (bundle.module.archivedAt) {
+      validation.issues.push({
+        severity: "blocking",
+        code: "item_archived",
+        message: "Modulen er arkivert. Gjenopprett den før du publiserer.",
+        params: { itemType: "module" },
+      });
+      validation.valid = false;
+    }
     if (!validation.valid) {
       response.status(422).json({
         error: "publish_blocked_by_validation",
