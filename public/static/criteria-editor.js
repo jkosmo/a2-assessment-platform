@@ -199,3 +199,74 @@ export function buildCriteriaEditorHtml(criteria, t, tf) {
       <button type="button" class="vk-regenerate vk-add-btn">${escapeHtml(t("shell.criteria.regenerate"))}</button>
     </div>`;
 }
+
+/**
+ * ⚠️ `t` og `tf` sendes INN, de leses ikke fra modulen — samme grunn som for `driftText`.
+ * Uten det er funksjonen uren gjennom oversetterne, og kan ikke enhetstestes.
+ * `buildCriteriaEditorHtml` tok dem allerede som parametre; dette gjør de to like.
+ *
+ * Ingen atferdsendring: kalleren sender de samme `t` og `tf` som før.
+ */
+export function buildDriftDiffModalHtml(diff, locale, t, tf) {
+  const { added, removed, changed } = diff;
+  const totalChanges = added.length + removed.length + changed.length;
+
+  const renderRow = (id, kind, body) => `
+    <li class="drift-diff-row drift-diff-row--${kind}">
+      <label>
+        <input type="checkbox" data-diff-checkbox data-criterion-id="${escapeHtml(id)}" checked>
+        <span class="drift-diff-row-body">${body}</span>
+      </label>
+    </li>
+  `;
+
+  const addedHtml = added.map(({ id, next }) => renderRow(id, "added", `
+    <span class="drift-diff-row-tag drift-diff-row-tag--added">${escapeHtml(t("shell.drift.diff.added"))}</span>
+    <strong>${escapeHtml(driftText(next?.label, locale) || id)}</strong>
+    ${driftText(next?.description, locale) ? `<p class="drift-diff-row-desc">${escapeHtml(driftText(next.description, locale))}</p>` : ""}
+  `)).join("");
+
+  const removedHtml = removed.map(({ id, prev }) => renderRow(id, "removed", `
+    <span class="drift-diff-row-tag drift-diff-row-tag--removed">${escapeHtml(t("shell.drift.diff.removed"))}</span>
+    <strong>${escapeHtml(driftText(prev?.label, locale) || id)}</strong>
+    ${driftText(prev?.description, locale) ? `<p class="drift-diff-row-desc">${escapeHtml(driftText(prev.description, locale))}</p>` : ""}
+  `)).join("");
+
+  const changedHtml = changed.map(({ id, prev, next, fields }) => {
+    const parts = [];
+    if (fields.labelChanged) parts.push(`<p class="drift-diff-row-fieldchange"><em>${escapeHtml(t("shell.drift.diff.label"))}:</em> <s>${escapeHtml(driftText(prev?.label, locale))}</s> → <strong>${escapeHtml(driftText(next?.label, locale))}</strong></p>`);
+    if (fields.descChanged) parts.push(`<p class="drift-diff-row-fieldchange"><em>${escapeHtml(t("shell.drift.diff.description"))}:</em> ${escapeHtml(driftText(next?.description, locale))}</p>`);
+    if (fields.scoreChanged) parts.push(`<p class="drift-diff-row-fieldchange"><em>${escapeHtml(t("shell.drift.diff.maxScore"))}:</em> ${escapeHtml(String(prev?.maxScore ?? ""))} → ${escapeHtml(String(next?.maxScore ?? ""))}</p>`);
+    if (fields.visChanged) parts.push(`<p class="drift-diff-row-fieldchange"><em>${escapeHtml(t("shell.drift.diff.candidateVisible"))}:</em> ${Boolean(prev?.candidateVisible) ? "✓" : "—"} → ${Boolean(next?.candidateVisible) ? "✓" : "—"}</p>`);
+    return renderRow(id, "changed", `
+      <span class="drift-diff-row-tag drift-diff-row-tag--changed">${escapeHtml(t("shell.drift.diff.changed"))}</span>
+      <strong>${escapeHtml(driftText(next?.label, locale) || id)}</strong>
+      ${parts.join("")}
+    `);
+  }).join("");
+
+  const emptyHtml = totalChanges === 0
+    ? `<p class="drift-diff-empty">${escapeHtml(t("shell.drift.diff.noChanges"))}</p>`
+    : "";
+
+  return `
+    <div class="drift-diff-modal">
+      <header class="drift-diff-modal-header">
+        <h2 id="driftDiffTitle">${escapeHtml(t("shell.drift.diff.title"))}</h2>
+        <button type="button" class="drift-diff-close" data-diff-action="close" aria-label="${escapeHtml(t("shell.drift.diff.close"))}">×</button>
+      </header>
+      <p class="drift-diff-modal-summary">${escapeHtml(tf("shell.drift.diff.summary", { added: added.length, removed: removed.length, changed: changed.length }))}</p>
+      <ul class="drift-diff-list">
+        ${addedHtml}
+        ${changedHtml}
+        ${removedHtml}
+      </ul>
+      ${emptyHtml}
+      <footer class="drift-diff-modal-footer">
+        <button type="button" class="btn-secondary" data-diff-action="cancel">${escapeHtml(t("shell.drift.diff.cancel"))}</button>
+        <button type="button" class="btn-secondary" data-diff-action="accept-selected">${escapeHtml(t("shell.drift.diff.acceptSelected"))}</button>
+        <button type="button" class="btn-primary" data-diff-action="accept-all">${escapeHtml(t("shell.drift.diff.acceptAll"))}</button>
+      </footer>
+    </div>
+  `;
+}
