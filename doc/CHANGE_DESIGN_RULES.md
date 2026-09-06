@@ -134,6 +134,32 @@ fiksforsøk på rad er også et stoppsignal.
 
 ---
 
+## 9. Et negativt resultat trenger sin egen instrumentering
+
+Måler du at en mekanisme **ikke** slår til, har du ikke ett svar — du har flere forklaringer som ser
+like ut nedenfra. Loggen må kunne skille dem før tallet betyr noe.
+
+⚠️ **#1023 kostet en ekstra deploy på nettopp dette.** Grenseregelen fyrte fire ganger før en fiks
+og null etter. «Fyrte ikke» kunne bety tre ting:
+
+- poengsummen ble `null`, og en `try/catch` svelget det
+- grensene lå et annet sted enn jeg trodde, fordi terskelen ble lest globalt i stedet for fra modulen
+- båndet var for smalt, og regelen var riktig
+
+Loggen registrerte bare TREFF, så de tre var umulige å skille. Da `secondary_trigger_evaluated`
+begynte å logge `totalScore`, grensene og båndene for HVER vurdering, tok det ett minutt: grensene
+var riktige, poengsummen ble regnet ut, og bare to besvarelser lå i båndet — begge utløste regelen.
+
+Samme dag traff det en gang til: kriteriene for `low_confidence` ble lagt i regelfila og målingen ga
+fortsatt null. «Virket ikke» og «nådde aldri instansen» kunne ikke skilles, og Kudu kjører i en egen
+container som ikke ser appens filsystem. En oppstartslogg over hva instansen faktisk lastet, avgjorde
+det — og den burde vært der fra før.
+
+**I praksis:** logger du bare når noe skjer, kan du ikke forklare når det ikke skjer. Skal et
+fravær kunne tolkes, må inngangene logges også når utfallet er «nei». Og bygger du en logg for å
+svare på «hvilken konfigurasjon kjører her», ta med FELTENE saken faktisk handler om — den første
+utgaven av vår viste beskrivelsene, men ikke båndene som avgjorde.
+
 ## Hva reglene ikke løser
 
 Reglene er disiplin. De veier opp for at frontend mangler en delt abstraksjon for tverrgående ting
