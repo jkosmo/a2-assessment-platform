@@ -115,4 +115,34 @@ describe("#1023 — poengsum nær en sonegrense utløser en ny vurdering", () =>
       expect(d.reasons).not.toContain("score_near_pass_boundary");
     }
   });
+  it("følger MODULENS egen terskel, ikke den globale", () => {
+    // ⚠️ DENNE FANGER EN EKTE FEIL, funnet på stage 2026-09-06. Første utgave regnet grensene fra
+    // `getAssessmentRules().thresholds.totalMin`, mens vedtaket bruker `resolveTotalMin`, som
+    // honorerer modulens egen terskel. Målingen avslørte det: en besvarelse på 60 fikk automatisk
+    // bestått — altså hadde modulen en annen terskel enn den globale — og båndet lå dermed feil.
+    //
+    // En modul med terskel 50 har stryk-grensen på 40 (50 minus standardbåndet på 10).
+    const modulpolicy = { passRules: { totalMin: 50 } } as never;
+    const nær = evaluateSecondaryAssessmentTrigger(
+      { moduleId: "m1", primaryResult: resultat(), totalScore: 40, assessmentPolicy: modulpolicy },
+      bareGrenser({ greenYellow: null, yellowRed: 5 }),
+    );
+    expect(nær.reasons, "40 er modulens stryk-grense").toContain("score_near_fail_boundary");
+
+    // Og den globale stryk-grensen skal IKKE lenger utløse noe for denne modulen.
+    const globalGrense = evaluateSecondaryAssessmentTrigger(
+      { moduleId: "m1", primaryResult: resultat(), totalScore: STRYK_GRENSE, assessmentPolicy: modulpolicy },
+      bareGrenser({ greenYellow: null, yellowRed: 5 }),
+    );
+    expect(globalGrense.reasons, "den globale grensen gjelder ikke her").not.toContain("score_near_fail_boundary");
+  });
+
+  it("bruker modulens eget grensetilfelle-vindu når det er satt", () => {
+    const modulpolicy = { passRules: { totalMin: 70, borderlineWindow: { min: 45, max: 70 } } } as never;
+    const d = evaluateSecondaryAssessmentTrigger(
+      { moduleId: "m1", primaryResult: resultat(), totalScore: 45, assessmentPolicy: modulpolicy },
+      bareGrenser({ greenYellow: null, yellowRed: 3 }),
+    );
+    expect(d.reasons).toContain("score_near_fail_boundary");
+  });
 });

@@ -166,6 +166,8 @@ export async function runLlmEvaluationPipeline(ctx: EvaluatorContext): Promise<E
     // #1023: nærhet til en sonegrense. `null` når kalleren ikke kan regne den ut — da fyrer ikke
     // grenseregelen, og de øvrige utløserne gjelder som før.
     totalScore: ctx.beregnTotalPoeng ? ctx.beregnTotalPoeng(primaryLlmResult) : null,
+    // Modulen kan ha sin egen terskel; grensene må regnes fra den, ikke fra den globale.
+    assessmentPolicy: ctx.inputContext.assessmentPolicy,
   });
 
   // #1023: mål den foreslåtte regelen mot den levende, FØR vi vurderer å bytte.

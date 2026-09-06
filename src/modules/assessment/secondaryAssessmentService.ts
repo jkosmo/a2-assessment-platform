@@ -1,3 +1,5 @@
+import type { ModuleAssessmentPolicy } from "../../codecs/assessmentPolicyCodec.js";
+import { resolveZoneBoundaries } from "./mcqPassRule.js";
 import { getAssessmentRules } from "../../config/assessmentRules.js";
 import type { LlmStructuredAssessment } from "./llmAssessmentService.js";
 import {
@@ -24,6 +26,8 @@ type TriggerInput = {
    * `null` når kalleren ikke kan regne den ut. Da fyrer ikke grenseregelen, og de andre gjelder.
    */
   totalScore?: number | null;
+  /** Modulens egen policy — grensene kan være overstyrt per modul. */
+  assessmentPolicy?: ModuleAssessmentPolicy | null;
 };
 
 export type SecondaryTriggerDecision = {
@@ -70,6 +74,7 @@ export type SecondaryDisagreementDecision = {
 function boundaryTriggers(
   totalScore: number | null | undefined,
   policy: SecondaryAssessmentPolicy,
+  assessmentPolicy: ModuleAssessmentPolicy | null | undefined,
 ): string[] {
   // `NaN` og `Infinity` trenger ingen egen vakt: `Math.abs(NaN - 60) <= 5` er usann, og det samme
   // for uendelig. Mutasjonstesting viste at en `Number.isFinite`-sjekk her ikke kunne bli rød —
@@ -79,15 +84,16 @@ function boundaryTriggers(
   // leste globalt, og da kunne regelen ikke overstyres — verken av en modul eller av en test. Tre
   // tester ble røde med én gang, og det er nettopp den slags stille kobling de er der for.
   const bånd = policy.triggerRules.scoreBoundaryBands;
-  const rules = getAssessmentRules();
-  const totalMin = rules.thresholds.totalMin;
-  const gulRødGrense = totalMin - (rules.thresholds.borderlineBelowMin ?? 0);
+  // ⚠️ Grensene hentes fra `resolveZoneBoundaries`, som vedtaket også bruker. En egen utregning her
+  // leste den GLOBALE terskelen, og en måling på stage viste hva det koster: en modul med egen
+  // terskel fikk båndet lagt feil sted, stille.
+  const { pass, fail } = resolveZoneBoundaries(assessmentPolicy);
 
   const ut: string[] = [];
-  if (typeof bånd?.greenYellow === "number" && Math.abs(totalScore - totalMin) <= bånd.greenYellow) {
+  if (typeof bånd?.greenYellow === "number" && Math.abs(totalScore - pass) <= bånd.greenYellow) {
     ut.push("score_near_pass_boundary");
   }
-  if (typeof bånd?.yellowRed === "number" && Math.abs(totalScore - gulRødGrense) <= bånd.yellowRed) {
+  if (typeof bånd?.yellowRed === "number" && fail !== null && Math.abs(totalScore - fail) <= bånd.yellowRed) {
     ut.push("score_near_fail_boundary");
   }
   return ut;
@@ -152,7 +158,7 @@ export function evaluateSecondaryAssessmentTrigger(
   // Grensene kommer fra de samme tallene vedtaket bruker: `totalMin` og, under den,
   // `totalMin - borderlineBelowMin`. Den nederste er den viktigste — der går utfallet fra «et
   // menneske ser på det» til «automatisk stryk».
-  for (const grense of boundaryTriggers(input.totalScore, policy)) {
+  for (const grense of boundaryTriggers(input.totalScore, policy, input.assessmentPolicy)) {
     reasons.push(grense);
   }
 
