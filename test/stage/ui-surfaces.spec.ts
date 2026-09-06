@@ -1,3 +1,4 @@
+import { translations as oversettelser } from "../../public/i18n/participant-translations.js";
 import { expect, test, type Page, type Route } from "@playwright/test";
 import { readAuth, stageBaseUrl } from "./stageAuth.js";
 
@@ -23,6 +24,21 @@ const BASE = stageBaseUrl(auth);
 test.skip(!auth, `hopper over: ${reason}`);
 
 /** Flatene, med hva som skal stå der og hvor det står. */
+// ⚠️ Hentet fra den EKTE tabellen, ikke skrevet av hånd. En håndskrevet liste ville stille sluttet
+// å måle den dagen en etikett ble omformulert — og da hadde vakta vært grønn på feil grunnlag.
+//
+// Bare etiketter som FAKTISK skiller seg mellom nb og en-GB tas med. Er de like, sier «norsk ord
+// funnet i en-GB» ingenting.
+const NORSKE_RAMMEORD: string[] = (() => {
+  const nb = (oversettelser as Record<string, Record<string, string>>).nb ?? {};
+  const en = (oversettelser as Record<string, Record<string, string>>)["en-GB"] ?? {};
+  return Object.keys(nb)
+    .filter((k) => k.startsWith("nav."))
+    .map((k) => nb[k])
+    .filter((v, i, a) => typeof v === "string" && v.length > 4 && a.indexOf(v) === i)
+    .filter((v) => !Object.values(en).includes(v));
+})();
+
 const FLATER = [
   { navn: "sensorkøen", rute: "/review", beholder: "#manualReviewQueueBody", innhold: "#manualReviewQueueBody" },
   { navn: "resultatsiden", rute: "/results", beholder: "#completionBody", forbered: "#loadResults", innhold: "#completionBody" },
@@ -92,6 +108,105 @@ for (const flate of FLATER) {
     expect(feiltoaster, `røde feilmeldinger ved lasting: ${JSON.stringify(feiltoaster)}`).toEqual([]);
 
     expect(konsollfeil, `ubehandlede feil i konsollet: ${JSON.stringify(konsollfeil)}`).toEqual([]);
+  });
+
+  test(`${flate.navn}: et TREGT svar overskriver ikke språket brukeren står i`, async ({ page }) => {
+    // ⚠️ KAPPLØPET. Bytter brukeren språk to ganger raskt, kan det FØRSTE svaret lande sist. Uten
+    // vakt tegner den gamle lokalen over den nye, og brukeren sitter i et språk hen ikke valgte.
+    //
+    // `lagLokalisertRessurs` har vakta — `if (hentSpråk() !== språk) return;` — men den er bare
+    // enhetstestet. Epicen #1041 krevde påstanden PER FLATE, fordi det er innføringen som glipper,
+    // ikke modulen.
+    //
+    // Måten: svaret som skal TAPE merkes og forsinkes. Renders det likevel, dukker merket opp i
+    // DOM-en. Det er uavhengig av hva testdataene inneholder — i motsetning til å sammenligne tekst,
+    // som er blindt på flater der innholdet er språkuavhengig.
+    //
+    // ⚠️ DENNE ER SVAKERE ENN DE ANDRE, OG DET SKAL STÅ HER. Mutasjonstesting viser at merket bare
+    // når DOM-en på ÉN av de seks flatene — merker jeg vinnersvaret i stedet for taperen, blir bare
+    // én test rød. På de fem andre ville påstanden vært grønn uansett hva vakta gjorde.
+    //
+    // Hvorfor den likevel er verdt å ha: de seks flatene deler ÉN implementasjon etter #1042, og
+    // kappløpsvakta er enhetstestet i `test/unit/localized-resource.test.js`. Denne bekrefter at
+    // modulen faktisk er koblet inn på minst én ekte flate — det enhetstesten ikke kan si noe om.
+    //
+    // Skal den bli en ekte per-flate-påstand, må vi vite hvorfor det merkede svaret ikke rendres på
+    // de fem andre. Det er ikke undersøkt.
+    const MERKE = "ZZSTALEZZ";
+    await forberedSide(page);
+    await page.goto(`${BASE}${flate.rute}`, { waitUntil: "domcontentloaded" });
+    if (flate.forbered) await page.click(flate.forbered);
+    await expect(page.locator(flate.beholder)).not.toBeEmpty({ timeout: 20000 });
+
+    const velger = page.locator("#localeSelect");
+    if ((await velger.count()) === 0) test.skip(true, "ingen språkvelger på denne flaten");
+
+    const start = (await velger.inputValue()) === "nb" ? "nb" : "en-GB";
+    const annet = start === "nb" ? "en-GB" : "nb";
+
+    let merk = false;
+    await page.route("**/api/**", async (r: Route) => {
+      const svar = await r.fetch({ headers: { ...r.request().headers(), authorization: `Bearer ${auth!.accessToken}` } });
+      if (!merk) return r.fulfill({ response: svar });
+      // Merk hver streng i svaret, og hold det tilbake så det lander SIST.
+      let kropp = await svar.text();
+      try {
+        kropp = JSON.stringify(JSON.parse(kropp), (_n, v) => (typeof v === "string" ? `${MERKE}${v}` : v));
+      } catch {
+        return r.fulfill({ response: svar });
+      }
+      await new Promise((res) => setTimeout(res, 4000));
+      await r.fulfill({ response: svar, body: kropp });
+    });
+
+    merk = true;
+    await velger.selectOption(annet);
+    merk = false;
+    await velger.selectOption(start);
+
+    await expect(page.locator("html")).toHaveAttribute("lang", start, { timeout: 20000 });
+    // Vent forbi forsinkelsen, så det trege svaret HAR landet før vi ser etter merket.
+    await page.waitForTimeout(6000);
+
+    const tekst = (await page.locator("body").textContent()) ?? "";
+    expect(
+      tekst.includes(MERKE),
+      `${flate.rute}: et forsinket svar fra ${annet} tegnet over ${start}. Kappløpsvakta virker ikke her.`,
+    ).toBe(false);
+    await expect(page.locator("html")).toHaveAttribute("lang", start);
+  });
+
+  test(`${flate.navn}: ingen BLANDET språk etter bytte`, async ({ page }) => {
+    // ⚠️ Rammens etiketter kommer fra klientens egen tabell, innholdet fra serveren. Følger bare den
+    // ene med på et språkbytte, står siden med to språk samtidig — og det ser ut som en halvferdig
+    // oversettelse, ikke som en feil. Nav-etikettene er delte og finnes på hver flate.
+    await forberedSide(page);
+    await page.goto(`${BASE}${flate.rute}`, { waitUntil: "domcontentloaded" });
+    if (flate.forbered) await page.click(flate.forbered);
+    await expect(page.locator(flate.beholder)).not.toBeEmpty({ timeout: 20000 });
+
+    const velger = page.locator("#localeSelect");
+    if ((await velger.count()) === 0) test.skip(true, "ingen språkvelger på denne flaten");
+
+    await velger.selectOption("en-GB");
+    await expect(page.locator("html")).toHaveAttribute("lang", "en-GB", { timeout: 20000 });
+
+    // ⚠️ `#workspaceNav` SPESIFIKT. Første utgave brukte `nav, header` og tok den første treffet —
+    // på flere flater er det et undernav uten de delte etikettene. Testen fant da ingen norske ord
+    // fordi den så feil sted, og var grønn av det. Mutasjonstesting avslørte det: å hoppe over
+    // språkbyttet HELT ga fortsatt ingen røde.
+    const nav = page.locator("#workspaceNav");
+    await expect(nav, "arbeidsflate-navet skal være fylt").not.toBeEmpty({ timeout: 20000 });
+    const rammetekst = (await nav.textContent()) ?? "";
+
+    // Kontrollcase: ordlista må ha noe å lete etter, ellers er «ingen norsk igjen» sant om ingenting.
+    expect(NORSKE_RAMMEORD.length, "det skal finnes norske rammeord som skiller seg fra en-GB").toBeGreaterThan(3);
+
+    const norskeIgjen = NORSKE_RAMMEORD.filter((ord) => rammetekst.includes(ord));
+    expect(
+      norskeIgjen.join(", "),
+      `${flate.rute} viser norske rammeord i en-GB: siden står med to språk samtidig.`,
+    ).toBe("");
   });
 
   test(`${flate.navn}: HENTER PÅ NYTT ved språkbytte`, async ({ page }) => {
