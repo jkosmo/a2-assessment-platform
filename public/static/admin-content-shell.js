@@ -4005,7 +4005,7 @@ function openDriftDiffModal(diff, proposedRecord) {
   overlay.setAttribute("role", "dialog");
   overlay.setAttribute("aria-modal", "true");
   overlay.setAttribute("aria-labelledby", "driftDiffTitle");
-  overlay.innerHTML = buildDriftDiffModalHtml(diff, contentLocale);
+  overlay.innerHTML = buildDriftDiffModalHtml(diff, contentLocale, t, tf);
   document.body.appendChild(overlay);
 
   // B4 a11y: focus trap + ESC handler. The trap is implemented as a Tab/Shift-Tab handler
@@ -4081,7 +4081,14 @@ function openDriftDiffModal(diff, proposedRecord) {
   initial?.focus?.();
 }
 
-function buildDriftDiffModalHtml(diff, locale) {
+/**
+ * ⚠️ `t` og `tf` sendes INN, de leses ikke fra modulen — samme grunn som for `driftText`.
+ * Uten det er funksjonen uren gjennom oversetterne, og kan ikke enhetstestes.
+ * `buildCriteriaEditorHtml` tok dem allerede som parametre; dette gjør de to like.
+ *
+ * Ingen atferdsendring: kalleren sender de samme `t` og `tf` som før.
+ */
+function buildDriftDiffModalHtml(diff, locale, t, tf) {
   const { added, removed, changed } = diff;
   const totalChanges = added.length + removed.length + changed.length;
 
