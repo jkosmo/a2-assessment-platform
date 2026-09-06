@@ -2,6 +2,55 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.62.0 - 2026-09-06
+
+Samlet promotering av 35 commits. De to store trådene er **hvem som avgjør en vurdering** og
+**opprydding i veier som gjorde det samme to ganger**.
+
+### #1048 — mennesket vinner når vi ikke kan måle at svaret er for kort
+
+Modellen sa to ting samtidig — «det er for lite grunnlag her» og «et menneske bør se på dette» — og
+vi hørte bare det første. På stage ba den om menneskelig vurdering i **21 av 78** vurderinger, og
+**alle 21** ble automatisk strøket uten at en sensor så dem.
+
+Automatisk stryk krever nå et målbart faktum: at svaret er vesentlig kortere enn oppgaven ba om
+(under halve nivåets minimum). Kan vi ikke måle det, står hovedregelen.
+
+⚠️ **Regelen gjelder bare konflikten.** Ba modellen ikke om et menneske, finnes ingen anmodning å
+overstyre, og auto-stryk står som før. Første utgave manglet den betingelsen, og integrasjonssuiten
+fant det ved at seks policy-tester gikk fra `COMPLETED` til `UNDER_REVIEW`.
+
+Målt på stage etter deploy: `kort_tynt` (12 ord) og `lang_tynt` (160 ord) fikk **identisk dom** fra
+modellen og endte likevel ulikt — `COMPLETED` mot `UNDER_REVIEW`. Eneste forskjell er ordtellingen.
+
+### #1049 — omfang er ikke det samme som nivå
+
+> «Det er ikke slik at det å skrive langt er vanskeligere enn å være kort.»
+
+Tabellen sa det motsatte: `advanced` ga 400–700 ord, og hver genererte oppgave arvet påstanden.
+Nivået sier nå hvor **sammensatt** oppgaven kan være, omfanget hvor **mye** som skal skrives, og
+forfatteren kan overstyre omfanget per modul (`scopeMinWords` / `scopeMaxWords`, nullbare — null
+betyr «bruk nivåets standard»).
+
+### #1023 — nærhet til sonegrense utløser en ny vurdering
+
+Forsøket på å få modellen til å melde egen usikkerhet ble **forlatt etter måling**:
+`low_confidence` forekom i 0 av 63 vurderinger. Produkteiers vinkel erstattet den — er skåren nær
+grensen mellom grønn og gul, eller særlig mellom gul og rød, er det en sak for en second opinion.
+
+### Én vei, ikke to
+
+Kopier-prompt-knappen for ekstern LLM er fjernet. Bruk av ekstern modell skjer gjennom Skill-en,
+som nå kjenner både nivå og omfang. Fem kopier av nivågrensene er nede i fire, og en vakt holder
+resten i takt.
+
+### Ellers
+
+- **#955** — en arkivert modul kan ikke lenger publiseres (invarianten ble håndhevet fire steder av fem)
+- **#1024/#1026** — gjettekartene for språk er fjernet; modellen skriver alt på deltakerens språk
+- **#1040/#1041/#1043** — vakter for språkbytte, flatekontrakt og ratsjen
+- **Uttrekk** — kriterieredigereren, driftsdiffen og to normaliserere ut av `admin-content-shell.js`
+
 ## 2.61.0 - 2026-08-30
 
 ### Identitetsfeltene: seks kopier, én forsvarlig
