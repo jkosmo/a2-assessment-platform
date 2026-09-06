@@ -65,6 +65,9 @@ type CreateModuleInput = {
   title: string;
   description?: string;
   certificationLevel?: string;
+  // #1049: forfatterens forventede svarlengde. Utelatt = nivåets standard.
+  scopeMinWords?: number | null;
+  scopeMaxWords?: number | null;
   validFrom?: Date;
   validTo?: Date;
   actorId?: string;
@@ -104,6 +107,8 @@ export async function createModule(input: CreateModuleInput, tx?: DbTransactionC
       title: input.title,
       description: input.description,
       certificationLevel: input.certificationLevel,
+      scopeMinWords: input.scopeMinWords,
+      scopeMaxWords: input.scopeMaxWords,
       validFrom: input.validFrom,
       validTo: input.validTo,
       createdById: input.actorId,

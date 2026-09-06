@@ -223,6 +223,14 @@ model Module {
   title                  String
   description            String?
   certificationLevel     String?
+  // #1049: forfatterens forventede svarlengde. NULL = nivåets standard (LEVEL_SCOPE).
+  //
+  // Ligger her, ved siden av certificationLevel, fordi det er det paret vi skiller: nivået sier
+  // hvor sammensatt oppgaven kan være, omfanget hvor mye som skal skrives. De to har samme
+  // livsløp og samme rolle — begge er forfatterinnstillinger som leses ved GENERERING, som er
+  // tilstandsløs og ikke kan slå opp en modulversjon som ikke finnes ennå.
+  scopeMinWords          Int?
+  scopeMaxWords          Int?
   validFrom              DateTime?
   validTo                DateTime?
   activeVersionId        String?

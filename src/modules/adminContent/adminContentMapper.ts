@@ -19,6 +19,10 @@ export function toCreateModuleInput(data: ModuleCreateBody, validFrom: Date | un
     title: localizedTextCodec.serialize(data.title),
     description: data.description ? localizedTextCodec.serialize(data.description) : undefined,
     certificationLevel: data.certificationLevel ? localizedTextCodec.serialize(data.certificationLevel) : undefined,
+    // #1049: rene tall, ikke lokalisert tekst — et ordantall har ikke et språk, i motsetning til
+    // nivået, som vises som prosa og derfor serialiseres.
+    scopeMinWords: data.scopeMinWords ?? undefined,
+    scopeMaxWords: data.scopeMaxWords ?? undefined,
     validFrom,
     validTo,
     actorId,

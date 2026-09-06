@@ -2017,7 +2017,17 @@ async function generateDraftInBackground(sourceMaterial, certLevel, locale, gene
       getHeaders,
       {
         method: "POST",
-        body: JSON.stringify({ sourceMaterial, certificationLevel: certLevel, locale, generationMode, scenarioMode, ...(blueprintObject ? { blueprint: blueprintObject } : {}) }),
+        body: JSON.stringify({
+          sourceMaterial,
+          certificationLevel: certLevel,
+          locale,
+          generationMode,
+          scenarioMode,
+          // #1049: genereringen er tilstandsløs og kan ikke slå opp modulen. Klienten sender
+          // forfatterens omfang med, akkurat som den allerede sender nivået.
+          ...scopeForGeneration(),
+          ...(blueprintObject ? { blueprint: blueprintObject } : {}),
+        }),
         signal: abort.signal,
       },
     );
@@ -3294,6 +3304,17 @@ function startDirectEditFlow() {
  * aria upkeep, add/remove/regenerate — is identical, because a second copy of this behaviour is
  * exactly what the epic is trying to get rid of.
  */
+// #1049: nivåets standard for svarlengde, vist som plassholder når forfatteren ikke har satt noe.
+//
+// ⚠️ En kopi av LEVEL_SCOPE på serveren, og det er en bevisst en: klienten trenger tallet for å vise
+// hva som gjelder når feltet står tomt, og den kan ikke importere serverens TypeScript.
+// `test/unit/level-budget-copies-guard.test.ts` holder den i takt med kilden.
+const LEVEL_SCOPE_DEFAULTS = {
+  basic: { minWords: 100, maxWords: 200 },
+  intermediate: { minWords: 250, maxWords: 450 },
+  advanced: { minWords: 400, maxWords: 700 },
+};
+
 const CERTIFICATION_LEVELS = ["basic", "intermediate", "advanced"];
 
 /**
@@ -3326,6 +3347,17 @@ function certificationLevelValue(raw) {
  * outside the scale falls back to `intermediate`: the generators use it to pitch difficulty, so a
  * wrong-but-valid level degrades the output while an invalid one fails the whole call.
  */
+/**
+ * #1049: forfatterens omfang, hvis modulen har et. Utelates helt når hen ikke har satt noe — da
+ * bruker serveren nivåets standard, og det er ETT sted den regnes ut.
+ */
+function scopeForGeneration() {
+  const mod = bundle?.module ?? {};
+  const min = typeof mod.scopeMinWords === "number" ? mod.scopeMinWords : null;
+  const max = typeof mod.scopeMaxWords === "number" ? mod.scopeMaxWords : null;
+  return min === null && max === null ? {} : { scope: { minWords: min, maxWords: max } };
+}
+
 function certificationLevelForGeneration() {
   // The level chosen in Innstillinger wins over the stored one while the panel is open. QA round 7:
   // picking `advanced` and then regenerating asked the service for `basic`, and the same save then
@@ -5140,6 +5172,25 @@ function renderSettingsPanel() {
     `<select id="settingsCertLevel" class="settings-input">${certOptions}</select>`,
   );
 
+  // #1049: forventet svarlengde, ved siden av nivået fordi det er det paret som ble skilt.
+  //
+  // ⚠️ TOMT FELT BETYR «bruk nivåets standard», og det er derfor plassholderen viser tallet i
+  // stedet for en instruksjon. En forfatter som lar feltet stå tomt skal se hva som da gjelder,
+  // uten å måtte lete etter en tabell.
+  //
+  // Produkteier 2026-09-06: å skrive langt er ikke vanskeligere enn å være kort. Feltet finnes
+  // nettopp for at et avansert nivå skal kunne be om et kort, presist svar.
+  const standardOmfang = LEVEL_SCOPE_DEFAULTS[certLevel] ?? LEVEL_SCOPE_DEFAULTS.intermediate;
+  row(
+    "shell.settings.scopeWords",
+    `<input id="settingsScopeMin" class="settings-input" type="number" min="20" max="5000"
+       value="${mod.scopeMinWords ?? ""}" placeholder="${standardOmfang.minWords}" />
+     <span aria-hidden="true">–</span>
+     <input id="settingsScopeMax" class="settings-input" type="number" min="20" max="5000"
+       value="${mod.scopeMaxWords ?? ""}" placeholder="${standardOmfang.maxWords}" />
+     <span class="settings-hint">${escapeHtml(t("shell.settings.scopeWordsHint"))}</span>`,
+  );
+
   // date inputs need yyyy-mm-dd, not a localized rendering
   const asDateValue = (d) => (d ? new Date(d).toISOString().slice(0, 10) : "");
   row(
@@ -6125,6 +6176,16 @@ async function saveSettingsInBackground() {
   // Module-level fields. Sent only when the author actually changed them, so a mode switch
   // does not rewrite a description or a date the panel merely displayed.
   const certInput = document.getElementById("settingsCertLevel");
+  const scopeMinInput = document.getElementById("settingsScopeMin");
+  const scopeMaxInput = document.getElementById("settingsScopeMax");
+  /** Tomt felt er `null` — «bruk nivåets standard» — ikke 0 og ikke «ingen endring». */
+  const scopeVerdi = (el) => {
+    const v = el?.value?.trim();
+    if (!v) return null;
+    const n = Number(v);
+    return Number.isFinite(n) && n > 0 ? Math.round(n) : null;
+  };
+  const mod = bundle.module ?? {};
   const fromInput = document.getElementById("settingsValidFrom");
   const toInput = document.getElementById("settingsValidTo");
   // One value, not one per language — see `certificationLevelValue`. The QA-round-2 defect was
@@ -6151,6 +6212,12 @@ async function saveSettingsInBackground() {
     ...(certInput && certInput.value.trim() && certInput.value.trim() !== currentCert
       ? { certificationLevel: certInput.value.trim() }
       : {}),
+    // #1049: tomt felt = null = «tilbake til nivåets standard». Derfor sammenlignes mot den LAGREDE
+    // verdien, ikke mot falsy: en forfatter som tømmer feltet ber om å angre, og det må sendes.
+    ...(scopeMinInput && scopeVerdi(scopeMinInput) !== (mod.scopeMinWords ?? null)
+      ? { scopeMinWords: scopeVerdi(scopeMinInput) } : {}),
+    ...(scopeMaxInput && scopeVerdi(scopeMaxInput) !== (mod.scopeMaxWords ?? null)
+      ? { scopeMaxWords: scopeVerdi(scopeMaxInput) } : {}),
     ...(fromInput && fromInput.value !== currentFrom ? { validFrom: fromInput.value || null } : {}),
     ...(toInput && toInput.value !== currentTo ? { validTo: toInput.value || null } : {}),
   };

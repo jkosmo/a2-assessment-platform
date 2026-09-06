@@ -94,10 +94,16 @@ export const agentTokenCreateBodySchema = z.object({
 // `localizedTextMaybeUntranslatedSchema` har vaert kontrakten for broedtekstfeltene siden #905/#913
 // og godtar {"en-GB": "..."} alene. Ingen ny datamodell, ingen migrasjon, og rene strenger leses
 // fortsatt som foer — dette gjelder hva som SKRIVES fra naa av.
+// #1049: forventet svarlengde, satt av forfatteren. Utelatt eller null = nivåets standard.
+// Kompleksiteten kan IKKE overstyres — den følger sertifiseringsnivået.
+export const scopeWordsSchema = z.number().int().min(20).max(5000).nullable().optional();
+
 export const moduleCreateBodySchema = z.object({
   title: localizedTextMaybeUntranslatedSchema,
   description: localizedTextMaybeUntranslatedSchema.optional(),
   certificationLevel: certificationLevelInputSchema,
+  scopeMinWords: scopeWordsSchema,
+  scopeMaxWords: scopeWordsSchema,
   validFrom: z.string().trim().optional(),
   validTo: z.string().trim().optional(),
   clientRef: clientRefSchema.optional(),
@@ -260,6 +266,8 @@ export const composeModuleVersionBodySchema = z.object({
   // untouched, which is what lets a settings save avoid rewriting content it never showed.
   description: localizedTextPatchSchema.nullable().optional(),
   certificationLevel: certificationLevelInputSchema.optional(),
+  scopeMinWords: scopeWordsSchema,
+  scopeMaxWords: scopeWordsSchema,
   validFrom: z.string().trim().nullable().optional(),
   validTo: z.string().trim().nullable().optional(),
   assessmentMode: assessmentModeSchema.optional(),
@@ -358,6 +366,9 @@ export const scenarioModeSchema = z.enum(["auto", "include", "exclude"]);
 export const moduleDraftGenerationBodySchema = z.object({
   sourceMaterial: z.string().trim().min(1),
   certificationLevel: certificationLevelSchema,
+  // #1049: klienten sender forfatterens omfang med, slik den allerede sender nivået. Genereringen
+  // er tilstandsløs og kan ikke slå det opp selv.
+  scope: z.object({ minWords: scopeWordsSchema, maxWords: scopeWordsSchema }).optional(),
   locale: generationLocaleSchema,
   generationMode: generationModeSchema.default("ordinary"),
   blueprint: assessmentBlueprintSchema.optional(),

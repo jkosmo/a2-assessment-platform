@@ -150,6 +150,49 @@ describe("llm content generation prompts", () => {
     expect(advancedPrompt).toContain("- Expected answer length: 400–700 words");
   });
 
+  it("#1049: forfatterens omfang overstyrer nivåets standard i prompten", () => {
+    // Produkteier vil ha korte svar på en advanced-modul: nivået sier 400-700, forfatteren 150-250.
+    const prompt = buildModuleDraftPrompts({
+      sourceMaterial: "Internal policy notes.",
+      certificationLevel: "advanced",
+      locale: "en-GB",
+      generationMode: "ordinary",
+      scope: { minWords: 150, maxWords: 250 },
+    }).userPrompt;
+
+    expect(prompt).toContain("- Expected answer length: 150–250 words");
+    expect(prompt, "nivåets standard skal ikke stå der samtidig").not.toContain("400–700");
+
+    // ⚠️ KOMPLEKSITETEN FØLGER FORTSATT NIVÅET. Det er hele poenget med å skille de to: forfatteren
+    // styrer hvor mye som skal skrives, ikke hvor sammensatt oppgaven får være. Kunne hen flyttet
+    // kompleksiteten, ville sertifiseringsnivået vært meningsløst.
+    expect(prompt).toContain("- Maximum actors in scenario: 3");
+  });
+
+  it("#1049: et ugyldig omfang ignoreres i sin helhet", () => {
+    // Et minimum over maksimum er en umulig instruks. Da er nivåets standard et bedre svar enn å
+    // sende modellen noe den ikke kan oppfylle.
+    const prompt = buildModuleDraftPrompts({
+      sourceMaterial: "Internal policy notes.",
+      certificationLevel: "basic",
+      locale: "en-GB",
+      generationMode: "ordinary",
+      scope: { minWords: 900, maxWords: 100 },
+    }).userPrompt;
+    expect(prompt).toContain("- Expected answer length: 100–200 words");
+  });
+
+  it("#1049: delvis overstyring arver resten fra nivået", () => {
+    const prompt = buildModuleDraftPrompts({
+      sourceMaterial: "Internal policy notes.",
+      certificationLevel: "basic",
+      locale: "en-GB",
+      generationMode: "ordinary",
+      scope: { minWords: 150, maxWords: null },
+    }).userPrompt;
+    expect(prompt).toContain("- Expected answer length: 150–200 words");
+  });
+
   it("#1049: retningslinjene i prosa gjentar IKKE tallene fra tabellen", () => {
     // ⚠️ Uten denne kommer tallene tilbake ved neste redigering av retningslinjene, og da er vi
     // tilbake til to kilder for samme sannhet — uten at noe blir rødt.

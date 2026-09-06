@@ -78,6 +78,35 @@ describe("#1049 — kopiene av nivågrensene er enige med kilden", () => {
     ).toBe("");
   });
 
+  it("klientens standardtabell viser de samme tallene", () => {
+    // ⚠️ #1049: forfatterflaten trenger tallet for å vise hva som gjelder når omfangsfeltet står
+    // tomt — plassholderen er nivåets standard. Klienten kan ikke importere serverens TypeScript,
+    // så kopien er bevisst. Da må den holdes i takt, ellers lover Innstillinger noe annet enn det
+    // genereringen faktisk bruker, og forfatteren ser ett tall mens modellen får et annet.
+    const kilde = les("../../public/static/admin-content-shell.js");
+    const avvik: string[] = [];
+
+    for (const nivå of NIVÅER) {
+      const rad = kilde.split("\n").find((l) => l.trim().startsWith(`${nivå}: { minWords:`));
+      if (!rad) {
+        avvik.push(`${nivå}: fant ingen rad i LEVEL_SCOPE_DEFAULTS`);
+        continue;
+      }
+      const tall = (rad.match(/[0-9]+/g) ?? []).map(Number);
+      for (const [navn, verdi] of [
+        ["minWords", LEVEL_SCOPE[nivå].minWords],
+        ["maxWords", LEVEL_SCOPE[nivå].maxWords],
+      ] as const) {
+        if (!tall.includes(verdi)) avvik.push(`${nivå}.${navn}=${verdi} står ikke i: ${rad.trim()}`);
+      }
+    }
+
+    expect(
+      avvik.join("\n"),
+      "Innstillinger viser en annen standard enn genereringen bruker.",
+    ).toBe("");
+  });
+
   it("benchmark-skriptet bruker de samme tallene", () => {
     const kilde = les("../../scripts/run-generation-benchmark.mjs");
     const avvik: string[] = [];

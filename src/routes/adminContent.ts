@@ -750,6 +750,10 @@ adminContentRouter.post("/modules/:moduleId/versions", idempotency((req) => `mod
       // null clears, undefined leaves alone.
       ...(data.description !== undefined ? { description: data.description } : {}),
       ...(data.certificationLevel !== undefined ? { certificationLevel: data.certificationLevel } : {}),
+      // #1049: `null` er en EKTE verdi her — «tilbake til nivåets standard» — så testen må være mot
+      // `undefined`, ikke mot falsy. En `?? undefined` her ville gjort det umulig å angre.
+      ...(data.scopeMinWords !== undefined ? { scopeMinWords: data.scopeMinWords } : {}),
+      ...(data.scopeMaxWords !== undefined ? { scopeMaxWords: data.scopeMaxWords } : {}),
       ...(data.validFrom !== undefined ? { validFrom: validFrom } : {}),
       ...(data.validTo !== undefined ? { validTo: validTo } : {}),
       assessmentMode: data.assessmentMode,

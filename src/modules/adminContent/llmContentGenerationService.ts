@@ -26,6 +26,8 @@ export type ModuleDraftInput = {
   // also applied to MCQ generation. See #372.
   blueprint?: AssessmentBlueprint;
   scenarioMode?: ScenarioMode;
+  /** #1049: forfatterens forventede svarlengde. Utelatt = nivåets standard. */
+  scope?: ScopeOverride | null;
 };
 
 export type ModuleDraftResult = {
@@ -144,6 +146,8 @@ export type BlueprintInput = {
   sourceMaterial: string;
   certificationLevel: CertificationLevel;
   locale: GenerationLocale;
+  /** #1049: forfatterens forventede svarlengde. Utelatt = nivåets standard. */
+  scope?: ScopeOverride | null;
 };
 
 export type AssessmentBlueprint = {
@@ -430,8 +434,28 @@ export const LEVEL_SCOPE: Record<
 };
 
 /** Kompleksitet og omfang samlet, for de tre stedene som trenger begge. */
-export function budgetFor(level: CertificationLevel) {
-  return { ...LEVEL_COMPLEXITY[level], ...LEVEL_SCOPE[level] };
+/**
+ * #1049: forfatterens omfang, med nivåets verdi som standard.
+ *
+ * ⚠️ Kompleksiteten kan IKKE overstyres. Den følger sertifiseringsnivået, og det er hele poenget
+ * med å skille de to: nivået sier hvor sammensatt oppgaven kan være, omfanget hvor mye som skal
+ * skrives. Å la forfatteren flytte kompleksiteten ville gjort nivået meningsløst.
+ *
+ * Delvis overstyring godtas — setter forfatteren bare et minimum, arver maksimum fra nivået.
+ * Et ugyldig par (min over maks) ignoreres i sin helhet framfor å produsere en umulig instruks.
+ */
+export type ScopeOverride = { minWords?: number | null; maxWords?: number | null };
+
+export function budgetFor(level: CertificationLevel, override?: ScopeOverride | null) {
+  const standard = LEVEL_SCOPE[level];
+  const minWords = typeof override?.minWords === "number" ? override.minWords : standard.minWords;
+  const maxWords = typeof override?.maxWords === "number" ? override.maxWords : standard.maxWords;
+  const gyldig = minWords > 0 && maxWords >= minWords;
+  return {
+    ...LEVEL_COMPLEXITY[level],
+    ...standard,
+    ...(gyldig ? { minWords, maxWords } : {}),
+  };
 }
 
 const MCQ_LEVEL_GUIDELINES: Record<CertificationLevel, string> = {
@@ -822,11 +846,11 @@ ${renderBlueprintSection(input.blueprint)}
 ## Complexity budget (enforce strictly)
 
 Respect these limits for ${input.certificationLevel} level:
-- Maximum actors in scenario: ${budgetFor(input.certificationLevel).actorsMax}
-- Maximum distinct concepts required: ${budgetFor(input.certificationLevel).conceptsMax}
-- Maximum trade-offs or dilemmas: ${budgetFor(input.certificationLevel).tradeoffsMax}
-- Expected answer length: ${budgetFor(input.certificationLevel).minWords}–${budgetFor(input.certificationLevel).maxWords} words
-- Expected completion time: ${budgetFor(input.certificationLevel).timeBudgetMinutes} minutes
+- Maximum actors in scenario: ${budgetFor(input.certificationLevel, input.scope).actorsMax}
+- Maximum distinct concepts required: ${budgetFor(input.certificationLevel, input.scope).conceptsMax}
+- Maximum trade-offs or dilemmas: ${budgetFor(input.certificationLevel, input.scope).tradeoffsMax}
+- Expected answer length: ${budgetFor(input.certificationLevel, input.scope).minWords}–${budgetFor(input.certificationLevel, input.scope).maxWords} words
+- Expected completion time: ${budgetFor(input.certificationLevel, input.scope).timeBudgetMinutes} minutes
 
 Before finalising, verify that a candidate can start a reasonable answer using only taskText and candidateTaskConstraints, plus expected prerequisite knowledge for this certification level. Do not introduce scenario elements that are not necessary to test the learning objective.
 
@@ -1306,7 +1330,7 @@ export function buildBlueprintPrompts(input: BlueprintInput): {
   const systemPrompt =
     "You are a certification content architect. Analyse the provided source material and return a structured assessment blueprint as strict JSON only - no markdown, no commentary.";
 
-  const budget = budgetFor(input.certificationLevel);
+  const budget = budgetFor(input.certificationLevel, input.scope);
 
   const userPrompt = `Analyse the source material below and produce an assessment blueprint for a ${input.certificationLevel}-level certification module.
 
@@ -1651,6 +1675,8 @@ export type ScenarioAnswerabilityInput = {
   candidateTaskConstraints: string | undefined | null;
   assessorExpectedContent: string | undefined | null;
   certificationLevel: CertificationLevel;
+  /** #1049: forfatterens forventede svarlengde. Utelatt = nivåets standard. */
+  scope?: ScopeOverride | null;
 };
 
 export type ScenarioAnswerabilityResult = {
@@ -1682,7 +1708,7 @@ function buildScenarioAnswerabilityPrompts(input: ScenarioAnswerabilityInput): {
     ? `\nassessor expected content (hidden from candidate):\n${input.assessorExpectedContent.trim()}`
     : "";
 
-  const budget = budgetFor(input.certificationLevel);
+  const budget = budgetFor(input.certificationLevel, input.scope);
 
   const userPrompt = `Check if a candidate can answer the following task using only the information visible to them.
 
