@@ -378,23 +378,61 @@ const DISTRACTOR_GUIDELINES: Record<CertificationLevel, string> = {
     "ALL options must be substantively plausible. Every distractor must represent a genuine expert-level confusion, subtle definitional error, or claim that is correct in a nearby but different context. The correct answer must not be identifiable by style, length, specificity, or qualifier patterns. A well-prepared candidate must reason carefully about each option.",
 };
 
+/**
+ * #1049: KVALITATIV veiledning per nivå. Ingen tall.
+ *
+ * ⚠️ Tallene sto her OG i tabellen under, og begge ble sendt til modellen i samme prompt — prosaen
+ * først, de strukturerte grensene rett etter. Samme sannhet to steder, i to formater, fra to
+ * kilder som kan gli fra hverandre. Det er klassen som har truffet oss sju ganger.
+ *
+ * Verre: en forfatter som overstyrer omfanget ville fått prosaen til å motsi sin egen innstilling,
+ * og vi ville ikke visst hvilken modellen fulgte.
+ */
 const MODULE_DRAFT_LEVEL_GUIDELINES: Record<CertificationLevel, string> = {
   basic:
-    "Keep the task approachable. Use plain language, a single clear situation when a scenario is needed, and avoid layered tensions or multiple competing sub-problems. Maximum scenario complexity: 1 actor, 0 trade-offs, 2 required concepts. Expected answer: 100–200 words, 10 minutes.",
+    "Keep the task approachable. Use plain language, a single clear situation when a scenario is needed, and avoid layered tensions or multiple competing sub-problems.",
   intermediate:
-    "Aim for moderate complexity. The task may include one realistic tension or trade-off, but it must still be easy to parse on first read. Maximum scenario complexity: 2 actors, 1 trade-off, 3 required concepts. Expected answer: 250–450 words, 20 minutes.",
+    "Aim for moderate complexity. The task may include one realistic tension or trade-off, but it must still be easy to parse on first read.",
   advanced:
-    "Use a more demanding but still readable task. It may involve ambiguity, competing considerations, or nuanced application, but avoid unnecessary complication for its own sake. Maximum scenario complexity: 3 actors, 2 trade-offs, 4 required concepts. Expected answer: 400–700 words, 30 minutes.",
+    "Use a more demanding but still readable task. It may involve ambiguity, competing considerations, or nuanced application, but avoid unnecessary complication for its own sake.",
 };
 
-export const COMPLEXITY_BUDGET: Record<
+/**
+ * #1049: KOMPLEKSITET — hvor sammensatt oppgaven kan være. Dette hører til sertifiseringsnivået.
+ */
+export const LEVEL_COMPLEXITY: Record<
   CertificationLevel,
-  { actorsMax: number; conceptsMax: number; tradeoffsMax: number; minWords: number; maxWords: number; timeBudgetMinutes: number }
+  { actorsMax: number; conceptsMax: number; tradeoffsMax: number }
 > = {
-  basic:        { actorsMax: 1, conceptsMax: 2, tradeoffsMax: 0, minWords: 100, maxWords: 200, timeBudgetMinutes: 10 },
-  intermediate: { actorsMax: 2, conceptsMax: 3, tradeoffsMax: 1, minWords: 250, maxWords: 450, timeBudgetMinutes: 20 },
-  advanced:     { actorsMax: 3, conceptsMax: 4, tradeoffsMax: 2, minWords: 400, maxWords: 700, timeBudgetMinutes: 30 },
+  basic:        { actorsMax: 1, conceptsMax: 2, tradeoffsMax: 0 },
+  intermediate: { actorsMax: 2, conceptsMax: 3, tradeoffsMax: 1 },
+  advanced:     { actorsMax: 3, conceptsMax: 4, tradeoffsMax: 2 },
 };
+
+/**
+ * #1049: OMFANG — hvor mye tekst og tid svaret bør ta. Dette hører IKKE til nivået.
+ *
+ * ⚠️ Produkteier 2026-09-06: «Det er ikke slik at det å skrive langt er vanskeligere enn å være
+ * kort.» Å svare kort og presist på et sammensatt spørsmål er ofte vanskeligere enn å skrive langt.
+ * Ved å ha omfanget i nivåtabellen kodet vi inn det motsatte, og hver genererte oppgave arvet det.
+ *
+ * Verdiene er UENDRET fra da de lå sammen med kompleksiteten, så ingen eksisterende oppgave endrer
+ * seg av delingen alene. De er nå standarden en forfatter kan overstyre — ikke en påstand om at
+ * nivået bestemmer lengden.
+ */
+export const LEVEL_SCOPE: Record<
+  CertificationLevel,
+  { minWords: number; maxWords: number; timeBudgetMinutes: number }
+> = {
+  basic:        { minWords: 100, maxWords: 200, timeBudgetMinutes: 10 },
+  intermediate: { minWords: 250, maxWords: 450, timeBudgetMinutes: 20 },
+  advanced:     { minWords: 400, maxWords: 700, timeBudgetMinutes: 30 },
+};
+
+/** Kompleksitet og omfang samlet, for de tre stedene som trenger begge. */
+export function budgetFor(level: CertificationLevel) {
+  return { ...LEVEL_COMPLEXITY[level], ...LEVEL_SCOPE[level] };
+}
 
 const MCQ_LEVEL_GUIDELINES: Record<CertificationLevel, string> = {
   basic:
@@ -781,11 +819,11 @@ ${renderBlueprintSection(input.blueprint)}
 ## Complexity budget (enforce strictly)
 
 Respect these limits for ${input.certificationLevel} level:
-- Maximum actors in scenario: ${COMPLEXITY_BUDGET[input.certificationLevel].actorsMax}
-- Maximum distinct concepts required: ${COMPLEXITY_BUDGET[input.certificationLevel].conceptsMax}
-- Maximum trade-offs or dilemmas: ${COMPLEXITY_BUDGET[input.certificationLevel].tradeoffsMax}
-- Expected answer length: ${COMPLEXITY_BUDGET[input.certificationLevel].minWords}–${COMPLEXITY_BUDGET[input.certificationLevel].maxWords} words
-- Expected completion time: ${COMPLEXITY_BUDGET[input.certificationLevel].timeBudgetMinutes} minutes
+- Maximum actors in scenario: ${budgetFor(input.certificationLevel).actorsMax}
+- Maximum distinct concepts required: ${budgetFor(input.certificationLevel).conceptsMax}
+- Maximum trade-offs or dilemmas: ${budgetFor(input.certificationLevel).tradeoffsMax}
+- Expected answer length: ${budgetFor(input.certificationLevel).minWords}–${budgetFor(input.certificationLevel).maxWords} words
+- Expected completion time: ${budgetFor(input.certificationLevel).timeBudgetMinutes} minutes
 
 Before finalising, verify that a candidate can start a reasonable answer using only taskText and candidateTaskConstraints, plus expected prerequisite knowledge for this certification level. Do not introduce scenario elements that are not necessary to test the learning objective.
 
@@ -1265,7 +1303,7 @@ export function buildBlueprintPrompts(input: BlueprintInput): {
   const systemPrompt =
     "You are a certification content architect. Analyse the provided source material and return a structured assessment blueprint as strict JSON only - no markdown, no commentary.";
 
-  const budget = COMPLEXITY_BUDGET[input.certificationLevel];
+  const budget = budgetFor(input.certificationLevel);
 
   const userPrompt = `Analyse the source material below and produce an assessment blueprint for a ${input.certificationLevel}-level certification module.
 
@@ -1641,7 +1679,7 @@ function buildScenarioAnswerabilityPrompts(input: ScenarioAnswerabilityInput): {
     ? `\nassessor expected content (hidden from candidate):\n${input.assessorExpectedContent.trim()}`
     : "";
 
-  const budget = COMPLEXITY_BUDGET[input.certificationLevel];
+  const budget = budgetFor(input.certificationLevel);
 
   const userPrompt = `Check if a candidate can answer the following task using only the information visible to them.
 

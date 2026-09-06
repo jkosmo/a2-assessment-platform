@@ -1,3 +1,5 @@
+// @ts-expect-error — nettleser-ESM uten typer, lest som bibliotek. Samme mønster som
+// test/unit/agent-authoring-export-schema-roundtrip.test.ts bruker for skill-skriptet.
 import { translations as oversettelser } from "../../public/i18n/participant-translations.js";
 import { expect, test, type Page, type Route } from "@playwright/test";
 import { readAuth, stageBaseUrl } from "./stageAuth.js";
