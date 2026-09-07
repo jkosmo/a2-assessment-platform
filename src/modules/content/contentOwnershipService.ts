@@ -77,8 +77,21 @@ export async function assertContentOwnership(input: {
   const decision = decideOwnershipAccess({ isAdmin, ownerUserIds, actorUserId: input.actorUserId });
   if (decision === "allow") return;
   if (decision === "unowned") {
+    // ⚠️ #1030: MELDINGEN MÅ VÆRE NØYTRAL, fordi denne grenen ikke kan skille to tilstander.
+    //
+    // Vakta kjører som middleware, altså FØR handleren rekker å slå opp om innholdet finnes.
+    // `listContentOwnerUserIds` gir tom liste både for innhold som finnes uten eier OG for
+    // innhold som ikke finnes. En ikke-admin som ba om et slettet kurs fikk derfor beskjed om å
+    // be en administrator legge hen til som eier av noe som ikke er der.
+    //
+    // ⚠️ REKKEFØLGEN ER IKKE ENDRET, MED VILJE. Å sjekke eksistens først ville gitt en presis
+    // melding, men også gratis rekognosering: hvem som helst kunne kartlagt hvilke ID-er som
+    // finnes ved å skille 403 fra 404. Det er nettopp den kartleggingen #943 stengte.
+    //
+    // Meldingen dekker derfor begge tilstander sannferdig, og beholder det brukeren kan gjøre:
+    // finnes innholdet, er svaret at en administrator må sette en eier.
     throw new ForbiddenError(
-      "This content has no owner yet — only an administrator can modify it until an owner is assigned.",
+      "You do not have access to this content, or it does not exist.",
       "content_unowned",
     );
   }
