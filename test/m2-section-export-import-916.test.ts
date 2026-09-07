@@ -459,25 +459,17 @@ describe("#916 QA: course import must not publish around a held-back section", (
           // The source environment had this course published — that is what makes the importer
           // republish it, and what made the bug reachable.
           audit: { publishedAt: "2026-08-01T00:00:00.000Z" },
-          // ⚠️ Kurset MÅ ha en modul. Uten en er publisering avvist med «Cannot publish a course
-          // with no modules», og da hadde blokkertesten under bestått av helt feil grunn — den
-          // ville målt en regel som ikke har noe med seksjoner å gjøre. Kontrollcasen avslørte det.
+          // ⚠️ #1001: HER LÅ EN DUMMY-MODUL «QA modul», bare for å komme forbi publiseringsporten.
+          //
+          // Kommentaren sa: «Kurset MÅ ha en modul. Uten en er publisering avvist med Cannot
+          // publish a course with no modules, og da hadde blokkertesten under bestått av helt feil
+          // grunn.» Det var riktig observert — og omgåelsen var selve beviset på at regelen var
+          // vilkårlig. Etter #916 er seksjoner likeverdige kurselementer, og porten krever nå
+          // «minst ett element», ikke «minst én modul».
+          //
+          // Nå måler testen det den var ment å måle: et rent seksjonskurs, uten en modul som
+          // ikke har noe der å gjøre.
           items: [
-            {
-              type: "MODULE",
-              sortOrder: 0,
-              module: {
-                module: { title: L("QA modul"), description: L("d"), certificationLevel: "foundation" },
-                activeVersion: {
-                  assessmentMode: "FREETEXT_ONLY",
-                  taskText: L("Gjør oppgaven"),
-                  assessorExpectedContent: L("Forventet"),
-                  rubric: { criteria: { c1: 1 }, scalingRule: { practical_weight: 70 } },
-                  promptTemplate: { systemPrompt: L("system"), userPromptTemplate: L("mal"), examples: [] },
-                  audit: { publishedAt: "2026-08-01T00:00:00.000Z", versionNo: 1 },
-                },
-              },
-            },
             { type: "SECTION", sortOrder: 1, section: { title: sectionTitle, bodyMarkdown: body } },
           ],
         },

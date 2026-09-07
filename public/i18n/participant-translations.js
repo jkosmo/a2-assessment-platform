@@ -92,6 +92,7 @@ export const translations = {
     // formuleres her i stedet for å komme som norsk prosa fra serveren.
     // {count} og {courseTitles} fylles fra feilsvarets `details`.
     "errors.api.content_in_use": "This content is used in {count} course(s): {courseTitles}. Remove it from them first, or unpublish those courses.",
+    "errors.api.course_has_no_items": "A course needs at least one module or section before it can be published.",
     "errors.api.content_in_issued_certificate": "This content is part of {count} issued certificate(s) and cannot be deleted. Archive it instead — a certificate has to be able to show what it covered.",
     "errors.api.content_in_legacy_certificate": "This section is part of {count} certificate(s) issued before we recorded what they covered, and cannot be deleted. Archive it instead.",
     "errors.api.course_has_active_participants": "{count} participant(s) are part-way through this course, so it cannot be retired. Unpublish it instead — that hides it without retiring it — or wait until they finish.",
@@ -539,6 +540,7 @@ export const translations = {
 
     // #972/#965/#980 — se merknaden i en-GB-tabellen.
     "errors.api.content_in_use": "Innholdet er i bruk i {count} kurs: {courseTitles}. Fjern det fra kursene først, eller avpubliser dem.",
+    "errors.api.course_has_no_items": "Et kurs må ha minst én modul eller seksjon før det kan publiseres.",
     "errors.api.content_in_issued_certificate": "Innholdet inngår i {count} utstedte kursbevis og kan ikke slettes. Arkiver det i stedet — et kursbevis må kunne vise hva det dekket.",
     "errors.api.content_in_legacy_certificate": "Seksjonen inngår i {count} kursbevis utstedt før vi registrerte hva de dekket, og kan ikke slettes. Arkiver den i stedet.",
     "errors.api.course_has_active_participants": "{count} deltakere er midt i en gjennomføring, så kurset kan ikke pensjoneres. Avpubliser det i stedet — det skjuler kurset uten å pensjonere det — eller vent til de er ferdige.",
@@ -979,6 +981,7 @@ export const translations = {
     "errors.apiGeneric": "Førespurnaden kunne ikkje fullførast ({status}). Prøv igjen — varer det ved, kontakt administrator.",
 
 "errors.api.content_in_use": "Innhaldet er i bruk i {count} kurs: {courseTitles}. Fjern det frå kursa først, eller avpubliser dei.",
+"errors.api.course_has_no_items": "Eit kurs må ha minst éin modul eller seksjon før det kan publiserast.",
 "errors.api.content_in_issued_certificate": "Innhaldet inngår i {count} utstedte kursbevis og kan ikkje slettast. Arkiver det i staden — eit kursbevis må kunne vise kva det dekte.",
 "errors.api.content_in_legacy_certificate": "Seksjonen inngår i {count} kursbevis utstedt før vi registrerte kva dei dekte, og kan ikkje slettast. Arkiver han i staden.",
 "errors.api.course_has_active_participants": "{count} deltakarar er midt i ei gjennomføring, så kurset kan ikkje pensjonerast. Avpubliser det i staden — det skjuler kurset utan å pensjonere det — eller vent til dei er ferdige.",

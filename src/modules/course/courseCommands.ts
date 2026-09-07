@@ -1,6 +1,6 @@
 import { prisma } from "../../db/prisma.js";
 import { runInTransaction, type DbTransactionClient } from "../../db/transaction.js";
-import { NotFoundError, ValidationError } from "../../errors/AppError.js";
+import { DomainRuleError, NotFoundError, ValidationError } from "../../errors/AppError.js";
 import { recordAuditEvent } from "../../services/auditService.js";
 import { auditActions, auditEntityTypes, agentAuthoringAuditMetadata, type AgentAuthoringContext } from "../../observability/auditEvents.js";
 import { assertCourseHasNoInProgressParticipants } from "./contentLifecycle.js";
@@ -129,15 +129,41 @@ export async function updateCourse(
 }
 
 export async function publishCourse(courseId: string, actorId?: string, tx?: DbTransactionClient) {
-  // #796: the has-modules check runs on the tx client when composing an import, so it sees the course
-  // items created earlier in the SAME transaction.
+  // #796: sjekken kjører på tx-klienten når en import komponeres, så den ser kurselementene som ble
+  // laget tidligere i SAMME transaksjon.
+  //
+  // ⚠️ #1001: kravet er «minst ett ELEMENT», ikke «minst én modul».
+  //
+  // Regelen ga mening da et kurs var en beholder for moduler. Etter #916 er seksjoner likeverdige
+  // kurselementer med sin egen publiseringsgate, og da ble «minst én modul» vilkårlig: et kurs som
+  // bare består av lesestoff kunne ikke publiseres, uansett hvor mange publiserte seksjoner det
+  // hadde.
+  //
+  // Produkteier 2026-08-24: «jeg tviler på at rene seksjonskurs vil trengs, men det krever
+  // kompleksitet å aktivt hindre det samt at vi ville måtte forklare brukere begrensningen som
+  // også krever mer.» Beslutningen er altså ikke at rene lesekurs er ØNSKET, men at det koster
+  // mer å hindre dem enn å tillate dem.
+  //
+  // ⚠️ PORTEN FJERNES IKKE. Null elementer avvises fortsatt — det var reell beskyttelse mot å
+  // publisere et tomt skall, ikke vilkårlighet. Det eneste som faller bort er filteret på
+  // `itemType`.
+  //
+  // To steder i kodebasen behandlet allerede rene lesekurs som normale: rapportlaget regner ut
+  // fullføringsgrad for dem (#969), og #916 måtte legge inn en dummy-modul i fiksturet sitt for å
+  // komme forbi denne porten.
   const course = await (tx ?? prisma).course.findUnique({
     where: { id: courseId },
-    include: { _count: { select: { items: { where: { itemType: "MODULE" } } } } },
+    include: { _count: { select: { items: true } } },
   });
   if (!course) throw new NotFoundError("Course", "course_not_found", "Course not found.");
   if (course._count.items === 0) {
-    throw new ValidationError("Cannot publish a course with no modules.");
+    // ⚠️ EGEN KODE, ikke bare en setning (#972/#999). `ValidationError` gir `validation_error`
+    // uten `issues`, og da viser `api-error.js` serverens `message` ordrett — altså denne engelske
+    // setningen midt i et norsk grensesnitt. Med en kode treffer den den delte oversetteren.
+    throw new DomainRuleError(
+      "course_has_no_items",
+      "Cannot publish a course with no items. Add at least one module or section first.",
+    );
   }
 
   // #803: publish + audit commit atomically.
