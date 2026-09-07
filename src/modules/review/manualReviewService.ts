@@ -276,7 +276,19 @@ export async function supersedeEligibleReviewsForRetake(
   await repo.supersedeMany(reviews.map((r) => r.id), newSubmissionId, now);
 
   for (const review of reviews) {
-    await repo.updateSubmissionStatus(review.submissionId, SubmissionStatus.COMPLETED);
+    // ⚠️ SUPERSEDED, IKKE COMPLETED (#951). Forsøket ble forlatt da deltakeren leverte på nytt, og
+    // et menneske rakk aldri å avgjøre det. Det er ikke et utfall.
+    //
+    // Denne veien er den ENESTE stien som setter en sluttstatus uten å gå via
+    // `appendDecisionWithLineage`, og det er riktig at den ikke gjør det: å skrive et vedtak her
+    // ville tatt det gamle AUTOMATISKE resultatet og gjort det endelig. Sa det «bestått», ville vi
+    // gitt kursbevis for et forsøk sensoren aldri fikk se — og en deltaker kunne unngått
+    // vurderingen ved å levere på nytt.
+    //
+    // Feilen lå derfor på LESESIDEN: rapportene så COMPLETED og talte det gamle vedtaket som
+    // endelig. Med en egen status er tilstanden synlig for alle som leser, i stedet for at hver
+    // rapport må huske å slå opp sensorsakens status.
+    await repo.updateSubmissionStatus(review.submissionId, SubmissionStatus.SUPERSEDED);
     await recordAuditEvent({
       entityType: auditEntityTypes.manualReview,
       entityId: review.id,

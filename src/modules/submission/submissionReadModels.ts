@@ -106,12 +106,22 @@ function parseStructuredLlmResponse(responseJson: string | null | undefined) {
   }
 }
 
-function getSubmissionStatusExplanation(status: string) {
+// Eksportert for at regelen skal kunne testes direkte (#951). Teksten deltakeren leser er en
+// påstand om virkeligheten, og en påstand som ingen test leser kan bli usann uten at noe sier fra.
+export function getSubmissionStatusExplanation(status: string) {
   if (status === "UNDER_REVIEW") {
     return "Your submission is under manual review because confidence/red-flag rules require a human decision.";
   }
   if (status === "COMPLETED") {
     return "Final decision is available.";
+  }
+  // ⚠️ #951: uten denne falt et forlatt forsøk gjennom til «still processing» — usant, og den
+  // verste varianten av usant: deltakeren ville ventet på et svar som aldri kommer.
+  //
+  // Forsøket ble erstattet fordi deltakeren leverte på nytt. Det er den nye innleveringen som
+  // gjelder, og den gamle får aldri et vedtak.
+  if (status === "SUPERSEDED") {
+    return "This attempt was replaced when you submitted again. Your most recent submission is the one that counts.";
   }
   return "Assessment is still processing.";
 }

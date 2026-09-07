@@ -68,7 +68,10 @@ describe("MVP participant result and history", () => {
       .get(`/api/submissions/${completedSubmissionId}/result`)
       .set(participantAHeaders);
     expect(completedResultResponse.status).toBe(200);
-    expect(["COMPLETED", "UNDER_REVIEW", "PROCESSING", "SUBMITTED"]).toContain(completedResultResponse.body.status);
+    // ⚠️ #951: SUPERSEDED er med fordi seed-dataen faktisk kjører retake-veien — en innlevering
+    // med åpen sensorsak blir erstattet når deltakeren leverer på nytt. Før #951 sto den som
+    // COMPLETED, altså som et avgjort resultat den aldri var.
+    expect(["COMPLETED", "UNDER_REVIEW", "PROCESSING", "SUBMITTED", "SUPERSEDED"]).toContain(completedResultResponse.body.status);
     expect(typeof completedResultResponse.body.statusExplanation).toBe("string");
     expect(completedResultResponse.body.scoreComponents.totalScore).not.toBeNull();
     expect(completedResultResponse.body.participantGuidance.improvementAdvice.length).toBeGreaterThan(0);

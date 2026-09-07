@@ -1,4 +1,5 @@
 import { SubmissionStatus } from "../../db/prismaRuntime.js";
+import { isSettledSubmission } from "../submission/submissionOutcome.js";
 import type { SupportedLocale } from "../../i18n/locale.js";
 import { localizeContentText } from "../../i18n/content.js";
 import { getAssessmentRules } from "../../config/assessmentRules.js";
@@ -268,7 +269,9 @@ export async function getAnalyticsSemanticModel(filters: ReportFilters) {
   // Dette avgjoer IKKE den aapne KPI-beslutningen (skal raten maale raavedtaket eller det endelige
   // utfallet?). Den handler om saker som ER avgjort. Her utelates bare de som ikke er det.
   const settled = submissions.filter(
-    (submission) => submission.decisions[0] && submission.submissionStatus !== SubmissionStatus.UNDER_REVIEW,
+    // ⚠️ #951: hviteliste, ikke svarteliste. `!== UNDER_REVIEW` slapp SUPERSEDED gjennom som
+    // «avgjort», og et forlatt forsøk bærer fortsatt sitt gamle automatiske vedtak.
+    (submission) => submission.decisions[0] && isSettledSubmission(submission.submissionStatus),
   );
   const settledDecisionCount = settled.length;
   const passCount = settled.filter((submission) => submission.decisions[0]?.passFailTotal === true).length;
@@ -345,7 +348,7 @@ export async function getAnalyticsTrendsReport(
       current.underReview += 1;
     }
     // #948: ventende saker teller ikke som bestaatt eller stroeket — se begrunnelsen over.
-    if (submission.decisions[0] && submission.submissionStatus !== SubmissionStatus.UNDER_REVIEW) {
+    if (submission.decisions[0] && isSettledSubmission(submission.submissionStatus)) {
       current.decisionCount += 1;
       if (submission.decisions[0].passFailTotal) {
         current.passCount += 1;
@@ -423,7 +426,7 @@ export async function getAnalyticsCohortsReport(
       current.underReview += 1;
     }
     // #948: ventende saker teller ikke som bestaatt eller stroeket — se begrunnelsen over.
-    if (submission.submissionStatus !== SubmissionStatus.UNDER_REVIEW) {
+    if (isSettledSubmission(submission.submissionStatus)) {
       if (submission.decisions[0]?.passFailTotal === true) {
         current.passCount += 1;
       }

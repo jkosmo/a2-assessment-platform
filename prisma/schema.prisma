@@ -22,6 +22,17 @@ enum SubmissionStatus {
   SCORED
   UNDER_REVIEW
   COMPLETED
+  // #951: forsoeket ble forlatt da deltakeren leverte paa nytt mens saken laa hos sensor.
+  //
+  // Et forlatt forsoek er IKKE et utfall. Det ble aldri avgjort av et menneske, og det skal
+  // derfor verken telle som bestaatt eller stroeket — samme prinsipp som #948 slo fast for saker
+  // som venter paa sensor.
+  //
+  // Foer denne statusen ble slike innleveringer satt til COMPLETED, og rapportene talte det gamle
+  // AUTOMATISKE vedtaket som et endelig resultat. Sa vedtaket "bestaatt", ble forsoeket talt som
+  // bestaatt i bestaatt-raten, mens CertificationStatus aldri ble skrevet — to kilder som sa
+  // hver sin ting om samme deltaker.
+  SUPERSEDED
   REJECTED
 }
 
