@@ -629,6 +629,14 @@ async function renderListView() {
     const cascadeDeleteBtn = isAdministrator()
       ? `<button class="row-action-btn destructive" data-action="cascade-delete" data-course-id="${cid}" data-course-title="${ctitle}">Slett kurs og ubrukt innhold</button>`
       : "";
+    // ⚠️ #1029: MERKET NEDERST SA «Skrivebeskyttet», og det var et løfte systemet ikke holdt.
+    //
+    // «Skrivebeskyttet» betyr «du kan se, men ikke endre». Etter #943 er LESING av kursdetalj og
+    // klassemedlemmer eierskapsvaktet, så den som klikket seg videre fikk et avslag merket sa ikke
+    // ville komme. Et merke som lover mer enn flaten gir er verre enn ikke noe merke.
+    //
+    // Teksten er samtidig flyttet inn i oversettelsestabellen. Den sto hardkodet på norsk i en
+    // trespråklig flate — nabotekstene her gjør fortsatt det samme, og det er en egen sak.
     return `<tr>
       <td class="col-title">${ctitle}</td>
       <td class="col-status">${courseStatusBadge(status)}</td>
@@ -643,7 +651,7 @@ async function renderListView() {
           ${canManage ? `<button class="row-action-btn" data-action="export" data-course-id="${cid}" data-course-title="${ctitle}">Eksporter</button>` : ""}
           ${canManage ? archiveToggleBtn : ""}
           ${canManage ? cascadeDeleteBtn : ""}
-          ${canManage ? "" : `<span class="row-readonly-note" title="Bare en eier eller administrator kan endre dette kurset.">Skrivebeskyttet</span>`}
+          ${canManage ? "" : `<span class="row-readonly-note" title="${escapeHtml(t("adminContent.courses.row.noAccessTitle"))}">${escapeHtml(t("adminContent.courses.row.noAccess"))}</span>`}
         </div>
       </td>
     </tr>`;

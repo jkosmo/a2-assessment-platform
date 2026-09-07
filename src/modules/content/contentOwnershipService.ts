@@ -82,7 +82,14 @@ export async function assertContentOwnership(input: {
       "content_unowned",
     );
   }
-  throw new ForbiddenError("You can only modify content you own.", "content_ownership");
+  // ⚠️ #1029: «modify» var feil etter #943. Da ble LESING av kursdetalj og klassemedlemmer
+  // eierskapsvaktet også, så den som avvises her har ofte bare forsøkt å se på noe. En setning
+  // som sier «du kan ikke endre» sender hen for å lete etter en redigeringsknapp som ikke er
+  // problemet.
+  //
+  // Dette er fallbacken en API-konsument uten oversettelsestabell får; brukeren ser den
+  // kodebaserte teksten (`errors.api.content_ownership`), som er endret på samme måte.
+  throw new ForbiddenError("Only an owner or an administrator has access to this item.", "content_ownership");
 }
 
 // --- #787 slice 3: owner-set management (used by the owners API). Managing owners is itself an

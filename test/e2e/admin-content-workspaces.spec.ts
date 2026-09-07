@@ -18,6 +18,17 @@ import {
 // shell tests below exercise its in-page flows (idle "create new module", source step), so they load
 // the shell HTML directly via its `/admin-content.html` file path (the static server's public-file
 // fallback), independent of the library route.
+// ⚠️ «Module created.» finnes TO steder i DOM-en samtidig: i chat-boblen forfatteren leser, og i
+// `#shellStatusAnnouncer` — den aria-live-regionen som gjentar den samme beskjeden for
+// skjermlesere. En uscopet `getByText` treffer derfor to elementer, og Playwrights strict mode
+// gjør det til en feil.
+//
+// Det er et KAPPLØP, ikke en konstant feil: rekkefølgen avhenger av når annonsereren rekker å bli
+// oppdatert. Testen sto grønn isolert 3 av 3 og falt i full suite — den verste formen, fordi rødt
+// da betyr «uflaks» like ofte som «regresjon», og en port man må tolke er ingen port.
+//
+// Alle fire stedene er scopet til `#chatMessages`. Å rette ett av fire ville bare flyttet
+// kappløpet til neste kjøring.
 test.describe("admin content browser coverage", () => {
 
   // #896 S5: version history. The rows have existed since the first «Mellomlagring» — every save
@@ -1241,7 +1252,7 @@ test.describe("admin content browser coverage", () => {
     await clickEnabledButton(page, "3 questions");
     await clickEnabledButton(page, "4 options");
 
-    await expect(page.getByText("Module created.")).toBeVisible();
+    await expect(page.locator("#chatMessages").getByText("Module created.")).toBeVisible();
     await clickEnabledButton(page, "Save draft");
 
     await expect(page.getByText("Open or create a module before saving.")).toHaveCount(0);
@@ -1368,7 +1379,7 @@ test.describe("admin content browser coverage", () => {
     await clickEnabledButton(page, "3 questions");
     await clickEnabledButton(page, "4 options");
 
-    await expect(page.getByText("Module created.")).toBeVisible();
+    await expect(page.locator("#chatMessages").getByText("Module created.")).toBeVisible();
 
     // Innstillinger opens on a module that has no bundle — it was created in this session, not
     // loaded. Round 3: the panel was empty here because it read only from `bundle`.
@@ -1456,7 +1467,7 @@ test.describe("admin content browser coverage", () => {
 
     // No MCQ question-count step on the free-text-only path.
     await expect(page.getByText(/How many MCQ questions/i)).toHaveCount(0);
-    await expect(page.getByText("Module created.")).toBeVisible();
+    await expect(page.locator("#chatMessages").getByText("Module created.")).toBeVisible();
     await clickEnabledButton(page, "Save draft");
 
     await expect.poll(() => versionPayload?.assessmentMode).toBe("FREETEXT_ONLY");
@@ -1631,7 +1642,7 @@ test.describe("admin content browser coverage", () => {
     await clickEnabledButton(page, "3 questions");
     await clickEnabledButton(page, "4 options");
 
-    await expect(page.getByText("Module created.")).toBeVisible();
+    await expect(page.locator("#chatMessages").getByText("Module created.")).toBeVisible();
     await clickEnabledButton(page, "Save draft");
 
     await expect.poll(() => versionPayload?.assessmentMode).toBe("MCQ_ONLY");

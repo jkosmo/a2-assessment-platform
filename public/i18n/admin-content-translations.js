@@ -52,6 +52,8 @@ const adminContentBase = {
 
   // Courses tab
   "adminContent.courses.message.published": "Course published.",
+  "adminContent.courses.row.noAccess": "Owner access only",
+  "adminContent.courses.row.noAccessTitle": "Only an owner or an administrator can open this course.",
   "adminContent.courses.cascadePublish.confirmTitle": "Publish course and content",
   "adminContent.courses.cascadePublish.confirmText": "This course has unpublished content. Publish these items together with the course?",
   "adminContent.courses.cascadePublish.blockedTitle": "Cannot publish yet",
@@ -574,6 +576,8 @@ const nbOverrides = {
 
   // Courses tab
   "adminContent.courses.message.published": "Kurs publisert.",
+  "adminContent.courses.row.noAccess": "Kun for eier",
+  "adminContent.courses.row.noAccessTitle": "Bare en eier eller en administrator kan åpne dette kurset.",
   "adminContent.courses.cascadePublish.confirmTitle": "Publiser kurs og innhold",
   "adminContent.courses.cascadePublish.confirmText": "Kurset har upublisert innhold. Vil du publisere disse elementene sammen med kurset?",
   "adminContent.courses.cascadePublish.blockedTitle": "Kan ikke publisere ennå",
@@ -656,6 +660,8 @@ const nnOverrides = {
 
   // Courses tab
   "adminContent.courses.message.published": "Kurs publisert.",
+  "adminContent.courses.row.noAccess": "Berre for eigar",
+  "adminContent.courses.row.noAccessTitle": "Berre ein eigar eller ein administrator kan opne dette kurset.",
   "adminContent.courses.cascadePublish.confirmTitle": "Publiser kurs og innhald",
   "adminContent.courses.cascadePublish.confirmText": "Kurset har upublisert innhald. Vil du publisere desse elementa saman med kurset?",
   "adminContent.courses.cascadePublish.blockedTitle": "Kan ikkje publisere enno",
