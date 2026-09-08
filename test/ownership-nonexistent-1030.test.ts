@@ -35,6 +35,9 @@ const FINNES_IKKE = "det-finnes-ingen-slik-kurs-id-1030";
 // presis, men den lyver ikke.
 // ─────────────────────────────────────────────────────────────────────────────
 
+// ⚠️ MÅLT PÅ EN SKRIVERUTE. Da denne saken ble skrevet var `GET /:courseId` eierskapsvaktet, og det
+// var der en SMO møtte den løgnaktige meldingen. Lesing er åpnet 2026-09-08 (doc/DECISIONS.md), så
+// leseruta går nå gjennom for alle — men `unowned`-grenen, og dermed meldingen, lever på skriving.
 describe("#1030 — avslaget om innhold uten eier lyver ikke om at innholdet finnes", () => {
   afterAll(async () => {
     await prisma.$disconnect();
@@ -42,8 +45,9 @@ describe("#1030 — avslaget om innhold uten eier lyver ikke om at innholdet fin
 
   it("⚠️ en SMO som ber om et kurs som ikke finnes får ikke beskjed om å skaffe seg eierskap", async () => {
     const svar = await request(app)
-      .get(`/api/admin/content/courses/${FINNES_IKKE}`)
-      .set(smo);
+      .put(`/api/admin/content/courses/${FINNES_IKKE}/items`)
+      .set(smo)
+      .send({ items: [] });
 
     expect(svar.status, "fortsatt 403 — se kontrollcasen under").toBe(403);
     expect(svar.body.error).toBe("content_unowned");
@@ -65,8 +69,9 @@ describe("#1030 — avslaget om innhold uten eier lyver ikke om at innholdet fin
     // Uten denne kontrollen ville testen over vært grønn for en løsning som åpnet nettopp det
     // hullet #943 lukket.
     const svar = await request(app)
-      .get(`/api/admin/content/courses/${FINNES_IKKE}`)
-      .set(smo);
+      .put(`/api/admin/content/courses/${FINNES_IKKE}/items`)
+      .set(smo)
+      .send({ items: [] });
 
     expect(
       svar.status,
@@ -78,8 +83,9 @@ describe("#1030 — avslaget om innhold uten eier lyver ikke om at innholdet fin
     // Kontrollcase motsatt vei: uten denne kan vi ikke skille «vakta gjør jobben sin» fra «ruta
     // svarer 403 på alt». Admin går utenom eierskapssjekken og møter handleren, som vet sannheten.
     const svar = await request(app)
-      .get(`/api/admin/content/courses/${FINNES_IKKE}`)
-      .set(admin);
+      .put(`/api/admin/content/courses/${FINNES_IKKE}/items`)
+      .set(admin)
+      .send({ items: [] });
 
     expect(svar.status, "administrator skal få den ærlige 404-en").toBe(404);
   });

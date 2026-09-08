@@ -100,19 +100,31 @@ describe("content ownership enforcement (#787 slice 4b)", () => {
   // slipper inn, den fremmede avvises, administrator slipper inn. Bare da måler den en avgrensning
   // og ikke en stengt dør.
 
-  it("COURSE-lesing: detalj, items og publish-preview er vaktet som skriverutene", async () => {
-    const create = await request(app).post("/api/admin/content/courses").set(smoA).send({ title: L("Read-guard course") });
+  // ⚠️ SNUDD 2026-09-08. Denne testen festet #943s vakter. Produkteier har avgjort at enhver
+  // forfatter skal kunne se alt kursinnhold (doc/DECISIONS.md), så påstanden er nå den motsatte —
+  // og den måler fortsatt noe: at ingen av de tre rutene har fått vakta tilbake.
+  //
+  // #943s egen begrunnelse var ikke at kolleger ikke skal se hverandres arbeid, men at lesetilgang
+  // gjorde et eierskapshull i kursimporten utnyttbart. Det hullet er tettet.
+  it("COURSE-lesing er åpen for enhver forfatter — skrivingen er det ikke", async () => {
+    const create = await request(app).post("/api/admin/content/courses").set(smoA).send({ title: L("Read-open course") });
     expect(create.status).toBe(201);
     const id = create.body.course.id as string;
 
     for (const path of [`/api/admin/content/courses/${id}`, `/api/admin/content/courses/${id}/items`, `/api/admin/content/courses/${id}/publish-preview`]) {
       expect((await request(app).get(path).set(smoA)).status, `${path} eier`).toBe(200);
       expect((await request(app).get(path).set(admin)).status, `${path} admin`).toBe(200);
-
-      const blocked = await request(app).get(path).set(smoB);
-      expect(blocked.status, `${path} fremmed SMO`).toBe(403);
-      expect(blocked.body.error).toBe("content_ownership");
+      expect((await request(app).get(path).set(smoB)).status, `${path} fremmed SMO`).toBe(200);
     }
+
+    // ⚠️ KONTROLLEN SOM GJØR PÅSTANDEN OVER VERDT NOE. Uten den ville en runde som fjernet ALLE
+    // vakter — også på skriving — sett like grønn ut. Beslutningen gjelder å se, ikke å endre.
+    const skriv = await request(app)
+      .put(`/api/admin/content/courses/${id}/items`)
+      .set(smoB)
+      .send({ items: [] });
+    expect(skriv.status, "en fremmed SMO skal fortsatt ikke kunne endre kurset").toBe(403);
+    expect(skriv.body.error).toBe("content_ownership");
   });
 
   // Lista skal FORTSATT være åpen. Den er hvordan man finner sine egne kurs, og hver rad bærer
@@ -182,13 +194,24 @@ describe("content ownership enforcement (#787 slice 4b)", () => {
     // Gjør kurset foreldreløst — slik legacy-innhold ser ut i databasen.
     await prisma.contentOwner.deleteMany({ where: { contentType: "COURSE", contentId: id } });
 
-    const orphaned = await request(app).get(`/api/admin/content/courses/${id}`).set(smoA);
+    // ⚠️ MÅLT PÅ EN SKRIVERUTE, IKKE EN LESERUTE (2026-09-08). Lesing av kursinnhold er åpnet for
+    // alle forfattere (doc/DECISIONS.md), så `GET /:courseId` går nå gjennom for hvem som helst.
+    // `unowned`-grenen lever videre på skriving, og det er den denne testen alltid har handlet om.
+    //
+    // Uten flyttingen ville testen enten vært slettet — og grenen stått uvoktet — eller stått rød
+    // for en beslutning, som er den verste formen for rødt.
+    const orphaned = await request(app)
+      .put(`/api/admin/content/courses/${id}/items`)
+      .set(smoA)
+      .send({ items: [] });
     expect(orphaned.status).toBe(403);
     // ⚠️ Feilkoden, ikke bare statusen: `content_unowned` og `content_ownership` betyr to helt
     // ulike ting for den som leser meldingen — «ingen eier ennå» mot «ikke din».
     expect(orphaned.body.error).toBe("content_unowned");
 
-    expect((await request(app).get(`/api/admin/content/courses/${id}`).set(admin)).status).toBe(200);
+    // Kontrollen motsatt vei: administrator går forbi eierskapssjekken og møter handleren.
+    expect((await request(app).put(`/api/admin/content/courses/${id}/items`).set(admin).send({ items: [] })).status)
+      .toBeLessThan(300);
   });
 
   it("UEID klasse: SMO får content_unowned på medlemslista, administrator kommer inn", async () => {

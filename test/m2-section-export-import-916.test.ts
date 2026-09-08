@@ -89,19 +89,33 @@ describe("#916 standalone section export", () => {
     expect(envelope.exportedBy).toBeTruthy();
   });
 
-  it("refuses to export another author's section (403 content_ownership)", async () => {
+  it("lets another author export a section — reading is open by decision", async () => {
     const { id } = await createSection(smoOwner, {
       title: L(`Privat ${Date.now()}`),
       bodyMarkdown: L("# Ikke ditt"),
     });
 
+    // ⚠️ VAKTA ER FJERNET MED VILJE 2026-09-08 (doc/DECISIONS.md).
+    //
+    // Produkteier: «Er man SMO skal man kunne se alt kursinnhold. Hvis de benytter dette til å
+    // jukse, så er det til slutt deres eget problem.» Og på spørsmål om å strippe MCQ-fasiten:
+    // «Hvis noen ønsker å jukse så er det fritt frem — det er bare å laste ned modulen og legge
+    // den inn i en LLM, så får de fasit. Vi skal ikke ta høyde for å sikre oss mot juks, det er
+    // umulig.»
+    //
+    // Påstanden er derfor SNUDD, ikke slettet. Testen måler fortsatt noe: at en fremmed forfatter
+    // faktisk slipper til. Slettet vi den, ville en gjeninnført vakt passert ubemerket.
+    //
+    // Seksjoner er det tydeligste tilfellet: «Vi ønsker at så mange som mulig leser seksjoner.»
+    // Lesestoff som er skjult for kolleger motarbeider hele formålet med verktøyet.
     const res = await request(app)
       .get(`/api/admin/content/sections/${id}/export-package`)
       .set(smoOther);
-    expect(res.status).toBe(403);
-    expect(res.body.error).toBe("content_ownership");
-    // The refusal must not leak the content it is protecting.
-    expect(JSON.stringify(res.body)).not.toContain("Ikke ditt");
+    expect(res.status, "lesestoff skal ikke være skjult for andre forfattere").toBeLessThan(300);
+    // ⚠️ Og innholdet skal FAKTISK være der. Sto det bare «status < 300» her, ville en tom
+    // konvolutt bestått — og da hadde vi målt at ruta svarer, ikke at seksjonen kan leses.
+    // Påstanden sto tidligere motsatt vei: at avslaget ikke lekket det det beskyttet.
+    expect(JSON.stringify(res.body), "eksporten skal bære seksjonens innhold").toContain("Ikke ditt");
 
     // ADMINISTRATOR keeps universal access (same rule as every other ownership-guarded route).
     expect((await request(app).get(`/api/admin/content/sections/${id}/export-package`).set(admin)).status).toBe(200);

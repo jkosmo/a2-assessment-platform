@@ -543,3 +543,78 @@ rundt den. Er de to uenige, skal de bringes i takt — ikke låses fast hver for
 på innleveringen. Sperren ligger der den skal.
 
 **Sak:** #978, #1002 · **Status:** avklart 2026-08-24
+
+---
+
+## Forfattere kan lese alt kursinnhold — juks er den enkeltes eget ansvar
+
+Produkteier 2026-09-08:
+
+> *«Jeg tror vi sier at dette skal være enkelt: er man SMO skal man kunne se alt kursinnhold. Hvis
+> de benytter dette til å jukse, så er det til slutt deres eget problem. Dette er et verktøy for
+> kompetansebygging, og å motivere for kompetansebygging — hvis noen ønsker å omgå dette er det
+> deres eget problem.»*
+
+Og om seksjoner særskilt:
+
+> *«Når det gjelder seksjoner så er det i alle fall ingen grunn til å beskytte mot lesing, vi ønsker
+> at så mange som mulig leser seksjoner.»*
+
+### Hva som var tilstanden
+
+Systemet gjorde tre ulike ting med samme spørsmål:
+
+| Innhold | Lesing før | |
+|---|---|---|
+| Seksjoner | vaktet | motsatt av det vi vil |
+| Kurs | vaktet etter #943 | motsatt av det vi vil |
+| Moduler | fasit tilgjengelig for enhver forfatter | tilfeldigvis riktig |
+
+⚠️ **Modulene lekket allerede.** Målt 2026-09-08: en SMO som kaller `GET /api/modules?adminFacing=true`
+får **117 moduler, 17 med `assessorExpectedContent`** — ingen eierskapsfilter. MCQ-fasiten
+(`correctAnswer`, `rationale`, `systemPrompt`) følger derimot ikke med.
+
+Den lekkasjen er nå **tilsiktet**, ikke oversett. Produkteier har veid den mot kompleksiteten ved å
+stenge den, og valgt enkelhet.
+
+### Hva #943 egentlig beskyttet mot, og hvorfor det ikke gjelder
+
+#943 la vakt på kursenes leseruter. Begrunnelsen var ikke at kolleger ikke skal se hverandres
+arbeid, men **rekognosering**: lesetilgangen skulle gjøre et eierskapshull i kursimporten
+utnyttbart. `POST /courses/import` krever i dag eierskap for `replaceExisting`, så hullet er tettet
+og begrunnelsen faller bort.
+
+### MCQ-fasiten ble vurdert særskilt — og også den er åpen
+
+Målingen viste at kurseksporten inlines hver moduls fulle innhold: **4 av 7 vellykkede
+kurseksporter ga `correctAnswer`** til en SMO som ikke eide noe av det. Jeg foreslo å strippe
+fasiten for den som ikke eier modulen.
+
+Produkteier:
+
+> *«Hvis noen ønsker å jukse så er det fritt frem — det er bare å laste ned modulen og legge den
+> inn i en LLM, så får de fasit. Vi skal ikke ta høyde for å sikre oss mot juks, det er umulig.»*
+
+Argumentet avgjør saken: oppgaveteksten og alternativene gir en språkmodell svaret uansett om vi
+sender `correctAnswer` eller ikke. Strippingen ville vært en kostnad uten en beskyttelse — og #392
+viste allerede hva den koster: en sikkerhetskopi som mistet svarene ved import.
+
+⚠️ **Dette er en vurdert og forkastet beskyttelse, ikke en oversett lekkasje.** Forskjellen betyr
+noe for den som møter dette senere.
+
+### Grensene som står
+
+⚠️ **Skriving er fortsatt vaktet.** Beslutningen gjelder å SE, ikke å endre.
+
+⚠️ **`/enrollments` er fortsatt vaktet.** Den lister navn, e-post og avdeling på deltakere.
+«Juks er deres eget problem» er en beslutning om innhold, ikke om andres personopplysninger. Skal
+den også åpnes, er det en egen beslutning.
+
+### Hvorfor det finnes en test
+
+`test/content-read-open-by-decision.test.ts` fester dette. #943 ble innført i god tro etter et funn
+fra nattskanningen, og en senere skanning vil se det samme mønsteret igjen — åpen lesing ved siden
+av vaktet skriving — og foreslå det samme. Uten en test som sier at asymmetrien er tilsiktet, er den
+bare et funn som venter på å bli lukket på nytt.
+
+**Sak:** #943, #1031 · **Status:** avklart 2026-09-08

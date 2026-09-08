@@ -354,9 +354,11 @@ adminSectionsRouter.get("/", async (request, response, next) => {
 // Ownership is enforced: an export envelope is a full copy of the content, and #903 exists because
 // course export shipped without this guard and handed out other authors' material. A section
 // carries no MCQ answer key, but it is still someone else's work.
+// ⚠️ #943-vakta er fjernet her 2026-09-08. Kommentaren over sa «det er fortsatt noen andres
+// arbeid» — sant, men produkteier har avgjort at forfattere skal kunne se hverandres kursinnhold.
+// En seksjon bærer ingen fasit; den ER lesestoffet vi vil at flest mulig skal lese.
 adminSectionsRouter.get(
   "/:sectionId/export-package",
-  requireContentOwnership("SECTION", "sectionId"),
   async (request, response, next) => {
     const actorId = request.context?.userId;
     if (!actorId) {
@@ -396,7 +398,26 @@ adminSectionsRouter.get(
 // Trygt å stramme: ruta brukes kun av seksjonseditoren (`renderEditorView`), som er der eierskap
 // skal kreves. Lista (`GET /`) merker allerede hver rad med `canManage` og skjuler handlingene en
 // ikke-eier ville fått 403 på.
-adminSectionsRouter.get("/:sectionId", requireContentOwnership("SECTION", "sectionId"), async (request, response, next) => {
+// ⚠️ LESING AV KURSINNHOLD ER ÅPEN FOR ALLE FORFATTERE — DET ER EN BESLUTNING, IKKE ET HULL.
+//
+// Produkteier 2026-09-08:
+//
+//   «Er man SMO skal man kunne se alt kursinnhold. Hvis de benytter dette til å jukse, så er det
+//   til slutt deres eget problem. Dette er et verktøy for kompetansebygging, og å motivere for
+//   kompetansebygging — hvis noen ønsker å omgå dette er det deres eget problem.»
+//
+// #943 la eierskapsvakt på disse leserutene. Begrunnelsen var ikke at kolleger ikke skal se
+// hverandres arbeid, men REKOGNOSERING: lesetilgangen skulle gjøre et eierskapshull i
+// kursimporten utnyttbart. Det hullet er tettet — `POST /import` krever eierskap for
+// `replaceExisting` — så den begrunnelsen står ikke lenger.
+//
+// ⚠️ SKRIVING ER FORTSATT VAKTET. Beslutningen gjelder å SE, ikke å endre. De tolv skriverutene i
+// denne fila er urørt.
+//
+// ⚠️ SEKSJONER ER DET TYDELIGSTE TILFELLET. Produkteier: «Når det gjelder seksjoner så er det i
+// alle fall ingen grunn til å beskytte mot lesing, vi ønsker at så mange som mulig leser
+// seksjoner.» Seksjoner er lesestoff; å skjule dem for kolleger motarbeider hele formålet.
+adminSectionsRouter.get("/:sectionId", async (request, response, next) => {
   try {
     const section = await getSection(request.params.sectionId);
     if (!section) {
@@ -468,7 +489,8 @@ adminSectionsRouter.post("/:sectionId/assets", requireContentOwnership("SECTION"
 
 // Samme hull, samme rettelse: figurlista hører til seksjonen, og POST/localize på samme sti er
 // allerede vaktet. En uvoktet GET ved siden av tre voktede skriveruter er en glipp, ikke en policy.
-adminSectionsRouter.get("/:sectionId/assets", requireContentOwnership("SECTION", "sectionId"), async (request, response, next) => {
+// Vedleggene ER seksjonens innhold — bildene som vises i lesestoffet. Samme beslutning som over.
+adminSectionsRouter.get("/:sectionId/assets", async (request, response, next) => {
   try {
     response.json({ assets: await listSectionAssets(request.params.sectionId) });
   } catch (error) {
