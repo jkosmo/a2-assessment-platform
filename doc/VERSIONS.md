@@ -2,6 +2,52 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.63.0 - 2026-09-09
+
+Seks commits. Den røde tråden er **hvem som avgjør, og hvem som får se** — og i to av sakene endte
+undersøkelsen med å avvise fiksen saken selv foreslo.
+
+### Forfattere kan lese alt kursinnhold
+
+Systemet gjorde tre ulike ting med samme spørsmål: seksjoner var vaktet mot lesing, kurs ble vaktet
+av #943, og moduler lekket allerede. Målt: en SMO som kaller `GET /api/modules?adminFacing=true`
+fikk **117 moduler, 17 med `assessorExpectedContent`** — uten eierskapsfilter.
+
+Produkteier: *«Er man SMO skal man kunne se alt kursinnhold. Hvis de benytter dette til å jukse, så
+er det til slutt deres eget problem.»*
+
+⚠️ **MCQ-fasiten ble vurdert særskilt.** Kurseksporten inlines hver moduls fulle innhold — 4 av 7
+vellykkede eksporter ga `correctAnswer` til en fremmed SMO. Strippingen ble bygget og så rullet
+tilbake: *«det er bare å laste ned modulen og legge den inn i en LLM, så får de fasit.»* En
+beskyttelse som omgås slik er kostnad uten vern.
+
+Skriving er urørt, og `/enrollments` er fortsatt vaktet — den lister personopplysninger, ikke
+kursinnhold.
+
+### #951 — et forlatt forsøk er ikke et utfall
+
+Retake satte den gamle innleveringen til `COMPLETED` uten å skrive vedtak. Målingen avviste fiksen
+saken foreslo: å skrive vedtaket ville gitt kursbevis for et forsøk sensoren aldri fikk se. Feilen
+lå på **lesesiden** — fem svartelister talte det gamle automatiske vedtaket som endelig. Ny status
+`SUPERSEDED`, og én delt hviteliste erstatter de fem.
+
+På stage flyttet 12 innleveringer seg ut av «fullført», der de aldri hørte hjemme.
+
+### #1001 — et kurs publiseres på elementer, ikke på moduler
+
+Beslutningen ble tatt 2026-08-24 og dokumentert, men koden ble aldri endret. Et kurs av rent
+lesestoff kunne ikke publiseres. Porten står — null elementer avvises fortsatt — men filteret på
+`itemType` er borte, og avslaget har fått koden `course_has_no_items`.
+
+### #1029 og #1030 — avslag som lovet noe systemet ikke gir
+
+«Skrivebeskyttet» betyr «du kan se, men ikke endre». Etter #943 kunne den som så merket ikke se
+heller. Og en SMO som ba om et **slettet** kurs ble bedt om å skaffe seg eierskap til noe som ikke
+er der.
+
+Rekkefølgen på eksistens- og eierskapssjekken er ikke endret: det ville gitt presis melding og
+gratis rekognosering. Meldingen er nøytral i stedet.
+
 ## 2.62.0 - 2026-09-06
 
 Samlet promotering av 35 commits. De to store trådene er **hvem som avgjør en vurdering** og
