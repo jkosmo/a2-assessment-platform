@@ -87,8 +87,20 @@ export const translations = {
     // ⚠️ En kode som IKKE står her får den generiske `errors.apiGeneric` med statuskoden, ikke
     // serverens setning. Det er med vilje: en manglende oversettelse skal se ut som en manglende
     // oversettelse, ikke som engelsk lekkasje i et norsk grensesnitt.
-    "errors.api.content_ownership": "You can only change content you own. Ask an owner or an administrator to add you as an owner of this item.",
-    "errors.api.content_unowned": "This content has no owner yet. Only an administrator can change it until an owner has been assigned.",
+    "errors.api.content_ownership": "Only an owner or an administrator has access to this item. Ask an owner or an administrator to add you as an owner.",
+    // #999: livssyklusvaktene kaster nå DomainRuleError med egen kode, så setningen kan
+    // formuleres her i stedet for å komme som norsk prosa fra serveren.
+    // {count} og {courseTitles} fylles fra feilsvarets `details`.
+    "errors.api.content_in_use": "This content is used in {count} course(s): {courseTitles}. Remove it from them first, or unpublish those courses.",
+    "errors.api.course_has_no_items": "A course needs at least one module or section before it can be published.",
+    "errors.api.section_archived_cannot_publish": "Restore the section before you publish it.",
+    "errors.api.section_has_no_content": "The section has no content to publish yet. Add text first.",
+    "errors.api.section_already_archived": "The section is already archived.",
+    "errors.api.section_not_archived": "The section is not archived, so it cannot be restored.",
+    "errors.api.content_in_issued_certificate": "This content is part of {count} issued certificate(s) and cannot be deleted. Archive it instead — a certificate has to be able to show what it covered.",
+    "errors.api.content_in_legacy_certificate": "This section is part of {count} certificate(s) issued before we recorded what they covered, and cannot be deleted. Archive it instead.",
+    "errors.api.course_has_active_participants": "{count} participant(s) are part-way through this course, so it cannot be retired. Unpublish it instead — that hides it without retiring it — or wait until they finish.",
+    "errors.api.content_unowned": "You do not have access to this content, or it does not exist. If it exists, an administrator must assign an owner.",
     "errors.api.last_owner": "You cannot remove the last owner. Add another owner first, or ask an administrator.",
     "errors.api.owner_not_found": "That user is not an owner of this content.",
     "errors.api.agent_token_scope": "This agent token does not cover the item you are trying to change.",
@@ -106,13 +118,30 @@ export const translations = {
     "errors.api.publish_blocked_by_validation": "Publishing is blocked. Fix the points listed below, then try again.",
     "errors.api.course_has_unpublished_items": "The course contains items that are not published. Publish them together with the course.",
     "errors.api.item_archived": "The item is archived. Restore it before you publish.",
+    // #914: innholdsvalideringens meldinger. Serveren skrev dem ferdig paa ENGELSK, mens
+    // kurspubliseringens meldinger var hardkodet NORSK — saa begge spraakgrupper fikk feil tekst,
+    // avhengig av hvilken gate som fyrte.
+    //
+    // De hoerer hjemme her sammen med #980 sine publiseringskoder, ikke i en egen tabell:
+    // `apiErrorCodeText` slaar opp `errors.api.<kode>` og fyller plassholderne fra `params`.
+    "errors.api.DISTRACTOR_ELIMINATION_RISK_HIGH": "Question {questionNumber}: one or more options can be eliminated without domain reasoning. Regenerate or revise this question.",
+    "errors.api.DISTRACTOR_ELIMINATION_RISK_MEDIUM": "Question {questionNumber}: at least one option may be eliminable without full domain reasoning. Consider revising.",
+    "errors.api.DISTRACTOR_METADATA_INCOMPLETE": "Question {questionNumber}: {count} distractor(s) have incomplete quality metadata. Plausibility may be insufficient.",
+    "errors.api.DISTRACTOR_QUALITY_PATTERN": "{count} of {total} questions have medium elimination risk. The overall MCQ set may be easier than intended.",
+    "errors.api.MISSING_CANDIDATE_TASK_CONSTRAINTS": "Assessor content is set but the candidate task constraints are empty. Candidates will only see the task text, with no scope guidance.",
+    "errors.api.CANDIDATE_TASK_CONSTRAINTS_TOO_LONG": "The candidate task constraints exceed 80 words. They should be 1-3 short sentences, so they do not work as an answer outline.",
+    "errors.api.TASK_TEXT_TOO_SHORT": "The task text is too short to be a meaningful assessment task.",
+    "errors.api.MISSING_ASSESSOR_EXPECTED_CONTENT": "Assessor guidance is required. It must describe what a strong response contains, so assessors have something to grade against.",
+    "errors.api.MCQ_COUNT_FAR_BELOW_BLUEPRINT": "The blueprint suggested {suggested} MCQ questions, but only {actual} are present ({percent} %). The MCQ set was probably not regenerated after the blueprint changed.",
+    "errors.api.MCQ_COUNT_DEVIATES_FROM_BLUEPRINT": "The blueprint suggested {suggested} MCQ questions, but {actual} are present. Calibration may drift; consider revising.",
+    "errors.api.BLUEPRINT_OBJECTIVES_NOT_REFERENCED": "None of the {count} learning objectives from the blueprint appear in the task text or the assessor guidance. Check that the generation actually used the blueprint.",
     "errors.api.item_archived.module": "The module is archived. Restore it before you publish.",
     "errors.api.item_archived.section": "The section is archived. Restore it before you publish.",
     "errors.api.module_no_content": "The module has no version with content to publish.",
     "errors.api.section_no_content": "The section has no content to publish.",
     "errors.api.module_in_use": "The module is used by a course and cannot be removed. Take it out of the course first.",
     "errors.api.conflict": "Someone else changed this while you were working. Reload and try again.",
-    "errors.api.rate_limited": "Too many requests in a row. Wait a moment, then try again.",
+    "errors.api.rate_limited": "Too many requests in a row. Try again in {retryAfterSeconds} seconds.",
     "errors.api.internal_error": "Something went wrong on the server. Try again — if it persists, contact your administrator.",
     "errors.api.confirmation_required": "The confirmation did not match. Type the word exactly as it is shown.",
     "errors.api.not_an_export_envelope": "This file is not a content package produced by Export.",
@@ -249,6 +278,27 @@ export const translations = {
     "appeal.statusValue.RESOLVED": "Resolved",
     "appeal.statusValue.REJECTED": "Rejected",
     "appeal.statusValue.UNKNOWN": "Unknown",
+    // #940: overskriften på resultatskjermen. Utfallet avgjør hva som står åpent, så teksten må
+    // bære svaret alene — resten ligger bak «Vis detaljer».
+    "result.headline.passed": "Passed",
+    "result.headline.passedPercent": "Passed \u2014 {percent}%",
+    "result.headline.passedScore": "Passed \u2014 {score} points",
+    "result.headline.failed": "Not passed",
+    "result.headline.failedPercent": "Not passed \u2014 {percent}%",
+    "result.headline.failedScore": "Not passed \u2014 {score} points",
+    "result.headline.review": "An assessor is reviewing your submission",
+    "result.headline.reviewSub": "You will get an e-mail when it is done. Nothing more to do now.",
+    "result.headline.pending": "Your submission is being assessed",
+    "result.headline.unknown": "No outcome recorded for this attempt",
+    "result.headline.requirementPercent": "{min}% was required.",
+    "result.headline.requirementScore": "{min} points were required.",
+    "result.headline.parts": "{parts}",
+    "result.headline.partsWithRequirement": "{parts}. {min} points were required.",
+    "result.headline.partMcq": "Multiple choice",
+    "result.headline.partPractical": "Practical",
+    "result.details.show": "Show details",
+    "result.details.hide": "Hide details",
+    "result.submissionIdLabel": "Submission ID",
     "result.status": "Status",
     "result.statusExplanation": "Status explanation",
     "result.statusValue.SUBMITTED": "Submitted",
@@ -273,53 +323,43 @@ export const translations = {
     "result.decisionValue.APPEAL_RESOLUTION": "Appeal resolution",
     "result.decisionValue.UNKNOWN": "Unknown",
     "result.decisionReason": "Decision reason",
-    "result.decisionReasonValue.autoManualReview":
-      "Automatically sent to manual review because confidence, red flags, or borderline rules were triggered.",
-    "result.decisionReasonValue.autoPass": "Automatically passed based on threshold rules.",
-    "result.decisionReasonValue.autoFail": "Automatically failed based on threshold rules.",
-    "result.decisionReasonValue.autoFailInsufficientEvidence":
+    // #950: one entry per decision reason code the server can send. A code with no entry here falls
+    // back to the server's English sentence - see decision-reason.js.
+    "result.decisionReasonCode.llmDisagreement":
+      "Sent to manual review because two independent assessments disagreed.",
+    "result.decisionReasonCode.scoreInconsistency":
+      "Sent to manual review because the scores did not add up consistently.",
+    "result.decisionReasonCode.borderline":
+      "Sent to manual review because the total score {totalScore} falls in the borderline range {min}–{max}, where an assessor decides.",
+    "result.decisionReasonCode.redFlagOrConfidence":
+      "Sent to manual review because confidence or red-flag rules were triggered.",
+    "result.decisionReasonCode.aiDeclaration":
+      "Sent to manual review: you declared extensive autonomous AI use and chose to submit after being encouraged to work further with the material. An assessor decides — this is not an automatic fail.",
+    "result.decisionReasonCode.aiDeclarationDescribed":
+      "Sent to manual review: you declared extensive autonomous AI use and chose to submit after being encouraged to work further with the material. An assessor decides — this is not an automatic fail. Your own description: «{description}»",
+    "result.decisionReasonCode.contentSimilarity":
+      "Sent to manual review because the answer closely resembles an independently generated model answer ({similarityPercent}% against a threshold of {thresholdPercent}%). This is one signal, not proof — an assessor decides, and this is not an automatic fail.",
+    "result.decisionReasonCode.insufficientEvidence":
       "Automatically failed because the submission did not contain enough evidence to assess reliably.",
+    "result.decisionReasonCode.mcqBelowMinimum":
+      "Automatically failed because the multiple-choice score was below the required minimum.",
+    "result.decisionReasonCode.practicalBelowMinimum":
+      "Automatically failed because the practical score was below the required minimum.",
+    "result.decisionReasonCode.autoFail": "Automatically failed based on threshold rules.",
+    "result.decisionReasonCode.autoPass": "Automatically passed based on threshold rules.",
+    "result.decisionReasonCode.mcqOnlyPass":
+      "Passed: you scored {scorePercent}%, and {minPercent}% was required.",
+    "result.decisionReasonCode.mcqOnlyFail":
+      "Not passed: you scored {scorePercent}%, and {minPercent}% was required.",
     "result.confidence": "Confidence note",
+    // #1019: ÅRSAKSNØYTRALT. Nivået kommer fra strukturerte felt og sier hvor sikker vurderingen
+    // var — ikke hvorfor. En oppgitt grunn vi ikke har dekning for, er verre enn ingen grunn.
     "result.confidenceValue.low":
-      "Low confidence due to sparse content; assessment is based on partial evidence.",
-    "result.confidenceValue.medium": "Medium confidence due to potential responsible-use ambiguity.",
+      "The assessment was made with low confidence. An assessor can look at it again if you appeal.",
+    "result.confidenceValue.medium":
+      "The assessment was made with some uncertainty.",
     "result.confidenceValue.high": "High confidence: structured and sufficiently detailed submission.",
     "result.improvementAdvice": "Improvement advice",
-    "result.improvementAdviceValue.beforeAfter": "Provide clearer before/after examples.",
-    "result.improvementAdviceValue.validationChecks": "Describe specific validation checks you performed.",
-    "result.improvementAdviceValue.responsibleUse": "Reference responsible-use constraints explicitly.",
-    "result.improvementAdviceValue.riskScenarios":
-      "Specify concrete risk scenarios, owners, and mitigations tied to the module.",
-    "result.improvementAdviceValue.dataHandling":
-      "Add a data handling and privacy section, including logging and retention.",
-    "result.improvementAdviceValue.humanInLoop":
-      "Define a human-in-the-loop process and approval steps.",
-    "result.improvementAdviceValue.qaMetrics":
-      "Include measurable QA metrics and acceptance criteria.",
-    "result.improvementAdviceValue.improvementLoop":
-      "Provide a concrete improvement loop with iterations and feedback capture.",
-    "result.improvementAdviceValue.promptLeakage":
-      "Clarify responsible-use guidelines and safeguards against prompt leakage.",
-    "result.improvementAdviceValue.governanceScope":
-      "Define governance scope, risk owners, and monitoring cadence.",
-    "result.improvementAdviceValue.riskCategories":
-      "Map content to risk categories (STRIDE, CIA triad, or equivalent).",
-    "result.improvementAdviceValue.qaChecklist":
-      "Incorporate a concrete QA process with checklists and independent review.",
-    "result.improvementAdviceValue.dataControls":
-      "Specify data handling, privacy, retention, and security controls.",
-    "result.improvementAdviceValue.qualityThresholds":
-      "Articulate acceptance criteria and thresholds for quality and risk.",
-    "result.improvementAdviceValue.iterationVersioning":
-      "Outline an iteration plan with feedback loops and versioning.",
-    "result.improvementAdviceValue.escalationDecisionRights":
-      "Clarify escalation procedures and decision rights.",
-    "result.improvementAdviceValue.artifactsEvidence":
-      "Include artefacts like risk register, control mapping, and audit trails.",
-    "result.improvementAdviceValue.responsibleAiMisuse":
-      "Align prompts with responsible AI principles and misuse safeguards.",
-    "result.improvementAdviceValue.examplesFailureModes":
-      "Provide example outputs and mitigations for common failure modes.",
     "result.rationales": "Criterion rationales",
     "result.criterion.relevance_for_case": "Relevance for case",
     "result.criterion.quality_and_utility": "Quality and utility",
@@ -333,14 +373,6 @@ export const translations = {
     "result.criterion.communication": "Communication",
     "result.criterion.critical_thinking": "Critical thinking",
     "result.criterion.problem_solving": "Problem solving",
-    "result.rationaleValue.relevance_for_case": "The answer is relevant to the module task.",
-    "result.rationaleValue.quality_and_utility": "The answer demonstrates practical utility.",
-    "result.rationaleValue.iteration_and_improvement":
-      "At least one visible iteration or improvement is documented.",
-    "result.rationaleValue.human_quality_assurance":
-      "The submission shows manual quality-assurance checks.",
-    "result.rationaleValue.responsible_use":
-      "Responsible-use checks are described in the submission.",
     "result.none": "No result loaded.",
     "result.celebratePass": "🎉 Congratulations — you passed!",
     "courses.celebrateComplete": "🎉 Course completed — well done!",
@@ -511,8 +543,17 @@ export const translations = {
     "errors.apiGeneric": "Forespørselen kunne ikke fullføres ({status}). Prøv igjen — vedvarer det, kontakt administrator.",
 
     // #972/#965/#980 — se merknaden i en-GB-tabellen.
-    "errors.api.content_ownership": "Du kan bare endre innhold du eier. Be en eier eller en administrator om å legge deg til som eier av dette elementet.",
-    "errors.api.content_unowned": "Dette innholdet har ingen eier ennå. Bare en administrator kan endre det til en eier er satt.",
+    "errors.api.content_in_use": "Innholdet er i bruk i {count} kurs: {courseTitles}. Fjern det fra kursene først, eller avpubliser dem.",
+    "errors.api.course_has_no_items": "Et kurs må ha minst én modul eller seksjon før det kan publiseres.",
+    "errors.api.section_archived_cannot_publish": "Gjenopprett seksjonen før du publiserer den.",
+    "errors.api.section_has_no_content": "Seksjonen har ikke noe innhold å publisere ennå. Legg inn tekst først.",
+    "errors.api.section_already_archived": "Seksjonen er allerede arkivert.",
+    "errors.api.section_not_archived": "Seksjonen er ikke arkivert, så den kan ikke gjenopprettes.",
+    "errors.api.content_in_issued_certificate": "Innholdet inngår i {count} utstedte kursbevis og kan ikke slettes. Arkiver det i stedet — et kursbevis må kunne vise hva det dekket.",
+    "errors.api.content_in_legacy_certificate": "Seksjonen inngår i {count} kursbevis utstedt før vi registrerte hva de dekket, og kan ikke slettes. Arkiver den i stedet.",
+    "errors.api.course_has_active_participants": "{count} deltakere er midt i en gjennomføring, så kurset kan ikke pensjoneres. Avpubliser det i stedet — det skjuler kurset uten å pensjonere det — eller vent til de er ferdige.",
+    "errors.api.content_ownership": "Bare en eier eller en administrator har tilgang til dette elementet. Be en eier eller en administrator om å legge deg til som eier.",
+    "errors.api.content_unowned": "Du har ikke tilgang til dette innholdet, eller så finnes det ikke. Finnes det, må en administrator sette en eier.",
     "errors.api.last_owner": "Du kan ikke fjerne den siste eieren. Legg til en eier til først, eller spør en administrator.",
     "errors.api.owner_not_found": "Den brukeren er ikke eier av dette innholdet.",
     "errors.api.agent_token_scope": "Dette agent-tokenet dekker ikke elementet du prøver å endre.",
@@ -530,13 +571,24 @@ export const translations = {
     "errors.api.publish_blocked_by_validation": "Publiseringen er blokkert. Rett opp punktene under, og prøv igjen.",
     "errors.api.course_has_unpublished_items": "Kurset inneholder elementer som ikke er publisert. Publiser dem sammen med kurset.",
     "errors.api.item_archived": "Elementet er arkivert. Gjenopprett det før du publiserer.",
+    "errors.api.DISTRACTOR_ELIMINATION_RISK_HIGH": "Spørsmål {questionNumber}: ett eller flere alternativer kan utelukkes uten fagkunnskap. Lag spørsmålet på nytt eller revider det.",
+    "errors.api.DISTRACTOR_ELIMINATION_RISK_MEDIUM": "Spørsmål {questionNumber}: minst ett alternativ kan trolig utelukkes uten full fagkunnskap. Vurder å revidere.",
+    "errors.api.DISTRACTOR_METADATA_INCOMPLETE": "Spørsmål {questionNumber}: {count} avledere mangler kvalitetsdata. Troverdigheten kan være for svak.",
+    "errors.api.DISTRACTOR_QUALITY_PATTERN": "{count} av {total} spørsmål har middels utelukkingsrisiko. Hele settet kan være lettere enn tiltenkt.",
+    "errors.api.MISSING_CANDIDATE_TASK_CONSTRAINTS": "Sensorinnholdet er fylt ut, men rammene for kandidaten er tomme. Kandidaten ser da bare oppgaveteksten, uten å vite hva som forventes.",
+    "errors.api.CANDIDATE_TASK_CONSTRAINTS_TOO_LONG": "Rammene for kandidaten er over 80 ord. De bør være 1-3 korte setninger, slik at de ikke fungerer som en svarskisse.",
+    "errors.api.TASK_TEXT_TOO_SHORT": "Oppgaveteksten er for kort til å være en reell vurderingsoppgave.",
+    "errors.api.MISSING_ASSESSOR_EXPECTED_CONTENT": "Sensorveiledningen må fylles ut. Den skal beskrive hva et godt svar inneholder, så sensor har noe å vurdere mot.",
+    "errors.api.MCQ_COUNT_FAR_BELOW_BLUEPRINT": "Planen foreslo {suggested} flervalgsspørsmål, men bare {actual} finnes ({percent} %). Settet ble trolig ikke laget på nytt etter at planen ble endret.",
+    "errors.api.MCQ_COUNT_DEVIATES_FROM_BLUEPRINT": "Planen foreslo {suggested} flervalgsspørsmål, men {actual} finnes. Kalibreringen kan skli; vurder å revidere.",
+    "errors.api.BLUEPRINT_OBJECTIVES_NOT_REFERENCED": "Ingen av de {count} læringsmålene fra planen finnes i oppgaveteksten eller sensorveiledningen. Sjekk at genereringen faktisk brukte planen.",
     "errors.api.item_archived.module": "Modulen er arkivert. Gjenopprett den før du publiserer.",
     "errors.api.item_archived.section": "Seksjonen er arkivert. Gjenopprett den før du publiserer.",
     "errors.api.module_no_content": "Modulen har ingen versjon med innhold å publisere.",
     "errors.api.section_no_content": "Seksjonen har ikke noe innhold å publisere.",
     "errors.api.module_in_use": "Modulen er i bruk i et kurs og kan ikke fjernes. Ta den ut av kurset først.",
     "errors.api.conflict": "Noen andre endret dette mens du jobbet. Last på nytt og prøv igjen.",
-    "errors.api.rate_limited": "For mange forespørsler etter hverandre. Vent litt, og prøv igjen.",
+    "errors.api.rate_limited": "For mange forespørsler etter hverandre. Prøv igjen om {retryAfterSeconds} sekunder.",
     "errors.api.internal_error": "Noe gikk galt på serveren. Prøv igjen — vedvarer det, kontakt administrator.",
     "errors.api.confirmation_required": "Bekreftelsen stemte ikke. Skriv ordet nøyaktig slik det står.",
     "errors.api.not_an_export_envelope": "Denne fila er ikke en innholdspakke laget med «Eksporter».",
@@ -671,6 +723,27 @@ export const translations = {
     "appeal.statusValue.RESOLVED": "Avgjort",
     "appeal.statusValue.REJECTED": "Avvist",
     "appeal.statusValue.UNKNOWN": "Ukjent",
+    // #940: overskriften på resultatskjermen. Utfallet avgjør hva som står åpent, så teksten må
+    // bære svaret alene — resten ligger bak «Vis detaljer».
+    "result.headline.passed": "Bestått",
+    "result.headline.passedPercent": "Bestått \u2014 {percent} %",
+    "result.headline.passedScore": "Bestått \u2014 {score} poeng",
+    "result.headline.failed": "Ikke bestått",
+    "result.headline.failedPercent": "Ikke bestått \u2014 {percent} %",
+    "result.headline.failedScore": "Ikke bestått \u2014 {score} poeng",
+    "result.headline.review": "En sensor ser på besvarelsen din",
+    "result.headline.reviewSub": "Du får e-post når den er ferdig. Ingenting mer å gjøre nå.",
+    "result.headline.pending": "Besvarelsen din blir vurdert",
+    "result.headline.unknown": "Det er ikke registrert noe utfall for dette forsøket",
+    "result.headline.requirementPercent": "Kravet var {min} %.",
+    "result.headline.requirementScore": "Kravet var {min} poeng.",
+    "result.headline.parts": "{parts}",
+    "result.headline.partsWithRequirement": "{parts}. Kravet var {min} poeng.",
+    "result.headline.partMcq": "Flervalg",
+    "result.headline.partPractical": "Praktisk",
+    "result.details.show": "Vis detaljer",
+    "result.details.hide": "Skjul detaljer",
+    "result.submissionIdLabel": "Innleverings-ID",
     "result.status": "Status",
     "result.statusExplanation": "Statusforklaring",
     "result.statusValue.SUBMITTED": "Innsendt",
@@ -695,56 +768,43 @@ export const translations = {
     "result.decisionValue.APPEAL_RESOLUTION": "Ankeavgjørelse",
     "result.decisionValue.UNKNOWN": "Ukjent",
     "result.decisionReason": "Begrunnelse",
-    "result.decisionReasonValue.autoManualReview":
-      "Automatisk sendt til manuell vurdering på grunn av konfidens, røde flagg eller grenseverdi-regler.",
-    "result.decisionReasonValue.autoPass": "Automatisk bestått etter terskelregler.",
-    "result.decisionReasonValue.autoFail": "Automatisk ikke bestått etter terskelregler.",
-    "result.decisionReasonValue.autoFailInsufficientEvidence":
+    // #950: én oppføring per grunnkode serveren kan sende. En kode uten oppføring her faller tilbake
+    // til serverens engelske setning — se decision-reason.js.
+    "result.decisionReasonCode.llmDisagreement":
+      "Sendt til manuell vurdering fordi to uavhengige vurderinger var uenige.",
+    "result.decisionReasonCode.scoreInconsistency":
+      "Sendt til manuell vurdering fordi poengsummene ikke gikk opp.",
+    "result.decisionReasonCode.borderline":
+      "Sendt til manuell vurdering fordi poengsummen {totalScore} ligger i grenseområdet {min}–{max}, der en sensor avgjør.",
+    "result.decisionReasonCode.redFlagOrConfidence":
+      "Sendt til manuell vurdering fordi regler for konfidens eller røde flagg slo til.",
+    "result.decisionReasonCode.aiDeclaration":
+      "Sendt til manuell vurdering: du oppga omfattende autonom KI-bruk og valgte å levere etter å ha blitt oppfordret til å bearbeide stoffet videre. En sensor vurderer — dette er ikke en automatisk stryk.",
+    "result.decisionReasonCode.aiDeclarationDescribed":
+      "Sendt til manuell vurdering: du oppga omfattende autonom KI-bruk og valgte å levere etter å ha blitt oppfordret til å bearbeide stoffet videre. En sensor vurderer — dette er ikke en automatisk stryk. Din egen beskrivelse: «{description}»",
+    "result.decisionReasonCode.contentSimilarity":
+      "Sendt til manuell vurdering fordi besvarelsen ligner sterkt på et uavhengig generert modellsvar ({similarityPercent} % mot en terskel på {thresholdPercent} %). Dette er ett signal, ikke bevis — en sensor vurderer, og dette er ikke en automatisk stryk.",
+    "result.decisionReasonCode.insufficientEvidence":
       "Automatisk ikke bestått fordi innleveringen ikke ga nok grunnlag for en pålitelig vurdering.",
+    "result.decisionReasonCode.mcqBelowMinimum":
+      "Automatisk ikke bestått fordi poengsummen på flervalgsdelen var under kravet.",
+    "result.decisionReasonCode.practicalBelowMinimum":
+      "Automatisk ikke bestått fordi poengsummen på den praktiske delen var under kravet.",
+    "result.decisionReasonCode.autoFail": "Automatisk ikke bestått etter terskelregler.",
+    "result.decisionReasonCode.autoPass": "Automatisk bestått etter terskelregler.",
+    "result.decisionReasonCode.mcqOnlyPass":
+      "Bestått: du fikk {scorePercent} %, og kravet var {minPercent} %.",
+    "result.decisionReasonCode.mcqOnlyFail":
+      "Ikke bestått: du fikk {scorePercent} %, og kravet var {minPercent} %.",
     "result.confidence": "Konfidensnotat",
+    // #1019: ÅRSAKSNØYTRALT. Nivået kommer fra strukturerte felt og sier hvor sikker vurderingen
+    // var — ikke hvorfor. En oppgitt grunn vi ikke har dekning for, er verre enn ingen grunn.
     "result.confidenceValue.low":
-      "Lav konfidens på grunn av lite innhold; vurderingen bygger på delvis dokumentasjon.",
+      "Vurderingen ble gjort med lav sikkerhet. En sensor kan se på den igjen om du klager.",
     "result.confidenceValue.medium":
-      "Middels konfidens på grunn av mulig uklarhet i ansvarlig bruk.",
+      "Vurderingen ble gjort med noe usikkerhet.",
     "result.confidenceValue.high": "Høy konfidens: strukturert og tilstrekkelig detaljert innlevering.",
     "result.improvementAdvice": "Forbedringsråd",
-    "result.improvementAdviceValue.beforeAfter": "Vis tydeligere før/etter-eksempler.",
-    "result.improvementAdviceValue.validationChecks":
-      "Beskriv konkrete kvalitetssjekker du gjennomførte.",
-    "result.improvementAdviceValue.responsibleUse":
-      "Vis tydelig hvilke rammer for ansvarlig bruk du fulgte.",
-    "result.improvementAdviceValue.riskScenarios":
-      "Beskriv konkrete risikoscenarioer, eiere og tiltak knyttet til modulen.",
-    "result.improvementAdviceValue.dataHandling":
-      "Legg til en seksjon om datahåndtering og personvern, inkludert logging og lagringstid.",
-    "result.improvementAdviceValue.humanInLoop":
-      "Beskriv en human-in-the-loop-prosess med godkjenningstrinn.",
-    "result.improvementAdviceValue.qaMetrics":
-      "Ta med målbare QA-metrikker og akseptansekriterier.",
-    "result.improvementAdviceValue.improvementLoop":
-      "Beskriv en konkret forbedringssløyfe med iterasjoner og tilbakemeldinger.",
-    "result.improvementAdviceValue.promptLeakage":
-      "Presiser retningslinjer for ansvarlig bruk og vern mot prompt-lekkasje.",
-    "result.improvementAdviceValue.governanceScope":
-      "Beskriv styringsomfang, risikoeiere og rytme for oppfølging.",
-    "result.improvementAdviceValue.riskCategories":
-      "Knytt innholdet til risikokategorier (STRIDE, CIA-triaden eller tilsvarende).",
-    "result.improvementAdviceValue.qaChecklist":
-      "Bruk en konkret QA-prosess med sjekklister og uavhengig gjennomgang.",
-    "result.improvementAdviceValue.dataControls":
-      "Beskriv datahåndtering, personvern, lagringstid og sikkerhetskontroller.",
-    "result.improvementAdviceValue.qualityThresholds":
-      "Definer akseptansekriterier og terskler for kvalitet og risiko.",
-    "result.improvementAdviceValue.iterationVersioning":
-      "Skisser en iterasjonsplan med tilbakemeldingssløyfer og versjonering.",
-    "result.improvementAdviceValue.escalationDecisionRights":
-      "Klartgjør eskaleringsrutiner og beslutningsmyndighet.",
-    "result.improvementAdviceValue.artifactsEvidence":
-      "Legg ved artefakter som risikoregister, kontrollkartlegging og revisjonsspor.",
-    "result.improvementAdviceValue.responsibleAiMisuse":
-      "Sørg for at promptene følger prinsipper for ansvarlig KI og vern mot misbruk.",
-    "result.improvementAdviceValue.examplesFailureModes":
-      "Ta med eksempelutdata og tiltak for vanlige feilmønstre.",
     "result.rationales": "Kriteriebegrunnelser",
     "result.criterion.relevance_for_case": "Relevans for oppgaven",
     "result.criterion.quality_and_utility": "Kvalitet og nytte",
@@ -758,14 +818,6 @@ export const translations = {
     "result.criterion.communication": "Kommunikasjon",
     "result.criterion.critical_thinking": "Kritisk tenkning",
     "result.criterion.problem_solving": "Problemløsning",
-    "result.rationaleValue.relevance_for_case": "Svaret er relevant for moduloppgaven.",
-    "result.rationaleValue.quality_and_utility": "Svaret viser praktisk nytte.",
-    "result.rationaleValue.iteration_and_improvement":
-      "Minst én synlig iterasjon eller forbedring er dokumentert.",
-    "result.rationaleValue.human_quality_assurance":
-      "Innleveringen viser manuelle kvalitetssikringskontroller.",
-    "result.rationaleValue.responsible_use":
-      "Kontroller for ansvarlig bruk er beskrevet i innleveringen.",
     "result.none": "Ingen resultat lastet.",
     "result.celebratePass": "🎉 Gratulerer — du bestod!",
     "courses.celebrateComplete": "🎉 Kurs fullført — godt jobbet!",
@@ -936,9 +988,18 @@ export const translations = {
     "errors.apiValidation": "Noko i skjemaet manglar eller er feil utfylt. Sjå på felta som er markerte, og prøv igjen.",
     "errors.apiGeneric": "Førespurnaden kunne ikkje fullførast ({status}). Prøv igjen — varer det ved, kontakt administrator.",
 
+"errors.api.content_in_use": "Innhaldet er i bruk i {count} kurs: {courseTitles}. Fjern det frå kursa først, eller avpubliser dei.",
+"errors.api.course_has_no_items": "Eit kurs må ha minst éin modul eller seksjon før det kan publiserast.",
+"errors.api.section_archived_cannot_publish": "Gjenopprett seksjonen før du publiserer henne.",
+"errors.api.section_has_no_content": "Seksjonen har ikkje noko innhald å publisere enno. Legg inn tekst først.",
+"errors.api.section_already_archived": "Seksjonen er allereie arkivert.",
+"errors.api.section_not_archived": "Seksjonen er ikkje arkivert, så han kan ikkje gjenopprettast.",
+"errors.api.content_in_issued_certificate": "Innhaldet inngår i {count} utstedte kursbevis og kan ikkje slettast. Arkiver det i staden — eit kursbevis må kunne vise kva det dekte.",
+"errors.api.content_in_legacy_certificate": "Seksjonen inngår i {count} kursbevis utstedt før vi registrerte kva dei dekte, og kan ikkje slettast. Arkiver han i staden.",
+"errors.api.course_has_active_participants": "{count} deltakarar er midt i ei gjennomføring, så kurset kan ikkje pensjonerast. Avpubliser det i staden — det skjuler kurset utan å pensjonere det — eller vent til dei er ferdige.",
     // #972/#965/#980 — sjå merknaden i en-GB-tabellen.
-    "errors.api.content_ownership": "Du kan berre endre innhald du eig. Be ein eigar eller ein administrator om å leggje deg til som eigar av dette elementet.",
-    "errors.api.content_unowned": "Dette innhaldet har ingen eigar enno. Berre ein administrator kan endre det til ein eigar er sett.",
+    "errors.api.content_ownership": "Berre ein eigar eller ein administrator har tilgang til dette elementet. Be ein eigar eller ein administrator om å leggje deg til som eigar.",
+    "errors.api.content_unowned": "Du har ikkje tilgang til dette innhaldet, eller så finst det ikkje. Finst det, må ein administrator setje ein eigar.",
     "errors.api.last_owner": "Du kan ikkje fjerne den siste eigaren. Legg til ein eigar til først, eller spør ein administrator.",
     "errors.api.owner_not_found": "Den brukaren er ikkje eigar av dette innhaldet.",
     "errors.api.agent_token_scope": "Dette agent-tokenet dekkjer ikkje elementet du prøver å endre.",
@@ -956,13 +1017,24 @@ export const translations = {
     "errors.api.publish_blocked_by_validation": "Publiseringa er blokkert. Rett opp punkta under, og prøv igjen.",
     "errors.api.course_has_unpublished_items": "Kurset inneheld element som ikkje er publiserte. Publiser dei saman med kurset.",
     "errors.api.item_archived": "Elementet er arkivert. Gjenopprett det før du publiserer.",
+    "errors.api.DISTRACTOR_ELIMINATION_RISK_HIGH": "Spørsmål {questionNumber}: eitt eller fleire alternativ kan utelukkast utan fagkunnskap. Lag spørsmålet på nytt eller revider det.",
+    "errors.api.DISTRACTOR_ELIMINATION_RISK_MEDIUM": "Spørsmål {questionNumber}: minst eitt alternativ kan truleg utelukkast utan full fagkunnskap. Vurder å revidere.",
+    "errors.api.DISTRACTOR_METADATA_INCOMPLETE": "Spørsmål {questionNumber}: {count} avleiarar manglar kvalitetsdata. Truverdet kan vere for svakt.",
+    "errors.api.DISTRACTOR_QUALITY_PATTERN": "{count} av {total} spørsmål har middels utelukkingsrisiko. Heile settet kan vere lettare enn tenkt.",
+    "errors.api.MISSING_CANDIDATE_TASK_CONSTRAINTS": "Sensorinnhaldet er fylt ut, men rammene for kandidaten er tomme. Kandidaten ser då berre oppgåveteksten, utan å vite kva som blir forventa.",
+    "errors.api.CANDIDATE_TASK_CONSTRAINTS_TOO_LONG": "Rammene for kandidaten er over 80 ord. Dei bør vere 1-3 korte setningar, slik at dei ikkje fungerer som ei svarskisse.",
+    "errors.api.TASK_TEXT_TOO_SHORT": "Oppgåveteksten er for kort til å vere ei reell vurderingsoppgåve.",
+    "errors.api.MISSING_ASSESSOR_EXPECTED_CONTENT": "Sensorrettleiinga må fyllast ut. Ho skal skildre kva eit godt svar inneheld, så sensor har noko å vurdere mot.",
+    "errors.api.MCQ_COUNT_FAR_BELOW_BLUEPRINT": "Planen føreslo {suggested} fleirvalsspørsmål, men berre {actual} finst ({percent} %). Settet blei truleg ikkje laga på nytt etter at planen blei endra.",
+    "errors.api.MCQ_COUNT_DEVIATES_FROM_BLUEPRINT": "Planen føreslo {suggested} fleirvalsspørsmål, men {actual} finst. Kalibreringa kan skli; vurder å revidere.",
+    "errors.api.BLUEPRINT_OBJECTIVES_NOT_REFERENCED": "Ingen av dei {count} læringsmåla frå planen finst i oppgåveteksten eller sensorrettleiinga. Sjekk at genereringa faktisk brukte planen.",
     "errors.api.item_archived.module": "Modulen er arkivert. Gjenopprett han før du publiserer.",
     "errors.api.item_archived.section": "Seksjonen er arkivert. Gjenopprett han før du publiserer.",
     "errors.api.module_no_content": "Modulen har ingen versjon med innhald å publisere.",
     "errors.api.section_no_content": "Seksjonen har ikkje noko innhald å publisere.",
     "errors.api.module_in_use": "Modulen er i bruk i eit kurs og kan ikkje fjernast. Ta han ut av kurset først.",
     "errors.api.conflict": "Nokon andre endra dette medan du arbeidde. Last på nytt og prøv igjen.",
-    "errors.api.rate_limited": "For mange førespurnader etter kvarandre. Vent litt, og prøv igjen.",
+    "errors.api.rate_limited": "For mange førespurnader etter kvarandre. Prøv igjen om {retryAfterSeconds} sekund.",
     "errors.api.internal_error": "Noko gjekk gale på tenaren. Prøv igjen — varer det ved, kontakt administrator.",
     "errors.api.confirmation_required": "Stadfestinga stemte ikkje. Skriv ordet nøyaktig slik det står.",
     "errors.api.not_an_export_envelope": "Denne fila er ikkje ein innhaldspakke laga med «Eksporter».",
@@ -1097,6 +1169,27 @@ export const translations = {
     "appeal.statusValue.RESOLVED": "Avgjord",
     "appeal.statusValue.REJECTED": "Avvist",
     "appeal.statusValue.UNKNOWN": "Ukjend",
+    // #940: overskrifta på resultatskjermen. Utfallet avgjer kva som står ope, så teksten må bere
+    // svaret åleine — resten ligg bak «Vis detaljar».
+    "result.headline.passed": "Bestått",
+    "result.headline.passedPercent": "Bestått \u2014 {percent} %",
+    "result.headline.passedScore": "Bestått \u2014 {score} poeng",
+    "result.headline.failed": "Ikkje bestått",
+    "result.headline.failedPercent": "Ikkje bestått \u2014 {percent} %",
+    "result.headline.failedScore": "Ikkje bestått \u2014 {score} poeng",
+    "result.headline.review": "Ein sensor ser på svaret ditt",
+    "result.headline.reviewSub": "Du får e-post når han er ferdig. Ingenting meir å gjere no.",
+    "result.headline.pending": "Svaret ditt blir vurdert",
+    "result.headline.unknown": "Det er ikkje registrert noko utfall for dette forsøket",
+    "result.headline.requirementPercent": "Kravet var {min} %.",
+    "result.headline.requirementScore": "Kravet var {min} poeng.",
+    "result.headline.parts": "{parts}",
+    "result.headline.partsWithRequirement": "{parts}. Kravet var {min} poeng.",
+    "result.headline.partMcq": "Fleirval",
+    "result.headline.partPractical": "Praktisk",
+    "result.details.show": "Vis detaljar",
+    "result.details.hide": "Skjul detaljar",
+    "result.submissionIdLabel": "Innleverings-ID",
     "result.status": "Status",
     "result.statusExplanation": "Statusforklaring",
     "result.statusValue.SUBMITTED": "Innsendt",
@@ -1121,56 +1214,42 @@ export const translations = {
     "result.decisionValue.APPEAL_RESOLUTION": "Ankeavgjerd",
     "result.decisionValue.UNKNOWN": "Ukjend",
     "result.decisionReason": "Grunngjeving",
-    "result.decisionReasonValue.autoManualReview":
-      "Automatisk sendt til manuell vurdering på grunn av konfidens, raude flagg eller grenseverdi-reglar.",
-    "result.decisionReasonValue.autoPass": "Automatisk bestått etter terskelreglar.",
-    "result.decisionReasonValue.autoFail": "Automatisk ikkje bestått etter terskelreglar.",
-    "result.decisionReasonValue.autoFailInsufficientEvidence":
+    // #950: éi oppføring per grunnkode serveren kan sende. Ein kode utan oppføring her fell tilbake
+    // til den engelske setninga frå serveren — sjå decision-reason.js.
+    "result.decisionReasonCode.llmDisagreement":
+      "Sendt til manuell vurdering fordi to uavhengige vurderingar var ueinige.",
+    "result.decisionReasonCode.scoreInconsistency":
+      "Sendt til manuell vurdering fordi poengsummane ikkje gjekk opp.",
+    "result.decisionReasonCode.borderline":
+      "Sendt til manuell vurdering fordi poengsummen {totalScore} ligg i grenseområdet {min}–{max}, der ein sensor avgjer.",
+    "result.decisionReasonCode.redFlagOrConfidence":
+      "Sendt til manuell vurdering fordi reglar for konfidens eller raude flagg slo til.",
+    "result.decisionReasonCode.aiDeclaration":
+      "Sendt til manuell vurdering: du oppgav omfattande autonom KI-bruk og valde å levere etter å ha blitt oppmoda til å arbeide vidare med stoffet. Ein sensor vurderer — dette er ikkje ein automatisk stryk.",
+    "result.decisionReasonCode.aiDeclarationDescribed":
+      "Sendt til manuell vurdering: du oppgav omfattande autonom KI-bruk og valde å levere etter å ha blitt oppmoda til å arbeide vidare med stoffet. Ein sensor vurderer — dette er ikkje ein automatisk stryk. Di eiga skildring: «{description}»",
+    "result.decisionReasonCode.contentSimilarity":
+      "Sendt til manuell vurdering fordi svaret liknar sterkt på eit uavhengig generert modellsvar ({similarityPercent} % mot ein terskel på {thresholdPercent} %). Dette er eitt signal, ikkje bevis — ein sensor vurderer, og dette er ikkje ein automatisk stryk.",
+    "result.decisionReasonCode.insufficientEvidence":
       "Automatisk ikkje bestått fordi innleveringa ikkje gav nok grunnlag for ei påliteleg vurdering.",
+    "result.decisionReasonCode.mcqBelowMinimum":
+      "Automatisk ikkje bestått fordi poengsummen på fleirvalsdelen var under kravet.",
+    "result.decisionReasonCode.practicalBelowMinimum":
+      "Automatisk ikkje bestått fordi poengsummen på den praktiske delen var under kravet.",
+    "result.decisionReasonCode.autoFail": "Automatisk ikkje bestått etter terskelreglar.",
+    "result.decisionReasonCode.autoPass": "Automatisk bestått etter terskelreglar.",
+    "result.decisionReasonCode.mcqOnlyPass":
+      "Bestått: du fekk {scorePercent} %, og kravet var {minPercent} %.",
+    "result.decisionReasonCode.mcqOnlyFail":
+      "Ikkje bestått: du fekk {scorePercent} %, og kravet var {minPercent} %.",
     "result.confidence": "Konfidensnotat",
+    // #1019: ÅRSAKSNØYTRALT — sjå kommentaren i bokmålsblokka.
     "result.confidenceValue.low":
-      "Låg konfidens på grunn av lite innhald; vurderinga byggjer på delvis dokumentasjon.",
+      "Vurderinga vart gjord med låg tryggleik. Ein sensor kan sjå på ho igjen om du klagar.",
     "result.confidenceValue.medium":
-      "Middels konfidens på grunn av mogleg uklarheit i ansvarleg bruk.",
+      "Vurderinga vart gjord med noko uvisse.",
     "result.confidenceValue.high": "Høg konfidens: strukturert og tilstrekkeleg detaljert innlevering.",
     "result.improvementAdvice": "Forbetringsråd",
-    "result.improvementAdviceValue.beforeAfter": "Vis tydelegare før/etter-døme.",
-    "result.improvementAdviceValue.validationChecks":
-      "Skildr konkrete kvalitetssjekkar du gjennomførte.",
-    "result.improvementAdviceValue.responsibleUse":
-      "Vis tydeleg kva rammer for ansvarleg bruk du følgde.",
-    "result.improvementAdviceValue.riskScenarios":
-      "Skildr konkrete risikoscenario, eigarar og tiltak knytte til modulen.",
-    "result.improvementAdviceValue.dataHandling":
-      "Legg til ein seksjon om datahandsaming og personvern, inkludert logging og lagringstid.",
-    "result.improvementAdviceValue.humanInLoop":
-      "Skildr ein human-in-the-loop-prosess med godkjenningstrinn.",
-    "result.improvementAdviceValue.qaMetrics":
-      "Ta med målbare QA-metrikkar og akseptkriterium.",
-    "result.improvementAdviceValue.improvementLoop":
-      "Skildr ei konkret forbetringssløyfe med iterasjonar og tilbakemeldingar.",
-    "result.improvementAdviceValue.promptLeakage":
-      "Presiser retningslinjer for ansvarleg bruk og vern mot prompt-lekkasje.",
-    "result.improvementAdviceValue.governanceScope":
-      "Skildr styringsomfang, risikoeigarar og rytme for oppfølging.",
-    "result.improvementAdviceValue.riskCategories":
-      "Knyt innhaldet til risikokategoriar (STRIDE, CIA-triaden eller tilsvarande).",
-    "result.improvementAdviceValue.qaChecklist":
-      "Bruk ein konkret QA-prosess med sjekklister og uavhengig gjennomgang.",
-    "result.improvementAdviceValue.dataControls":
-      "Skildr datahandsaming, personvern, lagringstid og tryggleikskontrollar.",
-    "result.improvementAdviceValue.qualityThresholds":
-      "Definer akseptkriterium og tersklar for kvalitet og risiko.",
-    "result.improvementAdviceValue.iterationVersioning":
-      "Skisser ein iterasjonsplan med tilbakemeldingssløyfer og versjonering.",
-    "result.improvementAdviceValue.escalationDecisionRights":
-      "Klårgjer eskaleringsrutinar og avgjerdsmynde.",
-    "result.improvementAdviceValue.artifactsEvidence":
-      "Legg ved artefaktar som risikoregister, kontrollkartlegging og revisjonsspor.",
-    "result.improvementAdviceValue.responsibleAiMisuse":
-      "Sørg for at promptane følgjer prinsipp for ansvarleg KI og vern mot misbruk.",
-    "result.improvementAdviceValue.examplesFailureModes":
-      "Ta med eksempelutdata og tiltak for vanlege feilmønster.",
     "result.rationales": "Kriteriegrunngjevingar",
     "result.criterion.relevance_for_case": "Relevans for oppgåva",
     "result.criterion.quality_and_utility": "Kvalitet og nytte",
@@ -1184,14 +1263,6 @@ export const translations = {
     "result.criterion.communication": "Kommunikasjon",
     "result.criterion.critical_thinking": "Kritisk tenking",
     "result.criterion.problem_solving": "Problemløysing",
-    "result.rationaleValue.relevance_for_case": "Svaret er relevant for moduloppgåva.",
-    "result.rationaleValue.quality_and_utility": "Svaret viser praktisk nytte.",
-    "result.rationaleValue.iteration_and_improvement":
-      "Minst éin synleg iterasjon eller forbetring er dokumentert.",
-    "result.rationaleValue.human_quality_assurance":
-      "Innleveringa viser manuelle kvalitetssikringskontrollar.",
-    "result.rationaleValue.responsible_use":
-      "Kontrollar for ansvarleg bruk er skildra i innleveringa.",
     "result.none": "Ingen resultat lasta.",
     "result.celebratePass": "🎉 Gratulerer — du bestod!",
     "courses.celebrateComplete": "🎉 Kurs fullført — godt jobba!",

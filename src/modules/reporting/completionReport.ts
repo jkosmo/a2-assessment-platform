@@ -1,4 +1,5 @@
 import { SubmissionStatus } from "../../db/prismaRuntime.js";
+import { isSettledSubmission } from "../submission/submissionOutcome.js";
 import { localizeContentText } from "../../i18n/content.js";
 import type { SupportedLocale } from "../../i18n/locale.js";
 import { reportingRepository } from "../../repositories/reportingRepository.js";
@@ -39,7 +40,7 @@ type CompletionLearnerRow = {
   decidedAt: string | null;
 };
 
-export async function getCompletionReport(filters: ReportFilters) {
+export async function getCompletionReport(filters: ReportFilters, locale: SupportedLocale = "en-GB") {
   const where = {
     ...(filters.moduleId ? { moduleId: filters.moduleId } : {}),
     ...(filters.dateFrom || filters.dateTo
@@ -63,7 +64,15 @@ export async function getCompletionReport(filters: ReportFilters) {
     const key = submission.module.id;
     const current = rowsByModule.get(key) ?? {
       moduleId: submission.module.id,
-      moduleTitle: localizeContentText("en-GB", submission.module.title) ?? submission.module.title,
+      // #1027: leserens spraak, ikke engelsk.
+      //
+      // ⚠️ Sto som `localizeContentText("en-GB", …)`. En norsk rapportleser fikk engelske modultitler i
+      // sin egen rapport — og for en modul som bare er oversatt til norsk, fikk hen den norske teksten
+      // likevel, gjennom reservekjeden. Resultatet var en rapport der spraaket varierte med hva som
+      // tilfeldigvis fantes.
+      //
+      // Detaljrapportene under tok allerede imot `locale`. Disse to var de eneste som ikke gjorde det.
+      moduleTitle: localizeContentText(locale, submission.module.title) ?? submission.module.title,
       totalSubmissions: 0,
       completedSubmissions: 0,
       underReviewSubmissions: 0,
@@ -101,7 +110,7 @@ export async function getCompletionReport(filters: ReportFilters) {
   };
 }
 
-export async function getPassRatesReport(filters: ReportFilters) {
+export async function getPassRatesReport(filters: ReportFilters, locale: SupportedLocale = "en-GB") {
   const where = {
     ...(filters.moduleId ? { moduleId: filters.moduleId } : {}),
     ...(filters.dateFrom || filters.dateTo
@@ -122,7 +131,10 @@ export async function getPassRatesReport(filters: ReportFilters) {
   for (const submission of submissions) {
     const latestDecision = submission.decisions[0];
     const outcome =
-      submission.submissionStatus === SubmissionStatus.UNDER_REVIEW || !latestDecision
+      // ⚠️ Spør om STATUSEN er avgjort, ikke om det finnes et vedtak (#951). En erstattet
+      // innlevering BÆRER et gammelt automatisk vedtak, så `!latestDecision` er usant for den —
+      // den ville blitt klassifisert som PASS eller FAIL på et resultat ingen sensor så.
+      !isSettledSubmission(submission.submissionStatus) || !latestDecision
         ? "UNDER_REVIEW"
         : latestDecision.passFailTotal
           ? "PASS"
@@ -135,7 +147,8 @@ export async function getPassRatesReport(filters: ReportFilters) {
     const key = submission.module.id;
     const current = rowsByModule.get(key) ?? {
       moduleId: submission.module.id,
-      moduleTitle: localizeContentText("en-GB", submission.module.title) ?? submission.module.title,
+      // #1027: se kommentaren i getCompletionReport.
+      moduleTitle: localizeContentText(locale, submission.module.title) ?? submission.module.title,
       totalSubmissions: 0,
       decisionCount: 0,
       passCount: 0,
@@ -310,8 +323,11 @@ function deriveLearnerSubmissionStatus(
   submissionStatus: SubmissionStatusType,
   passFailTotal: boolean | null | undefined,
 ) {
-  if (submissionStatus === SubmissionStatus.UNDER_REVIEW) {
-    return "UNDER_REVIEW";
+  // ⚠️ #951: en ikke-avgjort innlevering skal vise sin egen tilstand, ikke arve et gammelt
+  // vedtak. Sto det her `=== UNDER_REVIEW`, ville en SUPERSEDED innlevering med `passFailTotal:
+  // true` blitt vist som «PASSED» — et bestått deltakeren aldri fikk.
+  if (!isSettledSubmission(submissionStatus)) {
+    return submissionStatus;
   }
   if (passFailTotal === true) {
     return "PASSED";

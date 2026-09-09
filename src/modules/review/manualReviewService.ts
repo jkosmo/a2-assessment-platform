@@ -1,11 +1,12 @@
 import { DecisionType, ReviewStatus, SubmissionStatus } from "../../db/prismaRuntime.js";
+import { allLocaleValues } from "../../i18n/allLocaleValues.js";
 import { ConflictError, NotFoundError } from "../../errors/AppError.js";
 import { manualReviewRepository, createManualReviewRepository } from "./manualReviewRepository.js";
 import { runInTransaction, type DbTransactionClient } from "../../db/transaction.js";
 import { recordAuditEvent } from "../../services/auditService.js";
 import { appendDecisionWithLineage } from "../assessment/decisionLineageService.js";
 import { notifyAssessmentResult } from "../certification/index.js";
-import { checkAndIssueCourseCompletions } from "../course/index.js";
+import { enqueueOutboxEvents, OUTBOX_EVENT_TYPES } from "../outbox/outboxService.js";
 import { logOperationalEvent } from "../../observability/operationalLog.js";
 import { auditActions, auditEntityTypes } from "../../observability/auditEvents.js";
 import { operationalEvents } from "../../observability/operationalEvents.js";
@@ -37,6 +38,9 @@ export async function listManualReviewQueue(input: {
         title:
           localizeContentText(normalizeLocale(input.locale) ?? "en-GB", review.submission.module.title) ??
           review.submission.module.title,
+        // #1027: se klagekøen. #1022 lokaliserte tittelen her, men gjorde samtidig køsøket
+        // smalere — det gikk før over den rå JSON-strengen og traff på tvers av alle språk.
+        titleSearch: allLocaleValues(review.submission.module.title),
       },
       latestDecision: review.submission.decisions[0] ?? null,
     },
@@ -172,21 +176,8 @@ export async function finalizeManualReviewOverride(input: {
     );
   });
 
-  checkAndIssueCourseCompletions({
-    userId: review.submission.userId,
-    moduleId: review.submission.moduleId,
-  }).catch((error: unknown) => {
-    logOperationalEvent(
-      operationalEvents.course.completionCheckFailed,
-      {
-        userId: review.submission.userId,
-        moduleId: review.submission.moduleId,
-        errorMessage: error instanceof Error ? error.message : "Unknown error",
-      },
-      "error",
-    );
-  });
-
+  // #946: kursfullføringen ligger nå på outboxen, lagt der inne i transaksjonen i
+  // `finalizeManualReviewOverrideCommand`. Se samme begrunnelse i appealService.
   return { review: resolvedReview, overrideDecision };
 }
 
@@ -254,6 +245,17 @@ async function finalizeManualReviewOverrideCommand(
       },
     }, tx);
 
+    // #946: samme dør som den automatiske stien og ankestien. Commiter sammen med vedtaket.
+    await enqueueOutboxEvents(
+      [
+        {
+          type: OUTBOX_EVENT_TYPES.courseCompletionCheck,
+          payload: { userId: review.submission.userId, moduleId: review.submission.moduleId },
+        },
+      ],
+      tx,
+    );
+
     return { overrideDecision, resolvedReview };
   });
 }
@@ -274,7 +276,19 @@ export async function supersedeEligibleReviewsForRetake(
   await repo.supersedeMany(reviews.map((r) => r.id), newSubmissionId, now);
 
   for (const review of reviews) {
-    await repo.updateSubmissionStatus(review.submissionId, SubmissionStatus.COMPLETED);
+    // ⚠️ SUPERSEDED, IKKE COMPLETED (#951). Forsøket ble forlatt da deltakeren leverte på nytt, og
+    // et menneske rakk aldri å avgjøre det. Det er ikke et utfall.
+    //
+    // Denne veien er den ENESTE stien som setter en sluttstatus uten å gå via
+    // `appendDecisionWithLineage`, og det er riktig at den ikke gjør det: å skrive et vedtak her
+    // ville tatt det gamle AUTOMATISKE resultatet og gjort det endelig. Sa det «bestått», ville vi
+    // gitt kursbevis for et forsøk sensoren aldri fikk se — og en deltaker kunne unngått
+    // vurderingen ved å levere på nytt.
+    //
+    // Feilen lå derfor på LESESIDEN: rapportene så COMPLETED og talte det gamle vedtaket som
+    // endelig. Med en egen status er tilstanden synlig for alle som leser, i stedet for at hver
+    // rapport må huske å slå opp sensorsakens status.
+    await repo.updateSubmissionStatus(review.submissionId, SubmissionStatus.SUPERSEDED);
     await recordAuditEvent({
       entityType: auditEntityTypes.manualReview,
       entityId: review.id,

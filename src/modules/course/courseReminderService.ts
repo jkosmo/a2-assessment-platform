@@ -63,6 +63,9 @@ export type CourseReminderScheduleSummary = {
   skippedCompleted: number;
   skippedInactive: number;
   skippedEntraClass: number;
+  // #967: frister paa kurs som ikke er publisert, eller som er arkivert. Deltakeren kan ikke naa
+  // dem, saa en paaminnelse ville bedt hen om aa gjoere noe hen ikke har adgang til.
+  skippedCourseUnavailable: number;
 };
 
 // En effektiv frist-kandidat per (bruker, kurs) etter sammenslåing av individuelle + klasse-kilder.
@@ -210,10 +213,26 @@ async function gatherCandidates(summary: CourseReminderScheduleSummary, upperBou
   const map = new Map<string, ReminderCandidate>();
   const keyOf = (userId: string, courseId: string) => `${userId}::${courseId}`;
 
+  // #967: et kurs deltakeren ikke kan aapne, skal ikke sende paaminnelser.
+  //
+  // Scenarioet er konkret: kurset avpubliseres midt i en kullkjoering. Deltakeren ser det ikke
+  // lenger under «Mine kurs» og kan ikke fullfoere det — men fikk «7 dager til frist», deretter
+  // «forfalt», og ble staaende som OVERDUE for alltid. For et kurs som ikke lenger fantes for hen.
+  //
+  // Samme regel som deltakerflaten allerede bruker (`courseRepository.findPublishedCourses`):
+  // publisert OG ikke arkivert. Avpublisering er reversibel, saa fristen forsvinner ikke — den
+  // varsles igjen naar kurset publiseres paa nytt.
+  const courseIsReachable = (course: { publishedAt: Date | null; archivedAt: Date | null }) =>
+    course.publishedAt !== null && course.archivedAt === null;
+
   // 1. Individuelle (eksplisitt tildelte) enrollments med frist.
   const enrollments = await enrollmentRepository.findIndividualEnrollmentsWithDueDate(upperBound);
   for (const enrollment of enrollments) {
     if (!enrollment.dueAt) continue;
+    if (!courseIsReachable(enrollment.course)) {
+      summary.skippedCourseUnavailable += 1;
+      continue;
+    }
     map.set(keyOf(enrollment.userId, enrollment.courseId), {
       userId: enrollment.userId,
       courseId: enrollment.courseId,
@@ -234,6 +253,12 @@ async function gatherCandidates(summary: CourseReminderScheduleSummary, upperBou
 
   for (const assignment of assignments) {
     if (!assignment.dueAt) continue;
+    if (!courseIsReachable(assignment.course)) {
+      // Én klasse-tildeling = ett undertrykt varsel i telleren, ikke ett per medlem. Medlemmene er
+      // ikke ekspandert ennaa, og aa telle dem her ville blandet to enheter i samme tall.
+      summary.skippedCourseUnavailable += 1;
+      continue;
+    }
     if (assignment.class.kind === "ENTRA") {
       summary.skippedEntraClass += 1;
       continue;
@@ -303,6 +328,7 @@ export async function runCourseReminderSchedule(input?: {
     skippedCompleted: 0,
     skippedInactive: 0,
     skippedEntraClass: 0,
+    skippedCourseUnavailable: 0,
   };
 
   // #798: bound both due-date scans to the reminder horizon (largest due-soon offset + 1 day). This still

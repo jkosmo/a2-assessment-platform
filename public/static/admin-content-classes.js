@@ -289,8 +289,17 @@ async function openClass(id) {
     </li>`).join("");
   const courseRows = courses.map((c) => {
     const due = formatDueDate(c.dueAt);
+    // #967: si hvorfor ingen i klassen beveger seg. Et arkivert eller upublisert kurs er usynlig
+    // for deltakeren, og påminnelser sendes ikke lenger for det — men tildelingen står igjen, og
+    // uten dette merket ser raden helt normal ut.
+    const unreachable = c.courseArchived
+      ? "Arkivert – deltakerne ser det ikke"
+      : c.coursePublished === false
+        ? "Ikke publisert – deltakerne ser det ikke"
+        : "";
     return `<li class="assign-row">
       <span class="assign-name">${escapeHtml(courseTitle(c.title))}</span>
+      ${unreachable ? `<span class="assign-meta assign-meta--warn">${escapeHtml(unreachable)}</span>` : ""}
       <span class="assign-meta">${due ? `Frist: ${escapeHtml(due)}` : "Ingen frist"}</span>
       <button type="button" class="assign-remove btn-secondary" data-remove-course="${escapeHtml(c.courseId)}" aria-label="Fjern kurs">Fjern</button>
     </li>`;

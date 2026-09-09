@@ -65,6 +65,30 @@
       <div id="settingsContent" style="display:none">
 
         <!-- General section -->
+        <!-- #953: vurderinger som ga opp. Seksjonen finnes i DOM-en, men rendres kun når lista
+             ikke er tom (produkteier 2026-08-26: «vis dette kun hvis det er noen elementer å vise»).
+             Skjules med setHidden(), ikke .hidden-klassen — se dom-visibility.js. -->
+        <section class="card" id="failedAssessmentsCard">
+          <h2 data-i18n="adminPlatform.section.failedAssessments">Assessments that gave up</h2>
+          <p class="small" data-i18n="adminPlatform.failedAssessments.intro">These submissions used up every retry. The candidate has no result and is waiting.</p>
+          <p class="small" id="failedAssessmentsTruncated" hidden style="display:none"></p>
+          <div class="table-wrap" tabindex="0" role="region" aria-label="Failed assessments">
+            <table>
+              <thead>
+                <tr>
+                  <th scope="col" data-i18n="adminPlatform.failedAssessments.participant">Participant</th>
+                  <th scope="col" data-i18n="adminPlatform.failedAssessments.module">Module</th>
+                  <th scope="col" data-i18n="adminPlatform.failedAssessments.failedAt">Failed</th>
+                  <th scope="col" data-i18n="adminPlatform.failedAssessments.attempts">Attempts</th>
+                  <th scope="col" data-i18n="adminPlatform.failedAssessments.error">Cause</th>
+                  <th scope="col"><span class="sr-only" data-i18n="adminPlatform.failedAssessments.action">Action</span></th>
+                </tr>
+              </thead>
+              <tbody id="failedAssessmentsBody"></tbody>
+            </table>
+          </div>
+        </section>
+
         <section class="card">
           <h2 data-i18n="adminPlatform.section.general">General</h2>
           <div class="field-group">

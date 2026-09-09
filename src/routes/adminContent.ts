@@ -95,6 +95,7 @@ import { adminSectionsRouter } from "./adminSections.js";
 import { generateLimiter, extractLimiter, intentLogLimiter } from "../middleware/rateLimiting.js";
 import { ForbiddenError, NotFoundError, AppError } from "../errors/AppError.js";
 import { assertContentOwnership } from "../modules/content/contentOwnershipService.js";
+import { respondWithAppError } from "./helpers/respondWithAppError.js";
 
 const adminContentRouter = Router();
 
@@ -279,7 +280,7 @@ adminContentRouter.patch("/modules/:moduleId/title", async (request, response) =
     response.json({ module });
   } catch (error) {
     if (error instanceof AppError) {
-      response.status(error.httpStatus).json({ error: error.code, message: error.message });
+      respondWithAppError(response, error);
       return;
     }
     response.status(400).json({ error: "update_title_failed", message: "Could not update module title." });
@@ -310,7 +311,7 @@ adminContentRouter.delete("/modules/:moduleId", async (request, response) => {
     response.json({ deletedModule });
   } catch (error) {
     if (error instanceof AppError) {
-      response.status(error.httpStatus).json({ error: error.code, message: error.message });
+      respondWithAppError(response, error);
       return;
     }
     response.status(400).json({ error: "delete_module_failed", message: "Could not delete module." });
@@ -402,7 +403,7 @@ adminContentRouter.get("/modules/:moduleId/export", async (request, response) =>
     response.json({ moduleExport: bundle });
   } catch (error) {
     if (error instanceof AppError) {
-      response.status(error.httpStatus).json({ error: error.code, message: error.message });
+      respondWithAppError(response, error);
       return;
     }
     response.status(404).json({ error: "module_export_failed", message: "Could not export module." });
@@ -478,7 +479,7 @@ adminContentRouter.post("/modules/import", idempotency("modules.import"), async 
     });
   } catch (err) {
     if (err instanceof AppError) {
-      response.status(err.httpStatus).json({ error: err.code, message: err.message });
+      respondWithAppError(response, err);
       return;
     }
     const message = err instanceof Error ? err.message : "Unknown error";
@@ -516,7 +517,7 @@ adminContentRouter.get("/modules/:moduleId/export-package", async (request, resp
     response.json({ envelope });
   } catch (error) {
     if (error instanceof AppError) {
-      response.status(error.httpStatus).json({ error: error.code, message: error.message });
+      respondWithAppError(response, error);
       return;
     }
     const message = error instanceof Error ? error.message : "Could not build module export envelope.";
@@ -749,6 +750,10 @@ adminContentRouter.post("/modules/:moduleId/versions", idempotency((req) => `mod
       // null clears, undefined leaves alone.
       ...(data.description !== undefined ? { description: data.description } : {}),
       ...(data.certificationLevel !== undefined ? { certificationLevel: data.certificationLevel } : {}),
+      // #1049: `null` er en EKTE verdi her — «tilbake til nivåets standard» — så testen må være mot
+      // `undefined`, ikke mot falsy. En `?? undefined` her ville gjort det umulig å angre.
+      ...(data.scopeMinWords !== undefined ? { scopeMinWords: data.scopeMinWords } : {}),
+      ...(data.scopeMaxWords !== undefined ? { scopeMaxWords: data.scopeMaxWords } : {}),
       ...(data.validFrom !== undefined ? { validFrom: validFrom } : {}),
       ...(data.validTo !== undefined ? { validTo: validTo } : {}),
       assessmentMode: data.assessmentMode,
@@ -768,7 +773,7 @@ adminContentRouter.post("/modules/:moduleId/versions", idempotency((req) => `mod
     response.status(201).json(result);
   } catch (err) {
     if (err instanceof AppError) {
-      response.status(err.httpStatus).json({ error: err.code, message: err.message });
+      respondWithAppError(response, err);
       return;
     }
     // The transaction rolled back, so the module is exactly as it was. Say what failed rather
@@ -829,7 +834,7 @@ adminContentRouter.post(
       response.status(201).json({ moduleVersion });
     } catch (error) {
       if (error instanceof AppError) {
-        response.status(error.httpStatus).json({ error: error.code, message: error.message });
+        respondWithAppError(response, error);
         return;
       }
       response.status(400).json({
@@ -935,6 +940,25 @@ adminContentRouter.post("/modules/:moduleId/module-versions/:moduleVersionId/pub
       validation.issues.push(...translationIssues);
       validation.valid = false;
     }
+
+    // #955: I3 — «arkivert men publisert» skal aldri finnes.
+    //
+    // ⚠️ Fire andre steder håndhevet dette; denne ruta gjorde det ikke, og KUNNE ikke:
+    // `findModuleContentBundle` selekterte ikke `archivedAt`. Uten sjekken kunne man arkivere en
+    // modul (som nullstiller `activeVersionId`) og så publisere en versjon direkte her. Da ser
+    // `evaluateModule` en aktiv versjon, melder `publishable: true`, og utelater modulen fra
+    // kursets `unpublishedItems` — kurset publiseres uten kaskade, og deltakeren møter en blindvei.
+    //
+    // Samme kode som de fire andre stedene bruker, så klienten kan vise den samme setningen (#914).
+    if (bundle.module.archivedAt) {
+      validation.issues.push({
+        severity: "blocking",
+        code: "item_archived",
+        message: "Modulen er arkivert. Gjenopprett den før du publiserer.",
+        params: { itemType: "module" },
+      });
+      validation.valid = false;
+    }
     if (!validation.valid) {
       response.status(422).json({
         error: "publish_blocked_by_validation",
@@ -952,7 +976,7 @@ adminContentRouter.post("/modules/:moduleId/module-versions/:moduleVersionId/pub
     response.json({ moduleVersion, validationWarnings: validation.issues });
   } catch (error) {
     if (error instanceof AppError) {
-      response.status(error.httpStatus).json({ error: error.code, message: error.message });
+      respondWithAppError(response, error);
       return;
     }
     response.status(400).json({ error: "publish_module_version_failed", message: "Could not publish module version." });
@@ -972,7 +996,7 @@ adminContentRouter.post("/modules/:moduleId/unpublish", async (request, response
     response.json({ moduleId: result.moduleId, previousActiveVersionId: result.previousActiveVersionId });
   } catch (error) {
     if (error instanceof AppError) {
-      response.status(error.httpStatus).json({ error: error.code, message: error.message });
+      respondWithAppError(response, error);
       return;
     }
     const message = error instanceof Error ? error.message : "Could not unpublish module.";
@@ -1009,7 +1033,7 @@ adminContentRouter.post("/modules/:moduleId/archive", async (request, response) 
     response.json({ moduleId: result.id, archivedAt: result.archivedAt });
   } catch (error) {
     if (error instanceof AppError) {
-      response.status(error.httpStatus).json({ error: error.code, message: error.message });
+      respondWithAppError(response, error);
       return;
     }
     const message = error instanceof Error ? error.message : "Could not archive module.";
@@ -1030,7 +1054,7 @@ adminContentRouter.post("/modules/:moduleId/restore", async (request, response) 
     response.json({ moduleId: result.id });
   } catch (error) {
     if (error instanceof AppError) {
-      response.status(error.httpStatus).json({ error: error.code, message: error.message });
+      respondWithAppError(response, error);
       return;
     }
     const message = error instanceof Error ? error.message : "Could not restore module.";
@@ -1103,6 +1127,9 @@ adminContentRouter.post("/source-material/fetch-url", generateLimiter, async (re
     response.status(429).json({
       error: "rate_limited",
       message: `Too many URL fetches. Retry in ~${retryAfterSec}s.`,
+      // #983: tallet MAA foelge med. Oversettelsen for `rate_limited` er delt med resten av
+      // plattformen og navngir sekundene, saa et svar uten `details` viser plassholderen ordrett.
+      details: { retryAfterSeconds: retryAfterSec },
     });
     return;
   }
@@ -1122,7 +1149,7 @@ adminContentRouter.post("/source-material/fetch-url", generateLimiter, async (re
               : err.code === "http_error"
                 ? 502
                 : 500;
-      response.status(status).json({ error: err.code, message: err.message });
+      respondWithAppError(response, err, status);
       return;
     }
     const message = err instanceof Error ? err.message : "Unknown error";
@@ -1155,6 +1182,9 @@ adminContentRouter.post("/source-material/crawl-url", generateLimiter, async (re
     response.status(429).json({
       error: "rate_limited",
       message: `Too many crawls. Retry in ~${retryAfterSec}s.`,
+      // #983: tallet MAA foelge med. Oversettelsen for `rate_limited` er delt med resten av
+      // plattformen og navngir sekundene, saa et svar uten `details` viser plassholderen ordrett.
+      details: { retryAfterSeconds: retryAfterSec },
     });
     return;
   }
@@ -1175,7 +1205,7 @@ adminContentRouter.post("/source-material/crawl-url", generateLimiter, async (re
                 : err.code === "http_error"
                   ? 502
                   : 500;
-      response.status(status).json({ error: err.code, message: err.message });
+      respondWithAppError(response, err, status);
       return;
     }
     const message = err instanceof Error ? err.message : "Unknown error";

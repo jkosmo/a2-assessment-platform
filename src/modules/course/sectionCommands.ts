@@ -1,6 +1,6 @@
 import { prisma } from "../../db/prisma.js";
 import { runInTransaction, type DbTransactionClient } from "../../db/transaction.js";
-import { AppError, NotFoundError, ValidationError } from "../../errors/AppError.js";
+import { AppError, DomainRuleError, NotFoundError, ValidationError } from "../../errors/AppError.js";
 import { recordAuditEvent } from "../../services/auditService.js";
 import { auditActions, auditEntityTypes, agentAuthoringAuditMetadata, type AgentAuthoringContext } from "../../observability/auditEvents.js";
 import { assertSectionNotInAnyCourse, assertSectionNotInIssuedCertificate } from "./contentLifecycle.js";
@@ -296,7 +296,16 @@ export async function publishSection(sectionId: string, actorId?: string) {
     throw new NotFoundError("CourseSection", "section_not_found", "Course section not found.");
   }
   if (section.archivedAt) {
-    throw new ValidationError("Gjenopprett seksjonen før du publiserer den.");
+    // ⚠️ #999: EGEN KODE, IKKE PROSA. En `ValidationError` gir koden `validation_error` uten
+    // `issues`, og da viser `api-error.js` serverens `message` ORDRETT — altså denne norske
+    // setningen midt i et engelsk forfattergrensesnitt.
+    //
+    // Samme retting som de fire livssyklusvaktene for kurs fikk (`content_in_use` m.fl.). Med en
+    // kode slår klienten den opp i sin egen tabell og rendrer på brukerens språk.
+    throw new DomainRuleError(
+      "section_archived_cannot_publish",
+      "Restore the section before publishing it.",
+    );
   }
   const latest = await prisma.courseSectionVersion.findFirst({
     where: { sectionId },
@@ -304,7 +313,11 @@ export async function publishSection(sectionId: string, actorId?: string) {
     select: { id: true, bodyMarkdown: true },
   });
   if (!latest) {
-    throw new ValidationError("Seksjonen har ikke noe innhold å publisere.");
+    // #999: se forklaringen over.
+    throw new DomainRuleError(
+      "section_has_no_content",
+      "The section has no content to publish.",
+    );
   }
   // #916: door 1 — the explicit publish action, and the step the course cascade calls. Blocking,
   // not a warning: this is the moment the text reaches a participant who may not read the one
@@ -375,7 +388,8 @@ export async function archiveSection(sectionId: string, actorId?: string) {
     throw new NotFoundError("CourseSection", "section_not_found", "Course section not found.");
   }
   if (section.archivedAt) {
-    throw new ValidationError("Seksjonen er allerede arkivert.");
+    // #999: se forklaringen over.
+    throw new DomainRuleError("section_already_archived", "The section is already archived.");
   }
   await assertSectionNotInAnyCourse(sectionId, "arkiveres");
   const updated = await runInTransaction(async (tx) => {
@@ -409,7 +423,8 @@ export async function restoreSection(sectionId: string, actorId?: string) {
     throw new NotFoundError("CourseSection", "section_not_found", "Course section not found.");
   }
   if (!section.archivedAt) {
-    throw new ValidationError("Seksjonen er ikke arkivert.");
+    // #999: se forklaringen over.
+    throw new DomainRuleError("section_not_archived", "The section is not archived.");
   }
   const updated = await runInTransaction(async (tx) => {
     const section = await tx.courseSection.update({

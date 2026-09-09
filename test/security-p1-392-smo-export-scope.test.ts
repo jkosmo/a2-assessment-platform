@@ -114,7 +114,7 @@ describe("Security P1 #392: SMO content scope on module export", () => {
   // #903: the module route was guarded, the COURSE route was not - and a course export
   // inlines each module's full payload, answer keys included. Exporting someone else's course
   // was therefore a way around the module guard above.
-  it("SMO-B is denied export of a course owned by SMO-A", async () => {
+  it("SMO-B reaches SMO-A's course export — content reads are open by decision", async () => {
     const courseRes = await request(app)
       .post("/api/admin/content/courses")
       .set(smoAHeaders)
@@ -122,10 +122,23 @@ describe("Security P1 #392: SMO content scope on module export", () => {
     expect(courseRes.status).toBe(201);
     const courseId = courseRes.body.course.id as string;
 
+    // ⚠️ VAKTA ER FJERNET MED VILJE 2026-09-08 (doc/DECISIONS.md).
+    //
+    // Produkteier: «Er man SMO skal man kunne se alt kursinnhold. Hvis de benytter dette til å
+    // jukse, så er det til slutt deres eget problem.» Og på spørsmål om å strippe MCQ-fasiten:
+    // «Hvis noen ønsker å jukse så er det fritt frem — det er bare å laste ned modulen og legge
+    // den inn i en LLM, så får de fasit. Vi skal ikke ta høyde for å sikre oss mot juks, det er
+    // umulig.»
+    //
+    // Påstanden er derfor SNUDD, ikke slettet. Testen måler fortsatt noe: at en fremmed forfatter
+    // faktisk slipper til. Slettet vi den, ville en gjeninnført vakt passert ubemerket.
+    //
+    // Kurset er tomt, så begge får 422 «ikke eksporterbart». Det er nettopp poenget: SMO-B møter nå
+    // SAMME svar som eieren, ikke et avslag på grunn av hvem hen er.
     const exportBRes = await request(app)
       .get(`/api/admin/content/courses/${courseId}/export-package`)
       .set(smoBHeaders);
-    expect(exportBRes.status).toBe(403);
+    expect(exportBRes.status, "en fremmed forfatter skal ikke avvises på eierskap").not.toBe(403);
 
     // The owner still reaches it - the guard is about who, not about disabling the feature.
     // Assert the EXACT status, not "anything but 403": an empty course is not exportable, and

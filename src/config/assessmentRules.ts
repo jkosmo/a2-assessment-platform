@@ -1,3 +1,5 @@
+import { logOperationalEvent } from "../observability/operationalLog.js";
+import { operationalEvents } from "../observability/operationalEvents.js";
 import fs from "node:fs";
 import path from "node:path";
 import { z } from "zod";
@@ -6,6 +8,24 @@ import { env } from "./env.js";
 export const rulesSchema = z.object({
   thresholds: z.object({
     totalMin: z.number().min(0).max(100),
+    // Produkteierbeslutning 2026-08-28: et resultat like UNDER terskelen gaar til sensor i stedet
+    // for aa strykes av maskinen. Tallet er hvor mange poeng baandet strekker seg — 10 gir 60-70
+    // med dagens terskel paa 70.
+    //
+    // ⚠️ Funksjonen fantes fra #464, men bare per modulversjon og uten standard. Maalt paa stage:
+    // 3 av 101 modulversjoner hadde et vindu satt — og de tre sto paa 0-90, altsaa «vurder alt
+    // manuelt». Vakta som skulle fange grensetilfeller hadde dermed aldri vaert i drift noe sted.
+    //
+    // ⚠️ RELATIVT, ikke absolutt. Foerste forsoek satte «60-70» rett inn, og fem eksisterende
+    // tester ble roede med en gang: en modul kan ha sin EGEN terskel (`passRules.totalMin`), og da
+    // er 60-70 meningsloest — for en modul med krav 50 ligger hele vinduet over bestaatt-grensa.
+    //
+    // Baandet er dessuten AApent oppad: et resultat paa noeyaktig terskelen er bestaatt, ikke et
+    // grensetilfelle. Uten det ble hver eneste akkurat-bestaatt sendt til sensor.
+    //
+    // 10 poeng er bevisst vidt: en kandidat som blir feilaktig stroeket er en dyrere feil enn en
+    // som blir feilaktig bestaatt. Strammes inn hvis sensorlasten blir for hoey.
+    borderlineBelowMin: z.number().min(0).max(100).optional(),
   }),
   weights: z.object({
     practicalMaxScore: z.number().min(1),
@@ -23,14 +43,43 @@ export const rulesSchema = z.object({
         .record(z.string().min(1), z.string().min(1))
         .optional()
         .default({}),
+      // #1023: samme mekanisme, for de to feltene som bærer USIKKERHET.
+      //
+      // ⚠️ Målt 2026-09-05: `manual_review_reason_code = low_confidence` forekom 0 av 48 ekte
+      // vurderinger, og `evidence_sufficiency = uncertain` 0 av 48. Begge sto i kontrakten som en
+      // ren liste over tillatte verdier, uten ett ord om NÅR de gjelder — mens `red_flags` rett over
+      // fikk kriterier per kode. Modellen fikk aldri vite hva den skulle se etter.
+      manualReviewReasonDescriptions: z
+        .record(z.string().min(1), z.string().min(1))
+        .optional()
+        .default({}),
+      evidenceSufficiencyDescriptions: z
+        .record(z.string().min(1), z.string().min(1))
+        .optional()
+        .default({}),
       canonicalRedFlags: z.record(z.string().min(1), z.array(z.string().min(1))).default({}),
     })
     .default({
       unknownRedFlagHandling: "downgrade_to_unclassified",
       unknownRedFlagCanonicalCode: "unclassified_model_warning",
       redFlagDescriptions: {},
+      manualReviewReasonDescriptions: {},
+      evidenceSufficiencyDescriptions: {},
       canonicalRedFlags: {},
     }),
+  // #1048: når «det er ikke nok her» skal vinne over «et menneske bør se på den».
+  //
+  // ⚠️ Produkteier 2026-09-06: automatisk stryk er UNNTAKET, og må begrunnes med et målbart faktum.
+  // Andelen er av forventet minimum (modulens eget omfang, ellers nivåets standard). 0,5 betyr
+  // «under halvparten av det som var ventet».
+  //
+  // En besvarelse på 40 ord der 100 var ventet er noe annet enn 280 der 300 var ventet, og det er
+  // grunnen til at dette er en ANDEL og ikke et fast ordtall.
+  insufficientEvidence: z
+    .object({
+      autoFailBelowScopeRatio: z.number().min(0).max(1).default(0.5),
+    })
+    .default({ autoFailBelowScopeRatio: 0.5 }),
   mcqQuality: z
     .object({
       minAttemptCount: z.number().int().positive().default(5),
@@ -78,12 +127,35 @@ export const rulesSchema = z.object({
           confidenceNotePatterns: z.array(z.string().min(1)).default(["medium confidence", "low confidence"]),
           redFlagCodes: z.array(z.string().min(1)).default([]),
           redFlagSeverities: z.array(z.string().min(1)).default(["medium", "high"]),
+          // #1023: nærhet til en SONEGRENSE utløser en ny vurdering.
+          //
+          // ⚠️ Bakgrunn: konfidensutløseren over er målt død. `low_confidence` forekom 0 av 63 ekte
+          // vurderinger, og delstrengene er engelske mens modellen skriver på deltakerens språk. Vi
+          // ba modellen introspektere — noe modeller er dårlige på — for å avgjøre om vi skulle
+          // gjøre den ene tingen som faktisk måler usikkerhet: vurdere en gang til.
+          //
+          // Poengsummen er derimot et tall vi eier selv, og den er språkuavhengig. Målt på 88 ekte
+          // vurderinger kommer den i hopp på fem (rubrikken er 5 kriterier à 0–4, skalert til 100),
+          // mens grensene er skarpe. Én kandidat på 55 stryker automatisk; én på 60 går til et
+          // menneske. Det er ETT trinn på rutenettet.
+          //
+          // Båndene er i poeng og gjelder på hver side av grensen. `null` slår av.
+          scoreBoundaryBands: z
+            .object({
+              // Grensen bestått/grensetilfelle, altså `totalMin`.
+              greenYellow: z.number().min(0).nullable().default(null),
+              // Grensen grensetilfelle/stryk, `totalMin - borderlineBelowMin`. Den viktigste: det er
+              // her utfallet går fra «et menneske ser på det» til «automatisk stryk».
+              yellowRed: z.number().min(0).nullable().default(null),
+            })
+            .default({ greenYellow: null, yellowRed: null }),
         })
         .default({
           manualReviewRecommended: true,
           confidenceNotePatterns: ["medium confidence", "low confidence"],
           redFlagCodes: [],
           redFlagSeverities: ["medium", "high"],
+          scoreBoundaryBands: { greenYellow: null, yellowRed: null },
         }),
       disagreementRules: z
         .object({
@@ -183,5 +255,28 @@ export function getAssessmentRules(): AssessmentRules {
   }
 
   cached = rules;
+
+  // ⚠️ HVILKE REGLER KJØRER DENNE INSTANSEN? Uten dette kunne vi ikke svare på det.
+  //
+  // 2026-09-05 la vi bruksKRITERIER for `low_confidence` i regelfila (#1023), deployet til stage, og
+  // målte at modellen fortsatt aldri satte koden. Da sto to forklaringer igjen — «kriteriene virket
+  // ikke» og «kriteriene nådde aldri instansen» — og INGEN av dem kunne utelukkes. Kudu kjører i en
+  // egen container og ser ikke appens filsystem, så fila kunne ikke leses utenfra.
+  //
+  // Bare nøklene og antallet logges, aldri tekstene: linja skal kunne leses i en driftslogg.
+  const d = rules.llmDecisionReliability;
+  logOperationalEvent(operationalEvents.assessment.rulesLoaded, {
+    rulesPath,
+    redFlagCodes: Object.keys(d.canonicalRedFlags ?? {}).length,
+    manualReviewReasonKeys: Object.keys(d.manualReviewReasonDescriptions ?? {}),
+    evidenceSufficiencyKeys: Object.keys(d.evidenceSufficiencyDescriptions ?? {}),
+    // ⚠️ Manglet i første utgave. Loggen ble laget for å svare på «hvilke regler kjører denne
+    // instansen», og hadde med én gang et hull av samme type: den viste beskrivelsene, men ikke
+    // båndene som avgjør om grenseregelen fyrer.
+    scoreBoundaryBands: rules.secondaryAssessment.triggerRules.scoreBoundaryBands,
+    totalMin: rules.thresholds.totalMin,
+    borderlineBelowMin: rules.thresholds.borderlineBelowMin ?? null,
+  });
+
   return cached;
 }

@@ -312,6 +312,43 @@ importfeil vanskeligere å diagnostisere uten å hjelpe noen.
 `test/e2e/section-portability-916.spec.ts` (forfatter, detaljfeltet skal være der).
 **Sak:** #988, #992 · **Status:** avklart
 
+## Kapasitet og drift
+
+### Piloten kjøres ferdig på B1 — oppskalering venter til etter den
+
+**Hvorfor:** produkteier 2026-08-28, etter at målingen under ble lagt fram: *«vi avventer til vi er
+ferdig med pilot og skal oppskalere»*.
+
+Web, worker og parser deler én B1-instans (1,75 GB) i prod. Målt over et døgn ligger minnet på
+**79,5 % i snitt og topper på 92 %**, med CPU-topper på 100 %. Det er ikke driftsmargin, det er en
+terskel — og en utrulling starter en ny prosess ved siden av den gamle, altså når det er minst plass.
+
+Det er likevel en bevisst avveining, ikke en forglemmelse: piloten har få samtidige brukere, og
+kostnaden ved å bytte plattform midt i en pilot er større enn ubehaget den gir. **Utløseren er
+oppskaleringen etter pilot**, og hva som skal kjøpes står i #808.
+
+⚠️ **Kjøp B2, ikke S1.** S1 koster 560 kr mer i måneden og gir *nøyaktig like mye minne som i dag* —
+det man betaler for er utrullingsspor. #808 ble opprinnelig skrevet om nedetid ved utrulling, og da
+var spor riktig svar. Målingen viser at også den daglige driften er trang, og for det problemet
+kjøper S1 ingenting. B2 dobler minnet for under halvparten av prisen.
+
+**Sak:** #808 · **Status:** utsatt 2026-08-28, utløses av oppskalering etter pilot
+
+### ⚠️ Databasen skal ikke oppgraderes — symptomet peker feil vei
+
+Opplevelsen er at «databasen sliter hver gang vi gjør ting». Den første hypotesen — også min — var
+kredittstruping: prod-databasen er `Standard_B1ms` i Burstable-klassen, som kjører på CPU-kreditter
+og strupes hardt når de tar slutt. Det er en god forklaring.
+
+**Den er feil.** Kredittene står på 288 av 288 hver eneste time i 24 timer, uten et eneste dropp, og
+CPU ligger på 8,5 % i snitt. Databasen er uvirksom. Årsaken er apptjenesten over.
+
+Dette står her fordi feilslutningen er lett å gjøre om igjen: symptomet — trege eller feilende
+forespørsler — ser ut som en database under press uansett hvor flaskehalsen faktisk er. **Sjekk
+begge før du konkluderer**, og ikke betal for et problem som ikke finnes.
+
+**Sak:** #808 · **Status:** målt 2026-08-28
+
 ## Roller og innsyn
 
 ### Revisjonssporet leses av alle med et oppfølgingsforhold til kandidaten
@@ -351,6 +388,54 @@ rollespørsmål — og derfor en egen sak, ikke en justering av dette settet.
 **Håndheves:** `test/role-set-guard.test.js` fester settene, så en endring må gjøres bevisst i
 stedet for å oppdages i en nattskanning.
 **Sak:** #962, #1000, #941 · **Status:** avklart 2026-08-23
+
+### Sensor og klagebehandler avgrenses IKKE til tildelte saker
+
+**Hvorfor:** produkteier 2026-08-28, på spørsmålet om `REVIEWER` og `APPEAL_HANDLER` bør begrenses
+til saker de faktisk er tildelt: **nei.**
+
+Koblingen finnes i datamodellen — `ManualReview.reviewerId` og `Appeal.resolvedById` — så
+avgrensningen ville vært den billigste av alle å innføre. Den skal likevel ikke innføres.
+
+⚠️ **Grunnen er at det å se på en kollegas sak er en LEGITIM arbeidsflyt**, ikke et smutthull:
+kalibrering, opplæring, og å steppe inn ved sykdom. En avgrensning her ville brutt noe som virker,
+for å lukke et hull som ikke er der.
+
+Dette snevrer inn #1000: spørsmålet om «hvem hører til hvem» gjelder bare `SUBJECT_MATTER_OWNER` og
+`REPORT_READER`.
+
+**Sak:** #1000 · **Status:** avklart 2026-08-28
+
+### «Mine mentees» har ingen datakilde i dag — og det blokkerer avgrensningen
+
+**Hvorfor:** produkteier 2026-08-28: `User.manager` er **ikke fylt** i produksjon i dag, men *«det
+vil være ønskelig å populere det i fremtiden»*.
+
+Feltet finnes (`prisma/schema.prisma:74`) og HR-synken kan skrive til det
+(`orgSyncService.ts:171`), men det står tomt.
+
+⚠️ **Rekkefølgen følger av dette, og den er ikke valgfri:** en avgrensning av `REPORT_READER` mot en
+tom relasjon gir **null tilgang til alle**. Ingen mentor ville kunne følge opp noen. Feltet må
+fylles først, og forholdet må vise seg å være det riktige, før håndhevingen kan skrus på.
+
+Inntil da er tilgangen **bevisst åpen og målt**, ikke uregulert: hver lesing av et revisjonsspor
+logges med hvilket forhold som faktisk knyttet leseren til innleveringen, og `roleOnly: true` når
+ingen gjorde det (#1000, v2.42.0).
+
+**Sak:** #1000 · **Status:** avklart 2026-08-28, avventer at `manager` fylles
+
+### Tilgangen står åpen mens den måles
+
+**Hvorfor:** produkteier 2026-08-28, på spørsmålet om det er greit å la de fem rollene beholde full
+lesetilgang mens vi samler måledata: **ja.**
+
+Avveiningen er mellom personvern og at systemet virker. Å stramme inn først ville betydd at en
+lærer ikke får se en kandidat hen faktisk følger opp — og det oppdages først når noen klager.
+
+⚠️ Dette er et **tidsavgrenset** valg, ikke en permanent tilstand. Det henger på at målingen faktisk
+leses: se `roleOnly` i hendelsen `submission_audit_trail_read`.
+
+**Sak:** #1000 · **Status:** avklart 2026-08-28
 
 ## Publisering av kurs
 
@@ -458,3 +543,78 @@ rundt den. Er de to uenige, skal de bringes i takt — ikke låses fast hver for
 på innleveringen. Sperren ligger der den skal.
 
 **Sak:** #978, #1002 · **Status:** avklart 2026-08-24
+
+---
+
+## Forfattere kan lese alt kursinnhold — juks er den enkeltes eget ansvar
+
+Produkteier 2026-09-08:
+
+> *«Jeg tror vi sier at dette skal være enkelt: er man SMO skal man kunne se alt kursinnhold. Hvis
+> de benytter dette til å jukse, så er det til slutt deres eget problem. Dette er et verktøy for
+> kompetansebygging, og å motivere for kompetansebygging — hvis noen ønsker å omgå dette er det
+> deres eget problem.»*
+
+Og om seksjoner særskilt:
+
+> *«Når det gjelder seksjoner så er det i alle fall ingen grunn til å beskytte mot lesing, vi ønsker
+> at så mange som mulig leser seksjoner.»*
+
+### Hva som var tilstanden
+
+Systemet gjorde tre ulike ting med samme spørsmål:
+
+| Innhold | Lesing før | |
+|---|---|---|
+| Seksjoner | vaktet | motsatt av det vi vil |
+| Kurs | vaktet etter #943 | motsatt av det vi vil |
+| Moduler | fasit tilgjengelig for enhver forfatter | tilfeldigvis riktig |
+
+⚠️ **Modulene lekket allerede.** Målt 2026-09-08: en SMO som kaller `GET /api/modules?adminFacing=true`
+får **117 moduler, 17 med `assessorExpectedContent`** — ingen eierskapsfilter. MCQ-fasiten
+(`correctAnswer`, `rationale`, `systemPrompt`) følger derimot ikke med.
+
+Den lekkasjen er nå **tilsiktet**, ikke oversett. Produkteier har veid den mot kompleksiteten ved å
+stenge den, og valgt enkelhet.
+
+### Hva #943 egentlig beskyttet mot, og hvorfor det ikke gjelder
+
+#943 la vakt på kursenes leseruter. Begrunnelsen var ikke at kolleger ikke skal se hverandres
+arbeid, men **rekognosering**: lesetilgangen skulle gjøre et eierskapshull i kursimporten
+utnyttbart. `POST /courses/import` krever i dag eierskap for `replaceExisting`, så hullet er tettet
+og begrunnelsen faller bort.
+
+### MCQ-fasiten ble vurdert særskilt — og også den er åpen
+
+Målingen viste at kurseksporten inlines hver moduls fulle innhold: **4 av 7 vellykkede
+kurseksporter ga `correctAnswer`** til en SMO som ikke eide noe av det. Jeg foreslo å strippe
+fasiten for den som ikke eier modulen.
+
+Produkteier:
+
+> *«Hvis noen ønsker å jukse så er det fritt frem — det er bare å laste ned modulen og legge den
+> inn i en LLM, så får de fasit. Vi skal ikke ta høyde for å sikre oss mot juks, det er umulig.»*
+
+Argumentet avgjør saken: oppgaveteksten og alternativene gir en språkmodell svaret uansett om vi
+sender `correctAnswer` eller ikke. Strippingen ville vært en kostnad uten en beskyttelse — og #392
+viste allerede hva den koster: en sikkerhetskopi som mistet svarene ved import.
+
+⚠️ **Dette er en vurdert og forkastet beskyttelse, ikke en oversett lekkasje.** Forskjellen betyr
+noe for den som møter dette senere.
+
+### Grensene som står
+
+⚠️ **Skriving er fortsatt vaktet.** Beslutningen gjelder å SE, ikke å endre.
+
+⚠️ **`/enrollments` er fortsatt vaktet.** Den lister navn, e-post og avdeling på deltakere.
+«Juks er deres eget problem» er en beslutning om innhold, ikke om andres personopplysninger. Skal
+den også åpnes, er det en egen beslutning.
+
+### Hvorfor det finnes en test
+
+`test/content-read-open-by-decision.test.ts` fester dette. #943 ble innført i god tro etter et funn
+fra nattskanningen, og en senere skanning vil se det samme mønsteret igjen — åpen lesing ved siden
+av vaktet skriving — og foreslå det samme. Uten en test som sier at asymmetrien er tilsiktet, er den
+bare et funn som venter på å bli lukket på nytt.
+
+**Sak:** #943, #1031 · **Status:** avklart 2026-09-08

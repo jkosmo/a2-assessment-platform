@@ -17,7 +17,7 @@ const notifyAssessmentResult = vi.fn();
 const logOperationalEvent = vi.fn();
 
 vi.mock("../../src/db/prisma.js", () => ({
-  prisma: { $transaction: vi.fn((cb: (tx: unknown) => unknown) => cb({})) },
+  prisma: { $transaction: vi.fn((cb: (tx: unknown) => unknown) => cb({ outboxEvent: { createMany: vi.fn().mockResolvedValue({ count: 1 }) } })) },
 }));
 
 vi.mock("../../src/modules/review/manualReviewRepository.js", () => ({
@@ -237,7 +237,7 @@ describe("manual review service", () => {
     });
   });
 
-  it("supersedes open reviews for a user+module and marks submissions completed", async () => {
+  it("supersedes open reviews for a user+module and marks submissions SUPERSEDED, not completed", async () => {
     findOpenByUserAndModule.mockResolvedValue([
       { id: "review-1", submissionId: "submission-old-1" },
       { id: "review-2", submissionId: "submission-old-2" },
@@ -253,6 +253,14 @@ describe("manual review service", () => {
     expect(count).toBe(2);
     expect(supersedeMany).toHaveBeenCalledWith(["review-1", "review-2"], "submission-new", expect.any(Date));
     expect(updateSubmissionStatus).toHaveBeenCalledTimes(2);
+    // ⚠️ #951: HVILKEN status, ikke bare at den ble satt. Denne påstanden manglet, og derfor sto
+    // testen grønn både da veien skrev COMPLETED og etter at den skrev SUPERSEDED — den kunne ikke
+    // se forskjell på et forlatt forsøk og et fullført.
+    //
+    // COMPLETED her betydde at rapportene leste det gamle AUTOMATISKE vedtaket som endelig. Sa det
+    // «bestått», ble forsøket talt som bestått mens CertificationStatus aldri ble skrevet.
+    expect(updateSubmissionStatus).toHaveBeenCalledWith("submission-old-1", "SUPERSEDED");
+    expect(updateSubmissionStatus).toHaveBeenCalledWith("submission-old-2", "SUPERSEDED");
     expect(recordAuditEvent).toHaveBeenCalledTimes(2);
     expect(recordAuditEvent).toHaveBeenCalledWith(expect.objectContaining({
       entityType: "manual_review",

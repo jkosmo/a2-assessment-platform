@@ -1,13 +1,17 @@
 import { createAssessmentDecision, createMcqOnlyDecision, type ModuleAssessmentPolicy } from "./decisionService.js";
+import type { AssessmentRunFence } from "./AssessmentJobRunner.js";
 import { recordAuditEvent } from "../../services/auditService.js";
 import { auditActions, auditEntityTypes } from "../../observability/auditEvents.js";
 import { enqueueOutboxEvents, OUTBOX_EVENT_TYPES } from "../outbox/outboxService.js";
 import { localizeContentText } from "../../i18n/content.js";
 import type { LlmStructuredAssessment } from "./llmAssessmentService.js";
 import type { SupportedLocale } from "../../i18n/locale.js";
+import type { AiInfluenceDecision } from "./aiInfluence.js";
+import type { DecisionReason } from "./decisionReason.js";
 
 type ApplyDecisionInput = {
   jobId: string;
+  fence: AssessmentRunFence;
   submissionId: string;
   userId: string;
   moduleId: string;
@@ -17,14 +21,17 @@ type ApplyDecisionInput = {
   mcqScaledScore: number;
   mcqPercentScore: number;
   llmResult: LlmStructuredAssessment;
-  forceManualReviewReason: string | undefined;
+  forceManualReviewReason: DecisionReason | undefined;
   assessmentPolicy: ModuleAssessmentPolicy | null;
   rubricMaxTotal: number;
   rubricCriteriaIds: string[];
   /** #578: FREETEXT_ONLY — practical/LLM-only scoring, no MCQ component. */
   freetextOnly?: boolean;
+  /** #1048: tallene automatisk stryk må begrunnes med. `null` = kan ikke måles, og da vinner mennesket. */
+  answerWordCount?: number | null;
+  expectedMinWords?: number | null;
   /** #475: AI-influence review trigger (undefined = no trigger). Routes to review, never fails. */
-  aiInfluence?: { forcesReview: boolean; reason: string };
+  aiInfluence?: AiInfluenceDecision;
   /** #475 Phase 2: computed AI-influence signals JSON persisted on the decision (null when none). */
   aiInfluenceJson?: string | null;
   /** Localized module title text (may be a raw localization JSON string). */
@@ -46,6 +53,8 @@ type ApplyDecisionInput = {
  */
 export async function applyAssessmentDecision(input: ApplyDecisionInput): Promise<void> {
   const decisionResult = await createAssessmentDecision({
+    jobId: input.jobId,
+    fence: input.fence,
     submissionId: input.submissionId,
     userId: input.userId,
     moduleVersionId: input.moduleVersionId,
@@ -59,6 +68,8 @@ export async function applyAssessmentDecision(input: ApplyDecisionInput): Promis
     rubricMaxTotal: input.rubricMaxTotal,
     rubricCriteriaIds: input.rubricCriteriaIds,
     freetextOnly: input.freetextOnly,
+    answerWordCount: input.answerWordCount,
+    expectedMinWords: input.expectedMinWords,
     aiInfluence: input.aiInfluence,
     aiInfluenceJson: input.aiInfluenceJson,
   });
@@ -72,6 +83,7 @@ export async function applyAssessmentDecision(input: ApplyDecisionInput): Promis
 
 type ApplyMcqOnlyDecisionInput = {
   jobId: string;
+  fence: AssessmentRunFence;
   submissionId: string;
   userId: string;
   moduleId: string;
@@ -99,6 +111,8 @@ type ApplyMcqOnlyDecisionInput = {
  */
 export async function applyMcqOnlyDecision(input: ApplyMcqOnlyDecisionInput): Promise<void> {
   const decisionResult = await createMcqOnlyDecision({
+    jobId: input.jobId,
+    fence: input.fence,
     submissionId: input.submissionId,
     userId: input.userId,
     moduleVersionId: input.moduleVersionId,

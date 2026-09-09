@@ -17,6 +17,19 @@ export default defineConfig({
   test: {
     environment: "node",
     include: ["test/**/*.test.ts", "test/**/*.test.js"],
+    // ⚠️ DOM-TESTENE TRENGER jsdom, OG `include` OVER FANGER DEM OGSÅ.
+    //
+    // `npm test` — det CI kjører som `verify` — tar HELE `test/**`, altså også `test/dom/`. De
+    // testene importerer frontend-moduler som rører `document`, og under `environment: "node"`
+    // faller de med «ReferenceError: document is not defined».
+    //
+    // ⚠️ DETTE HADDE STÅTT RØDT EN STUND UTEN AT NOEN SÅ DET. CI kjører bare på pull request og på
+    // push til main; pushes til dev utløser den aldri. Forrige PR var 25. august, så feilen lå
+    // usett i to uker og dukket opp først da dev → main ble åpnet.
+    //
+    // Miljøet følger nå fila i stedet for kommandoen, så `npm test`, `npm run test:unit` og
+    // `npm run test:dom` er enige om hva en DOM-test er.
+    environmentMatchGlobs: [["test/dom/**", "jsdom"]],
     globals: true,
     testTimeout: 20000,
     // #513: `npm test` (CI verify) runs the whole suite — unit + DB-backed integration — against a

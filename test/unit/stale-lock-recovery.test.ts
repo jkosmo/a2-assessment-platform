@@ -109,7 +109,12 @@ describe("stale-lock recovery path", () => {
     );
 
     // Runner then picked up and completed the (now-PENDING) job
-    expect(runAssessment).toHaveBeenCalledWith("job-1");
+    // #953: kjoeringen baerer sitt eget gjerde (lockedBy + lockedAt), fordi jobb-id alene
+      // ikke skiller en forlatt kjoering fra gjenforsoeket.
+      expect(runAssessment).toHaveBeenCalledWith("job-1", {
+        lockedBy: expect.any(String),
+        lockedAt: expect.any(Date),
+      });
     expect(markJobSucceeded).toHaveBeenCalledWith("job-1", expect.any(String), expect.any(Date));
   });
 
@@ -152,7 +157,12 @@ describe("stale-lock recovery path", () => {
     await processNextJob(runAssessment);
 
     expect(resetExpiredJob).toHaveBeenCalledTimes(2);
-    expect(runAssessment).toHaveBeenCalledWith("job-1");
+    // #953: kjoeringen baerer sitt eget gjerde (lockedBy + lockedAt), fordi jobb-id alene
+      // ikke skiller en forlatt kjoering fra gjenforsoeket.
+      expect(runAssessment).toHaveBeenCalledWith("job-1", {
+        lockedBy: expect.any(String),
+        lockedAt: expect.any(Date),
+      });
     expect(markJobSucceeded).toHaveBeenCalledWith("job-1", expect.any(String), expect.any(Date));
   });
 
@@ -168,7 +178,12 @@ describe("stale-lock recovery path", () => {
 
     expect(result).toBe(true);
     expect(resetExpiredJob).not.toHaveBeenCalled();
-    expect(runAssessment).toHaveBeenCalledWith("job-3");
+    // #953: kjoeringen baerer sitt eget gjerde (lockedBy + lockedAt), fordi jobb-id alene
+      // ikke skiller en forlatt kjoering fra gjenforsoeket.
+      expect(runAssessment).toHaveBeenCalledWith("job-3", {
+        lockedBy: expect.any(String),
+        lockedAt: expect.any(Date),
+      });
     expect(markJobSucceeded).toHaveBeenCalledWith("job-3", expect.any(String), expect.any(Date));
   });
 

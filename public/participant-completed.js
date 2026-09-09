@@ -1,4 +1,11 @@
 import { renderWorkspaceNavigationWithProfile } from "/static/workspace-nav.js";
+import { applyIdentityDefaults as delApplyIdentityDefaults } from "/static/identity-defaults.js";
+import { renderRolePresetControl as delRenderRolePresetControl } from "/static/role-preset-control.js";
+import { runWithBusyButton } from "/static/busy-button.js";
+import { showToast } from "/static/toast.js";
+import { hideLoading, showEmpty, showLoading } from "/static/loading.js";
+import { lagLokalisertRessurs } from "/static/localized-resource.js";
+import { describeApiError } from "/static/api-error.js";
 import { resolveInitialLocale } from "/static/i18n-locale.js";
 import { createNumberFormatter, createDateTimeFormatter } from "/static/format-display.js";
 const formatDateTime = createDateTimeFormatter(() => currentLocale);
@@ -161,26 +168,6 @@ function headers() {
   });
 }
 
-async function runWithBusyButton(button, action) {
-  if (!button || button.dataset.busy === "true") {
-    return;
-  }
-
-  const wasDisabled = button.disabled;
-  button.dataset.busy = "true";
-  button.disabled = true;
-  button.classList.add("button-busy");
-  button.setAttribute("aria-busy", "true");
-
-  try {
-    await action();
-  } finally {
-    button.dataset.busy = "";
-    button.classList.remove("button-busy");
-    button.removeAttribute("aria-busy");
-    button.disabled = wasDisabled;
-  }
-}
 
 
 
@@ -190,29 +177,15 @@ function localizeSubmissionStatus(value) {
 }
 
 function renderRolePresetControl() {
-  mockRolePresetSelect.innerHTML = "";
-
-  const manualOption = document.createElement("option");
-  manualOption.value = "";
-  manualOption.textContent = t("identity.rolePresetManual");
-  mockRolePresetSelect.appendChild(manualOption);
-
-  for (const role of roleSwitchState.presets) {
-    const option = document.createElement("option");
-    option.value = role;
-    option.textContent = role;
-    mockRolePresetSelect.appendChild(option);
-  }
-
-  const matchingPreset = findMatchingPreset(rolesInput.value, roleSwitchState.presets);
-  mockRolePresetSelect.value = matchingPreset;
-
-  const disabled = !roleSwitchState.enabled;
-  mockRolePresetSelect.disabled = disabled;
-  mockRolePresetHint.textContent = disabled
-    ? t("identity.rolePresetDisabledEntra")
-    : t("identity.rolePresetHint");
-  mockRolePresetContainer.hidden = roleSwitchState.presets.length === 0;
+  // #1046: fire identiske kopier, to ulike oppforsler. Se `/static/role-preset-control.js`.
+  delRenderRolePresetControl({
+    select: mockRolePresetSelect,
+    hint: mockRolePresetHint,
+    container: mockRolePresetContainer,
+    roleSwitchState,
+    currentRoles: rolesInput.value,
+    t,
+  });
 }
 
 function renderWorkspaceNavigation() {
@@ -238,7 +211,8 @@ function renderCompletedModules(body) {
   completedMeta.textContent = `${t("completed.meta.loadedPrefix")}: ${modules.length}`;
 
   if (modules.length === 0) {
-    completedBody.innerHTML = `<tr><td colspan="6">${t("completed.empty")}</td></tr>`;
+    // #1046: den delte tomtilstanden, med `.empty-state`-stilen de andre flatene bruker.
+    showEmpty(completedBody, t("completed.empty"), { columns: 6 });
     return;
   }
 
@@ -329,16 +303,8 @@ async function loadVersion() {
 }
 
 function applyIdentityDefaults() {
-  const identityDefaults = participantRuntimeConfig?.identityDefaults?.participant;
-  if (!identityDefaults) {
-    return;
-  }
-
-  document.getElementById("userId").value = identityDefaults.userId ?? "";
-  document.getElementById("email").value = identityDefaults.email ?? "";
-  document.getElementById("name").value = identityDefaults.name ?? "";
-  document.getElementById("department").value = identityDefaults.department ?? "";
-  rolesInput.value = Array.isArray(identityDefaults.roles) ? identityDefaults.roles.join(",") : "";
+  // #1046: se `/static/identity-defaults.js`. HVILKEN rolle som leses er flatens eget valg.
+  delApplyIdentityDefaults(participantRuntimeConfig?.identityDefaults?.participant , rolesInput);
 }
 
 async function loadParticipantConsoleConfig() {
@@ -390,27 +356,38 @@ loadMeButton.addEventListener("click", async () => {
       const body = await apiFetch("/api/me", headers);
       log(body);
     } catch (error) {
-      log(error.message);
+      log(describeApiError(error, t).headline);
     }
   });
 });
 
+// #1042: serveren avgjør hvilket språk innhold vises på når data HENTES (#1027). Ressursen eier
+// ny henting ved språkbytte, kappløpsvakt og enkeltflyt per språk — flaten skal ikke ha sin egen.
+const fullførteModuler = lagLokalisertRessurs({
+  hentSpråk: () => currentLocale,
+  hent: () => {
+    const limit = Number(completedLimit.value);
+    const query = Number.isFinite(limit) && limit > 0 ? `?limit=${encodeURIComponent(limit)}` : "";
+    showLoading(completedBody, { rows: 3, columns: 6 });
+    return apiFetch(`/api/modules/completed${query}`, headers).finally(() => hideLoading(completedBody));
+  },
+  tegn: (body) => {
+    renderCompletedModules(body);
+    log(body);
+  },
+  påFeil: (error) => log(describeApiError(error, t).headline),
+});
+
 loadCompletedButton.addEventListener("click", async () => {
-  await runWithBusyButton(loadCompletedButton, async () => {
-    try {
-      const limit = Number(completedLimit.value);
-      const query = Number.isFinite(limit) && limit > 0 ? `?limit=${encodeURIComponent(limit)}` : "";
-      const body = await apiFetch(`/api/modules/completed${query}`, headers);
-      renderCompletedModules(body);
-      log(body);
-    } catch (error) {
-      log(error.message);
-    }
-  });
+  await runWithBusyButton(loadCompletedButton, () => fullførteModuler.last());
 });
 
 localeSelect.addEventListener("change", () => {
   setLocale(localeSelect.value);
+  // ⚠️ Hentingen ligger HER, ikke i `setLocale`. Den kalles også ved oppstart, og en bivirkning
+  // der sender kall av gårde før roller og token finnes — det var #1039.
+  fullførteModuler.oppdaterVedSpråkbytte();
+  kursbevis.oppdaterVedSpråkbytte();
 });
 
 completedCancelAppeal.addEventListener("click", () => {
@@ -434,7 +411,8 @@ completedSubmitAppeal.addEventListener("click", async () => {
       completedAppealFeedback.hidden = false;
       completedSubmitAppeal.disabled = true;
     } catch (error) {
-      completedAppealFeedback.textContent = `${t("completed.appeal.error")} ${error.message ?? ""}`.trim();
+      // #983: serverens engelske setning sto her ordrett, etter en norsk innledning.
+      completedAppealFeedback.textContent = `${t("completed.appeal.error")} ${describeApiError(error, t).headline}`.trim();
       completedAppealFeedback.className = "small field-error";
       completedAppealFeedback.hidden = false;
     }
@@ -464,7 +442,7 @@ const courseCertList = document.getElementById("courseCertList");
 function renderCourseCertificates(completions) {
   courseCertList.innerHTML = "";
   if (!Array.isArray(completions) || completions.length === 0) {
-    courseCertList.innerHTML = `<p class="small">${escapeHtmlC(t("courseCert.empty"))}</p>`;
+    showEmpty(courseCertList, t("courseCert.empty"));
     return;
   }
   for (const cc of completions) {
@@ -481,13 +459,22 @@ function renderCourseCertificates(completions) {
   }
 }
 
-async function loadCourseCertificates() {
-  try {
-    const body = await apiFetch("/api/courses/completions", headers);
-    renderCourseCertificates(body?.completions ?? []);
-  } catch {
+// #1042: kursbevisene viser `courseTitle` og `certificationLevel`, som serveren lokaliserer ved
+// henting. Uten ny henting ble de stående på forrige språk — engelsk side, norske titler (#1040).
+const kursbevis = lagLokalisertRessurs({
+  hentSpråk: () => currentLocale,
+  hent: () => apiFetch("/api/courses/completions", headers),
+  tegn: (body) => renderCourseCertificates(body?.completions ?? []),
+  påFeil: (error) => {
+    // ⚠️ #1046: her sto bare `renderCourseCertificates([])`. En feil ble altså vist som «du har
+    // ingen kursbevis» — en tom liste er ikke det samme som at hentingen mislyktes.
     renderCourseCertificates([]);
-  }
+    showToast(describeApiError(error, t).headline, "error");
+  },
+});
+
+async function loadCourseCertificates() {
+  await kursbevis.last();
 }
 
 // Refresh course certs when the completed button is clicked too.

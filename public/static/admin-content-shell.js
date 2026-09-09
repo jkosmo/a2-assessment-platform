@@ -16,9 +16,18 @@ import {
   resolveWorkspaceNavigationItems,
 } from "/static/participant-console-state.js";
 import { showToast } from "/static/toast.js";
-import { describeApiError } from "/static/api-error.js";
+import { apiErrorCodeText, describeApiError } from "/static/api-error.js";
 import { renderWorkspaceNavigationWithProfile } from "./workspace-nav.js";
 import { localizeValueForLocale, buildPreviewHtml } from "/static/admin-content-preview.js";
+import {
+  buildCriteriaEditorHtml,
+  buildEditorStateFromCriteriaRecord,
+  captureLatestCriteriaState,
+  buildDriftDiffModalHtml,
+  computeCriteriaDiff,
+  driftText,
+  humaniseCriterionId,
+} from "/static/criteria-editor.js";
 import { setHidden } from "/static/dom-visibility.js";
 import { hashBlueprintAsync, classifyDriftState } from "/static/admin-content-blueprint-hash.js";
 import {
@@ -31,9 +40,14 @@ import { deriveModuleStatusChains } from "/static/module-status-logic.js";
 import { renderOwnerPanel } from "/static/owner-panel.js";
 import { makeSrBadge, loadVersion } from "/static/admin-content-shared.js";
 import {
-  buildExternalLlmAuthoringPrompt,
-  parseExternalLlmJson,
-} from "/static/admin-content-external-llm.js";
+  buildLocalizedCopyValue,
+  selectTranslatedDraftFields,
+  applyMcqTranslation,
+  dropMcqQuestionLocale,
+  mcqCorrectAnswerIndexes,
+  normalizeModuleTitlePatch,
+  strictLocaleValue,
+} from "/static/admin-content-localized-copy.js";
 
 // ---------------------------------------------------------------------------
 // i18n
@@ -125,6 +139,22 @@ let bundle = null;
  * authoring in the language they read.
  */
 let contentLocale = currentLocale;
+
+// #930: en tittel skrevet i ÉTT språk skal sendes som {[contentLocale]: tittel} — ikke som en ren
+// streng.
+//
+// ⚠️ En ren streng bærer ikke noe språkmerke, og `missingLocalesFor` leser den som bokmål.
+// Oppretter forfatteren en modul mens arbeidsflaten står på engelsk, lagres «Incident response»
+// som norsk: publiseringsgaten melder at en-GB og nn mangler, når det er nb og nn som mangler, og
+// «oversett det som mangler» oversetter til feil språk fra en kilde den tror er norsk.
+//
+// Er verdien allerede et kart, står den urørt — den bærer sitt eget språk fra før.
+function titleInContentLocale(value) {
+  if (value && typeof value === "object") return value;
+  const text = typeof value === "string" ? value.trim() : "";
+  if (!text) return value;
+  return { [contentLocale]: text };
+}
 
 // Generation state
 let generationAbort = null; // AbortController for active generation
@@ -517,13 +547,6 @@ function _domFormFields(entry) {
     crawlBtn.className = "btn-secondary chat-choice-btn";
     crawlBtn.textContent = t("shell.source.crawlUrlBtn");
 
-    // #455: external-LLM handoff. Copies authoring prompt to clipboard and opens modal
-    // where the user pastes the JSON the LLM produced. Bypasses the normal source-material
-    // submit path — the module is created directly from the imported JSON.
-    const externalLlmBtn = document.createElement("button");
-    externalLlmBtn.type = "button";
-    externalLlmBtn.className = "btn-secondary chat-choice-btn";
-    externalLlmBtn.textContent = t("shell.source.externalLlmBtn");
 
     const uploadHint = document.createElement("span");
     uploadHint.className = "chat-form-help";
@@ -660,31 +683,6 @@ function _domFormFields(entry) {
     // and lands user in draft-ready with module + sessionDraft populated.
     // #555: scenario velges nå ETTER kilde, så ved ekstern-LLM-handoff (som skjer på kilde-
     // steget) er scenario ennå ukjent — vi defaulter til "auto" og lar ekstern LLM avgjøre.
-    externalLlmBtn.addEventListener("click", async () => {
-      const scenarioMode = entry.context?.scenarioMode ?? "auto";
-      const promptText = buildExternalLlmAuthoringPrompt(scenarioMode);
-      try {
-        await navigator.clipboard.writeText(promptText);
-        showToast(t("shell.source.externalLlm.copied"), "success");
-      } catch {
-        // Clipboard API can fail in some browsers/contexts. Still open the modal — the
-        // textarea inside lets the user copy the prompt manually as fallback.
-        showToast(t("shell.source.externalLlm.copyFailed"), "error");
-      }
-      openExternalLlmModal({
-        scenarioMode,
-        onImportSuccess: () => {
-          entry.submitted = true;
-          _deactivateAll();
-          btn.disabled = true;
-          inputEl.disabled = true;
-          uploadBtn.disabled = true;
-          urlBtn.disabled = true;
-          crawlBtn.disabled = true;
-          externalLlmBtn.disabled = true;
-        },
-      });
-    });
 
     const fileInput = document.createElement("input");
     fileInput.type = "file";
@@ -802,7 +800,6 @@ function _domFormFields(entry) {
     uploadRow.appendChild(uploadBtn);
     uploadRow.appendChild(urlBtn);
     uploadRow.appendChild(crawlBtn);
-    uploadRow.appendChild(externalLlmBtn);
     uploadRow.appendChild(uploadHint);
     uploadRow.appendChild(fileInput);
     wrap.appendChild(uploadRow);
@@ -1393,13 +1390,6 @@ function buildPreviewCandidate(patch) {
           : sessionDraft?.criteria,
   };
 }
-
-function setPreviewCandidate(patch) {
-  previewDraft = buildPreviewCandidate(patch);
-  renderPreviewLocaleBar();
-  renderPreview();
-}
-
 function clearPreviewCandidate() {
   previewDraft = null;
   renderPreviewLocaleBar();
@@ -1461,6 +1451,22 @@ function dropLocale(localized, locale) {
   }
 }
 
+/**
+ * #982: si fra om språk som ikke ble oversatt.
+ *
+ * ⚠️ #1016: det fantes to tekster, og hver beskrev sin halvdel av virkeligheten — «står fortsatt
+ * med {source}-teksten» mot «står tomme». De var dessuten koblet MOTSATT flere steder. Nå slipper
+ * alle veier lokalen, så det finnes én sannhet og én tekst; den andre nøkkelen er fjernet.
+ */
+function describeFailedLocales(failedLocales, sourceLocale) {
+  if (!failedLocales?.length) return "";
+  const text = tf("shell.generating.draftNotTranslated", {
+    locales: failedLocales.join(", "),
+    source: sourceLocale,
+  });
+  return `<p style="margin:8px 0 0;font-size:13px;color:var(--color-warning,#8a5f10)">${escapeHtml(text)}</p>`;
+}
+
 function buildLocalizedTextMap(baseLocale, baseText, translatedEntries = {}) {
   const result = {};
   for (const locale of supportedLocales) {
@@ -1473,51 +1479,59 @@ function buildLocalizedTextMap(baseLocale, baseText, translatedEntries = {}) {
   return result;
 }
 
-function normalizeModuleTitlePatch(title) {
-  if (!title) return null;
-  if (typeof title === "string") {
-    const normalized = title.trim();
-    if (!normalized) return null;
-    // #892: en uoversatt tittel sendes som streng. Tidligere fylte buildLocalizedTextMap alle tre
-    // språk med samme tekst, som fikk tittelen til å se oversatt ut og skjulte at den ikke var det.
-    // Utkast som FAKTISK er oversatt kommer hit som objekt (localizeDraftAcrossLocales) og merges.
-    return normalized;
-  }
-  if (typeof title !== "object") {
-    return null;
-  }
 
-  const normalized = {};
-  for (const locale of supportedLocales) {
-    const value = title?.[locale];
-    if (typeof value === "string" && value.trim()) {
-      normalized[locale] = value.trim();
-    }
-  }
-  return Object.keys(normalized).length > 0 ? normalized : null;
-}
-
+/**
+ * #982: en oversettelse som ikke kom, skal se ut som en oversettelse som ikke kom.
+ *
+ * ⚠️ Skrev tidligere `draft?.taskText ?? taskText` — altså KILDETEKSTEN — inn i mållokalen når
+ * svaret var tomt eller manglet felt, og kastet ikke engang ved nettverksfeil. Kartet så komplett
+ * ut, `missingLocalesFor` fant ingenting å savne, publiseringsgaten slapp modulen gjennom, og en
+ * nynorskdeltaker fikk bokmål uten at noe sa fra. Det er #892-invarianten brutt stille.
+ *
+ * Søstermetoden `localizeDraftAcrossLocalesWithTitle` gjorde dette riktig allerede (#905): den
+ * SLIPPER lokalen og fører den opp i `failedLocales`. Denne gjør nå det samme, og returnerer
+ * `failedLocales` slik at kalleren kan si fra i stedet for å vise «ferdig».
+ */
 async function localizeDraftAcrossLocales(taskText, assessorExpectedContent, sourceLocale, candidateTaskConstraints) {
   const localized = {
     taskText: buildLocalizedTextMap(sourceLocale, taskText),
     assessorExpectedContent: buildLocalizedTextMap(sourceLocale, assessorExpectedContent),
     candidateTaskConstraints: buildLocalizedTextMap(sourceLocale, candidateTaskConstraints ?? ""),
+    failedLocales: [],
   };
 
   for (const targetLocale of supportedLocales) {
     if (targetLocale === sourceLocale) continue;
-    const result = await apiFetch(
-      "/api/admin/content/generate/module-draft/localize",
-      getHeaders,
-      {
-        method: "POST",
-        body: JSON.stringify({ taskText, assessorExpectedContent, candidateTaskConstraints: candidateTaskConstraints ?? "", sourceLocale, targetLocale }),
-      },
-    );
-    const draft = result?.draft ?? result;
-    localized.taskText[targetLocale] = draft?.taskText ?? taskText;
-    localized.assessorExpectedContent[targetLocale] = draft?.assessorExpectedContent ?? assessorExpectedContent;
-    localized.candidateTaskConstraints[targetLocale] = draft?.candidateTaskConstraints ?? candidateTaskConstraints ?? "";
+
+    let result;
+    try {
+      result = await apiFetch(
+        "/api/admin/content/generate/module-draft/localize",
+        getHeaders,
+        {
+          method: "POST",
+          body: JSON.stringify({ taskText, assessorExpectedContent, candidateTaskConstraints: candidateTaskConstraints ?? "", sourceLocale, targetLocale }),
+        },
+      );
+    } catch {
+      dropLocale(localized, targetLocale);
+      localized.failedLocales.push(targetLocale);
+      continue;
+    }
+
+    const fields = selectTranslatedDraftFields(result?.draft ?? result);
+    // Et svar uten oppgavetekst er ingen oversettelse. Samme behandling som en kastet feil.
+    if (!fields) {
+      dropLocale(localized, targetLocale);
+      localized.failedLocales.push(targetLocale);
+      continue;
+    }
+
+    // ⚠️ Felter som mangler i svaret fylles IKKE med kildeteksten — de slippes for den lokalen.
+    for (const field of ["taskText", "assessorExpectedContent", "candidateTaskConstraints"]) {
+      if (fields[field]) localized[field][targetLocale] = fields[field];
+      else delete localized[field][targetLocale];
+    }
   }
 
   return localized;
@@ -1548,9 +1562,9 @@ async function localizeDraftAcrossLocalesWithTitle(title, taskText, assessorExpe
     taskText: buildLocalizedTextMap(sourceLocale, taskText),
     assessorExpectedContent: buildLocalizedTextMap(sourceLocale, assessorExpectedContent),
     candidateTaskConstraints: buildLocalizedTextMap(sourceLocale, candidateTaskConstraints ?? ""),
-    // Lokaler som IKKE ble oversatt. De står nå med kildeteksten, som er nødvendig for at lagring
-    // skal gå gjennom — men kalleren MÅ si fra, ellers ser forfatteren «ferdig» på en tittel som i
-    // praksis er kopiert. Stillhet her var halve #892.
+    // Lokaler som IKKE ble oversatt. De SLIPPES nå, som i søsterfunksjonen — begrunnelsen for å la
+    // kildeteksten stå («nødvendig for at lagring skal gå gjennom») falt bort med #930, som myknet
+    // skjemaene til å ta imot et delvis kart. Kalleren må fortsatt si fra: stillhet her var halve #892.
     failedLocales: [],
   };
   const hasDraftBody = Boolean(taskText?.trim() && assessorExpectedContent?.trim());
@@ -1562,9 +1576,17 @@ async function localizeDraftAcrossLocalesWithTitle(title, taskText, assessorExpe
       // Ingen oppgavetekst å oversette (MCQ-only) — bare tittelen skal flyttes over.
       try {
         const translatedTitle = await localizeTitleOnly(title, sourceLocale, targetLocale);
-        if (translatedTitle) localized.title[targetLocale] = translatedTitle;
-        else localized.failedLocales.push(targetLocale);
+        if (translatedTitle) {
+          localized.title[targetLocale] = translatedTitle;
+        } else {
+          // ⚠️ #1016: her sto det bare `failedLocales.push`. Tittelen ble staaende KILDEFYLT fra
+          // `buildLocalizedTextMap`, altsaa nøyaktig den tilstanden #892 forbyr — den ser oversatt
+          // ut. Feilstien tre linjer ned slapp lokalen; denne gjorde det ikke. Samme funksjon.
+          dropLocale(localized, targetLocale);
+          localized.failedLocales.push(targetLocale);
+        }
       } catch {
+        dropLocale(localized, targetLocale);
         localized.failedLocales.push(targetLocale);
       }
       continue;
@@ -1596,15 +1618,42 @@ async function localizeDraftAcrossLocalesWithTitle(title, taskText, assessorExpe
       localized.failedLocales.push(targetLocale);
       continue;
     }
+    // ⚠️ #1016: sto `?? taskText` osv. — KILDETEKSTEN inn i mållokalen for felt svaret utelot.
+    // Det er samme feil #982 fjernet i `localizeDraftAcrossLocales`, som ligger ÉN FUNKSJON unna og
+    // gjør det riktig. Rettet ett sted, glemt det andre; sjuende gang i samme klasse.
     localized.title[targetLocale] = draft.title;
-    localized.taskText[targetLocale] = draft?.taskText ?? taskText;
-    localized.assessorExpectedContent[targetLocale] = draft?.assessorExpectedContent ?? assessorExpectedContent;
-    localized.candidateTaskConstraints[targetLocale] = draft?.candidateTaskConstraints ?? candidateTaskConstraints ?? "";
+    for (const field of ["taskText", "assessorExpectedContent", "candidateTaskConstraints"]) {
+      if (draft?.[field]) localized[field][targetLocale] = draft[field];
+      else delete localized[field][targetLocale];
+    }
   }
 
   return localized;
 }
 
+/**
+ * #1014: oversett MCQ-settet til de andre språkene — og la et språk som IKKE ble oversatt, se ut
+ * som et språk som ikke ble oversatt.
+ *
+ * ⚠️ Skrev tidligere `?? …[sourceLocale]` på alle fire feltene, altså KILDETEKSTEN inn i mållokalen
+ * når svaret manglet noe. Det er samme feil som #982 fjernet i `localizeDraftAcrossLocales`, men på
+ * DELTAKERVENDT innhold: kartet så komplett ut, publiseringsgaten fant ingenting å savne, og en
+ * nynorskdeltaker fikk bokmålsspørsmål som så oversatt ut.
+ *
+ * ⚠️ `options` og `correctAnswer` flytter SAMMEN, og det er ikke pynt. `localizedTextIdentity`
+ * bygger identiteten av hele språkkartet, og svaret må være identisk med ett av alternativene.
+ * Slippes et språk fra svaret mens alternativet beholder det, matcher svaret ingen — og da blir
+ * spørsmålet, med skjemaets egne ord, stille ubesvarbart for alle. Derfor:
+ *   - språket tas bare hvis ALLE alternativene kom tilbake, og
+ *   - svaret for det språket hentes fra det oversatte ALTERNATIVET på kildesvarets plass, ikke fra
+ *     modellens egen oversettelse av svaret. Identiteten holder da av konstruksjon.
+ *
+ * `stem` og `rationale` er ikke koblet til noe og behandles hver for seg — et manglende rasjonale
+ * skal ikke koste et ellers godt oversatt spørsmål.
+ *
+ * Returnerer `{ questions, failedLocales }`, samme form som søsterfunksjonene, slik at kalleren kan
+ * si fra i stedet for å vise «ferdig».
+ */
 async function localizeMcqAcrossLocales(questions, sourceLocale) {
   const localizedQuestions = questions.map((question) => ({
     stem: buildLocalizedTextMap(sourceLocale, question.stem),
@@ -1612,40 +1661,45 @@ async function localizeMcqAcrossLocales(questions, sourceLocale) {
     correctAnswer: buildLocalizedTextMap(sourceLocale, question.correctAnswer),
     rationale: buildLocalizedTextMap(sourceLocale, question.rationale),
   }));
+  const correctIndexes = mcqCorrectAnswerIndexes(questions);
+  const failedLocales = [];
 
   for (const targetLocale of supportedLocales) {
     if (targetLocale === sourceLocale) continue;
-    const result = await apiFetch(
-      "/api/admin/content/generate/mcq/localize",
-      getHeaders,
-      {
-        method: "POST",
-        body: JSON.stringify({ questions, sourceLocale, targetLocale }),
-      },
-    );
-    const translatedQuestions = result?.questions ?? [];
-    translatedQuestions.forEach((question, index) => {
-      if (!localizedQuestions[index]) return;
-      localizedQuestions[index].stem[targetLocale] = question?.stem ?? localizedQuestions[index].stem[sourceLocale];
-      localizedQuestions[index].correctAnswer[targetLocale] = question?.correctAnswer ?? localizedQuestions[index].correctAnswer[sourceLocale];
-      localizedQuestions[index].rationale[targetLocale] = question?.rationale ?? localizedQuestions[index].rationale[sourceLocale];
-      (question?.options ?? []).forEach((option, optionIndex) => {
-        if (!localizedQuestions[index].options[optionIndex]) return;
-        localizedQuestions[index].options[optionIndex][targetLocale] = option ?? localizedQuestions[index].options[optionIndex][sourceLocale];
-      });
-    });
+
+    let result;
+    try {
+      result = await apiFetch(
+        "/api/admin/content/generate/mcq/localize",
+        getHeaders,
+        {
+          method: "POST",
+          body: JSON.stringify({ questions, sourceLocale, targetLocale }),
+        },
+      );
+    } catch {
+      // ⚠️ Fantes ikke før: funksjonen hadde ingen try/catch, og BEGGE de opprinnelige kallerne
+      // kaller den utenfor sine try-blokker. Et 500-svar ga derfor en uhåndtert rejection og en
+      // fremdriftsboble som ble stående. Nå er utfallet et manglende språk — noe dataene kan
+      // uttrykke og publiseringsgaten måler — og de genererte spørsmålene kastes ikke bort fordi
+      // oversettelsen feilet.
+      localizedQuestions.forEach((q) => dropMcqQuestionLocale(q, targetLocale));
+      failedLocales.push(targetLocale);
+      continue;
+    }
+
+    const oversatte = Array.isArray(result?.questions) ? result.questions : [];
+    if (oversatte.length === 0) {
+      // Et svar uten spørsmål er ingen oversettelse. Samme behandling som en kastet feil.
+      localizedQuestions.forEach((q) => dropMcqQuestionLocale(q, targetLocale));
+      failedLocales.push(targetLocale);
+      continue;
+    }
+
+    applyMcqTranslation(localizedQuestions, oversatte, { targetLocale, correctIndexes });
   }
 
-  return localizedQuestions;
-}
-
-function buildLocalizedMcqDraft(questions, sourceLocale) {
-  return (questions ?? []).map((question) => ({
-    stem: buildLocalizedTextMap(sourceLocale, question?.stem ?? ""),
-    options: (question?.options ?? []).map((option) => buildLocalizedTextMap(sourceLocale, option ?? "")),
-    correctAnswer: buildLocalizedTextMap(sourceLocale, question?.correctAnswer ?? ""),
-    rationale: buildLocalizedTextMap(sourceLocale, question?.rationale ?? ""),
-  }));
+  return { questions: localizedQuestions, failedLocales };
 }
 
 function resolveEditableMcqQuestions(locale) {
@@ -1812,7 +1866,16 @@ let pendingProposal = null;
  *                   for content the author has not accepted.
  * @returns true if committed, false if parked.
  */
-function commitOrProposeGenerated({ patch, slot, readyHtml, scroll = "top", onCommit }) {
+/**
+ * #982: `warningHtml` er et EGET argument, ikke en del av `readyHtml`.
+ *
+ * ⚠️ Advarselen om språk som ikke ble oversatt lå først inne i `readyHtml`. Den rendres bare når
+ * patchen landes med én gang — er en redigeringsflate åpen, parkeres forslaget og en helt annen
+ * tekst vises. Forfatteren som HAR skrevet i feltene, altså den som oftest ber om en revisjon, fikk
+ * dermed aldri vite at en oversettelse manglet. Advarselen må høre til beskjeden, ikke til én av to
+ * måter å vise den på.
+ */
+function commitOrProposeGenerated({ patch, slot, readyHtml, warningHtml = "", scroll = "top", onCommit }) {
   const commit = () => {
     commitSessionDraftPatch(patch, { scroll });
     onCommit?.();
@@ -1820,7 +1883,7 @@ function commitOrProposeGenerated({ patch, slot, readyHtml, scroll = "top", onCo
 
   if (!hasOpenEditForm()) {
     commit();
-    logResolveSlot(slot, readyHtml);
+    logResolveSlot(slot, () => `${readyHtml()}${warningHtml}`);
     return true;
   }
 
@@ -1836,7 +1899,7 @@ function commitOrProposeGenerated({ patch, slot, readyHtml, scroll = "top", onCo
   const thisProposal = pendingProposal;
   logResolveSlot(
     slot,
-    () => `<strong>${escapeHtml(t("shell.proposal.title"))}</strong>
+    () => `<strong>${escapeHtml(t("shell.proposal.title"))}</strong>${warningHtml}
       <p style="margin:8px 0 0;font-size:13px;color:var(--color-meta)">${escapeHtml(t("shell.proposal.body"))}</p>`,
     [
       {
@@ -1954,7 +2017,17 @@ async function generateDraftInBackground(sourceMaterial, certLevel, locale, gene
       getHeaders,
       {
         method: "POST",
-        body: JSON.stringify({ sourceMaterial, certificationLevel: certLevel, locale, generationMode, scenarioMode, ...(blueprintObject ? { blueprint: blueprintObject } : {}) }),
+        body: JSON.stringify({
+          sourceMaterial,
+          certificationLevel: certLevel,
+          locale,
+          generationMode,
+          scenarioMode,
+          // #1049: genereringen er tilstandsløs og kan ikke slå opp modulen. Klienten sender
+          // forfatterens omfang med, akkurat som den allerede sender nivået.
+          ...scopeForGeneration(),
+          ...(blueprintObject ? { blueprint: blueprintObject } : {}),
+        }),
         signal: abort.signal,
       },
     );
@@ -1978,6 +2051,10 @@ async function generateDraftInBackground(sourceMaterial, certLevel, locale, gene
 
   const draft = result?.draft ?? result;
   const localizedDraft = await localizeDraftAcrossLocales(draft.taskText, draft.assessorExpectedContent, locale, draft.candidateTaskConstraints);
+  // #982: en delvis oversettelse er ikke «ferdig». Språk som ikke ble oversatt står nå tomme —
+  // sier vi ingenting, oppdager forfatteren det først når publiseringsgaten stopper modulen, eller
+  // verre: aldri, fordi hen tror alt er på plass.
+  const localizeWarning = describeFailedLocales(localizedDraft.failedLocales, locale);
   // #926 §6: gjennom porten. Blueprint og hash-oppfriskningen hører til utkastet, ikke til
   // forslaget, så de skjer først når patchen faktisk landes.
   commitOrProposeGenerated({
@@ -1985,6 +2062,7 @@ async function generateDraftInBackground(sourceMaterial, certLevel, locale, gene
     slot,
     readyHtml: () => `<strong>${escapeHtml(t("shell.generating.draftReady"))}</strong>
       <p style="margin:8px 0 0;font-size:13px;color:var(--color-meta)">${escapeHtml(t("shell.generating.reviewPreviewHint"))}</p>`,
+    warningHtml: localizeWarning,
     onCommit: () => {
       if (blueprint) {
         sessionDraft = { ...sessionDraft, assessmentBlueprint: blueprint };
@@ -2044,7 +2122,7 @@ async function generateMcqInBackground(sourceMaterial, certLevel, locale, genera
   sessionState = "draft-pending";
 
   const questions = result?.questions ?? [];
-  const localizedQuestions = await localizeMcqAcrossLocales(questions, locale);
+  const { questions: localizedQuestions, failedLocales } = await localizeMcqAcrossLocales(questions, locale);
   // #551: surface MCQ quality warnings (incl. the length-cue check) so the author can review.
   const mcqWarnings = Array.isArray(result?.validation?.issues) ? result.validation.issues : [];
   const mcqWarningsHtml = mcqWarnings.length > 0
@@ -2054,8 +2132,13 @@ async function generateMcqInBackground(sourceMaterial, certLevel, locale, genera
     patch: { mcqQuestions: localizedQuestions },
     slot,
     scroll: "bottom",
+    // #982: kvalitetsadvarslene fra #551 lå også inne i `readyHtml`, og forsvant dermed når
+    // forslaget ble parkert bak åpne felter — spørsmål med kjente problemer kunne landes uten at
+    // advarselen noen gang var synlig. Fjerde advarsel i samme fil med samme feil.
     readyHtml: () => `<strong>${escapeHtml(tf("shell.generating.mcqReady", { count: questions.length }))}</strong>
-      <p style="margin:8px 0 0;font-size:13px;color:var(--color-meta)">${escapeHtml(t("shell.generating.reviewPreviewHint"))}</p>${mcqWarningsHtml}`,
+      <p style="margin:8px 0 0;font-size:13px;color:var(--color-meta)">${escapeHtml(t("shell.generating.reviewPreviewHint"))}</p>`,
+    // #1014: kvalitetsadvarslene fra #551 OG spraakene som ikke ble oversatt, i samme spor.
+    warningHtml: `${mcqWarningsHtml}${describeFailedLocales(failedLocales, locale)}`,
     onCommit: () => onAccept?.(questions),
   });
 }
@@ -2111,12 +2194,15 @@ async function reviseDraftInBackground(instruction, onAccept) {
 
   const draft = result?.draft ?? result;
   const localizedDraft = await localizeDraftAcrossLocales(draft.taskText, draft.assessorExpectedContent, contentLocale, draft.candidateTaskConstraints);
+  // #982: samme som ved generering — språk som ikke ble oversatt står tomme, og det skal sies.
+  const localizeWarning = describeFailedLocales(localizedDraft.failedLocales, contentLocale);
   // #926 §6: dette er stien saken beskriver ordrett — forfatteren har skrevet i feltene og ber om
   // en revisjon i chatten. Uten porten kom svaret rett inn over deres eget arbeid.
   commitOrProposeGenerated({
     patch: { taskText: localizedDraft.taskText, assessorExpectedContent: localizedDraft.assessorExpectedContent, candidateTaskConstraints: localizedDraft.candidateTaskConstraints },
     slot,
     readyHtml: () => `<strong>${escapeHtml(t("shell.revision.draftReady"))}</strong>`,
+    warningHtml: localizeWarning,
     onCommit: () => onAccept?.(draft),
   });
 }
@@ -2168,12 +2254,18 @@ async function reviseMcqInBackground(instruction, onAccept) {
   sessionState = "draft-pending";
 
   const questions = result?.questions ?? [];
-  const localizedQuestions = await localizeMcqAcrossLocales(questions, contentLocale);
+  const { questions: localizedQuestions, failedLocales } = await localizeMcqAcrossLocales(questions, contentLocale);
   commitOrProposeGenerated({
     patch: { mcqQuestions: localizedQuestions },
     slot,
     scroll: "bottom",
     readyHtml: () => `<strong>${escapeHtml(tf("shell.revision.mcqReady", { count: questions.length }))}</strong>`,
+    // #1014: et språk som ikke ble oversatt skal stå i kvitteringen — ellers sier flaten «klart»
+    // over et sett der ett språk mangler.
+    //
+    // ⚠️ I `warningHtml`, ikke i `readyHtml`. #982: advarsler lagt i `readyHtml` forsvinner når
+    // forslaget parkeres bak åpne felter, og kunne landes uten at de noen gang var synlige.
+    warningHtml: describeFailedLocales(failedLocales, contentLocale),
     onCommit: () => onAccept?.(questions),
   });
 }
@@ -2194,8 +2286,11 @@ async function applyStructuredTitleEditInBackground(newTitle) {
     // En delvis oversettelse er ikke en suksess. Sier vi «ferdig» her, står forfatteren igjen med en
     // tittel som ser oversatt ut, men som er kildeteksten kopiert inn — og oppdager det først når en
     // deltaker møter feil språk.
+    // ⚠️ #1016: brukte `shell.revision.titleNotTranslated`, som sier at språkene «står fortsatt med
+    // kildeteksten». Koden over SLIPPER lokalen, så de står tomme. Teksten sendte forfatteren for å
+    // lete etter noe som ikke er der. Det finnes nå bare én oppførsel, og derfor bare én tekst.
     const warning = localizedDraft.failedLocales?.length
-      ? ` ${tf("shell.revision.titleNotTranslated", {
+      ? ` ${tf("shell.generating.draftNotTranslated", {
           locales: localizedDraft.failedLocales.join(", "),
           source: snapshot.sourceLocale,
         })}`
@@ -2213,7 +2308,12 @@ async function applyStructuredTitleEditInBackground(newTitle) {
         candidateTaskConstraints: localizedDraft.candidateTaskConstraints,
       },
       slot,
-      readyHtml: () => `<strong>${escapeHtml(tf("shell.revision.titleReady", { title: newTitle }))}</strong>${escapeHtml(warning)}`,
+      // #982: advarselen som EGET argument. Lå den i `readyHtml`, forsvant den i det øyeblikket
+      // forfatteren hadde en redigeringsflate åpen — og da parkeres forslaget i stedet.
+      readyHtml: () => `<strong>${escapeHtml(tf("shell.revision.titleReady", { title: newTitle }))}</strong>`,
+      warningHtml: warning
+        ? `<p style="margin:8px 0 0;font-size:13px;color:var(--color-warning,#8a5f10)">${escapeHtml(warning)}</p>`
+        : "",
     });
   } catch (err) {
     const errMsg = apiErrorText(err);
@@ -2251,15 +2351,26 @@ async function refreshLocalizedDraftInBackground({ draft, mcq }) {
       patch.candidateTaskConstraints = localizedDraft.candidateTaskConstraints;
     }
     if (localizedMcq) {
-      patch.mcqQuestions = localizedMcq;
+      patch.mcqQuestions = localizedMcq.questions;
     }
     // #926 QA: samme hull som tittelstien. «Oversett til nynorsk» i chatten leser utkastet, ikke
     // feltene, så en oversettelse skrev håndskrevet, ulagret tekst ut av veien.
+    //
+    // ⚠️ #982: denne sto helt stum — den ignorerte `failedLocales` og sa «Oversettelse klar»
+    // uansett. Det er RE-oversettelsesflaten, altså stedet der feilede språk er mest sannsynlige,
+    // og der en forfatter minst av alt bør tro at jobben er gjort.
     commitOrProposeGenerated({
       patch,
       slot,
       scroll: localizedMcq && !localizedDraft ? "bottom" : "top",
       readyHtml: () => `<strong>${escapeHtml(t("shell.revision.translateReady"))}</strong>`,
+      // #1014: MCQ-oversettelsen kan feile for et sprak uten at utkastveien gjorde det. Sto her
+      // bare `localizedDraft`, rapporterte re-oversettelsesflaten halve sannheten — og det er
+      // nettopp flaten der feilede sprak er mest sannsynlige.
+      warningHtml: describeFailedLocales(
+        [...new Set([...(localizedDraft?.failedLocales ?? []), ...(localizedMcq?.failedLocales ?? [])])],
+        snapshot.sourceLocale,
+      ),
     });
   } catch (err) {
     const errMsg = apiErrorText(err);
@@ -2462,24 +2573,6 @@ async function saveDraftBundleInBackground(options = {}) {
 // #896 S4: which locale a value ACTUALLY has, with no fallback. localizeValueForLocale falls
 // back to nb/en-GB by design so the preview is never blank — exactly wrong when the question is
 // "is this locale missing?", because the fallback answers "no" for every locale.
-function strictLocaleValue(value, locale) {
-  if (!value) return "";
-  let parsed = value;
-  if (typeof parsed === "string") {
-    try {
-      const maybe = JSON.parse(parsed);
-      parsed = maybe && typeof maybe === "object" && !Array.isArray(maybe) ? maybe : null;
-    } catch {
-      // A plain string is written in one language. It belongs to no locale in particular, so
-      // the caller decides what the source locale is — it is not "present" under any of them.
-      parsed = null;
-    }
-    if (parsed === null) return "";
-  }
-  if (typeof parsed !== "object" || Array.isArray(parsed)) return "";
-  const candidate = parsed[locale];
-  return typeof candidate === "string" ? candidate : "";
-}
 
 // The stored value read as one language.
 //
@@ -2563,7 +2656,27 @@ function describeTranslationGate(issues, otherBlockers = []) {
   // A publish response can carry a blueprint mismatch alongside the translation gaps. Showing only
   // the gaps meant the author translated, retried, and failed again on a blocker they were never
   // told about — the gate would have taught them to distrust it.
-  const others = otherBlockers.map((issue) => issue?.message).filter(Boolean);
+  // #914: koden og `params` er sannheten; serverens `message` er reserve.
+  //
+  // Bruker den DELTE `apiErrorCodeText`, som #980 alt hadde bygget for publiseringsdialogen. Den
+  // slaar opp `errors.api.<kode>` (med variant naar koden trenger det) og fyller plassholderne.
+  //
+  // Foerste utgave av #914 lagde en egen `describeGateIssue` med egne `adminContent.validation.*`
+  // -noekler. Det var en ANDRE mekanisme for samme jobb, med sin egen ordlyd — «Restore it before
+  // publishing» mot #980 sin «Restore it before you publish». Nettopp den driften saken skal fjerne.
+  const others = otherBlockers
+    .map((issue) => {
+      // `item_archived` slaas opp som `errors.api.item_archived.module` / `.section`, fordi den
+      // brukes for begge med ulik tekst (#980). Varianten staar i `params.itemType`.
+      //
+      // ⚠️ Uten dette faller nettopp den koden tilbake paa serverens `message` — som er hardkodet
+      // NORSK. En engelsk forfatter fikk da norsk tekst for arkiverte moduler, mens alt annet paa
+      // samme skjerm var oversatt. Kursvisningen tok varianten fra RADEN og var derfor riktig, saa
+      // feilen fantes bare i denne ene veien.
+      const variant = typeof issue?.params?.itemType === "string" ? [issue.params.itemType.toLowerCase()] : [];
+      return apiErrorCodeText(issue?.code ?? null, t, variant, issue?.params ?? null) || issue?.message;
+    })
+    .filter(Boolean);
   return `<strong>${escapeHtml(t("shell.publish.translationGate.heading"))}</strong><ul>${
     [...lines, ...others].map((line) => `<li>${escapeHtml(line)}</li>`).join("")
   }</ul>`;
@@ -2918,257 +3031,6 @@ async function unpublishModuleInBackground() {
     ]);
   }
 }
-
-async function archiveModuleInBackground() {
-  const moduleId = selectedModuleId;
-  if (!moduleId) return;
-
-  const slot = logProgress("shell.archive.progress");
-  slot.abortBtn.remove();
-
-  try {
-    await apiFetch(`/api/admin/content/modules/${encodeURIComponent(moduleId)}/archive`, getHeaders, {
-      method: "POST",
-      body: JSON.stringify({}),
-    });
-    bundle = null;
-    selectedModuleId = null;
-    sessionDraft = null;
-    previewDraft = null;
-    latestSavedModuleVersionId = null;
-    renderPreviewLocaleBar();
-    renderPreview();
-    logResolveSlot(slot, () => `<strong>${escapeHtml(t("shell.archive.success"))}</strong>`);
-    showToast(t("shell.archive.success"), "success");
-    announceStatus(t("shell.archive.success"));
-    startIdle();
-  } catch (err) {
-    const errMsg = apiErrorText(err);
-    logResolveSlot(slot, () => `${escapeHtml(t("shell.archive.errorPrefix"))}${escapeHtml(errMsg)}`, [
-      { labelKey: "shell.action.retry", action: archiveModuleInBackground },
-    ]);
-  }
-}
-
-async function restoreArchivedModuleInBackground(moduleId, moduleTitle) {
-  const slot = logProgress("shell.restore.progress");
-  slot.abortBtn.remove();
-
-  try {
-    await apiFetch(`/api/admin/content/modules/${encodeURIComponent(moduleId)}/restore`, getHeaders, {
-      method: "POST",
-      body: JSON.stringify({}),
-    });
-    logResolveSlot(slot, () => `<strong>${escapeHtml(tf("shell.restore.success", { module: moduleTitle ?? moduleId }))}</strong>`);
-    showToast(tf("shell.restore.success", { module: moduleTitle ?? moduleId }), "success");
-    announceStatus(tf("shell.restore.success", { module: moduleTitle ?? moduleId }));
-    await loadModule(moduleId);
-  } catch (err) {
-    const errMsg = apiErrorText(err);
-    logResolveSlot(slot, () => `${escapeHtml(t("shell.restore.errorPrefix"))}${escapeHtml(errMsg)}`, [
-      { labelKey: "shell.action.retry", action: () => restoreArchivedModuleInBackground(moduleId, moduleTitle) },
-      { labelKey: "shell.action.cancel", action: startIdle },
-    ]);
-  }
-}
-
-async function startArchivedModulePicker() {
-  const slot = logProgress("shell.archive.loading");
-  slot.abortBtn.remove();
-
-  try {
-    const data = await apiFetch(`/api/admin/content/modules/archive?locale=${encodeURIComponent(currentLocale)}`, getHeaders);
-    const archivedModules = Array.isArray(data?.modules) ? data.modules : [];
-    if (archivedModules.length === 0) {
-      logResolveSlot(slot, () => escapeHtml(t("shell.archive.empty")), [
-        { labelKey: "shell.action.cancel", action: startIdle },
-      ]);
-      return;
-    }
-
-    logResolveSlot(slot, () => `<strong>${escapeHtml(t("shell.archive.prompt"))}</strong>`);
-    logBot(
-      () => escapeHtml(t("shell.archive.pickHint")),
-      [
-        ...archivedModules.map((module) => ({
-          label: module.title || module.id,
-          action: () => restoreArchivedModuleInBackground(module.id, module.title || module.id),
-        })),
-        { labelKey: "shell.action.cancel", action: startIdle },
-      ],
-    );
-  } catch (err) {
-    const errMsg = apiErrorText(err);
-    logResolveSlot(slot, () => `${escapeHtml(t("shell.archive.errorPrefix"))}${escapeHtml(errMsg)}`, [
-      { labelKey: "shell.action.retry", action: startArchivedModulePicker },
-      { labelKey: "shell.action.cancel", action: startIdle },
-    ]);
-  }
-}
-
-function buildLocalizedCopyValue(value) {
-  if (value && typeof value === "object") {
-    return Object.fromEntries(
-      supportedLocales.map((locale) => {
-        const localizedValue = localizeValueForLocale(value, locale) || localizeValueForLocale(value, "en-GB") || "";
-        return [locale, `${localizedValue} ${t("shell.duplicate.copySuffix")}`.trim()];
-      }),
-    );
-  }
-  const fallback = String(value ?? "").trim();
-  const label = fallback || t("shell.newModule.defaultTitle");
-  return Object.fromEntries(
-    supportedLocales.map((locale) => [locale, `${label} ${t("shell.duplicate.copySuffix")}`.trim()]),
-  );
-}
-
-async function duplicateCurrentModuleInBackground() {
-  const sourceModule = bundle?.module;
-  const sourceConfig = bundle?.selectedConfiguration ?? {};
-  if (!sourceModule) {
-    logBot(() => t("shell.duplicate.moduleRequired"));
-    return;
-  }
-
-  const slot = logProgress("shell.duplicate.progress");
-  slot.abortBtn.remove();
-
-  try {
-    const createBody = await apiFetch(
-      "/api/admin/content/modules",
-      getHeaders,
-      {
-        method: "POST",
-        body: JSON.stringify({
-          title: buildLocalizedCopyValue(sourceModule.title),
-          description: sourceModule.description ?? undefined,
-          certificationLevel: sourceModule.certificationLevel ?? "intermediate",
-          validFrom: sourceModule.validFrom ?? undefined,
-          validTo: sourceModule.validTo ?? undefined,
-        }),
-      },
-    );
-    const duplicatedModule = createBody?.module ?? createBody;
-    const duplicatedModuleId = duplicatedModule?.id;
-    if (!duplicatedModuleId) {
-      throw new Error(t("shell.duplicate.errorUnknown"));
-    }
-
-    const rubricVersion = sourceConfig.rubricVersion
-      ? await apiFetch(`/api/admin/content/modules/${encodeURIComponent(duplicatedModuleId)}/rubric-versions`, getHeaders, {
-        method: "POST",
-        body: JSON.stringify({
-          criteria: sourceConfig.rubricVersion.criteria,
-          scalingRule: sourceConfig.rubricVersion.scalingRule,
-        }),
-      })
-      : null;
-
-    const promptTemplateVersion = sourceConfig.promptTemplateVersion
-      ? await apiFetch(`/api/admin/content/modules/${encodeURIComponent(duplicatedModuleId)}/prompt-template-versions`, getHeaders, {
-        method: "POST",
-        body: JSON.stringify({
-          systemPrompt: sourceConfig.promptTemplateVersion.systemPrompt,
-          userPromptTemplate: sourceConfig.promptTemplateVersion.userPromptTemplate,
-          examples: sourceConfig.promptTemplateVersion.examples ?? [],
-        }),
-      })
-      : null;
-
-    const mcqSetVersion = sourceConfig.mcqSetVersion
-      ? await apiFetch(`/api/admin/content/modules/${encodeURIComponent(duplicatedModuleId)}/mcq-set-versions`, getHeaders, {
-        method: "POST",
-        body: JSON.stringify({
-          title: sourceConfig.mcqSetVersion.title,
-          questions: sourceConfig.mcqSetVersion.questions ?? [],
-        }),
-      })
-      : null;
-
-    if (sourceConfig.moduleVersion) {
-      await apiFetch(`/api/admin/content/modules/${encodeURIComponent(duplicatedModuleId)}/module-versions`, getHeaders, {
-        method: "POST",
-        body: JSON.stringify({
-          taskText: sourceConfig.moduleVersion.taskText,
-          assessorExpectedContent: sourceConfig.moduleVersion.assessorExpectedContent,
-          candidateTaskConstraints: sourceConfig.moduleVersion.candidateTaskConstraints || undefined,
-          rubricVersionId: rubricVersion?.rubricVersion?.id,
-          promptTemplateVersionId: promptTemplateVersion?.promptTemplateVersion?.id,
-          mcqSetVersionId: mcqSetVersion?.mcqSetVersion?.id,
-          submissionSchema: sourceConfig.moduleVersion.submissionSchema ?? buildDefaultSubmissionSchema(),
-          assessmentPolicy: sourceConfig.moduleVersion.assessmentPolicy ?? undefined,
-        }),
-      });
-    }
-
-    const sourceLabel = localizeValue(sourceModule.title) || sourceModule.id;
-    await loadModule(duplicatedModuleId);
-    logResolveSlot(slot, () => `<strong>${escapeHtml(tf("shell.duplicate.success", { module: sourceLabel }))}</strong>`);
-    showToast(tf("shell.duplicate.success", { module: sourceLabel }), "success");
-    announceStatus(tf("shell.duplicate.success", { module: sourceLabel }));
-  } catch (err) {
-    const errMsg = apiErrorText(err);
-    logResolveSlot(slot, () => `${escapeHtml(t("shell.duplicate.errorPrefix"))}${escapeHtml(errMsg)}`, [
-      { labelKey: "shell.action.retry", action: duplicateCurrentModuleInBackground },
-    ]);
-  }
-}
-
-async function deleteModuleInBackground() {
-  const moduleId = selectedModuleId;
-  if (!moduleId) return;
-
-  const slot = logProgress("shell.delete.progress");
-  slot.abortBtn.remove();
-
-  try {
-    await apiFetch(`/api/admin/content/modules/${encodeURIComponent(moduleId)}`, getHeaders, {
-      method: "DELETE",
-    });
-    bundle = null;
-    selectedModuleId = null;
-    sessionDraft = null;
-    previewDraft = null;
-    latestSavedModuleVersionId = null;
-    renderPreviewLocaleBar();
-    renderPreview();
-    logResolveSlot(slot, () => `<strong>${escapeHtml(t("shell.delete.success"))}</strong>`);
-    showToast(t("shell.delete.success"), "success");
-    announceStatus(t("shell.delete.success"));
-    startIdle();
-  } catch (err) {
-    const errMsg = apiErrorText(err);
-    logResolveSlot(slot, () => `${escapeHtml(t("shell.delete.errorPrefix"))}${escapeHtml(errMsg)}`, [
-      { labelKey: "shell.action.retry", action: deleteModuleInBackground },
-    ]);
-  }
-}
-
-function confirmModuleDeletion() {
-  const moduleLabel = localizeValue(bundle?.module?.title) || selectedModuleId || "";
-  if (!moduleLabel) {
-    logBot(() => t("shell.delete.moduleRequired"));
-    return;
-  }
-
-  logForm(
-    "text",
-    () => `<strong>${escapeHtml(tf("shell.delete.confirmPrompt", { module: moduleLabel }))}</strong>`,
-    "shell.delete.confirmPlaceholder",
-    "shell.delete.confirmSubmit",
-    (typedValue) => {
-      if (typedValue.trim() !== moduleLabel) {
-        logBot(() => t("shell.delete.confirmMismatch"), [
-          { labelKey: "shell.action.retry", action: confirmModuleDeletion },
-          { labelKey: "shell.action.cancel", action: showModuleActions },
-        ]);
-        return;
-      }
-      deleteModuleInBackground();
-    },
-  );
-}
-
 function confirmHighImpactAction(promptKey, confirmKey, action, cancelAction = showModuleActions, vars = {}) {
   logBot(() => escapeHtml(tf(promptKey, vars)), [
     { labelKey: confirmKey, action },
@@ -3309,14 +3171,6 @@ async function loadModule(moduleId, options = {}) {
   }
   showModuleActions();
 }
-
-function detectRevisionTargets(instruction) {
-  return detectShellRevisionTargets(instruction, {
-    hasDraft: !!(sessionDraft?.taskText || sessionDraft?.assessorExpectedContent),
-    hasMcq: (sessionDraft?.mcqQuestions?.length ?? 0) > 0,
-  });
-}
-
 function describeStructuredEditIntent(intent) {
   if (intent.kind === "title") {
     return tf("shell.revision.intent.title", { title: intent.title });
@@ -3440,106 +3294,7 @@ function startDirectEditFlow() {
 // criteria is an array of { id, label, description, maxScore, candidateVisible }. Renders
 // as .vk-* cards (same classes the chat-bubble editor used; styles now sized for the wider
 // preview pane). Total weight + add/regenerate buttons at the bottom.
-function buildCriteriaEditorHtml(criteria, t, tf) {
-  const items = criteria.map((c, i) => {
-    const labelLabel = escapeHtml(t("shell.criteria.labelLabel"));
-    const descLabel = escapeHtml(t("shell.criteria.descLabel"));
-    const weightText = escapeHtml(t("shell.criteria.weight"));
-    // B4 (#451) a11y: remove-button aria-label includes the criterion's title so screen
-    // readers say "Fjern: Klar kommunikasjon" — not just "Fjern". Falls back to a
-    // positional label when title is empty.
-    const removeAria = escapeHtml(
-      c.label?.trim()
-        ? tf("shell.criteria.removeAriaWithLabel", { label: c.label })
-        : tf("shell.criteria.removeAriaPositional", { index: i + 1 })
-    );
-    // B4 a11y: aria-valuetext is what screen readers announce. Localised "{value} av 10" /
-    // "{value} of 10". The vk-weight input event listener updates this dynamically.
-    const weightValueText = escapeHtml(tf("shell.criteria.weightOfTen", { value: c.maxScore }));
-    // Stage-tilbakemelding 2026-08-17: "Vurderingskriterium tar veldig mye plass". Fire stablede
-    // rader i en kolonne dobbelt så bred som innholdet trengte. Samme felt, samme redigerbarhet —
-    // pakket i BREDDEN. Skyveknappen er byttet mot en teller (femtedel av plassen, treffer et helt
-    // tall hver gang), og beskrivelsen er én linje som vokser når man klikker i den.
-    //
-    // `vk-weight` beholder `type="range"` og klassenavnet: totalvekt-utregningen, aria-oppdateringen
-    // og fire e2e-er leser dem. Den er visuelt skjult og erstattet av tellerknappene, som skriver
-    // til samme input — ett tall, én kilde.
-    return `
-      <li class="vk-card" data-criterion-index="${i}">
-        <input class="vk-label" type="text" value="${escapeHtml(c.label)}"
-               placeholder="${escapeHtml(t("shell.criteria.labelPlaceholder"))}"
-               aria-label="${labelLabel}" />
-        <span class="vk-stepper">
-          <button type="button" class="vk-step" data-step="-1"
-                  aria-label="${escapeHtml(tf("shell.criteria.weightDown", { label: c.label || String(i + 1) }))}">&minus;</button>
-          <input class="vk-weight" type="range" min="1" max="10" step="1" value="${c.maxScore}"
-                 aria-label="${weightText}"
-                 aria-valuemin="1" aria-valuemax="10" aria-valuenow="${c.maxScore}"
-                 aria-valuetext="${weightValueText}" />
-          <span class="vk-weight-value">${c.maxScore}</span>
-          <button type="button" class="vk-step" data-step="1"
-                  aria-label="${escapeHtml(tf("shell.criteria.weightUp", { label: c.label || String(i + 1) }))}">+</button>
-        </span>
-        <button type="button" class="vk-visible-toggle" aria-pressed="${c.candidateVisible ? "true" : "false"}"
-                title="${escapeHtml(t("shell.criteria.visibleToCandidate"))}"
-                aria-label="${escapeHtml(t("shell.criteria.visibleToCandidate"))}">
-          <input class="vk-visible" type="checkbox" ${c.candidateVisible ? "checked" : ""} tabindex="-1" aria-hidden="true" />
-          <span aria-hidden="true">${c.candidateVisible ? "◉" : "○"}</span>
-        </button>
-        <button type="button" class="vk-remove" data-criterion-index="${i}"
-                aria-label="${removeAria}">×</button>
-        <textarea class="vk-description" rows="1"
-                  placeholder="${escapeHtml(t("shell.criteria.descPlaceholder"))}"
-                  aria-label="${descLabel}">${escapeHtml(c.description)}</textarea>
-      </li>`;
-  }).join("");
-  const total = criteria.reduce((sum, c) => sum + (Number(c.maxScore) || 0), 0);
-  return `
-    <ul class="vk-list">${items}</ul>
-    <p class="vk-total"><strong>${escapeHtml(t("shell.criteria.totalWeight"))}:</strong> <span class="vk-total-value">${total}</span></p>
-    <div class="vk-actions-row">
-      <button type="button" class="vk-add vk-add-btn">+ ${escapeHtml(t("shell.criteria.add"))}</button>
-      <button type="button" class="vk-regenerate vk-add-btn">${escapeHtml(t("shell.criteria.regenerate"))}</button>
-    </div>`;
-}
 
-/**
- * #896 S3c: storage-shape criteria record → editor state.
- *
- * Lifted out of `enterPreviewEditMode`, where it closed over `editingLocale`. The locale is now a
- * parameter because the editor is moving to Innstillinger, which has no editing locale of its own
- * — it reads in the UI language. Same function, two callers, one behaviour.
- */
-function buildEditorStateFromCriteriaRecord(source, locale) {
-  if (!source || typeof source !== "object") return [];
-  return Object.entries(source).map(([id, raw]) => {
-    const c = raw && typeof raw === "object" ? raw : {};
-    // v1.1.78: for sparse legacy criteria with only `weight` (no maxScore), derive
-    // maxScore from weight × 10 so the slider opens at a meaningful position.
-    const derivedFromWeight = Number(c.weight) > 0 ? Math.max(1, Math.round(Number(c.weight) * 10)) : 0;
-    const initialMaxScore = Number(c.maxScore) > 0
-      ? Number(c.maxScore)
-      : (derivedFromWeight > 0 ? derivedFromWeight : 5);
-    // v1.2.10: c.label/c.description kan være string ELLER locale-objekt.
-    // #902: read in the locale being edited — reading in the UI language put English criteria
-    // beside Norwegian scenario text, and what was typed was written back as the edited language.
-    const rawLabel = localizeValueForLocale(c.label, locale);
-    const rawDesc = localizeValueForLocale(c.description, locale);
-    return {
-      id: String(id),
-      label: typeof rawLabel === "string" && rawLabel.trim() ? rawLabel : humaniseCriterionId(String(id)),
-      description: typeof rawDesc === "string" ? rawDesc : "",
-      maxScore: Math.max(1, Math.min(10, initialMaxScore)),
-      candidateVisible: Boolean(c.candidateVisible),
-      // #902: the editor shows ONE language, but the stored value may hold three. Carry the whole
-      // stored value and the locale it is being edited in, so the save can merge instead of
-      // replacing — writing back a bare string deleted the two languages never shown.
-      storedLabel: c.label ?? null,
-      storedDescription: c.description ?? null,
-      locale,
-    };
-  });
-}
 
 /**
  * #896 S3c: the criteria editor's event behaviour, extracted so it can be mounted anywhere.
@@ -3549,6 +3304,17 @@ function buildEditorStateFromCriteriaRecord(source, locale) {
  * aria upkeep, add/remove/regenerate — is identical, because a second copy of this behaviour is
  * exactly what the epic is trying to get rid of.
  */
+// #1049: nivåets standard for svarlengde, vist som plassholder når forfatteren ikke har satt noe.
+//
+// ⚠️ En kopi av LEVEL_SCOPE på serveren, og det er en bevisst en: klienten trenger tallet for å vise
+// hva som gjelder når feltet står tomt, og den kan ikke importere serverens TypeScript.
+// `test/unit/level-budget-copies-guard.test.ts` holder den i takt med kilden.
+const LEVEL_SCOPE_DEFAULTS = {
+  basic: { minWords: 100, maxWords: 200 },
+  intermediate: { minWords: 250, maxWords: 450 },
+  advanced: { minWords: 400, maxWords: 700 },
+};
+
 const CERTIFICATION_LEVELS = ["basic", "intermediate", "advanced"];
 
 /**
@@ -3581,6 +3347,17 @@ function certificationLevelValue(raw) {
  * outside the scale falls back to `intermediate`: the generators use it to pitch difficulty, so a
  * wrong-but-valid level degrades the output while an invalid one fails the whole call.
  */
+/**
+ * #1049: forfatterens omfang, hvis modulen har et. Utelates helt når hen ikke har satt noe — da
+ * bruker serveren nivåets standard, og det er ETT sted den regnes ut.
+ */
+function scopeForGeneration() {
+  const mod = bundle?.module ?? {};
+  const min = typeof mod.scopeMinWords === "number" ? mod.scopeMinWords : null;
+  const max = typeof mod.scopeMaxWords === "number" ? mod.scopeMaxWords : null;
+  return min === null && max === null ? {} : { scope: { minWords: min, maxWords: max } };
+}
+
 function certificationLevelForGeneration() {
   // The level chosen in Innstillinger wins over the stored one while the panel is open. QA round 7:
   // picking `advanced` and then regenerating asked the service for `basic`, and the same save then
@@ -3726,27 +3503,6 @@ function wireCriteriaEditor({ container, getState, setState, rerender, onRegener
 // every visible criterion card and returns a fresh array; falls back to the closure's last
 // known state if the container has already been torn down. Same shape as criteriaEditorState
 // items but read from inputs to avoid stale-state bugs.
-function captureLatestCriteriaState(container, fallbackState) {
-  if (!container) return Array.isArray(fallbackState) ? fallbackState.slice() : [];
-  const cards = container.querySelectorAll(".vk-card");
-  if (cards.length === 0) return [];
-  return Array.from(cards).map((card, idx) => {
-    const fallback = (Array.isArray(fallbackState) && fallbackState[idx]) ? fallbackState[idx] : {};
-    return {
-      id: fallback.id,
-      label: card.querySelector(".vk-label")?.value.trim() ?? "",
-      description: card.querySelector(".vk-description")?.value.trim() ?? "",
-      maxScore: Math.max(1, Math.min(10, Number(card.querySelector(".vk-weight")?.value) || 5)),
-      candidateVisible: card.querySelector(".vk-visible")?.checked ?? false,
-      // #902: the DOM holds one language; the other two live only on the state object. Rebuilding
-      // the item from the cards alone would drop them again on the way to the save — which is
-      // exactly how the bare-string write survived the first fix.
-      storedLabel: fallback.storedLabel,
-      storedDescription: fallback.storedDescription,
-      locale: fallback.locale,
-    };
-  });
-}
 
 // B2 (#449 redesign): transform editor-state array into storage-shape record (id-keyed).
 // Drops criteria with blank labels (they're noise). Auto-id new criteria from a slug of
@@ -3924,7 +3680,7 @@ async function handleDriftShowDiff() {
   // under a language it was never written in.
   const newCriteriaRecord = llmCriteriaArrayToStorageRecord(newCriteriaArr, requestedLocale);
   const existing = bundle?.selectedConfiguration?.rubricVersion?.criteria ?? {};
-  const diff = computeCriteriaDiff(existing, newCriteriaRecord);
+  const diff = computeCriteriaDiff(existing, newCriteriaRecord, contentLocale);
 
   openDriftDiffModal(diff, newCriteriaRecord);
 }
@@ -3966,271 +3722,14 @@ function llmCriteriaArrayToStorageRecord(arr, locale) {
  * The drift diff both COMPARES and RENDERS these values, and it used `String(...)` for each — fine
  * while everything was a bare string, useless the moment a locale object appears.
  */
-function driftText(value) {
-  if (value == null) return "";
-  if (typeof value === "string") return value;
-  return localizeValueForLocale(value, contentLocale) ?? "";
-}
 
-function computeCriteriaDiff(existing, next) {
-  const existingIds = new Set(Object.keys(existing ?? {}));
-  const nextIds = new Set(Object.keys(next ?? {}));
-  const added = [];
-  const removed = [];
-  const changed = [];
-  const unchanged = [];
-
-  for (const id of nextIds) {
-    if (!existingIds.has(id)) {
-      added.push({ id, next: next[id] });
-      continue;
-    }
-    const a = existing[id] ?? {};
-    const b = next[id] ?? {};
-    // QA round 5: proposals are locale objects now, and `String({...})` is "[object Object]" for
-    // every one of them — so two different proposals compared EQUAL and a text-only change was
-    // filed as unchanged, which "accept selected" then left out. Compare the language on screen.
-    const labelChanged = driftText(a.label) !== driftText(b.label);
-    const descChanged = driftText(a.description) !== driftText(b.description);
-    const scoreChanged = Number(a.maxScore ?? 0) !== Number(b.maxScore ?? 0);
-    const visChanged = Boolean(a.candidateVisible) !== Boolean(b.candidateVisible);
-    if (labelChanged || descChanged || scoreChanged || visChanged) {
-      changed.push({ id, prev: a, next: b, fields: { labelChanged, descChanged, scoreChanged, visChanged } });
-    } else {
-      unchanged.push({ id, prev: a, next: b });
-    }
-  }
-  for (const id of existingIds) {
-    if (!nextIds.has(id)) {
-      removed.push({ id, prev: existing[id] });
-    }
-  }
-  return { added, removed, changed, unchanged };
-}
 
 function hasManuallyEditedCriteria() {
   const criteria = bundle?.selectedConfiguration?.rubricVersion?.criteria ?? {};
   return Object.values(criteria).some((c) => c && typeof c === "object" && c.manuallyEdited === true);
 }
 
-// #455: external-LLM import modal. Lets the author paste the JSON an external LLM produced
-// (after copying our authoring prompt), or upload a .json file. On Importer, parses the
-// JSON, creates a new module, populates sessionDraft, and lands the author in draft-ready.
-// Reuses the focus-trap / ESC pattern from openDriftDiffModal — they should stay in sync.
-function openExternalLlmModal({ scenarioMode = "auto", onImportSuccess } = {}) {
-  const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
 
-  const overlay = document.createElement("div");
-  overlay.className = "drift-diff-overlay";
-  overlay.setAttribute("role", "dialog");
-  overlay.setAttribute("aria-modal", "true");
-  overlay.setAttribute("aria-labelledby", "externalLlmTitle");
-  overlay.innerHTML = `
-    <div class="drift-diff-modal external-llm-modal">
-      <header class="drift-diff-modal-header">
-        <h2 id="externalLlmTitle">${escapeHtml(t("shell.externalLlm.title"))}</h2>
-        <button type="button" class="drift-diff-close" data-ext-action="close" aria-label="${escapeHtml(t("shell.externalLlm.close"))}">×</button>
-      </header>
-      <ol class="external-llm-steps">
-        <li>${escapeHtml(t("shell.externalLlm.step1"))}</li>
-        <li>${escapeHtml(t("shell.externalLlm.step2"))}</li>
-        <li>${escapeHtml(t("shell.externalLlm.step3"))}</li>
-      </ol>
-      <div class="external-llm-prompt-actions">
-        <button type="button" class="btn-secondary" data-ext-action="copy-prompt">${escapeHtml(t("shell.externalLlm.copyPromptAgain"))}</button>
-        <button type="button" class="btn-secondary" data-ext-action="upload-json">${escapeHtml(t("shell.externalLlm.uploadJson"))}</button>
-        <input type="file" accept="application/json,.json" hidden data-ext-input="file">
-      </div>
-      <label class="external-llm-json-label" for="externalLlmJsonInput">${escapeHtml(t("shell.externalLlm.jsonLabel"))}</label>
-      <textarea id="externalLlmJsonInput" class="chat-textarea external-llm-json" rows="10" placeholder="${escapeHtml(t("shell.externalLlm.jsonPlaceholder"))}" data-ext-input="textarea"></textarea>
-      <p class="external-llm-error" data-ext-output="error" role="alert" hidden></p>
-      <footer class="drift-diff-modal-footer">
-        <button type="button" class="btn-secondary" data-ext-action="cancel">${escapeHtml(t("shell.externalLlm.cancel"))}</button>
-        <button type="button" class="btn-primary" data-ext-action="import">${escapeHtml(t("shell.externalLlm.import"))}</button>
-      </footer>
-    </div>
-  `;
-  document.body.appendChild(overlay);
-
-  const focusableSelector = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
-  const getFocusables = () => Array.from(overlay.querySelectorAll(focusableSelector))
-    .filter((el) => !el.hasAttribute("disabled") && !el.hasAttribute("hidden") && el.offsetParent !== null);
-
-  const keyHandler = (event) => {
-    if (event.key === "Escape") {
-      event.preventDefault();
-      close();
-      return;
-    }
-    if (event.key !== "Tab") return;
-    const focusables = getFocusables();
-    if (focusables.length === 0) return;
-    const first = focusables[0];
-    const last = focusables[focusables.length - 1];
-    if (event.shiftKey && document.activeElement === first) {
-      event.preventDefault();
-      last.focus();
-    } else if (!event.shiftKey && document.activeElement === last) {
-      event.preventDefault();
-      first.focus();
-    }
-  };
-  overlay.addEventListener("keydown", keyHandler);
-
-  const close = () => {
-    overlay.removeEventListener("keydown", keyHandler);
-    overlay.remove();
-    opener?.focus?.();
-  };
-
-  const textarea = overlay.querySelector('[data-ext-input="textarea"]');
-  const fileInput = overlay.querySelector('[data-ext-input="file"]');
-  const errorEl = overlay.querySelector('[data-ext-output="error"]');
-  const importBtn = overlay.querySelector('[data-ext-action="import"]');
-
-  const setError = (message) => {
-    if (!message) {
-      errorEl.hidden = true;
-      errorEl.textContent = "";
-    } else {
-      errorEl.hidden = false;
-      errorEl.textContent = message;
-    }
-  };
-
-  overlay.querySelector('[data-ext-action="close"]').addEventListener("click", close);
-  overlay.querySelector('[data-ext-action="cancel"]').addEventListener("click", close);
-  overlay.addEventListener("click", (event) => {
-    if (event.target === overlay) close();
-  });
-
-  overlay.querySelector('[data-ext-action="copy-prompt"]').addEventListener("click", async () => {
-    try {
-      await navigator.clipboard.writeText(buildExternalLlmAuthoringPrompt(scenarioMode));
-      showToast(t("shell.source.externalLlm.copied"), "success");
-    } catch {
-      showToast(t("shell.source.externalLlm.copyFailed"), "error");
-    }
-  });
-
-  overlay.querySelector('[data-ext-action="upload-json"]').addEventListener("click", () => {
-    fileInput.click();
-  });
-
-  fileInput.addEventListener("change", async () => {
-    const file = fileInput.files?.[0];
-    if (!file) return;
-    try {
-      const text = await file.text();
-      textarea.value = text;
-      setError("");
-    } catch {
-      setError(t("shell.externalLlm.fileReadError"));
-    } finally {
-      fileInput.value = "";
-    }
-  });
-
-  importBtn.addEventListener("click", async () => {
-    setError("");
-    const raw = textarea.value;
-    let parsed;
-    try {
-      parsed = parseExternalLlmJson(raw);
-    } catch (err) {
-      setError(apiErrorText(err) || t("shell.externalLlm.parseError"));
-      return;
-    }
-    importBtn.disabled = true;
-    try {
-      await applyExternalLlmJsonImport(parsed);
-      onImportSuccess?.();
-      close();
-    } catch (err) {
-      setError(apiErrorText(err) || t("shell.externalLlm.importError"));
-      importBtn.disabled = false;
-    }
-  });
-
-  const initial = textarea ?? getFocusables()[0];
-  initial?.focus?.();
-}
-
-// #455: take the parsed external-LLM JSON, create the module shell, populate sessionDraft,
-// and land the author in draft-ready. Mirrors the new-module branch of confirmAndGenerate
-// (line ~3759) without the LLM round-trips — the LLM work was done off-platform.
-async function applyExternalLlmJsonImport(parsed) {
-  // #918: a plain-string title is sent AS a plain string. `localizedTextSchema` is
-  // `string | {all three locales}`, so the string needs no wrapping — and wrapping it filled all
-  // three languages with the source text, which is the encoding for "this IS translated". The
-  // publish gate then found no gap in a title nobody had translated (#892/#905). A locale OBJECT
-  // from the import is a real translation and passes through untouched.
-  const moduleTitle = parsed.moduleTitle;
-  const certificationLevel = ["basic", "intermediate", "advanced"].includes(parsed.certificationLevel)
-    ? parsed.certificationLevel
-    : "intermediate";
-
-  const slot = logProgress(() => {
-    const previewTitle = typeof moduleTitle === "string"
-      ? moduleTitle
-      : (localizeValueForLocale(moduleTitle, currentLocale) || localizeValueForLocale(moduleTitle, "en-GB") || "");
-    return `${t("shell.newModule.creating").replace(/…$/, "")} «${previewTitle}»…`;
-  });
-  slot.abortBtn.remove();
-
-  let newModule;
-  try {
-    const body = await apiFetch(
-      "/api/admin/content/modules",
-      getHeaders,
-      { method: "POST", body: JSON.stringify({ title: moduleTitle, certificationLevel }) },
-    );
-    newModule = body?.module ?? body;
-  } catch (err) {
-    const errMsg = apiErrorText(err);
-    logResolveSlot(
-      slot,
-      () => `${escapeHtml(t("shell.newModule.createError"))}<br><span style="font-size:13px;color:var(--color-meta)">${escapeHtml(errMsg)}</span>`,
-    );
-    throw new Error(t("shell.externalLlm.importError"));
-  }
-
-  selectedModuleId = newModule?.id ?? newModule?.moduleId;
-  const capturedId = selectedModuleId;
-  const capturedTitle = typeof moduleTitle === "string"
-    ? moduleTitle
-    : (localizeValueForLocale(moduleTitle, currentLocale) || localizeValueForLocale(moduleTitle, "en-GB") || "");
-  logResolveSlot(slot, () =>
-    `${escapeHtml(t("shell.newModule.created"))} <strong>${escapeHtml(capturedTitle)}</strong>` +
-    `<br><span style="font-size:13px;color:var(--color-meta)">ID: ${escapeHtml(capturedId)}</span>`,
-  );
-
-  // Build sessionDraft from imported content. buildPreviewCandidate accepts string OR
-  // locale-object values for any localizable field, so we pass parsed values through.
-  // Criteria, if provided, become an explicit override that saveDraftBundleInBackground
-  // POSTs as a new RubricVersion (the B2 explicit-criteria branch, not ensure-rubric).
-  sessionDraft = buildPreviewCandidate({
-    title: moduleTitle,
-    taskText: parsed.taskText,
-    assessorExpectedContent: parsed.assessorExpectedContent,
-    candidateTaskConstraints: parsed.candidateTaskConstraints,
-    mcqQuestions: parsed.mcqQuestions,
-  });
-  if (parsed.criteria && Object.keys(parsed.criteria).length > 0) {
-    sessionDraft = { ...sessionDraft, criteria: parsed.criteria };
-  }
-  previewDraft = null;
-  sessionState = "draft-pending";
-  // Third creation path: an imported external-LLM draft is a new module too, and Innstillinger
-  // needs the bundle or it shows "load a module".
-  await attachBundleForNewModule(selectedModuleId);
-  renderPreviewLocaleBar();
-  renderPreview();
-
-  logBot(() => `<strong>${escapeHtml(t("shell.externalLlm.imported"))}</strong>
-    <p style="margin:8px 0 0;font-size:13px;color:var(--color-meta)">${escapeHtml(t("shell.externalLlm.importedHint"))}</p>`);
-  showDraftReadyActions();
-}
 
 // B3 (#450): full-screen modal showing the diff. Accept-all triggers a single regenerate
 // against the LLM's proposal (writes a new RubricVersion with the proposed criteria).
@@ -4246,7 +3745,7 @@ function openDriftDiffModal(diff, proposedRecord) {
   overlay.setAttribute("role", "dialog");
   overlay.setAttribute("aria-modal", "true");
   overlay.setAttribute("aria-labelledby", "driftDiffTitle");
-  overlay.innerHTML = buildDriftDiffModalHtml(diff);
+  overlay.innerHTML = buildDriftDiffModalHtml(diff, contentLocale, t, tf);
   document.body.appendChild(overlay);
 
   // B4 a11y: focus trap + ESC handler. The trap is implemented as a Tab/Shift-Tab handler
@@ -4322,69 +3821,6 @@ function openDriftDiffModal(diff, proposedRecord) {
   initial?.focus?.();
 }
 
-function buildDriftDiffModalHtml(diff) {
-  const { added, removed, changed } = diff;
-  const totalChanges = added.length + removed.length + changed.length;
-
-  const renderRow = (id, kind, body) => `
-    <li class="drift-diff-row drift-diff-row--${kind}">
-      <label>
-        <input type="checkbox" data-diff-checkbox data-criterion-id="${escapeHtml(id)}" checked>
-        <span class="drift-diff-row-body">${body}</span>
-      </label>
-    </li>
-  `;
-
-  const addedHtml = added.map(({ id, next }) => renderRow(id, "added", `
-    <span class="drift-diff-row-tag drift-diff-row-tag--added">${escapeHtml(t("shell.drift.diff.added"))}</span>
-    <strong>${escapeHtml(driftText(next?.label) || id)}</strong>
-    ${driftText(next?.description) ? `<p class="drift-diff-row-desc">${escapeHtml(driftText(next.description))}</p>` : ""}
-  `)).join("");
-
-  const removedHtml = removed.map(({ id, prev }) => renderRow(id, "removed", `
-    <span class="drift-diff-row-tag drift-diff-row-tag--removed">${escapeHtml(t("shell.drift.diff.removed"))}</span>
-    <strong>${escapeHtml(driftText(prev?.label) || id)}</strong>
-    ${driftText(prev?.description) ? `<p class="drift-diff-row-desc">${escapeHtml(driftText(prev.description))}</p>` : ""}
-  `)).join("");
-
-  const changedHtml = changed.map(({ id, prev, next, fields }) => {
-    const parts = [];
-    if (fields.labelChanged) parts.push(`<p class="drift-diff-row-fieldchange"><em>${escapeHtml(t("shell.drift.diff.label"))}:</em> <s>${escapeHtml(driftText(prev?.label))}</s> → <strong>${escapeHtml(driftText(next?.label))}</strong></p>`);
-    if (fields.descChanged) parts.push(`<p class="drift-diff-row-fieldchange"><em>${escapeHtml(t("shell.drift.diff.description"))}:</em> ${escapeHtml(driftText(next?.description))}</p>`);
-    if (fields.scoreChanged) parts.push(`<p class="drift-diff-row-fieldchange"><em>${escapeHtml(t("shell.drift.diff.maxScore"))}:</em> ${escapeHtml(String(prev?.maxScore ?? ""))} → ${escapeHtml(String(next?.maxScore ?? ""))}</p>`);
-    if (fields.visChanged) parts.push(`<p class="drift-diff-row-fieldchange"><em>${escapeHtml(t("shell.drift.diff.candidateVisible"))}:</em> ${Boolean(prev?.candidateVisible) ? "✓" : "—"} → ${Boolean(next?.candidateVisible) ? "✓" : "—"}</p>`);
-    return renderRow(id, "changed", `
-      <span class="drift-diff-row-tag drift-diff-row-tag--changed">${escapeHtml(t("shell.drift.diff.changed"))}</span>
-      <strong>${escapeHtml(driftText(next?.label) || id)}</strong>
-      ${parts.join("")}
-    `);
-  }).join("");
-
-  const emptyHtml = totalChanges === 0
-    ? `<p class="drift-diff-empty">${escapeHtml(t("shell.drift.diff.noChanges"))}</p>`
-    : "";
-
-  return `
-    <div class="drift-diff-modal">
-      <header class="drift-diff-modal-header">
-        <h2 id="driftDiffTitle">${escapeHtml(t("shell.drift.diff.title"))}</h2>
-        <button type="button" class="drift-diff-close" data-diff-action="close" aria-label="${escapeHtml(t("shell.drift.diff.close"))}">×</button>
-      </header>
-      <p class="drift-diff-modal-summary">${escapeHtml(tf("shell.drift.diff.summary", { added: added.length, removed: removed.length, changed: changed.length }))}</p>
-      <ul class="drift-diff-list">
-        ${addedHtml}
-        ${changedHtml}
-        ${removedHtml}
-      </ul>
-      ${emptyHtml}
-      <footer class="drift-diff-modal-footer">
-        <button type="button" class="btn-secondary" data-diff-action="cancel">${escapeHtml(t("shell.drift.diff.cancel"))}</button>
-        <button type="button" class="btn-secondary" data-diff-action="accept-selected">${escapeHtml(t("shell.drift.diff.acceptSelected"))}</button>
-        <button type="button" class="btn-primary" data-diff-action="accept-all">${escapeHtml(t("shell.drift.diff.acceptAll"))}</button>
-      </footer>
-    </div>
-  `;
-}
 
 // B3 (#450): build the storage-shape record from "merge existing criteria with the proposed
 // changes the user accepted". Logic per id:
@@ -4970,8 +4406,9 @@ function enterPreviewEditMode({ force = false } = {}) {
       clearPreviewCandidate();
       // A locale that failed to translate stays UNTRANSLATED rather than being filled with a
       // copy of the source text (#892). The hole is named here and blocks publishing in S4.
+      // #1016: samme tekst som alle andre veier — lokalen slippes, altså står språket tomt.
       const warning = failedLocales?.length
-        ? ` ${tf("shell.revision.titleNotTranslated", {
+        ? ` ${tf("shell.generating.draftNotTranslated", {
             locales: failedLocales.join(", "),
             source: editingLocale,
           })}`
@@ -4982,11 +4419,16 @@ function enterPreviewEditMode({ force = false } = {}) {
 
     Promise.all([
       localizeDraftAcrossLocalesWithTitle(newTitle, newTaskText, newGuidanceText, editingLocale, newCandidateTaskConstraints),
-      currentMcqQuestions.length ? localizeMcqAcrossLocales(newMcqQuestions, editingLocale) : Promise.resolve([]),
+      currentMcqQuestions.length
+        ? localizeMcqAcrossLocales(newMcqQuestions, editingLocale)
+        : Promise.resolve({ questions: [], failedLocales: [] }),
     ])
-      .then(([localizedDraft, localizedMcqQuestions]) => {
+      .then(([localizedDraft, localizedMcq]) => {
         if (abort.signal.aborted) return;
-        commit(localizedDraft, localizedMcqQuestions, localizedDraft.failedLocales);
+        // #1014: MCQ-veien kan naa feile for ETT sprak uten at utkastveien gjorde det. Sprakene fra
+        // begge slaas sammen, ellers rapporterer flaten bare halve sannheten.
+        const alleFeilede = [...new Set([...(localizedDraft.failedLocales ?? []), ...localizedMcq.failedLocales])];
+        commit(localizedDraft, localizedMcq.questions, alleFeilede);
       })
       .catch(() => {
         // Already handled by the abort listener above - the form is back and the slot is
@@ -5045,10 +4487,6 @@ function renderWorkspaceActions(actions) {
 }
 
 /** Nothing to act on — used when a module is unloaded or the flow takes over the conversation. */
-function clearWorkspaceActions() {
-  renderWorkspaceActions([]);
-}
-
 function showModuleActions() {
   const hasDraft = !!sessionDraft;
   const hasMcq = (sessionDraft?.mcqQuestions?.length ?? 0) > 0;
@@ -5734,6 +5172,25 @@ function renderSettingsPanel() {
     `<select id="settingsCertLevel" class="settings-input">${certOptions}</select>`,
   );
 
+  // #1049: forventet svarlengde, ved siden av nivået fordi det er det paret som ble skilt.
+  //
+  // ⚠️ TOMT FELT BETYR «bruk nivåets standard», og det er derfor plassholderen viser tallet i
+  // stedet for en instruksjon. En forfatter som lar feltet stå tomt skal se hva som da gjelder,
+  // uten å måtte lete etter en tabell.
+  //
+  // Produkteier 2026-09-06: å skrive langt er ikke vanskeligere enn å være kort. Feltet finnes
+  // nettopp for at et avansert nivå skal kunne be om et kort, presist svar.
+  const standardOmfang = LEVEL_SCOPE_DEFAULTS[certLevel] ?? LEVEL_SCOPE_DEFAULTS.intermediate;
+  row(
+    "shell.settings.scopeWords",
+    `<input id="settingsScopeMin" class="settings-input" type="number" min="20" max="5000"
+       value="${mod.scopeMinWords ?? ""}" placeholder="${standardOmfang.minWords}" />
+     <span aria-hidden="true">–</span>
+     <input id="settingsScopeMax" class="settings-input" type="number" min="20" max="5000"
+       value="${mod.scopeMaxWords ?? ""}" placeholder="${standardOmfang.maxWords}" />
+     <span class="settings-hint">${escapeHtml(t("shell.settings.scopeWordsHint"))}</span>`,
+  );
+
   // date inputs need yyyy-mm-dd, not a localized rendering
   const asDateValue = (d) => (d ? new Date(d).toISOString().slice(0, 10) : "");
   row(
@@ -5808,19 +5265,38 @@ function renderSettingsPanel() {
       "practicalMin",
     );
   }
-  const borderline = policy?.passRules?.borderlineWindow;
-  row(
-    "shell.settings.borderlineWindow",
-    `<input id="settingsBorderlineMin" class="settings-input" type="number" min="0" max="100"
-      value="${Number.isFinite(Number(borderline?.min)) ? escapeHtml(String(borderline.min)) : ""}"
-      placeholder="${escapeHtml(t("shell.settings.noneShort"))}" />
-     <span aria-hidden="true">→</span>
-     <input id="settingsBorderlineMax" class="settings-input" type="number" min="0" max="100"
-      value="${Number.isFinite(Number(borderline?.max)) ? escapeHtml(String(borderline.max)) : ""}"
-      placeholder="${escapeHtml(t("shell.settings.noneShort"))}" /> %`,
-    false,
-    "borderlineWindow",
-  );
+  // ⚠️ Grensesonen gjelder IKKE for rene flervalgsmoduler — `resolveMcqOnlyDecision` har ingen
+  // manuell-vurdering-sti i det hele tatt. Feltet sto her og lot som om det virket.
+  if (mode !== "MCQ_ONLY") {
+    const borderline = policy?.passRules?.borderlineWindow;
+    // Hva skjer hvis feltet står tomt? Plattformen sender da et bånd under terskelen til sensor —
+    // og båndet regnes fra MODULENS terskel, ikke den globale. Plassholderen viser det tallparet.
+    //
+    // ⚠️ Plassholder, ikke verdi. Å fylle inn tallene ville gjort en bevisst standard om til en
+    // per-modul-overstyring ingen valgte — nøyaktig feilen QA fant på MCQ-feltet i runde 7.
+    const below = bundle?.platformDefaults?.borderlineBelowMin;
+    const effectiveMin = policy?.passRules?.totalMin ?? bundle?.platformDefaults?.totalMin;
+    const hasDefault = Number.isFinite(Number(below)) && Number(below) > 0 && Number.isFinite(Number(effectiveMin));
+    const defaultLow = hasDefault ? Math.max(0, Number(effectiveMin) - Number(below)) : null;
+    const placeholderLow = hasDefault
+      ? tf("shell.settings.platformDefault", { value: defaultLow })
+      : t("shell.settings.noneShort");
+    const placeholderHigh = hasDefault
+      ? tf("shell.settings.platformDefault", { value: effectiveMin })
+      : t("shell.settings.noneShort");
+    row(
+      "shell.settings.borderlineWindow",
+      `<input id="settingsBorderlineMin" class="settings-input settings-input--wide" type="number" min="0" max="100"
+        value="${Number.isFinite(Number(borderline?.min)) ? escapeHtml(String(borderline.min)) : ""}"
+        placeholder="${escapeHtml(placeholderLow)}" />
+       <span aria-hidden="true">→</span>
+       <input id="settingsBorderlineMax" class="settings-input settings-input--wide" type="number" min="0" max="100"
+        value="${Number.isFinite(Number(borderline?.max)) ? escapeHtml(String(borderline.max)) : ""}"
+        placeholder="${escapeHtml(placeholderHigh)}" /> %`,
+      false,
+      "borderlineWindow",
+    );
+  }
 
   // #896 S3c: NO summary rows for criteria, assessment instruction or submission schema.
   //
@@ -6700,6 +6176,16 @@ async function saveSettingsInBackground() {
   // Module-level fields. Sent only when the author actually changed them, so a mode switch
   // does not rewrite a description or a date the panel merely displayed.
   const certInput = document.getElementById("settingsCertLevel");
+  const scopeMinInput = document.getElementById("settingsScopeMin");
+  const scopeMaxInput = document.getElementById("settingsScopeMax");
+  /** Tomt felt er `null` — «bruk nivåets standard» — ikke 0 og ikke «ingen endring». */
+  const scopeVerdi = (el) => {
+    const v = el?.value?.trim();
+    if (!v) return null;
+    const n = Number(v);
+    return Number.isFinite(n) && n > 0 ? Math.round(n) : null;
+  };
+  const mod = bundle.module ?? {};
   const fromInput = document.getElementById("settingsValidFrom");
   const toInput = document.getElementById("settingsValidTo");
   // One value, not one per language — see `certificationLevelValue`. The QA-round-2 defect was
@@ -6726,6 +6212,12 @@ async function saveSettingsInBackground() {
     ...(certInput && certInput.value.trim() && certInput.value.trim() !== currentCert
       ? { certificationLevel: certInput.value.trim() }
       : {}),
+    // #1049: tomt felt = null = «tilbake til nivåets standard». Derfor sammenlignes mot den LAGREDE
+    // verdien, ikke mot falsy: en forfatter som tømmer feltet ber om å angre, og det må sendes.
+    ...(scopeMinInput && scopeVerdi(scopeMinInput) !== (mod.scopeMinWords ?? null)
+      ? { scopeMinWords: scopeVerdi(scopeMinInput) } : {}),
+    ...(scopeMaxInput && scopeVerdi(scopeMaxInput) !== (mod.scopeMaxWords ?? null)
+      ? { scopeMaxWords: scopeVerdi(scopeMaxInput) } : {}),
     ...(fromInput && fromInput.value !== currentFrom ? { validFrom: fromInput.value || null } : {}),
     ...(toInput && toInput.value !== currentTo ? { validTo: toInput.value || null } : {}),
   };
@@ -7212,14 +6704,13 @@ async function createMcqOnlyModuleThenGenerate(moduleTitle, sourceMaterial, cert
 
   let newModule;
   try {
-    // #918: the typed title goes out as the plain string it is. Filling all three locales with it
-    // told the publish gate "already translated" about a title written in exactly one language —
-    // see the module library, which has always sent a string, and `localizedTextSchema`, which
-    // accepts one.
+    // #918 fjernet løgnen om at tittelen var oversatt til tre språk. #930 fjerner den som ble
+    // igjen: en ren streng leses som bokmål, så en tittel skrevet på engelsk ble lagret som norsk.
+    // Nå følger språket med.
     const body = await apiFetch(
       "/api/admin/content/modules",
       getHeaders,
-      { method: "POST", body: JSON.stringify({ title: moduleTitle, certificationLevel: certLevel }) },
+      { method: "POST", body: JSON.stringify({ title: titleInContentLocale(moduleTitle), certificationLevel: certLevel }) },
     );
     newModule = body?.module ?? body;
   } catch (err) {
@@ -7506,9 +6997,6 @@ function renderEditableBlueprint(slot, initialBlueprint, ctx) {
 // function declarations so they're visible across the file. The chat-bubble criteria editor
 // (openCriteriaEditor + renderEditableCriteria) was removed in v1.1.77 when B2 was moved into
 // the preview pane / direct-edit flow — these two utilities are all that remained worth keeping.
-function humaniseCriterionId(id) {
-  return String(id).replace(/[_-]+/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
-}
 
 function slugifyLabel(label) {
   if (typeof label !== "string") return null;
@@ -7551,13 +7039,16 @@ async function confirmAndGenerate(moduleTitle, existingModuleId, sourceMaterial,
 
   let newModule;
   try {
-    // #918: plain string in, plain string out — see createMcqOnlyModuleThenGenerate. The draft's
-    // own title (`sessionDraft.title` below) has always been the bare string; only the create call
-    // pretended otherwise, so the module row and the draft disagreed from the first second.
+    // #918 sluttet å fylle tre språk med samme tekst. #930 legger til hvilket språk teksten
+    // faktisk er skrevet i — en ren streng leses som bokmål, så en engelsk tittel ble lagret som
+    // norsk.
+    //
+    // ⚠️ Fjerde og siste opprettelsessti. De tre andre ble rettet først, og bare denne testen
+    // fanget at den fantes. Fire veier til samme endepunkt er én for mange.
     const body = await apiFetch(
       "/api/admin/content/modules",
       getHeaders,
-      { method: "POST", body: JSON.stringify({ title: moduleTitle, certificationLevel: certLevel }) },
+      { method: "POST", body: JSON.stringify({ title: titleInContentLocale(moduleTitle), certificationLevel: certLevel }) },
     );
     newModule = body?.module ?? body;
   } catch (err) {

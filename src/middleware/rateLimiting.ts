@@ -26,7 +26,16 @@ function buildRateLimitHandler(message: Record<string, string>): Options["handle
       : Math.ceil(options.windowMs / 1000);
 
     response.set("Retry-After", String(retryAfterSeconds));
-    response.status(options.statusCode).json(message);
+    // #983: sekundene som DATA, ikke bare i den engelske setningen og i en HTTP-header.
+    //
+    // ⚠️ Kroppen bar koden `rate_limited` fra foer, men tallet sto bare i prosaen — «Retry in 60
+    // seconds» — og i `Retry-After`. En klient som ville skrive setningen paa brukerens spraak
+    // maatte enten lese headeren eller parse en engelsk setning. Den ene er upraktisk, den andre er
+    // nettopp problemet.
+    //
+    // ⚠️ Det FAKTISKE tallet er dessuten ikke 60: det regnes ut fra naar vinduet nullstilles. Den
+    // engelske setningen loy allerede om det.
+    response.status(options.statusCode).json({ ...message, details: { retryAfterSeconds } });
   };
 }
 

@@ -1,6 +1,11 @@
+import { localizedTextCodec } from "../../codecs/localizedTextCodec.js";
+import { LEVEL_SCOPE } from "../adminContent/llmContentGenerationService.js";
+import { resolveAssessmentDecision } from "./decisionService.js";
 import { SubmissionStatus } from "../../db/prismaRuntime.js";
 import { assessmentJobRepository } from "./assessmentJobRepository.js";
 import { recordAuditEvent } from "../../services/auditService.js";
+import { logOperationalEvent } from "../../observability/operationalLog.js";
+import { operationalEvents } from "../../observability/operationalEvents.js";
 import { auditActions, auditEntityTypes } from "../../observability/auditEvents.js";
 import { normalizeLocale } from "../../i18n/locale.js";
 import { buildAssessmentInputContext } from "./AssessmentInputFactory.js";
@@ -21,9 +26,36 @@ import {
   processAssessmentJobsNow as runnerProcessAssessmentJobsNow,
   processSubmissionJobNow as runnerProcessSubmissionJobNow,
   processNextJob as runnerProcessNextJob,
+  type AssessmentRunFence,
 } from "./AssessmentJobRunner.js";
 
 export { enqueueAssessmentJob } from "./AssessmentJobRunner.js";
+
+/** #1048: ord i besvarelsen. `null` når det ikke er noe å telle — da kan vi ikke begrunne unntaket. */
+function tellOrd(tekst: string): number | null {
+  const ord = tekst.trim().split(/\s+/).filter(Boolean);
+  return ord.length > 0 ? ord.length : null;
+}
+
+/**
+ * #1048: forventet minimum for denne modulen.
+ *
+ * Modulens eget omfang (#1049) vinner. Ellers nivåets standard — men BARE når nivået er en av de
+ * tre kjente. Importert innhold kan bære et hvilket som helst nivånavn, og å gjette på et av våre
+ * for et ukjent ville gitt et tall vi ikke kan stå inne for.
+ *
+ * `null` betyr «ingen forventning», og da vinner mennesket.
+ */
+function resolveExpectedMinWords(modul: {
+  scopeMinWords?: number | null;
+  certificationLevel?: string | null;
+}): number | null {
+  if (typeof modul.scopeMinWords === "number" && modul.scopeMinWords > 0) return modul.scopeMinWords;
+  const rå = localizedTextCodec.parse(modul.certificationLevel ?? null);
+  const nivå = (typeof rå === "string" ? rå : Object.values(rå ?? {}).find(Boolean) ?? "").trim().toLowerCase();
+  if (nivå !== "basic" && nivå !== "intermediate" && nivå !== "advanced") return null;
+  return LEVEL_SCOPE[nivå].minWords;
+}
 
 export async function processAssessmentJobsNow(maxJobs = 1) {
   return runnerProcessAssessmentJobsNow(runAssessment, maxJobs);
@@ -35,7 +67,7 @@ export async function processAssessmentJobsNow(maxJobs = 1) {
 // false, so a participant who never saw the UI verdict is still notified by e-mail.
 export async function processSubmissionJobNow(submissionId: string, maxCycles = 25) {
   return runnerProcessSubmissionJobNow(
-    (jobId) => runAssessment(jobId, { gradedSynchronously: true }),
+    (jobId, fence) => runAssessment(jobId, fence, { gradedSynchronously: true }),
     submissionId,
     maxCycles,
   );
@@ -45,7 +77,11 @@ export async function processNextJob(submissionId?: string): Promise<boolean> {
   return runnerProcessNextJob(runAssessment, submissionId);
 }
 
-async function runAssessment(jobId: string, options: { gradedSynchronously?: boolean } = {}) {
+async function runAssessment(
+  jobId: string,
+  fence: AssessmentRunFence,
+  options: { gradedSynchronously?: boolean } = {},
+) {
   const job = await assessmentJobRepository.findAssessmentJobWithSubmissionOrThrow(jobId);
 
   const submission = job.submission;
@@ -66,6 +102,27 @@ async function runAssessment(jobId: string, options: { gradedSynchronously?: boo
     mcqPercentScore = mcqAttempt.percentScore;
   }
 
+  // #953, spesifikasjonens krav 2: «Ikke rør en innlevering med et endelig vedtak fra før. Statusen
+  // alene er ikke nok som predikat.»
+  //
+  // ⚠️ Gjerdet (claimDecisionWrite) lukker ÉN retning av kappløpet: en forlatt kjøring som våkner
+  // etter at et gjenforsøk tok over. Den motsatte rekkefølgen sto åpen: vedtakstransaksjonen
+  // COMMITER rett før tidsgrensen utløper, men `runAssessment` rekker ikke returnere (utboks og
+  // revisjon skjer etter transaksjonen). Runneren ser da en deadline-feil, setter jobben PENDING,
+  // og gjenforsøket starter med friskt gjerde — overskriver COMPLETED med PROCESSING og skriver
+  // dom nummer to, som kan være motsatt av den første.
+  //
+  // Vedtaket er predikatet, ikke statusen. Finnes det ett, er jobben ferdig — den skal ikke feile,
+  // for da ville den blitt forsøkt igjen i det uendelige.
+  const existingDecision = await assessmentJobRepository.findDecisionIdForSubmission(submission.id);
+  if (existingDecision) {
+    logOperationalEvent(
+      operationalEvents.assessment.decisionAlreadyPresent,
+      { jobId, submissionId: submission.id, decisionId: existingDecision.id },
+    );
+    return;
+  }
+
   await assessmentJobRepository.updateSubmissionStatus(submission.id, SubmissionStatus.PROCESSING);
 
   // MCQ_ONLY modules (#525): no free-text, no LLM evaluation. Decide pass/fail purely from the
@@ -73,6 +130,7 @@ async function runAssessment(jobId: string, options: { gradedSynchronously?: boo
   if (assessmentMode === "MCQ_ONLY") {
     await applyMcqOnlyDecision({
       jobId,
+      fence,
       submissionId: submission.id,
       userId: submission.userId,
       moduleId: submission.moduleId,
@@ -141,6 +199,27 @@ async function runAssessment(jobId: string, options: { gradedSynchronously?: boo
   // is the slower of the two, not the sum.
   const [{ finalLlmResult, forceManualReviewReason }, contentSignal] = await Promise.all([
     runLlmEvaluationPipeline({
+      // #1023: samme formel som vedtaket bruker, kalt på primærresultatet. `resolveAssessmentDecision`
+      // er ren, så dette koster ingenting og kan ikke gli fra vedtaket.
+      beregnTotalPoeng: (resultat) => {
+        try {
+          return resolveAssessmentDecision({
+            mcqScaledScore,
+            mcqPercentScore,
+            llmResult: resultat,
+            forceManualReviewReason: undefined,
+            assessmentPolicy: inputContext.assessmentPolicy,
+            rubricMaxTotal: inputContext.rubricMaxTotal,
+            rubricCriteriaIds: inputContext.rubricCriteriaIds,
+            freetextOnly: assessmentMode === "FREETEXT_ONLY",
+            aiInfluence: undefined,
+          }).totalScore;
+        } catch {
+          // ⚠️ En feil her skal ALDRI stoppe vurderingen. Utfallet er at grenseregelen ikke fyrer,
+          // altså at vi går glipp av en ekstra vurdering — ikke at kandidaten blir stående uten svar.
+          return null;
+        }
+      },
       jobId,
       submissionId: submission.id,
       userId: submission.userId,
@@ -160,8 +239,20 @@ async function runAssessment(jobId: string, options: { gradedSynchronously?: boo
   const aiInfluence = aiOutcome.decision;
   const aiInfluenceJson = aiOutcome.signalsJson;
 
+  // #1048: tallene automatisk stryk må begrunnes med. Begge finnes allerede her — svarteksten
+  // hentes tre linjer over til innholdslikhet, og hele modulraden er lastet.
+  //
+  // ⚠️ Nivåets standard brukes bare når modulen ikke har sitt eget omfang (#1049), og bare når
+  // nivået faktisk er en av de tre kjente. Er det noe annet — importert innhold bærer det det
+  // bærer — får vi ingen forventning, og da vinner mennesket.
+  const svarOrd = tellOrd(extractAnswerText(JSON.parse(submission.responseJson) as Record<string, unknown>));
+  const forventetMin = resolveExpectedMinWords(submission.moduleVersion.module);
+
   await applyAssessmentDecision({
+    answerWordCount: svarOrd,
+    expectedMinWords: forventetMin,
     jobId,
+    fence,
     submissionId: submission.id,
     userId: submission.userId,
     moduleId: submission.moduleId,

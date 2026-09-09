@@ -110,6 +110,97 @@ describe("Unified content lifecycle (#705)", () => {
     await prisma.$disconnect();
   });
 
+  // ── #999: vaktene bærer nå en KODE, ikke bare en norsk setning ─────────────────────────────────
+  //
+  // ⚠️ Uten denne testen måler klienttesten bare seg selv. Den mater inn en kode og sjekker at
+  // setningen kommer ut riktig — men ingenting sa at serveren faktisk SENDER den koden.
+  //
+  // Meldingen står uendret med vilje: den logges, og en API-konsument uten oversettelsestabell får
+  // den fortsatt. Den er bare ikke lenger det brukeren ser.
+  it("#999: innhold i bruk gir kode og tall, ikke bare prosa", async () => {
+    const moduleId = await makePublishedModule();
+    await makeCourse({ moduleId, published: false });
+
+    await expect(archiveModule(moduleId, ACTOR)).rejects.toMatchObject({
+      code: "content_in_use",
+      details: { count: 1 },
+    });
+
+    // Kursnavnet følger med som DATA, så klienten slipper å lese det ut av en setning.
+    try {
+      await archiveModule(moduleId, ACTOR);
+      throw new Error("skulle ha blitt blokkert");
+    } catch (error) {
+      const details = (error as { details?: { courseTitles?: string[] } }).details;
+      expect(details?.courseTitles).toHaveLength(1);
+      // Meldingen finnes fortsatt, for logg og for API-konsumenter.
+      expect((error as Error).message).toContain("i bruk i 1 kurs");
+    }
+  });
+
+  it("#999: et kurs med påbegynt deltaker gir course_has_active_participants", async () => {
+    const moduleId = await makePublishedModule();
+    const courseId = await makeCourse({ moduleId, published: true });
+    const user = await prisma.user.create({
+      data: { externalId: `lc-999-${Date.now()}`, name: "LC 999", email: `lc-999-${Date.now()}@x.test` },
+      select: { id: true },
+    });
+    await prisma.submission.create({
+      data: {
+        userId: user.id,
+        moduleId,
+        moduleVersionId: (await prisma.module.findUniqueOrThrow({ where: { id: moduleId }, select: { activeVersionId: true } })).activeVersionId!,
+        deliveryType: "text",
+        submissionStatus: "SUBMITTED",
+      },
+    });
+
+    await expect(archiveCourse(courseId, ACTOR)).rejects.toMatchObject({
+      code: "course_has_active_participants",
+      details: { count: 1 },
+    });
+
+    await prisma.submission.deleteMany({ where: { userId: user.id } });
+    await prisma.user.deleteMany({ where: { id: user.id } });
+  });
+
+  // ⚠️ #999 QA-runde 2: min forrige test gikk paa TJENESTENIVAA og saa feilobjektet direkte. Den
+  // var derfor gronn selv om ruta droppet `details` paa vei ut.
+  //
+  // Fjorten ruter skrev feilkroppen for haand som `{ error, message }`. Det gikk bra saa lenge
+  // ingen feil bar data — men #999 lot vaktene sende tallene setningen trenger, og da viste de
+  // rutene «used in {count} course(s): {courseTitles}» med plassholderne staaende. Verre enn den
+  // norske prosaen de erstattet.
+  //
+  // Denne testen gaar over HTTP, som er der forskjellen faktisk viste seg.
+  it("#999: arkiv-ruta sender details over HTTP, ikke bare message", async () => {
+    const moduleId = await makePublishedModule();
+    await makeCourse({ moduleId, published: false });
+
+    const res = await request(app)
+      .post(`/api/admin/content/modules/${moduleId}/archive`)
+      .set(adminHeaders);
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe("content_in_use");
+    // Kjernen: uten denne raden staar plassholderne igjen i grensesnittet.
+    expect(res.body.details).toMatchObject({ count: 1 });
+    expect(res.body.details.courseTitles).toHaveLength(1);
+  });
+
+  it("#999: avpubliser-ruta gjoer det samme", async () => {
+    const moduleId = await makePublishedModule();
+    await makeCourse({ moduleId, published: false });
+
+    const res = await request(app)
+      .post(`/api/admin/content/modules/${moduleId}/unpublish`)
+      .set(adminHeaders);
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe("content_in_use");
+    expect(res.body.details).toMatchObject({ count: 1 });
+  });
+
   // G2 — modul i kurs er bærende og kan ikke trekkes vekk.
   it("blokkerer avpubliser OG arkiver av en modul som ligger i et kurs (G2)", async () => {
     const moduleId = await makePublishedModule();

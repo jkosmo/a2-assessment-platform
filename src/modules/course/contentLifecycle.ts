@@ -1,5 +1,5 @@
 import { prisma } from "../../db/prisma.js";
-import { ValidationError } from "../../errors/AppError.js";
+import { DomainRuleError, ValidationError } from "../../errors/AppError.js";
 import { localizeContentText } from "../../i18n/content.js";
 
 // Enhetlig innholds-livssyklus — delte vakter for kurs/modul/seksjon.
@@ -75,7 +75,12 @@ export function inUseMessage(
 export async function assertModuleNotInAnyCourse(moduleId: string, verb: string): Promise<void> {
   const courses = await findCoursesContainingModule(moduleId);
   if (courses.length > 0) {
-    throw new ValidationError(inUseMessage("Modulen", verb, courses));
+    // #999: koden er kontrakten. `courseTitles` foelger med saa klienten kan navngi kursene uten
+    // aa lese dem ut av setningen.
+    throw new DomainRuleError("content_in_use", inUseMessage("Modulen", verb, courses), {
+      count: courses.length,
+      courseTitles: courses.map((c) => c.title),
+    });
   }
 }
 
@@ -83,7 +88,10 @@ export async function assertModuleNotInAnyCourse(moduleId: string, verb: string)
 export async function assertSectionNotInAnyCourse(sectionId: string, verb: string): Promise<void> {
   const courses = await findCoursesContainingSection(sectionId);
   if (courses.length > 0) {
-    throw new ValidationError(inUseMessage("Seksjonen", verb, courses));
+    throw new DomainRuleError("content_in_use", inUseMessage("Seksjonen", verb, courses), {
+      count: courses.length,
+      courseTitles: courses.map((c) => c.title),
+    });
   }
 }
 
@@ -115,9 +123,11 @@ async function assertNotInIssuedCertificate(
 ): Promise<void> {
   const count = await prisma.courseCompletion.count({ where: { [column]: { contains: id } } });
   if (count > 0) {
-    throw new ValidationError(
+    throw new DomainRuleError(
+      "content_in_issued_certificate",
       `${noun} kan ikke ${verb} fordi den inngår i ${count} utstedt${count === 1 ? "" : "e"} kursbevis. `
       + "Arkiver den i stedet — et kursbevis må kunne vise hva det dekket.",
+      { count },
     );
   }
 }
@@ -138,7 +148,13 @@ export async function describeIssuedCertificateBlock(sectionId: string): Promise
     await assertSectionNotInIssuedCertificate(sectionId, "slettes");
     return null;
   } catch (error) {
-    if (error instanceof ValidationError) return error.message;
+    // ⚠️ #999: vakta kaster nå DomainRuleError, ikke ValidationError. Sto denne igjen på den gamle
+    // klassen, ville den sluttet å rapportere og kastet videre i stedet — og forhåndsvisningen for
+    // kaskadesletting ville mistet blokkeringen den finnes for å vise.
+    //
+    // Merk at `reason` fortsatt er norsk prosa i en nyttelast. Det er samme klasse som #999 retter
+    // for feilsvar, men en annen kanal, og hører i #995.
+    if (error instanceof DomainRuleError || error instanceof ValidationError) return error.message;
     throw error;
   }
 }
@@ -182,9 +198,11 @@ export async function assertSectionNotInIssuedCertificate(sectionId: string, ver
   const readPairs = new Set(reads.map((r) => `${r.userId}|${r.courseId}`));
   const covered = legacy.filter((c) => readPairs.has(`${c.userId}|${c.courseId}`)).length;
   if (covered > 0) {
-    throw new ValidationError(
+    throw new DomainRuleError(
+      "content_in_legacy_certificate",
       `Seksjonen kan ikke ${verb} fordi den inngår i ${covered} kursbevis utstedt før `
       + "øyeblikksbildet ble innført. Arkiver den i stedet — et kursbevis må kunne vise hva det dekket.",
+      { count: covered },
     );
   }
 }
@@ -224,9 +242,11 @@ export async function assertCourseHasNoInProgressParticipants(courseId: string, 
   const count = await countCourseInProgressParticipants(courseId);
   if (count > 0) {
     const deltaker = count === 1 ? "1 deltaker er" : `${count} deltakere er`;
-    throw new ValidationError(
+    throw new DomainRuleError(
+      "course_has_active_participants",
       `Kurset kan ikke ${verb} fordi ${deltaker} midt i en gjennomføring. ` +
         `Avpubliser kurset i stedet (skjuler det uten å pensjonere det), eller vent til de er ferdige.`,
+      { count },
     );
   }
 }

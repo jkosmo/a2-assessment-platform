@@ -16,6 +16,7 @@
  */
 
 import { apiFetch } from "/static/api-client.js";
+import { showToast } from "/static/toast.js";
 
 // ── Built-in translations ─────────────────────────────────────────────────────
 
@@ -180,10 +181,10 @@ function renderDeletionBanner(effectiveAt, getHeaders, locale) {
   });
 }
 
+// ⚠️ #1046: het `showToastIfAvailable` og sjekket `window.showToast`, en global som aldri har vært
+// satt — ikke i noen commit. Meldingen forsvant altså alltid. Bruker nå den delte modulen.
 function showToastIfAvailable(message, type) {
-  if (typeof window.showToast === "function") {
-    window.showToast(message, type);
-  }
+  showToast(message, type);
 }
 
 // ── Main export ──────────────────────────────────────────────────────────────

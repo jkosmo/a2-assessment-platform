@@ -253,13 +253,27 @@ export async function getCalibrationWorkspaceSnapshot(input: CalibrationWorkspac
   const outcomeCount = outcomes.length;
   const decisions = outcomes.filter((outcome) => outcome.decision !== null).map((outcome) => outcome.decision!);
   const decisionCount = decisions.length;
-  const passCount = decisions.filter((decision) => decision.passFailTotal === true).length;
-  const failCount = decisions.filter((decision) => decision.passFailTotal === false).length;
+  // #948: en sak som VENTER paa sensor er verken bestaatt eller stroeket, og skal ikke telle i en
+  // bestaatt-rate i det hele tatt.
+  //
+  // ⚠️ Foer #948 bar et ventende vedtak `passFailTotal: true` og ble talt som BESTAATT — en
+  // smigrende feil. Etter #948 baerer det `false`, og ble talt som STROEKET — en alarmerende feil
+  // som fyrte LOW_PASS_RATE paa et forsoek maskinen ga 72 av terskel 70. Begge er feil paa samme
+  // maate: de gjoer en ikke-avgjort sak om til et datapunkt.
+  //
+  // Dette avgjoer IKKE den aapne KPI-beslutningen (skal raten maale raavedtaket eller det endelige
+  // utfallet?). Den handler om saker som ER avgjort. Her utelates bare de som ikke er det.
+  const settledDecisions = outcomes
+    .filter((outcome) => outcome.decision !== null && outcome.submissionStatus !== "UNDER_REVIEW")
+    .map((outcome) => outcome.decision!);
+  const settledDecisionCount = settledDecisions.length;
+  const passCount = settledDecisions.filter((decision) => decision.passFailTotal === true).length;
+  const failCount = settledDecisions.filter((decision) => decision.passFailTotal === false).length;
   const underReviewCount = outcomes.filter((outcome) => outcome.submissionStatus === "UNDER_REVIEW").length;
   const manualReviewSignalCount = outcomes.filter(
     (outcome) => outcome.submissionStatus === "UNDER_REVIEW" || outcome.llm?.manualReviewRecommended === true,
   ).length;
-  const passRate = decisionCount > 0 ? round2(passCount / decisionCount) : null;
+  const passRate = settledDecisionCount > 0 ? round2(passCount / settledDecisionCount) : null;
   const manualReviewRate = outcomeCount > 0 ? round2(manualReviewSignalCount / outcomeCount) : null;
   const averageTotalScore =
     decisionCount > 0 ? round2(decisions.reduce((sum, decision) => sum + decision.totalScore, 0) / decisionCount) : null;

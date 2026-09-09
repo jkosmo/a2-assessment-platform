@@ -587,7 +587,9 @@ describe("MVP admin content management and publication", () => {
         moduleId: seedModule.id,
         deliveryType: "text",
         responseJson: {
-          response: "Completed module should still remain visible after later publication.",
+          // ⚠️ Lengden er load-bearing — se kommentaren i teksten.
+          response:
+            "Completed module should still remain visible after later publication. Denne teksten er bevisst lang nok til at den hermetiske LLM-stubben gir toppscore (over 800 tegn gir 4 per kriterium), slik at resultatet lander KLART over bestaatt-grensa og ikke inne i grensebaandet paa ti poeng under terskelen. Uten det ville denne testen — som handler om SYNLIGHET av fullfoerte moduler etter en publisering, ikke om vurderingspolicy — blitt roed hver gang noen justerer baandet. Fiksturen sier altsaa noe om hva testen maaler: den trenger en fullfoert innlevering, og da maa den score som en fullfoert innlevering. Teksten gjentar seg med vilje for aa naa lengden. Den unngaar dessuten ord som utloeser roede flagg i stubben — foerste utkast forklarte nettopp det, og brukte da selv et av ordene. Lengden er load-bearing, og det samme er ordvalget.",
           reflection: "Creating a completed module baseline before publishing a new module.",
           promptExcerpt: "Document baseline completion before publication test.",
         },
@@ -844,6 +846,9 @@ describe("MVP admin content management and publication", () => {
         assessmentPolicy,
       });
     expect(moduleVersionResponse.status).toBe(201);
+    // ⚠️ Policyen lagres NØYAKTIG som sendt. Grensevinduet festes bevisst IKKE her — det er en
+    // avledet verdi, og en avledet verdi i innholdet blir gammel når terskelen endres. Se
+    // begrunnelsen i assessmentPolicyCodec.ts.
     expect(moduleVersionResponse.body.moduleVersion.assessmentPolicyJson).toBe(JSON.stringify(assessmentPolicy));
 
     await request(app)
@@ -858,5 +863,66 @@ describe("MVP admin content management and publication", () => {
       .set(adminHeaders);
     expect(activeVersionResponse.status).toBe(200);
     expect(activeVersionResponse.body.activeVersion.assessmentPolicy).toEqual(assessmentPolicy);
+  });
+
+  // ── #930: en tittel skrevet i ETT språk skal bære HVILKET språk ────────────────────────────────
+  //
+  // #918 fjernet den ene løgnen: tre språk fylt med samme kildetekst påsto «dette ER oversatt».
+  // Klienten sender nå én streng i stedet. Men en ren streng er ikke nøytral — `missingLocalesFor`
+  // leser den som bokmål, fordi feltet ikke bærer noe språkmerke.
+  //
+  // ⚠️ Konsekvensen: oppretter du en modul mens arbeidsflaten står på engelsk, lagres «Incident
+  // response» som norsk. Gaten melder at en-GB og nn mangler. Det er feil — det er nb og nn som
+  // mangler. «Oversett det som mangler» oversetter da til feil språk, fra en kilde den tror er
+  // norsk, og en norsk deltaker får engelsk tekst servert SOM norsk uten at noe flagger det.
+  it("#930: en tittel opprettet på engelsk lagres som engelsk, ikke som bokmål", async () => {
+    const response = await request(app)
+      .post("/api/admin/content/modules")
+      .set(adminHeaders)
+      .send({ title: { "en-GB": "Incident response" } });
+
+    expect(response.status).toBe(201);
+    const moduleId = response.body.module.id as string;
+
+    const stored = await prisma.module.findUnique({ where: { id: moduleId }, select: { title: true } });
+    expect(localizedTextCodec.parse(stored?.title ?? null)).toEqual({ "en-GB": "Incident response" });
+
+    // ⚠️ Kjernen. Før dette svarte gaten ["en-GB", "nn"] — den navnga kildespråket som manglende.
+    expect(missingLocalesFor(stored?.title ?? null).sort()).toEqual(["nb", "nn"]);
+
+    await prisma.module.deleteMany({ where: { id: moduleId } });
+  });
+
+  // Motprøven, som skiller «bærer språket sitt» fra «godtar hva som helst». En modul opprettet på
+  // bokmål skal mangle de to andre — ikke seg selv.
+  it("#930: en tittel opprettet på bokmål mangler en-GB og nn", async () => {
+    const response = await request(app)
+      .post("/api/admin/content/modules")
+      .set(adminHeaders)
+      .send({ title: { nb: "Hendelseshåndtering" } });
+
+    expect(response.status).toBe(201);
+    const moduleId = response.body.module.id as string;
+    const stored = await prisma.module.findUnique({ where: { id: moduleId }, select: { title: true } });
+
+    expect(missingLocalesFor(stored?.title ?? null).sort()).toEqual(["en-GB", "nn"]);
+
+    await prisma.module.deleteMany({ where: { id: moduleId } });
+  });
+
+  // Bakoverkompatibilitet: rene strenger finnes allerede i databasen og fra eldre klienter. De skal
+  // fortsatt godtas og fortsatt leses som før — dette handler om hva som SKRIVES fra nå av.
+  it("#930: en ren streng godtas fortsatt ved opprettelse", async () => {
+    const response = await request(app)
+      .post("/api/admin/content/modules")
+      .set(adminHeaders)
+      .send({ title: "Gammel klient sender en streng" });
+
+    expect(response.status).toBe(201);
+    const moduleId = response.body.module.id as string;
+    const stored = await prisma.module.findUnique({ where: { id: moduleId }, select: { title: true } });
+    expect(stored?.title).toBe("Gammel klient sender en streng");
+
+    await prisma.module.deleteMany({ where: { id: moduleId } });
   });
 });

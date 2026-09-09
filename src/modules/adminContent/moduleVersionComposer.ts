@@ -39,6 +39,9 @@ export interface ComposeModuleVersionInput {
    */
   description?: LocalizedText | null;
   certificationLevel?: LocalizedText;
+  // #1049: rene tall, ikke lokalisert tekst — et ordantall har ikke et språk.
+  scopeMinWords?: number | null;
+  scopeMaxWords?: number | null;
   validFrom?: Date | null;
   validTo?: Date | null;
   assessmentMode?: "FREETEXT_PLUS_MCQ" | "MCQ_ONLY" | "FREETEXT_ONLY";
@@ -95,6 +98,8 @@ export async function composeModuleVersion(input: ComposeModuleVersionInput, exi
     const touchesDetails =
       input.description !== undefined
       || input.certificationLevel !== undefined
+      || input.scopeMinWords !== undefined
+      || input.scopeMaxWords !== undefined
       || input.validFrom !== undefined
       || input.validTo !== undefined;
 
@@ -105,6 +110,8 @@ export async function composeModuleVersion(input: ComposeModuleVersionInput, exi
       const detailPatch: {
         description?: string | null;
         certificationLevel?: string;
+        scopeMinWords?: number | null;
+        scopeMaxWords?: number | null;
         validFrom?: Date | null;
         validTo?: Date | null;
       } = {};
@@ -122,6 +129,11 @@ export async function composeModuleVersion(input: ComposeModuleVersionInput, exi
           mergeLocalized(stored?.certificationLevel ?? null, input.certificationLevel),
         );
       }
+      // ⚠️ ERSTATTES, ikke merges — i motsetning til feltene over. Et ordantall er ett tall på en
+      // fast skala, ikke prosa med tre språk å bevare. Samme skille som `certificationLevel` hadde
+      // før det ble lokalisert: hva feltet BETYR avgjør, ikke hvordan det tilfeldigvis er typet.
+      if (input.scopeMinWords !== undefined) detailPatch.scopeMinWords = input.scopeMinWords;
+      if (input.scopeMaxWords !== undefined) detailPatch.scopeMaxWords = input.scopeMaxWords;
       if (input.validFrom !== undefined) detailPatch.validFrom = input.validFrom;
       if (input.validTo !== undefined) detailPatch.validTo = input.validTo;
 

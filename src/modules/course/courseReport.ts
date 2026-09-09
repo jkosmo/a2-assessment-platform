@@ -36,6 +36,8 @@ type CourseLearnerRow = {
   underReviewModules: number;
   completedModules: number;
   totalModules: number;
+  readSections: number;
+  totalSections: number;
   score: number | null;
   latestActivityAt: string | null;
   completedAt: string | null;
@@ -121,9 +123,16 @@ export async function getCourseReport(
       // bruker-ID-ene for unionen over. CourseCompletion er unik per (userId, courseId), så
       // radantallet er fortsatt antall distinkte deltakere — `completedParticipants` betyr det
       // samme som før.
+      // ⚠️ #966/#996: SAMME modulliste som drilldownen. Arkivfilteret ble først lagt bare i
+      // drilldownen, og da sprikte de to flatene igjen: unionen «aktiv = har levert på en av
+      // kursets moduler» ble regnet over ulike modulsett, så kursraden kunne si «10 innmeldte»
+      // mens detaljvisningen viste 9 personer — og modullista viste fem moduler ved siden av rader
+      // som sa «4/4». Det er nøyaktig selvmotsigelsen kommentaren over `resolveCourseParticipantIds`
+      // sier ikke skal kunne oppstå.
+      const activeModules = course.modules.filter((cm) => cm.module?.archivedAt == null);
       const { participantIds, completions } = await resolveCourseParticipantIds(
         course.id,
-        course.modules.map((cm) => cm.moduleId),
+        activeModules.map((cm) => cm.moduleId),
         filters,
       );
       const enrolled = participantIds.size;
@@ -139,8 +148,10 @@ export async function getCourseReport(
       //
       // Snittet er poenget, ikke en klipping til 100 %: en klipping ville skjult at de to tallene
       // var uenige. Nå er telleren en delmengde av nevneren per konstruksjon.
+      // #966: arkiverte moduler utelates også her. En arkivert modul med egen pass-rate i lista,
+      // ved siden av rader som sier «4/4», er det samme to-tall-problemet én etasje ned.
       const moduleBreakdown = await Promise.all(
-        course.modules.map(async (cm) => {
+        activeModules.map(async (cm) => {
           const passedIds = await courseRepository.findPassedUserIdsForModule(cm.moduleId, filters);
           const passedUsers = passedIds.filter((id) => participantIds.has(id)).length;
           const enrolledUsers = participantIds.size;
@@ -199,7 +210,17 @@ export async function getCourseLearnerReport(
     };
   }
 
-  const moduleIds = course.modules.map((moduleEntry) => moduleEntry.moduleId);
+  // #966 (produkteier 2026-08-25): «alle seksjoner må være lest». Rapporten stilte tidligere bare
+  // modulkravet, og var dermed den ene av fem flatene som var uenig med bevisporten: en deltaker
+  // med alle moduler bestått, men uleste seksjoner, sto som «Fullført» her — uten bevis og uten å
+  // være ferdig.
+  //
+  // ⚠️ Arkiverte moduler filtreres nå bort, slik porten har gjort siden #945. Sto det igjen, ville
+  // kravet vært uoppfyllelig for et kurs med en arkivert modul, og ingen ville nådd «Fullført» på
+  // beregning. Feltet fantes ikke i spørringen før — se `findPublishedCoursesWithModuleDetails`.
+  const moduleIds = course.modules
+    .filter((moduleEntry) => moduleEntry.module?.archivedAt == null)
+    .map((moduleEntry) => moduleEntry.moduleId);
   // ⚠️ #996: SAMME definisjon som sammendraget. Drilldownen bygde tidligere radene sine av
   // innleveringer og fullføringer alene, så en tildelt deltaker som ikke hadde startet fantes ikke
   // her — kursraden sa «10 innmeldte», detaljvisningen viste 0 personer, og CSV-en var tom.
@@ -211,6 +232,33 @@ export async function getCourseLearnerReport(
     moduleIds,
     filters,
   );
+
+  // #966: seksjonskravet hentes fra SAMME dør som bevisporten bruker — deltakerdøra. Den utelater
+  // seksjoner deltakeren ikke kan åpne, så et krav som aldri kan oppfylles kan ikke oppstå her.
+  const participantItems = await courseRepository.findCourseItemsForParticipant(course.id);
+  const requiredSectionIds = participantItems
+    .filter((item) => item.itemType === "SECTION" && item.sectionId != null)
+    .map((item) => item.sectionId as string);
+  const requiredSectionIdSet = new Set(requiredSectionIds);
+
+  const sectionReadRows = await courseRepository.findReadSectionIdsForCourseParticipants(
+    course.id,
+    Array.from(participantIds),
+    filters,
+  );
+  const readSectionsByUser = new Map<string, Set<string>>();
+  // #966: lesing er AKTIVITET. `hasStarted` teller den nå, så «Siste aktivitet» må gjøre det samme
+  // — ellers sier raden «Pågår» ved siden av «Siste aktivitet: —» for en deltaker som bare har
+  // lest, og de to kolonnene motsier hverandre.
+  const latestReadByUser = new Map<string, Date>();
+  for (const row of sectionReadRows) {
+    if (!requiredSectionIdSet.has(row.sectionId)) continue;
+    const set = readSectionsByUser.get(row.userId);
+    if (set) set.add(row.sectionId);
+    else readSectionsByUser.set(row.userId, new Set([row.sectionId]));
+    const seen = latestReadByUser.get(row.userId);
+    if (!seen || row.readAt > seen) latestReadByUser.set(row.userId, row.readAt);
+  }
 
   const learners = new Map<string, {
     participantId: string;
@@ -309,11 +357,25 @@ export async function getCourseLearnerReport(
       }
     }
 
-    const hasStarted = learner.latestByModule.size > 0 || Boolean(learner.completion);
+    const readSections = readSectionsByUser.get(learner.participantId)?.size ?? 0;
+    const latestRead = latestReadByUser.get(learner.participantId) ?? null;
+    const latestActivityAt =
+      latestRead && (!learner.latestActivityAt || latestRead > learner.latestActivityAt)
+        ? latestRead
+        : learner.latestActivityAt;
+
+    // #966: kravet er moduler OG seksjoner, samme regnestykke som bevisporten og kurslista.
+    // `hasStarted` teller nå også lesing: en deltaker som bare har lest, men ikke levert, er i gang
+    // — ikke «ikke startet».
+    const hasStarted = learner.latestByModule.size > 0 || readSections > 0 || Boolean(learner.completion);
     const completedModules = learner.completion ? moduleIds.length : passedModules;
     const status = learner.completion
       ? "COMPLETED"
-      : computeCourseStatus(passedModules, moduleIds.length, hasStarted);
+      : computeCourseStatus(
+          passedModules + readSections,
+          moduleIds.length + requiredSectionIds.length,
+          hasStarted,
+        );
 
     return {
       participantId: learner.participantId,
@@ -328,8 +390,12 @@ export async function getCourseLearnerReport(
       underReviewModules,
       completedModules,
       totalModules: moduleIds.length,
+      // #966: seksjonene vises fordi de nå AVGJØR statusen. Uten dem ville raden kunne si
+      // «4/4 moduler» ved siden av «Pågår», og rapportleseren hadde ingen måte å se hvorfor.
+      readSections: learner.completion ? requiredSectionIds.length : readSections,
+      totalSections: requiredSectionIds.length,
       score: scores.length > 0 ? round2(scores.reduce((sum, score) => sum + score, 0) / scores.length) : null,
-      latestActivityAt: learner.latestActivityAt?.toISOString() ?? null,
+      latestActivityAt: latestActivityAt?.toISOString() ?? null,
       completedAt: learner.completion?.completedAt.toISOString() ?? null,
       certificateId: learner.completion?.certificateId ?? null,
     };

@@ -115,6 +115,22 @@ The course master toggle is set via the admin course API: `POST`/`PUT /api/admin
 | `POST` | `/api/reviews/:reviewId/claim` | ADMINISTRATOR, REVIEWER |
 | `POST` | `/api/reviews/:reviewId/override` | ADMINISTRATOR, REVIEWER |
 
+### `submission.module` i køsvaret (#1027)
+
+Gjelder både `/api/reviews` og `/api/appeals`.
+
+- `title` — **ferdig lokalisert streng** på leserens språk (`x-locale`), ikke lagringsformatet.
+  Klienten skal vise den som den er, ikke tolke den.
+- `titleSearch` — **alle språkvariantene** av tittelen, som en liste.
+
+⚠️ `titleSearch` finnes fordi køsøket før gikk over den rå JSON-strengen og derfor traff på tvers
+av alle språk. Det var utilsiktet, men nyttig: en behandler fant saken uansett hvilket språk
+tittelen ble skrevet på. Da #1022 begynte å lokalisere `title`, ble søket smalere uten at noen la
+merke til det.
+
+Et klientsidefilter som søker i køen **skal ta med `titleSearch`**, ellers blir søket smalere enn
+det var før serveren lokaliserte.
+
 ---
 
 ## Appeals
@@ -152,6 +168,30 @@ The course master toggle is set via the admin course API: `POST`/`PUT /api/admin
 | `GET` | `/api/reports/analytics/cohorts?cohortBy=<month\|department>` | ADMINISTRATOR, REPORT_READER, SUBJECT_MATTER_OWNER |
 | `GET` | `/api/reports/analytics/data-quality` | ADMINISTRATOR, REPORT_READER, SUBJECT_MATTER_OWNER |
 | `GET` | `/api/reports/export?type=<report>&format=csv` | ADMINISTRATOR, REPORT_READER, SUBJECT_MATTER_OWNER |
+
+## Cohort status (#498)
+
+Teacher/SMO dashboard: enrollment status counts over a course's effective audience (individual
+enrolments + class-assigned members), evaluated at read time.
+
+| Method | Route | Roles |
+|---|---|---|
+| `GET` | `/api/cohort-status/courses` | ADMINISTRATOR, REPORT_READER, SUBJECT_MATTER_OWNER |
+| `GET` | `/api/cohort-status/course/:courseId` | ADMINISTRATOR, REPORT_READER, SUBJECT_MATTER_OWNER |
+
+`GET /course/:courseId` returns `{ courseId, total, counts, byClass, generatedAt, coursePublished,
+courseArchived }`.
+
+**#967 — reminders and this dashboard treat an unreachable course in opposite ways, deliberately.**
+The reminder schedule **suppresses** due-date mail for a course that is unpublished or archived (the
+participant cannot open it, so the mail asks for something they cannot do) and counts each suppression
+as `skippedCourseUnavailable`. This dashboard does the opposite: it never filters the audience — that
+would empty the screen for a teacher who explicitly asked about *this* course — and reports
+`coursePublished` / `courseArchived` instead. The course list includes unreachable courses for the
+same reason, flagged rather than hidden.
+
+The distinction is who is asking: a reminder is an action aimed at a participant who cannot act on it;
+a dashboard is a question from a teacher who deserves an honest answer.
 
 ### #989 — recertification removed
 
@@ -429,10 +469,21 @@ fields (`title`, `bodyMarkdown`) accept a string or a partial `{en-GB,nb,nn}` ob
 
 **The role is not the whole check.** Routes on `:courseId` additionally require that the caller
 **owns the course** (or is ADMINISTRATOR) — `requireContentOwnership("COURSE", "courseId")`.
-That now includes the two read routes it was missing on (#903): `GET .../export-package`, whose
-envelope inlines each module’s full payload including MCQ answer keys, and
-`GET .../enrollments`, which returns participant names, e-mail, department and progress. Both
-return `403 content_ownership` for a non-owner SMO.
+**Reads are guarded too, not only writes.** #903 closed `GET .../export-package` (the envelope
+inlines each module’s full payload, MCQ answer keys included) and `GET .../enrollments`
+(participant names, e-mail, department, progress). #943 closed the rest of the same surface:
+`GET /:courseId`, `GET /:courseId/items` and `GET /:courseId/publish-preview` — course detail is
+the reconnaissance that makes the other holes usable, and publish-preview reveals which items the
+owner is still holding back. All return `403 content_ownership` for a non-owner SMO, or
+`403 content_unowned` when the course has no `ContentOwner` row at all (legacy content — admin-only
+until an owner is assigned).
+
+The **list** endpoints stay open by design: they are how an author finds their own content, and
+each row carries `canManage` so the UI hides the actions the guard would reject. The line is
+between the list and the detail.
+
+The same asymmetry existed on classes and is closed by #943: `GET /:classId/members` returned the
+name and e-mail of every member of any class while both writes on that path were guarded.
 
 Course ownership is deliberately **not** module ownership: a course owner exporting their own
 course receives the inlined payload of every module in it, including modules authored by someone
@@ -445,12 +496,12 @@ have nothing to do with, not about partitioning content inside a course you asse
 |---|---|---|
 | `GET` | `/api/admin/content/courses` | List courses (with module count) |
 | `POST` | `/api/admin/content/courses` | Create a course |
-| `GET` | `/api/admin/content/courses/:courseId` | Course detail (modules) |
+| `GET` | `/api/admin/content/courses/:courseId` | Course detail (modules). **`403 content_ownership`** for a non-owner SMO (#943) |
 | `PUT` | `/api/admin/content/courses/:courseId` | Update course metadata |
 | `PUT` | `/api/admin/content/courses/:courseId/modules` | Set the module list (legacy). Writes `CourseItem` MODULE-rader — det er ikke lenger en dual-write, `CourseItem` er eneste sannhetskilde (#502). Eventuelle SECTION-elementer bevares og re-indekseres etter modulene. **`400` hvis en modul er arkivert** (#992) — samme regel som `/items`; se under. |
-| `GET` | `/api/admin/content/courses/:courseId/items` | Read the ordered mixed module/section sequence (#486/B2) |
+| `GET` | `/api/admin/content/courses/:courseId/items` | Read the ordered mixed module/section sequence (#486/B2). **`403 content_ownership`** for a non-owner SMO (#943) |
 | `PUT` | `/api/admin/content/courses/:courseId/items` | Set the ordered sequence — body `{ items: [{type:"MODULE",moduleId} \| {type:"SECTION",sectionId}] }`. Re-syncs CourseModule (#486). **`400` hvis noe av innholdet er arkivert** (#938); se under. |
-| `GET` | `/api/admin/content/courses/:courseId/publish-preview` | Inspect unpublished items before publishing (#734). Returns `{ courseId, allPublished, publishable, unpublishedItems: [{ type, id, title, publishable, blockers: [{code,message}] }] }`. Read-only; the UI calls it to drive the cascade-publish confirm dialog. |
+| `GET` | `/api/admin/content/courses/:courseId/publish-preview` | Inspect unpublished items before publishing (#734). **`403 content_ownership`** for a non-owner SMO (#943) — the preview reveals which items the owner is still holding back. Returns `{ courseId, allPublished, publishable, unpublishedItems: [{ type, id, title, publishable, blockers: [{code,message}] }] }`. Read-only; the UI calls it to drive the cascade-publish confirm dialog. |
 | `POST` | `/api/admin/content/courses/:courseId/publish` | Publish course (#734). Body `{ publishItems?: boolean }`. If the course has unpublished modules/sections: without `publishItems:true` returns `409 course_has_unpublished_items` (with the preview) so the UI can confirm; with `publishItems:true` cascade-publishes the items (items → course) — but returns `422 course_publish_blocked_by_items` (with `details.unpublishedItems`) and publishes nothing if any item is un-publishable (module fails validation / no content, archived item). Enforces I1: a published course never contains unavailable content. Response `{ course, publishedItems }`. |
 | `POST` | `/api/admin/content/courses/:courseId/unpublish` | Unpublish course (reversible soft take-down; no G3 lock, #705) |
 | `POST` | `/api/admin/content/courses/:courseId/archive` | Archive course. Blocked `400` if a participant is mid-course (G3 — suggests unpublish instead); auto-unpublishes (I3, #705) |
@@ -463,10 +514,10 @@ have nothing to do with, not about partitioning content inside a course you asse
 | `GET` | `/api/admin/content/classes` | List classes (cohorts) with member + assigned-course counts (#645/CL-2) |
 | `POST` | `/api/admin/content/classes` | Create a class — body `{ name, description? }` (#645/CL-2) |
 | `DELETE` | `/api/admin/content/classes/:classId` | Archive a class (soft). System classes rejected `400` (#645/CL-2) |
-| `GET` | `/api/admin/content/classes/:classId/members` | List class members (#645/CL-2) |
+| `GET` | `/api/admin/content/classes/:classId/members` | List class members (#645/CL-2) — returns **name and e-mail**. **`403 content_ownership`** for a non-owner SMO, **`403 content_unowned`** on system classes (#943) |
 | `POST` | `/api/admin/content/classes/:classId/members` | Add a member — body `{ userId }` (#645/CL-2) |
 | `DELETE` | `/api/admin/content/classes/:classId/members/:userId` | Remove a member (#645/CL-2) |
-| `GET` | `/api/admin/content/classes/:classId/courses` | List courses assigned to the class (#645/CL-2) |
+| `GET` | `/api/admin/content/classes/:classId/courses` | List courses assigned to the class (#645/CL-2). **`403 content_ownership`** for a non-owner SMO (#943). Each row carries `coursePublished` / `courseArchived` (#967) — assignments to an unreachable course are **not** hidden (a hidden row is a row nobody can remove), they are flagged so the screen can explain why nobody is progressing |
 | `POST` | `/api/admin/content/classes/:classId/courses` | Assign a course — body `{ courseId, dueAt?\|null }` (#645/CL-2) |
 | `DELETE` | `/api/admin/content/classes/:classId/courses/:courseId` | Unassign a course (#645/CL-2) |
 | `GET` | `/api/admin/content/users/search?q=` | Search users by name/email (min 2 chars, capped 20) for class membership (#645/CL-3) |
@@ -569,6 +620,8 @@ The participant/preview serve endpoint `GET /api/content-assets/:assetId` accept
 | `PUT` | `/api/admin/platform` | ADMINISTRATOR |
 | `POST` | `/api/admin/platform/certificate-background` | ADMINISTRATOR — multipart `file` (PNG/JPEG/GIF/WebP, max 15 MB). Sets the platform-wide diploma background (#580). |
 | `DELETE` | `/api/admin/platform/certificate-background` | ADMINISTRATOR — clears the diploma background (#580). |
+| `GET` | `/api/admin/platform/failed-assessments` | ADMINISTRATOR — submissions still STUCK after assessment gave up: a FAILED job, no decision, no active job (#953). Self-clearing — a queued retry or a decision removes the row. |
+| `POST` | `/api/admin/platform/failed-assessments/:submissionId/retry` | ADMINISTRATOR — re-queues the assessment. 409 if the submission already has a decision. Separate from `POST /api/assessments/:id/run`, which is ownership-scoped to the submitter and returns 404 for an administrator (#953). |
 
 **Certificate background image (#580):** the uploaded image is stored in blob (reusing F4 asset
 storage) and referenced from platform key-value config — no new model. It is served
@@ -606,3 +659,28 @@ These URLs are not role-gated by Express itself; access is enforced by the authe
 | `/results` | SUBJECT_MATTER_OWNER, ADMINISTRATOR, REPORT_READER |
 | `/profile` | any authenticated |
 | `/admin-platform` | ADMINISTRATOR |
+
+## Domain-rule error codes (#999)
+
+A rule in the domain said no — as opposed to Zod rejecting the request shape. These return `400`
+with a code the client can look up, and the numbers the sentence needs as **fields**, not as prose
+interpolated into `message`.
+
+| Code | Meaning | `details` |
+|---|---|---|
+| `content_in_use` | The module or section is part of a course and cannot be unpublished, archived or deleted | `{ count, courseTitles }` |
+| `content_in_issued_certificate` | The content is named in an issued certificate and can never be deleted | `{ count }` |
+| `content_in_legacy_certificate` | The section is in a certificate issued before we recorded what it covered | `{ count }` |
+| `course_has_active_participants` | Someone is part-way through the course, so it cannot be retired | `{ count }` |
+
+`message` is unchanged and still carries a Norwegian sentence. It is logged, and it is what an API
+consumer without a translation table gets. **It is no longer what a user sees** — the client
+formats the sentence from the code and `details`.
+
+⚠️ Every route renders these through one helper (`routes/helpers/respondWithAppError.ts`), which
+matches the global error middleware. Fourteen routes previously wrote `{ error, message }` by hand
+and dropped `details`; the placeholders then reached the screen unfilled.
+
+Other guards still throw `validation_error` with prose, and the client still falls back to showing
+that `message`. That fallback shrinks as more guards get codes — it is not a licence to add new
+prose-only errors.

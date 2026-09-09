@@ -1,4 +1,6 @@
 import { renderWorkspaceNavigationWithProfile } from "/static/workspace-nav.js";
+import { applyIdentityDefaults as delApplyIdentityDefaults } from "/static/identity-defaults.js";
+import { lagLokalisertRessurs } from "/static/localized-resource.js";
 import { resolveInitialLocale } from "/static/i18n-locale.js";
 import { createNumberFormatter, createDateTimeFormatter } from "/static/format-display.js";
 const formatDateTime = createDateTimeFormatter(() => currentLocale);
@@ -8,6 +10,7 @@ import { apiFetch, buildConsoleHeaders, getConsoleConfig, applyNavReviewBadge } 
 import { initConsentGuard } from "/static/consent-guard.js";
 import { hideLoading, showEmpty, showLoading } from "/static/loading.js";
 import { setHidden } from "/static/dom-visibility.js";
+import { localizeDecisionReason } from "/static/decision-reason.js";
 import { showToast } from "/static/toast.js";
 import { describeApiError } from "/static/api-error.js";
 import { OUTCOME_FAILED, OUTCOME_PASSED, rawPassFailState } from "/static/outcome.js";
@@ -99,13 +102,11 @@ let activeReviewTab = "manualReview";
 let latestReviewQueue = [];
 let selectedReviewId = "";
 let selectedReviewDetails = null;
-let activeReviewQueueLoad = null;
 
 // Appeal state
 let latestAppealQueue = [];
 let selectedAppealId = "";
 let selectedAppealDetails = null;
-let activeAppealQueueLoad = null;
 
 let participantRuntimeConfig = {
   authMode: "mock",
@@ -147,6 +148,23 @@ function setLocale(locale) {
   localStorage.setItem("participant.locale", currentLocale);
   document.documentElement.lang = currentLocale;
   applyTranslations();
+
+  // ⚠️ #1027: serveren baker nå inn språket når køen HENTES, ikke når den rendres. Uten en ny
+  // henting ville titlene blitt stående på språket de ble hentet i — engelsk side, norske titler.
+  //
+  // Det var en regresjon endringen selv innførte: klientparseren kjørte per rendering, så byttet
+  // slo inn umiddelbart. Å flytte ansvaret til serveren er riktig, men flyttingen tar med seg en
+  // forutsetning ingen hadde skrevet ned.
+  //
+  // ⚠️ Første forsøk sjekket om kø-elementene FANTES i DOM-en. Begge finnes alltid, uansett rolle,
+  // så en bruker med bare REVIEWER-rollen hentet klagekøen ved hvert språkbytte og fikk 403 og en
+  // rød feiltoast. `refreshVisibleReviewQueues` spør om ROLLER, som er det spørsmålet som gjelder.
+  //
+  // ⚠️ Hentingen ligger IKKE her lenger. `setLocale` kalles også ved oppstart, før config, roller
+  // og MSAL er lastet. Da gikk kallene ut med HTML-ens reserveroller og uten token — 403 i mock,
+  // 401 med ekte pålogging, og en rød feilmelding ved HVER lasting av siden, for alle.
+  //
+  // `setLocale` setter språk. Den som BYTTER språk, henter. To ansvar, to steder.
 }
 
 function applyTranslations() {
@@ -238,6 +256,41 @@ async function runWithBusyButton(button, action) {
 }
 
 
+
+/**
+ * #1018: avgjørelsens begrunnelse, på sensorens språk.
+ *
+ * ⚠️ Sto tidligere rått på engelsk fire steder i denne fila, i et ellers norsk grensesnitt. #950 ga
+ * serveren en KODE å sende; her brukes den med SENSORENS formuleringer — teksten handler om en
+ * annen person, så deltakerens «du fikk 100 %» ville vært direkte feil.
+ *
+ * ⚠️ Fritekst skrevet av et menneske har ingen kode, og vises da ordrett. Det er hele poenget: en
+ * sensors eller klagebehandlers egne ord skal ikke byttes ut med en standardsetning.
+ */
+function assessorDecisionReason(decision) {
+  if (!decision) return "-";
+  return localizeDecisionReason(
+    {
+      decisionReason: decision.decisionReason,
+      decisionReasonCode: decision.decisionReasonCode,
+      decisionReasonParams: decision.decisionReasonParams,
+    },
+    { translate: t, formatNumber, keyPrefix: "assessor.decisionReasonCode." },
+  );
+}
+
+/**
+ * Utløseren for manuell vurdering er en TEKSTKOPI av avgjørelsens begrunnelse, tatt før kodene
+ * fantes (`decisionService.ts:405`). Finnes avgjørelsen, formuleres den derfor derfra; ellers
+ * vises kopien som den er.
+ *
+ * ⚠️ Kopien er selve problemet, og den bør fjernes — ført i #1018. Å lese fra kilden her er en
+ * visningsfiks, ikke en opprydding i datamodellen.
+ */
+function assessorTriggerReason(review, decision) {
+  const fromDecision = decision?.decisionReasonCode ? assessorDecisionReason(decision) : null;
+  return fromDecision ?? normalizeMultilineText(review?.triggerReason);
+}
 
 function normalizeMultilineText(value) {
   if (typeof value !== "string") return "-";
@@ -552,6 +605,9 @@ function filterReviewsBySearch(reviews) {
       review.reviewer?.name, review.reviewer?.email,
       review.submission?.user?.name, review.submission?.user?.email,
       review.submission?.module?.title, review.submission?.module?.id,
+      // #1027: se klagekøen. #1022 lokaliserte tittelen her og gjorde søket smalere uten at det
+      // ble lagt merke til.
+      ...(review.submission?.module?.titleSearch ?? []),
     ].filter(Boolean).join(" ").toLowerCase();
     return haystack.includes(needle);
   });
@@ -710,7 +766,7 @@ function renderManualReviewDetails(details) {
     `=== ${t("manualReview.details.section.review")} ===`,
     `${t("manualReview.details.reviewId")}: ${review.id ?? "-"}`,
     `${t("manualReview.details.reviewStatus")}: ${localizeReviewStatus(review.reviewStatus)}`,
-    `${t("manualReview.details.triggerReason")}: ${normalizeMultilineText(review.triggerReason)}`,
+    `${t("manualReview.details.triggerReason")}: ${assessorTriggerReason(review, latestDecision)}`,
     `${t("manualReview.details.reviewer")}: ${review.reviewer?.name ?? "-"} (${review.reviewer?.email ?? "-"})`,
     `${t("manualReview.details.createdAt")}: ${formatDateTime(review.createdAt)}`,
     `${t("manualReview.details.reviewedAt")}: ${formatDateTime(review.reviewedAt)}`,
@@ -749,7 +805,7 @@ function renderManualReviewDetails(details) {
     `${t("manualReview.details.decisionType")}: ${latestDecision?.decisionType ?? "-"}`,
     `${t("manualReview.details.totalScore")}: ${formatNumber(latestDecision?.totalScore)}`,
     `${t("manualReview.details.passFailTotal")}: ${formatMrPassFail(latestDecision?.passFailTotal)}`,
-    `${t("manualReview.details.decisionReason")}: ${normalizeMultilineText(latestDecision?.decisionReason)}`,
+    `${t("manualReview.details.decisionReason")}: ${assessorDecisionReason(latestDecision)}`,
     `${t("manualReview.details.finalisedAt")}: ${formatDateTime(latestDecision?.finalisedAt)}`,
     `${t("manualReview.details.llmEvaluationId")}: ${latestLlmEvaluation?.id ?? t("manualReview.details.none")}`,
     `${t("manualReview.details.llmPracticalScore")}: ${formatNumber(latestLlmEvaluation?.practicalScoreScaled)}`,
@@ -814,7 +870,7 @@ function renderManualReviewDetails(details) {
       actor: t("case.history.review"),
       when: formatDateTime(latestDecision.finalisedAt),
       decision: `${formatMrPassFail(latestDecision.passFailTotal)} · ${t("manualReview.details.totalScore")}: ${formatNumber(latestDecision.totalScore)}`,
-      reason: latestDecision.decisionReason,
+      reason: assessorDecisionReason(latestDecision),
     });
   }
   if (latestAppeal) {
@@ -960,37 +1016,42 @@ async function loadReviewDetails(reviewId) {
   }
 }
 
-async function loadReviewQueue() {
-  if (activeReviewQueueLoad) return activeReviewQueueLoad;
-  activeReviewQueueLoad = (async () => {
-    try {
-      const statuses = getSelectedReviewStatuses();
-      const limit = getMrWorkspaceSettings().queuePageSize;
-      const body = await apiFetch(
-        `/api/reviews?status=${encodeURIComponent(statuses.join(","))}&limit=${encodeURIComponent(limit)}`,
-        headers,
-      );
-      latestReviewQueue = Array.isArray(body.reviews) ? body.reviews : [];
-      renderReviewQueue();
-      showToast(`${t("manualReview.loadedPrefix")}: ${latestReviewQueue.length}`, "info");
-      if (selectedReviewId && latestReviewQueue.some((r) => r.id === selectedReviewId)) {
-        await loadReviewDetails(selectedReviewId);
-      } else {
-        setSelectedReview("", false);
-        selectedReviewDetails = null;
-        renderManualReviewDetails(null);
-      }
-      logDebug(body);
-    } catch (error) {
-      latestReviewQueue = [];
-      renderReviewQueue();
-      showToast(toActionableErrorMessage(error), "error");
-      logDebug(toActionableErrorMessage(error));
-    } finally {
-      activeReviewQueueLoad = null;
+// #1042: køene hentes gjennom den delte ressursen. Den eier enkeltflyten nøklet på SPRÅK, som
+// var den håndlagde vakta her — og som slukte et språkbytte i #1027 fordi den bare spurte «pågår
+// en henting?».
+const sensorkø = lagLokalisertRessurs({
+  hentSpråk: () => currentLocale,
+  hent: () => {
+    const statuses = getSelectedReviewStatuses();
+    const limit = getMrWorkspaceSettings().queuePageSize;
+    return apiFetch(
+      `/api/reviews?status=${encodeURIComponent(statuses.join(","))}&limit=${encodeURIComponent(limit)}`,
+      headers,
+    );
+  },
+  tegn: async (body) => {
+    latestReviewQueue = Array.isArray(body.reviews) ? body.reviews : [];
+    renderReviewQueue();
+    showToast(`${t("manualReview.loadedPrefix")}: ${latestReviewQueue.length}`, "info");
+    if (selectedReviewId && latestReviewQueue.some((r) => r.id === selectedReviewId)) {
+      await loadReviewDetails(selectedReviewId);
+    } else {
+      setSelectedReview("", false);
+      selectedReviewDetails = null;
+      renderManualReviewDetails(null);
     }
-  })();
-  return activeReviewQueueLoad;
+    logDebug(body);
+  },
+  påFeil: (error) => {
+    latestReviewQueue = [];
+    renderReviewQueue();
+    showToast(toActionableErrorMessage(error), "error");
+    logDebug(toActionableErrorMessage(error));
+  },
+});
+
+async function loadReviewQueue() {
+  await sensorkø.last();
 }
 
 // ── Appeal: workspace settings ─────────────────────────────────────────────────
@@ -1055,6 +1116,10 @@ function filterAppealsBySearch(appeals) {
       appeal.appealedBy?.name, appeal.appealedBy?.email,
       appeal.submission?.user?.name, appeal.submission?.user?.email,
       appeal.submission?.module?.title, appeal.submission?.module?.id,
+      // #1027: søket gikk før over den RÅ JSON-strengen, og traff derfor på tvers av alle språk.
+      // Serveren lokaliserer nå tittelen, så uten språkvariantene ville søket blitt smalere enn
+      // det var — en behandler ville sluttet å finne saker skrevet på et annet språk.
+      ...(appeal.submission?.module?.titleSearch ?? []),
     ].filter(Boolean).join(" ").toLowerCase();
     return haystack.includes(needle);
   });
@@ -1062,18 +1127,16 @@ function filterAppealsBySearch(appeals) {
 
 // ── Appeal: queue rendering ────────────────────────────────────────────────────
 
+// #1027: serveren lokaliserer tittelen nå, som den gjør for køen for manuell vurdering (#1022).
+//
+// ⚠️ Her sto en egen parser med reservekjeden `locale ?? en-GB ?? første verdi`. Serverens kjede er
+// en annen, og to implementasjoner av «hvilket språk viser vi» driver alltid fra hverandre — det
+// var nettopp det #1022 viste. Funksjonen beholdes som en tynn vakt for rader fra en eldre
+// server-versjon, men den skal ikke vokse igjen.
 function resolveModuleTitle(title) {
   if (!title) return "-";
-  if (typeof title === "object") {
-    return title[currentLocale] ?? title["en-GB"] ?? Object.values(title)[0] ?? "-";
-  }
-  try {
-    const parsed = JSON.parse(title);
-    if (parsed && typeof parsed === "object") {
-      return parsed[currentLocale] ?? parsed["en-GB"] ?? Object.values(parsed)[0] ?? title;
-    }
-  } catch { /* not JSON */ }
-  return title;
+  if (typeof title === "string") return title;
+  return String(title);
 }
 
 function renderAppealQueue() {
@@ -1234,7 +1297,7 @@ function renderAppealHandlerDetails(details) {
     `${t("appealHandler.details.decisionType")}: ${latestDecision?.decisionType ?? "-"}`,
     `${t("appealHandler.details.totalScore")}: ${formatNumber(latestDecision?.totalScore)}`,
     `${t("appealHandler.details.passFailTotal")}: ${formatAppealPassFail(latestDecision?.passFailTotal)}`,
-    `${t("appealHandler.details.decisionReason")}: ${normalizeMultilineText(latestDecision?.decisionReason)}`,
+    `${t("appealHandler.details.decisionReason")}: ${assessorDecisionReason(latestDecision)}`,
     `${t("appealHandler.details.finalisedAt")}: ${formatDateTime(latestDecision?.finalisedAt)}`,
     `${t("appealHandler.details.llmEvaluationId")}: ${latestLlmEvaluation?.id ?? t("appealHandler.details.none")}`,
     `${t("appealHandler.details.llmPracticalScore")}: ${formatNumber(latestLlmEvaluation?.practicalScoreScaled)}`,
@@ -1253,7 +1316,7 @@ function renderAppealHandlerDetails(details) {
   if (latestManualReview) {
     lines.push(`${t("appealHandler.details.manualReviewId")}: ${latestManualReview.id ?? t("appealHandler.details.none")}`);
     lines.push(`${t("appealHandler.details.manualReviewStatus")}: ${localizeManualReviewStatus(latestManualReview.reviewStatus)}`);
-    lines.push(`${t("appealHandler.details.manualReviewTriggerReason")}: ${normalizeMultilineText(latestManualReview.triggerReason)}`);
+    lines.push(`${t("appealHandler.details.manualReviewTriggerReason")}: ${assessorTriggerReason(latestManualReview, latestDecision)}`);
     lines.push(`${t("appealHandler.details.manualReviewReviewerId")}: ${latestManualReview.reviewerId ?? "-"}`);
     lines.push(`${t("appealHandler.details.manualReviewCreatedAt")}: ${formatDateTime(latestManualReview.createdAt)}`);
     lines.push(`${t("appealHandler.details.manualReviewReviewedAt")}: ${formatDateTime(latestManualReview.reviewedAt)}`);
@@ -1388,42 +1451,45 @@ async function loadAppealDetails(appealId, options = {}) {
   }
 }
 
-async function loadAppealQueue(options = {}) {
-  if (activeAppealQueueLoad) return activeAppealQueueLoad;
-  activeAppealQueueLoad = (async () => {
-    try {
-      showLoading(appealQueueBody, { rows: 5, columns: 9 });
-      const statuses = getSelectedAppealStatuses();
-      const limit = getAppealWorkspaceSettings().queuePageSize;
-      const body = await apiFetch(
-        `/api/appeals?status=${encodeURIComponent(statuses.join(","))}&limit=${encodeURIComponent(limit)}`,
-        headers,
-      );
-      latestAppealQueue = Array.isArray(body.appeals) ? body.appeals : [];
-      renderAppealQueue();
-      showToast(`${t("appealHandler.loadedPrefix")}: ${latestAppealQueue.length}`, "info");
-      if (selectedAppealId && latestAppealQueue.some((a) => a.id === selectedAppealId)) {
-        await loadAppealDetails(selectedAppealId, { notify: false });
-      } else {
-        setSelectedAppeal("", false);
-        selectedAppealDetails = null;
-        renderAppealHandlerDetails(null);
-      }
-      logDebug(body);
-    } catch (error) {
-      latestAppealQueue = [];
-      appealQueueCountLabel.textContent = "0";
+// #1042: se `sensorkø` — samme mønster, samme modul.
+const klagekø = lagLokalisertRessurs({
+  hentSpråk: () => currentLocale,
+  hent: () => {
+    showLoading(appealQueueBody, { rows: 5, columns: 9 });
+    const statuses = getSelectedAppealStatuses();
+    const limit = getAppealWorkspaceSettings().queuePageSize;
+    return apiFetch(
+      `/api/appeals?status=${encodeURIComponent(statuses.join(","))}&limit=${encodeURIComponent(limit)}`,
+      headers,
+    );
+  },
+  tegn: async (body) => {
+    latestAppealQueue = Array.isArray(body.appeals) ? body.appeals : [];
+    renderAppealQueue();
+    showToast(`${t("appealHandler.loadedPrefix")}: ${latestAppealQueue.length}`, "info");
+    if (selectedAppealId && latestAppealQueue.some((a) => a.id === selectedAppealId)) {
+      await loadAppealDetails(selectedAppealId, { notify: false });
+    } else {
+      setSelectedAppeal("", false);
       selectedAppealDetails = null;
       renderAppealHandlerDetails(null);
-      updateReviewTabCounts();
-      showEmpty(appealQueueBody, toActionableErrorMessage(error), { columns: 9 });
-      showToast(toActionableErrorMessage(error), "error");
-      logDebug(toActionableErrorMessage(error));
-    } finally {
-      activeAppealQueueLoad = null;
     }
-  })();
-  return activeAppealQueueLoad;
+    logDebug(body);
+  },
+  påFeil: (error) => {
+    latestAppealQueue = [];
+    appealQueueCountLabel.textContent = "0";
+    selectedAppealDetails = null;
+    renderAppealHandlerDetails(null);
+    updateReviewTabCounts();
+    showEmpty(appealQueueBody, toActionableErrorMessage(error), { columns: 9 });
+    showToast(toActionableErrorMessage(error), "error");
+    logDebug(toActionableErrorMessage(error));
+  },
+});
+
+async function loadAppealQueue() {
+  await klagekø.last();
 }
 
 // ── Boot / config ──────────────────────────────────────────────────────────────
@@ -1440,15 +1506,13 @@ async function loadVersion() {
 }
 
 function applyIdentityDefaults() {
-  const defaults =
+  // #1046: se `/static/identity-defaults.js`. HVILKEN rolle som leses er flatens eget valg —
+  // sensorflaten har to arbeidsflater bak samme side, og faller tilbake fra den ene til den andre.
+  delApplyIdentityDefaults(
     participantRuntimeConfig?.identityDefaults?.reviewWorkspace ??
-    participantRuntimeConfig?.identityDefaults?.reviewer;
-  if (!defaults) return;
-  document.getElementById("userId").value = defaults.userId ?? "";
-  document.getElementById("email").value = defaults.email ?? "";
-  document.getElementById("name").value = defaults.name ?? "";
-  document.getElementById("department").value = defaults.department ?? "";
-  rolesInput.value = Array.isArray(defaults.roles) ? defaults.roles.join(",") : "";
+      participantRuntimeConfig?.identityDefaults?.reviewer,
+    rolesInput,
+  );
 }
 
 async function loadParticipantConsoleConfig() {
@@ -1500,7 +1564,21 @@ async function loadParticipantConsoleConfig() {
 
 // ── Event wiring ───────────────────────────────────────────────────────────────
 
-localeSelect.addEventListener("change", () => setLocale(localeSelect.value));
+localeSelect.addEventListener("change", () => {
+  setLocale(localeSelect.value);
+  // #1027: serveren baker inn språket ved henting, så køene må hentes på nytt. Her, og ikke inne i
+  // `setLocale`, fordi oppstarten også kaller den — se kommentaren der.
+  //
+  // ⚠️ #1042, avvik fra de andre flatene, med vilje: her kalles IKKE `ressurs.oppdaterVedSpråkbytte()`
+  // direkte. Denne flaten har to køer bak hver sin rolle, og en bruker med bare sensorrollen skal
+  // aldri hente klagekøen — det ga 403 og en rød feilmelding i #1027 runde 2.
+  //
+  // `refreshVisibleReviewQueues` spør om ROLLER først og kaller bare de køene brukeren har lov til.
+  // Ressursenes egen «bare når noe er hentet»-regel er derfor ikke i spill her; rolleporten er det
+  // som avgjør. Regel 2 i `doc/CHANGE_DESIGN_RULES.md` krever at et slikt avvik begrunnes — dette
+  // er begrunnelsen.
+  void refreshVisibleReviewQueues();
+});
 reviewTabManualButton?.addEventListener("click", () => setActiveReviewTab("manualReview"));
 reviewTabAppealButton?.addEventListener("click", () => setActiveReviewTab("appeal"));
 

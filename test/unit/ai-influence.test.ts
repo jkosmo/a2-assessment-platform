@@ -12,6 +12,19 @@ import {
 import { resolveAssessmentDecision } from "../../src/modules/assessment/decisionService.js";
 import type { LlmStructuredAssessment } from "../../src/modules/assessment/llmAssessmentService.js";
 import type { ModuleAssessmentPolicy } from "../../src/codecs/assessmentPolicyCodec.js";
+import { decisionReasonCodes } from "../../src/modules/assessment/decisionReason.js";
+import type { AiInfluenceDecision } from "../../src/modules/assessment/aiInfluence.js";
+
+// #950: et KI-utløst review bærer koden sin ved siden av teksten, slik at deltakerens grensesnitt
+// kan formulere setningen på hens eget språk i stedet for å vise serverens norske prosa rått.
+function aiDeclarationDecision(): AiInfluenceDecision {
+  return {
+    forcesReview: true,
+    reason: AUTONOMOUS_REVIEW_REASON,
+    code: decisionReasonCodes.manualReviewAiDeclaration,
+    params: { description: "" },
+  };
+}
 
 // #475: AI-influence flagging is a REVIEW TRIGGER, never a verdict. These tests pin the two guarantees
 // that matter: (1) evaluateAiInfluence only fires under the exact enabled+live+autonomous+insisted
@@ -79,7 +92,7 @@ describe("evaluateAiInfluence", () => {
 
   it("fires only on enabled + live + autonomous + insisted", () => {
     const result = evaluateAiInfluence({ signals: autonomousInsisted, policy: null, rules: RULES_LIVE });
-    expect(result).toEqual({ forcesReview: true, reason: AUTONOMOUS_REVIEW_REASON });
+    expect(result).toEqual(aiDeclarationDecision());
   });
 
   it("carries the participant's free-text description into the reason for the reviewer", () => {
@@ -97,7 +110,7 @@ describe("evaluateAiInfluence", () => {
   it("lets a per-module policy enable flagging when the global default is off", () => {
     const policy: ModuleAssessmentPolicy = { aiInfluence: { enabled: true, shadowMode: false } };
     const result = evaluateAiInfluence({ signals: autonomousInsisted, policy, rules: RULES_OFF });
-    expect(result).toEqual({ forcesReview: true, reason: AUTONOMOUS_REVIEW_REASON });
+    expect(result).toEqual(aiDeclarationDecision());
   });
 
   it("lets a per-module policy force shadow mode even when the global default is live", () => {
@@ -151,7 +164,7 @@ describe("resolveAssessmentDecision + aiInfluence (review trigger, never fail)",
   it("routes the SAME strong submission to review (not fail) when AI-influence forces review", () => {
     const resolved = resolveAssessmentDecision({
       ...passingInput,
-      aiInfluence: { forcesReview: true, reason: AUTONOMOUS_REVIEW_REASON },
+      aiInfluence: aiDeclarationDecision(),
     });
     // It becomes a review, never a fail: needsManualReview flips on, passFailTotal is withheld, and
     // the auto-fail path is NOT taken.
@@ -164,7 +177,10 @@ describe("resolveAssessmentDecision + aiInfluence (review trigger, never fail)",
   it("does not change the outcome when forcesReview is false", () => {
     const resolved = resolveAssessmentDecision({
       ...passingInput,
-      aiInfluence: { forcesReview: false, reason: AUTONOMOUS_REVIEW_REASON },
+      // ⚠️ Typen sier at et beslutningsobjekt ALLTID utløser gjennomgang — buildAiInfluenceOutcome
+      // lager det bare når det gjør det. Testen holder likevel på at decisionService leser flagget
+      // og ikke bare tilstedeværelsen av objektet, så en fremtidig kaller ikke kan rute ved uhell.
+      aiInfluence: { ...aiDeclarationDecision(), forcesReview: false } as unknown as AiInfluenceDecision,
     });
     expect(resolved.needsManualReview).toBe(false);
     expect(resolved.passFailTotal).toBe(true);
@@ -176,7 +192,7 @@ describe("resolveAssessmentDecision + aiInfluence (review trigger, never fail)",
       llmResult: passingAssessment({
         red_flags: [{ code: "POTENTIAL_SENSITIVE_DATA", severity: "high", description: "x" }],
       }),
-      aiInfluence: { forcesReview: true, reason: AUTONOMOUS_REVIEW_REASON },
+      aiInfluence: aiDeclarationDecision(),
     });
     expect(resolved.needsManualReview).toBe(true);
     expect(resolved.decisionReason).toContain("red flag");
@@ -244,7 +260,7 @@ describe("buildAiInfluenceOutcome", () => {
   });
 
   it("declaration forces review → decision is the declaration result; persisted forcesReview true", () => {
-    const declarationResult = { forcesReview: true as const, reason: AUTONOMOUS_REVIEW_REASON };
+    const declarationResult = aiDeclarationDecision();
     const out = buildAiInfluenceOutcome({ declaration: "autonomous", declarationResult, contentSignal: contentShadow });
     expect(out.decision).toBe(declarationResult);
     const persisted = JSON.parse(out.signalsJson!);

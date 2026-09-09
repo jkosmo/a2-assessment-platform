@@ -133,9 +133,90 @@ describe("llm content generation prompts", () => {
     }).userPrompt;
 
     expect(basicPrompt).toContain("Use the certification level as the primary difficulty control.");
-    expect(basicPrompt).toContain("Maximum scenario complexity: 1 actor");
     expect(advancedPrompt).toContain("It may involve ambiguity, competing considerations, or nuanced application");
-    expect(advancedPrompt).toContain("Maximum scenario complexity: 3 actors");
+
+    // ⚠️ #1049: TALLENE KOMMER FRA DEN STRUKTURERTE DELEN, IKKE FRA PROSAEN.
+    //
+    // Denne testen krevde tidligere «Maximum scenario complexity: 1 actor» — en frase som sto i
+    // BEGGE. Retningslinjene gjentok tallene i prosa, og tabellen skrev dem inn rett under, så
+    // modellen fikk samme grense to ganger fra to kilder som kunne gli fra hverandre. Testen låste
+    // duplikatet fast.
+    //
+    // Nå bærer prosaen den kvalitative veiledningen og tabellen tallene. Påstandene under treffer
+    // de strukturerte linjene, som er den ene kilden.
+    expect(basicPrompt).toContain("- Maximum actors in scenario: 1");
+    expect(advancedPrompt).toContain("- Maximum actors in scenario: 3");
+    expect(basicPrompt).toContain("- Expected answer length: 100–200 words");
+    expect(advancedPrompt).toContain("- Expected answer length: 400–700 words");
+  });
+
+  it("#1049: forfatterens omfang overstyrer nivåets standard i prompten", () => {
+    // Produkteier vil ha korte svar på en advanced-modul: nivået sier 400-700, forfatteren 150-250.
+    const prompt = buildModuleDraftPrompts({
+      sourceMaterial: "Internal policy notes.",
+      certificationLevel: "advanced",
+      locale: "en-GB",
+      generationMode: "ordinary",
+      scope: { minWords: 150, maxWords: 250 },
+    }).userPrompt;
+
+    expect(prompt).toContain("- Expected answer length: 150–250 words");
+    expect(prompt, "nivåets standard skal ikke stå der samtidig").not.toContain("400–700");
+
+    // ⚠️ KOMPLEKSITETEN FØLGER FORTSATT NIVÅET. Det er hele poenget med å skille de to: forfatteren
+    // styrer hvor mye som skal skrives, ikke hvor sammensatt oppgaven får være. Kunne hen flyttet
+    // kompleksiteten, ville sertifiseringsnivået vært meningsløst.
+    expect(prompt).toContain("- Maximum actors in scenario: 3");
+  });
+
+  it("#1049: et ugyldig omfang ignoreres i sin helhet", () => {
+    // Et minimum over maksimum er en umulig instruks. Da er nivåets standard et bedre svar enn å
+    // sende modellen noe den ikke kan oppfylle.
+    const prompt = buildModuleDraftPrompts({
+      sourceMaterial: "Internal policy notes.",
+      certificationLevel: "basic",
+      locale: "en-GB",
+      generationMode: "ordinary",
+      scope: { minWords: 900, maxWords: 100 },
+    }).userPrompt;
+    expect(prompt).toContain("- Expected answer length: 100–200 words");
+  });
+
+  it("#1049: delvis overstyring arver resten fra nivået", () => {
+    const prompt = buildModuleDraftPrompts({
+      sourceMaterial: "Internal policy notes.",
+      certificationLevel: "basic",
+      locale: "en-GB",
+      generationMode: "ordinary",
+      scope: { minWords: 150, maxWords: null },
+    }).userPrompt;
+    expect(prompt).toContain("- Expected answer length: 150–200 words");
+  });
+
+  it("#1049: retningslinjene i prosa gjentar IKKE tallene fra tabellen", () => {
+    // ⚠️ Uten denne kommer tallene tilbake ved neste redigering av retningslinjene, og da er vi
+    // tilbake til to kilder for samme sannhet — uten at noe blir rødt.
+    //
+    // Vakta leser den kvalitative teksten slik den faktisk sendes, og krever at den er tallfri.
+    const prompt = buildModuleDraftPrompts({
+      sourceMaterial: "Internal policy notes about safe handling of customer data.",
+      certificationLevel: "advanced",
+      locale: "en-GB",
+      generationMode: "ordinary",
+    }).userPrompt;
+
+    const linjer = prompt.split("\n");
+    const kvalitativ = linjer.find((l) => l.includes("It may involve ambiguity")) ?? "";
+
+    // Kontrollcase: fant vi linja i det hele tatt? Ellers er «ingen tall der» sant om ingenting.
+    expect(kvalitativ.length, "den kvalitative retningslinja skal finnes i prompten").toBeGreaterThan(40);
+
+    expect(
+      /\d/.test(kvalitativ) ? kvalitativ : "",
+      "Retningslinja i prosa skal ikke inneholde tall. Grensene kommer fra LEVEL_COMPLEXITY og\n" +
+        "LEVEL_SCOPE, som skrives inn strukturert rett under. To kilder for samme grense glir fra\n" +
+        "hverandre — og en forfatter som overstyrer omfanget ville fått prosaen til å motsi seg selv.",
+    ).toBe("");
   });
 
   it("extracts explicit MCQ targets from compact option references", () => {

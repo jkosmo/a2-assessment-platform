@@ -14,6 +14,10 @@ const basePolicy: SecondaryAssessmentPolicy = {
     confidenceNotePatterns: ["medium confidence", "low confidence"],
     redFlagCodes: ["potential_sensitive_data", "policy_violation", "responsible_use_violation"],
     redFlagSeverities: ["medium", "high"],
+    // #1023: av i denne fiksturen. Testene her måler de ANDRE utløserne, og en grenseregel som
+    // fyrte i bakgrunnen ville gjort dem uleselige — «kjørte den fordi modellen ba om det, eller
+    // fordi poengsummen lå nær 60?». Grenseregelen har sine egne tester.
+    scoreBoundaryBands: { greenYellow: null, yellowRed: null },
   },
   disagreementRules: {
     practicalScoreDeltaMin: 8,

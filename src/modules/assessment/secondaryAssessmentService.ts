@@ -1,9 +1,12 @@
+import type { ModuleAssessmentPolicy } from "../../codecs/assessmentPolicyCodec.js";
+import { resolveZoneBoundaries } from "./mcqPassRule.js";
 import { getAssessmentRules } from "../../config/assessmentRules.js";
 import type { LlmStructuredAssessment } from "./llmAssessmentService.js";
 import {
   hasOnlyInsufficientEvidenceRedFlags,
   hasInsufficientEvidenceSignal,
   hasLowConfidenceManualReviewSignal,
+  deriveConfidenceLevel,
   recommendsManualReview,
 } from "./assessmentDecisionSignals.js";
 import { isConfiguredSecondaryTriggerRedFlag, normalizeRedFlags } from "./assessmentRedFlagPolicy.js";
@@ -13,18 +16,119 @@ export type SecondaryAssessmentPolicy = ReturnType<typeof getAssessmentRules>["s
 type TriggerInput = {
   moduleId: string;
   primaryResult: LlmStructuredAssessment;
+  /**
+   * #1023: den samlede poengsummen for PRIMÆRvurderingen, regnet ut av `resolveAssessmentDecision`.
+   *
+   * ⚠️ Sendes inn, ikke regnet ut her. Formelen skalerer rubrikken mot 70 eller 100 avhengig av
+   * modus, og vekter inn MCQ etter modulens policy — å gjenskape den her ville gitt to steder som
+   * kan gli fra hverandre, og utløseren ville stille målt mot et annet tall enn vedtaket bruker.
+   *
+   * `null` når kalleren ikke kan regne den ut. Da fyrer ikke grenseregelen, og de andre gjelder.
+   */
+  totalScore?: number | null;
+  /** Modulens egen policy — grensene kan være overstyrt per modul. */
+  assessmentPolicy?: ModuleAssessmentPolicy | null;
 };
+
+/**
+ * #1023: grensene og båndene slik utløseren SÅ dem, for logging. Eksportert framfor at kalleren
+ * regner dem ut på nytt — det var nettopp en slik dobbel utregning som la båndet feil sted.
+ */
+export function boundaryInputs(
+  policy: SecondaryAssessmentPolicy,
+  assessmentPolicy: ModuleAssessmentPolicy | null | undefined,
+) {
+  const { pass, fail } = resolveZoneBoundaries(assessmentPolicy);
+  const bånd = policy.triggerRules.scoreBoundaryBands;
+  return {
+    passBoundary: pass,
+    failBoundary: fail,
+    bandGreenYellow: bånd?.greenYellow ?? null,
+    bandYellowRed: bånd?.yellowRed ?? null,
+  };
+}
 
 export type SecondaryTriggerDecision = {
   enabled: boolean;
   shouldRun: boolean;
   reasons: string[];
+  /**
+   * #1023: grensene og båndene utløseren FAKTISK brukte.
+   *
+   * ⚠️ Bæres med i avgjørelsen framfor å regnes ut på nytt der den skal logges. Et første utkast lot
+   * evaluatoren kalle `getAssessmentRules()` selv — da kunne de loggede tallene i prinsippet være
+   * andre enn de som avgjorde, og loggen ville vært verdiløs nettopp når den trengs.
+   */
+  boundary?: {
+    passBoundary: number;
+    failBoundary: number | null;
+    bandGreenYellow: number | null;
+    bandYellowRed: number | null;
+  };
+  /**
+   * #1023: hva den STRUKTURERTE regelen ville valgt. Påvirker ingenting — den er her for å måles.
+   *
+   * ⚠️ Dagens utløser leter etter delstrenger i språkmodellens frie tekst («medium confidence»,
+   * «low confidence»). Formulerer modellen seg om, slutter den å fyre, og en besvarelse som skulle
+   * fått et andre blikk får det ikke. Ingenting feiler, ingenting logges.
+   *
+   * Å bytte utløser er likevel ikke en opprydding: det endrer hvor ofte vi betaler for en ekstra
+   * LLM-kjøring og hvor lenge deltakeren venter. Derfor måles de to mot hverandre først.
+   *
+   * `undefined` når utløseren aldri kom så langt (policy av, eller auto-stryk-grenen).
+   */
+  shadow?: SecondaryTriggerShadow;
+};
+
+export type SecondaryTriggerShadow = {
+  /** Dagens regel: strukturert lavkonfidens ELLER delstrengtreff. */
+  liveConfidenceTrigger: boolean;
+  /** Den foreslåtte: bare strukturerte felt. */
+  shadowConfidenceTrigger: boolean;
+  /** Hvilke mønstre som faktisk traff. Ingen fritekst — bare mønstrene fra konfigurasjonen. */
+  matchedPatterns: string[];
+  /** Hele avgjørelsen, som den ville blitt med den strukturerte regelen. */
+  shadowShouldRun: boolean;
+  agrees: boolean;
 };
 
 export type SecondaryDisagreementDecision = {
   hasDisagreement: boolean;
   reasons: string[];
 };
+
+/**
+ * Hvilke sonegrenser poengsummen ligger nær nok til å fortjene en ny vurdering.
+ *
+ * Båndene står i regelfila og kan justeres uten kodeendring; `null` slår av den grensen.
+ */
+export function boundaryTriggers(
+  totalScore: number | null | undefined,
+  policy: SecondaryAssessmentPolicy,
+  assessmentPolicy: ModuleAssessmentPolicy | null | undefined,
+): string[] {
+  // `NaN` og `Infinity` trenger ingen egen vakt: `Math.abs(NaN - 60) <= 5` er usann, og det samme
+  // for uendelig. Mutasjonstesting viste at en `Number.isFinite`-sjekk her ikke kunne bli rød —
+  // altså kode som ikke kan observeres. Testen låser oppførselen uansett hvordan den er skrevet.
+  if (typeof totalScore !== "number") return [];
+  // ⚠️ Båndene kommer fra POLICYEN som sendes inn, ikke fra den globale regelfila. Første utgave
+  // leste globalt, og da kunne regelen ikke overstyres — verken av en modul eller av en test. Tre
+  // tester ble røde med én gang, og det er nettopp den slags stille kobling de er der for.
+  const bånd = policy.triggerRules.scoreBoundaryBands;
+  // ⚠️ Grensene hentes fra `resolveZoneBoundaries`, som vedtaket også bruker. En egen utregning her
+  // leste den GLOBALE terskelen, og en måling på stage viste hva det koster: en modul med egen
+  // terskel fikk båndet lagt feil sted, stille.
+  const { pass, fail } = resolveZoneBoundaries(assessmentPolicy);
+
+  const ut: string[] = [];
+  if (typeof bånd?.greenYellow === "number" && Math.abs(totalScore - pass) <= bånd.greenYellow) {
+    ut.push("score_near_pass_boundary");
+  }
+  if (typeof bånd?.yellowRed === "number" && fail !== null && Math.abs(totalScore - fail) <= bånd.yellowRed) {
+    ut.push("score_near_fail_boundary");
+  }
+  return ut;
+}
 
 export function evaluateSecondaryAssessmentTrigger(
   input: TriggerInput,
@@ -36,6 +140,7 @@ export function evaluateSecondaryAssessmentTrigger(
       enabled: false,
       shouldRun: false,
       reasons: ["secondary assessment disabled by policy"],
+      boundary: boundaryInputs(policy, input.assessmentPolicy),
     };
   }
 
@@ -48,6 +153,7 @@ export function evaluateSecondaryAssessmentTrigger(
       enabled: true,
       shouldRun: false,
       reasons: ["primary_result_insufficient_evidence_auto_fail"],
+      boundary: boundaryInputs(policy, input.assessmentPolicy),
     };
   }
 
@@ -57,14 +163,17 @@ export function evaluateSecondaryAssessmentTrigger(
   }
 
   const confidenceNote = input.primaryResult.confidence_note.toLowerCase();
-  const hasConfidenceTrigger =
-    hasLowConfidenceManualReviewSignal(input.primaryResult) ||
-    policy.triggerRules.confidenceNotePatterns.some((pattern) =>
-      confidenceNote.includes(pattern.toLowerCase()),
-    );
+  const matchedPatterns = policy.triggerRules.confidenceNotePatterns.filter((pattern) =>
+    confidenceNote.includes(pattern.toLowerCase()),
+  );
+  const structuredLowConfidence = hasLowConfidenceManualReviewSignal(input.primaryResult);
+  const hasConfidenceTrigger = structuredLowConfidence || matchedPatterns.length > 0;
   if (hasConfidenceTrigger) {
     reasons.push("primary_result_low_or_medium_confidence");
   }
+
+  // #1023: den foreslåtte regelen, regnet ut ved siden av. Den avgjør ingenting.
+  const shadowConfidenceTrigger = deriveConfidenceLevel(input.primaryResult) !== null;
 
   const hasFlagSeverityTrigger = normalizeRedFlags(input.primaryResult.red_flags).some((flag) =>
     isConfiguredSecondaryTriggerRedFlag(flag),
@@ -73,10 +182,36 @@ export function evaluateSecondaryAssessmentTrigger(
     reasons.push("primary_result_red_flag_trigger");
   }
 
+  // #1023: nærhet til en sonegrense.
+  //
+  // ⚠️ Dette er utløseren som ERSTATTER konfidensgjettingen i praksis. Målt over 63 ekte vurderinger
+  // satte modellen aldri `low_confidence`, og delstrengene er engelske mens notatet skrives på
+  // deltakerens språk. Poengsummen er derimot vår egen, og den er den samme uansett språk.
+  //
+  // Grensene kommer fra de samme tallene vedtaket bruker: `totalMin` og, under den,
+  // `totalMin - borderlineBelowMin`. Den nederste er den viktigste — der går utfallet fra «et
+  // menneske ser på det» til «automatisk stryk».
+  for (const grense of boundaryTriggers(input.totalScore, policy, input.assessmentPolicy)) {
+    reasons.push(grense);
+  }
+
+  // Skyggeavgjørelsen: samme regnestykke, men med den strukturerte konfidensregelen.
+  const shadowReasonCount =
+    reasons.filter((r) => r !== "primary_result_low_or_medium_confidence").length
+    + (shadowConfidenceTrigger ? 1 : 0);
+
   return {
     enabled: true,
     shouldRun: reasons.length > 0,
     reasons,
+    boundary: boundaryInputs(policy, input.assessmentPolicy),
+    shadow: {
+      liveConfidenceTrigger: hasConfidenceTrigger,
+      shadowConfidenceTrigger,
+      matchedPatterns,
+      shadowShouldRun: shadowReasonCount > 0,
+      agrees: (reasons.length > 0) === (shadowReasonCount > 0),
+    },
   };
 }
 

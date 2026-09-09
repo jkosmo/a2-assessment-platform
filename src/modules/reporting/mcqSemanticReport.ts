@@ -1,4 +1,6 @@
 import { SubmissionStatus } from "../../db/prismaRuntime.js";
+import { isSettledSubmission } from "../submission/submissionOutcome.js";
+import type { SupportedLocale } from "../../i18n/locale.js";
 import { localizeContentText } from "../../i18n/content.js";
 import { getAssessmentRules } from "../../config/assessmentRules.js";
 import { getReportingAnalyticsConfig } from "../../config/reportingAnalytics.js";
@@ -54,7 +56,7 @@ type AnalyticsCohortRow = {
   passRate: number | null;
 };
 
-export async function getMcqQualityReport(filters: ReportFilters) {
+export async function getMcqQualityReport(filters: ReportFilters, locale: SupportedLocale = "en-GB") {
   const rules = getAssessmentRules();
   const submissionWhere = {
     ...(filters.moduleId ? { moduleId: filters.moduleId } : {}),
@@ -93,8 +95,14 @@ export async function getMcqQualityReport(filters: ReportFilters) {
   for (const response of responses) {
     const existing = perQuestion.get(response.questionId) ?? {
       moduleId: response.question.module.id,
-      moduleTitle: localizeContentText("en-GB", response.question.module.title) ?? response.question.module.title,
-      certificationLevel: response.question.module.certificationLevel ?? null,
+      moduleTitle: localizeContentText(locale, response.question.module.title) ?? response.question.module.title,
+      // #1027: samme felt som `courses.ts` lokaliserer tre steder. Her gikk det rått ut som
+      // lagringsformatet — i den SAMME raden der tittelen ble lokalisert riktig. En rapport med
+      // norsk tittel og en JSON-blob i nivåkolonnen er verre enn to engelske felt.
+      certificationLevel:
+        localizeContentText(locale, response.question.module.certificationLevel) ??
+        response.question.module.certificationLevel ??
+        null,
       questionId: response.question.id,
       questionStem: response.question.stem,
       optionsJson: response.question.optionsJson,
@@ -250,14 +258,30 @@ export async function getAnalyticsSemanticModel(filters: ReportFilters) {
   const completedSubmissions = submissions.filter((submission) => submission.submissionStatus === SubmissionStatus.COMPLETED).length;
   const underReviewSubmissions = submissions.filter((submission) => submission.submissionStatus === SubmissionStatus.UNDER_REVIEW).length;
   const decisionCount = submissions.filter((submission) => submission.decisions[0]).length;
-  const passCount = submissions.filter((submission) => submission.decisions[0]?.passFailTotal === true).length;
-  const failCount = submissions.filter((submission) => submission.decisions[0]?.passFailTotal === false).length;
+  // #948: en sak som VENTER paa sensor er verken bestaatt eller stroeket, og skal ikke telle i en
+  // bestaatt-rate i det hele tatt.
+  //
+  // ⚠️ Foer #948 bar et ventende vedtak `passFailTotal: true` og ble talt som BESTAATT — en
+  // smigrende feil. Etter #948 baerer det `false`, og ble talt som STROEKET — en alarmerende feil
+  // som fyrte LOW_PASS_RATE paa et forsoek maskinen ga 72 av terskel 70. Begge er feil paa samme
+  // maate: de gjoer en ikke-avgjort sak om til et datapunkt.
+  //
+  // Dette avgjoer IKKE den aapne KPI-beslutningen (skal raten maale raavedtaket eller det endelige
+  // utfallet?). Den handler om saker som ER avgjort. Her utelates bare de som ikke er det.
+  const settled = submissions.filter(
+    // ⚠️ #951: hviteliste, ikke svarteliste. `!== UNDER_REVIEW` slapp SUPERSEDED gjennom som
+    // «avgjort», og et forlatt forsøk bærer fortsatt sitt gamle automatiske vedtak.
+    (submission) => submission.decisions[0] && isSettledSubmission(submission.submissionStatus),
+  );
+  const settledDecisionCount = settled.length;
+  const passCount = settled.filter((submission) => submission.decisions[0]?.passFailTotal === true).length;
+  const failCount = settled.filter((submission) => submission.decisions[0]?.passFailTotal === false).length;
   const appealCount = submissions.reduce((sum, submission) => sum + submission.appeals.length, 0);
 
   const kpiValues = {
     submissions_total: totalSubmissions,
     completion_rate: totalSubmissions > 0 ? round2(completedSubmissions / totalSubmissions) : 0,
-    pass_rate: decisionCount > 0 ? round2(passCount / decisionCount) : null,
+    pass_rate: settledDecisionCount > 0 ? round2(passCount / settledDecisionCount) : null,
     manual_review_rate: totalSubmissions > 0 ? round2(underReviewSubmissions / totalSubmissions) : 0,
     appeal_rate: totalSubmissions > 0 ? round2(appealCount / totalSubmissions) : 0,
   } as Record<string, number | null>;
@@ -323,7 +347,8 @@ export async function getAnalyticsTrendsReport(
     if (submission.submissionStatus === SubmissionStatus.UNDER_REVIEW) {
       current.underReview += 1;
     }
-    if (submission.decisions[0]) {
+    // #948: ventende saker teller ikke som bestaatt eller stroeket — se begrunnelsen over.
+    if (submission.decisions[0] && isSettledSubmission(submission.submissionStatus)) {
       current.decisionCount += 1;
       if (submission.decisions[0].passFailTotal) {
         current.passCount += 1;
@@ -400,11 +425,14 @@ export async function getAnalyticsCohortsReport(
     if (submission.submissionStatus === SubmissionStatus.UNDER_REVIEW) {
       current.underReview += 1;
     }
-    if (submission.decisions[0]?.passFailTotal === true) {
-      current.passCount += 1;
-    }
-    if (submission.decisions[0]?.passFailTotal === false) {
-      current.failCount += 1;
+    // #948: ventende saker teller ikke som bestaatt eller stroeket — se begrunnelsen over.
+    if (isSettledSubmission(submission.submissionStatus)) {
+      if (submission.decisions[0]?.passFailTotal === true) {
+        current.passCount += 1;
+      }
+      if (submission.decisions[0]?.passFailTotal === false) {
+        current.failCount += 1;
+      }
     }
 
     const participants = cohortParticipantSets.get(cohort) ?? new Set<string>();

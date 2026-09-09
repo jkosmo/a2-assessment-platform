@@ -5,6 +5,8 @@ import {
 } from "../../src/modules/submission/submissionReadModels.js";
 import { toManualReviewWorkspaceView } from "../../src/modules/review/manualReviewReadModels.js";
 import { toAppealWorkspaceView } from "../../src/modules/appeal/appealReadModels.js";
+import { getAssessmentRules } from "../../src/config/assessmentRules.js";
+import { resolveMcqMinPercent } from "../../src/modules/assessment/mcqPassRule.js";
 
 describe("module-owned read models", () => {
   it("builds a localized submission history response", () => {
@@ -81,6 +83,7 @@ describe("module-owned read models", () => {
         {
           id: "mcq-1",
           scaledScore: 25,
+          percentScore: 83.33,
           completedAt: new Date("2026-03-23T10:01:00.000Z"),
         },
       ],
@@ -224,5 +227,84 @@ describe("module-owned read models", () => {
     expect(view.appeal.submission.module.title).toBe("Norsk tittel");
     expect(view.appeal.submission.module.description).toBe("Norsk beskrivelse");
     expect(view.sla.slaState).toBe("RESOLVED");
+  });
+});
+
+// ── #940: kravene resultatskjermen viser ────────────────────────────────────────────────────────
+//
+// ⚠️ QA-porten 2026-08-27: hele servertillegget sto UTEN påstander. Alle e2e-ene mocker
+// `/result`, så de ville vært grønne uansett hva serveren sendte — og skjermen sier «Kravet var
+// 80 %» på grunnlag av nettopp disse feltene.
+describe("#940 — resultatsvaret bærer kravene, ikke bare poengsummene", () => {
+  const base = {
+    id: "submission-1",
+    submissionStatus: "COMPLETED",
+    decisions: [{ id: "d1", decisionReason: "x", decisionReasonCode: null, decisionReasonParams: null,
+      mcqScaledScore: 30, practicalScaledScore: 0, totalScore: 30 }],
+    appeals: [],
+    mcqAttempts: [{ id: "a1", scaledScore: 30, percentScore: 100, completedAt: new Date("2026-08-27T10:00:00.000Z") }],
+    llmEvaluations: [],
+  };
+
+  it("en ren flervalgsmodul får sin egen terskel, ikke plattformens standard", () => {
+    const view = toSubmissionResultView({
+      ...base,
+      moduleVersion: { assessmentMode: "MCQ_ONLY", assessmentPolicyJson: JSON.stringify({ passRules: { mcqMinPercent: 80 } }) },
+    });
+
+    expect(view.assessmentMode).toBe("MCQ_ONLY");
+    expect(view.requirement.mcqMinPercent).toBe(80);
+    // Prosenten er det skjermen viser; poengsummen alene sier ingenting uten en nevner.
+    expect(view.scoreComponents.mcqPercentScore).toBe(100);
+  });
+
+  // ⚠️ DEN VIKTIGSTE. En modul UTEN eksplisitt grense avgjøres mot standarden. Sendte visningen
+  // `null` her, ville vedtaket vært fattet mot 70 mens skjermen ikke viste noe krav i det hele
+  // tatt — #949-feilen i utelatelsesform.
+  it("uten eksplisitt grense sendes SAMME standard som vedtaket bruker", () => {
+    const view = toSubmissionResultView({
+      ...base,
+      moduleVersion: { assessmentMode: "FREETEXT_PLUS_MCQ", assessmentPolicyJson: null },
+    });
+
+    expect(view.requirement.totalMin).toBe(getAssessmentRules().thresholds.totalMin);
+    // En ren flervalgsterskel er derimot IKKE aktuell for en blandet modul uten eksplisitt grense.
+    expect(view.requirement.mcqMinPercent).toBeNull();
+  });
+
+  it("en ren flervalgsmodul uten policy får standarden for modultypen", () => {
+    const view = toSubmissionResultView({
+      ...base,
+      moduleVersion: { assessmentMode: "MCQ_ONLY", assessmentPolicyJson: null },
+    });
+
+    // ⚠️ `toBeGreaterThan(0)` pinner ingenting — enhver terskel ville bestått. Påstanden må være
+    // på DEN VERDIEN vedtaket faktisk bruker, ellers kan de to skli fra hverandre uten at noe sier
+    // fra. Det er hele poenget med å dele oppslaget.
+    expect(view.requirement.mcqMinPercent).toBe(
+      resolveMcqMinPercent("MCQ_ONLY", null),
+    );
+  });
+
+  // ⚠️ En ødelagt policy-JSON skal gi en resultatside uten krav-tall, ikke en 500. Deltakeren har
+  // bestått eller ikke uansett hva som står i det feltet.
+  it("en ødelagt policy velter ikke resultatsiden, og gir standardene", () => {
+    const view = toSubmissionResultView({
+      ...base,
+      moduleVersion: { assessmentMode: "MCQ_ONLY", assessmentPolicyJson: "{ikke json" },
+    });
+
+    // ⚠️ `not.toThrow()` alene sier bare at det ikke smalt. Det som betyr noe er at svaret er
+    // BRUKBART: en ødelagt policy skal lese som «ingen egen grense», altså standardene — ikke som
+    // manglende tall, og ikke som en halv side.
+    expect(view.requirement.mcqMinPercent).toBe(resolveMcqMinPercent("MCQ_ONLY", null));
+    expect(view.requirement.totalMin).toBe(getAssessmentRules().thresholds.totalMin);
+    expect(view.scoreComponents.mcqPercentScore).toBe(100);
+  });
+
+  it("uten modulversjon i det hele tatt svarer den fortsatt", () => {
+    const view = toSubmissionResultView({ ...base, moduleVersion: null });
+    expect(view.assessmentMode).toBeNull();
+    expect(view.requirement.mcqMinPercent).toBeNull();
   });
 });

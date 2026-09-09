@@ -1,6 +1,9 @@
 import { DecisionType, SubmissionStatus } from "../../db/prismaRuntime.js";
 import { getAssessmentRules } from "../../config/assessmentRules.js";
 import { createDecisionRepository } from "../../repositories/decisionRepository.js";
+import { createAssessmentJobRepository } from "./assessmentJobRepository.js";
+import type { AssessmentRunFence } from "./AssessmentJobRunner.js";
+import { ConflictError } from "../../errors/AppError.js";
 import { runInTransaction } from "../../db/transaction.js";
 import type { LlmStructuredAssessment } from "./llmAssessmentService.js";
 import { recordAuditEvent } from "../../services/auditService.js";
@@ -15,13 +18,25 @@ import {
 import { redFlagsCodec } from "../../codecs/redFlagsCodec.js";
 import { AssessmentMode } from "../../db/prismaRuntime.js";
 import type { ModuleAssessmentPolicy } from "../../codecs/assessmentPolicyCodec.js";
+import type { AiInfluenceDecision } from "./aiInfluence.js";
+import {
+  decisionReason as buildReason,
+  decisionReasonCodes,
+  serializeDecisionReasonParams,
+  type DecisionReason,
+  type DecisionReasonCode,
+  type DecisionReasonParams,
+} from "./decisionReason.js";
 import {
   DEFAULT_MCQ_ONLY_MIN_PERCENT as DEFAULT_MCQ_ONLY_MIN_PERCENT_VALUE,
   resolveMcqMinPercent,
+  resolveTotalMin,
 } from "./mcqPassRule.js";
 export type { ModuleAssessmentPolicy };
 
 type BuildDecisionInput = {
+  jobId: string;
+  fence: AssessmentRunFence;
   submissionId: string;
   userId: string;
   moduleVersionId: string;
@@ -30,17 +45,21 @@ type BuildDecisionInput = {
   mcqScaledScore: number;
   mcqPercentScore: number;
   llmResult: LlmStructuredAssessment;
-  forceManualReviewReason?: string;
+  forceManualReviewReason?: DecisionReason;
   assessmentPolicy?: ModuleAssessmentPolicy | null;
   rubricMaxTotal?: number;
   rubricCriteriaIds?: string[];
   // #578: FREETEXT_ONLY — practical/LLM-only scoring, no MCQ component. The rubric score spans the
   // full 0–100 and there is no MCQ gate.
   freetextOnly?: boolean;
+  /** #1048: antall ord i besvarelsen. `null` når den ikke lot seg måle. */
+  answerWordCount?: number | null;
+  /** #1048: modulens eget omfang (#1049), ellers nivåets standard. `null` når ingen finnes. */
+  expectedMinWords?: number | null;
   // #475: AI-influence review trigger. When present with forcesReview, routes to UNDER_REVIEW —
   // NEVER contributes to a FAIL (feeds `needsManualReview` only). Computed upstream from the
   // participant's AI-use declaration + content-similarity; see aiInfluence.ts.
-  aiInfluence?: { forcesReview: boolean; reason: string };
+  aiInfluence?: AiInfluenceDecision;
   // #475 Phase 2: the computed AI-influence signals JSON, persisted on the decision for transparency
   // and pilot analysis. Purely informational at the decision layer.
   aiInfluenceJson?: string | null;
@@ -55,16 +74,40 @@ export type ResolvedAssessmentDecision = {
   needsManualReview: boolean;
   passFailTotal: boolean;
   decisionReason: string;
+  /** #950: hvilken regel som avgjorde, som data. Klienten formulerer setningen fra denne. */
+  decisionReasonCode: DecisionReasonCode;
+  /** Tallene setningen trenger (terskler, poeng). Tomt objekt når grunnen ikke har tall. */
+  decisionReasonParams: DecisionReasonParams;
 };
 
 type ResolveAssessmentDecisionInput = Pick<
   BuildDecisionInput,
-  "mcqScaledScore" | "mcqPercentScore" | "llmResult" | "forceManualReviewReason" | "assessmentPolicy" | "rubricMaxTotal" | "rubricCriteriaIds" | "freetextOnly" | "aiInfluence"
+  "mcqScaledScore" | "mcqPercentScore" | "llmResult" | "forceManualReviewReason" | "assessmentPolicy" | "rubricMaxTotal" | "rubricCriteriaIds" | "freetextOnly" | "aiInfluence" | "answerWordCount" | "expectedMinWords"
 >;
+
+/**
+ * #1048: er besvarelsen vesentlig kortere enn det oppgaven ba om?
+ *
+ * ⚠️ Returnerer `false` når vi ikke kan måle — uten svarlengde eller uten forventet minimum finnes
+ * ikke faktumet som skal begrunne automatisk stryk. `false` betyr da «mennesket vinner», som er
+ * hovedregelen og retningen i kandidatens favør.
+ *
+ * Andelen er av det forventede minimumet, ikke et fast ordtall: 40 ord der 100 var ventet er noe
+ * helt annet enn 280 der 300 var ventet.
+ */
+export function isSubstantiallyShort(
+  answerWordCount: number | null | undefined,
+  expectedMinWords: number | null | undefined,
+  ratio: number,
+): boolean {
+  if (typeof answerWordCount !== "number" || typeof expectedMinWords !== "number") return false;
+  if (expectedMinWords <= 0) return false;
+  return answerWordCount < expectedMinWords * ratio;
+}
 
 export function resolveAssessmentDecision(input: ResolveAssessmentDecisionInput): ResolvedAssessmentDecision {
   const rules = getAssessmentRules();
-  const totalMin = input.assessmentPolicy?.passRules?.totalMin ?? rules.thresholds.totalMin;
+  const totalMin = resolveTotalMin(input.assessmentPolicy);
   const rubricMaxTotal = input.rubricMaxTotal ?? 20;
 
   // Recompute rubric total server-side: filter to known criteria (if provided),
@@ -120,22 +163,62 @@ export function resolveAssessmentDecision(input: ResolveAssessmentDecisionInput)
 
   const llmRecommendsManualReview = recommendsManualReview(input.llmResult);
 
+  // #1048: modellens anmodning om et MENNESKE er hovedregelen. Automatisk stryk er unntaket, og
+  // unntaket må begrunnes med et målbart faktum: at besvarelsen er vesentlig kortere enn ventet.
+  //
+  // ⚠️ MÅLT PROBLEM. 21 av 78 ekte vurderinger på stage ba om menneskelig vurdering. Null nådde en
+  // sensor — alle 21 ble automatisk strøket. Modellen sier to ting samtidig, «det var for lite her»
+  // og «et menneske bør se på dette», og vi hørte bare det ene.
+  //
+  // ⚠️ ENDRINGEN KAN BARE GÅ ÉN VEI. Betingelsen er den gamle OG den nye; en `&&` kan bare gjøre
+  // mengden mindre. Uansett hvilket minimum en forfatter setter, kan resultatet aldri bli strengere
+  // enn før — bare mildere. Derfor trenger dette ingen egen aktivering.
+  //
+  // ⚠️ KAN VI IKKE MÅLE, VINNER MENNESKET. Uten forventet minimum eller uten svarlengde finnes ikke
+  // faktumet som skal begrunne unntaket, og da står hovedregelen.
+  const vesentligForKort = isSubstantiallyShort(
+    input.answerWordCount,
+    input.expectedMinWords,
+    rules.insufficientEvidence.autoFailBelowScopeRatio,
+  );
+
   const autoFailForInsufficientEvidence =
     !input.forceManualReviewReason &&
     !hasOpenRedFlag &&
     !passesThresholds &&
-    (hasInsufficientEvidenceSignal(input.llmResult) || hasOnlyInsufficientEvidenceFlags);
+    (hasInsufficientEvidenceSignal(input.llmResult) || hasOnlyInsufficientEvidenceFlags) &&
+    // ⚠️ LENGDEKRAVET GJELDER BARE NÅR DET ER EN KONFLIKT Å LØSE. Ba ikke modellen om et menneske,
+    // finnes ingen anmodning å overstyre, og auto-stryk står som før.
+    //
+    // Første utgave manglet denne betingelsen og gjaldt alltid. Integrasjonssuiten avslørte det:
+    // seks policy-tester der modellen IKKE hadde bedt om et menneske gikk fra COMPLETED til
+    // UNDER_REVIEW, bare fordi modulen manglet et nivå og vi derfor ikke kunne måle. Det ville
+    // sendt saker til sensor uten at noen hadde bedt om det — en helt annen endring enn den
+    // produkteier beskrev.
+    (!llmRecommendsManualReview || vesentligForKort);
 
   // v1.2.20 (#464): borderline-window — totalScore i [min, max] router til manuell
   // vurdering. Overstyrer auto-pass selv om threshold-rules ellers passerer. Brukes til
   // grensetilfeller forfatter vil ha assessor til å se på.
-  const borderlineWindow = input.assessmentPolicy?.passRules?.borderlineWindow;
+  // Modulens eget vindu vinner. Ellers gjelder standardbaandet fra regelfila, regnet ut fra
+  // modulens EFFEKTIVE terskel — ikke et fast tallpar, som ville vaert galt for enhver modul med
+  // egen `totalMin`. Foer dette fantes ingen standard, saa vakta var moerk for 98 av 101 moduler.
+  //
+  // Baandet er aapent oppad (`< totalMin`): noeyaktig paa terskelen er bestaatt, ikke grensetilfelle.
+  const defaultBelow = rules.thresholds.borderlineBelowMin;
+  const borderlineWindow =
+    input.assessmentPolicy?.passRules?.borderlineWindow ??
+    (defaultBelow != null && defaultBelow > 0
+      ? { min: Math.max(0, totalMin - defaultBelow), max: totalMin, exclusiveMax: true }
+      : undefined);
   const isInBorderlineWindow =
     borderlineWindow !== undefined &&
     typeof borderlineWindow.min === "number" &&
     typeof borderlineWindow.max === "number" &&
     totalScore >= borderlineWindow.min &&
-    totalScore <= borderlineWindow.max;
+    ("exclusiveMax" in borderlineWindow && borderlineWindow.exclusiveMax
+      ? totalScore < borderlineWindow.max
+      : totalScore <= borderlineWindow.max);
 
   // #475: AI-influence is a review TRIGGER only. It feeds `needsManualReview` (below) and forces
   // `passFailTotal` to false so a would-pass submission is not auto-passed — mirroring borderlineWindow.
@@ -151,28 +234,56 @@ export function resolveAssessmentDecision(input: ResolveAssessmentDecisionInput)
     isInBorderlineWindow ||
     aiInfluenceForcesReview;
 
-  const componentFailReason = !mcqGatePasses
-    ? "Automatic fail: MCQ score below required minimum."
+  // #950: hver gren gir en KODE og tallene setningen trenger, ved siden av den engelske teksten.
+  // Teksten er uendret fra før — den lagres, logges og vises til sensor. Koden er det deltakerens
+  // grensesnitt formulerer setningen fra, på sitt eget språk.
+  const componentFailReason: DecisionReason | null = !mcqGatePasses
+    ? buildReason(
+        decisionReasonCodes.autoFailMcqBelowMinimum,
+        "Automatic fail: MCQ score below required minimum.",
+      )
     : !practicalGatePasses
-      ? "Automatic fail: practical score below required minimum."
+      ? buildReason(
+          decisionReasonCodes.autoFailPracticalBelowMinimum,
+          "Automatic fail: practical score below required minimum.",
+        )
       : null;
 
-  const decisionReason = needsManualReview
+  const resolvedReason: DecisionReason = needsManualReview
     ? input.forceManualReviewReason ??
       (totalsInconsistent
-        ? "LLM score inconsistency detected — routed to manual review."
+        ? buildReason(
+            decisionReasonCodes.manualReviewScoreInconsistency,
+            "LLM score inconsistency detected — routed to manual review.",
+          )
         : isInBorderlineWindow
-          ? `Routed to manual review: total score ${totalScore} is in the borderline window [${borderlineWindow!.min}, ${borderlineWindow!.max}].`
+          ? buildReason(
+              decisionReasonCodes.manualReviewBorderline,
+              `Routed to manual review: total score ${totalScore} is in the borderline window [${borderlineWindow!.min}, ${borderlineWindow!.max}].`,
+              { totalScore, min: borderlineWindow!.min, max: borderlineWindow!.max },
+            )
           : hasOpenRedFlag || llmRecommendsManualReview
-            ? "Automatically routed to manual review due to red flag / confidence rule."
+            ? buildReason(
+                decisionReasonCodes.manualReviewRedFlagOrConfidence,
+                "Automatically routed to manual review due to red flag / confidence rule.",
+              )
             : aiInfluenceForcesReview
-              ? input.aiInfluence!.reason
-              : "Automatically routed to manual review due to red flag / confidence rule.")
+              ? buildReason(input.aiInfluence!.code, input.aiInfluence!.reason, input.aiInfluence!.params)
+              : buildReason(
+                  decisionReasonCodes.manualReviewRedFlagOrConfidence,
+                  "Automatically routed to manual review due to red flag / confidence rule.",
+                ))
     : autoFailForInsufficientEvidence
-      ? "Automatic fail due to insufficient submission evidence."
+      ? buildReason(
+          decisionReasonCodes.autoFailInsufficientEvidence,
+          "Automatic fail due to insufficient submission evidence.",
+        )
       : passesThresholds
-        ? "Automatic pass by threshold rules."
-        : componentFailReason ?? "Automatic fail by threshold rules.";
+        ? buildReason(decisionReasonCodes.autoPassThresholds, "Automatic pass by threshold rules.")
+        : componentFailReason ??
+          buildReason(decisionReasonCodes.autoFailThresholds, "Automatic fail by threshold rules.");
+
+  const decisionReason = resolvedReason.text;
 
   return {
     totalScore,
@@ -185,8 +296,23 @@ export function resolveAssessmentDecision(input: ResolveAssessmentDecisionInput)
     // ikke automatisk bestått selv om threshold-rules ellers passerte. Assessor må
     // bekrefte. #475: samme for AI-influence review — en besvarelse rutet til review er
     // ikke automatisk bestått.
-    passFailTotal: passesThresholds && !isInBorderlineWindow && !aiInfluenceForcesReview,
+    // #948: et vedtak kan ALDRI baere `passFailTotal: true` mens innleveringen gaar til manuell
+    // vurdering. Seks ting kan utloese en slik vurdering; foer denne linja tvang bare to av dem
+    // (`isInBorderlineWindow` og `aiInfluenceForcesReview`) flagget til false. De oevrige — et
+    // paatvunget `forceManualReviewReason`, `totalsInconsistent`, og en modell som ber om
+    // menneskeblikk — lot et «bestaatt» vedtak staa mens sensor ennaa ikke hadde sett saken.
+    //
+    // ⚠️ Konsekvensen laa hos LESERNE, og de er tolv: deltakeren saa modulkortet som bestaatt,
+    // kalibreringsrapporten talte forsoeket som PASS, kursrapporten sa IN_PROGRESS. Aa lappe tolv
+    // lesere ville vaert feil form — og én ville blitt glemt. Invarianten hoerer i kilden.
+    //
+    // Dette gjoer ikke en bestaatt til en stroeket: `passFailTotal: false` + UNDER_REVIEW leses som
+    // «til vurdering», ikke som «ikke bestaatt» — samme moenster #475 allerede etablerte for
+    // ai-influence, med den uttrykkelige begrunnelsen at et signal aldri skal kunne felle noen.
+    passFailTotal: passesThresholds && !needsManualReview,
     decisionReason,
+    decisionReasonCode: resolvedReason.code,
+    decisionReasonParams: resolvedReason.params,
   };
 }
 
@@ -197,6 +323,8 @@ export function resolveAssessmentDecision(input: ResolveAssessmentDecisionInput)
 export { DEFAULT_MCQ_ONLY_MIN_PERCENT } from "./mcqPassRule.js";
 
 type BuildMcqOnlyDecisionInput = {
+  jobId: string;
+  fence: AssessmentRunFence;
   submissionId: string;
   userId: string;
   moduleVersionId: string;
@@ -214,14 +342,30 @@ type BuildMcqOnlyDecisionInput = {
 export function resolveMcqOnlyDecision(
   mcqPercentScore: number,
   mcqMinPercent: number,
-): { passFailTotal: boolean; decisionReason: string } {
+): { passFailTotal: boolean; decisionReason: string; decisionReasonCode: DecisionReasonCode; decisionReasonParams: DecisionReasonParams } {
   const passFailTotal = mcqPercentScore >= mcqMinPercent;
   // Round the displayed score to 2 decimals (raw can be e.g. 66.6666… ) — #546 feedback.
   const shownScore = Math.round(mcqPercentScore * 100) / 100;
-  const decisionReason = passFailTotal
-    ? `Automatic pass: MCQ score ${shownScore}% meets the required minimum of ${mcqMinPercent}%.`
-    : `Automatic fail: MCQ score ${shownScore}% is below the required minimum of ${mcqMinPercent}%.`;
-  return { passFailTotal, decisionReason };
+  // #950: DENNE var den synligste. En ren MCQ-modul er den vanligste veien gjennom systemet, og
+  // grunnen har tall i seg — den kunne aldri slås opp i et tekstkart, så en norsk deltaker fikk
+  // «Automatic pass: MCQ score 100% meets the required minimum of 70%.» i et ellers norsk skjermbilde.
+  const reason = passFailTotal
+    ? buildReason(
+        decisionReasonCodes.mcqOnlyPass,
+        `Automatic pass: MCQ score ${shownScore}% meets the required minimum of ${mcqMinPercent}%.`,
+        { scorePercent: shownScore, minPercent: mcqMinPercent },
+      )
+    : buildReason(
+        decisionReasonCodes.mcqOnlyFail,
+        `Automatic fail: MCQ score ${shownScore}% is below the required minimum of ${mcqMinPercent}%.`,
+        { scorePercent: shownScore, minPercent: mcqMinPercent },
+      );
+  return {
+    passFailTotal,
+    decisionReason: reason.text,
+    decisionReasonCode: reason.code,
+    decisionReasonParams: reason.params,
+  };
 }
 
 export async function createMcqOnlyDecision(input: BuildMcqOnlyDecisionInput) {
@@ -229,10 +373,26 @@ export async function createMcqOnlyDecision(input: BuildMcqOnlyDecisionInput) {
   const mcqMinPercent =
     resolveMcqMinPercent(AssessmentMode.MCQ_ONLY, input.assessmentPolicy)
     ?? DEFAULT_MCQ_ONLY_MIN_PERCENT_VALUE;
-  const { passFailTotal, decisionReason } = resolveMcqOnlyDecision(input.mcqPercentScore, mcqMinPercent);
+  const { passFailTotal, decisionReason, decisionReasonCode, decisionReasonParams } =
+    resolveMcqOnlyDecision(input.mcqPercentScore, mcqMinPercent);
 
   return runInTransaction(async (tx) => {
     const repo = createDecisionRepository(tx);
+    // #953: gjerdet FØRST i transaksjonen. Er dette en forlatt kjøring (#856) som våknet etter at
+    // et gjenforsøk overtok, eier den ikke lenger jobben — og da skal vedtaket ikke skrives. Kastes
+    // her, ruller hele transaksjonen tilbake, så ingen halv dom blir liggende.
+    const stillOurs = await createAssessmentJobRepository(tx).claimDecisionWrite(
+      input.jobId,
+      input.fence.lockedBy,
+      input.fence.lockedAt,
+    );
+    if (stillOurs.count === 0) {
+      throw new ConflictError(
+        "assessment_run_superseded",
+        "This assessment run no longer owns its job — a newer run has taken over. Discarding the verdict.",
+      );
+    }
+
 
     const decision = await repo.createAssessmentDecision({
       submissionId: input.submissionId,
@@ -246,6 +406,8 @@ export async function createMcqOnlyDecision(input: BuildMcqOnlyDecisionInput) {
       passFailTotal,
       decisionType: DecisionType.AUTOMATIC,
       decisionReason,
+      decisionReasonCode,
+      decisionReasonParams: serializeDecisionReasonParams(decisionReasonParams),
       finalisedById: input.userId,
     });
 
@@ -280,6 +442,21 @@ export async function createAssessmentDecision(input: BuildDecisionInput) {
 
   return runInTransaction(async (tx) => {
     const repo = createDecisionRepository(tx);
+    // #953: gjerdet FØRST i transaksjonen. Er dette en forlatt kjøring (#856) som våknet etter at
+    // et gjenforsøk overtok, eier den ikke lenger jobben — og da skal vedtaket ikke skrives. Kastes
+    // her, ruller hele transaksjonen tilbake, så ingen halv dom blir liggende.
+    const stillOurs = await createAssessmentJobRepository(tx).claimDecisionWrite(
+      input.jobId,
+      input.fence.lockedBy,
+      input.fence.lockedAt,
+    );
+    if (stillOurs.count === 0) {
+      throw new ConflictError(
+        "assessment_run_superseded",
+        "This assessment run no longer owns its job — a newer run has taken over. Discarding the verdict.",
+      );
+    }
+
 
     const decision = await repo.createAssessmentDecision({
       submissionId: input.submissionId,
@@ -294,6 +471,8 @@ export async function createAssessmentDecision(input: BuildDecisionInput) {
       passFailTotal: resolved.passFailTotal,
       decisionType: DecisionType.AUTOMATIC,
       decisionReason: resolved.decisionReason,
+      decisionReasonCode: resolved.decisionReasonCode,
+      decisionReasonParams: serializeDecisionReasonParams(resolved.decisionReasonParams),
       finalisedById: input.userId,
     });
 
@@ -338,7 +517,11 @@ export async function createAssessmentDecision(input: BuildDecisionInput) {
         submissionId: input.submissionId,
         totalScore: resolved.totalScore,
         needsManualReview: resolved.needsManualReview,
-        forceManualReviewReason: input.forceManualReviewReason ?? null,
+        // ⚠️ .text, ikke hele objektet. Feltet var en streng før #950, og revisjonsloggen leses av
+        // mennesker og av eldre eksporter — å bytte det til et objekt ville vært en stille
+        // formatendring i et spor som skal være stabilt. Koden legges ved som eget felt i stedet.
+        forceManualReviewReason: input.forceManualReviewReason?.text ?? null,
+        decisionReasonCode: resolved.decisionReasonCode,
         passFailTotal: decision.passFailTotal,
       },
     }, tx);

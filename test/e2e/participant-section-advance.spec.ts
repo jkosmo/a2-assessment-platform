@@ -522,3 +522,96 @@ test("#996 KONTROLLCASE: en ARKIVERT modul blokkerer IKKE — den er tatt ut av 
   await page.locator("#sectionReaderFinish").click();
   await expect.poll(() => readCalled).toBe(true);
 });
+
+// Produkteier 2026-08-28, med skjermbilde: «Når jeg trykker på Les, så åpner ikke seksjonen med
+// starten i toppen av skjermen.»
+//
+// ⚠️ To ting sto galt samtidig, og hver for seg ville de vært harmløse:
+//   1. `scrollIntoView({ block: "nearest" })` ruller MINST MULIG — var raden allerede så vidt
+//      synlig, flyttet den seg ikke i det hele tatt.
+//   2. Kallet lå FØR `await renderSectionReaderInto(...)`, altså mot et tomt panel. Nettleseren
+//      regnet ut hvor den skulle rulle basert på en høyde som ennå ikke fantes.
+//
+// Resultatet var at deltakeren sto midt i eller nederst i en lang seksjon og måtte rulle oppover
+// for å finne begynnelsen. Testen krever at radens topp faktisk lander øverst.
+test("#UI: en lang seksjon åpner med starten øverst på skjermen", async ({ page }) => {
+  await mockBase(page);
+  await mockCourse(page);
+
+  // Lang nok til at siden faktisk kan rulle — en kort seksjon ville vært grønn uansett.
+  const longHtml = Array.from({ length: 120 }, (_, i) => `<p>Avsnitt ${i + 1} i seksjonsteksten.</p>`).join("");
+  await page.route("**/api/courses/c1/sections/s1", (route: Route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ title: "Første seksjon", html: longHtml }) }),
+  );
+
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await openCourse(page);
+
+  const first = page.locator('.course-item[data-key="ci1"]');
+
+  // Før klikket ligger raden et stykke nede på siden — ellers måler testen ingenting.
+  const before = await first.boundingBox();
+  expect(before!.y).toBeGreaterThan(60);
+
+  await first.locator(".course-module-row").click();
+  await expect(first.locator("#sectionReaderBody")).toContainText("Avsnitt 1 i seksjonsteksten.");
+
+  // Rullingen er myk, så vent til den har stanset i stedet for å gjette på en forsinkelse.
+  await expect.poll(async () => Math.round((await first.boundingBox())!.y), { timeout: 5000 })
+    .toBeLessThanOrEqual(40);
+
+  // Og det ØVERSTE av seksjonsteksten skal være synlig — ikke bare raden.
+  const firstParagraph = first.locator("#sectionReaderBody p").first();
+  await expect(firstParagraph).toBeInViewport();
+});
+
+// ⚠️ Motstykket, og grunnen til at `block: "start"` står der.
+//
+// Mutasjonstesten avslørte at testen over IKKE binder valget av `start`: en LANG seksjon er høyere
+// enn skjermen, så «nearest» ruller toppen til toppen helt av seg selv. Den beviser bare
+// rekkefølgen.
+//
+// En KORT seksjon er den eneste som skiller dem: «nearest» gjør ingenting hvis raden allerede er
+// synlig, og deltakeren sitter igjen med seksjonen der den tilfeldigvis lå.
+//
+// Kurset får mange elementer her — ikke for realismens skyld, men fordi en kort side ikke KAN rulle
+// raden helt opp. Første forsøk feilet på y=104 av nettopp den grunnen, og det var testen som var
+// feil, ikke koden.
+test("#UI: også en KORT seksjon åpner med starten øverst", async ({ page }) => {
+  await mockBase(page);
+
+  const items = Array.from({ length: 24 }, (_, i) => ({
+    type: "SECTION",
+    sectionId: `x${i}`,
+    courseItemId: `cx${i}`,
+    title: `Seksjon ${i + 1}`,
+    read: false,
+    discussionsEnabled: false,
+  }));
+  await page.route("**/api/courses/c1", (route: Route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ course: { id: "c1", title: "Kurs", discussionsEnabled: false, items } }),
+    }),
+  );
+  await page.route("**/api/courses/c1/sections/*", (route: Route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ title: "Seksjon", html: "<p>Kort tekst.</p>" }) }),
+  );
+
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await openCourse(page);
+
+  // Et element midt i lista: langt nok ned til at det må rulles, langt nok fra bunnen til at det
+  // FINNES rulleplass.
+  const target = page.locator('.course-item[data-key="cx11"]');
+  await target.scrollIntoViewIfNeeded();
+  const before = await target.boundingBox();
+  expect(before!.y).toBeGreaterThan(60);
+
+  await target.locator(".course-module-row").click();
+  await expect(target.locator("#sectionReaderBody")).toContainText("Kort tekst.");
+
+  await expect.poll(async () => Math.round((await target.boundingBox())!.y), { timeout: 5000 })
+    .toBeLessThanOrEqual(40);
+});

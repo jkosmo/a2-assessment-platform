@@ -94,6 +94,17 @@ describe("MVP reporting endpoints", () => {
         decisionReason: "Regression fixture adjusted to represent a failed learner.",
       },
     });
+    // ⚠️ Fiksturen forfalsker et STRØKET utfall ved å skrive rett i vedtaket. Da må den også sette
+    // innleveringsstatusen, ellers beskriver de to hverandres motsetning.
+    //
+    // Vurderingen rutet denne til sensor etter at grensebåndet ble innført (svaret er kort, og
+    // landet innenfor ti poeng under terskelen). Rapporten leser status FØRST, så raden kom ut som
+    // UNDER_REVIEW mens vedtaket sa strøket. Testen skal fortsatt måle at en strøket deltaker vises
+    // som strøket — ikke at grensebåndet finnes; det har egne tester.
+    await prisma.submission.update({
+      where: { id: failedSubmissionId },
+      data: { submissionStatus: "COMPLETED" },
+    });
 
     const createAppealResponse = await request(app)
       .post(`/api/submissions/${completedSubmissionId}/appeals`)

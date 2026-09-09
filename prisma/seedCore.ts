@@ -18,6 +18,19 @@ type SeedModuleInput = {
   questions: SeedQuestion[];
 };
 
+// #1048: nivaaet i seed-modulene under sto som "foundation" - en levning fra da feltet var
+// fritekst og forfattere fikk «ren tekst, f.eks. foundation» som instruks. Produktet tilbyr i
+// dag bare basic / intermediate / advanced (CERTIFICATION_LEVELS), saa seed-dataen framstilte
+// en modul produktet ikke kan lage.
+//
+// DET BLE SYNLIG FOERST DA ET NIVAA BEGYNTE AA BETY NOE. Nivaaet slaar opp forventet
+// svarlengde, og et nivaa utenfor skalaen gir INGEN forventning. Da kan vi ikke maale om et
+// svar er for kort, og hovedregelen - «et menneske ser paa den» - staar. Seks policy-tester
+// falt paa nettopp det.
+//
+// ENDRINGEN GJELDER BARE SEED-DATAEN. Ekte moduler som baerer et nivaa utenfor skalaen blir
+// bevart med vilje (se admin-content-shell.js), og for dem er «kan ikke maale» det RIKTIGE
+// svaret: har ingen sagt hvor langt svaret skulle vaere, avgjoer et menneske.
 export async function runSeed(prisma: any) {
   const now = new Date();
 
@@ -92,7 +105,7 @@ export async function runSeed(prisma: any) {
   const firstModule = await createSeedModuleBundle(prisma, admin.id, now, {
     title: "Generative AI Foundations",
     description: "M0 seeded module for development and integration testing.",
-    certificationLevel: "foundation",
+    certificationLevel: "basic",
     taskText: "Complete the assignment and submit your response.",
     assessorExpectedContent: "Include concrete examples and reasoning that support your answer.",
     promptSystem: "You are an assessment assistant. Return strict JSON only.",
@@ -129,7 +142,7 @@ export async function runSeed(prisma: any) {
   const secondModule = await createSeedModuleBundle(prisma, admin.id, now, {
     title: "AI Governance and Risk Essentials",
     description: "Second seeded module for multi-module flow testing and UX verification.",
-    certificationLevel: "foundation",
+    certificationLevel: "basic",
     taskText: "Assess governance risks and document a practical mitigation approach.",
     assessorExpectedContent: "Describe concrete controls, owners, and follow-up actions.",
     promptSystem: "You are an assessment assistant focused on governance and risk quality.",

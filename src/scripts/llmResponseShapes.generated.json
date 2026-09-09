@@ -1,0 +1,245 @@
+{
+  "capturedAt": "2026-08-27T20:47:06.020Z",
+  "capturedFrom": "stage 2.38.0",
+  "capturedModel": "(ukjent — sett LLM_MODEL)",
+  "sampleSize": 10,
+  "distributions": {
+    "evidenceSufficiency": {
+      "sufficient": 5,
+      "insufficient": 5
+    },
+    "manualReviewReasonCode": {
+      "none": 6,
+      "insufficient_evidence": 3,
+      "red_flag": 1
+    },
+    "recommendedOutcome": {
+      "fail": 6,
+      "pass": 4
+    },
+    "confidenceLevel": {
+      "(ikke satt)": 10
+    },
+    "decisionReasonCode": {
+      "(ikke satt)": 10
+    }
+  },
+  "shapes": [
+    {
+      "assessmentMode": "FREETEXT_ONLY",
+      "status": "COMPLETED",
+      "passFailTotal": false,
+      "evidenceSufficiency": "sufficient",
+      "recommendedOutcome": "fail",
+      "manualReviewReasonCode": "none",
+      "decisionReasonCode": null,
+      "confidenceLevel": null,
+      "confidenceKeywords": [
+        "limited"
+      ],
+      "confidenceNoteShape": {
+        "length": 229,
+        "words": 32
+      },
+      "improvementAdviceCount": 10,
+      "criterionRationaleCount": 3,
+      "scoreComponents": {
+        "totalScore": 16.67,
+        "mcqPercentScore": null
+      }
+    },
+    {
+      "assessmentMode": "FREETEXT_PLUS_MCQ",
+      "status": "COMPLETED",
+      "passFailTotal": true,
+      "evidenceSufficiency": "sufficient",
+      "recommendedOutcome": "pass",
+      "manualReviewReasonCode": "none",
+      "decisionReasonCode": null,
+      "confidenceLevel": null,
+      "confidenceKeywords": [],
+      "confidenceNoteShape": {
+        "length": 144,
+        "words": 22
+      },
+      "improvementAdviceCount": 10,
+      "criterionRationaleCount": 5,
+      "scoreComponents": {
+        "totalScore": 93,
+        "mcqPercentScore": 100
+      }
+    },
+    {
+      "assessmentMode": "FREETEXT_PLUS_MCQ",
+      "status": "COMPLETED",
+      "passFailTotal": false,
+      "evidenceSufficiency": "insufficient",
+      "recommendedOutcome": "fail",
+      "manualReviewReasonCode": "insufficient_evidence",
+      "decisionReasonCode": null,
+      "confidenceLevel": null,
+      "confidenceKeywords": [],
+      "confidenceNoteShape": {
+        "length": 133,
+        "words": 17
+      },
+      "improvementAdviceCount": 10,
+      "criterionRationaleCount": 6,
+      "scoreComponents": {
+        "totalScore": 30,
+        "mcqPercentScore": 100
+      }
+    },
+    {
+      "assessmentMode": "FREETEXT_ONLY",
+      "status": "COMPLETED",
+      "passFailTotal": true,
+      "evidenceSufficiency": "sufficient",
+      "recommendedOutcome": "pass",
+      "manualReviewReasonCode": "none",
+      "decisionReasonCode": null,
+      "confidenceLevel": null,
+      "confidenceKeywords": [],
+      "confidenceNoteShape": {
+        "length": 150,
+        "words": 17
+      },
+      "improvementAdviceCount": 5,
+      "criterionRationaleCount": 4,
+      "scoreComponents": {
+        "totalScore": 100,
+        "mcqPercentScore": null
+      }
+    },
+    {
+      "assessmentMode": "FREETEXT_ONLY",
+      "status": "COMPLETED",
+      "passFailTotal": false,
+      "evidenceSufficiency": "insufficient",
+      "recommendedOutcome": "fail",
+      "manualReviewReasonCode": "insufficient_evidence",
+      "decisionReasonCode": null,
+      "confidenceLevel": null,
+      "confidenceKeywords": [],
+      "confidenceNoteShape": {
+        "length": 118,
+        "words": 19
+      },
+      "improvementAdviceCount": 6,
+      "criterionRationaleCount": 4,
+      "scoreComponents": {
+        "totalScore": 0,
+        "mcqPercentScore": null
+      }
+    },
+    {
+      "assessmentMode": "FREETEXT_ONLY",
+      "status": "COMPLETED",
+      "passFailTotal": false,
+      "evidenceSufficiency": "sufficient",
+      "recommendedOutcome": "pass",
+      "manualReviewReasonCode": "none",
+      "decisionReasonCode": null,
+      "confidenceLevel": null,
+      "confidenceKeywords": [],
+      "confidenceNoteShape": {
+        "length": 91,
+        "words": 15
+      },
+      "improvementAdviceCount": 6,
+      "criterionRationaleCount": 4,
+      "scoreComponents": {
+        "totalScore": 66.67,
+        "mcqPercentScore": null
+      }
+    },
+    {
+      "assessmentMode": "FREETEXT_PLUS_MCQ",
+      "status": "COMPLETED",
+      "passFailTotal": true,
+      "evidenceSufficiency": "sufficient",
+      "recommendedOutcome": "pass",
+      "manualReviewReasonCode": "none",
+      "decisionReasonCode": null,
+      "confidenceLevel": null,
+      "confidenceKeywords": [],
+      "confidenceNoteShape": {
+        "length": 138,
+        "words": 21
+      },
+      "improvementAdviceCount": 3,
+      "criterionRationaleCount": 5,
+      "scoreComponents": {
+        "totalScore": 100,
+        "mcqPercentScore": 100
+      }
+    },
+    {
+      "assessmentMode": "FREETEXT_PLUS_MCQ",
+      "status": "COMPLETED",
+      "passFailTotal": false,
+      "evidenceSufficiency": "insufficient",
+      "recommendedOutcome": "fail",
+      "manualReviewReasonCode": "insufficient_evidence",
+      "decisionReasonCode": null,
+      "confidenceLevel": null,
+      "confidenceKeywords": [
+        "høy sikkerhet"
+      ],
+      "confidenceNoteShape": {
+        "length": 80,
+        "words": 13
+      },
+      "improvementAdviceCount": 10,
+      "criterionRationaleCount": 5,
+      "scoreComponents": {
+        "totalScore": 40,
+        "mcqPercentScore": 100
+      }
+    },
+    {
+      "assessmentMode": "FREETEXT_PLUS_MCQ",
+      "status": "COMPLETED",
+      "passFailTotal": false,
+      "evidenceSufficiency": "insufficient",
+      "recommendedOutcome": "fail",
+      "manualReviewReasonCode": "none",
+      "decisionReasonCode": null,
+      "confidenceLevel": null,
+      "confidenceKeywords": [
+        "høy sikkerhet"
+      ],
+      "confidenceNoteShape": {
+        "length": 105,
+        "words": 14
+      },
+      "improvementAdviceCount": 10,
+      "criterionRationaleCount": 5,
+      "scoreComponents": {
+        "totalScore": 24,
+        "mcqPercentScore": 80
+      }
+    },
+    {
+      "assessmentMode": "FREETEXT_PLUS_MCQ",
+      "status": "COMPLETED",
+      "passFailTotal": false,
+      "evidenceSufficiency": "insufficient",
+      "recommendedOutcome": "fail",
+      "manualReviewReasonCode": "red_flag",
+      "decisionReasonCode": null,
+      "confidenceLevel": null,
+      "confidenceKeywords": [],
+      "confidenceNoteShape": {
+        "length": 113,
+        "words": 15
+      },
+      "improvementAdviceCount": 9,
+      "criterionRationaleCount": 5,
+      "scoreComponents": {
+        "totalScore": 30,
+        "mcqPercentScore": 100
+      }
+    }
+  ]
+}

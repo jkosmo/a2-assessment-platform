@@ -131,7 +131,20 @@ const envSchema = z.object({
   AI_CONTENT_SIMILARITY_ENABLED: z.enum(["true", "false"]).optional(),
   AI_CONTENT_SIMILARITY_SHADOW: z.enum(["true", "false"]).optional(),
   ASSESSMENT_JOB_POLL_INTERVAL_MS: z.coerce.number().int().positive().default(4000),
-  ASSESSMENT_JOB_MAX_ATTEMPTS: z.coerce.number().int().positive().default(3),
+  // #953 (produkteier 2026-08-26): «vurdering skal kunne kjøre offline, og bruker varsles per e-post
+  // senere om resultat. Derfor vil jeg ved avvik avvente noen minutter for å se om det er LLM-tjenesten
+  // som har problem, og så prøve på nytt igjen.»
+  //
+  // ⚠️ Sto tidligere på 3 forsøk med FAST 30 sekunders venting. Hele gjenforsøksvinduet var da under
+  // ett minutt: en LLM-nedetid på to minutter brukte opp alle forsøkene, jobben ble FAILED, og
+  // innleveringen ble stående i PROCESSING for alltid. Det er #953-scenarioet, og det oppsto ikke
+  // fordi gjenforsøk manglet — men fordi de var for tette til å overleve en hikke.
+  //
+  // 6 forsøk med eksponentiell venting fra ett minutt (1+2+4+8+16 = 31 min) dekker en realistisk
+  // nedetid uten å holde en genuint ødelagt innlevering i live i det uendelige.
+  ASSESSMENT_JOB_MAX_ATTEMPTS: z.coerce.number().int().positive().default(6),
+  ASSESSMENT_JOB_RETRY_BASE_MS: z.coerce.number().int().positive().default(60_000),
+  ASSESSMENT_JOB_RETRY_CAP_MS: z.coerce.number().int().positive().default(1_800_000),
   ASSESSMENT_JOB_LEASE_DURATION_MS: z.coerce.number().int().positive().default(300000),
   // #856: hard wall-clock cap on a single job's in-process execution. The #792 lease heartbeat renews a
   // running job's lease forever, so without this an in-process-stuck job (a DB lock-wait, not the LLM —
@@ -140,6 +153,15 @@ const envSchema = z.object({
   // the deadline the runner fails/retries the job (fenced) so the tick returns instead of wedging.
   ASSESSMENT_JOB_MAX_RUNTIME_MS: z.coerce.number().int().positive().default(300000),
   ASSESSMENT_JOB_STUCK_THRESHOLD_MS: z.coerce.number().int().positive().default(600000),
+  // #953 (produkteier 2026-08-26): «Hvis mange vurderinger begynner å hope seg opp bør
+  // administrator varsles.» Terskelen er 3 fordi ÉN feilet vurdering er en enkeltsak — det er
+  // opphopningen som betyr at tjenesten er nede.
+  //
+  // ⚠️ Karenstiden er ikke pynt. Når LLM-tjenesten er nede feiler alt samtidig, så uten et tak
+  // ville hver innlevering gitt sin egen e-post. Det er nøyaktig støyen som får folk til å
+  // filtrere bort varselet — og da er varselet verre enn ingenting.
+  ASSESSMENT_FAILED_ALERT_THRESHOLD: z.coerce.number().int().positive().default(3),
+  ASSESSMENT_FAILED_ALERT_COOLDOWN_MS: z.coerce.number().int().positive().default(86_400_000),
   // #866: Postgres session timeouts applied ONLY to the dedicated worker container's DB connections
   // (PROCESS_ROLE=worker). A worker's first tick query (stale-lock scan / outbox claim) can block on a
   // row lock held by a zombie `idle in transaction` connection from an abruptly-killed pre-deploy

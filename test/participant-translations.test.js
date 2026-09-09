@@ -62,12 +62,18 @@ describe("participant translation resources", () => {
         expect(translations[locale][key].length).toBeGreaterThan(0);
       }
 
-      // Improvement advice keys are dynamic content — rely on key-parity for completeness,
-      // but verify the group is non-empty so it cannot be silently cleared.
-      const adviceKeys = Object.keys(translations[locale]).filter((k) =>
-        k.startsWith("result.improvementAdviceValue."),
+      // #1024: her sto en vakt om at `result.improvementAdviceValue.*` ikke måtte tømmes stille.
+      //
+      // Gruppa er nå fjernet med vilje, sammen med gjettekartet den voktet. Vakta falt derfor
+      // sammen med mekanismen — den skal ikke omgås ved å senke terskelen til null, for da ville
+      // den stått igjen som en test som ikke kan bli rød.
+      //
+      // Grunnen: `buildResponseLanguageInstruction` ber modellen skrive `improvement_advice` på
+      // deltakerens språk, så et engelsk oppslag kan ikke treffe. Teksten vises slik den er lagret.
+      const døde = Object.keys(translations[locale]).filter(
+        (k) => k.startsWith("result.improvementAdviceValue.") || k.startsWith("result.rationaleValue."),
       );
-      expect(adviceKeys.length, `${locale} must have improvement advice content keys`).toBeGreaterThan(0);
+      expect(døde, `${locale}: gjettekartets nøkler skal være borte, ikke delvis fjernet`).toEqual([]);
     }
   });
 });

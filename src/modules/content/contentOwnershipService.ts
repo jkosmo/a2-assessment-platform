@@ -77,12 +77,32 @@ export async function assertContentOwnership(input: {
   const decision = decideOwnershipAccess({ isAdmin, ownerUserIds, actorUserId: input.actorUserId });
   if (decision === "allow") return;
   if (decision === "unowned") {
+    // ⚠️ #1030: MELDINGEN MÅ VÆRE NØYTRAL, fordi denne grenen ikke kan skille to tilstander.
+    //
+    // Vakta kjører som middleware, altså FØR handleren rekker å slå opp om innholdet finnes.
+    // `listContentOwnerUserIds` gir tom liste både for innhold som finnes uten eier OG for
+    // innhold som ikke finnes. En ikke-admin som ba om et slettet kurs fikk derfor beskjed om å
+    // be en administrator legge hen til som eier av noe som ikke er der.
+    //
+    // ⚠️ REKKEFØLGEN ER IKKE ENDRET, MED VILJE. Å sjekke eksistens først ville gitt en presis
+    // melding, men også gratis rekognosering: hvem som helst kunne kartlagt hvilke ID-er som
+    // finnes ved å skille 403 fra 404. Det er nettopp den kartleggingen #943 stengte.
+    //
+    // Meldingen dekker derfor begge tilstander sannferdig, og beholder det brukeren kan gjøre:
+    // finnes innholdet, er svaret at en administrator må sette en eier.
     throw new ForbiddenError(
-      "This content has no owner yet — only an administrator can modify it until an owner is assigned.",
+      "You do not have access to this content, or it does not exist.",
       "content_unowned",
     );
   }
-  throw new ForbiddenError("You can only modify content you own.", "content_ownership");
+  // ⚠️ #1029: «modify» var feil etter #943. Da ble LESING av kursdetalj og klassemedlemmer
+  // eierskapsvaktet også, så den som avvises her har ofte bare forsøkt å se på noe. En setning
+  // som sier «du kan ikke endre» sender hen for å lete etter en redigeringsknapp som ikke er
+  // problemet.
+  //
+  // Dette er fallbacken en API-konsument uten oversettelsestabell får; brukeren ser den
+  // kodebaserte teksten (`errors.api.content_ownership`), som er endret på samme måte.
+  throw new ForbiddenError("Only an owner or an administrator has access to this item.", "content_ownership");
 }
 
 // --- #787 slice 3: owner-set management (used by the owners API). Managing owners is itself an

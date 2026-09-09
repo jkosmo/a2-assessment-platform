@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { DecisionType, SubmissionStatus } from "../../src/db/prismaRuntime.js";
 import type { LlmStructuredAssessment } from "../../src/modules/assessment/llmAssessmentService.js";
 import { warmModuleGraph } from "../support/moduleGraphWarmup.js";
+import { decisionReason, decisionReasonCodes } from "../../src/modules/assessment/decisionReason.js";
 
 const assessmentDecisionCreate = vi.fn();
 const manualReviewCreate = vi.fn();
@@ -24,6 +25,14 @@ vi.mock("../../src/repositories/decisionRepository.js", () => ({
     createManualReview: manualReviewCreate,
     updateSubmissionStatus: submissionUpdate,
   }),
+}));
+
+// #953: vedtaksskrivingen gjerdes nå mot kjøringen som eier jobben. Standard er «vi eier den» slik
+// at de eksisterende testene måler det de alltid har målt; egne tester setter count 0.
+const claimDecisionWrite = vi.fn();
+vi.mock("../../src/modules/assessment/assessmentJobRepository.js", () => ({
+  assessmentJobRepository: { claimDecisionWrite },
+  createAssessmentJobRepository: () => ({ claimDecisionWrite }),
 }));
 
 vi.mock("../../src/services/auditService.js", () => ({
@@ -73,6 +82,8 @@ warmModuleGraph(() => import("../../src/modules/assessment/decisionService.js"))
 
 describe("decision service", () => {
   beforeEach(() => {
+    claimDecisionWrite.mockReset();
+    claimDecisionWrite.mockResolvedValue({ count: 1 });
     assessmentDecisionCreate.mockReset();
     manualReviewCreate.mockReset();
     submissionUpdate.mockReset();
@@ -90,7 +101,9 @@ describe("decision service", () => {
 
     const { createAssessmentDecision } = await import("../../src/modules/assessment/decisionService.js");
 
-    const result = await createAssessmentDecision({
+    const result = await createAssessmentDecision({ jobId: "job-fence", fence: { lockedBy: "worker-test", lockedAt: new Date(0) },
+      answerWordCount: 20,
+      expectedMinWords: 100,
       submissionId: "submission-1",
       userId: "user-1",
       moduleVersionId: "module-version-1",
@@ -135,7 +148,7 @@ describe("decision service", () => {
   it("opens manual review and skips the certification write when manual review is forced", async () => {
     assessmentDecisionCreate.mockResolvedValue({
       id: "decision-2",
-      passFailTotal: true,
+      passFailTotal: false,
       decisionReason: "Escalated for human review.",
     });
     manualReviewCreate.mockResolvedValue({
@@ -146,7 +159,9 @@ describe("decision service", () => {
 
     const { createAssessmentDecision } = await import("../../src/modules/assessment/decisionService.js");
 
-    const result = await createAssessmentDecision({
+    const result = await createAssessmentDecision({ jobId: "job-fence", fence: { lockedBy: "worker-test", lockedAt: new Date(0) },
+      answerWordCount: 20,
+      expectedMinWords: 100,
       submissionId: "submission-2",
       userId: "user-2",
       moduleVersionId: "module-version-2",
@@ -155,13 +170,20 @@ describe("decision service", () => {
       mcqScaledScore: 30,
       mcqPercentScore: 100,
       llmResult: buildLlmResult(),
-      forceManualReviewReason: "Escalated for human review.",
+      forceManualReviewReason: decisionReason(decisionReasonCodes.manualReviewRedFlagOrConfidence, "Escalated for human review."),
     });
 
     expect(assessmentDecisionCreate).toHaveBeenCalledWith(
       expect.objectContaining({
         decisionReason: "Escalated for human review.",
-        passFailTotal: true,
+        // #950: koden MÅ lagres, ikke bare regnes ut. Uten denne påstanden kunne linjen som
+        // sender den til databasen slettes uten at én eneste test ble rød — og da ville hele
+        // oversettelsen vært død for nye avgjørelser.
+        decisionReasonCode: "MANUAL_REVIEW_RED_FLAG_OR_CONFIDENCE",
+        // #948: sto tidligere som `true`. ⚠️ Testen festet feilen som om den var tilsiktet — et
+        // vedtak som baerer «bestaatt» mens innleveringen gaar til sensor. Terskelen passerer
+        // fortsatt; det er nettopp derfor det var farlig.
+        passFailTotal: false,
       }),
     );
     expect(manualReviewCreate).toHaveBeenCalledWith({
@@ -188,13 +210,16 @@ describe("decision service", () => {
     expect(result).toEqual({
       decision: {
         id: "decision-2",
-        passFailTotal: true,
+        passFailTotal: false,
         decisionReason: "Escalated for human review.",
       },
       needsManualReview: true,
     });
   });
 
+  // ⚠️ #1048: denne krever nå at besvarelsen er VESENTLIG for kort. Automatisk stryk er ikke lenger
+  // noe som følger av signalet alene — det må begrunnes med et målbart faktum. Testen sender derfor
+  // 20 ord der 100 var ventet; uten de tallene ville mennesket vunnet, som er den nye hovedregelen.
   it("fails automatically when confidence indicates insufficient evidence without other review triggers", async () => {
     assessmentDecisionCreate.mockResolvedValue({
       id: "decision-3",
@@ -205,7 +230,9 @@ describe("decision service", () => {
 
     const { createAssessmentDecision } = await import("../../src/modules/assessment/decisionService.js");
 
-    const result = await createAssessmentDecision({
+    const result = await createAssessmentDecision({ jobId: "job-fence", fence: { lockedBy: "worker-test", lockedAt: new Date(0) },
+      answerWordCount: 20,
+      expectedMinWords: 100,
       submissionId: "submission-3",
       userId: "user-3",
       moduleVersionId: "module-version-3",
@@ -269,7 +296,9 @@ describe("decision service", () => {
 
     const { createAssessmentDecision } = await import("../../src/modules/assessment/decisionService.js");
 
-    const result = await createAssessmentDecision({
+    const result = await createAssessmentDecision({ jobId: "job-fence", fence: { lockedBy: "worker-test", lockedAt: new Date(0) },
+      answerWordCount: 20,
+      expectedMinWords: 100,
       submissionId: "submission-4",
       userId: "user-4",
       moduleVersionId: "module-version-4",
@@ -315,7 +344,9 @@ describe("decision service", () => {
 
     const { createAssessmentDecision } = await import("../../src/modules/assessment/decisionService.js");
 
-    const result = await createAssessmentDecision({
+    const result = await createAssessmentDecision({ jobId: "job-fence", fence: { lockedBy: "worker-test", lockedAt: new Date(0) },
+      answerWordCount: 20,
+      expectedMinWords: 100,
       submissionId: "submission-4b",
       userId: "user-4b",
       moduleVersionId: "module-version-4b",
@@ -370,7 +401,9 @@ describe("decision service", () => {
 
     const { createAssessmentDecision } = await import("../../src/modules/assessment/decisionService.js");
 
-    const result = await createAssessmentDecision({
+    const result = await createAssessmentDecision({ jobId: "job-fence", fence: { lockedBy: "worker-test", lockedAt: new Date(0) },
+      answerWordCount: 20,
+      expectedMinWords: 100,
       submissionId: "submission-4c",
       userId: "user-4c",
       moduleVersionId: "module-version-4c",
@@ -420,7 +453,9 @@ describe("decision service", () => {
 
     const { createAssessmentDecision } = await import("../../src/modules/assessment/decisionService.js");
 
-    const result = await createAssessmentDecision({
+    const result = await createAssessmentDecision({ jobId: "job-fence", fence: { lockedBy: "worker-test", lockedAt: new Date(0) },
+      answerWordCount: 20,
+      expectedMinWords: 100,
       submissionId: "submission-5",
       userId: "user-5",
       moduleVersionId: "module-version-5",
@@ -468,7 +503,9 @@ describe("decision service", () => {
 
     const { createAssessmentDecision } = await import("../../src/modules/assessment/decisionService.js");
 
-    const result = await createAssessmentDecision({
+    const result = await createAssessmentDecision({ jobId: "job-fence", fence: { lockedBy: "worker-test", lockedAt: new Date(0) },
+      answerWordCount: 20,
+      expectedMinWords: 100,
       submissionId: "submission-6",
       userId: "user-6",
       moduleVersionId: "module-version-6",
@@ -853,10 +890,16 @@ describe("decision service", () => {
 
     it("returns 'Automatic fail by threshold rules.' for a score below threshold with no insufficient signal", async () => {
       const { resolveAssessmentDecision } = await import("../../src/modules/assessment/decisionService.js");
-      // Default sum=14: recomputedPractical=49; mcqScaled=20 → total=49+20=69 < 70; confidence has no patterns
+      // ⚠️ Sto på total=69 — ett poeng under grensa. Etter at standard-grensebåndet (10 poeng under
+      // terskelen) ble innført, er det nettopp et tilfelle som skal til SENSOR, ikke strykes
+      // automatisk. Testen festet altså den gamle policyen.
+      //
+      // Den måler fortsatt det navnet sitt sier — automatisk stryk under terskelen — men med et
+      // resultat som ligger UNDER båndet. Grensetilfellet er dekket av egne tester lenger opp.
+      // Default sum=14: recomputedPractical=49; mcqScaled=0 → total=49 < 60.
       const result = resolveAssessmentDecision({
-        mcqScaledScore: 20,
-        mcqPercentScore: 67,
+        mcqScaledScore: 0,
+        mcqPercentScore: 0,
         llmResult: buildLlmResult({
           evidence_sufficiency: "sufficient",
           recommended_outcome: "fail",
@@ -866,7 +909,7 @@ describe("decision service", () => {
         }),
         assessmentPolicy: null,
       });
-      expect(result.totalScore).toBe(69);
+      expect(result.totalScore).toBe(49);
       expect(result.autoFailForInsufficientEvidence).toBe(false);
       expect(result.needsManualReview).toBe(false);
       expect(result.decisionReason).toBe("Automatic fail by threshold rules.");
@@ -878,6 +921,11 @@ describe("decision service", () => {
       const result = resolveAssessmentDecision({
         mcqScaledScore: 0,
         mcqPercentScore: 0,
+        // ⚠️ #1048: automatisk stryk krever nå et målbart faktum — at besvarelsen er vesentlig
+        // kortere enn ventet. 15 av 100 ord. Uten tallene ville mennesket vunnet, som er den nye
+        // hovedregelen, og denne begrunnelsen ville aldri oppstått.
+        answerWordCount: 15,
+        expectedMinWords: 100,
         llmResult: buildLlmResult({
           rubric_scores: { relevance_for_case: 0, quality_and_utility: 0, iteration_and_improvement: 0, human_quality_assurance: 0, responsible_use: 0 },
           rubric_total: 0,
@@ -907,7 +955,9 @@ describe("decision service", () => {
 
     const { createAssessmentDecision } = await import("../../src/modules/assessment/decisionService.js");
 
-    const result = await createAssessmentDecision({
+    const result = await createAssessmentDecision({ jobId: "job-fence", fence: { lockedBy: "worker-test", lockedAt: new Date(0) },
+      answerWordCount: 20,
+      expectedMinWords: 100,
       submissionId: "submission-7",
       userId: "user-7",
       moduleVersionId: "module-version-7",
@@ -938,6 +988,273 @@ describe("decision service", () => {
       }),
     );
     expect(result.needsManualReview).toBe(false);
+  });
+  // ── #948: invarianten — ingen «bestått» mens sensor ikke har sett saken ────────────────────────
+  //
+  // ⚠️ Begge disse har en TERSKEL SOM PASSERER. Det er hele poenget: uten det ville
+  // `passFailTotal` vært false av en helt annen grunn, og testen ville vært grønn uansett hva
+  // linja i kilden gjorde. En test som ikke kan bli rød måler ingenting.
+  //
+  // Leserne er tolv, og de tolket flagget ulikt: deltakerens modulkort, kalibreringsrapporten,
+  // kursrapporten, sertifiseringen. Derfor står vakta i kilden og ikke hos dem.
+
+  it("#948: en uenig sum gir ikke bestått, selv når terskelen passerer", async () => {
+    assessmentDecisionCreate.mockResolvedValue({
+      id: "decision-948a",
+      passFailTotal: false,
+      decisionReason: "Routed to manual review: rubric totals are inconsistent.",
+    });
+    manualReviewCreate.mockResolvedValue({ id: "review-948a", triggerReason: "totals" });
+    submissionUpdate.mockResolvedValue({ id: "submission-948a" });
+
+    const { createAssessmentDecision } = await import("../../src/modules/assessment/decisionService.js");
+
+    await createAssessmentDecision({ jobId: "job-fence", fence: { lockedBy: "worker-test", lockedAt: new Date(0) },
+      submissionId: "submission-948a",
+      userId: "user-948a",
+      moduleVersionId: "module-version-1",
+      rubricVersionId: "rubric-version-1",
+      promptTemplateVersionId: "prompt-version-1",
+      mcqScaledScore: 30,
+      mcqPercentScore: 100,
+      // Kriteriene summerer til 14, men modellen rapporterer 15. Poengene regnes fra den
+      // GJENBEREGNEDE summen, så terskelen passerer fortsatt — og det er nettopp det farlige.
+      llmResult: buildLlmResult({ rubric_total: 15 }),
+    });
+
+    expect(assessmentDecisionCreate).toHaveBeenCalledWith(
+      expect.objectContaining({ totalScore: 79, passFailTotal: false }),
+    );
+    expect(submissionUpdate).toHaveBeenCalledWith("submission-948a", SubmissionStatus.UNDER_REVIEW);
+    expect(upsertCertificationStatusFromDecision).not.toHaveBeenCalled();
+  });
+
+  it("#948: en modell som ber om menneskeblikk gir ikke bestått, selv når terskelen passerer", async () => {
+    assessmentDecisionCreate.mockResolvedValue({
+      id: "decision-948b",
+      passFailTotal: false,
+      decisionReason: "Routed to manual review.",
+    });
+    manualReviewCreate.mockResolvedValue({ id: "review-948b", triggerReason: "llm" });
+    submissionUpdate.mockResolvedValue({ id: "submission-948b" });
+
+    const { createAssessmentDecision } = await import("../../src/modules/assessment/decisionService.js");
+
+    await createAssessmentDecision({ jobId: "job-fence", fence: { lockedBy: "worker-test", lockedAt: new Date(0) },
+      submissionId: "submission-948b",
+      userId: "user-948b",
+      moduleVersionId: "module-version-1",
+      rubricVersionId: "rubric-version-1",
+      promptTemplateVersionId: "prompt-version-1",
+      mcqScaledScore: 30,
+      mcqPercentScore: 100,
+      llmResult: buildLlmResult({ manual_review_recommended: true }),
+    });
+
+    expect(assessmentDecisionCreate).toHaveBeenCalledWith(
+      expect.objectContaining({ totalScore: 79, passFailTotal: false }),
+    );
+    expect(submissionUpdate).toHaveBeenCalledWith("submission-948b", SubmissionStatus.UNDER_REVIEW);
+    expect(upsertCertificationStatusFromDecision).not.toHaveBeenCalled();
+  });
+
+  // Motprøven. Uten den ville «sett passFailTotal til false alltid» også vært grønt — og da hadde
+  // ingen kunnet bestå noe.
+  it("#948: et rent auto-bestått vedtak er fortsatt bestått", async () => {
+    assessmentDecisionCreate.mockResolvedValue({
+      id: "decision-948c",
+      passFailTotal: true,
+      decisionReason: "Automatic pass by threshold rules.",
+    });
+    submissionUpdate.mockResolvedValue({ id: "submission-948c" });
+
+    const { createAssessmentDecision } = await import("../../src/modules/assessment/decisionService.js");
+
+    await createAssessmentDecision({ jobId: "job-fence", fence: { lockedBy: "worker-test", lockedAt: new Date(0) },
+      submissionId: "submission-948c",
+      userId: "user-948c",
+      moduleVersionId: "module-version-1",
+      rubricVersionId: "rubric-version-1",
+      promptTemplateVersionId: "prompt-version-1",
+      mcqScaledScore: 30,
+      mcqPercentScore: 100,
+      llmResult: buildLlmResult(),
+    });
+
+    expect(assessmentDecisionCreate).toHaveBeenCalledWith(
+      expect.objectContaining({ passFailTotal: true }),
+    );
+    expect(manualReviewCreate).not.toHaveBeenCalled();
+    expect(submissionUpdate).toHaveBeenCalledWith("submission-948c", SubmissionStatus.COMPLETED);
+  });
+
+  // ── Grensevinduet, nå med en standard (produkteier 2026-08-28) ─────────────────────────────────
+  //
+  // Utløseren var et ekte skjermbilde fra stage: «Ikkje bestått — 66,67 poeng. Kravet var 70.»
+  // ⚠️ Funksjonen fantes fra #464, men bare per modulversjon og uten standard. Målt på stage: 3 av
+  // 101 modulversjoner hadde et vindu — og de tre sto på 0-90, altså «vurder alt manuelt». Vakta
+  // hadde dermed aldri vært i drift noe sted.
+  //
+  // 60-70 er bevisst vidt: en kandidat som blir feilaktig strøket er en dyrere feil enn en som blir
+  // feilaktig bestått.
+
+  it("standardvinduet ruter 66,67 til sensor i stedet for å stryke automatisk", async () => {
+    assessmentDecisionCreate.mockResolvedValue({
+      id: "decision-bl1",
+      passFailTotal: false,
+      decisionReason: "Routed to manual review: borderline result.",
+    });
+    manualReviewCreate.mockResolvedValue({ id: "review-bl1", triggerReason: "borderline" });
+    submissionUpdate.mockResolvedValue({ id: "submission-bl1" });
+
+    const { createAssessmentDecision } = await import("../../src/modules/assessment/decisionService.js");
+
+    await createAssessmentDecision({ jobId: "job-fence", fence: { lockedBy: "worker-test", lockedAt: new Date(0) },
+      submissionId: "submission-bl1",
+      userId: "user-bl1",
+      moduleVersionId: "module-version-1",
+      rubricVersionId: "rubric-version-1",
+      promptTemplateVersionId: "prompt-version-1",
+      // 10/20 rubrikk = 35 praktisk, + 20 MCQ (66,7 %) ⇒ 55. Under 70, innenfor 60-70? Nei — vi
+      // trenger et tall MELLOM 60 og 70. 12/20 = 42 praktisk + 24,67 MCQ ⇒ 66,67.
+      mcqScaledScore: 24.67,
+      mcqPercentScore: 82,
+      llmResult: buildLlmResult({
+        rubric_scores: { a: 3, b: 3, c: 2, d: 2, e: 2 },
+        rubric_total: 12,
+      }),
+      // Ingen modulpolicy ⇒ standarden fra regelfila skal gjelde.
+    });
+
+    const written = assessmentDecisionCreate.mock.calls[0][0] as { totalScore: number; passFailTotal: boolean };
+    expect(written.totalScore).toBeGreaterThanOrEqual(60);
+    expect(written.totalScore).toBeLessThanOrEqual(70);
+    expect(written.passFailTotal).toBe(false);
+    // ⚠️ Kjernen: den skal til SENSOR, ikke settes som automatisk stryk.
+    expect(manualReviewCreate).toHaveBeenCalled();
+    expect(submissionUpdate).toHaveBeenCalledWith("submission-bl1", SubmissionStatus.UNDER_REVIEW);
+    expect(upsertCertificationStatusFromDecision).not.toHaveBeenCalled();
+  });
+
+  // Motprøven. Uten den ville «rut alt til sensor» også vært grønt — og det er nøyaktig feilen de
+  // tre 0-90-modulene på stage gjør.
+  it("et resultat godt under vinduet strykes fortsatt automatisk", async () => {
+    assessmentDecisionCreate.mockResolvedValue({
+      id: "decision-bl2",
+      passFailTotal: false,
+      decisionReason: "Automatic fail by threshold rules.",
+    });
+    submissionUpdate.mockResolvedValue({ id: "submission-bl2" });
+
+    const { createAssessmentDecision } = await import("../../src/modules/assessment/decisionService.js");
+
+    await createAssessmentDecision({ jobId: "job-fence", fence: { lockedBy: "worker-test", lockedAt: new Date(0) },
+      submissionId: "submission-bl2",
+      userId: "user-bl2",
+      moduleVersionId: "module-version-1",
+      rubricVersionId: "rubric-version-1",
+      promptTemplateVersionId: "prompt-version-1",
+      mcqScaledScore: 0,
+      mcqPercentScore: 0,
+      llmResult: buildLlmResult({ rubric_scores: { a: 1, b: 1, c: 1, d: 1, e: 1 }, rubric_total: 5 }),
+    });
+
+    const written = assessmentDecisionCreate.mock.calls[0][0] as { totalScore: number };
+    expect(written.totalScore).toBeLessThan(60);
+    expect(manualReviewCreate).not.toHaveBeenCalled();
+    expect(submissionUpdate).toHaveBeenCalledWith("submission-bl2", SubmissionStatus.COMPLETED);
+  });
+
+  // Modulens eget vindu skal fortsatt vinne — standarden er en bunnplanke, ikke en overstyring.
+  it("modulens eget vindu vinner over standarden", async () => {
+    assessmentDecisionCreate.mockResolvedValue({ id: "decision-bl3", passFailTotal: false, decisionReason: "x" });
+    submissionUpdate.mockResolvedValue({ id: "submission-bl3" });
+
+    const { createAssessmentDecision } = await import("../../src/modules/assessment/decisionService.js");
+
+    await createAssessmentDecision({ jobId: "job-fence", fence: { lockedBy: "worker-test", lockedAt: new Date(0) },
+      submissionId: "submission-bl3",
+      userId: "user-bl3",
+      moduleVersionId: "module-version-1",
+      rubricVersionId: "rubric-version-1",
+      promptTemplateVersionId: "prompt-version-1",
+      mcqScaledScore: 24.67,
+      mcqPercentScore: 82,
+      llmResult: buildLlmResult({ rubric_scores: { a: 3, b: 3, c: 2, d: 2, e: 2 }, rubric_total: 12 }),
+      // Et smalt vindu som IKKE dekker 66,67 ⇒ ingen manuell vurdering. Standardbåndet (60-70)
+      // ville fanget den; modulens eget vindu skal vinne.
+      assessmentPolicy: { passRules: { borderlineWindow: { min: 69, max: 69.5 } } },
+    });
+
+    expect(manualReviewCreate).not.toHaveBeenCalled();
+    expect(submissionUpdate).toHaveBeenCalledWith("submission-bl3", SubmissionStatus.COMPLETED);
+  });
+
+  // Det skarpeste tilfellet: ETT poeng under grensa. En eksisterende test festet dette som
+  // «automatisk stryk» — den er endret, og dette er påstanden som erstatter den.
+  it("ett poeng under terskelen går til sensor, ikke automatisk stryk", async () => {
+    const { resolveAssessmentDecision } = await import("../../src/modules/assessment/decisionService.js");
+    const result = resolveAssessmentDecision({
+      mcqScaledScore: 20,
+      mcqPercentScore: 67,
+      llmResult: buildLlmResult({
+        evidence_sufficiency: "sufficient",
+        recommended_outcome: "fail",
+        manual_review_recommended: false,
+        manual_review_reason_code: "none",
+        confidence_note: "High confidence; score falls below the pass threshold.",
+      }),
+      assessmentPolicy: null,
+    });
+    expect(result.totalScore).toBe(69);
+    expect(result.needsManualReview).toBe(true);
+    expect(result.passFailTotal).toBe(false);
+  });
+
+  // Og motstykket: NØYAKTIG på terskelen er bestått, ikke et grensetilfelle. Uten den åpne øvre
+  // grensa ville hver eneste akkurat-bestått blitt sendt til sensor.
+  it("nøyaktig på terskelen er bestått, ikke grensetilfelle", async () => {
+    const { resolveAssessmentDecision } = await import("../../src/modules/assessment/decisionService.js");
+    const result = resolveAssessmentDecision({
+      mcqScaledScore: 21,
+      mcqPercentScore: 70,
+      llmResult: buildLlmResult(),
+      assessmentPolicy: null,
+    });
+    expect(result.totalScore).toBe(70);
+    expect(result.needsManualReview).toBe(false);
+    expect(result.passFailTotal).toBe(true);
+  });
+
+  // ⚠️ Selve «relativt»-poenget, som QA-porten pekte på at ingen test bandt.
+  //
+  // Modulen har SIN EGEN terskel på 50. Standardbåndet skal da dekke 40-50 — ikke 60-70. Et fast
+  // tallpar ville lagt hele vinduet OVER bestått-grensa for denne modulen, og da ville hver
+  // bestått i 60-70 gått til sensor mens det tiltenkte båndet ble strøket automatisk.
+  it("standardbåndet følger modulens EGEN terskel, ikke den globale", async () => {
+    const { resolveAssessmentDecision } = await import("../../src/modules/assessment/decisionService.js");
+
+    // 45 poeng: under modulens terskel (50), innenfor båndet 40-50 ⇒ sensor.
+    const inBand = resolveAssessmentDecision({
+      mcqScaledScore: 0,
+      mcqPercentScore: 0,
+      llmResult: buildLlmResult({ rubric_scores: { a: 3, b: 3, c: 3, d: 2, e: 2 }, rubric_total: 13 }),
+      assessmentPolicy: { passRules: { totalMin: 50 } },
+    });
+    expect(inBand.totalScore).toBeGreaterThanOrEqual(40);
+    expect(inBand.totalScore).toBeLessThan(50);
+    expect(inBand.needsManualReview).toBe(true);
+
+    // 65 poeng: over modulens terskel ⇒ bestått. Ville vært INNE i et fast 60-70-vindu.
+    const above = resolveAssessmentDecision({
+      mcqScaledScore: 20,
+      mcqPercentScore: 67,
+      llmResult: buildLlmResult(),
+      assessmentPolicy: { passRules: { totalMin: 50 } },
+    });
+    expect(above.totalScore).toBeGreaterThan(50);
+    expect(above.needsManualReview).toBe(false);
+    expect(above.passFailTotal).toBe(true);
   });
 });
 
@@ -1005,4 +1322,69 @@ describe("resolveAssessmentDecision — FREETEXT_ONLY (#578)", () => {
     });
     expect(resolved.needsManualReview).toBe(true);
   });
+});
+
+// ── #950: den vanligste veien gjennom systemet ──────────────────────────────────────────────────
+//
+// ⚠️ En ren flervalgsmodul er der de fleste avgjørelsene blir til, og grunnen har TALL i seg — den
+// kunne aldri oversettes ved tekstoppslag. QA-porten påpekte at ingenting pinnet at koden faktisk
+// blir SKREVET: sletter man feltet i skrivekallet, regnes koden fortsatt ut, alt er grønt, og
+// oversettelsen er død for alle nye avgjørelser uten at noe sier fra.
+describe("createMcqOnlyDecision — grunnkoden lagres, ikke bare regnes ut", () => {
+  beforeEach(() => {
+    assessmentDecisionCreate.mockReset();
+    assessmentDecisionCreate.mockResolvedValue({ id: "decision-mcq", decisionReason: "x", passFailTotal: true });
+    submissionUpdate.mockReset();
+    recordAuditEvent.mockReset();
+    upsertCertificationStatusFromDecision.mockReset();
+    claimDecisionWrite.mockReset();
+    claimDecisionWrite.mockResolvedValue({ count: 1 });
+  });
+
+  it("skriver koden OG tallene setningen trenger", async () => {
+    const { createMcqOnlyDecision } = await import("../../src/modules/assessment/decisionService.js");
+
+    await createMcqOnlyDecision({
+      jobId: "job-mcq",
+      fence: { lockedBy: "worker-test", lockedAt: new Date(0) },
+      submissionId: "submission-mcq",
+      userId: "user-1",
+      moduleVersionId: "module-version-1",
+      mcqScaledScore: 30,
+      mcqPercentScore: 100,
+    });
+
+    const written = assessmentDecisionCreate.mock.calls[0][0] as {
+      decisionReasonCode: string;
+      decisionReasonParams: string | null;
+    };
+
+    expect(written.decisionReasonCode).toBe("MCQ_ONLY_PASS");
+    // Tallene lagres som JSON. Påstanden er på VERDIENE, ikke på at feltet finnes — et tomt
+    // objekt ville bestått en ren eksistenssjekk og gitt deltakeren «{scorePercent}» på skjermen.
+    expect(JSON.parse(written.decisionReasonParams ?? "null")).toEqual({ scorePercent: 100, minPercent: 70 });
+  });
+
+  it("skriver strykkoden med de samme tallene når kravet ikke er nådd", async () => {
+    const { createMcqOnlyDecision } = await import("../../src/modules/assessment/decisionService.js");
+
+    await createMcqOnlyDecision({
+      jobId: "job-mcq",
+      fence: { lockedBy: "worker-test", lockedAt: new Date(0) },
+      submissionId: "submission-mcq",
+      userId: "user-1",
+      moduleVersionId: "module-version-1",
+      mcqScaledScore: 18,
+      mcqPercentScore: 60,
+    });
+
+    const written = assessmentDecisionCreate.mock.calls[0][0] as {
+      decisionReasonCode: string;
+      decisionReasonParams: string | null;
+    };
+
+    expect(written.decisionReasonCode).toBe("MCQ_ONLY_FAIL");
+    expect(JSON.parse(written.decisionReasonParams ?? "null")).toEqual({ scorePercent: 60, minPercent: 70 });
+  });
+
 });

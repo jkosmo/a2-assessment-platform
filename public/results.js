@@ -1,4 +1,9 @@
 import { renderWorkspaceNavigationWithProfile } from "/static/workspace-nav.js";
+import { applyIdentityDefaults as delApplyIdentityDefaults } from "/static/identity-defaults.js";
+import { runWithBusyButton } from "/static/busy-button.js";
+import { showToast } from "/static/toast.js";
+import { lagLokalisertRessurs } from "/static/localized-resource.js";
+import { describeApiError } from "/static/api-error.js";
 import { createDateTimeFormatter } from "/static/format-display.js";
 const formatDateTime = createDateTimeFormatter(() => currentLocale, "—");
 import { resolveInitialLocale } from "/static/i18n-locale.js";
@@ -6,7 +11,7 @@ import { escapeHtml as escapeHtmlR } from "/static/html-escape.js";
 import { localeLabels, supportedLocales, translations } from "/static/i18n/results-translations.js";
 import { apiFetch, buildConsoleHeaders, getConsoleConfig, getAccessToken, fetchQueueCounts, applyNavReviewBadge } from "/static/api-client.js";
 import { initConsentGuard } from "/static/consent-guard.js";
-import { hideLoading, showLoading } from "/static/loading.js";
+import { hideLoading, showEmpty, showLoading } from "/static/loading.js";
 import {
   findMatchingPreset,
   resolveRoleSwitchState,
@@ -65,11 +70,16 @@ function tf(key, values = {}) {
   return t(key).replace(/\{(\w+)\}/g, (_, token) => String(values[token] ?? ""));
 }
 
-function setMessage(text, type = "info") {
-  outputStatus.textContent = text;
-  outputStatus.className = `small field-${type}`;
-  outputStatus.dataset.hasContent = text ? "1" : "";
-}
+// #1046: `setMessage` er borte. Den var en LOKAL kopi — `cohort-status.js` hadde en nesten
+// identisk — og den skrev til et felt som ble stående til noe annet overskrev det.
+//
+// ⚠️ Produkteierens innvending, og den er riktig: inline meldinger TAR PLASS, og plassen
+// akkumulerer. En handling i grensesnittet har allerede en permanent virkning — feltet oppdateres,
+// tabellen fylles. Å skrive «Resultater lastet» ved siden av en tabell som nettopp ble fylt, er å
+// si det samme to ganger, og det ene av dem blir stående.
+//
+// Toast markerer at noe SKJEDDE, og forsvinner. Feil og advarsler auto-lukkes ikke i det hele tatt
+// (`toast.js`, #601), så en feil brukeren må handle på blir stående til den bekreftes.
 
 function log(data) {
   output.textContent = typeof data === "string" ? data : JSON.stringify(data, null, 2);
@@ -114,15 +124,13 @@ function formatScore(value) {
   }).format(value);
 }
 
-function localizeTitle(value) {
-  if (!value) return "";
-  try {
-    const parsed = JSON.parse(value);
-    return parsed[currentLocale] ?? parsed["en-GB"] ?? value;
-  } catch {
-    return value;
-  }
-}
+// #1027: `localizeTitle` er borte. Den tolket lagringsformatet på klienten, med sin egen
+// reservekjede — den samme klassen som ga #1022 to ulike svar på «hvilket språk viser vi».
+//
+// Alle tre feltene den ble brukt på kommer nå ferdig lokalisert fra serveren:
+// `moduleTitle` fra completionReport.ts (fire steder) og `courseTitle` fra courseReport.ts.
+// Å beholde parseren ville betydd at et lagringsformat som slipper gjennom, blir stille reparert
+// på klienten med en annen regel enn serverens — og da ser ingen at serveren tok feil.
 
 function renderPassRates(rows) {
   passRateGrid.innerHTML = "";
@@ -139,7 +147,7 @@ function renderPassRates(rows) {
 
     const title = document.createElement("div");
     title.className = "module-title";
-    title.textContent = localizeTitle(row.moduleTitle) || row.moduleId;
+    title.textContent = row.moduleTitle || row.moduleId;
 
     const rateValue = document.createElement("div");
     rateValue.className = "rate-value";
@@ -169,15 +177,19 @@ function renderCompletion(passRatesRows, completionRows) {
   const rows = completionRows ?? [];
   if (selectedModuleRow && !rows.some((row) => row.moduleId === selectedModuleRow.moduleId)) {
     selectedModuleRow = null;
+  } else if (selectedModuleRow) {
+    // ⚠️ #1027: den valgte raden bar tittelen fra det øyeblikket den ble KLIKKET. Etter et
+    // språkbytte ga det blandet språk i detaljlinja: «1 learners for Hendelseshåndtering».
+    //
+    // Fikset her, i den ene renderingen, i stedet for i de to stedene som SKRIVER linja. Å lappe
+    // leserne ville betydd at neste leser av `selectedModuleRow.moduleTitle` arvet feilen på nytt.
+    const fresh = rows.find((row) => row.moduleId === selectedModuleRow.moduleId);
+    if (fresh) selectedModuleRow.moduleTitle = fresh.moduleTitle || selectedModuleRow.moduleId;
   }
 
   if (rows.length === 0) {
-    const tr = document.createElement("tr");
-    const td = document.createElement("td");
-    td.colSpan = 8;
-    td.textContent = t("results.completion.empty");
-    tr.appendChild(td);
-    completionBody.appendChild(tr);
+    // #1046: den delte tomtilstanden — samme stil som resten av flatene.
+    showEmpty(completionBody, t("results.completion.empty"), { columns: 8 });
     return;
   }
 
@@ -191,7 +203,7 @@ function renderCompletion(passRatesRows, completionRows) {
     const activateRow = async () => {
       selectedModuleRow = {
         moduleId: row.moduleId,
-        moduleTitle: localizeTitle(row.moduleTitle) || row.moduleId,
+        moduleTitle: row.moduleTitle || row.moduleId,
       };
       renderCompletion(passRatesRows, completionRows);
       await loadModuleLearners();
@@ -211,7 +223,7 @@ function renderCompletion(passRatesRows, completionRows) {
     const titleButton = document.createElement("button");
     titleButton.type = "button";
     titleButton.className = "report-row-button";
-    titleButton.textContent = localizeTitle(row.moduleTitle) || row.moduleId;
+    titleButton.textContent = row.moduleTitle || row.moduleId;
     titleButton.setAttribute("aria-pressed", selectedModuleRow?.moduleId === row.moduleId ? "true" : "false");
     titleButton.addEventListener("click", (event) => {
       event.stopPropagation();
@@ -240,14 +252,11 @@ function renderCompletion(passRatesRows, completionRows) {
 function renderParticipants(rows) {
   participantBody.innerHTML = "";
   if (!rows || rows.length === 0) {
-    const tr = document.createElement("tr");
-    const td = document.createElement("td");
-    td.colSpan = 6;
-    td.textContent = selectedModuleRow
-      ? t("results.participants.empty")
-      : t("results.participants.placeholder");
-    tr.appendChild(td);
-    participantBody.appendChild(tr);
+    showEmpty(
+      participantBody,
+      selectedModuleRow ? t("results.participants.empty") : t("results.participants.placeholder"),
+      { columns: 6 },
+    );
     return;
   }
   for (const row of rows) {
@@ -264,17 +273,31 @@ function renderParticipants(rows) {
   }
 }
 
-async function loadResults() {
-  const params = buildFilterParams();
-  showLoading(loadResultsButton);
-  setMessage("");
-  try {
-    const [passRatesData, completionData, courseData] = await Promise.all([
+// #1042: rapportene hentes gjennom den delte ressursen, som eier kappløpsvakta, enkeltflyten og
+// regelen om at ingenting hentes før noe faktisk ER hentet.
+//
+// ⚠️ Den håndlagde utgaven her var en av tre ulike dybder på samme mønster (#1027): køene hadde
+// alt, denne hadde alt, profilsiden manglet enkeltflyt. Det er den ujevnheten modulen fjerner.
+const rapporter = lagLokalisertRessurs({
+  hentSpråk: () => currentLocale,
+  hent: () => {
+    const params = buildFilterParams();
+    // ⚠️ #1046: her sto `showLoading(loadResultsButton)`. Den erstatter elementets innhold med
+    // skjelettlinjer, og `hideLoading` rydder bare klasser — den skriver ikke innholdet tilbake.
+    // Teksten på knappen forsvant derfor PERMANENT ved første klikk, helt til et språkbytte kalte
+    // `applyTranslations()`.
+    //
+    // Feilen har ligget der siden mars og ble funnet av produkteier, ikke av en test.
+    //
+    // `showLoading` er for BEHOLDERE som skal fylles. En knapp har allerede innholdet sitt og skal
+    // bare markeres som opptatt — det er `runWithBusyButton` sin jobb, og den brukes fra lytteren.
+    return Promise.all([
       apiFetch(`/api/reports/pass-rates?${params}`, headers),
       apiFetch(`/api/reports/completion?${params}`, headers),
       apiFetch(`/api/reports/courses?${params}`, headers),
     ]);
-
+  },
+  tegn: async ([passRatesData, completionData, courseData]) => {
     renderPassRates(passRatesData.rows);
     renderCompletion(passRatesData.rows, completionData.rows);
     renderCourseReport(courseData.rows ?? []);
@@ -282,14 +305,17 @@ async function loadResults() {
       selectedModuleRow ? loadModuleLearners() : Promise.resolve(renderParticipants([])),
       selectedCourseRow ? loadCourseLearners() : Promise.resolve(renderCourseLearners([])),
     ]);
-    resultsMeta.textContent = t("results.filters.loaded");
     log({ passRates: passRatesData, completion: completionData, courses: courseData });
-  } catch (error) {
-    setMessage(error.message ?? "Error loading results.", "warning");
+  },
+  påFeil: (error) => {
+    // #983: reserven var hardkodet engelsk, og hovedveien viste serverens engelske setning.
+    showToast(describeApiError(error, t).headline, "error");
     log(error);
-  } finally {
-    hideLoading(loadResultsButton);
-  }
+  },
+});
+
+async function loadResults() {
+  await rapporter.last();
 }
 
 async function exportCsv(type) {
@@ -311,7 +337,7 @@ async function exportCsv(type) {
     a.click();
     URL.revokeObjectURL(a.href);
   } catch (error) {
-    setMessage(error.message ?? "Export failed.", "warning");
+    showToast(describeApiError(error, t).headline, "error");
   }
 }
 
@@ -320,6 +346,16 @@ function setLocale(locale) {
   localStorage.setItem("participant.locale", currentLocale);
   document.documentElement.lang = currentLocale;
   applyTranslations();
+
+  // ⚠️ #1027: serveren baker inn språket når rapporten HENTES. Uten en ny henting oversetter
+  // `applyTranslations` etikettene, mens modul- og kurstitlene i tabellen blir stående på det
+  // forrige språket — engelsk side, norske titler.
+  //
+  // Nøyaktig samme feil som i vurderingskøene. Den fulgte med flyttingen av ansvaret til serveren:
+  // klientparseren kjørte per rendering, så byttet slo inn av seg selv. Det gjør det ikke lenger.
+  //
+  // ⚠️ Hentingen ligger IKKE her. `setLocale` kalles også ved oppstart, og en bivirkning der
+  // sendte kall av gårde før roller og token fantes — se review.js. `setLocale` setter språk.
 }
 
 function applyTranslations() {
@@ -390,17 +426,8 @@ function renderWorkspaceNavigation() {
 }
 
 function applyIdentityDefaults() {
-  const defaults = participantRuntimeConfig?.identityDefaults?.reportReader;
-  if (!defaults) return;
-  const userId = document.getElementById("userId");
-  const email = document.getElementById("email");
-  const name = document.getElementById("name");
-  const department = document.getElementById("department");
-  if (userId) userId.value = defaults.userId ?? "";
-  if (email) email.value = defaults.email ?? "";
-  if (name) name.value = defaults.name ?? "";
-  if (department) department.value = defaults.department ?? "";
-  rolesInput.value = Array.isArray(defaults.roles) ? defaults.roles.join(",") : "";
+  // #1046: se `/static/identity-defaults.js`. HVILKEN rolle som leses er flatens eget valg.
+  delApplyIdentityDefaults(participantRuntimeConfig?.identityDefaults?.reportReader , rolesInput);
 }
 
 async function loadVersion() {
@@ -449,7 +476,11 @@ async function loadParticipantConsoleConfig() {
 }
 
 // Event listeners
-localeSelect.addEventListener("change", () => setLocale(localeSelect.value));
+localeSelect.addEventListener("change", () => {
+  setLocale(localeSelect.value);
+  // Bare når noe faktisk ER hentet — før første «Last resultater» finnes det ingenting å oppdatere.
+  rapporter.oppdaterVedSpråkbytte();
+});
 
 mockRolePresetSelect.addEventListener("change", () => {
   if (!mockRolePresetSelect.value || !roleSwitchState.enabled) return;
@@ -463,7 +494,7 @@ rolesInput.addEventListener("input", () => {
   renderWorkspaceNavigation();
 });
 
-loadResultsButton.addEventListener("click", () => loadResults());
+loadResultsButton.addEventListener("click", () => runWithBusyButton(loadResultsButton, () => loadResults()));
 exportCompletionButton.addEventListener("click", () => exportCsv("completion"));
 exportPassRatesButton.addEventListener("click", () => exportCsv("pass-rates"));
 // v1.2.24 (#358): scoped learner-level eksporter — bruker samme exportCsv-helper.
@@ -492,6 +523,10 @@ function renderCourseReport(rows) {
   courseReportBody.innerHTML = "";
   if (selectedCourseRow && Array.isArray(rows) && !rows.some((row) => row.courseId === selectedCourseRow.courseId)) {
     selectedCourseRow = null;
+  } else if (selectedCourseRow && Array.isArray(rows)) {
+    // #1027: se `renderCompletion` — samme cache, samme blandede språk i detaljlinja.
+    const fresh = rows.find((row) => row.courseId === selectedCourseRow.courseId);
+    if (fresh) selectedCourseRow.courseTitle = fresh.courseTitle || selectedCourseRow.courseId;
   }
   if (!Array.isArray(rows) || rows.length === 0) {
     const tr = document.createElement("tr");
@@ -567,7 +602,7 @@ function renderCourseLearners(rows) {
   courseLearnerBody.innerHTML = "";
   if (!Array.isArray(rows) || rows.length === 0) {
     const tr = document.createElement("tr");
-    tr.innerHTML = `<td colspan="7" class="small">${escapeHtmlR(selectedCourseRow ? t("results.courses.detail.empty") : t("results.courses.placeholder"))}</td>`;
+    tr.innerHTML = `<td colspan="8" class="small">${escapeHtmlR(selectedCourseRow ? t("results.courses.detail.empty") : t("results.courses.placeholder"))}</td>`;
     courseLearnerBody.appendChild(tr);
     return;
   }
@@ -580,6 +615,7 @@ function renderCourseLearners(rows) {
       <td>${escapeHtmlR(row.participantDepartment ?? "—")}</td>
       <td>${escapeHtmlR(formatStatus(row.status))}</td>
       <td>${escapeHtmlR(`${row.completedModules}/${row.totalModules}`)}</td>
+      <td>${escapeHtmlR(`${row.readSections ?? 0}/${row.totalSections ?? 0}`)}</td>
       <td>${escapeHtmlR(formatScore(row.score))}</td>
       <td>${escapeHtmlR(formatDateTime(row.latestActivityAt))}</td>
     `;
@@ -604,7 +640,7 @@ async function loadModuleLearners() {
     });
     renderParticipants(data.rows ?? []);
   } catch (error) {
-    moduleDetailMeta.textContent = error.message ?? t("results.participants.empty");
+    moduleDetailMeta.textContent = describeApiError(error, t).headline;
     renderParticipants([]);
   }
 }
@@ -626,7 +662,7 @@ async function loadCourseLearners() {
     });
     renderCourseLearners(data.rows ?? []);
   } catch (error) {
-    courseDetailMeta.textContent = error.message ?? t("results.courses.detail.empty");
+    courseDetailMeta.textContent = describeApiError(error, t).headline;
     renderCourseLearners([]);
   }
 }

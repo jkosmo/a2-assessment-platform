@@ -21,7 +21,24 @@ type CreateLlmEvaluationInput = {
   confidenceNote: string;
 };
 
-type AssessmentJobRepositoryClient = Pick<typeof prisma, "assessmentJob" | "submission" | "lLMEvaluation">;
+type AssessmentJobRepositoryClient = Pick<typeof prisma, "assessmentJob" | "submission" | "lLMEvaluation" | "assessmentDecision">;
+
+// #953: «venter fortsatt på et menneske» — ett sted, brukt av både lista og telleren, så de to
+// ikke kan komme i utakt. Ingen vedtak = ingen dom er felt; ingen aktiv jobb = ingen er på saken.
+// ⚠️ Ikke `as const` på lista: det gir en readonly tuple, som Prisma ikke godtar for `in`. Typen
+// faller da stille tilbake til standardformen, og `select` i spørringene under mistes — feilen
+// dukker opp langt unna, hos kalleren, som «submission finnes ikke på typen».
+const ACTIVE_JOB_FILTER_STATUSES: AssessmentJobStatusType[] = ["PENDING", "RUNNING"];
+
+const STUCK_SUBMISSION_FILTER = {
+  // ⚠️ `AND`, ikke to `assessmentJobs`-nøkler i samme objekt. Prisma tar det siste, og et filter
+  // som «finnes en feilet» ville da spist «ingen aktiv» uten et pip.
+  AND: [
+    { decisions: { none: {} } },
+    { assessmentJobs: { some: { status: "FAILED" as AssessmentJobStatusType } } },
+    { assessmentJobs: { none: { status: { in: ACTIVE_JOB_FILTER_STATUSES } } } },
+  ],
+};
 
 export function createAssessmentJobRepository(client: AssessmentJobRepositoryClient = prisma) {
   return {
@@ -86,8 +103,32 @@ export function createAssessmentJobRepository(client: AssessmentJobRepositoryCli
       });
     },
 
+    /** #953 krav 2: vedtaket er predikatet for «allerede avgjort», ikke innleveringens status. */
+    findDecisionIdForSubmission(submissionId: string) {
+      return client.assessmentDecision.findFirst({ where: { submissionId }, select: { id: true } });
+    },
+
     findAssessmentJobOrThrow(jobId: string) {
       return client.assessmentJob.findUniqueOrThrow({ where: { id: jobId } });
+    },
+
+    /**
+     * #953: samme gjerde som de terminale skrivingene, men brukt FØR et vedtak skrives.
+     *
+     * ⚠️ Jobb-id-en alene duger ikke som gjerde. Når en kjøring forlates på tidsgrensen (#856),
+     * fortsetter den i bakgrunnen, og gjenforsøket bruker SAMME jobb-id. Det som skiller de to er
+     * `lockedAt` — hver låsing setter et nytt tidspunkt. Uten dette kunne en forlatt kjøring lande
+     * et vedtak etter at et nytt forsøk allerede var i gang, og besvarelsen fått to dommer.
+     *
+     * Skrives som `updateMany` og ikke `count` med vilje: den tar en radlås, så gjerdet holder helt
+     * fram til vedtakstransaksjonen commiter. En ren telling kunne blitt utdatert i mellomtiden.
+     * `errorMessage: null` er den samme uskadelige nullstillingen `markJobSucceeded` gjør.
+     */
+    claimDecisionWrite(jobId: string, lockedBy: string, lockedAt: Date) {
+      return client.assessmentJob.updateMany({
+        where: { id: jobId, status: "RUNNING", lockedBy, lockedAt },
+        data: { errorMessage: null },
+      });
     },
 
     // #792: fenced terminal write (see markJobSucceeded). count===0 → lease lost, don't overwrite.
@@ -141,6 +182,50 @@ export function createAssessmentJobRepository(client: AssessmentJobRepositoryCli
 
     createLlmEvaluation(data: CreateLlmEvaluationInput) {
       return client.lLMEvaluation.create({ data });
+    },
+
+    /**
+     * #953: innleveringer som STÅR FAST fordi vurderingen ga opp.
+     *
+     * ⚠️ Første utgave spurte «finnes det en FAILED-jobbrad?». Det spørsmålet kan aldri bli nei:
+     * et gjenforsøk oppretter en NY jobbrad, og den gamle blir stående for alltid.
+     *
+     * Riktig spørsmål er «venter denne innleveringen fortsatt på et menneske?»: vurderingen ga opp,
+     * det finnes ikke noe vedtak, og ingen ny kjøring er i gang. Da friskmelder tilstanden seg selv.
+     *
+     * ⚠️ Både lista og telleren spør over INNLEVERINGER, ikke jobbrader. To grunner, begge lærte:
+     *
+     *  1. Andre utgave la filteret i lista, men bygget tellerens `where` med objektspredning:
+     *     `{ ...STUCK, assessmentJobs: { some: FAILED } }`. Senere nøkkel vinner i JS, så
+     *     «ingen aktiv jobb» forsvant STILLE fra telleren. Varselet talte da saker noen nettopp
+     *     hadde tatt hånd om. Med samme enhet finnes det ikke to `where` å holde i takt.
+     *  2. `distinct` + `take` i Prisma tar `take` i databasen på JOBBRADER og dedupliserer i minnet
+     *     etterpå. Med flere feilede forsøk per innlevering kunne lista vise færre enn telleren sa.
+     */
+    findStuckFailedAssessments(limit: number) {
+      return client.submission.findMany({
+        where: STUCK_SUBMISSION_FILTER,
+        orderBy: { submittedAt: "desc" },
+        take: limit,
+        select: {
+          id: true,
+          submissionStatus: true,
+          submittedAt: true,
+          user: { select: { name: true, email: true } },
+          module: { select: { id: true, title: true } },
+          assessmentJobs: {
+            where: { status: "FAILED" },
+            orderBy: { updatedAt: "desc" },
+            take: 1,
+            select: { id: true, attempts: true, maxAttempts: true, errorMessage: true, updatedAt: true },
+          },
+        },
+      });
+    },
+
+    /** #953: NØYAKTIG samme `where` som lista — samme enhet, samme filter, ett sted. */
+    countStuckFailedAssessments() {
+      return client.submission.count({ where: STUCK_SUBMISSION_FILTER });
     },
 
     countJobsByStatus(status: AssessmentJobStatusType) {

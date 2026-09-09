@@ -41,10 +41,20 @@ const findAppealById = vi.fn();
 const appealSubmissionUpdate = vi.fn();
 const notifyAppealStatusTransition = vi.fn();
 
+// #946: én delt tx-attrapp. Påstandene under sammenligner mot DENNE, så de måler at kallene
+// skjer i SAMME transaksjon — ikke hvilke tabeller attrappen tilfeldigvis har.
+const FAKE_TX = { outboxEvent: { createMany: vi.fn().mockResolvedValue({ count: 1 }) } };
+
 // ─── vi.mock registrations ────────────────────────────────────────────────────
 
 vi.mock("../../src/db/prisma.js", () => ({
-  prisma: { $transaction: vi.fn((cb: (tx: unknown) => unknown) => cb({})) },
+  // #946: anke- og overstyringstransaksjonene legger nå `courseCompletionCheck` på outboxen INNE i
+  // transaksjonen, så den falske tx-klienten må ha tabellen. Uten den falt disse to testene på
+  // «Cannot read properties of undefined (reading 'createMany')» — og de sto røde en hel dag fordi
+  // #946 bare ble kjørt mot integrasjonssuiten, aldri mot enhetssuiten.
+  prisma: {
+    $transaction: vi.fn((cb: (tx: unknown) => unknown) => cb(FAKE_TX)),
+  },
 }));
 
 vi.mock("../../src/modules/submission/submissionRepository.js", () => ({
@@ -115,6 +125,11 @@ vi.mock("../../src/config/assessmentRules.js", () => ({
   getAssessmentRules: () => ({
     thresholds: { totalMin: 60, practicalMinPercent: 40, mcqMinPercent: 60 },
     weights: { practicalMaxScore: 50 },
+    // ⚠️ #1048: mocken må speile skjemaet. Uten denne seksjonen leser vedtaket `undefined` og
+    // kaster — og testen feiler med «Cannot read properties of undefined» i stedet for den
+    // databasefeilen den faktisk måler. Samme felle som en mock uten `boundaryInputs` i
+    // assessment-evaluator: en mock som ikke speiler modulen, måler noe annet enn den tror.
+    insufficientEvidence: { autoFailBelowScopeRatio: 0.5 },
     manualReview: {
       borderlineWindow: { min: 55, max: 59 },
       redFlagSeverities: ["HIGH", "CRITICAL"],
@@ -128,6 +143,15 @@ vi.mock("../../src/i18n/content.js", () => ({
 vi.mock("../../src/i18n/locale.js", () => ({
   normalizeLocale: (v: string) => v,
 }));
+
+// #953: vedtaksskrivingen gjerdes nå mot kjøringen som eier jobben. Standard er «vi eier den» slik
+// at de eksisterende testene måler det de alltid har målt; egne tester setter count 0.
+const claimDecisionWrite = vi.fn();
+vi.mock("../../src/modules/assessment/assessmentJobRepository.js", () => ({
+  assessmentJobRepository: { claimDecisionWrite },
+  createAssessmentJobRepository: () => ({ claimDecisionWrite }),
+}));
+
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -239,6 +263,9 @@ warmModuleGraph(async () => {
 
 describe("transactional failure injection", () => {
   beforeEach(() => {
+    claimDecisionWrite.mockReset();
+    claimDecisionWrite.mockResolvedValue({ count: 1 });
+
     recordAuditEvent.mockReset().mockResolvedValue(undefined);
     upsertCertificationStatusFromDecision.mockReset().mockResolvedValue(undefined);
     logOperationalEvent.mockReset();
@@ -272,7 +299,7 @@ describe("transactional failure injection", () => {
       const { createAssessmentDecision } = await import("../../src/modules/assessment/decisionService.js");
 
       await expect(
-        createAssessmentDecision({ ...BASE_DECISION_INPUT, llmResult: buildPassingLlmResult() }),
+        createAssessmentDecision({ jobId: "job-fence", fence: { lockedBy: "worker-test", lockedAt: new Date(0) }, ...BASE_DECISION_INPUT, llmResult: buildPassingLlmResult() }),
       ).rejects.toThrow("DB connection lost");
 
       expect(decisionSubmissionUpdate).not.toHaveBeenCalled();
@@ -291,7 +318,7 @@ describe("transactional failure injection", () => {
       const { createAssessmentDecision } = await import("../../src/modules/assessment/decisionService.js");
 
       await expect(
-        createAssessmentDecision({ ...BASE_DECISION_INPUT, llmResult: buildPassingLlmResult() }),
+        createAssessmentDecision({ jobId: "job-fence", fence: { lockedBy: "worker-test", lockedAt: new Date(0) }, ...BASE_DECISION_INPUT, llmResult: buildPassingLlmResult() }),
       ).rejects.toThrow("Unique constraint violation");
 
       expect(upsertCertificationStatusFromDecision).not.toHaveBeenCalled();
@@ -310,7 +337,7 @@ describe("transactional failure injection", () => {
       const { createAssessmentDecision } = await import("../../src/modules/assessment/decisionService.js");
 
       await expect(
-        createAssessmentDecision({ ...BASE_DECISION_INPUT, llmResult: buildPassingLlmResult() }),
+        createAssessmentDecision({ jobId: "job-fence", fence: { lockedBy: "worker-test", lockedAt: new Date(0) }, ...BASE_DECISION_INPUT, llmResult: buildPassingLlmResult() }),
       ).rejects.toThrow("Certification write failed");
 
       expect(recordAuditEvent).not.toHaveBeenCalled();
@@ -606,11 +633,11 @@ describe("transactional failure injection", () => {
 
       const result = await createSubmission({ userId: "user-1", moduleId: "module-1", locale: "nb", deliveryType: "text", responseJson: {} });
 
-      expect(supersedeEligibleReviewsForRetake).toHaveBeenCalledWith("user-1", "module-1", "submission-1", {});
-      expect(supersedeEligibleAppealsForRetake).toHaveBeenCalledWith("user-1", "module-1", "submission-1", {});
+      expect(supersedeEligibleReviewsForRetake).toHaveBeenCalledWith("user-1", "module-1", "submission-1", FAKE_TX);
+      expect(supersedeEligibleAppealsForRetake).toHaveBeenCalledWith("user-1", "module-1", "submission-1", FAKE_TX);
       expect(recordAuditEvent).toHaveBeenCalledWith(
         expect.objectContaining({ action: "retake_supersede_completed", metadata: { supersededReviewCount: 1, supersededAppealCount: 1 } }),
-        {},
+        FAKE_TX,
       );
       expect(result).toMatchObject({ id: "submission-1" });
     });

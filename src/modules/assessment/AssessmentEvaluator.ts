@@ -12,8 +12,13 @@ import {
   evaluateSecondaryAssessmentDisagreement,
   evaluateSecondaryAssessmentTrigger,
 } from "./secondaryAssessmentService.js";
-import { shouldSuppressManualReviewForInsufficientEvidenceDisagreement } from "./assessmentDecisionSignals.js";
+import {
+  hasStructuredInsufficientEvidenceSignal,
+  matchedInsufficientEvidencePatterns,
+  shouldSuppressManualReviewForInsufficientEvidenceDisagreement,
+} from "./assessmentDecisionSignals.js";
 import type { AssessmentInputContext } from "./AssessmentInputFactory.js";
+import { decisionReason, decisionReasonCodes, type DecisionReason } from "./decisionReason.js";
 
 export type EvaluationResult = {
   /** The final LLM result to use for decision-making (secondary result when run, otherwise primary). */
@@ -21,8 +26,11 @@ export type EvaluationResult = {
   /**
    * Set when the primary and secondary assessments disagree in a way that requires manual review.
    * Undefined otherwise.
+   *
+   * #950: bærer koden sammen med teksten. Var en naken streng, og da måtte mottakeren GJETTE hvilken
+   * grunn det var for å kunne oversette den. Typen gjør gjettingen umulig.
    */
-  forceManualReviewReason: string | undefined;
+  forceManualReviewReason: DecisionReason | undefined;
 };
 
 type EvaluatorContext = {
@@ -33,6 +41,14 @@ type EvaluatorContext = {
   moduleVersionId: string;
   promptTemplateVersionId: string;
   inputContext: AssessmentInputContext;
+  /**
+   * #1023: regner ut den samlede poengsummen for et LLM-resultat.
+   *
+   * ⚠️ Sendes inn som en funksjon, ikke som et tall, fordi primærresultatet først finnes HER — og
+   * ikke som en kopi av formelen, fordi den skalerer rubrikken ulikt per modus og vekter inn MCQ
+   * etter modulens policy. Kalleren har alle delene og lukker over dem; da finnes formelen ett sted.
+   */
+  beregnTotalPoeng?: (resultat: LlmStructuredAssessment) => number | null;
 };
 
 /**
@@ -142,14 +158,70 @@ export async function runLlmEvaluationPipeline(ctx: EvaluatorContext): Promise<E
 
   // --- Secondary assessment pass (conditional) ---
   let finalLlmResult: LlmStructuredAssessment = primaryLlmResult;
-  let forceManualReviewReason: string | undefined;
+  let forceManualReviewReason: DecisionReason | undefined;
 
   const secondaryTrigger = evaluateSecondaryAssessmentTrigger({
     moduleId,
     primaryResult: primaryLlmResult,
+    // #1023: nærhet til en sonegrense. `null` når kalleren ikke kan regne den ut — da fyrer ikke
+    // grenseregelen, og de øvrige utløserne gjelder som før.
+    totalScore: ctx.beregnTotalPoeng ? ctx.beregnTotalPoeng(primaryLlmResult) : null,
+    // Modulen kan ha sin egen terskel; grensene må regnes fra den, ikke fra den globale.
+    assessmentPolicy: ctx.inputContext.assessmentPolicy,
   });
 
+  // #1023: grenseregelens INNGANGER, for hver vurdering — ikke bare når den fyrer.
+  //
+  // ⚠️ Regelen fyrte fire ganger før terskelfiksen og null etter, og jeg kunne ikke se hvorfor:
+  // «fyrte ikke» kan bety at poengsummen ble null, at grensene lå et annet sted enn jeg trodde,
+  // eller at båndet var for smalt. De tre ser like ut i en logg som bare registrerer treff.
+  //
+  // Ingen fritekst, bare tall og navngitte utløsere.
+  {
+    const totalScore = ctx.beregnTotalPoeng ? ctx.beregnTotalPoeng(primaryLlmResult) : null;
+    logOperationalEvent(operationalEvents.assessment.secondaryTriggerEvaluated, {
+      jobId,
+      submissionId,
+      moduleId,
+      totalScore,
+      ...(secondaryTrigger.boundary ?? { passBoundary: 0, failBoundary: null, bandGreenYellow: null, bandYellowRed: null }),
+      reasons: secondaryTrigger.reasons,
+    });
+  }
+
+  // #1023: mål den foreslåtte regelen mot den levende, FØR vi vurderer å bytte.
+  //
+  // ⚠️ Logges bare ved UENIGHET. Er de enige, er det ingen informasjon i hendelsen, og en logg full
+  // av «alt som forventet» blir ikke lest. Er de uenige, er det nettopp det vi vil vite: hvor ofte,
+  // og i hvilken retning.
+  //
+  // Ingen fritekst i metadataen — bare hvilke mønstre som traff og hvilke strukturerte verdier som
+  // lå bak. Notatet kan i teorien gjengi noe kandidaten skrev.
+  if (secondaryTrigger.shadow && !secondaryTrigger.shadow.agrees) {
+    logOperationalEvent(operationalEvents.assessment.secondaryTriggerShadowDiff, {
+      jobId,
+      submissionId,
+      moduleId,
+      liveConfidenceTrigger: secondaryTrigger.shadow.liveConfidenceTrigger,
+      shadowConfidenceTrigger: secondaryTrigger.shadow.shadowConfidenceTrigger,
+      liveShouldRun: secondaryTrigger.shouldRun,
+      shadowShouldRun: secondaryTrigger.shadow.shadowShouldRun,
+      matchedPatterns: secondaryTrigger.shadow.matchedPatterns,
+      evidenceSufficiency: primaryLlmResult.evidence_sufficiency ?? "(ikke satt)",
+      manualReviewReasonCode: primaryLlmResult.manual_review_reason_code ?? "(ikke satt)",
+    });
+  }
+
   if (secondaryTrigger.shouldRun) {
+    // #1023: hvorfor den kjørte. Uten dette kan vi ikke se om en ny utløser virker — vi kunne bare
+    // telle at en andre vurdering skjedde, ikke hva som utløste den.
+    logOperationalEvent(operationalEvents.assessment.secondaryAssessmentRan, {
+      jobId,
+      submissionId,
+      moduleId,
+      reasons: secondaryTrigger.reasons,
+      totalScore: ctx.beregnTotalPoeng ? ctx.beregnTotalPoeng(primaryLlmResult) : null,
+    });
     await recordAuditEvent({
       entityType: auditEntityTypes.assessmentJob,
       entityId: jobId,
@@ -211,9 +283,52 @@ export async function runLlmEvaluationPipeline(ctx: EvaluatorContext): Promise<E
       disagreement.hasDisagreement &&
       !shouldSuppressManualReviewForInsufficientEvidenceDisagreement(primaryLlmResult, secondaryLlmResult)
     ) {
-      forceManualReviewReason =
-        "Automatically routed to manual review due to disagreement between primary and secondary LLM assessments.";
+      forceManualReviewReason = decisionReason(
+        decisionReasonCodes.manualReviewLlmDisagreement,
+        "Automatically routed to manual review due to disagreement between primary and secondary LLM assessments.",
+      );
     }
+  }
+
+  // #1026: er delstreng-reserven ALENE om å melde «utilstrekkelig grunnlag»?
+  //
+  // ⚠️ Da er den det eneste som står mellom en manuell vurdering og automatisk stryk: signalet
+  // inngår i `autoFailForInsufficientEvidence` (decisionService.ts), som undertrykker
+  // `llmRecommendsManualReview`. Et mønster som «additional material» er en vanlig frase i et
+  // forbedringsråd til en GOD besvarelse.
+  //
+  // ⚠️ MÅLT PÅ `finalLlmResult`, ikke på primærresultatet. QA-porten fant at et første utkast så på
+  // primæren — men vedtaket fattes på det ENDELIGE resultatet, som er sekundærvurderingen når en
+  // slik kjørte. Et treff som bare finnes i sekundærens råd ville da gitt automatisk stryk uten at
+  // noe ble logget, og nettopp de tilfellene saken handler om ville blitt undertalt.
+  //
+  // Logges bare når reserven er alene. Er de strukturerte feltene enige, er det ingen informasjon
+  // i hendelsen.
+  const patternOnlyMatches = hasStructuredInsufficientEvidenceSignal(finalLlmResult)
+    ? []
+    : matchedInsufficientEvidencePatterns(finalLlmResult);
+  if (patternOnlyMatches.length > 0) {
+    logOperationalEvent(
+      operationalEvents.assessment.insufficientEvidencePatternOnly,
+      {
+        jobId,
+        submissionId,
+        moduleId,
+        // Hvilken vurdering treffet kom fra — primæren eller den andre. Uten dette kan vi ikke se
+        // om problemet henger sammen med at en andre vurdering kjørte.
+        assessmentPass: finalLlmResult === primaryLlmResult ? "primary" : "secondary",
+        matchedPatterns: patternOnlyMatches,
+        evidenceSufficiency: finalLlmResult.evidence_sufficiency ?? "(ikke satt)",
+        manualReviewReasonCode: finalLlmResult.manual_review_reason_code ?? "(ikke satt)",
+        // Det er NÅR denne er sann at treffet koster noe: da fjernes sensoren fra sløyfa.
+        llmRecommendedManualReview: finalLlmResult.manual_review_recommended === true,
+      },
+      // ⚠️ «error», ikke «info». Loggnivåene er bare info og error, og dette er ikke rutine: det er
+      // et tilfelle der en frase i et forbedringsråd kan ha fjernet sensoren fra sløyfa. Havner det
+      // i info-strømmen, blir det aldri lest. Ingen Azure-alarm matcher på nivå, bare på eventnavn,
+      // så det drukner heller ikke ekte feil.
+      "error",
+    );
   }
 
   return { finalLlmResult, forceManualReviewReason };

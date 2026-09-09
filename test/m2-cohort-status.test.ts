@@ -96,4 +96,62 @@ describe("Cohort-status dashboard API (#498)", () => {
       .set({ "x-user-id": `co-p-${stamp}`, "x-user-email": `co-p-${stamp}@x.test`, "x-user-name": "P", "x-user-roles": "PARTICIPANT" });
     expect(res.status).toBe(403);
   });
+
+  // ⚠️ #967: kull-dashbordet filtrerer IKKE bort publikum når kurset er utilgjengelig — det ville
+  // tømt hele skjermen for en fagansvarlig som uttrykkelig spurte om DETTE kurset, uten å si
+  // hvorfor. Motsatt av hva påminnelsene gjør med samme faktum, og med vilje: en påminnelse er en
+  // handling rettet mot en deltaker som ikke kan svare på den; et dashbord er et spørsmål fra en
+  // fagansvarlig som fortjener et ærlig svar.
+  //
+  // Testen krever begge deler: publikum står, OG tilstanden rapporteres.
+  it("#967: et avpublisert kurs beholder publikum, men rapporterer at det ikke er publisert", async () => {
+    const course = await prisma.course.create({
+      data: { title: JSON.stringify({ nb: "Avpublisert" }), publishedAt: null },
+      select: { id: true },
+    });
+    const learner = await makeUser("unpub");
+    await prisma.courseEnrollment.create({
+      data: { userId: learner, courseId: course.id, source: "INDIVIDUAL", dueAt: null },
+    });
+
+    const response = await request(app).get(`/api/cohort-status/course/${course.id}`).set(adminHeaders);
+
+    expect(response.status).toBe(200);
+    expect(response.body.coursePublished).toBe(false);
+    expect(response.body.courseArchived).toBe(false);
+    // Publikum er IKKE tømt — det er hele poenget.
+    expect(response.body.total).toBe(1);
+
+    await prisma.courseEnrollment.deleteMany({ where: { courseId: course.id } });
+    await prisma.course.deleteMany({ where: { id: course.id } });
+  });
+
+  it("#967: et arkivert kurs rapporteres som arkivert", async () => {
+    const course = await prisma.course.create({
+      data: { title: JSON.stringify({ nb: "Arkivert" }), publishedAt: new Date(), archivedAt: new Date() },
+      select: { id: true },
+    });
+
+    const response = await request(app).get(`/api/cohort-status/course/${course.id}`).set(adminHeaders);
+
+    expect(response.status).toBe(200);
+    expect(response.body.courseArchived).toBe(true);
+
+    await prisma.course.deleteMany({ where: { id: course.id } });
+  });
+
+  // Motprøven: et helt vanlig publisert kurs skal rapportere seg som nettopp det. Uten den ville
+  // «alltid false» også vært grønt.
+  it("#967: et publisert kurs rapporterer seg som tilgjengelig", async () => {
+    const course = await prisma.course.create({
+      data: { title: JSON.stringify({ nb: "Publisert" }), publishedAt: new Date() },
+      select: { id: true },
+    });
+
+    const response = await request(app).get(`/api/cohort-status/course/${course.id}`).set(adminHeaders);
+
+    expect(response.body).toMatchObject({ coursePublished: true, courseArchived: false });
+
+    await prisma.course.deleteMany({ where: { id: course.id } });
+  });
 });

@@ -205,6 +205,34 @@ Etter en senere endring i samme runde: sjekk sakene du lukket tidligere. #948 bl
 fellene ble gjentatt etterpå — importen inn i en flerlinjes importblokk tre ganger, den stumme
 fiksturen seks. En stående ordre man LESER er ikke det samme som en sjekk man KJØRER.
 
+### Rotårsak etter hver runde med feil (standing order, 2026-08-26)
+
+Produkteier 2026-08-26: *«for hver runde der du gjør feil analyseres rotårsak og det vurderes om
+rutiner skal justeres for å hindre gjentakelse.»*
+
+Etter hver runde der QA-porten gir NO-GO, en test viser seg å ikke måle noe, eller en feil når
+committet kode: **skriv rotårsaken, og ta stilling til om en rutine skal endres.** Ikke bare «hva
+var galt», men *hvorfor slapp det gjennom det som skulle fanget det*.
+
+Tre spørsmål, i denne rekkefølgen:
+
+1. **Hvilken eksisterende sjekk skulle fanget dette, og hvorfor gjorde den det ikke?**
+   Fantes den ikke, ble den ikke kjørt, eller kjørte den og målte feil ting?
+2. **Er det en NY regel som trengs, eller en sjekk som må KJØRE?**
+   Standardsvaret er det siste. Se advarselen over: lærdommene fra 2026-08-25 ble skrevet ned samme
+   dag og fellene gjentatt etterpå.
+3. **Kan sjekken gjøres mekanisk?**
+   En sjekk som spør om jeg husket noe, har allerede feilet. En som kjører uansett, har ikke.
+
+Rotårsaken hører hjemme i `doc/VERSIONS.md` under releasen, ikke bare i samtalen — samtalen
+forsvinner.
+
+⚠️ **Det som beviselig har fanget feil i dette repoet er mekanisk, ikke hukommelse:** QA-porten (en
+annen modell leser diffen) og mutasjonstesting (reverser fiksen, krev at testen blir rød). Da 2.33.0
+ble bygget fanget de to til sammen seks feil jeg selv hadde lest over flere ganger — deriblant en
+knapp som ikke kunne virke, og tre tester som var grønne uten å måle noe. Foretrekk å legge en ny
+lærdom inn som en sjekk som kjører, framfor som en setning som skal huskes.
+
 ### Test- og releasemetodikk — les den før du planlegger en runde (standing order, 2026-08-19)
 
 `doc/TEST_AND_RELEASE_PLAYBOOK.md` fanger arbeidsmåten fra release 2.22.x, med **hva hver teknikk

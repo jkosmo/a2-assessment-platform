@@ -1,4 +1,5 @@
 import { AppealStatus, DecisionType, SubmissionStatus } from "../../db/prismaRuntime.js";
+import { allLocaleValues } from "../../i18n/allLocaleValues.js";
 import { ConflictError, NotFoundError } from "../../errors/AppError.js";
 import { appealRepository, createAppealRepository } from "./appealRepository.js";
 import { runInTransaction, type DbTransactionClient } from "../../db/transaction.js";
@@ -10,7 +11,7 @@ import { logOperationalEvent } from "../../observability/operationalLog.js";
 import { auditActions, auditEntityTypes } from "../../observability/auditEvents.js";
 import { operationalEvents } from "../../observability/operationalEvents.js";
 import { appendDecisionWithLineage } from "../assessment/decisionLineageService.js";
-import { checkAndIssueCourseCompletions } from "../course/index.js";
+import { enqueueOutboxEvents, OUTBOX_EVENT_TYPES } from "../outbox/outboxService.js";
 import { localizeContentText } from "../../i18n/content.js";
 import { normalizeLocale } from "../../i18n/locale.js";
 import { toAppealWorkspaceView } from "./appealReadModels.js";
@@ -91,6 +92,7 @@ export async function createSubmissionAppeal(input: {
 export async function listAppealQueue(input: {
   statuses: Array<"OPEN" | "IN_REVIEW" | "RESOLVED" | "REJECTED" | "SUPERSEDED">;
   limit: number;
+  locale?: string;
 }) {
   const appeals = await appealRepository.findAppealsForQueue(input.statuses, input.limit);
 
@@ -114,7 +116,23 @@ export async function listAppealQueue(input: {
       submittedAt: appeal.submission.submittedAt,
       submissionStatus: appeal.submission.submissionStatus,
       user: appeal.submission.user,
-      module: appeal.submission.module,
+      // #1027: serveren eier spørsmålet «hvilket språk viser vi». Klagekøen sendte
+      // lagringsformatet og lot klienten tolke det selv — med en annen reservekjede enn serverens.
+      // Køen for manuell vurdering ble rettet i #1022; denne sto igjen.
+      module: {
+        ...appeal.submission.module,
+        title:
+          localizeContentText(normalizeLocale(input.locale) ?? "en-GB", appeal.submission.module.title) ??
+          appeal.submission.module.title,
+        // ⚠️ Søket i køen gikk over den RÅ JSON-strengen, og traff derfor på tvers av alle språk.
+        // Utilsiktet, men nyttig: en behandler fant saken uansett hvilket språk tittelen ble
+        // skrevet på. Sender vi bare den lokaliserte tittelen, blir søket SMALERE enn før — og det
+        // skjedde allerede for manuell vurdering i #1022 uten at noen merket det.
+        //
+        // Alle variantene følger derfor med som et eget felt. Visningen blir riktig, og søket
+        // finner det man leter etter.
+        titleSearch: allLocaleValues(appeal.submission.module.title),
+      },
       latestDecision: appeal.submission.decisions[0] ?? null,
     },
   }));
@@ -285,21 +303,10 @@ export async function resolveAppeal(input: {
     resolutionNote: input.resolutionNote,
   });
 
-  checkAndIssueCourseCompletions({
-    userId: appeal.submission.userId,
-    moduleId: appeal.submission.moduleId,
-  }).catch((error: unknown) => {
-    logOperationalEvent(
-      operationalEvents.course.completionCheckFailed,
-      {
-        userId: appeal.submission.userId,
-        moduleId: appeal.submission.moduleId,
-        errorMessage: error instanceof Error ? error.message : "Unknown error",
-      },
-      "error",
-    );
-  });
-
+  // #946: kursfullføringen ligger nå på outboxen, lagt der inne i transaksjonen i
+  // `resolveAppealCommand`. Den sto tidligere her som et fire-and-forget-kall etter at svaret
+  // var sendt: feilet det, var utstedelsen tapt og bare en loggrad visste om det — mens
+  // påminnelsesjobben og kull-dashbordet spør «finnes rad?» og dermed så kandidaten som forfalt.
   return { appeal: resolvedAppeal, resolutionDecision };
 }
 
@@ -367,6 +374,19 @@ async function resolveAppealCommand(
         appealStatus: resolvedAppeal.appealStatus,
       },
     }, tx);
+
+    // #946: samme dør som den automatiske stien (AssessmentDecisionApplicationService). Hendelsen
+    // commiter sammen med vedtaket, så en krasj gir enten begge eller ingen av dem — aldri et
+    // bestått vedtak uten at noen kommer til å sjekke kursfullføringen.
+    await enqueueOutboxEvents(
+      [
+        {
+          type: OUTBOX_EVENT_TYPES.courseCompletionCheck,
+          payload: { userId: appeal.submission.userId, moduleId: appeal.submission.moduleId },
+        },
+      ],
+      tx,
+    );
 
     return { resolutionDecision, resolvedAppeal };
   });

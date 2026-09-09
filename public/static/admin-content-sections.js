@@ -52,6 +52,7 @@ const LABELS = {
     exportSection: "Export", importSection: "Import section package", exported: "Section exported.",
     notAnEnvelope: "This does not look like a section package. The file is missing the fields an export adds (exportFormat, exportedAt and scope), and its contents do not look like a section either. Use Export on a section to produce a valid file.",
     imported: "Section package imported as a draft. Review it and publish when it is ready.",
+    replaceFromFile: "Replace from file", replaceConfirm: "Replace this section's content with the file? The current version is kept — the import becomes a new draft.", replaced: "Content replaced. The import is a draft — review it and publish when it is ready.",
     gateHeldBack: "Saved, but not published — the section is missing", gateBlocked: "Cannot publish — the section is missing",
     gateHint: "Use “Translate from this language” to fill the gaps, then save again.",
     fieldTitle: "the title", fieldBodyMarkdown: "the content",
@@ -79,6 +80,7 @@ const LABELS = {
     exportSection: "Eksporter", importSection: "Importer seksjons-pakke", exported: "Seksjon eksportert.",
     notAnEnvelope: "Dette ser ikke ut som en seksjonspakke. Fila mangler feltene en eksport legger på (exportFormat, exportedAt og scope), og innholdet ligner heller ikke på en seksjon. Bruk «Eksporter» på en seksjon for å lage en gyldig fil.",
     imported: "Seksjons-pakken er importert som utkast. Gå gjennom den og publiser når den er klar.",
+    replaceFromFile: "Erstatt fra fil", replaceConfirm: "Erstatte innholdet i denne seksjonen med fila? Nåværende versjon beholdes — importen blir et nytt utkast.", replaced: "Innholdet er erstattet. Importen er et utkast — gå gjennom den og publiser når den er klar.",
     gateHeldBack: "Lagret, men ikke publisert — seksjonen mangler", gateBlocked: "Kan ikke publisere — seksjonen mangler",
     gateHint: "Bruk «Oversett fra dette språket» for å fylle hullene, og lagre på nytt.",
     fieldTitle: "tittelen", fieldBodyMarkdown: "innholdet",
@@ -106,6 +108,7 @@ const LABELS = {
     exportSection: "Eksporter", importSection: "Importer seksjons-pakke", exported: "Seksjon eksportert.",
     notAnEnvelope: "Dette ser ikkje ut som ein seksjonspakke. Fila manglar felta ein eksport legg på (exportFormat, exportedAt og scope), og innhaldet liknar heller ikkje på ein seksjon. Bruk «Eksporter» på ein seksjon for å lage ei gyldig fil.",
     imported: "Seksjons-pakken er importert som utkast. Gå gjennom han og publiser når han er klar.",
+    replaceFromFile: "Erstatt frå fil", replaceConfirm: "Erstatte innhaldet i denne seksjonen med fila? Noverande versjon blir teken vare på — importen blir eit nytt utkast.", replaced: "Innhaldet er erstatta. Importen er eit utkast — gå gjennom han og publiser når han er klar.",
     gateHeldBack: "Lagra, men ikkje publisert — seksjonen manglar", gateBlocked: "Kan ikkje publisere — seksjonen manglar",
     gateHint: "Bruk «Omset frå dette språket» for å fylle hola, og lagre på nytt.",
     fieldTitle: "tittelen", fieldBodyMarkdown: "innhaldet",
@@ -480,6 +483,62 @@ async function exportSectionPackage(sectionId, btn) {
 // #916: import a section package. It always lands as a draft (server-side rule), so there is no
 // autoPublish flag to get wrong here — unlike the module importer, where two pages had to remember
 // to send `autoPublish: false`.
+/**
+ * #1012: erstatt innholdet i en EKSISTERENDE seksjon fra fil.
+ *
+ * Serveren gjorde dette allerede — `mode: "replaceExisting"` med `targetId`. Klienten sendte bare
+ * `createNew` hardkodet, så man kunne lage en ny seksjon fra fil, men aldri oppdatere en som fantes.
+ *
+ * ⚠️ Ikke destruktivt: importen lager en NY versjon som utkast (`publishedAt: null`), og den aktive
+ * versjonen står urørt til forfatteren publiserer og passerer oversettelsesgaten. Bekreftelsen
+ * finnes likevel, fordi «erstatt» leses som noe som ikke kan angres — teksten sier hva som faktisk
+ * skjer i stedet for å be om et ja.
+ */
+async function replaceSectionFromFile(input) {
+  const file = input?.files?.[0] ?? null;
+  if (!file) return;
+  // Nullstill med én gang, så samme fil kan velges på nytt etter en avbrutt eller feilet runde.
+  input.value = "";
+  if (!editing?.id) return;
+
+  if (!window.confirm(L("replaceConfirm"))) return;
+
+  try {
+    const text = await file.text();
+    let payload;
+    try {
+      payload = JSON.parse(text);
+    } catch (parseError) {
+      throw new Error(`Filen er ikke gyldig JSON: ${parseError instanceof Error ? parseError.message : "ukjent feil"}`);
+    }
+    // Samme vennlige vakt som importen i lista: pek en modul-/kurspakke til siden som kan ta den,
+    // i stedet for å la serverens scope_mismatch komme rått ut.
+    if (payload?.scope === "course" || payload?.scope === "module") {
+      throw new Error(
+        payload.scope === "course"
+          ? "Dette er en kurs-pakke. Importer den fra Kurs-siden."
+          : "Dette er en modul-pakke. Importer den fra Moduler-siden.",
+      );
+    }
+
+    await apiFetch("/api/admin/content/sections/import", getHeaders, {
+      method: "POST",
+      body: JSON.stringify({ payload, mode: "replaceExisting", targetId: editing.id }),
+    });
+    showToast(L("replaced"));
+    // Hent redigeringen på nytt, ellers står forfatteren igjen med det gamle innholdet på skjermen
+    // og tror ingenting skjedde.
+    await renderEditorView(editing.id);
+  } catch (error) {
+    // ⚠️ `L` som tredje argument: uten oversetteren faller `describeImportError` tilbake på sin
+    // hardkodede engelske tekst, og en eierskapsfeil ville blitt engelsk på en trespråklig side.
+    // Det var #996-funnet på importen i lista, og det gjelder like mye her.
+    const d = describeImportError(error, { notAnEnvelope: L("notAnEnvelope") }, L);
+    showToast(`${L("replaceFromFile")}: ${d.headline}`, "error", d.detail);
+    document.getElementById("replaceFromFileBtn")?.focus();
+  }
+}
+
 async function importSectionPackage(input) {
   const file = input?.files?.[0] ?? null;
   if (!file) return;
@@ -598,6 +657,12 @@ async function renderEditorView(sectionId) {
       <div class="editor-actions">
         <button type="button" id="saveBtn" class="btn btn-primary">${escapeHtml(L("save"))}</button>
         <button type="button" id="translateBtn" class="btn btn-secondary" style="width:auto">${escapeHtml(L("translate"))}</button>
+        ${sectionId ? `
+        <!-- #1012: erstatt innholdet i DENNE seksjonen fra fil. Vises kun for en seksjon som
+             finnes — «erstatt» gir ingen mening for et tomt skjema, der Importer-knappen i lista
+             allerede dekker behovet. -->
+        <button type="button" id="replaceFromFileBtn" class="btn btn-secondary" style="width:auto">${escapeHtml(L("replaceFromFile"))}</button>
+        <input type="file" id="replaceFromFileInput" accept="application/json,.json" hidden />` : ""}
         <button type="button" id="sectionLifecycleBtn" class="btn btn-secondary" style="width:auto;display:none"></button>
         <span class="editor-status" id="editorStatus"></span>
       </div>
@@ -605,6 +670,11 @@ async function renderEditorView(sectionId) {
 
   document.getElementById("backLink")?.addEventListener("click", (e) => { e.preventDefault(); goTo("list"); });
   document.getElementById("translateBtn")?.addEventListener("click", translateFromCurrent);
+  // #1012
+  const replaceBtn = document.getElementById("replaceFromFileBtn");
+  const replaceInput = document.getElementById("replaceFromFileInput");
+  replaceBtn?.addEventListener("click", () => replaceInput?.click());
+  replaceInput?.addEventListener("change", (event) => replaceSectionFromFile(event.target));
   document.getElementById("langTabs")?.addEventListener("click", (event) => {
     const tab = event.target.closest("[data-locale]");
     if (!tab) return;

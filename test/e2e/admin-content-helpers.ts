@@ -68,7 +68,9 @@ export type MockModuleExport = {
   };
   // Sent by getModuleContentBundle so Innstillinger can show which number an empty "Samlet
   // beståttgrense" falls back to, without storing it. Mirrors config/assessment-rules.json.
-  platformDefaults: { totalMin: number };
+  // #464-standard: baandet under terskelen. Fiksturen maa BAERE det — plassholderen i
+  // innstillingspanelet regnes fra det, og uten feltet ville testen maalt fallbacken «Ingen».
+  platformDefaults: { totalMin: number; borderlineBelowMin?: number | null };
 };
 
 export function localizedText(base: string): Record<string, string> {
@@ -215,7 +217,7 @@ export function buildMockModuleExport({
     },
     // Matches config/assessment-rules.json. Only `totalMin` has a platform fallback; the other
     // three pass rules are simply OFF when unset, which is why the panel's placeholders differ.
-    platformDefaults: { totalMin: 70 },
+    platformDefaults: { totalMin: 70, borderlineBelowMin: 10 },
   };
 }
 

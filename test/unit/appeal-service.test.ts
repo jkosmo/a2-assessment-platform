@@ -22,7 +22,7 @@ const logOperationalEvent = vi.fn();
 const appendDecisionWithLineage = vi.fn();
 
 vi.mock("../../src/db/prisma.js", () => ({
-  prisma: { $transaction: vi.fn((cb: (tx: unknown) => unknown) => cb({})) },
+  prisma: { $transaction: vi.fn((cb: (tx: unknown) => unknown) => cb({ outboxEvent: { createMany: vi.fn().mockResolvedValue({ count: 1 }) } })) },
 }));
 
 vi.mock("../../src/modules/appeal/appealRepository.js", () => ({
@@ -85,7 +85,10 @@ describe("appeal service", () => {
     appendDecisionWithLineage.mockReset();
     vi.mocked(mockPrisma.$transaction).mockReset();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    vi.mocked(mockPrisma.$transaction).mockImplementation((cb: any) => cb({}));
+    // #946: ankeoppgjøret legger kursfullførings-sjekken på outboxen INNE i transaksjonen, så den
+    // falske tx-klienten må ha tabellen. `beforeEach` overstyrte mocken fra registreringen over.
+    vi.mocked(mockPrisma.$transaction).mockImplementation((cb: any) =>
+      cb({ outboxEvent: { createMany: vi.fn().mockResolvedValue({ count: 1 }) } }));
   });
 
   it("rejects appeal creation when the submission is missing", async () => {

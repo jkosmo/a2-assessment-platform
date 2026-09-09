@@ -32,7 +32,14 @@ describe("describeApiError — koden er kontrakten", () => {
 
     const nb = describeApiError(error, tFor("nb"));
     expect(nb.headline).toBe(adminContentTranslations.nb["errors.api.content_ownership"]);
-    expect(nb.headline).toMatch(/du eier/i);
+    // ⚠️ #1029: sto «du eier» her. Ordlyden endret seg da tekstene sluttet å love lesetilgang de
+    // ikke gir — etter #943 avvises også LESING, og «du kan bare endre innhold du eier» sendte
+    // brukeren for å lete etter en redigeringsknapp som ikke var problemet.
+    //
+    // Påstanden er fortsatt den samme: overskriften skal være NORSK prosa fra tabellen, ikke
+    // serverens engelske setning. Linja over sjekker at den ER tabellens tekst; denne at teksten
+    // faktisk sier noe på norsk.
+    expect(nb.headline).toMatch(/tilgang/i);
 
     // Samme feil, annet konsollspråk: teksten skal følge brukeren, ikke serveren.
     const nn = describeApiError(error, tFor("nn"));

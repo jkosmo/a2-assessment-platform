@@ -1,4 +1,7 @@
 import { resolveInitialLocale } from "/static/i18n-locale.js";
+import { showToast } from "/static/toast.js";
+import { describeApiError } from "/static/api-error.js";
+import { lagLokalisertRessurs } from "/static/localized-resource.js";
 import { localeLabels, supportedLocales, translations } from "/static/i18n/certificate-translations.js";
 import { apiFetch, buildConsoleHeaders, getConsoleConfig } from "/static/api-client.js";
 
@@ -70,7 +73,12 @@ function renderCertificate(data) {
   document.getElementById("certName").textContent = data.participantName ?? "-";
   document.getElementById("certCourse").textContent = data.courseTitle ?? data.courseId ?? "-";
   document.getElementById("certCompletedAt").textContent = formatDate(data.completedAt);
-  document.getElementById("certLevel").textContent = localizeCertLevel(data.certificationLevel);
+  // ⚠️ #1046: linja sto med «Certification level: -» når nivået manglet, mens modultallet rett
+  // under skjules helt i samme tilfelle. To ulike svar på samme spørsmål, i samme fil — og på et
+  // dokument som skrives ut og arkiveres.
+  const nivå = data.certificationLevel ? localizeCertLevel(data.certificationLevel) : "";
+  document.getElementById("certLevel").textContent = nivå;
+  document.getElementById("certLevelWrap").hidden = !nivå;
   const modulesWrap = document.getElementById("certModulesWrap");
   if (typeof data.moduleCount === "number" && data.moduleCount > 0) {
     document.getElementById("certModules").textContent = String(data.moduleCount);
@@ -123,18 +131,33 @@ async function loadIdentityDefaults() {
   }
 }
 
+// #1046: kursbeviset viser `courseTitle` fra serveren, som lokaliseres ved HENTING (#1027).
+//
+// ⚠️ Denne flaten var IKKE med i sveipet for #1042 — den sto ikke i QA-funnet, og ingen hadde rørt
+// fila siden juni. Inventaret i #1046 fant den: det dypeste laget manglet alt, akkurat som
+// produkteierens diagnose forutså. Kursnavnet på et utskrevet bevis sto på feil språk.
+const bevis = lagLokalisertRessurs({
+  hentSpråk: () => currentLocale,
+  hent: () => {
+    const id = new URLSearchParams(window.location.search).get("id");
+    return apiFetch(`/api/courses/completions/${encodeURIComponent(id)}`, headers);
+  },
+  tegn: (data) => renderCertificate(data),
+  påFeil: (error) => {
+    // ⚠️ #1046: alle feil ble vist som «beviset finnes ikke». En 403 og en nettverksfeil er ikke
+    // det samme som at beviset er borte — tilstanden beholdes, men årsaken sies nå.
+    showState("certificate.notFound");
+    showToast(describeApiError(error, t).headline, "error");
+  },
+});
+
 async function loadCertificate() {
   const id = new URLSearchParams(window.location.search).get("id");
   if (!id) {
     showState("certificate.missingId");
     return;
   }
-  try {
-    const data = await apiFetch(`/api/courses/completions/${encodeURIComponent(id)}`, headers);
-    renderCertificate(data);
-  } catch {
-    showState("certificate.notFound");
-  }
+  await bevis.last();
 }
 
 printBtn.addEventListener("click", () => window.print());
@@ -142,6 +165,8 @@ localeSelect.addEventListener("change", () => {
   currentLocale = supportedLocales.includes(localeSelect.value) ? localeSelect.value : "en-GB";
   localStorage.setItem("participant.locale", currentLocale);
   applyTranslations();
+  // ⚠️ `applyTranslations` oversetter bare etikettene. Kursnavnet kommer fra serveren og må hentes.
+  bevis.oppdaterVedSpråkbytte();
 });
 
 populateLocaleSelect();

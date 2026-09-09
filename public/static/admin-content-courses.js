@@ -250,10 +250,33 @@ function resolveCourseLocalizationSourceLocale(currentValues, initialValues) {
   return null;
 }
 
+/**
+ * #1037: en oversettelse som ikke kom, skal se ut som en oversettelse som ikke kom.
+ *
+ * ⚠️ SKREV TIDLIGERE KILDETEKSTEN INN I MÅLLOKALET. To steder gjorde det: `|| sourceTitle` når
+ * svaret manglet feltet, og `catch`-blokka ved nettverksfeil. Resultatet var et fullt trespråkskart
+ * som PÅSTO at kurset var oversatt — og løgnen ble fortalt nettopp når noe allerede hadde gått galt,
+ * mens forfatteren så en feilmelding om noe annet.
+ *
+ * Nedstrøms trodde publiseringsgaten at kurset var ferdig, oversettelsesstatusen i lista viste det
+ * som komplett, og en nynorskdeltaker fikk bokmål servert som nynorsk. Det er #892-invarianten
+ * brutt stille.
+ *
+ * ⚠️ #930 DEKKET IKKE DETTE. Den sørget for at innhold skrevet i ETT språk bærer hvilket. Denne
+ * stien skriver TRE, og ligger derfor utenfor.
+ *
+ * Retter etter #982/#905-mønsteret: lokalen SLIPPES, og føres opp i `failedLocales` slik at kalleren
+ * kan si fra. Stillhet her var halve #892 — derfor returnerer funksjonen listen, og begge kallerne
+ * viser den.
+ *
+ * `preserveExisting` er urørt: redigerer man et kurs som allerede har en oversettelse, beholdes den
+ * når en ny ikke kom. Det er ikke en løgn — teksten ER oversatt, bare ikke på nytt.
+ */
 async function localizeCourseCopyAcrossLocales({ titleValues, descriptionValues, sourceLocale, preserveExisting = false }) {
   const localized = {
     title: cloneLocalizedFieldValues(titleValues),
     description: cloneLocalizedFieldValues(descriptionValues),
+    failedLocales: [],
   };
 
   const sourceTitle = localized.title[sourceLocale]?.trim() ?? "";
@@ -279,19 +302,31 @@ async function localizeCourseCopyAcrossLocales({ titleValues, descriptionValues,
         }),
       });
 
+      // ⚠️ INGEN `|| sourceTitle` HER. Kom det ingen oversettelse, blir lokalen stående tom — med
+      // mindre det ALLEREDE fantes en, og vi er i redigeringsmodus.
+      let feilet = false;
       if (hasSourceTitle) {
-        localized.title[targetLocale] = result?.title?.trim?.() || (preserveExisting ? localized.title[targetLocale] : "") || sourceTitle;
+        const oversatt = result?.title?.trim?.() || "";
+        const beholdt = preserveExisting ? localized.title[targetLocale] : "";
+        localized.title[targetLocale] = oversatt || beholdt || "";
+        if (!oversatt && !beholdt) feilet = true;
       }
       if (hasSourceDescription) {
-        localized.description[targetLocale] =
-          result?.description?.trim?.() || (preserveExisting ? localized.description[targetLocale] : "") || sourceDescription;
+        const oversatt = result?.description?.trim?.() || "";
+        const beholdt = preserveExisting ? localized.description[targetLocale] : "";
+        localized.description[targetLocale] = oversatt || beholdt || "";
+        if (!oversatt && !beholdt) feilet = true;
       }
+      if (feilet) localized.failedLocales.push(targetLocale);
     } catch {
-      if (hasSourceTitle && !localized.title[targetLocale]) {
-        localized.title[targetLocale] = sourceTitle;
-      }
-      if (hasSourceDescription && !localized.description[targetLocale]) {
-        localized.description[targetLocale] = sourceDescription;
+      // ⚠️ NETTVERKSFEILEN VAR DEN VERSTE VARIANTEN: den fylte tre språk med kildeteksten mens
+      // forfatteren så en feilmelding om noe helt annet. Nå slippes lokalen, og kalleren sier fra.
+      const beholdtTittel = preserveExisting ? localized.title[targetLocale] : "";
+      const beholdtBeskrivelse = preserveExisting ? localized.description[targetLocale] : "";
+      if (hasSourceTitle) localized.title[targetLocale] = beholdtTittel || "";
+      if (hasSourceDescription) localized.description[targetLocale] = beholdtBeskrivelse || "";
+      if ((hasSourceTitle && !beholdtTittel) || (hasSourceDescription && !beholdtBeskrivelse)) {
+        localized.failedLocales.push(targetLocale);
       }
     }
   }
@@ -299,13 +334,25 @@ async function localizeCourseCopyAcrossLocales({ titleValues, descriptionValues,
   return localized;
 }
 
-const CERT_LABELS = { basic: "Basic", intermediate: "Intermediate", advanced: "Advanced" };
-
-function certBadgeLegacy(level) {
-  if (!level) return `<span class="cert-badge">—</span>`;
-  return `<span class="cert-badge">${CERT_LABELS[level] ?? level}</span>`;
+/**
+ * #1037: si fra når en oversettelse ikke kom.
+ *
+ * ⚠️ STILLHET VAR HALVE #892. Å slutte å fylle kildetekst inn i mållokalet er bare halve rettingen:
+ * hvis ingenting sier fra, tror forfatteren fortsatt at kurset er ferdig oversatt — forskjellen er
+ * bare at nå er feltet tomt i stedet for feilmerket. Begge kallerne må derfor vise dette.
+ *
+ * Meldingen er en advarsel, ikke en feil: lagringen GIKK gjennom, og kildespråket er lagret riktig.
+ */
+function meldFeiledeLokaler(failedLocales) {
+  if (!failedLocales?.length) return;
+  showToast(
+    `Lagret, men oversettelsen kom ikke for: ${failedLocales.join(", ")}. ` +
+      "Innholdet er ikke merket som oversatt til disse språkene — bruk «Oversett» for å prøve igjen.",
+    "error",
+  );
 }
 
+const CERT_LABELS = { basic: "Basic", intermediate: "Intermediate", advanced: "Advanced" };
 // ---------------------------------------------------------------------------
 // Route detection
 // ---------------------------------------------------------------------------
@@ -322,12 +369,6 @@ function certLabel(level) {
           : null;
   return key ? t(key) : localizedText(level) || level;
 }
-
-function certBadgeLocalizedTemp(level) {
-  if (!level) return `<span class="cert-badge">â€”</span>`;
-  return `<span class="cert-badge">${escapeHtml(certLabel(level))}</span>`;
-}
-
 function detectRoute() {
   return detectCoursesRoute(window.location.pathname);
 }
@@ -452,14 +493,19 @@ function cascadeItemTypeLabel(type) {
 // kan ikke skille dem — men klienten vet hvilken rad den tegner, så typen sendes inn som variant.
 //
 // ⚠️ Det som fortsatt ikke er oversatt: blokkeringene fra contentValidationService
-// (MCQ_COUNT_FAR_BELOW_BLUEPRINT m.fl.). De bærer ingen `params`, så tallene og tersklene finnes
-// bare inne i den engelske setningen. Å erstatte den med en kodenavn-setning ville fjernet
-// informasjonen forfatteren trenger. Rammen er lokalisert, årsaken er serverens tekst — det er
-// nøyaktig #914, og sømmen skal være synlig til den er gjort.
+// (MCQ_COUNT_FAR_BELOW_BLUEPRINT m.fl.). De bar ingen `params`, så tallene og tersklene fantes
+// bare inne i den engelske setningen, og å erstatte den med en kodenavn-setning ville fjernet
+// informasjonen forfatteren trenger.
+//
+// #914 er nå gjort: hver kode bærer `params`, og `describeGateIssue` bygger setningen på leserens
+// språk. Reservekjeden under står igjen for koder som ennå ikke har en nøkkel — den er sømmen som
+// gjør et hull synlig i stedet for stille.
 function blockerText(blocker, itemType) {
   if (blocker?.code !== "translation_incomplete" || !blocker.field || !Array.isArray(blocker.missingLocales)) {
+    // #914: `params` sendes naa med, saa setninger med tall (MCQ_COUNT_*, DISTRACTOR_*) kan
+    // lokaliseres. Varianten fra raden beholdes for `item_archived`, som #980 innfoerte.
     const variant = typeof itemType === "string" ? itemType.toLowerCase() : null;
-    const known = apiErrorCodeText(blocker?.code ?? null, t, variant ? [variant] : []);
+    const known = apiErrorCodeText(blocker?.code ?? null, t, variant ? [variant] : [], blocker?.params ?? null);
     if (known) return known;
     const reason = typeof blocker?.message === "string" ? blocker.message : "";
     if (!reason) return "";
@@ -636,6 +682,14 @@ async function renderListView() {
     const cascadeDeleteBtn = isAdministrator()
       ? `<button class="row-action-btn destructive" data-action="cascade-delete" data-course-id="${cid}" data-course-title="${ctitle}">Slett kurs og ubrukt innhold</button>`
       : "";
+    // ⚠️ #1029: MERKET NEDERST SA «Skrivebeskyttet», og det var et løfte systemet ikke holdt.
+    //
+    // «Skrivebeskyttet» betyr «du kan se, men ikke endre». Etter #943 er LESING av kursdetalj og
+    // klassemedlemmer eierskapsvaktet, så den som klikket seg videre fikk et avslag merket sa ikke
+    // ville komme. Et merke som lover mer enn flaten gir er verre enn ikke noe merke.
+    //
+    // Teksten er samtidig flyttet inn i oversettelsestabellen. Den sto hardkodet på norsk i en
+    // trespråklig flate — nabotekstene her gjør fortsatt det samme, og det er en egen sak.
     return `<tr>
       <td class="col-title">${ctitle}</td>
       <td class="col-status">${courseStatusBadge(status)}</td>
@@ -650,7 +704,7 @@ async function renderListView() {
           ${canManage ? `<button class="row-action-btn" data-action="export" data-course-id="${cid}" data-course-title="${ctitle}">Eksporter</button>` : ""}
           ${canManage ? archiveToggleBtn : ""}
           ${canManage ? cascadeDeleteBtn : ""}
-          ${canManage ? "" : `<span class="row-readonly-note" title="Bare en eier eller administrator kan endre dette kurset.">Skrivebeskyttet</span>`}
+          ${canManage ? "" : `<span class="row-readonly-note" title="${escapeHtml(t("adminContent.courses.row.noAccessTitle"))}">${escapeHtml(t("adminContent.courses.row.noAccess"))}</span>`}
         </div>
       </td>
     </tr>`;
@@ -1104,249 +1158,8 @@ function appendConvCertBubble(label) {
   bubble.textContent = label;
   certChoices.parentNode.insertBefore(bubble, document.getElementById("convAfterCert"));
 }
-
-function showConvModuleSearch() {
-  const after = document.getElementById("convAfterCert");
-  if (!after) return;
-
-  convModules = [];
-  comboboxQuery = "";
-  comboboxSelectedId = null;
-  comboboxOpen = false;
-
-  after.innerHTML = `
-    <div class="conv-bot-msg" role="status" aria-live="polite">
-      <p>Søk etter moduler og legg dem til i kurset. Du kan opprette kurset direkte — etterpå åpnes editoren der du kan legge til <strong>seksjoner</strong> og justere rekkefølgen.</p>
-    </div>
-    <div id="convModuleListContainer"></div>
-    <div class="combobox-row" style="margin-bottom:var(--space-2)">
-      <div class="combobox-wrap" id="convComboboxWrap">
-        <input id="convComboboxInput" type="text" class="combobox-input"
-          placeholder="Søk på modulnavn eller modul-ID…"
-          aria-label="Søk etter modul"
-          autocomplete="off" role="combobox" aria-expanded="false"
-          aria-autocomplete="list" aria-controls="convComboboxDropdown" />
-        <div id="convComboboxDropdown" class="combobox-dropdown" role="listbox" hidden></div>
-      </div>
-      <button id="convAddModuleItemBtn" class="btn btn-secondary" disabled>Legg til</button>
-    </div>
-    <div class="form-actions">
-      <button id="convCreateBtn" class="btn btn-primary">Opprett kurs</button>
-    </div>
-    <div class="conv-step" id="convAfterModules"></div>`;
-
-  renderConvModuleList();
-  initConvCombobox();
-
-  document.getElementById("convCreateBtn")?.addEventListener("click", convCreateCourse);
-  // v1.2.16 (#353 part 2): focus the search input so keyboard users start in the new step.
-  setTimeout(() => document.getElementById("convComboboxInput")?.focus(), 60);
-}
-
-function renderConvModuleList() {
-  const container = document.getElementById("convModuleListContainer");
-  if (!container) return;
-  if (convModules.length === 0) {
-    container.innerHTML = "";
-    return;
-  }
-  container.innerHTML = `<div class="module-list" id="convModuleList">
-    ${convModules.map((m, i) => `
-      <div class="module-list-item" data-module-id="${escapeHtml(m.moduleId)}">
-        <span class="module-list-item-order">${i + 1}.</span>
-        <span class="module-list-item-title">${escapeHtml(m.title)}</span>
-        <div class="module-list-item-actions">
-          <button class="module-move-btn" data-move="up" data-index="${i}" ${i === 0 ? "disabled" : ""} aria-label="Flytt opp">↑</button>
-          <button class="module-move-btn" data-move="down" data-index="${i}" ${i === convModules.length - 1 ? "disabled" : ""} aria-label="Flytt ned">↓</button>
-          <button class="module-remove-btn" data-remove="${i}" aria-label="Fjern modul">Fjern</button>
-        </div>
-      </div>`).join("")}
-  </div>`;
-  document.getElementById("convModuleList")?.addEventListener("click", handleConvModuleListClick);
-}
-
-function handleConvModuleListClick(e) {
-  const moveBtn = e.target.closest("[data-move]");
-  if (moveBtn) {
-    const idx = parseInt(moveBtn.dataset.index, 10);
-    const swap = moveBtn.dataset.move === "up" ? idx - 1 : idx + 1;
-    if (swap >= 0 && swap < convModules.length) {
-      [convModules[idx], convModules[swap]] = [convModules[swap], convModules[idx]];
-      renderConvModuleList();
-    }
-    return;
-  }
-  const removeBtn = e.target.closest("[data-remove]");
-  if (removeBtn) {
-    convModules.splice(parseInt(removeBtn.dataset.remove, 10), 1);
-    renderConvModuleList();
-    updateConvComboboxDropdown();
-  }
-}
-
-function initConvCombobox() {
-  const input = document.getElementById("convComboboxInput");
-  const addBtn = document.getElementById("convAddModuleItemBtn");
-
-  input?.addEventListener("input", () => {
-    comboboxQuery = input.value;
-    comboboxSelectedId = null;
-    comboboxHighlightedIndex = -1;
-    comboboxOpen = comboboxQuery.trim().length > 0;
-    if (addBtn) addBtn.disabled = true;
-    updateConvComboboxDropdown();
-  });
-  input?.addEventListener("focus", () => {
-    if (comboboxQuery.trim()) { comboboxOpen = true; updateConvComboboxDropdown(); }
-  });
-  input?.addEventListener("blur", () => {
-    setTimeout(() => { comboboxOpen = false; comboboxHighlightedIndex = -1; updateConvComboboxDropdown(); }, 150);
-  });
-  // v1.2.16 (#353 part 1): keyboard nav per WAI-ARIA combobox-pattern.
-  input?.addEventListener("keydown", (event) => {
-    const visibleOptions = getVisibleComboboxOptions();
-    if (event.key === "ArrowDown") {
-      event.preventDefault();
-      if (!comboboxOpen && comboboxQuery.trim().length > 0) { comboboxOpen = true; }
-      if (visibleOptions.length === 0) return;
-      comboboxHighlightedIndex = Math.min(visibleOptions.length - 1, Math.max(0, comboboxHighlightedIndex) + 1);
-      if (comboboxHighlightedIndex === 0 && !visibleOptions[0]) comboboxHighlightedIndex = 0;
-      updateConvComboboxDropdown();
-    } else if (event.key === "ArrowUp") {
-      event.preventDefault();
-      if (visibleOptions.length === 0) return;
-      comboboxHighlightedIndex = Math.max(0, comboboxHighlightedIndex - 1);
-      updateConvComboboxDropdown();
-    } else if (event.key === "Enter") {
-      if (comboboxHighlightedIndex >= 0 && visibleOptions[comboboxHighlightedIndex]) {
-        event.preventDefault();
-        const opt = visibleOptions[comboboxHighlightedIndex];
-        comboboxSelectedId = opt.id;
-        input.value = opt.title;
-        comboboxOpen = false;
-        comboboxHighlightedIndex = -1;
-        if (addBtn) addBtn.disabled = false;
-        updateConvComboboxDropdown();
-        addConvSelectedModule();
-      }
-    } else if (event.key === "Escape") {
-      if (comboboxOpen) {
-        event.preventDefault();
-        comboboxOpen = false;
-        comboboxHighlightedIndex = -1;
-        updateConvComboboxDropdown();
-      }
-    } else if (event.key === "Home" && comboboxOpen && visibleOptions.length > 0) {
-      event.preventDefault();
-      comboboxHighlightedIndex = 0;
-      updateConvComboboxDropdown();
-    } else if (event.key === "End" && comboboxOpen && visibleOptions.length > 0) {
-      event.preventDefault();
-      comboboxHighlightedIndex = visibleOptions.length - 1;
-      updateConvComboboxDropdown();
-    }
-  });
-  addBtn?.addEventListener("click", addConvSelectedModule);
-}
-
 // v1.2.16 (#353): list of currently-visible combobox options as { id, title }. Brukt av
 // keyboard-handleren og dropdown-renderingen så begge ser samme array (indeks-konsistens).
-function getVisibleComboboxOptions() {
-  const addedIds = new Set(convModules.map(m => m.moduleId));
-  const q = comboboxQuery.trim().toLowerCase();
-  return allLibraryModules
-    .filter(m => {
-      if (addedIds.has(m.id)) return false;
-      if (!q) return true;
-      return (m.title ?? "").toLowerCase().includes(q) || m.id.toLowerCase().includes(q);
-    })
-    .map(m => ({ id: m.id, title: localizedText(m.title) || m.id }));
-}
-
-function updateConvComboboxDropdown() {
-  const input = document.getElementById("convComboboxInput");
-  const dropdown = document.getElementById("convComboboxDropdown");
-  const addBtn = document.getElementById("convAddModuleItemBtn");
-  if (!input || !dropdown) return;
-
-  const options = getVisibleComboboxOptions();
-
-  if (!comboboxOpen || comboboxQuery.trim() === "") {
-    dropdown.hidden = true;
-    input.setAttribute("aria-expanded", "false");
-    input.removeAttribute("aria-activedescendant");
-    return;
-  }
-  dropdown.hidden = false;
-  input.setAttribute("aria-expanded", "true");
-
-  if (options.length === 0) {
-    dropdown.innerHTML = `<div class="combobox-empty">Ingen moduler matcher søket.</div>`;
-    comboboxSelectedId = null;
-    comboboxHighlightedIndex = -1;
-    input.removeAttribute("aria-activedescendant");
-    if (addBtn) addBtn.disabled = true;
-    return;
-  }
-
-  // Clamp highlighted index to current options. -1 means nothing highlighted yet.
-  if (comboboxHighlightedIndex >= options.length) comboboxHighlightedIndex = options.length - 1;
-
-  // v1.2.16 (#353): hver option får stabil id slik at input kan peke til den med
-  // aria-activedescendant. SR-bruker hører hvilken option som er fokusert per pil-tast.
-  dropdown.innerHTML = options.map((m, idx) => {
-    const optionId = `combobox-opt-${escapeHtml(m.id)}`;
-    const isHighlighted = idx === comboboxHighlightedIndex;
-    const isSelected = m.id === comboboxSelectedId;
-    return `
-    <div id="${optionId}"
-      class="combobox-option${isSelected ? " selected" : ""}${isHighlighted ? " highlighted" : ""}"
-      role="option" aria-selected="${isSelected}"
-      data-module-id="${escapeHtml(m.id)}" data-module-title="${escapeHtml(m.title)}">
-      ${escapeHtml(m.title)}
-      <span class="combobox-option-id">${escapeHtml(m.id)}</span>
-    </div>`;
-  }).join("");
-
-  // Sett aria-activedescendant til highlighted option om noen er highlighted.
-  if (comboboxHighlightedIndex >= 0 && options[comboboxHighlightedIndex]) {
-    input.setAttribute("aria-activedescendant", `combobox-opt-${options[comboboxHighlightedIndex].id}`);
-    // Scroll into view i lang liste.
-    dropdown.querySelector(".combobox-option.highlighted")?.scrollIntoView({ block: "nearest" });
-  } else {
-    input.removeAttribute("aria-activedescendant");
-  }
-
-  dropdown.querySelectorAll(".combobox-option").forEach(opt => {
-    opt.addEventListener("mousedown", e => {
-      e.preventDefault();
-      comboboxSelectedId = opt.dataset.moduleId;
-      const title = opt.dataset.moduleTitle;
-      if (input) input.value = title.replace(/&amp;/g,"&").replace(/&lt;/g,"<").replace(/&gt;/g,">").replace(/&quot;/g,'"');
-      comboboxOpen = false;
-      comboboxHighlightedIndex = -1;
-      updateConvComboboxDropdown();
-      if (addBtn) addBtn.disabled = false;
-    });
-  });
-
-  if (addBtn) addBtn.disabled = !comboboxSelectedId;
-}
-
-function addConvSelectedModule() {
-  if (!comboboxSelectedId) return;
-  const mod = allLibraryModules.find(m => m.id === comboboxSelectedId);
-  if (!mod) return;
-  convModules.push({ moduleId: mod.id, title: localizedText(mod.title) || mod.id });
-  comboboxSelectedId = null;
-  comboboxQuery = "";
-  comboboxOpen = false;
-  const input = document.getElementById("convComboboxInput");
-  if (input) input.value = "";
-  updateConvComboboxDropdown();
-  renderConvModuleList();
-}
-
 async function convCreateCourse() {
   const createBtn = document.getElementById("convCreateBtn");
   if (createBtn) createBtn.disabled = true;
@@ -1363,6 +1176,7 @@ async function convCreateCourse() {
       descriptionValues: {},
       sourceLocale,
     });
+    meldFeiledeLokaler(localizedValues.failedLocales);
     const normalizedTitle = normalizeLocalizedRequestValue(localizedValues.title) ?? convTitle;
 
     const body = await apiFetch("/api/admin/content/courses", getHeaders, {
@@ -1869,7 +1683,14 @@ function collectLocaleValues() {
 function normalizeLocalizedRequestValue(valueMap) {
   const entries = Object.entries(valueMap).filter(([, value]) => typeof value === "string" && value.trim());
   if (entries.length === 0) return undefined;
-  if (entries.length === 1 && entries[0][0] === "en-GB") return entries[0][1];
+  // ⚠️ Her sto: er ENGELSK det eneste utfylte språket, send en ren streng i stedet for kartet.
+  //
+  // En ren streng bærer ikke noe språkmerke, og serveren leser den som bokmål (#930). Et kurs med
+  // bare engelsk tittel ble derfor registrert som norsk, og publiseringsgaten navnga feil språk som
+  // manglende — nøyaktig feilen #930 rettet for moduler.
+  //
+  // Merk asymmetrien den skapte: bare-norsk beholdt kartet, bare-engelsk mistet det. Serveren
+  // godtar delvise kart (`localizedTextPatchSchema`), så kollapsen var aldri nødvendig.
   return Object.fromEntries(entries);
 }
 
@@ -1912,6 +1733,7 @@ async function saveCourse(courseId) {
         preserveExisting: true,
       })
     : cloneCourseLocaleValues(collectedValues);
+  meldFeiledeLokaler(effectiveValues.failedLocales);
   const normalizedTitle = normalizeLocalizedRequestValue(effectiveValues.title);
   const normalizedDescription = normalizeLocalizedRequestValue(effectiveValues.description);
 

@@ -123,6 +123,42 @@ async function createAssessedSubmission(
   );
 
   await runAssessmentSync(app, participantHeaders, submissionId);
+
+  // #1028: si fra HVA som gikk galt, ikke bare at noe gjorde det.
+  //
+  // ⚠️ RETTELSE 2026-08-30. Her sto det at den ekte tjenesten «kaster med en gang (ingen
+  // Azure-nøkkel)» og at innleveringen faller til #953-stien. Begge deler er MÅLT FEIL.
+  //
+  // Målt tilstand når dette slår til, for den innleveringen testen nettopp lagde:
+  //
+  //     jobb: SUCCEEDED, attempts 1, errorMessage null
+  //     LLMEvaluation-rader: 2      ← primær og sekundær ble faktisk skrevet
+  //     vedtak: 1, innlevering: UNDER_REVIEW
+  //     mock kalt: 0
+  //
+  // ⚠️ Og en probe lagt inne i den EKTE `evaluatePracticalWithLlm` fyrte ALDRI — verken i `src/`
+  // eller i `dist/`. Så vurderingen kalte hverken mocken eller den ekte funksjonen, og skrev
+  // likevel to evalueringsrader. Det er ikke «tjenesten ga opp». Hva det ER, er fortsatt åpent.
+  //
+  // Ikke gjenta disse: mocken overlever `resetModules` (testens egen import får den, `erMocket`
+  // true i hver test); fabrikken kjøres bare ÉN gang i fila; innleveringene er unike per test;
+  // å vente til jobben er ferdig hjelper ikke.
+  //
+  // Resultatet var at en vilkårlig test feilet med «expected UNDER_REVIEW to be COMPLETED» —
+  // altså det som ser ut som en feil i vurderingspolicyen. Ingenting pekte mot mocken. Fila har
+  // allerede kostet en time på nøyaktig denne forvekslingen én gang (se kommentaren over
+  // `warmModuleGraph`); denne vakta skal spare den neste.
+  //
+  // Den fikser IKKE årsaken (#1028) — den gjør symptomet mulig å lese.
+  if (mockEvaluatePracticalWithLlm.mock.calls.length === 0) {
+    throw new Error(
+      "#1028: språkmodell-mocken ble aldri kalt, men vurderingen fullførte likevel og skrev " +
+        "evalueringsrader. Jobben lykkes, ingen feil logges, og innleveringen havner i manuell " +
+        "vurdering med et resultat testen ikke køet opp. Dette er IKKE en feil i " +
+        "vurderingspolicyen. Rotårsaken er åpen — kjør fila på nytt; se #1028.",
+    );
+  }
+
   const resultResponse = await request(app).get(`/api/submissions/${submissionId}/result`).set(participantHeaders);
   expect(resultResponse.status).toBe(200);
   return resultResponse.body as {

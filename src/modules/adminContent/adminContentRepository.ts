@@ -132,6 +132,9 @@ export function createAdminContentRepository(client: AdminContentRepositoryClien
       title: string;
       description?: string;
       certificationLevel?: string;
+      // #1049: forfatterens forventede svarlengde. Utelatt = nivåets standard.
+      scopeMinWords?: number | null;
+      scopeMaxWords?: number | null;
       validFrom?: Date;
       validTo?: Date;
       createdById?: string;
@@ -169,7 +172,7 @@ export function createAdminContentRepository(client: AdminContentRepositoryClien
     findModuleDetails(moduleId: string) {
       return client.module.findUnique({
         where: { id: moduleId },
-        select: { id: true, description: true, certificationLevel: true, validFrom: true, validTo: true },
+        select: { id: true, description: true, certificationLevel: true, scopeMinWords: true, scopeMaxWords: true, validFrom: true, validTo: true },
       });
     },
 
@@ -190,12 +193,19 @@ export function createAdminContentRepository(client: AdminContentRepositoryClien
     // «sertifiseringsnivå» and validity could be set once and never corrected.
     updateModuleDetails(
       moduleId: string,
-      data: { description?: string | null; certificationLevel?: string; validFrom?: Date | null; validTo?: Date | null },
+      data: {
+        description?: string | null;
+        certificationLevel?: string;
+        scopeMinWords?: number | null;
+        scopeMaxWords?: number | null;
+        validFrom?: Date | null;
+        validTo?: Date | null;
+      },
     ) {
       return client.module.update({
         where: { id: moduleId },
         data,
-        select: { id: true, description: true, certificationLevel: true, validFrom: true, validTo: true },
+        select: { id: true, description: true, certificationLevel: true, scopeMinWords: true, scopeMaxWords: true, validFrom: true, validTo: true },
       });
     },
 
@@ -250,6 +260,12 @@ export function createAdminContentRepository(client: AdminContentRepositoryClien
           validFrom: true,
           validTo: true,
           activeVersionId: true,
+          // #1049: forfatterens omfang. Klienten sender det med ved generering, som er tilstandsløs.
+          scopeMinWords: true,
+          scopeMaxWords: true,
+          // #955: uten dette KAN publiseringsruta ikke sjekke arkivstatus, og invarianten
+          // «arkivert men publisert oppstår aldri» var uhåndhevbar der.
+          archivedAt: true,
           createdAt: true,
           updatedAt: true,
           versions: {

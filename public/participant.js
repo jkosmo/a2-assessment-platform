@@ -1,5 +1,17 @@
 import { renderWorkspaceNavigationWithProfile } from "/static/workspace-nav.js";
+import { applyIdentityDefaults as delApplyIdentityDefaults } from "/static/identity-defaults.js";
+import { renderRolePresetControl as delRenderRolePresetControl } from "/static/role-preset-control.js";
+import { runWithBusyButton } from "/static/busy-button.js";
 import { resolveInitialLocale } from "/static/i18n-locale.js";
+import { localizeDecisionReason } from "/static/decision-reason.js";
+import { describeApiError } from "/static/api-error.js";
+import {
+  buildHeadline,
+  planRows,
+  readDetailsOpen,
+  resolveOutcome,
+  writeDetailsOpen,
+} from "/static/result-summary.js";
 import { createNumberFormatter, createDateTimeFormatter } from "/static/format-display.js";
 const formatDateTime = createDateTimeFormatter(() => currentLocale);
 const formatNumber = createNumberFormatter(() => currentLocale);
@@ -64,6 +76,10 @@ const selectedModuleCandidateConstraintsSection = document.getElementById("selec
 const selectedModuleCandidateTaskConstraints = document.getElementById("selectedModuleCandidateTaskConstraints");
 const submissionIdLabel = document.getElementById("submissionId");
 const attemptIdLabel = document.getElementById("attemptId");
+// #940: flytkrommet rundt resultatet. Se `applyResultChrome`.
+const attemptIdLine = document.getElementById("attemptIdLine");
+const submissionIdLine = document.getElementById("submissionIdLine");
+const resultSummaryLabel = document.getElementById("resultSummaryLabel");
 const appealIdLabel = document.getElementById("appealId");
 const appVersionLabel = document.getElementById("appVersion");
 const resultSummary = document.getElementById("resultSummary");
@@ -387,10 +403,6 @@ function applyPreviewModeUi() {
   if (historySection) {
     historySection.classList.add("hidden");
   }
-}
-
-function isDebugModeEnabled() {
-  return participantRuntimeConfig?.debugMode !== false;
 }
 
 function isRawDebugEnabled() {
@@ -1242,7 +1254,18 @@ function renderFlowGating() {
 
   assessmentSection.classList.toggle("hidden", !hasAssessmentContext);
   // FREETEXT_ONLY has no MCQ section.
-  mcqSection.classList.toggle("hidden", !hasSelectedModule || !flowState.hasSubmission || freetextOnly);
+  //
+  // Produkteier 2026-08-28, med skjermbilde: flervalgskortet sto igjen TOMT etter innsending — bare
+  // en overskrift og luft, rett over vurderingskortet.
+  //
+  // ⚠️ Forhaandsvisningsstien loeste dette allerede (se `previewModeEnabled`-grenen under), den
+  // vanlige flyten gjorde det ikke. To steder svarte ulikt paa samme spoersmaal; regelen er nå
+  // den samme begge steder: er testen levert og det ikke er noe aa vise, er kortet borte.
+  const mcqHasNothingToShow = flowState.hasMcqSubmission && currentQuestions.length === 0;
+  mcqSection.classList.toggle(
+    "hidden",
+    !hasSelectedModule || !flowState.hasSubmission || freetextOnly || mcqHasNothingToShow,
+  );
   setSectionLocked(assessmentSection, !gate.assessmentUnlocked);
   setSectionLocked(appealSection, !gate.appealUnlocked);
   queueAssessmentButton.classList.toggle("hidden", autoAssessmentEnabled);
@@ -1258,13 +1281,19 @@ function renderFlowGating() {
   // aliasert til `resultPassFail` og vakta lette etter `passFailTotal`. Resultatet var
   // selvmotsigende: banneret holdt en bestått-under-vurdering noeytral uten konfetti, mens den
   // samme renderingen gjorde retake-knappen diskret som om utfallet var endelig.
-  resetSubmissionFlowButton.classList.toggle(
-    "reset-flow-discreet",
-    hasResultStatus && isSettledPass({
-      passFailTotal: flowState.resultPassFail,
-      submissionStatus: flowState.resultStatus,
-    }),
-  );
+  //
+  // #940: regelen snudd, og gjort til det den alltid handlet om. Knappen skal være FREMTREDENDE
+  // bare når et nytt forsøk er det åpenbare neste steget — altså etter en avgjort stryk. Alt annet
+  // er diskret.
+  //
+  // ⚠️ Funnet ved å SE på den ekte siden: under «Ingenting mer å gjøre nå» sto en rød knapp som
+  // ropte høyest på skjermen. Den motsier beskjeden, og et nytt forsøk er dessuten ikke mulig mens
+  // en sensor har saken.
+  const settledFail = deriveOutcome({
+    passFailTotal: flowState.resultPassFail,
+    submissionStatus: flowState.resultStatus,
+  }) === "failed";
+  resetSubmissionFlowButton.classList.toggle("reset-flow-discreet", hasResultStatus && !settledFail);
 
   const createSubmissionBusy = createSubmissionButton.dataset.busy === "true";
   const submitMcqBusy = submitMcqButton.dataset.busy === "true";
@@ -1326,6 +1355,9 @@ function renderFlowGating() {
   assessmentGateHint.textContent = t(gate.assessmentHintKey);
   checkAssessmentHint.textContent = t(gate.checkAssessmentHintKey);
   appealGateHint.textContent = t(gate.appealHintKey);
+  // #940: gating kjører på hver tilstandsendring. Uten dette ville et nytt forsøk etter et
+  // resultat starte med kontrollene fortsatt skjult — de skal tilbake når resultatet er borte.
+  applyResultChrome(resultSummary?.dataset.hasResult === "true");
   renderAppealState();
   applySubmissionReadMode();
 }
@@ -1637,29 +1669,15 @@ function restoreDraftForSelectedModule(showStatus = true) {
 }
 
 function renderRolePresetControl() {
-  mockRolePresetSelect.innerHTML = "";
-
-  const manualOption = document.createElement("option");
-  manualOption.value = "";
-  manualOption.textContent = t("identity.rolePresetManual");
-  mockRolePresetSelect.appendChild(manualOption);
-
-  for (const role of roleSwitchState.presets) {
-    const option = document.createElement("option");
-    option.value = role;
-    option.textContent = role;
-    mockRolePresetSelect.appendChild(option);
-  }
-
-  const matchingPreset = findMatchingPreset(rolesInput.value, roleSwitchState.presets);
-  mockRolePresetSelect.value = matchingPreset;
-
-  const disabled = !roleSwitchState.enabled;
-  mockRolePresetSelect.disabled = disabled;
-  mockRolePresetHint.textContent = disabled
-    ? t("identity.rolePresetDisabledEntra")
-    : t("identity.rolePresetHint");
-  mockRolePresetContainer.hidden = roleSwitchState.presets.length === 0;
+  // #1046: fire identiske kopier, to ulike oppforsler. Se `/static/role-preset-control.js`.
+  delRenderRolePresetControl({
+    select: mockRolePresetSelect,
+    hint: mockRolePresetHint,
+    container: mockRolePresetContainer,
+    roleSwitchState,
+    currentRoles: rolesInput.value,
+    t,
+  });
 }
 
 function renderWorkspaceNavigation() {
@@ -1763,16 +1781,8 @@ function applyCourseOnlyMode() {
 }
 
 function applyIdentityDefaults() {
-  const identityDefaults = participantRuntimeConfig?.identityDefaults?.participant;
-  if (!identityDefaults) {
-    return;
-  }
-
-  document.getElementById("userId").value = identityDefaults.userId ?? "";
-  document.getElementById("email").value = identityDefaults.email ?? "";
-  document.getElementById("name").value = identityDefaults.name ?? "";
-  document.getElementById("department").value = identityDefaults.department ?? "";
-  rolesInput.value = Array.isArray(identityDefaults.roles) ? identityDefaults.roles.join(",") : "";
+  // #1046: se `/static/identity-defaults.js`. HVILKEN rolle som leses er flatens eget valg.
+  delApplyIdentityDefaults(participantRuntimeConfig?.identityDefaults?.participant , rolesInput);
 }
 
 function headers() {
@@ -1810,24 +1820,24 @@ function headers() {
 // til noe; en kandidat midt i en test kan ikke, og for hen er dumpen bare støy som ser ut som en
 // systemfeil. Derfor beholder admin-flatene detaljfeltet (`section-portability-916.spec.ts`), mens
 // deltakerflaten sender det til `diagnostic` — konsollet, og råpanelet når feilsøking er slått på.
+// #983: deltakerkonsollet hadde SIN EGEN feiloversetter. Den kjente to nøkler —
+// `errors.apiValidation` og `errors.apiGeneric` — og slo aldri opp `errors.api.<kode>`.
+//
+// ⚠️ Den delte tabellen fantes hele tiden, med `rate_limited` på tre språk. Konsollet spurte den
+// bare aldri. Resultatet: en deltaker med bokmål som leverte to ganger raskt fikk «Too many
+// submission requests. Retry in 60 seconds.» — og modul-lista ble tømt og erstattet av den
+// engelske setningen. Tomtilstand og feilmelding i ett, på feil språk.
+//
+// ⚠️ Deltakerkonsollet var den ENESTE skjermen som ikke brukte `describeApiError`. Alle de andre
+// gjorde det. En andre kopi av en oversetter driver alltid fra originalen; denne rakk å bli to
+// nøkler bak.
+//
+// `diagnostic` beholder navnet sitt: `showToast(msg, type, detail)` tar en `detail` som tredje
+// argument, og et felt med det navnet inviterer neste kaller til å sende det rett dit.
 function humanizeApiError(text) {
-  const match = /^(\d{3}):\s*(\{[\s\S]*\})$/.exec(text);
-  if (!match) return null;
-  let body;
-  try {
-    body = JSON.parse(match[2]);
-  } catch {
-    return null;
-  }
-  const code = typeof body?.error === "string" ? body.error : null;
-  const key = code === "validation_error" ? "errors.apiValidation" : "errors.apiGeneric";
-  return {
-    headline: t(key).replace("{status}", match[1]),
-    // Navnet er `diagnostic`, ikke `detail`, med vilje: `showToast(msg, type, detail)` tar en
-    // `detail` som tredje argument, og et felt med det navnet inviterer neste kaller til å sende det
-    // rett dit. Feltet heter nå noe annet enn parameteren det ikke skal inn i.
-    diagnostic: JSON.stringify(body, null, 2),
-  };
+  const described = describeApiError(text?.body ? text : { message: text }, t);
+  if (!described.code) return null;
+  return { headline: described.headline, diagnostic: described.detail ?? described.headline };
 }
 
 // #988: samme oversettelse som `log()` bruker, for de kallstedene som går rett til showToast.
@@ -1868,27 +1878,6 @@ function log(data, options = {}) {
   output.textContent = formatOutputDetail(data);
 }
 
-async function runWithBusyButton(button, action, after = () => {}) {
-  if (!button || button.dataset.busy === "true") {
-    return;
-  }
-
-  const wasDisabled = button.disabled;
-  button.dataset.busy = "true";
-  button.disabled = true;
-  button.classList.add("button-busy");
-  button.setAttribute("aria-busy", "true");
-
-  try {
-    await action();
-  } finally {
-    button.dataset.busy = "";
-    button.classList.remove("button-busy");
-    button.removeAttribute("aria-busy");
-    button.disabled = wasDisabled;
-    after();
-  }
-}
 
 async function loadVersion() {
   try {
@@ -1960,17 +1949,6 @@ function localizeDecisionType(value, submissionStatus, passFailTotal) {
   return t(`result.decisionValue.${normalized || "UNKNOWN"}`);
 }
 
-function localizeStatusExplanation(status) {
-  const normalized = typeof status === "string" ? status.toUpperCase() : "";
-  if (normalized === "UNDER_REVIEW") {
-    return t("result.statusExplanation.underReview");
-  }
-  if (normalized === "COMPLETED") {
-    return t("result.statusExplanation.completed");
-  }
-  return t("result.statusExplanation.processing");
-}
-
 function localizeCriterionName(criterion) {
   const key = typeof criterion === "string" ? criterion : "";
   const translationKey = `result.criterion.${key}`;
@@ -1995,136 +1973,35 @@ function localizeCriterionName(criterion) {
     .replace(/^./, (c) => c.toUpperCase());
 }
 
-function localizeKnownContent(value, map) {
-  if (typeof value !== "string") {
-    return value ?? "-";
-  }
+// #1024: her lå `localizeKnownContent` og to gjettekart — 19 engelske forbedringsråd og fem
+// stub-begrunnelser — som slo opp modellens frie tekst mot en oversatt nøkkel.
+//
+// ⚠️ De var lag fra tiden FØR `buildResponseLanguageInstruction`. Serveren ber nå modellen skrive
+// `improvement_advice` og `criterion_rationales` på deltakerens språk, og `responseLocale` er
+// koblet til besvarelsens språk. Et engelsk oppslag kan da ikke treffe.
+//
+// Målt før fjerning: kriteriekartet lette etter «Stub: submission appears relevant to the module
+// task.», mens serveren sender «Stub: assessed criterion <id>.» — teksten ble endret, kartet ikke,
+// og oppslaget kunne aldri matche. Stubbens tre forbedringsråd traff 0 av de 19 oppføringene.
+//
+// Teksten vises nå slik den er lagret. Rader vurdert før språkinstruksjonen står med engelsk tekst
+// i databasen, og det er den ærlige visningen av dem (produkteier 2026-09-04).
 
-  const trimmed = value.trim();
-  const directKey = map[trimmed];
-  if (directKey) {
-    return t(directKey);
-  }
-
-  const normalize = (text) =>
-    text
-      .trim()
-      .replace(/[.;!]+$/g, "")
-      .replace(/\s+/g, " ")
-      .toLowerCase();
-
-  const normalized = normalize(trimmed);
-  for (const [candidate, translationKey] of Object.entries(map)) {
-    if (normalize(candidate) === normalized) {
-      return t(translationKey);
-    }
-  }
-
-  return value;
-}
-
-function localizeDecisionReason(value) {
-  return localizeKnownContent(value, {
-    "Automatically routed to manual review due to red flag / confidence / borderline rule.":
-      "result.decisionReasonValue.autoManualReview",
-    "Automatically routed to manual review due to disagreement between primary and secondary LLM assessments.":
-      "result.decisionReasonValue.autoManualReview",
-    "Automatic pass by threshold rules.": "result.decisionReasonValue.autoPass",
-    "Automatic fail by threshold rules.": "result.decisionReasonValue.autoFail",
-    "Automatic fail due to insufficient submission evidence.":
-      "result.decisionReasonValue.autoFailInsufficientEvidence",
-  });
-}
-
-function localizeConfidence(value) {
-  if (typeof value === "string") {
-    const normalized = value.trim().toLowerCase();
-    if (
-      normalized.includes("low confidence") &&
-      (normalized.includes("sparse") ||
-        normalized.includes("limited cues") ||
-        normalized.includes("partial evidence"))
-    ) {
-      return t("result.confidenceValue.low");
-    }
-  }
-
-  return localizeKnownContent(value, {
-    "Low confidence due to sparse content; assessment based on partial evidence; more details would improve accuracy.":
-      "result.confidenceValue.low",
-    "Low confidence in alignment due to sparse content; assessment based on limited cues.":
-      "result.confidenceValue.low",
-    "Medium confidence due to potential responsible-use ambiguity.":
-      "result.confidenceValue.medium",
-    "High confidence: structured and sufficiently detailed submission.":
-      "result.confidenceValue.high",
-  });
-}
-
-function localizeImprovementAdvice(values) {
-  return localizeImprovementAdviceItems(values).join("; ");
-}
-
-function localizeImprovementAdviceItems(values) {
-  if (!Array.isArray(values) || values.length === 0) {
-    return [];
-  }
-
-  const mapping = {
-    "Provide clearer before/after examples.": "result.improvementAdviceValue.beforeAfter",
-    "Describe concrete validation checks you performed.":
-      "result.improvementAdviceValue.validationChecks",
-    "Reference responsible-use constraints explicitly.":
-      "result.improvementAdviceValue.responsibleUse",
-    "Specify concrete risk scenarios, owners, and mitigations tied to the module.":
-      "result.improvementAdviceValue.riskScenarios",
-    "Add a data handling and privacy section, including logging and retention.":
-      "result.improvementAdviceValue.dataHandling",
-    "Define a human-in-the-loop process and approval steps.":
-      "result.improvementAdviceValue.humanInLoop",
-    "Include measurable QA metrics and acceptance criteria.":
-      "result.improvementAdviceValue.qaMetrics",
-    "Provide a concrete improvement loop with iterations and feedback capture.":
-      "result.improvementAdviceValue.improvementLoop",
-    "Clarify responsible-use guidelines and safeguards against prompt leakage.":
-      "result.improvementAdviceValue.promptLeakage",
-    "Define governance scope, risk owners, and monitoring cadence.":
-      "result.improvementAdviceValue.governanceScope",
-    "Map content to risk categories (STRIDE, CIA triad, or equivalent).":
-      "result.improvementAdviceValue.riskCategories",
-    "Incorporate a concrete QA process with checklists and independent review.":
-      "result.improvementAdviceValue.qaChecklist",
-    "Specify data handling, privacy, retention, and security controls.":
-      "result.improvementAdviceValue.dataControls",
-    "Articulate acceptance criteria and thresholds for quality and risk.":
-      "result.improvementAdviceValue.qualityThresholds",
-    "Outline an iteration plan with feedback loops and versioning.":
-      "result.improvementAdviceValue.iterationVersioning",
-    "Clarify escalation procedures and decision rights.":
-      "result.improvementAdviceValue.escalationDecisionRights",
-    "Include artefacts like risk register, control mapping, and audit trails.":
-      "result.improvementAdviceValue.artifactsEvidence",
-    "Align prompts with responsible AI principles and misuse safeguards.":
-      "result.improvementAdviceValue.responsibleAiMisuse",
-    "Provide example outputs and mitigations for common failure modes.":
-      "result.improvementAdviceValue.examplesFailureModes",
-  };
-
-  return values.map((value) => localizeKnownContent(value, mapping));
-}
-
-function localizeCriterionRationale(value) {
-  return localizeKnownContent(value, {
-    "Stub: submission appears relevant to the module task.":
-      "result.rationaleValue.relevance_for_case",
-    "Stub: output shows practical utility.": "result.rationaleValue.quality_and_utility",
-    "Stub: at least one improvement iteration is visible.":
-      "result.rationaleValue.iteration_and_improvement",
-    "Stub: includes human QA/reflection markers.":
-      "result.rationaleValue.human_quality_assurance",
-    "Stub: responsible-use checks inferred from provided content.":
-      "result.rationaleValue.responsible_use",
-  });
+/**
+ * #1019: forbeholdet fra vurderingen, på deltakerens språk.
+ *
+ * ⚠️ Dette gjettet tidligere på delstrenger i språkmodellens engelske frittekst — «low confidence»
+ * pluss «sparse» eller «limited cues» — med et kart over fire setninger modellen kanskje skrev
+ * ordrett. Bommet det, sto engelsk tekst i et norsk skjermbilde. Notatet er GENERERT og kan
+ * formuleres om når som helst; en gjetning på fri tekst kan ikke være stabil.
+ *
+ * Serveren sender nå nivået som en verdi (`deriveConfidenceLevel`), og `null` når det ikke er noe
+ * forbehold å melde — da vises ingen rad. Samme mønster som #950 innførte for begrunnelsen.
+ */
+function localizeConfidence(level) {
+  if (level === "low") return t("result.confidenceValue.low");
+  if (level === "medium") return t("result.confidenceValue.medium");
+  return null;
 }
 
 function deriveAssessmentProgressKeyFromSubmissionStatus(status, latestJobStatus) {
@@ -2236,6 +2113,277 @@ function clearSummaryContainer(element) {
   }
 
   element.innerHTML = "";
+}
+
+// ── #940: resultatskjermen ──────────────────────────────────────────────────────────────────────
+//
+// Åtte likestilte rader for å si «bestått, 100 %». Nå avgjør UTFALLET hva som står åpent, og resten
+// ligger bak «Vis detaljer». Reglene selv bor i result-summary.js, fordi de ellers bare kunne prøves
+// ved å rendre hele flaten (#982).
+
+/**
+ * Setter inn {navn}, samme konvensjon som resten av fila.
+ *
+ * ⚠️ TALL formateres med `formatNumber`, ikke med `String()`. QA-porten runde 3 målte at
+ * overskrifta sa «Ikke bestått — 66.67 %» med PUNKTUM, mens delpoengene på SAMME underlinje sto med
+ * komma — de gikk gjennom formatNumber, overskrifta ikke. Det rammer enhver flervalgsmodul der
+ * antall spørsmål ikke går opp i 100.
+ */
+function fillPlaceholders(template, params) {
+  let out = String(template ?? "");
+  for (const [key, value] of Object.entries(params ?? {})) {
+    const shown = typeof value === "number" ? formatNumber(value) : String(value);
+    out = out.split(`{${key}}`).join(shown);
+  }
+  return out;
+}
+
+/** «Flervalg 28 · Praktisk 48» — delpoengene som én tekst, på deltakerens språk. */
+function formatScoreParts(parts) {
+  return (parts ?? []).map((part) => `${t(part.labelKey)} ${formatNumber(part.value)}`).join(" · ");
+}
+
+function buildHeadlineText(headline) {
+  const text = fillPlaceholders(t(headline.key), headline.params);
+  if (!headline.subKey) return { text, sub: "" };
+  const subParams = { ...headline.subParams };
+  if (Array.isArray(subParams.parts)) subParams.parts = formatScoreParts(subParams.parts);
+  return { text, sub: fillPlaceholders(t(headline.subKey), subParams) };
+}
+
+/**
+ * Verdien for én rad. Radene er navngitt i result-summary.js; her slås de opp.
+ *
+ * ⚠️ Returnerer null når raden ikke har noe å si. En rad som viser «–» bruker plass på å fortelle
+ * at den er tom — det var ett av de åtte elementene som skulle bort.
+ */
+function resultRowContent(row, body) {
+  // ⚠️ QA-porten runde 4: doc-kommentaren over lovet dette, men bare `submissionId`-grenen holdt
+  // det. `formatNumber(null)` gir «-», så poengradene viste en strek i alle vente-tilstandene — og
+  // siden utfellingen HUSKES, så en deltaker som hadde åpnet detaljene før dette uten å klikke.
+  //
+  // Min egen e2e for «ingen strek-rader» var falskt grønn: fiksturet var et BESTÅTT resultat, der
+  // poengradene aldri planlegges i det hele tatt. Testen kunne ikke nå påstanden sin.
+  const score = (key, labelKey) => {
+    const value = body.scoreComponents?.[key];
+    return typeof value === "number" ? { label: t(labelKey), value: formatNumber(value) } : null;
+  };
+
+  switch (row) {
+    case "status":
+      return { label: t("result.status"), value: localizeSubmissionStatus(body.status) };
+    case "totalScore":
+      return score("totalScore", "result.totalScore");
+    case "mcqScore":
+      return score("mcqScaledScore", "result.mcqScore");
+    case "practicalScore":
+      return score("practicalScaledScore", "result.practicalScore");
+    case "decision":
+      // Uten et vedtak sa raden «Ukjent», som er en rad som bruker plass på å si at den er tom.
+      if (!body.decision) return null;
+      return {
+        label: t("result.decision"),
+        value: localizeDecisionType(body.decision?.decisionType, body.status, body.decision?.passFailTotal),
+        valueClass: outcomeClass(body.decision?.passFailTotal, body.status),
+      };
+    case "decisionReason":
+      return { label: t("result.decisionReason"), value: localizeDecisionReason(body.participantGuidance, { translate: t, formatNumber }) };
+    case "confidence": {
+      const confidence = localizeConfidence(body.participantGuidance?.confidenceLevel);
+      return confidence ? { label: t("result.confidence"), value: confidence } : null;
+    }
+    case "submissionId":
+      // ⚠️ null, ikke "-". En rad som viser en strek bruker plass på å si at den er tom.
+      // ⚠️ Dette er INNLEVERINGENS id, ikke forsøkets. «Forsøks-ID» er navnet på `attemptId` ellers
+      // på siden, og to ulike verdier under samme navn er verre enn ingen av dem.
+      return body.submissionId
+        ? { label: t("result.submissionIdLabel"), value: body.submissionId, valueClass: "machine-id" }
+        : null;
+    default:
+      return null;
+  }
+}
+
+function appendPlannedRows(grid, rows, body) {
+  for (const row of rows) {
+    const content = resultRowContent(row, body);
+    if (!content) continue;
+    appendSummaryRow(grid, content.label, content.value, content.valueClass);
+  }
+}
+
+const OUTCOME_MARKS = { passed: "\u2713", failed: "\u2715", review: "\u25F7", pending: "\u25F7" };
+
+function buildResultCard(body) {
+  const isMcqOnly = body.assessmentMode ? body.assessmentMode === "MCQ_ONLY" : selectedModuleIsMcqOnly();
+  const isFreetextOnly = body.assessmentMode
+    ? body.assessmentMode === "FREETEXT_ONLY"
+    : selectedModuleIsFreetextOnly();
+
+  const outcome = resolveOutcome(body.status, body.decision?.passFailTotal ?? null);
+  lastResultOutcome = outcome;
+  const headline = buildHeadline(outcome, {
+    scoreComponents: body.scoreComponents ?? {},
+    requirement: body.requirement ?? {},
+    isMcqOnly,
+    isFreetextOnly,
+  });
+
+  const reasonText = localizeDecisionReason(body.participantGuidance, { translate: t, formatNumber });
+  const confidenceText = localizeConfidence(body.participantGuidance?.confidenceLevel);
+  const plan = planRows(outcome, {
+    isMcqOnly,
+    isFreetextOnly,
+    hasDecisionReason: Boolean(reasonText) && reasonText !== "-",
+    // #1019: null betyr «ingenting å melde». Raden planlegges da ikke i det hele tatt.
+    hasConfidence: Boolean(confidenceText),
+  });
+
+  const card = createSummaryCard("");
+
+  const verdict = document.createElement("div");
+  verdict.className = "result-verdict";
+
+  const mark = document.createElement("span");
+  mark.className = `result-mark result-mark-${outcome}`;
+  mark.textContent = OUTCOME_MARKS[outcome] ?? "";
+  // Dekorativ: utfallet står i teksten ved siden av, og en skjermleser skal ikke lese «hake».
+  mark.setAttribute("aria-hidden", "true");
+
+  const texts = buildHeadlineText(headline);
+  const headlineNode = document.createElement("span");
+  headlineNode.className = "result-headline";
+  headlineNode.textContent = texts.text;
+
+  if (texts.sub) {
+    const subNode = document.createElement("span");
+    subNode.className = "result-subline";
+    subNode.textContent = texts.sub;
+    headlineNode.appendChild(subNode);
+  }
+
+  verdict.append(mark, headlineNode);
+  card.appendChild(verdict);
+
+  if (plan.open.length > 0) {
+    const openGrid = document.createElement("div");
+    openGrid.className = "summary-grid result-open";
+    appendPlannedRows(openGrid, plan.open, body);
+    card.appendChild(openGrid);
+  }
+
+  if (plan.detail.length > 0) {
+    const details = document.createElement("details");
+    details.className = "result-details";
+    // Åpnet du detaljene på ett resultat, vil du sannsynligvis ha dem åpne på neste.
+    details.open = readDetailsOpen(safeLocalStorage());
+    // `toggle` er den riktige hendelsen: den fanger både klikk og tastatur.
+    //
+    // ⚠️ Et utkast la til en `click`-lytter i tillegg, fordi QA-porten målte at lagringen sto tom
+    // rett etter et klikk. Men det var TESTEN som navigerte før den kølagte oppgaven rakk å kjøre —
+    // ikke produktet som mistet valget. En mutasjon bekreftet det: fjernes click-lytteren, merker
+    // ingen test det. To skrivemåter ingen kan skille fra hverandre er kompleksitet uten dekning,
+    // og testen venter nå på at verdien FAKTISK er skrevet i stedet.
+    details.addEventListener("toggle", () => writeDetailsOpen(safeLocalStorage(), details.open));
+
+    const summary = document.createElement("summary");
+    summary.textContent = t("result.details.show");
+    details.appendChild(summary);
+
+    // ⚠️ Teksten «Vis detaljer» er den samme enten panelet er åpent eller lukket. En seende bruker
+    // ser pila snu; en skjermleserbruker hører bare det samme igjen. <details> eksponerer riktignok
+    // expanded-tilstanden selv, men det er ikke sant i alle nettleser/skjermleser-par — og en
+    // beskrivende etikett koster ingenting.
+    const syncSummaryLabel = () => {
+      summary.setAttribute("aria-label", t(details.open ? "result.details.hide" : "result.details.show"));
+    };
+    syncSummaryLabel();
+    details.addEventListener("toggle", syncSummaryLabel);
+
+    const detailGrid = document.createElement("div");
+    detailGrid.className = "summary-grid";
+    appendPlannedRows(detailGrid, plan.detail, body);
+    details.appendChild(detailGrid);
+
+    card.appendChild(details);
+  }
+
+  return card;
+}
+
+/**
+ * ⚠️ Selve OPPSLAGET av localStorage kaster i en nettleser som har lagring avslått — ikke bare
+ * kallene på den. Derfor er også dette pakket inn.
+ */
+function safeLocalStorage() {
+  try {
+    return window.localStorage;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * #940: når resultatet står på skjermen, er kontrollene som produserte det ferdige.
+ *
+ * ⚠️ QA-porten fant dette: første runde byttet ut INNHOLDET i resultatkortet og lot alt rundt stå.
+ * Seks av de åtte elementene saken lister lå i flyten utenfor kortet, ikke i det — «Sjekk framdrift»
+ * som ikke kan sjekke noe, hintet som forklarer den, «Vurdering er ferdig» rett over et kort som
+ * sier utfallet, «Vis resultat» som ber deg vise det som allerede vises, og etiketten
+ * «Resultatoppsummering:» over en boks som selv sier hva den er.
+ *
+ * Det er samme feil som i #982: jeg fikset stedet jeg så på, og sjekket ikke hvem andre som gjorde
+ * det samme. Saken listet elementene eksplisitt, og jeg fjernet to av åtte.
+ *
+ * ⚠️ `setHidden`, ikke `.hidden` — knappene har klasser som setter `display`, og de vinner over
+ * `[hidden]` i kaskaden.
+ *
+ * Det som IKKE skjules: «Slett innlevering og start på nytt» (#549 — den skal være der, bare
+ * nedtonet), og ankeseksjonen, som er neste steg for den som er uenig.
+ */
+// Utfallet fra siste rendring. `applyResultChrome` trenger det, og gating kjører uavhengig av
+// resultatrenderingen — derfor må det holdes her og ikke leses ut av DOM-en.
+let lastResultOutcome = null;
+
+function applyResultChrome(hasResult) {
+  // ⚠️ QA-porten runde 2: første utkast nøklet på «står det et kort der», og det var en DØDLÅS.
+  //
+  // Et resultat som fortsatt BEHANDLES rendrer også et kort («Besvarelsen din blir vurdert»). Da
+  // skjulte vi «Start vurdering», «Sjekk framdrift» og «Vis resultat» — samtidig som «Slett
+  // innlevering og start på nytt» er skjult av gatingen fordi statusen ikke er ferdig
+  // (participant.js:~1264/1380). Null kontroller igjen.
+  //
+  // Realistisk vei inn: autoløkka gir opp etter 90 sekunder — som er en helt vanlig LLM-tid på en
+  // delt B1-instans — deltakeren klikker «Vis resultat», og sitter fast.
+  //
+  // Kontrollene skal derfor bare bort når det ikke er mer å gjøre: bestått, ikke bestått, ukjent
+  // utfall, eller til manuell vurdering (der kortet lover en e-post som faktisk sendes,
+  // manualReviewService.ts:155). ALDRI mens noe holder på.
+  //
+  // ⚠️ «unknown» regnes IKKE som avgjort. En avgjort status uten vedtak — REJECTED er den ene i
+  // enumet — ville ellers fått krommet skjult mens reset-knappen også er skjult av gatingen, altså
+  // samme dødlås en gang til. Ingen kodesti skriver REJECTED i dag (#953), men vet vi ikke hva som
+  // skjedde, er kontrollene nettopp det ærlige å la stå.
+  const settled = hasResult
+    && lastResultOutcome !== null
+    && lastResultOutcome !== "pending"
+    && lastResultOutcome !== "unknown";
+  applySettledChrome(settled);
+}
+
+function applySettledChrome(hasResult) {
+  for (const node of [checkAssessmentButton, checkAssessmentHint, queueAssessmentButton, checkResultButton, resultSummaryLabel]) {
+    if (node) setHidden(node, hasResult);
+  }
+  // Maskin-ID-ene: forsøks-ID-en ligger nå bak «Vis detaljer» i kortet, der den trengs når noe skal
+  // ettergås (#939). To ID-linjer i tillegg er støy over et ferdig resultat.
+  for (const node of [attemptIdLine, submissionIdLine]) {
+    if (node) setHidden(node, hasResult);
+  }
+  // «Vurderingshandlinger er tilgjengelige.» og «Vurdering er ferdig.» sier begge noe kortet
+  // allerede har sagt tydeligere.
+  if (assessmentGateHint) setHidden(assessmentGateHint, hasResult);
+  if (assessmentProgressStatus) setHidden(assessmentProgressStatus, hasResult);
 }
 
 function createSummaryCard(title) {
@@ -2351,6 +2499,8 @@ function renderResultSummary(body) {
     resultSummary.dataset.hasResult = "";
     clearSummaryContainer(resultSummary);
     resultSummary.textContent = t("result.none");
+    lastResultOutcome = null;
+    applyResultChrome(false);
     renderAppealState();
     return;
   }
@@ -2365,39 +2515,12 @@ function renderResultSummary(body) {
   flowState.resultPassFail = body?.decision?.passFailTotal ?? null;
 
   clearSummaryContainer(resultSummary);
-  const summaryCard = createSummaryCard("");
-  const summaryGrid = document.createElement("div");
-  summaryGrid.className = "summary-grid";
-  appendSummaryRow(summaryGrid, t("result.status"), localizeSubmissionStatus(body.status));
-  appendSummaryRow(summaryGrid, t("result.statusExplanation"), localizeStatusExplanation(body.status));
-  appendSummaryRow(summaryGrid, t("result.totalScore"), formatNumber(body.scoreComponents?.totalScore));
-  // #591: only show the score components that actually count for the module type — a 0 from a
-  // component the module doesn't have (MCQ for free-text-only, practical for MCQ-only) just confuses
-  // the participant. Principle: don't show information the user doesn't need.
-  if (!selectedModuleIsFreetextOnly()) {
-    appendSummaryRow(summaryGrid, t("result.mcqScore"), formatNumber(body.scoreComponents?.mcqScaledScore));
-  }
-  if (!selectedModuleIsMcqOnly()) {
-    appendSummaryRow(summaryGrid, t("result.practicalScore"), formatNumber(body.scoreComponents?.practicalScaledScore));
-  }
-  appendSummaryRow(summaryGrid, t("result.decision"), localizeDecisionType(body.decision?.decisionType, body.status, body.decision?.passFailTotal), outcomeClass(body.decision?.passFailTotal, body.status));
-  appendSummaryRow(
-    summaryGrid,
-    t("result.decisionReason"),
-    localizeDecisionReason(body.participantGuidance?.decisionReason),
-  );
-  appendSummaryRow(
-    summaryGrid,
-    t("result.confidence"),
-    localizeConfidence(body.participantGuidance?.confidenceNote),
-  );
-  summaryCard.appendChild(summaryGrid);
-  resultSummary.appendChild(summaryCard);
+  resultSummary.appendChild(buildResultCard(body));
 
   appendSummaryList(
     resultSummary,
     t("result.improvementAdvice"),
-    localizeImprovementAdviceItems(body.participantGuidance?.improvementAdvice),
+    Array.isArray(body.participantGuidance?.improvementAdvice) ? body.participantGuidance.improvementAdvice : [],
   );
 
   const rationales = body.participantGuidance?.criterionRationales ?? {};
@@ -2409,7 +2532,7 @@ function renderResultSummary(body) {
 
     for (const [criterion, rationale] of rationaleEntries) {
       const item = document.createElement("li");
-      item.textContent = `${localizeCriterionName(criterion)}: ${localizeCriterionRationale(String(rationale))}`;
+      item.textContent = `${localizeCriterionName(criterion)}: ${String(rationale)}`;
       rationaleList.appendChild(item);
     }
 
@@ -2437,6 +2560,7 @@ function renderResultSummary(body) {
   }
 
   resultSummary.dataset.hasResult = "true";
+  applyResultChrome(true);
   renderAppealState();
 }
 
@@ -2607,7 +2731,10 @@ loadModulesButton.addEventListener("click", async () => {
       syncParticipantModuleWorkspace({ restoreDraft: true });
       log(body);
     } catch (error) {
-      showEmpty(moduleList, error.message);
+      // #983: ⚠️ dette tømte lista OG satte serverens engelske setning i stedet — tomtilstand og
+      // feilmelding i ett, på feil språk. Setningen er nå oversatt; er koden ukjent, faller
+      // `describeApiError` tilbake til en lokalisert generisk med statuskoden i.
+      showEmpty(moduleList, describeApiError(error, t).headline);
       log(error.message);
     }
   });
@@ -2903,7 +3030,7 @@ checkAssessmentButton.addEventListener("click", async () => {
       renderAssessmentProgress();
       log(body);
     } catch (error) {
-      showEmpty(assessmentProgressStatus, error.message);
+      showEmpty(assessmentProgressStatus, describeApiError(error, t).headline);
       assessmentProgressSeconds.textContent = "";
       assessmentProgressSeconds.classList.add("hidden");
       log(error.message);
@@ -2963,7 +3090,7 @@ loadHistoryButton?.addEventListener("click", async () => {
       renderHistorySummary(body);
       log(body);
     } catch (error) {
-      showEmpty(historySummary, error.message);
+      showEmpty(historySummary, describeApiError(error, t).headline);
       log(error.message);
     }
   });
@@ -3473,7 +3600,10 @@ async function loadCourseDetail(courseId) {
     renderCourseDetailModules(courseId, body.course);
   } catch (error) {
     if (container) {
-      container.innerHTML = `<p class="small" style="color:var(--color-error)">${escapeHtmlP(error instanceof Error ? error.message : t("courses.loadError"))}</p>`;
+      // #1046: serverens `message` er `"<status>: <hele JSON-kroppen>"` (api-client.js:167) — altså
+      // JSON rett i grensesnittet, på serverens språk. Den delte oversetteren gir kodens setning på
+      // brukerens språk. Dette var ett av to steder i fila som IKKE går gjennom `log()`.
+      container.innerHTML = `<p class="small" style="color:var(--color-error)">${escapeHtmlP(describeApiError(error, t).headline)}</p>`;
     }
   }
 }
@@ -3743,7 +3873,16 @@ function focusInlinePanel(panel) {
 }
 
 function scrollItemIntoView(itemWrap) {
-  try { itemWrap.scrollIntoView({ behavior: "smooth", block: "nearest" }); } catch { /* ignore */ }
+  // Produkteier 2026-08-28: «Når jeg trykker på Les, så åpner ikke seksjonen med starten i toppen
+  // av skjermen.»
+  //
+  // ⚠️ Sto som `block: "nearest"`, som ruller MINST MULIG. Var raden allerede så vidt synlig,
+  // flyttet den seg ikke i det hele tatt — og når panelet så utvidet seg til full seksjonstekst,
+  // sto deltakeren midt i eller nederst i teksten og måtte rulle oppover for å finne begynnelsen.
+  //
+  // `start` legger radens topp øverst. `.course-item` har `scroll-margin-top` så den ikke klistrer
+  // seg helt inntil kanten.
+  try { itemWrap.scrollIntoView({ behavior: "smooth", block: "start" }); } catch { /* ignore */ }
 }
 
 function collapseInlineOpen() {
@@ -3793,8 +3932,10 @@ async function openInlineItemByEntry(courseId, entry) {
     itemWrap.classList.add("open");
     setHidden(panel, false);
     row?.setAttribute("aria-expanded", "true");
-    scrollItemIntoView(itemWrap);
+    // ⚠️ Rull ETTER at innholdet er rendret. Sto før `await`-en, altså mot et tomt panel — og da
+    // regnet nettleseren ut hvor den skulle rulle basert på en høyde som ikke fantes ennå.
     await renderSectionReaderInto(panel, courseId, entry);
+    scrollItemIntoView(itemWrap);
     focusInlinePanel(panel);
     return;
   }
@@ -3972,7 +4113,7 @@ async function renderSectionReaderInto(panel, courseId, entry) {
     }
   } catch (error) {
     const bodyEl = panel.querySelector("#sectionReaderBody");
-    if (bodyEl) bodyEl.textContent = error instanceof Error ? error.message : t("courses.loadError");
+    if (bodyEl) bodyEl.textContent = describeApiError(error, t).headline;
   }
 
   // #923: seksjonsleseren har IKKE lenger et eget diskusjonsboard. Tre nivåer med diskusjon delte

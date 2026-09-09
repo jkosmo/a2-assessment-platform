@@ -4,6 +4,9 @@ import { sha256 } from "../utils/hash.js";
 import type { AppRole as AppRoleType } from "@prisma/client";
 import { AppRole } from "../db/prismaRuntime.js";
 import { hasAnyRole, SUBMISSION_AUDIT_READERS } from "../auth/roleSets.js";
+import { auditActions, auditEntityTypes } from "../observability/auditEvents.js";
+import { logOperationalEvent } from "../observability/operationalLog.js";
+import { operationalEvents } from "../observability/operationalEvents.js";
 import { prisma } from "../db/prisma.js";
 import { runInTransaction, type DbTransactionClient } from "../db/transaction.js";
 import type { AuditAction, AuditEventInput } from "../observability/auditEvents.js";
@@ -245,6 +248,65 @@ export async function getSubmissionAuditTrail(input: SubmissionAuditTrailInput) 
 
   const events = await auditRepository.findSubmissionAuditEvents(input.submissionId);
   const includeActorEmail = hasAuditReadAccess(input.roles);
+
+  // #1000: hvem leste dette sporet, og knyttet noe FORHOLD dem til innleveringen?
+  //
+  // ⚠️ Sporet bærer navn og e-post til både kandidaten og alle som har behandlet saken. At noen
+  // leser det skal kunne etterprøves — og det kunne det ikke før nå.
+  //
+  // Fem roller kan lese ALT, men to av dem er begrunnet med et forhold («mine kandidater», «mine
+  // mentees») som datamodellen ikke har. `roleOnly` teller nettopp de lesingene som hvilte på
+  // rollen alene. Uten de tallene ville enhver innstramming vært en gjetning — og en innstramming
+  // mot en relasjon som ikke finnes, gir null tilgang til alle.
+  //
+  // ⚠️ Loggingen får ALDRI velte lesingen. Den er et sidespor, ikke en del av svaret.
+  const isOwnSubmission = submission.userId === input.requestorUserId;
+  try {
+    const relations = isOwnSubmission
+      ? { isAssignedReviewer: false, isAssignedAppealHandler: false, ownsModuleContent: false }
+      : await auditRepository.findReaderRelations({
+          submissionId: submission.id,
+          moduleId: submission.moduleId,
+          readerUserId: input.requestorUserId,
+        });
+
+    await recordAuditEvent({
+      entityType: auditEntityTypes.submissionAuditAccess,
+      entityId: submission.id,
+      action: auditActions.audit.submissionTrailRead,
+      actorId: input.requestorUserId,
+      metadata: {
+        // ⚠️ `subjectSubmissionId`, ikke `submissionId` — den nøkkelen ville lagt denne hendelsen
+        // inn i deltakerens eget spor, og skapt lesinger-av-lesinger.
+        subjectSubmissionId: submission.id,
+        readerRoles: input.roles,
+        isOwnSubmission,
+        ...relations,
+        roleOnly:
+          !isOwnSubmission
+          && !relations.isAssignedReviewer
+          && !relations.isAssignedAppealHandler
+          && !relations.ownsModuleContent,
+      },
+    });
+  } catch (error) {
+    // Lesingen fortsetter. En manglende tilgangslogg er et hull i sporbarheten, ikke en grunn til
+    // å nekte en lærer å se en sak.
+    //
+    // ⚠️ Men den skal ikke forsvinne i STILLHET. QA-porten: under backfill eller PII-skrubbing
+    // holdes kjedelåsen i opptil 120 s, og skrivingen her feiler på Prismas 5 s tidsavbrudd. Uten
+    // denne linja ville tilgangsloggen fått hull ingen visste om — og et hull i en tilgangslogg er
+    // nettopp det man ikke oppdager før noen spør hvem som har lest hva.
+    logOperationalEvent(
+      operationalEvents.audit.trailAccessLogFailed,
+      {
+        subjectSubmissionId: submission.id,
+        readerUserId: input.requestorUserId,
+        errorMessage: error instanceof Error ? error.message : String(error),
+      },
+      "error",
+    );
+  }
 
   return {
     submissionId: submission.id,

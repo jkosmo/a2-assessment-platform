@@ -93,6 +93,34 @@ body {
   padding: 0 var(--space-5);
 }
 
+/* ─── Overskrifter ────────────────────────────────────────────────────────────────────────────
+ *
+ * Produkteier 2026-08-28, med skjermbilde av modul-arbeidsflaten: «Det er noe feil med størrelsen
+ * av font og skala på boksene her i forhold til hva som blir brukt for selve listen.»
+ *
+ * ⚠️ Målt årsak: overskriftene var ikke stilsatt I DET HELE TATT. `h2` målte 24px/700 med 19,92px
+ * marger — nøyaktig nettleserens standard (1,5em og 0,83em). De var altså ikke for store i forhold
+ * til et designvalg; de sto utenfor designsystemet. Alt annet på siden bruker tokens og en skala
+ * som topper seg på 17px (`.result-headline`), mens `h2` arvet 24.
+ *
+ * Verdiene under er ikke funnet på: de sto allerede INLINE i markupen, satt for hånd der noen
+ * merket problemet — h1 22px (`admin-content.html:566`), h2 16px (`:667`, `:672`,
+ * `cohort-status.html:96`), h3 15px (`admin-content-calibration.html:177`). Dette skriver dem inn
+ * ett sted i stedet for fem, og lar de gjenværende inline-verdiene stemme overens i stedet for å
+ * overstyre.
+ *
+ * Margene bruker mellomrom-tokens. Standardens 0,83em skalerte med fontstørrelsen og ga et
+ * luftsprang mellom kortene som ikke fantes noe annet sted.
+ */
+h1, h2, h3 {
+  font-weight: 700;
+  line-height: 1.3;
+  text-wrap: balance;
+}
+h1 { font-size: 22px; margin: 0 0 var(--space-2); }
+h2 { font-size: 16px; margin: 0 0 var(--space-1); }
+h3 { font-size: 15px; margin: var(--space-2) 0 var(--space-1); }
+
 .card {
   background: var(--color-surface);
   border-radius: var(--radius-card);
@@ -426,9 +454,13 @@ button:focus-visible {
   color: var(--color-link-active);
 }
 
+/* ⚠️ Sto på 24px. Det var mindre enn sidens h1 den gang h1 arvet nettleserens 32 — men da
+   overskriftsskalaen ble skrevet inn (h1 22px), snudde forholdet: hjelpepanelet ropte høyere enn
+   siden det ligger over. Følger nå `.dialog-title` (18px), som er samme flatetype: et panel som
+   legger seg oppå. */
 .workspace-help-title {
   margin: 4px 0 0;
-  font-size: 24px;
+  font-size: 18px;
 }
 
 .workspace-help-close {
@@ -648,6 +680,92 @@ body.auth-resolving .mock-identity-card {
   white-space: pre-wrap;
 }
 
+/* ── #940: resultatskjermen ──────────────────────────────────────────────────
+   Utfallet avgjør hva som står åpent. Overskrifta bærer svaret; resten ligger
+   bak «Vis detaljer».
+
+   ⚠ FORMREGELEN gjelder her også: messing brukes til strek og etikett, aldri
+   som tonet flate. Utfallet markeres derfor med farget TEGN og tekst, ikke med
+   en farget boks — en grønn eller rød flate ville dessuten kollidert med
+   varselfargen, som ligger i samme familie. */
+.result-verdict {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.result-mark {
+  font-size: 20px;
+  line-height: 1.3;
+  flex: none;
+}
+.result-mark-passed { color: var(--color-success); }
+.result-mark-failed { color: var(--color-error); }
+.result-mark-review,
+.result-mark-pending { color: var(--color-primary); }
+
+.result-headline {
+  font-size: 17px;
+  font-weight: 600;
+  line-height: 1.35;
+  text-wrap: balance;
+}
+
+.result-subline {
+  display: block;
+  margin-top: 2px;
+  font-size: 14px;
+  font-weight: 400;
+  color: var(--color-meta);
+}
+
+/* Radene som står åpne — begrunnelsen når noen strøk eller venter på en sensor. */
+.result-open {
+  margin-top: var(--space-2);
+}
+
+.result-details {
+  margin-top: var(--space-2);
+  border-top: 1px solid var(--color-border-soft);
+  padding-top: var(--space-1);
+}
+
+.result-details > summary {
+  cursor: pointer;
+  font-size: 14px;
+  color: var(--color-link-active);
+  /* Egen pil under, så den kan snus når detaljene er åpne. */
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  /* Treffflate på berøringsskjerm. */
+  min-height: 32px;
+}
+.result-details > summary::-webkit-details-marker { display: none; }
+.result-details > summary::after {
+  content: "\25BE";
+  font-size: 11px;
+  transition: transform 0.15s ease;
+}
+.result-details[open] > summary::after { transform: rotate(180deg); }
+
+@media (prefers-reduced-motion: reduce) {
+  .result-details > summary::after { transition: none; }
+}
+
+.result-details .summary-grid { margin-top: var(--space-1); }
+
+/* Forsøks-ID-en er FLYTTET hit, ikke fjernet — den trengs når noe skal ettergås
+   (#939). Maskintekst settes med fast bredde og bryter hvor som helst, ellers
+   sprenger den rutenettet på en telefon. */
+.machine-id {
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 12px;
+  color: var(--color-meta);
+  word-break: break-all;
+}
+
 .summary-list {
   margin: 0;
   padding-left: calc(var(--space-2) + 4px);
@@ -807,6 +925,75 @@ pre.pre-content {
   border: 1px solid var(--color-border-soft);
   max-height: 320px;
   overflow-y: auto;
+}
+
+/* #953: «Vurderinger som ga opp».
+ *
+ * ⚠️ shared.css har ingen grunnstil for `table` utenfor mobil-media-queryen, så tabeller arver
+ * nettleserens standard: sentrerte overskrifter, ingen luft, ingen justering. Det blir tydelig her
+ * fordi raden har et langt tidsstempel, en teknisk feiltekst OG en knapp ved siden av hverandre.
+ *
+ * Stilen er SCOPET til kortet med vilje. En grunnstil for `table` ville truffet hver eneste tabell
+ * i appen, og jeg har ikke sett på dem. Blir dette mønsteret ønsket flere steder, er det en egen
+ * runde der hver flate faktisk inspiseres.
+ */
+#failedAssessmentsCard table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+#failedAssessmentsCard th {
+  text-align: left;
+  font-size: 0.85rem;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--color-meta);
+  font-weight: 600;
+  padding: 0 var(--space-2) var(--space-1) 0;
+  border-bottom: 1px solid var(--color-table-border);
+  white-space: nowrap;
+}
+
+#failedAssessmentsCard td {
+  text-align: left;
+  vertical-align: top;
+  padding: var(--space-2) var(--space-2) var(--space-2) 0;
+  border-bottom: 1px solid var(--color-table-border);
+}
+
+#failedAssessmentsCard tr:last-child td {
+  border-bottom: none;
+}
+
+/* Deltakerens e-post under navnet — sekundær, ikke like tung som navnet. */
+#failedAssessmentsCard td .small {
+  color: var(--color-meta);
+}
+
+/* Årsaken er en teknisk melding. Den skal kunne leses, men ikke dominere raden, og den skal ikke
+   presse knappen ut av syne når teksten er lang. */
+#failedAssessmentsCard td.failed-reason {
+  color: var(--color-meta);
+  max-width: 22rem;
+  word-break: break-word;
+}
+
+/* Handlingen står ytterst og holdes samlet, så knappen ikke klistrer seg til årsaksteksten. */
+#failedAssessmentsCard td.failed-action {
+  text-align: right;
+  white-space: nowrap;
+  padding-right: 0;
+}
+
+/* Tidspunktet brakk over to linjer («26. aug.,» / «21:43») fordi kolonnen er smal. Datoen er ett
+   tall å lese, ikke to — den skal stå samlet. */
+#failedAssessmentsCard td.failed-when {
+  white-space: nowrap;
+}
+
+#failedAssessmentsCard .failed-attempts {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 tr.selected {

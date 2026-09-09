@@ -29,7 +29,11 @@ const CONFIG = fileURLToPath(new URL("../../vitest.unit.config.ts", import.meta.
 // Vakter som med vilje står utenfor porten. Tom i dag; hver oppføring skal ha en setning om hvorfor
 // den ikke kan kjøre uten database eller server.
 const EXEMPT = {
-  // "test/some-guard.test.js": "grunn",
+  // #955: kjører hele veien gjennom ruta — oppretter modul, versjon, arkiverer og publiserer — og
+  // trenger derfor database. Den ligger i integrasjonssuiten (`npm run test:integration:native`).
+  // En invariant om at «arkivert + publisert aldri oppstår» kan ikke prøves uten å faktisk skrive
+  // begge tilstandene.
+  "test/module-publish-archive-guard.test.ts": "krever database — kjører i integrasjonssuiten",
 };
 
 function rootGuardFiles() {

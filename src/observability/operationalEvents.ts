@@ -9,12 +9,36 @@ export const operationalEvents = {
   },
   course: {
     completionCheckFailed: "course_completion_check_failed",
+    // #967: tildelings-e-posten ble holdt tilbake fordi kurset ikke var publisert. Tildelingen
+    // gikk gjennom — det er VARSELET som ikke ble sendt, og en e-post som aldri kom er stille.
+    assignmentMailSuppressed: "course_assignment_mail_suppressed",
+  },
+  audit: {
+    // #1000: tilgangsloggen for et revisjonsspor kunne ikke skrives. Skjer typisk mens
+    // backfill/skrubbing holder kjedelåsen. Lesingen gikk gjennom — det er SPORET av den som
+    // mangler, og et hull i en tilgangslogg oppdages ellers først når noen spør hvem som har lest hva.
+    trailAccessLogFailed: "audit_trail_access_log_failed",
   },
   assessment: {
     queueBacklog: "assessment_queue_backlog",
     jobStaleLockDetected: "assessment_job_stale_lock_detected",
     jobStuckAlert: "assessment_job_stuck_alert",
+    failedBacklogAlert: "assessment_failed_backlog_alert",
+    decisionAlreadyPresent: "assessment_decision_already_present",
     llmEvaluationFailed: "llm_evaluation_failed",
+    // #1023: skyggemåling av utløseren for andre vurdering. Logges BARE ved uenighet.
+    secondaryTriggerShadowDiff: "secondary_trigger_shadow_diff",
+    // #1026: delstreng-reserven for «utilstrekkelig grunnlag». Logges når den er ALENE om
+    // å fyre — da er den det eneste som står mellom en manuell vurdering og automatisk stryk.
+    insufficientEvidencePatternOnly: "insufficient_evidence_pattern_only",
+    // #1023: hvilke regler instansen faktisk lastet. Logges én gang ved oppstart.
+    rulesLoaded: "assessment_rules_loaded",
+    // #1023: HVORFOR en andre vurdering ble kjørt. Uten dette kan vi ikke se om en ny utløser virker.
+    secondaryAssessmentRan: "secondary_assessment_ran",
+    // #1023: grenseregelens INNGANGER, logget for hver vurdering — ikke bare når den fyrer.
+    // Uten dette er «fyrte ikke» uten forklaring: var poengsummen null, lå grensene feil, eller var
+    // båndet for smalt? Det spørsmålet kostet en deploy å ikke kunne svare på.
+    secondaryTriggerEvaluated: "secondary_trigger_evaluated",
   },
   certification: {
     participantNotificationFailed: "participant_notification_failed",
@@ -60,6 +84,13 @@ export type OperationalEventMetadataByName = {
     moduleId: string;
     errorMessage: string;
   }>;
+  // #967: hvor mange medlemmer som IKKE fikk «nytt kurs tildelt», og hvorfor.
+  [operationalEvents.course.assignmentMailSuppressed]: EventMetadata<{
+    courseId: string;
+    classId: string;
+    recipientCount: number;
+    reason: "unpublished";
+  }>;
   [operationalEvents.appeal.slaBacklog]: EventMetadata<{
     openAppeals: number;
     inReviewAppeals: number;
@@ -82,12 +113,103 @@ export type OperationalEventMetadataByName = {
     jobId: string;
     submissionId: string;
   }>;
+  // #953: opphopning av vurderinger som ga opp. Ingen jobId — dette er et TALL over flere jobber,
+  // ikke en hendelse om én av dem. `recipientCount` er med fordi «varselet gikk ut» og «noen fikk
+  // det» ikke er samme sak: en plattform uten administrator-tildelinger har null mottakere.
+  [operationalEvents.assessment.failedBacklogAlert]: EventMetadata<{
+    failedCount: number;
+    threshold: number;
+    recipientCount: number;
+  }>;
+  // #953 krav 2: kjøringen stanset fordi innleveringen allerede var avgjort. Ikke en feil — en
+  // jobb som kom for sent. Loggnivået er info — dette er en vakt som gjorde jobben sin, ikke en
+  // driftsfeil. Skjer det ofte, er DET funnet, og telleren i loggen bærer mønsteret.
+  [operationalEvents.assessment.decisionAlreadyPresent]: EventMetadata<{
+    jobId: string;
+    submissionId: string;
+    decisionId: string;
+  }>;
   [operationalEvents.assessment.llmEvaluationFailed]: EventMetadata<{
     jobId: string;
     submissionId: string;
     assessmentPass: string;
     llmMode: string;
     errorMessage: string;
+  }>;
+  // #1023: dagens utløser leter etter delstrenger i språkmodellens frie tekst («medium confidence»,
+  // «low confidence»). Den strukturerte regelen leser felt modellen faktisk fyller ut. Denne
+  // hendelsen logges når de to er UENIGE, slik at vi kan måle før vi bytter — et bytte endrer hvor
+  // ofte vi betaler for en ekstra LLM-kjøring.
+  //
+  // ⚠️ Ingen fritekst i metadataen. Notatet kan i teorien gjengi noe kandidaten skrev; her lagres
+  // bare hvilke MØNSTRE som traff, og hvilke strukturerte verdier som lå bak.
+  // #1026: reserven søker i FORBEDRINGSRÅDENE, med mønstre som «additional material» — vanlige
+  // fraser i et råd til en god besvarelse. Et treff undertrykker manuell vurdering og gir
+  // automatisk stryk i stedet. Denne hendelsen sier hvor ofte reserven er alene om å fyre.
+  //
+  // ⚠️ Ingen fritekst: bare hvilke mønstre som traff, og hvor de traff.
+  [operationalEvents.audit.trailAccessLogFailed]: EventMetadata<{
+    subjectSubmissionId: string;
+    readerUserId: string;
+    errorMessage: string;
+  }>;
+  [operationalEvents.assessment.insufficientEvidencePatternOnly]: EventMetadata<{
+    jobId: string;
+    submissionId: string;
+    moduleId: string;
+    /** «primary» eller «secondary» — hvilken vurdering treffet kom fra. */
+    assessmentPass: string;
+    matchedPatterns: string[];
+    evidenceSufficiency: string;
+    manualReviewReasonCode: string;
+    llmRecommendedManualReview: boolean;
+  }>;
+  [operationalEvents.assessment.rulesLoaded]: EventMetadata<{
+    rulesPath: string;
+    redFlagCodes: number;
+    /** Bare nøklene, aldri tekstene — linja skal kunne leses i en driftslogg. */
+    manualReviewReasonKeys: string[];
+    evidenceSufficiencyKeys: string[];
+    /** Båndene som avgjør om grenseregelen fyrer, og tersklene de regnes fra. */
+    scoreBoundaryBands: { greenYellow: number | null; yellowRed: number | null };
+    totalMin: number;
+    borderlineBelowMin: number | null;
+  }>;
+  [operationalEvents.assessment.secondaryTriggerEvaluated]: EventMetadata<{
+    jobId: string;
+    submissionId: string;
+    moduleId: string;
+    /** Primærvurderingens samlede poengsum, eller null når den ikke lot seg regne ut. */
+    totalScore: number | null;
+    /** Grensene slik utløseren så dem — de samme vedtaket bruker. */
+    passBoundary: number;
+    failBoundary: number | null;
+    /** Båndene fra regelfila. `null` betyr at grensen er slått av. */
+    bandGreenYellow: number | null;
+    bandYellowRed: number | null;
+    /** Utløserne som slo til. Tom liste = ingen. */
+    reasons: string[];
+  }>;
+  [operationalEvents.assessment.secondaryAssessmentRan]: EventMetadata<{
+    jobId: string;
+    submissionId: string;
+    moduleId: string;
+    /** Utløserne som slo til, fra konfigurasjonen — ingen fritekst. */
+    reasons: string[];
+    /** Primærvurderingens samlede poengsum, eller null når den ikke kunne regnes ut. */
+    totalScore: number | null;
+  }>;
+  [operationalEvents.assessment.secondaryTriggerShadowDiff]: EventMetadata<{
+    jobId: string;
+    submissionId: string;
+    moduleId: string;
+    liveConfidenceTrigger: boolean;
+    shadowConfidenceTrigger: boolean;
+    liveShouldRun: boolean;
+    shadowShouldRun: boolean;
+    matchedPatterns: string[];
+    evidenceSufficiency: string;
+    manualReviewReasonCode: string;
   }>;
   [operationalEvents.certification.participantNotificationFailed]: EventMetadata<{
     channel: string;

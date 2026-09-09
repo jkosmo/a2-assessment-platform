@@ -2,6 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { applyOrgDeltaSync, syncEntraUsersFromGroup } from "../modules/orgSync/index.js";
 import { AppError } from "../errors/AppError.js";
+import { respondWithAppError } from "./helpers/respondWithAppError.js";
 
 const orgSyncRouter = Router();
 
@@ -56,7 +57,7 @@ orgSyncRouter.post("/entra", async (request, response, next) => {
     response.json(result);
   } catch (error) {
     if (error instanceof AppError) {
-      response.status(error.httpStatus).json({ error: error.code, message: error.message });
+      respondWithAppError(response, error);
       return;
     }
     next(error);

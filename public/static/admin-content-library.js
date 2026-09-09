@@ -667,9 +667,14 @@ async function createAndNavigate() {
   createModuleError.hidden = true;
 
   try {
+    // #930: tittelen sendes med språkmerke. Biblioteket har alltid sendt en ren streng, og en ren
+    // streng leses som bokmål av `missingLocalesFor` — så en tittel skrevet på engelsk ble lagret
+    // som norsk, og publiseringsgaten navnga feil språk som manglende.
+    //
+    // Denne skjermen har ingen egen innholdsspråk-velger; den skriver på grensesnittspråket.
     const body = await apiFetch("/api/admin/content/modules", getHeaders, {
       method: "POST",
-      body: JSON.stringify({ title, certificationLevel: level }),
+      body: JSON.stringify({ title: { [currentLocale]: title }, certificationLevel: level }),
     });
     const newId = body.module?.id ?? body.id;
     if (!newId) throw new Error("Fikk ikke modul-ID.");

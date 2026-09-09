@@ -18,6 +18,17 @@ import {
 // shell tests below exercise its in-page flows (idle "create new module", source step), so they load
 // the shell HTML directly via its `/admin-content.html` file path (the static server's public-file
 // fallback), independent of the library route.
+// ⚠️ «Module created.» finnes TO steder i DOM-en samtidig: i chat-boblen forfatteren leser, og i
+// `#shellStatusAnnouncer` — den aria-live-regionen som gjentar den samme beskjeden for
+// skjermlesere. En uscopet `getByText` treffer derfor to elementer, og Playwrights strict mode
+// gjør det til en feil.
+//
+// Det er et KAPPLØP, ikke en konstant feil: rekkefølgen avhenger av når annonsereren rekker å bli
+// oppdatert. Testen sto grønn isolert 3 av 3 og falt i full suite — den verste formen, fordi rødt
+// da betyr «uflaks» like ofte som «regresjon», og en port man må tolke er ingen port.
+//
+// Alle fire stedene er scopet til `#chatMessages`. Å rette ett av fire ville bare flyttet
+// kappløpet til neste kjøring.
 test.describe("admin content browser coverage", () => {
 
   // #896 S5: version history. The rows have existed since the first «Mellomlagring» — every save
@@ -775,11 +786,17 @@ test.describe("admin content browser coverage", () => {
     await page.goto("/admin-content/module/module-1/conversation");
     await page.locator("#tabSettings").click();
 
-    // The three gates are OFF when blank — decisionService resolves them to null.
+    // The two component gates are OFF when blank — decisionService resolves them to null.
     await expect(page.locator("#settingsMcqMinPercent")).toHaveAttribute("placeholder", /No limit|Ingen grense|Inga grense/);
     await expect(page.locator("#settingsPracticalMin")).toHaveAttribute("placeholder", /No limit|Ingen grense|Inga grense/);
-    await expect(page.locator("#settingsBorderlineMin")).toHaveAttribute("placeholder", /None|Ingen/);
-    // Only the overall pass mark falls back to a platform value, and it names the number.
+    // ⚠️ Grensesonen sto her og krevde «Ingen» — altså «tomt betyr av». Det sluttet å være sant da
+    // plattformen fikk et standardbånd: tomt felt betyr nå at båndet under modulens terskel gjelder.
+    // En plassholder som sa «Ingen» ville fortalt forfatteren at ingen saker rutes på score alene,
+    // mens de faktisk gjør det.
+    //
+    // Grensesonen hører nå sammen med totalMin: begge navngir tallet de faller tilbake på.
+    await expect(page.locator("#settingsBorderlineMin")).toHaveAttribute("placeholder", /60/);
+    await expect(page.locator("#settingsBorderlineMax")).toHaveAttribute("placeholder", /70/);
     await expect(page.locator("#settingsTotalMin")).toHaveAttribute("placeholder", /70/);
   });
 
@@ -1235,7 +1252,7 @@ test.describe("admin content browser coverage", () => {
     await clickEnabledButton(page, "3 questions");
     await clickEnabledButton(page, "4 options");
 
-    await expect(page.getByText("Module created.")).toBeVisible();
+    await expect(page.locator("#chatMessages").getByText("Module created.")).toBeVisible();
     await clickEnabledButton(page, "Save draft");
 
     await expect(page.getByText("Open or create a module before saving.")).toHaveCount(0);
@@ -1263,11 +1280,17 @@ test.describe("admin content browser coverage", () => {
     // The module shell is created inside `confirmAndGenerate`, which the blueprint step gates.
     await clickEnabledButton(page, /Use this plan|Bruk denne planen/);
 
-    await expect.poll(() => state.lastModuleCreateBody?.title).toBe("Incident response");
+    // ⚠️ #918 krevde en REN STRENG her, for å bevise at tittelen ikke var kopiert til tre språk.
+    // #930 går ett skritt videre: en ren streng bærer ikke noe språkmerke, og leses som bokmål. En
+    // tittel skrevet på engelsk ble dermed lagret som norsk, og publiseringsgaten navnga feil språk
+    // som manglende.
+    //
+    // Påstanden er derfor STRENGERE nå, ikke svakere: ett språk, og vi vet hvilket.
+    await expect.poll(() => state.lastModuleCreateBody?.title).toEqual({ "en-GB": "Incident response" });
     expect(
-      typeof state.lastModuleCreateBody.title,
-      "a three-locale map claims a translation the author never made",
-    ).toBe("string");
+      Object.keys(state.lastModuleCreateBody.title),
+      "et trespråkskart påstår en oversettelse forfatteren aldri laget",
+    ).toEqual(["en-GB"]);
 
     // MCQ-only takes its own route to the same endpoint.
     await page.goto("/admin-content.html");
@@ -1277,59 +1300,18 @@ test.describe("admin content browser coverage", () => {
     await clickEnabledButton(page, "MCQ only");
     await clickEnabledButton(page, "Basic");
 
-    await expect.poll(() => state.lastModuleCreateBody?.title).toBe("Safety quiz");
-    expect(typeof state.lastModuleCreateBody.title).toBe("string");
+    await expect.poll(() => state.lastModuleCreateBody?.title).toEqual({ "en-GB": "Safety quiz" });
+    expect(Object.keys(state.lastModuleCreateBody.title)).toEqual(["en-GB"]);
   });
 
-  // #918, third creation path. This is the one where the lie survives all the way to the publish
-  // gate: the other two put a bare string in `sessionDraft.title`, so the first save corrects the
-  // module row. The import put the tri-locale map there too, and `normalizeModuleTitlePatch` passed
-  // it on to the save — the gate reads that value, saw three locales, and let the module publish.
-  test("an external-LLM import carries the title's real language through to the save", async ({ page }) => {
-    const state = await mockCommonApis(page);
-
-    const importJson = (title: unknown) => JSON.stringify({
-      module: { title, certificationLevel: "basic" },
-      moduleVersion: {
-        taskText: "Handle a reported security incident from first alert to closure.",
-        assessorExpectedContent: "A strong answer names containment, escalation and reporting.",
-      },
-      mcqSet: {
-        questions: [
-          {
-            stem: "Who must be notified first?",
-            options: ["The duty officer", "The press"],
-            correctAnswer: "The duty officer",
-            rationale: "Escalation starts with the duty officer.",
-          },
-        ],
-      },
-    });
-
-    const runImport = async (payload: string) => {
-      await page.goto("/admin-content.html");
-      await clickEnabledButton(page, "Create new module");
-      await submitActiveChatInput(page, "Ignored — the import carries its own title");
-      await clickEnabledButton(page, "Use external LLM");
-      await page.locator("#externalLlmJsonInput").fill(payload);
-      await page.locator('[data-ext-action="import"]').click();
-      await expect(page.getByText("Module imported.")).toBeVisible();
-    };
-
-    await runImport(importJson("Incident response"));
-    expect(state.lastModuleCreateBody.title).toBe("Incident response");
-
-    await clickEnabledButton(page, "Save draft");
-    // The value the publish gate reads. Three identical copies here is the module telling the gate
-    // it is translated; a bare string is it admitting it is not.
-    await expect.poll(() => state.lastModuleVersionBody?.title).toBe("Incident response");
-
-    // The caveat that makes this a merge and not a downgrade: an import MAY carry a real
-    // translation, and a locale object must pass through untouched rather than being flattened.
-    const translated = { "en-GB": "Incident response", nb: "Hendelseshåndtering", nn: "Hendingshandtering" };
-    await runImport(importJson(translated));
-    expect(state.lastModuleCreateBody.title).toEqual(translated);
-  });
+  // ⚠️ HER STO «#918, third creation path» — importen fra ekstern LLM.
+  //
+  // Den veien er fjernet 2026-09-06: bruk av ekstern LLM skjer gjennom Skill-en, og to måter å
+  // gjøre det samme på er én for mange (produkteier). Testen dekket en flate som ikke finnes.
+  //
+  // Regelen den voktet lever videre, og på et bedre nivå: `normalizeModuleTitlePatch` ble trukket
+  // ut til admin-content-localized-copy.js og har nå tolv enhetstester, blant dem den som låser at
+  // en uoversatt tittel BLIR VÆRENDE en streng i stedet for tre like kopier.
 
   // #927 (#896 §11): the last uncovered finish criterion — an e2e that follows the NEW-MODULE
   // journey end to end through the tab surface, not just "create and save".
@@ -1397,7 +1379,7 @@ test.describe("admin content browser coverage", () => {
     await clickEnabledButton(page, "3 questions");
     await clickEnabledButton(page, "4 options");
 
-    await expect(page.getByText("Module created.")).toBeVisible();
+    await expect(page.locator("#chatMessages").getByText("Module created.")).toBeVisible();
 
     // Innstillinger opens on a module that has no bundle — it was created in this session, not
     // loaded. Round 3: the panel was empty here because it read only from `bundle`.
@@ -1485,7 +1467,7 @@ test.describe("admin content browser coverage", () => {
 
     // No MCQ question-count step on the free-text-only path.
     await expect(page.getByText(/How many MCQ questions/i)).toHaveCount(0);
-    await expect(page.getByText("Module created.")).toBeVisible();
+    await expect(page.locator("#chatMessages").getByText("Module created.")).toBeVisible();
     await clickEnabledButton(page, "Save draft");
 
     await expect.poll(() => versionPayload?.assessmentMode).toBe("FREETEXT_ONLY");
@@ -1660,7 +1642,7 @@ test.describe("admin content browser coverage", () => {
     await clickEnabledButton(page, "3 questions");
     await clickEnabledButton(page, "4 options");
 
-    await expect(page.getByText("Module created.")).toBeVisible();
+    await expect(page.locator("#chatMessages").getByText("Module created.")).toBeVisible();
     await clickEnabledButton(page, "Save draft");
 
     await expect.poll(() => versionPayload?.assessmentMode).toBe("MCQ_ONLY");
@@ -2735,6 +2717,49 @@ test.describe("admin content browser coverage", () => {
   // #905: a locale whose translation failed must be ABSENT from what is saved. Leaving the
   // source copy behind is what made "not translated yet" invisible to the publish gate (#896 S4)
   // and to the translation-status list (#894).
+  // #982: en oversettelse som feiler skal sies fra om, ikke fylles med kildetekst.
+  //
+  // ⚠️ HVA DENNE MÅLER: direkte-redigering (`#previewEditConfirm`), som skriver til loggen selv og
+  // ikke går gjennom `commitOrProposeGenerated`. Oppdaget ved mutasjonstesting — jeg fjernet
+  // advarselen fra de tre kallerne jeg hadde endret, og denne forble grønn.
+  //
+  // Den parkerte grenen dekkes av «… også når forslaget parkeres bak åpne felter» lenger nede.
+  test("en feilet oversettelse sier fra i loggen", async ({ page }) => {
+    await mockCommonApis(page, {
+      modules: [{ id: "module-1", title: "Trade unions", activeVersion: { versionNo: 1 } }],
+      moduleExports: {
+        "module-1": buildMockModuleExport({
+          id: "module-1",
+          title: "Trade unions",
+          moduleVersionId: "module-1-version-1",
+          taskText: localizedText("Norsk scenario"),
+          mcqQuestions: [
+            {
+              stem: localizedText("Question 1"),
+              options: [localizedText("Option A"), localizedText("Option B")],
+              correctAnswer: localizedText("Option B"),
+              rationale: localizedText("Rationale"),
+            },
+          ],
+        }),
+      },
+    });
+
+    // Begge målspråkene feiler, så advarselen MÅ komme.
+    await page.route("**/generate/module-draft/localize", (route: Route) =>
+      route.fulfill({ status: 500, contentType: "application/json", body: "{}" }));
+
+    await page.goto("/admin-content/module/module-1/conversation");
+    await page.locator("#previewEditTitle").waitFor();
+    await page.locator("#previewEditTaskText").fill("Bearbeidet scenario");
+    await page.locator("#previewEditConfirm").click();
+
+    await expect(page.locator("#chatMessages")).toContainText(
+      /Ikke oversatt til|Not translated to|Ikkje omsett til/,
+      { timeout: 10000 },
+    );
+  });
+
   test("a failed locale is left out of the saved draft, not filled with the source text", async ({ page }) => {
     const state = await mockCommonApis(page, {
       modules: [{ id: "module-1", title: "Trade unions", activeVersion: { versionNo: 1 } }],
@@ -2913,6 +2938,66 @@ test.describe("admin content browser coverage", () => {
   //
   // Two tests, because the two halves fail differently: a gate that never proposes loses work
   // silently, and a gate that never commits makes every generation cost an extra click.
+  // #982: advarselen om språk som ikke ble oversatt må vises OGSÅ når forslaget parkeres bak
+  // åpne felter — det er den forfatteren som oftest ber om en revisjon møter.
+  //
+  // ⚠️ Jeg påsto først at denne grenen ikke kunne testes «fordi den krever chat-klassifisering».
+  // Det var feil: klassifiseringen er klient-side og deterministisk, og testen rett under driver
+  // allerede nøyaktig denne grenen. Påstanden var en antakelse, ikke et funn.
+  test("en feilet oversettelse sier fra også når forslaget parkeres bak åpne felter", async ({ page }) => {
+    await mockCommonApis(page, {
+      modules: [{ id: "module-1", title: "Trade unions", activeVersion: { versionNo: 1 } }],
+      moduleExports: {
+        "module-1": buildMockModuleExport({
+          id: "module-1",
+          title: "Trade unions",
+          moduleVersionId: "module-1-version-1",
+          taskText: localizedText("Norsk scenario"),
+          assessorExpectedContent: localizedText("Norsk veiledning"),
+        }),
+      },
+    });
+
+    await page.route("**/generate/module-draft/revise", (route: Route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          draft: {
+            taskText: "Generert scenario",
+            assessorExpectedContent: "Generert veiledning",
+            candidateTaskConstraints: "",
+          },
+        }),
+      }));
+
+    // Begge målspråkene feiler. Denne overstyrer default-mocken i `mockCommonApis`.
+    await page.route("**/generate/module-draft/localize", (route: Route) =>
+      route.fulfill({ status: 500, contentType: "application/json", body: "{}" }));
+
+    await page.goto("/admin-content/module/module-1/conversation?resumeEditing=1");
+    await expect(
+      page.locator("#workspaceActions").getByRole("button", { name: /Request changes in chat|Be om endringer i chat/ }),
+    ).toBeEnabled();
+
+    const taskField = page.locator("#previewEditTaskText");
+    await expect(taskField).not.toHaveValue("");
+    await taskField.fill("Skrevet for hånd");
+
+    await clickEnabledButton(page, /Request changes in chat|Be om endringer i chat/);
+    await page.locator(".chat-textarea:enabled").last().fill("Skjerp scenarioet");
+    await clickEnabledButton(page, /Revise|Revider/);
+
+    // Forutsetningen: forslaget ER parkert. Uten denne ville påstanden under kunne vært grønn
+    // fordi vi målte den direkte stien i stedet.
+    await expect(page.locator("#chatMessages").getByText(/Suggestion ready|Forslag klart/)).toBeVisible();
+
+    // Og advarselen skal stå i den parkerte beskjeden.
+    await expect(page.locator("#chatMessages")).toContainText(
+      /Ikke oversatt til|Not translated to|Ikkje omsett til/,
+    );
+  });
+
   test("a revision lands as a proposal when the fields hold unsaved typing", async ({ page }) => {
     await mockCommonApis(page, {
       modules: [{ id: "module-1", title: "Trade unions", activeVersion: { versionNo: 1 } }],

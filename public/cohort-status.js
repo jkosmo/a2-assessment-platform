@@ -1,4 +1,7 @@
 import { renderWorkspaceNavigationWithProfile } from "/static/workspace-nav.js";
+import { showToast } from "/static/toast.js";
+import { describeApiError } from "/static/api-error.js";
+import { lagLokalisertRessurs } from "/static/localized-resource.js";
 import { resolveInitialLocale } from "/static/i18n-locale.js";
 import { escapeHtml } from "/static/html-escape.js";
 import { localeLabels, supportedLocales, translations } from "/static/i18n/cohort-status-translations.js";
@@ -29,6 +32,7 @@ const debugOutputSection = document.getElementById("debugOutputSection");
 const courseSelect = document.getElementById("courseSelect");
 const cohortMeta = document.getElementById("cohortMeta");
 const cohortEmpty = document.getElementById("cohortEmpty");
+const cohortUnavailable = document.getElementById("cohortUnavailable");
 const statusCards = document.getElementById("statusCards");
 const byClassSection = document.getElementById("byClassSection");
 const byClassEmpty = document.getElementById("byClassEmpty");
@@ -58,11 +62,7 @@ function log(data) {
   output.textContent = typeof data === "string" ? data : JSON.stringify(data, null, 2);
 }
 
-function setMessage(text, type = "info") {
-  if (!outputStatus) return;
-  outputStatus.textContent = text;
-  outputStatus.className = `small field-${type}`;
-}
+// #1046: se `results.js` — dette var den andre lokale kopien av samme funksjon.
 
 function applyTranslations() {
   for (const el of document.querySelectorAll("[data-i18n]")) {
@@ -178,6 +178,18 @@ function renderCohort(summary) {
         .join("");
     }
   }
+  // #967: ⚠️ den viktigste linja paa skjermen naar den gjelder. Uten den viser dashbordet
+  // «OVERDUE 7» uten ett ord om at kurset ikke finnes for de sju — og fagansvarlig leter etter en
+  // forklaring som ikke staar noe sted.
+  if (cohortUnavailable) {
+    const message = summary.courseArchived === true
+      ? t("cohort.unavailable.archived")
+      : summary.coursePublished === false
+        ? t("cohort.unavailable.unpublished")
+        : "";
+    cohortUnavailable.textContent = message;
+    cohortUnavailable.hidden = message === "";
+  }
   if (cohortMeta) {
     const when = summary.generatedAt ? new Date(summary.generatedAt).toLocaleString(currentLocale) : "";
     cohortMeta.textContent = `${t("cohort.generatedAt")}: ${when}`;
@@ -185,6 +197,7 @@ function renderCohort(summary) {
 }
 
 function showCohortEmpty() {
+  if (cohortUnavailable) cohortUnavailable.hidden = true;
   if (cohortEmpty) cohortEmpty.hidden = false;
   if (statusCards) setHidden(statusCards, true);
   if (byClassSection) byClassSection.hidden = true;
@@ -192,8 +205,19 @@ function showCohortEmpty() {
 }
 
 async function loadCourses() {
-  try {
-    const data = await apiFetch("/api/cohort-status/courses", headers);
+  await kursliste.last();
+}
+
+function tegnKurslisteFeil() {
+  showToast(t("cohort.error"), "error");
+}
+
+function tegnKursliste(data) {
+  // ⚠️ Den valgte verdien må overleve at lista bygges på nytt ved språkbytte. Uten dette ville
+  // et språkbytte nullstilt kursvalget, og sammendraget under blitt stående på et kurs som ikke
+  // lenger er valgt.
+  const valgt = courseSelect.value;
+  {
     const courses = data.courses ?? [];
     if (courses.length === 0) {
       courseSelect.innerHTML = `<option value="">${escapeHtml(t("cohort.picker.empty"))}</option>`;
@@ -203,9 +227,17 @@ async function loadCourses() {
     courseSelect.disabled = false;
     courseSelect.innerHTML =
       `<option value="">${escapeHtml(t("cohort.picker.placeholder"))}</option>` +
-      courses.map((c) => `<option value="${escapeHtml(c.id)}">${escapeHtml(c.title)}</option>`).join("");
-  } catch (error) {
-    setMessage(error?.message ?? t("cohort.error"), "error");
+      // #967: et unaabart kurs staar i lista, men merkes — ellers ville fagansvarlig valgt det
+      // uten aa vite hvorfor ingen beveger seg.
+      courses.map((c) => {
+        const mark = c.archived === true
+          ? ` (${t("cohort.course.archived")})`
+          : c.published === false
+            ? ` (${t("cohort.course.unpublished")})`
+            : "";
+        return `<option value="${escapeHtml(c.id)}">${escapeHtml(c.title)}${escapeHtml(mark)}</option>`;
+      }).join("");
+    if (valgt) courseSelect.value = valgt;
   }
 }
 
@@ -218,9 +250,11 @@ async function loadCohort(courseId) {
     const summary = await apiFetch(`/api/cohort-status/course/${encodeURIComponent(courseId)}`, headers);
     renderCohort(summary);
     log(summary);
-    setMessage("", "info");
   } catch (error) {
-    setMessage(error?.message ?? t("cohort.error"), "error");
+    // #1046: serverens `message` er skrevet på SERVERENS språk. Den delte oversetteren slår opp
+    // `errors.api.<kode>` på brukerens språk, og faller tilbake til vår egen tekst når koden er
+    // ukjent. Alle andre flater fikk den i #972/#983; denne ble ikke rørt før nå.
+    showToast(describeApiError(error, t).headline, "error");
     showCohortEmpty();
   }
 }
@@ -259,7 +293,24 @@ async function init() {
   await loadCourses();
 }
 
-localeSelect?.addEventListener("change", () => setLocale(localeSelect.value));
+// #1042: kursvelgeren og kohortsammendraget viser kurs- og modultitler, som serveren lokaliserer
+// ved HENTING (#1027). Uten ny henting ble de stående på forrige språk (#1040).
+//
+// ⚠️ Ressursene ligger her, etter at lasterne er definert, og hentingen kalles fra lytteren —
+// ikke fra `setLocale`, som også kjører ved oppstart (#1039).
+const kursliste = lagLokalisertRessurs({
+  hentSpråk: () => currentLocale,
+  hent: () => apiFetch("/api/cohort-status/courses", headers),
+  tegn: (data) => tegnKursliste(data),
+  påFeil: () => tegnKurslisteFeil(),
+});
+
+localeSelect?.addEventListener("change", () => {
+  setLocale(localeSelect.value);
+  kursliste.oppdaterVedSpråkbytte();
+  // Sammendraget hentes bare når et kurs faktisk er valgt.
+  if (courseSelect?.value) void loadCohort();
+});
 mockRolePresetSelect?.addEventListener("change", () => {
   if (!mockRolePresetSelect.value || !roleSwitchState.enabled) return;
   rolesInput.value = mockRolePresetSelect.value;
@@ -271,7 +322,7 @@ rolesInput?.addEventListener("input", () => {
 });
 courseSelect?.addEventListener("change", () => loadCohort(courseSelect.value));
 loadMeButton?.addEventListener("click", async () => {
-  try { log(await apiFetch("/api/me", headers)); } catch (error) { log(error?.message ?? "Error"); }
+  try { log(await apiFetch("/api/me", headers)); } catch (error) { log(describeApiError(error, t).headline); }
 });
 if (debugOutputSection) debugOutputSection.hidden = new URLSearchParams(window.location.search).get("debug") !== "1";
 

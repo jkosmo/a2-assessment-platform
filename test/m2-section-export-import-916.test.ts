@@ -89,19 +89,33 @@ describe("#916 standalone section export", () => {
     expect(envelope.exportedBy).toBeTruthy();
   });
 
-  it("refuses to export another author's section (403 content_ownership)", async () => {
+  it("lets another author export a section — reading is open by decision", async () => {
     const { id } = await createSection(smoOwner, {
       title: L(`Privat ${Date.now()}`),
       bodyMarkdown: L("# Ikke ditt"),
     });
 
+    // ⚠️ VAKTA ER FJERNET MED VILJE 2026-09-08 (doc/DECISIONS.md).
+    //
+    // Produkteier: «Er man SMO skal man kunne se alt kursinnhold. Hvis de benytter dette til å
+    // jukse, så er det til slutt deres eget problem.» Og på spørsmål om å strippe MCQ-fasiten:
+    // «Hvis noen ønsker å jukse så er det fritt frem — det er bare å laste ned modulen og legge
+    // den inn i en LLM, så får de fasit. Vi skal ikke ta høyde for å sikre oss mot juks, det er
+    // umulig.»
+    //
+    // Påstanden er derfor SNUDD, ikke slettet. Testen måler fortsatt noe: at en fremmed forfatter
+    // faktisk slipper til. Slettet vi den, ville en gjeninnført vakt passert ubemerket.
+    //
+    // Seksjoner er det tydeligste tilfellet: «Vi ønsker at så mange som mulig leser seksjoner.»
+    // Lesestoff som er skjult for kolleger motarbeider hele formålet med verktøyet.
     const res = await request(app)
       .get(`/api/admin/content/sections/${id}/export-package`)
       .set(smoOther);
-    expect(res.status).toBe(403);
-    expect(res.body.error).toBe("content_ownership");
-    // The refusal must not leak the content it is protecting.
-    expect(JSON.stringify(res.body)).not.toContain("Ikke ditt");
+    expect(res.status, "lesestoff skal ikke være skjult for andre forfattere").toBeLessThan(300);
+    // ⚠️ Og innholdet skal FAKTISK være der. Sto det bare «status < 300» her, ville en tom
+    // konvolutt bestått — og da hadde vi målt at ruta svarer, ikke at seksjonen kan leses.
+    // Påstanden sto tidligere motsatt vei: at avslaget ikke lekket det det beskyttet.
+    expect(JSON.stringify(res.body), "eksporten skal bære seksjonens innhold").toContain("Ikke ditt");
 
     // ADMINISTRATOR keeps universal access (same rule as every other ownership-guarded route).
     expect((await request(app).get(`/api/admin/content/sections/${id}/export-package`).set(admin)).status).toBe(200);
@@ -459,25 +473,17 @@ describe("#916 QA: course import must not publish around a held-back section", (
           // The source environment had this course published — that is what makes the importer
           // republish it, and what made the bug reachable.
           audit: { publishedAt: "2026-08-01T00:00:00.000Z" },
-          // ⚠️ Kurset MÅ ha en modul. Uten en er publisering avvist med «Cannot publish a course
-          // with no modules», og da hadde blokkertesten under bestått av helt feil grunn — den
-          // ville målt en regel som ikke har noe med seksjoner å gjøre. Kontrollcasen avslørte det.
+          // ⚠️ #1001: HER LÅ EN DUMMY-MODUL «QA modul», bare for å komme forbi publiseringsporten.
+          //
+          // Kommentaren sa: «Kurset MÅ ha en modul. Uten en er publisering avvist med Cannot
+          // publish a course with no modules, og da hadde blokkertesten under bestått av helt feil
+          // grunn.» Det var riktig observert — og omgåelsen var selve beviset på at regelen var
+          // vilkårlig. Etter #916 er seksjoner likeverdige kurselementer, og porten krever nå
+          // «minst ett element», ikke «minst én modul».
+          //
+          // Nå måler testen det den var ment å måle: et rent seksjonskurs, uten en modul som
+          // ikke har noe der å gjøre.
           items: [
-            {
-              type: "MODULE",
-              sortOrder: 0,
-              module: {
-                module: { title: L("QA modul"), description: L("d"), certificationLevel: "foundation" },
-                activeVersion: {
-                  assessmentMode: "FREETEXT_ONLY",
-                  taskText: L("Gjør oppgaven"),
-                  assessorExpectedContent: L("Forventet"),
-                  rubric: { criteria: { c1: 1 }, scalingRule: { practical_weight: 70 } },
-                  promptTemplate: { systemPrompt: L("system"), userPromptTemplate: L("mal"), examples: [] },
-                  audit: { publishedAt: "2026-08-01T00:00:00.000Z", versionNo: 1 },
-                },
-              },
-            },
             { type: "SECTION", sortOrder: 1, section: { title: sectionTitle, bodyMarkdown: body } },
           ],
         },

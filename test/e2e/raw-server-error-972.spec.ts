@@ -100,8 +100,12 @@ test.describe("#965: eierskapsvaktas 403 på seksjonsflaten", () => {
     const toast = toastOf(page);
     // Setningen sier hva som er galt OG hva forfatteren kan gjøre med det — poenget i #965 var at
     // «You can only modify content you own.» ikke fortalte at løsningen er å be om å bli eier.
-    await expect(toast).toContainText(/du eier/i);
-    await expect(toast).toContainText(/eier/i);
+    // ⚠️ #1029: frasen var «du eier». Ordlyden endret seg da tekstene sluttet å love lesetilgang
+    // de ikke gir — etter #943 avvises også LESING. Påstanden er den samme: norsk prosa som sier
+    // hva som er galt OG hva forfatteren kan gjøre med det. Det siste var hele poenget i #965;
+    // «You can only modify content you own.» fortalte ikke at løsningen er å be om å bli eier.
+    await expect(toast).toContainText(/tilgang/i);
+    await expect(toast).toContainText(/legge deg til som eier/i);
 
     // De to feilene i én: rå JSON, og serverens språk.
     await expect(toast).not.toContainText("403:");
@@ -118,8 +122,9 @@ test.describe("#965: eierskapsvaktas 403 på seksjonsflaten", () => {
     await page.locator('[data-action="unpublish"][data-id="sec-972"]').click();
 
     const toast = toastOf(page);
-    await expect(toast).toContainText(/You can only change content you own/i);
-    await expect(toast).not.toContainText(/du eier/i);
+    await expect(toast).toContainText(/administrator has access/i);
+    await expect(toast).toContainText(/add you as an owner/i);
+    await expect(toast).not.toContainText(/tilgang til dette elementet/i);
     await expect(toast).not.toContainText("403:");
   });
 

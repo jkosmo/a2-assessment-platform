@@ -910,7 +910,7 @@ function Wait-Stable {
     [string]$Label,
     [int]$RequiredSuccesses = 6,
     [int]$DelaySeconds = 20,
-    [int]$MaxConsecutiveFailures = 30,
+    [int]$MaxConsecutiveFailures = 45,
     [string]$ExpectedVersion = ""
   )
 
@@ -919,9 +919,26 @@ function Wait-Stable {
   # false positive that previously caused the dual Wait-Stable + separate version-check race.
   #
   # MaxConsecutiveFailures budget: each iteration is up to 15s (HTTP timeout) + 20s (sleep) = 35s.
-  # 30 iterations = ~17 min tolerance. Observed B1 cold-start times: 6-9 min (variable, sometimes
-  # cascading VNETFailure → second cold start). v1.1.43 used 15 (~9 min) and just barely missed.
-  # 30 gives ~2x safety margin over worst observed time.
+  # 45 iterations = ~26 min tolerance.
+  #
+  # History: v1.1.43 used 15 (~9 min) and just barely missed. It was raised to 30 (~17 min) against
+  # observed B1 cold starts of 6-9 min -- roughly 2x margin at the time.
+  #
+  # 2026-09-09, the 2.63.0 production deploy MISSED AT 30 BY TWO MINUTES. Measured from the run log:
+  #   polls 1-22  (~8 min): old container still serving the previous version
+  #   polls 23-30 (~5 min): app not responding at all while the new container started
+  #   gave up 20:27 -- /version answered 2.63.0 at 20:29
+  #
+  # That deploy carried TWO startup migrations (#951 and its backfill) on a single B1 instance that
+  # sits near 80% memory at rest. Migrations run in startup.mjs before the runtime is imported, so
+  # their cost lands squarely inside this window and grows with the batch.
+  #
+  # ⚠️ THE COST OF BEING TOO STRICT IS NOT A RED CROSS. When this throws, the job fails and the
+  # post-deploy smoke test is SKIPPED -- so a deploy that actually succeeded goes unverified by the
+  # machine, precisely when something unusual happened. A gate that cries wolf teaches us to ignore
+  # it, and then a real failure walks through.
+  #
+  # 45 restores roughly 2x margin over the worst time we have actually measured (~13 min).
   $modeDescription = if ($ExpectedVersion) { "/version == $ExpectedVersion" } else { "/healthz HTTP 200" }
   Write-Host "Confirming $Label is stable on $modeDescription ($RequiredSuccesses successes, ${DelaySeconds}s interval, tolerates $MaxConsecutiveFailures consecutive failures during restart window)..."
   $successes = 0

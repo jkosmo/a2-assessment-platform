@@ -34,6 +34,7 @@ import { NotFoundError, AppError } from "../errors/AppError.js";
 import type { AdminCourseListItem, AdminCourseDetail } from "../modules/course/index.js";
 import { countCourseInProgressParticipants } from "../modules/course/contentLifecycle.js";
 import { generateLimiter } from "../middleware/rateLimiting.js";
+import { respondWithAppError } from "./helpers/respondWithAppError.js";
 
 const adminCoursesRouter = Router();
 
@@ -238,7 +239,7 @@ adminCoursesRouter.post("/import", async (request, response, next) => {
     });
   } catch (err) {
     if (err instanceof AppError) {
-      response.status(err.httpStatus).json({ error: err.code, message: err.message });
+      respondWithAppError(response, err);
       return;
     }
     const message = err instanceof Error ? err.message : "Unknown error";
@@ -264,7 +265,26 @@ adminCoursesRouter.post("/import", async (request, response, next) => {
 // another author's module into their course receives that module's answer key in the export.
 // Accepted: the course is theirs, the content is what they put in it, and an answer key is
 // not a state secret. What this guard stops is reading a course you have nothing to do with.
-adminCoursesRouter.get("/:courseId/export-package", requireContentOwnership("COURSE", "courseId"), async (request, response, next) => {
+// ⚠️ LESING AV KURSINNHOLD ER ÅPEN FOR ALLE FORFATTERE — DET ER EN BESLUTNING, IKKE ET HULL.
+//
+// Produkteier 2026-09-08:
+//
+//   «Er man SMO skal man kunne se alt kursinnhold. Hvis de benytter dette til å jukse, så er det
+//   til slutt deres eget problem. Dette er et verktøy for kompetansebygging, og å motivere for
+//   kompetansebygging — hvis noen ønsker å omgå dette er det deres eget problem.»
+//
+// #943 la eierskapsvakt på disse leserutene. Begrunnelsen var ikke at kolleger ikke skal se
+// hverandres arbeid, men REKOGNOSERING: lesetilgangen skulle gjøre et eierskapshull i
+// kursimporten utnyttbart. Det hullet er tettet — `POST /import` krever eierskap for
+// `replaceExisting` — så den begrunnelsen står ikke lenger.
+//
+// ⚠️ SKRIVING ER FORTSATT VAKTET. Beslutningen gjelder å SE, ikke å endre. De tolv skriverutene i
+// denne fila er urørt.
+//
+// ⚠️ OG `/enrollments` ER FORTSATT VAKTET. Den lister navn, e-post og avdeling på deltakere —
+// personopplysninger, ikke kursinnhold. «Juks er deres eget problem» dekker ikke andres data, så
+// den er holdt utenfor med vilje. Skal den også åpnes, er det en egen beslutning.
+adminCoursesRouter.get("/:courseId/export-package", async (request, response, next) => {
   const actorId = request.context?.userId;
   if (!actorId) {
     response.status(401).json({ error: "unauthorized" });
@@ -275,7 +295,7 @@ adminCoursesRouter.get("/:courseId/export-package", requireContentOwnership("COU
     response.json({ envelope });
   } catch (error) {
     if (error instanceof AppError) {
-      response.status(error.httpStatus).json({ error: error.code, message: error.message });
+      respondWithAppError(response, error);
       return;
     }
     const message = error instanceof Error ? error.message : "Unknown error";
@@ -298,6 +318,15 @@ adminCoursesRouter.get("/:courseId/export-package", requireContentOwnership("COU
   }
 });
 
+// #943: tolv skriveruter på `/:courseId` var vaktet, denne lesingen var det ikke. Den gir hele
+// oppsettet til et fremmed kurs — moduler, seksjoner, publiseringsstatus, `enrollmentPolicy`. Det
+// er rekognoseringen som gjør resten utnyttbart, og eksportruta rett over ble vaktet med nettopp
+// den begrunnelsen (#903).
+//
+// Trygt å stramme: ruta brukes kun av kursredigeringen (`renderDetailView`), og lista merker
+// allerede hver rad med `canManage` — «Rediger» rendres ikke for den som ville fått 403.
+// Samme grep som seksjonene fikk i #916, og linja går der: LISTA er åpen (du må kunne finne dine
+// egne), DETALJEN er ikke.
 adminCoursesRouter.get("/:courseId", async (request, response, next) => {
   try {
     const course = await courseRepository.findCourseById(request.params.courseId);
@@ -364,6 +393,8 @@ adminCoursesRouter.put("/:courseId/modules", requireContentOwnership("COURSE", "
 });
 
 // Mixed item ordering — modules and learning sections interleaved (#486/B2).
+// #943: samme vakt som søsteren `PUT /items` og som detaljruta over — kursbyggeren er det eneste
+// kallstedet, og den åpnes bare for en eier.
 adminCoursesRouter.get("/:courseId/items", async (request, response, next) => {
   try {
     // #958: forfatterlista skal se ALT — den er verktøyet man rydder opp arkivert innhold MED.
@@ -421,6 +452,8 @@ adminCoursesRouter.put("/:courseId/items", requireContentOwnership("COURSE", "co
 // #734: preview the unpublished modules/sections in a course before publishing, and whether each is
 // currently publishable. The UI calls this before opening the cascade-publish confirm dialog. Read-
 // only; agent tokens cannot reach it (not in the agent-token allowlist — enforceAgentTokenScope).
+// #943: vaktet som `POST /publish` den er forspillet til. Uten vakta kunne enhver SMO lese hvilke
+// elementer i et fremmed kurs som ennå er UPUBLISERTE — altså hva eieren holder tilbake.
 adminCoursesRouter.get("/:courseId/publish-preview", async (request, response, next) => {
   try {
     const preview = await getCoursePublishPreview(request.params.courseId);

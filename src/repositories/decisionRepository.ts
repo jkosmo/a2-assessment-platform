@@ -21,6 +21,10 @@ export type CreateAssessmentDecisionInput = {
   passFailTotal: boolean;
   decisionType: DecisionTypeType;
   decisionReason: string;
+  // #950: koden for en maskinskrevet grunn, og tallene setningen trenger. Begge null når et
+  // menneske skrev grunnen selv (sensor eller klagebehandler) — da vises teksten ordrett.
+  decisionReasonCode?: string | null;
+  decisionReasonParams?: string | null;
   finalisedById?: string;
   finalisedAt?: Date;
   parentDecisionId?: string;

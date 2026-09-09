@@ -1,5 +1,6 @@
 import { Router } from "express";
-import { courseRepository, computeCourseStatus, getSection, checkCourseCompletionForCourse, reconcileCourseCompletionsForUser } from "../modules/course/index.js";
+import { courseRepository, createCourseRepository, computeCourseStatus, getSection, checkCourseCompletionForCourse, reconcileCourseCompletionsForUser } from "../modules/course/index.js";
+import { runInTransaction } from "../db/transaction.js";
 import { renderSectionMarkdown } from "../modules/course/sectionContent.js";
 import { localizeContentText } from "../i18n/content.js";
 import { normalizeLocale } from "../i18n/locale.js";
@@ -170,7 +171,9 @@ coursesRouter.get("/completions", async (request, response, next) => {
       certificateId: cc.certificateId,
       completedAt: cc.completedAt.toISOString(),
       courseTitle: localizeContentText(locale, cc.course.title) ?? cc.course.title,
-      certificationLevel: cc.course.certificationLevel,
+      // #1027: sertifiseringsnivået sendes lokalisert, som tittelen på linja over. Det sto som
+      // rå JSON, og hver klient tolket det selv — samme mønster #1022 rettet for modultittelen.
+      certificationLevel: localizeContentText(locale, cc.course.certificationLevel) ?? cc.course.certificationLevel,
     }));
     response.json({ completions: items });
   } catch (error) {
@@ -210,7 +213,7 @@ coursesRouter.get("/completions/:certificateId", async (request, response, next)
       certificateId: completion.certificateId,
       courseId: completion.courseId,
       courseTitle: localizeContentText(locale, completion.course.title) ?? completion.course.title,
-      certificationLevel: completion.course.certificationLevel,
+      certificationLevel: localizeContentText(locale, completion.course.certificationLevel) ?? completion.course.certificationLevel,
       completedAt: completion.completedAt.toISOString(),
       participantName: completion.user.name,
       moduleCount,
@@ -358,7 +361,7 @@ coursesRouter.get("/:courseId", async (request, response, next) => {
       id: course.id,
       title: localizeContentText(locale, course.title) ?? course.title,
       description: localizeContentText(locale, course.description) ?? course.description,
-      certificationLevel: course.certificationLevel,
+      certificationLevel: localizeContentText(locale, course.certificationLevel) ?? course.certificationLevel,
       publishedAt: course.publishedAt.toISOString(),
       discussionsEnabled: course.discussionsEnabled,
       moduleCount: moduleIds.length,
@@ -481,9 +484,19 @@ coursesRouter.post("/:courseId/sections/:sectionId/read", async (request, respon
     if (!item) {
       throw new NotFoundError("CourseSection", "section_not_found", "Section not found in this course.");
     }
-    await courseRepository.markSectionRead(userId, course.id, request.params.sectionId);
-    // Reading the final section can be the last gate for certification (#476/#525) — re-check.
-    await checkCourseCompletionForCourse({ userId, courseId: course.id });
+    // #946: markeringen og bevisporten commiter sammen. Sto tidligere som to uavhengige skriv:
+    // seksjonen ble markert lest, og feilet porten etterpå, var kurset ferdig uten at noe bevis
+    // ble utstedt — og ingenting rettet det før deltakeren selv åpnet bevissiden.
+    //
+    // ⚠️ Bevisst IKKE flyttet til outboxen slik de tre andre veiene er. Deltakeren står på siden
+    // og leser ferdig siste seksjon; her skal beviset finnes med én gang, ikke når worker-en
+    // rekker det. Transaksjonen gir holdbarheten uten å gjøre utstedelsen asynkron.
+    await runInTransaction(async (tx) => {
+      const txRepo = createCourseRepository(tx);
+      await txRepo.markSectionRead(userId, course.id, request.params.sectionId);
+      // Reading the final section can be the last gate for certification (#476/#525) — re-check.
+      await checkCourseCompletionForCourse({ userId, courseId: course.id }, tx);
+    });
     response.status(204).send();
   } catch (error) {
     next(error);

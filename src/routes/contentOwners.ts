@@ -9,6 +9,7 @@ import {
   removeContentOwner,
 } from "../modules/content/contentOwnershipService.js";
 import { AppError } from "../errors/AppError.js";
+import { respondWithAppError } from "./helpers/respondWithAppError.js";
 
 // #787 slice 3: manage the owner set of a content object. Two layers of authz: the mount requires the
 // content-admin capability (SMO/ADMIN), and each handler additionally calls assertContentOwnership so
@@ -22,7 +23,7 @@ const addBodySchema = z.object({ userId: z.string().min(1) });
 
 function sendAppError(response: Response, error: unknown): boolean {
   if (error instanceof AppError) {
-    response.status(error.httpStatus).json({ error: error.code, message: error.message });
+    respondWithAppError(response, error);
     return true;
   }
   return false;

@@ -1,4 +1,17 @@
 import { renderWorkspaceNavigationWithProfile } from "/static/workspace-nav.js";
+import { applyIdentityDefaults as delApplyIdentityDefaults } from "/static/identity-defaults.js";
+import { renderRolePresetControl as delRenderRolePresetControl } from "/static/role-preset-control.js";
+import { runWithBusyButton } from "/static/busy-button.js";
+import { showToast } from "/static/toast.js";
+// ⚠️ #1046: denne fila kalte `window.showToast?.(…)` seks steder. Globalen ble ALDRI satt — heller
+// ikke i committen som innførte mønsteret (332283db, 22. mars). Med valgfri kjeding forsvant hvert
+// eneste kall stille, så profilsiden har vært stum ved feil i fem måneder mens koden så ut som den
+// snakket.
+//
+// Det er lag-i-tid i sin reneste form: mønsteret ble skrevet for en global noen antok fantes.
+import { hideLoading, showEmpty, showLoading } from "/static/loading.js";
+import { lagLokalisertRessurs } from "/static/localized-resource.js";
+import { describeApiError } from "/static/api-error.js";
 import { resolveInitialLocale } from "/static/i18n-locale.js";
 import { createNumberFormatter, createDateTimeFormatter } from "/static/format-display.js";
 const formatDateTime = createDateTimeFormatter(() => currentLocale, "—");
@@ -119,32 +132,15 @@ function populateLocaleSelect() {
 // ── Navigation ────────────────────────────────────────────────────────────────
 
 function renderRolePresetControl() {
-  mockRolePresetSelect.innerHTML = "";
-  const manual = document.createElement("option");
-  manual.value = "";
-  manual.textContent = t("identity.rolePresetManual") ?? "— manual —";
-  mockRolePresetSelect.appendChild(manual);
-
-  for (const role of roleSwitchState.presets) {
-    const option = document.createElement("option");
-    option.value = role;
-    option.textContent = role;
-    mockRolePresetSelect.appendChild(option);
-  }
-
-  const matchingPreset = findMatchingPreset(rolesInput.value, roleSwitchState.presets);
-  mockRolePresetSelect.value = matchingPreset;
-
-  const disabled = !roleSwitchState.enabled;
-  mockRolePresetSelect.disabled = disabled;
-  if (mockRolePresetHint) {
-    mockRolePresetHint.textContent = disabled
-      ? (t("identity.rolePresetDisabledEntra") ?? "")
-      : (t("identity.rolePresetHint") ?? "");
-  }
-  if (mockRolePresetContainer) {
-    mockRolePresetContainer.hidden = roleSwitchState.presets.length === 0;
-  }
+  // #1046: fire identiske kopier, to ulike oppforsler. Se `/static/role-preset-control.js`.
+  delRenderRolePresetControl({
+    select: mockRolePresetSelect,
+    hint: mockRolePresetHint,
+    container: mockRolePresetContainer,
+    roleSwitchState,
+    currentRoles: rolesInput.value,
+    t,
+  });
 }
 
 function renderWorkspaceNavigation() {
@@ -196,54 +192,18 @@ function formatDate(value) {
 
 const formatNumber = createNumberFormatter(() => currentLocale, "—");
 
-function localizeContentValue(value) {
-  if (!value) return "â€”";
-  if (typeof value === "string") {
-    const trimmed = value.trim();
-    if (trimmed.startsWith("{")) {
-      try {
-        const parsed = JSON.parse(trimmed);
-        if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-          return (
-            parsed[currentLocale] ??
-            parsed["en-GB"] ??
-            Object.values(parsed).find((entry) => typeof entry === "string" && entry.trim().length > 0) ??
-            "â€”"
-          );
-        }
-      } catch {
-        return value;
-      }
-    }
-    return value;
-  }
-  if (typeof value === "object" && !Array.isArray(value)) {
-    return (
-      value[currentLocale] ??
-      value["en-GB"] ??
-      Object.values(value).find((entry) => typeof entry === "string" && entry.trim().length > 0) ??
-      "â€”"
-    );
-  }
-  return "â€”";
+// #1027: den fjerde klientparseren i denne saken er fjernet herfra.
+//
+// ⚠️ Den var verre enn de andre, for den var STILLE. Serveren sender nå `courseTitle` og
+// `certificationLevel` ferdig lokalisert (courses.ts), så parseren fikk aldri et lagringsformat å
+// tolke og gjorde ingenting. Nivåkolonnen fulgte språkbyttet før, og sluttet å gjøre det — uten at
+// noe ble rødt, fordi #736 sin re-rendering fra cache fortsatt kjørte og «virket».
+//
+// En parser som ikke lenger har noe å parse, ser ut som om den gjør jobben sin.
+function showValue(value) {
+  return typeof value === "string" && value.trim().length > 0 ? value : "—";
 }
 
-async function runWithBusyButton(button, action) {
-  if (!button || button.dataset.busy === "true") return;
-  const wasDisabled = button.disabled;
-  button.dataset.busy = "true";
-  button.disabled = true;
-  button.classList.add("button-busy");
-  button.setAttribute("aria-busy", "true");
-  try {
-    await action();
-  } finally {
-    button.dataset.busy = "";
-    button.classList.remove("button-busy");
-    button.removeAttribute("aria-busy");
-    button.disabled = wasDisabled;
-  }
-}
 
 // ── Profile rendering ─────────────────────────────────────────────────────────
 
@@ -276,12 +236,9 @@ function renderModules(body) {
   modulesBody.innerHTML = "";
 
   if (modules.length === 0) {
-    const row = document.createElement("tr");
-    const cell = document.createElement("td");
-    cell.colSpan = 4;
-    cell.textContent = t("profile.modules.empty");
-    row.appendChild(cell);
-    modulesBody.appendChild(row);
+    // #1046: den delte tomtilstanden. Den håndlagde varianten her gjorde det samme, men uten
+    // `.empty-state`-stilen — så tomme tabeller så ulike ut fra flate til flate.
+    showEmpty(modulesBody, t("profile.modules.empty"), { columns: 4 });
     return;
   }
 
@@ -322,12 +279,9 @@ function renderCourses(body) {
   coursesBody.innerHTML = "";
 
   if (courses.length === 0) {
-    const row = document.createElement("tr");
-    const cell = document.createElement("td");
-    cell.colSpan = 4;
-    cell.textContent = t("profile.courses.empty");
-    row.appendChild(cell);
-    coursesBody.appendChild(row);
+    // #1046: den delte tomtilstanden. Den håndlagde varianten her gjorde det samme, men uten
+    // `.empty-state`-stilen — så tomme tabeller så ulike ut fra flate til flate.
+    showEmpty(coursesBody, t("profile.courses.empty"), { columns: 4 });
     return;
   }
 
@@ -335,7 +289,7 @@ function renderCourses(body) {
     const row = document.createElement("tr");
 
     const titleTd = document.createElement("td");
-    titleTd.textContent = localizeContentValue(course.courseTitle ?? course.courseId);
+    titleTd.textContent = showValue(course.courseTitle ?? course.courseId);
     row.appendChild(titleTd);
 
     const dateTd = document.createElement("td");
@@ -343,7 +297,7 @@ function renderCourses(body) {
     row.appendChild(dateTd);
 
     const levelTd = document.createElement("td");
-    levelTd.textContent = localizeContentValue(course.certificationLevel);
+    levelTd.textContent = showValue(course.certificationLevel);
     row.appendChild(levelTd);
 
     // #550: certificate ID + link to the printable certificate view (was ID text only).
@@ -465,10 +419,11 @@ function renderAgentTokens(tokens) {
             await apiFetch(`/api/admin/content/agent-authoring/tokens/${encodeURIComponent(token.id)}/revoke`, headers, {
               method: "POST",
             });
-            window.showToast?.(t("agentTokens.revoked.toast"), "success");
+            showToast(t("agentTokens.revoked.toast"), "success");
             await loadAgentTokens();
           } catch (error) {
-            window.showToast?.(error.message ?? "Error", "error");
+            // #983: «Error» var hardkodet engelsk, og hovedveien viste serverens setning.
+            showToast(describeApiError(error, t).headline, "error");
           }
         });
       });
@@ -560,7 +515,7 @@ async function submitDeletion(immediate) {
         setTimeout(() => { window.location.reload(); }, 1500);
       }
     } catch (error) {
-      deletionFeedback.textContent = error.message ?? "Error";
+      deletionFeedback.textContent = describeApiError(error, t).headline;
       deletionFeedback.style.cssText = "color:var(--color-error);display:block";
     }
   });
@@ -586,14 +541,8 @@ async function loadConsoleConfig() {
 
   document.body.classList.toggle("auth-entra", roleSwitchState.authMode === "entra");
 
-  const identityDefaults = participantRuntimeConfig?.identityDefaults?.participant;
-  if (identityDefaults) {
-    document.getElementById("userId").value = identityDefaults.userId ?? "";
-    document.getElementById("email").value = identityDefaults.email ?? "";
-    document.getElementById("name").value = identityDefaults.name ?? "";
-    document.getElementById("department").value = identityDefaults.department ?? "";
-    rolesInput.value = Array.isArray(identityDefaults.roles) ? identityDefaults.roles.join(",") : "";
-  }
+  // #1046: se `/static/identity-defaults.js`.
+  delApplyIdentityDefaults(participantRuntimeConfig?.identityDefaults?.participant, rolesInput);
 
   renderRolePresetControl();
 
@@ -626,16 +575,13 @@ async function loadProfileData() {
     localeSelect.value = serverLocale;
   }
 
-  // Load completed modules (non-blocking — render empty state first, fill in on success)
-  const [modulesResult, coursesResult] = await Promise.allSettled([
-    apiFetch("/api/modules/completed", headers),
-    apiFetch("/api/courses/completions", headers),
-  ]);
-
-  cachedModulesData = modulesResult.status === "fulfilled" ? modulesResult.value : null;
-  cachedCoursesData = coursesResult.status === "fulfilled" ? coursesResult.value : null;
-  renderModules(cachedModulesData);
-  renderCourses(cachedCoursesData);
+  // ⚠️ #1042: FØRSTEHENTINGEN går gjennom den samme ressursen som språkbyttet. Første forsøk lot
+  // den ligge igjen som en egen `Promise.allSettled` her — da visste ressursen ikke at noe var
+  // hentet, og `oppdaterVedSpråkbytte` gjorde ingenting. Sertifiseringsnivået sluttet å følge
+  // språket på nytt, av nøyaktig samme grunn som i #1027.
+  //
+  // To lastere for samme data er selve feilen modulen finnes for å fjerne.
+  await profillister.last();
 
   // Agent access (AA-3, #731) — gated on the /api/me roles.
   await refreshAgentTokensSection(cachedMeData);
@@ -651,9 +597,48 @@ localeSelect.addEventListener("change", () => {
   setLocale(localeSelect.value);
   // #736: re-render the dynamically built content so table values follow the new locale, not just
   // the static [data-i18n] labels that applyTranslations() handles.
+  //
+  // ⚠️ #1027 gjorde halve premissen for #736 usann. Den bygde på at listene bar LAGRINGSFORMATET,
+  // slik at en ny rendering kunne velge språk på nytt fra data siden allerede hadde. Nå baker
+  // serveren inn språket ved HENTING, og en ny rendering av de samme radene gir nøyaktig samme
+  // tekst. Sertifiseringsnivået fulgte språkbyttet før 2.49.0 og sluttet å gjøre det.
+  //
+  // Renderingen beholdes — den gjør fortsatt jobben for det som formes på klienten (datoer, tall,
+  // etiketter). Men det som kommer ferdig fra serveren må HENTES på nytt.
   if (cachedMeData) renderProfile(cachedMeData);
   renderModules(cachedModulesData);
   renderCourses(cachedCoursesData);
+  profillister.oppdaterVedSpråkbytte();
+});
+
+// #1042: listene hentes gjennom den delte ressursen. Den eier kappløpsvakta OG enkeltflyten —
+// profilsiden manglet enkeltflyt selv etter #1027, nok et tilfelle av at én fiks i settet ble
+// tatt for settet.
+const profillister = lagLokalisertRessurs({
+  hentSpråk: () => currentLocale,
+  hent: () => {
+    // #1046: flaten viste ingenting mens den lastet. De tre flatene som HAR lastetilstand fikk
+    // den i mars; denne ble aldri rørt.
+    showLoading(modulesBody, { rows: 3, columns: 4 });
+    showLoading(coursesBody, { rows: 2, columns: 4 });
+    return Promise.allSettled([
+      apiFetch("/api/modules/completed", headers),
+      apiFetch("/api/courses/completions", headers),
+    ]).finally(() => {
+      hideLoading(modulesBody);
+      hideLoading(coursesBody);
+    });
+  },
+  tegn: ([modulesResult, coursesResult]) => {
+    if (modulesResult.status === "fulfilled") {
+      cachedModulesData = modulesResult.value;
+      renderModules(cachedModulesData);
+    }
+    if (coursesResult.status === "fulfilled") {
+      cachedCoursesData = coursesResult.value;
+      renderCourses(cachedCoursesData);
+    }
+  },
 });
 
 rolesInput.addEventListener("input", () => {
@@ -677,7 +662,7 @@ viewDataBtn.addEventListener("click", async () => {
       dataViewSection.style.display = "";
       dataViewSection.scrollIntoView({ behavior: "smooth", block: "start" });
     } catch (error) {
-      window.showToast?.(error.message ?? "Error loading data", "error");
+      showToast(describeApiError(error, t).headline, "error");
     }
   });
 });
@@ -697,7 +682,7 @@ downloadDataBtn.addEventListener("click", async () => {
       a.remove();
       URL.revokeObjectURL(url);
     } catch (error) {
-      window.showToast?.(error.message ?? "Error downloading data", "error");
+      showToast(describeApiError(error, t).headline, "error");
     }
   });
 });
@@ -724,7 +709,8 @@ issueAgentTokenBtn.addEventListener("click", async () => {
       agentTokenLabelInput.value = "";
       await loadAgentTokens();
     } catch (error) {
-      window.showToast?.(error.message ?? "Error", "error");
+      // #1046: siste to rå bruk på denne flaten. Reserven «Error» var dessuten hardkodet engelsk.
+      showToast(describeApiError(error, t).headline, "error");
     }
   });
 });
@@ -769,7 +755,7 @@ downloadFullBtn.addEventListener("click", async () => {
       a.remove();
       URL.revokeObjectURL(url);
     } catch (error) {
-      window.showToast?.(error.message ?? "Error downloading data", "error");
+      showToast(describeApiError(error, t).headline, "error");
     }
   });
 });

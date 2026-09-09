@@ -1,10 +1,15 @@
 import { renderWorkspaceNavigationWithProfile } from "/static/workspace-nav.js";
+import { applyIdentityDefaults as delApplyIdentityDefaults } from "/static/identity-defaults.js";
+import { renderRolePresetControl as delRenderRolePresetControl } from "/static/role-preset-control.js";
+import { describeApiError } from "/static/api-error.js";
+import { lagLokalisertRessurs } from "/static/localized-resource.js";
 import { resolveInitialLocale } from "/static/i18n-locale.js";
 import { localeLabels, supportedLocales, translations } from "/static/i18n/admin-platform-translations.js";
 import { apiFetch, buildConsoleHeaders, getConsoleConfig, fetchQueueCounts, applyNavReviewBadge } from "/static/api-client.js";
 import { initConsentGuard } from "/static/consent-guard.js";
 import { showToast } from "/static/toast.js";
 import { escapeHtml } from "/static/html-escape.js";
+import { setHidden } from "/static/dom-visibility.js";
 import {
   findMatchingPreset,
   resolveRoleSwitchState,
@@ -88,32 +93,15 @@ function populateLocaleSelect() {
 // ── Navigation ────────────────────────────────────────────────────────────────
 
 function renderRolePresetControl() {
-  mockRolePresetSelect.innerHTML = "";
-  const manual = document.createElement("option");
-  manual.value = "";
-  manual.textContent = t("identity.rolePresetManual") ?? "— manual —";
-  mockRolePresetSelect.appendChild(manual);
-
-  for (const role of roleSwitchState.presets) {
-    const option = document.createElement("option");
-    option.value = role;
-    option.textContent = role;
-    mockRolePresetSelect.appendChild(option);
-  }
-
-  const matchingPreset = findMatchingPreset(rolesInput.value, roleSwitchState.presets);
-  mockRolePresetSelect.value = matchingPreset;
-
-  const disabled = !roleSwitchState.enabled;
-  mockRolePresetSelect.disabled = disabled;
-  if (mockRolePresetHint) {
-    mockRolePresetHint.textContent = disabled
-      ? (t("identity.rolePresetDisabledEntra") ?? "")
-      : (t("identity.rolePresetHint") ?? "");
-  }
-  if (mockRolePresetContainer) {
-    mockRolePresetContainer.hidden = roleSwitchState.presets.length === 0;
-  }
+  // #1046: fire identiske kopier, to ulike oppforsler. Se `/static/role-preset-control.js`.
+  delRenderRolePresetControl({
+    select: mockRolePresetSelect,
+    hint: mockRolePresetHint,
+    container: mockRolePresetContainer,
+    roleSwitchState,
+    currentRoles: rolesInput.value,
+    t,
+  });
 }
 
 function renderWorkspaceNavigation() {
@@ -174,6 +162,7 @@ async function loadSettings() {
     consentBodyEnGb.value = data.consentBody?.["en-GB"] ?? "";
     if (data.consentVersion) consentVersionBadge.textContent = data.consentVersion;
     renderCertBackground(Boolean(data.certificateBackground));
+    await loadFailedAssessments();
     settingsContent.style.display = "";
   } catch (err) {
     if (settingsContent) {
@@ -227,7 +216,8 @@ async function uploadCertBackground() {
     renderCertBackground(true);
     showCertBgFeedback(t("adminPlatform.certBackground.uploaded"), false);
   } catch (err) {
-    showCertBgFeedback(String(err?.message ?? err), true);
+    // #1046: se `cohort-status` — serverens språk i et grensesnitt som defaulter til brukerens.
+    showCertBgFeedback(describeApiError(err, t).headline, true);
   } finally {
     certBgUpload.disabled = false;
   }
@@ -240,7 +230,8 @@ async function removeCertBackground() {
     renderCertBackground(false);
     showCertBgFeedback(t("adminPlatform.certBackground.removed"), false);
   } catch (err) {
-    showCertBgFeedback(String(err?.message ?? err), true);
+    // #1046: se `cohort-status` — serverens språk i et grensesnitt som defaulter til brukerens.
+    showCertBgFeedback(describeApiError(err, t).headline, true);
   } finally {
     certBgRemove.disabled = false;
   }
@@ -307,13 +298,9 @@ async function loadConsoleConfig() {
   document.body.classList.toggle("auth-entra", roleSwitchState.authMode === "entra");
   document.body.classList.remove("auth-resolving"); // auth-modus kjent → ikke vis dev-kort i prod/stage
 
-  const identityDefaults = participantRuntimeConfig?.identityDefaults?.administrator;
-  if (identityDefaults) {
-    document.getElementById("userId").value = identityDefaults.userId ?? "";
-    document.getElementById("email").value = identityDefaults.email ?? "";
-    document.getElementById("name").value = identityDefaults.name ?? "";
-    document.getElementById("department").value = identityDefaults.department ?? "";
-    rolesInput.value = Array.isArray(identityDefaults.roles) ? identityDefaults.roles.join(",") : "";
+  // #1046: se `/static/identity-defaults.js`.
+  {
+    delApplyIdentityDefaults(participantRuntimeConfig?.identityDefaults?.administrator, rolesInput);
   }
 
   renderRolePresetControl();
@@ -322,7 +309,11 @@ async function loadConsoleConfig() {
 
 // ── Event wiring ──────────────────────────────────────────────────────────────
 
-localeSelect.addEventListener("change", () => setLocale(localeSelect.value));
+localeSelect.addEventListener("change", () => {
+  setLocale(localeSelect.value);
+  // ⚠️ Hentingen ligger HER, ikke i `setLocale` — den kalles også ved oppstart (#1039).
+  feiledeVurderinger.oppdaterVedSpråkbytte();
+});
 rolesInput.addEventListener("input", () => {
   const matching = findMatchingPreset(rolesInput.value, roleSwitchState.presets);
   mockRolePresetSelect.value = matching;
@@ -354,3 +345,129 @@ initTabs();
   }
   await loadSettings();
 })();
+
+
+// ── #953 Vurderinger som ga opp ───────────────────────────────────────────────
+//
+// ⚠️ Seksjonen skjules med setHidden(), IKKE .hidden-klassen. `.card` setter display, og en
+// forfatter-regel som .hidden taper mot den — elementet ville aldri blitt skjult. Det er
+// .hidden-fella dokumentert i FEATURE_SURFACE_MAP.
+//
+// Kortet er skjult som utgangspunkt og vises KUN når lista har rader (produkteier 2026-08-26).
+// Feiler oppslaget, forblir det skjult: en administrator skal ikke få et tomt kort som ser ut som
+// «alt er bra» når vi faktisk ikke vet.
+
+const failedAssessmentsCard = document.getElementById("failedAssessmentsCard");
+const failedAssessmentsBody = document.getElementById("failedAssessmentsBody");
+
+// #1042: modultitlene i lista over feilede vurderinger lokaliseres av serveren ved HENTING
+// (#1022/#1027). Uten ny henting ved språkbytte ble de stående på forrige språk (#1040).
+const feiledeVurderinger = lagLokalisertRessurs({
+  hentSpråk: () => currentLocale,
+  hent: () => apiFetch("/api/admin/platform/failed-assessments", headers),
+  tegn: (data) => tegnFeiledeVurderinger(data),
+  påFeil: () => { /* kortet forblir skjult, som før */ },
+});
+
+async function loadFailedAssessments() {
+  await feiledeVurderinger.last();
+}
+
+function tegnFeiledeVurderinger(data) {
+  if (!failedAssessmentsCard || !failedAssessmentsBody) return;
+  setHidden(failedAssessmentsCard, true);
+
+  const rows = Array.isArray(data?.failedAssessments) ? data.failedAssessments : [];
+  const total = typeof data?.total === "number" ? data.total : rows.length;
+
+  if (rows.length === 0) return;
+
+  failedAssessmentsBody.innerHTML = "";
+  for (const row of rows) {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${escapeHtml(row.participantName ?? "—")}<br><span class="small">${escapeHtml(row.participantEmail ?? "")}</span></td>
+      <td>${escapeHtml(moduleTitleOf(row.moduleTitle))}</td>
+      <td class="failed-when">${escapeHtml(formatWhen(row.failedAt))}</td>
+      <td class="failed-attempts">${escapeHtml(`${row.attempts ?? "?"}/${row.maxAttempts ?? "?"}`)}</td>
+      <td class="small failed-reason">${escapeHtml(row.errorMessage ?? "—")}</td>
+      <td class="failed-action"></td>
+    `;
+    const actionCell = tr.lastElementChild;
+    const button = document.createElement("button");
+    button.className = "btn-secondary";
+    button.textContent = t("adminPlatform.failedAssessments.retry");
+    button.addEventListener("click", () => retryAssessment(row.submissionId, button));
+    actionCell.appendChild(button);
+    failedAssessmentsBody.appendChild(tr);
+  }
+
+  // Lista er avkortet, telleren er ikke. Si det, i stedet for å la administratoren lure på hvorfor
+  // merket i menyen viser et større tall enn antall rader.
+  const truncationNote = document.getElementById("failedAssessmentsTruncated");
+  if (truncationNote) {
+    const truncated = total > rows.length;
+    setHidden(truncationNote, !truncated);
+    truncationNote.textContent = truncated
+      ? `${t("adminPlatform.failedAssessments.showing")} ${rows.length} / ${total}`
+      : "";
+  }
+
+  setHidden(failedAssessmentsCard, false);
+}
+
+async function retryAssessment(submissionId, button) {
+  button.disabled = true;
+  button.textContent = t("adminPlatform.failedAssessments.retrying");
+  try {
+    // #953: administratorens EGEN rute. Deltakerruta `/api/assessments/:id/run` er eierskaps-
+    // sjekket mot innsenderen, så en administrator fikk 404 der — knappen virket aldri.
+    await apiFetch(`/api/admin/platform/failed-assessments/${encodeURIComponent(submissionId)}/retry`, headers, {
+      method: "POST",
+      body: JSON.stringify({}),
+    });
+    button.textContent = t("adminPlatform.failedAssessments.retryQueued");
+    showToast(t("adminPlatform.failedAssessments.retryQueued"));
+    // Merket i toppmenyen leser samme teller — oppdater det, ellers står det igjen med et tall
+    // administratoren nettopp har gjort noe med.
+    if (workspaceNav) {
+      fetchQueueCounts(headers).then((counts) => applyNavReviewBadge(workspaceNav, counts)).catch(() => {});
+    }
+    // Raden er ikke lenger «fast» — en aktiv jobb finnes. Hent lista på nytt så kortet
+    // friskmelder seg selv i stedet for å vise en sak som er tatt hånd om.
+    await loadFailedAssessments();
+  } catch (err) {
+    button.disabled = false;
+    button.textContent = t("adminPlatform.failedAssessments.retryFailed");
+    showToast(describeApiError(err, t).headline, "error");
+  }
+}
+
+// Modultittelen er lokalisert JSON lagret som TEKST. `typeof === "string"` er sant for BEGGE
+// former og måler ingenting — samme felle som stage-suiten gikk i.
+/**
+ * #1022: serveren lokaliserer nå tittelen, så her skal det ikke tolkes noe.
+ *
+ * ⚠️ Denne parset tidligere JSON-strengen selv, med en ANNEN reservekjede enn serverens: den falt
+ * tilbake på `nb`, og fantes ikke nb, viste den den rå JSON-strengen. En tittel som bare er
+ * oversatt til nynorsk — en helt lovlig tilstand etter #892 — traff nøyaktig det.
+ *
+ * To implementasjoner av «hvilket språk viser vi» er én for mye. Serveren eier spørsmålet.
+ */
+function moduleTitleOf(value) {
+  return typeof value === "string" && value.trim() ? value : "—";
+}
+
+// Dato og klokkeslett uten sekunder. `toLocaleString()` ga «26.8.2026, 21:43:21» — sekundene
+// hjelper ingen som skal avgjøre om en vurdering skal kjøres på nytt, og lengden presset kolonnen.
+function formatWhen(iso) {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleString(currentLocale === "en-GB" ? "en-GB" : "nb-NO", {
+    day: "2-digit",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}

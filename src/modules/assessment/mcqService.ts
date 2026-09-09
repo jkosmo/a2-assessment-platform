@@ -20,6 +20,9 @@ const TERMINAL_SUBMISSION_STATUSES: ReadonlySet<(typeof SubmissionStatus)[keyof 
   SubmissionStatus.SCORED,
   SubmissionStatus.COMPLETED,
   SubmissionStatus.UNDER_REVIEW,
+  // #951: et forlatt forsøk kan man heller ikke starte et nytt MCQ-forsøk på. Deltakeren har
+  // allerede levert på nytt, og den nye innleveringen er den som skal besvares.
+  SubmissionStatus.SUPERSEDED,
   SubmissionStatus.REJECTED,
 ]);
 

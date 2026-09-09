@@ -2,6 +2,2211 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.63.0 - 2026-09-09
+
+Seks commits. Den røde tråden er **hvem som avgjør, og hvem som får se** — og i to av sakene endte
+undersøkelsen med å avvise fiksen saken selv foreslo.
+
+### Forfattere kan lese alt kursinnhold
+
+Systemet gjorde tre ulike ting med samme spørsmål: seksjoner var vaktet mot lesing, kurs ble vaktet
+av #943, og moduler lekket allerede. Målt: en SMO som kaller `GET /api/modules?adminFacing=true`
+fikk **117 moduler, 17 med `assessorExpectedContent`** — uten eierskapsfilter.
+
+Produkteier: *«Er man SMO skal man kunne se alt kursinnhold. Hvis de benytter dette til å jukse, så
+er det til slutt deres eget problem.»*
+
+⚠️ **MCQ-fasiten ble vurdert særskilt.** Kurseksporten inlines hver moduls fulle innhold — 4 av 7
+vellykkede eksporter ga `correctAnswer` til en fremmed SMO. Strippingen ble bygget og så rullet
+tilbake: *«det er bare å laste ned modulen og legge den inn i en LLM, så får de fasit.»* En
+beskyttelse som omgås slik er kostnad uten vern.
+
+Skriving er urørt, og `/enrollments` er fortsatt vaktet — den lister personopplysninger, ikke
+kursinnhold.
+
+### #951 — et forlatt forsøk er ikke et utfall
+
+Retake satte den gamle innleveringen til `COMPLETED` uten å skrive vedtak. Målingen avviste fiksen
+saken foreslo: å skrive vedtaket ville gitt kursbevis for et forsøk sensoren aldri fikk se. Feilen
+lå på **lesesiden** — fem svartelister talte det gamle automatiske vedtaket som endelig. Ny status
+`SUPERSEDED`, og én delt hviteliste erstatter de fem.
+
+På stage flyttet 12 innleveringer seg ut av «fullført», der de aldri hørte hjemme.
+
+### #1001 — et kurs publiseres på elementer, ikke på moduler
+
+Beslutningen ble tatt 2026-08-24 og dokumentert, men koden ble aldri endret. Et kurs av rent
+lesestoff kunne ikke publiseres. Porten står — null elementer avvises fortsatt — men filteret på
+`itemType` er borte, og avslaget har fått koden `course_has_no_items`.
+
+### #1029 og #1030 — avslag som lovet noe systemet ikke gir
+
+«Skrivebeskyttet» betyr «du kan se, men ikke endre». Etter #943 kunne den som så merket ikke se
+heller. Og en SMO som ba om et **slettet** kurs ble bedt om å skaffe seg eierskap til noe som ikke
+er der.
+
+Rekkefølgen på eksistens- og eierskapssjekken er ikke endret: det ville gitt presis melding og
+gratis rekognosering. Meldingen er nøytral i stedet.
+
+## 2.62.0 - 2026-09-06
+
+Samlet promotering av 35 commits. De to store trådene er **hvem som avgjør en vurdering** og
+**opprydding i veier som gjorde det samme to ganger**.
+
+### #1048 — mennesket vinner når vi ikke kan måle at svaret er for kort
+
+Modellen sa to ting samtidig — «det er for lite grunnlag her» og «et menneske bør se på dette» — og
+vi hørte bare det første. På stage ba den om menneskelig vurdering i **21 av 78** vurderinger, og
+**alle 21** ble automatisk strøket uten at en sensor så dem.
+
+Automatisk stryk krever nå et målbart faktum: at svaret er vesentlig kortere enn oppgaven ba om
+(under halve nivåets minimum). Kan vi ikke måle det, står hovedregelen.
+
+⚠️ **Regelen gjelder bare konflikten.** Ba modellen ikke om et menneske, finnes ingen anmodning å
+overstyre, og auto-stryk står som før. Første utgave manglet den betingelsen, og integrasjonssuiten
+fant det ved at seks policy-tester gikk fra `COMPLETED` til `UNDER_REVIEW`.
+
+Målt på stage etter deploy: `kort_tynt` (12 ord) og `lang_tynt` (160 ord) fikk **identisk dom** fra
+modellen og endte likevel ulikt — `COMPLETED` mot `UNDER_REVIEW`. Eneste forskjell er ordtellingen.
+
+### #1049 — omfang er ikke det samme som nivå
+
+> «Det er ikke slik at det å skrive langt er vanskeligere enn å være kort.»
+
+Tabellen sa det motsatte: `advanced` ga 400–700 ord, og hver genererte oppgave arvet påstanden.
+Nivået sier nå hvor **sammensatt** oppgaven kan være, omfanget hvor **mye** som skal skrives, og
+forfatteren kan overstyre omfanget per modul (`scopeMinWords` / `scopeMaxWords`, nullbare — null
+betyr «bruk nivåets standard»).
+
+### #1023 — nærhet til sonegrense utløser en ny vurdering
+
+Forsøket på å få modellen til å melde egen usikkerhet ble **forlatt etter måling**:
+`low_confidence` forekom i 0 av 63 vurderinger. Produkteiers vinkel erstattet den — er skåren nær
+grensen mellom grønn og gul, eller særlig mellom gul og rød, er det en sak for en second opinion.
+
+### Én vei, ikke to
+
+Kopier-prompt-knappen for ekstern LLM er fjernet. Bruk av ekstern modell skjer gjennom Skill-en,
+som nå kjenner både nivå og omfang. Fem kopier av nivågrensene er nede i fire, og en vakt holder
+resten i takt.
+
+### Ellers
+
+- **#955** — en arkivert modul kan ikke lenger publiseres (invarianten ble håndhevet fire steder av fem)
+- **#1024/#1026** — gjettekartene for språk er fjernet; modellen skriver alt på deltakerens språk
+- **#1040/#1041/#1043** — vakter for språkbytte, flatekontrakt og ratsjen
+- **Uttrekk** — kriterieredigereren, driftsdiffen og to normaliserere ut av `admin-content-shell.js`
+
+## 2.61.0 - 2026-08-30
+
+### Identitetsfeltene: seks kopier, én forsvarlig
+
+`applyIdentityDefaults` lå i **sju filer**. Likhetsskanningen fant bare **to** av dem som 100 %
+like — og det er selve poenget: resten hadde driftet nok til å slippe under grensen.
+
+⚠️ **Og de hadde ulik forsvarlighet.** `results.js` null-sjekker hvert felt før det settes. De
+andre gjør `document.getElementById("userId").value = …` rett fram og **kaster** hvis feltet ikke
+finnes på siden. Den delte modulen tar den forsvarlige varianten.
+
+### Hva som IKKE ble felles, med vilje
+
+**Hvilken rolle som leses.** Sensorflaten bruker `reviewWorkspace ?? reviewer`, kohortstatus
+`contentAdmin ?? reportReader`, deltakerflaten `participant`.
+
+Det er en reell forskjell mellom flatene, ikke drift — så den ble værende hos hver enkelt. En felles
+funksjon som gjemte det ville skjult noe som faktisk betyr noe.
+
+**Likhetsskanningen peker på form. Den kan ikke se hva forskjellen betyr.** Det må leses.
+
+### Status for generaliseringen
+
+13 par ved start, **10 igjen**. De som står er par *innenfor* én fil — sensorkø mot klagekø,
+modul-liste mot kurs-liste — der symmetrien trolig er tilsiktet. De lar vi ligge til vi har en
+grunn.
+
+## 2.60.0 - 2026-08-30
+
+### Generalisering: rollevelgeren lå i fire kopier med to oppførsler
+
+`scripts/dev/similar-function-scan.mjs` sammenligner funksjoners **form** — nodetyper uten navn og
+literaler — så to funksjoner som gjør det samme med ulike variabelnavn får samme signatur.
+
+Den fant 13 par med ≥85 % lik form. Det sterkeste: `renderRolePresetControl`, **100 % identisk
+struktur i fire filer**.
+
+⚠️ **Og de hadde driftet fra hverandre:**
+
+| Variant | Dato | Oppførsel |
+|---|---|---|
+| `participant`, `participant-completed` | 9. mars | Ingen null-vakter, ingen reservetekst |
+| `profile`, `admin-platform` | 22. mars | Null-vakter og `?? ""`-reserver |
+
+Den eldste ville **kastet** hvis `mockRolePresetHint` manglet. Fire kopier, to oppførsler, ingen
+som visste om forskjellen. `/static/role-preset-control.js` tar den nyeste, altså den forsvarlige.
+
+### ⚠️ Og jeg brakk 87 tester underveis uten å oppdage det på første forsøk
+
+Skriptet mitt sa: «legg til importen hvis `role-preset-control.js` ikke finnes i fila». Men
+kommentaren jeg nettopp hadde satt inn **inneholder den strengen**. Sjekken ble usann, importen kom
+aldri, og fire flater kastet `delRenderRolePresetControl is not defined` ved lasting.
+
+**Jeg sjekket på en streng der jeg mente en importsetning.** Samme klasse som en påstand tidligere
+i dag som traff min egen kommentar.
+
+### Og jeg leste feilen feil
+
+E2E rapporterte «225 passed (10.1m)» mot vanlige «312 passed (1.3m)». Jeg konkluderte at **87
+tester manglet**, og lette etter en stille delvis kjøring.
+
+De feilet. Jeg hadde pipet til `tail -3`, som kuttet «12 failed»-linja — og «exit code 0» kom fra
+røret, ikke fra Playwright.
+
+⚠️ **Det er andre gang samme dag.** Første gang var integrasjonssuiten i morges, og jeg skrev det
+ned da. Notatet var ikke nok.
+
+Kjøretiden var forresten symptomet, ikke en egen feil: hver feilende test brukte 30 sekunder på å
+vente på innhold som aldri kom.
+
+## 2.59.0 - 2026-08-30
+
+### Nåbarhetsanalyse med ekte parser — og resten av de gamle skjermbildene
+
+Produkteierens historikk: konsollet gikk fra enkelt UI, til avansert, til samtalebasert, til
+Forhåndsvis/Rediger/Innstillinger. Hypotesen var at det ligger rester av gamle skjermbilder.
+
+`scripts/dev/dead-code-scan.mjs` bygger kallgrafen med TypeScript-parseren og går bredde-først fra
+inngangspunktene.
+
+⚠️ **Verktøyet ble validert før det ble brukt:** kjørt på fila slik den var FØR gårsdagens
+opprydding, og den fant nøyaktig de seks funksjonene som allerede var verifisert manuelt — samme
+navn, samme linjetall. Uten den kontrollen ville jeg bare visst at verktøyet er enig med seg selv.
+
+### Funnet: den samtalebaserte modulvelgeren
+
+Seks funksjoner i `admin-content-courses.js`, alle med `Conv`-prefiks:
+`initConvCombobox`, `updateConvComboboxDropdown`, `renderConvModuleList`,
+`handleConvModuleListClick`, `getVisibleComboboxOptions`, `addConvSelectedModule`.
+
+**To uavhengige bevis:** de refererer bare hverandre, og DOM-elementene de opererer på —
+`comboboxDropdown`, `comboboxInput`, `convModuleList`, `convAddModuleItemBtn` — finnes **ikke i
+noen HTML**. Skjermen er borte; koden ble igjen.
+
+196 linjer. Pluss 16 linjer i `participant.js`.
+
+### ⚠️ Hvorfor grep ikke fant dem, og parseren gjorde det
+
+`localizeImprovementAdvice` er en tre-linjers innpakning som aldri kalles. `grep -c` ga fire treff
+— men de var i hovedsak `localizeImprovementAdvice**Items**`, en annen funksjon som *er* i bruk.
+
+**Grep ser prefikser. Parseren ser identiteter.**
+
+### Status
+
+Null unådde deklarasjoner igjen i hele `public/`. Samlet frontend nede fra 27 502 til 26 954
+linjer i dag — 548 linjer, alle verifisert enkeltvis.
+
+⚠️ Det er 2 %, ikke 20. **Konsollet er ikke oppblåst av død kode.** 17 500 linjer er hva en
+samtaledrevet innholdsassistent med seks arbeidsflater faktisk koster.
+
+## 2.58.1 - 2026-08-30
+
+### Død kode i forfatterkonsollet — 327 linjer, funnet med nåbarhetsanalyse
+
+Produkteierens hypotese: konsollet er bygget om flere ganger (enkelt UI → avansert → samtalebasert
+→ Forhåndsvis/Rediger/Innstillinger), så det ligger trolig rester av gamle skjermbilder.
+
+⚠️ **Referansetelling fant dem ikke.** Død kode i klynger refererer til seg selv og ser levende ut.
+Det som skulle til var **nåbarhetsanalyse** fra inngangspunktene: bygg kallgrafen, start i
+toppnivåkoden, se hva som aldri nås.
+
+Resultat i `admin-content-shell.js`: 204 av 210 funksjoner nås. De seks som ikke gjorde det var en
+sammenhengende klynge — **modulhåndtering**: arkiver, slett, dupliser, gjenopprett, velg arkivert.
+
+Funksjonaliteten hadde flyttet til `admin-content-library.js` (`archiveModule`, `restoreModule`,
+`duplicateModule`, `deleteModuleFromRow`). Restene refererte bare hverandre, som «prøv igjen»-valg.
+
+**247 linjer fjernet, og null unådde funksjoner igjen.**
+
+Pluss 7 funksjoner uten en eneste referanse i `courses.js` og `shell.js` — navn som
+`certBadgeLegacy` og `certBadgeLocalizedTemp` sier selv hva de var.
+
+### ⚠️ Fire råmålinger overrapporterte grovt før filtrering
+
+| Måling | Først | Etter |
+|---|---|---|
+| Kobling mot manglende elementer | 96 | **5** |
+| Ubrukte oversettelsesnøkler | 349 | 219 |
+| Tester uten påstand | 2025 | **~0** |
+| Unådde funksjoner i to filer | 104 | **søppel — ikke meldt** |
+
+Den siste er verdt å merke seg: klammertellingen brekker på `{` inne i strenger og maler, så en
+funksjon ble «761 linjer» og masken slukte inngangspunktet. **Tallene for `courses.js` og
+`library.js` er derfor ikke brukt.**
+
+Fjerningen i `shell.js` står på uavhengig grunnlag: null treff på navnene i hele repoet,
+erstatningene funnet i biblioteket, og alle suiter grønne.
+
+### Nøkkelrydding forsøkt og rullet tilbake
+
+219 «ubrukte» oversettelsesnøkler viste seg ikke å være ubrukte: nøkler bygges med
+strengsammenslåing og standardargument (`decisionReasonKeyFor(code, params, prefix = "…")`), ikke
+maler. Vakta i `decision-reason.test.js` fanget det umiddelbart — seks røde.
+
+**Statisk skanning er ikke godt nok grunnlag for å slette. Nåbarhet er.**
+
+## 2.58.0 - 2026-08-30
+
+### ⚠️ «Last resultater» mistet teksten sin ved første klikk
+
+Funnet av produkteier under manuell test. Feilen har ligget der siden **mars**.
+
+`showLoading(knappen)` erstatter elementets `innerHTML` med skjelettlinjer, og `hideLoading` rydder
+bare klasser — den skriver ikke innholdet tilbake. Teksten forsvant derfor permanent, helt til et
+språkbytte kalte `applyTranslations()` og skrev den inn igjen.
+
+**`showLoading` er for BEHOLDERE som skal fylles. En knapp har allerede innholdet sitt** og skal
+bare markeres som opptatt.
+
+⚠️ **Ingen test så på knappen etter et klikk.** Det gjør de nå, og mutasjonen gjenskaper feilen
+nøyaktig: «Load results» → «».
+
+### `runWithBusyButton` var tre lokale kopier
+
+`participant.js`, `participant-completed.js` og `profile.js` hadde hver sin, nesten identiske —
+eneste forskjell var et `after`-kall. `results.js` hadde ingen, og brukte feil verktøy i stedet.
+
+Nå én delt modul, `public/static/busy-button.js`.
+
+**Det er samme historie som resten av #1046: den riktige løsningen fantes allerede, tre steder, og
+det fjerde stedet visste ikke om den.**
+
+### Kursbeviset skjuler tomt nivå
+
+Fant i utskriftsmodus: beviset viste «Certification level: -» når nivået manglet, mens modultallet
+rett under skjules helt i samme tilfelle. To ulike svar på samme spørsmål, i samme fil, på et
+dokument som skrives ut og arkiveres.
+
+## 2.57.0 - 2026-08-30
+
+### #1046 steg 3 — toast som eneste tilbakemeldingsform
+
+Produkteierens argument avgjorde det:
+
+> «Inline tar plass, og det har gradvis akkumulert. I utgangspunktet når vi gjør ting i UI gir det
+> en permanent effekt — et felt oppdateres, en status endres. Toast gir en midlertidig
+> tydeliggjøring av at noe har skjedd.»
+
+⚠️ **Og jeg tok feil i min egen innvending.** Jeg hevdet at «en feilmelding som forsvinner er en
+feilmelding brukeren ikke fikk» — uten å lese `toast.js`. Den auto-lukker ikke feil og advarsler i
+det hele tatt (`error: 0`, `warning: 0`), avgjort i #601 etter en brukertilbakemelding.
+
+Jeg argumenterte mot koden uten å lese den. Samme feil som jeg har rettet flere ganger i testene i
+dag: en påstand som høres riktig ut, uten måling bak.
+
+### To lokale kopier av `setMessage` er borte
+
+`results.js` og `cohort-status.js` hadde nesten identiske lokale funksjoner. Feil går nå som toast;
+**«Resultater lastet» er bare fjernet** — tabellen som nettopp ble fylt sier det samme, og
+inline-varianten ble stående.
+
+### ⚠️ Profilsiden har vært stum ved feil i fem måneder
+
+`profile.js` kalte `window.showToast?.(…)` seks steder. **Globalen har aldri vært satt** — ikke i
+noen commit, heller ikke den som innførte mønsteret 22. mars (332283db).
+
+Med valgfri kjeding forsvant hvert eneste kall stille. Koden så ut som den snakket.
+
+`consent-guard.js` hadde samme sjekk, med samme resultat.
+
+**Det er lag-i-tid i sin reneste form: et mønster skrevet for en global noen antok fantes.**
+
+### To flater skilte ikke feil fra tomt
+
+- `participant-completed` viste en feil som «du har ingen kursbevis»
+- `certificate` viste alle feil som «beviset finnes ikke» — også en 403 eller nettverksfeil
+
+Tilstanden beholdes, men årsaken sies nå.
+
+## 2.56.0 - 2026-08-30
+
+### #1046 steg 2 — delte laste- og tomtilstander
+
+| | Før | Etter |
+|---|---|---|
+| `showEmpty` | 2/8 | **5/8** |
+| `showLoading` | 3/8 | **5/8** |
+
+`profile`, `participant-completed` og `results` hadde håndlagde tomtilstander som gjorde det samme
+som den delte — bare uten `.empty-state`-stilen. Profilsiden viste dessuten **ingenting** mens den
+lastet.
+
+⚠️ **De tre som står igjen har grunner, og skal ikke tvinges:** `admin-platform` skjuler hele kortet
+når det ikke finnes feilede vurderinger, `cohort-status` har en `<select>` og ikke en tabell, og
+`certificate` viser én post med egne tilstander.
+
+**Uniformitet er ikke målet. Å ikke ha ulike svar på det samme spørsmålet er målet.**
+
+### ⚠️ Metoden måtte justeres: dater AVGJØRELSEN, ikke fila
+
+| | Opprettet | Delt? |
+|---|---|---|
+| `toast.js` | 11. mars | ✅ delt |
+| `setMessage` i `results.js` | 17. mars | lokal kopi |
+| `setMessage` i `cohort-status.js` | **19. juli** | kopi av kopien |
+
+Kohortstatus er fire måneder nyere enn `toast.js`, men kopierte en eldre lokal løsning framfor å
+bruke den delte.
+
+**Filen er ny. Tenkningen er gammel.** «Nyeste vinner» ville her gitt feil svar.
+
+Toast mot inline melding er dessuten **to ulike ideer om hvordan man sier fra**, ikke to kvaliteter
+av samme idé. Det venter på en beslutning fra produkteier — se `doc/UI_INVENTORY_1046.md`.
+
+## 2.55.0 - 2026-08-30
+
+### #1046 steg 1 — den delte feiloversetteren spredt til flatene som manglet den
+
+Inventarets første anbefaling: `api-error` er nyeste tenkning (29. august, etter #972 og #983) og
+manglet hos tre flater. Nå har alle den.
+
+Skralletesten i `raw-server-error-guard` målte framgangen underveis:
+
+| Fil | Før | Etter |
+|---|---|---|
+| `admin-platform.js` | 2 | **0** |
+| `cohort-status.js` | 2 | **0** |
+| `profile.js` | 2 | **0** |
+| `participant-completed.js` | 2 | **0** |
+| `participant.js` | 15 | **13** |
+
+Totalt nede fra 37 (23. august) til 14.
+
+### ⚠️ De to i participant.js er de mest lærerike
+
+De var de eneste som **ikke** gikk gjennom `log()` — en `innerHTML` og en `textContent` som viste
+`"<status>: <hele JSON-kroppen>"` rett på skjermen, på serverens språk.
+
+De hadde stått der siden mars. Ingen så dem, fordi de så ut som alle de andre.
+
+### Og en hardkodet engelsk reserve forsvant
+
+`profile.js` hadde `error.message ?? "Error"` og `?? "Error downloading data"` — engelske reserver
+i et grensesnitt som ellers er oversatt. De kunne bare vises hvis `message` manglet, som betyr at
+ingen noensinne så dem, som igjen betyr at ingen oppdaget at de var på feil språk.
+
+## 2.54.0 - 2026-08-30
+
+### #1046 — UI-inventaret, og en syvende flate med språkfeilen
+
+Produkteierens diagnose: **variasjonen er lag i tid.** Skjermbildene er utviklet på ulike
+tidspunkt, og endringer gjort ett sted er ikke tatt andre steder.
+
+Dateringen bekrefter den. `doc/UI_INVENTORY_1046.md` har tallene.
+
+### ⚠️ Inventaret fant en flate sveipet mitt hadde bommet på
+
+`certificate.js` — sist rørt 23. juni, bruker **to av elleve** delte moduler — hadde samme feil som
+#1040: den henter `/api/courses/completions/{id}`, som serveren lokaliserer ved henting, og
+språkbyttet kalte bare `applyTranslations()`.
+
+**Kursnavnet på et utskrevet bevis sto på feil språk.**
+
+Den sto ikke i QA-funnet som startet #1027, så den kom aldri med i lista over flater. Dateringen
+fant den på første forsøk: dypeste lag, mangler alt.
+
+Rettet, mutasjonsverifisert, og lagt i kontrakten — som nå dekker **sju** flater med 28 tester.
+
+### Metoden videre: spre, ikke design
+
+Er variasjonen lag i tid, finnes den beste versjonen allerede — den nyeste. Standardisering blir da
+å spre den siste avgjørelsen, ikke å tegne noe nytt. Billigere, mindre risikabelt, og etterprøvbart
+med `git log` per mønster.
+
+### Og jeg innførte selv et nytt lag i dag
+
+⚠️ `lagLokalisertRessurs` ble importert med `./static/…` mens hele resten av kodebasen bruker
+`/static/…`. Den virket, men var en avvikende variant — altså nøyaktig det vi rydder opp i. Rettet
+i alle sju flatene.
+
+**Et lag oppstår ikke av uenighet. Det oppstår av at noen ikke visste hva som allerede fantes.**
+
+## 2.53.0 - 2026-08-30
+
+### #1044 fullført — kontrakten dekker alle seks flatene
+
+`admin-platform` og `deltakere/status` er inne. 24 tester, fire punkter per flate, alle
+mutasjonsverifisert: kappløpsvakt fjernet gir røde, enkeltflyt uten språk gir røde, ingen ny
+henting gir røde.
+
+⚠️ På kohortstatus er det **kursvelgeren** som er innholdet — titlene der kommer fra serveren og
+skal følge språket. En kontrakt som bare ser på tabeller ville hoppet over den flaten.
+
+### Epos #1041: kjernen er levert
+
+| Sak | |
+|---|---|
+| #1043 skralletest mot klientside språkvalg | ✅ |
+| #1042 delt ressursmodul, seks flater | ✅ |
+| #1044 flatekontrakt, seks flater | ✅ |
+| #1028 ustabil vurderingssuite | p2, åpen |
+
+Feilklassen «rettet ett sted, glemte de andre» har truffet sju ganger. Den er nå strukturelt borte:
+mønsteret finnes ett sted, en skralletest hindrer at klientparsere sniker seg inn, og kontrakten
+gjør «husket jeg flate nr. 5» om fra disiplin til en liste.
+
+## 2.52.0 - 2026-08-30
+
+### #1044 — én flatekontrakt for alle flater med språkvelger
+
+En ny flate legges til ved å utvide **lista**, ikke ved å kopiere en testfil. Fire punkter per
+flate: lesbar tekst uten rå JSON og uten rød feilmelding, innholdet følger språkbyttet, ingen
+**glimt** av feil språk når et tregt svar lander, og et bytte under første henting blir ikke slukt.
+
+### ⚠️ Punkt 4 manglet, og mutasjonstesten avslørte det
+
+Designnotatet listet fire sjekker. Jeg implementerte tre og trodde jeg var ferdig. Mutasjonen
+«enkeltflyt uten språk» drepte **null** tester — det var beviset på at et helt ansvar var udekket.
+
+**En kontrakt som ikke er mutasjonsverifisert per ansvar, er en liste over gode intensjoner.**
+
+### Duplikater fjernet
+
+To testfiler slettet, to trimmet fra 12 til 6 tester. Det som står igjen dekker det kontrakten ikke
+gjør: rollestyringen på sensorflaten, oppstartsregresjonen fra #1039, søket på `titleSearch` og
+detaljlinja på resultatsiden.
+
+⚠️ Punktet sto i saken fordi en gammel svak test aldri ble slettet i #1027 — to `it` med samme navn
+i samme fil.
+
+### Kontrakten fant noe med en gang
+
+Punkt 1 feilet på sensorflaten med **404 og rød feilmelding**: konsollet autovelger første rad og
+henter detaljene. Ingen lette etter det.
+
+## 2.51.0 - 2026-08-30
+
+### #1042 fullført — alle seks flatene på den delte modulen
+
+`review`, `results` og `profile` er nå over sammen med de tre fra 2.50.0. **Null håndlagde
+kappløps- eller enkeltflytvakter står igjen i `public/`.**
+
+Feilklassen «rettet ett sted, glemte de andre» har truffet sju ganger. Den forsvant ikke med mer
+disiplin — den forsvinner fordi mønsteret nå finnes ett sted.
+
+### ⚠️ Profilen ble halvkonvertert først, og feilen kom rett tilbake
+
+Jeg flyttet språkbyttet til ressursen og lot **førstehentingen** ligge igjen som en egen
+`Promise.allSettled`. Da visste ressursen ikke at noe var hentet, `oppdaterVedSpråkbytte` gjorde
+ingenting, og sertifiseringsnivået sluttet å følge språket — av nøyaktig samme grunn som i #1027.
+
+E2E-testen fanget det umiddelbart.
+
+**To lastere for samme data er selve feilen modulen finnes for å fjerne — og jeg holdt på å innføre
+den mens jeg fjernet den.**
+
+### review.js avviker med vilje
+
+Der kalles den rollestyrte `refreshVisibleReviewQueues`, ikke ressursen direkte: flaten har to køer
+bak hver sin rolle, og en ren sensor skal aldri hente klagekøen. Regel 2 krever at et slikt avvik
+begrunnes på stedet, og begrunnelsen står i koden.
+
+### Kappløpstestene måler nå glimtet
+
+⚠️ Tredje gang samme falskt grønne form i dag: å måle SLUTTILSTANDEN beviser ingenting når modulen
+serialiserer — uten kappløpsvakt tegnes feil språk og deretter riktig over, så slutten er riktig
+uansett.
+
+Testene samler nå hver mellomtilstand med en `MutationObserver`.
+
+**Det brukeren ser i et kappløp er glimtet, ikke slutten.**
+
+## 2.50.0 - 2026-08-30
+
+### #1043 — skralletest mot klientside språkvalg
+
+Vakta teller reservekjeder på klienten og feiler i **begge** retninger. Den ser ikke etter
+`JSON.parse`, men etter kjeden `parsed[currentLocale] ?? parsed["en-GB"]` — det er kjeden som gir
+drift, fordi hver kopi har sin egen rekkefølge.
+
+⚠️ Baselinen er 4. Mitt eget designnotat sa 2. Grep med noen linjers kontekst fant ikke kjedene som
+sto alene på en linje. **En ratsj teller uten å bli lei; et håndsveip blir det.**
+
+⚠️ To treff var falske: `adminContentTranslations` og `TOAST_CLOSE_LABELS` er grensesnittets EGNE
+oversettelsestabeller. En vakt som roper på riktig kode blir slått av.
+
+### #1042 — delt modul for språkbytte og henting
+
+`lagLokalisertRessurs` eier fire ting ingen flate lenger implementerer selv: ny henting bare når noe
+er hentet, kappløpsvakt, enkeltflyt nøklet på språk, og at `setLocale` forblir uten bivirkning.
+
+Sveipet viste hvorfor: `review.js` hadde hele mønsteret, `results.js` hadde det, `profile.js`
+manglet enkeltflyt, og tre flater hadde ingenting. **Tre ulike dybder på samme mønster.**
+
+Tre flater er konvertert — de som faktisk hadde brukersynlig feil: `participant-completed`,
+`admin-platform` og `cohort-status`.
+
+### To funn under konverteringen
+
+`loadCourses` i `cohort-status` viste **serverens feilmelding rått**. Konverteringen fjernet den, og
+skralletesten fra #1043 fyrte i riktig retning samme dag den ble laget: «sett baselinen ned. Bra
+jobba.»
+
+⚠️ Og kursvalget måtte bevares eksplisitt: uten det ville et språkbytte bygget lista på nytt og
+nullstilt hvilket kurs som var valgt, så sammendraget sto igjen på et kurs ingen hadde valgt.
+
+### Kappløpstesten var falskt grønn — nummer ti
+
+Modulen serialiserer, så sluttilstanden blir riktig uansett. Testen så aldri **glimtet** av feil
+språk, og forble grønn da kappløpsvakta ble fjernet.
+
+Den samler nå hver mellomtilstand med en `MutationObserver`.
+
+**Det brukeren ser i et kappløp er glimtet, ikke sluttilstanden. En test som bare måler slutten,
+måler ikke kappløpet.**
+
+## 2.49.3 - 2026-08-30
+
+### #1027, femte QA-runde: bivirkningen som fyrte ved oppstart
+
+⚠️ **Språkfiksen la en henting inne i `setLocale`. Oppstarten kaller også `setLocale`** — før
+config, roller og MSAL er lastet. Kallet gikk ut omtrent 1 ms etter config-forespørselen.
+
+- I mock-modus kom rollene fra `review.html`, som står med `REVIEWER,APPEAL_HANDLER`. En ren
+  sensor hentet klagekøen og fikk 403.
+- **Med ekte pålogging er det verre:** `getAccessToken()` er null før MSAL er initialisert, så
+  begge kallene gikk uten Bearer og ga 401. Rød feilmelding ved hver lasting av `/review`, for
+  alle. Det lå ute på stage i 2.49.0–2.49.2.
+
+`setLocale` setter nå bare språk. Den som **bytter** språk, henter. To ansvar, to steder.
+
+### ⚠️ Og jeg meldte feilen som en eksisterende sak
+
+#1039 ble skrevet som en svakhet i mock-innloggingens standardroller. Kallstien kom med **9227b25b**
+— min egen commit i denne leveransen. På `main` finnes den ikke.
+
+Jeg så ett uventet kall, antok at det hadde ligget der hele tiden, og skrev en sak om det. Jeg
+spurte aldri om jeg nettopp hadde laget det selv.
+
+**Et funn som dukker opp i samme runde som en endring, skal sammenlignes mot `main` før det meldes
+som eksisterende.**
+
+### Profilens FØRSTE henting manglet vakta oppdateringen fikk
+
+Bytter du språk mens siden laster første gang, landet det gamle svaret sist og vant. Tredje gang i
+denne saken at én fiks i et sett ble tatt for settet.
+
+### Søket hadde ingen test på klientsiden
+
+QA-porten fjernet `titleSearch` fra begge søkefiltrene, og hele e2e-suiten forble grønn — 285 av
+285. Serveren sendte variantene; ingen målte at klienten faktisk brukte dem. Det var det saken
+eksplisitt handlet om.
+
+### Og testen jeg skrev for førstehentingen var selv falskt grønn
+
+Den målte at det nye språket kom fram, ikke at det gamle lot være å overskrive — og var ferdig før
+det trege svaret landet. Min egen mutasjonssjekk fanget den.
+
+**En kappløpstest som ikke venter til taperen har landet, måler ikke kappløpet.**
+
+## 2.49.2 - 2026-08-30
+
+### #1027, fjerde QA-runde: en regresjon jeg innførte og ikke så
+
+⚠️ **Profilsidens nivåkolonne fulgte språkbyttet før 2.49.0, og sluttet å gjøre det.**
+
+#736 bygde med vilje en re-rendering fra cache slik at tabellverdier skulle følge språket. Den
+bygde på at listene bar **lagringsformatet**, så en ny rendering kunne velge språk på nytt fra data
+siden allerede hadde. Da språkvalget flyttet til serveren, ble den re-renderingen en no-op: samme
+rader inn, samme tekst ut.
+
+Ingenting ble rødt. Renderingen kjørte fortsatt og så ut som den virket.
+
+**Å flytte et ansvar bryter forutsetningene til kode som aldri nevnte dem.** #736 sa hva den gjorde,
+ikke hva den hvilte på.
+
+### To døde klientparsere fjernet
+
+`localizeTitle` i resultatsiden og `localizeContentValue` i profilsiden fikk begge bare ferdige
+strenger fra serveren og reparerte ingenting.
+
+⚠️ Den i profilsiden var den verste, fordi den var stille: en parser som ikke lenger har noe å
+parse, ser ut som om den gjør jobben sin.
+
+### Detaljlinja på resultatsiden blandet språk
+
+«1 learners for Hendelseshåndtering». Den valgte raden bar tittelen fra det øyeblikket den ble
+**klikket**. Rettet i renderingen, ikke i de to stedene som skriver linja — en fiks hos leserne
+ville betydd at neste leser arvet feilen på nytt.
+
+### Vakta i review.js hadde ingen test som kunne bli rød
+
+QA-porten fjernet språksjekken i begge vaktene, og hele e2e-suiten forble grønn: **280 av 280**.
+
+Jeg hadde mutasjonsverifisert DOM-sjekken fra funn A og skrevet at vakta var dekket. Det var to
+ulike fikser, og bare den ene ble prøvd.
+
+**Å verifisere én fiks i et sett og rapportere «settet er verifisert», er samme feil som å rette
+ett sted og si at saken er lukket.** Fem fikser denne runden, fem mutasjoner, hver for seg.
+
+## 2.49.1 - 2026-08-30
+
+### #1027, tredje QA-runde: jeg rettet ett sted grundig og det andre halvveis
+
+Køene i `review.js` fikk en ordentlig vakt som kjenner språk. Resultatsiden fikk bare flagget.
+**Samme feil, to flater, to ulike kvaliteter på fiksen** — og bare den ene ble prøvd.
+
+To ting fulgte av det:
+
+- **Språkbytte under den FØRSTE hentingen ble slukt.** Flagget «noe er hentet» ble satt når lasten
+  var ferdig. Bytter du språk mens den går, ser `setLocale` et falskt «ingenting hentet ennå» og
+  lar være. Engelsk side, norske titler, stille — til brukeren selv trykker «Last resultater».
+  Flagget settes nå når hentingen **starter**.
+- **Det trege svaret vant over det brukeren valgte sist.** Bytt til nb (tregt svar), bytt raskt
+  tilbake til en-GB (raskt svar) — og det norske svaret lander sist og overskriver. Resultatsiden
+  har nå samme språkvakt som køene.
+
+### ⚠️ Påstanden «alle mutasjonsverifisert» i 2.49.0 var ikke sann
+
+QA-porten fjernet språksjekken i vakta og kjørte alle suitene: enhet 1306, DOM 6 og e2e forble
+**grønne**. Ingen test i repoet åpnet `/results` overhodet.
+
+Jeg hadde mutasjonsverifisert de fiksene som *hadde* tester, og skrevet «alle» om hele settet. Det
+er ikke en unøyaktighet i formuleringen — det er å påstå dekning jeg ikke hadde sjekket at fantes.
+
+`test/e2e/results-locale-refresh-1027.spec.ts` dekker nå flaten med tre tester, og de er
+mutasjonsverifisert hver for seg: vakt uten språk gir 2 røde, flagg ved slutt gir 1 rød, og
+`setLocale` uten ny henting gir 2 røde. Gjenoppretting fra filkopi gir 3 grønne igjen.
+
+**Mutasjonsverifisering som ikke omfatter alle fiksene i settet, er ikke verifisering av settet.**
+
+## 2.49.0 - 2026-08-30
+
+### #1027 — serveren eier spørsmålet «hvilket språk viser vi»
+
+Serveren sendte lagringsformatet, og hver klient tolket det selv. Da får vi flere implementasjoner
+av samme spørsmål, og de driver fra hverandre — som #1022 viste, der klientens reservekjede falt
+tilbake på `nb` og serverens på første tilgjengelige.
+
+⚠️ **#892 gjør dette til noe som faktisk skjer:** en delvis oversatt tittel er en lovlig tilstand,
+ikke en teoretisk kant.
+
+Saken navnga to hardkodede `localizeContentText("en-GB", …)`. **Det var seks.** Og to steder for
+`certificationLevel`. **Det var tre.**
+
+### Søket ble smalere i #1022, uten at noen merket det
+
+Køene søkte over den **rå JSON-strengen**, og traff derfor på tvers av alle språk. Utilsiktet, men
+nyttig: en behandler fant saken uansett hvilket språk tittelen ble skrevet på.
+
+⚠️ #1022 lokaliserte tittelen i køen for manuell vurdering — og gjorde samtidig søket smalere. Ingen
+la merke til det. Begge køene sender nå språkvariantene som eget felt, så visningen er riktig **og**
+søket finner det man leter etter.
+
+### Å flytte ansvaret til serveren tar med seg en forutsetning
+
+QA-porten fant at språkbytte på sensorsiden sluttet å virke. Serveren baker inn språket når køen
+**hentes**; klientparseren kjørte per **rendering**. Byttet slo derfor ikke inn før neste henting —
+engelsk side, norske titler.
+
+Flyttingen er riktig. Men den forutsetningen sto ingen steder, og jeg tenkte ikke på den.
+
+### Og jeg skapte selv spriket kommentaren min fordømmer
+
+`/api/reports/mcq-quality` ga **engelsk JSON og norsk CSV**. Kommentaren jeg hadde skrevet to
+skjermer lenger opp sier at det er verre enn å ta feil begge steder — fordi ingen ser at de spriker.
+
+Fire eksportveier til hadde samme sprik. Alle er rettet.
+
+### Testen var grønn før fiksen
+
+⚠️ Den sammenlignet bare nb mot en-GB og krevde at de var **ulike**. Seed-modulene har rene strenger
+som titler — ingen lokalisering i det hele tatt — så påstanden målte ikke det den skulle. Den ville
+også vært grønn med språkene byttet om.
+
+Testen lager nå sin egen modul med kjent tittel per språk, og sier **hvilken** tekst hver leser skal
+få. Mutasjonsverifisert: tilbake til hardkodet engelsk gir tre røde, mot null før.
+
+**En test som lener seg på data den ikke lager, måler det den håper finnes.**
+
+### Andre runde hos porten: fiksen min hadde sin egen regresjon
+
+⚠️ **Språkbyttet spurte DOM-en, ikke brukeren.** Første utgave sjekket om kø-elementene *fantes*.
+Begge finnes alltid, uansett rolle. En bruker med bare sensorrollen hentet derfor klagekøen ved hvert
+språkbytte og fikk 403 og en rød feilmelding. Koden spør nå om **rolle**, gjennom funksjonen som
+allerede fantes for nettopp det spørsmålet.
+
+Tre ting til fulgte av samme flytting:
+
+- **Resultatsiden** hadde nøyaktig samme feil som køene — engelsk side, norske titler.
+- **Sertifiseringsnivået** gikk fortsatt rått ut i mcq-rapporten, i samme rad der tittelen ble
+  lokalisert riktig.
+- **Enkeltflyt-vakta slukte et språkbytte** som skjedde mens køen lastet. Vakta er riktig for to
+  like hentinger; to hentinger i ulike språk er ikke like.
+
+### Tre av testene mine kunne ikke bli røde
+
+Verre enn koden de skulle dekke:
+
+- `if (firstTitle)` hoppet over hele påstanden når rapporten var tom. Ruta som **var** feilen hadde
+  dermed ingen test som kunne feile.
+- En løkke over klager den aldri lagde. Tom kø betyr null runder, og null runder er grønt.
+- Den gamle svake CSV-testen ble aldri slettet — to `it` med samme navn i samme fil.
+- I den nye e2e-testen sto velgeren `.toast.error`. Klassen heter `toast--error`. En velger som ikke
+  treffer, gjør `toHaveCount(0)` sann uansett hva siden gjør.
+
+**En betinget påstand er ikke en test. Den er en test som spør om lov.**
+
+Alle er nå mutasjonsverifisert: de blir røde på den gamle koden og grønne igjen etter gjenoppretting
+fra filkopi.
+
+### Funnet underveis: #1039
+
+En ren sensor får 403 mot klagekøen allerede ved **sidelasting**, fordi mock-innloggingens
+standardroller i `review.html` står som `REVIEWER,APPEAL_HANDLER` og rekker å bestemme oppførsel før
+`/api/me` er lest. Egen sak — men den er grunnen til at e2e-testen måler differanse rundt
+språkbyttet i stedet for totalen.
+
+## 2.48.0 - 2026-08-29
+
+### #983 — deltakerkonsollet spurte aldri den delte oversettelsestabellen
+
+En deltaker med bokmål som leverte to ganger raskt fikk «Too many submission requests. Retry in 60
+seconds.» midt i et ellers norsk grensesnitt. **Og modul-lista ble tømt** og erstattet av den
+engelske setningen — tomtilstand og feilmelding i ett.
+
+⚠️ **Roten var ikke en manglende oversettelse.** Nøkkelen `errors.api.rate_limited` fantes på alle
+tre språk hele tiden. Deltakerkonsollet hadde bare **sin egen feiloversetter**, `humanizeApiError`,
+som kjente to nøkler og aldri slo opp `errors.api.<kode>`.
+
+Deltakerkonsollet var den **eneste** skjermen som ikke brukte den delte `describeApiError`. Alle de
+andre gjorde det. En andre kopi av en oversetter driver alltid fra originalen, og denne hadde rukket
+å bli to nøkler bak.
+
+### Tallet var heller ikke sant
+
+Sekundene sto bare i den engelske prosaen og i `Retry-After`-headeren. En klient som ville skrive
+setningen på brukerens språk måtte enten lese headeren eller parse en engelsk setning.
+
+⚠️ Og setningen løy: den sa alltid «60 seconds», mens det faktiske tallet regnes ut fra når vinduet
+nullstilles. Serveren sender nå `details.retryAfterSeconds`, og setningen navngir det ekte tallet.
+
+### Skrallen ga beskjed
+
+`raw-server-error-guard` teller rå bruk av serverens `message` per fil og feiler i **begge**
+retninger. Da tallet for `participant.js` falt fra 18 til 15, sa den ifra at baselinen skulle ned —
+«Bra jobba».
+
+De fleste som står igjen er `log(error.message)`, og `log()` oversetter selv gjennom den samme
+funksjonen som nå er koblet til den delte tabellen.
+
+⚠️ **Men ikke alle.** QA-porten fant at `participant.js:3738` (innerHTML) og `:4248` (textContent)
+IKKE går gjennom `log()`. Min første formulering her sa at alle femten var trygge. Det var feil, og
+den feilen sto i både ratsj-kommentaren og denne fila. De to er eksisterende gjeld, ikke innført nå.
+
+### Søsterflatene hadde ingen oversetter i det hele tatt
+
+`participant-completed.js`, `results.js` og `profile.js` viste serverens engelske `message` rått,
+med hardkodede engelske reserver — «Error», «Export failed.», «Error loading data». De bruker nå den
+delte oversetteren.
+
+`profile.js` arvet i tillegg **ikke feilkodetabellen**, i motsetning til de to andre. Nøklene fantes
+hele tiden; profilen sto bare utenfor.
+
+`results.js` er nå nede på **null** rå bruk og er fjernet fra baselinen.
+
+### En plassholder skal aldri nå skjermen
+
+⚠️ Da nøkkelen ble endret til å navngi sekundene, sluttet den å virke for avsendere som ikke sender
+tallet. To håndrullede 429-svar gjorde ikke det, og forfatteren fikk «Prøv igjen om
+{retryAfterSeconds} sekunder» ordrett.
+
+Begge avsenderne sender nå tallet. Og utfyllingen returnerer `null` hvis en plassholder overlever,
+slik at kalleren faller tilbake på den generiske setningen — samme mønster som `localizeDecisionReason`
+(#950), og av samme grunn: **en delt nøkkel har alltid flere avsendere enn den som endret den.**
+
+### En import kan ødelegge en hel skjerm
+
+Skriptet mitt satte importlinja etter «siste linje som starter med `import`» — som landet **inni** et
+flerlinjers importuttrykk. Tre skjermer rendret da ingenting.
+
+E2E fanget det. Uten den testen ville de gått til stage ødelagt.
+
+## 2.47.0 - 2026-08-29
+
+### #930 — en tittel skrevet på ett språk bærer nå hvilket
+
+#918 fjernet den første løgnen: tre språk fylt med samme kildetekst påsto «dette er oversatt».
+Klienten sendte deretter en ren streng. Men en ren streng er ikke nøytral.
+
+⚠️ `missingLocalesFor` leser en ren streng som **bokmål**, fordi feltet ikke bærer noe språkmerke.
+Oppretter du en modul mens arbeidsflaten står på engelsk, ble «Incident response» lagret som norsk.
+Gaten meldte at `en-GB` og `nn` manglet — det er `nb` og `nn` som mangler. «Oversett det som
+mangler» oversatte da til feil språk, fra en kilde den trodde var norsk.
+
+Opprettelsen tar nå imot et delvis språkkart, og klienten sender `{[contentLocale]: tittel}`.
+
+**Fire opprettelsesstier, ikke én.** Jeg fant tre. Den fjerde fanget bare en e2e-test. Fire veier
+til samme endepunkt er én for mange, og det står notert i koden.
+
+**En omvei forsvant.** Dupliseringen opprettet modulen med en ren streng og satte språkkartet med
+en PATCH etterpå, fordi opprettelsen ikke tok imot delvise kart. I vinduet mellom de to sto kopien
+registrert som bokmål uansett originalens språk — og feilet PATCH-en, ble den stående slik.
+
+### #999 — domenevaktene har egne feilkoder
+
+`ValidationError` gir alltid koden `validation_error`. Klienten kunne derfor ikke skille «Zod
+avviste formen» fra «en domeneregel sa nei», og viste serverens `message` ordrett. Satte du
+grensesnittet til engelsk og prøvde å arkivere en modul som lå i et kurs, sto den norske setningen
+der som den var.
+
+Ny klasse `DomainRuleError` med kode og data. Fire koder i livssyklusvaktene. **Tallene sendes som
+felt, ikke som interpolert prosa** — ellers måtte klienten lese tallet ut av en setning på et språk
+den ikke valgte.
+
+⚠️ **Unntaket i `api-error.js` er krympet, ikke fjernet.** Saken ba om å fjerne det. Det gikk ikke:
+35 andre steder kaster fortsatt `ValidationError` med prosa, og uten fallbacken faller de tilbake
+til «noe i skjemaet mangler eller er feil utfylt» — nøyaktig regresjonen #996 rettet.
+
+### QA-porten fant to regresjoner, og begge var samme feil i ny form
+
+**Fjorten ruter skrev feilkroppen for hånd** som `{ error, message }`, uten `details`. Det gikk bra
+så lenge ingen feil bar data. Med #999 viste de rutene «used in {count} course(s): {courseTitles}»
+med plassholderne stående — verre enn den norske prosaen de erstattet.
+
+Porten fant to av dem. Å lappe de to ville vært samme feil på nytt: alle fjorten bruker nå én felles
+hjelper, som gjengir en `AppError` likt den globale feilhåndteringen.
+
+⚠️ **Min egen test var falskt grønn.** Den gikk på tjenestenivå og så feilobjektet direkte, ikke
+HTTP-svaret — der forskjellen faktisk lå. Testen går nå over HTTP.
+
+**Eksport til import røk.** Eksporten skriver tittelen slik den er lagret, og etter #930 kan det
+være et delvis kart. Importskjemaet krevde fortsatt streng eller alle tre, så eksporten lyktes og
+importen avviste fila den nettopp hadde laget.
+
+Nøyaktig samme feil som #912 rettet i det samme skjemaet, den gangen for `certificationLevel: null`.
+**Rundturen brytes hver gang skrivesiden får lov til noe lesesiden ikke.**
+
+### To flater som gjeninnførte feilen
+
+**Kursklienten kollapset aktivt `{en-GB: X}` til ren streng** når engelsk var eneste utfylte språk.
+Bare engelsk — norsk-alene beholdt kartet. Serveren leste så strengen som bokmål. Kollapsen var
+aldri nødvendig; kursskjemaet har alltid godtatt delvise kart.
+
+**Agent-ruta** krevde fortsatt streng eller alle tre. En agent skriver i ett språk om gangen, som
+alle andre, og måtte derfor velge mellom løgnen #918 fjernet og strengen #930 fjerner.
+
+## 2.46.0 - 2026-08-28
+
+### Et resultat like under grensa går til sensor, ikke rett i strykbunken
+
+Produkteier så et ekte resultat på stage: «Ikkje bestått — 66,67 poeng. Kravet var 70 poeng.» og
+sa at det burde vært vurdert av et menneske.
+
+Mekanismen fantes fra #464 — men bare per modulversjon, og uten noen standardverdi.
+
+⚠️ **Målt på stage: 3 av 101 modulversjoner hadde et vindu satt. Alle tre sto på 0–90** — altså
+«vurder alt manuelt», rester fra da sensorgrensesnittet ble testet. Prod: 0 av 45. **Vakta hadde
+aldri vært i drift noe sted.** Funksjonen feilet på to motsatte måter samtidig: mørk nesten overalt,
+og altfor vid der den var på.
+
+Standarden er nå `borderlineBelowMin: 10` i regelfila — ti poeng under den gjeldende terskelen.
+
+### Formen måtte endres to ganger, og begge gangene fant testene det
+
+**Første forsøk var et absolutt «60–70».** Fem eksisterende tester ble røde med én gang, og de
+hadde rett: en modul kan ha sin egen terskel, og for en modul med krav 65 ligger 60–70 delvis over
+bestått-grensa. Et resultat på nøyaktig 70 havnet dessuten inne i vinduet og ble sendt til sensor
+selv om det er bestått.
+
+Båndet er derfor **relativt og åpent oppad**.
+
+**Andre forsøk festet verdien i modulen ved hver redigering.** QA-porten fant tre uavhengige feil,
+og alle tre kom av det samme: vinduet er en **avledet** verdi, og en avledet verdi som skrives inn
+i innhold blir gammel.
+
+- Det festede vinduet manglet den åpne øvre grensa, så nøyaktig 70 ble bestått uten policy og sendt
+  til sensor med policy.
+- Kalibrerte forfatteren terskelen fra 70 til 60, sto vinduet igjen på 60–70 — *over* terskelen.
+- Festingen dekket ikke ruta forfatterne faktisk lagrer gjennom.
+
+⚠️ Å fikse alle tre ville etterlatt en denormalisert verdi som kunne bli utdatert igjen. Standarden
+gjelder derfor **kun i kjøretid**, der terskelen uansett er kjent. Forfatterflaten **viser** den
+gjeldende verdien i stedet. Innstillingspanelet får båndet gjennom `platformDefaults`, den samme
+inngangen det allerede brukte for `totalMin`, og regner plassholderen selv: «60 (plattformstandard)
+→ 70». En plassholder, ikke en verdi — å fylle inn tallene ville gjort standarden om til en
+overstyring ingen valgte.
+
+### En test festet den gamle policyen
+
+En eksisterende test brukte 69 poeng — ett poeng under grensa — og krevde automatisk stryk. Samme
+klasse som testen #948 avdekket: en policy skrevet ned som riktig oppførsel. Den er endret bevisst,
+og 69-tilfellet er nå en egen test som krever det motsatte.
+
+⚠️ **Ingen dødlås.** QA-porten kjørte flaten i ekte nettleser med 66,67-tallene: deltakeren ser «En
+sensor ser på besvarelsen din», og reset-knappen står aktiv, så et nytt forsøk supersederer den
+åpne saken.
+
+**Gjenstår:** rene flervalgsmoduler treffes ikke — `resolveMcqOnlyDecision` har ingen
+manuell-vurdering-sti i det hele tatt. Egen sak.
+
+### Overskriftene var ikke stilsatt
+
+⚠️ `h1/h2/h3` arvet nettleserens 32/24/18 med em-baserte marger, mens designet ellers topper seg på
+17px. De var altså ikke *for store* i forhold til et designvalg — de sto utenfor designsystemet.
+
+Verdiene som er skrevet inn (22/16/15) er ikke funnet på: de sto allerede **inline fem steder** i
+markupen, håndsatt der noen merket problemet. Et sveipeskript vokter nå skalaen over alle flatene,
+med en kort liste bevisste unntak.
+
+Ett funn på kjøpet: hjelpepanelets tittel var 24px — mindre enn `h1` den gang `h1` arvet 32. Da
+skalaen ble skrevet inn, **snudde forholdet**, og panelet ropte høyere enn siden det ligger over.
+Den følger nå dialogene på 18px.
+
+### «Les» åpnet ikke seksjonen med starten øverst
+
+To feil samtidig: `scrollIntoView` sto på `block: "nearest"`, som ruller minst mulig, **og** kallet
+lå før innholdet var rendret — altså mot et tomt panel.
+
+⚠️ Mutasjonstesten avslørte at den første testen bare bandt rekkefølgen: en lang seksjon er høyere
+enn skjermen, så «nearest» ruller toppen til toppen av seg selv. Det trengtes en test til med en
+**kort** seksjon for å binde valget av `start`.
+
+### Tomt flervalgskort, og en teller større enn alle overskrifter
+
+Flervalgskortet sto igjen tomt etter innsending — bare en overskrift og luft. Forhåndsvisningsstien
+skjulte det allerede; den vanlige flyten gjorde det ikke. To steder svarte ulikt på samme spørsmål.
+
+«Forløpt 15s» var 28px/800 — sidens største element. Den står nå på linje med «Vurdering», begge
+16px, og leser fortsatt som «det skjer noe».
+
+## 2.45.0 - 2026-08-28
+
+### #967 — påminnelser slutter å mase om kurs deltakeren ikke kan åpne
+
+Påminnelsesjobben hentet frister uten å se på kurset i det hele tatt. `include` hentet bare
+`{ id, title }`, så jobben **kunne** ikke sjekke publiseringsstatus — uansett hvor gjerne den ville.
+
+Scenarioet er konkret: kurset avpubliseres midt i en kullkjøring. Deltakeren ser det ikke lenger
+under «Mine kurs» og kan ikke fullføre det. Hen får likevel «7 dager til frist», deretter
+«forfalt» — og blir stående som OVERDUE i fagansvarliges dashbord for alltid, for et kurs som ikke
+lenger finnes for hen.
+
+Samme regel som deltakerflaten allerede bruker: publisert **og** ikke arkivert. Avpublisering er
+reversibel, så fristen forsvinner ikke — den varsles igjen når kurset publiseres på nytt.
+
+### Undertrykte varsler telles
+
+⚠️ Filteret ligger i **tjenesten**, ikke i spørringen. Et spørringsfilter ville vært billigere, men
+det ville skjult hvor mange varsler som ble holdt tilbake — og et stille undertrykt varsel er like
+vanskelig å oppdage som et feilsendt.
+
+Kjøresammendraget har allerede `skippedAlreadySent`, `skippedCompleted`, `skippedInactive`,
+`skippedEntraClass`. Nå også **`skippedCourseUnavailable`**. Det er husets eget mønster, ikke et
+nytt påfunn.
+
+### ⚠️ Kull-dashbordet gjør det MOTSATTE, og det er med vilje
+
+Saken slår sammen påminnelser og kullpublikum. De trenger motsatt fiks.
+
+Å filtrere bort publikum på dashbordet ville tømt hele skjermen for en fagansvarlig som uttrykkelig
+spurte om **dette** kurset — uten å si hvorfor. Det ville vært verre enn dagens feil.
+
+Forskjellen er hvem som spør: **en påminnelse er en handling rettet mot en deltaker som ikke kan
+svare på den. Et dashbord er et spørsmål fra en fagansvarlig som fortjener et ærlig svar.**
+
+`getCohortStatus` slo opp kurset med `select: { id: true }` og kunne derfor ikke si noe. Svaret
+bærer nå `coursePublished` og `courseArchived`, så flaten kan forklare hvorfor ingen beveger seg.
+
+Samme resonnement på klasseskjermens kurstildelinger: de skjules ikke — en skjult rad er en rad
+ingen kan fjerne — men de merkes «Ikke publisert – deltakerne ser det ikke».
+
+### UI-et er inspisert, ikke bare skrevet
+
+`scripts/dev/inspect-class-course-badge.mjs` laster den ekte klasseskjermen i headless Chromium på
+1280 og 480 px og måler merkets farge mot den nøytrale metateksten.
+
+⚠️ Vakta meldte først avvik: «merket har samme farge som vanlig metatekst». **Det var detektoren som
+var feil** — den plukket første `.assign-meta`, og varselelementet bærer begge klassene, så den
+sammenlignet merket med seg selv. Tredje gang på én dag at et måleverktøy villeder. Vakta velger nå
+uttrykkelig bort varselelementet, og grunnen står i koden.
+
+### QA-porten sa NO-GO, og hadde rett
+
+Første runde leverte **halve saken**. Dashbordet fikk `coursePublished`/`courseArchived` — men
+klienten brukte dem ikke, og `GET /api/cohort-status/courses` listet uansett bare publiserte kurs.
+
+⚠️ **Kurset forsvant altså stille fra velgeren.** Det er nøyaktig «tømt skjerm uten å si hvorfor»
+— utfallet hele begrunnelsen min argumenterte mot — bare ett hakk tidligere i flyten. Feltene var
+død last: nåbare for et API-kall, usynlige for et menneske.
+
+Velgeren tar nå med unåbare kurs, merket «(ikke publisert)» / «(arkivert)», og dashbordet viser én
+linje som sier hvorfor tallene står stille.
+
+Porten fant også at **tildelings-e-posten** (#684) fortsatt gikk ut for upubliserte kurs: «Logg inn
+på plattformen for å starte» for et kurs medlemmet ikke kan se — tjue linjer over koden jeg endret.
+Med #967 er påminnelsene stille, så den e-posten ville vært det ENESTE deltakeren noensinne hørte om
+kurset. Tildelingen blokkeres ikke — «tildel utkast, publiser senere» er en legitim arbeidsflyt —
+men varselet holdes tilbake og logges som `course_assignment_mail_suppressed`.
+
+Og en regresjon som var min egen: #967-avsnittet i `API_REFERENCE.md` var satt inn **midt i**
+Reporting-tabellen og brakk den. Rettet, og `/api/cohort-status/*` er nå dokumentert i det hele tatt
+— det manglet fra før.
+
+### Testene ble strammet der de var slappe
+
+- `skippedCourseUnavailable` ble målt med `>= 1`. **Enhver fremmed rad i den delte test-databasen
+  ville tilfredsstilt den.** Forventet antall utledes nå fra databasen, så påstanden er eksakt.
+- Klasse-testen krever nå «én undertrykkelse per TILDELING, ikke én per medlem». Klassen har to
+  medlemmer, så en teller som løp per medlem ville gitt 2 og blandet to enheter i samme tall.
+- To e2e-tester ser nå det brukeren ser. Porten sa det rett ut: merkene var bare voktet av et
+  manuelt inspeksjonsskript, og et UI-element ingen automatisk test ser, kan forsvinne i en
+  refaktorering uten at noe blir rødt.
+
+### Etterslep, ført som oppfølging
+
+- **#1035** — individuell innmelding mangler vakta mot arkiverte kurs som klasse-tildeling har.
+- **#1036** — frist som passerer mens kurset er avpublisert. Porten korrigerte min egen modell:
+  «forfalt» går IKKE tapt, bare forvarslene. Beskrivelsen står i saken fordi den er lett å «fikse»
+  i feil retning.
+
+## 2.44.0 - 2026-08-28
+
+### #948 — ingen «bestått» mens sensor ikke har sett saken
+
+Seks ting kan sende en innlevering til manuell vurdering. Bare to av dem tvang vedtaket til å la
+være å si «bestått». De øvrige lot et vedtak bære `passFailTotal: true` mens innleveringen sto som
+`UNDER_REVIEW`.
+
+Scenarioet er konkret: språkmodellen rapporterer feil delsum. Vedtaket lagres som bestått, saken
+går til sensor, og sertifiseringen hoppes korrekt over. **Deltakeren ser modulkortet som bestått.**
+Kurset slipper hen ikke videre. Sensor har ennå ikke sett saken.
+
+### Invarianten hører i kilden, ikke hos leserne
+
+Tolv steder leser dette flagget — deltakerens modulkort, kalibreringsrapporten, kursrapporten,
+sertifiseringen, e-postvarslene, sensorkøen. De tolket det ulikt, og noen sjekket ikke status i det
+hele tatt.
+
+⚠️ **Å lappe tolv lesere ville vært feil form.** Én ville blitt glemt, og den ene ville vært den
+som fortalte en kandidat noe usant. Ett uttrykk i `decisionService` gjør alle tolv riktige samtidig:
+`passFailTotal: passesThresholds && !needsManualReview`.
+
+Dette gjør ikke en bestått til en strøket. `passFailTotal: false` sammen med `UNDER_REVIEW` leses
+som «til vurdering» — samme mønster #475 etablerte for ai-influence, med den uttrykkelige
+begrunnelsen at et signal aldri skal kunne felle noen.
+
+### En test hadde festet feilen som om den var tilsiktet
+
+En eksisterende test forventet `passFailTotal: true` sammen med `UNDER_REVIEW`. Invarianten ble
+altså ikke bare brutt ved uhell — den var skrevet ned som riktig oppførsel. Den er rettet, og tre
+nye tester krever at flagget snur for hver enkelt utløser. Alle har **en terskel som passerer** —
+uten det ville de vært grønne uansett hva koden gjorde.
+
+### QA-porten fant retningen jeg hadde snudd uten å merke det
+
+⚠️ Kalibreringen teller `passFailTotal === false` som strøket. Før denne endringen ble en ventende
+sak talt som **bestått** — en smigrende feil. Etter den ble den talt som **strøket** — en
+alarmerende feil, og kvalitetsflagget `LOW_PASS_RATE` fyrte på et forsøk maskinen ga 72 av terskel
+70, som ingen hadde strøket.
+
+Begge er feil på samme måte: **de gjør en ikke-avgjort sak om til et datapunkt.** Ventende saker
+holdes nå utenfor både teller og nevner, på alle fire tellestedene i kalibreringen og
+analyserapporten. Det avgjør ikke den åpne spørsmålet om raten skal måle råvedtaket eller det
+endelige utfallet — det gjelder saker som ER avgjort.
+
+Porten kjørte dessuten hele flaten i ekte nettleser: deltakeren ser «En sensor ser på besvarelsen
+din», ikke «Ikke bestått», og en sak sensor godkjenner ender som «Bestått · 72».
+
+### Etterslep, ført som oppfølging
+
+- Sensorens historikk merker det automatiske vedtaket «Vurderer-overstyring» før sensor har gjort
+  noe. Feil etikett fra før, men verdien ved siden av peker nå motsatt vei.
+- Gamle rader med `true` + `UNDER_REVIEW` konverteres ikke. Vedtak er uforanderlige, så en
+  bakfylling ville omskrevet historikk — de avgjøres av sensor som før.
+
+## 2.43.0 - 2026-08-28
+
+### #943 — lesing av kurs og klasser er vaktet som skrivingen
+
+Tolv skriveruter på `/:courseId` krevde eierskap. Fire lese-ruter på samme sti krevde ingenting.
+
+Det som lakk var ikke bare titler: kursdetaljen gir hele oppsettet — moduler, seksjoner,
+publiseringsstatus, `enrollmentPolicy` — og `publish-preview` gir hvilke elementer eieren ennå
+holder TILBAKE. Det er rekognoseringen som gjør resten utnyttbart, og eksportruta rett ved siden
+av ble vaktet med nettopp den begrunnelsen (#903).
+
+⚠️ **Sveipen fant mer enn saken navnga.** Saken pekte på kurs. Klassene har samme form én ruter
+bortenfor, og lesingen der lekker mer: `GET /:classId/members` ga **navn og e-post** til hvert
+medlem av en hvilken som helst klasse, til enhver SMO. Begge skriverutene på samme sti var vaktet.
+Det er nøyaktig hullet #903-oppfølgingen lukket for `/:courseId/enrollments` — det sto fortsatt
+åpent for klasser.
+
+Fem ruter vaktet: kursdetalj, `/items`, `/publish-preview`, `/:classId/members`, `/:classId/courses`.
+
+### Linja går mellom lista og detaljen
+
+**Listene forblir åpne.** Du må kunne finne dine egne kurs, og hver rad bærer allerede `canManage`
+slik at «Rediger» ikke rendres for den som ville fått 403. Det er detaljen som er stengt, ikke
+oversikten.
+
+Det er et valg, ikke en forglemmelse — så én test fester det. Uten den kunne en senere «stram
+alt»-runde lukket lista uten at noe ble rødt, og da fant ingen SMO fram til noe som helst.
+
+### Ingenting blir uarbeidbart
+
+Ueid innhold — systemklasser, og kurs eldre enn eierskapsmodellen — gir `403 content_unowned` for
+en ikke-admin. Det høres ut som et tap, men UI-veien dit har vært skjult siden #787: raden har vist
+«Skrivebeskyttet» uten Rediger-knapp hele tiden. API-et gjør nå bare det UI-et alltid har sagt.
+
+En SMO trenger heller ikke klassens medlemsliste for å nå alle — det gjøres med
+`enrollmentPolicy: OPEN` på kurset. QA-porten kjørte flaten i ekte nettleser som eier, fremmed SMO
+og administrator: ingen skjerm knakk, og en dyplenke som ikke-eier gir en lesbar tomtilstand, ikke
+rå JSON.
+
+### Hver vakt mutasjonsverifisert for seg
+
+Fem vakter fjernet én om gangen. Hver ga en rød test som navnga akkurat den ruta. Gjenoppretting
+fra filkopi, ikke søk-og-erstatt.
+
+⚠️ Deteksjonsskriptet mitt leste vitest-utdataen feil og meldte «grønn» på alle fem — det var
+skriptet som var galt, ikke testene. Verdt å merke seg: **et måleverktøy som feiler stille er
+farligere enn ingen måling**, og dette er andre gang på to dager det gjelder (jf. `tail -1` som
+skjulte «1 failed» i 2.42.0).
+
+### Etterslep, ført som oppfølging
+
+- Tekstene sier «endre» der handlingen nå er å **lese** — både `content_ownership`-setningen og
+  listemerket «Skrivebeskyttet», som lover en lesetilgang som ikke lenger finnes.
+- Vakta kjører før eksistenssjekken, så et **slettet** kurs gir 403 «har ingen eier ennå» der
+  admin får 404. Eldre enn denne leveransen, men leserutene er der dyplenker lander.
+- `GET /source-material/extract/:jobId` sjekker ikke hvem som eier jobben.
+
+## 2.42.0 - 2026-08-28
+
+### #1000 — lesing av et revisjonsspor logges nå, med forholdet
+
+Fem roller kan lese ETHVERT revisjonsspor. To av dem er begrunnet med et forhold til kandidaten —
+«mine kandidater», «mine mentees» — som datamodellen ikke har.
+
+⚠️ **Et funn saken ikke nevnte: lesingen ble ikke logget i det hele tatt.** Sporet bærer navn og
+e-post til både kandidaten og alle som har behandlet saken. Ingen kunne se hvem som hadde lest det.
+
+Hver lesing logges nå med hvilket forhold som faktisk knyttet leseren til innleveringen — tildelt
+vurderer, behandlet anke, eier av modulinnholdet, eller kandidaten selv — og `roleOnly: true` når
+INGEN av dem gjaldt.
+
+**`roleOnly` er tallet saken hviler på.** Om noen uker finnes det data på hvor ofte et spor leses
+uten at noe forhold finnes, og mønsteret vil vise hva «mine kandidater» betyr i praksis.
+
+⚠️ **Ingen innstramming.** En avgrensning mot en relasjon som ikke finnes gir null tilgang til alle
+— da kunne ingen lærer fulgt opp noen. Modellen først, håndhevingen etterpå.
+
+To detaljer:
+
+- Metadatanøkkelen er `subjectSubmissionId`, **ikke** `submissionId`. Sistnevnte ville fylt den
+  denormaliserte kolonnen (`auditService.ts:88`), lagt tilgangshendelsen inn i deltakerens eget spor
+  og skapt lesinger-av-lesinger. Mutasjonsverifisert.
+- Loggingen kan aldri velte lesingen. En manglende tilgangslogg er et hull i sporbarheten, ikke en
+  grunn til å nekte en lærer å se en sak.
+
+### QA-porten fant hullet som teller
+
+⚠️ **Ingen av de tre første testene SKAPTE et forhold.** `findReaderRelations` kunne vært koblet til
+`appealedById` i stedet for `resolvedById` — kandidaten som anker, ikke den som behandler — og alle
+ville vært grønne. Da ville `roleOnly` vært stille feil, og det er tallet hele GDPR-beslutningen
+skal hvile på.
+
+En måling som er feil er verre enn ingen måling: den ville fortalt at ingen leser noe uten et
+forhold, mens sannheten var motsatt. Tre nye tester lager nå forholdene på ekte, mutasjonsverifisert
+med nøyaktig det scenarioet.
+
+Porten fant også at den tomme `catch {}` mistet tilgangsloggen i **stillhet** under backfill, der
+kjedelåsen holdes i opptil to minutter. Et hull i en tilgangslogg oppdages ellers først når noen
+spør hvem som har lest hva. Tapet logges nå som en driftshendelse.
+
+To ting den flagget som ikke er blokkere, men hører i en DPIA: radene kan **aldri slettes** (enhver
+sletting bryter hashkjeden), og **403-forsøk logges ikke** — den som prøver seg og blir avvist,
+etterlater ingen spor.
+
+### Tre beslutninger ført i DECISIONS.md
+
+Produkteier 2026-08-28: sensor og klagebehandler avgrenses **ikke** til tildelte saker (å se en
+kollegas sak er en legitim arbeidsflyt); `User.manager` er ikke fylt i dag, men ønskes fylt — det
+gjør saken **blokkert på data, ikke på en beslutning**; og tilgangen står bevisst åpen mens den
+måles.
+
+Det snevrer inn #1000 til `SUBJECT_MATTER_OWNER` og `REPORT_READER`.
+
+### Sakslista ryddet: 93 → 78
+
+Femten åpne saker beskrev noe koden allerede motbeviser. Alle verifisert i kildekoden, ikke bare mot
+endringsloggen — og tre stikkprøvd for hånd før lukking.
+
+⚠️ Gjennomgangen fant også at familiene er større enn antatt: den kjente «LLM-fritekst styrer en
+beslutning» har seks saker, men **lokalisert-tekst-familien har rundt tretten**. Lista vokser fordi
+noen få rotårsaker kartlegges, ikke fordi kvaliteten faller.
+
+## 2.41.0 - 2026-08-28
+
+### #1022 — modultittelen lokaliseres på serveren
+
+⚠️ **Saken hadde feil premiss, og undersøkelsen rettet den.** Jeg skrev at administratoren så en
+JSON-blobb. Det gjorde hen ikke — klienten parset den.
+
+Men det ekte problemet var vanskeligere å se: TO implementasjoner av «hvilket språk viser vi», med
+ulik reservekjede.
+
+```
+server:  inline[locale] ?? inline["en-GB"] ?? førsteTilgjengelige ?? input
+klient:  parsed[locale] ?? parsed["en-GB"] ?? parsed.nb          ?? raw
+```
+
+En tittel som **bare er oversatt til nynorsk** — en lovlig tilstand etter #892 — har verken `en-GB`
+eller `nb`. Klienten falt da helt ned på rådata, og DA fikk administratoren JSON-blobben.
+
+Serveren lokaliserer nå med `localizeContentText`. Klienten tolker ingenting.
+
+### Rotårsak: jeg kjørte ikke alle suitene
+
+QA-porten ga NO-GO på en **regresjon i en eksisterende e2e-test** som stubbet den gamle kontrakten.
+Den ville jeg fanget selv — hvis jeg hadde kjørt e2e-suiten. Jeg kjørte enhet og integrasjon, og
+antok resten.
+
+⚠️ Det er samme feilklasse som resten av denne runden, bare på prosessnivå: **jeg sjekket der jeg
+så, og antok om resten.** Sveipen min etter eksisterende tester lette dessuten bare i `test/`, ikke
+i `test/e2e/`.
+
+Porten fant også at begge mine nye tester kjørte UTEN språk-header og ble grønne via reservekjeden —
+en mutant som hardkodet «nb» ville bestått. En tredje test krever nå at språket følger forespørselen.
+
+### Og min egen test veltet fire andre
+
+Første utgave av integrasjonstesten hentet en vilkårlig seedet bruker med `findFirst()` og hengte
+innleveringer på hen. Det veltet fire tester i tre helt andre filer — GDPR, påminnelser og outbox —
+som teller rader for den brukeren.
+
+⚠️ Feilene så ut som flakingen fra #1021, men var mine. Testen lager nå sin egen bruker og rydder
+etter seg i `afterAll`.
+
+Det er samme lærdom som #1021, fra motsatt side: **en test som legger igjen tilstand ødelegger for
+andre, og symptomet dukker opp et helt annet sted enn årsaken.**
+
+### Sveipen fant tre flater til
+
+Klagekøen (⚠️ der **søkefeltet søker i den rå JSON-strengen**), rapportene (som hardkoder `en-GB`,
+så en norsk leser får engelske titler), og `certificationLevel`. Ført som **#1027**.
+
+## 2.40.0 - 2026-08-28
+
+### #1026 — et forbedringsråd kan fjerne sensoren fra sløyfa
+
+`hasInsufficientEvidenceSignal` sjekker strukturerte felt, og faller så tilbake på delstrengsøk i
+språkmodellens frie tekst — inkludert i **forbedringsrådene**. Mønstrene inkluderer «additional
+material» og «detailed reflection».
+
+⚠️ Det er helt vanlige fraser i et råd til en GOD besvarelse: «add a more detailed reflection on
+your process». Og et treff er ikke uskyldig — signalet inngår i `autoFailForInsufficientEvidence`,
+som **undertrykker manuell vurdering**:
+
+```
+needsManualReview = … || (llmRecommendsManualReview && !autoFailForInsufficientEvidence) || …
+```
+
+Anbefaler modellen at et menneske ser på saken, men et råd inneholder «additional material», blir
+det automatisk stryk i stedet. **Ingen sensor ser den.**
+
+Oppførselen er **uendret**. Funksjonen er delt i `hasStructuredInsufficientEvidenceSignal` og
+`matchedInsufficientEvidencePatterns` slik at reserven kan MÅLES før den eventuelt fjernes. Er den
+alene om å fyre, logges `insufficient_evidence_pattern_only` på feilnivå, med hvilke mønstre som
+traff og om modellen anbefalte manuell vurdering. Det siste er nøkkelen: det er da treffet koster
+noe.
+
+### QA-porten: jeg målte feil resultat
+
+⚠️ **NO-GO, og funnet er min gjentakende feil.** Første utkast målte PRIMÆRresultatet. Men vedtaket
+fattes på `finalLlmResult` — som er sekundærvurderingen når en slik kjørte.
+
+Scenario: primæren har intet signal, en andre vurdering kjøres fordi modellen anbefaler manuell
+behandling, og sekundærens råd inneholder «additional material». Da gis automatisk stryk på
+mønsteret alene — **uten at noe logges.** Nettopp tilfellene saken skal telle, ville blitt undertalt.
+
+Målingen leser nå `finalLlmResult`, og bærer `assessmentPass` så vi kan se om problemet henger
+sammen med at en andre vurdering kjørte.
+
+Porten fant også at måleblokka var **utestet**: en invertert betingelse ville vært grønn, og da
+hadde vi hatt en måling som aldri fyrte. Det er verre enn ingen måling, fordi tausheten leses som
+«problemet finnes ikke». Tre tester dekker den nå, mutasjonsverifisert.
+
+Begge hendelsene er ført inn i `doc/OBSERVABILITY_RUNBOOK.md`, med hva man skal gjøre når de dukker
+opp — en driftshendelse ingen vet hva betyr, blir ikke handlet på.
+
+## 2.39.0 - 2026-08-27
+
+### #1023 — utløseren for andre vurdering måles før den byttes
+
+Om en besvarelse skal vurderes en gang til avgjøres delvis av om språkmodellens FRIE TEKST
+inneholder «medium confidence» eller «low confidence». Formulerer modellen seg om, slutter
+utløseren å fyre, og en besvarelse som skulle fått et andre blikk får det ikke. Ingenting feiler.
+
+Begge reglene regnes nå ut. **Dagens avgjør fortsatt alt** — et bytte endrer hvor ofte vi betaler
+for en ekstra LLM-kjøring og hvor lenge deltakeren venter, og det er en produktbeslutning. Ved
+uenighet logges `secondary_trigger_shadow_diff`, uten fritekst: bare hvilke mønstre som traff og
+hvilke strukturerte verdier som lå bak.
+
+⚠️ Fiksturet fra #1025 viser at den strukturerte regelen aldri fyrer i de ti ekte vurderingene vi
+har. Uenighetene vi logger vil derfor nesten bare gå én vei. Det er en reell observasjon, men den
+betyr at måledataene ikke kan svare på hovedspørsmålet før `uncertain` eller `low_confidence` er
+sett i ekte trafikk. Ført i sakens kommentar, så tallene ikke leses feil.
+
+### #1025 — fiksturer bygget på ekte LLM-svar, ikke på hva jeg tror modellen svarer
+
+`scripts/dev/capture-llm-shapes.mjs` henter FORMEN på ekte svar fra stage: strukturerte felt,
+tellinger, og nøkkelord fra en fast liste. Ingen fritekst, ingen id-er, ingen e-post — fiksturet
+havner i et offentlig repo.
+
+Første kjøring bekreftet umiddelbart det som avslørte feilen i #1019: **2 av 10 vurderinger har
+utilstrekkelig grunnlag OG høy sikkerhet i samme svar.** Det er nå festet som en test.
+
+⚠️ Stemplet bærer modellnavn, ikke bare appversjon. Modellen kan byttes uten at appen bumpes, og et
+utdatert fikstur er en NY kilde til falsk trygghet.
+
+⚠️ Personvernvakta matcher på `c` pluss lengde, ikke `cm`. Dagens cuid-prefiks ruller til `cn`
+rundt februar 2027, og en vakt som lette etter «cm» ville da sluttet STILLE å matche.
+
+### Sveipen fant noe verre enn saken
+
+`hasInsufficientEvidenceSignal` faller også tilbake på delstrenger — mot `confidence_note`,
+kriteriebegrunnelser OG **forbedringsrådene**. Mønstrene inkluderer «additional material» og
+«detailed reflection», som er helt vanlige fraser i et råd til en god besvarelse.
+
+Et treff undertrykker en andre vurdering, og inngår i `autoFailForInsufficientEvidence` — som igjen
+**undertrykker manuell vurdering**. Anbefaler modellen at et menneske ser på saken, men et
+forbedringsråd tilfeldigvis inneholder «additional material», blir det automatisk stryk i stedet.
+
+Ført som **#1026**, p1. Ikke rørt her: det krever samme måling først.
+
+## 2.38.0 - 2026-08-27
+
+### #1019 — konfidensnotatet gjettes ikke lenger fra engelsk prosa
+
+Etter hver vurdering skriver språkmodellen en fritekstsetning om hvor sikker den var. Klienten leste
+den setningen og lette etter ord i den: «low confidence» pluss «sparse», «limited cues» eller
+«partial evidence», med et kart over fire setninger modellen kanskje skrev ordrett.
+
+⚠️ Notatet er GENERERT. Det kan formuleres om når som helst uten at noe i repoet endres — en
+gjetning på fri tekst kan ikke være stabil. Bommet den, sto engelsk i et norsk skjermbilde.
+
+Modellen svarer allerede på faste spørsmål ved siden av fritteksten (`evidence_sufficiency`,
+`manual_review_reason_code`), og prompten ber om dem. `deriveConfidenceLevel` leser dem og gir
+«lav», «middels» eller ingenting.
+
+**Ingenting betyr ingen rad.** «Høy konfidens» er ikke et forbehold — en rad som forteller
+deltakeren at alt er som det skal, bruker plass uten å si noe. Samme regel som #940 innførte.
+
+### #1018 — sensor og klagebehandler leser begrunnelsen på sitt eget språk
+
+Seks steder i `review.js` viste serverens engelske setning ordrett, i et ellers norsk grensesnitt.
+
+Formuleringene er EGNE, ikke deltakerens: «Sendt til vurdering: poengsummen 64 ligger i
+grenseområdet 60–70». Deltakerens tekst står i andreperson — «du fikk 100 %» — og det er direkte
+feil på en skjerm der teksten handler om en annen person. Det var derfor dette ikke bare var å
+importere språkfila.
+
+`localizeDecisionReason` tar nå et opsjonsobjekt med `keyPrefix`, så samme regel tjener begge
+målgrupper. Vakttesten dekker begge, på alle tre språk.
+
+⚠️ **En felle datatypen avslørte, ikke testene:** sensorflaten får avgjørelsesraden RÅTT fra
+databasen, der `decisionReasonParams` er en JSON-STRENG. Deltakerflaten får den tolket av
+lesemodellen. Uten tolkning ville `Object.entries` på en streng gitt tegn-par, ingen plassholder
+blitt fylt, og «poengsummen {totalScore} ligger i …» stått på skjermen.
+
+### Sveipen fant noe større enn saken
+
+Samme delstreng-gjetting finnes i BESLUTNINGSVEIEN: om en andre, uavhengig vurdering skal kjøres
+avgjøres delvis av om notatet inneholder «medium confidence» eller «low confidence»
+(`secondaryAssessmentService.ts:59-63`).
+
+Formulerer modellen seg om, slutter utløseren å fyre, og en besvarelse som skulle fått et andre
+blikk får det ikke. Ingen feiler, ingenting logges.
+
+⚠️ **Ikke rørt, med vilje.** `deriveConfidenceLevel` er en ferdig erstatning, men å bytte utløser
+endrer hvor ofte vi betaler for en ekstra LLM-kjøring og hvor lenge deltakeren venter. Det er en
+produktbeslutning. Ført i **#1023** med forslag om skyggemåling først, samme grep som #475 brukte.
+
+### Ekte data omgjorde regelen
+
+⚠️ **Det viktigste funnet i denne runden kom ikke fra porten, men fra ti EKTE vurderinger på stage.**
+
+Første utkast lot «utilstrekkelig grunnlag» (`evidence_sufficiency: insufficient`) bety «lav
+konfidens». Dataene viste at det er feil, og ofte det motsatte. I tre av tre slike vurderinger skrev
+modellen selv:
+
+> «Det er høy sikkerhet i vurderingen på grunn av svarets svært begrensede innhold.»
+
+Leverer noen noe tomt, er modellen nettopp SIKKER på at det stryker. De to feltene svarer på ulike
+spørsmål:
+
+| Felt | Spørsmål |
+|---|---|
+| `evidence_sufficiency` | var det NOK I BESVARELSEN til å vurdere? |
+| `manual_review_reason_code: low_confidence` | hvor sikker er modellen på DOMMEN sin? |
+
+Å si «vurderingen ble gjort med lav sikkerhet, en sensor kan se på den igjen om du klager» til en
+som leverte tomt, er usant — og inviterer til en klage uten grunnlag. **Det ville vært verre enn
+feilen jeg rettet.** At det ikke var nok i besvarelsen står allerede i BEGRUNNELSEN
+(`AUTO_FAIL_INSUFFICIENT_EVIDENCE`), der det hører hjemme.
+
+Regelen er nå bare ekte usikkerhet: `low_confidence` → lav, `uncertain` → middels, ellers ingen rad.
+
+⚠️ Verifiseringen bekreftet også at feltene FAKTISK fylles ut: `evidence_sufficiency` var satt i
+10 av 10 vurderinger. Uten den sjekken kunne fiksen ha byttet en rad som noen ganger var feil, mot
+en rad som aldri vises.
+
+### QA-porten: setningene diktet opp en årsak
+
+⚠️ **NO-GO på noe jeg selv innførte.** «Middels konfidens **på grunn av mulig uklarhet i ansvarlig
+bruk**» ble nå utløst av at grunnlaget var *usikkert* — som ikke sier noe om ansvarlig bruk. Samme
+for «lav konfidens **på grunn av lite innhold**», utløst av modellens lavkonfidens-kode.
+
+Før dukket setningene bare opp ved eksakt treff mot en original som FAKTISK hadde den årsaken. Ved å
+knytte dem til et NIVÅ gjorde jeg dem til påstander vi ikke har dekning for. **En oppgitt grunn vi
+ikke kan stå inne for, er verre enn ingen grunn.** Begge er nå årsaksnøytrale.
+
+Porten fant tre ting til:
+
+- **En asymmetri:** utilstrekkelig grunnlag meldt som `evidence_sufficiency` ga lavt nivå; meldt som
+  `manual_review_reason_code` gjorde det ikke. Da avhang det deltakeren så av hvilket felt modellen
+  tilfeldigvis fylte ut.
+- **En falskt grønn test av mine:** «ødelagt JSON … ikke et kast» besto også uten fiksen, fordi
+  `Object.entries` på en streng ikke kaster. Navnet lovet noe den ikke sjekket. Oppførselen var
+  dessuten feil — med ødelagt JSON sto «{scorePercent}» synlig. Setningen faller nå tilbake på
+  serverens lagrede tekst: engelsk, men sann.
+- **Vakten dekket bare deltakerens strenger.** Sensorens var uvoktet; en omdøpt plassholder der
+  ville stått synlig uten at noe ble rødt.
+
+### Rotårsak: tre mutasjoner som ikke traff
+
+Tre ganger i denne runden endret jeg noe uten å bekrefte at endringen traff:
+
+1. En mutasjon «fjernet» en nynorsk oversettelse — men strengen i fila hadde `–` der jeg skrev
+   en bokstavelig tankestrek. Ingen assert fanget det, og jeg holdt på å konkludere med at vakten
+   var ødelagt.
+2. `git checkout` på fila for å reversere mutasjonen forkastet HELE fila, inkludert alle
+   oversettelsene jeg nettopp hadde skrevet.
+3. Jeg «gjenopprettet» en linje som aldri var fjernet, og la inn et duplikat.
+
+Alle tre er samme vane: å anta at en endring traff. **Enhver mutasjon skal ha en assert som feiler
+hvis mønsteret ikke finnes** — ellers måler man ingenting og tror man har målt noe.
+
+## 2.37.1 - 2026-08-27
+
+### #1021 — integrasjonssuiten feilet tilfeldig, og det var ikke tilfeldig
+
+Seks kjøringer, seks ulike feilende tester, hver av dem grønn alene. Filene kjørte i PARALLELL mot
+én delt Postgres.
+
+⚠️ **Racet var dokumentert fra før.** #513 fant mekanismen i mars — «integration files that touch the
+same seed fixtures race: one file mutates state another is mid-assessment on, intermittently flipping
+a decision» — og satte `fileParallelism: false` i `vitest.config.ts`, altså for CI. Den lokale
+konfigurasjonen beholdt parallelliteten, og racet ble omgått ved å EKSKLUDERE de to filene som feilet
+mest (#804). Mekanismen sto igjen for de andre 113.
+
+Målt på samme ferske, seedede database: parallelt feilet 6 av 6 kjøringer med 1–4 tester, serielt
+576/576 grønt i 3 av 3. Den lokale kommandoen kjører nå serielt, som CI alltid har gjort.
+
+Prisen er 4 minutter mot 1.
+
+### Hvorfor dette var verdt en p1
+
+En suite som feiler tilfeldig er verre enn en som feiler alltid: den lærer leseren å se bort fra
+rødt. I løpet av dagen kostet den meg en runde der jeg stashet bort mine egne endringer for å
+«bevise» at en feil ikke var min — beviset var verdiløst, for begge kjøringene traff samme race.
+
+⚠️ Og én av de tilfeldige feilene var `TC-POL-AIINFLUENCE-002`, som holder på at et KI-signal skal
+rute til gjennomgang og aldri til stryk. Lærer man seg å avfeie røde kjøringer som støy, avfeier man
+den regelen også.
+
+### Rotårsak: å lappe der det gjorde vondt
+
+#513 fant årsaken og fikset symptomet to steder. Det er samme mønster som gikk igjen i #982, #950 og
+#940 samme dag, og som QA-porten fant hos meg fire ganger: **jeg endrer stedet jeg ser på, og sveiper
+ikke etter hvem andre som har samme problem.** Her sto det fem måneder.
+
+⚠️ Tre av mine egne eksperimenter i denne saken var dessuten ugyldige, fordi `npx vitest` hopper over
+npm sin `pretest`-hook — den som nullstiller og seeder databasen. Jeg presenterte to av dem som
+bekreftelser før jeg hadde kontroll på hva jeg kjørte mot. **Kjør den kommandoen som faktisk
+brukes**, ikke en håndlaget variant av den.
+
+## 2.37.0 - 2026-08-27
+
+### #940 — utfallet avgjør hva som står åpent
+
+Produkteier, stage 2026-08-20, rett etter en ren flervalgsmodul: *«Dette er ikke optimal bruk av
+skjermen og kan gjøres på en mer konsis og enklere måte.»* Åtte likestilte elementer for å si
+«bestått, 100 %». Det som betydde noe var to av dem.
+
+Nå bestemmer utfallet hva som er utfoldet:
+
+| Tilstand | Åpent |
+|---|---|
+| Bestått | «Bestått — 100 %. Kravet var 80 %.» |
+| Ikke bestått | begrunnelsen — den er selve svaret |
+| Til manuell vurdering | «En sensor ser på besvarelsen din. Du får e-post når den er ferdig.» |
+| Blandet modul | totalen, med delpoengene på underlinja |
+
+Den tredje beskjeden fantes ikke i det hele tatt før nå. «Sendt til manuell vurdering» sto som én
+rad blant sju likestilte, og det som betyr noe — *at du ikke skal gjøre noe, og at du får beskjed* —
+sto ingen steder.
+
+Reglene bor i `public/static/result-summary.js`, ikke i participant.js, fordi de ellers bare kunne
+prøves ved å rendre hele flaten (#982-lærdommen).
+
+⚠️ **Utfallet utledes ikke her.** Første utkast gjorde det, og `test/outcome-derivation-guard.test.js`
+fanget det — #978-vakten gjorde nøyaktig jobben sin. `deriveOutcome` i `outcome.js` er fortsatt det
+ene stedet; `resolve­Outcome` legger bare til ett visningsskille: «en sensor ser på den» mot
+«maskinen jobber», som er to helt ulike beskjeder for deltakeren.
+
+**Serverendring:** «Kravet var 80 %» fantes ikke på klienten. `toSubmissionResultView` sender nå
+`requirement` og `mcqPercentScore`, og terskelen hentes med `resolveTotalMin` /
+`resolveMcqMinPercent` — samme oppslag som vedtaket bruker.
+
+### Rotårsak: samme feilklasse, tredje gang på én dag
+
+QA-porten ga **NO-GO**: **seks av sakens åtte elementer sto fortsatt på skjermen.** Jeg byttet ut
+innholdet i resultatkortet og lot flyten rundt stå — «Sjekk framdrift», hintet som forklarer den,
+«Vurderingshandlinger er tilgjengelige.», «Vurdering er ferdig.», «Vis resultat» og etiketten
+«Resultatoppsummering:» lå alle UTENFOR kortet.
+
+Alle testene var grønne. De målte kortet; elementene lå ikke i det.
+
+**Saken listet de åtte elementene eksplisitt, og jeg fjernet to.** Det er ikke uoppmerksomhet — det
+er at jeg leser en sak som en beskrivelse og ikke som en sjekkliste. Tiltaket er mekanisk, ikke en
+ny regel å huske: `test/e2e/participant-result-summary-940.spec.ts` går gjennom listen ordrett, mot
+hele siden, med en makker som krever at kontrollene kommer TILBAKE når resultatet forsvinner.
+
+To testhull til, begge funnet av porten:
+
+- **Fiksturet kunne ikke nå påstanden.** Testen «gjentar ikke samme tall» utelot
+  `practicalScaledScore`, som API-et faktisk sender som `0`. Vakten sto utestet, og en mutasjon som
+  fjernet den forble grønn.
+- **Hele servertillegget sto uten påstander.** Alle e2e-ene mocker `/result`, så de ville vært
+  grønne uansett hva serveren sendte — og skjermen sier «Kravet var 80 %» på grunnlag av nettopp de
+  feltene.
+
+Porten fant også at visningen leste `totalMin ?? null` mens vedtaket leste `?? standarden (70)`. En
+blandet modul uten eksplisitt grense ble avgjort mot 70 mens skjermen ikke viste noe krav. Det er
+#949-feilen i utelatelsesform: to oppslag for samme tall, der det ene glemmer reservverdien.
+
+⚠️ Og en påstand jeg *ikke* kunne si noe om: en avgjort status uten vedtak (`REJECTED`) ga
+overskrifta «Besvarelsen din blir vurdert». Ingenting vurderes, og det kommer ikke mer. Nå sier
+skjermen mindre, og lar statusen stå åpent.
+
+### Andre runde: en dødlås jeg selv innførte
+
+Fiksen på funnet over skjulte kontrollene når «det står et kort der». Men et resultat som fortsatt
+BEHANDLES rendrer også et kort. Da forsvant «Start vurdering», «Sjekk framdrift» og «Vis resultat» —
+samtidig som «Slett innlevering og start på nytt» er skjult av gatingen fordi statusen ikke er
+ferdig. **Null kontroller igjen, og ingen vei videre.**
+
+Veien inn er ikke eksotisk: autoløkka gir opp etter 90 sekunder, som er vanlig LLM-tid på en delt
+B1-instans, og deltakeren klikker «Vis resultat».
+
+⚠️ **Feilen er at jeg nøklet på TILSTEDEVÆRELSE der spørsmålet var TILSTAND.** «Finnes det et
+resultat» og «er utfallet avgjort» er ikke samme spørsmål, og de fire tilstandene i #940 er nettopp
+et svar på det skillet — jeg hadde regelen i hånden og brukte den ikke i den tilstøtende koden.
+Krommet skjules nå bare for avgjort/ukjent/til-vurdering, aldri mens noe holder på.
+
+To testpåstander var dessuten svakere enn de så ut:
+
+- `toBeHidden()` er sant også for et element som IKKE FINNES, og skjulingen hopper stille over
+  null-noder. En omdøpt id i HTML ville gitt en synlig knapp og en grønn test. Hver skjul-påstand
+  har nå `toHaveCount(1)` foran seg.
+- Returretningen låste fire av åtte elementer. Listen ligger nå ett sted, som data, og begge
+  retningene måler nøyaktig de samme åtte.
+
+Detaljraden kalte dessuten innleveringens id «Forsøks-ID» — samme navn som `attemptId` bruker ellers
+på siden. To ulike verdier under ett navn er verre enn ingen av dem.
+
+### Tredje runde: tallene sto på feil språk
+
+Overskrifta gikk utenom tallformateringen. En norsk deltaker så «Ikke bestått — 66.67 %» med
+PUNKTUM, mens delpoengene på SAMME underlinje sto med komma — de gikk gjennom `formatNumber`,
+overskrifta ikke. Det rammer enhver flervalgsmodul der antall spørsmål ikke går opp i 100, altså de
+fleste.
+
+Porten fant også en latent felle: en avgjort status uten vedtak (`REJECTED`) ville fått krommet
+skjult mens reset-knappen også er skjult — dødlåsen én gang til, gjennom en annen dør. Ingen kodesti
+skriver `REJECTED` i dag (#953), men `unknown`-grenen er ny kode, og et utfall vi ikke kjenner skal
+ikke rydde bort deltakerens siste vei ut.
+
+⚠️ **Tre runder, tre funn jeg trodde var ferdig.** Fellesnevneren for runde 2 og 3 er den samme som
+for runde 1: jeg endrer ett sted og sjekker ikke hva som gjelder rundt det. Det som faktisk fant
+dem, var ikke en ny regel å huske — det var at porten fikk beskjed om å LETE etter det tredje, og at
+den kjørte flaten i en ekte nettleser i stedet for å lese diffen.
+
+### Fjerde runde: strekene levde videre der ingen så etter dem
+
+`resultRowContent` lovet i sin egen kommentar å returnere null når en rad ikke har noe å si. Bare
+ÉN av grenene holdt det. `formatNumber(null)` gir «-», så vente-tilstandene viste «Total poengsum –»,
+«MCQ-poeng –» og «Beslutning Ukjent» bak «Vis detaljer» — og siden utfellingen huskes, så en
+deltaker som hadde åpnet detaljene før, dette uten å klikke.
+
+⚠️ **Min egen test for nettopp dette var falskt grønn.** Fiksturet var et BESTÅTT resultat, og for
+et avgjort utfall planlegges poengradene aldri. Testen kunne ikke nå påstanden sin — samme
+fikstur-felle som runde 2 fant ett annet sted, i en test jeg skrev for å vokte mot problemet.
+
+Testen kjører nå begge tilstandene, og påstanden navngir hvilke rader som viser strek i stedet for
+å bare telle dem.
+
+To påstander til var svakere enn de så ut: `toBeGreaterThan(0)` på en terskel pinner ingen verdi,
+og `not.toThrow()` sier bare at det ikke smalt — ikke at svaret er brukbart. Begge måler nå den
+verdien vedtaket faktisk bruker.
+
+### Femte runde: verktøyet løy igjen, og en test målte sin egen timing
+
+Begge funnene satt i test- og verktøylaget; produktkoden var ren.
+
+**Inspeksjonsskriptet viste rå nøkkel i alle 24 kortene.** `result.submissionId` ble døpt om til
+`result.submissionIdLabel` i runde 2, og skriptet fortsatte å slå opp det gamle navnet — mens det
+meldte «Ingen avvik målt».
+
+⚠️ Dette er ANDRE gang inspeksjonen viste noe annet enn produktet. Første gang satte jeg inn en
+vakt — men bare for statusraden, altså akkurat den ene som hadde feilet. Nå sier oppslaget selv fra
+for enhver manglende nøkkel, og målingen behandler det som et avvik. **En lapp på det som gikk galt
+sist er ikke en vakt.**
+
+**«Vis detaljer huskes»-testen målte sin egen timing.** Lagringen skjer i `toggle`, som er en kølagt
+oppgave; testen navigerte før den rakk å kjøre. Grønn alene, rød når fila kjøres samlet — den verste
+formen, fordi den ser stabil ut når man sjekker den. Testen venter nå på at verdien FAKTISK er
+skrevet.
+
+⚠️ Første fiks la til en `click`-lytter i produktet i tillegg. En mutasjon avslørte at ingen test
+kunne skille de to skrivemåtene — altså kompleksitet uten dekning, for å løse et problem som lå i
+testen. Fjernet igjen.
+
+### Sjette runde: to hull ingen runde hadde sett etter
+
+- **Overskriftene hadde ingen vakt.** `t()` gir nøkkelen tilbake når den mangler, og
+  «result.headline.passedPercent» på skjermen ser ut som en feilmelding for deltakeren. #950 fikk en
+  slik vakt for begrunnelsene; overskriftene fikk den aldri. Nå kreves hver av de tolv
+  overskrift/underlinje-kombinasjonene på alle tre språk, med plassholderne fylt.
+- **«Vis detaljer» sa det samme åpen som lukket.** En seende bruker ser pila snu; en
+  skjermleserbruker hører bare det samme igjen. Etiketten forteller nå hva et klikk vil gjøre.
+
+### Inspeksjonen sluttet å være en kopi
+
+Verktøyet løy to ganger i denne saken, og begge gangene av samme grunn: skriptet BYGDE KORTET PÅ
+NYTT. Det importerte reglene, men gjenskapte rader, etiketter og verdier selv — og divergerte fra
+produktet uten at noe sa fra.
+
+Første gang satte jeg inn en vakt for akkurat den raden som hadde feilet. Den neste divergensen kom
+et annet sted. **En lapp på det som gikk galt sist er ikke en vakt.**
+
+Skriptet laster nå den ekte deltakersiden med participant.js, mockede API-svar og de ekte
+språkfilene, i fire tilstander × tre språk × to bredder. Det finnes ingen kopi å divergere fra, og
+det som måles er det deltakeren ser. Sidefeil telles også som avvik — uten det kunne kortet vært
+tomt fordi noe kastet, og skjermdumpen ville bare vist et tomt felt.
+
+### To funn som bare kunne SES
+
+Da inspeksjonen viste den ekte siden, kom to ting fram som ingen måling hadde fanget:
+
+- **«TOTAL POENGSUM 64» og «MCQ-POENG 64» sto rett under hverandre** i vente-tilstandene.
+  Overskrifta hadde slått sammen like tall siden første utkast; detaljradene gjorde det ikke. To
+  like tall er ikke et avvik i seg selv, så ingen automatisk sjekk kunne funnet det.
+- **Den røde «Slett innlevering»-knappen ropte høyest på skjermen** under beskjeden «Ingenting mer å
+  gjøre nå». Den motsier beskjeden, og et nytt forsøk er dessuten umulig mens en sensor har saken.
+  Regelen er nå den den alltid handlet om: fremtredende BARE etter en avgjort stryk.
+
+⚠️ Begge er argumenter for at måling og øyne løser ulike problemer. Målingen finner det som er galt
+på en måte man kan definere på forhånd. Øynene finner det som bare er *dårlig*.
+
+### Sjette runde: GO, og ett tall til på riktig språk
+
+Porten frikjente de tre sporene jeg var usikker på: en anke setter status til UNDER_REVIEW, så
+knappen blir diskret og kortet sier «en sensor ser på den» — riktig for både anket stryk og anket
+bestått. Sammenslåingen av poengrader kan ikke skjule et ekte tall, fordi MCQ_ONLY skriver
+`totalScore = mcqScaledScore` og FREETEXT_ONLY `total = praktisk`. Og `result-summary.js` importeres
+bare av participant.js, så ingenting lekker til de tre flatene jeg ikke har rørt.
+
+Ett funn sto igjen, i #950-kode denne diffen ikke rørte: begrunnelseslinja skrev «du fikk 66.67 %»
+med PUNKTUM, rett under en overskrift som sa «66,67 %» med komma. To skrivemåter for samme tall, på
+samme kort — bare synlig fordi #940 la de to linjene ved siden av hverandre. `localizeDecisionReason`
+tar nå en tallformaterer, som `fillPlaceholders` gjør.
+
+### Fem runder — hva som faktisk fant feilene
+
+Ingen av de fire funnene ble funnet av at jeg husket bedre. Det som fant dem:
+
+1. **Å be porten lete etter «det neste»,** i stedet for å be den vurdere fiksen. Runde 2 til 5 ble
+   alle bestilt med den formuleringen, og hver av dem fant noe.
+2. **Å kjøre flaten i en ekte nettleser** i stedet for å lese diffen. Dødlåsen og strek-radene ble
+   MÅLT, ikke resonnert fram.
+3. **Mutasjonstesting.** Nitten mutasjoner er verifisert i denne saken. Tre av dem OVERLEVDE først
+   — og hver overlevende mutasjon avslørte enten en test som ikke målte det den påsto, eller kode
+   ingen test kunne skille fra sitt eget fravær.
+
+### Registrert underveis
+
+- **#1020** — «Slik kommer du videre» for den som ikke bestod, skilt ut fra denne saken
+- **#1021** — `m2-appeal-flow` feiler ujevnt under full integrasjonskjøring, også uten disse
+  endringene
+
+## 2.36.0 - 2026-08-27
+
+### #950 — serveren sender HVA som avgjorde, ikke en engelsk setning
+
+En norsk deltaker som bestod en flervalgsmodul fikk «Automatic pass: MCQ score 100% meets the
+required minimum of 70%.» under BEGRUNNELSE, i et skjermbilde der alt annet var oversatt.
+
+Klienten prøvde å oversette ved å slå serverens engelske prosa opp i et kart. Det kan ikke holde:
+
+- **Kartet driftet.** Nøkkelen på klienten sa «... red flag / confidence / borderline rule.» lenge
+  etter at serveren sluttet å skrive «borderline» i den strengen. Ingenting sa fra — oppslaget
+  bommet bare.
+- **Grunner med tall i seg kan aldri slås opp som tekst.** «Poengsummen 64 ligger i vinduet [60, 70]»
+  finnes ikke i noe kart. Det gjelder også den vanligste grunnen av alle: den for en ren
+  flervalgsmodul.
+- **Feltet har to slags innhold.** Sensor og klagebehandler skriver fritekst i det SAMME feltet
+  (`reviews.ts:32`, `appeals.ts:28`). Kartet kunne ikke se forskjell, og risikerte å bytte ut et
+  menneskes egne ord med en standardsetning.
+
+Serveren sender nå en KODE og tallene setningen trenger. `AssessmentDecision` har fått
+`decisionReasonCode` og `decisionReasonParams` (additive, nullbare, ingen backfill). Klienten
+formulerer setningen på deltakerens språk i `public/static/decision-reason.js`.
+
+**Fravær av kode ER signalet:** en grunn uten kode er et menneskes egne ord — eller en rad fra før
+feltet fantes — og vises ordrett. `decisionLineageService.ts` setter derfor `null` eksplisitt, ikke
+ved forglemmelse.
+
+Sidegevinst: KI-signalene i `aiInfluence.ts` sendte **norsk** i samme felt, fordi teksten også går
+til sensor. Nå bærer de en kode, og begge målgruppene kan få sitt eget språk.
+
+### Rotårsak, per stående ordre
+
+**Tre av fire QA-funn var tester som var grønne uansett.** Ikke fordi de var slurvete skrevet, men
+fordi jeg testet det jeg hadde SKREVET, ikke det som måtte holde:
+
+1. Plassholdertesten sammenlignet språkfilene **mot hverandre**. Den fanget at nynorsk manglet et
+   tall bokmål hadde, men ikke at serveren hadde byttet navn på det. Døper man om `scorePercent` i
+   `decisionService.ts`, forble alt grønt mens deltakeren så `{scorePercent}` på skjermen — altså
+   nøyaktig driften saken handlet om, i en test som skulle vokte mot den.
+2. **Ingenting pinnet at koden faktisk ble SKREVET.** Sletter man feltet i skrivekallet, regnes
+   koden fortsatt ut, alt er grønt, og oversettelsen er død for alle nye avgjørelser.
+3. En egen `if (!code)`-gren kunne ikke observeres — oppslaget under ga uansett null. Mutasjonen
+   avslørte den: testene besto med grenen fjernet.
+
+Rettet ved at testene nå kjører de EKTE serverfunksjonene for hver grunn med tall i seg, og krever
+at setningen kommer ut ferdig utfylt. Fire mutasjoner er verifisert røde: slettet skrivefelt,
+omdøpt `scorePercent`, omdøpt `min`, omdøpt `similarityPercent`.
+
+⚠️ **Sveipen var også ufullstendig,** samme feilklasse som #982. Jeg fant to av tre renderpunkter
+på sensorflaten, og overså at `ManualReview.triggerReason` er en **tekstkopi uten kode** — så selv
+en oversatt sensorflate ville vist engelsk. Ført i #1018.
+
+En bifangst til: revisjonsloggens `forceManualReviewReason` gikk fra streng til objekt da typen ble
+strammet. Typen `AuditMetadataByAction` pinner bare `submissionId`, så kompilatoren sa ingenting.
+Rettet til `.text`, med koden som eget felt.
+
+### Registrert underveis
+
+- **#1017** — halvbygget Entra-klassekobling leses som en virkende funksjon
+- **#1018** — sensor og klagebehandler ser begrunnelsen rått på engelsk
+- **#1019** — konfidensnotatet gjettes fra engelsk prosa, raden rett under den vi nettopp fikset
+
+## 2.35.0 - 2026-08-27
+
+### #982 — en oversettelse som ikke kom, fylles ikke lenger med kildetekst
+
+`localizeDraftAcrossLocales` skrev `draft?.taskText ?? taskText` — altså KILDETEKSTEN — inn i
+mållokalen når oversettelsen svarte tomt, og fanget ikke nettverksfeil i det hele tatt. Kartet så
+komplett ut, `missingLocalesFor` fant ingenting å savne, publiseringsgaten slapp modulen gjennom, og
+en nynorskdeltaker fikk bokmål uten at noe sa fra. Det er #892-invarianten brutt stille, i
+hovedflyten for innholdsproduksjon.
+
+Lokalen slippes nå og føres i `failedLocales`, slik søstermetoden har gjort siden #905. Regelen for
+hva som beholdes fra et oversettelsessvar ligger i `selectTranslatedDraftFields`
+(`public/static/admin-content-localized-copy.js`), fordi den lå inne i en funksjon som gjør
+nettverkskall — **en regel som bare kan prøves gjennom hele flaten, blir i praksis ikke prøvd.**
+
+⚠️ Sidegevinst porten fant: kallet lå UTENFOR try-blokkene i begge kallerne, så en nettverksfeil
+under lokalisering ga en uhåndtert rejection og en fremdriftsboble som aldri løste seg.
+Per-lokale-fangsten retter også det.
+
+### Advarselen nådde ikke fram — fire ganger, samme mekanisme
+
+Advarselen om språk som ikke ble oversatt lå inne i `readyHtml`. Den rendres bare når endringen
+landes med én gang. Har forfatteren skrevet i feltene, PARKERES forslaget og en helt annen tekst
+vises — så den som oftest ber om en revisjon, fikk aldri vite at et språk manglet.
+
+`warningHtml` er nå et eget argument til `commitOrProposeGenerated` og rendres i BEGGE grenene. Fire
+advarsler er flyttet over: generer utkast, revider utkast, tittelrevisjon, og MCQ-kvalitet (#551).
+Den siste ble funnet først i fjerde QA-runde — jeg hadde flyttet tre og latt den fjerde stå.
+
+Oversett-kommandoen (`refreshLocalizedDraftInBackground`) var i tillegg **helt stum**: den ignorerte
+`failedLocales` og sa «Oversettelse klar» uansett, på nettopp den flaten der oversettelser feiler
+oftest.
+
+Ny tekstnøkkel `shell.generating.draftNotTranslated` i tre språk. Den eksisterende sier at språkene
+«står fortsatt med kildeteksten», som er feil etter at lokalen slippes — en melding som beskriver
+feil tilstand sender forfatteren for å lete etter noe som ikke er der.
+
+### Rotårsak, per stående ordre
+
+Fire QA-runder, og hver runde fant SAMME feilklasse ett nytt sted:
+
+1. Jeg fikset `buildLocalizedCopyValue` — som viste seg å være **død kode**. Funksjonen har ingen
+   utløser; den levende dupliseringen ligger i biblioteket og var allerede ærlig. Jeg sjekket aldri
+   om funksjonen hadde en kaller.
+2. Jeg rettet den levende stien, men bare to av tre kallere fikk advarselen fram.
+3. Jeg påsto at den parkerte grenen ikke kunne testes «fordi den krever chat-klassifisering».
+   Klassifiseringen er klient-side og deterministisk, og det fantes allerede en test som drev
+   nøyaktig den grenen. Dekningen var femten linjer unna.
+4. Den fjerde advarselen sto igjen.
+
+⚠️ Og en test til som var grønn av feil grunn: e2e-en jeg skrev for advarsels-wiringen målte et
+FJERDE sted — direkte-redigering, som skriver til loggen selv. Jeg fjernet advarselen fra alle tre
+kallerne jeg hadde endret, og den forble grønn.
+
+**Fellesnevneren er ikke uoppmerksomhet.** Jeg fikser det jeg ser på, og sjekker ikke systematisk
+hvem andre som gjør det samme — pre-flight-oppslag nummer to. Fjerde runde ble derfor bedt om å lete
+etter FLERE av samme slag, ikke bare vurdere fiksen. Den gikk gjennom alle seks kallerne og bekreftet
+at det ikke finnes en femte. Det spørsmålet burde vært stilt i første runde.
+
+## 2.34.0 - 2026-08-27
+
+### #1012 — erstatt innholdet i en seksjon fra fil
+
+Produkteier 2026-08-26: *«Vi trenger å kunne importere json direkte inn i en seksjon og erstatte
+innholdet.»*
+
+⚠️ **Saken var delvis feil da den ble skrevet, og feilen var min.** Den påsto at ingen klientkode
+poster til `/sections/import`. Søket gikk mot `public/*.js`, som ikke treffer `public/static/` —
+og `admin-content-sections.js:507` gjorde nettopp det. Ett sted sjekket, konklusjon trukket for alle.
+
+Det ekte gapet var smalere: klienten sendte `mode: "createNew"` hardkodet. Man kunne lage en NY
+seksjon fra fil, aldri oppdatere en som fantes.
+
+**«Erstatt fra fil»** ligger nå i seksjonsredigeringen, ved siden av Lagre og Oversett. Den vises
+kun når man står i en seksjon som finnes — «erstatt» har ingenting å erstatte i et tomt skjema.
+
+⚠️ **Ikke destruktivt.** Serveren lager en ny versjon som UTKAST (`publishedAt: null`), og den
+aktive versjonen står urørt til forfatteren publiserer og passerer oversettelsesgaten (#916).
+Forrige versjon overlever. Bekreftelsen sier det, i stedet for bare å spørre «er du sikker» — en
+dialog som ikke forklarer hva som skjer, lærer folk å klikke ja uten å lese.
+
+Modul- og kurspakker stoppes FØR de når serveren, med en beskjed som peker til riktig side. Samme
+vakt som importen i lista, inkludert `L` som tredje argument til `describeImportError` — uten den
+faller feilteksten tilbake på hardkodet engelsk på en trespråklig side (#996).
+
+**Testen påstår HVA som sendes, ikke at knappen finnes.** Med `createNew` faller den på
+`Expected "replaceExisting", Received "createNew"`. En test som bare klikket og så at kallet gikk,
+ville vært grønn for nøyaktig den feilen — knappen ville «virket» og laget en ny seksjon.
+
+Testen for at knappen IKKE finnes på en ny seksjon krever først at Lagre-knappen finnes. Uten det
+ville den vært grønn bare fordi siden aldri rendret redigeringen.
+
+### UI-en ble inspisert før den ble vist fram
+
+`scripts/dev/inspect-section-replace-button.mjs` rendrer verktøylinja i begge språk, tar skjermbilde
+og måler knappeavstand og overflyt.
+
+Den fanget to ting: etiketten «Erstatt innhold fra fil» var så lang at knappen brakk stygt (kortet
+til «Erstatt fra fil»), og rute-formatet jeg gjettet på var feil — appen bruker `?id=`, ikke
+`#editor/`. Uten rendering ville jeg trodd knappen manglet.
+
+## 2.33.1 - 2026-08-26
+
+### #953 — to funn fra stage som ingen test kunne gitt
+
+**Gjenforsøksutvidelsen var uten effekt i miljøet.** Jobben viste «forsøk 3/3» der koden lover 6.
+`infra/azure/main.bicep` hadde `assessmentJobMaxAttempts = 3` som standard, og app-innstillingen
+med samme verdi. Infrastrukturen vinner over kodens standard.
+
+⚠️ **To standardverdier for samme tall er en felle:** enhetstestene måler kodens, og miljøet kjører
+infrastrukturens. Alle testene var grønne mens hele del A av #953 sto død i utrullede miljøer.
+Bicep-parameteren er nå 6, med en kommentar om at de to må endres sammen.
+
+⚠️ **`deploy-app.yml` kjører ikke Bicep.** Stage er satt direkte; PROD MÅ SETTES ved neste
+prod-runde, ellers gjelder ikke #953 der.
+
+**Verifisert ende til ende mot ekte data:** med ugyldig LLM-endepunkt brukte innleveringen opp
+forsøkene og dukket opp i «Vurderinger som ga opp» med årsak `fetch failed`. Administrator trykket
+«kjør på nytt» → 202 med ny jobb → COMPLETED med vedtak på 90 sekunder → raden borte, telleren
+1 → 0, lista og telleren fortsatt enige.
+
+### UI-en var funksjonell og stygg
+
+Produkteier 2026-08-26: *«Når vi lager UI-elementer så bør de visuelt inspiseres som en del av
+kvalitetskontroll.»*
+
+`shared.css` har ingen grunnstil for `table` utenfor mobil-media-queryen, så tabellen arvet
+nettleserens standard: sentrerte overskrifter, ingen luft, ingen justering. Det ble tydelig her
+fordi raden har et langt tidsstempel, en teknisk feiltekst OG en knapp ved siden av hverandre.
+
+Stilen er SCOPET til kortet. En grunnstil for `table` ville truffet hver eneste tabell i appen, og
+de er ikke inspisert.
+
+**`scripts/dev/inspect-failed-assessments-card.mjs`** rendrer kortet med realistiske verdier — et
+langt navn, en lang feilmelding — tar skjermbilde og måler kolonner, justering og overflyt. Den er
+lagt inn som verktøy, ikke som en engangsfil, per den stående ordren om at en lærdom skal bli en
+sjekk som KJØRER framfor en setning som skal huskes.
+
+⚠️ Skriptet fanget seg selv to ganger: det satte feil localStorage-nøkkel (`locale` i stedet for
+`participant.locale`), så begge skjermbildene ble på norsk mens det meldte at to språk var sjekket.
+Det skriver nå ut overskriften som bevis på at språket faktisk skiftet. Og et av målene sammenlignet
+bokskanter der luften ligger i cellens padding — det målte ingenting og er fjernet.
+
+## 2.33.0 - 2026-08-26
+
+### #953 — en vurdering som gir opp er ikke lenger en blindvei
+
+Produkteier 2026-08-26: *«Vurdering skal kunne kjøre offline, og bruker varsles per e-post senere om
+resultat. Derfor vil jeg ved avvik avvente noen minutter for å se om det er LLM-tjenesten som har
+problem, og så prøve på nytt igjen. Hvis mange vurderinger begynner å hope seg opp bør administrator
+varsles.»*
+
+⚠️ **De to trukne forsøkene løste feil problem.** Begge prøvde å håndtere at vurderingen *ga opp* —
+ved å skrive en ny tilstand i databasen. Men gjenforsøk fantes allerede: 3 forsøk med **fast 30
+sekunders venting**, altså et samlet vindu på under ett minutt. En LLM-nedetid på to minutter brukte
+opp alt. Tallet var ikke feil i seg selv; det var for tett til å måle det det skulle måle — «er
+tjenesten nede, eller er denne besvarelsen umulig å vurdere?». Under ett minutt kan ikke skille de to.
+
+**A — gjenforsøkene dekker nå en nedetid.** 6 forsøk med eksponentiell venting fra ett minutt
+(1+2+4+8+16 = 31 min), tak på 30 min. Begge tall er miljøvariabler.
+
+**B — vedtaket bæres av kjøringen som eide jobben.** Når en kjøring forlates på tidsgrensen (#856)
+fortsetter den i bakgrunnen og kan lande et vedtak lenge etterpå — på en besvarelse et gjenforsøk
+allerede har begynt på. Resultatet ville vært to dommer på samme besvarelse.
+
+⚠️ **Jobb-id duger ikke som gjerde.** Den forlatte kjøringen og gjenforsøket har SAMME jobb-id. Det
+eneste som skiller dem er `lockedAt`, som settes på nytt ved hver låsing. Gjerdet er derfor
+`{ lockedBy, lockedAt }`, tredd fra runneren ned i vedtakstransaksjonen, og det er **påkrevd i
+signaturen** — en framtidig kaller kan ikke skrive et vedtak uten å ta stilling til hvilken kjøring
+det tilhører.
+
+**C — administrator ser og kan handle.** Ny seksjon på `/admin-platform`: «Vurderinger som ga opp»,
+med én handling per rad — kjør vurderingen på nytt, via `POST /api/admin/platform/failed-assessments/:submissionId/retry`. Seksjonen rendres KUN når lista har rader.
+Telleren ligger i `/api/queue-counts` som `failedAssessments`, rollegatet til administrator.
+
+E-post til alle med administrator-rolle når antallet passerer terskelen (3), med en karenstid på ett
+døgn. ⚠️ Karenstiden lagres i `PlatformConfig`, ikke i minnet: worker-en restartes ved hver
+utrulling, så et minnebasert tak ville nullstilt seg selv og gitt en ny e-post per restart — nøyaktig
+støyen taket finnes for. Loggraden skrives uansett om det finnes mottakere, så en plattform uten
+administrator-tildelinger ikke er helt stille i nettopp den situasjonen varselet er laget for.
+
+**Ikke endret:** den synkrone MCQ-stien. `mcqService` fanger feil og faller tilbake til
+bakgrunnsarbeideren, så gjenforsøkstigen styrer kun worker-en — ingen deltaker venter lenger i
+nettleseren.
+
+Mutasjonsverifisert på tre punkter: ventingen (`expected 30000 to be greater than 54001.8`),
+karenstiden (`expected "spy" to not be called at all, but actually been called 2 times`), og
+kontrollcaset som beviser at varselet kommer igjen etter karenstiden.
+
+### QA-runden: NO-GO, og knappen jeg nettopp bygde kunne ikke virke
+
+Porten fant tre P1-er. Alle tre satt i FLATEN, ikke i motoren — gjerdet, gjenforsøkstigen og
+varslingslogikken ble bekreftet som riktige.
+
+**F1 — «kjør på nytt» fikk 404, hver gang.** Knappen kalte deltakerruta
+`POST /api/assessments/:id/run`, som henter innleveringen med `getOwnedSubmission(submissionId, userId)`
+— filtrert på `where: { id, userId }`, uten administrator-unntak. En administrator eier ikke
+deltakerens innlevering. Hele handlingsflaten var død ved levering.
+
+⚠️ Testen min gjorde det verre: den sjekket at strengen `/run` fantes i skriptet. Den målte at jeg
+hadde skrevet noe, ikke at det virket. Administratorhandlingen har nå sin EGEN rute på
+administratorflaten, bak dens egen rollegate. Å myke opp eierskapssjekken ville løst symptomet og
+svekket en invariant som gjelder alle de andre kallerne.
+
+**F2 — «feilet» friskmeldte seg aldri.** Lista og telleren spurte «finnes det en FAILED-jobbrad?».
+Det spørsmålet kan aldri bli nei: et gjenforsøk oppretter en NY rad, og den gamle blir stående.
+Lista tømte seg aldri, telleren sank aldri, og døgnvarselet ville gått til alle administratorer i
+all framtid etter én enkelt nedetid — nøyaktig støyen karenstiden finnes for.
+
+Riktig spørsmål er «venter denne innleveringen fortsatt på et menneske?»: vurderingen ga opp, det
+finnes ikke noe vedtak, og ingen ny kjøring er i gang. Da friskmelder tilstanden seg selv.
+
+**F3 — e2e-en spesifikasjonen krevde manglet.** Den finnes nå, og den er mutasjonsverifisert mot
+selve F1: kobles knappen tilbake til deltakerruta, faller den på `Expected "sub-1", Received null`.
+Den ville altså fanget feilen med én gang.
+
+⚠️ Første utgave av e2e-en besto mot en side som ga 404, fordi `toBeHidden()` er sann også for et
+element som ikke finnes. Den krever nå at kortet FINNES i DOM-en før den sjekker at det er skjult —
+forskjellen på «skjult» og «aldri lastet». Testserveren manglet dessuten ruta for `/admin-platform`.
+
+Også rettet: varselet respekterer nå `PARTICIPANT_NOTIFICATION_CHANNEL` i stedet for å gå rett på
+ACS (F5), karenstiden skrives også når ingen kunne varsles så error-loggraden ikke gjentas hver
+fjerde sekund (F7), og de to nye rutene er dokumentert (F8).
+
+### Andre QA-runde: én linje objektspredning som spiste et helt filter
+
+Porten ga NO-GO igjen. F1–F3 var reelt rettet, men counter-halvdelen av F2 var fortsatt gal:
+
+```ts
+where: {
+  ...STUCK_SUBMISSION_FILTER,                      // assessmentJobs: { none: aktiv }
+  assessmentJobs: { some: { status: "FAILED" } },  // overskriver linja over
+}
+```
+
+Senere nøkkel vinner i JS. «Ingen aktiv jobb» forsvant STILLE fra telleren, mens lista beholdt det.
+Kommentaren rett over konstanten påsto at de to ikke KAN komme i utakt — og de kom i utakt tre
+linjer lenger nede, i samme funksjon.
+
+Konsekvensen var presis: administratoren trykker «kjør på nytt» på tre saker, gjenforsøkene ligger i
+kø, og neste worker-runde sender e-post om at tre vurderinger venter på at noen kjører dem på nytt.
+Hen åpner siden e-posten ber om, og kortet er tomt.
+
+**Kuren er ikke et filter til.** Lista og telleren spør nå over samme ENHET — innleveringer, ikke
+jobbrader — med samme `where`. Da finnes det ikke to spørringer å holde i takt. Filteret er skrevet
+som `AND: [...]` framfor flere nøkler i samme objekt, nettopp fordi den ene kan spise den andre.
+
+Det løste samtidig et funn til: `distinct` + `take` tar `take` i databasen på JOBBRADER og
+dedupliserer i minnet etterpå, så lista kunne vise færre saker enn telleren sa.
+
+**Krav 2 er nå oppfylt i motoren, ikke bare i admin-ruta.** Gjerdet lukket én retning av kappløpet;
+den motsatte sto åpen. Vedtakstransaksjonen kan COMMITE rett før tidsgrensen utløper uten at
+kjøringen rekker å returnere — runneren ser en deadline-feil, setter jobben PENDING, og gjenforsøket
+starter med friskt gjerde. `runAssessment` spør nå om innleveringen allerede har et vedtak FØR den
+rører noe, og avslutter jobben som ferdig hvis den har det. Vedtaket er predikatet, ikke statusen.
+
+Også rettet: telleren i `queue-counts` hadde ingen leser — den driver nå merket på plattformlenka i
+toppmenyen, så en administrator ser opphopningen uten å gå innom siden.
+
+⚠️ Og kontraktsvakta hadde gjeninnført den vakuøse målingen i miniatyr: `toContain("/run")` besto
+kun fordi strengen fantes i en KODEKOMMENTAR. Den krever nå den faktiske admin-ruta og forbyr
+deltakerruta eksplisitt.
+
+### Tredje QA-runde: GO, og de tre siste funnene tatt med
+
+Porten bekreftet at krav 2-vakta ikke stopper noe legitimt: et nytt forsøk lager en ny innlevering,
+og anke og manuell overprøving går aldri gjennom `runAssessment`. Den fant også noe jeg ikke hadde
+tenkt på — `renewLease` rører ikke `lockedAt`, bare `leaseExpiresAt`. En lang, lovlig kjøring
+beholder derfor gjerdet sitt gjennom alle fornyelser og kan ikke bli avvist av seg selv.
+
+De tre gjenstående funnene er rettet:
+
+- **Deltakerruta lovet noe motoren nekter.** En strøket innlevering fikk 202 «lagt i kø», men
+  motoren stopper på vedtaket. Ruta svarer nå 409 for ETHVERT vedtak. Å kjøre vurderingen om igjen
+  på et strøket forsøk er dessuten karaktershopping — veien videre er et nytt forsøk.
+- **Lista er avkortet, telleren er ikke.** Ved over hundre samtidige ville merket sagt 140 og siden
+  vist 100 rader. Svaret bærer nå `total` og `shown`, og siden sier «Viser 100 / 140».
+- **Driftshåndboka sa fortsatt tre forsøk.** Env-tabellen er oppdatert med alle fem verdiene, med
+  begrunnelsen for karenstiden der drift faktisk leter.
+
+Nav-merket oppdateres nå også etter «kjør på nytt», så det ikke står igjen med et tall
+administratoren nettopp har gjort noe med.
+
+### Rotårsak, per stående ordre
+
+Tre runder, tolv funn. De faller i to grupper, og bare den ene er interessant.
+
+**Motoren var riktig hele veien.** Gjerdet, gjenforsøksstigen og karenstiden ble bekreftet i runde
+én og sto uendret gjennom alle tre rundene.
+
+**Alle tolv funnene satt i flaten eller i målingen av den.** Knappen som ikke kunne virke. Filteret
+som spiste seg selv i en objektspredning. Lista og telleren som spurte om ulike ting. Fire tester
+som var grønne uten å måle noe.
+
+Fellesnevneren er ikke uoppmerksomhet — det er at jeg **verifiserte at jeg hadde skrevet noe, ikke
+at det virket**. `toContain("/run")` fant strengen i en kommentar. `toBeHidden()` var sann fordi
+elementet ikke fantes. Begge er grønne av en grunn jeg ikke hadde tenkt på.
+
+Rutinen som følger av det er registrert som **#1013**: en vakt som avviser testpåstander som ikke
+kan bli røde. Ikke en regel til — `CLAUDE.md` sa allerede at tester skal kunne bli røde, og ordren
+ble brutt fire ganger dagen etter at den ble skrevet, av den som skrev den.
+
+### Enhetssuiten sto rød siden #946
+
+Fem testfiler feilet, oppdaget først nå. Ingen produktfeil — alle var attrapper som ikke kjente de
+nye kallene (en falsk transaksjonsklient uten `outboxEvent`, et kursrepo-mock uten
+`findCourseItemsForParticipant`). De sto røde fordi #946 og #966 kun ble kjørt mot
+integrasjonssuiten, aldri mot enhetssuiten, og QA-porten kjørte med `-SkipTests`.
+
+Samme feilform som sakene selv handler om, ett nivå opp: én flate verifisert, den andre antatt.
+
+## 2.32.0 - 2026-08-25
+
+### #966 — kursrapporten stiller nå samme krav som bevisporten
+
+Produkteier 2026-08-25: **alle seksjoner må være lest.**
+
+«Fullført kurs» ble besvart fem steder. Fire var enige; SMO-rapporten var ikke. Den telte bare
+moduler, så en deltaker med alle moduler bestått men uleste seksjoner sto som «Fullført» i
+rapporten — uten bevis, og uten å være ferdig. To visninger som sier ulikt om samme person.
+
+- `courseReport` regner nå `moduler + seksjoner`, som bevisporten og kurslista.
+- Seksjonskravet hentes fra SAMME dør som porten bruker (`findCourseItemsForParticipant`), så
+  seksjoner deltakeren ikke kan åpne ikke kan bli et uoppfyllelig krav.
+- `hasStarted` teller nå også lesing: den som bare har lest er i gang, ikke «ikke startet».
+
+⚠️ **Arkiverte moduler filtreres også bort her nå.** Porten har gjort det siden #945; rapporten
+kunne ikke — `findPublishedCoursesWithModuleDetails` hentet ikke `archivedAt`. Et kurs med en
+arkivert modul hadde derfor et uoppfyllelig krav i rapporten. Feltet hentes nå.
+
+Raden har fått `readSections` / `totalSections`, og tabellen en kolonne «Leste seksjoner» (tre
+språk). Uten den ville raden kunnet si «4/4 moduler» ved siden av «Pågår», og rapportleseren
+hadde ingen måte å se hvorfor. CSV-en er nøkkel-generisk og får feltene automatisk.
+
+**Vakten er mutasjonsverifisert — etter at første utgave ble avslørt som verdiløs.** Den hadde
+null moduler og én seksjon, var grønn, og FORBLE grønn da regelen ble reversert:
+`computeCourseStatus(0, 0)` gir NOT_STARTED uansett regel, og etter lesing kortslutter
+`learner.completion` til COMPLETED før regelen i det hele tatt kalles. Fiksturen har derfor nå en
+faktisk bestått modul. Med regelen reversert faller testen på
+`expected 'COMPLETED' to be 'IN_PROGRESS'`.
+
+
+### QA-runden: to regresjoner jeg innførte selv
+
+Porten ga NO-GO. Begge funnene var mine egne, og begge produserte tall som motsa hverandre i samme
+skjermbilde — feilen `resolveCourseParticipantIds`-kommentaren i samme fil sier ikke skal oppstå.
+
+- **Seksjonslesing var ikke datofiltrert.** Innleveringer og fullføringer er det. Med filteret «fra
+  1. august» ville en deltaker som ble ferdig i juni vist «0/4 moduler» ved siden av
+  «12/12 seksjoner», status «Pågår» og «Siste aktivitet: —» — pågående aktivitet i et vindu uten
+  aktivitet. `findReadSectionIdsForCourseParticipants` filtrerer nå på `readAt` i samme vindu.
+- **Arkivfilteret sto bare i drilldownen.** Sammendraget regnet unionen «aktiv = har levert på en av
+  kursets moduler» over det ufiltrerte modulsettet. Kursraden kunne si «10 innmeldte» mens
+  detaljvisningen viste 9 personer, og modullista fem moduler ved siden av rader som sa «4/4».
+  Begge flatene bruker nå `activeModules`.
+
+Et tredje funn ble også rettet: `hasStarted` telte lesing, men `latestActivityAt` gjorde det ikke,
+så en deltaker som bare hadde lest sto som «Pågår» med «Siste aktivitet: —». Lesetidspunktet
+inngår nå.
+
+Testen har fått en påstand om datovinduet, så funn 1 ikke kan komme tilbake.
+
+## 2.31.1 - 2026-08-25
+
+### #946 — fire veier utsteder kursbevis, nå er alle fire holdbare
+
+Utstedelsen av kursbevis skjedde på fire steder med tre ulike holdbarheter. To av dem var
+fire-and-forget: `checkAndIssueCourseCompletions(...).catch(log)` ble avfyrt etter at svaret var
+sendt, utenfor transaksjonen. Restartet containeren under en utrulling før den flytende promisen
+fullførte, var beviset tapt — ingen outbox-rad, ingen retry, kun en loggrad. Deltakeren sto igjen
+som OVERDUE og fikk forfalt-purring til hen selv åpnet bevissiden, som er det eneste stedet
+etterslepssveipen kjøres fra.
+
+| Vei | Før | Nå |
+|---|---|---|
+| Automatisk vurdering | outbox | uendret |
+| Anke (`appealService`) | `.catch(log)`, ikke ventet | outbox, inne i vedtakstransaksjonen |
+| Manuell behandling (`manualReviewService`) | `.catch(log)`, ikke ventet | outbox, inne i vedtakstransaksjonen |
+| Seksjon lest (`courses.ts`) | direkte kall, ikke atomisk | i transaksjon med `markSectionRead` |
+
+De to vedtaksveiene bruker den outbox-døra den automatiske stien allerede gikk gjennom
+(`OUTBOX_EVENT_TYPES.courseCompletionCheck`) — ingen ny hendelsestype, ingen ny håndterer, ingen
+migrasjon. Hendelsen commiter sammen med vedtaket: en krasj gir enten begge eller ingen.
+
+⚠️ Leseruten ble bevisst **ikke** flyttet til outboxen. Deltakeren står på siden og leser ferdig
+siste seksjon; der skal beviset finnes med én gang, ikke når workeren rekker det. Transaksjonen
+gir holdbarheten uten å gjøre utstedelsen asynkron.
+
+**Vakten er mutasjonsverifisert.** Testene måler differansen i antall `course_completion_check`-rader
+rundt selve kallet, ikke om det finnes en rad. Den automatiske vurderingen tidligere i samme test
+har allerede lagt sju slike rader for samme deltaker og modul — en eksistens-sjekk ville vært grønn
+også med fiksen reversert. Med fiksen reversert faller begge testene på `expected 7 to be 8`.
+
 ## 2.31.0 - 2026-08-25
 
 ⚠️ **#953 ble TRUKKET fra denne releasen etter andre NO-GO fra QA-porten.** Se under.

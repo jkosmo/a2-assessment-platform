@@ -15,10 +15,35 @@ import { logOperationalEvent } from "../../observability/operationalLog.js";
 import { auditActions, auditEntityTypes } from "../../observability/auditEvents.js";
 import { operationalEvents } from "../../observability/operationalEvents.js";
 import { alertOnStuckJobs, scanAndResetStaleJobs } from "./staleLockScanner.js";
+import { alertOnFailedAssessmentBacklog } from "./failedAssessmentAlert.js";
 
-export type AssessmentRunFn = (jobId: string) => Promise<void>;
+/**
+ * #953: kjøringens IDENTITET, ikke bare jobbens.
+ *
+ * En jobb kan kjøres flere ganger (gjenforsøk), og en kjøring som ble forlatt på tidsgrensen lever
+ * videre i bakgrunnen med samme jobb-id. `lockedAt` settes på nytt ved hver låsing og er derfor det
+ * eneste som skiller «denne kjøringen» fra «den forrige som vi ga opp å vente på».
+ *
+ * Gjerdet er PÅKREVD i signaturen. Gjort med vilje: en framtidig kaller skal ikke kunne skrive et
+ * vedtak uten å ta stilling til hvilken kjøring det tilhører.
+ */
+export type AssessmentRunFence = { lockedBy: string; lockedAt: Date };
+export type AssessmentRunFn = (jobId: string, fence: AssessmentRunFence) => Promise<void>;
 
 const ACTIVE_JOB_STATUSES = [AssessmentJobStatus.PENDING, AssessmentJobStatus.RUNNING];
+
+// #953: eksponentiell venting mellom gjenforsøk — samme form som outboxens `backoffMs`.
+//
+// ⚠️ Sto som en naken `30_000`. Med tre forsøk var hele vinduet under ett minutt, så en LLM-hikke
+// på to minutter brukte opp alt og etterlot innleveringen i PROCESSING for alltid. Tallet var ikke
+// feil i seg selv — det var for tett til å måle det det skulle måle: «er tjenesten nede, eller er
+// denne besvarelsen umulig å vurdere?». En venting på under ett minutt kan ikke skille de to.
+function retryBackoffMs(attempts: number): number {
+  return Math.min(
+    env.ASSESSMENT_JOB_RETRY_BASE_MS * 2 ** Math.max(0, attempts - 1),
+    env.ASSESSMENT_JOB_RETRY_CAP_MS,
+  );
+}
 
 export async function enqueueAssessmentJob(submissionId: string) {
   const existingPending = await assessmentJobRepository.findPendingOrRunningJobForSubmission(
@@ -119,6 +144,12 @@ export async function processSubmissionJobNow(runAssessment: AssessmentRunFn, su
 export async function processNextJob(runAssessment: AssessmentRunFn, submissionId?: string): Promise<boolean> {
   await scanAndResetStaleJobs();
   await alertOnStuckJobs();
+  // #953: varsler administratorer NÅR feilede vurderinger hoper seg opp. Egen karenstid inni, så
+  // den kan trygt kalles hver runde. Feil her skal ikke stanse jobbkjøringen — et uteblitt varsel
+  // er en dårlig dag, en stanset vurderingskø er en verre.
+  await alertOnFailedAssessmentBacklog().catch(() => {
+    /* varslingen logger selv; den skal aldri velte runneren */
+  });
 
   const now = new Date();
   const candidate = await assessmentJobRepository.findNextRunnableJob(
@@ -160,7 +191,9 @@ export async function processNextJob(runAssessment: AssessmentRunFn, submissionI
     // returns and the scanner/retry re-runs the job instead of it wedging. The deadline is set above the
     // worst-case legit assessment (primary + secondary LLM ≈ 2 × AZURE_OPENAI_TIMEOUT_MS + overhead).
     await runWithDeadline(
-      runAssessment(candidate.id),
+      // #953: `now` er nøyaktig det `tryLockPendingJob` skrev som `lockedAt` over — samme fence som
+      // de terminale skrivingene bruker. Vedtaket bæres dermed av DENNE låsingen.
+      runAssessment(candidate.id, { lockedBy: WORKER_INSTANCE_ID, lockedAt: now }),
       env.ASSESSMENT_JOB_MAX_RUNTIME_MS,
       `Assessment job ${candidate.id} exceeded the ${env.ASSESSMENT_JOB_MAX_RUNTIME_MS}ms runtime deadline (#856).`,
     );
@@ -181,7 +214,7 @@ export async function processNextJob(runAssessment: AssessmentRunFn, submissionI
         now,
         {
           status: willRetry ? AssessmentJobStatus.PENDING : AssessmentJobStatus.FAILED,
-          availableAt: willRetry ? new Date(Date.now() + 30_000) : job.availableAt,
+          availableAt: willRetry ? new Date(Date.now() + retryBackoffMs(job.attempts)) : job.availableAt,
           errorMessage: error instanceof Error ? error.message : "Unknown assessment error",
         },
       );
