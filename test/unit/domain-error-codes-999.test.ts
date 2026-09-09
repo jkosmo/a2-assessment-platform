@@ -35,9 +35,11 @@ const kilde = filer.map((f) => les(f)).join("\n");
 
 // ⚠️ Taket senkes når tallet går ned. Det er en RATSJ: den skal feile i begge retninger, så en
 // forbedring ikke går ubemerket forbi og en forverring ikke sniker seg inn.
-const TAK = 2;
+const TAK = 27;
+// 2026-09-09: 27 = 2 kastede + 25 håndbygde i ruter. De kastede gikk fra 35 til 2; de håndbygde
+// er ikke rørt ennå, og er neste porsjon.
 //
-// ⚠️ DE TO SISTE BLIR STÅENDE, OG DET ER EN AVGJØRELSE — IKKE RESTGJELD.
+// ⚠️ DE TO SISTE KASTEDE BLIR STÅENDE, OG DET ER EN AVGJØRELSE — IKKE RESTGJELD.
 //
 // En feilkode finnes for at klienten skal si det samme på brukerens språk. De to som er igjen er
 // ikke domeneregler noen kan handle på:
@@ -60,12 +62,27 @@ describe("#999 — domenevaktene skal bære koder", () => {
     expect(kilde).toContain("DomainRuleError");
   });
 
-  it("⚠️ antallet ValidationError uten kode går bare ned", () => {
-    const antall = (kilde.match(/new ValidationError\(/g) ?? []).length;
+  it("⚠️ antallet generiske validation_error går bare ned", () => {
+    // ⚠️ TO KILDER, IKKE ÉN. Ratsjen talte først bare `new ValidationError(`. Men 25 ruter bygger
+    // svaret for hånd — `response.status(400).json({ error: "validation_error", message: … })` —
+    // og de tar NØYAKTIG samme vei gjennom `api-error.js`: uten `issues` vises serverens setning
+    // ordrett.
+    //
+    // Med bare kastene talt sto tallet på 2 og så nesten ferdig ut, mens 25 gjensto. En måling som
+    // bare ser den ene halvdelen er verre enn ingen — den sier «vi er i mål» om noe som ikke er det.
+    //
+    // Zod-svarene (`issues` til stede) telles IKKE: de får den generiske overskriften med vilje,
+    // og detaljene i detaljfeltet. Det er #996 sin avgjørelse og skal stå.
+    const kastet = (kilde.match(/new ValidationError\(/g) ?? []).length;
+    const direkte = kilde
+      .split("\n")
+      .filter((l) => l.includes('error: "validation_error"') && !l.includes("issues")).length;
+    const antall = kastet + direkte;
 
     expect(
       antall,
-      `Det er nå ${antall} ValidationError uten kode; taket er ${TAK}.\n` +
+      `Det er nå ${antall} generiske validation_error; taket er ${TAK}.\n` +
+        `(${kastet} kastet, ${direkte} bygget for hånd i en rute — begge tar samme vei.)\n` +
         "Hver av dem viser serverens egen setning ordrett i brukerens grensesnitt, uansett språk.\n" +
         "Trenger den nye virkelig å være uten kode? Domeneregler skal kaste DomainRuleError.",
     ).toBeLessThanOrEqual(TAK);
