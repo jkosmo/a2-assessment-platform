@@ -35,9 +35,11 @@ const kilde = filer.map((f) => les(f)).join("\n");
 
 // ⚠️ Taket senkes når tallet går ned. Det er en RATSJ: den skal feile i begge retninger, så en
 // forbedring ikke går ubemerket forbi og en forverring ikke sniker seg inn.
-const TAK = 27;
-// 2026-09-09: 27 = 2 kastede + 25 håndbygde i ruter. De kastede gikk fra 35 til 2; de håndbygde
-// er ikke rørt ennå, og er neste porsjon.
+const TAK = 14;
+// 2026-09-09: 35 -> 27 -> 14. De kastede er nede i 2 (og blir stående, se under). Av de håndbygde
+// er reports.ts ryddet: fjorten svar viste seg å være TO meldinger — «Invalid report query
+// filters» sto ordrett tolv steder — og deler nå én kilde. 12 igjen i adminContent, calibration
+// og adminSections.
 //
 // ⚠️ DE TO SISTE KASTEDE BLIR STÅENDE, OG DET ER EN AVGJØRELSE — IKKE RESTGJELD.
 //
@@ -123,6 +125,15 @@ describe("#999 — domenevaktene skal bære koder", () => {
   it("⚠️ hver kode i src har tekst i ALLE tre språktabellene", () => {
     // Samme regel på N steder, håndhevet på N−1. En kode uten tekst er verre enn prosa: klienten
     // faller tilbake til den generiske «noe i skjemaet er feil utfylt», som er feil diagnose.
+    // ⚠️ AVGRENSET TIL `DomainRuleError`, OG DET ER RIKTIG SCOPE.
+    //
+    // Jeg utvidet den først til å ta ALLE `error: "kode"` i src. Da falt 56 koder ut som «mangler
+    // tekst» — men de er maskinvendte: agent-token, signaturer, nonce, og `*_failed`-innpakninger
+    // rundt interne feil. Å kreve nynorsk for `replayed_nonce` er meningsløst.
+    //
+    // `DomainRuleError` ER definisjonen på «en regel et menneske brøt og skal få vite om». Er en ny
+    // kode brukervendt, skal den kastes som en — ikke bygges for hånd i en rute. Det var nettopp
+    // det rapportkodene måtte rettes til.
     const koder = [...kilde.matchAll(/new DomainRuleError\(\s*"([a-z_]+)"/g)].map((m) => m[1]);
     expect(koder.length, "fant ingen koder — kontrollcase").toBeGreaterThan(4);
 

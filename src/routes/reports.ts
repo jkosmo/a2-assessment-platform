@@ -1,4 +1,6 @@
 import { Router } from "express";
+import { DomainRuleError } from "../errors/AppError.js";
+import type { NextFunction } from "express";
 import { z } from "zod";
 import { parseCsvFilter, parseQueryDate } from "./helpers/queryParsing.js";
 import {
@@ -63,10 +65,36 @@ const cohortQuerySchema = z.object({
   cohortBy: z.enum(["month", "department"]).optional(),
 });
 
+/**
+ * #999: rapportavslagene som koder.
+ *
+ * ⚠️ FJORTEN SVAR, TO MELDINGER. «Invalid report query filters.» sto ORDRETT tolv steder. Å gi hvert
+ * svar sin egen kode ville låst tolv kopier fast; de deler nå én kilde.
+ *
+ * ⚠️ OG DE GIKK SAMME VEI SOM DE KASTEDE. Et håndbygget `{ error: "validation_error", message }`
+ * uten `issues` behandles av `api-error.js` nøyaktig som en `ValidationError`: setningen vises
+ * ordrett, uansett hvilket språk brukeren har valgt. Ratsjen talte dem ikke før 2026-09-09, og da
+ * så saken nesten ferdig ut mens 25 slike gjensto.
+ */
+function avvisFiltre(next: NextFunction): void {
+  next(new DomainRuleError("report_filters_invalid", "Invalid report query filters."));
+}
+
+/**
+ * Rapporten trenger et valg — et kurs eller en modul — før den kan bygges.
+ *
+ * ⚠️ FELTNAVNET FØLGER SOM DATA. To av de fjorten svarene skilte seg bare ved hvilket felt de savnet.
+ * Med feltet i `details` kan klienten si «velg et kurs» eller «velg en modul» på brukerens språk,
+ * uten to nesten like koder.
+ */
+function avvisValg(next: NextFunction, field: "selectedCourseId" | "selectedModuleId"): void {
+  next(new DomainRuleError("report_selection_required", `A ${field} is required.`, { field }));
+}
+
 reportsRouter.get("/courses", async (request, response, next) => {
   const filters = parseReportFilters(request.query);
   if (!filters) {
-    response.status(400).json({ error: "validation_error", message: "Invalid report query filters." });
+    avvisFiltre(next);
     return;
   }
 
@@ -82,7 +110,7 @@ reportsRouter.get("/courses/details", async (request, response, next) => {
   const filters = parseReportFilters(request.query);
   const parsed = detailQuerySchema.safeParse(request.query);
   if (!filters || !parsed.success || !parsed.data.selectedCourseId) {
-    response.status(400).json({ error: "validation_error", message: "A selectedCourseId is required." });
+    avvisValg(next, "selectedCourseId");
     return;
   }
 
@@ -98,10 +126,10 @@ reportsRouter.get("/courses/details", async (request, response, next) => {
   }
 });
 
-reportsRouter.get("/completion", async (request, response) => {
+reportsRouter.get("/completion", async (request, response, next) => {
   const filters = parseReportFilters(request.query);
   if (!filters) {
-    response.status(400).json({ error: "validation_error", message: "Invalid report query filters." });
+    avvisFiltre(next);
     return;
   }
 
@@ -113,7 +141,7 @@ reportsRouter.get("/completion/details", async (request, response, next) => {
   const filters = parseReportFilters(request.query);
   const parsed = detailQuerySchema.safeParse(request.query);
   if (!filters || !parsed.success || !parsed.data.selectedModuleId) {
-    response.status(400).json({ error: "validation_error", message: "A selectedModuleId is required." });
+    avvisValg(next, "selectedModuleId");
     return;
   }
 
@@ -129,10 +157,10 @@ reportsRouter.get("/completion/details", async (request, response, next) => {
   }
 });
 
-reportsRouter.get("/pass-rates", async (request, response) => {
+reportsRouter.get("/pass-rates", async (request, response, next) => {
   const filters = parseReportFilters(request.query);
   if (!filters) {
-    response.status(400).json({ error: "validation_error", message: "Invalid report query filters." });
+    avvisFiltre(next);
     return;
   }
 
@@ -140,10 +168,10 @@ reportsRouter.get("/pass-rates", async (request, response) => {
   response.json(report);
 });
 
-reportsRouter.get("/manual-review-queue", async (request, response) => {
+reportsRouter.get("/manual-review-queue", async (request, response, next) => {
   const filters = parseReportFilters(request.query);
   if (!filters) {
-    response.status(400).json({ error: "validation_error", message: "Invalid report query filters." });
+    avvisFiltre(next);
     return;
   }
 
@@ -151,10 +179,10 @@ reportsRouter.get("/manual-review-queue", async (request, response) => {
   response.json(report);
 });
 
-reportsRouter.get("/appeals", async (request, response) => {
+reportsRouter.get("/appeals", async (request, response, next) => {
   const filters = parseReportFilters(request.query);
   if (!filters) {
-    response.status(400).json({ error: "validation_error", message: "Invalid report query filters." });
+    avvisFiltre(next);
     return;
   }
 
@@ -162,10 +190,10 @@ reportsRouter.get("/appeals", async (request, response) => {
   response.json(report);
 });
 
-reportsRouter.get("/mcq-quality", async (request, response) => {
+reportsRouter.get("/mcq-quality", async (request, response, next) => {
   const filters = parseReportFilters(request.query);
   if (!filters) {
-    response.status(400).json({ error: "validation_error", message: "Invalid report query filters." });
+    avvisFiltre(next);
     return;
   }
 
@@ -180,10 +208,10 @@ reportsRouter.get("/mcq-quality", async (request, response) => {
 // (ACTIVE / NOT_CERTIFIED), ikke en utløpsstatus utledet ved lesing. URL-en beholder det gamle
 // navnet: den er en offentlig flate uten kjent erstatning, og et navnebytte er en API-endring for
 // seg — samme expand/contract-avveining som for kolonnene.
-reportsRouter.get("/recertification", async (request, response) => {
+reportsRouter.get("/recertification", async (request, response, next) => {
   const filters = parseReportFilters(request.query);
   if (!filters) {
-    response.status(400).json({ error: "validation_error", message: "Invalid report query filters." });
+    avvisFiltre(next);
     return;
   }
 
@@ -191,10 +219,10 @@ reportsRouter.get("/recertification", async (request, response) => {
   response.json(report);
 });
 
-reportsRouter.get("/analytics/semantic-model", async (request, response) => {
+reportsRouter.get("/analytics/semantic-model", async (request, response, next) => {
   const filters = parseReportFilters(request.query);
   if (!filters) {
-    response.status(400).json({ error: "validation_error", message: "Invalid report query filters." });
+    avvisFiltre(next);
     return;
   }
 
@@ -202,10 +230,10 @@ reportsRouter.get("/analytics/semantic-model", async (request, response) => {
   response.json(report);
 });
 
-reportsRouter.get("/analytics/trends", async (request, response) => {
+reportsRouter.get("/analytics/trends", async (request, response, next) => {
   const filters = parseReportFilters(request.query);
   if (!filters) {
-    response.status(400).json({ error: "validation_error", message: "Invalid report query filters." });
+    avvisFiltre(next);
     return;
   }
   const parsed = trendQuerySchema.safeParse(request.query);
@@ -220,10 +248,10 @@ reportsRouter.get("/analytics/trends", async (request, response) => {
   response.json(report);
 });
 
-reportsRouter.get("/analytics/cohorts", async (request, response) => {
+reportsRouter.get("/analytics/cohorts", async (request, response, next) => {
   const filters = parseReportFilters(request.query);
   if (!filters) {
-    response.status(400).json({ error: "validation_error", message: "Invalid report query filters." });
+    avvisFiltre(next);
     return;
   }
   const parsed = cohortQuerySchema.safeParse(request.query);
@@ -238,10 +266,10 @@ reportsRouter.get("/analytics/cohorts", async (request, response) => {
   response.json(report);
 });
 
-reportsRouter.get("/analytics/data-quality", async (request, response) => {
+reportsRouter.get("/analytics/data-quality", async (request, response, next) => {
   const filters = parseReportFilters(request.query);
   if (!filters) {
-    response.status(400).json({ error: "validation_error", message: "Invalid report query filters." });
+    avvisFiltre(next);
     return;
   }
 
@@ -249,7 +277,7 @@ reportsRouter.get("/analytics/data-quality", async (request, response) => {
   response.json(report);
 });
 
-reportsRouter.get("/export", async (request, response) => {
+reportsRouter.get("/export", async (request, response, next) => {
   const parsed = exportQuerySchema.safeParse(request.query);
   if (!parsed.success) {
     response.status(400).json({ error: "validation_error", issues: parsed.error.issues });
@@ -258,7 +286,7 @@ reportsRouter.get("/export", async (request, response) => {
 
   const filters = parseReportFilters(parsed.data);
   if (!filters) {
-    response.status(400).json({ error: "validation_error", message: "Invalid report query filters." });
+    avvisFiltre(next);
     return;
   }
 
