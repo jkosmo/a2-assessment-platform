@@ -1,6 +1,6 @@
 import { prisma } from "../../db/prisma.js";
 import { runInTransaction, type DbTransactionClient } from "../../db/transaction.js";
-import { DomainRuleError, NotFoundError, ValidationError } from "../../errors/AppError.js";
+import { DomainRuleError, NotFoundError } from "../../errors/AppError.js";
 import { recordAuditEvent } from "../../services/auditService.js";
 import { auditActions, auditEntityTypes, agentAuthoringAuditMetadata, type AgentAuthoringContext } from "../../observability/auditEvents.js";
 import { assertCourseHasNoInProgressParticipants } from "./contentLifecycle.js";
@@ -33,22 +33,37 @@ export async function assertContentUsableInCourse(
       const found = await reader.module.count({ where: { id: { in: moduleIds } } });
       // ⚠️ To feil som MÅ kunne skilles. «Finnes ikke» om noe som finnes er en løgn, og forfatteren
       // mister informasjonen om hva hen skal gjøre — det var uklare feilmeldinger som ga oss #937.
-      throw new ValidationError(
-        found === moduleIds.length
-          ? "One or more modules are archived and cannot be added to a course."
-          : "One or more modules do not exist.",
-      );
+      // ⚠️ #999: skillet ligger nå i KODEN, ikke bare i setningen. Kommentaren over verner om at
+      // «finnes ikke» og «er arkivert» må kunne skilles — med to koder kan klienten faktisk skille
+      // dem på brukerens språk, i stedet for å vise serverens engelske setning ordrett.
+      throw found === moduleIds.length
+        ? new DomainRuleError(
+            "course_item_archived",
+            "One or more modules are archived and cannot be added to a course.",
+            { itemType: "MODULE" },
+          )
+        : new DomainRuleError(
+            "course_item_not_found",
+            "One or more modules do not exist.",
+            { itemType: "MODULE" },
+          );
     }
   }
   if (sectionIds.length > 0) {
     const usable = await reader.courseSection.count({ where: { id: { in: sectionIds }, archivedAt: null } });
     if (usable !== sectionIds.length) {
       const found = await reader.courseSection.count({ where: { id: { in: sectionIds } } });
-      throw new ValidationError(
-        found === sectionIds.length
-          ? "One or more sections are archived and cannot be added to a course."
-          : "One or more sections do not exist.",
-      );
+      throw found === sectionIds.length
+        ? new DomainRuleError(
+            "course_item_archived",
+            "One or more sections are archived and cannot be added to a course.",
+            { itemType: "SECTION" },
+          )
+        : new DomainRuleError(
+            "course_item_not_found",
+            "One or more sections do not exist.",
+            { itemType: "SECTION" },
+          );
     }
   }
 }
@@ -276,9 +291,13 @@ export async function deleteCourse(courseId: string, actorId?: string) {
   // author at archiving (the soft-delete) instead.
   const completionCount = await prisma.courseCompletion.count({ where: { courseId } });
   if (completionCount > 0) {
-    throw new ValidationError(
+    // ⚠️ ANTALLET SOM FELT, ikke som interpolert prosa — klienten skal kunne si «3 kursbevis» på
+    // brukerens språk uten å lese tallet ut av en engelsk setning.
+    throw new DomainRuleError(
+      "course_has_completions",
       `Cannot delete a course that has ${completionCount} completion${completionCount === 1 ? "" : "s"} ` +
         `(issued certificates). Archive the course instead to keep the completion records.`,
+      { count: completionCount },
     );
   }
 
@@ -323,10 +342,18 @@ export async function setCourseItems(
   const moduleIds = items.flatMap((i) => (i.type === "MODULE" ? [i.moduleId] : []));
   const sectionIds = items.flatMap((i) => (i.type === "SECTION" ? [i.sectionId] : []));
   if (new Set(moduleIds).size !== moduleIds.length) {
-    throw new ValidationError("A module may appear only once in a course.");
+    throw new DomainRuleError(
+      "course_duplicate_item",
+      "A module may appear only once in a course.",
+      { itemType: "MODULE" },
+    );
   }
   if (new Set(sectionIds).size !== sectionIds.length) {
-    throw new ValidationError("A section may appear only once in a course.");
+    throw new DomainRuleError(
+      "course_duplicate_item",
+      "A section may appear only once in a course.",
+      { itemType: "SECTION" },
+    );
   }
   await assertContentUsableInCourse(reader, { moduleIds, sectionIds });
 

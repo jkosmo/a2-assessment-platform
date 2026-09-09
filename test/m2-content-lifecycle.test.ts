@@ -393,6 +393,12 @@ describe("#938: arkivert innhold kan ikke legges inn i et kurs", () => {
 
     expect(res.status).toBe(400);
     // «One or more sections do not exist» ville vært en løgn — den finnes, den kan bare ikke brukes.
+    //
+    // ⚠️ #999: PÅSTANDEN GJELDER KODEN, ikke setningen. Da vaktene fikk koder overlevde en mutasjon
+    // som slo `course_item_not_found` og `course_item_archived` sammen til én — fordi denne testen
+    // bare leste prosaen, og prosaen var uendret. Koden er kontrakten; teksten er oversettbar og
+    // kan skifte uten at noe er galt.
+    expect(res.body.error, "arkivert og finnes-ikke må ha hver sin kode").toBe("course_item_archived");
     expect(JSON.stringify(res.body)).toMatch(/archived/i);
 
     const items = await prisma.courseItem.count({ where: { courseId: course.id } });
@@ -453,6 +459,8 @@ describe("#938: arkivert innhold kan ikke legges inn i et kurs", () => {
       .send({ items: [{ type: "SECTION", sectionId: "finnes-ikke-i-det-hele-tatt" }] });
 
     expect(res.status).toBe(400);
+    // ⚠️ #999: koden først, prosaen som støtte. Se forklaringen ved søstertesten over.
+    expect(res.body.error, "finnes-ikke skal ikke dele kode med arkivert").toBe("course_item_not_found");
     expect(JSON.stringify(res.body)).toMatch(/do not exist/i);
     expect(JSON.stringify(res.body)).not.toMatch(/archived/i);
   });
@@ -518,6 +526,8 @@ describe("#938: arkivert innhold kan ikke legges inn i et kurs", () => {
       .send({ modules: [{ moduleId: "finnes-ikke", sortOrder: 0 }] });
 
     expect(res.status).toBe(400);
+    // ⚠️ #999: koden først, prosaen som støtte. Se forklaringen ved søstertesten over.
+    expect(res.body.error, "finnes-ikke skal ikke dele kode med arkivert").toBe("course_item_not_found");
     expect(JSON.stringify(res.body)).toMatch(/do not exist/i);
     expect(JSON.stringify(res.body)).not.toMatch(/archived/i);
   });

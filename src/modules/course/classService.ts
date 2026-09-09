@@ -1,6 +1,6 @@
 import { prisma } from "../../db/prisma.js";
 import { runInTransaction } from "../../db/transaction.js";
-import { NotFoundError, ValidationError } from "../../errors/AppError.js";
+import { DomainRuleError, NotFoundError } from "../../errors/AppError.js";
 import { recordAuditEvent } from "../../services/auditService.js";
 import { auditActions, auditEntityTypes } from "../../observability/auditEvents.js";
 import { localizeContentText } from "../../i18n/content.js";
@@ -24,7 +24,7 @@ async function requireClass(classId: string) {
 
 export async function createClass(input: { name: string; description?: string | null }, actorId: string | null) {
   const name = input.name?.trim();
-  if (!name) throw new ValidationError("Class name is required.");
+  if (!name) throw new DomainRuleError("class_name_required", "Class name is required.");
   const created = await runInTransaction(async (tx) => {
     const repo = createClassRepository(tx);
     const klass = await repo.createClass({ name, description: input.description ?? null, createdById: actorId });
@@ -49,7 +49,16 @@ export async function createClass(input: { name: string; description?: string | 
 
 export async function archiveClass(classId: string, actorId: string | null) {
   const klass = await requireClass(classId);
-  if (klass.isSystem) throw new ValidationError("System classes cannot be archived.");
+  if (klass.isSystem) {
+    // ⚠️ #999: samme regel som ved gjenoppretting under, men ULIK handling. Koden er felles og
+    // handlingen følger som felt — ellers ville klienten trengt to koder for én regel, eller
+    // mistet hvilken handling som ble avvist.
+    throw new DomainRuleError(
+      "system_class_immutable",
+      "System classes cannot be archived.",
+      { action: "archive" },
+    );
+  }
   await runInTransaction(async (tx) => {
     const repo = createClassRepository(tx);
     await repo.archiveClass(classId);
@@ -68,7 +77,13 @@ export async function archiveClass(classId: string, actorId: string | null) {
 
 export async function restoreClass(classId: string, actorId: string | null) {
   const klass = await requireClass(classId);
-  if (klass.isSystem) throw new ValidationError("System classes are never archived.");
+  if (klass.isSystem) {
+    throw new DomainRuleError(
+      "system_class_immutable",
+      "System classes are never archived.",
+      { action: "restore" },
+    );
+  }
   if (!klass.archivedAt) return; // already active — idempotent no-op
   await runInTransaction(async (tx) => {
     const repo = createClassRepository(tx);
@@ -89,10 +104,15 @@ export async function restoreClass(classId: string, actorId: string | null) {
 export async function addMember(classId: string, userId: string, actorId: string | null) {
   const klass = await requireClass(classId);
   if (klass.isSystem || klass.kind !== "MANUAL") {
-    throw new ValidationError("Members can only be managed on manual (non-system) classes.");
+    throw new DomainRuleError(
+      "system_class_immutable",
+      "Members can only be managed on manual (non-system) classes.",
+      { action: "manage_members" },
+    );
   }
   const user = await prisma.user.findUnique({ where: { id: userId }, select: { id: true } });
-  if (!user) throw new ValidationError(`Unknown user id: ${userId}.`);
+  // ⚠️ Id-en som felt: klienten skal kunne navngi HVEM som mangler uten å parse en setning.
+  if (!user) throw new DomainRuleError("unknown_user", `Unknown user id: ${userId}.`, { userId });
   await runInTransaction(async (tx) => {
     const repo = createClassRepository(tx);
     await repo.addMember(classId, userId, actorId);
@@ -161,7 +181,9 @@ export async function assignCourseToClass(courseId: string, classId: string, due
   });
   if (!course) throw new NotFoundError("Course", "course_not_found", "Course not found.");
   // #688: archived courses are retired and must not be assignable to a class.
-  if (course.archivedAt) throw new ValidationError("Cannot assign an archived course.");
+  if (course.archivedAt) {
+    throw new DomainRuleError("course_archived", "Cannot assign an archived course.");
+  }
   await runInTransaction(async (tx) => {
     const repo = createClassRepository(tx);
     await repo.assignCourseToClass(courseId, classId, dueAt, actorId);
