@@ -35,7 +35,9 @@ const kilde = filer.map((f) => les(f)).join("\n");
 
 // ⚠️ Taket senkes når tallet går ned. Det er en RATSJ: den skal feile i begge retninger, så en
 // forbedring ikke går ubemerket forbi og en forverring ikke sniker seg inn.
-const TAK = 30;
+const TAK = 21;
+// 2026-09-09: 35 -> 34 (#1001) -> 30 (seksjonsvaktene) -> 21 (vedleggene). De ni vedleggskastene
+// ble til fem koder, fordi tre av dem var ordrette duplikater som nå deler én kilde.
 
 describe("#999 — domenevaktene skal bære koder", () => {
   it("kontrollcase: vi leser faktisk kildekoden", () => {
