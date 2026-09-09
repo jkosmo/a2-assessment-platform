@@ -250,10 +250,33 @@ function resolveCourseLocalizationSourceLocale(currentValues, initialValues) {
   return null;
 }
 
+/**
+ * #1037: en oversettelse som ikke kom, skal se ut som en oversettelse som ikke kom.
+ *
+ * ⚠️ SKREV TIDLIGERE KILDETEKSTEN INN I MÅLLOKALET. To steder gjorde det: `|| sourceTitle` når
+ * svaret manglet feltet, og `catch`-blokka ved nettverksfeil. Resultatet var et fullt trespråkskart
+ * som PÅSTO at kurset var oversatt — og løgnen ble fortalt nettopp når noe allerede hadde gått galt,
+ * mens forfatteren så en feilmelding om noe annet.
+ *
+ * Nedstrøms trodde publiseringsgaten at kurset var ferdig, oversettelsesstatusen i lista viste det
+ * som komplett, og en nynorskdeltaker fikk bokmål servert som nynorsk. Det er #892-invarianten
+ * brutt stille.
+ *
+ * ⚠️ #930 DEKKET IKKE DETTE. Den sørget for at innhold skrevet i ETT språk bærer hvilket. Denne
+ * stien skriver TRE, og ligger derfor utenfor.
+ *
+ * Retter etter #982/#905-mønsteret: lokalen SLIPPES, og føres opp i `failedLocales` slik at kalleren
+ * kan si fra. Stillhet her var halve #892 — derfor returnerer funksjonen listen, og begge kallerne
+ * viser den.
+ *
+ * `preserveExisting` er urørt: redigerer man et kurs som allerede har en oversettelse, beholdes den
+ * når en ny ikke kom. Det er ikke en løgn — teksten ER oversatt, bare ikke på nytt.
+ */
 async function localizeCourseCopyAcrossLocales({ titleValues, descriptionValues, sourceLocale, preserveExisting = false }) {
   const localized = {
     title: cloneLocalizedFieldValues(titleValues),
     description: cloneLocalizedFieldValues(descriptionValues),
+    failedLocales: [],
   };
 
   const sourceTitle = localized.title[sourceLocale]?.trim() ?? "";
@@ -279,24 +302,54 @@ async function localizeCourseCopyAcrossLocales({ titleValues, descriptionValues,
         }),
       });
 
+      // ⚠️ INGEN `|| sourceTitle` HER. Kom det ingen oversettelse, blir lokalen stående tom — med
+      // mindre det ALLEREDE fantes en, og vi er i redigeringsmodus.
+      let feilet = false;
       if (hasSourceTitle) {
-        localized.title[targetLocale] = result?.title?.trim?.() || (preserveExisting ? localized.title[targetLocale] : "") || sourceTitle;
+        const oversatt = result?.title?.trim?.() || "";
+        const beholdt = preserveExisting ? localized.title[targetLocale] : "";
+        localized.title[targetLocale] = oversatt || beholdt || "";
+        if (!oversatt && !beholdt) feilet = true;
       }
       if (hasSourceDescription) {
-        localized.description[targetLocale] =
-          result?.description?.trim?.() || (preserveExisting ? localized.description[targetLocale] : "") || sourceDescription;
+        const oversatt = result?.description?.trim?.() || "";
+        const beholdt = preserveExisting ? localized.description[targetLocale] : "";
+        localized.description[targetLocale] = oversatt || beholdt || "";
+        if (!oversatt && !beholdt) feilet = true;
       }
+      if (feilet) localized.failedLocales.push(targetLocale);
     } catch {
-      if (hasSourceTitle && !localized.title[targetLocale]) {
-        localized.title[targetLocale] = sourceTitle;
-      }
-      if (hasSourceDescription && !localized.description[targetLocale]) {
-        localized.description[targetLocale] = sourceDescription;
+      // ⚠️ NETTVERKSFEILEN VAR DEN VERSTE VARIANTEN: den fylte tre språk med kildeteksten mens
+      // forfatteren så en feilmelding om noe helt annet. Nå slippes lokalen, og kalleren sier fra.
+      const beholdtTittel = preserveExisting ? localized.title[targetLocale] : "";
+      const beholdtBeskrivelse = preserveExisting ? localized.description[targetLocale] : "";
+      if (hasSourceTitle) localized.title[targetLocale] = beholdtTittel || "";
+      if (hasSourceDescription) localized.description[targetLocale] = beholdtBeskrivelse || "";
+      if ((hasSourceTitle && !beholdtTittel) || (hasSourceDescription && !beholdtBeskrivelse)) {
+        localized.failedLocales.push(targetLocale);
       }
     }
   }
 
   return localized;
+}
+
+/**
+ * #1037: si fra når en oversettelse ikke kom.
+ *
+ * ⚠️ STILLHET VAR HALVE #892. Å slutte å fylle kildetekst inn i mållokalet er bare halve rettingen:
+ * hvis ingenting sier fra, tror forfatteren fortsatt at kurset er ferdig oversatt — forskjellen er
+ * bare at nå er feltet tomt i stedet for feilmerket. Begge kallerne må derfor vise dette.
+ *
+ * Meldingen er en advarsel, ikke en feil: lagringen GIKK gjennom, og kildespråket er lagret riktig.
+ */
+function meldFeiledeLokaler(failedLocales) {
+  if (!failedLocales?.length) return;
+  showToast(
+    `Lagret, men oversettelsen kom ikke for: ${failedLocales.join(", ")}. ` +
+      "Innholdet er ikke merket som oversatt til disse språkene — bruk «Oversett» for å prøve igjen.",
+    "error",
+  );
 }
 
 const CERT_LABELS = { basic: "Basic", intermediate: "Intermediate", advanced: "Advanced" };
@@ -1123,6 +1176,7 @@ async function convCreateCourse() {
       descriptionValues: {},
       sourceLocale,
     });
+    meldFeiledeLokaler(localizedValues.failedLocales);
     const normalizedTitle = normalizeLocalizedRequestValue(localizedValues.title) ?? convTitle;
 
     const body = await apiFetch("/api/admin/content/courses", getHeaders, {
@@ -1679,6 +1733,7 @@ async function saveCourse(courseId) {
         preserveExisting: true,
       })
     : cloneCourseLocaleValues(collectedValues);
+  meldFeiledeLokaler(effectiveValues.failedLocales);
   const normalizedTitle = normalizeLocalizedRequestValue(effectiveValues.title);
   const normalizedDescription = normalizeLocalizedRequestValue(effectiveValues.description);
 
