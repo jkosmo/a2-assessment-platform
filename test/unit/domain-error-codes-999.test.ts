@@ -33,18 +33,28 @@ function alleTsFiler(dir: URL): URL[] {
 const filer = alleTsFiler(ROT);
 const kilde = filer.map((f) => les(f)).join("\n");
 
-// ⚠️ Taket senkes når tallet går ned. Det er en RATSJ: den skal feile i begge retninger, så en
-// forbedring ikke går ubemerket forbi og en forverring ikke sniker seg inn.
-const TAK = 14;
-// 2026-09-09: 35 -> 27 -> 14. De kastede er nede i 2 (og blir stående, se under). Av de håndbygde
-// er reports.ts ryddet: fjorten svar viste seg å være TO meldinger — «Invalid report query
-// filters» sto ordrett tolv steder — og deler nå én kilde. 12 igjen i adminContent, calibration
-// og adminSections.
+// ⚠️ RATSJ: tallet kan gå ned, aldri opp. Går det ned, settes TAK ned i SAMME commit — ellers
+// måler den ingenting fra da av. Den skal altså feile i begge retninger.
+const TAK = 13;
+
+// HISTORIKK, så neste porsjon vet hvor den skal lete:
 //
-// ⚠️ DE TO SISTE KASTEDE BLIR STÅENDE, OG DET ER EN AVGJØRELSE — IKKE RESTGJELD.
+//   35  da saken ble skrevet
+//   34  #1001 ga publiseringsporten en kode
+//   30  de fire seksjonsvaktene — den siste norske prosaen i kastene
+//   21  vedleggene: ni kast viste seg å være fem regler, tre av dem ordrette duplikater
+//   14  påmelding, kursbevisbakgrunn, kaskadesletting, eksporttak, vedleggsimport
+//   13  rapportrutene: fjorten svar var TO meldinger, «Invalid report query filters» sto tolv
+//       ganger ordrett
 //
-// En feilkode finnes for at klienten skal si det samme på brukerens språk. De to som er igjen er
-// ikke domeneregler noen kan handle på:
+// ⚠️ TALLET DEKKET LENGE BARE HALVE SANNHETEN. Ratsjen talte først bare `new ValidationError(`,
+// mens 25 ruter bygde svaret for hånd med `{ error: "validation_error", message }` — samme vei
+// gjennom `api-error.js`, samme skade. Det sto som «2 igjen» mens 27 gjensto.
+//
+// ── HVA SOM STÅR IGJEN, OG HVORFOR ────────────────────────────────────────────────────────────
+//
+// ⚠️ DE 2 KASTEDE BLIR STÅENDE. En feilkode finnes for at klienten skal si det samme på brukerens
+// språk. Disse to er ikke domeneregler noen kan handle på:
 //
 //   entraUserSyncService — en KONFIGURASJONSFEIL som navngir en miljøvariabel. Å oversette
 //   «ENTRA_USER_SYNC_GROUP_ID er ikke satt» til nynorsk hjelper ingen.
@@ -52,9 +62,14 @@ const TAK = 14;
 //   submissionService — en INTERN INVARIANT. Fyrer den, er dataene inkonsistente, og svaret er en
 //   feilrapport — ikke en setning som ber brukeren gjøre noe hen ikke kan gjøre.
 //
-// Å kode dem ville fått tallet til null og gjort tekstene til en løgn om hvem de er til for.
-// 2026-09-09: 35 -> 34 (#1001) -> 30 (seksjonsvaktene) -> 21 (vedleggene). De ni vedleggskastene
-// ble til fem koder, fordi tre av dem var ordrette duplikater som nå deler én kilde.
+// ⚠️ DE 11 HÅNDBYGDE ER EN ANNEN SAK. «url is required», «invalid locale», «validFrom/validTo må
+// være ISO-verdier», «Missing file» er FORMVALIDERING, ikke domeneregler — forespørselen har feil
+// form, ingen har brutt en regel om innholdet.
+//
+// #996 avgjorde allerede formen: Zod-svar bærer `issues`, får den generiske overskriften, og
+// detaljene i detaljfeltet. Riktig fiks er å flytte dem inn i skjemaene — ikke å gi dem
+// DomainRuleError-koder, som ville påstått at de er noe de ikke er. De ligger i adminContent (8),
+// calibration (2) og adminSections (1).
 
 describe("#999 — domenevaktene skal bære koder", () => {
   it("kontrollcase: vi leser faktisk kildekoden", () => {
@@ -78,7 +93,14 @@ describe("#999 — domenevaktene skal bære koder", () => {
     const kastet = (kilde.match(/new ValidationError\(/g) ?? []).length;
     const direkte = kilde
       .split("\n")
-      .filter((l) => l.includes('error: "validation_error"') && !l.includes("issues")).length;
+      // ⚠️ KOMMENTARLINJER TELLES IKKE. Vakta talte sin egen forklaring i reports.ts, der frasen
+      // står sitert. En vakt som teller prosa måler ikke oppførsel — samme feil som #1037-vakta
+      // gjorde da den sto rød på sin egen kommentar.
+      .filter((l) => {
+        const t = l.trim();
+        if (t.startsWith("//") || t.startsWith("*")) return false;
+        return t.includes('error: "validation_error"') && !t.includes("issues");
+      }).length;
     const antall = kastet + direkte;
 
     expect(
