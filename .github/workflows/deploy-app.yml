@@ -102,8 +102,16 @@ jobs:
             -AzureFederatedTenantId "${{ secrets.AZURE_TENANT_ID }}" `
             -SkipInfra "true"
 
+      # ⚠️ always(), IKKE success(). Røyktesten er det eneste maskinelle beviset på at appen faktisk
+      # svarer etter en deploy, og den ble hoppet over 2026-09-09 nettopp da vi trengte den:
+      # stabilitetssjekken ga opp to minutter for tidlig, jobben feilet, og steget under kjørte
+      # aldri. Deployen HADDE lykkes — men ingen maskin bekreftet det, og verifiseringen måtte gjøres
+      # for hånd.
+      #
+      # Å hoppe over verifiseringen når noe uvanlig skjedde er å slå av instrumentet i det øyeblikket
+      # man trenger det. Feilet deployen på ekte, feiler røyktesten også, og da sier den det.
       - name: Post-deploy /healthz smoke test
-        if: success()
+        if: always()
         shell: bash
         run: bash ./scripts/azure/post-deploy-smoke.sh "${{ vars.AZURE_RESOURCE_GROUP }}"
 
@@ -162,7 +170,15 @@ jobs:
             -AzureFederatedTenantId "${{ secrets.AZURE_TENANT_ID }}" `
             -SkipInfra "true"
 
+      # ⚠️ always(), IKKE success(). Røyktesten er det eneste maskinelle beviset på at appen faktisk
+      # svarer etter en deploy, og den ble hoppet over 2026-09-09 nettopp da vi trengte den:
+      # stabilitetssjekken ga opp to minutter for tidlig, jobben feilet, og steget under kjørte
+      # aldri. Deployen HADDE lykkes — men ingen maskin bekreftet det, og verifiseringen måtte gjøres
+      # for hånd.
+      #
+      # Å hoppe over verifiseringen når noe uvanlig skjedde er å slå av instrumentet i det øyeblikket
+      # man trenger det. Feilet deployen på ekte, feiler røyktesten også, og da sier den det.
       - name: Post-deploy /healthz smoke test
-        if: success()
+        if: always()
         shell: bash
         run: bash ./scripts/azure/post-deploy-smoke.sh "${{ vars.AZURE_RESOURCE_GROUP }}"
