@@ -5,6 +5,26 @@ on:
   push:
     branches:
       - main
+      # ⚠️ `dev` LAGT TIL 2026-09-09. Porten sto ikke der arbeidet skjer.
+      #
+      # CI kjørte bare på pull request og på push til `main`. Alt utviklingsarbeid skjer på `dev`,
+      # og PR-er til main åpnes med uker mellomrom — sist 25. august. Resultatet var at `npm test`
+      # sto RØD i to uker uten at noen så det: elleve DOM-tester falt på «document is not defined»
+      # fordi den delte konfigen kjørte dem i `node` uten jsdom.
+      #
+      # Den ble oppdaget først da dev → main ble åpnet som #1050, altså to uker etter at den oppsto.
+      # En port som ikke står der arbeidet er, fanger ingenting.
+      - dev
+
+# ⚠️ Eldre kjøringer avbrytes. Uten dette ville hver push til `dev` legge seg i kø bak den
+# forrige, og en serie raske pushes ville brukt runner-tid på å teste mellomtilstander ingen
+# bryr seg om. Vi vil vite om SISTE tilstand er grønn.
+#
+# `deploy-app.yml` bruker bevisst `cancel-in-progress: false` — en halvferdig deploy skal ikke
+# avbrytes. Her er det motsatt: en halvferdig testkjøring er verdiløs.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true

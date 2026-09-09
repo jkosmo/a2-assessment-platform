@@ -67,3 +67,39 @@ describe("deployen verifiseres av en maskin, uansett utfall", () => {
     ).toBeGreaterThanOrEqual(20);
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// VAKT: porten skal stå der arbeidet er.
+//
+// ⚠️ MÅLT KONSEKVENS. CI kjørte bare på pull request og på push til `main`. Alt arbeid skjer på
+// `dev`, og PR-er til main åpnes med uker mellomrom. `npm test` sto derfor RØD i to uker — elleve
+// DOM-tester falt på «document is not defined» — og ble oppdaget først da dev → main ble åpnet.
+//
+// Det er samme feilklasse som har truffet oss flere ganger: et signal ingen ser, er ikke et signal.
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("CI kjører der arbeidet skjer", () => {
+  it("⚠️ CI utløses av pushes til dev, ikke bare til main", () => {
+    const yml = les("../../.github/workflows/ci.yml");
+    const start = yml.indexOf("on:");
+    const slutt = yml.indexOf("\nenv:", start);
+    expect(start, "fant ikke on-blokken — kontrollcase").toBeGreaterThanOrEqual(0);
+
+    const blokk = yml.slice(start, slutt);
+    expect(
+      blokk,
+      "CI må kjøre på dev. Uten det står porten bare ved main, og feil kan ligge rødt i ukevis " +
+        "mens arbeidet fortsetter — slik jsdom-feilen gjorde i to uker.",
+    ).toMatch(/^\s*-\s*dev\s*$/m);
+
+    // ⚠️ Kontrollcase: main skal fortsatt være der. Uten denne kunne noen byttet ut main med dev
+    // og testen ville sett like grønn ut, mens porten på standardgrenen forsvant.
+    expect(blokk, "main skal fortsatt utløse CI").toMatch(/^\s*-\s*main\s*$/m);
+  });
+
+  it("⚠️ eldre CI-kjøringer avbrytes, så køen ikke tester mellomtilstander", () => {
+    const yml = les("../../.github/workflows/ci.yml");
+    expect(yml, "uten concurrency stables kjøringene ved raske pushes").toContain("concurrency:");
+    expect(yml).toContain("cancel-in-progress: true");
+  });
+});
