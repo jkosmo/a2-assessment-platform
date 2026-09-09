@@ -248,7 +248,10 @@ describe("#749 section-asset export/import round-trip", () => {
         mode: "createNew",
       });
     expect(disallowed.status).toBe(400);
-    expect(disallowed.body.error).toBe("validation_error");
+    // ⚠️ #999: PÅSTANDEN ER STRAMMET INN, ikke løsnet. `validation_error` var det generiske svaret
+    // som viste serverens engelske setning ordrett. Nå bærer avslaget en kode klienten kan
+    // oversette — og testen sier hvilken, så en sammenslåing av koder blir rød.
+    expect(disallowed.body.error).toBe("section_asset_import_failed");
 
     const oversizedBuffer = Buffer.alloc(MAX_ASSET_BYTES + 1, 0x41);
     const oversized = await request(app)
@@ -265,7 +268,7 @@ describe("#749 section-asset export/import round-trip", () => {
         mode: "createNew",
       });
     expect(oversized.status).toBe(400);
-    expect(oversized.body.error).toBe("validation_error");
+    expect(oversized.body.error).toBe("section_asset_import_failed");
   });
 
   it("(d) rejects a total envelope over the 25 MB asset cap on export", async () => {
@@ -278,8 +281,11 @@ describe("#749 section-asset export/import round-trip", () => {
 
     const exportRes = await request(app).get(`/api/admin/content/courses/${courseId}/export-package`).set(adminHeaders);
     expect(exportRes.status).toBe(400);
-    expect(exportRes.body.error).toBe("validation_error");
+    expect(exportRes.body.error).toBe("export_asset_cap_exceeded");
     expect(String(exportRes.body.message)).toMatch(/cap/i);
+    // ⚠️ Og tallene skal ligge som DATA, ikke bare i setningen — det var hele poenget i #999.
+    expect(exportRes.body.details?.maxBytes, "grensen skal følge med som felt").toBeGreaterThan(0);
+    expect(exportRes.body.details?.bytes, "og den faktiske summen").toBeGreaterThan(0);
   });
 
   it("(f) #754 remaps refs whose sourceId contains hyphens/underscores (agent fallback files)", async () => {

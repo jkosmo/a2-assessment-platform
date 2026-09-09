@@ -1,6 +1,6 @@
 import type { CourseEnrollmentSource, AppRole as AppRoleType } from "@prisma/client";
 import { prisma } from "../../db/prisma.js";
-import { NotFoundError, ValidationError } from "../../errors/AppError.js";
+import { DomainRuleError, NotFoundError } from "../../errors/AppError.js";
 import { recordAuditEvent } from "../../services/auditService.js";
 import { auditActions, auditEntityTypes } from "../../observability/auditEvents.js";
 import { enrollmentRepository, createEnrollmentRepository } from "./enrollmentRepository.js";
@@ -55,7 +55,10 @@ export async function assignEnrollments(
   const byDepartment = typeof input.department === "string" && input.department.trim().length > 0;
   const explicitUserIds = (input.userIds ?? []).filter((id) => typeof id === "string" && id.length > 0);
   if (!byDepartment && explicitUserIds.length === 0) {
-    throw new ValidationError("Provide userIds or a department to assign.");
+    throw new DomainRuleError(
+      "enrollment_target_missing",
+      "Provide userIds or a department to assign.",
+    );
   }
   const source: CourseEnrollmentSource = byDepartment ? "DEPARTMENT" : "INDIVIDUAL";
 
@@ -72,7 +75,12 @@ export async function assignEnrollments(
     const foundIds = new Set(found.map((u) => u.id));
     const missing = userIds.filter((id) => !foundIds.has(id));
     if (missing.length > 0) {
-      throw new ValidationError(`Unknown user id(s): ${missing.join(", ")}.`);
+      // ⚠️ Id-ene som felt: klienten skal kunne navngi HVEM som mangler, ikke parse en setning.
+      throw new DomainRuleError(
+        "unknown_user",
+        `Unknown user id(s): ${missing.join(", ")}.`,
+        { userIds: missing },
+      );
     }
   }
 
@@ -151,7 +159,13 @@ export async function revokeEnrollment(courseId: string, userId: string, actorId
 export async function selfEnroll(courseId: string, userId: string): Promise<void> {
   const course = await requireCourse(courseId);
   if (course.enrollmentPolicy !== "OPEN") {
-    throw new ValidationError("This course is restricted — self-enrolment is not allowed.");
+    // ⚠️ DEN ENESTE DELTAKERVENDTE I HELE SETTET. De andre møter forfattere og administratorer;
+    // denne møter en kandidat som prøver å melde seg på selv. Da er riktig språk ikke en
+    // finesse — det er hele beskjeden.
+    throw new DomainRuleError(
+      "course_enrolment_restricted",
+      "This course is restricted — self-enrolment is not allowed.",
+    );
   }
   await runInTransaction(async (tx) => {
     const repo = createEnrollmentRepository(tx);

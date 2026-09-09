@@ -1,6 +1,6 @@
 import { prisma } from "../../db/prisma.js";
 import { runInTransaction } from "../../db/transaction.js";
-import { NotFoundError, ValidationError } from "../../errors/AppError.js";
+import { DomainRuleError, NotFoundError } from "../../errors/AppError.js";
 import { recordAuditEvent } from "../../services/auditService.js";
 import { auditActions, auditEntityTypes } from "../../observability/auditEvents.js";
 import { localizeContentText } from "../../i18n/content.js";
@@ -196,8 +196,13 @@ export async function cascadeDeleteCourse(
   const analysis = await analyzeCourseCascade(courseId);
 
   if (analysis.blockers.length > 0) {
-    throw new ValidationError(
-      `Kan ikke slette kurset: ${analysis.blockers.map((b) => b.reason).join(" ")}`,
+    // ⚠️ #999: DEN SISTE NORSKE PROSAEN I SETTET. Den ble vist ordrett i et engelsk grensesnitt.
+    //
+    // Blokkeringene lå allerede som data i `details` — det var bare selve setningen som var norsk,
+    // og som klienten ikke kunne oversette fordi kastet manglet en kode.
+    throw new DomainRuleError(
+      "course_cascade_blocked",
+      `Cannot delete the course: ${analysis.blockers.map((b) => b.reason).join(" ")}`,
       { blockers: analysis.blockers },
     );
   }

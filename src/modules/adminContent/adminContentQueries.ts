@@ -2,7 +2,7 @@ import { adminContentRepository } from "./adminContentRepository.js";
 import type { SupportedLocale } from "../../i18n/locale.js";
 import { localizeContentText } from "../../i18n/content.js";
 import { decodeLocalizedText, safeParseJson, mapMcqSetVersion } from "./adminContentProjections.js";
-import { ValidationError } from "../../errors/AppError.js";
+import { DomainRuleError, ValidationError } from "../../errors/AppError.js";
 import { getAssessmentRules } from "../../config/assessmentRules.js";
 
 // v1.2.20 (#460): "published_with_draft" skiller mellom (a) modul som aldri har vært
@@ -322,9 +322,13 @@ async function buildSectionExportPayload(
   if (assetBudget) {
     assetBudget.total += totalBytes;
     if (assetBudget.total > MAX_EXPORT_ASSET_TOTAL_BYTES) {
-      throw new ValidationError(
+      // ⚠️ #999: grensen og summen som FELT. Forfatteren skal få vite «figurene er 18 MB, taket
+      // er 15 MB» på sitt eget språk — ikke lese to tall ut av en engelsk setning.
+      throw new DomainRuleError(
+        "export_asset_cap_exceeded",
         `Export exceeds the ${MAX_EXPORT_ASSET_TOTAL_BYTES}-byte total-asset cap ` +
           `(figures sum to ${assetBudget.total} bytes). Reduce or split the content before exporting.`,
+        { bytes: assetBudget.total, maxBytes: MAX_EXPORT_ASSET_TOTAL_BYTES },
       );
     }
   }

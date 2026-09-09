@@ -101,6 +101,14 @@ export interface EntraUserSyncResult {
 export async function syncEntraUsersFromGroup(actorId: string): Promise<EntraUserSyncResult> {
   const groupId = env.ENTRA_USER_SYNC_GROUP_ID;
   if (!groupId) {
+    // ⚠️ #999: DENNE BLIR STÅENDE UTEN KODE, med vilje.
+    //
+    // En feilkode finnes for at klienten skal kunne si det samme på brukerens språk. Dette er ikke
+    // en domeneregel en bruker kan gjøre noe med — det er en KONFIGURASJONSFEIL som navngir en
+    // miljøvariabel. Å oversette «ENTRA_USER_SYNC_GROUP_ID er ikke satt» til nynorsk hjelper ingen;
+    // den som ser den, skal lese loggen og sette variabelen.
+    //
+    // Å gi den kode ville fått ratsjen ned, men gjort teksten til en løgn om hvem den er til for.
     throw new ValidationError("Entra user sync is not configured (ENTRA_USER_SYNC_GROUP_ID is unset).");
   }
 

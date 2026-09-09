@@ -35,7 +35,20 @@ const kilde = filer.map((f) => les(f)).join("\n");
 
 // ⚠️ Taket senkes når tallet går ned. Det er en RATSJ: den skal feile i begge retninger, så en
 // forbedring ikke går ubemerket forbi og en forverring ikke sniker seg inn.
-const TAK = 10;
+const TAK = 2;
+//
+// ⚠️ DE TO SISTE BLIR STÅENDE, OG DET ER EN AVGJØRELSE — IKKE RESTGJELD.
+//
+// En feilkode finnes for at klienten skal si det samme på brukerens språk. De to som er igjen er
+// ikke domeneregler noen kan handle på:
+//
+//   entraUserSyncService — en KONFIGURASJONSFEIL som navngir en miljøvariabel. Å oversette
+//   «ENTRA_USER_SYNC_GROUP_ID er ikke satt» til nynorsk hjelper ingen.
+//
+//   submissionService — en INTERN INVARIANT. Fyrer den, er dataene inkonsistente, og svaret er en
+//   feilrapport — ikke en setning som ber brukeren gjøre noe hen ikke kan gjøre.
+//
+// Å kode dem ville fått tallet til null og gjort tekstene til en løgn om hvem de er til for.
 // 2026-09-09: 35 -> 34 (#1001) -> 30 (seksjonsvaktene) -> 21 (vedleggene). De ni vedleggskastene
 // ble til fem koder, fordi tre av dem var ordrette duplikater som nå deler én kilde.
 
