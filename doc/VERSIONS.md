@@ -2,6 +2,50 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.64.0 - 2026-09-10
+
+Tolv commits. Én brukersynlig tråd — **feilmeldinger som kan leses på ditt eget språk** — og tre
+rettelser i porten som slipper arbeidet gjennom.
+
+### #999 — feilkoder i stedet for serverens egen setning
+
+En `ValidationError` uten `issues` fikk `api-error.js` til å vise serverens `message` ORDRETT. En
+norsk setning dukket derfor opp midt i et engelsk forfattergrensesnitt, og en engelsk midt i et
+norsk. Med en kode slår klienten den opp i sin egen tabell.
+
+**35 → 15**, i fem porsjoner. Tre ganger viste «mange steder» seg å være «få regler»: ni
+vedleggskast var fem regler, fjorten rapportsvar var to meldinger — «Invalid report query filters»
+sto tolv ganger ordrett. Hadde hvert sted fått egen kode, ville duplikatene vært låst fast.
+
+⚠️ **Tallene ligger nå i `details`, ikke i setningen.** `too large (1234567 bytes, max 5242880)`
+tvang klienten til å lese tall ut av engelsk prosa. Det var eksplisitt det saken ba om.
+
+⚠️ **Og ratsjen gikk OPP til slutt, fra 13 til 15.** To koder viste seg å være unåbare — Zod avviser
+tilfellet på ruta før tjenesten kalles — så de ble rullet tilbake. En ratsj som bare kan gå ned
+ville presset fram to koder som lyver om sin egen rekkevidde.
+
+### #1037 — kurslagringen løy når noe allerede hadde gått galt
+
+Feilet LLM-lokaliseringen under lagring, skrev klienten kildeteksten inn i alle tre språk.
+Forfatteren så en feilmelding om noe annet, mens kartet stille påsto at kurset var oversatt.
+Nedstrøms trodde publiseringsgaten at det var ferdig, og en nynorskdeltaker fikk bokmål servert som
+nynorsk.
+
+Lokalen slippes nå, og BEGGE kallerne sier fra — stillhet var halve #892.
+
+### Porten som slipper arbeidet gjennom
+
+⚠️ **CI kjørte ikke der arbeidet skjer.** Bare på pull request og på push til main, mens alt skjer på
+dev og PR-er åpnes med ukers mellomrom. `npm test` sto RØD i to uker uten at noen så det: elleve
+DOM-tester falt fordi den delte konfigen kjørte dem uten jsdom. Oppdaget først da dev → main ble
+åpnet. CI kjører nå på dev, med avbrytelse av eldre kjøringer.
+
+⚠️ **Og deployporten ropte ulv.** Prod-deployen av 2.63.0 LYKTES, men jobben feilet fordi
+stabilitetssjekken ga opp to minutter for tidlig — og da ble røyktesten HOPPET OVER, siden den sto
+på `if: success()`. En deploy som faktisk gikk bra ble uverifisert av maskinen, nøyaktig i det
+tilfellet der noe uvanlig skjedde. Budsjettet er hevet fra ~17 til ~26 minutter, og begge
+røyktestene står nå på `if: always()`.
+
 ## 2.63.0 - 2026-09-09
 
 Seks commits. Den røde tråden er **hvem som avgjør, og hvem som får se** — og i to av sakene endte
