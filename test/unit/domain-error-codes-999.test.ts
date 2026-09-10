@@ -35,7 +35,7 @@ const kilde = filer.map((f) => les(f)).join("\n");
 
 // ⚠️ RATSJ: tallet kan gå ned, aldri opp. Går det ned, settes TAK ned i SAMME commit — ellers
 // måler den ingenting fra da av. Den skal altså feile i begge retninger.
-const TAK = 13;
+const TAK = 15;
 
 // HISTORIKK, så neste porsjon vet hvor den skal lete:
 //
@@ -46,6 +46,14 @@ const TAK = 13;
 //   14  påmelding, kursbevisbakgrunn, kaskadesletting, eksporttak, vedleggsimport
 //   13  rapportrutene: fjorten svar var TO meldinger, «Invalid report query filters» sto tolv
 //       ganger ordrett
+//   15  ⚠️ OPP IGJEN, med vilje. To av kodene viste seg å være UNÅBARE: Zod avviser tilfellet på
+//       ruta før tjenesten kalles. Målt mot stage 2026-09-10 — `class_name_required` og
+//       `enrollment_target_missing` ga begge `validation_error` med `issues`. De er rullet tilbake
+//       til vanlige vakter, og de seks tekstene er slettet.
+//
+//       ⚠️ RATSJEN SKAL IKKE PRESSE TALLET NED FOR ENHVER PRIS. En kode som aldri når en klient
+//       lyver om sin egen rekkevidde, og neste leser tror den er brukervendt. Å telle den som
+//       framgang gjør målet til tallet i stedet for det tallet skulle måle.
 //
 // ⚠️ TALLET DEKKET LENGE BARE HALVE SANNHETEN. Ratsjen talte først bare `new ValidationError(`,
 // mens 25 ruter bygde svaret for hånd med `{ error: "validation_error", message }` — samme vei

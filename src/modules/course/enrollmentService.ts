@@ -1,6 +1,6 @@
 import type { CourseEnrollmentSource, AppRole as AppRoleType } from "@prisma/client";
 import { prisma } from "../../db/prisma.js";
-import { DomainRuleError, NotFoundError } from "../../errors/AppError.js";
+import { DomainRuleError, NotFoundError, ValidationError } from "../../errors/AppError.js";
 import { recordAuditEvent } from "../../services/auditService.js";
 import { auditActions, auditEntityTypes } from "../../observability/auditEvents.js";
 import { enrollmentRepository, createEnrollmentRepository } from "./enrollmentRepository.js";
@@ -55,10 +55,17 @@ export async function assignEnrollments(
   const byDepartment = typeof input.department === "string" && input.department.trim().length > 0;
   const explicitUserIds = (input.userIds ?? []).filter((id) => typeof id === "string" && id.length > 0);
   if (!byDepartment && explicitUserIds.length === 0) {
-    throw new DomainRuleError(
-      "enrollment_target_missing",
-      "Provide userIds or a department to assign.",
-    );
+    // ⚠️ #999: DENNE SKAL IKKE HA KODE — den er UNÅBAR fra API-et.
+    //
+    // Ruta validerer med Zod FØR tjenesten kalles, og Zod avviser dette tilfellet selv. Målt mot
+    // stage 2026-09-10: svaret er `validation_error` med `issues`, som er riktig oppførsel etter
+    // #996. Vakta her er en forsvarlig dublett for en framtidig andre kaller — ikke en beskjed noen
+    // bruker får.
+    //
+    // En feilkode er et løfte om at klienten kan vise den på brukerens språk. Gir vi en kode til noe
+    // som aldri når en klient, lyver koden om sin egen rekkevidde, og neste leser tror den er
+    // brukervendt.
+    throw new ValidationError("Provide userIds or a department to assign.");
   }
   const source: CourseEnrollmentSource = byDepartment ? "DEPARTMENT" : "INDIVIDUAL";
 

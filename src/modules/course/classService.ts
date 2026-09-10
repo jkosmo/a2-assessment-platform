@@ -1,6 +1,6 @@
 import { prisma } from "../../db/prisma.js";
 import { runInTransaction } from "../../db/transaction.js";
-import { DomainRuleError, NotFoundError } from "../../errors/AppError.js";
+import { DomainRuleError, NotFoundError, ValidationError } from "../../errors/AppError.js";
 import { recordAuditEvent } from "../../services/auditService.js";
 import { auditActions, auditEntityTypes } from "../../observability/auditEvents.js";
 import { localizeContentText } from "../../i18n/content.js";
@@ -24,7 +24,17 @@ async function requireClass(classId: string) {
 
 export async function createClass(input: { name: string; description?: string | null }, actorId: string | null) {
   const name = input.name?.trim();
-  if (!name) throw new DomainRuleError("class_name_required", "Class name is required.");
+  // ⚠️ #999: DENNE SKAL IKKE HA KODE — den er UNÅBAR fra API-et.
+  //
+  // Ruta validerer med Zod FØR tjenesten kalles, og Zod avviser dette tilfellet selv. Målt mot
+  // stage 2026-09-10: svaret er `validation_error` med `issues`, som er riktig oppførsel etter
+  // #996. Vakta her er en forsvarlig dublett for en framtidig andre kaller — ikke en beskjed noen
+  // bruker får.
+  //
+  // En feilkode er et løfte om at klienten kan vise den på brukerens språk. Gir vi en kode til noe
+  // som aldri når en klient, lyver koden om sin egen rekkevidde, og neste leser tror den er
+  // brukervendt.
+  if (!name) throw new ValidationError("Class name is required.");
   const created = await runInTransaction(async (tx) => {
     const repo = createClassRepository(tx);
     const klass = await repo.createClass({ name, description: input.description ?? null, createdById: actorId });
