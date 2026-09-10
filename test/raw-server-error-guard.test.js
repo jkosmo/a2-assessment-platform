@@ -72,7 +72,13 @@ const RENDER_BASELINE = {
   // formulering her påsto at alle femten var trygge. Det var feil. De to er eksisterende gjeld.
   // #1046: nede fra 15 til 13. De to som forsvant var nettopp de som IKKE gikk gjennom `log()` —
   // en `innerHTML` og en `textContent` som viste `"<status>: <hele JSON-kroppen>"` rett i
-  // grensesnittet. De 13 som står igjen ER `log()`-kall, og `log()` oversetter selv.
+  // grensesnittet.
+  //
+  // ⚠️ De 13 som står igjen fordeler seg på 11 `log()`-kall og 2 linjer inne i filas EGNE
+  // oversettere (`humanizeApiError`, `participantErrorToast`) — som må røre `message`, det er
+  // jobben deres. At de gjør det, er ikke lenger en påstand i denne kommentaren: den er målt av
+  // «participant.js: de rå linjene går gjennom filas egne oversettere» lenger ned. Uten den kunne
+  // `humanizeApiError` falt ut av `log()` uten at tallet her rørte seg.
   "participant.js": 13,
   // #983: de tre søsterflatene brukte serverens engelske `message` rått, med hardkodede engelske
   // reserver som «Error». `profile.js` arvet i tillegg ikke feilkodetabellen i det hele tatt.
@@ -169,6 +175,90 @@ function ratchetProblems(perFile, baseline, hint) {
   }
   return problems;
 }
+
+/**
+ * Leser en toppnivåfunksjons kropp ved å telle klammer fra `function NAVN(`.
+ *
+ * ⚠️ En regex over «alt mellom `function log(` og neste `function `» ville tatt med naboene så
+ * snart noen flyttet en funksjon inn imellom — og vakta ville blitt grønn på feil grunnlag.
+ */
+function functionBody(src, name) {
+  const start = src.indexOf(`function ${name}(`);
+  if (start === -1) return null;
+  // ⚠️ Kroppens `{` er IKKE den første etter navnet: `function log(data, options = {})` har en
+  // klamme i parameterlista. Vi må forbi den balanserte `)` først. Vakta fant selv denne feilen
+  // — den sto rød på `log()` med teksten `'function log(data, options = {'`.
+  let paren = 0;
+  let i = src.indexOf("(", start);
+  for (; i < src.length; i++) {
+    if (src[i] === "(") paren++;
+    else if (src[i] === ")") {
+      paren--;
+      if (paren === 0) break;
+    }
+  }
+  const open = src.indexOf("{", i);
+  if (open === -1) return null;
+  let depth = 0;
+  for (let i = open; i < src.length; i++) {
+    if (src[i] === "{") depth++;
+    else if (src[i] === "}") {
+      depth--;
+      if (depth === 0) {
+        return { text: src.slice(start, i + 1), fromLine: src.slice(0, start).split("\n").length, toLine: src.slice(0, i).split("\n").length };
+      }
+    }
+  }
+  return null;
+}
+
+// ⚠️ BASELINEN PÅSTO NOE DEN IKKE MÅLTE. Kommentaren over `"participant.js": 13` sier at de tretten
+// som står igjen «ER log()-kall, og log() oversetter selv». Det er RIKTIG i dag — men det sto som
+// PROSA. Fjernet noen `humanizeApiError` fra `log()`, ville tallet stått urørt på 13 mens hvert
+// eneste av de elleve kallstedene begynte å vise `"429: {…hele JSON-kroppen…}"` igjen.
+//
+// En ratsj som teller linjer kan ikke se hva linjene GJØR. Denne vakta måler påstanden i stedet.
+// (#983/#1046, kontrollert på nytt i #999-runden.)
+describe("participant.js: de rå linjene går gjennom filas egne oversettere", () => {
+  const src = readFileSync(join(PUBLIC, "participant.js"), "utf8");
+
+  it("KONTROLLCASE: vi finner faktisk funksjonene vi påstår noe om", () => {
+    // Uten denne blir vakta grønn ved å måle NULL så snart en funksjon får nytt navn.
+    for (const name of ["log", "participantErrorToast", "humanizeApiError"]) {
+      expect(functionBody(src, name), `fant ikke function ${name}(`).toBeTruthy();
+    }
+  });
+
+  it("`log()` og `participantErrorToast()` slår opp feilkoden i den delte tabellen", () => {
+    // `humanizeApiError` er filas innpakning rundt `describeApiError` i /static/api-error.js.
+    // Faller den ut av en av disse to, viser flaten serverens språk igjen.
+    expect(functionBody(src, "log").text, "log() oversetter ikke lenger").toContain("humanizeApiError");
+    expect(functionBody(src, "participantErrorToast").text, "participantErrorToast() oversetter ikke lenger")
+      .toContain("humanizeApiError");
+    expect(functionBody(src, "humanizeApiError").text, "innpakningen bruker ikke den delte oversetteren")
+      .toContain("describeApiError");
+  });
+
+  it("ingen rå bruk står UTENFOR log() og filas egne oversettere", () => {
+    const oversettere = ["humanizeApiError", "participantErrorToast"].map((n) => functionBody(src, n));
+    const utenfor = [];
+    src.split("\n").forEach((line, index) => {
+      const trimmed = line.trim();
+      if (trimmed.startsWith("//") || trimmed.startsWith("*")) return;
+      if (!RAW.test(line)) return;
+      const lineNo = index + 1;
+      if (/\blog\(/.test(line)) return; // log() oversetter selv — bevist av testen over.
+      if (oversettere.some((f) => f && lineNo >= f.fromLine && lineNo <= f.toLine)) return;
+      utenfor.push(`${lineNo}: ${trimmed.slice(0, 100)}`);
+    });
+
+    expect(
+      utenfor.join("\n"),
+      "Disse rører serverens `message` uten å gå gjennom log() eller filas egne oversettere.\n" +
+        "Send dem gjennom describeApiError (api-error.js) i stedet.",
+    ).toBe("");
+  });
+});
 
 describe("servertekst vises ikke rått i en toast", () => {
   it("ingen fil har flere rå bruk enn baselinen", () => {

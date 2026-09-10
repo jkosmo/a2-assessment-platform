@@ -59,6 +59,27 @@ const uploadAsset: RequestHandler = (request, response, next) => {
   });
 };
 
+/**
+ * #999: «Missing file» var det siste håndbygde `validation_error`-svaret uten `issues`.
+ *
+ * ⚠️ FILA LIGGER IKKE I KROPPEN. Multer henger den på `request.file`, så skjemaet parser
+ * `{ file: request.file }` og ikke `request.body`. Formen på AVSLAGET er poenget: uten `issues`
+ * leser `api-error.js` svaret som en domeneregel og viser serverens engelske setning ordrett.
+ *
+ * Feltene som kreves er nøyaktig de tre `createSectionAsset` leser. Tar man med flere, flytter man
+ * en kontrakt hit som ikke hører hjemme her.
+ */
+const assetUploadSchema = z.object({
+  file: z.object(
+    {
+      originalname: z.string().min(1),
+      mimetype: z.string().min(1),
+      buffer: z.instanceof(Buffer),
+    },
+    { required_error: "Missing file (field name 'file')." },
+  ),
+});
+
 const createSectionSchema = z.object({
   title: localizedTextPatchSchema,
   bodyMarkdown: localizedTextPatchSchema,
@@ -468,11 +489,12 @@ adminSectionsRouter.put("/:sectionId/content", requireContentOwnership("SECTION"
 
 // Asset upload (#483/F4) — multipart image upload to a section's blob storage.
 adminSectionsRouter.post("/:sectionId/assets", requireContentOwnership("SECTION", "sectionId"), uploadAsset, async (request: Request<{ sectionId: string }>, response, next) => {
-  const file = request.file;
-  if (!file) {
-    response.status(400).json({ error: "validation_error", message: "Missing file (field name 'file')." });
+  const parsed = assetUploadSchema.safeParse({ file: request.file });
+  if (!parsed.success) {
+    response.status(400).json({ error: "validation_error", issues: parsed.error.issues });
     return;
   }
+  const file = parsed.data.file;
   try {
     const asset = await createSectionAsset({
       sectionId: request.params.sectionId,

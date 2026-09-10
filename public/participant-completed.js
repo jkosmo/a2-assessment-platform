@@ -110,6 +110,12 @@ function applyOutputVisibility() {
   output.hidden = !isDebugModeEnabled();
 }
 
+// #983: samme vurdering som i participant.js — se kommentaren over `formatOutputStatus` der.
+//
+// ⚠️ `data.message` her er IKKE en feilvei. Alle fire feilkallstedene i denne fila går allerede
+// gjennom `describeApiError(error, t).headline` (linje ~359, ~378, ~415, ~472), og `log()` får
+// derfor en ferdig oversatt STRENG — som treffer grenen over, ikke denne. Grenen under gjelder
+// vilkårlige vellykkede svar, og ingen av rutene denne siden kaller legger `message` i et 2xx-svar.
 function formatOutputStatus(data) {
   if (typeof data === "string") {
     return data;

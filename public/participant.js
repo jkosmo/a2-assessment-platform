@@ -416,6 +416,21 @@ function applyOutputVisibility() {
   output.hidden = !isRawDebugEnabled();
 }
 
+// #983: DENNE ER IKKE EN FEILOVERSETTER, OG SKAL IKKE BLI DET.
+//
+// `data.message` under ser ut som den samme feilen som resten av #983 rettet, men den er det ikke:
+// `formatOutputStatus` er siste utvei i `summarizeParticipantResponse`, og den kjører bare på
+// VELLYKKEDE svar. Feilveien går gjennom `humanizeApiError` FØR vi kommer hit — `log()` velger
+// `humanized.headline` når det finnes et svar å oversette, og bare ellers oppsummeringen.
+//
+// ⚠️ Målt mot rutene deltakerkonsollet faktisk kaller (`/api/modules`, `/api/me`, `/api/submissions`,
+// `/api/submissions/history`, `/api/courses`, `/api/courses/completions`, `/version`): ingen av dem
+// legger `message` i et 2xx-svar. Grenen er en forsvarlig reserve for et vilkårlig svar i et
+// feilsøkingskonsoll, ikke en vei serverens prosa når brukeren på i dag.
+//
+// Å sende den gjennom `describeApiError` ville vært feil medisin: den oversetteren slår opp en
+// FEILKODE, og et vellykket svar har ingen. Skulle en rute en dag svare 2xx med prosa, er fiksen på
+// SERVEREN — svaret trenger en nøkkel klienten kan slå opp, ikke en ferdig setning på ett språk.
 function formatOutputStatus(data) {
   if (typeof data === "string") {
     return data;
