@@ -58,13 +58,25 @@ test.describe("#744 course builder — per-item 'Åpne' editor links (new tab)",
 
     // Module item → conversation editor, new tab.
     const moduleOpen = moduleRow.getByRole("link", { name: "Åpne" });
-    await expect(moduleOpen).toHaveAttribute("href", "/admin-content/module/module-1/conversation");
+    // ⚠️ #1052: LENKEN BÆRER NÅ OPPHAVET, og nettopp her betyr det mest. `target="_blank"` under
+    // betyr at fanen er fersk: det finnes ingen nettleserhistorikk å gå tilbake i, så appens egen
+    // «Tilbake» er det ENESTE som finnes. Uten `returnTo` sto forfatteren i en blindvei.
+    //
+    // Påstanden måler begge deler — at den peker på riktig editor, OG at opphavet følger med.
+    await expect(moduleOpen).toHaveAttribute(
+      "href",
+      "/admin-content/module/module-1/conversation?returnTo=%2Fadmin-content%2Fcourses%2Fcourse-1",
+    );
     await expect(moduleOpen).toHaveAttribute("target", "_blank");
     await expect(moduleOpen).toHaveAttribute("rel", /noopener/);
 
     // Section item → section editor, new tab.
     const sectionOpen = sectionRow.getByRole("link", { name: "Åpne" });
-    await expect(sectionOpen).toHaveAttribute("href", "/admin-content/sections?id=section-1");
+    // Seksjons-URL-en har allerede `?id=`, så opphavet henges på med `&`.
+    await expect(sectionOpen).toHaveAttribute(
+      "href",
+      "/admin-content/sections?id=section-1&returnTo=%2Fadmin-content%2Fcourses%2Fcourse-1",
+    );
     await expect(sectionOpen).toHaveAttribute("target", "_blank");
 
     // The "Åpne" link sits next to "Fjern" in the row's action area.

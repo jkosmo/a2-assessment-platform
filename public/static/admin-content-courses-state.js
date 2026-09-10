@@ -46,3 +46,23 @@ export function deriveCourseListRows(courses, { localizeTitle, formatDate }) {
     canManage: course.canManage !== false,
   }));
 }
+
+/**
+ * #1052: lenken fra kursets elementliste inn til elementets egen flate.
+ *
+ * ⚠️ REN, FORDI DEN MÅ TESTES. Mutasjonstesting viste at DOM-suiten ikke fanget at `returnTo`
+ * forsvant fra lenken — den rendres inne i `renderModuleList()`, som trenger hele kursflaten for å
+ * kjøre. Trukket ut hit er den ett kall og én påstand.
+ *
+ * ⚠️ OG OPPHAVET ER IKKE PYNT HER. Kalleren åpner lenken med `target="_blank"`. I en fersk fane
+ * finnes ingen nettleserhistorikk, så appens egen «Tilbake» er det ENESTE som finnes — uten
+ * `returnTo` står forfatteren i en blindvei.
+ */
+export function buildCourseItemHref(item, courseId) {
+  const base = item?.type === "SECTION"
+    ? `/admin-content/sections?id=${encodeURIComponent(item.refId)}`
+    : `/admin-content/module/${encodeURIComponent(item?.refId)}/conversation`;
+  if (!courseId) return base;
+  const opphav = `/admin-content/courses/${encodeURIComponent(courseId)}`;
+  return `${base}${base.includes("?") ? "&" : "?"}returnTo=${encodeURIComponent(opphav)}`;
+}

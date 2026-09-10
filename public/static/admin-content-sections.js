@@ -41,7 +41,7 @@ const LABELS = {
     archived: "Section archived.", restored: "Section restored.", confirmArchive: "Archive this section?",
     colUpdated: "Last changed", edit: "Edit", del: "Delete", empty: "No sections yet.",
     readonly: "Read-only", readonlyHint: "Only an owner or an administrator can change this section.",
-    back: "← Back", titleLabel: "Title", markdown: "Markdown", preview: "Preview",
+    back: "← Back", backToCourse: "← Back to the course", titleLabel: "Title", markdown: "Markdown", preview: "Preview",
     save: "Save new version", saved: "Section saved.", deleted: "Section deleted.",
     confirmDelete: "Delete this section?", loadError: "Could not load sections.",
     needContent: "Add a title and content in at least one language.",
@@ -69,7 +69,7 @@ const LABELS = {
     archived: "Seksjon arkivert.", restored: "Seksjon gjenopprettet.", confirmArchive: "Arkivere denne seksjonen?",
     colUpdated: "Sist endret", edit: "Rediger", del: "Slett", empty: "Ingen seksjoner ennå.",
     readonly: "Skrivebeskyttet", readonlyHint: "Bare en eier eller administrator kan endre denne seksjonen.",
-    back: "← Tilbake", titleLabel: "Tittel", markdown: "Markdown", preview: "Forhåndsvisning",
+    back: "← Tilbake", backToCourse: "← Tilbake til kurset", titleLabel: "Tittel", markdown: "Markdown", preview: "Forhåndsvisning",
     save: "Lagre ny versjon", saved: "Seksjon lagret.", deleted: "Seksjon slettet.",
     confirmDelete: "Slette denne seksjonen?", loadError: "Kunne ikke laste seksjoner.",
     needContent: "Fyll inn tittel og innhold på minst ett språk.",
@@ -97,7 +97,7 @@ const LABELS = {
     archived: "Seksjon arkivert.", restored: "Seksjon gjenoppretta.", confirmArchive: "Arkivere denne seksjonen?",
     colUpdated: "Sist endra", edit: "Rediger", del: "Slett", empty: "Ingen seksjonar enno.",
     readonly: "Skrivebeskytta", readonlyHint: "Berre ein eigar eller administrator kan endre denne seksjonen.",
-    back: "← Tilbake", titleLabel: "Tittel", markdown: "Markdown", preview: "Førehandsvising",
+    back: "← Tilbake", backToCourse: "← Tilbake til kurset", titleLabel: "Tittel", markdown: "Markdown", preview: "Førehandsvising",
     save: "Lagre ny versjon", saved: "Seksjon lagra.", deleted: "Seksjon sletta.",
     confirmDelete: "Slette denne seksjonen?", loadError: "Kunne ikkje laste seksjonar.",
     needContent: "Fyll inn tittel og innhald på minst eitt språk.",
@@ -222,11 +222,17 @@ function detectRoute() {
 }
 
 function goTo(view, sectionId) {
-  const url = view === "list"
+  // ⚠️ #1052: `returnTo` må BÆRES VIDERE. Lagring og intern navigasjon kaller goTo, og uten dette
+  // ville opphavet forsvunnet ved første lagring — forfatteren kom inn fra et kurs, lagret, og
+  // hadde plutselig bare lista igjen.
+  const opphav = detectRoute().returnTo;
+  const hale = opphav ? `returnTo=${encodeURIComponent(opphav)}` : "";
+  const base = view === "list"
     ? "/admin-content/sections"
     : sectionId
       ? `/admin-content/sections?id=${encodeURIComponent(sectionId)}`
       : "/admin-content/sections?new";
+  const url = hale ? `${base}${base.includes("?") ? "&" : "?"}${hale}` : base;
   history.pushState({}, "", url);
   renderRoute();
 }
@@ -668,7 +674,18 @@ async function renderEditorView(sectionId) {
       </div>
     </div>`;
 
-  document.getElementById("backLink")?.addEventListener("click", (e) => { e.preventDefault(); goTo("list"); });
+  // ⚠️ #1052: TEKSTEN MÅ FØLGE MÅLET. «← Tilbake» som sender deg til lista når du kom fra et kurs
+  // er samme slags løgn som #1029 ryddet bort — et løfte flaten ikke holder.
+  const opphav = detectRoute().returnTo;
+  const backEl = document.getElementById("backLink");
+  if (backEl && opphav) backEl.textContent = L("backToCourse");
+  backEl?.addEventListener("click", (e) => {
+    e.preventDefault();
+    // ⚠️ IKKE `history.back()`. Kursets elementliste åpner med `target="_blank"`, og i en fersk
+    // fane finnes ingen historikk å gå tilbake i — da ville knappen ikke gjort noe i det hele tatt.
+    if (opphav) location.href = opphav;
+    else goTo("list");
+  });
   document.getElementById("translateBtn")?.addEventListener("click", translateFromCurrent);
   // #1012
   const replaceBtn = document.getElementById("replaceFromFileBtn");

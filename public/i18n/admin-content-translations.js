@@ -87,6 +87,7 @@ const adminContentBase = {
   "shell.module.loading": "Loading module\u2026",
   "shell.module.loadError": "Could not load the module. Please try again.",
   "shell.module.goToLibrary": "Go to the module list",
+  "shell.module.backToCourse": "Back to the course",
 
   "shell.module.pickAnother": "Select another module",
   "shell.actions.groupLabel": "Module actions",
@@ -725,6 +726,7 @@ const adminContentLateOverrides = {
     "shell.module.loading": "Laster modul\u2026",
     "shell.module.loadError": "Kunne ikke laste modulen. Pr\u00f8v igjen.",
     "shell.module.goToLibrary": "Gå til modul-lista",
+    "shell.module.backToCourse": "Tilbake til kurset",
 
     "shell.module.pickAnother": "Velg annen modul",
     "shell.actions.groupLabel": "Modulhandlinger",
@@ -1164,6 +1166,7 @@ const adminContentLateOverrides = {
     "shell.module.loading": "Lastar modul\u2026",
     "shell.module.loadError": "Kunne ikkje laste modulen. Pr\u00f8v igjen.",
     "shell.module.goToLibrary": "Gå til modullista",
+    "shell.module.backToCourse": "Tilbake til kurset",
 
     "shell.module.pickAnother": "Vel ein annan modul",
     "shell.actions.groupLabel": "Modulhandlingar",
