@@ -3,6 +3,7 @@ import { app } from "../src/app.js";
 import { prisma } from "../src/db/prisma.js";
 import { findModuleIdByTitle } from "./support/participantFlow.js";
 import { countCourseCompletionChecks, submissionOwner } from "./support/outboxProbe.js";
+import { processNextOutboxEvent } from "../src/modules/outbox/outboxService.js";
 
 const participantHeaders = {
   "x-user-id": "participant-1",
@@ -195,6 +196,16 @@ describe("MVP appeal flow", () => {
     const resolvedAppeal = await prisma.appeal.findUniqueOrThrow({ where: { id: appealId } });
     expect(resolvedAppeal.appealStatus).toBe("RESOLVED");
     expect(resolvedAppeal.resolutionNote).toContain("adjusted");
+
+    // #1007: ankevarslene ligger på outboxen (create, claim og resolve — tre rader). Revisjonsraden
+    // «participant_notification_sent» skrives først når leveringsarbeideren har levert dem, så
+    // testen driver arbeideren selv. Før ble de sendt direkte i forespørselen, og en restart under
+    // en utrulling kunne tape dem for godt.
+    const ankeRaderFør = await prisma.outboxEvent.count({ where: { type: "appeal_notification", status: "pending" } });
+    expect(ankeRaderFør).toBeGreaterThanOrEqual(3);
+    for (let i = 0; i < 50; i += 1) {
+      if (!(await processNextOutboxEvent(`appeal-flow-test-${Date.now()}`, 30_000))) break;
+    }
 
     const auditResponse = await request(app)
       .get(`/api/audit/submissions/${submissionId}`)

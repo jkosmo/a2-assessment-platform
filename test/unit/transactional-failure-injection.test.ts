@@ -47,6 +47,8 @@ const FAKE_TX = { outboxEvent: { createMany: vi.fn().mockResolvedValue({ count: 
 
 // ─── vi.mock registrations ────────────────────────────────────────────────────
 
+const outboxCreateMany = vi.fn();
+
 vi.mock("../../src/db/prisma.js", () => ({
   // #946: anke- og overstyringstransaksjonene legger nå `courseCompletionCheck` på outboxen INNE i
   // transaksjonen, så den falske tx-klienten må ha tabellen. Uten den falt disse to testene på
@@ -54,6 +56,9 @@ vi.mock("../../src/db/prisma.js", () => ({
   // #946 bare ble kjørt mot integrasjonssuiten, aldri mot enhetssuiten.
   prisma: {
     $transaction: vi.fn((cb: (tx: unknown) => unknown) => cb(FAKE_TX)),
+    // #1007: varslene er outbox-rader som legges ETTER commit. `outboxCreateMany` lar testen injisere
+    // at innleggingen feiler — det er det som nå er «notification failure after a successful transaction».
+    outboxEvent: { createMany: (...args: unknown[]) => outboxCreateMany(...args) },
   },
 }));
 
@@ -432,7 +437,9 @@ describe("transactional failure injection", () => {
         decisionType: DecisionType.MANUAL_OVERRIDE,
       });
       decisionSubmissionUpdate.mockResolvedValue({ id: "submission-1" });
-      notifyAssessmentResult.mockRejectedValue(new Error("webhook unreachable"));
+      // #1007: den direkte sendingen finnes ikke lenger; det som kan feile etter commit er innleggingen
+      // av outbox-raden. Vedtaket skal stå, svaret skal komme, og feilen skal logges.
+      outboxCreateMany.mockReset().mockRejectedValue(new Error("outbox insert failed"));
 
       const { finalizeManualReviewOverride } = await import("../../src/modules/review/manualReviewService.js");
 
@@ -448,6 +455,7 @@ describe("transactional failure injection", () => {
         review: { id: "review-1", reviewStatus: ReviewStatus.RESOLVED },
         overrideDecision: { id: "decision-2" },
       });
+      expect(notifyAssessmentResult).not.toHaveBeenCalled();
       expect(logOperationalEvent).toHaveBeenCalledWith(
         "participant_notification_pipeline_failed",
         expect.objectContaining({ submissionId: "submission-1" }),
@@ -546,7 +554,8 @@ describe("transactional failure injection", () => {
         decisionType: DecisionType.APPEAL_RESOLUTION,
       });
       decisionSubmissionUpdate.mockResolvedValue({ id: "submission-1" });
-      notifyAppealStatusTransition.mockRejectedValue(new Error("webhook timeout"));
+      // #1007: se overstyringstesten — det er outbox-innleggingen som kan feile etter commit.
+      outboxCreateMany.mockReset().mockRejectedValue(new Error("outbox insert failed"));
 
       const { resolveAppeal } = await import("../../src/modules/appeal/appealService.js");
 
@@ -562,6 +571,7 @@ describe("transactional failure injection", () => {
         appeal: { id: "appeal-1", appealStatus: AppealStatus.RESOLVED },
         resolutionDecision: { id: "decision-2" },
       });
+      expect(notifyAppealStatusTransition).not.toHaveBeenCalled();
       expect(logOperationalEvent).toHaveBeenCalledWith(
         "participant_notification_pipeline_failed",
         expect.objectContaining({ appealId: "appeal-1" }),

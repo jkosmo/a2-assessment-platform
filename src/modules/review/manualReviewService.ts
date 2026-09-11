@@ -5,11 +5,10 @@ import { manualReviewRepository, createManualReviewRepository } from "./manualRe
 import { runInTransaction, type DbTransactionClient } from "../../db/transaction.js";
 import { recordAuditEvent } from "../../services/auditService.js";
 import { appendDecisionWithLineage } from "../assessment/decisionLineageService.js";
-import { notifyAssessmentResult } from "../certification/index.js";
 import { enqueueOutboxEvents, OUTBOX_EVENT_TYPES } from "../outbox/outboxService.js";
 import { logOperationalEvent } from "../../observability/operationalLog.js";
-import { auditActions, auditEntityTypes } from "../../observability/auditEvents.js";
 import { operationalEvents } from "../../observability/operationalEvents.js";
+import { auditActions, auditEntityTypes } from "../../observability/auditEvents.js";
 import { localizeContentText } from "../../i18n/content.js";
 import { normalizeLocale } from "../../i18n/locale.js";
 import { toManualReviewWorkspaceView } from "./manualReviewReadModels.js";
@@ -156,25 +155,36 @@ export async function finalizeManualReviewOverride(input: {
 
   const submissionLocale = normalizeLocale(review.submission.locale) ?? "en-GB";
   const moduleTitle = localizeContentText(submissionLocale, review.submission.module.title) ?? review.submission.moduleId;
-  notifyAssessmentResult({
-    submissionId: review.submission.id,
-    submittedAt: review.submission.submittedAt,
-    recipientEmail: review.submission.user.email,
-    recipientName: review.submission.user.name,
-    moduleTitle,
-    moduleId: review.submission.moduleId,
-    passFailTotal: input.passFailTotal,
-    locale: submissionLocale,
-  }).catch((error: unknown) => {
+  // #1007: på outboxen, ikke fire-and-forget. Før: `notifyAssessmentResult(...).catch(log)` —
+  // restartes containeren under en utrulling før promisen fullfører, får deltakeren aldri e-posten om
+  // utfallet, og bare en loggrad vet det. Samme dør som den automatiske stien (#795) og kursbevisene
+  // (#946); leveringsarbeideren prøver på nytt fra den lagrede raden.
+  // ⚠️ Raden legges ETTER at overstyringen er committet, ikke inne i samme transaksjon (som #946
+  // gjorde for kursfullføringen). Feiler selve innleggingen, står vedtaket — og svaret skal si det.
+  // Da logges det som før; vinduet er «databasen feilet på ett insert rett etter et vellykket commit».
+  try {
+    await enqueueOutboxEvents([
+      {
+        type: OUTBOX_EVENT_TYPES.assessmentNotification,
+        payload: {
+          submissionId: review.submission.id,
+          submittedAt: review.submission.submittedAt.toISOString(),
+          recipientEmail: review.submission.user.email,
+          recipientName: review.submission.user.name,
+          moduleTitle,
+          moduleId: review.submission.moduleId,
+          passFailTotal: input.passFailTotal,
+          locale: submissionLocale,
+        },
+      },
+    ]);
+  } catch (error: unknown) {
     logOperationalEvent(
       operationalEvents.certification.participantNotificationPipelineFailed,
-      {
-        submissionId: review.submission.id,
-        errorMessage: error instanceof Error ? error.message : "Unknown error",
-      },
+      { submissionId: review.submission.id, errorMessage: error instanceof Error ? error.message : "Unknown error" },
       "error",
     );
-  });
+  }
 
   // #946: kursfullføringen ligger nå på outboxen, lagt der inne i transaksjonen i
   // `finalizeManualReviewOverrideCommand`. Se samme begrunnelse i appealService.

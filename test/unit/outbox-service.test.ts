@@ -7,12 +7,13 @@ import { warmModuleGraph } from "../support/moduleGraphWarmup.js";
 const findFirst = vi.fn();
 const updateMany = vi.fn();
 const notifyAssessmentResult = vi.fn();
+const notifyAppealStatusTransition = vi.fn();
 const checkAndIssueCourseCompletions = vi.fn();
 
 vi.mock("../../src/db/prisma.js", () => ({
   prisma: { outboxEvent: { findFirst, updateMany } },
 }));
-vi.mock("../../src/modules/certification/index.js", () => ({ notifyAssessmentResult }));
+vi.mock("../../src/modules/certification/index.js", () => ({ notifyAssessmentResult, notifyAppealStatusTransition }));
 vi.mock("../../src/modules/course/index.js", () => ({ checkAndIssueCourseCompletions }));
 
 // #994: modulgrafen leses her, ikke i første test. Se test/support/moduleGraphWarmup.ts.
@@ -58,5 +59,21 @@ describe("outbox delivery timeout (#795-followup)", () => {
     expect(retryCall.data.status).toBe("pending");
     expect(retryCall.data.attempts).toBe(1);
     expect(retryCall.data.lastError).toMatch(/exceeded/);
+  });
+});
+
+// #1007: ankevarsler er en egen radtype. Leveringen må kjenne den — ellers ligger raden og feiler
+// «Unknown outbox event type» til maxAttempts, og deltakeren får aldri varselet.
+describe("#1007 — appeal_notification leveres fra raden", () => {
+  it("⚠️ deliverOutboxEvent dispatcher til notifyAppealStatusTransition med hele nyttelasten", async () => {
+    notifyAppealStatusTransition.mockReset().mockResolvedValue(undefined);
+    const { deliverOutboxEvent, OUTBOX_EVENT_TYPES } = await import("../../src/modules/outbox/outboxService.js");
+    const payload = {
+      appealId: "a1", submissionId: "s1", previousStatus: "OPEN", currentStatus: "IN_REVIEW",
+      recipientUserId: "u1", recipientEmail: "u1@x.test", recipientName: "U", moduleTitle: "M", locale: "nb",
+    };
+    await deliverOutboxEvent({ type: OUTBOX_EVENT_TYPES.appealNotification, payloadJson: JSON.stringify(payload) });
+    expect(notifyAppealStatusTransition).toHaveBeenCalledTimes(1);
+    expect(notifyAppealStatusTransition).toHaveBeenCalledWith(payload);
   });
 });
