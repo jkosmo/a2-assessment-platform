@@ -33,7 +33,10 @@ describe("#1051 — hydratePreviewMarkdown", () => {
     );
     const el = monter(html);
     const kilder = el.querySelectorAll("[data-markdown-source]");
-    expect(kilder.length, "oppgavetekst OG veiledning").toBe(2);
+    // ⚠️ TRE, ikke to. #917 (2026-08-16) navnga alle tre fritekstfeltene fra Skill-en: oppgavetekst,
+    // veiledning OG sensorens forventede innhold. Jeg dekket to og fant den tredje da jeg leste
+    // den eldre saken — N−1 igjen, fanget av en sak som lå og ventet.
+    expect(kilder.length, "oppgavetekst, veiledning og forventet innhold").toBe(3);
     // ⚠️ Teksten er ESCAPET før hydrering — så `textContent` gir råmarkdownen tilbake, og en
     // forfatter som skriver `<script>` ser den som tekst, ikke som kjørt kode.
     expect(kilder[0].textContent).toBe("## A");

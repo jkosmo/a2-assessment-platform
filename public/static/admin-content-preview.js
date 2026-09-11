@@ -176,7 +176,7 @@ export function buildPreviewHtml(data, { locale, t, tf }) {
     : "";
   const assessorExpectedContentHtml = localizedGuidance && !forParticipant
     ? `<div class="preview-section-label">${escapeHtml(t("adminContent.moduleVersion.assessorExpectedContent"))}</div>
-       <div class="preview-text-block preview-text-secondary">${escapeHtml(localizedGuidance)}</div>`
+       <div class="preview-text-block preview-text-secondary" data-markdown-source>${escapeHtml(localizedGuidance)}</div>`
     : "";
   const mcqCountHtml = mcqCount > 0
     ? `<p class="preview-meta">${escapeHtml(tf("shell.mcq.countLabel", { count: mcqCount }))}</p>`
