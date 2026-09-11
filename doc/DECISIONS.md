@@ -618,3 +618,10 @@ av vaktet skriving — og foreslå det samme. Uten en test som sier at asymmetri
 bare et funn som venter på å bli lukket på nytt.
 
 **Sak:** #943, #1031 · **Status:** avklart 2026-09-08
+
+## Bokmål er organisasjonens standardspråk (2026-09-11)
+
+`DEFAULT_LOCALE=nb` på web og worker (bicep-parameter `defaultLocale`). Gjelder to ting: en
+forespørsel uten `x-locale` og uten gjenkjennelig `Accept-Language`, og e-post til en bruker som
+ikke har logget inn siden `User.preferredLocale` kom (#970). Kodens egen reserve forblir `en-GB` —
+plattformen kan kjøre for andre organisasjoner; dette er A-2s konfigurasjon.
