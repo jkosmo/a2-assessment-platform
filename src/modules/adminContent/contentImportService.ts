@@ -654,7 +654,29 @@ export async function importCourseFromEnvelope(
           // Vi avpubliserer i stedet for å nekte importen: forfatteren skal kunne oppdatere et kurs
           // med ufullstendig oversettelse og fylle hullene etterpå. Det er samme valg som for
           // moduler (#896 S4) — hold tilbake, ikke avvis.
+          // #1003: en livssyklusovergang skal ha sitt eget spor, i samme transaksjon (#961 for
+          // seksjonssletting). Uten den kunne et kurs tas av lufta av en import og republiseres senere,
+          // og revisjonshistorikken viste aldri at det var nede — og hvorfor. Bare når kurset faktisk
+          // VAR publisert; en no-op skal ikke se ut som en overgang.
+          const before = await tx.course.findUnique({ where: { id: courseId }, select: { publishedAt: true } });
           await tx.course.update({ where: { id: courseId }, data: { publishedAt: null } });
+          if (before?.publishedAt) {
+            await recordAuditEvent(
+              {
+                entityType: auditEntityTypes.course,
+                entityId: courseId,
+                action: auditActions.course.unpublished,
+                actorId: options.actorId,
+                metadata: {
+                  courseId,
+                  reason: "import_translation_gate_holdback",
+                  previousPublishedAt: before.publishedAt.toISOString(),
+                  mode: options.mode,
+                },
+              },
+              tx,
+            );
+          }
         }
 
         await recordAuditEvent(

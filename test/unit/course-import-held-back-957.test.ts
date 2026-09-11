@@ -25,6 +25,7 @@ const publishCourse = vi.fn();
 
 const findModuleTitle = vi.fn();
 const recordAuditEvent = vi.fn();
+const courseFindUnique = vi.fn();
 
 vi.mock("../../src/modules/adminContent/adminContentCommands.js", () => ({
   createModule,
@@ -55,11 +56,13 @@ vi.mock("../../src/services/auditService.js", () => ({ recordAuditEvent }));
 const courseUpdate = vi.fn();
 
 vi.mock("../../src/db/transaction.js", () => ({
-  runInTransaction: (cb: (tx: unknown) => unknown) => cb({ course: { update: courseUpdate } }),
+  // #1003: importen leser publiseringstilstanden FØR den avpubliserer, så overgangen kan spores.
+  runInTransaction: (cb: (tx: unknown) => unknown) => cb({ course: { update: courseUpdate, findUnique: courseFindUnique } }),
 }));
 
 function resetMocks() {
   courseUpdate.mockReset().mockResolvedValue({});
+  courseFindUnique.mockReset().mockResolvedValue({ publishedAt: null });
   createModule.mockReset().mockResolvedValue({ id: "new-module-id" });
   createRubricVersion.mockReset().mockResolvedValue({ id: "rubric-id" });
   createPromptTemplateVersion.mockReset().mockResolvedValue({ id: "prompt-id" });
@@ -187,6 +190,34 @@ describe("#996 importCourseFromEnvelope avpubliserer et målkurs som holdes tilb
     expect(courseUpdate).toHaveBeenCalledWith(
       expect.objectContaining({ data: expect.objectContaining({ publishedAt: null }) }),
     );
+  });
+
+  it("#1003: var målkurset PUBLISERT, spores overgangen som course_unpublished med grunn", async () => {
+    courseFindUnique.mockResolvedValue({ publishedAt: new Date("2026-06-01T00:00:00.000Z") });
+    const { importCourseFromEnvelope } = await import(
+      "../../src/modules/adminContent/contentImportService.js"
+    );
+    await importCourseFromEnvelope(buildCourseEnvelope({ fullyTranslated: false }), {
+      actorId: "actor-1",
+      mode: "replaceExisting",
+      targetCourseId: "course-1",
+    } as never);
+    const overgang = recordAuditEvent.mock.calls.find((c) => (c[0] as { action: string }).action === "course_unpublished");
+    expect(overgang, "course_unpublished-rad").toBeTruthy();
+    expect((overgang![0] as { metadata: Record<string, unknown> }).metadata).toMatchObject({
+      reason: "import_translation_gate_holdback",
+      previousPublishedAt: "2026-06-01T00:00:00.000Z",
+    });
+    expect(overgang![1], "i samme transaksjon").toBeDefined();
+  });
+
+  it("#1003 kontroll: var målkurset alt UPUBLISERT, spores ingen overgang — en no-op er ikke en hendelse", async () => {
+    courseFindUnique.mockResolvedValue({ publishedAt: null });
+    const { importCourseFromEnvelope } = await import(
+      "../../src/modules/adminContent/contentImportService.js"
+    );
+    await importCourseFromEnvelope(buildCourseEnvelope({ fullyTranslated: false }), { actorId: "actor-1", mode: "createNew" });
+    expect(recordAuditEvent.mock.calls.some((c) => (c[0] as { action: string }).action === "course_unpublished")).toBe(false);
   });
 
   it("KONTROLLCASE: en komplett pakke publiseres, og avpubliseres IKKE", async () => {
