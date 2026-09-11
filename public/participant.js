@@ -17,6 +17,7 @@ const formatDateTime = createDateTimeFormatter(() => currentLocale);
 const formatNumber = createNumberFormatter(() => currentLocale);
 import { escapeHtml as escapeHtmlP } from "/static/html-escape.js";
 import { sanitizeSectionHtml } from "/static/sanitize.js";
+import { certLevelKey, localizeCertLevel } from "/static/cert-level.js";
 import { mountDiscussionPanel } from "/static/discussion-panel.js";
 import { localeLabels, supportedLocales, translations } from "/static/i18n/participant-translations.js";
 import { apiFetch, buildConsoleHeaders, getConsoleConfig, fetchQueueCounts, applyNavReviewBadge, hydrateContentAssetImages } from "/static/api-client.js";
@@ -1094,18 +1095,14 @@ function renderModules() {
     // Show certification level so students can tell modules at different levels apart.
     // module.certificationLevel may be a plain string ("basic"/"intermediate"/"advanced")
     // or a localized object — normalise to a key we can label. See #372 follow-up.
-    let levelKey = null;
-    const rawLevel = module.certificationLevel;
-    if (typeof rawLevel === "string") {
-      levelKey = rawLevel.toLowerCase();
-    } else if (rawLevel && typeof rawLevel === "object") {
-      const firstValue = Object.values(rawLevel).find((v) => typeof v === "string" && v.length > 0);
-      if (typeof firstValue === "string") levelKey = firstValue.toLowerCase();
-    }
-    if (levelKey === "basic" || levelKey === "intermediate" || levelKey === "advanced") {
+    // #1045: normaliseringen som sto her er nå den delte `certLevelKey`, og ordet kommer fra
+    // `certLevel.*` i basen — samme som kursbevis og profil. Før sa badgen «Middels» der
+    // kursbeviset sa «Videregående», for samme nivå.
+    const levelKey = certLevelKey(module.certificationLevel);
+    if (levelKey) {
       const levelBadge = document.createElement("div");
       levelBadge.className = `module-status-badge level level-${levelKey}`;
-      levelBadge.textContent = t(`modules.levelBadge.${levelKey}`);
+      levelBadge.textContent = localizeCertLevel(module.certificationLevel, t);
       badges.appendChild(levelBadge);
       hasBadges = true;
     }

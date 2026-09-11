@@ -16,6 +16,7 @@ import { resolveInitialLocale } from "/static/i18n-locale.js";
 import { createNumberFormatter, createDateTimeFormatter } from "/static/format-display.js";
 const formatDateTime = createDateTimeFormatter(() => currentLocale, "—");
 import { localeLabels, supportedLocales, translations } from "/static/i18n/profile-translations.js";
+import { localizeCertLevel } from "/static/cert-level.js";
 import { apiFetch, buildConsoleHeaders, getConsoleConfig, fetchQueueCounts, applyNavReviewBadge } from "/static/api-client.js";
 import { escapeHtml } from "/static/html-escape.js";
 import {
@@ -297,7 +298,9 @@ function renderCourses(body) {
     row.appendChild(dateTd);
 
     const levelTd = document.createElement("td");
-    levelTd.textContent = showValue(course.certificationLevel);
+    // #1045: nivået er en NØKKEL («basic»), ikke tekst. Profilen viste den rå. Delt hjelper,
+    // så alle flatene sier det samme ordet for samme nivå.
+    levelTd.textContent = localizeCertLevel(course.certificationLevel, t);
     row.appendChild(levelTd);
 
     // #550: certificate ID + link to the printable certificate view (was ID text only).

@@ -1,4 +1,5 @@
 import { resolveInitialLocale } from "/static/i18n-locale.js";
+import { localizeCertLevel as sharedLocalizeCertLevel } from "/static/cert-level.js";
 import { showToast } from "/static/toast.js";
 import { describeApiError } from "/static/api-error.js";
 import { lagLokalisertRessurs } from "/static/localized-resource.js";
@@ -56,12 +57,9 @@ function formatDate(value) {
   }
 }
 
-function localizeCertLevel(level) {
-  if (!level) return "-";
-  const key = `certLevel.${String(level).toLowerCase()}`;
-  const label = t(key);
-  return label === key ? String(level) : label;
-}
+// #1045: logikken som sto her var riktig — oppslag med reserve — og er nå den delte
+// `localizeCertLevel` i /static/cert-level.js, så kursbevis, profil og konsoll sier samme ord.
+const localizeCertLevel = (level) => sharedLocalizeCertLevel(level, t, { empty: "-" });
 
 function showState(messageKey) {
   certificateEl.hidden = true;
