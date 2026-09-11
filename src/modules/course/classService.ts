@@ -315,6 +315,8 @@ export interface UserMembershipContext {
  *  - the "Alle deltakere" system class if the user has the PARTICIPANT role,
  *  - every MANUAL class they are an explicit member of,
  *  - (only when `classEntraLinkingEnabled`) ENTRA classes whose group is in the user's token groups.
+ *    ⚠️ #1017: denne grenen kan ikke treffe i dag — ingen kode oppretter ENTRA-klasser, og bryteren
+ *    kan ikke slås på fra UI. Se classConfig.ts.
  */
 export async function getUserClassIds(ctx: UserMembershipContext): Promise<Set<string>> {
   const ids = new Set<string>();

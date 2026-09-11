@@ -264,6 +264,7 @@ async function gatherCandidates(summary: CourseReminderScheduleSummary, upperBou
       summary.skippedCourseUnavailable += 1;
       continue;
     }
+    // #1017: vakt, ikke funksjon — ingen ENTRA-klasser kan opprettes i dag (se classConfig.ts).
     if (assignment.class.kind === "ENTRA") {
       summary.skippedEntraClass += 1;
       continue;

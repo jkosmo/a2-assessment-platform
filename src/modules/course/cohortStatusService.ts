@@ -44,6 +44,7 @@ export async function resolveCourseAudience(courseId: string): Promise<AudienceM
   const assignments = await classRepository.findCourseGroupAssignmentsForCourse(courseId);
   let allParticipants: Array<{ id: string; name: string; email: string }> | null = null;
   for (const assignment of assignments) {
+    // #1017: vakt, ikke funksjon — ingen ENTRA-klasser kan opprettes i dag (se classConfig.ts).
     if (assignment.class.kind === "ENTRA") continue;
     const members: Array<{ id: string; activeStatus: boolean; isAnonymized: boolean }> = assignment.class.isSystem
       ? (allParticipants ??= await findActiveParticipants()).map((u) => ({ ...u, activeStatus: true, isAnonymized: false }))
