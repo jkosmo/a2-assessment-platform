@@ -257,6 +257,9 @@ async function suppressAssignmentMail(courseId: string, classId: string): Promis
   }
 }
 
+// #900: avstand mellom tildelings-e-poster. 0 i test (env), ellers 300 ms — sju mottakere = ~2 s.
+const ASSIGNMENT_EMAIL_SPACING_MS = process.env.NODE_ENV === "test" ? 0 : 300;
+
 async function notifyClassMembersOfCourseAssignment(
   classId: string,
   className: string,
@@ -265,24 +268,31 @@ async function notifyClassMembersOfCourseAssignment(
 ): Promise<void> {
   try {
     const members = await classRepository.listMembers(classId);
-    await Promise.allSettled(
-      members
-        // #968: ikke e-post til en som har sluttet eller er anonymisert — samme regel som publikummet
-        // og påminnelsene. Før ble den bare filtrert på at adressen fantes.
-        .filter((m) => m.user.email && isReachableParticipant(m.user))
-        .map((m) => {
-          // #970: mottakerens språk («sist sett»), ikke bokmål for alle. Tittelen velges for samme språk.
-          const locale = recipientLocale(m.user);
-          return sendCourseAssignmentNotification({
-            recipientEmail: m.user.email,
-            recipientName: m.user.name,
-            courseTitle: localizeContentText(locale, courseTitleJson) ?? courseTitleJson,
-            className,
-            dueAt,
-            locale,
-          });
-        }),
-    );
+    const recipients = members
+      // #968: ikke e-post til en som har sluttet eller er anonymisert — samme regel som publikummet
+      // og påminnelsene. Før ble den bare filtrert på at adressen fantes.
+      .filter((m) => m.user.email && isReachableParticipant(m.user));
+    // #900: ÉN om gangen, med en pause mellom. Sju e-poster i samme sekund ble strupet av ACS
+    // 13.08.2026 — alle sju tapt. Promise.allSettled her var årsaken; sekvensielt med pause holder oss
+    // under grensen, og sendViaAcs prøver på nytt om ACS likevel struper. Kalleren venter ikke på
+    // dette (void), så tiden koster ingen.
+    for (const [index, m] of recipients.entries()) {
+      if (index > 0) await new Promise((resolve) => setTimeout(resolve, ASSIGNMENT_EMAIL_SPACING_MS));
+      // #970: mottakerens språk («sist sett»), ikke bokmål for alle. Tittelen velges for samme språk.
+      const locale = recipientLocale(m.user);
+      try {
+        await sendCourseAssignmentNotification({
+          recipientEmail: m.user.email,
+          recipientName: m.user.name,
+          courseTitle: localizeContentText(locale, courseTitleJson) ?? courseTitleJson,
+          className,
+          dueAt,
+          locale,
+        });
+      } catch {
+        /* én feilet mottaker skal ikke stoppe de neste */
+      }
+    }
   } catch {
     /* never let notification failure surface — assignment already succeeded */
   }
