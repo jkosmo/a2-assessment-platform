@@ -18,6 +18,7 @@ import { findActiveParticipants } from "../../repositories/userRepository.js";
 import { recipientLocale } from "../../i18n/recipientLocale.js";
 import type { SupportedLocale } from "../../i18n/locale.js";
 import { isReachableParticipant } from "../user/participantReach.js";
+import { buildSentReminderKeySet, reminderDedupKey } from "./courseReminderDedup.js";
 
 // #497: automatiske kurs-frist-påminnelser (Epic #478, siste «Done når»-pilar). Audit-basert dedup
 // gjør re-kjøring idempotent og restart-trygg. Dekker to kilder til kurs-frister:
@@ -172,18 +173,20 @@ async function defaultSendCourseReminder(input: CourseReminderSendInput): Promis
 }
 
 // Audit-basert dedup: en påminnelse er allerede sendt hvis det finnes en `course_reminder_sent`-rad
-// på kurset som matcher denne mottakeren + typen. due_soon dedup-er per (userId, daysBefore, asOfDate);
-// overdue dedup-er per (userId) — v1 sender forfalt-purring kun én gang.
-async function hasReminderBeenSent(
-  courseId: string,
-  predicate: (metadataJson: string) => boolean,
-): Promise<boolean> {
-  const existing = await auditRepository.findAuditEventMetadataByEntityAndAction(
+// på kurset med samme nøkkel (se courseReminderDedup.ts). #971: radene hentes ÉN gang per kurs og
+// parses til et sett — før ble hele dumpen hentet én gang PER KANDIDAT og søkt som substring.
+const sentKeysByCourse = new Map<string, Set<string>>();
+async function sentReminderKeys(courseId: string): Promise<Set<string>> {
+  const cached = sentKeysByCourse.get(courseId);
+  if (cached) return cached;
+  const rows = await auditRepository.findAuditEventMetadataByEntityAndAction(
     auditEntityTypes.course,
     courseId,
     auditActions.course.reminderSent,
   );
-  return existing.some((event) => predicate(event.metadataJson));
+  const keys = buildSentReminderKeySet(rows);
+  sentKeysByCourse.set(courseId, keys);
+  return keys;
 }
 
 function addDays(input: Date, days: number): Date {
@@ -321,6 +324,8 @@ export async function runCourseReminderSchedule(input?: {
   const asOf = input?.asOf ?? new Date();
   const send = input?.sendImpl ?? defaultSendCourseReminder;
   const asOfDate = asOf.toISOString().slice(0, 10);
+  // #971: settet av alt sendt gjelder for DENNE kjøringen. En syklus skal lese databasen på nytt.
+  sentKeysByCourse.clear();
 
   const reminderDaysBefore = Array.from(new Set(getAssessmentRules().courseReminders.reminderDaysBefore))
     .filter((value) => value >= 0)
@@ -378,18 +383,9 @@ export async function runCourseReminderSchedule(input?: {
     }
 
     const userId = candidate.userId;
-    const alreadySent = await hasReminderBeenSent(candidate.courseId, (metadataJson) => {
-      if (!metadataJson.includes(`"userId":"${userId}"`)) return false;
-      if (kind === "overdue") {
-        return metadataJson.includes('"kind":"overdue"');
-      }
-      return (
-        metadataJson.includes('"kind":"due_soon"') &&
-        metadataJson.includes(`"daysBefore":${daysBefore}`) &&
-        metadataJson.includes(`"asOfDate":"${asOfDate}"`)
-      );
-    });
-    if (alreadySent) {
+    const dedupKey = reminderDedupKey({ userId, kind, daysBefore, asOfDate });
+    const sentKeys = await sentReminderKeys(candidate.courseId);
+    if (sentKeys.has(dedupKey)) {
       summary.skippedAlreadySent += 1;
       continue;
     }
@@ -427,6 +423,7 @@ export async function runCourseReminderSchedule(input?: {
     });
 
     if (result.delivered) {
+      sentKeys.add(dedupKey);
       summary.sent += 1;
     } else {
       summary.failed += 1;
