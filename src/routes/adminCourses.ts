@@ -36,6 +36,7 @@ import type { AdminCourseListItem, AdminCourseDetail } from "../modules/course/i
 import { countCourseInProgressParticipants } from "../modules/course/contentLifecycle.js";
 import { generateLimiter } from "../middleware/rateLimiting.js";
 import { respondWithAppError } from "./helpers/respondWithAppError.js";
+import { requestLocale } from "../i18n/requestLocale.js";
 
 const adminCoursesRouter = Router();
 
@@ -151,7 +152,7 @@ adminCoursesRouter.get("/", async (request, response, next) => {
       actorUserId: request.context?.userId ?? "",
       roles: request.context?.roles ?? [],
     });
-    const locale = request.context?.locale ?? "nb";
+    const locale = requestLocale(request);
     const items: AdminCourseListItem[] = courses.map((c, i) => ({
       id: c.id,
       title: c.title,

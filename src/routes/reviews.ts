@@ -6,6 +6,7 @@ import {
   getManualReviewWorkspaceView,
   listManualReviewQueue,
 } from "../modules/review/index.js";
+import { requestLocale } from "../i18n/requestLocale.js";
 
 const reviewsRouter = Router();
 
@@ -40,7 +41,7 @@ reviewsRouter.get("/", async (request, response) => {
     return;
   }
 
-  const locale = request.context?.locale ?? "nb";
+  const locale = requestLocale(request);
   const reviews = await listManualReviewQueue({
     statuses:
       parsed.data.status.length > 0 ? parsed.data.status : (["OPEN", "IN_REVIEW"] as const),
@@ -52,7 +53,7 @@ reviewsRouter.get("/", async (request, response) => {
 });
 
 reviewsRouter.get("/:reviewId", async (request, response) => {
-  const review = await getManualReviewWorkspaceView(request.params.reviewId, request.context?.locale ?? "nb");
+  const review = await getManualReviewWorkspaceView(request.params.reviewId, requestLocale(request));
   if (!review) {
     response.status(404).json({ error: "not_found", message: "Manual review not found." });
     return;

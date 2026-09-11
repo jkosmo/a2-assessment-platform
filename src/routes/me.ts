@@ -9,6 +9,7 @@ import {
   cancelPseudonymizationRequest,
 } from "../modules/user/pseudonymizationService.js";
 import { AppError } from "../errors/AppError.js";
+import { requestLocale } from "../i18n/requestLocale.js";
 
 const meRouter = Router();
 
@@ -44,7 +45,7 @@ meRouter.get("/", async (request, response, next) => {
         name: principal.name,
         department: principal.department,
         roles: request.context?.roles ?? [],
-        locale: request.context?.locale ?? "en-GB",
+        locale: requestLocale(request),
       },
       consent: {
         currentVersion: consentVersion,
@@ -65,7 +66,7 @@ meRouter.get("/", async (request, response, next) => {
 // Returns consent config text for the current locale so the frontend can
 // render the dialog without embedding text in HTML.
 meRouter.get("/consent", async (request, response, next) => {
-  const locale = request.context?.locale ?? "en-GB";
+  const locale = requestLocale(request);
   try {
     const config = await getConsentConfig(locale);
     response.json(config);

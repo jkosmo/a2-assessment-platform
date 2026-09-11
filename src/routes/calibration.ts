@@ -8,6 +8,7 @@ import { getCalibrationWorkspaceSnapshot } from "../modules/calibration/index.js
 import { publishModuleVersionWithThresholds } from "../modules/adminContent/index.js";
 import { assertContentOwnership } from "../modules/content/contentOwnershipService.js";
 import { parseCsvFilter, parseQueryDate } from "./helpers/queryParsing.js";
+import { requestLocale } from "../i18n/requestLocale.js";
 
 const calibrationRouter = Router();
 
@@ -77,7 +78,7 @@ calibrationRouter.get("/workspace", async (request, response, next) => {
   try {
     const body = await getCalibrationWorkspaceSnapshot({
       actorId: request.context?.userId,
-      locale: request.context?.locale ?? "en-GB",
+      locale: requestLocale(request),
       filters: {
         moduleId: parsed.data.moduleId,
         moduleVersionId: parsed.data.moduleVersionId,

@@ -3,6 +3,7 @@ import type { AppRole as AppRoleType } from "@prisma/client";
 import { hasAnyRole } from "./roleSets.js";
 import type { NextFunction, Request, Response } from "express";
 import { t } from "../i18n/messages.js";
+import { requestLocale } from "../i18n/requestLocale.js";
 
 export function requireAnyRole(allowed: AppRoleType[]) {
   return (request: Request, response: Response, next: NextFunction) => {
@@ -12,7 +13,7 @@ export function requireAnyRole(allowed: AppRoleType[]) {
     const authorized = hasAnyRole(roles, allowed);
 
     if (!authorized) {
-      const locale = request.context?.locale ?? "en-GB";
+      const locale = requestLocale(request);
       response.status(403).json({
         error: "forbidden",
         message: t(locale, "forbidden_requires_roles", { roles: allowed }),
