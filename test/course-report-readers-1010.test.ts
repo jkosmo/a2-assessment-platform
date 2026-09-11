@@ -11,8 +11,11 @@ import { prisma } from "../src/db/prisma.js";
 // som hadde lest tre seksjoner uten å levere noe, fantes ikke: verken i kursraden eller i
 // drilldownen. #966 slo fast at lesing er aktivitet; nevneren må mene det samme.
 //
-// ⚠️ Fiksturen har med vilje INGEN innmelding, INGEN klasse og INGEN modul. Alt som kunne fått
-// deltakeren inn i nevneren på en annen vei, er borte — så testen måler den fjerde kilden alene.
+// ⚠️ Fiksturen har med vilje INGEN innmelding, INGEN klasse og INGEN modul — og TO seksjoner, der
+// bare én leses. Første utgave hadde én seksjon: da var kurset fullført i det den ble lest, beviset
+// ble utstedt, og deltakeren kom inn i nevneren via «fullført». Mutasjonstesten (fjerde kilde
+// fjernet) var grønn. Alt som kan få deltakeren inn på en annen vei, må være borte — ellers måler
+// testen ikke den fjerde kilden, den måler at unionen har fire ledd.
 // ─────────────────────────────────────────────────────────────────────────────
 
 const stamp = `${Date.now()}-${Math.round(performance.now())}`;
@@ -39,13 +42,18 @@ describe("#1010 — kursrapporten teller den som bare har lest", () => {
       data: { title: `Lesekurs ${stamp}`, publishedAt: new Date(), enrollmentPolicy: "OPEN" },
       select: { id: true },
     });
-    const section = await prisma.courseSection.create({ data: { title: JSON.stringify({ nb: "Les meg" }) }, select: { id: true } });
-    const version = await prisma.courseSectionVersion.create({
-      data: { sectionId: section.id, versionNo: 1, bodyMarkdown: JSON.stringify({ nb: "Innhold." }), publishedAt: new Date() },
-      select: { id: true },
-    });
-    await prisma.courseSection.update({ where: { id: section.id }, data: { activeVersionId: version.id } });
-    await prisma.courseItem.create({ data: { courseId: course.id, itemType: "SECTION", sectionId: section.id, sortOrder: 1 } });
+    const lagSeksjon = async (sortOrder: number) => {
+      const section = await prisma.courseSection.create({ data: { title: JSON.stringify({ nb: `Les meg ${sortOrder}` }) }, select: { id: true } });
+      const version = await prisma.courseSectionVersion.create({
+        data: { sectionId: section.id, versionNo: 1, bodyMarkdown: JSON.stringify({ nb: "Innhold." }), publishedAt: new Date() },
+        select: { id: true },
+      });
+      await prisma.courseSection.update({ where: { id: section.id }, data: { activeVersionId: version.id } });
+      await prisma.courseItem.create({ data: { courseId: course.id, itemType: "SECTION", sectionId: section.id, sortOrder } });
+      return section;
+    };
+    const section = await lagSeksjon(1);
+    await lagSeksjon(2); // ulest — så kurset IKKE fullføres og beviset ikke utstedes
 
     const rader = async () => {
       const res = await request(app)
@@ -69,11 +77,13 @@ describe("#1010 — kursrapporten teller den som bare har lest", () => {
     const les = await request(app).post(`/api/courses/${course.id}/sections/${section.id}/read`).set(leser);
     expect(les.status).toBeLessThan(300);
     expect(await prisma.courseEnrollment.count({ where: { courseId: course.id } }), "kontroll: fortsatt ingen innmelding").toBe(0);
+    expect(await prisma.courseCompletion.count({ where: { courseId: course.id } }), "kontroll: ingen fullføring — ellers kommer hen inn den veien").toBe(0);
 
     const etter = await rader();
     expect(etter).toHaveLength(1);
     expect(etter[0].readSections).toBe(1);
-    expect(etter[0].totalSections).toBe(1);
+    expect(etter[0].totalSections).toBe(2);
+    expect(etter[0].status).not.toBe("COMPLETED");
     expect((await kursrad())?.enrolledParticipants).toBe(1);
   });
 });
