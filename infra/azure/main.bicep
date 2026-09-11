@@ -15,6 +15,12 @@ param appNamePrefix string = 'a2-assessment-platform'
 ])
 param appServiceSkuName string = 'B1'
 
+// #970/#984: organisasjonens standardspråk. Brukes når en forespørsel ikke bærer x-locale eller
+// gjenkjennelig Accept-Language, og for e-post til brukere som ikke har logget inn siden
+// User.preferredLocale kom. Kodens egen reserve er en-GB; denne organisasjonen er norsk.
+@allowed(['en-GB', 'nb', 'nn'])
+param defaultLocale string = 'nb'
+
 @description('Cost center tag value.')
 param costCenter string = 'a2-assessment-platform'
 
@@ -718,6 +724,10 @@ resource webAppSettingsConfig 'Microsoft.Web/sites/config@2023-12-01' = {
           value: 'production'
         }
         {
+          name: 'DEFAULT_LOCALE'
+          value: defaultLocale
+        }
+        {
           name: 'PORT'
           value: '8080'
         }
@@ -952,6 +962,10 @@ resource workerAppSettingsConfig 'Microsoft.Web/sites/config@2023-12-01' = {
         {
           name: 'NODE_ENV'
           value: 'production'
+        }
+        {
+          name: 'DEFAULT_LOCALE'
+          value: defaultLocale
         }
         {
           name: 'PORT'
