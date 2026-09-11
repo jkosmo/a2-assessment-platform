@@ -114,10 +114,11 @@ describe("#651 agent authoring tokens", () => {
     });
     const moduleRow = await prisma.module.findUniqueOrThrow({
       where: { id: moduleEntry.id },
-      select: { activeVersionId: true, createdById: true },
+      select: { activeVersionId: true },
     });
     expect(moduleRow.activeVersionId).toBeNull();
-    expect(moduleRow.createdById).toBe(adminUser.id);
+    // #963: eierskap måles der autorisasjonen leser det — ContentOwner, ikke createdById.
+    expect(await prisma.contentOwner.findFirst({ where: { contentType: "MODULE", contentId: moduleEntry.id, userId: adminUser.id } })).not.toBeNull();
   });
 
   it("works when the issuer's role is not persisted (Entra claim / mock hint) — #651 stage 403 regression", async () => {

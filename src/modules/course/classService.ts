@@ -39,7 +39,7 @@ export async function createClass(input: { name: string; description?: string | 
   if (!name) throw new ValidationError("Class name is required.");
   const created = await runInTransaction(async (tx) => {
     const repo = createClassRepository(tx);
-    const klass = await repo.createClass({ name, description: input.description ?? null, createdById: actorId });
+    const klass = await repo.createClass({ name, description: input.description ?? null });
     await recordAuditEvent(
       {
         entityType: auditEntityTypes.class,
@@ -50,12 +50,15 @@ export async function createClass(input: { name: string; description?: string | 
       },
       tx,
     );
+    // #787 slice 4a: creator becomes sole initial owner.
+    // #963: INNE i transaksjonen, som for modul, kurs og seksjon. Dette var det ene av fire stedene
+    // som lå utenfor: klassen var alt lagret når eierraden ble skrevet, og feilet den, sto klassen
+    // igjen som «unowned» — 403 mot skaperen selv, permanent, til en administrator grep inn.
+    if (actorId) {
+      await addContentOwner({ contentType: "CLASS", contentId: klass.id, ownerUserId: actorId, actorUserId: actorId }, tx);
+    }
     return klass;
   });
-  // #787 slice 4a: creator becomes sole initial owner (inert until 4b enforcement).
-  if (actorId) {
-    await addContentOwner({ contentType: "CLASS", contentId: created.id, ownerUserId: actorId, actorUserId: actorId });
-  }
   return created;
 }
 

@@ -8,11 +8,12 @@ describe("class repository", () => {
     const create = vi.fn().mockResolvedValue({ id: "class-1" });
     const repo = createClassRepository({ class: { create } } as never);
 
-    await repo.createClass({ name: "Onboarding H2026", description: "Nye ansatte", createdById: "admin-1" });
+    await repo.createClass({ name: "Onboarding H2026", description: "Nye ansatte" });
 
     expect(create).toHaveBeenCalledWith(
       expect.objectContaining({
-        data: { name: "Onboarding H2026", description: "Nye ansatte", kind: "MANUAL", createdById: "admin-1" },
+        // #963: eierskap skrives til ContentOwner av tjenesten, ikke som createdById her.
+        data: { name: "Onboarding H2026", description: "Nye ansatte", kind: "MANUAL" },
       }),
     );
   });

@@ -137,7 +137,6 @@ export function createAdminContentRepository(client: AdminContentRepositoryClien
       scopeMaxWords?: number | null;
       validFrom?: Date;
       validTo?: Date;
-      createdById?: string;
     }) {
       return client.module.create({
         data,
@@ -150,13 +149,6 @@ export function createAdminContentRepository(client: AdminContentRepositoryClien
           validTo: true,
           createdAt: true,
         },
-      });
-    },
-
-    findModuleOwner(moduleId: string) {
-      return client.module.findUnique({
-        where: { id: moduleId },
-        select: { id: true, createdById: true },
       });
     },
 
