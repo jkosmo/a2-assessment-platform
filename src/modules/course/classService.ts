@@ -4,6 +4,7 @@ import { DomainRuleError, NotFoundError, ValidationError } from "../../errors/Ap
 import { recordAuditEvent } from "../../services/auditService.js";
 import { auditActions, auditEntityTypes } from "../../observability/auditEvents.js";
 import { localizeContentText } from "../../i18n/content.js";
+import { recipientLocale } from "../../i18n/recipientLocale.js";
 import type { SupportedLocale } from "../../i18n/locale.js";
 import { hasAnyRole, PARTICIPANTS } from "../../auth/roleSets.js";
 import { sendCourseAssignmentNotification } from "../certification/participantNotificationService.js";
@@ -259,20 +260,22 @@ async function notifyClassMembersOfCourseAssignment(
   dueAt: Date | null,
 ): Promise<void> {
   try {
-    const courseTitle = localizeContentText("nb", courseTitleJson) ?? courseTitleJson;
     const members = await classRepository.listMembers(classId);
     await Promise.allSettled(
       members
         .filter((m) => m.user.email)
-        .map((m) =>
-          sendCourseAssignmentNotification({
+        .map((m) => {
+          // #970: mottakerens språk («sist sett»), ikke bokmål for alle. Tittelen velges for samme språk.
+          const locale = recipientLocale(m.user);
+          return sendCourseAssignmentNotification({
             recipientEmail: m.user.email,
             recipientName: m.user.name,
-            courseTitle,
+            courseTitle: localizeContentText(locale, courseTitleJson) ?? courseTitleJson,
             className,
             dueAt,
-          }),
-        ),
+            locale,
+          });
+        }),
     );
   } catch {
     /* never let notification failure surface — assignment already succeeded */

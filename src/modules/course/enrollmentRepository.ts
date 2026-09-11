@@ -81,7 +81,7 @@ export function createEnrollmentRepository(client: EnrollmentRepositoryClient = 
       return client.courseEnrollment.findMany({
         where: { revokedAt: null, dueAt: { not: null, lte: upperBound } },
         include: {
-          user: { select: { id: true, name: true, email: true, activeStatus: true, isAnonymized: true } },
+          user: { select: { id: true, name: true, email: true, activeStatus: true, isAnonymized: true, preferredLocale: true } },
           course: { select: { id: true, title: true, publishedAt: true, archivedAt: true } },
         },
       });

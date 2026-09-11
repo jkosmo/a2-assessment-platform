@@ -194,7 +194,7 @@ export async function authenticate(request: Request, response: Response, next: N
   }
 
   try {
-    const user = await upsertUserFromPrincipal(principal);
+    const user = await upsertUserFromPrincipal(principal, locale);
 
     // Sikkerhetsfiks: Hindre tilgang for brukere som er deaktivert via org-sync (#15)
     if (user.activeStatus === false) {

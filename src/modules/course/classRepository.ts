@@ -90,7 +90,7 @@ export function createClassRepository(client: ClassRepositoryClient = prisma) {
       return client.classMember.findMany({
         where: { classId },
         orderBy: { addedAt: "desc" },
-        include: { user: { select: { id: true, name: true, email: true } } },
+        include: { user: { select: { id: true, name: true, email: true, preferredLocale: true } } },
       });
     },
 
@@ -146,7 +146,7 @@ export function createClassRepository(client: ClassRepositoryClient = prisma) {
               members: {
                 select: {
                   user: {
-                    select: { id: true, name: true, email: true, activeStatus: true, isAnonymized: true },
+                    select: { id: true, name: true, email: true, activeStatus: true, isAnonymized: true, preferredLocale: true },
                   },
                 },
               },
@@ -176,7 +176,7 @@ export function createClassRepository(client: ClassRepositoryClient = prisma) {
               members: {
                 select: {
                   user: {
-                    select: { id: true, name: true, email: true, activeStatus: true, isAnonymized: true },
+                    select: { id: true, name: true, email: true, activeStatus: true, isAnonymized: true, preferredLocale: true },
                   },
                 },
               },

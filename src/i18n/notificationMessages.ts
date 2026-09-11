@@ -319,3 +319,46 @@ export function getCourseReminderNotificationMessage(
     nextStepGuidance: guidance,
   };
 }
+
+// #970: klassetildeling av kurs. Var hardkodet bokmål i participantNotificationService — den eneste
+// e-posten uten språkparameter. Samme form som påminnelsene; ingen lenker (#688).
+type CourseAssignmentLabels = {
+  subject: string; // {course}
+  body: string; // {class} {course}
+  dueLine: string; // {date}
+  closing: string;
+};
+
+const courseAssignmentMessages: Record<SupportedLocale, CourseAssignmentLabels> = {
+  "en-GB": {
+    subject: "New course assigned: {course}",
+    body: "Hello!\n\nYour class «{class}» has been assigned the course «{course}».",
+    dueLine: "\nDue: {date}.",
+    closing: "\n\nLog in to the platform to get started.",
+  },
+  nb: {
+    subject: "Nytt kurs tildelt: {course}",
+    body: "Hei!\n\nKlassen din «{class}» har blitt tildelt kurset «{course}».",
+    dueLine: "\nFrist: {date}.",
+    closing: "\n\nLogg inn på plattformen for å starte.",
+  },
+  nn: {
+    subject: "Nytt kurs tildelt: {course}",
+    body: "Hei!\n\nKlassen din «{class}» har fått tildelt kurset «{course}».",
+    dueLine: "\nFrist: {date}.",
+    closing: "\n\nLogg inn på plattforma for å starte.",
+  },
+};
+
+export function getCourseAssignmentNotificationMessage(
+  locale: SupportedLocale,
+  context: { courseTitle: string; className: string; dueAt?: Date | null },
+): NotificationMessage {
+  const t = courseAssignmentMessages[locale];
+  const dueLine = context.dueAt ? t.dueLine.replace("{date}", formatDateOnly(context.dueAt, locale)) : "";
+  return {
+    subject: t.subject.replace("{course}", context.courseTitle),
+    nextStepGuidance:
+      t.body.replace("{class}", context.className).replace("{course}", context.courseTitle) + dueLine + t.closing,
+  };
+}

@@ -1,6 +1,7 @@
 import type { AppRole as AppRoleType } from "@prisma/client";
 import { AppRole } from "../db/prismaRuntime.js";
 import type { AuthPrincipal } from "../auth/principal.js";
+import type { SupportedLocale } from "../i18n/locale.js";
 import { parseEntraGroupRoleMapJson } from "../auth/entraRoleMap.js";
 import { revokeAllAgentTokensForUser } from "../auth/agentAuthoringTokenService.js";
 import { prisma } from "../db/prisma.js";
@@ -27,7 +28,11 @@ export class IdentityReconciliationError extends Error {
   }
 }
 
-export async function upsertUserFromPrincipal(principal: AuthPrincipal) {
+// #970: `locale` er språket forespørselen ble løst til (x-locale → Accept-Language → standard), og
+// lagres som `preferredLocale` — «sist sett». Én skriving skjer uansett (lastLoginAt), så dette
+// koster ingen ekstra rundtur. Alle fem skrivingene under bærer den, av samme grunn som de alle
+// bærer lastLoginAt: hvilken gren som treffes avhenger av kappløp, ikke av hva vi vil huske.
+export async function upsertUserFromPrincipal(principal: AuthPrincipal, locale?: SupportedLocale) {
   const existingByExternalId = await prisma.user.findUnique({
     where: { externalId: principal.externalId },
     select: { id: true, email: true, activeStatus: true, isAnonymized: true },
@@ -54,6 +59,7 @@ export async function upsertUserFromPrincipal(principal: AuthPrincipal) {
         name: principal.name,
         department: principal.department,
         lastLoginAt: now,
+        ...(locale ? { preferredLocale: locale } : {}),
       },
     });
   }
@@ -67,6 +73,7 @@ export async function upsertUserFromPrincipal(principal: AuthPrincipal) {
           name: principal.name,
           department: principal.department,
           lastLoginAt: now,
+          ...(locale ? { preferredLocale: locale } : {}),
         },
       });
     }
@@ -82,6 +89,7 @@ export async function upsertUserFromPrincipal(principal: AuthPrincipal) {
         department: principal.department,
         activeStatus: true,
         lastLoginAt: now,
+        ...(locale ? { preferredLocale: locale } : {}),
       },
     });
   } catch (error) {
@@ -109,6 +117,7 @@ export async function upsertUserFromPrincipal(principal: AuthPrincipal) {
               name: principal.name,
               department: principal.department,
               lastLoginAt: now,
+              ...(locale ? { preferredLocale: locale } : {}),
             },
           });
         }
@@ -125,6 +134,7 @@ export async function upsertUserFromPrincipal(principal: AuthPrincipal) {
         name: principal.name,
         department: principal.department,
         lastLoginAt: now,
+        ...(locale ? { preferredLocale: locale } : {}),
       },
     });
   }
@@ -146,7 +156,7 @@ export async function findActiveParticipants(at = new Date()) {
         },
       },
     },
-    select: { id: true, name: true, email: true },
+    select: { id: true, name: true, email: true, preferredLocale: true },
   });
 }
 

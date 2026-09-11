@@ -15,6 +15,8 @@ import { deriveStatus } from "./enrollmentService.js";
 import { enrollmentRepository } from "./enrollmentRepository.js";
 import { classRepository } from "./classRepository.js";
 import { findActiveParticipants } from "../../repositories/userRepository.js";
+import { recipientLocale } from "../../i18n/recipientLocale.js";
+import type { SupportedLocale } from "../../i18n/locale.js";
 
 // #497: automatiske kurs-frist-påminnelser (Epic #478, siste «Done når»-pilar). Audit-basert dedup
 // gjør re-kjøring idempotent og restart-trygg. Dekker to kilder til kurs-frister:
@@ -26,10 +28,10 @@ import { findActiveParticipants } from "../../repositories/userRepository.js";
 // ⚠️ #989 fjernet resertifisering av moduler. DETTE er ikke det: en kursfrist er en frist for å bli
 // FERDIG med et kurs, ikke en utløpsdato på kunnskap. Kursfrister er uendret og skal forbli det.
 // Per (bruker, kurs) beregnes ÉN effektiv frist: individuell frist vinner over klasse; ved flere
-// klasse-frister vinner den tidligste. Slik unngås dobbel-varsling. Ingen per-bruker locale finnes
-// ennå → org-default (nb), samme som diskusjonsvarsler.
-
-const NOTIFY_LOCALE = "nb" as const;
+// klasse-frister vinner den tidligste. Slik unngås dobbel-varsling.
+// #970: språket er MOTTAKERENS — «sist sett» (`User.preferredLocale`, se recipientLocale). Før sto
+// det «ingen per-bruker locale finnes ennå → nb» her, og en engelskspråklig deltaker fikk
+// resultat-e-post på engelsk mandag og «Fristen nærmer seg» på norsk tirsdag.
 const NOTIFICATION_TYPE = "course_reminder";
 
 type ReminderChannel = "disabled" | "log" | "webhook" | "acs_email";
@@ -40,6 +42,7 @@ export type CourseReminderSendInput = {
   recipientEmail: string;
   recipientName: string | null;
   courseTitle: string;
+  locale: SupportedLocale;
   kind: CourseReminderKind;
   dueAt: Date;
   daysBefore?: number;
@@ -75,7 +78,8 @@ type ReminderCandidate = {
   dueAt: Date;
   recipientEmail: string;
   recipientName: string | null;
-  courseTitle: string; // lokalisert
+  courseTitle: string; // lokalisert for mottakeren
+  locale: SupportedLocale;
   activeStatus: boolean;
   isAnonymized: boolean;
   source: "individual" | "class";
@@ -83,7 +87,7 @@ type ReminderCandidate = {
 
 async function defaultSendCourseReminder(input: CourseReminderSendInput): Promise<CourseReminderSendResult> {
   const channel = env.PARTICIPANT_NOTIFICATION_CHANNEL;
-  const message = getCourseReminderNotificationMessage(NOTIFY_LOCALE, input.kind, {
+  const message = getCourseReminderNotificationMessage(input.locale, input.kind, {
     courseTitle: input.courseTitle,
     dueAt: input.dueAt,
     daysBefore: input.daysBefore,
@@ -203,8 +207,8 @@ function dueDateIsBefore(dueAt: Date, asOf: Date): boolean {
   return due < now;
 }
 
-function localizeTitle(title: string): string {
-  return localizeContentText(NOTIFY_LOCALE, title) ?? title ?? "";
+function localizeTitle(locale: SupportedLocale, title: string): string {
+  return localizeContentText(locale, title) ?? title ?? "";
 }
 
 // Samler individuelle + klasse-tildelte frister til ÉN effektiv kandidat per (bruker, kurs).
@@ -239,7 +243,8 @@ async function gatherCandidates(summary: CourseReminderScheduleSummary, upperBou
       dueAt: enrollment.dueAt,
       recipientEmail: enrollment.user.email,
       recipientName: enrollment.user.name,
-      courseTitle: localizeTitle(enrollment.course.title),
+      courseTitle: localizeTitle(recipientLocale(enrollment.user), enrollment.course.title),
+      locale: recipientLocale(enrollment.user),
       activeStatus: enrollment.user.activeStatus,
       isAnonymized: enrollment.user.isAnonymized,
       source: "individual",
@@ -249,7 +254,7 @@ async function gatherCandidates(summary: CourseReminderScheduleSummary, upperBou
   // 2. Klasse-tildelte frister → ekspander til medlemmer. MANUAL = ClassMember-rader;
   //    system-klassen «Alle deltakere» = alle aktive deltakere (ingen rader). ENTRA hoppes over.
   const assignments = await classRepository.findCourseGroupAssignmentsWithDueDate(upperBound);
-  let allParticipants: Array<{ id: string; name: string; email: string }> | null = null;
+  let allParticipants: Array<{ id: string; name: string; email: string; preferredLocale: string | null }> | null = null;
 
   for (const assignment of assignments) {
     if (!assignment.dueAt) continue;
@@ -268,6 +273,7 @@ async function gatherCandidates(summary: CourseReminderScheduleSummary, upperBou
       id: string;
       name: string;
       email: string;
+      preferredLocale: string | null;
       activeStatus: boolean;
       isAnonymized: boolean;
     }> = assignment.class.isSystem
@@ -278,7 +284,6 @@ async function gatherCandidates(summary: CourseReminderScheduleSummary, upperBou
         }))
       : assignment.class.members.map((m) => m.user);
 
-    const courseTitle = localizeTitle(assignment.course.title);
     for (const user of members) {
       const key = keyOf(user.id, assignment.courseId);
       const existing = map.get(key);
@@ -295,7 +300,8 @@ async function gatherCandidates(summary: CourseReminderScheduleSummary, upperBou
         dueAt: assignment.dueAt,
         recipientEmail: user.email,
         recipientName: user.name,
-        courseTitle,
+        courseTitle: localizeTitle(recipientLocale(user), assignment.course.title),
+        locale: recipientLocale(user),
         activeStatus: user.activeStatus,
         isAnonymized: user.isAnonymized,
         source: "class",
@@ -394,6 +400,7 @@ export async function runCourseReminderSchedule(input?: {
       recipientEmail: candidate.recipientEmail,
       recipientName: candidate.recipientName,
       courseTitle: candidate.courseTitle,
+      locale: candidate.locale,
       kind,
       dueAt: candidate.dueAt,
       daysBefore,
