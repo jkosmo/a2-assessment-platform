@@ -14,6 +14,7 @@ import { localizeDecisionReason } from "/static/decision-reason.js";
 import { showToast } from "/static/toast.js";
 import { describeApiError } from "/static/api-error.js";
 import { OUTCOME_FAILED, OUTCOME_PASSED, rawPassFailState } from "/static/outcome.js";
+import { decisionHistoryActorKey, decisionHistoryOutcome } from "/static/decision-history.js";
 import {
   findMatchingPreset,
   resolveRoleSwitchState,
@@ -866,10 +867,19 @@ function renderManualReviewDetails(details) {
     });
   }
   if (latestDecision) {
+    // #1034: etiketten følger vedtakstypen, og et AUTOMATISK vedtak i en sak som fortsatt er åpen
+    // sier «til vurdering» — ikke «Ikke bestått» på 72 av 70, som lest sammen med den gamle faste
+    // etiketten «Vurderer-overstyring» påsto at en kollega alt hadde strøket kandidaten.
+    const outcome = decisionHistoryOutcome({
+      decisionType: latestDecision.decisionType,
+      passFailTotal: latestDecision.passFailTotal,
+      submissionStatus: submission.status,
+    });
+    const outcomeText = outcome === "pending" ? t("case.history.pendingReview") : formatMrPassFail(latestDecision.passFailTotal);
     history.push({
-      actor: t("case.history.review"),
+      actor: t(decisionHistoryActorKey(latestDecision.decisionType)),
       when: formatDateTime(latestDecision.finalisedAt),
-      decision: `${formatMrPassFail(latestDecision.passFailTotal)} · ${t("manualReview.details.totalScore")}: ${formatNumber(latestDecision.totalScore)}`,
+      decision: `${outcomeText} · ${t("manualReview.details.totalScore")}: ${formatNumber(latestDecision.totalScore)}`,
       reason: assessorDecisionReason(latestDecision),
     });
   }
