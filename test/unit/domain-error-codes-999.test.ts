@@ -33,9 +33,70 @@ function alleTsFiler(dir: URL): URL[] {
 const filer = alleTsFiler(ROT);
 const kilde = filer.map((f) => les(f)).join("\n");
 
-// ⚠️ Taket senkes når tallet går ned. Det er en RATSJ: den skal feile i begge retninger, så en
-// forbedring ikke går ubemerket forbi og en forverring ikke sniker seg inn.
-const TAK = 30;
+// ⚠️ RATSJ: tallet kan gå ned, aldri opp. Går det ned, settes TAK ned i SAMME commit — ellers
+// måler den ingenting fra da av. Den skal altså feile i begge retninger.
+const TAK = 4;
+
+// HISTORIKK, så neste porsjon vet hvor den skal lete:
+//
+//   35  da saken ble skrevet
+//   34  #1001 ga publiseringsporten en kode
+//   30  de fire seksjonsvaktene — den siste norske prosaen i kastene
+//   21  vedleggene: ni kast viste seg å være fem regler, tre av dem ordrette duplikater
+//   14  påmelding, kursbevisbakgrunn, kaskadesletting, eksporttak, vedleggsimport
+//   13  rapportrutene: fjorten svar var TO meldinger, «Invalid report query filters» sto tolv
+//       ganger ordrett
+//   15  ⚠️ OPP IGJEN, med vilje. To av kodene viste seg å være UNÅBARE: Zod avviser tilfellet på
+//       ruta før tjenesten kalles. Målt mot stage 2026-09-10 — `class_name_required` og
+//       `enrollment_target_missing` ga begge `validation_error` med `issues`. De er rullet tilbake
+//       til vanlige vakter, og de seks tekstene er slettet.
+//
+//       ⚠️ RATSJEN SKAL IKKE PRESSE TALLET NED FOR ENHVER PRIS. En kode som aldri når en klient
+//       lyver om sin egen rekkevidde, og neste leser tror den er brukervendt. Å telle den som
+//       framgang gjør målet til tallet i stedet for det tallet skulle måle.
+//
+//    4  de elleve håndbygde er flyttet inn i Zod-skjemaene på ruta. Ingen av dem fikk kode, og
+//       det var poenget: «url is required» og «Missing file» er FORMVALIDERING. Nå bærer svarene
+//       `issues`, får den generiske overskriften og detaljene i detaljfeltet — formen #996 avgjorde.
+//       Tallet består nå UTELUKKENDE av de fire kastene, og ingen av dem er en domeneregel.
+//
+// ⚠️ HERFRA GÅR TALLET IKKE NED AV SEG SELV. De fire som står igjen skal stå (begrunnelsene under),
+// så en ny nedgang betyr enten at noen fjernet en vakt, eller at en av begrunnelsene er revurdert.
+// Er det siste tilfellet, skriv HVILKEN her — ellers arver neste leser en beslutning uten spor.
+//
+// ⚠️ TALLET DEKKET LENGE BARE HALVE SANNHETEN. Ratsjen talte først bare `new ValidationError(`,
+// mens 25 ruter bygde svaret for hånd med `{ error: "validation_error", message }` — samme vei
+// gjennom `api-error.js`, samme skade. Det sto som «2 igjen» mens 27 gjensto.
+//
+// ── HVA SOM STÅR IGJEN, OG HVORFOR ────────────────────────────────────────────────────────────
+//
+// ⚠️ DE 2 KASTEDE BLIR STÅENDE. En feilkode finnes for at klienten skal si det samme på brukerens
+// språk. Disse to er ikke domeneregler noen kan handle på:
+//
+//   entraUserSyncService — en KONFIGURASJONSFEIL som navngir en miljøvariabel. Å oversette
+//   «ENTRA_USER_SYNC_GROUP_ID er ikke satt» til nynorsk hjelper ingen.
+//
+//   submissionService — en INTERN INVARIANT. Fyrer den, er dataene inkonsistente, og svaret er en
+//   feilrapport — ikke en setning som ber brukeren gjøre noe hen ikke kan gjøre.
+//
+// ⚠️ DE 11 HÅNDBYGDE ER GJORT OPP — men ikke med koder. «url is required», «invalid locale»,
+// «validFrom/validTo må være ISO-verdier», «Missing file» er FORMVALIDERING, ikke domeneregler:
+// forespørselen har feil form, ingen har brutt en regel om innholdet. De ligger nå i Zod-skjemaene
+// på ruta (adminContent 8, calibration 2, adminSections 1), og svarene bærer `issues`.
+//
+// ⚠️ UNNTAKET I `api-error.js` KAN LIKEVEL IKKE FJERNES ENNÅ, og det var det #999 siktet mot.
+// Grenen som viser `body.message` når `validation_error` mangler `issues` har fortsatt levende
+// avsendere — nettopp de fire over. To av dem er NÅBARE over HTTP:
+//
+//   `POST /api/org-sync/entra` uten `ENTRA_USER_SYNC_GROUP_ID` satt → `validation_error` uten
+//   `issues`, med konfigurasjonssetningen som eneste forklaring.
+//
+//   `createSubmission` når modulen mangler aktiv versjon → samme form.
+//
+// Fjernes unntaket nå, blir begge til «noe i skjemaet mangler eller er feil utfylt» — feil diagnose
+// på noe som ikke er et skjema i det hele tatt, altså nøyaktig regresjonen #996 rettet. Rekkefølgen
+// er: gi de to en ÆRLIG klasse først (en konfigurasjonsfeil er ikke 400 `validation_error`, og en
+// intern invariant er ikke det heller), og fjern så unntaket. Det er en egen sak, ikke denne.
 
 describe("#999 — domenevaktene skal bære koder", () => {
   it("kontrollcase: vi leser faktisk kildekoden", () => {
@@ -45,12 +106,34 @@ describe("#999 — domenevaktene skal bære koder", () => {
     expect(kilde).toContain("DomainRuleError");
   });
 
-  it("⚠️ antallet ValidationError uten kode går bare ned", () => {
-    const antall = (kilde.match(/new ValidationError\(/g) ?? []).length;
+  it("⚠️ antallet generiske validation_error går bare ned", () => {
+    // ⚠️ TO KILDER, IKKE ÉN. Ratsjen talte først bare `new ValidationError(`. Men 25 ruter bygger
+    // svaret for hånd — `response.status(400).json({ error: "validation_error", message: … })` —
+    // og de tar NØYAKTIG samme vei gjennom `api-error.js`: uten `issues` vises serverens setning
+    // ordrett.
+    //
+    // Med bare kastene talt sto tallet på 2 og så nesten ferdig ut, mens 25 gjensto. En måling som
+    // bare ser den ene halvdelen er verre enn ingen — den sier «vi er i mål» om noe som ikke er det.
+    //
+    // Zod-svarene (`issues` til stede) telles IKKE: de får den generiske overskriften med vilje,
+    // og detaljene i detaljfeltet. Det er #996 sin avgjørelse og skal stå.
+    const kastet = (kilde.match(/new ValidationError\(/g) ?? []).length;
+    const direkte = kilde
+      .split("\n")
+      // ⚠️ KOMMENTARLINJER TELLES IKKE. Vakta talte sin egen forklaring i reports.ts, der frasen
+      // står sitert. En vakt som teller prosa måler ikke oppførsel — samme feil som #1037-vakta
+      // gjorde da den sto rød på sin egen kommentar.
+      .filter((l) => {
+        const t = l.trim();
+        if (t.startsWith("//") || t.startsWith("*")) return false;
+        return t.includes('error: "validation_error"') && !t.includes("issues");
+      }).length;
+    const antall = kastet + direkte;
 
     expect(
       antall,
-      `Det er nå ${antall} ValidationError uten kode; taket er ${TAK}.\n` +
+      `Det er nå ${antall} generiske validation_error; taket er ${TAK}.\n` +
+        `(${kastet} kastet, ${direkte} bygget for hånd i en rute — begge tar samme vei.)\n` +
         "Hver av dem viser serverens egen setning ordrett i brukerens grensesnitt, uansett språk.\n" +
         "Trenger den nye virkelig å være uten kode? Domeneregler skal kaste DomainRuleError.",
     ).toBeLessThanOrEqual(TAK);
@@ -91,6 +174,15 @@ describe("#999 — domenevaktene skal bære koder", () => {
   it("⚠️ hver kode i src har tekst i ALLE tre språktabellene", () => {
     // Samme regel på N steder, håndhevet på N−1. En kode uten tekst er verre enn prosa: klienten
     // faller tilbake til den generiske «noe i skjemaet er feil utfylt», som er feil diagnose.
+    // ⚠️ AVGRENSET TIL `DomainRuleError`, OG DET ER RIKTIG SCOPE.
+    //
+    // Jeg utvidet den først til å ta ALLE `error: "kode"` i src. Da falt 56 koder ut som «mangler
+    // tekst» — men de er maskinvendte: agent-token, signaturer, nonce, og `*_failed`-innpakninger
+    // rundt interne feil. Å kreve nynorsk for `replayed_nonce` er meningsløst.
+    //
+    // `DomainRuleError` ER definisjonen på «en regel et menneske brøt og skal få vite om». Er en ny
+    // kode brukervendt, skal den kastes som en — ikke bygges for hånd i en rute. Det var nettopp
+    // det rapportkodene måtte rettes til.
     const koder = [...kilde.matchAll(/new DomainRuleError\(\s*"([a-z_]+)"/g)].map((m) => m[1]);
     expect(koder.length, "fant ingen koder — kontrollcase").toBeGreaterThan(4);
 

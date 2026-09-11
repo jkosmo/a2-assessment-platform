@@ -99,3 +99,138 @@ test("participant: the section reader strips dangerous markup but keeps allowed 
   // The injected script never executed.
   expect(await page.evaluate(() => (window as unknown as { __pwned?: boolean }).__pwned ?? false)).toBe(false);
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// #1051: modulens oppgavetekst går nå gjennom den samme døra som seksjonene.
+//
+// Skill-en skriver oppgaveteksten i markdown. Klienten satte den som `textContent`, og deltakeren
+// så `## Oppgave` og `**uthevet**` som rå tegn. Serveren rendrer nå til HTML — og klienten
+// sanerer LIKEVEL på nytt før `innerHTML`, samme forsvar i dybden som #814 ga seksjonsleseren.
+//
+// ⚠️ Denne testen beviser to ting som en enhetstest ikke kan: at klienten faktisk bruker
+// `innerHTML` (markdownen VISES som struktur), og at et innerHTML-sluk ikke stoler på serveren.
+// ─────────────────────────────────────────────────────────────────────────────
+
+test("participant: the module brief renders markdown HTML and re-sanitises it (#1051)", async ({ page }) => {
+  await mockBase(page);
+  await page.addInitScript(() => {
+    try { localStorage.setItem("participant.locale", "nb"); } catch { /* ignore */ }
+  });
+  await page.route("**/api/courses", (route: Route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ courses: [{ id: "c1", title: "Kurs", description: null, moduleCount: 1, progress: { completed: 0, total: 1, courseStatus: "NOT_STARTED" } }] }),
+    }),
+  );
+  await page.route("**/api/courses/completions", (route: Route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ completions: [] }) }),
+  );
+  await page.route("**/api/courses/c1", (route: Route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ course: { id: "c1", title: "Kurs", items: [{ type: "MODULE", moduleId: "m1", title: "Modul", available: true }] } }),
+    }),
+  );
+  // Rendret markdown + noe ondsinnet, som om serveren var kompromittert eller en eldre server
+  // sendte usanert HTML. Klienten skal beholde strukturen og stryke det farlige.
+  const taskTextHtml = [
+    "<h2>Oppgave</h2>",
+    "<p>Skriv <strong>kort</strong> om saken.</p>",
+    "<script>window.__pwned = true;</script>",
+    '<img src="x" onerror="window.__pwned = true">',
+  ].join("");
+  await page.route("**/api/modules?includeCompleted=true", (route: Route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        modules: [{
+          id: "m1",
+          title: "Modul",
+          description: null,
+          taskText: "## Oppgave\n\nSkriv **kort** om saken.",
+          taskTextHtml,
+          candidateTaskConstraints: null,
+          candidateTaskConstraintsHtml: null,
+          assessmentMode: "FREETEXT_ONLY",
+          submissionSchema: { fields: [] },
+          assessmentPolicy: null,
+          participantStatus: null,
+          activeVersion: { id: "v1", assessmentMode: "FREETEXT_ONLY" },
+        }],
+      }),
+    }),
+  );
+  await page.goto("/participant");
+  await expect(page.locator("#loadCoursesBtn")).toBeEnabled();
+  await page.locator("#loadCoursesBtn").click();
+  await page.locator(".course-accordion-header").click();
+  await page.locator(".course-module-row").click();
+
+  const brief = page.locator("#selectedModuleTaskText");
+  // ⚠️ Markdownen vises som STRUKTUR — det beviser at klienten bruker innerHTML, ikke textContent.
+  // Med textContent ville `<h2>` stått som bokstavelige tegn i teksten.
+  await expect(brief.locator("h2")).toHaveText("Oppgave");
+  await expect(brief.locator("strong")).toHaveText("kort");
+  await expect(brief).toHaveClass(/is-rendered/);
+  // Og det farlige er strøket, selv om det kom «fra serveren».
+  await expect(brief.locator("script")).toHaveCount(0);
+  const img = brief.locator("img");
+  if (await img.count()) {
+    expect(await img.first().getAttribute("onerror")).toBeNull();
+  }
+  expect(await page.evaluate(() => (window as unknown as { __pwned?: boolean }).__pwned ?? false)).toBe(false);
+});
+
+test("participant: without taskTextHtml the brief falls back to plain text (#1051 control)", async ({ page }) => {
+  // ⚠️ Kontrollcase: en eldre server som ikke sender HTML ennå skal fortsatt vise oppgaven — som
+  // tekst, og UTEN at markdown-tegn tolkes som HTML. Uten denne kunne fiksen ha gjort briefen tom
+  // for alle servere som ikke er oppgradert, og testen over ville sett like grønn ut.
+  await mockBase(page);
+  await page.addInitScript(() => {
+    try { localStorage.setItem("participant.locale", "nb"); } catch { /* ignore */ }
+  });
+  await page.route("**/api/courses", (route: Route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ courses: [{ id: "c1", title: "Kurs", description: null, moduleCount: 1, progress: { completed: 0, total: 1, courseStatus: "NOT_STARTED" } }] }),
+    }),
+  );
+  await page.route("**/api/courses/completions", (route: Route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ completions: [] }) }),
+  );
+  await page.route("**/api/courses/c1", (route: Route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ course: { id: "c1", title: "Kurs", items: [{ type: "MODULE", moduleId: "m1", title: "Modul", available: true }] } }),
+    }),
+  );
+  await page.route("**/api/modules?includeCompleted=true", (route: Route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        modules: [{
+          id: "m1", title: "Modul", description: null,
+          taskText: "Ren tekst <b>ikke html</b>",
+          assessmentMode: "FREETEXT_ONLY", submissionSchema: { fields: [] }, assessmentPolicy: null,
+          participantStatus: null, activeVersion: { id: "v1", assessmentMode: "FREETEXT_ONLY" },
+        }],
+      }),
+    }),
+  );
+  await page.goto("/participant");
+  await expect(page.locator("#loadCoursesBtn")).toBeEnabled();
+  await page.locator("#loadCoursesBtn").click();
+  await page.locator(".course-accordion-header").click();
+  await page.locator(".course-module-row").click();
+
+  const brief = page.locator("#selectedModuleTaskText");
+  await expect(brief).toContainText("Ren tekst <b>ikke html</b>");
+  await expect(brief.locator("b")).toHaveCount(0);
+  await expect(brief).not.toHaveClass(/is-rendered/);
+});

@@ -2,6 +2,7 @@ import { renderWorkspaceNavigationWithProfile } from "/static/workspace-nav.js";
 import { applyIdentityDefaults as delApplyIdentityDefaults } from "/static/identity-defaults.js";
 import { renderRolePresetControl as delRenderRolePresetControl } from "/static/role-preset-control.js";
 import { runWithBusyButton } from "/static/busy-button.js";
+import { localizeCertLevel } from "/static/cert-level.js";
 import { showToast } from "/static/toast.js";
 import { hideLoading, showEmpty, showLoading } from "/static/loading.js";
 import { lagLokalisertRessurs } from "/static/localized-resource.js";
@@ -110,6 +111,12 @@ function applyOutputVisibility() {
   output.hidden = !isDebugModeEnabled();
 }
 
+// #983: samme vurdering som i participant.js — se kommentaren over `formatOutputStatus` der.
+//
+// ⚠️ `data.message` her er IKKE en feilvei. Alle fire feilkallstedene i denne fila går allerede
+// gjennom `describeApiError(error, t).headline` (linje ~359, ~378, ~415, ~472), og `log()` får
+// derfor en ferdig oversatt STRENG — som treffer grenen over, ikke denne. Grenen under gjelder
+// vilkårlige vellykkede svar, og ingen av rutene denne siden kaller legger `message` i et 2xx-svar.
 function formatOutputStatus(data) {
   if (typeof data === "string") {
     return data;
@@ -450,7 +457,7 @@ function renderCourseCertificates(completions) {
     card.style.cssText = "border:1px solid var(--color-border);border-radius:var(--space-1);padding:var(--space-1);margin-bottom:var(--space-1);background:var(--color-bg-subtle,var(--color-bg))";
     card.innerHTML = `
       <div style="font-weight:600;font-size:14px">${escapeHtmlC(cc.courseTitle ?? cc.courseId)}</div>
-      ${cc.certificationLevel ? `<div class="small" style="margin-top:2px">${escapeHtmlC(t("courseCert.certLevel"))}: ${escapeHtmlC(cc.certificationLevel)}</div>` : ""}
+      ${cc.certificationLevel ? `<div class="small" style="margin-top:2px">${escapeHtmlC(t("courseCert.certLevel"))}: ${escapeHtmlC(localizeCertLevel(cc.certificationLevel, t))}</div>` : ""}
       <div class="small" style="margin-top:4px">${escapeHtmlC(t("courseCert.completedAt"))}: ${formatDateTime(cc.completedAt)}</div>
       <div class="small" style="color:var(--color-text-soft)">${escapeHtmlC(t("courseCert.certificateId"))}: <code>${escapeHtmlC(cc.certificateId)}</code></div>
       <div style="margin-top:6px"><a href="/certificate?id=${encodeURIComponent(cc.certificateId)}" target="_blank" rel="noopener" class="workspace-nav-link">${escapeHtmlC(t("courseCert.view"))}</a></div>

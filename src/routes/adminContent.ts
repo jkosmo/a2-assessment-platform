@@ -45,6 +45,8 @@ import {
   mcqLocalizationBodySchema,
   mcqRevisionBodySchema,
   sourceMaterialUploadBodySchema,
+  sourceMaterialUrlBodySchema,
+  sourceMaterialCondenseBodySchema,
   importBodySchema,
   normalizeImportPayload,
   agentTokenCreateBodySchema,
@@ -59,7 +61,7 @@ import {
 import { importModuleFromEnvelope } from "../modules/adminContent/contentImportService.js";
 import { composeModuleVersion } from "../modules/adminContent/moduleVersionComposer.js";
 import { validateAuthoringPackage } from "../modules/adminContent/agentAuthoringValidationService.js";
-import { AUTHORING_PACKAGE_FORMAT } from "../modules/adminContent/agentAuthoringSchemas.js";
+import { agentAuthoringValidateRequestSchema } from "../modules/adminContent/agentAuthoringSchemas.js";
 import { moduleAdminLinks } from "../modules/adminContent/adminUiLinks.js";
 import {
   condenseSourceMaterial,
@@ -117,20 +119,17 @@ adminContentRouter.use("/sections", adminSectionsRouter);
 // package is invalid (the report IS the result); 400 only when the request
 // isn't a recognizable validate call at all.
 adminContentRouter.post("/agent-authoring/validate", async (request, response) => {
-  const body = request.body as { package?: unknown } | undefined;
-  const pkg = body?.package;
-  const packageFormat =
-    pkg && typeof pkg === "object" ? (pkg as { packageFormat?: unknown }).packageFormat : undefined;
-  if (packageFormat !== AUTHORING_PACKAGE_FORMAT) {
-    response.status(400).json({
-      error: "validation_error",
-      message: `Request body must be { package } with packageFormat "${AUTHORING_PACKAGE_FORMAT}".`,
-    });
+  // #999: konvoluttsjekken er nå et Zod-skjema, så avslaget bærer `issues` som alle andre
+  // formfeil. Den håndbygde setningen her gikk samme vei som en domeneregel gjennom
+  // `api-error.js` og ble vist ordrett på serverens språk.
+  const { data, error } = parseRequest(agentAuthoringValidateRequestSchema, request.body);
+  if (error) {
+    response.status(400).json({ error: "validation_error", issues: error });
     return;
   }
 
   try {
-    const report = await validateAuthoringPackage(pkg);
+    const report = await validateAuthoringPackage(data.package);
     response.status(200).json(report);
   } catch {
     response.status(500).json({
@@ -219,15 +218,11 @@ adminContentRouter.post("/modules", async (request, response) => {
     return;
   }
 
+  // #999: gyldigheten avgjøres nå av `isoDateStringSchema` i skjemaet over, så `parseOptionalDate`
+  // kan ikke lenger gi `null` for en ikke-tom verdi. Det som sto her var en andre kontroll som
+  // svarte UTEN `issues` — og gikk derfor samme vei som en domeneregel gjennom `api-error.js`.
   const validFrom = parseOptionalDate(data.validFrom);
   const validTo = parseOptionalDate(data.validTo);
-  if ((data.validFrom && !validFrom) || (data.validTo && !validTo)) {
-    response.status(400).json({
-      error: "validation_error",
-      message: "validFrom/validTo must be valid ISO date or datetime values.",
-    });
-    return;
-  }
 
   try {
     const module = await createModule(
@@ -728,18 +723,12 @@ adminContentRouter.post("/modules/:moduleId/versions", idempotency((req) => `mod
     return;
   }
 
-  // An unparseable date is a client error, not a request to clear the field. Without this,
-  // `validTo: "not-a-date"` returns 201 while silently removing an existing bound — the module
-  // create route already refuses it, and an update must be no more forgiving.
+  // An unparseable date is a client error, not a request to clear the field: `validTo: "not-a-date"`
+  // must not return 201 while silently removing an existing bound.
+  // #999: den regelen bor nå i `isoDateStringSchema` på skjemaet, så avslaget bærer `issues` som
+  // enhver annen formfeil. Tom streng og `null` betyr fortsatt «nullstill», og slipper gjennom.
   const validFrom = data.validFrom ? parseOptionalDate(data.validFrom) : null;
   const validTo = data.validTo ? parseOptionalDate(data.validTo) : null;
-  if ((data.validFrom && !validFrom) || (data.validTo && !validTo)) {
-    response.status(400).json({
-      error: "validation_error",
-      message: "validFrom/validTo must be valid ISO date or datetime values.",
-    });
-    return;
-  }
 
   try {
     await assertModuleOwnership(request.params.moduleId, actorId, request.context?.roles ?? []);
@@ -1111,11 +1100,13 @@ adminContentRouter.post("/source-material/fetch-url", generateLimiter, async (re
     response.status(401).json({ error: "unauthorized" });
     return;
   }
-  const url = typeof request.body?.url === "string" ? request.body.url.trim() : "";
-  if (!url) {
-    response.status(400).json({ error: "validation_error", message: "url is required" });
+  // #999: formkravet bor i skjemaet, så avslaget bærer `issues`.
+  const { data, error } = parseRequest(sourceMaterialUrlBodySchema, request.body);
+  if (error) {
+    response.status(400).json({ error: "validation_error", issues: error });
     return;
   }
+  const url = data.url;
   // Lazy-imported so the module's deps (jsdom + readability) don't load unless used
   const { fetchUrlAsSourceMaterial, UrlFetchError, checkAndConsumeRateLimit } = await import(
     "../modules/adminContent/urlFetchService.js"
@@ -1167,11 +1158,13 @@ adminContentRouter.post("/source-material/crawl-url", generateLimiter, async (re
     response.status(401).json({ error: "unauthorized" });
     return;
   }
-  const url = typeof request.body?.url === "string" ? request.body.url.trim() : "";
-  if (!url) {
-    response.status(400).json({ error: "validation_error", message: "url is required" });
+  // #999: samme skjema som hent-URL — én kilde, ikke to kopier som kan drive fra hverandre.
+  const { data, error } = parseRequest(sourceMaterialUrlBodySchema, request.body);
+  if (error) {
+    response.status(400).json({ error: "validation_error", issues: error });
     return;
   }
+  const url = data.url;
   const { crawlUrlAsSourceMaterial, UrlFetchError, checkAndConsumeCrawlRateLimit } = await import(
     "../modules/adminContent/urlFetchService.js"
   );
@@ -1217,26 +1210,22 @@ adminContentRouter.post("/source-material/crawl-url", generateLimiter, async (re
 // calls this automatically when combined source material exceeds 50K chars. Trades one
 // LLM call (~10-30s) for significantly reduced context cost in the 4 downstream LLM calls.
 adminContentRouter.post("/source-material/condense", generateLimiter, async (request, response) => {
-  const sourceMaterial = typeof request.body?.sourceMaterial === "string" ? request.body.sourceMaterial : "";
-  const certificationLevel = typeof request.body?.certificationLevel === "string" ? request.body.certificationLevel : "intermediate";
-  const locale = typeof request.body?.locale === "string" ? request.body.locale : "nb";
-  if (!sourceMaterial.trim()) {
-    response.status(400).json({ error: "validation_error", message: "sourceMaterial is required" });
-    return;
-  }
-  if (!["basic", "intermediate", "advanced"].includes(certificationLevel)) {
-    response.status(400).json({ error: "validation_error", message: "invalid certificationLevel" });
-    return;
-  }
-  if (!["nb", "nn", "en-GB"].includes(locale)) {
-    response.status(400).json({ error: "validation_error", message: "invalid locale" });
+  // #999: tre håndbygde avslag på rad er nå ett skjema. Sidegevinst: de tre `as`-castene under
+  // forsvant — de fantes bare fordi kontrollen var en `includes()` TypeScript ikke kunne lese.
+  //
+  // ⚠️ `safeParse` direkte, ikke `parseRequest`: hjelperen er typet `z.ZodType<T>` (inn = ut), og
+  // med `.default()` er inn- og uttypen FORSKJELLIGE. Da velger TypeScript inntypen, og
+  // standardverdiene blir `undefined` i typen selv om de aldri er det i kjøring.
+  const parsed = sourceMaterialCondenseBodySchema.safeParse(request.body);
+  if (!parsed.success) {
+    response.status(400).json({ error: "validation_error", issues: parsed.error.issues });
     return;
   }
   try {
     const result = await condenseSourceMaterial({
-      sourceMaterial,
-      certificationLevel: certificationLevel as "basic" | "intermediate" | "advanced",
-      locale: locale as "nb" | "nn" | "en-GB",
+      sourceMaterial: parsed.data.sourceMaterial,
+      certificationLevel: parsed.data.certificationLevel,
+      locale: parsed.data.locale,
     });
     response.json(result);
   } catch (err) {

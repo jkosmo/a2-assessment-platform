@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   detectCoursesRoute,
+  buildCourseItemHref,
   buildCourseDeleteDialogText,
   deriveCourseListRows,
   moveItem,
@@ -116,5 +117,44 @@ describe("admin content courses state helpers", () => {
       expect(courseItemTypeBadge("MODULE")).toBe("MODUL");
       expect(courseItemTypeBadge(undefined)).toBe("MODUL");
     });
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// #1052: lenken fra kursets elementliste må bære opphavet.
+//
+// ⚠️ TRUKKET UT HIT FORDI MUTASJONSTESTING VISTE AT INGEN TEST SÅ DEN. Da jeg satte kursstien til
+// tom streng i `renderModuleList()`, forble DOM-suiten grønn — lenken rendres inne i en funksjon
+// som trenger hele kursflaten for å kjøre, og ingen test gjorde det.
+//
+// ⚠️ OG DET ER IKKE PYNT. Lenken åpnes med `target="_blank"`. I en fersk fane finnes ingen
+// nettleserhistorikk, så appens egen «Tilbake» er det ENESTE som finnes. Uten `returnTo` står
+// forfatteren i en blindvei — ikke bare på feil sted.
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("#1052 — kurslenken bærer opphavet", () => {
+  it("⚠️ en seksjon får returnTo på riktig skilletegn", () => {
+    // Seksjons-URL-en har allerede `?id=`, så opphavet må henges på med `&`. En `?` her ville
+    // gjort resten av spørrestrengen til en del av id-en.
+    const href = buildCourseItemHref({ type: "SECTION", refId: "sec1" }, "kurs1");
+    expect(href).toBe("/admin-content/sections?id=sec1&returnTo=%2Fadmin-content%2Fcourses%2Fkurs1");
+  });
+
+  it("⚠️ en modul får det med `?`, siden stien er ren", () => {
+    const href = buildCourseItemHref({ type: "MODULE", refId: "mod1" }, "kurs1");
+    expect(href).toBe("/admin-content/module/mod1/conversation?returnTo=%2Fadmin-content%2Fcourses%2Fkurs1");
+  });
+
+  it("⚠️ uten kurs-id er lenken uendret — kontrollcase", () => {
+    // Blokkeringens makker. Uten denne kunne hjelperen hengt på en tom `returnTo=` overalt, og
+    // testene over ville sett like grønne ut mens biblioteksvisningen fikk søppel i URL-en.
+    expect(buildCourseItemHref({ type: "SECTION", refId: "sec1" }, null))
+      .toBe("/admin-content/sections?id=sec1");
+    expect(buildCourseItemHref({ type: "MODULE", refId: "mod1" }, ""))
+      .toBe("/admin-content/module/mod1/conversation");
+  });
+
+  it("id-er kodes, så en id med skråstrek ikke bryter stien", () => {
+    expect(buildCourseItemHref({ type: "SECTION", refId: "a/b" }, "k1")).toContain("id=a%2Fb");
   });
 });

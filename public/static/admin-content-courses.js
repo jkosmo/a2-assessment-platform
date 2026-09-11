@@ -28,6 +28,7 @@ import {
   deriveCourseListRows,
   moveItem,
   courseItemTypeBadge,
+  buildCourseItemHref,
 } from "/static/admin-content-courses-state.js";
 import { renderWorkspaceNavigationWithProfile } from "./workspace-nav.js";
 import { renderOwnerPanel } from "/static/owner-panel.js";
@@ -1210,6 +1211,9 @@ async function convCreateCourse() {
 // ---------------------------------------------------------------------------
 
 // Active locale tab for the detail form
+// #1052: hvilket kurs detaljvisningen står i. Elementlistas lenker trenger det for å kunne
+// sende forfatteren tilbake hit, og `renderModuleList()` tar ingen parametre.
+let aktivtKursId = null;
 let activeDetailLocale = supportedLocales.includes(currentLocale) ? currentLocale : "en-GB";
 let initialDetailLocaleValues = cloneCourseLocaleValues();
 
@@ -1237,9 +1241,11 @@ let comboboxHighlightedIndex = -1;
 
 async function renderDetailView(courseId) {
   if (!courseId) {
+    aktivtKursId = null;
     await renderNewCourseConversational();
     return;
   }
+  aktivtKursId = courseId;
 
   pageContent.innerHTML = `<div class="page-loading">Laster…</div>`;
 
@@ -1461,9 +1467,7 @@ function renderModuleList() {
     ${courseModules.map((m, i) => {
       // #744: åpne elementets editor i ny fane så kursbyggeren ikke går tapt.
       // Modul → samtale-editoren; seksjon → seksjons-editoren.
-      const openHref = m.type === "SECTION"
-        ? `/admin-content/sections?id=${encodeURIComponent(m.refId)}`
-        : `/admin-content/module/${encodeURIComponent(m.refId)}/conversation`;
+      const openHref = buildCourseItemHref(m, aktivtKursId);
       return `
       <div class="module-list-item" data-item-type="${m.type}" data-ref-id="${escapeHtml(m.refId)}">
         <span class="module-list-item-order">${i + 1}.</span>

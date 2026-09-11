@@ -98,14 +98,35 @@ export const agentTokenCreateBodySchema = z.object({
 // Kompleksiteten kan IKKE overstyres — den følger sertifiseringsnivået.
 export const scopeWordsSchema = z.number().int().min(20).max(5000).nullable().optional();
 
+/**
+ * #999: en datostreng som `new Date()` faktisk kan lese.
+ *
+ * ⚠️ DETTE ER FORMVALIDERING, IKKE EN DOMENEREGEL. «validFrom må være en ISO-verdi» handler om
+ * formen på forespørselen, ikke om noe brukeren har lov til. Derfor hører den i SKJEMAET, ikke i en
+ * `DomainRuleError` — svaret bærer da `issues`, får den generiske overskriften og detaljene i
+ * detaljfeltet, som er formen #996 avgjorde. Kontrollen sto tidligere som en håndbygget
+ * `{ error: "validation_error", message }` etter Zod, og gikk derfor samme vei som en domeneregel:
+ * serverens engelske setning ordrett i grensesnittet, uansett brukerens språk.
+ *
+ * ⚠️ TOM STRENG SLIPPER GJENNOM MED VILJE. Den betyr «ikke satt» hos begge kallerne
+ * (`parseOptionalDate` gir `undefined`, komponeringsruta gir `null` = nullstill feltet). Avviste vi
+ * den her, ville en tom inndata i skjemaet blitt en feil i stedet for et fjernet tidsvindu.
+ */
+export const isoDateStringSchema = z
+  .string()
+  .trim()
+  .refine((value) => value.length === 0 || !Number.isNaN(new Date(value).getTime()), {
+    message: "Must be a valid ISO date or datetime value.",
+  });
+
 export const moduleCreateBodySchema = z.object({
   title: localizedTextMaybeUntranslatedSchema,
   description: localizedTextMaybeUntranslatedSchema.optional(),
   certificationLevel: certificationLevelInputSchema,
   scopeMinWords: scopeWordsSchema,
   scopeMaxWords: scopeWordsSchema,
-  validFrom: z.string().trim().optional(),
-  validTo: z.string().trim().optional(),
+  validFrom: isoDateStringSchema.optional(),
+  validTo: isoDateStringSchema.optional(),
   clientRef: clientRefSchema.optional(),
 });
 
@@ -268,8 +289,8 @@ export const composeModuleVersionBodySchema = z.object({
   certificationLevel: certificationLevelInputSchema.optional(),
   scopeMinWords: scopeWordsSchema,
   scopeMaxWords: scopeWordsSchema,
-  validFrom: z.string().trim().nullable().optional(),
-  validTo: z.string().trim().nullable().optional(),
+  validFrom: isoDateStringSchema.nullable().optional(),
+  validTo: isoDateStringSchema.nullable().optional(),
   assessmentMode: assessmentModeSchema.optional(),
   taskText: localizedTextMaybeUntranslatedSchema.optional(),
   assessorExpectedContent: localizedTextMaybeUntranslatedSchema.optional(),
@@ -333,6 +354,31 @@ export const sourceMaterialUploadBodySchema = z.object({
   fileName: z.string().trim().min(1),
   mimeType: z.string().trim().optional(),
   contentBase64: z.string().trim().min(1),
+});
+
+/**
+ * #999: hent-URL og kryp-URL delte den samme håndbygde setningen «url is required».
+ *
+ * ⚠️ Én kilde, to ruter. To kopier av samme kontroll driver fra hverandre — det var nettopp det som
+ * skjedde med «Invalid report query filters.», som sto ordrett tolv steder.
+ */
+export const sourceMaterialUrlBodySchema = z.object({
+  url: z.string().trim().min(1),
+});
+
+/**
+ * #999: kondenseringsruta hadde tre håndbygde avslag på rad — «sourceMaterial is required»,
+ * «invalid certificationLevel», «invalid locale».
+ *
+ * ⚠️ DEFAULTENE ER FLYTTET, IKKE FJERNET. Ruta leste tidligere `typeof x === "string" ? x : "nb"`,
+ * altså «alt som ikke er en streng blir standardverdien». Nå er det `undefined` som gir standarden,
+ * mens en feil TYPE blir et avslag med `issues`. Det er strengere, og det er riktig: en klient som
+ * sender `locale: 42` skal få vite det, ikke stille bli lest som nynorsk-nabo `nb`.
+ */
+export const sourceMaterialCondenseBodySchema = z.object({
+  sourceMaterial: z.string().trim().min(1),
+  certificationLevel: certificationLevelSchema.default("intermediate"),
+  locale: generationLocaleSchema.default("nb"),
 });
 
 export const blueprintGenerationBodySchema = z.object({

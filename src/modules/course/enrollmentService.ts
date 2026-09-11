@@ -1,6 +1,6 @@
 import type { CourseEnrollmentSource, AppRole as AppRoleType } from "@prisma/client";
 import { prisma } from "../../db/prisma.js";
-import { NotFoundError, ValidationError } from "../../errors/AppError.js";
+import { DomainRuleError, NotFoundError, ValidationError } from "../../errors/AppError.js";
 import { recordAuditEvent } from "../../services/auditService.js";
 import { auditActions, auditEntityTypes } from "../../observability/auditEvents.js";
 import { enrollmentRepository, createEnrollmentRepository } from "./enrollmentRepository.js";
@@ -26,15 +26,40 @@ export interface AssignEnrollmentsResult {
   source: CourseEnrollmentSource;
 }
 
-async function requireCourse(courseId: string): Promise<{ id: string; enrollmentPolicy: string }> {
+async function requireCourse(courseId: string): Promise<{ id: string; enrollmentPolicy: string; archivedAt: Date | null }> {
   const course = await prisma.course.findUnique({
     where: { id: courseId },
-    select: { id: true, enrollmentPolicy: true },
+    select: { id: true, enrollmentPolicy: true, archivedAt: true },
   });
   if (!course) {
     throw new NotFoundError("Course", "course_not_found", "Course not found.");
   }
   return course;
+}
+
+/**
+ * #1035: et pensjonert kurs skal ikke tildeles — samme regel som #688 ga klassetildelingen.
+ *
+ * ⚠️ HVORFOR DETTE IKKE LIGGER I `requireCourse`. Fire funksjoner bruker den: to melder INN
+ * (assign, selfEnroll), én melder UT (revoke), én LISTER. Å fjerne noen fra et arkivert kurs, eller
+ * se hvem som står der, skal fortsatt gå — det er opprydding. Blokkerte vi i `requireCourse`, hadde
+ * vi låst døra ut sammen med døra inn.
+ *
+ * ⚠️ UPUBLISERT BLOKKERES IKKE, med vilje. «Meld inn nå, publiser senere» er en legitim arbeidsflyt,
+ * og #967 valgte av samme grunn å undertrykke tildelings-e-posten framfor å blokkere tildelingen.
+ * Klasseveien (#688) blokkerer heller ikke upublisert. De to veiene skal si det samme.
+ *
+ * ⚠️ FOR DELTAKEREN ER DET RUTA SOM STENGER, IKKE DENNE. `POST /api/courses/:id/enroll` sjekker
+ * `archivedAt` selv og gir 404 før `selfEnroll` kalles — et arkivert kurs skal ikke finnes for en
+ * deltaker i det hele tatt. Kallet herfra i `selfEnroll` er tjenestens eget vern for en framtidig
+ * direkte kaller. Det som faktisk manglet i #1035 var admin-veien, `assignEnrollments`.
+ *
+ * Samme kode som klasseveien, `course_archived`, så klienten oversetter dem likt.
+ */
+function assertCourseAssignable(course: { archivedAt: Date | null }): void {
+  if (course.archivedAt) {
+    throw new DomainRuleError("course_archived", "Cannot assign an archived course.");
+  }
 }
 
 /**
@@ -50,11 +75,21 @@ export async function assignEnrollments(
   input: AssignEnrollmentsInput,
   actorId: string | null,
 ): Promise<AssignEnrollmentsResult> {
-  await requireCourse(courseId);
+  assertCourseAssignable(await requireCourse(courseId));
 
   const byDepartment = typeof input.department === "string" && input.department.trim().length > 0;
   const explicitUserIds = (input.userIds ?? []).filter((id) => typeof id === "string" && id.length > 0);
   if (!byDepartment && explicitUserIds.length === 0) {
+    // ⚠️ #999: DENNE SKAL IKKE HA KODE — den er UNÅBAR fra API-et.
+    //
+    // Ruta validerer med Zod FØR tjenesten kalles, og Zod avviser dette tilfellet selv. Målt mot
+    // stage 2026-09-10: svaret er `validation_error` med `issues`, som er riktig oppførsel etter
+    // #996. Vakta her er en forsvarlig dublett for en framtidig andre kaller — ikke en beskjed noen
+    // bruker får.
+    //
+    // En feilkode er et løfte om at klienten kan vise den på brukerens språk. Gir vi en kode til noe
+    // som aldri når en klient, lyver koden om sin egen rekkevidde, og neste leser tror den er
+    // brukervendt.
     throw new ValidationError("Provide userIds or a department to assign.");
   }
   const source: CourseEnrollmentSource = byDepartment ? "DEPARTMENT" : "INDIVIDUAL";
@@ -72,7 +107,12 @@ export async function assignEnrollments(
     const foundIds = new Set(found.map((u) => u.id));
     const missing = userIds.filter((id) => !foundIds.has(id));
     if (missing.length > 0) {
-      throw new ValidationError(`Unknown user id(s): ${missing.join(", ")}.`);
+      // ⚠️ Id-ene som felt: klienten skal kunne navngi HVEM som mangler, ikke parse en setning.
+      throw new DomainRuleError(
+        "unknown_user",
+        `Unknown user id(s): ${missing.join(", ")}.`,
+        { userIds: missing },
+      );
     }
   }
 
@@ -150,8 +190,15 @@ export async function revokeEnrollment(courseId: string, userId: string, actorId
  */
 export async function selfEnroll(courseId: string, userId: string): Promise<void> {
   const course = await requireCourse(courseId);
+  assertCourseAssignable(course);
   if (course.enrollmentPolicy !== "OPEN") {
-    throw new ValidationError("This course is restricted — self-enrolment is not allowed.");
+    // ⚠️ DEN ENESTE DELTAKERVENDTE I HELE SETTET. De andre møter forfattere og administratorer;
+    // denne møter en kandidat som prøver å melde seg på selv. Da er riktig språk ikke en
+    // finesse — det er hele beskjeden.
+    throw new DomainRuleError(
+      "course_enrolment_restricted",
+      "This course is restricted — self-enrolment is not allowed.",
+    );
   }
   await runInTransaction(async (tx) => {
     const repo = createEnrollmentRepository(tx);

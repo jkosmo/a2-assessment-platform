@@ -2,6 +2,95 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.65.0 - 2026-09-11
+
+Sju commits, ingen migrasjoner. To av dem er feil du meldte selv fra skjermen; resten er saker
+som lå klare mens prodvinduet var stengt.
+
+### #1051 (+ #917) — oppgaveteksten rendres som markdown
+
+Skillen skriver fritekstmoduler med `## Overskrift` og `**fet**` i oppgaveteksten. Deltakeren så
+råtegnene. Seksjonene hadde allerede en dør for dette (`renderSectionMarkdown`); modulen går nå
+gjennom samme dør. `briefFields()` gir `taskTextHtml` og `candidateTaskConstraintsHtml` ved siden
+av råteksten, og admin-forhåndsvisningen henter det samme — også sensorens forventede innhold
+(#917). Målt mot stage: 36 moduler med oppgavetekst, alle 36 med HTML, 11 av dem markdown.
+
+### #1052 — «Tilbake» følger opphavet
+
+Kurs → seksjon → «Tilbake» landet i seksjonslista, ikke i kurset. Lenkene fra kursdetaljen bærer
+nå `returnTo`, og tilbakeknappen bruker det. ⚠️ `safeReturnTo` godtar bare stier under
+`/admin-content/` og løser dem mot et fiktivt opphav først — `/admin-content/../../x` og
+prosentkodede varianter avvises. Den første utgaven av sjekken var død kode; testen fant det.
+
+### #1035 — individuell innmelding blokkerer arkiverte kurs
+
+Klasseveien nektet, den individuelle gjorde det ikke. `assertCourseAssignable` i tjenesten,
+`course_archived` som domenefeil. Bare tildeling og selvinnmelding — tilbaketrekking og lesing
+skal fortsatt virke på et arkivert kurs.
+
+### #1045 — sertifiseringsnivået vises likt overalt
+
+Fire flater, tre nøkkelfamilier, to flater uten oversettelse i det hele tatt. Profilen viste
+«basic» rett fra databasen; badgen sa «Middels» der kursbeviset sa «Videregående» for samme nivå.
+Én hjelper (`cert-level.js`), én familie i basen, og en vakt som holder de eldre familiene enige
+inntil de slettes. Ukjente former (arv fra fritekst) vises som de er.
+
+### #976 — en låst seksjon er låst for mus også
+
+Låsen satte `tabindex=-1` og en klasse. Alt som ikke var en av fire navngitte knapper var
+klikkbart. Nå `disabled` på kontroller, `aria-disabled` på lenker, `pointer-events: none` på
+seksjonen — og opplåsing gjenoppretter uten å skru på det som var av av en annen grunn.
+
+### #999 siste porsjon — ratsjen 15 → 4
+
+De elleve håndbygde `{error:"validation_error"}`-svarene er flyttet inn i Zod-skjemaene. Fire står
+igjen, dokumentert i testen; `api-error.js`-unntaket blir til de to siste kastene har fått en
+ærlig feilklasse.
+
+## 2.64.0 - 2026-09-10
+
+Tolv commits. Én brukersynlig tråd — **feilmeldinger som kan leses på ditt eget språk** — og tre
+rettelser i porten som slipper arbeidet gjennom.
+
+### #999 — feilkoder i stedet for serverens egen setning
+
+En `ValidationError` uten `issues` fikk `api-error.js` til å vise serverens `message` ORDRETT. En
+norsk setning dukket derfor opp midt i et engelsk forfattergrensesnitt, og en engelsk midt i et
+norsk. Med en kode slår klienten den opp i sin egen tabell.
+
+**35 → 15**, i fem porsjoner. Tre ganger viste «mange steder» seg å være «få regler»: ni
+vedleggskast var fem regler, fjorten rapportsvar var to meldinger — «Invalid report query filters»
+sto tolv ganger ordrett. Hadde hvert sted fått egen kode, ville duplikatene vært låst fast.
+
+⚠️ **Tallene ligger nå i `details`, ikke i setningen.** `too large (1234567 bytes, max 5242880)`
+tvang klienten til å lese tall ut av engelsk prosa. Det var eksplisitt det saken ba om.
+
+⚠️ **Og ratsjen gikk OPP til slutt, fra 13 til 15.** To koder viste seg å være unåbare — Zod avviser
+tilfellet på ruta før tjenesten kalles — så de ble rullet tilbake. En ratsj som bare kan gå ned
+ville presset fram to koder som lyver om sin egen rekkevidde.
+
+### #1037 — kurslagringen løy når noe allerede hadde gått galt
+
+Feilet LLM-lokaliseringen under lagring, skrev klienten kildeteksten inn i alle tre språk.
+Forfatteren så en feilmelding om noe annet, mens kartet stille påsto at kurset var oversatt.
+Nedstrøms trodde publiseringsgaten at det var ferdig, og en nynorskdeltaker fikk bokmål servert som
+nynorsk.
+
+Lokalen slippes nå, og BEGGE kallerne sier fra — stillhet var halve #892.
+
+### Porten som slipper arbeidet gjennom
+
+⚠️ **CI kjørte ikke der arbeidet skjer.** Bare på pull request og på push til main, mens alt skjer på
+dev og PR-er åpnes med ukers mellomrom. `npm test` sto RØD i to uker uten at noen så det: elleve
+DOM-tester falt fordi den delte konfigen kjørte dem uten jsdom. Oppdaget først da dev → main ble
+åpnet. CI kjører nå på dev, med avbrytelse av eldre kjøringer.
+
+⚠️ **Og deployporten ropte ulv.** Prod-deployen av 2.63.0 LYKTES, men jobben feilet fordi
+stabilitetssjekken ga opp to minutter for tidlig — og da ble røyktesten HOPPET OVER, siden den sto
+på `if: success()`. En deploy som faktisk gikk bra ble uverifisert av maskinen, nøyaktig i det
+tilfellet der noe uvanlig skjedde. Budsjettet er hevet fra ~17 til ~26 minutter, og begge
+røyktestene står nå på `if: always()`.
+
 ## 2.63.0 - 2026-09-09
 
 Seks commits. Den røde tråden er **hvem som avgjør, og hvem som får se** — og i to av sakene endte

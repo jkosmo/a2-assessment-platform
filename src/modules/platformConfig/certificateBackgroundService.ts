@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 
 import { putAsset, getAsset } from "../course/assetStorage.js";
 import { platformConfigRepository } from "./platformConfigRepository.js";
-import { ValidationError } from "../../errors/AppError.js";
+import { DomainRuleError } from "../../errors/AppError.js";
 
 // #580: a single, platform-wide diploma background image rendered behind every course certificate.
 // Reuses the F4 blob primitives (putAsset/getAsset) for storage and the platform key-value config
@@ -22,13 +22,20 @@ export async function setCertificateBackground(
   userId: string,
 ): Promise<void> {
   if (!ALLOWED_MIME_TYPES.includes(input.mimeType)) {
-    throw new ValidationError(
+    // ⚠️ #999: SAMME KODE som seksjonsvedleggene, men EGEN tillatt-liste — her er SVG ikke lov.
+    // Derfor ligger lista i `details` og ikke i teksten: en fast setning som navnga SVG ville lovet
+    // et format som blir avvist rett etterpå.
+    throw new DomainRuleError(
+      "asset_unsupported_type",
       `Unsupported image type (${input.mimeType || "unknown"}). Allowed: PNG, JPEG, GIF, WebP.`,
+      { mimeType: input.mimeType || null, allowed: ALLOWED_MIME_TYPES },
     );
   }
   if (input.buffer.byteLength > CERTIFICATE_BACKGROUND_MAX_BYTES) {
-    throw new ValidationError(
+    throw new DomainRuleError(
+      "asset_too_large",
       `Image too large (${input.buffer.byteLength} bytes, max ${CERTIFICATE_BACKGROUND_MAX_BYTES}).`,
+      { bytes: input.buffer.byteLength, maxBytes: CERTIFICATE_BACKGROUND_MAX_BYTES },
     );
   }
   const safeName =

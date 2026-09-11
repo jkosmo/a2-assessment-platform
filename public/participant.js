@@ -17,6 +17,8 @@ const formatDateTime = createDateTimeFormatter(() => currentLocale);
 const formatNumber = createNumberFormatter(() => currentLocale);
 import { escapeHtml as escapeHtmlP } from "/static/html-escape.js";
 import { sanitizeSectionHtml } from "/static/sanitize.js";
+import { certLevelKey, localizeCertLevel } from "/static/cert-level.js";
+import { setSectionLocked } from "/static/section-lock.js";
 import { mountDiscussionPanel } from "/static/discussion-panel.js";
 import { localeLabels, supportedLocales, translations } from "/static/i18n/participant-translations.js";
 import { apiFetch, buildConsoleHeaders, getConsoleConfig, fetchQueueCounts, applyNavReviewBadge, hydrateContentAssetImages } from "/static/api-client.js";
@@ -416,6 +418,21 @@ function applyOutputVisibility() {
   output.hidden = !isRawDebugEnabled();
 }
 
+// #983: DENNE ER IKKE EN FEILOVERSETTER, OG SKAL IKKE BLI DET.
+//
+// `data.message` under ser ut som den samme feilen som resten av #983 rettet, men den er det ikke:
+// `formatOutputStatus` er siste utvei i `summarizeParticipantResponse`, og den kjører bare på
+// VELLYKKEDE svar. Feilveien går gjennom `humanizeApiError` FØR vi kommer hit — `log()` velger
+// `humanized.headline` når det finnes et svar å oversette, og bare ellers oppsummeringen.
+//
+// ⚠️ Målt mot rutene deltakerkonsollet faktisk kaller (`/api/modules`, `/api/me`, `/api/submissions`,
+// `/api/submissions/history`, `/api/courses`, `/api/courses/completions`, `/version`): ingen av dem
+// legger `message` i et 2xx-svar. Grenen er en forsvarlig reserve for et vilkårlig svar i et
+// feilsøkingskonsoll, ikke en vei serverens prosa når brukeren på i dag.
+//
+// Å sende den gjennom `describeApiError` ville vært feil medisin: den oversetteren slår opp en
+// FEILKODE, og et vellykket svar har ingen. Skulle en rute en dag svare 2xx med prosa, er fiksen på
+// SERVEREN — svaret trenger en nøkkel klienten kan slå opp, ikke en ferdig setning på ett språk.
 function formatOutputStatus(data) {
   if (typeof data === "string") {
     return data;
@@ -707,9 +724,35 @@ function renderSelectedModuleSummary() {
   const statusSummary = formatModuleStatusSummary(selectedModule);
   selectedModuleStatus.textContent = statusSummary;
   selectedModuleStatus.classList.toggle("hidden", statusSummary.length === 0);
-  selectedModuleTaskText.textContent = selectedModule?.taskText ?? "";
+  // ⚠️ #1051: HTML-EN ER RENDRET OG SANITERT PÅ SERVEREN, som for seksjoner. Skill-en skriver
+  // oppgaveteksten i markdown, og `textContent` viste den som rå tegn: «## Oppgave» og «**uthevet**».
+  //
+  // Serveren har vært gjennom `renderSectionMarkdown` (`marked` + sanitisering). Klienten sanerer
+  // LIKEVEL på nytt før `innerHTML` — samme forsvar i dybden som seksjonsleseren fikk i #814. Et
+  // innerHTML-sluk skal aldri stole på at det som kommer inn allerede er trygt.
+  //
+  // Råteksten er reserve for en eldre server som ikke sender HTML ennå. `is-rendered`-klassen
+  // slår av `white-space: pre-wrap`, som var riktig for ren tekst men gir doble mellomrom når
+  // linjeskiftene MELLOM taggene også bevares.
+  const taskHtml = typeof selectedModule?.taskTextHtml === "string" ? selectedModule.taskTextHtml : "";
+  if (taskHtml.length > 0) {
+    selectedModuleTaskText.innerHTML = sanitizeSectionHtml(taskHtml);
+    selectedModuleTaskText.classList.add("is-rendered");
+  } else {
+    selectedModuleTaskText.textContent = selectedModule?.taskText ?? "";
+    selectedModuleTaskText.classList.remove("is-rendered");
+  }
   const constraints = selectedModule?.candidateTaskConstraints ?? "";
-  if (selectedModuleCandidateTaskConstraints) selectedModuleCandidateTaskConstraints.textContent = constraints;
+  if (selectedModuleCandidateTaskConstraints) {
+    const constraintsHtml = typeof selectedModule?.candidateTaskConstraintsHtml === "string" ? selectedModule.candidateTaskConstraintsHtml : "";
+    if (constraintsHtml.length > 0) {
+      selectedModuleCandidateTaskConstraints.innerHTML = sanitizeSectionHtml(constraintsHtml);
+      selectedModuleCandidateTaskConstraints.classList.add("is-rendered");
+    } else {
+      selectedModuleCandidateTaskConstraints.textContent = constraints;
+      selectedModuleCandidateTaskConstraints.classList.remove("is-rendered");
+    }
+  }
   // .module-brief / .module-brief-section set `display: grid`, which overrides the `.hidden`
   // class (defined earlier in the cascade, no !important). Gate via inline style.display so an
   // MCQ-only module (taskText == null) doesn't show an empty OPPGAVE/VEILEDNING brief (#525 follow-up).
@@ -721,23 +764,7 @@ function renderSelectedModuleSummary() {
   updateModuleSelectionVisibility(Boolean(selectedModule));
 }
 
-function setSectionLocked(section, locked) {
-  section.classList.toggle("section-locked", locked);
-  for (const el of section.querySelectorAll("button, input, textarea, select, a[href]")) {
-    if (locked) {
-      el.dataset.preLockTabindex = el.getAttribute("tabindex") ?? "";
-      el.setAttribute("tabindex", "-1");
-    } else {
-      const pre = el.dataset.preLockTabindex;
-      if (pre === "") {
-        el.removeAttribute("tabindex");
-      } else if (pre != null) {
-        el.setAttribute("tabindex", pre);
-      }
-      delete el.dataset.preLockTabindex;
-    }
-  }
-}
+// #976: setSectionLocked bor i /static/section-lock.js — trukket ut for å kunne testes for seg.
 
 function updateModuleSelectionVisibility(hasSelectedModule) {
   submissionSection.classList.toggle("hidden", !hasSelectedModule);
@@ -1053,18 +1080,14 @@ function renderModules() {
     // Show certification level so students can tell modules at different levels apart.
     // module.certificationLevel may be a plain string ("basic"/"intermediate"/"advanced")
     // or a localized object — normalise to a key we can label. See #372 follow-up.
-    let levelKey = null;
-    const rawLevel = module.certificationLevel;
-    if (typeof rawLevel === "string") {
-      levelKey = rawLevel.toLowerCase();
-    } else if (rawLevel && typeof rawLevel === "object") {
-      const firstValue = Object.values(rawLevel).find((v) => typeof v === "string" && v.length > 0);
-      if (typeof firstValue === "string") levelKey = firstValue.toLowerCase();
-    }
-    if (levelKey === "basic" || levelKey === "intermediate" || levelKey === "advanced") {
+    // #1045: normaliseringen som sto her er nå den delte `certLevelKey`, og ordet kommer fra
+    // `certLevel.*` i basen — samme som kursbevis og profil. Før sa badgen «Middels» der
+    // kursbeviset sa «Videregående», for samme nivå.
+    const levelKey = certLevelKey(module.certificationLevel);
+    if (levelKey) {
       const levelBadge = document.createElement("div");
       levelBadge.className = `module-status-badge level level-${levelKey}`;
-      levelBadge.textContent = t(`modules.levelBadge.${levelKey}`);
+      levelBadge.textContent = localizeCertLevel(module.certificationLevel, t);
       badges.appendChild(levelBadge);
       hasBadges = true;
     }

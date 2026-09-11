@@ -108,6 +108,10 @@
       .module-brief-section { display: grid; gap: calc(var(--space-1) * 0.5); }
       .module-brief-label { font-size: 12px; font-weight: 700; letter-spacing: 0.02em; text-transform: uppercase; color: var(--color-link-active); }
       .module-brief-text { white-space: pre-wrap; line-height: 1.5; color: var(--color-text); }
+      /* #1051: rendret markdown bærer sin egen struktur; pre-wrap ville doblet mellomrommene. */
+      .module-brief-text.is-rendered { white-space: normal; }
+      .module-brief-text.is-rendered > :first-child { margin-top: 0; }
+      .module-brief-text.is-rendered > :last-child { margin-bottom: 0; }
       .submission-field-readonly {
         background: var(--color-bg);
         color: var(--color-text);
@@ -115,7 +119,9 @@
         resize: none;
         cursor: default;
       }
-      .section-locked { background: var(--color-bg); border-color: var(--color-border-soft); }
+      /* #976: låsen skal låse. `disabled` tar skjemakontrollene; dette tar lenkene og alt annet som
+         kan klikkes. Hover-tips forsvinner også i en låst seksjon, og det er riktig. */
+      .section-locked { background: var(--color-bg); border-color: var(--color-border-soft); pointer-events: none; }
       /* Course accordion */
       .course-accordion { display: grid; gap: var(--space-1); margin-top: var(--space-2); }
       .course-accordion-item { border: 1px solid var(--color-module-border); border-radius: var(--radius-card); overflow: hidden; }

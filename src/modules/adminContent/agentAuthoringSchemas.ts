@@ -161,6 +161,21 @@ export const authoringPackageSchema = z
   })
   .strict();
 
+/**
+ * #999: KONVOLUTTEN til dry-run-kallet, ikke innholdet i pakken.
+ *
+ * ⚠️ IKKE BYTT DENNE MOT `authoringPackageSchema`. Ruta returnerer 200 med en RAPPORT når pakken er
+ * ugyldig — rapporten ER resultatet. 400 betyr «dette er ikke et gjenkjennelig validate-kall i det
+ * hele tatt», og bare `packageFormat` avgjør det. Derfor `.passthrough()`: resten av pakken skal nå
+ * fram urørt til `validateAuthoringPackage`, som er den som har lov til å felle dom over den.
+ *
+ * Skjemaet finnes for FORMEN på avslaget: en håndbygget `{ error: "validation_error", message }`
+ * uten `issues` vises ordrett i grensesnittet, uansett brukerens språk.
+ */
+export const agentAuthoringValidateRequestSchema = z.object({
+  package: z.object({ packageFormat: z.literal(AUTHORING_PACKAGE_FORMAT) }).passthrough(),
+});
+
 export type AuthoringPackage = z.infer<typeof authoringPackageSchema>;
 export type AuthoringObject = z.infer<typeof authoringObjectSchema>;
 export type AuthoringModulePayload = z.infer<typeof authoringModulePayloadSchema>;

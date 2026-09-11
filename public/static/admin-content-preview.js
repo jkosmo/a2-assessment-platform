@@ -168,15 +168,15 @@ export function buildPreviewHtml(data, { locale, t, tf }) {
     : "";
   const taskTextHtml = localizedTask
     ? `<div class="preview-section-label">${escapeHtml(t("adminContent.moduleVersion.taskText"))}</div>
-       <div class="preview-text-block">${escapeHtml(localizedTask)}</div>`
+       <div class="preview-text-block" data-markdown-source>${escapeHtml(localizedTask)}</div>`
     : "";
   const candidateConstraintsHtml = localizedCandidateConstraints
     ? `<div class="preview-section-label">${escapeHtml(t("adminContent.moduleVersion.candidateTaskConstraints"))}</div>
-       <div class="preview-text-block preview-text-candidate-constraints">${escapeHtml(localizedCandidateConstraints)}</div>`
+       <div class="preview-text-block preview-text-candidate-constraints" data-markdown-source>${escapeHtml(localizedCandidateConstraints)}</div>`
     : "";
   const assessorExpectedContentHtml = localizedGuidance && !forParticipant
     ? `<div class="preview-section-label">${escapeHtml(t("adminContent.moduleVersion.assessorExpectedContent"))}</div>
-       <div class="preview-text-block preview-text-secondary">${escapeHtml(localizedGuidance)}</div>`
+       <div class="preview-text-block preview-text-secondary" data-markdown-source>${escapeHtml(localizedGuidance)}</div>`
     : "";
   const mcqCountHtml = mcqCount > 0
     ? `<p class="preview-meta">${escapeHtml(tf("shell.mcq.countLabel", { count: mcqCount }))}</p>`
@@ -285,4 +285,44 @@ function renderPreviewCriteria(criteria, t, tf, localize = (v) => (typeof v === 
 
 function humaniseCriterionId(id) {
   return String(id).replace(/[_-]+/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+/**
+ * #1051: bytt de markdown-bærende blokkene fra escapet tekst til server-rendret HTML.
+ *
+ * ⚠️ HVORFOR TO FASER. `buildPreviewHtml` er synkron og ren, med fire monteringer. Å gjøre den
+ * asynkron ville rippet gjennom alle. I stedet rendres teksten escapet først — som før — og denne
+ * bytter den ut når serveren svarer. Deltakeren ser rendret markdown; ser forfatteren rå `##` i
+ * forhåndsvisningen, «retter» hen det ved å fjerne markdownen, og da har vi undergravd fiksen fra
+ * den andre siden.
+ *
+ * ⚠️ RENDRINGEN SKJER PÅ SERVEREN, IKKE HER. Samme `renderSectionMarkdown` som deltakeren får —
+ * ett sanitiseringsregime. Klienten sanerer likevel på nytt før `innerHTML` (forsvar i dybden,
+ * #814). Feiler kallet, står den escapede teksten igjen: dårligere, men aldri farlig.
+ *
+ * Et løpenummer sørger for at et sent svar fra en forrige render ikke overskriver en nyere.
+ */
+let hydreringsLøpenummer = 0;
+export async function hydratePreviewMarkdown(container, { apiFetch, getHeaders, locale, sanitize }) {
+  if (!container) return;
+  const blokker = Array.from(container.querySelectorAll("[data-markdown-source]"));
+  if (blokker.length === 0) return;
+  const mitt = ++hydreringsLøpenummer;
+
+  await Promise.all(blokker.map(async (blokk) => {
+    const markdown = blokk.textContent ?? "";
+    if (!markdown.trim()) return;
+    try {
+      const svar = await apiFetch("/api/admin/content/sections/preview", getHeaders, {
+        method: "POST",
+        body: JSON.stringify({ markdown, locale }),
+      });
+      if (mitt !== hydreringsLøpenummer) return; // en nyere render har tatt over
+      if (typeof svar?.html !== "string" || !svar.html) return;
+      blokk.innerHTML = sanitize ? sanitize(svar.html) : svar.html;
+      blokk.classList.add("is-rendered");
+    } catch {
+      // Escapet tekst blir stående. Aldri farlig — bare mindre pen.
+    }
+  }));
 }

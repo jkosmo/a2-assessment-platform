@@ -3,6 +3,7 @@ import { AppRole } from "../../db/prismaRuntime.js";
 import { hasAnyRole, MODULE_ADMIN_READERS } from "../../auth/roleSets.js";
 import type { SupportedLocale } from "../../i18n/locale.js";
 import { localizeContentText } from "../../i18n/content.js";
+import { renderSectionMarkdown } from "../course/sectionContent.js";
 import { assessmentPolicyCodec } from "../../codecs/assessmentPolicyCodec.js";
 import { submissionSchemaCodec } from "../../codecs/submissionSchemaCodec.js";
 import {
@@ -30,6 +31,40 @@ type ListModulesOptions = {
   participantFacing?: boolean;
 };
 
+/**
+ * #1051: oppgaveteksten og veiledningen — både som tekst og som rendret HTML.
+ *
+ * ⚠️ HVORFOR HTML HER, OG IKKE I KLIENTEN. Skill-en skriver oppgaveteksten i markdown, og klienten
+ * satte den som `textContent`. Deltakeren så `## Oppgave` og `**uthevet**` som tegn på skjermen.
+ *
+ * Seksjoner har hatt løsningen hele tiden: `renderSectionMarkdown` — `marked` med sanitisering — og
+ * prinsippet står i `sectionContent.ts`: forfatterskrevet markdown stoles aldri på, den rendres til
+ * HTML på serveren og saniteres der. Modulens tekst er samme slags innhold fra samme slags
+ * forfatter, og skal gjennom samme dør. Rendret vi i klienten, fikk vi to sanitiseringsregimer for
+ * samme innhold, og de ville glidd fra hverandre.
+ *
+ * ⚠️ ÉN KILDE FOR FIRE KALLSTEDER. Feltene ble bygget inline fire steder i denne fila. Å legge til
+ * HTML-en på tre av dem hadde vært den samme «N−1»-feilen som har truffet oss sju ganger — derfor
+ * bor formen her, og kallstedene sprer den.
+ *
+ * Råteksten beholdes ved siden av: klienten trenger den til forhåndsvisning og redigering, og en
+ * API-konsument uten DOM skal ikke måtte strippe HTML for å lese oppgaven.
+ */
+function briefFields(
+  version: { taskText?: unknown; candidateTaskConstraints?: unknown } | null | undefined,
+  locale: SupportedLocale,
+) {
+  const taskText = localizeContentText(locale, version?.taskText as never) ?? (version?.taskText as string | null | undefined) ?? null;
+  const candidateTaskConstraints = localizeContentText(locale, version?.candidateTaskConstraints as never) ?? null;
+  return {
+    taskText,
+    taskTextHtml: typeof taskText === "string" ? renderSectionMarkdown(taskText, locale) : null,
+    candidateTaskConstraints,
+    candidateTaskConstraintsHtml:
+      typeof candidateTaskConstraints === "string" ? renderSectionMarkdown(candidateTaskConstraints, locale) : null,
+  };
+}
+
 export async function listModules(
   roles: AppRoleType[],
   userId?: string,
@@ -46,9 +81,8 @@ export async function listModules(
       ...module,
       title: localizeContentText(locale, module.title) ?? module.title,
       description: localizeContentText(locale, module.description),
-      taskText: localizeContentText(locale, module.activeVersion?.taskText) ?? module.activeVersion?.taskText ?? null,
+      ...briefFields(module.activeVersion, locale),
       ...(participantFacing ? {} : { assessorExpectedContent: localizeContentText(locale, module.activeVersion?.assessorExpectedContent) }),
-      candidateTaskConstraints: localizeContentText(locale, module.activeVersion?.candidateTaskConstraints),
       submissionSchema: submissionSchemaCodec.parse(module.activeVersion?.submissionSchemaJson),
       assessmentPolicy: assessmentPolicyCodec.parse(module.activeVersion?.assessmentPolicyJson),
       assessmentMode: module.activeVersion?.assessmentMode ?? null,
@@ -87,9 +121,8 @@ export async function listModules(
       ...module,
       title: localizeContentText(locale, module.title) ?? module.title,
       description: localizeContentText(locale, module.description),
-      taskText: localizeContentText(locale, module.activeVersion?.taskText) ?? module.activeVersion?.taskText ?? null,
+      ...briefFields(module.activeVersion, locale),
       ...(participantFacing ? {} : { assessorExpectedContent: localizeContentText(locale, module.activeVersion?.assessorExpectedContent) }),
-      candidateTaskConstraints: localizeContentText(locale, module.activeVersion?.candidateTaskConstraints),
       submissionSchema: submissionSchemaCodec.parse(module.activeVersion?.submissionSchemaJson),
       assessmentPolicy: assessmentPolicyCodec.parse(module.activeVersion?.assessmentPolicyJson),
       assessmentMode: module.activeVersion?.assessmentMode ?? null,
@@ -172,9 +205,8 @@ export async function getModuleById(
     ...module,
     title: localizeContentText(locale, module.title) ?? module.title,
     description: localizeContentText(locale, module.description),
-    taskText: localizeContentText(locale, module.activeVersion?.taskText) ?? module.activeVersion?.taskText ?? null,
+    ...briefFields(module.activeVersion, locale),
     ...(participantFacing ? {} : { assessorExpectedContent: localizeContentText(locale, module.activeVersion?.assessorExpectedContent) }),
-    candidateTaskConstraints: localizeContentText(locale, module.activeVersion?.candidateTaskConstraints),
     assessmentMode: module.activeVersion?.assessmentMode ?? null,
   };
 }
@@ -199,9 +231,8 @@ export async function getActiveModuleVersion(
   const { assessorExpectedContent: _gt, ...activeVersionBase } = activeVersion;
   return {
     ...activeVersionBase,
-    taskText: localizeContentText(locale, activeVersion.taskText) ?? activeVersion.taskText,
+    ...briefFields(activeVersion, locale),
     ...(participantFacing ? {} : { assessorExpectedContent: localizeContentText(locale, activeVersion.assessorExpectedContent) }),
-    candidateTaskConstraints: localizeContentText(locale, activeVersion.candidateTaskConstraints),
     submissionSchema: submissionSchemaCodec.parse(activeVersion.submissionSchemaJson),
     assessmentPolicy: assessmentPolicyCodec.parse(activeVersion.assessmentPolicyJson),
   };

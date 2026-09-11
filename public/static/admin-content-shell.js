@@ -18,7 +18,8 @@ import {
 import { showToast } from "/static/toast.js";
 import { apiErrorCodeText, describeApiError } from "/static/api-error.js";
 import { renderWorkspaceNavigationWithProfile } from "./workspace-nav.js";
-import { localizeValueForLocale, buildPreviewHtml } from "/static/admin-content-preview.js";
+import { localizeValueForLocale, buildPreviewHtml, hydratePreviewMarkdown } from "/static/admin-content-preview.js";
+import { sanitizeSectionHtml } from "/static/sanitize.js";
 import {
   buildCriteriaEditorHtml,
   buildEditorStateFromCriteriaRecord,
@@ -243,6 +244,26 @@ const tabPanelModule = document.getElementById("tabPanelModule");
 const tabPanelSettings = document.getElementById("tabPanelSettings");
 const unsavedTabSwitchDialog = document.getElementById("dialogUnsavedTabSwitch");
 const shellStatusAnnouncer = document.getElementById("shellStatusAnnouncer");
+
+/**
+ * #1052: hvor «tilbake» skal føre når forfatteren kom hit fra et kurs.
+ *
+ * ⚠️ VALIDERES SOM I `admin-content-sections-state.js`. `returnTo` kommer fra URL-en, altså fra
+ * hvem som helst som får en forfatter til å klikke. Bare en relativ sti under `/admin-content/`
+ * slipper gjennom; `//vert` ser relativ ut men forlater siden.
+ *
+ * ⚠️ MODULFLATEN HAR INGEN EGEN TILBAKE-KNAPP. Denne brukes derfor bare av feilveiene under, der
+ * valget står mellom «gå til modullista» og «gå tilbake dit du kom fra». Skal arbeidsflaten få en
+ * varig tilbake-lenke, er det en UI-avgjørelse produkteier må ta — se #1052.
+ */
+function opphavFraUrl() {
+  const v = new URLSearchParams(location.search).get("returnTo");
+  if (typeof v !== "string" || !v.startsWith("/admin-content/")) return null;
+  if (v.startsWith("//") || v.startsWith("/\\")) return null;
+  return v;
+}
+
+
 const stateRail = document.getElementById("stateRail");
 const srModuleName = document.getElementById("srModuleName");
 const srEditing = document.getElementById("srEditing");
@@ -1218,6 +1239,16 @@ function renderPreview() {
   }
 
   updateStateRail();
+
+  // ⚠️ #1051: ÉN hydrering for alle fire monteringene over — ikke fire. Bytter de
+  // markdown-bærende blokkene til server-rendret HTML, så forfatteren ser det samme som
+  // deltakeren. Asynkron med vilje: teksten står escapet til svaret kommer, og aldri farlig.
+  void hydratePreviewMarkdown(previewContent, {
+    apiFetch,
+    getHeaders,
+    locale: contentLocale,
+    sanitize: sanitizeSectionHtml,
+  });
 }
 
 function scrollPreviewToTop() {
@@ -3122,7 +3153,7 @@ async function loadModule(moduleId, options = {}) {
     // Stage-tilbakemelding 2026-08-17: send forfatteren til modul-lista i stedet for å bygge en
     // ny, lang liste inne i samtalen. Lista har søk og filtre; dette hadde ingen av delene.
     logResolveSlot(slot, () => t("shell.module.loadError"), [
-      { labelKey: "shell.module.goToLibrary", action: () => { location.href = "/admin-content"; } },
+      { labelKey: opphavFraUrl() ? "shell.module.backToCourse" : "shell.module.goToLibrary", action: () => { location.href = opphavFraUrl() ?? "/admin-content"; } },
       { labelKey: "shell.action.cancel", action: startIdle },
     ]);
     return;
@@ -7058,7 +7089,7 @@ async function confirmAndGenerate(moduleTitle, existingModuleId, sourceMaterial,
       [
         // v1.2.18 (#352) sendte denne til modul-biblioteket, men beholdt etiketten «Åpne avansert
         // editor». Den har altså løyet i et halvt år. Nå sier den hvor den går.
-        { labelKey: "shell.module.goToLibrary", action: () => { location.href = "/admin-content"; } },
+        { labelKey: opphavFraUrl() ? "shell.module.backToCourse" : "shell.module.goToLibrary", action: () => { location.href = opphavFraUrl() ?? "/admin-content"; } },
         { labelKey: "shell.action.retry", action: () => confirmAndGenerate(moduleTitle, null, sourceMaterial, certLevel, locale, generationMode, blueprint, scenarioMode, freetextOnly) },
         { labelKey: "shell.action.cancel", action: startIdle },
       ],

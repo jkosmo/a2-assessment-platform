@@ -29,7 +29,7 @@ import { createCourse, setCourseModules, setCourseItems, publishCourse, type Cou
 import { randomUUID } from "node:crypto";
 import { createSection } from "../course/sectionCommands.js";
 import { stageSectionAssets, reclaimAssetBlobs, type StagedSectionAsset } from "../course/assetCommands.js";
-import { ValidationError } from "../../errors/AppError.js";
+import { DomainRuleError, ValidationError } from "../../errors/AppError.js";
 import { localizedTextCodec, type LocalizedText } from "../../codecs/localizedTextCodec.js";
 import { recordAuditEvent } from "../../services/auditService.js";
 import { validateTranslationCompleteness, validateMcqTranslationCompleteness } from "./contentValidationService.js";
@@ -111,7 +111,13 @@ async function stageSectionForImport(
     const label = typeof section.title === "string" ? section.title : JSON.stringify(section.title);
     const detail = error instanceof Error ? error.message : String(error);
     // Keep the client-error status (asset validation failures are 400) while adding section context.
-    throw new ValidationError(`Failed to import assets for section "${label}": ${detail}`);
+    // ⚠️ #999: seksjonen og den underliggende grunnen som felt. Grunnen er dynamisk og kan ikke
+    // oversettes, men HVILKEN seksjon som feilet kan navngis på brukerens språk rundt den.
+    throw new DomainRuleError(
+      "section_asset_import_failed",
+      `Failed to import assets for section "${label}": ${detail}`,
+      { label, detail },
+    );
   }
 
   const idMap = new Map<string, string>();

@@ -186,9 +186,27 @@ export function describeApiError(error, t, options = {}) {
   // utstedt kursbevis, gammelt bevis uten øyeblikksbilde, kurs med påbegynt deltaker — kaster nå
   // `DomainRuleError` med egen kode og treffer derfor kodeoppslaget lenger ned.
   //
-  // Unntaket er IKKE fjernet, og det var ikke mulig: 35 andre `ValidationError`-steder kaster
-  // fortsatt prosa. Fjernes unntaket nå, faller alle 35 tilbake til «noe i skjemaet er feil
-  // utfylt» — nøyaktig regresjonen #996 rettet. Det krymper etter hvert som flere vakter får kode.
+  // ⚠️ #999 SISTE PORSJON: unntaket er fortsatt IKKE fjernet, og her er nøyaktig hvorfor. Tell
+  // avsenderne FØR du rører grenen, ikke etterpå.
+  //
+  // De elleve håndbygde `{ error: "validation_error", message }`-svarene i adminContent,
+  // calibration og adminSections er borte: de var FORMVALIDERING og ligger nå i Zod-skjemaene, så
+  // svarene bærer `issues` og treffer den andre grenen. Igjen står fire `new ValidationError(`, og
+  // TO AV DEM ER NÅBARE over HTTP:
+  //
+  //   `POST /api/org-sync/entra` uten `ENTRA_USER_SYNC_GROUP_ID` — en konfigurasjonsfeil.
+  //   `createSubmission` når modulen mangler aktiv versjon — en intern invariant.
+  //
+  // (De to andre — klasse- og påmeldingsvakta — avvises av Zod på ruta før tjenesten nås. Målt mot
+  // stage 2026-09-10.)
+  //
+  // Fjernes unntaket nå, blir begge til «noe i skjemaet mangler eller er feil utfylt»: feil
+  // diagnose på noe som ikke er et skjema i det hele tatt. Det er regresjonen #996 rettet, og en
+  // konfigurasjonsfeil rammes hardere av den enn en domeneregel gjorde.
+  //
+  // Riktig rekkefølge videre er å gi de to en ÆRLIG klasse først — en konfigurasjonsfeil er ikke
+  // 400 `validation_error`, og en intern invariant er det heller ikke — og så fjerne denne grenen.
+  // Ratsjen i `test/unit/domain-error-codes-999.test.ts` viser tallet; er det 0, kan grenen dø.
   if (code === "validation_error") {
     const domainMessage = !issues && typeof body?.message === "string" && body.message.trim().length > 0
       ? body.message.trim()

@@ -90,6 +90,9 @@ export async function createSubmission(input: CreateSubmissionInput) {
   const module = await getModuleWithActiveVersion(input.moduleId);
 
   if (!module || !module.activeVersion || !module.activeVersion.publishedAt) {
+    // ⚠️ #999: BLIR OGSÅ STÅENDE. Dette er en intern invariant, ikke en regel deltakeren brøt.
+    // Fyrer den, er dataene inkonsistente — modulen er publisert uten aktiv versjon — og svaret er
+    // en feilrapport, ikke en oversatt setning som ber brukeren gjøre noe hen ikke kan gjøre.
     throw new ValidationError("Module active version is not available.");
   }
 

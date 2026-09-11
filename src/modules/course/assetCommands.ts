@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { AppRole as AppRoleType } from "@prisma/client";
 import { prisma } from "../../db/prisma.js";
-import { NotFoundError, ValidationError } from "../../errors/AppError.js";
+import { DomainRuleError, NotFoundError } from "../../errors/AppError.js";
 import { putAsset, getAsset, deleteAsset } from "./assetStorage.js";
 import { canParticipantReadSection } from "./enrollmentService.js";
 import { sanitizeSvg, svgHasText, extractSvgTexts, applySvgTextTranslations } from "./svgSanitizer.js";
@@ -20,6 +20,45 @@ export const MAX_ASSET_BYTES = 5 * 1024 * 1024; // 5 MB
 // bytes) so an export can never balloon unbounded. Export throws if exceeded — never silently drops.
 export const MAX_EXPORT_ASSET_TOTAL_BYTES = 25 * 1024 * 1024; // 25 MB
 
+/**
+ * #999: vedleggsavslagene som koder, med TALLENE som felt.
+ *
+ * ⚠️ NI KAST, FEM REGLER. Tre av de ni var ordrette duplikater av hverandre — «unsupported type»
+ * sto identisk tre steder, «too large» to. Å gi ni kast hver sin kode ville låst duplikatene fast;
+ * de deler nå én kilde, så en endring i ordlyd eller grense treffer alle.
+ *
+ * ⚠️ OG TALLENE FØLGER SOM DATA, IKKE SOM INTERPOLERT PROSA. Meldingen sa
+ * «too large (1234567 bytes, max 5242880)». Klienten måtte i så fall lese tallene UT AV en setning
+ * for å kunne si «bildet er 1,2 MB, grensen er 5 MB» på brukerens språk. Nå ligger de i `details`,
+ * og setningen bygges der den skal bygges.
+ *
+ * `message` er fortsatt engelsk med vilje: den logges, og den er det en API-konsument uten
+ * oversettelsestabell får (se AppError.ts). Brukeren ser den kodebaserte teksten.
+ */
+function avvisType(label: string | null, mimeType: string): never {
+  throw new DomainRuleError(
+    "asset_unsupported_type",
+    `Unsupported image type (${mimeType || "unknown"}). Allowed: PNG, JPEG, GIF, WebP, SVG.`,
+    { label, mimeType: mimeType || null, allowed: ALLOWED_ASSET_MIME_TYPES },
+  );
+}
+
+function avvisStorrelse(label: string | null, bytes: number): never {
+  throw new DomainRuleError(
+    "asset_too_large",
+    `Image too large (${bytes} bytes, max ${MAX_ASSET_BYTES}).`,
+    { label, bytes, maxBytes: MAX_ASSET_BYTES },
+  );
+}
+
+function avvisSvg(label: string | null): never {
+  throw new DomainRuleError(
+    "asset_svg_invalid",
+    "SVG could not be processed (empty or invalid after sanitisation).",
+    { label },
+  );
+}
+
 export async function createSectionAsset(input: {
   sectionId: string;
   filename: string;
@@ -34,10 +73,10 @@ export async function createSectionAsset(input: {
     throw new NotFoundError("CourseSection", "section_not_found", "Course section not found.");
   }
   if (!ALLOWED_ASSET_MIME_TYPES.includes(input.mimeType)) {
-    throw new ValidationError(`Unsupported image type (${input.mimeType || "unknown"}). Allowed: PNG, JPEG, GIF, WebP, SVG.`);
+    avvisType(null, input.mimeType);
   }
   if (input.buffer.byteLength > MAX_ASSET_BYTES) {
-    throw new ValidationError(`Image too large (${input.buffer.byteLength} bytes, max ${MAX_ASSET_BYTES}).`);
+    avvisStorrelse(null, input.buffer.byteLength);
   }
 
   // #657: SVG is sanitised before storage — active content (scripts, handlers, foreignObject)
@@ -47,7 +86,7 @@ export async function createSectionAsset(input: {
   if (input.mimeType === SVG_MIME_TYPE) {
     const sanitized = sanitizeSvg(input.buffer.toString("utf8"));
     if (!sanitized) {
-      throw new ValidationError("SVG could not be processed (empty or invalid after sanitisation).");
+      avvisSvg(null);
     }
     storedBuffer = Buffer.from(sanitized, "utf8");
   }
@@ -318,20 +357,26 @@ function decodeAndValidateAssetBytes(input: {
   try {
     buffer = Buffer.from(input.contentBase64, "base64");
   } catch {
-    throw new ValidationError(`Asset "${input.label}" has invalid base64 content.`);
+    throw new DomainRuleError(
+      "asset_invalid_base64",
+      `Asset "${input.label}" has invalid base64 content.`,
+      { label: input.label },
+    );
   }
   if (buffer.byteLength === 0) {
-    throw new ValidationError(`Asset "${input.label}" decoded to zero bytes.`);
+    throw new DomainRuleError(
+      "asset_empty",
+      `Asset "${input.label}" decoded to zero bytes.`,
+      { label: input.label },
+    );
   }
   if (buffer.byteLength > MAX_ASSET_BYTES) {
-    throw new ValidationError(
-      `Asset "${input.label}" too large (${buffer.byteLength} bytes, max ${MAX_ASSET_BYTES}).`,
-    );
+    avvisStorrelse(input.label, buffer.byteLength);
   }
   if (input.mimeType === SVG_MIME_TYPE) {
     const sanitized = sanitizeSvg(buffer.toString("utf8"));
     if (!sanitized) {
-      throw new ValidationError(`Asset "${input.label}" SVG is empty or invalid after sanitisation.`);
+      avvisSvg(input.label);
     }
     return Buffer.from(sanitized, "utf8");
   }
@@ -364,9 +409,7 @@ export async function importSectionAssets(
   for (const asset of assets) {
     const label = asset.filename || asset.sourceId;
     if (!ALLOWED_ASSET_MIME_TYPES.includes(asset.mimeType)) {
-      throw new ValidationError(
-        `Asset "${label}" has unsupported type (${asset.mimeType || "unknown"}). Allowed: PNG, JPEG, GIF, WebP, SVG.`,
-      );
+      avvisType(label, asset.mimeType);
     }
 
     const storedBuffer = decodeAndValidateAssetBytes({
@@ -448,9 +491,7 @@ export async function stageSectionAssets(
   for (const asset of assets) {
     const label = asset.filename || asset.sourceId;
     if (!ALLOWED_ASSET_MIME_TYPES.includes(asset.mimeType)) {
-      throw new ValidationError(
-        `Asset "${label}" has unsupported type (${asset.mimeType || "unknown"}). Allowed: PNG, JPEG, GIF, WebP, SVG.`,
-      );
+      avvisType(label, asset.mimeType);
     }
 
     const storedBuffer = decodeAndValidateAssetBytes({
