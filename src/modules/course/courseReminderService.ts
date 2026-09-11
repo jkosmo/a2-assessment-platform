@@ -17,6 +17,7 @@ import { classRepository } from "./classRepository.js";
 import { findActiveParticipants } from "../../repositories/userRepository.js";
 import { recipientLocale } from "../../i18n/recipientLocale.js";
 import type { SupportedLocale } from "../../i18n/locale.js";
+import { isReachableParticipant } from "../user/participantReach.js";
 
 // #497: automatiske kurs-frist-påminnelser (Epic #478, siste «Done når»-pilar). Audit-basert dedup
 // gjør re-kjøring idempotent og restart-trygg. Dekker to kilder til kurs-frister:
@@ -345,7 +346,7 @@ export async function runCourseReminderSchedule(input?: {
   const candidates = await gatherCandidates(summary, upperBound);
 
   for (const candidate of candidates) {
-    if (!candidate.activeStatus || candidate.isAnonymized) {
+    if (!isReachableParticipant(candidate)) {
       summary.skippedInactive += 1;
       continue;
     }

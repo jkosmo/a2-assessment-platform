@@ -5,6 +5,7 @@ import type { EnrollmentStatus } from "./enrollmentStatus.js";
 import { enrollmentRepository } from "./enrollmentRepository.js";
 import { classRepository } from "./classRepository.js";
 import { findActiveParticipants } from "../../repositories/userRepository.js";
+import { isReachableParticipant } from "../user/participantReach.js";
 
 // #498: teacher/SMO cohort-status dashboard. Aggregates the EnrollmentStatus (ASSIGNED / IN_PROGRESS /
 // OVERDUE / COMPLETED) over a course's EFFECTIVE audience — individual CourseEnrollment rows plus
@@ -28,8 +29,12 @@ export async function resolveCourseAudience(courseId: string): Promise<AudienceM
   const map = new Map<string, AudienceMember>();
 
   // 1. Individual (explicitly assigned) enrolments — active (non-revoked) rows.
+  // #968: samme regel som for klassemedlemmer under. Før talte en deaktivert deltaker med individuell
+  // innmelding i publikummet, mens den samme via klasse ikke gjorde det — og påminnelsesjobben
+  // hoppet over begge, så «purr» på dashbordet pekte på noen som aldri ville få purringen.
   const enrollments = await enrollmentRepository.findActiveEnrollmentsForCourse(courseId);
   for (const enrollment of enrollments) {
+    if (!isReachableParticipant(enrollment.user)) continue;
     map.set(enrollment.userId, {
       userId: enrollment.userId,
       dueAt: enrollment.dueAt,
@@ -51,7 +56,7 @@ export async function resolveCourseAudience(courseId: string): Promise<AudienceM
       : assignment.class.members.map((m) => m.user);
 
     for (const user of members) {
-      if (!user.activeStatus || user.isAnonymized) continue;
+      if (!isReachableParticipant(user)) continue;
       const existing = map.get(user.id);
       if (existing) {
         // Individual wins; among class assignments keep the earliest due date.

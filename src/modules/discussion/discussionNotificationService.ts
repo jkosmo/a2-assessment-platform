@@ -9,6 +9,7 @@ import { sendDiscussionNotification } from "../certification/participantNotifica
 import { recordAuditEvent } from "../../services/auditService.js";
 import { auditActions, auditEntityTypes } from "../../observability/auditEvents.js";
 import { recipientLocale } from "../../i18n/recipientLocale.js";
+import { isReachableParticipant } from "../user/participantReach.js";
 
 /**
  * Diskusjon — minimal varsling (#495/T-QA-5). Nytt SPØRSMÅL → kursets SMO-er; nytt SVAR →
@@ -95,7 +96,7 @@ export async function notifyNewReply(input: {
   });
   const recipients = subscriptions
     .map((s) => s.user)
-    .filter((u) => u.activeStatus && !u.isAnonymized);
+    .filter((u) => isReachableParticipant(u)); // #968: samme regel som publikum og påminnelser
   if (recipients.length === 0) return;
 
   let delivered = 0;

@@ -60,7 +60,9 @@ export function createEnrollmentRepository(client: EnrollmentRepositoryClient = 
       return client.courseEnrollment.findMany({
         where: { courseId, revokedAt: null },
         orderBy: { assignedAt: "desc" },
-        include: { user: { select: { id: true, name: true, email: true, department: true } } },
+        // #968: activeStatus/isAnonymized følger med så publikummet kan filtrere individuelle
+        // innmeldinger med samme regel som klassemedlemmer. Admin-lista viser fortsatt alle.
+        include: { user: { select: { id: true, name: true, email: true, department: true, activeStatus: true, isAnonymized: true } } },
       });
     },
 

@@ -13,6 +13,7 @@ import { isClassEntraLinkingEnabled } from "./classConfig.js";
 import { addContentOwner } from "../content/contentOwnershipService.js";
 import { logOperationalEvent } from "../../observability/operationalLog.js";
 import { operationalEvents } from "../../observability/operationalEvents.js";
+import { isReachableParticipant } from "../user/participantReach.js";
 
 // #645/CL-2: class (cohort) business logic — CRUD + membership + course assignment + dynamic
 // membership evaluation. Course→class assignment is dynamic: a participant is assigned a course if
@@ -266,7 +267,9 @@ async function notifyClassMembersOfCourseAssignment(
     const members = await classRepository.listMembers(classId);
     await Promise.allSettled(
       members
-        .filter((m) => m.user.email)
+        // #968: ikke e-post til en som har sluttet eller er anonymisert — samme regel som publikummet
+        // og påminnelsene. Før ble den bare filtrert på at adressen fantes.
+        .filter((m) => m.user.email && isReachableParticipant(m.user))
         .map((m) => {
           // #970: mottakerens språk («sist sett»), ikke bokmål for alle. Tittelen velges for samme språk.
           const locale = recipientLocale(m.user);
