@@ -29,6 +29,7 @@ import { hasAnyRole, ADMIN_ONLY } from "../auth/roleSets.js";
 import { buildCourseExportEnvelope } from "../modules/adminContent/index.js";
 import { importCourseFromEnvelope } from "../modules/adminContent/contentImportService.js";
 import { localizedTextCodec } from "../codecs/localizedTextCodec.js";
+import { localizeContentText } from "../i18n/content.js";
 import { localizeCourseCopy } from "../modules/adminContent/llmContentGenerationService.js";
 import { NotFoundError, AppError } from "../errors/AppError.js";
 import type { AdminCourseListItem, AdminCourseDetail } from "../modules/course/index.js";
@@ -150,9 +151,11 @@ adminCoursesRouter.get("/", async (request, response, next) => {
       actorUserId: request.context?.userId ?? "",
       roles: request.context?.roles ?? [],
     });
+    const locale = request.context?.locale ?? "nb";
     const items: AdminCourseListItem[] = courses.map((c, i) => ({
       id: c.id,
       title: c.title,
+      displayTitle: localizeContentText(locale, c.title) ?? c.title,
       description: c.description,
       certificationLevel: c.certificationLevel,
       moduleCount: c._count.modules,

@@ -4,6 +4,7 @@ import { DomainRuleError, NotFoundError, ValidationError } from "../../errors/Ap
 import { recordAuditEvent } from "../../services/auditService.js";
 import { auditActions, auditEntityTypes } from "../../observability/auditEvents.js";
 import { localizeContentText } from "../../i18n/content.js";
+import type { SupportedLocale } from "../../i18n/locale.js";
 import { hasAnyRole, PARTICIPANTS } from "../../auth/roleSets.js";
 import { sendCourseAssignmentNotification } from "../certification/participantNotificationService.js";
 import { classRepository, createClassRepository, SYSTEM_ALL_PARTICIPANTS_CLASS_ID } from "./classRepository.js";
@@ -169,12 +170,15 @@ export async function listClassMembers(classId: string) {
   return members.map((m) => ({ userId: m.userId, name: m.user.name, email: m.user.email, addedAt: m.addedAt.toISOString() }));
 }
 
-export async function listClassCourseAssignments(classId: string) {
+export async function listClassCourseAssignments(classId: string, locale: SupportedLocale) {
   await requireClass(classId);
   const rows = await classRepository.listCourseAssignmentsForClass(classId);
   return rows.map((r) => ({
     courseId: r.courseId,
-    title: r.course.title,
+    // #1038: serveren eier «hvilket språk viser vi» (#1027). Klasseskjermen tolket lagringsformatet
+    // selv, med sin egen reservekjede (nb → en-GB → nn → første) — en annen enn serverens. Ingen søker
+    // i tittelen på den skjermen, så variantene trenger ikke følge med som for køene.
+    title: localizeContentText(locale, r.course.title) ?? r.course.title,
     dueAt: r.dueAt ? r.dueAt.toISOString() : null,
     // #967: en tildeling til et kurs deltakeren ikke kan aapne er ikke feil i seg selv — men den
     // forklarer hvorfor ingen i klassen beveger seg, og det skal ikke kreve detektivarbeid.

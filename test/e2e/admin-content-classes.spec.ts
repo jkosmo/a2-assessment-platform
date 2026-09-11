@@ -34,6 +34,8 @@ test("classes admin: list, create, add a student via search, and assign a course
   const state = {
     classes: [{ id: "cls_all_participants", name: "Alle deltakere", isSystem: true, _count: { members: 0, courseAssignments: 0 } }],
     members: [] as Array<{ userId: string; name: string; email: string; addedAt: string }>,
+    // #1038: `title` på tildelinger er den FERDIG VALGTE strengen (serveren lokaliserer); kurslista
+    // bærer lagringsformatet i `title` og den valgte i `displayTitle`.
     assignedCourses: [] as Array<{ courseId: string; title: string; dueAt: string | null }>,
   };
   let memberPosted = false;
@@ -62,7 +64,7 @@ test("classes admin: list, create, add a student via search, and assign a course
       // #497: mirror the server — persist the assigned course WITH its due date so the re-rendered
       // chip can display the frist.
       const body = route.request().postDataJSON() as { courseId: string; dueAt?: string };
-      state.assignedCourses.push({ courseId: body.courseId, title: JSON.stringify({ nb: "Arbeidsmiljø" }), dueAt: body.dueAt ?? null });
+      state.assignedCourses.push({ courseId: body.courseId, title: "Arbeidsmiljø", dueAt: body.dueAt ?? null });
       return route.fulfill({ status: 201, contentType: "application/json", body: JSON.stringify({ ok: true }) });
     }
     return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ courses: state.assignedCourses }) });
@@ -76,9 +78,9 @@ test("classes admin: list, create, add a student via search, and assign a course
       contentType: "application/json",
       body: JSON.stringify({
         courses: [
-          { id: "course-1", title: JSON.stringify({ nb: "Arbeidsmiljø" }), archivedAt: null },
+          { id: "course-1", title: JSON.stringify({ nb: "Arbeidsmiljø" }), displayTitle: "Arbeidsmiljø", archivedAt: null },
           // #688: archived courses must NOT be offered for assignment.
-          { id: "course-arch", title: JSON.stringify({ nb: "Gammelt kurs" }), archivedAt: "2026-01-01T00:00:00.000Z" },
+          { id: "course-arch", title: JSON.stringify({ nb: "Gammelt kurs" }), displayTitle: "Gammelt kurs", archivedAt: "2026-01-01T00:00:00.000Z" },
         ],
       }),
     }),
@@ -332,9 +334,9 @@ test("#967: klasseskjermen merker tildelinger til upubliserte og arkiverte kurs"
       contentType: "application/json",
       body: JSON.stringify({
         courses: [
-          { courseId: "c-ok", title: JSON.stringify({ nb: "Publisert kurs" }), dueAt: null, coursePublished: true, courseArchived: false },
-          { courseId: "c-unpub", title: JSON.stringify({ nb: "Utkastkurs" }), dueAt: null, coursePublished: false, courseArchived: false },
-          { courseId: "c-arch", title: JSON.stringify({ nb: "Gammelt kurs" }), dueAt: null, coursePublished: true, courseArchived: true },
+          { courseId: "c-ok", title: "Publisert kurs", dueAt: null, coursePublished: true, courseArchived: false },
+          { courseId: "c-unpub", title: "Utkastkurs", dueAt: null, coursePublished: false, courseArchived: false },
+          { courseId: "c-arch", title: "Gammelt kurs", dueAt: null, coursePublished: true, courseArchived: true },
         ],
       }),
     }),

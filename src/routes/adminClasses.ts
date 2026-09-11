@@ -118,7 +118,7 @@ adminClassesRouter.delete("/:classId/members/:userId", requireContentOwnership("
 // SMO lese hvilke kurs en klasse er tildelt, og med hvilke frister.
 adminClassesRouter.get("/:classId/courses", requireContentOwnership("CLASS", "classId"), async (request: Request<{ classId: string }>, response, next) => {
   try {
-    response.json({ courses: await listClassCourseAssignments(request.params.classId) });
+    response.json({ courses: await listClassCourseAssignments(request.params.classId, request.context?.locale ?? "nb") });
   } catch (error) {
     next(error);
   }
