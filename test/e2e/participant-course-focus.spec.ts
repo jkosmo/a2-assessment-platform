@@ -50,7 +50,8 @@ async function mockBase(page: Page) {
       body: JSON.stringify({
         courses: [
           { id: "c1", title: "Kurs én", description: null, moduleCount: 1, progress: { completed: 0, total: 1, sectionCompleted: 0, sectionTotal: 1, courseStatus: "NOT_STARTED" } },
-          { id: "c2", title: "Kurs to", description: null, moduleCount: 1, progress: { completed: 0, total: 1, sectionCompleted: 0, sectionTotal: 1, courseStatus: "NOT_STARTED" } },
+          // #979: to seksjoner lest, ingen modul bestått — etiketten deler per type, linja måler steg.
+          { id: "c2", title: "Kurs to", description: null, moduleCount: 2, progress: { completed: 2, total: 4, moduleCompleted: 0, moduleTotal: 2, sectionCompleted: 2, sectionTotal: 2, courseStatus: "IN_PROGRESS" } },
         ],
       }),
     }),
@@ -96,6 +97,14 @@ test("#921: kurslista henter seg selv og står ekspandert — ingen «Last kurs�
   // .course-accordion-body var display:none uten .open — den regelen er borte.
   await expect(page.locator(".course-accordion-item").first().locator(".course-progress-bar")).toBeVisible();
   await expect(page.locator(".course-accordion-item").nth(1).locator(".course-progress-bar")).toBeVisible();
+
+  // #979: «Moduler 0/2 · Seksjoner 2/2» og 50 % er begge riktige for samme kurs — linja er andel
+  // STEG, og skal si det selv. Uten navnet leses linja som «halvparten av modulene».
+  const bar = page.locator(".course-accordion-item").nth(1).locator(".course-progress-bar");
+  await expect(bar).toHaveAttribute("role", "progressbar");
+  await expect(bar).toHaveAttribute("aria-valuenow", "50");
+  await expect(bar).toHaveAttribute("aria-label", /2 av 4 steg/);
+  await expect(page.locator(".course-accordion-item").nth(1).locator(".course-accordion-progress")).toContainText("0/2");
 
   // Lista er lista: kursets innhold (sekvensen) hører til kursvisningen, ikke hit.
   await expect(page.locator(".course-sequence")).toHaveCount(0);
