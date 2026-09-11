@@ -722,9 +722,35 @@ function renderSelectedModuleSummary() {
   const statusSummary = formatModuleStatusSummary(selectedModule);
   selectedModuleStatus.textContent = statusSummary;
   selectedModuleStatus.classList.toggle("hidden", statusSummary.length === 0);
-  selectedModuleTaskText.textContent = selectedModule?.taskText ?? "";
+  // ⚠️ #1051: HTML-EN ER RENDRET OG SANITERT PÅ SERVEREN, som for seksjoner. Skill-en skriver
+  // oppgaveteksten i markdown, og `textContent` viste den som rå tegn: «## Oppgave» og «**uthevet**».
+  //
+  // Serveren har vært gjennom `renderSectionMarkdown` (`marked` + sanitisering). Klienten sanerer
+  // LIKEVEL på nytt før `innerHTML` — samme forsvar i dybden som seksjonsleseren fikk i #814. Et
+  // innerHTML-sluk skal aldri stole på at det som kommer inn allerede er trygt.
+  //
+  // Råteksten er reserve for en eldre server som ikke sender HTML ennå. `is-rendered`-klassen
+  // slår av `white-space: pre-wrap`, som var riktig for ren tekst men gir doble mellomrom når
+  // linjeskiftene MELLOM taggene også bevares.
+  const taskHtml = typeof selectedModule?.taskTextHtml === "string" ? selectedModule.taskTextHtml : "";
+  if (taskHtml.length > 0) {
+    selectedModuleTaskText.innerHTML = sanitizeSectionHtml(taskHtml);
+    selectedModuleTaskText.classList.add("is-rendered");
+  } else {
+    selectedModuleTaskText.textContent = selectedModule?.taskText ?? "";
+    selectedModuleTaskText.classList.remove("is-rendered");
+  }
   const constraints = selectedModule?.candidateTaskConstraints ?? "";
-  if (selectedModuleCandidateTaskConstraints) selectedModuleCandidateTaskConstraints.textContent = constraints;
+  if (selectedModuleCandidateTaskConstraints) {
+    const constraintsHtml = typeof selectedModule?.candidateTaskConstraintsHtml === "string" ? selectedModule.candidateTaskConstraintsHtml : "";
+    if (constraintsHtml.length > 0) {
+      selectedModuleCandidateTaskConstraints.innerHTML = sanitizeSectionHtml(constraintsHtml);
+      selectedModuleCandidateTaskConstraints.classList.add("is-rendered");
+    } else {
+      selectedModuleCandidateTaskConstraints.textContent = constraints;
+      selectedModuleCandidateTaskConstraints.classList.remove("is-rendered");
+    }
+  }
   // .module-brief / .module-brief-section set `display: grid`, which overrides the `.hidden`
   // class (defined earlier in the cascade, no !important). Gate via inline style.display so an
   // MCQ-only module (taskText == null) doesn't show an empty OPPGAVE/VEILEDNING brief (#525 follow-up).

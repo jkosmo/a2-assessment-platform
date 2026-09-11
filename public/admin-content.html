@@ -49,6 +49,10 @@
       .preview-version-chain { font-size: 12px; color: var(--color-link-active); font-weight: 600; margin: 0 0 var(--space-1); }
       .preview-section-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--color-meta); margin: var(--space-1) 0 4px; }
       .preview-text-block { font-size: 14px; color: var(--color-text); line-height: 1.6; white-space: pre-wrap; background: var(--color-module-summary-bg); border: 1px solid var(--color-module-summary-border); border-radius: var(--radius-card); padding: var(--space-1); }
+      /* #1051: rendret markdown bærer sin egen struktur; pre-wrap ville doblet mellomrommene. */
+      .preview-text-block.is-rendered { white-space: normal; }
+      .preview-text-block.is-rendered > :first-child { margin-top: 0; }
+      .preview-text-block.is-rendered > :last-child { margin-bottom: 0; }
       .preview-text-secondary { color: var(--color-meta); }
       .preview-meta { font-size: 12px; color: var(--color-meta); margin: 8px 0 0; }
       .preview-mcq-list { display: flex; flex-direction: column; gap: var(--space-1); margin-top: 8px; }

@@ -18,7 +18,8 @@ import {
 import { showToast } from "/static/toast.js";
 import { apiErrorCodeText, describeApiError } from "/static/api-error.js";
 import { renderWorkspaceNavigationWithProfile } from "./workspace-nav.js";
-import { localizeValueForLocale, buildPreviewHtml } from "/static/admin-content-preview.js";
+import { localizeValueForLocale, buildPreviewHtml, hydratePreviewMarkdown } from "/static/admin-content-preview.js";
+import { sanitizeSectionHtml } from "/static/sanitize.js";
 import {
   buildCriteriaEditorHtml,
   buildEditorStateFromCriteriaRecord,
@@ -1238,6 +1239,16 @@ function renderPreview() {
   }
 
   updateStateRail();
+
+  // ⚠️ #1051: ÉN hydrering for alle fire monteringene over — ikke fire. Bytter de
+  // markdown-bærende blokkene til server-rendret HTML, så forfatteren ser det samme som
+  // deltakeren. Asynkron med vilje: teksten står escapet til svaret kommer, og aldri farlig.
+  void hydratePreviewMarkdown(previewContent, {
+    apiFetch,
+    getHeaders,
+    locale: contentLocale,
+    sanitize: sanitizeSectionHtml,
+  });
 }
 
 function scrollPreviewToTop() {
