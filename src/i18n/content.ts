@@ -5,7 +5,7 @@ const localeKeys: SupportedLocale[] = ["en-GB", "nb", "nn"];
 
 type InlineLocalizedMap = Partial<Record<SupportedLocale, string>>;
 
-function parseInlineLocalizedMap(input: string): InlineLocalizedMap | null {
+export function parseInlineLocalizedMap(input: string): InlineLocalizedMap | null {
   const trimmed = input.trim();
   if (!trimmed.startsWith("{") || !trimmed.endsWith("}")) {
     return null;

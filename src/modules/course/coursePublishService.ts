@@ -3,8 +3,8 @@ import { AppError, NotFoundError } from "../../errors/AppError.js";
 import { publishCourse } from "./courseCommands.js";
 import { publishSection, evaluateSectionTranslationGate } from "./sectionCommands.js";
 import { publishModuleVersion } from "../adminContent/adminContentCommands.js";
-import { validateModuleVersionForPublish, validateTranslationCompleteness, validateMcqTranslationCompleteness } from "../adminContent/contentValidationService.js";
 import { courseRepository } from "./courseRepository.js";
+import { evaluateModulePublishGate, flattenStoredLocalized } from "../adminContent/modulePublishGate.js";
 
 // Cascade-publish (#734): when an author publishes a COURSE, its modules/sections must already be
 // published — otherwise the published course contains unavailable content (violates content-
@@ -70,11 +70,11 @@ export type CoursePublishResult = {
   publishedItems: PublishedItemRef[];
 };
 
-// The validator only needs a representative non-empty string for its (warning-level) length checks.
-// The raw stored value — a plain string or a serialized LocalizedText JSON blob — is sufficient; the
-// blocking outcome is driven by the blueprint check, which does not depend on this flattening.
+// #956: tittelen til visning i kaskadeforhåndsvisningen — én representativ tekst. Selve gaten
+// (lengde, blueprint, oversettelse) ligger i `evaluateModulePublishGate`, felles for alle tre dørene;
+// den gamle no-op-utflatingen her gjorde at lengde- og blueprint-sjekkene målte på rå JSON.
 function flattenLocalized(value: string | null | undefined): string | null {
-  return value ?? null;
+  return flattenStoredLocalized(value);
 }
 
 // The cascade preview is server-rendered text (the courses page prints `blocker.message` as-is),
@@ -94,15 +94,6 @@ function translationFieldLabel(field: string): string {
   const mcq = /^mcq\.question(\d+)$/.exec(field);
   if (mcq) return `MCQ-spørsmål ${mcq[1]}`;
   return TRANSLATION_FIELD_LABELS[field] ?? field;
-}
-
-function parseBlueprint(raw: string | null | undefined): unknown {
-  if (!raw || typeof raw !== "string") return null;
-  try {
-    return JSON.parse(raw);
-  } catch {
-    return null;
-  }
 }
 
 type ModuleEvaluation = {
@@ -175,9 +166,7 @@ async function evaluateModule(moduleId: string): Promise<ModuleEvaluation> {
     };
   }
 
-  let mcqQuestionCount = 0;
-  // #896 S4: the question rows themselves, not only the count — the translation gate reads their
-  // stored text.
+  // #896 S4: the question rows themselves — the shared gate reads their stored text and counts them.
   let mcqQuestions: Array<{
     stem: string | null;
     optionsJson: string | null;
@@ -192,43 +181,24 @@ async function evaluateModule(moduleId: string): Promise<ModuleEvaluation> {
         questions: { select: { stem: true, optionsJson: true, correctAnswer: true, rationale: true } },
       },
     });
-    mcqQuestionCount = set?._count.questions ?? 0;
     mcqQuestions = set?.questions ?? [];
   }
 
-  const validation = validateModuleVersionForPublish({
-    taskText: flattenLocalized(latest.taskText) ?? "",
-    candidateTaskConstraints: flattenLocalized(latest.candidateTaskConstraints),
-    assessorExpectedContent: flattenLocalized(latest.assessorExpectedContent),
-    blueprint: parseBlueprint(latest.assessmentBlueprint) as never,
-    mcqQuestionCount,
+  // #896 S4 / #956: the cascade is a second door into publishing. It runs the SAME gate as the
+  // module-publish button and the import — one function, one field set, one normalisation. Before,
+  // this door had its own copy with a no-op flatten, and the author got a different answer here
+  // than from the button for the same module. The archived case is handled above and never reaches
+  // this point, so `archivedAt` is passed as null.
+  const validation = evaluateModulePublishGate({
+    module: { title: module.title, description: module.description, archivedAt: null },
+    version: {
+      taskText: latest.taskText,
+      candidateTaskConstraints: latest.candidateTaskConstraints,
+      assessorExpectedContent: latest.assessorExpectedContent,
+      assessmentBlueprint: latest.assessmentBlueprint,
+    },
+    mcqQuestions,
   });
-
-  // #896 S4: the cascade is a second door into publishing. A translation gate that only guards
-  // the module-publish route would be trivially bypassed by adding the module to a course and
-  // publishing that — and the participant sees the same half-translated module either way.
-  // The values here are the raw stored strings, which is exactly what the check wants.
-  // The field set must match the module-publish route exactly. Two gates that disagree about what
-  // "complete" means are worse than one gate, because the author is told different things
-  // depending on which button they pressed.
-  const translationIssues = [
-    ...validateTranslationCompleteness([
-      { field: "title", raw: module.title },
-      ...(module.description ? [{ field: "description", raw: module.description }] : []),
-      ...(latest.taskText ? [{ field: "taskText", raw: latest.taskText }] : []),
-      ...(latest.assessorExpectedContent
-        ? [{ field: "assessorExpectedContent", raw: latest.assessorExpectedContent }]
-        : []),
-      ...(latest.candidateTaskConstraints
-        ? [{ field: "candidateTaskConstraints", raw: latest.candidateTaskConstraints }]
-        : []),
-    ]),
-    ...validateMcqTranslationCompleteness(mcqQuestions),
-  ];
-  if (translationIssues.length > 0) {
-    validation.issues.push(...translationIssues);
-    validation.valid = false;
-  }
 
   if (!validation.valid) {
     const blockers = validation.issues
