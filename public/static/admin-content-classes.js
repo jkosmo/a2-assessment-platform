@@ -60,16 +60,12 @@ function escapeHtml(s) {
   return String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }
 
-// Course titles are stored as localized JSON; pick nb → en-GB → first.
-function courseTitle(raw) {
-  if (!raw) return "(uten tittel)";
-  try {
-    const obj = typeof raw === "string" ? JSON.parse(raw) : raw;
-    if (obj && typeof obj === "object") return obj.nb || obj["en-GB"] || obj.nn || Object.values(obj)[0] || "(uten tittel)";
-    return String(raw);
-  } catch {
-    return String(raw);
-  }
+// #1038: kurstittelen kommer ferdig valgt for leserens språk fra serveren (`title` på
+// klassens tildelinger, `displayTitle` på kurslista). Parseren som sto her hadde sin egen
+// reservekjede (nb → en-GB → nn → første) — en annen enn serverens, og de to var uenige om hva en
+// delvis oversatt tittel skulle vise. Klienten viser strengen den får; språket sendes som `x-locale`.
+function courseTitle(value) {
+  return typeof value === "string" && value.trim() ? value : "(uten tittel)";
 }
 
 // #497: a class-assigned due date (dueAt) is stored as UTC midnight of the picked date; format from the
@@ -306,7 +302,7 @@ async function openClass(id) {
   }).join("");
   const assignedIds = new Set(courses.map((c) => c.courseId));
   // #688: don't offer archived courses for assignment — they are retired and shouldn't be assigned.
-  const courseOptions = allCourses.filter((c) => !assignedIds.has(c.id) && !c.archivedAt).map((c) => `<option value="${escapeHtml(c.id)}">${escapeHtml(courseTitle(c.title))}</option>`).join("");
+  const courseOptions = allCourses.filter((c) => !assignedIds.has(c.id) && !c.archivedAt).map((c) => `<option value="${escapeHtml(c.id)}">${escapeHtml(courseTitle(c.displayTitle))}</option>`).join("");
   pageContent.innerHTML = `
     <a class="back-link" id="backToClasses">← Tilbake til klasser</a>
     <div class="page-header"><h1>Klasse</h1></div>
@@ -413,6 +409,9 @@ function buildLocaleSelector() {
   localeSelect.addEventListener("change", () => {
     currentLocale = localeSelect.value;
     localStorage.setItem("participant.locale", currentLocale);
+    // #1038: serveren velger språk når data HENTES. Neste kall skal be om det nye språket, og lista
+    // under henter på nytt — en åpen klasse lukkes, så ingen tittel blir stående på det gamle.
+    if (_headerValues && typeof _headerValues === "object") _headerValues["x-locale"] = currentLocale;
     renderWorkspaceNavigation();
     renderListView();
   });
@@ -429,6 +428,7 @@ async function init() {
       name: defaults.name,
       roles: Array.isArray(defaults.roles) ? defaults.roles.join(",") : defaults.roles,
     });
+    _headerValues["x-locale"] = currentLocale;
     // Admin gating must use the *live* signed-in user's roles. identityDefaults is only populated
     // in mock-role mode (undefined in prod/Entra — see participantConsole.ts), so reading roles
     // from it hides admin controls for real admins in prod. /api/me returns the token's roles.

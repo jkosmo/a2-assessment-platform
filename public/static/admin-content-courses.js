@@ -1214,6 +1214,11 @@ async function convCreateCourse() {
 // #1052: hvilket kurs detaljvisningen står i. Elementlistas lenker trenger det for å kunne
 // sende forfatteren tilbake hit, og `renderModuleList()` tar ingen parametre.
 let aktivtKursId = null;
+// #974: kursdetaljens INNHOLDSspråk — fanen forfatteren redigerer i. Samme rolle som `contentLocale`
+// i admin-content-shell, men per visning: den starter som menyspråket når et kurs åpnes (1252) og
+// følger deretter bare fanevalget. Shellens `contentLocale` lever i minnet på sin egen side, så de
+// to kan ikke dele verdi i dag; et felles, lagret innholdsspråk på tvers av forfattersidene er en
+// egen avgjørelse (se #974).
 let activeDetailLocale = supportedLocales.includes(currentLocale) ? currentLocale : "en-GB";
 let initialDetailLocaleValues = cloneCourseLocaleValues();
 

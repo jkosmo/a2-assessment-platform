@@ -3537,9 +3537,15 @@ function buildCourseAccordionItem(course) {
   // og UTEN sertifikatlenke. Det er #938-klassen: to steder som svarer ulikt på samme spørsmål.
   const completed = isCourseCompleted(course);
   const inProgress = !completed && courseStatus === "IN_PROGRESS";
+  // #979: framdriftslinja er ANDEL STEG — moduler og seksjoner teller likt, slik serveren teller dem
+  // i `courseStatus` (COMPLETED når alle steg er gjort). Etiketten over deler opp per type; linja
+  // svarer på et annet spørsmål: hvor langt på vei. «Moduler 0/2 · Seksjoner 2/2» og 50 % er derfor
+  // begge riktige for samme kurs. `total` var «misvisende» som «x/total MODULER» (#714) — ikke som
+  // antall steg. Linja sier nå selv hva den måler, for skjermleser og for musepekeren.
   const passedCount = course.progress?.completed ?? 0;
   const totalCount = course.progress?.total ?? course.moduleCount ?? 0;
   const pct = totalCount > 0 ? Math.round((passedCount / totalCount) * 100) : 0;
+  const stepsLabel = fillPlaceholders(t("courses.progress.steps"), { done: passedCount, total: totalCount });
   const completion = participantCompletions[course.id];
 
   const item = document.createElement("div");
@@ -3590,7 +3596,7 @@ function buildCourseAccordionItem(course) {
         <span class="course-accordion-chevron" aria-hidden="true">&#8250;</span>
       </button>
       <div class="course-accordion-body">
-        <div class="course-progress-bar"><div class="course-progress-fill" style="width:${pct}%"></div></div>
+        <div class="course-progress-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct}" aria-label="${escapeHtmlP(stepsLabel)}" title="${escapeHtmlP(stepsLabel)}"><div class="course-progress-fill" style="width:${pct}%"></div></div>
         <div id="courseDetail_${course.id}" class="course-detail-slot"><p class="small" style="color:var(--color-meta)">${escapeHtmlP(t("courses.loadingModules"))}</p></div>
       </div>
     `;

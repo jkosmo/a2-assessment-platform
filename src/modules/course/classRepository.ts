@@ -9,10 +9,11 @@ export const SYSTEM_ALL_PARTICIPANTS_CLASS_ID = "cls_all_participants";
 
 type ClassRepositoryClient = Pick<typeof prisma, "class" | "classMember" | "courseGroupAssignment">;
 
+// #963: eierskap bor i ContentOwner (#787). `Class.createdById` skrives ikke lenger; kolonnen står
+// til neste contract-migrasjon.
 export interface CreateClassInput {
   name: string;
   description?: string | null;
-  createdById: string | null;
 }
 
 export function createClassRepository(client: ClassRepositoryClient = prisma) {
@@ -23,7 +24,6 @@ export function createClassRepository(client: ClassRepositoryClient = prisma) {
           name: input.name,
           description: input.description ?? null,
           kind: "MANUAL",
-          createdById: input.createdById,
         },
         select: { id: true, name: true, description: true, kind: true, isSystem: true, archivedAt: true },
       });
@@ -90,7 +90,7 @@ export function createClassRepository(client: ClassRepositoryClient = prisma) {
       return client.classMember.findMany({
         where: { classId },
         orderBy: { addedAt: "desc" },
-        include: { user: { select: { id: true, name: true, email: true } } },
+        include: { user: { select: { id: true, name: true, email: true, preferredLocale: true, activeStatus: true, isAnonymized: true } } },
       });
     },
 
@@ -146,7 +146,7 @@ export function createClassRepository(client: ClassRepositoryClient = prisma) {
               members: {
                 select: {
                   user: {
-                    select: { id: true, name: true, email: true, activeStatus: true, isAnonymized: true },
+                    select: { id: true, name: true, email: true, activeStatus: true, isAnonymized: true, preferredLocale: true },
                   },
                 },
               },
@@ -176,7 +176,7 @@ export function createClassRepository(client: ClassRepositoryClient = prisma) {
               members: {
                 select: {
                   user: {
-                    select: { id: true, name: true, email: true, activeStatus: true, isAnonymized: true },
+                    select: { id: true, name: true, email: true, activeStatus: true, isAnonymized: true, preferredLocale: true },
                   },
                 },
               },

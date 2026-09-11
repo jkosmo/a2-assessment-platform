@@ -388,6 +388,32 @@ export function createCourseRepository(client: CourseRepositoryClient = prisma) 
     // all-time. En deltaker som ble ferdig i juni ville med filteret «fra 1. august» vist
     // «0/4 moduler» ved siden av «12/12 seksjoner», status «Pågår» og «Siste aktivitet: —»
     // — pågående aktivitet i et vindu uten aktivitet.
+    // #1010: hvem har LEST i kurset i vinduet — uavhengig av tildeling. Fjerde kilde i
+    // `resolveCourseParticipantIds`. Et OPEN-kurs (standarden) kan leses uten innmeldingsrad, og
+    // klienten kaller aldri selv-innmelding, så den som bare har lest fantes ikke for rapporten.
+    // Samme vindu og samme avdelingsfilter som innleveringene.
+    findLearnerSectionReadersForCourse(
+      courseId: string,
+      filters: Pick<ReportFilters, "dateFrom" | "dateTo" | "orgUnit"> = {},
+    ) {
+      return client.courseSectionRead.findMany({
+        where: {
+          courseId,
+          ...(filters.dateFrom || filters.dateTo
+            ? {
+                readAt: {
+                  ...(filters.dateFrom ? { gte: filters.dateFrom } : {}),
+                  ...(filters.dateTo ? { lte: filters.dateTo } : {}),
+                },
+              }
+            : {}),
+          ...(filters.orgUnit ? { user: { department: filters.orgUnit } } : {}),
+        },
+        distinct: ["userId"],
+        select: { userId: true },
+      });
+    },
+
     findReadSectionIdsForCourseParticipants(
       courseId: string,
       userIds: string[],

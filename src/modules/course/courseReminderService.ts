@@ -15,6 +15,10 @@ import { deriveStatus } from "./enrollmentService.js";
 import { enrollmentRepository } from "./enrollmentRepository.js";
 import { classRepository } from "./classRepository.js";
 import { findActiveParticipants } from "../../repositories/userRepository.js";
+import { recipientLocale } from "../../i18n/recipientLocale.js";
+import type { SupportedLocale } from "../../i18n/locale.js";
+import { isReachableParticipant } from "../user/participantReach.js";
+import { buildSentReminderKeySet, reminderDedupKey } from "./courseReminderDedup.js";
 
 // #497: automatiske kurs-frist-påminnelser (Epic #478, siste «Done når»-pilar). Audit-basert dedup
 // gjør re-kjøring idempotent og restart-trygg. Dekker to kilder til kurs-frister:
@@ -26,10 +30,10 @@ import { findActiveParticipants } from "../../repositories/userRepository.js";
 // ⚠️ #989 fjernet resertifisering av moduler. DETTE er ikke det: en kursfrist er en frist for å bli
 // FERDIG med et kurs, ikke en utløpsdato på kunnskap. Kursfrister er uendret og skal forbli det.
 // Per (bruker, kurs) beregnes ÉN effektiv frist: individuell frist vinner over klasse; ved flere
-// klasse-frister vinner den tidligste. Slik unngås dobbel-varsling. Ingen per-bruker locale finnes
-// ennå → org-default (nb), samme som diskusjonsvarsler.
-
-const NOTIFY_LOCALE = "nb" as const;
+// klasse-frister vinner den tidligste. Slik unngås dobbel-varsling.
+// #970: språket er MOTTAKERENS — «sist sett» (`User.preferredLocale`, se recipientLocale). Før sto
+// det «ingen per-bruker locale finnes ennå → nb» her, og en engelskspråklig deltaker fikk
+// resultat-e-post på engelsk mandag og «Fristen nærmer seg» på norsk tirsdag.
 const NOTIFICATION_TYPE = "course_reminder";
 
 type ReminderChannel = "disabled" | "log" | "webhook" | "acs_email";
@@ -40,6 +44,7 @@ export type CourseReminderSendInput = {
   recipientEmail: string;
   recipientName: string | null;
   courseTitle: string;
+  locale: SupportedLocale;
   kind: CourseReminderKind;
   dueAt: Date;
   daysBefore?: number;
@@ -75,7 +80,8 @@ type ReminderCandidate = {
   dueAt: Date;
   recipientEmail: string;
   recipientName: string | null;
-  courseTitle: string; // lokalisert
+  courseTitle: string; // lokalisert for mottakeren
+  locale: SupportedLocale;
   activeStatus: boolean;
   isAnonymized: boolean;
   source: "individual" | "class";
@@ -83,7 +89,7 @@ type ReminderCandidate = {
 
 async function defaultSendCourseReminder(input: CourseReminderSendInput): Promise<CourseReminderSendResult> {
   const channel = env.PARTICIPANT_NOTIFICATION_CHANNEL;
-  const message = getCourseReminderNotificationMessage(NOTIFY_LOCALE, input.kind, {
+  const message = getCourseReminderNotificationMessage(input.locale, input.kind, {
     courseTitle: input.courseTitle,
     dueAt: input.dueAt,
     daysBefore: input.daysBefore,
@@ -167,18 +173,20 @@ async function defaultSendCourseReminder(input: CourseReminderSendInput): Promis
 }
 
 // Audit-basert dedup: en påminnelse er allerede sendt hvis det finnes en `course_reminder_sent`-rad
-// på kurset som matcher denne mottakeren + typen. due_soon dedup-er per (userId, daysBefore, asOfDate);
-// overdue dedup-er per (userId) — v1 sender forfalt-purring kun én gang.
-async function hasReminderBeenSent(
-  courseId: string,
-  predicate: (metadataJson: string) => boolean,
-): Promise<boolean> {
-  const existing = await auditRepository.findAuditEventMetadataByEntityAndAction(
+// på kurset med samme nøkkel (se courseReminderDedup.ts). #971: radene hentes ÉN gang per kurs og
+// parses til et sett — før ble hele dumpen hentet én gang PER KANDIDAT og søkt som substring.
+const sentKeysByCourse = new Map<string, Set<string>>();
+async function sentReminderKeys(courseId: string): Promise<Set<string>> {
+  const cached = sentKeysByCourse.get(courseId);
+  if (cached) return cached;
+  const rows = await auditRepository.findAuditEventMetadataByEntityAndAction(
     auditEntityTypes.course,
     courseId,
     auditActions.course.reminderSent,
   );
-  return existing.some((event) => predicate(event.metadataJson));
+  const keys = buildSentReminderKeySet(rows);
+  sentKeysByCourse.set(courseId, keys);
+  return keys;
 }
 
 function addDays(input: Date, days: number): Date {
@@ -203,8 +211,8 @@ function dueDateIsBefore(dueAt: Date, asOf: Date): boolean {
   return due < now;
 }
 
-function localizeTitle(title: string): string {
-  return localizeContentText(NOTIFY_LOCALE, title) ?? title ?? "";
+function localizeTitle(locale: SupportedLocale, title: string): string {
+  return localizeContentText(locale, title) ?? title ?? "";
 }
 
 // Samler individuelle + klasse-tildelte frister til ÉN effektiv kandidat per (bruker, kurs).
@@ -239,7 +247,8 @@ async function gatherCandidates(summary: CourseReminderScheduleSummary, upperBou
       dueAt: enrollment.dueAt,
       recipientEmail: enrollment.user.email,
       recipientName: enrollment.user.name,
-      courseTitle: localizeTitle(enrollment.course.title),
+      courseTitle: localizeTitle(recipientLocale(enrollment.user), enrollment.course.title),
+      locale: recipientLocale(enrollment.user),
       activeStatus: enrollment.user.activeStatus,
       isAnonymized: enrollment.user.isAnonymized,
       source: "individual",
@@ -249,7 +258,7 @@ async function gatherCandidates(summary: CourseReminderScheduleSummary, upperBou
   // 2. Klasse-tildelte frister → ekspander til medlemmer. MANUAL = ClassMember-rader;
   //    system-klassen «Alle deltakere» = alle aktive deltakere (ingen rader). ENTRA hoppes over.
   const assignments = await classRepository.findCourseGroupAssignmentsWithDueDate(upperBound);
-  let allParticipants: Array<{ id: string; name: string; email: string }> | null = null;
+  let allParticipants: Array<{ id: string; name: string; email: string; preferredLocale: string | null }> | null = null;
 
   for (const assignment of assignments) {
     if (!assignment.dueAt) continue;
@@ -259,6 +268,7 @@ async function gatherCandidates(summary: CourseReminderScheduleSummary, upperBou
       summary.skippedCourseUnavailable += 1;
       continue;
     }
+    // #1017: vakt, ikke funksjon — ingen ENTRA-klasser kan opprettes i dag (se classConfig.ts).
     if (assignment.class.kind === "ENTRA") {
       summary.skippedEntraClass += 1;
       continue;
@@ -268,6 +278,7 @@ async function gatherCandidates(summary: CourseReminderScheduleSummary, upperBou
       id: string;
       name: string;
       email: string;
+      preferredLocale: string | null;
       activeStatus: boolean;
       isAnonymized: boolean;
     }> = assignment.class.isSystem
@@ -278,7 +289,6 @@ async function gatherCandidates(summary: CourseReminderScheduleSummary, upperBou
         }))
       : assignment.class.members.map((m) => m.user);
 
-    const courseTitle = localizeTitle(assignment.course.title);
     for (const user of members) {
       const key = keyOf(user.id, assignment.courseId);
       const existing = map.get(key);
@@ -295,7 +305,8 @@ async function gatherCandidates(summary: CourseReminderScheduleSummary, upperBou
         dueAt: assignment.dueAt,
         recipientEmail: user.email,
         recipientName: user.name,
-        courseTitle,
+        courseTitle: localizeTitle(recipientLocale(user), assignment.course.title),
+        locale: recipientLocale(user),
         activeStatus: user.activeStatus,
         isAnonymized: user.isAnonymized,
         source: "class",
@@ -313,6 +324,8 @@ export async function runCourseReminderSchedule(input?: {
   const asOf = input?.asOf ?? new Date();
   const send = input?.sendImpl ?? defaultSendCourseReminder;
   const asOfDate = asOf.toISOString().slice(0, 10);
+  // #971: settet av alt sendt gjelder for DENNE kjøringen. En syklus skal lese databasen på nytt.
+  sentKeysByCourse.clear();
 
   const reminderDaysBefore = Array.from(new Set(getAssessmentRules().courseReminders.reminderDaysBefore))
     .filter((value) => value >= 0)
@@ -338,7 +351,7 @@ export async function runCourseReminderSchedule(input?: {
   const candidates = await gatherCandidates(summary, upperBound);
 
   for (const candidate of candidates) {
-    if (!candidate.activeStatus || candidate.isAnonymized) {
+    if (!isReachableParticipant(candidate)) {
       summary.skippedInactive += 1;
       continue;
     }
@@ -370,18 +383,9 @@ export async function runCourseReminderSchedule(input?: {
     }
 
     const userId = candidate.userId;
-    const alreadySent = await hasReminderBeenSent(candidate.courseId, (metadataJson) => {
-      if (!metadataJson.includes(`"userId":"${userId}"`)) return false;
-      if (kind === "overdue") {
-        return metadataJson.includes('"kind":"overdue"');
-      }
-      return (
-        metadataJson.includes('"kind":"due_soon"') &&
-        metadataJson.includes(`"daysBefore":${daysBefore}`) &&
-        metadataJson.includes(`"asOfDate":"${asOfDate}"`)
-      );
-    });
-    if (alreadySent) {
+    const dedupKey = reminderDedupKey({ userId, kind, daysBefore, asOfDate });
+    const sentKeys = await sentReminderKeys(candidate.courseId);
+    if (sentKeys.has(dedupKey)) {
       summary.skippedAlreadySent += 1;
       continue;
     }
@@ -394,6 +398,7 @@ export async function runCourseReminderSchedule(input?: {
       recipientEmail: candidate.recipientEmail,
       recipientName: candidate.recipientName,
       courseTitle: candidate.courseTitle,
+      locale: candidate.locale,
       kind,
       dueAt: candidate.dueAt,
       daysBefore,
@@ -418,6 +423,7 @@ export async function runCourseReminderSchedule(input?: {
     });
 
     if (result.delivered) {
+      sentKeys.add(dedupKey);
       summary.sent += 1;
     } else {
       summary.failed += 1;

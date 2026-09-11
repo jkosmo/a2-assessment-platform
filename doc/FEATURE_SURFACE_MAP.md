@@ -1006,7 +1006,7 @@ sted, i `decisionService`, fordi tolv lesere ellers ville tolket den hver for se
 | `participant.js` | `deriveOutcome`, `isSettledPass`, `isAppealableFail`, `hasPassingDecision` | resultatbanner, kortstyling, feiring, anke, autostart |
 | `participant-completed.js` | `deriveOutcome`, `isAppealableFail` | ⚠️ se konfigurasjonsmerknaden |
 | `profile.js` | `deriveOutcome` | ⚠️ se konfigurasjonsmerknaden |
-| `review.js` | `rawPassFailState` | to formattere, én regel |
+| `review.js` | `rawPassFailState`, `decisionHistoryOutcome` | to formattere, én regel — unntatt historikkraden for et AUTOMATISK vedtak i en åpen sak, som leser status og sier «til vurdering» (#1034, `static/decision-history.js`) |
 | `static/admin-content-calibration.js` | `rawPassFailState` | status i egen kolonne |
 
 ⚠️ **Konfigurasjonsmerknad.** `/api/modules/completed` filtrerer på `completedSubmissionStatuses`

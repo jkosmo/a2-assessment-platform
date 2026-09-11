@@ -81,6 +81,10 @@ model User {
   externalId                    String                   @unique
   name                          String
   email                         String                   @unique
+  // #970: «sist sett»-språk — det språket brukeren hadde appen på ved siste forespørsel. Skrives
+  // sammen med lastLoginAt. Brukes av e-post som ikke har en besvarelse å lese språket fra
+  // (påminnelser, tildelinger, diskusjonsvarsler). Null = aldri logget inn → env.DEFAULT_LOCALE.
+  preferredLocale               String?
   department                    String?
   manager                       String?
   activeStatus                  Boolean                  @default(true)

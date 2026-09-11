@@ -29,12 +29,14 @@ import { hasAnyRole, ADMIN_ONLY } from "../auth/roleSets.js";
 import { buildCourseExportEnvelope } from "../modules/adminContent/index.js";
 import { importCourseFromEnvelope } from "../modules/adminContent/contentImportService.js";
 import { localizedTextCodec } from "../codecs/localizedTextCodec.js";
+import { localizeContentText } from "../i18n/content.js";
 import { localizeCourseCopy } from "../modules/adminContent/llmContentGenerationService.js";
 import { NotFoundError, AppError } from "../errors/AppError.js";
 import type { AdminCourseListItem, AdminCourseDetail } from "../modules/course/index.js";
 import { countCourseInProgressParticipants } from "../modules/course/contentLifecycle.js";
 import { generateLimiter } from "../middleware/rateLimiting.js";
 import { respondWithAppError } from "./helpers/respondWithAppError.js";
+import { requestLocale } from "../i18n/requestLocale.js";
 
 const adminCoursesRouter = Router();
 
@@ -150,9 +152,11 @@ adminCoursesRouter.get("/", async (request, response, next) => {
       actorUserId: request.context?.userId ?? "",
       roles: request.context?.roles ?? [],
     });
+    const locale = requestLocale(request);
     const items: AdminCourseListItem[] = courses.map((c, i) => ({
       id: c.id,
       title: c.title,
+      displayTitle: localizeContentText(locale, c.title) ?? c.title,
       description: c.description,
       certificationLevel: c.certificationLevel,
       moduleCount: c._count.modules,

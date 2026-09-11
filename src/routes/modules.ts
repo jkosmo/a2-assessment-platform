@@ -14,6 +14,7 @@ import {
 import { t } from "../i18n/messages.js";
 import { hasAnyRole, CONTENT_AUTHORS } from "../auth/roleSets.js";
 import { mcqSubmitLimiter } from "../middleware/rateLimiting.js";
+import { requestLocale } from "../i18n/requestLocale.js";
 
 const modulesRouter = Router();
 // #952: `includeCompleted` er fjernet. Den fantes bare for den frittstående modul-lista i
@@ -52,7 +53,7 @@ modulesRouter.get("/", async (request, response) => {
 
   const roles = request.context?.roles ?? [];
   const userId = request.context?.userId;
-  const locale = request.context?.locale ?? "en-GB";
+  const locale = requestLocale(request);
   const adminFacingRequested = parsed.data.adminFacing === "true";
   const hasElevatedRole = hasAnyRole(roles, CONTENT_AUTHORS);
   const participantFacing = adminFacingRequested && hasElevatedRole ? false : true;
@@ -79,7 +80,7 @@ modulesRouter.get("/completed", async (request, response) => {
     return;
   }
 
-  const locale = request.context?.locale ?? "en-GB";
+  const locale = requestLocale(request);
   const limit = resolveCompletedHistoryLimit(parsed.data.limit);
   const modules = await listCompletedModulesForUser(userId, locale, limit);
   response.json({
@@ -93,7 +94,7 @@ modulesRouter.get("/completed", async (request, response) => {
 
 modulesRouter.get("/:moduleId", async (request, response) => {
   const roles = request.context?.roles ?? [];
-  const locale = request.context?.locale ?? "en-GB";
+  const locale = requestLocale(request);
   const moduleId = request.params.moduleId as string;
   const module = await getModuleById(moduleId, roles, locale, { participantFacing: true });
 
@@ -107,7 +108,7 @@ modulesRouter.get("/:moduleId", async (request, response) => {
 
 modulesRouter.get("/:moduleId/active-version", async (request, response) => {
   const roles = request.context?.roles ?? [];
-  const locale = request.context?.locale ?? "en-GB";
+  const locale = requestLocale(request);
   const moduleId = request.params.moduleId as string;
   const activeVersion = await getActiveModuleVersion(moduleId, roles, locale, { participantFacing: true });
 
@@ -136,7 +137,7 @@ modulesRouter.get("/:moduleId/mcq/start", async (request, response, next) => {
   }
 
   try {
-    const locale = request.context?.locale ?? "en-GB";
+    const locale = requestLocale(request);
     const result = await startMcqAttempt(moduleId, parsed.data.submissionId, userId, locale);
     response.json(result);
   } catch (error) {

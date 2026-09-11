@@ -24,6 +24,8 @@ const findLearnerSubmissionsForModules = vi.fn();
 // deltakerdøra og deltakernes lesing. Uten disse to i mocken faller testen på «is not a function».
 const findCourseItemsForParticipant = vi.fn();
 const findReadSectionIdsForCourseParticipants = vi.fn();
+// #1010: fjerde kilde — den som bare har LEST i kurset (OPEN-kurs uten innmeldingsrad).
+const findLearnerSectionReadersForCourse = vi.fn();
 
 const resolveCourseAudience = vi.fn();
 const findUserIdsInDepartment = vi.fn();
@@ -41,6 +43,7 @@ vi.mock("../../src/modules/course/courseRepository.js", () => ({
     findLearnerSubmissionsForModules,
     findCourseItemsForParticipant,
     findReadSectionIdsForCourseParticipants,
+    findLearnerSectionReadersForCourse,
   },
 }));
 
@@ -91,6 +94,7 @@ describe("#969 course report — enrolledParticipants is the course audience", (
   beforeEach(() => {
     findCourseItemsForParticipant.mockResolvedValue([]);
     findReadSectionIdsForCourseParticipants.mockResolvedValue([]);
+    findLearnerSectionReadersForCourse.mockReset().mockResolvedValue([]);
     findPublishedCoursesWithModuleDetails.mockReset();
     findCourseCompletionsForLearnerReport.mockReset().mockResolvedValue([]);
     countCourseCompletions.mockReset().mockResolvedValue(0);
@@ -341,5 +345,32 @@ describe("#996: kursdrilldownen bruker samme publikum som sammendraget", () => {
     expect(report.rows).toHaveLength(1);
     expect(report.rows[0].participantName).toBe("Aktiv Aktivsen");
     expect(findUsersByIds, "ingen mangler — da skal oppslaget ikke gjøres").not.toHaveBeenCalled();
+  });
+
+  // #1010: et rent lesekurs (0 moduler) på OPEN-policy. Ingen er tildelt, ingen har levert — men
+  // 20 har lest og 2 er ferdige. Før: «2 innmeldte, 2 fullførte, 100 %». De 20 fantes ikke.
+  it("⚠️ #1010: den som bare har LEST teller i nevneren — et rent lesekurs viser ikke 100 %", async () => {
+    findPublishedCoursesWithModuleDetails.mockResolvedValue([course("lesekurs", [])]);
+    const lesere = Array.from({ length: 20 }, (_, i) => `leser-${i}`);
+    findLearnerSectionReadersForCourse.mockResolvedValue(lesere.map((userId) => ({ userId })));
+    findCourseCompletionsForLearnerReport.mockResolvedValue(completions("leser-0", "leser-1"));
+
+    const { getCourseReport } = await import("../../src/modules/course/courseReport.js");
+    const { rows } = await getCourseReport();
+    expect(rows[0].enrolledParticipants).toBe(20);
+    expect(rows[0].completedParticipants).toBe(2);
+    expect(rows[0].completionRate).toBe(0.1);
+    // Kontroll: lesere som alt er tildelt telles ikke dobbelt.
+    resolveCourseAudience.mockResolvedValue(audience("leser-0", "leser-5"));
+    const igjen = await getCourseReport();
+    expect(igjen.rows[0].enrolledParticipants).toBe(20);
+  });
+
+  it("#1010: leserne hentes med rapportens vindu og avdelingsfilter — ikke all-time", async () => {
+    findPublishedCoursesWithModuleDetails.mockResolvedValue([course("lesekurs", [])]);
+    const { getCourseReport } = await import("../../src/modules/course/courseReport.js");
+    const filters = { dateFrom: new Date("2026-08-01T00:00:00Z"), dateTo: new Date("2026-08-31T00:00:00Z"), orgUnit: "Legal" };
+    await getCourseReport(filters);
+    expect(findLearnerSectionReadersForCourse).toHaveBeenCalledWith("lesekurs", expect.objectContaining(filters));
   });
 });

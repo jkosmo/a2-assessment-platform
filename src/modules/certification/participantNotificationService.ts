@@ -3,7 +3,7 @@ import type { AppealStatus } from "@prisma/client";
 import { env } from "../../config/env.js";
 import { withTimeout } from "../../clients/externalCall.js";
 import type { SupportedLocale } from "../../i18n/locale.js";
-import { getAppealNotificationMessage, getAssessmentResultNotificationMessage } from "../../i18n/notificationMessages.js";
+import { getAppealNotificationMessage, getAssessmentResultNotificationMessage, getCourseAssignmentNotificationMessage } from "../../i18n/notificationMessages.js";
 import { logOperationalEvent } from "../../observability/operationalLog.js";
 import { auditActions, auditEntityTypes } from "../../observability/auditEvents.js";
 import { operationalEvents } from "../../observability/operationalEvents.js";
@@ -375,17 +375,24 @@ export async function notifyAppealStatusTransition(input: AppealNotificationInpu
 export interface CourseAssignmentNotificationInput {
   recipientEmail: string;
   recipientName?: string | null;
+  // #970: kurstittelen skal alt være valgt for MOTTAKERENS språk — samme språk som `locale`.
   courseTitle: string;
   className: string;
   dueAt?: Date | null;
+  locale: SupportedLocale;
 }
 
 export async function sendCourseAssignmentNotification(
   input: CourseAssignmentNotificationInput,
 ): Promise<NotificationResult> {
-  const subject = `Nytt kurs tildelt: ${input.courseTitle}`;
-  const dueLine = input.dueAt ? `\nFrist: ${input.dueAt.toISOString().slice(0, 10)}.` : "";
-  const body = `Hei!\n\nKlassen din «${input.className}» har blitt tildelt kurset «${input.courseTitle}».${dueLine}\n\nLogg inn på plattformen for å starte.`;
+  // #970: var hardkodet bokmål — den eneste e-posten uten språk. Nå fra samme tabell som resten.
+  const message = getCourseAssignmentNotificationMessage(input.locale, {
+    courseTitle: input.courseTitle,
+    className: input.className,
+    dueAt: input.dueAt ?? null,
+  });
+  const subject = message.subject;
+  const body = message.nextStepGuidance;
 
   const payload = {
     notificationType: "class_course_assignment",

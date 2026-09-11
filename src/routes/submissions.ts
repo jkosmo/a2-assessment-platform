@@ -11,6 +11,7 @@ import { isModuleInAccessibleCourse } from "../modules/course/index.js";
 import { env } from "../config/env.js";
 import { hasAnyRole, CONTENT_AUTHORS } from "../auth/roleSets.js";
 import { submissionCreateLimiter } from "../middleware/rateLimiting.js";
+import { requestLocale } from "../i18n/requestLocale.js";
 
 // #475: AI-use process signals — aggregate-only declaration + reflective-nudge choice. No keystroke
 // or paste telemetry. Optional so submissions from clients without the feature enabled are unaffected.
@@ -77,7 +78,7 @@ submissionsRouter.post("/", submissionCreateLimiter, async (request, response, n
   try {
     const submission = await createSubmission({
       userId,
-      locale: request.context?.locale ?? env.DEFAULT_LOCALE,
+      locale: requestLocale(request),
       ...parsed.data,
     });
     response.status(201).json({ submission });
@@ -127,7 +128,7 @@ submissionsRouter.get("/history", async (request, response) => {
   const history = await getOwnedSubmissionHistoryView({
     userId,
     limit: parsed.data.limit,
-    locale: request.context?.locale ?? env.DEFAULT_LOCALE,
+    locale: requestLocale(request),
   });
   response.json(history);
 });

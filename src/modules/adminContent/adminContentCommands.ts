@@ -111,7 +111,6 @@ export async function createModule(input: CreateModuleInput, tx?: DbTransactionC
       scopeMaxWords: input.scopeMaxWords,
       validFrom: input.validFrom,
       validTo: input.validTo,
-      createdById: input.actorId,
     });
 
     await recordAuditEvent(
@@ -131,9 +130,10 @@ export async function createModule(input: CreateModuleInput, tx?: DbTransactionC
       client,
     );
 
-    // #787 slice 4a: creator becomes sole initial owner. Modules already set createdById and the backfill
-    // populated ContentOwner from it, but new modules need an explicit row so 4b enforcement (which reads
-    // ContentOwner, not createdById) recognises the creator. Inert until 4b. Idempotent + audited.
+    // #787 slice 4a: creator becomes sole initial owner. #963: ContentOwner er den ENESTE generasjonen
+    // nå — `Module.createdById` skrives ikke lenger (kolonnen står til neste contract-migrasjon). To
+    // steder som svarte på «hvem eier», der bare det ene ble lest, fikk leseren til å tro det andre
+    // betydde noe. Idempotent + audited.
     // #796: created in the same transaction as the module so createModule is fully atomic.
     if (input.actorId) {
       await addContentOwner(

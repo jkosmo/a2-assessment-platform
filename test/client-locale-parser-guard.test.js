@@ -45,9 +45,7 @@ const PUBLIC = fileURLToPath(new URL("../public", import.meta.url));
 
 // Fil -> antall kjente språkvalg på klienten.
 const BASELINE = {
-  // #1038: kurstittelen i klasselista. Serveren sender lagringsformatet her ennå, så denne kan
-  // ikke bare slettes — ruta må lokalisere først.
-  "static/admin-content-classes.js": 1,
+  // #1038 (fjernet 2026-09-11): klasseskjermen fikk tittelen ferdig valgt fra serveren.
   // Forfatterkonsollets egne visningshjelpere, to av dem.
   "static/admin-content-courses.js": 2,
   // Tittelvisning i seksjonslista.
@@ -61,7 +59,7 @@ const BASELINE = {
   // Fjernes den, må ruta lokalisere først, som for #1038. Egen endring, ikke en opprydding her.
   "static/admin-content-preview.js": 2,
 };
-// 6 til sammen, per 2026-09-06.
+// 5 til sammen, per 2026-09-11 (6 den 2026-09-06).
 //
 // ⚠️ Mitt eget håndsveip før denne vakta sa 2. Det var halvparten. Grep med noen linjers kontekst
 // fant ikke kjedene som sto alene på en linje — verdien var allerede tolket lenger opp, så det sto

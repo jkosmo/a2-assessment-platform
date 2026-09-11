@@ -91,10 +91,11 @@ describe("#650 agent-friendly authoring orchestration", () => {
     });
     const moduleRow = await prisma.module.findUniqueOrThrow({
       where: { id: module1.moduleId },
-      select: { activeVersionId: true, createdById: true },
+      select: { activeVersionId: true },
     });
     expect(moduleRow.activeVersionId).toBeNull(); // draft
-    expect(moduleRow.createdById).not.toBeNull(); // ownership tracked
+    // #963: eierskap måles der autorisasjonen leser det — ContentOwner, ikke createdById.
+    expect(await prisma.contentOwner.count({ where: { contentType: "MODULE", contentId: module1.moduleId } })).toBeGreaterThan(0);
 
     // 2. Draft section — activeVersionId stays null, content preserved in v1.
     const sectionResponse = await request(app)
@@ -179,10 +180,11 @@ describe("#650 agent-friendly authoring orchestration", () => {
     });
     const moduleRow = await prisma.module.findUniqueOrThrow({
       where: { id: imported.moduleId },
-      select: { activeVersionId: true, createdById: true },
+      select: { activeVersionId: true },
     });
     expect(moduleRow.activeVersionId).toBeNull();
-    expect(moduleRow.createdById).toBe(smoUser.id);
+    // #963: eierskap måles der autorisasjonen leser det — ContentOwner, ikke createdById.
+    expect(await prisma.contentOwner.findFirst({ where: { contentType: "MODULE", contentId: imported.moduleId, userId: smoUser.id } })).not.toBeNull();
 
     const sectionResponse = await request(app)
       .post("/api/admin/content/sections")

@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import { claimAppeal, getAppealWorkspaceView, listAppealQueue, resolveAppeal } from "../modules/appeal/index.js";
+import { requestLocale } from "../i18n/requestLocale.js";
 
 const appealsRouter = Router();
 
@@ -49,7 +50,7 @@ appealsRouter.get("/", async (request, response) => {
 });
 
 appealsRouter.get("/:appealId", async (request, response) => {
-  const appeal = await getAppealWorkspaceView(request.params.appealId, request.context?.locale ?? "nb");
+  const appeal = await getAppealWorkspaceView(request.params.appealId, requestLocale(request));
   if (!appeal) {
     response.status(404).json({ error: "not_found", message: "Appeal not found." });
     return;

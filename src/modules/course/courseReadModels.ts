@@ -57,7 +57,11 @@ export interface CourseDetail extends CourseListItem {
 
 export interface AdminCourseListItem {
   id: string;
+  // Lagringsformatet (språkkart som JSON) — forfatterkonsollet redigerer det og trenger hele kartet.
   title: string;
+  // #1038: samme tittel valgt for leserens språk, av serveren. For flater som bare VISER kurset
+  // (klasseskjermen) og ikke skal ha sin egen mening om hvilket språk som gjelder når ett mangler.
+  displayTitle: string;
   description: string | null;
   certificationLevel: string | null;
   moduleCount: number;

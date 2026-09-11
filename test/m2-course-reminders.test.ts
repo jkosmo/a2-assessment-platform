@@ -57,7 +57,7 @@ describe("Course due-date reminders (#497)", () => {
     return course.id;
   }
 
-  async function makeUser(tag: string, opts: { activeStatus?: boolean; participant?: boolean } = {}): Promise<string> {
+  async function makeUser(tag: string, opts: { activeStatus?: boolean; participant?: boolean; preferredLocale?: string | null } = {}): Promise<string> {
     seq += 1;
     const user = await prisma.user.create({
       data: {
@@ -65,6 +65,7 @@ describe("Course due-date reminders (#497)", () => {
         name: `CR ${tag}`,
         email: `cr-${tag}-${stamp}-${seq}@x.test`,
         activeStatus: opts.activeStatus ?? true,
+        preferredLocale: opts.preferredLocale ?? null,
         ...(opts.participant
           ? { roleAssignments: { create: { appRole: "PARTICIPANT", validFrom: new Date("2020-01-01T00:00:00.000Z") } } }
           : {}),
@@ -193,8 +194,10 @@ describe("Course due-date reminders (#497)", () => {
 
   it("individual: sends due-soon + overdue to the right participants and is idempotent", async () => {
     const courseId = await makeCourse();
-    const dueSoon7 = await makeUser("due7");
-    const dueSoon1 = await makeUser("due1");
+    // #970: språket er mottakerens «sist sett». Tre mottakere, tre språk — og én uten (aldri logget
+    // inn) som får den konfigurerte standarden, ikke bokmål.
+    const dueSoon7 = await makeUser("due7", { preferredLocale: "nb" });
+    const dueSoon1 = await makeUser("due1", { preferredLocale: "nn" });
     const overdue = await makeUser("overdue");
     const notYet = await makeUser("notyet");
     const completed = await makeUser("completed");
@@ -220,8 +223,14 @@ describe("Course due-date reminders (#497)", () => {
     expect(new Set(sentTo.keys())).toEqual(new Set([dueSoon7, dueSoon1, overdue]));
     expect(sentTo.get(dueSoon7)?.kind).toBe("due_soon");
     expect(sentTo.get(dueSoon7)?.daysBefore).toBe(7);
-    expect(sentTo.get(dueSoon7)?.courseTitle).toBe("Påminnelseskurs"); // localized (nb)
+    expect(sentTo.get(dueSoon7)?.courseTitle).toBe("Påminnelseskurs"); // #970: mottakerens språk (nb)
+    expect(sentTo.get(dueSoon7)?.locale).toBe("nb");
     expect(sentTo.get(dueSoon1)?.daysBefore).toBe(1);
+    expect(sentTo.get(dueSoon1)?.courseTitle).toBe("Påminningskurs"); // nn
+    expect(sentTo.get(dueSoon1)?.locale).toBe("nn");
+    // ⚠️ Aldri logget inn → env.DEFAULT_LOCALE (en-GB i test), IKKE bokmål. Det var bokmål før, hardkodet.
+    expect(sentTo.get(overdue)?.locale).toBe("en-GB");
+    expect(sentTo.get(overdue)?.courseTitle).toBe("Reminder course");
     expect(sentTo.get(overdue)?.kind).toBe("overdue");
     expect(sentTo.get(overdue)?.daysBefore).toBeUndefined();
 

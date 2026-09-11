@@ -98,6 +98,7 @@ import { generateLimiter, extractLimiter, intentLogLimiter } from "../middleware
 import { ForbiddenError, NotFoundError, AppError } from "../errors/AppError.js";
 import { assertContentOwnership } from "../modules/content/contentOwnershipService.js";
 import { respondWithAppError } from "./helpers/respondWithAppError.js";
+import { requestLocale } from "../i18n/requestLocale.js";
 
 const adminContentRouter = Router();
 
@@ -254,7 +255,7 @@ adminContentRouter.get("/modules/library", async (request, response) => {
 });
 
 adminContentRouter.get("/modules", async (request, response) => {
-  const modules = await listAdminModules(request.context?.locale ?? "en-GB");
+  const modules = await listAdminModules(requestLocale(request));
   response.json({ modules });
 });
 

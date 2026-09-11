@@ -82,9 +82,16 @@ async function resolveReportAudienceIds(courseId: string, orgUnit: string | unde
  *   fullført     har et kursbevis i vinduet — kan ha mistet tildelingen etterpå
  *   aktiv        har levert på en av kursets moduler — dekker ENTRA-klasser, som ikke er
  *                oppløsbare hos oss, og som derfor ikke finnes i den første kilden
+ *   leser        har lest en seksjon i kurset i vinduet (#1010)
  *
- * Den siste er lagt til etter at #969 alene KRYMPET nevneren for Entra-tildelte kurs: deltakere som
+ * Den tredje er lagt til etter at #969 alene KRYMPET nevneren for Entra-tildelte kurs: deltakere som
  * talte før (via innlevering) forsvant. Én fiks gjorde ett tall riktigere og et annet galere.
+ *
+ * ⚠️ #1010: den fjerde er der av en annen grunn enn saken trodde. ENTRA-klasser kan ikke opprettes
+ * (#1017). Men et OPEN-kurs — standarden — kan leses av alle UTEN innmeldingsrad, og klienten
+ * kaller aldri selv-innmelding. Den som bare har lest, uten å levere, fantes derfor ikke for
+ * rapporten: et rent lesekurs så ut som «2 innmeldte, 2 fullførte, 100 %» med tjue pågående
+ * usynlige. #966 slo fast at lesing er aktivitet; nevneren må mene det samme.
  *
  * At telleren er en delmengde av nevneren følger nå av konstruksjonen, ikke av en klipping — en
  * klipping ville skjult uenigheten i stedet for å fjerne den.
@@ -98,15 +105,17 @@ async function resolveCourseParticipantIds(
   completions: Awaited<ReturnType<typeof courseRepository.findCourseCompletionsForLearnerReport>>;
   submissions: Awaited<ReturnType<typeof courseRepository.findLearnerSubmissionsForModules>>;
 }> {
-  const [audienceUserIds, completions, submissions] = await Promise.all([
+  const [audienceUserIds, completions, submissions, readers] = await Promise.all([
     resolveReportAudienceIds(courseId, filters.orgUnit),
     courseRepository.findCourseCompletionsForLearnerReport(courseId, filters),
     courseRepository.findLearnerSubmissionsForModules(moduleIds, filters),
+    courseRepository.findLearnerSectionReadersForCourse(courseId, filters),
   ]);
 
   const participantIds = new Set(audienceUserIds);
   for (const completion of completions) participantIds.add(completion.userId);
   for (const submission of submissions) participantIds.add(submission.userId);
+  for (const reader of readers) participantIds.add(reader.userId);
 
   return { participantIds, completions, submissions };
 }

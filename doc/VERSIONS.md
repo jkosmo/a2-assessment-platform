@@ -2,6 +2,62 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.66.0 - 2026-09-11
+
+Tretten commits, to migrasjoner (begge additive), én konfigurasjonsendring. Tråden gjennom det
+meste: **språk** — hvem bestemmer det, og hvor det ble glemt.
+
+### Avgjørelse: bokmål er standardspråk
+
+`DEFAULT_LOCALE=nb` på web og worker (bicep-parameter `defaultLocale`; satt manuelt på stage og
+prod, infra-kjøringen bærer den videre). Gjelder forespørsler uten `x-locale`/`Accept-Language` og
+e-post til brukere uten lagret språk. Kodens egen reserve er fortsatt `en-GB`.
+
+### #970 — e-post på mottakerens språk («sist sett»)
+
+Påminnelser, klassetildelinger og diskusjonsvarsler var låst til bokmål. Ny kolonne
+`User.preferredLocale`, skrevet i samme `update` som `lastLoginAt` ved hver forespørsel — null ekstra
+rundtur. Backfill fra brukerens siste besvarelse, så første kjøring etter deploy ikke går på
+standarden til alle som ikke har rukket å logge inn. ⚠️ Sakens premiss «`User.locale` finnes» var
+feillesning av `Submission.locale` — det fantes ingen lagret språkpreferanse noe sted.
+
+### #974 — LLM-utkast på innholdsspråket, ikke menyspråket
+
+Ni genereringskall («lag modul fra kildemateriale», «lag MCQ») sendte `currentLocale` — menyen — som
+språket innholdet skulle skrives på. Regelen sto i koden siden 17. august; ingen vakt håndhevet den.
+Nå `contentLocale`, ratsj 24 → 13 i begge retninger.
+
+### #984 — én reserve for forespørselens språk
+
+28 steder, tre ulike svar (`"nb"`, `"en-GB"`, `env.DEFAULT_LOCALE`) — alle døde, siden `authenticate`
+alltid setter `context.locale`. Nå `requestLocale(request)`, med vakt.
+
+### #1038 — klasseskjermens kurstitler velges av serveren
+
+Siste klientparser av #1022-slaget. `displayTitle` på kurslista ved siden av råformatet.
+
+### #1034 — «Vurderer-overstyring» på et vedtak ingen sensor har rørt
+
+Etiketten følger nå `decisionType`; et automatisk vedtak i en åpen sak sier «Til vurdering», ikke
+«Ikke bestått · 72» med terskel 70.
+
+### #963 — én generasjon eierskap
+
+`createdById` skrives ikke lenger; klassens eierrad er inne i transaksjonen (var det ene av fire
+stedene utenfor — feilet den, sto klassen som «unowned» med 403 mot skaperen selv). Kolonnene står
+til en contract-migrasjon i en senere release.
+
+### #1010 — den som bare har lest, teller i kursrapporten
+
+Sakens ENTRA-forklaring holdt ikke (#1017); den ekte populasjonen er OPEN-kurs lest uten
+innmeldingsrad. Fjerde kilde i nevneren.
+
+### Mindre
+
+- **#979** framdriftslinja sier selv at den måler andel steg (`role=progressbar`, «2 av 4 steg»).
+- **#1017** ENTRA-klasser merket som halvbygde, med vakt (valg A).
+- **#983** lukket etter måling av ekte 429 på stage; **#1047** lukket som plattformnode.
+
 ## 2.65.0 - 2026-09-11
 
 Sju commits, ingen migrasjoner. To av dem er feil du meldte selv fra skjermen; resten er saker

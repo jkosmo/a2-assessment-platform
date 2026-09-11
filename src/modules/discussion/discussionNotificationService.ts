@@ -8,6 +8,8 @@ import {
 import { sendDiscussionNotification } from "../certification/participantNotificationService.js";
 import { recordAuditEvent } from "../../services/auditService.js";
 import { auditActions, auditEntityTypes } from "../../observability/auditEvents.js";
+import { recipientLocale } from "../../i18n/recipientLocale.js";
+import { isReachableParticipant } from "../user/participantReach.js";
 
 /**
  * Diskusjon — minimal varsling (#495/T-QA-5). Nytt SPØRSMÅL → kursets SMO-er; nytt SVAR →
@@ -16,10 +18,9 @@ import { auditActions, auditEntityTypes } from "../../observability/auditEvents.
  * bevisst minimalt her. Alle feil svelges av kalleren: varsling skal aldri velte selve handlingen.
  *
  * Merknad: `Course` har ingen eier-kobling, så «kursets SMO» = alle aktive brukere med rollen
- * SUBJECT_MATTER_OWNER. Ingen per-bruker locale finnes ennå; vi bruker org-default (nb).
+ * SUBJECT_MATTER_OWNER. #970: språket er MOTTAKERENS («sist sett», `recipientLocale`) — før sto det
+ * «ingen per-bruker locale finnes ennå → nb» her, og alle fikk bokmål.
  */
-
-const NOTIFY_LOCALE = "nb" as const;
 
 export async function notifyNewQuestion(input: {
   courseId: string;
@@ -42,21 +43,20 @@ export async function notifyNewQuestion(input: {
           },
         },
       },
-      select: { id: true, email: true, name: true },
+      select: { id: true, email: true, name: true, preferredLocale: true },
     }),
     prisma.course.findUnique({ where: { id: input.courseId }, select: { title: true } }),
   ]);
   if (smos.length === 0) return;
 
-  const courseTitle = localizeContentText(NOTIFY_LOCALE, course?.title ?? "") ?? course?.title ?? "";
-  const message = getDiscussionQuestionNotificationMessage(NOTIFY_LOCALE, {
-    courseTitle,
-    threadTitle: input.threadTitle,
-  });
-
   let delivered = 0;
   let channel = "unknown";
   for (const smo of smos) {
+    const locale = recipientLocale(smo);
+    const message = getDiscussionQuestionNotificationMessage(locale, {
+      courseTitle: localizeContentText(locale, course?.title ?? "") ?? course?.title ?? "",
+      threadTitle: input.threadTitle,
+    });
     const result = await sendDiscussionNotification({
       recipientEmail: smo.email,
       recipientName: smo.name,
@@ -92,18 +92,17 @@ export async function notifyNewReply(input: {
 }): Promise<void> {
   const subscriptions = await prisma.discussionSubscription.findMany({
     where: { threadId: input.threadId, userId: { not: input.replyAuthorId } },
-    select: { user: { select: { id: true, email: true, name: true, isAnonymized: true, activeStatus: true } } },
+    select: { user: { select: { id: true, email: true, name: true, isAnonymized: true, activeStatus: true, preferredLocale: true } } },
   });
   const recipients = subscriptions
     .map((s) => s.user)
-    .filter((u) => u.activeStatus && !u.isAnonymized);
+    .filter((u) => isReachableParticipant(u)); // #968: samme regel som publikum og påminnelser
   if (recipients.length === 0) return;
-
-  const message = getDiscussionReplyNotificationMessage(NOTIFY_LOCALE, { threadTitle: input.threadTitle });
 
   let delivered = 0;
   let channel = "unknown";
   for (const user of recipients) {
+    const message = getDiscussionReplyNotificationMessage(recipientLocale(user), { threadTitle: input.threadTitle });
     const result = await sendDiscussionNotification({
       recipientEmail: user.email,
       recipientName: user.name,

@@ -20,6 +20,7 @@ import {
   type ReportFilters,
 } from "../modules/reporting/index.js";
 import { getCourseLearnerReport, getCourseReport } from "../modules/course/index.js";
+import { requestLocale } from "../i18n/requestLocale.js";
 
 const reportsRouter = Router();
 
@@ -99,7 +100,7 @@ reportsRouter.get("/courses", async (request, response, next) => {
   }
 
   try {
-    const report = await getCourseReport(filters, request.context?.locale ?? "nb");
+    const report = await getCourseReport(filters, requestLocale(request));
     response.json(report);
   } catch (error) {
     next(error);
@@ -118,7 +119,7 @@ reportsRouter.get("/courses/details", async (request, response, next) => {
     const report = await getCourseLearnerReport(
       parsed.data.selectedCourseId,
       filters,
-      request.context?.locale ?? "nb",
+      requestLocale(request),
     );
     response.json(report);
   } catch (error) {
@@ -133,7 +134,7 @@ reportsRouter.get("/completion", async (request, response, next) => {
     return;
   }
 
-  const report = await getCompletionReport(filters, request.context?.locale ?? "nb");
+  const report = await getCompletionReport(filters, requestLocale(request));
   response.json(report);
 });
 
@@ -149,7 +150,7 @@ reportsRouter.get("/completion/details", async (request, response, next) => {
     const report = await getCompletionLearnerReport(
       filters,
       parsed.data.selectedModuleId,
-      request.context?.locale ?? "nb",
+      requestLocale(request),
     );
     response.json(report);
   } catch (error) {
@@ -164,7 +165,7 @@ reportsRouter.get("/pass-rates", async (request, response, next) => {
     return;
   }
 
-  const report = await getPassRatesReport(filters, request.context?.locale ?? "nb");
+  const report = await getPassRatesReport(filters, requestLocale(request));
   response.json(report);
 });
 
@@ -175,7 +176,7 @@ reportsRouter.get("/manual-review-queue", async (request, response, next) => {
     return;
   }
 
-  const report = await getManualReviewQueueReport(filters, request.context?.locale ?? "nb");
+  const report = await getManualReviewQueueReport(filters, requestLocale(request));
   response.json(report);
 });
 
@@ -186,7 +187,7 @@ reportsRouter.get("/appeals", async (request, response, next) => {
     return;
   }
 
-  const report = await getAppealsReport(filters, request.context?.locale ?? "nb");
+  const report = await getAppealsReport(filters, requestLocale(request));
   response.json(report);
 });
 
@@ -200,7 +201,7 @@ reportsRouter.get("/mcq-quality", async (request, response, next) => {
   // ⚠️ #1027: denne ruta ble glemt i første runde, mens CSV-eksporten av SAMME rapport fikk
   // språket. Resultatet var engelsk JSON og norsk fil — nøyaktig spriket kommentaren i
   // eksportgrenen under kaller verre enn å ta feil begge steder.
-  const report = await getMcqQualityReport(filters, request.context?.locale ?? "nb");
+  const report = await getMcqQualityReport(filters, requestLocale(request));
   response.json(report);
 });
 
@@ -215,7 +216,7 @@ reportsRouter.get("/recertification", async (request, response, next) => {
     return;
   }
 
-  const report = await getCertificationStatusReport(filters, request.context?.locale ?? "nb");
+  const report = await getCertificationStatusReport(filters, requestLocale(request));
   response.json(report);
 });
 
@@ -296,7 +297,7 @@ reportsRouter.get("/export", async (request, response, next) => {
   // #1027: eksporten skal ha SAMME språk som skjermen. Uten dette ville en norsk leser fått en
   // norsk rapport på skjermen og en engelsk CSV — verre enn om begge var engelske, fordi ingen
   // ville sett at de sprikte.
-  const reportLocale = request.context?.locale ?? "nb";
+  const reportLocale = requestLocale(request);
   if (parsed.data.type === "completion") {
     rows = (await getCompletionReport(filters, reportLocale)).rows;
   } else if (parsed.data.type === "pass-rates") {

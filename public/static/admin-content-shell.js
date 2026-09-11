@@ -2749,7 +2749,9 @@ async function translateMissingLocalesThenPublish(issues) {
     issues.some((issue) => issue.field === field),
   );
   const needsMcqSource = issues.some((issue) => String(issue.field ?? "").startsWith("mcq."));
-  const preferredOrder = [contentLocale, currentLocale, "nb", "en-GB", "nn"];
+  // #974: menyspråket sto som andre kandidat her. Regelen (se `contentLocale`) er at menyen aldri
+  // styrer innhold — kildeteksten til en oversettelse er innhold.
+  const preferredOrder = [contentLocale, "nb", "en-GB", "nn"];
   const sourceLocale = preferredOrder.find((locale) => {
     if (!locale) return false;
     if (!gatedTextFields.every((field) => sourceTextForLocale(current[field], locale).trim())) return false;
@@ -4603,7 +4605,7 @@ async function exportModulePackageInBackground() {
     const envelope = body?.envelope;
     if (!envelope) throw new Error("empty envelope");
 
-    const title = localizeValueForLocale(bundle?.module?.title ?? "module", currentLocale);
+    const title = localizeValueForLocale(bundle?.module?.title ?? "module", contentLocale);
     const safeTitle =
       String(title).replace(/[^a-z0-9-]+/gi, "-").replace(/^-+|-+$/g, "").toLowerCase() || "module";
     const url = URL.createObjectURL(
@@ -6611,7 +6613,7 @@ function askForScenarioModeRegen(existingModuleId, sourceMaterial, knownCertLeve
 function continueRegenAfterScenario(existingModuleId, sourceMaterial, knownCertLevel, scenarioMode, freetextOnly = false) {
   if (knownCertLevel) {
     // Hard-default "thorough" — se askForCertLevel-kommentaren.
-    generateBlueprintAndConfirm(null, existingModuleId, sourceMaterial, knownCertLevel, currentLocale, "thorough", scenarioMode, freetextOnly);
+    generateBlueprintAndConfirm(null, existingModuleId, sourceMaterial, knownCertLevel, contentLocale, "thorough", scenarioMode, freetextOnly);
   } else {
     askForCertLevel(null, existingModuleId, sourceMaterial, scenarioMode, freetextOnly);
   }
@@ -6647,7 +6649,7 @@ function startMcqOnlyRegen(sourceMaterial, knownCertLevel) {
   };
   renderPreview();
   const certLevel = knownCertLevel ?? bundle?.module?.certificationLevel ?? "intermediate";
-  askForMcqQuestionCount(sourceMaterial, certLevel, currentLocale, "thorough", () => showDraftReadyActions());
+  askForMcqQuestionCount(sourceMaterial, certLevel, contentLocale, "thorough", () => showDraftReadyActions());
 }
 
 function askForSourceMaterial(moduleTitle, existingModuleId, knownCertLevel, scenarioMode = "auto") {
@@ -6676,9 +6678,9 @@ function askForCertLevel(moduleTitle, existingModuleId, sourceMaterial, scenario
   // Generation mode is always "thorough" — author feedback (2026-05-18) confirmed the
   // "Vanlig" option was never selected in practice. Removed to reduce conversation friction.
   logBot(() => t("shell.certLevel.prompt"), [
-    { labelKey: "shell.certLevel.basic", action: () => generateBlueprintAndConfirm(moduleTitle, existingModuleId, sourceMaterial, "basic", currentLocale, "thorough", scenarioMode, freetextOnly) },
-    { labelKey: "shell.certLevel.intermediate", action: () => generateBlueprintAndConfirm(moduleTitle, existingModuleId, sourceMaterial, "intermediate", currentLocale, "thorough", scenarioMode, freetextOnly) },
-    { labelKey: "shell.certLevel.advanced", action: () => generateBlueprintAndConfirm(moduleTitle, existingModuleId, sourceMaterial, "advanced", currentLocale, "thorough", scenarioMode, freetextOnly) },
+    { labelKey: "shell.certLevel.basic", action: () => generateBlueprintAndConfirm(moduleTitle, existingModuleId, sourceMaterial, "basic", contentLocale, "thorough", scenarioMode, freetextOnly) },
+    { labelKey: "shell.certLevel.intermediate", action: () => generateBlueprintAndConfirm(moduleTitle, existingModuleId, sourceMaterial, "intermediate", contentLocale, "thorough", scenarioMode, freetextOnly) },
+    { labelKey: "shell.certLevel.advanced", action: () => generateBlueprintAndConfirm(moduleTitle, existingModuleId, sourceMaterial, "advanced", contentLocale, "thorough", scenarioMode, freetextOnly) },
   ]);
 }
 
@@ -6781,7 +6783,7 @@ async function createMcqOnlyModuleThenGenerate(moduleTitle, sourceMaterial, cert
 
   // Reuse the existing MCQ-generation chain; on accept go straight to the draft-ready actions
   // (no draft/criteria generation step, which is free-text-only).
-  askForMcqQuestionCount(sourceMaterial, certLevel, currentLocale, "thorough", () => showDraftReadyActions());
+  askForMcqQuestionCount(sourceMaterial, certLevel, contentLocale, "thorough", () => showDraftReadyActions());
 }
 
 // #454 Phase 4 (v1.2.4): condense source material once before blueprint generation if it
@@ -7308,9 +7310,9 @@ function startGenerateMcqFlow() {
 function askForCertLevelMcqOnly(sourceMaterial) {
   // Generation mode hard-defaulted to "thorough" — see askForCertLevel above for rationale.
   logBot(() => t("shell.mcqCertLevel.prompt"), [
-    { labelKey: "shell.certLevel.basic", action: () => askForMcqQuestionCount(sourceMaterial, "basic", currentLocale, "thorough", () => showModuleActions()) },
-    { labelKey: "shell.certLevel.intermediate", action: () => askForMcqQuestionCount(sourceMaterial, "intermediate", currentLocale, "thorough", () => showModuleActions()) },
-    { labelKey: "shell.certLevel.advanced", action: () => askForMcqQuestionCount(sourceMaterial, "advanced", currentLocale, "thorough", () => showModuleActions()) },
+    { labelKey: "shell.certLevel.basic", action: () => askForMcqQuestionCount(sourceMaterial, "basic", contentLocale, "thorough", () => showModuleActions()) },
+    { labelKey: "shell.certLevel.intermediate", action: () => askForMcqQuestionCount(sourceMaterial, "intermediate", contentLocale, "thorough", () => showModuleActions()) },
+    { labelKey: "shell.certLevel.advanced", action: () => askForMcqQuestionCount(sourceMaterial, "advanced", contentLocale, "thorough", () => showModuleActions()) },
   ]);
 }
 

@@ -14,6 +14,7 @@ import {
   assignCourseToClass,
   unassignCourseFromClass,
 } from "../modules/course/index.js";
+import { requestLocale } from "../i18n/requestLocale.js";
 
 // #645/CL-2: class (cohort) administration. Mounted under /api/admin/content/classes, so it inherits
 // the SMO/ADMINISTRATOR gate from the admin-content router.
@@ -118,7 +119,7 @@ adminClassesRouter.delete("/:classId/members/:userId", requireContentOwnership("
 // SMO lese hvilke kurs en klasse er tildelt, og med hvilke frister.
 adminClassesRouter.get("/:classId/courses", requireContentOwnership("CLASS", "classId"), async (request: Request<{ classId: string }>, response, next) => {
   try {
-    response.json({ courses: await listClassCourseAssignments(request.params.classId) });
+    response.json({ courses: await listClassCourseAssignments(request.params.classId, requestLocale(request)) });
   } catch (error) {
     next(error);
   }

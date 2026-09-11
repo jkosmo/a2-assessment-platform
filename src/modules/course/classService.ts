@@ -4,6 +4,8 @@ import { DomainRuleError, NotFoundError, ValidationError } from "../../errors/Ap
 import { recordAuditEvent } from "../../services/auditService.js";
 import { auditActions, auditEntityTypes } from "../../observability/auditEvents.js";
 import { localizeContentText } from "../../i18n/content.js";
+import { recipientLocale } from "../../i18n/recipientLocale.js";
+import type { SupportedLocale } from "../../i18n/locale.js";
 import { hasAnyRole, PARTICIPANTS } from "../../auth/roleSets.js";
 import { sendCourseAssignmentNotification } from "../certification/participantNotificationService.js";
 import { classRepository, createClassRepository, SYSTEM_ALL_PARTICIPANTS_CLASS_ID } from "./classRepository.js";
@@ -11,6 +13,7 @@ import { isClassEntraLinkingEnabled } from "./classConfig.js";
 import { addContentOwner } from "../content/contentOwnershipService.js";
 import { logOperationalEvent } from "../../observability/operationalLog.js";
 import { operationalEvents } from "../../observability/operationalEvents.js";
+import { isReachableParticipant } from "../user/participantReach.js";
 
 // #645/CL-2: class (cohort) business logic — CRUD + membership + course assignment + dynamic
 // membership evaluation. Course→class assignment is dynamic: a participant is assigned a course if
@@ -37,7 +40,7 @@ export async function createClass(input: { name: string; description?: string | 
   if (!name) throw new ValidationError("Class name is required.");
   const created = await runInTransaction(async (tx) => {
     const repo = createClassRepository(tx);
-    const klass = await repo.createClass({ name, description: input.description ?? null, createdById: actorId });
+    const klass = await repo.createClass({ name, description: input.description ?? null });
     await recordAuditEvent(
       {
         entityType: auditEntityTypes.class,
@@ -48,12 +51,15 @@ export async function createClass(input: { name: string; description?: string | 
       },
       tx,
     );
+    // #787 slice 4a: creator becomes sole initial owner.
+    // #963: INNE i transaksjonen, som for modul, kurs og seksjon. Dette var det ene av fire stedene
+    // som lå utenfor: klassen var alt lagret når eierraden ble skrevet, og feilet den, sto klassen
+    // igjen som «unowned» — 403 mot skaperen selv, permanent, til en administrator grep inn.
+    if (actorId) {
+      await addContentOwner({ contentType: "CLASS", contentId: klass.id, ownerUserId: actorId, actorUserId: actorId }, tx);
+    }
     return klass;
   });
-  // #787 slice 4a: creator becomes sole initial owner (inert until 4b enforcement).
-  if (actorId) {
-    await addContentOwner({ contentType: "CLASS", contentId: created.id, ownerUserId: actorId, actorUserId: actorId });
-  }
   return created;
 }
 
@@ -169,12 +175,15 @@ export async function listClassMembers(classId: string) {
   return members.map((m) => ({ userId: m.userId, name: m.user.name, email: m.user.email, addedAt: m.addedAt.toISOString() }));
 }
 
-export async function listClassCourseAssignments(classId: string) {
+export async function listClassCourseAssignments(classId: string, locale: SupportedLocale) {
   await requireClass(classId);
   const rows = await classRepository.listCourseAssignmentsForClass(classId);
   return rows.map((r) => ({
     courseId: r.courseId,
-    title: r.course.title,
+    // #1038: serveren eier «hvilket språk viser vi» (#1027). Klasseskjermen tolket lagringsformatet
+    // selv, med sin egen reservekjede (nb → en-GB → nn → første) — en annen enn serverens. Ingen søker
+    // i tittelen på den skjermen, så variantene trenger ikke følge med som for køene.
+    title: localizeContentText(locale, r.course.title) ?? r.course.title,
     dueAt: r.dueAt ? r.dueAt.toISOString() : null,
     // #967: en tildeling til et kurs deltakeren ikke kan aapne er ikke feil i seg selv — men den
     // forklarer hvorfor ingen i klassen beveger seg, og det skal ikke kreve detektivarbeid.
@@ -255,20 +264,24 @@ async function notifyClassMembersOfCourseAssignment(
   dueAt: Date | null,
 ): Promise<void> {
   try {
-    const courseTitle = localizeContentText("nb", courseTitleJson) ?? courseTitleJson;
     const members = await classRepository.listMembers(classId);
     await Promise.allSettled(
       members
-        .filter((m) => m.user.email)
-        .map((m) =>
-          sendCourseAssignmentNotification({
+        // #968: ikke e-post til en som har sluttet eller er anonymisert — samme regel som publikummet
+        // og påminnelsene. Før ble den bare filtrert på at adressen fantes.
+        .filter((m) => m.user.email && isReachableParticipant(m.user))
+        .map((m) => {
+          // #970: mottakerens språk («sist sett»), ikke bokmål for alle. Tittelen velges for samme språk.
+          const locale = recipientLocale(m.user);
+          return sendCourseAssignmentNotification({
             recipientEmail: m.user.email,
             recipientName: m.user.name,
-            courseTitle,
+            courseTitle: localizeContentText(locale, courseTitleJson) ?? courseTitleJson,
             className,
             dueAt,
-          }),
-        ),
+            locale,
+          });
+        }),
     );
   } catch {
     /* never let notification failure surface — assignment already succeeded */
@@ -305,6 +318,8 @@ export interface UserMembershipContext {
  *  - the "Alle deltakere" system class if the user has the PARTICIPANT role,
  *  - every MANUAL class they are an explicit member of,
  *  - (only when `classEntraLinkingEnabled`) ENTRA classes whose group is in the user's token groups.
+ *    ⚠️ #1017: denne grenen kan ikke treffe i dag — ingen kode oppretter ENTRA-klasser, og bryteren
+ *    kan ikke slås på fra UI. Se classConfig.ts.
  */
 export async function getUserClassIds(ctx: UserMembershipContext): Promise<Set<string>> {
   const ids = new Set<string>();

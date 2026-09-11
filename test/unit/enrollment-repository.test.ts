@@ -86,7 +86,8 @@ describe("enrollment repository", () => {
       orderBy: { assignedAt: "desc" },
       include: {
         user: {
-          select: { id: true, name: true, email: true, department: true },
+          // #968: activeStatus/isAnonymized følger med så publikummet kan filtrere med én regel.
+          select: { id: true, name: true, email: true, department: true, activeStatus: true, isAnonymized: true },
         },
       },
     });
