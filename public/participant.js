@@ -18,6 +18,7 @@ const formatNumber = createNumberFormatter(() => currentLocale);
 import { escapeHtml as escapeHtmlP } from "/static/html-escape.js";
 import { sanitizeSectionHtml } from "/static/sanitize.js";
 import { certLevelKey, localizeCertLevel } from "/static/cert-level.js";
+import { setSectionLocked } from "/static/section-lock.js";
 import { mountDiscussionPanel } from "/static/discussion-panel.js";
 import { localeLabels, supportedLocales, translations } from "/static/i18n/participant-translations.js";
 import { apiFetch, buildConsoleHeaders, getConsoleConfig, fetchQueueCounts, applyNavReviewBadge, hydrateContentAssetImages } from "/static/api-client.js";
@@ -763,23 +764,7 @@ function renderSelectedModuleSummary() {
   updateModuleSelectionVisibility(Boolean(selectedModule));
 }
 
-function setSectionLocked(section, locked) {
-  section.classList.toggle("section-locked", locked);
-  for (const el of section.querySelectorAll("button, input, textarea, select, a[href]")) {
-    if (locked) {
-      el.dataset.preLockTabindex = el.getAttribute("tabindex") ?? "";
-      el.setAttribute("tabindex", "-1");
-    } else {
-      const pre = el.dataset.preLockTabindex;
-      if (pre === "") {
-        el.removeAttribute("tabindex");
-      } else if (pre != null) {
-        el.setAttribute("tabindex", pre);
-      }
-      delete el.dataset.preLockTabindex;
-    }
-  }
-}
+// #976: setSectionLocked bor i /static/section-lock.js — trukket ut for å kunne testes for seg.
 
 function updateModuleSelectionVisibility(hasSelectedModule) {
   submissionSection.classList.toggle("hidden", !hasSelectedModule);
