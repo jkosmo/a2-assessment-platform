@@ -16,16 +16,18 @@ const BASE = stageBaseUrl(auth);
 const DIR = process.env.UI_GALLERY_DIR ?? "";
 test.skip(!auth || !DIR, !auth ? `hopper over: ${reason}` : "hopper over: UI_GALLERY_DIR ikke satt");
 
-const SIDER: Array<{ fil: string; navn: string; rute: string; vent?: string }> = [
+// `handling` gjør det en bruker ville gjort først, så bildet viser innhold og ikke en tom startskjerm.
+const SIDER: Array<{ fil: string; navn: string; rute: string; vent?: string; handling?: (page: Page) => Promise<void> }> = [
   { fil: "01-mine-kurs", navn: "Deltaker: Mine kurs", rute: "/participant", vent: ".course-accordion-item, #moduleList" },
   { fil: "02-fullforte", navn: "Deltaker: Fullførte", rute: "/participant/completed", vent: "#courseCertList" },
   { fil: "03-profil", navn: "Deltaker: Profil", rute: "/profile", vent: "#coursesBody" },
   { fil: "04-sensor", navn: "Sensor: køer", rute: "/review", vent: "#manualReviewQueueBody" },
-  { fil: "05-rapporter", navn: "Rapporter", rute: "/results", vent: "#completionBody" },
-  { fil: "06-kullstatus", navn: "Kullstatus", rute: "/deltakere/status", vent: "#courseSelect" },
+  { fil: "05-rapporter", navn: "Rapporter", rute: "/results", vent: "#completionBody", handling: async (page) => { await page.locator("#loadResults").click().catch(() => undefined); } },
+  { fil: "06-kullstatus", navn: "Kullstatus", rute: "/deltakere/status", vent: "#courseSelect", handling: async (page) => { await page.locator("#courseSelect").selectOption({ index: 1 }).catch(() => undefined); } },
   { fil: "07-admin-plattform", navn: "Admin: plattform", rute: "/admin-platform", vent: "#failedAssessmentsBody" },
-  { fil: "08-forfatter-samtale", navn: "Forfatter: modul (samtale)", rute: "/admin-content" },
-  { fil: "09-forfatter-bibliotek", navn: "Forfatter: bibliotek", rute: "/admin-content/library" },
+  // /admin-content ER biblioteket (modulvelgeren); samtalen ligger under /module/:id/conversation.
+  { fil: "08-forfatter-bibliotek", navn: "Forfatter: bibliotek", rute: "/admin-content" },
+  { fil: "09-forfatter-samtale", navn: "Forfatter: modul (samtale)", rute: "MODUL", vent: "#previewContent, #chatLog, main" },
   { fil: "10-forfatter-kurs", navn: "Forfatter: kurs", rute: "/admin-content/courses" },
   { fil: "11-forfatter-seksjoner", navn: "Forfatter: seksjoner", rute: "/admin-content/sections" },
   { fil: "12-forfatter-klasser", navn: "Forfatter: klasser", rute: "/admin-content/classes" },
@@ -49,6 +51,13 @@ async function forberedSide(page: Page) {
   );
 }
 
+async function førstePubliserteModulId(): Promise<string> {
+  const svar = await fetch(`${BASE}/api/admin/content/modules/library`, { headers: { authorization: `Bearer ${auth!.accessToken}` } });
+  const data = (await svar.json()) as { modules?: Array<{ id: string; status?: string }> };
+  const m = (data.modules ?? []).find((x) => x.status === "published") ?? (data.modules ?? [])[0];
+  return m?.id ?? "";
+}
+
 test.describe.configure({ mode: "serial" });
 for (const side of SIDER) {
   test(`skjermbilde: ${side.navn}`, async ({ page }) => {
@@ -56,9 +65,11 @@ for (const side of SIDER) {
     await page.setViewportSize({ width: 1280, height: 900 });
     await forberedSide(page);
     await page.addInitScript(() => { try { localStorage.setItem("participant.locale", "nb"); } catch { /* ignorer */ } });
-    await page.goto(`${BASE}${side.rute}`, { waitUntil: "domcontentloaded" });
+    const rute = side.rute === "MODUL" ? `/admin-content/module/${encodeURIComponent(await førstePubliserteModulId())}/conversation` : side.rute;
+    await page.goto(`${BASE}${rute}`, { waitUntil: "domcontentloaded" });
     if (side.vent) await page.locator(side.vent).first().waitFor({ state: "attached", timeout: 20_000 }).catch(() => undefined);
     await page.waitForLoadState("networkidle").catch(() => undefined);
+    if (side.handling) { await side.handling(page); await page.waitForLoadState("networkidle").catch(() => undefined); }
     await page.waitForTimeout(1500);
     await page.screenshot({ path: join(DIR, `${side.fil}.jpg`), fullPage: true, type: "jpeg", quality: 70 });
   });
