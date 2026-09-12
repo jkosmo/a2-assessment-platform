@@ -179,7 +179,7 @@ export async function assertSectionNotInIssuedCertificate(sectionId: string, ver
   // i stedet for N `OR`-grener, og det eksakte par-treffet gjøres i minnet på et lite resultat.
   const reads = await prisma.courseSectionRead.findMany({
     where: { sectionId },
-    select: { userId: true, courseId: true },
+    select: { userId: true, courseId: true, readAt: true },
   });
   if (reads.length === 0) return;
 
@@ -189,14 +189,27 @@ export async function assertSectionNotInIssuedCertificate(sectionId: string, ver
       userId: { in: [...new Set(reads.map((r) => r.userId))] },
       courseId: { in: [...new Set(reads.map((r) => r.courseId))] },
     },
-    select: { userId: true, courseId: true },
+    select: { userId: true, courseId: true, completedAt: true },
   });
   if (legacy.length === 0) return;
 
   // `IN × IN` er et kryssprodukt-supersett: den treffer også par som ikke finnes sammen. Derfor
   // avgjøres det EKSAKTE paret her, på et resultat som allerede er lite.
-  const readPairs = new Set(reads.map((r) => `${r.userId}|${r.courseId}`));
-  const covered = legacy.filter((c) => readPairs.has(`${c.userId}|${c.courseId}`)).length;
+  //
+  // ⚠️ #1003: OG tidspunktet. En lesning ETTER at beviset ble utstedt kan ikke ha vært grunnlag for
+  // det. Uten sammenligningen ble en seksjon lagt til i august permanent uslettbar fordi en deltaker
+  // med mai-bevis leste den — «den står i et bevis den ikke sto i». Feilen gikk i trygg retning
+  // (bevarte for mye), men den var feil. Bare lesninger ved eller før fullføringen teller.
+  const earliestReadByPair = new Map<string, Date>();
+  for (const r of reads) {
+    const key = `${r.userId}|${r.courseId}`;
+    const prev = earliestReadByPair.get(key);
+    if (!prev || r.readAt < prev) earliestReadByPair.set(key, r.readAt);
+  }
+  const covered = legacy.filter((c) => {
+    const firstRead = earliestReadByPair.get(`${c.userId}|${c.courseId}`);
+    return firstRead !== undefined && firstRead <= c.completedAt;
+  }).length;
   if (covered > 0) {
     throw new DomainRuleError(
       "content_in_legacy_certificate",

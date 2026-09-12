@@ -32,7 +32,7 @@ import { stageSectionAssets, reclaimAssetBlobs, type StagedSectionAsset } from "
 import { DomainRuleError, ValidationError } from "../../errors/AppError.js";
 import { localizedTextCodec, type LocalizedText } from "../../codecs/localizedTextCodec.js";
 import { recordAuditEvent } from "../../services/auditService.js";
-import { validateTranslationCompleteness, validateMcqTranslationCompleteness } from "./contentValidationService.js";
+import { evaluateModulePublishGate } from "./modulePublishGate.js";
 import {
   auditActions,
   auditEntityTypes,
@@ -299,41 +299,48 @@ async function importModulePayload(
   // the module stays a DRAFT. That is also the agreed import model: imported modules are drafts
   // and publishing is an explicit act. The author publishes it once the gaps are filled, and the
   // ordinary gate tells them which ones.
-  // Same field set as the module-publish route and the cascade. A gate that checks fewer fields
-  // here is a gate with a hole shaped exactly like an import.
-  const importTranslationIssues = [
-    ...validateTranslationCompleteness([
-      { field: "title", raw: serializeRequired(payload.module.title) },
-      ...(payload.module.description
-        ? [{ field: "description", raw: serializeLocalized(payload.module.description) }]
-        : []),
-      ...(isMcqOnly || !payload.activeVersion.taskText
-        ? []
-        : [{ field: "taskText", raw: serializeRequired(payload.activeVersion.taskText) }]),
-      ...(payload.activeVersion.assessorExpectedContent
-        ? [{ field: "assessorExpectedContent", raw: serializeLocalized(payload.activeVersion.assessorExpectedContent) }]
-        : []),
-      ...(payload.activeVersion.candidateTaskConstraints
-        ? [{ field: "candidateTaskConstraints", raw: serializeLocalized(payload.activeVersion.candidateTaskConstraints) }]
-        : []),
-    ]),
-    ...validateMcqTranslationCompleteness(
-      (payload.activeVersion.mcqSet?.questions ?? []).map((question) => ({
-        stem: serializeRequired(question.stem),
-        optionsJson: JSON.stringify(question.options.map((option) => serializeRequired(option))),
-        correctAnswer: serializeRequired(question.correctAnswer),
-        rationale: question.rationale ? serializeRequired(question.rationale) : null,
-      })),
-    ),
-  ];
+  // #956: SAME gate as the module-publish button and the cascade — `evaluateModulePublishGate`.
+  // This door used to run only the translation checks, with its own field set: it skipped
+  // `taskText` for MCQ_ONLY even when the text existed (the other doors gated it), and it never
+  // ran the blueprint check, so `MCQ_COUNT_FAR_BELOW_BLUEPRINT` — the one blocking rule there —
+  // did not exist on this door. A gate that checks fewer things here is a gate with a hole shaped
+  // exactly like an import.
+  const importGate = evaluateModulePublishGate({
+    module: {
+      title: serializeRequired(payload.module.title),
+      description: (payload.module.description ? serializeLocalized(payload.module.description) : null) ?? null,
+      archivedAt: null,
+    },
+    version: {
+      taskText: payload.activeVersion.taskText ? serializeRequired(payload.activeVersion.taskText) : null,
+      candidateTaskConstraints: (payload.activeVersion.candidateTaskConstraints
+        ? serializeLocalized(payload.activeVersion.candidateTaskConstraints)
+        : null) ?? null,
+      assessorExpectedContent: (payload.activeVersion.assessorExpectedContent
+        ? serializeLocalized(payload.activeVersion.assessorExpectedContent)
+        : null) ?? null,
+      assessmentBlueprint: payload.activeVersion.assessmentBlueprint
+        ? JSON.stringify(payload.activeVersion.assessmentBlueprint)
+        : null,
+    },
+    mcqQuestions: (payload.activeVersion.mcqSet?.questions ?? []).map((question) => ({
+      stem: serializeRequired(question.stem),
+      optionsJson: JSON.stringify(question.options.map((option) => serializeRequired(option))),
+      correctAnswer: serializeRequired(question.correctAnswer),
+      rationale: question.rationale ? serializeRequired(question.rationale) : null,
+    })),
+  });
+  const importTranslationIssues = importGate.issues.filter((issue) => issue.severity === "blocking");
   // `heldBackByTranslationGate` is reported to the caller, not just acted on locally. A course
   // import publishes the course after its modules; if a module was held back and the course goes
   // live anyway, the published course points at a module with no active version — participants get
   // "module not available", which is invariant I1 violated by the very gate meant to protect them.
+  // #956: the name predates the shared gate; it now means «held back by the publish gate» — any
+  // blocking issue, translation or blueprint. Kept for the API surface.
   const heldBackByTranslationGate =
     options.autoPublish !== false
     && Boolean(payload.activeVersion.audit?.publishedAt)
-    && importTranslationIssues.length > 0;
+    && !importGate.valid;
 
   if (options.autoPublish !== false && payload.activeVersion.audit?.publishedAt && !heldBackByTranslationGate) {
     await publishModuleVersion(moduleId, moduleVersion.id, options.actorId, tx);
@@ -654,7 +661,29 @@ export async function importCourseFromEnvelope(
           // Vi avpubliserer i stedet for å nekte importen: forfatteren skal kunne oppdatere et kurs
           // med ufullstendig oversettelse og fylle hullene etterpå. Det er samme valg som for
           // moduler (#896 S4) — hold tilbake, ikke avvis.
+          // #1003: en livssyklusovergang skal ha sitt eget spor, i samme transaksjon (#961 for
+          // seksjonssletting). Uten den kunne et kurs tas av lufta av en import og republiseres senere,
+          // og revisjonshistorikken viste aldri at det var nede — og hvorfor. Bare når kurset faktisk
+          // VAR publisert; en no-op skal ikke se ut som en overgang.
+          const before = await tx.course.findUnique({ where: { id: courseId }, select: { publishedAt: true } });
           await tx.course.update({ where: { id: courseId }, data: { publishedAt: null } });
+          if (before?.publishedAt) {
+            await recordAuditEvent(
+              {
+                entityType: auditEntityTypes.course,
+                entityId: courseId,
+                action: auditActions.course.unpublished,
+                actorId: options.actorId,
+                metadata: {
+                  courseId,
+                  reason: "import_translation_gate_holdback",
+                  previousPublishedAt: before.publishedAt.toISOString(),
+                  mode: options.mode,
+                },
+              },
+              tx,
+            );
+          }
         }
 
         await recordAuditEvent(

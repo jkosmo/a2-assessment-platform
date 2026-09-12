@@ -2,6 +2,7 @@ import { EmailClient } from "@azure/communication-email";
 import type { AppealStatus } from "@prisma/client";
 import { env } from "../../config/env.js";
 import { withTimeout } from "../../clients/externalCall.js";
+import { classifyAcsError, describeAcsFailure, nextAttemptDelayMs } from "./acsThrottle.js";
 import type { SupportedLocale } from "../../i18n/locale.js";
 import { getAppealNotificationMessage, getAssessmentResultNotificationMessage, getCourseAssignmentNotificationMessage } from "../../i18n/notificationMessages.js";
 import { logOperationalEvent } from "../../observability/operationalLog.js";
@@ -196,16 +197,22 @@ export async function sendViaAcs(input: {
 
   try {
     // #812: bound the whole send (beginSend + pollUntilDone) so a slow/unresponsive ACS can't wedge the
-    // calling worker tick. No retry here — a re-send after a timeout could duplicate the email; the
+    // calling worker tick. No retry on TIMEOUT — a re-send after a timeout could duplicate the email; the
     // scheduled monitors re-run on their next cycle and are audit-deduped, so a dropped send is recovered
     // safely without risking a double-send.
-    const result = await withTimeout(
-      (async () => {
-        const poller = await emailClient.beginSend(message);
-        return poller.pollUntilDone();
-      })(),
-      env.ACS_EMAIL_SEND_TIMEOUT_MS,
-      "acs_email_send",
+    //
+    // #900: retry on THROTTLING only. ACS answers 429 «try again after N seconds» when several sends
+    // land in the same second (seven class-assignment emails, 13.08.2026 — all seven lost). A 429 is
+    // a rejection before acceptance, so re-sending cannot duplicate; we wait what ACS asks for.
+    const result = await sendWithThrottleRetry(() =>
+      withTimeout(
+        (async () => {
+          const poller = await emailClient.beginSend(message);
+          return poller.pollUntilDone();
+        })(),
+        env.ACS_EMAIL_SEND_TIMEOUT_MS,
+        "acs_email_send",
+      ),
     );
 
     if (result.status === "Succeeded") {
@@ -224,7 +231,8 @@ export async function sendViaAcs(input: {
     );
     return { delivered: false, channel: "acs_email", subject: input.subject, nextStepGuidance: input.body, failureReason };
   } catch (error) {
-    const failureReason = error instanceof Error ? error.message : "acs_send_failed";
+    // #900: statuskoden med i grunnen — før sto det «" - Please try again after 0 seconds."».
+    const failureReason = describeAcsFailure(error);
     logOperationalEvent(
       operationalEvents.certification.participantNotificationFailed,
       { channel: "acs_email", ...input.logPayload, failureReason },
@@ -232,6 +240,30 @@ export async function sendViaAcs(input: {
     );
     return { delivered: false, channel: "acs_email", subject: input.subject, nextStepGuidance: input.body, failureReason };
   }
+}
+
+const ACS_THROTTLE_ATTEMPTS = 3;
+const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+/** Inntil tre forsøk ved ACS-struping; alt annet kastes videre uendret. Eksportert for test. */
+export async function sendWithThrottleRetry<T>(
+  attempt: () => Promise<T>,
+  options: { attempts?: number; wait?: (ms: number) => Promise<void> } = {},
+): Promise<T> {
+  const attempts = options.attempts ?? ACS_THROTTLE_ATTEMPTS;
+  const wait = options.wait ?? sleep;
+  let lastError: unknown;
+  for (let i = 0; i < attempts; i += 1) {
+    try {
+      return await attempt();
+    } catch (error) {
+      lastError = error;
+      const decision = classifyAcsError(error);
+      if (!decision.throttled || i === attempts - 1) throw error;
+      await wait(nextAttemptDelayMs(decision.waitMs, i));
+    }
+  }
+  throw lastError;
 }
 
 export type AssessmentResultNotificationInput = {

@@ -248,6 +248,48 @@ describe("#896 S4 translation gate — every publish door", () => {
     await request(app).delete(`/api/admin/content/modules/${moduleId}`).set(adminHeaders);
   });
 
+  // #1003: når importen tar et LEVENDE kurs av lufta (replaceExisting + holdt tilbake av gaten), skal
+  // overgangen ha sitt eget spor, i samme transaksjon — som #961 for seksjonssletting. Uten det
+  // kunne kurset republiseres senere uten at historikken viste at det var nede, eller hvorfor.
+  it("#1003: a replace-import that unpublishes a live course records course_unpublished with the reason", async () => {
+    const moduleId = await createModule(threeLocales("Task"));
+    const courseId = await createCourseWith(moduleId);
+    const versions = await prisma.moduleVersion.findMany({ where: { moduleId }, orderBy: { versionNo: "desc" }, take: 1, select: { id: true } });
+    await request(app).post(`/api/admin/content/modules/${moduleId}/module-versions/${versions[0]!.id}/publish`).set(adminHeaders).send({}).expect(200);
+    await request(app).post(`/api/admin/content/courses/${courseId}/publish`).set(adminHeaders).send({}).expect(200);
+    const publishedAt = (await prisma.course.findUniqueOrThrow({ where: { id: courseId }, select: { publishedAt: true } })).publishedAt;
+    expect(publishedAt).toBeTruthy();
+
+    const exportRes = await request(app).get(`/api/admin/content/courses/${courseId}/export-package`).set(adminHeaders);
+    expect(exportRes.status).toBe(200);
+    const envelope = exportRes.body.envelope;
+    const courseItem = (envelope.course.course.items ?? envelope.course.course.modules)[0];
+    delete courseItem.module.activeVersion.taskText.nn;
+
+    const importRes = await request(app)
+      .post("/api/admin/content/courses/import")
+      .set(adminHeaders)
+      .send({ payload: envelope, mode: "replaceExisting", targetId: courseId });
+    expect(importRes.status, JSON.stringify(importRes.body)).toBe(201);
+
+    const after = await prisma.course.findUniqueOrThrow({ where: { id: courseId }, select: { publishedAt: true } });
+    expect(after.publishedAt).toBeNull();
+
+    const spor = await prisma.auditEvent.findMany({
+      where: { entityType: "course", entityId: courseId, action: "course_unpublished" },
+      orderBy: { timestamp: "desc" },
+      select: { metadataJson: true },
+    });
+    expect(spor.length, "én course_unpublished-rad fra importen").toBeGreaterThanOrEqual(1);
+    const meta = JSON.parse(spor[0]!.metadataJson) as Record<string, unknown>;
+    expect(meta.reason).toBe("import_translation_gate_holdback");
+    expect(meta.previousPublishedAt).toBe(publishedAt!.toISOString());
+
+    await request(app).delete(`/api/admin/content/courses/${courseId}`).set(adminHeaders);
+    await request(app).post(`/api/admin/content/modules/${moduleId}/unpublish`).set(adminHeaders);
+    await request(app).delete(`/api/admin/content/modules/${moduleId}`).set(adminHeaders);
+  });
+
   it("still auto-publishes an imported package that has every locale", async () => {
     const moduleId = await createModule(threeLocales("Task"));
     const versions = await prisma.moduleVersion.findMany({

@@ -1,7 +1,8 @@
 import { prisma } from "../../db/prisma.js";
 import { env } from "../../config/env.js";
 import type { DbTransactionClient } from "../../db/transaction.js";
-import { notifyAssessmentResult } from "../certification/index.js";
+import { notifyAppealStatusTransition, notifyAssessmentResult } from "../certification/index.js";
+import type { AppealNotificationInput } from "../certification/participantNotificationService.js";
 import { checkAndIssueCourseCompletions } from "../course/index.js";
 import type { SupportedLocale } from "../../i18n/locale.js";
 
@@ -27,6 +28,9 @@ function withDeadline<T>(work: Promise<T>, deadlineMs: number, message: string):
 export const OUTBOX_EVENT_TYPES = {
   assessmentNotification: "assessment_notification",
   courseCompletionCheck: "course_completion_check",
+  // #1007: ankevarsler gikk utenom outboxen (fire-and-forget etter svaret). Et tapt varsel retter
+  // seg aldri — i motsetning til et tapt kursbevis, som etterslepssveipen tok (#946).
+  appealNotification: "appeal_notification",
 } as const;
 
 type AssessmentNotificationPayload = {
@@ -45,9 +49,13 @@ type CourseCompletionCheckPayload = {
   moduleId: string;
 };
 
+// Samme felt som `notifyAppealStatusTransition` tar — statusene er strenger og kan lagres som de er.
+export type AppealNotificationPayload = AppealNotificationInput;
+
 export type OutboxEnqueueInput =
   | { type: typeof OUTBOX_EVENT_TYPES.assessmentNotification; payload: AssessmentNotificationPayload }
-  | { type: typeof OUTBOX_EVENT_TYPES.courseCompletionCheck; payload: CourseCompletionCheckPayload };
+  | { type: typeof OUTBOX_EVENT_TYPES.courseCompletionCheck; payload: CourseCompletionCheckPayload }
+  | { type: typeof OUTBOX_EVENT_TYPES.appealNotification; payload: AppealNotificationPayload };
 
 // Retry backoff: 30s, 60s, 120s, … capped at 15 min. Small enough that a transient failure recovers
 // quickly, large enough that a persistently-failing handler doesn't hot-loop.
@@ -130,6 +138,11 @@ export async function deliverOutboxEvent(event: { type: string; payloadJson: str
   if (event.type === OUTBOX_EVENT_TYPES.courseCompletionCheck) {
     const p = JSON.parse(event.payloadJson) as CourseCompletionCheckPayload;
     await checkAndIssueCourseCompletions({ userId: p.userId, moduleId: p.moduleId });
+    return;
+  }
+  if (event.type === OUTBOX_EVENT_TYPES.appealNotification) {
+    const p = JSON.parse(event.payloadJson) as AppealNotificationPayload;
+    await notifyAppealStatusTransition(p);
     return;
   }
   throw new Error(`Unknown outbox event type: ${event.type}`);

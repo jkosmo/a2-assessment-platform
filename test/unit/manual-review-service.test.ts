@@ -16,8 +16,14 @@ const appendDecisionWithLineage = vi.fn();
 const notifyAssessmentResult = vi.fn();
 const logOperationalEvent = vi.fn();
 
+// #1007: resultatvarselet legges på outboxen (prisma.outboxEvent.createMany) etter at overstyringen
+// er committet — ikke sendt direkte. `outboxCreateMany` er beviset.
+const outboxCreateMany = vi.fn().mockResolvedValue({ count: 1 });
 vi.mock("../../src/db/prisma.js", () => ({
-  prisma: { $transaction: vi.fn((cb: (tx: unknown) => unknown) => cb({ outboxEvent: { createMany: vi.fn().mockResolvedValue({ count: 1 }) } })) },
+  prisma: {
+    $transaction: vi.fn((cb: (tx: unknown) => unknown) => cb({ outboxEvent: { createMany: vi.fn().mockResolvedValue({ count: 1 }) } })),
+    outboxEvent: { createMany: (...args: unknown[]) => outboxCreateMany(...args) },
+  },
 }));
 
 vi.mock("../../src/modules/review/manualReviewRepository.js", () => ({
@@ -74,6 +80,7 @@ describe("manual review service", () => {
     recordAuditEvent.mockReset();
     appendDecisionWithLineage.mockReset();
     notifyAssessmentResult.mockReset().mockResolvedValue(undefined);
+    outboxCreateMany.mockClear();
     logOperationalEvent.mockReset();
   });
 
@@ -235,6 +242,13 @@ describe("manual review service", () => {
         decisionType: DecisionType.MANUAL_OVERRIDE,
       },
     });
+
+    // #1007: varselet går via outboxen — ikke direkte, og ikke fire-and-forget.
+    expect(notifyAssessmentResult).not.toHaveBeenCalled();
+    expect(outboxCreateMany).toHaveBeenCalledTimes(1);
+    const rader = (outboxCreateMany.mock.calls[0][0] as { data: Array<{ type: string; payloadJson: string }> }).data;
+    expect(rader.map((r) => r.type)).toEqual(["assessment_notification"]);
+    expect(JSON.parse(rader[0].payloadJson)).toMatchObject({ submissionId: "submission-1", passFailTotal: false });
   });
 
   it("supersedes open reviews for a user+module and marks submissions SUPERSEDED, not completed", async () => {

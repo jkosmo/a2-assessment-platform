@@ -604,16 +604,65 @@ describe("#938 P1: slettevernet dekker gamle bevis og kaskaden", () => {
     const user = await participant("legacy");
 
     // Beviset er fra «før»: ingen seksjons-øyeblikksbilde. Lesesporet er alt vi har.
-    await prisma.courseCompletion.create({
-      data: { userId: user.id, courseId: course.id, moduleSnapshotJson: "[]", sectionSnapshotJson: null },
-    });
+    // #1003: lesningen må ligge FØR utstedelsen — slik den gjør i virkeligheten, der den siste
+    // lesningen er det som utløser beviset. Fiksturen hadde rekkefølgen motsatt (begge `now()`),
+    // og det var tilfeldigvis grønt bare fordi vakta ikke sammenlignet tidspunkter.
     await prisma.courseSectionRead.create({
-      data: { userId: user.id, courseId: course.id, sectionId: section.id },
+      data: { userId: user.id, courseId: course.id, sectionId: section.id, readAt: new Date("2026-04-20T10:00:00Z") },
+    });
+    await prisma.courseCompletion.create({
+      data: { userId: user.id, courseId: course.id, moduleSnapshotJson: "[]", sectionSnapshotJson: null, completedAt: new Date("2026-05-01T10:00:00Z") },
     });
 
     const res = await request(app).delete(`/api/admin/content/sections/${section.id}`).set(adminHeaders);
     expect(res.status).toBe(400);
     expect(JSON.stringify(res.body)).toMatch(/før øyeblikksbildet|kursbevis/i);
+    expect(await prisma.courseSection.count({ where: { id: section.id } })).toBe(1);
+  });
+
+  it("#1003: en lesning ETTER at beviset ble utstedt beskytter ikke — seksjonen sto ikke i beviset", async () => {
+    // Kurs utsteder bevis i mai. Seksjon legges til i august. Deltakeren med mai-beviset leser den.
+    // Før ble seksjonen permanent uslettbar, «fordi den står i et bevis» den aldri sto i.
+    const section = await prisma.courseSection.create({
+      data: { title: JSON.stringify({ "en-GB": "Added later" }) },
+      select: { id: true },
+    });
+    const course = await prisma.course.create({
+      data: { title: `Legacy Later ${Date.now()}`, publishedAt: new Date() },
+      select: { id: true },
+    });
+    const user = await participant("later");
+    await prisma.courseCompletion.create({
+      data: { userId: user.id, courseId: course.id, moduleSnapshotJson: "[]", sectionSnapshotJson: null, completedAt: new Date("2026-05-01T10:00:00Z") },
+    });
+    await prisma.courseSectionRead.create({
+      data: { userId: user.id, courseId: course.id, sectionId: section.id, readAt: new Date("2026-08-01T10:00:00Z") },
+    });
+
+    const res = await request(app).delete(`/api/admin/content/sections/${section.id}`).set(adminHeaders);
+    expect(res.status, JSON.stringify(res.body)).toBe(204);
+  });
+
+  it("#1003 kontroll: en lesning FØR beviset beskytter fortsatt", async () => {
+    // Uten denne ville «ignorer lesetidspunkt helt» også bestått testen over.
+    const section = await prisma.courseSection.create({
+      data: { title: JSON.stringify({ "en-GB": "Read before cert" }) },
+      select: { id: true },
+    });
+    const course = await prisma.course.create({
+      data: { title: `Legacy Before ${Date.now()}`, publishedAt: new Date() },
+      select: { id: true },
+    });
+    const user = await participant("before");
+    await prisma.courseSectionRead.create({
+      data: { userId: user.id, courseId: course.id, sectionId: section.id, readAt: new Date("2026-04-20T10:00:00Z") },
+    });
+    await prisma.courseCompletion.create({
+      data: { userId: user.id, courseId: course.id, moduleSnapshotJson: "[]", sectionSnapshotJson: null, completedAt: new Date("2026-05-01T10:00:00Z") },
+    });
+
+    const res = await request(app).delete(`/api/admin/content/sections/${section.id}`).set(adminHeaders);
+    expect(res.status).toBe(400);
     expect(await prisma.courseSection.count({ where: { id: section.id } })).toBe(1);
   });
 

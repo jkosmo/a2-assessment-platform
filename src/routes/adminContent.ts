@@ -76,7 +76,7 @@ import {
   reviseMcqQuestions,
   checkScenarioAnswerability,
 } from "../modules/adminContent/llmContentGenerationService.js";
-import { validateMcqDistractors, validateScenarioDraft, validateModuleVersionForPublish, validateTranslationCompleteness, validateMcqTranslationCompleteness } from "../modules/adminContent/contentValidationService.js";
+import { validateMcqDistractors, validateScenarioDraft } from "../modules/adminContent/contentValidationService.js";
 import { localizedTextCodec } from "../codecs/localizedTextCodec.js";
 import { findCoursesContainingModule, inUseMessage } from "../modules/course/contentLifecycle.js";
 import {
@@ -99,6 +99,7 @@ import { ForbiddenError, NotFoundError, AppError } from "../errors/AppError.js";
 import { assertContentOwnership } from "../modules/content/contentOwnershipService.js";
 import { respondWithAppError } from "./helpers/respondWithAppError.js";
 import { requestLocale } from "../i18n/requestLocale.js";
+import { evaluateModulePublishGate } from "../modules/adminContent/modulePublishGate.js";
 
 const adminContentRouter = Router();
 
@@ -864,91 +865,32 @@ adminContentRouter.post("/modules/:moduleId/module-versions/:moduleVersionId/pub
     const mcqSetVersion = bundle.versions.mcqSetVersions.find(
       (v) => v.id === moduleVersionData.mcqSetVersionId,
     );
-    let blueprint: unknown = null;
     const rawBlueprint = (moduleVersionData as { assessmentBlueprint?: string | null }).assessmentBlueprint;
-    if (rawBlueprint && typeof rawBlueprint === "string") {
-      try { blueprint = JSON.parse(rawBlueprint); } catch { blueprint = null; }
-    }
-    // taskText / assessorExpectedContent are LocalizedText (string OR {en-GB, nb, nn} object after
-    // decode). The validator only needs a representative string — pick the first non-empty locale.
-    const flattenLocalized = (value: unknown): string | null => {
-      if (typeof value === "string") return value;
-      if (value && typeof value === "object") {
-        const candidate = (value as Record<string, unknown>)["en-GB"]
-          ?? (value as Record<string, unknown>).nb
-          ?? (value as Record<string, unknown>).nn;
-        return typeof candidate === "string" ? candidate : null;
-      }
-      return null;
-    };
-    const validation = validateModuleVersionForPublish({
-      taskText: flattenLocalized(moduleVersionData.taskText) ?? "",
-      candidateTaskConstraints: flattenLocalized(moduleVersionData.candidateTaskConstraints),
-      assessorExpectedContent: flattenLocalized(moduleVersionData.assessorExpectedContent),
-      blueprint: blueprint as never,
-      mcqQuestionCount: mcqSetVersion?.questions?.length ?? 0,
-    });
-
-    // #896 S4: the translation gate. Publishing is where content reaches participants, so it is
-    // where a half-translated module has to stop. The check reads the stored shape directly —
-    // possible only since #905, because before that an untranslated field arrived as three
-    // identical copies of the source text and looked complete.
-    //
-    // Serialized values, not the flattened ones above: flattening picks the first non-empty
-    // locale and would hide exactly the gap we are looking for.
+    // #896 S4 / #955 / #956: ÉN gate, felles med kaskaden og importen (`evaluateModulePublishGate`).
+    // Denne døra har DEKODEDE verdier fra bundelen (LocalizedText-objekter, `options` ikke
+    // `optionsJson`), så de serialiseres tilbake til lagringsformatet gaten leser. Å sende de dekodede
+    // objektene rett inn kompilerte til `[object Object]` i et tidligere utkast av dette.
     const serialize = (value: unknown): string | null =>
       value === null || value === undefined ? null : localizedTextCodec.serialize(value as never);
-    const translationIssues = [
-      ...validateTranslationCompleteness([
-        { field: "title", raw: serialize(bundle.module.title) },
-        // The description is shown to participants in the module list, so it is content, not
-        // setup — an English-only description reaches a Norwegian participant as English.
-        ...(bundle.module.description ? [{ field: "description", raw: serialize(bundle.module.description) }] : []),
-        // Optional fields are gated only when they exist: an absent field is not an untranslated
-        // one. taskText is absent for MCQ_ONLY modules, where the questions carry the assessment.
-        ...(moduleVersionData.taskText ? [{ field: "taskText", raw: serialize(moduleVersionData.taskText) }] : []),
-        ...(moduleVersionData.assessorExpectedContent
-          ? [{ field: "assessorExpectedContent", raw: serialize(moduleVersionData.assessorExpectedContent) }]
-          : []),
-        ...(moduleVersionData.candidateTaskConstraints
-          ? [{ field: "candidateTaskConstraints", raw: serialize(moduleVersionData.candidateTaskConstraints) }]
-          : []),
-      ]),
-      // The bundle hands back DECODED questions (LocalizedText objects, `options` not
-      // `optionsJson`), so serialize them back into the shape the check reads. Passing the
-      // decoded objects compiled to `[object Object]` in an earlier draft of this.
-      ...validateMcqTranslationCompleteness(
-        (mcqSetVersion?.questions ?? []).map((question) => ({
-          stem: serialize(question.stem),
-          optionsJson: JSON.stringify((question.options ?? []).map((option) => serialize(option))),
-          correctAnswer: serialize(question.correctAnswer),
-          rationale: serialize(question.rationale),
-        })),
-      ),
-    ];
-    if (translationIssues.length > 0) {
-      validation.issues.push(...translationIssues);
-      validation.valid = false;
-    }
-
-    // #955: I3 — «arkivert men publisert» skal aldri finnes.
-    //
-    // ⚠️ Fire andre steder håndhevet dette; denne ruta gjorde det ikke, og KUNNE ikke:
-    // `findModuleContentBundle` selekterte ikke `archivedAt`. Uten sjekken kunne man arkivere en
-    // modul (som nullstiller `activeVersionId`) og så publisere en versjon direkte her. Da ser
-    // `evaluateModule` en aktiv versjon, melder `publishable: true`, og utelater modulen fra
-    // kursets `unpublishedItems` — kurset publiseres uten kaskade, og deltakeren møter en blindvei.
-    //
-    // Samme kode som de fire andre stedene bruker, så klienten kan vise den samme setningen (#914).
-    if (bundle.module.archivedAt) {
-      validation.issues.push({
-        severity: "blocking",
-        code: "item_archived",
-        message: "Modulen er arkivert. Gjenopprett den før du publiserer.",
-        params: { itemType: "module" },
-      });
-      validation.valid = false;
-    }
+    const validation = evaluateModulePublishGate({
+      module: {
+        title: serialize(bundle.module.title),
+        description: serialize(bundle.module.description),
+        archivedAt: bundle.module.archivedAt ?? null,
+      },
+      version: {
+        taskText: serialize(moduleVersionData.taskText),
+        candidateTaskConstraints: serialize(moduleVersionData.candidateTaskConstraints),
+        assessorExpectedContent: serialize(moduleVersionData.assessorExpectedContent),
+        assessmentBlueprint: typeof rawBlueprint === "string" ? rawBlueprint : null,
+      },
+      mcqQuestions: (mcqSetVersion?.questions ?? []).map((question) => ({
+        stem: serialize(question.stem),
+        optionsJson: JSON.stringify((question.options ?? []).map((option) => serialize(option))),
+        correctAnswer: serialize(question.correctAnswer),
+        rationale: serialize(question.rationale),
+      })),
+    });
     if (!validation.valid) {
       response.status(422).json({
         error: "publish_blocked_by_validation",

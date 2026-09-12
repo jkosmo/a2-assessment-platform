@@ -21,8 +21,14 @@ const notifyAppealStatusTransition = vi.fn();
 const logOperationalEvent = vi.fn();
 const appendDecisionWithLineage = vi.fn();
 
+// #1007: ankevarsler legges på outboxen (prisma.outboxEvent.createMany) etter commit — ikke sendt
+// direkte og svelget. `outboxCreateMany` er beviset.
+const outboxCreateMany = vi.fn().mockResolvedValue({ count: 1 });
 vi.mock("../../src/db/prisma.js", () => ({
-  prisma: { $transaction: vi.fn((cb: (tx: unknown) => unknown) => cb({ outboxEvent: { createMany: vi.fn().mockResolvedValue({ count: 1 }) } })) },
+  prisma: {
+    $transaction: vi.fn((cb: (tx: unknown) => unknown) => cb({ outboxEvent: { createMany: vi.fn().mockResolvedValue({ count: 1 }) } })),
+    outboxEvent: { createMany: (...args: unknown[]) => outboxCreateMany(...args) },
+  },
 }));
 
 vi.mock("../../src/modules/appeal/appealRepository.js", () => ({
@@ -81,6 +87,7 @@ describe("appeal service", () => {
     findAppealById.mockReset();
     recordAuditEvent.mockReset();
     notifyAppealStatusTransition.mockReset();
+    outboxCreateMany.mockClear();
     logOperationalEvent.mockReset();
     appendDecisionWithLineage.mockReset();
     vi.mocked(mockPrisma.$transaction).mockReset();
@@ -108,7 +115,7 @@ describe("appeal service", () => {
     expect(updateSubmissionStatus).not.toHaveBeenCalled();
   });
 
-  it("creates an appeal, updates the submission, and tolerates notification failure", async () => {
+  it("creates an appeal, updates the submission, and queues the notification on the outbox (#1007)", async () => {
     findOwnedSubmissionWithLatestDecision.mockResolvedValue({
       id: "submission-1",
       decisions: [{ id: "decision-1" }],
@@ -125,7 +132,8 @@ describe("appeal service", () => {
       email: "user-1@company.com",
       name: "User One",
     });
-    notifyAppealStatusTransition.mockRejectedValue(new Error("webhook failed"));
+    // #1007: sendes ikke direkte lenger — en feil her ville vært leveringsarbeiderens sak.
+    notifyAppealStatusTransition.mockRejectedValue(new Error("skal ikke kalles"));
 
     const { createSubmissionAppeal } = await import("../../src/modules/appeal/appealService.js");
 
@@ -150,16 +158,22 @@ describe("appeal service", () => {
       }),
       expect.anything(), // tx client passed for transactional audit
     );
-    expect(logOperationalEvent).toHaveBeenCalledWith(
-      "participant_notification_pipeline_failed",
-      expect.objectContaining({
-        appealId: "appeal-1",
-        submissionId: "submission-1",
-        currentStatus: AppealStatus.OPEN,
-        recipientUserId: "user-1",
-      }),
-      "error",
-    );
+    // #1007: før sto det her at pipeline-feilen ble LOGGET og svelget. Nå finnes ingen direkte
+    // sending å svelge: varselet er en outbox-rad, og leveringsarbeideren prøver på nytt.
+    expect(notifyAppealStatusTransition).not.toHaveBeenCalled();
+    expect(logOperationalEvent).not.toHaveBeenCalledWith("participant_notification_pipeline_failed", expect.anything(), "error");
+    const ankeRader = outboxCreateMany.mock.calls
+      .flatMap((c) => (c[0] as { data: Array<{ type: string; payloadJson: string }> }).data)
+      .filter((r) => r.type === "appeal_notification");
+    expect(ankeRader).toHaveLength(1);
+    expect(JSON.parse(ankeRader[0].payloadJson)).toMatchObject({
+      appealId: "appeal-1",
+      submissionId: "submission-1",
+      previousStatus: null,
+      currentStatus: AppealStatus.OPEN,
+      recipientUserId: "user-1",
+      recipientEmail: "user-1@company.com",
+    });
     expect(result).toEqual({
       id: "appeal-1",
       appealStatus: AppealStatus.OPEN,
@@ -290,15 +304,20 @@ describe("appeal service", () => {
       }),
       expect.anything(),
     );
-    expect(notifyAppealStatusTransition).toHaveBeenCalledWith(
-      expect.objectContaining({
-        appealId: "appeal-1",
-        submissionId: "submission-1",
-        previousStatus: AppealStatus.IN_REVIEW,
-        currentStatus: AppealStatus.RESOLVED,
-        recipientUserId: "user-1",
-      }),
-    );
+    // #1007: varselet ligger på outboxen med hele inputen — ikke sendt direkte.
+    expect(notifyAppealStatusTransition).not.toHaveBeenCalled();
+    const ankeRader = outboxCreateMany.mock.calls
+      .flatMap((c) => (c[0] as { data: Array<{ type: string; payloadJson: string }> }).data)
+      .filter((r) => r.type === "appeal_notification");
+    expect(ankeRader).toHaveLength(1);
+    expect(JSON.parse(ankeRader[0].payloadJson)).toMatchObject({
+      appealId: "appeal-1",
+      submissionId: "submission-1",
+      previousStatus: AppealStatus.IN_REVIEW,
+      currentStatus: AppealStatus.RESOLVED,
+      recipientUserId: "user-1",
+      passFailTotal: true,
+    });
     expect(result).toEqual({
       appeal: {
         id: "appeal-1",

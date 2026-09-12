@@ -5,13 +5,12 @@ import { appealRepository, createAppealRepository } from "./appealRepository.js"
 import { runInTransaction, type DbTransactionClient } from "../../db/transaction.js";
 import { recordAuditEvent } from "../../services/auditService.js";
 import { buildAppealSlaSnapshot } from "./appealSla.js";
-import { notifyAppealStatusTransition } from "../certification/index.js";
 import { env } from "../../config/env.js";
-import { logOperationalEvent } from "../../observability/operationalLog.js";
 import { auditActions, auditEntityTypes } from "../../observability/auditEvents.js";
-import { operationalEvents } from "../../observability/operationalEvents.js";
 import { appendDecisionWithLineage } from "../assessment/decisionLineageService.js";
-import { enqueueOutboxEvents, OUTBOX_EVENT_TYPES } from "../outbox/outboxService.js";
+import { enqueueOutboxEvents, OUTBOX_EVENT_TYPES, type AppealNotificationPayload } from "../outbox/outboxService.js";
+import { logOperationalEvent } from "../../observability/operationalLog.js";
+import { operationalEvents } from "../../observability/operationalEvents.js";
 import { localizeContentText } from "../../i18n/content.js";
 import { normalizeLocale } from "../../i18n/locale.js";
 import { toAppealWorkspaceView } from "./appealReadModels.js";
@@ -73,7 +72,7 @@ export async function createSubmissionAppeal(input: {
   if (appealedBy) {
     const locale = normalizeLocale(submission.locale) ?? env.DEFAULT_LOCALE;
     const moduleTitle = localizeContentText(locale, submission.module.title) ?? submission.moduleId;
-    await safeNotifyAppealStatusTransition({
+    await enqueueAppealNotification({
       appealId: appeal.id,
       submissionId: submission.id,
       previousStatus: null,
@@ -221,7 +220,7 @@ export async function claimAppeal(appealId: string, handlerId: string, isAdmin =
 
   const claimLocale = normalizeLocale(appeal.submission.locale) ?? env.DEFAULT_LOCALE;
   const claimModuleTitle = localizeContentText(claimLocale, appeal.submission.module.title) ?? appeal.submissionId;
-  await safeNotifyAppealStatusTransition({
+  await enqueueAppealNotification({
     appealId: claimed.id,
     submissionId: appeal.submissionId,
     previousStatus: appeal.appealStatus,
@@ -289,7 +288,7 @@ export async function resolveAppeal(input: {
 
   const resolveLocale = normalizeLocale(appeal.submission.locale) ?? env.DEFAULT_LOCALE;
   const resolveModuleTitle = localizeContentText(resolveLocale, appeal.submission.module.title) ?? latestDecision.submissionId;
-  await safeNotifyAppealStatusTransition({
+  await enqueueAppealNotification({
     appealId: resolvedAppeal.id,
     submissionId: latestDecision.submissionId,
     previousStatus: appeal.appealStatus,
@@ -420,11 +419,15 @@ export async function supersedeEligibleAppealsForRetake(
   return appeals.length;
 }
 
-async function safeNotifyAppealStatusTransition(
-  input: Parameters<typeof notifyAppealStatusTransition>[0],
-) {
+// #1007: på outboxen, ikke fire-and-forget. `safeNotifyAppealStatusTransition` sendte og svelget
+// feilen; et varsel som forsvant under en utrulling kom aldri, og bare loggen visste det. Samme dør
+// som kursbevisene fikk i #946 — leveringsarbeideren prøver på nytt fra den lagrede raden.
+//
+// ⚠️ Raden legges ETTER at ankeskrivingen er committet. Feiler innleggingen, står vedtaket — og
+// svaret skal si det; feilen logges som før. Vinduet er ett insert rett etter et vellykket commit.
+async function enqueueAppealNotification(input: AppealNotificationPayload) {
   try {
-    await notifyAppealStatusTransition(input);
+    await enqueueOutboxEvents([{ type: OUTBOX_EVENT_TYPES.appealNotification, payload: input }]);
   } catch (error) {
     logOperationalEvent(
       operationalEvents.certification.participantNotificationPipelineFailed,
