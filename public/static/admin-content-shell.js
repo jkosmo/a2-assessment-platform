@@ -3577,20 +3577,34 @@ function buildCriteriaRecordFromEditorState(criteria) {
 }
 
 // B3 (#450): "Behold kriteriene" — patch the active rubric's blueprint-hash to the current
-// hash so the drift banner hides. No version bump; criteria unchanged.
+// hash so the drift banner hides. Criteria unchanged.
+//
+// #915: the server now creates a NEW rubric version (same criteria, new hash) instead of patching
+// the old one in place — so a restored older module version keeps the hash it was authored with.
+// The bundle is patched to point at the new version, so the next save attaches it
+// (`latestRubricId` reads `cfg.rubricVersion.id`). Until saved, a reload shows the banner again —
+// correctly: the persisted draft still references the old rubric.
 async function handleDriftKeep() {
   if (!selectedModuleId) return;
   const hash = currentBlueprintHash;
   if (!hash) return;
   try {
-    await apiFetch(
+    const result = await apiFetch(
       `/api/admin/content/modules/${encodeURIComponent(selectedModuleId)}/rubric-versions/sync-blueprint`,
       getHeaders,
-      { method: "POST", body: JSON.stringify({ blueprintHash: hash }) },
+      { method: "POST", body: JSON.stringify({ blueprintHash: hash, rubricVersionId: bundle?.selectedConfiguration?.rubricVersion?.id ?? undefined }) },
     );
     // Patch bundle in place so we don't clobber unsaved sessionDraft via full reload.
-    const sr = bundle?.selectedConfiguration?.rubricVersion?.scalingRule;
-    if (sr && typeof sr === "object") sr.generated_from_blueprint_hash = hash;
+    const cfgRubric = bundle?.selectedConfiguration?.rubricVersion;
+    if (cfgRubric && result?.rubricVersionId) {
+      const previousId = cfgRubric.id;
+      cfgRubric.id = result.rubricVersionId;
+      if (typeof result.versionNo === "number") cfgRubric.versionNo = result.versionNo;
+      cfgRubric.scalingRule = { ...(cfgRubric.scalingRule ?? {}), generated_from_blueprint_hash: hash };
+      if (Array.isArray(bundle?.versions?.rubricVersions) && result.rubricVersionId !== previousId) {
+        bundle.versions.rubricVersions.unshift({ ...cfgRubric });
+      }
+    }
     renderPreview();
     showToast(t("shell.drift.keep.success"), "success");
   } catch (err) {
