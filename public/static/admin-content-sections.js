@@ -44,7 +44,7 @@ const LABELS = {
     published: "Section published.", unpublished: "Section unpublished.",
     archived: "Section archived.", restored: "Section restored.", confirmArchive: "Archive this section?",
     colUpdated: "Last changed", edit: "Open", del: "Delete section", empty: "No sections yet.",
-    readonly: "Read-only", readonlyHint: "Only an owner or an administrator can change this section.",
+    readonly: "Owner access only", readonlyHint: "Only an owner or an administrator can open this section.",
     back: "← Back", backToCourse: "← Back to the course", titleLabel: "Title", markdown: "Markdown", preview: "Preview",
     save: "Save new version", saved: "Section saved.", deleted: "Section deleted.",
     confirmDelete: "Are you sure you want to delete this section for good? It disappears from every course that uses it.", loadError: "Could not load sections.",
@@ -72,7 +72,7 @@ const LABELS = {
     published: "Seksjon publisert.", unpublished: "Seksjon avpublisert.",
     archived: "Seksjon arkivert.", restored: "Seksjon gjenopprettet.", confirmArchive: "Arkivere denne seksjonen?",
     colUpdated: "Sist endret", edit: "Åpne", del: "Slett seksjon", empty: "Ingen seksjoner ennå.",
-    readonly: "Skrivebeskyttet", readonlyHint: "Bare en eier eller administrator kan endre denne seksjonen.",
+    readonly: "Kun for eier", readonlyHint: "Bare en eier eller en administrator kan åpne denne seksjonen.",
     back: "← Tilbake", backToCourse: "← Tilbake til kurset", titleLabel: "Tittel", markdown: "Markdown", preview: "Forhåndsvisning",
     save: "Lagre ny versjon", saved: "Seksjon lagret.", deleted: "Seksjon slettet.",
     confirmDelete: "Er du helt sikker på at du vil slette denne seksjonen for godt? Den forsvinner fra alle kurs som bruker den.", loadError: "Kunne ikke laste seksjoner.",
@@ -100,7 +100,7 @@ const LABELS = {
     published: "Seksjon publisert.", unpublished: "Seksjon avpublisert.",
     archived: "Seksjon arkivert.", restored: "Seksjon gjenoppretta.", confirmArchive: "Arkivere denne seksjonen?",
     colUpdated: "Sist endra", edit: "Opne", del: "Slett seksjon", empty: "Ingen seksjonar enno.",
-    readonly: "Skrivebeskytta", readonlyHint: "Berre ein eigar eller administrator kan endre denne seksjonen.",
+    readonly: "Berre for eigar", readonlyHint: "Berre ein eigar eller ein administrator kan opne denne seksjonen.",
     back: "← Tilbake", backToCourse: "← Tilbake til kurset", titleLabel: "Tittel", markdown: "Markdown", preview: "Førehandsvising",
     save: "Lagre ny versjon", saved: "Seksjon lagra.", deleted: "Seksjon sletta.",
     confirmDelete: "Er du heilt sikker på at du vil slette denne seksjonen for godt? Han forsvinn frå alle kurs som bruker han.", loadError: "Kunne ikkje laste seksjonar.",
@@ -383,20 +383,21 @@ async function renderListView() {
       : `<span class="course-count-zero">0</span>`;
     return `<tr>
       <td class="col-title">${escapeHtml(displayTitle(s.title))}</td>
-      <td>${statusBadge(status)}</td>
-      <td>v${escapeHtml(s.versionNo ?? "1")}</td>
-      <td>${courseCell}</td>
-      <td style="white-space:nowrap">${escapeHtml(formatDate(s.updatedAt))}</td>
+      <td class="col-status">${statusBadge(status)}</td>
+      <td class="col-version">v${escapeHtml(s.versionNo ?? "1")}</td>
+      <td class="col-courses">${courseCell}</td>
+      <td class="col-updated">${escapeHtml(formatDate(s.updatedAt))}</td>
       <td class="col-actions">
-        <div class="row-actions">${rowActionsHtml(canManage
-          ? [
-            `<button class="row-action-btn" data-action="edit" data-id="${id}">${escapeHtml(L("edit"))}</button>`,
-            `<button class="row-action-btn" data-action="duplicate" data-id="${id}">${escapeHtml(L("duplicate"))}</button>`,
-            `<button class="row-action-btn" data-action="export" data-id="${id}">${escapeHtml(L("exportSection"))}</button>`,
-            publishToggle,
-            archiveToggle,
-          ]
-          : [`<span class="row-readonly-note" title="${escapeHtml(L("readonlyHint"))}">${escapeHtml(L("readonly"))}</span>`],
+        <div class="row-actions">${rowActionsHtml([
+          // #1046 (produkteier 12.09): samme logikk som Moduler — Dupliser og Eksporter er lese-/
+          // kopihandlinger og finnes også for den som ikke eier seksjonen; Åpne og livssyklus bare for eier.
+          canManage ? `<button class="row-action-btn" data-action="edit" data-id="${id}">${escapeHtml(L("edit"))}</button>` : "",
+          `<button class="row-action-btn" data-action="duplicate" data-id="${id}">${escapeHtml(L("duplicate"))}</button>`,
+          `<button class="row-action-btn" data-action="export" data-id="${id}">${escapeHtml(L("exportSection"))}</button>`,
+          canManage ? publishToggle : "",
+          canManage ? archiveToggle : "",
+          canManage ? "" : `<span class="row-readonly-note" title="${escapeHtml(L("readonlyHint"))}">${escapeHtml(L("readonly"))}</span>`,
+        ],
         { moreLabel: L("more") })}</div>
       </td>
     </tr>`;
@@ -417,7 +418,7 @@ async function renderListView() {
     <div class="list-filters-row">${sectionFilterBar()}${sectionCourseFilterBar(sections)}</div>
     ${visible.length === 0
       ? `<div class="empty-state"><p class="empty-state-text">${escapeHtml(L("empty"))}</p></div>`
-      : `<div class="sections-table-wrap"><table class="sections-table">
+      : `<div class="sections-table-wrap list-table-wrap"><table class="sections-table list-table">
           <thead><tr><th>${escapeHtml(L("colTitle"))}</th><th>${escapeHtml(L("colStatus"))}</th><th>${escapeHtml(L("colVersion"))}</th><th>${escapeHtml(L("colCourses"))}</th><th>${escapeHtml(L("colUpdated"))}</th><th class="col-actions"></th></tr></thead>
           <tbody id="sectionsTableBody">${rows}</tbody></table></div>`}`;
 

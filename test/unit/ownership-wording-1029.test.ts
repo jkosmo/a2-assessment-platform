@@ -62,6 +62,20 @@ describe("#1029 — tekstene lover ikke lenger lesetilgang de ikke gir", () => {
     expect(rad, "merket skal oversettes").toContain("adminContent.courses.row.noAccess");
   });
 
+  // #1046 (produkteier 12.09): «Kurs bruker begrepet Kun for eier, moduler og seksjoner
+  // Skrivebeskyttet». Samme merke på alle fire listene — og samme regel som over: ingen av dem
+  // lover en lesetilgang som ikke finnes.
+  it("⚠️ merket i modul-, seksjons- og klasselista sier det samme som kurslista", () => {
+    for (const fil of ["admin-content-library.js", "admin-content-sections.js", "admin-content-classes.js"]) {
+      const kilde = les(`../../public/static/${fil}`);
+      const rader = kilde.split("\n").filter((l) => l.includes("row-readonly-note") || l.includes("readonly:"));
+      expect(rader.length, `${fil}: fant ikke merket — kontrollcase`).toBeGreaterThan(0);
+      for (const rad of rader) {
+        for (const ord of LOVER_LESETILGANG) expect(rad, `${fil}: «${ord}» lover en lesetilgang #943 fjernet`).not.toContain(ord);
+      }
+    }
+  });
+
   it("merkets nøkler finnes i alle tre språktabeller", () => {
     const kilde = les("../../public/i18n/admin-content-translations.js");
     for (const nøkkel of ["adminContent.courses.row.noAccess", "adminContent.courses.row.noAccessTitle"]) {

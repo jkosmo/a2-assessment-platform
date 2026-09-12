@@ -122,14 +122,14 @@ function renderClassesTable() {
       : "";
     return `
     <tr>
-      <td>${escapeHtml(c.name)}${systemBadge}${statusBadge}</td>
+      <td class="col-name">${escapeHtml(c.name)}${systemBadge}${statusBadge}</td>
       <td>${escapeHtml(classTypeLabel(c))}</td>
       <td>${c._count?.members ?? 0}</td>
       <td>${c._count?.courseAssignments ?? 0}</td>
       <td class="col-actions">
         <div class="row-actions">${rowActionsHtml(canManage
           ? [`<button class="row-action-btn" data-action="open" data-id="${escapeHtml(c.id)}">Åpne</button>`, archiveToggle, deleteBtn]
-          : [`<span class="row-readonly-note" title="Bare en eier eller administrator kan endre denne klassen.">Skrivebeskyttet</span>`])}</div>
+          : [`<span class="row-readonly-note" title="Bare en eier eller en administrator kan åpne denne klassen.">Kun for eier</span>`])}</div>
       </td>
     </tr>`;
   }).join("");
@@ -152,9 +152,9 @@ async function renderListView() {
     <div class="page-header"><div><h1>Klasser</h1><p class="page-lead">Grupper av deltakere som får kurs tildelt samlet.</p></div><div style="display:flex;gap:8px">${isAdministrator ? `<button id="importUsersBtn" class="btn btn-secondary" style="width:auto" title="Importer brukere fra en JSON-fil eksportert fra Entra (delta-synk)">Importer brukere</button><input type="file" id="importUsersFile" accept="application/json,.json" style="display:none"><button id="syncEntraBtn" class="btn btn-secondary" style="width:auto" title="Importer brukere fra «Alle i A-2 Norge» i Entra (krever Graph-tilgang)">Synk brukere fra Entra</button>` : ""}<button id="newClassBtn" class="btn btn-primary" style="width:auto">Ny klasse</button></div></div>
     <p style="color:var(--color-meta);font-size:13px">En klasse er en gruppe deltakere du kan tildele kurs til samlet. «Alle deltakere» er en systemklasse (alle med deltakerrolle).</p>
     ${classFilterBar()}
-    <div class="classes-table-wrap">
-      <table class="classes-table">
-        <thead><tr><th>Navn</th><th>Type</th><th>Medlemmer</th><th>Tildelte kurs</th><th></th></tr></thead>
+    <div class="classes-table-wrap list-table-wrap">
+      <table class="classes-table list-table">
+        <thead><tr><th scope="col">Navn</th><th scope="col">Type</th><th scope="col">Medlemmer</th><th scope="col">Tildelte kurs</th><th scope="col"><span class="sr-only">Handlinger</span></th></tr></thead>
         <tbody id="classesTableBody"></tbody>
       </table>
     </div>`;
@@ -259,9 +259,7 @@ async function archiveClass(id, name) {
 
 // #1046 D3: sletting for godt, bare fra en arkivert rad. Produkteier ba om «er du helt sikker».
 async function deleteClassInAdmin(id, name) {
-  if (!window.confirm(`Er du helt sikker på at du vil slette klassen «${name}» for godt?
-
-Medlemslista og kurstildelingene forsvinner. Deltakernes egen fremdrift beholdes.`)) return;
+  if (!window.confirm(`Er du helt sikker på at du vil slette klassen «${name}» for godt?\n\nMedlemslista og kurstildelingene forsvinner. Deltakernes egen fremdrift beholdes.`)) return;
   try {
     await apiFetch(`/api/admin/content/classes/${encodeURIComponent(id)}`, getHeaders, { method: "DELETE" });
     showToast("Klasse slettet.", "success");

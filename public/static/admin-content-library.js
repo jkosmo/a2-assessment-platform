@@ -333,7 +333,7 @@ function renderLibrary() {
           canManage ? unpublishAction : "",
           canManage ? archiveAction : "",
           canManage ? deleteAction : "",
-          canManage ? "" : `<span class="row-readonly-note" title="Bare en eier eller administrator kan endre denne modulen.">Skrivebeskyttet</span>`,
+          canManage ? "" : `<span class="row-readonly-note" title="Bare en eier eller en administrator kan åpne denne modulen.">Kun for eier</span>`,
         ])}</div>
       </td>
     </tr>`;
@@ -345,8 +345,8 @@ function renderLibrary() {
   const dateIcon = dateDir === "asc" ? "↑" : dateDir === "desc" ? "↓" : "↕";
 
   libraryContent.innerHTML = `
-    <div class="library-table-wrap">
-      <table class="library-table" aria-label="Modulbibliotek">
+    <div class="library-table-wrap list-table-wrap">
+      <table class="library-table list-table" aria-label="Modulbibliotek">
         <thead>
           <tr>
             <th scope="col" class="sortable${titleDir !== "none" ? ` sort-${titleDir}` : ""}" data-sort="title" aria-sort="${titleDir !== "none" ? titleDir + "ending" : "none"}">Navn <i class="sort-indicator" aria-hidden="true">${titleIcon}</i></th>

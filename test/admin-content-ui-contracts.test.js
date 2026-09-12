@@ -78,7 +78,7 @@ describe("admin content workspace UI contracts", () => {
     expect(coursesHtml).toContain('id="deleteCancelBtn"');
 
     // Dynamic JS: list and detail elements rendered at runtime
-    expect(coursesJs).toContain('<table class="courses-table" aria-label="Kursliste">');
+    expect(coursesJs).toContain('<table class="courses-table list-table" aria-label="Kursliste">');
     expect(coursesJs).toContain('class="back-link"');
     expect(coursesJs).toContain('class="page-header-back"');
   });

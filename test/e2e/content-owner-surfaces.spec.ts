@@ -110,11 +110,14 @@ test("seksjon-liste: edit/lifecycle hidden for canManage:false, shown for canMan
   // Owned row: edit + lifecycle present.
   await expect(page.locator('[data-action="edit"][data-id="sec-mine"]')).toBeVisible();
   await expect(await revealRowAction(page, page.locator('[data-action="unpublish"][data-id="sec-mine"]'))).toBeVisible();
-  // Not-owned row: no edit, no lifecycle — a read-only marker instead.
+  // Not-owned row: no edit, no lifecycle — but Dupliser/Eksporter stay (read/copy actions, as on
+  // Moduler; #1046 12.09), and the marker says «Kun for eier» like the course list (#1029).
   await expect(page.locator('[data-action="edit"][data-id="sec-theirs"]')).toHaveCount(0);
   await expect(page.locator('[data-action="unpublish"][data-id="sec-theirs"]')).toHaveCount(0);
+  await expect(page.locator('[data-action="duplicate"][data-id="sec-theirs"]')).toBeVisible();
+  await expect(page.locator('[data-action="export"][data-id="sec-theirs"]')).toBeVisible();
   await expect(page.locator(".row-readonly-note")).toHaveCount(1);
-  await expect(page.locator(".row-readonly-note")).toHaveText("Skrivebeskyttet");
+  await expect(page.locator(".row-readonly-note")).toHaveText("Kun for eier");
 });
 
 // QA #3 — the standalone section editor (admin-content-sections.js), reachable directly via ?id=.

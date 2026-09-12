@@ -99,39 +99,7 @@
       .library-filter-btn.active { background: var(--color-blue-light); border-color: var(--color-blue); color: var(--color-link-active); }
 
       /* ── Table ───────────────────────────────────────────────────────────── */
-      .library-table-wrap { overflow-x: auto; border: 1px solid var(--color-table-wrap-border); border-radius: var(--radius-card); }
-      .library-table {
-        width: 100%;
-        border-collapse: collapse;
-        font-size: 14px;
-        background: var(--color-surface);
-      }
-      .library-table th {
-        text-align: left;
-        padding: 10px 12px;
-        font-size: 11px;
-        font-weight: 700;
-        text-transform: uppercase;
-        letter-spacing: 0.05em;
-        color: var(--color-meta);
-        border-bottom: 1px solid var(--color-table-border);
-        white-space: nowrap;
-        background: var(--color-bg);
-      }
-      .library-table td {
-        padding: 10px 12px;
-        border-bottom: 1px solid var(--color-table-border);
-        vertical-align: middle;
-      }
-      .library-table tr:last-child td { border-bottom: none; }
-      .library-table tr:hover td { background: var(--color-row-hover); }
-
-      .col-name { min-width: 180px; font-weight: 600; }
-      .col-level { white-space: nowrap; }
-      .col-status { white-space: nowrap; }
-      .col-courses { white-space: nowrap; }
-      .col-updated { white-space: nowrap; color: var(--color-meta); font-size: 13px; }
-      .col-actions { white-space: nowrap; min-width: 260px; }
+      /* #1046 C1/C2: tabellen (.list-table-wrap/.list-table) arves fra shared.css — samme regel ett sted. */
 
       /* ── Sortable column headers ─────────────────────────────────────────── */
       .library-table th.sortable { cursor: pointer; user-select: none; }

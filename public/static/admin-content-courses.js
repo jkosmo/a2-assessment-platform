@@ -733,8 +733,8 @@ async function renderListView() {
       </div>
     </div>
     ${archiveToggle}
-    <div class="courses-table-wrap">
-      <table class="courses-table" aria-label="Kursliste">
+    <div class="courses-table-wrap list-table-wrap">
+      <table class="courses-table list-table" aria-label="Kursliste">
         <thead>
           <tr>
             <th scope="col">Navn</th>
