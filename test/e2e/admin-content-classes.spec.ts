@@ -196,6 +196,36 @@ test("deltakere sub-nav: role-gates tabs and marks the current one active", asyn
 
   // The active tab reflects the current page.
   await expect(subnav.locator("#subnavKlasser")).toHaveClass(/active/);
+  await expect(subnav).toHaveAttribute("data-roles-resolved", "true");
+});
+
+// #1046 E4: «Manuell behandling» må ikke blinke. Før ble alle lenkene tegnet og de ulovlige fjernet
+// ETTER at rollene var hentet — en SMO så fanen komme og gå. Nå holdes de rollestyrte lenkene
+// usynlige til svaret er der. Testen holder /api/me tilbake og ser at lenken ikke er synlig i
+// mellomtiden — og at den fjernes, ikke vises, når svaret kommer.
+test("deltakere sub-nav: rollestyrte faner vises ikke før rollene er kjent (ingen blinking)", async ({ page }) => {
+  await mockBaseApis(page, ["SUBJECT_MATTER_OWNER"]);
+  await page.route("**/api/admin/content/classes", (route: Route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ classes: [] }) }),
+  );
+  let slippMe: (() => void) | null = null;
+  const meHoldes = new Promise<void>((resolve) => { slippMe = resolve; });
+  await page.route("**/api/me", async (route: Route) => {
+    await meHoldes;
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ user: { id: "u1", roles: ["SUBJECT_MATTER_OWNER"] }, consent: { currentVersion: "1.0", accepted: true } }) });
+  });
+
+  await page.goto("/deltakere/klasser");
+  const subnav = page.locator("#deltakereSubnav");
+  await expect(subnav).toHaveAttribute("data-roles-resolved", "false");
+  // Lenken finnes i DOM-en, men er usynlig — det er hele poenget.
+  await expect(subnav.locator("#subnavReview")).toHaveCount(1);
+  await expect(subnav.locator("#subnavReview")).toBeHidden();
+
+  slippMe!();
+  await expect(subnav).toHaveAttribute("data-roles-resolved", "true");
+  await expect(subnav.locator("#subnavReview")).toHaveCount(0);
+  await expect(subnav.locator("#subnavKlasser")).toBeVisible();
 });
 
 // #690: the "Synk brukere fra Entra" button is ADMINISTRATOR-only and triggers the Entra user sync.

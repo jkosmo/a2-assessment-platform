@@ -55,14 +55,26 @@ async function initDeltakereSubnav() {
   if (!nav) return;
   markActive(nav);
 
+  // #1046 E4: lenkene som avhenger av rolle holdes usynlige til rollene er kjent. Før ble alle tegnet
+  // og de ulovlige fjernet etterpa — en SMO så «Manuell behandling» blinke og forsvinne. Plassen
+  // holdes (visibility, ikke display), så raden ikke hopper når svaret kommer. Fail-open står:
+  // klarer vi ikke å hente roller, vises alt, som før.
+  const gated = Object.keys(LINK_ROLES).map((id) => nav.querySelector(`#${id}`)).filter(Boolean);
+  for (const link of gated) link.style.visibility = "hidden";
+  nav.dataset.rolesResolved = "false";
+
   const roles = await resolveRoles();
-  if (!roles) return; // fail-open: leave all links visible
-  const roleSet = new Set(roles);
+  const roleSet = roles ? new Set(roles) : null;
   for (const [id, allowed] of Object.entries(LINK_ROLES)) {
-    if (!allowed.some((role) => roleSet.has(role))) {
-      nav.querySelector(`#${id}`)?.remove();
+    const link = nav.querySelector(`#${id}`);
+    if (!link) continue;
+    if (roleSet && !allowed.some((role) => roleSet.has(role))) {
+      link.remove();
+    } else {
+      link.style.visibility = "";
     }
   }
+  nav.dataset.rolesResolved = "true";
 }
 
 if (document.readyState === "loading") {
