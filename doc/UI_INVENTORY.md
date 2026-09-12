@@ -14,7 +14,7 @@ skjermer som har den, hvilke som har sin egen, og hvilke som mangler den.
 | Tom liste / ingenting å vise | 5 | 0 | 4 | 5 | 32 | 2026-06-22 |
 | Laster… | 5 | 0 | 2 | 7 | 7 | 2026-06-22 |
 | Melding nederst (toast) | 13 | 1 | 0 | 0 | 2 | 2026-06-24 |
-| Meny og profil øverst | 7 | 0 | 0 | 7 | 0 | 2026-08-23 |
+| Meny og profil øverst | 13 | 0 | 0 | 1 | 0 | 2026-08-23 |
 | Språkvelger | 7 | 0 | 6 | 1 | 6 | 2026-08-30 |
 | Hvem er jeg (identitetsfelt) | 6 | 0 | 0 | 8 | 0 | 2026-08-30 |
 | Hva som vises ut fra rolle | 1 | 0 | 1 | 12 | 5 | — |
@@ -40,19 +40,19 @@ oversettelsestabellen.
 
 | Skjerm | Sist endret | Feilmelding fra serveren | Tom liste / ingenting å vise | Laster… | Melding nederst (toast) | Meny og profil øverst | Språkvelger | Hvem er jeg (identitetsfelt) | Hva som vises ut fra rolle | Knapp som jobber (opptatt-tilstand) | Tekster på ett språk (hardkodet) |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| Deltaker: Mine kurs | 2026-09-11 | begge (1 egne) | felles | felles | felles (2026-03-11) | felles (2026-06-22) | egen (1) | felles (2026-08-30) | — | felles (2026-08-30) | egen (3) |
+| Deltaker: Mine kurs | 2026-09-11 | begge (1 egne) | felles | felles | felles (2026-08-23) | felles (2026-06-22) | egen (1) | felles (2026-08-30) | — | felles (2026-08-30) | egen (3) |
 | Deltaker: Fullførte | 2026-09-11 | felles (2026-08-29) | felles | felles | felles (2026-08-30) | felles (2026-06-22) | felles (2026-08-30) | felles (2026-08-30) | — | felles (2026-08-30) | felles |
 | Deltaker: Profil | 2026-09-11 | felles (2026-08-29) | felles | felles | felles (2026-08-30) | felles (2026-06-22) | felles (2026-08-30) | felles (2026-08-30) | — | felles (2026-08-30) | felles |
 | Kursbevis | 2026-09-11 | felles (2026-08-30) | — | — | felles (2026-08-30) | — | felles (2026-08-30) | — | — | — | felles |
 | Sensor: køer | 2026-09-11 | felles (2026-08-23) | felles | felles | felles (2026-03-22) | felles (2026-06-22) | felles (2026-08-30) | felles (2026-08-30) | felles (2026-03-22) | — | felles |
 | Rapporter | 2026-08-30 | felles (2026-08-29) | felles | felles | felles (2026-08-30) | felles (2026-06-22) | felles (2026-08-30) | felles (2026-08-30) | — | felles (2026-08-30) | felles |
 | Kullstatus | 2026-08-30 | felles (2026-08-30) | — | — | felles (2026-08-30) | felles (2026-07-19) | felles (2026-08-30) | — | — | — | felles |
-| Forfatter: modul (samtale) | 2026-09-12 | felles (2026-08-23) | — | — | begge (2 egne) | — | — | — | — | egen (2) | egen (1) |
-| Forfatter: kurs | 2026-09-12 | felles (2026-08-23) | egen (16) | egen (3) | felles (2026-04-18) | — | egen (1) | — | — | — | egen (17) |
-| Forfatter: seksjoner | 2026-09-10 | felles (2026-08-23) | egen (9) | — | felles (2026-06-15) | — | egen (1) | — | — | egen (3) | egen (19) |
-| Forfatter: bibliotek | 2026-09-12 | felles (2026-08-23) | egen (4) | — | felles (2026-04-18) | — | egen (1) | — | — | egen (5) | egen (8) |
-| Forfatter: klasser | 2026-09-11 | felles (2026-08-23) | egen (3) | egen (4) | felles (2026-06-26) | — | egen (1) | — | egen (5) | egen (1) | egen (8) |
-| Forfatter: kalibrering | 2026-08-24 | felles (2026-08-23) | — | — | felles (2026-04-18) | — | egen (1) | — | — | — | felles |
+| Forfatter: modul (samtale) | 2026-09-12 | felles (2026-08-23) | — | — | begge (2 egne) | felles (2026-04-24) | — | — | — | egen (2) | egen (1) |
+| Forfatter: kurs | 2026-09-12 | felles (2026-08-23) | egen (16) | egen (3) | felles (2026-04-18) | felles (2026-04-24) | egen (1) | — | — | — | egen (17) |
+| Forfatter: seksjoner | 2026-09-10 | felles (2026-08-23) | egen (9) | — | felles (2026-06-15) | felles (2026-06-15) | egen (1) | — | — | egen (3) | egen (19) |
+| Forfatter: bibliotek | 2026-09-12 | felles (2026-08-23) | egen (4) | — | felles (2026-04-18) | felles (2026-04-24) | egen (1) | — | — | egen (5) | egen (8) |
+| Forfatter: klasser | 2026-09-11 | felles (2026-08-23) | egen (3) | egen (4) | felles (2026-06-26) | felles (2026-06-26) | egen (1) | — | egen (5) | egen (1) | egen (8) |
+| Forfatter: kalibrering | 2026-08-24 | felles (2026-08-23) | — | — | felles (2026-04-18) | felles (2026-04-24) | egen (1) | — | — | — | felles |
 | Admin: plattform | 2026-08-30 | felles (2026-08-30) | — | — | felles (2026-03-22) | felles (2026-06-22) | felles (2026-08-30) | felles (2026-08-30) | — | — | felles |
 
 ## Slik leses det

@@ -50,13 +50,15 @@ type Egenskap = {
   fellesTegn: RegExp; // hvordan bruk av den delte ser ut
   egenTegn: RegExp[]; // hvordan en egen utgave ser ut
   fellesVinner?: boolean; // når den felles brukes, er «egne» treff normale rester av bruken — ikke en egen utgave
+  modulFil?: string; // filnavnet som søkes i git-loggen for å datere når skjermen tok den i bruk
 };
 const EGENSKAPER: Egenskap[] = [
   {
     navn: "Feilmelding fra serveren",
     forklaring: "Når et kall feiler: oversettes svaret via den delte tabellen, eller vises serverens tekst rått?",
     felles: "api-error.js",
-    fellesTegn: /from "\/static\/api-error\.js"/,
+    fellesTegn: /from "(\/static\/|\.\/)api-error\.js"/,
+    modulFil: "api-error.js",
     egenTegn: [/showToast\([^)]*\b(err|error|e)\.message\b/, /showEmpty\([^)]*\b(err|error)\.message\b/, /textContent\s*=\s*\b(err|error)\.message\b/],
   },
   {
@@ -77,21 +79,24 @@ const EGENSKAPER: Egenskap[] = [
     navn: "Melding nederst (toast)",
     forklaring: "Bruker skjermen den delte toasten?",
     felles: "toast.js",
-    fellesTegn: /from "\/static\/toast\.js"/,
+    fellesTegn: /from "(\/static\/|\.\/)toast\.js"/,
+    modulFil: "toast.js",
     egenTegn: [/window\.alert\(/, /function showToast\(/],
   },
   {
     navn: "Meny og profil øverst",
     forklaring: "Bygges toppmenyen av den delte modulen?",
     felles: "workspace-nav.js",
-    fellesTegn: /from "\/static\/workspace-nav\.js"/,
+    fellesTegn: /from "(\/static\/|\.\/)workspace-nav\.js"/,
+    modulFil: "workspace-nav.js",
     egenTegn: [/class="workspace-nav-link"[^`]*href=/],
   },
   {
     navn: "Språkvelger",
     forklaring: "Har skjermen språkvelger, og henter den innhold på nytt ved bytte (#1040)?",
     felles: "localized-resource.js",
-    fellesTegn: /from "\/static\/localized-resource\.js"/,
+    fellesTegn: /from "(\/static\/|\.\/)localized-resource\.js"/,
+    modulFil: "localized-resource.js",
     egenTegn: [/localeSelect\??\.addEventListener\("change"/],
     fellesVinner: true,
   },
@@ -99,7 +104,8 @@ const EGENSKAPER: Egenskap[] = [
     navn: "Hvem er jeg (identitetsfelt)",
     forklaring: "Identitetsfeltene fra den delte modulen (#1044), eller egne?",
     felles: "identity-defaults.js",
-    fellesTegn: /from "\/static\/identity-defaults\.js"/,
+    fellesTegn: /from "(\/static\/|\.\/)identity-defaults\.js"/,
+    modulFil: "identity-defaults.js",
     egenTegn: [/x-user-id/],
     fellesVinner: true,
   },
@@ -114,7 +120,8 @@ const EGENSKAPER: Egenskap[] = [
     navn: "Knapp som jobber (opptatt-tilstand)",
     forklaring: "Deaktiveres knappen med den delte hjelperen mens kallet pågår?",
     felles: "busy-button.js",
-    fellesTegn: /from "\/static\/busy-button\.js"/,
+    fellesTegn: /from "(\/static\/|\.\/)busy-button\.js"/,
+    modulFil: "busy-button.js",
     egenTegn: [/btn\.disabled\s*=\s*true;[\s\S]{0,200}await apiFetch/],
   },
   {
@@ -165,8 +172,10 @@ function mål(skjerm: { fil: string }, e: Egenskap): Celle {
     }).length;
     return { status: egne === 0 ? "felles" : "egen", dato: "", egne };
   }
-  const fragment = e.fellesTegn.source.replace(/\\\//g, "/").replace(/\\\./g, ".").replace(/[\\^$]/g, "").replace(/\(|\)/g, "");
-  const når = brukerFelles ? førsteBruk(skjerm.fil, fragment.includes("from ") ? fragment.replace(/^from /, "").replace(/"/g, "") : fragment) : "";
+  // Datering: første commit der modulnavnet (eller funksjonsnavnet) dukket opp i fila. Forfattersidene
+  // importerer med "./x.js" og resten med "/static/x.js" — filnavnet er felles for begge.
+  const fragment = e.modulFil ?? e.fellesTegn.source.replace(/\\/g, "").replace(/\(|\)/g, "");
+  const når = brukerFelles ? førsteBruk(skjerm.fil, fragment) : "";
   if (brukerFelles && e.fellesVinner) return { status: "felles", dato: når, egne: 0 };
   if (brukerFelles && egne > 0) return { status: "begge", dato: når, egne };
   if (brukerFelles) return { status: "felles", dato: når, egne: 0 };
