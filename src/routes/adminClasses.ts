@@ -1,6 +1,7 @@
 import { Router, type Request } from "express";
 import { requireContentOwnership } from "./requireContentOwnership.js";
 import { listManageableContentIds } from "../modules/content/contentOwnershipService.js";
+import { deriveClassLifecycle } from "../modules/content/lifecycle.js";
 import { z } from "zod";
 import {
   createClass,
@@ -40,7 +41,8 @@ adminClassesRouter.get("/", async (request, response, next) => {
       actorUserId: request.context?.userId ?? "",
       roles: request.context?.roles ?? [],
     });
-    response.json({ classes: classes.map((c) => ({ ...c, canManage: manageable.has(c.id) })) });
+    // #1046 steg B: samme `lifecycle`-felt som innholdslistene (klasser er aktive eller arkiverte).
+    response.json({ classes: classes.map((c) => ({ ...c, lifecycle: deriveClassLifecycle(c), canManage: manageable.has(c.id) })) });
   } catch (error) {
     next(error);
   }

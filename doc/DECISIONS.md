@@ -638,3 +638,12 @@ en oppskrift: kolonner, hvordan lese status, hvilke handlinger, tekster, hvilket
 Det som ble valgt bort: å la sidene beholde egne varianter «der de trengte det». Ingen av
 avvikene var valgt — de var lag i tid. Neste steg (steg B) er én tilstand i API-et: alle fire
 listekallene skal levere samme `lifecycle`-felt, så oppskriftenes status-adaptere kan fjernes.
+
+## Én tilstand for alt innhold i forfatterlistene (2026-09-12, steg B)
+
+Alle fire listekallene (moduler, kurs, seksjoner, klasser) leverer nå `lifecycle`, regnet ut ett
+sted på tjeneren (`src/modules/content/lifecycle.ts`): `draft · published · published_with_draft ·
+archived` for innhold, `active · archived` for klasser. Klienten leser ordet; den regner ikke ut
+tilstand selv lenger. Filterknappene og statusmerket (med «Nyere utkast») følger dermed samme regel
+på alle listene. Modulenes gamle `status`-felt (fem verdier) og kursenes/seksjonenes råfelter står
+til klientene har gått over; da fjernes de (kontraktfasen).

@@ -2,7 +2,7 @@ import { createDateFormatter } from "./format-display.js";
 const formatDate = createDateFormatter(() => currentLocale);
 import { escapeHtml } from "./html-escape.js";
 import { createListPage } from "./list-page.js";
-import { moduleLibraryStatusBadge } from "./content-status-badge.js";
+import { lifecycleBadge, lifecycleOf } from "./content-status-badge.js";
 import {
   supportedLocales,
   localeLabels,
@@ -134,13 +134,6 @@ const CERT_I18N_KEYS = {
   advanced: "adminContent.promptDialog.certificationLevelAdvanced",
 };
 
-// #705: unify to the shared 3-state badge (Utkast/Publisert/Arkivert) — same vocabulary as the
-// course/section lists. The library's richer 5-state (deriveLibraryStatus) is collapsed here, with
-// `published_with_draft` kept as a «nyere utkast»-chip so nothing is lost.
-function statusBadge(status) {
-  return moduleLibraryStatusBadge(status, t);
-}
-
 function certBadge(level) {
   if (!level) return `<span class="cert-badge">—</span>`;
   // level kan være en literal string ("intermediate"), en JSON-encoded locale-object
@@ -217,18 +210,11 @@ function getListPage() {
     headerExtraHtml: `<input id="importModulePackageFile" type="file" accept="application/json,.json" hidden />`,
     // #1046 B2: samme rekkefølge som Kurs og Seksjoner; modulens egen «Har upublisert utkast» sist.
     // Default «Aktive», så forfatterne lander på det som er aktuelt nå.
+    // v1.2.20 (#460): «Har upublisert utkast» dekker både aldri publisert OG live med et nyere utkast —
+    // regelen bor i matchesLifecycleFilter (content-status-badge.js), felles for alle listene.
     filters: {
       options: [["all", "Alle"], ["active", "Aktive"], ["published", "Publiserte"], ["archived", "Arkiverte"], ["unpublished_draft", "Har upublisert utkast"]],
       initial: "active",
-      matches: (m, key) => {
-        if (key === "all") return true;
-        if (key === "active") return m.status !== "archived";
-        if (key === "archived") return m.status === "archived";
-        // v1.2.20 (#460): dekker både aldri publisert OG live med et nyere upublisert utkast.
-        if (key === "unpublished_draft") return m.status === "unpublished_draft" || m.status === "published_with_draft";
-        if (key === "published") return m.status === "published" || m.status === "published_with_draft";
-        return true;
-      },
     },
     // #745: kursfilteret bygges av modulenes egne `courses`.
     courseFilter: { coursesOf: (m) => m.courses ?? [] },
@@ -236,7 +222,7 @@ function getListPage() {
     sort: { key: "title", dir: "asc", locale: () => currentLocale },
     columns: [
       { key: "title", label: "Navn", className: "col-name", sortValue: (m) => m.title ?? "", render: (m) => escapeHtml(m.title ?? m.id) },
-      { key: "status", label: "Status", className: "col-status", render: (m) => statusBadge(m.status) },
+      { key: "status", label: "Status", className: "col-status", render: (m) => lifecycleBadge(m, t) },
       { key: "level", label: "Sertifiseringsnivå", className: "col-level", render: (m) => certBadge(m.certificationLevel) },
       { key: "courses", label: "Brukt i kurs", className: "col-courses", sortValue: (m) => m.courseCount ?? 0, render: (m) => (m.courseCount > 0
         ? `<button class="course-count-btn" data-module-id="${escapeHtml(m.id)}" aria-label="${m.courseCount} kurs">${m.courseCount}</button>`
@@ -246,14 +232,15 @@ function getListPage() {
     rowId: (m) => m.id,
     actions: (m) => {
       const openConvUrl = `/admin-content/module/${encodeURIComponent(m.id)}/conversation`;
-      const isArchived = m.status === "archived";
+      const lifecycle = lifecycleOf(m);
+      const isArchived = lifecycle === "archived";
       // #787 slice 5: eier/admin styrer om redigerings-/livssyklus-handlingene vises (speiler eierskaps-
       // vakta). Dupliser/Eksporter beholdes — de er lese-/kopi-handlinger som ikke vaktes av eierskap.
       const canManage = m.canManage !== false;
       const id = escapeHtml(m.id);
       const title = escapeHtml(m.title ?? m.id);
       // v1.2.20 (#459): Avpubliser bare for moduler som er aktivt publisert.
-      const isPublished = m.status === "published" || m.status === "published_with_draft";
+      const isPublished = lifecycle === "published" || lifecycle === "published_with_draft";
       return [
         // #896 S3c: knappen sier hva den gjør — åpner modulen.
         canManage ? `<a href="${openConvUrl}" class="row-action-btn">Åpne</a>` : "",

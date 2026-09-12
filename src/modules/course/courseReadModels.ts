@@ -1,3 +1,5 @@
+import type { ContentLifecycle } from "../content/lifecycle.js";
+
 export type CourseStatus = "NOT_STARTED" | "IN_PROGRESS" | "COMPLETED";
 
 export interface CourseListItem {
@@ -68,6 +70,8 @@ export interface AdminCourseListItem {
   updatedAt: string;
   publishedAt: string | null;
   archivedAt: string | null;
+  // #1046 steg B: tilstanden regnet ut av tjeneren, samme ord for modul, kurs og seksjon.
+  lifecycle: ContentLifecycle;
   // #705-UX(F): antall deltakere som er midt i kurset (påbegynt, ikke fullført).
   inProgressCount: number;
   // #787 slice 5: may the viewer manage this course (admin, or an owner)? Drives whether the list shows

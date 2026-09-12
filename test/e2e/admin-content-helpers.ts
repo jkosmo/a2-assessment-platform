@@ -372,7 +372,12 @@ export async function mockCommonApis(page: Page, {
     // Default library fixtures to status: "published" so they appear in the
     // course module picker after the #440 filter (only published modules are
     // pickable). Tests that need other statuses must set it explicitly.
-    const modulesWithStatus = libraryModules.map((m) => ({ status: "published", ...m }));
+    // #1046 steg B: den ekte ruten sender også `lifecycle`; mock-en gjør det samme (utledet av status).
+    const modulesWithStatus = libraryModules.map((m) => {
+      const status = (m as { status?: string }).status ?? "published";
+      const lifecycle = ["published", "published_with_draft", "archived"].includes(status) ? status : "draft";
+      return { status, lifecycle, ...m };
+    });
     await route.fulfill({
       status: 200,
       contentType: "application/json",

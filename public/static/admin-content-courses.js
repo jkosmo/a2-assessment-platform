@@ -1,7 +1,7 @@
 import { createDateFormatter } from "./format-display.js";
 const formatDate = createDateFormatter(() => currentLocale);
 import { escapeHtml } from "./html-escape.js";
-import { lifecycleStatusBadge } from "./content-status-badge.js";
+import { lifecycleBadge, lifecycleOf } from "./content-status-badge.js";
 import {
   supportedLocales,
   localeLabels,
@@ -385,18 +385,6 @@ function canPublishCourse(course) {
   return !course?.publishedAt && !course?.archivedAt && moduleCount > 0;
 }
 
-// #705: samme to akser og status-vokabular som modul/seksjon — arkivert overstyrer.
-function courseStatus(course) {
-  if (course?.archivedAt) return "archived";
-  if (course?.publishedAt) return "published";
-  return "draft";
-}
-
-function courseStatusBadge(status) {
-  // #705: shared 3-state badge + i18n (was hardcoded Norwegian — en-GB/nn users saw «Publisert»).
-  return lifecycleStatusBadge(status, t);
-}
-
 // #734: publishing a course must never leave it containing unavailable (draft/archived) modules or
 // sections (invariant I1). Before publishing we ask the API which items are unpublished and whether
 // each is publishable. If everything is already live we publish directly (unchanged behaviour). If
@@ -623,16 +611,7 @@ function getListPage() {
     ],
     headerExtraHtml: `<input id="importCoursePackageFile" type="file" accept="application/json,.json" hidden />`,
     // #705-UX(A): filter-piller (Alle/Aktive/Publiserte/Arkiverte) likt modul-biblioteket.
-    filters: {
-      options: [["all", "Alle"], ["active", "Aktive"], ["published", "Publiserte"], ["archived", "Arkiverte"]],
-      initial: "active",
-      matches: (c, key) => {
-        if (key === "all") return true;
-        if (key === "archived") return Boolean(c.archivedAt);
-        if (key === "published") return !c.archivedAt && Boolean(c.publishedAt);
-        return !c.archivedAt; // active
-      },
-    },
+    filters: { options: [["all", "Alle"], ["active", "Aktive"], ["published", "Publiserte"], ["archived", "Arkiverte"]], initial: "active" },
     // #1046 B1: søk på navn (alle språk) og ID, som på Moduler.
     search: { matches: (c, q) => {
       const titles = c.title && typeof c.title === "object" ? Object.values(c.title) : [c.title, localizedText(c.title)];
@@ -641,16 +620,16 @@ function getListPage() {
     sort: { key: "title", dir: "asc", locale: () => currentLocale },
     columns: [
       { key: "title", label: "Navn", className: "col-title", sortValue: (c) => courseRowModel(c).title, render: (c) => escapeHtml(courseRowModel(c).title) },
-      { key: "status", label: "Status", className: "col-status", render: (c) => courseStatusBadge(courseStatus(courseRowModel(c))) },
+      { key: "status", label: "Status", className: "col-status", render: (c) => lifecycleBadge(c, t) },
       { key: "level", label: "Sertifiseringsnivå", className: "col-level", render: (c) => certBadge(c.certificationLevel) },
       { key: "moduleCount", label: "Antall moduler", className: "col-module-count", sortValue: (c) => c.moduleCount ?? 0, render: (c) => String(c.moduleCount ?? 0) },
       { key: "inProgress", label: "Påbegynt", className: "col-inprogress", title: "Deltakere som er midt i kurset (påbegynt, ikke fullført)", sortValue: (c) => c.inProgressCount ?? 0, render: (c) => (c.inProgressCount > 0 ? String(c.inProgressCount) : "–") },
-      { key: "updatedAt", label: "Sist endret", className: "col-updated", sortValue: (c) => c.updatedAt ?? c.publishedAt ?? "", render: (c) => escapeHtml(courseRowModel(c).updatedLabel) },
+      { key: "updatedAt", label: "Sist endret", className: "col-updated", sortValue: (c) => c.updatedAt ?? "", render: (c) => escapeHtml(courseRowModel(c).updatedLabel) },
     ],
     rowId: (c) => c.id,
     actions: (c) => {
       const course = courseRowModel(c);
-      const status = courseStatus(course);
+      const lifecycle = lifecycleOf(c);
       const cid = escapeHtml(course.courseId);
       const ctitle = escapeHtml(course.title);
       // #787 slice 5: eier/admin styrer om rediger/livssyklus-handlingene vises (speiler eierskaps-vakta).
@@ -659,16 +638,16 @@ function getListPage() {
       // eierskapsvaktet, og et merke som lover mer enn flaten gir er verre enn ikke noe merke.
       if (!canManage) return [`<span class="row-readonly-note" title="${escapeHtml(t("adminContent.courses.row.noAccessTitle"))}">${escapeHtml(t("adminContent.courses.row.noAccess"))}</span>`];
       // #705: samme handlings-rekkefølge som modul/seksjon — Publiser⇄Avpubliser, Arkiver⇄Gjenopprett.
-      const publishToggle = canPublishCourse(course)
-        ? `<button class="row-action-btn" data-action="publish" data-course-id="${cid}">Publiser</button>`
-        : status === "published"
+      // Publiser vises bare for et utkast som har innhold (samme krav som canPublishCourse i detaljvisningen).
+      const publishToggle = lifecycle === "archived" ? ""
+        : lifecycle === "published"
           ? `<button class="row-action-btn" data-action="unpublish" data-course-id="${cid}" data-course-title="${ctitle}">Avpubliser</button>`
-          : "";
+          : (course.moduleCount > 0 ? `<button class="row-action-btn" data-action="publish" data-course-id="${cid}">Publiser</button>` : "");
       // #705-UX: Slett vises kun for arkiverte elementer (terminal steg etter arkivering).
-      const archiveToggle = course.archivedAt
+      const archiveToggle = lifecycle === "archived"
         ? `<button class="row-action-btn" data-action="restore" data-course-id="${cid}" data-course-title="${ctitle}">Gjenopprett</button>`
         : `<button class="row-action-btn" data-action="archive" data-course-id="${cid}" data-course-title="${ctitle}">Arkiver</button>`;
-      const deleteBtn = course.archivedAt
+      const deleteBtn = lifecycle === "archived"
         ? `<button class="row-action-btn destructive" data-action="delete" data-course-id="${cid}" data-course-title="${ctitle}">Slett</button>`
         : "";
       // #762: ADMINISTRATOR-only destructive cleanup — slett kurset + moduler/seksjoner som kun brukes

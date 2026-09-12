@@ -284,7 +284,11 @@ export function getSection(sectionId: string) {
 export function listSections() {
   return prisma.courseSection.findMany({
     orderBy: { updatedAt: "desc" },
-    include: { activeVersion: { select: { id: true, versionNo: true, publishedAt: true } } },
+    include: {
+      activeVersion: { select: { id: true, versionNo: true, publishedAt: true } },
+      // #1046 steg B: nyeste versjon, så `lifecycle` kan si «published_with_draft» som for moduler.
+      versions: { orderBy: { versionNo: "desc" }, take: 1, select: { id: true } },
+    },
   });
 }
 

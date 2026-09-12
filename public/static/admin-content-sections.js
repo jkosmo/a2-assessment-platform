@@ -13,7 +13,7 @@ import { renderWorkspaceNavigationWithProfile } from "./workspace-nav.js";
 import { describeImportError } from "/static/import-error.js";
 import { describeApiError } from "/static/api-error.js";
 import { showToast } from "/static/toast.js";
-import { lifecycleStatusBadge } from "/static/content-status-badge.js";
+import { lifecycleStatusBadge, lifecycleBadge, lifecycleOf } from "/static/content-status-badge.js";
 import { renderOwnerPanel } from "/static/owner-panel.js";
 import { sanitizeSectionHtml } from "/static/sanitize.js";
 import { createListPage } from "/static/list-page.js";
@@ -245,14 +245,6 @@ function goTo(view, sectionId) {
 // List view
 // ---------------------------------------------------------------------------
 
-// #705: status fra de samme to aksene som modul/kurs — arkivert overstyrer; ellers publisert hvis
-// en aktiv versjon er valgt, ellers utkast.
-function sectionStatus(s) {
-  if (s.archivedAt) return "archived";
-  if (s.activeVersionId) return "published";
-  return "draft";
-}
-
 function statusBadge(status) {
   // #705: shared 3-state badge + i18n (same vocabulary as course/module lists).
   // NB: this file's admin-translations accessor is `tNav`, not `t`.
@@ -309,13 +301,6 @@ function getListPage() {
     filters: {
       options: () => [["all", L("filterAll")], ["active", L("filterActive")], ["published", L("filterPublished")], ["archived", L("filterArchived")]],
       initial: "active",
-      matches: (s, key) => {
-        const status = sectionStatus(s);
-        if (key === "all") return true;
-        if (key === "archived") return status === "archived";
-        if (key === "published") return status === "published";
-        return status !== "archived"; // active
-      },
     },
     // #745: kursfilteret bygges av seksjonenes `courses`.
     courseFilter: { coursesOf: (s) => s.courses ?? [] },
@@ -324,7 +309,8 @@ function getListPage() {
     sort: { key: "title", dir: "asc", locale: () => currentLocale },
     columns: () => [
       { key: "title", label: L("colTitle"), className: "col-title", sortValue: (s) => displayTitle(s.title), render: (s) => escapeHtml(displayTitle(s.title)) },
-      { key: "status", label: L("colStatus"), className: "col-status", render: (s) => statusBadge(sectionStatus(s)) },
+      // #1046 steg B/C8: «Nyere utkast»-brikken følger med når tjeneren sier published_with_draft.
+      { key: "status", label: L("colStatus"), className: "col-status", render: (s) => lifecycleBadge(s, tNav) },
       { key: "version", label: L("colVersion"), className: "col-version", render: (s) => `v${escapeHtml(s.versionNo ?? "1")}` },
       { key: "courses", label: L("colCourses"), className: "col-courses", sortValue: (s) => Number(s.courseCount ?? 0), render: (s) => {
         const courseCount = Number(s.courseCount ?? 0);
@@ -336,16 +322,17 @@ function getListPage() {
     ],
     rowId: (s) => s.id,
     actions: (s) => {
-      const status = sectionStatus(s);
+      const lifecycle = lifecycleOf(s);
       const id = escapeHtml(s.id);
       // #787 slice 5: skjul åpne/livssyklus for innhold brukeren ikke eier (og ikke er admin for) — samme
       // regel som eierskaps-vakta, så vi ikke viser knapper som gir 403.
       const canManage = s.canManage !== false;
-      const publishToggle = status === "archived" ? ""
-        : status === "published"
+      const isLive = lifecycle === "published" || lifecycle === "published_with_draft";
+      const publishToggle = lifecycle === "archived" ? ""
+        : isLive
           ? `<button class="row-action-btn" data-action="unpublish" data-id="${id}">${escapeHtml(L("unpublish"))}</button>`
           : `<button class="row-action-btn" data-action="publish" data-id="${id}">${escapeHtml(L("publish"))}</button>`;
-      const archiveToggle = status === "archived"
+      const archiveToggle = lifecycle === "archived"
         ? `<button class="row-action-btn" data-action="restore" data-id="${id}">${escapeHtml(L("restore"))}</button>`
         : `<button class="row-action-btn" data-action="archive" data-id="${id}">${escapeHtml(L("archive"))}</button>`;
       // #1046 (produkteier 12.09): samme logikk som Moduler — Dupliser og Eksporter er lese-/kopihandlinger

@@ -23,6 +23,7 @@
 
 import { escapeHtml } from "./html-escape.js";
 import { rowActionsHtml, installRowMoreMenus } from "./row-actions.js";
+import { matchesLifecycleFilter } from "./content-status-badge.js";
 
 /**
  * @typedef {object} ListPageColumn
@@ -44,7 +45,7 @@ import { rowActionsHtml, installRowMoreMenus } from "./row-actions.js";
  *   empty: string, emptyFiltered?: string, more?: string, sortHint?: string, loadError: string }} texts
  * @property {Array<{ id: string, label: string, kind?: "primary"|"secondary", href?: string, title?: string, hidden?: boolean }>} headerActions
  * @property {string} [headerExtraHtml]   f.eks. skjulte filfelt
- * @property {{ options: Array<[string, string]>, initial: string, matches: (item: any, key: string) => boolean }} filters
+ * @property {{ options: Array<[string, string]>, initial: string, matches?: (item: any, key: string) => boolean }} filters
  * @property {{ coursesOf: (item: any) => Array<{ id: string, title: string }> }} [courseFilter]
  * @property {{ matches: (item: any, q: string) => boolean }} [search]
  * @property {{ key: string, dir: "asc"|"desc", locale?: () => string }} [sort]
@@ -91,7 +92,10 @@ export function createListPage(config) {
       if (state.course === "__none__") result = result.filter((item) => config.courseFilter.coursesOf(item).length === 0);
       else if (state.course !== "__all__") result = result.filter((item) => config.courseFilter.coursesOf(item).some((c) => c && c.id === state.course));
     }
-    result = result.filter((item) => config.filters.matches(item, state.filter));
+    // #1046 steg B: filterknappene leser tjenerens `lifecycle` — én regel for alle listene. En side
+    // oppgir bare `matches` når den har et filter som ikke er en tilstand.
+    const matches = config.filters.matches ?? matchesLifecycleFilter;
+    result = result.filter((item) => matches(item, state.filter));
     const col = state.sortKey ? columns.find((c) => c.key === state.sortKey && c.sortValue) : null;
     if (col) {
       const dir = state.sortDir === "desc" ? -1 : 1;

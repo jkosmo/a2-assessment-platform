@@ -7,6 +7,7 @@ import { describeApiError } from "/static/api-error.js";
 import { supportedLocales, localeLabels, translations as adminContentTranslations } from "/static/i18n/admin-content-translations.js";
 import { renderOwnerPanel } from "/static/owner-panel.js";
 import { createListPage } from "/static/list-page.js";
+import { lifecycleOf } from "/static/content-status-badge.js";
 
 // #645/CL-3: admin UI for classes (cohorts) — list, create, manage members, assign courses.
 
@@ -112,16 +113,12 @@ function getListPage() {
     ],
     headerExtraHtml: isAdministrator ? `<input type="file" id="importUsersFile" accept="application/json,.json" style="display:none">` : "",
     // #1046 B2: samme rekkefølge som Moduler/Kurs/Seksjoner — «Alle» først, «Aktive» forhåndsvalgt.
-    filters: {
-      options: [["all", "Alle"], ["active", "Aktive"], ["archived", "Arkiverte"]],
-      initial: "active",
-      matches: (c, key) => key === "all" || (key === "archived" ? Boolean(c.archivedAt) : !c.archivedAt),
-    },
+    filters: { options: [["all", "Alle"], ["active", "Aktive"], ["archived", "Arkiverte"]], initial: "active" },
     search: { matches: (c, q) => String(c.name ?? "").toLowerCase().includes(q) || String(c.id).toLowerCase().includes(q) },
     sort: { key: "name", dir: "asc", locale: () => currentLocale },
     columns: [
       { key: "name", label: "Navn", className: "col-name", sortValue: (c) => c.name ?? "", render: (c) =>
-        `${escapeHtml(c.name)}${c.isSystem ? `<span class="system-badge">System</span>` : ""}${c.archivedAt ? ` <span class="status-badge status-badge--archived">Arkivert</span>` : ""}` },
+        `${escapeHtml(c.name)}${c.isSystem ? `<span class="system-badge">System</span>` : ""}${lifecycleOf(c) === "archived" ? ` <span class="status-badge status-badge--archived">Arkivert</span>` : ""}` },
       { key: "type", label: "Type", render: (c) => escapeHtml(classTypeLabel(c)) },
       { key: "members", label: "Medlemmer", sortValue: (c) => c._count?.members ?? 0, render: (c) => String(c._count?.members ?? 0) },
       { key: "courses", label: "Tildelte kurs", sortValue: (c) => c._count?.courseAssignments ?? 0, render: (c) => String(c._count?.courseAssignments ?? 0) },
@@ -132,7 +129,7 @@ function getListPage() {
       // er ueide → bare admin forvalter dem, som før.
       const canManage = c.canManage !== false;
       if (!canManage) return [`<span class="row-readonly-note" title="Bare en eier eller en administrator kan åpne denne klassen.">Kun for eier</span>`];
-      const archived = Boolean(c.archivedAt);
+      const archived = lifecycleOf(c) === "archived";
       const id = escapeHtml(c.id);
       const name = escapeHtml(c.name);
       // #1046 D3: Åpne · Arkiver, og på arkiverte rader Gjenopprett · Slett.
