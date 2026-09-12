@@ -88,8 +88,7 @@ test("vurderingskvalitet: owner filter, load, signals, histogram, preview, publi
   await expect(page.locator("#qOwnPill")).toBeVisible();
   await expect(page.locator("#qVersionSelect option")).toHaveCount(3); // "all" + v4 + v3
 
-  // Load quality → signals cards, histogram bars, threshold + preview.
-  await page.locator("#qLoad").click();
+  // Valget henter kvaliteten selv (#1046 B5) → signalkort, histogram, terskel + forhåndsvisning.
   await expect(page.locator("#qSignals .q-sig")).toHaveCount(3);
   await expect(page.locator("#qHistogram .bar")).toHaveCount(20);
   await expect(page.locator("#qPreview")).toContainText("60");
@@ -147,7 +146,6 @@ test("vurderingskvalitet: MCQ-only module shows the MCQ rule instead of the tota
 
   await page.goto("/admin-content/calibration");
   await page.locator("#qModuleSelect").selectOption("mod-own");
-  await page.locator("#qLoad").click();
 
   // Distribution/total hidden; MCQ rule shown with the explanatory note.
   await expect(page.locator("#qModeNote")).toBeVisible();

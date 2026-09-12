@@ -255,7 +255,6 @@ test("participant: course load sends x-user-* identity headers in mock mode", as
   );
 
   await page.goto("/participant");
-  await page.locator("#loadCoursesBtn").click();
 
   await expect.poll(() => coursesUserId).toBe("participant-1");
   expect(coursesRoles).toContain("PARTICIPANT");

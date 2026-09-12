@@ -74,12 +74,13 @@ const RENDER_BASELINE = {
   // en `innerHTML` og en `textContent` som viste `"<status>: <hele JSON-kroppen>"` rett i
   // grensesnittet.
   //
-  // ⚠️ De 13 som står igjen fordeler seg på 11 `log()`-kall og 2 linjer inne i filas EGNE
+  // ⚠️ De 12 som står igjen fordeler seg på 10 `log()`-kall og 2 linjer inne i filas EGNE
   // oversettere (`humanizeApiError`, `participantErrorToast`) — som må røre `message`, det er
   // jobben deres. At de gjør det, er ikke lenger en påstand i denne kommentaren: den er målt av
   // «participant.js: de rå linjene går gjennom filas egne oversettere» lenger ned. Uten den kunne
   // `humanizeApiError` falt ut av `log()` uten at tallet her rørte seg.
-  "participant.js": 13,
+  // (13 → 12 i #1046 B5: «Oppdater kurslista»-knappen og dens `log()` er borte.)
+  "participant.js": 12,
   // #983: de tre søsterflatene brukte serverens engelske `message` rått, med hardkodede engelske
   // reserver som «Error». `profile.js` arvet i tillegg ikke feilkodetabellen i det hele tatt.
   // #1046: begge nede fra 2 til NULL. Reserven på profilsiden var dessuten hardkodet engelsk
@@ -212,10 +213,10 @@ function functionBody(src, name) {
   return null;
 }
 
-// ⚠️ BASELINEN PÅSTO NOE DEN IKKE MÅLTE. Kommentaren over `"participant.js": 13` sier at de tretten
+// ⚠️ BASELINEN PÅSTO NOE DEN IKKE MÅLTE. Kommentaren over `"participant.js": 12` sier at de tolv
 // som står igjen «ER log()-kall, og log() oversetter selv». Det er RIKTIG i dag — men det sto som
-// PROSA. Fjernet noen `humanizeApiError` fra `log()`, ville tallet stått urørt på 13 mens hvert
-// eneste av de elleve kallstedene begynte å vise `"429: {…hele JSON-kroppen…}"` igjen.
+// PROSA. Fjernet noen `humanizeApiError` fra `log()`, ville tallet stått urørt på 12 mens hvert
+// eneste av de ti kallstedene begynte å vise `"429: {…hele JSON-kroppen…}"` igjen.
 //
 // En ratsj som teller linjer kan ikke se hva linjene GJØR. Denne vakta måler påstanden i stedet.
 // (#983/#1046, kontrollert på nytt i #999-runden.)

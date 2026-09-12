@@ -33,7 +33,7 @@ const EDITOR_LOCALES = SECTION_EDITOR_LOCALES;
 // threading dozens of keys through the shared translations file).
 const LABELS = {
   "en-GB": {
-    heading: "Sections", newSection: "New section", colTitle: "Name", colVersion: "Version",
+    heading: "Sections", lead: "Reading material you can use in several courses.", newSection: "New section", colTitle: "Name", colVersion: "Version",
     colStatus: "Status", statusDraft: "Draft", statusPublished: "Published", statusArchived: "Archived",
     publish: "Publish", unpublish: "Unpublish", archive: "Archive", restore: "Restore",
     showArchived: "Show archived", hideArchived: "Hide archived",
@@ -61,7 +61,7 @@ const LABELS = {
     fieldTitle: "the title", fieldBodyMarkdown: "the content",
   },
   nb: {
-    heading: "Seksjoner", newSection: "Ny seksjon", colTitle: "Navn", colVersion: "Versjon",
+    heading: "Seksjoner", lead: "Lesestoff du kan bruke i flere kurs.", newSection: "Ny seksjon", colTitle: "Navn", colVersion: "Versjon",
     colStatus: "Status", statusDraft: "Utkast", statusPublished: "Publisert", statusArchived: "Arkivert",
     publish: "Publiser", unpublish: "Avpubliser", archive: "Arkiver", restore: "Gjenopprett",
     showArchived: "Vis arkiverte", hideArchived: "Skjul arkiverte",
@@ -89,7 +89,7 @@ const LABELS = {
     fieldTitle: "tittelen", fieldBodyMarkdown: "innholdet",
   },
   nn: {
-    heading: "Seksjonar", newSection: "Ny seksjon", colTitle: "Namn", colVersion: "Versjon",
+    heading: "Seksjonar", lead: "Lesestoff du kan bruke i fleire kurs.", newSection: "Ny seksjon", colTitle: "Namn", colVersion: "Versjon",
     colStatus: "Status", statusDraft: "Utkast", statusPublished: "Publisert", statusArchived: "Arkivert",
     publish: "Publiser", unpublish: "Avpubliser", archive: "Arkiver", restore: "Gjenopprett",
     showArchived: "Vis arkiverte", hideArchived: "Skjul arkiverte",
@@ -398,7 +398,10 @@ async function renderListView() {
 
   pageContent.innerHTML = `
     <div class="page-header">
-      <h1>${escapeHtml(L("heading"))}</h1>
+      <div>
+        <h1>${escapeHtml(L("heading"))}</h1>
+        <p class="page-lead">${escapeHtml(L("lead"))}</p>
+      </div>
       <div class="row" style="gap:0.5rem">
         <button type="button" id="importSectionBtn" class="btn btn-secondary" style="width:auto">${escapeHtml(L("importSection"))}</button>
         <input type="file" id="importSectionFile" accept="application/json,.json" hidden>

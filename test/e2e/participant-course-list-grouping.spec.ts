@@ -60,9 +60,7 @@ function course(id: string, title: string, status: string) {
 
 async function loadList(page: Page) {
   await page.goto("/participant");
-  const loadBtn = page.locator("#loadCoursesBtn");
-  await expect(loadBtn).toBeEnabled();
-  await loadBtn.click();
+  await expect(page.locator(".course-accordion-item").first()).toBeVisible();
 }
 
 test("#936: fullførte kurs havner nederst, bak en navngitt grense — og rekkefølgen ellers er urørt", async ({ page }) => {

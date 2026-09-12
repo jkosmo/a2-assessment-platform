@@ -38,6 +38,8 @@
         flex-wrap: wrap;
       }
       .library-header h1 { margin: 0; font-size: 22px; }
+      /* #1046 A1: én forklaringslinje under tittelen, som på deltaker- og sensorsidene. */
+      .page-lead { margin: 4px 0 0; font-size: 13px; color: var(--color-meta); }
 
       /* ── Toolbar ─────────────────────────────────────────────────────────── */
       .library-toolbar {
@@ -61,6 +63,8 @@
       .library-search:focus { outline: 2px solid var(--color-blue); outline-offset: 1px; border-color: transparent; }
 
       .library-filters { display: flex; flex-wrap: wrap; gap: 6px; }
+      /* #1046 B4: filterknapper og kursfilter på samme linje, som på Seksjoner. */
+      .library-filters-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
 
       /* #745: kurs-filter (dropdown) ved siden av filter-pillene. */
       .library-course-filter { display: flex; align-items: center; gap: 8px; }
@@ -275,7 +279,10 @@
       </nav>
 
       <div class="library-header">
-        <h1 id="libraryTitle">Moduler</h1>
+        <div>
+          <h1 id="libraryTitle">Moduler</h1>
+          <p class="page-lead">Vurderingsmoduler du kan redigere, publisere og bruke i kurs.</p>
+        </div>
         <div style="display:flex;gap:.5rem;align-items:center">
           <!-- #1046 A3: fylt hovedknapp ytterst til høyre, sekundære med ramme til venstre — som Seksjoner og Klasser. -->
           <button type="button" id="importModulePackageBtn" class="btn btn-secondary">Importer modul</button>
@@ -292,19 +299,22 @@
           placeholder="Søk på modulnavn eller modul-ID…"
           aria-label="Søk i modulbiblioteket"
         />
-        <div class="library-filters" role="group" aria-label="Filtrer moduler">
-          <button class="library-filter-btn" data-filter="all">Alle</button>
-          <button class="library-filter-btn active" data-filter="active">Aktive</button>
-          <button class="library-filter-btn" data-filter="unpublished_draft">Har upublisert utkast</button>
-          <button class="library-filter-btn" data-filter="published">Publiserte</button>
-          <button class="library-filter-btn" data-filter="archived">Arkiverte</button>
-        </div>
-        <!-- #745: klientside-filter på kurs. Options bygges i JS fra modulenes `courses`. -->
-        <div class="library-course-filter">
-          <label for="libraryCourseFilter">Kurs:</label>
-          <select id="libraryCourseFilter" class="library-course-select">
-            <option value="__all__">Alle kurs</option>
-          </select>
+        <div class="library-filters-row">
+          <!-- #1046 B2: samme rekkefølge som Kurs og Seksjoner; modulens egen «Har upublisert utkast» sist. -->
+          <div class="library-filters" role="group" aria-label="Filtrer moduler">
+            <button class="library-filter-btn" data-filter="all">Alle</button>
+            <button class="library-filter-btn active" data-filter="active">Aktive</button>
+            <button class="library-filter-btn" data-filter="published">Publiserte</button>
+            <button class="library-filter-btn" data-filter="archived">Arkiverte</button>
+            <button class="library-filter-btn" data-filter="unpublished_draft">Har upublisert utkast</button>
+          </div>
+          <!-- #745: klientside-filter på kurs. Options bygges i JS fra modulenes `courses`. -->
+          <div class="library-course-filter">
+            <label for="libraryCourseFilter">Kurs:</label>
+            <select id="libraryCourseFilter" class="library-course-select">
+              <option value="__all__">Alle kurs</option>
+            </select>
+          </div>
         </div>
       </div>
 

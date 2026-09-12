@@ -1,6 +1,5 @@
 import { renderWorkspaceNavigationWithProfile } from "/static/workspace-nav.js";
 import { applyIdentityDefaults as delApplyIdentityDefaults } from "/static/identity-defaults.js";
-import { runWithBusyButton } from "/static/busy-button.js";
 import { showToast } from "/static/toast.js";
 import { lagLokalisertRessurs } from "/static/localized-resource.js";
 import { describeApiError } from "/static/api-error.js";
@@ -33,7 +32,6 @@ const filterModuleId = document.getElementById("filterModuleId");
 const filterCourseId = document.getElementById("filterCourseId");
 const filterDateFrom = document.getElementById("filterDateFrom");
 const filterDateTo = document.getElementById("filterDateTo");
-const loadResultsButton = document.getElementById("loadResults");
 const resultsMeta = document.getElementById("resultsMeta");
 const passRateGrid = document.getElementById("passRateGrid");
 const completionBody = document.getElementById("completionBody");
@@ -282,15 +280,6 @@ const rapporter = lagLokalisertRessurs({
   hentSpråk: () => currentLocale,
   hent: () => {
     const params = buildFilterParams();
-    // ⚠️ #1046: her sto `showLoading(loadResultsButton)`. Den erstatter elementets innhold med
-    // skjelettlinjer, og `hideLoading` rydder bare klasser — den skriver ikke innholdet tilbake.
-    // Teksten på knappen forsvant derfor PERMANENT ved første klikk, helt til et språkbytte kalte
-    // `applyTranslations()`.
-    //
-    // Feilen har ligget der siden mars og ble funnet av produkteier, ikke av en test.
-    //
-    // `showLoading` er for BEHOLDERE som skal fylles. En knapp har allerede innholdet sitt og skal
-    // bare markeres som opptatt — det er `runWithBusyButton` sin jobb, og den brukes fra lytteren.
     return Promise.all([
       apiFetch(`/api/reports/pass-rates?${params}`, headers),
       apiFetch(`/api/reports/completion?${params}`, headers),
@@ -473,12 +462,17 @@ async function loadParticipantConsoleConfig() {
   renderWorkspaceNavigation();
   await initConsentGuard(headers, currentLocale);
   fetchQueueCounts(headers).then((counts) => applyNavReviewBadge(workspaceNav, counts));
+
+  // #1046 (B5): rapportene henter seg selv, som alle andre lister. «Last resultater»-knappen var den
+  // eneste lista som krevde et klikk. Første henting skjer HER, etter at identitetsskjemaet er fylt
+  // (#541) — en tidligere henting ville sendt tom x-user-id og fått 403.
+  await loadResults();
 }
 
 // Event listeners
 localeSelect.addEventListener("change", () => {
   setLocale(localeSelect.value);
-  // Bare når noe faktisk ER hentet — før første «Last resultater» finnes det ingenting å oppdatere.
+  // Bare når noe faktisk ER hentet — før første henting finnes det ingenting å oppdatere.
   rapporter.oppdaterVedSpråkbytte();
 });
 
@@ -494,7 +488,11 @@ rolesInput.addEventListener("input", () => {
   renderWorkspaceNavigation();
 });
 
-loadResultsButton.addEventListener("click", () => runWithBusyButton(loadResultsButton, () => loadResults()));
+// Filtrene virker med en gang (#1046 B5). `change` og ikke `input`: ID-feltene er fritekst, og en
+// henting per tastetrykk ville vært tre kall per bokstav.
+for (const felt of [filterModuleId, filterCourseId, filterDateFrom, filterDateTo]) {
+  felt?.addEventListener("change", () => loadResults());
+}
 exportCompletionButton.addEventListener("click", () => exportCsv("completion"));
 exportPassRatesButton.addEventListener("click", () => exportCsv("pass-rates"));
 // v1.2.24 (#358): scoped learner-level eksporter — bruker samme exportCsv-helper.

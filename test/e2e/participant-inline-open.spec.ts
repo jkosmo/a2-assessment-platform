@@ -84,8 +84,6 @@ test("participant: section and module both open inline in-place; only one open a
   );
 
   await page.goto("/participant");
-  await expect(page.locator("#loadCoursesBtn")).toBeEnabled();
-  await page.locator("#loadCoursesBtn").click();
   await page.locator(".course-accordion-header").click();
 
   const sectionItem = page.locator('.course-item[data-type="SECTION"]');

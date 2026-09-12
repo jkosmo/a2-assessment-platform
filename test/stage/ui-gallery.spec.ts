@@ -22,7 +22,7 @@ const SIDER: Array<{ fil: string; navn: string; rute: string; vent?: string; han
   { fil: "02-fullforte", navn: "Deltaker: Fullførte", rute: "/participant/completed", vent: "#courseCertList" },
   { fil: "03-profil", navn: "Deltaker: Profil", rute: "/profile", vent: "#coursesBody" },
   { fil: "04-sensor", navn: "Sensor: køer", rute: "/review", vent: "#manualReviewQueueBody" },
-  { fil: "05-rapporter", navn: "Rapporter", rute: "/results", vent: "#completionBody", handling: async (page) => { await page.locator("#loadResults").click().catch(() => undefined); } },
+  { fil: "05-rapporter", navn: "Rapporter", rute: "/results", vent: "#completionBody" },
   { fil: "06-kullstatus", navn: "Kullstatus", rute: "/deltakere/status", vent: "#courseSelect", handling: async (page) => { await page.locator("#courseSelect").selectOption({ index: 1 }).catch(() => undefined); } },
   { fil: "07-admin-plattform", navn: "Admin: plattform", rute: "/admin-platform", vent: "#failedAssessmentsBody" },
   // /admin-content ER biblioteket (modulvelgeren); samtalen ligger under /module/:id/conversation.

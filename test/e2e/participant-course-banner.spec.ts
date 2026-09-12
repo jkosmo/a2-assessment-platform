@@ -85,7 +85,6 @@ test("participant: a completed course shows the certificate banner with a link t
   );
 
   await page.goto("/participant");
-  await page.locator("#loadCoursesBtn").click();
 
   // ⚠️ #939 flyttet dette: den egne `.course-certificate-banner`-boksen i trekkspill-kroppen er
   // erstattet av `.course-certificate-link` PÅ selve raden, fordi et fullført kurs nå er én linje.
@@ -127,7 +126,6 @@ test("participant: a course with no certificate shows no banner", async ({ page 
   );
 
   await page.goto("/participant");
-  await page.locator("#loadCoursesBtn").click();
 
   // The course renders, but with no completion there must be no certificate banner.
   await expect(page.locator(".course-accordion-item")).toHaveCount(1);

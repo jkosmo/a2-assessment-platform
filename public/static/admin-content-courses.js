@@ -638,7 +638,10 @@ async function renderListView() {
   if (allCourses.length === 0) {
     pageContent.innerHTML = `
       <div class="page-header">
+        <div>
         <h1>Kurs</h1>
+        <p class="page-lead">Kurs samler moduler og seksjoner i den rekkefølgen deltakerne skal følge.</p>
+      </div>
         <div class="page-header-actions" style="display:flex;gap:.5rem;align-items:center">
           <button type="button" id="importCoursePackageBtn" class="btn btn-secondary">Importer kurs</button>
           <input id="importCoursePackageFile" type="file" accept="application/json,.json" hidden />
@@ -713,7 +716,10 @@ async function renderListView() {
 
   pageContent.innerHTML = `
     <div class="page-header">
-      <h1>Kurs</h1>
+      <div>
+        <h1>Kurs</h1>
+        <p class="page-lead">Kurs samler moduler og seksjoner i den rekkefølgen deltakerne skal følge.</p>
+      </div>
       <!-- #1046 A3: fylt hovedknapp ytterst til høyre, sekundær med ramme til venstre. -->
       <div class="page-header-actions" style="display:flex;gap:.5rem;align-items:center">
         <button type="button" id="importCoursePackageBtn" class="btn btn-secondary">Importer kurs</button>

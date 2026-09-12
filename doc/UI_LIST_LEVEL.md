@@ -151,3 +151,25 @@ Det som ikke trenger produktvalg og kan gjøres i én omgang, side for side, med
 5. **Nivå to:** E4.
 
 Så B5/B6 og A1. D3 og D5 venter på avgjørelsen om hvilke handlinger hver type skal ha.
+
+## Status 12.09.2026
+
+| Punkt | Status | Merknad |
+|---|---|---|
+| A1 | Gjort | Forklaringslinje under tittelen på Moduler, Kurs, Seksjoner og Klasser. |
+| A2, A4, C4, D1 | Gjort | Ordene er like på alle fire forfattersidene. |
+| A3, A5 | Gjort | Hovedknapp til høyre; «Rydd upubliserte» nederst på Moduler. |
+| B1 | Ikke gjort | Søkefelt på Kurs og Seksjoner venter til listene faktisk er lange. |
+| B2 | Gjort | Klasser og Moduler har samme rekkefølge; Moduler har «Har upublisert utkast» sist. |
+| B3 | Ikke gjort | Manuell behandlings flervalgsknapper er en annen kontroll; står som den er. |
+| B4 | Gjort på Moduler | Kursfilteret står på samme linje som filterknappene, som på Seksjoner. Anbefalingen om å legge et kursfilter på Kurs-sida var feil — et kursfilter på kurslista gir ingen mening. |
+| B5 | Gjort | «Last resultater» (Rapporter), «Vis kvalitet» (Vurderingskvalitet) og «Oppdater kurslista» (Mine kurs) er borte; sidene henter selv, og filtrene virker ved endring. |
+| B6 | Gjort | Vurderingskvalitet sier «Velg en modul for å se kvaliteten.» til en modul er valgt. |
+| C1, C2, C6 | Gjort | |
+| C3 | Ikke gjort | Sortering på Kurs/Seksjoner venter, som B1. |
+| C5 | Gjort | Seksjoner og Plattform bruker den felles datohjelperen. |
+| C7, D2, D4 | Gjort | |
+| C8 | Ikke gjort | Versjonskolonnen på Seksjoner står; «Nyere utkast»-merket hører til neste runde. |
+| D3, D5, D6 | Venter på avgjørelse | Se over. |
+| E2 | Gjort | Ingen varsler ved lasting på Manuell behandling. |
+| E4 | Gjort | |
