@@ -279,7 +279,7 @@ function renderLibrary() {
       <div class="library-empty">
         <p class="library-empty-title">Ingen moduler ennå</p>
         <p class="library-empty-text">Opprett den første modulen for å komme i gang.</p>
-        <button class="btn btn-primary" id="emptyCreateBtn">Opprett ny modul</button>
+        <button class="btn btn-primary" id="emptyCreateBtn">Ny modul</button>
       </div>`;
     document.getElementById("emptyCreateBtn")?.addEventListener("click", openCreateDialog);
     return;
@@ -316,8 +316,8 @@ function renderLibrary() {
 
     return `<tr>
       <td class="col-name">${escapeHtml(m.title ?? m.id)}</td>
-      <td class="col-level">${certBadge(m.certificationLevel)}</td>
       <td class="col-status">${statusBadge(m.status)}</td>
+      <td class="col-level">${certBadge(m.certificationLevel)}</td>
       <td class="col-courses">${courseCountCell}</td>
       <td class="col-updated">${formatDate(m.updatedAt)}</td>
       <td class="col-actions">
@@ -346,12 +346,12 @@ function renderLibrary() {
       <table class="library-table" aria-label="Modulbibliotek">
         <thead>
           <tr>
-            <th scope="col" class="sortable${titleDir !== "none" ? ` sort-${titleDir}` : ""}" data-sort="title" aria-sort="${titleDir !== "none" ? titleDir + "ending" : "none"}">Modulnavn <i class="sort-indicator" aria-hidden="true">${titleIcon}</i></th>
-            <th scope="col">Sertifiseringsnivå</th>
+            <th scope="col" class="sortable${titleDir !== "none" ? ` sort-${titleDir}` : ""}" data-sort="title" aria-sort="${titleDir !== "none" ? titleDir + "ending" : "none"}">Navn <i class="sort-indicator" aria-hidden="true">${titleIcon}</i></th>
             <th scope="col">Status</th>
+            <th scope="col">Sertifiseringsnivå</th>
             <th scope="col">Brukt i kurs</th>
             <th scope="col" class="sortable${dateDir !== "none" ? ` sort-${dateDir}` : ""}" data-sort="updatedAt" aria-sort="${dateDir !== "none" ? dateDir + "ending" : "none"}">Sist endret <i class="sort-indicator" aria-hidden="true">${dateIcon}</i></th>
-            <th scope="col">Handlinger</th>
+            <th scope="col"><span class="sr-only">Handlinger</span></th>
           </tr>
         </thead>
         <tbody id="libraryTableBody">${rows}</tbody>

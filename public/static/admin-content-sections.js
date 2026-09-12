@@ -5,6 +5,9 @@ import {
 } from "/static/i18n/admin-content-translations.js";
 import { apiFetch, buildConsoleHeaders, getConsoleConfig, hydrateContentAssetImages } from "/static/api-client.js";
 import { initConsentGuard } from "/static/consent-guard.js";
+// #1046 C5: samme datohjelper som Moduler og Kurs («28. aug. 2026»), ikke «28.8.2026».
+import { createDateFormatter } from "/static/format-display.js";
+const formatDate = createDateFormatter(() => currentLocale);
 import { resolveWorkspaceNavigationItems } from "/static/participant-console-state.js";
 import { renderWorkspaceNavigationWithProfile } from "./workspace-nav.js";
 import { describeImportError } from "/static/import-error.js";
@@ -30,7 +33,7 @@ const EDITOR_LOCALES = SECTION_EDITOR_LOCALES;
 // threading dozens of keys through the shared translations file).
 const LABELS = {
   "en-GB": {
-    heading: "Sections", newSection: "+ New section", colTitle: "Title", colVersion: "Version",
+    heading: "Sections", newSection: "New section", colTitle: "Name", colVersion: "Version",
     colStatus: "Status", statusDraft: "Draft", statusPublished: "Published", statusArchived: "Archived",
     publish: "Publish", unpublish: "Unpublish", archive: "Archive", restore: "Restore",
     showArchived: "Show archived", hideArchived: "Hide archived",
@@ -39,7 +42,7 @@ const LABELS = {
     courseFilterLabel: "Course:", courseFilterAll: "All courses", courseFilterNone: "Not in any course",
     published: "Section published.", unpublished: "Section unpublished.",
     archived: "Section archived.", restored: "Section restored.", confirmArchive: "Archive this section?",
-    colUpdated: "Last changed", edit: "Edit", del: "Delete", empty: "No sections yet.",
+    colUpdated: "Last changed", edit: "Open", del: "Delete", empty: "No sections yet.",
     readonly: "Read-only", readonlyHint: "Only an owner or an administrator can change this section.",
     back: "← Back", backToCourse: "← Back to the course", titleLabel: "Title", markdown: "Markdown", preview: "Preview",
     save: "Save new version", saved: "Section saved.", deleted: "Section deleted.",
@@ -49,7 +52,7 @@ const LABELS = {
     translatingImages: "Translating drawings…", imagesTranslated: "SVG drawings translated — verify each language visually.",
     uploadImage: "Upload image", altPrompt: "Alt text (describes the image for screen readers):", saveFirst: "Save the section first, then upload images.", imageInserted: "Image inserted.",
     // #916 — standalone section portability + the publish gate's author-facing wording.
-    exportSection: "Export", importSection: "Import section package", exported: "Section exported.",
+    exportSection: "Export", importSection: "Import section", exported: "Section exported.",
     notAnEnvelope: "This does not look like a section package. The file is missing the fields an export adds (exportFormat, exportedAt and scope), and its contents do not look like a section either. Use Export on a section to produce a valid file.",
     imported: "Section package imported as a draft. Review it and publish when it is ready.",
     replaceFromFile: "Replace from file", replaceConfirm: "Replace this section's content with the file? The current version is kept — the import becomes a new draft.", replaced: "Content replaced. The import is a draft — review it and publish when it is ready.",
@@ -58,7 +61,7 @@ const LABELS = {
     fieldTitle: "the title", fieldBodyMarkdown: "the content",
   },
   nb: {
-    heading: "Seksjoner", newSection: "+ Ny seksjon", colTitle: "Tittel", colVersion: "Versjon",
+    heading: "Seksjoner", newSection: "Ny seksjon", colTitle: "Navn", colVersion: "Versjon",
     colStatus: "Status", statusDraft: "Utkast", statusPublished: "Publisert", statusArchived: "Arkivert",
     publish: "Publiser", unpublish: "Avpubliser", archive: "Arkiver", restore: "Gjenopprett",
     showArchived: "Vis arkiverte", hideArchived: "Skjul arkiverte",
@@ -67,7 +70,7 @@ const LABELS = {
     courseFilterLabel: "Kurs:", courseFilterAll: "Alle kurs", courseFilterNone: "Ikke i noe kurs",
     published: "Seksjon publisert.", unpublished: "Seksjon avpublisert.",
     archived: "Seksjon arkivert.", restored: "Seksjon gjenopprettet.", confirmArchive: "Arkivere denne seksjonen?",
-    colUpdated: "Sist endret", edit: "Rediger", del: "Slett", empty: "Ingen seksjoner ennå.",
+    colUpdated: "Sist endret", edit: "Åpne", del: "Slett", empty: "Ingen seksjoner ennå.",
     readonly: "Skrivebeskyttet", readonlyHint: "Bare en eier eller administrator kan endre denne seksjonen.",
     back: "← Tilbake", backToCourse: "← Tilbake til kurset", titleLabel: "Tittel", markdown: "Markdown", preview: "Forhåndsvisning",
     save: "Lagre ny versjon", saved: "Seksjon lagret.", deleted: "Seksjon slettet.",
@@ -77,7 +80,7 @@ const LABELS = {
     translatingImages: "Oversetter tegninger…", imagesTranslated: "SVG-tegninger oversatt — verifiser hvert språk visuelt.",
     uploadImage: "Last opp bilde", altPrompt: "Alt-tekst (beskriver bildet for skjermlesere):", saveFirst: "Lagre seksjonen først, så kan du laste opp bilder.", imageInserted: "Bilde satt inn.",
     // #916 — frittstående seksjons-portabilitet + publiseringsgatens forfattertekst.
-    exportSection: "Eksporter", importSection: "Importer seksjons-pakke", exported: "Seksjon eksportert.",
+    exportSection: "Eksporter", importSection: "Importer seksjon", exported: "Seksjon eksportert.",
     notAnEnvelope: "Dette ser ikke ut som en seksjonspakke. Fila mangler feltene en eksport legger på (exportFormat, exportedAt og scope), og innholdet ligner heller ikke på en seksjon. Bruk «Eksporter» på en seksjon for å lage en gyldig fil.",
     imported: "Seksjons-pakken er importert som utkast. Gå gjennom den og publiser når den er klar.",
     replaceFromFile: "Erstatt fra fil", replaceConfirm: "Erstatte innholdet i denne seksjonen med fila? Nåværende versjon beholdes — importen blir et nytt utkast.", replaced: "Innholdet er erstattet. Importen er et utkast — gå gjennom den og publiser når den er klar.",
@@ -86,7 +89,7 @@ const LABELS = {
     fieldTitle: "tittelen", fieldBodyMarkdown: "innholdet",
   },
   nn: {
-    heading: "Seksjonar", newSection: "+ Ny seksjon", colTitle: "Tittel", colVersion: "Versjon",
+    heading: "Seksjonar", newSection: "Ny seksjon", colTitle: "Namn", colVersion: "Versjon",
     colStatus: "Status", statusDraft: "Utkast", statusPublished: "Publisert", statusArchived: "Arkivert",
     publish: "Publiser", unpublish: "Avpubliser", archive: "Arkiver", restore: "Gjenopprett",
     showArchived: "Vis arkiverte", hideArchived: "Skjul arkiverte",
@@ -95,7 +98,7 @@ const LABELS = {
     courseFilterLabel: "Kurs:", courseFilterAll: "Alle kurs", courseFilterNone: "Ikkje i noko kurs",
     published: "Seksjon publisert.", unpublished: "Seksjon avpublisert.",
     archived: "Seksjon arkivert.", restored: "Seksjon gjenoppretta.", confirmArchive: "Arkivere denne seksjonen?",
-    colUpdated: "Sist endra", edit: "Rediger", del: "Slett", empty: "Ingen seksjonar enno.",
+    colUpdated: "Sist endra", edit: "Opne", del: "Slett", empty: "Ingen seksjonar enno.",
     readonly: "Skrivebeskytta", readonlyHint: "Berre ein eigar eller administrator kan endre denne seksjonen.",
     back: "← Tilbake", backToCourse: "← Tilbake til kurset", titleLabel: "Tittel", markdown: "Markdown", preview: "Førehandsvising",
     save: "Lagre ny versjon", saved: "Seksjon lagra.", deleted: "Seksjon sletta.",
@@ -105,7 +108,7 @@ const LABELS = {
     translatingImages: "Omset teikningar…", imagesTranslated: "SVG-teikningar omsette — kontroller kvart språk visuelt.",
     uploadImage: "Last opp bilete", altPrompt: "Alt-tekst (skildrar biletet for skjermlesarar):", saveFirst: "Lagre seksjonen først, så kan du laste opp bilete.", imageInserted: "Bilete sett inn.",
     // #916 — frittståande seksjons-portabilitet + publiseringsgata sin forfattartekst.
-    exportSection: "Eksporter", importSection: "Importer seksjons-pakke", exported: "Seksjon eksportert.",
+    exportSection: "Eksporter", importSection: "Importer seksjon", exported: "Seksjon eksportert.",
     notAnEnvelope: "Dette ser ikkje ut som ein seksjonspakke. Fila manglar felta ein eksport legg på (exportFormat, exportedAt og scope), og innhaldet liknar heller ikkje på ein seksjon. Bruk «Eksporter» på ein seksjon for å lage ei gyldig fil.",
     imported: "Seksjons-pakken er importert som utkast. Gå gjennom han og publiser når han er klar.",
     replaceFromFile: "Erstatt frå fil", replaceConfirm: "Erstatte innhaldet i denne seksjonen med fila? Noverande versjon blir teken vare på — importen blir eit nytt utkast.", replaced: "Innhaldet er erstatta. Importen er eit utkast — gå gjennom han og publiser når han er klar.",
@@ -380,7 +383,7 @@ async function renderListView() {
       <td>${statusBadge(status)}</td>
       <td>v${escapeHtml(s.versionNo ?? "1")}</td>
       <td>${courseCell}</td>
-      <td style="white-space:nowrap">${escapeHtml(new Date(s.updatedAt).toLocaleDateString(currentLocale))}</td>
+      <td style="white-space:nowrap">${escapeHtml(formatDate(s.updatedAt))}</td>
       <td class="col-actions">
         <div class="row-actions">
           ${canManage
@@ -397,7 +400,7 @@ async function renderListView() {
     <div class="page-header">
       <h1>${escapeHtml(L("heading"))}</h1>
       <div class="row" style="gap:0.5rem">
-        <button type="button" id="importSectionBtn" class="btn" style="width:auto">${escapeHtml(L("importSection"))}</button>
+        <button type="button" id="importSectionBtn" class="btn btn-secondary" style="width:auto">${escapeHtml(L("importSection"))}</button>
         <input type="file" id="importSectionFile" accept="application/json,.json" hidden>
         <button type="button" id="newSectionBtn" class="btn btn-primary" style="width:auto">${escapeHtml(L("newSection"))}</button>
       </div>

@@ -277,11 +277,10 @@
       <div class="library-header">
         <h1 id="libraryTitle">Moduler</h1>
         <div style="display:flex;gap:.5rem;align-items:center">
-          <button id="createModuleBtn" class="btn btn-primary">Opprett ny modul</button>
-          <button type="button" id="importModulePackageBtn" class="btn btn-secondary">Importer modul-pakke (.json)</button>
+          <!-- #1046 A3: fylt hovedknapp ytterst til høyre, sekundære med ramme til venstre — som Seksjoner og Klasser. -->
+          <button type="button" id="importModulePackageBtn" class="btn btn-secondary">Importer modul</button>
           <input id="importModulePackageFile" type="file" accept="application/json,.json" hidden />
-          <!-- v1.2.11: Rydd stage-knapp, kun synlig for ADMINISTRATOR. JS toggler `hidden`. -->
-          <button type="button" id="purgeUnpublishedBtn" class="btn btn-secondary" hidden style="color:#a32424;border-color:#fdb;background:#fff8f8">Rydd upubliserte</button>
+          <button id="createModuleBtn" class="btn btn-primary">Ny modul</button>
         </div>
       </div>
 
@@ -313,11 +312,18 @@
         <div class="library-loading">Laster moduler…</div>
       </div>
 
+      <!-- #1046 A5: «Rydd upubliserte» er destruktiv og gjelder mange moduler på én gang; den hører
+           ikke hjemme blant hovedknappene øverst. Står nederst, etter lista. Kun ADMINISTRATOR; JS
+           toggler `hidden` (v1.2.11). -->
+      <div class="library-footer-actions" style="display:flex;justify-content:flex-end;margin-top:var(--space-3)">
+        <button type="button" id="purgeUnpublishedBtn" class="btn btn-secondary" hidden style="width:auto;color:#a32424;border-color:#fdb;background:#fff8f8">Rydd upubliserte</button>
+      </div>
+
     </main>
 
     <!-- Create module dialog -->
     <dialog id="createModuleDialog" aria-labelledby="createDialogTitle">
-      <h2 class="dialog-title" id="createDialogTitle">Opprett ny modul</h2>
+      <h2 class="dialog-title" id="createDialogTitle">Ny modul</h2>
       <form id="createModuleForm" method="dialog" novalidate>
         <div class="dialog-field">
           <label for="newModuleTitle">Modulnavn <span aria-hidden="true">*</span></label>

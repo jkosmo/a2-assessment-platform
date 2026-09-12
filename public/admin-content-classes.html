@@ -14,7 +14,9 @@
       .content-area-nav-link.active { color: var(--color-link-active); border-bottom-color: var(--color-blue); }
       .page-header { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); margin-bottom: var(--space-3); flex-wrap: wrap; }
       .page-header h1 { margin: 0; font-size: 22px; }
-      .classes-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+      /* #1046 C1: samme kort rundt lista som Kurs og Moduler. Lista lå rett på sidebakgrunnen. */
+      .classes-table-wrap { overflow-x: auto; border: 1px solid var(--color-table-wrap-border); border-radius: var(--radius-card); background: var(--color-surface); }
+      .classes-table { width: 100%; border-collapse: collapse; font-size: 14px; background: var(--color-surface); }
       .classes-table th, .classes-table td { text-align: left; padding: 10px var(--space-2); border-bottom: 1px solid var(--color-border-soft); }
       .classes-table th { font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--color-meta); }
       .classes-table .col-actions { white-space: nowrap; }

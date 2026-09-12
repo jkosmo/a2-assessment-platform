@@ -96,7 +96,8 @@ function filteredClasses() {
 }
 
 function classFilterBar() {
-  const pills = [["active", "Aktive"], ["archived", "Arkiverte"], ["all", "Alle"]];
+  // #1046 B2: samme rekkefølge som Moduler/Kurs/Seksjoner — «Alle» først, «Aktive» forhåndsvalgt.
+  const pills = [["all", "Alle"], ["active", "Aktive"], ["archived", "Arkiverte"]];
   return `<div class="list-filters" role="group" aria-label="Filtrer klasser">${pills
     .map(([key, label]) => `<button type="button" class="list-filter-btn${classesFilter === key ? " active" : ""}" data-filter="${key}">${escapeHtml(label)}</button>`)
     .join("")}</div>`;
@@ -114,7 +115,7 @@ function renderClassesTable() {
     if (!c.isSystem) {
       action = archived
         ? `<button class="row-action-btn" data-action="restore" data-id="${escapeHtml(c.id)}" data-name="${escapeHtml(c.name)}">Gjenopprett</button>`
-        : `<button class="row-action-btn destructive" data-action="archive" data-id="${escapeHtml(c.id)}" data-name="${escapeHtml(c.name)}">Arkiver</button>`;
+        : `<button class="row-action-btn" data-action="archive" data-id="${escapeHtml(c.id)}" data-name="${escapeHtml(c.name)}">Arkiver</button>`;
     }
     return `
     <tr>
@@ -125,7 +126,7 @@ function renderClassesTable() {
       <td class="col-actions">
         <div class="row-actions">
           ${canManage
-            ? `<button class="row-action-btn" data-action="open" data-id="${escapeHtml(c.id)}">Administrer</button>${action}`
+            ? `<button class="row-action-btn" data-action="open" data-id="${escapeHtml(c.id)}">Åpne</button>${action}`
             : `<span class="row-readonly-note" title="Bare en eier eller administrator kan endre denne klassen.">Skrivebeskyttet</span>`}
         </div>
       </td>
@@ -147,13 +148,15 @@ async function renderListView() {
     return;
   }
   pageContent.innerHTML = `
-    <div class="page-header"><h1>Klasser</h1><div style="display:flex;gap:8px">${isAdministrator ? `<button id="importUsersBtn" class="btn btn-secondary" style="width:auto" title="Importer brukere fra en JSON-fil eksportert fra Entra (delta-synk)">Importer brukere fra fil</button><input type="file" id="importUsersFile" accept="application/json,.json" style="display:none"><button id="syncEntraBtn" class="btn btn-secondary" style="width:auto" title="Importer brukere fra «Alle i A-2 Norge» i Entra (krever Graph-tilgang)">Synk brukere fra Entra</button>` : ""}<button id="newClassBtn" class="btn btn-primary" style="width:auto">+ Ny klasse</button></div></div>
+    <div class="page-header"><h1>Klasser</h1><div style="display:flex;gap:8px">${isAdministrator ? `<button id="importUsersBtn" class="btn btn-secondary" style="width:auto" title="Importer brukere fra en JSON-fil eksportert fra Entra (delta-synk)">Importer brukere</button><input type="file" id="importUsersFile" accept="application/json,.json" style="display:none"><button id="syncEntraBtn" class="btn btn-secondary" style="width:auto" title="Importer brukere fra «Alle i A-2 Norge» i Entra (krever Graph-tilgang)">Synk brukere fra Entra</button>` : ""}<button id="newClassBtn" class="btn btn-primary" style="width:auto">Ny klasse</button></div></div>
     <p style="color:var(--color-meta);font-size:13px">En klasse er en gruppe deltakere du kan tildele kurs til samlet. «Alle deltakere» er en systemklasse (alle med deltakerrolle).</p>
     ${classFilterBar()}
-    <table class="classes-table">
-      <thead><tr><th>Navn</th><th>Type</th><th>Medlemmer</th><th>Tildelte kurs</th><th></th></tr></thead>
-      <tbody id="classesTableBody"></tbody>
-    </table>`;
+    <div class="classes-table-wrap">
+      <table class="classes-table">
+        <thead><tr><th>Navn</th><th>Type</th><th>Medlemmer</th><th>Tildelte kurs</th><th></th></tr></thead>
+        <tbody id="classesTableBody"></tbody>
+      </table>
+    </div>`;
   renderClassesTable();
   document.getElementById("newClassBtn").addEventListener("click", createClassFlow);
   document.getElementById("syncEntraBtn")?.addEventListener("click", syncEntraUsers);
@@ -223,7 +226,7 @@ async function importUsersFromFile(input) {
   } catch (err) {
     apiErrorToast(err);
   } finally {
-    if (btn) { btn.disabled = false; btn.textContent = "Importer brukere fra fil"; }
+    if (btn) { btn.disabled = false; btn.textContent = "Importer brukere"; }
     input.value = ""; // allow re-selecting the same file
   }
 }

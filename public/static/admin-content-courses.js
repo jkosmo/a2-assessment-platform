@@ -640,9 +640,9 @@ async function renderListView() {
       <div class="page-header">
         <h1>Kurs</h1>
         <div class="page-header-actions" style="display:flex;gap:.5rem;align-items:center">
-          <a href="/admin-content/courses/new" class="btn btn-primary">Opprett nytt kurs</a>
-          <button type="button" id="importCoursePackageBtn" class="btn btn-secondary">Importer kurs-pakke (.json)</button>
+          <button type="button" id="importCoursePackageBtn" class="btn btn-secondary">Importer kurs</button>
           <input id="importCoursePackageFile" type="file" accept="application/json,.json" hidden />
+          <a href="/admin-content/courses/new" class="btn btn-primary">Nytt kurs</a>
         </div>
       </div>
       <div class="empty-state">
@@ -700,9 +700,9 @@ async function renderListView() {
       <td class="col-updated">${escapeHtml(course.updatedLabel)}</td>
       <td class="col-actions">
         <div class="row-actions">
-          ${canManage ? `<a href="/admin-content/courses/${encodeURIComponent(course.courseId)}" class="row-action-btn">Rediger</a>` : ""}
-          ${canManage ? publishToggle : ""}
+          ${canManage ? `<a href="/admin-content/courses/${encodeURIComponent(course.courseId)}" class="row-action-btn">Åpne</a>` : ""}
           ${canManage ? `<button class="row-action-btn" data-action="export" data-course-id="${cid}" data-course-title="${ctitle}">Eksporter</button>` : ""}
+          ${canManage ? publishToggle : ""}
           ${canManage ? archiveToggleBtn : ""}
           ${canManage ? cascadeDeleteBtn : ""}
           ${canManage ? "" : `<span class="row-readonly-note" title="${escapeHtml(t("adminContent.courses.row.noAccessTitle"))}">${escapeHtml(t("adminContent.courses.row.noAccess"))}</span>`}
@@ -714,10 +714,11 @@ async function renderListView() {
   pageContent.innerHTML = `
     <div class="page-header">
       <h1>Kurs</h1>
+      <!-- #1046 A3: fylt hovedknapp ytterst til høyre, sekundær med ramme til venstre. -->
       <div class="page-header-actions" style="display:flex;gap:.5rem;align-items:center">
-        <a href="/admin-content/courses/new" class="btn btn-primary">Opprett nytt kurs</a>
-        <button type="button" id="importCoursePackageBtn" class="btn btn-secondary">Importer kurs-pakke (.json)</button>
+        <button type="button" id="importCoursePackageBtn" class="btn btn-secondary">Importer kurs</button>
         <input id="importCoursePackageFile" type="file" accept="application/json,.json" hidden />
+        <a href="/admin-content/courses/new" class="btn btn-primary">Nytt kurs</a>
       </div>
     </div>
     ${archiveToggle}
@@ -725,13 +726,13 @@ async function renderListView() {
       <table class="courses-table" aria-label="Kursliste">
         <thead>
           <tr>
-            <th scope="col">Tittel</th>
+            <th scope="col">Navn</th>
             <th scope="col">Status</th>
             <th scope="col">Sertifiseringsnivå</th>
             <th scope="col">Antall moduler</th>
             <th scope="col" title="Deltakere som er midt i kurset (påbegynt, ikke fullført)">Påbegynt</th>
             <th scope="col">Sist endret</th>
-            <th scope="col">Handlinger</th>
+            <th scope="col"><span class="sr-only">Handlinger</span></th>
           </tr>
         </thead>
         <tbody id="coursesTableBody">${rows}</tbody>
@@ -1077,7 +1078,7 @@ async function renderNewCourseConversational() {
       <a href="/admin-content/courses" class="back-link">← Tilbake til kursliste</a>
     </div>
     <div class="page-header">
-      <h1>Opprett nytt kurs</h1>
+      <h1>Nytt kurs</h1>
     </div>
     <div class="conv-flow" id="convFlow">
       <div class="conv-bot-msg">
@@ -1341,7 +1342,7 @@ async function renderDetailView(courseId) {
   const enrollmentPolicy = course?.enrollmentPolicy ?? "OPEN";
   // #495/T-QA-4: default på for nye kurs og når feltet mangler (eldre detaljer).
   const discussionsEnabled = course?.discussionsEnabled !== false;
-  const pageTitle = course ? (localizedText(course.title) || "Rediger kurs") : "Opprett nytt kurs";
+  const pageTitle = course ? (localizedText(course.title) || "Kurs") : "Nytt kurs";
   const showPublishButton = canPublishCourse({
     ...course,
     moduleCount: courseModules.filter(it => it.type === "MODULE").length,
