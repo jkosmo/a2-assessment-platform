@@ -313,7 +313,11 @@ async function buildSectionExportPayload(
   // legitimately sit as a draft — in a course, or freshly imported — and reading only the active
   // version would export an empty body and silently lose the content the file is supposed to carry.
   // `audit.publishedAt` still reports the truth, so the destination knows it was not live.
-  const sourceVersion = section.activeVersion ?? section.versions[0] ?? null;
+  // #931 pkt 2: eksporten skal lese den NYESTE versjonen, ikke den aktive først — samme regel som
+  // #896 S6 ga moduler. Live seksjon på v1, forfatter redigerer, gaten holder v2 tilbake: eksporten
+  // ga v1, og en pakke fra «det jeg nettopp skrev» inneholdt det gamle. `versions` er sortert nyeste
+  // først; den aktive er reserve for en seksjon uten versjoner i lista.
+  const sourceVersion = section.versions[0] ?? section.activeVersion ?? null;
   if (!sourceVersion) {
     throw new Error("Section has no versions to export.");
   }

@@ -100,7 +100,7 @@ const createCancel = document.getElementById("createCancel");
 const coursesPopover = document.getElementById("coursesPopover");
 const coursesPopoverList = document.getElementById("coursesPopoverList");
 const navKalibrering = document.getElementById("navKalibrering");
-// v1.2.11: Rydd uplubliserte (kun ADMINISTRATOR).
+// v1.2.11: Rydd upubliserte (kun ADMINISTRATOR).
 const purgeUnpublishedBtn = document.getElementById("purgeUnpublishedBtn");
 const purgeUnpublishedDialog = document.getElementById("purgeUnpublishedDialog");
 const purgePreviewLoading = document.getElementById("purgePreviewLoading");
@@ -476,7 +476,7 @@ async function unpublishModuleFromRow(moduleId, moduleTitle, btn) {
   const confirmed = window.confirm(
     `Avpubliser «${moduleTitle}»?\n\n` +
     `Modulen blir utilgjengelig for nye innleveringer. Eksisterende innleveringer ` +
-    `går videre uforandret. Du kan publisere en versjon på nytt fra Avansert-editoren.`
+    `går videre uforandret. Du kan publisere en versjon på nytt fra modulens Innstillinger.`
   );
   if (!confirmed) return;
   btn.disabled = true;
@@ -644,7 +644,7 @@ async function runPurge() {
     if (failed > 0) {
       showToast(`Slettet ${deleted}, ${failed} feilet. Sjekk audit-loggen.`, "error");
     } else {
-      showToast(`Slettet ${deleted} uplubliserte moduler.`);
+      showToast(`Slettet ${deleted} upubliserte moduler.`);
     }
     await loadModules();
   } catch (error) {
@@ -831,7 +831,7 @@ async function init() {
   // Create module
   createModuleBtn?.addEventListener("click", openCreateDialog);
 
-  // v1.2.11: Rydd uplubliserte — kun ADMINISTRATOR ser knappen.
+  // v1.2.11: Rydd upubliserte — kun ADMINISTRATOR ser knappen.
   if (purgeUnpublishedBtn) {
     const isAdmin = resolveActiveWorkspaceRoles().includes("ADMINISTRATOR");
     purgeUnpublishedBtn.hidden = !isAdmin;

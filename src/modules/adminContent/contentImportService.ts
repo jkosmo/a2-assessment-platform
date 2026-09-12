@@ -426,18 +426,25 @@ export async function importSectionFromEnvelope(
   const payload = envelope.section;
 
   let targetSectionId: string | undefined;
+  // #931 pkt 3: en LEVENDE seksjon beholder tittelen sin til forfatteren publiserer. Kroppen lander
+  // som inaktiv versjon (riktig), men tittelen lå på seksjonsraden og ble skrevet med én gang:
+  // deltakeren fikk «Kapittel 9: Revisjon» over Kapittel 1-kroppen, og en fullt oversatt tittel
+  // kunne byttes mot en ettspråks uten at gaten så det. Tittelen er ikke versjonert, så det eneste
+  // ærlige er å la den stå på en publisert seksjon; forfatteren bytter den bevisst etterpå.
+  let keepLiveTitle = false;
   if (options.mode === "replaceExisting") {
     if (!options.targetSectionId) {
       throw new Error("targetSectionId is required when mode is replaceExisting.");
     }
     const existing = await prisma.courseSection.findUnique({
       where: { id: options.targetSectionId },
-      select: { id: true },
+      select: { id: true, activeVersionId: true },
     });
     if (!existing) {
       throw new Error("Target section not found for replaceExisting.");
     }
     targetSectionId = existing.id;
+    keepLiveTitle = existing.activeVersionId !== null;
   }
 
   // #796's split: blob I/O BEFORE the transaction, DB rows inside it.
@@ -453,11 +460,12 @@ export async function importSectionFromEnvelope(
             orderBy: { versionNo: "desc" },
             select: { versionNo: true },
           });
-          // Title is updated, content becomes a new INACTIVE version — the section's live content
-          // does not change until the author publishes (and passes the gate).
+          // Content becomes a new INACTIVE version — the section's live content does not change
+          // until the author publishes (and passes the gate). #931 pkt 3: the title follows the
+          // same rule when the section is live (see `keepLiveTitle`); a draft section takes it.
           await tx.courseSection.update({
             where: { id: targetSectionId },
-            data: { title: staged.title, updatedAt: new Date() },
+            data: keepLiveTitle ? { updatedAt: new Date() } : { title: staged.title, updatedAt: new Date() },
           });
           await tx.courseSectionVersion.create({
             data: {
@@ -497,6 +505,8 @@ export async function importSectionFromEnvelope(
               sectionId,
               sectionVersionId: latest.id,
               mode: options.mode,
+              // #931 pkt 3: sant bare når importen lot den levende tittelen stå.
+              ...(keepLiveTitle ? { titleKeptLive: true } : {}),
               assetCount: staged.stagedAssets.length,
               sourcePublishedAt: payload.audit?.publishedAt ?? null,
               sourceVersionNo: payload.audit?.sourceVersionNo ?? null,
