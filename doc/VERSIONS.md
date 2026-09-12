@@ -2,6 +2,50 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.67.0 - 2026-09-12
+
+Seks commits, ingen migrasjoner. Tråden: **regler som sto på flere steder og ble håndhevet på
+færre** — publikum, påminnelser, e-post og publiseringsgaten.
+
+### #956 — én publiseringsgate for moduler
+
+Knappen, kurskaskaden og importen hadde hver sin gate med eget feltsett og egen normalisering:
+kaskaden målte lengde og blueprint på rå JSON, importen kjørte aldri blueprint-sjekken
+(`MCQ_COUNT_FAR_BELOW_BLUEPRINT` fantes ikke på den døra) og unntok `taskText` for MCQ_ONLY.
+Nå `evaluateModulePublishGate` på lagringsformatet, felles for alle tre, med vakt mot en fjerde.
+⚠️ Importen kan holde tilbake noe den før slapp gjennom — det er intensjonen.
+
+### #968 — én regel for «kan deltakeren nås»
+
+«Aktiv og ikke anonymisert» sto inline fem steder og ble håndhevet på tre. En som hadde sluttet
+talte i kullets publikum om hen var meldt inn individuelt, ikke via klasse; påminnelsesjobben
+hoppet over begge; tildelings-e-post gikk til alle med adresse. Nå `isReachableParticipant`.
+
+### #900 — ACS-struping
+
+Sju tildelings-e-poster i samme sekund (13.08) ble alle strupet og tapt. Nå: én om gangen med
+300 ms mellom, retry inntil tre ganger BARE ved 429 (aldri ved tidsavbrudd — #812), og
+statuskoden med i feilgrunnen.
+
+### #1007 — varsler via outboxen
+
+Resultatvarsel ved overstyring og ankevarsler (opprett/claim/oppgjør) gikk utenom outboxen —
+fire-and-forget, tapt ved restart. Ny radtype `appeal_notification`; leveringsarbeideren prøver
+på nytt. ⚠️ Raden legges etter commit, ikke i samme transaksjon som #946.
+
+### #971 — dedup av påminnelser som data
+
+`"daysBefore":3` traff `"daysBefore":30` i substring-søket, og et felt i ny rekkefølge ville slått
+av dedup stille. Nå én nøkkel fra det parsede objektet, hentet én gang per kurs.
+
+### #1003 — to for grove vakter
+
+Legacy-sertifikatvakta ser på klokka (bare lesninger ved eller før utstedelsen teller);
+erstatningsimport som avpubliserer et levende kurs skriver `course_unpublished` med grunn.
+
+### Lukket uten kode
+**#964** — løst ved sletting i #989.
+
 ## 2.66.0 - 2026-09-11
 
 Tretten commits, to migrasjoner (begge additive), én konfigurasjonsendring. Tråden gjennom det
