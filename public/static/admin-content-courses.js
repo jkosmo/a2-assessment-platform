@@ -1242,6 +1242,11 @@ let comboboxOpen = false;
 // v1.2.16 (#353 part 1): WAI-ARIA combobox keyboard nav. Highlight (visual + a11y focus
 // via aria-activedescendant) er separat fra selection (det som faktisk legges til). Arrow
 // up/down flytter highlight; Enter velger highlighted og legger den til; Escape lukker.
+//
+// #977: da saken ble funnet fantes det TO kombobokser — samtaleveiviserens med tastaturstøtte og
+// kursdetaljens uten. Veiviserens er siden fjernet, og variabelen under sto igjen ubrukt, med
+// kommentaren over som påsto at støtten fantes. Nå har den gjenværende komboboksen den: en
+// tastaturbruker kunne ikke velge noe, og «Legg til modul» forble deaktivert.
 let comboboxHighlightedIndex = -1;
 
 async function renderDetailView(courseId) {
@@ -1556,13 +1561,22 @@ function updateComboboxDropdown() {
     return;
   }
 
-  dropdown.innerHTML = options.map(m => `
-    <div class="combobox-option${m.id === comboboxSelectedId ? " selected" : ""}"
+  if (comboboxHighlightedIndex >= options.length) comboboxHighlightedIndex = options.length - 1;
+  dropdown.innerHTML = options.map((m, index) => `
+    <div class="combobox-option${m.id === comboboxSelectedId ? " selected" : ""}${index === comboboxHighlightedIndex ? " highlighted" : ""}"
+      id="comboboxOption-${index}"
       role="option" aria-selected="${m.id === comboboxSelectedId}"
       data-module-id="${escapeHtml(m.id)}" data-module-title="${escapeHtml(localizedText(m.title) || m.id)}">
       ${escapeHtml(localizedText(m.title) || m.id)}
       <span class="combobox-option-id">${escapeHtml(m.id)}</span>
     </div>`).join("");
+  // #977: skjermleseren følger markeringen via aria-activedescendant; fokus blir i feltet.
+  if (comboboxHighlightedIndex >= 0) {
+    input.setAttribute("aria-activedescendant", `comboboxOption-${comboboxHighlightedIndex}`);
+    dropdown.querySelector(`#comboboxOption-${comboboxHighlightedIndex}`)?.scrollIntoView?.({ block: "nearest" });
+  } else {
+    input.removeAttribute("aria-activedescendant");
+  }
 
   dropdown.querySelectorAll(".combobox-option").forEach(opt => {
     opt.addEventListener("mousedown", e => {
@@ -1645,10 +1659,44 @@ function initDetailEventListeners(courseId) {
   comboboxInput?.addEventListener("input", () => {
     comboboxQuery = comboboxInput.value;
     comboboxSelectedId = null;
+    comboboxHighlightedIndex = -1;
     comboboxOpen = comboboxQuery.trim().length > 0;
     const addBtn = document.getElementById("addModuleBtn");
     if (addBtn) addBtn.disabled = true;
     updateComboboxDropdown();
+  });
+  // #977: tastaturet. Piltaster flytter markeringen, Enter velger den markerte (og legger den til om
+  // den alt var valgt), Escape lukker. Uten dette var «Legg til modul» uoppnåelig uten mus.
+  comboboxInput?.addEventListener("keydown", (e) => {
+    const options = getComboboxOptions();
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      if (options.length === 0) return;
+      e.preventDefault();
+      if (!comboboxOpen && comboboxQuery.trim()) comboboxOpen = true;
+      const delta = e.key === "ArrowDown" ? 1 : -1;
+      comboboxHighlightedIndex = (comboboxHighlightedIndex + delta + options.length) % options.length;
+      updateComboboxDropdown();
+      return;
+    }
+    if (e.key === "Enter") {
+      if (!comboboxOpen || comboboxHighlightedIndex < 0 || comboboxHighlightedIndex >= options.length) return;
+      e.preventDefault();
+      const chosen = options[comboboxHighlightedIndex];
+      comboboxSelectedId = chosen.id;
+      comboboxInput.value = localizedText(chosen.title) || chosen.id;
+      comboboxOpen = false;
+      comboboxHighlightedIndex = -1;
+      updateComboboxDropdown();
+      const addBtn = document.getElementById("addModuleBtn");
+      if (addBtn) addBtn.disabled = false;
+      return;
+    }
+    if (e.key === "Escape" && comboboxOpen) {
+      e.preventDefault();
+      comboboxOpen = false;
+      comboboxHighlightedIndex = -1;
+      updateComboboxDropdown();
+    }
   });
   comboboxInput?.addEventListener("focus", () => {
     if (comboboxQuery.trim()) {
