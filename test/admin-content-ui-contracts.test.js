@@ -64,8 +64,6 @@ describe("admin content workspace UI contracts", () => {
     const libraryHtml = readFile("public/admin-content-library.html");
     const coursesHtml = readFile("public/admin-content-courses.html");
 
-    expect(libraryHtml).toContain(".row-action-btn");
-    expect(coursesHtml).toContain(".row-action-btn");
     expect(libraryHtml).toContain(".content-area-nav");
     expect(coursesHtml).toContain(".content-area-nav");
   });
@@ -128,18 +126,26 @@ describe("courses conversational flow CSS", () => {
     expect(html).toContain(".conv-saving-indicator");
   });
 
-  it("library row-action-btn has width: auto — prevents global button reset in flex rows", () => {
-    const libraryHtml = readFile("public/admin-content-library.html");
-    expect(libraryHtml).toMatch(/\.row-action-btn\s*\{[^}]*width\s*:\s*auto/);
+  // #1046 D5: regelen for .row-action-btn bor i shared.css ALENE. Moduler og Kurs hadde hver sin
+  // ordrette kopi — «samme regel tre steder» — og disse to testene målte kopiene, ikke regelen.
+  // Nå måles regelen der den bor, og at ingen side har fått en kopi tilbake.
+  it("row-action-btn has width: auto in shared.css — prevents global button reset in flex rows", () => {
+    const sharedCss = readFile("public/static/shared.css");
+    expect(sharedCss).toMatch(/\.row-action-btn\s*\{[^}]*width\s*:\s*auto/);
   });
 
-  it("row-action-btn has min-height: 0 in both library and courses — prevents global button{min-height:40px} making <button> taller than sibling <a> elements", () => {
-    const libraryHtml = readFile("public/admin-content-library.html");
-    const coursesHtml = readFile("public/admin-content-courses.html");
+  it("row-action-btn has min-height: 0 in shared.css — prevents global button{min-height:40px} making <button> taller than sibling <a> elements", () => {
+    const sharedCss = readFile("public/static/shared.css");
     // shared.css sets button { min-height: 40px }. Without min-height: 0 override, <button class="row-action-btn">
     // is 40px while <a class="row-action-btn"> is ~25px — visible height mismatch in the same row.
-    expect(libraryHtml).toMatch(/\.row-action-btn\s*\{[^}]*min-height\s*:\s*0/);
-    expect(coursesHtml).toMatch(/\.row-action-btn\s*\{[^}]*min-height\s*:\s*0/);
+    expect(sharedCss).toMatch(/\.row-action-btn\s*\{[^}]*min-height\s*:\s*0/);
+  });
+
+  it("no list page carries its own copy of the .row-action-btn rule", () => {
+    for (const side of ["library", "courses", "sections", "classes"]) {
+      const html = readFile(`public/admin-content-${side}.html`);
+      expect(html, `${side}: .row-action-btn skal ikke defineres lokalt`).not.toMatch(/\.row-action-btn\s*\{/);
+    }
   });
 
   it("combobox-row button has width: auto — prevents global reset collapsing the module search input", () => {

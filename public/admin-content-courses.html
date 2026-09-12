@@ -105,30 +105,7 @@
       }
 
       /* ── Row actions ─────────────────────────────────────────────────────── */
-      .row-actions { display: flex; gap: 4px; align-items: center; }
-      .row-action-btn {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        width: auto;
-        min-height: 0;
-        padding: 4px 10px;
-        font-size: 12px;
-        font-weight: 600;
-        line-height: 1.4;
-        font-family: inherit;
-        border: 1px solid var(--color-border-soft);
-        border-radius: var(--radius-button);
-        background: var(--color-surface);
-        color: var(--color-text);
-        cursor: pointer;
-        white-space: nowrap;
-        text-decoration: none;
-        box-sizing: border-box;
-      }
-      .row-action-btn:hover { background: var(--color-row-hover); border-color: var(--color-link-hover-border); }
-      .row-action-btn.destructive { color: var(--color-error); border-color: #f5c0bb; }
-      .row-action-btn.destructive:hover { background: #fdf0ef; }
+      /* #1046 D5: .row-actions, .row-action-btn og «Mer»-menyen arves fra shared.css (samme regel ett sted). */
 
       /* ── Empty state ─────────────────────────────────────────────────────── */
       .empty-state {

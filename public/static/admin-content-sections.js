@@ -16,6 +16,7 @@ import { showToast } from "/static/toast.js";
 import { lifecycleStatusBadge } from "/static/content-status-badge.js";
 import { renderOwnerPanel } from "/static/owner-panel.js";
 import { sanitizeSectionHtml } from "/static/sanitize.js";
+import { rowActionsHtml, installRowMoreMenus } from "/static/row-actions.js";
 import {
   SECTION_EDITOR_LOCALES,
   nonEmptyLocales,
@@ -33,7 +34,7 @@ const EDITOR_LOCALES = SECTION_EDITOR_LOCALES;
 // threading dozens of keys through the shared translations file).
 const LABELS = {
   "en-GB": {
-    heading: "Sections", lead: "Reading material you can use in several courses.", newSection: "New section", colTitle: "Name", colVersion: "Version",
+    heading: "Sections", more: "More", lead: "Reading material you can use in several courses.", newSection: "New section", colTitle: "Name", colVersion: "Version",
     colStatus: "Status", statusDraft: "Draft", statusPublished: "Published", statusArchived: "Archived",
     publish: "Publish", unpublish: "Unpublish", archive: "Archive", restore: "Restore",
     showArchived: "Show archived", hideArchived: "Hide archived",
@@ -52,7 +53,7 @@ const LABELS = {
     translatingImages: "Translating drawings…", imagesTranslated: "SVG drawings translated — verify each language visually.",
     uploadImage: "Upload image", altPrompt: "Alt text (describes the image for screen readers):", saveFirst: "Save the section first, then upload images.", imageInserted: "Image inserted.",
     // #916 — standalone section portability + the publish gate's author-facing wording.
-    exportSection: "Export", importSection: "Import section", exported: "Section exported.",
+    exportSection: "Export", duplicate: "Duplicate", duplicated: "Copy created as a draft.", importSection: "Import section", exported: "Section exported.",
     notAnEnvelope: "This does not look like a section package. The file is missing the fields an export adds (exportFormat, exportedAt and scope), and its contents do not look like a section either. Use Export on a section to produce a valid file.",
     imported: "Section package imported as a draft. Review it and publish when it is ready.",
     replaceFromFile: "Replace from file", replaceConfirm: "Replace this section's content with the file? The current version is kept — the import becomes a new draft.", replaced: "Content replaced. The import is a draft — review it and publish when it is ready.",
@@ -61,7 +62,7 @@ const LABELS = {
     fieldTitle: "the title", fieldBodyMarkdown: "the content",
   },
   nb: {
-    heading: "Seksjoner", lead: "Lesestoff du kan bruke i flere kurs.", newSection: "Ny seksjon", colTitle: "Navn", colVersion: "Versjon",
+    heading: "Seksjoner", more: "Mer", lead: "Lesestoff du kan bruke i flere kurs.", newSection: "Ny seksjon", colTitle: "Navn", colVersion: "Versjon",
     colStatus: "Status", statusDraft: "Utkast", statusPublished: "Publisert", statusArchived: "Arkivert",
     publish: "Publiser", unpublish: "Avpubliser", archive: "Arkiver", restore: "Gjenopprett",
     showArchived: "Vis arkiverte", hideArchived: "Skjul arkiverte",
@@ -80,7 +81,7 @@ const LABELS = {
     translatingImages: "Oversetter tegninger…", imagesTranslated: "SVG-tegninger oversatt — verifiser hvert språk visuelt.",
     uploadImage: "Last opp bilde", altPrompt: "Alt-tekst (beskriver bildet for skjermlesere):", saveFirst: "Lagre seksjonen først, så kan du laste opp bilder.", imageInserted: "Bilde satt inn.",
     // #916 — frittstående seksjons-portabilitet + publiseringsgatens forfattertekst.
-    exportSection: "Eksporter", importSection: "Importer seksjon", exported: "Seksjon eksportert.",
+    exportSection: "Eksporter", duplicate: "Dupliser", duplicated: "Kopi opprettet som utkast.", importSection: "Importer seksjon", exported: "Seksjon eksportert.",
     notAnEnvelope: "Dette ser ikke ut som en seksjonspakke. Fila mangler feltene en eksport legger på (exportFormat, exportedAt og scope), og innholdet ligner heller ikke på en seksjon. Bruk «Eksporter» på en seksjon for å lage en gyldig fil.",
     imported: "Seksjons-pakken er importert som utkast. Gå gjennom den og publiser når den er klar.",
     replaceFromFile: "Erstatt fra fil", replaceConfirm: "Erstatte innholdet i denne seksjonen med fila? Nåværende versjon beholdes — importen blir et nytt utkast.", replaced: "Innholdet er erstattet. Importen er et utkast — gå gjennom den og publiser når den er klar.",
@@ -89,7 +90,7 @@ const LABELS = {
     fieldTitle: "tittelen", fieldBodyMarkdown: "innholdet",
   },
   nn: {
-    heading: "Seksjonar", lead: "Lesestoff du kan bruke i fleire kurs.", newSection: "Ny seksjon", colTitle: "Namn", colVersion: "Versjon",
+    heading: "Seksjonar", more: "Meir", lead: "Lesestoff du kan bruke i fleire kurs.", newSection: "Ny seksjon", colTitle: "Namn", colVersion: "Versjon",
     colStatus: "Status", statusDraft: "Utkast", statusPublished: "Publisert", statusArchived: "Arkivert",
     publish: "Publiser", unpublish: "Avpubliser", archive: "Arkiver", restore: "Gjenopprett",
     showArchived: "Vis arkiverte", hideArchived: "Skjul arkiverte",
@@ -108,7 +109,7 @@ const LABELS = {
     translatingImages: "Omset teikningar…", imagesTranslated: "SVG-teikningar omsette — kontroller kvart språk visuelt.",
     uploadImage: "Last opp bilete", altPrompt: "Alt-tekst (skildrar biletet for skjermlesarar):", saveFirst: "Lagre seksjonen først, så kan du laste opp bilete.", imageInserted: "Bilete sett inn.",
     // #916 — frittståande seksjons-portabilitet + publiseringsgata sin forfattartekst.
-    exportSection: "Eksporter", importSection: "Importer seksjon", exported: "Seksjon eksportert.",
+    exportSection: "Eksporter", duplicate: "Dupliser", duplicated: "Kopi oppretta som utkast.", importSection: "Importer seksjon", exported: "Seksjon eksportert.",
     notAnEnvelope: "Dette ser ikkje ut som ein seksjonspakke. Fila manglar felta ein eksport legg på (exportFormat, exportedAt og scope), og innhaldet liknar heller ikkje på ein seksjon. Bruk «Eksporter» på ein seksjon for å lage ei gyldig fil.",
     imported: "Seksjons-pakken er importert som utkast. Gå gjennom han og publiser når han er klar.",
     replaceFromFile: "Erstatt frå fil", replaceConfirm: "Erstatte innhaldet i denne seksjonen med fila? Noverande versjon blir teken vare på — importen blir eit nytt utkast.", replaced: "Innhaldet er erstatta. Importen er eit utkast — gå gjennom han og publiser når han er klar.",
@@ -366,14 +367,17 @@ async function renderListView() {
     // for) — samme regel som eierskaps-vakta, så vi ikke viser knapper som gir 403 ved lagring.
     const canManage = s.canManage !== false;
     // #705-UX: Slett vises kun for arkiverte elementer (terminal steg etter arkivering).
-    const lifecycle = status === "archived"
-      ? `<button class="row-action-btn" data-action="restore" data-id="${id}">${escapeHtml(L("restore"))}</button>
-         <button class="row-action-btn destructive" data-action="delete" data-id="${id}">${escapeHtml(L("del"))}</button>`
+    // Én knapp per oppføring, så «maks fire i raden» teller riktig (rowActionsHtml, #1046 D5).
+    const publishToggle = status === "archived" ? ""
       : status === "published"
-        ? `<button class="row-action-btn" data-action="unpublish" data-id="${id}">${escapeHtml(L("unpublish"))}</button>
-           <button class="row-action-btn" data-action="archive" data-id="${id}">${escapeHtml(L("archive"))}</button>`
-        : `<button class="row-action-btn" data-action="publish" data-id="${id}">${escapeHtml(L("publish"))}</button>
-           <button class="row-action-btn" data-action="archive" data-id="${id}">${escapeHtml(L("archive"))}</button>`;
+        ? `<button class="row-action-btn" data-action="unpublish" data-id="${id}">${escapeHtml(L("unpublish"))}</button>`
+        : `<button class="row-action-btn" data-action="publish" data-id="${id}">${escapeHtml(L("publish"))}</button>`;
+    const archiveToggle = status === "archived"
+      ? `<button class="row-action-btn" data-action="restore" data-id="${id}">${escapeHtml(L("restore"))}</button>`
+      : `<button class="row-action-btn" data-action="archive" data-id="${id}">${escapeHtml(L("archive"))}</button>`;
+    const deleteBtn = status === "archived"
+      ? `<button class="row-action-btn destructive" data-action="delete" data-id="${id}">${escapeHtml(L("del"))}</button>`
+      : "";
     const courseCount = Number(s.courseCount ?? 0);
     const courseCell = courseCount > 0
       ? `<button class="course-count-btn" data-id="${id}" aria-label="${courseCount}">${courseCount}</button>`
@@ -385,13 +389,17 @@ async function renderListView() {
       <td>${courseCell}</td>
       <td style="white-space:nowrap">${escapeHtml(formatDate(s.updatedAt))}</td>
       <td class="col-actions">
-        <div class="row-actions">
-          ${canManage
-            ? `<button class="row-action-btn" data-action="edit" data-id="${id}">${escapeHtml(L("edit"))}</button>
-          <button class="row-action-btn" data-action="export" data-id="${id}">${escapeHtml(L("exportSection"))}</button>
-          ${lifecycle}`
-            : `<span class="row-readonly-note" title="${escapeHtml(L("readonlyHint"))}">${escapeHtml(L("readonly"))}</span>`}
-        </div>
+        <div class="row-actions">${rowActionsHtml(canManage
+          ? [
+            `<button class="row-action-btn" data-action="edit" data-id="${id}">${escapeHtml(L("edit"))}</button>`,
+            `<button class="row-action-btn" data-action="duplicate" data-id="${id}">${escapeHtml(L("duplicate"))}</button>`,
+            `<button class="row-action-btn" data-action="export" data-id="${id}">${escapeHtml(L("exportSection"))}</button>`,
+            publishToggle,
+            archiveToggle,
+            deleteBtn,
+          ]
+          : [`<span class="row-readonly-note" title="${escapeHtml(L("readonlyHint"))}">${escapeHtml(L("readonly"))}</span>`],
+        { moreLabel: L("more") })}</div>
       </td>
     </tr>`;
   }).join("");
@@ -443,6 +451,7 @@ async function renderListView() {
     const action = btn.dataset.action;
     if (action === "edit") goTo("editor", id);
     else if (action === "export") exportSectionPackage(id, btn);
+    else if (action === "duplicate") duplicateSection(id, btn);
     else if (action === "delete") deleteSection(id);
     else if (action === "publish") sectionLifecycle(id, "publish", "published");
     else if (action === "unpublish") sectionLifecycle(id, "unpublish", "unpublished");
@@ -601,6 +610,35 @@ async function importSectionPackage(input) {
     document.getElementById("importSectionBtn")?.focus();
   } finally {
     if (input) input.value = "";
+  }
+}
+
+// #1046 D3: Dupliser på seksjoner, på samme måte som på moduler (#348): eksportpakke → import som
+// ny. Kopien får « (kopi)» på tittelen i alle språk og lander alltid som utkast — importen
+// publiserer aldri ved ankomst (#916), så forfatteren må publisere selv etter gjennomgang.
+async function duplicateSection(sectionId, btn) {
+  if (btn) btn.disabled = true;
+  try {
+    const body = await apiFetch(`/api/admin/content/sections/${encodeURIComponent(sectionId)}/export-package`, getHeaders);
+    const envelope = body?.envelope ?? null;
+    if (!envelope?.section) throw new Error("Eksport returnerte tom envelope.");
+    const srcTitle = envelope.section.title;
+    if (srcTitle && typeof srcTitle === "object") {
+      envelope.section.title = Object.fromEntries(Object.entries(srcTitle).map(([l, v]) => [l, v ? `${v} (kopi)` : v]));
+    } else if (typeof srcTitle === "string" && srcTitle) {
+      envelope.section.title = `${srcTitle} (kopi)`;
+    }
+    const result = await apiFetch("/api/admin/content/sections/import", getHeaders, {
+      method: "POST",
+      body: JSON.stringify({ payload: envelope, mode: "createNew" }),
+    });
+    if (!result?.sectionId) throw new Error("Import-respons mangler sectionId.");
+    showToast(L("duplicated"));
+    await renderListView();
+  } catch (err) {
+    apiErrorToast(err);
+  } finally {
+    if (btn) btn.disabled = false;
   }
 }
 
@@ -1017,6 +1055,7 @@ function renderContentAreaNav() {
 }
 
 async function init() {
+  installRowMoreMenus();
   try {
     const cfg = await getConsoleConfig();
     participantRuntimeConfig = cfg;

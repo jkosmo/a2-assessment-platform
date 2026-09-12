@@ -102,7 +102,8 @@ describe("Class (cohort) management + dynamic assignment (#645/CL-2)", () => {
     await prisma.user.deleteMany({ where: { externalId: participant.externalId } });
   });
 
-  it("refuses to archive the system class and forbids participants from creating classes", async () => {
+  it("refuses to archive or delete the system class and forbids participants from creating classes", async () => {
+    expect((await request(app).post(`/api/admin/content/classes/${SYSTEM_ALL_PARTICIPANTS_CLASS_ID}/archive`).set(adminHeaders)).status).toBe(400);
     expect((await request(app).delete(`/api/admin/content/classes/${SYSTEM_ALL_PARTICIPANTS_CLASS_ID}`).set(adminHeaders)).status).toBe(400);
     expect((await request(app).post("/api/admin/content/classes").set(participantHeaders(`cls-forbid-${Date.now()}`)).send({ name: "Nope" })).status).toBe(403);
   });
@@ -126,8 +127,16 @@ describe("Class (cohort) management + dynamic assignment (#645/CL-2)", () => {
     expect(row?.archivedAt).toBeNull();
     expect(row?.kind).toBe("MANUAL");
 
-    // Archive → still in the list (so the UI can show it under "Arkiverte"), now with archivedAt set.
-    expect((await request(app).delete(`/api/admin/content/classes/${classId}`).set(adminHeaders)).status).toBe(204);
+    // #1046 D3: DELETE sletter for godt — og bare en arkivert klasse. En aktiv klasse avvises, så en
+    // gammel klient som fortsatt sender DELETE for «Arkiver» ikke sletter noe.
+    const deleteActive = await request(app).delete(`/api/admin/content/classes/${classId}`).set(adminHeaders);
+    expect(deleteActive.status).toBe(400);
+    expect(deleteActive.body.error).toBe("class_not_archived");
+    expect((await findRow())?.archivedAt).toBeNull();
+
+    // Archive (POST /archive, som kurs og seksjoner) → still in the list (so the UI can show it under
+    // "Arkiverte"), now with archivedAt set.
+    expect((await request(app).post(`/api/admin/content/classes/${classId}/archive`).set(adminHeaders)).status).toBe(200);
     row = await findRow();
     expect(row?.archivedAt).not.toBeNull();
 
@@ -148,6 +157,33 @@ describe("Class (cohort) management + dynamic assignment (#645/CL-2)", () => {
 
     await prisma.auditEvent.deleteMany({ where: { entityType: "class", entityId: classId } });
     await prisma.class.delete({ where: { id: classId } });
+  });
+
+  // #1046 D3: sletting for godt tar med medlemmer, kurstildelinger og eierrader, og skriver revisjon.
+  it("deletes an archived class for good: members, assignments, owner rows and an audit row", async () => {
+    const created = await request(app).post("/api/admin/content/classes").set(adminHeaders).send({ name: `Kull slett ${Date.now()}` });
+    const classId = created.body.class.id as string;
+    const member = await prisma.user.create({
+      data: { externalId: `cls-del-${Date.now()}`, name: "Slett Medlem", email: `cls-del-${Date.now()}@x.test` },
+      select: { id: true },
+    });
+    expect((await request(app).post(`/api/admin/content/classes/${classId}/members`).set(adminHeaders).send({ userId: member.id })).status).toBe(201);
+    expect(await prisma.classMember.count({ where: { classId } })).toBe(1);
+    expect(await prisma.contentOwner.count({ where: { contentType: "CLASS", contentId: classId } })).toBeGreaterThan(0);
+
+    expect((await request(app).post(`/api/admin/content/classes/${classId}/archive`).set(adminHeaders)).status).toBe(200);
+    expect((await request(app).delete(`/api/admin/content/classes/${classId}`).set(adminHeaders)).status).toBe(204);
+
+    expect(await prisma.class.findUnique({ where: { id: classId } })).toBeNull();
+    expect(await prisma.classMember.count({ where: { classId } })).toBe(0);
+    expect(await prisma.contentOwner.count({ where: { contentType: "CLASS", contentId: classId } })).toBe(0);
+    const actions = (await prisma.auditEvent.findMany({ where: { entityType: "class", entityId: classId }, select: { action: true } })).map((e) => e.action);
+    expect(actions).toContain("class_deleted");
+    // Medlemmet selv finnes fortsatt — det er klassen som er borte, ikke deltakeren.
+    expect(await prisma.user.findUnique({ where: { id: member.id } })).not.toBeNull();
+
+    await prisma.auditEvent.deleteMany({ where: { entityType: "class", entityId: classId } });
+    await prisma.user.delete({ where: { id: member.id } });
   });
 
   // #688: archived courses must not be assignable to a class.

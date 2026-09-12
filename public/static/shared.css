@@ -1301,8 +1301,10 @@ dialog::backdrop {
 
 /* #705-UX(B): felles handlings-knapperad + knapp i admin-listene, så alle fire listene (kurs/
    moduler/seksjoner/klasser) ser like ut. Tidligere definerte hver side sin egen .row-action-btn
-   med ulik font/padding. Kanonisk definisjon her; sidene kan fortsatt overstyre om nødvendig. */
-.row-actions { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+   med ulik font/padding. Kanonisk definisjon her; sidene kan fortsatt overstyre om nødvendig.
+   #1046 D5: raden brekker ALDRI til to linjer. Regelen er «maks fire i raden»: er det flere
+   handlinger, viser lista tre pluss «Mer», og resten ligger i menyen under den. */
+.row-actions { display: flex; flex-wrap: nowrap; gap: 4px; align-items: center; }
 .row-action-btn {
   display: inline-flex;
   align-items: center;
@@ -1326,6 +1328,19 @@ dialog::backdrop {
 .row-action-btn:hover { background: var(--color-row-hover); border-color: var(--color-link-hover-border); }
 .row-action-btn.destructive { color: var(--color-error); border-color: #f5c0bb; }
 .row-action-btn.destructive:hover { background: #fdf0ef; }
+/* «Mer»-menyen (#1046 D5): <details> så åpne/lukke virker uten skript og med tastatur. */
+.row-more { position: relative; display: inline-block; }
+.row-more > summary { list-style: none; }
+.row-more > summary::-webkit-details-marker { display: none; }
+.row-more[open] > summary { background: var(--color-row-hover); }
+.row-more-menu {
+  position: absolute; right: 0; top: calc(100% + 4px); z-index: 20; min-width: 160px;
+  display: flex; flex-direction: column; gap: 2px; padding: 4px;
+  background: var(--color-surface); border: 1px solid var(--color-border-soft);
+  border-radius: var(--radius-card); box-shadow: 0 6px 20px rgba(0,0,0,0.12);
+}
+.row-more-menu .row-action-btn { justify-content: flex-start; width: 100%; border-color: transparent; }
+.row-more-menu .row-action-btn:hover { border-color: var(--color-link-hover-border); }
 /* #787 slice 5: nøytral «Skrivebeskyttet»-markør når brukeren verken eier innholdet eller er admin —
    samme høyde som knappene så radene ikke hopper, men tydelig ikke-interaktiv (dempet, hjelpe-markør). */
 .row-readonly-note {

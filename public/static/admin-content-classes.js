@@ -6,6 +6,7 @@ import { showToast } from "/static/toast.js";
 import { describeApiError } from "/static/api-error.js";
 import { supportedLocales, localeLabels, translations as adminContentTranslations } from "/static/i18n/admin-content-translations.js";
 import { renderOwnerPanel } from "/static/owner-panel.js";
+import { rowActionsHtml, installRowMoreMenus } from "/static/row-actions.js";
 
 // #645/CL-3: admin UI for classes (cohorts) — list, create, manage members, assign courses.
 
@@ -111,12 +112,14 @@ function renderClassesTable() {
     // #787 slice 5: eier/admin styrer om Administrer/Arkiver-handlingene vises (speiler eierskaps-vakta).
     // Systemklasser er ueide → bare admin forvalter dem, som før.
     const canManage = c.canManage !== false;
-    let action = "";
-    if (!c.isSystem) {
-      action = archived
-        ? `<button class="row-action-btn" data-action="restore" data-id="${escapeHtml(c.id)}" data-name="${escapeHtml(c.name)}">Gjenopprett</button>`
-        : `<button class="row-action-btn" data-action="archive" data-id="${escapeHtml(c.id)}" data-name="${escapeHtml(c.name)}">Arkiver</button>`;
-    }
+    // #1046 D3/D5: samme rad som de andre listene — Åpne · Arkiver, og på arkiverte rader
+    // Gjenopprett · Slett. Én knapp per oppføring, så «maks fire i raden» teller riktig.
+    const archiveToggle = c.isSystem ? "" : archived
+      ? `<button class="row-action-btn" data-action="restore" data-id="${escapeHtml(c.id)}" data-name="${escapeHtml(c.name)}">Gjenopprett</button>`
+      : `<button class="row-action-btn" data-action="archive" data-id="${escapeHtml(c.id)}" data-name="${escapeHtml(c.name)}">Arkiver</button>`;
+    const deleteBtn = !c.isSystem && archived
+      ? `<button class="row-action-btn destructive" data-action="delete" data-id="${escapeHtml(c.id)}" data-name="${escapeHtml(c.name)}">Slett</button>`
+      : "";
     return `
     <tr>
       <td>${escapeHtml(c.name)}${systemBadge}${statusBadge}</td>
@@ -124,11 +127,9 @@ function renderClassesTable() {
       <td>${c._count?.members ?? 0}</td>
       <td>${c._count?.courseAssignments ?? 0}</td>
       <td class="col-actions">
-        <div class="row-actions">
-          ${canManage
-            ? `<button class="row-action-btn" data-action="open" data-id="${escapeHtml(c.id)}">Åpne</button>${action}`
-            : `<span class="row-readonly-note" title="Bare en eier eller administrator kan endre denne klassen.">Skrivebeskyttet</span>`}
-        </div>
+        <div class="row-actions">${rowActionsHtml(canManage
+          ? [`<button class="row-action-btn" data-action="open" data-id="${escapeHtml(c.id)}">Åpne</button>`, archiveToggle, deleteBtn]
+          : [`<span class="row-readonly-note" title="Bare en eier eller administrator kan endre denne klassen.">Skrivebeskyttet</span>`])}</div>
       </td>
     </tr>`;
   }).join("");
@@ -176,6 +177,7 @@ async function renderListView() {
     if (btn.dataset.action === "open") openClass(btn.dataset.id);
     if (btn.dataset.action === "archive") archiveClass(btn.dataset.id, btn.dataset.name);
     if (btn.dataset.action === "restore") restoreClassInAdmin(btn.dataset.id, btn.dataset.name);
+    if (btn.dataset.action === "delete") deleteClassInAdmin(btn.dataset.id, btn.dataset.name);
   });
 }
 
@@ -246,8 +248,23 @@ async function createClassFlow() {
 async function archiveClass(id, name) {
   if (!window.confirm(`Arkivere klassen «${name}»?`)) return;
   try {
-    await apiFetch(`/api/admin/content/classes/${encodeURIComponent(id)}`, getHeaders, { method: "DELETE" });
+    // #1046 D3: POST /archive, som kurs og seksjoner. DELETE sletter nå for godt.
+    await apiFetch(`/api/admin/content/classes/${encodeURIComponent(id)}/archive`, getHeaders, { method: "POST" });
     showToast("Klasse arkivert.", "success");
+    await renderListView();
+  } catch (err) {
+    apiErrorToast(err);
+  }
+}
+
+// #1046 D3: sletting for godt, bare fra en arkivert rad. Produkteier ba om «er du helt sikker».
+async function deleteClassInAdmin(id, name) {
+  if (!window.confirm(`Er du helt sikker på at du vil slette klassen «${name}» for godt?
+
+Medlemslista og kurstildelingene forsvinner. Deltakernes egen fremdrift beholdes.`)) return;
+  try {
+    await apiFetch(`/api/admin/content/classes/${encodeURIComponent(id)}`, getHeaders, { method: "DELETE" });
+    showToast("Klasse slettet.", "success");
     await renderListView();
   } catch (err) {
     apiErrorToast(err);
@@ -421,6 +438,7 @@ function buildLocaleSelector() {
 }
 
 async function init() {
+  installRowMoreMenus();
   try {
     const cfg = await getConsoleConfig();
     participantRuntimeConfig = cfg;

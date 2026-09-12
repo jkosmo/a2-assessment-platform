@@ -5,6 +5,7 @@ import { z } from "zod";
 import {
   createClass,
   archiveClass,
+  deleteClass,
   restoreClass,
   addMember,
   removeMember,
@@ -59,9 +60,21 @@ adminClassesRouter.post("/", async (request, response, next) => {
   }
 });
 
-adminClassesRouter.delete("/:classId", requireContentOwnership("CLASS", "classId"), async (request: Request<{ classId: string }>, response, next) => {
+// #1046 D3: samme ruteform som kurs og seksjoner — POST /archive arkiverer, DELETE sletter for godt.
+// DELETE arkiverte før; tjenesten avviser DELETE av en aktiv klasse (`class_not_archived`), så en
+// gammel klient som fortsatt sender DELETE for «Arkiver» får et avslag og ikke en sletting.
+adminClassesRouter.post("/:classId/archive", requireContentOwnership("CLASS", "classId"), async (request: Request<{ classId: string }>, response, next) => {
   try {
     await archiveClass(request.params.classId, request.context?.userId ?? null);
+    response.json({ ok: true });
+  } catch (error) {
+    next(error);
+  }
+});
+
+adminClassesRouter.delete("/:classId", requireContentOwnership("CLASS", "classId"), async (request: Request<{ classId: string }>, response, next) => {
+  try {
+    await deleteClass(request.params.classId, request.context?.userId ?? null);
     response.status(204).send();
   } catch (error) {
     next(error);

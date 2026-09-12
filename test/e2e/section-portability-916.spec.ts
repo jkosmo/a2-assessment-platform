@@ -1,4 +1,5 @@
 import { test, expect, type Page, type Route } from "@playwright/test";
+import { revealRowAction } from "./admin-content-helpers.js";
 
 // #916 — standalone section export/import + the publish gate's author-facing wording, exercised in a
 // real browser against mocked APIs.
@@ -220,7 +221,7 @@ test("publish gate: the block names field and language instead of leaking the se
   );
 
   await page.goto("/admin-content/sections");
-  await page.getByRole("button", { name: /^Publiser$/ }).click();
+  await (await revealRowAction(page, page.locator('[data-action="publish"][data-id="sec-916"]'))).click();
 
   const toast = toastOf(page);
   await expect(toast).toContainText("Kan ikke publisere");

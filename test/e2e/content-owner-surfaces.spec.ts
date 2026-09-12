@@ -1,5 +1,5 @@
 import { test, expect, type Page, type Route } from "@playwright/test";
-import { mockCommonApis, buildMockModuleExport } from "./admin-content-helpers.js";
+import { mockCommonApis, buildMockModuleExport, revealRowAction } from "./admin-content-helpers.js";
 
 // #787 QA round 2: the owner-management panel must render on EVERY content surface, not just the course
 // detail. Round 1 shipped the panel into the conversational shell's state rail, but three surfaces run
@@ -109,7 +109,7 @@ test("seksjon-liste: edit/lifecycle hidden for canManage:false, shown for canMan
 
   // Owned row: edit + lifecycle present.
   await expect(page.locator('[data-action="edit"][data-id="sec-mine"]')).toBeVisible();
-  await expect(page.locator('[data-action="unpublish"][data-id="sec-mine"]')).toBeVisible();
+  await expect(await revealRowAction(page, page.locator('[data-action="unpublish"][data-id="sec-mine"]'))).toBeVisible();
   // Not-owned row: no edit, no lifecycle — a read-only marker instead.
   await expect(page.locator('[data-action="edit"][data-id="sec-theirs"]')).toHaveCount(0);
   await expect(page.locator('[data-action="unpublish"][data-id="sec-theirs"]')).toHaveCount(0);

@@ -91,6 +91,45 @@ export async function archiveClass(classId: string, actorId: string | null) {
   });
 }
 
+// #1046 D3: sletting for godt — bare av en klasse som alt er arkivert. Regelen er den samme som
+// listene viser for modul, kurs og seksjon («Slett» finnes bare på arkiverte rader), men her er den
+// også håndhevet på tjenersiden: `DELETE /:classId` arkiverte før, og en gammel klient som fortsatt
+// sender DELETE for «Arkiver» skal få et avslag, ikke en sletting.
+export async function deleteClass(classId: string, actorId: string | null) {
+  const klass = await requireClass(classId);
+  if (klass.isSystem) {
+    throw new DomainRuleError(
+      "system_class_immutable",
+      "System classes cannot be deleted.",
+      { action: "delete" },
+    );
+  }
+  if (!klass.archivedAt) {
+    throw new DomainRuleError(
+      "class_not_archived",
+      "Archive the class before deleting it.",
+      { action: "delete" },
+    );
+  }
+  await runInTransaction(async (tx) => {
+    const repo = createClassRepository(tx);
+    await repo.deleteClass(classId);
+    // Eierradene har ingen fremmednøkkel til klassen (ContentOwner peker på innhold av fire typer),
+    // så de må ryddes her — ellers blir de liggende som eierskap til noe som ikke finnes.
+    await tx.contentOwner.deleteMany({ where: { contentType: "CLASS", contentId: classId } });
+    await recordAuditEvent(
+      {
+        entityType: auditEntityTypes.class,
+        entityId: classId,
+        action: auditActions.class.deleted,
+        actorId: actorId ?? undefined,
+        metadata: { classId, name: klass.name },
+      },
+      tx,
+    );
+  });
+}
+
 export async function restoreClass(classId: string, actorId: string | null) {
   const klass = await requireClass(classId);
   if (klass.isSystem) {

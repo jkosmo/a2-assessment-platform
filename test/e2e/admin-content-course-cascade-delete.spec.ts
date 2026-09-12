@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 import type { Page, Route } from "@playwright/test";
 
-import { mockCommonApis } from "./admin-content-helpers.js";
+import { mockCommonApis, revealRowAction } from "./admin-content-helpers.js";
 
 // #762: ADMINISTRATOR-only cascade delete — delete a course together with the modules/sections it
 // exclusively owns. The row action must be hidden for a SUBJECT_MATTER_OWNER and shown for an
@@ -69,7 +69,7 @@ test.describe("course cascade delete (#762)", () => {
 
     await page.goto("/admin-content/courses");
     const row = page.locator("#coursesTableBody tr").filter({ hasText: "Labour rights" });
-    await row.locator('[data-action="cascade-delete"]').click();
+    await (await revealRowAction(page, row.locator('[data-action="cascade-delete"]'))).click();
 
     const dialog = page.locator("#cascadeDeleteDialog");
     await expect(dialog).toBeVisible();
@@ -107,7 +107,7 @@ test.describe("course cascade delete (#762)", () => {
 
     await page.goto("/admin-content/courses");
     const row = page.locator("#coursesTableBody tr").filter({ hasText: "Labour rights" });
-    await row.locator('[data-action="cascade-delete"]').click();
+    await (await revealRowAction(page, row.locator('[data-action="cascade-delete"]'))).click();
 
     const dialog = page.locator("#cascadeDeleteDialog");
     await expect(dialog).toBeVisible();

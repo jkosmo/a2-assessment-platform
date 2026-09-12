@@ -4,14 +4,7 @@ import type { Page, Route } from "@playwright/test";
 
 const AxeBuilder = (AxeBuilderModule.default ?? AxeBuilderModule) as any;
 
-import {
-  mockCommonApis,
-  clickEnabledButton,
-  submitActiveChatInput,
-  courseTextForLocale,
-  localizedText,
-  buildMockModuleExport,
-} from "./admin-content-helpers.js";
+import { mockCommonApis, clickEnabledButton, submitActiveChatInput, courseTextForLocale, localizedText, buildMockModuleExport, revealRowAction } from "./admin-content-helpers.js";
 
 // #613: the conversational shell (`admin-content.html`) has no bare production route — it lives at
 // `/admin-content/module/:id/conversation`, while `/admin-content` serves the module library. The
@@ -4420,13 +4413,14 @@ test.describe("admin content browser coverage", () => {
     await page.goto("/admin-content/sections");
     const row = page.locator("#sectionsTableBody tr").filter({ hasText: "Intro" });
     await expect(row.locator(".status-badge")).toHaveText("Published");
-    await expect(row.locator('[data-action="unpublish"]')).toBeVisible();
+    // #1046 D5: Avpubliser ligger under «Mer» — åpne menyen først.
+    await expect(await revealRowAction(page, row.locator('[data-action="unpublish"]'))).toBeVisible();
 
     await row.locator('[data-action="unpublish"]').click();
     // Etter avpublisering: status → Draft, og Publish-knappen vises.
     const row2 = page.locator("#sectionsTableBody tr").filter({ hasText: "Intro" });
     await expect(row2.locator(".status-badge")).toHaveText("Draft");
-    await expect(row2.locator('[data-action="publish"]')).toBeVisible();
+    await expect(await revealRowAction(page, row2.locator('[data-action="publish"]'))).toBeVisible();
   });
 
   test("shell and courses routes pass an accessibility smoke check", async ({ page }) => {

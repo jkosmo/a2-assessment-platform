@@ -1,6 +1,7 @@
 import { createDateFormatter } from "./format-display.js";
 const formatDate = createDateFormatter(() => currentLocale);
 import { escapeHtml } from "./html-escape.js";
+import { rowActionsHtml, installRowMoreMenus } from "./row-actions.js";
 import { moduleLibraryStatusBadge } from "./content-status-badge.js";
 import {
   supportedLocales,
@@ -303,10 +304,13 @@ function renderLibrary() {
 
     // #705-UX: Slett vises kun for arkiverte moduler (terminal steg etter arkivering) — konsistent
     // med kurs/seksjon. Sletting er vaktet i backend (blokkeres ved avhengigheter/kursbruk).
+    // Én knapp per oppføring, så «maks fire i raden» teller riktig (rowActionsHtml).
     const archiveAction = isArchived
-      ? `<button class="row-action-btn" data-action="restore" data-module-id="${escapeHtml(m.id)}">Gjenopprett</button>
-         <button class="row-action-btn destructive" data-action="delete" data-module-id="${escapeHtml(m.id)}" data-module-title="${escapeHtml(m.title ?? m.id)}">Slett</button>`
+      ? `<button class="row-action-btn" data-action="restore" data-module-id="${escapeHtml(m.id)}">Gjenopprett</button>`
       : `<button class="row-action-btn" data-action="archive" data-module-id="${escapeHtml(m.id)}">Arkiver</button>`;
+    const deleteAction = isArchived
+      ? `<button class="row-action-btn destructive" data-action="delete" data-module-id="${escapeHtml(m.id)}" data-module-title="${escapeHtml(m.title ?? m.id)}">Slett</button>`
+      : "";
     // v1.2.20 (#459): Avpubliser-knapp synlig kun for moduler som er aktivt publisert
     // (published eller published_with_draft). Klikk → bekreftelses-prompt → POST /unpublish.
     const isPublished = m.status === "published" || m.status === "published_with_draft";
@@ -321,17 +325,16 @@ function renderLibrary() {
       <td class="col-courses">${courseCountCell}</td>
       <td class="col-updated">${formatDate(m.updatedAt)}</td>
       <td class="col-actions">
-        <div class="row-actions">
-          <!-- #896 S3c: "Åpne i Avansert" er borte med Avansert-siden. "Åpne i Samtale" het det da
-               arbeidsflaten VAR en samtale; nå er den tre faner der samtalen er ett panel av flere,
-               så knappen sier hva den gjør: åpner modulen. -->
-          ${canManage ? `<a href="${openConvUrl}" class="row-action-btn">Åpne</a>` : ""}
-          <button class="row-action-btn" data-action="duplicate" data-module-id="${escapeHtml(m.id)}">Dupliser</button>
-          <button class="row-action-btn" data-action="export" data-module-id="${escapeHtml(m.id)}" data-module-title="${escapeHtml(m.title ?? m.id)}">Eksporter</button>
-          ${canManage ? unpublishAction : ""}
-          ${canManage ? archiveAction : ""}
-          ${canManage ? "" : `<span class="row-readonly-note" title="Bare en eier eller administrator kan endre denne modulen.">Skrivebeskyttet</span>`}
-        </div>
+        <div class="row-actions">${rowActionsHtml([
+          // #896 S3c: "Åpne i Avansert" er borte med Avansert-siden. Knappen sier hva den gjør: åpner modulen.
+          canManage ? `<a href="${openConvUrl}" class="row-action-btn">Åpne</a>` : "",
+          `<button class="row-action-btn" data-action="duplicate" data-module-id="${escapeHtml(m.id)}">Dupliser</button>`,
+          `<button class="row-action-btn" data-action="export" data-module-id="${escapeHtml(m.id)}" data-module-title="${escapeHtml(m.title ?? m.id)}">Eksporter</button>`,
+          canManage ? unpublishAction : "",
+          canManage ? archiveAction : "",
+          canManage ? deleteAction : "",
+          canManage ? "" : `<span class="row-readonly-note" title="Bare en eier eller administrator kan endre denne modulen.">Skrivebeskyttet</span>`,
+        ])}</div>
       </td>
     </tr>`;
   }).join("");
@@ -755,6 +758,7 @@ function buildLocaleSelector() {
 // ---------------------------------------------------------------------------
 
 async function init() {
+  installRowMoreMenus();
   try {
     const cfg = await getConsoleConfig();
     participantRuntimeConfig = cfg;

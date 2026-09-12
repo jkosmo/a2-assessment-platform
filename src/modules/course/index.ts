@@ -58,6 +58,7 @@ export { isClassEntraLinkingEnabled, CLASS_ENTRA_LINKING_KEY } from "./classConf
 export {
   createClass,
   archiveClass,
+  deleteClass,
   restoreClass,
   addMember,
   removeMember,

@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 import type { Page, Route } from "@playwright/test";
 
-import { mockCommonApis } from "./admin-content-helpers.js";
+import { mockCommonApis, revealRowAction } from "./admin-content-helpers.js";
 
 // #972/#965/#980 — «serverens feiltekst vist rått», i en ekte nettleser.
 //
@@ -95,7 +95,7 @@ test.describe("#965: eierskapsvaktas 403 på seksjonsflaten", () => {
     await mockOwnershipRefusal(page, "**/api/admin/content/sections/sec-972/unpublish");
 
     await page.goto("/admin-content/sections");
-    await page.locator('[data-action="unpublish"][data-id="sec-972"]').click();
+    await (await revealRowAction(page, page.locator('[data-action="unpublish"][data-id="sec-972"]'))).click();
 
     const toast = toastOf(page);
     // Setningen sier hva som er galt OG hva forfatteren kan gjøre med det — poenget i #965 var at
@@ -119,7 +119,7 @@ test.describe("#965: eierskapsvaktas 403 på seksjonsflaten", () => {
     await mockOwnershipRefusal(page, "**/api/admin/content/sections/sec-972/unpublish");
 
     await page.goto("/admin-content/sections");
-    await page.locator('[data-action="unpublish"][data-id="sec-972"]').click();
+    await (await revealRowAction(page, page.locator('[data-action="unpublish"][data-id="sec-972"]'))).click();
 
     const toast = toastOf(page);
     await expect(toast).toContainText(/administrator has access/i);
@@ -145,7 +145,7 @@ test.describe("#965: eierskapsvaktas 403 på seksjonsflaten", () => {
     );
 
     await page.goto("/admin-content/sections");
-    await page.locator('[data-action="unpublish"][data-id="sec-972"]').click();
+    await (await revealRowAction(page, page.locator('[data-action="unpublish"][data-id="sec-972"]'))).click();
 
     const message = page.locator(".toast__message");
     await expect(message).toContainText("409");

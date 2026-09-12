@@ -32,6 +32,7 @@ import {
 } from "/static/admin-content-courses-state.js";
 import { renderWorkspaceNavigationWithProfile } from "./workspace-nav.js";
 import { renderOwnerPanel } from "/static/owner-panel.js";
+import { rowActionsHtml, installRowMoreMenus } from "/static/row-actions.js";
 
 // ---------------------------------------------------------------------------
 // i18n
@@ -677,10 +678,13 @@ async function renderListView() {
         : "";
     // #705-UX: Slett vises kun for arkiverte elementer (terminal steg etter arkivering). Aktive
     // rader viser Arkiver i stedet — konsistent på tvers av kurs/modul/seksjon.
+    // Én knapp per oppføring, så «maks fire i raden» teller riktig (rowActionsHtml, #1046 D5).
     const archiveToggleBtn = course.archivedAt
-      ? `<button class="row-action-btn" data-action="restore" data-course-id="${cid}" data-course-title="${ctitle}">Gjenopprett</button>
-         <button class="row-action-btn destructive" data-action="delete" data-course-id="${cid}" data-course-title="${ctitle}">Slett</button>`
+      ? `<button class="row-action-btn" data-action="restore" data-course-id="${cid}" data-course-title="${ctitle}">Gjenopprett</button>`
       : `<button class="row-action-btn" data-action="archive" data-course-id="${cid}" data-course-title="${ctitle}">Arkiver</button>`;
+    const deleteBtn = course.archivedAt
+      ? `<button class="row-action-btn destructive" data-action="delete" data-course-id="${cid}" data-course-title="${ctitle}">Slett</button>`
+      : "";
     // #762: ADMINISTRATOR-only destructive cleanup — slett kurset + moduler/seksjoner som kun brukes
     // her. Delt innhold beholdes. Skjult for ikke-ADMINISTRATOR (rollen løses fra /api/me).
     const cascadeDeleteBtn = isAdministrator()
@@ -702,14 +706,15 @@ async function renderListView() {
       <td class="col-inprogress">${course.inProgressCount > 0 ? course.inProgressCount : "–"}</td>
       <td class="col-updated">${escapeHtml(course.updatedLabel)}</td>
       <td class="col-actions">
-        <div class="row-actions">
-          ${canManage ? `<a href="/admin-content/courses/${encodeURIComponent(course.courseId)}" class="row-action-btn">Åpne</a>` : ""}
-          ${canManage ? `<button class="row-action-btn" data-action="export" data-course-id="${cid}" data-course-title="${ctitle}">Eksporter</button>` : ""}
-          ${canManage ? publishToggle : ""}
-          ${canManage ? archiveToggleBtn : ""}
-          ${canManage ? cascadeDeleteBtn : ""}
-          ${canManage ? "" : `<span class="row-readonly-note" title="${escapeHtml(t("adminContent.courses.row.noAccessTitle"))}">${escapeHtml(t("adminContent.courses.row.noAccess"))}</span>`}
-        </div>
+        <div class="row-actions">${rowActionsHtml([
+          canManage ? `<a href="/admin-content/courses/${encodeURIComponent(course.courseId)}" class="row-action-btn">Åpne</a>` : "",
+          canManage ? `<button class="row-action-btn" data-action="export" data-course-id="${cid}" data-course-title="${ctitle}">Eksporter</button>` : "",
+          canManage ? publishToggle : "",
+          canManage ? archiveToggleBtn : "",
+          canManage ? deleteBtn : "",
+          canManage ? cascadeDeleteBtn : "",
+          canManage ? "" : `<span class="row-readonly-note" title="${escapeHtml(t("adminContent.courses.row.noAccessTitle"))}">${escapeHtml(t("adminContent.courses.row.noAccess"))}</span>`,
+        ])}</div>
       </td>
     </tr>`;
   }).join("");
@@ -1952,6 +1957,7 @@ function initDeleteDialog() {
 // ---------------------------------------------------------------------------
 
 async function init() {
+  installRowMoreMenus();
   try {
     const cfg = await getConsoleConfig();
     participantRuntimeConfig = cfg;
