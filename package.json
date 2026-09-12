@@ -13,6 +13,7 @@
     "maint:backfill-audit-chain": "tsx scripts/maintenance/backfill-audit-chain.ts",
     "maint:verify-audit-chain": "tsx scripts/maintenance/verify-audit-chain.ts",
     "maint:collapse-duplicated-titles": "tsx scripts/maintenance/collapse-duplicated-titles.ts",
+    "maint:report-partial-translations": "tsx scripts/maintenance/collapse-duplicated-titles.ts --report",
     "build": "tsc -p tsconfig.json",
     "start": "node scripts/runtime/startup.mjs",
     "postgres:setup": "node scripts/postgres/localSetup.mjs setup",

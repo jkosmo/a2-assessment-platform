@@ -126,3 +126,67 @@ export async function collapseDuplicatedLocalizedTitles(
   const totalCollapsed = Object.values(byEntity).reduce((sum, e) => sum + e.collapsed, 0);
   return { dryRun, byEntity, totalCollapsed };
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// #990: rapport over rader som KAN være skadet av seed-vifta og deretter delvis oversatt.
+//
+// Skaden #892 ryddet: alle tre språk lik kildeteksten → kollapses trygt (over). Skaden fra #981 ser
+// annerledes ut: vifta ga {en-GB: X, nb: X, nn: X}, så oversatte forfatteren ETT språk. Resultatet
+// er «to like, én ulik» — nøyaktig mønsteret som normalt betyr reelt oversettelsesarbeid. Skriptet
+// lar det derfor stå, og `missingLocalesFor` ser raden som komplett. Ingenting i systemet vet at det
+// ene av de to like språkene aldri ble oversatt.
+//
+// ⚠️ Dette KAN ikke rettes automatisk. Informasjonen om hva som faktisk var oversatt er borte; den
+// kan bare gjettes, og gjetningen gir falske treff på egennavn og titler som SKAL være like på to
+// språk («Scrum», «Design Thinking»). Derfor en rapport til gjennomgang, ikke en retting.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export type SuspectRow = {
+  entity: EntityKey;
+  id: string;
+  /** De to språkene som er like — det ene av dem er trolig aldri oversatt. */
+  equal: [string, string];
+  /** Språket som skiller seg ut. */
+  differs: string;
+  value: string;
+};
+
+/**
+ * «To like, én ulik» blant de tre støttede språkene. Null når raden ikke er et kart med tre
+ * ikke-tomme verdier, når alle er like (det er #892-skaden, som kollapses), eller når alle er ulike.
+ */
+export function suspectPartialTranslation(raw: string | null | undefined): Omit<SuspectRow, "entity" | "id"> | null {
+  const parsed = localizedTextCodec.parse(raw);
+  if (!parsed || typeof parsed !== "object") return null;
+  const entries: Array<[string, string]> = [];
+  for (const k of ["en-GB", "nb", "nn"]) {
+    const v = (parsed as Record<string, unknown>)[k];
+    if (typeof v === "string" && v.trim().length > 0) entries.push([k, v.trim()]);
+  }
+  if (entries.length !== 3) return null;
+  const [a, b, c] = entries as [[string, string], [string, string], [string, string]];
+  const pairs: Array<[[string, string], [string, string], [string, string]]> = [[a, b, c], [a, c, b], [b, c, a]];
+  for (const [x, y, z] of pairs) {
+    if (x[1] === y[1] && z[1] !== x[1]) {
+      return { equal: [x[0], y[0]], differs: z[0], value: x[1] };
+    }
+  }
+  return null;
+}
+
+export async function reportSuspectPartialTranslations(): Promise<SuspectRow[]> {
+  const [modules, sections, courses] = await Promise.all([
+    prisma.module.findMany({ select: { id: true, title: true, description: true } }),
+    prisma.courseSection.findMany({ select: { id: true, title: true } }),
+    prisma.course.findMany({ select: { id: true, title: true, description: true } }),
+  ]);
+  const rows: SuspectRow[] = [];
+  const push = (entity: EntityKey | "module.description", id: string, raw: string | null) => {
+    const s = suspectPartialTranslation(raw);
+    if (s) rows.push({ entity: entity as EntityKey, id, ...s });
+  };
+  for (const m of modules) { push("module.title", m.id, m.title); push("module.description", m.id, m.description); }
+  for (const s of sections) push("courseSection.title", s.id, s.title);
+  for (const c of courses) { push("course.title", c.id, c.title); push("course.description", c.id, c.description); }
+  return rows;
+}

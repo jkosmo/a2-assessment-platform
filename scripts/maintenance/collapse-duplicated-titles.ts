@@ -14,11 +14,22 @@
  * exactly which rows would change.
  *
  * Idempotent: re-running after --apply reports 0 collapsed.
+ *
+ * #990 --report: lists rows that look like «seed fan-out, then ONE locale translated» — two locales
+ * equal, one different. Those are NOT collapsed (the pattern normally means real translation work)
+ * and cannot be repaired automatically: which of the two equal locales was never translated is a
+ * guess. The report is for a human to review in the authoring UI. Never writes.
  */
-import { collapseDuplicatedLocalizedTitles } from "../../src/services/localizedTitleCleanup.js";
+import { collapseDuplicatedLocalizedTitles, reportSuspectPartialTranslations } from "../../src/services/localizedTitleCleanup.js";
 import { prisma } from "../../src/db/prisma.js";
 
 async function main() {
+  if (process.argv.includes("--report")) {
+    const rows = await reportSuspectPartialTranslations();
+    for (const row of rows) console.log(JSON.stringify({ event: "suspect_partial_translation", ...row }));
+    console.log(JSON.stringify({ event: "suspect_partial_translation_complete", count: rows.length }));
+    return;
+  }
   const apply = process.argv.includes("--apply");
   const result = await collapseDuplicatedLocalizedTitles({ dryRun: !apply });
 

@@ -75,3 +75,35 @@ describe("collapsibleTitle — display neutrality", () => {
     }
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// #990: skaden fra #981 — vifta ga tre like, forfatteren oversatte ETT språk. «To like, én ulik» ser
+// ut som ekte oversettelse for både kollaps-skriptet og `missingLocalesFor`. Kan ikke rettes
+// automatisk (hvilket av de to like som aldri ble oversatt, er en gjetning) — bare rapporteres.
+// ─────────────────────────────────────────────────────────────────────────────
+import { suspectPartialTranslation } from "../../src/services/localizedTitleCleanup.js";
+
+describe("#990 — suspectPartialTranslation: to like, én ulik", () => {
+  it("⚠️ treffer det ekte mønsteret, og sier hvilke to som er like", () => {
+    const s = suspectPartialTranslation(JSON.stringify({ "en-GB": "Kildetekst", nb: "Kildetekst", nn: "Omsett tekst" }));
+    expect(s).toEqual({ equal: ["en-GB", "nb"], differs: "nn", value: "Kildetekst" });
+  });
+
+  it("kontroll: tre like er #892-skaden (kollapses), IKKE en mistanke", () => {
+    expect(suspectPartialTranslation(JSON.stringify({ "en-GB": "X", nb: "X", nn: "X" }))).toBeNull();
+    expect(collapsibleTitle(JSON.stringify({ "en-GB": "X", nb: "X", nn: "X" }))).toBe("X");
+  });
+
+  it("kontroll: tre ulike er ekte oversettelse; to språk er ikke nok å si noe om; ren streng er ingenting", () => {
+    expect(suspectPartialTranslation(JSON.stringify({ "en-GB": "A", nb: "B", nn: "C" }))).toBeNull();
+    expect(suspectPartialTranslation(JSON.stringify({ "en-GB": "A", nb: "A" }))).toBeNull();
+    expect(suspectPartialTranslation("bare en streng")).toBeNull();
+    expect(suspectPartialTranslation(null)).toBeNull();
+  });
+
+  it("rekkefølgen i kartet spiller ingen rolle — det er nb/nn som er like her", () => {
+    const s = suspectPartialTranslation(JSON.stringify({ nn: "Same", "en-GB": "Different", nb: "Same" }));
+    expect(s?.equal).toEqual(["nb", "nn"]);
+    expect(s?.differs).toBe("en-GB");
+  });
+});
