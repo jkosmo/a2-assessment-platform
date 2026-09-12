@@ -471,6 +471,9 @@ adminContentRouter.post("/modules/import", idempotency("modules.import"), async 
     response.status(201).json({
       moduleId: result.moduleId,
       moduleVersionId: result.moduleVersionId,
+      // #995: kalleren (forfatter eller agent) skal vite at modulen ble holdt tilbake som utkast —
+      // ellers tror den pakken gikk live. Kursimport har hatt dette siden #957.
+      heldBackByTranslationGate: result.heldBackByTranslationGate,
       links: moduleAdminLinks(result.moduleId),
       ...(data.clientRef !== undefined ? { clientRef: data.clientRef } : {}),
     });

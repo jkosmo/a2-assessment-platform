@@ -174,6 +174,9 @@ describe("#896 S4 translation gate — every publish door", () => {
       .set(adminHeaders)
       .send({ payload: envelope, mode: "createNew" });
     expect(importRes.status, JSON.stringify(importRes.body)).toBe(201);
+    // #995: svaret SIER at modulen ble holdt tilbake. Returtypen strupte flagget, så ruta kunne ikke
+    // sende det videre — kalleren trodde pakken gikk live. Kursimport har hatt dette siden #957.
+    expect(importRes.body.heldBackByTranslationGate).toBe(true);
     const importedId = importRes.body.moduleId as string;
 
     const imported = await prisma.module.findUnique({

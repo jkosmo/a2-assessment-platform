@@ -359,7 +359,10 @@ export async function importModuleFromEnvelope(
     // AA-5 (#653): agent-orchestrated imports carry a trace in the audit metadata.
     agent?: AgentAuthoringContext;
   },
-): Promise<{ moduleId: string; moduleVersionId: string }> {
+): Promise<{ moduleId: string; moduleVersionId: string; heldBackByTranslationGate: boolean }> {
+  // #995: returtypen strupte flagget som faktisk ble returnert i runtime (den eksisterende
+  // enhetstesten målte på det). Modulimport-ruta kunne derfor ikke fortelle kalleren at pakken ble
+  // holdt tilbake — samme mønster som #957 for kurs, annen rute.
   if (envelope.scope !== "module" || !envelope.module) {
     throw new Error("Envelope is not a module export.");
   }

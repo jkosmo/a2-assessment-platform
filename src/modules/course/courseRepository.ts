@@ -472,20 +472,6 @@ export function createCourseRepository(client: CourseRepositoryClient = prisma) 
       });
     },
 
-    countDistinctEnrolledUsersForModules(
-      moduleIds: string[],
-      filters: Pick<ReportFilters, "dateFrom" | "dateTo" | "orgUnit"> = {},
-    ) {
-      if (moduleIds.length === 0) return Promise.resolve(0);
-      return client.submission.groupBy({
-        by: ["userId"],
-        where: {
-          moduleId: { in: moduleIds },
-          ...buildSubmissionWhere(filters),
-        },
-      }).then((rows) => rows.length);
-    },
-
     countPassedUsersForModule(moduleId: string, filters: Pick<ReportFilters, "dateFrom" | "dateTo" | "orgUnit"> = {}) {
       return client.certificationStatus.count({
         where: {
