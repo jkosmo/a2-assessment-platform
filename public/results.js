@@ -1,5 +1,6 @@
 import { renderWorkspaceNavigationWithProfile } from "/static/workspace-nav.js";
 import { formatPercent } from "/static/format-display.js";
+import { installRowMoreMenus } from "/static/row-actions.js";
 import { applyIdentityDefaults as delApplyIdentityDefaults } from "/static/identity-defaults.js";
 import { showToast } from "/static/toast.js";
 import { lagLokalisertRessurs } from "/static/localized-resource.js";
@@ -493,6 +494,7 @@ rolesInput.addEventListener("input", () => {
 for (const felt of [filterModuleId, filterCourseId, filterDateFrom, filterDateTo]) {
   felt?.addEventListener("change", () => loadResults());
 }
+installRowMoreMenus();
 exportCompletionButton.addEventListener("click", () => exportCsv("completion"));
 exportPassRatesButton.addEventListener("click", () => exportCsv("pass-rates"));
 // v1.2.24 (#358): scoped learner-level eksporter — bruker samme exportCsv-helper.

@@ -241,3 +241,19 @@ finnes en grunn.*
 
 Som på listenivået bør dette gjøres som én felles «skjemaside» (hode, tilstandslinje, handlingsrad,
 språkvelger, kort, lagrelinje), ikke som fire rettelser.
+
+
+## Status 12.09.2026 (kveld)
+
+| Punkt | Status |
+|---|---|
+| A (lag nytt) | Avgjort 1b og gjort for kurs og klasse (tomt skjema, lages ved første Lagre). Seksjon hadde det. Modul: gjenstår («Ny modul»-dialogen). |
+| B1, B2, B3 | Gjort for klasse, seksjon, kurs (form-page.js). Modul: B1 og B2 gjort; tilstandslinja er modulens egen og står. |
+| B6 | Gjort. |
+| C1, C2, C3 | Gjort for klasse, seksjon, kurs (språkpiller, bokmål først, «(påkrevd)»). Bokmål er det påkrevde språket (DECISIONS). |
+| D1, D2, D3 | Gjort: .form-field i shared.css; hvite felt; «(påkrevd)». D4–D7 gjenstår. |
+| E (lagring) | Avgjort 2a og gjort for klasse, seksjon, kurs: «Lagre», Avbryt som lenke, «Alt lagret / Ulagrede endringer», spørsmål før man forlater. Modul har sin egen. |
+| F1, F2 | Gjort for klasse, seksjon, kurs (handlingsrad i hodet, «maks fire + Mer»). Modul: sidepanelet står — dagslysspørsmål. |
+| G1–G3 | G3 gjort. G1/G2 (én «rad i skjema») gjenstår. |
+| H1–H4 | Gjort. |
+| J1, J2, J6, J8, J9 | Gjort (titler = menynavn, «klasse», tom tabell, Eksporter-meny, prosent/tid). J3, J4, J5, J7, J10 gjenstår. |

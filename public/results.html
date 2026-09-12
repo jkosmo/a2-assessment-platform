@@ -18,7 +18,6 @@
       tr:hover { background: var(--color-row-hover); }
       .export-row { display: flex; gap: var(--space-1); flex-wrap: wrap; margin-top: var(--space-1); }
       /* Overstyr global button{width:100%} så eksport-knappene blir kompakte og ligger på rad. */
-      .export-row button { width: auto; min-height: 0; padding: 6px 12px; font-size: 13px; }
       .report-row-button { width: auto; min-height: 0; padding: 0; border: 0; background: transparent; color: var(--color-blue); cursor: pointer; font: inherit; text-align: left; text-decoration: underline; }
       .report-row-button:hover { color: var(--color-blue-strong); }
       tr.is-selected { background: color-mix(in srgb, var(--color-blue) 8%, white); }
@@ -123,13 +122,20 @@
           </table>
         </div>
         <!-- v1.2.24 (#358): scoped learner-level eksporter ved siden av aggregerte. -->
+        <!-- #1046 J8: seks eksportknapper på to linjer var en meny som ikke hadde fått lov til å være
+             det. Én «Eksporter»-knapp med de seks valgene, samme «Mer»-mønster som listene. -->
         <div class="export-row">
-          <button id="exportCompletion" class="btn-secondary" data-i18n="results.export.completion">Export completion CSV</button>
-          <button id="exportPassRates" class="btn-secondary" data-i18n="results.export.passRates">Export pass rates CSV</button>
-          <button id="exportModuleSummary" class="btn-secondary" data-i18n="results.export.moduleSummary">Export module summary CSV</button>
-          <button id="exportModuleLearners" class="btn-secondary" data-i18n="results.export.moduleLearners">Export module learners CSV</button>
-          <button id="exportCourseSummary" class="btn-secondary" data-i18n="results.export.courseSummary">Export course summary CSV</button>
-          <button id="exportCourseLearners" class="btn-secondary" data-i18n="results.export.courseLearners">Export course learners CSV</button>
+          <details class="row-more" id="exportMenu">
+            <summary class="row-action-btn" data-i18n="results.export.menu">Export (CSV)</summary>
+            <div class="row-more-menu">
+              <button id="exportCompletion" class="row-action-btn" data-i18n="results.export.completion">Completion</button>
+              <button id="exportPassRates" class="row-action-btn" data-i18n="results.export.passRates">Pass rates</button>
+              <button id="exportModuleSummary" class="row-action-btn" data-i18n="results.export.moduleSummary">Module summary</button>
+              <button id="exportModuleLearners" class="row-action-btn" data-i18n="results.export.moduleLearners">Module participants</button>
+              <button id="exportCourseSummary" class="row-action-btn" data-i18n="results.export.courseSummary">Course summary</button>
+              <button id="exportCourseLearners" class="row-action-btn" data-i18n="results.export.courseLearners">Course participants</button>
+            </div>
+          </details>
         </div>
         <div class="detail-block">
           <h3 data-i18n="results.participants.title">Learner details for selected module</h3>
