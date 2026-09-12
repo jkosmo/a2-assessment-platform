@@ -78,3 +78,76 @@ Plattforminnstillinger (admin).
 5. **Handlinger** (D3–D6): krever avgjørelser om hva som skal være mulig per type — ta dem i én
    omgang, så bygges lista likt etterpå.
 6. **Filtre** (B1–B6) og **tomtilstander** (B6).
+
+---
+
+# Anbefalt variant per punkt
+
+*Lagt til 2026-09-12 (kveld). Regelen fra sakens metode: den nyeste utgaven er referansen, med
+mindre det finnes en grunn — og da står grunnen her. Datoene er første commit der varianten kom
+inn (`git log -S`).*
+
+## A. Sidehodet
+
+| # | Anbefalt | Hvorfor |
+|---|---|---|
+| A1 | Én forklaringslinje under tittelen på alle sider. | Alle sidene laget etter juni har den; Moduler/Kurs/Seksjoner (april) er de eldste. Tekst: hva siden er for, i én setning — som «Følg fremdriften din på tvers av kursene dine». |
+| A2 | «Ny modul», «Nytt kurs», «Ny seksjon», «Ny klasse». Uten «+», uten «Opprett». | «Opprett ny …» er april-formen (Moduler, Kurs). «+ Ny …» kom i juni (Seksjoner, Klasser) og er nyest, men plusstegnet gjør ingenting knappen ikke alt sier. Behold den korte formen, dropp tegnet. |
+| A3 | Fylt hovedknapp ytterst til høyre; sekundære (Importer, Synk) til venstre for den med ramme. | Seksjoner og Klasser (juni) har hovedknappen til høyre — nyest. Moduler og Kurs (april) har den til venstre. Én stil på de sekundære: ramme, som på Klasser. |
+| A4 | «Importer modul», «Importer kurs», «Importer seksjon», «Importer brukere». Én linje. Filtypen står i dialogen. | Ingen av dagens fire er like; «(.json)» er informasjon for dialogen, ikke for knappen. |
+| A5 | Flytt «Rydd upubliserte» ut av sidehodet — inn i en «Flere handlinger»-meny ved hovedknappene, eller nederst på siden. | Den er destruktiv og gjelder mange elementer på én gang; den skal ikke stå som en tredje hovedknapp. Fra mai, bare på Moduler. |
+
+## B. Filtre og søk
+
+| # | Anbefalt | Hvorfor |
+|---|---|---|
+| B1 | Søkefelt på alle lister med mer enn ti rader, over filterknappene, venstrejustert (som Moduler). | Moduler har det eneste søkefeltet på listenivå; det er også den lista som faktisk er lang (50+). Kurs og Seksjoner vil bli like lange. |
+| B2 | Rekkefølge: Alle · Aktive · Publiserte · Arkiverte (+ «Har upublisert utkast» der det finnes). «Aktive» forhåndsvalgt. | Tre av fire sider har denne rekkefølgen; Klasser (juli) avviker uten grunn. |
+| B3 | «Valgt» = hvit knapp med brun ramme og brun tekst (forfattersidenes stil). | Det er stilen på flest sider. Manuell behandlings fylte brune knapp er flervalg (flere statuser kan være på samtidig) — det er en annen kontroll og kan beholde fylt stil, men da bør den se ut som en bryter, ikke som en filterknapp. |
+| B4 | Kursfilteret på samme linje som filterknappene, til høyre, med etiketten «Kurs:» (som Seksjoner). | Seksjoner (juni) er nyest. Legg det til på Kurs også — der er det ikke, men det er like relevant. |
+| B5 | Filtrer med en gang; fjern «Last resultater» og «Oppdater kurslista». | Alle andre lister filtrerer ved endring. Resultater-siden er den eneste som krever et knappetrykk, og «Oppdater kurslista» er en rest fra da lista ikke lastet seg selv (#921 fjernet klikket, knappen ble stående). |
+| B6 | Tomtilstand med forklaring, som Kullstatus: «Velg en modul for å se kvaliteten.» | Vurderingskvalitet er tom uten et ord i dag. |
+
+## C. Lista
+
+| # | Anbefalt | Hvorfor |
+|---|---|---|
+| C1 | Alle lister i det hvite kortet med samme kant og skygge. Klasser rettes. | Elleve av tolv sider har kortet. Klasser-lista tegnes av skriptet uten kort — glemt, ikke valgt. |
+| C2 | Kolonneoverskrifter i STORE BOKSTAVER, små, grå (forfattersidenes stil). | Det er stilen i `shared.css` (`text-transform: uppercase`) og på flest sider. Profil og Manuell behandling har egne tabellstiler fra mars; de er de eldste. |
+| C3 | Sortering på navn og dato på alle tabeller. | Moduler har det (april) og er den eneste lista der det er nødvendig i dag — men Kurs og Seksjoner vokser. Én tabell-hjelper med sortering, brukt av alle. |
+| C4 | «Navn» som første kolonne overalt. | «Tittel» er riktig for kurs og seksjoner, «Navn» for klasser og moduler — men brukeren ser ikke forskjellen, og én overskrift er verdt mer enn presisjonen. |
+| C5 | «18. aug. 2026» overalt; klokkeslett bare der det betyr noe (innlevert, vurdert). Én hjelper: `createDateFormatter` i `format-display.js` (juni). | Hjelperen finnes; Seksjoner («28.8.2026») og Plattform («26. aug., 21:43», uten år) har ikke tatt den i bruk. |
+| C6 | Tom overskrift over handlingskolonnen. | «HANDLINGER» sier ikke noe knappene ikke sier selv. Seksjoner/Klasser (nyest) har tom. |
+| C7 | Rekkefølge: Navn · Status · Nivå · (typens egne tall) · Sist endret · handlinger. | Kurs (status før nivå) er den som leses lettest: status er det man ser etter først. Moduler bytter til samme. |
+| C8 | «Nyere utkast»-merke ved status (som Moduler); dropp versjonskolonnen på Seksjoner. | Versjonsnummeret betyr ingenting for forfatteren i lista; «det finnes et nyere utkast» gjør det. Moduler-varianten er fra august og nyest. |
+
+## D. Handlingene på raden
+
+| # | Anbefalt | Hvorfor |
+|---|---|---|
+| D1 | «Åpne» overalt. | Nyest (Moduler, 18.08.2026), og det eneste av de tre ordene som ikke lover noe om hva du skal gjøre etterpå. «Rediger» (april/juni) og «Administrer» (juni) er begge eldre. |
+| D2 | Åpne · Dupliser · Eksporter · Publiser/Avpubliser · Arkiver · Slett. | Fra det ufarlige til det farlige, venstre mot høyre. Moduler har nesten denne rekkefølgen alt. |
+| D3 | **Avgjørelse trengs:** Dupliser på kurs og seksjoner? Slett på seksjoner og klasser? | Ikke en standardisering, men et produktvalg. Forslag: Dupliser på alle tre innholdstypene (det er en vanlig forfatterhandling); Slett i lista bare for det som ikke er brukt noe sted — regelen som alt finnes for kurs («… og ubrukt innhold»). |
+| D4 | «Arkiver» som vanlig knapp overalt; rød bare på «Slett». | Arkivering er reversibel. Rød på Klasser er fra juni og står alene. |
+| D5 | I lista: «Åpne» + de to–tre vanligste; resten under «Mer» (⋯). Én knapperad. | Fem knapper som bryter til to linjer gjør radene dobbelt så høye på Moduler og Kurs. Hva som er «vanligst» leses av loggen når vi har den; til da: Åpne · Dupliser · Mer. |
+| D6 | Regel: lista viser det man gjør uten å åpne; det åpnede elementet viser alt. | Følger av D5. |
+
+## E. Toppmenyen
+
+| # | Anbefalt | Hvorfor |
+|---|---|---|
+| E1 | Ikke et funn: ulikt antall knapper i galleriet skyldtes testriggens innloggingsmåte. Med vanlig innlogging er toppmenyen lik (bekreftet av produkteier 12.09, prod og stage). | — |
+| E2 | Fjern «oppdatert: N»-varslene ved lasting på Manuell behandling. | Ingen annen side varsler at den har lastet; det er «toast-bruk»-kandidaten fra sakens egen liste. |
+| E4 (ny) | Nivå to skal tegnes først når rollene er kjent — ikke tegnes fullt og så fjerne lenker. | Produkteier så «Manuell behandling» blinke og forsvinne som SMO. `deltakere-subnav.js` er «fail-open»: alle lenker først, fjern etterpå. Skjul lenkene til rollene er hentet (maks ett sekund), vis så de riktige. |
+
+## Første runde (forslag)
+
+Det som ikke trenger produktvalg og kan gjøres i én omgang, side for side, med galleriet som fasit:
+
+1. **Ord:** A2, A4, C4, D1.
+2. **Plassering:** A3, B2, B4, C7, D2.
+3. **Kort og overskrifter:** C1 (Klasser), C2 (Profil, Manuell behandling), C6.
+4. **Dato:** C5 — én hjelper.
+5. **Nivå to:** E4.
+
+Så B5/B6 og A1. D3 og D5 venter på avgjørelsen om hvilke handlinger hver type skal ha.
