@@ -32,7 +32,7 @@ import {
 } from "/static/admin-content-courses-state.js";
 import { renderWorkspaceNavigationWithProfile } from "./workspace-nav.js";
 import { renderOwnerPanel } from "/static/owner-panel.js";
-import { rowActionsHtml, installRowMoreMenus } from "/static/row-actions.js";
+import { createListPage } from "/static/list-page.js";
 
 // ---------------------------------------------------------------------------
 // i18n
@@ -397,26 +397,6 @@ function courseStatusBadge(status) {
   return lifecycleStatusBadge(status, t);
 }
 
-// #705-UX(A): filtrer kurslista likt modul-biblioteket. Bruker `course` slik den kommer fra API.
-function filterCourses(courses) {
-  if (coursesFilter === "all") return courses;
-  if (coursesFilter === "archived") return courses.filter((c) => c.archivedAt);
-  if (coursesFilter === "published") return courses.filter((c) => !c.archivedAt && c.publishedAt);
-  return courses.filter((c) => !c.archivedAt); // active
-}
-
-function courseFilterBar() {
-  const pills = [
-    ["all", "Alle"],
-    ["active", "Aktive"],
-    ["published", "Publiserte"],
-    ["archived", "Arkiverte"],
-  ];
-  return `<div class="list-filters" role="group" aria-label="Filtrer kurs">${pills
-    .map(([key, label]) => `<button type="button" class="list-filter-btn${coursesFilter === key ? " active" : ""}" data-filter="${key}">${label}</button>`)
-    .join("")}</div>`;
-}
-
 // #734: publishing a course must never leave it containing unavailable (draft/archived) modules or
 // sections (invariant I1). Before publishing we ask the API which items are unpublished and whether
 // each is publishable. If everything is already live we publish directly (unchanged behaviour). If
@@ -615,152 +595,118 @@ function initCascadePublishDialog() {
 // ── LIST VIEW ─────────────────────────────────────────────────────────────
 // ---------------------------------------------------------------------------
 
-async function renderListView() {
-  pageContent.innerHTML = `<div class="page-loading">Laster kurs…</div>`;
+// #1046: lista er den felles listesida (list-page.js). Her ligger bare oppskriften for kurs.
+let listPage = null;
 
-  let allCourses;
-  try {
-    const data = await apiFetch("/api/admin/content/courses", getHeaders);
-    allCourses = data.courses ?? [];
-  } catch (err) {
-    pageContent.innerHTML = `
-      <div class="empty-state">
-        <p class="empty-state-title">Kunne ikke laste kurs.</p>
-        <p class="empty-state-text">${escapeHtml(apiErrorText(err))}</p>
-      </div>`;
-    return;
-  }
+function courseRowModel(course) {
+  return deriveCourseListRows([course], { localizeTitle: localizedText, formatDate })[0];
+}
 
-  // #705-UX(A): filter-piller (Alle/Aktive/Publiserte/Arkiverte) likt modul-biblioteket, i stedet
-  // for den gamle «Vis arkiverte»-toggelen.
-  const courses = filterCourses(allCourses);
-  const archiveToggle = courseFilterBar(allCourses);
-
-  if (allCourses.length === 0) {
-    pageContent.innerHTML = `
-      <div class="page-header">
-        <div>
-        <h1>Kurs</h1>
-        <p class="page-lead">Kurs samler moduler og seksjoner i den rekkefølgen deltakerne skal følge.</p>
-      </div>
-        <div class="page-header-actions" style="display:flex;gap:.5rem;align-items:center">
-          <button type="button" id="importCoursePackageBtn" class="btn btn-secondary">Importer kurs</button>
-          <input id="importCoursePackageFile" type="file" accept="application/json,.json" hidden />
-          <a href="/admin-content/courses/new" class="btn btn-primary">Nytt kurs</a>
-        </div>
-      </div>
+function getListPage() {
+  if (listPage) return listPage;
+  listPage = createListPage({
+    host: pageContent,
+    ids: { tbody: "coursesTableBody", search: "coursesSearch" },
+    texts: {
+      title: "Kurs",
+      lead: "Kurs samler moduler og seksjoner i den rekkefølgen deltakerne skal følge.",
+      searchPlaceholder: "Søk på kursnavn eller kurs-ID…",
+      searchLabel: "Søk i kurs",
+      filterGroupLabel: "Filtrer kurs",
+      empty: "Ingen kurs ennå.",
+      emptyFiltered: "Ingen kurs i denne visningen.",
+      loadError: "Kunne ikke laste kurs.",
+    },
+    headerActions: [
+      { id: "importCoursePackageBtn", label: "Importer kurs" },
+      { id: "newCourseBtn", label: "Nytt kurs", kind: "primary", href: "/admin-content/courses/new" },
+    ],
+    headerExtraHtml: `<input id="importCoursePackageFile" type="file" accept="application/json,.json" hidden />`,
+    // #705-UX(A): filter-piller (Alle/Aktive/Publiserte/Arkiverte) likt modul-biblioteket.
+    filters: {
+      options: [["all", "Alle"], ["active", "Aktive"], ["published", "Publiserte"], ["archived", "Arkiverte"]],
+      initial: "active",
+      matches: (c, key) => {
+        if (key === "all") return true;
+        if (key === "archived") return Boolean(c.archivedAt);
+        if (key === "published") return !c.archivedAt && Boolean(c.publishedAt);
+        return !c.archivedAt; // active
+      },
+    },
+    // #1046 B1: søk på navn (alle språk) og ID, som på Moduler.
+    search: { matches: (c, q) => {
+      const titles = c.title && typeof c.title === "object" ? Object.values(c.title) : [c.title, localizedText(c.title)];
+      return titles.some((v) => String(v ?? "").toLowerCase().includes(q)) || String(c.id ?? "").toLowerCase().includes(q);
+    } },
+    sort: { key: "title", dir: "asc", locale: () => currentLocale },
+    columns: [
+      { key: "title", label: "Navn", className: "col-title", sortValue: (c) => courseRowModel(c).title, render: (c) => escapeHtml(courseRowModel(c).title) },
+      { key: "status", label: "Status", className: "col-status", render: (c) => courseStatusBadge(courseStatus(courseRowModel(c))) },
+      { key: "level", label: "Sertifiseringsnivå", className: "col-level", render: (c) => certBadge(c.certificationLevel) },
+      { key: "moduleCount", label: "Antall moduler", className: "col-module-count", sortValue: (c) => c.moduleCount ?? 0, render: (c) => String(c.moduleCount ?? 0) },
+      { key: "inProgress", label: "Påbegynt", className: "col-inprogress", title: "Deltakere som er midt i kurset (påbegynt, ikke fullført)", sortValue: (c) => c.inProgressCount ?? 0, render: (c) => (c.inProgressCount > 0 ? String(c.inProgressCount) : "–") },
+      { key: "updatedAt", label: "Sist endret", className: "col-updated", sortValue: (c) => c.updatedAt ?? c.publishedAt ?? "", render: (c) => escapeHtml(courseRowModel(c).updatedLabel) },
+    ],
+    rowId: (c) => c.id,
+    actions: (c) => {
+      const course = courseRowModel(c);
+      const status = courseStatus(course);
+      const cid = escapeHtml(course.courseId);
+      const ctitle = escapeHtml(course.title);
+      // #787 slice 5: eier/admin styrer om rediger/livssyklus-handlingene vises (speiler eierskaps-vakta).
+      const canManage = course.canManage !== false;
+      // ⚠️ #1029: merket sier «Kun for eier», ikke «Skrivebeskyttet» — etter #943 er også LESING
+      // eierskapsvaktet, og et merke som lover mer enn flaten gir er verre enn ikke noe merke.
+      if (!canManage) return [`<span class="row-readonly-note" title="${escapeHtml(t("adminContent.courses.row.noAccessTitle"))}">${escapeHtml(t("adminContent.courses.row.noAccess"))}</span>`];
+      // #705: samme handlings-rekkefølge som modul/seksjon — Publiser⇄Avpubliser, Arkiver⇄Gjenopprett.
+      const publishToggle = canPublishCourse(course)
+        ? `<button class="row-action-btn" data-action="publish" data-course-id="${cid}">Publiser</button>`
+        : status === "published"
+          ? `<button class="row-action-btn" data-action="unpublish" data-course-id="${cid}" data-course-title="${ctitle}">Avpubliser</button>`
+          : "";
+      // #705-UX: Slett vises kun for arkiverte elementer (terminal steg etter arkivering).
+      const archiveToggle = course.archivedAt
+        ? `<button class="row-action-btn" data-action="restore" data-course-id="${cid}" data-course-title="${ctitle}">Gjenopprett</button>`
+        : `<button class="row-action-btn" data-action="archive" data-course-id="${cid}" data-course-title="${ctitle}">Arkiver</button>`;
+      const deleteBtn = course.archivedAt
+        ? `<button class="row-action-btn destructive" data-action="delete" data-course-id="${cid}" data-course-title="${ctitle}">Slett</button>`
+        : "";
+      // #762: ADMINISTRATOR-only destructive cleanup — slett kurset + moduler/seksjoner som kun brukes
+      // her. Delt innhold beholdes. Skjult for ikke-ADMINISTRATOR (rollen løses fra /api/me).
+      const cascadeDeleteBtn = isAdministrator()
+        ? `<button class="row-action-btn destructive" data-action="cascade-delete" data-course-id="${cid}" data-course-title="${ctitle}">Slett kurs og ubrukt innhold</button>`
+        : "";
+      return [
+        `<a href="/admin-content/courses/${encodeURIComponent(course.courseId)}" class="row-action-btn">Åpne</a>`,
+        `<button class="row-action-btn" data-action="export" data-course-id="${cid}" data-course-title="${ctitle}">Eksporter</button>`,
+        publishToggle,
+        archiveToggle,
+        deleteBtn,
+        cascadeDeleteBtn,
+      ];
+    },
+    emptyHtml: () => `
       <div class="empty-state">
         <p class="empty-state-title">Ingen kurs ennå</p>
         <p class="empty-state-text">Opprett et kurs for å samle moduler i en kursstruktur, eller importer en kurs-pakke.</p>
         <a href="/admin-content/courses/new" class="btn btn-primary">Opprett kurs</a>
-      </div>`;
-    document.getElementById("importCoursePackageFile")?.addEventListener("change", handleImportCoursePackageFile);
-    document.getElementById("importCoursePackageBtn")?.addEventListener("click", () => {
-      document.getElementById("importCoursePackageFile")?.click();
-    });
-    return;
-  }
-
-  const rows = deriveCourseListRows(courses, {
-    localizeTitle: localizedText,
-    formatDate,
-  }).map((course) => {
-    const status = courseStatus(course);
-    const cid = escapeHtml(course.courseId);
-    const ctitle = escapeHtml(course.title);
-    // #787 slice 5: eier/admin styrer om rediger/livssyklus-handlingene vises (speiler eierskaps-vakta).
-    const canManage = course.canManage !== false;
-    // #705: samme handlings-rekkefølge som modul/seksjon — Publiser⇄Avpubliser, Arkiver⇄Gjenopprett.
-    const publishToggle = canPublishCourse(course)
-      ? `<button class="row-action-btn" data-action="publish" data-course-id="${cid}">Publiser</button>`
-      : status === "published"
-        ? `<button class="row-action-btn" data-action="unpublish" data-course-id="${cid}" data-course-title="${ctitle}">Avpubliser</button>`
-        : "";
-    // #705-UX: Slett vises kun for arkiverte elementer (terminal steg etter arkivering). Aktive
-    // rader viser Arkiver i stedet — konsistent på tvers av kurs/modul/seksjon.
-    // Én knapp per oppføring, så «maks fire i raden» teller riktig (rowActionsHtml, #1046 D5).
-    const archiveToggleBtn = course.archivedAt
-      ? `<button class="row-action-btn" data-action="restore" data-course-id="${cid}" data-course-title="${ctitle}">Gjenopprett</button>`
-      : `<button class="row-action-btn" data-action="archive" data-course-id="${cid}" data-course-title="${ctitle}">Arkiver</button>`;
-    const deleteBtn = course.archivedAt
-      ? `<button class="row-action-btn destructive" data-action="delete" data-course-id="${cid}" data-course-title="${ctitle}">Slett</button>`
-      : "";
-    // #762: ADMINISTRATOR-only destructive cleanup — slett kurset + moduler/seksjoner som kun brukes
-    // her. Delt innhold beholdes. Skjult for ikke-ADMINISTRATOR (rollen løses fra /api/me).
-    const cascadeDeleteBtn = isAdministrator()
-      ? `<button class="row-action-btn destructive" data-action="cascade-delete" data-course-id="${cid}" data-course-title="${ctitle}">Slett kurs og ubrukt innhold</button>`
-      : "";
-    // ⚠️ #1029: MERKET NEDERST SA «Skrivebeskyttet», og det var et løfte systemet ikke holdt.
-    //
-    // «Skrivebeskyttet» betyr «du kan se, men ikke endre». Etter #943 er LESING av kursdetalj og
-    // klassemedlemmer eierskapsvaktet, så den som klikket seg videre fikk et avslag merket sa ikke
-    // ville komme. Et merke som lover mer enn flaten gir er verre enn ikke noe merke.
-    //
-    // Teksten er samtidig flyttet inn i oversettelsestabellen. Den sto hardkodet på norsk i en
-    // trespråklig flate — nabotekstene her gjør fortsatt det samme, og det er en egen sak.
-    return `<tr>
-      <td class="col-title">${ctitle}</td>
-      <td class="col-status">${courseStatusBadge(status)}</td>
-      <td class="col-level">${certBadge(course.certificationLevel)}</td>
-      <td class="col-module-count">${course.moduleCount}</td>
-      <td class="col-inprogress">${course.inProgressCount > 0 ? course.inProgressCount : "–"}</td>
-      <td class="col-updated">${escapeHtml(course.updatedLabel)}</td>
-      <td class="col-actions">
-        <div class="row-actions">${rowActionsHtml([
-          canManage ? `<a href="/admin-content/courses/${encodeURIComponent(course.courseId)}" class="row-action-btn">Åpne</a>` : "",
-          canManage ? `<button class="row-action-btn" data-action="export" data-course-id="${cid}" data-course-title="${ctitle}">Eksporter</button>` : "",
-          canManage ? publishToggle : "",
-          canManage ? archiveToggleBtn : "",
-          canManage ? deleteBtn : "",
-          canManage ? cascadeDeleteBtn : "",
-          canManage ? "" : `<span class="row-readonly-note" title="${escapeHtml(t("adminContent.courses.row.noAccessTitle"))}">${escapeHtml(t("adminContent.courses.row.noAccess"))}</span>`,
-        ])}</div>
-      </td>
-    </tr>`;
-  }).join("");
-
-  pageContent.innerHTML = `
-    <div class="page-header">
-      <div>
-        <h1>Kurs</h1>
-        <p class="page-lead">Kurs samler moduler og seksjoner i den rekkefølgen deltakerne skal følge.</p>
-      </div>
-      <!-- #1046 A3: fylt hovedknapp ytterst til høyre, sekundær med ramme til venstre. -->
-      <div class="page-header-actions" style="display:flex;gap:.5rem;align-items:center">
-        <button type="button" id="importCoursePackageBtn" class="btn btn-secondary">Importer kurs</button>
-        <input id="importCoursePackageFile" type="file" accept="application/json,.json" hidden />
-        <a href="/admin-content/courses/new" class="btn btn-primary">Nytt kurs</a>
-      </div>
-    </div>
-    ${archiveToggle}
-    <div class="courses-table-wrap list-table-wrap">
-      <table class="courses-table list-table" aria-label="Kursliste">
-        <thead>
-          <tr>
-            <th scope="col">Navn</th>
-            <th scope="col">Status</th>
-            <th scope="col">Sertifiseringsnivå</th>
-            <th scope="col">Antall moduler</th>
-            <th scope="col" title="Deltakere som er midt i kurset (påbegynt, ikke fullført)">Påbegynt</th>
-            <th scope="col">Sist endret</th>
-            <th scope="col"><span class="sr-only">Handlinger</span></th>
-          </tr>
-        </thead>
-        <tbody id="coursesTableBody">${rows}</tbody>
-      </table>
-    </div>`;
-
-  document.getElementById("coursesTableBody")?.addEventListener("click", handleListTableClick);
-  document.getElementById("importCoursePackageFile")?.addEventListener("change", handleImportCoursePackageFile);
-  document.getElementById("importCoursePackageBtn")?.addEventListener("click", () => {
-    document.getElementById("importCoursePackageFile")?.click();
+      </div>`,
+    load: async () => (await apiFetch("/api/admin/content/courses", getHeaders)).courses ?? [],
+    describeError: (err) => apiErrorText(err),
+    onAction: (_action, _id, btn, _item, event) => handleListTableClick(event, btn),
+    afterRender: () => {
+      document.getElementById("importCoursePackageFile")?.addEventListener("change", handleImportCoursePackageFile);
+      document.getElementById("importCoursePackageBtn")?.addEventListener("click", () => {
+        document.getElementById("importCoursePackageFile")?.click();
+      });
+    },
   });
-  pageContent.querySelector(".list-filters")?.addEventListener("click", (event) => {
-    const btn = event.target.closest("[data-filter]");
-    if (!btn) return;
-    coursesFilter = btn.dataset.filter;
-    renderListView();
-  });
+  return listPage;
+}
+
+async function renderListView() {
+  pageContent.innerHTML = `<div class="page-loading">Laster kurs…</div>`;
+  await getListPage().reload().catch(() => undefined);
 }
 
 // #433 phase 4b — course export download. Calls /export-package and saves the
@@ -833,8 +779,7 @@ async function handleImportCoursePackageFile(event) {
   }
 }
 
-function handleListTableClick(event) {
-  const btn = event.target.closest("[data-action]");
+function handleListTableClick(event, btn = event.target.closest("[data-action]")) {
   if (!btn) return;
   if (btn.dataset.action === "publish") {
     publishCourseInAdmin(btn.dataset.courseId, btn);
@@ -1237,9 +1182,6 @@ let initialDetailLocaleValues = cloneCourseLocaleValues();
 // Course items being edited — modules and learning sections interleaved (#490/U3).
 // Each entry: { type: "MODULE" | "SECTION", refId, title }
 let courseModules = [];
-// #705-UX(A): aktivt filter i kurslista (Alle/Aktive/Publiserte/Arkiverte). Default «Aktive»
-// (skjuler arkiverte), som den gamle default-visningen.
-let coursesFilter = "active";
 
 // All available library modules (for the combobox)
 let allLibraryModules = [];
@@ -1957,7 +1899,6 @@ function initDeleteDialog() {
 // ---------------------------------------------------------------------------
 
 async function init() {
-  installRowMoreMenus();
   try {
     const cfg = await getConsoleConfig();
     participantRuntimeConfig = cfg;

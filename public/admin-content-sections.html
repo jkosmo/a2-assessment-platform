@@ -8,24 +8,7 @@
     <link rel="stylesheet" href="/static/loading.css" />
     <link rel="stylesheet" href="/static/toast.css" />
     <style>
-      /* #745: rad som holder status-filter-pillene og kurs-dropdownen på samme linje. */
-      .list-filters-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin-bottom: var(--space-2); }
-      .list-filters-row .list-filters { margin-bottom: 0; }
-      .list-course-filter { display: flex; align-items: center; gap: 8px; }
-      .list-course-filter label { font-size: 13px; font-weight: 600; color: var(--color-meta); }
-      .list-course-select {
-        width: auto;
-        min-height: 0;
-        padding: 5px 10px;
-        font-size: 13px;
-        font-family: inherit;
-        border: 1px solid var(--color-border-soft);
-        border-radius: var(--radius-card);
-        background: var(--color-surface);
-        color: var(--color-text);
-        max-width: 260px;
-      }
-      .list-course-select:focus { outline: 2px solid var(--color-blue); outline-offset: 1px; border-color: transparent; }
+      /* #1046: sidehode, søk, filtre, kursfilter og tabell er den felles listesida (list-page.js + shared.css). */
 
       .content-area-nav {
         display: flex;
@@ -51,17 +34,6 @@
       .content-area-nav-link:hover { color: var(--color-text); }
       .content-area-nav-link.active { color: var(--color-link-active); border-bottom-color: var(--color-blue); }
 
-      .page-header {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: var(--space-2);
-        margin-bottom: var(--space-3);
-        flex-wrap: wrap;
-      }
-      .page-header h1 { margin: 0; font-size: 22px; }
-      /* #1046 A1: én forklaringslinje under tittelen. */
-      .page-lead { margin: 4px 0 0; font-size: 13px; color: var(--color-meta); }
       .page-header-back { margin-bottom: var(--space-2); }
       .back-link { font-size: 13px; color: var(--color-meta); text-decoration: none; }
       .back-link:hover { color: var(--color-text); }

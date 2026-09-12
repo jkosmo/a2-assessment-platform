@@ -16,7 +16,7 @@ import { showToast } from "/static/toast.js";
 import { lifecycleStatusBadge } from "/static/content-status-badge.js";
 import { renderOwnerPanel } from "/static/owner-panel.js";
 import { sanitizeSectionHtml } from "/static/sanitize.js";
-import { rowActionsHtml, installRowMoreMenus } from "/static/row-actions.js";
+import { createListPage } from "/static/list-page.js";
 import {
   SECTION_EDITOR_LOCALES,
   nonEmptyLocales,
@@ -34,7 +34,7 @@ const EDITOR_LOCALES = SECTION_EDITOR_LOCALES;
 // threading dozens of keys through the shared translations file).
 const LABELS = {
   "en-GB": {
-    heading: "Sections", more: "More", lead: "Reading material you can use in several courses.", newSection: "New section", colTitle: "Name", colVersion: "Version",
+    heading: "Sections", more: "More", searchPlaceholder: "Search by section name or ID…", searchLabel: "Search sections", lead: "Reading material you can use in several courses.", newSection: "New section", colTitle: "Name", colVersion: "Version",
     colStatus: "Status", statusDraft: "Draft", statusPublished: "Published", statusArchived: "Archived",
     publish: "Publish", unpublish: "Unpublish", archive: "Archive", restore: "Restore",
     showArchived: "Show archived", hideArchived: "Hide archived",
@@ -62,7 +62,7 @@ const LABELS = {
     fieldTitle: "the title", fieldBodyMarkdown: "the content",
   },
   nb: {
-    heading: "Seksjoner", more: "Mer", lead: "Lesestoff du kan bruke i flere kurs.", newSection: "Ny seksjon", colTitle: "Navn", colVersion: "Versjon",
+    heading: "Seksjoner", more: "Mer", searchPlaceholder: "Søk på seksjonsnavn eller seksjons-ID…", searchLabel: "Søk i seksjoner", lead: "Lesestoff du kan bruke i flere kurs.", newSection: "Ny seksjon", colTitle: "Navn", colVersion: "Versjon",
     colStatus: "Status", statusDraft: "Utkast", statusPublished: "Publisert", statusArchived: "Arkivert",
     publish: "Publiser", unpublish: "Avpubliser", archive: "Arkiver", restore: "Gjenopprett",
     showArchived: "Vis arkiverte", hideArchived: "Skjul arkiverte",
@@ -90,7 +90,7 @@ const LABELS = {
     fieldTitle: "tittelen", fieldBodyMarkdown: "innholdet",
   },
   nn: {
-    heading: "Seksjonar", more: "Meir", lead: "Lesestoff du kan bruke i fleire kurs.", newSection: "Ny seksjon", colTitle: "Namn", colVersion: "Versjon",
+    heading: "Seksjonar", more: "Meir", searchPlaceholder: "Søk på seksjonsnamn eller seksjons-ID…", searchLabel: "Søk i seksjonar", lead: "Lesestoff du kan bruke i fleire kurs.", newSection: "Ny seksjon", colTitle: "Namn", colVersion: "Versjon",
     colStatus: "Status", statusDraft: "Utkast", statusPublished: "Publisert", statusArchived: "Arkivert",
     publish: "Publiser", unpublish: "Avpubliser", archive: "Arkiver", restore: "Gjenopprett",
     showArchived: "Vis arkiverte", hideArchived: "Skjul arkiverte",
@@ -259,13 +259,9 @@ function statusBadge(status) {
   return lifecycleStatusBadge(status, tNav);
 }
 
-// #705-UX(A): filter-piller (Alle/Aktive/Publiserte/Arkiverte) likt modul-biblioteket.
-let sectionsFilter = "active";
-// #745: valgt kurs i kurs-filteret. "__all__" = ingen filtrering (default),
-// "__none__" = seksjoner som ikke er i noe kurs, ellers en course-id. In-memory
-// (ingen persistering på tvers av reload), som øvrige filtre på siden.
-let sectionCourseFilter = "__all__";
+// #1046: lista er den felles listesida (list-page.js). Her ligger bare oppskriften for seksjoner.
 let allSections = []; // siste hentede liste — slås opp av «Brukt i kurs»-popoveren.
+let listPage = null;
 
 // #705-UX(G): popover som viser hvilke kurs en seksjon brukes i (likt modul-biblioteket).
 function showSectionCoursesPopover(anchor, sectionId) {
@@ -292,170 +288,113 @@ function showSectionCoursesPopover(anchor, sectionId) {
   setTimeout(() => document.addEventListener("click", close, true), 0);
 }
 
-function filterSections(sections) {
-  if (sectionsFilter === "all") return sections;
-  if (sectionsFilter === "archived") return sections.filter((s) => s.archivedAt);
-  if (sectionsFilter === "published") return sections.filter((s) => !s.archivedAt && s.activeVersionId);
-  return sections.filter((s) => !s.archivedAt); // active
-}
-
-// #745: kurs-filter komponerer med status-filteret (ekstra predikat). "__none__" beholder
-// seksjoner uten kurs; en course-id beholder seksjoner som er i det kurset.
-function applySectionCourseFilter(sections) {
-  if (sectionCourseFilter === "__none__") return sections.filter((s) => (s.courses ?? []).length === 0);
-  if (sectionCourseFilter !== "__all__") return sections.filter((s) => (s.courses ?? []).some((c) => c && c.id === sectionCourseFilter));
-  return sections;
-}
-
-// #745: distinkte kurs på tvers av alle seksjoners `courses`-array (dedupe på id), sortert på tittel.
-function collectSectionCourseFilterOptions(sections) {
-  const byId = new Map();
-  for (const s of sections) {
-    for (const c of (s.courses ?? [])) {
-      if (c && c.id && !byId.has(c.id)) byId.set(c.id, String(c.title ?? c.id));
-    }
-  }
-  return [...byId.entries()]
-    .map(([id, title]) => ({ id, title }))
-    .sort((a, b) => a.title.localeCompare(b.title, currentLocale));
-}
-
-// #745: kurs-dropdown, bygget per render fra dataene. Bevarer valgt kurs hvis det fortsatt finnes.
-function sectionCourseFilterBar(sections) {
-  const options = collectSectionCourseFilterOptions(sections);
-  const valid = new Set(["__all__", "__none__", ...options.map((o) => o.id)]);
-  if (!valid.has(sectionCourseFilter)) sectionCourseFilter = "__all__";
-  const opts = [
-    `<option value="__all__"${sectionCourseFilter === "__all__" ? " selected" : ""}>${escapeHtml(L("courseFilterAll"))}</option>`,
-    ...options.map((o) => `<option value="${escapeHtml(o.id)}"${o.id === sectionCourseFilter ? " selected" : ""}>${escapeHtml(o.title)}</option>`),
-    `<option value="__none__"${sectionCourseFilter === "__none__" ? " selected" : ""}>${escapeHtml(L("courseFilterNone"))}</option>`,
-  ].join("");
-  return `<div class="list-course-filter"><label for="sectionCourseFilter">${escapeHtml(L("courseFilterLabel"))}</label><select id="sectionCourseFilter" class="list-course-select">${opts}</select></div>`;
-}
-
-function sectionFilterBar() {
-  const pills = [
-    ["all", L("filterAll")],
-    ["active", L("filterActive")],
-    ["published", L("filterPublished")],
-    ["archived", L("filterArchived")],
-  ];
-  return `<div class="list-filters" role="group" aria-label="Filtrer seksjoner">${pills
-    .map(([key, label]) => `<button type="button" class="list-filter-btn${sectionsFilter === key ? " active" : ""}" data-filter="${key}">${escapeHtml(label)}</button>`)
-    .join("")}</div>`;
+function getListPage() {
+  if (listPage) return listPage;
+  listPage = createListPage({
+    host: pageContent,
+    ids: { tbody: "sectionsTableBody", search: "sectionsSearch", courseFilter: "sectionCourseFilter" },
+    // Tekstene som funksjon: sida har språkvelger, og neste tegning skal bruke det nye språket.
+    texts: () => ({
+      title: L("heading"), lead: L("lead"),
+      searchPlaceholder: L("searchPlaceholder"), searchLabel: L("searchLabel"),
+      filterGroupLabel: L("heading"),
+      courseFilterLabel: L("courseFilterLabel"), courseFilterAll: L("courseFilterAll"), courseFilterNone: L("courseFilterNone"),
+      empty: L("empty"), emptyFiltered: L("empty"), more: L("more"), loadError: L("loadError"),
+    }),
+    headerActions: () => [
+      { id: "importSectionBtn", label: L("importSection") },
+      { id: "newSectionBtn", label: L("newSection"), kind: "primary" },
+    ],
+    headerExtraHtml: `<input type="file" id="importSectionFile" accept="application/json,.json" hidden>`,
+    filters: {
+      options: () => [["all", L("filterAll")], ["active", L("filterActive")], ["published", L("filterPublished")], ["archived", L("filterArchived")]],
+      initial: "active",
+      matches: (s, key) => {
+        const status = sectionStatus(s);
+        if (key === "all") return true;
+        if (key === "archived") return status === "archived";
+        if (key === "published") return status === "published";
+        return status !== "archived"; // active
+      },
+    },
+    // #745: kursfilteret bygges av seksjonenes `courses`.
+    courseFilter: { coursesOf: (s) => s.courses ?? [] },
+    // #1046 B1: søk på navn (alle språk) og ID, som på Moduler.
+    search: { matches: (s, q) => Object.values(parseLocalized(s.title)).some((v) => String(v ?? "").toLowerCase().includes(q)) || String(s.id).toLowerCase().includes(q) },
+    sort: { key: "title", dir: "asc", locale: () => currentLocale },
+    columns: () => [
+      { key: "title", label: L("colTitle"), className: "col-title", sortValue: (s) => displayTitle(s.title), render: (s) => escapeHtml(displayTitle(s.title)) },
+      { key: "status", label: L("colStatus"), className: "col-status", render: (s) => statusBadge(sectionStatus(s)) },
+      { key: "version", label: L("colVersion"), className: "col-version", render: (s) => `v${escapeHtml(s.versionNo ?? "1")}` },
+      { key: "courses", label: L("colCourses"), className: "col-courses", sortValue: (s) => Number(s.courseCount ?? 0), render: (s) => {
+        const courseCount = Number(s.courseCount ?? 0);
+        return courseCount > 0
+          ? `<button class="course-count-btn" data-id="${escapeHtml(s.id)}" aria-label="${courseCount}">${courseCount}</button>`
+          : `<span class="course-count-zero">0</span>`;
+      } },
+      { key: "updatedAt", label: L("colUpdated"), className: "col-updated", sortValue: (s) => s.updatedAt ?? "", render: (s) => escapeHtml(formatDate(s.updatedAt)) },
+    ],
+    rowId: (s) => s.id,
+    actions: (s) => {
+      const status = sectionStatus(s);
+      const id = escapeHtml(s.id);
+      // #787 slice 5: skjul åpne/livssyklus for innhold brukeren ikke eier (og ikke er admin for) — samme
+      // regel som eierskaps-vakta, så vi ikke viser knapper som gir 403.
+      const canManage = s.canManage !== false;
+      const publishToggle = status === "archived" ? ""
+        : status === "published"
+          ? `<button class="row-action-btn" data-action="unpublish" data-id="${id}">${escapeHtml(L("unpublish"))}</button>`
+          : `<button class="row-action-btn" data-action="publish" data-id="${id}">${escapeHtml(L("publish"))}</button>`;
+      const archiveToggle = status === "archived"
+        ? `<button class="row-action-btn" data-action="restore" data-id="${id}">${escapeHtml(L("restore"))}</button>`
+        : `<button class="row-action-btn" data-action="archive" data-id="${id}">${escapeHtml(L("archive"))}</button>`;
+      // #1046 (produkteier 12.09): samme logikk som Moduler — Dupliser og Eksporter er lese-/kopihandlinger
+      // og finnes også for den som ikke eier seksjonen. «Slett» er ute av lista (D3) og ligger inne på den
+      // arkiverte seksjonen.
+      return [
+        canManage ? `<button class="row-action-btn" data-action="edit" data-id="${id}">${escapeHtml(L("edit"))}</button>` : "",
+        `<button class="row-action-btn" data-action="duplicate" data-id="${id}">${escapeHtml(L("duplicate"))}</button>`,
+        `<button class="row-action-btn" data-action="export" data-id="${id}">${escapeHtml(L("exportSection"))}</button>`,
+        canManage ? publishToggle : "",
+        canManage ? archiveToggle : "",
+        canManage ? "" : `<span class="row-readonly-note" title="${escapeHtml(L("readonlyHint"))}">${escapeHtml(L("readonly"))}</span>`,
+      ];
+    },
+    load: async () => {
+      const data = await apiFetch("/api/admin/content/sections", getHeaders);
+      allSections = data.sections ?? [];
+      return allSections;
+    },
+    onClick: (event) => {
+      const courseBtn = event.target.closest(".course-count-btn");
+      if (!courseBtn) return false;
+      showSectionCoursesPopover(courseBtn, courseBtn.dataset.id);
+      return true;
+    },
+    describeError: (err) => apiErrorText(err),
+    onAction: (action, id, btn) => {
+      if (action === "edit") goTo("editor", id);
+      else if (action === "export") exportSectionPackage(id, btn);
+      else if (action === "duplicate") duplicateSection(id, btn);
+      else if (action === "publish") sectionLifecycle(id, "publish", "published");
+      else if (action === "unpublish") sectionLifecycle(id, "unpublish", "unpublished");
+      else if (action === "archive") { if (window.confirm(L("confirmArchive"))) sectionLifecycle(id, "archive", "archived"); }
+      else if (action === "restore") sectionLifecycle(id, "restore", "restored");
+    },
+    afterRender: () => {
+      document.getElementById("newSectionBtn")?.addEventListener("click", () => goTo("editor", null));
+      // #916: en synlig knapp som driver et skjult filfelt, som modulbibliotekets importer.
+      const importBtn = document.getElementById("importSectionBtn");
+      const importFile = document.getElementById("importSectionFile");
+      importBtn?.addEventListener("click", () => importFile?.click());
+      importFile?.addEventListener("change", (event) => importSectionPackage(event.target));
+    },
+  });
+  return listPage;
 }
 
 async function renderListView() {
-  let sections;
-  try {
-    const data = await apiFetch("/api/admin/content/sections", getHeaders);
-    sections = data.sections ?? [];
-    allSections = sections;
-  } catch (err) {
-    pageContent.innerHTML = `<div class="empty-state"><p class="empty-state-title">${escapeHtml(L("loadError"))}</p><p class="empty-state-text">${escapeHtml(apiErrorText(err))}</p></div>`;
-    return;
-  }
-
-  // #745: status-filter (piller) + kurs-filter (dropdown) komponeres.
-  const visible = applySectionCourseFilter(filterSections(sections));
-
-  // #705: samme handlings-rekkefølge og status-vokabular som modul/kurs.
-  const rows = visible.map((s) => {
-    const status = sectionStatus(s);
-    const id = escapeHtml(s.id);
-    // #787 slice 5: skjul rediger/livssyklus-handlingene for innhold brukeren ikke eier (og ikke er admin
-    // for) — samme regel som eierskaps-vakta, så vi ikke viser knapper som gir 403 ved lagring.
-    const canManage = s.canManage !== false;
-    // #705-UX: Slett vises kun for arkiverte elementer (terminal steg etter arkivering).
-    // Én knapp per oppføring, så «maks fire i raden» teller riktig (rowActionsHtml, #1046 D5).
-    const publishToggle = status === "archived" ? ""
-      : status === "published"
-        ? `<button class="row-action-btn" data-action="unpublish" data-id="${id}">${escapeHtml(L("unpublish"))}</button>`
-        : `<button class="row-action-btn" data-action="publish" data-id="${id}">${escapeHtml(L("publish"))}</button>`;
-    const archiveToggle = status === "archived"
-      ? `<button class="row-action-btn" data-action="restore" data-id="${id}">${escapeHtml(L("restore"))}</button>`
-      : `<button class="row-action-btn" data-action="archive" data-id="${id}">${escapeHtml(L("archive"))}</button>`;
-    // #1046 D3 (avgjort 12.09): «Slett» er ute av lista. Den ligger inne på den arkiverte seksjonen
-    // (D6: lista viser det man gjør uten å åpne; det åpnede elementet viser alt).
-    const courseCount = Number(s.courseCount ?? 0);
-    const courseCell = courseCount > 0
-      ? `<button class="course-count-btn" data-id="${id}" aria-label="${courseCount}">${courseCount}</button>`
-      : `<span class="course-count-zero">0</span>`;
-    return `<tr>
-      <td class="col-title">${escapeHtml(displayTitle(s.title))}</td>
-      <td class="col-status">${statusBadge(status)}</td>
-      <td class="col-version">v${escapeHtml(s.versionNo ?? "1")}</td>
-      <td class="col-courses">${courseCell}</td>
-      <td class="col-updated">${escapeHtml(formatDate(s.updatedAt))}</td>
-      <td class="col-actions">
-        <div class="row-actions">${rowActionsHtml([
-          // #1046 (produkteier 12.09): samme logikk som Moduler — Dupliser og Eksporter er lese-/
-          // kopihandlinger og finnes også for den som ikke eier seksjonen; Åpne og livssyklus bare for eier.
-          canManage ? `<button class="row-action-btn" data-action="edit" data-id="${id}">${escapeHtml(L("edit"))}</button>` : "",
-          `<button class="row-action-btn" data-action="duplicate" data-id="${id}">${escapeHtml(L("duplicate"))}</button>`,
-          `<button class="row-action-btn" data-action="export" data-id="${id}">${escapeHtml(L("exportSection"))}</button>`,
-          canManage ? publishToggle : "",
-          canManage ? archiveToggle : "",
-          canManage ? "" : `<span class="row-readonly-note" title="${escapeHtml(L("readonlyHint"))}">${escapeHtml(L("readonly"))}</span>`,
-        ],
-        { moreLabel: L("more") })}</div>
-      </td>
-    </tr>`;
-  }).join("");
-
-  pageContent.innerHTML = `
-    <div class="page-header">
-      <div>
-        <h1>${escapeHtml(L("heading"))}</h1>
-        <p class="page-lead">${escapeHtml(L("lead"))}</p>
-      </div>
-      <div class="row" style="gap:0.5rem">
-        <button type="button" id="importSectionBtn" class="btn btn-secondary" style="width:auto">${escapeHtml(L("importSection"))}</button>
-        <input type="file" id="importSectionFile" accept="application/json,.json" hidden>
-        <button type="button" id="newSectionBtn" class="btn btn-primary" style="width:auto">${escapeHtml(L("newSection"))}</button>
-      </div>
-    </div>
-    <div class="list-filters-row">${sectionFilterBar()}${sectionCourseFilterBar(sections)}</div>
-    ${visible.length === 0
-      ? `<div class="empty-state"><p class="empty-state-text">${escapeHtml(L("empty"))}</p></div>`
-      : `<div class="sections-table-wrap list-table-wrap"><table class="sections-table list-table">
-          <thead><tr><th>${escapeHtml(L("colTitle"))}</th><th>${escapeHtml(L("colStatus"))}</th><th>${escapeHtml(L("colVersion"))}</th><th>${escapeHtml(L("colCourses"))}</th><th>${escapeHtml(L("colUpdated"))}</th><th class="col-actions"></th></tr></thead>
-          <tbody id="sectionsTableBody">${rows}</tbody></table></div>`}`;
-
-  document.getElementById("newSectionBtn")?.addEventListener("click", () => goTo("editor", null));
-  // #916: deliberately thin — a visible button driving a hidden file input, exactly like the module
-  // library's importer. #925 will rebuild this page; nothing here is worth carrying over but the
-  // two API calls.
-  const importBtn = document.getElementById("importSectionBtn");
-  const importFile = document.getElementById("importSectionFile");
-  importBtn?.addEventListener("click", () => importFile?.click());
-  importFile?.addEventListener("change", (event) => importSectionPackage(event.target));
-  pageContent.querySelector(".list-filters")?.addEventListener("click", (event) => {
-    const btn = event.target.closest("[data-filter]");
-    if (!btn) return;
-    sectionsFilter = btn.dataset.filter;
-    renderListView();
-  });
-  // #745: kurs-filter — re-render lista med det valgte kurset.
-  document.getElementById("sectionCourseFilter")?.addEventListener("change", (event) => {
-    sectionCourseFilter = event.target.value;
-    renderListView();
-  });
-  document.getElementById("sectionsTableBody")?.addEventListener("click", (event) => {
-    const courseBtn = event.target.closest(".course-count-btn");
-    if (courseBtn) { showSectionCoursesPopover(courseBtn, courseBtn.dataset.id); return; }
-    const btn = event.target.closest("[data-action]");
-    if (!btn) return;
-    const id = btn.dataset.id;
-    const action = btn.dataset.action;
-    if (action === "edit") goTo("editor", id);
-    else if (action === "export") exportSectionPackage(id, btn);
-    else if (action === "duplicate") duplicateSection(id, btn);
-    else if (action === "publish") sectionLifecycle(id, "publish", "published");
-    else if (action === "unpublish") sectionLifecycle(id, "unpublish", "unpublished");
-    else if (action === "archive") { if (window.confirm(L("confirmArchive"))) sectionLifecycle(id, "archive", "archived"); }
-    else if (action === "restore") sectionLifecycle(id, "restore", "restored");
-  });
+  await getListPage().reload().catch(() => undefined);
 }
 
 // #705: én felles handler for de fire livssyklus-overgangene (POST .../{action}).
@@ -1059,7 +998,6 @@ function renderContentAreaNav() {
 }
 
 async function init() {
-  installRowMoreMenus();
   try {
     const cfg = await getConsoleConfig();
     participantRuntimeConfig = cfg;

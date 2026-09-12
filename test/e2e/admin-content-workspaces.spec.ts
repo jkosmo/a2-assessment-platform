@@ -4343,10 +4343,12 @@ test.describe("admin content browser coverage", () => {
 
     await page.goto("/admin-content/courses");
 
-    await expect(page.getByRole("table", { name: "Kursliste" })).toBeVisible();
-    // Arkiverte er skjult under default «Aktive»-filter — bytt til «Arkiverte».
+    // Arkiverte er skjult under default «Aktive»-filter — bytt til «Arkiverte». (Med null synlige
+    // rader viser lista en tom-tilstand, ikke en tom tabell, som Moduler alltid har gjort.)
     await page.locator('.list-filter-btn[data-filter="archived"]').click();
-    await page.locator('[data-action="delete"]').first().click();
+    await expect(page.getByRole("table", { name: "Kurs" })).toBeVisible();
+    // #1046 D5: Slett ligger under «Mer».
+    await (await revealRowAction(page, page.locator('[data-action="delete"]').first())).click();
 
     await expect(page.locator("#deleteDialog")).toHaveAttribute("open", "");
     await expect(page.locator("#deleteDialogText")).toContainText("Trade unions");

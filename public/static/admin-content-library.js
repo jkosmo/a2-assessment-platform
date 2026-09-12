@@ -1,7 +1,7 @@
 import { createDateFormatter } from "./format-display.js";
 const formatDate = createDateFormatter(() => currentLocale);
 import { escapeHtml } from "./html-escape.js";
-import { rowActionsHtml, installRowMoreMenus } from "./row-actions.js";
+import { createListPage } from "./list-page.js";
 import { moduleLibraryStatusBadge } from "./content-status-badge.js";
 import {
   supportedLocales,
@@ -86,10 +86,6 @@ const localePicker = document.querySelector(".locale-picker");
 const appVersionLabel = document.getElementById("appVersion");
 const localeSelect = document.getElementById("localeSelect");
 const libraryContent = document.getElementById("libraryContent");
-const librarySearch = document.getElementById("librarySearch");
-// #745: klientside-filter på kurs. Bygges fra modulenes egne `courses`-arrayer.
-const libraryCourseFilter = document.getElementById("libraryCourseFilter");
-const createModuleBtn = document.getElementById("createModuleBtn");
 const createModuleDialog = document.getElementById("createModuleDialog");
 const createModuleForm = document.getElementById("createModuleForm");
 const newModuleTitle = document.getElementById("newModuleTitle");
@@ -120,16 +116,9 @@ const purgeError = document.getElementById("purgeError");
 // State
 // ---------------------------------------------------------------------------
 
-let allModules = [];
-// Default filter is "active" so authors land on a curated list of currently relevant
-// modules. Arkiverte/older versions er fortsatt tilgjengelig via filter-knappene.
-let activeFilter = "active";
-// #745: valgt kurs i kurs-filteret. "__all__" = ingen filtrering (default),
-// "__none__" = moduler som ikke er i noe kurs, ellers en course-id.
-let courseFilter = "__all__";
-let searchQuery = "";
-let sortColumn = "title"; // "title" | "updatedAt"
-let sortDirection = "asc"; // "asc" | "desc"
+let allModules = []; // siste hentede liste — slås opp av «Brukt i kurs»-popoveren.
+// #1046: lista er den felles listesida (list-page.js). Her ligger bare oppskriften for moduler.
+let listPage = null;
 // v1.2.12 (#348): pendingCreateTarget fjernet — én create-path, alltid Samtale.
 
 // ---------------------------------------------------------------------------
@@ -202,196 +191,118 @@ function resolveActiveWorkspaceRoles() {
 }
 
 // ---------------------------------------------------------------------------
-// Filter logic
+// Lista (den felles listesida)
 // ---------------------------------------------------------------------------
 
-// #745: bygg listen med distinkte kurs fra alle modulers `courses`-array (dedupe på id),
-// sortert på tittel. Brukes til å fylle kurs-filter-dropdownen.
-function collectCourseFilterOptions(modules) {
-  const byId = new Map();
-  for (const m of modules) {
-    for (const c of (m.courses ?? [])) {
-      if (c && c.id && !byId.has(c.id)) byId.set(c.id, String(c.title ?? c.id));
-    }
-  }
-  return [...byId.entries()]
-    .map(([id, title]) => ({ id, title }))
-    .sort((a, b) => a.title.localeCompare(b.title, currentLocale));
-}
-
-// #745: fyll kurs-dropdownen på nytt hver gang dataene lastes. Bevarer valgt kurs hvis det
-// fortsatt finnes; ellers faller vi tilbake til "Alle kurs".
-function rebuildCourseFilterOptions() {
-  if (!libraryCourseFilter) return;
-  const options = collectCourseFilterOptions(allModules);
-  const valid = new Set(["__all__", "__none__", ...options.map(o => o.id)]);
-  if (!valid.has(courseFilter)) courseFilter = "__all__";
-  libraryCourseFilter.innerHTML = [
-    `<option value="__all__">Alle kurs</option>`,
-    ...options.map(o => `<option value="${escapeHtml(o.id)}">${escapeHtml(o.title)}</option>`),
-    `<option value="__none__">Ikke i noe kurs</option>`,
-  ].join("");
-  libraryCourseFilter.value = courseFilter;
-}
-
-function applyFilter(modules) {
-  let result = modules;
-  const q = searchQuery.trim().toLowerCase();
-  if (q) {
-    result = result.filter(m =>
-      (m.title ?? "").toLowerCase().includes(q) ||
-      m.id.toLowerCase().includes(q)
-    );
-  }
-  // #745: kurs-filter komponerer med status-filter + søk + sortering (ekstra predikat).
-  if (courseFilter === "__none__") {
-    result = result.filter(m => (m.courses ?? []).length === 0);
-  } else if (courseFilter !== "__all__") {
-    result = result.filter(m => (m.courses ?? []).some(c => c && c.id === courseFilter));
-  }
-  if (activeFilter === "active") result = result.filter(m => m.status !== "archived");
-  else if (activeFilter === "archived") result = result.filter(m => m.status === "archived");
-  // v1.2.20 (#460): "har upublisert utkast"-filter dekker både modulene som aldri har vært
-  // publisert OG modulene som er live med en nyere upublisert draft.
-  else if (activeFilter === "unpublished_draft") result = result.filter(m => m.status === "unpublished_draft" || m.status === "published_with_draft");
-  else if (activeFilter === "published") result = result.filter(m => m.status === "published" || m.status === "published_with_draft");
-
-  result = [...result].sort((a, b) => {
-    let cmp = 0;
-    if (sortColumn === "title") {
-      cmp = (a.title ?? "").localeCompare(b.title ?? "", currentLocale);
-    } else if (sortColumn === "updatedAt") {
-      cmp = (a.updatedAt ?? "").localeCompare(b.updatedAt ?? "");
-    }
-    return sortDirection === "asc" ? cmp : -cmp;
-  });
-  return result;
-}
-
-// ---------------------------------------------------------------------------
-// Render
-// ---------------------------------------------------------------------------
-
-function renderLibrary() {
-  const visible = applyFilter(allModules);
-
-  if (allModules.length === 0) {
-    libraryContent.innerHTML = `
-      <div class="library-empty">
-        <p class="library-empty-title">Ingen moduler ennå</p>
-        <p class="library-empty-text">Opprett den første modulen for å komme i gang.</p>
+function getListPage() {
+  if (listPage) return listPage;
+  listPage = createListPage({
+    host: libraryContent,
+    ids: { tbody: "libraryTableBody", search: "librarySearch", courseFilter: "libraryCourseFilter" },
+    texts: {
+      title: "Moduler",
+      lead: "Vurderingsmoduler du kan redigere, publisere og bruke i kurs.",
+      searchPlaceholder: "Søk på modulnavn eller modul-ID…",
+      searchLabel: "Søk i modulbiblioteket",
+      filterGroupLabel: "Filtrer moduler",
+      courseFilterLabel: "Kurs:", courseFilterAll: "Alle kurs", courseFilterNone: "Ikke i noe kurs",
+      empty: "Ingen moduler ennå.",
+      emptyFiltered: "Ingen moduler matcher søket.",
+      loadError: "Kunne ikke laste moduler.",
+    },
+    headerActions: [
+      { id: "importModulePackageBtn", label: "Importer modul" },
+      { id: "createModuleBtn", label: "Ny modul", kind: "primary" },
+    ],
+    headerExtraHtml: `<input id="importModulePackageFile" type="file" accept="application/json,.json" hidden />`,
+    // #1046 B2: samme rekkefølge som Kurs og Seksjoner; modulens egen «Har upublisert utkast» sist.
+    // Default «Aktive», så forfatterne lander på det som er aktuelt nå.
+    filters: {
+      options: [["all", "Alle"], ["active", "Aktive"], ["published", "Publiserte"], ["archived", "Arkiverte"], ["unpublished_draft", "Har upublisert utkast"]],
+      initial: "active",
+      matches: (m, key) => {
+        if (key === "all") return true;
+        if (key === "active") return m.status !== "archived";
+        if (key === "archived") return m.status === "archived";
+        // v1.2.20 (#460): dekker både aldri publisert OG live med et nyere upublisert utkast.
+        if (key === "unpublished_draft") return m.status === "unpublished_draft" || m.status === "published_with_draft";
+        if (key === "published") return m.status === "published" || m.status === "published_with_draft";
+        return true;
+      },
+    },
+    // #745: kursfilteret bygges av modulenes egne `courses`.
+    courseFilter: { coursesOf: (m) => m.courses ?? [] },
+    search: { matches: (m, q) => (m.title ?? "").toLowerCase().includes(q) || m.id.toLowerCase().includes(q) },
+    sort: { key: "title", dir: "asc", locale: () => currentLocale },
+    columns: [
+      { key: "title", label: "Navn", className: "col-name", sortValue: (m) => m.title ?? "", render: (m) => escapeHtml(m.title ?? m.id) },
+      { key: "status", label: "Status", className: "col-status", render: (m) => statusBadge(m.status) },
+      { key: "level", label: "Sertifiseringsnivå", className: "col-level", render: (m) => certBadge(m.certificationLevel) },
+      { key: "courses", label: "Brukt i kurs", className: "col-courses", sortValue: (m) => m.courseCount ?? 0, render: (m) => (m.courseCount > 0
+        ? `<button class="course-count-btn" data-module-id="${escapeHtml(m.id)}" aria-label="${m.courseCount} kurs">${m.courseCount}</button>`
+        : `<span class="course-count-zero">0</span>`) },
+      { key: "updatedAt", label: "Sist endret", className: "col-updated", sortValue: (m) => m.updatedAt ?? "", render: (m) => formatDate(m.updatedAt) },
+    ],
+    rowId: (m) => m.id,
+    actions: (m) => {
+      const openConvUrl = `/admin-content/module/${encodeURIComponent(m.id)}/conversation`;
+      const isArchived = m.status === "archived";
+      // #787 slice 5: eier/admin styrer om redigerings-/livssyklus-handlingene vises (speiler eierskaps-
+      // vakta). Dupliser/Eksporter beholdes — de er lese-/kopi-handlinger som ikke vaktes av eierskap.
+      const canManage = m.canManage !== false;
+      const id = escapeHtml(m.id);
+      const title = escapeHtml(m.title ?? m.id);
+      // v1.2.20 (#459): Avpubliser bare for moduler som er aktivt publisert.
+      const isPublished = m.status === "published" || m.status === "published_with_draft";
+      return [
+        // #896 S3c: knappen sier hva den gjør — åpner modulen.
+        canManage ? `<a href="${openConvUrl}" class="row-action-btn">Åpne</a>` : "",
+        `<button class="row-action-btn" data-action="duplicate" data-module-id="${id}">Dupliser</button>`,
+        `<button class="row-action-btn" data-action="export" data-module-id="${id}" data-module-title="${title}">Eksporter</button>`,
+        canManage && isPublished ? `<button class="row-action-btn" data-action="unpublish" data-module-id="${id}" data-module-title="${title}">Avpubliser</button>` : "",
+        // #705-UX: Slett vises kun for arkiverte moduler (terminal steg etter arkivering).
+        canManage ? (isArchived
+          ? `<button class="row-action-btn" data-action="restore" data-module-id="${id}">Gjenopprett</button>`
+          : `<button class="row-action-btn" data-action="archive" data-module-id="${id}">Arkiver</button>`) : "",
+        canManage && isArchived ? `<button class="row-action-btn destructive" data-action="delete" data-module-id="${id}" data-module-title="${title}">Slett</button>` : "",
+        canManage ? "" : `<span class="row-readonly-note" title="Bare en eier eller en administrator kan åpne denne modulen.">Kun for eier</span>`,
+      ];
+    },
+    emptyHtml: () => `
+      <div class="empty-state">
+        <p class="empty-state-title">Ingen moduler ennå</p>
+        <p class="empty-state-text">Opprett den første modulen for å komme i gang.</p>
         <button class="btn btn-primary" id="emptyCreateBtn">Ny modul</button>
-      </div>`;
-    document.getElementById("emptyCreateBtn")?.addEventListener("click", openCreateDialog);
-    return;
-  }
-
-  if (visible.length === 0) {
-    libraryContent.innerHTML = `<div class="library-empty"><p class="library-empty-title">Ingen moduler matcher søket.</p></div>`;
-    return;
-  }
-
-  const rows = visible.map(m => {
-    const openConvUrl = `/admin-content/module/${encodeURIComponent(m.id)}/conversation`;
-    const isArchived = m.status === "archived";
-    // #787 slice 5: eier/admin styrer om redigerings-/livssyklus-handlingene vises (speiler eierskaps-
-    // vakta). Dupliser/Eksporter beholdes — de er lese-/kopi-handlinger som ikke vaktes av eierskap.
-    const canManage = m.canManage !== false;
-
-    const courseCountCell = m.courseCount > 0
-      ? `<button class="course-count-btn" data-module-id="${escapeHtml(m.id)}" aria-label="${m.courseCount} kurs">${m.courseCount}</button>`
-      : `<span class="course-count-zero">0</span>`;
-
-    // #705-UX: Slett vises kun for arkiverte moduler (terminal steg etter arkivering) — konsistent
-    // med kurs/seksjon. Sletting er vaktet i backend (blokkeres ved avhengigheter/kursbruk).
-    // Én knapp per oppføring, så «maks fire i raden» teller riktig (rowActionsHtml).
-    const archiveAction = isArchived
-      ? `<button class="row-action-btn" data-action="restore" data-module-id="${escapeHtml(m.id)}">Gjenopprett</button>`
-      : `<button class="row-action-btn" data-action="archive" data-module-id="${escapeHtml(m.id)}">Arkiver</button>`;
-    const deleteAction = isArchived
-      ? `<button class="row-action-btn destructive" data-action="delete" data-module-id="${escapeHtml(m.id)}" data-module-title="${escapeHtml(m.title ?? m.id)}">Slett</button>`
-      : "";
-    // v1.2.20 (#459): Avpubliser-knapp synlig kun for moduler som er aktivt publisert
-    // (published eller published_with_draft). Klikk → bekreftelses-prompt → POST /unpublish.
-    const isPublished = m.status === "published" || m.status === "published_with_draft";
-    const unpublishAction = isPublished
-      ? `<button class="row-action-btn" data-action="unpublish" data-module-id="${escapeHtml(m.id)}" data-module-title="${escapeHtml(m.title ?? m.id)}">Avpubliser</button>`
-      : "";
-
-    return `<tr>
-      <td class="col-name">${escapeHtml(m.title ?? m.id)}</td>
-      <td class="col-status">${statusBadge(m.status)}</td>
-      <td class="col-level">${certBadge(m.certificationLevel)}</td>
-      <td class="col-courses">${courseCountCell}</td>
-      <td class="col-updated">${formatDate(m.updatedAt)}</td>
-      <td class="col-actions">
-        <div class="row-actions">${rowActionsHtml([
-          // #896 S3c: "Åpne i Avansert" er borte med Avansert-siden. Knappen sier hva den gjør: åpner modulen.
-          canManage ? `<a href="${openConvUrl}" class="row-action-btn">Åpne</a>` : "",
-          `<button class="row-action-btn" data-action="duplicate" data-module-id="${escapeHtml(m.id)}">Dupliser</button>`,
-          `<button class="row-action-btn" data-action="export" data-module-id="${escapeHtml(m.id)}" data-module-title="${escapeHtml(m.title ?? m.id)}">Eksporter</button>`,
-          canManage ? unpublishAction : "",
-          canManage ? archiveAction : "",
-          canManage ? deleteAction : "",
-          canManage ? "" : `<span class="row-readonly-note" title="Bare en eier eller en administrator kan åpne denne modulen.">Kun for eier</span>`,
-        ])}</div>
-      </td>
-    </tr>`;
-  }).join("");
-
-  const titleDir = sortColumn === "title" ? sortDirection : "none";
-  const dateDir = sortColumn === "updatedAt" ? sortDirection : "none";
-  const titleIcon = titleDir === "asc" ? "↑" : titleDir === "desc" ? "↓" : "↕";
-  const dateIcon = dateDir === "asc" ? "↑" : dateDir === "desc" ? "↓" : "↕";
-
-  libraryContent.innerHTML = `
-    <div class="library-table-wrap list-table-wrap">
-      <table class="library-table list-table" aria-label="Modulbibliotek">
-        <thead>
-          <tr>
-            <th scope="col" class="sortable${titleDir !== "none" ? ` sort-${titleDir}` : ""}" data-sort="title" aria-sort="${titleDir !== "none" ? titleDir + "ending" : "none"}">Navn <i class="sort-indicator" aria-hidden="true">${titleIcon}</i></th>
-            <th scope="col">Status</th>
-            <th scope="col">Sertifiseringsnivå</th>
-            <th scope="col">Brukt i kurs</th>
-            <th scope="col" class="sortable${dateDir !== "none" ? ` sort-${dateDir}` : ""}" data-sort="updatedAt" aria-sort="${dateDir !== "none" ? dateDir + "ending" : "none"}">Sist endret <i class="sort-indicator" aria-hidden="true">${dateIcon}</i></th>
-            <th scope="col"><span class="sr-only">Handlinger</span></th>
-          </tr>
-        </thead>
-        <tbody id="libraryTableBody">${rows}</tbody>
-      </table>
-    </div>`;
-
-  document.getElementById("libraryTableBody")?.addEventListener("click", handleTableClick);
-  document.querySelectorAll(".library-table th[data-sort]").forEach(th => {
-    th.addEventListener("click", () => {
-      const col = th.dataset.sort;
-      if (sortColumn === col) {
-        sortDirection = sortDirection === "asc" ? "desc" : "asc";
-      } else {
-        sortColumn = col;
-        sortDirection = "asc";
-      }
-      renderLibrary();
-    });
+      </div>`,
+    load: async () => {
+      const data = await apiFetch(`/api/admin/content/modules/library?locale=${encodeURIComponent(currentLocale)}`, getHeaders);
+      allModules = data.modules ?? [];
+      return allModules;
+    },
+    onClick: (event) => {
+      const btn = event.target.closest(".course-count-btn[data-module-id]");
+      if (!btn) return false;
+      showCoursesPopover(btn, btn.dataset.moduleId);
+      return true;
+    },
+    describeError: (err) => apiErrorText(err),
+    onAction: (_action, _id, btn) => handleTableClick(btn),
+    afterRender: () => {
+      document.getElementById("createModuleBtn")?.addEventListener("click", openCreateDialog);
+      document.getElementById("emptyCreateBtn")?.addEventListener("click", openCreateDialog);
+    },
   });
+  return listPage;
 }
 
 // ---------------------------------------------------------------------------
 // Table click handler
 // ---------------------------------------------------------------------------
 
-function handleTableClick(event) {
-  const btn = event.target.closest("[data-action], [data-module-id].course-count-btn");
+function handleTableClick(btn) {
   if (!btn) return;
-
   const moduleId = btn.dataset.moduleId;
   const action = btn.dataset.action;
-
-  if (btn.classList.contains("course-count-btn")) {
-    showCoursesPopover(btn, moduleId);
-    return;
-  }
-
   if (action === "archive") archiveModule(moduleId, btn);
   else if (action === "restore") restoreModule(moduleId, btn);
   else if (action === "delete") deleteModuleFromRow(moduleId, btn.dataset.moduleTitle ?? moduleId, btn);
@@ -696,15 +607,7 @@ async function createAndNavigate() {
 // ---------------------------------------------------------------------------
 
 async function loadModules() {
-  try {
-    const data = await apiFetch(`/api/admin/content/modules/library?locale=${encodeURIComponent(currentLocale)}`, getHeaders);
-    allModules = data.modules ?? [];
-    // #745: gjenoppbygg kurs-dropdownen når dataene lastes (nye/fjernede kurs-koblinger).
-    rebuildCourseFilterOptions();
-    renderLibrary();
-  } catch (err) {
-    libraryContent.innerHTML = `<div class="library-empty"><p class="library-empty-title">Kunne ikke laste moduler.</p><p class="library-empty-text">${escapeHtml(apiErrorText(err))}</p></div>`;
-  }
+  await getListPage().reload().catch(() => undefined);
 }
 
 // ---------------------------------------------------------------------------
@@ -758,7 +661,6 @@ function buildLocaleSelector() {
 // ---------------------------------------------------------------------------
 
 async function init() {
-  installRowMoreMenus();
   try {
     const cfg = await getConsoleConfig();
     participantRuntimeConfig = cfg;
@@ -799,27 +701,6 @@ async function init() {
     fetchQueueCounts(getHeaders).then(counts => applyNavReviewBadge(workspaceNav, counts)).catch(() => {});
   }
 
-  // Search
-  librarySearch?.addEventListener("input", () => {
-    searchQuery = librarySearch.value;
-    renderLibrary();
-  });
-
-  // #745: kurs-filter (in-memory, ingen persistering på tvers av reload — som øvrige filtre).
-  libraryCourseFilter?.addEventListener("change", () => {
-    courseFilter = libraryCourseFilter.value;
-    renderLibrary();
-  });
-
-  // Filter buttons
-  document.querySelectorAll(".library-filter-btn").forEach(btn => {
-    btn.addEventListener("click", () => {
-      activeFilter = btn.dataset.filter;
-      document.querySelectorAll(".library-filter-btn").forEach(b => b.classList.toggle("active", b === btn));
-      renderLibrary();
-    });
-  });
-
   // Localize cert level select options
   if (newModuleLevel) {
     const optMap = {
@@ -831,9 +712,6 @@ async function init() {
       if (optMap[opt.value]) opt.textContent = optMap[opt.value];
     });
   }
-
-  // Create module
-  createModuleBtn?.addEventListener("click", openCreateDialog);
 
   // v1.2.11: Rydd upubliserte — kun ADMINISTRATOR ser knappen.
   if (purgeUnpublishedBtn) {
@@ -851,12 +729,13 @@ async function init() {
   // input; on file pick: parse JSON, POST envelope to /modules/import,
   // navigate to the freshly-created module's advanced view. Using <button>
   // (not <label>) so .btn styling applies cleanly.
-  const importModulePackageBtn = document.getElementById("importModulePackageBtn");
-  const importModulePackageFile = document.getElementById("importModulePackageFile");
-  importModulePackageBtn?.addEventListener("click", () => {
-    importModulePackageFile?.click();
+  // #1046: hodet tegnes av listesida, så lytterne delegeres fra verten (overlever ny tegning).
+  libraryContent.addEventListener("click", (event) => {
+    if (event.target.closest("#importModulePackageBtn")) document.getElementById("importModulePackageFile")?.click();
   });
-  importModulePackageFile?.addEventListener("change", async (event) => {
+  libraryContent.addEventListener("change", async (event) => {
+    if (event.target?.id !== "importModulePackageFile") return;
+    const importModulePackageBtn = document.getElementById("importModulePackageBtn");
     const target = event.target;
     const file = target?.files?.[0] ?? null;
     if (!file) return;

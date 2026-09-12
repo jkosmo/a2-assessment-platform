@@ -1345,6 +1345,36 @@ dialog::backdrop {
 .list-table .col-name, .list-table .col-title { width: 28%; min-width: 180px; font-weight: 600; }
 .list-table .col-status, .list-table .col-level, .list-table .col-courses, .list-table .col-module-count, .list-table .col-actions { white-space: nowrap; }
 .list-table .col-updated { white-space: nowrap; color: var(--color-meta); font-size: 13px; }
+/* #1046 — LISTESIDA (public/static/list-page.js). Alt under her hører til den felles listesida for
+   Moduler, Kurs, Seksjoner og Klasser. Sidene skal ikke ha egne kopier av disse reglene. */
+.page-header { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); margin-bottom: var(--space-3); flex-wrap: wrap; }
+.page-header h1 { margin: 0; font-size: 22px; }
+.page-lead { margin: 4px 0 0; font-size: 13px; color: var(--color-meta); }
+.list-filters-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin-bottom: var(--space-2); }
+.list-filters-row .list-filters { margin-bottom: 0; }
+.list-course-filter { display: flex; align-items: center; gap: 8px; }
+.list-course-filter label { font-size: 13px; font-weight: 600; color: var(--color-meta); }
+.list-course-select {
+  width: auto; min-height: 0; padding: 5px 10px; font-size: 13px; font-family: inherit;
+  border: 1px solid var(--color-border-soft); border-radius: var(--radius-card);
+  background: var(--color-surface); color: var(--color-text); max-width: 260px;
+}
+.list-course-select:focus { outline: 2px solid var(--color-blue); outline-offset: 1px; border-color: transparent; }
+.list-table th.sortable { cursor: pointer; user-select: none; }
+.list-table th.sortable:hover { color: var(--color-link-active); }
+.list-table .sort-indicator { display: inline-block; margin-left: 4px; opacity: 0.4; font-style: normal; }
+.list-table th.sort-asc .sort-indicator, .list-table th.sort-desc .sort-indicator { opacity: 1; color: var(--color-link-active); }
+.empty-state { text-align: center; padding: var(--space-5) var(--space-3); background: var(--color-surface); border: 1px solid var(--color-table-wrap-border); border-radius: var(--radius-card); }
+.empty-state-title { font-size: 18px; font-weight: 700; color: var(--color-text); margin: 0 0 8px; }
+.empty-state-text { font-size: 14px; color: var(--color-meta); margin: 0 0 var(--space-2); }
+/* #1046 B1 (produkteier 12.09: «Moduler har søkefelt, seksjoner har ikke»): ett søkefelt for alle
+   listene, over filterknappene, venstrejustert. Var .library-search bare på Moduler. */
+.list-search {
+  width: 100%; max-width: 380px; padding: 9px 12px; margin-bottom: var(--space-1);
+  border: 1px solid var(--color-border-soft); border-radius: var(--radius-card);
+  font-size: 14px; font-family: inherit; background: #fff; color: var(--color-text); box-sizing: border-box;
+}
+.list-search:focus { outline: 2px solid var(--color-blue); outline-offset: 1px; border-color: transparent; }
 /* «Mer»-menyen (#1046 D5): <details> så åpne/lukke virker uten skript og med tastatur. */
 .row-more { position: relative; display: inline-block; }
 .row-more > summary { list-style: none; }

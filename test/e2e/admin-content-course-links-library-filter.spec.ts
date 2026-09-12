@@ -96,7 +96,7 @@ test.describe("#745 module library — filter by course", () => {
 
     await page.goto(LIBRARY_PATH);
 
-    const table = page.locator(".library-table");
+    const table = page.locator(".list-table");
     await expect(table).toContainText("Module X");
     await expect(table).toContainText("Module Y");
 
@@ -130,13 +130,13 @@ test.describe("#745 module library — filter by course", () => {
 
     await page.goto(LIBRARY_PATH);
     await page.locator("#libraryCourseFilter").selectOption("course-a");
-    await expect(page.locator(".library-table")).toContainText("Trade unions");
-    await expect(page.locator(".library-table")).toContainText("Bargaining basics");
+    await expect(page.locator(".list-table")).toContainText("Trade unions");
+    await expect(page.locator(".list-table")).toContainText("Bargaining basics");
 
     // Search narrows within the course-filtered set.
     await page.locator("#librarySearch").fill("bargaining");
-    await expect(page.locator(".library-table")).toContainText("Bargaining basics");
-    await expect(page.locator(".library-table")).not.toContainText("Trade unions");
+    await expect(page.locator(".list-table")).toContainText("Bargaining basics");
+    await expect(page.locator(".list-table")).not.toContainText("Trade unions");
   });
 });
 
@@ -172,7 +172,7 @@ test.describe("#745 section library — filter by course", () => {
 
     await page.goto("/admin-content/sections");
 
-    const table = page.locator(".sections-table");
+    const table = page.locator(".list-table");
     await expect(table).toContainText("Section X");
     await expect(table).toContainText("Section Y");
 
@@ -183,15 +183,15 @@ test.describe("#745 section library — filter by course", () => {
     await expect(courseSelect.locator("option")).toContainText(["All courses", "Kurs A", "Not in any course"]);
 
     await courseSelect.selectOption("course-a");
-    await expect(page.locator(".sections-table")).toContainText("Section X");
-    await expect(page.locator(".sections-table")).not.toContainText("Section Y");
+    await expect(page.locator(".list-table")).toContainText("Section X");
+    await expect(page.locator(".list-table")).not.toContainText("Section Y");
 
     await page.locator("#sectionCourseFilter").selectOption("__none__");
-    await expect(page.locator(".sections-table")).toContainText("Section Y");
-    await expect(page.locator(".sections-table")).not.toContainText("Section X");
+    await expect(page.locator(".list-table")).toContainText("Section Y");
+    await expect(page.locator(".list-table")).not.toContainText("Section X");
 
     await page.locator("#sectionCourseFilter").selectOption("__all__");
-    await expect(page.locator(".sections-table")).toContainText("Section X");
-    await expect(page.locator(".sections-table")).toContainText("Section Y");
+    await expect(page.locator(".list-table")).toContainText("Section X");
+    await expect(page.locator(".list-table")).toContainText("Section Y");
   });
 });

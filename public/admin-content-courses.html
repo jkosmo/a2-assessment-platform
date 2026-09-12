@@ -29,17 +29,7 @@
       .content-area-nav-link.active { color: var(--color-link-active); border-bottom-color: var(--color-blue); }
 
       /* ── Page header ─────────────────────────────────────────────────────── */
-      .page-header {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: var(--space-2);
-        margin-bottom: var(--space-3);
-        flex-wrap: wrap;
-      }
-      .page-header h1 { margin: 0; font-size: 22px; }
-      /* #1046 A1: én forklaringslinje under tittelen. */
-      .page-lead { margin: 4px 0 0; font-size: 13px; color: var(--color-meta); }
+      /* #1046: sidehode, søk, filtre og tabell er den felles listesida (list-page.js + shared.css). */
 
       .page-header-back {
         display: flex;
@@ -79,15 +69,6 @@
       /* #1046 D5: .row-actions, .row-action-btn og «Mer»-menyen arves fra shared.css (samme regel ett sted). */
 
       /* ── Empty state ─────────────────────────────────────────────────────── */
-      .empty-state {
-        text-align: center;
-        padding: var(--space-5) var(--space-3);
-        background: var(--color-surface);
-        border: 1px solid var(--color-table-wrap-border);
-        border-radius: var(--radius-card);
-      }
-      .empty-state-title { font-size: 18px; font-weight: 700; color: var(--color-text); margin: 0 0 8px; }
-      .empty-state-text { font-size: 14px; color: var(--color-meta); margin: 0 0 var(--space-2); }
 
       /* ── Detail layout ───────────────────────────────────────────────────── */
       .detail-layout {

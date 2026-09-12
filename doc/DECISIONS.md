@@ -625,3 +625,16 @@ bare et funn som venter på å bli lukket på nytt.
 forespørsel uten `x-locale` og uten gjenkjennelig `Accept-Language`, og e-post til en bruker som
 ikke har logget inn siden `User.preferredLocale` kom (#970). Kodens egen reserve forblir `en-GB` —
 plattformen kan kjøre for andre organisasjoner; dette er A-2s konfigurasjon.
+
+## Én listeside for forfatterflaten (2026-09-12)
+
+Moduler, Kurs, Seksjoner og Klasser var fire håndskrevne utgaver av samme side. Hver runde av
+#1046 rettet samme ting fire steder — den feilklassen vi har sett gjentatte ganger. Nå eier
+`public/static/list-page.js` alt som er likt (sidehode, søk, filterknapper, kursfilter, tabell,
+sortering, rader, «Mer»-meny, klikk, tom-tilstand, filtrering i minnet), og hver side leverer bare
+en oppskrift: kolonner, hvordan lese status, hvilke handlinger, tekster, hvilket kall som henter.
+`test/dom/list-page-1046.dom.test.js` måler regelen og forbyr at en side får en kopi igjen.
+
+Det som ble valgt bort: å la sidene beholde egne varianter «der de trengte det». Ingen av
+avvikene var valgt — de var lag i tid. Neste steg (steg B) er én tilstand i API-et: alle fire
+listekallene skal levere samme `lifecycle`-felt, så oppskriftenes status-adaptere kan fjernes.

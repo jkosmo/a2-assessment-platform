@@ -6,7 +6,7 @@ import { showToast } from "/static/toast.js";
 import { describeApiError } from "/static/api-error.js";
 import { supportedLocales, localeLabels, translations as adminContentTranslations } from "/static/i18n/admin-content-translations.js";
 import { renderOwnerPanel } from "/static/owner-panel.js";
-import { rowActionsHtml, installRowMoreMenus } from "/static/row-actions.js";
+import { createListPage } from "/static/list-page.js";
 
 // #645/CL-3: admin UI for classes (cohorts) — list, create, manage members, assign courses.
 
@@ -81,8 +81,8 @@ function formatDueDate(iso) {
 // #705-family: classes now render Aktive/Arkiverte consistently with the other lifecycle lists.
 // Classes are 2-state (aktiv/arkivert) — no draft/publish — so the filter has Aktive/Arkiverte/Alle
 // (no "Publiserte"), and status is shown as an "Arkivert"-badge rather than the full 3-state badge.
-let classesFilter = "active";
-let classesCache = [];
+// #1046: lista er den felles listesida (list-page.js). Her ligger bare oppskriften for klasser.
+let listPage = null;
 
 function classTypeLabel(c) {
   if (c.isSystem) return "System";
@@ -90,95 +90,83 @@ function classTypeLabel(c) {
   return "Manuell";
 }
 
-function filteredClasses() {
-  if (classesFilter === "archived") return classesCache.filter((c) => c.archivedAt);
-  if (classesFilter === "all") return classesCache;
-  return classesCache.filter((c) => !c.archivedAt);
-}
-
-function classFilterBar() {
-  // #1046 B2: samme rekkefølge som Moduler/Kurs/Seksjoner — «Alle» først, «Aktive» forhåndsvalgt.
-  const pills = [["all", "Alle"], ["active", "Aktive"], ["archived", "Arkiverte"]];
-  return `<div class="list-filters" role="group" aria-label="Filtrer klasser">${pills
-    .map(([key, label]) => `<button type="button" class="list-filter-btn${classesFilter === key ? " active" : ""}" data-filter="${key}">${escapeHtml(label)}</button>`)
-    .join("")}</div>`;
-}
-
-function renderClassesTable() {
-  const rows = filteredClasses().map((c) => {
-    const archived = !!c.archivedAt;
-    const systemBadge = c.isSystem ? `<span class="system-badge">System</span>` : "";
-    const statusBadge = archived ? ` <span class="status-badge status-badge--archived">Arkivert</span>` : "";
-    // #787 slice 5: eier/admin styrer om Administrer/Arkiver-handlingene vises (speiler eierskaps-vakta).
-    // Systemklasser er ueide → bare admin forvalter dem, som før.
-    const canManage = c.canManage !== false;
-    // #1046 D3/D5: samme rad som de andre listene — Åpne · Arkiver, og på arkiverte rader
-    // Gjenopprett · Slett. Én knapp per oppføring, så «maks fire i raden» teller riktig.
-    const archiveToggle = c.isSystem ? "" : archived
-      ? `<button class="row-action-btn" data-action="restore" data-id="${escapeHtml(c.id)}" data-name="${escapeHtml(c.name)}">Gjenopprett</button>`
-      : `<button class="row-action-btn" data-action="archive" data-id="${escapeHtml(c.id)}" data-name="${escapeHtml(c.name)}">Arkiver</button>`;
-    const deleteBtn = !c.isSystem && archived
-      ? `<button class="row-action-btn destructive" data-action="delete" data-id="${escapeHtml(c.id)}" data-name="${escapeHtml(c.name)}">Slett</button>`
-      : "";
-    return `
-    <tr>
-      <td class="col-name">${escapeHtml(c.name)}${systemBadge}${statusBadge}</td>
-      <td>${escapeHtml(classTypeLabel(c))}</td>
-      <td>${c._count?.members ?? 0}</td>
-      <td>${c._count?.courseAssignments ?? 0}</td>
-      <td class="col-actions">
-        <div class="row-actions">${rowActionsHtml(canManage
-          ? [`<button class="row-action-btn" data-action="open" data-id="${escapeHtml(c.id)}">Åpne</button>`, archiveToggle, deleteBtn]
-          : [`<span class="row-readonly-note" title="Bare en eier eller en administrator kan åpne denne klassen.">Kun for eier</span>`])}</div>
-      </td>
-    </tr>`;
-  }).join("");
-  const body = document.getElementById("classesTableBody");
-  if (body) body.innerHTML = rows || `<tr><td colspan="5" style="color:var(--color-meta)">Ingen klasser i denne visningen.</td></tr>`;
-  document.querySelectorAll(".list-filter-btn").forEach((btn) => {
-    btn.classList.toggle("active", btn.dataset.filter === classesFilter);
+function getListPage() {
+  if (listPage) return listPage;
+  listPage = createListPage({
+    host: pageContent,
+    ids: { tbody: "classesTableBody", search: "classesSearch" },
+    texts: {
+      title: "Klasser",
+      lead: "Grupper av deltakere som får kurs tildelt samlet. «Alle deltakere» er en systemklasse med alle som har deltakerrolle.",
+      searchPlaceholder: "Søk på klassenavn…",
+      searchLabel: "Søk i klasser",
+      filterGroupLabel: "Filtrer klasser",
+      empty: "Ingen klasser ennå.",
+      emptyFiltered: "Ingen klasser i denne visningen.",
+      loadError: "Kunne ikke laste klasser.",
+    },
+    headerActions: [
+      { id: "importUsersBtn", label: "Importer brukere", title: "Importer brukere fra en JSON-fil eksportert fra Entra (delta-synk)", hidden: !isAdministrator },
+      { id: "syncEntraBtn", label: "Synk brukere fra Entra", title: "Importer brukere fra «Alle i A-2 Norge» i Entra (krever Graph-tilgang)", hidden: !isAdministrator },
+      { id: "newClassBtn", label: "Ny klasse", kind: "primary" },
+    ],
+    headerExtraHtml: isAdministrator ? `<input type="file" id="importUsersFile" accept="application/json,.json" style="display:none">` : "",
+    // #1046 B2: samme rekkefølge som Moduler/Kurs/Seksjoner — «Alle» først, «Aktive» forhåndsvalgt.
+    filters: {
+      options: [["all", "Alle"], ["active", "Aktive"], ["archived", "Arkiverte"]],
+      initial: "active",
+      matches: (c, key) => key === "all" || (key === "archived" ? Boolean(c.archivedAt) : !c.archivedAt),
+    },
+    search: { matches: (c, q) => String(c.name ?? "").toLowerCase().includes(q) || String(c.id).toLowerCase().includes(q) },
+    sort: { key: "name", dir: "asc", locale: () => currentLocale },
+    columns: [
+      { key: "name", label: "Navn", className: "col-name", sortValue: (c) => c.name ?? "", render: (c) =>
+        `${escapeHtml(c.name)}${c.isSystem ? `<span class="system-badge">System</span>` : ""}${c.archivedAt ? ` <span class="status-badge status-badge--archived">Arkivert</span>` : ""}` },
+      { key: "type", label: "Type", render: (c) => escapeHtml(classTypeLabel(c)) },
+      { key: "members", label: "Medlemmer", sortValue: (c) => c._count?.members ?? 0, render: (c) => String(c._count?.members ?? 0) },
+      { key: "courses", label: "Tildelte kurs", sortValue: (c) => c._count?.courseAssignments ?? 0, render: (c) => String(c._count?.courseAssignments ?? 0) },
+    ],
+    rowId: (c) => c.id,
+    actions: (c) => {
+      // #787 slice 5: eier/admin styrer om handlingene vises (speiler eierskaps-vakta). Systemklasser
+      // er ueide → bare admin forvalter dem, som før.
+      const canManage = c.canManage !== false;
+      if (!canManage) return [`<span class="row-readonly-note" title="Bare en eier eller en administrator kan åpne denne klassen.">Kun for eier</span>`];
+      const archived = Boolean(c.archivedAt);
+      const id = escapeHtml(c.id);
+      const name = escapeHtml(c.name);
+      // #1046 D3: Åpne · Arkiver, og på arkiverte rader Gjenopprett · Slett.
+      return [
+        `<button class="row-action-btn" data-action="open" data-id="${id}">Åpne</button>`,
+        c.isSystem ? "" : archived
+          ? `<button class="row-action-btn" data-action="restore" data-id="${id}" data-name="${name}">Gjenopprett</button>`
+          : `<button class="row-action-btn" data-action="archive" data-id="${id}" data-name="${name}">Arkiver</button>`,
+        !c.isSystem && archived ? `<button class="row-action-btn destructive" data-action="delete" data-id="${id}" data-name="${name}">Slett</button>` : "",
+      ];
+    },
+    load: async () => (await apiFetch("/api/admin/content/classes", getHeaders)).classes ?? [],
+    describeError: (err) => apiErrorText(err),
+    onAction: (action, id, btn) => {
+      if (action === "open") openClass(id);
+      if (action === "archive") archiveClass(id, btn.dataset.name);
+      if (action === "restore") restoreClassInAdmin(id, btn.dataset.name);
+      if (action === "delete") deleteClassInAdmin(id, btn.dataset.name);
+    },
+    afterRender: () => {
+      document.getElementById("newClassBtn")?.addEventListener("click", createClassFlow);
+      document.getElementById("syncEntraBtn")?.addEventListener("click", syncEntraUsers);
+      const importBtn = document.getElementById("importUsersBtn");
+      const importFile = document.getElementById("importUsersFile");
+      importBtn?.addEventListener("click", () => importFile?.click());
+      importFile?.addEventListener("change", () => importUsersFromFile(importFile));
+    },
   });
+  return listPage;
 }
 
 async function renderListView() {
   pageContent.innerHTML = `<div class="page-loading">Laster…</div>`;
-  try {
-    classesCache = (await apiFetch("/api/admin/content/classes", getHeaders)).classes ?? [];
-  } catch (err) {
-    pageContent.innerHTML = `<p>Kunne ikke laste klasser: ${escapeHtml(apiErrorText(err))}</p>`;
-    return;
-  }
-  pageContent.innerHTML = `
-    <div class="page-header"><div><h1>Klasser</h1><p class="page-lead">Grupper av deltakere som får kurs tildelt samlet.</p></div><div style="display:flex;gap:8px">${isAdministrator ? `<button id="importUsersBtn" class="btn btn-secondary" style="width:auto" title="Importer brukere fra en JSON-fil eksportert fra Entra (delta-synk)">Importer brukere</button><input type="file" id="importUsersFile" accept="application/json,.json" style="display:none"><button id="syncEntraBtn" class="btn btn-secondary" style="width:auto" title="Importer brukere fra «Alle i A-2 Norge» i Entra (krever Graph-tilgang)">Synk brukere fra Entra</button>` : ""}<button id="newClassBtn" class="btn btn-primary" style="width:auto">Ny klasse</button></div></div>
-    <p style="color:var(--color-meta);font-size:13px">En klasse er en gruppe deltakere du kan tildele kurs til samlet. «Alle deltakere» er en systemklasse (alle med deltakerrolle).</p>
-    ${classFilterBar()}
-    <div class="classes-table-wrap list-table-wrap">
-      <table class="classes-table list-table">
-        <thead><tr><th scope="col">Navn</th><th scope="col">Type</th><th scope="col">Medlemmer</th><th scope="col">Tildelte kurs</th><th scope="col"><span class="sr-only">Handlinger</span></th></tr></thead>
-        <tbody id="classesTableBody"></tbody>
-      </table>
-    </div>`;
-  renderClassesTable();
-  document.getElementById("newClassBtn").addEventListener("click", createClassFlow);
-  document.getElementById("syncEntraBtn")?.addEventListener("click", syncEntraUsers);
-  const importBtn = document.getElementById("importUsersBtn");
-  const importFile = document.getElementById("importUsersFile");
-  importBtn?.addEventListener("click", () => importFile?.click());
-  importFile?.addEventListener("change", () => importUsersFromFile(importFile));
-  pageContent.querySelector(".list-filters")?.addEventListener("click", (e) => {
-    const btn = e.target.closest("[data-filter]");
-    if (!btn) return;
-    classesFilter = btn.dataset.filter;
-    renderClassesTable();
-  });
-  document.getElementById("classesTableBody").addEventListener("click", (e) => {
-    const btn = e.target.closest("[data-action]");
-    if (!btn) return;
-    if (btn.dataset.action === "open") openClass(btn.dataset.id);
-    if (btn.dataset.action === "archive") archiveClass(btn.dataset.id, btn.dataset.name);
-    if (btn.dataset.action === "restore") restoreClassInAdmin(btn.dataset.id, btn.dataset.name);
-    if (btn.dataset.action === "delete") deleteClassInAdmin(btn.dataset.id, btn.dataset.name);
-  });
+  await getListPage().reload().catch(() => undefined);
 }
 
 // #690: import users from the configured Entra group ("Alle i A-2 Norge") so they are searchable
@@ -436,7 +424,6 @@ function buildLocaleSelector() {
 }
 
 async function init() {
-  installRowMoreMenus();
   try {
     const cfg = await getConsoleConfig();
     participantRuntimeConfig = cfg;

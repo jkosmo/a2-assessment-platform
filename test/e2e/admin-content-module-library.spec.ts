@@ -33,7 +33,7 @@ test.describe("admin content module library", () => {
     await expect(page.locator('a.content-area-nav-link[href="/deltakere/klasser"]')).toHaveCount(0);
     await expect(page.locator('a.content-area-nav-link[href="/admin-content/courses"]')).toHaveText("Kurs");
 
-    const table = page.locator(".library-table");
+    const table = page.locator(".list-table");
     await expect(table).toBeVisible();
     await expect(table).toContainText("Trade unions");
     await expect(table).toContainText("Collective bargaining");
@@ -41,10 +41,10 @@ test.describe("admin content module library", () => {
     // #896 S3c: one "open" link per row, pointing at the module workspace. There used to be two —
     // the second went to the Avansert editor, which no longer exists.
     await expect(
-      page.locator('.library-table a[href="/admin-content/module/module-1/conversation"]'),
+      page.locator('.list-table a[href="/admin-content/module/module-1/conversation"]'),
     ).toHaveText("Åpne");
     await expect(
-      page.locator('.library-table a[href="/admin-content/module/module-1/advanced"]'),
+      page.locator('.list-table a[href="/admin-content/module/module-1/advanced"]'),
     ).toHaveCount(0);
   });
 
@@ -53,7 +53,7 @@ test.describe("admin content module library", () => {
 
     await page.goto(LIBRARY_PATH);
 
-    await expect(page.locator(".library-empty")).toBeVisible();
+    await expect(page.locator(".empty-state")).toBeVisible();
     await expect(page.getByText("Ingen moduler ennå")).toBeVisible();
     // The empty state offers its own create entry point.
     await expect(page.locator("#emptyCreateBtn")).toBeVisible();
@@ -68,13 +68,13 @@ test.describe("admin content module library", () => {
     });
 
     await page.goto(LIBRARY_PATH);
-    await expect(page.locator(".library-table")).toContainText("Trade unions");
+    await expect(page.locator(".list-table")).toContainText("Trade unions");
 
     await page.locator("#librarySearch").fill("collective");
 
     // Only the matching row survives the client-side filter.
-    await expect(page.locator(".library-table")).toContainText("Collective bargaining");
-    await expect(page.locator(".library-table")).not.toContainText("Trade unions");
+    await expect(page.locator(".list-table")).toContainText("Collective bargaining");
+    await expect(page.locator(".list-table")).not.toContainText("Trade unions");
 
     // A search with no matches renders the "no match" empty state.
     await page.locator("#librarySearch").fill("nonexistent-xyz");
@@ -92,14 +92,14 @@ test.describe("admin content module library", () => {
     await page.goto(LIBRARY_PATH);
 
     // The "Aktive" filter button is active by default and the archived row is hidden.
-    await expect(page.locator('.library-filter-btn[data-filter="active"]')).toHaveClass(/active/);
-    await expect(page.locator(".library-table")).toContainText("Trade unions");
-    await expect(page.locator(".library-table")).not.toContainText("Old retired module");
+    await expect(page.locator('.list-filter-btn[data-filter="active"]')).toHaveClass(/active/);
+    await expect(page.locator(".list-table")).toContainText("Trade unions");
+    await expect(page.locator(".list-table")).not.toContainText("Old retired module");
 
     // Switching to "Arkiverte" shows only the archived module.
-    await page.locator('.library-filter-btn[data-filter="archived"]').click();
-    await expect(page.locator(".library-table")).toContainText("Old retired module");
-    await expect(page.locator(".library-table")).not.toContainText("Trade unions");
+    await page.locator('.list-filter-btn[data-filter="archived"]').click();
+    await expect(page.locator(".list-table")).toContainText("Old retired module");
+    await expect(page.locator(".list-table")).not.toContainText("Trade unions");
   });
 
   test("create-module dialog stays disabled until title and level are provided", async ({ page }) => {
