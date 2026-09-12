@@ -23,8 +23,12 @@ grunn — og da står grunnen her. Datoene er første commit der varianten kom i
 | 37 | Manuell behandling med sak valgt | skjema (beslutning) |
 | 38 | Plattforminnstillinger | skjema |
 | 39 | Profil | lesevisning |
+| 40 | Deltaker: kurs åpnet («Gjennomfør») | deltakerens inngang til svarskjemaet |
+| 41 | Status med kurs valgt | oppslag med nøkkeltall og tabell |
+| 42 | Resultater med rad valgt | filter, nøkkeltall, tabell, eksport, detalj |
 
-Ikke med ennå: deltakerens svarskjema (bildet feilet i riggen; tas ved neste kjøring).
+Deltakerens selve svarskjema (etter «Gjennomfør») er ikke med; deltakersida er nyest og bør heller
+være fasit enn funn.
 
 ## A. Å lage noe nytt
 
@@ -108,6 +112,21 @@ Ikke med ennå: deltakerens svarskjema (bildet feilet i riggen; tas ved neste kj
 |---|---|---|
 | I1 | Etikett/verdi-lister: «Navn — Joakim Kosmo» med kolonner (profil), «Oppgave — Agentflyt» med kolonner (manuell behandling), tilstandslinje med små STORE etiketter (modul). Tre måter. | 39, 37, 30 |
 | I2 | Nøkkeltall: tre kort med farget kant (kvalitet) — finnes ikke andre steder. | 36 |
+
+## J. Status og Resultater (lagt til på produkteiers forespørsel)
+
+| # | Hva er ulikt | Hvor |
+|---|---|---|
+| J1 | **Sidas navn er ikke menyens navn:** menyen sier «Status», sida «Kohort-status»; menyen sier «Resultater», sida «Resultatarbeidsflate». Forklaringslinja på Resultater sier «for HR og fagansvarlige». | 41, 42 |
+| J2 | **Tre ord for samme ting:** «Kohort» (Status-sida), «Kull» (galleriet/eldre tekster), «Klasse» (resten av plattformen). | 41 |
+| J3 | **Hva man filtrerer på:** Status har én nedtrekksliste med kursnavn. Resultater har fritekstfelt for «Modul-ID» og «Kurs-ID» — tekniske ID-er ingen bruker kjenner — pluss to datofelt. | 41, 42 |
+| J4 | **Nøkkeltall vises på tre måter:** fem fliser med stort farget tall og STOR etikett, første flis beige (Status); tre kort med farget venstrekant og «Innenfor forventet»-tekst (Vurderingskvalitet); et rutenett med én flis per modul, «100 %» + «1 bestått av 1 avgjørelser» (Resultater). | 41, 36, 42 |
+| J5 | **Tabellhodet:** små STORE BOKSTAVER (Status «Per klasse», forfatterlistene) mot vanlig skrift «Modul · Totalt · Fullført» (Resultater). | 41, 42 |
+| J6 | **Tom tabell:** Status viser både teksten «Ingen klasse-tildelinger for dette kurset» OG et tomt tabellhode. Listesida viser bare teksten. | 41 |
+| J7 | **Drilldown:** modulnavn som understreket lenke i tabellen, detalj i et eget kort langt under (Resultater); ingen drilldown på Status. Manuell behandling gjør det samme som Resultater (rad → detalj under). | 42, 37 |
+| J8 | **Eksport:** seks knapper «Eksporter … (CSV)» på to linjer. Ingen annen side har mer enn én eksportknapp. | 42 |
+| J9 | **Tall og tid:** «100 %» med mellomrom (Resultater) mot «100%» (Vurderingskvalitet); «Oppdatert: 12.9.2026, 20:57:59» med sekunder (Status) mot den felles datohjelperen ellers. | 42, 36, 41 |
+| J10 | Prosent for «ingen data»: en tankestrek «—» i flisa (Resultater) — greit, men «Ingen avgjørelser ennå» står også under; to måter å si det samme i én flis. | 42 |
 
 ## Det som IKKE står her
 
@@ -196,12 +215,27 @@ finnes en grunn.*
 |---|---|---|
 | I1 | Én etikett/verdi-liste (som profil): etikett i grått til venstre, verdi til høyre. | |
 
+## J. Status og Resultater
+
+| # | Anbefalt | Hvorfor |
+|---|---|---|
+| J1 | Sidas tittel = menyens navn: «Status» og «Resultater». Forklaringslinja sier hva sida svarer på, ikke hvem den er for. | Det er det brukeren nettopp trykket på. «Arbeidsflate» og «Kohort» er våre ord. |
+| J2 | «Klasse» overalt; «kohort» og «kull» går ut. | Klasser er det sidene i «Deltakere» heter, og det er ordet i lista. |
+| J3 | Resultater filtrerer som Status: velg **kurs** i en nedtrekksliste, og valgfritt **modul** i en til (fylt av kurset). ID-feltene går ut. Datofeltene beholdes. | Ingen kjenner en ID. Status (juli) er nyest og gjør det riktig. |
+| J4 | Ett nøkkeltall-kort: stort tall, etikett under i vanlig skrift, én farge for tallet som betyr noe (rød for forfalt/under mål, grønn for fullført/innenfor). Brukes av Status, Vurderingskvalitet og Resultater. Rutenettet «per modul» på Resultater blir en tabellkolonne i «Fullføring per modul» i stedet for 30 fliser. | Tre utgaver av samme byggekloss. Rutenettet skalerer ikke: 30+ fliser før tabellen som har samme tall. |
+| J5 | Tabellene bruker `.list-table` fra listesida (STORE overskrifter, hvitt kort, sortering). | Én tabell, som på listenivået. |
+| J6 | Tom tabell = bare teksten, ikke tabellhodet. | Som listesida. |
+| J7 | Rad → detalj under er greit (Resultater, Manuell behandling), men raden markeres som valgt og detaljen får overskrift med navnet på det valgte. | I dag må man lete etter detaljen langt nede. |
+| J8 | Én «Eksporter»-knapp med meny (samme «Mer»-mønster som listene) med de seks valgene. | Seks knapper på to linjer er en meny som ikke har fått lov til å være det. |
+| J9 | «100 %» med mellomrom (norsk skrivemåte) overalt; tidspunkt gjennom den felles datohjelperen, uten sekunder. | |
+| J10 | «—» alene når det ikke finnes data; forklaringen i title/hjelpetekst. | |
+
 ## Forslag til rekkefølge
 
-1. **Ord og småting uten produktvalg:** H1–H4, B1, B6, C2, D2, D3, G3.
+1. **Ord og småting uten produktvalg:** H1–H4, J1, J2, J9, B1, B6, C2, D2, D3, G3, J6.
 2. **Sidehodet:** B2 (navnet som tittel), B3 (tilstandslinja), F1 (handlingsraden).
 3. **Feltene og språk:** C1, C3, C4, D1, D4, D5.
-4. **Lister i skjema:** G1–G2 som én komponent.
+4. **Lister i skjema og nøkkeltall:** G1–G2 som én komponent; J4 (ett nøkkeltall-kort), J5, J8 (Eksporter-meny), J3 (kursvelger på Resultater).
 5. Etter avgjørelse: **A** (én måte å lage nytt) og **E** (én lagremodell). Disse to endrer hvordan
    forfatteren jobber, ikke bare hvordan det ser ut — derfor sist, og først etter et ja.
 

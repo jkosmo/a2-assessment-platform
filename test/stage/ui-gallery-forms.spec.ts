@@ -48,13 +48,19 @@ const SIDER: Side[] = [
     handling: async (page) => { await page.locator("#manualReviewQueueBody tr").first().click().catch(() => undefined); } },
   { fil: "38-plattform", navn: "Plattforminnstillinger (skjema)", rute: "/admin-platform", vent: "#failedAssessmentsBody" },
   { fil: "39-profil", navn: "Profil (skjema)", rute: "/profile", vent: "#coursesBody" },
+  // Status og Resultater (produkteier 12.09: «Vi trenger også å se på Status og Resultater»)
+  { fil: "41-status", navn: "Status (kull) med kurs valgt", rute: "/deltakere/status", vent: "#courseSelect",
+    handling: async (page) => { await page.locator("#courseSelect").selectOption({ index: 1 }).catch(() => undefined); await page.waitForTimeout(2000); } },
+  { fil: "42-resultater", navn: "Resultater med rad valgt", rute: "/results", vent: "#completionBody",
+    handling: async (page) => { await page.locator("#completionBody tr").first().waitFor({ timeout: 15_000 }).catch(() => undefined); await page.locator("#completionBody tr").first().click().catch(() => undefined); await page.waitForTimeout(1500); } },
   // Deltakerens skjema
   { fil: "40-deltaker-modul", navn: "Deltaker: modul åpnet (svarskjema)", rute: "/participant", vent: ".course-accordion-item",
     handling: async (page) => {
-      await page.locator(".course-accordion-header").first().click().catch(() => undefined);
-      await page.locator(".course-module-row").first().waitFor({ timeout: 10_000 }).catch(() => undefined);
-      await page.locator(".course-module-row").first().click().catch(() => undefined);
-      await page.locator("#moduleListSection, #assessmentForm, .module-card, #promptText").first().waitFor({ timeout: 10_000 }).catch(() => undefined);
+      const header = page.locator(".course-accordion-header").first();
+      await header.click({ timeout: 5000 }).catch(() => undefined);
+      const rad = page.locator(".course-module-row").first();
+      if (await rad.waitFor({ timeout: 8000 }).then(() => true).catch(() => false)) await rad.click({ timeout: 5000 }).catch(() => undefined);
+      await page.waitForTimeout(3000);
     } },
 ];
 
