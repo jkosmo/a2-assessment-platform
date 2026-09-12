@@ -170,7 +170,7 @@ Så B5/B6 og A1. D3 og D5 venter på avgjørelsen om hvilke handlinger hver type
 | C5 | Gjort | Seksjoner og Plattform bruker den felles datohjelperen. |
 | C7, D2, D4 | Gjort | |
 | C8 | Ikke gjort | Versjonskolonnen på Seksjoner står; «Nyere utkast»-merket hører til neste runde. |
-| D3 | Delvis | Avgjort 12.09: Dupliser på seksjoner (gjort), ikke på klasser. Slett på kurs og klasser med «er du helt sikker» (klasser gjort; kurs hadde det). Åpent: Dupliser på kurs, og om Slett skal ut av seksjonslista. |
+| D3 | Gjort | Avgjort 12.09: Dupliser på seksjoner, ikke på kurs eller klasser. Slett på kurs og klasser med «er du helt sikker». «Slett» er ute av seksjonslista og ligger inne på den arkiverte seksjonen (D6). |
 | D5 | Gjort | Avgjort 12.09: så mange som får plass på én linje. Målt til fire ved 1280 px. Regelen «maks fire, ellers tre pluss Mer» bor i `public/static/row-actions.js` og brukes av alle fire listene. |
 | D6 | Følger av D5 | Det som ligger under «Mer» er fortsatt i lista; regelen «det åpnede elementet viser alt» hører til neste nivå. |
 | E2 | Gjort | Ingen varsler ved lasting på Manuell behandling. |

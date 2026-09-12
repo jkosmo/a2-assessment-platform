@@ -351,3 +351,58 @@ test("section editor: «Oversett» locks the editor while translating, then fill
   await page.locator('.lang-tab[data-locale="nn"]').click();
   await expect(page.locator("#titleInput")).toHaveValue("T-nn");
 });
+
+// #1046 D3 (avgjort 12.09): «Slett» er ute av seksjonslista og bor inne på den ARKIVERTE seksjonen.
+// To steg som for modul, kurs og klasse: arkiver først, slett så. En aktiv seksjon har ingen
+// slett-knapp, verken i lista eller i editoren.
+test.describe("#1046 D3 — sletting av seksjon bor i editoren, bare for arkiverte", () => {
+  const rad = (archivedAt: string | null) => ({
+    id: "sec-del", title: JSON.stringify({ nb: "Slettbar", nn: "Slettbar", "en-GB": "Deletable" }), bodyMarkdown: JSON.stringify({ nb: "x", nn: "x", "en-GB": "x" }),
+    activeVersionId: null, versionNo: 1, updatedAt: "2026-09-01T00:00:00.000Z", archivedAt, courseCount: 0, courses: [], canManage: true,
+  });
+
+  async function mockSection(page: Page, archivedAt: string | null) {
+    await mockBaseApis(page);
+    await page.route("**/api/admin/content/sections", (route: Route) =>
+      route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ sections: [rad(archivedAt)] }) }));
+    await page.route("**/api/admin/content-owners/SECTION/sec-del", (route: Route) =>
+      route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ owners: [], canManageOwners: false }) }));
+    let deleted = false;
+    await page.route("**/api/admin/content/sections/sec-del", (route: Route) => {
+      if (route.request().method() === "DELETE") { deleted = true; return route.fulfill({ status: 204, body: "" }); }
+      return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ section: rad(archivedAt) }) });
+    });
+    return () => deleted;
+  }
+
+  test("lista har ingen Slett; den arkiverte seksjonen har det i editoren, med bekreftelse", async ({ page }) => {
+    const bleSlettet = await mockSection(page, "2026-09-02T00:00:00.000Z");
+    await page.goto("/admin-content/sections");
+    // Lista åpner på «Aktive»; den arkiverte raden ligger under «Arkiverte».
+    await page.locator('.list-filter-btn[data-filter="archived"]').click();
+    await expect(page.locator("#sectionsTableBody tr")).toHaveCount(1);
+    await expect(page.locator('#sectionsTableBody [data-action="delete"]')).toHaveCount(0);
+
+    await page.locator('[data-action="edit"][data-id="sec-del"]').click();
+    const slett = page.locator("#sectionDeleteBtn");
+    await expect(slett).toBeVisible();
+
+    // Avbryt i bekreftelsen → ingenting sendes.
+    page.once("dialog", (d) => d.dismiss());
+    await slett.click();
+    expect(bleSlettet()).toBe(false);
+
+    // Bekreft → DELETE går, og forfatteren står i lista igjen.
+    page.once("dialog", (d) => { expect(d.message()).toMatch(/helt sikker|sure/i); return d.accept(); });
+    await slett.click();
+    await expect.poll(bleSlettet).toBe(true);
+    await expect(page.locator("#sectionsTableBody")).toBeAttached();
+  });
+
+  test("en aktiv seksjon har ingen slett-knapp i editoren", async ({ page }) => {
+    await mockSection(page, null);
+    await page.goto("/admin-content/sections?id=sec-del");
+    await expect(page.locator("#titleInput")).toBeVisible();
+    await expect(page.locator("#sectionDeleteBtn")).toBeHidden();
+  });
+});

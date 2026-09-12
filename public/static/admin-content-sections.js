@@ -43,11 +43,11 @@ const LABELS = {
     courseFilterLabel: "Course:", courseFilterAll: "All courses", courseFilterNone: "Not in any course",
     published: "Section published.", unpublished: "Section unpublished.",
     archived: "Section archived.", restored: "Section restored.", confirmArchive: "Archive this section?",
-    colUpdated: "Last changed", edit: "Open", del: "Delete", empty: "No sections yet.",
+    colUpdated: "Last changed", edit: "Open", del: "Delete section", empty: "No sections yet.",
     readonly: "Read-only", readonlyHint: "Only an owner or an administrator can change this section.",
     back: "← Back", backToCourse: "← Back to the course", titleLabel: "Title", markdown: "Markdown", preview: "Preview",
     save: "Save new version", saved: "Section saved.", deleted: "Section deleted.",
-    confirmDelete: "Delete this section?", loadError: "Could not load sections.",
+    confirmDelete: "Are you sure you want to delete this section for good? It disappears from every course that uses it.", loadError: "Could not load sections.",
     needContent: "Add a title and content in at least one language.",
     translate: "Translate from this language", translating: "Translating…", translated: "Translated — review before saving.",
     translatingImages: "Translating drawings…", imagesTranslated: "SVG drawings translated — verify each language visually.",
@@ -71,11 +71,11 @@ const LABELS = {
     courseFilterLabel: "Kurs:", courseFilterAll: "Alle kurs", courseFilterNone: "Ikke i noe kurs",
     published: "Seksjon publisert.", unpublished: "Seksjon avpublisert.",
     archived: "Seksjon arkivert.", restored: "Seksjon gjenopprettet.", confirmArchive: "Arkivere denne seksjonen?",
-    colUpdated: "Sist endret", edit: "Åpne", del: "Slett", empty: "Ingen seksjoner ennå.",
+    colUpdated: "Sist endret", edit: "Åpne", del: "Slett seksjon", empty: "Ingen seksjoner ennå.",
     readonly: "Skrivebeskyttet", readonlyHint: "Bare en eier eller administrator kan endre denne seksjonen.",
     back: "← Tilbake", backToCourse: "← Tilbake til kurset", titleLabel: "Tittel", markdown: "Markdown", preview: "Forhåndsvisning",
     save: "Lagre ny versjon", saved: "Seksjon lagret.", deleted: "Seksjon slettet.",
-    confirmDelete: "Slette denne seksjonen?", loadError: "Kunne ikke laste seksjoner.",
+    confirmDelete: "Er du helt sikker på at du vil slette denne seksjonen for godt? Den forsvinner fra alle kurs som bruker den.", loadError: "Kunne ikke laste seksjoner.",
     needContent: "Fyll inn tittel og innhold på minst ett språk.",
     translate: "Oversett fra dette språket", translating: "Oversetter…", translated: "Oversatt — se over før du lagrer.",
     translatingImages: "Oversetter tegninger…", imagesTranslated: "SVG-tegninger oversatt — verifiser hvert språk visuelt.",
@@ -99,11 +99,11 @@ const LABELS = {
     courseFilterLabel: "Kurs:", courseFilterAll: "Alle kurs", courseFilterNone: "Ikkje i noko kurs",
     published: "Seksjon publisert.", unpublished: "Seksjon avpublisert.",
     archived: "Seksjon arkivert.", restored: "Seksjon gjenoppretta.", confirmArchive: "Arkivere denne seksjonen?",
-    colUpdated: "Sist endra", edit: "Opne", del: "Slett", empty: "Ingen seksjonar enno.",
+    colUpdated: "Sist endra", edit: "Opne", del: "Slett seksjon", empty: "Ingen seksjonar enno.",
     readonly: "Skrivebeskytta", readonlyHint: "Berre ein eigar eller administrator kan endre denne seksjonen.",
     back: "← Tilbake", backToCourse: "← Tilbake til kurset", titleLabel: "Tittel", markdown: "Markdown", preview: "Førehandsvising",
     save: "Lagre ny versjon", saved: "Seksjon lagra.", deleted: "Seksjon sletta.",
-    confirmDelete: "Slette denne seksjonen?", loadError: "Kunne ikkje laste seksjonar.",
+    confirmDelete: "Er du heilt sikker på at du vil slette denne seksjonen for godt? Han forsvinn frå alle kurs som bruker han.", loadError: "Kunne ikkje laste seksjonar.",
     needContent: "Fyll inn tittel og innhald på minst eitt språk.",
     translate: "Omset frå dette språket", translating: "Omset…", translated: "Omsett — sjå over før du lagrar.",
     translatingImages: "Omset teikningar…", imagesTranslated: "SVG-teikningar omsette — kontroller kvart språk visuelt.",
@@ -375,9 +375,8 @@ async function renderListView() {
     const archiveToggle = status === "archived"
       ? `<button class="row-action-btn" data-action="restore" data-id="${id}">${escapeHtml(L("restore"))}</button>`
       : `<button class="row-action-btn" data-action="archive" data-id="${id}">${escapeHtml(L("archive"))}</button>`;
-    const deleteBtn = status === "archived"
-      ? `<button class="row-action-btn destructive" data-action="delete" data-id="${id}">${escapeHtml(L("del"))}</button>`
-      : "";
+    // #1046 D3 (avgjort 12.09): «Slett» er ute av lista. Den ligger inne på den arkiverte seksjonen
+    // (D6: lista viser det man gjør uten å åpne; det åpnede elementet viser alt).
     const courseCount = Number(s.courseCount ?? 0);
     const courseCell = courseCount > 0
       ? `<button class="course-count-btn" data-id="${id}" aria-label="${courseCount}">${courseCount}</button>`
@@ -396,7 +395,6 @@ async function renderListView() {
             `<button class="row-action-btn" data-action="export" data-id="${id}">${escapeHtml(L("exportSection"))}</button>`,
             publishToggle,
             archiveToggle,
-            deleteBtn,
           ]
           : [`<span class="row-readonly-note" title="${escapeHtml(L("readonlyHint"))}">${escapeHtml(L("readonly"))}</span>`],
         { moreLabel: L("more") })}</div>
@@ -452,7 +450,6 @@ async function renderListView() {
     if (action === "edit") goTo("editor", id);
     else if (action === "export") exportSectionPackage(id, btn);
     else if (action === "duplicate") duplicateSection(id, btn);
-    else if (action === "delete") deleteSection(id);
     else if (action === "publish") sectionLifecycle(id, "publish", "published");
     else if (action === "unpublish") sectionLifecycle(id, "unpublish", "unpublished");
     else if (action === "archive") { if (window.confirm(L("confirmArchive"))) sectionLifecycle(id, "archive", "archived"); }
@@ -647,7 +644,7 @@ async function deleteSection(sectionId) {
   try {
     await apiFetch(`/api/admin/content/sections/${encodeURIComponent(sectionId)}`, getHeaders, { method: "DELETE" });
     showToast(L("deleted"));
-    renderListView();
+    goTo("list");
   } catch (err) {
     apiErrorToast(err);
   }
@@ -714,6 +711,9 @@ async function renderEditorView(sectionId) {
         <button type="button" id="replaceFromFileBtn" class="btn btn-secondary" style="width:auto">${escapeHtml(L("replaceFromFile"))}</button>
         <input type="file" id="replaceFromFileInput" accept="application/json,.json" hidden />` : ""}
         <button type="button" id="sectionLifecycleBtn" class="btn btn-secondary" style="width:auto;display:none"></button>
+        <!-- #1046 D3: sletting bor her, ikke i lista — og bare for en arkivert seksjon (to steg, som
+             for modul, kurs og klasse). -->
+        <button type="button" id="sectionDeleteBtn" class="btn btn-danger" style="width:auto;display:none">${escapeHtml(L("del"))}</button>
         <span class="editor-status" id="editorStatus"></span>
       </div>
     </div>`;
@@ -755,6 +755,7 @@ async function renderEditorView(sectionId) {
     if (file) uploadImage(file);
   });
   document.getElementById("sectionLifecycleBtn")?.addEventListener("click", toggleSectionLifecycle);
+  document.getElementById("sectionDeleteBtn")?.addEventListener("click", () => { if (editing?.id) deleteSection(editing.id); });
   refreshSectionLifecycleUI();
   refreshPreview();
   // #787: content-owner management for an existing section (new sections have no id yet).
@@ -777,8 +778,10 @@ function editorSectionStatus() {
 function refreshSectionLifecycleUI() {
   const badge = document.getElementById("sectionStatusBadge");
   const btn = document.getElementById("sectionLifecycleBtn");
+  const deleteBtn = document.getElementById("sectionDeleteBtn");
   const status = editorSectionStatus();
   if (badge) badge.innerHTML = status ? statusBadge(status) : "";
+  if (deleteBtn) deleteBtn.style.display = status === "archived" ? "" : "none";
   if (!btn) return;
   if (!status || status === "archived") {
     btn.style.display = "none";
