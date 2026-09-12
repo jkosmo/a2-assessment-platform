@@ -83,6 +83,9 @@ const participantConsoleConfigSchema = z.object({
 type ParticipantConsoleConfig = z.infer<typeof participantConsoleConfigSchema>;
 
 export type ParticipantConsoleRuntimeConfig = {
+  // #1046: organisasjonens standardspråk — klienten leser innholdstekst i rekkefølgen leserens språk →
+  // standardspråket → engelsk, samme regel som tjeneren (i18n/content.ts).
+  defaultLocale: "en-GB" | "nb" | "nn";
   authMode: "mock" | "entra";
   debugMode: boolean;
   // #495-follow-up: når true skjuler deltaker-UI den frittstående modul-lista (kun kurs).
@@ -134,6 +137,7 @@ export function getParticipantConsoleRuntimeConfig(): ParticipantConsoleRuntimeC
   const config = getParticipantConsoleConfig();
   const mockRoleSwitchEnabled = env.AUTH_MODE === "mock" && isMockAuthRuntimeAllowed;
   return {
+    defaultLocale: env.DEFAULT_LOCALE,
     authMode: env.AUTH_MODE,
     debugMode: resolveParticipantConsoleDebugMode(),
     courseOnly: env.PARTICIPANT_COURSE_ONLY,

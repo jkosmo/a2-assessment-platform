@@ -1064,7 +1064,7 @@ const adminContentLateOverrides = {
     "stateRail.live.none": "Ingen publisert versjon",
     "stateRail.changes.unsaved": "Ulagrede endringer",
     "stateRail.changes.saved": "Alt lagret",
-    "stateRail.label.preview": "Preview viser",
+    "stateRail.label.preview": "Forhåndsvisning viser",
     "stateRail.preview.workingDraft": "Arbeidsutkast",
     "stateRail.preview.savedVersion": "Lagret versjon v{versionNo}",
 
@@ -1504,7 +1504,7 @@ const adminContentLateOverrides = {
     "stateRail.live.none": "Ingen publisert versjon",
     "stateRail.changes.unsaved": "Ulagra endringar",
     "stateRail.changes.saved": "Alt lagra",
-    "stateRail.label.preview": "Preview viser",
+    "stateRail.label.preview": "Førehandsvising viser",
     "stateRail.preview.workingDraft": "Arbeidsutkast",
     "stateRail.preview.savedVersion": "Lagra versjon v{versionNo}",
 

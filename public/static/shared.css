@@ -1367,6 +1367,10 @@ dialog::backdrop {
 .empty-state { text-align: center; padding: var(--space-5) var(--space-3); background: var(--color-surface); border: 1px solid var(--color-table-wrap-border); border-radius: var(--radius-card); }
 .empty-state-title { font-size: 18px; font-weight: 700; color: var(--color-text); margin: 0 0 8px; }
 .empty-state-text { font-size: 14px; color: var(--color-meta); margin: 0 0 var(--space-2); }
+/* #1046 nivå to, B1: én tilbake-lenke på alle åpnede elementer — grå, uten understrek, «← Tilbake til [lista]».
+   Modulen hadde en blå understreket lenke; kurs, seksjon og klasse hadde hver sin kopi av den grå. */
+.back-link { font-size: 13px; color: var(--color-meta); text-decoration: none; display: inline-flex; align-items: center; gap: 4px; cursor: pointer; }
+.back-link:hover { color: var(--color-text); }
 /* #1046 B1 (produkteier 12.09: «Moduler har søkefelt, seksjoner har ikke»): ett søkefelt for alle
    listene, over filterknappene, venstrejustert. Var .library-search bare på Moduler. */
 .list-search {

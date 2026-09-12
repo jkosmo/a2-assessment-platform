@@ -2,7 +2,7 @@ import { renderWorkspaceNavigationWithProfile } from "/static/workspace-nav.js";
 import { applyIdentityDefaults as delApplyIdentityDefaults } from "/static/identity-defaults.js";
 import { renderRolePresetControl as delRenderRolePresetControl } from "/static/role-preset-control.js";
 import { runWithBusyButton } from "/static/busy-button.js";
-import { resolveInitialLocale } from "/static/i18n-locale.js";
+import { pickLocalizedText, resolveInitialLocale } from "/static/i18n-locale.js";
 import { localizeDecisionReason } from "/static/decision-reason.js";
 import { describeApiError } from "/static/api-error.js";
 import {
@@ -233,12 +233,7 @@ function localizePreviewText(value) {
     return "";
   }
 
-  const localized =
-    value[currentLocale] ??
-    value["en-GB"] ??
-    Object.values(value).find((entry) => typeof entry === "string" && entry.trim().length > 0);
-
-  return typeof localized === "string" ? localized : "";
+  return pickLocalizedText(value, currentLocale);
 }
 
 function shouldShowModuleDebugMeta() {

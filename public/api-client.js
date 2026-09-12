@@ -251,6 +251,12 @@ function applyNavBadge(navEl, selector, total) {
 
 let consoleConfigPromise = null;
 
+let defaultLocale = "en-GB";
+/** Organisasjonens standardspråk (fra /participant/config). «en-GB» til konfigurasjonen er lest. */
+export function getDefaultLocale() {
+  return defaultLocale;
+}
+
 export async function getConsoleConfig() {
   if (!consoleConfigPromise) {
     consoleConfigPromise = (async () => {
@@ -260,6 +266,8 @@ export async function getConsoleConfig() {
       }
 
       const config = await parseResponseBody(response);
+      // #1046: organisasjonens standardspråk — leses av pickLocalizedText (i18n-locale.js).
+      if (config && typeof config.defaultLocale === "string") defaultLocale = config.defaultLocale;
 
       if (config.authMode === "entra" && config.entra) {
         await initMsal(config.entra);

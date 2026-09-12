@@ -1,4 +1,5 @@
 import { renderWorkspaceNavigationWithProfile } from "/static/workspace-nav.js";
+import { formatPercent } from "/static/format-display.js";
 import { applyIdentityDefaults as delApplyIdentityDefaults } from "/static/identity-defaults.js";
 import { showToast } from "/static/toast.js";
 import { lagLokalisertRessurs } from "/static/localized-resource.js";
@@ -109,8 +110,7 @@ function buildFilterParams() {
 }
 
 function pct(value) {
-  if (value === null || value === undefined) return "—";
-  return `${Math.round(value * 100)} %`;
+  return formatPercent(value);
 }
 
 
@@ -533,9 +533,7 @@ function renderCourseReport(rows) {
     return;
   }
   for (const row of rows) {
-    const rate = typeof row.completionRate === "number"
-      ? `${Math.round(row.completionRate * 100)}%`
-      : "-";
+    const rate = typeof row.completionRate === "number" ? formatPercent(row.completionRate) : "-";
     const moduleList = Array.isArray(row.moduleBreakdown) && row.moduleBreakdown.length > 0
       ? row.moduleBreakdown.map((m) => {
           const mr = typeof m.passRate === "number" ? ` (${Math.round(m.passRate * 100)}%)` : "";

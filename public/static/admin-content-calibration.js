@@ -1,6 +1,7 @@
 import { createNumberFormatter, createDateTimeFormatter } from "./format-display.js";
 const formatDateTimeValue = createDateTimeFormatter(() => currentLocale);
 const formatNumber = createNumberFormatter(() => currentLocale);
+import { formatPercent } from "/static/format-display.js";
 import {
   supportedLocales,
   localeLabels,
@@ -284,7 +285,7 @@ function renderContentSimilarity(cs) {
     { k: t("quality.cs.stat.count"), v: String(cs.count) },
     { k: t("quality.cs.stat.median"), v: num(cs.median) },
     { k: t("quality.cs.stat.p90"), v: num(cs.p90) },
-    { k: tf("quality.cs.stat.over", { threshold: num(cs.threshold) }), v: `${cs.overThresholdCount} · ${overPct}%` },
+    { k: tf("quality.cs.stat.over", { threshold: num(cs.threshold) }), v: `${cs.overThresholdCount} · ${overPct}00a0%` },
   ];
   el.qCsStats.innerHTML = stats
     .map((s) => `<div class="q-sig neutral"><div class="k">${escapeHtml(s.k)}</div><div class="v">${escapeHtml(s.v)}</div></div>`)
@@ -334,7 +335,7 @@ function renderSignals(signals) {
   const passMin = th.passRateMinimum ?? 0.6;
   const mrMax = th.manualReviewRateMaximum ?? 0.35;
   const covMin = th.benchmarkCoverageMinimum ?? 0.5;
-  const pct = (v) => (v == null ? "—" : `${Math.round(v * 100)}%`);
+  const pct = (v) => formatPercent(v);
 
   const passRate = signals.passRate ?? null;
   const mrRate = signals.manualReviewRate ?? null;

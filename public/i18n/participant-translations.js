@@ -1,4 +1,5 @@
-export const supportedLocales = ["en-GB", "nb", "nn"];
+// #1046 C2: bokmål er standardspråket (DECISIONS 2026-09-11) og står først i alle språkvelgere.
+export const supportedLocales = ["nb", "nn", "en-GB"];
 
 export const localeLabels = {
   "en-GB": "English (UK)",
@@ -23,7 +24,7 @@ export const translations = {
     "nav.adminContent": "Content workspace",
     "nav.adminPlatform": "Platform settings",
     "nav.profile": "Profile",
-    "nav.results": "Results workspace",
+    "nav.results": "Results",
     "nav.deltakere": "Participants",
     "nav.skipToContent": "Skip to main content",
     "locale.label": "Language",

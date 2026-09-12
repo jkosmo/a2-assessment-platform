@@ -50,7 +50,7 @@ test("cohort dashboard: pick a course → status counts + per-class breakdown, w
 
   await page.goto("/deltakere/status");
 
-  await expect(page.locator("h1")).toContainText("Kohort-status");
+  await expect(page.locator("h1")).toContainText("Status");
   // The «Status» sub-tab is present and marked active; the reviewer-only tab is gated out for an SMO.
   await expect(page.locator("#subnavStatus")).toHaveClass(/active/);
   await expect(page.locator("#subnavReview")).toHaveCount(0);

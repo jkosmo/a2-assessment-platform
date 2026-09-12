@@ -59,3 +59,10 @@ export function createDateFormatter(getLocale, placeholder = "—") {
     });
   };
 }
+
+// #1046 J9: prosent skrives likt overalt — «100 %» med hardt mellomrom (norsk skrivemåte), «—» uten
+// verdi. Resultater skrev «100 %» ett sted og «100%» et annet; Vurderingskvalitet skrev «100%».
+export function formatPercent(fraction, placeholder = "—") {
+  if (fraction === null || fraction === undefined || Number.isNaN(Number(fraction))) return placeholder;
+  return `${Math.round(Number(fraction) * 100)} %`;
+}

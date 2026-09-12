@@ -3,6 +3,7 @@ import {
   localeLabels,
   translations as adminContentTranslations,
 } from "/static/i18n/admin-content-translations.js";
+import { pickLocalizedText } from "/static/i18n-locale.js";
 import { apiFetch, buildConsoleHeaders, getConsoleConfig, hydrateContentAssetImages } from "/static/api-client.js";
 import { initConsentGuard } from "/static/consent-guard.js";
 // #1046 C5: samme datohjelper som Moduler og Kurs («28. aug. 2026»), ikke «28.8.2026».
@@ -45,7 +46,7 @@ const LABELS = {
     archived: "Section archived.", restored: "Section restored.", confirmArchive: "Archive this section?",
     colUpdated: "Last changed", edit: "Open", del: "Delete section", empty: "No sections yet.",
     readonly: "Owner access only", readonlyHint: "Only an owner or an administrator can open this section.",
-    back: "← Back", backToCourse: "← Back to the course", titleLabel: "Title", markdown: "Markdown", preview: "Preview",
+    back: "← Back to sections", backToCourse: "← Back to the course", titleLabel: "Name", markdown: "Markdown", preview: "Preview",
     save: "Save new version", saved: "Section saved.", deleted: "Section deleted.",
     confirmDelete: "Are you sure you want to delete this section for good? It disappears from every course that uses it.", loadError: "Could not load sections.",
     needContent: "Add a title and content in at least one language.",
@@ -73,7 +74,7 @@ const LABELS = {
     archived: "Seksjon arkivert.", restored: "Seksjon gjenopprettet.", confirmArchive: "Arkivere denne seksjonen?",
     colUpdated: "Sist endret", edit: "Åpne", del: "Slett seksjon", empty: "Ingen seksjoner ennå.",
     readonly: "Kun for eier", readonlyHint: "Bare en eier eller en administrator kan åpne denne seksjonen.",
-    back: "← Tilbake", backToCourse: "← Tilbake til kurset", titleLabel: "Tittel", markdown: "Markdown", preview: "Forhåndsvisning",
+    back: "← Tilbake til seksjoner", backToCourse: "← Tilbake til kurset", titleLabel: "Navn", markdown: "Markdown", preview: "Forhåndsvisning",
     save: "Lagre ny versjon", saved: "Seksjon lagret.", deleted: "Seksjon slettet.",
     confirmDelete: "Er du helt sikker på at du vil slette denne seksjonen for godt? Den forsvinner fra alle kurs som bruker den.", loadError: "Kunne ikke laste seksjoner.",
     needContent: "Fyll inn tittel og innhold på minst ett språk.",
@@ -101,7 +102,7 @@ const LABELS = {
     archived: "Seksjon arkivert.", restored: "Seksjon gjenoppretta.", confirmArchive: "Arkivere denne seksjonen?",
     colUpdated: "Sist endra", edit: "Opne", del: "Slett seksjon", empty: "Ingen seksjonar enno.",
     readonly: "Berre for eigar", readonlyHint: "Berre ein eigar eller ein administrator kan opne denne seksjonen.",
-    back: "← Tilbake", backToCourse: "← Tilbake til kurset", titleLabel: "Tittel", markdown: "Markdown", preview: "Førehandsvising",
+    back: "← Tilbake til seksjonar", backToCourse: "← Tilbake til kurset", titleLabel: "Namn", markdown: "Markdown", preview: "Førehandsvising",
     save: "Lagre ny versjon", saved: "Seksjon lagra.", deleted: "Seksjon sletta.",
     confirmDelete: "Er du heilt sikker på at du vil slette denne seksjonen for godt? Han forsvinn frå alle kurs som bruker han.", loadError: "Kunne ikkje laste seksjonar.",
     needContent: "Fyll inn tittel og innhald på minst eitt språk.",
@@ -214,7 +215,7 @@ function parseLocalized(raw) {
 
 function displayTitle(rawTitle) {
   const t = parseLocalized(rawTitle);
-  return t[currentLocale] || t["en-GB"] || t.nb || t.nn || "(uten tittel)";
+  return pickLocalizedText(t, currentLocale) || "(uten tittel)";
 }
 
 // ---------------------------------------------------------------------------

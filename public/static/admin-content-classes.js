@@ -284,7 +284,7 @@ async function openClass(id) {
   const memberRows = members.map((m) => `<li class="assign-row">
       <span class="assign-name">${escapeHtml(m.name)}</span>
       ${m.email ? `<span class="assign-meta">${escapeHtml(m.email)}</span>` : ""}
-      <button type="button" class="assign-remove btn-secondary" data-remove-member="${escapeHtml(m.userId)}" aria-label="Fjern ${escapeHtml(m.name)}">Fjern</button>
+      <button type="button" class="assign-remove row-action-btn destructive" data-remove-member="${escapeHtml(m.userId)}" aria-label="Fjern ${escapeHtml(m.name)}">Fjern</button>
     </li>`).join("");
   const courseRows = courses.map((c) => {
     const due = formatDueDate(c.dueAt);
@@ -300,7 +300,7 @@ async function openClass(id) {
       <span class="assign-name">${escapeHtml(courseTitle(c.title))}</span>
       ${unreachable ? `<span class="assign-meta assign-meta--warn">${escapeHtml(unreachable)}</span>` : ""}
       <span class="assign-meta">${due ? `Frist: ${escapeHtml(due)}` : "Ingen frist"}</span>
-      <button type="button" class="assign-remove btn-secondary" data-remove-course="${escapeHtml(c.courseId)}" aria-label="Fjern kurs">Fjern</button>
+      <button type="button" class="assign-remove row-action-btn destructive" data-remove-course="${escapeHtml(c.courseId)}" aria-label="Fjern kurs">Fjern</button>
     </li>`;
   }).join("");
   const assignedIds = new Set(courses.map((c) => c.courseId));
@@ -311,8 +311,8 @@ async function openClass(id) {
     <div class="page-header"><h1>Klasse</h1></div>
     <div class="detail-section" id="classOwnerPanelHost"></div>
     <div class="detail-section">
-      <h2>Studenter (${members.length})</h2>
-      <ul class="assign-list" id="memberChips">${memberRows || `<li class="assign-empty">Ingen studenter ennå.</li>`}</ul>
+      <h2>Deltakere (${members.length})</h2>
+      <ul class="assign-list" id="memberChips">${memberRows || `<li class="assign-empty">Ingen deltakere ennå.</li>`}</ul>
       <div class="inline-form">
         <input type="text" id="studentSearch" placeholder="Søk navn eller e-post (min. 2 tegn)" autocomplete="off" style="min-width:280px" />
       </div>

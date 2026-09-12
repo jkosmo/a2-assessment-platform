@@ -4,6 +4,7 @@ import { describeApiError } from "/static/api-error.js";
 import { lagLokalisertRessurs } from "/static/localized-resource.js";
 import { resolveInitialLocale } from "/static/i18n-locale.js";
 import { escapeHtml } from "/static/html-escape.js";
+import { createDateTimeFormatter } from "/static/format-display.js";
 import { localeLabels, supportedLocales, translations } from "/static/i18n/cohort-status-translations.js";
 import { apiFetch, buildConsoleHeaders, getConsoleConfig } from "/static/api-client.js";
 import { initConsentGuard } from "/static/consent-guard.js";
@@ -39,6 +40,8 @@ const byClassEmpty = document.getElementById("byClassEmpty");
 const byClassBody = document.getElementById("byClassBody");
 
 let currentLocale = resolveInitialLocale(supportedLocales);
+// #1046 J9: samme datohjelper som resten (ingen sekunder).
+const formatDateTime = createDateTimeFormatter(() => currentLocale, "");
 let participantRuntimeConfig = { authMode: "mock", navigation: { items: [] }, identityDefaults: {} };
 let roleSwitchState = resolveRoleSwitchState(participantRuntimeConfig);
 
@@ -169,6 +172,9 @@ function renderCohort(summary) {
     byClassSection.hidden = false;
     const rows = summary.byClass ?? [];
     if (byClassEmpty) byClassEmpty.hidden = rows.length > 0;
+    // #1046 J6: tom tabell = bare teksten, ikke et tomt tabellhode (som listesida).
+    const tableWrap = byClassBody?.closest(".table-wrap");
+    if (tableWrap) tableWrap.hidden = rows.length === 0;
     if (byClassBody) {
       byClassBody.innerHTML = rows
         .map((b) => {
@@ -191,7 +197,7 @@ function renderCohort(summary) {
     cohortUnavailable.hidden = message === "";
   }
   if (cohortMeta) {
-    const when = summary.generatedAt ? new Date(summary.generatedAt).toLocaleString(currentLocale) : "";
+    const when = summary.generatedAt ? formatDateTime(summary.generatedAt) : "";
     cohortMeta.textContent = `${t("cohort.generatedAt")}: ${when}`;
   }
 }

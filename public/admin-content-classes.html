@@ -33,7 +33,7 @@
       .search-results li:hover { background: var(--color-row-hover); }
       .inline-form { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: var(--space-1); }
       .inline-form input, .inline-form select { padding: 6px 8px; border: 1px solid var(--color-border-soft); border-radius: var(--radius-btn); font-size: 13px; }
-      .back-link { font-size: 13px; color: var(--color-meta); text-decoration: none; cursor: pointer; }
+      /* #1046 B1: .back-link arves fra shared.css. */
     </style>
   </head>
   <body>
@@ -43,7 +43,8 @@
         <nav id="workspaceNav" class="workspace-nav"></nav>
         <div class="locale-picker">
           <span id="appVersion" class="version-badge">…</span>
-          <select id="localeSelect" aria-label="Språk"></select>
+          <label for="localeSelect" class="sr-only">Språk</label>
+          <select id="localeSelect" class="locale-select-compact"></select>
         </div>
       </div>
 
@@ -62,6 +63,7 @@
     </main>
 
     <script type="module" src="/static/admin-content-classes.js"></script>
+    <script type="module" src="/static/workspace-help.js"></script>
     <script type="module" src="/static/deltakere-subnav.js"></script>
   </body>
 </html>

@@ -77,7 +77,8 @@
       .preview-edit-textarea {
         display: block; width: 100%; box-sizing: border-box;
         font-size: 14px; font-family: inherit; line-height: 1.6;
-        color: var(--color-text); background: var(--color-module-summary-bg);
+        /* #1046 D2: hvit bakgrunn i felt, som alle andre skjemaer. Var beige (module-summary-bg). */
+        color: var(--color-text); background: #fff;
         border: 1px solid var(--color-blue); border-radius: var(--radius-card);
         padding: var(--space-1); resize: vertical; min-height: 100px;
         white-space: pre-wrap;
@@ -556,7 +557,7 @@
       </nav>
 
       <div class="page-header-back" style="margin-bottom:var(--space-1)">
-        <a href="/admin-content" class="back-link">← Tilbake til modulliste</a>
+        <a href="/admin-content" class="back-link">← Tilbake til moduler</a>
       </div>
       <div class="module-workspace-header">
         <h1 id="moduleWorkspaceTitle" style="margin:0; font-size:22px" data-i18n="shell.page.title">Modul</h1>

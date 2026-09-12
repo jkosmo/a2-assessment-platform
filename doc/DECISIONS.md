@@ -647,3 +647,30 @@ archived` for innhold, `active · archived` for klasser. Klienten leser ordet; d
 tilstand selv lenger. Filterknappene og statusmerket (med «Nyere utkast») følger dermed samme regel
 på alle listene. Modulenes gamle `status`-felt (fem verdier) og kursenes/seksjonenes råfelter står
 til klientene har gått over; da fjernes de (kontraktfasen).
+
+## Skjemaskjermene: lag nytt rett i et tomt element; lagre med knapp (2026-09-12)
+
+Produkteier valgte for #1046 nivå to (`doc/UI_FORM_LEVEL.md`):
+
+1. **Å lage nytt = åpne et tomt element** (som Ny seksjon i dag). Ingen dialog eller egen «hva skal
+   det hete»-side først. Elementet lages på tjeneren ved første lagring.
+2. **Alle skjemaer har en Lagre-knapp**, sida sier «Alt lagret» / «Ulagrede endringer», og spør før man
+   forlater med noe ulagret. Gjelder også klasse. Handlinger som er operasjoner og ikke felt (legg til
+   medlem, tildel kurs, publiser) utføres fortsatt i det de gjøres.
+
+Det som ble valgt bort: dialog først (modulens mønster) og «alt lagres fortløpende» (klassens mønster).
+
+## Bokmål er det påkrevde språket for innhold (2026-09-12)
+
+Produkteier: «Ja til NB som påkrevd.» Tre ting følger:
+
+1. **Lesing:** mangler en tekst på leserens språk, vises organisasjonens standardspråk
+   (`DEFAULT_LOCALE`, nb hos A-2) — ikke engelsk. Engelsk er siste utvei. Regelen bor ett sted på
+   tjeneren (`contentFallbackOrder`/`pickLocalizedValue` i `src/i18n/content.ts`) og ett sted på
+   klienten (`pickLocalizedText` i `public/static/i18n-locale.js`, som leser standardspråket fra
+   `/participant/config`).
+2. **Skjema:** bokmål er merket «(påkrevd)» og står først; et kurs kan ikke lagres uten navn på bokmål.
+   En ren streng uten språkmerke leses som bokmål på klienten også (som #930 på tjeneren).
+3. **Publisering:** uendret — gaten krever fortsatt alle tre språk. Utkast kan være delvise.
+
+Kodens egen reserve forblir `en-GB` for plattformer som kjører uten standardspråk.

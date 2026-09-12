@@ -143,7 +143,7 @@ være fasit enn funn.
 *Regelen: den nyeste utgaven er referansen (modulens arbeidsflate, august 2026, #896), med mindre det
 finnes en grunn.*
 
-## A. Å lage nytt — **trenger avgjørelse**
+## A. Å lage nytt — **avgjort 12.09: åpne et tomt element**
 
 | # | Anbefalt | Hvorfor |
 |---|---|---|
@@ -179,7 +179,7 @@ finnes en grunn.*
 | D5 | Gruppering: kort per tema med tittel (som plattform); inne i kortet små STORE gruppeoverskrifter når det trengs (som modul Innstillinger). | |
 | D6/D7 | Én datoform (to felt med «→» for et intervall, ett felt ellers) og én måte å si «tomt betyr standard»: verdien som plassholder i grått, og «(standard)» etter. | |
 
-## E. Lagring — **trenger avgjørelse**
+## E. Lagring — **avgjort 12.09: Lagre-knapp overalt, med «Alt lagret / Ulagrede endringer» og spørsmål før man forlater**
 
 | # | Anbefalt | Hvorfor |
 |---|---|---|

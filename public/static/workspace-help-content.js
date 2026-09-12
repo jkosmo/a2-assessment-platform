@@ -688,6 +688,93 @@ const workspaceContent = {
       ],
     },
   },
+  "admin-content-sections": {
+    title: { "en-GB": "Sections", nb: "Seksjoner", nn: "Seksjonar" },
+    summary: {
+      "en-GB": "Reading material you can use in several courses. Write it once, place it in any course.",
+      nb: "Lesestoff du kan bruke i flere kurs. Skriv det én gang, legg det inn i de kursene som trenger det.",
+      nn: "Lesestoff du kan bruke i fleire kurs. Skriv det éin gong, legg det inn i dei kursa som treng det.",
+    },
+    sections: {
+      "en-GB": [
+        { title: "What to do here", items: [
+          "Open a section to write or change it. Text is written in Markdown; the preview shows what participants see.",
+          "Save creates a new version. Publish when it is ready — the course shows the published version.",
+          "Use Duplicate to start from an existing section, and Export/Import to move one between environments.",
+        ] },
+        { title: "Good to know", items: [
+          "A section needs all three languages before it can be published.",
+          "Archive a section you no longer use; it can be deleted from inside the archived section.",
+        ] },
+      ],
+      nb: [
+        { title: "Dette gjør du her", items: [
+          "Åpne en seksjon for å skrive eller endre. Teksten skrives i Markdown; forhåndsvisningen viser det deltakerne ser.",
+          "Lagre lager en ny versjon. Publiser når den er klar — kurset viser den publiserte versjonen.",
+          "Bruk Dupliser for å starte fra en seksjon som finnes, og Eksporter/Importer for å flytte en mellom miljøer.",
+        ] },
+        { title: "Greit å vite", items: [
+          "En seksjon må ha alle tre språk før den kan publiseres.",
+          "Arkiver en seksjon du ikke bruker lenger; den kan slettes inne på den arkiverte seksjonen.",
+        ] },
+      ],
+      nn: [
+        { title: "Dette gjer du her", items: [
+          "Opne ein seksjon for å skrive eller endre. Teksten blir skriven i Markdown; førehandsvisinga viser det deltakarane ser.",
+          "Lagre lagar ein ny versjon. Publiser når han er klar — kurset viser den publiserte versjonen.",
+          "Bruk Dupliser for å starte frå ein seksjon som finst, og Eksporter/Importer for å flytte ein mellom miljø.",
+        ] },
+        { title: "Greitt å vite", items: [
+          "Ein seksjon må ha alle tre språka før han kan publiserast.",
+          "Arkiver ein seksjon du ikkje brukar lenger; han kan slettast inne på den arkiverte seksjonen.",
+        ] },
+      ],
+    },
+  },
+  "admin-content-classes": {
+    title: { "en-GB": "Classes", nb: "Klasser", nn: "Klassar" },
+    summary: {
+      "en-GB": "Groups of participants who are assigned courses together. Everyone with the participant role is in the system class «All participants».",
+      nb: "Grupper av deltakere som får kurs tildelt samlet. Alle med deltakerrolle er i systemklassen «Alle deltakere».",
+      nn: "Grupper av deltakarar som får kurs tildelt samla. Alle med deltakarrolle er i systemklassen «Alle deltakarar».",
+    },
+    sections: {
+      "en-GB": [
+        { title: "What to do here", items: [
+          "Open a class to add participants and assign courses, with an optional deadline for reminders.",
+          "Assigning a course to a class enrols everyone in it — also those added later.",
+          "Archive a class you no longer use; it can be deleted once archived.",
+        ] },
+      ],
+      nb: [
+        { title: "Dette gjør du her", items: [
+          "Åpne en klasse for å legge til deltakere og tildele kurs, med en frist for påminnelser om du vil.",
+          "Tildeler du et kurs til en klasse, får alle i klassen kurset — også de som legges til senere.",
+          "Arkiver en klasse du ikke bruker lenger; den kan slettes når den er arkivert.",
+        ] },
+      ],
+      nn: [
+        { title: "Dette gjer du her", items: [
+          "Opne ein klasse for å leggje til deltakarar og tildele kurs, med ein frist for påminningar om du vil.",
+          "Tildeler du eit kurs til ein klasse, får alle i klassen kurset — òg dei som blir lagde til seinare.",
+          "Arkiver ein klasse du ikkje brukar lenger; han kan slettast når han er arkivert.",
+        ] },
+      ],
+    },
+  },
+  "cohort-status": {
+    title: { "en-GB": "Status", nb: "Status", nn: "Status" },
+    summary: {
+      "en-GB": "Where each participant stands in a course: assigned, in progress, overdue or completed — in total and per class.",
+      nb: "Hvor hver deltaker står i et kurs: tildelt, påbegynt, forfalt eller fullført — samlet og per klasse.",
+      nn: "Kvar kvar deltakar står i eit kurs: tildelt, påbyrja, forfalle eller fullført — samla og per klasse.",
+    },
+    sections: {
+      "en-GB": [ { title: "What to do here", items: [ "Choose a course. The numbers update at once.", "«Overdue» means the class deadline has passed without completion." ] } ],
+      nb: [ { title: "Dette gjør du her", items: [ "Velg et kurs. Tallene oppdateres med en gang.", "«Forfalt» betyr at klassens frist er passert uten at kurset er fullført." ] } ],
+      nn: [ { title: "Dette gjer du her", items: [ "Vel eit kurs. Tala blir oppdaterte med ein gong.", "«Forfalle» tyder at fristen til klassen er passert utan at kurset er fullført." ] } ],
+    },
+  },
   "admin-content-calibration": {
     title: {
       "en-GB": "Calibration in Admin Content",

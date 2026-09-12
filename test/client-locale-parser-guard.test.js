@@ -46,10 +46,7 @@ const PUBLIC = fileURLToPath(new URL("../public", import.meta.url));
 // Fil -> antall kjente språkvalg på klienten.
 const BASELINE = {
   // #1038 (fjernet 2026-09-11): klasseskjermen fikk tittelen ferdig valgt fra serveren.
-  // Forfatterkonsollets egne visningshjelpere, to av dem.
-  "static/admin-content-courses.js": 2,
-  // Tittelvisning i seksjonslista.
-  "static/admin-content-sections.js": 1,
+  // #1046 (2026-09-12): kurs og seksjoner leser gjennom pickLocalizedText (i18n-locale.js) — 0 igjen.
   // #1043: `localizeValueForLocale` og `pickFirstNonEmpty` — kjeden [locale, "nb", "en-GB"] og så
   // «første ikke-tomme». Gjelden er ikke ny; den var USYNLIG for vakta fram til 2026-09-06, fordi
   // kjeden er skrevet som en ordnet LISTE til en hjelper og ikke som en `??`-kjede.

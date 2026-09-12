@@ -10,8 +10,8 @@ export const localeLabels = baseLocaleLabels;
 const extraTranslations = {
   "en-GB": {
     "nav.profile": "Profile",
-    "resultsPage.title": "Results Workspace",
-    "resultsPage.subtitle": "Overview of module pass rates and completion status for HR and subject matter owners.",
+    "resultsPage.title": "Results",
+    "resultsPage.subtitle": "Pass rates and completion per module and course.",
     "resultsPage.versionLabel": "Version:",
     "results.filters.title": "Filters",
     "results.filters.moduleId": "Module ID",
@@ -90,8 +90,8 @@ const extraTranslations = {
   },
   nb: {
     "nav.profile": "Profil",
-    "resultsPage.title": "Resultatarbeidsflate",
-    "resultsPage.subtitle": "Oversikt over bestått-rate og fullføringsstatus per modul for HR og fagansvarlige.",
+    "resultsPage.title": "Resultater",
+    "resultsPage.subtitle": "Bestått-andel og fullføring per modul og kurs.",
     "resultsPage.versionLabel": "Versjon:",
     "results.filters.title": "Filter",
     "results.filters.moduleId": "Modul-ID",
@@ -170,8 +170,8 @@ const extraTranslations = {
   },
   nn: {
     "nav.profile": "Profil",
-    "resultsPage.title": "Resultatarbeidsflate",
-    "resultsPage.subtitle": "Oversikt over bestått-rate og fullføringsstatus per modul for HR og fagleg ansvarlege.",
+    "resultsPage.title": "Resultat",
+    "resultsPage.subtitle": "Bestått-del og fullføring per modul og kurs.",
     "resultsPage.versionLabel": "Versjon:",
     "results.filters.title": "Filter",
     "results.filters.moduleId": "Modul-ID",

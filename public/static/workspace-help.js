@@ -193,6 +193,10 @@ function resolveHelpContext(location) {
     return "admin-content-courses";
   }
   if (path === "/admin-content/calibration") return "admin-content-calibration";
+  // #1046 B6: seksjoner og klasser hadde ingen egen hjelp — seksjoner fikk deltakerhjelpen, klasser ingen knapp.
+  if (path === "/admin-content/sections") return "admin-content-sections";
+  if (path === "/admin-content/classes") return "admin-content-classes";
+  if (path === "/deltakere/status") return "cohort-status";
   // #896 S3c: the Avansert routes now redirect into the workspace, so this branch could only ever
   // fire mid-redirect — and it pointed at a help entry that has been deleted with the page.
   // The canonical module route IS the shell - it carries the module in the path, not in a

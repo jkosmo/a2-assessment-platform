@@ -1,5 +1,6 @@
 import { createDateFormatter } from "./format-display.js";
 const formatDate = createDateFormatter(() => currentLocale);
+import { pickLocalizedText } from "/static/i18n-locale.js";
 import { escapeHtml } from "./html-escape.js";
 import { lifecycleBadge, lifecycleOf } from "./content-status-badge.js";
 import {
@@ -33,6 +34,9 @@ import {
 import { renderWorkspaceNavigationWithProfile } from "./workspace-nav.js";
 import { renderOwnerPanel } from "/static/owner-panel.js";
 import { createListPage } from "/static/list-page.js";
+
+// #1046 C2: bokmål først, som i alle språkvelgere. Bokmål er det påkrevde språket (produkteier 12.09); publiseringsgaten krever fortsatt alle tre.
+const DETAIL_LOCALES = ["nb", "nn", "en-GB"];
 
 // ---------------------------------------------------------------------------
 // i18n
@@ -125,13 +129,13 @@ function localizedText(value) {
       try {
         const parsed = JSON.parse(value);
         if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-          return parsed[currentLocale] ?? parsed["en-GB"] ?? Object.values(parsed).find(Boolean) ?? value;
+          return pickLocalizedText(parsed, currentLocale) || value;
         }
       } catch { /* plain string */ }
     }
     return value;
   }
-  return value[currentLocale] ?? value["en-GB"] ?? Object.values(value).find(Boolean) ?? "";
+  return pickLocalizedText(value, currentLocale);
 }
 
 function parseLocalizedFieldValues(value) {
@@ -156,7 +160,10 @@ function parseLocalizedFieldValues(value) {
         // Fall through and treat it as a plain string.
       }
     }
-    return { "en-GB": value, nb: "", nn: "" };
+    // En ren streng uten språkmerke leses som bokmål — samme regel som tjeneren (#930,
+    // contentValidationService: sourceLocale = "nb"). Klienten la den før i en-GB, så et kurs med
+    // ren strengtittel så ut som engelsk og manglet bokmål.
+    return { "en-GB": "", nb: value, nn: "" };
   }
 
   if (typeof value === "object" && !Array.isArray(value)) {
@@ -1010,7 +1017,7 @@ async function renderNewCourseConversational() {
 
   pageContent.innerHTML = `
     <div class="page-header-back">
-      <a href="/admin-content/courses" class="back-link">← Tilbake til kursliste</a>
+      <a href="/admin-content/courses" class="back-link">← Tilbake til kurs</a>
     </div>
     <div class="page-header">
       <h1>Nytt kurs</h1>
@@ -1204,7 +1211,7 @@ async function renderDetailView(courseId) {
         <div class="empty-state">
           <p class="empty-state-title">Kunne ikke laste kurs.</p>
           <p class="empty-state-text">${escapeHtml(apiErrorText(err))}</p>
-          <a href="/admin-content/courses" class="btn btn-secondary">Tilbake til kursliste</a>
+          <a href="/admin-content/courses" class="btn btn-secondary">Tilbake til kurs</a>
         </div>`;
       return;
     }
@@ -1259,7 +1266,7 @@ async function renderDetailView(courseId) {
   const titleValues = parseLocalizedFieldValues(course?.title);
   const descriptionValues = parseLocalizedFieldValues(course?.description);
   const localeValues = {};
-  for (const loc of ["en-GB", "nb", "nn"]) {
+  for (const loc of DETAIL_LOCALES) {
     localeValues[loc] = {
       title: titleValues[loc] ?? "",
       description: descriptionValues[loc] ?? "",
@@ -1282,7 +1289,7 @@ async function renderDetailView(courseId) {
 
   pageContent.innerHTML = `
     <div class="page-header-back">
-      <a href="/admin-content/courses" class="back-link">← Tilbake til kursliste</a>
+      <a href="/admin-content/courses" class="back-link">← Tilbake til kurs</a>
     </div>
     <div class="page-header">
       <h1 id="detailPageTitle">${escapeHtml(pageTitle)}</h1>
@@ -1295,30 +1302,30 @@ async function renderDetailView(courseId) {
         <h2 class="detail-section-title">Kursdetaljer</h2>
 
         <div class="locale-tabs" role="tablist" aria-label="Rediger per språk" id="localeTabs">
-          ${["en-GB", "nb", "nn"].map(loc => `
+          ${DETAIL_LOCALES.map(loc => `
             <button class="locale-tab-btn${loc === activeDetailLocale ? " active" : ""}"
               role="tab" aria-selected="${loc === activeDetailLocale}"
               data-locale="${loc}" id="tab-${loc}" aria-controls="pane-${loc}">
-              ${localeLabels[loc] ?? loc}${loc === "en-GB" ? " *" : ""}
+              ${localeLabels[loc] ?? loc}
             </button>`).join("")}
         </div>
 
-        ${["en-GB", "nb", "nn"].map(loc => `
+        ${DETAIL_LOCALES.map(loc => `
           <div class="locale-tab-pane${loc === activeDetailLocale ? " active" : ""}"
             id="pane-${loc}" role="tabpanel" aria-labelledby="tab-${loc}">
             <div class="form-field">
               <label for="title-${loc}">
-                Tittel${loc === "en-GB" ? `<span class="required-note">(påkrevd)</span>` : ""}
+                Navn${loc === "nb" ? `<span class="required-note">(påkrevd)</span>` : ""}
               </label>
               <input id="title-${loc}" type="text" data-field="title" data-locale="${loc}"
                 value="${escapeHtml(localeValues[loc].title)}"
-                placeholder="${loc === "en-GB" ? "" : "Bruker en-GB som fallback hvis tomt"}"
+                placeholder="${loc === "nb" ? "" : "Viser bokmål hvis tomt"}"
                 autocomplete="off" />
             </div>
             <div class="form-field">
               <label for="desc-${loc}">Beskrivelse</label>
               <textarea id="desc-${loc}" data-field="description" data-locale="${loc}"
-                placeholder="${loc === "en-GB" ? "" : "Bruker en-GB som fallback hvis tomt"}">${escapeHtml(localeValues[loc].description)}</textarea>
+                placeholder="${loc === "nb" ? "" : "Viser bokmål hvis tomt"}">${escapeHtml(localeValues[loc].description)}</textarea>
             </div>
           </div>`).join("")}
 
@@ -1659,7 +1666,7 @@ function initDetailEventListeners(courseId) {
 function collectLocaleValues() {
   const title = {};
   const description = {};
-  for (const loc of ["en-GB", "nb", "nn"]) {
+  for (const loc of DETAIL_LOCALES) {
     const titleEl = document.getElementById(`title-${loc}`);
     const descEl = document.getElementById(`desc-${loc}`);
     const tv = titleEl?.value.trim() ?? "";
@@ -1727,13 +1734,14 @@ async function saveCourse(courseId) {
   const normalizedTitle = normalizeLocalizedRequestValue(effectiveValues.title);
   const normalizedDescription = normalizeLocalizedRequestValue(effectiveValues.description);
 
-  // Validation
-  if (!hasAnyLocalizedValue(effectiveValues.title)) {
+  // Validation. #1046 (produkteier 12.09): bokmål er det påkrevde språket — navnet må finnes på
+  // bokmål før kurset kan lagres. De andre språkene kan fylles etterpå; publiseringsgaten krever alle tre.
+  if (!String(effectiveValues.title?.nb ?? "").trim()) {
     if (errorBanner) {
-      errorBanner.innerHTML = `<div class="error-banner">Tittel er påkrevd på minst ett språk.</div>`;
+      errorBanner.innerHTML = `<div class="error-banner">Navn er påkrevd på bokmål.</div>`;
       errorBanner.hidden = false;
     }
-    document.getElementById(`title-${activeDetailLocale}`)?.focus();
+    document.getElementById("title-nb")?.focus();
     return;
   }
   if (!certLevel) {
