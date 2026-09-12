@@ -1294,8 +1294,14 @@ function updateStateRail() {
   const loaded = bundle?.selectedConfiguration?.moduleVersion ?? null;
   const loadedIsLive = !!loaded?.id && loaded.id === bundle?.module?.activeVersionId;
 
-  if (srModuleName) {
-    srModuleName.textContent = localizeValue(sessionDraft?.title ?? previewDraft?.title ?? bundle?.module?.title) || selectedModuleId;
+  const moduleName = localizeValue(sessionDraft?.title ?? previewDraft?.title ?? bundle?.module?.title) || "";
+  if (srModuleName) srModuleName.textContent = moduleName || selectedModuleId;
+  // #1046 nivå to, B2: navnet er tittelen på sida (typen står som merke over).
+  const h1 = document.getElementById("moduleWorkspaceTitle");
+  if (h1) {
+    h1.textContent = moduleName || t("shell.newModule.defaultTitle");
+    h1.classList.toggle("is-untitled", !moduleName);
+    h1.removeAttribute("data-i18n");
   }
 
   if (srEditing) {

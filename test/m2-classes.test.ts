@@ -159,6 +159,34 @@ describe("Class (cohort) management + dynamic assignment (#645/CL-2)", () => {
     await prisma.class.delete({ where: { id: classId } });
   });
 
+  // #1046 nivå to (2a): klassen har et skjema med Lagre — GET henter én, PATCH lagrer navn/beskrivelse.
+  it("reads one class and saves name/description; the system class cannot be edited", async () => {
+    const created = await request(app).post("/api/admin/content/classes").set(adminHeaders).send({ name: `Kull skjema ${Date.now()}` });
+    const classId = created.body.class.id as string;
+
+    const one = await request(app).get(`/api/admin/content/classes/${classId}`).set(adminHeaders);
+    expect(one.status).toBe(200);
+    expect(one.body.class.id).toBe(classId);
+    expect(one.body.class.lifecycle).toBe("active");
+
+    const saved = await request(app).patch(`/api/admin/content/classes/${classId}`).set(adminHeaders).send({ name: "Nytt navn", description: "En beskrivelse" });
+    expect(saved.status).toBe(200);
+    expect(saved.body.class.name).toBe("Nytt navn");
+    expect(saved.body.class.description).toBe("En beskrivelse");
+
+    // Tomt navn avvises av skjemaet (400), og systemklassen kan ikke endres.
+    expect((await request(app).patch(`/api/admin/content/classes/${classId}`).set(adminHeaders).send({ name: "  " })).status).toBe(400);
+    const sys = await request(app).patch(`/api/admin/content/classes/${SYSTEM_ALL_PARTICIPANTS_CLASS_ID}`).set(adminHeaders).send({ name: "x" });
+    expect(sys.status).toBe(400);
+    expect(sys.body.error).toBe("system_class_immutable");
+
+    const actions = (await prisma.auditEvent.findMany({ where: { entityType: "class", entityId: classId }, select: { action: true } })).map((e) => e.action);
+    expect(actions).toContain("class_updated");
+
+    await prisma.auditEvent.deleteMany({ where: { entityType: "class", entityId: classId } });
+    await prisma.class.delete({ where: { id: classId } });
+  });
+
   // #1046 D3: sletting for godt tar med medlemmer, kurstildelinger og eierrader, og skriver revisjon.
   it("deletes an archived class for good: members, assignments, owner rows and an audit row", async () => {
     const created = await request(app).post("/api/admin/content/classes").set(adminHeaders).send({ name: `Kull slett ${Date.now()}` });

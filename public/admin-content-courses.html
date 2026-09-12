@@ -109,33 +109,7 @@
       .locale-tab-pane.active { display: block; }
 
       /* ── Form fields ─────────────────────────────────────────────────────── */
-      .form-field { margin-bottom: var(--space-2); }
-      .form-field:last-child { margin-bottom: 0; }
-      .form-field label {
-        display: block;
-        font-size: 13px;
-        font-weight: 600;
-        color: var(--color-meta);
-        margin-bottom: 4px;
-      }
-      .form-field input, .form-field textarea, .form-field select {
-        width: 100%;
-        padding: 9px 12px;
-        border: 1px solid var(--color-border-soft);
-        border-radius: var(--radius-card);
-        font-size: 14px;
-        font-family: inherit;
-        box-sizing: border-box;
-        background: #fff;
-        color: var(--color-text);
-      }
-      .form-field textarea { resize: vertical; min-height: 72px; }
-      .form-field input:focus, .form-field textarea:focus, .form-field select:focus {
-        outline: 2px solid var(--color-blue);
-        outline-offset: 1px;
-        border-color: transparent;
-      }
-      .required-note { font-size: 12px; color: var(--color-meta); margin-left: 4px; font-weight: 400; }
+      /* #1046 nivå to, D1: .form-field og .required-note arves fra shared.css — ett felt, ett sted. */
 
       /* ── Module list ─────────────────────────────────────────────────────── */
       .module-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: var(--space-2); }
@@ -286,75 +260,6 @@
       /* ── Loading ─────────────────────────────────────────────────────────── */
       .page-loading { padding: var(--space-3); text-align: center; color: var(--color-meta); font-size: 14px; }
 
-      /* ── Conversational new-course flow ──────────────────────────────────── */
-      .conv-flow {
-        max-width: 600px;
-        display: flex;
-        flex-direction: column;
-        gap: var(--space-2);
-      }
-      .conv-bot-msg {
-        background: var(--color-surface);
-        border: 1px solid var(--color-border-soft);
-        border-radius: var(--radius-card);
-        padding: var(--space-2) var(--space-3);
-        font-size: 15px;
-        color: var(--color-text);
-        line-height: 1.5;
-      }
-      .conv-bot-msg p { margin: 0; }
-      .conv-bot-msg p + p { margin-top: 6px; }
-      .conv-user-bubble {
-        align-self: flex-end;
-        background: var(--color-primary-tint);
-        color: var(--color-link-active);
-        border-radius: var(--radius-card);
-        padding: 8px var(--space-2);
-        font-size: 14px;
-        font-weight: 600;
-        max-width: 80%;
-      }
-      .conv-input-area {
-        display: flex;
-        gap: 8px;
-        align-items: flex-start;
-      }
-      .conv-input-area input {
-        flex: 1;
-        min-width: 0;
-        padding: 9px 12px;
-        border: 1px solid var(--color-border-soft);
-        border-radius: var(--radius-card);
-        font-size: 14px;
-        font-family: inherit;
-        box-sizing: border-box;
-        background: #fff;
-        color: var(--color-text);
-      }
-      .conv-input-area input:focus { outline: 2px solid var(--color-blue); outline-offset: 1px; border-color: transparent; }
-      .conv-input-area button { width: auto; flex-shrink: 0; }
-      .conv-choices {
-        display: flex;
-        gap: 8px;
-        flex-wrap: wrap;
-        margin-top: 4px;
-      }
-      .conv-choice-btn {
-        width: auto;
-        padding: 8px 18px;
-        font-size: 14px;
-        font-weight: 600;
-        border: 2px solid var(--color-border-soft);
-        border-radius: var(--radius-button);
-        background: var(--color-surface);
-        color: var(--color-text);
-        cursor: pointer;
-        white-space: nowrap;
-        transition: border-color 0.12s, background 0.12s;
-      }
-      .conv-choice-btn:hover { border-color: var(--color-blue); color: var(--color-link-active); background: var(--color-primary-tint); }
-      .conv-saving-indicator { font-size: 13px; color: var(--color-meta); font-style: italic; }
-      .conv-step { display: flex; flex-direction: column; gap: var(--space-2); }
       .combobox-row button { width: auto; flex-shrink: 0; }
     </style>
   </head>

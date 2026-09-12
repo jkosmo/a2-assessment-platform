@@ -134,6 +134,7 @@ export const auditActions = {
     archived: "class_archived",
     restored: "class_restored",
     deleted: "class_deleted",
+    updated: "class_updated",
     memberAdded: "class_member_added",
     memberRemoved: "class_member_removed",
     courseAssigned: "class_course_assigned",
@@ -436,6 +437,7 @@ export type AuditMetadataByAction = {
   [auditActions.class.archived]: EventMetadata<{ classId: string }>;
   [auditActions.class.restored]: EventMetadata<{ classId: string }>;
   [auditActions.class.deleted]: EventMetadata<{ classId: string; name: string }>;
+  [auditActions.class.updated]: EventMetadata<{ classId: string; fields: string[] }>;
   [auditActions.class.memberAdded]: EventMetadata<{ classId: string; userId: string }>;
   [auditActions.class.memberRemoved]: EventMetadata<{ classId: string; userId: string }>;
   [auditActions.class.courseAssigned]: EventMetadata<{ classId: string; courseId: string }>;

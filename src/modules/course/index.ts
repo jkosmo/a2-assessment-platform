@@ -59,6 +59,8 @@ export {
   createClass,
   archiveClass,
   deleteClass,
+  getClass,
+  updateClass,
   restoreClass,
   addMember,
   removeMember,

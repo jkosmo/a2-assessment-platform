@@ -65,7 +65,7 @@ test.describe("#1012 — erstatt seksjonsinnhold fra fil", () => {
     page.on("dialog", (d) => d.accept());
 
     await page.goto("/admin-content/sections?id=sec-1");
-    await page.waitForSelector("#replaceFromFileBtn");
+    await page.waitForSelector("#replaceFromFileBtn", { state: "attached" });
 
     await page.locator("#replaceFromFileInput").setInputFiles({
       name: "seksjon.json", mimeType: "application/json", buffer: Buffer.from(PACKAGE, "utf8"),
@@ -78,11 +78,11 @@ test.describe("#1012 — erstatt seksjonsinnhold fra fil", () => {
   test("knappen finnes IKKE for en ny seksjon — «erstatt» har ingenting å erstatte", async ({ page }) => {
     await mockAuthoring(page);
     await page.goto("/admin-content/sections?new");
-    await page.waitForSelector("#saveBtn");
+    await page.waitForSelector("#formSaveBtn");
 
     // ⚠️ Krev at LAGRE-knappen finnes først. Uten den ville påstanden under vært sann bare fordi
     // siden aldri rendret redigeringen — «finnes ikke» og «ble aldri lastet» ser like ut.
-    await expect(page.locator("#saveBtn")).toHaveCount(1);
+    await expect(page.locator("#formSaveBtn")).toHaveCount(1);
     await expect(page.locator("#replaceFromFileBtn")).toHaveCount(0);
   });
 
@@ -97,7 +97,7 @@ test.describe("#1012 — erstatt seksjonsinnhold fra fil", () => {
     page.on("dialog", (d) => d.accept());
 
     await page.goto("/admin-content/sections?id=sec-1");
-    await page.waitForSelector("#replaceFromFileBtn");
+    await page.waitForSelector("#replaceFromFileBtn", { state: "attached" });
 
     await page.locator("#replaceFromFileInput").setInputFiles({
       name: "modul.json", mimeType: "application/json",

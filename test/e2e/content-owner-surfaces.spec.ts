@@ -61,8 +61,9 @@ test("modul-avansert: owner panel renders in the module state-rail host", async 
   await expect(nav.locator("#navModuler")).toHaveClass(/active/);
   await expect(nav.locator("#navKurs")).toBeVisible();
   await expect(nav.locator("#navSeksjoner")).toBeVisible();
-  // QA r3 #1/#2: the page title is now "Modul", not the old vague workspace label.
-  await expect(page.locator("#moduleWorkspaceTitle")).toHaveText("Modul");
+  // #1046 nivå to (B2): tittelen er modulens navn; typen «Modul» står som merke over.
+  await expect(page.locator("#moduleWorkspaceTitle")).toContainText("Trade unions");
+  await expect(page.locator(".module-workspace-header .form-page-type")).toHaveText("Modul");
 });
 
 // QA #2 — classes were never wired for ownership; the panel goes in the openClass detail view.
@@ -74,6 +75,9 @@ test("klasse: owner panel renders in the class detail view", async ({ page }) =>
     route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ user: { id: "c1", email: "c@x.no", name: "C", roles: ["ADMINISTRATOR"] }, consent: { accepted: true }, pendingDeletion: null }) }));
   await page.route("**/api/admin/content/classes", (route: Route) =>
     route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ classes: [{ id: "cls-1", name: "Kull 2026", isSystem: false, _count: { members: 0, courseAssignments: 0 } }] }) }));
+  // #1046 nivå to: det åpnede elementet henter én klasse.
+  await page.route("**/api/admin/content/classes/*", (route: Route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ class: { id: "cls-1", name: "Kull 2026", isSystem: false, archivedAt: null, lifecycle: "active" } }) }));
   await page.route("**/api/admin/content/classes/*/members", (route: Route) =>
     route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ members: [] }) }));
   await page.route("**/api/admin/content/classes/*/courses", (route: Route) =>

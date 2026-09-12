@@ -199,8 +199,10 @@ app.get("/deltakere/klasser", (_request, response) => {
   response.sendFile(path.resolve(process.cwd(), "public", "admin-content-classes.html"));
 });
 // #765: 301 the old classes URL to its new home (same redirect pattern as the other moved routes).
-app.get("/admin-content/classes", (_request, response) => {
-  response.redirect(301, "/deltakere/klasser");
+app.get("/admin-content/classes", (request, response) => {
+  // #1046: klassen har fått ?id=/?new — spørrestrengen må følge med over.
+  const query = request.originalUrl.includes("?") ? request.originalUrl.slice(request.originalUrl.indexOf("?")) : "";
+  response.redirect(301, `/deltakere/klasser${query}`);
 });
 
 // Calibration workspace (Issue #326)

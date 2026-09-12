@@ -34,6 +34,7 @@ import {
 import { renderWorkspaceNavigationWithProfile } from "./workspace-nav.js";
 import { renderOwnerPanel } from "/static/owner-panel.js";
 import { createListPage } from "/static/list-page.js";
+import { createFormPage } from "/static/form-page.js";
 
 // #1046 C2: bokmål først, som i alle språkvelgere. Bokmål er det påkrevde språket (produkteier 12.09); publiseringsgaten krever fortsatt alle tre.
 const DETAIL_LOCALES = ["nb", "nn", "en-GB"];
@@ -233,18 +234,8 @@ function applyCourseLocaleValuesToForm(values) {
     }
   }
 
-  const pageTitle = document.getElementById("detailPageTitle");
-  if (pageTitle) {
-    const titleForLocale =
-      values?.title?.[currentLocale] ??
-      values?.title?.["en-GB"] ??
-      values?.title?.nb ??
-      values?.title?.nn ??
-      "";
-    if (titleForLocale) {
-      pageTitle.textContent = titleForLocale;
-    }
-  }
+  // Tittelen i hodet følger navnefeltet (skjemasida leser det).
+  courseFormPage?.refreshTitle();
 }
 
 function resolveCourseLocalizationSourceLocale(currentValues, initialValues) {
@@ -806,7 +797,7 @@ async function archiveCourseInAdmin(courseId, courseTitle, triggerButton = null)
   try {
     await apiFetch(`/api/admin/content/courses/${encodeURIComponent(courseId)}/archive`, getHeaders, { method: "POST" });
     showToast("Kurset ble arkivert.", "success");
-    await renderListView();
+    await refreshCourseView(courseId);
   } catch (err) {
     apiErrorToast(err);
     if (triggerButton) triggerButton.disabled = false;
@@ -823,7 +814,7 @@ async function unpublishCourseInAdmin(courseId, courseTitle, triggerButton = nul
   try {
     await apiFetch(`/api/admin/content/courses/${encodeURIComponent(courseId)}/unpublish`, getHeaders, { method: "POST" });
     showToast("Kurset ble avpublisert.", "success");
-    await renderListView();
+    await refreshCourseView(courseId);
   } catch (err) {
     apiErrorToast(err);
     if (triggerButton) triggerButton.disabled = false;
@@ -836,7 +827,7 @@ async function restoreCourseInAdmin(courseId, courseTitle, triggerButton = null)
   try {
     await apiFetch(`/api/admin/content/courses/${encodeURIComponent(courseId)}/restore`, getHeaders, { method: "POST" });
     showToast(`Kurset «${courseTitle}» ble gjenopprettet.`, "success");
-    await renderListView();
+    await refreshCourseView(courseId);
   } catch (err) {
     apiErrorToast(err);
     if (triggerButton) triggerButton.disabled = false;
@@ -989,170 +980,6 @@ function initCascadeDeleteDialog() {
 
 // ---------------------------------------------------------------------------
 // ── DETAIL VIEW ───────────────────────────────────────────────────────────
-// ---------------------------------------------------------------------------
-// ── NEW COURSE — CONVERSATIONAL FLOW ──────────────────────────────────────
-// ---------------------------------------------------------------------------
-
-// Conversational state for new-course creation
-let convTitle = "";
-let convCertLevel = "";
-let convModules = []; // { moduleId, title }
-
-async function renderNewCourseConversational() {
-  convTitle = "";
-  convCertLevel = "";
-  convModules = [];
-
-  // Load library modules for the optional module-add step
-  try {
-    const libData = await apiFetch(`/api/admin/content/modules/library?locale=${encodeURIComponent(currentLocale)}`, getHeaders);
-    // #440: only show PUBLISHED modules in the course picker. A course referring
-    // to an unpublished module creates latent failures (broken exports, broken
-    // course publish, broken participant view). Authors finalise modules first,
-    // then assemble courses.
-    allLibraryModules = (libData.modules ?? []).filter(m => m.status === "published");
-  } catch {
-    allLibraryModules = [];
-  }
-
-  pageContent.innerHTML = `
-    <div class="page-header-back">
-      <a href="/admin-content/courses" class="back-link">← Tilbake til kurs</a>
-    </div>
-    <div class="page-header">
-      <h1>Nytt kurs</h1>
-    </div>
-    <div class="conv-flow" id="convFlow">
-      <div class="conv-bot-msg">
-        <p>Hva skal kurset hete? Skriv tittelen slik du vil at deltakerne skal se den.</p>
-      </div>
-      <div class="conv-input-area" id="convTitleArea">
-        <input id="convTitleInput" type="text" placeholder="Kurstittel…" autocomplete="off" maxlength="200" />
-        <button id="convTitleNext" class="btn btn-primary">Neste</button>
-      </div>
-      <div class="conv-step" id="convAfterTitle"></div>
-    </div>`;
-
-  const titleInput = document.getElementById("convTitleInput");
-  const titleNext = document.getElementById("convTitleNext");
-
-  function submitTitle() {
-    const val = titleInput?.value.trim() ?? "";
-    if (!val) { titleInput?.focus(); return; }
-    convTitle = val;
-    if (titleInput) titleInput.disabled = true;
-    if (titleNext) titleNext.disabled = true;
-    appendConvUserBubble(convTitle);
-    showConvCertStep();
-  }
-
-  titleNext?.addEventListener("click", submitTitle);
-  titleInput?.addEventListener("keydown", e => { if (e.key === "Enter") submitTitle(); });
-  titleInput?.focus();
-}
-
-function appendConvUserBubble(text) {
-  const flow = document.getElementById("convFlow");
-  if (!flow) return;
-  const bubble = document.createElement("div");
-  bubble.className = "conv-user-bubble";
-  bubble.textContent = text;
-  flow.insertBefore(bubble, document.getElementById("convAfterTitle"));
-}
-
-function showConvCertStep() {
-  const after = document.getElementById("convAfterTitle");
-  if (!after) return;
-
-  // v1.2.16 (#353 part 2): hver conv-bot-msg er nå en aria-live region slik at SR-bruker
-  // får annonsert nye steg når de dukker opp. Fokus flyttes også til første interaktive
-  // element i steget — uten det måtte bruker Tab fra forrige posisjon (ofte langt unna).
-  after.innerHTML = `
-    <div class="conv-bot-msg" role="status" aria-live="polite">
-      <p>Hvilket sertifiseringsnivå passer for dette kurset?</p>
-    </div>
-    <div class="conv-choices" id="convCertChoices" role="group" aria-label="Sertifiseringsnivå">
-      <button class="conv-choice-btn" data-cert="basic">${escapeHtml(certLabel("basic"))}</button>
-      <button class="conv-choice-btn" data-cert="intermediate">${escapeHtml(certLabel("intermediate"))}</button>
-      <button class="conv-choice-btn" data-cert="advanced">${escapeHtml(certLabel("advanced"))}</button>
-    </div>
-    <div class="conv-step" id="convAfterCert"></div>`;
-
-  document.getElementById("convCertChoices")?.addEventListener("click", e => {
-    const btn = e.target.closest("[data-cert]");
-    if (!btn) return;
-    convCertLevel = btn.dataset.cert;
-    document.querySelectorAll(".conv-choice-btn").forEach(b => b.disabled = true);
-    appendConvCertBubble(btn.textContent.trim());
-    // Forenklet flyt: etter nivå-valg opprettes kurset direkte og editoren åpnes, der moduler OG
-    // seksjoner legges til. (Det gamle modul-søk-steget i samtalen er fjernet.)
-    convModules = [];
-    convCreateCourse();
-  });
-
-  // Focus first cert-choice button so keyboard users land in the new step.
-  setTimeout(() => document.querySelector("#convCertChoices .conv-choice-btn")?.focus(), 60);
-}
-
-function appendConvCertBubble(label) {
-  const certChoices = document.getElementById("convCertChoices");
-  if (!certChoices) return;
-  const bubble = document.createElement("div");
-  bubble.className = "conv-user-bubble";
-  bubble.textContent = label;
-  certChoices.parentNode.insertBefore(bubble, document.getElementById("convAfterCert"));
-}
-// v1.2.16 (#353): list of currently-visible combobox options as { id, title }. Brukt av
-// keyboard-handleren og dropdown-renderingen så begge ser samme array (indeks-konsistens).
-async function convCreateCourse() {
-  const createBtn = document.getElementById("convCreateBtn");
-  if (createBtn) createBtn.disabled = true;
-
-  const after = document.getElementById("convAfterModules") ?? document.getElementById("convAfterCert");
-  if (after) {
-    after.innerHTML = `<div class="conv-saving-indicator">Oppretter kurs…</div>`;
-  }
-
-  try {
-    const sourceLocale = supportedLocales.includes(currentLocale) ? currentLocale : "en-GB";
-    const localizedValues = await localizeCourseCopyAcrossLocales({
-      titleValues: { [sourceLocale]: convTitle },
-      descriptionValues: {},
-      sourceLocale,
-    });
-    meldFeiledeLokaler(localizedValues.failedLocales);
-    const normalizedTitle = normalizeLocalizedRequestValue(localizedValues.title) ?? convTitle;
-
-    const body = await apiFetch("/api/admin/content/courses", getHeaders, {
-      method: "POST",
-      body: JSON.stringify({
-        title: normalizedTitle,
-        certificationLevel: convCertLevel,
-      }),
-    });
-    const savedCourseId = body.course?.id;
-    if (!savedCourseId) throw new Error("Fikk ikke kurs-ID fra serveren.");
-
-    if (convModules.length > 0) {
-      await apiFetch(`/api/admin/content/courses/${encodeURIComponent(savedCourseId)}/modules`, getHeaders, {
-        method: "PUT",
-        body: JSON.stringify({ modules: convModules.map((m, i) => ({ moduleId: m.moduleId, sortOrder: i })) }),
-      });
-    }
-
-    showToast("Kurs opprettet. Legg til seksjoner og juster rekkefølgen her.", "success");
-    // #673-followup: gå rett til editoren der seksjoner + sekvens kan redigeres (ikke bare moduler).
-    window.location.href = `/admin-content/courses/${encodeURIComponent(savedCourseId)}`;
-  } catch (err) {
-    if (after) {
-      after.innerHTML = `<div class="error-banner">${escapeHtml(apiErrorText(err))}</div>`;
-    }
-    if (createBtn) createBtn.disabled = false;
-  }
-}
-
-// ---------------------------------------------------------------------------
-
 // Active locale tab for the detail form
 // #1052: hvilket kurs detaljvisningen står i. Elementlistas lenker trenger det for å kunne
 // sende forfatteren tilbake hit, og `renderModuleList()` tar ingen parametre.
@@ -1190,12 +1017,9 @@ let comboboxOpen = false;
 let comboboxHighlightedIndex = -1;
 
 async function renderDetailView(courseId) {
-  if (!courseId) {
-    aktivtKursId = null;
-    await renderNewCourseConversational();
-    return;
-  }
-  aktivtKursId = courseId;
+  // #1046 nivå to (1b, produkteier 12.09): «Nytt kurs» åpner det samme skjemaet tomt; kurset lages ved
+  // første Lagre. Sida med ett spørsmål og «Neste» (#506) er borte.
+  aktivtKursId = courseId ?? null;
 
   pageContent.innerHTML = `<div class="page-loading">Laster…</div>`;
 
@@ -1287,28 +1111,22 @@ async function renderDetailView(courseId) {
     moduleCount: courseModules.filter(it => it.type === "MODULE").length,
   });
 
-  pageContent.innerHTML = `
-    <div class="page-header-back">
-      <a href="/admin-content/courses" class="back-link">← Tilbake til kurs</a>
-    </div>
-    <div class="page-header">
-      <h1 id="detailPageTitle">${escapeHtml(pageTitle)}</h1>
-    </div>
-    <div class="detail-layout">
+  courseDetail = { courseId: courseId ?? null, course, localeValues, certLevel, enrollmentPolicy, discussionsEnabled };
+  const page = getCourseFormPage();
+  page.render();
+  page.markClean();
+  if (!courseId) document.getElementById("title-nb")?.focus();
+}
+
+// Kroppen i skjemasida: kursdetaljer + innhold. Feltene beholder id-ene sine (title-nb, certLevel …).
+function courseDetailBodyHtml() {
+  const { courseId, localeValues, certLevel, enrollmentPolicy, discussionsEnabled } = courseDetail;
+  return `<div class="detail-layout">
 
       <div class="detail-section" id="ownerPanelHost"></div>
 
       <div class="detail-section">
         <h2 class="detail-section-title">Kursdetaljer</h2>
-
-        <div class="locale-tabs" role="tablist" aria-label="Rediger per språk" id="localeTabs">
-          ${DETAIL_LOCALES.map(loc => `
-            <button class="locale-tab-btn${loc === activeDetailLocale ? " active" : ""}"
-              role="tab" aria-selected="${loc === activeDetailLocale}"
-              data-locale="${loc}" id="tab-${loc}" aria-controls="pane-${loc}">
-              ${localeLabels[loc] ?? loc}
-            </button>`).join("")}
-        </div>
 
         ${DETAIL_LOCALES.map(loc => `
           <div class="locale-tab-pane${loc === activeDetailLocale ? " active" : ""}"
@@ -1317,7 +1135,7 @@ async function renderDetailView(courseId) {
               <label for="title-${loc}">
                 Navn${loc === "nb" ? `<span class="required-note">(påkrevd)</span>` : ""}
               </label>
-              <input id="title-${loc}" type="text" data-field="title" data-locale="${loc}"
+              <input id="title-${loc}" type="text" data-field="title" data-locale="${loc}"${loc === "nb" ? " data-form-title" : ""}
                 value="${escapeHtml(localeValues[loc].title)}"
                 placeholder="${loc === "nb" ? "" : "Viser bokmål hvis tomt"}"
                 autocomplete="off" />
@@ -1376,22 +1194,95 @@ async function renderDetailView(courseId) {
       </div>
 
       <div id="formErrorBanner" hidden></div>
-
-      <div class="form-actions">
-        <button id="saveCourseBtn" class="btn btn-primary">Lagre kurs</button>
-        ${showPublishButton ? `<button id="publishCourseBtn" class="btn btn-secondary">Publiser kurs</button>` : ""}
-        <a href="/admin-content/courses" class="btn btn-secondary">Avbryt</a>
-      </div>
-
     </div>`;
+}
 
+function bindCourseDetail() {
+  const { courseId } = courseDetail;
   renderModuleList();
   initDetailEventListeners(courseId);
-  // #787 slice 5: content-owner management for this course.
+  // #787 slice 5: content-owner management for this course (a new course has no id yet).
   const ownerHost = document.getElementById("ownerPanelHost");
-  if (ownerHost) {
+  if (ownerHost && courseId) {
     renderOwnerPanel({ container: ownerHost, contentType: "COURSE", contentId: courseId, getHeaders, t }).catch(() => {});
   }
+}
+
+// ---------------------------------------------------------------------------
+// Skjemasida for kurs (form-page.js). #1046 nivå to.
+// ---------------------------------------------------------------------------
+
+let courseDetail = null; // { courseId, course, localeValues, certLevel, enrollmentPolicy, discussionsEnabled }
+let courseFormPage = null;
+
+const COURSE_FORM_TEXTS = {
+  back: "← Tilbake til kurs", typeLabel: "Kurs", untitled: "Nytt kurs",
+  savedAll: "Alt lagret", unsaved: "Ulagrede endringer", save: "Lagre", cancel: "Avbryt",
+  leaveConfirm: "Du har ulagrede endringer. Vil du forlate sida uten å lagre?",
+  contentLocale: "Innholdsspråk:", required: "(påkrevd)",
+};
+
+function switchDetailLocale(loc) {
+  activeDetailLocale = loc;
+  document.querySelectorAll(".locale-tab-pane").forEach(p => {
+    p.classList.toggle("active", p.id === `pane-${activeDetailLocale}`);
+  });
+}
+
+function getCourseFormPage() {
+  if (courseFormPage) return courseFormPage;
+  courseFormPage = createFormPage({
+    host: pageContent,
+    texts: COURSE_FORM_TEXTS,
+    backHref: "/admin-content/courses",
+    title: () => {
+      const nb = document.getElementById("title-nb")?.value?.trim();
+      if (nb) return nb;
+      return courseDetail?.course ? (localizedText(courseDetail.course.title) || "") : "";
+    },
+    item: () => courseDetail?.course ?? null,
+    t,
+    actions: () => courseDetailActions(),
+    languages: {
+      locales: DETAIL_LOCALES, labels: localeLabels, required: "nb",
+      current: () => activeDetailLocale,
+      onChange: (loc) => switchDetailLocale(loc),
+    },
+    body: () => courseDetailBodyHtml(),
+    save: { onSave: () => saveCourse(courseDetail?.courseId ?? null) },
+    afterRender: () => bindCourseDetail(),
+  });
+  courseFormPage.installGuards();
+  return courseFormPage;
+}
+
+// Handlingsraden i hodet (F1/F2): det lista kan, kan det åpnede kurset også.
+function courseDetailActions() {
+  const c = courseDetail?.course;
+  if (!c) return [];
+  const lifecycle = lifecycleOf(c);
+  const cid = escapeHtml(c.id);
+  const ctitle = escapeHtml(localizedText(c.title) || c.id);
+  const moduleCount = courseModules.filter(it => it.type === "MODULE").length;
+  return [
+    `<button type="button" class="row-action-btn" data-action="export" data-course-id="${cid}" data-course-title="${ctitle}">Eksporter</button>`,
+    lifecycle === "archived" ? ""
+      : lifecycle === "published"
+        ? `<button type="button" class="row-action-btn" data-action="unpublish" data-course-id="${cid}" data-course-title="${ctitle}">Avpubliser</button>`
+        : (moduleCount > 0 ? `<button type="button" id="publishCourseBtn" class="row-action-btn" data-action="publish" data-course-id="${cid}">Publiser</button>` : ""),
+    lifecycle === "archived"
+      ? `<button type="button" class="row-action-btn" data-action="restore" data-course-id="${cid}" data-course-title="${ctitle}">Gjenopprett</button>`
+      : `<button type="button" class="row-action-btn" data-action="archive" data-course-id="${cid}" data-course-title="${ctitle}">Arkiver</button>`,
+    lifecycle === "archived" ? `<button type="button" class="row-action-btn destructive" data-action="delete" data-course-id="${cid}" data-course-title="${ctitle}">Slett</button>` : "",
+    isAdministrator() ? `<button type="button" class="row-action-btn destructive" data-action="cascade-delete" data-course-id="${cid}" data-course-title="${ctitle}">Slett kurs og ubrukt innhold</button>` : "",
+  ];
+}
+
+// Etter en livssyklushandling: bli på kurset når man står i det, ellers lista.
+async function refreshCourseView(courseId) {
+  const route = detectRoute();
+  if (route.view === "list") await renderListView();
+  else await renderDetailView(courseId ?? route.courseId);
 }
 
 // ---------------------------------------------------------------------------
@@ -1401,6 +1292,9 @@ async function renderDetailView(courseId) {
 function renderModuleList() {
   const container = document.getElementById("moduleListContainer");
   if (!container) return;
+  // Innholdslista lagres med Lagre — men først etter at den er tegnet første gang (markClean etter render).
+  if (courseFormPage && courseFormPage.state && container.dataset.rendered === "1") courseFormPage.markDirty();
+  container.dataset.rendered = "1";
 
   renderSectionPicker();
 
@@ -1580,18 +1474,12 @@ function addSelectedSection() {
 // ---------------------------------------------------------------------------
 
 function initDetailEventListeners(courseId) {
-  // Locale tabs
-  document.getElementById("localeTabs")?.addEventListener("click", e => {
-    const btn = e.target.closest(".locale-tab-btn");
+  // Handlingsraden i skjemasidas hode — samme handlere som lista (handleListTableClick).
+  pageContent.querySelector(".form-page-actions")?.addEventListener("click", (e) => {
+    const btn = e.target.closest("[data-action]");
     if (!btn) return;
-    activeDetailLocale = btn.dataset.locale;
-    document.querySelectorAll(".locale-tab-btn").forEach(b => {
-      b.classList.toggle("active", b === btn);
-      b.setAttribute("aria-selected", String(b === btn));
-    });
-    document.querySelectorAll(".locale-tab-pane").forEach(p => {
-      p.classList.toggle("active", p.id === `pane-${activeDetailLocale}`);
-    });
+    if (!getCourseFormPage().confirmLeave()) return;
+    handleListTableClick(e, btn);
   });
 
   // Combobox
@@ -1655,8 +1543,6 @@ function initDetailEventListeners(courseId) {
   document.getElementById("addSectionBtn")?.addEventListener("click", addSelectedSection);
 
   // Save
-  document.getElementById("saveCourseBtn")?.addEventListener("click", () => saveCourse(courseId));
-  document.getElementById("publishCourseBtn")?.addEventListener("click", () => publishCourseInAdmin(courseId));
 }
 
 // ---------------------------------------------------------------------------
@@ -1714,7 +1600,7 @@ function resolveActiveWorkspaceRoles() {
 }
 
 async function saveCourse(courseId) {
-  const saveBtn = document.getElementById("saveCourseBtn");
+  const saveBtn = document.getElementById("formSaveBtn");
   const errorBanner = document.getElementById("formErrorBanner");
 
   const collectedValues = collectLocaleValues();
@@ -1742,7 +1628,7 @@ async function saveCourse(courseId) {
       errorBanner.hidden = false;
     }
     document.getElementById("title-nb")?.focus();
-    return;
+    return false;
   }
   if (!certLevel) {
     if (errorBanner) {
@@ -1750,7 +1636,7 @@ async function saveCourse(courseId) {
       errorBanner.hidden = false;
     }
     document.getElementById("certLevel")?.focus();
-    return;
+    return false;
   }
 
   if (errorBanner) errorBanner.hidden = true;
@@ -1803,18 +1689,21 @@ async function saveCourse(courseId) {
     showToast("Kurs lagret.", "success");
     initialDetailLocaleValues = cloneCourseLocaleValues(effectiveValues);
 
-    // If new, navigate to the saved course URL
+    // If new, navigate to the saved course URL (skjemaet er lagret — ingen spørsmål ved navigering).
     if (!courseId) {
+      getCourseFormPage().markClean();
       window.location.href = `/admin-content/courses/${encodeURIComponent(savedCourseId)}`;
     } else {
       await renderDetailView(courseId);
     }
+    return true;
   } catch (err) {
     if (errorBanner) {
       errorBanner.innerHTML = `<div class="error-banner">${escapeHtml(apiErrorText(err))}</div>`;
       errorBanner.hidden = false;
     }
     if (saveBtn) saveBtn.disabled = false;
+    return false;
   }
 }
 

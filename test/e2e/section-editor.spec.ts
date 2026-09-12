@@ -1,4 +1,5 @@
 import { test, expect, type Page, type Route } from "@playwright/test";
+import { revealRowAction } from "./admin-content-helpers.js";
 
 // Browser e2e for the section editor (U1/U2, #483/#524). Runs the REAL front-end JS in Chromium
 // against mocked APIs — covering the client-layer bugs supertest/integration tests can't see:
@@ -74,7 +75,7 @@ test("section editor: no raw i18n keys, and image upload is sent as multipart", 
   await page.locator("#titleInput").fill("Tittel");
   await page.locator("#markdownInput").fill("# Hei");
   // Save so the section gets an id (upload requires a saved section).
-  await page.getByRole("button", { name: /Lagre ny versjon/ }).click();
+  await page.getByRole("button", { name: /^Lagre$/ }).click();
 
   // The alt-text prompt — accept it.
   page.on("dialog", (dialog) => dialog.accept("alt-tekst"));
@@ -337,18 +338,18 @@ test("section editor: «Oversett» locks the editor while translating, then fill
 
   // LOCKED: button shows the translating label and the edit controls are disabled.
   await expect(page.locator("#translateBtn")).toHaveText(/Oversetter/);
-  await expect(page.locator("#saveBtn")).toBeDisabled();
+  await expect(page.locator("#formSaveBtn")).toBeDisabled();
   await expect(page.locator("#titleInput")).toBeDisabled();
   await expect(page.locator("#markdownInput")).toBeDisabled();
 
   // Release the translation → unlocks and restores the button label.
   releaseLocalize();
   await expect(page.locator("#translateBtn")).toHaveText(/Oversett fra/);
-  await expect(page.locator("#saveBtn")).toBeEnabled();
+  await expect(page.locator("#formSaveBtn")).toBeEnabled();
 
   // Both other locales were requested, and the nn tab now holds the translated title.
   await expect.poll(() => [...requestedTargets].sort()).toEqual(["en-GB", "nn"]);
-  await page.locator('.lang-tab[data-locale="nn"]').click();
+  await page.locator('[data-form-locale="nn"]').click();
   await expect(page.locator("#titleInput")).toHaveValue("T-nn");
 });
 
@@ -384,7 +385,8 @@ test.describe("#1046 D3 — sletting av seksjon bor i editoren, bare for arkiver
     await expect(page.locator('#sectionsTableBody [data-action="delete"]')).toHaveCount(0);
 
     await page.locator('[data-action="edit"][data-id="sec-del"]').click();
-    const slett = page.locator("#sectionDeleteBtn");
+    // #1046 nivå to: Slett ligger i handlingsraden i hodet — under «Mer» når det er flere enn fire.
+    const slett = await revealRowAction(page, page.locator("#sectionDeleteBtn"));
     await expect(slett).toBeVisible();
 
     // Avbryt i bekreftelsen → ingenting sendes.
@@ -394,7 +396,7 @@ test.describe("#1046 D3 — sletting av seksjon bor i editoren, bare for arkiver
 
     // Bekreft → DELETE går, og forfatteren står i lista igjen.
     page.once("dialog", (d) => { expect(d.message()).toMatch(/helt sikker|sure/i); return d.accept(); });
-    await slett.click();
+    await (await revealRowAction(page, page.locator("#sectionDeleteBtn"))).click();
     await expect.poll(bleSlettet).toBe(true);
     await expect(page.locator("#sectionsTableBody")).toBeAttached();
   });

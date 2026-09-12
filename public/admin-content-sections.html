@@ -43,14 +43,9 @@
       /* QA r7 #2: let the editor fill the page width so the Markdown/Preview columns are a true 50/50
          split of the available width (they were 50/50 of a 720px cap). Constrain only the single-column
          fields so the title input doesn't stretch uncomfortably wide. */
+      /* #1046 nivå to: hode, språkpiller, felt (.form-field) og lagrelinje er den felles skjemasida (form-page.js + shared.css). */
       .section-editor { max-width: none; }
-      .section-editor > .editor-field, .section-editor > .lang-tabs { max-width: 720px; }
-      .editor-field { margin-bottom: var(--space-2); }
-      .editor-field label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 4px; }
-      .editor-field input[type="text"] { width: 100%; padding: 8px; border: 1px solid var(--color-border-soft); border-radius: var(--radius-btn); font-size: 14px; }
-      .lang-tabs { display: flex; gap: 4px; margin-bottom: var(--space-2); }
-      .lang-tab { padding: 6px 12px; font-size: 13px; font-weight: 600; border: 1px solid var(--color-border-soft); background: none; border-radius: var(--radius-btn); cursor: pointer; color: var(--color-meta); }
-      .lang-tab.active { color: var(--color-link-active); border-color: var(--color-blue); background: var(--color-row-hover); }
+      .section-editor > .form-field { max-width: 720px; }
       .editor-cols { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-2); align-items: stretch; }
       @media (max-width: 760px) { .editor-cols { grid-template-columns: 1fr; } }
       /* #662: each column is a flex column so the markdown textarea and the preview pane fill the
@@ -64,7 +59,6 @@
       .preview-pane { border: 1px solid var(--color-border-soft); border-radius: var(--radius-card); padding: var(--space-2); min-height: 320px; flex: 1 1 auto; overflow-y: auto; }
       .preview-pane img { max-width: 100%; height: auto; }
       .preview-pane iframe { max-width: 100%; }
-      .editor-actions { margin-top: var(--space-3); display: flex; gap: var(--space-2); align-items: center; }
       .editor-status { font-size: 13px; color: var(--color-meta); }
     </style>
   </head>

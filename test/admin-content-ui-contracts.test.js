@@ -80,8 +80,8 @@ describe("admin content workspace UI contracts", () => {
     // Dynamic JS: the list is the shared list page (#1046, list-page.js); the detail view is the page's own.
     expect(coursesJs).toContain('createListPage({');
     expect(coursesJs).toContain('tbody: "coursesTableBody"');
-    expect(coursesJs).toContain('class="back-link"');
-    expect(coursesJs).toContain('class="page-header-back"');
+    // #1046 nivå to: hodet (tilbake-lenke, tittel) tegnes av den felles skjemasida (form-page.js).
+    expect(coursesJs).toContain("createFormPage({");
   });
 
   it("keeps the GDPR/privacy warning on the module workspace", () => {
@@ -97,34 +97,15 @@ describe("admin content workspace UI contracts", () => {
 // Courses conversational flow — CSS contracts
 // ---------------------------------------------------------------------------
 
-describe("courses conversational flow CSS", () => {
-  it("defines .conv-input-area as a flex container", () => {
+describe("courses form page", () => {
+  // #1046 nivå to (1b): den samtalebaserte «Nytt kurs»-sida (#506) er borte — «Nytt kurs» åpner det
+  // samme skjemaet tomt, på den felles skjemasida (form-page.js). Ingen egen CSS skal ligge igjen.
+  it("has no leftover conversational-flow CSS or markup", () => {
     const html = readFile("public/admin-content-courses.html");
-    expect(html).toContain(".conv-input-area");
-    // Must be flex so input and button sit side-by-side
-    expect(html).toMatch(/\.conv-input-area\s*\{[^}]*display\s*:\s*flex/);
-  });
-
-  it("overrides button width inside .conv-input-area — prevents global button{width:100%} collapsing the input", () => {
-    const html = readFile("public/admin-content-courses.html");
-    // The global shared.css reset sets button { width: 100% }.
-    // Without an explicit override, a button inside a flex row takes 100% width
-    // and the adjacent input collapses to near-zero — making the form unusable.
-    expect(html).toMatch(/\.conv-input-area\s+button\s*\{[^}]*width\s*:\s*auto/);
-  });
-
-  it("sets width: auto on .conv-choice-btn — prevents cert-level and module-choice buttons going full-width", () => {
-    const html = readFile("public/admin-content-courses.html");
-    expect(html).toMatch(/\.conv-choice-btn\s*\{[^}]*width\s*:\s*auto/);
-  });
-
-  it("defines all required conversational flow CSS classes", () => {
-    const html = readFile("public/admin-content-courses.html");
-    expect(html).toContain(".conv-flow");
-    expect(html).toContain(".conv-bot-msg");
-    expect(html).toContain(".conv-user-bubble");
-    expect(html).toContain(".conv-choices");
-    expect(html).toContain(".conv-saving-indicator");
+    const js = readFile("public/static/admin-content-courses.js");
+    expect(html).not.toContain(".conv-");
+    expect(js).not.toContain("renderNewCourseConversational");
+    expect(js).toContain("createFormPage({");
   });
 
   // #1046 D5: regelen for .row-action-btn bor i shared.css ALENE. Moduler og Kurs hadde hver sin
@@ -156,14 +137,6 @@ describe("courses conversational flow CSS", () => {
     expect(html).toMatch(/\.combobox-row\s+button\s*\{[^}]*width\s*:\s*auto/);
   });
 
-  it("conv-step defines flex column layout — provides spacing inside dynamically-injected step containers", () => {
-    const html = readFile("public/admin-content-courses.html");
-    // convAfter* divs are nested inside .conv-flow, not direct children, so they don't inherit
-    // the flow's gap. .conv-step makes each injected step container its own flex column with gap.
-    expect(html).toMatch(/\.conv-step\s*\{[^}]*display\s*:\s*flex/);
-    expect(html).toMatch(/\.conv-step\s*\{[^}]*flex-direction\s*:\s*column/);
-    expect(html).toMatch(/\.conv-step\s*\{[^}]*gap\s*:/);
-  });
 });
 
 // ---------------------------------------------------------------------------
@@ -177,22 +150,6 @@ describe("courses JS contracts", () => {
     // the actual method/body in the third argument — making every POST silently become a GET.
     expect(js).toMatch(/function getHeaders\s*\(\s*\)/);
     expect(js).not.toMatch(/^let getHeaders\s*=\s*\{/m);
-  });
-
-  it("renderDetailView delegates to renderNewCourseConversational when courseId is falsy", () => {
-    const js = readFile("public/static/admin-content-courses.js");
-    expect(js).toContain("function renderNewCourseConversational");
-    const detailIdx = js.indexOf("async function renderDetailView(");
-    const callIdx = js.indexOf("renderNewCourseConversational()", detailIdx);
-    expect(callIdx, "renderNewCourseConversational() must be called inside renderDetailView").toBeGreaterThan(detailIdx);
-  });
-
-  it("convCreateCourse sends a POST request to /api/admin/content/courses", () => {
-    const js = readFile("public/static/admin-content-courses.js");
-    const fnIdx = js.indexOf("async function convCreateCourse(");
-    expect(fnIdx, "convCreateCourse function must exist").toBeGreaterThan(-1);
-    const postIdx = js.indexOf('"POST"', fnIdx);
-    expect(postIdx, "convCreateCourse must issue a POST request").toBeGreaterThan(fnIdx);
   });
 
   it("courses admin exposes publish controls for saved unpublished courses", () => {

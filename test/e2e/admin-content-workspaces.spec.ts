@@ -3987,7 +3987,9 @@ test.describe("admin content browser coverage", () => {
       .toContain("Use a practical workplace framing.");
   });
 
-  test("courses conversational flow creates the course on certification choice and opens the editor (#506)", async ({ page }) => {
+  // #1046 nivå to (1b, produkteier 12.09): «Nytt kurs» åpner det samme skjemaet tomt; kurset lages ved
+  // første Lagre og editoren står igjen med det lagrede kurset. Den samtalebaserte sida (#506) er borte.
+  test("new course: the empty form creates the course on first save and stays in the editor", async ({ page }) => {
     const state = await mockCommonApis(page, {
       libraryModules: [
         { id: "module-1", title: "Trade unions" },
@@ -3997,12 +3999,15 @@ test.describe("admin content browser coverage", () => {
 
     await page.goto("/admin-content/courses/new");
 
-    const titleInput = page.locator("#convTitleInput");
-    await titleInput.fill("Labour rights");
-    await titleInput.press("Enter");
-    // #506: etter nivå-valg opprettes kurset direkte (tittel + nivå, ingen moduler) og editoren åpnes —
-    // moduler OG seksjoner legges til der. Det gamle modul-søk-steget i samtalen er fjernet.
-    await clickEnabledButton(page, "Basic");
+    await expect(page.locator("#formPageTitle")).toHaveText("Nytt kurs");
+    await expect(page.locator("#formSaveBtn")).toBeDisabled();
+    // Skjemaet åpner på menyspråket (#974); bokmål velges i språkpillene.
+    await page.locator("[data-form-locale=\"nb\"]").click();
+    await page.locator("#title-nb").fill("Arbeidsrett");
+    await expect(page.locator("#formPageTitle")).toHaveText("Arbeidsrett");
+    await expect(page.locator("#formPageDirty")).toHaveText("Ulagrede endringer");
+    await page.locator("#certLevel").selectOption("basic");
+    await page.locator("#formSaveBtn").click();
 
     await expect(page).toHaveURL(/\/admin-content\/courses\/[^/]+$/);
     await expect.poll(() => state.mutableCourses.length).toBe(1);
@@ -4029,7 +4034,7 @@ test.describe("admin content browser coverage", () => {
 
     await page.goto("/admin-content/courses/course-1");
 
-    await expect(page.locator("#detailPageTitle")).toContainText("Labour rights");
+    await expect(page.locator("#formPageTitle")).toContainText("Labour rights");
     await expect(page.locator("#desc-en-GB")).toHaveValue("");
     await expect(page.locator(".page-loading")).toHaveCount(0);
   });
@@ -4122,7 +4127,7 @@ test.describe("admin content browser coverage", () => {
     await expect(select).toBeVisible();
     await expect(select).toHaveValue("OPEN");
     await select.selectOption("RESTRICTED");
-    await page.locator("#saveCourseBtn").click();
+    await page.locator("#formSaveBtn").click();
 
     await expect.poll(() => putBody?.enrollmentPolicy).toBe("RESTRICTED");
   });
@@ -4145,20 +4150,23 @@ test.describe("admin content browser coverage", () => {
     await expect(page.getByRole("button", { name: /Collective bargaining/ })).toBeVisible();
   });
 
-  test("courses conversational flow accepts Enter on course title and advances to certification choices", async ({ page }) => {
-    await mockCommonApis(page, { libraryModules: [] });
+  test("new course: bokmål name and level are required before the first save", async ({ page }) => {
+    const state = await mockCommonApis(page, { libraryModules: [] });
 
     await page.goto("/admin-content/courses/new");
 
-    const titleInput = page.locator("#convTitleInput");
-    await expect(titleInput).toBeVisible();
-    await titleInput.fill("Labour rights");
-    await titleInput.press("Enter");
+    // Bokmål er det påkrevde språket (produkteier 12.09). Et navn på et annet språk oversettes til
+    // bokmål ved lagring; det som stopper i skjemaet er at det ikke finnes noe navn å oversette.
+    await page.locator("#certLevel").selectOption("basic");
+    await page.locator("#formSaveBtn").click();
+    await expect(page.locator("#formErrorBanner")).toContainText("bokmål");
+    expect(state.mutableCourses.length).toBe(0);
 
-    await expect(titleInput).toBeDisabled();
-    await expect(page.getByRole("button", { name: "Basic" })).toBeVisible();
-    await expect(page.getByRole("button", { name: "Intermediate" })).toBeVisible();
-    await expect(page.getByRole("button", { name: "Advanced" })).toBeVisible();
+    await page.locator("[data-form-locale=\"nb\"]").click();
+    await page.locator("#title-nb").fill("Arbeidsrett");
+    await page.locator("#formSaveBtn").click();
+    await expect(page).toHaveURL(/\/admin-content\/courses\/[^/]+$/);
+    await expect.poll(() => state.mutableCourses.length).toBe(1);
   });
 
   test("courses creation and detail view localize certification level labels to the active UI locale", async ({ page }) => {
@@ -4183,32 +4191,30 @@ test.describe("admin content browser coverage", () => {
 
     await page.goto("/admin-content/courses/new");
     await page.locator("#localeSelect").selectOption("nb");
-    await page.locator("#convTitleInput").fill("Arbeidsmiljo");
-    await page.locator("#convTitleInput").press("Enter");
-
-    await expect(page.getByRole("button", { name: "Grunnleggende" })).toBeVisible();
-    await expect(page.getByRole("button", { name: "Videregående" })).toBeVisible();
-    await expect(page.getByRole("button", { name: "Avansert" })).toBeVisible();
+    await expect(page.locator("#certLevel")).toContainText("Grunnleggende");
+    await expect(page.locator("#certLevel")).toContainText("Videregående");
+    await expect(page.locator("#certLevel")).toContainText("Avansert");
 
     await page.goto("/admin-content/courses/course-1");
-    await expect(page.locator("#detailPageTitle")).toContainText("Fagforeninger");
+    await expect(page.locator("#formPageTitle")).toContainText("Fagforeninger");
     await expect(page.locator("#certLevel")).toContainText("Grunnleggende");
-    await expect(page.locator("#tab-nb")).toHaveClass(/active/);
+    await expect(page.locator("[data-form-locale=\"nb\"]")).toHaveClass(/active/);
     await expect(page.locator("#title-nb")).toHaveValue("Fagforeninger");
     await expect(page.locator("#desc-nb")).toHaveValue("Norsk beskrivelse");
   });
 
-  test("courses conversational creation stores the typed title in the active locale and localizes the other variants", async ({ page }) => {
+  test("new course typed in one language localizes the other variants on save", async ({ page }) => {
     const state = await mockCommonApis(page, {
       libraryModules: [],
     });
 
     await page.goto("/admin-content/courses/new");
     await page.locator("#localeSelect").selectOption("nn");
-    await page.locator("#convTitleInput").fill("Arbeidsmiljøkurs");
-    await page.locator("#convTitleInput").press("Enter");
-    // #506: nivå-valget oppretter kurset direkte og åpner editoren.
-    await page.locator('[data-cert="basic"]').click();
+    await page.locator("[data-form-locale=\"nn\"]").click();
+    await page.locator("#title-nn").fill("Arbeidsmiljøkurs");
+    await page.locator("#certLevel").selectOption("basic");
+    // Lagring oversetter til de andre språkene før den krever bokmål — bokmål kommer fra oversettelsen.
+    await page.locator("#formSaveBtn").click();
 
     // #673-followup: opprettelse går nå rett til kurs-editoren (der seksjoner legges til), ikke lista.
     await expect(page).toHaveURL(/\/admin-content\/courses\/[^/]+$/);
@@ -4238,10 +4244,10 @@ test.describe("admin content browser coverage", () => {
     });
 
     await page.goto("/admin-content/courses/course-1");
-    await page.locator("#tab-nn").click();
+    await page.locator("[data-form-locale=\"nn\"]").click();
     await page.locator("#title-nn").fill("Nytt nynorsk kursnamn");
     await page.locator("#desc-nn").fill("Oppdatert nynorsk skildring");
-    await page.locator("#saveCourseBtn").click();
+    await page.locator("#formSaveBtn").click();
 
     await expect(page.locator("#title-nn")).toHaveValue("Nytt nynorsk kursnamn");
     await expect(page.locator("#title-en-GB")).toHaveValue("Nytt nynorsk kursnamn [en-GB]");
@@ -4252,17 +4258,16 @@ test.describe("admin content browser coverage", () => {
     await expect.poll(() => state.lastCourseLocalizationBodies.map((body) => body.targetLocale).slice(-2).sort()).toEqual(["en-GB", "nb"]);
   });
 
-  test("courses conversational flow has no module-search step after certification choice (#506)", async ({ page }) => {
+  test("new course can be created without any modules; content is added in the editor afterwards (#506)", async ({ page }) => {
     const state = await mockCommonApis(page, {
       libraryModules: [{ id: "module-1", title: "Trade unions" }],
     });
 
     await page.goto("/admin-content/courses/new");
-
-    await page.locator("#convTitleInput").fill("Labour rights");
-    await page.locator("#convTitleInput").press("Enter");
-    // #506: ingen modul-søk-steg lenger — nivå-valget oppretter kurset og åpner editoren.
-    await clickEnabledButton(page, "Basic");
+    await page.locator("[data-form-locale=\"nb\"]").click();
+    await page.locator("#title-nb").fill("Arbeidsrett");
+    await page.locator("#certLevel").selectOption("basic");
+    await page.locator("#formSaveBtn").click();
 
     await expect(page).toHaveURL(/\/admin-content\/courses\/[^/]+$/);
     await expect.poll(() => state.mutableCourses.length).toBe(1);
@@ -4293,9 +4298,9 @@ test.describe("admin content browser coverage", () => {
       response.request().method() === "PUT" &&
       response.status() === 200,
     );
-    await page.locator("#saveCourseBtn").click();
+    await page.locator("#formSaveBtn").click();
     await saveResponse;
-    await expect(page.locator("#saveCourseBtn")).toBeEnabled();
+    await expect(page.locator("#formSaveBtn")).toBeEnabled();
 
     await page.goto("/admin-content/courses");
     await expect(page.locator("#coursesTableBody")).toContainText("23 Apr 2026");

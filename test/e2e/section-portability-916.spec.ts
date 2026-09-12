@@ -275,7 +275,7 @@ test("held-back save: the author is told it was saved but not published, and how
   await page.getByRole("button", { name: /Ny seksjon/ }).click();
   await page.locator("#titleInput").fill("Bare norsk");
   await page.locator("#markdownInput").fill("# Bare norsk");
-  await page.getByRole("button", { name: /Lagre ny versjon/ }).click();
+  await page.getByRole("button", { name: /^Lagre$/ }).click();
 
   const toast = toastOf(page);
   // A plain "Seksjon lagret." here is the confusion this exists to prevent: the author would

@@ -560,7 +560,11 @@
         <a href="/admin-content" class="back-link">← Tilbake til moduler</a>
       </div>
       <div class="module-workspace-header">
-        <h1 id="moduleWorkspaceTitle" style="margin:0; font-size:22px" data-i18n="shell.page.title">Modul</h1>
+        <!-- #1046 nivå to, B2: typen som lite merke over NAVNET som tittel — som på kurs, seksjon og klasse. -->
+        <div class="form-page-title">
+          <span class="form-page-type" data-i18n="shell.page.title">Modul</span>
+          <h1 id="moduleWorkspaceTitle" class="is-untitled" data-i18n="shell.newModule.defaultTitle">Ny modul</h1>
+        </div>
         <!-- #896 S1: three views on the same module, replacing the Samtale/Avansert mode
              switch. Rediger is the default: opening a module lands where the work happens.
              Innstillinger is a frame in S1 and receives the Avansert fields in S3. -->

@@ -18,6 +18,7 @@ import { lifecycleStatusBadge, lifecycleBadge, lifecycleOf } from "/static/conte
 import { renderOwnerPanel } from "/static/owner-panel.js";
 import { sanitizeSectionHtml } from "/static/sanitize.js";
 import { createListPage } from "/static/list-page.js";
+import { createFormPage } from "/static/form-page.js";
 import {
   SECTION_EDITOR_LOCALES,
   nonEmptyLocales,
@@ -35,7 +36,7 @@ const EDITOR_LOCALES = SECTION_EDITOR_LOCALES;
 // threading dozens of keys through the shared translations file).
 const LABELS = {
   "en-GB": {
-    heading: "Sections", more: "More", searchPlaceholder: "Search by section name or ID…", searchLabel: "Search sections", lead: "Reading material you can use in several courses.", newSection: "New section", colTitle: "Name", colVersion: "Version",
+    heading: "Sections", more: "More", typeLabel: "Section", untitled: "New section", savedAll: "All saved", unsaved: "Unsaved changes", cancel: "Cancel", leaveConfirm: "You have unsaved changes. Leave without saving?", contentLocale: "Content language:", required: "(required)", searchPlaceholder: "Search by section name or ID…", searchLabel: "Search sections", lead: "Reading material you can use in several courses.", newSection: "New section", colTitle: "Name", colVersion: "Version",
     colStatus: "Status", statusDraft: "Draft", statusPublished: "Published", statusArchived: "Archived",
     publish: "Publish", unpublish: "Unpublish", archive: "Archive", restore: "Restore",
     showArchived: "Show archived", hideArchived: "Hide archived",
@@ -47,7 +48,7 @@ const LABELS = {
     colUpdated: "Last changed", edit: "Open", del: "Delete section", empty: "No sections yet.",
     readonly: "Owner access only", readonlyHint: "Only an owner or an administrator can open this section.",
     back: "← Back to sections", backToCourse: "← Back to the course", titleLabel: "Name", markdown: "Markdown", preview: "Preview",
-    save: "Save new version", saved: "Section saved.", deleted: "Section deleted.",
+    save: "Save", saved: "Section saved.", deleted: "Section deleted.",
     confirmDelete: "Are you sure you want to delete this section for good? It disappears from every course that uses it.", loadError: "Could not load sections.",
     needContent: "Add a title and content in at least one language.",
     translate: "Translate from this language", translating: "Translating…", translated: "Translated — review before saving.",
@@ -63,7 +64,7 @@ const LABELS = {
     fieldTitle: "the title", fieldBodyMarkdown: "the content",
   },
   nb: {
-    heading: "Seksjoner", more: "Mer", searchPlaceholder: "Søk på seksjonsnavn eller seksjons-ID…", searchLabel: "Søk i seksjoner", lead: "Lesestoff du kan bruke i flere kurs.", newSection: "Ny seksjon", colTitle: "Navn", colVersion: "Versjon",
+    heading: "Seksjoner", more: "Mer", typeLabel: "Seksjon", untitled: "Ny seksjon", savedAll: "Alt lagret", unsaved: "Ulagrede endringer", cancel: "Avbryt", leaveConfirm: "Du har ulagrede endringer. Vil du forlate sida uten å lagre?", contentLocale: "Innholdsspråk:", required: "(påkrevd)", searchPlaceholder: "Søk på seksjonsnavn eller seksjons-ID…", searchLabel: "Søk i seksjoner", lead: "Lesestoff du kan bruke i flere kurs.", newSection: "Ny seksjon", colTitle: "Navn", colVersion: "Versjon",
     colStatus: "Status", statusDraft: "Utkast", statusPublished: "Publisert", statusArchived: "Arkivert",
     publish: "Publiser", unpublish: "Avpubliser", archive: "Arkiver", restore: "Gjenopprett",
     showArchived: "Vis arkiverte", hideArchived: "Skjul arkiverte",
@@ -75,7 +76,7 @@ const LABELS = {
     colUpdated: "Sist endret", edit: "Åpne", del: "Slett seksjon", empty: "Ingen seksjoner ennå.",
     readonly: "Kun for eier", readonlyHint: "Bare en eier eller en administrator kan åpne denne seksjonen.",
     back: "← Tilbake til seksjoner", backToCourse: "← Tilbake til kurset", titleLabel: "Navn", markdown: "Markdown", preview: "Forhåndsvisning",
-    save: "Lagre ny versjon", saved: "Seksjon lagret.", deleted: "Seksjon slettet.",
+    save: "Lagre", saved: "Seksjon lagret.", deleted: "Seksjon slettet.",
     confirmDelete: "Er du helt sikker på at du vil slette denne seksjonen for godt? Den forsvinner fra alle kurs som bruker den.", loadError: "Kunne ikke laste seksjoner.",
     needContent: "Fyll inn tittel og innhold på minst ett språk.",
     translate: "Oversett fra dette språket", translating: "Oversetter…", translated: "Oversatt — se over før du lagrer.",
@@ -91,7 +92,7 @@ const LABELS = {
     fieldTitle: "tittelen", fieldBodyMarkdown: "innholdet",
   },
   nn: {
-    heading: "Seksjonar", more: "Meir", searchPlaceholder: "Søk på seksjonsnamn eller seksjons-ID…", searchLabel: "Søk i seksjonar", lead: "Lesestoff du kan bruke i fleire kurs.", newSection: "Ny seksjon", colTitle: "Namn", colVersion: "Versjon",
+    heading: "Seksjonar", more: "Meir", typeLabel: "Seksjon", untitled: "Ny seksjon", savedAll: "Alt lagra", unsaved: "Ulagra endringar", cancel: "Avbryt", leaveConfirm: "Du har ulagra endringar. Vil du forlate sida utan å lagre?", contentLocale: "Innhaldsspråk:", required: "(påkravd)", searchPlaceholder: "Søk på seksjonsnamn eller seksjons-ID…", searchLabel: "Søk i seksjonar", lead: "Lesestoff du kan bruke i fleire kurs.", newSection: "Ny seksjon", colTitle: "Namn", colVersion: "Versjon",
     colStatus: "Status", statusDraft: "Utkast", statusPublished: "Publisert", statusArchived: "Arkivert",
     publish: "Publiser", unpublish: "Avpubliser", archive: "Arkiver", restore: "Gjenopprett",
     showArchived: "Vis arkiverte", hideArchived: "Skjul arkiverte",
@@ -103,7 +104,7 @@ const LABELS = {
     colUpdated: "Sist endra", edit: "Opne", del: "Slett seksjon", empty: "Ingen seksjonar enno.",
     readonly: "Berre for eigar", readonlyHint: "Berre ein eigar eller ein administrator kan opne denne seksjonen.",
     back: "← Tilbake til seksjonar", backToCourse: "← Tilbake til kurset", titleLabel: "Namn", markdown: "Markdown", preview: "Førehandsvising",
-    save: "Lagre ny versjon", saved: "Seksjon lagra.", deleted: "Seksjon sletta.",
+    save: "Lagre", saved: "Seksjon lagra.", deleted: "Seksjon sletta.",
     confirmDelete: "Er du heilt sikker på at du vil slette denne seksjonen for godt? Han forsvinn frå alle kurs som bruker han.", loadError: "Kunne ikkje laste seksjonar.",
     needContent: "Fyll inn tittel og innhald på minst eitt språk.",
     translate: "Omset frå dette språket", translating: "Omset…", translated: "Omsett — sjå over før du lagrar.",
@@ -585,6 +586,155 @@ async function deleteSection(sectionId) {
 let editing = null; // { id, title:{}, body:{}, editLocale }
 let previewTimer = null;
 
+// ---------------------------------------------------------------------------
+// Det åpnede elementet: den felles skjemasida (form-page.js). #1046 nivå to.
+// ---------------------------------------------------------------------------
+
+let formPage = null;
+
+function sectionFormTexts() {
+  const opphav = detectRoute().returnTo;
+  return {
+    // ⚠️ #1052: TEKSTEN MÅ FØLGE MÅLET. «← Tilbake» som sender deg til lista når du kom fra et kurs
+    // er samme slags løgn som #1029 ryddet bort.
+    back: opphav ? L("backToCourse") : L("back"),
+    typeLabel: L("typeLabel"), untitled: L("untitled"),
+    savedAll: L("savedAll"), unsaved: L("unsaved"), save: L("save"), cancel: L("cancel"),
+    leaveConfirm: L("leaveConfirm"), contentLocale: L("contentLocale"), required: L("required"),
+  };
+}
+
+function goBackFromEditor() {
+  const opphav = detectRoute().returnTo;
+  // ⚠️ IKKE `history.back()`. Kursets elementliste åpner med `target="_blank"`, og i en fersk fane
+  // finnes ingen historikk å gå tilbake i — da ville knappen ikke gjort noe i det hele tatt.
+  if (opphav) location.href = opphav;
+  else goTo("list");
+}
+
+function getFormPage() {
+  if (formPage) return formPage;
+  formPage = createFormPage({
+    host: pageContent,
+    texts: sectionFormTexts,
+    onBack: goBackFromEditor,
+    title: () => (editing?.title?.[editing.editLocale] ?? "").trim() || pickLocalizedText(editing?.title ?? {}, currentLocale),
+    item: () => (editing?.id ? { lifecycle: editorSectionStatus() } : null),
+    t: tNav,
+    actions: () => sectionActions(),
+    languages: {
+      locales: EDITOR_LOCALES, labels: localeLabels, required: "nb",
+      current: () => editing?.editLocale ?? currentLocale,
+      onChange: (loc) => { captureInputs(); editing.editLocale = loc; renderEditorFields(); getFormPage().refreshTitle(); },
+    },
+    body: () => sectionEditorBodyHtml(),
+    save: { onSave: () => persistSection(), onCancel: goBackFromEditor },
+    afterRender: () => bindEditorHandlers(),
+  });
+  formPage.installGuards();
+  return formPage;
+}
+
+// Handlingsraden i hodet (F1/F2): det lista kan, kan det åpnede elementet også — pluss det som bare
+// finnes her (Oversett, Erstatt fra fil, Last opp bilde er inne i skjemaet).
+function sectionActions() {
+  if (!editing) return [];
+  const status = editorSectionStatus();
+  const id = editing.id ? escapeHtml(editing.id) : "";
+  // Rekkefølge som i lista (D2): det man gjør ofte først, det farlige sist — tre vises, resten under «Mer».
+  return [
+    `<button type="button" class="row-action-btn" id="translateBtn" data-editor-action="translate">${escapeHtml(L("translate"))}</button>`,
+    id ? `<button type="button" class="row-action-btn" data-editor-action="export">${escapeHtml(L("exportSection"))}</button>` : "",
+    id && status && status !== "archived"
+      ? (status === "published"
+        ? `<button type="button" class="row-action-btn" id="sectionLifecycleBtn" data-editor-action="unpublish">${escapeHtml(L("unpublish"))}</button>`
+        : `<button type="button" class="row-action-btn" id="sectionLifecycleBtn" data-editor-action="publish">${escapeHtml(L("publish"))}</button>`)
+      : "",
+    id ? `<button type="button" class="row-action-btn" id="replaceFromFileBtn" data-editor-action="replace">${escapeHtml(L("replaceFromFile"))}</button>` : "",
+    id && status ? (status === "archived"
+      ? `<button type="button" class="row-action-btn" data-editor-action="restore">${escapeHtml(L("restore"))}</button>`
+      : `<button type="button" class="row-action-btn" data-editor-action="archive">${escapeHtml(L("archive"))}</button>`) : "",
+    // #1046 D3: sletting bor her, ikke i lista — og bare for en arkivert seksjon.
+    id && status === "archived" ? `<button type="button" class="row-action-btn destructive" id="sectionDeleteBtn" data-editor-action="delete">${escapeHtml(L("del"))}</button>` : "",
+  ];
+}
+
+function sectionEditorBodyHtml() {
+  const sectionId = editing?.id ?? null;
+  return `
+    ${sectionId ? `<div id="ownerPanelHost" class="card" style="margin-bottom:var(--space-2)" data-form-untracked></div>` : ""}
+    <div class="section-editor card">
+      <div class="form-field">
+        <label for="titleInput">${escapeHtml(L("titleLabel"))}${editing.editLocale === "nb" ? ` <span class="required-note">${escapeHtml(L("required"))}</span>` : ""}</label>
+        <input type="text" id="titleInput" data-form-title value="${escapeHtml(editing.title[editing.editLocale])}" autocomplete="off" />
+      </div>
+      <div class="editor-cols">
+        <div>
+          <div class="editor-pane-label" style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+            <span>${escapeHtml(L("markdown"))}</span>
+            <span data-form-untracked>
+              <button type="button" id="uploadImageBtn" class="btn btn-secondary" style="width:auto;font-size:12px;padding:2px 8px">${escapeHtml(L("uploadImage"))}</button>
+              <input type="file" id="imageFileInput" accept="image/png,image/jpeg,image/gif,image/webp,image/svg+xml,.svg" hidden />
+            </span>
+          </div>
+          <textarea id="markdownInput">${escapeHtml(editing.body[editing.editLocale])}</textarea>
+        </div>
+        <div>
+          <div class="editor-pane-label">${escapeHtml(L("preview"))}</div>
+          <div class="preview-pane" id="previewPane"></div>
+        </div>
+      </div>
+      <input type="file" id="replaceFromFileInput" accept="application/json,.json" hidden data-form-untracked />
+      <span class="editor-status" id="editorStatus"></span>
+    </div>`;
+}
+
+function bindEditorHandlers() {
+  // Handlingsraden i hodet.
+  pageContent.querySelector(".form-page-actions")?.addEventListener("click", async (e) => {
+    const btn = e.target.closest("[data-editor-action]");
+    if (!btn || !editing) return;
+    const action = btn.dataset.editorAction;
+    if (action === "translate") return translateFromCurrent();
+    if (action === "replace") return document.getElementById("replaceFromFileInput")?.click();
+    if (!getFormPage().confirmLeave()) return;
+    if (action === "export") return exportSectionPackage(editing.id, btn);
+    if (action === "publish" || action === "unpublish") return toggleSectionLifecycle(action, btn);
+    if (action === "archive") { if (window.confirm(L("confirmArchive"))) await lifecycleInEditor("archive", "archived"); return; }
+    if (action === "restore") return lifecycleInEditor("restore", "restored");
+    if (action === "delete") return deleteSection(editing.id);
+  });
+  document.getElementById("replaceFromFileInput")?.addEventListener("change", (event) => replaceSectionFromFile(event.target));
+  document.getElementById("titleInput")?.addEventListener("input", captureInputs);
+  document.getElementById("markdownInput")?.addEventListener("input", () => { captureInputs(); schedulePreview(); });
+  document.getElementById("uploadImageBtn")?.addEventListener("click", () => {
+    document.getElementById("imageFileInput")?.click();
+  });
+  document.getElementById("imageFileInput")?.addEventListener("change", (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (file) uploadImage(file);
+  });
+  refreshPreview();
+  // #787: content-owner management for an existing section (new sections have no id yet).
+  if (editing?.id) {
+    const ownerHost = document.getElementById("ownerPanelHost");
+    if (ownerHost) renderOwnerPanel({ container: ownerHost, contentType: "SECTION", contentId: editing.id, getHeaders, t: tNav }).catch(() => {});
+  }
+}
+
+async function lifecycleInEditor(action, toastKey) {
+  try {
+    const data = await apiFetch(`/api/admin/content/sections/${encodeURIComponent(editing.id)}/${action}`, getHeaders, { method: "POST" });
+    editing.archivedAt = data.section?.archivedAt ?? (action === "archive" ? new Date().toISOString() : null);
+    editing.activeVersionId = data.section?.activeVersionId ?? editing.activeVersionId;
+    showToast(L(toastKey));
+    refreshSectionLifecycleUI();
+  } catch (err) {
+    apiErrorToast(err);
+  }
+}
+
 async function renderEditorView(sectionId) {
   editing = { id: sectionId, title: { nb: "", nn: "", "en-GB": "" }, body: { nb: "", nn: "", "en-GB": "" }, editLocale: currentLocale, activeVersionId: null, archivedAt: null };
 
@@ -600,97 +750,10 @@ async function renderEditorView(sectionId) {
       return;
     }
   }
-
-  pageContent.innerHTML = `
-    <div class="page-header-back" style="display:flex;align-items:center;gap:10px">
-      <a href="#" class="back-link" id="backLink">${escapeHtml(L("back"))}</a>
-      <span id="sectionStatusBadge"></span>
-    </div>
-    ${sectionId ? `<div id="ownerPanelHost" class="card" style="margin-bottom:var(--space-2)"></div>` : ""}
-    <div class="section-editor">
-      <div class="lang-tabs" id="langTabs">
-        ${EDITOR_LOCALES.map((loc) => `<button type="button" class="lang-tab${loc === editing.editLocale ? " active" : ""}" data-locale="${loc}">${escapeHtml(localeLabels[loc] ?? loc)}</button>`).join("")}
-      </div>
-      <div class="editor-field">
-        <label for="titleInput">${escapeHtml(L("titleLabel"))}</label>
-        <input type="text" id="titleInput" value="${escapeHtml(editing.title[editing.editLocale])}" />
-      </div>
-      <div class="editor-cols">
-        <div>
-          <div class="editor-pane-label" style="display:flex;justify-content:space-between;align-items:center;gap:8px">
-            <span>${escapeHtml(L("markdown"))}</span>
-            <button type="button" id="uploadImageBtn" class="btn btn-secondary" style="width:auto;font-size:12px;padding:2px 8px">${escapeHtml(L("uploadImage"))}</button>
-            <input type="file" id="imageFileInput" accept="image/png,image/jpeg,image/gif,image/webp,image/svg+xml,.svg" hidden />
-          </div>
-          <textarea id="markdownInput">${escapeHtml(editing.body[editing.editLocale])}</textarea>
-        </div>
-        <div>
-          <div class="editor-pane-label">${escapeHtml(L("preview"))}</div>
-          <div class="preview-pane" id="previewPane"></div>
-        </div>
-      </div>
-      <div class="editor-actions">
-        <button type="button" id="saveBtn" class="btn btn-primary">${escapeHtml(L("save"))}</button>
-        <button type="button" id="translateBtn" class="btn btn-secondary" style="width:auto">${escapeHtml(L("translate"))}</button>
-        ${sectionId ? `
-        <!-- #1012: erstatt innholdet i DENNE seksjonen fra fil. Vises kun for en seksjon som
-             finnes — «erstatt» gir ingen mening for et tomt skjema, der Importer-knappen i lista
-             allerede dekker behovet. -->
-        <button type="button" id="replaceFromFileBtn" class="btn btn-secondary" style="width:auto">${escapeHtml(L("replaceFromFile"))}</button>
-        <input type="file" id="replaceFromFileInput" accept="application/json,.json" hidden />` : ""}
-        <button type="button" id="sectionLifecycleBtn" class="btn btn-secondary" style="width:auto;display:none"></button>
-        <!-- #1046 D3: sletting bor her, ikke i lista — og bare for en arkivert seksjon (to steg, som
-             for modul, kurs og klasse). -->
-        <button type="button" id="sectionDeleteBtn" class="btn btn-danger" style="width:auto;display:none">${escapeHtml(L("del"))}</button>
-        <span class="editor-status" id="editorStatus"></span>
-      </div>
-    </div>`;
-
-  // ⚠️ #1052: TEKSTEN MÅ FØLGE MÅLET. «← Tilbake» som sender deg til lista når du kom fra et kurs
-  // er samme slags løgn som #1029 ryddet bort — et løfte flaten ikke holder.
-  const opphav = detectRoute().returnTo;
-  const backEl = document.getElementById("backLink");
-  if (backEl && opphav) backEl.textContent = L("backToCourse");
-  backEl?.addEventListener("click", (e) => {
-    e.preventDefault();
-    // ⚠️ IKKE `history.back()`. Kursets elementliste åpner med `target="_blank"`, og i en fersk
-    // fane finnes ingen historikk å gå tilbake i — da ville knappen ikke gjort noe i det hele tatt.
-    if (opphav) location.href = opphav;
-    else goTo("list");
-  });
-  document.getElementById("translateBtn")?.addEventListener("click", translateFromCurrent);
-  // #1012
-  const replaceBtn = document.getElementById("replaceFromFileBtn");
-  const replaceInput = document.getElementById("replaceFromFileInput");
-  replaceBtn?.addEventListener("click", () => replaceInput?.click());
-  replaceInput?.addEventListener("change", (event) => replaceSectionFromFile(event.target));
-  document.getElementById("langTabs")?.addEventListener("click", (event) => {
-    const tab = event.target.closest("[data-locale]");
-    if (!tab) return;
-    captureInputs();
-    editing.editLocale = tab.dataset.locale;
-    renderEditorFields();
-  });
-  document.getElementById("titleInput")?.addEventListener("input", captureInputs);
-  document.getElementById("markdownInput")?.addEventListener("input", () => { captureInputs(); schedulePreview(); });
-  document.getElementById("saveBtn")?.addEventListener("click", saveSection);
-  document.getElementById("uploadImageBtn")?.addEventListener("click", () => {
-    document.getElementById("imageFileInput")?.click();
-  });
-  document.getElementById("imageFileInput")?.addEventListener("change", (event) => {
-    const file = event.target.files?.[0];
-    event.target.value = "";
-    if (file) uploadImage(file);
-  });
-  document.getElementById("sectionLifecycleBtn")?.addEventListener("click", toggleSectionLifecycle);
-  document.getElementById("sectionDeleteBtn")?.addEventListener("click", () => { if (editing?.id) deleteSection(editing.id); });
-  refreshSectionLifecycleUI();
-  refreshPreview();
-  // #787: content-owner management for an existing section (new sections have no id yet).
-  if (sectionId) {
-    const ownerHost = document.getElementById("ownerPanelHost");
-    if (ownerHost) renderOwnerPanel({ container: ownerHost, contentType: "SECTION", contentId: sectionId, getHeaders, t: tNav }).catch(() => {});
-  }
+  const page = getFormPage();
+  page.render();
+  page.markClean();
+  if (!sectionId) document.getElementById("titleInput")?.focus();
 }
 
 // #705: status i editoren (samme vokabular som modul) + Publiser/Avpubliser-knapp. Seksjoner
@@ -704,31 +767,12 @@ function editorSectionStatus() {
 }
 
 function refreshSectionLifecycleUI() {
-  const badge = document.getElementById("sectionStatusBadge");
-  const btn = document.getElementById("sectionLifecycleBtn");
-  const deleteBtn = document.getElementById("sectionDeleteBtn");
-  const status = editorSectionStatus();
-  if (badge) badge.innerHTML = status ? statusBadge(status) : "";
-  if (deleteBtn) deleteBtn.style.display = status === "archived" ? "" : "none";
-  if (!btn) return;
-  if (!status || status === "archived") {
-    btn.style.display = "none";
-    return;
-  }
-  btn.style.display = "";
-  if (status === "published") {
-    btn.textContent = L("unpublish");
-    btn.dataset.action = "unpublish";
-  } else {
-    btn.textContent = L("publish");
-    btn.dataset.action = "publish";
-  }
+  // Statusmerket og handlingsraden bor i skjemasidas hode; tegn det på nytt.
+  if (formPage && editing) formPage.refreshHeader();
 }
 
-async function toggleSectionLifecycle() {
-  const btn = document.getElementById("sectionLifecycleBtn");
+async function toggleSectionLifecycle(action, btn) {
   if (!editing?.id || !btn) return;
-  const action = btn.dataset.action;
   btn.disabled = true;
   try {
     const data = await apiFetch(`/api/admin/content/sections/${encodeURIComponent(editing.id)}/${action}`, getHeaders, { method: "POST" });
@@ -754,7 +798,6 @@ function captureInputs() {
 }
 
 function renderEditorFields() {
-  document.querySelectorAll(".lang-tab").forEach((t) => t.classList.toggle("active", t.dataset.locale === editing.editLocale));
   const title = document.getElementById("titleInput");
   const md = document.getElementById("markdownInput");
   if (title) title.value = editing.title[editing.editLocale];
@@ -807,6 +850,8 @@ async function persistSection({ silent } = {}) {
       editing.archivedAt = data.section.archivedAt ?? null;
       heldBack = data.translationGate?.heldBack ? data.translationGate.issues : null;
       history.replaceState({}, "", `/admin-content/sections?id=${encodeURIComponent(editing.id)}`);
+      // Første lagring lager seksjonen: hodet får eierpanel, Eksporter osv. — tegn sida på nytt.
+      getFormPage().render();
     } else {
       await apiFetch(`/api/admin/content/sections/${encodeURIComponent(editing.id)}/title`, getHeaders, {
         method: "PATCH",
@@ -857,10 +902,10 @@ async function translateFromCurrent() {
     return;
   }
   // Lock the editor while translating so the author can't edit/navigate mid-call.
-  const controls = ["translateBtn", "saveBtn", "titleInput", "markdownInput", "backLink"]
+  const controls = ["translateBtn", "formSaveBtn", "titleInput", "markdownInput", "formBackLink"]
     .map((id) => document.getElementById(id))
     .filter(Boolean);
-  const tabs = Array.from(document.querySelectorAll(".lang-tab"));
+  const tabs = Array.from(document.querySelectorAll("[data-form-locale]"));
   const setLocked = (locked) => {
     controls.forEach((el) => { el.disabled = locked; el.style.pointerEvents = locked ? "none" : ""; el.style.opacity = locked ? "0.6" : ""; });
     tabs.forEach((el) => { el.disabled = locked; el.style.pointerEvents = locked ? "none" : ""; });
@@ -894,6 +939,7 @@ async function translateFromCurrent() {
     }
     showToast(L("translated"));
     renderEditorFields();
+    getFormPage().markDirty();
   } catch (err) {
     apiErrorToast(err);
   } finally {

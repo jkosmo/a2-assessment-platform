@@ -156,6 +156,45 @@ export async function restoreClass(classId: string, actorId: string | null) {
   });
 }
 
+// #1046 nivå to (2a): klassen har et skjema med Lagre — navn og beskrivelse endres her, ikke bare ved
+// opprettelse. Medlemmer og kurstildelinger er operasjoner og går sine egne veier.
+export async function getClass(classId: string) {
+  return requireClass(classId);
+}
+
+export async function updateClass(
+  classId: string,
+  input: { name?: string; description?: string | null },
+  actorId: string | null,
+) {
+  const klass = await requireClass(classId);
+  if (klass.isSystem) {
+    throw new DomainRuleError("system_class_immutable", "System classes cannot be edited.", { action: "update" });
+  }
+  const data: { name?: string; description?: string | null } = {};
+  // Tomt navn stoppes av rutas Zod-skjema (min(1)) før tjenesten kalles — ingen egen vakt her (#999:
+  // en kode uten klient som kan vise den, lover mer enn den holder).
+  if (input.name !== undefined && input.name.trim()) data.name = input.name.trim();
+  if (input.description !== undefined) data.description = input.description?.trim() || null;
+  const fields = Object.keys(data);
+  if (fields.length === 0) return klass;
+  return runInTransaction(async (tx) => {
+    const repo = createClassRepository(tx);
+    const updated = await repo.updateClass(classId, data);
+    await recordAuditEvent(
+      {
+        entityType: auditEntityTypes.class,
+        entityId: classId,
+        action: auditActions.class.updated,
+        actorId: actorId ?? undefined,
+        metadata: { classId, fields },
+      },
+      tx,
+    );
+    return updated;
+  });
+}
+
 export async function addMember(classId: string, userId: string, actorId: string | null) {
   const klass = await requireClass(classId);
   if (klass.isSystem || klass.kind !== "MANUAL") {

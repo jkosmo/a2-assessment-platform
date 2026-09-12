@@ -1379,6 +1379,42 @@ dialog::backdrop {
   font-size: 14px; font-family: inherit; background: #fff; color: var(--color-text); box-sizing: border-box;
 }
 .list-search:focus { outline: 2px solid var(--color-blue); outline-offset: 1px; border-color: transparent; }
+/* #1046 nivå to — SKJEMASIDA (public/static/form-page.js). Hode, tilstandslinje, handlingsrad,
+   språkpiller og lagrelinje for det åpnede elementet. Sidene skal ikke ha egne kopier. */
+.form-page-head { margin-bottom: var(--space-2); }
+.form-page-title-row { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-2); flex-wrap: wrap; margin-top: 6px; }
+.form-page-type { display: block; font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--color-meta); }
+.form-page-title h1 { margin: 2px 0 6px; font-size: 22px; line-height: 1.25; text-wrap: balance; }
+.form-page-title h1.is-untitled { color: var(--color-meta); font-weight: 500; }
+.form-page-state { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.form-state-badge { font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--color-border-soft); color: var(--color-meta); background: var(--color-surface); }
+.form-state-badge.is-dirty { color: #8a5a14; border-color: #e3c58a; background: #fff8ea; }
+.form-page-actions { flex: 0 0 auto; padding-top: 18px; }
+.form-page-languages { display: flex; gap: 4px; align-items: center; flex-wrap: wrap; margin: 0 0 var(--space-2); }
+.content-locale-label { font-size: 12px; font-weight: 600; color: var(--color-meta); margin-right: 4px; }
+.content-locale-pill { background: var(--color-surface); border: 1px solid var(--color-border-soft); border-radius: 999px; padding: 4px 12px; font-size: 12px; font-weight: 600; color: var(--color-meta); cursor: pointer; width: auto; min-height: 0; flex: 0 0 auto; font-family: inherit; }
+.content-locale-pill.active { background: var(--color-blue-light); border-color: var(--color-blue); color: var(--color-link-active); }
+.content-locale-pill:hover:not(.active) { border-color: var(--color-link-hover-border); color: var(--color-text); }
+.content-locale-required { font-weight: 500; opacity: 0.8; }
+.form-page-body > .card + .card, .form-page-body > .detail-section + .detail-section { margin-top: var(--space-2); }
+.form-save-bar { display: flex; align-items: center; justify-content: flex-end; gap: var(--space-2); margin-top: var(--space-3); padding-top: var(--space-2); border-top: 1px solid var(--color-border-soft); }
+.form-save-state { margin-right: auto; font-size: 13px; color: var(--color-meta); }
+.form-cancel-link { font-size: 14px; color: var(--color-meta); text-decoration: none; }
+.form-cancel-link:hover { color: var(--color-text); text-decoration: underline; }
+/* #1046 nivå to, D1: ETT skjemafelt — etikett over feltet, vanlig skrift, hvit bakgrunn, «(påkrevd)» som ord.
+   Var definert i kurssida; klasse, seksjon og modul hadde hver sin variant. */
+.form-field { margin-bottom: var(--space-2); }
+.form-field:last-child { margin-bottom: 0; }
+.form-field label { display: block; font-size: 13px; font-weight: 600; color: var(--color-meta); margin-bottom: 4px; }
+.form-field input, .form-field textarea, .form-field select {
+  width: 100%; padding: 9px 12px; border: 1px solid var(--color-border-soft); border-radius: var(--radius-card);
+  font-size: 14px; font-family: inherit; box-sizing: border-box; background: #fff; color: var(--color-text);
+}
+.form-field textarea { resize: vertical; min-height: 72px; }
+.form-field input:focus, .form-field textarea:focus, .form-field select:focus { outline: 2px solid var(--color-blue); outline-offset: 1px; border-color: transparent; }
+.form-field input:disabled, .form-field textarea:disabled { background: var(--color-bg); color: var(--color-meta); }
+.required-note { font-size: 12px; color: var(--color-meta); margin-left: 4px; font-weight: 400; }
+.form-field .field-hint { font-size: 12px; color: var(--color-meta); margin: 4px 0 0; }
 /* «Mer»-menyen (#1046 D5): <details> så åpne/lukke virker uten skript og med tastatur. */
 .row-more { position: relative; display: inline-block; }
 .row-more > summary { list-style: none; }
