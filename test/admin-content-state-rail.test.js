@@ -162,76 +162,33 @@ describe("deriveModuleStatusChains", () => {
 // Structural smoke tests — HTML: state rail present in both pages
 // ---------------------------------------------------------------------------
 
-describe("state rail HTML structure", () => {
-  // #896 S3c: `public/admin-content-advanced.html` sto her. Den er slettet, og arbeidsflaten er
-  // eneste forfatterflate — det er ikke lenger to sider å holde i takt.
-  const pages = [
-    "public/admin-content.html",
-  ];
-
-  for (const page of pages) {
-    describe(page, () => {
-      let html;
-      it("has state rail container with hidden attribute and aria-label", () => {
-        html = readFile(page);
-        expect(html).toContain('id="stateRail"');
-        // Must start hidden (JS reveals it when a module is selected)
-        expect(html).toMatch(/id="stateRail"[^>]*hidden/);
-        expect(html).toContain('aria-label=');
-      });
-
-      // QA r7 #1: «Modul» (srModuleName) and «Språk» (srLang) were dropped from the rail as redundant
-      // (module name is in the module card; language in the locale picker).
-      it("has the state rail value slots", () => {
-        html = readFile(page);
-        expect(html).not.toContain('id="srModuleName"');
-        expect(html).toContain('id="srEditing"');
-        expect(html).toContain('id="srLive"');
-        expect(html).toContain('id="srChanges"');
-        expect(html).toContain('id="srPreview"');
-      });
-
-      it("has i18n keys on state rail labels", () => {
-        html = readFile(page);
-        expect(html).not.toContain('data-i18n="stateRail.label.module"');
-        expect(html).not.toContain('data-i18n="stateRail.label.language"');
-        expect(html).toContain('data-i18n="stateRail.label.editing"');
-        expect(html).toContain('data-i18n="stateRail.label.live"');
-        expect(html).toContain('data-i18n="stateRail.label.changes"');
-      });
-    });
-  }
-});
-
-// ---------------------------------------------------------------------------
-// Structural smoke tests — CSS: badge classes defined in shared.css
-// ---------------------------------------------------------------------------
-
-describe("state rail CSS", () => {
-  it("defines .state-rail container and item classes", () => {
-    const css = readFile("public/static/shared.css");
-    expect(css).toContain(".state-rail");
-    expect(css).toContain(".state-rail-item");
-    expect(css).toContain(".state-rail-label");
-    expect(css).toContain(".state-rail-value");
+// #1046 (13.09): tilstandslinja er borte. Versjonsfaktaene står som merker i hodet, og «Forhåndsvisning
+// viser …» står i Forhåndsvisning-fanen. Kontrakten er at ingenting av den gamle linja blir igjen.
+describe("state rail is gone — badges in the header, «preview shows» in the preview tab", () => {
+  it("public/admin-content.html has no state rail and no sr-slots", () => {
+    const html = readFile("public/admin-content.html");
+    expect(html).not.toContain('id="stateRail"');
+    for (const id of ["srEditing", "srLive", "srChanges", "srPreview", "srModuleName"]) expect(html).not.toContain(`id="${id}"`);
+    expect(html).toContain('id="moduleLifecycleBadge"');
+    expect(html).toContain('id="moduleDirtyBadge"');
+    expect(html).toContain('id="previewShows"');
   });
 
-  it("defines all four sr-badge modifier classes", () => {
+  it("shared.css has no .state-rail rules", () => {
     const css = readFile("public/static/shared.css");
-    expect(css).toContain(".sr-badge--published");
-    expect(css).toContain(".sr-badge--saved-draft");
-    expect(css).toContain(".sr-badge--working");
-    expect(css).toContain(".sr-badge--unsaved");
+    expect(css).not.toMatch(/\.state-rail(-item|-label|-value|-sep)?\s*\{/);
+    expect(css).not.toContain(".sr-badge");
+  });
+
+  it("the shell writes the header badges and «preview shows» from the same chain facts", () => {
+    const js = readFile("public/static/admin-content-shell.js");
+    expect(js).toContain('getElementById("moduleLifecycleBadge")');
+    expect(js).toContain('getElementById("previewShows")');
+    expect(js).toContain('"stateRail.live.published"');
+    expect(js).toContain('"shell.header.draftVersion"');
+    expect(js).not.toContain("makeSrBadge");
   });
 });
-
-// ---------------------------------------------------------------------------
-// Call-site smoke tests — JS: updateStateRail is called from render functions
-// ---------------------------------------------------------------------------
-
-// ---------------------------------------------------------------------------
-// Contract tests — shell and Advanced share the same derivation source (#345)
-// ---------------------------------------------------------------------------
 
 describe("shared editing-source contract", () => {
   // #345 was about the shell and Avansert deriving status from ONE source instead of two. #896

@@ -9,6 +9,7 @@ import { localeLabels, supportedLocales, translations } from "/static/i18n/cohor
 import { apiFetch, buildConsoleHeaders, getConsoleConfig } from "/static/api-client.js";
 import { initConsentGuard } from "/static/consent-guard.js";
 import { setHidden } from "/static/dom-visibility.js";
+import { setTableEmpty } from "/static/table-empty.js";
 import {
   findMatchingPreset,
   resolveRoleSwitchState,
@@ -36,7 +37,6 @@ const cohortEmpty = document.getElementById("cohortEmpty");
 const cohortUnavailable = document.getElementById("cohortUnavailable");
 const statusCards = document.getElementById("statusCards");
 const byClassSection = document.getElementById("byClassSection");
-const byClassEmpty = document.getElementById("byClassEmpty");
 const byClassBody = document.getElementById("byClassBody");
 
 let currentLocale = resolveInitialLocale(supportedLocales);
@@ -172,10 +172,8 @@ function renderCohort(summary) {
   if (byClassSection) {
     byClassSection.hidden = false;
     const rows = summary.byClass ?? [];
-    if (byClassEmpty) byClassEmpty.hidden = rows.length > 0;
-    // #1046 J6: tom tabell = bare teksten, ikke et tomt tabellhode (som listesida).
-    const tableWrap = byClassBody?.closest(".list-table-wrap");
-    if (tableWrap) tableWrap.hidden = rows.length === 0;
+    // #1046 J6: tom tabell = bare teksten — samme hjelper som Resultater (table-empty.js).
+    setTableEmpty(byClassBody, rows.length === 0 ? t("cohort.byClass.empty") : null);
     if (byClassBody) {
       byClassBody.innerHTML = rows
         .map((b) => {

@@ -554,38 +554,6 @@
                 aria-controls="tabPanelSettings" data-i18n="shell.tab.settings">Innstillinger</button>
       </div>
 
-      <!-- QA r7 #1: dropped the redundant «Modul» (shown in the module card) and «Språk» (in the locale
-           picker) items from the status rail. -->
-      <!-- #975: `hidden` + inline display. `.state-rail{display:flex}` slår attributtet alene, og
-           CSS-lappen `.state-rail[hidden]` som pleide å dekke over det er fjernet. setHidden()
-           i admin-content-shell.js rydder begge deler når en modul velges. -->
-      <!-- Produkteier 13.09: versjonsfaktaene står som merker i hodet («Publisert v2 · Utkast v4»); det
-           forhåndsvisningen viser, står i Forhåndsvisning-fanen. Linja tegnes ikke lenger; feltene
-           holdes for koden som skriver til dem. -->
-      <div id="stateRail" class="state-rail" hidden style="display:none" aria-label="Modulstatus" data-retired>
-        <div class="state-rail-item">
-          <span class="state-rail-label" data-i18n="stateRail.label.editing">Du redigerer</span>
-          <span id="srEditing"></span>
-        </div>
-        <span class="state-rail-sep" aria-hidden="true">·</span>
-        <div class="state-rail-item">
-          <span class="state-rail-label" data-i18n="stateRail.label.live">Live nå</span>
-          <span id="srLive"></span>
-        </div>
-        <!-- #1046 (13.09): «Endringer» står som merke i hodet (moduleDirtyBadge); feltet her holdes
-             i synk for koden som leser det, men vises ikke to ganger. -->
-        <span class="state-rail-sep" aria-hidden="true" style="display:none">·</span>
-        <div class="state-rail-item" style="display:none">
-          <span class="state-rail-label" data-i18n="stateRail.label.changes">Endringer</span>
-          <span id="srChanges"></span>
-        </div>
-        <span class="state-rail-sep" aria-hidden="true">·</span>
-        <div class="state-rail-item">
-          <span class="state-rail-label" data-i18n="stateRail.label.preview">Preview viser</span>
-          <span id="srPreview"></span>
-        </div>
-      </div>
-
       <!-- Produkteier 13.09: GDPR-varselet tar for mye plass som boks over skjemaet, og «etter kort tid
            lærer brukeren å ignorere den». Det står nå som én linje UNDER oppgavefeltet — der teksten
            det advarer mot skrives — og folder ut hele teksten ved klikk (tegnes av admin-content-shell.js). -->
@@ -674,14 +642,6 @@
         </div>
       </dialog>
 
-      <dialog id="dialogUnsavedTabSwitch" aria-labelledby="unsavedTabSwitchTitle">
-        <h2 id="unsavedTabSwitchTitle" style="margin-top:0;font-size:16px" data-i18n="shell.tab.unsaved.title">Ulagrede endringer</h2>
-        <p id="unsavedTabSwitchBody" data-i18n="shell.tab.unsaved.body">Du har endringer i redigeringsfeltene som ikke er lagret. Bytter du visning, går de tapt.</p>
-        <div class="row" style="justify-content:flex-end;gap:var(--space-1)">
-          <button type="button" id="tabSwitchStay" class="btn-secondary" data-i18n="shell.tab.unsaved.stay">Bli værende</button>
-          <button type="button" id="tabSwitchDiscard" class="btn-danger" data-i18n="shell.tab.unsaved.discard">Forkast og bytt</button>
-        </div>
-      </dialog>
     </main>
     <script type="module" src="/static/admin-content-shell.js"></script>
     <script type="module" src="/static/workspace-help.js"></script>

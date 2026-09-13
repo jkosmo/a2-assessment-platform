@@ -34,11 +34,8 @@ describe("admin content translation resources", () => {
       // #896 S6: leaving a tab with unsaved work. Three different costs, three different bodies —
       // an untranslated one here means the author is warned in the wrong language about which of
       // them applies.
-      "shell.tab.unsaved.title",
       "shell.tab.unsaved.body",
-      "shell.tab.unsaved.draftBody",
       "shell.tab.unsaved.settingsBody",
-      "shell.tab.unsaved.discard",
 
       // #926 (§6 krav 2): something landed in a tab the author is not looking at.
       "shell.tab.attention.suffix",

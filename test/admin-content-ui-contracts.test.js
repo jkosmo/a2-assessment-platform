@@ -27,10 +27,10 @@ describe("admin content workspace UI contracts", () => {
 
   // #896 S3c: this was "state-rail parity between the two module workspaces". There is one
   // workspace now, so parity is not the question — presence is.
-  it("keeps the state rail on the module workspace", () => {
+  it("the module workspace carries its state in the shared header, not a state rail (#1046)", () => {
     const shellHtml = readFile("public/admin-content.html");
-    // QA r7 #1: srModuleName + srLang were removed as redundant.
-    for (const id of ["stateRail", "srEditing", "srLive", "srChanges", "srPreview"]) {
+    expect(shellHtml).not.toContain('id="stateRail"');
+    for (const id of ["moduleWorkspaceTitle", "moduleLifecycleBadge", "moduleDirtyBadge", "workspaceActions", "previewShows"]) {
       expect(shellHtml).toContain(`id="${id}"`);
     }
   });
@@ -343,8 +343,7 @@ describe("shell JS contracts", () => {
     const i18n = readFile("public/i18n/admin-content-translations.js");
     const keys = [
       "shell.directEdit.action",
-      "shell.directEdit.editingBadge",
-      "shell.directEdit.editingHint",
+      "shell.directEdit.nameLabel",
       "shell.directEdit.submit",
       "shell.directEdit.translating",
       "shell.directEdit.done",

@@ -41,7 +41,7 @@ import {
 } from "/static/admin-content-shell-state.js";
 import { deriveModuleStatusChains } from "/static/module-status-logic.js";
 import { renderOwnerPanel } from "/static/owner-panel.js";
-import { makeSrBadge, loadVersion } from "/static/admin-content-shared.js";
+import { loadVersion } from "/static/admin-content-shared.js";
 import {
   buildLocalizedCopyValue,
   selectTranslatedDraftFields,
@@ -243,7 +243,6 @@ const tabButtons = {
 };
 const tabPanelModule = document.getElementById("tabPanelModule");
 const tabPanelSettings = document.getElementById("tabPanelSettings");
-const unsavedTabSwitchDialog = document.getElementById("dialogUnsavedTabSwitch");
 const shellStatusAnnouncer = document.getElementById("shellStatusAnnouncer");
 
 /**
@@ -265,13 +264,6 @@ function opphavFraUrl() {
 }
 
 
-const stateRail = document.getElementById("stateRail");
-const srModuleName = document.getElementById("srModuleName");
-const srEditing = document.getElementById("srEditing");
-const srLive = document.getElementById("srLive");
-const srChanges = document.getElementById("srChanges");
-const srPreview = document.getElementById("srPreview");
-const srLang = document.getElementById("srLang");
 
 // #479 Slice A: must match SOURCE_MATERIAL_MAX_BYTES in
 // src/modules/adminContent/sourceMaterialExtractionService.ts (server). Keep both at 10 MB —
@@ -908,53 +900,6 @@ function _domFormFields(entry) {
   }, 80);
 }
 
-// Renders a module-picker choices column.
-function _domModuleChoicesCol(modules, active) {
-  const row = document.createElement("div");
-  row.className = "chat-choices chat-choices--column";
-  for (const m of modules) {
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = "btn-secondary chat-choice-btn";
-    btn.textContent = m.title || m.id;
-    btn.disabled = !active;
-    if (m.activeVersion) {
-      const badge = document.createElement("span");
-      badge.className = "module-status-badge live";
-      badge.style.cssText = "font-size:11px;padding:2px 8px;margin-left:8px";
-      badge.textContent = `Live v${m.activeVersion.versionNo}`;
-      btn.appendChild(badge);
-    }
-    if (active) {
-      btn.addEventListener("click", () => {
-        _disableAllDomChoices();
-        _deactivateAll();
-        logUser(m.title || m.id);
-        loadModule(m.id);
-      });
-    }
-    row.appendChild(btn);
-  }
-  const cancelBtn = document.createElement("button");
-  cancelBtn.type = "button";
-  cancelBtn.className = "btn-secondary chat-choice-btn";
-  cancelBtn.textContent = t("shell.action.cancel");
-  cancelBtn.disabled = !active;
-  if (active) {
-    cancelBtn.addEventListener("click", () => {
-      _disableAllDomChoices();
-      _deactivateAll();
-      logUser(t("shell.action.cancel"));
-      startIdle();
-    });
-  }
-  row.appendChild(cancelBtn);
-  chatMessages.appendChild(row);
-  _domScroll(row);
-  if (active) {
-    focusFirstEnabledChoice(row);
-  }
-}
 
 // ---------------------------------------------------------------------------
 // Logged chat API — all flow functions use these
@@ -1029,12 +974,6 @@ function logForm(formType, promptHtmlFn, placeholderKey, submitKey, onSubmit, in
   _domFormFields(entry);
 }
 
-// Log + render the module picker choices column.
-function logModuleChoices(modules) {
-  const entry = { kind: "module-choices", modules, active: true };
-  chatLog.push(entry);
-  _domModuleChoicesCol(modules, true);
-}
 
 // ---------------------------------------------------------------------------
 // Re-translate — clears and replays the entire chatLog with the current locale
@@ -1052,8 +991,6 @@ function retranslateChat() {
       if (!entry.submitted) {
         _domFormFields(entry);
       }
-    } else if (entry.kind === "module-choices") {
-      _domModuleChoicesCol(entry.modules, entry.active);
     }
   }
   chatMessages.lastElementChild?.scrollIntoView({ behavior: "smooth", block: "end" });
@@ -1298,14 +1235,10 @@ function scrollPreviewToBottom() {
 // ---------------------------------------------------------------------------
 
 function updateStateRail() {
-  if (!stateRail) return;
   const hasModule = !!selectedModuleId;
   // #975: her sto `stateRail.hidden = !hasModule` alene, og `.state-rail{display:flex}` slo
   // attributtet. Lappen var en egen CSS-regel, `.state-rail[hidden]{display:none}` — en fiks oppå
   // fella i stedet for kuren. Regelen er fjernet; setHidden gjør jobben for alle tilstander.
-  // Produkteier 13.09: linja tegnes ikke lenger (merkene i hodet og «Forhåndsvisning viser» i
-  // forhåndsvisningsfanen har overtatt). Feltene under skrives fortsatt for koden som leser dem.
-  setHidden(stateRail, true);
   // #787: content-owner panel for the loaded module. Render once per module (guard on the last id) so
   // the frequent updateStateRail calls don't re-fetch/reset it; hide when no module is loaded.
   const ownerHost = document.getElementById("moduleOwnerPanelHost");
@@ -1330,7 +1263,6 @@ function updateStateRail() {
   const loadedIsLive = !!loaded?.id && loaded.id === bundle?.module?.activeVersionId;
 
   const moduleName = localizeValue(sessionDraft?.title ?? previewDraft?.title ?? bundle?.module?.title) || "";
-  if (srModuleName) srModuleName.textContent = moduleName || selectedModuleId;
   // #1046 nivå to, B2: navnet er tittelen på sida (typen står som merke over).
   const h1 = document.getElementById("moduleWorkspaceTitle");
   if (h1) {
@@ -1357,67 +1289,17 @@ function updateStateRail() {
   }
   refreshModuleHeaderState();
 
-  if (srEditing) {
-    // Same correction as the preview field below: this read `liveChain` — what is PUBLISHED —
-    // while the field is called "Du redigerer" and the author is editing whatever is loaded.
-    if (hasUnsaved) {
-      srEditing.innerHTML = makeSrBadge("unsaved", t("stateRail.editing.workingDraft"));
-    } else if (loaded?.versionNo != null) {
-      srEditing.innerHTML = loadedIsLive
-        ? makeSrBadge("published", tf("stateRail.editing.published", { versionNo: loaded.versionNo }))
-        : makeSrBadge("saved-draft", tf("stateRail.editing.savedDraft", { versionNo: loaded.versionNo }));
-    } else if (chains?.liveChain.length > 0) {
-      srEditing.innerHTML = makeSrBadge("published", tf("stateRail.editing.published", { versionNo: chains.liveChain[0].versionNo }));
-    } else {
-      srEditing.innerHTML = `<span class="state-rail-value">—</span>`;
-    }
+  // «Forhåndsvisning viser …» i Forhåndsvisning-fanen: de tre tilstandene forhåndsvisningen kan være i.
+  const previewShows = document.getElementById("previewShows");
+  if (previewShows) {
+    const shows = hasUnsaved ? t("stateRail.preview.workingDraft")
+      : loadedIsLive ? t("stateRail.preview.published")
+      : loaded?.versionNo != null ? tf("stateRail.preview.savedVersion", { versionNo: loaded.versionNo })
+      : "—";
+    previewShows.textContent = `${t("stateRail.label.preview")}: ${shows}`;
+    setHidden(previewShows, activeTab !== "preview");
   }
 
-  if (srLive) {
-    if (chains?.liveChain.length > 0) {
-      srLive.innerHTML = makeSrBadge("published", tf("stateRail.live.published", { versionNo: chains.liveChain[0].versionNo }));
-    } else {
-      srLive.innerHTML = `<span class="state-rail-value" style="color:var(--color-meta)">${escapeHtml(t("stateRail.live.none"))}</span>`;
-    }
-  }
-
-  if (srChanges) {
-    if (hasUnsaved) {
-      srChanges.innerHTML = makeSrBadge("unsaved", t("stateRail.changes.unsaved"));
-    } else {
-      // v1.1.97: "Alt lagret" får ✓-prefiks og grønn-tint via dedikert klasse i stedet for
-       // inline style — mer fremtredende OK-indikator.
-      srChanges.innerHTML = `<span class="state-rail-value state-rail-value--saved-ok">✓ ${escapeHtml(t("stateRail.changes.saved"))}</span>`;
-    }
-  }
-
-  if (srPreview) {
-    // Stage-tilbakemelding 2026-08-17: *"det står at preview viser publisert versjon, men det som
-    // faktisk vises er min versjon under endring"*. This field had exactly two answers — "working
-    // draft" when a session draft existed, and otherwise the flat claim "published version". It
-    // never looked at WHICH version the preview had loaded. Open a saved draft, or restore an
-    // older version, and it asserted "published" over content that was not published at all.
-    //
-    // Three states now, and they are the three the preview can actually be in.
-    if (hasUnsaved) {
-      srPreview.innerHTML = makeSrBadge("unsaved", t("stateRail.preview.workingDraft"));
-    } else if (loadedIsLive) {
-      srPreview.innerHTML = `<span class="state-rail-value">${escapeHtml(t("stateRail.preview.published"))}</span>`;
-    } else if (loaded?.versionNo != null) {
-      srPreview.innerHTML = makeSrBadge("saved-draft", tf("stateRail.preview.savedVersion", { versionNo: loaded.versionNo }));
-    } else {
-      srPreview.innerHTML = `<span class="state-rail-value">—</span>`;
-    }
-    const previewShows = document.getElementById("previewShows");
-    if (previewShows) {
-      previewShows.textContent = `${t("stateRail.label.preview")}: ${srPreview.textContent}`;
-      setHidden(previewShows, activeTab !== "preview");
-    }
-  }
-
-  if (srLang) {
-    srLang.textContent = localeLabels[contentLocale] ?? (contentLocale);
-  }
 }
 
 // #896 S2 / #892: localizeDraftAcrossLocalesWithTitle does NOT reject when a locale fails - it
@@ -2586,10 +2468,16 @@ async function saveDraftBundleInBackground(options = {}) {
       : SHELL_MCQ_ONLY_MIN_PERCENT;
   // Produkteier 13.09: ingenting som står i handlingsraden skal gjentas som valg i samtalen.
   // Meldingen sier hva som mangler; veien videre er knappene i hodet og feltene i skjemaet.
+  // Skjemaet ble revet ved bekreftelsen; en stoppet lagring skal la forfatteren stå i det igjen.
+  const backToForm = () => {
+    if (activeTab !== "edit") switchToTab("edit");
+    if (!isEditFormOpen()) enterPreviewEditMode({ force: true });
+    showDraftReadyActions({ quiet: true });
+  };
   if (!isMcqOnly && !localizeValueForLocale(taskText, contentLocale).trim()) {
     logBot(() => t("shell.save.taskRequired"));
     showToast(t("shell.save.taskRequired"), "error");
-    if (activeTab !== "edit") switchToTab("edit");
+    backToForm();
     document.getElementById("previewEditTaskText")?.focus();
     return;
   }
@@ -2597,7 +2485,8 @@ async function saveDraftBundleInBackground(options = {}) {
   if (!isFreetextOnly && !mcqQuestions.length) {
     logBot(() => t("shell.save.mcqRequired"));
     showToast(t("shell.save.mcqRequired"), "error");
-    if (activeTab !== "edit") switchToTab("edit");
+    backToForm();
+    document.getElementById("previewEditAddQuestion")?.focus();
     return;
   }
 
@@ -3255,47 +3144,10 @@ function startIdle() {
   discardPendingProposal();
   chatLog = [];
   renderPreview();
-  logBot(() => t("shell.idle.prompt"), [
-    { labelKey: "shell.idle.openExisting", action: startModulePicker },
-    { labelKey: "shell.idle.createNew", action: startNewModuleFlow },
-  ]);
+  // Uten modul er lista stedet: «Ny modul» og åpning skjer der (#1046 A1). Ingen samtalevalg her.
+  logBot(() => t("shell.idle.prompt"));
 }
 
-async function startModulePicker() {
-  sessionState = "picking-module";
-  previewDraft = null;
-  renderPreviewLocaleBar();
-  renderPreview();
-  const slot = logProgress("shell.modules.loading");
-
-  try {
-    const data = await apiFetch("/api/admin/content/modules", getHeaders);
-    modules = Array.isArray(data) ? data : (data?.modules ?? []);
-  } catch {
-    logResolveSlot(slot, () => t("shell.modules.loadError"), [
-      { labelKey: "shell.action.retry", action: startModulePicker },
-      { labelKey: "shell.action.cancel", action: startIdle },
-    ]);
-    return;
-  }
-
-  if (modules.length === 0) {
-    logResolveSlot(slot, () => t("shell.modules.empty"), [
-      { labelKey: "shell.idle.createNew", action: startNewModuleFlow },
-      { labelKey: "shell.action.cancel", action: startIdle },
-    ]);
-    return;
-  }
-
-  // Build a snapshot of module list HTML (module titles are data, not translatable)
-  const listItems = modules.map(
-    (m) =>
-      `<div class="module-list-item"><strong>${escapeHtml(m.title || m.id)}</strong>${m.activeVersion ? ` <span class="module-status-badge live" style="font-size:11px;padding:2px 8px">Live v${m.activeVersion.versionNo}</span>` : ""}</div>`,
-  );
-  const listSnapshot = listItems.join("");
-  logResolveSlot(slot, () => `${escapeHtml(t("shell.modules.selectPrompt"))}<div class="module-list">${listSnapshot}</div>`);
-  logModuleChoices(modules);
-}
 
 async function loadModule(moduleId, options = {}) {
   const { resumeEditing = false } = options;
@@ -3944,7 +3796,6 @@ function hasManuallyEditedCriteria() {
   const criteria = bundle?.selectedConfiguration?.rubricVersion?.criteria ?? {};
   return Object.values(criteria).some((c) => c && typeof c === "object" && c.manuallyEdited === true);
 }
-
 
 
 // B3 (#450): full-screen modal showing the diff. Accept-all triggers a single regenerate
@@ -4621,10 +4472,6 @@ function enterPreviewEditMode({ force = false } = {}) {
       // values may be about to be discarded - but do not abort either: aborting would throw
       // away a translation that already succeeded, so "Bli vaerende" would leave them with
       // nothing saved. Hold it until the dialog is answered.
-      if (pendingTabSwitchKind === "form") {
-        pendingSaveCommit = () => commit(localized, localizedMcqQuestions, failedLocales);
-        return;
-      }
       generationAbort = null;
       // Release the locale controls before the form is torn down. Only the abort path used to
       // do this, so a SUCCESSFUL save left the UI language selector disabled for the rest of
@@ -5092,12 +4939,6 @@ function syncTabToUrl(tab) {
 }
 
 let activeTab = tabFromUrl();
-let pendingTabSwitch = null;
-let pendingTabSwitchKind = null;
-// A save whose translation resolved while the discard dialog was open. Held rather than
-// committed OR thrown away, because the author has not answered yet: "Bli vaerende" must
-// finish the save they asked for, "Forkast" must drop it.
-let pendingSaveCommit = null;
 
 /**
  * Does the edit form hold work a tab switch would destroy?
@@ -5187,24 +5028,6 @@ function stampEditFormValues() {
   }
 }
 
-// Same signal as the status rail's "Ulagrede endringer": if the rail calls it unsaved, a
-// tab switch says so too. The two cost different things, so the dialog says which:
-// an open form's field values are LOST, while a draft is kept but stays unsaved.
-function unsavedTabSwitchKind() {
-  if (hasOpenEditForm()) return "form";
-  // While a draft exists, a criteria edit is not unsaved work that a tab switch would destroy —
-  // it is absorbed into the draft here, which is what makes it survive to the draft save. Doing
-  // this before the check also stops the warning from claiming the edit is about to be lost when
-  // it is not; a warning the author knows is wrong is a warning they learn to click through.
-  syncSettingsCriteriaToDraft();
-  // #896 S6 QA: settings BEFORE the draft, deliberately. The Innstillinger inputs are DOM-only
-  // until Lagre and are destroyed by the re-render; a draft survives the switch. When both are
-  // dirty, checking the draft first showed the reassuring "your draft is kept" message while the
-  // settings were quietly thrown away — the most misleading of the three outcomes.
-  if (hasUnsavedSettingsEdits()) return "settings";
-  if (sessionDraft) return "draft";
-  return null;
-}
 
 /**
  * #920 (§7): the guard the two language switchers share.
@@ -5223,7 +5046,11 @@ function unsavedTabSwitchKind() {
  * Returns true to proceed, false to stay.
  */
 function confirmLocaleSwitchDiscard() {
-  const kind = activeTab === "edit" || activeTab === "settings" ? unsavedTabSwitchKind() : null;
+  // Et åpent skjema med endringer, eller endrede innstillinger, tegnes om fra det andre språket.
+  // Et utkast er trygt: begge tegningene leser FRA det.
+  const kind = activeTab === "edit" && hasOpenEditForm() ? "form"
+    : (activeTab === "edit" || activeTab === "settings") && hasUnsavedSettingsEdits() ? "settings"
+    : null;
   if (kind !== "form" && kind !== "settings") return true;
   return window.confirm(t(kind === "form" ? "shell.tab.unsaved.body" : "shell.tab.unsaved.settingsBody"));
 }
@@ -5791,7 +5618,6 @@ function renderSettingsPanel() {
   // reverted the date. `renderedValue` above is the stored value; this restores the typed one on
   // top of it, so the dirty-check still knows the difference.
   restoreSettingsDraftValues();
-  mountSettingsInfoButtons(host);
 
   // Changing the type changes which fields the save can carry, so the panel redraws to match.
   // Without this the author picked "Bare flervalg" and kept looking at a criteria editor whose
@@ -6148,19 +5974,6 @@ function mountCriteriaSection() {
     }),
   });
 }
-
-// Criteria count as unsaved settings work, so every exit from Innstillinger warns about them too
-// — the same three exits the tab, language and Avansert guards already cover.
-/**
- * Wire the i-buttons beside the pass-rule labels.
- *
- * Stage-tilbakemelding 2026-08-17. Opened on CLICK, not hover: hover does not exist on a tablet
- * and cannot be reached from the keyboard, so a hover-only explanation is an explanation some
- * authors can never read. One popover open at a time; Escape and a click elsewhere close it.
- */
-// #1046 D4: (i)-ikonene med popover er borte — hjelpen står under feltet (se `row` i
-// renderSettingsPanel). Beholdt som tom funksjon til kallstedene er ryddet.
-function mountSettingsInfoButtons() {}
 
 /** Has the author changed the criteria since the panel opened? Independent of where they land. */
 function settingsCriteriaEdited() {
@@ -6849,71 +6662,6 @@ function bindViewTabs() {
   }
 
 
-  const stayOnCurrentTab = () => {
-    pendingTabSwitch = null;
-    pendingTabSwitchKind = null;
-    // Staying means "keep what I was doing" - including a save that finished while the
-    // dialog was up.
-    const resume = pendingSaveCommit;
-    pendingSaveCommit = null;
-    resume?.();
-    // Arrowing to a tab focuses it before the dialog opens, so staying would otherwise
-    // leave focus on a tab that is not the selected one - or nowhere, in the closed
-    // dialog. Put focus back where the selection actually is.
-    //
-    // Deferred a frame: a native <dialog> restores focus to its invoker as part of closing, and
-    // that restoration runs AFTER this handler. Focusing synchronously meant the browser promptly
-    // moved focus somewhere else — for Escape, nowhere at all.
-    requestAnimationFrame(() => { tabButtons[activeTab]?.focus(); });
-  };
-
-  document.getElementById("tabSwitchStay")?.addEventListener("click", () => {
-    unsavedTabSwitchDialog?.close();
-    stayOnCurrentTab();
-  });
-
-  // Escape closes a native <dialog> without going through any button, which would leave
-  // pendingTabSwitch stale and focus parked on an unselected tab. The dialog's close event
-  // covers every dismissal path, so treat anything that is not an explicit discard as Stay.
-  unsavedTabSwitchDialog?.addEventListener("close", () => {
-    if (pendingTabSwitch) stayOnCurrentTab();
-  });
-
-  // A native <dialog> does not close on a backdrop click by itself. The click lands on the
-  // dialog element (the backdrop is its pseudo-element), so target identity is the test.
-  unsavedTabSwitchDialog?.addEventListener("click", (event) => {
-    if (event.target === unsavedTabSwitchDialog) unsavedTabSwitchDialog.close();
-  });
-
-  document.getElementById("tabSwitchDiscard")?.addEventListener("click", () => {
-    const target = pendingTabSwitch;
-    const kind = pendingTabSwitchKind;
-    pendingTabSwitch = null;
-    pendingTabSwitchKind = null;
-    unsavedTabSwitchDialog?.close();
-    if (!target) return;
-    // Tear the form down FIRST. applyTabState re-renders the preview when the audience
-    // changes, which removes #previewEditCancel - and then its handler never runs, leaving
-    // preview-pane--editing, criteriaReadyCallback and the chat actions stranded until a
-    // reload. Only an open form is discarded; a draft is carried along untouched.
-    if (kind === "form") {
-      // A save in flight has disabled that Cancel button, so clicking it would do NOTHING and
-      // the running translation would go on to save the values just discarded. Abort first:
-      // the signal handler re-enables the form, and commit() refuses to run once aborted.
-      pendingSaveCommit = null;
-      generationAbort?.abort();
-      document.getElementById("previewEditCancel")?.click();
-    }
-    // QA round 5: "Forkast" did not clear the cache that holds the values of COLLAPSED sections,
-    // so a discarded instruction came back the next time the section was opened. Worse across a
-    // language switch: the English cache was laid over the Norwegian field, and the next save
-    // could file English text as `nb`. Discarding settings has to discard all of them.
-    if (kind === "settings") discardSettingsEdits();
-    applyTabState(target);
-    syncTabToUrl(target);
-    tabButtons[target]?.focus();
-  });
-
   // Establish the roving tabindex now. Without this the assignment in applyTabState first
   // runs on the initial tab switch, so until then all three tabs sit in the tab order -
   // the exact behaviour the roving model exists to remove.
@@ -7062,65 +6810,11 @@ function startNewEmptyModule() {
   if (activeTab !== "settings") switchToTab("settings"); else renderSettingsPanel();
 }
 
-function startNewModuleFlow() {
-  previewDraft = null;
-  renderPreviewLocaleBar();
-  renderPreview();
-  logForm(
-    "text",
-    () => t("shell.newModule.titlePrompt"),
-    "shell.newModule.titlePlaceholder",
-    "shell.action.next",
-    // #555: unified authoring order — Kilde → Modultype → Innhold → Publiser. Source material
-    // is now the first question; module-type (free-text+MCQ vs MCQ-only) is asked after source,
-    // and scenario/cert only follow for the free-text branch. Matches the Avansert IA (#554).
-    (title) => askForSourceMaterial(title, null, null),
-  );
-}
 
 // ---------------------------------------------------------------------------
 // Scenario mode → source material → cert level → locale → generate
 // ---------------------------------------------------------------------------
 
-// #555: regen på en eksisterende modul følger samme rekkefølge som ny-modul-flyten — KILDE
-// først, så scenario, så (cert hvis ukjent →) vurderingsplan. Tidligere kom scenario før kilde,
-// som forfatter-feedback (skjermbilde 2026-06-21) bekreftet føltes feil også her. knownCertLevel
-// videreføres fra regen så vi ikke spør om cert-nivå på nytt. scenarioMode brukes server-side
-// (prompt) og i ekstern-LLM-handoff.
-function askForScenarioModeRegen(existingModuleId, sourceMaterial, knownCertLevel = null, freetextOnly = false) {
-  logBot(() => `<strong>${escapeHtml(t("shell.scenario.prompt"))}</strong><br><span style="font-size:13px;color:var(--color-meta)">${escapeHtml(t("shell.scenario.hint"))}</span>`, [
-    { labelKey: "shell.scenario.auto", action: () => continueRegenAfterScenario(existingModuleId, sourceMaterial, knownCertLevel, "auto", freetextOnly) },
-    { labelKey: "shell.scenario.include", action: () => continueRegenAfterScenario(existingModuleId, sourceMaterial, knownCertLevel, "include", freetextOnly) },
-    { labelKey: "shell.scenario.exclude", action: () => continueRegenAfterScenario(existingModuleId, sourceMaterial, knownCertLevel, "exclude", freetextOnly) },
-  ]);
-}
-
-function continueRegenAfterScenario(existingModuleId, sourceMaterial, knownCertLevel, scenarioMode, freetextOnly = false) {
-  if (knownCertLevel) {
-    // Hard-default "thorough" — se askForCertLevel-kommentaren.
-    generateBlueprintAndConfirm(null, existingModuleId, sourceMaterial, knownCertLevel, contentLocale, "thorough", scenarioMode, freetextOnly);
-  } else {
-    askForCertLevel(null, existingModuleId, sourceMaterial, scenarioMode, freetextOnly);
-  }
-}
-
-// #579: modultype-valg i regen-flyten. Den anbefalte opprett-veien (biblioteks-dialogen, #348)
-// oppretter modulen og lander her, så dette er stedet forfatter faktisk velger type. Etter kilde,
-// før scenario. Tillater typebytte: lagring skriver en ny versjon i valgt modus.
-//   - «Fritekst + flervalg» → uendret regen (scenario → cert/vurderingsplan → MCQ)
-//   - «Kun flervalg» → MCQ-only-generering, lagres som MCQ_ONLY (ingen scenario/rubrikk/prompt)
-function askForModuleTypeRegen(existingModuleId, sourceMaterial, knownCertLevel) {
-  logBot(
-    () =>
-      `<strong>${escapeHtml(t("shell.moduleType.prompt"))}</strong>`
-      + `<br><span style="font-size:13px;color:var(--color-meta)">${escapeHtml(t("shell.moduleType.hint"))}</span>`,
-    [
-      { labelKey: "shell.moduleType.freetext", action: () => askForScenarioModeRegen(existingModuleId, sourceMaterial, knownCertLevel, false) },
-      { labelKey: "shell.moduleType.freetextOnly", action: () => askForScenarioModeRegen(existingModuleId, sourceMaterial, knownCertLevel, true) },
-      { labelKey: "shell.moduleType.mcqOnly", action: () => startMcqOnlyRegen(sourceMaterial, knownCertLevel) },
-    ],
-  );
-}
 
 function startMcqOnlyRegen(sourceMaterial, knownCertLevel) {
   // Flag the in-progress draft as MCQ_ONLY so saveDraftBundleInBackground emits the MCQ_ONLY
@@ -7137,139 +6831,11 @@ function startMcqOnlyRegen(sourceMaterial, knownCertLevel) {
   askForMcqQuestionCount(sourceMaterial, certLevel, contentLocale, "thorough", () => showDraftReadyActions());
 }
 
-function askForSourceMaterial(moduleTitle, existingModuleId, knownCertLevel, scenarioMode = "auto") {
-  logForm(
-    "source-material",
-    () => `<strong>${escapeHtml(t("shell.source.promptTitle"))}</strong><br><span style="font-size:13px;color:var(--color-meta)">${escapeHtml(t("shell.source.promptHint"))}</span>`,
-    "shell.source.placeholder",
-    "shell.action.next",
-    (sourceMaterial) => {
-      // #555: unified order — KILDE kommer først i begge flytene.
-      //  - Ny modul (existingModuleId == null): spør modultype etter kilde.
-      //  - Regen (existingModuleId satt): spør scenario etter kilde, så cert/vurderingsplan.
-      if (!existingModuleId) {
-        askForModuleType(moduleTitle, sourceMaterial);
-        return;
-      }
-      // #579: regen spør også modultype etter kilde (forfatter kan bytte type ved regenerering).
-      askForModuleTypeRegen(existingModuleId, sourceMaterial, knownCertLevel);
-    },
-    "",
-    {},
-  );
-}
-
-function askForCertLevel(moduleTitle, existingModuleId, sourceMaterial, scenarioMode = "auto", freetextOnly = false) {
-  // Generation mode is always "thorough" — author feedback (2026-05-18) confirmed the
-  // "Vanlig" option was never selected in practice. Removed to reduce conversation friction.
-  logBot(() => t("shell.certLevel.prompt"), [
-    { labelKey: "shell.certLevel.basic", action: () => generateBlueprintAndConfirm(moduleTitle, existingModuleId, sourceMaterial, "basic", contentLocale, "thorough", scenarioMode, freetextOnly) },
-    { labelKey: "shell.certLevel.intermediate", action: () => generateBlueprintAndConfirm(moduleTitle, existingModuleId, sourceMaterial, "intermediate", contentLocale, "thorough", scenarioMode, freetextOnly) },
-    { labelKey: "shell.certLevel.advanced", action: () => generateBlueprintAndConfirm(moduleTitle, existingModuleId, sourceMaterial, "advanced", contentLocale, "thorough", scenarioMode, freetextOnly) },
-  ]);
-}
-
-// #555: module-type fork in the new-module flow. Asked after source material, before any
-// content generation. "Fritekst + flervalg" continues into the existing scenario → cert →
-// blueprint pipeline; "Kun flervalg" creates an MCQ_ONLY module and skips straight to MCQ
-// generation (no scenario, no rubric/prompt). Mirrors the Avansert editor's Modultype panel.
-function askForModuleType(moduleTitle, sourceMaterial) {
-  logBot(
-    () =>
-      `<strong>${escapeHtml(t("shell.moduleType.prompt"))}</strong>`
-      + `<br><span style="font-size:13px;color:var(--color-meta)">${escapeHtml(t("shell.moduleType.hint"))}</span>`,
-    [
-      { labelKey: "shell.moduleType.freetext", action: () => askForScenarioModeForFreetext(moduleTitle, sourceMaterial, false) },
-      { labelKey: "shell.moduleType.freetextOnly", action: () => askForScenarioModeForFreetext(moduleTitle, sourceMaterial, true) },
-      { labelKey: "shell.moduleType.mcqOnly", action: () => askForCertLevelMcqOnlyNewModule(moduleTitle, sourceMaterial) },
-    ],
-  );
-}
-
-// Free-text branch of the new-module flow: scenario choice now follows source+module-type
-// (not before source as in the legacy order). Routes into the unchanged cert → blueprint path.
-function askForScenarioModeForFreetext(moduleTitle, sourceMaterial, freetextOnly = false) {
-  logBot(
-    () =>
-      `<strong>${escapeHtml(t("shell.scenario.prompt"))}</strong>`
-      + `<br><span style="font-size:13px;color:var(--color-meta)">${escapeHtml(t("shell.scenario.hint"))}</span>`,
-    [
-      { labelKey: "shell.scenario.auto", action: () => askForCertLevel(moduleTitle, null, sourceMaterial, "auto", freetextOnly) },
-      { labelKey: "shell.scenario.include", action: () => askForCertLevel(moduleTitle, null, sourceMaterial, "include", freetextOnly) },
-      { labelKey: "shell.scenario.exclude", action: () => askForCertLevel(moduleTitle, null, sourceMaterial, "exclude", freetextOnly) },
-    ],
-  );
-}
-
-// MCQ-only branch of the new-module flow: ask cert level, then create the module shell and
-// hand off to the existing MCQ-generation chain. The shell is created up-front (like the
-// free-text confirmAndGenerate path) so selectedModuleId exists when MCQ is attached and saved.
-function askForCertLevelMcqOnlyNewModule(moduleTitle, sourceMaterial) {
-  logBot(() => t("shell.mcqCertLevel.prompt"), [
-    { labelKey: "shell.certLevel.basic", action: () => createMcqOnlyModuleThenGenerate(moduleTitle, sourceMaterial, "basic") },
-    { labelKey: "shell.certLevel.intermediate", action: () => createMcqOnlyModuleThenGenerate(moduleTitle, sourceMaterial, "intermediate") },
-    { labelKey: "shell.certLevel.advanced", action: () => createMcqOnlyModuleThenGenerate(moduleTitle, sourceMaterial, "advanced") },
-  ]);
-}
 
 // Default pass mark for MCQ-only modules created via the conversation (author can override in
 // Avansert). Mirrors DEFAULT_MCQ_ONLY_MIN_PERCENT on the server (decisionService).
 const SHELL_MCQ_ONLY_MIN_PERCENT = 70;
 
-async function createMcqOnlyModuleThenGenerate(moduleTitle, sourceMaterial, certLevel) {
-  const slot = logProgress(() => `${t("shell.newModule.creating").replace(/…$/, "")} «${moduleTitle}»…`);
-  slot.abortBtn.remove(); // creation is not abortable
-
-  let newModule;
-  try {
-    // #918 fjernet løgnen om at tittelen var oversatt til tre språk. #930 fjerner den som ble
-    // igjen: en ren streng leses som bokmål, så en tittel skrevet på engelsk ble lagret som norsk.
-    // Nå følger språket med.
-    const body = await apiFetch(
-      "/api/admin/content/modules",
-      getHeaders,
-      { method: "POST", body: JSON.stringify({ title: titleInContentLocale(moduleTitle), certificationLevel: certLevel }) },
-    );
-    newModule = body?.module ?? body;
-  } catch (err) {
-    logResolveSlot(
-      slot,
-      () => `${escapeHtml(t("shell.newModule.createError"))}<br><span style="font-size:13px;color:var(--color-meta)">${escapeHtml(t("shell.newModule.createErrorHint"))}</span>`,
-      [
-        { labelKey: "shell.action.retry", action: () => createMcqOnlyModuleThenGenerate(moduleTitle, sourceMaterial, certLevel) },
-        { labelKey: "shell.action.cancel", action: startIdle },
-      ],
-    );
-    return;
-  }
-
-  selectedModuleId = newModule?.id ?? newModule?.moduleId;
-  const capturedId = selectedModuleId;
-  logResolveSlot(slot, () =>
-    `${escapeHtml(t("shell.newModule.created"))} <strong>${escapeHtml(moduleTitle)}</strong>` +
-    `<br><span style="font-size:13px;color:var(--color-meta)">ID: ${escapeHtml(capturedId)}</span>`,
-  );
-
-  // MCQ-only draft: no taskText/rubric/prompt. assessmentMode + mcqMinPercent flagged here so
-  // saveDraftBundleInBackground emits the MCQ_ONLY module version (see that function's branch).
-  sessionDraft = {
-    title: moduleTitle,
-    assessmentMode: "MCQ_ONLY",
-    mcqMinPercent: SHELL_MCQ_ONLY_MIN_PERCENT,
-    taskText: "",
-    assessorExpectedContent: "",
-    candidateTaskConstraints: "",
-    mcqQuestions: [],
-  };
-  // QA round 4: same as the free-text path — Innstillinger needs the bundle or it shows
-  // "load a module". Three creation paths, and the first fix reached one of them.
-  await attachBundleForNewModule(selectedModuleId);
-  renderPreview();
-
-  // Reuse the existing MCQ-generation chain; on accept go straight to the draft-ready actions
-  // (no draft/criteria generation step, which is free-text-only).
-  askForMcqQuestionCount(sourceMaterial, certLevel, contentLocale, "thorough", () => showDraftReadyActions());
-}
 
 // #454 Phase 4 (v1.2.4): condense source material once before blueprint generation if it
 // exceeds 50K chars. Avoids paying full-context cost 4× (blueprint, draft, MCQ, rubric).
@@ -7772,14 +7338,12 @@ function showDraftReadyActions({ quiet = false } = {}) {
     });
   }
   const actions = model.actionKeys.map((key) => actionMap[key] && { key, ...actionMap[key] }).filter(Boolean);
-  // #1046 A1: et nytt element kan også fylles av assistenten — samme flyt som før, men navnet fra
-  // skjemaet brukes hvis det er skrevet, så det ikke spørres om to ganger.
-  if (!selectedModuleId) {
-    actions.push({
-      key: "generateContent",
-      labelKey: "shell.module.generateContent",
-      action: () => openGenerateDialog(),
-    });
+  // Produkteier 13.09 (stage-funn): med et utkast sto bare «Be om endring» igjen — ingen vei til
+  // kilder eller generering. Generer innhold (og Generer spørsmål når typen har flervalg) er alltid
+  // med; dialogen henter type og nivå fra Innstillinger.
+  actions.push({ key: "generateContent", labelKey: "shell.module.generateContent", action: () => openGenerateDialog() });
+  if (effectiveModuleMode() !== "FREETEXT_ONLY") {
+    actions.push({ key: "generateMcq", labelKey: "shell.module.generateMcq", action: () => openGenerateDialog({ mcqOnly: true }) });
   }
   renderWorkspaceActions(actions);
   if (model.shouldOpenUnifiedRevision) {
@@ -7787,33 +7351,6 @@ function showDraftReadyActions({ quiet = false } = {}) {
   }
 }
 
-// Separate entry point for MCQ-only generation from the module actions menu.
-// v1.2.8 (follow-up): regen-flyten på eksisterende modul skal også spørre om scenario
-// — samme intent som ved ny modul-flyten. Tidligere antakelse om at eksisterende moduler
-// bevarer egen stil var feil; forfatter vil styre per regenerering.
-function startGenerateDraftFlow() {
-  // #555: KILDE først også ved regenerering (var: scenario først).
-  askForSourceMaterial(null, selectedModuleId, bundle?.module?.certificationLevel ?? null);
-}
-
-function startGenerateMcqFlow() {
-  logForm(
-    "source-material",
-    () => `<strong>${escapeHtml(t("shell.mcqSource.promptTitle"))}</strong>`,
-    "shell.mcqSource.placeholder",
-    "shell.action.next",
-    (sourceMaterial) => askForCertLevelMcqOnly(sourceMaterial),
-  );
-}
-
-function askForCertLevelMcqOnly(sourceMaterial) {
-  // Generation mode hard-defaulted to "thorough" — see askForCertLevel above for rationale.
-  logBot(() => t("shell.mcqCertLevel.prompt"), [
-    { labelKey: "shell.certLevel.basic", action: () => askForMcqQuestionCount(sourceMaterial, "basic", contentLocale, "thorough", () => showModuleActions()) },
-    { labelKey: "shell.certLevel.intermediate", action: () => askForMcqQuestionCount(sourceMaterial, "intermediate", contentLocale, "thorough", () => showModuleActions()) },
-    { labelKey: "shell.certLevel.advanced", action: () => askForMcqQuestionCount(sourceMaterial, "advanced", contentLocale, "thorough", () => showModuleActions()) },
-  ]);
-}
 
 // #1046: antallene valgt i «Generer innhold»-dialogen — da spørres det ikke igjen i samtalen.
 let pendingMcqCounts = null;

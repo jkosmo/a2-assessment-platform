@@ -45,11 +45,6 @@ const TRAPS: Trap[] = [
     build: "#statusCards",
   },
   {
-    name: "arbeidsflate: tilstandslinja (CSS-lappen .state-rail[hidden] er fjernet)",
-    path: "/admin-content/module/x/conversation",
-    build: "#stateRail",
-  },
-  {
     name: "toppmeny: køplaketten på Vurdering",
     path: "/participant",
     build: "new:span.nav-queue-badge",
@@ -128,14 +123,6 @@ test("review: telleplakettene er skjult ved første maling, før JS har talt noe
     const display = await page.locator(id).evaluate((el) => getComputedStyle(el).display);
     expect(display, `${id} skal være skjult ved første maling`).toBe("none");
   }
-});
-
-test("arbeidsflate: tilstandslinja er skjult ved første maling uten CSS-lappen", async ({ page }) => {
-  // `.state-rail[hidden]` i shared.css er fjernet. Markupen må klare skjulingen på egen hånd, ellers
-  // står en tom statuslinje over arbeidsflata til en modul er valgt.
-  await page.goto("/admin-content/module/x/conversation");
-  const display = await page.locator("#stateRail").evaluate((el) => getComputedStyle(el).display);
-  expect(display, "#stateRail skal være skjult før en modul er valgt").toBe("none");
 });
 
 test("deltaker: kurspanel og diskusjonsboard skjules uten CSS-lappene sine", async ({ page }) => {

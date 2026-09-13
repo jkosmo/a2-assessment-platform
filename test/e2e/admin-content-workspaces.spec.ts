@@ -4,7 +4,7 @@ import type { Page, Route } from "@playwright/test";
 
 const AxeBuilder = (AxeBuilderModule.default ?? AxeBuilderModule) as any;
 
-import { mockCommonApis, clickEnabledButton, submitActiveChatInput, courseTextForLocale, localizedText, buildMockModuleExport, revealRowAction } from "./admin-content-helpers.js";
+import { mockCommonApis, clickEnabledButton, courseTextForLocale, localizedText, buildMockModuleExport, revealRowAction } from "./admin-content-helpers.js";
 
 // #613: the conversational shell (`admin-content.html`) has no bare production route — it lives at
 // `/admin-content/module/:id/conversation`, while `/admin-content` serves the module library. The
@@ -1204,260 +1204,11 @@ test.describe("admin content browser coverage", () => {
     expect(importCalled).toBe(false);
   });
 
-  test("shell can create a new module, generate content, and save without losing the module ID", async ({ page }) => {
-    await mockCommonApis(page);
-
-    await page.goto("/admin-content.html");
-
-    await clickEnabledButton(page, "Create new module");
-    await submitActiveChatInput(page, "Trade unions");
-    // #555: unified order — source material is the first question, then module-type, then
-    // (for free-text) scenario → cert level. Pick "Free-text + MCQ" and "auto" scenario.
-    await submitActiveChatInput(page, "Source notes about labour rights and worker organising.");
-    await clickEnabledButton(page, "Free-text + MCQ");
-    await clickEnabledButton(page, "Let the LLM decide");
-    await clickEnabledButton(page, "Basic");
-
-    // v1.1.54 removed the "Vanlig/Grundig" (Ordinary/Thorough) generation-mode prompt
-    // (always "thorough" now). After cert level the next interactive step is the
-    // blueprint preview (v1.1.53). Pin BOTH facts:
-    //   - no Ordinary/Thorough button exists in this conversation
-    //   - blueprint accept/skip buttons DO appear
-    await expect(page.getByRole("button", { name: /^Ordinary$|^Vanlig$|^Thorough$|^Grundig$/i })).toHaveCount(0);
-    await clickEnabledButton(page, /Use this plan|Bruk denne planen/);
-
-    // v1.1.96 removed the "Yes/No, generate MCQ" dialog — MCQ is required for save from
-    // the shell, so the "No" branch was a dead-end. Flow now goes directly to the count
-    // question after the blueprint is accepted.
-    await clickEnabledButton(page, "3 questions");
-    await clickEnabledButton(page, "4 options");
-
-    await expect(page.locator("#chatMessages").getByText("Module created.")).toBeVisible();
-    await page.locator("#moduleSaveBtn").click();
-
-    await expect(page.getByText("Open or create a module before saving.")).toHaveCount(0);
-    await expect(page.getByText(/Trade unions.*loaded\./)).toBeVisible();
-  });
-
-  // #918: the title an author types into the conversation exists in exactly one language — the one
-  // they typed it in. Sending `{nb, nn, "en-GB"}` filled with that one string is the encoding for
-  // "this IS translated" (#892/#905), so the publish gate found no gap in a title nobody had
-  // translated, and Norwegian participants got the English one. The module library has always sent
-  // a plain string; `localizedTextSchema` is `string | {all three}` and accepts it.
-  //
-  // Two creation paths, one test: free-text and MCQ-only are separate functions that made the same
-  // mistake in the same words, which is precisely the "correct fix, incomplete surface" class.
-  test("the conversation creates a module with a one-language title, not three copies of it", async ({ page }) => {
-    const state = await mockCommonApis(page);
-
-    await page.goto("/admin-content.html");
-    await clickEnabledButton(page, "Create new module");
-    await submitActiveChatInput(page, "Incident response");
-    await submitActiveChatInput(page, "Source notes about handling security incidents.");
-    await clickEnabledButton(page, "Free-text + MCQ");
-    await clickEnabledButton(page, "Let the LLM decide");
-    await clickEnabledButton(page, "Basic");
-    // The module shell is created inside `confirmAndGenerate`, which the blueprint step gates.
-    await clickEnabledButton(page, /Use this plan|Bruk denne planen/);
-
-    // ⚠️ #918 krevde en REN STRENG her, for å bevise at tittelen ikke var kopiert til tre språk.
-    // #930 går ett skritt videre: en ren streng bærer ikke noe språkmerke, og leses som bokmål. En
-    // tittel skrevet på engelsk ble dermed lagret som norsk, og publiseringsgaten navnga feil språk
-    // som manglende.
-    //
-    // Påstanden er derfor STRENGERE nå, ikke svakere: ett språk, og vi vet hvilket.
-    await expect.poll(() => state.lastModuleCreateBody?.title).toEqual({ "en-GB": "Incident response" });
-    expect(
-      Object.keys(state.lastModuleCreateBody.title),
-      "et trespråkskart påstår en oversettelse forfatteren aldri laget",
-    ).toEqual(["en-GB"]);
-
-    // MCQ-only takes its own route to the same endpoint.
-    await page.goto("/admin-content.html");
-    await clickEnabledButton(page, "Create new module");
-    await submitActiveChatInput(page, "Safety quiz");
-    await submitActiveChatInput(page, "Source notes for an MCQ-only quiz about safety rules.");
-    await clickEnabledButton(page, "MCQ only");
-    await clickEnabledButton(page, "Basic");
-
-    await expect.poll(() => state.lastModuleCreateBody?.title).toEqual({ "en-GB": "Safety quiz" });
-    expect(Object.keys(state.lastModuleCreateBody.title)).toEqual(["en-GB"]);
-  });
-
-  // ⚠️ HER STO «#918, third creation path» — importen fra ekstern LLM.
-  //
-  // Den veien er fjernet 2026-09-06: bruk av ekstern LLM skjer gjennom Skill-en, og to måter å
-  // gjøre det samme på er én for mange (produkteier). Testen dekket en flate som ikke finnes.
-  //
-  // Regelen den voktet lever videre, og på et bedre nivå: `normalizeModuleTitlePatch` ble trukket
-  // ut til admin-content-localized-copy.js og har nå tolv enhetstester, blant dem den som låser at
-  // en uoversatt tittel BLIR VÆRENDE en streng i stedet for tre like kopier.
-
-  // #927 (#896 §11): the last uncovered finish criterion — an e2e that follows the NEW-MODULE
-  // journey end to end through the tab surface, not just "create and save".
-  //
-  // The path is not arbitrary. Every single leg of it has had a silent data-loss bug during this
-  // epic, all found by cross-model review or by the product owner on stage, none by the suite:
-  //   - criteria edited in Innstillinger never reached the draft save (QA round 2)
-  //   - the panel was unreachable in the new-module flow because `bundle` never loaded (round 3)
-  //   - background generation overwrote manual edits (round 4)
-  //   - Add/Remove lost locale metadata (round 4)
-  //   - rebuilding the panel erased what had been typed (round 6)
-  //
-  // I gave up on this test three times during the epic: the harness tore the chat menu down on
-  // tab switch. v2.19.0 moved the actions to a fixed bar outside the log, which is what made it
-  // writable — the actions no longer scroll away or get rebuilt when the tab changes.
-  //
-  // The assertion is on the SAVE PAYLOAD, deliberately. Asserting a reload against a mocked API
-  // would only prove the mock echoes what it was handed; the payload is what the server would
-  // actually have persisted.
-  test("a new module carries criteria edited in Innstillinger all the way into the save", async ({ page }) => {
-    await mockCommonApis(page);
-
-    // Held open so Innstillinger can be opened WHILE generation is in flight — the case round 3
-    // and round 7 both broke on, and the one an author hits whenever they are quicker than the LLM.
-    // Seeded with a no-op rather than null: TypeScript cannot see that a Promise executor runs
-    // synchronously, so it narrows a `| null` binding to `never` at the call site below.
-    let releaseRubric: () => void = () => {};
-    const rubricInFlight = new Promise<void>((resolve) => { releaseRubric = resolve; });
-    await page.route("**/api/admin/content/generate/rubric", async (route: Route) => {
-      await rubricInFlight;
-      await route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: JSON.stringify({
-          rubric: {
-            criteria: [
-              { id: "clarity", label: "Generert klarhet", description: "Generert beskrivelse", maxScore: 5 },
-              { id: "depth", label: "Generert dybde", description: "Generert beskrivelse", maxScore: 5 },
-            ],
-          },
-        }),
-      });
-    });
-
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let versionPayload: any = null;
-    await page.route("**/api/admin/content/modules/*/versions", async (route: Route) => {
-      versionPayload = route.request().postDataJSON();
-      await route.fulfill({
-        status: 201,
-        contentType: "application/json",
-        body: JSON.stringify({ moduleVersion: { id: "module-1-version-1", versionNo: 1 } }),
-      });
-    });
-
-    await page.goto("/admin-content.html");
-
-    await clickEnabledButton(page, "Create new module");
-    await submitActiveChatInput(page, "Trade unions");
-    await submitActiveChatInput(page, "Source notes about labour rights and worker organising.");
-    await clickEnabledButton(page, "Free-text + MCQ");
-    await clickEnabledButton(page, "Let the LLM decide");
-    await clickEnabledButton(page, "Basic");
-    await clickEnabledButton(page, /Use this plan|Bruk denne planen/);
-    await clickEnabledButton(page, "3 questions");
-    await clickEnabledButton(page, "4 options");
-
-    await expect(page.locator("#chatMessages").getByText("Module created.")).toBeVisible();
-
-    // Innstillinger opens on a module that has no bundle — it was created in this session, not
-    // loaded. Round 3: the panel was empty here because it read only from `bundle`.
-    //
-    // The tab guard fires on the way: an unsaved draft exists. That dialog is the non-destructive
-    // one — it says the draft is KEPT, which is true — so confirming it is what an author does,
-    // not something the test is working around.
-    await page.locator("#tabSettings").click();
-    await expect(page.locator("#dialogUnsavedTabSwitch")).toBeHidden();
-    await expect(page.locator("#tabPanelSettings")).toBeVisible();
-
-    // Now let the generated criteria land, into a panel that is already on screen.
-    releaseRubric();
-    await expect(page.locator(".vk-card")).toHaveCount(2);
-    await expect(page.locator(".vk-label").first()).toHaveValue("Generert klarhet");
-
-    // Edit one, add one, remove one — the three operations round 4 lost locale metadata on.
-    await page.locator(".vk-label").first().fill("Redigert klarhet");
-    await clickEnabledButton(page, /Add criterion|Legg til kriterium/);
-    await expect(page.locator(".vk-card")).toHaveCount(3);
-    await page.locator(".vk-label").nth(2).fill("Nytt kriterium");
-    await page.locator(".vk-card").nth(1).locator(".vk-remove").click();
-    await expect(page.locator(".vk-card")).toHaveCount(2);
-
-    // Back to Rediger, then save. Round 2: the edits never left the panel.
-    //
-    // The same non-destructive dialog on the way back. It says the draft is kept — and the
-    // criteria edits are part of what it is promising to keep, because `unsavedTabSwitchKind`
-    // absorbs them into the draft BEFORE it decides what to warn about. The save assertion below
-    // is what proves that promise was honoured.
-    await page.locator("#tabEdit").click();
-    await expect(page.locator("#dialogUnsavedTabSwitch")).toBeHidden();
-    await expect(page.locator("#previewEditTaskText")).toBeVisible();
-
-    await page.locator("#moduleSaveBtn").click();
-
-    // Exactly the two criteria the author left behind — the edited one and the added one, with
-    // the removed one gone. Asserting the SET and not just a count is the point: an earlier bug
-    // saved the right number of criteria with the generated labels.
-    await expect.poll(() => {
-      const criteria = versionPayload?.rubric?.criteria;
-      if (!criteria) return null;
-      return Object.values(criteria)
-        .map((c: any) => (typeof c?.label === "string" ? c.label : c?.label?.nb ?? c?.label?.["en-GB"]))
-        .sort();
-    }).toEqual(["Nytt kriterium", "Redigert klarhet"]);
-  });
-
-  // #578: the conversation can author a FREETEXT_ONLY module — free-text + LLM assessment, no MCQ.
-  // After source the author picks "Free-text only"; the scenario/blueprint steps run but the MCQ
-  // step is skipped, and the saved version sends assessmentMode=FREETEXT_ONLY with no mcqSetVersionId.
-  test("shell can create a FREETEXT_ONLY module via the conversation", async ({ page }) => {
-    await mockCommonApis(page);
-
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let versionPayload: any = null;
-    await page.route("**/api/admin/content/modules/*/versions", async (route: Route) => {
-      versionPayload = route.request().postDataJSON();
-      await route.fulfill({
-        status: 201,
-        contentType: "application/json",
-        body: JSON.stringify({ moduleVersion: { id: "module-1-version-1", versionNo: 1 } }),
-      });
-    });
-    // A free-text-only module must never create an MCQ set.
-    let mcqSetCreated = false;
-    await page.route("**/api/admin/content/modules/*/mcq-set-versions", async (route: Route) => {
-      mcqSetCreated = true;
-      await route.fulfill({ status: 201, contentType: "application/json", body: JSON.stringify({ mcqSetVersion: { id: "mcq-1" } }) });
-    });
-
-    await page.goto("/admin-content.html");
-    await clickEnabledButton(page, "Create new module");
-    await submitActiveChatInput(page, "Essay module");
-    await submitActiveChatInput(page, "Source notes for a free-text-only essay module.");
-    await clickEnabledButton(page, "Free-text only");
-    // Free-text-only keeps the scenario + blueprint steps (it is LLM-assessed free text).
-    await clickEnabledButton(page, "Let the LLM decide");
-    await clickEnabledButton(page, "Basic");
-    await clickEnabledButton(page, /Use this plan|Bruk denne planen/);
-
-    // No MCQ question-count step on the free-text-only path.
-    await expect(page.getByText(/How many MCQ questions/i)).toHaveCount(0);
-    await expect(page.locator("#chatMessages").getByText("Module created.")).toBeVisible();
-    await page.locator("#moduleSaveBtn").click();
-
-    await expect.poll(() => versionPayload?.assessmentMode).toBe("FREETEXT_ONLY");
-    expect(versionPayload?.mcqSetVersionId).toBeUndefined();
-    expect(versionPayload?.taskText).toBeTruthy();
-    expect(mcqSetCreated).toBe(false);
-  });
-
-  // #479 Slice B: the source step can crawl a whole site section. Clicking "Crawl site" prompts
-  // for a start URL, POSTs to /source-material/crawl-url, and adds ONE combined source chip
-  // labelled with the hostname + page count. Client-layer behaviour (prompt → fetch → combine →
-  // chip) invisible to supertest, so it ships as an e2e alongside the feature.
   test("shell source step can crawl a site and adds a combined source chip", async ({ page }) => {
-    await mockCommonApis(page);
+    await mockCommonApis(page, {
+      modules: [{ id: "module-1", title: "Trade unions" }],
+      moduleExports: { "module-1": buildMockModuleExport({ id: "module-1", title: "Trade unions", moduleVersionId: "module-1-version-1" }) },
+    });
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let crawlBody: any = null;
@@ -1480,9 +1231,10 @@ test.describe("admin content browser coverage", () => {
       });
     });
 
-    await page.goto("/admin-content.html");
-    await clickEnabledButton(page, "Create new module");
-    await submitActiveChatInput(page, "Crawl module");
+    // Produkteier 13.09: kildeverktøyet lever i «Generer innhold»-dialogen.
+    await page.goto("/admin-content/module/module-1/conversation");
+    await clickEnabledButton(page, /^Generate content$|^Generer innhold$/);
+    await expect(page.locator("#dialogGenerate")).toHaveAttribute("open", "");
 
     // At the source step: accept the URL prompt, then click "Crawl site".
     page.once("dialog", (dialog) => dialog.accept("https://example.com/start"));
@@ -1498,14 +1250,18 @@ test.describe("admin content browser coverage", () => {
   // rejected client-side ("Filen er for stor … opptil 10 MB"). Upload a ~3 MB file and assert it
   // is accepted (extracted into a source chip), not rejected as too large.
   test("shell source step accepts a file between 2 and 10 MB", async ({ page }) => {
-    await mockCommonApis(page);
+    await mockCommonApis(page, {
+      modules: [{ id: "module-1", title: "Trade unions" }],
+      moduleExports: { "module-1": buildMockModuleExport({ id: "module-1", title: "Trade unions", moduleVersionId: "module-1-version-1" }) },
+    });
 
-    await page.goto("/admin-content.html");
-    await clickEnabledButton(page, "Create new module");
-    await submitActiveChatInput(page, "Big file module");
+    // Produkteier 13.09: kildeverktøyet lever i «Generer innhold»-dialogen.
+    await page.goto("/admin-content/module/module-1/conversation");
+    await clickEnabledButton(page, /^Generate content$|^Generer innhold$/);
+    await expect(page.locator("#dialogGenerate")).toHaveAttribute("open", "");
 
     const threeMb = Buffer.alloc(3 * 1024 * 1024, 0x41);
-    await page.locator('input[type="file"]').setInputFiles({
+    await page.locator('#dialogGenerate input[type="file"]').setInputFiles({
       name: "big.pdf",
       mimeType: "application/pdf",
       buffer: threeMb,
@@ -1520,7 +1276,10 @@ test.describe("admin content browser coverage", () => {
   // gets a warning toast — otherwise the thin source would silently produce a thin module. The
   // file is still accepted (chip appears); the author is just informed. Client-layer behaviour.
   test("shell source step warns when an uploaded file is image-heavy (low text density)", async ({ page }) => {
-    await mockCommonApis(page);
+    await mockCommonApis(page, {
+      modules: [{ id: "module-1", title: "Trade unions" }],
+      moduleExports: { "module-1": buildMockModuleExport({ id: "module-1", title: "Trade unions", moduleVersionId: "module-1-version-1" }) },
+    });
 
     // Override the extract poll to report low text density (registered after mockCommonApis so it wins).
     await page.route("**/api/admin/content/source-material/extract/*", async (route: Route) => {
@@ -1538,11 +1297,12 @@ test.describe("admin content browser coverage", () => {
       });
     });
 
-    await page.goto("/admin-content.html");
-    await clickEnabledButton(page, "Create new module");
-    await submitActiveChatInput(page, "Image-heavy module");
+    // Produkteier 13.09: kildeverktøyet lever i «Generer innhold»-dialogen.
+    await page.goto("/admin-content/module/module-1/conversation");
+    await clickEnabledButton(page, /^Generate content$|^Generer innhold$/);
+    await expect(page.locator("#dialogGenerate")).toHaveAttribute("open", "");
 
-    await page.locator('input[type="file"]').setInputFiles({
+    await page.locator('#dialogGenerate input[type="file"]').setInputFiles({
       name: "deck.pptx",
       mimeType: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
       buffer: Buffer.alloc(2 * 1024 * 1024, 0x41),
@@ -1558,7 +1318,10 @@ test.describe("admin content browser coverage", () => {
   // the returned hostname. This client fetch-layer flow had no e2e (baseline gap §4.1); pins
   // current behaviour before the #596/#598 refactors touch the shell.
   test("shell source step fetches a single URL and adds a source chip", async ({ page }) => {
-    await mockCommonApis(page);
+    await mockCommonApis(page, {
+      modules: [{ id: "module-1", title: "Trade unions" }],
+      moduleExports: { "module-1": buildMockModuleExport({ id: "module-1", title: "Trade unions", moduleVersionId: "module-1-version-1" }) },
+    });
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let fetchBody: any = null;
@@ -1575,9 +1338,10 @@ test.describe("admin content browser coverage", () => {
       });
     });
 
-    await page.goto("/admin-content.html");
-    await clickEnabledButton(page, "Create new module");
-    await submitActiveChatInput(page, "URL module");
+    // Produkteier 13.09: kildeverktøyet lever i «Generer innhold»-dialogen.
+    await page.goto("/admin-content/module/module-1/conversation");
+    await clickEnabledButton(page, /^Generate content$|^Generer innhold$/);
+    await expect(page.locator("#dialogGenerate")).toHaveAttribute("open", "");
 
     page.once("dialog", (dialog) => dialog.accept("https://example.org/article"));
     await clickEnabledButton(page, "Fetch from URL");
@@ -1586,51 +1350,6 @@ test.describe("admin content browser coverage", () => {
     expect(fetchBody?.url).toBe("https://example.org/article");
   });
 
-  // #555: the conversation can author an MCQ-only module. After source material the author
-  // picks "MCQ only", skips scenario/blueprint entirely, and the saved version sends
-  // assessmentMode=MCQ_ONLY with the default 70% pass mark (no rubric/prompt/taskText).
-  test("shell can create an MCQ-only module via the conversation", async ({ page }) => {
-    await mockCommonApis(page);
-
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let versionPayload: any = null;
-    await page.route("**/api/admin/content/modules/*/versions", async (route: Route) => {
-      versionPayload = route.request().postDataJSON();
-      await route.fulfill({
-        status: 201,
-        contentType: "application/json",
-        body: JSON.stringify({ moduleVersion: { id: "module-1-version-1", versionNo: 1 } }),
-      });
-    });
-
-    await page.goto("/admin-content.html");
-
-    await clickEnabledButton(page, "Create new module");
-    await submitActiveChatInput(page, "Quiz module");
-    await submitActiveChatInput(page, "Source notes for an MCQ-only quiz about safety rules.");
-    // #555: pick MCQ-only — no scenario or blueprint step should follow, straight to cert level.
-    await clickEnabledButton(page, "MCQ only");
-    await clickEnabledButton(page, "Basic");
-
-    // No scenario or blueprint buttons exist on the MCQ-only path.
-    await expect(page.getByRole("button", { name: /Let the LLM decide|Use this plan/i })).toHaveCount(0);
-
-    await clickEnabledButton(page, "3 questions");
-    await clickEnabledButton(page, "4 options");
-
-    await expect(page.locator("#chatMessages").getByText("Module created.")).toBeVisible();
-    await page.locator("#moduleSaveBtn").click();
-
-    await expect.poll(() => versionPayload?.assessmentMode).toBe("MCQ_ONLY");
-    expect(versionPayload?.taskText).toBeUndefined();
-    expect(versionPayload?.rubricVersionId).toBeUndefined();
-    expect(versionPayload?.promptTemplateVersionId).toBeUndefined();
-    expect(versionPayload?.assessmentPolicy?.passRules?.mcqMinPercent).toBe(70);
-  });
-
-  // Stage-tilbakemelding 2026-08-17: this used to switch on the UI language selector. The two are
-  // separate now — the menus are one thing, the language the module is written in is another — so
-  // the assertion moved to the control that actually governs the content.
   test("the content-language switcher changes the rendered task text; the UI language does not", async ({ page }) => {
     await mockCommonApis(page, {
       modules: [{ id: "module-1", title: "Trade unions", activeVersion: { versionNo: 1 } }],
@@ -1780,7 +1499,9 @@ test.describe("admin content browser coverage", () => {
     await page.locator("#previewEditTitle").waitFor();
     await page.locator("#previewEditTaskText").fill("Bearbeidet scenario");
     await page.locator("#moduleSaveBtn").click();
-    await expect(page.locator("#previewEditTaskText")).toHaveCount(0);
+    // Mocken har ingen flervalg, så lagringen stopper («legg til minst ett spørsmål») og skjemaet
+    // står igjen — med utkastet i seg og hodet på «Ulagrede endringer».
+    await expect(page.locator("#moduleDirtyBadge")).toHaveClass(/is-dirty/);
     await expect(page.getByText("Bearbeidet scenario")).toBeVisible();
 
     // Produkteier 13.09: fanebytte spør ikke; utkastet følger med og er det forhåndsvisningen viser.
@@ -1999,7 +1720,9 @@ test.describe("admin content browser coverage", () => {
     await page.locator("#previewEditTitle").waitFor();
     await page.locator("#previewEditTaskText").fill("Bearbeidet scenario");
     await page.locator("#moduleSaveBtn").click();
-    await expect(page.locator("#previewEditTaskText")).toHaveCount(0);
+    // Mocken har ingen flervalg, så lagringen stopper («legg til minst ett spørsmål») og skjemaet
+    // står igjen — med utkastet i seg og hodet på «Ulagrede endringer».
+    await expect(page.locator("#moduleDirtyBadge")).toHaveClass(/is-dirty/);
 
     // Produkteier 13.09: ingen fane spør. Utkastet følger med hele veien rundt.
     await page.locator("#tabPreview").click();
@@ -2459,7 +2182,9 @@ test.describe("admin content browser coverage", () => {
     await page.locator("#previewEditTitle").waitFor();
     await page.locator("#previewEditTaskText").fill("Bearbeidet scenario");
     await page.locator("#moduleSaveBtn").click();
-    await expect(page.locator("#previewEditTaskText")).toHaveCount(0);
+    // Mocken har ingen flervalg, så lagringen stopper («legg til minst ett spørsmål») og skjemaet
+    // står igjen — med utkastet i seg og hodet på «Ulagrede endringer».
+    await expect(page.locator("#moduleDirtyBadge")).toHaveClass(/is-dirty/);
 
     await page.locator("#tabSettings").click();
 
@@ -3882,15 +3607,18 @@ test.describe("admin content browser coverage", () => {
   });
 
   test("shell source-material upload keeps extracted content out of the input and sends it to generation", async ({ page }) => {
-    const state = await mockCommonApis(page);
+    const state = await mockCommonApis(page, {
+      modules: [{ id: "module-1", title: "Trade unions" }],
+      moduleExports: { "module-1": buildMockModuleExport({ id: "module-1", title: "Trade unions", moduleVersionId: "module-1-version-1" }) },
+    });
 
-    await page.goto("/admin-content.html");
-
-    await clickEnabledButton(page, "Create new module");
-    await submitActiveChatInput(page, "Upload module");
+    // Produkteier 13.09: kildeverktøyet lever i «Generer innhold»-dialogen.
+    await page.goto("/admin-content/module/module-1/conversation");
+    await clickEnabledButton(page, /^Generate content$|^Generer innhold$/);
+    await expect(page.locator("#dialogGenerate")).toHaveAttribute("open", "");
     // #555: source material is now the first question (before module-type/scenario/cert).
 
-    const fileInput = page.locator('input[type="file"]').last();
+    const fileInput = page.locator('#dialogGenerate input[type="file"]');
     await fileInput.setInputFiles({
       name: "source.docx",
       mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
@@ -3898,16 +3626,10 @@ test.describe("admin content browser coverage", () => {
     });
 
     await expect(page.getByText("source.docx")).toBeVisible();
-    const sourceTextarea = page.locator(".chat-textarea:enabled").last();
+    const sourceTextarea = page.locator("#dialogGenerate .chat-textarea");
     await sourceTextarea.fill("Use a practical workplace framing.");
-    await clickEnabledButton(page, /Next|Neste|Næste/i);
-    // #555: module-type then scenario then cert follow the source step.
-    await clickEnabledButton(page, "Free-text + MCQ");
-    await clickEnabledButton(page, "Let the LLM decide");
-    await clickEnabledButton(page, "Basic");
-
-    // v1.1.54 removed Ordinary/Thorough generation-mode buttons — the flow goes
-    // directly to the blueprint preview after cert-level selection.
+    await page.locator("#dialogGenerate .chat-submit-btn").click();
+    // Type, scenario og nivå spørres ikke om; neste steg er planen.
     await clickEnabledButton(page, /Use this plan|Bruk denne planen/);
 
     await expect
@@ -4063,24 +3785,6 @@ test.describe("admin content browser coverage", () => {
     await page.locator("#formSaveBtn").click();
 
     await expect.poll(() => putBody?.enrollmentPolicy).toBe("RESTRICTED");
-  });
-
-  test("shell idle flow opens the module picker and renders existing module choices", async ({ page }) => {
-    await mockCommonApis(page, {
-      modules: [
-        { id: "module-1", title: "Trade unions", activeVersion: { versionNo: 2 } },
-        { id: "module-2", title: "Collective bargaining" },
-      ],
-    });
-
-    await page.goto("/admin-content.html");
-
-    await expect(page.locator("#moduleWorkspaceTitle")).toBeVisible();
-    await expect(page.getByText("What would you like to do?")).toBeVisible();
-    await page.getByRole("button", { name: "Open existing module" }).click();
-
-    await expect(page.getByRole("button", { name: /Trade unions/ })).toBeVisible();
-    await expect(page.getByRole("button", { name: /Collective bargaining/ })).toBeVisible();
   });
 
   test("new course: bokmål name and level are required before the first save", async ({ page }) => {
@@ -4368,7 +4072,7 @@ test.describe("admin content browser coverage", () => {
       courses: [],
     });
 
-    await page.goto("/admin-content.html");
+    await page.goto("/admin-content/module/x/conversation");
     const shellResults = await new AxeBuilder({ page })
       .disableRules(["color-contrast"])
       .analyze();

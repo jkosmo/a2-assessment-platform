@@ -14,6 +14,7 @@ import { apiFetch, buildConsoleHeaders, getConsoleConfig, getAccessToken, fetchQ
 import { initConsentGuard } from "/static/consent-guard.js";
 import { hideLoading, showLoading } from "/static/loading.js";
 import { setHidden } from "/static/dom-visibility.js";
+import { setTableEmpty } from "/static/table-empty.js";
 import {
   findMatchingPreset,
   resolveRoleSwitchState,
@@ -136,25 +137,6 @@ function formatScore(value) {
 // Flisene per modul er borte; bestått-andelen står som kolonne i tabellen under.
 let latestPassRatesRows = [];
 let latestCompletionRows = [];
-// #1046 J6: tom tabell = bare teksten, ikke et tomt tabellhode (samme regel som listesida og Status).
-// Fila hadde tre ulike tomtilstander (empty-state-boks i tbody, <td colspan> med small-tekst, to
-// varianter av den). Nå én: tabellen skjules, teksten står der tabellen var.
-function setTableEmpty(tbody, message) {
-  const wrap = tbody.closest(".list-table-wrap");
-  if (!wrap) return;
-  let note = wrap.nextElementSibling;
-  if (!note || !note.classList.contains("table-empty-note")) {
-    note = document.createElement("p");
-    note.className = "small table-empty-note";
-    wrap.after(note);
-  }
-  // null = rader finnes; "" = tom uten egen tekst (forklaringen står alt over tabellen).
-  const hasRows = message === null || message === undefined;
-  setHidden(wrap, !hasRows);
-  setHidden(note, hasRows || !message);
-  note.textContent = message ?? "";
-}
-
 function renderPassRates(rows) {
   latestPassRatesRows = rows ?? [];
   renderKpi();

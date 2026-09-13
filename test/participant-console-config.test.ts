@@ -407,7 +407,9 @@ describe("participant console runtime config", () => {
     // #966 hadde en tomrad med colspan="8". #1046 J6: tom tabell skjules i stedet (setTableEmpty),
     // så det finnes ingen tomrad som kan spenne feil antall kolonner.
     expect(resultsJsResponse.text).not.toContain('colspan="8"');
-    expect(resultsJsResponse.text).toContain("function setTableEmpty(");
+    // Tomtilstanden er den delte hjelperen (table-empty.js), ikke en lokal funksjon.
+    expect(resultsJsResponse.text).toContain('from "/static/table-empty.js"');
+    expect(resultsJsResponse.text).not.toContain("function setTableEmpty(");
     expect(resultsJsResponse.text).toContain("row.readSections");
     expect(resultsJsResponse.text).toContain("row.totalSections");
     expect(resultsJsResponse.text).not.toContain("row.failedModules");

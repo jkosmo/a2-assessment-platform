@@ -1049,90 +1049,8 @@ dialog::backdrop {
   }
 }
 
-/* ── State rail ───────────────────────────────────────────────────────────── */
-/* #1046 (13.09): tilstandslinja er ikke lenger en egen uthevet boks — status og «Alt lagret» står i
-   hodet som på de andre skjemasidene; her står versjonsfaktaene som småtekst. */
-.state-rail {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px 16px;
-  padding: 0;
-  margin: -4px 0 var(--space-2);
-}
+/* Tilstandslinja (.state-rail) er borte (#1046, 13.09): versjonene står som merker i hodet. */
 
-/* #975: her sto `.state-rail[hidden] { display: none; }` — en lapp som patchet symptomet av at
-   `.state-rail{display:flex}` slår `hidden`-attributtet. Skjulingen eies nå av setHidden() i
-   admin-content-shell.js og av inline display i markupen, så lappen er borte. */
-
-.state-rail-item {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-}
-
-.state-rail-label {
-  font-size: 11px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--color-meta);
-  white-space: nowrap;
-  flex-shrink: 0;
-}
-
-/* v1.1.94 (#360 follow-up): state-rail-value harmoniseres med sr-badge for visuelt
-   ensartet rad. Tidligere var noen verdier pill-badges, andre var plain tekst — så
-   uryddig ut i state-rail. Nå: alle verdier får chip-form (rounded, padding, samme
-   font-size); sr-badge-varianter beholder fargede bakgrunner for aktive tilstander,
-   plain state-rail-value får subtil nøytral bakgrunn. */
-.state-rail-value {
-  display: inline-flex;
-  align-items: center;
-  border-radius: 999px;
-  padding: 2px 8px;
-  font-size: 11px;
-  font-weight: 700;
-  background: #ebe8df;
-  color: var(--color-text);
-  white-space: nowrap;
-}
-
-/* v1.1.97: "Alt lagret"-tilstand får grønt skjær så det er åpenbart at lagring er OK
-   uten å lese teksten. Skiller seg fra øvrige nøytrale chip-verdier. */
-.state-rail-value--saved-ok {
-  background: #e6f4ea;
-  color: #12613a;
-}
-
-.state-rail-sep {
-  color: var(--color-border-soft);
-  font-size: 14px;
-  flex-shrink: 0;
-  user-select: none;
-}
-
-/* State rail badges */
-.sr-badge {
-  display: inline-flex;
-  align-items: center;
-  border-radius: 999px;
-  padding: 2px 8px;
-  font-size: 11px;
-  font-weight: 700;
-  white-space: nowrap;
-}
-
-.sr-badge--published   { background: #e6f4ea; color: #12613a; }
-.sr-badge--saved-draft { background: #e8f0fe; color: #1a5276; }
-.sr-badge--working     { background: #ebe8df; color: #55524a; }
-.sr-badge--unsaved     { background: #fff3db; color: #7a4b00; }
-
-@media (max-width: 700px) {
-  .state-rail { gap: 6px 10px; }
-  .state-rail-sep { display: none; }
-}
 
 @media (max-width: 600px) {
   .queue-table-wrap table,
@@ -1250,7 +1168,7 @@ dialog::backdrop {
   border: 1px solid transparent;
   white-space: nowrap;
 }
-/* Helhetlig palett — gjenbruker app-ens badge-farger (jf. .sr-badge--*). Semantikk:
+/* Helhetlig palett — gjenbruker app-ens badge-farger (jf. .status-badge--*). Semantikk:
    grønn = fullført (Løst/Akseptert), gul = trenger handling (Åpen), rød = lukket (Låst),
    blå = informasjon (Spørsmål), grå = nøytral kategori (Diskusjon). */
 .disc-badge--open      { background: #fff3db; color: #7a4b00; }   /* gul  — trenger svar */
