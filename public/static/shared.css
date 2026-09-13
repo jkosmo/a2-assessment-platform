@@ -1383,6 +1383,26 @@ dialog::backdrop {
 .kpi-line { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-3); margin: 0 0 var(--space-2); font-size: 13px; color: var(--color-meta); }
 .kpi-line .kpi-value { font-size: 20px; font-weight: 700; color: var(--color-text); margin-right: 6px; font-variant-numeric: tabular-nums; }
 .table-empty-note { margin: var(--space-1) 0 0; color: var(--color-meta); }
+/* #1046 nivå to, G1–G3 — RAD I SKJEMA: kursets innhold, klassens kurs, klassens medlemmer. Nummer
+   (der rekkefølgen betyr noe), typemerke, navn, metadata i grått, handlinger til høyre med samme
+   knappestil som listene (.row-action-btn, «Fjern» rød). Sidene skal ikke ha egne kopier. */
+.form-rows { list-style: none; margin: 0 0 var(--space-2); padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.form-row { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: 1px solid var(--color-border-soft); border-radius: var(--radius-card); background: var(--color-bg); font-size: 14px; }
+.form-row-order { font-size: 12px; font-weight: 700; color: var(--color-meta); min-width: 20px; text-align: right; }
+.form-row-badge { font-size: 10px; font-weight: 700; letter-spacing: 0.04em; padding: 2px 6px; border-radius: var(--radius-btn); background: var(--color-row-hover); color: var(--color-meta); }
+.form-row[data-item-type="SECTION"] { background: #eef4ff; border-color: #c7dbff; }
+.form-row[data-item-type="SECTION"] .form-row-badge { background: #d6e4ff; color: #1d4ed8; }
+.form-row-title { flex: 1 1 auto; min-width: 0; font-weight: 500; }
+.form-row-meta { color: var(--color-meta); font-size: 12.5px; }
+.form-row-meta--warn { color: var(--color-warning); }
+.form-row-actions { display: flex; gap: 4px; margin-left: auto; flex: 0 0 auto; }
+.form-row-actions .row-action-btn:disabled { opacity: 0.4; cursor: default; }
+.form-rows-empty { color: var(--color-meta); font-style: italic; font-size: 13px; padding: 6px 0; }
+/* G2: én «legg til»-linje — søk/velg + knapp. */
+.form-add-row { display: flex; gap: 8px; align-items: flex-start; flex-wrap: wrap; margin-top: var(--space-2); }
+.form-add-row > button, .form-add-row > .btn { width: auto; flex: 0 0 auto; }
+.form-add-row > input, .form-add-row > select, .form-add-row > .combobox-wrap { flex: 1 1 240px; min-width: 0; }
+.form-add-row > input, .form-add-row > select { padding: 8px 10px; border: 1px solid var(--color-border-soft); border-radius: var(--radius-btn); font-size: 13px; font-family: inherit; background: var(--color-surface); box-sizing: border-box; }
 /* #1046 nivå to — SKJEMASIDA (public/static/form-page.js). Hode, tilstandslinje, handlingsrad,
    språkpiller og lagrelinje for det åpnede elementet. Sidene skal ikke ha egne kopier. */
 .form-page-head { margin-bottom: var(--space-2); }

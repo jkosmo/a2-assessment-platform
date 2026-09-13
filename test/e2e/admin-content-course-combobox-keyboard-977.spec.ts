@@ -49,8 +49,8 @@ test.describe("#977 — modulsøket i kursbyggeren kan betjenes med tastatur", (
     await expect(page.locator("#comboboxDropdown")).toBeHidden();
 
     await addBtn.press("Enter");
-    await expect(page.locator('.module-list-item[data-item-type="MODULE"]')).toHaveCount(1);
-    await expect(page.locator('.module-list-item[data-item-type="MODULE"]')).toContainText("Arbeidsmiljø");
+    await expect(page.locator('.form-row[data-item-type="MODULE"]')).toHaveCount(1);
+    await expect(page.locator('.form-row[data-item-type="MODULE"]')).toContainText("Arbeidsmiljø");
   });
 
   test("Escape lukker lista uten å velge", async ({ page }) => {

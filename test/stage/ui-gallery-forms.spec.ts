@@ -37,7 +37,7 @@ const SIDER: Side[] = [
   { fil: "30-modul-rediger", navn: "Modul: Rediger-fanen", rute: "MODUL", vent: "#tabEdit", handling: klikkFane("tabEdit") },
   { fil: "31-modul-forhandsvis", navn: "Modul: Forhåndsvis-fanen", rute: "MODUL", vent: "#tabPreview", handling: klikkFane("tabPreview") },
   { fil: "32-modul-innstillinger", navn: "Modul: Innstillinger-fanen", rute: "MODUL", vent: "#tabSettings", handling: klikkFane("tabSettings") },
-  { fil: "33-kurs-detalj", navn: "Kurs: åpnet", rute: "KURS", vent: "#detailPageTitle, .module-list-item" },
+  { fil: "33-kurs-detalj", navn: "Kurs: åpnet", rute: "KURS", vent: "#detailPageTitle, .form-row" },
   { fil: "34-seksjon-editor", navn: "Seksjon: åpnet (editor)", rute: "SEKSJON", vent: "#titleInput" },
   { fil: "35-klasse-detalj", navn: "Klasse: åpnet", rute: "/admin-content/classes", vent: "#classesTableBody",
     handling: async (page) => { await page.locator('#classesTableBody [data-action="open"]').first().click().catch(() => undefined); await page.locator("#memberChips, #backToClasses").first().waitFor({ timeout: 10_000 }).catch(() => undefined); } },

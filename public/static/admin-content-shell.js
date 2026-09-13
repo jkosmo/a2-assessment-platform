@@ -1073,6 +1073,8 @@ function renderPreviewLocaleBar() {
       // Disse knappene er i dag deaktivert under redigering via CSS. Guarden står likevel her, så
       // flaten ikke får tilbake blindveien i det øyeblikket noen fjerner den CSS-regelen.
       const wasEditing = !!document.getElementById("previewEditConfirm");
+      // Bare det som faktisk var skrevet og ikke bekreftet, er verdt en beskjed.
+      const wasDirty = hasOpenEditForm();
       // #920: the same question a tab switch asks. It used to ask it only for Innstillinger, so an
       // open edit form was re-rendered from the new language without a word — the typed text was
       // simply gone.
@@ -1090,8 +1092,10 @@ function renderPreviewLocaleBar() {
       renderSettingsPanel();
       if (wasEditing) {
         enterPreviewEditMode({ force: true });
-        logBot(() => escapeHtml(t("shell.directEdit.localeSwitched")));
-        if (!chatPaneVisible()) showToast(t("shell.directEdit.localeSwitched"), "warning");
+        if (wasDirty) {
+          logBot(() => escapeHtml(t("shell.directEdit.localeSwitched")));
+          if (!chatPaneVisible()) showToast(t("shell.directEdit.localeSwitched"), "warning");
+        }
       }
     });
     contentLocaleBar.appendChild(btn);
@@ -5307,13 +5311,13 @@ function renderSettingsPanel() {
   // Stage-tilbakemelding 2026-08-17: poengreglene sier ikke hva de gjør. Forklaringen ligger bak
   // et i-ikon, åpnet med KLIKK — hover finnes ikke på nettbrett og kan ikke nås med tastatur.
   // Ingen innebygde hjelpetekster: forfatteren ba om den kompakte varianten.
+  // #1046 D4: hjelpen står som én setning under feltet (tidligere et (i)-ikon med popover).
   const row = (labelKey, valueHtml, isEmpty = false, infoKey = null) => {
-    const info = infoKey
-      ? ` <button type="button" class="settings-info" data-info="${escapeHtml(infoKey)}"
-          aria-label="${escapeHtml(tf("shell.settings.infoAria", { field: t(labelKey) }))}"
-          aria-expanded="false">i</button>`
+    const helpText = infoKey ? t(`shell.settings.info.${infoKey}`) : "";
+    const help = helpText && !helpText.startsWith("shell.settings.info.")
+      ? `<span class="settings-help" data-info="${escapeHtml(infoKey)}">${escapeHtml(helpText)}</span>`
       : "";
-    openGroup.push(`<dt>${escapeHtml(t(labelKey))}${info}</dt><dd${isEmpty ? ' class="settings-empty"' : ""}>${valueHtml}</dd>`);
+    openGroup.push(`<dt>${escapeHtml(t(labelKey))}</dt><dd${isEmpty ? ' class="settings-empty"' : ""}>${valueHtml}${help}</dd>`);
   };
   const emptyText = escapeHtml(t("shell.settings.notSet"));
   // #896 S3c: Innstillinger reads in the UI language, not the preview language. The summary rows
@@ -5995,45 +5999,9 @@ function mountCriteriaSection() {
  * and cannot be reached from the keyboard, so a hover-only explanation is an explanation some
  * authors can never read. One popover open at a time; Escape and a click elsewhere close it.
  */
-function mountSettingsInfoButtons(host) {
-  // ONCE per host, not once per render. `renderSettingsPanel` replaces `host.innerHTML`, which
-  // destroys child listeners — but `host` itself survives, so a listener attached here accumulates
-  // one copy per render. Two copies made the popover open and close within the same click: the
-  // first created it, the second read `aria-expanded="true"` and treated the click as "close".
-  // Symptom was a button that did nothing at all.
-  if (host.dataset.infoButtonsMounted === "1") return;
-  host.dataset.infoButtonsMounted = "1";
-
-  const close = () => {
-    host.querySelectorAll(".settings-popover").forEach((p) => p.remove());
-    host.querySelectorAll(".settings-info[aria-expanded='true']").forEach((b) => {
-      b.setAttribute("aria-expanded", "false");
-    });
-  };
-
-  host.addEventListener("click", (event) => {
-    if (event.target.closest(".settings-popover")) return;
-    const button = event.target.closest(".settings-info");
-    const wasOpen = button?.getAttribute("aria-expanded") === "true";
-    close();
-    if (!button || wasOpen) return;
-
-    const body = t(`shell.settings.info.${button.dataset.info}`);
-    // A missing key resolves to the key itself; showing that to an author is worse than nothing.
-    if (!body || body.startsWith("shell.settings.info.")) return;
-
-    const popover = document.createElement("div");
-    popover.className = "settings-popover";
-    popover.setAttribute("role", "note");
-    popover.textContent = body;
-    button.setAttribute("aria-expanded", "true");
-    button.insertAdjacentElement("afterend", popover);
-  });
-
-  host.addEventListener("keydown", (event) => {
-    if (event.key === "Escape") close();
-  });
-}
+// #1046 D4: (i)-ikonene med popover er borte — hjelpen står under feltet (se `row` i
+// renderSettingsPanel). Beholdt som tom funksjon til kallstedene er ryddet.
+function mountSettingsInfoButtons() {}
 
 /** Has the author changed the criteria since the panel opened? Independent of where they land. */
 function settingsCriteriaEdited() {
@@ -7743,6 +7711,7 @@ function populateUiLocaleSelect() {
     // feltene og trykk Bekreft», og handlingsknappene var allerede brukt opp og deaktiverte.
     // Ingen vei videre uten å laste siden på nytt (rapportert fra stage 13.08).
     const wasEditing = !!document.getElementById("previewEditConfirm");
+    const wasDirty = hasOpenEditForm();
     // Replay the full chat log in the new locale
     retranslateChat();
     translatePageStaticText();
@@ -7764,8 +7733,10 @@ function populateUiLocaleSelect() {
       enterPreviewEditMode({ force: true });
       // Feltene fylles fra det nye språket. Det som var skrevet i det forrige — og ikke bekreftet
       // — er borte, og det skal man få vite, ikke oppdage.
-      logBot(() => escapeHtml(t("shell.directEdit.localeSwitched")));
-      if (!chatPaneVisible()) showToast(t("shell.directEdit.localeSwitched"), "warning");
+      if (wasDirty) {
+        logBot(() => escapeHtml(t("shell.directEdit.localeSwitched")));
+        if (!chatPaneVisible()) showToast(t("shell.directEdit.localeSwitched"), "warning");
+      }
     }
   });
 }

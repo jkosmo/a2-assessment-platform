@@ -1160,7 +1160,7 @@ function courseDetailBodyHtml() {
       <div class="detail-section">
         <h2 class="detail-section-title">Innhold i kurset (moduler og seksjoner)</h2>
         <div id="moduleListContainer"></div>
-        <div class="combobox-row" style="margin-top: var(--space-2)">
+        <div class="form-add-row">
           <div class="combobox-wrap" id="comboboxWrap">
             <input id="comboboxInput" type="text" class="combobox-input"
               placeholder="Søk på modulnavn eller modul-ID…"
@@ -1170,9 +1170,9 @@ function courseDetailBodyHtml() {
           </div>
           <button id="addModuleBtn" class="btn btn-secondary" disabled>Legg til modul</button>
         </div>
-        <div class="combobox-row" style="margin-top: var(--space-2)">
+        <div class="form-add-row">
           <label for="sectionSelect" class="sr-only">Velg læringsseksjon</label>
-          <select id="sectionSelect" class="combobox-input" style="flex:1 1 auto"></select>
+          <select id="sectionSelect" class="combobox-input"></select>
           <button id="addSectionBtn" class="btn btn-secondary">Legg til seksjon</button>
         </div>
       </div>
@@ -1314,25 +1314,26 @@ function renderModuleList() {
     return;
   }
 
-  container.innerHTML = `<div class="module-list" id="moduleList">
+  // #1046 G1: den delte «rad i skjema» (shared.css .form-row) — samme rad som klassens kurs og medlemmer.
+  container.innerHTML = `<ul class="form-rows" id="moduleList">
     ${courseModules.map((m, i) => {
       // #744: åpne elementets editor i ny fane så kursbyggeren ikke går tapt.
       // Modul → samtale-editoren; seksjon → seksjons-editoren.
       const openHref = buildCourseItemHref(m, aktivtKursId);
       return `
-      <div class="module-list-item" data-item-type="${m.type}" data-ref-id="${escapeHtml(m.refId)}">
-        <span class="module-list-item-order">${i + 1}.</span>
-        <span class="item-type-badge">${courseItemTypeBadge(m.type)}</span>
-        <span class="module-list-item-title">${escapeHtml(m.title)}</span>
-        <div class="module-list-item-actions">
-          <button class="module-move-btn" data-move="up" data-index="${i}" ${i === 0 ? "disabled" : ""} aria-label="Flytt opp">↑</button>
-          <button class="module-move-btn" data-move="down" data-index="${i}" ${i === courseModules.length - 1 ? "disabled" : ""} aria-label="Flytt ned">↓</button>
-          <a href="${openHref}" class="module-move-btn" style="text-decoration:none;display:inline-flex;align-items:center" target="_blank" rel="noopener">Åpne</a>
-          <button class="module-remove-btn" data-remove="${i}" aria-label="Fjern modul">Fjern</button>
+      <li class="form-row" data-item-type="${m.type}" data-ref-id="${escapeHtml(m.refId)}">
+        <span class="form-row-order">${i + 1}.</span>
+        <span class="form-row-badge">${courseItemTypeBadge(m.type)}</span>
+        <span class="form-row-title">${escapeHtml(m.title)}</span>
+        <div class="form-row-actions">
+          <button type="button" class="row-action-btn" data-move="up" data-index="${i}" ${i === 0 ? "disabled" : ""} aria-label="Flytt opp">↑</button>
+          <button type="button" class="row-action-btn" data-move="down" data-index="${i}" ${i === courseModules.length - 1 ? "disabled" : ""} aria-label="Flytt ned">↓</button>
+          <a href="${openHref}" class="row-action-btn" target="_blank" rel="noopener">Åpne</a>
+          <button type="button" class="row-action-btn destructive" data-remove="${i}" aria-label="Fjern modul">Fjern</button>
         </div>
-      </div>`;
+      </li>`;
     }).join("")}
-  </div>`;
+  </ul>`;
 
   document.getElementById("moduleList")?.addEventListener("click", handleModuleListClick);
   // #923: per-element diskusjons-toggle er borte. Diskusjon finnes bare på kursnivå, så en bryter

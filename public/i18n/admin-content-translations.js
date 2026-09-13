@@ -473,7 +473,7 @@ const adminContentBase = {
 
   "shell.settings.noneShort": "None",
 
-  "shell.settings.platformDefault": "{value} (platform default)",
+  "shell.settings.platformDefault": "{value} (default)",
 
   "shell.settings.infoAria": "About {field}",
 
@@ -506,7 +506,7 @@ const adminContentBase = {
   "shell.settings.assessmentPrompt": "Assessment instruction",
   "shell.settings.submissionSchema": "Submission form",
   "shell.settings.scopeWords": "Expected answer length",
-  "shell.settings.scopeWordsHint": "words — leave empty to use the level default",
+  "shell.settings.scopeWordsHint": "words (empty = the level default)",
   "shell.settings.certificationLevel": "Certification level",
   "shell.settings.validity": "Valid",
   "shell.settings.save": "Save settings",
@@ -1112,7 +1112,7 @@ const adminContentLateOverrides = {
 
     "shell.settings.noneShort": "Ingen",
 
-    "shell.settings.platformDefault": "{value} (plattformstandard)",
+    "shell.settings.platformDefault": "{value} (standard)",
 
     "shell.settings.infoAria": "Om {field}",
 
@@ -1145,7 +1145,7 @@ const adminContentLateOverrides = {
     "shell.settings.assessmentPrompt": "Vurderingsinstruks",
     "shell.settings.submissionSchema": "Innsendingsskjema",
     "shell.settings.scopeWords": "Forventet svarlengde",
-    "shell.settings.scopeWordsHint": "ord — la stå tomt for nivåets standard",
+    "shell.settings.scopeWordsHint": "ord (tomt = nivåets standard)",
     "shell.settings.certificationLevel": "Sertifiseringsnivå",
     "shell.settings.validity": "Gyldig",
     "shell.settings.save": "Lagre innstillinger",
@@ -1560,7 +1560,7 @@ const adminContentLateOverrides = {
 
     "shell.settings.noneShort": "Ingen",
 
-    "shell.settings.platformDefault": "{value} (plattformstandard)",
+    "shell.settings.platformDefault": "{value} (standard)",
 
     "shell.settings.infoAria": "Om {field}",
 
@@ -1593,7 +1593,7 @@ const adminContentLateOverrides = {
     "shell.settings.assessmentPrompt": "Vurderingsinstruks",
     "shell.settings.submissionSchema": "Innsendingsskjema",
     "shell.settings.scopeWords": "Forventa svarlengd",
-    "shell.settings.scopeWordsHint": "ord — la stå tomt for nivået sin standard",
+    "shell.settings.scopeWordsHint": "ord (tomt = nivået sin standard)",
     "shell.settings.certificationLevel": "Sertifiseringsnivå",
     "shell.settings.validity": "Gyldig",
     "shell.settings.save": "Lagre innstillingar",

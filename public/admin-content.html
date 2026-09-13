@@ -48,7 +48,9 @@
       .preview-module-title { font-size: 18px; font-weight: 700; color: var(--color-text); }
       .preview-description { font-size: 13px; color: var(--color-meta); margin: 0 0 8px; }
       .preview-version-chain { font-size: 12px; color: var(--color-link-active); font-weight: 600; margin: 0 0 var(--space-1); }
-      .preview-section-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--color-meta); margin: var(--space-1) 0 4px; }
+      /* #1046 D1: etikett over feltet i vanlig skrift (som .form-field label) — STORE BOKSTAVER er
+         forbeholdt gruppeoverskrifter. */
+      .preview-section-label { font-size: 13px; font-weight: 600; color: var(--color-meta); margin: var(--space-1) 0 4px; }
       .preview-text-block { font-size: 14px; color: var(--color-text); line-height: 1.6; white-space: pre-wrap; background: var(--color-module-summary-bg); border: 1px solid var(--color-module-summary-border); border-radius: var(--radius-card); padding: var(--space-1); }
       /* #1051: rendret markdown bærer sin egen struktur; pre-wrap ville doblet mellomrommene. */
       .preview-text-block.is-rendered { white-space: normal; }
@@ -413,16 +415,20 @@
 
       /* #896 S3a: the settings read-out. A definition list rather than cards — these are
          facts about one module, not seven separate things to open. */
-      .settings-list { display: grid; grid-template-columns: minmax(140px, max-content) 1fr; gap: 6px var(--space-2); margin: var(--space-2) 0; font-size: 14px; }
-      .settings-list dt { color: var(--color-meta); font-weight: 600; }
-      .settings-list dd { margin: 0; color: var(--color-text); }
+      /* #1046 D1/D4: etikett OVER feltet (som resten av skjemaene), hjelpen som én setning under
+         feltet i stedet for et (i)-ikon man må peke på. */
+      .settings-list { display: block; margin: var(--space-2) 0; font-size: 14px; }
+      .settings-list dt { color: var(--color-meta); font-weight: 600; font-size: 13px; margin: 0 0 4px; }
+      .settings-list dd { margin: 0 0 var(--space-2); color: var(--color-text); }
+      .settings-help { display: block; margin: 4px 0 0; font-size: 12.5px; line-height: 1.45; color: var(--color-meta); max-width: 68ch; }
       .settings-list dd.settings-empty { color: var(--color-meta); font-style: italic; }
       .settings-criteria { margin: 4px 0 0; padding-left: 18px; }
       .settings-criteria li { margin-bottom: 2px; }
       /* #896 S3b: editable rows. Sized to the content rather than the column so a percentage
          field does not stretch across the panel. */
       .settings-input { font-family: inherit; font-size: 14px; padding: 4px 8px; border: 1px solid var(--color-border-soft); border-radius: var(--radius-card); background: #fff; max-width: 320px; }
-      input.settings-input[type="number"] { max-width: 90px; }
+      /* Plassholderen kan være et ord («Ingen grense»); 90 px kuttet det. */
+      input.settings-input[type="number"] { max-width: 130px; }
       /* Ett unntak: samlet beståttgrense er det eneste feltet som har en plattformverdi å falle
          tilbake på, og plassholderen navngir tallet. 90 px kuttet den midt i ordet. */
       input.settings-input--wide[type="number"] { max-width: 165px; }
@@ -446,25 +452,6 @@
         font-size: 13px; line-height: 1.55; margin: 0 0 var(--space-2); max-width: 68ch;
         background: var(--color-primary-tint); border-left: 3px solid var(--color-primary);
         padding: 10px 14px; border-radius: 0 8px 8px 0;
-      }
-      .settings-list dt { position: relative; }
-      /* `min-height: 0` er ikke valgfritt: shared.css setter `button { width:100%; padding:8px;
-         min-height:40px }` for skjemaknapper, og uten overstyring blir sirkelen en oval. Samme
-         felle er dokumentert to ganger i shared.css fra før. */
-      .settings-info {
-        appearance: none; cursor: pointer; width: 17px; height: 17px; min-height: 0; padding: 0;
-        margin-left: 6px; border-radius: 50%; border: 1.5px solid var(--color-primary);
-        background: transparent; color: var(--color-primary); font: inherit; font-size: 11px;
-        font-weight: 700; line-height: 1; vertical-align: baseline; flex-shrink: 0;
-      }
-      .settings-info:hover { background: var(--color-primary); color: #fff; }
-      .settings-info:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 2px; }
-      /* Åpnes med klikk, ikke hover: hover finnes ikke på nettbrett og kan ikke nås med tastatur. */
-      .settings-popover {
-        position: absolute; left: 0; top: calc(100% + 6px); z-index: 20; width: min(320px, 60vw);
-        background: var(--color-text); color: #f7f5ef; font-size: 13px; font-weight: 400;
-        line-height: 1.5; padding: 10px 12px; border-radius: 8px;
-        box-shadow: 0 6px 20px rgba(0, 0, 0, 0.22);
       }
       /* One step in, so a subsection of Vurdering cannot be mistaken for a fifth group. The rule
          is on the left rather than the top: it marks containment, which is what is being said. */

@@ -401,14 +401,14 @@ test("#967: klasseskjermen merker tildelinger til upubliserte og arkiverte kurs"
 
   await page.goto("/deltakere/klasser");
   await page.locator('[data-action="open"]').first().click();
-  await expect(page.locator(".assign-row").first()).toBeVisible();
+  await expect(page.locator(".form-row").first()).toBeVisible();
 
-  const warnings = page.locator(".assign-meta--warn");
+  const warnings = page.locator(".form-row-meta--warn");
   await expect(warnings).toHaveCount(2);
   await expect(warnings.nth(0)).toContainText(/Ikke publisert/i);
   await expect(warnings.nth(1)).toContainText(/Arkivert/i);
   // Det publiserte kurset skal IKKE merkes — ellers betyr merket ingenting.
-  await expect(page.locator(".assign-row").first().locator(".assign-meta--warn")).toHaveCount(0);
+  await expect(page.locator(".form-row").first().locator(".form-row-meta--warn")).toHaveCount(0);
   // Et varsel ingen ser er ikke et varsel.
   await expect(warnings.first()).toHaveCSS("color", "rgb(122, 75, 0)");
 });

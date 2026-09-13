@@ -51,8 +51,8 @@ test.describe("#744 course builder — per-item 'Åpne' editor links (new tab)",
 
     await page.goto("/admin-content/courses/course-1");
 
-    const moduleRow = page.locator('.module-list-item[data-item-type="MODULE"]');
-    const sectionRow = page.locator('.module-list-item[data-item-type="SECTION"]');
+    const moduleRow = page.locator('.form-row[data-item-type="MODULE"]');
+    const sectionRow = page.locator('.form-row[data-item-type="SECTION"]');
     await expect(moduleRow).toBeVisible();
     await expect(sectionRow).toBeVisible();
 
@@ -80,8 +80,8 @@ test.describe("#744 course builder — per-item 'Åpne' editor links (new tab)",
     await expect(sectionOpen).toHaveAttribute("target", "_blank");
 
     // The "Åpne" link sits next to "Fjern" in the row's action area.
-    await expect(moduleRow.locator(".module-list-item-actions")).toContainText("Åpne");
-    await expect(moduleRow.locator(".module-list-item-actions")).toContainText("Fjern");
+    await expect(moduleRow.locator(".form-row-actions")).toContainText("Åpne");
+    await expect(moduleRow.locator(".form-row-actions")).toContainText("Fjern");
   });
 });
 

@@ -360,10 +360,11 @@ function classFormBodyHtml() {
   const st = openClassState ?? { klass: null, members: [], courses: [], allCourses: [] };
   const k = st.klass;
   const isNew = !st.id;
-  const memberRows = st.members.map((m) => `<li class="assign-row">
-      <span class="assign-name">${escapeHtml(m.name)}</span>
-      ${m.email ? `<span class="assign-meta">${escapeHtml(m.email)}</span>` : ""}
-      <button type="button" class="assign-remove row-action-btn destructive" data-remove-member="${escapeHtml(m.userId)}" aria-label="Fjern ${escapeHtml(m.name)}">Fjern</button>
+  // #1046 G1: den delte «rad i skjema» (shared.css .form-row) — samme rad som kursets innhold.
+  const memberRows = st.members.map((m) => `<li class="form-row">
+      <span class="form-row-title">${escapeHtml(m.name)}</span>
+      ${m.email ? `<span class="form-row-meta">${escapeHtml(m.email)}</span>` : ""}
+      <span class="form-row-actions"><button type="button" class="row-action-btn destructive" data-remove-member="${escapeHtml(m.userId)}" aria-label="Fjern ${escapeHtml(m.name)}">Fjern</button></span>
     </li>`).join("");
   const courseRows = st.courses.map((c) => {
     const due = formatDueDate(c.dueAt);
@@ -374,11 +375,11 @@ function classFormBodyHtml() {
       : c.coursePublished === false
         ? "Ikke publisert – deltakerne ser det ikke"
         : "";
-    return `<li class="assign-row">
-      <span class="assign-name">${escapeHtml(courseTitle(c.title))}</span>
-      ${unreachable ? `<span class="assign-meta assign-meta--warn">${escapeHtml(unreachable)}</span>` : ""}
-      <span class="assign-meta">${due ? `Frist: ${escapeHtml(due)}` : "Ingen frist"}</span>
-      <button type="button" class="assign-remove row-action-btn destructive" data-remove-course="${escapeHtml(c.courseId)}" aria-label="Fjern kurs">Fjern</button>
+    return `<li class="form-row">
+      <span class="form-row-title">${escapeHtml(courseTitle(c.title))}</span>
+      ${unreachable ? `<span class="form-row-meta form-row-meta--warn">${escapeHtml(unreachable)}</span>` : ""}
+      <span class="form-row-meta">${due ? `Frist: ${escapeHtml(due)}` : "Ingen frist"}</span>
+      <span class="form-row-actions"><button type="button" class="row-action-btn destructive" data-remove-course="${escapeHtml(c.courseId)}" aria-label="Fjern kurs">Fjern</button></span>
     </li>`;
   }).join("");
   const assignedIds = new Set(st.courses.map((c) => c.courseId));
@@ -402,16 +403,16 @@ function classFormBodyHtml() {
     ${isNew ? `<div class="detail-section" data-form-untracked><p class="small" style="margin:0">Lagre klassen først, så kan du legge til deltakere og tildele kurs.</p></div>` : `
     <div class="detail-section" data-form-untracked>
       <h2>Deltakere (${st.members.length})</h2>
-      <ul class="assign-list" id="memberChips">${memberRows || `<li class="assign-empty">Ingen deltakere ennå.</li>`}</ul>
-      <div class="inline-form">
-        <input type="text" id="studentSearch" placeholder="Søk navn eller e-post (min. 2 tegn)" autocomplete="off" style="min-width:280px" />
+      <ul class="form-rows" id="memberChips">${memberRows || `<li class="form-rows-empty">Ingen deltakere ennå.</li>`}</ul>
+      <div class="form-add-row">
+        <input type="text" id="studentSearch" placeholder="Søk navn eller e-post (min. 2 tegn)" autocomplete="off" />
       </div>
       <ul class="search-results" id="searchResults"></ul>
     </div>
     <div class="detail-section" data-form-untracked>
       <h2>Tildelte kurs (${st.courses.length})</h2>
-      <ul class="assign-list" id="courseChips">${courseRows || `<li class="assign-empty">Ingen kurs tildelt ennå.</li>`}</ul>
-      <div class="inline-form">
+      <ul class="form-rows" id="courseChips">${courseRows || `<li class="form-rows-empty">Ingen kurs tildelt ennå.</li>`}</ul>
+      <div class="form-add-row">
         <select id="courseSelect"><option value="">Velg kurs…</option>${courseOptions}</select>
         <label for="dueAtInput" style="font-size:13px;color:var(--color-meta);display:inline-flex;align-items:center;gap:6px">
           Frist (valgfri)

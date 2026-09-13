@@ -724,7 +724,7 @@ test.describe("admin content browser coverage", () => {
   // but not `host`, so a listener attached there accumulated one copy per render — the first copy
   // opened the popover and the second read it as already-open and closed it, within one click.
   // This test re-renders the panel before clicking, which is what makes it catch that.
-  test("the pass-rule help opens on click, and still works after a re-render", async ({ page }) => {
+  test("the pass-rule help stands under the field, and survives a re-render", async ({ page }) => {
     await mockCommonApis(page, {
       modules: [{ id: "module-1", title: "Trade unions", activeVersion: { versionNo: 1 } }],
       moduleExports: {
@@ -741,25 +741,10 @@ test.describe("admin content browser coverage", () => {
     await page.locator("#settingsPromptToggle").click();
     await page.locator("#settingsPromptToggle").click();
 
-    const info = page.locator(".settings-info[data-info='totalMin']");
-    await expect(info).toHaveAttribute("aria-expanded", "false");
-    await info.click();
-
-    const popover = page.locator(".settings-popover");
-    await expect(popover).toBeVisible();
-    await expect(popover).toContainText(/platform default|plattformens standardverdi/);
-    await expect(info).toHaveAttribute("aria-expanded", "true");
-
-    // Clicking it again closes; only one is ever open.
-    await info.click();
-    await expect(popover).toHaveCount(0);
-
-    await page.locator(".settings-info[data-info='mcqThreshold']").click();
-    await page.locator(".settings-info[data-info='practicalWeight']").click();
-    await expect(page.locator(".settings-popover")).toHaveCount(1);
-
-    // Escape closes it, so a keyboard user is not stuck with it covering the fields below.
-    await page.keyboard.press("Escape");
+    // #1046 D4: hjelpen står under feltet — ingen (i)-ikon, ingen popover, ingenting å peke på.
+    await expect(page.locator(".settings-info")).toHaveCount(0);
+    await expect(page.locator(".settings-help[data-info='totalMin']")).toContainText(/platform default|plattformens standardverdi/);
+    await expect(page.locator(".settings-help[data-info='mcqThreshold']")).toBeVisible();
     await expect(page.locator(".settings-popover")).toHaveCount(0);
   });
 
@@ -3855,7 +3840,7 @@ test.describe("admin content browser coverage", () => {
     await expect(page.locator("#workspaceActions")).toBeVisible();
     await expect(page.locator("#workspaceActions .workspace-action-btn").first()).toBeEnabled();
     // The full module picker is NOT shown after publish.
-    await expect(page.locator(".module-list .module-list-item")).toHaveCount(0);
+    await expect(page.locator("#moduleList .form-row")).toHaveCount(0);
   });
 
   // #555: regen on an existing module follows the unified order too — source material BEFORE

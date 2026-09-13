@@ -112,62 +112,9 @@
       /* #1046 nivå to, D1: .form-field og .required-note arves fra shared.css — ett felt, ett sted. */
 
       /* ── Module list ─────────────────────────────────────────────────────── */
-      .module-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: var(--space-2); }
-      .module-list-item {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        padding: 8px 10px;
-        border: 1px solid var(--color-border-soft);
-        border-radius: var(--radius-card);
-        background: var(--color-bg);
-        font-size: 14px;
-      }
-      .module-list-item-order {
-        font-size: 12px;
-        font-weight: 700;
-        color: var(--color-meta);
-        min-width: 20px;
-        text-align: right;
-      }
-      .module-list-item-title { flex: 1; font-weight: 500; }
-      .item-type-badge {
-        font-size: 10px;
-        font-weight: 700;
-        letter-spacing: 0.04em;
-        padding: 2px 6px;
-        border-radius: var(--radius-btn);
-        background: var(--color-row-hover);
-        color: var(--color-meta);
-      }
-      /* Distinguish sections from modules in the builder (#490 feedback). */
-      .module-list-item[data-item-type="SECTION"] {
-        background: #eef4ff;
-        border-color: #c7dbff;
-      }
-      .module-list-item[data-item-type="SECTION"] .item-type-badge {
-        background: #d6e4ff;
-        color: #1d4ed8;
-      }
-      .module-list-item-actions { display: flex; gap: 4px; }
-      .module-move-btn, .module-remove-btn {
-        padding: 3px 8px;
-        font-size: 12px;
-        font-weight: 600;
-        border: 1px solid var(--color-border-soft);
-        border-radius: var(--radius-button);
-        background: var(--color-surface);
-        color: var(--color-text);
-        cursor: pointer;
-        white-space: nowrap;
-      }
-      .module-move-btn:hover { background: var(--color-row-hover); }
-      .module-move-btn:disabled { opacity: 0.4; cursor: default; }
-      .module-remove-btn { color: var(--color-error); border-color: #f5c0bb; }
-      .module-remove-btn:hover { background: #fdf0ef; }
+      /* #1046 G1/G2: radene og «legg til»-linja er de delte .form-row/.form-add-row i shared.css. */
 
       /* ── Combobox ────────────────────────────────────────────────────────── */
-      .combobox-row { display: flex; gap: 8px; align-items: flex-start; }
       .combobox-wrap { position: relative; flex: 1; }
       .combobox-input {
         width: 100%;
@@ -260,7 +207,6 @@
       /* ── Loading ─────────────────────────────────────────────────────────── */
       .page-loading { padding: var(--space-3); text-align: center; color: var(--color-meta); font-size: 14px; }
 
-      .combobox-row button { width: auto; flex-shrink: 0; }
     </style>
   </head>
   <body>

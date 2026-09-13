@@ -255,12 +255,12 @@ tredelingen Rediger · Forhåndsvis · Innstillinger også på seksjoner, Result
 | B4 | Gjort: fanelinje fra form-page.js. Modul og seksjon: Rediger · Forhåndsvisning · Innstillinger. Kurs og klasse: Rediger · Innstillinger. Eierne ligger under Innstillinger overalt. |
 | B6 | Gjort. |
 | C1, C2, C3 | Gjort for klasse, seksjon, kurs (språkpiller, bokmål først, «(påkrevd)»). Bokmål er det påkrevde språket (DECISIONS). |
-| D1, D2, D3 | Gjort: .form-field i shared.css; hvite felt; «(påkrevd)». D4–D7 gjenstår. |
+| D1–D7 | D1–D3 gjort (.form-field, hvite felt, «(påkrevd)»). 13.09: modulens etiketter i Rediger og Innstillinger står over feltet i vanlig skrift (ikke STORE, ikke til venstre); D4: hjelpen står som én setning under feltet, (i)-ikonene med popover er borte; D7: «70 (standard)» og «ord (tomt = nivåets standard)». D5 (kort per tema) og D6 (intervall med «→», ett felt ellers) var alt slik. |
 | E (lagring) | Avgjort 2a og gjort for klasse, seksjon, kurs: «Lagre», Avbryt som lenke, «Alt lagret / Ulagrede endringer», spørsmål før man forlater. Modul har sin egen lagring, men samme merke i hodet. |
 | F1, F2 | Gjort for alle fire: handlingsrad i hodet med «maks fire + Mer». Modulens sidepanel er borte. 13.09 (produkteier): Lagre og Avbryt først i raden med grønn/rød tone; korte ord på modulens handlinger (Publiser · Generer innhold · Rediger i chat · Mer). |
 | E (lagring) 13.09 | Lagrelinja nederst er borte på alle fire; Lagre/Avbryt i hodet. Modul: én Lagre for Rediger, Innstillinger og utkast. |
 | B3 modul 13.09 | Tilstandslinja er borte; «Publisert v2 · Utkast v4» som merker i hodet, «Forhåndsvisning viser …» i fanen. GDPR-varselet er én linje under oppgavefeltet. Samtaleruta vises bare når assistenten spør. |
-| G1–G3 | G3 gjort. G1/G2 (én «rad i skjema») gjenstår. |
+| G1–G3 | Gjort 13.09: én «rad i skjema» (`.form-row` i shared.css) for kursets innhold, klassens kurs og klassens medlemmer — nummer, typemerke, navn, metadata i grått, handlinger til høyre som `row-action-btn`, «Fjern» rød. Én «legg til»-linje (`.form-add-row`). Sidenes egne kopier er slettet. |
 | H1–H4 | Gjort. |
 | J1, J2, J6, J8, J9 | Gjort (titler = menynavn, «klasse», tom tabell, Eksporter-meny, prosent/tid). |
 | J3, J4, J5, J6, J7 | Gjort 13.09: Resultater og Status har samme hode og filterrad som listesidene (kursvelger med navn, søk over moduler; ID-feltene er borte). Nøkkeltall som én linje (`.kpi-line` i shared.css) — flisene og rutenettet per modul er borte, bestått-andelen står som kolonne med stolpe. Alle tabellene er `.list-table`; tom tabell skjules og teksten står alene (én `setTableEmpty` i stedet for tre utgaver). Detaljen har navnet på valgt modul/kurs. |

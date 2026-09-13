@@ -132,11 +132,13 @@ describe("courses form page", () => {
     }
   });
 
-  it("combobox-row button has width: auto — prevents global reset collapsing the module search input", () => {
-    const html = readFile("public/admin-content-courses.html");
+  it("the add-row button has width: auto — prevents global reset collapsing the module search input", () => {
     // Same pattern as .conv-input-area button fix (v0.10.4): global button{width:100%} collapses
     // the adjacent input in a flex row unless the button explicitly sets width: auto.
-    expect(html).toMatch(/\.combobox-row\s+button\s*\{[^}]*width\s*:\s*auto/);
+    // #1046 G2: «legg til»-linja er den delte .form-add-row i shared.css, ikke sidens .combobox-row.
+    const css = readFile("public/static/shared.css");
+    expect(css).toMatch(/\.form-add-row\s*>\s*button[^{]*\{[^}]*width\s*:\s*auto/);
+    expect(readFile("public/admin-content-courses.html")).not.toMatch(/\.combobox-row/);
   });
 
 });
