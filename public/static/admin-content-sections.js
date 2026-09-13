@@ -36,7 +36,7 @@ const EDITOR_LOCALES = SECTION_EDITOR_LOCALES;
 // threading dozens of keys through the shared translations file).
 const LABELS = {
   "en-GB": {
-    heading: "Sections", more: "More", typeLabel: "Section", untitled: "New section", savedAll: "All saved", unsaved: "Unsaved changes", cancel: "Cancel", leaveConfirm: "You have unsaved changes. Leave without saving?", contentLocale: "Content language:", required: "(required)", searchPlaceholder: "Search by section name or ID…", searchLabel: "Search sections", lead: "Reading material you can use in several courses.", newSection: "New section", colTitle: "Name", colVersion: "Version",
+    heading: "Sections", more: "More", tabEdit: "Edit", tabSettings: "Settings", settingsAfterSave: "Save the section first; then owners can be managed here.", typeLabel: "Section", untitled: "New section", savedAll: "All saved", unsaved: "Unsaved changes", cancel: "Cancel", leaveConfirm: "You have unsaved changes. Leave without saving?", contentLocale: "Content language:", required: "(required)", searchPlaceholder: "Search by section name or ID…", searchLabel: "Search sections", lead: "Reading material you can use in several courses.", newSection: "New section", colTitle: "Name", colVersion: "Version",
     colStatus: "Status", statusDraft: "Draft", statusPublished: "Published", statusArchived: "Archived",
     publish: "Publish", unpublish: "Unpublish", archive: "Archive", restore: "Restore",
     showArchived: "Show archived", hideArchived: "Hide archived",
@@ -64,7 +64,7 @@ const LABELS = {
     fieldTitle: "the title", fieldBodyMarkdown: "the content",
   },
   nb: {
-    heading: "Seksjoner", more: "Mer", typeLabel: "Seksjon", untitled: "Ny seksjon", savedAll: "Alt lagret", unsaved: "Ulagrede endringer", cancel: "Avbryt", leaveConfirm: "Du har ulagrede endringer. Vil du forlate sida uten å lagre?", contentLocale: "Innholdsspråk:", required: "(påkrevd)", searchPlaceholder: "Søk på seksjonsnavn eller seksjons-ID…", searchLabel: "Søk i seksjoner", lead: "Lesestoff du kan bruke i flere kurs.", newSection: "Ny seksjon", colTitle: "Navn", colVersion: "Versjon",
+    heading: "Seksjoner", more: "Mer", tabEdit: "Rediger", tabSettings: "Innstillinger", settingsAfterSave: "Lagre seksjonen først, så kan eierne endres her.", typeLabel: "Seksjon", untitled: "Ny seksjon", savedAll: "Alt lagret", unsaved: "Ulagrede endringer", cancel: "Avbryt", leaveConfirm: "Du har ulagrede endringer. Vil du forlate sida uten å lagre?", contentLocale: "Innholdsspråk:", required: "(påkrevd)", searchPlaceholder: "Søk på seksjonsnavn eller seksjons-ID…", searchLabel: "Søk i seksjoner", lead: "Lesestoff du kan bruke i flere kurs.", newSection: "Ny seksjon", colTitle: "Navn", colVersion: "Versjon",
     colStatus: "Status", statusDraft: "Utkast", statusPublished: "Publisert", statusArchived: "Arkivert",
     publish: "Publiser", unpublish: "Avpubliser", archive: "Arkiver", restore: "Gjenopprett",
     showArchived: "Vis arkiverte", hideArchived: "Skjul arkiverte",
@@ -92,7 +92,7 @@ const LABELS = {
     fieldTitle: "tittelen", fieldBodyMarkdown: "innholdet",
   },
   nn: {
-    heading: "Seksjonar", more: "Meir", typeLabel: "Seksjon", untitled: "Ny seksjon", savedAll: "Alt lagra", unsaved: "Ulagra endringar", cancel: "Avbryt", leaveConfirm: "Du har ulagra endringar. Vil du forlate sida utan å lagre?", contentLocale: "Innhaldsspråk:", required: "(påkravd)", searchPlaceholder: "Søk på seksjonsnamn eller seksjons-ID…", searchLabel: "Søk i seksjonar", lead: "Lesestoff du kan bruke i fleire kurs.", newSection: "Ny seksjon", colTitle: "Namn", colVersion: "Versjon",
+    heading: "Seksjonar", more: "Meir", tabEdit: "Rediger", tabSettings: "Innstillingar", settingsAfterSave: "Lagre seksjonen først, så kan eigarane endrast her.", typeLabel: "Seksjon", untitled: "Ny seksjon", savedAll: "Alt lagra", unsaved: "Ulagra endringar", cancel: "Avbryt", leaveConfirm: "Du har ulagra endringar. Vil du forlate sida utan å lagre?", contentLocale: "Innhaldsspråk:", required: "(påkravd)", searchPlaceholder: "Søk på seksjonsnamn eller seksjons-ID…", searchLabel: "Søk i seksjonar", lead: "Lesestoff du kan bruke i fleire kurs.", newSection: "Ny seksjon", colTitle: "Namn", colVersion: "Versjon",
     colStatus: "Status", statusDraft: "Utkast", statusPublished: "Publisert", statusArchived: "Arkivert",
     publish: "Publiser", unpublish: "Avpubliser", archive: "Arkiver", restore: "Gjenopprett",
     showArchived: "Vis arkiverte", hideArchived: "Skjul arkiverte",
@@ -627,6 +627,16 @@ function getFormPage() {
       current: () => editing?.editLocale ?? currentLocale,
       onChange: (loc) => { captureInputs(); editing.editLocale = loc; renderEditorFields(); getFormPage().refreshTitle(); },
     },
+    tabs: {
+      items: () => [
+        { id: "rediger", label: L("tabEdit") },
+        { id: "forhandsvisning", label: L("preview") },
+        { id: "innstillinger", label: L("tabSettings") },
+      ],
+      initial: "rediger",
+      // Forhåndsvisningen tegnes når fanen åpnes — ikke ved hvert tastetrykk i en fane man ikke ser.
+      onChange: (id) => { if (id === "forhandsvisning") refreshPreview(); },
+    },
     body: () => sectionEditorBodyHtml(),
     save: { onSave: () => persistSection(), onCancel: goBackFromEditor },
     afterRender: () => bindEditorHandlers(),
@@ -659,17 +669,18 @@ function sectionActions() {
   ];
 }
 
+// Tre faner (produkteier 13.09): Rediger i full bredde — spaltene side om side ble for smale —
+// Forhåndsvisning for seg, og Innstillinger med eierne.
 function sectionEditorBodyHtml() {
   const sectionId = editing?.id ?? null;
   return `
-    ${sectionId ? `<div id="ownerPanelHost" class="card" style="margin-bottom:var(--space-2)" data-form-untracked></div>` : ""}
-    <div class="section-editor card">
-      <div class="form-field">
-        <label for="titleInput">${escapeHtml(L("titleLabel"))}${editing.editLocale === "nb" ? ` <span class="required-note">${escapeHtml(L("required"))}</span>` : ""}</label>
-        <input type="text" id="titleInput" data-form-title value="${escapeHtml(editing.title[editing.editLocale])}" autocomplete="off" />
-      </div>
-      <div class="editor-cols">
-        <div>
+    <div data-form-tab="rediger">
+      <div class="section-editor card">
+        <div class="form-field">
+          <label for="titleInput">${escapeHtml(L("titleLabel"))}${editing.editLocale === "nb" ? ` <span class="required-note">${escapeHtml(L("required"))}</span>` : ""}</label>
+          <input type="text" id="titleInput" data-form-title value="${escapeHtml(editing.title[editing.editLocale])}" autocomplete="off" />
+        </div>
+        <div class="editor-single">
           <div class="editor-pane-label" style="display:flex;justify-content:space-between;align-items:center;gap:8px">
             <span>${escapeHtml(L("markdown"))}</span>
             <span data-form-untracked>
@@ -679,13 +690,17 @@ function sectionEditorBodyHtml() {
           </div>
           <textarea id="markdownInput">${escapeHtml(editing.body[editing.editLocale])}</textarea>
         </div>
-        <div>
-          <div class="editor-pane-label">${escapeHtml(L("preview"))}</div>
-          <div class="preview-pane" id="previewPane"></div>
-        </div>
+        <input type="file" id="replaceFromFileInput" accept="application/json,.json" hidden data-form-untracked />
+        <span class="editor-status" id="editorStatus"></span>
       </div>
-      <input type="file" id="replaceFromFileInput" accept="application/json,.json" hidden data-form-untracked />
-      <span class="editor-status" id="editorStatus"></span>
+    </div>
+    <div data-form-tab="forhandsvisning" hidden>
+      <div class="card"><div class="preview-pane preview-pane--full" id="previewPane"></div></div>
+    </div>
+    <div data-form-tab="innstillinger" hidden>
+      ${sectionId
+        ? `<div id="ownerPanelHost" class="card" data-form-untracked></div>`
+        : `<div class="card"><p class="small" style="margin:0">${escapeHtml(L("settingsAfterSave"))}</p></div>`}
     </div>`;
 }
 
@@ -807,6 +822,7 @@ function renderEditorFields() {
 
 function schedulePreview() {
   clearTimeout(previewTimer);
+  if (formPage && formPage.tab !== "forhandsvisning") return;
   previewTimer = setTimeout(refreshPreview, 300);
 }
 

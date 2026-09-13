@@ -136,7 +136,7 @@ test("section list renders rows (status badge) without a client-side error", asy
 
 // #662: the markdown input must grow to match the (taller) preview pane instead of staying pinned
 // at its 320px minimum, so the author isn't editing in a small box beside a tall preview.
-test("section editor: markdown input grows to match a taller preview pane", async ({ page }) => {
+test("section editor: full-width editor in Rediger, preview in its own tab", async ({ page }) => {
   await mockBaseApis(page);
   await page.route("**/api/admin/content/sections", (route: Route) =>
     route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ sections: [] }) }),
@@ -154,19 +154,15 @@ test("section editor: markdown input grows to match a taller preview pane", asyn
   await page.getByRole("button", { name: /Ny seksjon/ }).click();
   await page.locator("#markdownInput").fill("# Hei\n\nNoe innhold.");
 
-  // Preview renders the tall mocked HTML.
+  // #1046 nivå to (13.09): editoren står alene i full bredde i Rediger; forhåndsvisningen er en egen
+  // fane som tegnes når den åpnes. Editoren skal være romslig (ikke 320 px), og forhåndsvisningen
+  // skal vise det man skrev.
+  const ta = await page.locator("#markdownInput").boundingBox();
+  expect(ta && ta.height > 320).toBe(true);
+  await page.locator('[data-form-tab-btn="forhandsvisning"]').click();
+  await expect(page.locator("#previewPane")).toBeVisible();
   await expect(page.locator("#previewPane")).toContainText("Preview line", { timeout: 5000 });
-
-  // The preview is taller than the 320px floor, and the textarea has grown to (about) match it —
-  // not stuck at 320. Allow a small tolerance for the label-row height difference between columns.
-  await expect
-    .poll(async () => {
-      const ta = await page.locator("#markdownInput").boundingBox();
-      const pv = await page.locator("#previewPane").boundingBox();
-      if (!ta || !pv) return -1;
-      return pv.height > 320 && Math.abs(ta.height - pv.height) <= 48 ? 1 : 0;
-    })
-    .toBe(1);
+  await expect(page.locator("#markdownInput")).toBeHidden();
 });
 
 // #540: the section editor must show the blocking consent dialog when consent is not yet

@@ -1122,9 +1122,7 @@ async function renderDetailView(courseId) {
 function courseDetailBodyHtml() {
   const { courseId, localeValues, certLevel, enrollmentPolicy, discussionsEnabled } = courseDetail;
   return `<div class="detail-layout">
-
-      <div class="detail-section" id="ownerPanelHost"></div>
-
+    <div data-form-tab="rediger">
       <div class="detail-section">
         <h2 class="detail-section-title">Kursdetaljer</h2>
 
@@ -1157,20 +1155,6 @@ function courseDetailBodyHtml() {
           </select>
         </div>
 
-        <div class="form-field" style="margin-top: var(--space-2)">
-          <label for="enrollmentPolicy">Synlighet</label>
-          <select id="enrollmentPolicy">
-            <option value="OPEN"${enrollmentPolicy !== "RESTRICTED" ? " selected" : ""}>Åpen – synlig for alle deltakere</option>
-            <option value="RESTRICTED"${enrollmentPolicy === "RESTRICTED" ? " selected" : ""}>Begrenset – kun tildelte (individuelt eller via klasse)</option>
-          </select>
-        </div>
-
-        <div class="form-field" style="margin-top: var(--space-2)">
-          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
-            <input type="checkbox" id="discussionsEnabled"${discussionsEnabled ? " checked" : ""} />
-            Diskusjon på dette kurset (deltakere kan stille spørsmål og diskutere)
-          </label>
-        </div>
       </div>
 
       <div class="detail-section">
@@ -1194,6 +1178,27 @@ function courseDetailBodyHtml() {
       </div>
 
       <div id="formErrorBanner" hidden></div>
+    </div>
+    <div data-form-tab="innstillinger" hidden>
+      ${courseId ? `<div class="detail-section" id="ownerPanelHost" data-form-untracked></div>` : ""}
+      <div class="detail-section">
+        <h2 class="detail-section-title">Innstillinger</h2>
+        <div class="form-field">
+          <label for="enrollmentPolicy">Synlighet</label>
+          <select id="enrollmentPolicy">
+            <option value="OPEN"${enrollmentPolicy !== "RESTRICTED" ? " selected" : ""}>Åpen – synlig for alle deltakere</option>
+            <option value="RESTRICTED"${enrollmentPolicy === "RESTRICTED" ? " selected" : ""}>Begrenset – kun tildelte (individuelt eller via klasse)</option>
+          </select>
+        </div>
+        <div class="form-field" style="margin-top: var(--space-2)">
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+            <input type="checkbox" id="discussionsEnabled"${discussionsEnabled ? " checked" : ""} />
+            Diskusjon på dette kurset (deltakere kan stille spørsmål og diskutere)
+          </label>
+        </div>
+        ${courseId ? "" : `<p class="small" style="margin:var(--space-2) 0 0">Lagre kurset først, så kan eierne endres her.</p>`}
+      </div>
+    </div>
     </div>`;
 }
 
@@ -1248,6 +1253,7 @@ function getCourseFormPage() {
       current: () => activeDetailLocale,
       onChange: (loc) => switchDetailLocale(loc),
     },
+    tabs: { items: () => [{ id: "rediger", label: "Rediger" }, { id: "innstillinger", label: "Innstillinger" }], initial: "rediger" },
     body: () => courseDetailBodyHtml(),
     save: { onSave: () => saveCourse(courseDetail?.courseId ?? null) },
     afterRender: () => bindCourseDetail(),

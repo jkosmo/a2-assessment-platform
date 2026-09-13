@@ -48,6 +48,8 @@ test("modul-avansert: owner panel renders in the module state-rail host", async 
 
   await page.goto("/admin-content/module/module-1/advanced");
 
+  // #1046 niva to (13.09): eierne ligger under Innstillinger-fanen.
+  await page.locator("#tabSettings").click();
   const panel = page.locator("#moduleOwnerPanelHost .owner-panel");
   await expect(panel).toBeVisible();
   // QA r4: compact by default — owner name shown inline, full list only after expanding.
@@ -88,6 +90,7 @@ test("klasse: owner panel renders in the class detail view", async ({ page }) =>
 
   await page.goto("/deltakere/klasser");
   await page.locator('[data-action="open"][data-id="cls-1"]').click();
+  await page.locator('[data-form-tab-btn="innstillinger"]').click();
 
   const panel = page.locator("#classOwnerPanelHost .owner-panel");
   await expect(panel).toBeVisible();
@@ -138,6 +141,8 @@ test("seksjon: owner panel renders in the section editor for an existing section
   await mockOwnerApi(page, "SECTION", "sec-1");
 
   await page.goto("/admin-content/sections?id=sec-1");
+  // #1046 niva to (13.09): eierne ligger under Innstillinger-fanen.
+  await page.locator('[data-form-tab-btn="innstillinger"]').click();
 
   const panel = page.locator("#ownerPanelHost .owner-panel");
   await expect(panel).toBeVisible();

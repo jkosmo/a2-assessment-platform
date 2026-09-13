@@ -321,6 +321,7 @@ function getFormPage() {
         archived ? `<button class="row-action-btn destructive" data-action="delete">Slett</button>` : "",
       ];
     },
+    tabs: { items: () => [{ id: "rediger", label: "Rediger" }, { id: "innstillinger", label: "Innstillinger" }], initial: "rediger" },
     body: () => classFormBodyHtml(),
     save: { onSave: () => saveClassForm() },
     afterRender: () => bindClassFormHandlers(),
@@ -384,7 +385,7 @@ function classFormBodyHtml() {
   const courseOptions = st.allCourses.filter((c) => !assignedIds.has(c.id) && !c.archivedAt).map((c) => `<option value="${escapeHtml(c.id)}">${escapeHtml(courseTitle(c.displayTitle))}</option>`).join("");
   const readOnly = Boolean(k?.isSystem);
   return `
-    ${isNew ? "" : `<div class="detail-section" id="classOwnerPanelHost" data-form-untracked></div>`}
+    <div data-form-tab="rediger">
     <div class="detail-section">
       <h2>Klasse</h2>
       <div class="form-field">
@@ -418,7 +419,13 @@ function classFormBodyHtml() {
         <button id="assignCourseBtn" class="btn btn-secondary" style="width:auto">Tildel kurs</button>
       </div>
       <p style="font-size:12px;color:var(--color-meta);margin:6px 0 0">Fristen brukes til automatiske påminnelser til deltakerne (frist nærmer seg / forfalt).</p>
-    </div>`}`;
+    </div>`}
+    </div>
+    <div data-form-tab="innstillinger" hidden>
+      ${isNew
+        ? `<div class="detail-section"><p class="small" style="margin:0">Lagre klassen først, så kan eierne endres her.</p></div>`
+        : `<div class="detail-section" id="classOwnerPanelHost" data-form-untracked></div>`}
+    </div>`;
 }
 
 async function saveClassForm() {

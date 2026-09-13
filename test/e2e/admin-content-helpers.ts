@@ -226,6 +226,8 @@ export async function clickEnabledButton(page: Page, label: string | RegExp) {
     .locator("button:enabled")
     .filter(typeof label === "string" ? { hasText: label } : { hasText: label })
     .last();
+  // #1046 D5: knappen kan ligge under «Mer» i en handlingsrad — åpne menyen først.
+  await revealRowAction(page, button);
   await expect(button).toBeVisible();
   await button.click();
 }

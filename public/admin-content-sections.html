@@ -46,6 +46,10 @@
       /* #1046 nivå to: hode, språkpiller, felt (.form-field) og lagrelinje er den felles skjemasida (form-page.js + shared.css). */
       .section-editor { max-width: none; }
       .section-editor > .form-field { max-width: 720px; }
+      /* Tre faner (13.09): editoren i full bredde; forhåndsvisningen for seg. */
+      .editor-single { display: flex; flex-direction: column; min-width: 0; }
+      .editor-single textarea { width: 100%; min-height: 60vh; padding: var(--space-2); border: 1px solid var(--color-border-soft); border-radius: var(--radius-card); font-family: var(--font-mono, monospace); font-size: 13px; line-height: 1.5; resize: vertical; box-sizing: border-box; }
+      .preview-pane--full { max-width: 760px; margin: 0 auto; }
       .editor-cols { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-2); align-items: stretch; }
       @media (max-width: 760px) { .editor-cols { grid-template-columns: 1fr; } }
       /* #662: each column is a flex column so the markdown textarea and the preview pane fill the

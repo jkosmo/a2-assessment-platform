@@ -1120,8 +1120,9 @@ test.describe("admin content browser coverage", () => {
 
     // And the workspace is still usable — the menu comes back rather than dead-ending on a
     // download.
+    // (Knappen ligger under «Mer» i handlingsraden; åpne menyen for å se at den er der og virker.)
     await expect(
-      page.getByRole("button", { name: /Eksporter modulpakke|Export module package/ }).last(),
+      await revealRowAction(page, page.locator("#workspaceActions button").filter({ hasText: /Eksporter modulpakke|Export module package/ }).last()),
     ).toBeEnabled();
   });
 
@@ -4122,6 +4123,8 @@ test.describe("admin content browser coverage", () => {
     });
 
     await page.goto("/admin-content/courses/course-1");
+    // #1046 nivå to (13.09): synlighet ligger under Innstillinger-fanen.
+    await page.locator('[data-form-tab-btn="innstillinger"]').click();
 
     const select = page.locator("#enrollmentPolicy");
     await expect(select).toBeVisible();

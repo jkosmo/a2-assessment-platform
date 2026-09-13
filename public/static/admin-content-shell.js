@@ -1,4 +1,6 @@
 import { escapeHtml } from "./html-escape.js";
+import { rowActionsHtml, installRowMoreMenus } from "./row-actions.js";
+import { lifecycleBadge } from "./content-status-badge.js";
 import {
   supportedLocales,
   localeLabels,
@@ -1275,12 +1277,12 @@ function updateStateRail() {
   // the frequent updateStateRail calls don't re-fetch/reset it; hide when no module is loaded.
   const ownerHost = document.getElementById("moduleOwnerPanelHost");
   if (ownerHost) {
+    // #1046 (13.09): panelet ligger under Innstillinger — synlig bare når den fanen er valgt OG en modul er lastet.
+    ownerHost.hidden = !hasModule || activeTab !== "settings";
     if (!hasModule) {
-      ownerHost.hidden = true;
       ownerHost.dataset.moduleId = "";
     } else if (ownerHost.dataset.moduleId !== selectedModuleId) {
       ownerHost.dataset.moduleId = selectedModuleId;
-      ownerHost.hidden = false;
       renderOwnerPanel({ container: ownerHost, contentType: "MODULE", contentId: selectedModuleId, getHeaders, t }).catch(() => {});
     }
   }
@@ -1302,6 +1304,23 @@ function updateStateRail() {
     h1.textContent = moduleName || t("shell.newModule.defaultTitle");
     h1.classList.toggle("is-untitled", !moduleName);
     h1.removeAttribute("data-i18n");
+  }
+
+  // #1046 (13.09): statusmerket og «Alt lagret / Ulagrede endringer» i hodet, som på kurs, seksjon
+  // og klasse. Tilstandslinja under bærer versjonsfaktaene.
+  const lifecycleBadgeHost = document.getElementById("moduleLifecycleBadge");
+  const dirtyBadge = document.getElementById("moduleDirtyBadge");
+  if (lifecycleBadgeHost) {
+    const lifecycle = bundle?.module?.archivedAt ? "archived"
+      : chains?.hasLiveVersion ? (chains.hasDraftVersion ? "published_with_draft" : "published")
+      : "draft";
+    lifecycleBadgeHost.innerHTML = bundle ? lifecycleBadge({ lifecycle }, t) : "";
+  }
+  if (dirtyBadge) {
+    dirtyBadge.hidden = !bundle && !sessionDraft;
+    dirtyBadge.textContent = hasUnsaved ? t("stateRail.changes.unsaved") : t("stateRail.changes.saved");
+    dirtyBadge.classList.toggle("is-dirty", hasUnsaved);
+    dirtyBadge.classList.toggle("is-clean", !hasUnsaved);
   }
 
   if (srEditing) {
@@ -4522,20 +4541,27 @@ function enterPreviewEditMode({ force = false } = {}) {
  * They live in one place now, and that place does not scroll. The log below keeps what is actually
  * a conversation: questions, instructions, generated results, status.
  */
+// #1046 (13.09): handlingsraden i hodet, med samme regel som listene og de andre skjemasidene —
+// maks fire i raden, resten under «Mer» (rowActionsHtml). Knappene er HTML, så handlingene slås
+// opp via indeks ved klikk (én lytter, satt én gang).
+let workspaceActionChoices = [];
 function renderWorkspaceActions(actions) {
   if (!workspaceActionsBar) return;
-  workspaceActionsBar.innerHTML = "";
   const live = (actions ?? []).filter(Boolean);
+  workspaceActionChoices = live;
   setHidden(workspaceActionsBar, live.length === 0);
-  if (live.length === 0) return;
-
-  for (const choice of live) {
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = "workspace-action-btn";
-    btn.textContent = resolveChoiceLabel(choice);
-    btn.addEventListener("click", () => { choice.action?.(); });
-    workspaceActionsBar.appendChild(btn);
+  if (live.length === 0) { workspaceActionsBar.innerHTML = ""; return; }
+  workspaceActionsBar.innerHTML = rowActionsHtml(
+    live.map((choice, i) => `<button type="button" class="row-action-btn workspace-action-btn" data-ws-action="${i}">${escapeHtml(resolveChoiceLabel(choice))}</button>`),
+    { moreLabel: "Mer" },
+  );
+  if (!workspaceActionsBar.dataset.bound) {
+    workspaceActionsBar.dataset.bound = "1";
+    workspaceActionsBar.addEventListener("click", (event) => {
+      const btn = event.target instanceof Element ? event.target.closest("[data-ws-action]") : null;
+      if (!btn) return;
+      workspaceActionChoices[Number(btn.dataset.wsAction)]?.action?.();
+    });
   }
 }
 
@@ -5000,6 +5026,8 @@ function applyTabState(tab) {
   // are .card (display:block), so a class-based toggle loses the cascade (CLAUDE.md).
   setHidden(tabPanelModule, tab === "settings");
   setHidden(tabPanelSettings, tab !== "settings");
+  const ownerHostEl = document.getElementById("moduleOwnerPanelHost");
+  if (ownerHostEl) ownerHostEl.hidden = tab !== "settings" || !ownerHostEl.dataset.moduleId;
   const chatPane = document.querySelector(".chat-pane");
   setHidden(chatPane, tab === "preview");
   tabPanelModule?.classList.toggle("workspace-shell--preview-only", tab === "preview");

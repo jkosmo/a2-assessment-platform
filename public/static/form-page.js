@@ -18,6 +18,7 @@
 import { escapeHtml } from "./html-escape.js";
 import { rowActionsHtml, installRowMoreMenus } from "./row-actions.js";
 import { lifecycleBadge } from "./content-status-badge.js";
+import { setHidden } from "./dom-visibility.js";
 
 const resolve = (x) => (typeof x === "function" ? x() : x);
 
@@ -33,7 +34,10 @@ const resolve = (x) => (typeof x === "function" ? x() : x);
  * @property {(t: (k: string) => string) => string} [statusHtml]  egen status-HTML i stedet for lifecycleBadge
  * @property {() => Array<string|null|undefined|false>} [actions]  handlingsraden (ferdig HTML per knapp)
  * @property {{ locales: string[], labels: Record<string,string>, current: () => string, onChange: (l: string) => void, required?: string }} [languages]
- * @property {() => string} body         sidens eget skjema (HTML)
+ * @property {() => string} body         sidens eget skjema (HTML). Med `tabs` legges hver fanes innhold i
+ *   en beholder med `data-form-tab="<id>"`; sida velger selv hva som ligger hvor.
+ * @property {{ items: () => Array<{ id: string, label: string }>, initial?: string, onChange?: (id: string) => void }} [tabs]
+ *   fanelinje under hodet (Rediger · Forhåndsvisning · Innstillinger). Fanebytte er ikke navigering og spør ikke.
  * @property {{ onSave: () => Promise<boolean|void>, onCancel?: () => void, hidden?: boolean }} [save]
  * @property {(root: HTMLElement) => void} [afterRender]
  * @property {(k: string) => string} [t]  oversetter for lifecycleBadge
@@ -42,7 +46,7 @@ const resolve = (x) => (typeof x === "function" ? x() : x);
 /** @param {FormPageConfig} config */
 export function createFormPage(config) {
   const { host } = config;
-  const state = { dirty: false, saving: false };
+  const state = { dirty: false, saving: false, tab: config.tabs?.initial ?? null };
   let guardInstalled = false;
 
   installRowMoreMenus();
@@ -83,6 +87,27 @@ export function createFormPage(config) {
     </div>`;
   }
 
+  // Fanelinja (variant A, produkteier 13.09): som nivå to i toppmenyen, rett under hodet. Alle
+  // fanenes innhold ligger i DOM-en; bytte viser og skjuler, så ingenting går tapt mellom fanene.
+  function tabsHtml() {
+    if (!config.tabs) return "";
+    const items = config.tabs.items();
+    if (!state.tab || !items.some((t) => t.id === state.tab)) state.tab = items[0]?.id ?? null;
+    return `<div class="form-page-tabs" role="tablist">${items.map((t) =>
+      `<button type="button" role="tab" class="form-page-tab${t.id === state.tab ? " active" : ""}" data-form-tab-btn="${escapeHtml(t.id)}" aria-selected="${t.id === state.tab}">${escapeHtml(t.label)}</button>`).join("")}</div>`;
+  }
+
+  function applyTab() {
+    if (!config.tabs) return;
+    for (const b of host.querySelectorAll("[data-form-tab-btn]")) {
+      const on = b.dataset.formTabBtn === state.tab;
+      b.classList.toggle("active", on);
+      b.setAttribute("aria-selected", String(on));
+    }
+    // setHidden, ikke bare attributtet: paneler med egen display-regel ville ellers slått `hidden` (#975).
+    for (const panel of host.querySelectorAll("[data-form-tab]")) setHidden(panel, panel.dataset.formTab !== state.tab);
+  }
+
   function saveBarHtml() {
     if (!config.save || config.save.hidden) return "";
     const T = texts();
@@ -94,7 +119,8 @@ export function createFormPage(config) {
   }
 
   function render() {
-    host.innerHTML = `${headerHtml()}${languagesHtml()}<div class="form-page-body">${config.body()}</div>${saveBarHtml()}`;
+    host.innerHTML = `${headerHtml()}${languagesHtml()}${tabsHtml()}<div class="form-page-body">${config.body()}</div>${saveBarHtml()}`;
+    applyTab();
     reflectDirty();
     config.afterRender?.(host);
   }
@@ -176,6 +202,13 @@ export function createFormPage(config) {
       return;
     }
     if (target.closest("#formSaveBtn")) { save(); return; }
+    const tabBtn = target.closest("[data-form-tab-btn]");
+    if (tabBtn && config.tabs) {
+      state.tab = tabBtn.dataset.formTabBtn;
+      applyTab();
+      config.tabs.onChange?.(state.tab);
+      return;
+    }
     const pill = target.closest("[data-form-locale]");
     if (pill && config.languages) {
       config.languages.onChange(pill.dataset.formLocale);
@@ -209,5 +242,8 @@ export function createFormPage(config) {
     confirmLeave,
     save,
     installGuards,
+    /** Bytt fane fra sida (f.eks. fra en lenke). */
+    showTab(id) { if (config.tabs) { state.tab = id; applyTab(); config.tabs.onChange?.(id); } },
+    get tab() { return state.tab; },
   };
 }

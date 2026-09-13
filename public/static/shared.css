@@ -1050,16 +1050,15 @@ dialog::backdrop {
 }
 
 /* ── State rail ───────────────────────────────────────────────────────────── */
+/* #1046 (13.09): tilstandslinja er ikke lenger en egen uthevet boks — status og «Alt lagret» står i
+   hodet som på de andre skjemasidene; her står versjonsfaktaene som småtekst. */
 .state-rail {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 6px 16px;
-  padding: 8px 12px;
-  margin-bottom: var(--space-2);
-  background: var(--color-module-summary-bg);
-  border: 1px solid var(--color-module-summary-border);
-  border-radius: var(--radius-card);
+  padding: 0;
+  margin: -4px 0 var(--space-2);
 }
 
 /* #975: her sto `.state-rail[hidden] { display: none; }` — en lapp som patchet symptomet av at
@@ -1383,6 +1382,7 @@ dialog::backdrop {
    språkpiller og lagrelinje for det åpnede elementet. Sidene skal ikke ha egne kopier. */
 .form-page-head { margin-bottom: var(--space-2); }
 .form-page-title-row { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-2); flex-wrap: wrap; margin-top: 6px; }
+.form-page-title { flex: 1 1 320px; min-width: 0; }
 .form-page-type { display: block; font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--color-meta); }
 .form-page-title h1 { margin: 2px 0 6px; font-size: 22px; line-height: 1.25; text-wrap: balance; }
 .form-page-title h1.is-untitled { color: var(--color-meta); font-weight: 500; }
@@ -1397,6 +1397,13 @@ dialog::backdrop {
 .content-locale-pill:hover:not(.active) { border-color: var(--color-link-hover-border); color: var(--color-text); }
 .content-locale-required { font-weight: 500; opacity: 0.8; }
 .form-page-body > .card + .card, .form-page-body > .detail-section + .detail-section { margin-top: var(--space-2); }
+/* Fanelinja (variant A): som nivå to i toppmenyen. Fanene er et nivå til, og ser slik ut. */
+.form-page-tabs { display: flex; gap: 0; border-bottom: 1px solid var(--color-table-wrap-border); margin: 0 0 var(--space-2); }
+.form-page-tab { width: auto; min-height: 0; padding: 8px 14px; font-size: 14px; font-weight: 600; font-family: inherit; color: var(--color-meta); background: none; border: 0; border-bottom: 2px solid transparent; margin-bottom: -1px; border-radius: 0; cursor: pointer; }
+.form-page-tab:hover { color: var(--color-text); }
+.form-page-tab.active { color: var(--color-link-active); border-bottom-color: var(--color-blue); }
+.form-page-tab:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 2px; }
+/* Fanepanelene skjules med setHidden() (inline display) — ingen [hidden]-lapp her (#975). */
 .form-save-bar { display: flex; align-items: center; justify-content: flex-end; gap: var(--space-2); margin-top: var(--space-3); padding-top: var(--space-2); border-top: 1px solid var(--color-border-soft); }
 .form-save-state { margin-right: auto; font-size: 13px; color: var(--color-meta); }
 .form-cancel-link { font-size: 14px; color: var(--color-meta); text-decoration: none; }

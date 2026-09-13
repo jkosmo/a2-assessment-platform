@@ -30,9 +30,10 @@ describe("admin content DOM accessibility contracts", () => {
     expect(queryAllByRole(body, "tablist", { name: "Modulvisning" })).toHaveLength(1);
 
     const tabs = queryAllByRole(body, "tab");
+    // #1046 (13.09): samme rekkefølge som seksjonene — Rediger først.
     expect(tabs.map((tab) => tab.textContent.trim())).toEqual([
-      "Forhåndsvisning",
       "Rediger",
+      "Forhåndsvisning",
       "Innstillinger",
     ]);
     // Rediger is the default view, and each tab points at the panel it controls.
