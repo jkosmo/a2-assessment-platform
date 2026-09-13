@@ -2,6 +2,68 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.68.0 - 2026-09-13
+
+38 commits, ingen migrasjoner, ingen nye miljøvariabler. Tråden: **ett brukergrensesnitt for
+forfatterflatene** (#1046) — samme liste, samme skjema, samme ord — og fagansvarlig får se
+Resultater for egne kurs (#1058).
+
+### #1046 — listenivået: én listeside
+
+Moduler, Kurs, Seksjoner og Klasser var fire håndskrevne lister med tre ulike statusformer fra
+API-et. Nå én delt listeside (`public/static/list-page.js`: hode, søk, filterpiller, kursfilter,
+sorterbar tabell, tomtilstand) og ett `lifecycle`-felt fra tjeneren (`src/modules/content/
+lifecycle.ts`) — klienten regner ikke ut tilstand lenger. Samme ord overalt («Navn»,
+«Skrivebeskyttet», «Nyere utkast»), maks fire knapper i raden og resten under «Mer», Dupliser/
+Eksporter også for ikke-eiere på seksjoner, Slett bare på den arkiverte seksjonen.
+
+### #1046 — skjemanivået: én skjemaside
+
+Kurs, seksjon og klasse deler nå `public/static/form-page.js`: tilbake-lenke og handlingsrad på
+én linje, typen som merke over navnet, statusmerke + «Alt lagret / Ulagrede endringer», Lagre og
+Avbryt først i raden (grønn/rød når noe er ulagret), språkpiller med bokmål først og «(påkrevd)»,
+faner som nivå to (Rediger · Forhåndsvisning · Innstillinger). Å lage nytt = åpne et tomt element;
+det lages ved første Lagre. Fanebytte er ikke navigering og spør ikke. Én «rad i skjema» og én
+«legg til»-linje for kursets innhold og klassens kurs/medlemmer. Bokmål er det påkrevde
+innholdsspråket; lesing faller tilbake til organisasjonens standardspråk før engelsk.
+
+### #1046 — modulen
+
+Samme hode og faner som de andre. Ny modul åpner på Innstillinger (navn, modultype, nivå); Lagre
+oppretter modulen og går til Rediger med feltene for valgt type. Navnet er et vanlig felt.
+Spørsmål legges til og fjernes i skjemaet. «Generer innhold» og «Be om endring» er dialoger — type
+og nivå hentes fra Innstillinger og spørres ikke om; «Be om endring» har eksempler å trykke på.
+Begge sier at resultatet legges i skjemaet som ulagret utkast. Samtaleruta åpnes bare når
+assistenten spør; framdrift og utfall kommer som toast. GDPR-varselet er én linje under
+oppgavefeltet. Død samtalekode (spørsmålskjeden, tilstandslinja, dialogen «Ulagrede endringer»)
+er fjernet, med en vakt mot udefinerte navn i klientfilene.
+
+### #1046 — Status og Resultater som lister
+
+Samme hode og filterrad som listesidene: kursvelger med navn (ikke ID), søk over moduler,
+nøkkeltall som én linje, `.list-table`, tom tabell = bare teksten, «Eksporter (CSV)» som én meny.
+Kursfilteret gjaldt før bare kursrapporten — nå avgrenser «Kurs: X» også modultabellen.
+
+### #1058 — Resultater for fagansvarlig
+
+`/api/reports` er montert for administrator, rapportleser og fagansvarlig. Fagansvarlig får de seks
+rapportene Resultater bruker (også personnivå, jf. revisjonsspor-avgjørelsen 23.08), avgrenset til
+kurs hen eier (`src/modules/reporting/scope.ts`). Analyse på tvers av organisasjonen krever
+fortsatt `REPORT_READERS`. Kurs utenfor settet gir tom rapport, ikke 403.
+
+### Mindre
+
+- #977 modulsøket i kursbyggeren kan betjenes med tastatur.
+- #990 rapport over rader som kan være seed-skadet og delvis oversatt.
+- #995 modulimport rapporterer holdt-tilbake-flagget.
+- #915 «Behold kriteriene» lager en ny rubrikkversjon.
+- #931 fem av sju restfunn fra prod-gjennomgangen 18.08.
+- #1055 kompleksitetsrapport.
+- Resultater/Status har toast-stil; «Last opp bilde» på seksjon er slått av til seksjonen er lagret.
+
+Gjenstår i #1046: steg 2 av samtaleryddingen (planen inn i dialogen, samtaleruta bort) og
+modulskallet på `form-page.js`.
+
 ## 2.67.0 - 2026-09-12
 
 Seks commits, ingen migrasjoner. Tråden: **regler som sto på flere steder og ble håndhevet på
