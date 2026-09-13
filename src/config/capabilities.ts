@@ -100,11 +100,13 @@ export const API_ROUTE_CAPABILITIES = [
   {
     id: "reports",
     prefix: "/api/reports",
-    roles: [AppRole.ADMINISTRATOR, AppRole.REPORT_READER],
+    // #1058: SMO er med i monteringen, men ser bare Resultater-rapportene, avgrenset til egne kurs.
+    // Rutene for analyse på tvers av organisasjonen krever REPORT_READERS inne i ruteren.
+    roles: [AppRole.ADMINISTRATOR, AppRole.REPORT_READER, AppRole.SUBJECT_MATTER_OWNER],
   },
   {
     // #498: teacher/SMO cohort-status dashboard. Same audience as the «Deltakere → Resultater» sub-tab
-    // (SMO + ADMINISTRATOR + REPORT_READER) — SMO is intentionally included here (unlike /api/reports).
+    // (SMO + ADMINISTRATOR + REPORT_READER). #1058: SMO er nå med på /api/reports også (egne kurs).
     id: "cohort_dashboard",
     prefix: "/api/cohort-status",
     roles: [AppRole.SUBJECT_MATTER_OWNER, AppRole.ADMINISTRATOR, AppRole.REPORT_READER],

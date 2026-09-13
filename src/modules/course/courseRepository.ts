@@ -352,12 +352,13 @@ export function createCourseRepository(client: CourseRepositoryClient = prisma) 
       }));
     },
 
-    async findPublishedCoursesWithModuleDetails(filters: Pick<ReportFilters, "courseId"> = {}) {
+    async findPublishedCoursesWithModuleDetails(filters: { courseIds?: string[] } = {}) {
       const courses = await client.course.findMany({
         where: {
           publishedAt: { not: null },
           archivedAt: null,
-          ...(filters.courseId ? { id: filters.courseId } : {}),
+          // #1058: kallerens kurs (valgt kurs ∩ tillatte kurs); undefined = alle.
+          ...(filters.courseIds ? { id: { in: filters.courseIds } } : {}),
         },
         orderBy: { publishedAt: "asc" },
         include: {

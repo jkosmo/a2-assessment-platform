@@ -167,6 +167,15 @@ describe("RBAC - /api/reports", () => {
   it("403 - no role", async () => {
     expect403(await supertest(app).get("/api/reports").set(NO_ROLE));
   });
+
+  // #1058: SMO er med i monteringen for Resultater-rapportene (egne kurs), men analysen på tvers av
+  // organisasjonen krever fortsatt REPORT_READERS — inne i ruteren, per rute.
+  it.each(["/api/reports/appeals", "/api/reports/mcq-quality", "/api/reports/manual-review-queue", "/api/reports/recertification", "/api/reports/analytics/trends", "/api/reports/analytics/cohorts", "/api/reports/analytics/semantic-model", "/api/reports/analytics/data-quality"])(
+    "403 - SUBJECT_MATTER_OWNER on org-wide %s",
+    async (path) => {
+      expect403(await supertest(app).get(path).set(HEADERS_BY_ROLE.SUBJECT_MATTER_OWNER));
+    },
+  );
 });
 
 describe("RBAC - /api/courses", () => {

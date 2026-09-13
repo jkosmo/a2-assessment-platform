@@ -321,14 +321,15 @@ const rapporter = lagLokalisertRessurs({
   },
 });
 
-const REPORT_READER_ROLES = ["ADMINISTRATOR", "REPORT_READER"];
+// #1058: fagansvarlig ser Resultater for egne kurs (tjeneren avgrenser).
+const REPORT_READER_ROLES = ["ADMINISTRATOR", "REPORT_READER", "SUBJECT_MATTER_OWNER"];
 function canReadReports() {
   const roles = String(rolesInput?.value ?? "").split(",").map((r) => r.trim().toUpperCase());
   return roles.some((r) => REPORT_READER_ROLES.includes(r));
 }
 
 async function loadResults() {
-  // Samme rollesett som /api/reports (src/auth/roleSets.ts REPORT_READERS). Uten tilgang vises
+  // Samme rollesett som /api/reports er montert med (src/config/capabilities.ts). Uten tilgang vises
   // forklaringen der tabellen skulle stått — ikke en 403-toast nederst på sida.
   const noAccess = document.getElementById("resultsNoAccess");
   const allowed = canReadReports();
@@ -529,11 +530,12 @@ for (const felt of [filterCourseId, filterDateFrom, filterDateTo]) {
 }
 resultsSearch?.addEventListener("input", () => renderCompletion(latestPassRatesRows, latestCompletionRows));
 
-// #1046 J3: kursvelgeren — navn, ikke ID. Samme kall som Status bruker; leses av samme roller.
+// #1046 J3: kursvelgeren — navn, ikke ID. #1058: fra rapport-API-et, som kjenner kallerens
+// avgrensning — fagansvarlig får bare kursene hen eier.
 async function loadCourseOptions() {
   if (!filterCourseId) return;
   try {
-    const data = await apiFetch("/api/cohort-status/courses", headers);
+    const data = await apiFetch("/api/reports/courses/options", headers);
     const current = filterCourseId.value;
     const options = (data.courses ?? []).map((c) => `<option value="${escapeHtmlR(c.id)}">${escapeHtmlR(c.title ?? c.id)}${c.archived ? ` (${escapeHtmlR(t("results.filters.archived"))})` : ""}</option>`).join("");
     filterCourseId.innerHTML = `<option value="">${escapeHtmlR(t("results.filters.allCourses"))}</option>${options}`;

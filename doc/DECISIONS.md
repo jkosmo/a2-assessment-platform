@@ -706,3 +706,9 @@ kompleksiteten nede. Sak: #1058.
 Konkret: de seks rapportene Resultater bruker (og eksportene av dem) åpnes for SMO filtrert på
 eierskap (ContentOwner på kurset, og modulene i kurset). Administrator og rapportleser ser alt som før.
 Resten av `/api/reports` er uendret.
+
+Gjennomført 13.09 (#1058): `/api/reports` er montert for administrator, rapportleser og fagansvarlig;
+fagansvarlig får bare de seks Resultater-rapportene (og eksportene av dem), avgrenset til kurs hen eier
+(`src/modules/reporting/scope.ts`). Rutene for analyse på tvers av organisasjonen krever fortsatt
+`REPORT_READERS`. Et kurs utenfor settet gir tom rapport, ikke 403. Samtidig rettet: kursfilteret på
+Resultater gjaldt bare kursrapporten — modultabellene ignorerte det. Nå avgrenser «Kurs: X» alt.

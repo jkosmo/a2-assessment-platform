@@ -21,8 +21,28 @@ import {
 } from "../modules/reporting/index.js";
 import { getCourseLearnerReport, getCourseReport } from "../modules/course/index.js";
 import { requestLocale } from "../i18n/requestLocale.js";
+import { requireAnyRole } from "../auth/authorization.js";
+import { REPORT_READERS } from "../auth/roleSets.js";
+import { resolveAllowedCourseIds } from "../modules/reporting/scope.js";
+import { prisma } from "../db/prisma.js";
+import { localizeContentText } from "../i18n/content.js";
+import type { Request } from "express";
 
 const reportsRouter = Router();
+
+// #1058: /api/reports er montert for administrator, rapportleser OG fagansvarlig (SMO). SMO ser bare
+// de seks rapportene Resultater bruker, avgrenset til kurs hen eier. Resten av rapportene er analyse
+// på tvers av organisasjonen og krever fortsatt REPORT_READERS.
+const orgWideOnly = requireAnyRole([...REPORT_READERS]);
+const RESULTS_EXPORT_TYPES = new Set([
+  "completion", "pass-rates", "module-summary", "module-learners", "course-summary", "course-learners",
+]);
+
+/** Legger kallerens kursavgrensning på filtrene (null = alle kurs). */
+async function scoped(request: Request, filters: ReportFilters): Promise<ReportFilters> {
+  const allowed = await resolveAllowedCourseIds({ roles: request.context?.roles, userId: request.context?.userId });
+  return allowed === null ? filters : { ...filters, allowedCourseIds: allowed };
+}
 
 const reportQuerySchema = z.object({
   moduleId: z.string().trim().min(1).optional(),
@@ -92,6 +112,30 @@ function avvisValg(next: NextFunction, field: "selectedCourseId" | "selectedModu
   next(new DomainRuleError("report_selection_required", `A ${field} is required.`, { field }));
 }
 
+// #1058: kursvelgeren på Resultater — kursene kalleren kan se, med navn på leserens språk. Samme
+// form som /api/cohort-status/courses, men avgrenset: SMO får bare egne kurs.
+reportsRouter.get("/courses/options", async (request, response, next) => {
+  try {
+    const allowed = await resolveAllowedCourseIds({ roles: request.context?.roles, userId: request.context?.userId });
+    const locale = requestLocale(request);
+    const courses = await prisma.course.findMany({
+      where: allowed === null ? {} : { id: { in: allowed } },
+      select: { id: true, title: true, publishedAt: true, archivedAt: true },
+      orderBy: { createdAt: "desc" },
+    });
+    response.json({
+      courses: courses.map((course) => ({
+        id: course.id,
+        title: localizeContentText(locale, course.title) ?? course.title ?? course.id,
+        published: course.publishedAt !== null,
+        archived: course.archivedAt !== null,
+      })),
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
 reportsRouter.get("/courses", async (request, response, next) => {
   const filters = parseReportFilters(request.query);
   if (!filters) {
@@ -100,7 +144,7 @@ reportsRouter.get("/courses", async (request, response, next) => {
   }
 
   try {
-    const report = await getCourseReport(filters, requestLocale(request));
+    const report = await getCourseReport(await scoped(request, filters), requestLocale(request));
     response.json(report);
   } catch (error) {
     next(error);
@@ -118,7 +162,7 @@ reportsRouter.get("/courses/details", async (request, response, next) => {
   try {
     const report = await getCourseLearnerReport(
       parsed.data.selectedCourseId,
-      filters,
+      await scoped(request, filters),
       requestLocale(request),
     );
     response.json(report);
@@ -134,7 +178,7 @@ reportsRouter.get("/completion", async (request, response, next) => {
     return;
   }
 
-  const report = await getCompletionReport(filters, requestLocale(request));
+  const report = await getCompletionReport(await scoped(request, filters), requestLocale(request));
   response.json(report);
 });
 
@@ -148,7 +192,7 @@ reportsRouter.get("/completion/details", async (request, response, next) => {
 
   try {
     const report = await getCompletionLearnerReport(
-      filters,
+      await scoped(request, filters),
       parsed.data.selectedModuleId,
       requestLocale(request),
     );
@@ -165,11 +209,11 @@ reportsRouter.get("/pass-rates", async (request, response, next) => {
     return;
   }
 
-  const report = await getPassRatesReport(filters, requestLocale(request));
+  const report = await getPassRatesReport(await scoped(request, filters), requestLocale(request));
   response.json(report);
 });
 
-reportsRouter.get("/manual-review-queue", async (request, response, next) => {
+reportsRouter.get("/manual-review-queue", orgWideOnly, async (request, response, next) => {
   const filters = parseReportFilters(request.query);
   if (!filters) {
     avvisFiltre(next);
@@ -180,7 +224,7 @@ reportsRouter.get("/manual-review-queue", async (request, response, next) => {
   response.json(report);
 });
 
-reportsRouter.get("/appeals", async (request, response, next) => {
+reportsRouter.get("/appeals", orgWideOnly, async (request, response, next) => {
   const filters = parseReportFilters(request.query);
   if (!filters) {
     avvisFiltre(next);
@@ -191,7 +235,7 @@ reportsRouter.get("/appeals", async (request, response, next) => {
   response.json(report);
 });
 
-reportsRouter.get("/mcq-quality", async (request, response, next) => {
+reportsRouter.get("/mcq-quality", orgWideOnly, async (request, response, next) => {
   const filters = parseReportFilters(request.query);
   if (!filters) {
     avvisFiltre(next);
@@ -209,7 +253,7 @@ reportsRouter.get("/mcq-quality", async (request, response, next) => {
 // (ACTIVE / NOT_CERTIFIED), ikke en utløpsstatus utledet ved lesing. URL-en beholder det gamle
 // navnet: den er en offentlig flate uten kjent erstatning, og et navnebytte er en API-endring for
 // seg — samme expand/contract-avveining som for kolonnene.
-reportsRouter.get("/recertification", async (request, response, next) => {
+reportsRouter.get("/recertification", orgWideOnly, async (request, response, next) => {
   const filters = parseReportFilters(request.query);
   if (!filters) {
     avvisFiltre(next);
@@ -220,7 +264,7 @@ reportsRouter.get("/recertification", async (request, response, next) => {
   response.json(report);
 });
 
-reportsRouter.get("/analytics/semantic-model", async (request, response, next) => {
+reportsRouter.get("/analytics/semantic-model", orgWideOnly, async (request, response, next) => {
   const filters = parseReportFilters(request.query);
   if (!filters) {
     avvisFiltre(next);
@@ -231,7 +275,7 @@ reportsRouter.get("/analytics/semantic-model", async (request, response, next) =
   response.json(report);
 });
 
-reportsRouter.get("/analytics/trends", async (request, response, next) => {
+reportsRouter.get("/analytics/trends", orgWideOnly, async (request, response, next) => {
   const filters = parseReportFilters(request.query);
   if (!filters) {
     avvisFiltre(next);
@@ -249,7 +293,7 @@ reportsRouter.get("/analytics/trends", async (request, response, next) => {
   response.json(report);
 });
 
-reportsRouter.get("/analytics/cohorts", async (request, response, next) => {
+reportsRouter.get("/analytics/cohorts", orgWideOnly, async (request, response, next) => {
   const filters = parseReportFilters(request.query);
   if (!filters) {
     avvisFiltre(next);
@@ -267,7 +311,7 @@ reportsRouter.get("/analytics/cohorts", async (request, response, next) => {
   response.json(report);
 });
 
-reportsRouter.get("/analytics/data-quality", async (request, response, next) => {
+reportsRouter.get("/analytics/data-quality", orgWideOnly, async (request, response, next) => {
   const filters = parseReportFilters(request.query);
   if (!filters) {
     avvisFiltre(next);
@@ -285,11 +329,18 @@ reportsRouter.get("/export", async (request, response, next) => {
     return;
   }
 
-  const filters = parseReportFilters(parsed.data);
-  if (!filters) {
+  const rawFilters = parseReportFilters(parsed.data);
+  if (!rawFilters) {
     avvisFiltre(next);
     return;
   }
+  if (!RESULTS_EXPORT_TYPES.has(parsed.data.type)) {
+    // Analyse på tvers av organisasjonen — samme port som rutene over.
+    let allowed = false;
+    orgWideOnly(request, response, () => { allowed = true; });
+    if (!allowed) return;
+  }
+  const filters = await scoped(request, rawFilters);
 
   let rows: Array<Record<string, unknown>>;
   let filenameBase = parsed.data.type;
@@ -328,6 +379,7 @@ reportsRouter.get("/export", async (request, response, next) => {
       dateFrom: filters.dateFrom,
       dateTo: filters.dateTo,
       orgUnit: filters.orgUnit,
+      allowedCourseIds: filters.allowedCourseIds,
     }, reportLocale);
     rows = courseReport.rows.map((row) => ({
       scopeType: "course" as const,
@@ -349,6 +401,7 @@ reportsRouter.get("/export", async (request, response, next) => {
         dateFrom: filters.dateFrom,
         dateTo: filters.dateTo,
         orgUnit: filters.orgUnit,
+        allowedCourseIds: filters.allowedCourseIds,
       }, reportLocale);
       // CourseLearnerRow inkluderer allerede courseId — ikke duplikat-spesifiser.
       rows = courseLearnerReport.rows.map((row) => ({

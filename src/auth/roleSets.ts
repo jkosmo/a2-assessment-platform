@@ -76,7 +76,9 @@ export const DISCUSSION_MODERATORS: readonly AppRoleType[] = [
 ];
 
 /**
- * Rapportlesing. `/api/reports` monteres med nøyaktig dette settet.
+ * Rapportlesing på tvers av organisasjonen. #1058: `/api/reports` er montert for disse pluss
+ * SUBJECT_MATTER_OWNER; SMO ser bare Resultater-rapportene, avgrenset til kurs hen eier
+ * (`src/modules/reporting/scope.ts`). Rutene for analyse på tvers krever dette settet.
  */
 export const REPORT_READERS: readonly AppRoleType[] = [AppRole.ADMINISTRATOR, AppRole.REPORT_READER];
 
