@@ -1829,10 +1829,10 @@ function nonEmptyLocaleMap(value) {
 }
 
 /** Legg det som er skrevet i Rediger inn i utkastet. Returnerer true når noe var endret. */
-function captureEditFormIntoDraft() {
+function captureEditFormIntoDraft({ force = false } = {}) {
   if (!isEditFormOpen() || !editFormSnapshot) return false;
   const snap = editFormSnapshot();
-  if (!snap.changed) return false;
+  if (!snap.changed && !force) return false;
   const loc = snap.editingLocale;
   const stored = bundle?.selectedConfiguration?.moduleVersion;
   const merge = (current, text) => mergeLocaleInto(current, loc, text);
@@ -2577,35 +2577,20 @@ async function saveDraftBundleInBackground(options = {}) {
     : Number.isFinite(storedMcqMinPercent)
       ? storedMcqMinPercent
       : SHELL_MCQ_ONLY_MIN_PERCENT;
-  // v1.1.95: when save fails on pre-save validation, attach recovery actions to the error
-  // message. Previously the bot message had no choices and the chat menu was deactivated
-  // (because the user just clicked Lagre utkast and _deactivateAll fired), so users were
-  // stuck with no way forward. Same action set as draft-ready menu — user can edit,
-  // revise, open Avansert, restart, or retry Lagre.
-  // v1.1.97: when MCQ is missing (cancelled or failed generation), recovery menu also
-  // includes "Generer MCQ" so the user can re-trigger generation without going via
-  // Avansert or restart. Uses startGenerateMcqFlow which asks for source material again
-  // — friction acceptable for a rare failure-recovery case.
-  const buildSaveRecoveryActions = ({ includeGenerateMcq = false } = {}) => {
-    const model = deriveShellDraftReadyActionModel({ hasSelectedModule: !!selectedModuleId });
-    const actionMap = {
-      revise: { labelKey: "shell.draftReady.editInChat", action: () => startUnifiedRevisionFlow() },
-      restart: { labelKey: "shell.draftReady.restart", action: startIdle },
-      saveDraft: { labelKey: "shell.draftReady.saveDraft", action: saveDraftBundleInBackground },
-    };
-    const actions = model.actionKeys.map((key) => actionMap[key]).filter(Boolean);
-    if (includeGenerateMcq) {
-      actions.unshift({ labelKey: "shell.module.generateMcq", action: () => startGenerateMcqFlow() });
-    }
-    return actions;
-  };
+  // Produkteier 13.09: ingenting som står i handlingsraden skal gjentas som valg i samtalen.
+  // Meldingen sier hva som mangler; veien videre er knappene i hodet og feltene i skjemaet.
   if (!isMcqOnly && !localizeValueForLocale(taskText, contentLocale).trim()) {
-    logBot(() => t("shell.save.taskRequired"), buildSaveRecoveryActions());
+    logBot(() => t("shell.save.taskRequired"));
+    showToast(t("shell.save.taskRequired"), "error");
+    if (activeTab !== "edit") switchToTab("edit");
+    document.getElementById("previewEditTaskText")?.focus();
     return;
   }
   // #578: FREETEXT_ONLY modules have no MCQ — skip the MCQ-required guard for them.
   if (!isFreetextOnly && !mcqQuestions.length) {
-    logBot(() => t("shell.save.mcqRequired"), buildSaveRecoveryActions({ includeGenerateMcq: true }));
+    logBot(() => t("shell.save.mcqRequired"));
+    showToast(t("shell.save.mcqRequired"), "error");
+    if (activeTab !== "edit") switchToTab("edit");
     return;
   }
 
@@ -3482,7 +3467,8 @@ async function runUnifiedRevision(instruction) {
 
 function startUnifiedRevisionFlow() {
   if (!sessionDraft?.taskText && !sessionDraft?.assessorExpectedContent && (sessionDraft?.mcqQuestions?.length ?? 0) === 0) {
-    logBot(() => t("shell.revision.unavailable"));
+    // Som toast, ikke som en ny linje i loggen for hvert klikk.
+    showToast(t("shell.revision.unavailable"), "info");
     return;
   }
 
@@ -4327,7 +4313,10 @@ function enterPreviewEditMode({ force = false } = {}) {
   const correctAnswerLabel = escapeHtml(t("shell.preview.correctAnswer"));
   const rationaleLabel = escapeHtml(t("adminContent.dialog.mcq.rationale"));
   const mcqHelp = escapeHtml(t("adminContent.help.mcqQuestions"));
-  const mcqHtml = currentMcqQuestions.length
+  // Produkteier 13.09: spørsmål kan legges til og fjernes her, ikke bare genereres i samtalen.
+  // Seksjonen vises alltid når typen har flervalg — også tom, med «Legg til spørsmål».
+  const hasMcqPart = editAssessmentMode !== "FREETEXT_ONLY";
+  const mcqHtml = hasMcqPart
     ? `
       <div class="preview-section-label">${mcqSectionLabel}</div>
       <div class="preview-edit-mcq-list">
@@ -4362,7 +4351,10 @@ function enterPreviewEditMode({ force = false } = {}) {
 
           return `
             <article class="preview-edit-mcq-item" data-preview-edit-question="${questionIndex}">
-              <div class="preview-mcq-question-header">${questionLabel}</div>
+              <div class="preview-mcq-question-header" style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+                <span>${questionLabel}</span>
+                <button type="button" class="row-action-btn destructive" data-remove-question="${questionIndex}">${escapeHtml(t("shell.directEdit.removeQuestion"))}</button>
+              </div>
               <textarea
                 id="previewEditMcqStem${questionIndex}"
                 class="preview-edit-textarea preview-edit-textarea--compact"
@@ -4385,6 +4377,9 @@ function enterPreviewEditMode({ force = false } = {}) {
             </article>
           `.trim();
         }).join("")}
+      </div>
+      <div class="preview-edit-mcq-add">
+        <button type="button" id="previewEditAddQuestion" class="row-action-btn">${escapeHtml(t("shell.directEdit.addQuestion"))}</button>
       </div>
     `
     : "";
@@ -4462,6 +4457,26 @@ function enterPreviewEditMode({ force = false } = {}) {
   // `hasOpenEditForm` compares against these, and the form is now open the whole time Rediger is,
   // so an unstamped field would read as changed from the first render.
   stampEditFormValues();
+  // Legg til / fjern spørsmål: det som står i feltene tas med i utkastet, lista endres, skjemaet
+  // tegnes på nytt fra utkastet. Ingenting går tapt, og tellingen stemmer.
+  const rebuildWithQuestions = (mutate) => {
+    captureEditFormIntoDraft({ force: true });
+    const list = [...(sessionDraft?.mcqQuestions ?? [])];
+    mutate(list);
+    sessionDraft = { ...sessionDraft, mcqQuestions: list };
+    newModulePlaceholder = false;
+    enterPreviewEditMode({ force: true });
+    refreshModuleHeaderState();
+  };
+  previewContent.querySelector("#previewEditAddQuestion")?.addEventListener("click", () => {
+    rebuildWithQuestions((list) => list.push({ stem: "", options: ["", "", "", ""], correctAnswer: "", rationale: "" }));
+  });
+  for (const btn of previewContent.querySelectorAll("[data-remove-question]")) {
+    btn.addEventListener("click", () => {
+      const index = Number(btn.dataset.removeQuestion);
+      rebuildWithQuestions((list) => list.splice(index, 1));
+    });
+  }
   // No auto-focus any more. Moving the caret into the title made sense when opening the form was
   // a deliberate action; now the form opens on every tab switch, every save and every language
   // change, and grabbing focus each time takes it away from wherever the author actually is.
@@ -4526,6 +4541,14 @@ function enterPreviewEditMode({ force = false } = {}) {
     // discard criteria the author had just generated.
     const newCriteriaRecord = sessionDraft?.criteria ?? null;
     const newMcqQuestions = readMcqQuestionsFromForm(currentMcqQuestions);
+    // Et spørsmål lagt til for hånd må være helt: tjeneren avviser tomme tekster etter at annet
+    // kan være skrevet. Si det før noe sendes, og la skjemaet stå.
+    const incomplete = newMcqQuestions.find((q) => !q.stem?.trim() || !q.rationale?.trim() || (q.options ?? []).some((o) => !o?.trim()));
+    if (incomplete) {
+      showToast(t("shell.directEdit.mcqIncomplete"), "error");
+      previewContent.querySelector(`[data-preview-edit-question="${newMcqQuestions.indexOf(incomplete)}"] textarea`)?.focus();
+      return;
+    }
 
     // #896 S2: one commitment. "Bekreft" used to stop here and hand the author a separate
     // "Lagre utkast" step, which meant the translation round was paid on every confirm even
@@ -4680,7 +4703,8 @@ function enterPreviewEditMode({ force = false } = {}) {
       });
   });
 
-  logBot(() => escapeHtml(t("shell.directEdit.editingHint")));
+  // «Rediger feltene til venstre …» loggen på hver åpning av skjemaet — og skjemaet åpnes ved hvert
+  // fanebytte. Ruta er dessuten skjult. Linja er borte.
 }
 
 /**

@@ -684,7 +684,7 @@ function sectionEditorBodyHtml() {
           <div class="editor-pane-label" style="display:flex;justify-content:space-between;align-items:center;gap:8px">
             <span>${escapeHtml(L("markdown"))} <span class="required-note">${escapeHtml(L("required"))}</span></span>
             <span data-form-untracked>
-              <button type="button" id="uploadImageBtn" class="btn btn-secondary" style="width:auto;font-size:12px;padding:2px 8px">${escapeHtml(L("uploadImage"))}</button>
+              <button type="button" id="uploadImageBtn" class="btn btn-secondary" style="width:auto;font-size:12px;padding:2px 8px" ${editing.id ? "" : `disabled title="${escapeHtml(L("saveFirst"))}"`}>${escapeHtml(L("uploadImage"))}</button>
               <input type="file" id="imageFileInput" accept="image/png,image/jpeg,image/gif,image/webp,image/svg+xml,.svg" hidden />
             </span>
           </div>
@@ -983,11 +983,12 @@ function insertAtCursor(text) {
 }
 
 async function uploadImage(file) {
-  // Assets need a section id — auto-save first (silently) if this is a new section.
-  // persistSection shows the needContent toast if there's nothing to save yet.
+  // Bilder hører til en lagret seksjon. Knappen er slått av til seksjonen finnes (produkteier
+  // 13.09: «Knapp bør ikke være synlig før den kan brukes, eller den bør ikke være aktiv») — den
+  // stille autolagringen som sto her ga bare «må ha både navn og innhold» uten sammenheng.
   if (!editing.id) {
-    const saved = await persistSection({ silent: true });
-    if (!saved || !editing.id) return;
+    showToast(L("saveFirst"), "info");
+    return;
   }
   const alt = window.prompt(L("altPrompt"), "");
   if (alt === null) return; // cancelled

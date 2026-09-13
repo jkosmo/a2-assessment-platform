@@ -730,3 +730,14 @@ Produkteier, etter omgang 5/6 på stage:
    skjult; ruta åpnes bare når assistenten spør (valg, skjema).
 5. Seksjon: tjeneren krever både navn og innhold for en versjon. Kravet står nå i etiketten
    («Innhold (Markdown) (påkrevd)») og i meldingen, med markøren i det som mangler.
+
+## Spørsmål redigeres i skjemaet; samtalen gjentar ikke handlingsraden (2026-09-13)
+
+Produkteier, etter omgang 7 på stage: «P.t. er det bare i samtale man kan legge til spørsmål … Ingen
+funksjoner som er i handlingsmeny bør vises i samtale, og man bør unngå gjentagende status.»
+
+1. Flervalgsdelen i Rediger vises alltid når modultypen har flervalg — også tom — med «Legg til
+   spørsmål» og «Fjern spørsmål». Generering i samtalen er én vei inn, ikke den eneste.
+2. Samtalen tilbyr ikke valg som alt står i handlingsraden. Ved en stoppet lagring sier meldingen
+   hva som mangler (toast + én linje i loggen) og sender forfatteren til feltet.
+3. Faste hint («Rediger feltene til venstre …») loggføres ikke; «ingenting å revidere» er en toast.
