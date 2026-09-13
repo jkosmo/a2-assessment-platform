@@ -86,13 +86,11 @@ test.describe("admin content — module-type bugs (#655)", () => {
       });
     });
 
-    await page.goto("/admin-content/module/module-1/conversation");
+    // `resumeEditing=1` bygger revisjonsutkastet fra den lastede modulen — samme vei som «Be om
+    // endring» går (#655 bug 2). Produkteier 13.09: samtalevalget er en dialog nå.
+    await page.goto("/admin-content/module/module-1/conversation?resumeEditing=1");
+    await page.locator("#previewEditTitle").waitFor();
 
-    // Module actions menu → "Continue editing in chat" (resumeChatEdit). This is the exact
-    // path that builds the revision draft from the loaded module (#655 bug 2).
-    await clickEnabledButton(page, /^Edit in chat$|^Rediger i chat$/);
-
-    // Draft-ready actions → "Save draft".
     await page.locator("#moduleSaveBtn").click();
 
     // The save must succeed — NOT be blocked by the scenario-required guard.

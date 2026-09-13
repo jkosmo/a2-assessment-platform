@@ -52,6 +52,9 @@
          forbeholdt gruppeoverskrifter. */
       .preview-section-label { font-size: 13px; font-weight: 600; color: var(--color-meta); margin: var(--space-1) 0 4px; }
       .preview-edit-mcq-add { margin: 6px 0 var(--space-2); }
+      #dialogGenerate .chat-form-col { gap: 8px; }
+      #dialogGenerate .chat-textarea, .dialog-textarea { width: 100%; box-sizing: border-box; font: inherit; font-size: 14px; padding: 8px 10px; border: 1px solid var(--color-border-soft); border-radius: var(--radius-card); }
+      .revise-example { width: auto; min-height: 0; padding: 4px 10px; font-size: 12px; border-radius: 999px; }
       .preview-edit-input { width: 100%; box-sizing: border-box; font: inherit; font-size: 15px; padding: 8px 10px; border: 1px solid var(--color-border-soft); border-radius: var(--radius-card); background: #fff; }
       .preview-text-block { font-size: 14px; color: var(--color-text); line-height: 1.6; white-space: pre-wrap; background: var(--color-module-summary-bg); border: 1px solid var(--color-module-summary-border); border-radius: var(--radius-card); padding: var(--space-1); }
       /* #1051: rendret markdown bærer sin egen struktur; pre-wrap ville doblet mellomrommene. */
@@ -639,6 +642,37 @@
         <h2 style="margin-top:0;font-size:16px" data-i18n="shell.settings.title">Innstillinger</h2>
         <div id="settingsSummary"></div>
       </section>
+
+      <!-- Produkteier 13.09: samtalen erstattes av to dialoger. «Generer innhold» tar kildemateriale
+           (type og nivå kommer fra Innstillinger); «Be om endring» tar én instruks. Begge legger
+           resultatet i skjemaet som ulagret utkast — Lagre beholder, Avbryt går tilbake. -->
+      <dialog id="dialogGenerate" aria-labelledby="dialogGenerateTitle">
+        <h2 id="dialogGenerateTitle" class="dialog-title" data-i18n="shell.generateDialog.title">Generer innhold</h2>
+        <p class="small" id="dialogGenerateContext"></p>
+        <div id="dialogGenerateSource"></div>
+        <div id="dialogGenerateMcq" class="row" style="gap:var(--space-2);margin-top:var(--space-1);display:none">
+          <label style="font-size:13px;color:var(--color-meta)"><span data-i18n="shell.generateDialog.questionCount">Antall spørsmål</span><br>
+            <select id="dialogGenerateQuestionCount" class="settings-input"><option value="3">3</option><option value="5" selected>5</option><option value="10">10</option></select></label>
+          <label style="font-size:13px;color:var(--color-meta)"><span data-i18n="shell.generateDialog.optionCount">Svaralternativer per spørsmål</span><br>
+            <select id="dialogGenerateOptionCount" class="settings-input"><option value="3">3</option><option value="4" selected>4</option><option value="5">5</option></select></label>
+        </div>
+        <p class="small" style="margin-top:var(--space-2)" data-i18n="shell.generateDialog.note">Det genererte legges i skjemaet som et ulagret utkast. Lagre for å beholde det, Avbryt for å gå tilbake til det som er lagret.</p>
+        <div class="row" style="justify-content:flex-end;gap:var(--space-1)">
+          <button type="button" id="dialogGenerateCancel" class="btn-secondary" data-i18n="shell.action.cancel">Avbryt</button>
+        </div>
+      </dialog>
+
+      <dialog id="dialogRevise" aria-labelledby="dialogReviseTitle">
+        <h2 id="dialogReviseTitle" class="dialog-title" data-i18n="shell.reviseDialog.title">Be om endring</h2>
+        <p class="small" data-i18n="shell.reviseDialog.hint">Skriv hva du vil ha annerledes, med vanlige ord. Assistenten endrer oppgavetekst, veiledning og spørsmål; kriterier og innstillinger endres under Innstillinger.</p>
+        <div id="dialogReviseExamples" class="row" style="gap:6px;flex-wrap:wrap;margin:var(--space-1) 0"></div>
+        <textarea id="dialogReviseInput" class="dialog-textarea" rows="4" data-i18n-placeholder="shell.revision.placeholder" placeholder="Describe the change you want…"></textarea>
+        <p class="small" style="margin-top:var(--space-1)" data-i18n="shell.reviseDialog.note">Endringen legges i skjemaet som et ulagret utkast. Lagre for å beholde den, Avbryt for å gå tilbake til det som er lagret.</p>
+        <div class="row" style="justify-content:flex-end;gap:var(--space-1)">
+          <button type="button" id="dialogReviseCancel" class="btn-secondary" data-i18n="shell.action.cancel">Avbryt</button>
+          <button type="button" id="dialogReviseSubmit" class="btn-primary" data-i18n="shell.revision.submit">Send</button>
+        </div>
+      </dialog>
 
       <dialog id="dialogUnsavedTabSwitch" aria-labelledby="unsavedTabSwitchTitle">
         <h2 id="unsavedTabSwitchTitle" style="margin-top:0;font-size:16px" data-i18n="shell.tab.unsaved.title">Ulagrede endringer</h2>

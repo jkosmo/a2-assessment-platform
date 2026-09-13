@@ -2832,11 +2832,11 @@ test.describe("admin content browser coverage", () => {
     // now contains a "Request changes in chat" button instead of auto-opening the
     // textarea below Save draft. Pin both: no textarea before click, textarea after.
     await expect(page.locator(".chat-textarea:enabled")).toHaveCount(0);
-    await clickEnabledButton(page, /^Edit in chat$|^Rediger i chat$/);
+    await clickEnabledButton(page, /^Request a change$|^Be om endring$/);
 
-    const revisionInput = page.locator(".chat-textarea:enabled").last();
+    const revisionInput = page.locator("#dialogReviseInput");
     await revisionInput.fill('Rename the module title to "Trade union dialogue"');
-    await clickEnabledButton(page, /Revise|Revider/);
+    await page.locator("#dialogReviseSubmit").click();
 
     await expect(page.getByText('I will update the module title to "Trade union dialogue" and refresh the localized variants.')).toBeVisible();
     await expect.poll(() => state.lastDraftLocalizationBody?.title).toBe("Trade union dialogue");
@@ -2894,16 +2894,16 @@ test.describe("admin content browser coverage", () => {
 
     await page.goto("/admin-content/module/module-1/conversation?resumeEditing=1");
     await expect(
-      page.locator("#workspaceActions").getByRole("button", { name: /^Edit in chat$|^Rediger i chat$/ }),
+      page.locator("#workspaceActions").getByRole("button", { name: /^Request a change$|^Be om endring$/ }),
     ).toBeEnabled();
 
     const taskField = page.locator("#previewEditTaskText");
     await expect(taskField).not.toHaveValue("");
     await taskField.fill("Skrevet for hånd");
 
-    await clickEnabledButton(page, /^Edit in chat$|^Rediger i chat$/);
-    await page.locator(".chat-textarea:enabled").last().fill("Skjerp scenarioet");
-    await clickEnabledButton(page, /Revise|Revider/);
+    await clickEnabledButton(page, /^Request a change$|^Be om endring$/);
+    await page.locator("#dialogReviseInput").fill("Skjerp scenarioet");
+    await page.locator("#dialogReviseSubmit").click();
 
     // Forutsetningen: forslaget ER parkert. Uten denne ville påstanden under kunne vært grønn
     // fordi vi målte den direkte stien i stedet.
@@ -2949,7 +2949,7 @@ test.describe("admin content browser coverage", () => {
     // draft and repaints the form, so text filled in before that lands in a textarea that is
     // about to be replaced — the test would then be measuring the repaint, not the gate.
     await expect(
-      page.locator("#workspaceActions").getByRole("button", { name: /^Edit in chat$|^Rediger i chat$/ }),
+      page.locator("#workspaceActions").getByRole("button", { name: /^Request a change$|^Be om endring$/ }),
     ).toBeEnabled();
 
     // The author's own work goes in first — this is what must survive.
@@ -2958,10 +2958,10 @@ test.describe("admin content browser coverage", () => {
     await taskField.fill("Skrevet for hånd");
     await expect(taskField).toHaveValue("Skrevet for hånd");
 
-    await clickEnabledButton(page, /^Edit in chat$|^Rediger i chat$/);
+    await clickEnabledButton(page, /^Request a change$|^Be om endring$/);
     await expect(taskField).toHaveValue("Skrevet for hånd");
-    await page.locator(".chat-textarea:enabled").last().fill("Skjerp scenarioet");
-    await clickEnabledButton(page, /Revise|Revider/);
+    await page.locator("#dialogReviseInput").fill("Skjerp scenarioet");
+    await page.locator("#dialogReviseSubmit").click();
 
     // The proposal is offered, and the field is untouched. Asserting the VALUE and not just the
     // presence of the buttons is the point: the old failure wrote the draft underneath a form
@@ -2974,9 +2974,9 @@ test.describe("admin content browser coverage", () => {
     await expect(taskField).toHaveValue("Skrevet for hånd");
 
     // Bruk replaces it — and repaints, so the author sees what they accepted.
-    await clickEnabledButton(page, /^Edit in chat$|^Rediger i chat$/);
-    await page.locator(".chat-textarea:enabled").last().fill("Skjerp scenarioet igjen");
-    await clickEnabledButton(page, /Revise|Revider/);
+    await clickEnabledButton(page, /^Request a change$|^Be om endring$/);
+    await page.locator("#dialogReviseInput").fill("Skjerp scenarioet igjen");
+    await page.locator("#dialogReviseSubmit").click();
     await clickEnabledButton(page, /^(Use|Bruk)$/);
     await expect(page.locator("#previewEditTaskText")).toHaveValue("Generert scenario");
   });
@@ -3028,9 +3028,9 @@ test.describe("admin content browser coverage", () => {
     await page.locator("#localeSelect").selectOption("en-GB");
     await expect(page.locator("#tabEdit")).toHaveText(/Edit/);
 
-    await clickEnabledButton(page, /^Edit in chat$|^Rediger i chat$/);
-    await page.locator(".chat-textarea:enabled").last().fill("make the task shorter");
-    await clickEnabledButton(page, /Revise|Revider/);
+    await clickEnabledButton(page, /^Request a change$|^Be om endring$/);
+    await page.locator("#dialogReviseInput").fill("make the task shorter");
+    await page.locator("#dialogReviseSubmit").click();
 
     // Begge halvdelene må holde: teksten som sendes er den NORSKE, og den er merket som norsk.
     // Uten den andre halvdelen oversettes svaret inn i feil språk og overskriver originalen.
@@ -3070,9 +3070,9 @@ test.describe("admin content browser coverage", () => {
     await page.goto("/admin-content/module/module-1/conversation?resumeEditing=1");
     await page.locator("#previewEditTaskText").waitFor();
 
-    await clickEnabledButton(page, /^Edit in chat$|^Rediger i chat$/);
-    await page.locator(".chat-textarea:enabled").last().fill("Skjerp scenarioet");
-    await clickEnabledButton(page, /Revise|Revider/);
+    await clickEnabledButton(page, /^Request a change$|^Be om endring$/);
+    await page.locator("#dialogReviseInput").fill("Skjerp scenarioet");
+    await page.locator("#dialogReviseSubmit").click();
 
     // Since v2.18.13 the Rediger form is open from the moment the tab is, so gating on presence
     // rather than dirtiness would turn every single generation into a proposal. Nothing was
@@ -3777,7 +3777,7 @@ test.describe("admin content browser coverage", () => {
 
   // #555: regen on an existing module follows the unified order too — source material BEFORE
   // scenario (forfatter-feedback 2026-06-21: scenario-first felt wrong here as well).
-  test("shell regen flow asks for source, then module type, then scenario", async ({ page }) => {
+  test("Generate content opens a dialog; type and level come from Settings and are not asked", async ({ page }) => {
     await mockCommonApis(page, {
       modules: [{ id: "module-1", title: "Trade unions" }],
       moduleExports: {
@@ -3792,23 +3792,23 @@ test.describe("admin content browser coverage", () => {
     await page.goto("/admin-content/module/module-1/conversation");
     await clickEnabledButton(page, /^Generate content$|^Generer innhold$/);
 
-    // Source material is asked first; neither module-type nor scenario shown yet.
-    await expect(page.getByText("Paste source material")).toBeVisible();
+    // Produkteier 13.09: kildemateriale i en dialog, type og nivå fra Innstillinger.
+    const dialog = page.locator("#dialogGenerate");
+    await expect(dialog).toHaveAttribute("open", "");
+    await expect(page.locator("#dialogGenerateContext")).toContainText(/Free text|Fritekst/);
+    await expect(page.locator("#dialogGenerateMcq")).toBeVisible();
+    await page.locator("#dialogGenerate .chat-textarea").fill("Updated source notes about labour rights and organising.");
+    await page.locator("#dialogGenerate .chat-submit-btn").click();
+    await expect(dialog).not.toHaveAttribute("open", "");
+
     await expect(page.getByText("What kind of module is this?")).toHaveCount(0);
     await expect(page.getByText("Should the task use a scenario?")).toHaveCount(0);
-
-    // #579: after source, the module-type question appears in regen too (not scenario directly).
-    await submitActiveChatInput(page, "Updated source notes about labour rights and organising.");
-    await expect(page.getByText("What kind of module is this?")).toBeVisible();
-    await expect(page.getByText("Should the task use a scenario?")).toHaveCount(0);
-
-    // Free-text branch then leads to the scenario question.
-    await clickEnabledButton(page, "Free-text + MCQ");
-    await expect(page.getByText("Should the task use a scenario?")).toBeVisible();
+    await expect(page.getByRole("button", { name: /^Basic$|^Grunnleggende$/ })).toHaveCount(0);
+    // Neste synlige steg er planen.
+    await expect(page.getByRole("button", { name: /Use this plan|Bruk denne planen/ })).toBeVisible();
   });
 
-  // #579: choosing "MCQ only" when regenerating skips scenario and goes straight to MCQ count.
-  test("shell regen flow can switch the module to MCQ-only", async ({ page }) => {
+  test("Generate content on an MCQ-only module generates questions with the dialog's counts, asking nothing", async ({ page }) => {
     await mockCommonApis(page, {
       modules: [{ id: "module-1", title: "Trade unions" }],
       moduleExports: {
@@ -3816,24 +3816,31 @@ test.describe("admin content browser coverage", () => {
           id: "module-1",
           title: "Trade unions",
           moduleVersionId: "module-1-version-1",
+          assessmentMode: "MCQ_ONLY",
         }),
       },
+    });
+    let mcqBody: any = null;
+    await page.route("**/api/admin/content/generate/mcq", async (route: Route) => {
+      mcqBody = route.request().postDataJSON();
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ questions: [] }) });
     });
 
     await page.goto("/admin-content/module/module-1/conversation");
     await clickEnabledButton(page, /^Generate content$|^Generer innhold$/);
-    await submitActiveChatInput(page, "Source notes for an MCQ-only quiz.");
-    await expect(page.getByText("What kind of module is this?")).toBeVisible();
-    await clickEnabledButton(page, "MCQ only");
+    await expect(page.locator("#dialogGenerateContext")).toContainText(/Multiple choice only|Bare flervalg|Kun flervalg/i);
+    await page.locator("#dialogGenerateQuestionCount").selectOption("10");
+    await page.locator("#dialogGenerateOptionCount").selectOption("3");
+    await page.locator("#dialogGenerate .chat-textarea").fill("Source notes for an MCQ-only quiz.");
+    await page.locator("#dialogGenerate .chat-submit-btn").click();
 
-    // No scenario on the MCQ-only branch — straight to the question-count question.
-    await expect(page.getByText("Should the task use a scenario?")).toHaveCount(0);
-    await expect(page.getByText(/How many MCQ questions/i)).toBeVisible();
+    await expect(page.getByText("What kind of module is this?")).toHaveCount(0);
+    await expect(page.getByText(/How many MCQ questions/i)).toHaveCount(0);
+    await expect.poll(() => mcqBody?.questionCount).toBe(10);
+    expect(mcqBody?.optionCount).toBe(3);
   });
 
-  // #578: regen can switch an existing module to FREETEXT_ONLY — scenario/blueprint run, MCQ is
-  // skipped, and the saved version is FREETEXT_ONLY with no mcqSetVersionId.
-  test("shell regen flow can switch the module to FREETEXT_ONLY", async ({ page }) => {
+  test("Generate content on a FREETEXT_ONLY module saves without any MCQ step", async ({ page }) => {
     await mockCommonApis(page, {
       modules: [{ id: "module-1", title: "Trade unions" }],
       moduleExports: {
@@ -3841,6 +3848,7 @@ test.describe("admin content browser coverage", () => {
           id: "module-1",
           title: "Trade unions",
           moduleVersionId: "module-1-version-1",
+          assessmentMode: "FREETEXT_ONLY",
         }),
       },
     });
@@ -3858,12 +3866,11 @@ test.describe("admin content browser coverage", () => {
 
     await page.goto("/admin-content/module/module-1/conversation");
     await clickEnabledButton(page, /^Generate content$|^Generer innhold$/);
-    await submitActiveChatInput(page, "Updated source for a free-text-only version.");
-    await expect(page.getByText("What kind of module is this?")).toBeVisible();
-    await clickEnabledButton(page, "Free-text only");
-
-    // Scenario + blueprint run; cert level is reused (known) so it is not asked again.
-    await clickEnabledButton(page, "Let the LLM decide");
+    // Typen er FREETEXT_ONLY i Innstillinger (mocken): ingen antall å velge, ingen spørsmål om type.
+    await expect(page.locator("#dialogGenerateMcq")).toBeHidden();
+    await page.locator("#dialogGenerate .chat-textarea").fill("Updated source for a free-text-only version.");
+    await page.locator("#dialogGenerate .chat-submit-btn").click();
+    await expect(page.getByText("What kind of module is this?")).toHaveCount(0);
     await clickEnabledButton(page, /Use this plan|Bruk denne planen/);
 
     // No MCQ step on the free-text-only path.

@@ -741,3 +741,19 @@ funksjoner som er i handlingsmeny bør vises i samtale, og man bør unngå gjent
 2. Samtalen tilbyr ikke valg som alt står i handlingsraden. Ved en stoppet lagring sier meldingen
    hva som mangler (toast + én linje i loggen) og sender forfatteren til feltet.
 3. Faste hint («Rediger feltene til venstre …») loggføres ikke; «ingenting å revidere» er en toast.
+
+## Samtalen erstattes av to dialoger (2026-09-13)
+
+Produkteier: «Jeg tror vi skal redusere samtalebasert. Den gir liten mening som den er nå.» Det som
+gir mening er «Generer innhold» med kildemateriale, og å be om en endring med vanlige ord. Type og
+nivå er alt valgt under Innstillinger og skal ikke spørres om.
+
+Steg 1 (gjort): to dialoger — **«Generer innhold»** (lim inn / last opp / URL / crawl, antall
+spørsmål og alternativer når typen har flervalg, Generer) og **«Be om endring»** (én instruks, med
+eksempler å trykke på). Begge sier eksplisitt at resultatet legges i skjemaet som ulagret utkast —
+Lagre beholder, Avbryt går tilbake til det lagrede (produkteier valgte «alltid nytt utkast», ikke
+«erstatt med spørsmål først»). Vurderingsplanen og framdriften vises fortsatt i den reduserte
+samtaleruta; spørsmålene om type, nivå, scenario og antall er borte fra flyten.
+
+Steg 2 (gjenstår): planen som del av dialogen, publiseringsgaten («Oversett det som mangler») som
+vanlig dialog, og samtaleruta fjernes.

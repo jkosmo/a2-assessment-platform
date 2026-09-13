@@ -857,8 +857,10 @@ function _domFormFields(entry) {
       btn.disabled = true;
       inputEl.disabled = true;
       entry.submitted = true;
-      _deactivateAll();
-      logUser(t("shell.source.userPreview"));
+      if (!entry.mount) {
+        _deactivateAll();
+        logUser(t("shell.source.userPreview"));
+      }
       entry.onSubmit(combinedSourceMaterial);
       return;
     }
@@ -885,6 +887,11 @@ function _domFormFields(entry) {
   });
   wrap.appendChild(inputEl);
   wrap.appendChild(btn);
+  // #1046: samme kildeverktøy (lim inn / last opp / URL / crawl) i «Generer innhold»-dialogen.
+  if (entry.mount) {
+    entry.mount.replaceChildren(wrap);
+    return;
+  }
   chatMessages.appendChild(wrap);
   _domScroll(wrap);
   // #360 a11y: for source-material, focus the upload button — the first meaningful
@@ -4855,18 +4862,9 @@ function showModuleActions() {
     canUnpublish,
   });
   const actionMap = {
-    generateContent: { labelKey: "shell.module.generateContent", action: () => startGenerateDraftFlow() },
-    generateMcq: { labelKey: "shell.module.generateMcq", action: () => startGenerateMcqFlow() },
-    resumeChatEdit: {
-      labelKey: "shell.module.resumeChatEdit",
-      action: () => {
-        if (createSessionDraftFromLoadedModule()) {
-          showDraftReadyActions();
-        } else {
-          showModuleActions();
-        }
-      },
-    },
+    generateContent: { labelKey: "shell.module.generateContent", action: () => openGenerateDialog() },
+    generateMcq: { labelKey: "shell.module.generateMcq", action: () => openGenerateDialog({ mcqOnly: true }) },
+    resumeChatEdit: { labelKey: "shell.module.resumeChatEdit", action: () => openReviseDialog() },
     saveDraft: { labelKey: "shell.draftReady.saveDraft", action: saveDraftBundleInBackground },
     publish: {
       // Direct publish — author already confirmed by clicking "Publish". The prior
@@ -6926,6 +6924,114 @@ function bindViewTabs() {
 // New module creation flow
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// #1046 (produkteier 13.09): «Generer innhold» og «Be om endring» som dialoger. Type og nivå kommer
+// fra Innstillinger og spørres ikke om. Resultatet legges i skjemaet som ulagret utkast.
+// ---------------------------------------------------------------------------
+function effectiveModuleMode() {
+  return sessionDraft?.assessmentMode ?? bundle?.selectedConfiguration?.moduleVersion?.assessmentMode ?? "FREETEXT_PLUS_MCQ";
+}
+function effectiveCertLevel() {
+  return sessionDraft?.certificationLevel ?? bundle?.module?.certificationLevel ?? "intermediate";
+}
+
+async function openGenerateDialog({ mcqOnly = false } = {}) {
+  const dialog = document.getElementById("dialogGenerate");
+  if (!dialog) return;
+  // Et nytt element må finnes på tjeneren før innhold kan genereres til det (navn kreves).
+  if (!selectedModuleId && sessionDraft) {
+    const created = await createModuleFromDraft();
+    if (!created) return;
+  }
+  const mode = effectiveModuleMode();
+  const hasMcq = mcqOnly || mode !== "FREETEXT_ONLY";
+  const context = document.getElementById("dialogGenerateContext");
+  if (context) {
+    context.textContent = tf("shell.generateDialog.context", {
+      type: t(`shell.settings.mode.${mode}`),
+      level: t(`shell.certLevel.${effectiveCertLevel()}`),
+    });
+  }
+  setHidden(document.getElementById("dialogGenerateMcq"), !hasMcq);
+  const host = document.getElementById("dialogGenerateSource");
+  const entry = {
+    kind: "form", formType: "source-material", placeholderKey: "shell.source.placeholder",
+    submitKey: "shell.generateDialog.submit", submitted: false, initialValue: "", context: {}, mount: host,
+    onSubmit: (sourceMaterial) => {
+      dialog.close();
+      pendingMcqCounts = hasMcq
+        ? {
+            questionCount: Number(document.getElementById("dialogGenerateQuestionCount")?.value ?? 5),
+            optionCount: Number(document.getElementById("dialogGenerateOptionCount")?.value ?? 4),
+          }
+        : null;
+      // Planen og framdriften vises i den reduserte samtaleruta til dialogene dekker også dem.
+      openChatPane();
+      const cert = effectiveCertLevel();
+      if (mcqOnly) {
+        askForMcqQuestionCount(sourceMaterial, cert, contentLocale, "thorough", () => showDraftReadyActions());
+        return;
+      }
+      if (mode === "MCQ_ONLY") {
+        startMcqOnlyRegen(sourceMaterial, cert);
+        return;
+      }
+      generateBlueprintAndConfirm(null, selectedModuleId, sourceMaterial, cert, contentLocale, "thorough", "auto", mode === "FREETEXT_ONLY");
+    },
+  };
+  _domFormFields(entry);
+  dialog.showModal();
+}
+
+const REVISE_EXAMPLE_KEYS = ["shorter", "sharper", "moreQuestions", "guidance", "example"];
+function openReviseDialog() {
+  const dialog = document.getElementById("dialogRevise");
+  if (!dialog) return;
+  // Endringen gjøres på utkastet; finnes det ikke, lages det fra det som er lastet.
+  if (!sessionDraft && !createSessionDraftFromLoadedModule()) {
+    showToast(t("shell.revision.unavailable"), "info");
+    return;
+  }
+  if (!sessionDraft?.taskText && !sessionDraft?.assessorExpectedContent && (sessionDraft?.mcqQuestions?.length ?? 0) === 0) {
+    showToast(t("shell.revision.unavailable"), "info");
+    return;
+  }
+  const input = document.getElementById("dialogReviseInput");
+  const examples = document.getElementById("dialogReviseExamples");
+  if (examples) {
+    examples.innerHTML = REVISE_EXAMPLE_KEYS.map((k) =>
+      `<button type="button" class="row-action-btn revise-example" data-example="${k}">${escapeHtml(t(`shell.reviseDialog.example.${k}`))}</button>`).join("");
+  }
+  if (input) input.value = "";
+  dialog.showModal();
+  setTimeout(() => input?.focus(), 50);
+}
+
+function bindGenerateAndReviseDialogs() {
+  document.getElementById("dialogGenerateCancel")?.addEventListener("click", () => document.getElementById("dialogGenerate")?.close());
+  // Kildeverktøyet rives når dialogen lukkes, så det ikke ligger igjen som et «aktivt» skjema i DOM-en.
+  document.getElementById("dialogGenerate")?.addEventListener("close", () => { document.getElementById("dialogGenerateSource")?.replaceChildren(); });
+  document.getElementById("dialogReviseCancel")?.addEventListener("click", () => document.getElementById("dialogRevise")?.close());
+  document.getElementById("dialogReviseExamples")?.addEventListener("click", (event) => {
+    const btn = event.target instanceof Element ? event.target.closest("[data-example]") : null;
+    if (!btn) return;
+    const input = document.getElementById("dialogReviseInput");
+    if (input) { input.value = t(`shell.reviseDialog.example.${btn.dataset.example}`); input.focus(); }
+  });
+  document.getElementById("dialogReviseSubmit")?.addEventListener("click", () => {
+    const input = document.getElementById("dialogReviseInput");
+    const instruction = input?.value.trim();
+    if (!instruction) { input?.focus(); return; }
+    document.getElementById("dialogRevise")?.close();
+    openChatPane();
+    runUnifiedRevision(instruction);
+  });
+  document.getElementById("dialogReviseInput")?.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); document.getElementById("dialogReviseSubmit")?.click(); }
+  });
+}
+bindGenerateAndReviseDialogs();
+
 // #1046 A1 (avgjørelse 1b): «Ny modul» åpner et tomt skjema — ingen dialog, ingen spørsmål først.
 // Utkastet er tomt, av typen fritekst (uten flervalg kan ikke FREETEXT_PLUS_MCQ lagres); typen kan
 // endres under Innstillinger etter første Lagre. `saveDraftBundleInBackground` lager modulen på
@@ -7649,7 +7755,7 @@ function showDraftReadyActions({ quiet = false } = {}) {
   const mcqCount = sessionDraft?.mcqQuestions?.length ?? 0;
   const model = deriveShellDraftReadyActionModel({ hasSelectedModule: !!selectedModuleId });
   const actionMap = {
-    revise: { labelKey: "shell.draftReady.editInChat", action: () => startUnifiedRevisionFlow() },
+    revise: { labelKey: "shell.draftReady.editInChat", action: () => openReviseDialog() },
     restart: { labelKey: "shell.draftReady.restart", action: startIdle },
     saveDraft: { labelKey: "shell.draftReady.saveDraft", action: saveDraftBundleInBackground },
   };
@@ -7672,10 +7778,7 @@ function showDraftReadyActions({ quiet = false } = {}) {
     actions.push({
       key: "generateContent",
       labelKey: "shell.module.generateContent",
-      action: () => {
-        const typed = document.getElementById("previewEditTitle")?.value.trim() || localizeValue(sessionDraft?.title) || "";
-        if (typed) askForSourceMaterial(typed, null, null); else startNewModuleFlow();
-      },
+      action: () => openGenerateDialog(),
     });
   }
   renderWorkspaceActions(actions);
@@ -7712,7 +7815,15 @@ function askForCertLevelMcqOnly(sourceMaterial) {
   ]);
 }
 
+// #1046: antallene valgt i «Generer innhold»-dialogen — da spørres det ikke igjen i samtalen.
+let pendingMcqCounts = null;
 function askForMcqQuestionCount(sourceMaterial, certLevel, locale, generationMode, onAccept) {
+  if (pendingMcqCounts) {
+    const { questionCount, optionCount } = pendingMcqCounts;
+    pendingMcqCounts = null;
+    generateMcqInBackground(sourceMaterial, certLevel, locale, generationMode, questionCount, optionCount, onAccept);
+    return;
+  }
   logBot(() => t("shell.mcq.questionCountPrompt"), [
     { labelKey: "shell.mcq.questionCountChoice3", action: () => askForMcqOptionCount(sourceMaterial, certLevel, locale, generationMode, 3, onAccept) },
     { labelKey: "shell.mcq.questionCountChoice5", action: () => askForMcqOptionCount(sourceMaterial, certLevel, locale, generationMode, 5, onAccept) },
