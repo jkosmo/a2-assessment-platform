@@ -695,13 +695,14 @@ Produkteier, etter omgang 3 på stage:
    framdrift) og kan skjules igjen. Utfallet av handlinger (lagret, importert, avvist) kommer som
    toast når ruta er skjult — som på de andre skjemasidene.
 
-## SMO ser resultater for egne kurs — tallene, ikke personene (2026-09-13)
+## SMO ser resultater for egne kurs — også personnivå (2026-09-13)
 
-Produkteier: SUBJECT_MATTER_OWNER skal kunne lese Resultater for kurs hen eier, men ikke identifisere
-enkeltpersoner der. Ingen særregler for små grupper — det holder kompleksiteten nede. Sak: #1058.
+Produkteier: SUBJECT_MATTER_OWNER skal kunne lese Resultater for kurs hen eier. Først foreslått som
+«tallene, ikke personene»; justert samme dag med henvisning til 23.08-avgjørelsen om revisjonssporet:
+SMO er «en lærer med pedagogisk oppfølgingsansvar» og ser allerede enkeltpersoner per innlevering, så
+det er ikke konsistent å skjule dem i Resultater. Ingen særregler for små grupper — det holder
+kompleksiteten nede. Sak: #1058.
 
-Konkret: de aggregerte rapportene (bestått-andel, fullføring, kursrapport og tilsvarende eksporter)
-åpnes for SMO filtrert på eierskap; deltakerdetaljene og deltaker-eksportene forblir administrator og
-rapportleser. Dette er et bevisst skille fra 23.08-avgjørelsen om revisjonssporet, der SMO ser alt om
-ÉN innlevering «som en lærer»: «hva skjedde med denne innleveringen» er noe annet enn «liste over hvem
-som strøk».
+Konkret: de seks rapportene Resultater bruker (og eksportene av dem) åpnes for SMO filtrert på
+eierskap (ContentOwner på kurset, og modulene i kurset). Administrator og rapportleser ser alt som før.
+Resten av `/api/reports` er uendret.
