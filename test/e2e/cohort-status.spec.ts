@@ -69,8 +69,9 @@ test("cohort dashboard: pick a course → status counts + per-class breakdown, w
   // Status cards render with the counts.
   const cards = page.locator("#statusCards");
   await expect(cards).toBeVisible();
-  // Makkeren til display-sjekken over: rutenettet skal faktisk komme TILBAKE som grid.
-  await expect(cards).toHaveCSS("display", "grid");
+  // Makkeren til display-sjekken over: linja skal faktisk komme TILBAKE som flex (#1046 J4: én
+  // nøkkeltall-linje, ikke et rutenett med fliser).
+  await expect(cards).toHaveCSS("display", "flex");
   await expect(cards.locator(".status-card--total .status-value")).toHaveText("5");
   await expect(cards.locator(".status-card--assigned .status-value")).toHaveText("2");
   await expect(cards.locator(".status-card--in_progress .status-value")).toHaveText("1");

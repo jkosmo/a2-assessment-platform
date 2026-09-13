@@ -12,7 +12,8 @@ import { escapeHtml as escapeHtmlR } from "/static/html-escape.js";
 import { localeLabels, supportedLocales, translations } from "/static/i18n/results-translations.js";
 import { apiFetch, buildConsoleHeaders, getConsoleConfig, getAccessToken, fetchQueueCounts, applyNavReviewBadge } from "/static/api-client.js";
 import { initConsentGuard } from "/static/consent-guard.js";
-import { hideLoading, showEmpty, showLoading } from "/static/loading.js";
+import { hideLoading, showLoading } from "/static/loading.js";
+import { setHidden } from "/static/dom-visibility.js";
 import {
   findMatchingPreset,
   resolveRoleSwitchState,
@@ -30,12 +31,12 @@ const mockRolePresetContainer = document.getElementById("mockRolePresetContainer
 const mockRolePresetSelect = document.getElementById("mockRolePreset");
 const mockRolePresetHint = document.getElementById("mockRolePresetHint");
 const loadMeButton = document.getElementById("loadMe");
-const filterModuleId = document.getElementById("filterModuleId");
 const filterCourseId = document.getElementById("filterCourseId");
+const resultsSearch = document.getElementById("resultsSearch");
+const resultsKpi = document.getElementById("resultsKpi");
 const filterDateFrom = document.getElementById("filterDateFrom");
 const filterDateTo = document.getElementById("filterDateTo");
 const resultsMeta = document.getElementById("resultsMeta");
-const passRateGrid = document.getElementById("passRateGrid");
 const completionBody = document.getElementById("completionBody");
 const exportCompletionButton = document.getElementById("exportCompletion");
 const exportPassRatesButton = document.getElementById("exportPassRates");
@@ -99,8 +100,8 @@ function headers() {
 
 function buildFilterParams() {
   const params = new URLSearchParams();
-  const moduleId = filterModuleId.value.trim();
   const courseId = filterCourseId.value.trim();
+  const moduleId = "";
   const dateFrom = filterDateFrom.value;
   const dateTo = filterDateTo.value;
   if (moduleId) params.set("moduleId", moduleId);
@@ -131,49 +132,61 @@ function formatScore(value) {
 // Å beholde parseren ville betydd at et lagringsformat som slipper gjennom, blir stille reparert
 // på klienten med en annen regel enn serverens — og da ser ingen at serveren tok feil.
 
+// #1046 J4: nøkkeltallene som én linje — antall moduler, avgjørelser, bestått-andel, fullføring.
+// Flisene per modul er borte; bestått-andelen står som kolonne i tabellen under.
+let latestPassRatesRows = [];
+let latestCompletionRows = [];
+// #1046 J6: tom tabell = bare teksten, ikke et tomt tabellhode (samme regel som listesida og Status).
+// Fila hadde tre ulike tomtilstander (empty-state-boks i tbody, <td colspan> med small-tekst, to
+// varianter av den). Nå én: tabellen skjules, teksten står der tabellen var.
+function setTableEmpty(tbody, message) {
+  const wrap = tbody.closest(".list-table-wrap");
+  if (!wrap) return;
+  let note = wrap.nextElementSibling;
+  if (!note || !note.classList.contains("table-empty-note")) {
+    note = document.createElement("p");
+    note.className = "small table-empty-note";
+    wrap.after(note);
+  }
+  // null = rader finnes; "" = tom uten egen tekst (forklaringen står alt over tabellen).
+  const hasRows = message === null || message === undefined;
+  setHidden(wrap, !hasRows);
+  setHidden(note, hasRows || !message);
+  note.textContent = message ?? "";
+}
+
 function renderPassRates(rows) {
-  passRateGrid.innerHTML = "";
-  if (!rows || rows.length === 0) {
-    const p = document.createElement("p");
-    p.className = "small";
-    p.textContent = t("results.passRates.empty");
-    passRateGrid.appendChild(p);
-    return;
-  }
-  for (const row of rows) {
-    const card = document.createElement("div");
-    card.className = "pass-rate-card";
+  latestPassRatesRows = rows ?? [];
+  renderKpi();
+}
 
-    const title = document.createElement("div");
-    title.className = "module-title";
-    title.textContent = row.moduleTitle || row.moduleId;
-
-    const rateValue = document.createElement("div");
-    rateValue.className = "rate-value";
-    rateValue.textContent = row.passRate !== null ? pct(row.passRate) : "—";
-
-    const rateLabel = document.createElement("div");
-    rateLabel.className = "rate-label";
-    rateLabel.textContent = t("results.passRates.passRate");
-
-    const rateDetail = document.createElement("div");
-    rateDetail.className = "rate-detail";
-    if (row.decisionCount > 0) {
-      rateDetail.textContent = `${row.passCount} ${t("results.passRates.passCount")} ${t("results.passRates.of")} ${row.decisionCount} ${t("results.passRates.decisions")}`;
-    } else {
-      rateDetail.textContent = t("results.passRates.noData");
-    }
-
-    card.append(title, rateValue, rateLabel, rateDetail);
-    passRateGrid.appendChild(card);
-  }
+function renderKpi() {
+  if (!resultsKpi) return;
+  const completion = latestCompletionRows;
+  const pass = latestPassRatesRows;
+  if (completion.length === 0 && pass.length === 0) { resultsKpi.innerHTML = ""; return; }
+  const decisions = pass.reduce((n, r) => n + (r.decisionCount ?? 0), 0);
+  const passed = pass.reduce((n, r) => n + (r.passCount ?? 0), 0);
+  const total = completion.reduce((n, r) => n + (r.totalSubmissions ?? 0), 0);
+  const completed = completion.reduce((n, r) => n + (r.completedSubmissions ?? 0), 0);
+  const item = (value, label) => `<span><span class="kpi-value">${escapeHtmlR(String(value))}</span>${escapeHtmlR(label)}</span>`;
+  resultsKpi.innerHTML = [
+    item(completion.length, t("results.kpi.modules")),
+    item(decisions, t("results.kpi.decisions")),
+    item(decisions > 0 ? formatPercent(passed / decisions) : "—", t("results.kpi.passed")),
+    item(total > 0 ? formatPercent(completed / total) : "—", t("results.kpi.completed")),
+  ].join("");
 }
 
 function renderCompletion(passRatesRows, completionRows) {
   completionBody.innerHTML = "";
+  latestCompletionRows = completionRows ?? [];
+  renderKpi();
 
   const passRateByModule = new Map(passRatesRows.map((r) => [r.moduleId, r]));
-  const rows = completionRows ?? [];
+  // #1046 B1: søket filtrerer radene på modulnavn (og id), i minnet, som på listesidene.
+  const q = (resultsSearch?.value ?? "").trim().toLowerCase();
+  const rows = (completionRows ?? []).filter((row) => !q || String(row.moduleTitle ?? "").toLowerCase().includes(q) || String(row.moduleId ?? "").toLowerCase().includes(q));
   if (selectedModuleRow && !rows.some((row) => row.moduleId === selectedModuleRow.moduleId)) {
     selectedModuleRow = null;
   } else if (selectedModuleRow) {
@@ -186,11 +199,8 @@ function renderCompletion(passRatesRows, completionRows) {
     if (fresh) selectedModuleRow.moduleTitle = fresh.moduleTitle || selectedModuleRow.moduleId;
   }
 
-  if (rows.length === 0) {
-    // #1046: den delte tomtilstanden — samme stil som resten av flatene.
-    showEmpty(completionBody, t("results.completion.empty"), { columns: 8 });
-    return;
-  }
+  setTableEmpty(completionBody, rows.length === 0 ? t("results.completion.empty") : null);
+  if (rows.length === 0) return;
 
   for (const row of rows) {
     const pr = passRateByModule.get(row.moduleId);
@@ -219,6 +229,7 @@ function renderCompletion(passRatesRows, completionRows) {
     });
 
     const titleCell = document.createElement("td");
+    titleCell.className = "col-name";
     const titleButton = document.createElement("button");
     titleButton.type = "button";
     titleButton.className = "report-row-button";
@@ -238,26 +249,32 @@ function renderCompletion(passRatesRows, completionRows) {
       pct(row.completionRate),
       pr ? pr.passCount : "—",
       pr ? pr.failCount : "—",
-      pr ? pct(pr.passRate) : "—",
     ]) {
       const td = document.createElement("td");
       td.textContent = String(value);
       tr.appendChild(td);
     }
+    // Bestått-andel med en liten stolpe, så kolonnen kan leses uten å lese tallene.
+    const rateTd = document.createElement("td");
+    if (pr && pr.passRate !== null && pr.passRate !== undefined) {
+      const bar = document.createElement("span");
+      bar.className = "rate-bar";
+      bar.style.width = `${Math.round(Math.max(0, Math.min(1, pr.passRate)) * 60)}px`;
+      rateTd.append(bar, document.createTextNode(pct(pr.passRate)));
+    } else {
+      rateTd.textContent = "—";
+    }
+    tr.appendChild(rateTd);
     completionBody.appendChild(tr);
   }
 }
 
 function renderParticipants(rows) {
   participantBody.innerHTML = "";
-  if (!rows || rows.length === 0) {
-    showEmpty(
-      participantBody,
-      selectedModuleRow ? t("results.participants.empty") : t("results.participants.placeholder"),
-      { columns: 6 },
-    );
-    return;
-  }
+  // Uten valgt modul står forklaringen alt i detaljlinja over; da bare skjules tabellen.
+  const empty = !rows || rows.length === 0;
+  setTableEmpty(participantBody, empty ? (selectedModuleRow ? t("results.participants.empty") : "") : null);
+  if (empty) return;
   for (const row of rows) {
     const tr = document.createElement("tr");
     tr.innerHTML = `
@@ -356,6 +373,10 @@ function applyTranslations() {
   for (const el of document.querySelectorAll("[data-i18n-placeholder]")) {
     const key = el.getAttribute("data-i18n-placeholder");
     if (key) el.placeholder = t(key);
+  }
+  for (const el of document.querySelectorAll("[data-i18n-aria-label]")) {
+    const key = el.getAttribute("data-i18n-aria-label");
+    if (key) el.setAttribute("aria-label", t(key));
   }
   if (!selectedModuleRow && moduleDetailMeta) {
     moduleDetailMeta.textContent = t("results.participants.placeholder");
@@ -467,7 +488,7 @@ async function loadParticipantConsoleConfig() {
   // #1046 (B5): rapportene henter seg selv, som alle andre lister. «Last resultater»-knappen var den
   // eneste lista som krevde et klikk. Første henting skjer HER, etter at identitetsskjemaet er fylt
   // (#541) — en tidligere henting ville sendt tom x-user-id og fått 403.
-  await loadResults();
+  await Promise.all([loadCourseOptions(), loadResults()]);
 }
 
 // Event listeners
@@ -489,10 +510,24 @@ rolesInput.addEventListener("input", () => {
   renderWorkspaceNavigation();
 });
 
-// Filtrene virker med en gang (#1046 B5). `change` og ikke `input`: ID-feltene er fritekst, og en
-// henting per tastetrykk ville vært tre kall per bokstav.
-for (const felt of [filterModuleId, filterCourseId, filterDateFrom, filterDateTo]) {
+// Filtrene virker med en gang (#1046 B5). Kurs og periode henter på nytt; søket filtrerer i minnet.
+for (const felt of [filterCourseId, filterDateFrom, filterDateTo]) {
   felt?.addEventListener("change", () => loadResults());
+}
+resultsSearch?.addEventListener("input", () => renderCompletion(latestPassRatesRows, latestCompletionRows));
+
+// #1046 J3: kursvelgeren — navn, ikke ID. Samme kall som Status bruker; leses av samme roller.
+async function loadCourseOptions() {
+  if (!filterCourseId) return;
+  try {
+    const data = await apiFetch("/api/cohort-status/courses", headers);
+    const current = filterCourseId.value;
+    const options = (data.courses ?? []).map((c) => `<option value="${escapeHtmlR(c.id)}">${escapeHtmlR(c.title ?? c.id)}${c.archived ? ` (${escapeHtmlR(t("results.filters.archived"))})` : ""}</option>`).join("");
+    filterCourseId.innerHTML = `<option value="">${escapeHtmlR(t("results.filters.allCourses"))}</option>${options}`;
+    if (current) filterCourseId.value = current;
+  } catch {
+    // Uten kursliste står «Alle kurs» igjen — rapporten virker fortsatt.
+  }
 }
 installRowMoreMenus();
 exportCompletionButton.addEventListener("click", () => exportCsv("completion"));
@@ -528,12 +563,9 @@ function renderCourseReport(rows) {
     const fresh = rows.find((row) => row.courseId === selectedCourseRow.courseId);
     if (fresh) selectedCourseRow.courseTitle = fresh.courseTitle || selectedCourseRow.courseId;
   }
-  if (!Array.isArray(rows) || rows.length === 0) {
-    const tr = document.createElement("tr");
-    tr.innerHTML = `<td colspan="5" class="small">${escapeHtmlR(t("results.courses.empty"))}</td>`;
-    courseReportBody.appendChild(tr);
-    return;
-  }
+  const empty = !Array.isArray(rows) || rows.length === 0;
+  setTableEmpty(courseReportBody, empty ? t("results.courses.empty") : null);
+  if (empty) return;
   for (const row of rows) {
     const rate = typeof row.completionRate === "number" ? formatPercent(row.completionRate) : "-";
     const moduleList = Array.isArray(row.moduleBreakdown) && row.moduleBreakdown.length > 0
@@ -598,12 +630,9 @@ function renderCourseReport(rows) {
 
 function renderCourseLearners(rows) {
   courseLearnerBody.innerHTML = "";
-  if (!Array.isArray(rows) || rows.length === 0) {
-    const tr = document.createElement("tr");
-    tr.innerHTML = `<td colspan="8" class="small">${escapeHtmlR(selectedCourseRow ? t("results.courses.detail.empty") : t("results.courses.placeholder"))}</td>`;
-    courseLearnerBody.appendChild(tr);
-    return;
-  }
+  const empty = !Array.isArray(rows) || rows.length === 0;
+  setTableEmpty(courseLearnerBody, empty ? (selectedCourseRow ? t("results.courses.detail.empty") : "") : null);
+  if (empty) return;
 
   for (const row of rows) {
     const tr = document.createElement("tr");

@@ -243,17 +243,23 @@ Som på listenivået bør dette gjøres som én felles «skjemaside» (hode, til
 språkvelger, kort, lagrelinje), ikke som fire rettelser.
 
 
-## Status 12.09.2026 (kveld)
+## Status 13.09.2026 (formiddag)
+
+Produkteier avgjorde 13.09: fanelinje som nivå to under hodet (variant A), eiere inn på Innstillinger,
+tredelingen Rediger · Forhåndsvis · Innstillinger også på seksjoner, Resultater som liste.
 
 | Punkt | Status |
 |---|---|
 | A (lag nytt) | Avgjort 1b og gjort for kurs og klasse (tomt skjema, lages ved første Lagre). Seksjon hadde det. Modul: gjenstår («Ny modul»-dialogen). |
-| B1, B2, B3 | Gjort for klasse, seksjon, kurs (form-page.js). Modul: B1 og B2 gjort; tilstandslinja er modulens egen og står. |
+| B1, B2, B3 | Gjort for alle fire. Modulens hode har samme typemerke, navn som tittel, statusmerke og «Alt lagret / Ulagrede endringer»; den gamle tilstandslinja er en liten tekstlinje under. |
+| B4 | Gjort: fanelinje fra form-page.js. Modul og seksjon: Rediger · Forhåndsvisning · Innstillinger. Kurs og klasse: Rediger · Innstillinger. Eierne ligger under Innstillinger overalt. |
 | B6 | Gjort. |
 | C1, C2, C3 | Gjort for klasse, seksjon, kurs (språkpiller, bokmål først, «(påkrevd)»). Bokmål er det påkrevde språket (DECISIONS). |
 | D1, D2, D3 | Gjort: .form-field i shared.css; hvite felt; «(påkrevd)». D4–D7 gjenstår. |
-| E (lagring) | Avgjort 2a og gjort for klasse, seksjon, kurs: «Lagre», Avbryt som lenke, «Alt lagret / Ulagrede endringer», spørsmål før man forlater. Modul har sin egen. |
-| F1, F2 | Gjort for klasse, seksjon, kurs (handlingsrad i hodet, «maks fire + Mer»). Modul: sidepanelet står — dagslysspørsmål. |
+| E (lagring) | Avgjort 2a og gjort for klasse, seksjon, kurs: «Lagre», Avbryt som lenke, «Alt lagret / Ulagrede endringer», spørsmål før man forlater. Modul har sin egen lagring, men samme merke i hodet. |
+| F1, F2 | Gjort for alle fire: handlingsrad i hodet med «maks fire + Mer». Modulens sidepanel er borte. |
 | G1–G3 | G3 gjort. G1/G2 (én «rad i skjema») gjenstår. |
 | H1–H4 | Gjort. |
-| J1, J2, J6, J8, J9 | Gjort (titler = menynavn, «klasse», tom tabell, Eksporter-meny, prosent/tid). J3, J4, J5, J7, J10 gjenstår. |
+| J1, J2, J6, J8, J9 | Gjort (titler = menynavn, «klasse», tom tabell, Eksporter-meny, prosent/tid). |
+| J3, J4, J5, J6, J7 | Gjort 13.09: Resultater og Status har samme hode og filterrad som listesidene (kursvelger med navn, søk over moduler; ID-feltene er borte). Nøkkeltall som én linje (`.kpi-line` i shared.css) — flisene og rutenettet per modul er borte, bestått-andelen står som kolonne med stolpe. Alle tabellene er `.list-table`; tom tabell skjules og teksten står alene (én `setTableEmpty` i stedet for tre utgaver). Detaljen har navnet på valgt modul/kurs. |
+| J10 | Gjort i praksis: «—» alene i tabellen. |

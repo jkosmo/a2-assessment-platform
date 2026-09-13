@@ -148,14 +148,15 @@ function setLocale(locale) {
 
 // --- Cohort dashboard logic -------------------------------------------------
 
+// #1046 J4: ett tall med etikett på nøkkeltall-linja (var en flis i et rutenett).
 function statusCard(cls, value, label) {
-  return `<div class="status-card status-card--${cls}"><div class="status-value">${value}</div><div class="status-label">${escapeHtml(label)}</div></div>`;
+  return `<span class="status-card status-card--${cls}"><span class="kpi-value status-value">${value}</span><span class="status-label">${escapeHtml(label)}</span></span>`;
 }
 
 function renderCohort(summary) {
   if (cohortEmpty) cohortEmpty.hidden = true;
   if (statusCards) {
-    // #975: `.status-grid{display:grid}` står i <style>-blokka i cohort-status.html og slår
+    // #975: `.kpi-line{display:flex}` (shared.css) slår
     // `hidden`-attributtet. Rutenettet ble aldri skjult — det var bare tomt, og et tomt grid har
     // høyde 0. Derfor så det riktig ut, og derfor sa `toBeHidden()` i e2e-en at alt var i orden.
     setHidden(statusCards, false);
@@ -173,13 +174,13 @@ function renderCohort(summary) {
     const rows = summary.byClass ?? [];
     if (byClassEmpty) byClassEmpty.hidden = rows.length > 0;
     // #1046 J6: tom tabell = bare teksten, ikke et tomt tabellhode (som listesida).
-    const tableWrap = byClassBody?.closest(".table-wrap");
+    const tableWrap = byClassBody?.closest(".list-table-wrap");
     if (tableWrap) tableWrap.hidden = rows.length === 0;
     if (byClassBody) {
       byClassBody.innerHTML = rows
         .map((b) => {
           const bc = b.counts ?? {};
-          return `<tr><td>${escapeHtml(b.className ?? b.classId)}</td><td>${bc.ASSIGNED ?? 0}</td><td>${bc.IN_PROGRESS ?? 0}</td><td>${bc.OVERDUE ?? 0}</td><td>${bc.COMPLETED ?? 0}</td><td>${b.total ?? 0}</td></tr>`;
+          return `<tr><td class="col-name">${escapeHtml(b.className ?? b.classId)}</td><td>${bc.ASSIGNED ?? 0}</td><td>${bc.IN_PROGRESS ?? 0}</td><td>${bc.OVERDUE ?? 0}</td><td>${bc.COMPLETED ?? 0}</td><td>${b.total ?? 0}</td></tr>`;
         })
         .join("");
     }
