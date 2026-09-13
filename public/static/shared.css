@@ -1405,7 +1405,10 @@ dialog::backdrop {
 .form-add-row > input, .form-add-row > select { padding: 8px 10px; border: 1px solid var(--color-border-soft); border-radius: var(--radius-btn); font-size: 13px; font-family: inherit; background: var(--color-surface); box-sizing: border-box; }
 /* #1046 nivå to — SKJEMASIDA (public/static/form-page.js). Hode, tilstandslinje, handlingsrad,
    språkpiller og lagrelinje for det åpnede elementet. Sidene skal ikke ha egne kopier. */
-.form-page-head { margin-bottom: var(--space-2); }
+.form-page-head { margin-bottom: 0; } /* luften under kommer fra .form-page-state (10 px) — samme rytme som modulen */
+/* Produkteier 13.09: tilbake-lenke og handlingsrad på én linje øverst; navnet får hele bredden. */
+.form-page-topline { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); flex-wrap: wrap; }
+.form-page-topline .back-link { margin: 0; }
 .form-page-title-row { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-2); flex-wrap: wrap; margin-top: 6px; }
 .form-page-title { flex: 1 1 320px; min-width: 0; }
 .form-page-type { display: block; font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--color-meta); }
@@ -1414,7 +1417,7 @@ dialog::backdrop {
 .form-page-state { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
 .form-state-badge { font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--color-border-soft); color: var(--color-meta); background: var(--color-surface); }
 .form-state-badge.is-dirty { color: #8a5a14; border-color: #e3c58a; background: #fff8ea; }
-.form-page-actions { flex: 0 0 auto; padding-top: 18px; }
+.form-page-actions { flex: 0 0 auto; margin-left: auto; }
 /* Produkteier 13.09: Lagre og Avbryt står FØRST i handlingsraden, med en diskré grønn og rød tone
    når det finnes noe å lagre eller forkaste. Uten endringer er begge grå og slått av — fargen
    sier «du har ulagrede endringer», ikke «her er en knapp». Slett beholder sin røde RAMME; det er

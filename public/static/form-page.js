@@ -72,15 +72,19 @@ export function createFormPage(config) {
     const back = config.backHref
       ? `<a href="${escapeHtml(config.backHref)}" class="back-link" id="formBackLink">${escapeHtml(T.back)}</a>`
       : `<a class="back-link" id="formBackLink" href="#">${escapeHtml(T.back)}</a>`;
+    // Produkteier 13.09: handlingsraden står på samme linje som tilbake-lenka, så navnet får hele
+    // bredden under.
     return `<div class="form-page-head">
-      ${back}
+      <div class="form-page-topline">
+        ${back}
+        ${actions ? `<div class="form-page-actions"><div class="row-actions">${actions}</div></div>` : ""}
+      </div>
       <div class="form-page-title-row">
         <div class="form-page-title">
           <span class="form-page-type">${escapeHtml(T.typeLabel)}</span>
           <h1 id="formPageTitle" class="${title ? "" : "is-untitled"}">${escapeHtml(title || T.untitled)}</h1>
           <div class="form-page-state">${status}<span id="formPageDirty" class="form-state-badge is-clean">${escapeHtml(T.savedAll)}</span></div>
         </div>
-        ${actions ? `<div class="form-page-actions"><div class="row-actions">${actions}</div></div>` : ""}
       </div>
     </div>`;
   }

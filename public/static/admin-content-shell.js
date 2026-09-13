@@ -971,18 +971,29 @@ function logUser(text) {
 // Create a progress slot (logged as a pending bot entry). Caller attaches abort listener.
 // textKeyOrFn: i18n key OR () => string.  Returns { entry, el, abortBtn }.
 function logProgress(textKeyOrFn, options = {}) {
-  if (options.abortable) openChatPane();
+  // Produkteier 13.09: en lagring skal ikke åpne samtaleruta. Ruta åpnes når assistenten SPØR
+  // (valg, skjema) — framdrift er ikke et spørsmål. Avbryt-knappen finnes i ruta for den som har den åpen.
   const { el, abortBtn } = _domProgress(textKeyOrFn, options);
   // quiet: framdrift uten utfall å melde (lasting av modulen) — speiles ikke som toast.
   const entry = { kind: "bot", html: null, choices: [], active: false, quiet: !!options.quiet };
   chatLog.push(entry);
-  return { entry, el, abortBtn };
+  // Ruta er skjult: framdriften vises som toast, med «Avbryt» når den kan avbrytes. Toasten
+  // fjernes når framdriften løses (logResolveSlot).
+  let toast = null;
+  if (!options.quiet && !chatPaneVisible()) {
+    const text = typeof textKeyOrFn === "function" ? textKeyOrFn() : t(textKeyOrFn);
+    toast = showToast(text, "info", "", options.abortable
+      ? { sticky: true, actionLabel: t("shell.action.cancel"), onAction: () => abortBtn.click() }
+      : { sticky: true });
+  }
+  return { entry, el, abortBtn, toast };
 }
 
 // Resolve a progress slot with its final content + choices.
 // Updates both the log entry and the DOM element in-place.
 function logResolveSlot(slot, htmlFn, choices = []) {
   setChatBusy(false);
+  slot.toast?.remove();
   slot.entry.html = htmlFn;
   slot.entry.choices = choices;
   slot.entry.active = choices.length > 0;
@@ -1779,6 +1790,66 @@ async function localizeMcqAcrossLocales(questions, sourceLocale) {
   return { questions: localizedQuestions, failedLocales };
 }
 
+// #1046 (produkteier 13.09): fanebytte er ikke navigering og spør ikke. Det som er skrevet i Rediger
+// legges i `sessionDraft` når man forlater fanen, og kommer tilbake når skjemaet åpnes igjen.
+// `editFormSnapshot` settes av enterPreviewEditMode (den kjenner utgangsverdiene) og leser feltene.
+let editFormSnapshot = null;
+// Utkastet kom fra skjemaet (én språkversjon, ikke oversatt). Da skal Lagre gå veien om oversettelse
+// (previewEditConfirm), ikke lagre utkastet rått som «Lagre utkast» gjorde for genererte utkast.
+let sessionDraftFromForm = false;
+
+function readMcqQuestionsFromForm(currentMcqQuestions) {
+  return currentMcqQuestions.map((question, questionIndex) => {
+    const container = previewContent.querySelector(`[data-preview-edit-question="${questionIndex}"]`);
+    const optionInputs = Array.from(container?.querySelectorAll("[data-preview-edit-option]") ?? []);
+    const options = optionInputs.map((input, optionIndex) => input.value.trim() || question.options[optionIndex] || "");
+    const checkedRadio = container?.querySelector(`input[name="previewEditCorrectAnswer${questionIndex}"]:checked`);
+    const checkedIndex = Number.parseInt(checkedRadio?.value ?? "-1", 10);
+    const safeCorrectAnswerIndex =
+      Number.isInteger(checkedIndex) && checkedIndex >= 0 && checkedIndex < options.length
+        ? checkedIndex
+        : Math.max(0, options.findIndex((option) => option === question.correctAnswer));
+    return {
+      stem: container?.querySelector(`#previewEditMcqStem${questionIndex}`)?.value.trim() || question.stem,
+      options,
+      correctAnswer: options[safeCorrectAnswerIndex] ?? options[0] ?? question.correctAnswer ?? "",
+      // Reverted to ||: an emptied rationale cannot be saved at all. Both the MCQ
+      // localization body and the MCQ-set body require a non-empty string, so clearing it
+      // produces a 400 AFTER the title and rubric may already have been written. Keeping
+      // the old text is wrong but harmless; a half-written save is not. The real fix is a
+      // schema that treats the rationale as genuinely optional - registered separately.
+      rationale: container?.querySelector(`#previewEditMcqRationale${questionIndex}`)?.value.trim() || question.rationale,
+    };
+  });
+}
+
+function nonEmptyLocaleMap(value) {
+  if (typeof value === "string") return value.trim() ? { [LEGACY_STRING_LOCALE]: value } : {};
+  return Object.fromEntries(Object.entries(value ?? {}).filter(([, v]) => typeof v === "string" && v.trim()));
+}
+
+/** Legg det som er skrevet i Rediger inn i utkastet. Returnerer true når noe var endret. */
+function captureEditFormIntoDraft() {
+  if (!isEditFormOpen() || !editFormSnapshot) return false;
+  const snap = editFormSnapshot();
+  if (!snap.changed) return false;
+  const loc = snap.editingLocale;
+  const stored = bundle?.selectedConfiguration?.moduleVersion;
+  const merge = (current, text) => mergeLocaleInto(current, loc, text);
+  sessionDraft = buildPreviewCandidate({
+    title: merge(sessionDraft?.title ?? bundle?.module?.title ?? "", snap.title) ?? "",
+    description: merge(sessionDraft?.description ?? bundle?.module?.description ?? "", snap.description),
+    taskText: merge(sessionDraft?.taskText ?? stored?.taskText ?? "", snap.taskText) ?? "",
+    assessorExpectedContent: merge(sessionDraft?.assessorExpectedContent ?? stored?.assessorExpectedContent ?? "", snap.assessorExpectedContent) ?? "",
+    candidateTaskConstraints: merge(sessionDraft?.candidateTaskConstraints ?? stored?.candidateTaskConstraints ?? "", snap.candidateTaskConstraints) ?? "",
+    mcqQuestions: snap.mcqQuestions,
+  });
+  sessionState = "draft-pending";
+  sessionDraftFromForm = true;
+  newModulePlaceholder = false;
+  return true;
+}
+
 function resolveEditableMcqQuestions(locale) {
   const sourceQuestions = sessionDraft?.mcqQuestions?.length
     ? sessionDraft.mcqQuestions
@@ -2463,6 +2534,18 @@ async function saveDraftBundleInBackground(options = {}) {
   if (!selectedModuleId && sessionDraft) {
     const created = await createModuleFromDraft();
     if (!created) return;
+    // Bare navn, type og nivå så langt (fra Innstillinger): modulen finnes nå, men det er ingen
+    // versjon å lagre. Last den inn, behold utkastet (typen!) og gå til Rediger for innholdet.
+    const hasContent = Object.keys(nonEmptyLocaleMap(sessionDraft.taskText)).length > 0 || (sessionDraft.mcqQuestions?.length ?? 0) > 0;
+    if (!hasContent) {
+      const keep = sessionDraft;
+      await loadModule(selectedModuleId);
+      sessionDraft = keep;
+      showDraftReadyActions({ quiet: true });
+      switchToTab("edit");
+      showToast(t("shell.newModule.createdGoEdit"), "success");
+      return;
+    }
   }
   const moduleId = selectedModuleId;
   if (!moduleId) {
@@ -3139,7 +3222,10 @@ async function createModuleFromDraft() {
   try {
     const body = await apiFetch("/api/admin/content/modules", getHeaders, {
       method: "POST",
-      body: JSON.stringify({ title: typeof title === "string" ? titleInContentLocale(title) : title }),
+      body: JSON.stringify({
+        title: typeof title === "string" ? titleInContentLocale(title) : title,
+        ...(sessionDraft?.certificationLevel ? { certificationLevel: sessionDraft.certificationLevel } : {}),
+      }),
     });
     const created = body?.module ?? body;
     const id = created?.id ?? created?.moduleId;
@@ -3166,6 +3252,8 @@ function startIdle() {
   bundle = null;
   selectedModuleId = null;
   sessionDraft = null;
+  sessionDraftFromForm = false;
+  newModulePlaceholder = false;
   previewDraft = null;
   latestSavedModuleVersionId = null;
   // #926 QA: a parked proposal belongs to the module that was loaded when it was made. Its
@@ -3222,6 +3310,8 @@ async function loadModule(moduleId, options = {}) {
   sessionState = "loading-module";
   selectedModuleId = moduleId;
   sessionDraft = null;
+  sessionDraftFromForm = false;
+  newModulePlaceholder = false;
   previewDraft = null;
   latestSavedModuleVersionId = null;
   // #926 QA: covers the save path too — saving reloads the module, and a proposal parked before
@@ -4335,12 +4425,27 @@ function enterPreviewEditMode({ force = false } = {}) {
     <textarea id="previewEditGuidanceText" class="preview-edit-textarea preview-edit-textarea--secondary"
       aria-label="${labelGuidance}">${escapedGuidance}</textarea>`;
 
+  // Fanebytte uten å lagre: det som står i feltene nå, mot det skjemaet ble åpnet med.
+  editFormSnapshot = () => {
+    const val = (id) => document.getElementById(id)?.value.trim();
+    const title = val("previewEditTitle") ?? currentTitle;
+    const description = val("previewEditDescription") ?? currentDescription;
+    const taskText = editIsMcqOnly ? "" : (val("previewEditTaskText") ?? currentTaskText);
+    const assessorExpectedContent = editIsMcqOnly ? "" : (val("previewEditGuidanceText") ?? currentGuidanceText);
+    const candidateTaskConstraints = editIsMcqOnly ? "" : (val("previewEditCandidateTaskConstraints") ?? currentCandidateTaskConstraints);
+    const mcqQuestions = readMcqQuestionsFromForm(currentMcqQuestions);
+    const changed = title !== currentTitle || description !== currentDescription || taskText !== currentTaskText
+      || assessorExpectedContent !== currentGuidanceText || candidateTaskConstraints !== currentCandidateTaskConstraints
+      || JSON.stringify(mcqQuestions) !== JSON.stringify(currentMcqQuestions);
+    return { changed, editingLocale, title, description, taskText, assessorExpectedContent, candidateTaskConstraints, mcqQuestions };
+  };
+
+  // Produkteier 13.09: navnet er et vanlig felt med etikett («Navn (påkrevd)»), ikke en understreket
+  // tittel som ser ut som en overskrift. Tittelen på sida står i hodet.
   previewContent.innerHTML = `
-    <div class="preview-module-header">
-      <input id="previewEditTitle" class="preview-edit-title" value="${escapedTitle}"
-        aria-label="${escapeHtml(t("shell.directEdit.titlePlaceholder"))}" />
-      <span class="module-status-badge draft">${escapeHtml(t("shell.directEdit.editingBadge"))}</span>
-    </div>
+    <div class="preview-section-label">${escapeHtml(t("shell.directEdit.nameLabel"))} <span class="required-note">${escapeHtml(t("shell.directEdit.required"))}</span></div>
+    <input id="previewEditTitle" class="preview-edit-input" value="${escapedTitle}"
+      aria-label="${escapeHtml(t("shell.directEdit.nameLabel"))}" placeholder="${escapeHtml(t("shell.directEdit.titlePlaceholder"))}" />
     <div class="preview-section-label">${labelDescription}</div>
     <textarea id="previewEditDescription" class="preview-edit-textarea preview-edit-textarea--compact"
       aria-label="${labelDescription}">${escapedDescription}</textarea>
@@ -4396,6 +4501,12 @@ function enterPreviewEditMode({ force = false } = {}) {
 
   document.getElementById("previewEditConfirm").addEventListener("click", () => {
     const newTitle = document.getElementById("previewEditTitle").value.trim() || currentTitle;
+    // #1046 A1: et nytt element kan ikke lages uten navn — si det FØR noe rives ned, så feltet står.
+    if (!selectedModuleId && !newTitle) {
+      showToast(t("shell.save.titleRequired"), "error");
+      document.getElementById("previewEditTitle")?.focus();
+      return;
+    }
     // #665: free-text inputs are absent for MCQ-only — guard the reads and keep the fields empty.
     const newTaskText = editIsMcqOnly ? "" : (document.getElementById("previewEditTaskText")?.value.trim() || currentTaskText);
     const newGuidanceText = editIsMcqOnly ? "" : (document.getElementById("previewEditGuidanceText")?.value.trim() || currentGuidanceText);
@@ -4414,29 +4525,7 @@ function enterPreviewEditMode({ force = false } = {}) {
     // untouched. `null` would mean "no override" and send the save to ensure-rubric, which would
     // discard criteria the author had just generated.
     const newCriteriaRecord = sessionDraft?.criteria ?? null;
-    const newMcqQuestions = currentMcqQuestions.map((question, questionIndex) => {
-      const container = previewContent.querySelector(`[data-preview-edit-question="${questionIndex}"]`);
-      const optionInputs = Array.from(container?.querySelectorAll("[data-preview-edit-option]") ?? []);
-      const options = optionInputs.map((input, optionIndex) => input.value.trim() || question.options[optionIndex] || "");
-      const checkedRadio = container?.querySelector(`input[name="previewEditCorrectAnswer${questionIndex}"]:checked`);
-      const checkedIndex = Number.parseInt(checkedRadio?.value ?? "-1", 10);
-      const safeCorrectAnswerIndex =
-        Number.isInteger(checkedIndex) && checkedIndex >= 0 && checkedIndex < options.length
-          ? checkedIndex
-          : Math.max(0, options.findIndex((option) => option === question.correctAnswer));
-
-      return {
-        stem: container?.querySelector(`#previewEditMcqStem${questionIndex}`)?.value.trim() || question.stem,
-        options,
-        correctAnswer: options[safeCorrectAnswerIndex] ?? options[0] ?? question.correctAnswer ?? "",
-        // Reverted to ||: an emptied rationale cannot be saved at all. Both the MCQ
-        // localization body and the MCQ-set body require a non-empty string, so clearing it
-        // produces a 400 AFTER the title and rubric may already have been written. Keeping
-        // the old text is wrong but harmless; a half-written save is not. The real fix is a
-        // schema that treats the rationale as genuinely optional - registered separately.
-        rationale: container?.querySelector(`#previewEditMcqRationale${questionIndex}`)?.value.trim() || question.rationale,
-      };
-    });
+    const newMcqQuestions = readMcqQuestionsFromForm(currentMcqQuestions);
 
     // #896 S2: one commitment. "Bekreft" used to stop here and hand the author a separate
     // "Lagre utkast" step, which meant the translation round was paid on every confirm even
@@ -4455,7 +4544,8 @@ function enterPreviewEditMode({ force = false } = {}) {
       && newCandidateTaskConstraints === currentCandidateTaskConstraints
       && JSON.stringify(newMcqQuestions) === JSON.stringify(currentMcqQuestions)
       && criteriaUnchanged;
-    if (nothingChanged) {
+    // Et utkast som kom fra skjemaet via et fanebytte er ulagret selv om feltene nå er like det.
+    if (nothingChanged && !sessionDraftFromForm) {
       // No edit means no LLM round and no new version - saving an identical copy would
       // spend a translation and leave a version nobody asked for.
       exitEditMode();
@@ -4647,7 +4737,10 @@ function saveFromHeader() {
   const kind = moduleDirtyKind();
   if (kind === "settings") { if (activeTab !== "settings") switchToTab("settings"); document.getElementById("settingsSave")?.click(); return; }
   if (kind === "form") { document.getElementById("previewEditConfirm")?.click(); return; }
-  if (kind === "draft") { void saveDraftBundleInBackground(); }
+  if (kind === "draft") {
+    if (activeTab === "edit" && isEditFormOpen() && sessionDraftFromForm) { document.getElementById("previewEditConfirm")?.click(); return; }
+    void saveDraftBundleInBackground();
+  }
 }
 
 function discardFromHeader() {
@@ -4656,7 +4749,13 @@ function discardFromHeader() {
   if (!window.confirm(t("shell.header.discardConfirm"))) return;
   if (kind === "form") { document.getElementById("previewEditCancel")?.click(); }
   else if (kind === "settings") { settingsDraftValues = null; renderSettingsPanel(); }
-  else if (kind === "draft") { startIdle(); }
+  else if (kind === "draft") {
+    // Forkast utkastet: last modulen på nytt fra det som er lagret. Et nytt element uten modul
+    // har ingenting å gå tilbake til — da er lista stedet.
+    if (selectedModuleId) { void loadModule(selectedModuleId); return; }
+    window.location.href = "/admin-content";
+    return;
+  }
   refreshModuleHeaderState();
 }
 
@@ -5235,29 +5334,18 @@ function applyTabState(tab) {
 
 function switchToTab(tab) {
   if (tab === activeTab) return;
-  // Gate on the tab being LEFT. Rediger holds the editing surface; Innstillinger holds inputs that
-  // exist only in the DOM until Lagre and are re-rendered from `bundle` on the way back — leaving
-  // it without asking simply threw typed values away. Forhaandsvisning risks nothing.
-  const kind = activeTab === "edit" || activeTab === "settings" ? unsavedTabSwitchKind() : null;
-  if (kind && unsavedTabSwitchDialog) {
-    pendingTabSwitch = tab;
-    pendingTabSwitchKind = kind;
-    const body = document.getElementById("unsavedTabSwitchBody");
-    const confirmBtn = document.getElementById("tabSwitchDiscard");
-    const bodyKey = kind === "form"
-      ? "shell.tab.unsaved.body"
-      : kind === "settings"
-        ? "shell.tab.unsaved.settingsBody"
-        : "shell.tab.unsaved.draftBody";
-    if (body) body.textContent = t(bodyKey);
-    if (confirmBtn) {
-      // Leaving Innstillinger DOES destroy the typed values, so that confirm is destructive —
-      // unlike an unsaved draft, which survives the switch.
-      confirmBtn.textContent = t(kind === "draft" ? "shell.tab.unsaved.switchAnyway" : "shell.tab.unsaved.discard");
-      confirmBtn.className = kind === "draft" ? "btn-primary" : "btn-danger";
+  // Produkteier 13.09: fanebytte er ikke navigering og spør ikke — samme regel som kurs, seksjon og
+  // klasse (form-page.js). Det som er skrevet i Rediger legges i utkastet og kommer tilbake;
+  // Forhåndsvisning viser utkastet; Innstillinger-verdiene fanges og settes tilbake ved neste
+  // tegning. Én Lagre lagrer det som er ulagret der du står.
+  if (activeTab === "edit") captureEditFormIntoDraft();
+  if (activeTab === "settings") {
+    captureSettingsDraftValues();
+    // Kriterieeditoren lever i DOM-en til noe leser den; neste tegning kaster den. Les den ut nå,
+    // så et byttet «synlig for kandidat» eller en ny etikett står der når man kommer tilbake.
+    if (settingsCriteriaState !== null) {
+      settingsCriteriaState = captureLatestCriteriaState(document.getElementById("settingsCriteriaEditor"), settingsCriteriaState);
     }
-    unsavedTabSwitchDialog.showModal();
-    return;
   }
   applyTabState(tab);
   syncTabToUrl(tab);
@@ -5273,10 +5361,59 @@ function switchToTab(tab) {
 // write paths follow, and a read-only panel cannot corrupt a module.
 // ---------------------------------------------------------------------------
 
+// #1046 A1 (produkteier 13.09): et nytt element har ingen versjon å vise innstillinger for. Det som
+// trengs først er navn, modultype og nivå — resten kommer når modulen finnes. Verdiene skrives rett
+// inn i utkastet; Lagre oppretter modulen med dem.
+function renderNewModuleSettings(host) {
+  const mode = sessionDraft?.assessmentMode ?? "FREETEXT_ONLY";
+  const level = sessionDraft?.certificationLevel ?? "";
+  const name = localizeValueForLocale(sessionDraft?.title ?? "", contentLocale) || "";
+  const modeOptions = ["FREETEXT_PLUS_MCQ", "FREETEXT_ONLY", "MCQ_ONLY"]
+    .map((v) => `<option value="${v}"${v === mode ? " selected" : ""}>${escapeHtml(t(`shell.settings.mode.${v}`))}</option>`).join("");
+  const levelOptions = ["", "basic", "intermediate", "advanced"]
+    .map((v) => `<option value="${v}"${v === level ? " selected" : ""}>${escapeHtml(v ? t(`shell.certLevel.${v}`) : t("shell.settings.notSet"))}</option>`).join("");
+  host.innerHTML = `<div class="settings-group">
+    <h3 class="settings-group-title">${escapeHtml(t("shell.settings.groupModule"))}</h3>
+    <dl class="settings-list">
+      <dt>${escapeHtml(t("shell.directEdit.nameLabel"))} <span class="required-note">${escapeHtml(t("shell.directEdit.required"))}</span></dt>
+      <dd><input id="settingsNewName" class="settings-input" type="text" value="${escapeHtml(name)}" autocomplete="off" /></dd>
+      <dt>${escapeHtml(t("shell.settings.moduleType"))}</dt>
+      <dd><select id="settingsModuleType" class="settings-input">${modeOptions}</select>
+        <span class="settings-help">${escapeHtml(t("shell.settings.newModuleTypeHelp"))}</span></dd>
+      <dt>${escapeHtml(t("shell.settings.certificationLevel"))}</dt>
+      <dd><select id="settingsCertLevel" class="settings-input">${levelOptions}</select></dd>
+    </dl>
+  </div>`;
+  host.querySelector("#settingsNewName")?.addEventListener("input", (e) => {
+    const v = e.target.value.trim();
+    sessionDraft = { ...sessionDraft, title: v ? { [contentLocale]: v } : "" };
+    if (v) newModulePlaceholder = false;
+    const h1 = document.getElementById("moduleWorkspaceTitle");
+    if (h1) { h1.textContent = v || t("shell.newModule.defaultTitle"); h1.classList.toggle("is-untitled", !v); }
+    refreshModuleHeaderState();
+  });
+  host.querySelector("#settingsModuleType")?.addEventListener("change", (e) => {
+    const v = e.target.value;
+    sessionDraft = { ...sessionDraft, assessmentMode: v, ...(v === "MCQ_ONLY" ? { mcqMinPercent: SHELL_MCQ_ONLY_MIN_PERCENT } : {}) };
+    if (v !== "MCQ_ONLY") delete sessionDraft.mcqMinPercent;
+    newModulePlaceholder = false;
+    refreshModuleHeaderState();
+  });
+  host.querySelector("#settingsCertLevel")?.addEventListener("change", (e) => {
+    sessionDraft = { ...sessionDraft, certificationLevel: e.target.value || undefined };
+    newModulePlaceholder = false;
+    refreshModuleHeaderState();
+  });
+}
+
 function renderSettingsPanel() {
   const host = document.getElementById("settingsSummary");
   if (!host) return;
 
+  if (!bundle && sessionDraft && !selectedModuleId) {
+    renderNewModuleSettings(host);
+    return;
+  }
   if (!bundle) {
     host.innerHTML = `<p class="settings-empty">${escapeHtml(t("shell.settings.noModule"))}</p>`;
     return;
@@ -6788,9 +6925,11 @@ function startNewEmptyModule() {
   renderPreviewLocaleBar();
   renderPreview();
   updateStateRail();
-  switchToTab("edit");
-  if (!isEditFormOpen()) enterPreviewEditMode({ force: true });
+  // Produkteier 13.09: det første valget for en modul er typen (fritekst, flervalg eller begge) — så
+  // et nytt element åpner på Innstillinger: navn, type og nivå. Lagre oppretter modulen; Rediger
+  // viser deretter feltene for valgt type.
   showDraftReadyActions({ quiet: true });
+  if (activeTab !== "settings") switchToTab("settings"); else renderSettingsPanel();
 }
 
 function startNewModuleFlow() {

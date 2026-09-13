@@ -427,7 +427,7 @@ test.describe("admin content browser coverage", () => {
     await expect(page.locator("#moduleSaveBtn")).toBeEnabled();
   });
 
-  test("unsaved criteria edits are caught by the same exit guard as the other settings", async ({ page }) => {
+  test("unsaved criteria edits survive a tab switch like the other settings", async ({ page }) => {
     const moduleExport = buildMockModuleExport({
       id: "module-1",
       title: "Trade unions",
@@ -449,11 +449,12 @@ test.describe("admin content browser coverage", () => {
     await page.locator("#tabSettings").click();
     await page.locator("#settingsCriteriaEditor .vk-label").first().fill("Endret kriterium");
 
-    // Criteria are settings work too. Leaving without saving must warn, or the edit is gone —
-    // the panel is rebuilt from the bundle on the way back.
+    // Criteria are settings work too. Produkteier 13.09: fanebytte spør ikke — endringen følger
+    // med (hodet sier «Ulagrede endringer») og står der når man kommer tilbake.
     await page.locator("#tabEdit").click();
-    await expect(page.locator("#dialogUnsavedTabSwitch")).toBeVisible();
-    await page.locator("#tabSwitchStay").click();
+    await expect(page.locator("#dialogUnsavedTabSwitch")).toBeHidden();
+    await expect(page.locator("#moduleDirtyBadge")).toHaveClass(/is-dirty/);
+    await page.locator("#tabSettings").click();
     await expect(page.locator("#settingsCriteriaEditor .vk-label").first()).toHaveValue("Endret kriterium");
   });
 
@@ -565,11 +566,14 @@ test.describe("admin content browser coverage", () => {
     }
     await expect(page.locator("#settingsCertLevel")).toHaveValue(originals.settingsCertLevel);
 
+    // Produkteier 13.09: ingen dialog — hvert felt alene gjør modulen «ulagret», og verdien står der
+    // etter en tur innom Rediger.
     for (const id of Object.keys(edits)) {
       await setField(id, edits[id]);
       await page.locator("#tabEdit").click();
-      await expect(page.locator("#dialogUnsavedTabSwitch"), `${id} did not trigger the exit guard`).toBeVisible();
-      await page.locator("#tabSwitchStay").click();
+      await expect(page.locator("#moduleDirtyBadge"), `${id} did not mark the module dirty`).toHaveClass(/is-dirty/);
+      await page.locator("#tabSettings").click();
+      await expect(page.locator(`#${id}`), `${id} did not survive the tab switch`).toHaveValue(edits[id]);
       await setField(id, originals[id]);
     }
   });
@@ -844,11 +848,11 @@ test.describe("admin content browser coverage", () => {
     await page.locator("#settingsPromptSystem").fill("Text the author will discard");
     await page.locator("#settingsPromptToggle").click();
 
-    // Leave the tab and choose Forkast.
-    await page.locator("#tabEdit").click();
-    await expect(page.locator("#dialogUnsavedTabSwitch")).toBeVisible();
-    await page.locator("#tabSwitchDiscard").click();
+    // Produkteier 13.09: forkasting skjer med Avbryt i hodet, ikke ved fanebytte.
+    page.once("dialog", (d) => d.accept());
+    await page.locator("#moduleCancelBtn").click();
 
+    await page.locator("#tabEdit").click();
     await page.locator("#tabSettings").click();
     await page.locator("#settingsPromptToggle").click();
     await expect(
@@ -1037,13 +1041,10 @@ test.describe("admin content browser coverage", () => {
     const edited = original === "advanced" ? "basic" : "advanced";
     await certInput.selectOption(edited);
 
-    // Exit 1: tab switch. The dialog must be the DESTRUCTIVE one — settings are not kept, unlike
-    // a draft, and telling the author "your draft is kept" here would be a lie about a different
-    // thing entirely.
+    // Exit 1 (tab switch) is no exit any more (produkteier 13.09): the value travels with the author.
     await page.locator("#tabEdit").click();
-    await expect(page.locator("#dialogUnsavedTabSwitch")).toBeVisible();
-    await expect(page.locator("#unsavedTabSwitchBody")).toContainText(/forkast|discard/i);
-    await page.locator("#tabSwitchStay").click();
+    await expect(page.locator("#dialogUnsavedTabSwitch")).toBeHidden();
+    await page.locator("#tabSettings").click();
     await expect(certInput).toHaveValue(edited);
 
     // Exit 2: UI language. This one had no guard at all — the panel re-rendered instantly.
@@ -1367,9 +1368,7 @@ test.describe("admin content browser coverage", () => {
     // one — it says the draft is KEPT, which is true — so confirming it is what an author does,
     // not something the test is working around.
     await page.locator("#tabSettings").click();
-    await expect(page.locator("#dialogUnsavedTabSwitch")).toBeVisible();
-    await expect(page.locator("#unsavedTabSwitchBody")).toContainText(/kept|beholdes|bevart/i);
-    await page.locator("#tabSwitchDiscard").click();
+    await expect(page.locator("#dialogUnsavedTabSwitch")).toBeHidden();
     await expect(page.locator("#tabPanelSettings")).toBeVisible();
 
     // Now let the generated criteria land, into a panel that is already on screen.
@@ -1392,9 +1391,7 @@ test.describe("admin content browser coverage", () => {
     // absorbs them into the draft BEFORE it decides what to warn about. The save assertion below
     // is what proves that promise was honoured.
     await page.locator("#tabEdit").click();
-    await expect(page.locator("#dialogUnsavedTabSwitch")).toBeVisible();
-    await expect(page.locator("#unsavedTabSwitchBody")).toContainText(/kept|beholdes|bevart/i);
-    await page.locator("#tabSwitchDiscard").click();
+    await expect(page.locator("#dialogUnsavedTabSwitch")).toBeHidden();
     await expect(page.locator("#previewEditTaskText")).toBeVisible();
 
     await page.locator("#moduleSaveBtn").click();
@@ -1763,7 +1760,7 @@ test.describe("admin content browser coverage", () => {
     await expect(page.getByText("Norsk scenario")).toBeVisible();
   });
 
-  test("an unsaved draft warns on tab switch and is carried along, not discarded", async ({ page }) => {
+  test("an unsaved draft is carried along on a tab switch, without a dialog", async ({ page }) => {
     await mockCommonApis(page, {
       modules: [{ id: "module-1", title: "Trade unions", activeVersion: { versionNo: 1 } }],
       moduleExports: {
@@ -1786,21 +1783,12 @@ test.describe("admin content browser coverage", () => {
     await expect(page.locator("#previewEditTaskText")).toHaveCount(0);
     await expect(page.getByText("Bearbeidet scenario")).toBeVisible();
 
-    // A draft is an investment whoever made it, so the switch is not silent...
+    // Produkteier 13.09: fanebytte spør ikke; utkastet følger med og er det forhåndsvisningen viser.
     await page.locator("#tabPreview").click();
-    await expect(page.locator("#dialogUnsavedTabSwitch")).toHaveAttribute("open", "");
-    // ...but nothing is destroyed by switching, so the wording and the button say so.
-    await expect(page.locator("#unsavedTabSwitchBody")).toContainText(/kept when you switch|beholdes/);
-    await expect(page.locator("#tabSwitchDiscard")).toHaveText(/Switch anyway|Bytt likevel/);
-
-    await page.locator("#tabSwitchStay").click();
-    await expect(page.locator("#tabEdit")).toHaveAttribute("aria-selected", "true");
-
-    // Switching anyway keeps the draft - it is still what the preview renders.
-    await page.locator("#tabPreview").click();
-    await page.locator("#tabSwitchDiscard").click();
+    await expect(page.locator("#dialogUnsavedTabSwitch")).toBeHidden();
     await expect(page.locator("#tabPreview")).toHaveAttribute("aria-selected", "true");
     await expect(page.getByText("Bearbeidet scenario")).toBeVisible();
+    await expect(page.locator("#moduleDirtyBadge")).toHaveClass(/is-dirty/);
   });
 
   // #896 S2: Lagre is one commitment - translate, then write. These guard the three rules
@@ -1871,12 +1859,11 @@ test.describe("admin content browser coverage", () => {
     await page.locator("#previewEditTaskText").fill("Halvferdig endring");
     await page.locator("#moduleSaveBtn").click();
 
-    await clickEnabledButton(page, /Cancel|Avbryt/);
+    // Samtaleruta er skjult (produkteier 13.09), så framdriften står som toast med «Avbryt».
+    await page.locator(".toast__action").click();
 
     // The form is still standing, still holding the typed text, and nothing was written.
-    // Scoped to the chat: the same text also reaches #shellStatusAnnouncer for screen
-    // readers, which is intended - it just makes an unscoped locator ambiguous.
-    await expect(page.locator("#chatMessages").getByText(/nothing was saved|ingenting ble lagret/)).toBeVisible();
+    await expect(page.getByText(/nothing was saved|ingenting ble lagret/).last()).toBeVisible();
     await expect(page.locator("#previewEditTaskText")).toHaveValue("Halvferdig endring");
     // No version was written: the save never got past the (blocked) translation step.
     await expect(
@@ -1884,8 +1871,8 @@ test.describe("admin content browser coverage", () => {
     ).toHaveCount(0);
   });
 
-  test("discarding while a save is running writes nothing", async ({ page }) => {
-    await mockCommonApis(page, {
+  test("switching tab while a save is running neither loses the save nor asks", async ({ page }) => {
+    const state = await mockCommonApis(page, {
       modules: [{ id: "module-1", title: "Trade unions", activeVersion: { versionNo: 1 } }],
       moduleExports: {
         "module-1": buildMockModuleExport({
@@ -1893,29 +1880,30 @@ test.describe("admin content browser coverage", () => {
           title: "Trade unions",
           moduleVersionId: "module-1-version-1",
           taskText: localizedText("Norsk scenario"),
+          mcqQuestions: [
+            {
+              stem: localizedText("Question 1"),
+              options: [localizedText("Option A"), localizedText("Option B")],
+              correctAnswer: localizedText("Option B"),
+              rationale: localizedText("Rationale"),
+            },
+          ],
         }),
       },
     });
 
-    // Hold the translation open so the discard lands mid-save.
-    await page.route("**/generate/module-draft/localize", async () => {
-      await new Promise(() => {});
-    });
-
     await page.goto("/admin-content/module/module-1/conversation");
     await page.locator("#previewEditTitle").waitFor();
-    await page.locator("#previewEditTaskText").fill("Skal forkastes");
+    await page.locator("#previewEditTaskText").fill("Skal lagres");
     await page.locator("#moduleSaveBtn").click();
 
-    // The form's own Cancel is disabled while saving, so the discard has to abort the save
-    // itself - otherwise the translation resolves later and saves what was just discarded.
+    // Produkteier 13.09: fanebytte spør ikke og forkaster ikke. Lagringen som ble bedt om, fullfører.
     await page.locator("#tabPreview").click();
-    await page.locator("#tabSwitchDiscard").click();
-
-    await expect(page.locator("#previewEditTaskText")).toHaveCount(0);
+    await expect(page.locator("#dialogUnsavedTabSwitch")).toBeHidden();
+    await expect.poll(() => state.lastDraftLocalizationBody?.sourceLocale).toBeTruthy();
     await expect(
-      page.getByText(/Draft saved as a new module version|Utkastet er lagret som en ny modulversjon/),
-    ).toHaveCount(0);
+      page.getByText(/Draft saved as a new module version|Utkastet er lagret som en ny modulversjon/).last(),
+    ).toBeVisible();
   });
 
   test("a failed translation saves one language honestly instead of three copies", async ({ page }) => {
@@ -1964,7 +1952,7 @@ test.describe("admin content browser coverage", () => {
     expect(state.lastTitlePatchBody.title.nn).toBeUndefined();
   });
 
-  test("discarding an open form into Forhaandsvisning leaves the workspace usable", async ({ page }) => {
+  test("switching an open form into Forhaandsvisning shows the typed text and keeps it", async ({ page }) => {
     await mockCommonApis(page, {
       modules: [{ id: "module-1", title: "Trade unions", activeVersion: { versionNo: 1 } }],
       moduleExports: {
@@ -1981,21 +1969,20 @@ test.describe("admin content browser coverage", () => {
     await page.locator("#previewEditTitle").waitFor();
     await page.locator("#previewEditTaskText").fill("Halvferdig endring");
 
-    // Switching to Forhaandsvisning re-renders the preview for a different audience, which
-    // removes the form's own Cancel button. If teardown runs after that render, the editing
-    // state is never cleaned up and the workspace is stuck until reload.
+    // Produkteier 13.09: fanebytte spør ikke. Forhåndsvisning viser det som er skrevet (ulagret),
+    // og tilbake i Rediger står teksten der — redigerbar, ikke frosset.
     await page.locator("#tabPreview").click();
-    await page.locator("#tabSwitchDiscard").click();
+    await expect(page.locator("#dialogUnsavedTabSwitch")).toBeHidden();
     await expect(page.locator(".preview-pane--editing")).toHaveCount(0);
+    await expect(page.getByText("Halvferdig endring")).toBeVisible();
 
-    // Back in Rediger the module is editable again, not frozen mid-edit.
     await page.locator("#tabEdit").click();
-    await expect(page.getByText("Norsk scenario")).toBeVisible();
     await page.locator("#previewEditTitle").waitFor();
-    await expect(page.locator("#previewEditTaskText")).toHaveValue(/Norsk scenario/);
+    await expect(page.locator("#previewEditTaskText")).toHaveValue("Halvferdig endring");
+    await expect(page.locator("#moduleDirtyBadge")).toHaveClass(/is-dirty/);
   });
 
-  test("moving between the two non-Rediger tabs does not re-ask about the draft", async ({ page }) => {
+  test("moving between the tabs never asks about the draft", async ({ page }) => {
     await mockCommonApis(page, {
       modules: [{ id: "module-1", title: "Trade unions", activeVersion: { versionNo: 1 } }],
       moduleExports: {
@@ -2014,15 +2001,13 @@ test.describe("admin content browser coverage", () => {
     await page.locator("#moduleSaveBtn").click();
     await expect(page.locator("#previewEditTaskText")).toHaveCount(0);
 
-    // Leaving Rediger asks once...
+    // Produkteier 13.09: ingen fane spør. Utkastet følger med hele veien rundt.
     await page.locator("#tabPreview").click();
-    await expect(page.locator("#dialogUnsavedTabSwitch")).toHaveAttribute("open", "");
-    await page.locator("#tabSwitchDiscard").click();
-
-    // ...and moving on between two tabs that hold no editing surface must not ask again.
+    await expect(page.locator("#dialogUnsavedTabSwitch")).toBeHidden();
     await page.locator("#tabSettings").click();
-    await expect(page.locator("#dialogUnsavedTabSwitch")).not.toHaveAttribute("open", "");
+    await expect(page.locator("#dialogUnsavedTabSwitch")).toBeHidden();
     await expect(page.locator("#tabPanelSettings")).toBeVisible();
+    await expect(page.locator("#moduleDirtyBadge")).toHaveClass(/is-dirty/);
   });
 
   test("the active tab survives a reload through the URL", async ({ page }) => {
@@ -2477,7 +2462,6 @@ test.describe("admin content browser coverage", () => {
     await expect(page.locator("#previewEditTaskText")).toHaveCount(0);
 
     await page.locator("#tabSettings").click();
-    await page.locator("#tabSwitchDiscard").click();
 
     // A settings save would carry the STORED content forward and quietly drop the draft, so it
     // is blocked with the reason rather than offered.
@@ -2535,7 +2519,7 @@ test.describe("admin content browser coverage", () => {
     await expect(page.locator("#previewEditGuidanceText")).toHaveValue(/Maa nevne risikoreduserende tiltak/);
   });
 
-  test("Escape on the unsaved-changes dialog behaves like staying", async ({ page }) => {
+  test("an arrow-key tab switch with typed text asks nothing and keeps the text", async ({ page }) => {
     await mockCommonApis(page, {
       modules: [{ id: "module-1", title: "Trade unions", activeVersion: { versionNo: 1 } }],
       moduleExports: {
@@ -2549,29 +2533,18 @@ test.describe("admin content browser coverage", () => {
     });
 
     await page.goto("/admin-content/module/module-1/conversation");
-    // Wait for the module to have LANDED, not just for the form to exist. The form is drawn once
-    // during init and again when loadModule resolves; typing between the two put the text into a
-    // form that was about to be replaced, and the unsaved-changes guard then had nothing to find.
     await expect(page.locator("#previewEditTaskText")).toHaveValue(/Norsk scenario/);
     await page.locator("#previewEditTaskText").fill("Halvferdig endring");
 
+    // Produkteier 13.09: fanebytte spør ikke — heller ikke med tastaturet.
     await page.locator("#tabEdit").focus();
     await page.keyboard.press("ArrowLeft");
-    await expect(page.locator("#dialogUnsavedTabSwitch")).toHaveAttribute("open", "");
+    await expect(page.locator("#dialogUnsavedTabSwitch")).toBeHidden();
+    await expect(page.locator("#tabEdit")).not.toHaveAttribute("aria-selected", "true");
 
-    // Escape bypasses every button, so it must not leave focus and selection disagreeing.
-    await page.keyboard.press("Escape");
-    await expect(page.locator("#dialogUnsavedTabSwitch")).not.toHaveAttribute("open", "");
-    await expect(page.locator("#tabEdit")).toHaveAttribute("aria-selected", "true");
-    // `toBeFocused` also requires the browser WINDOW to hold OS focus, which it does not reliably
-    // do part-way through a long serial run — the assertion then failed for a reason that has
-    // nothing to do with the app. What is under test is which element the page focused.
-    await expect
-      .poll(() => page.evaluate(() => document.activeElement?.id ?? null))
-      .toBe("tabEdit");
+    await page.locator("#tabEdit").click();
     await expect(page.locator("#previewEditTaskText")).toHaveValue("Halvferdig endring");
 
-    // The stale pending switch must not fire on the next, unrelated switch either.
     // Avbryt i hodet forkaster etter bekreftelse (produkteier 13.09).
     page.once("dialog", (d) => d.accept());
     await page.locator("#moduleCancelBtn").click();
@@ -2614,35 +2587,6 @@ test.describe("admin content browser coverage", () => {
     await expect(page.locator("#tabPreview")).toBeFocused();
   });
 
-  test("staying after an arrow-key switch returns focus to the selected tab", async ({ page }) => {
-    await mockCommonApis(page, {
-      modules: [{ id: "module-1", title: "Trade unions", activeVersion: { versionNo: 1 } }],
-      moduleExports: {
-        "module-1": buildMockModuleExport({
-          id: "module-1",
-          title: "Trade unions",
-          moduleVersionId: "module-1-version-1",
-          taskText: localizedText("Norsk scenario"),
-        }),
-      },
-    });
-
-    await page.goto("/admin-content/module/module-1/conversation");
-    await page.locator("#previewEditTitle").waitFor();
-    await page.locator("#previewEditTaskText").fill("Halvferdig endring");
-
-    // Arrowing focuses the target tab before the dialog appears, so "stay" must hand focus
-    // back - otherwise it sits on a tab that is not the selected one.
-    await page.locator("#tabEdit").focus();
-    await page.keyboard.press("ArrowLeft");
-    await expect(page.locator("#dialogUnsavedTabSwitch")).toHaveAttribute("open", "");
-    await page.locator("#tabSwitchStay").click();
-
-    await expect(page.locator("#tabEdit")).toBeFocused();
-    await expect(page.locator("#tabEdit")).toHaveAttribute("aria-selected", "true");
-    await expect(page.locator("#previewEditTaskText")).toHaveValue("Halvferdig endring");
-  });
-
   test("help on the module route explains the tabs, not the module library", async ({ page }) => {
     await mockCommonApis(page, {
       modules: [{ id: "module-1", title: "Trade unions", activeVersion: { versionNo: 1 } }],
@@ -2666,7 +2610,7 @@ test.describe("admin content browser coverage", () => {
     await expect(page.locator("#workspaceHelpBody")).toContainText(/Settings holds the module type|Innstillinger holder modultype/);
   });
 
-  test("leaving Rediger with an open edit form warns, and staying keeps the typed values", async ({ page }) => {
+  test("leaving Rediger with an open edit form asks nothing; the typed values come back", async ({ page }) => {
     await mockCommonApis(page, {
       modules: [{ id: "module-1", title: "Trade unions", activeVersion: { versionNo: 1 } }],
       moduleExports: {
@@ -2683,32 +2627,20 @@ test.describe("admin content browser coverage", () => {
     await page.locator("#previewEditTitle").waitFor();
     await page.locator("#previewEditTaskText").fill("Halvferdig endring");
 
+    // Produkteier 13.09: fanebytte er ikke navigering og spør ikke.
     await page.locator("#tabPreview").click();
-    await expect(page.locator("#dialogUnsavedTabSwitch")).toHaveAttribute("open", "");
-
-    // Stay: same tab, same unsaved text.
-    await page.locator("#tabSwitchStay").click();
-    await expect(page.locator("#tabEdit")).toHaveAttribute("aria-selected", "true");
-    await expect(page.locator("#previewEditTaskText")).toHaveValue("Halvferdig endring");
-
-    // Discard: the form is gone and the switch goes through.
-    await page.locator("#tabPreview").click();
-    await page.locator("#tabSwitchDiscard").click();
+    await expect(page.locator("#dialogUnsavedTabSwitch")).toBeHidden();
     await expect(page.locator("#tabPreview")).toHaveAttribute("aria-selected", "true");
     await expect(page.locator("#previewEditTaskText")).toHaveCount(0);
     await expect(page.locator(".chat-pane")).toBeHidden();
+    // Forhåndsvisningen viser det som er skrevet — ulagret.
+    await expect(page.getByText("Halvferdig endring")).toBeVisible();
+
+    await page.locator("#tabEdit").click();
+    await expect(page.locator("#previewEditTaskText")).toHaveValue("Halvferdig endring");
+    await expect(page.locator("#moduleDirtyBadge")).toHaveClass(/is-dirty/);
   });
 
-  // #905: a locale whose translation failed must be ABSENT from what is saved. Leaving the
-  // source copy behind is what made "not translated yet" invisible to the publish gate (#896 S4)
-  // and to the translation-status list (#894).
-  // #982: en oversettelse som feiler skal sies fra om, ikke fylles med kildetekst.
-  //
-  // ⚠️ HVA DENNE MÅLER: direkte-redigering (`#previewEditConfirm`), som skriver til loggen selv og
-  // ikke går gjennom `commitOrProposeGenerated`. Oppdaget ved mutasjonstesting — jeg fjernet
-  // advarselen fra de tre kallerne jeg hadde endret, og denne forble grønn.
-  //
-  // Den parkerte grenen dekkes av «… også når forslaget parkeres bak åpne felter» lenger nede.
   test("en feilet oversettelse sier fra i loggen", async ({ page }) => {
     await mockCommonApis(page, {
       modules: [{ id: "module-1", title: "Trade unions", activeVersion: { versionNo: 1 } }],

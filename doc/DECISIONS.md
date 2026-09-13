@@ -712,3 +712,21 @@ fagansvarlig får bare de seks Resultater-rapportene (og eksportene av dem), avg
 (`src/modules/reporting/scope.ts`). Rutene for analyse på tvers av organisasjonen krever fortsatt
 `REPORT_READERS`. Et kurs utenfor settet gir tom rapport, ikke 403. Samtidig rettet: kursfilteret på
 Resultater gjaldt bare kursrapporten — modultabellene ignorerte det. Nå avgrenser «Kurs: X» alt.
+
+## Modulskjemaet: fanebytte uten å lagre, navn som felt, ny modul åpner på Innstillinger (2026-09-13)
+
+Produkteier, etter omgang 5/6 på stage:
+
+1. **Fanebytte er ikke navigering og spør ikke** — også for modulen (kurs, seksjon og klasse hadde
+   det). Det som er skrevet i Rediger følger med til Innstillinger og tilbake; Forhåndsvisning viser
+   det som er skrevet (ulagret); Innstillinger-verdier, også kriterier, står der ved retur. Dialogen
+   «Forkast og bytt» er borte. Én Lagre lagrer det som er ulagret der du står; Avbryt forkaster.
+2. **Navnet er et vanlig felt** («Navn (påkrevd)») øverst i Rediger — ikke en understreket tittel
+   som ser ut som en overskrift. Uten navn stopper Lagre før noe rives ned.
+3. **Ny modul åpner på Innstillinger**: navn, modultype (fritekst + flervalg / bare fritekst / bare
+   flervalg) og sertifiseringsnivå — typen er det første valget. Lagre oppretter modulen; Rediger
+   viser så feltene for valgt type.
+4. **Lagring åpner ikke samtaleruta.** Framdriften vises som toast med «Avbryt» så lenge ruta er
+   skjult; ruta åpnes bare når assistenten spør (valg, skjema).
+5. Seksjon: tjeneren krever både navn og innhold for en versjon. Kravet står nå i etiketten
+   («Innhold (Markdown) (påkrevd)») og i meldingen, med markøren i det som mangler.

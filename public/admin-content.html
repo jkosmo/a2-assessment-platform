@@ -51,6 +51,7 @@
       /* #1046 D1: etikett over feltet i vanlig skrift (som .form-field label) — STORE BOKSTAVER er
          forbeholdt gruppeoverskrifter. */
       .preview-section-label { font-size: 13px; font-weight: 600; color: var(--color-meta); margin: var(--space-1) 0 4px; }
+      .preview-edit-input { width: 100%; box-sizing: border-box; font: inherit; font-size: 15px; padding: 8px 10px; border: 1px solid var(--color-border-soft); border-radius: var(--radius-card); background: #fff; }
       .preview-text-block { font-size: 14px; color: var(--color-text); line-height: 1.6; white-space: pre-wrap; background: var(--color-module-summary-bg); border: 1px solid var(--color-module-summary-border); border-radius: var(--radius-card); padding: var(--space-1); }
       /* #1051: rendret markdown bærer sin egen struktur; pre-wrap ville doblet mellomrommene. */
       .preview-text-block.is-rendered { white-space: normal; }
@@ -508,8 +509,14 @@
         <a href="/admin-content/calibration" class="content-area-nav-link" id="navKalibrering" hidden>Vurderingskvalitet</a>
       </nav>
 
-      <div class="page-header-back" style="margin-bottom:var(--space-1)">
+      <!-- Produkteier 13.09: handlingsraden på samme linje som tilbake-lenka (form-page.js sin
+           .form-page-topline), så navnet får hele bredden under. -->
+      <div class="form-page-topline" style="margin-bottom:var(--space-1)">
         <a href="/admin-content" class="back-link">← Tilbake til moduler</a>
+        <div class="form-page-actions">
+          <div id="workspaceActions" class="row-actions workspace-actions" role="group" style="display:none"
+               aria-label="Modulhandlinger" data-i18n-aria-label="shell.actions.groupLabel"></div>
+        </div>
       </div>
       <!-- #1046 nivå to (13.09): samme hode som kurs, seksjon og klasse (form-page.js sine klasser):
            typen som merke over NAVNET, statusmerke + «Alt lagret / Ulagrede endringer» rett under,
@@ -522,13 +529,6 @@
             <span id="moduleLifecycleBadge"></span>
             <span id="moduleDirtyBadge" class="form-state-badge is-clean" hidden></span>
           </div>
-        </div>
-        <!-- Handlingene som før sto øverst i samtaleruta (Stage-tilbakemelding 2026-08-17). Samme
-             regel som listene og de andre skjemasidene: maks fire i raden, resten under «Mer».
-             style="display:none": setHidden() styrer den (se merknaden ved tabPanelSettings). -->
-        <div class="form-page-actions">
-          <div id="workspaceActions" class="row-actions workspace-actions" role="group" style="display:none"
-               aria-label="Modulhandlinger" data-i18n-aria-label="shell.actions.groupLabel"></div>
         </div>
       </div>
 

@@ -112,15 +112,18 @@ test.describe("admin content module library", () => {
     await page.locator("#emptyCreateBtn").click();
     await expect(page).toHaveURL(/\/admin-content\/module\/new\/conversation$/);
 
-    // Tomt skjema, navnet som tittel («Ny modul» til noe er skrevet), Lagre av til noe er endret.
-    await expect(page.locator("#previewEditTitle")).toHaveValue("");
+    // Produkteier 13.09: et nytt element åpner på Innstillinger — navn, modultype og nivå er det
+    // første valget. «Ny modul» som tittel til navnet skrives; Lagre av til noe er endret.
+    await expect(page.locator("#tabSettings")).toHaveAttribute("aria-selected", "true");
+    await expect(page.locator("#settingsNewName")).toHaveValue("");
     await expect(page.locator("#moduleWorkspaceTitle")).toHaveClass(/is-untitled/);
     await expect(page.locator("#moduleSaveBtn")).toBeDisabled();
     await expect(page.locator(".chat-pane")).toBeHidden();
 
-    await page.locator("#previewEditTitle").fill("Workplace safety");
+    await page.locator("#settingsNewName").fill("Workplace safety");
     await expect(page.locator("#moduleWorkspaceTitle")).toHaveText("Workplace safety");
-    await page.locator("#previewEditTaskText").fill("Describe the safety routine.");
+    await page.locator("#settingsModuleType").selectOption("FREETEXT_ONLY");
+    await page.locator("#settingsCertLevel").selectOption("intermediate");
     await expect(page.locator("#moduleSaveBtn")).toBeEnabled();
 
     const createResponse = page.waitForResponse(
@@ -130,13 +133,15 @@ test.describe("admin content module library", () => {
     );
     await page.locator("#moduleSaveBtn").click();
     const response = await createResponse;
-    const postBody = response.request().postDataJSON() as { title?: Record<string, string> };
-    // Lagre oversetter først (#896 S2), så modulen lages med det oversatte navnet — språkmerket
-    // (#930), og det skrevne språket er med.
+    const postBody = response.request().postDataJSON() as { title?: Record<string, string>; certificationLevel?: string };
     expect(postBody.title?.["en-GB"]).toBe("Workplace safety");
+    expect(postBody.certificationLevel).toBe("intermediate");
 
-    // The mock module POST returns id "module-1"; the address is now the real one.
+    // The mock module POST returns id "module-1"; the address is now the real one, and the author
+    // lands in Rediger with the fields for the chosen type (free text only: no MCQ section).
     await expect(page).toHaveURL(/\/admin-content\/module\/module-1\/conversation$/);
+    await expect(page.locator("#tabEdit")).toHaveAttribute("aria-selected", "true");
+    await expect(page.locator("#previewEditTaskText")).toBeVisible();
   });
 
   test("Ny modul from the header button goes the same way", async ({ page }) => {
@@ -146,7 +151,7 @@ test.describe("admin content module library", () => {
     await page.goto(LIBRARY_PATH);
     await page.locator("#createModuleBtn").click();
     await expect(page).toHaveURL(/\/admin-content\/module\/new\/conversation$/);
-    await expect(page.locator("#previewEditTitle")).toHaveValue("");
+    await expect(page.locator("#settingsNewName")).toHaveValue("");
   });
 
   // #710 regression guard: the "Brukt i kurs" cell renders a <button> when the count > 0

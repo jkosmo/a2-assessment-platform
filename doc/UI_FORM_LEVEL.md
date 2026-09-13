@@ -252,7 +252,7 @@ tredelingen Rediger · Forhåndsvis · Innstillinger også på seksjoner, Result
 |---|---|
 | A (lag nytt) | Avgjort 1b og gjort for alle fire. Modul (13.09): «Ny modul» åpner `/admin-content/module/new/conversation` med tomt skjema; modulen lages på tjeneren ved første Lagre, og adressen byttes til den ekte. Dialogen med navn og nivå er borte; nivået settes under Innstillinger. |
 | B1, B2, B3 | Gjort for alle fire. Modulens hode har samme typemerke, navn som tittel, statusmerke og «Alt lagret / Ulagrede endringer»; den gamle tilstandslinja er en liten tekstlinje under. |
-| B4 | Gjort: fanelinje fra form-page.js. Modul og seksjon: Rediger · Forhåndsvisning · Innstillinger. Kurs og klasse: Rediger · Innstillinger. Eierne ligger under Innstillinger overalt. |
+| B4 | Gjort: fanelinje fra form-page.js. Modul og seksjon: Rediger · Forhåndsvisning · Innstillinger. Kurs og klasse: Rediger · Innstillinger. Eierne ligger under Innstillinger overalt. 13.09 kveld: fanebytte spør ikke på modulen heller — det skrevne følger med; ny modul åpner på Innstillinger (navn, type, nivå); navnet er et felt; lagring åpner ikke samtaleruta. |
 | B6 | Gjort. |
 | C1, C2, C3 | Gjort for klasse, seksjon, kurs (språkpiller, bokmål først, «(påkrevd)»). Bokmål er det påkrevde språket (DECISIONS). |
 | D1–D7 | D1–D3 gjort (.form-field, hvite felt, «(påkrevd)»). 13.09: modulens etiketter i Rediger og Innstillinger står over feltet i vanlig skrift (ikke STORE, ikke til venstre); D4: hjelpen står som én setning under feltet, (i)-ikonene med popover er borte; D7: «70 (standard)» og «ord (tomt = nivåets standard)». D5 (kort per tema) og D6 (intervall med «→», ett felt ellers) var alt slik. |

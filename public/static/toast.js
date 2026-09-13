@@ -48,7 +48,7 @@ function normalizeType(type) {
   return ["success", "error", "warning", "info"].includes(type) ? type : "info";
 }
 
-export function showToast(message, type = "info", detail = "") {
+export function showToast(message, type = "info", detail = "", options = {}) {
   const region = ensureToastRegion();
   const normalizedType = normalizeType(type);
   // Samme melding to ganger på én gang er støy, ikke informasjon (#1046: modulskallet speiler
@@ -92,6 +92,16 @@ export function showToast(message, type = "info", detail = "") {
     detailElement.textContent = String(detail);
     toast.appendChild(detailElement);
   }
+  // #1046: én valgfri handling («Avbryt» på en lagring som pågår). Kalleren fjerner toasten selv
+  // når handlingen ikke lenger gjelder (options.sticky = ingen automatisk lukking).
+  if (options.actionLabel && typeof options.onAction === "function") {
+    const actionButton = document.createElement("button");
+    actionButton.type = "button";
+    actionButton.className = "toast__action";
+    actionButton.textContent = String(options.actionLabel);
+    actionButton.addEventListener("click", () => { options.onAction(); removeToast(); });
+    toast.appendChild(actionButton);
+  }
 
   region.appendChild(toast);
 
@@ -99,7 +109,7 @@ export function showToast(message, type = "info", detail = "") {
     region.firstElementChild?.remove();
   }
 
-  const dismissMs = AUTO_DISMISS_MS[normalizedType] ?? AUTO_DISMISS_MS.info;
+  const dismissMs = options.sticky ? 0 : (AUTO_DISMISS_MS[normalizedType] ?? AUTO_DISMISS_MS.info);
   if (dismissMs > 0) {
     window.setTimeout(removeToast, dismissMs);
   }

@@ -31,7 +31,7 @@ test.describe("#973 unsaved-changes guard covers tickable fields", () => {
       ],
     });
 
-  test("a changed MCQ correct answer warns on a tab switch; an untouched form does not", async ({ page }) => {
+  test("a changed MCQ correct answer survives a tab switch without a dialog; an untouched form stays clean", async ({ page }) => {
     await mockCommonApis(page, {
       modules: [{ id: "module-1", title: "Trade unions" }],
       moduleExports: { "module-1": mcqModule() },
@@ -54,16 +54,12 @@ test.describe("#973 unsaved-changes guard covers tickable fields", () => {
     // `checked` rather than in `value`.
     await answers.nth(2).check();
 
+    // Produkteier 13.09: fanebytte spør ikke. Endringen følger med til Innstillinger (hodet sier
+    // «Ulagrede endringer») og står der når man kommer tilbake.
     await page.locator("#tabSettings").click();
-    await expect(page.locator("#dialogUnsavedTabSwitch")).toBeVisible();
-    // The FORM wording, not the settings or draft one: what is at risk here is the edit fields.
-    await expect(page.locator("#unsavedTabSwitchBody")).toContainText(
-      /changes in the edit fields|endringer i redigeringsfeltene/i,
-    );
-
-    // Staying must keep the corrected answer — the warning is only worth anything if the work it
-    // warns about is still there afterwards.
-    await page.locator("#tabSwitchStay").click();
+    await expect(page.locator("#dialogUnsavedTabSwitch")).toBeHidden();
+    await expect(page.locator("#moduleDirtyBadge")).toHaveClass(/is-dirty/);
+    await page.locator("#tabEdit").click();
     await expect(page.locator('input[name="previewEditCorrectAnswer0"]').nth(2)).toBeChecked();
   });
 
@@ -136,7 +132,7 @@ test.describe("#973 unsaved-changes guard covers tickable fields", () => {
   // editor through `captureLatestCriteriaState` (which already read `.checked`) — so this is the
   // regression pin for the surface that was NOT broken, and the control case that separates
   // "the checkbox is seen" from "the dialog fires on every exit".
-  test("toggling «synlig for kandidat» warns on the way out of Innstillinger; visiting it does not", async ({ page }) => {
+  test("toggling «synlig for kandidat» survives leaving Innstillinger; visiting it does not dirty anything", async ({ page }) => {
     const moduleExport = buildMockModuleExport({
       id: "module-1",
       title: "Trade unions",
@@ -169,12 +165,11 @@ test.describe("#973 unsaved-changes guard covers tickable fields", () => {
     await page.locator("#settingsCriteriaEditor .vk-visible-toggle").first().click();
     await expect(visible).not.toBeChecked();
 
+    // Produkteier 13.09: fanebytte spør ikke — endringen følger med og står der ved retur.
     await page.locator("#tabEdit").click();
-    await expect(page.locator("#dialogUnsavedTabSwitch")).toBeVisible();
-    await expect(page.locator("#unsavedTabSwitchBody")).toContainText(
-      /changed settings|endret innstillinger/i,
-    );
-    await page.locator("#tabSwitchStay").click();
+    await expect(page.locator("#dialogUnsavedTabSwitch")).toBeHidden();
+    await expect(page.locator("#moduleDirtyBadge")).toHaveClass(/is-dirty/);
+    await page.locator("#tabSettings").click();
     await expect(page.locator("#settingsCriteriaEditor .vk-visible").first()).not.toBeChecked();
   });
 });

@@ -47,10 +47,10 @@ const LABELS = {
     archived: "Section archived.", restored: "Section restored.", confirmArchive: "Archive this section?",
     colUpdated: "Last changed", edit: "Open", del: "Delete section", empty: "No sections yet.",
     readonly: "Owner access only", readonlyHint: "Only an owner or an administrator can open this section.",
-    back: "← Back to sections", backToCourse: "← Back to the course", titleLabel: "Name", markdown: "Markdown", preview: "Preview",
+    back: "← Back to sections", backToCourse: "← Back to the course", titleLabel: "Name", markdown: "Content (Markdown)", preview: "Preview",
     save: "Save", saved: "Section saved.", deleted: "Section deleted.",
     confirmDelete: "Are you sure you want to delete this section for good? It disappears from every course that uses it.", loadError: "Could not load sections.",
-    needContent: "Add a title and content in at least one language.",
+    needContent: "A section needs both a name and content before it can be saved.",
     translate: "Translate from this language", translating: "Translating…", translated: "Translated — review before saving.",
     translatingImages: "Translating drawings…", imagesTranslated: "SVG drawings translated — verify each language visually.",
     uploadImage: "Upload image", altPrompt: "Alt text (describes the image for screen readers):", saveFirst: "Save the section first, then upload images.", imageInserted: "Image inserted.",
@@ -75,10 +75,10 @@ const LABELS = {
     archived: "Seksjon arkivert.", restored: "Seksjon gjenopprettet.", confirmArchive: "Arkivere denne seksjonen?",
     colUpdated: "Sist endret", edit: "Åpne", del: "Slett seksjon", empty: "Ingen seksjoner ennå.",
     readonly: "Kun for eier", readonlyHint: "Bare en eier eller en administrator kan åpne denne seksjonen.",
-    back: "← Tilbake til seksjoner", backToCourse: "← Tilbake til kurset", titleLabel: "Navn", markdown: "Markdown", preview: "Forhåndsvisning",
+    back: "← Tilbake til seksjoner", backToCourse: "← Tilbake til kurset", titleLabel: "Navn", markdown: "Innhold (Markdown)", preview: "Forhåndsvisning",
     save: "Lagre", saved: "Seksjon lagret.", deleted: "Seksjon slettet.",
     confirmDelete: "Er du helt sikker på at du vil slette denne seksjonen for godt? Den forsvinner fra alle kurs som bruker den.", loadError: "Kunne ikke laste seksjoner.",
-    needContent: "Fyll inn tittel og innhold på minst ett språk.",
+    needContent: "En seksjon må ha både navn og innhold før den kan lagres.",
     translate: "Oversett fra dette språket", translating: "Oversetter…", translated: "Oversatt — se over før du lagrer.",
     translatingImages: "Oversetter tegninger…", imagesTranslated: "SVG-tegninger oversatt — verifiser hvert språk visuelt.",
     uploadImage: "Last opp bilde", altPrompt: "Alt-tekst (beskriver bildet for skjermlesere):", saveFirst: "Lagre seksjonen først, så kan du laste opp bilder.", imageInserted: "Bilde satt inn.",
@@ -103,10 +103,10 @@ const LABELS = {
     archived: "Seksjon arkivert.", restored: "Seksjon gjenoppretta.", confirmArchive: "Arkivere denne seksjonen?",
     colUpdated: "Sist endra", edit: "Opne", del: "Slett seksjon", empty: "Ingen seksjonar enno.",
     readonly: "Berre for eigar", readonlyHint: "Berre ein eigar eller ein administrator kan opne denne seksjonen.",
-    back: "← Tilbake til seksjonar", backToCourse: "← Tilbake til kurset", titleLabel: "Namn", markdown: "Markdown", preview: "Førehandsvising",
+    back: "← Tilbake til seksjonar", backToCourse: "← Tilbake til kurset", titleLabel: "Namn", markdown: "Innhald (Markdown)", preview: "Førehandsvising",
     save: "Lagre", saved: "Seksjon lagra.", deleted: "Seksjon sletta.",
     confirmDelete: "Er du heilt sikker på at du vil slette denne seksjonen for godt? Han forsvinn frå alle kurs som bruker han.", loadError: "Kunne ikkje laste seksjonar.",
-    needContent: "Fyll inn tittel og innhald på minst eitt språk.",
+    needContent: "Ein seksjon må ha både namn og innhald før han kan lagrast.",
     translate: "Omset frå dette språket", translating: "Omset…", translated: "Omsett — sjå over før du lagrar.",
     translatingImages: "Omset teikningar…", imagesTranslated: "SVG-teikningar omsette — kontroller kvart språk visuelt.",
     uploadImage: "Last opp bilete", altPrompt: "Alt-tekst (skildrar biletet for skjermlesarar):", saveFirst: "Lagre seksjonen først, så kan du laste opp bilete.", imageInserted: "Bilete sett inn.",
@@ -682,7 +682,7 @@ function sectionEditorBodyHtml() {
         </div>
         <div class="editor-single">
           <div class="editor-pane-label" style="display:flex;justify-content:space-between;align-items:center;gap:8px">
-            <span>${escapeHtml(L("markdown"))}</span>
+            <span>${escapeHtml(L("markdown"))} <span class="required-note">${escapeHtml(L("required"))}</span></span>
             <span data-form-untracked>
               <button type="button" id="uploadImageBtn" class="btn btn-secondary" style="width:auto;font-size:12px;padding:2px 8px">${escapeHtml(L("uploadImage"))}</button>
               <input type="file" id="imageFileInput" accept="image/png,image/jpeg,image/gif,image/webp,image/svg+xml,.svg" hidden />
@@ -851,7 +851,10 @@ async function persistSection({ silent } = {}) {
   const title = nonEmptyLocales(editing.title);
   const bodyMarkdown = nonEmptyLocales(editing.body);
   if (!hasSavableContent(editing.title, editing.body)) {
+    // Tjeneren krever både navn og innhold for en seksjonsversjon (createSectionSchema). Si det, og
+    // sett markøren i det som mangler.
     showToast(L("needContent"), "error");
+    (Object.keys(nonEmptyLocales(editing.title)).length === 0 ? document.getElementById("titleInput") : document.getElementById("markdownInput"))?.focus();
     return false;
   }
   try {
