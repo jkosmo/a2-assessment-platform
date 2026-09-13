@@ -694,3 +694,14 @@ Produkteier, etter omgang 3 på stage:
 5. **Samtaleruta i Rediger er skjult til assistenten trenger et svar** (valg, skjema, avbrytbar
    framdrift) og kan skjules igjen. Utfallet av handlinger (lagret, importert, avvist) kommer som
    toast når ruta er skjult — som på de andre skjemasidene.
+
+## SMO ser resultater for egne kurs — tallene, ikke personene (2026-09-13)
+
+Produkteier: SUBJECT_MATTER_OWNER skal kunne lese Resultater for kurs hen eier, men ikke identifisere
+enkeltpersoner der. Ingen særregler for små grupper — det holder kompleksiteten nede. Sak: #1058.
+
+Konkret: de aggregerte rapportene (bestått-andel, fullføring, kursrapport og tilsvarende eksporter)
+åpnes for SMO filtrert på eierskap; deltakerdetaljene og deltaker-eksportene forblir administrator og
+rapportleser. Dette er et bevisst skille fra 23.08-avgjørelsen om revisjonssporet, der SMO ser alt om
+ÉN innlevering «som en lærer»: «hva skjedde med denne innleveringen» er noe annet enn «liste over hvem
+som strøk».
