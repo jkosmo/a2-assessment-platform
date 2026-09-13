@@ -121,9 +121,9 @@ test.describe("utrullet stage — artefaktet stemmer med kilden", () => {
 
     // Personvernvarselet: `display:flex` MÅ ligge i klassen. Lå det inline, satte
     // `setHidden(el, false)` det til "" og boksen ble tegnet som `block`.
+    // Produkteier 13.09: varselet tegnes av skallet under oppgavefeltet; sida har bare stilen.
     expect(html).toContain(".privacy-notice");
-    expect(html).toContain('class="privacy-notice"');
-    expect(html).not.toMatch(/id="privacyNotice"[^>]*style="[^"]*display:\s*flex/);
+    expect(html).not.toContain('id="privacyNotice"');
 
     // Handlingslinja: `[hidden]` taper mot en klasse som setter display, så den skal styres av
     // inline `display:none` — ikke av attributtet.

@@ -36,7 +36,7 @@ const EDITOR_LOCALES = SECTION_EDITOR_LOCALES;
 // threading dozens of keys through the shared translations file).
 const LABELS = {
   "en-GB": {
-    heading: "Sections", more: "More", tabEdit: "Edit", tabSettings: "Settings", settingsAfterSave: "Save the section first; then owners can be managed here.", typeLabel: "Section", untitled: "New section", savedAll: "All saved", unsaved: "Unsaved changes", cancel: "Cancel", leaveConfirm: "You have unsaved changes. Leave without saving?", contentLocale: "Content language:", required: "(required)", searchPlaceholder: "Search by section name or ID…", searchLabel: "Search sections", lead: "Reading material you can use in several courses.", newSection: "New section", colTitle: "Name", colVersion: "Version",
+    heading: "Sections", more: "More", tabEdit: "Edit", tabSettings: "Settings", settingsAfterSave: "Save the section first; then owners can be managed here.", typeLabel: "Section", untitled: "New section", savedAll: "All saved", unsaved: "Unsaved changes", cancel: "Cancel", leaveConfirm: "You have unsaved changes. Leave without saving?", discardConfirm: "Discard the unsaved changes?", contentLocale: "Content language:", required: "(required)", searchPlaceholder: "Search by section name or ID…", searchLabel: "Search sections", lead: "Reading material you can use in several courses.", newSection: "New section", colTitle: "Name", colVersion: "Version",
     colStatus: "Status", statusDraft: "Draft", statusPublished: "Published", statusArchived: "Archived",
     publish: "Publish", unpublish: "Unpublish", archive: "Archive", restore: "Restore",
     showArchived: "Show archived", hideArchived: "Hide archived",
@@ -64,7 +64,7 @@ const LABELS = {
     fieldTitle: "the title", fieldBodyMarkdown: "the content",
   },
   nb: {
-    heading: "Seksjoner", more: "Mer", tabEdit: "Rediger", tabSettings: "Innstillinger", settingsAfterSave: "Lagre seksjonen først, så kan eierne endres her.", typeLabel: "Seksjon", untitled: "Ny seksjon", savedAll: "Alt lagret", unsaved: "Ulagrede endringer", cancel: "Avbryt", leaveConfirm: "Du har ulagrede endringer. Vil du forlate sida uten å lagre?", contentLocale: "Innholdsspråk:", required: "(påkrevd)", searchPlaceholder: "Søk på seksjonsnavn eller seksjons-ID…", searchLabel: "Søk i seksjoner", lead: "Lesestoff du kan bruke i flere kurs.", newSection: "Ny seksjon", colTitle: "Navn", colVersion: "Versjon",
+    heading: "Seksjoner", more: "Mer", tabEdit: "Rediger", tabSettings: "Innstillinger", settingsAfterSave: "Lagre seksjonen først, så kan eierne endres her.", typeLabel: "Seksjon", untitled: "Ny seksjon", savedAll: "Alt lagret", unsaved: "Ulagrede endringer", cancel: "Avbryt", leaveConfirm: "Du har ulagrede endringer. Vil du forlate sida uten å lagre?", discardConfirm: "Forkaste de ulagrede endringene?", contentLocale: "Innholdsspråk:", required: "(påkrevd)", searchPlaceholder: "Søk på seksjonsnavn eller seksjons-ID…", searchLabel: "Søk i seksjoner", lead: "Lesestoff du kan bruke i flere kurs.", newSection: "Ny seksjon", colTitle: "Navn", colVersion: "Versjon",
     colStatus: "Status", statusDraft: "Utkast", statusPublished: "Publisert", statusArchived: "Arkivert",
     publish: "Publiser", unpublish: "Avpubliser", archive: "Arkiver", restore: "Gjenopprett",
     showArchived: "Vis arkiverte", hideArchived: "Skjul arkiverte",
@@ -92,7 +92,7 @@ const LABELS = {
     fieldTitle: "tittelen", fieldBodyMarkdown: "innholdet",
   },
   nn: {
-    heading: "Seksjonar", more: "Meir", tabEdit: "Rediger", tabSettings: "Innstillingar", settingsAfterSave: "Lagre seksjonen først, så kan eigarane endrast her.", typeLabel: "Seksjon", untitled: "Ny seksjon", savedAll: "Alt lagra", unsaved: "Ulagra endringar", cancel: "Avbryt", leaveConfirm: "Du har ulagra endringar. Vil du forlate sida utan å lagre?", contentLocale: "Innhaldsspråk:", required: "(påkravd)", searchPlaceholder: "Søk på seksjonsnamn eller seksjons-ID…", searchLabel: "Søk i seksjonar", lead: "Lesestoff du kan bruke i fleire kurs.", newSection: "Ny seksjon", colTitle: "Namn", colVersion: "Versjon",
+    heading: "Seksjonar", more: "Meir", tabEdit: "Rediger", tabSettings: "Innstillingar", settingsAfterSave: "Lagre seksjonen først, så kan eigarane endrast her.", typeLabel: "Seksjon", untitled: "Ny seksjon", savedAll: "Alt lagra", unsaved: "Ulagra endringar", cancel: "Avbryt", leaveConfirm: "Du har ulagra endringar. Vil du forlate sida utan å lagre?", discardConfirm: "Forkaste dei ulagra endringane?", contentLocale: "Innhaldsspråk:", required: "(påkravd)", searchPlaceholder: "Søk på seksjonsnamn eller seksjons-ID…", searchLabel: "Søk i seksjonar", lead: "Lesestoff du kan bruke i fleire kurs.", newSection: "Ny seksjon", colTitle: "Namn", colVersion: "Versjon",
     colStatus: "Status", statusDraft: "Utkast", statusPublished: "Publisert", statusArchived: "Arkivert",
     publish: "Publiser", unpublish: "Avpubliser", archive: "Arkiver", restore: "Gjenopprett",
     showArchived: "Vis arkiverte", hideArchived: "Skjul arkiverte",
@@ -600,7 +600,7 @@ function sectionFormTexts() {
     back: opphav ? L("backToCourse") : L("back"),
     typeLabel: L("typeLabel"), untitled: L("untitled"),
     savedAll: L("savedAll"), unsaved: L("unsaved"), save: L("save"), cancel: L("cancel"),
-    leaveConfirm: L("leaveConfirm"), contentLocale: L("contentLocale"), required: L("required"),
+    leaveConfirm: L("leaveConfirm"), discardConfirm: L("discardConfirm"), contentLocale: L("contentLocale"), required: L("required"),
   };
 }
 
@@ -638,7 +638,7 @@ function getFormPage() {
       onChange: (id) => { if (id === "forhandsvisning") refreshPreview(); },
     },
     body: () => sectionEditorBodyHtml(),
-    save: { onSave: () => persistSection(), onCancel: goBackFromEditor },
+    save: { onSave: () => persistSection() },
     afterRender: () => bindEditorHandlers(),
   });
   formPage.installGuards();

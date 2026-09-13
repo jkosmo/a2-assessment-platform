@@ -90,17 +90,17 @@ test.describe("admin content — module-type bugs (#655)", () => {
 
     // Module actions menu → "Continue editing in chat" (resumeChatEdit). This is the exact
     // path that builds the revision draft from the loaded module (#655 bug 2).
-    await clickEnabledButton(page, /Continue editing in chat|Fortsett å redigere i chat|Hald fram med å redigere i chat/);
+    await clickEnabledButton(page, /^Edit in chat$|^Rediger i chat$/);
 
     // Draft-ready actions → "Save draft".
-    await clickEnabledButton(page, /^Save draft$|^Lagre utkast$/);
+    await page.locator("#moduleSaveBtn").click();
 
     // The save must succeed — NOT be blocked by the scenario-required guard.
     await expect(
       page.getByText(/The draft needs scenario text|Utkastet må ha scenario\/oppgavetekst|Utkastet må ha scenario\/oppgåvetekst/),
     ).toHaveCount(0);
     await expect(
-      page.getByText(/Draft saved as a new module version|Utkastet er lagret som en ny modulversjon|Utkastet er lagra som ein ny modulversjon/).first(),
+      page.getByText(/Draft saved as a new module version|Utkastet er lagret som en ny modulversjon|Utkastet er lagra som ein ny modulversjon/).last(),
     ).toBeVisible();
 
     // And the version that was saved carries the MCQ-only mode + the loaded pass threshold.
@@ -139,14 +139,14 @@ test.describe("admin content — module-type bugs (#655)", () => {
     // #896 S2: Lagre translates and saves in one step - and an untouched form saves
     // nothing at all, so make a real edit first.
     await page.locator("#previewEditMcqStem0").fill("Oppdatert MCQ-only stamme");
-    await page.locator("#previewEditConfirm").click();
+    await page.locator("#moduleSaveBtn").click();
 
     // Save must not hit the scenario-required guard, and must persist MCQ_ONLY.
     await expect(
       page.getByText(/The draft needs scenario text|Utkastet må ha scenario\/oppgavetekst|Utkastet må ha scenario\/oppgåvetekst/),
     ).toHaveCount(0);
     await expect(
-      page.getByText(/Draft saved as a new module version|Utkastet er lagret som en ny modulversjon|Utkastet er lagra som ein ny modulversjon/).first(),
+      page.getByText(/Draft saved as a new module version|Utkastet er lagret som en ny modulversjon|Utkastet er lagra som ein ny modulversjon/).last(),
     ).toBeVisible();
     expect(savedVersionPayload?.assessmentMode).toBe("MCQ_ONLY");
     expect(savedVersionPayload?.assessmentPolicy?.passRules?.mcqMinPercent).toBe(60);
@@ -184,7 +184,7 @@ test.describe("admin content — module-type bugs (#655)", () => {
     await page.goto("/admin-content/module/module-1/conversation");
     await page.locator("#previewEditTitle").waitFor();
     await page.locator("#previewEditTitle").fill("Union basics");
-    await page.locator("#previewEditConfirm").click();
+    await page.locator("#moduleSaveBtn").click();
 
     // Translation runs in the background. v2.18.13: Rediger stays in edit mode after the save, so
     // "settled" is no longer "the form went away" — it is the localisation calls having landed.

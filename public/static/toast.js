@@ -51,6 +51,11 @@ function normalizeType(type) {
 export function showToast(message, type = "info", detail = "") {
   const region = ensureToastRegion();
   const normalizedType = normalizeType(type);
+  // Samme melding to ganger på én gang er støy, ikke informasjon (#1046: modulskallet speiler
+  // samtaleutfall som toast når samtaleruta er skjult, og noen flyter toaster alt selv).
+  for (const el of region.querySelectorAll(".toast__message")) {
+    if (el.textContent === String(message)) return;
+  }
 
   const toast = document.createElement("section");
   toast.className = `toast toast--${normalizedType}`;

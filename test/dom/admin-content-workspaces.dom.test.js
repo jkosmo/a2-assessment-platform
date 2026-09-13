@@ -54,12 +54,13 @@ describe("admin content DOM accessibility contracts", () => {
   // was actually protecting, and what survives the move, is the privacy warning: it followed the
   // authoring surface here, and it must not be lost in the shuffle.
   it("keeps the special-category warning on the authoring surface", () => {
+    // Produkteier 13.09: varselet ligger i redigeringsskjemaet (under oppgavefeltet), tegnet av
+    // skallet — ikke som fast boks i sida. Sida har derfor bare stilen; skallet har teksten.
     const body = mountPage("public/admin-content.html");
-
-    expect(getByText(body, "Special category data risk")).toBeTruthy();
-    // Stage-tilbakemelding 2026-08-18: shown on Rediger only, so the tab handler needs a handle
-    // on it. Without the id the notice is visible on all three tabs again.
-    expect(body.querySelector("#privacyNotice")).toBeTruthy();
+    expect(body.querySelector("#privacyNotice")).toBeNull();
+    const shellJs = fs.readFileSync(path.join(process.cwd(), "public/static/admin-content-shell.js"), "utf8");
+    expect(shellJs).toContain('<details id="privacyNotice" class="privacy-notice"');
+    expect(shellJs).toContain('t("adminContent.privacy.warning.body")');
   });
 
   // #926 (#896 §6 krav 2): the attention marker is a CSS ::after on [data-attention], so it can

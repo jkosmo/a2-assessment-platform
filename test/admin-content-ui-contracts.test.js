@@ -85,11 +85,13 @@ describe("admin content workspace UI contracts", () => {
   });
 
   it("keeps the GDPR/privacy warning on the module workspace", () => {
-    const shellHtml = readFile("public/admin-content.html");
-    expect(shellHtml).toContain('adminContent.privacy.warning.title');
-    expect(shellHtml).toContain('adminContent.privacy.warning.body');
-    // Stage-tilbakemelding 2026-08-18: shown on Rediger only, which needs an id to toggle.
-    expect(shellHtml).toContain('id="privacyNotice"');
+    // Produkteier 13.09: varselet tegnes av skallet UNDER oppgavefeltet (én linje som folder ut),
+    // ikke som fast boks i HTML-en. Det finnes bare der fritekst skrives — som er poenget.
+    const shellJs = readFile("public/static/admin-content-shell.js");
+    expect(shellJs).toContain('adminContent.privacy.warning.title');
+    expect(shellJs).toContain('adminContent.privacy.warning.body');
+    expect(shellJs).toContain('id="privacyNotice"');
+    expect(readFile("public/admin-content.html")).not.toContain('id="privacyNotice"');
   });
 });
 

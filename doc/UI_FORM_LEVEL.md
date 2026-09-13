@@ -257,7 +257,9 @@ tredelingen Rediger · Forhåndsvis · Innstillinger også på seksjoner, Result
 | C1, C2, C3 | Gjort for klasse, seksjon, kurs (språkpiller, bokmål først, «(påkrevd)»). Bokmål er det påkrevde språket (DECISIONS). |
 | D1, D2, D3 | Gjort: .form-field i shared.css; hvite felt; «(påkrevd)». D4–D7 gjenstår. |
 | E (lagring) | Avgjort 2a og gjort for klasse, seksjon, kurs: «Lagre», Avbryt som lenke, «Alt lagret / Ulagrede endringer», spørsmål før man forlater. Modul har sin egen lagring, men samme merke i hodet. |
-| F1, F2 | Gjort for alle fire: handlingsrad i hodet med «maks fire + Mer». Modulens sidepanel er borte. |
+| F1, F2 | Gjort for alle fire: handlingsrad i hodet med «maks fire + Mer». Modulens sidepanel er borte. 13.09 (produkteier): Lagre og Avbryt først i raden med grønn/rød tone; korte ord på modulens handlinger (Publiser · Generer innhold · Rediger i chat · Mer). |
+| E (lagring) 13.09 | Lagrelinja nederst er borte på alle fire; Lagre/Avbryt i hodet. Modul: én Lagre for Rediger, Innstillinger og utkast. |
+| B3 modul 13.09 | Tilstandslinja er borte; «Publisert v2 · Utkast v4» som merker i hodet, «Forhåndsvisning viser …» i fanen. GDPR-varselet er én linje under oppgavefeltet. Samtaleruta vises bare når assistenten spør. |
 | G1–G3 | G3 gjort. G1/G2 (én «rad i skjema») gjenstår. |
 | H1–H4 | Gjort. |
 | J1, J2, J6, J8, J9 | Gjort (titler = menynavn, «klasse», tom tabell, Eksporter-meny, prosent/tid). |

@@ -231,7 +231,6 @@ const previewContent = document.getElementById("previewContent");
 // The fixed action bar above the chat log. See `renderWorkspaceActions`.
 const workspaceActionsBar = document.getElementById("workspaceActions");
 // Shown on Rediger only — see the tab handler.
-const privacyNotice = document.getElementById("privacyNotice");
 const workspaceNav = document.getElementById("workspaceNav");
 const localePicker = document.querySelector(".locale-picker");
 const appVersionLabel = document.getElementById("appVersion");
@@ -956,6 +955,7 @@ function _domModuleChoicesCol(modules, active) {
 
 // Log + render a bot message. htmlFn() is called at render time so re-translation works.
 function logBot(htmlFn, choices = []) {
+  if (choices.length > 0) openChatPane();
   const entry = { kind: "bot", html: htmlFn, choices, active: choices.length > 0 };
   chatLog.push(entry);
   _domBotBubble(htmlFn(), choices, false, choices.length > 0);
@@ -971,8 +971,10 @@ function logUser(text) {
 // Create a progress slot (logged as a pending bot entry). Caller attaches abort listener.
 // textKeyOrFn: i18n key OR () => string.  Returns { entry, el, abortBtn }.
 function logProgress(textKeyOrFn, options = {}) {
+  if (options.abortable) openChatPane();
   const { el, abortBtn } = _domProgress(textKeyOrFn, options);
-  const entry = { kind: "bot", html: null, choices: [], active: false };
+  // quiet: framdrift uten utfall å melde (lasting av modulen) — speiles ikke som toast.
+  const entry = { kind: "bot", html: null, choices: [], active: false, quiet: !!options.quiet };
   chatLog.push(entry);
   return { entry, el, abortBtn };
 }
@@ -992,11 +994,17 @@ function logResolveSlot(slot, htmlFn, choices = []) {
   if (announcement && announcement.length <= 160) {
     announceStatus(announcement);
   }
+  // Produkteier 13.09: samtaleruta er skjult til assistenten trenger et svar. Utfallet av en
+  // handling (lagret, importert, gjenopprettet, avvist) må likevel nå forfatteren — som toast,
+  // slik de andre skjemasidene gjør det. showToast hopper over en identisk toast som alt står.
+  if (choices.length > 0) openChatPane();
+  if (announcement && !slot.entry.quiet && choices.length === 0 && !chatPaneVisible()) showToast(announcement, /feil|error|failed|avvist|refus|kunne ikke|could not/i.test(announcement) ? "error" : "info");
   _domScroll(slot.el);
 }
 
 // Log + render a text input or textarea form (prompt bubble + input fields).
 function logForm(formType, promptHtmlFn, placeholderKey, submitKey, onSubmit, initialValue = "", context = {}) {
+  openChatPane();
   const entry = { kind: "form", formType, promptHtml: promptHtmlFn, placeholderKey, submitKey, onSubmit, submitted: false, initialValue, context };
   chatLog.push(entry);
   _domBotBubble(promptHtmlFn(), [], false);
@@ -1083,6 +1091,7 @@ function renderPreviewLocaleBar() {
       if (wasEditing) {
         enterPreviewEditMode({ force: true });
         logBot(() => escapeHtml(t("shell.directEdit.localeSwitched")));
+        if (!chatPaneVisible()) showToast(t("shell.directEdit.localeSwitched"), "warning");
       }
     });
     contentLocaleBar.appendChild(btn);
@@ -1272,7 +1281,9 @@ function updateStateRail() {
   // #975: her sto `stateRail.hidden = !hasModule` alene, og `.state-rail{display:flex}` slo
   // attributtet. Lappen var en egen CSS-regel, `.state-rail[hidden]{display:none}` — en fiks oppå
   // fella i stedet for kuren. Regelen er fjernet; setHidden gjør jobben for alle tilstander.
-  setHidden(stateRail, !hasModule);
+  // Produkteier 13.09: linja tegnes ikke lenger (merkene i hodet og «Forhåndsvisning viser» i
+  // forhåndsvisningsfanen har overtatt). Feltene under skrives fortsatt for koden som leser dem.
+  setHidden(stateRail, true);
   // #787: content-owner panel for the loaded module. Render once per module (guard on the last id) so
   // the frequent updateStateRail calls don't re-fetch/reset it; hide when no module is loaded.
   const ownerHost = document.getElementById("moduleOwnerPanelHost");
@@ -1308,20 +1319,21 @@ function updateStateRail() {
 
   // #1046 (13.09): statusmerket og «Alt lagret / Ulagrede endringer» i hodet, som på kurs, seksjon
   // og klasse. Tilstandslinja under bærer versjonsfaktaene.
+  // Produkteier 13.09: versjonsfaktaene fra tilstandslinja står som merker her — «Publisert v2»
+  // (live nå) og «Utkast v4» (det du redigerer, når det ikke er den som er live).
   const lifecycleBadgeHost = document.getElementById("moduleLifecycleBadge");
-  const dirtyBadge = document.getElementById("moduleDirtyBadge");
   if (lifecycleBadgeHost) {
-    const lifecycle = bundle?.module?.archivedAt ? "archived"
-      : chains?.hasLiveVersion ? (chains.hasDraftVersion ? "published_with_draft" : "published")
-      : "draft";
-    lifecycleBadgeHost.innerHTML = bundle ? lifecycleBadge({ lifecycle }, t) : "";
+    const liveNo = chains?.liveChain?.[0]?.versionNo ?? null;
+    const parts = [];
+    if (bundle?.module?.archivedAt) parts.push(lifecycleBadge({ lifecycle: "archived" }, t));
+    else if (liveNo != null) parts.push(`<span class="status-badge status-badge--published">${escapeHtml(tf("stateRail.live.published", { versionNo: liveNo }))}</span>`);
+    const editingNo = loaded?.versionNo ?? null;
+    if (hasUnsaved && !loaded) parts.push(`<span class="status-badge status-badge--draft">${escapeHtml(t("stateRail.editing.workingDraft"))}</span>`);
+    else if (editingNo != null && !loadedIsLive) parts.push(`<span class="status-badge status-badge--draft">${escapeHtml(tf("shell.header.draftVersion", { versionNo: editingNo }))}</span>`);
+    else if (liveNo == null && bundle) parts.push(lifecycleBadge({ lifecycle: "draft" }, t));
+    lifecycleBadgeHost.innerHTML = bundle || sessionDraft ? parts.join(" ") : "";
   }
-  if (dirtyBadge) {
-    dirtyBadge.hidden = !bundle && !sessionDraft;
-    dirtyBadge.textContent = hasUnsaved ? t("stateRail.changes.unsaved") : t("stateRail.changes.saved");
-    dirtyBadge.classList.toggle("is-dirty", hasUnsaved);
-    dirtyBadge.classList.toggle("is-clean", !hasUnsaved);
-  }
+  refreshModuleHeaderState();
 
   if (srEditing) {
     // Same correction as the preview field below: this read `liveChain` — what is PUBLISHED —
@@ -1373,6 +1385,11 @@ function updateStateRail() {
       srPreview.innerHTML = makeSrBadge("saved-draft", tf("stateRail.preview.savedVersion", { versionNo: loaded.versionNo }));
     } else {
       srPreview.innerHTML = `<span class="state-rail-value">—</span>`;
+    }
+    const previewShows = document.getElementById("previewShows");
+    if (previewShows) {
+      previewShows.textContent = `${t("stateRail.label.preview")}: ${srPreview.textContent}`;
+      setHidden(previewShows, activeTab !== "preview");
     }
   }
 
@@ -3171,7 +3188,7 @@ async function loadModule(moduleId, options = {}) {
   // the editor; now it is seeded on every visit to the tab, so merely looking at module A's
   // settings and then switching to B would show — and save — A's criteria on B.
   resetSettingsPanelState();
-  const slot = logProgress("shell.module.loading");
+  const slot = logProgress("shell.module.loading", { quiet: true });
 
   try {
     const exportData = await apiFetch(`/api/admin/content/modules/${encodeURIComponent(moduleId)}/export`, getHeaders);
@@ -4263,6 +4280,10 @@ function enterPreviewEditMode({ force = false } = {}) {
     <div class="preview-section-label">${labelTask}</div>
     <textarea id="previewEditTaskText" class="preview-edit-textarea"
       aria-label="${labelTask}">${escapedTask}</textarea>
+    <details id="privacyNotice" class="privacy-notice" role="note">
+      <summary>⚠ ${escapeHtml(t("adminContent.privacy.warning.short"))}</summary>
+      <p><strong>${escapeHtml(t("adminContent.privacy.warning.title"))}</strong> — ${escapeHtml(t("adminContent.privacy.warning.body"))}</p>
+    </details>
     <div class="preview-section-label">${labelCandidateConstraints}</div>
     <textarea id="previewEditCandidateTaskConstraints" class="preview-edit-textarea preview-edit-textarea--secondary"
       aria-label="${labelCandidateConstraints}">${escapedCandidateConstraints}</textarea>
@@ -4545,24 +4566,97 @@ function enterPreviewEditMode({ force = false } = {}) {
 // maks fire i raden, resten under «Mer» (rowActionsHtml). Knappene er HTML, så handlingene slås
 // opp via indeks ved klikk (én lytter, satt én gang).
 let workspaceActionChoices = [];
+
+// Produkteier 13.09: Lagre og Avbryt står FØRST i raden, som på de andre skjemasidene (form-page.js).
+// Én Lagre for hele modulen: den lagrer det som er ulagret der du står — feltene i Rediger, feltene
+// i Innstillinger, eller et generert utkast som ikke er lagret som versjon ennå. Knappene i selve
+// skjemaet (previewEditConfirm/settingsSave) er skjult og klikkes herfra, så lagreflyten er den samme.
+function moduleDirtyKind() {
+  if (activeTab === "settings" && hasUnsavedSettingsEdits()) return "settings";
+  if (hasOpenEditForm()) return "form";
+  if (hasUnsavedSettingsEdits()) return "settings";
+  if (sessionDraft) return "draft";
+  return null;
+}
+
+function refreshModuleHeaderState() {
+  const kind = moduleDirtyKind();
+  const dirty = kind !== null;
+  const dirtyBadge = document.getElementById("moduleDirtyBadge");
+  if (dirtyBadge) {
+    dirtyBadge.hidden = !bundle && !sessionDraft;
+    dirtyBadge.textContent = dirty ? t("stateRail.changes.unsaved") : t("stateRail.changes.saved");
+    dirtyBadge.classList.toggle("is-dirty", dirty);
+    dirtyBadge.classList.toggle("is-clean", !dirty);
+  }
+  const saveBtn = document.getElementById("moduleSaveBtn");
+  const cancelBtn = document.getElementById("moduleCancelBtn");
+  if (saveBtn) saveBtn.disabled = !dirty || generationAbort !== null;
+  if (cancelBtn) cancelBtn.disabled = !dirty || generationAbort !== null;
+}
+
+function saveFromHeader() {
+  const kind = moduleDirtyKind();
+  if (kind === "settings") { if (activeTab !== "settings") switchToTab("settings"); document.getElementById("settingsSave")?.click(); return; }
+  if (kind === "form") { document.getElementById("previewEditConfirm")?.click(); return; }
+  if (kind === "draft") { void saveDraftBundleInBackground(); }
+}
+
+function discardFromHeader() {
+  const kind = moduleDirtyKind();
+  if (!kind) return;
+  if (!window.confirm(t("shell.header.discardConfirm"))) return;
+  if (kind === "form") { document.getElementById("previewEditCancel")?.click(); }
+  else if (kind === "settings") { settingsDraftValues = null; renderSettingsPanel(); }
+  else if (kind === "draft") { startIdle(); }
+  refreshModuleHeaderState();
+}
+
+// Skriving i et felt gjør modulen ulagret — merket og knappene i hodet følger med.
+document.addEventListener("input", (event) => {
+  const el = event.target instanceof Element ? event.target : null;
+  if (el && el.matches("input, textarea, select") && !el.closest(".chat-pane")) refreshModuleHeaderState();
+});
+document.addEventListener("change", (event) => {
+  const el = event.target instanceof Element ? event.target : null;
+  if (el && el.matches("input, textarea, select") && !el.closest(".chat-pane")) refreshModuleHeaderState();
+});
+
+// Rekkefølgen i raden: det som endrer hva deltakerne ser først (Publiser/Avpubliser), så resten.
+const WS_ACTION_ORDER = ["publish", "unpublish", "generateContent", "resumeChatEdit", "revise", "generateMcq", "export", "import"];
 function renderWorkspaceActions(actions) {
   if (!workspaceActionsBar) return;
-  const live = (actions ?? []).filter(Boolean);
+  // saveDraft og restart er Lagre og Avbryt i hodet.
+  const live = (actions ?? []).filter(Boolean).filter((a) => a.key !== "saveDraft" && a.key !== "restart");
+  live.sort((a, b) => {
+    const ia = WS_ACTION_ORDER.indexOf(a.key), ib = WS_ACTION_ORDER.indexOf(b.key);
+    return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
+  });
   workspaceActionChoices = live;
-  setHidden(workspaceActionsBar, live.length === 0);
-  if (live.length === 0) { workspaceActionsBar.innerHTML = ""; return; }
-  workspaceActionsBar.innerHTML = rowActionsHtml(
-    live.map((choice, i) => `<button type="button" class="row-action-btn workspace-action-btn" data-ws-action="${i}">${escapeHtml(resolveChoiceLabel(choice))}</button>`),
+  const hasModule = !!(bundle || sessionDraft || selectedModuleId);
+  setHidden(workspaceActionsBar, live.length === 0 && !hasModule);
+  const pair = hasModule
+    ? `<button type="button" id="moduleSaveBtn" class="row-action-btn btn-save" disabled>${escapeHtml(t("shell.header.save"))}</button>` +
+      `<button type="button" id="moduleCancelBtn" class="row-action-btn btn-cancel" disabled>${escapeHtml(t("shell.header.cancel"))}</button>` +
+      (live.length ? `<span class="form-actions-sep" aria-hidden="true"></span>` : "")
+    : "";
+  workspaceActionsBar.innerHTML = pair + rowActionsHtml(
+    live.map((choice, i) => `<button type="button" class="row-action-btn workspace-action-btn" data-ws-action="${i}"${choice.hintKey ? ` title="${escapeHtml(t(choice.hintKey))}"` : ""}>${escapeHtml(resolveChoiceLabel(choice))}</button>`),
     { moreLabel: "Mer" },
   );
   if (!workspaceActionsBar.dataset.bound) {
     workspaceActionsBar.dataset.bound = "1";
     workspaceActionsBar.addEventListener("click", (event) => {
-      const btn = event.target instanceof Element ? event.target.closest("[data-ws-action]") : null;
+      const target = event.target instanceof Element ? event.target : null;
+      if (!target) return;
+      if (target.closest("#moduleSaveBtn")) { saveFromHeader(); return; }
+      if (target.closest("#moduleCancelBtn")) { discardFromHeader(); return; }
+      const btn = target.closest("[data-ws-action]");
       if (!btn) return;
       workspaceActionChoices[Number(btn.dataset.wsAction)]?.action?.();
     });
   }
+  refreshModuleHeaderState();
 }
 
 /** Nothing to act on — used when a module is unloaded or the flow takes over the conversation. */
@@ -4600,6 +4694,7 @@ function showModuleActions() {
       // Direct publish — author already confirmed by clicking "Publish". The prior
       // double-confirm dialog was redundant friction. (2026-05-18 author feedback)
       labelKey: "shell.draftReady.publish",
+      hintKey: "shell.draftReady.publishHint",
       action: publishLatestDraftInBackground,
     },
     unpublish: {
@@ -4607,15 +4702,15 @@ function showModuleActions() {
       action: () => confirmHighImpactAction("shell.unpublish.confirmPrompt", "shell.unpublish.confirmAction", unpublishModuleInBackground, showModuleActions, { module: moduleLabel }),
     },
   };
-  const actions = model.actionKeys.map((key) => actionMap[key]).filter(Boolean);
+  const actions = model.actionKeys.map((key) => actionMap[key] && { key, ...actionMap[key] }).filter(Boolean);
   // #896 S6: export/import belong on Rediger, per the IA table. They lived only on the module list
   // and in Avansert, so moving content between installations meant leaving the workspace you were
   // working in. Appended rather than folded into `actionKeys` because they are not part of the
   // authoring progression the status model describes — they are available whenever a module is.
   if (selectedModuleId) {
     actions.push(
-      { labelKey: "shell.module.exportPackage", action: () => exportModulePackageInBackground() },
-      { labelKey: "shell.module.importPackage", action: () => startImportPackageFlow() },
+      { key: "export", labelKey: "shell.module.exportPackage", action: () => exportModulePackageInBackground() },
+      { key: "import", labelKey: "shell.module.importPackage", action: () => startImportPackageFlow() },
     );
   }
   renderWorkspaceActions(actions);
@@ -5001,6 +5096,28 @@ function applyTabAttentionLabel(tab) {
   else button.removeAttribute("aria-label");
 }
 
+// Produkteier 13.09: samtaleruta er til overs i Rediger til assistenten trenger et svar. Den åpnes
+// når en flyt spør (valg, skjema, avbrytbar framdrift) og lukkes med «Skjul samtalen». Skjult rute
+// = skjemaet i full bredde.
+let chatPaneOpen = false;
+function chatPaneVisible() { return chatPaneOpen && activeTab === "edit"; }
+function applyChatPaneVisibility() {
+  const chatPane = document.querySelector(".chat-pane");
+  const hidden = activeTab === "preview" || !chatPaneOpen;
+  setHidden(chatPane, hidden);
+  tabPanelModule?.classList.toggle("workspace-shell--chat-hidden", hidden && activeTab !== "preview");
+}
+function openChatPane() {
+  if (chatPaneOpen) return;
+  chatPaneOpen = true;
+  applyChatPaneVisibility();
+}
+function closeChatPane() {
+  chatPaneOpen = false;
+  applyChatPaneVisibility();
+}
+document.getElementById("chatPaneClose")?.addEventListener("click", closeChatPane);
+
 function applyTabState(tab) {
   // Opening the tab IS seeing what landed in it.
   clearTabAttention(tab);
@@ -5028,8 +5145,7 @@ function applyTabState(tab) {
   setHidden(tabPanelSettings, tab !== "settings");
   const ownerHostEl = document.getElementById("moduleOwnerPanelHost");
   if (ownerHostEl) ownerHostEl.hidden = tab !== "settings" || !ownerHostEl.dataset.moduleId;
-  const chatPane = document.querySelector(".chat-pane");
-  setHidden(chatPane, tab === "preview");
+  applyChatPaneVisibility();
   tabPanelModule?.classList.toggle("workspace-shell--preview-only", tab === "preview");
   // Forhaandsvisning and Rediger share this panel, so point it at whichever tab owns it now.
   if (tab !== "settings") tabPanelModule?.setAttribute("aria-labelledby", tabButtons[tab]?.id ?? "tabEdit");
@@ -5043,7 +5159,7 @@ function applyTabState(tab) {
   // Stage-tilbakemelding 2026-08-18: the special-category warning belongs where the assignment
   // text is WRITTEN. On Forhåndsvisning and Innstillinger there is nothing to reword, so it is
   // noise — and a warning that shows everywhere stops being read where it matters.
-  setHidden(privacyNotice, tab !== "edit");
+  // GDPR-linja ligger inne i redigeringsskjemaet (under oppgavefeltet) og følger det.
 
   // Stage-tilbakemelding 2026-08-17: *"Åpner modul, den havner på rediger fanen, men jeg kan ikke
   // redigere før jeg trykker på «Rediger direkte»."* A tab called Rediger that does not let you
@@ -5451,6 +5567,11 @@ function renderSettingsPanel() {
   // Stamp what was rendered, so hasUnsavedSettingsEdits can tell an edited field from an
   // untouched one. Without this, restoring silently discarded typed-but-unsaved settings.
   stampRenderedValues(SETTINGS_INPUT_IDS.panel);
+  // Typevelgeren tegnes med den VALGTE typen (panelet tegnes om ved bytte), så stempelet må være
+  // den lagrede typen — ellers er et typebytte aldri «ulagret», og Lagre i hodet står grå.
+  const typeEl = document.getElementById("settingsModuleType");
+  const storedMode = bundle?.selectedConfiguration?.moduleVersion?.assessmentMode;
+  if (typeEl && storedMode) typeEl.dataset.renderedValue = storedMode;
   // #896 S3c: put back anything the author had typed but not saved. Expanding a section re-renders
   // the WHOLE panel, so opening the criteria editor after typing a new validity date silently
   // reverted the date. `renderedValue` above is the stored value; this restores the typed one on
@@ -7330,7 +7451,7 @@ function showDraftReadyActions() {
     parts.push(t("shell.draftReady.hint"));
     return escapeHtml(parts.join(" "));
   });
-  renderWorkspaceActions(model.actionKeys.map((key) => actionMap[key]).filter(Boolean));
+  renderWorkspaceActions(model.actionKeys.map((key) => actionMap[key] && { key, ...actionMap[key] }).filter(Boolean));
   if (model.shouldOpenUnifiedRevision) {
     startUnifiedRevisionFlow();
   }
@@ -7540,11 +7661,15 @@ function populateUiLocaleSelect() {
     // Without this the module types, the "missing component" reasons and the save button stay
     // in the previous language while the page around them switches.
     renderSettingsPanel();
+    // Handlingsraden og merkene i hodet bygges også i JS (#1046): tegn dem om med samme valg.
+    renderWorkspaceActions(workspaceActionChoices);
+    updateStateRail();
     if (wasEditing) {
       enterPreviewEditMode({ force: true });
       // Feltene fylles fra det nye språket. Det som var skrevet i det forrige — og ikke bekreftet
       // — er borte, og det skal man få vite, ikke oppdage.
       logBot(() => escapeHtml(t("shell.directEdit.localeSwitched")));
+      if (!chatPaneVisible()) showToast(t("shell.directEdit.localeSwitched"), "warning");
     }
   });
 }

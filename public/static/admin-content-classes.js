@@ -298,6 +298,7 @@ const FORM_TEXTS = {
   back: "← Tilbake til klasser", typeLabel: "Klasse", untitled: "Ny klasse",
   savedAll: "Alt lagret", unsaved: "Ulagrede endringer", save: "Lagre", cancel: "Avbryt",
   leaveConfirm: "Du har ulagrede endringer. Vil du forlate sida uten å lagre?",
+  discardConfirm: "Forkaste de ulagrede endringene?",
   contentLocale: "Innholdsspråk:", required: "(påkrevd)",
 };
 

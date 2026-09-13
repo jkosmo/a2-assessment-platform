@@ -10,7 +10,8 @@
 // - B3  tilstandslinje: statusmerke + «Alt lagret» / «Ulagrede endringer»
 // - F1  handlingsrad i hodet, samme «maks fire + Mer»-regel som listene
 // - C1  språkpiller med etiketten «Innholdsspråk:», bokmål først, «(påkrevd)» på det påkrevde språket
-// - E1  lagrelinje: Avbryt som lenke, fylt «Lagre» ytterst til høyre
+// - E1  Lagre og Avbryt FØRST i handlingsraden (produkteier 13.09), grønn/rød tone når noe er ulagret;
+//       begge slått av når alt er lagret. Avbryt = forkast endringene og vis det som er lagret.
 // - E3  spørsmål før man forlater med ulagrede endringer (lenker, tilbake, lukking av fanen)
 //
 // Sidens eget — feltene, dialogene, hva Lagre gjør — kommer inn som HTML og funksjoner.
@@ -38,7 +39,9 @@ const resolve = (x) => (typeof x === "function" ? x() : x);
  *   en beholder med `data-form-tab="<id>"`; sida velger selv hva som ligger hvor.
  * @property {{ items: () => Array<{ id: string, label: string }>, initial?: string, onChange?: (id: string) => void }} [tabs]
  *   fanelinje under hodet (Rediger · Forhåndsvisning · Innstillinger). Fanebytte er ikke navigering og spør ikke.
- * @property {{ onSave: () => Promise<boolean|void>, onCancel?: () => void, hidden?: boolean }} [save]
+ * @property {{ onSave: () => Promise<boolean|void>, onDiscard?: () => void, hidden?: boolean }} [save]
+ *   onDiscard: forkast ulagrede endringer (standard: last sida på nytt — det viser det som er lagret,
+ *   og et nytt element blir tomt igjen)
  * @property {(root: HTMLElement) => void} [afterRender]
  * @property {(k: string) => string} [t]  oversetter for lifecycleBadge
  */
@@ -59,7 +62,13 @@ export function createFormPage(config) {
     const status = config.statusHtml
       ? config.statusHtml(config.t ?? ((k) => k))
       : config.item ? lifecycleBadge(config.item(), config.t ?? ((k) => k)) : "";
-    const actions = config.actions ? rowActionsHtml(config.actions(), { moreLabel: "Mer" }) : "";
+    const rest = config.actions ? rowActionsHtml(config.actions(), { moreLabel: "Mer" }) : "";
+    const pair = config.save && !config.save.hidden
+      ? `<button type="button" id="formSaveBtn" class="row-action-btn btn-save" disabled>${escapeHtml(T.save)}</button>` +
+        `<button type="button" id="formCancelLink" class="row-action-btn btn-cancel" disabled>${escapeHtml(T.cancel)}</button>` +
+        (rest ? `<span class="form-actions-sep" aria-hidden="true"></span>` : "")
+      : "";
+    const actions = pair + rest;
     const back = config.backHref
       ? `<a href="${escapeHtml(config.backHref)}" class="back-link" id="formBackLink">${escapeHtml(T.back)}</a>`
       : `<a class="back-link" id="formBackLink" href="#">${escapeHtml(T.back)}</a>`;
@@ -108,18 +117,8 @@ export function createFormPage(config) {
     for (const panel of host.querySelectorAll("[data-form-tab]")) setHidden(panel, panel.dataset.formTab !== state.tab);
   }
 
-  function saveBarHtml() {
-    if (!config.save || config.save.hidden) return "";
-    const T = texts();
-    return `<div class="form-save-bar">
-      <span id="formSaveState" class="form-save-state"></span>
-      ${config.save.onCancel || config.backHref || config.onBack ? `<a href="#" id="formCancelLink" class="form-cancel-link">${escapeHtml(T.cancel)}</a>` : ""}
-      <button type="button" id="formSaveBtn" class="btn btn-primary" style="width:auto" disabled>${escapeHtml(T.save)}</button>
-    </div>`;
-  }
-
   function render() {
-    host.innerHTML = `${headerHtml()}${languagesHtml()}${tabsHtml()}<div class="form-page-body">${config.body()}</div>${saveBarHtml()}`;
+    host.innerHTML = `${headerHtml()}${languagesHtml()}${tabsHtml()}<div class="form-page-body">${config.body()}</div>`;
     applyTab();
     reflectDirty();
     config.afterRender?.(host);
@@ -135,6 +134,8 @@ export function createFormPage(config) {
     }
     const btn = host.querySelector("#formSaveBtn");
     if (btn) btn.disabled = !state.dirty || state.saving;
+    const cancel = host.querySelector("#formCancelLink");
+    if (cancel) cancel.disabled = !state.dirty || state.saving;
   }
 
   function refreshTitle() {
@@ -195,10 +196,13 @@ export function createFormPage(config) {
     const cancel = target.closest("#formCancelLink");
     if (cancel) {
       event.preventDefault();
-      if (!confirmLeave()) return;
-      if (config.save?.onCancel) config.save.onCancel();
-      else if (config.backHref) window.location.href = config.backHref;
-      else config.onBack?.();
+      // Avbryt = forkast det ulagrede og vis det som er lagret. Ikke navigering: man blir på sida.
+      if (!state.dirty) return;
+      const T = texts();
+      if (!window.confirm(T.discardConfirm ?? T.leaveConfirm)) return;
+      markClean();
+      if (config.save?.onDiscard) config.save.onDiscard();
+      else window.location.reload();
       return;
     }
     if (target.closest("#formSaveBtn")) { save(); return; }

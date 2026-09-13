@@ -46,7 +46,8 @@ describe("#1046 nivå to — den felles skjemasida", () => {
     expect(host.querySelector("#formPageTitle").textContent).toBe("Bravo");
     expect(host.querySelector(".status-badge--published")).toBeTruthy();
     expect(host.querySelector("#formPageDirty").textContent).toBe("Alt lagret");
-    expect(host.querySelectorAll(".form-page-actions .row-action-btn").length).toBe(2);
+    // Lagre + Avbryt først, så sidens to handlinger.
+    expect(host.querySelectorAll(".form-page-actions .row-action-btn").length).toBe(4);
   });
 
   it("tomt navn viser «Ny ting» dempet; skriving i navnefeltet oppdaterer tittelen", () => {
@@ -70,6 +71,26 @@ describe("#1046 nivå to — den felles skjemasida", () => {
     expect(onSave).toHaveBeenCalledTimes(1);
     expect(host.querySelector("#formPageDirty").textContent).toBe("Alt lagret");
     expect(btn.disabled).toBe(true);
+  });
+
+  it("Lagre og Avbryt står først i handlingsraden; Avbryt forkaster etter bekreftelse og kaller onDiscard", () => {
+    const onDiscard = vi.fn();
+    const { host } = lag({ save: { onSave: vi.fn(async () => true), onDiscard }, actions: () => ['<button type="button" class="row-action-btn">Arkiver</button>'] });
+    const knapper = [...host.querySelectorAll(".form-page-actions .row-actions > .row-action-btn")].map((b) => b.id || b.textContent);
+    expect(knapper.slice(0, 2)).toEqual(["formSaveBtn", "formCancelLink"]);
+    expect(host.querySelector(".form-save-bar")).toBeNull();
+    const avbryt = host.querySelector("#formCancelLink");
+    expect(avbryt.disabled).toBe(true);
+    skriv(host.querySelector("#navn"), "Bravo 3");
+    expect(avbryt.disabled).toBe(false);
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+    avbryt.click();
+    expect(onDiscard).not.toHaveBeenCalled();
+    confirm.mockReturnValue(true);
+    avbryt.click();
+    expect(onDiscard).toHaveBeenCalledTimes(1);
+    expect(host.querySelector("#formPageDirty").textContent).toBe("Alt lagret");
+    confirm.mockRestore();
   });
 
   it("felt merket data-form-untracked (søk, operasjoner) gjør ikke skjemaet ulagret", () => {

@@ -674,3 +674,23 @@ Produkteier: «Ja til NB som påkrevd.» Tre ting følger:
 3. **Publisering:** uendret — gaten krever fortsatt alle tre språk. Utkast kan være delvise.
 
 Kodens egen reserve forblir `en-GB` for plattformer som kjører uten standardspråk.
+
+## Skjemahodet: Lagre og Avbryt først i handlingsraden; samtaleruta på forespørsel (2026-09-13)
+
+Produkteier, etter omgang 3 på stage:
+
+1. **Lagre og Avbryt står først i handlingsraden i hodet** på alle skjemaene (modul, kurs, seksjon,
+   klasse), ved siden av «Alt lagret / Ulagrede endringer». Diskré grønn (Lagre) og rød (Avbryt) tone
+   når det finnes noe å lagre eller forkaste; grå og slått av ellers. Avbryt = forkast det ulagrede og
+   vis det som er lagret — ikke navigering. Lagrelinja nederst i skjemaet er borte. Modulen har én
+   Lagre for Rediger, Innstillinger og et generert utkast.
+2. **Korte ord på modulens handlinger**, samme ord som de andre elementene: Publiser · Avpubliser ·
+   Generer innhold · Generer spørsmål · Rediger i chat · Eksporter · Importer. Typen står i tittelen;
+   «modul» og «pakke» gjentas ikke i knappen. Publiser/Avpubliser først.
+3. **Versjonsfaktaene som merker i hodet** («Publisert v2 · Utkast v4»); «Forhåndsvisning viser …»
+   står i Forhåndsvisning-fanen. Modulens egen tilstandslinje tegnes ikke lenger.
+4. **GDPR-varselet som én linje under oppgavefeltet**, som folder ut hele teksten. Ikke «vis én gang»:
+   da mister nye forfattere av gamle moduler det.
+5. **Samtaleruta i Rediger er skjult til assistenten trenger et svar** (valg, skjema, avbrytbar
+   framdrift) og kan skjules igjen. Utfallet av handlinger (lagret, importert, avvist) kommer som
+   toast når ruta er skjult — som på de andre skjemasidene.
