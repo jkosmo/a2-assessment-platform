@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>A2 Results</title>
     <link rel="stylesheet" href="/static/shared.css" />
+    <link rel="stylesheet" href="/static/toast.css" />
     <style>
       .rate-bar { display: inline-block; height: 6px; border-radius: 3px; background: var(--color-primary); vertical-align: middle; margin-right: 8px; }
       /* Tabellen er den delte .list-table (shared.css). Bare det som er eget her: rapportene kan bli
@@ -105,6 +106,11 @@
 
       <!-- Nøkkeltall som én linje (J4), ikke fem fliser — tallene som svarer på «hvordan går det». -->
       <div id="resultsKpi" class="kpi-line" aria-live="polite"></div>
+      <!-- Rapportene leses av administrator og rapportleser (/api/reports). Uten en av rollene får sida
+           403 på første henting; da står forklaringen her i stedet for en feiltoast. -->
+      <div id="resultsNoAccess" class="empty-state" hidden style="display:none">
+        <p class="empty-state-text" data-i18n="results.noAccess">Results are available to administrators and report readers.</p>
+      </div>
 
       <section class="card">
         <h2 data-i18n="results.completion.title">Completion per module</h2>

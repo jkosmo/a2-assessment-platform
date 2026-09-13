@@ -1407,7 +1407,7 @@ dialog::backdrop {
 .btn-cancel:not(:disabled):hover { background: #f6dcd8; border-color: #d48a82; }
 .btn-save:disabled, .btn-cancel:disabled { opacity: 0.55; cursor: default; }
 .form-actions-sep { width: 1px; height: 20px; background: var(--color-border-soft); margin: 0 4px; }
-.form-page-languages { display: flex; gap: 4px; align-items: center; flex-wrap: wrap; margin: 0 0 var(--space-2); }
+.form-page-languages { display: flex; gap: 4px; align-items: center; flex-wrap: wrap; margin: 0 0 8px; }
 .content-locale-label { font-size: 12px; font-weight: 600; color: var(--color-meta); margin-right: 4px; }
 .content-locale-pill { background: var(--color-surface); border: 1px solid var(--color-border-soft); border-radius: 999px; padding: 4px 12px; font-size: 12px; font-weight: 600; color: var(--color-meta); cursor: pointer; width: auto; min-height: 0; flex: 0 0 auto; font-family: inherit; }
 .content-locale-pill.active { background: var(--color-blue-light); border-color: var(--color-blue); color: var(--color-link-active); }

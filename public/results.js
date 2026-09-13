@@ -321,7 +321,20 @@ const rapporter = lagLokalisertRessurs({
   },
 });
 
+const REPORT_READER_ROLES = ["ADMINISTRATOR", "REPORT_READER"];
+function canReadReports() {
+  const roles = String(rolesInput?.value ?? "").split(",").map((r) => r.trim().toUpperCase());
+  return roles.some((r) => REPORT_READER_ROLES.includes(r));
+}
+
 async function loadResults() {
+  // Samme rollesett som /api/reports (src/auth/roleSets.ts REPORT_READERS). Uten tilgang vises
+  // forklaringen der tabellen skulle stått — ikke en 403-toast nederst på sida.
+  const noAccess = document.getElementById("resultsNoAccess");
+  const allowed = canReadReports();
+  setHidden(noAccess, allowed);
+  for (const el of document.querySelectorAll("main > section.card:not(.mock-identity-card):not(#debugOutputSection), #resultsKpi, .list-filters-row, #resultsSearch")) setHidden(el, !allowed);
+  if (!allowed) return;
   await rapporter.last();
 }
 
