@@ -2455,6 +2455,11 @@ async function refreshLocalizedDraftInBackground({ draft, mcq }) {
 
 async function saveDraftBundleInBackground(options = {}) {
   const { afterSave = null } = options;
+  // #1046 A1: et nytt element finnes ikke på tjeneren før første Lagre. Navnet er det som kreves.
+  if (!selectedModuleId && sessionDraft) {
+    const created = await createModuleFromDraft();
+    if (!created) return;
+  }
   const moduleId = selectedModuleId;
   if (!moduleId) {
     logBot(() => t("shell.save.moduleRequired"));
@@ -3111,6 +3116,41 @@ function confirmHighImpactAction(promptKey, confirmKey, action, cancelAction = s
     { labelKey: confirmKey, action },
     { labelKey: "shell.action.cancel", action: cancelAction },
   ]);
+}
+
+// #1046 A1: lag modulen på tjeneren fra utkastets navn. Returnerer false (og sier hvorfor) når navnet
+// mangler eller opprettingen feilet. Adressen byttes til den ekte, så oppfrisking og tilbake-lenker
+// virker som for et element som fantes fra før.
+async function createModuleFromDraft() {
+  const title = sessionDraft?.title;
+  const hasTitle = typeof title === "string" ? title.trim().length > 0
+    : !!title && Object.values(title).some((v) => typeof v === "string" && v.trim().length > 0);
+  if (!hasTitle) {
+    logBot(() => t("shell.save.titleRequired"));
+    showToast(t("shell.save.titleRequired"), "error");
+    return false;
+  }
+  const slot = logProgress("shell.newModule.creating", { quiet: true });
+  slot.abortBtn.remove();
+  try {
+    const body = await apiFetch("/api/admin/content/modules", getHeaders, {
+      method: "POST",
+      body: JSON.stringify({ title: typeof title === "string" ? titleInContentLocale(title) : title }),
+    });
+    const created = body?.module ?? body;
+    const id = created?.id ?? created?.moduleId;
+    if (!id) throw new Error("no module id");
+    selectedModuleId = id;
+    newModulePlaceholder = false;
+    window.history.replaceState(null, "", `/admin-content/module/${encodeURIComponent(id)}/conversation`);
+    logResolveSlot(slot, () => `${escapeHtml(t("shell.newModule.created"))} <strong>${escapeHtml(localizeValue(title))}</strong>`);
+    return true;
+  } catch (err) {
+    const errMsg = apiErrorText(err);
+    logResolveSlot(slot, () => `${escapeHtml(t("shell.newModule.createError"))} ${escapeHtml(errMsg)}`);
+    showToast(`${t("shell.newModule.createError")} ${errMsg}`, "error");
+    return false;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -4496,6 +4536,7 @@ function enterPreviewEditMode({ force = false } = {}) {
         ...(Number.isFinite(editMcqMinPercent) ? { mcqMinPercent: editMcqMinPercent } : {}),
       });
       sessionState = "draft-pending";
+      newModulePlaceholder = false;
       clearPreviewCandidate();
       // A locale that failed to translate stays UNTRANSLATED rather than being filled with a
       // copy of the source text (#892). The hole is named here and blocks publishing in S4.
@@ -4571,11 +4612,14 @@ let workspaceActionChoices = [];
 // Én Lagre for hele modulen: den lagrer det som er ulagret der du står — feltene i Rediger, feltene
 // i Innstillinger, eller et generert utkast som ikke er lagret som versjon ennå. Knappene i selve
 // skjemaet (previewEditConfirm/settingsSave) er skjult og klikkes herfra, så lagreflyten er den samme.
+// #1046 A1: et nytt, tomt element har et plassholder-utkast som ikke teller som «ulagret» før noe
+// er skrevet. Flagget slås av når skjemaet bekreftes, assistenten fyller utkastet, eller modulen lages.
+let newModulePlaceholder = false;
 function moduleDirtyKind() {
   if (activeTab === "settings" && hasUnsavedSettingsEdits()) return "settings";
   if (hasOpenEditForm()) return "form";
   if (hasUnsavedSettingsEdits()) return "settings";
-  if (sessionDraft) return "draft";
+  if (sessionDraft && !newModulePlaceholder) return "draft";
   return null;
 }
 
@@ -4615,7 +4659,14 @@ function discardFromHeader() {
 // Skriving i et felt gjør modulen ulagret — merket og knappene i hodet følger med.
 document.addEventListener("input", (event) => {
   const el = event.target instanceof Element ? event.target : null;
-  if (el && el.matches("input, textarea, select") && !el.closest(".chat-pane")) refreshModuleHeaderState();
+  if (!el || !el.matches("input, textarea, select") || el.closest(".chat-pane")) return;
+  refreshModuleHeaderState();
+  // Navnet er tittelen på sida (B2) — følg feltet mens man skriver, som form-page.js gjør.
+  if (el.id === "previewEditTitle") {
+    const h1 = document.getElementById("moduleWorkspaceTitle");
+    const v = el.value.trim();
+    if (h1) { h1.textContent = v || t("shell.newModule.defaultTitle"); h1.classList.toggle("is-untitled", !v); }
+  }
 });
 document.addEventListener("change", (event) => {
   const el = event.target instanceof Element ? event.target : null;
@@ -6746,6 +6797,34 @@ function bindViewTabs() {
 // New module creation flow
 // ---------------------------------------------------------------------------
 
+// #1046 A1 (avgjørelse 1b): «Ny modul» åpner et tomt skjema — ingen dialog, ingen spørsmål først.
+// Utkastet er tomt, av typen fritekst (uten flervalg kan ikke FREETEXT_PLUS_MCQ lagres); typen kan
+// endres under Innstillinger etter første Lagre. `saveDraftBundleInBackground` lager modulen på
+// tjeneren når den ikke finnes ennå, og adressen byttes til den ekte.
+function startNewEmptyModule() {
+  sessionState = "draft-pending";
+  bundle = null;
+  selectedModuleId = null;
+  previewDraft = null;
+  latestSavedModuleVersionId = null;
+  chatLog = [];
+  sessionDraft = buildPreviewCandidate({
+    title: "",
+    taskText: "",
+    assessorExpectedContent: "",
+    candidateTaskConstraints: "",
+    mcqQuestions: [],
+    assessmentMode: "FREETEXT_ONLY",
+  });
+  newModulePlaceholder = true;
+  renderPreviewLocaleBar();
+  renderPreview();
+  updateStateRail();
+  switchToTab("edit");
+  if (!isEditFormOpen()) enterPreviewEditMode({ force: true });
+  showDraftReadyActions({ quiet: true });
+}
+
 function startNewModuleFlow() {
   previewDraft = null;
   renderPreviewLocaleBar();
@@ -7427,7 +7506,7 @@ async function populateSessionDraftCriteriaInBackground() {
   }
 }
 
-function showDraftReadyActions() {
+function showDraftReadyActions({ quiet = false } = {}) {
   sessionState = "draft-pending";
   // v1.1.81: kick off criteria-generation in background so preview shows them.
   // Idempotent — does nothing if sessionDraft.criteria is already populated.
@@ -7444,14 +7523,31 @@ function showDraftReadyActions() {
     saveDraft: { labelKey: "shell.draftReady.saveDraft", action: saveDraftBundleInBackground },
   };
   // The message is conversation and stays in the log; the actions go to the fixed bar, where they
-  // do not sink out of reach as the log grows.
-  logBot(() => {
-    const parts = [t("shell.draftReady.message")];
-    if (mcqCount > 0) parts.push(tf("shell.draftReady.mcqCount", { count: mcqCount }));
-    parts.push(t("shell.draftReady.hint"));
-    return escapeHtml(parts.join(" "));
-  });
-  renderWorkspaceActions(model.actionKeys.map((key) => actionMap[key] && { key, ...actionMap[key] }).filter(Boolean));
+  // do not sink out of reach as the log grows. `quiet`: et tomt nytt element har ikke noe utkast
+  // å melde om.
+  if (!quiet) {
+    newModulePlaceholder = false;
+    logBot(() => {
+      const parts = [t("shell.draftReady.message")];
+      if (mcqCount > 0) parts.push(tf("shell.draftReady.mcqCount", { count: mcqCount }));
+      parts.push(t("shell.draftReady.hint"));
+      return escapeHtml(parts.join(" "));
+    });
+  }
+  const actions = model.actionKeys.map((key) => actionMap[key] && { key, ...actionMap[key] }).filter(Boolean);
+  // #1046 A1: et nytt element kan også fylles av assistenten — samme flyt som før, men navnet fra
+  // skjemaet brukes hvis det er skrevet, så det ikke spørres om to ganger.
+  if (!selectedModuleId) {
+    actions.push({
+      key: "generateContent",
+      labelKey: "shell.module.generateContent",
+      action: () => {
+        const typed = document.getElementById("previewEditTitle")?.value.trim() || localizeValue(sessionDraft?.title) || "";
+        if (typed) askForSourceMaterial(typed, null, null); else startNewModuleFlow();
+      },
+    });
+  }
+  renderWorkspaceActions(actions);
   if (model.shouldOpenUnifiedRevision) {
     startUnifiedRevisionFlow();
   }
@@ -7718,6 +7814,11 @@ async function initShell() {
   const queryModuleId = new URLSearchParams(location.search).get("moduleId");
   const autoModuleId = pathModuleId ?? queryModuleId;
   const resumeEditing = new URLSearchParams(location.search).get("resumeEditing") === "1";
+  // #1046 A1: /module/new — et tomt element. Modulen lages på tjeneren ved første Lagre.
+  if (autoModuleId === "new") {
+    startNewEmptyModule();
+    return;
+  }
   if (autoModuleId) {
     await loadModule(autoModuleId, { resumeEditing });
     return;

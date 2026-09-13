@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-import { clickEnabledButton, mockCommonApis } from "./admin-content-helpers.js";
+import { mockCommonApis } from "./admin-content-helpers.js";
 
 // Characterization tests for the admin-content MODULE LIBRARY page
 // (`public/admin-content-library.html` + `/static/admin-content-library.js`).
@@ -102,61 +102,51 @@ test.describe("admin content module library", () => {
     await expect(page.locator(".list-table")).not.toContainText("Trade unions");
   });
 
-  test("create-module dialog stays disabled until title and level are provided", async ({ page }) => {
-    await mockCommonApis(page, {
-      libraryModules: [{ id: "module-1", title: "Trade unions", status: "published" }],
-    });
-
-    await page.goto(LIBRARY_PATH);
-
-    await page.locator("#createModuleBtn").click();
-    await expect(page.locator("#createModuleDialog")).toHaveAttribute("open", "");
-
-    // The confirm button starts disabled.
-    await expect(page.locator("#createOpenConversation")).toBeDisabled();
-
-    // Title alone is not enough — a certification level is also required.
-    await page.locator("#newModuleTitle").fill("Workplace safety");
-    await expect(page.locator("#createOpenConversation")).toBeDisabled();
-
-    await page.locator("#newModuleLevel").selectOption("basic");
-    await expect(page.locator("#createOpenConversation")).toBeEnabled();
-  });
-
-  test("creating a module POSTs the title/level and navigates to the conversational editor", async ({ page }) => {
+  // #1046 A1 (produkteier 12.09, avgjørelse 1b): «Ny modul» åpner et tomt element — ingen dialog.
+  // Modulen lages på tjeneren ved første Lagre, og adressen byttes til den ekte.
+  test("Ny modul opens an empty element; the first Lagre creates the module", async ({ page }) => {
     await mockCommonApis(page, { libraryModules: [] });
 
     await page.goto(LIBRARY_PATH);
-
-    // From the empty state, open the create dialog.
+    await expect(page.locator("#createModuleDialog")).toHaveCount(0);
     await page.locator("#emptyCreateBtn").click();
-    await expect(page.locator("#createModuleDialog")).toHaveAttribute("open", "");
+    await expect(page).toHaveURL(/\/admin-content\/module\/new\/conversation$/);
 
-    await page.locator("#newModuleTitle").fill("Workplace safety");
-    await page.locator("#newModuleLevel").selectOption("intermediate");
+    // Tomt skjema, navnet som tittel («Ny modul» til noe er skrevet), Lagre av til noe er endret.
+    await expect(page.locator("#previewEditTitle")).toHaveValue("");
+    await expect(page.locator("#moduleWorkspaceTitle")).toHaveClass(/is-untitled/);
+    await expect(page.locator("#moduleSaveBtn")).toBeDisabled();
+    await expect(page.locator(".chat-pane")).toBeHidden();
+
+    await page.locator("#previewEditTitle").fill("Workplace safety");
+    await expect(page.locator("#moduleWorkspaceTitle")).toHaveText("Workplace safety");
+    await page.locator("#previewEditTaskText").fill("Describe the safety routine.");
+    await expect(page.locator("#moduleSaveBtn")).toBeEnabled();
 
     const createResponse = page.waitForResponse(
       (response) =>
         response.url().includes("/api/admin/content/modules") &&
         response.request().method() === "POST",
     );
-    await clickEnabledButton(page, "Opprett modul");
+    await page.locator("#moduleSaveBtn").click();
     const response = await createResponse;
-    const postBody = response.request().postDataJSON() as {
-      title?: string;
-      certificationLevel?: string;
-    };
-    // ⚠️ #918 krevde en REN STRENG her, for å bevise at tittelen ikke var kopiert til tre språk.
-    // #930 går ett skritt videre: en ren streng bærer ikke noe språkmerke, og leses som bokmål. En
-    // tittel skrevet på engelsk ble dermed lagret som norsk, og publiseringsgaten navnga feil språk
-    // som manglende.
-    //
-    // Påstanden er derfor STRENGERE nå, ikke svakere: ett språk, og vi vet hvilket.
-    expect(postBody.title).toEqual({ "en-GB": "Workplace safety" });
-    expect(postBody.certificationLevel).toBe("intermediate");
+    const postBody = response.request().postDataJSON() as { title?: Record<string, string> };
+    // Lagre oversetter først (#896 S2), så modulen lages med det oversatte navnet — språkmerket
+    // (#930), og det skrevne språket er med.
+    expect(postBody.title?.["en-GB"]).toBe("Workplace safety");
 
-    // The mock module POST returns id "module-1"; the page navigates to its conversation route.
+    // The mock module POST returns id "module-1"; the address is now the real one.
     await expect(page).toHaveURL(/\/admin-content\/module\/module-1\/conversation$/);
+  });
+
+  test("Ny modul from the header button goes the same way", async ({ page }) => {
+    await mockCommonApis(page, {
+      libraryModules: [{ id: "module-1", title: "Trade unions", status: "published" }],
+    });
+    await page.goto(LIBRARY_PATH);
+    await page.locator("#createModuleBtn").click();
+    await expect(page).toHaveURL(/\/admin-content\/module\/new\/conversation$/);
+    await expect(page.locator("#previewEditTitle")).toHaveValue("");
   });
 
   // #710 regression guard: the "Brukt i kurs" cell renders a <button> when the count > 0

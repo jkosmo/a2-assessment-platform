@@ -250,7 +250,7 @@ tredelingen Rediger · Forhåndsvis · Innstillinger også på seksjoner, Result
 
 | Punkt | Status |
 |---|---|
-| A (lag nytt) | Avgjort 1b og gjort for kurs og klasse (tomt skjema, lages ved første Lagre). Seksjon hadde det. Modul: gjenstår («Ny modul»-dialogen). |
+| A (lag nytt) | Avgjort 1b og gjort for alle fire. Modul (13.09): «Ny modul» åpner `/admin-content/module/new/conversation` med tomt skjema; modulen lages på tjeneren ved første Lagre, og adressen byttes til den ekte. Dialogen med navn og nivå er borte; nivået settes under Innstillinger. |
 | B1, B2, B3 | Gjort for alle fire. Modulens hode har samme typemerke, navn som tittel, statusmerke og «Alt lagret / Ulagrede endringer»; den gamle tilstandslinja er en liten tekstlinje under. |
 | B4 | Gjort: fanelinje fra form-page.js. Modul og seksjon: Rediger · Forhåndsvisning · Innstillinger. Kurs og klasse: Rediger · Innstillinger. Eierne ligger under Innstillinger overalt. |
 | B6 | Gjort. |

@@ -86,14 +86,6 @@ const localePicker = document.querySelector(".locale-picker");
 const appVersionLabel = document.getElementById("appVersion");
 const localeSelect = document.getElementById("localeSelect");
 const libraryContent = document.getElementById("libraryContent");
-const createModuleDialog = document.getElementById("createModuleDialog");
-const createModuleForm = document.getElementById("createModuleForm");
-const newModuleTitle = document.getElementById("newModuleTitle");
-const newModuleLevel = document.getElementById("newModuleLevel");
-const createModuleError = document.getElementById("createModuleError");
-const createOpenConversation = document.getElementById("createOpenConversation");
-// v1.2.12 (#348): createOpenAdvanced fjernet fra dialogen — én create-path.
-const createCancel = document.getElementById("createCancel");
 const coursesPopover = document.getElementById("coursesPopover");
 const coursesPopoverList = document.getElementById("coursesPopoverList");
 const navKalibrering = document.getElementById("navKalibrering");
@@ -468,21 +460,13 @@ function showCoursesPopover(anchor, moduleId) {
 }
 
 // ---------------------------------------------------------------------------
-// Create module dialog
+// Ny modul — #1046 A1 (produkteier 12.09, avgjørelse 1b): å lage nytt = åpne et tomt element, som
+// kurs, seksjon og klasse. Dialogen med navn og nivå er borte; modulen lages på tjeneren ved første
+// Lagre i arbeidsflaten (admin-content-shell.js, «new»).
 // ---------------------------------------------------------------------------
 
-function validateCreateForm() {
-  const ok = newModuleTitle.value.trim().length > 0 && newModuleLevel.value !== "";
-  createOpenConversation.disabled = !ok;
-}
-
 function openCreateDialog() {
-  newModuleTitle.value = "";
-  newModuleLevel.value = "";
-  createModuleError.hidden = true;
-  createOpenConversation.disabled = true;
-  createModuleDialog.showModal();
-  newModuleTitle.focus();
+  window.location.href = "/admin-content/module/new/conversation";
 }
 
 // v1.2.11: åpne purge-dialog, hent kandidat-preview fra backend og render lister.
@@ -554,38 +538,6 @@ async function runPurge() {
     purgeConfirmBtn.disabled = false;
   } finally {
     purgeConfirmBtn.textContent = originalLabel;
-  }
-}
-
-// v1.2.12 (#348): én create-path — opprett modul og åpne i Samtale (anbefalt vei per
-// pilot-funn). Bruker kan bytte til Avansert via rad-handlingen "Åpne i Avansert" etterpå.
-async function createAndNavigate() {
-  const title = newModuleTitle.value.trim();
-  const level = newModuleLevel.value;
-  if (!title || !level) return;
-
-  createOpenConversation.disabled = true;
-  createModuleError.hidden = true;
-
-  try {
-    // #930: tittelen sendes med språkmerke. Biblioteket har alltid sendt en ren streng, og en ren
-    // streng leses som bokmål av `missingLocalesFor` — så en tittel skrevet på engelsk ble lagret
-    // som norsk, og publiseringsgaten navnga feil språk som manglende.
-    //
-    // Denne skjermen har ingen egen innholdsspråk-velger; den skriver på grensesnittspråket.
-    const body = await apiFetch("/api/admin/content/modules", getHeaders, {
-      method: "POST",
-      body: JSON.stringify({ title: { [currentLocale]: title }, certificationLevel: level }),
-    });
-    const newId = body.module?.id ?? body.id;
-    if (!newId) throw new Error("Fikk ikke modul-ID.");
-
-    createModuleDialog.close();
-    window.location.href = `/admin-content/module/${encodeURIComponent(newId)}/conversation`;
-  } catch (err) {
-    createModuleError.textContent = apiErrorText(err);
-    createModuleError.hidden = false;
-    createOpenConversation.disabled = false;
   }
 }
 
@@ -688,18 +640,6 @@ async function init() {
     fetchQueueCounts(getHeaders).then(counts => applyNavReviewBadge(workspaceNav, counts)).catch(() => {});
   }
 
-  // Localize cert level select options
-  if (newModuleLevel) {
-    const optMap = {
-      basic: t("adminContent.promptDialog.certificationLevelBasic"),
-      intermediate: t("adminContent.promptDialog.certificationLevelIntermediate"),
-      advanced: t("adminContent.promptDialog.certificationLevelAdvanced"),
-    };
-    newModuleLevel.querySelectorAll("option[value]").forEach(opt => {
-      if (optMap[opt.value]) opt.textContent = optMap[opt.value];
-    });
-  }
-
   // v1.2.11: Rydd upubliserte — kun ADMINISTRATOR ser knappen.
   if (purgeUnpublishedBtn) {
     const isAdmin = resolveActiveWorkspaceRoles().includes("ADMINISTRATOR");
@@ -767,10 +707,6 @@ async function init() {
       target.value = "";
     }
   });
-  newModuleTitle?.addEventListener("input", validateCreateForm);
-  newModuleLevel?.addEventListener("change", validateCreateForm);
-  createOpenConversation?.addEventListener("click", () => createAndNavigate());
-  createCancel?.addEventListener("click", () => createModuleDialog.close());
 
   // Close popover on Escape
   document.addEventListener("keydown", e => {

@@ -29,8 +29,7 @@ const klikkFane = (id: string) => async (page: Page) => { await page.locator(`#$
 
 const SIDER: Side[] = [
   // Lage nytt
-  { fil: "20-ny-modul-dialog", navn: "Ny modul (dialog)", rute: "/admin-content", vent: "#createModuleBtn",
-    handling: async (page) => { await page.locator("#createModuleBtn").click(); await page.locator("#createModuleDialog[open]").waitFor({ timeout: 5000 }).catch(() => undefined); } },
+  { fil: "20-ny-modul", navn: "Ny modul (tomt element)", rute: "/admin-content/module/new/conversation", vent: "#previewEditTitle" },
   { fil: "21-nytt-kurs", navn: "Nytt kurs (side)", rute: "/admin-content/courses/new", vent: "#pageContent form, #pageContent input" },
   { fil: "22-ny-seksjon", navn: "Ny seksjon (editor)", rute: "/admin-content/sections?new", vent: "#titleInput" },
   { fil: "23-ny-klasse", navn: "Ny klasse (prompt — kan ikke fotograferes, se merknad)", rute: "/admin-content/classes", vent: "#newClassBtn" },

@@ -150,31 +150,7 @@
     </main>
 
     <!-- Create module dialog -->
-    <dialog id="createModuleDialog" aria-labelledby="createDialogTitle">
-      <h2 class="dialog-title" id="createDialogTitle">Ny modul</h2>
-      <form id="createModuleForm" method="dialog" novalidate>
-        <div class="dialog-field">
-          <label for="newModuleTitle">Modulnavn <span aria-hidden="true">*</span></label>
-          <input id="newModuleTitle" type="text" required autocomplete="off" />
-        </div>
-        <div class="dialog-field">
-          <label for="newModuleLevel">Sertifiseringsnivå <span aria-hidden="true">*</span></label>
-          <select id="newModuleLevel" required>
-            <option value="">– Velg nivå –</option>
-            <option value="basic">Basic</option>
-            <option value="intermediate">Intermediate</option>
-            <option value="advanced">Advanced</option>
-          </select>
-        </div>
-        <div id="createModuleError" class="error-text" hidden></div>
-        <!-- v1.2.12 (#348): én create-path. Modul opprettes og åpnes i Samtale; brukeren
-             kan bytte til Avansert via rad-handlingen "Åpne i Avansert" når modulen er der. -->
-        <div class="dialog-actions">
-          <button type="button" id="createOpenConversation" class="btn btn-primary" disabled>Opprett modul</button>
-          <button type="button" class="dialog-cancel" id="createCancel">Avbryt</button>
-        </div>
-      </form>
-    </dialog>
+    <!-- #1046 A1: «Ny modul»-dialogen er borte — Ny modul åpner et tomt element i arbeidsflaten. -->
 
     <!-- v1.2.11: Rydd upubliserte-dialog. Viser kandidater + utelatte med årsak, krever
          skrevet "SLETT"-bekreftelse. Kun ADMINISTRATOR. -->
