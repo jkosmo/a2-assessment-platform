@@ -5,24 +5,17 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>A2 Cohort status</title>
     <link rel="stylesheet" href="/static/shared.css" />
+    <link rel="stylesheet" href="/static/toast.css" />
     <style>
       /* #967: dempet varsel, ikke en feilmelding — kurset er ikke ødelagt, det er bare ikke
          tilgjengelig for deltakerne akkurat nå. Samme farge som resten av flaten bruker. */
       .cohort-unavailable { color: var(--color-warning); border-left: 3px solid var(--color-warning);
         padding: var(--space-1) var(--space-2); margin-top: var(--space-1); font-size: 13.5px; }
-      .status-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: var(--space-1); margin-top: var(--space-1); }
-      .status-card { border: 1px solid var(--color-border-soft); border-radius: var(--radius-card); padding: var(--space-2); background: var(--color-surface, #fff); }
-      .status-card .status-value { font-size: 32px; font-weight: 800; line-height: 1; }
-      .status-card .status-label { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--color-meta); margin-top: 6px; }
-      .status-card--assigned .status-value { color: #42526b; }
-      .status-card--in_progress .status-value { color: #0d3f9e; }
+      /* #1046 J4: tallene er den delte nøkkeltall-linja (.kpi-line i shared.css). Bare fargen på
+         tilstandene er eget her — den bærer mening (forfalt er rødt uansett hvor det står). */
       .status-card--overdue .status-value { color: var(--color-error, #b3261e); }
       .status-card--completed .status-value { color: #1f7a4d; }
-      .status-card--total { background: var(--color-blue-light); }
-      .table-wrap { overflow-x: auto; border: 1px solid var(--color-table-wrap-border); border-radius: var(--space-1); margin-top: var(--space-1); }
-      table { width: 100%; border-collapse: collapse; min-width: 520px; }
-      th, td { border-bottom: 1px solid var(--color-table-border); padding: var(--space-1); font-size: 13px; text-align: left; }
-      th { font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--color-meta); }
+      .status-card--in_progress .status-value { color: #0d3f9e; }
     </style>
   </head>
   <body>
@@ -43,8 +36,13 @@
         <a href="/review" class="content-area-nav-link" id="subnavReview">Manuell behandling</a>
         <a href="/results" class="content-area-nav-link" id="subnavResults">Resultater</a>
       </nav>
-      <h1 data-i18n="cohortPage.title">Cohort status</h1>
-      <p class="small" data-i18n="cohortPage.subtitle">Participant status per course.</p>
+      <!-- #1046 (produkteier 13.09): samme hode og filterrad som listesidene og Resultater. -->
+      <div class="page-header">
+        <div>
+          <h1 data-i18n="cohortPage.title">Cohort status</h1>
+          <p class="page-lead" data-i18n="cohortPage.subtitle">Participant status per course.</p>
+        </div>
+      </div>
 
       <section class="card mock-identity-card">
         <details class="mock-identity-panel">
@@ -72,15 +70,13 @@
         </details>
       </section>
 
-      <section class="card">
-        <div class="row">
-          <div style="flex:1;min-width:240px">
-            <label for="courseSelect" data-i18n="cohort.picker.label">Course</label>
-            <select id="courseSelect"></select>
-          </div>
+      <div class="list-filters-row">
+        <div class="list-course-filter">
+          <label for="courseSelect" data-i18n="cohort.picker.label">Course</label>
+          <select id="courseSelect" class="list-course-select"></select>
         </div>
-        <div class="small" id="cohortMeta" aria-live="polite"></div>
-      </section>
+        <span class="small" id="cohortMeta" aria-live="polite"></span>
+      </div>
 
       <section class="card">
         <div id="cohortEmpty" class="small" data-i18n="cohort.empty">Select a course to see its cohort status.</div>
@@ -88,18 +84,17 @@
              kurs deltakerne ikke kan åpne, og fagansvarlig leter etter en forklaring som ikke
              finnes noe sted. role="status" fordi den dukker opp etter et valg. -->
         <div id="cohortUnavailable" class="cohort-unavailable" role="status" hidden></div>
-        <!-- #975: `.status-grid` setter display:grid, som slår UA-arkets `[hidden]`. Attributtet
+        <!-- #975: `.kpi-line` setter display:flex, som slår UA-arkets `[hidden]`. Attributtet
              blir stående for semantikken, men det er inline display som faktisk skjuler. -->
-        <div id="statusCards" class="status-grid" aria-live="polite" hidden style="display:none"></div>
+        <div id="statusCards" class="kpi-line" aria-live="polite" hidden style="display:none"></div>
 
         <div id="byClassSection" hidden>
           <h2 data-i18n="cohort.byClass.title" style="font-size:16px;margin-top:var(--space-2)">By class</h2>
-          <div id="byClassEmpty" class="small" data-i18n="cohort.byClass.empty" hidden>No class assignments for this course.</div>
-          <div class="table-wrap" tabindex="0" role="region" aria-label="Cohort status by class">
-            <table>
+          <div class="list-table-wrap" tabindex="0" role="region" aria-label="Cohort status by class">
+            <table class="list-table">
               <thead>
                 <tr>
-                  <th scope="col" data-i18n="cohort.byClass.class">Class</th>
+                  <th scope="col" class="col-name" data-i18n="cohort.byClass.class">Class</th>
                   <th scope="col" data-i18n="cohort.status.ASSIGNED">Assigned</th>
                   <th scope="col" data-i18n="cohort.status.IN_PROGRESS">In progress</th>
                   <th scope="col" data-i18n="cohort.status.OVERDUE">Overdue</th>

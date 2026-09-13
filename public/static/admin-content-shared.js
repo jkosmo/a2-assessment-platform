@@ -9,13 +9,7 @@
 // derives) was NOT done — modest payoff (~a few hundred lines; the issue's "~5k" was a big overcount) vs
 // real regression risk in two ~5k-line shells. Extend this module opportunistically when you're already
 // editing both shells for another reason; don't do a dedicated risky refactor for a p4 concern.
-import { escapeHtml } from "/static/html-escape.js";
 import { apiFetch } from "/static/api-client.js";
-
-/** Screen-reader status badge markup (was byte-identical in both shells). */
-export function makeSrBadge(modifier, text) {
-  return `<span class="sr-badge sr-badge--${modifier}">${escapeHtml(text)}</span>`;
-}
 
 /**
  * Load the app version and stamp it into the document title + the version label. The two shells differed

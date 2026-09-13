@@ -12,33 +12,17 @@
       .content-area-nav-link { padding: 10px var(--space-2); font-size: 14px; font-weight: 600; color: var(--color-meta); text-decoration: none; border-bottom: 2px solid transparent; margin-bottom: -2px; white-space: nowrap; }
       .content-area-nav-link:hover { color: var(--color-text); }
       .content-area-nav-link.active { color: var(--color-link-active); border-bottom-color: var(--color-blue); }
-      .page-header { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); margin-bottom: var(--space-3); flex-wrap: wrap; }
-      .page-header h1 { margin: 0; font-size: 22px; }
-      .classes-table { width: 100%; border-collapse: collapse; font-size: 14px; }
-      .classes-table th, .classes-table td { text-align: left; padding: 10px var(--space-2); border-bottom: 1px solid var(--color-border-soft); }
-      .classes-table th { font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--color-meta); }
-      .classes-table .col-actions { white-space: nowrap; }
+      /* #1046: sidehode, filtre og tabell er den felles listesida (list-page.js + shared.css). */
       /* #705-UX: .row-action-btn + .row-actions arves fra shared.css (felles utseende på tvers). */
       .system-badge { display: inline-block; margin-left: 6px; padding: 1px 8px; border-radius: 999px; background: var(--color-blue-light); color: var(--color-link-active); font-size: 11px; font-weight: 600; }
       .detail-section { background: var(--color-surface); border: 1px solid var(--color-border-soft); border-radius: var(--radius-card); box-shadow: var(--shadow-card); padding: var(--space-2); margin-bottom: var(--space-3); }
       .detail-section h2 { font-size: 16px; margin: 0 0 var(--space-2); }
-      /* QA r6 #3: rows (same visual language as owner rows) instead of grey chips. */
-      .assign-list { list-style: none; margin: 0 0 var(--space-2); padding: 0; }
-      .assign-row { display: flex; align-items: baseline; gap: var(--space-2); padding: 8px 0; border-bottom: 1px solid var(--color-border-soft); }
-      .assign-name { font-weight: 600; color: var(--color-text); }
-      .assign-meta { color: var(--color-meta); font-size: 12.5px; }
-      /* #967: kurset er tildelt, men deltakerne ser det ikke. Samme dempede varselfarge som
-         resten av flaten bruker — dette er en forklaring, ikke en feilmelding. */
-      .assign-meta--warn { color: var(--color-warning); }
-      .assign-remove { width: auto; margin-left: auto; flex: 0 0 auto; min-height: 0; padding: 3px 12px; font-size: 0.85rem; }
-      .assign-empty { color: var(--color-meta); font-style: italic; font-size: 13px; padding: 6px 0; }
+      /* #1046 G1/G2: radene og «legg til»-linja er de delte .form-row/.form-add-row i shared.css. */
       .search-results { list-style: none; margin: 4px 0 0; padding: 0; border: 1px solid var(--color-border-soft); border-radius: var(--radius-card); max-height: 220px; overflow-y: auto; }
       .search-results:empty { display: none; }
       .search-results li { padding: 6px 10px; cursor: pointer; font-size: 13px; }
       .search-results li:hover { background: var(--color-row-hover); }
-      .inline-form { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: var(--space-1); }
-      .inline-form input, .inline-form select { padding: 6px 8px; border: 1px solid var(--color-border-soft); border-radius: var(--radius-btn); font-size: 13px; }
-      .back-link { font-size: 13px; color: var(--color-meta); text-decoration: none; cursor: pointer; }
+      /* #1046 B1: .back-link arves fra shared.css. */
     </style>
   </head>
   <body>
@@ -48,7 +32,8 @@
         <nav id="workspaceNav" class="workspace-nav"></nav>
         <div class="locale-picker">
           <span id="appVersion" class="version-badge">…</span>
-          <select id="localeSelect" aria-label="Språk"></select>
+          <label for="localeSelect" class="sr-only">Språk</label>
+          <select id="localeSelect" class="locale-select-compact"></select>
         </div>
       </div>
 
@@ -67,6 +52,7 @@
     </main>
 
     <script type="module" src="/static/admin-content-classes.js"></script>
+    <script type="module" src="/static/workspace-help.js"></script>
     <script type="module" src="/static/deltakere-subnav.js"></script>
   </body>
 </html>

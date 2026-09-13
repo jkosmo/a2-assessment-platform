@@ -43,16 +43,22 @@ describe("content ownership enforcement (#787 slice 4b)", () => {
     expect((await request(app).put(`/api/admin/content/sections/${id}/content`).set(admin).send({ bodyMarkdown: "# admin" })).status).toBe(200);
   });
 
-  it("CLASS: non-owner SMO is blocked on delete, owner allowed", async () => {
+  // #1046 D3: DELETE arkiverte før; nå arkiverer POST /archive og DELETE sletter for godt (bare en
+  // arkivert klasse). Eierskapsvakta står foran begge.
+  it("CLASS: non-owner SMO is blocked on archive and delete, owner allowed", async () => {
     const create = await request(app).post("/api/admin/content/classes").set(smoA).send({ name: `Enf-${Date.now()}` });
     expect(create.status).toBe(201);
     const id = create.body.class.id as string;
 
-    const bRes = await request(app).delete(`/api/admin/content/classes/${id}`).set(smoB);
-    expect(bRes.status).toBe(403);
-    expect(bRes.body.error).toBe("content_ownership");
+    const bArchive = await request(app).post(`/api/admin/content/classes/${id}/archive`).set(smoB);
+    expect(bArchive.status).toBe(403);
+    expect(bArchive.body.error).toBe("content_ownership");
+    const bDelete = await request(app).delete(`/api/admin/content/classes/${id}`).set(smoB);
+    expect(bDelete.status).toBe(403);
+    expect(bDelete.body.error).toBe("content_ownership");
 
-    expect([200, 204]).toContain((await request(app).delete(`/api/admin/content/classes/${id}`).set(smoA)).status);
+    expect((await request(app).post(`/api/admin/content/classes/${id}/archive`).set(smoA)).status).toBe(200);
+    expect((await request(app).delete(`/api/admin/content/classes/${id}`).set(smoA)).status).toBe(204);
   });
 
   // #787 slice 5 (list UX): the list endpoints annotate each row with `canManage` so the UI hides the

@@ -13,7 +13,6 @@ import { warmModuleGraph } from "../support/moduleGraphWarmup.js";
 const findPublishedCoursesWithModuleDetails = vi.fn();
 const findCourseCompletionsForLearnerReport = vi.fn();
 const countCourseCompletions = vi.fn();
-const countDistinctEnrolledUsersForModules = vi.fn();
 const countPassedUsersForModule = vi.fn();
 const countUsersWithSubmissionsForModule = vi.fn();
 const findPassedUserIdsForModule = vi.fn();
@@ -36,7 +35,6 @@ vi.mock("../../src/modules/course/courseRepository.js", () => ({
     findPublishedCoursesWithModuleDetails,
     findCourseCompletionsForLearnerReport,
     countCourseCompletions,
-    countDistinctEnrolledUsersForModules,
     countPassedUsersForModule,
     countUsersWithSubmissionsForModule,
     findPassedUserIdsForModule,
@@ -98,7 +96,6 @@ describe("#969 course report — enrolledParticipants is the course audience", (
     findPublishedCoursesWithModuleDetails.mockReset();
     findCourseCompletionsForLearnerReport.mockReset().mockResolvedValue([]);
     countCourseCompletions.mockReset().mockResolvedValue(0);
-    countDistinctEnrolledUsersForModules.mockReset().mockResolvedValue(0);
     countPassedUsersForModule.mockReset().mockResolvedValue(0);
     countUsersWithSubmissionsForModule.mockReset().mockResolvedValue(0);
     findPassedUserIdsForModule.mockReset().mockResolvedValue([]);
@@ -111,8 +108,7 @@ describe("#969 course report — enrolledParticipants is the course audience", (
   // Scenario B i #969: datofilteret slipper fullføringene inn og innleveringene ut.
   it("never reports a completion rate above 100 % when completions outnumber recent submissions", async () => {
     findPublishedCoursesWithModuleDetails.mockResolvedValue([course("course-1", ["module-1"])]);
-    // Bare 3 brukere har levert inn i vinduet — den gamle nevneren.
-    countDistinctEnrolledUsersForModules.mockResolvedValue(3);
+    // (Den gamle nevneren — 3 brukere med innlevering — finnes ikke lenger som funksjon; #995.)
     // ...men 12 fullførte i vinduet, og alle 12 er fortsatt i kursets publikum.
     const learners = Array.from({ length: 12 }, (_, i) => `user-${i}`);
     resolveCourseAudience.mockResolvedValue(audience(...learners));
@@ -214,9 +210,11 @@ describe("#969 course report — enrolledParticipants is the course audience", (
     resolveCourseAudience.mockResolvedValue(audience("user-0", "user-1"));
 
     const { getCourseReport } = await import("../../src/modules/course/courseReport.js");
-    await getCourseReport();
+    const { rows } = await getCourseReport();
 
-    expect(countDistinctEnrolledUsersForModules).not.toHaveBeenCalled();
+    // #995: den gamle telleren (`countDistinctEnrolledUsersForModules`) er slettet fra repositoryet,
+    // så den KAN ikke kalles. Det som måles nå er svaret: publikummet, ikke innleverere.
+    expect(rows[0].enrolledParticipants).toBe(2);
   });
 });
 

@@ -1,4 +1,6 @@
 import { escapeHtml } from "./html-escape.js";
+import { rowActionsHtml, installRowMoreMenus } from "./row-actions.js";
+import { lifecycleBadge } from "./content-status-badge.js";
 import {
   supportedLocales,
   localeLabels,
@@ -39,7 +41,7 @@ import {
 } from "/static/admin-content-shell-state.js";
 import { deriveModuleStatusChains } from "/static/module-status-logic.js";
 import { renderOwnerPanel } from "/static/owner-panel.js";
-import { makeSrBadge, loadVersion } from "/static/admin-content-shared.js";
+import { loadVersion } from "/static/admin-content-shared.js";
 import {
   buildLocalizedCopyValue,
   selectTranslatedDraftFields,
@@ -229,7 +231,6 @@ const previewContent = document.getElementById("previewContent");
 // The fixed action bar above the chat log. See `renderWorkspaceActions`.
 const workspaceActionsBar = document.getElementById("workspaceActions");
 // Shown on Rediger only — see the tab handler.
-const privacyNotice = document.getElementById("privacyNotice");
 const workspaceNav = document.getElementById("workspaceNav");
 const localePicker = document.querySelector(".locale-picker");
 const appVersionLabel = document.getElementById("appVersion");
@@ -242,7 +243,6 @@ const tabButtons = {
 };
 const tabPanelModule = document.getElementById("tabPanelModule");
 const tabPanelSettings = document.getElementById("tabPanelSettings");
-const unsavedTabSwitchDialog = document.getElementById("dialogUnsavedTabSwitch");
 const shellStatusAnnouncer = document.getElementById("shellStatusAnnouncer");
 
 /**
@@ -264,13 +264,6 @@ function opphavFraUrl() {
 }
 
 
-const stateRail = document.getElementById("stateRail");
-const srModuleName = document.getElementById("srModuleName");
-const srEditing = document.getElementById("srEditing");
-const srLive = document.getElementById("srLive");
-const srChanges = document.getElementById("srChanges");
-const srPreview = document.getElementById("srPreview");
-const srLang = document.getElementById("srLang");
 
 // #479 Slice A: must match SOURCE_MATERIAL_MAX_BYTES in
 // src/modules/adminContent/sourceMaterialExtractionService.ts (server). Keep both at 10 MB —
@@ -856,8 +849,10 @@ function _domFormFields(entry) {
       btn.disabled = true;
       inputEl.disabled = true;
       entry.submitted = true;
-      _deactivateAll();
-      logUser(t("shell.source.userPreview"));
+      if (!entry.mount) {
+        _deactivateAll();
+        logUser(t("shell.source.userPreview"));
+      }
       entry.onSubmit(combinedSourceMaterial);
       return;
     }
@@ -884,6 +879,11 @@ function _domFormFields(entry) {
   });
   wrap.appendChild(inputEl);
   wrap.appendChild(btn);
+  // #1046: samme kildeverktøy (lim inn / last opp / URL / crawl) i «Generer innhold»-dialogen.
+  if (entry.mount) {
+    entry.mount.replaceChildren(wrap);
+    return;
+  }
   chatMessages.appendChild(wrap);
   _domScroll(wrap);
   // #360 a11y: for source-material, focus the upload button — the first meaningful
@@ -900,53 +900,6 @@ function _domFormFields(entry) {
   }, 80);
 }
 
-// Renders a module-picker choices column.
-function _domModuleChoicesCol(modules, active) {
-  const row = document.createElement("div");
-  row.className = "chat-choices chat-choices--column";
-  for (const m of modules) {
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = "btn-secondary chat-choice-btn";
-    btn.textContent = m.title || m.id;
-    btn.disabled = !active;
-    if (m.activeVersion) {
-      const badge = document.createElement("span");
-      badge.className = "module-status-badge live";
-      badge.style.cssText = "font-size:11px;padding:2px 8px;margin-left:8px";
-      badge.textContent = `Live v${m.activeVersion.versionNo}`;
-      btn.appendChild(badge);
-    }
-    if (active) {
-      btn.addEventListener("click", () => {
-        _disableAllDomChoices();
-        _deactivateAll();
-        logUser(m.title || m.id);
-        loadModule(m.id);
-      });
-    }
-    row.appendChild(btn);
-  }
-  const cancelBtn = document.createElement("button");
-  cancelBtn.type = "button";
-  cancelBtn.className = "btn-secondary chat-choice-btn";
-  cancelBtn.textContent = t("shell.action.cancel");
-  cancelBtn.disabled = !active;
-  if (active) {
-    cancelBtn.addEventListener("click", () => {
-      _disableAllDomChoices();
-      _deactivateAll();
-      logUser(t("shell.action.cancel"));
-      startIdle();
-    });
-  }
-  row.appendChild(cancelBtn);
-  chatMessages.appendChild(row);
-  _domScroll(row);
-  if (active) {
-    focusFirstEnabledChoice(row);
-  }
-}
 
 // ---------------------------------------------------------------------------
 // Logged chat API — all flow functions use these
@@ -954,6 +907,7 @@ function _domModuleChoicesCol(modules, active) {
 
 // Log + render a bot message. htmlFn() is called at render time so re-translation works.
 function logBot(htmlFn, choices = []) {
+  if (choices.length > 0) openChatPane();
   const entry = { kind: "bot", html: htmlFn, choices, active: choices.length > 0 };
   chatLog.push(entry);
   _domBotBubble(htmlFn(), choices, false, choices.length > 0);
@@ -969,16 +923,29 @@ function logUser(text) {
 // Create a progress slot (logged as a pending bot entry). Caller attaches abort listener.
 // textKeyOrFn: i18n key OR () => string.  Returns { entry, el, abortBtn }.
 function logProgress(textKeyOrFn, options = {}) {
+  // Produkteier 13.09: en lagring skal ikke åpne samtaleruta. Ruta åpnes når assistenten SPØR
+  // (valg, skjema) — framdrift er ikke et spørsmål. Avbryt-knappen finnes i ruta for den som har den åpen.
   const { el, abortBtn } = _domProgress(textKeyOrFn, options);
-  const entry = { kind: "bot", html: null, choices: [], active: false };
+  // quiet: framdrift uten utfall å melde (lasting av modulen) — speiles ikke som toast.
+  const entry = { kind: "bot", html: null, choices: [], active: false, quiet: !!options.quiet };
   chatLog.push(entry);
-  return { entry, el, abortBtn };
+  // Ruta er skjult: framdriften vises som toast, med «Avbryt» når den kan avbrytes. Toasten
+  // fjernes når framdriften løses (logResolveSlot).
+  let toast = null;
+  if (!options.quiet && !chatPaneVisible()) {
+    const text = typeof textKeyOrFn === "function" ? textKeyOrFn() : t(textKeyOrFn);
+    toast = showToast(text, "info", "", options.abortable
+      ? { sticky: true, actionLabel: t("shell.action.cancel"), onAction: () => abortBtn.click() }
+      : { sticky: true });
+  }
+  return { entry, el, abortBtn, toast };
 }
 
 // Resolve a progress slot with its final content + choices.
 // Updates both the log entry and the DOM element in-place.
 function logResolveSlot(slot, htmlFn, choices = []) {
   setChatBusy(false);
+  slot.toast?.remove();
   slot.entry.html = htmlFn;
   slot.entry.choices = choices;
   slot.entry.active = choices.length > 0;
@@ -990,23 +957,23 @@ function logResolveSlot(slot, htmlFn, choices = []) {
   if (announcement && announcement.length <= 160) {
     announceStatus(announcement);
   }
+  // Produkteier 13.09: samtaleruta er skjult til assistenten trenger et svar. Utfallet av en
+  // handling (lagret, importert, gjenopprettet, avvist) må likevel nå forfatteren — som toast,
+  // slik de andre skjemasidene gjør det. showToast hopper over en identisk toast som alt står.
+  if (choices.length > 0) openChatPane();
+  if (announcement && !slot.entry.quiet && choices.length === 0 && !chatPaneVisible()) showToast(announcement, /feil|error|failed|avvist|refus|kunne ikke|could not/i.test(announcement) ? "error" : "info");
   _domScroll(slot.el);
 }
 
 // Log + render a text input or textarea form (prompt bubble + input fields).
 function logForm(formType, promptHtmlFn, placeholderKey, submitKey, onSubmit, initialValue = "", context = {}) {
+  openChatPane();
   const entry = { kind: "form", formType, promptHtml: promptHtmlFn, placeholderKey, submitKey, onSubmit, submitted: false, initialValue, context };
   chatLog.push(entry);
   _domBotBubble(promptHtmlFn(), [], false);
   _domFormFields(entry);
 }
 
-// Log + render the module picker choices column.
-function logModuleChoices(modules) {
-  const entry = { kind: "module-choices", modules, active: true };
-  chatLog.push(entry);
-  _domModuleChoicesCol(modules, true);
-}
 
 // ---------------------------------------------------------------------------
 // Re-translate — clears and replays the entire chatLog with the current locale
@@ -1024,8 +991,6 @@ function retranslateChat() {
       if (!entry.submitted) {
         _domFormFields(entry);
       }
-    } else if (entry.kind === "module-choices") {
-      _domModuleChoicesCol(entry.modules, entry.active);
     }
   }
   chatMessages.lastElementChild?.scrollIntoView({ behavior: "smooth", block: "end" });
@@ -1063,6 +1028,8 @@ function renderPreviewLocaleBar() {
       // Disse knappene er i dag deaktivert under redigering via CSS. Guarden står likevel her, så
       // flaten ikke får tilbake blindveien i det øyeblikket noen fjerner den CSS-regelen.
       const wasEditing = !!document.getElementById("previewEditConfirm");
+      // Bare det som faktisk var skrevet og ikke bekreftet, er verdt en beskjed.
+      const wasDirty = hasOpenEditForm();
       // #920: the same question a tab switch asks. It used to ask it only for Innstillinger, so an
       // open edit form was re-rendered from the new language without a word — the typed text was
       // simply gone.
@@ -1080,7 +1047,10 @@ function renderPreviewLocaleBar() {
       renderSettingsPanel();
       if (wasEditing) {
         enterPreviewEditMode({ force: true });
-        logBot(() => escapeHtml(t("shell.directEdit.localeSwitched")));
+        if (wasDirty) {
+          logBot(() => escapeHtml(t("shell.directEdit.localeSwitched")));
+          if (!chatPaneVisible()) showToast(t("shell.directEdit.localeSwitched"), "warning");
+        }
       }
     });
     contentLocaleBar.appendChild(btn);
@@ -1265,22 +1235,20 @@ function scrollPreviewToBottom() {
 // ---------------------------------------------------------------------------
 
 function updateStateRail() {
-  if (!stateRail) return;
   const hasModule = !!selectedModuleId;
   // #975: her sto `stateRail.hidden = !hasModule` alene, og `.state-rail{display:flex}` slo
   // attributtet. Lappen var en egen CSS-regel, `.state-rail[hidden]{display:none}` — en fiks oppå
   // fella i stedet for kuren. Regelen er fjernet; setHidden gjør jobben for alle tilstander.
-  setHidden(stateRail, !hasModule);
   // #787: content-owner panel for the loaded module. Render once per module (guard on the last id) so
   // the frequent updateStateRail calls don't re-fetch/reset it; hide when no module is loaded.
   const ownerHost = document.getElementById("moduleOwnerPanelHost");
   if (ownerHost) {
+    // #1046 (13.09): panelet ligger under Innstillinger — synlig bare når den fanen er valgt OG en modul er lastet.
+    ownerHost.hidden = !hasModule || activeTab !== "settings";
     if (!hasModule) {
-      ownerHost.hidden = true;
       ownerHost.dataset.moduleId = "";
     } else if (ownerHost.dataset.moduleId !== selectedModuleId) {
       ownerHost.dataset.moduleId = selectedModuleId;
-      ownerHost.hidden = false;
       renderOwnerPanel({ container: ownerHost, contentType: "MODULE", contentId: selectedModuleId, getHeaders, t }).catch(() => {});
     }
   }
@@ -1294,66 +1262,44 @@ function updateStateRail() {
   const loaded = bundle?.selectedConfiguration?.moduleVersion ?? null;
   const loadedIsLive = !!loaded?.id && loaded.id === bundle?.module?.activeVersionId;
 
-  if (srModuleName) {
-    srModuleName.textContent = localizeValue(sessionDraft?.title ?? previewDraft?.title ?? bundle?.module?.title) || selectedModuleId;
+  const moduleName = localizeValue(sessionDraft?.title ?? previewDraft?.title ?? bundle?.module?.title) || "";
+  // #1046 nivå to, B2: navnet er tittelen på sida (typen står som merke over).
+  const h1 = document.getElementById("moduleWorkspaceTitle");
+  if (h1) {
+    h1.textContent = moduleName || t("shell.newModule.defaultTitle");
+    h1.classList.toggle("is-untitled", !moduleName);
+    h1.removeAttribute("data-i18n");
   }
 
-  if (srEditing) {
-    // Same correction as the preview field below: this read `liveChain` — what is PUBLISHED —
-    // while the field is called "Du redigerer" and the author is editing whatever is loaded.
-    if (hasUnsaved) {
-      srEditing.innerHTML = makeSrBadge("unsaved", t("stateRail.editing.workingDraft"));
-    } else if (loaded?.versionNo != null) {
-      srEditing.innerHTML = loadedIsLive
-        ? makeSrBadge("published", tf("stateRail.editing.published", { versionNo: loaded.versionNo }))
-        : makeSrBadge("saved-draft", tf("stateRail.editing.savedDraft", { versionNo: loaded.versionNo }));
-    } else if (chains?.liveChain.length > 0) {
-      srEditing.innerHTML = makeSrBadge("published", tf("stateRail.editing.published", { versionNo: chains.liveChain[0].versionNo }));
-    } else {
-      srEditing.innerHTML = `<span class="state-rail-value">—</span>`;
-    }
+  // #1046 (13.09): statusmerket og «Alt lagret / Ulagrede endringer» i hodet, som på kurs, seksjon
+  // og klasse. Tilstandslinja under bærer versjonsfaktaene.
+  // Produkteier 13.09: versjonsfaktaene fra tilstandslinja står som merker her — «Publisert v2»
+  // (live nå) og «Utkast v4» (det du redigerer, når det ikke er den som er live).
+  const lifecycleBadgeHost = document.getElementById("moduleLifecycleBadge");
+  if (lifecycleBadgeHost) {
+    const liveNo = chains?.liveChain?.[0]?.versionNo ?? null;
+    const parts = [];
+    if (bundle?.module?.archivedAt) parts.push(lifecycleBadge({ lifecycle: "archived" }, t));
+    else if (liveNo != null) parts.push(`<span class="status-badge status-badge--published">${escapeHtml(tf("stateRail.live.published", { versionNo: liveNo }))}</span>`);
+    const editingNo = loaded?.versionNo ?? null;
+    if (hasUnsaved && !loaded) parts.push(`<span class="status-badge status-badge--draft">${escapeHtml(t("stateRail.editing.workingDraft"))}</span>`);
+    else if (editingNo != null && !loadedIsLive) parts.push(`<span class="status-badge status-badge--draft">${escapeHtml(tf("shell.header.draftVersion", { versionNo: editingNo }))}</span>`);
+    else if (liveNo == null && bundle) parts.push(lifecycleBadge({ lifecycle: "draft" }, t));
+    lifecycleBadgeHost.innerHTML = bundle || sessionDraft ? parts.join(" ") : "";
+  }
+  refreshModuleHeaderState();
+
+  // «Forhåndsvisning viser …» i Forhåndsvisning-fanen: de tre tilstandene forhåndsvisningen kan være i.
+  const previewShows = document.getElementById("previewShows");
+  if (previewShows) {
+    const shows = hasUnsaved ? t("stateRail.preview.workingDraft")
+      : loadedIsLive ? t("stateRail.preview.published")
+      : loaded?.versionNo != null ? tf("stateRail.preview.savedVersion", { versionNo: loaded.versionNo })
+      : "—";
+    previewShows.textContent = `${t("stateRail.label.preview")}: ${shows}`;
+    setHidden(previewShows, activeTab !== "preview");
   }
 
-  if (srLive) {
-    if (chains?.liveChain.length > 0) {
-      srLive.innerHTML = makeSrBadge("published", tf("stateRail.live.published", { versionNo: chains.liveChain[0].versionNo }));
-    } else {
-      srLive.innerHTML = `<span class="state-rail-value" style="color:var(--color-meta)">${escapeHtml(t("stateRail.live.none"))}</span>`;
-    }
-  }
-
-  if (srChanges) {
-    if (hasUnsaved) {
-      srChanges.innerHTML = makeSrBadge("unsaved", t("stateRail.changes.unsaved"));
-    } else {
-      // v1.1.97: "Alt lagret" får ✓-prefiks og grønn-tint via dedikert klasse i stedet for
-       // inline style — mer fremtredende OK-indikator.
-      srChanges.innerHTML = `<span class="state-rail-value state-rail-value--saved-ok">✓ ${escapeHtml(t("stateRail.changes.saved"))}</span>`;
-    }
-  }
-
-  if (srPreview) {
-    // Stage-tilbakemelding 2026-08-17: *"det står at preview viser publisert versjon, men det som
-    // faktisk vises er min versjon under endring"*. This field had exactly two answers — "working
-    // draft" when a session draft existed, and otherwise the flat claim "published version". It
-    // never looked at WHICH version the preview had loaded. Open a saved draft, or restore an
-    // older version, and it asserted "published" over content that was not published at all.
-    //
-    // Three states now, and they are the three the preview can actually be in.
-    if (hasUnsaved) {
-      srPreview.innerHTML = makeSrBadge("unsaved", t("stateRail.preview.workingDraft"));
-    } else if (loadedIsLive) {
-      srPreview.innerHTML = `<span class="state-rail-value">${escapeHtml(t("stateRail.preview.published"))}</span>`;
-    } else if (loaded?.versionNo != null) {
-      srPreview.innerHTML = makeSrBadge("saved-draft", tf("stateRail.preview.savedVersion", { versionNo: loaded.versionNo }));
-    } else {
-      srPreview.innerHTML = `<span class="state-rail-value">—</span>`;
-    }
-  }
-
-  if (srLang) {
-    srLang.textContent = localeLabels[contentLocale] ?? (contentLocale);
-  }
 }
 
 // #896 S2 / #892: localizeDraftAcrossLocalesWithTitle does NOT reject when a locale fails - it
@@ -1731,6 +1677,66 @@ async function localizeMcqAcrossLocales(questions, sourceLocale) {
   }
 
   return { questions: localizedQuestions, failedLocales };
+}
+
+// #1046 (produkteier 13.09): fanebytte er ikke navigering og spør ikke. Det som er skrevet i Rediger
+// legges i `sessionDraft` når man forlater fanen, og kommer tilbake når skjemaet åpnes igjen.
+// `editFormSnapshot` settes av enterPreviewEditMode (den kjenner utgangsverdiene) og leser feltene.
+let editFormSnapshot = null;
+// Utkastet kom fra skjemaet (én språkversjon, ikke oversatt). Da skal Lagre gå veien om oversettelse
+// (previewEditConfirm), ikke lagre utkastet rått som «Lagre utkast» gjorde for genererte utkast.
+let sessionDraftFromForm = false;
+
+function readMcqQuestionsFromForm(currentMcqQuestions) {
+  return currentMcqQuestions.map((question, questionIndex) => {
+    const container = previewContent.querySelector(`[data-preview-edit-question="${questionIndex}"]`);
+    const optionInputs = Array.from(container?.querySelectorAll("[data-preview-edit-option]") ?? []);
+    const options = optionInputs.map((input, optionIndex) => input.value.trim() || question.options[optionIndex] || "");
+    const checkedRadio = container?.querySelector(`input[name="previewEditCorrectAnswer${questionIndex}"]:checked`);
+    const checkedIndex = Number.parseInt(checkedRadio?.value ?? "-1", 10);
+    const safeCorrectAnswerIndex =
+      Number.isInteger(checkedIndex) && checkedIndex >= 0 && checkedIndex < options.length
+        ? checkedIndex
+        : Math.max(0, options.findIndex((option) => option === question.correctAnswer));
+    return {
+      stem: container?.querySelector(`#previewEditMcqStem${questionIndex}`)?.value.trim() || question.stem,
+      options,
+      correctAnswer: options[safeCorrectAnswerIndex] ?? options[0] ?? question.correctAnswer ?? "",
+      // Reverted to ||: an emptied rationale cannot be saved at all. Both the MCQ
+      // localization body and the MCQ-set body require a non-empty string, so clearing it
+      // produces a 400 AFTER the title and rubric may already have been written. Keeping
+      // the old text is wrong but harmless; a half-written save is not. The real fix is a
+      // schema that treats the rationale as genuinely optional - registered separately.
+      rationale: container?.querySelector(`#previewEditMcqRationale${questionIndex}`)?.value.trim() || question.rationale,
+    };
+  });
+}
+
+function nonEmptyLocaleMap(value) {
+  if (typeof value === "string") return value.trim() ? { [LEGACY_STRING_LOCALE]: value } : {};
+  return Object.fromEntries(Object.entries(value ?? {}).filter(([, v]) => typeof v === "string" && v.trim()));
+}
+
+/** Legg det som er skrevet i Rediger inn i utkastet. Returnerer true når noe var endret. */
+function captureEditFormIntoDraft({ force = false } = {}) {
+  if (!isEditFormOpen() || !editFormSnapshot) return false;
+  const snap = editFormSnapshot();
+  if (!snap.changed && !force) return false;
+  const loc = snap.editingLocale;
+  const stored = bundle?.selectedConfiguration?.moduleVersion;
+  const merge = (current, text) => mergeLocaleInto(current, loc, text);
+  sessionDraft = buildPreviewCandidate({
+    title: merge(sessionDraft?.title ?? bundle?.module?.title ?? "", snap.title) ?? "",
+    description: merge(sessionDraft?.description ?? bundle?.module?.description ?? "", snap.description),
+    taskText: merge(sessionDraft?.taskText ?? stored?.taskText ?? "", snap.taskText) ?? "",
+    assessorExpectedContent: merge(sessionDraft?.assessorExpectedContent ?? stored?.assessorExpectedContent ?? "", snap.assessorExpectedContent) ?? "",
+    candidateTaskConstraints: merge(sessionDraft?.candidateTaskConstraints ?? stored?.candidateTaskConstraints ?? "", snap.candidateTaskConstraints) ?? "",
+    mcqQuestions: snap.mcqQuestions,
+  });
+  sessionState = "draft-pending";
+  sessionDraftFromForm = true;
+  newModulePlaceholder = false;
+  return true;
 }
 
 function resolveEditableMcqQuestions(locale) {
@@ -2413,6 +2419,23 @@ async function refreshLocalizedDraftInBackground({ draft, mcq }) {
 
 async function saveDraftBundleInBackground(options = {}) {
   const { afterSave = null } = options;
+  // #1046 A1: et nytt element finnes ikke på tjeneren før første Lagre. Navnet er det som kreves.
+  if (!selectedModuleId && sessionDraft) {
+    const created = await createModuleFromDraft();
+    if (!created) return;
+    // Bare navn, type og nivå så langt (fra Innstillinger): modulen finnes nå, men det er ingen
+    // versjon å lagre. Last den inn, behold utkastet (typen!) og gå til Rediger for innholdet.
+    const hasContent = Object.keys(nonEmptyLocaleMap(sessionDraft.taskText)).length > 0 || (sessionDraft.mcqQuestions?.length ?? 0) > 0;
+    if (!hasContent) {
+      const keep = sessionDraft;
+      await loadModule(selectedModuleId);
+      sessionDraft = keep;
+      showDraftReadyActions({ quiet: true });
+      switchToTab("edit");
+      showToast(t("shell.newModule.createdGoEdit"), "success");
+      return;
+    }
+  }
   const moduleId = selectedModuleId;
   if (!moduleId) {
     logBot(() => t("shell.save.moduleRequired"));
@@ -2443,35 +2466,27 @@ async function saveDraftBundleInBackground(options = {}) {
     : Number.isFinite(storedMcqMinPercent)
       ? storedMcqMinPercent
       : SHELL_MCQ_ONLY_MIN_PERCENT;
-  // v1.1.95: when save fails on pre-save validation, attach recovery actions to the error
-  // message. Previously the bot message had no choices and the chat menu was deactivated
-  // (because the user just clicked Lagre utkast and _deactivateAll fired), so users were
-  // stuck with no way forward. Same action set as draft-ready menu — user can edit,
-  // revise, open Avansert, restart, or retry Lagre.
-  // v1.1.97: when MCQ is missing (cancelled or failed generation), recovery menu also
-  // includes "Generer MCQ" so the user can re-trigger generation without going via
-  // Avansert or restart. Uses startGenerateMcqFlow which asks for source material again
-  // — friction acceptable for a rare failure-recovery case.
-  const buildSaveRecoveryActions = ({ includeGenerateMcq = false } = {}) => {
-    const model = deriveShellDraftReadyActionModel({ hasSelectedModule: !!selectedModuleId });
-    const actionMap = {
-      revise: { labelKey: "shell.draftReady.editInChat", action: () => startUnifiedRevisionFlow() },
-      restart: { labelKey: "shell.draftReady.restart", action: startIdle },
-      saveDraft: { labelKey: "shell.draftReady.saveDraft", action: saveDraftBundleInBackground },
-    };
-    const actions = model.actionKeys.map((key) => actionMap[key]).filter(Boolean);
-    if (includeGenerateMcq) {
-      actions.unshift({ labelKey: "shell.module.generateMcq", action: () => startGenerateMcqFlow() });
-    }
-    return actions;
+  // Produkteier 13.09: ingenting som står i handlingsraden skal gjentas som valg i samtalen.
+  // Meldingen sier hva som mangler; veien videre er knappene i hodet og feltene i skjemaet.
+  // Skjemaet ble revet ved bekreftelsen; en stoppet lagring skal la forfatteren stå i det igjen.
+  const backToForm = () => {
+    if (activeTab !== "edit") switchToTab("edit");
+    if (!isEditFormOpen()) enterPreviewEditMode({ force: true });
+    showDraftReadyActions({ quiet: true });
   };
   if (!isMcqOnly && !localizeValueForLocale(taskText, contentLocale).trim()) {
-    logBot(() => t("shell.save.taskRequired"), buildSaveRecoveryActions());
+    logBot(() => t("shell.save.taskRequired"));
+    showToast(t("shell.save.taskRequired"), "error");
+    backToForm();
+    document.getElementById("previewEditTaskText")?.focus();
     return;
   }
   // #578: FREETEXT_ONLY modules have no MCQ — skip the MCQ-required guard for them.
   if (!isFreetextOnly && !mcqQuestions.length) {
-    logBot(() => t("shell.save.mcqRequired"), buildSaveRecoveryActions({ includeGenerateMcq: true }));
+    logBot(() => t("shell.save.mcqRequired"));
+    showToast(t("shell.save.mcqRequired"), "error");
+    backToForm();
+    document.getElementById("previewEditAddQuestion")?.focus();
     return;
   }
 
@@ -3071,6 +3086,44 @@ function confirmHighImpactAction(promptKey, confirmKey, action, cancelAction = s
   ]);
 }
 
+// #1046 A1: lag modulen på tjeneren fra utkastets navn. Returnerer false (og sier hvorfor) når navnet
+// mangler eller opprettingen feilet. Adressen byttes til den ekte, så oppfrisking og tilbake-lenker
+// virker som for et element som fantes fra før.
+async function createModuleFromDraft() {
+  const title = sessionDraft?.title;
+  const hasTitle = typeof title === "string" ? title.trim().length > 0
+    : !!title && Object.values(title).some((v) => typeof v === "string" && v.trim().length > 0);
+  if (!hasTitle) {
+    logBot(() => t("shell.save.titleRequired"));
+    showToast(t("shell.save.titleRequired"), "error");
+    return false;
+  }
+  const slot = logProgress("shell.newModule.creating", { quiet: true });
+  slot.abortBtn.remove();
+  try {
+    const body = await apiFetch("/api/admin/content/modules", getHeaders, {
+      method: "POST",
+      body: JSON.stringify({
+        title: typeof title === "string" ? titleInContentLocale(title) : title,
+        ...(sessionDraft?.certificationLevel ? { certificationLevel: sessionDraft.certificationLevel } : {}),
+      }),
+    });
+    const created = body?.module ?? body;
+    const id = created?.id ?? created?.moduleId;
+    if (!id) throw new Error("no module id");
+    selectedModuleId = id;
+    newModulePlaceholder = false;
+    window.history.replaceState(null, "", `/admin-content/module/${encodeURIComponent(id)}/conversation`);
+    logResolveSlot(slot, () => `${escapeHtml(t("shell.newModule.created"))} <strong>${escapeHtml(localizeValue(title))}</strong>`);
+    return true;
+  } catch (err) {
+    const errMsg = apiErrorText(err);
+    logResolveSlot(slot, () => `${escapeHtml(t("shell.newModule.createError"))} ${escapeHtml(errMsg)}`);
+    showToast(`${t("shell.newModule.createError")} ${errMsg}`, "error");
+    return false;
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Chat flows
 // ---------------------------------------------------------------------------
@@ -3080,6 +3133,8 @@ function startIdle() {
   bundle = null;
   selectedModuleId = null;
   sessionDraft = null;
+  sessionDraftFromForm = false;
+  newModulePlaceholder = false;
   previewDraft = null;
   latestSavedModuleVersionId = null;
   // #926 QA: a parked proposal belongs to the module that was loaded when it was made. Its
@@ -3089,53 +3144,18 @@ function startIdle() {
   discardPendingProposal();
   chatLog = [];
   renderPreview();
-  logBot(() => t("shell.idle.prompt"), [
-    { labelKey: "shell.idle.openExisting", action: startModulePicker },
-    { labelKey: "shell.idle.createNew", action: startNewModuleFlow },
-  ]);
+  // Uten modul er lista stedet: «Ny modul» og åpning skjer der (#1046 A1). Ingen samtalevalg her.
+  logBot(() => t("shell.idle.prompt"));
 }
 
-async function startModulePicker() {
-  sessionState = "picking-module";
-  previewDraft = null;
-  renderPreviewLocaleBar();
-  renderPreview();
-  const slot = logProgress("shell.modules.loading");
-
-  try {
-    const data = await apiFetch("/api/admin/content/modules", getHeaders);
-    modules = Array.isArray(data) ? data : (data?.modules ?? []);
-  } catch {
-    logResolveSlot(slot, () => t("shell.modules.loadError"), [
-      { labelKey: "shell.action.retry", action: startModulePicker },
-      { labelKey: "shell.action.cancel", action: startIdle },
-    ]);
-    return;
-  }
-
-  if (modules.length === 0) {
-    logResolveSlot(slot, () => t("shell.modules.empty"), [
-      { labelKey: "shell.idle.createNew", action: startNewModuleFlow },
-      { labelKey: "shell.action.cancel", action: startIdle },
-    ]);
-    return;
-  }
-
-  // Build a snapshot of module list HTML (module titles are data, not translatable)
-  const listItems = modules.map(
-    (m) =>
-      `<div class="module-list-item"><strong>${escapeHtml(m.title || m.id)}</strong>${m.activeVersion ? ` <span class="module-status-badge live" style="font-size:11px;padding:2px 8px">Live v${m.activeVersion.versionNo}</span>` : ""}</div>`,
-  );
-  const listSnapshot = listItems.join("");
-  logResolveSlot(slot, () => `${escapeHtml(t("shell.modules.selectPrompt"))}<div class="module-list">${listSnapshot}</div>`);
-  logModuleChoices(modules);
-}
 
 async function loadModule(moduleId, options = {}) {
   const { resumeEditing = false } = options;
   sessionState = "loading-module";
   selectedModuleId = moduleId;
   sessionDraft = null;
+  sessionDraftFromForm = false;
+  newModulePlaceholder = false;
   previewDraft = null;
   latestSavedModuleVersionId = null;
   // #926 QA: covers the save path too — saving reloads the module, and a proposal parked before
@@ -3146,7 +3166,7 @@ async function loadModule(moduleId, options = {}) {
   // the editor; now it is seeded on every visit to the tab, so merely looking at module A's
   // settings and then switching to B would show — and save — A's criteria on B.
   resetSettingsPanelState();
-  const slot = logProgress("shell.module.loading");
+  const slot = logProgress("shell.module.loading", { quiet: true });
 
   try {
     const exportData = await apiFetch(`/api/admin/content/modules/${encodeURIComponent(moduleId)}/export`, getHeaders);
@@ -3306,7 +3326,8 @@ async function runUnifiedRevision(instruction) {
 
 function startUnifiedRevisionFlow() {
   if (!sessionDraft?.taskText && !sessionDraft?.assessorExpectedContent && (sessionDraft?.mcqQuestions?.length ?? 0) === 0) {
-    logBot(() => t("shell.revision.unavailable"));
+    // Som toast, ikke som en ny linje i loggen for hvert klikk.
+    showToast(t("shell.revision.unavailable"), "info");
     return;
   }
 
@@ -3577,20 +3598,34 @@ function buildCriteriaRecordFromEditorState(criteria) {
 }
 
 // B3 (#450): "Behold kriteriene" — patch the active rubric's blueprint-hash to the current
-// hash so the drift banner hides. No version bump; criteria unchanged.
+// hash so the drift banner hides. Criteria unchanged.
+//
+// #915: the server now creates a NEW rubric version (same criteria, new hash) instead of patching
+// the old one in place — so a restored older module version keeps the hash it was authored with.
+// The bundle is patched to point at the new version, so the next save attaches it
+// (`latestRubricId` reads `cfg.rubricVersion.id`). Until saved, a reload shows the banner again —
+// correctly: the persisted draft still references the old rubric.
 async function handleDriftKeep() {
   if (!selectedModuleId) return;
   const hash = currentBlueprintHash;
   if (!hash) return;
   try {
-    await apiFetch(
+    const result = await apiFetch(
       `/api/admin/content/modules/${encodeURIComponent(selectedModuleId)}/rubric-versions/sync-blueprint`,
       getHeaders,
-      { method: "POST", body: JSON.stringify({ blueprintHash: hash }) },
+      { method: "POST", body: JSON.stringify({ blueprintHash: hash, rubricVersionId: bundle?.selectedConfiguration?.rubricVersion?.id ?? undefined }) },
     );
     // Patch bundle in place so we don't clobber unsaved sessionDraft via full reload.
-    const sr = bundle?.selectedConfiguration?.rubricVersion?.scalingRule;
-    if (sr && typeof sr === "object") sr.generated_from_blueprint_hash = hash;
+    const cfgRubric = bundle?.selectedConfiguration?.rubricVersion;
+    if (cfgRubric && result?.rubricVersionId) {
+      const previousId = cfgRubric.id;
+      cfgRubric.id = result.rubricVersionId;
+      if (typeof result.versionNo === "number") cfgRubric.versionNo = result.versionNo;
+      cfgRubric.scalingRule = { ...(cfgRubric.scalingRule ?? {}), generated_from_blueprint_hash: hash };
+      if (Array.isArray(bundle?.versions?.rubricVersions) && result.rubricVersionId !== previousId) {
+        bundle.versions.rubricVersions.unshift({ ...cfgRubric });
+      }
+    }
     renderPreview();
     showToast(t("shell.drift.keep.success"), "success");
   } catch (err) {
@@ -3761,7 +3796,6 @@ function hasManuallyEditedCriteria() {
   const criteria = bundle?.selectedConfiguration?.rubricVersion?.criteria ?? {};
   return Object.values(criteria).some((c) => c && typeof c === "object" && c.manuallyEdited === true);
 }
-
 
 
 // B3 (#450): full-screen modal showing the diff. Accept-all triggers a single regenerate
@@ -4137,7 +4171,10 @@ function enterPreviewEditMode({ force = false } = {}) {
   const correctAnswerLabel = escapeHtml(t("shell.preview.correctAnswer"));
   const rationaleLabel = escapeHtml(t("adminContent.dialog.mcq.rationale"));
   const mcqHelp = escapeHtml(t("adminContent.help.mcqQuestions"));
-  const mcqHtml = currentMcqQuestions.length
+  // Produkteier 13.09: spørsmål kan legges til og fjernes her, ikke bare genereres i samtalen.
+  // Seksjonen vises alltid når typen har flervalg — også tom, med «Legg til spørsmål».
+  const hasMcqPart = editAssessmentMode !== "FREETEXT_ONLY";
+  const mcqHtml = hasMcqPart
     ? `
       <div class="preview-section-label">${mcqSectionLabel}</div>
       <div class="preview-edit-mcq-list">
@@ -4172,7 +4209,10 @@ function enterPreviewEditMode({ force = false } = {}) {
 
           return `
             <article class="preview-edit-mcq-item" data-preview-edit-question="${questionIndex}">
-              <div class="preview-mcq-question-header">${questionLabel}</div>
+              <div class="preview-mcq-question-header" style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+                <span>${questionLabel}</span>
+                <button type="button" class="row-action-btn destructive" data-remove-question="${questionIndex}">${escapeHtml(t("shell.directEdit.removeQuestion"))}</button>
+              </div>
               <textarea
                 id="previewEditMcqStem${questionIndex}"
                 class="preview-edit-textarea preview-edit-textarea--compact"
@@ -4195,6 +4235,9 @@ function enterPreviewEditMode({ force = false } = {}) {
             </article>
           `.trim();
         }).join("")}
+      </div>
+      <div class="preview-edit-mcq-add">
+        <button type="button" id="previewEditAddQuestion" class="row-action-btn">${escapeHtml(t("shell.directEdit.addQuestion"))}</button>
       </div>
     `
     : "";
@@ -4224,6 +4267,10 @@ function enterPreviewEditMode({ force = false } = {}) {
     <div class="preview-section-label">${labelTask}</div>
     <textarea id="previewEditTaskText" class="preview-edit-textarea"
       aria-label="${labelTask}">${escapedTask}</textarea>
+    <details id="privacyNotice" class="privacy-notice" role="note">
+      <summary>⚠ ${escapeHtml(t("adminContent.privacy.warning.short"))}</summary>
+      <p><strong>${escapeHtml(t("adminContent.privacy.warning.title"))}</strong> — ${escapeHtml(t("adminContent.privacy.warning.body"))}</p>
+    </details>
     <div class="preview-section-label">${labelCandidateConstraints}</div>
     <textarea id="previewEditCandidateTaskConstraints" class="preview-edit-textarea preview-edit-textarea--secondary"
       aria-label="${labelCandidateConstraints}">${escapedCandidateConstraints}</textarea>
@@ -4231,12 +4278,27 @@ function enterPreviewEditMode({ force = false } = {}) {
     <textarea id="previewEditGuidanceText" class="preview-edit-textarea preview-edit-textarea--secondary"
       aria-label="${labelGuidance}">${escapedGuidance}</textarea>`;
 
+  // Fanebytte uten å lagre: det som står i feltene nå, mot det skjemaet ble åpnet med.
+  editFormSnapshot = () => {
+    const val = (id) => document.getElementById(id)?.value.trim();
+    const title = val("previewEditTitle") ?? currentTitle;
+    const description = val("previewEditDescription") ?? currentDescription;
+    const taskText = editIsMcqOnly ? "" : (val("previewEditTaskText") ?? currentTaskText);
+    const assessorExpectedContent = editIsMcqOnly ? "" : (val("previewEditGuidanceText") ?? currentGuidanceText);
+    const candidateTaskConstraints = editIsMcqOnly ? "" : (val("previewEditCandidateTaskConstraints") ?? currentCandidateTaskConstraints);
+    const mcqQuestions = readMcqQuestionsFromForm(currentMcqQuestions);
+    const changed = title !== currentTitle || description !== currentDescription || taskText !== currentTaskText
+      || assessorExpectedContent !== currentGuidanceText || candidateTaskConstraints !== currentCandidateTaskConstraints
+      || JSON.stringify(mcqQuestions) !== JSON.stringify(currentMcqQuestions);
+    return { changed, editingLocale, title, description, taskText, assessorExpectedContent, candidateTaskConstraints, mcqQuestions };
+  };
+
+  // Produkteier 13.09: navnet er et vanlig felt med etikett («Navn (påkrevd)»), ikke en understreket
+  // tittel som ser ut som en overskrift. Tittelen på sida står i hodet.
   previewContent.innerHTML = `
-    <div class="preview-module-header">
-      <input id="previewEditTitle" class="preview-edit-title" value="${escapedTitle}"
-        aria-label="${escapeHtml(t("shell.directEdit.titlePlaceholder"))}" />
-      <span class="module-status-badge draft">${escapeHtml(t("shell.directEdit.editingBadge"))}</span>
-    </div>
+    <div class="preview-section-label">${escapeHtml(t("shell.directEdit.nameLabel"))} <span class="required-note">${escapeHtml(t("shell.directEdit.required"))}</span></div>
+    <input id="previewEditTitle" class="preview-edit-input" value="${escapedTitle}"
+      aria-label="${escapeHtml(t("shell.directEdit.nameLabel"))}" placeholder="${escapeHtml(t("shell.directEdit.titlePlaceholder"))}" />
     <div class="preview-section-label">${labelDescription}</div>
     <textarea id="previewEditDescription" class="preview-edit-textarea preview-edit-textarea--compact"
       aria-label="${labelDescription}">${escapedDescription}</textarea>
@@ -4253,6 +4315,26 @@ function enterPreviewEditMode({ force = false } = {}) {
   // `hasOpenEditForm` compares against these, and the form is now open the whole time Rediger is,
   // so an unstamped field would read as changed from the first render.
   stampEditFormValues();
+  // Legg til / fjern spørsmål: det som står i feltene tas med i utkastet, lista endres, skjemaet
+  // tegnes på nytt fra utkastet. Ingenting går tapt, og tellingen stemmer.
+  const rebuildWithQuestions = (mutate) => {
+    captureEditFormIntoDraft({ force: true });
+    const list = [...(sessionDraft?.mcqQuestions ?? [])];
+    mutate(list);
+    sessionDraft = { ...sessionDraft, mcqQuestions: list };
+    newModulePlaceholder = false;
+    enterPreviewEditMode({ force: true });
+    refreshModuleHeaderState();
+  };
+  previewContent.querySelector("#previewEditAddQuestion")?.addEventListener("click", () => {
+    rebuildWithQuestions((list) => list.push({ stem: "", options: ["", "", "", ""], correctAnswer: "", rationale: "" }));
+  });
+  for (const btn of previewContent.querySelectorAll("[data-remove-question]")) {
+    btn.addEventListener("click", () => {
+      const index = Number(btn.dataset.removeQuestion);
+      rebuildWithQuestions((list) => list.splice(index, 1));
+    });
+  }
   // No auto-focus any more. Moving the caret into the title made sense when opening the form was
   // a deliberate action; now the form opens on every tab switch, every save and every language
   // change, and grabbing focus each time takes it away from wherever the author actually is.
@@ -4292,6 +4374,12 @@ function enterPreviewEditMode({ force = false } = {}) {
 
   document.getElementById("previewEditConfirm").addEventListener("click", () => {
     const newTitle = document.getElementById("previewEditTitle").value.trim() || currentTitle;
+    // #1046 A1: et nytt element kan ikke lages uten navn — si det FØR noe rives ned, så feltet står.
+    if (!selectedModuleId && !newTitle) {
+      showToast(t("shell.save.titleRequired"), "error");
+      document.getElementById("previewEditTitle")?.focus();
+      return;
+    }
     // #665: free-text inputs are absent for MCQ-only — guard the reads and keep the fields empty.
     const newTaskText = editIsMcqOnly ? "" : (document.getElementById("previewEditTaskText")?.value.trim() || currentTaskText);
     const newGuidanceText = editIsMcqOnly ? "" : (document.getElementById("previewEditGuidanceText")?.value.trim() || currentGuidanceText);
@@ -4310,29 +4398,15 @@ function enterPreviewEditMode({ force = false } = {}) {
     // untouched. `null` would mean "no override" and send the save to ensure-rubric, which would
     // discard criteria the author had just generated.
     const newCriteriaRecord = sessionDraft?.criteria ?? null;
-    const newMcqQuestions = currentMcqQuestions.map((question, questionIndex) => {
-      const container = previewContent.querySelector(`[data-preview-edit-question="${questionIndex}"]`);
-      const optionInputs = Array.from(container?.querySelectorAll("[data-preview-edit-option]") ?? []);
-      const options = optionInputs.map((input, optionIndex) => input.value.trim() || question.options[optionIndex] || "");
-      const checkedRadio = container?.querySelector(`input[name="previewEditCorrectAnswer${questionIndex}"]:checked`);
-      const checkedIndex = Number.parseInt(checkedRadio?.value ?? "-1", 10);
-      const safeCorrectAnswerIndex =
-        Number.isInteger(checkedIndex) && checkedIndex >= 0 && checkedIndex < options.length
-          ? checkedIndex
-          : Math.max(0, options.findIndex((option) => option === question.correctAnswer));
-
-      return {
-        stem: container?.querySelector(`#previewEditMcqStem${questionIndex}`)?.value.trim() || question.stem,
-        options,
-        correctAnswer: options[safeCorrectAnswerIndex] ?? options[0] ?? question.correctAnswer ?? "",
-        // Reverted to ||: an emptied rationale cannot be saved at all. Both the MCQ
-        // localization body and the MCQ-set body require a non-empty string, so clearing it
-        // produces a 400 AFTER the title and rubric may already have been written. Keeping
-        // the old text is wrong but harmless; a half-written save is not. The real fix is a
-        // schema that treats the rationale as genuinely optional - registered separately.
-        rationale: container?.querySelector(`#previewEditMcqRationale${questionIndex}`)?.value.trim() || question.rationale,
-      };
-    });
+    const newMcqQuestions = readMcqQuestionsFromForm(currentMcqQuestions);
+    // Et spørsmål lagt til for hånd må være helt: tjeneren avviser tomme tekster etter at annet
+    // kan være skrevet. Si det før noe sendes, og la skjemaet stå.
+    const incomplete = newMcqQuestions.find((q) => !q.stem?.trim() || !q.rationale?.trim() || (q.options ?? []).some((o) => !o?.trim()));
+    if (incomplete) {
+      showToast(t("shell.directEdit.mcqIncomplete"), "error");
+      previewContent.querySelector(`[data-preview-edit-question="${newMcqQuestions.indexOf(incomplete)}"] textarea`)?.focus();
+      return;
+    }
 
     // #896 S2: one commitment. "Bekreft" used to stop here and hand the author a separate
     // "Lagre utkast" step, which meant the translation round was paid on every confirm even
@@ -4351,7 +4425,8 @@ function enterPreviewEditMode({ force = false } = {}) {
       && newCandidateTaskConstraints === currentCandidateTaskConstraints
       && JSON.stringify(newMcqQuestions) === JSON.stringify(currentMcqQuestions)
       && criteriaUnchanged;
-    if (nothingChanged) {
+    // Et utkast som kom fra skjemaet via et fanebytte er ulagret selv om feltene nå er like det.
+    if (nothingChanged && !sessionDraftFromForm) {
       // No edit means no LLM round and no new version - saving an identical copy would
       // spend a translation and leave a version nobody asked for.
       exitEditMode();
@@ -4397,10 +4472,6 @@ function enterPreviewEditMode({ force = false } = {}) {
       // values may be about to be discarded - but do not abort either: aborting would throw
       // away a translation that already succeeded, so "Bli vaerende" would leave them with
       // nothing saved. Hold it until the dialog is answered.
-      if (pendingTabSwitchKind === "form") {
-        pendingSaveCommit = () => commit(localized, localizedMcqQuestions, failedLocales);
-        return;
-      }
       generationAbort = null;
       // Release the locale controls before the form is torn down. Only the abort path used to
       // do this, so a SUCCESSFUL save left the UI language selector disabled for the rest of
@@ -4436,6 +4507,7 @@ function enterPreviewEditMode({ force = false } = {}) {
         ...(Number.isFinite(editMcqMinPercent) ? { mcqMinPercent: editMcqMinPercent } : {}),
       });
       sessionState = "draft-pending";
+      newModulePlaceholder = false;
       clearPreviewCandidate();
       // A locale that failed to translate stays UNTRANSLATED rather than being filled with a
       // copy of the source text (#892). The hole is named here and blocks publishing in S4.
@@ -4485,7 +4557,8 @@ function enterPreviewEditMode({ force = false } = {}) {
       });
   });
 
-  logBot(() => escapeHtml(t("shell.directEdit.editingHint")));
+  // «Rediger feltene til venstre …» loggen på hver åpning av skjemaet — og skjemaet åpnes ved hvert
+  // fanebytte. Ruta er dessuten skjult. Linja er borte.
 }
 
 /**
@@ -4502,21 +4575,120 @@ function enterPreviewEditMode({ force = false } = {}) {
  * They live in one place now, and that place does not scroll. The log below keeps what is actually
  * a conversation: questions, instructions, generated results, status.
  */
+// #1046 (13.09): handlingsraden i hodet, med samme regel som listene og de andre skjemasidene —
+// maks fire i raden, resten under «Mer» (rowActionsHtml). Knappene er HTML, så handlingene slås
+// opp via indeks ved klikk (én lytter, satt én gang).
+let workspaceActionChoices = [];
+
+// Produkteier 13.09: Lagre og Avbryt står FØRST i raden, som på de andre skjemasidene (form-page.js).
+// Én Lagre for hele modulen: den lagrer det som er ulagret der du står — feltene i Rediger, feltene
+// i Innstillinger, eller et generert utkast som ikke er lagret som versjon ennå. Knappene i selve
+// skjemaet (previewEditConfirm/settingsSave) er skjult og klikkes herfra, så lagreflyten er den samme.
+// #1046 A1: et nytt, tomt element har et plassholder-utkast som ikke teller som «ulagret» før noe
+// er skrevet. Flagget slås av når skjemaet bekreftes, assistenten fyller utkastet, eller modulen lages.
+let newModulePlaceholder = false;
+function moduleDirtyKind() {
+  if (activeTab === "settings" && hasUnsavedSettingsEdits()) return "settings";
+  if (hasOpenEditForm()) return "form";
+  if (hasUnsavedSettingsEdits()) return "settings";
+  if (sessionDraft && !newModulePlaceholder) return "draft";
+  return null;
+}
+
+function refreshModuleHeaderState() {
+  const kind = moduleDirtyKind();
+  const dirty = kind !== null;
+  const dirtyBadge = document.getElementById("moduleDirtyBadge");
+  if (dirtyBadge) {
+    dirtyBadge.hidden = !bundle && !sessionDraft;
+    dirtyBadge.textContent = dirty ? t("stateRail.changes.unsaved") : t("stateRail.changes.saved");
+    dirtyBadge.classList.toggle("is-dirty", dirty);
+    dirtyBadge.classList.toggle("is-clean", !dirty);
+  }
+  const saveBtn = document.getElementById("moduleSaveBtn");
+  const cancelBtn = document.getElementById("moduleCancelBtn");
+  if (saveBtn) saveBtn.disabled = !dirty || generationAbort !== null;
+  if (cancelBtn) cancelBtn.disabled = !dirty || generationAbort !== null;
+}
+
+function saveFromHeader() {
+  const kind = moduleDirtyKind();
+  if (kind === "settings") { if (activeTab !== "settings") switchToTab("settings"); document.getElementById("settingsSave")?.click(); return; }
+  if (kind === "form") { document.getElementById("previewEditConfirm")?.click(); return; }
+  if (kind === "draft") {
+    if (activeTab === "edit" && isEditFormOpen() && sessionDraftFromForm) { document.getElementById("previewEditConfirm")?.click(); return; }
+    void saveDraftBundleInBackground();
+  }
+}
+
+function discardFromHeader() {
+  const kind = moduleDirtyKind();
+  if (!kind) return;
+  if (!window.confirm(t("shell.header.discardConfirm"))) return;
+  if (kind === "form") { document.getElementById("previewEditCancel")?.click(); }
+  else if (kind === "settings") { settingsDraftValues = null; renderSettingsPanel(); }
+  else if (kind === "draft") {
+    // Forkast utkastet: last modulen på nytt fra det som er lagret. Et nytt element uten modul
+    // har ingenting å gå tilbake til — da er lista stedet.
+    if (selectedModuleId) { void loadModule(selectedModuleId); return; }
+    window.location.href = "/admin-content";
+    return;
+  }
+  refreshModuleHeaderState();
+}
+
+// Skriving i et felt gjør modulen ulagret — merket og knappene i hodet følger med.
+document.addEventListener("input", (event) => {
+  const el = event.target instanceof Element ? event.target : null;
+  if (!el || !el.matches("input, textarea, select") || el.closest(".chat-pane")) return;
+  refreshModuleHeaderState();
+  // Navnet er tittelen på sida (B2) — følg feltet mens man skriver, som form-page.js gjør.
+  if (el.id === "previewEditTitle") {
+    const h1 = document.getElementById("moduleWorkspaceTitle");
+    const v = el.value.trim();
+    if (h1) { h1.textContent = v || t("shell.newModule.defaultTitle"); h1.classList.toggle("is-untitled", !v); }
+  }
+});
+document.addEventListener("change", (event) => {
+  const el = event.target instanceof Element ? event.target : null;
+  if (el && el.matches("input, textarea, select") && !el.closest(".chat-pane")) refreshModuleHeaderState();
+});
+
+// Rekkefølgen i raden: det som endrer hva deltakerne ser først (Publiser/Avpubliser), så resten.
+const WS_ACTION_ORDER = ["publish", "unpublish", "generateContent", "resumeChatEdit", "revise", "generateMcq", "export", "import"];
 function renderWorkspaceActions(actions) {
   if (!workspaceActionsBar) return;
-  workspaceActionsBar.innerHTML = "";
-  const live = (actions ?? []).filter(Boolean);
-  setHidden(workspaceActionsBar, live.length === 0);
-  if (live.length === 0) return;
-
-  for (const choice of live) {
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = "workspace-action-btn";
-    btn.textContent = resolveChoiceLabel(choice);
-    btn.addEventListener("click", () => { choice.action?.(); });
-    workspaceActionsBar.appendChild(btn);
+  // saveDraft og restart er Lagre og Avbryt i hodet.
+  const live = (actions ?? []).filter(Boolean).filter((a) => a.key !== "saveDraft" && a.key !== "restart");
+  live.sort((a, b) => {
+    const ia = WS_ACTION_ORDER.indexOf(a.key), ib = WS_ACTION_ORDER.indexOf(b.key);
+    return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
+  });
+  workspaceActionChoices = live;
+  const hasModule = !!(bundle || sessionDraft || selectedModuleId);
+  setHidden(workspaceActionsBar, live.length === 0 && !hasModule);
+  const pair = hasModule
+    ? `<button type="button" id="moduleSaveBtn" class="row-action-btn btn-save" disabled>${escapeHtml(t("shell.header.save"))}</button>` +
+      `<button type="button" id="moduleCancelBtn" class="row-action-btn btn-cancel" disabled>${escapeHtml(t("shell.header.cancel"))}</button>` +
+      (live.length ? `<span class="form-actions-sep" aria-hidden="true"></span>` : "")
+    : "";
+  workspaceActionsBar.innerHTML = pair + rowActionsHtml(
+    live.map((choice, i) => `<button type="button" class="row-action-btn workspace-action-btn" data-ws-action="${i}"${choice.hintKey ? ` title="${escapeHtml(t(choice.hintKey))}"` : ""}>${escapeHtml(resolveChoiceLabel(choice))}</button>`),
+    { moreLabel: "Mer" },
+  );
+  if (!workspaceActionsBar.dataset.bound) {
+    workspaceActionsBar.dataset.bound = "1";
+    workspaceActionsBar.addEventListener("click", (event) => {
+      const target = event.target instanceof Element ? event.target : null;
+      if (!target) return;
+      if (target.closest("#moduleSaveBtn")) { saveFromHeader(); return; }
+      if (target.closest("#moduleCancelBtn")) { discardFromHeader(); return; }
+      const btn = target.closest("[data-ws-action]");
+      if (!btn) return;
+      workspaceActionChoices[Number(btn.dataset.wsAction)]?.action?.();
+    });
   }
+  refreshModuleHeaderState();
 }
 
 /** Nothing to act on — used when a module is unloaded or the flow takes over the conversation. */
@@ -4537,23 +4709,15 @@ function showModuleActions() {
     canUnpublish,
   });
   const actionMap = {
-    generateContent: { labelKey: "shell.module.generateContent", action: () => startGenerateDraftFlow() },
-    generateMcq: { labelKey: "shell.module.generateMcq", action: () => startGenerateMcqFlow() },
-    resumeChatEdit: {
-      labelKey: "shell.module.resumeChatEdit",
-      action: () => {
-        if (createSessionDraftFromLoadedModule()) {
-          showDraftReadyActions();
-        } else {
-          showModuleActions();
-        }
-      },
-    },
+    generateContent: { labelKey: "shell.module.generateContent", action: () => openGenerateDialog() },
+    generateMcq: { labelKey: "shell.module.generateMcq", action: () => openGenerateDialog({ mcqOnly: true }) },
+    resumeChatEdit: { labelKey: "shell.module.resumeChatEdit", action: () => openReviseDialog() },
     saveDraft: { labelKey: "shell.draftReady.saveDraft", action: saveDraftBundleInBackground },
     publish: {
       // Direct publish — author already confirmed by clicking "Publish". The prior
       // double-confirm dialog was redundant friction. (2026-05-18 author feedback)
       labelKey: "shell.draftReady.publish",
+      hintKey: "shell.draftReady.publishHint",
       action: publishLatestDraftInBackground,
     },
     unpublish: {
@@ -4561,15 +4725,15 @@ function showModuleActions() {
       action: () => confirmHighImpactAction("shell.unpublish.confirmPrompt", "shell.unpublish.confirmAction", unpublishModuleInBackground, showModuleActions, { module: moduleLabel }),
     },
   };
-  const actions = model.actionKeys.map((key) => actionMap[key]).filter(Boolean);
+  const actions = model.actionKeys.map((key) => actionMap[key] && { key, ...actionMap[key] }).filter(Boolean);
   // #896 S6: export/import belong on Rediger, per the IA table. They lived only on the module list
   // and in Avansert, so moving content between installations meant leaving the workspace you were
   // working in. Appended rather than folded into `actionKeys` because they are not part of the
   // authoring progression the status model describes — they are available whenever a module is.
   if (selectedModuleId) {
     actions.push(
-      { labelKey: "shell.module.exportPackage", action: () => exportModulePackageInBackground() },
-      { labelKey: "shell.module.importPackage", action: () => startImportPackageFlow() },
+      { key: "export", labelKey: "shell.module.exportPackage", action: () => exportModulePackageInBackground() },
+      { key: "import", labelKey: "shell.module.importPackage", action: () => startImportPackageFlow() },
     );
   }
   renderWorkspaceActions(actions);
@@ -4775,12 +4939,6 @@ function syncTabToUrl(tab) {
 }
 
 let activeTab = tabFromUrl();
-let pendingTabSwitch = null;
-let pendingTabSwitchKind = null;
-// A save whose translation resolved while the discard dialog was open. Held rather than
-// committed OR thrown away, because the author has not answered yet: "Bli vaerende" must
-// finish the save they asked for, "Forkast" must drop it.
-let pendingSaveCommit = null;
 
 /**
  * Does the edit form hold work a tab switch would destroy?
@@ -4870,24 +5028,6 @@ function stampEditFormValues() {
   }
 }
 
-// Same signal as the status rail's "Ulagrede endringer": if the rail calls it unsaved, a
-// tab switch says so too. The two cost different things, so the dialog says which:
-// an open form's field values are LOST, while a draft is kept but stays unsaved.
-function unsavedTabSwitchKind() {
-  if (hasOpenEditForm()) return "form";
-  // While a draft exists, a criteria edit is not unsaved work that a tab switch would destroy —
-  // it is absorbed into the draft here, which is what makes it survive to the draft save. Doing
-  // this before the check also stops the warning from claiming the edit is about to be lost when
-  // it is not; a warning the author knows is wrong is a warning they learn to click through.
-  syncSettingsCriteriaToDraft();
-  // #896 S6 QA: settings BEFORE the draft, deliberately. The Innstillinger inputs are DOM-only
-  // until Lagre and are destroyed by the re-render; a draft survives the switch. When both are
-  // dirty, checking the draft first showed the reassuring "your draft is kept" message while the
-  // settings were quietly thrown away — the most misleading of the three outcomes.
-  if (hasUnsavedSettingsEdits()) return "settings";
-  if (sessionDraft) return "draft";
-  return null;
-}
 
 /**
  * #920 (§7): the guard the two language switchers share.
@@ -4906,7 +5046,11 @@ function unsavedTabSwitchKind() {
  * Returns true to proceed, false to stay.
  */
 function confirmLocaleSwitchDiscard() {
-  const kind = activeTab === "edit" || activeTab === "settings" ? unsavedTabSwitchKind() : null;
+  // Et åpent skjema med endringer, eller endrede innstillinger, tegnes om fra det andre språket.
+  // Et utkast er trygt: begge tegningene leser FRA det.
+  const kind = activeTab === "edit" && hasOpenEditForm() ? "form"
+    : (activeTab === "edit" || activeTab === "settings") && hasUnsavedSettingsEdits() ? "settings"
+    : null;
   if (kind !== "form" && kind !== "settings") return true;
   return window.confirm(t(kind === "form" ? "shell.tab.unsaved.body" : "shell.tab.unsaved.settingsBody"));
 }
@@ -4955,6 +5099,28 @@ function applyTabAttentionLabel(tab) {
   else button.removeAttribute("aria-label");
 }
 
+// Produkteier 13.09: samtaleruta er til overs i Rediger til assistenten trenger et svar. Den åpnes
+// når en flyt spør (valg, skjema, avbrytbar framdrift) og lukkes med «Skjul samtalen». Skjult rute
+// = skjemaet i full bredde.
+let chatPaneOpen = false;
+function chatPaneVisible() { return chatPaneOpen && activeTab === "edit"; }
+function applyChatPaneVisibility() {
+  const chatPane = document.querySelector(".chat-pane");
+  const hidden = activeTab === "preview" || !chatPaneOpen;
+  setHidden(chatPane, hidden);
+  tabPanelModule?.classList.toggle("workspace-shell--chat-hidden", hidden && activeTab !== "preview");
+}
+function openChatPane() {
+  if (chatPaneOpen) return;
+  chatPaneOpen = true;
+  applyChatPaneVisibility();
+}
+function closeChatPane() {
+  chatPaneOpen = false;
+  applyChatPaneVisibility();
+}
+document.getElementById("chatPaneClose")?.addEventListener("click", closeChatPane);
+
 function applyTabState(tab) {
   // Opening the tab IS seeing what landed in it.
   clearTabAttention(tab);
@@ -4980,8 +5146,9 @@ function applyTabState(tab) {
   // are .card (display:block), so a class-based toggle loses the cascade (CLAUDE.md).
   setHidden(tabPanelModule, tab === "settings");
   setHidden(tabPanelSettings, tab !== "settings");
-  const chatPane = document.querySelector(".chat-pane");
-  setHidden(chatPane, tab === "preview");
+  const ownerHostEl = document.getElementById("moduleOwnerPanelHost");
+  if (ownerHostEl) ownerHostEl.hidden = tab !== "settings" || !ownerHostEl.dataset.moduleId;
+  applyChatPaneVisibility();
   tabPanelModule?.classList.toggle("workspace-shell--preview-only", tab === "preview");
   // Forhaandsvisning and Rediger share this panel, so point it at whichever tab owns it now.
   if (tab !== "settings") tabPanelModule?.setAttribute("aria-labelledby", tabButtons[tab]?.id ?? "tabEdit");
@@ -4995,7 +5162,7 @@ function applyTabState(tab) {
   // Stage-tilbakemelding 2026-08-18: the special-category warning belongs where the assignment
   // text is WRITTEN. On Forhåndsvisning and Innstillinger there is nothing to reword, so it is
   // noise — and a warning that shows everywhere stops being read where it matters.
-  setHidden(privacyNotice, tab !== "edit");
+  // GDPR-linja ligger inne i redigeringsskjemaet (under oppgavefeltet) og følger det.
 
   // Stage-tilbakemelding 2026-08-17: *"Åpner modul, den havner på rediger fanen, men jeg kan ikke
   // redigere før jeg trykker på «Rediger direkte»."* A tab called Rediger that does not let you
@@ -5016,29 +5183,18 @@ function applyTabState(tab) {
 
 function switchToTab(tab) {
   if (tab === activeTab) return;
-  // Gate on the tab being LEFT. Rediger holds the editing surface; Innstillinger holds inputs that
-  // exist only in the DOM until Lagre and are re-rendered from `bundle` on the way back — leaving
-  // it without asking simply threw typed values away. Forhaandsvisning risks nothing.
-  const kind = activeTab === "edit" || activeTab === "settings" ? unsavedTabSwitchKind() : null;
-  if (kind && unsavedTabSwitchDialog) {
-    pendingTabSwitch = tab;
-    pendingTabSwitchKind = kind;
-    const body = document.getElementById("unsavedTabSwitchBody");
-    const confirmBtn = document.getElementById("tabSwitchDiscard");
-    const bodyKey = kind === "form"
-      ? "shell.tab.unsaved.body"
-      : kind === "settings"
-        ? "shell.tab.unsaved.settingsBody"
-        : "shell.tab.unsaved.draftBody";
-    if (body) body.textContent = t(bodyKey);
-    if (confirmBtn) {
-      // Leaving Innstillinger DOES destroy the typed values, so that confirm is destructive —
-      // unlike an unsaved draft, which survives the switch.
-      confirmBtn.textContent = t(kind === "draft" ? "shell.tab.unsaved.switchAnyway" : "shell.tab.unsaved.discard");
-      confirmBtn.className = kind === "draft" ? "btn-primary" : "btn-danger";
+  // Produkteier 13.09: fanebytte er ikke navigering og spør ikke — samme regel som kurs, seksjon og
+  // klasse (form-page.js). Det som er skrevet i Rediger legges i utkastet og kommer tilbake;
+  // Forhåndsvisning viser utkastet; Innstillinger-verdiene fanges og settes tilbake ved neste
+  // tegning. Én Lagre lagrer det som er ulagret der du står.
+  if (activeTab === "edit") captureEditFormIntoDraft();
+  if (activeTab === "settings") {
+    captureSettingsDraftValues();
+    // Kriterieeditoren lever i DOM-en til noe leser den; neste tegning kaster den. Les den ut nå,
+    // så et byttet «synlig for kandidat» eller en ny etikett står der når man kommer tilbake.
+    if (settingsCriteriaState !== null) {
+      settingsCriteriaState = captureLatestCriteriaState(document.getElementById("settingsCriteriaEditor"), settingsCriteriaState);
     }
-    unsavedTabSwitchDialog.showModal();
-    return;
   }
   applyTabState(tab);
   syncTabToUrl(tab);
@@ -5054,10 +5210,59 @@ function switchToTab(tab) {
 // write paths follow, and a read-only panel cannot corrupt a module.
 // ---------------------------------------------------------------------------
 
+// #1046 A1 (produkteier 13.09): et nytt element har ingen versjon å vise innstillinger for. Det som
+// trengs først er navn, modultype og nivå — resten kommer når modulen finnes. Verdiene skrives rett
+// inn i utkastet; Lagre oppretter modulen med dem.
+function renderNewModuleSettings(host) {
+  const mode = sessionDraft?.assessmentMode ?? "FREETEXT_ONLY";
+  const level = sessionDraft?.certificationLevel ?? "";
+  const name = localizeValueForLocale(sessionDraft?.title ?? "", contentLocale) || "";
+  const modeOptions = ["FREETEXT_PLUS_MCQ", "FREETEXT_ONLY", "MCQ_ONLY"]
+    .map((v) => `<option value="${v}"${v === mode ? " selected" : ""}>${escapeHtml(t(`shell.settings.mode.${v}`))}</option>`).join("");
+  const levelOptions = ["", "basic", "intermediate", "advanced"]
+    .map((v) => `<option value="${v}"${v === level ? " selected" : ""}>${escapeHtml(v ? t(`shell.certLevel.${v}`) : t("shell.settings.notSet"))}</option>`).join("");
+  host.innerHTML = `<div class="settings-group">
+    <h3 class="settings-group-title">${escapeHtml(t("shell.settings.groupModule"))}</h3>
+    <dl class="settings-list">
+      <dt>${escapeHtml(t("shell.directEdit.nameLabel"))} <span class="required-note">${escapeHtml(t("shell.directEdit.required"))}</span></dt>
+      <dd><input id="settingsNewName" class="settings-input" type="text" value="${escapeHtml(name)}" autocomplete="off" /></dd>
+      <dt>${escapeHtml(t("shell.settings.moduleType"))}</dt>
+      <dd><select id="settingsModuleType" class="settings-input">${modeOptions}</select>
+        <span class="settings-help">${escapeHtml(t("shell.settings.newModuleTypeHelp"))}</span></dd>
+      <dt>${escapeHtml(t("shell.settings.certificationLevel"))}</dt>
+      <dd><select id="settingsCertLevel" class="settings-input">${levelOptions}</select></dd>
+    </dl>
+  </div>`;
+  host.querySelector("#settingsNewName")?.addEventListener("input", (e) => {
+    const v = e.target.value.trim();
+    sessionDraft = { ...sessionDraft, title: v ? { [contentLocale]: v } : "" };
+    if (v) newModulePlaceholder = false;
+    const h1 = document.getElementById("moduleWorkspaceTitle");
+    if (h1) { h1.textContent = v || t("shell.newModule.defaultTitle"); h1.classList.toggle("is-untitled", !v); }
+    refreshModuleHeaderState();
+  });
+  host.querySelector("#settingsModuleType")?.addEventListener("change", (e) => {
+    const v = e.target.value;
+    sessionDraft = { ...sessionDraft, assessmentMode: v, ...(v === "MCQ_ONLY" ? { mcqMinPercent: SHELL_MCQ_ONLY_MIN_PERCENT } : {}) };
+    if (v !== "MCQ_ONLY") delete sessionDraft.mcqMinPercent;
+    newModulePlaceholder = false;
+    refreshModuleHeaderState();
+  });
+  host.querySelector("#settingsCertLevel")?.addEventListener("change", (e) => {
+    sessionDraft = { ...sessionDraft, certificationLevel: e.target.value || undefined };
+    newModulePlaceholder = false;
+    refreshModuleHeaderState();
+  });
+}
+
 function renderSettingsPanel() {
   const host = document.getElementById("settingsSummary");
   if (!host) return;
 
+  if (!bundle && sessionDraft && !selectedModuleId) {
+    renderNewModuleSettings(host);
+    return;
+  }
   if (!bundle) {
     host.innerHTML = `<p class="settings-empty">${escapeHtml(t("shell.settings.noModule"))}</p>`;
     return;
@@ -5092,13 +5297,13 @@ function renderSettingsPanel() {
   // Stage-tilbakemelding 2026-08-17: poengreglene sier ikke hva de gjør. Forklaringen ligger bak
   // et i-ikon, åpnet med KLIKK — hover finnes ikke på nettbrett og kan ikke nås med tastatur.
   // Ingen innebygde hjelpetekster: forfatteren ba om den kompakte varianten.
+  // #1046 D4: hjelpen står som én setning under feltet (tidligere et (i)-ikon med popover).
   const row = (labelKey, valueHtml, isEmpty = false, infoKey = null) => {
-    const info = infoKey
-      ? ` <button type="button" class="settings-info" data-info="${escapeHtml(infoKey)}"
-          aria-label="${escapeHtml(tf("shell.settings.infoAria", { field: t(labelKey) }))}"
-          aria-expanded="false">i</button>`
+    const helpText = infoKey ? t(`shell.settings.info.${infoKey}`) : "";
+    const help = helpText && !helpText.startsWith("shell.settings.info.")
+      ? `<span class="settings-help" data-info="${escapeHtml(infoKey)}">${escapeHtml(helpText)}</span>`
       : "";
-    openGroup.push(`<dt>${escapeHtml(t(labelKey))}${info}</dt><dd${isEmpty ? ' class="settings-empty"' : ""}>${valueHtml}</dd>`);
+    openGroup.push(`<dt>${escapeHtml(t(labelKey))}</dt><dd${isEmpty ? ' class="settings-empty"' : ""}>${valueHtml}${help}</dd>`);
   };
   const emptyText = escapeHtml(t("shell.settings.notSet"));
   // #896 S3c: Innstillinger reads in the UI language, not the preview language. The summary rows
@@ -5403,12 +5608,16 @@ function renderSettingsPanel() {
   // Stamp what was rendered, so hasUnsavedSettingsEdits can tell an edited field from an
   // untouched one. Without this, restoring silently discarded typed-but-unsaved settings.
   stampRenderedValues(SETTINGS_INPUT_IDS.panel);
+  // Typevelgeren tegnes med den VALGTE typen (panelet tegnes om ved bytte), så stempelet må være
+  // den lagrede typen — ellers er et typebytte aldri «ulagret», og Lagre i hodet står grå.
+  const typeEl = document.getElementById("settingsModuleType");
+  const storedMode = bundle?.selectedConfiguration?.moduleVersion?.assessmentMode;
+  if (typeEl && storedMode) typeEl.dataset.renderedValue = storedMode;
   // #896 S3c: put back anything the author had typed but not saved. Expanding a section re-renders
   // the WHOLE panel, so opening the criteria editor after typing a new validity date silently
   // reverted the date. `renderedValue` above is the stored value; this restores the typed one on
   // top of it, so the dirty-check still knows the difference.
   restoreSettingsDraftValues();
-  mountSettingsInfoButtons(host);
 
   // Changing the type changes which fields the save can carry, so the panel redraws to match.
   // Without this the author picked "Bare flervalg" and kept looking at a criteria editor whose
@@ -5763,55 +5972,6 @@ function mountCriteriaSection() {
       // After the redraw, not before: the DOM is what the sync reads.
       syncSettingsCriteriaToDraft();
     }),
-  });
-}
-
-// Criteria count as unsaved settings work, so every exit from Innstillinger warns about them too
-// — the same three exits the tab, language and Avansert guards already cover.
-/**
- * Wire the i-buttons beside the pass-rule labels.
- *
- * Stage-tilbakemelding 2026-08-17. Opened on CLICK, not hover: hover does not exist on a tablet
- * and cannot be reached from the keyboard, so a hover-only explanation is an explanation some
- * authors can never read. One popover open at a time; Escape and a click elsewhere close it.
- */
-function mountSettingsInfoButtons(host) {
-  // ONCE per host, not once per render. `renderSettingsPanel` replaces `host.innerHTML`, which
-  // destroys child listeners — but `host` itself survives, so a listener attached here accumulates
-  // one copy per render. Two copies made the popover open and close within the same click: the
-  // first created it, the second read `aria-expanded="true"` and treated the click as "close".
-  // Symptom was a button that did nothing at all.
-  if (host.dataset.infoButtonsMounted === "1") return;
-  host.dataset.infoButtonsMounted = "1";
-
-  const close = () => {
-    host.querySelectorAll(".settings-popover").forEach((p) => p.remove());
-    host.querySelectorAll(".settings-info[aria-expanded='true']").forEach((b) => {
-      b.setAttribute("aria-expanded", "false");
-    });
-  };
-
-  host.addEventListener("click", (event) => {
-    if (event.target.closest(".settings-popover")) return;
-    const button = event.target.closest(".settings-info");
-    const wasOpen = button?.getAttribute("aria-expanded") === "true";
-    close();
-    if (!button || wasOpen) return;
-
-    const body = t(`shell.settings.info.${button.dataset.info}`);
-    // A missing key resolves to the key itself; showing that to an author is worse than nothing.
-    if (!body || body.startsWith("shell.settings.info.")) return;
-
-    const popover = document.createElement("div");
-    popover.className = "settings-popover";
-    popover.setAttribute("role", "note");
-    popover.textContent = body;
-    button.setAttribute("aria-expanded", "true");
-    button.insertAdjacentElement("afterend", popover);
-  });
-
-  host.addEventListener("keydown", (event) => {
-    if (event.key === "Escape") close();
   });
 }
 
@@ -6502,71 +6662,6 @@ function bindViewTabs() {
   }
 
 
-  const stayOnCurrentTab = () => {
-    pendingTabSwitch = null;
-    pendingTabSwitchKind = null;
-    // Staying means "keep what I was doing" - including a save that finished while the
-    // dialog was up.
-    const resume = pendingSaveCommit;
-    pendingSaveCommit = null;
-    resume?.();
-    // Arrowing to a tab focuses it before the dialog opens, so staying would otherwise
-    // leave focus on a tab that is not the selected one - or nowhere, in the closed
-    // dialog. Put focus back where the selection actually is.
-    //
-    // Deferred a frame: a native <dialog> restores focus to its invoker as part of closing, and
-    // that restoration runs AFTER this handler. Focusing synchronously meant the browser promptly
-    // moved focus somewhere else — for Escape, nowhere at all.
-    requestAnimationFrame(() => { tabButtons[activeTab]?.focus(); });
-  };
-
-  document.getElementById("tabSwitchStay")?.addEventListener("click", () => {
-    unsavedTabSwitchDialog?.close();
-    stayOnCurrentTab();
-  });
-
-  // Escape closes a native <dialog> without going through any button, which would leave
-  // pendingTabSwitch stale and focus parked on an unselected tab. The dialog's close event
-  // covers every dismissal path, so treat anything that is not an explicit discard as Stay.
-  unsavedTabSwitchDialog?.addEventListener("close", () => {
-    if (pendingTabSwitch) stayOnCurrentTab();
-  });
-
-  // A native <dialog> does not close on a backdrop click by itself. The click lands on the
-  // dialog element (the backdrop is its pseudo-element), so target identity is the test.
-  unsavedTabSwitchDialog?.addEventListener("click", (event) => {
-    if (event.target === unsavedTabSwitchDialog) unsavedTabSwitchDialog.close();
-  });
-
-  document.getElementById("tabSwitchDiscard")?.addEventListener("click", () => {
-    const target = pendingTabSwitch;
-    const kind = pendingTabSwitchKind;
-    pendingTabSwitch = null;
-    pendingTabSwitchKind = null;
-    unsavedTabSwitchDialog?.close();
-    if (!target) return;
-    // Tear the form down FIRST. applyTabState re-renders the preview when the audience
-    // changes, which removes #previewEditCancel - and then its handler never runs, leaving
-    // preview-pane--editing, criteriaReadyCallback and the chat actions stranded until a
-    // reload. Only an open form is discarded; a draft is carried along untouched.
-    if (kind === "form") {
-      // A save in flight has disabled that Cancel button, so clicking it would do NOTHING and
-      // the running translation would go on to save the values just discarded. Abort first:
-      // the signal handler re-enables the form, and commit() refuses to run once aborted.
-      pendingSaveCommit = null;
-      generationAbort?.abort();
-      document.getElementById("previewEditCancel")?.click();
-    }
-    // QA round 5: "Forkast" did not clear the cache that holds the values of COLLAPSED sections,
-    // so a discarded instruction came back the next time the section was opened. Worse across a
-    // language switch: the English cache was laid over the Norwegian field, and the next save
-    // could file English text as `nb`. Discarding settings has to discard all of them.
-    if (kind === "settings") discardSettingsEdits();
-    applyTabState(target);
-    syncTabToUrl(target);
-    tabButtons[target]?.focus();
-  });
-
   // Establish the roving tabindex now. Without this the assignment in applyTabState first
   // runs on the initial tab switch, so until then all three tabs sit in the tab order -
   // the exact behaviour the roving model exists to remove.
@@ -6577,65 +6672,149 @@ function bindViewTabs() {
 // New module creation flow
 // ---------------------------------------------------------------------------
 
-function startNewModuleFlow() {
+// ---------------------------------------------------------------------------
+// #1046 (produkteier 13.09): «Generer innhold» og «Be om endring» som dialoger. Type og nivå kommer
+// fra Innstillinger og spørres ikke om. Resultatet legges i skjemaet som ulagret utkast.
+// ---------------------------------------------------------------------------
+function effectiveModuleMode() {
+  return sessionDraft?.assessmentMode ?? bundle?.selectedConfiguration?.moduleVersion?.assessmentMode ?? "FREETEXT_PLUS_MCQ";
+}
+function effectiveCertLevel() {
+  return sessionDraft?.certificationLevel ?? bundle?.module?.certificationLevel ?? "intermediate";
+}
+
+async function openGenerateDialog({ mcqOnly = false } = {}) {
+  const dialog = document.getElementById("dialogGenerate");
+  if (!dialog) return;
+  // Et nytt element må finnes på tjeneren før innhold kan genereres til det (navn kreves).
+  if (!selectedModuleId && sessionDraft) {
+    const created = await createModuleFromDraft();
+    if (!created) return;
+  }
+  const mode = effectiveModuleMode();
+  const hasMcq = mcqOnly || mode !== "FREETEXT_ONLY";
+  const context = document.getElementById("dialogGenerateContext");
+  if (context) {
+    context.textContent = tf("shell.generateDialog.context", {
+      type: t(`shell.settings.mode.${mode}`),
+      level: t(`shell.certLevel.${effectiveCertLevel()}`),
+    });
+  }
+  setHidden(document.getElementById("dialogGenerateMcq"), !hasMcq);
+  const host = document.getElementById("dialogGenerateSource");
+  const entry = {
+    kind: "form", formType: "source-material", placeholderKey: "shell.source.placeholder",
+    submitKey: "shell.generateDialog.submit", submitted: false, initialValue: "", context: {}, mount: host,
+    onSubmit: (sourceMaterial) => {
+      dialog.close();
+      pendingMcqCounts = hasMcq
+        ? {
+            questionCount: Number(document.getElementById("dialogGenerateQuestionCount")?.value ?? 5),
+            optionCount: Number(document.getElementById("dialogGenerateOptionCount")?.value ?? 4),
+          }
+        : null;
+      // Planen og framdriften vises i den reduserte samtaleruta til dialogene dekker også dem.
+      openChatPane();
+      const cert = effectiveCertLevel();
+      if (mcqOnly) {
+        askForMcqQuestionCount(sourceMaterial, cert, contentLocale, "thorough", () => showDraftReadyActions());
+        return;
+      }
+      if (mode === "MCQ_ONLY") {
+        startMcqOnlyRegen(sourceMaterial, cert);
+        return;
+      }
+      generateBlueprintAndConfirm(null, selectedModuleId, sourceMaterial, cert, contentLocale, "thorough", "auto", mode === "FREETEXT_ONLY");
+    },
+  };
+  _domFormFields(entry);
+  dialog.showModal();
+}
+
+const REVISE_EXAMPLE_KEYS = ["shorter", "sharper", "moreQuestions", "guidance", "example"];
+function openReviseDialog() {
+  const dialog = document.getElementById("dialogRevise");
+  if (!dialog) return;
+  // Endringen gjøres på utkastet; finnes det ikke, lages det fra det som er lastet.
+  if (!sessionDraft && !createSessionDraftFromLoadedModule()) {
+    showToast(t("shell.revision.unavailable"), "info");
+    return;
+  }
+  if (!sessionDraft?.taskText && !sessionDraft?.assessorExpectedContent && (sessionDraft?.mcqQuestions?.length ?? 0) === 0) {
+    showToast(t("shell.revision.unavailable"), "info");
+    return;
+  }
+  const input = document.getElementById("dialogReviseInput");
+  const examples = document.getElementById("dialogReviseExamples");
+  if (examples) {
+    examples.innerHTML = REVISE_EXAMPLE_KEYS.map((k) =>
+      `<button type="button" class="row-action-btn revise-example" data-example="${k}">${escapeHtml(t(`shell.reviseDialog.example.${k}`))}</button>`).join("");
+  }
+  if (input) input.value = "";
+  dialog.showModal();
+  setTimeout(() => input?.focus(), 50);
+}
+
+function bindGenerateAndReviseDialogs() {
+  document.getElementById("dialogGenerateCancel")?.addEventListener("click", () => document.getElementById("dialogGenerate")?.close());
+  // Kildeverktøyet rives når dialogen lukkes, så det ikke ligger igjen som et «aktivt» skjema i DOM-en.
+  document.getElementById("dialogGenerate")?.addEventListener("close", () => { document.getElementById("dialogGenerateSource")?.replaceChildren(); });
+  document.getElementById("dialogReviseCancel")?.addEventListener("click", () => document.getElementById("dialogRevise")?.close());
+  document.getElementById("dialogReviseExamples")?.addEventListener("click", (event) => {
+    const btn = event.target instanceof Element ? event.target.closest("[data-example]") : null;
+    if (!btn) return;
+    const input = document.getElementById("dialogReviseInput");
+    if (input) { input.value = t(`shell.reviseDialog.example.${btn.dataset.example}`); input.focus(); }
+  });
+  document.getElementById("dialogReviseSubmit")?.addEventListener("click", () => {
+    const input = document.getElementById("dialogReviseInput");
+    const instruction = input?.value.trim();
+    if (!instruction) { input?.focus(); return; }
+    document.getElementById("dialogRevise")?.close();
+    openChatPane();
+    runUnifiedRevision(instruction);
+  });
+  document.getElementById("dialogReviseInput")?.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); document.getElementById("dialogReviseSubmit")?.click(); }
+  });
+}
+bindGenerateAndReviseDialogs();
+
+// #1046 A1 (avgjørelse 1b): «Ny modul» åpner et tomt skjema — ingen dialog, ingen spørsmål først.
+// Utkastet er tomt, av typen fritekst (uten flervalg kan ikke FREETEXT_PLUS_MCQ lagres); typen kan
+// endres under Innstillinger etter første Lagre. `saveDraftBundleInBackground` lager modulen på
+// tjeneren når den ikke finnes ennå, og adressen byttes til den ekte.
+function startNewEmptyModule() {
+  sessionState = "draft-pending";
+  bundle = null;
+  selectedModuleId = null;
   previewDraft = null;
+  latestSavedModuleVersionId = null;
+  chatLog = [];
+  sessionDraft = buildPreviewCandidate({
+    title: "",
+    taskText: "",
+    assessorExpectedContent: "",
+    candidateTaskConstraints: "",
+    mcqQuestions: [],
+    assessmentMode: "FREETEXT_ONLY",
+  });
+  newModulePlaceholder = true;
   renderPreviewLocaleBar();
   renderPreview();
-  logForm(
-    "text",
-    () => t("shell.newModule.titlePrompt"),
-    "shell.newModule.titlePlaceholder",
-    "shell.action.next",
-    // #555: unified authoring order — Kilde → Modultype → Innhold → Publiser. Source material
-    // is now the first question; module-type (free-text+MCQ vs MCQ-only) is asked after source,
-    // and scenario/cert only follow for the free-text branch. Matches the Avansert IA (#554).
-    (title) => askForSourceMaterial(title, null, null),
-  );
+  updateStateRail();
+  // Produkteier 13.09: det første valget for en modul er typen (fritekst, flervalg eller begge) — så
+  // et nytt element åpner på Innstillinger: navn, type og nivå. Lagre oppretter modulen; Rediger
+  // viser deretter feltene for valgt type.
+  showDraftReadyActions({ quiet: true });
+  if (activeTab !== "settings") switchToTab("settings"); else renderSettingsPanel();
 }
+
 
 // ---------------------------------------------------------------------------
 // Scenario mode → source material → cert level → locale → generate
 // ---------------------------------------------------------------------------
 
-// #555: regen på en eksisterende modul følger samme rekkefølge som ny-modul-flyten — KILDE
-// først, så scenario, så (cert hvis ukjent →) vurderingsplan. Tidligere kom scenario før kilde,
-// som forfatter-feedback (skjermbilde 2026-06-21) bekreftet føltes feil også her. knownCertLevel
-// videreføres fra regen så vi ikke spør om cert-nivå på nytt. scenarioMode brukes server-side
-// (prompt) og i ekstern-LLM-handoff.
-function askForScenarioModeRegen(existingModuleId, sourceMaterial, knownCertLevel = null, freetextOnly = false) {
-  logBot(() => `<strong>${escapeHtml(t("shell.scenario.prompt"))}</strong><br><span style="font-size:13px;color:var(--color-meta)">${escapeHtml(t("shell.scenario.hint"))}</span>`, [
-    { labelKey: "shell.scenario.auto", action: () => continueRegenAfterScenario(existingModuleId, sourceMaterial, knownCertLevel, "auto", freetextOnly) },
-    { labelKey: "shell.scenario.include", action: () => continueRegenAfterScenario(existingModuleId, sourceMaterial, knownCertLevel, "include", freetextOnly) },
-    { labelKey: "shell.scenario.exclude", action: () => continueRegenAfterScenario(existingModuleId, sourceMaterial, knownCertLevel, "exclude", freetextOnly) },
-  ]);
-}
-
-function continueRegenAfterScenario(existingModuleId, sourceMaterial, knownCertLevel, scenarioMode, freetextOnly = false) {
-  if (knownCertLevel) {
-    // Hard-default "thorough" — se askForCertLevel-kommentaren.
-    generateBlueprintAndConfirm(null, existingModuleId, sourceMaterial, knownCertLevel, contentLocale, "thorough", scenarioMode, freetextOnly);
-  } else {
-    askForCertLevel(null, existingModuleId, sourceMaterial, scenarioMode, freetextOnly);
-  }
-}
-
-// #579: modultype-valg i regen-flyten. Den anbefalte opprett-veien (biblioteks-dialogen, #348)
-// oppretter modulen og lander her, så dette er stedet forfatter faktisk velger type. Etter kilde,
-// før scenario. Tillater typebytte: lagring skriver en ny versjon i valgt modus.
-//   - «Fritekst + flervalg» → uendret regen (scenario → cert/vurderingsplan → MCQ)
-//   - «Kun flervalg» → MCQ-only-generering, lagres som MCQ_ONLY (ingen scenario/rubrikk/prompt)
-function askForModuleTypeRegen(existingModuleId, sourceMaterial, knownCertLevel) {
-  logBot(
-    () =>
-      `<strong>${escapeHtml(t("shell.moduleType.prompt"))}</strong>`
-      + `<br><span style="font-size:13px;color:var(--color-meta)">${escapeHtml(t("shell.moduleType.hint"))}</span>`,
-    [
-      { labelKey: "shell.moduleType.freetext", action: () => askForScenarioModeRegen(existingModuleId, sourceMaterial, knownCertLevel, false) },
-      { labelKey: "shell.moduleType.freetextOnly", action: () => askForScenarioModeRegen(existingModuleId, sourceMaterial, knownCertLevel, true) },
-      { labelKey: "shell.moduleType.mcqOnly", action: () => startMcqOnlyRegen(sourceMaterial, knownCertLevel) },
-    ],
-  );
-}
 
 function startMcqOnlyRegen(sourceMaterial, knownCertLevel) {
   // Flag the in-progress draft as MCQ_ONLY so saveDraftBundleInBackground emits the MCQ_ONLY
@@ -6652,139 +6831,11 @@ function startMcqOnlyRegen(sourceMaterial, knownCertLevel) {
   askForMcqQuestionCount(sourceMaterial, certLevel, contentLocale, "thorough", () => showDraftReadyActions());
 }
 
-function askForSourceMaterial(moduleTitle, existingModuleId, knownCertLevel, scenarioMode = "auto") {
-  logForm(
-    "source-material",
-    () => `<strong>${escapeHtml(t("shell.source.promptTitle"))}</strong><br><span style="font-size:13px;color:var(--color-meta)">${escapeHtml(t("shell.source.promptHint"))}</span>`,
-    "shell.source.placeholder",
-    "shell.action.next",
-    (sourceMaterial) => {
-      // #555: unified order — KILDE kommer først i begge flytene.
-      //  - Ny modul (existingModuleId == null): spør modultype etter kilde.
-      //  - Regen (existingModuleId satt): spør scenario etter kilde, så cert/vurderingsplan.
-      if (!existingModuleId) {
-        askForModuleType(moduleTitle, sourceMaterial);
-        return;
-      }
-      // #579: regen spør også modultype etter kilde (forfatter kan bytte type ved regenerering).
-      askForModuleTypeRegen(existingModuleId, sourceMaterial, knownCertLevel);
-    },
-    "",
-    {},
-  );
-}
-
-function askForCertLevel(moduleTitle, existingModuleId, sourceMaterial, scenarioMode = "auto", freetextOnly = false) {
-  // Generation mode is always "thorough" — author feedback (2026-05-18) confirmed the
-  // "Vanlig" option was never selected in practice. Removed to reduce conversation friction.
-  logBot(() => t("shell.certLevel.prompt"), [
-    { labelKey: "shell.certLevel.basic", action: () => generateBlueprintAndConfirm(moduleTitle, existingModuleId, sourceMaterial, "basic", contentLocale, "thorough", scenarioMode, freetextOnly) },
-    { labelKey: "shell.certLevel.intermediate", action: () => generateBlueprintAndConfirm(moduleTitle, existingModuleId, sourceMaterial, "intermediate", contentLocale, "thorough", scenarioMode, freetextOnly) },
-    { labelKey: "shell.certLevel.advanced", action: () => generateBlueprintAndConfirm(moduleTitle, existingModuleId, sourceMaterial, "advanced", contentLocale, "thorough", scenarioMode, freetextOnly) },
-  ]);
-}
-
-// #555: module-type fork in the new-module flow. Asked after source material, before any
-// content generation. "Fritekst + flervalg" continues into the existing scenario → cert →
-// blueprint pipeline; "Kun flervalg" creates an MCQ_ONLY module and skips straight to MCQ
-// generation (no scenario, no rubric/prompt). Mirrors the Avansert editor's Modultype panel.
-function askForModuleType(moduleTitle, sourceMaterial) {
-  logBot(
-    () =>
-      `<strong>${escapeHtml(t("shell.moduleType.prompt"))}</strong>`
-      + `<br><span style="font-size:13px;color:var(--color-meta)">${escapeHtml(t("shell.moduleType.hint"))}</span>`,
-    [
-      { labelKey: "shell.moduleType.freetext", action: () => askForScenarioModeForFreetext(moduleTitle, sourceMaterial, false) },
-      { labelKey: "shell.moduleType.freetextOnly", action: () => askForScenarioModeForFreetext(moduleTitle, sourceMaterial, true) },
-      { labelKey: "shell.moduleType.mcqOnly", action: () => askForCertLevelMcqOnlyNewModule(moduleTitle, sourceMaterial) },
-    ],
-  );
-}
-
-// Free-text branch of the new-module flow: scenario choice now follows source+module-type
-// (not before source as in the legacy order). Routes into the unchanged cert → blueprint path.
-function askForScenarioModeForFreetext(moduleTitle, sourceMaterial, freetextOnly = false) {
-  logBot(
-    () =>
-      `<strong>${escapeHtml(t("shell.scenario.prompt"))}</strong>`
-      + `<br><span style="font-size:13px;color:var(--color-meta)">${escapeHtml(t("shell.scenario.hint"))}</span>`,
-    [
-      { labelKey: "shell.scenario.auto", action: () => askForCertLevel(moduleTitle, null, sourceMaterial, "auto", freetextOnly) },
-      { labelKey: "shell.scenario.include", action: () => askForCertLevel(moduleTitle, null, sourceMaterial, "include", freetextOnly) },
-      { labelKey: "shell.scenario.exclude", action: () => askForCertLevel(moduleTitle, null, sourceMaterial, "exclude", freetextOnly) },
-    ],
-  );
-}
-
-// MCQ-only branch of the new-module flow: ask cert level, then create the module shell and
-// hand off to the existing MCQ-generation chain. The shell is created up-front (like the
-// free-text confirmAndGenerate path) so selectedModuleId exists when MCQ is attached and saved.
-function askForCertLevelMcqOnlyNewModule(moduleTitle, sourceMaterial) {
-  logBot(() => t("shell.mcqCertLevel.prompt"), [
-    { labelKey: "shell.certLevel.basic", action: () => createMcqOnlyModuleThenGenerate(moduleTitle, sourceMaterial, "basic") },
-    { labelKey: "shell.certLevel.intermediate", action: () => createMcqOnlyModuleThenGenerate(moduleTitle, sourceMaterial, "intermediate") },
-    { labelKey: "shell.certLevel.advanced", action: () => createMcqOnlyModuleThenGenerate(moduleTitle, sourceMaterial, "advanced") },
-  ]);
-}
 
 // Default pass mark for MCQ-only modules created via the conversation (author can override in
 // Avansert). Mirrors DEFAULT_MCQ_ONLY_MIN_PERCENT on the server (decisionService).
 const SHELL_MCQ_ONLY_MIN_PERCENT = 70;
 
-async function createMcqOnlyModuleThenGenerate(moduleTitle, sourceMaterial, certLevel) {
-  const slot = logProgress(() => `${t("shell.newModule.creating").replace(/…$/, "")} «${moduleTitle}»…`);
-  slot.abortBtn.remove(); // creation is not abortable
-
-  let newModule;
-  try {
-    // #918 fjernet løgnen om at tittelen var oversatt til tre språk. #930 fjerner den som ble
-    // igjen: en ren streng leses som bokmål, så en tittel skrevet på engelsk ble lagret som norsk.
-    // Nå følger språket med.
-    const body = await apiFetch(
-      "/api/admin/content/modules",
-      getHeaders,
-      { method: "POST", body: JSON.stringify({ title: titleInContentLocale(moduleTitle), certificationLevel: certLevel }) },
-    );
-    newModule = body?.module ?? body;
-  } catch (err) {
-    logResolveSlot(
-      slot,
-      () => `${escapeHtml(t("shell.newModule.createError"))}<br><span style="font-size:13px;color:var(--color-meta)">${escapeHtml(t("shell.newModule.createErrorHint"))}</span>`,
-      [
-        { labelKey: "shell.action.retry", action: () => createMcqOnlyModuleThenGenerate(moduleTitle, sourceMaterial, certLevel) },
-        { labelKey: "shell.action.cancel", action: startIdle },
-      ],
-    );
-    return;
-  }
-
-  selectedModuleId = newModule?.id ?? newModule?.moduleId;
-  const capturedId = selectedModuleId;
-  logResolveSlot(slot, () =>
-    `${escapeHtml(t("shell.newModule.created"))} <strong>${escapeHtml(moduleTitle)}</strong>` +
-    `<br><span style="font-size:13px;color:var(--color-meta)">ID: ${escapeHtml(capturedId)}</span>`,
-  );
-
-  // MCQ-only draft: no taskText/rubric/prompt. assessmentMode + mcqMinPercent flagged here so
-  // saveDraftBundleInBackground emits the MCQ_ONLY module version (see that function's branch).
-  sessionDraft = {
-    title: moduleTitle,
-    assessmentMode: "MCQ_ONLY",
-    mcqMinPercent: SHELL_MCQ_ONLY_MIN_PERCENT,
-    taskText: "",
-    assessorExpectedContent: "",
-    candidateTaskConstraints: "",
-    mcqQuestions: [],
-  };
-  // QA round 4: same as the free-text path — Innstillinger needs the bundle or it shows
-  // "load a module". Three creation paths, and the first fix reached one of them.
-  await attachBundleForNewModule(selectedModuleId);
-  renderPreview();
-
-  // Reuse the existing MCQ-generation chain; on accept go straight to the draft-ready actions
-  // (no draft/criteria generation step, which is free-text-only).
-  askForMcqQuestionCount(sourceMaterial, certLevel, contentLocale, "thorough", () => showDraftReadyActions());
-}
 
 // #454 Phase 4 (v1.2.4): condense source material once before blueprint generation if it
 // exceeds 50K chars. Avoids paying full-context cost 4× (blueprint, draft, MCQ, rubric).
@@ -7258,7 +7309,7 @@ async function populateSessionDraftCriteriaInBackground() {
   }
 }
 
-function showDraftReadyActions() {
+function showDraftReadyActions({ quiet = false } = {}) {
   sessionState = "draft-pending";
   // v1.1.81: kick off criteria-generation in background so preview shows them.
   // Idempotent — does nothing if sessionDraft.criteria is already populated.
@@ -7270,53 +7321,46 @@ function showDraftReadyActions() {
   const mcqCount = sessionDraft?.mcqQuestions?.length ?? 0;
   const model = deriveShellDraftReadyActionModel({ hasSelectedModule: !!selectedModuleId });
   const actionMap = {
-    revise: { labelKey: "shell.draftReady.editInChat", action: () => startUnifiedRevisionFlow() },
+    revise: { labelKey: "shell.draftReady.editInChat", action: () => openReviseDialog() },
     restart: { labelKey: "shell.draftReady.restart", action: startIdle },
     saveDraft: { labelKey: "shell.draftReady.saveDraft", action: saveDraftBundleInBackground },
   };
   // The message is conversation and stays in the log; the actions go to the fixed bar, where they
-  // do not sink out of reach as the log grows.
-  logBot(() => {
-    const parts = [t("shell.draftReady.message")];
-    if (mcqCount > 0) parts.push(tf("shell.draftReady.mcqCount", { count: mcqCount }));
-    parts.push(t("shell.draftReady.hint"));
-    return escapeHtml(parts.join(" "));
-  });
-  renderWorkspaceActions(model.actionKeys.map((key) => actionMap[key]).filter(Boolean));
+  // do not sink out of reach as the log grows. `quiet`: et tomt nytt element har ikke noe utkast
+  // å melde om.
+  if (!quiet) {
+    newModulePlaceholder = false;
+    logBot(() => {
+      const parts = [t("shell.draftReady.message")];
+      if (mcqCount > 0) parts.push(tf("shell.draftReady.mcqCount", { count: mcqCount }));
+      parts.push(t("shell.draftReady.hint"));
+      return escapeHtml(parts.join(" "));
+    });
+  }
+  const actions = model.actionKeys.map((key) => actionMap[key] && { key, ...actionMap[key] }).filter(Boolean);
+  // Produkteier 13.09 (stage-funn): med et utkast sto bare «Be om endring» igjen — ingen vei til
+  // kilder eller generering. Generer innhold (og Generer spørsmål når typen har flervalg) er alltid
+  // med; dialogen henter type og nivå fra Innstillinger.
+  actions.push({ key: "generateContent", labelKey: "shell.module.generateContent", action: () => openGenerateDialog() });
+  if (effectiveModuleMode() !== "FREETEXT_ONLY") {
+    actions.push({ key: "generateMcq", labelKey: "shell.module.generateMcq", action: () => openGenerateDialog({ mcqOnly: true }) });
+  }
+  renderWorkspaceActions(actions);
   if (model.shouldOpenUnifiedRevision) {
     startUnifiedRevisionFlow();
   }
 }
 
-// Separate entry point for MCQ-only generation from the module actions menu.
-// v1.2.8 (follow-up): regen-flyten på eksisterende modul skal også spørre om scenario
-// — samme intent som ved ny modul-flyten. Tidligere antakelse om at eksisterende moduler
-// bevarer egen stil var feil; forfatter vil styre per regenerering.
-function startGenerateDraftFlow() {
-  // #555: KILDE først også ved regenerering (var: scenario først).
-  askForSourceMaterial(null, selectedModuleId, bundle?.module?.certificationLevel ?? null);
-}
 
-function startGenerateMcqFlow() {
-  logForm(
-    "source-material",
-    () => `<strong>${escapeHtml(t("shell.mcqSource.promptTitle"))}</strong>`,
-    "shell.mcqSource.placeholder",
-    "shell.action.next",
-    (sourceMaterial) => askForCertLevelMcqOnly(sourceMaterial),
-  );
-}
-
-function askForCertLevelMcqOnly(sourceMaterial) {
-  // Generation mode hard-defaulted to "thorough" — see askForCertLevel above for rationale.
-  logBot(() => t("shell.mcqCertLevel.prompt"), [
-    { labelKey: "shell.certLevel.basic", action: () => askForMcqQuestionCount(sourceMaterial, "basic", contentLocale, "thorough", () => showModuleActions()) },
-    { labelKey: "shell.certLevel.intermediate", action: () => askForMcqQuestionCount(sourceMaterial, "intermediate", contentLocale, "thorough", () => showModuleActions()) },
-    { labelKey: "shell.certLevel.advanced", action: () => askForMcqQuestionCount(sourceMaterial, "advanced", contentLocale, "thorough", () => showModuleActions()) },
-  ]);
-}
-
+// #1046: antallene valgt i «Generer innhold»-dialogen — da spørres det ikke igjen i samtalen.
+let pendingMcqCounts = null;
 function askForMcqQuestionCount(sourceMaterial, certLevel, locale, generationMode, onAccept) {
+  if (pendingMcqCounts) {
+    const { questionCount, optionCount } = pendingMcqCounts;
+    pendingMcqCounts = null;
+    generateMcqInBackground(sourceMaterial, certLevel, locale, generationMode, questionCount, optionCount, onAccept);
+    return;
+  }
   logBot(() => t("shell.mcq.questionCountPrompt"), [
     { labelKey: "shell.mcq.questionCountChoice3", action: () => askForMcqOptionCount(sourceMaterial, certLevel, locale, generationMode, 3, onAccept) },
     { labelKey: "shell.mcq.questionCountChoice5", action: () => askForMcqOptionCount(sourceMaterial, certLevel, locale, generationMode, 5, onAccept) },
@@ -7478,6 +7522,7 @@ function populateUiLocaleSelect() {
     // feltene og trykk Bekreft», og handlingsknappene var allerede brukt opp og deaktiverte.
     // Ingen vei videre uten å laste siden på nytt (rapportert fra stage 13.08).
     const wasEditing = !!document.getElementById("previewEditConfirm");
+    const wasDirty = hasOpenEditForm();
     // Replay the full chat log in the new locale
     retranslateChat();
     translatePageStaticText();
@@ -7492,11 +7537,17 @@ function populateUiLocaleSelect() {
     // Without this the module types, the "missing component" reasons and the save button stay
     // in the previous language while the page around them switches.
     renderSettingsPanel();
+    // Handlingsraden og merkene i hodet bygges også i JS (#1046): tegn dem om med samme valg.
+    renderWorkspaceActions(workspaceActionChoices);
+    updateStateRail();
     if (wasEditing) {
       enterPreviewEditMode({ force: true });
       // Feltene fylles fra det nye språket. Det som var skrevet i det forrige — og ikke bekreftet
       // — er borte, og det skal man få vite, ikke oppdage.
-      logBot(() => escapeHtml(t("shell.directEdit.localeSwitched")));
+      if (wasDirty) {
+        logBot(() => escapeHtml(t("shell.directEdit.localeSwitched")));
+        if (!chatPaneVisible()) showToast(t("shell.directEdit.localeSwitched"), "warning");
+      }
     }
   });
 }
@@ -7545,6 +7596,11 @@ async function initShell() {
   const queryModuleId = new URLSearchParams(location.search).get("moduleId");
   const autoModuleId = pathModuleId ?? queryModuleId;
   const resumeEditing = new URLSearchParams(location.search).get("resumeEditing") === "1";
+  // #1046 A1: /module/new — et tomt element. Modulen lages på tjeneren ved første Lagre.
+  if (autoModuleId === "new") {
+    startNewEmptyModule();
+    return;
+  }
   if (autoModuleId) {
     await loadModule(autoModuleId, { resumeEditing });
     return;

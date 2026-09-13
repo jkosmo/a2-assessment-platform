@@ -12,7 +12,8 @@ vi.mock("../../src/modules/assessment/sensitiveDataMaskingService.js", () => ({
   })),
 }));
 
-vi.mock("../../src/i18n/content.js", () => ({
+vi.mock("../../src/i18n/content.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../src/i18n/content.js")>()),
   localizeContentText: vi.fn((_locale, text) => text ?? null),
 }));
 

@@ -67,7 +67,6 @@ test.describe("#1027 — resultatsiden henter rapportene på nytt ved språkbytt
   test("detaljlinja blander ikke språk etter et bytte", async ({ page }) => {
     await mockResultsWorkspace(page);
     await page.goto("/results");
-    await page.click("#loadResults");
     await expect(page.locator("#completionBody")).toContainText("Incident response");
 
     await page.locator("#completionBody tr").first().click();

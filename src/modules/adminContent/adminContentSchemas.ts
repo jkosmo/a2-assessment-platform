@@ -138,6 +138,8 @@ export const moduleTitleUpdateBodySchema = z.object({
 // so caller can also clear the stored hash if blueprint was deleted.
 export const rubricSyncBlueprintBodySchema = z.object({
   blueprintHash: z.string().trim().max(64).nullable(),
+  // #915: rubrikken forfatteren ser på (valgt konfigurasjon). Utelatt = siste på modulen.
+  rubricVersionId: z.string().trim().min(1).optional(),
 });
 
 export const rubricBodySchema = z.object({

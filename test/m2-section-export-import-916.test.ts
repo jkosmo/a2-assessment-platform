@@ -251,8 +251,9 @@ describe("#916 standalone section import", () => {
   });
 
   it("replaceExisting requires ownership of the target section, and lands as an inactive version", async () => {
+    const målTittel = L(`Mål ${Date.now()}`);
     const { id: targetId } = await createSection(smoOwner, {
-      title: L(`Mål ${Date.now()}`),
+      title: målTittel,
       bodyMarkdown: L("# Original"),
     });
     const liveVersionId = (await prisma.courseSection.findUnique({ where: { id: targetId } }))!.activeVersionId;
@@ -282,11 +283,32 @@ describe("#916 standalone section import", () => {
 
     const after = await prisma.courseSection.findUnique({ where: { id: targetId } });
     expect(after?.activeVersionId).toBe(liveVersionId);
+    // #931 pkt 3: den LEVENDE tittelen står. Før ble «Ny tekst …» skrevet rett på seksjonsraden, så
+    // deltakeren fikk den nye tittelen over den gamle kroppen — og en fullt oversatt tittel kunne
+    // byttes mot en ettspråks uten at gaten så det.
+    expect(JSON.parse(after!.title)).toEqual(målTittel);
     const newest = await latestVersionOf(targetId);
     expect(newest!.id).not.toBe(liveVersionId);
     expect(newest!.versionNo).toBe(2);
     expect(newest!.publishedAt).toBeNull();
     expect(JSON.parse(newest!.bodyMarkdown)).toEqual(L("# Erstatning"));
+  });
+
+  it("#931 pkt 3 kontroll: en seksjon som IKKE er publisert tar imot tittelen fra pakken", async () => {
+    // Uten denne ville «aldri skriv tittelen» også bestått testen over — og da kunne en utkast-
+    // seksjon aldri få navn fra en import.
+    const { id: targetId } = await createSection(smoOwner, {
+      title: { nb: `Utkast ${Date.now()}` },
+      bodyMarkdown: { nb: "# Bare norsk" }, // holdes tilbake av gaten → aldri publisert
+    });
+    expect((await prisma.courseSection.findUnique({ where: { id: targetId } }))!.activeVersionId).toBeNull();
+    const nyTittel = L(`Fra pakken ${Date.now()}`);
+    const { id: sourceId } = await createSection(smoOwner, { title: nyTittel, bodyMarkdown: L("# Innhold") });
+    const envelope = await exportEnvelope(sourceId, smoOwner);
+    const res = await request(app).post("/api/admin/content/sections/import").set(smoOwner)
+      .send({ payload: envelope, mode: "replaceExisting", targetId });
+    expect(res.status, JSON.stringify(res.body)).toBe(201);
+    expect(JSON.parse((await prisma.courseSection.findUnique({ where: { id: targetId } }))!.title)).toEqual(nyTittel);
   });
 
   it("carries figures through stageSectionAssets: blobs recreated, asset refs remapped", async () => {
@@ -390,6 +412,12 @@ describe("#916 section publish gate (#896 S4 applied to sections)", () => {
     expect(save.status).toBe(200);
     expect(save.body.translationGate.heldBack).toBe(true);
     expect((save.body.translationGate.issues as Array<{ field: string }>).map((i) => i.field)).toEqual(["bodyMarkdown"]);
+    // #931 pkt 4: SVARET på lagringen skal vise det som ble lagret — ikke den aktive kroppen gaten
+    // nektet å flytte. Før: `{ bodyMarkdown: <v1>, hasUnpublishedChanges: false }` rett etter at
+    // forfatteren skrev en side tekst. Editoren leste bare gate-feltene, så det var usynlig der —
+    // men Agent Authoring-API-et og alle andre konsumenter fikk feil.
+    expect(JSON.parse(save.body.section.bodyMarkdown)).toEqual({ nb: "# Nytt, bare på norsk" });
+    expect(save.body.section.hasUnpublishedChanges).toBe(true);
 
     // Stored (version 2 exists, with the author's text) …
     const newest = await latestVersionOf(id);
@@ -401,6 +429,13 @@ describe("#916 section publish gate (#896 S4 applied to sections)", () => {
     const detail = await request(app).get(`/api/admin/content/sections/${id}`).set(smoOwner);
     expect(JSON.parse(detail.body.section.bodyMarkdown)).toEqual({ nb: "# Nytt, bare på norsk" });
     expect(detail.body.section.hasUnpublishedChanges).toBe(true);
+
+    // #931 pkt 2: eksporten skal også lese det NYESTE — som #896 S6 for moduler. Før leste den den
+    // aktive først, så en pakke fra «det jeg nettopp skrev» inneholdt v1. `audit.publishedAt` sier
+    // fortsatt at det som ligger live er noe annet.
+    const exported = await request(app).get(`/api/admin/content/sections/${id}/export-package`).set(smoOwner);
+    expect(exported.status).toBe(200);
+    expect(exported.body.envelope.section.bodyMarkdown).toEqual({ nb: "# Nytt, bare på norsk" });
   });
 
   it("blocks the course cascade too, and publishes nothing when a section has a hole", async () => {

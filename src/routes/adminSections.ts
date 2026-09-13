@@ -1,6 +1,7 @@
 import { Router, type Request, type RequestHandler } from "express";
 import { requireContentOwnership } from "./requireContentOwnership.js";
 import { assertContentOwnership, listManageableContentIds } from "../modules/content/contentOwnershipService.js";
+import { deriveContentLifecycle } from "../modules/content/lifecycle.js";
 import multer from "multer";
 import { z } from "zod";
 import {
@@ -358,6 +359,8 @@ adminSectionsRouter.get("/", async (request, response, next) => {
           versionNo: s.activeVersion?.versionNo ?? null,
           updatedAt: s.updatedAt.toISOString(),
           archivedAt: s.archivedAt?.toISOString() ?? null,
+          // #1046 steg B: tilstanden regnet ut av tjeneren, samme ord for modul, kurs og seksjon.
+          lifecycle: deriveContentLifecycle({ archivedAt: s.archivedAt, activeVersionId: s.activeVersionId, latestVersionId: s.versions[0]?.id ?? null }),
           courseCount: courses.length,
           courses,
           canManage: manageable.has(s.id),

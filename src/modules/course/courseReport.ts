@@ -4,6 +4,7 @@ import { findUserIdsInDepartment, findUsersByIds } from "../../repositories/user
 import { localizeContentText } from "../../i18n/content.js";
 import type { SupportedLocale } from "../../i18n/locale.js";
 import type { ReportFilters } from "../reporting/types.js";
+import { effectiveCourseIds } from "../reporting/scopeRules.js";
 import { computeCourseStatus } from "./courseQueries.js";
 import { round2 } from "../reporting/csvExport.js";
 
@@ -121,10 +122,13 @@ async function resolveCourseParticipantIds(
 }
 
 export async function getCourseReport(
-  filters: Pick<ReportFilters, "courseId" | "dateFrom" | "dateTo" | "orgUnit"> = {},
+  filters: Pick<ReportFilters, "courseId" | "dateFrom" | "dateTo" | "orgUnit" | "allowedCourseIds"> = {},
   locale: SupportedLocale = "en-GB",
 ): Promise<{ rows: CourseReportRow[] }> {
-  const courses = await courseRepository.findPublishedCoursesWithModuleDetails(filters);
+  // #1058: SMO ser egne kurs. Et valgt kurs utenfor settet gir tom rapport.
+  const courseIds = effectiveCourseIds(filters);
+  if (courseIds && courseIds.length === 0) return { rows: [] };
+  const courses = await courseRepository.findPublishedCoursesWithModuleDetails({ courseIds });
 
   const rows: CourseReportRow[] = await Promise.all(
     courses.map(async (course) => {
@@ -195,7 +199,7 @@ export async function getCourseReport(
 
 export async function getCourseLearnerReport(
   courseId: string,
-  filters: Pick<ReportFilters, "dateFrom" | "dateTo" | "orgUnit"> = {},
+  filters: Pick<ReportFilters, "dateFrom" | "dateTo" | "orgUnit" | "allowedCourseIds"> = {},
   locale: SupportedLocale = "en-GB",
 ): Promise<{
   selectedCourseId: string;
@@ -206,7 +210,10 @@ export async function getCourseLearnerReport(
     inProgress: number;
   };
 }> {
-  const [course] = await courseRepository.findPublishedCoursesWithModuleDetails({ courseId });
+  // #1058: utenfor kallerens kurs → samme svar som for et kurs som ikke finnes.
+  const allowed = filters.allowedCourseIds && !filters.allowedCourseIds.includes(courseId) ? null
+    : (await courseRepository.findPublishedCoursesWithModuleDetails({ courseIds: [courseId] }))[0];
+  const course = allowed ?? null;
   if (!course) {
     return {
       selectedCourseId: courseId,

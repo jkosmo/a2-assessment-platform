@@ -1,6 +1,7 @@
 import { adminContentRepository } from "./adminContentRepository.js";
 import type { SupportedLocale } from "../../i18n/locale.js";
 import { localizeContentText } from "../../i18n/content.js";
+import { deriveContentLifecycle } from "../content/lifecycle.js";
 import { decodeLocalizedText, safeParseJson, mapMcqSetVersion } from "./adminContentProjections.js";
 import { DomainRuleError, ValidationError } from "../../errors/AppError.js";
 import { getAssessmentRules } from "../../config/assessmentRules.js";
@@ -46,6 +47,9 @@ export async function listLibraryModules(
     title: localizeContentText(locale, module.title) ?? module.title,
     certificationLevel: localizeContentText(locale, module.certificationLevel) ?? module.certificationLevel ?? null,
     status: deriveLibraryStatus(module),
+    // #1046 steg B: samme tilstandsord som kurs og seksjoner. `status` (fem verdier) står til
+    // klientene har gått over; da fjernes den.
+    lifecycle: deriveContentLifecycle({ archivedAt: module.archivedAt, activeVersionId: module.activeVersionId, latestVersionId: module.versions[0]?.id ?? null }),
     archivedAt: module.archivedAt?.toISOString() ?? null,
     updatedAt: module.updatedAt.toISOString(),
     activeVersionId: module.activeVersionId,
@@ -313,7 +317,11 @@ async function buildSectionExportPayload(
   // legitimately sit as a draft — in a course, or freshly imported — and reading only the active
   // version would export an empty body and silently lose the content the file is supposed to carry.
   // `audit.publishedAt` still reports the truth, so the destination knows it was not live.
-  const sourceVersion = section.activeVersion ?? section.versions[0] ?? null;
+  // #931 pkt 2: eksporten skal lese den NYESTE versjonen, ikke den aktive først — samme regel som
+  // #896 S6 ga moduler. Live seksjon på v1, forfatter redigerer, gaten holder v2 tilbake: eksporten
+  // ga v1, og en pakke fra «det jeg nettopp skrev» inneholdt det gamle. `versions` er sortert nyeste
+  // først; den aktive er reserve for en seksjon uten versjoner i lista.
+  const sourceVersion = section.versions[0] ?? section.activeVersion ?? null;
   if (!sourceVersion) {
     throw new Error("Section has no versions to export.");
   }

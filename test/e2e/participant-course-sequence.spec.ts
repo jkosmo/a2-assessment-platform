@@ -83,8 +83,6 @@ async function mockBase(page: Page) {
 
 async function openCourse(page: Page) {
   await page.goto("/participant");
-  await expect(page.locator("#loadCoursesBtn")).toBeEnabled();
-  await page.locator("#loadCoursesBtn").click();
   await page.locator(".course-accordion-header").click();
   await expect(page.locator(".course-sequence")).toBeVisible();
 }

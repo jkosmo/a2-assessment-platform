@@ -1,4 +1,5 @@
 import { preprocessSensitiveDataForLlm, type SensitiveDataPreprocessResult } from "./sensitiveDataMaskingService.js";
+import { pickLocalizedValue } from "../../i18n/content.js";
 import { localizeContentText } from "../../i18n/content.js";
 import type { SupportedLocale } from "../../i18n/locale.js";
 import { assessmentPolicyCodec, type ModuleAssessmentPolicy } from "../../codecs/assessmentPolicyCodec.js";
@@ -171,6 +172,6 @@ function resolveLocalizedText(
 ): string | null {
   if (!value) return null;
   if (typeof value === "string") return value;
-  if (locale && value[locale]) return value[locale];
-  return value["en-GB"] ?? Object.values(value)[0] ?? null;
+  // #1046: samme leserekkefølge som all annen innholdstekst (leserens språk → standardspråket → engelsk).
+  return pickLocalizedValue(value, (locale ?? "en-GB") as SupportedLocale) ?? null;
 }

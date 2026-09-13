@@ -1,6 +1,7 @@
 import { createNumberFormatter, createDateTimeFormatter } from "./format-display.js";
 const formatDateTimeValue = createDateTimeFormatter(() => currentLocale);
 const formatNumber = createNumberFormatter(() => currentLocale);
+import { formatPercent } from "/static/format-display.js";
 import {
   supportedLocales,
   localeLabels,
@@ -174,7 +175,13 @@ async function onModuleChange() {
   const moduleId = el.qModuleSelect.value;
   el.qVersionSelect.innerHTML = `<option value="">${t("quality.filter.version.all")}</option>`;
   el.qOwnPill.hidden = true;
-  if (!moduleId) return;
+  if (!moduleId) {
+    // #1046 (B6): tom side uten et ord var det eneste tomrommet uten forklaring i galleriet.
+    snapshotBody = null;
+    el.qMeta.textContent = t("quality.empty");
+    hideResults();
+    return;
+  }
 
   const mod = allModules.find((m) => m.id === moduleId);
   if (mod) {
@@ -198,6 +205,10 @@ async function onModuleChange() {
       el.qVersionSelect.appendChild(opt);
     }
   } catch { /* version list optional */ }
+
+  // #1046 (B5): kvaliteten hentes med en gang modulen er valgt. «Vis kvalitet»-knappen var ett
+  // klikk til mellom valget og svaret, og ingen annen liste krever det.
+  await loadQuality();
 }
 
 // ---------------------------------------------------------------------------
@@ -206,13 +217,7 @@ async function onModuleChange() {
 
 async function loadQuality() {
   const moduleId = el.qModuleSelect.value;
-  if (!moduleId) {
-    showToast(t("quality.errors.moduleRequired"), "error");
-    return;
-  }
-  el.qLoad.disabled = true;
-  const orig = el.qLoad.textContent;
-  el.qLoad.textContent = "…";
+  if (!moduleId) return;
   el.qMeta.textContent = t("quality.loading");
   try {
     const params = new URLSearchParams({ moduleId });
@@ -227,9 +232,6 @@ async function loadQuality() {
   } catch (error) {
     el.qMeta.textContent = apiErrorText(error);
     hideResults();
-  } finally {
-    el.qLoad.disabled = false;
-    el.qLoad.textContent = orig;
   }
 }
 
@@ -283,7 +285,7 @@ function renderContentSimilarity(cs) {
     { k: t("quality.cs.stat.count"), v: String(cs.count) },
     { k: t("quality.cs.stat.median"), v: num(cs.median) },
     { k: t("quality.cs.stat.p90"), v: num(cs.p90) },
-    { k: tf("quality.cs.stat.over", { threshold: num(cs.threshold) }), v: `${cs.overThresholdCount} · ${overPct}%` },
+    { k: tf("quality.cs.stat.over", { threshold: num(cs.threshold) }), v: `${cs.overThresholdCount} · ${overPct}00a0%` },
   ];
   el.qCsStats.innerHTML = stats
     .map((s) => `<div class="q-sig neutral"><div class="k">${escapeHtml(s.k)}</div><div class="v">${escapeHtml(s.v)}</div></div>`)
@@ -333,7 +335,7 @@ function renderSignals(signals) {
   const passMin = th.passRateMinimum ?? 0.6;
   const mrMax = th.manualReviewRateMaximum ?? 0.35;
   const covMin = th.benchmarkCoverageMinimum ?? 0.5;
-  const pct = (v) => (v == null ? "—" : `${Math.round(v * 100)}%`);
+  const pct = (v) => formatPercent(v);
 
   const passRate = signals.passRate ?? null;
   const mrRate = signals.manualReviewRate ?? null;
@@ -569,7 +571,7 @@ function mountWorkspace() {
 
   el = {};
   for (const id of [
-    "qOwnerSeg", "qCourseFilter", "qModuleSelect", "qVersionSelect", "qModuleCount", "qLoad", "qOwnPill", "qMeta",
+    "qOwnerSeg", "qCourseFilter", "qModuleSelect", "qVersionSelect", "qModuleCount", "qOwnPill", "qMeta",
     "qSignalsCard", "qSignals", "qThresholdCard", "qDistBlock", "qModeNote", "qHistogram", "qTotalMin", "qMcqField", "qMcqMin",
     "qPracticalField", "qPracticalMin", "qPreview", "qThresholdSource", "qPublish",
     "qAnchorCard", "qAnchorSummary", "qAnchorLink", "qOutcomesCard", "qOutcomesBody",
@@ -594,7 +596,7 @@ function mountWorkspace() {
   });
   el.qCourseFilter.addEventListener("change", () => { courseFilter = el.qCourseFilter.value; renderModuleOptions(); });
   el.qModuleSelect.addEventListener("change", onModuleChange);
-  el.qLoad.addEventListener("click", loadQuality);
+  el.qVersionSelect.addEventListener("change", loadQuality);
   el.qPublish.addEventListener("click", publish);
   el.qTotalMin.addEventListener("input", () => { renderHistogram(); updatePreview(); renderSignals(snapshotBody?.signals ?? {}); });
 

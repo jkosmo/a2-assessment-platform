@@ -576,17 +576,37 @@ export async function ensureRubricVersion(
   };
 }
 
-// B3 (#450): "Behold kriteriene"-handling. Updates the active RubricVersion's stored
-// blueprint-hash to match the current blueprint without changing criteria — so the drift
-// banner hides until the blueprint changes again. Returns null when no rubric exists yet
-// (caller should fall back to ensure-rubric).
+// B3 (#450): "Behold kriteriene"-handling. Records that the current criteria are asserted valid for
+// the current blueprint — so the drift banner hides until the blueprint changes again. Returns null
+// when no rubric exists yet (caller should fall back to ensure-rubric).
+//
+// #915: this used to PATCH the existing RubricVersion in place (new hash, same versionNo) — the one
+// exception to «component versions are immutable». Restore a module version authored under
+// blueprint A after «keep» had stamped its rubric with hash B, and the restored version showed
+// criteria drift it never had. Now «keep» creates a NEW rubric version: same criteria, new hash,
+// next versionNo — like every other component change. The caller's next save attaches it; older
+// module versions keep pointing at the rubric row they were authored with.
+//
+// `rubricVersionId` is the rubric the author is looking at (the selected configuration's). Without
+// it, the latest rubric on the module is used — which is what the selected configuration is in
+// every ordinary case.
 export async function syncActiveRubricBlueprintHash(
   moduleId: string,
   blueprintHash: string | null,
-): Promise<{ rubricVersionId: string; previousHash: string | null; nextHash: string | null } | null> {
+  options: { rubricVersionId?: string | null } = {},
+): Promise<{
+  rubricVersionId: string;
+  previousRubricVersionId: string;
+  versionNo: number;
+  previousHash: string | null;
+  nextHash: string | null;
+  scalingRule: Record<string, unknown>;
+} | null> {
   await ensureModuleExists(moduleId);
-  const existing = await adminContentRepository.findActiveRubricVersionForModule(moduleId);
-  if (!existing) return null;
+  const existing = options.rubricVersionId
+    ? await adminContentRepository.findRubricVersionById(options.rubricVersionId)
+    : await adminContentRepository.findActiveRubricVersionForModule(moduleId);
+  if (!existing || existing.moduleId !== moduleId) return null;
 
   let scalingRule: Record<string, unknown> = {};
   try {
@@ -610,15 +630,34 @@ export async function syncActiveRubricBlueprintHash(
     delete nextScalingRule.generated_from_blueprint_hash;
   }
 
-  await adminContentRepository.updateRubricVersionScalingRule(
-    existing.id,
-    JSON.stringify(nextScalingRule),
-  );
+  if (previousHash === blueprintHash) {
+    // Nothing to assert — the rubric already carries this hash. No new row for a no-op.
+    return {
+      rubricVersionId: existing.id,
+      previousRubricVersionId: existing.id,
+      versionNo: existing.versionNo,
+      previousHash,
+      nextHash: blueprintHash,
+      scalingRule: nextScalingRule,
+    };
+  }
+
+  const versionNo = await getNextVersionNo("rubric", moduleId);
+  const created = await adminContentRepository.createRubricVersion({
+    moduleId,
+    versionNo,
+    criteriaJson: existing.criteriaJson,
+    scalingRuleJson: JSON.stringify(nextScalingRule),
+    active: true,
+  });
 
   return {
-    rubricVersionId: existing.id,
+    rubricVersionId: created.id,
+    previousRubricVersionId: existing.id,
+    versionNo: created.versionNo,
     previousHash,
     nextHash: blueprintHash,
+    scalingRule: nextScalingRule,
   };
 }
 
@@ -963,12 +1002,9 @@ export async function publishModuleVersion(
  * rows, so pointing at the same ones reproduces the source version; copying them would add rows
  * nobody can tell apart from the originals.
  *
- * One documented exception (#915): `updateRubricVersionScalingRule` patches a RubricVersion IN
- * PLACE — «Behold kriteriene» flips the stored blueprint hash without bumping versionNo. Restore a
- * version authored before that flip and the criteria come back correct, but the drift banner reads
- * the newer hash and may show a false "criteria have drifted". The criteria themselves are intact;
- * only the drift indicator is misleading. Copying the rubric on restore would trade a wrong banner
- * for a duplicated row on every restore, which is a worse deal.
+ * #915 closed the one exception there was: «Behold kriteriene» used to patch a RubricVersion IN
+ * PLACE (new blueprint hash, same versionNo), so a restored version could show criteria drift it
+ * never had. It now creates a new rubric version, and the invariant holds without special cases.
  */
 export async function restoreModuleVersion(input: {
   moduleId: string;

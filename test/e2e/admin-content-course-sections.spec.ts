@@ -29,16 +29,16 @@ test("course builder: add a section from the library renders it as a [SEKSJON] r
 
   // The picker is populated, and there is no section row yet.
   await expect(page.locator("#sectionSelect option[value='sec-1']")).toHaveCount(1);
-  await expect(page.locator('#moduleList .module-list-item[data-item-type="SECTION"]')).toHaveCount(0);
+  await expect(page.locator('#moduleList .form-row[data-item-type="SECTION"]')).toHaveCount(0);
 
   // Add the section from the library.
   await page.locator("#sectionSelect").selectOption("sec-1");
   await page.locator("#addSectionBtn").click();
 
   // It appears as a distinct [SEKSJON] row carrying the section title.
-  const sectionRow = page.locator('#moduleList .module-list-item[data-item-type="SECTION"]');
+  const sectionRow = page.locator('#moduleList .form-row[data-item-type="SECTION"]');
   await expect(sectionRow).toHaveCount(1);
-  await expect(sectionRow.locator(".item-type-badge")).toHaveText("SEKSJON");
+  await expect(sectionRow.locator(".form-row-badge")).toHaveText("SEKSJON");
   await expect(sectionRow).toContainText("Innføring");
 
   // And it is no longer offered in the picker (can't add the same section twice).
@@ -91,5 +91,5 @@ test("#992: kursbyggeren tilbyr ikke arkiverte seksjoner", async ({ page }) => {
   await expect(page.locator("#sectionSelect option[value='sec-arkivert']")).toHaveCount(0);
   await page.locator("#sectionSelect").selectOption("sec-live");
   await page.locator("#addSectionBtn").click();
-  await expect(page.locator('#moduleList .module-list-item[data-item-type="SECTION"]')).toContainText("Innføring");
+  await expect(page.locator('#moduleList .form-row[data-item-type="SECTION"]')).toContainText("Innføring");
 });

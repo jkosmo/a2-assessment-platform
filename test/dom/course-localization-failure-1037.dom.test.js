@@ -69,9 +69,10 @@ describe("#1037 — kurslagring fyller ikke tre språk med kildeteksten", () => 
 
   it("⚠️ BEGGE kallerne viser beskjeden — ikke bare den ene", () => {
     // Samme regel på N steder, håndhevet på N−1, er feilklassen som har truffet oss sju ganger.
-    // Funksjonen har to kallere: opprettelse fra samtalen, og lagring fra detaljsiden.
+    // Funksjonen hadde to kallere: opprettelse fra samtalen, og lagring fra detaljsiden. #1046 nivå to
+    // fjernet samtalen — opprettelse og lagring går nå samme vei (saveCourse), så det er én kaller.
     const kallere = kilde.split("await localizeCourseCopyAcrossLocales(").length - 1;
-    expect(kallere, "ventet to kallesteder — endres det, må denne testen oppdateres").toBe(2);
+    expect(kallere, "ventet ett kallested — endres det, må denne testen oppdateres").toBe(1);
 
     const varsler = kilde.split("meldFeiledeLokaler(").length - 1;
     // Én definisjon + ett kall per kaller.

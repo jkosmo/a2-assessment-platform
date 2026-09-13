@@ -113,3 +113,6 @@
     animation: none;
   }
 }
+
+/* #1046: valgfri handling i en toast (f.eks. «Avbryt» på en lagring som pågår). */
+.toast__action { width: auto; min-height: 0; margin: 6px 0 0; padding: 4px 12px; font: inherit; font-size: 13px; font-weight: 600; border: 1px solid currentColor; border-radius: 6px; background: transparent; color: inherit; cursor: pointer; }

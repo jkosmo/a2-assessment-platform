@@ -3,6 +3,32 @@ import { contentMessages } from "./contentMessages.js";
 
 const localeKeys: SupportedLocale[] = ["en-GB", "nb", "nn"];
 
+// #1046 (produkteier 12.09: «Ja til NB som påkrevd»): når en tekst mangler på leserens språk, vises
+// organisasjonens standardspråk (DEFAULT_LOCALE, nb hos A-2) — ikke engelsk. Engelsk er bare siste
+// utvei, for plattformer som kjører uten standardspråk. Lest rett fra miljøet, ikke fra env.ts, så
+// denne fila ikke drar med seg hele miljøvalideringen inn i alle som lokaliserer en tekst.
+function organisationDefaultLocale(): SupportedLocale {
+  const raw = process.env.DEFAULT_LOCALE;
+  return raw && (localeKeys as string[]).includes(raw) ? (raw as SupportedLocale) : "en-GB";
+}
+
+/** Rekkefølgen en lokalisert tekst leses i: leserens språk → standardspråket → engelsk → det som finnes. */
+export function contentFallbackOrder(locale: SupportedLocale): SupportedLocale[] {
+  return [...new Set<SupportedLocale>([locale, organisationDefaultLocale(), "en-GB"])];
+}
+
+/** Første ikke-tomme verdi i et språkkart, i fallback-rekkefølgen. */
+export function pickLocalizedValue<T extends Partial<Record<SupportedLocale, string | null | undefined>>>(
+  map: T,
+  locale: SupportedLocale,
+): string | undefined {
+  for (const key of contentFallbackOrder(locale)) {
+    const value = map[key];
+    if (typeof value === "string" && value.trim().length > 0) return value;
+  }
+  return Object.values(map).find((v): v is string => typeof v === "string" && v.trim().length > 0);
+}
+
 type InlineLocalizedMap = Partial<Record<SupportedLocale, string>>;
 
 export function parseInlineLocalizedMap(input: string): InlineLocalizedMap | null {
@@ -76,7 +102,7 @@ export function localizeContentText(locale: SupportedLocale, input: string | nul
 
   const inline = parseInlineLocalizedMap(input);
   if (inline) {
-    return inline[locale] ?? inline["en-GB"] ?? Object.values(inline)[0] ?? input;
+    return pickLocalizedValue(inline, locale) ?? input;
   }
 
   if (locale === "en-GB") {

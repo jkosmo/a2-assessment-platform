@@ -8,24 +8,7 @@
     <link rel="stylesheet" href="/static/loading.css" />
     <link rel="stylesheet" href="/static/toast.css" />
     <style>
-      /* #745: rad som holder status-filter-pillene og kurs-dropdownen på samme linje. */
-      .list-filters-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin-bottom: var(--space-2); }
-      .list-filters-row .list-filters { margin-bottom: 0; }
-      .list-course-filter { display: flex; align-items: center; gap: 8px; }
-      .list-course-filter label { font-size: 13px; font-weight: 600; color: var(--color-meta); }
-      .list-course-select {
-        width: auto;
-        min-height: 0;
-        padding: 5px 10px;
-        font-size: 13px;
-        font-family: inherit;
-        border: 1px solid var(--color-border-soft);
-        border-radius: var(--radius-card);
-        background: var(--color-surface);
-        color: var(--color-text);
-        max-width: 260px;
-      }
-      .list-course-select:focus { outline: 2px solid var(--color-blue); outline-offset: 1px; border-color: transparent; }
+      /* #1046: sidehode, søk, filtre, kursfilter og tabell er den felles listesida (list-page.js + shared.css). */
 
       .content-area-nav {
         display: flex;
@@ -51,42 +34,22 @@
       .content-area-nav-link:hover { color: var(--color-text); }
       .content-area-nav-link.active { color: var(--color-link-active); border-bottom-color: var(--color-blue); }
 
-      .page-header {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: var(--space-2);
-        margin-bottom: var(--space-3);
-        flex-wrap: wrap;
-      }
-      .page-header h1 { margin: 0; font-size: 22px; }
       .page-header-back { margin-bottom: var(--space-2); }
-      .back-link { font-size: 13px; color: var(--color-meta); text-decoration: none; }
-      .back-link:hover { color: var(--color-text); }
+      /* #1046 B1: .back-link arves fra shared.css. */
 
-      .sections-table-wrap { overflow-x: auto; border: 1px solid var(--color-table-wrap-border); border-radius: var(--radius-card); }
-      .sections-table { width: 100%; border-collapse: collapse; font-size: 14px; }
-      /* #705-UX: tittel-kolonnen er den fleksible (min-width, ikke width:100% som klemte de andre
-         kolonnene + tvang handlingsknappene til å stable seg vertikalt). */
-      .sections-table .col-title { min-width: 220px; font-weight: 600; }
-      .sections-table th, .sections-table td { text-align: left; padding: 10px var(--space-2); border-bottom: 1px solid var(--color-border-soft); vertical-align: middle; }
-      .sections-table th { font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--color-meta); }
-      /* col-actions er en vanlig celle (ikke flex) så den vokser til knapperaden og holder den
-         horisontal. .row-action-btn + .row-actions arves nå fra shared.css (felles utseende). */
-      .sections-table .col-actions { white-space: nowrap; }
+      /* #1046 C1/C2: tabellen (.list-table-wrap/.list-table) arves fra shared.css — samme regel ett sted. */
 
       /* Editor */
       /* QA r7 #2: let the editor fill the page width so the Markdown/Preview columns are a true 50/50
          split of the available width (they were 50/50 of a 720px cap). Constrain only the single-column
          fields so the title input doesn't stretch uncomfortably wide. */
+      /* #1046 nivå to: hode, språkpiller, felt (.form-field) og lagrelinje er den felles skjemasida (form-page.js + shared.css). */
       .section-editor { max-width: none; }
-      .section-editor > .editor-field, .section-editor > .lang-tabs { max-width: 720px; }
-      .editor-field { margin-bottom: var(--space-2); }
-      .editor-field label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 4px; }
-      .editor-field input[type="text"] { width: 100%; padding: 8px; border: 1px solid var(--color-border-soft); border-radius: var(--radius-btn); font-size: 14px; }
-      .lang-tabs { display: flex; gap: 4px; margin-bottom: var(--space-2); }
-      .lang-tab { padding: 6px 12px; font-size: 13px; font-weight: 600; border: 1px solid var(--color-border-soft); background: none; border-radius: var(--radius-btn); cursor: pointer; color: var(--color-meta); }
-      .lang-tab.active { color: var(--color-link-active); border-color: var(--color-blue); background: var(--color-row-hover); }
+      .section-editor > .form-field { max-width: 720px; }
+      /* Tre faner (13.09): editoren i full bredde; forhåndsvisningen for seg. */
+      .editor-single { display: flex; flex-direction: column; min-width: 0; }
+      .editor-single textarea { width: 100%; min-height: 60vh; padding: var(--space-2); border: 1px solid var(--color-border-soft); border-radius: var(--radius-card); font-family: var(--font-mono, monospace); font-size: 13px; line-height: 1.5; resize: vertical; box-sizing: border-box; }
+      .preview-pane--full { max-width: 760px; margin: 0 auto; }
       .editor-cols { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-2); align-items: stretch; }
       @media (max-width: 760px) { .editor-cols { grid-template-columns: 1fr; } }
       /* #662: each column is a flex column so the markdown textarea and the preview pane fill the
@@ -96,11 +59,11 @@
       .editor-cols textarea { width: 100%; min-height: 320px; flex: 1 1 auto; padding: var(--space-2); border: 1px solid var(--color-border-soft); border-radius: var(--radius-card); font-family: var(--font-mono, monospace); font-size: 13px; resize: vertical; }
       /* #679: hold pane-toolbaren (inkl. «Last opp bilde») synlig i høy editor. Festes UNDER den
          sticky workspace-tab-baren (.content-area-nav: top:0, ~44px) så den ikke havner bak den. */
-      .editor-pane-label { font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--color-meta); margin-bottom: 4px; position: sticky; top: 46px; z-index: 5; background: var(--color-surface); padding: 6px 0; }
+      /* #1046 D1: etikett i vanlig skrift, som .form-field label. */
+      .editor-pane-label { font-size: 13px; font-weight: 600; color: var(--color-meta); margin-bottom: 4px; position: sticky; top: 46px; z-index: 5; background: var(--color-surface); padding: 6px 0; }
       .preview-pane { border: 1px solid var(--color-border-soft); border-radius: var(--radius-card); padding: var(--space-2); min-height: 320px; flex: 1 1 auto; overflow-y: auto; }
       .preview-pane img { max-width: 100%; height: auto; }
       .preview-pane iframe { max-width: 100%; }
-      .editor-actions { margin-top: var(--space-3); display: flex; gap: var(--space-2); align-items: center; }
       .editor-status { font-size: 13px; color: var(--color-meta); }
     </style>
   </head>

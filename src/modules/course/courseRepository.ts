@@ -352,12 +352,13 @@ export function createCourseRepository(client: CourseRepositoryClient = prisma) 
       }));
     },
 
-    async findPublishedCoursesWithModuleDetails(filters: Pick<ReportFilters, "courseId"> = {}) {
+    async findPublishedCoursesWithModuleDetails(filters: { courseIds?: string[] } = {}) {
       const courses = await client.course.findMany({
         where: {
           publishedAt: { not: null },
           archivedAt: null,
-          ...(filters.courseId ? { id: filters.courseId } : {}),
+          // #1058: kallerens kurs (valgt kurs ∩ tillatte kurs); undefined = alle.
+          ...(filters.courseIds ? { id: { in: filters.courseIds } } : {}),
         },
         orderBy: { publishedAt: "asc" },
         include: {
@@ -470,20 +471,6 @@ export function createCourseRepository(client: CourseRepositoryClient = prisma) 
           ...buildCompletionWhere(filters),
         },
       });
-    },
-
-    countDistinctEnrolledUsersForModules(
-      moduleIds: string[],
-      filters: Pick<ReportFilters, "dateFrom" | "dateTo" | "orgUnit"> = {},
-    ) {
-      if (moduleIds.length === 0) return Promise.resolve(0);
-      return client.submission.groupBy({
-        by: ["userId"],
-        where: {
-          moduleId: { in: moduleIds },
-          ...buildSubmissionWhere(filters),
-        },
-      }).then((rows) => rows.length);
     },
 
     countPassedUsersForModule(moduleId: string, filters: Pick<ReportFilters, "dateFrom" | "dateTo" | "orgUnit"> = {}) {

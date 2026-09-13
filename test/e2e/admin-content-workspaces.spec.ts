@@ -4,14 +4,7 @@ import type { Page, Route } from "@playwright/test";
 
 const AxeBuilder = (AxeBuilderModule.default ?? AxeBuilderModule) as any;
 
-import {
-  mockCommonApis,
-  clickEnabledButton,
-  submitActiveChatInput,
-  courseTextForLocale,
-  localizedText,
-  buildMockModuleExport,
-} from "./admin-content-helpers.js";
+import { mockCommonApis, clickEnabledButton, courseTextForLocale, localizedText, buildMockModuleExport, revealRowAction } from "./admin-content-helpers.js";
 
 // #613: the conversational shell (`admin-content.html`) has no bare production route — it lives at
 // `/admin-content/module/:id/conversation`, while `/admin-content` serves the module library. The
@@ -104,7 +97,7 @@ test.describe("admin content browser coverage", () => {
     // now?" — so the workspace returns to Rediger. That also puts the confirmation somewhere they
     // can actually see it: the chat log lives in the panel Innstillinger hides.
     await expect(page.locator("#tabEdit")).toHaveAttribute("aria-selected", "true");
-    await expect(page.getByText(/gjenopprettet som et nytt utkast|restored as a new draft/).first()).toBeVisible();
+    await expect(page.getByText(/gjenopprettet som et nytt utkast|restored as a new draft/).last()).toBeVisible();
   });
 
   // #896 S3c: the criteria editor moved from Rediger to Innstillinger. The spec's reason is that
@@ -151,7 +144,7 @@ test.describe("admin content browser coverage", () => {
     await expect(page.locator("#settingsCriteriaEditor .vk-card")).toHaveCount(2);
 
     await page.locator("#settingsCriteriaEditor .vk-label").first().fill("Klarhet");
-    await page.locator("#settingsSave").click();
+    await page.locator("#moduleSaveBtn").click();
 
     await expect.poll(() => savedBody !== null).toBe(true);
     // An INLINE rubric, not a reference. Referencing the existing rubricVersionId would carry the
@@ -209,7 +202,7 @@ test.describe("admin content browser coverage", () => {
     // One language at a time (§7) — the UI is en-GB here, so that is what is shown and edited.
     await expect(page.locator("#settingsPromptSystem")).toHaveValue("You assess.");
     await page.locator("#settingsPromptSystem").fill("You assess strictly.");
-    await page.locator("#settingsSave").click();
+    await page.locator("#moduleSaveBtn").click();
 
     await expect.poll(() => savedBody !== null).toBe(true);
     // Inline prompt, not a reference to the old version.
@@ -252,7 +245,7 @@ test.describe("admin content browser coverage", () => {
     await page.locator("#tabSettings").click();
     await page.locator("#settingsPromptToggle").click();
     await page.locator("#settingsPromptExamples").fill("{not json");
-    await page.locator("#settingsSave").click();
+    await page.locator("#moduleSaveBtn").click();
 
     // Nothing is sent, and the author is told why — rather than the examples quietly becoming [].
     await expect(page.getByText(/JSON-liste|JSON array/).first()).toBeVisible();
@@ -307,7 +300,7 @@ test.describe("admin content browser coverage", () => {
     await expect(page.locator("#settingsSchemaLabel")).toHaveValue("Your answer");
     await page.locator("#settingsSchemaLabel").fill("Your response");
 
-    await page.locator("#settingsSave").click();
+    await page.locator("#moduleSaveBtn").click();
     await expect.poll(() => savedBody !== null).toBe(true);
 
     // The weight lives on the rubric's scalingRule, so changing it writes a rubric — but the
@@ -392,7 +385,7 @@ test.describe("admin content browser coverage", () => {
     // Emptying a field removes the per-module override; decisionService then uses the platform
     // rules. That is a real choice, distinct from setting it to 0.
     await page.locator("#settingsPracticalMin").fill("");
-    await page.locator("#settingsSave").click();
+    await page.locator("#moduleSaveBtn").click();
 
     await expect.poll(() => savedBody !== null).toBe(true);
     expect(savedBody.assessmentPolicy.passRules.totalMin).toBe(70);
@@ -426,15 +419,15 @@ test.describe("admin content browser coverage", () => {
     // number than the one on screen. A threshold the author did not choose is worse than a
     // rejected one.
     await page.locator("#settingsPracticalWeight").fill("72.5");
-    await page.locator("#settingsSave").click();
+    await page.locator("#moduleSaveBtn").click();
 
     await expect(page.getByText(/helt tall|whole number/).first()).toBeVisible();
     expect(saveCalled).toBe(false);
     // And the Save button comes back, so the panel is not dead.
-    await expect(page.locator("#settingsSave")).toBeEnabled();
+    await expect(page.locator("#moduleSaveBtn")).toBeEnabled();
   });
 
-  test("unsaved criteria edits are caught by the same exit guard as the other settings", async ({ page }) => {
+  test("unsaved criteria edits survive a tab switch like the other settings", async ({ page }) => {
     const moduleExport = buildMockModuleExport({
       id: "module-1",
       title: "Trade unions",
@@ -456,11 +449,12 @@ test.describe("admin content browser coverage", () => {
     await page.locator("#tabSettings").click();
     await page.locator("#settingsCriteriaEditor .vk-label").first().fill("Endret kriterium");
 
-    // Criteria are settings work too. Leaving without saving must warn, or the edit is gone —
-    // the panel is rebuilt from the bundle on the way back.
+    // Criteria are settings work too. Produkteier 13.09: fanebytte spør ikke — endringen følger
+    // med (hodet sier «Ulagrede endringer») og står der når man kommer tilbake.
     await page.locator("#tabEdit").click();
-    await expect(page.locator("#dialogUnsavedTabSwitch")).toBeVisible();
-    await page.locator("#tabSwitchStay").click();
+    await expect(page.locator("#dialogUnsavedTabSwitch")).toBeHidden();
+    await expect(page.locator("#moduleDirtyBadge")).toHaveClass(/is-dirty/);
+    await page.locator("#tabSettings").click();
     await expect(page.locator("#settingsCriteriaEditor .vk-label").first()).toHaveValue("Endret kriterium");
   });
 
@@ -502,13 +496,13 @@ test.describe("admin content browser coverage", () => {
     await page.locator("#tabSettings").click();
     await page.locator("#settingsCriteriaEditor .vk-label").first().fill("Endret kriterium");
     await page.locator("#settingsModuleType").selectOption("MCQ_ONLY");
-    await page.locator("#settingsSave").click();
+    await page.locator("#moduleSaveBtn").click();
 
     await expect(page.getByText(/Lagre endringene i kriterier|Save your criteria/).first()).toBeVisible();
     expect(saveCalled).toBe(false);
     // The edit is still on screen, and Lagre still works — nothing has to be retyped.
     await expect(page.locator("#settingsCriteriaEditor .vk-label").first()).toHaveValue("Endret kriterium");
-    await expect(page.locator("#settingsSave")).toBeEnabled();
+    await expect(page.locator("#moduleSaveBtn")).toBeEnabled();
   });
 
   // QA 2026-08-16: the four pass-rule fields added in v2.18.9 were missing from the draft
@@ -572,11 +566,14 @@ test.describe("admin content browser coverage", () => {
     }
     await expect(page.locator("#settingsCertLevel")).toHaveValue(originals.settingsCertLevel);
 
+    // Produkteier 13.09: ingen dialog — hvert felt alene gjør modulen «ulagret», og verdien står der
+    // etter en tur innom Rediger.
     for (const id of Object.keys(edits)) {
       await setField(id, edits[id]);
       await page.locator("#tabEdit").click();
-      await expect(page.locator("#dialogUnsavedTabSwitch"), `${id} did not trigger the exit guard`).toBeVisible();
-      await page.locator("#tabSwitchStay").click();
+      await expect(page.locator("#moduleDirtyBadge"), `${id} did not mark the module dirty`).toHaveClass(/is-dirty/);
+      await page.locator("#tabSettings").click();
+      await expect(page.locator(`#${id}`), `${id} did not survive the tab switch`).toHaveValue(edits[id]);
       await setField(id, originals[id]);
     }
   });
@@ -626,7 +623,7 @@ test.describe("admin content browser coverage", () => {
     // and the two Norwegian ones must be exactly as they were.
     await expect(page.locator("#settingsCriteriaEditor .vk-label").first()).toHaveValue("Evidence");
     await page.locator("#settingsCriteriaEditor .vk-label").first().fill("Evidence quality");
-    await page.locator("#settingsSave").click();
+    await page.locator("#moduleSaveBtn").click();
 
     await expect.poll(() => savedBody !== null).toBe(true);
     const saved: any = Object.values(savedBody.rubric.criteria)[0];
@@ -689,7 +686,7 @@ test.describe("admin content browser coverage", () => {
     await page.locator("#settingsCriteriaEditor .vk-remove").first().click();
     await expect(page.locator("#settingsCriteriaEditor .vk-card")).toHaveCount(2);
 
-    await page.locator("#settingsSave").click();
+    await page.locator("#moduleSaveBtn").click();
     await expect.poll(() => savedBody !== null).toBe(true);
 
     const labels = Object.values(savedBody.rubric.criteria).map((c: any) =>
@@ -731,7 +728,7 @@ test.describe("admin content browser coverage", () => {
   // but not `host`, so a listener attached there accumulated one copy per render — the first copy
   // opened the popover and the second read it as already-open and closed it, within one click.
   // This test re-renders the panel before clicking, which is what makes it catch that.
-  test("the pass-rule help opens on click, and still works after a re-render", async ({ page }) => {
+  test("the pass-rule help stands under the field, and survives a re-render", async ({ page }) => {
     await mockCommonApis(page, {
       modules: [{ id: "module-1", title: "Trade unions", activeVersion: { versionNo: 1 } }],
       moduleExports: {
@@ -748,25 +745,10 @@ test.describe("admin content browser coverage", () => {
     await page.locator("#settingsPromptToggle").click();
     await page.locator("#settingsPromptToggle").click();
 
-    const info = page.locator(".settings-info[data-info='totalMin']");
-    await expect(info).toHaveAttribute("aria-expanded", "false");
-    await info.click();
-
-    const popover = page.locator(".settings-popover");
-    await expect(popover).toBeVisible();
-    await expect(popover).toContainText(/platform default|plattformens standardverdi/);
-    await expect(info).toHaveAttribute("aria-expanded", "true");
-
-    // Clicking it again closes; only one is ever open.
-    await info.click();
-    await expect(popover).toHaveCount(0);
-
-    await page.locator(".settings-info[data-info='mcqThreshold']").click();
-    await page.locator(".settings-info[data-info='practicalWeight']").click();
-    await expect(page.locator(".settings-popover")).toHaveCount(1);
-
-    // Escape closes it, so a keyboard user is not stuck with it covering the fields below.
-    await page.keyboard.press("Escape");
+    // #1046 D4: hjelpen står under feltet — ingen (i)-ikon, ingen popover, ingenting å peke på.
+    await expect(page.locator(".settings-info")).toHaveCount(0);
+    await expect(page.locator(".settings-help[data-info='totalMin']")).toContainText(/platform default|plattformens standardverdi/);
+    await expect(page.locator(".settings-help[data-info='mcqThreshold']")).toBeVisible();
     await expect(page.locator(".settings-popover")).toHaveCount(0);
   });
 
@@ -834,7 +816,7 @@ test.describe("admin content browser coverage", () => {
     await page.locator("#tabSettings").click();
     await page.locator("#settingsPromptToggle").click();
     await page.locator("#settingsPromptSystem").fill("New system instruction");
-    await page.locator("#settingsSave").click();
+    await page.locator("#moduleSaveBtn").click();
 
     await expect.poll(() => savedBody !== null).toBe(true);
     expect(savedBody.promptTemplate.systemPrompt["en-GB"]).toBe("New system instruction");
@@ -866,11 +848,11 @@ test.describe("admin content browser coverage", () => {
     await page.locator("#settingsPromptSystem").fill("Text the author will discard");
     await page.locator("#settingsPromptToggle").click();
 
-    // Leave the tab and choose Forkast.
-    await page.locator("#tabEdit").click();
-    await expect(page.locator("#dialogUnsavedTabSwitch")).toBeVisible();
-    await page.locator("#tabSwitchDiscard").click();
+    // Produkteier 13.09: forkasting skjer med Avbryt i hodet, ikke ved fanebytte.
+    page.once("dialog", (d) => d.accept());
+    await page.locator("#moduleCancelBtn").click();
 
+    await page.locator("#tabEdit").click();
     await page.locator("#tabSettings").click();
     await page.locator("#settingsPromptToggle").click();
     await expect(
@@ -925,7 +907,7 @@ test.describe("admin content browser coverage", () => {
     await page.locator("#settingsPromptToggle").click();
 
     // ...and sent, even though the field is folded away at the moment of saving.
-    await page.locator("#settingsSave").click();
+    await page.locator("#moduleSaveBtn").click();
     await expect.poll(() => savedBody !== null).toBe(true);
     expect(savedBody.promptTemplate, "a folded edit was treated as no change").toBeTruthy();
     expect(savedBody.promptTemplate.systemPrompt["en-GB"]).toBe("New system instruction");
@@ -981,7 +963,7 @@ test.describe("admin content browser coverage", () => {
     // locales used to be dropped.
     await page.locator("#settingsCriteriaEditor .vk-add").click();
     await page.locator("#settingsCriteriaEditor .vk-label").last().fill("Structure");
-    await page.locator("#settingsSave").click();
+    await page.locator("#moduleSaveBtn").click();
 
     await expect.poll(() => savedBody !== null).toBe(true);
     const criteria: any = savedBody.rubric.criteria;
@@ -1059,13 +1041,10 @@ test.describe("admin content browser coverage", () => {
     const edited = original === "advanced" ? "basic" : "advanced";
     await certInput.selectOption(edited);
 
-    // Exit 1: tab switch. The dialog must be the DESTRUCTIVE one — settings are not kept, unlike
-    // a draft, and telling the author "your draft is kept" here would be a lie about a different
-    // thing entirely.
+    // Exit 1 (tab switch) is no exit any more (produkteier 13.09): the value travels with the author.
     await page.locator("#tabEdit").click();
-    await expect(page.locator("#dialogUnsavedTabSwitch")).toBeVisible();
-    await expect(page.locator("#unsavedTabSwitchBody")).toContainText(/forkast|discard/i);
-    await page.locator("#tabSwitchStay").click();
+    await expect(page.locator("#dialogUnsavedTabSwitch")).toBeHidden();
+    await page.locator("#tabSettings").click();
     await expect(certInput).toHaveValue(edited);
 
     // Exit 2: UI language. This one had no guard at all — the panel re-rendered instantly.
@@ -1118,7 +1097,7 @@ test.describe("admin content browser coverage", () => {
 
     await page.goto("/admin-content/module/module-1/conversation");
     const download = page.waitForEvent("download");
-    await clickEnabledButton(page, /Eksporter modulpakke|Export module package/);
+    await clickEnabledButton(page, /^Eksporter$|^Export$/);
     await download;
 
     // The request names the displayed version. Without it the file holds the published v1 and the
@@ -1127,8 +1106,9 @@ test.describe("admin content browser coverage", () => {
 
     // And the workspace is still usable — the menu comes back rather than dead-ending on a
     // download.
+    // (Knappen ligger under «Mer» i handlingsraden; åpne menyen for å se at den er der og virker.)
     await expect(
-      page.getByRole("button", { name: /Eksporter modulpakke|Export module package/ }).last(),
+      await revealRowAction(page, page.locator("#workspaceActions button").filter({ hasText: /^Eksporter$|^Export$/ }).last()),
     ).toBeEnabled();
   });
 
@@ -1168,7 +1148,7 @@ test.describe("admin content browser coverage", () => {
     await page.goto("/admin-content/module/module-1/conversation");
 
     const chooser = page.waitForEvent("filechooser");
-    await clickEnabledButton(page, /Importer pakke i denne modulen|Import package into this module/);
+    await clickEnabledButton(page, /^Importer$|^Import$/);
     await (await chooser).setFiles({
       name: "module.json",
       mimeType: "application/json",
@@ -1188,7 +1168,7 @@ test.describe("admin content browser coverage", () => {
     expect(importBody!.autoPublish).toBe(false);
     // A retry after a lost response must not turn one package into two versions.
     expect(importKey).toBeTruthy();
-    await expect(page.getByText(/ny upublisert versjon|new unpublished version/).first()).toBeVisible();
+    await expect(page.getByText(/ny upublisert versjon|new unpublished version/).last()).toBeVisible();
   });
 
   test("Rediger refuses a course package instead of sending it to the module importer", async ({ page }) => {
@@ -1212,7 +1192,7 @@ test.describe("admin content browser coverage", () => {
     await page.goto("/admin-content/module/module-1/conversation");
 
     const chooser = page.waitForEvent("filechooser");
-    await clickEnabledButton(page, /Importer pakke i denne modulen|Import package into this module/);
+    await clickEnabledButton(page, /^Importer$|^Import$/);
     await (await chooser).setFiles({
       name: "course.json",
       mimeType: "application/json",
@@ -1220,268 +1200,15 @@ test.describe("admin content browser coverage", () => {
     });
 
     // Said so before sending it, rather than failing deep inside the importer.
-    await expect(page.getByText(/kurspakke|course package/).first()).toBeVisible();
+    await expect(page.getByText(/kurspakke|course package/).last()).toBeVisible();
     expect(importCalled).toBe(false);
   });
 
-  test("shell can create a new module, generate content, and save without losing the module ID", async ({ page }) => {
-    await mockCommonApis(page);
-
-    await page.goto("/admin-content.html");
-
-    await clickEnabledButton(page, "Create new module");
-    await submitActiveChatInput(page, "Trade unions");
-    // #555: unified order — source material is the first question, then module-type, then
-    // (for free-text) scenario → cert level. Pick "Free-text + MCQ" and "auto" scenario.
-    await submitActiveChatInput(page, "Source notes about labour rights and worker organising.");
-    await clickEnabledButton(page, "Free-text + MCQ");
-    await clickEnabledButton(page, "Let the LLM decide");
-    await clickEnabledButton(page, "Basic");
-
-    // v1.1.54 removed the "Vanlig/Grundig" (Ordinary/Thorough) generation-mode prompt
-    // (always "thorough" now). After cert level the next interactive step is the
-    // blueprint preview (v1.1.53). Pin BOTH facts:
-    //   - no Ordinary/Thorough button exists in this conversation
-    //   - blueprint accept/skip buttons DO appear
-    await expect(page.getByRole("button", { name: /^Ordinary$|^Vanlig$|^Thorough$|^Grundig$/i })).toHaveCount(0);
-    await clickEnabledButton(page, /Use this plan|Bruk denne planen/);
-
-    // v1.1.96 removed the "Yes/No, generate MCQ" dialog — MCQ is required for save from
-    // the shell, so the "No" branch was a dead-end. Flow now goes directly to the count
-    // question after the blueprint is accepted.
-    await clickEnabledButton(page, "3 questions");
-    await clickEnabledButton(page, "4 options");
-
-    await expect(page.locator("#chatMessages").getByText("Module created.")).toBeVisible();
-    await clickEnabledButton(page, "Save draft");
-
-    await expect(page.getByText("Open or create a module before saving.")).toHaveCount(0);
-    await expect(page.getByText(/Trade unions.*loaded\./)).toBeVisible();
-  });
-
-  // #918: the title an author types into the conversation exists in exactly one language — the one
-  // they typed it in. Sending `{nb, nn, "en-GB"}` filled with that one string is the encoding for
-  // "this IS translated" (#892/#905), so the publish gate found no gap in a title nobody had
-  // translated, and Norwegian participants got the English one. The module library has always sent
-  // a plain string; `localizedTextSchema` is `string | {all three}` and accepts it.
-  //
-  // Two creation paths, one test: free-text and MCQ-only are separate functions that made the same
-  // mistake in the same words, which is precisely the "correct fix, incomplete surface" class.
-  test("the conversation creates a module with a one-language title, not three copies of it", async ({ page }) => {
-    const state = await mockCommonApis(page);
-
-    await page.goto("/admin-content.html");
-    await clickEnabledButton(page, "Create new module");
-    await submitActiveChatInput(page, "Incident response");
-    await submitActiveChatInput(page, "Source notes about handling security incidents.");
-    await clickEnabledButton(page, "Free-text + MCQ");
-    await clickEnabledButton(page, "Let the LLM decide");
-    await clickEnabledButton(page, "Basic");
-    // The module shell is created inside `confirmAndGenerate`, which the blueprint step gates.
-    await clickEnabledButton(page, /Use this plan|Bruk denne planen/);
-
-    // ⚠️ #918 krevde en REN STRENG her, for å bevise at tittelen ikke var kopiert til tre språk.
-    // #930 går ett skritt videre: en ren streng bærer ikke noe språkmerke, og leses som bokmål. En
-    // tittel skrevet på engelsk ble dermed lagret som norsk, og publiseringsgaten navnga feil språk
-    // som manglende.
-    //
-    // Påstanden er derfor STRENGERE nå, ikke svakere: ett språk, og vi vet hvilket.
-    await expect.poll(() => state.lastModuleCreateBody?.title).toEqual({ "en-GB": "Incident response" });
-    expect(
-      Object.keys(state.lastModuleCreateBody.title),
-      "et trespråkskart påstår en oversettelse forfatteren aldri laget",
-    ).toEqual(["en-GB"]);
-
-    // MCQ-only takes its own route to the same endpoint.
-    await page.goto("/admin-content.html");
-    await clickEnabledButton(page, "Create new module");
-    await submitActiveChatInput(page, "Safety quiz");
-    await submitActiveChatInput(page, "Source notes for an MCQ-only quiz about safety rules.");
-    await clickEnabledButton(page, "MCQ only");
-    await clickEnabledButton(page, "Basic");
-
-    await expect.poll(() => state.lastModuleCreateBody?.title).toEqual({ "en-GB": "Safety quiz" });
-    expect(Object.keys(state.lastModuleCreateBody.title)).toEqual(["en-GB"]);
-  });
-
-  // ⚠️ HER STO «#918, third creation path» — importen fra ekstern LLM.
-  //
-  // Den veien er fjernet 2026-09-06: bruk av ekstern LLM skjer gjennom Skill-en, og to måter å
-  // gjøre det samme på er én for mange (produkteier). Testen dekket en flate som ikke finnes.
-  //
-  // Regelen den voktet lever videre, og på et bedre nivå: `normalizeModuleTitlePatch` ble trukket
-  // ut til admin-content-localized-copy.js og har nå tolv enhetstester, blant dem den som låser at
-  // en uoversatt tittel BLIR VÆRENDE en streng i stedet for tre like kopier.
-
-  // #927 (#896 §11): the last uncovered finish criterion — an e2e that follows the NEW-MODULE
-  // journey end to end through the tab surface, not just "create and save".
-  //
-  // The path is not arbitrary. Every single leg of it has had a silent data-loss bug during this
-  // epic, all found by cross-model review or by the product owner on stage, none by the suite:
-  //   - criteria edited in Innstillinger never reached the draft save (QA round 2)
-  //   - the panel was unreachable in the new-module flow because `bundle` never loaded (round 3)
-  //   - background generation overwrote manual edits (round 4)
-  //   - Add/Remove lost locale metadata (round 4)
-  //   - rebuilding the panel erased what had been typed (round 6)
-  //
-  // I gave up on this test three times during the epic: the harness tore the chat menu down on
-  // tab switch. v2.19.0 moved the actions to a fixed bar outside the log, which is what made it
-  // writable — the actions no longer scroll away or get rebuilt when the tab changes.
-  //
-  // The assertion is on the SAVE PAYLOAD, deliberately. Asserting a reload against a mocked API
-  // would only prove the mock echoes what it was handed; the payload is what the server would
-  // actually have persisted.
-  test("a new module carries criteria edited in Innstillinger all the way into the save", async ({ page }) => {
-    await mockCommonApis(page);
-
-    // Held open so Innstillinger can be opened WHILE generation is in flight — the case round 3
-    // and round 7 both broke on, and the one an author hits whenever they are quicker than the LLM.
-    // Seeded with a no-op rather than null: TypeScript cannot see that a Promise executor runs
-    // synchronously, so it narrows a `| null` binding to `never` at the call site below.
-    let releaseRubric: () => void = () => {};
-    const rubricInFlight = new Promise<void>((resolve) => { releaseRubric = resolve; });
-    await page.route("**/api/admin/content/generate/rubric", async (route: Route) => {
-      await rubricInFlight;
-      await route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: JSON.stringify({
-          rubric: {
-            criteria: [
-              { id: "clarity", label: "Generert klarhet", description: "Generert beskrivelse", maxScore: 5 },
-              { id: "depth", label: "Generert dybde", description: "Generert beskrivelse", maxScore: 5 },
-            ],
-          },
-        }),
-      });
-    });
-
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let versionPayload: any = null;
-    await page.route("**/api/admin/content/modules/*/versions", async (route: Route) => {
-      versionPayload = route.request().postDataJSON();
-      await route.fulfill({
-        status: 201,
-        contentType: "application/json",
-        body: JSON.stringify({ moduleVersion: { id: "module-1-version-1", versionNo: 1 } }),
-      });
-    });
-
-    await page.goto("/admin-content.html");
-
-    await clickEnabledButton(page, "Create new module");
-    await submitActiveChatInput(page, "Trade unions");
-    await submitActiveChatInput(page, "Source notes about labour rights and worker organising.");
-    await clickEnabledButton(page, "Free-text + MCQ");
-    await clickEnabledButton(page, "Let the LLM decide");
-    await clickEnabledButton(page, "Basic");
-    await clickEnabledButton(page, /Use this plan|Bruk denne planen/);
-    await clickEnabledButton(page, "3 questions");
-    await clickEnabledButton(page, "4 options");
-
-    await expect(page.locator("#chatMessages").getByText("Module created.")).toBeVisible();
-
-    // Innstillinger opens on a module that has no bundle — it was created in this session, not
-    // loaded. Round 3: the panel was empty here because it read only from `bundle`.
-    //
-    // The tab guard fires on the way: an unsaved draft exists. That dialog is the non-destructive
-    // one — it says the draft is KEPT, which is true — so confirming it is what an author does,
-    // not something the test is working around.
-    await page.locator("#tabSettings").click();
-    await expect(page.locator("#dialogUnsavedTabSwitch")).toBeVisible();
-    await expect(page.locator("#unsavedTabSwitchBody")).toContainText(/kept|beholdes|bevart/i);
-    await page.locator("#tabSwitchDiscard").click();
-    await expect(page.locator("#tabPanelSettings")).toBeVisible();
-
-    // Now let the generated criteria land, into a panel that is already on screen.
-    releaseRubric();
-    await expect(page.locator(".vk-card")).toHaveCount(2);
-    await expect(page.locator(".vk-label").first()).toHaveValue("Generert klarhet");
-
-    // Edit one, add one, remove one — the three operations round 4 lost locale metadata on.
-    await page.locator(".vk-label").first().fill("Redigert klarhet");
-    await clickEnabledButton(page, /Add criterion|Legg til kriterium/);
-    await expect(page.locator(".vk-card")).toHaveCount(3);
-    await page.locator(".vk-label").nth(2).fill("Nytt kriterium");
-    await page.locator(".vk-card").nth(1).locator(".vk-remove").click();
-    await expect(page.locator(".vk-card")).toHaveCount(2);
-
-    // Back to Rediger, then save. Round 2: the edits never left the panel.
-    //
-    // The same non-destructive dialog on the way back. It says the draft is kept — and the
-    // criteria edits are part of what it is promising to keep, because `unsavedTabSwitchKind`
-    // absorbs them into the draft BEFORE it decides what to warn about. The save assertion below
-    // is what proves that promise was honoured.
-    await page.locator("#tabEdit").click();
-    await expect(page.locator("#dialogUnsavedTabSwitch")).toBeVisible();
-    await expect(page.locator("#unsavedTabSwitchBody")).toContainText(/kept|beholdes|bevart/i);
-    await page.locator("#tabSwitchDiscard").click();
-    await expect(page.locator("#previewEditTaskText")).toBeVisible();
-
-    await clickEnabledButton(page, "Save draft");
-
-    // Exactly the two criteria the author left behind — the edited one and the added one, with
-    // the removed one gone. Asserting the SET and not just a count is the point: an earlier bug
-    // saved the right number of criteria with the generated labels.
-    await expect.poll(() => {
-      const criteria = versionPayload?.rubric?.criteria;
-      if (!criteria) return null;
-      return Object.values(criteria)
-        .map((c: any) => (typeof c?.label === "string" ? c.label : c?.label?.nb ?? c?.label?.["en-GB"]))
-        .sort();
-    }).toEqual(["Nytt kriterium", "Redigert klarhet"]);
-  });
-
-  // #578: the conversation can author a FREETEXT_ONLY module — free-text + LLM assessment, no MCQ.
-  // After source the author picks "Free-text only"; the scenario/blueprint steps run but the MCQ
-  // step is skipped, and the saved version sends assessmentMode=FREETEXT_ONLY with no mcqSetVersionId.
-  test("shell can create a FREETEXT_ONLY module via the conversation", async ({ page }) => {
-    await mockCommonApis(page);
-
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let versionPayload: any = null;
-    await page.route("**/api/admin/content/modules/*/versions", async (route: Route) => {
-      versionPayload = route.request().postDataJSON();
-      await route.fulfill({
-        status: 201,
-        contentType: "application/json",
-        body: JSON.stringify({ moduleVersion: { id: "module-1-version-1", versionNo: 1 } }),
-      });
-    });
-    // A free-text-only module must never create an MCQ set.
-    let mcqSetCreated = false;
-    await page.route("**/api/admin/content/modules/*/mcq-set-versions", async (route: Route) => {
-      mcqSetCreated = true;
-      await route.fulfill({ status: 201, contentType: "application/json", body: JSON.stringify({ mcqSetVersion: { id: "mcq-1" } }) });
-    });
-
-    await page.goto("/admin-content.html");
-    await clickEnabledButton(page, "Create new module");
-    await submitActiveChatInput(page, "Essay module");
-    await submitActiveChatInput(page, "Source notes for a free-text-only essay module.");
-    await clickEnabledButton(page, "Free-text only");
-    // Free-text-only keeps the scenario + blueprint steps (it is LLM-assessed free text).
-    await clickEnabledButton(page, "Let the LLM decide");
-    await clickEnabledButton(page, "Basic");
-    await clickEnabledButton(page, /Use this plan|Bruk denne planen/);
-
-    // No MCQ question-count step on the free-text-only path.
-    await expect(page.getByText(/How many MCQ questions/i)).toHaveCount(0);
-    await expect(page.locator("#chatMessages").getByText("Module created.")).toBeVisible();
-    await clickEnabledButton(page, "Save draft");
-
-    await expect.poll(() => versionPayload?.assessmentMode).toBe("FREETEXT_ONLY");
-    expect(versionPayload?.mcqSetVersionId).toBeUndefined();
-    expect(versionPayload?.taskText).toBeTruthy();
-    expect(mcqSetCreated).toBe(false);
-  });
-
-  // #479 Slice B: the source step can crawl a whole site section. Clicking "Crawl site" prompts
-  // for a start URL, POSTs to /source-material/crawl-url, and adds ONE combined source chip
-  // labelled with the hostname + page count. Client-layer behaviour (prompt → fetch → combine →
-  // chip) invisible to supertest, so it ships as an e2e alongside the feature.
   test("shell source step can crawl a site and adds a combined source chip", async ({ page }) => {
-    await mockCommonApis(page);
+    await mockCommonApis(page, {
+      modules: [{ id: "module-1", title: "Trade unions" }],
+      moduleExports: { "module-1": buildMockModuleExport({ id: "module-1", title: "Trade unions", moduleVersionId: "module-1-version-1" }) },
+    });
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let crawlBody: any = null;
@@ -1504,9 +1231,10 @@ test.describe("admin content browser coverage", () => {
       });
     });
 
-    await page.goto("/admin-content.html");
-    await clickEnabledButton(page, "Create new module");
-    await submitActiveChatInput(page, "Crawl module");
+    // Produkteier 13.09: kildeverktøyet lever i «Generer innhold»-dialogen.
+    await page.goto("/admin-content/module/module-1/conversation");
+    await clickEnabledButton(page, /^Generate content$|^Generer innhold$/);
+    await expect(page.locator("#dialogGenerate")).toHaveAttribute("open", "");
 
     // At the source step: accept the URL prompt, then click "Crawl site".
     page.once("dialog", (dialog) => dialog.accept("https://example.com/start"));
@@ -1522,14 +1250,18 @@ test.describe("admin content browser coverage", () => {
   // rejected client-side ("Filen er for stor … opptil 10 MB"). Upload a ~3 MB file and assert it
   // is accepted (extracted into a source chip), not rejected as too large.
   test("shell source step accepts a file between 2 and 10 MB", async ({ page }) => {
-    await mockCommonApis(page);
+    await mockCommonApis(page, {
+      modules: [{ id: "module-1", title: "Trade unions" }],
+      moduleExports: { "module-1": buildMockModuleExport({ id: "module-1", title: "Trade unions", moduleVersionId: "module-1-version-1" }) },
+    });
 
-    await page.goto("/admin-content.html");
-    await clickEnabledButton(page, "Create new module");
-    await submitActiveChatInput(page, "Big file module");
+    // Produkteier 13.09: kildeverktøyet lever i «Generer innhold»-dialogen.
+    await page.goto("/admin-content/module/module-1/conversation");
+    await clickEnabledButton(page, /^Generate content$|^Generer innhold$/);
+    await expect(page.locator("#dialogGenerate")).toHaveAttribute("open", "");
 
     const threeMb = Buffer.alloc(3 * 1024 * 1024, 0x41);
-    await page.locator('input[type="file"]').setInputFiles({
+    await page.locator('#dialogGenerate input[type="file"]').setInputFiles({
       name: "big.pdf",
       mimeType: "application/pdf",
       buffer: threeMb,
@@ -1544,7 +1276,10 @@ test.describe("admin content browser coverage", () => {
   // gets a warning toast — otherwise the thin source would silently produce a thin module. The
   // file is still accepted (chip appears); the author is just informed. Client-layer behaviour.
   test("shell source step warns when an uploaded file is image-heavy (low text density)", async ({ page }) => {
-    await mockCommonApis(page);
+    await mockCommonApis(page, {
+      modules: [{ id: "module-1", title: "Trade unions" }],
+      moduleExports: { "module-1": buildMockModuleExport({ id: "module-1", title: "Trade unions", moduleVersionId: "module-1-version-1" }) },
+    });
 
     // Override the extract poll to report low text density (registered after mockCommonApis so it wins).
     await page.route("**/api/admin/content/source-material/extract/*", async (route: Route) => {
@@ -1562,11 +1297,12 @@ test.describe("admin content browser coverage", () => {
       });
     });
 
-    await page.goto("/admin-content.html");
-    await clickEnabledButton(page, "Create new module");
-    await submitActiveChatInput(page, "Image-heavy module");
+    // Produkteier 13.09: kildeverktøyet lever i «Generer innhold»-dialogen.
+    await page.goto("/admin-content/module/module-1/conversation");
+    await clickEnabledButton(page, /^Generate content$|^Generer innhold$/);
+    await expect(page.locator("#dialogGenerate")).toHaveAttribute("open", "");
 
-    await page.locator('input[type="file"]').setInputFiles({
+    await page.locator('#dialogGenerate input[type="file"]').setInputFiles({
       name: "deck.pptx",
       mimeType: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
       buffer: Buffer.alloc(2 * 1024 * 1024, 0x41),
@@ -1582,7 +1318,10 @@ test.describe("admin content browser coverage", () => {
   // the returned hostname. This client fetch-layer flow had no e2e (baseline gap §4.1); pins
   // current behaviour before the #596/#598 refactors touch the shell.
   test("shell source step fetches a single URL and adds a source chip", async ({ page }) => {
-    await mockCommonApis(page);
+    await mockCommonApis(page, {
+      modules: [{ id: "module-1", title: "Trade unions" }],
+      moduleExports: { "module-1": buildMockModuleExport({ id: "module-1", title: "Trade unions", moduleVersionId: "module-1-version-1" }) },
+    });
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let fetchBody: any = null;
@@ -1599,9 +1338,10 @@ test.describe("admin content browser coverage", () => {
       });
     });
 
-    await page.goto("/admin-content.html");
-    await clickEnabledButton(page, "Create new module");
-    await submitActiveChatInput(page, "URL module");
+    // Produkteier 13.09: kildeverktøyet lever i «Generer innhold»-dialogen.
+    await page.goto("/admin-content/module/module-1/conversation");
+    await clickEnabledButton(page, /^Generate content$|^Generer innhold$/);
+    await expect(page.locator("#dialogGenerate")).toHaveAttribute("open", "");
 
     page.once("dialog", (dialog) => dialog.accept("https://example.org/article"));
     await clickEnabledButton(page, "Fetch from URL");
@@ -1610,51 +1350,6 @@ test.describe("admin content browser coverage", () => {
     expect(fetchBody?.url).toBe("https://example.org/article");
   });
 
-  // #555: the conversation can author an MCQ-only module. After source material the author
-  // picks "MCQ only", skips scenario/blueprint entirely, and the saved version sends
-  // assessmentMode=MCQ_ONLY with the default 70% pass mark (no rubric/prompt/taskText).
-  test("shell can create an MCQ-only module via the conversation", async ({ page }) => {
-    await mockCommonApis(page);
-
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let versionPayload: any = null;
-    await page.route("**/api/admin/content/modules/*/versions", async (route: Route) => {
-      versionPayload = route.request().postDataJSON();
-      await route.fulfill({
-        status: 201,
-        contentType: "application/json",
-        body: JSON.stringify({ moduleVersion: { id: "module-1-version-1", versionNo: 1 } }),
-      });
-    });
-
-    await page.goto("/admin-content.html");
-
-    await clickEnabledButton(page, "Create new module");
-    await submitActiveChatInput(page, "Quiz module");
-    await submitActiveChatInput(page, "Source notes for an MCQ-only quiz about safety rules.");
-    // #555: pick MCQ-only — no scenario or blueprint step should follow, straight to cert level.
-    await clickEnabledButton(page, "MCQ only");
-    await clickEnabledButton(page, "Basic");
-
-    // No scenario or blueprint buttons exist on the MCQ-only path.
-    await expect(page.getByRole("button", { name: /Let the LLM decide|Use this plan/i })).toHaveCount(0);
-
-    await clickEnabledButton(page, "3 questions");
-    await clickEnabledButton(page, "4 options");
-
-    await expect(page.locator("#chatMessages").getByText("Module created.")).toBeVisible();
-    await clickEnabledButton(page, "Save draft");
-
-    await expect.poll(() => versionPayload?.assessmentMode).toBe("MCQ_ONLY");
-    expect(versionPayload?.taskText).toBeUndefined();
-    expect(versionPayload?.rubricVersionId).toBeUndefined();
-    expect(versionPayload?.promptTemplateVersionId).toBeUndefined();
-    expect(versionPayload?.assessmentPolicy?.passRules?.mcqMinPercent).toBe(70);
-  });
-
-  // Stage-tilbakemelding 2026-08-17: this used to switch on the UI language selector. The two are
-  // separate now — the menus are one thing, the language the module is written in is another — so
-  // the assertion moved to the control that actually governs the content.
   test("the content-language switcher changes the rendered task text; the UI language does not", async ({ page }) => {
     await mockCommonApis(page, {
       modules: [{ id: "module-1", title: "Trade unions", activeVersion: { versionNo: 1 } }],
@@ -1754,10 +1449,12 @@ test.describe("admin content browser coverage", () => {
     await page.goto("/admin-content/module/module-1/conversation");
     await expect(page.locator("#moduleWorkspaceTitle")).toBeVisible();
 
-    // Rediger is the default: both panes visible.
+    // Rediger is the default: the form in full width. Produkteier 13.09: samtaleruta er skjult til
+    // assistenten trenger et svar (valg, skjema, avbrytbar framdrift).
     await expect(page.locator("#tabEdit")).toHaveAttribute("aria-selected", "true");
     await expect(page.locator(".preview-pane")).toBeVisible();
-    await expect(page.locator(".chat-pane")).toBeVisible();
+    await expect(page.locator(".chat-pane")).toBeHidden();
+    await expect(page.locator("#tabPanelModule")).toHaveClass(/workspace-shell--chat-hidden/);
     await expect(page.locator("#tabPanelSettings")).toBeHidden();
 
     // Forhaandsvisning: preview only, chat gone.
@@ -1782,7 +1479,7 @@ test.describe("admin content browser coverage", () => {
     await expect(page.getByText("Norsk scenario")).toBeVisible();
   });
 
-  test("an unsaved draft warns on tab switch and is carried along, not discarded", async ({ page }) => {
+  test("an unsaved draft is carried along on a tab switch, without a dialog", async ({ page }) => {
     await mockCommonApis(page, {
       modules: [{ id: "module-1", title: "Trade unions", activeVersion: { versionNo: 1 } }],
       moduleExports: {
@@ -1801,25 +1498,18 @@ test.describe("admin content browser coverage", () => {
     // leaves a sessionDraft behind and makes the status rail say "unsaved".
     await page.locator("#previewEditTitle").waitFor();
     await page.locator("#previewEditTaskText").fill("Bearbeidet scenario");
-    await page.locator("#previewEditConfirm").click();
-    await expect(page.locator("#previewEditTaskText")).toHaveCount(0);
+    await page.locator("#moduleSaveBtn").click();
+    // Mocken har ingen flervalg, så lagringen stopper («legg til minst ett spørsmål») og skjemaet
+    // står igjen — med utkastet i seg og hodet på «Ulagrede endringer».
+    await expect(page.locator("#moduleDirtyBadge")).toHaveClass(/is-dirty/);
     await expect(page.getByText("Bearbeidet scenario")).toBeVisible();
 
-    // A draft is an investment whoever made it, so the switch is not silent...
+    // Produkteier 13.09: fanebytte spør ikke; utkastet følger med og er det forhåndsvisningen viser.
     await page.locator("#tabPreview").click();
-    await expect(page.locator("#dialogUnsavedTabSwitch")).toHaveAttribute("open", "");
-    // ...but nothing is destroyed by switching, so the wording and the button say so.
-    await expect(page.locator("#unsavedTabSwitchBody")).toContainText(/kept when you switch|beholdes/);
-    await expect(page.locator("#tabSwitchDiscard")).toHaveText(/Switch anyway|Bytt likevel/);
-
-    await page.locator("#tabSwitchStay").click();
-    await expect(page.locator("#tabEdit")).toHaveAttribute("aria-selected", "true");
-
-    // Switching anyway keeps the draft - it is still what the preview renders.
-    await page.locator("#tabPreview").click();
-    await page.locator("#tabSwitchDiscard").click();
+    await expect(page.locator("#dialogUnsavedTabSwitch")).toBeHidden();
     await expect(page.locator("#tabPreview")).toHaveAttribute("aria-selected", "true");
     await expect(page.getByText("Bearbeidet scenario")).toBeVisible();
+    await expect(page.locator("#moduleDirtyBadge")).toHaveClass(/is-dirty/);
   });
 
   // #896 S2: Lagre is one commitment - translate, then write. These guard the three rules
@@ -1850,19 +1540,20 @@ test.describe("admin content browser coverage", () => {
     await page.goto("/admin-content/module/module-1/conversation");
 
     // Opening and closing without editing must not spend a translation or write a version.
+    // Produkteier 13.09: Lagre i hodet er slått av til noe er endret — så det KAN ikke skje.
     await page.locator("#previewEditTitle").waitFor();
-    await page.locator("#previewEditConfirm").click();
-    await expect(page.getByText(/Nothing changed|Ingenting er endret/)).toBeVisible();
+    await expect(page.locator("#moduleSaveBtn")).toBeDisabled();
+    await expect(page.locator("#moduleCancelBtn")).toBeDisabled();
     expect(state.lastDraftLocalizationBody).toBeFalsy();
 
     // A real edit translates and saves without a second click.
     await page.locator("#previewEditTitle").waitFor();
     await page.locator("#previewEditTaskText").fill("Bearbeidet scenario");
-    await page.locator("#previewEditConfirm").click();
+    await page.locator("#moduleSaveBtn").click();
 
     await expect.poll(() => state.lastDraftLocalizationBody?.sourceLocale).toBeTruthy();
     await expect(
-      page.getByText(/Draft saved as a new module version|Utkastet er lagret som en ny modulversjon/).first(),
+      page.getByText(/Draft saved as a new module version|Utkastet er lagret som en ny modulversjon/).last(),
     ).toBeVisible();
   });
 
@@ -1887,14 +1578,13 @@ test.describe("admin content browser coverage", () => {
     await page.goto("/admin-content/module/module-1/conversation");
     await page.locator("#previewEditTitle").waitFor();
     await page.locator("#previewEditTaskText").fill("Halvferdig endring");
-    await page.locator("#previewEditConfirm").click();
+    await page.locator("#moduleSaveBtn").click();
 
-    await clickEnabledButton(page, /Cancel|Avbryt/);
+    // Samtaleruta er skjult (produkteier 13.09), så framdriften står som toast med «Avbryt».
+    await page.locator(".toast__action").click();
 
     // The form is still standing, still holding the typed text, and nothing was written.
-    // Scoped to the chat: the same text also reaches #shellStatusAnnouncer for screen
-    // readers, which is intended - it just makes an unscoped locator ambiguous.
-    await expect(page.locator("#chatMessages").getByText(/nothing was saved|ingenting ble lagret/)).toBeVisible();
+    await expect(page.getByText(/nothing was saved|ingenting ble lagret/).last()).toBeVisible();
     await expect(page.locator("#previewEditTaskText")).toHaveValue("Halvferdig endring");
     // No version was written: the save never got past the (blocked) translation step.
     await expect(
@@ -1902,8 +1592,8 @@ test.describe("admin content browser coverage", () => {
     ).toHaveCount(0);
   });
 
-  test("discarding while a save is running writes nothing", async ({ page }) => {
-    await mockCommonApis(page, {
+  test("switching tab while a save is running neither loses the save nor asks", async ({ page }) => {
+    const state = await mockCommonApis(page, {
       modules: [{ id: "module-1", title: "Trade unions", activeVersion: { versionNo: 1 } }],
       moduleExports: {
         "module-1": buildMockModuleExport({
@@ -1911,29 +1601,30 @@ test.describe("admin content browser coverage", () => {
           title: "Trade unions",
           moduleVersionId: "module-1-version-1",
           taskText: localizedText("Norsk scenario"),
+          mcqQuestions: [
+            {
+              stem: localizedText("Question 1"),
+              options: [localizedText("Option A"), localizedText("Option B")],
+              correctAnswer: localizedText("Option B"),
+              rationale: localizedText("Rationale"),
+            },
+          ],
         }),
       },
     });
 
-    // Hold the translation open so the discard lands mid-save.
-    await page.route("**/generate/module-draft/localize", async () => {
-      await new Promise(() => {});
-    });
-
     await page.goto("/admin-content/module/module-1/conversation");
     await page.locator("#previewEditTitle").waitFor();
-    await page.locator("#previewEditTaskText").fill("Skal forkastes");
-    await page.locator("#previewEditConfirm").click();
+    await page.locator("#previewEditTaskText").fill("Skal lagres");
+    await page.locator("#moduleSaveBtn").click();
 
-    // The form's own Cancel is disabled while saving, so the discard has to abort the save
-    // itself - otherwise the translation resolves later and saves what was just discarded.
+    // Produkteier 13.09: fanebytte spør ikke og forkaster ikke. Lagringen som ble bedt om, fullfører.
     await page.locator("#tabPreview").click();
-    await page.locator("#tabSwitchDiscard").click();
-
-    await expect(page.locator("#previewEditTaskText")).toHaveCount(0);
+    await expect(page.locator("#dialogUnsavedTabSwitch")).toBeHidden();
+    await expect.poll(() => state.lastDraftLocalizationBody?.sourceLocale).toBeTruthy();
     await expect(
-      page.getByText(/Draft saved as a new module version|Utkastet er lagret som en ny modulversjon/),
-    ).toHaveCount(0);
+      page.getByText(/Draft saved as a new module version|Utkastet er lagret som en ny modulversjon/).last(),
+    ).toBeVisible();
   });
 
   test("a failed translation saves one language honestly instead of three copies", async ({ page }) => {
@@ -1964,7 +1655,7 @@ test.describe("admin content browser coverage", () => {
     await page.goto("/admin-content/module/module-1/conversation");
     await page.locator("#previewEditTitle").waitFor();
     await page.locator("#previewEditTitle").fill("Fagforeninger");
-    await page.locator("#previewEditConfirm").click();
+    await page.locator("#moduleSaveBtn").click();
 
     // The save still goes through - but the untranslated locales must stay untranslated.
     // Copying the source text into all three is precisely the #892 bug.
@@ -1982,7 +1673,7 @@ test.describe("admin content browser coverage", () => {
     expect(state.lastTitlePatchBody.title.nn).toBeUndefined();
   });
 
-  test("discarding an open form into Forhaandsvisning leaves the workspace usable", async ({ page }) => {
+  test("switching an open form into Forhaandsvisning shows the typed text and keeps it", async ({ page }) => {
     await mockCommonApis(page, {
       modules: [{ id: "module-1", title: "Trade unions", activeVersion: { versionNo: 1 } }],
       moduleExports: {
@@ -1999,21 +1690,20 @@ test.describe("admin content browser coverage", () => {
     await page.locator("#previewEditTitle").waitFor();
     await page.locator("#previewEditTaskText").fill("Halvferdig endring");
 
-    // Switching to Forhaandsvisning re-renders the preview for a different audience, which
-    // removes the form's own Cancel button. If teardown runs after that render, the editing
-    // state is never cleaned up and the workspace is stuck until reload.
+    // Produkteier 13.09: fanebytte spør ikke. Forhåndsvisning viser det som er skrevet (ulagret),
+    // og tilbake i Rediger står teksten der — redigerbar, ikke frosset.
     await page.locator("#tabPreview").click();
-    await page.locator("#tabSwitchDiscard").click();
+    await expect(page.locator("#dialogUnsavedTabSwitch")).toBeHidden();
     await expect(page.locator(".preview-pane--editing")).toHaveCount(0);
+    await expect(page.getByText("Halvferdig endring")).toBeVisible();
 
-    // Back in Rediger the module is editable again, not frozen mid-edit.
     await page.locator("#tabEdit").click();
-    await expect(page.getByText("Norsk scenario")).toBeVisible();
     await page.locator("#previewEditTitle").waitFor();
-    await expect(page.locator("#previewEditTaskText")).toHaveValue(/Norsk scenario/);
+    await expect(page.locator("#previewEditTaskText")).toHaveValue("Halvferdig endring");
+    await expect(page.locator("#moduleDirtyBadge")).toHaveClass(/is-dirty/);
   });
 
-  test("moving between the two non-Rediger tabs does not re-ask about the draft", async ({ page }) => {
+  test("moving between the tabs never asks about the draft", async ({ page }) => {
     await mockCommonApis(page, {
       modules: [{ id: "module-1", title: "Trade unions", activeVersion: { versionNo: 1 } }],
       moduleExports: {
@@ -2029,18 +1719,18 @@ test.describe("admin content browser coverage", () => {
     await page.goto("/admin-content/module/module-1/conversation");
     await page.locator("#previewEditTitle").waitFor();
     await page.locator("#previewEditTaskText").fill("Bearbeidet scenario");
-    await page.locator("#previewEditConfirm").click();
-    await expect(page.locator("#previewEditTaskText")).toHaveCount(0);
+    await page.locator("#moduleSaveBtn").click();
+    // Mocken har ingen flervalg, så lagringen stopper («legg til minst ett spørsmål») og skjemaet
+    // står igjen — med utkastet i seg og hodet på «Ulagrede endringer».
+    await expect(page.locator("#moduleDirtyBadge")).toHaveClass(/is-dirty/);
 
-    // Leaving Rediger asks once...
+    // Produkteier 13.09: ingen fane spør. Utkastet følger med hele veien rundt.
     await page.locator("#tabPreview").click();
-    await expect(page.locator("#dialogUnsavedTabSwitch")).toHaveAttribute("open", "");
-    await page.locator("#tabSwitchDiscard").click();
-
-    // ...and moving on between two tabs that hold no editing surface must not ask again.
+    await expect(page.locator("#dialogUnsavedTabSwitch")).toBeHidden();
     await page.locator("#tabSettings").click();
-    await expect(page.locator("#dialogUnsavedTabSwitch")).not.toHaveAttribute("open", "");
+    await expect(page.locator("#dialogUnsavedTabSwitch")).toBeHidden();
     await expect(page.locator("#tabPanelSettings")).toBeVisible();
+    await expect(page.locator("#moduleDirtyBadge")).toHaveClass(/is-dirty/);
   });
 
   test("the active tab survives a reload through the URL", async ({ page }) => {
@@ -2242,7 +1932,7 @@ test.describe("admin content browser coverage", () => {
 
     // Switching to MCQ-only saves a new version through the composed endpoint.
     await select.selectOption("MCQ_ONLY");
-    await page.locator("#settingsSave").click();
+    await page.locator("#moduleSaveBtn").click();
 
     await expect.poll(() => state.lastModuleVersionBody?.assessmentMode).toBe("MCQ_ONLY");
     // MCQ-only carries no free-text: the fields are left off rather than sent empty.
@@ -2262,7 +1952,7 @@ test.describe("admin content browser coverage", () => {
     await expect(page.locator('#settingsModuleType option[value="FREETEXT_PLUS_MCQ"]')).not.toBeDisabled();
 
     await page.locator("#settingsModuleType").selectOption("FREETEXT_PLUS_MCQ");
-    await page.locator("#settingsSave").click();
+    await page.locator("#moduleSaveBtn").click();
 
     await expect.poll(() => state.lastModuleVersionBody?.assessmentMode).toBe("FREETEXT_PLUS_MCQ");
     expect(state.lastModuleVersionBody.rubricVersionId).toBeTruthy();
@@ -2307,7 +1997,7 @@ test.describe("admin content browser coverage", () => {
     await expect(page.locator("#settingsPromptToggle")).toHaveCount(0);
 
     await page.locator("#settingsMcqMinPercent").fill("80");
-    await page.locator("#settingsSave").click();
+    await page.locator("#moduleSaveBtn").click();
 
     await expect.poll(() => state.lastModuleVersionBody?.assessmentMode).toBe("MCQ_ONLY");
     const sent = state.lastModuleVersionBody;
@@ -2354,7 +2044,7 @@ test.describe("admin content browser coverage", () => {
 
     await page.locator("#tabSettings").click();
     await page.locator("#settingsModuleType").selectOption("FREETEXT_ONLY");
-    await page.locator("#settingsSave").click();
+    await page.locator("#moduleSaveBtn").click();
 
     await expect.poll(() => state.lastModuleVersionBody?.assessmentMode).toBe("FREETEXT_ONLY");
     // The MCQ rule goes, because there is no MCQ any more. Everything else in the policy is
@@ -2395,7 +2085,7 @@ test.describe("admin content browser coverage", () => {
 
     await page.locator("#settingsCertLevel").selectOption("advanced");
     await page.locator("#settingsValidFrom").fill("2026-09-01");
-    await page.locator("#settingsSave").click();
+    await page.locator("#moduleSaveBtn").click();
 
     // ONE value on a fixed scale, replaced outright — not a per-locale patch. An earlier pass
     // merged it and produced {"en-GB":"advanced",nb:"basic"}, which claims the module is advanced
@@ -2438,7 +2128,7 @@ test.describe("admin content browser coverage", () => {
     const description = page.locator("#previewEditDescription");
     await expect(description).toBeVisible();
     await description.fill("Rettet beskrivelse");
-    await page.locator("#previewEditConfirm").click();
+    await page.locator("#moduleSaveBtn").click();
 
     await expect.poll(() => state.lastModuleVersionBody?.description).toBeTruthy();
     const sent = state.lastModuleVersionBody.description;
@@ -2466,7 +2156,7 @@ test.describe("admin content browser coverage", () => {
 
     await page.locator("#settingsValidFrom").fill("2026-09-01");
     await page.locator("#settingsValidTo").fill("2026-08-01");
-    await page.locator("#settingsSave").click();
+    await page.locator("#moduleSaveBtn").click();
 
     // Caught before the request: a window that can never open is the author's mistake to see.
     await expect(page.locator(".toast, [role='alert']").first()).toContainText(/end date|Sluttdatoen/);
@@ -2491,11 +2181,12 @@ test.describe("admin content browser coverage", () => {
     // Produce an unsaved draft, then look at Innstillinger.
     await page.locator("#previewEditTitle").waitFor();
     await page.locator("#previewEditTaskText").fill("Bearbeidet scenario");
-    await page.locator("#previewEditConfirm").click();
-    await expect(page.locator("#previewEditTaskText")).toHaveCount(0);
+    await page.locator("#moduleSaveBtn").click();
+    // Mocken har ingen flervalg, så lagringen stopper («legg til minst ett spørsmål») og skjemaet
+    // står igjen — med utkastet i seg og hodet på «Ulagrede endringer».
+    await expect(page.locator("#moduleDirtyBadge")).toHaveClass(/is-dirty/);
 
     await page.locator("#tabSettings").click();
-    await page.locator("#tabSwitchDiscard").click();
 
     // A settings save would carry the STORED content forward and quietly drop the draft, so it
     // is blocked with the reason rather than offered.
@@ -2553,7 +2244,7 @@ test.describe("admin content browser coverage", () => {
     await expect(page.locator("#previewEditGuidanceText")).toHaveValue(/Maa nevne risikoreduserende tiltak/);
   });
 
-  test("Escape on the unsaved-changes dialog behaves like staying", async ({ page }) => {
+  test("an arrow-key tab switch with typed text asks nothing and keeps the text", async ({ page }) => {
     await mockCommonApis(page, {
       modules: [{ id: "module-1", title: "Trade unions", activeVersion: { versionNo: 1 } }],
       moduleExports: {
@@ -2567,30 +2258,22 @@ test.describe("admin content browser coverage", () => {
     });
 
     await page.goto("/admin-content/module/module-1/conversation");
-    // Wait for the module to have LANDED, not just for the form to exist. The form is drawn once
-    // during init and again when loadModule resolves; typing between the two put the text into a
-    // form that was about to be replaced, and the unsaved-changes guard then had nothing to find.
     await expect(page.locator("#previewEditTaskText")).toHaveValue(/Norsk scenario/);
     await page.locator("#previewEditTaskText").fill("Halvferdig endring");
 
+    // Produkteier 13.09: fanebytte spør ikke — heller ikke med tastaturet.
     await page.locator("#tabEdit").focus();
     await page.keyboard.press("ArrowLeft");
-    await expect(page.locator("#dialogUnsavedTabSwitch")).toHaveAttribute("open", "");
+    await expect(page.locator("#dialogUnsavedTabSwitch")).toBeHidden();
+    await expect(page.locator("#tabEdit")).not.toHaveAttribute("aria-selected", "true");
 
-    // Escape bypasses every button, so it must not leave focus and selection disagreeing.
-    await page.keyboard.press("Escape");
-    await expect(page.locator("#dialogUnsavedTabSwitch")).not.toHaveAttribute("open", "");
-    await expect(page.locator("#tabEdit")).toHaveAttribute("aria-selected", "true");
-    // `toBeFocused` also requires the browser WINDOW to hold OS focus, which it does not reliably
-    // do part-way through a long serial run — the assertion then failed for a reason that has
-    // nothing to do with the app. What is under test is which element the page focused.
-    await expect
-      .poll(() => page.evaluate(() => document.activeElement?.id ?? null))
-      .toBe("tabEdit");
+    await page.locator("#tabEdit").click();
     await expect(page.locator("#previewEditTaskText")).toHaveValue("Halvferdig endring");
 
-    // The stale pending switch must not fire on the next, unrelated switch either.
-    await page.locator("#previewEditCancel").click();
+    // Avbryt i hodet forkaster etter bekreftelse (produkteier 13.09).
+    page.once("dialog", (d) => d.accept());
+    await page.locator("#moduleCancelBtn").click();
+    await expect(page.locator("#previewEditTaskText")).toHaveValue(/Norsk scenario/);
     await page.locator("#tabSettings").click();
     await expect(page.locator("#tabPanelSettings")).toBeVisible();
   });
@@ -2629,35 +2312,6 @@ test.describe("admin content browser coverage", () => {
     await expect(page.locator("#tabPreview")).toBeFocused();
   });
 
-  test("staying after an arrow-key switch returns focus to the selected tab", async ({ page }) => {
-    await mockCommonApis(page, {
-      modules: [{ id: "module-1", title: "Trade unions", activeVersion: { versionNo: 1 } }],
-      moduleExports: {
-        "module-1": buildMockModuleExport({
-          id: "module-1",
-          title: "Trade unions",
-          moduleVersionId: "module-1-version-1",
-          taskText: localizedText("Norsk scenario"),
-        }),
-      },
-    });
-
-    await page.goto("/admin-content/module/module-1/conversation");
-    await page.locator("#previewEditTitle").waitFor();
-    await page.locator("#previewEditTaskText").fill("Halvferdig endring");
-
-    // Arrowing focuses the target tab before the dialog appears, so "stay" must hand focus
-    // back - otherwise it sits on a tab that is not the selected one.
-    await page.locator("#tabEdit").focus();
-    await page.keyboard.press("ArrowLeft");
-    await expect(page.locator("#dialogUnsavedTabSwitch")).toHaveAttribute("open", "");
-    await page.locator("#tabSwitchStay").click();
-
-    await expect(page.locator("#tabEdit")).toBeFocused();
-    await expect(page.locator("#tabEdit")).toHaveAttribute("aria-selected", "true");
-    await expect(page.locator("#previewEditTaskText")).toHaveValue("Halvferdig endring");
-  });
-
   test("help on the module route explains the tabs, not the module library", async ({ page }) => {
     await mockCommonApis(page, {
       modules: [{ id: "module-1", title: "Trade unions", activeVersion: { versionNo: 1 } }],
@@ -2681,7 +2335,7 @@ test.describe("admin content browser coverage", () => {
     await expect(page.locator("#workspaceHelpBody")).toContainText(/Settings holds the module type|Innstillinger holder modultype/);
   });
 
-  test("leaving Rediger with an open edit form warns, and staying keeps the typed values", async ({ page }) => {
+  test("leaving Rediger with an open edit form asks nothing; the typed values come back", async ({ page }) => {
     await mockCommonApis(page, {
       modules: [{ id: "module-1", title: "Trade unions", activeVersion: { versionNo: 1 } }],
       moduleExports: {
@@ -2698,32 +2352,20 @@ test.describe("admin content browser coverage", () => {
     await page.locator("#previewEditTitle").waitFor();
     await page.locator("#previewEditTaskText").fill("Halvferdig endring");
 
+    // Produkteier 13.09: fanebytte er ikke navigering og spør ikke.
     await page.locator("#tabPreview").click();
-    await expect(page.locator("#dialogUnsavedTabSwitch")).toHaveAttribute("open", "");
-
-    // Stay: same tab, same unsaved text.
-    await page.locator("#tabSwitchStay").click();
-    await expect(page.locator("#tabEdit")).toHaveAttribute("aria-selected", "true");
-    await expect(page.locator("#previewEditTaskText")).toHaveValue("Halvferdig endring");
-
-    // Discard: the form is gone and the switch goes through.
-    await page.locator("#tabPreview").click();
-    await page.locator("#tabSwitchDiscard").click();
+    await expect(page.locator("#dialogUnsavedTabSwitch")).toBeHidden();
     await expect(page.locator("#tabPreview")).toHaveAttribute("aria-selected", "true");
     await expect(page.locator("#previewEditTaskText")).toHaveCount(0);
     await expect(page.locator(".chat-pane")).toBeHidden();
+    // Forhåndsvisningen viser det som er skrevet — ulagret.
+    await expect(page.getByText("Halvferdig endring")).toBeVisible();
+
+    await page.locator("#tabEdit").click();
+    await expect(page.locator("#previewEditTaskText")).toHaveValue("Halvferdig endring");
+    await expect(page.locator("#moduleDirtyBadge")).toHaveClass(/is-dirty/);
   });
 
-  // #905: a locale whose translation failed must be ABSENT from what is saved. Leaving the
-  // source copy behind is what made "not translated yet" invisible to the publish gate (#896 S4)
-  // and to the translation-status list (#894).
-  // #982: en oversettelse som feiler skal sies fra om, ikke fylles med kildetekst.
-  //
-  // ⚠️ HVA DENNE MÅLER: direkte-redigering (`#previewEditConfirm`), som skriver til loggen selv og
-  // ikke går gjennom `commitOrProposeGenerated`. Oppdaget ved mutasjonstesting — jeg fjernet
-  // advarselen fra de tre kallerne jeg hadde endret, og denne forble grønn.
-  //
-  // Den parkerte grenen dekkes av «… også når forslaget parkeres bak åpne felter» lenger nede.
   test("en feilet oversettelse sier fra i loggen", async ({ page }) => {
     await mockCommonApis(page, {
       modules: [{ id: "module-1", title: "Trade unions", activeVersion: { versionNo: 1 } }],
@@ -2752,7 +2394,7 @@ test.describe("admin content browser coverage", () => {
     await page.goto("/admin-content/module/module-1/conversation");
     await page.locator("#previewEditTitle").waitFor();
     await page.locator("#previewEditTaskText").fill("Bearbeidet scenario");
-    await page.locator("#previewEditConfirm").click();
+    await page.locator("#moduleSaveBtn").click();
 
     await expect(page.locator("#chatMessages")).toContainText(
       /Ikke oversatt til|Not translated to|Ikkje omsett til/,
@@ -2802,7 +2444,7 @@ test.describe("admin content browser coverage", () => {
     // #896 S2 merged Bekreft and Lagre: this one click translates and writes. The test was
     // written against the old two-step flow on a branch off main, and the extra "Lagre utkast"
     // click had nothing left to press once the branches met on dev.
-    await page.locator("#previewEditConfirm").click();
+    await page.locator("#moduleSaveBtn").click();
 
     await expect.poll(() => state.lastModuleVersionBody?.taskText).toBeTruthy();
     const savedTaskText = state.lastModuleVersionBody.taskText;
@@ -2863,7 +2505,7 @@ test.describe("admin content browser coverage", () => {
     await page.locator("#previewEditTaskText").fill("Oppdatert norsk scenario");
     await page.locator("#previewEditGuidanceText").fill("Oppdatert norsk veiledning");
     await page.locator("#previewEditTitle").fill("Fagforeninger");
-    await page.locator("#previewEditConfirm").click();
+    await page.locator("#moduleSaveBtn").click();
 
     // #896 S2: Lagre translates and writes in one commitment - no separate "Lagre utkast".
     await expect.poll(() => state.lastDraftLocalizationBody?.sourceLocale).toBe("nb");
@@ -2915,16 +2557,16 @@ test.describe("admin content browser coverage", () => {
     // now contains a "Request changes in chat" button instead of auto-opening the
     // textarea below Save draft. Pin both: no textarea before click, textarea after.
     await expect(page.locator(".chat-textarea:enabled")).toHaveCount(0);
-    await clickEnabledButton(page, /Request changes in chat|Be om endringer i chat/);
+    await clickEnabledButton(page, /^Request a change$|^Be om endring$/);
 
-    const revisionInput = page.locator(".chat-textarea:enabled").last();
+    const revisionInput = page.locator("#dialogReviseInput");
     await revisionInput.fill('Rename the module title to "Trade union dialogue"');
-    await clickEnabledButton(page, /Revise|Revider/);
+    await page.locator("#dialogReviseSubmit").click();
 
     await expect(page.getByText('I will update the module title to "Trade union dialogue" and refresh the localized variants.')).toBeVisible();
     await expect.poll(() => state.lastDraftLocalizationBody?.title).toBe("Trade union dialogue");
 
-    await clickEnabledButton(page, /Save draft|Lagre utkast/);
+    await page.locator("#moduleSaveBtn").click();
 
     // QA r7 #1: module name removed from the status rail; rename verified via the localization + patch bodies.
     await expect.poll(() => state.lastTitlePatchBody?.title?.["en-GB"]).toBe("Trade union dialogue");
@@ -2977,16 +2619,16 @@ test.describe("admin content browser coverage", () => {
 
     await page.goto("/admin-content/module/module-1/conversation?resumeEditing=1");
     await expect(
-      page.locator("#workspaceActions").getByRole("button", { name: /Request changes in chat|Be om endringer i chat/ }),
+      page.locator("#workspaceActions").getByRole("button", { name: /^Request a change$|^Be om endring$/ }),
     ).toBeEnabled();
 
     const taskField = page.locator("#previewEditTaskText");
     await expect(taskField).not.toHaveValue("");
     await taskField.fill("Skrevet for hånd");
 
-    await clickEnabledButton(page, /Request changes in chat|Be om endringer i chat/);
-    await page.locator(".chat-textarea:enabled").last().fill("Skjerp scenarioet");
-    await clickEnabledButton(page, /Revise|Revider/);
+    await clickEnabledButton(page, /^Request a change$|^Be om endring$/);
+    await page.locator("#dialogReviseInput").fill("Skjerp scenarioet");
+    await page.locator("#dialogReviseSubmit").click();
 
     // Forutsetningen: forslaget ER parkert. Uten denne ville påstanden under kunne vært grønn
     // fordi vi målte den direkte stien i stedet.
@@ -3032,7 +2674,7 @@ test.describe("admin content browser coverage", () => {
     // draft and repaints the form, so text filled in before that lands in a textarea that is
     // about to be replaced — the test would then be measuring the repaint, not the gate.
     await expect(
-      page.locator("#workspaceActions").getByRole("button", { name: /Request changes in chat|Be om endringer i chat/ }),
+      page.locator("#workspaceActions").getByRole("button", { name: /^Request a change$|^Be om endring$/ }),
     ).toBeEnabled();
 
     // The author's own work goes in first — this is what must survive.
@@ -3041,10 +2683,10 @@ test.describe("admin content browser coverage", () => {
     await taskField.fill("Skrevet for hånd");
     await expect(taskField).toHaveValue("Skrevet for hånd");
 
-    await clickEnabledButton(page, /Request changes in chat|Be om endringer i chat/);
+    await clickEnabledButton(page, /^Request a change$|^Be om endring$/);
     await expect(taskField).toHaveValue("Skrevet for hånd");
-    await page.locator(".chat-textarea:enabled").last().fill("Skjerp scenarioet");
-    await clickEnabledButton(page, /Revise|Revider/);
+    await page.locator("#dialogReviseInput").fill("Skjerp scenarioet");
+    await page.locator("#dialogReviseSubmit").click();
 
     // The proposal is offered, and the field is untouched. Asserting the VALUE and not just the
     // presence of the buttons is the point: the old failure wrote the draft underneath a form
@@ -3057,9 +2699,9 @@ test.describe("admin content browser coverage", () => {
     await expect(taskField).toHaveValue("Skrevet for hånd");
 
     // Bruk replaces it — and repaints, so the author sees what they accepted.
-    await clickEnabledButton(page, /Request changes in chat|Be om endringer i chat/);
-    await page.locator(".chat-textarea:enabled").last().fill("Skjerp scenarioet igjen");
-    await clickEnabledButton(page, /Revise|Revider/);
+    await clickEnabledButton(page, /^Request a change$|^Be om endring$/);
+    await page.locator("#dialogReviseInput").fill("Skjerp scenarioet igjen");
+    await page.locator("#dialogReviseSubmit").click();
     await clickEnabledButton(page, /^(Use|Bruk)$/);
     await expect(page.locator("#previewEditTaskText")).toHaveValue("Generert scenario");
   });
@@ -3111,9 +2753,9 @@ test.describe("admin content browser coverage", () => {
     await page.locator("#localeSelect").selectOption("en-GB");
     await expect(page.locator("#tabEdit")).toHaveText(/Edit/);
 
-    await clickEnabledButton(page, /Request changes in chat|Be om endringer i chat/);
-    await page.locator(".chat-textarea:enabled").last().fill("make the task shorter");
-    await clickEnabledButton(page, /Revise|Revider/);
+    await clickEnabledButton(page, /^Request a change$|^Be om endring$/);
+    await page.locator("#dialogReviseInput").fill("make the task shorter");
+    await page.locator("#dialogReviseSubmit").click();
 
     // Begge halvdelene må holde: teksten som sendes er den NORSKE, og den er merket som norsk.
     // Uten den andre halvdelen oversettes svaret inn i feil språk og overskriver originalen.
@@ -3153,9 +2795,9 @@ test.describe("admin content browser coverage", () => {
     await page.goto("/admin-content/module/module-1/conversation?resumeEditing=1");
     await page.locator("#previewEditTaskText").waitFor();
 
-    await clickEnabledButton(page, /Request changes in chat|Be om endringer i chat/);
-    await page.locator(".chat-textarea:enabled").last().fill("Skjerp scenarioet");
-    await clickEnabledButton(page, /Revise|Revider/);
+    await clickEnabledButton(page, /^Request a change$|^Be om endring$/);
+    await page.locator("#dialogReviseInput").fill("Skjerp scenarioet");
+    await page.locator("#dialogReviseSubmit").click();
 
     // Since v2.18.13 the Rediger form is open from the moment the tab is, so gating on presence
     // rather than dirtiness would turn every single generation into a proposal. Nothing was
@@ -3209,7 +2851,7 @@ test.describe("admin content browser coverage", () => {
     await expect(page.locator("#previewEditMcqStem0")).toHaveValue("Norsk sporsmal");
     await page.locator("#previewEditMcqStem0").fill("Oppdatert norsk sporsmal");
     await page.locator("#previewEditMcqOption0_1").fill("Oppdatert alternativ B");
-    await page.locator("#previewEditConfirm").click();
+    await page.locator("#moduleSaveBtn").click();
 
     await expect.poll(() => state.lastMcqLocalizationBody?.sourceLocale).toBe("nb");
 
@@ -3855,12 +3497,12 @@ test.describe("admin content browser coverage", () => {
     await expect(page.locator("#workspaceActions")).toBeVisible();
     await expect(page.locator("#workspaceActions .workspace-action-btn").first()).toBeEnabled();
     // The full module picker is NOT shown after publish.
-    await expect(page.locator(".module-list .module-list-item")).toHaveCount(0);
+    await expect(page.locator("#moduleList .form-row")).toHaveCount(0);
   });
 
   // #555: regen on an existing module follows the unified order too — source material BEFORE
   // scenario (forfatter-feedback 2026-06-21: scenario-first felt wrong here as well).
-  test("shell regen flow asks for source, then module type, then scenario", async ({ page }) => {
+  test("Generate content opens a dialog; type and level come from Settings and are not asked", async ({ page }) => {
     await mockCommonApis(page, {
       modules: [{ id: "module-1", title: "Trade unions" }],
       moduleExports: {
@@ -3873,25 +3515,25 @@ test.describe("admin content browser coverage", () => {
     });
 
     await page.goto("/admin-content/module/module-1/conversation");
-    await clickEnabledButton(page, "Generate new content from source material");
+    await clickEnabledButton(page, /^Generate content$|^Generer innhold$/);
 
-    // Source material is asked first; neither module-type nor scenario shown yet.
-    await expect(page.getByText("Paste source material")).toBeVisible();
+    // Produkteier 13.09: kildemateriale i en dialog, type og nivå fra Innstillinger.
+    const dialog = page.locator("#dialogGenerate");
+    await expect(dialog).toHaveAttribute("open", "");
+    await expect(page.locator("#dialogGenerateContext")).toContainText(/Free text|Fritekst/);
+    await expect(page.locator("#dialogGenerateMcq")).toBeVisible();
+    await page.locator("#dialogGenerate .chat-textarea").fill("Updated source notes about labour rights and organising.");
+    await page.locator("#dialogGenerate .chat-submit-btn").click();
+    await expect(dialog).not.toHaveAttribute("open", "");
+
     await expect(page.getByText("What kind of module is this?")).toHaveCount(0);
     await expect(page.getByText("Should the task use a scenario?")).toHaveCount(0);
-
-    // #579: after source, the module-type question appears in regen too (not scenario directly).
-    await submitActiveChatInput(page, "Updated source notes about labour rights and organising.");
-    await expect(page.getByText("What kind of module is this?")).toBeVisible();
-    await expect(page.getByText("Should the task use a scenario?")).toHaveCount(0);
-
-    // Free-text branch then leads to the scenario question.
-    await clickEnabledButton(page, "Free-text + MCQ");
-    await expect(page.getByText("Should the task use a scenario?")).toBeVisible();
+    await expect(page.getByRole("button", { name: /^Basic$|^Grunnleggende$/ })).toHaveCount(0);
+    // Neste synlige steg er planen.
+    await expect(page.getByRole("button", { name: /Use this plan|Bruk denne planen/ })).toBeVisible();
   });
 
-  // #579: choosing "MCQ only" when regenerating skips scenario and goes straight to MCQ count.
-  test("shell regen flow can switch the module to MCQ-only", async ({ page }) => {
+  test("Generate content on an MCQ-only module generates questions with the dialog's counts, asking nothing", async ({ page }) => {
     await mockCommonApis(page, {
       modules: [{ id: "module-1", title: "Trade unions" }],
       moduleExports: {
@@ -3899,24 +3541,31 @@ test.describe("admin content browser coverage", () => {
           id: "module-1",
           title: "Trade unions",
           moduleVersionId: "module-1-version-1",
+          assessmentMode: "MCQ_ONLY",
         }),
       },
     });
+    let mcqBody: any = null;
+    await page.route("**/api/admin/content/generate/mcq", async (route: Route) => {
+      mcqBody = route.request().postDataJSON();
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ questions: [] }) });
+    });
 
     await page.goto("/admin-content/module/module-1/conversation");
-    await clickEnabledButton(page, "Generate new content from source material");
-    await submitActiveChatInput(page, "Source notes for an MCQ-only quiz.");
-    await expect(page.getByText("What kind of module is this?")).toBeVisible();
-    await clickEnabledButton(page, "MCQ only");
+    await clickEnabledButton(page, /^Generate content$|^Generer innhold$/);
+    await expect(page.locator("#dialogGenerateContext")).toContainText(/Multiple choice only|Bare flervalg|Kun flervalg/i);
+    await page.locator("#dialogGenerateQuestionCount").selectOption("10");
+    await page.locator("#dialogGenerateOptionCount").selectOption("3");
+    await page.locator("#dialogGenerate .chat-textarea").fill("Source notes for an MCQ-only quiz.");
+    await page.locator("#dialogGenerate .chat-submit-btn").click();
 
-    // No scenario on the MCQ-only branch — straight to the question-count question.
-    await expect(page.getByText("Should the task use a scenario?")).toHaveCount(0);
-    await expect(page.getByText(/How many MCQ questions/i)).toBeVisible();
+    await expect(page.getByText("What kind of module is this?")).toHaveCount(0);
+    await expect(page.getByText(/How many MCQ questions/i)).toHaveCount(0);
+    await expect.poll(() => mcqBody?.questionCount).toBe(10);
+    expect(mcqBody?.optionCount).toBe(3);
   });
 
-  // #578: regen can switch an existing module to FREETEXT_ONLY — scenario/blueprint run, MCQ is
-  // skipped, and the saved version is FREETEXT_ONLY with no mcqSetVersionId.
-  test("shell regen flow can switch the module to FREETEXT_ONLY", async ({ page }) => {
+  test("Generate content on a FREETEXT_ONLY module saves without any MCQ step", async ({ page }) => {
     await mockCommonApis(page, {
       modules: [{ id: "module-1", title: "Trade unions" }],
       moduleExports: {
@@ -3924,6 +3573,7 @@ test.describe("admin content browser coverage", () => {
           id: "module-1",
           title: "Trade unions",
           moduleVersionId: "module-1-version-1",
+          assessmentMode: "FREETEXT_ONLY",
         }),
       },
     });
@@ -3940,33 +3590,35 @@ test.describe("admin content browser coverage", () => {
     });
 
     await page.goto("/admin-content/module/module-1/conversation");
-    await clickEnabledButton(page, "Generate new content from source material");
-    await submitActiveChatInput(page, "Updated source for a free-text-only version.");
-    await expect(page.getByText("What kind of module is this?")).toBeVisible();
-    await clickEnabledButton(page, "Free-text only");
-
-    // Scenario + blueprint run; cert level is reused (known) so it is not asked again.
-    await clickEnabledButton(page, "Let the LLM decide");
+    await clickEnabledButton(page, /^Generate content$|^Generer innhold$/);
+    // Typen er FREETEXT_ONLY i Innstillinger (mocken): ingen antall å velge, ingen spørsmål om type.
+    await expect(page.locator("#dialogGenerateMcq")).toBeHidden();
+    await page.locator("#dialogGenerate .chat-textarea").fill("Updated source for a free-text-only version.");
+    await page.locator("#dialogGenerate .chat-submit-btn").click();
+    await expect(page.getByText("What kind of module is this?")).toHaveCount(0);
     await clickEnabledButton(page, /Use this plan|Bruk denne planen/);
 
     // No MCQ step on the free-text-only path.
     await expect(page.getByText(/How many MCQ questions/i)).toHaveCount(0);
-    await clickEnabledButton(page, "Save draft");
+    await page.locator("#moduleSaveBtn").click();
 
     await expect.poll(() => versionPayload?.assessmentMode).toBe("FREETEXT_ONLY");
     expect(versionPayload?.mcqSetVersionId).toBeUndefined();
   });
 
   test("shell source-material upload keeps extracted content out of the input and sends it to generation", async ({ page }) => {
-    const state = await mockCommonApis(page);
+    const state = await mockCommonApis(page, {
+      modules: [{ id: "module-1", title: "Trade unions" }],
+      moduleExports: { "module-1": buildMockModuleExport({ id: "module-1", title: "Trade unions", moduleVersionId: "module-1-version-1" }) },
+    });
 
-    await page.goto("/admin-content.html");
-
-    await clickEnabledButton(page, "Create new module");
-    await submitActiveChatInput(page, "Upload module");
+    // Produkteier 13.09: kildeverktøyet lever i «Generer innhold»-dialogen.
+    await page.goto("/admin-content/module/module-1/conversation");
+    await clickEnabledButton(page, /^Generate content$|^Generer innhold$/);
+    await expect(page.locator("#dialogGenerate")).toHaveAttribute("open", "");
     // #555: source material is now the first question (before module-type/scenario/cert).
 
-    const fileInput = page.locator('input[type="file"]').last();
+    const fileInput = page.locator('#dialogGenerate input[type="file"]');
     await fileInput.setInputFiles({
       name: "source.docx",
       mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
@@ -3974,16 +3626,10 @@ test.describe("admin content browser coverage", () => {
     });
 
     await expect(page.getByText("source.docx")).toBeVisible();
-    const sourceTextarea = page.locator(".chat-textarea:enabled").last();
+    const sourceTextarea = page.locator("#dialogGenerate .chat-textarea");
     await sourceTextarea.fill("Use a practical workplace framing.");
-    await clickEnabledButton(page, /Next|Neste|Næste/i);
-    // #555: module-type then scenario then cert follow the source step.
-    await clickEnabledButton(page, "Free-text + MCQ");
-    await clickEnabledButton(page, "Let the LLM decide");
-    await clickEnabledButton(page, "Basic");
-
-    // v1.1.54 removed Ordinary/Thorough generation-mode buttons — the flow goes
-    // directly to the blueprint preview after cert-level selection.
+    await page.locator("#dialogGenerate .chat-submit-btn").click();
+    // Type, scenario og nivå spørres ikke om; neste steg er planen.
     await clickEnabledButton(page, /Use this plan|Bruk denne planen/);
 
     await expect
@@ -3994,7 +3640,9 @@ test.describe("admin content browser coverage", () => {
       .toContain("Use a practical workplace framing.");
   });
 
-  test("courses conversational flow creates the course on certification choice and opens the editor (#506)", async ({ page }) => {
+  // #1046 nivå to (1b, produkteier 12.09): «Nytt kurs» åpner det samme skjemaet tomt; kurset lages ved
+  // første Lagre og editoren står igjen med det lagrede kurset. Den samtalebaserte sida (#506) er borte.
+  test("new course: the empty form creates the course on first save and stays in the editor", async ({ page }) => {
     const state = await mockCommonApis(page, {
       libraryModules: [
         { id: "module-1", title: "Trade unions" },
@@ -4004,12 +3652,15 @@ test.describe("admin content browser coverage", () => {
 
     await page.goto("/admin-content/courses/new");
 
-    const titleInput = page.locator("#convTitleInput");
-    await titleInput.fill("Labour rights");
-    await titleInput.press("Enter");
-    // #506: etter nivå-valg opprettes kurset direkte (tittel + nivå, ingen moduler) og editoren åpnes —
-    // moduler OG seksjoner legges til der. Det gamle modul-søk-steget i samtalen er fjernet.
-    await clickEnabledButton(page, "Basic");
+    await expect(page.locator("#formPageTitle")).toHaveText("Nytt kurs");
+    await expect(page.locator("#formSaveBtn")).toBeDisabled();
+    // Skjemaet åpner på menyspråket (#974); bokmål velges i språkpillene.
+    await page.locator("[data-form-locale=\"nb\"]").click();
+    await page.locator("#title-nb").fill("Arbeidsrett");
+    await expect(page.locator("#formPageTitle")).toHaveText("Arbeidsrett");
+    await expect(page.locator("#formPageDirty")).toHaveText("Ulagrede endringer");
+    await page.locator("#certLevel").selectOption("basic");
+    await page.locator("#formSaveBtn").click();
 
     await expect(page).toHaveURL(/\/admin-content\/courses\/[^/]+$/);
     await expect.poll(() => state.mutableCourses.length).toBe(1);
@@ -4036,7 +3687,7 @@ test.describe("admin content browser coverage", () => {
 
     await page.goto("/admin-content/courses/course-1");
 
-    await expect(page.locator("#detailPageTitle")).toContainText("Labour rights");
+    await expect(page.locator("#formPageTitle")).toContainText("Labour rights");
     await expect(page.locator("#desc-en-GB")).toHaveValue("");
     await expect(page.locator(".page-loading")).toHaveCount(0);
   });
@@ -4124,48 +3775,35 @@ test.describe("admin content browser coverage", () => {
     });
 
     await page.goto("/admin-content/courses/course-1");
+    // #1046 nivå to (13.09): synlighet ligger under Innstillinger-fanen.
+    await page.locator('[data-form-tab-btn="innstillinger"]').click();
 
     const select = page.locator("#enrollmentPolicy");
     await expect(select).toBeVisible();
     await expect(select).toHaveValue("OPEN");
     await select.selectOption("RESTRICTED");
-    await page.locator("#saveCourseBtn").click();
+    await page.locator("#formSaveBtn").click();
 
     await expect.poll(() => putBody?.enrollmentPolicy).toBe("RESTRICTED");
   });
 
-  test("shell idle flow opens the module picker and renders existing module choices", async ({ page }) => {
-    await mockCommonApis(page, {
-      modules: [
-        { id: "module-1", title: "Trade unions", activeVersion: { versionNo: 2 } },
-        { id: "module-2", title: "Collective bargaining" },
-      ],
-    });
-
-    await page.goto("/admin-content.html");
-
-    await expect(page.locator("#moduleWorkspaceTitle")).toBeVisible();
-    await expect(page.getByText("What would you like to do?")).toBeVisible();
-    await page.getByRole("button", { name: "Open existing module" }).click();
-
-    await expect(page.getByRole("button", { name: /Trade unions/ })).toBeVisible();
-    await expect(page.getByRole("button", { name: /Collective bargaining/ })).toBeVisible();
-  });
-
-  test("courses conversational flow accepts Enter on course title and advances to certification choices", async ({ page }) => {
-    await mockCommonApis(page, { libraryModules: [] });
+  test("new course: bokmål name and level are required before the first save", async ({ page }) => {
+    const state = await mockCommonApis(page, { libraryModules: [] });
 
     await page.goto("/admin-content/courses/new");
 
-    const titleInput = page.locator("#convTitleInput");
-    await expect(titleInput).toBeVisible();
-    await titleInput.fill("Labour rights");
-    await titleInput.press("Enter");
+    // Bokmål er det påkrevde språket (produkteier 12.09). Et navn på et annet språk oversettes til
+    // bokmål ved lagring; det som stopper i skjemaet er at det ikke finnes noe navn å oversette.
+    await page.locator("#certLevel").selectOption("basic");
+    await page.locator("#formSaveBtn").click();
+    await expect(page.locator("#formErrorBanner")).toContainText("bokmål");
+    expect(state.mutableCourses.length).toBe(0);
 
-    await expect(titleInput).toBeDisabled();
-    await expect(page.getByRole("button", { name: "Basic" })).toBeVisible();
-    await expect(page.getByRole("button", { name: "Intermediate" })).toBeVisible();
-    await expect(page.getByRole("button", { name: "Advanced" })).toBeVisible();
+    await page.locator("[data-form-locale=\"nb\"]").click();
+    await page.locator("#title-nb").fill("Arbeidsrett");
+    await page.locator("#formSaveBtn").click();
+    await expect(page).toHaveURL(/\/admin-content\/courses\/[^/]+$/);
+    await expect.poll(() => state.mutableCourses.length).toBe(1);
   });
 
   test("courses creation and detail view localize certification level labels to the active UI locale", async ({ page }) => {
@@ -4190,32 +3828,30 @@ test.describe("admin content browser coverage", () => {
 
     await page.goto("/admin-content/courses/new");
     await page.locator("#localeSelect").selectOption("nb");
-    await page.locator("#convTitleInput").fill("Arbeidsmiljo");
-    await page.locator("#convTitleInput").press("Enter");
-
-    await expect(page.getByRole("button", { name: "Grunnleggende" })).toBeVisible();
-    await expect(page.getByRole("button", { name: "Videregående" })).toBeVisible();
-    await expect(page.getByRole("button", { name: "Avansert" })).toBeVisible();
+    await expect(page.locator("#certLevel")).toContainText("Grunnleggende");
+    await expect(page.locator("#certLevel")).toContainText("Videregående");
+    await expect(page.locator("#certLevel")).toContainText("Avansert");
 
     await page.goto("/admin-content/courses/course-1");
-    await expect(page.locator("#detailPageTitle")).toContainText("Fagforeninger");
+    await expect(page.locator("#formPageTitle")).toContainText("Fagforeninger");
     await expect(page.locator("#certLevel")).toContainText("Grunnleggende");
-    await expect(page.locator("#tab-nb")).toHaveClass(/active/);
+    await expect(page.locator("[data-form-locale=\"nb\"]")).toHaveClass(/active/);
     await expect(page.locator("#title-nb")).toHaveValue("Fagforeninger");
     await expect(page.locator("#desc-nb")).toHaveValue("Norsk beskrivelse");
   });
 
-  test("courses conversational creation stores the typed title in the active locale and localizes the other variants", async ({ page }) => {
+  test("new course typed in one language localizes the other variants on save", async ({ page }) => {
     const state = await mockCommonApis(page, {
       libraryModules: [],
     });
 
     await page.goto("/admin-content/courses/new");
     await page.locator("#localeSelect").selectOption("nn");
-    await page.locator("#convTitleInput").fill("Arbeidsmiljøkurs");
-    await page.locator("#convTitleInput").press("Enter");
-    // #506: nivå-valget oppretter kurset direkte og åpner editoren.
-    await page.locator('[data-cert="basic"]').click();
+    await page.locator("[data-form-locale=\"nn\"]").click();
+    await page.locator("#title-nn").fill("Arbeidsmiljøkurs");
+    await page.locator("#certLevel").selectOption("basic");
+    // Lagring oversetter til de andre språkene før den krever bokmål — bokmål kommer fra oversettelsen.
+    await page.locator("#formSaveBtn").click();
 
     // #673-followup: opprettelse går nå rett til kurs-editoren (der seksjoner legges til), ikke lista.
     await expect(page).toHaveURL(/\/admin-content\/courses\/[^/]+$/);
@@ -4245,10 +3881,10 @@ test.describe("admin content browser coverage", () => {
     });
 
     await page.goto("/admin-content/courses/course-1");
-    await page.locator("#tab-nn").click();
+    await page.locator("[data-form-locale=\"nn\"]").click();
     await page.locator("#title-nn").fill("Nytt nynorsk kursnamn");
     await page.locator("#desc-nn").fill("Oppdatert nynorsk skildring");
-    await page.locator("#saveCourseBtn").click();
+    await page.locator("#formSaveBtn").click();
 
     await expect(page.locator("#title-nn")).toHaveValue("Nytt nynorsk kursnamn");
     await expect(page.locator("#title-en-GB")).toHaveValue("Nytt nynorsk kursnamn [en-GB]");
@@ -4259,17 +3895,16 @@ test.describe("admin content browser coverage", () => {
     await expect.poll(() => state.lastCourseLocalizationBodies.map((body) => body.targetLocale).slice(-2).sort()).toEqual(["en-GB", "nb"]);
   });
 
-  test("courses conversational flow has no module-search step after certification choice (#506)", async ({ page }) => {
+  test("new course can be created without any modules; content is added in the editor afterwards (#506)", async ({ page }) => {
     const state = await mockCommonApis(page, {
       libraryModules: [{ id: "module-1", title: "Trade unions" }],
     });
 
     await page.goto("/admin-content/courses/new");
-
-    await page.locator("#convTitleInput").fill("Labour rights");
-    await page.locator("#convTitleInput").press("Enter");
-    // #506: ingen modul-søk-steg lenger — nivå-valget oppretter kurset og åpner editoren.
-    await clickEnabledButton(page, "Basic");
+    await page.locator("[data-form-locale=\"nb\"]").click();
+    await page.locator("#title-nb").fill("Arbeidsrett");
+    await page.locator("#certLevel").selectOption("basic");
+    await page.locator("#formSaveBtn").click();
 
     await expect(page).toHaveURL(/\/admin-content\/courses\/[^/]+$/);
     await expect.poll(() => state.mutableCourses.length).toBe(1);
@@ -4300,9 +3935,9 @@ test.describe("admin content browser coverage", () => {
       response.request().method() === "PUT" &&
       response.status() === 200,
     );
-    await page.locator("#saveCourseBtn").click();
+    await page.locator("#formSaveBtn").click();
     await saveResponse;
-    await expect(page.locator("#saveCourseBtn")).toBeEnabled();
+    await expect(page.locator("#formSaveBtn")).toBeEnabled();
 
     await page.goto("/admin-content/courses");
     await expect(page.locator("#coursesTableBody")).toContainText("23 Apr 2026");
@@ -4350,10 +3985,12 @@ test.describe("admin content browser coverage", () => {
 
     await page.goto("/admin-content/courses");
 
-    await expect(page.getByRole("table", { name: "Kursliste" })).toBeVisible();
-    // Arkiverte er skjult under default «Aktive»-filter — bytt til «Arkiverte».
+    // Arkiverte er skjult under default «Aktive»-filter — bytt til «Arkiverte». (Med null synlige
+    // rader viser lista en tom-tilstand, ikke en tom tabell, som Moduler alltid har gjort.)
     await page.locator('.list-filter-btn[data-filter="archived"]').click();
-    await page.locator('[data-action="delete"]').first().click();
+    await expect(page.getByRole("table", { name: "Kurs" })).toBeVisible();
+    // #1046 D5: Slett ligger under «Mer».
+    await (await revealRowAction(page, page.locator('[data-action="delete"]').first())).click();
 
     await expect(page.locator("#deleteDialog")).toHaveAttribute("open", "");
     await expect(page.locator("#deleteDialogText")).toContainText("Trade unions");
@@ -4420,13 +4057,14 @@ test.describe("admin content browser coverage", () => {
     await page.goto("/admin-content/sections");
     const row = page.locator("#sectionsTableBody tr").filter({ hasText: "Intro" });
     await expect(row.locator(".status-badge")).toHaveText("Published");
-    await expect(row.locator('[data-action="unpublish"]')).toBeVisible();
+    // #1046 D5: Avpubliser ligger under «Mer» — åpne menyen først.
+    await expect(await revealRowAction(page, row.locator('[data-action="unpublish"]'))).toBeVisible();
 
     await row.locator('[data-action="unpublish"]').click();
     // Etter avpublisering: status → Draft, og Publish-knappen vises.
     const row2 = page.locator("#sectionsTableBody tr").filter({ hasText: "Intro" });
     await expect(row2.locator(".status-badge")).toHaveText("Draft");
-    await expect(row2.locator('[data-action="publish"]')).toBeVisible();
+    await expect(await revealRowAction(page, row2.locator('[data-action="publish"]'))).toBeVisible();
   });
 
   test("shell and courses routes pass an accessibility smoke check", async ({ page }) => {
@@ -4434,7 +4072,7 @@ test.describe("admin content browser coverage", () => {
       courses: [],
     });
 
-    await page.goto("/admin-content.html");
+    await page.goto("/admin-content/module/x/conversation");
     const shellResults = await new AxeBuilder({ page })
       .disableRules(["color-contrast"])
       .analyze();
@@ -4505,7 +4143,7 @@ test.describe("admin content browser coverage", () => {
     await page.goto("/admin-content/module/module-1/conversation");
     await page.locator("#previewEditTitle").waitFor();
     await page.locator("#previewEditTitle").fill("Fagforeninger");
-    await page.locator("#previewEditConfirm").click();
+    await page.locator("#moduleSaveBtn").click();
 
     await expect.poll(() => versionBody !== null).toBe(true);
 
@@ -4592,7 +4230,7 @@ test.describe("admin content browser coverage", () => {
     await page.goto("/admin-content/module/module-1/conversation");
     await page.locator("#previewEditTitle").waitFor();
     await page.locator("#previewEditTitle").fill("Fagforeninger");
-    await page.locator("#previewEditConfirm").click();
+    await page.locator("#moduleSaveBtn").click();
 
     await expect.poll(() => versionBody !== null).toBe(true);
 
@@ -4644,7 +4282,7 @@ test.describe("admin content browser coverage", () => {
     // Switching the menus to Norwegian must NOT move the author to a different language's text —
     // that was the surprise being reported ("står i preview på bokmål, endrer UI til nynorsk...").
     await page.locator("#localeSelect").selectOption("nb");
-    await expect(page.locator("#previewEditConfirm")).toBeVisible();
+    await expect(page.locator("#previewEditTitle")).toBeVisible();
     await expect(
       page.locator("#previewEditTaskText"),
       "the UI language moved the content language with it",
@@ -4653,13 +4291,12 @@ test.describe("admin content browser coverage", () => {
     // The content-language switcher is the one that changes what is being authored, and the editor
     // survives it — that is the original bug this test was written for.
     await page.locator("#previewLocaleBar button", { hasText: /Norsk bokmål/ }).click();
-    await expect(page.locator("#previewEditConfirm")).toBeVisible();
+    await expect(page.locator("#previewEditTitle")).toBeVisible();
     await expect(page.locator("#previewEditTaskText")).toHaveValue("Norsk scenario");
 
-    // And confirming from there must still work — the way forward is intact. Since v2.18.13 the
-    // form stays open after the save (Rediger IS the form), showing the values that were written.
-    await page.locator("#previewEditConfirm").click();
+    // And the way forward is intact: the form stays open, untouched — so Lagre is (correctly) off.
     await expect(page.locator("#previewEditTaskText")).toHaveValue("Norsk scenario");
+    await expect(page.locator("#moduleSaveBtn")).toBeDisabled();
 
     expect(dialogs, "an untouched form must not be asked about").toBe(0);
   });
@@ -4723,9 +4360,9 @@ test.describe("admin content browser coverage", () => {
     answer = "accept";
     await page.locator("#previewLocaleBar button", { hasText: /Norsk bokmål/ }).click();
     expect(dialogMessages).toHaveLength(3);
-    await expect(page.locator("#previewEditConfirm")).toBeVisible();
+    await expect(page.locator("#previewEditTitle")).toBeVisible();
     await expect(page.locator("#previewEditTaskText")).toHaveValue("Norsk scenario");
-    await expect(page.getByText(/did not confirm is gone|uten å bekrefte, er borte/i).first()).toBeVisible();
+    await expect(page.getByText(/did not confirm is gone|uten å bekrefte, er borte/i).last()).toBeVisible();
   });
 
   // Stage-tilbakemelding 2026-08-17: Innstillinger edited in the UI language while Rediger edited

@@ -29,15 +29,7 @@
       .content-area-nav-link.active { color: var(--color-link-active); border-bottom-color: var(--color-blue); }
 
       /* ── Page header ─────────────────────────────────────────────────────── */
-      .page-header {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: var(--space-2);
-        margin-bottom: var(--space-3);
-        flex-wrap: wrap;
-      }
-      .page-header h1 { margin: 0; font-size: 22px; }
+      /* #1046: sidehode, søk, filtre og tabell er den felles listesida (list-page.js + shared.css). */
 
       .page-header-back {
         display: flex;
@@ -45,47 +37,10 @@
         gap: var(--space-2);
         margin-bottom: var(--space-2);
       }
-      .back-link {
-        font-size: 13px;
-        color: var(--color-meta);
-        text-decoration: none;
-        display: inline-flex;
-        align-items: center;
-        gap: 4px;
-      }
-      .back-link:hover { color: var(--color-text); }
+      /* #1046 B1: .back-link arves fra shared.css. */
 
       /* ── Table ───────────────────────────────────────────────────────────── */
-      .courses-table-wrap { overflow-x: auto; border: 1px solid var(--color-table-wrap-border); border-radius: var(--radius-card); }
-      .courses-table {
-        width: 100%;
-        border-collapse: collapse;
-        font-size: 14px;
-        background: var(--color-surface);
-      }
-      .courses-table th {
-        text-align: left;
-        padding: 10px 12px;
-        font-size: 11px;
-        font-weight: 700;
-        text-transform: uppercase;
-        letter-spacing: 0.05em;
-        color: var(--color-meta);
-        border-bottom: 1px solid var(--color-table-border);
-        white-space: nowrap;
-        background: var(--color-bg);
-      }
-      .courses-table td {
-        padding: 10px 12px;
-        border-bottom: 1px solid var(--color-table-border);
-        vertical-align: middle;
-      }
-      .courses-table tr:last-child td { border-bottom: none; }
-      .courses-table tr:hover td { background: var(--color-row-hover); }
-      .col-title { min-width: 200px; font-weight: 600; }
-      .col-level, .col-module-count, .col-updated { white-space: nowrap; }
-      .col-updated { color: var(--color-meta); font-size: 13px; }
-      .col-actions { white-space: nowrap; }
+      /* #1046 C1/C2: tabellen (.list-table-wrap/.list-table) arves fra shared.css — samme regel ett sted. */
 
       /* ── Cert badge ──────────────────────────────────────────────────────── */
       /* Status-merke (sertifiseringsnivå) — flatt «tag», ikke pille m/kant, så det ikke forveksles
@@ -103,41 +58,9 @@
       }
 
       /* ── Row actions ─────────────────────────────────────────────────────── */
-      .row-actions { display: flex; gap: 4px; align-items: center; }
-      .row-action-btn {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        width: auto;
-        min-height: 0;
-        padding: 4px 10px;
-        font-size: 12px;
-        font-weight: 600;
-        line-height: 1.4;
-        font-family: inherit;
-        border: 1px solid var(--color-border-soft);
-        border-radius: var(--radius-button);
-        background: var(--color-surface);
-        color: var(--color-text);
-        cursor: pointer;
-        white-space: nowrap;
-        text-decoration: none;
-        box-sizing: border-box;
-      }
-      .row-action-btn:hover { background: var(--color-row-hover); border-color: var(--color-link-hover-border); }
-      .row-action-btn.destructive { color: var(--color-error); border-color: #f5c0bb; }
-      .row-action-btn.destructive:hover { background: #fdf0ef; }
+      /* #1046 D5: .row-actions, .row-action-btn og «Mer»-menyen arves fra shared.css (samme regel ett sted). */
 
       /* ── Empty state ─────────────────────────────────────────────────────── */
-      .empty-state {
-        text-align: center;
-        padding: var(--space-5) var(--space-3);
-        background: var(--color-surface);
-        border: 1px solid var(--color-table-wrap-border);
-        border-radius: var(--radius-card);
-      }
-      .empty-state-title { font-size: 18px; font-weight: 700; color: var(--color-text); margin: 0 0 8px; }
-      .empty-state-text { font-size: 14px; color: var(--color-meta); margin: 0 0 var(--space-2); }
 
       /* ── Detail layout ───────────────────────────────────────────────────── */
       .detail-layout {
@@ -186,91 +109,12 @@
       .locale-tab-pane.active { display: block; }
 
       /* ── Form fields ─────────────────────────────────────────────────────── */
-      .form-field { margin-bottom: var(--space-2); }
-      .form-field:last-child { margin-bottom: 0; }
-      .form-field label {
-        display: block;
-        font-size: 13px;
-        font-weight: 600;
-        color: var(--color-meta);
-        margin-bottom: 4px;
-      }
-      .form-field input, .form-field textarea, .form-field select {
-        width: 100%;
-        padding: 9px 12px;
-        border: 1px solid var(--color-border-soft);
-        border-radius: var(--radius-card);
-        font-size: 14px;
-        font-family: inherit;
-        box-sizing: border-box;
-        background: #fff;
-        color: var(--color-text);
-      }
-      .form-field textarea { resize: vertical; min-height: 72px; }
-      .form-field input:focus, .form-field textarea:focus, .form-field select:focus {
-        outline: 2px solid var(--color-blue);
-        outline-offset: 1px;
-        border-color: transparent;
-      }
-      .required-note { font-size: 12px; color: var(--color-meta); margin-left: 4px; font-weight: 400; }
+      /* #1046 nivå to, D1: .form-field og .required-note arves fra shared.css — ett felt, ett sted. */
 
       /* ── Module list ─────────────────────────────────────────────────────── */
-      .module-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: var(--space-2); }
-      .module-list-item {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        padding: 8px 10px;
-        border: 1px solid var(--color-border-soft);
-        border-radius: var(--radius-card);
-        background: var(--color-bg);
-        font-size: 14px;
-      }
-      .module-list-item-order {
-        font-size: 12px;
-        font-weight: 700;
-        color: var(--color-meta);
-        min-width: 20px;
-        text-align: right;
-      }
-      .module-list-item-title { flex: 1; font-weight: 500; }
-      .item-type-badge {
-        font-size: 10px;
-        font-weight: 700;
-        letter-spacing: 0.04em;
-        padding: 2px 6px;
-        border-radius: var(--radius-btn);
-        background: var(--color-row-hover);
-        color: var(--color-meta);
-      }
-      /* Distinguish sections from modules in the builder (#490 feedback). */
-      .module-list-item[data-item-type="SECTION"] {
-        background: #eef4ff;
-        border-color: #c7dbff;
-      }
-      .module-list-item[data-item-type="SECTION"] .item-type-badge {
-        background: #d6e4ff;
-        color: #1d4ed8;
-      }
-      .module-list-item-actions { display: flex; gap: 4px; }
-      .module-move-btn, .module-remove-btn {
-        padding: 3px 8px;
-        font-size: 12px;
-        font-weight: 600;
-        border: 1px solid var(--color-border-soft);
-        border-radius: var(--radius-button);
-        background: var(--color-surface);
-        color: var(--color-text);
-        cursor: pointer;
-        white-space: nowrap;
-      }
-      .module-move-btn:hover { background: var(--color-row-hover); }
-      .module-move-btn:disabled { opacity: 0.4; cursor: default; }
-      .module-remove-btn { color: var(--color-error); border-color: #f5c0bb; }
-      .module-remove-btn:hover { background: #fdf0ef; }
+      /* #1046 G1/G2: radene og «legg til»-linja er de delte .form-row/.form-add-row i shared.css. */
 
       /* ── Combobox ────────────────────────────────────────────────────────── */
-      .combobox-row { display: flex; gap: 8px; align-items: flex-start; }
       .combobox-wrap { position: relative; flex: 1; }
       .combobox-input {
         width: 100%;
@@ -363,76 +207,6 @@
       /* ── Loading ─────────────────────────────────────────────────────────── */
       .page-loading { padding: var(--space-3); text-align: center; color: var(--color-meta); font-size: 14px; }
 
-      /* ── Conversational new-course flow ──────────────────────────────────── */
-      .conv-flow {
-        max-width: 600px;
-        display: flex;
-        flex-direction: column;
-        gap: var(--space-2);
-      }
-      .conv-bot-msg {
-        background: var(--color-surface);
-        border: 1px solid var(--color-border-soft);
-        border-radius: var(--radius-card);
-        padding: var(--space-2) var(--space-3);
-        font-size: 15px;
-        color: var(--color-text);
-        line-height: 1.5;
-      }
-      .conv-bot-msg p { margin: 0; }
-      .conv-bot-msg p + p { margin-top: 6px; }
-      .conv-user-bubble {
-        align-self: flex-end;
-        background: var(--color-primary-tint);
-        color: var(--color-link-active);
-        border-radius: var(--radius-card);
-        padding: 8px var(--space-2);
-        font-size: 14px;
-        font-weight: 600;
-        max-width: 80%;
-      }
-      .conv-input-area {
-        display: flex;
-        gap: 8px;
-        align-items: flex-start;
-      }
-      .conv-input-area input {
-        flex: 1;
-        min-width: 0;
-        padding: 9px 12px;
-        border: 1px solid var(--color-border-soft);
-        border-radius: var(--radius-card);
-        font-size: 14px;
-        font-family: inherit;
-        box-sizing: border-box;
-        background: #fff;
-        color: var(--color-text);
-      }
-      .conv-input-area input:focus { outline: 2px solid var(--color-blue); outline-offset: 1px; border-color: transparent; }
-      .conv-input-area button { width: auto; flex-shrink: 0; }
-      .conv-choices {
-        display: flex;
-        gap: 8px;
-        flex-wrap: wrap;
-        margin-top: 4px;
-      }
-      .conv-choice-btn {
-        width: auto;
-        padding: 8px 18px;
-        font-size: 14px;
-        font-weight: 600;
-        border: 2px solid var(--color-border-soft);
-        border-radius: var(--radius-button);
-        background: var(--color-surface);
-        color: var(--color-text);
-        cursor: pointer;
-        white-space: nowrap;
-        transition: border-color 0.12s, background 0.12s;
-      }
-      .conv-choice-btn:hover { border-color: var(--color-blue); color: var(--color-link-active); background: var(--color-primary-tint); }
-      .conv-saving-indicator { font-size: 13px; color: var(--color-meta); font-style: italic; }
-      .conv-step { display: flex; flex-direction: column; gap: var(--space-2); }
-      .combobox-row button { width: auto; flex-shrink: 0; }
     </style>
   </head>
   <body>

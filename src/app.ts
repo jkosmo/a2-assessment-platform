@@ -71,6 +71,14 @@ app.use(
   "/api/admin/content/courses/import",
   express.json({ limit: COURSE_IMPORT_BODY_LIMIT_BYTES }),
 );
+// #931 pkt 5: seksjonsIMPORT får samme grense som kursimport. Eksporten tillater 25 MB vedlegg
+// (≈33 MB som base64); med 15 MB-grensen under kunne eksporten lage en fil importen avviste med
+// 413. Kursimport fikk sin egen grense av nøyaktig denne grunnen (#749); seksjonsimport fikk ingen.
+// Registrert FØR /sections-parseren, som ellers hadde tatt kroppen først.
+app.use(
+  "/api/admin/content/sections/import",
+  express.json({ limit: COURSE_IMPORT_BODY_LIMIT_BYTES }),
+);
 // #763 (Layer B): section create (POST /sections) may inline figures/images (base64) → bodies
 // exceed 5 MB. Registered before the global parser so ONLY the /sections routes get the larger
 // limit; the express.json parser skips non-JSON (multipart asset uploads) and already-parsed bodies.
@@ -191,8 +199,10 @@ app.get("/deltakere/klasser", (_request, response) => {
   response.sendFile(path.resolve(process.cwd(), "public", "admin-content-classes.html"));
 });
 // #765: 301 the old classes URL to its new home (same redirect pattern as the other moved routes).
-app.get("/admin-content/classes", (_request, response) => {
-  response.redirect(301, "/deltakere/klasser");
+app.get("/admin-content/classes", (request, response) => {
+  // #1046: klassen har fått ?id=/?new — spørrestrengen må følge med over.
+  const query = request.originalUrl.includes("?") ? request.originalUrl.slice(request.originalUrl.indexOf("?")) : "";
+  response.redirect(301, `/deltakere/klasser${query}`);
 });
 
 // Calibration workspace (Issue #326)

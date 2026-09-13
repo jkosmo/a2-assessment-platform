@@ -1,4 +1,5 @@
 import { test, expect, type Page, type Route } from "@playwright/test";
+import { revealRowAction } from "./admin-content-helpers.js";
 
 // Browser e2e for the section editor (U1/U2, #483/#524). Runs the REAL front-end JS in Chromium
 // against mocked APIs — covering the client-layer bugs supertest/integration tests can't see:
@@ -74,7 +75,7 @@ test("section editor: no raw i18n keys, and image upload is sent as multipart", 
   await page.locator("#titleInput").fill("Tittel");
   await page.locator("#markdownInput").fill("# Hei");
   // Save so the section gets an id (upload requires a saved section).
-  await page.getByRole("button", { name: /Lagre ny versjon/ }).click();
+  await page.getByRole("button", { name: /^Lagre$/ }).click();
 
   // The alt-text prompt — accept it.
   page.on("dialog", (dialog) => dialog.accept("alt-tekst"));
@@ -135,7 +136,7 @@ test("section list renders rows (status badge) without a client-side error", asy
 
 // #662: the markdown input must grow to match the (taller) preview pane instead of staying pinned
 // at its 320px minimum, so the author isn't editing in a small box beside a tall preview.
-test("section editor: markdown input grows to match a taller preview pane", async ({ page }) => {
+test("section editor: full-width editor in Rediger, preview in its own tab", async ({ page }) => {
   await mockBaseApis(page);
   await page.route("**/api/admin/content/sections", (route: Route) =>
     route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ sections: [] }) }),
@@ -153,19 +154,15 @@ test("section editor: markdown input grows to match a taller preview pane", asyn
   await page.getByRole("button", { name: /Ny seksjon/ }).click();
   await page.locator("#markdownInput").fill("# Hei\n\nNoe innhold.");
 
-  // Preview renders the tall mocked HTML.
+  // #1046 nivå to (13.09): editoren står alene i full bredde i Rediger; forhåndsvisningen er en egen
+  // fane som tegnes når den åpnes. Editoren skal være romslig (ikke 320 px), og forhåndsvisningen
+  // skal vise det man skrev.
+  const ta = await page.locator("#markdownInput").boundingBox();
+  expect(ta && ta.height > 320).toBe(true);
+  await page.locator('[data-form-tab-btn="forhandsvisning"]').click();
+  await expect(page.locator("#previewPane")).toBeVisible();
   await expect(page.locator("#previewPane")).toContainText("Preview line", { timeout: 5000 });
-
-  // The preview is taller than the 320px floor, and the textarea has grown to (about) match it —
-  // not stuck at 320. Allow a small tolerance for the label-row height difference between columns.
-  await expect
-    .poll(async () => {
-      const ta = await page.locator("#markdownInput").boundingBox();
-      const pv = await page.locator("#previewPane").boundingBox();
-      if (!ta || !pv) return -1;
-      return pv.height > 320 && Math.abs(ta.height - pv.height) <= 48 ? 1 : 0;
-    })
-    .toBe(1);
+  await expect(page.locator("#markdownInput")).toBeHidden();
 });
 
 // #540: the section editor must show the blocking consent dialog when consent is not yet
@@ -255,7 +252,6 @@ test("participant: course load sends x-user-* identity headers in mock mode", as
   );
 
   await page.goto("/participant");
-  await page.locator("#loadCoursesBtn").click();
 
   await expect.poll(() => coursesUserId).toBe("participant-1");
   expect(coursesRoles).toContain("PARTICIPANT");
@@ -338,17 +334,73 @@ test("section editor: «Oversett» locks the editor while translating, then fill
 
   // LOCKED: button shows the translating label and the edit controls are disabled.
   await expect(page.locator("#translateBtn")).toHaveText(/Oversetter/);
-  await expect(page.locator("#saveBtn")).toBeDisabled();
+  await expect(page.locator("#formSaveBtn")).toBeDisabled();
   await expect(page.locator("#titleInput")).toBeDisabled();
   await expect(page.locator("#markdownInput")).toBeDisabled();
 
   // Release the translation → unlocks and restores the button label.
   releaseLocalize();
   await expect(page.locator("#translateBtn")).toHaveText(/Oversett fra/);
-  await expect(page.locator("#saveBtn")).toBeEnabled();
+  await expect(page.locator("#formSaveBtn")).toBeEnabled();
 
   // Both other locales were requested, and the nn tab now holds the translated title.
   await expect.poll(() => [...requestedTargets].sort()).toEqual(["en-GB", "nn"]);
-  await page.locator('.lang-tab[data-locale="nn"]').click();
+  await page.locator('[data-form-locale="nn"]').click();
   await expect(page.locator("#titleInput")).toHaveValue("T-nn");
+});
+
+// #1046 D3 (avgjort 12.09): «Slett» er ute av seksjonslista og bor inne på den ARKIVERTE seksjonen.
+// To steg som for modul, kurs og klasse: arkiver først, slett så. En aktiv seksjon har ingen
+// slett-knapp, verken i lista eller i editoren.
+test.describe("#1046 D3 — sletting av seksjon bor i editoren, bare for arkiverte", () => {
+  const rad = (archivedAt: string | null) => ({
+    id: "sec-del", title: JSON.stringify({ nb: "Slettbar", nn: "Slettbar", "en-GB": "Deletable" }), bodyMarkdown: JSON.stringify({ nb: "x", nn: "x", "en-GB": "x" }),
+    activeVersionId: null, versionNo: 1, updatedAt: "2026-09-01T00:00:00.000Z", archivedAt, courseCount: 0, courses: [], canManage: true,
+  });
+
+  async function mockSection(page: Page, archivedAt: string | null) {
+    await mockBaseApis(page);
+    await page.route("**/api/admin/content/sections", (route: Route) =>
+      route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ sections: [rad(archivedAt)] }) }));
+    await page.route("**/api/admin/content-owners/SECTION/sec-del", (route: Route) =>
+      route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ owners: [], canManageOwners: false }) }));
+    let deleted = false;
+    await page.route("**/api/admin/content/sections/sec-del", (route: Route) => {
+      if (route.request().method() === "DELETE") { deleted = true; return route.fulfill({ status: 204, body: "" }); }
+      return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ section: rad(archivedAt) }) });
+    });
+    return () => deleted;
+  }
+
+  test("lista har ingen Slett; den arkiverte seksjonen har det i editoren, med bekreftelse", async ({ page }) => {
+    const bleSlettet = await mockSection(page, "2026-09-02T00:00:00.000Z");
+    await page.goto("/admin-content/sections");
+    // Lista åpner på «Aktive»; den arkiverte raden ligger under «Arkiverte».
+    await page.locator('.list-filter-btn[data-filter="archived"]').click();
+    await expect(page.locator("#sectionsTableBody tr")).toHaveCount(1);
+    await expect(page.locator('#sectionsTableBody [data-action="delete"]')).toHaveCount(0);
+
+    await page.locator('[data-action="edit"][data-id="sec-del"]').click();
+    // #1046 nivå to: Slett ligger i handlingsraden i hodet — under «Mer» når det er flere enn fire.
+    const slett = await revealRowAction(page, page.locator("#sectionDeleteBtn"));
+    await expect(slett).toBeVisible();
+
+    // Avbryt i bekreftelsen → ingenting sendes.
+    page.once("dialog", (d) => d.dismiss());
+    await slett.click();
+    expect(bleSlettet()).toBe(false);
+
+    // Bekreft → DELETE går, og forfatteren står i lista igjen.
+    page.once("dialog", (d) => { expect(d.message()).toMatch(/helt sikker|sure/i); return d.accept(); });
+    await (await revealRowAction(page, page.locator("#sectionDeleteBtn"))).click();
+    await expect.poll(bleSlettet).toBe(true);
+    await expect(page.locator("#sectionsTableBody")).toBeAttached();
+  });
+
+  test("en aktiv seksjon har ingen slett-knapp i editoren", async ({ page }) => {
+    await mockSection(page, null);
+    await page.goto("/admin-content/sections?id=sec-del");
+    await expect(page.locator("#titleInput")).toBeVisible();
+    await expect(page.locator("#sectionDeleteBtn")).toBeHidden();
+  });
 });

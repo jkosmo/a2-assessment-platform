@@ -41,6 +41,12 @@ export function createClassRepository(client: ClassRepositoryClient = prisma) {
       return client.class.update({ where: { id: classId }, data: { archivedAt: new Date() } });
     },
 
+    // #1046 D3: sletting for godt. Medlemmer og kurstildelinger følger med (onDelete: Cascade i
+    // skjemaet); deltakernes egen fremdrift ligger på brukeren og røres ikke.
+    deleteClass(classId: string) {
+      return client.class.delete({ where: { id: classId } });
+    },
+
     // #705-family: reverse of archiveClass — clear the soft-archive so the class is active again.
     restoreClass(classId: string) {
       return client.class.update({ where: { id: classId }, data: { archivedAt: null } });

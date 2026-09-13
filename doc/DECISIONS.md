@@ -625,3 +625,135 @@ bare et funn som venter på å bli lukket på nytt.
 forespørsel uten `x-locale` og uten gjenkjennelig `Accept-Language`, og e-post til en bruker som
 ikke har logget inn siden `User.preferredLocale` kom (#970). Kodens egen reserve forblir `en-GB` —
 plattformen kan kjøre for andre organisasjoner; dette er A-2s konfigurasjon.
+
+## Én listeside for forfatterflaten (2026-09-12)
+
+Moduler, Kurs, Seksjoner og Klasser var fire håndskrevne utgaver av samme side. Hver runde av
+#1046 rettet samme ting fire steder — den feilklassen vi har sett gjentatte ganger. Nå eier
+`public/static/list-page.js` alt som er likt (sidehode, søk, filterknapper, kursfilter, tabell,
+sortering, rader, «Mer»-meny, klikk, tom-tilstand, filtrering i minnet), og hver side leverer bare
+en oppskrift: kolonner, hvordan lese status, hvilke handlinger, tekster, hvilket kall som henter.
+`test/dom/list-page-1046.dom.test.js` måler regelen og forbyr at en side får en kopi igjen.
+
+Det som ble valgt bort: å la sidene beholde egne varianter «der de trengte det». Ingen av
+avvikene var valgt — de var lag i tid. Neste steg (steg B) er én tilstand i API-et: alle fire
+listekallene skal levere samme `lifecycle`-felt, så oppskriftenes status-adaptere kan fjernes.
+
+## Én tilstand for alt innhold i forfatterlistene (2026-09-12, steg B)
+
+Alle fire listekallene (moduler, kurs, seksjoner, klasser) leverer nå `lifecycle`, regnet ut ett
+sted på tjeneren (`src/modules/content/lifecycle.ts`): `draft · published · published_with_draft ·
+archived` for innhold, `active · archived` for klasser. Klienten leser ordet; den regner ikke ut
+tilstand selv lenger. Filterknappene og statusmerket (med «Nyere utkast») følger dermed samme regel
+på alle listene. Modulenes gamle `status`-felt (fem verdier) og kursenes/seksjonenes råfelter står
+til klientene har gått over; da fjernes de (kontraktfasen).
+
+## Skjemaskjermene: lag nytt rett i et tomt element; lagre med knapp (2026-09-12)
+
+Produkteier valgte for #1046 nivå to (`doc/UI_FORM_LEVEL.md`):
+
+1. **Å lage nytt = åpne et tomt element** (som Ny seksjon i dag). Ingen dialog eller egen «hva skal
+   det hete»-side først. Elementet lages på tjeneren ved første lagring.
+2. **Alle skjemaer har en Lagre-knapp**, sida sier «Alt lagret» / «Ulagrede endringer», og spør før man
+   forlater med noe ulagret. Gjelder også klasse. Handlinger som er operasjoner og ikke felt (legg til
+   medlem, tildel kurs, publiser) utføres fortsatt i det de gjøres.
+
+Det som ble valgt bort: dialog først (modulens mønster) og «alt lagres fortløpende» (klassens mønster).
+
+## Bokmål er det påkrevde språket for innhold (2026-09-12)
+
+Produkteier: «Ja til NB som påkrevd.» Tre ting følger:
+
+1. **Lesing:** mangler en tekst på leserens språk, vises organisasjonens standardspråk
+   (`DEFAULT_LOCALE`, nb hos A-2) — ikke engelsk. Engelsk er siste utvei. Regelen bor ett sted på
+   tjeneren (`contentFallbackOrder`/`pickLocalizedValue` i `src/i18n/content.ts`) og ett sted på
+   klienten (`pickLocalizedText` i `public/static/i18n-locale.js`, som leser standardspråket fra
+   `/participant/config`).
+2. **Skjema:** bokmål er merket «(påkrevd)» og står først; et kurs kan ikke lagres uten navn på bokmål.
+   En ren streng uten språkmerke leses som bokmål på klienten også (som #930 på tjeneren).
+3. **Publisering:** uendret — gaten krever fortsatt alle tre språk. Utkast kan være delvise.
+
+Kodens egen reserve forblir `en-GB` for plattformer som kjører uten standardspråk.
+
+## Skjemahodet: Lagre og Avbryt først i handlingsraden; samtaleruta på forespørsel (2026-09-13)
+
+Produkteier, etter omgang 3 på stage:
+
+1. **Lagre og Avbryt står først i handlingsraden i hodet** på alle skjemaene (modul, kurs, seksjon,
+   klasse), ved siden av «Alt lagret / Ulagrede endringer». Diskré grønn (Lagre) og rød (Avbryt) tone
+   når det finnes noe å lagre eller forkaste; grå og slått av ellers. Avbryt = forkast det ulagrede og
+   vis det som er lagret — ikke navigering. Lagrelinja nederst i skjemaet er borte. Modulen har én
+   Lagre for Rediger, Innstillinger og et generert utkast.
+2. **Korte ord på modulens handlinger**, samme ord som de andre elementene: Publiser · Avpubliser ·
+   Generer innhold · Generer spørsmål · Rediger i chat · Eksporter · Importer. Typen står i tittelen;
+   «modul» og «pakke» gjentas ikke i knappen. Publiser/Avpubliser først.
+3. **Versjonsfaktaene som merker i hodet** («Publisert v2 · Utkast v4»); «Forhåndsvisning viser …»
+   står i Forhåndsvisning-fanen. Modulens egen tilstandslinje tegnes ikke lenger.
+4. **GDPR-varselet som én linje under oppgavefeltet**, som folder ut hele teksten. Ikke «vis én gang»:
+   da mister nye forfattere av gamle moduler det.
+5. **Samtaleruta i Rediger er skjult til assistenten trenger et svar** (valg, skjema, avbrytbar
+   framdrift) og kan skjules igjen. Utfallet av handlinger (lagret, importert, avvist) kommer som
+   toast når ruta er skjult — som på de andre skjemasidene.
+
+## SMO ser resultater for egne kurs — også personnivå (2026-09-13)
+
+Produkteier: SUBJECT_MATTER_OWNER skal kunne lese Resultater for kurs hen eier. Først foreslått som
+«tallene, ikke personene»; justert samme dag med henvisning til 23.08-avgjørelsen om revisjonssporet:
+SMO er «en lærer med pedagogisk oppfølgingsansvar» og ser allerede enkeltpersoner per innlevering, så
+det er ikke konsistent å skjule dem i Resultater. Ingen særregler for små grupper — det holder
+kompleksiteten nede. Sak: #1058.
+
+Konkret: de seks rapportene Resultater bruker (og eksportene av dem) åpnes for SMO filtrert på
+eierskap (ContentOwner på kurset, og modulene i kurset). Administrator og rapportleser ser alt som før.
+Resten av `/api/reports` er uendret.
+
+Gjennomført 13.09 (#1058): `/api/reports` er montert for administrator, rapportleser og fagansvarlig;
+fagansvarlig får bare de seks Resultater-rapportene (og eksportene av dem), avgrenset til kurs hen eier
+(`src/modules/reporting/scope.ts`). Rutene for analyse på tvers av organisasjonen krever fortsatt
+`REPORT_READERS`. Et kurs utenfor settet gir tom rapport, ikke 403. Samtidig rettet: kursfilteret på
+Resultater gjaldt bare kursrapporten — modultabellene ignorerte det. Nå avgrenser «Kurs: X» alt.
+
+## Modulskjemaet: fanebytte uten å lagre, navn som felt, ny modul åpner på Innstillinger (2026-09-13)
+
+Produkteier, etter omgang 5/6 på stage:
+
+1. **Fanebytte er ikke navigering og spør ikke** — også for modulen (kurs, seksjon og klasse hadde
+   det). Det som er skrevet i Rediger følger med til Innstillinger og tilbake; Forhåndsvisning viser
+   det som er skrevet (ulagret); Innstillinger-verdier, også kriterier, står der ved retur. Dialogen
+   «Forkast og bytt» er borte. Én Lagre lagrer det som er ulagret der du står; Avbryt forkaster.
+2. **Navnet er et vanlig felt** («Navn (påkrevd)») øverst i Rediger — ikke en understreket tittel
+   som ser ut som en overskrift. Uten navn stopper Lagre før noe rives ned.
+3. **Ny modul åpner på Innstillinger**: navn, modultype (fritekst + flervalg / bare fritekst / bare
+   flervalg) og sertifiseringsnivå — typen er det første valget. Lagre oppretter modulen; Rediger
+   viser så feltene for valgt type.
+4. **Lagring åpner ikke samtaleruta.** Framdriften vises som toast med «Avbryt» så lenge ruta er
+   skjult; ruta åpnes bare når assistenten spør (valg, skjema).
+5. Seksjon: tjeneren krever både navn og innhold for en versjon. Kravet står nå i etiketten
+   («Innhold (Markdown) (påkrevd)») og i meldingen, med markøren i det som mangler.
+
+## Spørsmål redigeres i skjemaet; samtalen gjentar ikke handlingsraden (2026-09-13)
+
+Produkteier, etter omgang 7 på stage: «P.t. er det bare i samtale man kan legge til spørsmål … Ingen
+funksjoner som er i handlingsmeny bør vises i samtale, og man bør unngå gjentagende status.»
+
+1. Flervalgsdelen i Rediger vises alltid når modultypen har flervalg — også tom — med «Legg til
+   spørsmål» og «Fjern spørsmål». Generering i samtalen er én vei inn, ikke den eneste.
+2. Samtalen tilbyr ikke valg som alt står i handlingsraden. Ved en stoppet lagring sier meldingen
+   hva som mangler (toast + én linje i loggen) og sender forfatteren til feltet.
+3. Faste hint («Rediger feltene til venstre …») loggføres ikke; «ingenting å revidere» er en toast.
+
+## Samtalen erstattes av to dialoger (2026-09-13)
+
+Produkteier: «Jeg tror vi skal redusere samtalebasert. Den gir liten mening som den er nå.» Det som
+gir mening er «Generer innhold» med kildemateriale, og å be om en endring med vanlige ord. Type og
+nivå er alt valgt under Innstillinger og skal ikke spørres om.
+
+Steg 1 (gjort): to dialoger — **«Generer innhold»** (lim inn / last opp / URL / crawl, antall
+spørsmål og alternativer når typen har flervalg, Generer) og **«Be om endring»** (én instruks, med
+eksempler å trykke på). Begge sier eksplisitt at resultatet legges i skjemaet som ulagret utkast —
+Lagre beholder, Avbryt går tilbake til det lagrede (produkteier valgte «alltid nytt utkast», ikke
+«erstatt med spørsmål først»). Vurderingsplanen og framdriften vises fortsatt i den reduserte
+samtaleruta; spørsmålene om type, nivå, scenario og antall er borte fra flyten.
+
+Steg 2 (gjenstår): planen som del av dialogen, publiseringsgaten («Oversett det som mangler») som
+vanlig dialog, og samtaleruta fjernes.

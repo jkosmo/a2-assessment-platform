@@ -471,6 +471,9 @@ adminContentRouter.post("/modules/import", idempotency("modules.import"), async 
     response.status(201).json({
       moduleId: result.moduleId,
       moduleVersionId: result.moduleVersionId,
+      // #995: kalleren (forfatter eller agent) skal vite at modulen ble holdt tilbake som utkast —
+      // ellers tror den pakken gikk live. Kursimport har hatt dette siden #957.
+      heldBackByTranslationGate: result.heldBackByTranslationGate,
       links: moduleAdminLinks(result.moduleId),
       ...(data.clientRef !== undefined ? { clientRef: data.clientRef } : {}),
     });
@@ -620,7 +623,7 @@ adminContentRouter.post("/modules/:moduleId/rubric-versions/sync-blueprint", asy
   try {
     const moduleId = String(request.params.moduleId);
     await assertModuleOwnership(moduleId, actorId, request.context?.roles ?? []);
-    const result = await syncActiveRubricBlueprintHash(moduleId, data.blueprintHash);
+    const result = await syncActiveRubricBlueprintHash(moduleId, data.blueprintHash, { rubricVersionId: data.rubricVersionId ?? null });
     if (!result) {
       response.status(404).json({ error: "no_rubric_to_sync" });
       return;

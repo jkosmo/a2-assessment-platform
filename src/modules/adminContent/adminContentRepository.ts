@@ -404,19 +404,20 @@ export function createAdminContentRepository(client: AdminContentRepositoryClien
       });
     },
 
-    // B3 (#450): patch scalingRule on an existing RubricVersion without bumping versionNo.
-    // Used by "Behold kriteriene"-handling — flips the stored blueprint-hash so drift-banner
-    // hides, but leaves criteria untouched.
-    updateRubricVersionScalingRule(id: string, scalingRuleJson: string) {
-      return client.rubricVersion.update({
+    // #915: «Behold kriteriene» lager en NY rubrikkversjon (se syncActiveRubricBlueprintHash). Det
+    // som sto her — `updateRubricVersionScalingRule`, en patch på stedet uten versionNo-bump — var
+    // det ene unntaket fra «komponentversjoner er uforanderlige», og det unntaket gjorde
+    // gjenoppretting av en eldre modulversjon til en løgn om kriteriedrift.
+    findRubricVersionById(id: string) {
+      return client.rubricVersion.findUnique({
         where: { id },
-        data: { scalingRuleJson },
         select: {
           id: true,
           moduleId: true,
           versionNo: true,
+          criteriaJson: true,
+          scalingRuleJson: true,
           active: true,
-          createdAt: true,
         },
       });
     },

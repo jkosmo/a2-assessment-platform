@@ -50,6 +50,15 @@ test("classes admin: list, create, add a student via search, and assign a course
     }
     return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ classes: state.classes }) });
   });
+  // #1046 nivå to: det åpnede elementet henter én klasse (GET) og lagrer navn/beskrivelse (PATCH).
+  await page.route("**/api/admin/content/classes/*", (route: Route) => {
+    const id = new URL(route.request().url()).pathname.split("/").pop() ?? "";
+    const klass = state.classes.find((c) => c.id === id) ?? { id, name: "Ukjent", isSystem: false };
+    if (route.request().method() === "PATCH") {
+      Object.assign(klass, route.request().postDataJSON() as object);
+    }
+    return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ class: { ...klass, lifecycle: "active" } }) });
+  });
   await page.route("**/api/admin/content/classes/*/members", (route: Route) => {
     if (route.request().method() === "POST") {
       memberPosted = true;
@@ -94,8 +103,19 @@ test("classes admin: list, create, add a student via search, and assign a course
   await expect(page.locator("#classesTableBody")).toContainText("Alle deltakere");
 
   // Create a class.
-  page.once("dialog", (dialog) => dialog.accept("Kull 2026"));
+  // #1046 nivå to (1b): «Ny klasse» åpner et tomt skjema; klassen lages ved første Lagre, og man
+  // står igjen i den lagrede klassen (med deltakere og kurs).
   await page.locator("#newClassBtn").click();
+  await expect(page.locator("#formPageTitle")).toHaveText("Ny klasse");
+  await expect(page.locator("#formSaveBtn")).toBeDisabled();
+  await page.locator("#className").fill("Kull 2026");
+  await expect(page.locator("#formPageTitle")).toHaveText("Kull 2026");
+  await expect(page.locator("#formPageDirty")).toHaveText("Ulagrede endringer");
+  await page.locator("#formSaveBtn").click();
+  await expect(page.locator("#studentSearch")).toBeVisible();
+  await expect(page.locator("#formPageDirty")).toHaveText("Alt lagret");
+  // Tilbake til lista: den nye klassen står der, og «Åpne» fører inn igjen.
+  await page.locator("#formBackLink").click();
   await expect(page.locator("#classesTableBody")).toContainText("Kull 2026");
 
   // Open the new class → detail view.
@@ -196,6 +216,36 @@ test("deltakere sub-nav: role-gates tabs and marks the current one active", asyn
 
   // The active tab reflects the current page.
   await expect(subnav.locator("#subnavKlasser")).toHaveClass(/active/);
+  await expect(subnav).toHaveAttribute("data-roles-resolved", "true");
+});
+
+// #1046 E4: «Manuell behandling» må ikke blinke. Før ble alle lenkene tegnet og de ulovlige fjernet
+// ETTER at rollene var hentet — en SMO så fanen komme og gå. Nå holdes de rollestyrte lenkene
+// usynlige til svaret er der. Testen holder /api/me tilbake og ser at lenken ikke er synlig i
+// mellomtiden — og at den fjernes, ikke vises, når svaret kommer.
+test("deltakere sub-nav: rollestyrte faner vises ikke før rollene er kjent (ingen blinking)", async ({ page }) => {
+  await mockBaseApis(page, ["SUBJECT_MATTER_OWNER"]);
+  await page.route("**/api/admin/content/classes", (route: Route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ classes: [] }) }),
+  );
+  let slippMe: (() => void) | null = null;
+  const meHoldes = new Promise<void>((resolve) => { slippMe = resolve; });
+  await page.route("**/api/me", async (route: Route) => {
+    await meHoldes;
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ user: { id: "u1", roles: ["SUBJECT_MATTER_OWNER"] }, consent: { currentVersion: "1.0", accepted: true } }) });
+  });
+
+  await page.goto("/deltakere/klasser");
+  const subnav = page.locator("#deltakereSubnav");
+  await expect(subnav).toHaveAttribute("data-roles-resolved", "false");
+  // Lenken finnes i DOM-en, men er usynlig — det er hele poenget.
+  await expect(subnav.locator("#subnavReview")).toHaveCount(1);
+  await expect(subnav.locator("#subnavReview")).toBeHidden();
+
+  slippMe!();
+  await expect(subnav).toHaveAttribute("data-roles-resolved", "true");
+  await expect(subnav.locator("#subnavReview")).toHaveCount(0);
+  await expect(subnav.locator("#subnavKlasser")).toBeVisible();
 });
 
 // #690: the "Synk brukere fra Entra" button is ADMINISTRATOR-only and triggers the Entra user sync.
@@ -316,6 +366,9 @@ test("classes admin: importing a users file posts to the delta sync endpoint", a
 // automatisk test ser, kan forsvinne i en refaktorering uten at noe blir rødt.
 test("#967: klasseskjermen merker tildelinger til upubliserte og arkiverte kurs", async ({ page }) => {
   await mockBaseApis(page, ["ADMINISTRATOR"]);
+  await page.route("**/api/admin/content/classes/*", (route: Route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ class: { id: "cls-1", name: "Kull A", isSystem: false, archivedAt: null, lifecycle: "active" } }) }),
+  );
   await page.route("**/api/admin/content/classes", (route: Route) =>
     route.fulfill({
       status: 200,
@@ -348,14 +401,14 @@ test("#967: klasseskjermen merker tildelinger til upubliserte og arkiverte kurs"
 
   await page.goto("/deltakere/klasser");
   await page.locator('[data-action="open"]').first().click();
-  await expect(page.locator(".assign-row").first()).toBeVisible();
+  await expect(page.locator(".form-row").first()).toBeVisible();
 
-  const warnings = page.locator(".assign-meta--warn");
+  const warnings = page.locator(".form-row-meta--warn");
   await expect(warnings).toHaveCount(2);
   await expect(warnings.nth(0)).toContainText(/Ikke publisert/i);
   await expect(warnings.nth(1)).toContainText(/Arkivert/i);
   // Det publiserte kurset skal IKKE merkes — ellers betyr merket ingenting.
-  await expect(page.locator(".assign-row").first().locator(".assign-meta--warn")).toHaveCount(0);
+  await expect(page.locator(".form-row").first().locator(".form-row-meta--warn")).toHaveCount(0);
   // Et varsel ingen ser er ikke et varsel.
   await expect(warnings.first()).toHaveCSS("color", "rgb(122, 75, 0)");
 });

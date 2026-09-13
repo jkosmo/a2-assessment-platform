@@ -50,3 +50,41 @@ describe("#705 shared content status badge", () => {
     expect(pwd).toContain('<span class="status-chip">Nyere utkast</span>');
   });
 });
+
+// #1046 steg B: tjeneren leverer `lifecycle`; klienten leser ordet. Én reserve for gamle svar
+// (og testers mock-data) — ett sted, ikke ett per side.
+import { lifecycleOf, lifecycleBadge, matchesLifecycleFilter } from "../../public/static/content-status-badge.js";
+
+describe("#1046 steg B — lifecycleOf / lifecycleBadge / matchesLifecycleFilter", () => {
+  it("leser tjenerens ord først, og faller tilbake på de gamle feltene når det mangler", () => {
+    expect(lifecycleOf({ lifecycle: "published_with_draft", archivedAt: "x" })).toBe("published_with_draft");
+    expect(lifecycleOf({ archivedAt: "2026-09-01" })).toBe("archived");
+    expect(lifecycleOf({ status: "published_with_draft" })).toBe("published_with_draft");
+    expect(lifecycleOf({ status: "ready" })).toBe("draft");
+    expect(lifecycleOf({ activeVersionId: "v1", archivedAt: null })).toBe("published");
+    expect(lifecycleOf({ activeVersionId: null, archivedAt: null })).toBe("draft");
+    expect(lifecycleOf({ publishedAt: "2026-09-01", archivedAt: null })).toBe("published");
+    expect(lifecycleOf({ publishedAt: null, archivedAt: null })).toBe("draft");
+    expect(lifecycleOf({ name: "Klasse", archivedAt: null })).toBe("active");
+  });
+
+  it("merket: published_with_draft gir Publisert + «nyere utkast»; klasser uten arkivering får ikke merke", () => {
+    expect(lifecycleBadge({ lifecycle: "published_with_draft" }, t)).toBe(
+      '<span class="status-badge status-badge--published">Publisert</span> <span class="status-chip">Nyere utkast</span>',
+    );
+    expect(lifecycleBadge({ lifecycle: "draft" }, t)).toContain("status-badge--draft");
+    expect(lifecycleBadge({ lifecycle: "archived" }, t)).toContain("status-badge--archived");
+    expect(lifecycleBadge({ lifecycle: "active" }, t)).toBe("");
+  });
+
+  it("filterknappene: én regel for alle listene", () => {
+    const rader = ["draft", "published", "published_with_draft", "archived", "active"].map((lifecycle) => ({ lifecycle }));
+    const treff = (key) => rader.filter((r) => matchesLifecycleFilter(r, key)).map((r) => r.lifecycle);
+    expect(treff("all")).toEqual(["draft", "published", "published_with_draft", "archived", "active"]);
+    expect(treff("active")).toEqual(["draft", "published", "published_with_draft", "active"]);
+    expect(treff("archived")).toEqual(["archived"]);
+    expect(treff("published")).toEqual(["published", "published_with_draft"]);
+    // v1.2.20 (#460): aldri publisert OG live med et nyere utkast.
+    expect(treff("unpublished_draft")).toEqual(["draft", "published_with_draft"]);
+  });
+});

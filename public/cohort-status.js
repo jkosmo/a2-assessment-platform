@@ -4,10 +4,12 @@ import { describeApiError } from "/static/api-error.js";
 import { lagLokalisertRessurs } from "/static/localized-resource.js";
 import { resolveInitialLocale } from "/static/i18n-locale.js";
 import { escapeHtml } from "/static/html-escape.js";
+import { createDateTimeFormatter } from "/static/format-display.js";
 import { localeLabels, supportedLocales, translations } from "/static/i18n/cohort-status-translations.js";
 import { apiFetch, buildConsoleHeaders, getConsoleConfig } from "/static/api-client.js";
 import { initConsentGuard } from "/static/consent-guard.js";
 import { setHidden } from "/static/dom-visibility.js";
+import { setTableEmpty } from "/static/table-empty.js";
 import {
   findMatchingPreset,
   resolveRoleSwitchState,
@@ -35,10 +37,11 @@ const cohortEmpty = document.getElementById("cohortEmpty");
 const cohortUnavailable = document.getElementById("cohortUnavailable");
 const statusCards = document.getElementById("statusCards");
 const byClassSection = document.getElementById("byClassSection");
-const byClassEmpty = document.getElementById("byClassEmpty");
 const byClassBody = document.getElementById("byClassBody");
 
 let currentLocale = resolveInitialLocale(supportedLocales);
+// #1046 J9: samme datohjelper som resten (ingen sekunder).
+const formatDateTime = createDateTimeFormatter(() => currentLocale, "");
 let participantRuntimeConfig = { authMode: "mock", navigation: { items: [] }, identityDefaults: {} };
 let roleSwitchState = resolveRoleSwitchState(participantRuntimeConfig);
 
@@ -145,14 +148,15 @@ function setLocale(locale) {
 
 // --- Cohort dashboard logic -------------------------------------------------
 
+// #1046 J4: ett tall med etikett på nøkkeltall-linja (var en flis i et rutenett).
 function statusCard(cls, value, label) {
-  return `<div class="status-card status-card--${cls}"><div class="status-value">${value}</div><div class="status-label">${escapeHtml(label)}</div></div>`;
+  return `<span class="status-card status-card--${cls}"><span class="kpi-value status-value">${value}</span><span class="status-label">${escapeHtml(label)}</span></span>`;
 }
 
 function renderCohort(summary) {
   if (cohortEmpty) cohortEmpty.hidden = true;
   if (statusCards) {
-    // #975: `.status-grid{display:grid}` står i <style>-blokka i cohort-status.html og slår
+    // #975: `.kpi-line{display:flex}` (shared.css) slår
     // `hidden`-attributtet. Rutenettet ble aldri skjult — det var bare tomt, og et tomt grid har
     // høyde 0. Derfor så det riktig ut, og derfor sa `toBeHidden()` i e2e-en at alt var i orden.
     setHidden(statusCards, false);
@@ -168,12 +172,13 @@ function renderCohort(summary) {
   if (byClassSection) {
     byClassSection.hidden = false;
     const rows = summary.byClass ?? [];
-    if (byClassEmpty) byClassEmpty.hidden = rows.length > 0;
+    // #1046 J6: tom tabell = bare teksten — samme hjelper som Resultater (table-empty.js).
+    setTableEmpty(byClassBody, rows.length === 0 ? t("cohort.byClass.empty") : null);
     if (byClassBody) {
       byClassBody.innerHTML = rows
         .map((b) => {
           const bc = b.counts ?? {};
-          return `<tr><td>${escapeHtml(b.className ?? b.classId)}</td><td>${bc.ASSIGNED ?? 0}</td><td>${bc.IN_PROGRESS ?? 0}</td><td>${bc.OVERDUE ?? 0}</td><td>${bc.COMPLETED ?? 0}</td><td>${b.total ?? 0}</td></tr>`;
+          return `<tr><td class="col-name">${escapeHtml(b.className ?? b.classId)}</td><td>${bc.ASSIGNED ?? 0}</td><td>${bc.IN_PROGRESS ?? 0}</td><td>${bc.OVERDUE ?? 0}</td><td>${bc.COMPLETED ?? 0}</td><td>${b.total ?? 0}</td></tr>`;
         })
         .join("");
     }
@@ -191,7 +196,7 @@ function renderCohort(summary) {
     cohortUnavailable.hidden = message === "";
   }
   if (cohortMeta) {
-    const when = summary.generatedAt ? new Date(summary.generatedAt).toLocaleString(currentLocale) : "";
+    const when = summary.generatedAt ? formatDateTime(summary.generatedAt) : "";
     cohortMeta.textContent = `${t("cohort.generatedAt")}: ${when}`;
   }
 }

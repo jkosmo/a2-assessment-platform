@@ -1042,7 +1042,6 @@ const sensorkø = lagLokalisertRessurs({
   tegn: async (body) => {
     latestReviewQueue = Array.isArray(body.reviews) ? body.reviews : [];
     renderReviewQueue();
-    showToast(`${t("manualReview.loadedPrefix")}: ${latestReviewQueue.length}`, "info");
     if (selectedReviewId && latestReviewQueue.some((r) => r.id === selectedReviewId)) {
       await loadReviewDetails(selectedReviewId);
     } else {
@@ -1476,7 +1475,6 @@ const klagekø = lagLokalisertRessurs({
   tegn: async (body) => {
     latestAppealQueue = Array.isArray(body.appeals) ? body.appeals : [];
     renderAppealQueue();
-    showToast(`${t("appealHandler.loadedPrefix")}: ${latestAppealQueue.length}`, "info");
     if (selectedAppealId && latestAppealQueue.some((a) => a.id === selectedAppealId)) {
       await loadAppealDetails(selectedAppealId, { notify: false });
     } else {

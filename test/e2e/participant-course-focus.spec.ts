@@ -88,7 +88,7 @@ test("#921: kurslista henter seg selv og står ekspandert — ingen «Last kurs�
   await mockBase(page);
   await page.goto("/participant");
 
-  // Ingen klikk på #loadCoursesBtn her. Det er hele poenget: klikket lå mellom deltakeren og det
+  // Ingen klikk på en «last»-knapp her. Det er hele poenget: klikket lå mellom deltakeren og det
   // eneste spørsmålet de kom for å få svar på.
   await expect(page.locator(".course-accordion-item")).toHaveCount(2);
   await expect(page.locator(".course-accordion-title").first()).toHaveText("Kurs én");
@@ -129,7 +129,6 @@ test("#922: et åpnet kurs får flaten alene, og lista viker helt", async ({ pag
   // Veien tilbake står øverst til venstre. «Oppdater kurslista» hører til lista, ikke til lesingen.
   await expect(page.locator("#courseBackBar")).toBeVisible();
   await expect(page.locator("#courseBackBtn")).toHaveText("← Alle kurs");
-  await expect(page.locator("#loadCoursesBtn")).toBeHidden();
 });
 
 test("#922: tilbake-lenka fører til kurslista igjen", async ({ page }) => {
@@ -144,7 +143,6 @@ test("#922: tilbake-lenka fører til kurslista igjen", async ({ page }) => {
   await expect(page.locator('.course-accordion-item[data-course-id="c2"]')).toBeVisible();
   await expect(page.locator('.course-accordion-item[data-course-id="c1"]')).toBeVisible();
   await expect(page.locator("#courseBackBar")).toBeHidden();
-  await expect(page.locator("#loadCoursesBtn")).toBeVisible();
   // Sekvensen hører til kursvisningen — tilbake i lista skal den ikke bli stående.
   await expect(page.locator(".course-sequence")).toBeHidden();
 });

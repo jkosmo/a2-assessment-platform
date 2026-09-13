@@ -1,4 +1,5 @@
-export const supportedLocales = ["en-GB", "nb", "nn"];
+// #1046 C2: bokmål er standardspråket (DECISIONS 2026-09-11) og står først i alle språkvelgere.
+export const supportedLocales = ["nb", "nn", "en-GB"];
 
 export const localeLabels = {
   "en-GB": "English (UK)",
@@ -23,7 +24,7 @@ export const translations = {
     "nav.adminContent": "Content workspace",
     "nav.adminPlatform": "Platform settings",
     "nav.profile": "Profile",
-    "nav.results": "Results workspace",
+    "nav.results": "Results",
     "nav.deltakere": "Participants",
     "nav.skipToContent": "Skip to main content",
     "locale.label": "Language",
@@ -110,6 +111,7 @@ export const translations = {
     "errors.api.course_duplicate_item": "That item is already in the course. Each module or section can appear only once.",
     "errors.api.course_has_completions": "This course has issued certificates and cannot be deleted. Archive it instead, so the records are kept.",
     "errors.api.system_class_immutable": "This is a system class and is managed automatically. It cannot be changed by hand.",
+    "errors.api.class_not_archived": "Archive the class before deleting it.",
     "errors.api.unknown_user": "That user could not be found.",
     "errors.api.course_archived": "The course is archived. Restore it before assigning it.",
     "errors.api.course_enrolment_restricted": "This course is not open for self-enrolment. Ask an administrator to add you.",
@@ -406,7 +408,6 @@ export const translations = {
     "history.latestScore": "Latest score",
     "courses.title": "My courses",
     "courses.load": "Load courses",
-    "courses.reload": "Refresh course list",
     "courses.backToList": "← All courses",
     "courses.hint": "Track your progress across courses.",
     "courses.empty": "No courses available.",
@@ -584,6 +585,7 @@ export const translations = {
     "errors.api.course_duplicate_item": "Elementet ligger allerede i kurset. Hver modul eller seksjon kan bare være med én gang.",
     "errors.api.course_has_completions": "Kurset har utstedte kursbevis og kan ikke slettes. Arkiver det i stedet, så beholdes registreringene.",
     "errors.api.system_class_immutable": "Dette er en systemklasse som styres automatisk. Den kan ikke endres manuelt.",
+    "errors.api.class_not_archived": "Arkiver klassen før du sletter den.",
     "errors.api.unknown_user": "Fant ikke denne brukeren.",
     "errors.api.course_archived": "Kurset er arkivert. Gjenopprett det før du tildeler det.",
     "errors.api.course_enrolment_restricted": "Dette kurset er ikke åpent for selvpåmelding. Be en administrator legge deg til.",
@@ -874,7 +876,6 @@ export const translations = {
     "appeal.nextSteps": "Anken din er sendt inn for behandling. Du trenger ikke gjore noe mer akkurat na.",
     "courses.title": "Mine kurs",
     "courses.load": "Last kurs",
-    "courses.reload": "Oppdater kurslista",
     "courses.backToList": "← Alle kurs",
     "courses.hint": "Følg fremdriften din på tvers av kurs.",
     "courses.empty": "Ingen kurs tilgjengelig.",
@@ -1051,6 +1052,7 @@ export const translations = {
 "errors.api.course_duplicate_item": "Elementet ligg allereie i kurset. Kvar modul eller seksjon kan berre vere med éin gong.",
 "errors.api.course_has_completions": "Kurset har utferda kursbevis og kan ikkje slettast. Arkiver det i staden, så blir registreringane tekne vare på.",
 "errors.api.system_class_immutable": "Dette er ein systemklasse som blir styrt automatisk. Han kan ikkje endrast manuelt.",
+"errors.api.class_not_archived": "Arkiver klassen før du slettar han.",
 "errors.api.unknown_user": "Fann ikkje denne brukaren.",
 "errors.api.course_archived": "Kurset er arkivert. Gjenopprett det før du tildeler det.",
 "errors.api.course_enrolment_restricted": "Dette kurset er ikkje ope for sjølvpåmelding. Be ein administrator leggje deg til.",
@@ -1341,7 +1343,6 @@ export const translations = {
     "appeal.nextSteps": "Anken di er sendt inn for behandling. Du treng ikkje gjere noko meir akkurat no.",
     "courses.title": "Mine kurs",
     "courses.load": "Last kurs",
-    "courses.reload": "Oppdater kurslista",
     "courses.backToList": "← Alle kurs",
     "courses.hint": "Følg framgangen din på tvers av kurs.",
     "courses.empty": "Ingen kurs tilgjengelege.",

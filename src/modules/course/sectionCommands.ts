@@ -119,15 +119,18 @@ export async function createSection(input: {
         publishedAt: keepAsDraft ? null : new Date(),
       },
     });
+    // #931 pkt 4: `versions` (nyeste først) må med, ellers faller `toDetail` tilbake til den aktive
+    // versjonen — den gaten nettopp nektet å flytte — og svaret på en tilbakeholdt lagring viser
+    // gammelt (eller tomt) innhold rett etter at forfatteren skrev en side tekst.
     const result = keepAsDraft
       ? await client.courseSection.findUniqueOrThrow({
           where: { id: section.id },
-          include: { activeVersion: true },
+          include: { activeVersion: true, versions: { orderBy: { versionNo: "desc" }, take: 1 } },
         })
       : await client.courseSection.update({
           where: { id: section.id },
           data: { activeVersionId: version.id },
-          include: { activeVersion: true },
+          include: { activeVersion: true, versions: { orderBy: { versionNo: "desc" }, take: 1 } },
         });
     await recordAuditEvent(
       {
@@ -256,7 +259,9 @@ export async function updateSectionContent(sectionId: string, bodyMarkdown: stri
       data: heldBackByTranslationGate
         ? { updatedAt: new Date() }
         : { activeVersionId: version.id, updatedAt: new Date() },
-      include: { activeVersion: true },
+      // #931 pkt 4: se createSectionWithAssets — uten `versions` svarer en tilbakeholdt lagring
+      // med den aktive (gamle) kroppen, og `hasUnpublishedChanges` blir false.
+      include: { activeVersion: true, versions: { orderBy: { versionNo: "desc" }, take: 1 } },
     });
     return { ...section, heldBackByTranslationGate, translationGateIssues: gate.issues };
   };
@@ -279,7 +284,11 @@ export function getSection(sectionId: string) {
 export function listSections() {
   return prisma.courseSection.findMany({
     orderBy: { updatedAt: "desc" },
-    include: { activeVersion: { select: { id: true, versionNo: true, publishedAt: true } } },
+    include: {
+      activeVersion: { select: { id: true, versionNo: true, publishedAt: true } },
+      // #1046 steg B: nyeste versjon, så `lifecycle` kan si «published_with_draft» som for moduler.
+      versions: { orderBy: { versionNo: "desc" }, take: 1, select: { id: true } },
+    },
   });
 }
 

@@ -225,7 +225,10 @@ describe("participant console runtime config", () => {
 
     expect(response.status).toBe(200);
     expect(response.text).toContain("results.js");
-    expect(response.text).toContain('id="passRateGrid"');
+    // #1046 J4: flisene per modul er borte; nokkeltallene star som en linje over tabellen.
+    expect(response.text).not.toContain('id="passRateGrid"');
+    expect(response.text).toContain('id="resultsKpi"');
+    expect(response.text).toContain('id="resultsSearch"');
     expect(response.text).toContain('id="completionBody"');
     expect(response.text).toContain('id="participantBody"');
     expect(response.text).toContain('id="moduleDetailMeta"');
@@ -401,9 +404,12 @@ describe("participant console runtime config", () => {
     expect(resultsJsResponse.text).toContain('apiFetch(`/api/reports/courses/details?${params}`, headers)');
     expect(resultsJsResponse.text).toContain('function renderCourseLearners(rows)');
     expect(resultsJsResponse.text).toContain('tr.tabIndex = 0');
-    // #966: åtte kolonner nå — «Leste seksjoner» kom til fordi den AVGJØR statusen. Tomraden må
-    // spenne like mange som radmalen har, ellers står den tomme tabellen skjevt.
-    expect(resultsJsResponse.text).toContain('colspan="8"');
+    // #966 hadde en tomrad med colspan="8". #1046 J6: tom tabell skjules i stedet (setTableEmpty),
+    // så det finnes ingen tomrad som kan spenne feil antall kolonner.
+    expect(resultsJsResponse.text).not.toContain('colspan="8"');
+    // Tomtilstanden er den delte hjelperen (table-empty.js), ikke en lokal funksjon.
+    expect(resultsJsResponse.text).toContain('from "/static/table-empty.js"');
+    expect(resultsJsResponse.text).not.toContain("function setTableEmpty(");
     expect(resultsJsResponse.text).toContain("row.readSections");
     expect(resultsJsResponse.text).toContain("row.totalSections");
     expect(resultsJsResponse.text).not.toContain("row.failedModules");

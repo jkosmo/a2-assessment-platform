@@ -5,20 +5,15 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>A2 Results</title>
     <link rel="stylesheet" href="/static/shared.css" />
+    <link rel="stylesheet" href="/static/toast.css" />
     <style>
-      .pass-rate-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: var(--space-1); margin-top: var(--space-1); }
-      .pass-rate-card { border: 1px solid var(--color-border); border-radius: var(--space-1); padding: var(--space-1); background: var(--color-bg); }
-      .pass-rate-card .module-title { font-weight: 600; font-size: 13px; margin-bottom: calc(var(--space-1) * 0.5); }
-      .pass-rate-card .rate-value { font-size: 28px; font-weight: 700; color: var(--color-blue); }
-      .pass-rate-card .rate-label { font-size: 11px; color: var(--color-text-soft); }
-      .pass-rate-card .rate-detail { font-size: 11px; color: var(--color-text-soft); margin-top: calc(var(--space-1) * 0.25); }
-      .table-wrap { overflow-x: auto; border: 1px solid var(--color-table-wrap-border); border-radius: var(--space-1); margin-top: calc(var(--space-1) * 1.25); max-height: 500px; overflow-y: auto; }
-      table { width: 100%; border-collapse: collapse; min-width: 700px; }
-      th, td { border-bottom: 1px solid var(--color-table-border); padding: var(--space-1); font-size: 12px; text-align: left; vertical-align: top; }
-      tr:hover { background: var(--color-row-hover); }
-      .export-row { display: flex; gap: var(--space-1); flex-wrap: wrap; margin-top: var(--space-1); }
+      .rate-bar { display: inline-block; height: 6px; border-radius: 3px; background: var(--color-primary); vertical-align: middle; margin-right: 8px; }
+      /* Tabellen er den delte .list-table (shared.css). Bare det som er eget her: rapportene kan bli
+         lange, så tabellen ruller innenfor sida i stedet for å skyve resten ned. */
+      .list-table-wrap { margin-top: calc(var(--space-1) * 1.25); max-height: 500px; overflow-y: auto; }
+      .list-table th { position: sticky; top: 0; z-index: 1; }
+      .list-table td { font-variant-numeric: tabular-nums; }
       /* Overstyr global button{width:100%} så eksport-knappene blir kompakte og ligger på rad. */
-      .export-row button { width: auto; min-height: 0; padding: 6px 12px; font-size: 13px; }
       .report-row-button { width: auto; min-height: 0; padding: 0; border: 0; background: transparent; color: var(--color-blue); cursor: pointer; font: inherit; text-align: left; text-decoration: underline; }
       .report-row-button:hover { color: var(--color-blue-strong); }
       tr.is-selected { background: color-mix(in srgb, var(--color-blue) 8%, white); }
@@ -44,8 +39,27 @@
         <a href="/review" class="content-area-nav-link" id="subnavReview">Manuell behandling</a>
         <a href="/results" class="content-area-nav-link" id="subnavResults">Resultater</a>
       </nav>
-      <h1 data-i18n="resultsPage.title">Results Workspace</h1>
-      <p class="small" data-i18n="resultsPage.subtitle">Overview of module pass rates and completion status.</p>
+      <!-- #1046 J3/J4/J5/J8 (produkteier 13.09: «Resultater som liste»): samme hode som listesidene —
+           tittel og forklaring til venstre, Eksporter-menyen til høyre. -->
+      <div class="page-header">
+        <div>
+          <h1 data-i18n="resultsPage.title">Results</h1>
+          <p class="page-lead" data-i18n="resultsPage.subtitle">Overview of module pass rates and completion status.</p>
+        </div>
+        <div class="page-header-actions">
+          <details class="row-more" id="exportMenu">
+            <summary class="row-action-btn" data-i18n="results.export.menu">Export (CSV)</summary>
+            <div class="row-more-menu">
+              <button id="exportCompletion" class="row-action-btn" data-i18n="results.export.completion">Completion</button>
+              <button id="exportPassRates" class="row-action-btn" data-i18n="results.export.passRates">Pass rates</button>
+              <button id="exportModuleSummary" class="row-action-btn" data-i18n="results.export.moduleSummary">Module summary</button>
+              <button id="exportModuleLearners" class="row-action-btn" data-i18n="results.export.moduleLearners">Module participants</button>
+              <button id="exportCourseSummary" class="row-action-btn" data-i18n="results.export.courseSummary">Course summary</button>
+              <button id="exportCourseLearners" class="row-action-btn" data-i18n="results.export.courseLearners">Course participants</button>
+            </div>
+          </details>
+        </div>
+      </div>
 
       <section class="card mock-identity-card">
         <details class="mock-identity-panel">
@@ -73,47 +87,38 @@
         </details>
       </section>
 
-      <section class="card">
-        <h2 data-i18n="results.filters.title">Filters</h2>
-        <div class="row">
-          <div>
-            <label for="filterModuleId" data-i18n="results.filters.moduleId">Module ID</label>
-            <input id="filterModuleId" type="text" autocomplete="off" data-i18n-placeholder="results.filters.moduleIdPlaceholder" />
-          </div>
-          <div>
-            <label for="filterCourseId" data-i18n="results.filters.courseId">Course ID</label>
-            <input id="filterCourseId" type="text" autocomplete="off" data-i18n-placeholder="results.filters.courseIdPlaceholder" />
-          </div>
-          <div>
-            <label for="filterDateFrom" data-i18n="results.filters.dateFrom">Date from</label>
-            <input id="filterDateFrom" type="date" />
-          </div>
-          <div>
-            <label for="filterDateTo" data-i18n="results.filters.dateTo">Date to</label>
-            <input id="filterDateTo" type="date" />
-          </div>
-          <div>
-            <label>&nbsp;</label>
-            <button id="loadResults" class="btn-primary" data-i18n="results.filters.load">Load results</button>
-          </div>
+      <!-- Filterraden som på listesidene: søk over, kursvelger og periode på samme linje. Modul-ID/
+           Kurs-ID-feltene er borte — ingen kjenner en ID; kurset velges med navn, modulen finnes med søk. -->
+      <input id="resultsSearch" type="search" class="list-search" data-i18n-placeholder="results.filters.searchPlaceholder" aria-label="Search modules" data-i18n-aria-label="results.filters.searchLabel" />
+      <div class="list-filters-row">
+        <div class="list-course-filter">
+          <label for="filterCourseId" data-i18n="results.filters.course">Course:</label>
+          <select id="filterCourseId" class="list-course-select"><option value="" data-i18n="results.filters.allCourses">All courses</option></select>
         </div>
-        <div class="small" id="resultsMeta" aria-live="polite"></div>
-      </section>
+        <div class="list-course-filter">
+          <label for="filterDateFrom" data-i18n="results.filters.dateFrom">From</label>
+          <input id="filterDateFrom" type="date" class="list-course-select" />
+          <label for="filterDateTo" data-i18n="results.filters.dateTo">To</label>
+          <input id="filterDateTo" type="date" class="list-course-select" />
+        </div>
+        <span class="small" id="resultsMeta" aria-live="polite"></span>
+      </div>
 
-      <section class="card">
-        <h2 data-i18n="results.passRates.title">Pass rates per module</h2>
-        <div id="passRateGrid" class="pass-rate-grid" aria-live="polite">
-          <p class="small" data-i18n="results.passRates.empty">No data loaded.</p>
-        </div>
-      </section>
+      <!-- Nøkkeltall som én linje (J4), ikke fem fliser — tallene som svarer på «hvordan går det». -->
+      <div id="resultsKpi" class="kpi-line" aria-live="polite"></div>
+      <!-- Rapportene leses av administrator, rapportleser og fagansvarlig (egne kurs, #1058). Uten rolle får sida
+           403 på første henting; da står forklaringen her i stedet for en feiltoast. -->
+      <div id="resultsNoAccess" class="empty-state" hidden style="display:none">
+        <p class="empty-state-text" data-i18n="results.noAccess">Results are available to administrators and report readers.</p>
+      </div>
 
       <section class="card">
         <h2 data-i18n="results.completion.title">Completion per module</h2>
-        <div class="table-wrap" tabindex="0" role="region" aria-label="Completion per module">
-          <table>
+        <div class="list-table-wrap" tabindex="0" role="region" aria-label="Completion per module">
+          <table class="list-table">
             <thead>
               <tr>
-                <th scope="col" data-i18n="results.completion.module">Module</th>
+                <th scope="col" class="col-name" data-i18n="results.completion.module">Module</th>
                 <th scope="col" data-i18n="results.completion.total">Total submissions</th>
                 <th scope="col" data-i18n="results.completion.completed">Completed</th>
                 <th scope="col" data-i18n="results.completion.underReview">Under review</th>
@@ -126,22 +131,13 @@
             <tbody id="completionBody"></tbody>
           </table>
         </div>
-        <!-- v1.2.24 (#358): scoped learner-level eksporter ved siden av aggregerte. -->
-        <div class="export-row">
-          <button id="exportCompletion" class="btn-secondary" data-i18n="results.export.completion">Export completion CSV</button>
-          <button id="exportPassRates" class="btn-secondary" data-i18n="results.export.passRates">Export pass rates CSV</button>
-          <button id="exportModuleSummary" class="btn-secondary" data-i18n="results.export.moduleSummary">Export module summary CSV</button>
-          <button id="exportModuleLearners" class="btn-secondary" data-i18n="results.export.moduleLearners">Export module learners CSV</button>
-          <button id="exportCourseSummary" class="btn-secondary" data-i18n="results.export.courseSummary">Export course summary CSV</button>
-          <button id="exportCourseLearners" class="btn-secondary" data-i18n="results.export.courseLearners">Export course learners CSV</button>
-        </div>
         <div class="detail-block">
           <h3 data-i18n="results.participants.title">Learner details for selected module</h3>
           <div id="moduleDetailMeta" class="small detail-meta" aria-live="polite" data-i18n="results.participants.placeholder">
             Select a module row to see learner details.
           </div>
-          <div class="table-wrap" tabindex="0" role="region" aria-label="Module learner detail">
-            <table>
+          <div class="list-table-wrap" tabindex="0" role="region" aria-label="Module learner detail">
+            <table class="list-table">
               <thead>
                 <tr>
                   <th scope="col" data-i18n="results.participants.name">Name</th>
@@ -160,8 +156,8 @@
 
       <section class="card">
         <h2 data-i18n="results.courses.title">Course completion report</h2>
-        <div class="table-wrap" tabindex="0" role="region" aria-label="Course completion report">
-          <table>
+        <div class="list-table-wrap" tabindex="0" role="region" aria-label="Course completion report">
+          <table class="list-table">
             <thead>
               <tr>
                 <th scope="col" data-i18n="results.courses.course">Course</th>
@@ -179,8 +175,8 @@
           <div id="courseDetailMeta" class="small detail-meta" aria-live="polite" data-i18n="results.courses.placeholder">
             Select a course row to see learner details.
           </div>
-          <div class="table-wrap" tabindex="0" role="region" aria-label="Course learner detail">
-            <table>
+          <div class="list-table-wrap" tabindex="0" role="region" aria-label="Course learner detail">
+            <table class="list-table">
               <thead>
                 <tr>
                   <th scope="col" data-i18n="results.participants.name">Name</th>

@@ -39,6 +39,7 @@ test("course owner panel: lists, adds via search, and removes owners", async ({ 
 
   await page.addInitScript(() => { try { localStorage.setItem("participant.locale", "nb"); } catch { /* ignore */ } });
   await page.goto("/admin-content/courses/course-1");
+  await page.locator('[data-form-tab-btn="innstillinger"]').click();
 
   // Panel renders compact with the initial owner; expand to manage.
   const panel = page.locator("#ownerPanelHost .owner-panel");
@@ -98,6 +99,7 @@ test("owner panel is read-only when the viewer cannot manage owners", async ({ p
 
   await page.addInitScript(() => { try { localStorage.setItem("participant.locale", "nb"); } catch { /* ignore */ } });
   await page.goto("/admin-content/courses/course-2");
+  await page.locator('[data-form-tab-btn="innstillinger"]').click();
 
   const panel = page.locator("#ownerPanelHost .owner-panel");
   await expect(panel).toBeVisible();

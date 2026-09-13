@@ -1,4 +1,5 @@
 import { test, expect, type Page, type Route } from "@playwright/test";
+import { revealRowAction } from "./admin-content-helpers.js";
 
 // #916 — standalone section export/import + the publish gate's author-facing wording, exercised in a
 // real browser against mocked APIs.
@@ -89,16 +90,19 @@ test("«Eksporter» calls the export-package endpoint for that row", async ({ pa
   await expect(toastOf(page)).toContainText(/eksportert/i);
 });
 
-test("«Eksporter» is hidden on a row the viewer may not manage", async ({ page }) => {
-  // The route enforces ownership regardless; hiding the button is so the author is not offered an
-  // action that can only 403 (the #787 slice-5 rule, applied to the new action).
+test("«Eksporter» and «Dupliser» stay on a row the viewer may not manage; «Åpne» does not", async ({ page }) => {
+  // Snudd 12.09 (#1046, produkteier): samme logikk som Moduler. Eksport og duplisering er lese-/
+  // kopihandlinger, og ruten sluttet å kreve eierskap 2026-09-08 (forfattere skal kunne se
+  // hverandres innhold). Det som fortsatt bare er for eier, er å åpne og endre.
   await mockBaseApis(page);
   await mockSectionList(page, [{ ...SECTION_ROW, canManage: false }]);
 
   await page.goto("/admin-content/sections");
 
   await expect(page.getByText("Portabel seksjon")).toBeVisible();
-  await expect(page.getByRole("button", { name: /^Eksporter$/ })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /^Eksporter$/ })).toHaveCount(1);
+  await expect(page.getByRole("button", { name: /^Dupliser$/ })).toHaveCount(1);
+  await expect(page.locator('[data-action="edit"]')).toHaveCount(0);
   await expect(page.locator(".row-readonly-note")).toBeVisible();
 });
 
@@ -220,7 +224,7 @@ test("publish gate: the block names field and language instead of leaking the se
   );
 
   await page.goto("/admin-content/sections");
-  await page.getByRole("button", { name: /^Publiser$/ }).click();
+  await (await revealRowAction(page, page.locator('[data-action="publish"][data-id="sec-916"]'))).click();
 
   const toast = toastOf(page);
   await expect(toast).toContainText("Kan ikke publisere");
@@ -271,7 +275,7 @@ test("held-back save: the author is told it was saved but not published, and how
   await page.getByRole("button", { name: /Ny seksjon/ }).click();
   await page.locator("#titleInput").fill("Bare norsk");
   await page.locator("#markdownInput").fill("# Bare norsk");
-  await page.getByRole("button", { name: /Lagre ny versjon/ }).click();
+  await page.getByRole("button", { name: /^Lagre$/ }).click();
 
   const toast = toastOf(page);
   // A plain "Seksjon lagret." here is the confusion this exists to prevent: the author would

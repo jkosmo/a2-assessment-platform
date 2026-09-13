@@ -11,6 +11,8 @@ export default defineConfig({
   resolve: {
     alias: [
       { find: /^\/static\/i18n\/(.*)$/, replacement: `${path.join(rootDir, "public", "i18n")}${path.sep}$1` },
+      // Filer som ligger i public-rota, men serveres under /static (app.ts monterer begge): api-client.js.
+      { find: /^\/static\/(api-client\.js)$/, replacement: `${path.join(rootDir, "public")}${path.sep}$1` },
       { find: /^\/static\/(.*)$/, replacement: `${path.join(rootDir, "public", "static")}${path.sep}$1` },
     ],
   },

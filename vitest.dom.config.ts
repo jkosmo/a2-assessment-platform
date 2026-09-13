@@ -18,6 +18,11 @@ export default defineConfig({
         find: /^\/static\/i18n\/(.*)$/,
         replacement: `${publicI18nDir}${path.sep}$1`,
       },
+      // Filer som ligger i public-rota, men serveres under /static (app.ts monterer begge): api-client.js.
+      {
+        find: /^\/static\/(api-client\.js)$/,
+        replacement: `${path.dirname(publicStaticDir)}${path.sep}$1`,
+      },
       {
         find: /^\/static\/(.*)$/,
         replacement: `${publicStaticDir}${path.sep}$1`,

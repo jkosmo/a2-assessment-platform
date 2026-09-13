@@ -2,7 +2,7 @@ import { renderWorkspaceNavigationWithProfile } from "/static/workspace-nav.js";
 import { applyIdentityDefaults as delApplyIdentityDefaults } from "/static/identity-defaults.js";
 import { renderRolePresetControl as delRenderRolePresetControl } from "/static/role-preset-control.js";
 import { runWithBusyButton } from "/static/busy-button.js";
-import { resolveInitialLocale } from "/static/i18n-locale.js";
+import { pickLocalizedText, resolveInitialLocale } from "/static/i18n-locale.js";
 import { localizeDecisionReason } from "/static/decision-reason.js";
 import { describeApiError } from "/static/api-error.js";
 import {
@@ -233,12 +233,7 @@ function localizePreviewText(value) {
     return "";
   }
 
-  const localized =
-    value[currentLocale] ??
-    value["en-GB"] ??
-    Object.values(value).find((entry) => typeof entry === "string" && entry.trim().length > 0);
-
-  return typeof localized === "string" ? localized : "";
+  return pickLocalizedText(value, currentLocale);
 }
 
 function shouldShowModuleDebugMeta() {
@@ -1721,11 +1716,6 @@ function renderWorkspaceNavigation() {
 }
 
 async function loadParticipantConsoleConfig() {
-  // #541: identity-dependent actions must wait until the console config has populated the
-  // identity form. Otherwise an early click sends an empty x-user-id, the backend falls back
-  // to the roleless MOCK_DEFAULT_USER_ID, and the request 403s with a confusing role error.
-  const loadCoursesBtn = document.getElementById("loadCoursesBtn");
-  if (loadCoursesBtn) loadCoursesBtn.disabled = true;
   try {
     const body = await getConsoleConfig();
     participantRuntimeConfig = {
@@ -1772,9 +1762,6 @@ async function loadParticipantConsoleConfig() {
   renderWorkspaceNavigation();
   await initConsentGuard(headers, currentLocale);
   fetchQueueCounts(headers).then((counts) => applyNavReviewBadge(workspaceNav, counts));
-
-  // Identity form is now populated — safe to allow course loading (#541).
-  if (loadCoursesBtn) loadCoursesBtn.disabled = false;
 
   // #921: kurslista henter seg selv. «Hvilke kurs har jeg?» er hele grunnen til at deltakeren er
   // her, og svaret lå bak et klikk på «Last kurs». Lastingen må skje ETTER at identiteten er
@@ -3258,17 +3245,6 @@ let participantCompletions = {};   // courseId -> completion
 const celebratedCompletedCourses = new Set();
 
 
-document.getElementById("loadCoursesBtn")?.addEventListener("click", async () => {
-  const btn = document.getElementById("loadCoursesBtn");
-  await runWithBusyButton(btn, async () => {
-    try {
-      await loadParticipantCourses();
-    } catch (error) {
-      log(error instanceof Error ? error.message : t("courses.loadError"));
-    }
-  });
-});
-
 async function loadParticipantCourses() {
   const [coursesBody, completionsBody] = await Promise.all([
     apiFetch("/api/courses", headers),
@@ -3341,8 +3317,6 @@ function applyCourseFocusState() {
     }
   }
   setHidden(document.getElementById("courseBackBar"), !focused);
-  // «Oppdater kurslista» hører til lista, ikke til lesingen.
-  setHidden(document.getElementById("loadCoursesBtn"), focused);
 }
 
 // Nettleserens tilbakeknapp skal føre samme sted som tilbake-lenka (#922). Begge retninger legger

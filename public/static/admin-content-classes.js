@@ -6,6 +6,9 @@ import { showToast } from "/static/toast.js";
 import { describeApiError } from "/static/api-error.js";
 import { supportedLocales, localeLabels, translations as adminContentTranslations } from "/static/i18n/admin-content-translations.js";
 import { renderOwnerPanel } from "/static/owner-panel.js";
+import { createListPage } from "/static/list-page.js";
+import { createFormPage } from "/static/form-page.js";
+import { lifecycleOf } from "/static/content-status-badge.js";
 
 // #645/CL-3: admin UI for classes (cohorts) — list, create, manage members, assign courses.
 
@@ -80,8 +83,8 @@ function formatDueDate(iso) {
 // #705-family: classes now render Aktive/Arkiverte consistently with the other lifecycle lists.
 // Classes are 2-state (aktiv/arkivert) — no draft/publish — so the filter has Aktive/Arkiverte/Alle
 // (no "Publiserte"), and status is shown as an "Arkivert"-badge rather than the full 3-state badge.
-let classesFilter = "active";
-let classesCache = [];
+// #1046: lista er den felles listesida (list-page.js). Her ligger bare oppskriften for klasser.
+let listPage = null;
 
 function classTypeLabel(c) {
   if (c.isSystem) return "System";
@@ -89,91 +92,79 @@ function classTypeLabel(c) {
   return "Manuell";
 }
 
-function filteredClasses() {
-  if (classesFilter === "archived") return classesCache.filter((c) => c.archivedAt);
-  if (classesFilter === "all") return classesCache;
-  return classesCache.filter((c) => !c.archivedAt);
-}
-
-function classFilterBar() {
-  const pills = [["active", "Aktive"], ["archived", "Arkiverte"], ["all", "Alle"]];
-  return `<div class="list-filters" role="group" aria-label="Filtrer klasser">${pills
-    .map(([key, label]) => `<button type="button" class="list-filter-btn${classesFilter === key ? " active" : ""}" data-filter="${key}">${escapeHtml(label)}</button>`)
-    .join("")}</div>`;
-}
-
-function renderClassesTable() {
-  const rows = filteredClasses().map((c) => {
-    const archived = !!c.archivedAt;
-    const systemBadge = c.isSystem ? `<span class="system-badge">System</span>` : "";
-    const statusBadge = archived ? ` <span class="status-badge status-badge--archived">Arkivert</span>` : "";
-    // #787 slice 5: eier/admin styrer om Administrer/Arkiver-handlingene vises (speiler eierskaps-vakta).
-    // Systemklasser er ueide → bare admin forvalter dem, som før.
-    const canManage = c.canManage !== false;
-    let action = "";
-    if (!c.isSystem) {
-      action = archived
-        ? `<button class="row-action-btn" data-action="restore" data-id="${escapeHtml(c.id)}" data-name="${escapeHtml(c.name)}">Gjenopprett</button>`
-        : `<button class="row-action-btn destructive" data-action="archive" data-id="${escapeHtml(c.id)}" data-name="${escapeHtml(c.name)}">Arkiver</button>`;
-    }
-    return `
-    <tr>
-      <td>${escapeHtml(c.name)}${systemBadge}${statusBadge}</td>
-      <td>${escapeHtml(classTypeLabel(c))}</td>
-      <td>${c._count?.members ?? 0}</td>
-      <td>${c._count?.courseAssignments ?? 0}</td>
-      <td class="col-actions">
-        <div class="row-actions">
-          ${canManage
-            ? `<button class="row-action-btn" data-action="open" data-id="${escapeHtml(c.id)}">Administrer</button>${action}`
-            : `<span class="row-readonly-note" title="Bare en eier eller administrator kan endre denne klassen.">Skrivebeskyttet</span>`}
-        </div>
-      </td>
-    </tr>`;
-  }).join("");
-  const body = document.getElementById("classesTableBody");
-  if (body) body.innerHTML = rows || `<tr><td colspan="5" style="color:var(--color-meta)">Ingen klasser i denne visningen.</td></tr>`;
-  document.querySelectorAll(".list-filter-btn").forEach((btn) => {
-    btn.classList.toggle("active", btn.dataset.filter === classesFilter);
+function getListPage() {
+  if (listPage) return listPage;
+  listPage = createListPage({
+    host: pageContent,
+    ids: { tbody: "classesTableBody", search: "classesSearch" },
+    texts: {
+      title: "Klasser",
+      lead: "Grupper av deltakere som får kurs tildelt samlet. «Alle deltakere» er en systemklasse med alle som har deltakerrolle.",
+      searchPlaceholder: "Søk på klassenavn…",
+      searchLabel: "Søk i klasser",
+      filterGroupLabel: "Filtrer klasser",
+      empty: "Ingen klasser ennå.",
+      emptyFiltered: "Ingen klasser i denne visningen.",
+      loadError: "Kunne ikke laste klasser.",
+    },
+    headerActions: [
+      { id: "importUsersBtn", label: "Importer brukere", title: "Importer brukere fra en JSON-fil eksportert fra Entra (delta-synk)", hidden: !isAdministrator },
+      { id: "syncEntraBtn", label: "Synk brukere fra Entra", title: "Importer brukere fra «Alle i A-2 Norge» i Entra (krever Graph-tilgang)", hidden: !isAdministrator },
+      { id: "newClassBtn", label: "Ny klasse", kind: "primary" },
+    ],
+    headerExtraHtml: isAdministrator ? `<input type="file" id="importUsersFile" accept="application/json,.json" style="display:none">` : "",
+    // #1046 B2: samme rekkefølge som Moduler/Kurs/Seksjoner — «Alle» først, «Aktive» forhåndsvalgt.
+    filters: { options: [["all", "Alle"], ["active", "Aktive"], ["archived", "Arkiverte"]], initial: "active" },
+    search: { matches: (c, q) => String(c.name ?? "").toLowerCase().includes(q) || String(c.id).toLowerCase().includes(q) },
+    sort: { key: "name", dir: "asc", locale: () => currentLocale },
+    columns: [
+      { key: "name", label: "Navn", className: "col-name", sortValue: (c) => c.name ?? "", render: (c) =>
+        `${escapeHtml(c.name)}${c.isSystem ? `<span class="system-badge">System</span>` : ""}${lifecycleOf(c) === "archived" ? ` <span class="status-badge status-badge--archived">Arkivert</span>` : ""}` },
+      { key: "type", label: "Type", render: (c) => escapeHtml(classTypeLabel(c)) },
+      { key: "members", label: "Medlemmer", sortValue: (c) => c._count?.members ?? 0, render: (c) => String(c._count?.members ?? 0) },
+      { key: "courses", label: "Tildelte kurs", sortValue: (c) => c._count?.courseAssignments ?? 0, render: (c) => String(c._count?.courseAssignments ?? 0) },
+    ],
+    rowId: (c) => c.id,
+    actions: (c) => {
+      // #787 slice 5: eier/admin styrer om handlingene vises (speiler eierskaps-vakta). Systemklasser
+      // er ueide → bare admin forvalter dem, som før.
+      const canManage = c.canManage !== false;
+      if (!canManage) return [`<span class="row-readonly-note" title="Bare en eier eller en administrator kan åpne denne klassen.">Kun for eier</span>`];
+      const archived = lifecycleOf(c) === "archived";
+      const id = escapeHtml(c.id);
+      const name = escapeHtml(c.name);
+      // #1046 D3: Åpne · Arkiver, og på arkiverte rader Gjenopprett · Slett.
+      return [
+        `<button class="row-action-btn" data-action="open" data-id="${id}">Åpne</button>`,
+        c.isSystem ? "" : archived
+          ? `<button class="row-action-btn" data-action="restore" data-id="${id}" data-name="${name}">Gjenopprett</button>`
+          : `<button class="row-action-btn" data-action="archive" data-id="${id}" data-name="${name}">Arkiver</button>`,
+        !c.isSystem && archived ? `<button class="row-action-btn destructive" data-action="delete" data-id="${id}" data-name="${name}">Slett</button>` : "",
+      ];
+    },
+    load: async () => (await apiFetch("/api/admin/content/classes", getHeaders)).classes ?? [],
+    describeError: (err) => apiErrorText(err),
+    onAction: (action, id, btn) => {
+      if (action === "open") goToClass(id);
+      if (action === "archive") archiveClass(id, btn.dataset.name);
+      if (action === "restore") restoreClassInAdmin(id, btn.dataset.name);
+      if (action === "delete") deleteClassInAdmin(id, btn.dataset.name);
+    },
+    afterRender: () => {
+      document.getElementById("newClassBtn")?.addEventListener("click", createClassFlow);
+      document.getElementById("syncEntraBtn")?.addEventListener("click", syncEntraUsers);
+      const importBtn = document.getElementById("importUsersBtn");
+      const importFile = document.getElementById("importUsersFile");
+      importBtn?.addEventListener("click", () => importFile?.click());
+      importFile?.addEventListener("change", () => importUsersFromFile(importFile));
+    },
   });
+  return listPage;
 }
 
 async function renderListView() {
   pageContent.innerHTML = `<div class="page-loading">Laster…</div>`;
-  try {
-    classesCache = (await apiFetch("/api/admin/content/classes", getHeaders)).classes ?? [];
-  } catch (err) {
-    pageContent.innerHTML = `<p>Kunne ikke laste klasser: ${escapeHtml(apiErrorText(err))}</p>`;
-    return;
-  }
-  pageContent.innerHTML = `
-    <div class="page-header"><h1>Klasser</h1><div style="display:flex;gap:8px">${isAdministrator ? `<button id="importUsersBtn" class="btn btn-secondary" style="width:auto" title="Importer brukere fra en JSON-fil eksportert fra Entra (delta-synk)">Importer brukere fra fil</button><input type="file" id="importUsersFile" accept="application/json,.json" style="display:none"><button id="syncEntraBtn" class="btn btn-secondary" style="width:auto" title="Importer brukere fra «Alle i A-2 Norge» i Entra (krever Graph-tilgang)">Synk brukere fra Entra</button>` : ""}<button id="newClassBtn" class="btn btn-primary" style="width:auto">+ Ny klasse</button></div></div>
-    <p style="color:var(--color-meta);font-size:13px">En klasse er en gruppe deltakere du kan tildele kurs til samlet. «Alle deltakere» er en systemklasse (alle med deltakerrolle).</p>
-    ${classFilterBar()}
-    <table class="classes-table">
-      <thead><tr><th>Navn</th><th>Type</th><th>Medlemmer</th><th>Tildelte kurs</th><th></th></tr></thead>
-      <tbody id="classesTableBody"></tbody>
-    </table>`;
-  renderClassesTable();
-  document.getElementById("newClassBtn").addEventListener("click", createClassFlow);
-  document.getElementById("syncEntraBtn")?.addEventListener("click", syncEntraUsers);
-  const importBtn = document.getElementById("importUsersBtn");
-  const importFile = document.getElementById("importUsersFile");
-  importBtn?.addEventListener("click", () => importFile?.click());
-  importFile?.addEventListener("change", () => importUsersFromFile(importFile));
-  pageContent.querySelector(".list-filters")?.addEventListener("click", (e) => {
-    const btn = e.target.closest("[data-filter]");
-    if (!btn) return;
-    classesFilter = btn.dataset.filter;
-    renderClassesTable();
-  });
-  document.getElementById("classesTableBody").addEventListener("click", (e) => {
-    const btn = e.target.closest("[data-action]");
-    if (!btn) return;
-    if (btn.dataset.action === "open") openClass(btn.dataset.id);
-    if (btn.dataset.action === "archive") archiveClass(btn.dataset.id, btn.dataset.name);
-    if (btn.dataset.action === "restore") restoreClassInAdmin(btn.dataset.id, btn.dataset.name);
-  });
+  await getListPage().reload().catch(() => undefined);
 }
 
 // #690: import users from the configured Entra group ("Alle i A-2 Norge") so they are searchable
@@ -223,28 +214,38 @@ async function importUsersFromFile(input) {
   } catch (err) {
     apiErrorToast(err);
   } finally {
-    if (btn) { btn.disabled = false; btn.textContent = "Importer brukere fra fil"; }
+    if (btn) { btn.disabled = false; btn.textContent = "Importer brukere"; }
     input.value = ""; // allow re-selecting the same file
   }
 }
 
-async function createClassFlow() {
-  const name = window.prompt("Navn på klassen:");
-  if (!name || !name.trim()) return;
+// #1046 nivå to (1b): «Ny klasse» åpner et tomt skjema; klassen lages ved første Lagre. Var en
+// nettleser-prompt som ikke kunne oversettes eller stiles.
+function createClassFlow() {
+  return goToClass(null);
+}
+
+async function archiveClass(id, name, { stay = false } = {}) {
+  if (!window.confirm(`Arkivere klassen «${name}»?`)) return;
   try {
-    await apiFetch("/api/admin/content/classes", getHeaders, { method: "POST", body: JSON.stringify({ name: name.trim() }) });
-    showToast("Klasse opprettet.", "success");
+    // #1046 D3: POST /archive, som kurs og seksjoner. DELETE sletter nå for godt.
+    await apiFetch(`/api/admin/content/classes/${encodeURIComponent(id)}/archive`, getHeaders, { method: "POST" });
+    showToast("Klasse arkivert.", "success");
+    if (stay) { await openClass(id); return; }
     await renderListView();
   } catch (err) {
     apiErrorToast(err);
   }
 }
 
-async function archiveClass(id, name) {
-  if (!window.confirm(`Arkivere klassen «${name}»?`)) return;
+// #1046 D3: sletting for godt, bare fra en arkivert rad. Produkteier ba om «er du helt sikker».
+async function deleteClassInAdmin(id, name) {
+  if (!window.confirm(`Er du helt sikker på at du vil slette klassen «${name}» for godt?\n\nMedlemslista og kurstildelingene forsvinner. Deltakernes egen fremdrift beholdes.`)) return;
   try {
     await apiFetch(`/api/admin/content/classes/${encodeURIComponent(id)}`, getHeaders, { method: "DELETE" });
-    showToast("Klasse arkivert.", "success");
+    showToast("Klasse slettet.", "success");
+    history.replaceState({}, "", window.location.pathname);
+    openClassState = null;
     await renderListView();
   } catch (err) {
     apiErrorToast(err);
@@ -252,73 +253,166 @@ async function archiveClass(id, name) {
 }
 
 // #705-family: reverse of archiveClass — restore an archived class so it is active again.
-async function restoreClassInAdmin(id, name) {
+async function restoreClassInAdmin(id, name, { stay = false } = {}) {
   if (!window.confirm(`Gjenopprette klassen «${name}»?`)) return;
   try {
     await apiFetch(`/api/admin/content/classes/${encodeURIComponent(id)}/restore`, getHeaders, { method: "POST" });
     showToast("Klasse gjenopprettet.", "success");
+    if (stay) { await openClass(id); return; }
     await renderListView();
   } catch (err) {
     apiErrorToast(err);
   }
 }
 
+// ---------------------------------------------------------------------------
+// Det åpnede elementet: den felles skjemasida (form-page.js). #1046 nivå to.
+//
+// Produkteier 12.09: lag nytt = åpne et tomt element (ingen prompt); Lagre-knapp med
+// «Alt lagret / Ulagrede endringer» og spørsmål før man forlater. Klassen har fått URL
+// (?id=… / ?new) som seksjoner, så tilbake-knappen i nettleseren og dyplenker virker.
+// ---------------------------------------------------------------------------
+
+let formPage = null;
+let openClassState = null; // { id, klass, members, courses, allCourses } — null når lista vises
+
+function classUrl(id) {
+  // Sida bor både på /admin-content/classes og /deltakere/klasser (#765); behold den man står på.
+  const base = window.location.pathname;
+  return id ? `${base}?id=${encodeURIComponent(id)}` : `${base}?new`;
+}
+
+function goToClass(id, { replace = false } = {}) {
+  const url = classUrl(id);
+  if (replace) history.replaceState({}, "", url); else history.pushState({}, "", url);
+  return openClass(id);
+}
+
+function goToList() {
+  history.pushState({}, "", window.location.pathname);
+  openClassState = null;
+  return renderListView();
+}
+
+const FORM_TEXTS = {
+  back: "← Tilbake til klasser", typeLabel: "Klasse", untitled: "Ny klasse",
+  savedAll: "Alt lagret", unsaved: "Ulagrede endringer", save: "Lagre", cancel: "Avbryt",
+  leaveConfirm: "Du har ulagrede endringer. Vil du forlate sida uten å lagre?",
+  discardConfirm: "Forkaste de ulagrede endringene?",
+  contentLocale: "Innholdsspråk:", required: "(påkrevd)",
+};
+
+function getFormPage() {
+  if (formPage) return formPage;
+  formPage = createFormPage({
+    host: pageContent,
+    texts: FORM_TEXTS,
+    onBack: () => goToList(),
+    title: () => (document.getElementById("className")?.value ?? openClassState?.klass?.name ?? "").trim(),
+    item: () => openClassState?.klass ?? null,
+    t: tNav,
+    actions: () => {
+      const k = openClassState?.klass;
+      if (!k?.id || k.isSystem || k.canManage === false) return [];
+      const archived = Boolean(k.archivedAt);
+      return [
+        archived
+          ? `<button class="row-action-btn" data-action="restore">Gjenopprett</button>`
+          : `<button class="row-action-btn" data-action="archive">Arkiver</button>`,
+        archived ? `<button class="row-action-btn destructive" data-action="delete">Slett</button>` : "",
+      ];
+    },
+    tabs: { items: () => [{ id: "rediger", label: "Rediger" }, { id: "innstillinger", label: "Innstillinger" }], initial: "rediger" },
+    body: () => classFormBodyHtml(),
+    save: { onSave: () => saveClassForm() },
+    afterRender: () => bindClassFormHandlers(),
+  });
+  formPage.installGuards();
+  return formPage;
+}
+
 async function openClass(id) {
   pageContent.innerHTML = `<div class="page-loading">Laster…</div>`;
-  let members = [], courses = [], allCourses = [];
+  let klass = null, members = [], courses = [], allCourses = [];
   try {
-    [members, courses, allCourses] = await Promise.all([
-      apiFetch(`/api/admin/content/classes/${encodeURIComponent(id)}/members`, getHeaders).then((r) => r.members ?? []),
-      apiFetch(`/api/admin/content/classes/${encodeURIComponent(id)}/courses`, getHeaders).then((r) => r.courses ?? []),
-      apiFetch("/api/admin/content/courses", getHeaders).then((r) => r.courses ?? []),
-    ]);
+    if (id) {
+      [klass, members, courses, allCourses] = await Promise.all([
+        apiFetch(`/api/admin/content/classes/${encodeURIComponent(id)}`, getHeaders).then((r) => r.class ?? null),
+        apiFetch(`/api/admin/content/classes/${encodeURIComponent(id)}/members`, getHeaders).then((r) => r.members ?? []),
+        apiFetch(`/api/admin/content/classes/${encodeURIComponent(id)}/courses`, getHeaders).then((r) => r.courses ?? []),
+        apiFetch("/api/admin/content/courses", getHeaders).then((r) => r.courses ?? []),
+      ]);
+      // canManage kommer fra lista; enkeltoppslaget går gjennom eierskapsvakta, så den som kom hit kan forvalte.
+      if (klass) klass.canManage = true;
+    }
   } catch (err) {
-    pageContent.innerHTML = `<p>Kunne ikke laste klassen: ${escapeHtml(apiErrorText(err))}</p>`;
+    pageContent.innerHTML = `<div class="empty-state"><p class="empty-state-title">Kunne ikke laste klassen.</p><p class="empty-state-text">${escapeHtml(apiErrorText(err))}</p></div>`;
     return;
   }
-  // QA r6 #3: rows instead of grey chips — same visual language as the owner rows (name + meta,
-  // separator line, slim «Fjern» on the right).
-  const memberRows = members.map((m) => `<li class="assign-row">
-      <span class="assign-name">${escapeHtml(m.name)}</span>
-      ${m.email ? `<span class="assign-meta">${escapeHtml(m.email)}</span>` : ""}
-      <button type="button" class="assign-remove btn-secondary" data-remove-member="${escapeHtml(m.userId)}" aria-label="Fjern ${escapeHtml(m.name)}">Fjern</button>
+  openClassState = { id: id ?? null, klass, members, courses, allCourses };
+  const page = getFormPage();
+  page.render();
+  page.markClean();
+  if (!id) document.getElementById("className")?.focus();
+}
+
+function classFormBodyHtml() {
+  const st = openClassState ?? { klass: null, members: [], courses: [], allCourses: [] };
+  const k = st.klass;
+  const isNew = !st.id;
+  // #1046 G1: den delte «rad i skjema» (shared.css .form-row) — samme rad som kursets innhold.
+  const memberRows = st.members.map((m) => `<li class="form-row">
+      <span class="form-row-title">${escapeHtml(m.name)}</span>
+      ${m.email ? `<span class="form-row-meta">${escapeHtml(m.email)}</span>` : ""}
+      <span class="form-row-actions"><button type="button" class="row-action-btn destructive" data-remove-member="${escapeHtml(m.userId)}" aria-label="Fjern ${escapeHtml(m.name)}">Fjern</button></span>
     </li>`).join("");
-  const courseRows = courses.map((c) => {
+  const courseRows = st.courses.map((c) => {
     const due = formatDueDate(c.dueAt);
     // #967: si hvorfor ingen i klassen beveger seg. Et arkivert eller upublisert kurs er usynlig
-    // for deltakeren, og påminnelser sendes ikke lenger for det — men tildelingen står igjen, og
-    // uten dette merket ser raden helt normal ut.
+    // for deltakeren, og påminnelser sendes ikke lenger for det — men tildelingen står igjen.
     const unreachable = c.courseArchived
       ? "Arkivert – deltakerne ser det ikke"
       : c.coursePublished === false
         ? "Ikke publisert – deltakerne ser det ikke"
         : "";
-    return `<li class="assign-row">
-      <span class="assign-name">${escapeHtml(courseTitle(c.title))}</span>
-      ${unreachable ? `<span class="assign-meta assign-meta--warn">${escapeHtml(unreachable)}</span>` : ""}
-      <span class="assign-meta">${due ? `Frist: ${escapeHtml(due)}` : "Ingen frist"}</span>
-      <button type="button" class="assign-remove btn-secondary" data-remove-course="${escapeHtml(c.courseId)}" aria-label="Fjern kurs">Fjern</button>
+    return `<li class="form-row">
+      <span class="form-row-title">${escapeHtml(courseTitle(c.title))}</span>
+      ${unreachable ? `<span class="form-row-meta form-row-meta--warn">${escapeHtml(unreachable)}</span>` : ""}
+      <span class="form-row-meta">${due ? `Frist: ${escapeHtml(due)}` : "Ingen frist"}</span>
+      <span class="form-row-actions"><button type="button" class="row-action-btn destructive" data-remove-course="${escapeHtml(c.courseId)}" aria-label="Fjern kurs">Fjern</button></span>
     </li>`;
   }).join("");
-  const assignedIds = new Set(courses.map((c) => c.courseId));
+  const assignedIds = new Set(st.courses.map((c) => c.courseId));
   // #688: don't offer archived courses for assignment — they are retired and shouldn't be assigned.
-  const courseOptions = allCourses.filter((c) => !assignedIds.has(c.id) && !c.archivedAt).map((c) => `<option value="${escapeHtml(c.id)}">${escapeHtml(courseTitle(c.displayTitle))}</option>`).join("");
-  pageContent.innerHTML = `
-    <a class="back-link" id="backToClasses">← Tilbake til klasser</a>
-    <div class="page-header"><h1>Klasse</h1></div>
-    <div class="detail-section" id="classOwnerPanelHost"></div>
+  const courseOptions = st.allCourses.filter((c) => !assignedIds.has(c.id) && !c.archivedAt).map((c) => `<option value="${escapeHtml(c.id)}">${escapeHtml(courseTitle(c.displayTitle))}</option>`).join("");
+  const readOnly = Boolean(k?.isSystem);
+  return `
+    <div data-form-tab="rediger">
     <div class="detail-section">
-      <h2>Studenter (${members.length})</h2>
-      <ul class="assign-list" id="memberChips">${memberRows || `<li class="assign-empty">Ingen studenter ennå.</li>`}</ul>
-      <div class="inline-form">
-        <input type="text" id="studentSearch" placeholder="Søk navn eller e-post (min. 2 tegn)" autocomplete="off" style="min-width:280px" />
+      <h2>Klasse</h2>
+      <div class="form-field">
+        <label for="className">Navn <span class="required-note">(påkrevd)</span></label>
+        <input type="text" id="className" data-form-title value="${escapeHtml(k?.name ?? "")}" ${readOnly ? "disabled" : ""} autocomplete="off" />
+      </div>
+      <div class="form-field">
+        <label for="classDescription">Beskrivelse</label>
+        <textarea id="classDescription" rows="3" ${readOnly ? "disabled" : ""}>${escapeHtml(k?.description ?? "")}</textarea>
+      </div>
+      ${readOnly ? `<p class="small">Systemklassen styres automatisk og kan ikke endres.</p>` : ""}
+    </div>
+    ${isNew ? `<div class="detail-section" data-form-untracked><p class="small" style="margin:0">Lagre klassen først, så kan du legge til deltakere og tildele kurs.</p></div>` : `
+    <div class="detail-section" data-form-untracked>
+      <h2>Deltakere (${st.members.length})</h2>
+      <ul class="form-rows" id="memberChips">${memberRows || `<li class="form-rows-empty">Ingen deltakere ennå.</li>`}</ul>
+      <div class="form-add-row">
+        <input type="text" id="studentSearch" placeholder="Søk navn eller e-post (min. 2 tegn)" autocomplete="off" />
       </div>
       <ul class="search-results" id="searchResults"></ul>
     </div>
-    <div class="detail-section">
-      <h2>Tildelte kurs (${courses.length})</h2>
-      <ul class="assign-list" id="courseChips">${courseRows || `<li class="assign-empty">Ingen kurs tildelt ennå.</li>`}</ul>
-      <div class="inline-form">
+    <div class="detail-section" data-form-untracked>
+      <h2>Tildelte kurs (${st.courses.length})</h2>
+      <ul class="form-rows" id="courseChips">${courseRows || `<li class="form-rows-empty">Ingen kurs tildelt ennå.</li>`}</ul>
+      <div class="form-add-row">
         <select id="courseSelect"><option value="">Velg kurs…</option>${courseOptions}</select>
         <label for="dueAtInput" style="font-size:13px;color:var(--color-meta);display:inline-flex;align-items:center;gap:6px">
           Frist (valgfri)
@@ -327,8 +421,61 @@ async function openClass(id) {
         <button id="assignCourseBtn" class="btn btn-secondary" style="width:auto">Tildel kurs</button>
       </div>
       <p style="font-size:12px;color:var(--color-meta);margin:6px 0 0">Fristen brukes til automatiske påminnelser til deltakerne (frist nærmer seg / forfalt).</p>
+    </div>`}
+    </div>
+    <div data-form-tab="innstillinger" hidden>
+      ${isNew
+        ? `<div class="detail-section"><p class="small" style="margin:0">Lagre klassen først, så kan eierne endres her.</p></div>`
+        : `<div class="detail-section" id="classOwnerPanelHost" data-form-untracked></div>`}
     </div>`;
-  document.getElementById("backToClasses").addEventListener("click", renderListView);
+}
+
+async function saveClassForm() {
+  const st = openClassState;
+  if (!st) return false;
+  const name = (document.getElementById("className")?.value ?? "").trim();
+  const description = (document.getElementById("classDescription")?.value ?? "").trim();
+  if (!name) {
+    showToast("Navn er påkrevd.", "error");
+    document.getElementById("className")?.focus();
+    return false;
+  }
+  try {
+    if (!st.id) {
+      const created = await apiFetch("/api/admin/content/classes", getHeaders, { method: "POST", body: JSON.stringify({ name, description: description || undefined }) });
+      showToast("Klasse opprettet.", "success");
+      // Første lagring lager klassen; sida bytter til den lagrede (med deltakere og kurs).
+      await goToClass(created.class.id, { replace: true });
+      return true;
+    }
+    const saved = await apiFetch(`/api/admin/content/classes/${encodeURIComponent(st.id)}`, getHeaders, { method: "PATCH", body: JSON.stringify({ name, description: description || null }) });
+    st.klass = { ...st.klass, ...(saved.class ?? {}), canManage: true };
+    showToast("Lagret.", "success");
+    getFormPage().refreshTitle();
+    return true;
+  } catch (err) {
+    apiErrorToast(err);
+    return false;
+  }
+}
+
+function bindClassFormHandlers() {
+  const st = openClassState;
+  if (!st) return;
+  const id = st.id;
+
+  // Handlingsraden i hodet.
+  pageContent.querySelector(".form-page-actions")?.addEventListener("click", async (e) => {
+    const btn = e.target.closest("[data-action]");
+    if (!btn || !st.klass) return;
+    if (!getFormPage().confirmLeave()) return;
+    const k = st.klass;
+    if (btn.dataset.action === "archive") { await archiveClass(k.id, k.name, { stay: true }); return; }
+    if (btn.dataset.action === "restore") { await restoreClassInAdmin(k.id, k.name, { stay: true }); return; }
+    if (btn.dataset.action === "delete") { await deleteClassInAdmin(k.id, k.name); }
+  });
+
+  if (!id) return;
 
   // #787: content-owner management for the class.
   const ownerHost = document.getElementById("classOwnerPanelHost");
@@ -338,7 +485,7 @@ async function openClass(id) {
   const searchInput = document.getElementById("studentSearch");
   const resultsEl = document.getElementById("searchResults");
   let searchTimer = null;
-  searchInput.addEventListener("input", () => {
+  searchInput?.addEventListener("input", () => {
     clearTimeout(searchTimer);
     const q = searchInput.value.trim();
     if (q.length < 2) { resultsEl.innerHTML = ""; return; }
@@ -349,16 +496,16 @@ async function openClass(id) {
       } catch { /* ignore */ }
     }, 250);
   });
-  resultsEl.addEventListener("click", async (e) => {
+  resultsEl?.addEventListener("click", async (e) => {
     const li = e.target.closest("[data-add-user]");
     if (!li) return;
     try {
       await apiFetch(`/api/admin/content/classes/${encodeURIComponent(id)}/members`, getHeaders, { method: "POST", body: JSON.stringify({ userId: li.dataset.addUser }) });
-      showToast("Student lagt til.", "success");
+      showToast("Deltaker lagt til.", "success");
       openClass(id);
     } catch (err) { apiErrorToast(err); }
   });
-  document.getElementById("memberChips").addEventListener("click", async (e) => {
+  document.getElementById("memberChips")?.addEventListener("click", async (e) => {
     const btn = e.target.closest("[data-remove-member]");
     if (!btn) return;
     try {
@@ -368,7 +515,7 @@ async function openClass(id) {
   });
 
   // Course assignment.
-  document.getElementById("assignCourseBtn").addEventListener("click", async () => {
+  document.getElementById("assignCourseBtn")?.addEventListener("click", async () => {
     const courseId = document.getElementById("courseSelect").value;
     if (!courseId) return;
     const due = document.getElementById("dueAtInput").value;
@@ -380,7 +527,7 @@ async function openClass(id) {
       openClass(id);
     } catch (err) { apiErrorToast(err); }
   });
-  document.getElementById("courseChips").addEventListener("click", async (e) => {
+  document.getElementById("courseChips")?.addEventListener("click", async (e) => {
     const btn = e.target.closest("[data-remove-course]");
     if (!btn) return;
     try {
@@ -454,7 +601,17 @@ async function init() {
   } catch {
     if (appVersionLabel) appVersionLabel.textContent = "unknown";
   }
-  await renderListView();
+  await renderRoute();
+  window.addEventListener("popstate", () => { renderRoute(); });
+}
+
+// #1046: ?id=… åpner klassen, ?new et tomt skjema, ellers lista.
+function renderRoute() {
+  const q = new URLSearchParams(window.location.search);
+  if (q.has("new")) return openClass(null);
+  if (q.get("id")) return openClass(q.get("id"));
+  openClassState = null;
+  return renderListView();
 }
 
 init();

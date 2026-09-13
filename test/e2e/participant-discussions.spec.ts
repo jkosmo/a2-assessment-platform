@@ -132,7 +132,6 @@ test("participant: oppretter en kurs-nivå tråd, ser den i lista, åpner og sva
   });
 
   await page.goto("/participant");
-  await page.locator("#loadCoursesBtn").click();
 
   // Åpne kurs-accordion → laster detalj.
   await page.locator(".course-accordion-header").first().click();

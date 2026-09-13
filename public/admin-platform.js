@@ -2,6 +2,7 @@ import { renderWorkspaceNavigationWithProfile } from "/static/workspace-nav.js";
 import { applyIdentityDefaults as delApplyIdentityDefaults } from "/static/identity-defaults.js";
 import { renderRolePresetControl as delRenderRolePresetControl } from "/static/role-preset-control.js";
 import { describeApiError } from "/static/api-error.js";
+import { createDateTimeFormatter } from "/static/format-display.js";
 import { lagLokalisertRessurs } from "/static/localized-resource.js";
 import { resolveInitialLocale } from "/static/i18n-locale.js";
 import { localeLabels, supportedLocales, translations } from "/static/i18n/admin-platform-translations.js";
@@ -40,6 +41,7 @@ const consentVersionBadge = document.getElementById("consentVersion");
 // ── State ─────────────────────────────────────────────────────────────────────
 
 let currentLocale = resolveInitialLocale(supportedLocales);
+const formatDateTime = createDateTimeFormatter(() => currentLocale, "—");
 let participantRuntimeConfig = {
   authMode: "mock",
   mockRolePresets: [],
@@ -464,10 +466,7 @@ function formatWhen(iso) {
   if (!iso) return "—";
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "—";
-  return d.toLocaleString(currentLocale === "en-GB" ? "en-GB" : "nb-NO", {
-    day: "2-digit",
-    month: "short",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  // #1046 C5: med år, som alle andre datoer i løsningen — «26. aug. 2026, 21:43». Uten år var
+  // dette den eneste datoen i grensesnittet man ikke kunne plassere.
+  return formatDateTime(iso);
 }

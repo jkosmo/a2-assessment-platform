@@ -90,11 +90,6 @@ test("participant: open a course section, render its image, and have the read re
 
   await page.goto("/participant");
 
-  // #541: the load button is disabled until the identity form is populated, then enabled.
-  const loadBtn = page.locator("#loadCoursesBtn");
-  await expect(loadBtn).toBeEnabled();
-  await loadBtn.click();
-
   // Expand the course → loads detail → renders the section row.
   await page.locator(".course-accordion-header").click();
   const sectionRow = page.locator(".course-module-row");

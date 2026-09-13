@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-import { clickEnabledButton, mockCommonApis } from "./admin-content-helpers.js";
+import { mockCommonApis } from "./admin-content-helpers.js";
 
 // Characterization tests for the admin-content MODULE LIBRARY page
 // (`public/admin-content-library.html` + `/static/admin-content-library.js`).
@@ -33,7 +33,7 @@ test.describe("admin content module library", () => {
     await expect(page.locator('a.content-area-nav-link[href="/deltakere/klasser"]')).toHaveCount(0);
     await expect(page.locator('a.content-area-nav-link[href="/admin-content/courses"]')).toHaveText("Kurs");
 
-    const table = page.locator(".library-table");
+    const table = page.locator(".list-table");
     await expect(table).toBeVisible();
     await expect(table).toContainText("Trade unions");
     await expect(table).toContainText("Collective bargaining");
@@ -41,10 +41,10 @@ test.describe("admin content module library", () => {
     // #896 S3c: one "open" link per row, pointing at the module workspace. There used to be two —
     // the second went to the Avansert editor, which no longer exists.
     await expect(
-      page.locator('.library-table a[href="/admin-content/module/module-1/conversation"]'),
+      page.locator('.list-table a[href="/admin-content/module/module-1/conversation"]'),
     ).toHaveText("Åpne");
     await expect(
-      page.locator('.library-table a[href="/admin-content/module/module-1/advanced"]'),
+      page.locator('.list-table a[href="/admin-content/module/module-1/advanced"]'),
     ).toHaveCount(0);
   });
 
@@ -53,7 +53,7 @@ test.describe("admin content module library", () => {
 
     await page.goto(LIBRARY_PATH);
 
-    await expect(page.locator(".library-empty")).toBeVisible();
+    await expect(page.locator(".empty-state")).toBeVisible();
     await expect(page.getByText("Ingen moduler ennå")).toBeVisible();
     // The empty state offers its own create entry point.
     await expect(page.locator("#emptyCreateBtn")).toBeVisible();
@@ -68,13 +68,13 @@ test.describe("admin content module library", () => {
     });
 
     await page.goto(LIBRARY_PATH);
-    await expect(page.locator(".library-table")).toContainText("Trade unions");
+    await expect(page.locator(".list-table")).toContainText("Trade unions");
 
     await page.locator("#librarySearch").fill("collective");
 
     // Only the matching row survives the client-side filter.
-    await expect(page.locator(".library-table")).toContainText("Collective bargaining");
-    await expect(page.locator(".library-table")).not.toContainText("Trade unions");
+    await expect(page.locator(".list-table")).toContainText("Collective bargaining");
+    await expect(page.locator(".list-table")).not.toContainText("Trade unions");
 
     // A search with no matches renders the "no match" empty state.
     await page.locator("#librarySearch").fill("nonexistent-xyz");
@@ -92,71 +92,66 @@ test.describe("admin content module library", () => {
     await page.goto(LIBRARY_PATH);
 
     // The "Aktive" filter button is active by default and the archived row is hidden.
-    await expect(page.locator('.library-filter-btn[data-filter="active"]')).toHaveClass(/active/);
-    await expect(page.locator(".library-table")).toContainText("Trade unions");
-    await expect(page.locator(".library-table")).not.toContainText("Old retired module");
+    await expect(page.locator('.list-filter-btn[data-filter="active"]')).toHaveClass(/active/);
+    await expect(page.locator(".list-table")).toContainText("Trade unions");
+    await expect(page.locator(".list-table")).not.toContainText("Old retired module");
 
     // Switching to "Arkiverte" shows only the archived module.
-    await page.locator('.library-filter-btn[data-filter="archived"]').click();
-    await expect(page.locator(".library-table")).toContainText("Old retired module");
-    await expect(page.locator(".library-table")).not.toContainText("Trade unions");
+    await page.locator('.list-filter-btn[data-filter="archived"]').click();
+    await expect(page.locator(".list-table")).toContainText("Old retired module");
+    await expect(page.locator(".list-table")).not.toContainText("Trade unions");
   });
 
-  test("create-module dialog stays disabled until title and level are provided", async ({ page }) => {
-    await mockCommonApis(page, {
-      libraryModules: [{ id: "module-1", title: "Trade unions", status: "published" }],
-    });
-
-    await page.goto(LIBRARY_PATH);
-
-    await page.locator("#createModuleBtn").click();
-    await expect(page.locator("#createModuleDialog")).toHaveAttribute("open", "");
-
-    // The confirm button starts disabled.
-    await expect(page.locator("#createOpenConversation")).toBeDisabled();
-
-    // Title alone is not enough — a certification level is also required.
-    await page.locator("#newModuleTitle").fill("Workplace safety");
-    await expect(page.locator("#createOpenConversation")).toBeDisabled();
-
-    await page.locator("#newModuleLevel").selectOption("basic");
-    await expect(page.locator("#createOpenConversation")).toBeEnabled();
-  });
-
-  test("creating a module POSTs the title/level and navigates to the conversational editor", async ({ page }) => {
+  // #1046 A1 (produkteier 12.09, avgjørelse 1b): «Ny modul» åpner et tomt element — ingen dialog.
+  // Modulen lages på tjeneren ved første Lagre, og adressen byttes til den ekte.
+  test("Ny modul opens an empty element; the first Lagre creates the module", async ({ page }) => {
     await mockCommonApis(page, { libraryModules: [] });
 
     await page.goto(LIBRARY_PATH);
-
-    // From the empty state, open the create dialog.
+    await expect(page.locator("#createModuleDialog")).toHaveCount(0);
     await page.locator("#emptyCreateBtn").click();
-    await expect(page.locator("#createModuleDialog")).toHaveAttribute("open", "");
+    await expect(page).toHaveURL(/\/admin-content\/module\/new\/conversation$/);
 
-    await page.locator("#newModuleTitle").fill("Workplace safety");
-    await page.locator("#newModuleLevel").selectOption("intermediate");
+    // Produkteier 13.09: et nytt element åpner på Innstillinger — navn, modultype og nivå er det
+    // første valget. «Ny modul» som tittel til navnet skrives; Lagre av til noe er endret.
+    await expect(page.locator("#tabSettings")).toHaveAttribute("aria-selected", "true");
+    await expect(page.locator("#settingsNewName")).toHaveValue("");
+    await expect(page.locator("#moduleWorkspaceTitle")).toHaveClass(/is-untitled/);
+    await expect(page.locator("#moduleSaveBtn")).toBeDisabled();
+    await expect(page.locator(".chat-pane")).toBeHidden();
+
+    await page.locator("#settingsNewName").fill("Workplace safety");
+    await expect(page.locator("#moduleWorkspaceTitle")).toHaveText("Workplace safety");
+    await page.locator("#settingsModuleType").selectOption("FREETEXT_ONLY");
+    await page.locator("#settingsCertLevel").selectOption("intermediate");
+    await expect(page.locator("#moduleSaveBtn")).toBeEnabled();
 
     const createResponse = page.waitForResponse(
       (response) =>
         response.url().includes("/api/admin/content/modules") &&
         response.request().method() === "POST",
     );
-    await clickEnabledButton(page, "Opprett modul");
+    await page.locator("#moduleSaveBtn").click();
     const response = await createResponse;
-    const postBody = response.request().postDataJSON() as {
-      title?: string;
-      certificationLevel?: string;
-    };
-    // ⚠️ #918 krevde en REN STRENG her, for å bevise at tittelen ikke var kopiert til tre språk.
-    // #930 går ett skritt videre: en ren streng bærer ikke noe språkmerke, og leses som bokmål. En
-    // tittel skrevet på engelsk ble dermed lagret som norsk, og publiseringsgaten navnga feil språk
-    // som manglende.
-    //
-    // Påstanden er derfor STRENGERE nå, ikke svakere: ett språk, og vi vet hvilket.
-    expect(postBody.title).toEqual({ "en-GB": "Workplace safety" });
+    const postBody = response.request().postDataJSON() as { title?: Record<string, string>; certificationLevel?: string };
+    expect(postBody.title?.["en-GB"]).toBe("Workplace safety");
     expect(postBody.certificationLevel).toBe("intermediate");
 
-    // The mock module POST returns id "module-1"; the page navigates to its conversation route.
+    // The mock module POST returns id "module-1"; the address is now the real one, and the author
+    // lands in Rediger with the fields for the chosen type (free text only: no MCQ section).
     await expect(page).toHaveURL(/\/admin-content\/module\/module-1\/conversation$/);
+    await expect(page.locator("#tabEdit")).toHaveAttribute("aria-selected", "true");
+    await expect(page.locator("#previewEditTaskText")).toBeVisible();
+  });
+
+  test("Ny modul from the header button goes the same way", async ({ page }) => {
+    await mockCommonApis(page, {
+      libraryModules: [{ id: "module-1", title: "Trade unions", status: "published" }],
+    });
+    await page.goto(LIBRARY_PATH);
+    await page.locator("#createModuleBtn").click();
+    await expect(page).toHaveURL(/\/admin-content\/module\/new\/conversation$/);
+    await expect(page.locator("#settingsNewName")).toHaveValue("");
   });
 
   // #710 regression guard: the "Brukt i kurs" cell renders a <button> when the count > 0

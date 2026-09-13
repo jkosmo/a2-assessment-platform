@@ -1,6 +1,6 @@
 {
   "name": "a2-assessment-platform",
-  "version": "2.67.0",
+  "version": "2.68.0",
   "private": true,
   "description": "Internal assessment platform backend bootstrap (M0 foundation).",
   "type": "module",
@@ -13,6 +13,8 @@
     "maint:backfill-audit-chain": "tsx scripts/maintenance/backfill-audit-chain.ts",
     "maint:verify-audit-chain": "tsx scripts/maintenance/verify-audit-chain.ts",
     "maint:collapse-duplicated-titles": "tsx scripts/maintenance/collapse-duplicated-titles.ts",
+    "maint:report-partial-translations": "tsx scripts/maintenance/collapse-duplicated-titles.ts --report",
+    "complexity": "tsx scripts/complexity/report.ts",
     "build": "tsc -p tsconfig.json",
     "start": "node scripts/runtime/startup.mjs",
     "postgres:setup": "node scripts/postgres/localSetup.mjs setup",

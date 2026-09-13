@@ -91,6 +91,45 @@ export async function archiveClass(classId: string, actorId: string | null) {
   });
 }
 
+// #1046 D3: sletting for godt — bare av en klasse som alt er arkivert. Regelen er den samme som
+// listene viser for modul, kurs og seksjon («Slett» finnes bare på arkiverte rader), men her er den
+// også håndhevet på tjenersiden: `DELETE /:classId` arkiverte før, og en gammel klient som fortsatt
+// sender DELETE for «Arkiver» skal få et avslag, ikke en sletting.
+export async function deleteClass(classId: string, actorId: string | null) {
+  const klass = await requireClass(classId);
+  if (klass.isSystem) {
+    throw new DomainRuleError(
+      "system_class_immutable",
+      "System classes cannot be deleted.",
+      { action: "delete" },
+    );
+  }
+  if (!klass.archivedAt) {
+    throw new DomainRuleError(
+      "class_not_archived",
+      "Archive the class before deleting it.",
+      { action: "delete" },
+    );
+  }
+  await runInTransaction(async (tx) => {
+    const repo = createClassRepository(tx);
+    await repo.deleteClass(classId);
+    // Eierradene har ingen fremmednøkkel til klassen (ContentOwner peker på innhold av fire typer),
+    // så de må ryddes her — ellers blir de liggende som eierskap til noe som ikke finnes.
+    await tx.contentOwner.deleteMany({ where: { contentType: "CLASS", contentId: classId } });
+    await recordAuditEvent(
+      {
+        entityType: auditEntityTypes.class,
+        entityId: classId,
+        action: auditActions.class.deleted,
+        actorId: actorId ?? undefined,
+        metadata: { classId, name: klass.name },
+      },
+      tx,
+    );
+  });
+}
+
 export async function restoreClass(classId: string, actorId: string | null) {
   const klass = await requireClass(classId);
   if (klass.isSystem) {
@@ -114,6 +153,45 @@ export async function restoreClass(classId: string, actorId: string | null) {
       },
       tx,
     );
+  });
+}
+
+// #1046 nivå to (2a): klassen har et skjema med Lagre — navn og beskrivelse endres her, ikke bare ved
+// opprettelse. Medlemmer og kurstildelinger er operasjoner og går sine egne veier.
+export async function getClass(classId: string) {
+  return requireClass(classId);
+}
+
+export async function updateClass(
+  classId: string,
+  input: { name?: string; description?: string | null },
+  actorId: string | null,
+) {
+  const klass = await requireClass(classId);
+  if (klass.isSystem) {
+    throw new DomainRuleError("system_class_immutable", "System classes cannot be edited.", { action: "update" });
+  }
+  const data: { name?: string; description?: string | null } = {};
+  // Tomt navn stoppes av rutas Zod-skjema (min(1)) før tjenesten kalles — ingen egen vakt her (#999:
+  // en kode uten klient som kan vise den, lover mer enn den holder).
+  if (input.name !== undefined && input.name.trim()) data.name = input.name.trim();
+  if (input.description !== undefined) data.description = input.description?.trim() || null;
+  const fields = Object.keys(data);
+  if (fields.length === 0) return klass;
+  return runInTransaction(async (tx) => {
+    const repo = createClassRepository(tx);
+    const updated = await repo.updateClass(classId, data);
+    await recordAuditEvent(
+      {
+        entityType: auditEntityTypes.class,
+        entityId: classId,
+        action: auditActions.class.updated,
+        actorId: actorId ?? undefined,
+        metadata: { classId, fields },
+      },
+      tx,
+    );
+    return updated;
   });
 }
 

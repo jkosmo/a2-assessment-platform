@@ -6,6 +6,7 @@ import { reportingRepository } from "../../repositories/reportingRepository.js";
 import type { SubmissionStatus as SubmissionStatusType } from "@prisma/client";
 import { normalizeFilters, round2 } from "./csvExport.js";
 import type { ReportFilters } from "./types.js";
+import { moduleIdClause } from "./scope.js";
 
 type CompletionRow = {
   moduleId: string;
@@ -41,8 +42,10 @@ type CompletionLearnerRow = {
 };
 
 export async function getCompletionReport(filters: ReportFilters, locale: SupportedLocale = "en-GB") {
+  // #1058: valgt kurs og tillatte kurs (SMO ser egne) avgjør hvilke moduler som er med — ett sted.
+  const scope = await moduleIdClause(filters);
   const where = {
-    ...(filters.moduleId ? { moduleId: filters.moduleId } : {}),
+    ...(scope ?? {}),
     ...(filters.dateFrom || filters.dateTo
       ? {
           submittedAt: {
@@ -57,7 +60,7 @@ export async function getCompletionReport(filters: ReportFilters, locale: Suppor
       : {}),
   } as const;
 
-  const submissions = await reportingRepository.findSubmissionsForCompletionReport(where);
+  const submissions = scope === null ? [] : await reportingRepository.findSubmissionsForCompletionReport(where);
 
   const rowsByModule = new Map<string, CompletionRow>();
   for (const submission of submissions) {
@@ -111,8 +114,9 @@ export async function getCompletionReport(filters: ReportFilters, locale: Suppor
 }
 
 export async function getPassRatesReport(filters: ReportFilters, locale: SupportedLocale = "en-GB") {
+  const scope = await moduleIdClause(filters);
   const where = {
-    ...(filters.moduleId ? { moduleId: filters.moduleId } : {}),
+    ...(scope ?? {}),
     ...(filters.dateFrom || filters.dateTo
       ? {
           submittedAt: {
@@ -124,7 +128,7 @@ export async function getPassRatesReport(filters: ReportFilters, locale: Support
     ...(filters.orgUnit ? { user: { department: filters.orgUnit } } : {}),
   } as const;
 
-  const submissions = await reportingRepository.findSubmissionsForPassRatesReport(where);
+  const submissions = scope === null ? [] : await reportingRepository.findSubmissionsForPassRatesReport(where);
 
   const outcomeFilter = new Set((filters.statuses ?? []).map((value) => value.toUpperCase()));
   const rowsByModule = new Map<string, PassRatesRow>();
@@ -198,8 +202,10 @@ export async function getCompletionLearnerReport(
   moduleId: string,
   locale: SupportedLocale = "en-GB",
 ) {
+  // #1058: modulen må ligge i et kurs kalleren kan se; ellers tom rapport (ikke 403).
+  const scope = await moduleIdClause(filters, moduleId);
   const where = {
-    moduleId,
+    ...(scope ?? { moduleId }),
     ...(filters.dateFrom || filters.dateTo
       ? {
           submittedAt: {
@@ -211,7 +217,7 @@ export async function getCompletionLearnerReport(
     ...(filters.orgUnit ? { user: { department: filters.orgUnit } } : {}),
   } as const;
 
-  const submissions = await reportingRepository.findSubmissionLearnersForModuleReport(where);
+  const submissions = scope === null ? [] : await reportingRepository.findSubmissionLearnersForModuleReport(where);
   const latestByUser = new Map<string, (typeof submissions)[number]>();
 
   for (const submission of submissions) {
@@ -258,8 +264,9 @@ export async function getModuleLearnersReport(
   filters: ReportFilters,
   locale: SupportedLocale = "en-GB",
 ) {
+  const scope = await moduleIdClause(filters);
   const where = {
-    ...(filters.moduleId ? { moduleId: filters.moduleId } : {}),
+    ...(scope ?? {}),
     ...(filters.dateFrom || filters.dateTo
       ? {
           submittedAt: {
@@ -271,7 +278,7 @@ export async function getModuleLearnersReport(
     ...(filters.orgUnit ? { user: { department: filters.orgUnit } } : {}),
   } as const;
 
-  const submissions = await reportingRepository.findSubmissionLearnersForModuleReport(where);
+  const submissions = scope === null ? [] : await reportingRepository.findSubmissionLearnersForModuleReport(where);
   const latestByUserModule = new Map<string, (typeof submissions)[number]>();
 
   for (const submission of submissions) {

@@ -1049,91 +1049,8 @@ dialog::backdrop {
   }
 }
 
-/* ── State rail ───────────────────────────────────────────────────────────── */
-.state-rail {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px 16px;
-  padding: 8px 12px;
-  margin-bottom: var(--space-2);
-  background: var(--color-module-summary-bg);
-  border: 1px solid var(--color-module-summary-border);
-  border-radius: var(--radius-card);
-}
+/* Tilstandslinja (.state-rail) er borte (#1046, 13.09): versjonene står som merker i hodet. */
 
-/* #975: her sto `.state-rail[hidden] { display: none; }` — en lapp som patchet symptomet av at
-   `.state-rail{display:flex}` slår `hidden`-attributtet. Skjulingen eies nå av setHidden() i
-   admin-content-shell.js og av inline display i markupen, så lappen er borte. */
-
-.state-rail-item {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-}
-
-.state-rail-label {
-  font-size: 11px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--color-meta);
-  white-space: nowrap;
-  flex-shrink: 0;
-}
-
-/* v1.1.94 (#360 follow-up): state-rail-value harmoniseres med sr-badge for visuelt
-   ensartet rad. Tidligere var noen verdier pill-badges, andre var plain tekst — så
-   uryddig ut i state-rail. Nå: alle verdier får chip-form (rounded, padding, samme
-   font-size); sr-badge-varianter beholder fargede bakgrunner for aktive tilstander,
-   plain state-rail-value får subtil nøytral bakgrunn. */
-.state-rail-value {
-  display: inline-flex;
-  align-items: center;
-  border-radius: 999px;
-  padding: 2px 8px;
-  font-size: 11px;
-  font-weight: 700;
-  background: #ebe8df;
-  color: var(--color-text);
-  white-space: nowrap;
-}
-
-/* v1.1.97: "Alt lagret"-tilstand får grønt skjær så det er åpenbart at lagring er OK
-   uten å lese teksten. Skiller seg fra øvrige nøytrale chip-verdier. */
-.state-rail-value--saved-ok {
-  background: #e6f4ea;
-  color: #12613a;
-}
-
-.state-rail-sep {
-  color: var(--color-border-soft);
-  font-size: 14px;
-  flex-shrink: 0;
-  user-select: none;
-}
-
-/* State rail badges */
-.sr-badge {
-  display: inline-flex;
-  align-items: center;
-  border-radius: 999px;
-  padding: 2px 8px;
-  font-size: 11px;
-  font-weight: 700;
-  white-space: nowrap;
-}
-
-.sr-badge--published   { background: #e6f4ea; color: #12613a; }
-.sr-badge--saved-draft { background: #e8f0fe; color: #1a5276; }
-.sr-badge--working     { background: #ebe8df; color: #55524a; }
-.sr-badge--unsaved     { background: #fff3db; color: #7a4b00; }
-
-@media (max-width: 700px) {
-  .state-rail { gap: 6px 10px; }
-  .state-rail-sep { display: none; }
-}
 
 @media (max-width: 600px) {
   .queue-table-wrap table,
@@ -1251,7 +1168,7 @@ dialog::backdrop {
   border: 1px solid transparent;
   white-space: nowrap;
 }
-/* Helhetlig palett — gjenbruker app-ens badge-farger (jf. .sr-badge--*). Semantikk:
+/* Helhetlig palett — gjenbruker app-ens badge-farger (jf. .status-badge--*). Semantikk:
    grønn = fullført (Løst/Akseptert), gul = trenger handling (Åpen), rød = lukket (Låst),
    blå = informasjon (Spørsmål), grå = nøytral kategori (Diskusjon). */
 .disc-badge--open      { background: #fff3db; color: #7a4b00; }   /* gul  — trenger svar */
@@ -1301,8 +1218,10 @@ dialog::backdrop {
 
 /* #705-UX(B): felles handlings-knapperad + knapp i admin-listene, så alle fire listene (kurs/
    moduler/seksjoner/klasser) ser like ut. Tidligere definerte hver side sin egen .row-action-btn
-   med ulik font/padding. Kanonisk definisjon her; sidene kan fortsatt overstyre om nødvendig. */
-.row-actions { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+   med ulik font/padding. Kanonisk definisjon her; sidene kan fortsatt overstyre om nødvendig.
+   #1046 D5: raden brekker ALDRI til to linjer. Regelen er «maks fire i raden»: er det flere
+   handlinger, viser lista tre pluss «Mer», og resten ligger i menyen under den. */
+.row-actions { display: flex; flex-wrap: nowrap; gap: 4px; align-items: center; }
 .row-action-btn {
   display: inline-flex;
   align-items: center;
@@ -1326,6 +1245,150 @@ dialog::backdrop {
 .row-action-btn:hover { background: var(--color-row-hover); border-color: var(--color-link-hover-border); }
 .row-action-btn.destructive { color: var(--color-error); border-color: #f5c0bb; }
 .row-action-btn.destructive:hover { background: #fdf0ef; }
+/* #1046 C1/C2 (produkteier 12.09: «lista for moduler har hvit bakgrunn, lista for seksjoner lys
+   brun», «seksjoner har mye bredere kolonne for navn»): de fire listesidene hadde hver sin kopi av
+   tabellregelen, med små avvik i bakgrunn, overskriftsstørrelse og kolonnebredde. Én regel her.
+   Navnekolonnen får samme andel overalt (28 %), så lister med få kolonner ikke lar navnet ese ut. */
+.list-table-wrap { overflow-x: auto; border: 1px solid var(--color-table-wrap-border); border-radius: var(--radius-card); background: var(--color-surface); }
+.list-table { width: 100%; border-collapse: collapse; font-size: 14px; background: var(--color-surface); }
+.list-table th {
+  text-align: left; padding: 10px 12px;
+  font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--color-meta);
+  border-bottom: 1px solid var(--color-table-border); white-space: nowrap; background: var(--color-bg);
+}
+.list-table td { padding: 10px 12px; border-bottom: 1px solid var(--color-table-border); vertical-align: middle; }
+.list-table tr:last-child td { border-bottom: none; }
+.list-table tr:hover td { background: var(--color-row-hover); }
+.list-table .col-name, .list-table .col-title { width: 28%; min-width: 180px; font-weight: 600; }
+.list-table .col-status, .list-table .col-level, .list-table .col-courses, .list-table .col-module-count, .list-table .col-actions { white-space: nowrap; }
+.list-table .col-updated { white-space: nowrap; color: var(--color-meta); font-size: 13px; }
+/* #1046 — LISTESIDA (public/static/list-page.js). Alt under her hører til den felles listesida for
+   Moduler, Kurs, Seksjoner og Klasser. Sidene skal ikke ha egne kopier av disse reglene. */
+.page-header { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); margin-bottom: var(--space-3); flex-wrap: wrap; }
+.page-header h1 { margin: 0; font-size: 22px; }
+.page-lead { margin: 4px 0 0; font-size: 13px; color: var(--color-meta); }
+.list-filters-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin-bottom: var(--space-2); }
+.list-filters-row .list-filters { margin-bottom: 0; }
+.list-course-filter { display: flex; align-items: center; gap: 8px; }
+.list-course-filter label { font-size: 13px; font-weight: 600; color: var(--color-meta); }
+.list-course-select {
+  width: auto; min-height: 0; padding: 5px 10px; font-size: 13px; font-family: inherit;
+  border: 1px solid var(--color-border-soft); border-radius: var(--radius-card);
+  background: var(--color-surface); color: var(--color-text); max-width: 260px;
+}
+.list-course-select:focus { outline: 2px solid var(--color-blue); outline-offset: 1px; border-color: transparent; }
+.list-table th.sortable { cursor: pointer; user-select: none; }
+.list-table th.sortable:hover { color: var(--color-link-active); }
+.list-table .sort-indicator { display: inline-block; margin-left: 4px; opacity: 0.4; font-style: normal; }
+.list-table th.sort-asc .sort-indicator, .list-table th.sort-desc .sort-indicator { opacity: 1; color: var(--color-link-active); }
+.empty-state { text-align: center; padding: var(--space-5) var(--space-3); background: var(--color-surface); border: 1px solid var(--color-table-wrap-border); border-radius: var(--radius-card); }
+.empty-state-title { font-size: 18px; font-weight: 700; color: var(--color-text); margin: 0 0 8px; }
+.empty-state-text { font-size: 14px; color: var(--color-meta); margin: 0 0 var(--space-2); }
+/* #1046 nivå to, B1: én tilbake-lenke på alle åpnede elementer — grå, uten understrek, «← Tilbake til [lista]».
+   Modulen hadde en blå understreket lenke; kurs, seksjon og klasse hadde hver sin kopi av den grå. */
+.back-link { font-size: 13px; color: var(--color-meta); text-decoration: none; display: inline-flex; align-items: center; gap: 4px; cursor: pointer; }
+.back-link:hover { color: var(--color-text); }
+/* #1046 B1 (produkteier 12.09: «Moduler har søkefelt, seksjoner har ikke»): ett søkefelt for alle
+   listene, over filterknappene, venstrejustert. Var .library-search bare på Moduler. */
+.list-search {
+  width: 100%; max-width: 380px; padding: 9px 12px; margin-bottom: var(--space-1);
+  border: 1px solid var(--color-border-soft); border-radius: var(--radius-card);
+  font-size: 14px; font-family: inherit; background: #fff; color: var(--color-text); box-sizing: border-box;
+}
+.list-search:focus { outline: 2px solid var(--color-blue); outline-offset: 1px; border-color: transparent; }
+/* #1046 J4 — NØKKELTALL (Status, Resultater): én linje over tabellen, ikke fliser. Verdien stor,
+   etiketten liten ved siden av. Sidene skal ikke ha egne kopier. */
+.kpi-line { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-3); margin: 0 0 var(--space-2); font-size: 13px; color: var(--color-meta); }
+.kpi-line .kpi-value { font-size: 20px; font-weight: 700; color: var(--color-text); margin-right: 6px; font-variant-numeric: tabular-nums; }
+.table-empty-note { margin: var(--space-1) 0 0; color: var(--color-meta); }
+/* #1046 nivå to, G1–G3 — RAD I SKJEMA: kursets innhold, klassens kurs, klassens medlemmer. Nummer
+   (der rekkefølgen betyr noe), typemerke, navn, metadata i grått, handlinger til høyre med samme
+   knappestil som listene (.row-action-btn, «Fjern» rød). Sidene skal ikke ha egne kopier. */
+.form-rows { list-style: none; margin: 0 0 var(--space-2); padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.form-row { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: 1px solid var(--color-border-soft); border-radius: var(--radius-card); background: var(--color-bg); font-size: 14px; }
+.form-row-order { font-size: 12px; font-weight: 700; color: var(--color-meta); min-width: 20px; text-align: right; }
+.form-row-badge { font-size: 10px; font-weight: 700; letter-spacing: 0.04em; padding: 2px 6px; border-radius: var(--radius-btn); background: var(--color-row-hover); color: var(--color-meta); }
+.form-row[data-item-type="SECTION"] { background: #eef4ff; border-color: #c7dbff; }
+.form-row[data-item-type="SECTION"] .form-row-badge { background: #d6e4ff; color: #1d4ed8; }
+.form-row-title { flex: 1 1 auto; min-width: 0; font-weight: 500; }
+.form-row-meta { color: var(--color-meta); font-size: 12.5px; }
+.form-row-meta--warn { color: var(--color-warning); }
+.form-row-actions { display: flex; gap: 4px; margin-left: auto; flex: 0 0 auto; }
+.form-row-actions .row-action-btn:disabled { opacity: 0.4; cursor: default; }
+.form-rows-empty { color: var(--color-meta); font-style: italic; font-size: 13px; padding: 6px 0; }
+/* G2: én «legg til»-linje — søk/velg + knapp. */
+.form-add-row { display: flex; gap: 8px; align-items: flex-start; flex-wrap: wrap; margin-top: var(--space-2); }
+.form-add-row > button, .form-add-row > .btn { width: auto; flex: 0 0 auto; }
+.form-add-row > input, .form-add-row > select, .form-add-row > .combobox-wrap { flex: 1 1 240px; min-width: 0; }
+.form-add-row > input, .form-add-row > select { padding: 8px 10px; border: 1px solid var(--color-border-soft); border-radius: var(--radius-btn); font-size: 13px; font-family: inherit; background: var(--color-surface); box-sizing: border-box; }
+/* #1046 nivå to — SKJEMASIDA (public/static/form-page.js). Hode, tilstandslinje, handlingsrad,
+   språkpiller og lagrelinje for det åpnede elementet. Sidene skal ikke ha egne kopier. */
+.form-page-head { margin-bottom: 0; } /* luften under kommer fra .form-page-state (10 px) — samme rytme som modulen */
+/* Produkteier 13.09: tilbake-lenke og handlingsrad på én linje øverst; navnet får hele bredden. */
+.form-page-topline { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); flex-wrap: wrap; }
+.form-page-topline .back-link { margin: 0; }
+.form-page-title-row { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-2); flex-wrap: wrap; margin-top: 6px; }
+.form-page-title { flex: 1 1 320px; min-width: 0; }
+.form-page-type { display: block; font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--color-meta); }
+.form-page-title h1 { margin: 2px 0 6px; font-size: 22px; line-height: 1.25; text-wrap: balance; }
+.form-page-title h1.is-untitled { color: var(--color-meta); font-weight: 500; }
+.form-page-state { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+.form-state-badge { font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--color-border-soft); color: var(--color-meta); background: var(--color-surface); }
+.form-state-badge.is-dirty { color: #8a5a14; border-color: #e3c58a; background: #fff8ea; }
+.form-page-actions { flex: 0 0 auto; margin-left: auto; }
+/* Produkteier 13.09: Lagre og Avbryt står FØRST i handlingsraden, med en diskré grønn og rød tone
+   når det finnes noe å lagre eller forkaste. Uten endringer er begge grå og slått av — fargen
+   sier «du har ulagrede endringer», ikke «her er en knapp». Slett beholder sin røde RAMME; det er
+   en annen ting. */
+.form-page-actions .row-actions { align-items: center; }
+.btn-save, .btn-cancel { font-weight: 700; }
+.btn-save:not(:disabled) { background: #e6f4ea; border-color: #9fcfad; color: #14603a; }
+.btn-save:not(:disabled):hover { background: #d7ecdd; border-color: #6fb586; }
+.btn-cancel:not(:disabled) { background: #fbecea; border-color: #e6b3ae; color: #9b2f25; }
+.btn-cancel:not(:disabled):hover { background: #f6dcd8; border-color: #d48a82; }
+.btn-save:disabled, .btn-cancel:disabled { opacity: 0.55; cursor: default; }
+.form-actions-sep { width: 1px; height: 20px; background: var(--color-border-soft); margin: 0 4px; }
+.form-page-languages { display: flex; gap: 4px; align-items: center; flex-wrap: wrap; margin: 0 0 8px; }
+.content-locale-label { font-size: 12px; font-weight: 600; color: var(--color-meta); margin-right: 4px; }
+.content-locale-pill { background: var(--color-surface); border: 1px solid var(--color-border-soft); border-radius: 999px; padding: 4px 12px; font-size: 12px; font-weight: 600; color: var(--color-meta); cursor: pointer; width: auto; min-height: 0; flex: 0 0 auto; font-family: inherit; }
+.content-locale-pill.active { background: var(--color-blue-light); border-color: var(--color-blue); color: var(--color-link-active); }
+.content-locale-pill:hover:not(.active) { border-color: var(--color-link-hover-border); color: var(--color-text); }
+.content-locale-required { font-weight: 500; opacity: 0.8; }
+.form-page-body > .card + .card, .form-page-body > .detail-section + .detail-section { margin-top: var(--space-2); }
+/* Fanelinja (variant A): som nivå to i toppmenyen. Fanene er et nivå til, og ser slik ut. */
+.form-page-tabs { display: flex; gap: 0; border-bottom: 1px solid var(--color-table-wrap-border); margin: 0 0 var(--space-2); }
+.form-page-tab { width: auto; min-height: 0; padding: 8px 14px; font-size: 14px; font-weight: 600; font-family: inherit; color: var(--color-meta); background: none; border: 0; border-bottom: 2px solid transparent; margin-bottom: -1px; border-radius: 0; cursor: pointer; }
+.form-page-tab:hover { color: var(--color-text); }
+.form-page-tab.active { color: var(--color-link-active); border-bottom-color: var(--color-blue); }
+.form-page-tab:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 2px; }
+/* Fanepanelene skjules med setHidden() (inline display) — ingen [hidden]-lapp her (#975). */
+/* #1046 nivå to, D1: ETT skjemafelt — etikett over feltet, vanlig skrift, hvit bakgrunn, «(påkrevd)» som ord.
+   Var definert i kurssida; klasse, seksjon og modul hadde hver sin variant. */
+.form-field { margin-bottom: var(--space-2); }
+.form-field:last-child { margin-bottom: 0; }
+.form-field label { display: block; font-size: 13px; font-weight: 600; color: var(--color-meta); margin-bottom: 4px; }
+.form-field input, .form-field textarea, .form-field select {
+  width: 100%; padding: 9px 12px; border: 1px solid var(--color-border-soft); border-radius: var(--radius-card);
+  font-size: 14px; font-family: inherit; box-sizing: border-box; background: #fff; color: var(--color-text);
+}
+.form-field textarea { resize: vertical; min-height: 72px; }
+.form-field input:focus, .form-field textarea:focus, .form-field select:focus { outline: 2px solid var(--color-blue); outline-offset: 1px; border-color: transparent; }
+.form-field input:disabled, .form-field textarea:disabled { background: var(--color-bg); color: var(--color-meta); }
+.required-note { font-size: 12px; color: var(--color-meta); margin-left: 4px; font-weight: 400; }
+.form-field .field-hint { font-size: 12px; color: var(--color-meta); margin: 4px 0 0; }
+/* «Mer»-menyen (#1046 D5): <details> så åpne/lukke virker uten skript og med tastatur. */
+.row-more { position: relative; display: inline-block; }
+.row-more > summary { list-style: none; }
+.row-more > summary::-webkit-details-marker { display: none; }
+.row-more[open] > summary { background: var(--color-row-hover); }
+.row-more-menu {
+  position: absolute; right: 0; top: calc(100% + 4px); z-index: 20; min-width: 160px;
+  display: flex; flex-direction: column; gap: 2px; padding: 4px;
+  background: var(--color-surface); border: 1px solid var(--color-border-soft);
+  border-radius: var(--radius-card); box-shadow: 0 6px 20px rgba(0,0,0,0.12);
+}
+.row-more-menu .row-action-btn { justify-content: flex-start; width: 100%; border-color: transparent; }
+.row-more-menu .row-action-btn:hover { border-color: var(--color-link-hover-border); }
 /* #787 slice 5: nøytral «Skrivebeskyttet»-markør når brukeren verken eier innholdet eller er admin —
    samme høyde som knappene så radene ikke hopper, men tydelig ikke-interaktiv (dempet, hjelpe-markør). */
 .row-readonly-note {

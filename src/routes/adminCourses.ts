@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { requireContentOwnership } from "./requireContentOwnership.js";
 import { idempotency } from "../middleware/idempotency.js";
+import { deriveContentLifecycle } from "../modules/content/lifecycle.js";
 import { assertContentOwnership, listManageableContentIds } from "../modules/content/contentOwnershipService.js";
 import { z } from "zod";
 import {
@@ -163,6 +164,7 @@ adminCoursesRouter.get("/", async (request, response, next) => {
       updatedAt: c.updatedAt.toISOString(),
       publishedAt: c.publishedAt?.toISOString() ?? null,
       archivedAt: c.archivedAt?.toISOString() ?? null,
+      lifecycle: deriveContentLifecycle({ archivedAt: c.archivedAt, publishedAt: c.publishedAt }),
       inProgressCount: inProgressCounts[i],
       canManage: manageable.has(c.id),
     }));

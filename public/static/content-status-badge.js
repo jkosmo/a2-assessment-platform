@@ -45,3 +45,48 @@ export function moduleLibraryStatusBadge(libraryStatus, t) {
   if (libraryStatus === "published") return lifecycleStatusBadge("published", t);
   return lifecycleStatusBadge("draft", t);
 }
+
+// ---------------------------------------------------------------------------
+// #1046 steg B: tjeneren leverer `lifecycle` på alle fire listene (modul, kurs, seksjon, klasse):
+//   draft · published · published_with_draft · archived   (innhold)
+//   active · archived                                     (klasser)
+// Klienten regner ikke ut tilstand lenger; den leser ordet. Én reserve for gamle svar uten feltet
+// (og for testers mock-data) ligger her — ETT sted, ikke ett per side. Fjernes når ingen sender
+// gamle svar.
+// ---------------------------------------------------------------------------
+
+export function lifecycleOf(item) {
+  if (item?.lifecycle) return item.lifecycle;
+  if (item?.archivedAt) return "archived";
+  if (typeof item?.status === "string") {
+    // Modulbibliotekets gamle femverdi-felt.
+    if (item.status === "published" || item.status === "published_with_draft" || item.status === "archived") return item.status;
+    return "draft";
+  }
+  if (item && "activeVersionId" in item) return item.activeVersionId ? "published" : "draft";
+  if (item && "publishedAt" in item) return item.publishedAt ? "published" : "draft";
+  return "active";
+}
+
+/** Merket for en rad, med «Nyere utkast»-brikken når det finnes en versjon nyere enn den som er live. */
+export function lifecycleBadge(item, t) {
+  const lifecycle = lifecycleOf(item);
+  if (lifecycle === "published_with_draft") return lifecycleStatusBadge("published", t, { chipKey: "adminContent.lifecycle.newerDraft" });
+  if (lifecycle === "active") return "";
+  return lifecycleStatusBadge(lifecycle, t);
+}
+
+/**
+ * Filterknappenes regel, én gang for alle listene:
+ *   all → alt · active → ikke arkivert · archived → arkivert
+ *   published → live (med eller uten nyere utkast) · unpublished_draft → har et utkast som ikke er live
+ */
+export function matchesLifecycleFilter(item, key) {
+  const lifecycle = lifecycleOf(item);
+  if (key === "all") return true;
+  if (key === "archived") return lifecycle === "archived";
+  if (key === "active") return lifecycle !== "archived";
+  if (key === "published") return lifecycle === "published" || lifecycle === "published_with_draft";
+  if (key === "unpublished_draft") return lifecycle === "draft" || lifecycle === "published_with_draft";
+  return true;
+}

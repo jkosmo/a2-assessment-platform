@@ -1,10 +1,14 @@
 import { Router, type Request } from "express";
 import { requireContentOwnership } from "./requireContentOwnership.js";
 import { listManageableContentIds } from "../modules/content/contentOwnershipService.js";
+import { deriveClassLifecycle } from "../modules/content/lifecycle.js";
 import { z } from "zod";
 import {
   createClass,
   archiveClass,
+  deleteClass,
+  getClass,
+  updateClass,
   restoreClass,
   addMember,
   removeMember,
@@ -24,6 +28,10 @@ const createClassSchema = z.object({
   name: z.string().trim().min(1),
   description: z.string().trim().optional(),
 });
+const updateClassSchema = z.object({
+  name: z.string().trim().min(1).optional(),
+  description: z.string().trim().nullable().optional(),
+});
 const addMemberSchema = z.object({ userId: z.string().min(1) });
 const assignCourseSchema = z.object({ courseId: z.string().min(1), dueAt: z.string().datetime().nullish() });
 
@@ -39,7 +47,8 @@ adminClassesRouter.get("/", async (request, response, next) => {
       actorUserId: request.context?.userId ?? "",
       roles: request.context?.roles ?? [],
     });
-    response.json({ classes: classes.map((c) => ({ ...c, canManage: manageable.has(c.id) })) });
+    // #1046 steg B: samme `lifecycle`-felt som innholdslistene (klasser er aktive eller arkiverte).
+    response.json({ classes: classes.map((c) => ({ ...c, lifecycle: deriveClassLifecycle(c), canManage: manageable.has(c.id) })) });
   } catch (error) {
     next(error);
   }
@@ -59,9 +68,45 @@ adminClassesRouter.post("/", async (request, response, next) => {
   }
 });
 
-adminClassesRouter.delete("/:classId", requireContentOwnership("CLASS", "classId"), async (request: Request<{ classId: string }>, response, next) => {
+// #1046 nivå to: klassen som åpnet element — hent én, og lagre navn/beskrivelse med Lagre-knappen.
+adminClassesRouter.get("/:classId", requireContentOwnership("CLASS", "classId"), async (request: Request<{ classId: string }>, response, next) => {
+  try {
+    const klass = await getClass(request.params.classId);
+    response.json({ class: { ...klass, lifecycle: deriveClassLifecycle(klass) } });
+  } catch (error) {
+    next(error);
+  }
+});
+
+adminClassesRouter.patch("/:classId", requireContentOwnership("CLASS", "classId"), async (request: Request<{ classId: string }>, response, next) => {
+  const parsed = updateClassSchema.safeParse(request.body);
+  if (!parsed.success) {
+    response.status(400).json({ error: "validation_error", issues: parsed.error.issues });
+    return;
+  }
+  try {
+    const klass = await updateClass(request.params.classId, parsed.data, request.context?.userId ?? null);
+    response.json({ class: { ...klass, lifecycle: deriveClassLifecycle(klass) } });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// #1046 D3: samme ruteform som kurs og seksjoner — POST /archive arkiverer, DELETE sletter for godt.
+// DELETE arkiverte før; tjenesten avviser DELETE av en aktiv klasse (`class_not_archived`), så en
+// gammel klient som fortsatt sender DELETE for «Arkiver» får et avslag og ikke en sletting.
+adminClassesRouter.post("/:classId/archive", requireContentOwnership("CLASS", "classId"), async (request: Request<{ classId: string }>, response, next) => {
   try {
     await archiveClass(request.params.classId, request.context?.userId ?? null);
+    response.json({ ok: true });
+  } catch (error) {
+    next(error);
+  }
+});
+
+adminClassesRouter.delete("/:classId", requireContentOwnership("CLASS", "classId"), async (request: Request<{ classId: string }>, response, next) => {
+  try {
+    await deleteClass(request.params.classId, request.context?.userId ?? null);
     response.status(204).send();
   } catch (error) {
     next(error);

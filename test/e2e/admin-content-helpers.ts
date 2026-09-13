@@ -226,6 +226,8 @@ export async function clickEnabledButton(page: Page, label: string | RegExp) {
     .locator("button:enabled")
     .filter(typeof label === "string" ? { hasText: label } : { hasText: label })
     .last();
+  // #1046 D5: knappen kan ligge under «Mer» i en handlingsrad — åpne menyen først.
+  await revealRowAction(page, button);
   await expect(button).toBeVisible();
   await button.click();
 }
@@ -372,7 +374,12 @@ export async function mockCommonApis(page: Page, {
     // Default library fixtures to status: "published" so they appear in the
     // course module picker after the #440 filter (only published modules are
     // pickable). Tests that need other statuses must set it explicitly.
-    const modulesWithStatus = libraryModules.map((m) => ({ status: "published", ...m }));
+    // #1046 steg B: den ekte ruten sender også `lifecycle`; mock-en gjør det samme (utledet av status).
+    const modulesWithStatus = libraryModules.map((m) => {
+      const status = (m as { status?: string }).status ?? "published";
+      const lifecycle = ["published", "published_with_draft", "archived"].includes(status) ? status : "draft";
+      return { status, lifecycle, ...m };
+    });
     await route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -1129,4 +1136,23 @@ export async function mockCommonApis(page: Page, {
   });
 
   return state;
+}
+
+// #1046 D5: raden viser maks fire handlinger; resten ligger under «Mer» (<details class="row-more">).
+// En handling i menyen er ikke synlig før menyen er åpnet. Hjelperen åpner menyen som holder
+// handlingen — og gjør ingenting hvis handlingen står rett i raden. Bruk den før klikk/synlighets-
+// påstander på livssyklus-handlingene (Publiser/Avpubliser, Arkiver, Slett).
+export async function revealRowAction(_page: Page, action: import("@playwright/test").Locator) {
+  // Lista tegnes etter at API-svaret er inne — vent til handlingen finnes i DOM-en før menyen letes opp,
+  // ellers er tellingen 0 og hjelperen gjør ingenting.
+  await action.first().waitFor({ state: "attached" });
+  // ⚠️ Ikke `page.locator("details.row-more", { has: action })`: `has` evaluerer den indre lokatoren
+  // RELATIVT til <details>, så en radrelativ lokator («#tabell tr … [data-action]») treffer aldri,
+  // tellingen blir 0 og hjelperen gjør stille ingenting. Forfedre-oppslaget fra selve handlingen
+  // virker uansett hvordan lokatoren er bygd.
+  const menu = action.first().locator("xpath=ancestor::details[contains(@class, 'row-more')]");
+  if ((await menu.count()) > 0 && !(await menu.first().evaluate((el) => (el as HTMLDetailsElement).open))) {
+    await menu.first().locator("summary").click();
+  }
+  return action;
 }

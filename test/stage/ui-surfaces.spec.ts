@@ -43,7 +43,7 @@ const NORSKE_RAMMEORD: string[] = (() => {
 
 const FLATER = [
   { navn: "sensorkøen", rute: "/review", beholder: "#manualReviewQueueBody", innhold: "#manualReviewQueueBody" },
-  { navn: "resultatsiden", rute: "/results", beholder: "#completionBody", forbered: "#loadResults", innhold: "#completionBody" },
+  { navn: "resultatsiden", rute: "/results", beholder: "#completionBody", innhold: "#completionBody" },
   { navn: "profilen", rute: "/profile", beholder: "#coursesBody", innhold: "#coursesBody" },
   { navn: "fullførte moduler", rute: "/participant/completed", beholder: "#courseCertList", innhold: "#courseCertList" },
   // ⚠️ `beholder` er `body` her fordi flaten ikke har én samlende node å vente på. Men `innhold`
@@ -89,7 +89,6 @@ for (const flate of FLATER) {
 
     await forberedSide(page);
     await page.goto(`${BASE}${flate.rute}`, { waitUntil: "domcontentloaded" });
-    if (flate.forbered) await page.click(flate.forbered);
 
     // ⚠️ Kontrollcase: kom vi i det hele tatt inn? Havner vi på innloggingssiden, er alle
     // påstandene under sanne uten å måle noe.
@@ -137,7 +136,6 @@ for (const flate of FLATER) {
     const MERKE = "ZZSTALEZZ";
     await forberedSide(page);
     await page.goto(`${BASE}${flate.rute}`, { waitUntil: "domcontentloaded" });
-    if (flate.forbered) await page.click(flate.forbered);
     await expect(page.locator(flate.beholder)).not.toBeEmpty({ timeout: 20000 });
 
     const velger = page.locator("#localeSelect");
@@ -184,7 +182,6 @@ for (const flate of FLATER) {
     // oversettelse, ikke som en feil. Nav-etikettene er delte og finnes på hver flate.
     await forberedSide(page);
     await page.goto(`${BASE}${flate.rute}`, { waitUntil: "domcontentloaded" });
-    if (flate.forbered) await page.click(flate.forbered);
     await expect(page.locator(flate.beholder)).not.toBeEmpty({ timeout: 20000 });
 
     const velger = page.locator("#localeSelect");
@@ -232,7 +229,6 @@ for (const flate of FLATER) {
     });
 
     await page.goto(`${BASE}${flate.rute}`, { waitUntil: "domcontentloaded" });
-    if (flate.forbered) await page.click(flate.forbered);
     await expect(page.locator(flate.beholder)).not.toBeEmpty({ timeout: 20000 });
 
     const velger = page.locator("#localeSelect");
@@ -258,7 +254,6 @@ for (const flate of FLATER) {
   test(`${flate.navn}: språkbytte gir ikke rå JSON eller feil`, async ({ page }) => {
     await forberedSide(page);
     await page.goto(`${BASE}${flate.rute}`, { waitUntil: "domcontentloaded" });
-    if (flate.forbered) await page.click(flate.forbered);
     await expect(page.locator(flate.beholder)).not.toBeEmpty({ timeout: 20000 });
 
     const velger = page.locator("#localeSelect");

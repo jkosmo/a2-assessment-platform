@@ -1,0 +1,164 @@
+{
+  "dato": "2026-09-12",
+  "versjon": "2.67.0",
+  "samlet": 63,
+  "skår": {
+    "reglerFlereSteder": 28,
+    "utgaverAvViktigeRegler": 100,
+    "filerAltMåGjennom": 25,
+    "filerSomEndresSammen": 90,
+    "størrelse": 70
+  },
+  "tall": {
+    "sumRegler": 36,
+    "regler": [
+      {
+        "hva": "Skjermer som selv velger hvilket språk et lagret innhold vises på (serveren skal gjøre det)",
+        "steder": 5,
+        "kilde": "test/client-locale-parser-guard.test.js"
+      },
+      {
+        "hva": "Steder som viser serverens rå feiltekst i stedet for en oversatt melding",
+        "steder": 14,
+        "kilde": "test/raw-server-error-guard.test.js"
+      },
+      {
+        "hva": "Feil fra serveren uten kode (klienten kan ikke oversette dem)",
+        "steder": 4,
+        "kilde": "test/unit/domain-error-codes-999.test.ts"
+      },
+      {
+        "hva": "Steder i forfatterkonsollet som bruker menyspråket (ikke innholdsspråket)",
+        "steder": 13,
+        "kilde": "test/unit/admin-content-locale-roles-974.test.js"
+      }
+    ],
+    "utgaver": [
+      {
+        "hva": "Kan en modul publiseres? (knapp, kurskaskade, import)",
+        "delt": "evaluateModulePublishGate",
+        "ekstra": 0,
+        "hvordan": "kall til de underliggende sjekkene utenfor den delte funksjonen"
+      },
+      {
+        "hva": "Kan deltakeren nås? (aktiv og ikke anonymisert)",
+        "delt": "isReachableParticipant",
+        "ekstra": 0,
+        "hvordan": "linjer som sjekker begge feltene selv"
+      },
+      {
+        "hva": "Hvilket språk gjelder for denne forespørselen?",
+        "delt": "requestLocale",
+        "ekstra": 0,
+        "hvordan": "egne reserveverdier for språk i rutene"
+      },
+      {
+        "hva": "Er innleveringen avgjort? (hvilke statuser teller som ferdig)",
+        "delt": "isSettledSubmission",
+        "ekstra": 0,
+        "hvordan": "spørringer som lister statusene selv"
+      }
+    ],
+    "store": {
+      "over1500": [
+        {
+          "fil": "public/static/admin-content-shell.js",
+          "linjer": 7573
+        },
+        {
+          "fil": "public/participant.js",
+          "linjer": 4183
+        },
+        {
+          "fil": "src/modules/adminContent/llmContentGenerationService.ts",
+          "linjer": 2091
+        },
+        {
+          "fil": "public/static/admin-content-courses.js",
+          "linjer": 2003
+        },
+        {
+          "fil": "public/review.js",
+          "linjer": 1779
+        }
+      ],
+      "over800": [
+        {
+          "fil": "src/routes/adminContent.ts",
+          "linjer": 1361
+        },
+        {
+          "fil": "src/modules/adminContent/adminContentCommands.ts",
+          "linjer": 1157
+        },
+        {
+          "fil": "public/static/admin-content-sections.js",
+          "linjer": 1057
+        },
+        {
+          "fil": "public/static/admin-content-library.js",
+          "linjer": 914
+        },
+        {
+          "fil": "public/static/workspace-help-content.js",
+          "linjer": 847
+        }
+      ],
+      "mestImportert": [
+        {
+          "fil": "prisma",
+          "importører": 51
+        },
+        {
+          "fil": "index",
+          "importører": 39
+        },
+        {
+          "fil": "locale",
+          "importører": 38
+        },
+        {
+          "fil": "AppError",
+          "importører": 36
+        },
+        {
+          "fil": "auditEvents",
+          "importører": 34
+        },
+        {
+          "fil": "auditService",
+          "importører": 32
+        },
+        {
+          "fil": "env",
+          "importører": 31
+        },
+        {
+          "fil": "prismaRuntime",
+          "importører": 30
+        }
+      ]
+    },
+    "samendring": [
+      {
+        "a": "public/participant-completed.js",
+        "b": "public/profile.js",
+        "sammen": 14,
+        "andel": 0.7
+      },
+      {
+        "a": "public/profile.js",
+        "b": "public/results.js",
+        "sammen": 12,
+        "andel": 0.6
+      }
+    ],
+    "størrelse": {
+      "ruter": 195,
+      "tabeller": 39,
+      "kolonner": 506,
+      "i18nNøkler": 4726,
+      "testfiler": 341
+    }
+  }
+}

@@ -1,5 +1,5 @@
 import { test, expect, type Page, type Route } from "@playwright/test";
-import { mockCommonApis, buildMockModuleExport } from "./admin-content-helpers.js";
+import { mockCommonApis, buildMockModuleExport, revealRowAction } from "./admin-content-helpers.js";
 
 // #787 QA round 2: the owner-management panel must render on EVERY content surface, not just the course
 // detail. Round 1 shipped the panel into the conversational shell's state rail, but three surfaces run
@@ -48,6 +48,8 @@ test("modul-avansert: owner panel renders in the module state-rail host", async 
 
   await page.goto("/admin-content/module/module-1/advanced");
 
+  // #1046 niva to (13.09): eierne ligger under Innstillinger-fanen.
+  await page.locator("#tabSettings").click();
   const panel = page.locator("#moduleOwnerPanelHost .owner-panel");
   await expect(panel).toBeVisible();
   // QA r4: compact by default — owner name shown inline, full list only after expanding.
@@ -61,8 +63,9 @@ test("modul-avansert: owner panel renders in the module state-rail host", async 
   await expect(nav.locator("#navModuler")).toHaveClass(/active/);
   await expect(nav.locator("#navKurs")).toBeVisible();
   await expect(nav.locator("#navSeksjoner")).toBeVisible();
-  // QA r3 #1/#2: the page title is now "Modul", not the old vague workspace label.
-  await expect(page.locator("#moduleWorkspaceTitle")).toHaveText("Modul");
+  // #1046 nivå to (B2): tittelen er modulens navn; typen «Modul» står som merke over.
+  await expect(page.locator("#moduleWorkspaceTitle")).toContainText("Trade unions");
+  await expect(page.locator(".module-workspace-header .form-page-type")).toHaveText("Modul");
 });
 
 // QA #2 — classes were never wired for ownership; the panel goes in the openClass detail view.
@@ -74,6 +77,9 @@ test("klasse: owner panel renders in the class detail view", async ({ page }) =>
     route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ user: { id: "c1", email: "c@x.no", name: "C", roles: ["ADMINISTRATOR"] }, consent: { accepted: true }, pendingDeletion: null }) }));
   await page.route("**/api/admin/content/classes", (route: Route) =>
     route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ classes: [{ id: "cls-1", name: "Kull 2026", isSystem: false, _count: { members: 0, courseAssignments: 0 } }] }) }));
+  // #1046 nivå to: det åpnede elementet henter én klasse.
+  await page.route("**/api/admin/content/classes/*", (route: Route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ class: { id: "cls-1", name: "Kull 2026", isSystem: false, archivedAt: null, lifecycle: "active" } }) }));
   await page.route("**/api/admin/content/classes/*/members", (route: Route) =>
     route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ members: [] }) }));
   await page.route("**/api/admin/content/classes/*/courses", (route: Route) =>
@@ -84,6 +90,7 @@ test("klasse: owner panel renders in the class detail view", async ({ page }) =>
 
   await page.goto("/deltakere/klasser");
   await page.locator('[data-action="open"][data-id="cls-1"]').click();
+  await page.locator('[data-form-tab-btn="innstillinger"]').click();
 
   const panel = page.locator("#classOwnerPanelHost .owner-panel");
   await expect(panel).toBeVisible();
@@ -109,12 +116,15 @@ test("seksjon-liste: edit/lifecycle hidden for canManage:false, shown for canMan
 
   // Owned row: edit + lifecycle present.
   await expect(page.locator('[data-action="edit"][data-id="sec-mine"]')).toBeVisible();
-  await expect(page.locator('[data-action="unpublish"][data-id="sec-mine"]')).toBeVisible();
-  // Not-owned row: no edit, no lifecycle — a read-only marker instead.
+  await expect(await revealRowAction(page, page.locator('[data-action="unpublish"][data-id="sec-mine"]'))).toBeVisible();
+  // Not-owned row: no edit, no lifecycle — but Dupliser/Eksporter stay (read/copy actions, as on
+  // Moduler; #1046 12.09), and the marker says «Kun for eier» like the course list (#1029).
   await expect(page.locator('[data-action="edit"][data-id="sec-theirs"]')).toHaveCount(0);
   await expect(page.locator('[data-action="unpublish"][data-id="sec-theirs"]')).toHaveCount(0);
+  await expect(page.locator('[data-action="duplicate"][data-id="sec-theirs"]')).toBeVisible();
+  await expect(page.locator('[data-action="export"][data-id="sec-theirs"]')).toBeVisible();
   await expect(page.locator(".row-readonly-note")).toHaveCount(1);
-  await expect(page.locator(".row-readonly-note")).toHaveText("Skrivebeskyttet");
+  await expect(page.locator(".row-readonly-note")).toHaveText("Kun for eier");
 });
 
 // QA #3 — the standalone section editor (admin-content-sections.js), reachable directly via ?id=.
@@ -131,6 +141,8 @@ test("seksjon: owner panel renders in the section editor for an existing section
   await mockOwnerApi(page, "SECTION", "sec-1");
 
   await page.goto("/admin-content/sections?id=sec-1");
+  // #1046 niva to (13.09): eierne ligger under Innstillinger-fanen.
+  await page.locator('[data-form-tab-btn="innstillinger"]').click();
 
   const panel = page.locator("#ownerPanelHost .owner-panel");
   await expect(panel).toBeVisible();

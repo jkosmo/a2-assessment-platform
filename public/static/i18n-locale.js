@@ -1,3 +1,4 @@
+import { getDefaultLocale } from "/static/api-client.js";
 // #596 (EPIC #595) slice 3 — single source of truth for initial-locale resolution.
 //
 // Replaces 9 copies of `resolveInitialLocale` across the page scripts (review, admin-content,
@@ -19,4 +20,22 @@ export function resolveInitialLocale(supportedLocales) {
   if (normalized.startsWith("nn")) return "nn";
   if (normalized.startsWith("en")) return "en-GB";
   return "en-GB";
+}
+
+// #1046 (produkteier 12.09: «Ja til NB som påkrevd»): når en innholdstekst mangler på leserens språk,
+// vises organisasjonens standardspråk (nb hos A-2) — ikke engelsk. Samme regel som tjeneren
+// (src/i18n/content.ts). Klientene brukte «?? value["en-GB"]» hver for seg; nå ett sted.
+export function contentFallbackOrder(locale) {
+  return [...new Set([locale, getDefaultLocale(), "en-GB"])];
+}
+
+/** Første ikke-tomme verdi i et språkkart, i rekkefølgen leserens språk → standardspråket → engelsk → det som finnes. */
+export function pickLocalizedText(map, locale) {
+  if (!map || typeof map !== "object") return "";
+  for (const key of contentFallbackOrder(locale)) {
+    const value = map[key];
+    if (typeof value === "string" && value.trim().length > 0) return value;
+  }
+  const first = Object.values(map).find((v) => typeof v === "string" && v.trim().length > 0);
+  return typeof first === "string" ? first : "";
 }

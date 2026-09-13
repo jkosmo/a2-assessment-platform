@@ -76,8 +76,6 @@ test("participant: the section reader strips dangerous markup but keeps allowed 
   );
 
   await page.goto("/participant");
-  await expect(page.locator("#loadCoursesBtn")).toBeEnabled();
-  await page.locator("#loadCoursesBtn").click();
   await page.locator(".course-accordion-header").click();
   await page.locator(".course-module-row").click();
 
@@ -164,8 +162,6 @@ test("participant: the module brief renders markdown HTML and re-sanitises it (#
     }),
   );
   await page.goto("/participant");
-  await expect(page.locator("#loadCoursesBtn")).toBeEnabled();
-  await page.locator("#loadCoursesBtn").click();
   await page.locator(".course-accordion-header").click();
   await page.locator(".course-module-row").click();
 
@@ -224,8 +220,6 @@ test("participant: without taskTextHtml the brief falls back to plain text (#105
     }),
   );
   await page.goto("/participant");
-  await expect(page.locator("#loadCoursesBtn")).toBeEnabled();
-  await page.locator("#loadCoursesBtn").click();
   await page.locator(".course-accordion-header").click();
   await page.locator(".course-module-row").click();
 
