@@ -183,16 +183,68 @@ let criteriaGenerationInFlight = false;
 // enterPreviewEditMode, cleared by exitEditMode, fired by populateSessionDraftCriteriaInBackground.
 let criteriaReadyCallback = null;
 
-// Chat log — every rendered message is stored here as a re-renderable spec so
-// that retranslateChat() can rebuild the entire dialog on locale switch.
-// Entry kinds:
-//   { kind:'bot',   html:()=>string, choices:Choice[], active:bool }
-//   { kind:'user',  text:string }
-//   { kind:'form',  formType:'text'|'textarea', promptHtml:()=>string,
-//                   placeholderKey:string, submitKey:string, onSubmit:fn, submitted:bool }
-//   { kind:'module-choices', modules:Module[], active:bool }
-// Choice: { labelKey?:string, label?:string, action:()=>void }
-let chatLog = [];
+// #1046 steg 2 (produkteier 13.09): samtaleruta er borte. Det som var «logg» er nå tre ting:
+//   - framdrift og utfall → toast (showToast), med «Avbryt» når noe kan avbrytes
+//   - et spørsmål som trenger svar → valgdialogen (#dialogChoice)
+//   - kildemateriale og plan → «Generer innhold»-dialogen; en instruks → «Be om endring»-dialogen
+// Funksjonsnavnene logBot/logProgress/logResolveSlot står igjen på kallstedene med samme signatur.
+
+
+// ---------------------------------------------------------------------------
+// Framdrift, utfall og spørsmål — uten samtalerute
+// ---------------------------------------------------------------------------
+
+/** Én valgdialog for alt som trenger et svar: HTML øverst, knappene under. */
+function showChoiceDialog(htmlFn, choices) {
+  const dialog = document.getElementById("dialogChoice");
+  const body = document.getElementById("dialogChoiceBody");
+  const actions = document.getElementById("dialogChoiceActions");
+  if (!dialog || !body || !actions) return;
+  body.innerHTML = htmlFn();
+  actions.innerHTML = "";
+  const hasCancel = choices.some((c) => c.labelKey === "shell.action.cancel");
+  const all = hasCancel ? choices : [...choices, { labelKey: "shell.action.cancel", action: () => {} }];
+  all.forEach((choice, index) => {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = index === 0 && choice.labelKey !== "shell.action.cancel" ? "btn-primary" : "btn-secondary";
+    btn.textContent = resolveChoiceLabel(choice);
+    btn.addEventListener("click", () => { dialog.close(); choice.action?.(); });
+    actions.appendChild(btn);
+  });
+  if (!dialog.open) dialog.showModal();
+}
+
+/** Beskjed uten spørsmål → toast. Med valg → valgdialogen. */
+function logBot(htmlFn, choices = []) {
+  if (choices.length > 0) { showChoiceDialog(htmlFn, choices); return; }
+  const text = htmlToPlainText(htmlFn());
+  if (text) { showToast(text, "info"); announceStatus(text); }
+}
+
+/** Framdrift → en toast som står til den løses; «Avbryt» når kalleren har hengt på en lytter. */
+function logProgress(textKeyOrFn, options = {}) {
+  const text = typeof textKeyOrFn === "function" ? textKeyOrFn() : t(textKeyOrFn);
+  announceStatus(text);
+  const abortBtn = document.createElement("button");
+  abortBtn.type = "button";
+  const el = document.createElement("div");
+  const toast = options.quiet ? null : showToast(text, "info", "", options.abortable
+    ? { sticky: true, actionLabel: t("shell.action.cancel"), onAction: () => abortBtn.click() }
+    : { sticky: true });
+  return { entry: { quiet: !!options.quiet }, el, abortBtn, toast };
+}
+
+/** Utfallet: toasten for framdriften fjernes; svaret vises — som toast, eller som spørsmål. */
+function logResolveSlot(slot, htmlFn, choices = []) {
+  slot?.toast?.remove();
+  if (choices.length > 0) { showChoiceDialog(htmlFn, choices); return; }
+  const text = htmlToPlainText(htmlFn());
+  if (!text) return;
+  announceStatus(text);
+  if (slot?.entry?.quiet) return;
+  showToast(text, /feil|error|failed|avvist|refus|kunne ikke|could not|mislyktes/i.test(text) ? "error" : "info");
+}
 
 // Identity / headers
 let participantRuntimeConfig = {
@@ -224,7 +276,6 @@ function getHeaders() {
 // DOM refs
 // ---------------------------------------------------------------------------
 
-const chatMessages = document.getElementById("chatMessages");
 const previewPane = document.getElementById("previewPane");
 const contentLocaleBar = document.getElementById("previewLocaleBar");
 const previewContent = document.getElementById("previewContent");
@@ -331,20 +382,7 @@ function announceStatus(message) {
   });
 }
 
-function setChatBusy(isBusy) {
-  if (!chatMessages) return;
-  if (isBusy) {
-    chatMessages.setAttribute("aria-busy", "true");
-  } else {
-    chatMessages.removeAttribute("aria-busy");
-  }
-}
 
-function focusFirstEnabledChoice(container) {
-  const firstChoice = container?.querySelector?.(".chat-choice-btn:not([disabled])");
-  if (!firstChoice) return;
-  setTimeout(() => firstChoice.focus(), 40);
-}
 
 // #972/#985: returnerte `parsed.message || parsed.error` — altså serverens engelske setning, eller
 // i verste fall den rå kodestrengen (`content_ownership`) som overskrift. Begge deler er brudd på
@@ -395,23 +433,8 @@ function readFileAsBase64(file) {
   });
 }
 
-function _domScroll(el) {
-  el.scrollIntoView({ behavior: "smooth", block: "end" });
-}
 
-// Disable every current choice button in the DOM immediately (live feedback).
-function _disableAllDomChoices() {
-  for (const btn of chatMessages.querySelectorAll(".chat-choice-btn:not([disabled])")) {
-    btn.disabled = true;
-  }
-}
 
-// Mark all log entries as inactive so replays render them with disabled choices.
-function _deactivateAll() {
-  for (const e of chatLog) {
-    if ("active" in e) e.active = false;
-  }
-}
 
 // Build a choices row from an array of { labelKey, action } specs.
 // disabled=true renders non-interactive buttons for past history.
@@ -419,88 +442,9 @@ function resolveChoiceLabel(choice) {
   return choice.label ?? t(choice.labelKey);
 }
 
-function _domChoiceRow(choices, disabled, autoFocus = false) {
-  const row = document.createElement("div");
-  row.className = "chat-choices";
-  for (const c of choices) {
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = "btn-secondary chat-choice-btn";
-    btn.textContent = resolveChoiceLabel(c);
-    btn.disabled = disabled;
-    if (!disabled) {
-      btn.addEventListener("click", () => {
-        _disableAllDomChoices();
-        _deactivateAll();
-        logUser(resolveChoiceLabel(c));
-        c.action();
-      });
-    }
-    row.appendChild(btn);
-  }
-  if (autoFocus && !disabled) {
-    focusFirstEnabledChoice(row);
-  }
-  return row;
-}
 
-function _domBotBubble(html, choices, disabled, autoFocusChoices = false) {
-  const msg = document.createElement("div");
-  msg.className = "chat-msg chat-msg--bot";
-  const bubble = document.createElement("div");
-  bubble.className = "chat-bubble";
-  bubble.innerHTML = html;
-  msg.appendChild(bubble);
-  if (choices && choices.length > 0) {
-    msg.appendChild(_domChoiceRow(choices, disabled, autoFocusChoices));
-  }
-  chatMessages.appendChild(msg);
-  _domScroll(msg);
-  return msg;
-}
 
-function _domUserBubble(text) {
-  const msg = document.createElement("div");
-  msg.className = "chat-msg chat-msg--user";
-  msg.innerHTML = `<div class="chat-bubble">${escapeHtml(text)}</div>`;
-  chatMessages.appendChild(msg);
-  _domScroll(msg);
-}
 
-// Creates a progress bubble. Returns { el, abortBtn }.
-// v1.1.98: abort button removed from progress messages. Value was low (LLM calls take
-// 30-60s; users can wait or navigate away) and it created a dead-end — clicking Avbryt
-// ended the chat with "...avbrutt" without a recovery menu, leaving the user stuck.
-// The abortBtn return is now a detached stub so existing callers (~17 places using
-// addEventListener/remove/disabled) keep working without behavior — the click event
-// never fires since the button isn't attached to the DOM.
-function _domProgress(textKeyOrFn, { abortable = false } = {}) {
-  const text = typeof textKeyOrFn === "function" ? textKeyOrFn() : t(textKeyOrFn);
-  setChatBusy(true);
-  announceStatus(text);
-  const msg = document.createElement("div");
-  msg.className = "chat-msg chat-msg--bot";
-  const bubble = document.createElement("div");
-  bubble.className = "chat-bubble chat-bubble--progress";
-  bubble.innerHTML = `<span class="chat-spinner"></span>${escapeHtml(text)}`;
-  msg.appendChild(bubble);
-  // v1.1.98 dropped the Avbryt button because it ended the chat with no way forward -
-  // "dead-end, low value, high complexity". Correct then. #896 S2 changes that for ONE
-  // caller: Lagre now commits to a write, and cancelling hands the form back with every
-  // typed value intact, which is a recovery rather than a dead end. So the button is
-  // opt-in: abortable callers get a real one, everyone else keeps the detached stub and
-  // its harmless no-op listeners.
-  const abortBtn = document.createElement("button");
-  abortBtn.type = "button";
-  if (abortable) {
-    abortBtn.className = "btn-secondary chat-progress-abort";
-    abortBtn.textContent = t("shell.action.cancel");
-    bubble.appendChild(abortBtn);
-  }
-  chatMessages.appendChild(msg);
-  _domScroll(msg);
-  return { el: msg, abortBtn };
-}
 
 // Renders the interactive part of a form entry (input or textarea + submit button).
 // Called both on first render and during retranslateChat for unsubmitted forms.
@@ -849,10 +793,6 @@ function _domFormFields(entry) {
       btn.disabled = true;
       inputEl.disabled = true;
       entry.submitted = true;
-      if (!entry.mount) {
-        _deactivateAll();
-        logUser(t("shell.source.userPreview"));
-      }
       entry.onSubmit(combinedSourceMaterial);
       return;
     }
@@ -862,11 +802,6 @@ function _domFormFields(entry) {
     btn.disabled = true;
     inputEl.disabled = true;
     entry.submitted = true;
-    const displayText = isMultiLine
-      ? tf("shell.source.userPreview", { count: val.length, preview: val.length > 80 ? val.slice(0, 80) + "…" : val })
-      : val;
-    _deactivateAll();
-    logUser(displayText);
     entry.onSubmit(val);
   }
 
@@ -879,25 +814,9 @@ function _domFormFields(entry) {
   });
   wrap.appendChild(inputEl);
   wrap.appendChild(btn);
-  // #1046: samme kildeverktøy (lim inn / last opp / URL / crawl) i «Generer innhold»-dialogen.
-  if (entry.mount) {
-    entry.mount.replaceChildren(wrap);
-    return;
-  }
-  chatMessages.appendChild(wrap);
-  _domScroll(wrap);
-  // #360 a11y: for source-material, focus the upload button — the first meaningful
-  // control in the step. Keyboard users discover both upload AND textarea via natural
-  // Tab order; previously textarea autofocus required Shift+Tab to find the upload.
-  // For other form types, keep textarea/input autofocus (instant typing).
-  setTimeout(() => {
-    if (isSourceMaterial) {
-      const uploadBtn = wrap.querySelector(".chat-choice-btn");
-      (uploadBtn ?? inputEl).focus();
-    } else {
-      inputEl.focus();
-    }
-  }, 80);
+  // Kildeverktøyet monteres i «Generer innhold»-dialogen; fokus på opplastingsknappen (#360).
+  entry.mount.replaceChildren(wrap);
+  setTimeout(() => { (wrap.querySelector(".chat-choice-btn") ?? inputEl).focus(); }, 80);
 }
 
 
@@ -905,96 +824,11 @@ function _domFormFields(entry) {
 // Logged chat API — all flow functions use these
 // ---------------------------------------------------------------------------
 
-// Log + render a bot message. htmlFn() is called at render time so re-translation works.
-function logBot(htmlFn, choices = []) {
-  if (choices.length > 0) openChatPane();
-  const entry = { kind: "bot", html: htmlFn, choices, active: choices.length > 0 };
-  chatLog.push(entry);
-  _domBotBubble(htmlFn(), choices, false, choices.length > 0);
-}
-
-// Log + render a user bubble. Marks all preceding entries inactive.
-function logUser(text) {
-  _deactivateAll();
-  chatLog.push({ kind: "user", text });
-  _domUserBubble(text);
-}
-
-// Create a progress slot (logged as a pending bot entry). Caller attaches abort listener.
-// textKeyOrFn: i18n key OR () => string.  Returns { entry, el, abortBtn }.
-function logProgress(textKeyOrFn, options = {}) {
-  // Produkteier 13.09: en lagring skal ikke åpne samtaleruta. Ruta åpnes når assistenten SPØR
-  // (valg, skjema) — framdrift er ikke et spørsmål. Avbryt-knappen finnes i ruta for den som har den åpen.
-  const { el, abortBtn } = _domProgress(textKeyOrFn, options);
-  // quiet: framdrift uten utfall å melde (lasting av modulen) — speiles ikke som toast.
-  const entry = { kind: "bot", html: null, choices: [], active: false, quiet: !!options.quiet };
-  chatLog.push(entry);
-  // Ruta er skjult: framdriften vises som toast, med «Avbryt» når den kan avbrytes. Toasten
-  // fjernes når framdriften løses (logResolveSlot).
-  let toast = null;
-  if (!options.quiet && !chatPaneVisible()) {
-    const text = typeof textKeyOrFn === "function" ? textKeyOrFn() : t(textKeyOrFn);
-    toast = showToast(text, "info", "", options.abortable
-      ? { sticky: true, actionLabel: t("shell.action.cancel"), onAction: () => abortBtn.click() }
-      : { sticky: true });
-  }
-  return { entry, el, abortBtn, toast };
-}
-
-// Resolve a progress slot with its final content + choices.
-// Updates both the log entry and the DOM element in-place.
-function logResolveSlot(slot, htmlFn, choices = []) {
-  setChatBusy(false);
-  slot.toast?.remove();
-  slot.entry.html = htmlFn;
-  slot.entry.choices = choices;
-  slot.entry.active = choices.length > 0;
-  slot.el.innerHTML = `<div class="chat-bubble">${htmlFn()}</div>`;
-  if (choices.length > 0) {
-    slot.el.appendChild(_domChoiceRow(choices, false, true));
-  }
-  const announcement = htmlToPlainText(htmlFn());
-  if (announcement && announcement.length <= 160) {
-    announceStatus(announcement);
-  }
-  // Produkteier 13.09: samtaleruta er skjult til assistenten trenger et svar. Utfallet av en
-  // handling (lagret, importert, gjenopprettet, avvist) må likevel nå forfatteren — som toast,
-  // slik de andre skjemasidene gjør det. showToast hopper over en identisk toast som alt står.
-  if (choices.length > 0) openChatPane();
-  if (announcement && !slot.entry.quiet && choices.length === 0 && !chatPaneVisible()) showToast(announcement, /feil|error|failed|avvist|refus|kunne ikke|could not/i.test(announcement) ? "error" : "info");
-  _domScroll(slot.el);
-}
-
-// Log + render a text input or textarea form (prompt bubble + input fields).
-function logForm(formType, promptHtmlFn, placeholderKey, submitKey, onSubmit, initialValue = "", context = {}) {
-  openChatPane();
-  const entry = { kind: "form", formType, promptHtml: promptHtmlFn, placeholderKey, submitKey, onSubmit, submitted: false, initialValue, context };
-  chatLog.push(entry);
-  _domBotBubble(promptHtmlFn(), [], false);
-  _domFormFields(entry);
-}
 
 
-// ---------------------------------------------------------------------------
-// Re-translate — clears and replays the entire chatLog with the current locale
-// ---------------------------------------------------------------------------
 
-function retranslateChat() {
-  chatMessages.innerHTML = "";
-  for (const entry of chatLog) {
-    if (entry.kind === "bot" && entry.html) {
-      _domBotBubble(entry.html(), entry.choices, !entry.active);
-    } else if (entry.kind === "user") {
-      _domUserBubble(entry.text);
-    } else if (entry.kind === "form") {
-      _domBotBubble(entry.promptHtml(), [], true);
-      if (!entry.submitted) {
-        _domFormFields(entry);
-      }
-    }
-  }
-  chatMessages.lastElementChild?.scrollIntoView({ behavior: "smooth", block: "end" });
-}
+
+
 
 // ---------------------------------------------------------------------------
 // Preview rendering
@@ -1049,7 +883,7 @@ function renderPreviewLocaleBar() {
         enterPreviewEditMode({ force: true });
         if (wasDirty) {
           logBot(() => escapeHtml(t("shell.directEdit.localeSwitched")));
-          if (!chatPaneVisible()) showToast(t("shell.directEdit.localeSwitched"), "warning");
+          showToast(t("shell.directEdit.localeSwitched"), "warning");
         }
       }
     });
@@ -1868,120 +1702,19 @@ function commitSessionDraftPatch(patch, { scroll = "top" } = {}) {
   else scrollPreviewToTop();
 }
 
-// ---------------------------------------------------------------------------
-// #926 (#896 §6 krav 1): samtalen foreslår — den overskriver aldri.
-//
-// Spesifikasjonen: har feltene ulagrede endringer, skal et generert resultat lande som et
-// FORSLAG med «Bruk»/«Forkast», ikke skrives rett inn. Uten dette kan forfatteren skrive et
-// scenario for hånd, be om en revisjon i chatten, og få sitt eget arbeid erstattet uten å ha
-// sagt ja.
-//
-// Verre enn som så, før denne endringen: med redigeringsskjemaet åpent ble feltene ikke tegnet
-// på nytt etter en generering. Utkastet under dem var byttet ut, men skjermen viste fortsatt
-// forfatterens egen tekst — overskrivingen ble først synlig ved lagring.
-//
-// Forslaget parkeres i samtaleloggen fordi det er der forfatteren nettopp ba om endringen, og
-// fordi chat-panelet er synlig i begge fanene der dette kan inntreffe. Det holdes UTENFOR
-// `sessionDraft`: et forslag som allerede ligger i utkastet er ikke et forslag, og ville blitt
-// lagret av neste «Lagre».
-//
-// Merk at «ulagrede endringer» her betyr `hasOpenEditForm()` — feltverdier som avviker fra det
-// de ble tegnet med. Et urørt skjema er ikke i bruk, og et forslag der ville bare vært et ekstra
-// klikk foran den handlingen forfatteren nettopp ba om.
-// ---------------------------------------------------------------------------
-let pendingProposal = null;
-
-/**
- * Commit a generated patch, or park it as a proposal when the edit form holds unsaved typing.
- *
- * @param patch      the localized patch, ready for `buildPreviewCandidate`
- * @param slot       the conversation-log slot the generation is reporting into
- * @param readyHtml  () => html — what the log says when the patch is applied
- * @param scroll     "top" | "bottom"
- * @param onCommit   runs after the patch lands, on both paths. NOT run while parked: it starts
- *                   criteria generation and moves the session state, and neither should happen
- *                   for content the author has not accepted.
- * @returns true if committed, false if parked.
- */
-/**
- * #982: `warningHtml` er et EGET argument, ikke en del av `readyHtml`.
- *
- * ⚠️ Advarselen om språk som ikke ble oversatt lå først inne i `readyHtml`. Den rendres bare når
- * patchen landes med én gang — er en redigeringsflate åpen, parkeres forslaget og en helt annen
- * tekst vises. Forfatteren som HAR skrevet i feltene, altså den som oftest ber om en revisjon, fikk
- * dermed aldri vite at en oversettelse manglet. Advarselen må høre til beskjeden, ikke til én av to
- * måter å vise den på.
- */
+// #1046 steg 2: det genererte legges rett inn i skjemaet (dialogen sa det på forhånd). Har
+// forfatteren skrevet noe mens genereringen pågikk, tas det med i utkastet først — ingenting
+// overskrives stille, og ingenting parkeres som «forslag» i en logg som ikke finnes lenger.
 function commitOrProposeGenerated({ patch, slot, readyHtml, warningHtml = "", scroll = "top", onCommit }) {
-  const commit = () => {
-    commitSessionDraftPatch(patch, { scroll });
-    onCommit?.();
-  };
-
-  if (!hasOpenEditForm()) {
-    commit();
-    logResolveSlot(slot, () => `${readyHtml()}${warningHtml}`);
-    return true;
-  }
-
-  // A second proposal replaces the first rather than queueing: two competing "Bruk"-buttons in
-  // the log, both claiming to be the generated result, is worse than losing the older one — and
-  // the older one is by definition the one the author did not answer.
-  //
-  // #926 QA: the proposal is stamped with the module it was made for. Its buttons live in the
-  // conversation log, which survives `startIdle` and a reload of a DIFFERENT module — so without
-  // the stamp, «Bruk» could merge one module's generated text into another's draft, or into no
-  // module at all.
-  pendingProposal = { commit, moduleId: selectedModuleId };
-  const thisProposal = pendingProposal;
-  logResolveSlot(
-    slot,
-    () => `<strong>${escapeHtml(t("shell.proposal.title"))}</strong>${warningHtml}
-      <p style="margin:8px 0 0;font-size:13px;color:var(--color-meta)">${escapeHtml(t("shell.proposal.body"))}</p>`,
-    [
-      {
-        labelKey: "shell.proposal.use",
-        action: () => {
-          // Stale guard: the log entry survives a re-render, so an old proposal's button must not
-          // resurrect content the author already answered for — or content that belongs to a
-          // module that is no longer open.
-          if (pendingProposal !== thisProposal || selectedModuleId !== thisProposal.moduleId) {
-            logBot(() => escapeHtml(t("shell.proposal.stale")));
-            return;
-          }
-          pendingProposal = null;
-          thisProposal.commit();
-          // The fields on screen still hold the author's typing. They said yes, so repaint from
-          // the draft — otherwise the accepted proposal is invisible until the next re-render,
-          // which is the exact failure this whole mechanism exists to remove.
-          if (activeTab === "edit") enterPreviewEditMode({ force: true });
-          logBot(() => escapeHtml(t("shell.proposal.used")));
-        },
-      },
-      {
-        labelKey: "shell.proposal.discard",
-        action: () => {
-          if (pendingProposal !== thisProposal) return;
-          pendingProposal = null;
-          logBot(() => escapeHtml(t("shell.proposal.discarded")));
-        },
-      },
-    ],
-  );
-  return false;
+  if (hasOpenEditForm()) captureEditFormIntoDraft();
+  commitSessionDraftPatch(patch, { scroll });
+  onCommit?.();
+  if (activeTab === "edit") enterPreviewEditMode({ force: true });
+  logResolveSlot(slot, () => `${readyHtml()}${warningHtml}`);
+  return true;
 }
 
-/**
- * Drop a parked proposal without applying it. Called wherever the ground it stood on moves:
- * `startIdle` (everything unloaded) and `loadModule` (a different module, or the same one
- * reloaded after a save).
- *
- * Deliberately silent — this is not the author discarding anything, it is the proposal ceasing to
- * be applicable. Saying so in the log would report an action nobody took.
- */
-function discardPendingProposal() {
-  pendingProposal = null;
-}
+
 
 function createSessionDraftFromLoadedModule() {
   const moduleVersion = bundle?.selectedConfiguration?.moduleVersion ?? null;
@@ -3137,12 +2870,6 @@ function startIdle() {
   newModulePlaceholder = false;
   previewDraft = null;
   latestSavedModuleVersionId = null;
-  // #926 QA: a parked proposal belongs to the module that was loaded when it was made. Its
-  // buttons live in the conversation log, which this does not tear down, so «Bruk» stayed
-  // clickable after everything else was unloaded — and merged the previous module's generated
-  // text into an empty draft with no title and no module id. See also `discardPendingProposal`.
-  discardPendingProposal();
-  chatLog = [];
   renderPreview();
   // Uten modul er lista stedet: «Ny modul» og åpning skjer der (#1046 A1). Ingen samtalevalg her.
   logBot(() => t("shell.idle.prompt"));
@@ -3158,13 +2885,6 @@ async function loadModule(moduleId, options = {}) {
   newModulePlaceholder = false;
   previewDraft = null;
   latestSavedModuleVersionId = null;
-  // #926 QA: covers the save path too — saving reloads the module, and a proposal parked before
-  // the save would otherwise raise a fresh unsaved draft on top of the version just written.
-  discardPendingProposal();
-  // #896 S3c: the Innstillinger panel keeps its editors in module-level state, and none of it
-  // belonged to this module. Before S3c the criteria state was only seeded once the author opened
-  // the editor; now it is seeded on every visit to the tab, so merely looking at module A's
-  // settings and then switching to B would show — and save — A's criteria on B.
   resetSettingsPanelState();
   const slot = logProgress("shell.module.loading", { quiet: true });
 
@@ -3287,7 +3007,7 @@ async function runUnifiedRevision(instruction) {
 
   if (intent.kind === "clarify") {
     logBot(() => escapeHtml(t("shell.revision.clarify")), [
-      { labelKey: "shell.revision.tryAgain", action: () => startUnifiedRevisionFlow() },
+      { labelKey: "shell.revision.tryAgain", action: () => openReviseDialog() },
       { labelKey: "shell.directEdit.action", action: () => startDirectEditFlow() },
     ]);
     return;
@@ -3324,21 +3044,6 @@ async function runUnifiedRevision(instruction) {
   showDraftReadyActions();
 }
 
-function startUnifiedRevisionFlow() {
-  if (!sessionDraft?.taskText && !sessionDraft?.assessorExpectedContent && (sessionDraft?.mcqQuestions?.length ?? 0) === 0) {
-    // Som toast, ikke som en ny linje i loggen for hvert klikk.
-    showToast(t("shell.revision.unavailable"), "info");
-    return;
-  }
-
-  logForm(
-    "textarea",
-    () => `<strong>${escapeHtml(t("shell.revision.unifiedPromptTitle"))}</strong><br><span style="font-size:13px;color:var(--color-meta)">${escapeHtml(t("shell.revision.unifiedPromptHint"))}</span>`,
-    "shell.revision.placeholder",
-    "shell.revision.submit",
-    (instruction) => runUnifiedRevision(instruction),
-  );
-}
 
 function startDirectEditFlow() {
   enterPreviewEditMode();
@@ -4640,7 +4345,8 @@ function discardFromHeader() {
 // Skriving i et felt gjør modulen ulagret — merket og knappene i hodet følger med.
 document.addEventListener("input", (event) => {
   const el = event.target instanceof Element ? event.target : null;
-  if (!el || !el.matches("input, textarea, select") || el.closest(".chat-pane")) return;
+  // Feltene i dialogene (kilde, plan, instruks) er ikke modulens skjema.
+  if (!el || !el.matches("input, textarea, select") || el.closest("dialog")) return;
   refreshModuleHeaderState();
   // Navnet er tittelen på sida (B2) — følg feltet mens man skriver, som form-page.js gjør.
   if (el.id === "previewEditTitle") {
@@ -4651,7 +4357,7 @@ document.addEventListener("input", (event) => {
 });
 document.addEventListener("change", (event) => {
   const el = event.target instanceof Element ? event.target : null;
-  if (el && el.matches("input, textarea, select") && !el.closest(".chat-pane")) refreshModuleHeaderState();
+  if (el && el.matches("input, textarea, select") && !el.closest("dialog")) refreshModuleHeaderState();
 });
 
 // Rekkefølgen i raden: det som endrer hva deltakerne ser først (Publiser/Avpubliser), så resten.
@@ -4737,9 +4443,6 @@ function showModuleActions() {
     );
   }
   renderWorkspaceActions(actions);
-  if (model.shouldOfferUnifiedRevision) {
-    startUnifiedRevisionFlow();
-  }
 }
 
 /**
@@ -5102,24 +4805,6 @@ function applyTabAttentionLabel(tab) {
 // Produkteier 13.09: samtaleruta er til overs i Rediger til assistenten trenger et svar. Den åpnes
 // når en flyt spør (valg, skjema, avbrytbar framdrift) og lukkes med «Skjul samtalen». Skjult rute
 // = skjemaet i full bredde.
-let chatPaneOpen = false;
-function chatPaneVisible() { return chatPaneOpen && activeTab === "edit"; }
-function applyChatPaneVisibility() {
-  const chatPane = document.querySelector(".chat-pane");
-  const hidden = activeTab === "preview" || !chatPaneOpen;
-  setHidden(chatPane, hidden);
-  tabPanelModule?.classList.toggle("workspace-shell--chat-hidden", hidden && activeTab !== "preview");
-}
-function openChatPane() {
-  if (chatPaneOpen) return;
-  chatPaneOpen = true;
-  applyChatPaneVisibility();
-}
-function closeChatPane() {
-  chatPaneOpen = false;
-  applyChatPaneVisibility();
-}
-document.getElementById("chatPaneClose")?.addEventListener("click", closeChatPane);
 
 function applyTabState(tab) {
   // Opening the tab IS seeing what landed in it.
@@ -5148,8 +4833,6 @@ function applyTabState(tab) {
   setHidden(tabPanelSettings, tab !== "settings");
   const ownerHostEl = document.getElementById("moduleOwnerPanelHost");
   if (ownerHostEl) ownerHostEl.hidden = tab !== "settings" || !ownerHostEl.dataset.moduleId;
-  applyChatPaneVisibility();
-  tabPanelModule?.classList.toggle("workspace-shell--preview-only", tab === "preview");
   // Forhaandsvisning and Rediger share this panel, so point it at whichever tab owns it now.
   if (tab !== "settings") tabPanelModule?.setAttribute("aria-labelledby", tabButtons[tab]?.id ?? "tabEdit");
   // Safe here: an open edit form is torn down before any switch away from Rediger, so this
@@ -6676,6 +6359,8 @@ function bindViewTabs() {
 // #1046 (produkteier 13.09): «Generer innhold» og «Be om endring» som dialoger. Type og nivå kommer
 // fra Innstillinger og spørres ikke om. Resultatet legges i skjemaet som ulagret utkast.
 // ---------------------------------------------------------------------------
+// Antallene fra «Generer innhold»-dialogen, lest av MCQ-genereringen etter planen.
+let pendingMcqCounts = null;
 function effectiveModuleMode() {
   return sessionDraft?.assessmentMode ?? bundle?.selectedConfiguration?.moduleVersion?.assessmentMode ?? "FREETEXT_PLUS_MCQ";
 }
@@ -6701,29 +6386,36 @@ async function openGenerateDialog({ mcqOnly = false } = {}) {
     });
   }
   setHidden(document.getElementById("dialogGenerateMcq"), !hasMcq);
+  setHidden(document.getElementById("dialogGenerateStep1"), false);
+  setHidden(document.getElementById("dialogGeneratePlan"), true);
+  // Det som står i skjemaet tas med i utkastet før noe genereres — det genererte legges oppå.
+  if (isEditFormOpen()) captureEditFormIntoDraft();
   const host = document.getElementById("dialogGenerateSource");
   const entry = {
     kind: "form", formType: "source-material", placeholderKey: "shell.source.placeholder",
     submitKey: "shell.generateDialog.submit", submitted: false, initialValue: "", context: {}, mount: host,
     onSubmit: (sourceMaterial) => {
-      dialog.close();
       pendingMcqCounts = hasMcq
         ? {
             questionCount: Number(document.getElementById("dialogGenerateQuestionCount")?.value ?? 5),
             optionCount: Number(document.getElementById("dialogGenerateOptionCount")?.value ?? 4),
           }
         : null;
-      // Planen og framdriften vises i den reduserte samtaleruta til dialogene dekker også dem.
-      openChatPane();
       const cert = effectiveCertLevel();
+      const counts = pendingMcqCounts ?? { questionCount: 5, optionCount: 4 };
+      pendingMcqCounts = null;
       if (mcqOnly) {
-        askForMcqQuestionCount(sourceMaterial, cert, contentLocale, "thorough", () => showDraftReadyActions());
+        dialog.close();
+        generateMcqInBackground(sourceMaterial, cert, contentLocale, "thorough", counts.questionCount, counts.optionCount, () => showDraftReadyActions({ quiet: true }));
         return;
       }
       if (mode === "MCQ_ONLY") {
-        startMcqOnlyRegen(sourceMaterial, cert);
+        dialog.close();
+        startMcqOnlyRegen(sourceMaterial, cert, counts);
         return;
       }
+      // Fritekst: planen kommer som steg 2 i samme dialog; «Bruk denne planen» lukker og genererer.
+      pendingMcqCounts = counts;
       generateBlueprintAndConfirm(null, selectedModuleId, sourceMaterial, cert, contentLocale, "thorough", "auto", mode === "FREETEXT_ONLY");
     },
   };
@@ -6771,7 +6463,7 @@ function bindGenerateAndReviseDialogs() {
     const instruction = input?.value.trim();
     if (!instruction) { input?.focus(); return; }
     document.getElementById("dialogRevise")?.close();
-    openChatPane();
+    if (isEditFormOpen()) captureEditFormIntoDraft();
     runUnifiedRevision(instruction);
   });
   document.getElementById("dialogReviseInput")?.addEventListener("keydown", (e) => {
@@ -6790,7 +6482,6 @@ function startNewEmptyModule() {
   selectedModuleId = null;
   previewDraft = null;
   latestSavedModuleVersionId = null;
-  chatLog = [];
   sessionDraft = buildPreviewCandidate({
     title: "",
     taskText: "",
@@ -6816,7 +6507,7 @@ function startNewEmptyModule() {
 // ---------------------------------------------------------------------------
 
 
-function startMcqOnlyRegen(sourceMaterial, knownCertLevel) {
+function startMcqOnlyRegen(sourceMaterial, knownCertLevel, counts = { questionCount: 5, optionCount: 4 }) {
   // Flag the in-progress draft as MCQ_ONLY so saveDraftBundleInBackground emits the MCQ_ONLY
   // module version (no rubric/prompt/taskText). Cert level is reused from the existing module.
   sessionDraft = {
@@ -6828,7 +6519,7 @@ function startMcqOnlyRegen(sourceMaterial, knownCertLevel) {
   };
   renderPreview();
   const certLevel = knownCertLevel ?? bundle?.module?.certificationLevel ?? "intermediate";
-  askForMcqQuestionCount(sourceMaterial, certLevel, contentLocale, "thorough", () => showDraftReadyActions());
+  generateMcqInBackground(sourceMaterial, certLevel, contentLocale, "thorough", counts.questionCount, counts.optionCount, () => showDraftReadyActions({ quiet: true }));
 }
 
 
@@ -6903,25 +6594,35 @@ async function generateBlueprintAndConfirm(moduleTitle, existingModuleId, source
       return;
     }
     logResolveSlot(slot, () => escapeHtml(t("shell.blueprint.errorFallback")));
+    document.getElementById("dialogGenerate")?.close();
     confirmAndGenerate(moduleTitle, existingModuleId, sourceMaterial, certLevel, locale, generationMode, null, scenarioMode, freetextOnly);
     return;
   }
 
   generationAbort = null;
   sessionState = selectedModuleId ? (sessionDraft ? "draft-pending" : "module-loaded") : "idle";
+  logResolveSlot(slot, () => escapeHtml(t("shell.blueprint.ready")), []);
 
   const bp = blueprintResult?.blueprint;
   // v1.2.4: pass effectiveSourceMaterial (possibly condensed) so all downstream LLM calls
   // (draft, MCQ, rubric) get the same condensed view rather than re-paying for raw.
   // v1.2.8: scenarioMode forwarded through to draft generation.
-  renderEditableBlueprint(slot, bp, { moduleTitle, existingModuleId, sourceMaterial: effectiveSourceMaterial, certLevel, locale, generationMode, scenarioMode, freetextOnly });
+  // Planen står i «Generer innhold»-dialogen (steg 2 i den), ikke i en samtalerute.
+  const planHost = document.getElementById("dialogGeneratePlan");
+  const dialog = document.getElementById("dialogGenerate");
+  if (planHost) {
+    setHidden(document.getElementById("dialogGenerateStep1"), true);
+    setHidden(planHost, false);
+    if (dialog && !dialog.open) dialog.showModal();
+    renderEditableBlueprint(planHost, bp, { moduleTitle, existingModuleId, sourceMaterial: effectiveSourceMaterial, certLevel, locale, generationMode, scenarioMode, freetextOnly });
+  }
 }
 
 // B1 (#448): editable Vurderingsplan card replaces the static accept/skip preview. Lærer
 // can add, edit, and remove læringsmål and sentrale temaer before continuing. "Bruk denne
 // planen" captures current inputs and passes them to confirmAndGenerate. "Generer på nytt"
 // re-runs blueprint generation, warning first if the user made manual edits.
-function renderEditableBlueprint(slot, initialBlueprint, ctx) {
+function renderEditableBlueprint(host, initialBlueprint, ctx) {
   // Local mutable working copy — never mutates the original bundle/sessionDraft until
   // the user clicks "Bruk denne planen".
   const working = {
@@ -6978,37 +6679,35 @@ function renderEditableBlueprint(slot, initialBlueprint, ctx) {
   };
 
   const captureInputs = () => {
-    const objInputs = slot.el.querySelectorAll(".bp-objective-input");
-    const topInputs = slot.el.querySelectorAll(".bp-topic-input");
+    const objInputs = host.querySelectorAll(".bp-objective-input");
+    const topInputs = host.querySelectorAll(".bp-topic-input");
     working.learningObjectives = Array.from(objInputs).map((i) => i.value.trim()).filter(Boolean);
     working.keyTopics = Array.from(topInputs).map((i) => i.value.trim()).filter(Boolean);
   };
 
   const renderAndWire = () => {
-    logResolveSlot(slot, renderHtml, [
-      {
-        labelKey: "shell.blueprint.usePlan",
-        action: () => {
-          captureInputs();
-          if (working.learningObjectives.length === 0) {
-            window.alert(t("shell.blueprint.objectivesRequired"));
-            return;
-          }
-          const blueprintJson = JSON.stringify(working);
-          confirmAndGenerate(ctx.moduleTitle, ctx.existingModuleId, ctx.sourceMaterial, ctx.certLevel, ctx.locale, ctx.generationMode, blueprintJson, ctx.scenarioMode, ctx.freetextOnly);
-        },
-      },
-      {
-        labelKey: "shell.blueprint.regenerate",
-        action: () => {
-          captureInputs();
-          if (hasManualEdits && !window.confirm(t("shell.blueprint.regenerateWarning"))) return;
-          generateBlueprintAndConfirm(ctx.moduleTitle, ctx.existingModuleId, ctx.sourceMaterial, ctx.certLevel, ctx.locale, ctx.generationMode, ctx.scenarioMode);
-        },
-      },
-    ]);
+    host.innerHTML = `${renderHtml()}
+      <div class="row" style="justify-content:flex-end;gap:var(--space-1);margin-top:var(--space-2)">
+        <button type="button" class="btn-secondary" data-bp-action="regenerate">${escapeHtml(t("shell.blueprint.regenerate"))}</button>
+        <button type="button" class="btn-primary" data-bp-action="use">${escapeHtml(t("shell.blueprint.usePlan"))}</button>
+      </div>`;
+    host.querySelector('[data-bp-action="use"]')?.addEventListener("click", () => {
+      captureInputs();
+      if (working.learningObjectives.length === 0) {
+        showToast(t("shell.blueprint.objectivesRequired"), "error");
+        return;
+      }
+      const blueprintJson = JSON.stringify(working);
+      document.getElementById("dialogGenerate")?.close();
+      confirmAndGenerate(ctx.moduleTitle, ctx.existingModuleId, ctx.sourceMaterial, ctx.certLevel, ctx.locale, ctx.generationMode, blueprintJson, ctx.scenarioMode, ctx.freetextOnly);
+    });
+    host.querySelector('[data-bp-action="regenerate"]')?.addEventListener("click", () => {
+      captureInputs();
+      if (hasManualEdits && !window.confirm(t("shell.blueprint.regenerateWarning"))) return;
+      generateBlueprintAndConfirm(ctx.moduleTitle, ctx.existingModuleId, ctx.sourceMaterial, ctx.certLevel, ctx.locale, ctx.generationMode, ctx.scenarioMode, ctx.freetextOnly);
+    });
 
-    const editor = slot.el.querySelector(".bp-editor");
+    const editor = host.querySelector(".bp-editor");
     if (!editor) return;
     editor.addEventListener("input", (e) => {
       hasManualEdits = true;
@@ -7062,13 +6761,13 @@ function renderEditableBlueprint(slot, initialBlueprint, ctx) {
         captureInputs();
         working.learningObjectives.push("");
         renderAndWire();
-        const inputs = slot.el.querySelectorAll(".bp-objective-input");
+        const inputs = host.querySelectorAll(".bp-objective-input");
         inputs[inputs.length - 1]?.focus();
       } else if (target.classList.contains("bp-add-topic")) {
         captureInputs();
         working.keyTopics.push("");
         renderAndWire();
-        const inputs = slot.el.querySelectorAll(".bp-topic-input");
+        const inputs = host.querySelectorAll(".bp-topic-input");
         inputs[inputs.length - 1]?.focus();
       }
     });
@@ -7197,11 +6896,10 @@ async function attachBundleForNewModule(moduleId) {
 }
 
 function askForMcqGeneration(sourceMaterial, certLevel, locale, generationMode) {
-  // v1.1.96: Yes/No-dialogen ble fjernet. MCQ er nødvendig for save fra samtale, så "Nei"
-  // var en dead-end (bekreftet via bruker-feedback 2026-05-22). Går direkte til count-
-  // dialogen. Bruker kan fortsatt avbryte via "Avbryt"-knappen på progress-meldingen
-  // hvis de virkelig ikke vil ha MCQ — da må de bruke Avansert editor i stedet.
-  askForMcqQuestionCount(sourceMaterial, certLevel, locale, generationMode, () => showDraftReadyActions());
+  // Antallene ble valgt i «Generer innhold»-dialogen; ingen spørsmål her.
+  const counts = pendingMcqCounts ?? { questionCount: 5, optionCount: 4 };
+  pendingMcqCounts = null;
+  generateMcqInBackground(sourceMaterial, certLevel, locale, generationMode, counts.questionCount, counts.optionCount, () => showDraftReadyActions({ quiet: true }));
 }
 
 // v1.1.81: auto-generate criteria into sessionDraft so the preview pane shows them during
@@ -7346,77 +7044,12 @@ function showDraftReadyActions({ quiet = false } = {}) {
     actions.push({ key: "generateMcq", labelKey: "shell.module.generateMcq", action: () => openGenerateDialog({ mcqOnly: true }) });
   }
   renderWorkspaceActions(actions);
-  if (model.shouldOpenUnifiedRevision) {
-    startUnifiedRevisionFlow();
-  }
 }
 
 
-// #1046: antallene valgt i «Generer innhold»-dialogen — da spørres det ikke igjen i samtalen.
-let pendingMcqCounts = null;
-function askForMcqQuestionCount(sourceMaterial, certLevel, locale, generationMode, onAccept) {
-  if (pendingMcqCounts) {
-    const { questionCount, optionCount } = pendingMcqCounts;
-    pendingMcqCounts = null;
-    generateMcqInBackground(sourceMaterial, certLevel, locale, generationMode, questionCount, optionCount, onAccept);
-    return;
-  }
-  logBot(() => t("shell.mcq.questionCountPrompt"), [
-    { labelKey: "shell.mcq.questionCountChoice3", action: () => askForMcqOptionCount(sourceMaterial, certLevel, locale, generationMode, 3, onAccept) },
-    { labelKey: "shell.mcq.questionCountChoice5", action: () => askForMcqOptionCount(sourceMaterial, certLevel, locale, generationMode, 5, onAccept) },
-    { labelKey: "shell.mcq.questionCountChoice10", action: () => askForMcqOptionCount(sourceMaterial, certLevel, locale, generationMode, 10, onAccept) },
-    { labelKey: "shell.mcq.questionCountCustom", action: () => askForCustomMcqQuestionCount(sourceMaterial, certLevel, locale, generationMode, onAccept) },
-  ]);
-}
 
-function askForCustomMcqQuestionCount(sourceMaterial, certLevel, locale, generationMode, onAccept) {
-  logForm(
-    "text",
-    () => t("shell.mcq.questionCountPrompt"),
-    "shell.mcq.questionCountPlaceholder",
-    "shell.action.next",
-    (rawValue) => {
-      const questionCount = parsePositiveIntInRange(rawValue, 1, 20);
-      if (questionCount === null) {
-        logBot(() => t("shell.mcq.questionCountInvalid"), [
-          { labelKey: "shell.action.retry", action: () => askForCustomMcqQuestionCount(sourceMaterial, certLevel, locale, generationMode, onAccept) },
-          { labelKey: "shell.action.cancel", action: () => askForMcqQuestionCount(sourceMaterial, certLevel, locale, generationMode, onAccept) },
-        ]);
-        return;
-      }
-      askForMcqOptionCount(sourceMaterial, certLevel, locale, generationMode, questionCount, onAccept);
-    },
-  );
-}
 
-function askForMcqOptionCount(sourceMaterial, certLevel, locale, generationMode, questionCount, onAccept) {
-  logBot(() => tf("shell.mcq.optionCountPrompt", { count: questionCount }), [
-    { labelKey: "shell.mcq.optionCountChoice3", action: () => generateMcqInBackground(sourceMaterial, certLevel, locale, generationMode, questionCount, 3, onAccept) },
-    { labelKey: "shell.mcq.optionCountChoice4", action: () => generateMcqInBackground(sourceMaterial, certLevel, locale, generationMode, questionCount, 4, onAccept) },
-    { labelKey: "shell.mcq.optionCountChoice5", action: () => generateMcqInBackground(sourceMaterial, certLevel, locale, generationMode, questionCount, 5, onAccept) },
-    { labelKey: "shell.mcq.optionCountCustom", action: () => askForCustomMcqOptionCount(sourceMaterial, certLevel, locale, generationMode, questionCount, onAccept) },
-  ]);
-}
 
-function askForCustomMcqOptionCount(sourceMaterial, certLevel, locale, generationMode, questionCount, onAccept) {
-  logForm(
-    "text",
-    () => tf("shell.mcq.optionCountPrompt", { count: questionCount }),
-    "shell.mcq.optionCountPlaceholder",
-    "shell.action.next",
-    (rawValue) => {
-      const optionCount = parsePositiveIntInRange(rawValue, 2, 6);
-      if (optionCount === null) {
-        logBot(() => t("shell.mcq.optionCountInvalid"), [
-          { labelKey: "shell.action.retry", action: () => askForCustomMcqOptionCount(sourceMaterial, certLevel, locale, generationMode, questionCount, onAccept) },
-          { labelKey: "shell.action.cancel", action: () => askForMcqOptionCount(sourceMaterial, certLevel, locale, generationMode, questionCount, onAccept) },
-        ]);
-        return;
-      }
-      generateMcqInBackground(sourceMaterial, certLevel, locale, generationMode, questionCount, optionCount, onAccept);
-    },
-  );
-}
 
 // ---------------------------------------------------------------------------
 // Nav / version / locale
@@ -7524,7 +7157,6 @@ function populateUiLocaleSelect() {
     const wasEditing = !!document.getElementById("previewEditConfirm");
     const wasDirty = hasOpenEditForm();
     // Replay the full chat log in the new locale
-    retranslateChat();
     translatePageStaticText();
     renderPreviewLocaleBar();
     renderPreview();
@@ -7546,7 +7178,7 @@ function populateUiLocaleSelect() {
       // — er borte, og det skal man få vite, ikke oppdage.
       if (wasDirty) {
         logBot(() => escapeHtml(t("shell.directEdit.localeSwitched")));
-        if (!chatPaneVisible()) showToast(t("shell.directEdit.localeSwitched"), "warning");
+        showToast(t("shell.directEdit.localeSwitched"), "warning");
       }
     }
   });

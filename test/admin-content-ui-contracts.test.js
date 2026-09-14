@@ -49,7 +49,10 @@ describe("admin content workspace UI contracts", () => {
     expect(shellHtml).toContain('id="tabEdit"');
     expect(shellHtml).toContain('id="tabSettings"');
     expect(shellHtml).toContain('id="tabPanelSettings"');
-    expect(shellHtml).toContain('id="chatMessages"');
+    // #1046 steg 2: ingen samtalerute; spørsmål går i valgdialogen, kilde/plan i Generer-dialogen.
+    expect(shellHtml).not.toContain('id="chatMessages"');
+    expect(shellHtml).toContain('id="dialogChoice"');
+    expect(shellHtml).toContain('id="dialogGeneratePlan"');
     expect(shellHtml).toContain('id="previewContent"');
     // v2.19.0: the fixed action bar replaced buttons parked in the conversation log.
     expect(shellHtml).toContain('id="workspaceActions"');
@@ -203,11 +206,10 @@ describe("shell JS contracts", () => {
     expect(html).toContain('data-i18n="shell.page.title"');
   });
 
-  it("logForm accepts initialValue argument for pre-fill", () => {
+  it("#1046 steg 2: the source-material form is mounted in the Generate dialog, not a chat log", () => {
     const js = readFile("public/static/admin-content-shell.js");
-    // Signature must carry initialValue so direct-edit flow can pre-fill fields.
-    expect(js).toMatch(/function logForm\s*\([^)]*initialValue/);
-    expect(js).toContain("entry.initialValue");
+    expect(js).not.toMatch(/function logForm\s*\(/);
+    expect(js).toContain("entry.mount.replaceChildren(wrap)");
   });
 
   // v2.18.13 reversed this contract, so the test is inverted rather than deleted — the reason it
@@ -312,20 +314,13 @@ describe("shell JS contracts", () => {
       ).toEqual([]);
     });
 
-    it("the gate parks rather than commits while the edit form is dirty", () => {
-      const js = readFile("public/static/admin-content-shell.js");
-      const start = js.indexOf("function commitOrProposeGenerated(");
-      expect(start).toBeGreaterThan(-1);
-      const body = js.slice(start, js.indexOf("\n}", js.indexOf("return false;", start)));
-
-      // `hasOpenEditForm` is the dirty check — `isEditFormOpen` is mere presence, and since
-      // v2.18.13 the form is present the whole time Rediger is, so gating on it would turn every
-      // generation into a proposal.
-      expect(body).toContain("hasOpenEditForm()");
-      expect(body).not.toContain("isEditFormOpen()");
-      expect(body).toContain("shell.proposal.use");
-      expect(body).toContain("shell.proposal.discard");
-    });
+    it("#1046 steg 2: no proposal mechanism — the generated result goes into the form the dialog announced", () => {
+    const body = readFile("public/static/admin-content-shell.js");
+    expect(body).not.toContain("pendingProposal");
+    expect(body).not.toContain("shell.proposal.");
+    // Det skrevne tas med i utkastet før resultatet legges inn.
+    expect(body).toMatch(/if \(hasOpenEditForm\(\)\) captureEditFormIntoDraft\(\);\s*\n\s*commitSessionDraftPatch\(patch/);
+  });
 
     it("marks the Innstillinger tab when generated criteria land out of sight", () => {
       const js = readFile("public/static/admin-content-shell.js");
@@ -346,8 +341,6 @@ describe("shell JS contracts", () => {
       "shell.directEdit.nameLabel",
       "shell.directEdit.submit",
       "shell.directEdit.translating",
-      "shell.directEdit.done",
-      "shell.directEdit.translateError",
     ];
     for (const key of keys) {
       // Must appear at least 3 times: en-GB base + nb override + nn override

@@ -41,17 +41,8 @@ describe("admin content translation resources", () => {
       "shell.tab.attention.suffix",
       "shell.tab.attention.announce",
 
-      // #926 (§6 krav 1): the conversation proposes; it never overwrites.
-      "shell.proposal.title",
-      "shell.proposal.body",
-      "shell.proposal.use",
-      "shell.proposal.discard",
-      "shell.proposal.used",
-      "shell.proposal.discarded",
-
       // The Rediger form itself.
       "shell.directEdit.submit",
-      "shell.directEdit.editingBadge",
       "shell.directEdit.titlePlaceholder",
       "shell.action.cancel",
       "shell.action.retry",

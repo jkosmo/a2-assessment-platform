@@ -1453,15 +1453,15 @@ test.describe("admin content browser coverage", () => {
     // assistenten trenger et svar (valg, skjema, avbrytbar framdrift).
     await expect(page.locator("#tabEdit")).toHaveAttribute("aria-selected", "true");
     await expect(page.locator(".preview-pane")).toBeVisible();
-    await expect(page.locator(".chat-pane")).toBeHidden();
-    await expect(page.locator("#tabPanelModule")).toHaveClass(/workspace-shell--chat-hidden/);
+    // #1046 steg 2: samtaleruta finnes ikke lenger.
+    await expect(page.locator(".chat-pane")).toHaveCount(0);
     await expect(page.locator("#tabPanelSettings")).toBeHidden();
 
     // Forhaandsvisning: preview only, chat gone.
     await page.locator("#tabPreview").click();
     await expect(page.locator("#tabPreview")).toHaveAttribute("aria-selected", "true");
     await expect(page.locator(".preview-pane")).toBeVisible();
-    await expect(page.locator(".chat-pane")).toBeHidden();
+    await expect(page.locator(".chat-pane")).toHaveCount(0);
 
     // Innstillinger: the edit grid goes away entirely. Asserting hidden here is the point -
     // .workspace-shell sets display:grid, so a class-based toggle would silently do nothing.
@@ -1947,7 +1947,7 @@ test.describe("admin content browser coverage", () => {
     // Wait for the panel to be REBUILT from the reloaded bundle, not just for the value we
     // typed. Asserting the value alone passes instantly — it is what was selected by hand — and
     // the re-render then replaces the select underneath the next interaction.
-    await expect(page.locator("#chatMessages")).toContainText(/Settings saved|Innstillingene er lagret/);
+    await expect(page.locator(".toast__message").last()).toContainText(/Settings saved|Innstillingene er lagret/);
     await expect(page.locator("#settingsModuleType")).toHaveValue("MCQ_ONLY");
     await expect(page.locator('#settingsModuleType option[value="FREETEXT_PLUS_MCQ"]')).not.toBeDisabled();
 
@@ -2357,7 +2357,7 @@ test.describe("admin content browser coverage", () => {
     await expect(page.locator("#dialogUnsavedTabSwitch")).toBeHidden();
     await expect(page.locator("#tabPreview")).toHaveAttribute("aria-selected", "true");
     await expect(page.locator("#previewEditTaskText")).toHaveCount(0);
-    await expect(page.locator(".chat-pane")).toBeHidden();
+    await expect(page.locator(".chat-pane")).toHaveCount(0);
     // Forhåndsvisningen viser det som er skrevet — ulagret.
     await expect(page.getByText("Halvferdig endring")).toBeVisible();
 
@@ -2396,10 +2396,7 @@ test.describe("admin content browser coverage", () => {
     await page.locator("#previewEditTaskText").fill("Bearbeidet scenario");
     await page.locator("#moduleSaveBtn").click();
 
-    await expect(page.locator("#chatMessages")).toContainText(
-      /Ikke oversatt til|Not translated to|Ikkje omsett til/,
-      { timeout: 10000 },
-    );
+    await expect(page.locator(".toast").filter({ hasText: /Ikke oversatt til|Not translated to|Ikkje omsett til/ }).first()).toBeVisible({ timeout: 10000 });
   });
 
   test("a failed locale is left out of the saved draft, not filled with the source text", async ({ page }) => {
@@ -2630,17 +2627,13 @@ test.describe("admin content browser coverage", () => {
     await page.locator("#dialogReviseInput").fill("Skjerp scenarioet");
     await page.locator("#dialogReviseSubmit").click();
 
-    // Forutsetningen: forslaget ER parkert. Uten denne ville påstanden under kunne vært grønn
-    // fordi vi målte den direkte stien i stedet.
-    await expect(page.locator("#chatMessages").getByText(/Suggestion ready|Forslag klart/)).toBeVisible();
-
-    // Og advarselen skal stå i den parkerte beskjeden.
-    await expect(page.locator("#chatMessages")).toContainText(
-      /Ikke oversatt til|Not translated to|Ikkje omsett til/,
-    );
+    // #1046 steg 2: det skrevne tas med i utkastet før endringen, og resultatet legges rett inn —
+    // med beskjed om språkene som ikke ble oversatt.
+    await expect(page.locator("#previewEditTaskText")).toHaveValue("Generert scenario");
+    await expect(page.locator(".toast").filter({ hasText: /Ikke oversatt til|Not translated to|Ikkje omsett til/ }).first()).toBeVisible();
   });
 
-  test("a revision lands as a proposal when the fields hold unsaved typing", async ({ page }) => {
+  test("a revision applies on top of unsaved typing — no proposal, Avbryt restores the saved text", async ({ page }) => {
     await mockCommonApis(page, {
       modules: [{ id: "module-1", title: "Trade unions", activeVersion: { versionNo: 1 } }],
       moduleExports: {
@@ -2683,37 +2676,19 @@ test.describe("admin content browser coverage", () => {
     await taskField.fill("Skrevet for hånd");
     await expect(taskField).toHaveValue("Skrevet for hånd");
 
+    // #1046 steg 2: ingen «forslag» i en logg. Dialogen sa at resultatet legges i skjemaet som
+    // ulagret utkast; det skrevne tas med i utkastet før endringen (assistenten endrer DET), og
+    // resultatet står i feltet etterpå. Avbryt i hodet henter tilbake det lagrede.
     await clickEnabledButton(page, /^Request a change$|^Be om endring$/);
-    await expect(taskField).toHaveValue("Skrevet for hånd");
     await page.locator("#dialogReviseInput").fill("Skjerp scenarioet");
     await page.locator("#dialogReviseSubmit").click();
-
-    // The proposal is offered, and the field is untouched. Asserting the VALUE and not just the
-    // presence of the buttons is the point: the old failure wrote the draft underneath a form
-    // that kept showing the author's text, so a presence-only check would have passed then too.
-    await expect(page.locator("#chatMessages").getByText(/Suggestion ready|Forslag klart/)).toBeVisible();
-    await expect(taskField).toHaveValue("Skrevet for hånd");
-
-    // Forkast leaves it that way.
-    await clickEnabledButton(page, /^(Discard|Forkast)$/);
-    await expect(taskField).toHaveValue("Skrevet for hånd");
-
-    // Bruk replaces it — and repaints, so the author sees what they accepted.
-    await clickEnabledButton(page, /^Request a change$|^Be om endring$/);
-    await page.locator("#dialogReviseInput").fill("Skjerp scenarioet igjen");
-    await page.locator("#dialogReviseSubmit").click();
-    await clickEnabledButton(page, /^(Use|Bruk)$/);
     await expect(page.locator("#previewEditTaskText")).toHaveValue("Generert scenario");
-  });
+    await expect(page.locator("#moduleDirtyBadge")).toHaveClass(/is-dirty/);
 
-  // QA før prod, 2026-08-18. Fanget av ingen av de 199 e2e-ene, fordi ingen av dem lot menyspråket
-  // og innholdsspråket peke hver sin vei — og etter v2.18.12 er nettopp det normaltilstanden så
-  // snart forfatteren bytter meny én gang.
-  //
-  // Feilen: revisjonsstien leste `currentLocale` (MENYspråket) når den hentet teksten som skulle
-  // revideres, og merket den med samme språk. Skriver du på bokmål og bytter menyen til engelsk,
-  // sendes den norske teksten merket `en-GB` — LLM-en svarer på engelsk, oversettingen
-  // maskinoversetter tilbake til nb, og originalteksten din er borte.
+    page.once("dialog", (d) => d.accept());
+    await page.locator("#moduleCancelBtn").click();
+    await expect(page.locator("#previewEditTaskText")).toHaveValue(/Norsk scenario/);
+  });
   test("a revision reads and tags the CONTENT language, not the menu language", async ({ page }) => {
     await mockCommonApis(page, {
       modules: [{ id: "module-1", title: "Trade unions", activeVersion: { versionNo: 1 } }],
@@ -2802,8 +2777,8 @@ test.describe("admin content browser coverage", () => {
     // Since v2.18.13 the Rediger form is open from the moment the tab is, so gating on presence
     // rather than dirtiness would turn every single generation into a proposal. Nothing was
     // typed here, so nothing is at risk and nothing should be asked.
-    await expect(page.locator("#chatMessages").getByText(/scenario and guidance ready|scenario og veiledning er klart/)).toBeVisible();
-    await expect(page.locator("#chatMessages").getByText(/Suggestion ready|Forslag klart/)).toHaveCount(0);
+    await expect(page.locator(".toast").filter({ hasText: /scenario and guidance ready|scenario og veiledning er klart/ }).first()).toBeVisible();
+    await expect(page.locator("#previewEditTaskText")).toHaveValue("Generert scenario");
   });
 
   test("direct edit keeps MCQ visible and editable through translation and save", async ({ page }) => {
@@ -3524,13 +3499,15 @@ test.describe("admin content browser coverage", () => {
     await expect(page.locator("#dialogGenerateMcq")).toBeVisible();
     await page.locator("#dialogGenerate .chat-textarea").fill("Updated source notes about labour rights and organising.");
     await page.locator("#dialogGenerate .chat-submit-btn").click();
-    await expect(dialog).not.toHaveAttribute("open", "");
 
     await expect(page.getByText("What kind of module is this?")).toHaveCount(0);
     await expect(page.getByText("Should the task use a scenario?")).toHaveCount(0);
     await expect(page.getByRole("button", { name: /^Basic$|^Grunnleggende$/ })).toHaveCount(0);
-    // Neste synlige steg er planen.
-    await expect(page.getByRole("button", { name: /Use this plan|Bruk denne planen/ })).toBeVisible();
+    // Steg 2 i samme dialog: planen. «Bruk denne planen» lukker og genererer.
+    await expect(dialog).toHaveAttribute("open", "");
+    await expect(page.locator("#dialogGeneratePlan")).toBeVisible();
+    await page.locator('#dialogGeneratePlan [data-bp-action="use"]').click();
+    await expect(dialog).not.toHaveAttribute("open", "");
   });
 
   test("Generate content on an MCQ-only module generates questions with the dialog's counts, asking nothing", async ({ page }) => {

@@ -143,8 +143,6 @@ test.describe("utrullet stage — artefaktet stemmer med kilden", () => {
 
     for (const key of [
       "shell.module.importReloadFailed",
-      "shell.proposal.title",
-      "shell.proposal.use",
       "shell.proposal.discard",
       "shell.tab.attention.suffix",
       "shell.settings.needsMissing",

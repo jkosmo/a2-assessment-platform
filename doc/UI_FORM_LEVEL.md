@@ -132,7 +132,7 @@ være fasit enn funn.
 
 - Innholdet i modulens Rediger-fane (spørsmålsbygger, kriterier) — det er modulens eget skjema, ikke et
   mønster som deles. Bare feltenes form (D) er med.
-- Samtale-panelet (KI-dialogen) — egen sak.
+- Samtale-panelet (KI-dialogen) — fjernet 14.09 (se DECISIONS «Samtalen erstattes av to dialoger»).
 - Dialoger for bekreftelse (slett/arkiver) — nettleserens `confirm()` de fleste steder, egen dialog for
   kurssletting. Det er et eget punkt, men hører til begge nivåene og er notert under A1/E5.
 
@@ -257,9 +257,9 @@ tredelingen Rediger · Forhåndsvis · Innstillinger også på seksjoner, Result
 | C1, C2, C3 | Gjort for klasse, seksjon, kurs (språkpiller, bokmål først, «(påkrevd)»). Bokmål er det påkrevde språket (DECISIONS). |
 | D1–D7 | D1–D3 gjort (.form-field, hvite felt, «(påkrevd)»). 13.09: modulens etiketter i Rediger og Innstillinger står over feltet i vanlig skrift (ikke STORE, ikke til venstre); D4: hjelpen står som én setning under feltet, (i)-ikonene med popover er borte; D7: «70 (standard)» og «ord (tomt = nivåets standard)». D5 (kort per tema) og D6 (intervall med «→», ett felt ellers) var alt slik. |
 | E (lagring) | Avgjort 2a og gjort for klasse, seksjon, kurs: «Lagre», Avbryt som lenke, «Alt lagret / Ulagrede endringer», spørsmål før man forlater. Modul har sin egen lagring, men samme merke i hodet. |
-| F1, F2 | Gjort for alle fire: handlingsrad i hodet med «maks fire + Mer». Modulens sidepanel er borte. 13.09 (produkteier): Lagre og Avbryt først i raden med grønn/rød tone; korte ord på modulens handlinger (Publiser · Generer innhold · Rediger i chat · Mer). |
+| F1, F2 | Gjort for alle fire: handlingsrad i hodet med «maks fire + Mer». Modulens sidepanel er borte. 13.09 (produkteier): Lagre og Avbryt først i raden med grønn/rød tone; korte ord på modulens handlinger (Publiser · Generer innhold · Be om endring · Mer). |
 | E (lagring) 13.09 | Lagrelinja nederst er borte på alle fire; Lagre/Avbryt i hodet. Modul: én Lagre for Rediger, Innstillinger og utkast. |
-| B3 modul 13.09 | Tilstandslinja er borte; «Publisert v2 · Utkast v4» som merker i hodet, «Forhåndsvisning viser …» i fanen. GDPR-varselet er én linje under oppgavefeltet. Samtaleruta vises bare når assistenten spør. |
+| B3 modul 13.09 | Tilstandslinja er borte; «Publisert v2 · Utkast v4» som merker i hodet, «Forhåndsvisning viser …» i fanen. GDPR-varselet er én linje under oppgavefeltet. Samtaleruta vises bare når assistenten spør. 14.09: samtaleruta er fjernet — planen ligger i «Generer innhold»-dialogen, spørsmål i én valgdialog, framdrift som toast; skjemaet står i full bredde. |
 | G1–G3 | Gjort 13.09: én «rad i skjema» (`.form-row` i shared.css) for kursets innhold, klassens kurs og klassens medlemmer — nummer, typemerke, navn, metadata i grått, handlinger til høyre som `row-action-btn`, «Fjern» rød. Én «legg til»-linje (`.form-add-row`). Sidenes egne kopier er slettet. |
 | H1–H4 | Gjort. |
 | J1, J2, J6, J8, J9 | Gjort (titler = menynavn, «klasse», tom tabell, Eksporter-meny, prosent/tid). |

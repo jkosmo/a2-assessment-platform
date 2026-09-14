@@ -44,7 +44,8 @@ describe("admin content DOM accessibility contracts", () => {
       expect(body.querySelector(`#${panelId}`)).toBeTruthy();
     }
 
-    expect(getByRole(body, "log")).toBeTruthy();
+    // #1046 steg 2: samtaleloggen (role="log") er borte; lesestatus-regionen for skjermlesere står.
+    expect(body.querySelector('[role="log"]')).toBeNull();
     expect(getByRole(body, "status")).toBeTruthy();
   });
 

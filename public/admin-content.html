@@ -14,11 +14,11 @@
       /* #896 S3c: `.advanced-link` styled the header link to the Avansert page. Ingen elementer
          bærer klassen lenger — fjernet 2026-08-18. */
 
-      .workspace-shell { display: grid; grid-template-columns: 1fr 380px; gap: var(--space-2); align-items: start; }
+      /* #1046 steg 2: samtaleruta er borte — skjemaet står alene i full bredde. */
+      .workspace-shell { display: block; }
       /* #360 (200% zoom): bump fra 900px → 1024px slik at 1920×1080 + 200% zoom (effektiv
          960px) trigger stablet layout. Sticky-preview er borte globalt (se preview-pane
          CSS), så ingen stacking-overrides her — bare grid-direction. */
-      @media (max-width: 1024px) { .workspace-shell { grid-template-columns: 1fr; } }
 
       /* ── Preview pane ─────────────────────────────────────────────────────── */
       /* v1.1.92 (#360 follow-up): bring back position: sticky, but ONLY in dual-column
@@ -53,6 +53,10 @@
       .preview-section-label { font-size: 13px; font-weight: 600; color: var(--color-meta); margin: var(--space-1) 0 4px; }
       .preview-edit-mcq-add { margin: 6px 0 var(--space-2); }
       #dialogGenerate .chat-form-col { gap: 8px; }
+      #dialogGeneratePlan .chat-textarea { padding: 6px 10px; font-size: 13px; }
+      .dialog-choice-body { font-size: 14px; line-height: 1.5; }
+      .dialog-choice-body ul { margin: 8px 0 0; padding-left: 20px; }
+      #dialogChoiceActions button { width: auto; min-height: 0; padding: 8px 14px; }
       #dialogGenerate .chat-textarea, .dialog-textarea { width: 100%; box-sizing: border-box; font: inherit; font-size: 14px; padding: 8px 10px; border: 1px solid var(--color-border-soft); border-radius: var(--radius-card); }
       .revise-example { width: auto; min-height: 0; padding: 4px 10px; font-size: 12px; border-radius: 999px; }
       .preview-edit-input { width: 100%; box-sizing: border-box; font: inherit; font-size: 15px; padding: 8px 10px; border: 1px solid var(--color-border-soft); border-radius: var(--radius-card); background: #fff; }
@@ -135,38 +139,10 @@
       .module-status-badge.draft { background: #fff3db; color: #7a4b00; }
       .module-status-badge.shell { background: #edf1f7; color: #42526b; }
 
-      /* ── Chat pane ────────────────────────────────────────────────────────── */
-      .chat-pane { display: flex; flex-direction: column; min-height: 60vh; }
-      /* Stage-tilbakemelding 2026-08-17: handlingene lå i samtaleloggen og ble stående grå etter
-         bruk, så høyresiden vokste monotont og de gyldige valgene sank til bunns. De står nå
-         øverst og skroller ikke — loggen under er samtalen. */
       /* #1046 (13.09): handlingene står i hodet som .row-actions/.row-action-btn (shared.css). */
       .workspace-action-btn:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 2px; }
-      .chat-messages { flex: 1; display: flex; flex-direction: column; gap: var(--space-1); padding: var(--space-1); overflow-y: auto; min-height: 200px; }
-
-      .chat-msg { display: flex; }
-      /* v1.1.93 (#360 follow-up): stack bubble + choices vertically for bot messages so
-         choice pills appear BELOW the bubble. Previously default flex-direction: row
-         squeezed choices into a narrow right column when bubble was wide (blueprint
-         editor, criteria editor, etc.), causing button text to wrap character-by-character.
-         User messages stay row-based since they typically have no choices. */
-      .chat-msg--bot { flex-direction: column; align-items: flex-start; }
-      .chat-msg--user { justify-content: flex-end; }
-
-      .chat-bubble { max-width: 90%; padding: 10px 14px; border-radius: 16px; font-size: 14px; line-height: 1.5; }
-      .chat-msg--bot .chat-bubble { background: var(--color-blue-light); color: var(--color-text); border-bottom-left-radius: 4px; }
-      .chat-msg--user .chat-bubble { background: var(--color-navy); color: #fff; border-bottom-right-radius: 4px; }
-      .chat-bubble--progress { display: flex; align-items: center; gap: 8px; color: var(--color-meta); }
-
-      .chat-spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid var(--color-border-soft); border-top-color: var(--color-blue); border-radius: 50%; animation: spin 0.7s linear infinite; flex-shrink: 0; }
       @keyframes spin { to { transform: rotate(360deg); } }
-
-      /* Contain bubble content so long error strings don't cause horizontal scroll */
-      .chat-pane { overflow: hidden; }
-      .chat-bubble { overflow-wrap: break-word; word-break: break-word; min-width: 0; }
-
-      .chat-choices { display: flex; flex-wrap: wrap; gap: 6px; padding: 6px var(--space-1) var(--space-1); max-width: 100%; }
-      .chat-choices--column { flex-direction: column; align-items: flex-start; }
+      /* Kildeverktøyet og planen i «Generer innhold»-dialogen bruker disse (var samtalens skjema). */
       .chat-choice-btn { width: auto !important; max-width: 100% !important; padding: 6px 14px !important; font-size: 13px !important; border-radius: 999px !important; transition: transform 80ms ease-out; }
       /* v1.1.97: subtle tactile feedback on click — knappen "presses" et øyeblikk så
          brukeren ser at klikket ble registrert før neste bot-melding kommer. Pure CSS,
@@ -411,9 +387,6 @@
       }
       /* Forhåndsvisning: the chat pane is hidden, so the preview takes the full width
          instead of leaving a 380px gap where the chat used to be. */
-      .workspace-shell--preview-only { grid-template-columns: 1fr; }
-      .workspace-shell--chat-hidden { grid-template-columns: 1fr; }
-      .chat-pane-head { display: flex; justify-content: flex-end; padding-bottom: 6px; }
       .preview-shows { margin: 0 0 var(--space-1); color: var(--color-meta); }
       /* Lagre/Avbryt står i hodet; skjemaets egne knapper er der for koden som klikker dem. */
       .preview-edit-actions, #settingsSave { display: none !important; }
@@ -571,28 +544,7 @@
           </div>
         </section>
 
-        <!-- Chat pane -->
-        <section class="card chat-pane" aria-label="Samtaleassistent">
-          <!-- Stage-tilbakemelding 2026-08-17: «UI i rediger der tidligere knapper vises som
-               inaktive gir ikke lengre mening nå som dette ikke er et samtale basert UI, den gjør
-               også at høyresiden blir veldig lang».
-               Handlingene bor her, i en fast linje som ikke skroller. Loggen under er samtalen:
-               spørsmål, instrukser, generert innhold, status. Brukte knapperader forsvinner nå
-               i stedet for å bli stående grå og dytte de gyldige valgene nedover. -->
-          <!-- style="display:none", ikke [hidden]. QA 2026-08-19: `.workspace-actions` setter
-               `display:flex`, og en forfatter-origin klasseregel slår UA-arkets `[hidden]{display:none}`
-               — så attributtet gjorde ingenting, og en tom handlingslinje med bunnramme og marg ble
-               malt ved første tegning før `renderWorkspaceActions` rakk å kjøre.
-               Samme felle som `tabPanelSettings`, og samme løsning: `setHidden()` styrer den etterpå,
-               og `display:""` faller tilbake på klassens `flex`. -->
-          <!-- Produkteier 13.09: samtaleruta er til overs i Rediger til assistenten trenger et svar. Den
-               åpnes når en flyt spør (valg, skjema, avbrytbar framdrift) og lukkes her. -->
-          <div class="chat-pane-head">
-            <button type="button" id="chatPaneClose" class="row-action-btn" data-i18n="shell.chat.hide">Skjul samtalen</button>
-          </div>
-          <div id="chatMessages" class="chat-messages" role="log" aria-live="polite" aria-relevant="additions text" aria-atomic="false"></div>
-          <div id="shellStatusAnnouncer" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></div>
-        </section>
+        <div id="shellStatusAnnouncer" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></div>
 
       </div>
 
@@ -617,6 +569,7 @@
       <dialog id="dialogGenerate" aria-labelledby="dialogGenerateTitle">
         <h2 id="dialogGenerateTitle" class="dialog-title" data-i18n="shell.generateDialog.title">Generer innhold</h2>
         <p class="small" id="dialogGenerateContext"></p>
+        <div id="dialogGenerateStep1">
         <div id="dialogGenerateSource"></div>
         <div id="dialogGenerateMcq" class="row" style="gap:var(--space-2);margin-top:var(--space-1);display:none">
           <label style="font-size:13px;color:var(--color-meta)"><span data-i18n="shell.generateDialog.questionCount">Antall spørsmål</span><br>
@@ -625,9 +578,18 @@
             <select id="dialogGenerateOptionCount" class="settings-input"><option value="3">3</option><option value="4" selected>4</option><option value="5">5</option></select></label>
         </div>
         <p class="small" style="margin-top:var(--space-2)" data-i18n="shell.generateDialog.note">Det genererte legges i skjemaet som et ulagret utkast. Lagre for å beholde det, Avbryt for å gå tilbake til det som er lagret.</p>
+        </div>
+        <!-- Steg 2 (fritekst): vurderingsplanen — læringsmål og temaer som kan redigeres før genereringen. -->
+        <div id="dialogGeneratePlan" hidden style="display:none"></div>
         <div class="row" style="justify-content:flex-end;gap:var(--space-1)">
           <button type="button" id="dialogGenerateCancel" class="btn-secondary" data-i18n="shell.action.cancel">Avbryt</button>
         </div>
+      </dialog>
+
+      <!-- Ett spørsmål som trenger svar (publiseringsgaten, feil med «Prøv igjen», bekreftelser). -->
+      <dialog id="dialogChoice" aria-labelledby="dialogChoiceBody">
+        <div id="dialogChoiceBody" class="dialog-choice-body"></div>
+        <div id="dialogChoiceActions" class="row" style="justify-content:flex-end;gap:var(--space-1);margin-top:var(--space-2)"></div>
       </dialog>
 
       <dialog id="dialogRevise" aria-labelledby="dialogReviseTitle">

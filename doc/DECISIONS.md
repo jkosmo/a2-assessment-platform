@@ -755,5 +755,9 @@ Lagre beholder, Avbryt går tilbake til det lagrede (produkteier valgte «alltid
 «erstatt med spørsmål først»). Vurderingsplanen og framdriften vises fortsatt i den reduserte
 samtaleruta; spørsmålene om type, nivå, scenario og antall er borte fra flyten.
 
-Steg 2 (gjenstår): planen som del av dialogen, publiseringsgaten («Oversett det som mangler») som
-vanlig dialog, og samtaleruta fjernes.
+Steg 2 (gjort 2026-09-14): samtaleruta er fjernet. Vurderingsplanen er steg 2 i «Generer
+innhold»-dialogen (mål og temaer kan redigeres, «Bruk denne planen» / «Generer på nytt»),
+publiseringsgaten og andre spørsmål som trenger svar går i én valgdialog, og framdrift og
+resultat meldes som toast (framdrift med «Avbryt»). Forslagsmekanismen (#926) er borte: det som
+står i skjemaet tas med i utkastet før generering/endring, så resultatet legges rett inn — slik
+dialogen sier. Skjemaet står alene i full bredde.
