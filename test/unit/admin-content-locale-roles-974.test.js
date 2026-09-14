@@ -14,12 +14,16 @@ import { describe, expect, it } from "vitest";
 // Kriteriegenereringen (7186) hadde alt gjort det riktig — det var én av tre flyter.
 //
 // ⚠️ RATSJ I BEGGE RETNINGER. 13 igjen er de lovlige: definisjon, oversettelsestabell, x-locale,
-// intent-logg (telemetri om inputen), datoformat, språkvelgeren, og fire kommentarer som nevner
-// navnet for å forklare regelen. Fjernes én, skal tallet ned i samme commit.
+// intent-logg (telemetri om inputen), språkvelgeren (tre), getteren Innstillinger-fanen leser
+// datoformatet gjennom (to på én linje), og tre kommentarer som nevner navnet for å forklare regelen.
+// Fjernes én, skal tallet ned i samme commit. Innstillinger-fanen (#1046 punkt 2) telles for seg:
+// datoformatet og én kommentar.
 // ─────────────────────────────────────────────────────────────────────────────
 
 const SHELL = fileURLToPath(new URL("../../public/static/admin-content-shell.js", import.meta.url));
 const TAK = 13;
+const SETTINGS_TAB = fileURLToPath(new URL("../../public/static/admin-content-settings-tab.js", import.meta.url));
+const TAK_SETTINGS_TAB = 2;
 
 describe("#974 — menyspråket styrer ikke innhold i admin-content-shell", () => {
   const src = readFileSync(SHELL, "utf8");
@@ -43,5 +47,15 @@ describe("#974 — menyspråket styrer ikke innhold i admin-content-shell", () =
   it(`ratsj: currentLocale forekommer nøyaktig ${TAK} ganger (går tallet ned, senk TAK i samme commit)`, () => {
     const antall = (src.match(/currentLocale/g) ?? []).length;
     expect(antall, `${antall} forekomster av currentLocale i shell`).toBe(TAK);
+  });
+
+  it(`ratsj: Innstillinger-fanen leser ctx.currentLocale nøyaktig ${TAK_SETTINGS_TAB} ganger (datoformat + kommentar)`, () => {
+    const tab = readFileSync(SETTINGS_TAB, "utf8");
+    const antall = (tab.match(/currentLocale/g) ?? []).length;
+    expect(antall, `${antall} forekomster av currentLocale i Innstillinger-fanen`).toBe(TAK_SETTINGS_TAB);
+    // Og aldri som innholdsspråk: bare toLocaleString leser den.
+    for (const l of tab.split("\n")) {
+      if (/currentLocale/.test(l) && !l.trim().startsWith("//")) expect(l).toContain("toLocaleString");
+    }
   });
 });

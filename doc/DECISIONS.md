@@ -695,6 +695,18 @@ Produkteier, etter omgang 3 på stage:
    framdrift) og kan skjules igjen. Utfallet av handlinger (lagret, importert, avvist) kommer som
    toast når ruta er skjult — som på de andre skjemasidene.
 
+## Modulskallet deles etter fane: Innstillinger først (2026-09-14)
+
+`admin-content-shell.js` var 7 200 linjer med alt på modulsida i én fil. Innstillinger-fanen
+(1 440 linjer: panelet, kriterie-, instruks- og skjemaseksjonene, versjonshistorikken, lagringen)
+er skilt ut til `admin-content-settings-tab.js`. Snittet er en `ctx`: tilstanden skallet eier
+(`bundle`, `sessionDraft`, `contentLocale` …) som get/set-egenskaper, så begge sider ser samme
+verdi uten kopier, og skallets funksjoner som referanser. Fanen svarer med det skallet trenger
+(`renderSettingsPanel`, `hasUnsavedSettingsEdits`, …); tilstanden skallet før nullstilte direkte
+(`settingsCriteriaState` m.fl.) er metoder. `LEGACY_STRING_LOCALE` og `mergeLocaleInto` — brukt av
+begge — ligger i `localized-value.js`. Koden i fanen er flyttet, ikke skrevet om; kommentarene
+følger med. Neste kandidat er genereringsflyten (~1 100 linjer).
+
 ## Modulens hode tegnes av form-page.js; Avbryt tar alt ulagret (2026-09-14)
 
 Oppfølging av «Skjemahodet: Lagre og Avbryt først» (13.09): modulen hadde fortsatt sin egen utgave
