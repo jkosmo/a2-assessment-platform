@@ -226,21 +226,40 @@ function logBot(htmlFn, choices = []) {
 }
 
 /** Framdrift → en toast som står til den løses; «Avbryt» når kalleren har hengt på en lytter. */
+// Stage 14.09: det som pågår i «Generer innhold»-dialogen (crawl, henting, opplasting, analyse)
+// vises på en linje i dialogen med spinner — toastene lå bak dialogens bakteppe, og en knapp som
+// skiftet tekst var for lite til å se at noe som tar minutter, var i gang.
+function setGenerateDialogStatus(text, { abort = null, slow = false, tone = "info" } = {}) {
+  const box = document.getElementById("dialogGenerateStatus");
+  if (!box) return;
+  if (!text) { setHidden(box, true); return; }
+  const line = box.querySelector(".dialog-status-text");
+  if (line) line.textContent = slow ? `${text} ${t("shell.dialogStatus.slow")}` : text;
+  box.classList.toggle("is-error", tone === "error");
+  const abortBtn = box.querySelector("[data-dialog-status-abort]");
+  if (abortBtn) { abortBtn.onclick = abort; setHidden(abortBtn, !abort); }
+  setHidden(box, false);
+}
+
 function logProgress(textKeyOrFn, options = {}) {
   const text = typeof textKeyOrFn === "function" ? textKeyOrFn() : t(textKeyOrFn);
   announceStatus(text);
   const abortBtn = document.createElement("button");
   abortBtn.type = "button";
   const el = document.createElement("div");
-  const toast = options.quiet ? null : showToast(text, "info", "", options.abortable
+  // Står dialogen åpen, er det der forfatteren ser — framdriften vises i den, ikke som toast.
+  const inDialog = !options.quiet && !!document.getElementById("dialogGenerate")?.open;
+  if (inDialog) setGenerateDialogStatus(text, { abort: options.abortable ? () => abortBtn.click() : null, slow: true });
+  const toast = options.quiet || inDialog ? null : showToast(text, "info", "", options.abortable
     ? { sticky: true, actionLabel: t("shell.action.cancel"), onAction: () => abortBtn.click() }
     : { sticky: true });
-  return { entry: { quiet: !!options.quiet }, el, abortBtn, toast };
+  return { entry: { quiet: !!options.quiet }, el, abortBtn, toast, inDialog };
 }
 
 /** Utfallet: toasten for framdriften fjernes; svaret vises — som toast, eller som spørsmål. */
 function logResolveSlot(slot, htmlFn, choices = []) {
   slot?.toast?.remove();
+  if (slot?.inDialog) setGenerateDialogStatus(null);
   if (choices.length > 0) { showChoiceDialog(htmlFn, choices); return; }
   const text = htmlToPlainText(htmlFn());
   if (!text) return;
@@ -447,6 +466,11 @@ function resolveChoiceLabel(choice) {
 
 // Renders the interactive part of a form entry (input or textarea + submit button).
 // Called both on first render and during retranslateChat for unsubmitted forms.
+// Vertsnavnet til statuslinja; en ugyldig URL vises som den ble skrevet (feilen kommer fra tjeneren).
+function hostnameOf(url) {
+  try { return new URL(url.trim()).hostname; } catch { return url.trim(); }
+}
+
 function _domFormFields(entry) {
   const wrap = document.createElement("div");
   const isMultiLine = entry.formType === "textarea" || entry.formType === "source-material";
@@ -550,13 +574,12 @@ function _domFormFields(entry) {
     urlBtn.addEventListener("click", async () => {
       const url = window.prompt(t("shell.source.urlPrompt"));
       if (!url || !url.trim()) return;
-      const originalLabel = urlBtn.textContent;
       urlBtn.disabled = true;
       uploadBtn.disabled = true;
       // #555-oppfølging (forfatter-feedback): «Neste» var fortsatt klikkbar mens URL-en ble hentet
       // — uklart hva som skjedde. Deaktiver den til hentingen er ferdig.
       btn.disabled = true;
-      urlBtn.textContent = t("shell.source.fetching");
+      setGenerateDialogStatus(tf("shell.source.fetchingStatus", { host: hostnameOf(url) }));
       try {
         const result = await apiFetch(
           "/api/admin/content/source-material/fetch-url",
@@ -579,7 +602,7 @@ function _domFormFields(entry) {
         urlBtn.disabled = false;
         uploadBtn.disabled = false;
         btn.disabled = false;
-        urlBtn.textContent = originalLabel;
+        setGenerateDialogStatus(null);
       }
     });
 
@@ -588,12 +611,11 @@ function _domFormFields(entry) {
     crawlBtn.addEventListener("click", async () => {
       const url = window.prompt(t("shell.source.crawlPrompt"));
       if (!url || !url.trim()) return;
-      const originalLabel = crawlBtn.textContent;
       crawlBtn.disabled = true;
       urlBtn.disabled = true;
       uploadBtn.disabled = true;
       btn.disabled = true;
-      crawlBtn.textContent = t("shell.source.crawling");
+      setGenerateDialogStatus(tf("shell.source.crawlingStatus", { host: hostnameOf(url) }));
       try {
         const result = await apiFetch(
           "/api/admin/content/source-material/crawl-url",
@@ -631,7 +653,7 @@ function _domFormFields(entry) {
         urlBtn.disabled = false;
         uploadBtn.disabled = false;
         btn.disabled = false;
-        crawlBtn.textContent = originalLabel;
+        setGenerateDialogStatus(null);
       }
     });
 
@@ -683,7 +705,6 @@ function _domFormFields(entry) {
         return;
       }
 
-      const originalLabel = uploadBtn.textContent;
       uploadBtn.disabled = true;
       urlBtn.disabled = true;
       // #555-oppfølging: hold «Neste» deaktivert mens filer ekstraheres (samme grunn som URL).
@@ -695,9 +716,7 @@ function _domFormFields(entry) {
       let processed = 0;
       for (const file of toExtract) {
         processed += 1;
-        uploadBtn.textContent = toExtract.length === 1
-          ? t("shell.source.uploading")
-          : `${t("shell.source.uploading")} ${processed}/${toExtract.length}`;
+        setGenerateDialogStatus(tf("shell.source.uploadingStatus", { fileName: file.name, n: processed, total: toExtract.length }));
         try {
           const contentBase64 = await readFileAsBase64(file);
           const { jobId } = await apiFetch(
@@ -749,7 +768,7 @@ function _domFormFields(entry) {
       uploadBtn.disabled = false;
       urlBtn.disabled = false;
       btn.disabled = false;
-      uploadBtn.textContent = originalLabel;
+      setGenerateDialogStatus(null);
       fileInput.value = "";
       inputEl.focus();
     });
@@ -812,7 +831,9 @@ function _domFormFields(entry) {
     submit();
   });
   wrap.appendChild(inputEl);
-  wrap.appendChild(btn);
+  // Stage 14.09: Generer står i bunnraden ved siden av Avbryt, ikke under tekstfeltet.
+  const submitSlot = document.getElementById("dialogGenerateSubmitSlot");
+  if (submitSlot) submitSlot.replaceChildren(btn); else wrap.appendChild(btn);
   // Kildeverktøyet monteres i «Generer innhold»-dialogen; fokus på opplastingsknappen (#360).
   entry.mount.replaceChildren(wrap);
   setTimeout(() => { (wrap.querySelector(".chat-choice-btn") ?? inputEl).focus(); }, 80);
@@ -1706,7 +1727,7 @@ function startGeneration() {
 
 async function generateDraftInBackground(sourceMaterial, certLevel, locale, generationMode, onAccept, blueprint = null, scenarioMode = "auto") {
   const abort = startGeneration();
-  const slot = logProgress("shell.generating.draftProgress");
+  const slot = logProgress("shell.generating.draftProgress", { abortable: true });
   slot.abortBtn.addEventListener("click", () => { abort.abort(); slot.abortBtn.disabled = true; });
 
   // Blueprint may arrive as a JSON string (from confirmAndGenerate after author accepts it)
@@ -1786,7 +1807,7 @@ async function generateDraftInBackground(sourceMaterial, certLevel, locale, gene
 
 async function generateMcqInBackground(sourceMaterial, certLevel, locale, generationMode, questionCount, optionCount, onAccept) {
   const abort = startGeneration();
-  const slot = logProgress("shell.generating.mcqProgress");
+  const slot = logProgress("shell.generating.mcqProgress", { abortable: true });
   slot.abortBtn.addEventListener("click", () => { abort.abort(); slot.abortBtn.disabled = true; });
 
   // Pull blueprint from sessionDraft if present so MCQ is generated against the same contract
@@ -1855,7 +1876,7 @@ async function generateMcqInBackground(sourceMaterial, certLevel, locale, genera
 
 async function reviseDraftInBackground(instruction, onAccept) {
   const abort = startGeneration();
-  const slot = logProgress("shell.revision.draftProgress");
+  const slot = logProgress("shell.revision.draftProgress", { abortable: true });
   slot.abortBtn.addEventListener("click", () => { abort.abort(); slot.abortBtn.disabled = true; });
 
   let result;
@@ -1919,7 +1940,7 @@ async function reviseDraftInBackground(instruction, onAccept) {
 
 async function reviseMcqInBackground(instruction, onAccept) {
   const abort = startGeneration();
-  const slot = logProgress("shell.revision.mcqProgress");
+  const slot = logProgress("shell.revision.mcqProgress", { abortable: true });
   slot.abortBtn.addEventListener("click", () => { abort.abort(); slot.abortBtn.disabled = true; });
 
   const currentQuestions = (sessionDraft?.mcqQuestions ?? []).map((question) => ({
@@ -4876,6 +4897,7 @@ async function openGenerateDialog({ mcqOnly = false } = {}) {
   setHidden(document.getElementById("dialogGenerateMcq"), !hasMcq);
   setHidden(document.getElementById("dialogGenerateStep1"), false);
   setHidden(document.getElementById("dialogGeneratePlan"), true);
+  setGenerateDialogStatus(null);
   // Det som står i skjemaet tas med i utkastet før noe genereres — det genererte legges oppå.
   if (isEditFormOpen()) captureEditFormIntoDraft();
   const host = document.getElementById("dialogGenerateSource");
@@ -4937,6 +4959,8 @@ function openReviseDialog() {
 
 function bindGenerateAndReviseDialogs() {
   document.getElementById("dialogGenerateCancel")?.addEventListener("click", () => document.getElementById("dialogGenerate")?.close());
+  // Lukkes dialogen (Avbryt, Esc) mens noe pågår, går resten som toast — statuslinja skal ikke stå igjen til neste gang.
+  document.getElementById("dialogGenerate")?.addEventListener("close", () => setGenerateDialogStatus(null));
   // Kildeverktøyet rives når dialogen lukkes, så det ikke ligger igjen som et «aktivt» skjema i DOM-en.
   document.getElementById("dialogGenerate")?.addEventListener("close", () => { document.getElementById("dialogGenerateSource")?.replaceChildren(); });
   document.getElementById("dialogReviseCancel")?.addEventListener("click", () => document.getElementById("dialogRevise")?.close());
@@ -5059,7 +5083,7 @@ async function generateBlueprintAndConfirm(moduleTitle, existingModuleId, source
   const effectiveSourceMaterial = await maybeCondenseSourceMaterial(sourceMaterial, certLevel, locale);
 
   const abort = startGeneration();
-  const slot = logProgress("shell.blueprint.progress");
+  const slot = logProgress("shell.blueprint.progress", { abortable: true });
   slot.abortBtn.addEventListener("click", () => { abort.abort(); slot.abortBtn.disabled = true; });
 
   let blueprintResult = null;

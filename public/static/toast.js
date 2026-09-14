@@ -40,8 +40,23 @@ function ensureToastRegion() {
   region.className = "toast-region";
   region.setAttribute("aria-live", "polite");
   region.setAttribute("aria-atomic", "false");
+  // Stage 14.09: en åpen <dialog> (modal) ligger i toppsjiktet, og alt utenfor — også toastene —
+  // ble liggende dimmet og uklikkbart bak bakteppet. Framdrift og feil fra jobber som startes i
+  // en dialog («Generer innhold», crawl) forsvant. Som popover ligger regionen i samme toppsjikt;
+  // raiseRegion() legger den øverst hver gang en toast kommer.
+  region.setAttribute("popover", "manual");
   document.body.appendChild(region);
   return region;
+}
+
+function raiseRegion(region) {
+  if (typeof region.showPopover !== "function") return;
+  try {
+    if (region.matches(":popover-open")) region.hidePopover();
+    region.showPopover();
+  } catch {
+    // Ikke koblet til dokumentet, eller nettleser uten popover — regionen er fortsatt position:fixed.
+  }
 }
 
 function normalizeType(type) {
@@ -50,6 +65,7 @@ function normalizeType(type) {
 
 export function showToast(message, type = "info", detail = "", options = {}) {
   const region = ensureToastRegion();
+  raiseRegion(region);
   const normalizedType = normalizeType(type);
   // Samme melding to ganger på én gang er støy, ikke informasjon (#1046: modulskallet speiler
   // samtaleutfall som toast når samtaleruta er skjult, og noen flyter toaster alt selv).
