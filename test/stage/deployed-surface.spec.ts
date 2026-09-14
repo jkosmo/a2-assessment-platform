@@ -103,10 +103,10 @@ test.describe("utrullet stage — artefaktet stemmer med kilden", () => {
   test("arbeidsflaten er utrullet med oppryddingen fra #896 S3c", async ({ request }) => {
     const html = await fetchText(request, "/admin-content/module/x/conversation");
 
-    expect(html).toContain('id="tabPreview"');
-    expect(html).toContain('id="tabEdit"');
-    expect(html).toContain('id="tabSettings"');
-    expect(html).toContain('id="workspaceActions"');
+    // #1046 (14.09): hodet og fanene tegnes av form-page.js inn i dette festet.
+    expect(html).toContain('id="moduleFormHead"');
+    expect(html).toContain('id="tabPanelModule"');
+    expect(html).toContain('id="tabPanelSettings"');
 
     // Slettet i S3c — en knapp uten klikkhåndterer, med en gal forklaring over seg.
     expect(html).not.toContain('id="settingsOpenAdvanced"');
@@ -125,15 +125,15 @@ test.describe("utrullet stage — artefaktet stemmer med kilden", () => {
     expect(html).toContain(".privacy-notice");
     expect(html).not.toContain('id="privacyNotice"');
 
-    // Handlingslinja: `[hidden]` taper mot en klasse som setter display, så den skal styres av
-    // inline `display:none` — ikke av attributtet.
-    expect(html).not.toMatch(/id="workspaceActions"[^>]*\shidden[\s>]/);
-    expect(html).toMatch(/id="workspaceActions"[^>]*style="display:none"/);
+    // Innstillinger-panelet: `[hidden]` taper mot .card sin display, så det styres av inline
+    // `display:none` — ikke av attributtet.
+    expect(html).not.toMatch(/id="tabPanelSettings"[^>]*\shidden[\s>]/);
+    expect(html).toMatch(/id="tabPanelSettings"[^>]*style="display:none"/);
   });
 
   test("fanemerkingen fra #926 er med i utrullet CSS", async ({ request }) => {
     const html = await fetchText(request, "/admin-content/module/x/conversation");
-    expect(html).toContain('.module-tab[data-attention="1"]::after');
+    expect(html).toContain('.form-page-tab[data-attention="1"]::after');
   });
 
   // Én rå i18n-nøkkel nådde brukeren i denne leveransen (`shell.module.importReloadFailed`).

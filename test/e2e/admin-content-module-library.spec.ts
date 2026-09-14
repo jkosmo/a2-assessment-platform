@@ -114,24 +114,24 @@ test.describe("admin content module library", () => {
 
     // Produkteier 13.09: et nytt element åpner på Innstillinger — navn, modultype og nivå er det
     // første valget. «Ny modul» som tittel til navnet skrives; Lagre av til noe er endret.
-    await expect(page.locator("#tabSettings")).toHaveAttribute("aria-selected", "true");
+    await expect(page.locator("#formTab-settings")).toHaveAttribute("aria-selected", "true");
     await expect(page.locator("#settingsNewName")).toHaveValue("");
-    await expect(page.locator("#moduleWorkspaceTitle")).toHaveClass(/is-untitled/);
-    await expect(page.locator("#moduleSaveBtn")).toBeDisabled();
+    await expect(page.locator("#formPageTitle")).toHaveClass(/is-untitled/);
+    await expect(page.locator("#formSaveBtn")).toBeDisabled();
     await expect(page.locator(".chat-pane")).toBeHidden();
 
     await page.locator("#settingsNewName").fill("Workplace safety");
-    await expect(page.locator("#moduleWorkspaceTitle")).toHaveText("Workplace safety");
+    await expect(page.locator("#formPageTitle")).toHaveText("Workplace safety");
     await page.locator("#settingsModuleType").selectOption("FREETEXT_ONLY");
     await page.locator("#settingsCertLevel").selectOption("intermediate");
-    await expect(page.locator("#moduleSaveBtn")).toBeEnabled();
+    await expect(page.locator("#formSaveBtn")).toBeEnabled();
 
     const createResponse = page.waitForResponse(
       (response) =>
         response.url().includes("/api/admin/content/modules") &&
         response.request().method() === "POST",
     );
-    await page.locator("#moduleSaveBtn").click();
+    await page.locator("#formSaveBtn").click();
     const response = await createResponse;
     const postBody = response.request().postDataJSON() as { title?: Record<string, string>; certificationLevel?: string };
     expect(postBody.title?.["en-GB"]).toBe("Workplace safety");
@@ -140,7 +140,7 @@ test.describe("admin content module library", () => {
     // The mock module POST returns id "module-1"; the address is now the real one, and the author
     // lands in Rediger with the fields for the chosen type (free text only: no MCQ section).
     await expect(page).toHaveURL(/\/admin-content\/module\/module-1\/conversation$/);
-    await expect(page.locator("#tabEdit")).toHaveAttribute("aria-selected", "true");
+    await expect(page.locator("#formTab-edit")).toHaveAttribute("aria-selected", "true");
     await expect(page.locator("#previewEditTaskText")).toBeVisible();
   });
 

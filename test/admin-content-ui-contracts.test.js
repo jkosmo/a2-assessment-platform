@@ -30,8 +30,19 @@ describe("admin content workspace UI contracts", () => {
   it("the module workspace carries its state in the shared header, not a state rail (#1046)", () => {
     const shellHtml = readFile("public/admin-content.html");
     expect(shellHtml).not.toContain('id="stateRail"');
-    for (const id of ["moduleWorkspaceTitle", "moduleLifecycleBadge", "moduleDirtyBadge", "workspaceActions", "previewShows"]) {
-      expect(shellHtml).toContain(`id="${id}"`);
+    // #1046 (14.09): hodet (navn, merker, Lagre/Avbryt, handlinger, språk, faner) tegnes av form-page.js
+    // i #moduleFormHead — modulen har ikke lenger et eget hode i HTML-en.
+    expect(shellHtml).toContain('id="moduleFormHead"');
+    for (const id of ["moduleWorkspaceTitle", "moduleLifecycleBadge", "moduleDirtyBadge", "workspaceActions", "previewLocaleBar", "tabEdit"]) {
+      expect(shellHtml).not.toContain(`id="${id}"`);
+    }
+    expect(shellHtml).toContain('id="previewShows"');
+    const shellJs = readFile("public/static/admin-content-shell.js");
+    expect(shellJs).toContain('import { createFormPage } from "./form-page.js"');
+    expect(shellJs).toMatch(/formPage = createFormPage\(\{\s*\n\s*host: moduleFormHost/);
+    // Lagre/Avbryt, «ulagret» og fanelinja er form-page sine — skallet har ingen egne.
+    for (const own of ["moduleSaveBtn", "moduleCancelBtn", "moduleDirtyBadge", "tabButtons", "renderPreviewLocaleBar"]) {
+      expect(shellJs).not.toContain(own);
     }
   });
 
@@ -44,18 +55,15 @@ describe("admin content workspace UI contracts", () => {
     const shellHtml = readFile("public/admin-content.html");
     const shellJs = readFile("public/static/admin-content-shell.js");
 
-    expect(shellHtml).toContain('id="tabPreview"');
+    // Panelene står i sida; fanene tegnes av form-page.js (formTab-edit/preview/settings).
     expect(shellHtml).toContain('id="tabPanelModule"');
-    expect(shellHtml).toContain('id="tabEdit"');
-    expect(shellHtml).toContain('id="tabSettings"');
     expect(shellHtml).toContain('id="tabPanelSettings"');
+    expect(shellJs).toMatch(/TAB_ORDER = \["edit", "preview", "settings"\]/);
     // #1046 steg 2: ingen samtalerute; spørsmål går i valgdialogen, kilde/plan i Generer-dialogen.
     expect(shellHtml).not.toContain('id="chatMessages"');
     expect(shellHtml).toContain('id="dialogChoice"');
     expect(shellHtml).toContain('id="dialogGeneratePlan"');
     expect(shellHtml).toContain('id="previewContent"');
-    // v2.19.0: the fixed action bar replaced buttons parked in the conversation log.
-    expect(shellHtml).toContain('id="workspaceActions"');
 
     expect(shellHtml).not.toContain('id="settingsOpenAdvanced"');
     expect(shellHtml).not.toContain('id="modeSwitchAdvanced"');
@@ -201,9 +209,11 @@ describe("shell JS contracts", () => {
     expect(js).toContain('querySelectorAll("[data-i18n]")');
   });
 
-  it("shell page h1 carries data-i18n so it translates with locale", () => {
-    const html = readFile("public/admin-content.html");
-    expect(html).toContain('data-i18n="shell.page.title"');
+  it("the module header translates with the UI locale (typen fra t(), hodet tegnes på nytt)", () => {
+    // #1046 (14.09): hodet tegnes av form-page.js fra t(); ved menyspråkbytte tegnes det på nytt.
+    const js = readFile("public/static/admin-content-shell.js");
+    expect(js).toContain('typeLabel: t("shell.page.title")');
+    expect(js).toMatch(/uiLocaleSelect\.addEventListener\("change"[\s\S]*?formPage\?\.render\(\)/);
   });
 
   it("#1046 steg 2: the source-material form is mounted in the Generate dialog, not a chat log", () => {
@@ -359,10 +369,18 @@ describe("shell JS contracts", () => {
     expect(js).toContain("preview-edit-textarea");
   });
 
-  it("preview-pane--editing CSS class locks locale bar during edit", () => {
-    const html = readFile("public/admin-content.html");
-    expect(html).toContain("preview-pane--editing");
-    expect(html).toMatch(/preview-pane--editing[^{]*\{[^}]*pointer-events:\s*none/);
+  it("switching content language with an open edit form asks first and re-opens the form", () => {
+    // Språkpillene er form-page sine; byttet går gjennom switchContentLocale, som spør (#920) når
+    // et skjema med endringer ville blitt tegnet om, og åpner skjemaet igjen i det nye språket.
+    // (Den gamle CSS-låsen `.preview-pane--editing .preview-locale-btn` traff aldri: pillene lå
+    // utenfor forhåndsvisningsruten.)
+    const js = readFile("public/static/admin-content-shell.js");
+    const start = js.indexOf("function switchContentLocale(");
+    const fn = js.slice(start, js.indexOf("\nfunction ", start + 1));
+    expect(fn).toContain("if (!confirmLocaleSwitchDiscard()) return false;");
+    expect(fn).toContain("enterPreviewEditMode({ force: true })");
+    expect(js).toContain("onChange: switchContentLocale");
+    expect(readFile("public/admin-content.html")).not.toContain("preview-locale-btn");
   });
 
   it("PATCH /modules/:id/title route exists in backend router", () => {

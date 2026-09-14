@@ -49,7 +49,7 @@ test("modul-avansert: owner panel renders in the module state-rail host", async 
   await page.goto("/admin-content/module/module-1/advanced");
 
   // #1046 niva to (13.09): eierne ligger under Innstillinger-fanen.
-  await page.locator("#tabSettings").click();
+  await page.locator("#formTab-settings").click();
   const panel = page.locator("#moduleOwnerPanelHost .owner-panel");
   await expect(panel).toBeVisible();
   // QA r4: compact by default — owner name shown inline, full list only after expanding.
@@ -64,8 +64,8 @@ test("modul-avansert: owner panel renders in the module state-rail host", async 
   await expect(nav.locator("#navKurs")).toBeVisible();
   await expect(nav.locator("#navSeksjoner")).toBeVisible();
   // #1046 nivå to (B2): tittelen er modulens navn; typen «Modul» står som merke over.
-  await expect(page.locator("#moduleWorkspaceTitle")).toContainText("Trade unions");
-  await expect(page.locator(".module-workspace-header .form-page-type")).toHaveText("Modul");
+  await expect(page.locator("#formPageTitle")).toContainText("Trade unions");
+  await expect(page.locator("#moduleFormHead .form-page-type")).toHaveText("Modul");
 });
 
 // QA #2 — classes were never wired for ownership; the panel goes in the openClass detail view.

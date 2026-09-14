@@ -20,10 +20,32 @@ describe("admin content DOM accessibility contracts", () => {
     document.body.innerHTML = "";
   });
 
-  // #896 S1: the shell's mode switch became a tablist of three views. The advanced page
-  // keeps its own switch until S3 folds it into the Innstillinger tab.
-  it("exposes the three module views as one tablist with Rediger selected", () => {
+  // #896 S1: the shell's mode switch became a tablist of three views. #1046 (14.09): fanelinja
+  // tegnes av form-page.js (som på kurs, seksjon og klasse), så kontrakten testes der den bor —
+  // med modulens tre faner og paneler.
+  it("exposes the three module views as one tablist with Rediger selected", async () => {
     const body = mountPage("public/admin-content.html");
+    const host = body.querySelector("#moduleFormHead");
+    expect(host).toBeTruthy();
+    const { createFormPage } = await import("../../public/static/form-page.js");
+    const fp = createFormPage({
+      host,
+      texts: { back: "← Tilbake", typeLabel: "Modul", untitled: "Ny modul", savedAll: "Alt lagret", unsaved: "Ulagret", save: "Lagre", cancel: "Avbryt", leaveConfirm: "?", contentLocale: "Innholdsspråk:", required: "" },
+      backHref: "/admin-content",
+      title: () => "",
+      tabs: {
+        label: "Modulvisning",
+        items: () => [
+          { id: "edit", label: "Rediger", panel: "tabPanelModule" },
+          { id: "preview", label: "Forhåndsvisning", panel: "tabPanelModule" },
+          { id: "settings", label: "Innstillinger", panel: "tabPanelSettings" },
+        ],
+        initial: "edit",
+      },
+      save: { onSave: async () => {} },
+      body: () => "",
+    });
+    fp.render();
 
     const tablist = getByRole(body, "tablist", { name: "Modulvisning" });
     expect(tablist).toBeTruthy();
@@ -39,6 +61,8 @@ describe("admin content DOM accessibility contracts", () => {
     // Rediger is the default view, and each tab points at the panel it controls.
     expect(tabs.filter((tab) => tab.getAttribute("aria-selected") === "true")).toHaveLength(1);
     expect(getByRole(body, "tab", { name: "Rediger" }).getAttribute("aria-selected")).toBe("true");
+    // Én tabstopp: bare den valgte fanen ligger i tabrekkefølgen.
+    expect(tabs.map((tab) => tab.getAttribute("tabindex"))).toEqual(["0", "-1", "-1"]);
     for (const tab of tabs) {
       const panelId = tab.getAttribute("aria-controls");
       expect(body.querySelector(`#${panelId}`)).toBeTruthy();
@@ -70,7 +94,7 @@ describe("admin content DOM accessibility contracts", () => {
   it("styles the tab attention marker", () => {
     const html = fs.readFileSync(path.join(process.cwd(), "public/admin-content.html"), "utf8");
 
-    expect(html).toContain('.module-tab[data-attention="1"]::after');
+    expect(html).toContain('.form-page-tab[data-attention="1"]::after');
   });
 
   it("keeps course delete confirmation accessible and course navigation scaffolded", () => {

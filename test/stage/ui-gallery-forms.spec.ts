@@ -34,9 +34,9 @@ const SIDER: Side[] = [
   { fil: "22-ny-seksjon", navn: "Ny seksjon (editor)", rute: "/admin-content/sections?new", vent: "#titleInput" },
   { fil: "23-ny-klasse", navn: "Ny klasse (prompt — kan ikke fotograferes, se merknad)", rute: "/admin-content/classes", vent: "#newClassBtn" },
   // Det åpnede elementet
-  { fil: "30-modul-rediger", navn: "Modul: Rediger-fanen", rute: "MODUL", vent: "#tabEdit", handling: klikkFane("tabEdit") },
-  { fil: "31-modul-forhandsvis", navn: "Modul: Forhåndsvis-fanen", rute: "MODUL", vent: "#tabPreview", handling: klikkFane("tabPreview") },
-  { fil: "32-modul-innstillinger", navn: "Modul: Innstillinger-fanen", rute: "MODUL", vent: "#tabSettings", handling: klikkFane("tabSettings") },
+  { fil: "30-modul-rediger", navn: "Modul: Rediger-fanen", rute: "MODUL", vent: "#formTab-edit", handling: klikkFane("formTab-edit") },
+  { fil: "31-modul-forhandsvis", navn: "Modul: Forhåndsvis-fanen", rute: "MODUL", vent: "#formTab-preview", handling: klikkFane("formTab-preview") },
+  { fil: "32-modul-innstillinger", navn: "Modul: Innstillinger-fanen", rute: "MODUL", vent: "#formTab-settings", handling: klikkFane("formTab-settings") },
   { fil: "33-kurs-detalj", navn: "Kurs: åpnet", rute: "KURS", vent: "#detailPageTitle, .form-row" },
   { fil: "34-seksjon-editor", navn: "Seksjon: åpnet (editor)", rute: "SEKSJON", vent: "#titleInput" },
   { fil: "35-klasse-detalj", navn: "Klasse: åpnet", rute: "/admin-content/classes", vent: "#classesTableBody",

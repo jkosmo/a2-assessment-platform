@@ -1361,6 +1361,8 @@ dialog::backdrop {
 .form-page-tab:hover { color: var(--color-text); }
 .form-page-tab.active { color: var(--color-link-active); border-bottom-color: var(--color-blue); }
 .form-page-tab:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 2px; }
+/* Tre norske etiketter med luft går ut over 320 px; la raden bryte heller enn å rulle sidelengs. */
+@media (max-width: 480px) { .form-page-tabs { flex-wrap: wrap; } .form-page-tab { padding: 6px 12px; } }
 /* Fanepanelene skjules med setHidden() (inline display) — ingen [hidden]-lapp her (#975). */
 /* #1046 nivå to, D1: ETT skjemafelt — etikett over feltet, vanlig skrift, hvit bakgrunn, «(påkrevd)» som ord.
    Var definert i kurssida; klasse, seksjon og modul hadde hver sin variant. */

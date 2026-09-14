@@ -1,6 +1,7 @@
 import { escapeHtml } from "./html-escape.js";
 import { rowActionsHtml, installRowMoreMenus } from "./row-actions.js";
 import { lifecycleBadge } from "./content-status-badge.js";
+import { createFormPage } from "./form-page.js";
 import {
   supportedLocales,
   localeLabels,
@@ -277,21 +278,17 @@ function getHeaders() {
 // ---------------------------------------------------------------------------
 
 const previewPane = document.getElementById("previewPane");
-const contentLocaleBar = document.getElementById("previewLocaleBar");
 const previewContent = document.getElementById("previewContent");
-// The fixed action bar above the chat log. See `renderWorkspaceActions`.
-const workspaceActionsBar = document.getElementById("workspaceActions");
+// #1046 (14.09): hodet — tilbake-lenke, handlingsrad med Lagre/Avbryt, navn, statusmerker,
+// språkpiller og fanelinje — tegnes av form-page.js, som på kurs, seksjon og klasse. Panelene
+// under (forhåndsvisning/skjema, innstillinger) ligger utenfor og styres herfra. Se `createModuleFormPage`.
+const moduleFormHost = document.getElementById("moduleFormHead");
+let formPage = null;
 // Shown on Rediger only — see the tab handler.
 const workspaceNav = document.getElementById("workspaceNav");
 const localePicker = document.querySelector(".locale-picker");
 const appVersionLabel = document.getElementById("appVersion");
 const uiLocaleSelect = document.getElementById("localeSelect");
-// #896 S1: the Samtale/Avansert mode switch is replaced by three views on one module.
-const tabButtons = {
-  preview: document.getElementById("tabPreview"),
-  edit: document.getElementById("tabEdit"),
-  settings: document.getElementById("tabSettings"),
-};
 const tabPanelModule = document.getElementById("tabPanelModule");
 const tabPanelSettings = document.getElementById("tabPanelSettings");
 const shellStatusAnnouncer = document.getElementById("shellStatusAnnouncer");
@@ -834,61 +831,33 @@ function _domFormFields(entry) {
 // Preview rendering
 // ---------------------------------------------------------------------------
 
-function renderPreviewLocaleBar() {
-  // Only show the switcher when content is loaded — with nothing to author, the only language that
-  // means anything is the UI one, and that has its own selector in the top bar.
-  const hasContent = !!bundle || !!sessionDraft || !!previewDraft;
-  contentLocaleBar.classList.toggle("visible", hasContent);
-  contentLocaleBar.innerHTML = "";
-  if (!hasContent) return;
-
-  // Stage-tilbakemelding 2026-08-17: this reads as a PREVIEW control, but it decides the language
-  // for Forhåndsvisning, Rediger and Innstillinger alike. Saying so is half the fix; the other
-  // half was making Innstillinger actually obey it.
-  const label = document.createElement("span");
-  label.className = "content-locale-label";
-  label.textContent = t("shell.contentLocale.label");
-  contentLocaleBar.appendChild(label);
-
-  for (const loc of supportedLocales) {
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = "preview-locale-btn" + (loc === contentLocale ? " active" : "");
-    btn.textContent = localeLabels[loc] ?? loc;
-    btn.setAttribute("aria-pressed", String(loc === contentLocale));
-    btn.setAttribute("aria-label", tf("shell.contentLocale.switchAria", { locale: localeLabels[loc] ?? loc }));
-    btn.addEventListener("click", () => {
-      if (loc === contentLocale) return;
-      // Disse knappene er i dag deaktivert under redigering via CSS. Guarden står likevel her, så
-      // flaten ikke får tilbake blindveien i det øyeblikket noen fjerner den CSS-regelen.
-      const wasEditing = !!document.getElementById("previewEditConfirm");
-      // Bare det som faktisk var skrevet og ikke bekreftet, er verdt en beskjed.
-      const wasDirty = hasOpenEditForm();
-      // #920: the same question a tab switch asks. It used to ask it only for Innstillinger, so an
-      // open edit form was re-rendered from the new language without a word — the typed text was
-      // simply gone.
-      if (!confirmLocaleSwitchDiscard()) return;
-      contentLocale = loc;
-      // The panel's editors are seeded once, in the language they were seeded FOR. Discard so the
-      // next render re-reads them in the new one; otherwise the author edits Norwegian text that
-      // the save then files as English.
-      settingsCriteriaState = null;
-      settingsCriteriaBaseline = null;
-      settingsCriteriaDraftBaseline = undefined;
-      settingsDraftValues = null;
-      renderPreviewLocaleBar();
-      renderPreview();
-      renderSettingsPanel();
-      if (wasEditing) {
-        enterPreviewEditMode({ force: true });
-        if (wasDirty) {
-          logBot(() => escapeHtml(t("shell.directEdit.localeSwitched")));
-          showToast(t("shell.directEdit.localeSwitched"), "warning");
-        }
-      }
-    });
-    contentLocaleBar.appendChild(btn);
+// Innholdsspråket byttes i form-page.js sine språkpiller; dette er det som skjer ved byttet.
+// Returnerer false når forfatteren sier nei (et åpent skjema med endringer ville blitt tegnet om).
+function switchContentLocale(loc) {
+  if (loc === contentLocale) return false;
+  const wasEditing = !!document.getElementById("previewEditConfirm");
+  // Bare det som faktisk var skrevet og ikke bekreftet, er verdt en beskjed.
+  const wasDirty = hasOpenEditForm();
+  // #920: the same question a tab switch asks. It used to ask it only for Innstillinger, so an
+  // open edit form was re-rendered from the new language without a word — the typed text was
+  // simply gone.
+  if (!confirmLocaleSwitchDiscard()) return false;
+  contentLocale = loc;
+  // The panel's editors are seeded once, in the language they were seeded FOR. Discard so the
+  // next render re-reads them in the new one; otherwise the author edits Norwegian text that
+  // the save then files as English.
+  settingsCriteriaState = null;
+  settingsCriteriaBaseline = null;
+  settingsCriteriaDraftBaseline = undefined;
+  settingsDraftValues = null;
+  renderPreview();
+  renderSettingsPanel();
+  if (wasEditing) {
+    enterPreviewEditMode({ force: true });
+    if (wasDirty) showToast(t("shell.directEdit.localeSwitched"), "warning");
   }
+  formPage?.refreshHeader();
+  return true;
 }
 
 // B3 (#450): the blueprint that the current view "is about" — sessionDraft takes precedence
@@ -1088,40 +1057,14 @@ function updateStateRail() {
   }
   if (!hasModule) return;
 
-  const chains = bundle ? deriveModuleStatusChains(bundle) : null;
   const hasUnsaved = !!sessionDraft;
   // The version the workspace actually has open — which is NOT the same as the live one whenever
-  // the author has restored an earlier version or is sitting on a saved draft. Both rail fields
-  // below describe what is on screen, so both read this rather than the published chain.
+  // the author has restored an earlier version or is sitting on a saved draft.
   const loaded = bundle?.selectedConfiguration?.moduleVersion ?? null;
   const loadedIsLive = !!loaded?.id && loaded.id === bundle?.module?.activeVersionId;
 
-  const moduleName = localizeValue(sessionDraft?.title ?? previewDraft?.title ?? bundle?.module?.title) || "";
-  // #1046 nivå to, B2: navnet er tittelen på sida (typen står som merke over).
-  const h1 = document.getElementById("moduleWorkspaceTitle");
-  if (h1) {
-    h1.textContent = moduleName || t("shell.newModule.defaultTitle");
-    h1.classList.toggle("is-untitled", !moduleName);
-    h1.removeAttribute("data-i18n");
-  }
-
-  // #1046 (13.09): statusmerket og «Alt lagret / Ulagrede endringer» i hodet, som på kurs, seksjon
-  // og klasse. Tilstandslinja under bærer versjonsfaktaene.
-  // Produkteier 13.09: versjonsfaktaene fra tilstandslinja står som merker her — «Publisert v2»
-  // (live nå) og «Utkast v4» (det du redigerer, når det ikke er den som er live).
-  const lifecycleBadgeHost = document.getElementById("moduleLifecycleBadge");
-  if (lifecycleBadgeHost) {
-    const liveNo = chains?.liveChain?.[0]?.versionNo ?? null;
-    const parts = [];
-    if (bundle?.module?.archivedAt) parts.push(lifecycleBadge({ lifecycle: "archived" }, t));
-    else if (liveNo != null) parts.push(`<span class="status-badge status-badge--published">${escapeHtml(tf("stateRail.live.published", { versionNo: liveNo }))}</span>`);
-    const editingNo = loaded?.versionNo ?? null;
-    if (hasUnsaved && !loaded) parts.push(`<span class="status-badge status-badge--draft">${escapeHtml(t("stateRail.editing.workingDraft"))}</span>`);
-    else if (editingNo != null && !loadedIsLive) parts.push(`<span class="status-badge status-badge--draft">${escapeHtml(tf("shell.header.draftVersion", { versionNo: editingNo }))}</span>`);
-    else if (liveNo == null && bundle) parts.push(lifecycleBadge({ lifecycle: "draft" }, t));
-    lifecycleBadgeHost.innerHTML = bundle || sessionDraft ? parts.join(" ") : "";
-  }
-  refreshModuleHeaderState();
+  // Navn og merker står i hodet (form-page.js) — se moduleHeaderTitle/moduleStatusBadgesHtml.
+  formPage?.refreshHeader();
 
   // «Forhåndsvisning viser …» i Forhåndsvisning-fanen: de tre tilstandene forhåndsvisningen kan være i.
   const previewShows = document.getElementById("previewShows");
@@ -1203,7 +1146,6 @@ function buildPreviewCandidate(patch) {
 }
 function clearPreviewCandidate() {
   previewDraft = null;
-  renderPreviewLocaleBar();
   renderPreview();
 }
 
@@ -1744,7 +1686,6 @@ function createSessionDraftFromLoadedModule() {
   });
   previewDraft = null;
   sessionState = "draft-pending";
-  renderPreviewLocaleBar();
   renderPreview();
   return true;
 }
@@ -2916,10 +2857,6 @@ async function loadModule(moduleId, options = {}) {
   // had arrived — "load a module to see the settings" — and then never drew it again. The author
   // had to switch tabs and back. Only the preview was re-rendered here.
   renderSettingsPanel();
-  // The content-language switcher is hidden until there is content, and `loadModule` never told it
-  // that content had arrived — so opening a module straight from its URL left it invisible. It
-  // showed up only if you had come through the conversation flow, which renders it on its own.
-  renderPreviewLocaleBar();
   // Rediger is the default tab, so a module opened from its URL lands here — and it has to land in
   // an editable state, not a read-only one behind a button.
   if (activeTab === "edit") enterPreviewEditMode();
@@ -4153,7 +4090,7 @@ function enterPreviewEditMode({ force = false } = {}) {
       // leave the in-flight save writing the OLD values over a freshly rebuilt form. One save
       // owns the session until it resolves or is aborted.
       if (uiLocaleSelect) uiLocaleSelect.disabled = busy;
-      for (const btn of contentLocaleBar?.querySelectorAll("button") ?? []) btn.disabled = busy;
+      formPage?.setBusy(busy);
     };
     setFormBusy(true);
 
@@ -4300,20 +4237,75 @@ function moduleDirtyKind() {
   return null;
 }
 
+// «Alt lagret / Ulagrede endringer», Lagre og Avbryt i hodet leser moduleDirtyKind() via form-page.js
+// (`isDirty`). Mens noe genereres står knappene og språkpillene stille.
 function refreshModuleHeaderState() {
-  const kind = moduleDirtyKind();
-  const dirty = kind !== null;
-  const dirtyBadge = document.getElementById("moduleDirtyBadge");
-  if (dirtyBadge) {
-    dirtyBadge.hidden = !bundle && !sessionDraft;
-    dirtyBadge.textContent = dirty ? t("stateRail.changes.unsaved") : t("stateRail.changes.saved");
-    dirtyBadge.classList.toggle("is-dirty", dirty);
-    dirtyBadge.classList.toggle("is-clean", !dirty);
-  }
-  const saveBtn = document.getElementById("moduleSaveBtn");
-  const cancelBtn = document.getElementById("moduleCancelBtn");
-  if (saveBtn) saveBtn.disabled = !dirty || generationAbort !== null;
-  if (cancelBtn) cancelBtn.disabled = !dirty || generationAbort !== null;
+  formPage?.setBusy(generationAbort !== null);
+}
+
+// B2: navnet er tittelen på sida. Følger feltet mens man skriver; ellers det som er lastet/utkastet.
+function moduleHeaderTitle() {
+  // Bare når skjemaet er det man ser: det kan stå tegnet i den skjulte Rediger-fanen mens navnet
+  // skrives under Innstillinger (ny modul).
+  const field = activeTab === "edit" ? document.getElementById("previewEditTitle") : null;
+  if (field) return field.value.trim();
+  return localizeValue(sessionDraft?.title ?? previewDraft?.title ?? bundle?.module?.title) || "";
+}
+
+// Produkteier 13.09: versjonsfaktaene fra den gamle tilstandslinja står som merker i hodet —
+// «Publisert v2» (live nå) og «Utkast v4» (det du redigerer, når det ikke er den som er live).
+function moduleStatusBadgesHtml() {
+  if (!bundle && !sessionDraft) return "";
+  const chains = bundle ? deriveModuleStatusChains(bundle) : null;
+  const loaded = bundle?.selectedConfiguration?.moduleVersion ?? null;
+  const loadedIsLive = !!loaded?.id && loaded.id === bundle?.module?.activeVersionId;
+  const liveNo = chains?.liveChain?.[0]?.versionNo ?? null;
+  const parts = [];
+  if (bundle?.module?.archivedAt) parts.push(lifecycleBadge({ lifecycle: "archived" }, t));
+  else if (liveNo != null) parts.push(`<span class="status-badge status-badge--published">${escapeHtml(tf("stateRail.live.published", { versionNo: liveNo }))}</span>`);
+  const editingNo = loaded?.versionNo ?? null;
+  if (sessionDraft && !loaded) parts.push(`<span class="status-badge status-badge--draft">${escapeHtml(t("stateRail.editing.workingDraft"))}</span>`);
+  else if (editingNo != null && !loadedIsLive) parts.push(`<span class="status-badge status-badge--draft">${escapeHtml(tf("shell.header.draftVersion", { versionNo: editingNo }))}</span>`);
+  else if (liveNo == null && bundle) parts.push(lifecycleBadge({ lifecycle: "draft" }, t));
+  return parts.join(" ");
+}
+
+function createModuleFormPage() {
+  if (!moduleFormHost) return;
+  formPage = createFormPage({
+    host: moduleFormHost,
+    texts: () => ({
+      back: t("shell.header.back"), typeLabel: t("shell.page.title"), untitled: t("shell.newModule.defaultTitle"),
+      savedAll: t("stateRail.changes.saved"), unsaved: t("stateRail.changes.unsaved"),
+      save: t("shell.header.save"), cancel: t("shell.header.cancel"),
+      leaveConfirm: t("shell.header.leaveConfirm"), discardConfirm: t("shell.header.discardConfirm"),
+      contentLocale: t("shell.contentLocale.label"), required: "",
+    }),
+    backHref: "/admin-content",
+    title: moduleHeaderTitle,
+    statusHtml: moduleStatusBadgesHtml,
+    t,
+    actions: () => workspaceActionChoices.map((choice, i) =>
+      `<button type="button" class="row-action-btn workspace-action-btn" data-ws-action="${i}"${choice.hintKey ? ` title="${escapeHtml(t(choice.hintKey))}"` : ""}>${escapeHtml(resolveChoiceLabel(choice))}</button>`),
+    languages: { locales: supportedLocales, labels: localeLabels, current: () => contentLocale, onChange: switchContentLocale },
+    tabs: {
+      label: t("shell.tab.listLabel"),
+      items: () => TAB_ORDER.map((id) => ({ id, label: t(`shell.tab.${id}`), panel: id === "settings" ? "tabPanelSettings" : "tabPanelModule" })),
+      initial: activeTab,
+      onChange: onTabSelected,
+    },
+    // Lagre-flyten kjøres av skallet (saveFromHeader); «false» lar form-page.js la tilstanden stå til
+    // skallet melder fra gjennom isDirty.
+    save: { onSave: async () => { saveFromHeader(); return false; }, onDiscard: discardFromHeader },
+    isDirty: () => moduleDirtyKind() !== null,
+    body: () => "",
+  });
+  moduleFormHost.addEventListener("click", (event) => {
+    const btn = event.target instanceof Element ? event.target.closest("[data-ws-action]") : null;
+    if (btn) workspaceActionChoices[Number(btn.dataset.wsAction)]?.action?.();
+  });
+  formPage.render();
+  formPage.installGuards();
 }
 
 function saveFromHeader() {
@@ -4326,20 +4318,20 @@ function saveFromHeader() {
   }
 }
 
+// Avbryt i hodet (form-page.js har alt spurt): vis det som er lagret.
 function discardFromHeader() {
   const kind = moduleDirtyKind();
   if (!kind) return;
-  if (!window.confirm(t("shell.header.discardConfirm"))) return;
-  if (kind === "form") { document.getElementById("previewEditCancel")?.click(); }
-  else if (kind === "settings") { settingsDraftValues = null; renderSettingsPanel(); }
-  else if (kind === "draft") {
-    // Forkast utkastet: last modulen på nytt fra det som er lagret. Et nytt element uten modul
-    // har ingenting å gå tilbake til — da er lista stedet.
-    if (selectedModuleId) { void loadModule(selectedModuleId); return; }
-    window.location.href = "/admin-content";
-    return;
-  }
-  refreshModuleHeaderState();
+  if (kind === "settings") { settingsDraftValues = null; renderSettingsPanel(); refreshModuleHeaderState(); return; }
+  // Skjema og utkast er samme sak når modulen finnes: alt ulagret bort, modulen inn fra det lagrede.
+  // (Et skjema som bare ble skrevet i, uten utkast bak seg, er dekket av det samme — loadModule
+  // tegner skjemaet på nytt. Å bare lukke skjemaet holdt ikke: etter en tur innom Innstillinger
+  // står det skrevne også i utkastet, og skjemaet ville åpnet igjen med det.)
+  if (selectedModuleId) { void loadModule(selectedModuleId); return; }
+  // Nytt element: skjemaet tilbake til utkastet (navn, type, nivå fra Innstillinger står).
+  if (kind === "form") { document.getElementById("previewEditCancel")?.click(); refreshModuleHeaderState(); return; }
+  // Et nytt utkast uten modul har ingenting å gå tilbake til — da er lista stedet.
+  window.location.href = "/admin-content";
 }
 
 // Skriving i et felt gjør modulen ulagret — merket og knappene i hodet følger med.
@@ -4348,12 +4340,8 @@ document.addEventListener("input", (event) => {
   // Feltene i dialogene (kilde, plan, instruks) er ikke modulens skjema.
   if (!el || !el.matches("input, textarea, select") || el.closest("dialog")) return;
   refreshModuleHeaderState();
-  // Navnet er tittelen på sida (B2) — følg feltet mens man skriver, som form-page.js gjør.
-  if (el.id === "previewEditTitle") {
-    const h1 = document.getElementById("moduleWorkspaceTitle");
-    const v = el.value.trim();
-    if (h1) { h1.textContent = v || t("shell.newModule.defaultTitle"); h1.classList.toggle("is-untitled", !v); }
-  }
+  // Navnet er tittelen på sida (B2) — følg feltet mens man skriver.
+  if (el.id === "previewEditTitle") formPage?.refreshTitle();
 });
 document.addEventListener("change", (event) => {
   const el = event.target instanceof Element ? event.target : null;
@@ -4363,7 +4351,6 @@ document.addEventListener("change", (event) => {
 // Rekkefølgen i raden: det som endrer hva deltakerne ser først (Publiser/Avpubliser), så resten.
 const WS_ACTION_ORDER = ["publish", "unpublish", "generateContent", "resumeChatEdit", "revise", "generateMcq", "export", "import"];
 function renderWorkspaceActions(actions) {
-  if (!workspaceActionsBar) return;
   // saveDraft og restart er Lagre og Avbryt i hodet.
   const live = (actions ?? []).filter(Boolean).filter((a) => a.key !== "saveDraft" && a.key !== "restart");
   live.sort((a, b) => {
@@ -4371,29 +4358,7 @@ function renderWorkspaceActions(actions) {
     return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
   });
   workspaceActionChoices = live;
-  const hasModule = !!(bundle || sessionDraft || selectedModuleId);
-  setHidden(workspaceActionsBar, live.length === 0 && !hasModule);
-  const pair = hasModule
-    ? `<button type="button" id="moduleSaveBtn" class="row-action-btn btn-save" disabled>${escapeHtml(t("shell.header.save"))}</button>` +
-      `<button type="button" id="moduleCancelBtn" class="row-action-btn btn-cancel" disabled>${escapeHtml(t("shell.header.cancel"))}</button>` +
-      (live.length ? `<span class="form-actions-sep" aria-hidden="true"></span>` : "")
-    : "";
-  workspaceActionsBar.innerHTML = pair + rowActionsHtml(
-    live.map((choice, i) => `<button type="button" class="row-action-btn workspace-action-btn" data-ws-action="${i}"${choice.hintKey ? ` title="${escapeHtml(t(choice.hintKey))}"` : ""}>${escapeHtml(resolveChoiceLabel(choice))}</button>`),
-    { moreLabel: "Mer" },
-  );
-  if (!workspaceActionsBar.dataset.bound) {
-    workspaceActionsBar.dataset.bound = "1";
-    workspaceActionsBar.addEventListener("click", (event) => {
-      const target = event.target instanceof Element ? event.target : null;
-      if (!target) return;
-      if (target.closest("#moduleSaveBtn")) { saveFromHeader(); return; }
-      if (target.closest("#moduleCancelBtn")) { discardFromHeader(); return; }
-      const btn = target.closest("[data-ws-action]");
-      if (!btn) return;
-      workspaceActionChoices[Number(btn.dataset.wsAction)]?.action?.();
-    });
-  }
+  formPage?.refreshHeader();
   refreshModuleHeaderState();
 }
 
@@ -4624,7 +4589,7 @@ async function importModulePackageInBackground(moduleId, file, idempotencyKey = 
 
 // Declared before tabFromUrl() runs at module scope - a const in the temporal dead zone
 // would throw on load and take the whole shell with it.
-const TAB_ORDER = ["preview", "edit", "settings"];
+const TAB_ORDER = ["edit", "preview", "settings"];
 const TAB_QUERY_PARAM = "tab";
 
 function tabFromUrl() {
@@ -4774,7 +4739,7 @@ const tabAttention = new Set();
 function markTabAttention(tab) {
   // Ingen grunn til å merke fanen forfatteren står i — der ER endringen synlig.
   if (tab === activeTab) return;
-  const button = tabButtons[tab];
+  const button = formPage?.tabButton(tab);
   if (!button) return;
   tabAttention.add(tab);
   button.dataset.attention = "1";
@@ -4786,7 +4751,7 @@ function markTabAttention(tab) {
 
 function clearTabAttention(tab) {
   if (!tabAttention.delete(tab)) return;
-  const button = tabButtons[tab];
+  const button = formPage?.tabButton(tab);
   if (!button) return;
   delete button.dataset.attention;
   applyTabAttentionLabel(tab);
@@ -4795,7 +4760,7 @@ function clearTabAttention(tab) {
 // The tab's accessible name is its own label plus, when marked, the reason. Rebuilt from the
 // label each time rather than appended to, so repeated marking cannot stack the suffix.
 function applyTabAttentionLabel(tab) {
-  const button = tabButtons[tab];
+  const button = formPage?.tabButton(tab);
   if (!button) return;
   const base = t(`shell.tab.${tab}`);
   if (tabAttention.has(tab)) button.setAttribute("aria-label", `${base} (${t("shell.tab.attention.suffix")})`);
@@ -4819,14 +4784,6 @@ function applyTabState(tab) {
   // confirmed, and the GENERATED criteria would be saved instead. No-op unless a draft exists.
   if (activeTab === "settings" && tab !== "settings") syncSettingsCriteriaToDraft();
   activeTab = tab;
-  for (const [name, button] of Object.entries(tabButtons)) {
-    if (!button) continue;
-    const selected = name === tab;
-    button.classList.toggle("active", selected);
-    button.setAttribute("aria-selected", selected ? "true" : "false");
-    // Roving tabindex: a tablist is ONE tab stop, and the arrow keys move within it.
-    button.tabIndex = selected ? 0 : -1;
-  }
   // setHidden, not the .hidden class: workspace-shell sets display:grid and the panels
   // are .card (display:block), so a class-based toggle loses the cascade (CLAUDE.md).
   setHidden(tabPanelModule, tab === "settings");
@@ -4834,7 +4791,7 @@ function applyTabState(tab) {
   const ownerHostEl = document.getElementById("moduleOwnerPanelHost");
   if (ownerHostEl) ownerHostEl.hidden = tab !== "settings" || !ownerHostEl.dataset.moduleId;
   // Forhaandsvisning and Rediger share this panel, so point it at whichever tab owns it now.
-  if (tab !== "settings") tabPanelModule?.setAttribute("aria-labelledby", tabButtons[tab]?.id ?? "tabEdit");
+  if (tab !== "settings") tabPanelModule?.setAttribute("aria-labelledby", `formTab-${tab}`);
   // Safe here: an open edit form is torn down before any switch away from Rediger, so this
   // cannot discard typed values. No bundle guard - a new module has a draft and no bundle,
   // and its preview needs the audience swap just as much.
@@ -4864,7 +4821,15 @@ function applyTabState(tab) {
   }
 }
 
+// Fra kode (Lagre som må til Innstillinger, lenker): gå via form-page, så fanelinja følger med.
 function switchToTab(tab) {
+  if (tab === activeTab) return;
+  if (formPage) { formPage.showTab(tab); return; }
+  onTabSelected(tab);
+}
+
+// Fanen er valgt (klikk, piltast eller showTab) — form-page.js har alt merket knappen.
+function onTabSelected(tab) {
   if (tab === activeTab) return;
   // Produkteier 13.09: fanebytte er ikke navigering og spør ikke — samme regel som kurs, seksjon og
   // klasse (form-page.js). Det som er skrevet i Rediger legges i utkastet og kommer tilbake;
@@ -4920,8 +4885,7 @@ function renderNewModuleSettings(host) {
     const v = e.target.value.trim();
     sessionDraft = { ...sessionDraft, title: v ? { [contentLocale]: v } : "" };
     if (v) newModulePlaceholder = false;
-    const h1 = document.getElementById("moduleWorkspaceTitle");
-    if (h1) { h1.textContent = v || t("shell.newModule.defaultTitle"); h1.classList.toggle("is-untitled", !v); }
+    formPage?.refreshTitle();
     refreshModuleHeaderState();
   });
   host.querySelector("#settingsModuleType")?.addEventListener("change", (e) => {
@@ -6324,33 +6288,6 @@ async function saveSettingsInBackground() {
   }
 }
 
-function bindViewTabs() {
-  for (const [name, button] of Object.entries(tabButtons)) {
-    button?.addEventListener("click", () => switchToTab(name));
-    // Standard tablist keyboard model. Focus follows the arrow keys and the view
-    // switches with it, which is the expected behaviour for tabs whose panels are
-    // already loaded.
-    button?.addEventListener("keydown", (event) => {
-      const index = TAB_ORDER.indexOf(name);
-      let target = null;
-      if (event.key === "ArrowRight") target = TAB_ORDER[(index + 1) % TAB_ORDER.length];
-      else if (event.key === "ArrowLeft") target = TAB_ORDER[(index - 1 + TAB_ORDER.length) % TAB_ORDER.length];
-      else if (event.key === "Home") target = TAB_ORDER[0];
-      else if (event.key === "End") target = TAB_ORDER[TAB_ORDER.length - 1];
-      if (!target) return;
-      event.preventDefault();
-      tabButtons[target]?.focus();
-      switchToTab(target);
-    });
-  }
-
-
-  // Establish the roving tabindex now. Without this the assignment in applyTabState first
-  // runs on the initial tab switch, so until then all three tabs sit in the tab order -
-  // the exact behaviour the roving model exists to remove.
-  applyTabState(activeTab);
-}
-
 // ---------------------------------------------------------------------------
 // New module creation flow
 // ---------------------------------------------------------------------------
@@ -6491,7 +6428,6 @@ function startNewEmptyModule() {
     assessmentMode: "FREETEXT_ONLY",
   });
   newModulePlaceholder = true;
-  renderPreviewLocaleBar();
   renderPreview();
   updateStateRail();
   // Produkteier 13.09: det første valget for en modul er typen (fritekst, flervalg eller begge) — så
@@ -7148,23 +7084,22 @@ function populateUiLocaleSelect() {
     // author touched the selector — after which it silently stopped, with nothing on screen saying
     // so. Changing the menu language now changes the menus; the content stays in the language it
     // is written in, which is the only rule that can be stated in one sentence.
-    // Direkte redigering bygges INN i forhåndsvisningsruten, så renderPreview() river den.
-    // Forhåndsvisningens EGEN språkvelger er deaktivert under redigering
-    // (.preview-pane--editing .preview-locale-btn { pointer-events: none }) — men denne, i
-    // topplinja, var det ikke. Man havnet i lesemodus med en samtale som fortsatt sa «rediger
-    // feltene og trykk Bekreft», og handlingsknappene var allerede brukt opp og deaktiverte.
-    // Ingen vei videre uten å laste siden på nytt (rapportert fra stage 13.08).
+    // Direkte redigering bygges INN i forhåndsvisningsruten, så renderPreview() river den — åpne
+    // skjemaet igjen etterpå (rapportert fra stage 13.08: man havnet i lesemodus uten vei videre).
     const wasEditing = !!document.getElementById("previewEditConfirm");
     const wasDirty = hasOpenEditForm();
     // Replay the full chat log in the new locale
     translatePageStaticText();
-    renderPreviewLocaleBar();
+    // Hodet (form-page.js) bygges fra t(): tegn det på nytt, og legg fanemerkingen (#926) tilbake —
+    // suffikset i aria-label er også oversatt tekst.
+    formPage?.render();
+    for (const tab of tabAttention) {
+      const button = formPage?.tabButton(tab);
+      if (button) button.dataset.attention = "1";
+      applyTabAttentionLabel(tab);
+    }
     renderPreview();
     renderWorkspaceNavigation();
-    // #926: the attention suffix is built from `t()`, so it is stale text after a language change.
-    // `translatePageStaticText` cannot reach it — the tab carries `data-i18n`, not
-    // `data-i18n-aria-label`, and the suffix is not in the markup at all.
-    for (const tab of Object.keys(tabButtons)) applyTabAttentionLabel(tab);
     // #896 S3b: the settings panel is built in JS, so translatePageStaticText cannot reach it.
     // Without this the module types, the "missing component" reasons and the save button stay
     // in the previous language while the page around them switches.
@@ -7217,8 +7152,8 @@ async function loadConsoleConfig() {
 async function initShell() {
   populateUiLocaleSelect();
   translatePageStaticText();
-  bindViewTabs();
-  renderPreviewLocaleBar();
+  createModuleFormPage();
+  applyTabState(activeTab);
   renderPreview();
   loadVersion(appVersionLabel, "A2 Content Workspace");
   await loadConsoleConfig();

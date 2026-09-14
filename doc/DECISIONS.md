@@ -695,6 +695,19 @@ Produkteier, etter omgang 3 på stage:
    framdrift) og kan skjules igjen. Utfallet av handlinger (lagret, importert, avvist) kommer som
    toast når ruta er skjult — som på de andre skjemasidene.
 
+## Modulens hode tegnes av form-page.js; Avbryt tar alt ulagret (2026-09-14)
+
+Oppfølging av «Skjemahodet: Lagre og Avbryt først» (13.09): modulen hadde fortsatt sin egen utgave
+av hodet — egen HTML, egne Lagre/Avbryt-knapper, eget merke, egen språkvelger og fanelinje med egen
+tastaturhåndtering — som *så* lik ut som de tre andre. Nå er det `form-page.js` som tegner det, og
+form-page fikk det modulen trengte og de andre manglet: piltaster/Home/End i fanelinja (én tabstopp),
+`aria-controls` mot paneler utenfor, avledet «ulagret» (`isDirty`) og «opptatt» (Lagre, Avbryt og
+språkpiller står stille mens noe genereres). Modulen fikk «forlate sida?»-vakten (E3) på kjøpet.
+
+Avbryt på modulen: alt ulagret bort, modulen inn fra det lagrede. Å bare lukke skjemaet holdt ikke —
+etter en tur innom Innstillinger sto det skrevne også i utkastet, og skjemaet åpnet igjen med det.
+Et nytt element (uten modul) går tilbake til utkastet sitt; et nytt utkast uten skjema går til lista.
+
 ## SMO ser resultater for egne kurs — også personnivå (2026-09-13)
 
 Produkteier: SUBJECT_MATTER_OWNER skal kunne lese Resultater for kurs hen eier. Først foreslått som
