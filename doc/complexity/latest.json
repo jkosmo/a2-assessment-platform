@@ -1,25 +1,25 @@
 {
-  "dato": "2026-09-12",
-  "versjon": "2.67.0",
-  "samlet": 63,
+  "dato": "2026-09-14",
+  "versjon": "2.68.0",
+  "samlet": 65,
   "skår": {
-    "reglerFlereSteder": 28,
+    "reglerFlereSteder": 36,
     "utgaverAvViktigeRegler": 100,
-    "filerAltMåGjennom": 25,
+    "filerAltMåGjennom": 30,
     "filerSomEndresSammen": 90,
     "størrelse": 70
   },
   "tall": {
-    "sumRegler": 36,
+    "sumRegler": 32,
     "regler": [
       {
         "hva": "Skjermer som selv velger hvilket språk et lagret innhold vises på (serveren skal gjøre det)",
-        "steder": 5,
+        "steder": 2,
         "kilde": "test/client-locale-parser-guard.test.js"
       },
       {
         "hva": "Steder som viser serverens rå feiltekst i stedet for en oversatt melding",
-        "steder": 14,
+        "steder": 13,
         "kilde": "test/raw-server-error-guard.test.js"
       },
       {
@@ -63,11 +63,11 @@
       "over1500": [
         {
           "fil": "public/static/admin-content-shell.js",
-          "linjer": 7573
+          "linjer": 7615
         },
         {
           "fil": "public/participant.js",
-          "linjer": 4183
+          "linjer": 4157
         },
         {
           "fil": "src/modules/adminContent/llmContentGenerationService.ts",
@@ -75,11 +75,11 @@
         },
         {
           "fil": "public/static/admin-content-courses.js",
-          "linjer": 2003
+          "linjer": 1841
         },
         {
           "fil": "public/review.js",
-          "linjer": 1779
+          "linjer": 1777
         }
       ],
       "over800": [
@@ -93,21 +93,17 @@
         },
         {
           "fil": "public/static/admin-content-sections.js",
-          "linjer": 1057
-        },
-        {
-          "fil": "public/static/admin-content-library.js",
-          "linjer": 914
+          "linjer": 1098
         },
         {
           "fil": "public/static/workspace-help-content.js",
-          "linjer": 847
+          "linjer": 934
         }
       ],
       "mestImportert": [
         {
           "fil": "prisma",
-          "importører": 51
+          "importører": 53
         },
         {
           "fil": "index",
@@ -135,7 +131,7 @@
         },
         {
           "fil": "prismaRuntime",
-          "importører": 30
+          "importører": 31
         }
       ]
     },
@@ -154,11 +150,11 @@
       }
     ],
     "størrelse": {
-      "ruter": 195,
+      "ruter": 199,
       "tabeller": 39,
       "kolonner": 506,
-      "i18nNøkler": 4726,
-      "testfiler": 341
+      "i18nNøkler": 4718,
+      "testfiler": 351
     }
   }
 }
