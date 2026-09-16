@@ -3636,13 +3636,13 @@ test.describe("admin content browser coverage", () => {
 
     await page.goto("/admin-content/courses/new");
 
-    await expect(page.locator("#formPageTitle")).toHaveText("Nytt kurs");
+    await expect(page.locator("#formPageTitle")).toHaveText(/^Nytt kurs$|^New course$/);
     await expect(page.locator("#formSaveBtn")).toBeDisabled();
     // Skjemaet åpner på menyspråket (#974); bokmål velges i språkpillene.
     await page.locator("[data-form-locale=\"nb\"]").click();
     await page.locator("#title-nb").fill("Arbeidsrett");
     await expect(page.locator("#formPageTitle")).toHaveText("Arbeidsrett");
-    await expect(page.locator("#formPageDirty")).toHaveText("Ulagrede endringer");
+    await expect(page.locator("#formPageDirty")).toHaveText(/^Ulagrede endringer$|^Unsaved changes$|^Ulagra endringar$/);
     await page.locator("#certLevel").selectOption("basic");
     await page.locator("#formSaveBtn").click();
 
@@ -3972,7 +3972,7 @@ test.describe("admin content browser coverage", () => {
     // Arkiverte er skjult under default «Aktive»-filter — bytt til «Arkiverte». (Med null synlige
     // rader viser lista en tom-tilstand, ikke en tom tabell, som Moduler alltid har gjort.)
     await page.locator('.list-filter-btn[data-filter="archived"]').click();
-    await expect(page.getByRole("table", { name: "Kurs" })).toBeVisible();
+    await expect(page.getByRole("table", { name: /^Kurs$|^Courses$/ })).toBeVisible();
     // #1046 D5: Slett ligger under «Mer».
     await (await revealRowAction(page, page.locator('[data-action="delete"]').first())).click();
 

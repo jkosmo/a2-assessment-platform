@@ -102,7 +102,7 @@ test.describe("#745 module library — filter by course", () => {
 
     const courseSelect = page.locator("#libraryCourseFilter");
     // The dropdown was rebuilt from the data: it offers "Kurs A" plus the two fixed groups.
-    await expect(courseSelect.locator("option")).toContainText(["Alle kurs", "Kurs A", "Ikke i noe kurs"]);
+    await expect(courseSelect.locator("option")).toContainText([/Alle kurs|All courses/, "Kurs A", /Ikke i noe kurs|Not in any course/]);
 
     // Select "Kurs A" → only X survives.
     await courseSelect.selectOption("course-a");

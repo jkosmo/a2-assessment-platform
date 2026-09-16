@@ -99,7 +99,7 @@ test("classes admin: list, create, add a student via search, and assign a course
   await page.goto("/deltakere/klasser");
 
   // List renders the system class with a real heading (no raw i18n keys).
-  await expect(page.locator("h1")).toContainText("Klasser");
+  await expect(page.locator("h1")).toContainText(/^Klasser$|^Classes$|^Klassar$/);
   await expect(page.locator("#classesTableBody")).toContainText("Alle deltakere");
 
   // Create a class.
@@ -110,10 +110,10 @@ test("classes admin: list, create, add a student via search, and assign a course
   await expect(page.locator("#formSaveBtn")).toBeDisabled();
   await page.locator("#className").fill("Kull 2026");
   await expect(page.locator("#formPageTitle")).toHaveText("Kull 2026");
-  await expect(page.locator("#formPageDirty")).toHaveText("Ulagrede endringer");
+  await expect(page.locator("#formPageDirty")).toHaveText(/^Ulagrede endringer$|^Unsaved changes$|^Ulagra endringar$/);
   await page.locator("#formSaveBtn").click();
   await expect(page.locator("#studentSearch")).toBeVisible();
-  await expect(page.locator("#formPageDirty")).toHaveText("Alt lagret");
+  await expect(page.locator("#formPageDirty")).toHaveText(/^Alt lagret$|^All saved$|^Alt lagra$/);
   // Tilbake til lista: den nye klassen står der, og «Åpne» fører inn igjen.
   await page.locator("#formBackLink").click();
   await expect(page.locator("#classesTableBody")).toContainText("Kull 2026");
@@ -167,7 +167,7 @@ test("classes admin: Aktive/Arkiverte filter, Type column, and restore action", 
   });
 
   await page.goto("/deltakere/klasser");
-  await expect(page.locator("h1")).toContainText("Klasser");
+  await expect(page.locator("h1")).toContainText(/^Klasser$|^Classes$|^Klassar$/);
   const body = page.locator("#classesTableBody");
 
   // Default "Aktive": active classes shown, archived hidden.
@@ -256,7 +256,7 @@ test("classes admin: Entra user-sync button is admin-only and posts to the sync 
     route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ classes: [] }) }),
   );
   await page.goto("/deltakere/klasser");
-  await expect(page.locator("h1")).toContainText("Klasser");
+  await expect(page.locator("h1")).toContainText(/^Klasser$|^Classes$|^Klassar$/);
   await expect(page.locator("#syncEntraBtn")).toHaveCount(0);
 });
 

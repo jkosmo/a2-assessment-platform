@@ -78,7 +78,7 @@ test.describe("admin content module library", () => {
 
     // A search with no matches renders the "no match" empty state.
     await page.locator("#librarySearch").fill("nonexistent-xyz");
-    await expect(page.getByText("Ingen moduler matcher søket.")).toBeVisible();
+    await expect(page.getByText(/Ingen moduler matcher søket\.|No modules match the search\./)).toBeVisible();
   });
 
   test("default 'Aktive' filter hides archived modules, and 'Arkiverte' reveals them", async ({ page }) => {

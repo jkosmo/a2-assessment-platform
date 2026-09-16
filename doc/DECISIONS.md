@@ -695,6 +695,21 @@ Produkteier, etter omgang 3 på stage:
    framdrift) og kan skjules igjen. Utfallet av handlinger (lagret, importert, avvist) kommer som
    toast når ruta er skjult — som på de andre skjemasidene.
 
+## Ett tekstsystem for forfattersidene (2026-09-16)
+
+Fem sider hadde hver sin `t`/`tf` og hver sin utregning av menyspråket (skallets `tf` byttet bare
+første forekomst av en plassholder); seksjonssida hadde i tillegg en privat LABELS-tabell med 86
+ord på tre språk, og kurs- og klassesida hadde skjemaordene (Lagre, Avbryt, «Alt lagret», …) som
+bokmålsstrenger i koden — fire kopier av de samme ni ordene. Nå: `createTranslator` og
+`resolveInitialLocale` i `i18n-locale.js` for alle, `form.*` for skjemaordene (gjennom
+`formPageTexts(t, …)`), `courses.*` / `classes.*` / `library.*` for listesidenes skjelett, og
+`sections.*` for seksjonssidas ord — alt i `admin-content-translations.js`, som paritetstesten
+holder lik på tre språk. Sju nøkler i skallet som var de samme ordene, er borte.
+
+Det som står igjen er innhold, ikke mekanisme: ~180 tekster i Moduler/Kurs/Klasser er fortsatt
+bokmål i koden (#1063). Med engelsk menyspråk får forfatteren nå engelsk hode og bokmål i resten —
+et skritt fram fra «alt bokmål uansett», men ikke i mål.
+
 ## Modulskallet deles etter fane: Innstillinger først (2026-09-14)
 
 `admin-content-shell.js` var 7 200 linjer med alt på modulsida i én fil. Innstillinger-fanen

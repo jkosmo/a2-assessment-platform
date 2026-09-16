@@ -24,6 +24,20 @@ import { setHidden } from "./dom-visibility.js";
 const resolve = (x) => (typeof x === "function" ? x() : x);
 
 /**
+ * Skjemasidenes felles ord fra ett sted (form.* i admin-content-translations.js), pluss sidas egne:
+ * `back`, `typeLabel`, `untitled`. Kall den i `texts: () => formPageTexts(t, {...})`, så følger
+ * ordene menyspråket.
+ */
+export function formPageTexts(t, page) {
+  return {
+    savedAll: t("form.savedAll"), unsaved: t("form.unsaved"), save: t("form.save"), cancel: t("form.cancel"),
+    leaveConfirm: t("form.leaveConfirm"), discardConfirm: t("form.discardConfirm"),
+    contentLocale: t("form.contentLocale"), required: t("form.required"), more: t("form.more"),
+    ...page,
+  };
+}
+
+/**
  * @typedef {object} FormPageConfig
  * @property {HTMLElement} host
  * @property {() => ({ back: string, typeLabel: string, untitled: string, savedAll: string, unsaved: string,
@@ -66,7 +80,7 @@ export function createFormPage(config) {
     const status = config.statusHtml
       ? config.statusHtml(config.t ?? ((k) => k))
       : config.item ? lifecycleBadge(config.item(), config.t ?? ((k) => k)) : "";
-    const rest = config.actions ? rowActionsHtml(config.actions(), { moreLabel: "Mer" }) : "";
+    const rest = config.actions ? rowActionsHtml(config.actions(), { moreLabel: T.more ?? "Mer" }) : "";
     const pair = config.save && !config.save.hidden
       ? `<button type="button" id="formSaveBtn" class="row-action-btn btn-save" disabled>${escapeHtml(T.save)}</button>` +
         `<button type="button" id="formCancelLink" class="row-action-btn btn-cancel" disabled>${escapeHtml(T.cancel)}</button>` +

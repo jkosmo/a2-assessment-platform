@@ -3,7 +3,7 @@ import {
   localeLabels,
   translations as adminContentTranslations,
 } from "/static/i18n/admin-content-translations.js";
-import { pickLocalizedText } from "/static/i18n-locale.js";
+import { pickLocalizedText, resolveInitialLocale, createTranslator } from "/static/i18n-locale.js";
 import { apiFetch, buildConsoleHeaders, getConsoleConfig, hydrateContentAssetImages } from "/static/api-client.js";
 import { initConsentGuard } from "/static/consent-guard.js";
 // #1046 C5: samme datohjelper som Moduler og Kurs («28. aug. 2026»), ikke «28.8.2026».
@@ -18,7 +18,7 @@ import { lifecycleStatusBadge, lifecycleBadge, lifecycleOf } from "/static/conte
 import { renderOwnerPanel } from "/static/owner-panel.js";
 import { sanitizeSectionHtml } from "/static/sanitize.js";
 import { createListPage } from "/static/list-page.js";
-import { createFormPage } from "/static/form-page.js";
+import { createFormPage, formPageTexts } from "/static/form-page.js";
 import {
   SECTION_EDITOR_LOCALES,
   nonEmptyLocales,
@@ -32,107 +32,11 @@ import {
 
 const EDITOR_LOCALES = SECTION_EDITOR_LOCALES;
 
-// Self-contained labels for this workspace's own UI (kept local to avoid
-// threading dozens of keys through the shared translations file).
-const LABELS = {
-  "en-GB": {
-    heading: "Sections", more: "More", tabEdit: "Edit", tabSettings: "Settings", settingsAfterSave: "Save the section first; then owners can be managed here.", typeLabel: "Section", untitled: "New section", savedAll: "All saved", unsaved: "Unsaved changes", cancel: "Cancel", leaveConfirm: "You have unsaved changes. Leave without saving?", discardConfirm: "Discard the unsaved changes?", contentLocale: "Content language:", required: "(required)", searchPlaceholder: "Search by section name or ID…", searchLabel: "Search sections", lead: "Reading material you can use in several courses.", newSection: "New section", colTitle: "Name", colVersion: "Version",
-    colStatus: "Status", statusDraft: "Draft", statusPublished: "Published", statusArchived: "Archived",
-    publish: "Publish", unpublish: "Unpublish", archive: "Archive", restore: "Restore",
-    showArchived: "Show archived", hideArchived: "Hide archived",
-    filterAll: "All", filterActive: "Active", filterPublished: "Published", filterArchived: "Archived",
-    colCourses: "Used in courses", coursesPopoverTitle: "Used in courses", noCourses: "Not used in any course.",
-    courseFilterLabel: "Course:", courseFilterAll: "All courses", courseFilterNone: "Not in any course",
-    published: "Section published.", unpublished: "Section unpublished.",
-    archived: "Section archived.", restored: "Section restored.", confirmArchive: "Archive this section?",
-    colUpdated: "Last changed", edit: "Open", del: "Delete section", empty: "No sections yet.",
-    readonly: "Owner access only", readonlyHint: "Only an owner or an administrator can open this section.",
-    back: "← Back to sections", backToCourse: "← Back to the course", titleLabel: "Name", markdown: "Content (Markdown)", preview: "Preview",
-    save: "Save", saved: "Section saved.", deleted: "Section deleted.",
-    confirmDelete: "Are you sure you want to delete this section for good? It disappears from every course that uses it.", loadError: "Could not load sections.",
-    needContent: "A section needs both a name and content before it can be saved.",
-    translate: "Translate from this language", translating: "Translating…", translated: "Translated — review before saving.",
-    translatingImages: "Translating drawings…", imagesTranslated: "SVG drawings translated — verify each language visually.",
-    uploadImage: "Upload image", altPrompt: "Alt text (describes the image for screen readers):", saveFirst: "Save the section first, then upload images.", imageInserted: "Image inserted.",
-    // #916 — standalone section portability + the publish gate's author-facing wording.
-    exportSection: "Export", duplicate: "Duplicate", duplicated: "Copy created as a draft.", importSection: "Import section", exported: "Section exported.",
-    notAnEnvelope: "This does not look like a section package. The file is missing the fields an export adds (exportFormat, exportedAt and scope), and its contents do not look like a section either. Use Export on a section to produce a valid file.",
-    imported: "Section package imported as a draft. Review it and publish when it is ready.",
-    replaceFromFile: "Replace from file", replaceConfirm: "Replace this section's content with the file? The current version is kept — the import becomes a new draft.", replaced: "Content replaced. The import is a draft — review it and publish when it is ready.",
-    gateHeldBack: "Saved, but not published — the section is missing", gateBlocked: "Cannot publish — the section is missing",
-    gateHint: "Use “Translate from this language” to fill the gaps, then save again.",
-    fieldTitle: "the title", fieldBodyMarkdown: "the content",
-  },
-  nb: {
-    heading: "Seksjoner", more: "Mer", tabEdit: "Rediger", tabSettings: "Innstillinger", settingsAfterSave: "Lagre seksjonen først, så kan eierne endres her.", typeLabel: "Seksjon", untitled: "Ny seksjon", savedAll: "Alt lagret", unsaved: "Ulagrede endringer", cancel: "Avbryt", leaveConfirm: "Du har ulagrede endringer. Vil du forlate sida uten å lagre?", discardConfirm: "Forkaste de ulagrede endringene?", contentLocale: "Innholdsspråk:", required: "(påkrevd)", searchPlaceholder: "Søk på seksjonsnavn eller seksjons-ID…", searchLabel: "Søk i seksjoner", lead: "Lesestoff du kan bruke i flere kurs.", newSection: "Ny seksjon", colTitle: "Navn", colVersion: "Versjon",
-    colStatus: "Status", statusDraft: "Utkast", statusPublished: "Publisert", statusArchived: "Arkivert",
-    publish: "Publiser", unpublish: "Avpubliser", archive: "Arkiver", restore: "Gjenopprett",
-    showArchived: "Vis arkiverte", hideArchived: "Skjul arkiverte",
-    filterAll: "Alle", filterActive: "Aktive", filterPublished: "Publiserte", filterArchived: "Arkiverte",
-    colCourses: "Brukt i kurs", coursesPopoverTitle: "Brukt i kurs", noCourses: "Ikke brukt i noe kurs.",
-    courseFilterLabel: "Kurs:", courseFilterAll: "Alle kurs", courseFilterNone: "Ikke i noe kurs",
-    published: "Seksjon publisert.", unpublished: "Seksjon avpublisert.",
-    archived: "Seksjon arkivert.", restored: "Seksjon gjenopprettet.", confirmArchive: "Arkivere denne seksjonen?",
-    colUpdated: "Sist endret", edit: "Åpne", del: "Slett seksjon", empty: "Ingen seksjoner ennå.",
-    readonly: "Kun for eier", readonlyHint: "Bare en eier eller en administrator kan åpne denne seksjonen.",
-    back: "← Tilbake til seksjoner", backToCourse: "← Tilbake til kurset", titleLabel: "Navn", markdown: "Innhold (Markdown)", preview: "Forhåndsvisning",
-    save: "Lagre", saved: "Seksjon lagret.", deleted: "Seksjon slettet.",
-    confirmDelete: "Er du helt sikker på at du vil slette denne seksjonen for godt? Den forsvinner fra alle kurs som bruker den.", loadError: "Kunne ikke laste seksjoner.",
-    needContent: "En seksjon må ha både navn og innhold før den kan lagres.",
-    translate: "Oversett fra dette språket", translating: "Oversetter…", translated: "Oversatt — se over før du lagrer.",
-    translatingImages: "Oversetter tegninger…", imagesTranslated: "SVG-tegninger oversatt — verifiser hvert språk visuelt.",
-    uploadImage: "Last opp bilde", altPrompt: "Alt-tekst (beskriver bildet for skjermlesere):", saveFirst: "Lagre seksjonen først, så kan du laste opp bilder.", imageInserted: "Bilde satt inn.",
-    // #916 — frittstående seksjons-portabilitet + publiseringsgatens forfattertekst.
-    exportSection: "Eksporter", duplicate: "Dupliser", duplicated: "Kopi opprettet som utkast.", importSection: "Importer seksjon", exported: "Seksjon eksportert.",
-    notAnEnvelope: "Dette ser ikke ut som en seksjonspakke. Fila mangler feltene en eksport legger på (exportFormat, exportedAt og scope), og innholdet ligner heller ikke på en seksjon. Bruk «Eksporter» på en seksjon for å lage en gyldig fil.",
-    imported: "Seksjons-pakken er importert som utkast. Gå gjennom den og publiser når den er klar.",
-    replaceFromFile: "Erstatt fra fil", replaceConfirm: "Erstatte innholdet i denne seksjonen med fila? Nåværende versjon beholdes — importen blir et nytt utkast.", replaced: "Innholdet er erstattet. Importen er et utkast — gå gjennom den og publiser når den er klar.",
-    gateHeldBack: "Lagret, men ikke publisert — seksjonen mangler", gateBlocked: "Kan ikke publisere — seksjonen mangler",
-    gateHint: "Bruk «Oversett fra dette språket» for å fylle hullene, og lagre på nytt.",
-    fieldTitle: "tittelen", fieldBodyMarkdown: "innholdet",
-  },
-  nn: {
-    heading: "Seksjonar", more: "Meir", tabEdit: "Rediger", tabSettings: "Innstillingar", settingsAfterSave: "Lagre seksjonen først, så kan eigarane endrast her.", typeLabel: "Seksjon", untitled: "Ny seksjon", savedAll: "Alt lagra", unsaved: "Ulagra endringar", cancel: "Avbryt", leaveConfirm: "Du har ulagra endringar. Vil du forlate sida utan å lagre?", discardConfirm: "Forkaste dei ulagra endringane?", contentLocale: "Innhaldsspråk:", required: "(påkravd)", searchPlaceholder: "Søk på seksjonsnamn eller seksjons-ID…", searchLabel: "Søk i seksjonar", lead: "Lesestoff du kan bruke i fleire kurs.", newSection: "Ny seksjon", colTitle: "Namn", colVersion: "Versjon",
-    colStatus: "Status", statusDraft: "Utkast", statusPublished: "Publisert", statusArchived: "Arkivert",
-    publish: "Publiser", unpublish: "Avpubliser", archive: "Arkiver", restore: "Gjenopprett",
-    showArchived: "Vis arkiverte", hideArchived: "Skjul arkiverte",
-    filterAll: "Alle", filterActive: "Aktive", filterPublished: "Publiserte", filterArchived: "Arkiverte",
-    colCourses: "Brukt i kurs", coursesPopoverTitle: "Brukt i kurs", noCourses: "Ikkje brukt i noko kurs.",
-    courseFilterLabel: "Kurs:", courseFilterAll: "Alle kurs", courseFilterNone: "Ikkje i noko kurs",
-    published: "Seksjon publisert.", unpublished: "Seksjon avpublisert.",
-    archived: "Seksjon arkivert.", restored: "Seksjon gjenoppretta.", confirmArchive: "Arkivere denne seksjonen?",
-    colUpdated: "Sist endra", edit: "Opne", del: "Slett seksjon", empty: "Ingen seksjonar enno.",
-    readonly: "Berre for eigar", readonlyHint: "Berre ein eigar eller ein administrator kan opne denne seksjonen.",
-    back: "← Tilbake til seksjonar", backToCourse: "← Tilbake til kurset", titleLabel: "Namn", markdown: "Innhald (Markdown)", preview: "Førehandsvising",
-    save: "Lagre", saved: "Seksjon lagra.", deleted: "Seksjon sletta.",
-    confirmDelete: "Er du heilt sikker på at du vil slette denne seksjonen for godt? Han forsvinn frå alle kurs som bruker han.", loadError: "Kunne ikkje laste seksjonar.",
-    needContent: "Ein seksjon må ha både namn og innhald før han kan lagrast.",
-    translate: "Omset frå dette språket", translating: "Omset…", translated: "Omsett — sjå over før du lagrar.",
-    translatingImages: "Omset teikningar…", imagesTranslated: "SVG-teikningar omsette — kontroller kvart språk visuelt.",
-    uploadImage: "Last opp bilete", altPrompt: "Alt-tekst (skildrar biletet for skjermlesarar):", saveFirst: "Lagre seksjonen først, så kan du laste opp bilete.", imageInserted: "Bilete sett inn.",
-    // #916 — frittståande seksjons-portabilitet + publiseringsgata sin forfattartekst.
-    exportSection: "Eksporter", duplicate: "Dupliser", duplicated: "Kopi oppretta som utkast.", importSection: "Importer seksjon", exported: "Seksjon eksportert.",
-    notAnEnvelope: "Dette ser ikkje ut som ein seksjonspakke. Fila manglar felta ein eksport legg på (exportFormat, exportedAt og scope), og innhaldet liknar heller ikkje på ein seksjon. Bruk «Eksporter» på ein seksjon for å lage ei gyldig fil.",
-    imported: "Seksjons-pakken er importert som utkast. Gå gjennom han og publiser når han er klar.",
-    replaceFromFile: "Erstatt frå fil", replaceConfirm: "Erstatte innhaldet i denne seksjonen med fila? Noverande versjon blir teken vare på — importen blir eit nytt utkast.", replaced: "Innhaldet er erstatta. Importen er eit utkast — gå gjennom han og publiser når han er klar.",
-    gateHeldBack: "Lagra, men ikkje publisert — seksjonen manglar", gateBlocked: "Kan ikkje publisere — seksjonen manglar",
-    gateHint: "Bruk «Omset frå dette språket» for å fylle hola, og lagre på nytt.",
-    fieldTitle: "tittelen", fieldBodyMarkdown: "innhaldet",
-  },
-};
 
-let currentLocale = (() => {
-  const stored = localStorage.getItem("participant.locale");
-  if (stored && supportedLocales.includes(stored)) return stored;
-  const b = navigator.language?.toLowerCase() ?? "";
-  if (b.startsWith("nb")) return "nb";
-  if (b.startsWith("nn")) return "nn";
-  return "en-GB";
-})();
+let currentLocale = resolveInitialLocale(supportedLocales);
 
-function L(key) {
-  return LABELS[currentLocale]?.[key] ?? LABELS["en-GB"][key] ?? key;
-}
+// Seksjonssidas egne ord ligger under sections.* i den delte oversettelsesfila (#1046 punkt 3).
+const L = (key) => t(`sections.${key}`);
 
 // #916: render the publish gate's blockers from `field` + `missingLocales`, never from `message`.
 // The server's message is English; this page runs in three languages, and the author needs to read
@@ -155,9 +59,8 @@ function gateIssuesFrom(error) {
   const issues = error?.body?.issues;
   return Array.isArray(issues) ? issues : [];
 }
-function tNav(key) {
-  return adminContentTranslations[currentLocale]?.[key] ?? adminContentTranslations["en-GB"]?.[key] ?? key;
-}
+const { t, tf } = createTranslator(adminContentTranslations, () => currentLocale);
+const tNav = t;
 
 // #972/#965: syv toaster og to tomtilstander sto på `err?.message ?? "Error"`. Publiseringsgaten
 // var alt kodet riktig her (`translationGateMessage` over) — alt ANNET, blant annet eierskapsvaktas
@@ -293,7 +196,7 @@ function getListPage() {
       searchPlaceholder: L("searchPlaceholder"), searchLabel: L("searchLabel"),
       filterGroupLabel: L("heading"),
       courseFilterLabel: L("courseFilterLabel"), courseFilterAll: L("courseFilterAll"), courseFilterNone: L("courseFilterNone"),
-      empty: L("empty"), emptyFiltered: L("empty"), more: L("more"), loadError: L("loadError"),
+      empty: L("empty"), emptyFiltered: L("empty"), more: t("form.more"), loadError: L("loadError"),
     }),
     headerActions: () => [
       { id: "importSectionBtn", label: L("importSection") },
@@ -599,8 +502,7 @@ function sectionFormTexts() {
     // er samme slags løgn som #1029 ryddet bort.
     back: opphav ? L("backToCourse") : L("back"),
     typeLabel: L("typeLabel"), untitled: L("untitled"),
-    savedAll: L("savedAll"), unsaved: L("unsaved"), save: L("save"), cancel: L("cancel"),
-    leaveConfirm: L("leaveConfirm"), discardConfirm: L("discardConfirm"), contentLocale: L("contentLocale"), required: L("required"),
+    ...formPageTexts(t, {}),
   };
 }
 
@@ -677,12 +579,12 @@ function sectionEditorBodyHtml() {
     <div data-form-tab="rediger">
       <div class="section-editor card">
         <div class="form-field">
-          <label for="titleInput">${escapeHtml(L("titleLabel"))}${editing.editLocale === "nb" ? ` <span class="required-note">${escapeHtml(L("required"))}</span>` : ""}</label>
+          <label for="titleInput">${escapeHtml(L("titleLabel"))}${editing.editLocale === "nb" ? ` <span class="required-note">${escapeHtml(t("form.required"))}</span>` : ""}</label>
           <input type="text" id="titleInput" data-form-title value="${escapeHtml(editing.title[editing.editLocale])}" autocomplete="off" />
         </div>
         <div class="editor-single">
           <div class="editor-pane-label" style="display:flex;justify-content:space-between;align-items:center;gap:8px">
-            <span>${escapeHtml(L("markdown"))} <span class="required-note">${escapeHtml(L("required"))}</span></span>
+            <span>${escapeHtml(L("markdown"))} <span class="required-note">${escapeHtml(t("form.required"))}</span></span>
             <span data-form-untracked>
               <button type="button" id="uploadImageBtn" class="btn btn-secondary" style="width:auto;font-size:12px;padding:2px 8px" ${editing.id ? "" : `disabled title="${escapeHtml(L("saveFirst"))}"`}>${escapeHtml(L("uploadImage"))}</button>
               <input type="file" id="imageFileInput" accept="image/png,image/jpeg,image/gif,image/webp,image/svg+xml,.svg" hidden />

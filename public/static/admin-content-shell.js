@@ -1,7 +1,7 @@
 import { escapeHtml } from "./html-escape.js";
 import { rowActionsHtml, installRowMoreMenus } from "./row-actions.js";
 import { lifecycleBadge } from "./content-status-badge.js";
-import { createFormPage } from "./form-page.js";
+import { createFormPage, formPageTexts } from "./form-page.js";
 import { createSettingsTab } from "./admin-content-settings-tab.js";
 import { createPublishFlow } from "./admin-content-publish.js";
 import { createCriteriaTools } from "./admin-content-criteria.js";
@@ -11,6 +11,7 @@ import {
   localeLabels,
   translations as adminContentTranslations,
 } from "/static/i18n/admin-content-translations.js";
+import { resolveInitialLocale, createTranslator } from "/static/i18n-locale.js";
 import {
   apiFetch,
   buildConsoleHeaders,
@@ -61,19 +62,9 @@ import {
 // i18n
 // ---------------------------------------------------------------------------
 
-let currentLocale = (() => {
-  const stored = localStorage.getItem("participant.locale");
-  if (stored && supportedLocales.includes(stored)) return stored;
-  const b = navigator.language?.toLowerCase() ?? "";
-  if (b.startsWith("nb")) return "nb";
-  if (b.startsWith("nn")) return "nn";
-  return "en-GB";
-})();
+let currentLocale = resolveInitialLocale(supportedLocales);
 
-function t(key) {
-  const map = adminContentTranslations[currentLocale] ?? adminContentTranslations["en-GB"] ?? {};
-  return map[key] ?? key;
-}
+const { t, tf } = createTranslator(adminContentTranslations, () => currentLocale);
 
 // #972: samtale-skallet flettet `String(err?.message ?? err)` inn i chat-loggen 19 steder. Det
 // er "<status>: <hele JSON-kroppen>" fra apiFetch — rå JSON midt i en samtale, på serverens språk.
@@ -83,14 +74,6 @@ function apiErrorText(error) {
   return describeApiError(error, t).headline;
 }
 
-// Template translation: replaces {varName} placeholders in the translated string.
-function tf(key, vars) {
-  let str = t(key);
-  for (const [k, v] of Object.entries(vars)) {
-    str = str.replace(`{${k}}`, String(v));
-  }
-  return str;
-}
 
 function localizeValue(value) {
   return localizeValueForLocale(value, contentLocale);
@@ -3153,11 +3136,8 @@ function createModuleFormPage() {
   formPage = createFormPage({
     host: moduleFormHost,
     texts: () => ({
-      back: t("shell.header.back"), typeLabel: t("shell.page.title"), untitled: t("shell.newModule.defaultTitle"),
-      savedAll: t("stateRail.changes.saved"), unsaved: t("stateRail.changes.unsaved"),
-      save: t("shell.header.save"), cancel: t("shell.header.cancel"),
-      leaveConfirm: t("shell.header.leaveConfirm"), discardConfirm: t("shell.header.discardConfirm"),
-      contentLocale: t("shell.contentLocale.label"), required: "",
+      ...formPageTexts(t, { back: t("shell.header.back"), typeLabel: t("shell.page.title"), untitled: t("shell.newModule.defaultTitle") }),
+      required: "",
     }),
     backHref: "/admin-content",
     title: moduleHeaderTitle,

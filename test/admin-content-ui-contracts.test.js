@@ -38,7 +38,7 @@ describe("admin content workspace UI contracts", () => {
     }
     expect(shellHtml).toContain('id="previewShows"');
     const shellJs = readFile("public/static/admin-content-shell.js");
-    expect(shellJs).toContain('import { createFormPage } from "./form-page.js"');
+    expect(shellJs).toContain('import { createFormPage, formPageTexts } from "./form-page.js"');
     expect(shellJs).toMatch(/formPage = createFormPage\(\{\s*\n\s*host: moduleFormHost/);
     // Lagre/Avbryt, «ulagret» og fanelinja er form-page sine — skallet har ingen egne.
     for (const own of ["moduleSaveBtn", "moduleCancelBtn", "moduleDirtyBadge", "tabButtons", "renderPreviewLocaleBar"]) {

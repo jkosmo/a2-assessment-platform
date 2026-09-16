@@ -8,6 +8,7 @@ import {
   localeLabels,
   translations as adminContentTranslations,
 } from "/static/i18n/admin-content-translations.js";
+import { resolveInitialLocale, createTranslator } from "/static/i18n-locale.js";
 import {
   apiFetch,
   buildConsoleHeaders,
@@ -29,26 +30,11 @@ import { renderWorkspaceNavigationWithProfile } from "./workspace-nav.js";
 // i18n
 // ---------------------------------------------------------------------------
 
-let currentLocale = (() => {
-  const stored = localStorage.getItem("participant.locale");
-  if (stored && supportedLocales.includes(stored)) return stored;
-  const b = navigator.language?.toLowerCase() ?? "";
-  if (b.startsWith("nb")) return "nb";
-  if (b.startsWith("nn")) return "nn";
-  return "en-GB";
-})();
+let currentLocale = resolveInitialLocale(supportedLocales);
 
 const translations = { ...adminContentTranslations[currentLocale], ...adminContentTranslations["en-GB"] };
 
-function t(key) {
-  return adminContentTranslations[currentLocale]?.[key] ?? adminContentTranslations["en-GB"]?.[key] ?? key;
-}
-
-function tf(key, vars = {}) {
-  let s = t(key);
-  for (const [k, v] of Object.entries(vars)) s = s.replaceAll(`{${k}}`, String(v));
-  return s;
-}
+const { t, tf } = createTranslator(adminContentTranslations, () => currentLocale);
 
 // #972: fem toaster og fire tekstfelt her viste `err.message` — altså `"<status>: <hele
 // JSON-kroppen>"` fra apiFetch. De norske `?? "Kunne ikke arkivere modul."`-fallbackene var død
@@ -185,15 +171,10 @@ function getListPage() {
     host: libraryContent,
     ids: { tbody: "libraryTableBody", search: "librarySearch", courseFilter: "libraryCourseFilter" },
     texts: {
-      title: "Moduler",
-      lead: "Vurderingsmoduler du kan redigere, publisere og bruke i kurs.",
-      searchPlaceholder: "Søk på modulnavn eller modul-ID…",
-      searchLabel: "Søk i modulbiblioteket",
-      filterGroupLabel: "Filtrer moduler",
-      courseFilterLabel: "Kurs:", courseFilterAll: "Alle kurs", courseFilterNone: "Ikke i noe kurs",
-      empty: "Ingen moduler ennå.",
-      emptyFiltered: "Ingen moduler matcher søket.",
-      loadError: "Kunne ikke laste moduler.",
+      title: t("library.title"), lead: t("library.lead"),
+      searchPlaceholder: t("library.searchPlaceholder"), searchLabel: t("library.searchLabel"), filterGroupLabel: t("library.filterGroupLabel"),
+      courseFilterLabel: t("library.courseFilterLabel"), courseFilterAll: t("library.courseFilterAll"), courseFilterNone: t("library.courseFilterNone"),
+      empty: t("library.empty"), emptyFiltered: t("library.emptyFiltered"), loadError: t("library.loadError"), more: t("form.more"),
     },
     headerActions: [
       { id: "importModulePackageBtn", label: "Importer modul" },
