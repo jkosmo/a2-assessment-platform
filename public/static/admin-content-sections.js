@@ -886,8 +886,8 @@ function insertAtCursor(text) {
 
 async function uploadImage(file) {
   // Bilder hører til en lagret seksjon. Knappen er slått av til seksjonen finnes (produkteier
-  // 13.09: «Knapp bør ikke være synlig før den kan brukes, eller den bør ikke være aktiv») — den
-  // stille autolagringen som sto her ga bare «må ha både navn og innhold» uten sammenheng.
+  // 13.09: «Knapp bør ikke være synlig før den kan brukes, eller den bør ikke være aktiv»). Ingen
+  // stille autolagring: den ga bare «må ha både navn og innhold» uten sammenheng.
   if (!editing.id) {
     showToast(L("saveFirst"), "info");
     return;

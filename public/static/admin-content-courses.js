@@ -986,7 +986,7 @@ let allLibrarySections = [];
 let comboboxQuery = "";
 let comboboxSelectedId = null;
 let comboboxOpen = false;
-// v1.2.16 (#353 part 1): WAI-ARIA combobox keyboard nav. Highlight (visual + a11y focus
+// #353: WAI-ARIA combobox keyboard nav. Highlight (visual + a11y focus
 // via aria-activedescendant) er separat fra selection (det som faktisk legges til). Arrow
 // up/down flytter highlight; Enter velger highlighted og legger den til; Escape lukker.
 //
@@ -998,7 +998,7 @@ let comboboxHighlightedIndex = -1;
 
 async function renderDetailView(courseId) {
   // #1046 nivå to (1b, produkteier 12.09): «Nytt kurs» åpner det samme skjemaet tomt; kurset lages ved
-  // første Lagre. Sida med ett spørsmål og «Neste» (#506) er borte.
+  // første Lagre.
   aktivtKursId = courseId ?? null;
 
   pageContent.innerHTML = `<div class="page-loading">Laster…</div>`;

@@ -31,10 +31,8 @@ export function createSettingsTab(ctx) {
   // ---------------------------------------------------------------------------
   // #896 S3a: the Innstillinger read-out.
   //
-  // Every value here already sits in the ctx.bundle the shell loaded — this reads, it never
-  // writes. Editing still hands off to the Avansert page until S3b wires each row up, which
-  // is a deliberate split: the settings surface is worth having in the new IA before the
-  // write paths follow, and a read-only panel cannot corrupt a module.
+  // Every value here sits in the bundle the shell loaded; every field is editable and saved as a
+  // new module version through saveSettingsInBackground.
   // ---------------------------------------------------------------------------
 
   // #1046 A1 (produkteier 13.09): et nytt element har ingen versjon å vise innstillinger for. Det som
@@ -284,9 +282,8 @@ export function createSettingsTab(ctx) {
       );
     }
 
-    // #896 S3c: the rest of the pass rules. Only mcqMinPercent was editable, so an author who wanted
-    // to change the overall pass mark still had to go to Avansert — which makes "ett sted å gjøre
-    // hver ting" untrue for the very field most likely to be adjusted after a calibration round.
+    // The rest of the pass rules — the overall pass mark is the field most likely to be adjusted
+    // after a calibration round, so it must be editable here («ett sted å gjøre hver ting»).
     //
     // Blank means "not set": decisionService falls back to the platform rules, and writing a number
     // in would turn a deliberate default into a per-module override nobody chose.
@@ -330,7 +327,7 @@ export function createSettingsTab(ctx) {
       );
     }
     // ⚠️ Grensesonen gjelder IKKE for rene flervalgsmoduler — `resolveMcqOnlyDecision` har ingen
-    // manuell-vurdering-sti i det hele tatt. Feltet sto her og lot som om det virket.
+    // manuell-vurdering-sti i det hele tatt; et felt her ville latt som om det virket.
     if (mode !== "MCQ_ONLY") {
       const borderline = policy?.passRules?.borderlineWindow;
       // Hva skjer hvis feltet står tomt? Plattformen sender da et bånd under terskelen til sensor —
@@ -368,9 +365,8 @@ export function createSettingsTab(ctx) {
     // Three duplications inside one panel — reported from stage as "vurderingskriteria ligger nå 4
     // steder". The editors below carry their own summary; the row was the redundant half.
 
-    // #896 S3c: the scaling rule's practical weight — the last settings field that existed only on
-    // Avansert. `max_total` is NOT editable: it is derived from the criteria and shown there, so an
-    // input for it would be a second, conflicting way to set the same number.
+    // The scaling rule's practical weight. `max_total` is NOT editable: it is derived from the
+    // criteria and shown there, so an input for it would be a second, conflicting way to set it.
     if (mode !== "MCQ_ONLY") {
       const practicalWeight = Number(cfg.rubricVersion?.scalingRule?.practical_weight);
       row(
@@ -801,11 +797,10 @@ export function createSettingsTab(ctx) {
   /**
    * #896 S3c: the assessment instruction (prompt) editor.
    *
-   * One language at a time, per §7 — the workspace edits in the active UI language and the other two
-   * are merged, not overwritten. Avansert shows three locale panes side by side; that is the model
-   * this epic is moving away from.
+   * One language at a time, per §7 — the workspace edits in the content language and the other two
+   * are merged, not overwritten.
    *
-   * Examples stay a JSON textarea, exactly as on Avansert. They are an array of free-shaped objects
+   * Examples stay a JSON textarea. They are an array of free-shaped objects
    * consumed by the LLM, and inventing a structured editor for them here would be a guess at a shape
    * nothing else in the system constrains.
    */
@@ -1017,7 +1012,7 @@ export function createSettingsTab(ctx) {
       ctx.previewDraft = null;
       await loadModule(moduleId);
       // Restore is triggered from Innstillinger, but what the author wants to see afterwards is the
-      // restored CONTENT — and the confirmation itself lands in the chat log, which that tab hides.
+      // restored CONTENT.
       switchToTab("edit");
 
       // loadModule swallows its own fetch errors, so reaching this line does NOT prove the workspace

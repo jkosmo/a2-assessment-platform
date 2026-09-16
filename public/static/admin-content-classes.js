@@ -56,9 +56,9 @@ function escapeHtml(s) {
 }
 
 // #1038: kurstittelen kommer ferdig valgt for leserens språk fra serveren (`title` på
-// klassens tildelinger, `displayTitle` på kurslista). Parseren som sto her hadde sin egen
-// reservekjede (nb → en-GB → nn → første) — en annen enn serverens, og de to var uenige om hva en
-// delvis oversatt tittel skulle vise. Klienten viser strengen den får; språket sendes som `x-locale`.
+// klassens tildelinger, `displayTitle` på kurslista). Klienten skal ikke ha egen reservekjede for
+// språk — den ville vært en annen enn serverens, og de to ville vært uenige om hva en delvis oversatt
+// tittel skal vise. Klienten viser strengen den får; språket sendes som `x-locale`.
 function courseTitle(value) {
   return typeof value === "string" && value.trim() ? value : "(uten tittel)";
 }

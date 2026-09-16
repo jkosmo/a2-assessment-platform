@@ -221,9 +221,9 @@ export function createPublishFlow(ctx) {
     // and answer key. An MCQ-only module has neither, and a free-text module need not have the
     // answer key, so calling it unconditionally 400s and took the rest of the fill down with it.
     const canUseDraftLocalizer = Boolean(sourceDraft.taskText.trim() && sourceDraft.assessorExpectedContent.trim());
-    // Fields that localizer actually returns. `description` is NOT among them — it used to be asked
-    // for and never delivered, so a description-only gap could never be filled and the automatic
-    // republish hit the same 422 forever.
+    // Fields the localizer actually returns. `description` is NOT among them — asking for it would
+    // never be delivered, so a description-only gap could never be filled and the automatic
+    // republish would hit the same 422 forever.
     const DRAFT_LOCALIZER_FIELDS = ["title", "taskText", "assessorExpectedContent", "candidateTaskConstraints"];
     // The per-field localizer has two slots: `title` for short text, `bodyMarkdown` for long.
     const LONG_TEXT_FIELDS = new Set(["taskText", "assessorExpectedContent", "candidateTaskConstraints"]);

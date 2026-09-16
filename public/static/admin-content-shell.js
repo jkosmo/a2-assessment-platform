@@ -66,8 +66,7 @@ let currentLocale = resolveInitialLocale(supportedLocales);
 
 const { t, tf } = createTranslator(adminContentTranslations, () => currentLocale);
 
-// #972: samtale-skallet flettet `String(err?.message ?? err)` inn i chat-loggen 19 steder. Det
-// er "<status>: <hele JSON-kroppen>" fra apiFetch — rå JSON midt i en samtale, på serverens språk.
+// #972: `err.message` fra apiFetch er "<status>: <hele JSON-kroppen>" — rå JSON på serverens språk.
 // `apiErrorText` slår opp KODEN i den delte tabellen (api-error.js) og gir en setning på
 // forfatterens språk. En feil klienten selv kastet slipper uendret gjennom: den teksten er vår.
 function apiErrorText(error) {
@@ -160,12 +159,12 @@ let latestSavedModuleVersionId = null;
 // (in scalingRule.generated_from_blueprint_hash) to detect drift.
 let currentBlueprintHash = null;
 
-// v1.1.81: tracks whether criteria-generation is in flight for the current sessionDraft.
+// Tracks whether criteria-generation is in flight for the current sessionDraft.
 // Used by renderPreview to show a "Vurderingskriterier genereres…" placeholder. Reset
 // whenever sessionDraft is replaced (commitSessionDraftPatch / loadModule).
 let criteriaGenerationInFlight = false;
 
-// v1.1.92: when enterPreviewEditMode is active, this callback receives the freshly-generated
+// When enterPreviewEditMode is active, this callback receives the freshly-generated
 // criteria record so the in-progress edit-form can populate its criteria-editor state without
 // the whole preview being re-rendered (which would wipe the edit form). Set by
 // enterPreviewEditMode, cleared by exitEditMode, fired by populateSessionDraftCriteriaInBackground.
@@ -518,8 +517,7 @@ function _domFormFields(entry) {
     uploadHint.className = "chat-form-help";
     uploadHint.textContent = t("shell.source.uploadHint");
 
-    // v1.2.3 (#454 Phase 2.1): chip-liste i stedet for "·"-separert tekst, så hver kilde
-    // får sin egen rad med × for fjerning. uploadHint vises kun når lista er tom.
+    // Chip-liste: hver kilde får sin egen rad med × for fjerning. uploadHint vises kun når lista er tom.
     const sourceList = document.createElement("ul");
     sourceList.className = "source-chip-list";
     // #975: `.source-chip-list{display:flex}` (admin-content.html) slår `hidden`-attributtet, så
@@ -561,8 +559,7 @@ function _domFormFields(entry) {
       if (!url || !url.trim()) return;
       urlBtn.disabled = true;
       uploadBtn.disabled = true;
-      // #555-oppfølging (forfatter-feedback): «Neste» var fortsatt klikkbar mens URL-en ble hentet
-      // — uklart hva som skjedde. Deaktiver den til hentingen er ferdig.
+      // Generer er slått av til hentingen er ferdig — ellers er det uklart hva som skjer (#555).
       btn.disabled = true;
       setGenerateDialogStatus(tf("shell.source.fetchingStatus", { host: hostnameOf(url) }));
       try {
@@ -642,24 +639,16 @@ function _domFormFields(entry) {
       }
     });
 
-    // #455: external-LLM-handoff. Copies prompt + opens import modal. On successful
-    // import, marks the form submitted (skipping the normal source→cert→generate path)
-    // and lands user in draft-ready with module + sessionDraft populated.
-    // #555: scenario velges nå ETTER kilde, så ved ekstern-LLM-handoff (som skjer på kilde-
-    // steget) er scenario ennå ukjent — vi defaulter til "auto" og lar ekstern LLM avgjøre.
-
     const fileInput = document.createElement("input");
     fileInput.type = "file";
     fileInput.accept = SOURCE_MATERIAL_ACCEPT;
-    // v1.2.3 (#454 Phase 2.1): allow multi-select i fil-picker så bruker kan velge mange
-    // filer i én operasjon. Behold "én ekstraksjon om gangen"-loopen siden parser-worker
-    // håndterer én fil per job — minimerer endring i backend, gir også klarere progress.
+    // Flervalg i filvelgeren; ekstraksjonen går likevel én fil om gangen (parser-workeren tar én
+    // jobb per fil, og framdriften blir tydelig).
     fileInput.multiple = true;
     fileInput.hidden = true;
 
     uploadBtn.addEventListener("click", () => fileInput.click());
-    // v1.2.3: håndter en eller flere filer fra picker-en. Validerer hver fil for seg;
-    // hopper over de som feiler (med toast) og fortsetter med resten.
+    // Én eller flere filer: hver valideres for seg; de som feiler hoppes over (med toast).
     fileInput.addEventListener("change", async () => {
       const files = Array.from(fileInput.files ?? []);
       if (files.length === 0) return;
@@ -692,12 +681,10 @@ function _domFormFields(entry) {
 
       uploadBtn.disabled = true;
       urlBtn.disabled = true;
-      // #555-oppfølging: hold «Neste» deaktivert mens filer ekstraheres (samme grunn som URL).
+      // Generer er slått av mens filer ekstraheres (samme grunn som ved URL).
       btn.disabled = true;
 
-      // v1.2.3: ekstrahérer filene sekvensielt. Sekvensielt er trygt for parser-worker
-      // (én job om gangen, ingen pool-uttømming) og gir tydelig progress-status til bruker.
-      // Knapp-label viser "Laster opp 2/5..." mens bruker ser progress.
+      // Sekvensielt: trygt for parser-workeren (én jobb om gangen) og gir «n av m» i statuslinja.
       let processed = 0;
       for (const file of toExtract) {
         processed += 1;
@@ -764,8 +751,7 @@ function _domFormFields(entry) {
     uploadRow.appendChild(uploadHint);
     uploadRow.appendChild(fileInput);
     wrap.appendChild(uploadRow);
-    // v1.2.3: chip-liste plassert under uploadRow så den ikke konkurrerer om plass med
-    // knappene. Skjules når tom (display: none via hidden-attributtet).
+    // Chip-lista under knapperaden, så den ikke konkurrerer om plassen; skjult når tom.
     wrap.appendChild(sourceList);
   }
 
@@ -969,20 +955,18 @@ function renderPreview() {
     if (cfg.mcqSetVersion) versionChainParts.push(`MCQ v${cfg.mcqSetVersion.versionNo}`);
 
     previewContent.innerHTML = buildPreviewHtml({
-      // v1.2.27 (#361 follow-up): title/description respect draft-overrides like other
-      // fields. Without this, edits handed off from Avansert (changed title/description)
-      // were ignored because mod.title from the loaded bundle always won.
+      // Title and description follow the draft like every other field; the loaded bundle must
+      // not win over an unsaved edit (#361).
       title: (hasDraft && activeDraft.title) ? activeDraft.title : mod.title,
       description: (hasDraft && activeDraft.description) ? activeDraft.description : mod.description,
       taskText: hasDraft ? activeDraft.taskText : (cfg.moduleVersion?.taskText ?? ""),
       assessorExpectedContent: hasDraft ? activeDraft.assessorExpectedContent : (cfg.moduleVersion?.assessorExpectedContent ?? ""),
       candidateTaskConstraints: hasDraft ? activeDraft.candidateTaskConstraints : (cfg.moduleVersion?.candidateTaskConstraints ?? ""),
       mcqQuestions: hasDraft ? (activeDraft.mcqQuestions ?? []) : (cfg.mcqSetVersion?.questions ?? []),
-      // B2 (#449): show Vurderingskriterier in the preview pane as content. Prefer draft
-      // overrides if user has edited via Rediger direkte; fall back to persisted rubric.
+      // B2 (#449): criteria are content and show in the preview. The draft's criteria win over
+      // the persisted rubric.
       criteria: (hasDraft && activeDraft.criteria) ? activeDraft.criteria : (cfg.rubricVersion?.criteria ?? null),
-      // v1.1.81: show "genereres…" placeholder when criteria-generation is in flight for
-      // the current sessionDraft.
+      // "genereres…" placeholder while criteria-generation is in flight for the current sessionDraft.
       // Generation status is an authoring signal too - the learner has no business seeing it.
       criteriaLoadingText: (criteriaGenerationInFlight && !forParticipant) ? t("shell.criteria.generating") : "",
       // B3 (#450): drift banner rendered above the criteria section.
@@ -1044,9 +1028,6 @@ function scrollPreviewToBottom() {
 
 function updateStateRail() {
   const hasModule = !!selectedModuleId;
-  // #975: her sto `stateRail.hidden = !hasModule` alene, og `.state-rail{display:flex}` slo
-  // attributtet. Lappen var en egen CSS-regel, `.state-rail[hidden]{display:none}` — en fiks oppå
-  // fella i stedet for kuren. Regelen er fjernet; setHidden gjør jobben for alle tilstander.
   // #787: content-owner panel for the loaded module. Render once per module (guard on the last id) so
   // the frequent updateStateRail calls don't re-fetch/reset it; hide when no module is loaded.
   const ownerHost = document.getElementById("moduleOwnerPanelHost");
@@ -1154,19 +1135,10 @@ function clearPreviewCandidate() {
   renderPreview();
 }
 
-// ⛔ `translateLocalizedText(text)` sto her og returnerte `{"en-GB": text, nb: text, nn: text}`.
-// Slettet 2026-08-19, etter at de to siste kallerne (`resolveMcqTitlePayload` og
-// `resolveCurrentPromptPayload`) ble rettet.
-//
-// Den var maskinen bak løgnen #892, #905 og #918 hver for seg fjernet fra hver sin sti: én tekst i
-// ett språk, kopiert inn i alle tre, slik at innholdet så oversatt ut for publiseringsgaten og for
-// oversettelsesstatusen. Hver gang noen trengte «gjør denne strengen til et lokale-objekt», lå den
-// her og gjorde det på den ene måten som er gal.
-//
-// **Ikke legg den tilbake.** Kodingen for «skrevet i ett språk, ikke oversatt ennå» er en REN
-// STRENG — og `localizedTextMaybeUntranslatedSchema` godtar den overalt der det betyr noe. Skal
-// språket registreres, er svaret et ett-nøkkels kart `{ [contentLocale]: tekst }` (#930), aldri tre
-// kopier.
+// ⚠️ Ingen hjelper skal gjøre én tekst til `{"en-GB": t, nb: t, nn: t}`. Kodingen for «skrevet i ett
+// språk, ikke oversatt ennå» er en REN STRENG (`localizedTextMaybeUntranslatedSchema`), og skal
+// språket registreres, er svaret et ett-nøkkels kart `{ [contentLocale]: tekst }` (#930). Tre kopier
+// ser oversatt ut for publiseringsgaten og oversettelsesstatusen — det var #892, #905 og #918.
 
 /**
  * Fjern språk som er tomme fra en lokalisert verdi.
@@ -1361,10 +1333,9 @@ async function localizeDraftAcrossLocalesWithTitle(title, taskText, assessorExpe
         },
       );
     } catch {
-      // #905: DROP the pre-filled source copy for this locale. It used to be left standing
-      // "so the draft stays saveable" — but the API accepts a partial map now, and leaving the
-      // copy is what made a failed translation indistinguishable from a real one. The locale is
-      // recorded as failed so the caller can say so, and the field simply has no value here.
+      // #905: no source copy for a locale that failed. The API accepts a partial map, and a copy
+      // is what makes a failed translation indistinguishable from a real one. The locale is
+      // recorded as failed so the caller can say so; the field simply has no value here.
       dropLocale(localized, targetLocale);
       localized.failedLocales.push(targetLocale);
       continue;
@@ -1649,9 +1620,8 @@ function commitSessionDraftPatch(patch, { scroll = "top" } = {}) {
   else scrollPreviewToTop();
 }
 
-// #1046 steg 2: det genererte legges rett inn i skjemaet (dialogen sa det på forhånd). Har
-// forfatteren skrevet noe mens genereringen pågikk, tas det med i utkastet først — ingenting
-// overskrives stille, og ingenting parkeres som «forslag» i en logg som ikke finnes lenger.
+// Det genererte legges rett inn i skjemaet (dialogen sa det på forhånd). Har forfatteren skrevet
+// noe mens genereringen pågikk, tas det med i utkastet først — ingenting overskrives stille.
 function commitOrProposeGenerated({ patch, slot, readyHtml, warningHtml = "", scroll = "top", onCommit }) {
   if (hasOpenEditForm()) captureEditFormIntoDraft();
   commitSessionDraftPatch(patch, { scroll });
@@ -1771,8 +1741,8 @@ async function generateDraftInBackground(sourceMaterial, certLevel, locale, gene
   // sier vi ingenting, oppdager forfatteren det først når publiseringsgaten stopper modulen, eller
   // verre: aldri, fordi hen tror alt er på plass.
   const localizeWarning = describeFailedLocales(localizedDraft.failedLocales, locale);
-  // #926 §6: gjennom porten. Blueprint og hash-oppfriskningen hører til utkastet, ikke til
-  // forslaget, så de skjer først når patchen faktisk landes.
+  // #926 §6: gjennom porten. Blueprint og hash-oppfriskningen hører til utkastet, så de skjer
+  // når patchen landes (onCommit).
   commitOrProposeGenerated({
     patch: { taskText: localizedDraft.taskText, assessorExpectedContent: localizedDraft.assessorExpectedContent, candidateTaskConstraints: localizedDraft.candidateTaskConstraints },
     slot,
@@ -1848,9 +1818,8 @@ async function generateMcqInBackground(sourceMaterial, certLevel, locale, genera
     patch: { mcqQuestions: localizedQuestions },
     slot,
     scroll: "bottom",
-    // #982: kvalitetsadvarslene fra #551 lå også inne i `readyHtml`, og forsvant dermed når
-    // forslaget ble parkert bak åpne felter — spørsmål med kjente problemer kunne landes uten at
-    // advarselen noen gang var synlig. Fjerde advarsel i samme fil med samme feil.
+    // #982: kvalitetsadvarslene (#551) som eget `warningHtml`, ikke inne i `readyHtml` — en advarsel
+    // skal aldri kunne forsvinne sammen med meldingen om at noe er klart.
     readyHtml: () => `<strong>${escapeHtml(tf("shell.generating.mcqReady", { count: questions.length }))}</strong>
       <p style="margin:8px 0 0;font-size:13px;color:var(--color-meta)">${escapeHtml(t("shell.generating.reviewPreviewHint"))}</p>`,
     // #1014: kvalitetsadvarslene fra #551 OG spraakene som ikke ble oversatt, i samme spor.
@@ -1979,8 +1948,8 @@ async function reviseMcqInBackground(instruction, onAccept) {
     // #1014: et språk som ikke ble oversatt skal stå i kvitteringen — ellers sier flaten «klart»
     // over et sett der ett språk mangler.
     //
-    // ⚠️ I `warningHtml`, ikke i `readyHtml`. #982: advarsler lagt i `readyHtml` forsvinner når
-    // forslaget parkeres bak åpne felter, og kunne landes uten at de noen gang var synlige.
+    // ⚠️ I `warningHtml`, ikke i `readyHtml` (#982): en advarsel skal ikke dele skjebne med
+    // «klart»-meldingen.
     warningHtml: describeFailedLocales(failedLocales, contentLocale),
     onCommit: () => onAccept?.(questions),
   });
@@ -2024,8 +1993,7 @@ async function applyStructuredTitleEditInBackground(newTitle) {
         candidateTaskConstraints: localizedDraft.candidateTaskConstraints,
       },
       slot,
-      // #982: advarselen som EGET argument. Lå den i `readyHtml`, forsvant den i det øyeblikket
-      // forfatteren hadde en redigeringsflate åpen — og da parkeres forslaget i stedet.
+      // #982: advarselen som EGET argument, ikke inne i `readyHtml`.
       readyHtml: () => `<strong>${escapeHtml(tf("shell.revision.titleReady", { title: newTitle }))}</strong>`,
       warningHtml: warning
         ? `<p style="margin:8px 0 0;font-size:13px;color:var(--color-warning,#8a5f10)">${escapeHtml(warning)}</p>`
@@ -2388,10 +2356,7 @@ async function loadModule(moduleId, options = {}) {
   // B3 (#450): recompute blueprint hash so the drift banner can be classified on first render.
   await refreshBlueprintHash();
 
-  // #896 S3c: the handoff is gone with the Avansert editor. It existed to carry an unsaved draft
-  // and the two locales between two surfaces; there is one surface now, so there is nothing to
-  // carry and nothing to keep in sync. `resumeEditing` survives because the module list and old
-  // links still use it to mean "open this module ready to edit".
+  // `resumeEditing`: the module list and old links use it to mean "open this module ready to edit".
   const resumedIntoDraft = resumeEditing && createSessionDraftFromLoadedModule();
   renderPreview();
   // QA round 6: reloading on `?tab=settings` selected the tab, drew the panel before the module
@@ -2441,10 +2406,8 @@ function describeStructuredEditIntent(intent) {
   return "";
 }
 
-// v1.2.23 (#357 Phase A): instrumentering. Sender hver intent-klassifisering til server
-// så vi kan samle ekte pilot-bruker-ordbruk og bygge evidensen som Phase B (hybrid LLM-
-// fallback) trenger. Best-effort fire-and-forget — feil i loggingen skal aldri påvirke
-// brukerens flyt.
+// #357: instrumentering. Hver intent-klassifisering sendes til serveren så ekte ordbruk kan samles.
+// Best-effort — feil i loggingen skal aldri påvirke forfatterens flyt.
 function logIntentClassificationToServer(rawInput, intent, ctx) {
   apiFetch(
     "/api/admin/content/intent-log",
@@ -2654,9 +2617,8 @@ function enterPreviewEditMode({ force = false } = {}) {
 
   // Build edit-mode HTML using same visual classes as preview
   const escapedTitle = escapeHtml(currentTitle);
-  // #896 S3b: the description is participant-visible in the module list, so it is content and
-  // belongs in Rediger — not in Innstillinger with the setup. Until now it could only be
-  // corrected from the Avansert page, which the epic is retiring.
+  // The description is participant-visible in the module list, so it is content and belongs in
+  // Rediger — not in Innstillinger with the setup (#896 S3b).
   const currentDescription = localizeValueForLocale(
     sessionDraft?.description ?? bundle?.module?.description ?? "",
     editingLocale,
@@ -2745,7 +2707,7 @@ function enterPreviewEditMode({ force = false } = {}) {
     `
     : "";
 
-  // v1.1.92: when criteria-generation is in flight AND editor has no criteria yet, show
+  // When criteria-generation is in flight AND the editor has no criteria yet, show
   // a "Genererer…" placeholder instead of an empty editor. When generation completes,
   // criteriaReadyCallback fires and the placeholder is replaced with real editor cards.
   // #896 S3c: NO criteria editor here any more.
@@ -2857,7 +2819,7 @@ function enterPreviewEditMode({ force = false } = {}) {
 
   function exitEditMode() {
     if (previewPaneEl) previewPaneEl.classList.remove("preview-pane--editing");
-    // v1.1.92: clear the criteriaReadyCallback so async generation that completes after
+    // Clear the criteriaReadyCallback so async generation that completes after
     // exit doesn't try to write into a torn-down DOM.
     criteriaReadyCallback = null;
     renderPreview();
@@ -3002,7 +2964,7 @@ function enterPreviewEditMode({ force = false } = {}) {
         // Only send criteria when they were actually edited: rewriting an untouched rubric on
         // every save collapses its localized labels to one language (#902). OMIT the key -
         // passing null would overwrite criteria the draft is already carrying (generated or
-        // handed off from Avansert) and the save would fall back to the old persisted rubric.
+        // edited) and the save would fall back to the old persisted rubric.
         ...(editIsMcqOnly ? { criteria: null } : (criteriaUnchanged ? {} : { criteria: newCriteriaRecord })),
         // #665: keep the module type (and MCQ threshold) on the draft so save/publish uses the
         // right mode instead of falling back to FREETEXT_PLUS_MCQ and demanding scenario text.
@@ -3064,20 +3026,6 @@ function enterPreviewEditMode({ force = false } = {}) {
   // fanebytte. Ruta er dessuten skjult. Linja er borte.
 }
 
-/**
- * Render the module's actions into the fixed bar above the chat log.
- *
- * Stage-tilbakemelding 2026-08-17: *«UI i rediger der tidligere knapper vises som inaktive gir
- * ikke lengre mening nå som dette ikke er et samtale basert UI, den gjør også at høyresiden blir
- * veldig lang, hvorpå man må skrolle mye opp og ned.»*
- *
- * The actions used to be chat bubbles. Every time one was used, its row stayed behind greyed out,
- * so the pane grew monotonically and the live choices sank to the bottom — after a round trip the
- * author had to scroll past a museum of spent buttons to find anything they could press.
- *
- * They live in one place now, and that place does not scroll. The log below keeps what is actually
- * a conversation: questions, instructions, generated results, status.
- */
 // #1046 (13.09): handlingsraden i hodet, med samme regel som listene og de andre skjemasidene —
 // maks fire i raden, resten under «Mer» (rowActionsHtml). Knappene er HTML, så handlingene slås
 // opp via indeks ved klikk (én lytter, satt én gang).
@@ -3113,8 +3061,8 @@ function moduleHeaderTitle() {
   return localizeValue(sessionDraft?.title ?? previewDraft?.title ?? bundle?.module?.title) || "";
 }
 
-// Produkteier 13.09: versjonsfaktaene fra den gamle tilstandslinja står som merker i hodet —
-// «Publisert v2» (live nå) og «Utkast v4» (det du redigerer, når det ikke er den som er live).
+// Versjonsfaktaene som merker i hodet — «Publisert v2» (live nå) og «Utkast v4» (det du
+// redigerer, når det ikke er den som er live). Produkteier 13.09.
 function moduleStatusBadgesHtml() {
   if (!bundle && !sessionDraft) return "";
   const chains = bundle ? deriveModuleStatusChains(bundle) : null;
@@ -3255,10 +3203,9 @@ function showModuleActions() {
     },
   };
   const actions = model.actionKeys.map((key) => actionMap[key] && { key, ...actionMap[key] }).filter(Boolean);
-  // #896 S6: export/import belong on Rediger, per the IA table. They lived only on the module list
-  // and in Avansert, so moving content between installations meant leaving the workspace you were
-  // working in. Appended rather than folded into `actionKeys` because they are not part of the
-  // authoring progression the status model describes — they are available whenever a module is.
+  // #896 S6: export/import belong on the module page too, not only on the list. Appended rather
+  // than folded into `actionKeys` because they are not part of the authoring progression the
+  // status model describes — they are available whenever a module is.
   if (selectedModuleId) {
     actions.push(
       { key: "export", labelKey: "shell.module.exportPackage", action: () => exportModulePackageInBackground() },
@@ -3469,11 +3416,9 @@ let activeTab = tabFromUrl();
 /**
  * Does the edit form hold work a tab switch would destroy?
  *
- * This used to mean "is the form on screen", which was the same question while the form only
- * existed after clicking "Rediger direkte". Now that Rediger IS the form, mere existence says
- * nothing — and the old reading made every switch to Innstillinger raise an unsaved-changes
- * dialog over a form the author had not touched. A warning that always fires is a warning people
- * learn to click through, which is worse than none.
+ * Not "is the form on screen": Rediger IS the form, so mere existence says nothing, and asking
+ * about an untouched form on every tab switch is a warning people learn to click through — worse
+ * than none.
  *
  * Each field is stamped with what it was rendered with (`stampEditFormValues`), so "dirty" is a
  * comparison, exactly as it is in the settings panel.
@@ -3560,8 +3505,8 @@ function stampEditFormValues() {
  *
  * §7 asks for the same warning on a language change as on a tab change, and the reason is the
  * same in both places: the surfaces that hold work only in the DOM are torn down and rebuilt from
- * the other language. Until now only Innstillinger was asked about, so «Rediger direkte» + type +
- * switch language silently replaced the typed text with the stored text of the new language.
+ * the other language — an open form with typed text would otherwise be replaced by the stored text
+ * of the new language without a word.
  *
  * Same `unsavedTabSwitchKind()` as the tab switch, with one deliberate difference: `"draft"` does
  * NOT ask. A tab switch warns about a draft because it is unsaved; a language switch does not
@@ -3662,10 +3607,8 @@ function applyTabState(tab) {
   // noise — and a warning that shows everywhere stops being read where it matters.
   // GDPR-linja ligger inne i redigeringsskjemaet (under oppgavefeltet) og følger det.
 
-  // Stage-tilbakemelding 2026-08-17: *"Åpner modul, den havner på rediger fanen, men jeg kan ikke
-  // redigere før jeg trykker på «Rediger direkte»."* A tab called Rediger that does not let you
-  // edit is a tab that lies about its name. The fields are open on arrival now, and the separate
-  // "Rediger direkte" action is gone from the menu — one way in, not two.
+  // A tab called Rediger must let you edit on arrival: the fields are open, there is no separate
+  // "start editing" action — one way in, not two (stage-tilbakemelding 17.08).
   //
   // Forhåndsvisning shares this pane and must stay read-only: it is the participant's view.
   if (tab === "edit") {
@@ -3879,8 +3822,8 @@ function startMcqOnlyRegen(sourceMaterial, knownCertLevel, counts = { questionCo
 }
 
 
-// Default pass mark for MCQ-only modules created via the conversation (author can override in
-// Avansert). Mirrors DEFAULT_MCQ_ONLY_MIN_PERCENT on the server (decisionService).
+// Default pass mark for new MCQ-only modules (the author can change it under Innstillinger).
+// Mirrors DEFAULT_MCQ_ONLY_MIN_PERCENT on the server (decisionService).
 const SHELL_MCQ_ONLY_MIN_PERCENT = 70;
 
 
@@ -3923,8 +3866,8 @@ async function maybeCondenseSourceMaterial(sourceMaterial, certLevel, locale) {
 }
 
 async function generateBlueprintAndConfirm(moduleTitle, existingModuleId, sourceMaterial, certLevel, locale, generationMode, scenarioMode = "auto", freetextOnly = false) {
-  // v1.2.4: condense source material if over threshold. Condensed result replaces raw
-  // for ALL downstream calls (blueprint → draft → MCQ → rubric).
+  // Condense source material over the threshold; the condensed text replaces the raw one for ALL
+  // downstream calls (blueprint → draft → MCQ → rubric).
   const effectiveSourceMaterial = await maybeCondenseSourceMaterial(sourceMaterial, certLevel, locale);
 
   const abort = startGeneration();
@@ -3960,10 +3903,8 @@ async function generateBlueprintAndConfirm(moduleTitle, existingModuleId, source
   logResolveSlot(slot, () => escapeHtml(t("shell.blueprint.ready")), []);
 
   const bp = blueprintResult?.blueprint;
-  // v1.2.4: pass effectiveSourceMaterial (possibly condensed) so all downstream LLM calls
-  // (draft, MCQ, rubric) get the same condensed view rather than re-paying for raw.
-  // v1.2.8: scenarioMode forwarded through to draft generation.
-  // Planen står i «Generer innhold»-dialogen (steg 2 i den), ikke i en samtalerute.
+  // effectiveSourceMaterial (possibly condensed) goes to every downstream call, so none re-pays for
+  // the raw text. Planen står i «Generer innhold»-dialogen (steg 2 i den), ikke i en samtalerute.
   const planHost = document.getElementById("dialogGeneratePlan");
   const dialog = document.getElementById("dialogGenerate");
   if (planHost) {
@@ -4195,8 +4136,7 @@ async function confirmAndGenerate(moduleTitle, existingModuleId, sourceMaterial,
       slot,
       () => `${escapeHtml(t("shell.newModule.createError"))}<br><span style="font-size:13px;color:var(--color-meta)">${escapeHtml(t("shell.newModule.createErrorHint"))}</span>`,
       [
-        // v1.2.18 (#352) sendte denne til modul-biblioteket, men beholdt etiketten «Åpne avansert
-        // editor». Den har altså løyet i et halvt år. Nå sier den hvor den går.
+        // Etiketten sier hvor lenka går (#352).
         { labelKey: opphavFraUrl() ? "shell.module.backToCourse" : "shell.module.goToLibrary", action: () => { location.href = opphavFraUrl() ?? "/admin-content"; } },
         { labelKey: "shell.action.retry", action: () => confirmAndGenerate(moduleTitle, null, sourceMaterial, certLevel, locale, generationMode, blueprint, scenarioMode, freetextOnly) },
         { labelKey: "shell.action.cancel", action: startIdle },
@@ -4258,11 +4198,11 @@ function askForMcqGeneration(sourceMaterial, certLevel, locale, generationMode) 
   generateMcqInBackground(sourceMaterial, certLevel, locale, generationMode, counts.questionCount, counts.optionCount, () => showDraftReadyActions({ quiet: true }));
 }
 
-// v1.1.81: auto-generate criteria into sessionDraft so the preview pane shows them during
+// Auto-generate criteria into sessionDraft so the preview pane shows them during
 // creation (before save). B2 (#449 redesign) made criteria "content" — they belong in the
 // preview pane, not gated behind save+publish+reopen. Fires once per session-draft when:
 //   - sessionDraft exists with taskText + assessor (otherwise LLM has nothing to work with)
-//   - sessionDraft.criteria not already set (idempotent — handoff/edit may pre-populate it)
+//   - sessionDraft.criteria not already set (idempotent — an edit may pre-populate it)
 // On success, sessionDraft.criteria becomes the storage-shape record that saveDraftBundle
 // then POSTs as a new RubricVersion (the "explicit criteria" branch, not ensure-rubric).
 async function populateSessionDraftCriteriaInBackground() {
@@ -4291,10 +4231,9 @@ async function populateSessionDraftCriteriaInBackground() {
   // and tagging the reply with the live locale files English text as Norwegian — which then looks
   // like a translation that exists.
   const generationLocale = contentLocale;
-  // #926: this repaint used to be unconditional, and `renderPreview` writes straight into
-  // `previewContent.innerHTML` — so it tore down an open Rediger form and rebuilt it from the
-  // bundle, throwing away whatever the author had typed. Same class as §6 itself: content
-  // changing without the author asking, this time by a background job nobody saw start.
+  // #926: never repaint over an open Rediger form. `renderPreview` writes straight into
+  // `previewContent.innerHTML`, so an unconditional repaint here would throw away whatever the
+  // author had typed — content changing without the author asking, by a job nobody saw start.
   //
   // The completion handler at the bottom already makes exactly this distinction. It only ever
   // held for the way OUT; the way IN had no guard at all.
@@ -4325,13 +4264,9 @@ async function populateSessionDraftCriteriaInBackground() {
     // see the criteria in preview until after save in that case.
   } finally {
     criteriaGenerationInFlight = false;
-    // v1.1.91: don't re-render if user has entered Rediger direkte while generation was
-    // in flight — would wipe their edit form. v1.1.92: also notify the active edit-mode
-    // via criteriaReadyCallback so the placeholder is replaced with editor cards.
-    // v1.1.93: previewPaneEl is block-scoped inside enterPreviewEditMode — referencing it
-    // here threw ReferenceError, which prevented renderPreview() from running. Users saw
-    // criteria appear only after Lagre (which triggers loadModule → renderPreview). Use
-    // document.querySelector directly to read the live edit-mode state.
+    // An open edit form must not be re-rendered (it would wipe the typed text); it is told through
+    // criteriaReadyCallback instead, so its placeholder becomes editor cards. The edit-mode state
+    // is read from the live DOM — the pane element itself is scoped inside enterPreviewEditMode.
     const previewPaneNow = document.querySelector(".preview-pane");
     const inEditMode = previewPaneNow?.classList.contains("preview-pane--editing");
     if (inEditMode) {
@@ -4364,7 +4299,7 @@ async function populateSessionDraftCriteriaInBackground() {
 
 function showDraftReadyActions({ quiet = false } = {}) {
   sessionState = "draft-pending";
-  // v1.1.81: kick off criteria-generation in background so preview shows them.
+  // Kick off criteria-generation in the background so the preview shows them.
   // Idempotent — does nothing if sessionDraft.criteria is already populated.
   populateSessionDraftCriteriaInBackground();
   // A freshly generated draft lands on Rediger, and Rediger is editable — the invariant has to
@@ -4504,7 +4439,6 @@ function populateUiLocaleSelect() {
     // skjemaet igjen etterpå (rapportert fra stage 13.08: man havnet i lesemodus uten vei videre).
     const wasEditing = !!document.getElementById("previewEditConfirm");
     const wasDirty = hasOpenEditForm();
-    // Replay the full chat log in the new locale
     translatePageStaticText();
     // Hodet (form-page.js) bygges fra t(): tegn det på nytt, og legg fanemerkingen (#926) tilbake —
     // suffikset i aria-label er også oversatt tekst.

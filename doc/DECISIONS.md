@@ -695,6 +695,17 @@ Produkteier, etter omgang 3 på stage:
    framdrift) og kan skjules igjen. Utfallet av handlinger (lagret, importert, avvist) kommer som
    toast når ruta er skjult — som på de andre skjemasidene.
 
+## Kommentarer sier regelen, ikke historien (2026-09-16)
+
+Fjerde og siste punkt i oppryddingsplanen etter #1046. Forfattersidenes kommentarer (24–31 % av
+linjene i modulskallet og fanene) fortalte ofte HVA som sto der før, i hvilken versjon, og hvilken
+QA-runde som fant det — og pekte på flater som ikke finnes lenger (samtaleloggen, Avansert-sida,
+tilstandslinja, «Rediger direkte», «Neste», forslag som parkeres, ekstern-LLM-overlevering).
+Regelen som gjelder nå: en kommentar sier hva som gjelder og hvorfor, i presens; saksnummeret
+beholdes som spor; versjonsnummer, rundenummer og «pleide å» går ut; gravsteiner over slettet kode
+går ut — den regelen koden skulle verne, står igjen som regel. Rent kommentararbeid: kodelinjene er
+byte for byte de samme (diff uten kommentarer er tom).
+
 ## Ett tekstsystem for forfattersidene (2026-09-16)
 
 Fem sider hadde hver sin `t`/`tf` og hver sin utregning av menyspråket (skallets `tf` byttet bare

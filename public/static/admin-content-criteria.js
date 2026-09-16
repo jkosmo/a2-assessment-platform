@@ -132,9 +132,9 @@ export function createCriteriaTools(ctx) {
         // so it is saved as a one-locale map rather than a bare string the reader would have to
         // guess at. `storedLabel: null` (not undefined) is what selects the merging path.
         next.push({
-          // QA round 4: the id used to be `new_criterion_${length + 1}`, and the list SHRINKS on
-          // remove — so add, remove, add produced the same id twice. `Object.fromEntries` keeps the
-          // last entry per key, so one of the two new criteria vanished at save time without a word.
+          // Not `new_criterion_${length + 1}`: the list SHRINKS on remove, so add, remove, add would
+          // produce the same id twice — and `Object.fromEntries` keeps the last entry per key, so one
+          // of the two would vanish at save time without a word.
           // A counter that only ever goes up cannot collide.
           id: freshCriterionId(next), label: "", description: "", maxScore: 5,
           candidateVisible: false, storedLabel: null, storedDescription: null, locale: ctx.contentLocale,
@@ -145,8 +145,8 @@ export function createCriteriaTools(ctx) {
         inputs[inputs.length - 1]?.focus();
       } else if (btn.classList.contains("vk-regenerate")) {
         captureFromDom();
-        // v1.1.80: no confirm here. Nothing is persisted yet — close without saving and the edits
-        // are gone anyway. The B3 drift-banner confirm stays, because that one writes immediately.
+        // No confirm here: nothing is persisted yet — close without saving and the edits are gone
+        // anyway. The drift-banner confirm stays, because that one writes immediately.
         onRegenerate?.();
       }
     });
