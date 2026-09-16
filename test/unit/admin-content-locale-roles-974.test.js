@@ -13,15 +13,16 @@ import { describe, expect, it } from "vitest";
 // skrive innholdet på. Forfatter med menyen på engelsk og innhold på bokmål fikk et engelsk utkast.
 // Kriteriegenereringen (7186) hadde alt gjort det riktig — det var én av tre flyter.
 //
-// ⚠️ RATSJ I BEGGE RETNINGER. 13 igjen er de lovlige: definisjon, oversettelsestabell, x-locale,
+// ⚠️ RATSJ I BEGGE RETNINGER. 12 igjen er de lovlige: definisjon, oversettelsestabell, x-locale,
 // intent-logg (telemetri om inputen), språkvelgeren (tre), getteren Innstillinger-fanen leser
-// datoformatet gjennom (to på én linje), og tre kommentarer som nevner navnet for å forklare regelen.
+// datoformatet gjennom (to på én linje), og to kommentarer som nevner navnet for å forklare regelen
+// (den tredje fulgte kriteriekoden til admin-content-criteria.js).
 // Fjernes én, skal tallet ned i samme commit. Innstillinger-fanen (#1046 punkt 2) telles for seg:
 // datoformatet og én kommentar.
 // ─────────────────────────────────────────────────────────────────────────────
 
 const SHELL = fileURLToPath(new URL("../../public/static/admin-content-shell.js", import.meta.url));
-const TAK = 13;
+const TAK = 12;
 const SETTINGS_TAB = fileURLToPath(new URL("../../public/static/admin-content-settings-tab.js", import.meta.url));
 const TAK_SETTINGS_TAB = 2;
 
@@ -38,10 +39,14 @@ describe("#974 — menyspråket styrer ikke innhold i admin-content-shell", () =
   });
 
   it("⚠️ kildevalget for oversettelse har ikke menyspråket som kandidat", () => {
-    const linje = lines.find((l) => l.includes("const preferredOrder = ["));
+    // Publiseringsgaten bor i admin-content-publish.js (#1046 punkt 2); menyspråket kommer ikke
+    // inn i ctx der, så et brudd ville stått som `ctx.currentLocale` — det er det som sjekkes.
+    const publish = readFileSync(fileURLToPath(new URL("../../public/static/admin-content-publish.js", import.meta.url)), "utf8");
+    const linje = publish.split("\n").find((l) => l.includes("const preferredOrder = ["));
     expect(linje, "fant ikke preferredOrder — kontrollcase").toBeTruthy();
     expect(linje).not.toContain("currentLocale");
     expect(linje).toContain("contentLocale");
+    expect(publish).not.toContain("currentLocale");
   });
 
   it(`ratsj: currentLocale forekommer nøyaktig ${TAK} ganger (går tallet ned, senk TAK i samme commit)`, () => {

@@ -705,7 +705,16 @@ verdi uten kopier, og skallets funksjoner som referanser. Fanen svarer med det s
 (`renderSettingsPanel`, `hasUnsavedSettingsEdits`, …); tilstanden skallet før nullstilte direkte
 (`settingsCriteriaState` m.fl.) er metoder. `LEGACY_STRING_LOCALE` og `mergeLocaleInto` — brukt av
 begge — ligger i `localized-value.js`. Koden i fanen er flyttet, ikke skrevet om; kommentarene
-følger med. Neste kandidat er genereringsflyten (~1 100 linjer).
+følger med.
+
+16.09, to skiver til med samme snitt: **kriteriene og planavviket** (#450 B3: editor, «Behold /
+Regenerer / Vis hva som ville endret seg», diff-modal, sammenslåing, regenerering — 680 linjer →
+`admin-content-criteria.js`) og **publisering med publiseringsgaten** (#896 S4: publiser,
+avpubliser, «Oversett det som mangler» — 460 linjer → `admin-content-publish.js`). Skallet er
+7 200 → 4 650 linjer. Redigeringsskjemaet (`enterPreviewEditMode`, ~470 linjer) står igjen med
+vilje: det leser og skriver 15 av skallets tilstander og kaller 24 av funksjonene — en modul med
+det snittet er skallet under et annet navn. Flytteverktøyet (`split_range`) bytter bare navn i
+kode, ikke i strenger og kommentarer; første skive lærte oss det (`/api/…/ctx.modules/`).
 
 ## Modulens hode tegnes av form-page.js; Avbryt tar alt ulagret (2026-09-14)
 

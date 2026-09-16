@@ -21,6 +21,8 @@ const FILES = [
   "public/static/admin-content-shell.js",
   "public/static/admin-content-settings-tab.js",
   "public/static/localized-value.js",
+  "public/static/admin-content-criteria.js",
+  "public/static/admin-content-publish.js",
   "public/static/admin-content-courses.js",
   "public/static/admin-content-sections.js",
   "public/static/admin-content-classes.js",

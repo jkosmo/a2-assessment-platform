@@ -35,6 +35,8 @@ const SKJERMER: Array<{ navn: string; fil: string; html: string }> = [
   { navn: "Kullstatus", fil: "public/cohort-status.js", html: "public/cohort-status.html" },
   { navn: "Forfatter: modul", fil: "public/static/admin-content-shell.js", html: "public/admin-content.html" },
   { navn: "Forfatter: modul — Innstillinger-fanen", fil: "public/static/admin-content-settings-tab.js", html: "public/admin-content.html" },
+  { navn: "Forfatter: modul — kriterier og planavvik", fil: "public/static/admin-content-criteria.js", html: "public/admin-content.html" },
+  { navn: "Forfatter: modul — publisering", fil: "public/static/admin-content-publish.js", html: "public/admin-content.html" },
   { navn: "Forfatter: kurs", fil: "public/static/admin-content-courses.js", html: "public/admin-content-courses.html" },
   { navn: "Forfatter: seksjoner", fil: "public/static/admin-content-sections.js", html: "public/admin-content-sections.html" },
   { navn: "Forfatter: bibliotek", fil: "public/static/admin-content-library.js", html: "public/admin-content-library.html" },

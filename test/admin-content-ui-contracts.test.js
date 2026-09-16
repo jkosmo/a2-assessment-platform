@@ -282,7 +282,15 @@ describe("shell JS contracts", () => {
     // står i, og krever at funksjonen enten ER porten, står i GENERATORS, eller er ført opp som et
     // begrunnet unntak. Et nytt kall et sted ingen har vurdert gjør testen rød.
     it("no writer reaches sessionDraft outside the gate without an explicit exemption", () => {
-      const js = readFile("public/static/admin-content-shell.js");
+      // #1046 punkt 2: skallet er delt i moduler som får `commitSessionDraftPatch` gjennom ctx —
+      // vakten leser dem alle. Én kilde til hvilke: ctx-blokkene i skallet nevner funksjonen.
+      const SHELL_MODULES = [
+        "public/static/admin-content-shell.js",
+        "public/static/admin-content-publish.js",
+        "public/static/admin-content-settings-tab.js",
+        "public/static/admin-content-criteria.js",
+      ];
+      const js = SHELL_MODULES.map(readFile).join("\n");
 
       // Bevisste unntak, med grunn. Å legge noe til her er en avgjørelse, ikke en formalitet.
       const EXEMPT = {
@@ -296,8 +304,9 @@ describe("shell JS contracts", () => {
         translateMissingLocalesThenPublish: "explicit gap-fill remedy that saves immediately",
       };
 
-      // Funksjonshoder i filen, i rekkefølge, så et kall kan tilordnes den som omslutter det.
-      const heads = [...js.matchAll(/^(?:async\s+)?function\s+([A-Za-z0-9_$]+)\s*\(/gm)]
+      // Funksjonshoder i filene, i rekkefølge, så et kall kan tilordnes den som omslutter det.
+      // Innrykk tillatt: i de utskilte modulene ligger funksjonene inne i en fabrikk.
+      const heads = [...js.matchAll(/^\s*(?:async\s+)?function\s+([A-Za-z0-9_$]+)\s*\(/gm)]
         .map((m) => ({ name: m[1], index: m.index }));
       const enclosing = (index) => {
         let found = null;
