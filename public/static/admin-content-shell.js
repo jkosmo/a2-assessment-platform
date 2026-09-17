@@ -1291,6 +1291,30 @@ async function localizeTitleOnly(title, sourceLocale, targetLocale) {
   return typeof result?.title === "string" && result.title.trim() ? result.title.trim() : null;
 }
 
+/**
+ * #1064: beskrivelsen er deltakersynlig (kurslista) og skal oversettes som de andre feltene når den
+ * lagres fra Rediger. Modul-oversetteren har den ikke i ordforrådet, så den går samme vei som
+ * tittelen — ett kall per språk. Et språk som ikke ble oversatt, SLIPPES (#1016), ikke kildefylles.
+ * Tom beskrivelse oversettes ikke: da er svaret ett-nøkkels tomt (forfatteren slettet den).
+ */
+async function localizeDescriptionAcrossLocales(description, sourceLocale) {
+  const text = String(description ?? "").trim();
+  if (!text) return { description: { [sourceLocale]: "" }, failedLocales: [] };
+  const map = { [sourceLocale]: text };
+  const failedLocales = [];
+  for (const targetLocale of supportedLocales) {
+    if (targetLocale === sourceLocale) continue;
+    try {
+      const translated = await localizeTitleOnly(text, sourceLocale, targetLocale);
+      if (translated) map[targetLocale] = translated;
+      else failedLocales.push(targetLocale);
+    } catch {
+      failedLocales.push(targetLocale);
+    }
+  }
+  return { description: map, failedLocales };
+}
+
 async function localizeDraftAcrossLocalesWithTitle(title, taskText, assessorExpectedContent, sourceLocale, candidateTaskConstraints) {
   const localized = {
     title: buildLocalizedTextMap(sourceLocale, title),
@@ -2937,7 +2961,7 @@ function enterPreviewEditMode({ force = false } = {}) {
     }, { once: true });
     slot.abortBtn.addEventListener("click", () => abort.abort());
 
-    const commit = (localized, localizedMcqQuestions, failedLocales) => {
+    const commit = (localized, localizedMcqQuestions, failedLocales, localizedDescription = null) => {
       // The author has the discard dialog open and has not answered yet. Do not commit - the
       // values may be about to be discarded - but do not abort either: aborting would throw
       // away a translation that already succeeded, so "Bli vaerende" would leave them with
@@ -2958,10 +2982,12 @@ function enterPreviewEditMode({ force = false } = {}) {
       // rather than papered over; the publish gate in S4 is where it has to be resolved.
       sessionDraft = buildPreviewCandidate({
         title: dropFailedLocales(localized.title, failedLocales, editingLocale),
-        // The description is not part of the translation round — it is one field in one
-        // language, patched onto the stored value by the composer so the other locales
-        // survive. Sent as a locale-keyed patch for exactly that reason.
-        ...(newDescription !== currentDescription ? { description: { [editingLocale]: newDescription } } : {}),
+        // #1064: en endret beskrivelse oversettes til de andre språkene som tittelen. Kunne den
+        // ikke oversettes (eller ble slettet), sendes den som ett-nøkkels kart — patchet inn på det
+        // lagrede av komponisten, så de andre språkene står.
+        ...(newDescription !== currentDescription
+          ? { description: localizedDescription ?? { [editingLocale]: newDescription } }
+          : {}),
         taskText: localized.taskText,
         assessorExpectedContent: localized.assessorExpectedContent,
         candidateTaskConstraints: localized.candidateTaskConstraints,
@@ -2997,13 +3023,16 @@ function enterPreviewEditMode({ force = false } = {}) {
       currentMcqQuestions.length
         ? localizeMcqAcrossLocales(newMcqQuestions, editingLocale)
         : Promise.resolve({ questions: [], failedLocales: [] }),
+      newDescription !== currentDescription
+        ? localizeDescriptionAcrossLocales(newDescription, editingLocale)
+        : Promise.resolve({ description: null, failedLocales: [] }),
     ])
-      .then(([localizedDraft, localizedMcq]) => {
+      .then(([localizedDraft, localizedMcq, localizedDesc]) => {
         if (abort.signal.aborted) return;
         // #1014: MCQ-veien kan naa feile for ETT sprak uten at utkastveien gjorde det. Sprakene fra
-        // begge slaas sammen, ellers rapporterer flaten bare halve sannheten.
-        const alleFeilede = [...new Set([...(localizedDraft.failedLocales ?? []), ...localizedMcq.failedLocales])];
-        commit(localizedDraft, localizedMcq.questions, alleFeilede);
+        // alle veiene slaas sammen, ellers rapporterer flaten bare halve sannheten.
+        const alleFeilede = [...new Set([...(localizedDraft.failedLocales ?? []), ...localizedMcq.failedLocales, ...localizedDesc.failedLocales])];
+        commit(localizedDraft, localizedMcq.questions, alleFeilede, localizedDesc.description);
       })
       .catch(() => {
         // Already handled by the abort listener above - the form is back and the slot is
