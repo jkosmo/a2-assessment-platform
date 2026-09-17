@@ -472,3 +472,112 @@ describe("mcq service — shuffle behaviour via startMcqAttempt", () => {
     expect(parsedAfter).toEqual(storedOptions);
   });
 });
+
+// #1062: trekket per forsøk — gjort én gang ved opprettelse, lagret på forsøket, brukt ved
+// utlevering OG retting.
+describe("mcq service — #1062 trekket per forsøk", () => {
+  const bank = ["q-1", "q-2", "q-3", "q-4", "q-5"].map((id) => ({
+    id,
+    stem: `Stem ${id}`,
+    optionsJson: JSON.stringify(["A", "B"]),
+    correctAnswer: "A",
+    active: true,
+  }));
+
+  beforeEach(() => {
+    findSubmissionForModuleMcq.mockReset();
+    findOpenAttemptForSubmission.mockReset();
+    createAttempt.mockReset();
+    findActiveQuestionsForSet.mockReset();
+    findAttemptForSubmission.mockReset();
+    deleteResponsesForAttempt.mockReset();
+    createResponses.mockReset();
+    completeAttemptGuarded.mockReset();
+    findAttemptById.mockReset();
+    submissionUpdate.mockReset();
+    enqueueAssessmentJobMock.mockReset();
+    recordAuditEvent.mockReset();
+    findActiveQuestionsForSet.mockResolvedValue(bank);
+    deleteResponsesForAttempt.mockResolvedValue(undefined);
+    createResponses.mockResolvedValue(undefined);
+    completeAttemptGuarded.mockResolvedValue({ count: 1 });
+    findAttemptById.mockImplementation((attemptId: string) => Promise.resolve({ id: attemptId }));
+    submissionUpdate.mockResolvedValue(undefined);
+    enqueueAssessmentJobMock.mockResolvedValue(undefined);
+    recordAuditEvent.mockResolvedValue(undefined);
+  });
+
+  function submissionWithPolicy(policy: unknown) {
+    return {
+      id: "submission-1",
+      submissionStatus: "SUBMITTED" as const,
+      moduleVersion: {
+        mcqSetVersionId: "mcq-set-1",
+        assessmentMode: "MCQ_ONLY" as const,
+        assessmentPolicyJson: policy === null ? null : JSON.stringify(policy),
+      },
+    };
+  }
+
+  it("nytt forsøk med «3 per forsøk»: tre ulike spørsmål fra banken, trekket lagres på forsøket", async () => {
+    findSubmissionForModuleMcq.mockResolvedValue(submissionWithPolicy({ mcq: { questionsPerAttempt: 3 } }));
+    findOpenAttemptForSubmission.mockResolvedValue(null);
+    createAttempt.mockImplementation((data: { questionOrderJson?: string }) =>
+      Promise.resolve({ id: "attempt-1", mcqSetVersionId: "mcq-set-1", completedAt: null, questionOrderJson: data.questionOrderJson }),
+    );
+    const { startMcqAttempt } = await import("../../src/modules/assessment/mcqService.js");
+    const result = await startMcqAttempt("module-1", "submission-1", "user-1");
+
+    expect(result.questions).toHaveLength(3);
+    expect(new Set(result.questions.map((q) => q.id)).size).toBe(3);
+    const saved = JSON.parse(createAttempt.mock.calls[0][0].questionOrderJson) as string[];
+    expect(saved).toHaveLength(3);
+    expect(result.questions.map((q) => q.id)).toEqual(saved);
+  });
+
+  it("uten policy: alle fem — trekket lagres likevel, så rekkefølgen står ved ny lasting", async () => {
+    findSubmissionForModuleMcq.mockResolvedValue(submissionWithPolicy(null));
+    findOpenAttemptForSubmission.mockResolvedValue(null);
+    createAttempt.mockImplementation((data: { questionOrderJson?: string }) =>
+      Promise.resolve({ id: "attempt-1", mcqSetVersionId: "mcq-set-1", completedAt: null, questionOrderJson: data.questionOrderJson }),
+    );
+    const { startMcqAttempt } = await import("../../src/modules/assessment/mcqService.js");
+    const result = await startMcqAttempt("module-1", "submission-1", "user-1");
+    expect(result.questions.map((q) => q.id).sort()).toEqual(bank.map((q) => q.id));
+    expect(JSON.parse(createAttempt.mock.calls[0][0].questionOrderJson)).toHaveLength(5);
+  });
+
+  it("gjenopptatt forsøk: samme spørsmål i samme rekkefølge som lagret — ikke et nytt trekk", async () => {
+    findSubmissionForModuleMcq.mockResolvedValue(submissionWithPolicy({ mcq: { questionsPerAttempt: 2 } }));
+    findOpenAttemptForSubmission.mockResolvedValue({ id: "attempt-1", mcqSetVersionId: "mcq-set-1", completedAt: null, questionOrderJson: '["q-4","q-2"]' });
+    const { startMcqAttempt } = await import("../../src/modules/assessment/mcqService.js");
+    const result = await startMcqAttempt("module-1", "submission-1", "user-1");
+    expect(result.questions.map((q) => q.id)).toEqual(["q-4", "q-2"]);
+    expect(createAttempt).not.toHaveBeenCalled();
+  });
+
+  it("eldre forsøk uten trekk: alle aktive i lagret rekkefølge (ingen migrering av data)", async () => {
+    findSubmissionForModuleMcq.mockResolvedValue(submissionWithPolicy(null));
+    findOpenAttemptForSubmission.mockResolvedValue({ id: "attempt-old", mcqSetVersionId: "mcq-set-1", completedAt: null, questionOrderJson: null });
+    const { startMcqAttempt } = await import("../../src/modules/assessment/mcqService.js");
+    const result = await startMcqAttempt("module-1", "submission-1", "user-1");
+    expect(result.questions.map((q) => q.id)).toEqual(bank.map((q) => q.id));
+  });
+
+  it("retting: prosenten regnes av de STILTE spørsmålene, og svar utenfor trekket teller ikke", async () => {
+    findSubmissionForModuleMcq.mockResolvedValue(submissionWithPolicy({ mcq: { questionsPerAttempt: 2 }, passRules: { mcqMinPercent: 50 } }));
+    findAttemptForSubmission.mockResolvedValue({ id: "attempt-1", mcqSetVersionId: "mcq-set-1", completedAt: null, questionOrderJson: '["q-4","q-2"]' });
+    const { submitMcqAttempt } = await import("../../src/modules/assessment/mcqService.js");
+    const result = await submitMcqAttempt({
+      moduleId: "module-1", submissionId: "submission-1", attemptId: "attempt-1", userId: "user-1",
+      responses: [
+        { questionId: "q-4", selectedAnswer: "A" }, // riktig
+        { questionId: "q-2", selectedAnswer: "B" }, // feil
+        { questionId: "q-1", selectedAnswer: "A" }, // ikke stilt — teller ikke
+      ],
+    });
+    expect(result.rawScore).toBe(1);
+    expect(result.percentScore).toBe(50);
+    expect(createResponses.mock.calls[0][0]).toHaveLength(2);
+  });
+});

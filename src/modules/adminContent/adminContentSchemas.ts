@@ -217,6 +217,14 @@ export const assessmentPolicyBodySchema = z.object({
       mcqWeight: z.number().min(0).max(100),
     })
     .optional(),
+  // #1062/#1061: bruken av flervalgssettet per forsøk. Se assessmentPolicyCodec.
+  mcq: z
+    .object({
+      questionsPerAttempt: z.number().int().min(1).max(500).optional(),
+      shuffleQuestions: z.boolean().optional(),
+      reviewAfterSubmit: z.boolean().optional(),
+    })
+    .optional(),
   passRules: z
     .object({
       // #547: optional — MCQ-only policies set only mcqMinPercent; decisionService defaults

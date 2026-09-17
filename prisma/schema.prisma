@@ -377,6 +377,9 @@ model MCQAttempt {
   submissionId    String
   mcqSetVersionId String
   startedAt       DateTime
+  // #1062: hvilke spørsmål forsøket fikk, i rekkefølge (JSON-liste av questionId). Null for
+  // forsøk fra før — de betyr «alle aktive i settet, lagret rekkefølge».
+  questionOrderJson String?
   completedAt     DateTime?
   rawScore        Int?
   scaledScore     Float?
