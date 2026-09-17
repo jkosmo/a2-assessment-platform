@@ -249,9 +249,12 @@ export function createFormPage(config) {
     const pill = target.closest("[data-form-locale]");
     if (pill && config.languages) {
       if (pill.classList.contains("active")) return;
-      if (config.languages.onChange(pill.dataset.formLocale) === false) return;
+      const loc = pill.dataset.formLocale;
+      if (config.languages.onChange(loc) === false) return;
+      // Etter språket, ikke elementet: onChange kan ha tegnet hodet på nytt (refreshHeader), og da
+      // er `pill` et løsrevet element — sammenligning mot det slo av markeringen på alle pillene.
       for (const b of host.querySelectorAll("[data-form-locale]")) {
-        const on = b === pill;
+        const on = b.dataset.formLocale === loc;
         b.classList.toggle("active", on);
         b.setAttribute("aria-pressed", String(on));
       }

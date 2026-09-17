@@ -99,3 +99,62 @@ test.describe("Generer innhold: det som pågår, vises i dialogen", () => {
     expect(c && c.width < 160).toBe(true);
   });
 });
+
+// Stage 17.09 (produkteier): «genererte modulinnhold fra en nettside, vurderingskriteria la seg
+// under innholdet». På en ren fritekstmodul tegnet ferdig-steget forhåndsvisningen — med
+// kriteriene — over skjemaet på Rediger. Rediger er skjemaet; kriteriene hører under Innstillinger.
+test("a generated free-text draft lands in the Rediger form — criteria are not drawn over it", async ({ page }) => {
+  await mockCommonApis(page, {
+    modules: [{ id: "module-1", title: "Trade unions", activeVersion: { versionNo: 1 } }],
+    moduleExports: {
+      "module-1": buildMockModuleExport({ id: "module-1", title: "Trade unions", moduleVersionId: "module-1-version-1", taskText: localizedText("Norsk scenario"), assessmentMode: "FREETEXT_ONLY" }),
+    },
+  });
+  await page.route("**/api/admin/content/generate/rubric", async (route) => {
+    await new Promise((r) => setTimeout(r, 800));
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ rubric: { criteria: [
+      { id: "clarity", label: "Clarity", description: "Explains.", maxScore: 5, candidateVisible: true },
+    ] } }) });
+  });
+  await page.goto("/admin-content/module/module-1/conversation");
+  await expect(page.locator("#previewEditTaskText")).toHaveValue(/Norsk scenario/);
+  await clickEnabledButton(page, /^Generate content$|^Generer innhold$/);
+  await page.locator("#dialogGenerate .chat-textarea").fill("Source notes.");
+  await page.locator("#dialogGenerate .chat-submit-btn").click();
+  await expect(page.locator("#dialogGeneratePlan")).toBeVisible({ timeout: 10000 });
+  await page.locator('#dialogGeneratePlan [data-bp-action="use"]').click();
+
+  // Skjemaet står, med det genererte, også etter at kriteriene har landet.
+  await expect(page.locator("#previewEditTaskText")).toHaveValue(/scenario/i, { timeout: 15000 });
+  await page.waitForTimeout(1500);
+  await expect(page.locator("#previewEditTaskText")).toBeVisible();
+  await expect(page.locator(".preview-pane").getByText(/Vurderingskriterier \(|Assessment criteria \(/)).toHaveCount(0);
+  // Én melding om at utkastet er klart, og den sier hvor det er.
+  const ready = page.locator(".toast").filter({ hasText: /Draft ready|Utkastet er klart/ });
+  await expect(ready).toHaveCount(1);
+  await expect(ready).toContainText(/unsaved draft|ulagret utkast|ulagra utkast/);
+  // Kriteriene ligger under Innstillinger.
+  await page.locator("#formTab-settings").click();
+  await expect(page.locator("#tabPanelSettings")).toBeVisible();
+  await expect(page.locator("#settingsCriteriaEditor")).toBeVisible({ timeout: 10000 });
+  await expect(page.locator("#settingsCriteriaEditor .vk-label").first()).toHaveValue("Clarity");
+});
+
+// Stage 17.09 (produkteier): «Av og til forsvinner markering av innholdsspråk». Byttet tegner hodet
+// på nytt; markeringen må settes etter språket, ikke etter knappen som ble klikket.
+test("switching content language keeps exactly one language pill marked", async ({ page }) => {
+  await mockCommonApis(page, {
+    modules: [{ id: "module-1", title: "Trade unions", activeVersion: { versionNo: 1 } }],
+    moduleExports: {
+      "module-1": buildMockModuleExport({ id: "module-1", title: "Trade unions", moduleVersionId: "module-1-version-1", taskText: localizedText("Norsk scenario") }),
+    },
+  });
+  await page.goto("/admin-content/module/module-1/conversation");
+  await expect(page.locator("#previewEditTaskText")).toHaveValue(/Norsk scenario/);
+  for (const loc of ["nb", "nn", "en-GB", "nb"]) {
+    await page.locator(`[data-form-locale="${loc}"]`).click();
+    await expect(page.locator(".content-locale-pill.active")).toHaveCount(1);
+    await expect(page.locator(`[data-form-locale="${loc}"]`)).toHaveClass(/active/);
+    await expect(page.locator(`[data-form-locale="${loc}"]`)).toHaveAttribute("aria-pressed", "true");
+  }
+});

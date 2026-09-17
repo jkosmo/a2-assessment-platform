@@ -874,6 +874,11 @@ async function refreshBlueprintHash() {
   const next = await hashBlueprintAsync(blueprint);
   if (next === currentBlueprintHash) return;
   currentBlueprintHash = next;
+  // Stage 17.09: dette kallet kommer asynkront ETTER at et generert utkast er lagt i skjemaet, og
+  // renderPreview() tegnet forhåndsvisningen — med kriteriene — over skjemaet på Rediger. Et åpent
+  // skjema står; avviksbanneret (som er det hashen styrer) hører til forhåndsvisningen og tegnes
+  // neste gang den tegnes.
+  if (isEditFormOpen()) return;
   renderPreview();
 }
 
@@ -4093,7 +4098,8 @@ async function confirmAndGenerate(moduleTitle, existingModuleId, sourceMaterial,
   const onDraftReady = () => {
     if (freetextOnly) {
       sessionDraft = { ...(sessionDraft ?? {}), assessmentMode: "FREETEXT_ONLY", mcqQuestions: [] };
-      renderPreview();
+      // Rediger er skjemaet: tegn det på nytt fra utkastet, ikke forhåndsvisningen over det.
+      if (activeTab === "edit") enterPreviewEditMode({ force: true }); else renderPreview();
       showDraftReadyActions();
     } else {
       askForMcqGeneration(sourceMaterial, certLevel, locale, generationMode);
@@ -4306,7 +4312,6 @@ function showDraftReadyActions({ quiet = false } = {}) {
   // hold on the new-module flow too, or the tab is editable everywhere except where a new author
   // meets it first.
   if (activeTab === "edit" && !isEditFormOpen() && (bundle || sessionDraft)) enterPreviewEditMode();
-  const mcqCount = sessionDraft?.mcqQuestions?.length ?? 0;
   const model = deriveShellDraftReadyActionModel({ hasSelectedModule: !!selectedModuleId });
   const actionMap = {
     revise: { labelKey: "shell.draftReady.editInChat", action: () => openReviseDialog() },
@@ -4316,15 +4321,9 @@ function showDraftReadyActions({ quiet = false } = {}) {
   // The message is conversation and stays in the log; the actions go to the fixed bar, where they
   // do not sink out of reach as the log grows. `quiet`: et tomt nytt element har ikke noe utkast
   // å melde om.
-  if (!quiet) {
-    newModulePlaceholder = false;
-    logBot(() => {
-      const parts = [t("shell.draftReady.message")];
-      if (mcqCount > 0) parts.push(tf("shell.draftReady.mcqCount", { count: mcqCount }));
-      parts.push(t("shell.draftReady.hint"));
-      return escapeHtml(parts.join(" "));
-    });
-  }
+  // Ingen egen «utkastet er klart»-melding her: flyten som la utkastet inn har alt sagt det
+  // (commitOrProposeGenerated). To toaster om det samme var støy (stage 17.09).
+  if (!quiet) newModulePlaceholder = false;
   const actions = model.actionKeys.map((key) => actionMap[key] && { key, ...actionMap[key] }).filter(Boolean);
   // Produkteier 13.09 (stage-funn): med et utkast sto bare «Be om endring» igjen — ingen vei til
   // kilder eller generering. Generer innhold (og Generer spørsmål når typen har flervalg) er alltid
