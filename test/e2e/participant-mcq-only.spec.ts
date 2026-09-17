@@ -466,3 +466,84 @@ test("#988: en servervalideringsfeil vises som en setning, ikke som Zod-utdata",
   await expect(status).not.toContainText("responses");
   await expect(status).not.toContainText("400:");
 });
+
+// #1061: gjennomgangen av flervalgsdelen er et eget kall. Svarer tjeneren tomt (modulen har ikke
+// slått den på), vises ingenting; svarer den med spørsmål, står de under resultatet — feil først,
+// med eget svar, riktig svar og begrunnelse. Fasiten kommer ALDRI fra resultatkallet.
+async function mockMcqFlowToResult(page: Page) {
+  await mockBase(page);
+  await page.addInitScript(() => { try { localStorage.setItem("participant.locale", "nb"); } catch { /* ignore */ } });
+  await page.route("**/api/submissions", (route: Route) =>
+    route.fulfill({ status: 201, contentType: "application/json", body: JSON.stringify({ submission: { id: "s1" } }) }),
+  );
+  await page.route("**/api/modules/*/mcq/start**", (route: Route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ attemptId: "a1", questions: [{ id: "q1", stem: "Spørsmål 1", options: ["A", "B"] }] }) }),
+  );
+  await page.route("**/api/modules/*/mcq/submit", (route: Route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ assessmentComplete: true }) }),
+  );
+  await page.route("**/api/submissions/*/result", (route: Route) =>
+    route.fulfill({
+      status: 200, contentType: "application/json",
+      body: JSON.stringify({
+        submissionId: "s1", status: "COMPLETED",
+        decision: { passFailTotal: true, decisionType: "AUTOMATIC" },
+        scoreComponents: { totalScore: 50, mcqScaledScore: 50, mcqPercentScore: 50, practicalScaledScore: 0 },
+        participantGuidance: {},
+      }),
+    }),
+  );
+}
+
+test("#1061: uten gjennomgang i policyen vises ingen fasit", async ({ page }) => {
+  await mockMcqFlowToResult(page);
+  await page.route("**/api/submissions/*/mcq-review", (route: Route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ enabled: false, questions: [] }) }),
+  );
+  await page.goto("/participant");
+  await page.locator("#loadModules").click();
+  await page.locator(".module-card", { hasText: "MCQ Modul" }).click();
+  await page.locator("input[name='q_q1']").first().check();
+  await page.locator("#submitMcq").click();
+  await expect(page.locator("#resultSummary .result-headline")).toContainText("Bestått");
+  await expect(page.locator(".mcq-review-list")).toHaveCount(0);
+  await expect(page.locator("#resultSummary")).not.toContainText("Riktig svar");
+});
+
+test("#1061: med gjennomgang: feil først, med ditt svar, riktig svar og begrunnelse; riktige under", async ({ page }) => {
+  await mockMcqFlowToResult(page);
+  await page.route("**/api/submissions/*/mcq-review", (route: Route) =>
+    route.fulfill({
+      status: 200, contentType: "application/json",
+      body: JSON.stringify({
+        enabled: true,
+        questions: [
+          { id: "q1", stem: "Spørsmål 1", options: ["A", "B"], selectedAnswer: "A", correctAnswer: "A", isCorrect: true, rationale: "A er riktig fordi." },
+          { id: "q2", stem: "Spørsmål 2", options: ["C", "D"], selectedAnswer: "C", correctAnswer: "D", isCorrect: false, rationale: "D er riktig fordi." },
+        ],
+      }),
+    }),
+  );
+  await page.goto("/participant");
+  await page.locator("#loadModules").click();
+  await page.locator(".module-card", { hasText: "MCQ Modul" }).click();
+  await page.locator("input[name='q_q1']").first().check();
+  await page.locator("#submitMcq").click();
+
+  const review = page.locator("#resultSummary .summary-card", { hasText: "Gjennomgang av flervalg" });
+  await expect(review).toBeVisible();
+  await expect(review).toContainText("1 av 2 svar var feil");
+  const items = review.locator(".mcq-review-item");
+  await expect(items).toHaveCount(2);
+  // Den feile først.
+  await expect(items.nth(0)).toHaveClass(/is-wrong/);
+  await expect(items.nth(0)).toContainText("Spørsmål 2");
+  await expect(items.nth(0)).toContainText("Ditt svar: C");
+  await expect(items.nth(0)).toContainText("Riktig svar: D");
+  await expect(items.nth(0)).toContainText("D er riktig fordi.");
+  await expect(items.nth(1)).toHaveClass(/is-correct/);
+  await expect(items.nth(1)).not.toContainText("Riktig svar");
+  // Kortet stables ikke når resultatet tegnes på nytt.
+  await page.waitForTimeout(1500);
+  await expect(page.locator("#resultSummary .mcq-review-list")).toHaveCount(1);
+});

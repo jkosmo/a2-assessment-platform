@@ -7,6 +7,7 @@ import {
   getOwnedSubmissionResultView,
 } from "../modules/submission/index.js";
 import { createSubmissionAppeal } from "../modules/appeal/index.js";
+import { getOwnedMcqReview } from "../modules/submission/mcqReviewService.js";
 import { isModuleInAccessibleCourse } from "../modules/course/index.js";
 import { env } from "../config/env.js";
 import { hasAnyRole, CONTENT_AUTHORS } from "../auth/roleSets.js";
@@ -162,6 +163,22 @@ submissionsRouter.get("/:submissionId/result", async (request, response) => {
     return;
   }
   response.json(result);
+});
+
+// #1061: gjennomgangen av flervalgsdelen — fasitens ene dør. Tomt (enabled:false) når modulversjonen
+// ikke har slått den på; 404 når innleveringen ikke er deltakerens egen.
+submissionsRouter.get("/:submissionId/mcq-review", async (request, response) => {
+  const userId = request.context?.userId;
+  if (!userId) {
+    response.status(401).json({ error: "unauthorized" });
+    return;
+  }
+  const review = await getOwnedMcqReview(request.params.submissionId, userId, requestLocale(request));
+  if (!review) {
+    response.status(404).json({ error: "not_found", message: "Submission not found." });
+    return;
+  }
+  response.json(review);
 });
 
 export { submissionsRouter };

@@ -64,3 +64,13 @@ test("a non-integer per-attempt value is refused with a message, nothing is save
   await page.waitForTimeout(500);
   expect(state.lastModuleVersionBody).toBeNull();
 });
+
+// #1061: «Vis gjennomgang» lagres som reviewAfterSubmit: true; av skrives ikke.
+test("review after submit: off by default, saved as true when turned on", async ({ page }) => {
+  const state = await openSettings(page, { mcq: { questionsPerAttempt: 2 } });
+  await expect(page.locator("#settingsMcqReview")).not.toBeChecked();
+  await page.locator("#settingsMcqReview").check();
+  await page.locator("#formSaveBtn").click();
+  await expect.poll(() => state.lastModuleVersionBody?.assessmentPolicy?.mcq).toBeTruthy();
+  expect(state.lastModuleVersionBody.assessmentPolicy.mcq).toEqual({ questionsPerAttempt: 2, reviewAfterSubmit: true });
+});

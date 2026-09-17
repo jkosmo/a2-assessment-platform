@@ -300,6 +300,15 @@ export function createSettingsTab(ctx) {
         false,
         "mcqShuffle",
       );
+      // #1061: gjennomgangen etter innlevering. Av som standard — fasit er en egen dør (#903), og en
+      // prøve skal ikke vise den. På for repetisjon.
+      row(
+        "shell.settings.mcqReview",
+        `<label class="settings-check"><input id="settingsMcqReview" type="checkbox"${policy?.mcq?.reviewAfterSubmit === true ? " checked" : ""} />
+          ${escapeHtml(t("shell.settings.mcqReviewLabel"))}</label>`,
+        false,
+        "mcqReview",
+      );
     }
 
     // The rest of the pass rules — the overall pass mark is the field most likely to be adjusted
@@ -524,7 +533,7 @@ export function createSettingsTab(ctx) {
     // Rendered by renderSettingsPanel itself, so always present when the tab is open.
     panel: [
       "settingsModuleType", "settingsCertLevel", "settingsValidFrom", "settingsValidTo",
-      "settingsMcqMinPercent", "settingsMcqPerAttempt", "settingsMcqShuffle", "settingsTotalMin", "settingsPracticalMin",
+      "settingsMcqMinPercent", "settingsMcqPerAttempt", "settingsMcqShuffle", "settingsMcqReview", "settingsTotalMin", "settingsPracticalMin",
       "settingsBorderlineMin", "settingsBorderlineMax", "settingsPracticalWeight",
     ],
     // Inside collapsible sections: absent from the DOM until the author expands them.
@@ -1200,7 +1209,11 @@ export function createSettingsTab(ctx) {
     if (shuffleInput) {
       if (shuffleInput.checked) delete mcqUse.shuffleQuestions; else mcqUse.shuffleQuestions = false;
     }
-    if (isFreetextOnly) { delete mcqUse.questionsPerAttempt; delete mcqUse.shuffleQuestions; }
+    const reviewInput = document.getElementById("settingsMcqReview");
+    if (reviewInput) {
+      if (reviewInput.checked) mcqUse.reviewAfterSubmit = true; else delete mcqUse.reviewAfterSubmit;
+    }
+    if (isFreetextOnly) { delete mcqUse.questionsPerAttempt; delete mcqUse.shuffleQuestions; delete mcqUse.reviewAfterSubmit; }
     const mcqChanged = JSON.stringify(mcqUse) !== JSON.stringify(existingPolicy?.mcq ?? {});
 
     const policy = existingPolicy || Object.keys(passRules).length > 0 || Object.keys(mcqUse).length > 0
