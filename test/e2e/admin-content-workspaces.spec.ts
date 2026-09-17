@@ -3810,7 +3810,7 @@ test.describe("admin content browser coverage", () => {
     // bokmål ved lagring; det som stopper i skjemaet er at det ikke finnes noe navn å oversette.
     await page.locator("#certLevel").selectOption("basic");
     await page.locator("#formSaveBtn").click();
-    await expect(page.locator("#formErrorBanner")).toContainText("bokmål");
+    await expect(page.locator("#formErrorBanner")).toContainText(/bokmål/i);
     expect(state.mutableCourses.length).toBe(0);
 
     await page.locator("[data-form-locale=\"nb\"]").click();

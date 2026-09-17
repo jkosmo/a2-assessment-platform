@@ -176,8 +176,8 @@ function getListPage() {
       empty: t("library.empty"), emptyFiltered: t("library.emptyFiltered"), loadError: t("library.loadError"), more: t("form.more"),
     },
     headerActions: [
-      { id: "importModulePackageBtn", label: "Importer modul" },
-      { id: "createModuleBtn", label: "Ny modul", kind: "primary" },
+      { id: "importModulePackageBtn", label: t("library.importModule") },
+      { id: "createModuleBtn", label: t("library.newModule"), kind: "primary" },
     ],
     headerExtraHtml: `<input id="importModulePackageFile" type="file" accept="application/json,.json" hidden />`,
     // #1046 B2: samme rekkefølge som Kurs og Seksjoner; modulens egen «Har upublisert utkast» sist.
@@ -185,7 +185,7 @@ function getListPage() {
     // #460: «Har upublisert utkast» dekker både aldri publisert OG live med et nyere utkast —
     // regelen bor i matchesLifecycleFilter (content-status-badge.js), felles for alle listene.
     filters: {
-      options: [["all", "Alle"], ["active", "Aktive"], ["published", "Publiserte"], ["archived", "Arkiverte"], ["unpublished_draft", "Har upublisert utkast"]],
+      options: [["all", t("ui.filter.all")], ["active", t("ui.filter.active")], ["published", t("ui.filter.published")], ["archived", t("ui.filter.archived")], ["unpublished_draft", t("ui.filter.unpublishedDraft")]],
       initial: "active",
     },
     // #745: kursfilteret bygges av modulenes egne `courses`.
@@ -193,13 +193,13 @@ function getListPage() {
     search: { matches: (m, q) => (m.title ?? "").toLowerCase().includes(q) || m.id.toLowerCase().includes(q) },
     sort: { key: "title", dir: "asc", locale: () => currentLocale },
     columns: [
-      { key: "title", label: "Navn", className: "col-name", sortValue: (m) => m.title ?? "", render: (m) => escapeHtml(m.title ?? m.id) },
-      { key: "status", label: "Status", className: "col-status", render: (m) => lifecycleBadge(m, t) },
-      { key: "level", label: "Sertifiseringsnivå", className: "col-level", render: (m) => certBadge(m.certificationLevel) },
-      { key: "courses", label: "Brukt i kurs", className: "col-courses", sortValue: (m) => m.courseCount ?? 0, render: (m) => (m.courseCount > 0
+      { key: "title", label: t("ui.name"), className: "col-name", sortValue: (m) => m.title ?? "", render: (m) => escapeHtml(m.title ?? m.id) },
+      { key: "status", label: t("ui.status"), className: "col-status", render: (m) => lifecycleBadge(m, t) },
+      { key: "level", label: t("ui.certLevel"), className: "col-level", render: (m) => certBadge(m.certificationLevel) },
+      { key: "courses", label: t("library.col.usedInCourses"), className: "col-courses", sortValue: (m) => m.courseCount ?? 0, render: (m) => (m.courseCount > 0
         ? `<button class="course-count-btn" data-module-id="${escapeHtml(m.id)}" aria-label="${m.courseCount} kurs">${m.courseCount}</button>`
         : `<span class="course-count-zero">0</span>`) },
-      { key: "updatedAt", label: "Sist endret", className: "col-updated", sortValue: (m) => m.updatedAt ?? "", render: (m) => formatDate(m.updatedAt) },
+      { key: "updatedAt", label: t("ui.lastChanged"), className: "col-updated", sortValue: (m) => m.updatedAt ?? "", render: (m) => formatDate(m.updatedAt) },
     ],
     rowId: (m) => m.id,
     actions: (m) => {
@@ -215,23 +215,23 @@ function getListPage() {
       const isPublished = lifecycle === "published" || lifecycle === "published_with_draft";
       return [
         // #896 S3c: knappen sier hva den gjør — åpner modulen.
-        canManage ? `<a href="${openConvUrl}" class="row-action-btn">Åpne</a>` : "",
-        `<button class="row-action-btn" data-action="duplicate" data-module-id="${id}">Dupliser</button>`,
-        `<button class="row-action-btn" data-action="export" data-module-id="${id}" data-module-title="${title}">Eksporter</button>`,
-        canManage && isPublished ? `<button class="row-action-btn" data-action="unpublish" data-module-id="${id}" data-module-title="${title}">Avpubliser</button>` : "",
+        canManage ? `<a href="${openConvUrl}" class="row-action-btn">${escapeHtml(t("ui.action.open"))}</a>` : "",
+        `<button class="row-action-btn" data-action="duplicate" data-module-id="${id}">${escapeHtml(t("ui.action.duplicate"))}</button>`,
+        `<button class="row-action-btn" data-action="export" data-module-id="${id}" data-module-title="${title}">${escapeHtml(t("ui.action.export"))}</button>`,
+        canManage && isPublished ? `<button class="row-action-btn" data-action="unpublish" data-module-id="${id}" data-module-title="${title}">${escapeHtml(t("ui.action.unpublish"))}</button>` : "",
         // #705-UX: Slett vises kun for arkiverte moduler (terminal steg etter arkivering).
         canManage ? (isArchived
-          ? `<button class="row-action-btn" data-action="restore" data-module-id="${id}">Gjenopprett</button>`
-          : `<button class="row-action-btn" data-action="archive" data-module-id="${id}">Arkiver</button>`) : "",
-        canManage && isArchived ? `<button class="row-action-btn destructive" data-action="delete" data-module-id="${id}" data-module-title="${title}">Slett</button>` : "",
-        canManage ? "" : `<span class="row-readonly-note" title="Bare en eier eller en administrator kan åpne denne modulen.">Kun for eier</span>`,
+          ? `<button class="row-action-btn" data-action="restore" data-module-id="${id}">${escapeHtml(t("ui.action.restore"))}</button>`
+          : `<button class="row-action-btn" data-action="archive" data-module-id="${id}">${escapeHtml(t("ui.action.archive"))}</button>`) : "",
+        canManage && isArchived ? `<button class="row-action-btn destructive" data-action="delete" data-module-id="${id}" data-module-title="${title}">${escapeHtml(t("ui.action.delete"))}</button>` : "",
+        canManage ? "" : `<span class="row-readonly-note" title="${escapeHtml(t("library.ownerOnlyHint"))}">${escapeHtml(t("ui.ownerOnly"))}</span>`,
       ];
     },
     emptyHtml: () => `
       <div class="empty-state">
-        <p class="empty-state-title">Ingen moduler ennå</p>
-        <p class="empty-state-text">Opprett den første modulen for å komme i gang.</p>
-        <button class="btn btn-primary" id="emptyCreateBtn">Ny modul</button>
+        <p class="empty-state-title">${escapeHtml(t("library.emptyTitle"))}</p>
+        <p class="empty-state-text">${escapeHtml(t("library.emptyHint"))}</p>
+        <button class="btn btn-primary" id="emptyCreateBtn">${escapeHtml(t("library.newModule"))}</button>
       </div>`,
     load: async () => {
       const data = await apiFetch(`/api/admin/content/modules/library?locale=${encodeURIComponent(currentLocale)}`, getHeaders);
@@ -277,7 +277,7 @@ async function deleteModuleFromRow(moduleId, moduleTitle, btn) {
   btn.disabled = true;
   try {
     await apiFetch(`/api/admin/content/modules/${encodeURIComponent(moduleId)}`, getHeaders, { method: "DELETE" });
-    showToast("Modul slettet.", "success");
+    showToast(t("library.deleted"), "success");
     await loadModules();
   } catch (err) {
     apiErrorToast(err);
@@ -294,7 +294,7 @@ async function exportModulePackage(moduleId, moduleTitle, btn) {
   try {
     const body = await apiFetch(`/api/admin/content/modules/${encodeURIComponent(moduleId)}/export-package`, getHeaders);
     const envelope = body?.envelope ?? null;
-    if (!envelope) throw new Error("Eksport returnerte tom envelope.");
+    if (!envelope) throw new Error(t("library.exportEmpty"));
     const safeTitle = String(moduleTitle ?? "module").replace(/[^a-z0-9-]+/gi, "-").replace(/^-+|-+$/g, "").toLowerCase() || "module";
     const filename = `module-${safeTitle}-${new Date().toISOString().slice(0, 10)}.json`;
     const blob = new Blob([JSON.stringify(envelope, null, 2)], { type: "application/json" });
@@ -323,7 +323,7 @@ async function archiveModule(moduleId, btn) {
   btn.disabled = true;
   try {
     await apiFetch(`/api/admin/content/modules/${encodeURIComponent(moduleId)}/archive`, getHeaders, { method: "POST" });
-    showToast("Modul arkivert.", "success");
+    showToast(t("library.archived"), "success");
     await loadModules();
   } catch (err) {
     apiErrorToast(err);
@@ -335,7 +335,7 @@ async function restoreModule(moduleId, btn) {
   btn.disabled = true;
   try {
     await apiFetch(`/api/admin/content/modules/${encodeURIComponent(moduleId)}/restore`, getHeaders, { method: "POST" });
-    showToast("Modul gjenopprettet.", "success");
+    showToast(t("library.restored"), "success");
     await loadModules();
   } catch (err) {
     apiErrorToast(err);
@@ -375,7 +375,7 @@ async function unpublishModuleFromRow(moduleId, moduleTitle, btn) {
 async function duplicateModule(moduleId, btn) {
   btn.disabled = true;
   const original = allModules.find(m => m.id === moduleId);
-  const sourceTitle = original?.title ?? "Modul";
+  const sourceTitle = original?.title ?? t("ui.kind.module");
 
   try {
     // /export-package, ikke /export (live editing-bundle) — det er
@@ -383,7 +383,7 @@ async function duplicateModule(moduleId, btn) {
     const exportResult = await apiFetch(`/api/admin/content/modules/${encodeURIComponent(moduleId)}/export-package`, getHeaders);
     const envelope = exportResult?.envelope ?? exportResult;
     if (!envelope || envelope.exportFormat !== "a2-content-export/v1" || !envelope.module) {
-      throw new Error("Uventet eksport-format fra server.");
+      throw new Error(t("library.exportUnexpected"));
     }
 
     // Suffiks " (kopi)" på tittelen i alle locales så listen viser kopien tydelig.
@@ -402,7 +402,7 @@ async function duplicateModule(moduleId, btn) {
       method: "POST",
       body: JSON.stringify({ payload: envelope, mode: "createNew", autoPublish: false }),
     });
-    if (!importResult?.moduleId) throw new Error("Import-respons mangler moduleId.");
+    if (!importResult?.moduleId) throw new Error(t("library.importNoId"));
 
     showToast(`Full kopi av «${sourceTitle}» opprettet.`, "success");
     await loadModules();
@@ -423,7 +423,7 @@ function showCoursesPopover(anchor, moduleId) {
 
   coursesPopoverList.innerHTML = (module.courses ?? [])
     .map(c => `<li>${escapeHtml(c.title ?? c.id)}</li>`)
-    .join("") || "<li><em>Ingen kurs funnet.</em></li>";
+    .join("") || `<li><em>${escapeHtml(t("library.noCourses"))}</em></li>`;
 
   const rect = anchor.getBoundingClientRect();
   coursesPopover.style.top = `${rect.bottom + window.scrollY + 6}px`;
@@ -466,7 +466,7 @@ async function openPurgeDialog() {
 
     purgeDeleteCount.textContent = String(toDelete.length);
     purgeDeleteList.innerHTML = toDelete.length === 0
-      ? `<li style="color:#666">Ingen kandidater — alt er enten publisert, arkivert, i bruk, eller har submissions.</li>`
+      ? `<li style="color:#666">${escapeHtml(t("library.purge.noCandidates"))}</li>`
       : toDelete.map((c) => `<li>${escapeHtml(c.title || c.id)}</li>`).join("");
 
     purgeSkipCount.textContent = String(toSkip.length);
@@ -480,7 +480,7 @@ async function openPurgeDialog() {
     // Hvis ingenting å slette, ikke aktiver bekreftelses-input.
     if (toDelete.length === 0) {
       purgeConfirmInput.disabled = true;
-      purgeConfirmInput.placeholder = "Ingenting å slette";
+      purgeConfirmInput.placeholder = t("library.purge.nothing");
     } else {
       purgeConfirmInput.disabled = false;
       purgeConfirmInput.placeholder = "";
@@ -497,7 +497,7 @@ async function runPurge() {
   purgeError.hidden = true;
   purgeConfirmBtn.disabled = true;
   const originalLabel = purgeConfirmBtn.textContent;
-  purgeConfirmBtn.textContent = "Sletter…";
+  purgeConfirmBtn.textContent = t("library.purge.deleting");
   try {
     const result = await apiFetch("/api/admin/content/modules/purge-unpublished", getHeaders, {
       method: "POST",
@@ -657,7 +657,7 @@ async function init() {
       // Friendly guard: a course package can't be imported here — point the author to the Kurs page
       // instead of surfacing the raw scope_mismatch 400 (#563-relatert UX-funn).
       if (payload?.scope === "course") {
-        throw new Error("Dette er en kurs-pakke. Importer den fra Kurs-siden med «Importer kurs-pakke».");
+        throw new Error(t("library.importIsCourse"));
       }
       // #896: importerte moduler skal alltid lande som UTKAST — publisering er en eksplisitt
       // handling forfatteren gjør etter gjennomgang, på samme måte som ved kursimport. Uten
@@ -667,8 +667,8 @@ async function init() {
         method: "POST",
         body: JSON.stringify({ payload, mode: "createNew", autoPublish: false }),
       });
-      if (!result?.moduleId) throw new Error("Import-respons mangler moduleId.");
-      showToast("Modul-pakken er importert som utkast. Gå gjennom den og publiser når den er klar.");
+      if (!result?.moduleId) throw new Error(t("library.importNoId"));
+      showToast(t("library.imported"));
       // Land i arbeidsrommet: der er publiseringsgaten med «Oversett det som mangler» (#896).
       window.location.href = `/admin-content/module/${encodeURIComponent(result.moduleId)}/conversation`;
     } catch (error) {

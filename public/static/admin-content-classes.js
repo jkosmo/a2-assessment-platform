@@ -60,7 +60,7 @@ function escapeHtml(s) {
 // språk — den ville vært en annen enn serverens, og de to ville vært uenige om hva en delvis oversatt
 // tittel skal vise. Klienten viser strengen den får; språket sendes som `x-locale`.
 function courseTitle(value) {
-  return typeof value === "string" && value.trim() ? value : "(uten tittel)";
+  return typeof value === "string" && value.trim() ? value : tNav("ui.untitledItem");
 }
 
 // #497: a class-assigned due date (dueAt) is stored as UTC midnight of the picked date; format from the
@@ -79,9 +79,9 @@ function formatDueDate(iso) {
 let listPage = null;
 
 function classTypeLabel(c) {
-  if (c.isSystem) return "System";
+  if (c.isSystem) return tNav("classes.type.system");
   if (c.kind === "ENTRA") return "Entra";
-  return "Manuell";
+  return tNav("classes.type.manual");
 }
 
 function getListPage() {
@@ -95,38 +95,38 @@ function getListPage() {
       empty: tNav("classes.empty"), emptyFiltered: tNav("classes.emptyFiltered"), loadError: tNav("classes.loadError"), more: tNav("form.more"),
     },
     headerActions: [
-      { id: "importUsersBtn", label: "Importer brukere", title: "Importer brukere fra en JSON-fil eksportert fra Entra (delta-synk)", hidden: !isAdministrator },
-      { id: "syncEntraBtn", label: "Synk brukere fra Entra", title: "Importer brukere fra «Alle i A-2 Norge» i Entra (krever Graph-tilgang)", hidden: !isAdministrator },
-      { id: "newClassBtn", label: "Ny klasse", kind: "primary" },
+      { id: "importUsersBtn", label: tNav("classes.importUsers"), title: tNav("classes.importUsersHint"), hidden: !isAdministrator },
+      { id: "syncEntraBtn", label: tNav("classes.syncEntra"), title: tNav("classes.syncEntraHint"), hidden: !isAdministrator },
+      { id: "newClassBtn", label: tNav("classes.newClass"), kind: "primary" },
     ],
     headerExtraHtml: isAdministrator ? `<input type="file" id="importUsersFile" accept="application/json,.json" style="display:none">` : "",
     // #1046 B2: samme rekkefølge som Moduler/Kurs/Seksjoner — «Alle» først, «Aktive» forhåndsvalgt.
-    filters: { options: [["all", "Alle"], ["active", "Aktive"], ["archived", "Arkiverte"]], initial: "active" },
+    filters: { options: [["all", tNav("ui.filter.all")], ["active", tNav("ui.filter.active")], ["archived", tNav("ui.filter.archived")]], initial: "active" },
     search: { matches: (c, q) => String(c.name ?? "").toLowerCase().includes(q) || String(c.id).toLowerCase().includes(q) },
     sort: { key: "name", dir: "asc", locale: () => currentLocale },
     columns: [
-      { key: "name", label: "Navn", className: "col-name", sortValue: (c) => c.name ?? "", render: (c) =>
-        `${escapeHtml(c.name)}${c.isSystem ? `<span class="system-badge">System</span>` : ""}${lifecycleOf(c) === "archived" ? ` <span class="status-badge status-badge--archived">Arkivert</span>` : ""}` },
-      { key: "type", label: "Type", render: (c) => escapeHtml(classTypeLabel(c)) },
-      { key: "members", label: "Medlemmer", sortValue: (c) => c._count?.members ?? 0, render: (c) => String(c._count?.members ?? 0) },
-      { key: "courses", label: "Tildelte kurs", sortValue: (c) => c._count?.courseAssignments ?? 0, render: (c) => String(c._count?.courseAssignments ?? 0) },
+      { key: "name", label: tNav("ui.name"), className: "col-name", sortValue: (c) => c.name ?? "", render: (c) =>
+        `${escapeHtml(c.name)}${c.isSystem ? `<span class="system-badge">${escapeHtml(tNav("classes.type.system"))}</span>` : ""}${lifecycleOf(c) === "archived" ? ` <span class="status-badge status-badge--archived">${escapeHtml(tNav("ui.status.archived"))}</span>` : ""}` },
+      { key: "type", label: tNav("ui.type"), render: (c) => escapeHtml(classTypeLabel(c)) },
+      { key: "members", label: tNav("classes.col.members"), sortValue: (c) => c._count?.members ?? 0, render: (c) => String(c._count?.members ?? 0) },
+      { key: "courses", label: tNav("classes.col.assignedCourses"), sortValue: (c) => c._count?.courseAssignments ?? 0, render: (c) => String(c._count?.courseAssignments ?? 0) },
     ],
     rowId: (c) => c.id,
     actions: (c) => {
       // #787 slice 5: eier/admin styrer om handlingene vises (speiler eierskaps-vakta). Systemklasser
       // er ueide → bare admin forvalter dem, som før.
       const canManage = c.canManage !== false;
-      if (!canManage) return [`<span class="row-readonly-note" title="Bare en eier eller en administrator kan åpne denne klassen.">Kun for eier</span>`];
+      if (!canManage) return [`<span class="row-readonly-note" title="${escapeHtml(tNav("classes.ownerOnlyHint"))}">${escapeHtml(tNav("ui.ownerOnly"))}</span>`];
       const archived = lifecycleOf(c) === "archived";
       const id = escapeHtml(c.id);
       const name = escapeHtml(c.name);
       // #1046 D3: Åpne · Arkiver, og på arkiverte rader Gjenopprett · Slett.
       return [
-        `<button class="row-action-btn" data-action="open" data-id="${id}">Åpne</button>`,
+        `<button class="row-action-btn" data-action="open" data-id="${id}">${escapeHtml(tNav("ui.action.open"))}</button>`,
         c.isSystem ? "" : archived
-          ? `<button class="row-action-btn" data-action="restore" data-id="${id}" data-name="${name}">Gjenopprett</button>`
-          : `<button class="row-action-btn" data-action="archive" data-id="${id}" data-name="${name}">Arkiver</button>`,
-        !c.isSystem && archived ? `<button class="row-action-btn destructive" data-action="delete" data-id="${id}" data-name="${name}">Slett</button>` : "",
+          ? `<button class="row-action-btn" data-action="restore" data-id="${id}" data-name="${name}">${escapeHtml(tNav("ui.action.restore"))}</button>`
+          : `<button class="row-action-btn" data-action="archive" data-id="${id}" data-name="${name}">${escapeHtml(tNav("ui.action.archive"))}</button>`,
+        !c.isSystem && archived ? `<button class="row-action-btn destructive" data-action="delete" data-id="${id}" data-name="${name}">${escapeHtml(tNav("ui.action.delete"))}</button>` : "",
       ];
     },
     load: async () => (await apiFetch("/api/admin/content/classes", getHeaders)).classes ?? [],
@@ -150,7 +150,7 @@ function getListPage() {
 }
 
 async function renderListView() {
-  pageContent.innerHTML = `<div class="page-loading">Laster…</div>`;
+  pageContent.innerHTML = `<div class="page-loading">${escapeHtml(tNav("ui.loading"))}</div>`;
   await getListPage().reload().catch(() => undefined);
 }
 
@@ -158,7 +158,7 @@ async function renderListView() {
 // for class membership before their first login. ADMINISTRATOR only.
 async function syncEntraUsers() {
   const btn = document.getElementById("syncEntraBtn");
-  if (btn) { btn.disabled = true; btn.textContent = "Synker…"; }
+  if (btn) { btn.disabled = true; btn.textContent = tNav("classes.syncing"); }
   try {
     const res = await apiFetch("/api/admin/sync/org/entra", getHeaders, { method: "POST" });
     const imported = res?.importedUsers ?? res?.run?.createdCount ?? 0;
@@ -166,7 +166,7 @@ async function syncEntraUsers() {
   } catch (err) {
     apiErrorToast(err);
   } finally {
-    if (btn) { btn.disabled = false; btn.textContent = "Synk brukere fra Entra"; }
+    if (btn) { btn.disabled = false; btn.textContent = tNav("classes.syncEntra"); }
   }
 }
 
@@ -178,14 +178,14 @@ async function importUsersFromFile(input) {
   const file = input?.files?.[0];
   if (!file) return;
   const btn = document.getElementById("importUsersBtn");
-  if (btn) { btn.disabled = true; btn.textContent = "Importerer…"; }
+  if (btn) { btn.disabled = true; btn.textContent = tNav("classes.importing"); }
   try {
     const text = await file.text();
     let payload;
     try {
       payload = JSON.parse(text);
     } catch {
-      throw new Error("Fila er ikke gyldig JSON.");
+      throw new Error(tNav("classes.importInvalidJson"));
     }
     const users = Array.isArray(payload) ? payload : payload?.users;
     if (!Array.isArray(users) || users.length === 0) {
@@ -201,7 +201,7 @@ async function importUsersFromFile(input) {
   } catch (err) {
     apiErrorToast(err);
   } finally {
-    if (btn) { btn.disabled = false; btn.textContent = "Importer brukere"; }
+    if (btn) { btn.disabled = false; btn.textContent = tNav("classes.importUsers"); }
     input.value = ""; // allow re-selecting the same file
   }
 }
@@ -217,7 +217,7 @@ async function archiveClass(id, name, { stay = false } = {}) {
   try {
     // #1046 D3: POST /archive, som kurs og seksjoner. DELETE sletter nå for godt.
     await apiFetch(`/api/admin/content/classes/${encodeURIComponent(id)}/archive`, getHeaders, { method: "POST" });
-    showToast("Klasse arkivert.", "success");
+    showToast(tNav("classes.archived"), "success");
     if (stay) { await openClass(id); return; }
     await renderListView();
   } catch (err) {
@@ -230,7 +230,7 @@ async function deleteClassInAdmin(id, name) {
   if (!window.confirm(`Er du helt sikker på at du vil slette klassen «${name}» for godt?\n\nMedlemslista og kurstildelingene forsvinner. Deltakernes egen fremdrift beholdes.`)) return;
   try {
     await apiFetch(`/api/admin/content/classes/${encodeURIComponent(id)}`, getHeaders, { method: "DELETE" });
-    showToast("Klasse slettet.", "success");
+    showToast(tNav("classes.deleted"), "success");
     history.replaceState({}, "", window.location.pathname);
     openClassState = null;
     await renderListView();
@@ -244,7 +244,7 @@ async function restoreClassInAdmin(id, name, { stay = false } = {}) {
   if (!window.confirm(`Gjenopprette klassen «${name}»?`)) return;
   try {
     await apiFetch(`/api/admin/content/classes/${encodeURIComponent(id)}/restore`, getHeaders, { method: "POST" });
-    showToast("Klasse gjenopprettet.", "success");
+    showToast(tNav("classes.restored"), "success");
     if (stay) { await openClass(id); return; }
     await renderListView();
   } catch (err) {
@@ -298,12 +298,12 @@ function getFormPage() {
       const archived = Boolean(k.archivedAt);
       return [
         archived
-          ? `<button class="row-action-btn" data-action="restore">Gjenopprett</button>`
-          : `<button class="row-action-btn" data-action="archive">Arkiver</button>`,
-        archived ? `<button class="row-action-btn destructive" data-action="delete">Slett</button>` : "",
+          ? `<button class="row-action-btn" data-action="restore">${escapeHtml(tNav("ui.action.restore"))}</button>`
+          : `<button class="row-action-btn" data-action="archive">${escapeHtml(tNav("ui.action.archive"))}</button>`,
+        archived ? `<button class="row-action-btn destructive" data-action="delete">${escapeHtml(tNav("ui.action.delete"))}</button>` : "",
       ];
     },
-    tabs: { items: () => [{ id: "rediger", label: "Rediger" }, { id: "innstillinger", label: "Innstillinger" }], initial: "rediger" },
+    tabs: { items: () => [{ id: "rediger", label: tNav("ui.tab.edit") }, { id: "innstillinger", label: tNav("ui.tab.settings") }], initial: "rediger" },
     body: () => classFormBodyHtml(),
     save: { onSave: () => saveClassForm() },
     afterRender: () => bindClassFormHandlers(),
@@ -313,7 +313,7 @@ function getFormPage() {
 }
 
 async function openClass(id) {
-  pageContent.innerHTML = `<div class="page-loading">Laster…</div>`;
+  pageContent.innerHTML = `<div class="page-loading">${escapeHtml(tNav("ui.loading"))}</div>`;
   let klass = null, members = [], courses = [], allCourses = [];
   try {
     if (id) {
@@ -327,7 +327,7 @@ async function openClass(id) {
       if (klass) klass.canManage = true;
     }
   } catch (err) {
-    pageContent.innerHTML = `<div class="empty-state"><p class="empty-state-title">Kunne ikke laste klassen.</p><p class="empty-state-text">${escapeHtml(apiErrorText(err))}</p></div>`;
+    pageContent.innerHTML = `<div class="empty-state"><p class="empty-state-title">${escapeHtml(tNav("classes.loadOneError"))}</p><p class="empty-state-text">${escapeHtml(apiErrorText(err))}</p></div>`;
     return;
   }
   openClassState = { id: id ?? null, klass, members, courses, allCourses };
@@ -345,22 +345,22 @@ function classFormBodyHtml() {
   const memberRows = st.members.map((m) => `<li class="form-row">
       <span class="form-row-title">${escapeHtml(m.name)}</span>
       ${m.email ? `<span class="form-row-meta">${escapeHtml(m.email)}</span>` : ""}
-      <span class="form-row-actions"><button type="button" class="row-action-btn destructive" data-remove-member="${escapeHtml(m.userId)}" aria-label="Fjern ${escapeHtml(m.name)}">Fjern</button></span>
+      <span class="form-row-actions"><button type="button" class="row-action-btn destructive" data-remove-member="${escapeHtml(m.userId)}" aria-label="${escapeHtml(tNav("ui.action.remove"))} ${escapeHtml(m.name)}">${escapeHtml(tNav("ui.action.remove"))}</button></span>
     </li>`).join("");
   const courseRows = st.courses.map((c) => {
     const due = formatDueDate(c.dueAt);
     // #967: si hvorfor ingen i klassen beveger seg. Et arkivert eller upublisert kurs er usynlig
     // for deltakeren, og påminnelser sendes ikke lenger for det — men tildelingen står igjen.
     const unreachable = c.courseArchived
-      ? "Arkivert – deltakerne ser det ikke"
+      ? tNav("classes.course.archivedNote")
       : c.coursePublished === false
-        ? "Ikke publisert – deltakerne ser det ikke"
+        ? tNav("classes.course.unpublishedNote")
         : "";
     return `<li class="form-row">
       <span class="form-row-title">${escapeHtml(courseTitle(c.title))}</span>
       ${unreachable ? `<span class="form-row-meta form-row-meta--warn">${escapeHtml(unreachable)}</span>` : ""}
-      <span class="form-row-meta">${due ? `Frist: ${escapeHtml(due)}` : "Ingen frist"}</span>
-      <span class="form-row-actions"><button type="button" class="row-action-btn destructive" data-remove-course="${escapeHtml(c.courseId)}" aria-label="Fjern kurs">Fjern</button></span>
+      <span class="form-row-meta">${due ? `${escapeHtml(tNav("classes.course.deadline"))}: ${escapeHtml(due)}` : escapeHtml(tNav("classes.course.noDeadline"))}</span>
+      <span class="form-row-actions"><button type="button" class="row-action-btn destructive" data-remove-course="${escapeHtml(c.courseId)}" aria-label="${escapeHtml(tNav("classes.course.remove"))}">${escapeHtml(tNav("ui.action.remove"))}</button></span>
     </li>`;
   }).join("");
   const assignedIds = new Set(st.courses.map((c) => c.courseId));
@@ -370,43 +370,43 @@ function classFormBodyHtml() {
   return `
     <div data-form-tab="rediger">
     <div class="detail-section">
-      <h2>Klasse</h2>
+      <h2>${escapeHtml(tNav("ui.kind.class"))}</h2>
       <div class="form-field">
-        <label for="className">Navn <span class="required-note">(påkrevd)</span></label>
+        <label for="className">${escapeHtml(tNav("ui.name"))} <span class="required-note">${escapeHtml(tNav("ui.required"))}</span></label>
         <input type="text" id="className" data-form-title value="${escapeHtml(k?.name ?? "")}" ${readOnly ? "disabled" : ""} autocomplete="off" />
       </div>
       <div class="form-field">
-        <label for="classDescription">Beskrivelse</label>
+        <label for="classDescription">${escapeHtml(tNav("ui.description"))}</label>
         <textarea id="classDescription" rows="3" ${readOnly ? "disabled" : ""}>${escapeHtml(k?.description ?? "")}</textarea>
       </div>
-      ${readOnly ? `<p class="small">Systemklassen styres automatisk og kan ikke endres.</p>` : ""}
+      ${readOnly ? `<p class="small">${escapeHtml(tNav("classes.systemReadonly"))}</p>` : ""}
     </div>
-    ${isNew ? `<div class="detail-section" data-form-untracked><p class="small" style="margin:0">Lagre klassen først, så kan du legge til deltakere og tildele kurs.</p></div>` : `
+    ${isNew ? `<div class="detail-section" data-form-untracked><p class="small" style="margin:0">${escapeHtml(tNav("classes.saveFirstMembers"))}</p></div>` : `
     <div class="detail-section" data-form-untracked>
       <h2>Deltakere (${st.members.length})</h2>
-      <ul class="form-rows" id="memberChips">${memberRows || `<li class="form-rows-empty">Ingen deltakere ennå.</li>`}</ul>
+      <ul class="form-rows" id="memberChips">${memberRows || `<li class="form-rows-empty">${escapeHtml(tNav("classes.noMembers"))}</li>`}</ul>
       <div class="form-add-row">
-        <input type="text" id="studentSearch" placeholder="Søk navn eller e-post (min. 2 tegn)" autocomplete="off" />
+        <input type="text" id="studentSearch" placeholder="${escapeHtml(tNav("classes.memberSearchPlaceholder"))}" autocomplete="off" />
       </div>
       <ul class="search-results" id="searchResults"></ul>
     </div>
     <div class="detail-section" data-form-untracked>
       <h2>Tildelte kurs (${st.courses.length})</h2>
-      <ul class="form-rows" id="courseChips">${courseRows || `<li class="form-rows-empty">Ingen kurs tildelt ennå.</li>`}</ul>
+      <ul class="form-rows" id="courseChips">${courseRows || `<li class="form-rows-empty">${escapeHtml(tNav("classes.noCourses"))}</li>`}</ul>
       <div class="form-add-row">
-        <select id="courseSelect"><option value="">Velg kurs…</option>${courseOptions}</select>
+        <select id="courseSelect"><option value="">${escapeHtml(tNav("classes.pickCourse"))}</option>${courseOptions}</select>
         <label for="dueAtInput" style="font-size:13px;color:var(--color-meta);display:inline-flex;align-items:center;gap:6px">
           Frist (valgfri)
-          <input type="date" id="dueAtInput" title="Frist for å fullføre kurset (valgfri)" />
+          <input type="date" id="dueAtInput" title="${escapeHtml(tNav("classes.deadlineLabel"))}" />
         </label>
-        <button id="assignCourseBtn" class="btn btn-secondary" style="width:auto">Tildel kurs</button>
+        <button id="assignCourseBtn" class="btn btn-secondary" style="width:auto">${escapeHtml(tNav("classes.assignCourse"))}</button>
       </div>
-      <p style="font-size:12px;color:var(--color-meta);margin:6px 0 0">Fristen brukes til automatiske påminnelser til deltakerne (frist nærmer seg / forfalt).</p>
+      <p style="font-size:12px;color:var(--color-meta);margin:6px 0 0">${escapeHtml(tNav("classes.deadlineHint"))}</p>
     </div>`}
     </div>
     <div data-form-tab="innstillinger" hidden>
       ${isNew
-        ? `<div class="detail-section"><p class="small" style="margin:0">Lagre klassen først, så kan eierne endres her.</p></div>`
+        ? `<div class="detail-section"><p class="small" style="margin:0">${escapeHtml(tNav("classes.saveFirstOwners"))}</p></div>`
         : `<div class="detail-section" id="classOwnerPanelHost" data-form-untracked></div>`}
     </div>`;
 }
@@ -417,14 +417,14 @@ async function saveClassForm() {
   const name = (document.getElementById("className")?.value ?? "").trim();
   const description = (document.getElementById("classDescription")?.value ?? "").trim();
   if (!name) {
-    showToast("Navn er påkrevd.", "error");
+    showToast(tNav("classes.nameRequired"), "error");
     document.getElementById("className")?.focus();
     return false;
   }
   try {
     if (!st.id) {
       const created = await apiFetch("/api/admin/content/classes", getHeaders, { method: "POST", body: JSON.stringify({ name, description: description || undefined }) });
-      showToast("Klasse opprettet.", "success");
+      showToast(tNav("classes.created"), "success");
       // Første lagring lager klassen; sida bytter til den lagrede (med deltakere og kurs).
       await goToClass(created.class.id, { replace: true });
       return true;
@@ -482,7 +482,7 @@ function bindClassFormHandlers() {
     if (!li) return;
     try {
       await apiFetch(`/api/admin/content/classes/${encodeURIComponent(id)}/members`, getHeaders, { method: "POST", body: JSON.stringify({ userId: li.dataset.addUser }) });
-      showToast("Deltaker lagt til.", "success");
+      showToast(tNav("classes.memberAdded"), "success");
       openClass(id);
     } catch (err) { apiErrorToast(err); }
   });
@@ -504,7 +504,7 @@ function bindClassFormHandlers() {
     if (due) body.dueAt = new Date(due + "T00:00:00.000Z").toISOString();
     try {
       await apiFetch(`/api/admin/content/classes/${encodeURIComponent(id)}/courses`, getHeaders, { method: "POST", body: JSON.stringify(body) });
-      showToast("Kurs tildelt.", "success");
+      showToast(tNav("classes.courseAssigned"), "success");
       openClass(id);
     } catch (err) { apiErrorToast(err); }
   });

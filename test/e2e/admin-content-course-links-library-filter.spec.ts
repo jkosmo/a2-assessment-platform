@@ -57,7 +57,7 @@ test.describe("#744 course builder — per-item 'Åpne' editor links (new tab)",
     await expect(sectionRow).toBeVisible();
 
     // Module item → conversation editor, new tab.
-    const moduleOpen = moduleRow.getByRole("link", { name: "Åpne" });
+    const moduleOpen = moduleRow.getByRole("link", { name: /^Åpne$|^Open$|^Opne$/ });
     // ⚠️ #1052: LENKEN BÆRER NÅ OPPHAVET, og nettopp her betyr det mest. `target="_blank"` under
     // betyr at fanen er fersk: det finnes ingen nettleserhistorikk å gå tilbake i, så appens egen
     // «Tilbake» er det ENESTE som finnes. Uten `returnTo` sto forfatteren i en blindvei.
@@ -71,7 +71,7 @@ test.describe("#744 course builder — per-item 'Åpne' editor links (new tab)",
     await expect(moduleOpen).toHaveAttribute("rel", /noopener/);
 
     // Section item → section editor, new tab.
-    const sectionOpen = sectionRow.getByRole("link", { name: "Åpne" });
+    const sectionOpen = sectionRow.getByRole("link", { name: /^Åpne$|^Open$|^Opne$/ });
     // Seksjons-URL-en har allerede `?id=`, så opphavet henges på med `&`.
     await expect(sectionOpen).toHaveAttribute(
       "href",
@@ -80,8 +80,8 @@ test.describe("#744 course builder — per-item 'Åpne' editor links (new tab)",
     await expect(sectionOpen).toHaveAttribute("target", "_blank");
 
     // The "Åpne" link sits next to "Fjern" in the row's action area.
-    await expect(moduleRow.locator(".form-row-actions")).toContainText("Åpne");
-    await expect(moduleRow.locator(".form-row-actions")).toContainText("Fjern");
+    await expect(moduleRow.locator(".form-row-actions")).toContainText(/Åpne|Open|Opne/);
+    await expect(moduleRow.locator(".form-row-actions")).toContainText(/Fjern|Remove/);
   });
 });
 

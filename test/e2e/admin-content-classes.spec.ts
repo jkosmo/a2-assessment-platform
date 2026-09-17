@@ -178,7 +178,7 @@ test("classes admin: Aktive/Arkiverte filter, Type column, and restore action", 
   // Type column labels are present.
   await expect(body).toContainText("System");
   await expect(body).toContainText("Entra");
-  await expect(body).toContainText("Manuell");
+  await expect(body).toContainText(/Manuell|Manual/);
 
   // The system class has no archive/restore action.
   await expect(body.locator('[data-action="archive"][data-id="cls_all_participants"]')).toHaveCount(0);
