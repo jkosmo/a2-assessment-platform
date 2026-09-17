@@ -143,15 +143,20 @@ test.describe("utrullet stage — artefaktet stemmer med kilden", () => {
 
     for (const key of [
       "shell.module.importReloadFailed",
-      "shell.proposal.discard",
       "shell.tab.attention.suffix",
       "shell.settings.needsMissing",
+      // #1046 punkt 3: skjemasidenes felles ord og seksjonssidas ord bor her nå.
+      "form.savedAll",
+      "sections.noCourses",
+      "shell.dialogStatus.slow",
     ]) {
       expect(i18n, `mangler ${key} i utrullet bundle`).toContain(key);
     }
 
     // Slettet i oppryddingen — står de igjen, er et gammelt bundle utrullet.
     expect(i18n).not.toContain("shell.settings.openAdvanced");
+    expect(i18n).not.toContain("shell.proposal.");
+    expect(i18n).not.toContain("shell.header.save");
   });
 
   test("shell-en er utrullet med §6-porten", async ({ request }) => {

@@ -43,7 +43,9 @@ const NORSKE_RAMMEORD: string[] = (() => {
 
 const FLATER = [
   { navn: "sensorkøen", rute: "/review", beholder: "#manualReviewQueueBody", innhold: "#manualReviewQueueBody" },
-  { navn: "resultatsiden", rute: "/results", beholder: "#completionBody", innhold: "#completionBody" },
+  // #1046 omgang 4: en tom tabell skjules og teksten står alene (setTableEmpty), så `#completionBody`
+  // er tom med rette når kurset/filteret ikke har rader. Nøkkeltallslinja tegnes alltid.
+  { navn: "resultatsiden", rute: "/results", beholder: "#resultsKpi", innhold: "#resultsKpi" },
   { navn: "profilen", rute: "/profile", beholder: "#coursesBody", innhold: "#coursesBody" },
   { navn: "fullførte moduler", rute: "/participant/completed", beholder: "#courseCertList", innhold: "#courseCertList" },
   // ⚠️ `beholder` er `body` her fordi flaten ikke har én samlende node å vente på. Men `innhold`
@@ -53,6 +55,21 @@ const FLATER = [
   { navn: "admin-plattform", rute: "/admin-platform", beholder: "body", innhold: "#failedAssessmentsBody" },
   { navn: "kohortstatus", rute: "/deltakere/status", beholder: "#courseSelect", innhold: "#courseSelect" },
 ];
+
+// Hvor lenge en flate får på å fylle beholderen sin. Målt 17.09 på stage (én B1-instans): rapport-
+// flatene svarer på under 1 s uten last, 4–8 s med tre nettlesere samtidig, og over 20 s når hele
+// suiten kjører — det er kapasitet (#808), ikke kode. 45 s her skiller «treg» fra «tom».
+// Feilmeldingen tar med røde toaster, så et 429 («for mange forespørsler») ikke leses som en tom side.
+const VENT_PÅ_INNHOLD_MS = 45000;
+async function ventPåInnhold(page: Page, selector: string, hva = `${selector} fikk aldri innhold`) {
+  try {
+    await expect(page.locator(selector), hva).not.toBeEmpty({ timeout: VENT_PÅ_INNHOLD_MS });
+  } catch (error) {
+    const røde = await page.locator(".toast--error").allTextContents().catch(() => []);
+    if (røde.length > 0) throw new Error(`${hva} — røde toaster: ${JSON.stringify(røde)}`);
+    throw error;
+  }
+}
 
 async function forberedSide(page: Page) {
   // Legg det ekte tokenet på alle API-kall.
@@ -99,7 +116,7 @@ for (const flate of FLATER) {
     //
     // Første utgave brukte en fast pause på 2,5 s og feilet her — ikke fordi siden var tom, men
     // fordi ekte Azure av og til bruker fire. En fast pause måler nettverket, ikke produktet.
-    await expect(page.locator(flate.beholder), `${flate.beholder} fikk aldri innhold`).not.toBeEmpty({ timeout: 20000 });
+    await ventPåInnhold(page, flate.beholder);
 
     const tekst = (await page.locator("body").textContent()) ?? "";
 
@@ -136,7 +153,7 @@ for (const flate of FLATER) {
     const MERKE = "ZZSTALEZZ";
     await forberedSide(page);
     await page.goto(`${BASE}${flate.rute}`, { waitUntil: "domcontentloaded" });
-    await expect(page.locator(flate.beholder)).not.toBeEmpty({ timeout: 20000 });
+    await ventPåInnhold(page, flate.beholder);
 
     const velger = page.locator("#localeSelect");
     if ((await velger.count()) === 0) test.skip(true, "ingen språkvelger på denne flaten");
@@ -182,7 +199,7 @@ for (const flate of FLATER) {
     // oversettelse, ikke som en feil. Nav-etikettene er delte og finnes på hver flate.
     await forberedSide(page);
     await page.goto(`${BASE}${flate.rute}`, { waitUntil: "domcontentloaded" });
-    await expect(page.locator(flate.beholder)).not.toBeEmpty({ timeout: 20000 });
+    await ventPåInnhold(page, flate.beholder);
 
     const velger = page.locator("#localeSelect");
     if ((await velger.count()) === 0) test.skip(true, "ingen språkvelger på denne flaten");
@@ -195,7 +212,7 @@ for (const flate of FLATER) {
     // fordi den så feil sted, og var grønn av det. Mutasjonstesting avslørte det: å hoppe over
     // språkbyttet HELT ga fortsatt ingen røde.
     const nav = page.locator("#workspaceNav");
-    await expect(nav, "arbeidsflate-navet skal være fylt").not.toBeEmpty({ timeout: 20000 });
+    await expect(nav, "arbeidsflate-navet skal være fylt").not.toBeEmpty({ timeout: VENT_PÅ_INNHOLD_MS });
     const rammetekst = (await nav.textContent()) ?? "";
 
     // Kontrollcase: ordlista må ha noe å lete etter, ellers er «ingen norsk igjen» sant om ingenting.
@@ -229,7 +246,7 @@ for (const flate of FLATER) {
     });
 
     await page.goto(`${BASE}${flate.rute}`, { waitUntil: "domcontentloaded" });
-    await expect(page.locator(flate.beholder)).not.toBeEmpty({ timeout: 20000 });
+    await ventPåInnhold(page, flate.beholder);
 
     const velger = page.locator("#localeSelect");
     if ((await velger.count()) === 0) test.skip(true, "ingen språkvelger på denne flaten");
@@ -254,7 +271,7 @@ for (const flate of FLATER) {
   test(`${flate.navn}: språkbytte gir ikke rå JSON eller feil`, async ({ page }) => {
     await forberedSide(page);
     await page.goto(`${BASE}${flate.rute}`, { waitUntil: "domcontentloaded" });
-    await expect(page.locator(flate.beholder)).not.toBeEmpty({ timeout: 20000 });
+    await ventPåInnhold(page, flate.beholder);
 
     const velger = page.locator("#localeSelect");
     if ((await velger.count()) === 0) test.skip(true, "ingen språkvelger på denne flaten");
@@ -266,11 +283,11 @@ for (const flate of FLATER) {
     // Vi venter på at siden faktisk HAR byttet språk, som er det påstanden handler om.
     await velger.selectOption("nb");
     await expect(page.locator("html")).toHaveAttribute("lang", "nb", { timeout: 20000 });
-    await expect(page.locator(flate.beholder)).not.toBeEmpty({ timeout: 20000 });
+    await ventPåInnhold(page, flate.beholder);
 
     await velger.selectOption("en-GB");
     await expect(page.locator("html")).toHaveAttribute("lang", "en-GB", { timeout: 20000 });
-    await expect(page.locator(flate.beholder)).not.toBeEmpty({ timeout: 20000 });
+    await ventPåInnhold(page, flate.beholder);
 
     const tekst = (await page.locator("body").textContent()) ?? "";
     expect(RÅ_JSON.test(tekst), "rå lagringsformat etter språkbytte").toBe(false);

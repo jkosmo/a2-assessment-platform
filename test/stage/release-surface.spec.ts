@@ -51,9 +51,11 @@ test.describe("utrullet stage — er endringene faktisk med?", () => {
     expect(js).toContain("describeImportError");
 
     // Alle tre språk skal ha SIN egen tekst. Nøkkelparitet fanger ikke at innholdet er feil språk.
-    expect(js).toContain('noCourses: "Not used in any course."');
-    expect(js).toContain('noCourses: "Ikke brukt i noe kurs."');
-    expect(js).toContain('noCourses: "Ikkje brukt i noko kurs."');
+    // #1046 punkt 3: seksjonssidas ord ligger i den delte oversettelsesfila (sections.*).
+    const i18n = await fetchText(request, "/static/i18n/admin-content-translations.js");
+    expect(i18n).toContain('"sections.noCourses": "Not used in any course."');
+    expect(i18n).toContain('"sections.noCourses": "Ikke brukt i noe kurs."');
+    expect(i18n).toContain('"sections.noCourses": "Ikkje brukt i noko kurs."');
   });
 
   test(".hidden-fella er ikke utrullet i deltakerens markup", async ({ request }) => {
