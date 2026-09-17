@@ -1,16 +1,16 @@
 {
-  "dato": "2026-09-14",
-  "versjon": "2.68.0",
-  "samlet": 65,
+  "dato": "2026-09-17",
+  "versjon": "2.69.0",
+  "samlet": 64,
   "skår": {
-    "reglerFlereSteder": 36,
+    "reglerFlereSteder": 38,
     "utgaverAvViktigeRegler": 100,
-    "filerAltMåGjennom": 30,
+    "filerAltMåGjennom": 25,
     "filerSomEndresSammen": 90,
-    "størrelse": 70
+    "størrelse": 69
   },
   "tall": {
-    "sumRegler": 32,
+    "sumRegler": 31,
     "regler": [
       {
         "hva": "Skjermer som selv velger hvilket språk et lagret innhold vises på (serveren skal gjøre det)",
@@ -29,7 +29,7 @@
       },
       {
         "hva": "Steder i forfatterkonsollet som bruker menyspråket (ikke innholdsspråket)",
-        "steder": 13,
+        "steder": 12,
         "kilde": "test/unit/admin-content-locale-roles-974.test.js"
       }
     ],
@@ -63,7 +63,7 @@
       "over1500": [
         {
           "fil": "public/static/admin-content-shell.js",
-          "linjer": 7615
+          "linjer": 4570
         },
         {
           "fil": "public/participant.js",
@@ -75,7 +75,7 @@
         },
         {
           "fil": "public/static/admin-content-courses.js",
-          "linjer": 1841
+          "linjer": 1815
         },
         {
           "fil": "public/review.js",
@@ -83,6 +83,10 @@
         }
       ],
       "over800": [
+        {
+          "fil": "public/static/admin-content-settings-tab.js",
+          "linjer": 1463
+        },
         {
           "fil": "src/routes/adminContent.ts",
           "linjer": 1361
@@ -93,7 +97,7 @@
         },
         {
           "fil": "public/static/admin-content-sections.js",
-          "linjer": 1098
+          "linjer": 1000
         },
         {
           "fil": "public/static/workspace-help-content.js",
@@ -153,8 +157,8 @@
       "ruter": 199,
       "tabeller": 39,
       "kolonner": 506,
-      "i18nNøkler": 4718,
-      "testfiler": 351
+      "i18nNøkler": 4871,
+      "testfiler": 352
     }
   }
 }

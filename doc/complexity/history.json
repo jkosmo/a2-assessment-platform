@@ -22,5 +22,17 @@
       "filerSomEndresSammen": 90,
       "størrelse": 70
     }
+  },
+  {
+    "dato": "2026-09-17",
+    "versjon": "2.69.0",
+    "samlet": 64,
+    "skår": {
+      "reglerFlereSteder": 38,
+      "utgaverAvViktigeRegler": 100,
+      "filerAltMåGjennom": 25,
+      "filerSomEndresSammen": 90,
+      "størrelse": 69
+    }
   }
 ]
