@@ -1,11 +1,17 @@
 import { escapeHtml } from "./html-escape.js";
 import { rowActionsHtml, installRowMoreMenus } from "./row-actions.js";
 import { lifecycleBadge } from "./content-status-badge.js";
+import { createFormPage, formPageTexts } from "./form-page.js";
+import { createSettingsTab } from "./admin-content-settings-tab.js";
+import { createPublishFlow } from "./admin-content-publish.js";
+import { createCriteriaTools } from "./admin-content-criteria.js";
+import { LEGACY_STRING_LOCALE, mergeLocaleInto } from "./localized-value.js";
 import {
   supportedLocales,
   localeLabels,
   translations as adminContentTranslations,
 } from "/static/i18n/admin-content-translations.js";
+import { resolveInitialLocale, createTranslator } from "/static/i18n-locale.js";
 import {
   apiFetch,
   buildConsoleHeaders,
@@ -56,36 +62,17 @@ import {
 // i18n
 // ---------------------------------------------------------------------------
 
-let currentLocale = (() => {
-  const stored = localStorage.getItem("participant.locale");
-  if (stored && supportedLocales.includes(stored)) return stored;
-  const b = navigator.language?.toLowerCase() ?? "";
-  if (b.startsWith("nb")) return "nb";
-  if (b.startsWith("nn")) return "nn";
-  return "en-GB";
-})();
+let currentLocale = resolveInitialLocale(supportedLocales);
 
-function t(key) {
-  const map = adminContentTranslations[currentLocale] ?? adminContentTranslations["en-GB"] ?? {};
-  return map[key] ?? key;
-}
+const { t, tf } = createTranslator(adminContentTranslations, () => currentLocale);
 
-// #972: samtale-skallet flettet `String(err?.message ?? err)` inn i chat-loggen 19 steder. Det
-// er "<status>: <hele JSON-kroppen>" fra apiFetch — rå JSON midt i en samtale, på serverens språk.
+// #972: `err.message` fra apiFetch er "<status>: <hele JSON-kroppen>" — rå JSON på serverens språk.
 // `apiErrorText` slår opp KODEN i den delte tabellen (api-error.js) og gir en setning på
 // forfatterens språk. En feil klienten selv kastet slipper uendret gjennom: den teksten er vår.
 function apiErrorText(error) {
   return describeApiError(error, t).headline;
 }
 
-// Template translation: replaces {varName} placeholders in the translated string.
-function tf(key, vars) {
-  let str = t(key);
-  for (const [k, v] of Object.entries(vars)) {
-    str = str.replace(`{${k}}`, String(v));
-  }
-  return str;
-}
 
 function localizeValue(value) {
   return localizeValueForLocale(value, contentLocale);
@@ -172,27 +159,98 @@ let latestSavedModuleVersionId = null;
 // (in scalingRule.generated_from_blueprint_hash) to detect drift.
 let currentBlueprintHash = null;
 
-// v1.1.81: tracks whether criteria-generation is in flight for the current sessionDraft.
+// Tracks whether criteria-generation is in flight for the current sessionDraft.
 // Used by renderPreview to show a "Vurderingskriterier genereres…" placeholder. Reset
 // whenever sessionDraft is replaced (commitSessionDraftPatch / loadModule).
 let criteriaGenerationInFlight = false;
 
-// v1.1.92: when enterPreviewEditMode is active, this callback receives the freshly-generated
+// When enterPreviewEditMode is active, this callback receives the freshly-generated
 // criteria record so the in-progress edit-form can populate its criteria-editor state without
 // the whole preview being re-rendered (which would wipe the edit form). Set by
 // enterPreviewEditMode, cleared by exitEditMode, fired by populateSessionDraftCriteriaInBackground.
 let criteriaReadyCallback = null;
 
-// Chat log — every rendered message is stored here as a re-renderable spec so
-// that retranslateChat() can rebuild the entire dialog on locale switch.
-// Entry kinds:
-//   { kind:'bot',   html:()=>string, choices:Choice[], active:bool }
-//   { kind:'user',  text:string }
-//   { kind:'form',  formType:'text'|'textarea', promptHtml:()=>string,
-//                   placeholderKey:string, submitKey:string, onSubmit:fn, submitted:bool }
-//   { kind:'module-choices', modules:Module[], active:bool }
-// Choice: { labelKey?:string, label?:string, action:()=>void }
-let chatLog = [];
+// #1046 steg 2 (produkteier 13.09): samtaleruta er borte. Det som var «logg» er nå tre ting:
+//   - framdrift og utfall → toast (showToast), med «Avbryt» når noe kan avbrytes
+//   - et spørsmål som trenger svar → valgdialogen (#dialogChoice)
+//   - kildemateriale og plan → «Generer innhold»-dialogen; en instruks → «Be om endring»-dialogen
+// Funksjonsnavnene logBot/logProgress/logResolveSlot står igjen på kallstedene med samme signatur.
+
+
+// ---------------------------------------------------------------------------
+// Framdrift, utfall og spørsmål — uten samtalerute
+// ---------------------------------------------------------------------------
+
+/** Én valgdialog for alt som trenger et svar: HTML øverst, knappene under. */
+function showChoiceDialog(htmlFn, choices) {
+  const dialog = document.getElementById("dialogChoice");
+  const body = document.getElementById("dialogChoiceBody");
+  const actions = document.getElementById("dialogChoiceActions");
+  if (!dialog || !body || !actions) return;
+  body.innerHTML = htmlFn();
+  actions.innerHTML = "";
+  const hasCancel = choices.some((c) => c.labelKey === "shell.action.cancel");
+  const all = hasCancel ? choices : [...choices, { labelKey: "shell.action.cancel", action: () => {} }];
+  all.forEach((choice, index) => {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = index === 0 && choice.labelKey !== "shell.action.cancel" ? "btn-primary" : "btn-secondary";
+    btn.textContent = resolveChoiceLabel(choice);
+    btn.addEventListener("click", () => { dialog.close(); choice.action?.(); });
+    actions.appendChild(btn);
+  });
+  if (!dialog.open) dialog.showModal();
+}
+
+/** Beskjed uten spørsmål → toast. Med valg → valgdialogen. */
+function logBot(htmlFn, choices = []) {
+  if (choices.length > 0) { showChoiceDialog(htmlFn, choices); return; }
+  const text = htmlToPlainText(htmlFn());
+  if (text) { showToast(text, "info"); announceStatus(text); }
+}
+
+/** Framdrift → en toast som står til den løses; «Avbryt» når kalleren har hengt på en lytter. */
+// Stage 14.09: det som pågår i «Generer innhold»-dialogen (crawl, henting, opplasting, analyse)
+// vises på en linje i dialogen med spinner — toastene lå bak dialogens bakteppe, og en knapp som
+// skiftet tekst var for lite til å se at noe som tar minutter, var i gang.
+function setGenerateDialogStatus(text, { abort = null, slow = false, tone = "info" } = {}) {
+  const box = document.getElementById("dialogGenerateStatus");
+  if (!box) return;
+  if (!text) { setHidden(box, true); return; }
+  const line = box.querySelector(".dialog-status-text");
+  if (line) line.textContent = slow ? `${text} ${t("shell.dialogStatus.slow")}` : text;
+  box.classList.toggle("is-error", tone === "error");
+  const abortBtn = box.querySelector("[data-dialog-status-abort]");
+  if (abortBtn) { abortBtn.onclick = abort; setHidden(abortBtn, !abort); }
+  setHidden(box, false);
+}
+
+function logProgress(textKeyOrFn, options = {}) {
+  const text = typeof textKeyOrFn === "function" ? textKeyOrFn() : t(textKeyOrFn);
+  announceStatus(text);
+  const abortBtn = document.createElement("button");
+  abortBtn.type = "button";
+  const el = document.createElement("div");
+  // Står dialogen åpen, er det der forfatteren ser — framdriften vises i den, ikke som toast.
+  const inDialog = !options.quiet && !!document.getElementById("dialogGenerate")?.open;
+  if (inDialog) setGenerateDialogStatus(text, { abort: options.abortable ? () => abortBtn.click() : null, slow: true });
+  const toast = options.quiet || inDialog ? null : showToast(text, "info", "", options.abortable
+    ? { sticky: true, actionLabel: t("shell.action.cancel"), onAction: () => abortBtn.click() }
+    : { sticky: true });
+  return { entry: { quiet: !!options.quiet }, el, abortBtn, toast, inDialog };
+}
+
+/** Utfallet: toasten for framdriften fjernes; svaret vises — som toast, eller som spørsmål. */
+function logResolveSlot(slot, htmlFn, choices = []) {
+  slot?.toast?.remove();
+  if (slot?.inDialog) setGenerateDialogStatus(null);
+  if (choices.length > 0) { showChoiceDialog(htmlFn, choices); return; }
+  const text = htmlToPlainText(htmlFn());
+  if (!text) return;
+  announceStatus(text);
+  if (slot?.entry?.quiet) return;
+  showToast(text, /feil|error|failed|avvist|refus|kunne ikke|could not|mislyktes/i.test(text) ? "error" : "info");
+}
 
 // Identity / headers
 let participantRuntimeConfig = {
@@ -224,23 +282,18 @@ function getHeaders() {
 // DOM refs
 // ---------------------------------------------------------------------------
 
-const chatMessages = document.getElementById("chatMessages");
 const previewPane = document.getElementById("previewPane");
-const contentLocaleBar = document.getElementById("previewLocaleBar");
 const previewContent = document.getElementById("previewContent");
-// The fixed action bar above the chat log. See `renderWorkspaceActions`.
-const workspaceActionsBar = document.getElementById("workspaceActions");
+// #1046 (14.09): hodet — tilbake-lenke, handlingsrad med Lagre/Avbryt, navn, statusmerker,
+// språkpiller og fanelinje — tegnes av form-page.js, som på kurs, seksjon og klasse. Panelene
+// under (forhåndsvisning/skjema, innstillinger) ligger utenfor og styres herfra. Se `createModuleFormPage`.
+const moduleFormHost = document.getElementById("moduleFormHead");
+let formPage = null;
 // Shown on Rediger only — see the tab handler.
 const workspaceNav = document.getElementById("workspaceNav");
 const localePicker = document.querySelector(".locale-picker");
 const appVersionLabel = document.getElementById("appVersion");
 const uiLocaleSelect = document.getElementById("localeSelect");
-// #896 S1: the Samtale/Avansert mode switch is replaced by three views on one module.
-const tabButtons = {
-  preview: document.getElementById("tabPreview"),
-  edit: document.getElementById("tabEdit"),
-  settings: document.getElementById("tabSettings"),
-};
 const tabPanelModule = document.getElementById("tabPanelModule");
 const tabPanelSettings = document.getElementById("tabPanelSettings");
 const shellStatusAnnouncer = document.getElementById("shellStatusAnnouncer");
@@ -331,20 +384,7 @@ function announceStatus(message) {
   });
 }
 
-function setChatBusy(isBusy) {
-  if (!chatMessages) return;
-  if (isBusy) {
-    chatMessages.setAttribute("aria-busy", "true");
-  } else {
-    chatMessages.removeAttribute("aria-busy");
-  }
-}
 
-function focusFirstEnabledChoice(container) {
-  const firstChoice = container?.querySelector?.(".chat-choice-btn:not([disabled])");
-  if (!firstChoice) return;
-  setTimeout(() => firstChoice.focus(), 40);
-}
 
 // #972/#985: returnerte `parsed.message || parsed.error` — altså serverens engelske setning, eller
 // i verste fall den rå kodestrengen (`content_ownership`) som overskrift. Begge deler er brudd på
@@ -395,23 +435,8 @@ function readFileAsBase64(file) {
   });
 }
 
-function _domScroll(el) {
-  el.scrollIntoView({ behavior: "smooth", block: "end" });
-}
 
-// Disable every current choice button in the DOM immediately (live feedback).
-function _disableAllDomChoices() {
-  for (const btn of chatMessages.querySelectorAll(".chat-choice-btn:not([disabled])")) {
-    btn.disabled = true;
-  }
-}
 
-// Mark all log entries as inactive so replays render them with disabled choices.
-function _deactivateAll() {
-  for (const e of chatLog) {
-    if ("active" in e) e.active = false;
-  }
-}
 
 // Build a choices row from an array of { labelKey, action } specs.
 // disabled=true renders non-interactive buttons for past history.
@@ -419,91 +444,17 @@ function resolveChoiceLabel(choice) {
   return choice.label ?? t(choice.labelKey);
 }
 
-function _domChoiceRow(choices, disabled, autoFocus = false) {
-  const row = document.createElement("div");
-  row.className = "chat-choices";
-  for (const c of choices) {
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = "btn-secondary chat-choice-btn";
-    btn.textContent = resolveChoiceLabel(c);
-    btn.disabled = disabled;
-    if (!disabled) {
-      btn.addEventListener("click", () => {
-        _disableAllDomChoices();
-        _deactivateAll();
-        logUser(resolveChoiceLabel(c));
-        c.action();
-      });
-    }
-    row.appendChild(btn);
-  }
-  if (autoFocus && !disabled) {
-    focusFirstEnabledChoice(row);
-  }
-  return row;
-}
 
-function _domBotBubble(html, choices, disabled, autoFocusChoices = false) {
-  const msg = document.createElement("div");
-  msg.className = "chat-msg chat-msg--bot";
-  const bubble = document.createElement("div");
-  bubble.className = "chat-bubble";
-  bubble.innerHTML = html;
-  msg.appendChild(bubble);
-  if (choices && choices.length > 0) {
-    msg.appendChild(_domChoiceRow(choices, disabled, autoFocusChoices));
-  }
-  chatMessages.appendChild(msg);
-  _domScroll(msg);
-  return msg;
-}
 
-function _domUserBubble(text) {
-  const msg = document.createElement("div");
-  msg.className = "chat-msg chat-msg--user";
-  msg.innerHTML = `<div class="chat-bubble">${escapeHtml(text)}</div>`;
-  chatMessages.appendChild(msg);
-  _domScroll(msg);
-}
 
-// Creates a progress bubble. Returns { el, abortBtn }.
-// v1.1.98: abort button removed from progress messages. Value was low (LLM calls take
-// 30-60s; users can wait or navigate away) and it created a dead-end — clicking Avbryt
-// ended the chat with "...avbrutt" without a recovery menu, leaving the user stuck.
-// The abortBtn return is now a detached stub so existing callers (~17 places using
-// addEventListener/remove/disabled) keep working without behavior — the click event
-// never fires since the button isn't attached to the DOM.
-function _domProgress(textKeyOrFn, { abortable = false } = {}) {
-  const text = typeof textKeyOrFn === "function" ? textKeyOrFn() : t(textKeyOrFn);
-  setChatBusy(true);
-  announceStatus(text);
-  const msg = document.createElement("div");
-  msg.className = "chat-msg chat-msg--bot";
-  const bubble = document.createElement("div");
-  bubble.className = "chat-bubble chat-bubble--progress";
-  bubble.innerHTML = `<span class="chat-spinner"></span>${escapeHtml(text)}`;
-  msg.appendChild(bubble);
-  // v1.1.98 dropped the Avbryt button because it ended the chat with no way forward -
-  // "dead-end, low value, high complexity". Correct then. #896 S2 changes that for ONE
-  // caller: Lagre now commits to a write, and cancelling hands the form back with every
-  // typed value intact, which is a recovery rather than a dead end. So the button is
-  // opt-in: abortable callers get a real one, everyone else keeps the detached stub and
-  // its harmless no-op listeners.
-  const abortBtn = document.createElement("button");
-  abortBtn.type = "button";
-  if (abortable) {
-    abortBtn.className = "btn-secondary chat-progress-abort";
-    abortBtn.textContent = t("shell.action.cancel");
-    bubble.appendChild(abortBtn);
-  }
-  chatMessages.appendChild(msg);
-  _domScroll(msg);
-  return { el: msg, abortBtn };
-}
 
 // Renders the interactive part of a form entry (input or textarea + submit button).
 // Called both on first render and during retranslateChat for unsubmitted forms.
+// Vertsnavnet til statuslinja; en ugyldig URL vises som den ble skrevet (feilen kommer fra tjeneren).
+function hostnameOf(url) {
+  try { return new URL(url.trim()).hostname; } catch { return url.trim(); }
+}
+
 function _domFormFields(entry) {
   const wrap = document.createElement("div");
   const isMultiLine = entry.formType === "textarea" || entry.formType === "source-material";
@@ -566,8 +517,7 @@ function _domFormFields(entry) {
     uploadHint.className = "chat-form-help";
     uploadHint.textContent = t("shell.source.uploadHint");
 
-    // v1.2.3 (#454 Phase 2.1): chip-liste i stedet for "·"-separert tekst, så hver kilde
-    // får sin egen rad med × for fjerning. uploadHint vises kun når lista er tom.
+    // Chip-liste: hver kilde får sin egen rad med × for fjerning. uploadHint vises kun når lista er tom.
     const sourceList = document.createElement("ul");
     sourceList.className = "source-chip-list";
     // #975: `.source-chip-list{display:flex}` (admin-content.html) slår `hidden`-attributtet, så
@@ -607,13 +557,11 @@ function _domFormFields(entry) {
     urlBtn.addEventListener("click", async () => {
       const url = window.prompt(t("shell.source.urlPrompt"));
       if (!url || !url.trim()) return;
-      const originalLabel = urlBtn.textContent;
       urlBtn.disabled = true;
       uploadBtn.disabled = true;
-      // #555-oppfølging (forfatter-feedback): «Neste» var fortsatt klikkbar mens URL-en ble hentet
-      // — uklart hva som skjedde. Deaktiver den til hentingen er ferdig.
+      // Generer er slått av til hentingen er ferdig — ellers er det uklart hva som skjer (#555).
       btn.disabled = true;
-      urlBtn.textContent = t("shell.source.fetching");
+      setGenerateDialogStatus(tf("shell.source.fetchingStatus", { host: hostnameOf(url) }));
       try {
         const result = await apiFetch(
           "/api/admin/content/source-material/fetch-url",
@@ -636,7 +584,7 @@ function _domFormFields(entry) {
         urlBtn.disabled = false;
         uploadBtn.disabled = false;
         btn.disabled = false;
-        urlBtn.textContent = originalLabel;
+        setGenerateDialogStatus(null);
       }
     });
 
@@ -645,12 +593,11 @@ function _domFormFields(entry) {
     crawlBtn.addEventListener("click", async () => {
       const url = window.prompt(t("shell.source.crawlPrompt"));
       if (!url || !url.trim()) return;
-      const originalLabel = crawlBtn.textContent;
       crawlBtn.disabled = true;
       urlBtn.disabled = true;
       uploadBtn.disabled = true;
       btn.disabled = true;
-      crawlBtn.textContent = t("shell.source.crawling");
+      setGenerateDialogStatus(tf("shell.source.crawlingStatus", { host: hostnameOf(url) }));
       try {
         const result = await apiFetch(
           "/api/admin/content/source-material/crawl-url",
@@ -688,28 +635,20 @@ function _domFormFields(entry) {
         urlBtn.disabled = false;
         uploadBtn.disabled = false;
         btn.disabled = false;
-        crawlBtn.textContent = originalLabel;
+        setGenerateDialogStatus(null);
       }
     });
-
-    // #455: external-LLM-handoff. Copies prompt + opens import modal. On successful
-    // import, marks the form submitted (skipping the normal source→cert→generate path)
-    // and lands user in draft-ready with module + sessionDraft populated.
-    // #555: scenario velges nå ETTER kilde, så ved ekstern-LLM-handoff (som skjer på kilde-
-    // steget) er scenario ennå ukjent — vi defaulter til "auto" og lar ekstern LLM avgjøre.
 
     const fileInput = document.createElement("input");
     fileInput.type = "file";
     fileInput.accept = SOURCE_MATERIAL_ACCEPT;
-    // v1.2.3 (#454 Phase 2.1): allow multi-select i fil-picker så bruker kan velge mange
-    // filer i én operasjon. Behold "én ekstraksjon om gangen"-loopen siden parser-worker
-    // håndterer én fil per job — minimerer endring i backend, gir også klarere progress.
+    // Flervalg i filvelgeren; ekstraksjonen går likevel én fil om gangen (parser-workeren tar én
+    // jobb per fil, og framdriften blir tydelig).
     fileInput.multiple = true;
     fileInput.hidden = true;
 
     uploadBtn.addEventListener("click", () => fileInput.click());
-    // v1.2.3: håndter en eller flere filer fra picker-en. Validerer hver fil for seg;
-    // hopper over de som feiler (med toast) og fortsetter med resten.
+    // Én eller flere filer: hver valideres for seg; de som feiler hoppes over (med toast).
     fileInput.addEventListener("change", async () => {
       const files = Array.from(fileInput.files ?? []);
       if (files.length === 0) return;
@@ -740,21 +679,16 @@ function _domFormFields(entry) {
         return;
       }
 
-      const originalLabel = uploadBtn.textContent;
       uploadBtn.disabled = true;
       urlBtn.disabled = true;
-      // #555-oppfølging: hold «Neste» deaktivert mens filer ekstraheres (samme grunn som URL).
+      // Generer er slått av mens filer ekstraheres (samme grunn som ved URL).
       btn.disabled = true;
 
-      // v1.2.3: ekstrahérer filene sekvensielt. Sekvensielt er trygt for parser-worker
-      // (én job om gangen, ingen pool-uttømming) og gir tydelig progress-status til bruker.
-      // Knapp-label viser "Laster opp 2/5..." mens bruker ser progress.
+      // Sekvensielt: trygt for parser-workeren (én jobb om gangen) og gir «n av m» i statuslinja.
       let processed = 0;
       for (const file of toExtract) {
         processed += 1;
-        uploadBtn.textContent = toExtract.length === 1
-          ? t("shell.source.uploading")
-          : `${t("shell.source.uploading")} ${processed}/${toExtract.length}`;
+        setGenerateDialogStatus(tf("shell.source.uploadingStatus", { fileName: file.name, n: processed, total: toExtract.length }));
         try {
           const contentBase64 = await readFileAsBase64(file);
           const { jobId } = await apiFetch(
@@ -806,7 +740,7 @@ function _domFormFields(entry) {
       uploadBtn.disabled = false;
       urlBtn.disabled = false;
       btn.disabled = false;
-      uploadBtn.textContent = originalLabel;
+      setGenerateDialogStatus(null);
       fileInput.value = "";
       inputEl.focus();
     });
@@ -817,8 +751,7 @@ function _domFormFields(entry) {
     uploadRow.appendChild(uploadHint);
     uploadRow.appendChild(fileInput);
     wrap.appendChild(uploadRow);
-    // v1.2.3: chip-liste plassert under uploadRow så den ikke konkurrerer om plass med
-    // knappene. Skjules når tom (display: none via hidden-attributtet).
+    // Chip-lista under knapperaden, så den ikke konkurrerer om plassen; skjult når tom.
     wrap.appendChild(sourceList);
   }
 
@@ -849,10 +782,6 @@ function _domFormFields(entry) {
       btn.disabled = true;
       inputEl.disabled = true;
       entry.submitted = true;
-      if (!entry.mount) {
-        _deactivateAll();
-        logUser(t("shell.source.userPreview"));
-      }
       entry.onSubmit(combinedSourceMaterial);
       return;
     }
@@ -862,11 +791,6 @@ function _domFormFields(entry) {
     btn.disabled = true;
     inputEl.disabled = true;
     entry.submitted = true;
-    const displayText = isMultiLine
-      ? tf("shell.source.userPreview", { count: val.length, preview: val.length > 80 ? val.slice(0, 80) + "…" : val })
-      : val;
-    _deactivateAll();
-    logUser(displayText);
     entry.onSubmit(val);
   }
 
@@ -878,26 +802,12 @@ function _domFormFields(entry) {
     submit();
   });
   wrap.appendChild(inputEl);
-  wrap.appendChild(btn);
-  // #1046: samme kildeverktøy (lim inn / last opp / URL / crawl) i «Generer innhold»-dialogen.
-  if (entry.mount) {
-    entry.mount.replaceChildren(wrap);
-    return;
-  }
-  chatMessages.appendChild(wrap);
-  _domScroll(wrap);
-  // #360 a11y: for source-material, focus the upload button — the first meaningful
-  // control in the step. Keyboard users discover both upload AND textarea via natural
-  // Tab order; previously textarea autofocus required Shift+Tab to find the upload.
-  // For other form types, keep textarea/input autofocus (instant typing).
-  setTimeout(() => {
-    if (isSourceMaterial) {
-      const uploadBtn = wrap.querySelector(".chat-choice-btn");
-      (uploadBtn ?? inputEl).focus();
-    } else {
-      inputEl.focus();
-    }
-  }, 80);
+  // Stage 14.09: Generer står i bunnraden ved siden av Avbryt, ikke under tekstfeltet.
+  const submitSlot = document.getElementById("dialogGenerateSubmitSlot");
+  if (submitSlot) submitSlot.replaceChildren(btn); else wrap.appendChild(btn);
+  // Kildeverktøyet monteres i «Generer innhold»-dialogen; fokus på opplastingsknappen (#360).
+  entry.mount.replaceChildren(wrap);
+  setTimeout(() => { (wrap.querySelector(".chat-choice-btn") ?? inputEl).focus(); }, 80);
 }
 
 
@@ -905,156 +815,40 @@ function _domFormFields(entry) {
 // Logged chat API — all flow functions use these
 // ---------------------------------------------------------------------------
 
-// Log + render a bot message. htmlFn() is called at render time so re-translation works.
-function logBot(htmlFn, choices = []) {
-  if (choices.length > 0) openChatPane();
-  const entry = { kind: "bot", html: htmlFn, choices, active: choices.length > 0 };
-  chatLog.push(entry);
-  _domBotBubble(htmlFn(), choices, false, choices.length > 0);
-}
-
-// Log + render a user bubble. Marks all preceding entries inactive.
-function logUser(text) {
-  _deactivateAll();
-  chatLog.push({ kind: "user", text });
-  _domUserBubble(text);
-}
-
-// Create a progress slot (logged as a pending bot entry). Caller attaches abort listener.
-// textKeyOrFn: i18n key OR () => string.  Returns { entry, el, abortBtn }.
-function logProgress(textKeyOrFn, options = {}) {
-  // Produkteier 13.09: en lagring skal ikke åpne samtaleruta. Ruta åpnes når assistenten SPØR
-  // (valg, skjema) — framdrift er ikke et spørsmål. Avbryt-knappen finnes i ruta for den som har den åpen.
-  const { el, abortBtn } = _domProgress(textKeyOrFn, options);
-  // quiet: framdrift uten utfall å melde (lasting av modulen) — speiles ikke som toast.
-  const entry = { kind: "bot", html: null, choices: [], active: false, quiet: !!options.quiet };
-  chatLog.push(entry);
-  // Ruta er skjult: framdriften vises som toast, med «Avbryt» når den kan avbrytes. Toasten
-  // fjernes når framdriften løses (logResolveSlot).
-  let toast = null;
-  if (!options.quiet && !chatPaneVisible()) {
-    const text = typeof textKeyOrFn === "function" ? textKeyOrFn() : t(textKeyOrFn);
-    toast = showToast(text, "info", "", options.abortable
-      ? { sticky: true, actionLabel: t("shell.action.cancel"), onAction: () => abortBtn.click() }
-      : { sticky: true });
-  }
-  return { entry, el, abortBtn, toast };
-}
-
-// Resolve a progress slot with its final content + choices.
-// Updates both the log entry and the DOM element in-place.
-function logResolveSlot(slot, htmlFn, choices = []) {
-  setChatBusy(false);
-  slot.toast?.remove();
-  slot.entry.html = htmlFn;
-  slot.entry.choices = choices;
-  slot.entry.active = choices.length > 0;
-  slot.el.innerHTML = `<div class="chat-bubble">${htmlFn()}</div>`;
-  if (choices.length > 0) {
-    slot.el.appendChild(_domChoiceRow(choices, false, true));
-  }
-  const announcement = htmlToPlainText(htmlFn());
-  if (announcement && announcement.length <= 160) {
-    announceStatus(announcement);
-  }
-  // Produkteier 13.09: samtaleruta er skjult til assistenten trenger et svar. Utfallet av en
-  // handling (lagret, importert, gjenopprettet, avvist) må likevel nå forfatteren — som toast,
-  // slik de andre skjemasidene gjør det. showToast hopper over en identisk toast som alt står.
-  if (choices.length > 0) openChatPane();
-  if (announcement && !slot.entry.quiet && choices.length === 0 && !chatPaneVisible()) showToast(announcement, /feil|error|failed|avvist|refus|kunne ikke|could not/i.test(announcement) ? "error" : "info");
-  _domScroll(slot.el);
-}
-
-// Log + render a text input or textarea form (prompt bubble + input fields).
-function logForm(formType, promptHtmlFn, placeholderKey, submitKey, onSubmit, initialValue = "", context = {}) {
-  openChatPane();
-  const entry = { kind: "form", formType, promptHtml: promptHtmlFn, placeholderKey, submitKey, onSubmit, submitted: false, initialValue, context };
-  chatLog.push(entry);
-  _domBotBubble(promptHtmlFn(), [], false);
-  _domFormFields(entry);
-}
 
 
-// ---------------------------------------------------------------------------
-// Re-translate — clears and replays the entire chatLog with the current locale
-// ---------------------------------------------------------------------------
 
-function retranslateChat() {
-  chatMessages.innerHTML = "";
-  for (const entry of chatLog) {
-    if (entry.kind === "bot" && entry.html) {
-      _domBotBubble(entry.html(), entry.choices, !entry.active);
-    } else if (entry.kind === "user") {
-      _domUserBubble(entry.text);
-    } else if (entry.kind === "form") {
-      _domBotBubble(entry.promptHtml(), [], true);
-      if (!entry.submitted) {
-        _domFormFields(entry);
-      }
-    }
-  }
-  chatMessages.lastElementChild?.scrollIntoView({ behavior: "smooth", block: "end" });
-}
+
+
 
 // ---------------------------------------------------------------------------
 // Preview rendering
 // ---------------------------------------------------------------------------
 
-function renderPreviewLocaleBar() {
-  // Only show the switcher when content is loaded — with nothing to author, the only language that
-  // means anything is the UI one, and that has its own selector in the top bar.
-  const hasContent = !!bundle || !!sessionDraft || !!previewDraft;
-  contentLocaleBar.classList.toggle("visible", hasContent);
-  contentLocaleBar.innerHTML = "";
-  if (!hasContent) return;
-
-  // Stage-tilbakemelding 2026-08-17: this reads as a PREVIEW control, but it decides the language
-  // for Forhåndsvisning, Rediger and Innstillinger alike. Saying so is half the fix; the other
-  // half was making Innstillinger actually obey it.
-  const label = document.createElement("span");
-  label.className = "content-locale-label";
-  label.textContent = t("shell.contentLocale.label");
-  contentLocaleBar.appendChild(label);
-
-  for (const loc of supportedLocales) {
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = "preview-locale-btn" + (loc === contentLocale ? " active" : "");
-    btn.textContent = localeLabels[loc] ?? loc;
-    btn.setAttribute("aria-pressed", String(loc === contentLocale));
-    btn.setAttribute("aria-label", tf("shell.contentLocale.switchAria", { locale: localeLabels[loc] ?? loc }));
-    btn.addEventListener("click", () => {
-      if (loc === contentLocale) return;
-      // Disse knappene er i dag deaktivert under redigering via CSS. Guarden står likevel her, så
-      // flaten ikke får tilbake blindveien i det øyeblikket noen fjerner den CSS-regelen.
-      const wasEditing = !!document.getElementById("previewEditConfirm");
-      // Bare det som faktisk var skrevet og ikke bekreftet, er verdt en beskjed.
-      const wasDirty = hasOpenEditForm();
-      // #920: the same question a tab switch asks. It used to ask it only for Innstillinger, so an
-      // open edit form was re-rendered from the new language without a word — the typed text was
-      // simply gone.
-      if (!confirmLocaleSwitchDiscard()) return;
-      contentLocale = loc;
-      // The panel's editors are seeded once, in the language they were seeded FOR. Discard so the
-      // next render re-reads them in the new one; otherwise the author edits Norwegian text that
-      // the save then files as English.
-      settingsCriteriaState = null;
-      settingsCriteriaBaseline = null;
-      settingsCriteriaDraftBaseline = undefined;
-      settingsDraftValues = null;
-      renderPreviewLocaleBar();
-      renderPreview();
-      renderSettingsPanel();
-      if (wasEditing) {
-        enterPreviewEditMode({ force: true });
-        if (wasDirty) {
-          logBot(() => escapeHtml(t("shell.directEdit.localeSwitched")));
-          if (!chatPaneVisible()) showToast(t("shell.directEdit.localeSwitched"), "warning");
-        }
-      }
-    });
-    contentLocaleBar.appendChild(btn);
+// Innholdsspråket byttes i form-page.js sine språkpiller; dette er det som skjer ved byttet.
+// Returnerer false når forfatteren sier nei (et åpent skjema med endringer ville blitt tegnet om).
+function switchContentLocale(loc) {
+  if (loc === contentLocale) return false;
+  const wasEditing = !!document.getElementById("previewEditConfirm");
+  // Bare det som faktisk var skrevet og ikke bekreftet, er verdt en beskjed.
+  const wasDirty = hasOpenEditForm();
+  // #920: the same question a tab switch asks. It used to ask it only for Innstillinger, so an
+  // open edit form was re-rendered from the new language without a word — the typed text was
+  // simply gone.
+  if (!confirmLocaleSwitchDiscard()) return false;
+  contentLocale = loc;
+  // The panel's editors are seeded once, in the language they were seeded FOR. Discard so the
+  // next render re-reads them in the new one; otherwise the author edits Norwegian text that
+  // the save then files as English.
+  settingsTab.resetLocaleBoundState();
+  renderPreview();
+  settingsTab.renderSettingsPanel();
+  if (wasEditing) {
+    enterPreviewEditMode({ force: true });
+    if (wasDirty) showToast(t("shell.directEdit.localeSwitched"), "warning");
   }
+  formPage?.refreshHeader();
+  return true;
 }
 
 // B3 (#450): the blueprint that the current view "is about" — sessionDraft takes precedence
@@ -1080,6 +874,11 @@ async function refreshBlueprintHash() {
   const next = await hashBlueprintAsync(blueprint);
   if (next === currentBlueprintHash) return;
   currentBlueprintHash = next;
+  // Stage 17.09: dette kallet kommer asynkront ETTER at et generert utkast er lagt i skjemaet, og
+  // renderPreview() tegnet forhåndsvisningen — med kriteriene — over skjemaet på Rediger. Et åpent
+  // skjema står; avviksbanneret (som er det hashen styrer) hører til forhåndsvisningen og tegnes
+  // neste gang den tegnes.
+  if (isEditFormOpen()) return;
   renderPreview();
 }
 
@@ -1121,9 +920,9 @@ function renderDriftBannerHtml() {
 function attachDriftBannerHandlers() {
   const banner = previewContent?.querySelector("[data-drift-banner]");
   if (!banner) return;
-  banner.querySelector('[data-drift-action="keep"]')?.addEventListener("click", handleDriftKeep);
-  banner.querySelector('[data-drift-action="show-diff"]')?.addEventListener("click", handleDriftShowDiff);
-  banner.querySelector('[data-drift-action="regenerate"]')?.addEventListener("click", handleDriftRegenerate);
+  banner.querySelector('[data-drift-action="keep"]')?.addEventListener("click", criteriaTools.handleDriftKeep);
+  banner.querySelector('[data-drift-action="show-diff"]')?.addEventListener("click", criteriaTools.handleDriftShowDiff);
+  banner.querySelector('[data-drift-action="regenerate"]')?.addEventListener("click", criteriaTools.handleDriftRegenerate);
 }
 
 function renderPreview() {
@@ -1161,20 +960,18 @@ function renderPreview() {
     if (cfg.mcqSetVersion) versionChainParts.push(`MCQ v${cfg.mcqSetVersion.versionNo}`);
 
     previewContent.innerHTML = buildPreviewHtml({
-      // v1.2.27 (#361 follow-up): title/description respect draft-overrides like other
-      // fields. Without this, edits handed off from Avansert (changed title/description)
-      // were ignored because mod.title from the loaded bundle always won.
+      // Title and description follow the draft like every other field; the loaded bundle must
+      // not win over an unsaved edit (#361).
       title: (hasDraft && activeDraft.title) ? activeDraft.title : mod.title,
       description: (hasDraft && activeDraft.description) ? activeDraft.description : mod.description,
       taskText: hasDraft ? activeDraft.taskText : (cfg.moduleVersion?.taskText ?? ""),
       assessorExpectedContent: hasDraft ? activeDraft.assessorExpectedContent : (cfg.moduleVersion?.assessorExpectedContent ?? ""),
       candidateTaskConstraints: hasDraft ? activeDraft.candidateTaskConstraints : (cfg.moduleVersion?.candidateTaskConstraints ?? ""),
       mcqQuestions: hasDraft ? (activeDraft.mcqQuestions ?? []) : (cfg.mcqSetVersion?.questions ?? []),
-      // B2 (#449): show Vurderingskriterier in the preview pane as content. Prefer draft
-      // overrides if user has edited via Rediger direkte; fall back to persisted rubric.
+      // B2 (#449): criteria are content and show in the preview. The draft's criteria win over
+      // the persisted rubric.
       criteria: (hasDraft && activeDraft.criteria) ? activeDraft.criteria : (cfg.rubricVersion?.criteria ?? null),
-      // v1.1.81: show "genereres…" placeholder when criteria-generation is in flight for
-      // the current sessionDraft.
+      // "genereres…" placeholder while criteria-generation is in flight for the current sessionDraft.
       // Generation status is an authoring signal too - the learner has no business seeing it.
       criteriaLoadingText: (criteriaGenerationInFlight && !forParticipant) ? t("shell.criteria.generating") : "",
       // B3 (#450): drift banner rendered above the criteria section.
@@ -1236,9 +1033,6 @@ function scrollPreviewToBottom() {
 
 function updateStateRail() {
   const hasModule = !!selectedModuleId;
-  // #975: her sto `stateRail.hidden = !hasModule` alene, og `.state-rail{display:flex}` slo
-  // attributtet. Lappen var en egen CSS-regel, `.state-rail[hidden]{display:none}` — en fiks oppå
-  // fella i stedet for kuren. Regelen er fjernet; setHidden gjør jobben for alle tilstander.
   // #787: content-owner panel for the loaded module. Render once per module (guard on the last id) so
   // the frequent updateStateRail calls don't re-fetch/reset it; hide when no module is loaded.
   const ownerHost = document.getElementById("moduleOwnerPanelHost");
@@ -1254,40 +1048,14 @@ function updateStateRail() {
   }
   if (!hasModule) return;
 
-  const chains = bundle ? deriveModuleStatusChains(bundle) : null;
   const hasUnsaved = !!sessionDraft;
   // The version the workspace actually has open — which is NOT the same as the live one whenever
-  // the author has restored an earlier version or is sitting on a saved draft. Both rail fields
-  // below describe what is on screen, so both read this rather than the published chain.
+  // the author has restored an earlier version or is sitting on a saved draft.
   const loaded = bundle?.selectedConfiguration?.moduleVersion ?? null;
   const loadedIsLive = !!loaded?.id && loaded.id === bundle?.module?.activeVersionId;
 
-  const moduleName = localizeValue(sessionDraft?.title ?? previewDraft?.title ?? bundle?.module?.title) || "";
-  // #1046 nivå to, B2: navnet er tittelen på sida (typen står som merke over).
-  const h1 = document.getElementById("moduleWorkspaceTitle");
-  if (h1) {
-    h1.textContent = moduleName || t("shell.newModule.defaultTitle");
-    h1.classList.toggle("is-untitled", !moduleName);
-    h1.removeAttribute("data-i18n");
-  }
-
-  // #1046 (13.09): statusmerket og «Alt lagret / Ulagrede endringer» i hodet, som på kurs, seksjon
-  // og klasse. Tilstandslinja under bærer versjonsfaktaene.
-  // Produkteier 13.09: versjonsfaktaene fra tilstandslinja står som merker her — «Publisert v2»
-  // (live nå) og «Utkast v4» (det du redigerer, når det ikke er den som er live).
-  const lifecycleBadgeHost = document.getElementById("moduleLifecycleBadge");
-  if (lifecycleBadgeHost) {
-    const liveNo = chains?.liveChain?.[0]?.versionNo ?? null;
-    const parts = [];
-    if (bundle?.module?.archivedAt) parts.push(lifecycleBadge({ lifecycle: "archived" }, t));
-    else if (liveNo != null) parts.push(`<span class="status-badge status-badge--published">${escapeHtml(tf("stateRail.live.published", { versionNo: liveNo }))}</span>`);
-    const editingNo = loaded?.versionNo ?? null;
-    if (hasUnsaved && !loaded) parts.push(`<span class="status-badge status-badge--draft">${escapeHtml(t("stateRail.editing.workingDraft"))}</span>`);
-    else if (editingNo != null && !loadedIsLive) parts.push(`<span class="status-badge status-badge--draft">${escapeHtml(tf("shell.header.draftVersion", { versionNo: editingNo }))}</span>`);
-    else if (liveNo == null && bundle) parts.push(lifecycleBadge({ lifecycle: "draft" }, t));
-    lifecycleBadgeHost.innerHTML = bundle || sessionDraft ? parts.join(" ") : "";
-  }
-  refreshModuleHeaderState();
+  // Navn og merker står i hodet (form-page.js) — se moduleHeaderTitle/moduleStatusBadgesHtml.
+  formPage?.refreshHeader();
 
   // «Forhåndsvisning viser …» i Forhåndsvisning-fanen: de tre tilstandene forhåndsvisningen kan være i.
   const previewShows = document.getElementById("previewShows");
@@ -1369,23 +1137,13 @@ function buildPreviewCandidate(patch) {
 }
 function clearPreviewCandidate() {
   previewDraft = null;
-  renderPreviewLocaleBar();
   renderPreview();
 }
 
-// ⛔ `translateLocalizedText(text)` sto her og returnerte `{"en-GB": text, nb: text, nn: text}`.
-// Slettet 2026-08-19, etter at de to siste kallerne (`resolveMcqTitlePayload` og
-// `resolveCurrentPromptPayload`) ble rettet.
-//
-// Den var maskinen bak løgnen #892, #905 og #918 hver for seg fjernet fra hver sin sti: én tekst i
-// ett språk, kopiert inn i alle tre, slik at innholdet så oversatt ut for publiseringsgaten og for
-// oversettelsesstatusen. Hver gang noen trengte «gjør denne strengen til et lokale-objekt», lå den
-// her og gjorde det på den ene måten som er gal.
-//
-// **Ikke legg den tilbake.** Kodingen for «skrevet i ett språk, ikke oversatt ennå» er en REN
-// STRENG — og `localizedTextMaybeUntranslatedSchema` godtar den overalt der det betyr noe. Skal
-// språket registreres, er svaret et ett-nøkkels kart `{ [contentLocale]: tekst }` (#930), aldri tre
-// kopier.
+// ⚠️ Ingen hjelper skal gjøre én tekst til `{"en-GB": t, nb: t, nn: t}`. Kodingen for «skrevet i ett
+// språk, ikke oversatt ennå» er en REN STRENG (`localizedTextMaybeUntranslatedSchema`), og skal
+// språket registreres, er svaret et ett-nøkkels kart `{ [contentLocale]: tekst }` (#930). Tre kopier
+// ser oversatt ut for publiseringsgaten og oversettelsesstatusen — det var #892, #905 og #918.
 
 /**
  * Fjern språk som er tomme fra en lokalisert verdi.
@@ -1580,10 +1338,9 @@ async function localizeDraftAcrossLocalesWithTitle(title, taskText, assessorExpe
         },
       );
     } catch {
-      // #905: DROP the pre-filled source copy for this locale. It used to be left standing
-      // "so the draft stays saveable" — but the API accepts a partial map now, and leaving the
-      // copy is what made a failed translation indistinguishable from a real one. The locale is
-      // recorded as failed so the caller can say so, and the field simply has no value here.
+      // #905: no source copy for a locale that failed. The API accepts a partial map, and a copy
+      // is what makes a failed translation indistinguishable from a real one. The locale is
+      // recorded as failed so the caller can say so; the field simply has no value here.
       dropLocale(localized, targetLocale);
       localized.failedLocales.push(targetLocale);
       continue;
@@ -1868,120 +1625,18 @@ function commitSessionDraftPatch(patch, { scroll = "top" } = {}) {
   else scrollPreviewToTop();
 }
 
-// ---------------------------------------------------------------------------
-// #926 (#896 §6 krav 1): samtalen foreslår — den overskriver aldri.
-//
-// Spesifikasjonen: har feltene ulagrede endringer, skal et generert resultat lande som et
-// FORSLAG med «Bruk»/«Forkast», ikke skrives rett inn. Uten dette kan forfatteren skrive et
-// scenario for hånd, be om en revisjon i chatten, og få sitt eget arbeid erstattet uten å ha
-// sagt ja.
-//
-// Verre enn som så, før denne endringen: med redigeringsskjemaet åpent ble feltene ikke tegnet
-// på nytt etter en generering. Utkastet under dem var byttet ut, men skjermen viste fortsatt
-// forfatterens egen tekst — overskrivingen ble først synlig ved lagring.
-//
-// Forslaget parkeres i samtaleloggen fordi det er der forfatteren nettopp ba om endringen, og
-// fordi chat-panelet er synlig i begge fanene der dette kan inntreffe. Det holdes UTENFOR
-// `sessionDraft`: et forslag som allerede ligger i utkastet er ikke et forslag, og ville blitt
-// lagret av neste «Lagre».
-//
-// Merk at «ulagrede endringer» her betyr `hasOpenEditForm()` — feltverdier som avviker fra det
-// de ble tegnet med. Et urørt skjema er ikke i bruk, og et forslag der ville bare vært et ekstra
-// klikk foran den handlingen forfatteren nettopp ba om.
-// ---------------------------------------------------------------------------
-let pendingProposal = null;
-
-/**
- * Commit a generated patch, or park it as a proposal when the edit form holds unsaved typing.
- *
- * @param patch      the localized patch, ready for `buildPreviewCandidate`
- * @param slot       the conversation-log slot the generation is reporting into
- * @param readyHtml  () => html — what the log says when the patch is applied
- * @param scroll     "top" | "bottom"
- * @param onCommit   runs after the patch lands, on both paths. NOT run while parked: it starts
- *                   criteria generation and moves the session state, and neither should happen
- *                   for content the author has not accepted.
- * @returns true if committed, false if parked.
- */
-/**
- * #982: `warningHtml` er et EGET argument, ikke en del av `readyHtml`.
- *
- * ⚠️ Advarselen om språk som ikke ble oversatt lå først inne i `readyHtml`. Den rendres bare når
- * patchen landes med én gang — er en redigeringsflate åpen, parkeres forslaget og en helt annen
- * tekst vises. Forfatteren som HAR skrevet i feltene, altså den som oftest ber om en revisjon, fikk
- * dermed aldri vite at en oversettelse manglet. Advarselen må høre til beskjeden, ikke til én av to
- * måter å vise den på.
- */
+// Det genererte legges rett inn i skjemaet (dialogen sa det på forhånd). Har forfatteren skrevet
+// noe mens genereringen pågikk, tas det med i utkastet først — ingenting overskrives stille.
 function commitOrProposeGenerated({ patch, slot, readyHtml, warningHtml = "", scroll = "top", onCommit }) {
-  const commit = () => {
-    commitSessionDraftPatch(patch, { scroll });
-    onCommit?.();
-  };
-
-  if (!hasOpenEditForm()) {
-    commit();
-    logResolveSlot(slot, () => `${readyHtml()}${warningHtml}`);
-    return true;
-  }
-
-  // A second proposal replaces the first rather than queueing: two competing "Bruk"-buttons in
-  // the log, both claiming to be the generated result, is worse than losing the older one — and
-  // the older one is by definition the one the author did not answer.
-  //
-  // #926 QA: the proposal is stamped with the module it was made for. Its buttons live in the
-  // conversation log, which survives `startIdle` and a reload of a DIFFERENT module — so without
-  // the stamp, «Bruk» could merge one module's generated text into another's draft, or into no
-  // module at all.
-  pendingProposal = { commit, moduleId: selectedModuleId };
-  const thisProposal = pendingProposal;
-  logResolveSlot(
-    slot,
-    () => `<strong>${escapeHtml(t("shell.proposal.title"))}</strong>${warningHtml}
-      <p style="margin:8px 0 0;font-size:13px;color:var(--color-meta)">${escapeHtml(t("shell.proposal.body"))}</p>`,
-    [
-      {
-        labelKey: "shell.proposal.use",
-        action: () => {
-          // Stale guard: the log entry survives a re-render, so an old proposal's button must not
-          // resurrect content the author already answered for — or content that belongs to a
-          // module that is no longer open.
-          if (pendingProposal !== thisProposal || selectedModuleId !== thisProposal.moduleId) {
-            logBot(() => escapeHtml(t("shell.proposal.stale")));
-            return;
-          }
-          pendingProposal = null;
-          thisProposal.commit();
-          // The fields on screen still hold the author's typing. They said yes, so repaint from
-          // the draft — otherwise the accepted proposal is invisible until the next re-render,
-          // which is the exact failure this whole mechanism exists to remove.
-          if (activeTab === "edit") enterPreviewEditMode({ force: true });
-          logBot(() => escapeHtml(t("shell.proposal.used")));
-        },
-      },
-      {
-        labelKey: "shell.proposal.discard",
-        action: () => {
-          if (pendingProposal !== thisProposal) return;
-          pendingProposal = null;
-          logBot(() => escapeHtml(t("shell.proposal.discarded")));
-        },
-      },
-    ],
-  );
-  return false;
+  if (hasOpenEditForm()) captureEditFormIntoDraft();
+  commitSessionDraftPatch(patch, { scroll });
+  onCommit?.();
+  if (activeTab === "edit") enterPreviewEditMode({ force: true });
+  logResolveSlot(slot, () => `${readyHtml()}${warningHtml}`);
+  return true;
 }
 
-/**
- * Drop a parked proposal without applying it. Called wherever the ground it stood on moves:
- * `startIdle` (everything unloaded) and `loadModule` (a different module, or the same one
- * reloaded after a save).
- *
- * Deliberately silent — this is not the author discarding anything, it is the proposal ceasing to
- * be applicable. Saying so in the log would report an action nobody took.
- */
-function discardPendingProposal() {
-  pendingProposal = null;
-}
+
 
 function createSessionDraftFromLoadedModule() {
   const moduleVersion = bundle?.selectedConfiguration?.moduleVersion ?? null;
@@ -2011,7 +1666,6 @@ function createSessionDraftFromLoadedModule() {
   });
   previewDraft = null;
   sessionState = "draft-pending";
-  renderPreviewLocaleBar();
   renderPreview();
   return true;
 }
@@ -2033,7 +1687,7 @@ function startGeneration() {
 
 async function generateDraftInBackground(sourceMaterial, certLevel, locale, generationMode, onAccept, blueprint = null, scenarioMode = "auto") {
   const abort = startGeneration();
-  const slot = logProgress("shell.generating.draftProgress");
+  const slot = logProgress("shell.generating.draftProgress", { abortable: true });
   slot.abortBtn.addEventListener("click", () => { abort.abort(); slot.abortBtn.disabled = true; });
 
   // Blueprint may arrive as a JSON string (from confirmAndGenerate after author accepts it)
@@ -2092,8 +1746,8 @@ async function generateDraftInBackground(sourceMaterial, certLevel, locale, gene
   // sier vi ingenting, oppdager forfatteren det først når publiseringsgaten stopper modulen, eller
   // verre: aldri, fordi hen tror alt er på plass.
   const localizeWarning = describeFailedLocales(localizedDraft.failedLocales, locale);
-  // #926 §6: gjennom porten. Blueprint og hash-oppfriskningen hører til utkastet, ikke til
-  // forslaget, så de skjer først når patchen faktisk landes.
+  // #926 §6: gjennom porten. Blueprint og hash-oppfriskningen hører til utkastet, så de skjer
+  // når patchen landes (onCommit).
   commitOrProposeGenerated({
     patch: { taskText: localizedDraft.taskText, assessorExpectedContent: localizedDraft.assessorExpectedContent, candidateTaskConstraints: localizedDraft.candidateTaskConstraints },
     slot,
@@ -2113,7 +1767,7 @@ async function generateDraftInBackground(sourceMaterial, certLevel, locale, gene
 
 async function generateMcqInBackground(sourceMaterial, certLevel, locale, generationMode, questionCount, optionCount, onAccept) {
   const abort = startGeneration();
-  const slot = logProgress("shell.generating.mcqProgress");
+  const slot = logProgress("shell.generating.mcqProgress", { abortable: true });
   slot.abortBtn.addEventListener("click", () => { abort.abort(); slot.abortBtn.disabled = true; });
 
   // Pull blueprint from sessionDraft if present so MCQ is generated against the same contract
@@ -2169,9 +1823,8 @@ async function generateMcqInBackground(sourceMaterial, certLevel, locale, genera
     patch: { mcqQuestions: localizedQuestions },
     slot,
     scroll: "bottom",
-    // #982: kvalitetsadvarslene fra #551 lå også inne i `readyHtml`, og forsvant dermed når
-    // forslaget ble parkert bak åpne felter — spørsmål med kjente problemer kunne landes uten at
-    // advarselen noen gang var synlig. Fjerde advarsel i samme fil med samme feil.
+    // #982: kvalitetsadvarslene (#551) som eget `warningHtml`, ikke inne i `readyHtml` — en advarsel
+    // skal aldri kunne forsvinne sammen med meldingen om at noe er klart.
     readyHtml: () => `<strong>${escapeHtml(tf("shell.generating.mcqReady", { count: questions.length }))}</strong>
       <p style="margin:8px 0 0;font-size:13px;color:var(--color-meta)">${escapeHtml(t("shell.generating.reviewPreviewHint"))}</p>`,
     // #1014: kvalitetsadvarslene fra #551 OG spraakene som ikke ble oversatt, i samme spor.
@@ -2182,7 +1835,7 @@ async function generateMcqInBackground(sourceMaterial, certLevel, locale, genera
 
 async function reviseDraftInBackground(instruction, onAccept) {
   const abort = startGeneration();
-  const slot = logProgress("shell.revision.draftProgress");
+  const slot = logProgress("shell.revision.draftProgress", { abortable: true });
   slot.abortBtn.addEventListener("click", () => { abort.abort(); slot.abortBtn.disabled = true; });
 
   let result;
@@ -2246,7 +1899,7 @@ async function reviseDraftInBackground(instruction, onAccept) {
 
 async function reviseMcqInBackground(instruction, onAccept) {
   const abort = startGeneration();
-  const slot = logProgress("shell.revision.mcqProgress");
+  const slot = logProgress("shell.revision.mcqProgress", { abortable: true });
   slot.abortBtn.addEventListener("click", () => { abort.abort(); slot.abortBtn.disabled = true; });
 
   const currentQuestions = (sessionDraft?.mcqQuestions ?? []).map((question) => ({
@@ -2300,8 +1953,8 @@ async function reviseMcqInBackground(instruction, onAccept) {
     // #1014: et språk som ikke ble oversatt skal stå i kvitteringen — ellers sier flaten «klart»
     // over et sett der ett språk mangler.
     //
-    // ⚠️ I `warningHtml`, ikke i `readyHtml`. #982: advarsler lagt i `readyHtml` forsvinner når
-    // forslaget parkeres bak åpne felter, og kunne landes uten at de noen gang var synlige.
+    // ⚠️ I `warningHtml`, ikke i `readyHtml` (#982): en advarsel skal ikke dele skjebne med
+    // «klart»-meldingen.
     warningHtml: describeFailedLocales(failedLocales, contentLocale),
     onCommit: () => onAccept?.(questions),
   });
@@ -2345,8 +1998,7 @@ async function applyStructuredTitleEditInBackground(newTitle) {
         candidateTaskConstraints: localizedDraft.candidateTaskConstraints,
       },
       slot,
-      // #982: advarselen som EGET argument. Lå den i `readyHtml`, forsvant den i det øyeblikket
-      // forfatteren hadde en redigeringsflate åpen — og da parkeres forslaget i stedet.
+      // #982: advarselen som EGET argument, ikke inne i `readyHtml`.
       readyHtml: () => `<strong>${escapeHtml(tf("shell.revision.titleReady", { title: newTitle }))}</strong>`,
       warningHtml: warning
         ? `<p style="margin:8px 0 0;font-size:13px;color:var(--color-warning,#8a5f10)">${escapeHtml(warning)}</p>`
@@ -2615,470 +2267,6 @@ async function saveDraftBundleInBackground(options = {}) {
     ]);
   }
 }
-
-// #896 S4: which locale a value ACTUALLY has, with no fallback. localizeValueForLocale falls
-// back to nb/en-GB by design so the preview is never blank — exactly wrong when the question is
-// "is this locale missing?", because the fallback answers "no" for every locale.
-
-// The stored value read as one language.
-//
-// A bare string is legacy content whose language was never recorded, and the SERVER resolves it as
-// nb (`missingLocalesFor`'s sourceLocale default). The client must agree, or the two disagree
-// about the same bytes: this used to hand the string back for whatever locale was asked, so with
-// an English UI a Norwegian legacy title was accepted as the en-GB source, saved under en-GB, and
-// nb ended up missing — the republish then failed on a gap the gap-fill had just created.
-const LEGACY_STRING_LOCALE = "nb";
-
-function sourceTextForLocale(value, locale) {
-  const strict = strictLocaleValue(value, locale);
-  if (strict.trim()) return strict;
-  if (locale === LEGACY_STRING_LOCALE && typeof value === "string") return value;
-  return "";
-}
-
-// The text fields the gate covers. Must stay in step with the server's field set — the two lists
-// disagreeing means the author is offered a fix for a gap that is not the one blocking them.
-const TRANSLATION_GATE_FIELDS = ["title", "description", "taskText", "assessorExpectedContent", "candidateTaskConstraints"];
-
-// The stored value as a locale map holding only the locales that really have text. A plain string
-// is recorded under `sourceLocale` — it has to land somewhere, and the author's working language
-// is the only honest guess available at this point.
-function localeMapOf(value) {
-  const map = {};
-  for (const locale of supportedLocales) {
-    const existing = strictLocaleValue(value, locale);
-    if (existing.trim()) map[locale] = existing;
-  }
-  if (Object.keys(map).length === 0 && typeof value === "string" && value.trim()) {
-    // Legacy bare string: label it with the locale the server reads it as, not with whatever the
-    // author happens to be looking at. Anything else silently relabels the text's language.
-    map[LEGACY_STRING_LOCALE] = value;
-  }
-  return map;
-}
-
-function fillLocaleGap(map, locale, text) {
-  if (map[locale]?.trim()) return;
-  if (typeof text === "string" && text.trim()) map[locale] = text;
-}
-
-// #905: a locale with no text gets no entry — never a copy of the source. Note what this does NOT
-// do: it does not collapse a single-locale map back to a bare string. A bare string is content
-// whose language is unrecorded, which is what forced the gate to guess "nb" and mislabel an
-// author working in English. `{nb: "..."}` says the same thing and says which language.
-function collapseLocaleMap(map) {
-  return Object.keys(map).length === 0 ? "" : map;
-}
-
-// #913: MCQ fields now take partial maps too, so a half-successful translation keeps what
-// succeeded. This used to collapse anything short of all three locales back to the source
-// language, which threw away the locales that DID translate — the author paid for a translation,
-// was told it was saved, and the next publish attempt asked for it again.
-
-function translationGateIssuesFrom(error) {
-  const issues = error?.body?.issues;
-  if (!Array.isArray(issues)) return [];
-  return issues.filter((issue) => issue?.code === "translation_incomplete" && Array.isArray(issue.missingLocales));
-}
-
-function translationGateFieldLabel(field) {
-  // MCQ issues are per question, so the field name carries an index: mcq.question3. There is no
-  // key per question — the label is built from the pattern.
-  const mcq = /^mcq\.question(\d+)$/.exec(String(field ?? ""));
-  if (mcq) return t("shell.publish.field.mcqQuestion").replace("{n}", mcq[1]);
-  const label = t(`shell.publish.field.${field}`);
-  // An unknown field must still be NAMED — a silent omission would tell the author the module is
-  // complete while publishing keeps failing. Falling back to the raw key is ugly but truthful.
-  return label.startsWith("shell.publish.field.") ? String(field) : label;
-}
-
-function describeTranslationGate(issues, otherBlockers = []) {
-  const lines = issues.map((issue) => {
-    const label = translationGateFieldLabel(issue.field);
-    return t("shell.publish.translationGate.item")
-      .replace("{field}", label)
-      .replace("{locales}", issue.missingLocales.join(", "));
-  });
-  // A publish response can carry a blueprint mismatch alongside the translation gaps. Showing only
-  // the gaps meant the author translated, retried, and failed again on a blocker they were never
-  // told about — the gate would have taught them to distrust it.
-  // #914: koden og `params` er sannheten; serverens `message` er reserve.
-  //
-  // Bruker den DELTE `apiErrorCodeText`, som #980 alt hadde bygget for publiseringsdialogen. Den
-  // slaar opp `errors.api.<kode>` (med variant naar koden trenger det) og fyller plassholderne.
-  //
-  // Foerste utgave av #914 lagde en egen `describeGateIssue` med egne `adminContent.validation.*`
-  // -noekler. Det var en ANDRE mekanisme for samme jobb, med sin egen ordlyd — «Restore it before
-  // publishing» mot #980 sin «Restore it before you publish». Nettopp den driften saken skal fjerne.
-  const others = otherBlockers
-    .map((issue) => {
-      // `item_archived` slaas opp som `errors.api.item_archived.module` / `.section`, fordi den
-      // brukes for begge med ulik tekst (#980). Varianten staar i `params.itemType`.
-      //
-      // ⚠️ Uten dette faller nettopp den koden tilbake paa serverens `message` — som er hardkodet
-      // NORSK. En engelsk forfatter fikk da norsk tekst for arkiverte moduler, mens alt annet paa
-      // samme skjerm var oversatt. Kursvisningen tok varianten fra RADEN og var derfor riktig, saa
-      // feilen fantes bare i denne ene veien.
-      const variant = typeof issue?.params?.itemType === "string" ? [issue.params.itemType.toLowerCase()] : [];
-      return apiErrorCodeText(issue?.code ?? null, t, variant, issue?.params ?? null) || issue?.message;
-    })
-    .filter(Boolean);
-  return `<strong>${escapeHtml(t("shell.publish.translationGate.heading"))}</strong><ul>${
-    [...lines, ...others].map((line) => `<li>${escapeHtml(line)}</li>`).join("")
-  }</ul>`;
-}
-
-// Blocking issues from the same publish response that are NOT translation gaps. "Translate what is
-// missing" cannot clear these, so they are listed but not acted on.
-function otherBlockingIssuesFrom(error) {
-  const issues = error?.body?.issues;
-  if (!Array.isArray(issues)) return [];
-  return issues.filter((issue) => issue?.code !== "translation_incomplete" && issue?.severity === "blocking");
-}
-
-// #896 S4: "Oversett det som mangler" — fills only the holes. Every locale that already has
-// content keeps exactly the text it has; the author's own wording is never overwritten by a
-// machine translation of itself. What is translated goes through the ordinary save, so the
-// result is a normal new version, and then publish is retried.
-async function translateMissingLocalesThenPublish(issues) {
-  const moduleId = selectedModuleId;
-  if (!moduleId) return;
-
-  const moduleVersion = bundle?.selectedConfiguration?.moduleVersion;
-  const current = {
-    title: sessionDraft?.title ?? bundle?.module?.title ?? "",
-    description: sessionDraft?.description ?? bundle?.module?.description ?? "",
-    taskText: sessionDraft?.taskText ?? moduleVersion?.taskText ?? "",
-    assessorExpectedContent: sessionDraft?.assessorExpectedContent ?? moduleVersion?.assessorExpectedContent ?? "",
-    candidateTaskConstraints: sessionDraft?.candidateTaskConstraints ?? moduleVersion?.candidateTaskConstraints ?? "",
-  };
-  const currentMcq = sessionDraft?.mcqQuestions?.length
-    ? sessionDraft.mcqQuestions
-    : (bundle?.selectedConfiguration?.mcqSetVersion?.questions ?? []);
-
-  // Translate FROM a locale that actually has the content — and "the content" means the fields
-  // the gate actually complained about, not a fixed pair. Requiring taskText AND
-  // assessorExpectedContent made this unusable for the two cases most likely to hit the gate: an
-  // MCQ-only module (no task text at all) and a module whose only gap is the title.
-  const gatedTextFields = TRANSLATION_GATE_FIELDS.filter((field) =>
-    issues.some((issue) => issue.field === field),
-  );
-  const needsMcqSource = issues.some((issue) => String(issue.field ?? "").startsWith("mcq."));
-  // #974: menyspråket sto som andre kandidat her. Regelen (se `contentLocale`) er at menyen aldri
-  // styrer innhold — kildeteksten til en oversettelse er innhold.
-  const preferredOrder = [contentLocale, "nb", "en-GB", "nn"];
-  const sourceLocale = preferredOrder.find((locale) => {
-    if (!locale) return false;
-    if (!gatedTextFields.every((field) => sourceTextForLocale(current[field], locale).trim())) return false;
-    if (needsMcqSource) {
-      // EVERY required part, not just the stem. A question can legally be mixed — a stem localized
-      // into three languages next to options still stored as legacy bare strings — and picking a
-      // source from the stem alone produced a request the options could not satisfy. The call
-      // failed validation, and the gap went unnoticed because the option had no source text to
-      // count as missing.
-      return currentMcq.every((question) => {
-        if (!sourceTextForLocale(question?.stem ?? "", locale).trim()) return false;
-        if (!sourceTextForLocale(question?.correctAnswer ?? "", locale).trim()) return false;
-        if (!(question?.options ?? []).every((option) => sourceTextForLocale(option, locale).trim())) return false;
-        // The rationale too, but only when the question HAS one. Since #913 a question can hold a
-        // rationale in one language and its stem in another; picking the stem's locale as source
-        // left the rationale's gap unfillable, because the source locale is excluded from the
-        // target list and only targets are ever checked. The republish then hit the same gate.
-        const hasRationale = supportedLocales.some((l) => strictLocaleValue(question?.rationale, l).trim())
-          || (typeof question?.rationale === "string" && question.rationale.trim());
-        return !hasRationale || Boolean(sourceTextForLocale(question?.rationale ?? "", locale).trim());
-      });
-    }
-    return true;
-  });
-  if (!sourceLocale) {
-    logBot(() => t("shell.publish.translationGate.noSource"));
-    return;
-  }
-
-  const missingLocales = [...new Set(issues.flatMap((issue) => issue.missingLocales))]
-    .filter((locale) => locale !== sourceLocale);
-  if (missingLocales.length === 0) return;
-
-  const slot = logProgress("shell.publish.translationGate.progress");
-  slot.abortBtn.remove();
-
-  // Start from the stored values as locale maps, so untouched locales survive the save.
-  const merged = {};
-  for (const field of TRANSLATION_GATE_FIELDS) {
-    merged[field] = localeMapOf(current[field], sourceLocale);
-  }
-
-  const sourceDraft = {
-    title: sourceTextForLocale(current.title, sourceLocale),
-    taskText: sourceTextForLocale(current.taskText, sourceLocale),
-    assessorExpectedContent: sourceTextForLocale(current.assessorExpectedContent, sourceLocale),
-    candidateTaskConstraints: sourceTextForLocale(current.candidateTaskConstraints, sourceLocale),
-  };
-
-  // The module-draft localizer translates the scenario, answer key and constraints together, which
-  // is what makes them read as one coherent whole — but its schema DEMANDS a non-empty task text
-  // and answer key. An MCQ-only module has neither, and a free-text module need not have the
-  // answer key, so calling it unconditionally 400s and took the rest of the fill down with it.
-  const canUseDraftLocalizer = Boolean(sourceDraft.taskText.trim() && sourceDraft.assessorExpectedContent.trim());
-  // Fields that localizer actually returns. `description` is NOT among them — it used to be asked
-  // for and never delivered, so a description-only gap could never be filled and the automatic
-  // republish hit the same 422 forever.
-  const DRAFT_LOCALIZER_FIELDS = ["title", "taskText", "assessorExpectedContent", "candidateTaskConstraints"];
-  // The per-field localizer has two slots: `title` for short text, `bodyMarkdown` for long.
-  const LONG_TEXT_FIELDS = new Set(["taskText", "assessorExpectedContent", "candidateTaskConstraints"]);
-
-  // MCQ questions are participant-facing content too, and for an MCQ-only module they ARE the
-  // assessment. Same rule as the text fields: start from what exists, fill only the empty slots.
-  const mergedMcq = currentMcq.map((question) => ({
-    stem: localeMapOf(question?.stem),
-    options: (question?.options ?? []).map((option) => localeMapOf(option)),
-    correctAnswer: localeMapOf(question?.correctAnswer),
-    rationale: localeMapOf(question?.rationale),
-  }));
-  const needsMcqFill = issues.some((issue) => String(issue.field ?? "").startsWith("mcq."));
-  const gapFields = new Set(gatedTextFields);
-
-  const failedLocales = [];
-  for (const targetLocale of missingLocales) {
-    const stillMissing = () =>
-      [...gapFields].filter(
-        (field) => !merged[field][targetLocale]?.trim() && merged[field][sourceLocale]?.trim(),
-      );
-
-    if (canUseDraftLocalizer && stillMissing().some((field) => DRAFT_LOCALIZER_FIELDS.includes(field))) {
-      try {
-        const result = await apiFetch("/api/admin/content/generate/module-draft/localize", getHeaders, {
-          method: "POST",
-          body: JSON.stringify({ ...sourceDraft, sourceLocale, targetLocale }),
-        });
-        const draft = result?.draft ?? result;
-        if (!draft?.title) throw new Error("localize returned no title");
-        // Only the holes. A locale that already had text keeps it — this is the whole point of
-        // "translate what is missing" rather than "translate everything".
-        for (const field of DRAFT_LOCALIZER_FIELDS) {
-          if (gapFields.has(field)) fillLocaleGap(merged[field], targetLocale, draft[field]);
-        }
-      } catch {
-        // Swallowed on purpose: the per-field pass below is the retry, and whether this locale
-        // actually failed is decided at the END from the gaps that remain — not from whether a
-        // call threw. Treating the exception as failure meant a fallback that filled every gap
-        // still reported failure and skipped the automatic republish.
-      }
-    }
-
-    // Whatever the draft localizer could not cover — because it was skipped, because it failed, or
-    // because the field is outside its vocabulary (description) — is translated one field at a
-    // time. Slower, but it works for every module type.
-    for (const field of stillMissing()) {
-      try {
-        const key = LONG_TEXT_FIELDS.has(field) ? "bodyMarkdown" : "title";
-        const result = await apiFetch("/api/admin/content/sections/localize", getHeaders, {
-          method: "POST",
-          body: JSON.stringify({ [key]: merged[field][sourceLocale], sourceLocale, targetLocale }),
-        });
-        const translated = result?.[key];
-        if (typeof translated === "string" && translated.trim()) merged[field][targetLocale] = translated.trim();
-      } catch {
-        // Same reasoning: the gap either got filled or it did not, and that is what is checked.
-      }
-    }
-
-    if (needsMcqFill && mergedMcq.length > 0) {
-      try {
-        const mcqResult = await apiFetch("/api/admin/content/generate/mcq/localize", getHeaders, {
-          method: "POST",
-          body: JSON.stringify({
-            questions: currentMcq.map((question) => {
-              // A question may legitimately have no rationale. Sending "" for it is not the same
-              // as leaving it out — the endpoint rejects an empty string, so the whole fill died
-              // before the model ran.
-              const rationale = sourceTextForLocale(question?.rationale ?? "", sourceLocale);
-              return {
-                stem: sourceTextForLocale(question?.stem ?? "", sourceLocale),
-                options: (question?.options ?? []).map((option) => sourceTextForLocale(option, sourceLocale)),
-                correctAnswer: sourceTextForLocale(question?.correctAnswer ?? "", sourceLocale),
-                ...(rationale.trim() ? { rationale } : {}),
-              };
-            }),
-            sourceLocale,
-            targetLocale,
-          }),
-        });
-        const translatedQuestions = mcqResult?.questions ?? [];
-        translatedQuestions.forEach((question, index) => {
-          const target = mergedMcq[index];
-          if (!target) return;
-          fillLocaleGap(target.stem, targetLocale, question?.stem);
-
-          // The save schema requires correctAnswer to be one of options, VERBATIM. A translator
-          // that renders the answer "The members." and the option "The members" produces a 200
-          // here and a 400 three steps later, surfacing as a generic save failure with no hint
-          // that the translation was the cause.
-          //
-          // Only checked for the values actually being merged: the response always carries every
-          // field, so an inconsistency in an answer this locale does not need must not discard a
-          // stem or rationale translation it does.
-          const fillingAnswer = !target.correctAnswer[targetLocale]?.trim();
-          const fillingOptions = target.options.some((option) => !option[targetLocale]?.trim());
-          if (fillingAnswer || fillingOptions) {
-            const translatedOptions = question?.options ?? [];
-            if (
-              typeof question?.correctAnswer === "string"
-              && !translatedOptions.some((option) => option === question.correctAnswer)
-            ) {
-              throw new Error("translated correctAnswer does not match any translated option");
-            }
-          }
-          fillLocaleGap(target.correctAnswer, targetLocale, question?.correctAnswer);
-          // Only if the question HAD a rationale. The localization response contract requires the
-          // model to return one, so a question without a rationale gets an invented one — stored
-          // under the target locales only, and therefore read back as a gap on the very next
-          // publish attempt. Inventing assessor-facing text nobody wrote is worse than the loop.
-          if (Object.keys(target.rationale).length > 0) {
-            fillLocaleGap(target.rationale, targetLocale, question?.rationale);
-          }
-          (question?.options ?? []).forEach((option, optionIndex) => {
-            if (target.options[optionIndex]) fillLocaleGap(target.options[optionIndex], targetLocale, option);
-          });
-        });
-      } catch {
-        // Checked below, not here.
-      }
-    }
-
-    // A locale counts as failed only if something is STILL missing after every attempt. Deciding
-    // from thrown exceptions instead meant a first-choice localizer that failed marked the locale
-    // as failed even when the fallback filled every gap — the author was told the translation had
-    // failed, and the automatic republish they had asked for never ran.
-    // A part is missing this locale when it HAS text somewhere and not here. Keyed on "the map is
-    // non-empty" rather than "the source locale has text": a part with no source text is still a
-    // gap the fill did not close, and reading it as satisfied reported success over the very hole
-    // that blocked publishing. A rationale that is absent everywhere is not a gap — it is a field
-    // this question does not have.
-    const mcqStillMissing =
-      needsMcqFill
-      && mergedMcq.some((question) =>
-        [question.stem, question.correctAnswer, question.rationale, ...question.options].some(
-          (map) => Object.keys(map).length > 0 && !map[targetLocale]?.trim(),
-        ),
-      );
-    if (stillMissing().length > 0 || mcqStillMissing) failedLocales.push(targetLocale);
-  }
-
-  // #905: never store a source-language copy under a locale that failed. An empty field is
-  // honest; a copy pretends the translation happened.
-  const patch = {};
-  for (const field of TRANSLATION_GATE_FIELDS) {
-    const value = collapseLocaleMap(merged[field]);
-    // An optional field the module does not have must stay ABSENT, not become "". Materializing it
-    // makes the save send an empty string, which the localized-text schema rejects — so an
-    // otherwise successful gap-fill would fail at the last step for every module that has no
-    // description and no candidate constraints.
-    if (value === "") continue;
-    patch[field] = value;
-  }
-  if (needsMcqFill && mergedMcq.length > 0) {
-    patch.mcqQuestions = mergedMcq.map((question) => {
-      const rationale = collapseLocaleMap(question.rationale);
-      return {
-        stem: collapseLocaleMap(question.stem),
-        options: question.options.map((option) => collapseLocaleMap(option)),
-        correctAnswer: collapseLocaleMap(question.correctAnswer),
-        // A question may legitimately have no rationale. `rationale: ""` is a different thing and
-        // the save schema rejects it, so an otherwise successful fill would 400 at the last step
-        // — taking the text translations from the same attempt down with it.
-        ...(rationale === "" ? {} : { rationale }),
-      };
-    });
-  }
-  commitSessionDraftPatch(patch);
-
-  if (failedLocales.length > 0) {
-    logResolveSlot(slot, () => escapeHtml(t("shell.publish.translationGate.failed")), [
-      { labelKey: "shell.action.retry", action: () => translateMissingLocalesThenPublish(issues) },
-    ]);
-    // Save what did succeed — the author should not lose the translations that worked — but do
-    // not retry publish, since it would only hit the same gate.
-    await saveDraftBundleInBackground();
-    return;
-  }
-
-  logResolveSlot(slot, () => escapeHtml(t("shell.revision.translateReady")));
-  await saveDraftBundleInBackground({ afterSave: publishLatestDraftInBackground });
-}
-
-async function publishLatestDraftInBackground() {
-  const moduleId = selectedModuleId;
-  const moduleVersionId = latestSavedModuleVersionId ?? bundle?.selectedConfiguration?.moduleVersion?.id;
-  if (!moduleId || !moduleVersionId) {
-    logBot(() => t("shell.publish.versionRequired"));
-    return;
-  }
-
-  const slot = logProgress("shell.publish.progress");
-  slot.abortBtn.remove();
-
-  try {
-    await apiFetch(
-      `/api/admin/content/modules/${encodeURIComponent(moduleId)}/module-versions/${encodeURIComponent(moduleVersionId)}/publish`,
-      getHeaders,
-      { method: "POST", body: JSON.stringify({}) },
-    );
-    logResolveSlot(slot, () => `<strong>${escapeHtml(t("shell.publish.success"))}</strong>`);
-    showToast(t("shell.publish.success"), "success");
-    announceStatus(t("shell.publish.success"));
-    sessionDraft = null;
-    previewDraft = null;
-    latestSavedModuleVersionId = null;
-    // UX: etter publisering, last modulen på nytt (nå Live) og vis modul-handlinger
-    // ("Hva vil du gjøre med denne modulen?") i stedet for full modul-velger. loadModule
-    // avslutter med showModuleActions() og bevarer kontekst til modulen man nettopp
-    // publiserte; "Velg en annen modul" er fortsatt tilgjengelig derfra. Samme mønster
-    // som unpublishModuleInBackground.
-    await loadModule(moduleId);
-  } catch (err) {
-    // #896 S4: a half-translated module is not a failure to report as a stack of JSON — it is a
-    // list of holes with an action that fills them.
-    const gateIssues = translationGateIssuesFrom(err);
-    if (gateIssues.length > 0) {
-      const otherBlockers = otherBlockingIssuesFrom(err);
-      logResolveSlot(slot, () => describeTranslationGate(gateIssues, otherBlockers), [
-        { labelKey: "shell.publish.translationGate.fillGaps", action: () => translateMissingLocalesThenPublish(gateIssues) },
-        { labelKey: "shell.directEdit.action", action: () => startDirectEditFlow() },
-      ]);
-      return;
-    }
-    const errMsg = apiErrorText(err);
-    logResolveSlot(slot, () => `${escapeHtml(t("shell.publish.errorPrefix"))}${escapeHtml(errMsg)}`, [
-      { labelKey: "shell.action.retry", action: publishLatestDraftInBackground },
-    ]);
-  }
-}
-
-async function unpublishModuleInBackground() {
-  const moduleId = selectedModuleId;
-  if (!moduleId) return;
-
-  const slot = logProgress("shell.unpublish.progress");
-  slot.abortBtn.remove();
-
-  try {
-    await apiFetch(`/api/admin/content/modules/${encodeURIComponent(moduleId)}/unpublish`, getHeaders, {
-      method: "POST",
-      body: JSON.stringify({}),
-    });
-    await loadModule(moduleId);
-    logResolveSlot(slot, () => `<strong>${escapeHtml(t("shell.unpublish.success"))}</strong>`);
-    showToast(t("shell.unpublish.success"), "success");
-    announceStatus(t("shell.unpublish.success"));
-  } catch (err) {
-    const errMsg = apiErrorText(err);
-    logResolveSlot(slot, () => `${escapeHtml(t("shell.unpublish.errorPrefix"))}${escapeHtml(errMsg)}`, [
-      { labelKey: "shell.action.retry", action: unpublishModuleInBackground },
-    ]);
-  }
-}
 function confirmHighImpactAction(promptKey, confirmKey, action, cancelAction = showModuleActions, vars = {}) {
   logBot(() => escapeHtml(tf(promptKey, vars)), [
     { labelKey: confirmKey, action },
@@ -3137,12 +2325,6 @@ function startIdle() {
   newModulePlaceholder = false;
   previewDraft = null;
   latestSavedModuleVersionId = null;
-  // #926 QA: a parked proposal belongs to the module that was loaded when it was made. Its
-  // buttons live in the conversation log, which this does not tear down, so «Bruk» stayed
-  // clickable after everything else was unloaded — and merged the previous module's generated
-  // text into an empty draft with no title and no module id. See also `discardPendingProposal`.
-  discardPendingProposal();
-  chatLog = [];
   renderPreview();
   // Uten modul er lista stedet: «Ny modul» og åpning skjer der (#1046 A1). Ingen samtalevalg her.
   logBot(() => t("shell.idle.prompt"));
@@ -3158,14 +2340,7 @@ async function loadModule(moduleId, options = {}) {
   newModulePlaceholder = false;
   previewDraft = null;
   latestSavedModuleVersionId = null;
-  // #926 QA: covers the save path too — saving reloads the module, and a proposal parked before
-  // the save would otherwise raise a fresh unsaved draft on top of the version just written.
-  discardPendingProposal();
-  // #896 S3c: the Innstillinger panel keeps its editors in module-level state, and none of it
-  // belonged to this module. Before S3c the criteria state was only seeded once the author opened
-  // the editor; now it is seeded on every visit to the tab, so merely looking at module A's
-  // settings and then switching to B would show — and save — A's criteria on B.
-  resetSettingsPanelState();
+  settingsTab.resetSettingsPanelState();
   const slot = logProgress("shell.module.loading", { quiet: true });
 
   try {
@@ -3186,20 +2361,13 @@ async function loadModule(moduleId, options = {}) {
   // B3 (#450): recompute blueprint hash so the drift banner can be classified on first render.
   await refreshBlueprintHash();
 
-  // #896 S3c: the handoff is gone with the Avansert editor. It existed to carry an unsaved draft
-  // and the two locales between two surfaces; there is one surface now, so there is nothing to
-  // carry and nothing to keep in sync. `resumeEditing` survives because the module list and old
-  // links still use it to mean "open this module ready to edit".
+  // `resumeEditing`: the module list and old links use it to mean "open this module ready to edit".
   const resumedIntoDraft = resumeEditing && createSessionDraftFromLoadedModule();
   renderPreview();
   // QA round 6: reloading on `?tab=settings` selected the tab, drew the panel before the module
   // had arrived — "load a module to see the settings" — and then never drew it again. The author
   // had to switch tabs and back. Only the preview was re-rendered here.
-  renderSettingsPanel();
-  // The content-language switcher is hidden until there is content, and `loadModule` never told it
-  // that content had arrived — so opening a module straight from its URL left it invisible. It
-  // showed up only if you had come through the conversation flow, which renders it on its own.
-  renderPreviewLocaleBar();
+  settingsTab.renderSettingsPanel();
   // Rediger is the default tab, so a module opened from its URL lands here — and it has to land in
   // an editable state, not a read-only one behind a button.
   if (activeTab === "edit") enterPreviewEditMode();
@@ -3243,10 +2411,8 @@ function describeStructuredEditIntent(intent) {
   return "";
 }
 
-// v1.2.23 (#357 Phase A): instrumentering. Sender hver intent-klassifisering til server
-// så vi kan samle ekte pilot-bruker-ordbruk og bygge evidensen som Phase B (hybrid LLM-
-// fallback) trenger. Best-effort fire-and-forget — feil i loggingen skal aldri påvirke
-// brukerens flyt.
+// #357: instrumentering. Hver intent-klassifisering sendes til serveren så ekte ordbruk kan samles.
+// Best-effort — feil i loggingen skal aldri påvirke forfatterens flyt.
 function logIntentClassificationToServer(rawInput, intent, ctx) {
   apiFetch(
     "/api/admin/content/intent-log",
@@ -3287,7 +2453,7 @@ async function runUnifiedRevision(instruction) {
 
   if (intent.kind === "clarify") {
     logBot(() => escapeHtml(t("shell.revision.clarify")), [
-      { labelKey: "shell.revision.tryAgain", action: () => startUnifiedRevisionFlow() },
+      { labelKey: "shell.revision.tryAgain", action: () => openReviseDialog() },
       { labelKey: "shell.directEdit.action", action: () => startDirectEditFlow() },
     ]);
     return;
@@ -3324,21 +2490,6 @@ async function runUnifiedRevision(instruction) {
   showDraftReadyActions();
 }
 
-function startUnifiedRevisionFlow() {
-  if (!sessionDraft?.taskText && !sessionDraft?.assessorExpectedContent && (sessionDraft?.mcqQuestions?.length ?? 0) === 0) {
-    // Som toast, ikke som en ny linje i loggen for hvert klikk.
-    showToast(t("shell.revision.unavailable"), "info");
-    return;
-  }
-
-  logForm(
-    "textarea",
-    () => `<strong>${escapeHtml(t("shell.revision.unifiedPromptTitle"))}</strong><br><span style="font-size:13px;color:var(--color-meta)">${escapeHtml(t("shell.revision.unifiedPromptHint"))}</span>`,
-    "shell.revision.placeholder",
-    "shell.revision.submit",
-    (instruction) => runUnifiedRevision(instruction),
-  );
-}
 
 function startDirectEditFlow() {
   enterPreviewEditMode();
@@ -3422,686 +2573,6 @@ function certificationLevelForGeneration() {
   return CERTIFICATION_LEVELS.includes(value) ? value : "intermediate";
 }
 
-/**
- * A fresh criterion id that collides with nothing already in the editor.
- *
- * QA round 4 fixed "add, remove, add reuses an id" with a counter; QA round 5 pointed out the
- * counter restarts on page load, so a rubric that already contains `new_criterion_1` gets it
- * handed out a second time — and `Object.fromEntries` keeps only the last one. Check the state.
- */
-function freshCriterionId(existing) {
-  const taken = new Set((existing ?? []).map((c) => String(c?.id ?? "")));
-  let candidate;
-  do {
-    nextNewCriterionSeq += 1;
-    candidate = `new_criterion_${nextNewCriterionSeq}`;
-  } while (taken.has(candidate));
-  return candidate;
-}
-
-let nextNewCriterionSeq = 0;
-
-function wireCriteriaEditor({ container, getState, setState, rerender, onRegenerate }) {
-  if (!container) return;
-
-  // QA 2026-08-16: this was a second, byte-for-byte copy of `captureLatestCriteriaState`, and when
-  // that one learned to carry the locale metadata (#902) this one did not — so Add or Remove threw
-  // `storedLabel` away and the next save wrote bare strings, deleting the other two languages.
-  // Deduplicated rather than patched: two copies of a DOM read is how the bug happened.
-  const captureFromDom = () => {
-    setState(captureLatestCriteriaState(container, getState()));
-  };
-
-  container.addEventListener("input", (e) => {
-    if (e.target.classList?.contains("vk-weight")) {
-      const card = e.target.closest(".vk-card");
-      const valueEl = card?.querySelector(".vk-weight-value");
-      if (valueEl) valueEl.textContent = String(e.target.value);
-      // B4 (#451) a11y: keep aria-valuenow + aria-valuetext in sync during drag/arrow-key use.
-      e.target.setAttribute("aria-valuenow", String(e.target.value));
-      e.target.setAttribute("aria-valuetext", tf("shell.criteria.weightOfTen", { value: e.target.value }));
-      const total = Array.from(container.querySelectorAll(".vk-weight"))
-        .reduce((sum, el) => sum + (Number(el.value) || 0), 0);
-      const totalEl = container.querySelector(".vk-total-value");
-      if (totalEl) totalEl.textContent = String(total);
-    }
-    // B4 (#451) a11y: the remove button must always say "Fjern: {current label}", not the name
-    // it had at render time.
-    if (e.target.classList?.contains("vk-label")) {
-      const card = e.target.closest(".vk-card");
-      const removeBtn = card?.querySelector(".vk-remove");
-      if (removeBtn) {
-        const idx = Number(card.dataset.criterionIndex ?? 0) + 1;
-        const newLabel = String(e.target.value ?? "").trim();
-        removeBtn.setAttribute(
-          "aria-label",
-          newLabel
-            ? tf("shell.criteria.removeAriaWithLabel", { label: newLabel })
-            : tf("shell.criteria.removeAriaPositional", { index: idx }),
-        );
-      }
-    }
-  });
-
-  container.addEventListener("click", (e) => {
-    const btn = e.target.closest("button");
-    if (!btn) return;
-    // The stepper and the visibility toggle write to the SAME `vk-weight` / `vk-visible` inputs the
-    // save and the tests already read, then fire `input`/`change` so the existing listeners run.
-    // One source of truth per value; the buttons are only a smaller way to reach it.
-    if (btn.classList.contains("vk-step")) {
-      const range = btn.closest(".vk-stepper")?.querySelector(".vk-weight");
-      if (!range) return;
-      const next = Math.max(1, Math.min(10, (Number(range.value) || 5) + Number(btn.dataset.step)));
-      if (next === Number(range.value)) return;
-      range.value = String(next);
-      range.dispatchEvent(new Event("input", { bubbles: true }));
-      range.dispatchEvent(new Event("change", { bubbles: true }));
-      return;
-    }
-    if (btn.classList.contains("vk-visible-toggle")) {
-      const box = btn.querySelector(".vk-visible");
-      if (!box) return;
-      box.checked = !box.checked;
-      btn.setAttribute("aria-pressed", box.checked ? "true" : "false");
-      const glyph = btn.querySelector("span[aria-hidden]");
-      if (glyph) glyph.textContent = box.checked ? "◉" : "○";
-      box.dispatchEvent(new Event("change", { bubbles: true }));
-      return;
-    }
-    if (btn.classList.contains("vk-remove")) {
-      captureFromDom();
-      // QA round 6: removing the LAST criterion could not be saved. An empty list builds a `null`
-      // record, and every save path reads `null` as "no criteria change" — so the deletion was
-      // dropped and the old criterion came back, or Lagre said "ingen endringer". A rubric needs
-      // at least one criterion, so say that instead of accepting an action that cannot take.
-      if (getState().length <= 1) {
-        showToast(t("shell.criteria.lastCriterionRequired"), "error");
-        return;
-      }
-      const idx = Number(btn.dataset.criterionIndex);
-      if (Number.isFinite(idx)) {
-        const next = getState();
-        next.splice(idx, 1);
-        setState(next);
-        rerender();
-      }
-    } else if (btn.classList.contains("vk-add")) {
-      captureFromDom();
-      const next = getState();
-      // #902: a new criterion has nothing stored, but it IS being typed in a specific language,
-      // so it is saved as a one-locale map rather than a bare string the reader would have to
-      // guess at. `storedLabel: null` (not undefined) is what selects the merging path.
-      next.push({
-        // QA round 4: the id used to be `new_criterion_${length + 1}`, and the list SHRINKS on
-        // remove — so add, remove, add produced the same id twice. `Object.fromEntries` keeps the
-        // last entry per key, so one of the two new criteria vanished at save time without a word.
-        // A counter that only ever goes up cannot collide.
-        id: freshCriterionId(next), label: "", description: "", maxScore: 5,
-        candidateVisible: false, storedLabel: null, storedDescription: null, locale: contentLocale,
-      });
-      setState(next);
-      rerender();
-      const inputs = container.querySelectorAll(".vk-label");
-      inputs[inputs.length - 1]?.focus();
-    } else if (btn.classList.contains("vk-regenerate")) {
-      captureFromDom();
-      // v1.1.80: no confirm here. Nothing is persisted yet — close without saving and the edits
-      // are gone anyway. The B3 drift-banner confirm stays, because that one writes immediately.
-      onRegenerate?.();
-    }
-  });
-}
-
-// B2 (#449 redesign): one-shot DOM-to-state capture, used when leaving edit mode. Re-reads
-// every visible criterion card and returns a fresh array; falls back to the closure's last
-// known state if the container has already been torn down. Same shape as criteriaEditorState
-// items but read from inputs to avoid stale-state bugs.
-
-// B2 (#449 redesign): transform editor-state array into storage-shape record (id-keyed).
-// Drops criteria with blank labels (they're noise). Auto-id new criteria from a slug of
-// the label, falling back to "criterion_N" if the slug ends up empty. Weight is computed
-// as a fraction of maxScore over the total — keeps the existing scalingRule.max_total math
-// happy. Returns null when no usable criteria, so callers can fall through to ensure-rubric.
-function buildCriteriaRecordFromEditorState(criteria) {
-  const valid = (criteria ?? []).filter((c) => c && c.label && c.label.trim());
-  if (valid.length === 0) return null;
-  const totalMax = valid.reduce((sum, c) => sum + (Number(c.maxScore) || 0), 0) || 1;
-  return Object.fromEntries(valid.map((c, idx) => {
-    const baseId = c.id ?? slugifyLabel(c.label) ?? `criterion_${idx + 1}`;
-    // #902: merge the edited language into whatever was stored. A criterion the editor never
-    // localized (`storedLabel` absent — a brand-new one, or a caller that does not track it)
-    // keeps the old bare-string behaviour, which the reader still understands as "one language".
-    const locale = c.locale ?? contentLocale;
-    // An UNTOUCHED field keeps its stored value byte for byte. Merging it would turn a bare
-    // string — "one language, not translated yet" — into a two-locale map asserting the same
-    // text is valid in both, which is a translation nobody made.
-    const mergeIfEdited = (stored, edited) => {
-      if (stored === undefined) return edited;
-      if (edited === localizeValueForLocale(stored ?? "", locale)) return stored;
-      return mergeLocaleInto(stored, locale, edited);
-    };
-    const label = mergeIfEdited(c.storedLabel, c.label) ?? c.label;
-    const description = mergeIfEdited(c.storedDescription, c.description ?? "") ?? "";
-    return [String(baseId), {
-      label,
-      description,
-      maxScore: Number(c.maxScore),
-      weight: Number(((Number(c.maxScore) || 0) / totalMax).toFixed(2)),
-      candidateVisible: Boolean(c.candidateVisible),
-      // B3 (#450): direct-edit always counts as manual editing — the user explicitly chose
-      // these values. Used by the drift "Regenerer fra ny plan" confirm prompt so we warn
-      // before overwriting. False positives (treating every edit as manual) are acceptable.
-      manuallyEdited: true,
-    }];
-  }));
-}
-
-// B3 (#450): "Behold kriteriene" — patch the active rubric's blueprint-hash to the current
-// hash so the drift banner hides. Criteria unchanged.
-//
-// #915: the server now creates a NEW rubric version (same criteria, new hash) instead of patching
-// the old one in place — so a restored older module version keeps the hash it was authored with.
-// The bundle is patched to point at the new version, so the next save attaches it
-// (`latestRubricId` reads `cfg.rubricVersion.id`). Until saved, a reload shows the banner again —
-// correctly: the persisted draft still references the old rubric.
-async function handleDriftKeep() {
-  if (!selectedModuleId) return;
-  const hash = currentBlueprintHash;
-  if (!hash) return;
-  try {
-    const result = await apiFetch(
-      `/api/admin/content/modules/${encodeURIComponent(selectedModuleId)}/rubric-versions/sync-blueprint`,
-      getHeaders,
-      { method: "POST", body: JSON.stringify({ blueprintHash: hash, rubricVersionId: bundle?.selectedConfiguration?.rubricVersion?.id ?? undefined }) },
-    );
-    // Patch bundle in place so we don't clobber unsaved sessionDraft via full reload.
-    const cfgRubric = bundle?.selectedConfiguration?.rubricVersion;
-    if (cfgRubric && result?.rubricVersionId) {
-      const previousId = cfgRubric.id;
-      cfgRubric.id = result.rubricVersionId;
-      if (typeof result.versionNo === "number") cfgRubric.versionNo = result.versionNo;
-      cfgRubric.scalingRule = { ...(cfgRubric.scalingRule ?? {}), generated_from_blueprint_hash: hash };
-      if (Array.isArray(bundle?.versions?.rubricVersions) && result.rubricVersionId !== previousId) {
-        bundle.versions.rubricVersions.unshift({ ...cfgRubric });
-      }
-    }
-    renderPreview();
-    showToast(t("shell.drift.keep.success"), "success");
-  } catch (err) {
-    showToast(`${t("shell.drift.keep.error")}: ${apiErrorText(err)}`, "error");
-  }
-}
-
-// B3 (#450): "Regenerer fra ny plan" — if any criterion was manually edited, confirm with
-// the user first (their edits will be overwritten). Then POST /rubric-versions/ensure with
-// force:true to generate + persist a new RubricVersion against the current blueprint, and
-// reload the module to pick up the new versionNo and stored hash.
-async function handleDriftRegenerate() {
-  if (!selectedModuleId) return;
-  if (hasManuallyEditedCriteria() && !window.confirm(t("shell.drift.regenerate.confirm"))) return;
-
-  const moduleVersion = bundle?.selectedConfiguration?.moduleVersion;
-  const taskText = localizeValueForLocale(
-    sessionDraft?.taskText ?? moduleVersion?.taskText ?? "",
-    contentLocale,
-  );
-  const assessorText = localizeValueForLocale(
-    sessionDraft?.assessorExpectedContent ?? moduleVersion?.assessorExpectedContent ?? "",
-    contentLocale,
-  );
-  const constraintsText = localizeValueForLocale(
-    sessionDraft?.candidateTaskConstraints ?? moduleVersion?.candidateTaskConstraints ?? "",
-    contentLocale,
-  );
-  if (!taskText || !assessorText) {
-    showToast(t("shell.drift.regenerate.missingTask"), "error");
-    return;
-  }
-  const blueprint = getActiveBlueprint();
-
-  const slot = logProgress("shell.drift.regenerate.progress");
-  try {
-    await apiFetch(
-      `/api/admin/content/modules/${encodeURIComponent(selectedModuleId)}/rubric-versions/ensure`,
-      getHeaders,
-      {
-        method: "POST",
-        body: JSON.stringify({
-          taskText,
-          assessorExpectedContent: assessorText,
-          candidateTaskConstraints: constraintsText || undefined,
-          certificationLevel: certificationLevelForGeneration(),
-          locale: contentLocale,
-          ...(blueprint ? { blueprint } : {}),
-          force: true,
-        }),
-      },
-    );
-    logResolveSlot(slot, () => escapeHtml(t("shell.drift.regenerate.success")));
-    // Clear any direct-edit override — the freshly persisted rubric is now the truth.
-    if (sessionDraft?.criteria) {
-      sessionDraft = { ...sessionDraft, criteria: null };
-    }
-    await loadModule(selectedModuleId);
-    await refreshBlueprintHash();
-  } catch (err) {
-    logResolveSlot(slot, () =>
-      `${escapeHtml(t("shell.drift.regenerate.error"))}: ${escapeHtml(apiErrorText(err))}`,
-    );
-  }
-}
-
-// B3 (#450): "Vis hva som ville endret seg" — call /generate/rubric (dry-run, doesn't
-// persist) to see what the LLM would now produce given the new blueprint. Diff against the
-// existing rubric criteria, then offer accept-all / accept-selected. User can also cancel.
-async function handleDriftShowDiff() {
-  if (!selectedModuleId) return;
-  const moduleVersion = bundle?.selectedConfiguration?.moduleVersion;
-  const taskText = localizeValueForLocale(
-    sessionDraft?.taskText ?? moduleVersion?.taskText ?? "",
-    contentLocale,
-  );
-  const assessorText = localizeValueForLocale(
-    sessionDraft?.assessorExpectedContent ?? moduleVersion?.assessorExpectedContent ?? "",
-    contentLocale,
-  );
-  const constraintsText = localizeValueForLocale(
-    sessionDraft?.candidateTaskConstraints ?? moduleVersion?.candidateTaskConstraints ?? "",
-    contentLocale,
-  );
-  if (!taskText || !assessorText) {
-    showToast(t("shell.drift.regenerate.missingTask"), "error");
-    return;
-  }
-  const blueprint = getActiveBlueprint();
-
-  // QA round 5: I changed this request to send `requestedLocale` without declaring it here — it
-  // only existed inside regenerateCriteriaFromTask. Every "show what would change" threw a
-  // ReferenceError that the catch below reported as a generation error, so the action was dead.
-  const requestedLocale = contentLocale;
-  const slot = logProgress("shell.drift.diff.progress");
-  let result;
-  try {
-    result = await apiFetch("/api/admin/content/generate/rubric", getHeaders, {
-      method: "POST",
-      body: JSON.stringify({
-        taskText,
-        assessorExpectedContent: assessorText,
-        candidateTaskConstraints: constraintsText || undefined,
-        certificationLevel: certificationLevelForGeneration(),
-        locale: requestedLocale,
-        ...(blueprint ? { blueprint } : {}),
-      }),
-    });
-  } catch (err) {
-    logResolveSlot(slot, () =>
-      `${escapeHtml(t("shell.drift.diff.error"))}: ${escapeHtml(apiErrorText(err))}`,
-    );
-    return;
-  }
-  logResolveSlot(slot, () => escapeHtml(t("shell.drift.diff.computed")));
-
-  const newCriteriaArr = Array.isArray(result?.rubric?.criteria) ? result.rubric.criteria : [];
-  // QA round 6: the request captured `requestedLocale`, but the response was tagged with the
-  // LIVE locale. Switch language while the call is in flight and the generated text is filed
-  // under a language it was never written in.
-  const newCriteriaRecord = llmCriteriaArrayToStorageRecord(newCriteriaArr, requestedLocale);
-  const existing = bundle?.selectedConfiguration?.rubricVersion?.criteria ?? {};
-  const diff = computeCriteriaDiff(existing, newCriteriaRecord, contentLocale);
-
-  openDriftDiffModal(diff, newCriteriaRecord);
-}
-
-// B3 (#450): mirror of moduleRubricToStoragePayload's criteria branch. LLM returns an array
-// (with .id, .label, .description, .maxScore, .candidateVisible per item); storage wants a
-// record keyed by id with weight derived from maxScore.
-/**
- * @param locale the language the generator was ASKED for. Required: the record it produces is
- *   written straight to storage, and a bare string there means "one language, not translated" —
- *   which the reader resolves as bokmal. QA round 4: generating with an English UI therefore
- *   filed English criteria as Norwegian, and a later English edit produced a two-locale map whose
- *   Norwegian side was already the English text.
- */
-function llmCriteriaArrayToStorageRecord(arr, locale) {
-  const valid = (arr ?? []).filter((c) => c && c.label && c.label.trim());
-  const totalMax = valid.reduce((sum, c) => sum + (Number(c.maxScore) || 0), 0) || 1;
-  const tag = (text) => (locale && text ? { [locale]: text } : text);
-  return Object.fromEntries(valid.map((c, idx) => {
-    const baseId = String(c.id ?? slugifyLabel(c.label) ?? `criterion_${idx + 1}`);
-    return [baseId, {
-      label: tag(c.label ?? ""),
-      description: tag(c.description ?? ""),
-      maxScore: Number(c.maxScore) || 0,
-      weight: Number(((Number(c.maxScore) || 0) / totalMax).toFixed(2)),
-      candidateVisible: Boolean(c.candidateVisible),
-    }];
-  }));
-}
-
-// B3 (#450): per-criterion diff — categorise each id as "added" (only in new), "removed"
-// (only in existing), "changed" (id present in both but label/description/maxScore differs),
-// or "unchanged". Returns parallel arrays keyed for easy modal rendering. Compares by `id`
-// so an LLM relabeling the same criterion would still match — risk we accept (id stability
-// is the LLM's job, not ours).
-/**
- * The readable text of a criterion field, whether it is a bare string or a locale map.
- *
- * The drift diff both COMPARES and RENDERS these values, and it used `String(...)` for each — fine
- * while everything was a bare string, useless the moment a locale object appears.
- */
-
-
-function hasManuallyEditedCriteria() {
-  const criteria = bundle?.selectedConfiguration?.rubricVersion?.criteria ?? {};
-  return Object.values(criteria).some((c) => c && typeof c === "object" && c.manuallyEdited === true);
-}
-
-
-// B3 (#450): full-screen modal showing the diff. Accept-all triggers a single regenerate
-// against the LLM's proposal (writes a new RubricVersion with the proposed criteria).
-// Accept-selected lets the author pick a subset (checkboxes); the resulting rubric is a
-// merge of existing + selected proposals.
-function openDriftDiffModal(diff, proposedRecord) {
-  // B4 (#451) a11y: remember the element that triggered the modal so focus can return
-  // to it on close — without this, keyboard users lose their place.
-  const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-
-  const overlay = document.createElement("div");
-  overlay.className = "drift-diff-overlay";
-  overlay.setAttribute("role", "dialog");
-  overlay.setAttribute("aria-modal", "true");
-  overlay.setAttribute("aria-labelledby", "driftDiffTitle");
-  overlay.innerHTML = buildDriftDiffModalHtml(diff, contentLocale, t, tf);
-  document.body.appendChild(overlay);
-
-  // B4 a11y: focus trap + ESC handler. The trap is implemented as a Tab/Shift-Tab handler
-  // on the overlay that wraps focus inside the modal's focusable elements. ESC closes.
-  const focusableSelector = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
-  const getFocusables = () => Array.from(overlay.querySelectorAll(focusableSelector))
-    .filter((el) => !el.hasAttribute("disabled") && el.offsetParent !== null);
-
-  const keyHandler = (event) => {
-    if (event.key === "Escape") {
-      event.preventDefault();
-      close();
-      return;
-    }
-    if (event.key !== "Tab") return;
-    const focusables = getFocusables();
-    if (focusables.length === 0) return;
-    const first = focusables[0];
-    const last = focusables[focusables.length - 1];
-    if (event.shiftKey && document.activeElement === first) {
-      event.preventDefault();
-      last.focus();
-    } else if (!event.shiftKey && document.activeElement === last) {
-      event.preventDefault();
-      first.focus();
-    }
-  };
-  overlay.addEventListener("keydown", keyHandler);
-
-  const close = () => {
-    overlay.removeEventListener("keydown", keyHandler);
-    overlay.remove();
-    // B4 a11y: return focus to the opener so keyboard users land back where they were.
-    opener?.focus?.();
-  };
-
-  overlay.querySelector('[data-diff-action="close"]')?.addEventListener("click", close);
-  overlay.querySelector('[data-diff-action="cancel"]')?.addEventListener("click", close);
-  overlay.addEventListener("click", (event) => {
-    if (event.target === overlay) close();
-  });
-
-  overlay.querySelector('[data-diff-action="accept-all"]')?.addEventListener("click", async () => {
-    close();
-    // #919: «godta alle» is the same decision as ticking every box, so it takes the same road.
-    // Handing `proposedRecord` straight to the save skipped the locale merge entirely — and it is
-    // the button an author in a hurry presses, so it was the likelier way to lose the two
-    // languages that were not on screen.
-    const allIds = new Set([
-      ...diff.added.map(({ id }) => id),
-      ...diff.removed.map(({ id }) => id),
-      ...diff.changed.map(({ id }) => id),
-    ]);
-    await persistMergedRubric(mergeProposedCriteria(diff, proposedRecord, allIds));
-  });
-
-  overlay.querySelector('[data-diff-action="accept-selected"]')?.addEventListener("click", async () => {
-    const acceptedIds = Array.from(overlay.querySelectorAll('input[data-diff-checkbox]:checked'))
-      .map((input) => input.getAttribute("data-criterion-id"))
-      .filter(Boolean);
-    if (acceptedIds.length === 0) {
-      showToast(t("shell.drift.diff.noneSelected"), "error");
-      return;
-    }
-    close();
-    const merged = mergeProposedCriteria(diff, proposedRecord, new Set(acceptedIds));
-    await persistMergedRubric(merged);
-  });
-
-  // B4 a11y: focus the modal's first focusable on open (default: the close button) so
-  // keyboard/screen-reader users land inside the dialog instead of staying outside.
-  const initial = getFocusables()[0];
-  initial?.focus?.();
-}
-
-
-// B3 (#450): build the storage-shape record from "merge existing criteria with the proposed
-// changes the user accepted". Logic per id:
-//   - added id, accepted     → use proposed
-//   - added id, not accepted → drop (not present in result)
-//   - removed id, accepted   → drop (user accepted the removal)
-//   - removed id, not accepted → keep existing
-//   - changed id, accepted   → proposed MERGED onto existing (#919 — see below)
-//   - changed id, not accepted → keep existing
-//   - unchanged              → keep existing
-// Weights are recomputed from the resulting maxScore totals so scalingRule.max_total stays
-// coherent — done downstream by the backend on POST, but we pre-normalise here too.
-function mergeProposedCriteria(diff, proposedRecord, acceptedIds) {
-  const result = {};
-  const existing = bundle?.selectedConfiguration?.rubricVersion?.criteria ?? {};
-
-  for (const { id } of diff.unchanged) {
-    result[id] = existing[id];
-  }
-  for (const { id, prev } of diff.removed) {
-    if (!acceptedIds.has(id)) result[id] = prev;
-  }
-  for (const { id } of diff.changed) {
-    result[id] = acceptedIds.has(id) ? mergeProposedCriterion(existing[id], proposedRecord[id]) : existing[id];
-  }
-  for (const { id } of diff.added) {
-    // Nothing to merge against — a brand-new criterion exists in exactly the language the
-    // generator was asked for, and `llmCriteriaArrayToStorageRecord` already tagged it as such.
-    if (acceptedIds.has(id)) result[id] = proposedRecord[id];
-  }
-
-  const totalMax = Object.values(result).reduce((sum, c) => sum + (Number(c?.maxScore) || 0), 0) || 1;
-  for (const [id, c] of Object.entries(result)) {
-    const maxScore = Number(c?.maxScore) || 0;
-    result[id] = { ...c, weight: Number((maxScore / totalMax).toFixed(2)) };
-  }
-  return result;
-}
-
-/**
- * #919: fold an accepted drift proposal into the criterion it replaces, instead of replacing it.
- *
- * Same class as #892/#902/#905, and the same rule as the regeneration path got in v2.18.10: the
- * composition writes localized fields VERBATIM, so a surface that shows one language must merge
- * that language in itself. The generator is asked for `contentLocale` and answers in it —
- * `llmCriteriaArrayToStorageRecord` tags the answer `{[locale]: text}` — so accepting a proposal
- * wholesale wrote a one-locale map over a criterion that had three, and deleted two translations
- * the author never saw and never edited. See doc/FEATURE_SURFACE_MAP.md point 21.
- *
- * Everything that is NOT localized (maxScore, candidateVisible) comes from the proposal: that is
- * the change being accepted. Only `label` and `description` are merged.
- */
-function mergeProposedCriterion(stored, proposed) {
-  if (!proposed || typeof proposed !== "object") return proposed;
-  if (!stored || typeof stored !== "object") return proposed;
-  return {
-    ...proposed,
-    label: mergeProposedLocalizedField(stored.label, proposed.label),
-    description: mergeProposedLocalizedField(stored.description, proposed.description),
-  };
-}
-
-/**
- * Merge every locale the proposal actually carries into the stored value, and leave the rest of
- * the stored value byte for byte. A stored value that does not exist has nothing to merge onto,
- * so the proposal stands as it is.
- */
-function mergeProposedLocalizedField(stored, proposed) {
-  if (stored === undefined || stored === null || stored === "") return proposed;
-  const entries = typeof proposed === "string"
-    // A bare string from the generator carries no locale marker, and the one language it can
-    // honestly be attributed to is the one it was asked for.
-    ? [[contentLocale, proposed]]
-    : Object.entries(proposed ?? {}).filter(([, text]) => typeof text === "string");
-  if (entries.length === 0) return stored;
-  let next = stored;
-  for (const [locale, text] of entries) next = mergeLocaleInto(next, locale, text);
-  return next ?? proposed;
-}
-
-// B3 (#450): POST the merged criteria as a new RubricVersion. Server-side createRubricVersion
-// bumps versionNo and stamps generated_from_blueprint_hash via scalingRule passed here.
-async function persistMergedRubric(criteriaRecord) {
-  if (!selectedModuleId) return;
-  const blueprintHash = currentBlueprintHash;
-  const totalMax = Object.values(criteriaRecord).reduce((sum, c) => sum + (Number(c?.maxScore) || 0), 0) || 1;
-  const existingScalingRule = bundle?.selectedConfiguration?.rubricVersion?.scalingRule ?? {};
-  const scalingRule = {
-    ...existingScalingRule,
-    // `|| 70` turned a legitimate 0 into 70: an author who deliberately set the practical weight
-    // to zero got it silently restored the next time they accepted a criteria-drift suggestion.
-    // Now that the weight is editable in Innstillinger (#896 S3c), 0 is a real value someone can
-    // actually choose.
-    practical_weight: Number.isFinite(Number(existingScalingRule.practical_weight))
-      ? Number(existingScalingRule.practical_weight)
-      : 70,
-    max_total: totalMax,
-  };
-  if (blueprintHash) scalingRule.generated_from_blueprint_hash = blueprintHash;
-  else delete scalingRule.generated_from_blueprint_hash;
-
-  const slot = logProgress("shell.drift.diff.persisting");
-  try {
-    await apiFetch(
-      `/api/admin/content/modules/${encodeURIComponent(selectedModuleId)}/rubric-versions`,
-      getHeaders,
-      {
-        method: "POST",
-        body: JSON.stringify({ criteria: criteriaRecord, scalingRule, active: true }),
-      },
-    );
-    logResolveSlot(slot, () => escapeHtml(t("shell.drift.diff.persisted")));
-    if (sessionDraft?.criteria) {
-      sessionDraft = { ...sessionDraft, criteria: null };
-    }
-    await loadModule(selectedModuleId);
-    await refreshBlueprintHash();
-  } catch (err) {
-    logResolveSlot(slot, () =>
-      `${escapeHtml(t("shell.drift.diff.persistError"))}: ${escapeHtml(apiErrorText(err))}`,
-    );
-  }
-}
-
-// B2 (#449 redesign): fetch new criteria from /generate/rubric using the current taskText
-// and assessor expectations in the form (NOT the persisted versions — the user may have
-// edited them in this same direct-edit session). Calls onSuccess with the new criteria
-// array so the caller can update its state and re-render.
-async function regenerateCriteriaFromTask(criteriaContainer, onSuccess) {
-  // QA 2026-08-16 round 3: these three inputs belong to the Rediger edit form, and since S3c the
-  // ONLY Regenerate button lives in Innstillinger — where the form is not rendered. Every click
-  // therefore took the "no task text" alert and never called the API: the button was dead.
-  //
-  // The form still wins when it is open (the author may have edited the scenario in this same
-  // session and not saved it yet); otherwise fall back to the draft, then to what is stored.
-  // The language this regeneration is FOR: it decides what text is sent, what the service is
-  // asked to write, and what locale the result is stored under. All three must be the same value.
-  const requestedLocale = contentLocale;
-  const fieldOr = (id, stored) => {
-    const el = document.getElementById(id);
-    if (el) return el.value.trim();
-    return localizeValueForLocale(stored ?? "", requestedLocale).trim();
-  };
-  const storedVersion = bundle?.selectedConfiguration?.moduleVersion ?? {};
-  const taskText = fieldOr("previewEditTaskText", sessionDraft?.taskText ?? storedVersion.taskText);
-  const assessorText = fieldOr(
-    "previewEditGuidanceText",
-    sessionDraft?.assessorExpectedContent ?? storedVersion.assessorExpectedContent,
-  );
-  const constraintsText = fieldOr(
-    "previewEditCandidateTaskConstraints",
-    sessionDraft?.candidateTaskConstraints ?? storedVersion.candidateTaskConstraints,
-  );
-  if (!taskText || !assessorText) {
-    window.alert(t("shell.criteria.regenerateMissingTask"));
-    return;
-  }
-  // Show inline progress in the criteria container.
-  const originalHtml = criteriaContainer.innerHTML;
-  criteriaContainer.innerHTML = `<p class="vk-total">${escapeHtml(t("shell.criteria.regenerating"))}</p>`;
-  let blueprintObj = null;
-  const bp = bundle?.selectedConfiguration?.moduleVersion?.assessmentBlueprint;
-  if (bp) {
-    if (typeof bp === "string") {
-      try { blueprintObj = JSON.parse(bp); } catch { blueprintObj = null; }
-    } else if (typeof bp === "object") {
-      blueprintObj = bp;
-    }
-  }
-  try {
-    const result = await apiFetch("/api/admin/content/generate/rubric", getHeaders, {
-      method: "POST",
-      body: JSON.stringify({
-        taskText,
-        assessorExpectedContent: assessorText,
-        candidateTaskConstraints: constraintsText || undefined,
-        certificationLevel: certificationLevelForGeneration(),
-        locale: contentLocale,
-        ...(blueprintObj ? { blueprint: blueprintObj } : {}),
-      }),
-    });
-    const generated = Array.isArray(result?.rubric?.criteria) ? result.rubric.criteria : [];
-    // QA round 6: regeneration produces text in ONE language, and `storedLabel: null` told the
-    // save "nothing to merge onto" — so regenerating with an English preview kept the English
-    // criteria and deleted nb and nn. When the generator reuses an existing id, that criterion
-    // still has the other two languages and they must survive; only a genuinely new id has
-    // nothing behind it. The stage plan promises exactly this ("de andre språkene urørt").
-    const storedCriteria = bundle?.selectedConfiguration?.rubricVersion?.criteria ?? {};
-    const mapped = generated.map((c) => {
-      const id = String(c.id ?? slugifyLabel(c.label) ?? "criterion");
-      const previous = storedCriteria[id];
-      return {
-        id,
-        label: c.label ?? "",
-        description: c.description ?? "",
-        maxScore: Math.max(1, Math.min(10, Number(c.maxScore) || 5)),
-        candidateVisible: Boolean(c.candidateVisible),
-        // #902: one language, so the save writes `{<locale>: "..."}` rather than a bare string the
-        // reader would have to guess the language of. QA round 4: this said `currentLocale` while
-        // the REQUEST asked for `contentLocale`, so English text was filed as Norwegian. One
-        // variable feeds both now.
-        storedLabel: previous?.label ?? null,
-        storedDescription: previous?.description ?? null,
-        locale: requestedLocale,
-      };
-    });
-    onSuccess(mapped);
-    showToast(t("shell.criteria.regenerated"), "success");
-  } catch (err) {
-    const errMsg = apiErrorText(err);
-    criteriaContainer.innerHTML = originalHtml;
-    showToast(`${t("shell.criteria.regenerateError")}: ${errMsg}`, "error");
-  }
-}
 
 /**
  * @param force rebuild even when the open form holds unsaved text. Only for the callers that MEAN
@@ -4151,9 +2622,8 @@ function enterPreviewEditMode({ force = false } = {}) {
 
   // Build edit-mode HTML using same visual classes as preview
   const escapedTitle = escapeHtml(currentTitle);
-  // #896 S3b: the description is participant-visible in the module list, so it is content and
-  // belongs in Rediger — not in Innstillinger with the setup. Until now it could only be
-  // corrected from the Avansert page, which the epic is retiring.
+  // The description is participant-visible in the module list, so it is content and belongs in
+  // Rediger — not in Innstillinger with the setup (#896 S3b).
   const currentDescription = localizeValueForLocale(
     sessionDraft?.description ?? bundle?.module?.description ?? "",
     editingLocale,
@@ -4242,7 +2712,7 @@ function enterPreviewEditMode({ force = false } = {}) {
     `
     : "";
 
-  // v1.1.92: when criteria-generation is in flight AND editor has no criteria yet, show
+  // When criteria-generation is in flight AND the editor has no criteria yet, show
   // a "Genererer…" placeholder instead of an empty editor. When generation completes,
   // criteriaReadyCallback fires and the placeholder is replaced with real editor cards.
   // #896 S3c: NO criteria editor here any more.
@@ -4354,7 +2824,7 @@ function enterPreviewEditMode({ force = false } = {}) {
 
   function exitEditMode() {
     if (previewPaneEl) previewPaneEl.classList.remove("preview-pane--editing");
-    // v1.1.92: clear the criteriaReadyCallback so async generation that completes after
+    // Clear the criteriaReadyCallback so async generation that completes after
     // exit doesn't try to write into a torn-down DOM.
     criteriaReadyCallback = null;
     renderPreview();
@@ -4448,7 +2918,7 @@ function enterPreviewEditMode({ force = false } = {}) {
       // leave the in-flight save writing the OLD values over a freshly rebuilt form. One save
       // owns the session until it resolves or is aborted.
       if (uiLocaleSelect) uiLocaleSelect.disabled = busy;
-      for (const btn of contentLocaleBar?.querySelectorAll("button") ?? []) btn.disabled = busy;
+      formPage?.setBusy(busy);
     };
     setFormBusy(true);
 
@@ -4499,7 +2969,7 @@ function enterPreviewEditMode({ force = false } = {}) {
         // Only send criteria when they were actually edited: rewriting an untouched rubric on
         // every save collapses its localized labels to one language (#902). OMIT the key -
         // passing null would overwrite criteria the draft is already carrying (generated or
-        // handed off from Avansert) and the save would fall back to the old persisted rubric.
+        // edited) and the save would fall back to the old persisted rubric.
         ...(editIsMcqOnly ? { criteria: null } : (criteriaUnchanged ? {} : { criteria: newCriteriaRecord })),
         // #665: keep the module type (and MCQ threshold) on the draft so save/publish uses the
         // right mode instead of falling back to FREETEXT_PLUS_MCQ and demanding scenario text.
@@ -4561,20 +3031,6 @@ function enterPreviewEditMode({ force = false } = {}) {
   // fanebytte. Ruta er dessuten skjult. Linja er borte.
 }
 
-/**
- * Render the module's actions into the fixed bar above the chat log.
- *
- * Stage-tilbakemelding 2026-08-17: *«UI i rediger der tidligere knapper vises som inaktive gir
- * ikke lengre mening nå som dette ikke er et samtale basert UI, den gjør også at høyresiden blir
- * veldig lang, hvorpå man må skrolle mye opp og ned.»*
- *
- * The actions used to be chat bubbles. Every time one was used, its row stayed behind greyed out,
- * so the pane grew monotonically and the live choices sank to the bottom — after a round trip the
- * author had to scroll past a museum of spent buttons to find anything they could press.
- *
- * They live in one place now, and that place does not scroll. The log below keeps what is actually
- * a conversation: questions, instructions, generated results, status.
- */
 // #1046 (13.09): handlingsraden i hodet, med samme regel som listene og de andre skjemasidene —
 // maks fire i raden, resten under «Mer» (rowActionsHtml). Knappene er HTML, så handlingene slås
 // opp via indeks ved klikk (én lytter, satt én gang).
@@ -4588,27 +3044,79 @@ let workspaceActionChoices = [];
 // er skrevet. Flagget slås av når skjemaet bekreftes, assistenten fyller utkastet, eller modulen lages.
 let newModulePlaceholder = false;
 function moduleDirtyKind() {
-  if (activeTab === "settings" && hasUnsavedSettingsEdits()) return "settings";
+  if (activeTab === "settings" && settingsTab.hasUnsavedSettingsEdits()) return "settings";
   if (hasOpenEditForm()) return "form";
-  if (hasUnsavedSettingsEdits()) return "settings";
+  if (settingsTab.hasUnsavedSettingsEdits()) return "settings";
   if (sessionDraft && !newModulePlaceholder) return "draft";
   return null;
 }
 
+// «Alt lagret / Ulagrede endringer», Lagre og Avbryt i hodet leser moduleDirtyKind() via form-page.js
+// (`isDirty`). Mens noe genereres står knappene og språkpillene stille.
 function refreshModuleHeaderState() {
-  const kind = moduleDirtyKind();
-  const dirty = kind !== null;
-  const dirtyBadge = document.getElementById("moduleDirtyBadge");
-  if (dirtyBadge) {
-    dirtyBadge.hidden = !bundle && !sessionDraft;
-    dirtyBadge.textContent = dirty ? t("stateRail.changes.unsaved") : t("stateRail.changes.saved");
-    dirtyBadge.classList.toggle("is-dirty", dirty);
-    dirtyBadge.classList.toggle("is-clean", !dirty);
-  }
-  const saveBtn = document.getElementById("moduleSaveBtn");
-  const cancelBtn = document.getElementById("moduleCancelBtn");
-  if (saveBtn) saveBtn.disabled = !dirty || generationAbort !== null;
-  if (cancelBtn) cancelBtn.disabled = !dirty || generationAbort !== null;
+  formPage?.setBusy(generationAbort !== null);
+}
+
+// B2: navnet er tittelen på sida. Følger feltet mens man skriver; ellers det som er lastet/utkastet.
+function moduleHeaderTitle() {
+  // Bare når skjemaet er det man ser: det kan stå tegnet i den skjulte Rediger-fanen mens navnet
+  // skrives under Innstillinger (ny modul).
+  const field = activeTab === "edit" ? document.getElementById("previewEditTitle") : null;
+  if (field) return field.value.trim();
+  return localizeValue(sessionDraft?.title ?? previewDraft?.title ?? bundle?.module?.title) || "";
+}
+
+// Versjonsfaktaene som merker i hodet — «Publisert v2» (live nå) og «Utkast v4» (det du
+// redigerer, når det ikke er den som er live). Produkteier 13.09.
+function moduleStatusBadgesHtml() {
+  if (!bundle && !sessionDraft) return "";
+  const chains = bundle ? deriveModuleStatusChains(bundle) : null;
+  const loaded = bundle?.selectedConfiguration?.moduleVersion ?? null;
+  const loadedIsLive = !!loaded?.id && loaded.id === bundle?.module?.activeVersionId;
+  const liveNo = chains?.liveChain?.[0]?.versionNo ?? null;
+  const parts = [];
+  if (bundle?.module?.archivedAt) parts.push(lifecycleBadge({ lifecycle: "archived" }, t));
+  else if (liveNo != null) parts.push(`<span class="status-badge status-badge--published">${escapeHtml(tf("stateRail.live.published", { versionNo: liveNo }))}</span>`);
+  const editingNo = loaded?.versionNo ?? null;
+  if (sessionDraft && !loaded) parts.push(`<span class="status-badge status-badge--draft">${escapeHtml(t("stateRail.editing.workingDraft"))}</span>`);
+  else if (editingNo != null && !loadedIsLive) parts.push(`<span class="status-badge status-badge--draft">${escapeHtml(tf("shell.header.draftVersion", { versionNo: editingNo }))}</span>`);
+  else if (liveNo == null && bundle) parts.push(lifecycleBadge({ lifecycle: "draft" }, t));
+  return parts.join(" ");
+}
+
+function createModuleFormPage() {
+  if (!moduleFormHost) return;
+  formPage = createFormPage({
+    host: moduleFormHost,
+    texts: () => ({
+      ...formPageTexts(t, { back: t("shell.header.back"), typeLabel: t("shell.page.title"), untitled: t("shell.newModule.defaultTitle") }),
+      required: "",
+    }),
+    backHref: "/admin-content",
+    title: moduleHeaderTitle,
+    statusHtml: moduleStatusBadgesHtml,
+    t,
+    actions: () => workspaceActionChoices.map((choice, i) =>
+      `<button type="button" class="row-action-btn workspace-action-btn" data-ws-action="${i}"${choice.hintKey ? ` title="${escapeHtml(t(choice.hintKey))}"` : ""}>${escapeHtml(resolveChoiceLabel(choice))}</button>`),
+    languages: { locales: supportedLocales, labels: localeLabels, current: () => contentLocale, onChange: switchContentLocale },
+    tabs: {
+      label: t("shell.tab.listLabel"),
+      items: () => TAB_ORDER.map((id) => ({ id, label: t(`shell.tab.${id}`), panel: id === "settings" ? "tabPanelSettings" : "tabPanelModule" })),
+      initial: activeTab,
+      onChange: onTabSelected,
+    },
+    // Lagre-flyten kjøres av skallet (saveFromHeader); «false» lar form-page.js la tilstanden stå til
+    // skallet melder fra gjennom isDirty.
+    save: { onSave: async () => { saveFromHeader(); return false; }, onDiscard: discardFromHeader },
+    isDirty: () => moduleDirtyKind() !== null,
+    body: () => "",
+  });
+  moduleFormHost.addEventListener("click", (event) => {
+    const btn = event.target instanceof Element ? event.target.closest("[data-ws-action]") : null;
+    if (btn) workspaceActionChoices[Number(btn.dataset.wsAction)]?.action?.();
+  });
+  formPage.render();
+  formPage.installGuards();
 }
 
 function saveFromHeader() {
@@ -4621,43 +3129,39 @@ function saveFromHeader() {
   }
 }
 
+// Avbryt i hodet (form-page.js har alt spurt): vis det som er lagret.
 function discardFromHeader() {
   const kind = moduleDirtyKind();
   if (!kind) return;
-  if (!window.confirm(t("shell.header.discardConfirm"))) return;
-  if (kind === "form") { document.getElementById("previewEditCancel")?.click(); }
-  else if (kind === "settings") { settingsDraftValues = null; renderSettingsPanel(); }
-  else if (kind === "draft") {
-    // Forkast utkastet: last modulen på nytt fra det som er lagret. Et nytt element uten modul
-    // har ingenting å gå tilbake til — da er lista stedet.
-    if (selectedModuleId) { void loadModule(selectedModuleId); return; }
-    window.location.href = "/admin-content";
-    return;
-  }
-  refreshModuleHeaderState();
+  if (kind === "settings") { settingsTab.clearDraftValues(); settingsTab.renderSettingsPanel(); refreshModuleHeaderState(); return; }
+  // Skjema og utkast er samme sak når modulen finnes: alt ulagret bort, modulen inn fra det lagrede.
+  // (Et skjema som bare ble skrevet i, uten utkast bak seg, er dekket av det samme — loadModule
+  // tegner skjemaet på nytt. Å bare lukke skjemaet holdt ikke: etter en tur innom Innstillinger
+  // står det skrevne også i utkastet, og skjemaet ville åpnet igjen med det.)
+  if (selectedModuleId) { void loadModule(selectedModuleId); return; }
+  // Nytt element: skjemaet tilbake til utkastet (navn, type, nivå fra Innstillinger står).
+  if (kind === "form") { document.getElementById("previewEditCancel")?.click(); refreshModuleHeaderState(); return; }
+  // Et nytt utkast uten modul har ingenting å gå tilbake til — da er lista stedet.
+  window.location.href = "/admin-content";
 }
 
 // Skriving i et felt gjør modulen ulagret — merket og knappene i hodet følger med.
 document.addEventListener("input", (event) => {
   const el = event.target instanceof Element ? event.target : null;
-  if (!el || !el.matches("input, textarea, select") || el.closest(".chat-pane")) return;
+  // Feltene i dialogene (kilde, plan, instruks) er ikke modulens skjema.
+  if (!el || !el.matches("input, textarea, select") || el.closest("dialog")) return;
   refreshModuleHeaderState();
-  // Navnet er tittelen på sida (B2) — følg feltet mens man skriver, som form-page.js gjør.
-  if (el.id === "previewEditTitle") {
-    const h1 = document.getElementById("moduleWorkspaceTitle");
-    const v = el.value.trim();
-    if (h1) { h1.textContent = v || t("shell.newModule.defaultTitle"); h1.classList.toggle("is-untitled", !v); }
-  }
+  // Navnet er tittelen på sida (B2) — følg feltet mens man skriver.
+  if (el.id === "previewEditTitle") formPage?.refreshTitle();
 });
 document.addEventListener("change", (event) => {
   const el = event.target instanceof Element ? event.target : null;
-  if (el && el.matches("input, textarea, select") && !el.closest(".chat-pane")) refreshModuleHeaderState();
+  if (el && el.matches("input, textarea, select") && !el.closest("dialog")) refreshModuleHeaderState();
 });
 
 // Rekkefølgen i raden: det som endrer hva deltakerne ser først (Publiser/Avpubliser), så resten.
 const WS_ACTION_ORDER = ["publish", "unpublish", "generateContent", "resumeChatEdit", "revise", "generateMcq", "export", "import"];
 function renderWorkspaceActions(actions) {
-  if (!workspaceActionsBar) return;
   // saveDraft og restart er Lagre og Avbryt i hodet.
   const live = (actions ?? []).filter(Boolean).filter((a) => a.key !== "saveDraft" && a.key !== "restart");
   live.sort((a, b) => {
@@ -4665,29 +3169,7 @@ function renderWorkspaceActions(actions) {
     return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
   });
   workspaceActionChoices = live;
-  const hasModule = !!(bundle || sessionDraft || selectedModuleId);
-  setHidden(workspaceActionsBar, live.length === 0 && !hasModule);
-  const pair = hasModule
-    ? `<button type="button" id="moduleSaveBtn" class="row-action-btn btn-save" disabled>${escapeHtml(t("shell.header.save"))}</button>` +
-      `<button type="button" id="moduleCancelBtn" class="row-action-btn btn-cancel" disabled>${escapeHtml(t("shell.header.cancel"))}</button>` +
-      (live.length ? `<span class="form-actions-sep" aria-hidden="true"></span>` : "")
-    : "";
-  workspaceActionsBar.innerHTML = pair + rowActionsHtml(
-    live.map((choice, i) => `<button type="button" class="row-action-btn workspace-action-btn" data-ws-action="${i}"${choice.hintKey ? ` title="${escapeHtml(t(choice.hintKey))}"` : ""}>${escapeHtml(resolveChoiceLabel(choice))}</button>`),
-    { moreLabel: "Mer" },
-  );
-  if (!workspaceActionsBar.dataset.bound) {
-    workspaceActionsBar.dataset.bound = "1";
-    workspaceActionsBar.addEventListener("click", (event) => {
-      const target = event.target instanceof Element ? event.target : null;
-      if (!target) return;
-      if (target.closest("#moduleSaveBtn")) { saveFromHeader(); return; }
-      if (target.closest("#moduleCancelBtn")) { discardFromHeader(); return; }
-      const btn = target.closest("[data-ws-action]");
-      if (!btn) return;
-      workspaceActionChoices[Number(btn.dataset.wsAction)]?.action?.();
-    });
-  }
+  formPage?.refreshHeader();
   refreshModuleHeaderState();
 }
 
@@ -4718,18 +3200,17 @@ function showModuleActions() {
       // double-confirm dialog was redundant friction. (2026-05-18 author feedback)
       labelKey: "shell.draftReady.publish",
       hintKey: "shell.draftReady.publishHint",
-      action: publishLatestDraftInBackground,
+      action: publishFlow.publishLatestDraftInBackground,
     },
     unpublish: {
       labelKey: "shell.module.unpublish",
-      action: () => confirmHighImpactAction("shell.unpublish.confirmPrompt", "shell.unpublish.confirmAction", unpublishModuleInBackground, showModuleActions, { module: moduleLabel }),
+      action: () => confirmHighImpactAction("shell.unpublish.confirmPrompt", "shell.unpublish.confirmAction", publishFlow.unpublishModuleInBackground, showModuleActions, { module: moduleLabel }),
     },
   };
   const actions = model.actionKeys.map((key) => actionMap[key] && { key, ...actionMap[key] }).filter(Boolean);
-  // #896 S6: export/import belong on Rediger, per the IA table. They lived only on the module list
-  // and in Avansert, so moving content between installations meant leaving the workspace you were
-  // working in. Appended rather than folded into `actionKeys` because they are not part of the
-  // authoring progression the status model describes — they are available whenever a module is.
+  // #896 S6: export/import belong on the module page too, not only on the list. Appended rather
+  // than folded into `actionKeys` because they are not part of the authoring progression the
+  // status model describes — they are available whenever a module is.
   if (selectedModuleId) {
     actions.push(
       { key: "export", labelKey: "shell.module.exportPackage", action: () => exportModulePackageInBackground() },
@@ -4737,9 +3218,6 @@ function showModuleActions() {
     );
   }
   renderWorkspaceActions(actions);
-  if (model.shouldOfferUnifiedRevision) {
-    startUnifiedRevisionFlow();
-  }
 }
 
 /**
@@ -4812,7 +3290,7 @@ function startImportPackageFlow() {
 
   // Same combined guard as restore: the settings inputs are DOM-only until Lagre, so `sessionDraft`
   // alone does not know whether the reload after import would throw work away.
-  if ((sessionDraft || hasUnsavedSettingsEdits()) && !window.confirm(t("shell.module.importConfirmDiscardDraft"))) {
+  if ((sessionDraft || settingsTab.hasUnsavedSettingsEdits()) && !window.confirm(t("shell.module.importConfirmDiscardDraft"))) {
     // Choosing this action already disabled the menu. Declining must not leave the workspace with
     // no actions at all.
     showModuleActions();
@@ -4921,7 +3399,7 @@ async function importModulePackageInBackground(moduleId, file, idempotencyKey = 
 
 // Declared before tabFromUrl() runs at module scope - a const in the temporal dead zone
 // would throw on load and take the whole shell with it.
-const TAB_ORDER = ["preview", "edit", "settings"];
+const TAB_ORDER = ["edit", "preview", "settings"];
 const TAB_QUERY_PARAM = "tab";
 
 function tabFromUrl() {
@@ -4943,11 +3421,9 @@ let activeTab = tabFromUrl();
 /**
  * Does the edit form hold work a tab switch would destroy?
  *
- * This used to mean "is the form on screen", which was the same question while the form only
- * existed after clicking "Rediger direkte". Now that Rediger IS the form, mere existence says
- * nothing — and the old reading made every switch to Innstillinger raise an unsaved-changes
- * dialog over a form the author had not touched. A warning that always fires is a warning people
- * learn to click through, which is worse than none.
+ * Not "is the form on screen": Rediger IS the form, so mere existence says nothing, and asking
+ * about an untouched form on every tab switch is a warning people learn to click through — worse
+ * than none.
  *
  * Each field is stamped with what it was rendered with (`stampEditFormValues`), so "dirty" is a
  * comparison, exactly as it is in the settings panel.
@@ -5034,8 +3510,8 @@ function stampEditFormValues() {
  *
  * §7 asks for the same warning on a language change as on a tab change, and the reason is the
  * same in both places: the surfaces that hold work only in the DOM are torn down and rebuilt from
- * the other language. Until now only Innstillinger was asked about, so «Rediger direkte» + type +
- * switch language silently replaced the typed text with the stored text of the new language.
+ * the other language — an open form with typed text would otherwise be replaced by the stored text
+ * of the new language without a word.
  *
  * Same `unsavedTabSwitchKind()` as the tab switch, with one deliberate difference: `"draft"` does
  * NOT ask. A tab switch warns about a draft because it is unsaved; a language switch does not
@@ -5049,7 +3525,7 @@ function confirmLocaleSwitchDiscard() {
   // Et åpent skjema med endringer, eller endrede innstillinger, tegnes om fra det andre språket.
   // Et utkast er trygt: begge tegningene leser FRA det.
   const kind = activeTab === "edit" && hasOpenEditForm() ? "form"
-    : (activeTab === "edit" || activeTab === "settings") && hasUnsavedSettingsEdits() ? "settings"
+    : (activeTab === "edit" || activeTab === "settings") && settingsTab.hasUnsavedSettingsEdits() ? "settings"
     : null;
   if (kind !== "form" && kind !== "settings") return true;
   return window.confirm(t(kind === "form" ? "shell.tab.unsaved.body" : "shell.tab.unsaved.settingsBody"));
@@ -5071,7 +3547,7 @@ const tabAttention = new Set();
 function markTabAttention(tab) {
   // Ingen grunn til å merke fanen forfatteren står i — der ER endringen synlig.
   if (tab === activeTab) return;
-  const button = tabButtons[tab];
+  const button = formPage?.tabButton(tab);
   if (!button) return;
   tabAttention.add(tab);
   button.dataset.attention = "1";
@@ -5083,7 +3559,7 @@ function markTabAttention(tab) {
 
 function clearTabAttention(tab) {
   if (!tabAttention.delete(tab)) return;
-  const button = tabButtons[tab];
+  const button = formPage?.tabButton(tab);
   if (!button) return;
   delete button.dataset.attention;
   applyTabAttentionLabel(tab);
@@ -5092,7 +3568,7 @@ function clearTabAttention(tab) {
 // The tab's accessible name is its own label plus, when marked, the reason. Rebuilt from the
 // label each time rather than appended to, so repeated marking cannot stack the suffix.
 function applyTabAttentionLabel(tab) {
-  const button = tabButtons[tab];
+  const button = formPage?.tabButton(tab);
   if (!button) return;
   const base = t(`shell.tab.${tab}`);
   if (tabAttention.has(tab)) button.setAttribute("aria-label", `${base} (${t("shell.tab.attention.suffix")})`);
@@ -5102,24 +3578,6 @@ function applyTabAttentionLabel(tab) {
 // Produkteier 13.09: samtaleruta er til overs i Rediger til assistenten trenger et svar. Den åpnes
 // når en flyt spør (valg, skjema, avbrytbar framdrift) og lukkes med «Skjul samtalen». Skjult rute
 // = skjemaet i full bredde.
-let chatPaneOpen = false;
-function chatPaneVisible() { return chatPaneOpen && activeTab === "edit"; }
-function applyChatPaneVisibility() {
-  const chatPane = document.querySelector(".chat-pane");
-  const hidden = activeTab === "preview" || !chatPaneOpen;
-  setHidden(chatPane, hidden);
-  tabPanelModule?.classList.toggle("workspace-shell--chat-hidden", hidden && activeTab !== "preview");
-}
-function openChatPane() {
-  if (chatPaneOpen) return;
-  chatPaneOpen = true;
-  applyChatPaneVisibility();
-}
-function closeChatPane() {
-  chatPaneOpen = false;
-  applyChatPaneVisibility();
-}
-document.getElementById("chatPaneClose")?.addEventListener("click", closeChatPane);
 
 function applyTabState(tab) {
   // Opening the tab IS seeing what landed in it.
@@ -5132,42 +3590,30 @@ function applyTabState(tab) {
   // re-rendered from the bundle. Typing into a label never reaches `settingsCriteriaState`, so a
   // criteria edit made on a fresh draft would otherwise be gone by the time the draft is
   // confirmed, and the GENERATED criteria would be saved instead. No-op unless a draft exists.
-  if (activeTab === "settings" && tab !== "settings") syncSettingsCriteriaToDraft();
+  if (activeTab === "settings" && tab !== "settings") settingsTab.syncSettingsCriteriaToDraft();
   activeTab = tab;
-  for (const [name, button] of Object.entries(tabButtons)) {
-    if (!button) continue;
-    const selected = name === tab;
-    button.classList.toggle("active", selected);
-    button.setAttribute("aria-selected", selected ? "true" : "false");
-    // Roving tabindex: a tablist is ONE tab stop, and the arrow keys move within it.
-    button.tabIndex = selected ? 0 : -1;
-  }
   // setHidden, not the .hidden class: workspace-shell sets display:grid and the panels
   // are .card (display:block), so a class-based toggle loses the cascade (CLAUDE.md).
   setHidden(tabPanelModule, tab === "settings");
   setHidden(tabPanelSettings, tab !== "settings");
   const ownerHostEl = document.getElementById("moduleOwnerPanelHost");
   if (ownerHostEl) ownerHostEl.hidden = tab !== "settings" || !ownerHostEl.dataset.moduleId;
-  applyChatPaneVisibility();
-  tabPanelModule?.classList.toggle("workspace-shell--preview-only", tab === "preview");
   // Forhaandsvisning and Rediger share this panel, so point it at whichever tab owns it now.
-  if (tab !== "settings") tabPanelModule?.setAttribute("aria-labelledby", tabButtons[tab]?.id ?? "tabEdit");
+  if (tab !== "settings") tabPanelModule?.setAttribute("aria-labelledby", `formTab-${tab}`);
   // Safe here: an open edit form is torn down before any switch away from Rediger, so this
   // cannot discard typed values. No bundle guard - a new module has a draft and no bundle,
   // and its preview needs the audience swap just as much.
   if (audienceChanges) renderPreview();
   // Rendered on entry rather than kept in sync: the panel is a read-out of the loaded
   // bundle, and the bundle cannot change while Innstillinger is the visible tab.
-  if (tab === "settings") renderSettingsPanel();
+  if (tab === "settings") settingsTab.renderSettingsPanel();
   // Stage-tilbakemelding 2026-08-18: the special-category warning belongs where the assignment
   // text is WRITTEN. On Forhåndsvisning and Innstillinger there is nothing to reword, so it is
   // noise — and a warning that shows everywhere stops being read where it matters.
   // GDPR-linja ligger inne i redigeringsskjemaet (under oppgavefeltet) og følger det.
 
-  // Stage-tilbakemelding 2026-08-17: *"Åpner modul, den havner på rediger fanen, men jeg kan ikke
-  // redigere før jeg trykker på «Rediger direkte»."* A tab called Rediger that does not let you
-  // edit is a tab that lies about its name. The fields are open on arrival now, and the separate
-  // "Rediger direkte" action is gone from the menu — one way in, not two.
+  // A tab called Rediger must let you edit on arrival: the fields are open, there is no separate
+  // "start editing" action — one way in, not two (stage-tilbakemelding 17.08).
   //
   // Forhåndsvisning shares this pane and must stay read-only: it is the participant's view.
   if (tab === "edit") {
@@ -5181,7 +3627,15 @@ function applyTabState(tab) {
   }
 }
 
+// Fra kode (Lagre som må til Innstillinger, lenker): gå via form-page, så fanelinja følger med.
 function switchToTab(tab) {
+  if (tab === activeTab) return;
+  if (formPage) { formPage.showTab(tab); return; }
+  onTabSelected(tab);
+}
+
+// Fanen er valgt (klikk, piltast eller showTab) — form-page.js har alt merket knappen.
+function onTabSelected(tab) {
   if (tab === activeTab) return;
   // Produkteier 13.09: fanebytte er ikke navigering og spør ikke — samme regel som kurs, seksjon og
   // klasse (form-page.js). Det som er skrevet i Rediger legges i utkastet og kommer tilbake;
@@ -5189,1483 +3643,14 @@ function switchToTab(tab) {
   // tegning. Én Lagre lagrer det som er ulagret der du står.
   if (activeTab === "edit") captureEditFormIntoDraft();
   if (activeTab === "settings") {
-    captureSettingsDraftValues();
+    settingsTab.captureSettingsDraftValues();
     // Kriterieeditoren lever i DOM-en til noe leser den; neste tegning kaster den. Les den ut nå,
     // så et byttet «synlig for kandidat» eller en ny etikett står der når man kommer tilbake.
-    if (settingsCriteriaState !== null) {
-      settingsCriteriaState = captureLatestCriteriaState(document.getElementById("settingsCriteriaEditor"), settingsCriteriaState);
-    }
+    settingsTab.captureCriteriaStateFromDom();
   }
   applyTabState(tab);
   syncTabToUrl(tab);
   if (tab === "settings") scrollPreviewToTop();
-}
-
-// ---------------------------------------------------------------------------
-// #896 S3a: the Innstillinger read-out.
-//
-// Every value here already sits in the bundle the shell loaded — this reads, it never
-// writes. Editing still hands off to the Avansert page until S3b wires each row up, which
-// is a deliberate split: the settings surface is worth having in the new IA before the
-// write paths follow, and a read-only panel cannot corrupt a module.
-// ---------------------------------------------------------------------------
-
-// #1046 A1 (produkteier 13.09): et nytt element har ingen versjon å vise innstillinger for. Det som
-// trengs først er navn, modultype og nivå — resten kommer når modulen finnes. Verdiene skrives rett
-// inn i utkastet; Lagre oppretter modulen med dem.
-function renderNewModuleSettings(host) {
-  const mode = sessionDraft?.assessmentMode ?? "FREETEXT_ONLY";
-  const level = sessionDraft?.certificationLevel ?? "";
-  const name = localizeValueForLocale(sessionDraft?.title ?? "", contentLocale) || "";
-  const modeOptions = ["FREETEXT_PLUS_MCQ", "FREETEXT_ONLY", "MCQ_ONLY"]
-    .map((v) => `<option value="${v}"${v === mode ? " selected" : ""}>${escapeHtml(t(`shell.settings.mode.${v}`))}</option>`).join("");
-  const levelOptions = ["", "basic", "intermediate", "advanced"]
-    .map((v) => `<option value="${v}"${v === level ? " selected" : ""}>${escapeHtml(v ? t(`shell.certLevel.${v}`) : t("shell.settings.notSet"))}</option>`).join("");
-  host.innerHTML = `<div class="settings-group">
-    <h3 class="settings-group-title">${escapeHtml(t("shell.settings.groupModule"))}</h3>
-    <dl class="settings-list">
-      <dt>${escapeHtml(t("shell.directEdit.nameLabel"))} <span class="required-note">${escapeHtml(t("shell.directEdit.required"))}</span></dt>
-      <dd><input id="settingsNewName" class="settings-input" type="text" value="${escapeHtml(name)}" autocomplete="off" /></dd>
-      <dt>${escapeHtml(t("shell.settings.moduleType"))}</dt>
-      <dd><select id="settingsModuleType" class="settings-input">${modeOptions}</select>
-        <span class="settings-help">${escapeHtml(t("shell.settings.newModuleTypeHelp"))}</span></dd>
-      <dt>${escapeHtml(t("shell.settings.certificationLevel"))}</dt>
-      <dd><select id="settingsCertLevel" class="settings-input">${levelOptions}</select></dd>
-    </dl>
-  </div>`;
-  host.querySelector("#settingsNewName")?.addEventListener("input", (e) => {
-    const v = e.target.value.trim();
-    sessionDraft = { ...sessionDraft, title: v ? { [contentLocale]: v } : "" };
-    if (v) newModulePlaceholder = false;
-    const h1 = document.getElementById("moduleWorkspaceTitle");
-    if (h1) { h1.textContent = v || t("shell.newModule.defaultTitle"); h1.classList.toggle("is-untitled", !v); }
-    refreshModuleHeaderState();
-  });
-  host.querySelector("#settingsModuleType")?.addEventListener("change", (e) => {
-    const v = e.target.value;
-    sessionDraft = { ...sessionDraft, assessmentMode: v, ...(v === "MCQ_ONLY" ? { mcqMinPercent: SHELL_MCQ_ONLY_MIN_PERCENT } : {}) };
-    if (v !== "MCQ_ONLY") delete sessionDraft.mcqMinPercent;
-    newModulePlaceholder = false;
-    refreshModuleHeaderState();
-  });
-  host.querySelector("#settingsCertLevel")?.addEventListener("change", (e) => {
-    sessionDraft = { ...sessionDraft, certificationLevel: e.target.value || undefined };
-    newModulePlaceholder = false;
-    refreshModuleHeaderState();
-  });
-}
-
-function renderSettingsPanel() {
-  const host = document.getElementById("settingsSummary");
-  if (!host) return;
-
-  if (!bundle && sessionDraft && !selectedModuleId) {
-    renderNewModuleSettings(host);
-    return;
-  }
-  if (!bundle) {
-    host.innerHTML = `<p class="settings-empty">${escapeHtml(t("shell.settings.noModule"))}</p>`;
-    return;
-  }
-
-  const cfg = bundle.selectedConfiguration ?? {};
-  const version = cfg.moduleVersion ?? null;
-  const mod = bundle.module ?? {};
-  const policy = version?.assessmentPolicy ?? null;
-  const criteria = cfg.rubricVersion?.criteria ?? null;
-
-  // The type the panel is DRAWING for: whatever is selected in the dropdown right now, falling
-  // back to what is stored. #896 S3c: it read only the stored one, so picking "Bare flervalg" left
-  // the criteria and instruction editors standing — editors the save then refuses to carry. The
-  // panel has to show the consequences of the choice at the moment it is made, not after Lagre.
-  const mode = settingsSelectedMode();
-  const modeLabel = t(`shell.settings.mode.${mode}`);
-
-  // #896 S3c: eleven rows in one undifferentiated list, with three full editors bolted on after
-  // it, told the author nothing about what belongs together. Four groups: what the module IS, how
-  // it is ASSESSED, what the participant SUBMITS, and the history — which is a log, not a setting,
-  // and therefore sits on the far side of Lagre.
-  //
-  // `group()` opens a bucket; `row()` fills the open one. Rendering happens once at the end, so
-  // the order of the groups on screen is the order they are opened here.
-  const groups = new Map();
-  let openGroup = null;
-  const group = (labelKey) => {
-    openGroup = [];
-    groups.set(labelKey, openGroup);
-  };
-  // Stage-tilbakemelding 2026-08-17: poengreglene sier ikke hva de gjør. Forklaringen ligger bak
-  // et i-ikon, åpnet med KLIKK — hover finnes ikke på nettbrett og kan ikke nås med tastatur.
-  // Ingen innebygde hjelpetekster: forfatteren ba om den kompakte varianten.
-  // #1046 D4: hjelpen står som én setning under feltet (tidligere et (i)-ikon med popover).
-  const row = (labelKey, valueHtml, isEmpty = false, infoKey = null) => {
-    const helpText = infoKey ? t(`shell.settings.info.${infoKey}`) : "";
-    const help = helpText && !helpText.startsWith("shell.settings.info.")
-      ? `<span class="settings-help" data-info="${escapeHtml(infoKey)}">${escapeHtml(helpText)}</span>`
-      : "";
-    openGroup.push(`<dt>${escapeHtml(t(labelKey))}</dt><dd${isEmpty ? ' class="settings-empty"' : ""}>${valueHtml}${help}</dd>`);
-  };
-  const emptyText = escapeHtml(t("shell.settings.notSet"));
-  // #896 S3c: Innstillinger reads in the UI language, not the preview language. The summary rows
-  // used localizeValue (preview locale) while the editors use currentLocale, so with the UI in
-  // Norwegian and the preview in English the criteria summary showed English while "Endre
-  // kriterier" opened the Norwegian values and said it was editing nb. One language per surface.
-  const settingsValue = (value) => localizeValueForLocale(value, contentLocale);
-
-  // #896 S3b: module type is editable, and first, as the issue specifies — it decides which
-  // fields Rediger even shows. Only the types this module has the components for are offered;
-  // the rest are disabled with the reason, rather than allowed and then rejected by the API.
-  // Availability comes from the module's HISTORY, not from what the current version happens to
-  // point at. Switching to MCQ-only writes a version without rubric or prompt pointers — reading
-  // availability off that version would then disable every free-text mode and strand the module
-  // in the type it was last saved as. The components still exist; the version simply stopped
-  // referencing them, which is exactly what makes switching back possible.
-  const rubricHistory = bundle.versions?.rubricVersions ?? [];
-  const promptHistory = bundle.versions?.promptTemplateVersions ?? [];
-  const mcqHistory = bundle.versions?.mcqSetVersions ?? [];
-  const taskHistory = (bundle.versions?.moduleVersions ?? []).find((v) => !!settingsValue(v?.taskText));
-
-  const hasRubric = rubricHistory.length > 0 || !!cfg.rubricVersion;
-  const hasPrompt = promptHistory.length > 0 || !!cfg.promptTemplateVersion;
-  const hasMcq = mcqHistory.length > 0 || !!cfg.mcqSetVersion;
-  const hasTask = !!settingsValue(version?.taskText) || !!taskHistory;
-  const freetextReady = hasTask && hasRubric && hasPrompt;
-
-  // Stage-tilbakemelding 2026-08-19: suffikset listet TYPENS KRAV, ikke det som faktisk mangler.
-  // En modul som er «Bare fritekst» har allerede oppgavetekst, rubrikk og vurderingsinstruks — den
-  // mangler bare MCQ-settet. Likevel sto det «krever oppgavetekst, rubrikk og MCQ-sett» på
-  // «Fritekst og flervalg», så forfatteren leste tre mangler der det var én, og hadde ingen måte å
-  // se hvilken.
-  //
-  // Samme regel som publiseringsgaten i §4: meldingen skal navngi HULLET, ikke gjenta kravet.
-  // Hva som mangler vet vi allerede — det er nettopp det `hasTask`/`hasRubric`/`hasPrompt`/`hasMcq`
-  // er.
-  const requirementsFor = (value) => {
-    const freetext = [
-      { ok: hasTask, key: "shell.settings.needs.taskText" },
-      { ok: hasRubric, key: "shell.settings.needs.rubric" },
-      { ok: hasPrompt, key: "shell.settings.needs.prompt" },
-    ];
-    const mcq = [{ ok: hasMcq, key: "shell.settings.needs.mcq" }];
-    if (value === "MCQ_ONLY") return mcq;
-    if (value === "FREETEXT_ONLY") return freetext;
-    return [...freetext, ...mcq];
-  };
-
-  // «A», «A og B», «A, B og C» — listeform, ikke en kommaliste som slutter brått.
-  const joinMissing = (parts) => {
-    if (parts.length <= 1) return parts.join("");
-    return `${parts.slice(0, -1).join(", ")} ${t("shell.settings.needs.and")} ${parts[parts.length - 1]}`;
-  };
-
-  const modeOptions = [
-    { value: "FREETEXT_PLUS_MCQ", ok: freetextReady && hasMcq },
-    { value: "FREETEXT_ONLY", ok: freetextReady },
-    { value: "MCQ_ONLY", ok: hasMcq },
-  ];
-  const optionsHtml = modeOptions
-    .map(({ value, ok }) => {
-      const label = t(`shell.settings.mode.${value}`);
-      const missing = requirementsFor(value).filter((r) => !r.ok).map((r) => t(r.key));
-      const suffix = ok || value === mode || missing.length === 0
-        ? ""
-        : ` — ${tf("shell.settings.needsMissing", { missing: joinMissing(missing) })}`;
-      const disabled = !ok && value !== mode ? " disabled" : "";
-      const selected = value === mode ? " selected" : "";
-      return `<option value="${value}"${disabled}${selected}>${escapeHtml(label + suffix)}</option>`;
-    })
-    .join("");
-  group("shell.settings.groupModule");
-  row(
-    "shell.settings.moduleType",
-    `<select id="settingsModuleType" class="settings-input">${optionsHtml}</select>`,
-  );
-
-  // #896 S3b: editable now that the composed save can write module-level fields. They were
-  // create-only before — set once at creation and impossible to correct afterwards.
-  //
-  // A FIXED SCALE, not translatable text (produkteier 2026-08-17: "Nivå er ment som en fast skala
-  // enkel→medium→vanskelig … dette er ikke noe som bør oversettes modul for modul"). The value is
-  // one of three; the LABEL is translated at render, from `shell.certLevel.*`. A free-text input
-  // let an author type anything into a field the generate endpoints validate as an enum.
-  const certLevel = certificationLevelValue(mod.certificationLevel);
-  const certOptions = [
-    // "Not set" is offered only while nothing IS set. QA round 7: as a clearing action it sent
-    // `certificationLevel: null`, and the composed-version schema takes a string or a record but
-    // not null — a 400 every time. `description` right beside it in that schema is `.nullable()`
-    // and can be cleared; this field is not, and making it so is a backend change that does not
-    // belong in this diff. Better to not offer an action than to offer one that fails.
-    ...(certLevel ? [] : [`<option value="" selected>${escapeHtml(t("shell.settings.notSet"))}</option>`]),
-    ...CERTIFICATION_LEVELS.map((level) =>
-      `<option value="${level}"${level === certLevel ? " selected" : ""}>${escapeHtml(t(`shell.certLevel.${level}`))}</option>`),
-    // Existing data may hold something outside the scale — older modules were told "plain text,
-    // e.g. foundation", and imports carry whatever they carry. Offer it back verbatim rather than
-    // silently rewriting it to a neighbouring level the author never chose.
-    ...(certLevel && !CERTIFICATION_LEVELS.includes(certLevel)
-      ? [`<option value="${escapeHtml(certLevel)}" selected>${escapeHtml(certLevel)}</option>`]
-      : []),
-  ].join("");
-  row(
-    "shell.settings.certificationLevel",
-    `<select id="settingsCertLevel" class="settings-input">${certOptions}</select>`,
-  );
-
-  // #1049: forventet svarlengde, ved siden av nivået fordi det er det paret som ble skilt.
-  //
-  // ⚠️ TOMT FELT BETYR «bruk nivåets standard», og det er derfor plassholderen viser tallet i
-  // stedet for en instruksjon. En forfatter som lar feltet stå tomt skal se hva som da gjelder,
-  // uten å måtte lete etter en tabell.
-  //
-  // Produkteier 2026-09-06: å skrive langt er ikke vanskeligere enn å være kort. Feltet finnes
-  // nettopp for at et avansert nivå skal kunne be om et kort, presist svar.
-  const standardOmfang = LEVEL_SCOPE_DEFAULTS[certLevel] ?? LEVEL_SCOPE_DEFAULTS.intermediate;
-  row(
-    "shell.settings.scopeWords",
-    `<input id="settingsScopeMin" class="settings-input" type="number" min="20" max="5000"
-       value="${mod.scopeMinWords ?? ""}" placeholder="${standardOmfang.minWords}" />
-     <span aria-hidden="true">–</span>
-     <input id="settingsScopeMax" class="settings-input" type="number" min="20" max="5000"
-       value="${mod.scopeMaxWords ?? ""}" placeholder="${standardOmfang.maxWords}" />
-     <span class="settings-hint">${escapeHtml(t("shell.settings.scopeWordsHint"))}</span>`,
-  );
-
-  // date inputs need yyyy-mm-dd, not a localized rendering
-  const asDateValue = (d) => (d ? new Date(d).toISOString().slice(0, 10) : "");
-  row(
-    "shell.settings.validity",
-    `<input id="settingsValidFrom" class="settings-input" type="date" value="${escapeHtml(asDateValue(mod.validFrom))}" />
-     <span aria-hidden="true">→</span>
-     <input id="settingsValidTo" class="settings-input" type="date" value="${escapeHtml(asDateValue(mod.validTo))}" />`,
-  );
-
-  group("shell.settings.groupAssessment");
-  const mcqMinPercent = policy?.passRules?.mcqMinPercent;
-  if (mode !== "FREETEXT_ONLY") {
-    row(
-      "shell.settings.mcqThreshold",
-      // QA round 7: this used to show 70 when nothing was stored, and the save copied whatever was
-      // on screen into `passRules` — so changing a validity date on a module with no policy at all
-      // silently gave it an MCQ pass mark of 70. A candidate with a good total but 69 % on the
-      // multiple choice would then fail a module that had no such rule the day before.
-      //
-      // Blank means "not set", exactly like the other three pass rules. That consistency is the
-      // point of the redesign; this field was the one left behaving differently.
-      `<input id="settingsMcqMinPercent" class="settings-input" type="number" min="0" max="100"
-        value="${Number.isFinite(mcqMinPercent) ? escapeHtml(String(mcqMinPercent)) : ""}"
-        placeholder="${escapeHtml(t("shell.settings.noLimit"))}" /> %`,
-      false,
-      "mcqThreshold",
-    );
-  }
-
-  // #896 S3c: the rest of the pass rules. Only mcqMinPercent was editable, so an author who wanted
-  // to change the overall pass mark still had to go to Avansert — which makes "ett sted å gjøre
-  // hver ting" untrue for the very field most likely to be adjusted after a calibration round.
-  //
-  // Blank means "not set": decisionService falls back to the platform rules, and writing a number
-  // in would turn a deliberate default into a per-module override nobody chose.
-  //
-  // Stage-tilbakemelding 2026-08-17 avdekket at "tomt = plattformstandard" bare gjelder EN av de
-  // fire. decisionService.ts:101-132: totalMin faller tilbake på plattformverdien, mens de tre
-  // andre er AV når de er tomme — ingen sperre i det hele tatt. Plassholderen sier derfor hva
-  // tomt faktisk gjør for nettopp det feltet, i stedet for en felles forklaring som er usann for
-  // tre av dem. Å fylle inn verdiene i stedet, som først foreslått, ville slått PÅ en sperre som
-  // er av — akkurat feilen QA fant på MCQ-feltet.
-  const numberRow = (labelKey, id, value, placeholderText, infoKey, suffix = " %", wide = false) =>
-    row(
-      labelKey,
-      `<input id="${id}" class="settings-input${wide ? " settings-input--wide" : ""}" type="number" min="0" max="100"
-        value="${Number.isFinite(Number(value)) && value !== null && value !== undefined ? escapeHtml(String(value)) : ""}"
-        placeholder="${escapeHtml(placeholderText)}" />${suffix}`,
-      false,
-      infoKey,
-    );
-  // The one rule with a platform fallback: show the number it falls back TO, without storing it.
-  const platformTotalMin = bundle?.platformDefaults?.totalMin;
-  numberRow(
-    "shell.settings.totalMin",
-    "settingsTotalMin",
-    policy?.passRules?.totalMin,
-    Number.isFinite(platformTotalMin)
-      ? tf("shell.settings.platformDefault", { value: platformTotalMin })
-      : t("shell.settings.notSet"),
-    "totalMin",
-    " %",
-    // The only field whose placeholder is a sentence rather than a word.
-    true,
-  );
-  if (mode !== "MCQ_ONLY") {
-    numberRow(
-      "shell.settings.practicalMin",
-      "settingsPracticalMin",
-      policy?.passRules?.practicalMinPercent,
-      t("shell.settings.noLimit"),
-      "practicalMin",
-    );
-  }
-  // ⚠️ Grensesonen gjelder IKKE for rene flervalgsmoduler — `resolveMcqOnlyDecision` har ingen
-  // manuell-vurdering-sti i det hele tatt. Feltet sto her og lot som om det virket.
-  if (mode !== "MCQ_ONLY") {
-    const borderline = policy?.passRules?.borderlineWindow;
-    // Hva skjer hvis feltet står tomt? Plattformen sender da et bånd under terskelen til sensor —
-    // og båndet regnes fra MODULENS terskel, ikke den globale. Plassholderen viser det tallparet.
-    //
-    // ⚠️ Plassholder, ikke verdi. Å fylle inn tallene ville gjort en bevisst standard om til en
-    // per-modul-overstyring ingen valgte — nøyaktig feilen QA fant på MCQ-feltet i runde 7.
-    const below = bundle?.platformDefaults?.borderlineBelowMin;
-    const effectiveMin = policy?.passRules?.totalMin ?? bundle?.platformDefaults?.totalMin;
-    const hasDefault = Number.isFinite(Number(below)) && Number(below) > 0 && Number.isFinite(Number(effectiveMin));
-    const defaultLow = hasDefault ? Math.max(0, Number(effectiveMin) - Number(below)) : null;
-    const placeholderLow = hasDefault
-      ? tf("shell.settings.platformDefault", { value: defaultLow })
-      : t("shell.settings.noneShort");
-    const placeholderHigh = hasDefault
-      ? tf("shell.settings.platformDefault", { value: effectiveMin })
-      : t("shell.settings.noneShort");
-    row(
-      "shell.settings.borderlineWindow",
-      `<input id="settingsBorderlineMin" class="settings-input settings-input--wide" type="number" min="0" max="100"
-        value="${Number.isFinite(Number(borderline?.min)) ? escapeHtml(String(borderline.min)) : ""}"
-        placeholder="${escapeHtml(placeholderLow)}" />
-       <span aria-hidden="true">→</span>
-       <input id="settingsBorderlineMax" class="settings-input settings-input--wide" type="number" min="0" max="100"
-        value="${Number.isFinite(Number(borderline?.max)) ? escapeHtml(String(borderline.max)) : ""}"
-        placeholder="${escapeHtml(placeholderHigh)}" /> %`,
-      false,
-      "borderlineWindow",
-    );
-  }
-
-  // #896 S3c: NO summary rows for criteria, assessment instruction or submission schema.
-  //
-  // Each of them used to have a row here showing the value AND a section further down editing it.
-  // Three duplications inside one panel — reported from stage as "vurderingskriteria ligger nå 4
-  // steder". The editors below carry their own summary; the row was the redundant half.
-
-  // #896 S3c: the scaling rule's practical weight — the last settings field that existed only on
-  // Avansert. `max_total` is NOT editable: it is derived from the criteria and shown there, so an
-  // input for it would be a second, conflicting way to set the same number.
-  if (mode !== "MCQ_ONLY") {
-    const practicalWeight = Number(cfg.rubricVersion?.scalingRule?.practical_weight);
-    row(
-      "shell.settings.practicalWeight",
-      `<input id="settingsPracticalWeight" class="settings-input" type="number" min="0" max="100"
-        value="${escapeHtml(String(Number.isFinite(practicalWeight) ? practicalWeight : 70))}" /> %`,
-      false,
-      "practicalWeight",
-    );
-  }
-
-  // An unsaved draft and a settings save would fight over the same next version: the settings
-  // save carries the PERSISTED content forward, so it would quietly drop whatever is in the
-  // draft. Blocking with a reason beats a silent loss.
-  const draftBlocks = !!sessionDraft;
-  const actionHtml = draftBlocks
-    ? `<p class="settings-empty">${escapeHtml(t("shell.settings.draftBlocks"))}</p>`
-    : `<button type="button" id="settingsSave" class="btn-primary">${escapeHtml(t("shell.settings.save"))}</button>`;
-
-  // A group with nothing in it is not rendered: MCQ_ONLY has no submission schema and no
-  // criteria, and an empty heading reads as something that failed to load.
-  const settingsGroup = (labelKey, ...parts) => {
-    const body = parts.filter(Boolean).join("");
-    if (!body.trim()) return "";
-    return `<section class="settings-group" aria-labelledby="${labelKey.replace(/\./g, "-")}">
-      <h3 id="${labelKey.replace(/\./g, "-")}" class="settings-group-title">${escapeHtml(t(labelKey))}</h3>
-      ${body}
-    </section>`;
-  };
-  const groupList = (labelKey) => {
-    const items = groups.get(labelKey) ?? [];
-    return items.length > 0 ? `<dl class="settings-list">${items.join("")}</dl>` : "";
-  };
-
-  // Lagre sits after every setting and before the history — the author reads down, edits, saves,
-  // and only then looks at what came before. Putting it mid-panel made the fields below it look
-  // like they belonged to something else.
-  host.innerHTML = [
-    settingsGroup("shell.settings.groupModule", groupList("shell.settings.groupModule")),
-    settingsGroup(
-      "shell.settings.groupAssessment",
-      // Stage-tilbakemelding 2026-08-17: fem tall uten kontekst. Det uklare er ikke hva hvert felt
-      // heter, men at grensene legges OPPÅ hverandre og at totalen vektes — det forklares én gang
-      // her, ikke gjentatt i fem verktøytips. Feltdetaljene ligger bak i-ikonene.
-      `<p class="settings-group-explainer">${escapeHtml(t("shell.settings.assessmentExplainer"))}</p>`,
-      groupList("shell.settings.groupAssessment"),
-      renderCriteriaSection(),
-      renderPromptSection(),
-    ),
-    // Innsendingsskjema and Versjonshistorikk already carry their own headings, so they ARE the
-    // group — wrapping them would print the same word twice. CSS gives those two headings the
-    // same weight as the group titles above, which is what makes the four levels read as peers.
-    renderSubmissionSchemaSection(),
-    actionHtml,
-    renderVersionHistory(),
-  ].join("");
-  mountCriteriaSection();
-  mountPromptSection();
-  mountSubmissionSchemaSection();
-
-  // Stamp what was rendered, so hasUnsavedSettingsEdits can tell an edited field from an
-  // untouched one. Without this, restoring silently discarded typed-but-unsaved settings.
-  stampRenderedValues(SETTINGS_INPUT_IDS.panel);
-  // Typevelgeren tegnes med den VALGTE typen (panelet tegnes om ved bytte), så stempelet må være
-  // den lagrede typen — ellers er et typebytte aldri «ulagret», og Lagre i hodet står grå.
-  const typeEl = document.getElementById("settingsModuleType");
-  const storedMode = bundle?.selectedConfiguration?.moduleVersion?.assessmentMode;
-  if (typeEl && storedMode) typeEl.dataset.renderedValue = storedMode;
-  // #896 S3c: put back anything the author had typed but not saved. Expanding a section re-renders
-  // the WHOLE panel, so opening the criteria editor after typing a new validity date silently
-  // reverted the date. `renderedValue` above is the stored value; this restores the typed one on
-  // top of it, so the dirty-check still knows the difference.
-  restoreSettingsDraftValues();
-
-  // Changing the type changes which fields the save can carry, so the panel redraws to match.
-  // Without this the author picked "Bare flervalg" and kept looking at a criteria editor whose
-  // contents the save would refuse — the choice and its consequences on two different screens.
-  document.getElementById("settingsModuleType")?.addEventListener("change", () => {
-    captureSettingsDraftValues();
-    // The criteria editor lives in the DOM until something reads it, and a re-render throws that
-    // DOM away. Typing in a criterion and then changing the type would have lost the text —
-    // including on the way BACK to a type that has criteria. Read it out first.
-    if (settingsCriteriaState !== null) {
-      settingsCriteriaState = captureLatestCriteriaState(
-        document.getElementById("settingsCriteriaEditor"),
-        settingsCriteriaState,
-      );
-    }
-    renderSettingsPanel();
-  });
-
-  document.getElementById("settingsSave")?.addEventListener("click", (event) => {
-    // Disabled on the first click, like the restore buttons. A double-click on a slow connection
-    // sent two concurrent POSTs and produced either two identical versions or a confusing
-    // conflict; the idempotency key inside handles the lost-response retry, which is a different
-    // problem. Re-enabled on the failure paths, since success re-renders the panel.
-    event.currentTarget.disabled = true;
-    void saveSettingsInBackground();
-  });
-  host.querySelectorAll("[data-restore-version]").forEach((button) => {
-    button.addEventListener("click", () => {
-      // #896 S6 QA: a physical double-click produced two calls with two different Date.now() keys,
-      // so idempotency could not help — either two versions, or the second failing on the unique
-      // (moduleId, versionNo). Disabling every restore button on the first click is what makes
-      // "exactly one new version" true from the author's side; the server key covers the
-      // lost-response retry, which is a different problem.
-      host.querySelectorAll("[data-restore-version]").forEach((other) => { other.disabled = true; });
-      void restoreModuleVersionInBackground(button.dataset.restoreVersion);
-    });
-  });
-}
-
-/**
- * #896 S3c: replace ONE locale in a stored localized value, keeping the others.
- *
- * The composer writes `promptTemplate.systemPrompt` verbatim — it does not merge. So an editor that
- * edits one language has to do the merging itself, or the two languages it never showed are gone.
- * That exact mistake has been made three times in this epic (title #892, description and
- * certification level in S3b); this helper exists so it is made once and fixed once.
- */
-function mergeLocaleInto(stored, locale, text) {
-  const next = {};
-  if (stored && typeof stored === "object" && !Array.isArray(stored)) {
-    for (const [key, value] of Object.entries(stored)) {
-      if (typeof value === "string" && value.trim()) next[key] = value;
-    }
-  } else if (typeof stored === "string" && stored.trim()) {
-    // A bare string is legacy content the server reads as nb (#896 S4).
-    next[LEGACY_STRING_LOCALE] = stored;
-  }
-  if (typeof text === "string" && text.trim()) next[locale] = text;
-  else delete next[locale];
-  return Object.keys(next).length > 0 ? next : undefined;
-}
-
-/**
- * #896 S3c: unsaved settings values survive a panel re-render.
- *
- * The panel is rebuilt from `bundle` every time a section is expanded or collapsed. Without this,
- * typing a validity date and then opening the criteria editor reverted the date — the author would
- * not necessarily notice, because their eyes were on the section they just opened.
- *
- * Captured before the rebuild, reapplied after. `renderedValue` still holds the STORED value, so
- * `hasUnsavedSettingsEdits` keeps working.
- */
-/**
- * Every input in Innstillinger, grouped by the section that renders it.
- *
- * QA 2026-08-16 found the four pass-rule fields added in v2.18.9 missing from BOTH the draft
- * preservation and the dirty check: typing a new overall pass mark and then expanding the
- * assessment instruction silently reverted it, and leaving the tab warned about nothing. The
- * cause was that this id list existed in six places — a stamping loop per section, a dirty check
- * per section, and two panel-wide lists — so adding a field meant remembering all six. It is one
- * list now, and `stampRenderedValues` / `anyFieldDirty` are the only readers.
- */
-const SETTINGS_INPUT_IDS = {
-  // Rendered by renderSettingsPanel itself, so always present when the tab is open.
-  panel: [
-    "settingsModuleType", "settingsCertLevel", "settingsValidFrom", "settingsValidTo",
-    "settingsMcqMinPercent", "settingsTotalMin", "settingsPracticalMin",
-    "settingsBorderlineMin", "settingsBorderlineMax", "settingsPracticalWeight",
-  ],
-  // Inside collapsible sections: absent from the DOM until the author expands them.
-  prompt: ["settingsPromptSystem", "settingsPromptUser", "settingsPromptExamples"],
-  schema: ["settingsSchemaLabel", "settingsSchemaPlaceholder"],
-};
-const SETTINGS_TEXT_INPUT_IDS = [
-  ...SETTINGS_INPUT_IDS.panel, ...SETTINGS_INPUT_IDS.prompt, ...SETTINGS_INPUT_IDS.schema,
-];
-
-/**
- * Record what the DOM was rendered with, so an edit can be told from an untouched field.
- *
- * Goes through `fieldStateValue` (#973) rather than reading `.value`: every field in the panel is
- * text, a number or a select TODAY, and the day one of them is a checkbox the dirty check must not
- * quietly start comparing the constant `"on"` with itself.
- */
-function stampRenderedValues(ids) {
-  for (const id of ids) {
-    const el = document.getElementById(id);
-    if (el) el.dataset.renderedValue = fieldStateValue(el);
-  }
-}
-
-/** True when any of `ids` holds something other than what it was rendered with. */
-function anyFieldDirty(ids) {
-  return ids.some((id) => {
-    const el = document.getElementById(id);
-    return el && el.dataset.renderedValue !== undefined && fieldStateValue(el) !== el.dataset.renderedValue;
-  });
-}
-
-let settingsDraftValues = null;
-
-// The Save button is disabled on click to stop a double-submit. Every path that returns without
-// saving has to put it back, or the panel is dead until the next re-render.
-function reenableSettingsSave() {
-  const btn = document.getElementById("settingsSave");
-  if (btn) btn.disabled = false;
-}
-
-function captureSettingsDraftValues() {
-  // QA 2026-08-16 round 3: this REPLACED the cache with whatever was on screen, so an edit made in
-  // a section that is now collapsed — and therefore absent from the DOM — was thrown away the
-  // moment a sibling section was opened. Editing the instruction, folding it, opening the answer
-  // field and unfolding the instruction again silently restored the stored text.
-  //
-  // Start from what is already cached and let the live DOM override it: a field that is present
-  // is authoritative for itself, and one that is absent keeps whatever was last typed into it.
-  const dirty = { ...(settingsDraftValues ?? {}) };
-  for (const id of SETTINGS_TEXT_INPUT_IDS) {
-    const el = document.getElementById(id);
-    if (!el || el.dataset.renderedValue === undefined) continue;
-    if (fieldStateValue(el) !== el.dataset.renderedValue) dirty[id] = fieldStateValue(el);
-    // Present and back to its stored value: the author undid the edit, so drop the stale entry
-    // rather than resurrect it on the next render.
-    else delete dirty[id];
-  }
-  settingsDraftValues = Object.keys(dirty).length > 0 ? dirty : null;
-}
-
-/**
- * The value of a settings field, whether or not its section is currently open.
- *
- * QA 2026-08-16 round 3: `promptDirty` and `schemaDirty` read only live DOM elements, so an edit
- * made and then folded away counted as no change at all — "ingen endringer" and no POST if it was
- * the only edit, or a save that wrote everything except it. Collapsing a section is not undoing it.
- */
-function settingsFieldValue(id) {
-  const el = document.getElementById(id);
-  if (el) return fieldStateValue(el);
-  return settingsDraftValues?.[id];
-}
-
-/** True when this ONE field differs from what was stored, counting a collapsed section. */
-function fieldIsDirty(id) {
-  const el = document.getElementById(id);
-  if (el) return el.dataset.renderedValue !== undefined && fieldStateValue(el) !== el.dataset.renderedValue;
-  return settingsDraftValues?.[id] !== undefined;
-}
-
-/**
- * Merge an edited localized field, or hand back the stored value untouched.
- *
- * QA round 5: a section is saved as a unit, so editing the system instruction ran
- * `mergeLocaleInto` over the user template too. A stored bare string means "one language, not
- * translated yet" — merging an untouched one turned it into `{nb: "…", "en-GB": "…"}` with the
- * same text in both, asserting an English translation nobody wrote. Same rule the criteria editor
- * already follows: only what changed is rewritten.
- */
-function mergeSettingsField(id, stored) {
-  if (!fieldIsDirty(id)) return stored;
-  return mergeLocaleInto(stored, contentLocale, settingsFieldValue(id) ?? "");
-}
-
-/** True when any of `ids` differs from its stored value, counting collapsed sections. */
-function anyFieldDirtyIncludingCollapsed(ids) {
-  return ids.some((id) => {
-    const el = document.getElementById(id);
-    if (el) return el.dataset.renderedValue !== undefined && fieldStateValue(el) !== el.dataset.renderedValue;
-    return settingsDraftValues?.[id] !== undefined;
-  });
-}
-
-function restoreSettingsDraftValues() {
-  if (!settingsDraftValues) return;
-  for (const [id, value] of Object.entries(settingsDraftValues)) {
-    const el = document.getElementById(id);
-    // A field belonging to a collapsed section is simply not in the DOM; its value stays in
-    // `settingsDraftValues` until the section is opened again.
-    // Symmetrical with `captureSettingsDraftValues`, which stores what `fieldStateValue` read
-    // (#973) — a cache written by one accessor and read back by another is how the state of a
-    // tickable field gets lost on the way through.
-    if (el) applyFieldStateValue(el, value);
-  }
-}
-
-// #896 S3c: the criteria editor's state while Innstillinger is open. Module-level, because the
-// panel re-renders on every settings change and a closure would lose the author's edits each time.
-// `null` = not opened this visit; an array = opened, and whatever is in it is what will be saved.
-let settingsCriteriaState = null;
-// #896 S3c, forfatterbeslutning 2026-08-16: kriteriene står ALLTID åpne, så det finnes ingen
-// sammenslått tilstand å holde styr på. Spesifikasjonens begrunnelse for å flytte dem hit var at
-// de «endres sjelden etter at den er satt» — men i praksis varierer genererte moduler mye, så de
-// er verdt et blikk hver gang man er innom. Instruks og svarfelt er fortsatt sammenslått: de er
-// lange, og endres faktisk sjelden.
-
-function settingsCriteriaSource() {
-  return sessionDraft?.criteria ?? bundle?.selectedConfiguration?.rubricVersion?.criteria ?? null;
-}
-
-// The record the section opened with, so the save can tell an edit from a visit.
-let settingsCriteriaBaseline = null;
-
-// What sessionDraft.criteria held when the panel was opened, so "Forkast" can put it back.
-// undefined = nothing captured yet; null = the draft had no criteria at all.
-let settingsCriteriaDraftBaseline;
-
-/**
- * #896 S3c: discard everything the Innstillinger panel is holding that is tied to one module.
- *
- * Five separate variables, cleared in one place because clearing four of five is the bug this
- * epic keeps producing. Called when a module is loaded (the state belongs to the previous one)
- * and after a settings save (what was typed is now what is stored).
- */
-/**
- * Throw away unsaved settings work, on purpose, because the author said so.
- *
- * Distinct from `resetSettingsPanelState`, which runs when the panel's subject changes. This one
- * is the answer to "Forkast": the criteria editor AND the cache that holds folded-away fields.
- * Clearing only what is on screen left the folded edits to reappear later — the author was told
- * their changes were discarded and they were not.
- */
-function discardSettingsEdits() {
-  // QA round 6: criteria edits are absorbed into the session draft as they are made, so clearing
-  // only the panel state left them in the draft — they came back and were saved, after the author
-  // had confirmed "Forkast". Put the draft's criteria back to what they were when the panel was
-  // opened, so discarding means the same thing for every field in it.
-  if (sessionDraft && settingsCriteriaDraftBaseline !== undefined) {
-    const restored = { ...sessionDraft };
-    if (settingsCriteriaDraftBaseline === null) delete restored.criteria;
-    else restored.criteria = settingsCriteriaDraftBaseline;
-    sessionDraft = restored;
-  }
-  settingsCriteriaState = null;
-  settingsCriteriaBaseline = null;
-  settingsCriteriaDraftBaseline = undefined;
-  settingsDraftValues = null;
-}
-
-function resetSettingsPanelState() {
-  settingsCriteriaState = null;
-  settingsCriteriaBaseline = null;
-  // QA round 7: left behind, this belonged to the PREVIOUS module — and a later language switch
-  // would write its criteria onto the new draft, or delete them when it was null.
-  settingsCriteriaDraftBaseline = undefined;
-  settingsPromptExpanded = false;
-  settingsSchemaExpanded = false;
-  settingsDraftValues = null;
-}
-
-function renderCriteriaSection() {
-  if (!bundle) return "";
-  // #665: MCQ-only modules have no rubric, so no criteria to show.
-  if (settingsSelectedMode() === "MCQ_ONLY") return "";
-
-  // Read the stored criteria the first time the panel renders them. Re-reading on every render
-  // would discard edits, since the panel rebuilds whenever anything else in it changes.
-  if (settingsCriteriaState === null) {
-    settingsCriteriaState = buildEditorStateFromCriteriaRecord(settingsCriteriaSource(), contentLocale);
-    settingsCriteriaBaseline = buildCriteriaRecordFromEditorState(settingsCriteriaState);
-    settingsCriteriaDraftBaseline = sessionDraft?.criteria ?? null;
-  }
-
-  // Always open, and therefore no summary row above it: the editor IS the summary. A row listing
-  // the criteria plus a section editing them was the duplication reported from stage.
-  return `<section class="settings-criteria-section" aria-labelledby="settingsCriteriaHeading">
-    <h3 id="settingsCriteriaHeading" class="settings-subsection-title">${
-      escapeHtml(tf("shell.criteria.title", { count: settingsCriteriaState.length }))
-    }</h3>
-    <div id="settingsCriteriaEditor" class="settings-criteria-editor">${
-      buildCriteriaEditorHtml(settingsCriteriaState, t, tf)
-    }</div>
-  </section>`;
-}
-
-/**
- * QA 2026-08-16: carry a criteria edit into the session draft while one exists.
- *
- * While there is an unsaved draft, Innstillinger has NO Lagre button — saving settings would
- * carry the persisted content forward and drop the draft, so it is deliberately blocked. But the
- * criteria editor still accepts edits, and they were written only to `settingsCriteriaState`.
- * Confirming the draft reads `sessionDraft.criteria`, so an author who generated a module and then
- * adjusted its criteria in Innstillinger saved the GENERATED criteria, silently, every time.
- *
- * `settingsCriteriaSource()` already prefers `sessionDraft.criteria` when reading; this is the
- * matching write. The baseline moves with it, because an edit that is safely in the draft is not
- * unsaved work and must not raise the exit warning.
- */
-function syncSettingsCriteriaToDraft() {
-  if (!sessionDraft || settingsCriteriaState === null) return;
-  // Typing into a label never reaches `settingsCriteriaState` — only add/remove do — so the live
-  // DOM is the truth here, exactly as it is on the settings-save path.
-  const state = captureLatestCriteriaState(
-    document.getElementById("settingsCriteriaEditor"),
-    settingsCriteriaState,
-  );
-  const record = buildCriteriaRecordFromEditorState(state);
-  if (!record) return;
-  settingsCriteriaState = state;
-  sessionDraft = { ...sessionDraft, criteria: record };
-  // The baseline deliberately does NOT move. It answers one question — "has the author changed
-  // anything since the panel opened?" — and moving it on every sync made the answer always "no",
-  // which let background generation overwrite manual edits and let a language switch roll them
-  // back (QA round 7, three findings from this one line).
-}
-
-function mountCriteriaSection() {
-  const container = document.getElementById("settingsCriteriaEditor");
-  if (!container) return;
-
-  // Typing never reaches the editor state — only Add and Remove do — so `change` (which fires on
-  // blur, including the blur caused by clicking a tab) is when a typed criterion becomes part of
-  // the draft. No-op when there is no draft.
-  container.addEventListener("change", () => { syncSettingsCriteriaToDraft(); });
-
-  wireCriteriaEditor({
-    container,
-    getState: () => settingsCriteriaState ?? [],
-    // NO sync here. QA 2026-08-16 round 3: `syncSettingsCriteriaToDraft` re-reads the DOM, and
-    // `setState` runs BEFORE `rerender` has drawn the new cards — so Add read one card too few and
-    // dropped the new criterion, Remove read the removed card back in, and regeneration replaced
-    // the generated list with the old DOM while still reporting success. The sync belongs at the
-    // exits (`unsavedTabSwitchKind`, `applyTabState`), where state and DOM agree.
-    setState: (next) => { settingsCriteriaState = next; },
-    rerender: () => {
-      container.innerHTML = buildCriteriaEditorHtml(settingsCriteriaState ?? [], t, tf);
-      // After the redraw, so the sync reads the cards that now exist. Add and Remove go through
-      // here, and doing it from setState (round 3) read the DOM one redraw too early.
-      syncSettingsCriteriaToDraft();
-    },
-    onRegenerate: () => regenerateCriteriaFromTask(container, (newList) => {
-      settingsCriteriaState = newList;
-      container.innerHTML = buildCriteriaEditorHtml(settingsCriteriaState, t, tf);
-      // After the redraw, not before: the DOM is what the sync reads.
-      syncSettingsCriteriaToDraft();
-    }),
-  });
-}
-
-/** Has the author changed the criteria since the panel opened? Independent of where they land. */
-function settingsCriteriaEdited() {
-  if (settingsCriteriaState === null) return false;
-  const current = buildCriteriaRecordFromEditorState(
-    captureLatestCriteriaState(document.getElementById("settingsCriteriaEditor"), settingsCriteriaState),
-  );
-  return JSON.stringify(current) !== JSON.stringify(settingsCriteriaBaseline);
-}
-
-/**
- * Is there criteria work a tab or language switch would DESTROY?
- *
- * Only when there is no session draft. With one, the edits are absorbed into it as they are made,
- * so the switch keeps them — and the dialog the author then sees says exactly that.
- */
-function hasUnsavedCriteriaEdits() {
-  return settingsCriteriaEdited() && !sessionDraft;
-}
-
-/**
- * #896 S3c: the assessment instruction (prompt) editor.
- *
- * One language at a time, per §7 — the workspace edits in the active UI language and the other two
- * are merged, not overwritten. Avansert shows three locale panes side by side; that is the model
- * this epic is moving away from.
- *
- * Examples stay a JSON textarea, exactly as on Avansert. They are an array of free-shaped objects
- * consumed by the LLM, and inventing a structured editor for them here would be a guess at a shape
- * nothing else in the system constrains.
- */
-let settingsPromptExpanded = false;
-
-function renderPromptSection() {
-  if (!bundle) return "";
-  // QA round 4: an MCQ-only version has no prompt, and the save omits the whole rubric/prompt
-  // branch for it — but the editor was still drawn. Editing the instruction on an MCQ-only module
-  // produced a new, identical version and a green confirmation, with the edit nowhere in the
-  // payload and gone after reload. Same rule as the criteria editor: if the save cannot carry it,
-  // do not offer it.
-  if (settingsSelectedMode() === "MCQ_ONLY") return "";
-  const prompt = bundle.selectedConfiguration?.promptTemplateVersion ?? null;
-  const localeLabel = escapeHtml(tf("shell.settings.editingInLocale", { locale: contentLocale }));
-
-  if (!settingsPromptExpanded) {
-    return `<section class="settings-criteria-section">
-      <div class="settings-criteria-head">
-        <h3 class="settings-subsection-title">${escapeHtml(t("shell.settings.assessmentPrompt"))}</h3>
-        <button type="button" id="settingsPromptToggle" class="btn-secondary settings-criteria-toggle"
-          aria-expanded="false" aria-controls="settingsPromptEditor">${escapeHtml(t("shell.settings.promptEdit"))}</button>
-      </div>
-      <div id="settingsPromptEditor" hidden></div>
-    </section>`;
-  }
-
-  const sys = escapeHtml(localizeValueForLocale(prompt?.systemPrompt ?? "", contentLocale));
-  const user = escapeHtml(localizeValueForLocale(prompt?.userPromptTemplate ?? "", contentLocale));
-  const examples = escapeHtml(JSON.stringify(prompt?.examples ?? [], null, 2));
-
-  return `<section class="settings-criteria-section">
-    <div class="settings-criteria-head">
-      <h3 class="settings-subsection-title">${escapeHtml(t("shell.settings.assessmentPrompt"))}</h3>
-      <button type="button" id="settingsPromptToggle" class="btn-secondary settings-criteria-toggle"
-        aria-expanded="true" aria-controls="settingsPromptEditor">${escapeHtml(t("shell.settings.criteriaDone"))}</button>
-    </div>
-    <div id="settingsPromptEditor" class="settings-criteria-editor">
-      <p class="settings-empty">${localeLabel}</p>
-      <label class="settings-field-label" for="settingsPromptSystem">${escapeHtml(t("shell.settings.promptSystem"))}</label>
-      <textarea id="settingsPromptSystem" class="settings-textarea" rows="4">${sys}</textarea>
-      <label class="settings-field-label" for="settingsPromptUser">${escapeHtml(t("shell.settings.promptUser"))}</label>
-      <textarea id="settingsPromptUser" class="settings-textarea" rows="4">${user}</textarea>
-      <label class="settings-field-label" for="settingsPromptExamples">${escapeHtml(t("shell.settings.promptExamples"))}</label>
-      <textarea id="settingsPromptExamples" class="settings-textarea settings-textarea--mono" rows="4">${examples}</textarea>
-    </div>
-  </section>`;
-}
-
-function mountPromptSection() {
-  const toggle = document.getElementById("settingsPromptToggle");
-  if (!toggle) return;
-  toggle.addEventListener("click", () => {
-    captureSettingsDraftValues();
-    settingsPromptExpanded = !settingsPromptExpanded;
-    renderSettingsPanel();
-  });
-  stampRenderedValues(SETTINGS_INPUT_IDS.prompt);
-}
-
-/**
- * #896 S3c: the submission schema — what the participant is asked to fill in.
- *
- * One field, per #901: the backend, the participant view and the assessment all support several,
- * but the admin UI clamps it to one and that limitation is tracked separately. Editing the first
- * field here rather than pretending the others do not exist: any extra fields are carried through
- * untouched, so a module authored via the API keeps them.
- */
-let settingsSchemaExpanded = false;
-
-function renderSubmissionSchemaSection() {
-  if (!bundle) return "";
-  const field = bundle.selectedConfiguration?.moduleVersion?.submissionSchema?.fields?.[0] ?? null;
-
-  if (!settingsSchemaExpanded) {
-    return `<section class="settings-criteria-section">
-      <div class="settings-criteria-head">
-        <h3 class="settings-group-title">${escapeHtml(t("shell.settings.submissionSchema"))}</h3>
-        <button type="button" id="settingsSchemaToggle" class="btn-secondary settings-criteria-toggle"
-          aria-expanded="false" aria-controls="settingsSchemaEditor">${escapeHtml(t("shell.settings.schemaEdit"))}</button>
-      </div>
-      <div id="settingsSchemaEditor" hidden></div>
-    </section>`;
-  }
-
-  const label = escapeHtml(localizeValueForLocale(field?.label ?? "", contentLocale));
-  const placeholder = escapeHtml(localizeValueForLocale(field?.placeholder ?? "", contentLocale));
-  return `<section class="settings-criteria-section">
-    <div class="settings-criteria-head">
-      <h3 class="settings-group-title">${escapeHtml(t("shell.settings.submissionSchema"))}</h3>
-      <button type="button" id="settingsSchemaToggle" class="btn-secondary settings-criteria-toggle"
-        aria-expanded="true" aria-controls="settingsSchemaEditor">${escapeHtml(t("shell.settings.criteriaDone"))}</button>
-    </div>
-    <div id="settingsSchemaEditor" class="settings-criteria-editor">
-      <p class="settings-empty">${escapeHtml(tf("shell.settings.editingInLocale", { locale: contentLocale }))}</p>
-      <label class="settings-field-label" for="settingsSchemaLabel">${escapeHtml(t("shell.settings.schemaLabel"))}</label>
-      <input id="settingsSchemaLabel" class="settings-input" type="text" value="${label}" />
-      <label class="settings-field-label" for="settingsSchemaPlaceholder">${escapeHtml(t("shell.settings.schemaPlaceholder"))}</label>
-      <input id="settingsSchemaPlaceholder" class="settings-input" type="text" value="${placeholder}" />
-    </div>
-  </section>`;
-}
-
-function mountSubmissionSchemaSection() {
-  const toggle = document.getElementById("settingsSchemaToggle");
-  if (!toggle) return;
-  toggle.addEventListener("click", () => {
-    captureSettingsDraftValues();
-    settingsSchemaExpanded = !settingsSchemaExpanded;
-    renderSettingsPanel();
-  });
-  stampRenderedValues(SETTINGS_INPUT_IDS.schema);
-}
-
-/**
- * #896 S5: the list of saved versions, and the way back to one of them.
- *
- * Every «Mellomlagring» already wrote a row — the data has been there since long before this UI.
- * What was missing was any way to SEE it, so "I liked the previous wording better" meant retyping
- * from memory.
- *
- * The current version has no restore button: restoring it would create an identical copy and
- * nothing else, which is a confusing way to spend a click.
- */
-function renderVersionHistory() {
-  const versions = [...(bundle?.versions?.moduleVersions ?? [])].sort(
-    (a, b) => (b?.versionNo ?? 0) - (a?.versionNo ?? 0),
-  );
-  if (versions.length === 0) return "";
-
-  const currentId = bundle?.selectedConfiguration?.moduleVersion?.id ?? null;
-  const activeId = bundle?.module?.activeVersionId ?? null;
-
-  const items = versions.map((version) => {
-    const isCurrent = version.id === currentId;
-    const isLive = version.id === activeId;
-    const badges = [
-      isLive ? `<span class="version-badge live">${escapeHtml(t("shell.versions.live"))}</span>` : "",
-      isCurrent && !isLive ? `<span class="version-badge current">${escapeHtml(t("shell.versions.current"))}</span>` : "",
-    ].join("");
-    const when = version.createdAt
-      ? `<span class="version-when">${escapeHtml(formatDateTime(version.createdAt))}</span>`
-      : "";
-    // No restore button on the version already loaded — it would copy the module onto itself.
-    // aria-label carries the version number: a screen-reader user tabbing a list of five
-    // identically-named "Restore" buttons has no way to tell which one goes where.
-    const action = isCurrent
-      ? ""
-      : `<button type="button" class="btn-secondary version-restore" data-restore-version="${escapeHtml(version.id)}"
-          aria-label="${escapeHtml(tf("shell.versions.restoreVersionAria", { versionNo: version.versionNo }))}">${
-          escapeHtml(t("shell.versions.restore"))
-        }</button>`;
-    return `<li class="version-item">
-      <span class="version-no">${escapeHtml(tf("shell.versions.versionNo", { versionNo: version.versionNo }))}</span>
-      ${when}${badges}${action}
-    </li>`;
-  });
-
-  return `<section class="version-history" aria-labelledby="versionHistoryHeading">
-    <h3 id="versionHistoryHeading" class="settings-group-title">${escapeHtml(t("shell.versions.heading"))}</h3>
-    <p class="settings-empty">${escapeHtml(t("shell.versions.explainer"))}</p>
-    <ul class="version-list">${items.join("")}</ul>
-  </section>`;
-}
-
-function formatDateTime(value) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "";
-  return date.toLocaleString(currentLocale === "en-GB" ? "en-GB" : "nb-NO", {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
-
-/**
- * #896 S5: restore. The server copies the chosen version forward into a NEW version — history is
- * append-only, so this is undoable by restoring whatever came before it.
- */
-async function restoreModuleVersionInBackground(sourceVersionId, idempotencyKey = null) {
-  const moduleId = selectedModuleId;
-  if (!moduleId || !sourceVersionId) return;
-
-  // Unsaved work would be lost: the restore writes the next version from STORED content, so
-  // whatever is only in the browser never reaches the database. That includes the settings inputs,
-  // which are DOM-only until Lagre — `sessionDraft` says nothing about them.
-  const losesWork = !!sessionDraft || hasUnsavedSettingsEdits();
-  if (losesWork && !window.confirm(t("shell.versions.confirmDiscardDraft"))) return;
-
-  // One key per restore ACTION, reused by the retry. Without it a lost response leaves the author
-  // choosing between "retry and maybe get two versions" and "do not retry and maybe get none";
-  // with it, the retry either finds the committed result or performs the restore once.
-  const key = idempotencyKey ?? `restore-${moduleId}-${sourceVersionId}-${Date.now()}`;
-
-  const slot = logProgress("shell.versions.restoreProgress");
-  slot.abortBtn.remove();
-
-  try {
-    const result = await apiFetch(
-      `/api/admin/content/modules/${encodeURIComponent(moduleId)}/module-versions/${encodeURIComponent(sourceVersionId)}/restore`,
-      getHeaders,
-      { method: "POST", body: JSON.stringify({}), headers: { "Idempotency-Key": key } },
-    );
-    const restoredId = result?.moduleVersion?.id ?? null;
-    latestSavedModuleVersionId = restoredId;
-    sessionDraft = null;
-    previewDraft = null;
-    await loadModule(moduleId);
-    // Restore is triggered from Innstillinger, but what the author wants to see afterwards is the
-    // restored CONTENT — and the confirmation itself lands in the chat log, which that tab hides.
-    switchToTab("edit");
-
-    // loadModule swallows its own fetch errors, so reaching this line does NOT prove the workspace
-    // is showing the restored version. Saying "restored" over the previous content would be the
-    // worst of both: the change happened, and the screen argues otherwise.
-    const shown = bundle?.selectedConfiguration?.moduleVersion?.id ?? null;
-    if (restoredId && shown !== restoredId) {
-      logResolveSlot(slot, () => escapeHtml(t("shell.versions.restoreReloadFailed")), [
-        { labelKey: "shell.action.retry", action: () => loadModule(moduleId) },
-      ]);
-      showToast(t("shell.versions.restoreReloadFailed"), "error");
-      return;
-    }
-
-    logResolveSlot(slot, () => `<strong>${escapeHtml(t("shell.versions.restoreSuccess"))}</strong>`);
-    showToast(t("shell.versions.restoreSuccess"), "success");
-    announceStatus(t("shell.versions.restoreSuccess"));
-  } catch (err) {
-    const errMsg = apiErrorText(err);
-    // The click disabled every restore button to stop a double-click. A success path reloads and
-    // re-renders them; a failure has to put them back by hand, or the list is dead until reload.
-    document.querySelectorAll("[data-restore-version]").forEach((button) => { button.disabled = false; });
-    logResolveSlot(slot, () => `${escapeHtml(t("shell.versions.restoreError"))}${escapeHtml(errMsg)}`, [
-      // Same key: a retry after a lost response must not create a second version.
-      { labelKey: "shell.action.retry", action: () => restoreModuleVersionInBackground(sourceVersionId, key) },
-    ]);
-  }
-}
-
-// The settings inputs live only in the DOM until Lagre. Their rendered values are stamped on the
-// elements so anything that reloads the module can tell whether it would be throwing away edits.
-function hasUnsavedSettingsEdits() {
-  // Every field in the panel — plus the ones inside COLLAPSED sections, which are not in the DOM
-  // at all and whose typed values live only in `settingsDraftValues`.
-  //
-  // Only entries whose field is currently absent count from there. A field that is on screen is
-  // judged by the DOM, because the snapshot is taken before a re-render and goes stale the moment
-  // the author reverts the value by hand — trusting it would warn about an edit that is no longer
-  // there, and a warning the author knows is wrong is a warning they learn to click through.
-  const heldInCollapsedSection = Object.keys(settingsDraftValues ?? {}).some(
-    (id) => document.getElementById(id) === null,
-  );
-  return anyFieldDirty(SETTINGS_TEXT_INPUT_IDS) || heldInCollapsedSection || hasUnsavedCriteriaEdits();
-}
-
-/**
- * #896 S3b: save the settings as a new module version.
- *
- * Everything not shown here is carried forward from the current version by reference, so the
- * save changes the setup and nothing else. Content belonging to a type that is being switched
- * away from is NOT deleted — it stays on the previous version, and switching back brings it
- * into view again. That is what "beholdes, ikke slettes" means in a versioned model.
- */
-async function saveSettingsInBackground() {
-  const moduleId = selectedModuleId;
-  if (!moduleId || !bundle) return;
-
-  const cfg = bundle.selectedConfiguration ?? {};
-  const version = cfg.moduleVersion ?? null;
-  const mode = document.getElementById("settingsModuleType")?.value ?? version?.assessmentMode ?? "FREETEXT_PLUS_MCQ";
-  const thresholdInput = document.getElementById("settingsMcqMinPercent");
-  // No `?? SHELL_MCQ_ONLY_MIN_PERCENT` here: that fallback made the guard below unreachable, so an
-  // out-of-range or fractional threshold was silently saved as 70 — the exact behaviour the guard
-  // was written to prevent.
-  const mcqMinPercent = thresholdInput ? parsePercentInRange(thresholdInput.value, 0, 100) : null;
-
-  const isMcqOnly = mode === "MCQ_ONLY";
-  const isFreetextOnly = mode === "FREETEXT_ONLY";
-
-  // Blank is a legitimate value — "no per-module override" — and must not be treated as invalid.
-  // Only a filled field that does not parse is the author's mistake to see.
-  const thresholdBlank = !thresholdInput || thresholdInput.value.trim() === "";
-  // An out-of-range threshold is the author's mistake to see, not something to quietly turn
-  // into 70. parsePercentInRange returns null for 101, for 72.5 and for gibberish alike.
-  if (thresholdInput && !thresholdBlank && !isFreetextOnly && mcqMinPercent === null) {
-    showToast(t("shell.settings.invalidThreshold"), "error");
-    thresholdInput.focus();
-    reenableSettingsSave();
-    return;
-  }
-
-  // Falling back to history: switching back to a type needs the components the CURRENT version
-  // stopped pointing at. Newest first, matching how the bundle orders them.
-  const latestRubricId = cfg.rubricVersion?.id ?? bundle.versions?.rubricVersions?.[0]?.id;
-  const latestPromptId = cfg.promptTemplateVersion?.id ?? bundle.versions?.promptTemplateVersions?.[0]?.id;
-  const latestMcqId = cfg.mcqSetVersion?.id ?? bundle.versions?.mcqSetVersions?.[0]?.id;
-  const latestTaskVersion = version?.taskText
-    ? version
-    : (bundle.versions?.moduleVersions ?? []).find((v) => !!localizeValue(v?.taskText));
-
-  // The policy is carried whole. Sending only the MCQ rule would drop totalMin, the practical
-  // minimum and the borderline window — pass/fail rules the author never touched, silently
-  // reverting to platform defaults on a mode change.
-  const existingPolicy = version?.assessmentPolicy ?? null;
-  const passRules = { ...(existingPolicy?.passRules ?? {}) };
-  if (isFreetextOnly || (thresholdInput && thresholdBlank)) {
-    // Blank clears the override, the same as the other three pass rules. Before this, a module
-    // with no policy showed a placeholder 70 that the save wrote in for real.
-    delete passRules.mcqMinPercent;
-  } else if (mcqMinPercent !== null) {
-    passRules.mcqMinPercent = mcqMinPercent;
-  }
-
-  // #896 S3c: the rest of the pass rules, now editable here. An EMPTY field means "not set" and
-  // removes the per-module override — decisionService then falls back to the platform rules. That
-  // is a real, distinct choice from "set it to 0", so the two cannot be collapsed.
-  const readOptionalPercent = (id) => {
-    const el = document.getElementById(id);
-    if (!el) return { present: false };
-    const raw = el.value.trim();
-    if (raw === "") return { present: true, value: null };
-    const parsed = parsePercentInRange(raw, 0, 100);
-    return { present: true, value: parsed };
-  };
-  const policyFieldSpecs = [
-    { id: "settingsTotalMin", key: "totalMin" },
-    { id: "settingsPracticalMin", key: "practicalMinPercent" },
-  ];
-  for (const { id, key } of policyFieldSpecs) {
-    const read = readOptionalPercent(id);
-    if (!read.present) continue;
-    if (read.value === null && document.getElementById(id).value.trim() !== "") {
-      showToast(t("shell.settings.invalidThreshold"), "error");
-      document.getElementById(id).focus();
-      // Without this the author fixes the number and finds Lagre dead — the click handler
-      // disables it, so every early return has to hand it back.
-      reenableSettingsSave();
-      return;
-    }
-    if (read.value === null) delete passRules[key];
-    else passRules[key] = read.value;
-  }
-  const bMin = readOptionalPercent("settingsBorderlineMin");
-  const bMax = readOptionalPercent("settingsBorderlineMax");
-  if (bMin.present || bMax.present) {
-    if (bMin.value === null && bMax.value === null) {
-      delete passRules.borderlineWindow;
-    } else if (bMin.value === null || bMax.value === null || bMin.value > bMax.value) {
-      // Half a window is not a window, and a reversed one silently matches nothing.
-      showToast(t("shell.settings.invalidBorderline"), "error");
-      document.getElementById("settingsBorderlineMin")?.focus();
-      reenableSettingsSave();
-    return;
-    } else {
-      passRules.borderlineWindow = { min: bMin.value, max: bMax.value };
-    }
-  }
-
-  const policy = existingPolicy || Object.keys(passRules).length > 0
-    ? { ...(existingPolicy ?? {}), passRules }
-    : null;
-
-  // Module-level fields. Sent only when the author actually changed them, so a mode switch
-  // does not rewrite a description or a date the panel merely displayed.
-  const certInput = document.getElementById("settingsCertLevel");
-  const scopeMinInput = document.getElementById("settingsScopeMin");
-  const scopeMaxInput = document.getElementById("settingsScopeMax");
-  /** Tomt felt er `null` — «bruk nivåets standard» — ikke 0 og ikke «ingen endring». */
-  const scopeVerdi = (el) => {
-    const v = el?.value?.trim();
-    if (!v) return null;
-    const n = Number(v);
-    return Number.isFinite(n) && n > 0 ? Math.round(n) : null;
-  };
-  const mod = bundle.module ?? {};
-  const fromInput = document.getElementById("settingsValidFrom");
-  const toInput = document.getElementById("settingsValidTo");
-  // One value, not one per language — see `certificationLevelValue`. The QA-round-2 defect was
-  // that the comparison read a different locale than the one on screen, which made an untouched
-  // level look changed; with a single value there is no locale to get wrong.
-  const currentCert = certificationLevelValue(bundle.module?.certificationLevel);
-  const currentFrom = bundle.module?.validFrom ? new Date(bundle.module.validFrom).toISOString().slice(0, 10) : "";
-  const currentTo = bundle.module?.validTo ? new Date(bundle.module.validTo).toISOString().slice(0, 10) : "";
-
-  if (fromInput?.value && toInput?.value && toInput.value < fromInput.value) {
-    showToast(t("shell.settings.invalidValidity"), "error");
-    toInput.focus();
-    reenableSettingsSave();
-    return;
-  }
-
-  const moduleFields = {
-    // Replaced outright, and deliberately: the level is one value on a fixed scale, so there is
-    // nothing from another language to preserve. (This is the opposite of the title, description
-    // and criteria, which ARE prose and must be merged — the difference is what the field means,
-    // not how it happens to be typed.)
-    // Never `null`: the schema does not accept it (see the select above), and a blank selection
-    // is only reachable when the level was already unset — in which case there is no change.
-    ...(certInput && certInput.value.trim() && certInput.value.trim() !== currentCert
-      ? { certificationLevel: certInput.value.trim() }
-      : {}),
-    // #1049: tomt felt = null = «tilbake til nivåets standard». Derfor sammenlignes mot den LAGREDE
-    // verdien, ikke mot falsy: en forfatter som tømmer feltet ber om å angre, og det må sendes.
-    ...(scopeMinInput && scopeVerdi(scopeMinInput) !== (mod.scopeMinWords ?? null)
-      ? { scopeMinWords: scopeVerdi(scopeMinInput) } : {}),
-    ...(scopeMaxInput && scopeVerdi(scopeMaxInput) !== (mod.scopeMaxWords ?? null)
-      ? { scopeMaxWords: scopeVerdi(scopeMaxInput) } : {}),
-    ...(fromInput && fromInput.value !== currentFrom ? { validFrom: fromInput.value || null } : {}),
-    ...(toInput && toInput.value !== currentTo ? { validTo: toInput.value || null } : {}),
-  };
-
-  // Same rule as the edit form: nothing changed, nothing written. Without this, opening
-  // Innstillinger and pressing Lagre out of habit creates a module version identical to the
-  // last one — #896's "ingen endringer ⇒ ingen ny versjon" applies here too.
-  const currentMode = version?.assessmentMode ?? "FREETEXT_PLUS_MCQ";
-  const currentThreshold = version?.assessmentPolicy?.passRules?.mcqMinPercent;
-  const thresholdChanged = thresholdInput
-    ? mcqMinPercent !== (Number.isFinite(currentThreshold) ? currentThreshold : SHELL_MCQ_ONLY_MIN_PERCENT)
-    : false;
-  // The whole pass-rule object, not just the MCQ threshold. Adding the other three rules to the
-  // payload without adding them here meant editing the overall pass mark hit "no changes" and
-  // nothing was written — the field existed and did nothing.
-  const policyChanged = JSON.stringify(passRules) !== JSON.stringify(existingPolicy?.passRules ?? {});
-  // #896 S3c: criteria edited here ride along as an INLINE rubric, exactly as the direct-edit save
-  // does. Referencing `rubricVersionId` would carry the old criteria forward and quietly discard
-  // what the author just typed.
-  const criteriaRecord = hasUnsavedCriteriaEdits()
-    ? buildCriteriaRecordFromEditorState(
-        captureLatestCriteriaState(document.getElementById("settingsCriteriaEditor"), settingsCriteriaState),
-      )
-    : null;
-
-  // #896 S3c: the practical weight lives on the rubric's scalingRule, so changing it means writing
-  // a rubric — the criteria come along unchanged when they were not edited.
-  const weightInput = document.getElementById("settingsPracticalWeight");
-  const storedWeight = Number(cfg.rubricVersion?.scalingRule?.practical_weight);
-  const practicalWeight = weightInput ? parsePercentInRange(weightInput.value, 0, 100) : null;
-  const weightChanged = Boolean(
-    weightInput && practicalWeight !== (Number.isFinite(storedWeight) ? storedWeight : 70),
-  );
-  if (weightInput && weightInput.value.trim() !== "" && practicalWeight === null) {
-    // Out of range or not a whole number is the author's mistake to see, not something to round.
-    showToast(t("shell.settings.invalidWeight"), "error");
-    weightInput.focus();
-    reenableSettingsSave();
-    return;
-  }
-
-  // #896 S3c: the assessment instruction. Edited in ONE language, merged onto the stored value —
-  // the composer writes it verbatim, so sending only the edited locale would delete the other two.
-  const promptDirty = anyFieldDirtyIncludingCollapsed(SETTINGS_INPUT_IDS.prompt);
-  let promptPayload = null;
-  if (promptDirty) {
-    const stored = cfg.promptTemplateVersion ?? {};
-    const examplesRaw = settingsFieldValue("settingsPromptExamples");
-    let examples = stored.examples ?? [];
-    if (examplesRaw !== undefined) {
-      try {
-        const parsed = JSON.parse(examplesRaw || "[]");
-        if (!Array.isArray(parsed)) throw new Error("not an array");
-        examples = parsed;
-      } catch {
-        // Malformed JSON is the author's to see, not something to silently drop or guess at.
-        // The field may be folded away, in which case there is nothing to focus — the message
-        // still has to appear, or the save fails without a reason.
-        showToast(t("shell.settings.promptExamplesInvalid"), "error");
-        document.getElementById("settingsPromptExamples")?.focus();
-        reenableSettingsSave();
-        return;
-      }
-    }
-    const systemPrompt = mergeSettingsField("settingsPromptSystem", stored.systemPrompt);
-    const userPromptTemplate = mergeSettingsField("settingsPromptUser", stored.userPromptTemplate);
-    if (!systemPrompt || !userPromptTemplate) {
-      showToast(t("shell.settings.promptRequired"), "error");
-      reenableSettingsSave();
-    return;
-    }
-    promptPayload = { systemPrompt, userPromptTemplate, examples };
-  }
-
-  // #896 S3c: the submission schema. Only the FIRST field is editable (#901), and the rest are
-  // carried through untouched — a module authored via the API can legitimately have several, and
-  // rebuilding the array from one input would delete them.
-  const schemaDirty = anyFieldDirtyIncludingCollapsed(SETTINGS_INPUT_IDS.schema);
-  let submissionSchemaPayload = null;
-  if (schemaDirty) {
-    const existing = version?.submissionSchema ?? buildDefaultSubmissionSchema();
-    const fields = (existing.fields ?? []).map((f) => ({ ...f }));
-    const first = fields[0] ?? { id: "response", type: "textarea", required: true };
-    const label = mergeSettingsField("settingsSchemaLabel", first.label);
-    if (!label) {
-      showToast(t("shell.settings.schemaLabelRequired"), "error");
-      reenableSettingsSave();
-    return;
-    }
-    const placeholder = mergeSettingsField("settingsSchemaPlaceholder", first.placeholder);
-    fields[0] = { ...first, label, ...(placeholder ? { placeholder } : {}) };
-    submissionSchemaPayload = { ...existing, fields };
-  }
-
-  // QA 2026-08-16: switching to MCQ-only in the SAME save as a criteria, instruction or weight
-  // edit dropped the edit without a word. The version model keeps stored free-text content on the
-  // previous version — switching back brings it into view — but an edit that was never saved has
-  // no previous version to survive on, so it is simply gone, and switching back shows the OLD
-  // criteria as if nothing had been typed. Refusing is the only honest option: the author can
-  // save the edit first, or undo it, and both are recoverable. Guessing is not.
-  if (isMcqOnly && mode !== currentMode && (criteriaRecord || promptPayload || weightChanged)) {
-    showToast(t("shell.settings.mcqOnlyDiscardsEdits"), "error");
-    // Put the type back and redraw. Since the panel started following the dropdown, picking
-    // MCQ-only hides the criteria and instruction editors — so a refusal that said "save them
-    // first or undo them" left the author with no editor to do either in. Reverting restores the
-    // editors WITH the edit still in them, which is what makes the message actionable.
-    const typeInput = document.getElementById("settingsModuleType");
-    if (typeInput) typeInput.value = currentMode;
-    renderSettingsPanel();
-    reenableSettingsSave();
-    return;
-  }
-
-  if (
-    mode === currentMode && !thresholdChanged && !criteriaRecord && !promptPayload
-    && !submissionSchemaPayload && !weightChanged && !policyChanged && Object.keys(moduleFields).length === 0
-  ) {
-    showToast(t("shell.settings.noChanges"), "info");
-    reenableSettingsSave();
-    return;
-  }
-
-  const body = {
-    ...moduleFields,
-    assessmentMode: mode,
-    ...(isMcqOnly ? {} : {
-      // Same stripping here: this carries the STORED content forward, so any blank locale already
-      // in the database would otherwise fail a settings-only save the author never touched.
-      taskText: dropBlankLocales(latestTaskVersion?.taskText) ?? latestTaskVersion?.taskText,
-      assessorExpectedContent:
-        dropBlankLocales(latestTaskVersion?.assessorExpectedContent) ?? latestTaskVersion?.assessorExpectedContent,
-      candidateTaskConstraints: dropBlankLocales(latestTaskVersion?.candidateTaskConstraints),
-      // Inline rubric when the author edited criteria here, otherwise keep referencing the
-      // existing one. Sending both would be ambiguous; sending only the id would drop the edit.
-      // A rubric is written when the criteria OR the practical weight changed — both live on the
-      // same row, so either one means a new version of it. `criteriaRecord` falls back to the
-      // stored criteria so a weight-only change does not rewrite them.
-      ...(criteriaRecord || weightChanged
-        ? {
-            rubric: (() => {
-              const criteria = criteriaRecord
-                ?? buildCriteriaRecordFromEditorState(
-                  buildEditorStateFromCriteriaRecord(cfg.rubricVersion?.criteria ?? null, contentLocale),
-                );
-              return {
-                criteria,
-                scalingRule: {
-                  ...(cfg.rubricVersion?.scalingRule ?? {}),
-                  max_total: Object.values(criteria ?? {}).reduce((sum, c) => sum + (Number(c.maxScore) || 0), 0) || 1,
-                  practical_weight: weightChanged
-                    ? practicalWeight
-                    : (cfg.rubricVersion?.scalingRule?.practical_weight ?? 70),
-                },
-              };
-            })(),
-          }
-        : { rubricVersionId: latestRubricId }),
-      // Same either/or as the rubric: a new inline prompt, or a reference to the existing one.
-      ...(promptPayload ? { promptTemplate: promptPayload } : { promptTemplateVersionId: latestPromptId }),
-    }),
-    ...(isFreetextOnly ? {} : { mcqSetVersionId: latestMcqId }),
-    ...(policy ? { assessmentPolicy: policy } : {}),
-    ...(submissionSchemaPayload
-      ? { submissionSchema: submissionSchemaPayload }
-      : (version?.submissionSchema ? { submissionSchema: version.submissionSchema } : {})),
-  };
-
-  const slot = logProgress("shell.settings.saving");
-  slot.abortBtn.remove();
-  const versionBefore = version?.id ?? null;
-  try {
-    await apiFetch(`/api/admin/content/modules/${encodeURIComponent(moduleId)}/versions`, getHeaders, {
-      method: "POST",
-      // A lost response must not turn one Lagre into two versions on retry.
-      headers: { "Idempotency-Key": `settings-${moduleId}-${Date.now()}` },
-      body: JSON.stringify(body),
-    });
-    await loadModule(moduleId);
-    // The criteria the author typed are now the stored ones, so the panel state is discarded and
-    // the next render reads them back from the bundle. Keeping it would report unsaved edits
-    // forever and warn on every exit from a tab with nothing left to lose. (loadModule above
-    // already does this; the call is kept so the reset does not depend on that being true.)
-    resetSettingsPanelState();
-    renderSettingsPanel();
-    // loadModule swallows its own fetch errors, so a 502 on the reload would leave the panel
-    // showing the previous version under a green toast. Verify what came back instead of
-    // trusting that it came back at all.
-    const reloadedMode = bundle?.selectedConfiguration?.moduleVersion?.assessmentMode ?? "FREETEXT_PLUS_MCQ";
-    // Check the module-level fields too. When certification or validity was the only change,
-    // comparing the mode alone always matched and a failed reload still showed green.
-    // Both sides through the same reader, so the comparison cannot be confused by the shape the
-    // value happens to be stored in. (Round 3 had this comparing a locale object against a
-    // localized string, which was never equal — every successful edit reported a stale reload.)
-    const reloadedCert = certificationLevelValue(bundle?.module?.certificationLevel);
-    const savedCert = moduleFields.certificationLevel === undefined
-      ? undefined
-      : certificationLevelValue(moduleFields.certificationLevel);
-    const certStale = savedCert !== undefined && reloadedCert !== savedCert;
-    // Validity too. Checking mode and certification only meant a date-only change always compared
-    // equal on the two fields that were checked, so a failed reload still showed green over the
-    // old date — the exact hole the check was added to close, left open for one more field.
-    const asDay = (value) => (value ? new Date(value).toISOString().slice(0, 10) : "");
-    const datesStale = ["validFrom", "validTo"].some(
-      (field) => moduleFields[field] !== undefined && asDay(bundle?.module?.[field]) !== asDay(moduleFields[field]),
-    );
-    // The check above only looks at mode, certification and dates. A criteria-, prompt-, schema-
-    // or weight-only save changes none of them, so a failed reload compared equal on everything
-    // that WAS checked and reported success over the old configuration. Every successful save
-    // writes a NEW module version, so the version id is the one signal that covers all of them.
-    const reloadedVersionId = bundle?.selectedConfiguration?.moduleVersion?.id ?? null;
-    const versionStale = versionBefore !== null && reloadedVersionId === versionBefore;
-    if (reloadedMode !== mode || certStale || datesStale || versionStale) {
-      logResolveSlot(slot, () => escapeHtml(t("shell.settings.savedStale")));
-      showToast(t("shell.settings.savedStale"), "info");
-      return;
-    }
-    logResolveSlot(slot, () => `<strong>${escapeHtml(t("shell.settings.saved"))}</strong>`);
-    showToast(t("shell.settings.saved"), "success");
-  } catch (error) {
-    // The composed save is all-or-nothing, so the module is untouched. Årsaken er som regel
-    // handlingsbar, så den skal med — men #972: den skal komme fra klientens egen kodetabell, ikke
-    // fra serverens `body.message`. Den forrige varianten (`error?.body?.message || …`) viste
-    // engelsk servertekst i et konsoll forfatteren kanskje har satt til nynorsk.
-    const message = apiErrorText(error);
-    logResolveSlot(slot, () => escapeHtml(`${t("shell.settings.saveFailed")} ${message}`));
-    showToast(t("shell.settings.saveFailed"), "error");
-    reenableSettingsSave();
-  }
-}
-
-function bindViewTabs() {
-  for (const [name, button] of Object.entries(tabButtons)) {
-    button?.addEventListener("click", () => switchToTab(name));
-    // Standard tablist keyboard model. Focus follows the arrow keys and the view
-    // switches with it, which is the expected behaviour for tabs whose panels are
-    // already loaded.
-    button?.addEventListener("keydown", (event) => {
-      const index = TAB_ORDER.indexOf(name);
-      let target = null;
-      if (event.key === "ArrowRight") target = TAB_ORDER[(index + 1) % TAB_ORDER.length];
-      else if (event.key === "ArrowLeft") target = TAB_ORDER[(index - 1 + TAB_ORDER.length) % TAB_ORDER.length];
-      else if (event.key === "Home") target = TAB_ORDER[0];
-      else if (event.key === "End") target = TAB_ORDER[TAB_ORDER.length - 1];
-      if (!target) return;
-      event.preventDefault();
-      tabButtons[target]?.focus();
-      switchToTab(target);
-    });
-  }
-
-
-  // Establish the roving tabindex now. Without this the assignment in applyTabState first
-  // runs on the initial tab switch, so until then all three tabs sit in the tab order -
-  // the exact behaviour the roving model exists to remove.
-  applyTabState(activeTab);
 }
 
 // ---------------------------------------------------------------------------
@@ -6676,6 +3661,8 @@ function bindViewTabs() {
 // #1046 (produkteier 13.09): «Generer innhold» og «Be om endring» som dialoger. Type og nivå kommer
 // fra Innstillinger og spørres ikke om. Resultatet legges i skjemaet som ulagret utkast.
 // ---------------------------------------------------------------------------
+// Antallene fra «Generer innhold»-dialogen, lest av MCQ-genereringen etter planen.
+let pendingMcqCounts = null;
 function effectiveModuleMode() {
   return sessionDraft?.assessmentMode ?? bundle?.selectedConfiguration?.moduleVersion?.assessmentMode ?? "FREETEXT_PLUS_MCQ";
 }
@@ -6701,29 +3688,37 @@ async function openGenerateDialog({ mcqOnly = false } = {}) {
     });
   }
   setHidden(document.getElementById("dialogGenerateMcq"), !hasMcq);
+  setHidden(document.getElementById("dialogGenerateStep1"), false);
+  setHidden(document.getElementById("dialogGeneratePlan"), true);
+  setGenerateDialogStatus(null);
+  // Det som står i skjemaet tas med i utkastet før noe genereres — det genererte legges oppå.
+  if (isEditFormOpen()) captureEditFormIntoDraft();
   const host = document.getElementById("dialogGenerateSource");
   const entry = {
     kind: "form", formType: "source-material", placeholderKey: "shell.source.placeholder",
     submitKey: "shell.generateDialog.submit", submitted: false, initialValue: "", context: {}, mount: host,
     onSubmit: (sourceMaterial) => {
-      dialog.close();
       pendingMcqCounts = hasMcq
         ? {
             questionCount: Number(document.getElementById("dialogGenerateQuestionCount")?.value ?? 5),
             optionCount: Number(document.getElementById("dialogGenerateOptionCount")?.value ?? 4),
           }
         : null;
-      // Planen og framdriften vises i den reduserte samtaleruta til dialogene dekker også dem.
-      openChatPane();
       const cert = effectiveCertLevel();
+      const counts = pendingMcqCounts ?? { questionCount: 5, optionCount: 4 };
+      pendingMcqCounts = null;
       if (mcqOnly) {
-        askForMcqQuestionCount(sourceMaterial, cert, contentLocale, "thorough", () => showDraftReadyActions());
+        dialog.close();
+        generateMcqInBackground(sourceMaterial, cert, contentLocale, "thorough", counts.questionCount, counts.optionCount, () => showDraftReadyActions({ quiet: true }));
         return;
       }
       if (mode === "MCQ_ONLY") {
-        startMcqOnlyRegen(sourceMaterial, cert);
+        dialog.close();
+        startMcqOnlyRegen(sourceMaterial, cert, counts);
         return;
       }
+      // Fritekst: planen kommer som steg 2 i samme dialog; «Bruk denne planen» lukker og genererer.
+      pendingMcqCounts = counts;
       generateBlueprintAndConfirm(null, selectedModuleId, sourceMaterial, cert, contentLocale, "thorough", "auto", mode === "FREETEXT_ONLY");
     },
   };
@@ -6757,6 +3752,8 @@ function openReviseDialog() {
 
 function bindGenerateAndReviseDialogs() {
   document.getElementById("dialogGenerateCancel")?.addEventListener("click", () => document.getElementById("dialogGenerate")?.close());
+  // Lukkes dialogen (Avbryt, Esc) mens noe pågår, går resten som toast — statuslinja skal ikke stå igjen til neste gang.
+  document.getElementById("dialogGenerate")?.addEventListener("close", () => setGenerateDialogStatus(null));
   // Kildeverktøyet rives når dialogen lukkes, så det ikke ligger igjen som et «aktivt» skjema i DOM-en.
   document.getElementById("dialogGenerate")?.addEventListener("close", () => { document.getElementById("dialogGenerateSource")?.replaceChildren(); });
   document.getElementById("dialogReviseCancel")?.addEventListener("click", () => document.getElementById("dialogRevise")?.close());
@@ -6771,7 +3768,7 @@ function bindGenerateAndReviseDialogs() {
     const instruction = input?.value.trim();
     if (!instruction) { input?.focus(); return; }
     document.getElementById("dialogRevise")?.close();
-    openChatPane();
+    if (isEditFormOpen()) captureEditFormIntoDraft();
     runUnifiedRevision(instruction);
   });
   document.getElementById("dialogReviseInput")?.addEventListener("keydown", (e) => {
@@ -6790,7 +3787,6 @@ function startNewEmptyModule() {
   selectedModuleId = null;
   previewDraft = null;
   latestSavedModuleVersionId = null;
-  chatLog = [];
   sessionDraft = buildPreviewCandidate({
     title: "",
     taskText: "",
@@ -6800,14 +3796,13 @@ function startNewEmptyModule() {
     assessmentMode: "FREETEXT_ONLY",
   });
   newModulePlaceholder = true;
-  renderPreviewLocaleBar();
   renderPreview();
   updateStateRail();
   // Produkteier 13.09: det første valget for en modul er typen (fritekst, flervalg eller begge) — så
   // et nytt element åpner på Innstillinger: navn, type og nivå. Lagre oppretter modulen; Rediger
   // viser deretter feltene for valgt type.
   showDraftReadyActions({ quiet: true });
-  if (activeTab !== "settings") switchToTab("settings"); else renderSettingsPanel();
+  if (activeTab !== "settings") switchToTab("settings"); else settingsTab.renderSettingsPanel();
 }
 
 
@@ -6816,7 +3811,7 @@ function startNewEmptyModule() {
 // ---------------------------------------------------------------------------
 
 
-function startMcqOnlyRegen(sourceMaterial, knownCertLevel) {
+function startMcqOnlyRegen(sourceMaterial, knownCertLevel, counts = { questionCount: 5, optionCount: 4 }) {
   // Flag the in-progress draft as MCQ_ONLY so saveDraftBundleInBackground emits the MCQ_ONLY
   // module version (no rubric/prompt/taskText). Cert level is reused from the existing module.
   sessionDraft = {
@@ -6828,12 +3823,12 @@ function startMcqOnlyRegen(sourceMaterial, knownCertLevel) {
   };
   renderPreview();
   const certLevel = knownCertLevel ?? bundle?.module?.certificationLevel ?? "intermediate";
-  askForMcqQuestionCount(sourceMaterial, certLevel, contentLocale, "thorough", () => showDraftReadyActions());
+  generateMcqInBackground(sourceMaterial, certLevel, contentLocale, "thorough", counts.questionCount, counts.optionCount, () => showDraftReadyActions({ quiet: true }));
 }
 
 
-// Default pass mark for MCQ-only modules created via the conversation (author can override in
-// Avansert). Mirrors DEFAULT_MCQ_ONLY_MIN_PERCENT on the server (decisionService).
+// Default pass mark for new MCQ-only modules (the author can change it under Innstillinger).
+// Mirrors DEFAULT_MCQ_ONLY_MIN_PERCENT on the server (decisionService).
 const SHELL_MCQ_ONLY_MIN_PERCENT = 70;
 
 
@@ -6876,12 +3871,12 @@ async function maybeCondenseSourceMaterial(sourceMaterial, certLevel, locale) {
 }
 
 async function generateBlueprintAndConfirm(moduleTitle, existingModuleId, sourceMaterial, certLevel, locale, generationMode, scenarioMode = "auto", freetextOnly = false) {
-  // v1.2.4: condense source material if over threshold. Condensed result replaces raw
-  // for ALL downstream calls (blueprint → draft → MCQ → rubric).
+  // Condense source material over the threshold; the condensed text replaces the raw one for ALL
+  // downstream calls (blueprint → draft → MCQ → rubric).
   const effectiveSourceMaterial = await maybeCondenseSourceMaterial(sourceMaterial, certLevel, locale);
 
   const abort = startGeneration();
-  const slot = logProgress("shell.blueprint.progress");
+  const slot = logProgress("shell.blueprint.progress", { abortable: true });
   slot.abortBtn.addEventListener("click", () => { abort.abort(); slot.abortBtn.disabled = true; });
 
   let blueprintResult = null;
@@ -6903,25 +3898,33 @@ async function generateBlueprintAndConfirm(moduleTitle, existingModuleId, source
       return;
     }
     logResolveSlot(slot, () => escapeHtml(t("shell.blueprint.errorFallback")));
+    document.getElementById("dialogGenerate")?.close();
     confirmAndGenerate(moduleTitle, existingModuleId, sourceMaterial, certLevel, locale, generationMode, null, scenarioMode, freetextOnly);
     return;
   }
 
   generationAbort = null;
   sessionState = selectedModuleId ? (sessionDraft ? "draft-pending" : "module-loaded") : "idle";
+  logResolveSlot(slot, () => escapeHtml(t("shell.blueprint.ready")), []);
 
   const bp = blueprintResult?.blueprint;
-  // v1.2.4: pass effectiveSourceMaterial (possibly condensed) so all downstream LLM calls
-  // (draft, MCQ, rubric) get the same condensed view rather than re-paying for raw.
-  // v1.2.8: scenarioMode forwarded through to draft generation.
-  renderEditableBlueprint(slot, bp, { moduleTitle, existingModuleId, sourceMaterial: effectiveSourceMaterial, certLevel, locale, generationMode, scenarioMode, freetextOnly });
+  // effectiveSourceMaterial (possibly condensed) goes to every downstream call, so none re-pays for
+  // the raw text. Planen står i «Generer innhold»-dialogen (steg 2 i den), ikke i en samtalerute.
+  const planHost = document.getElementById("dialogGeneratePlan");
+  const dialog = document.getElementById("dialogGenerate");
+  if (planHost) {
+    setHidden(document.getElementById("dialogGenerateStep1"), true);
+    setHidden(planHost, false);
+    if (dialog && !dialog.open) dialog.showModal();
+    renderEditableBlueprint(planHost, bp, { moduleTitle, existingModuleId, sourceMaterial: effectiveSourceMaterial, certLevel, locale, generationMode, scenarioMode, freetextOnly });
+  }
 }
 
 // B1 (#448): editable Vurderingsplan card replaces the static accept/skip preview. Lærer
 // can add, edit, and remove læringsmål and sentrale temaer before continuing. "Bruk denne
 // planen" captures current inputs and passes them to confirmAndGenerate. "Generer på nytt"
 // re-runs blueprint generation, warning first if the user made manual edits.
-function renderEditableBlueprint(slot, initialBlueprint, ctx) {
+function renderEditableBlueprint(host, initialBlueprint, ctx) {
   // Local mutable working copy — never mutates the original bundle/sessionDraft until
   // the user clicks "Bruk denne planen".
   const working = {
@@ -6978,37 +3981,35 @@ function renderEditableBlueprint(slot, initialBlueprint, ctx) {
   };
 
   const captureInputs = () => {
-    const objInputs = slot.el.querySelectorAll(".bp-objective-input");
-    const topInputs = slot.el.querySelectorAll(".bp-topic-input");
+    const objInputs = host.querySelectorAll(".bp-objective-input");
+    const topInputs = host.querySelectorAll(".bp-topic-input");
     working.learningObjectives = Array.from(objInputs).map((i) => i.value.trim()).filter(Boolean);
     working.keyTopics = Array.from(topInputs).map((i) => i.value.trim()).filter(Boolean);
   };
 
   const renderAndWire = () => {
-    logResolveSlot(slot, renderHtml, [
-      {
-        labelKey: "shell.blueprint.usePlan",
-        action: () => {
-          captureInputs();
-          if (working.learningObjectives.length === 0) {
-            window.alert(t("shell.blueprint.objectivesRequired"));
-            return;
-          }
-          const blueprintJson = JSON.stringify(working);
-          confirmAndGenerate(ctx.moduleTitle, ctx.existingModuleId, ctx.sourceMaterial, ctx.certLevel, ctx.locale, ctx.generationMode, blueprintJson, ctx.scenarioMode, ctx.freetextOnly);
-        },
-      },
-      {
-        labelKey: "shell.blueprint.regenerate",
-        action: () => {
-          captureInputs();
-          if (hasManualEdits && !window.confirm(t("shell.blueprint.regenerateWarning"))) return;
-          generateBlueprintAndConfirm(ctx.moduleTitle, ctx.existingModuleId, ctx.sourceMaterial, ctx.certLevel, ctx.locale, ctx.generationMode, ctx.scenarioMode);
-        },
-      },
-    ]);
+    host.innerHTML = `${renderHtml()}
+      <div class="row" style="justify-content:flex-end;gap:var(--space-1);margin-top:var(--space-2)">
+        <button type="button" class="btn-secondary" data-bp-action="regenerate">${escapeHtml(t("shell.blueprint.regenerate"))}</button>
+        <button type="button" class="btn-primary" data-bp-action="use">${escapeHtml(t("shell.blueprint.usePlan"))}</button>
+      </div>`;
+    host.querySelector('[data-bp-action="use"]')?.addEventListener("click", () => {
+      captureInputs();
+      if (working.learningObjectives.length === 0) {
+        showToast(t("shell.blueprint.objectivesRequired"), "error");
+        return;
+      }
+      const blueprintJson = JSON.stringify(working);
+      document.getElementById("dialogGenerate")?.close();
+      confirmAndGenerate(ctx.moduleTitle, ctx.existingModuleId, ctx.sourceMaterial, ctx.certLevel, ctx.locale, ctx.generationMode, blueprintJson, ctx.scenarioMode, ctx.freetextOnly);
+    });
+    host.querySelector('[data-bp-action="regenerate"]')?.addEventListener("click", () => {
+      captureInputs();
+      if (hasManualEdits && !window.confirm(t("shell.blueprint.regenerateWarning"))) return;
+      generateBlueprintAndConfirm(ctx.moduleTitle, ctx.existingModuleId, ctx.sourceMaterial, ctx.certLevel, ctx.locale, ctx.generationMode, ctx.scenarioMode, ctx.freetextOnly);
+    });
 
-    const editor = slot.el.querySelector(".bp-editor");
+    const editor = host.querySelector(".bp-editor");
     if (!editor) return;
     editor.addEventListener("input", (e) => {
       hasManualEdits = true;
@@ -7062,13 +4063,13 @@ function renderEditableBlueprint(slot, initialBlueprint, ctx) {
         captureInputs();
         working.learningObjectives.push("");
         renderAndWire();
-        const inputs = slot.el.querySelectorAll(".bp-objective-input");
+        const inputs = host.querySelectorAll(".bp-objective-input");
         inputs[inputs.length - 1]?.focus();
       } else if (target.classList.contains("bp-add-topic")) {
         captureInputs();
         working.keyTopics.push("");
         renderAndWire();
-        const inputs = slot.el.querySelectorAll(".bp-topic-input");
+        const inputs = host.querySelectorAll(".bp-topic-input");
         inputs[inputs.length - 1]?.focus();
       }
     });
@@ -7097,7 +4098,8 @@ async function confirmAndGenerate(moduleTitle, existingModuleId, sourceMaterial,
   const onDraftReady = () => {
     if (freetextOnly) {
       sessionDraft = { ...(sessionDraft ?? {}), assessmentMode: "FREETEXT_ONLY", mcqQuestions: [] };
-      renderPreview();
+      // Rediger er skjemaet: tegn det på nytt fra utkastet, ikke forhåndsvisningen over det.
+      if (activeTab === "edit") enterPreviewEditMode({ force: true }); else renderPreview();
       showDraftReadyActions();
     } else {
       askForMcqGeneration(sourceMaterial, certLevel, locale, generationMode);
@@ -7140,8 +4142,7 @@ async function confirmAndGenerate(moduleTitle, existingModuleId, sourceMaterial,
       slot,
       () => `${escapeHtml(t("shell.newModule.createError"))}<br><span style="font-size:13px;color:var(--color-meta)">${escapeHtml(t("shell.newModule.createErrorHint"))}</span>`,
       [
-        // v1.2.18 (#352) sendte denne til modul-biblioteket, men beholdt etiketten «Åpne avansert
-        // editor». Den har altså løyet i et halvt år. Nå sier den hvor den går.
+        // Etiketten sier hvor lenka går (#352).
         { labelKey: opphavFraUrl() ? "shell.module.backToCourse" : "shell.module.goToLibrary", action: () => { location.href = opphavFraUrl() ?? "/admin-content"; } },
         { labelKey: "shell.action.retry", action: () => confirmAndGenerate(moduleTitle, null, sourceMaterial, certLevel, locale, generationMode, blueprint, scenarioMode, freetextOnly) },
         { labelKey: "shell.action.cancel", action: startIdle },
@@ -7187,7 +4188,7 @@ async function attachBundleForNewModule(moduleId) {
   // deliberately bypasses it. Visiting module A's settings, going back to idle and creating module
   // B therefore showed A's criteria on B — and leaving the tab synced them into B's draft. The
   // state belongs to whichever module the panel last drew; a different module means none of it.
-  resetSettingsPanelState();
+  settingsTab.resetSettingsPanelState();
   try {
     const exportData = await apiFetch(`/api/admin/content/modules/${encodeURIComponent(moduleId)}/export`, getHeaders);
     bundle = exportData?.moduleExport ?? bundle;
@@ -7197,18 +4198,17 @@ async function attachBundleForNewModule(moduleId) {
 }
 
 function askForMcqGeneration(sourceMaterial, certLevel, locale, generationMode) {
-  // v1.1.96: Yes/No-dialogen ble fjernet. MCQ er nødvendig for save fra samtale, så "Nei"
-  // var en dead-end (bekreftet via bruker-feedback 2026-05-22). Går direkte til count-
-  // dialogen. Bruker kan fortsatt avbryte via "Avbryt"-knappen på progress-meldingen
-  // hvis de virkelig ikke vil ha MCQ — da må de bruke Avansert editor i stedet.
-  askForMcqQuestionCount(sourceMaterial, certLevel, locale, generationMode, () => showDraftReadyActions());
+  // Antallene ble valgt i «Generer innhold»-dialogen; ingen spørsmål her.
+  const counts = pendingMcqCounts ?? { questionCount: 5, optionCount: 4 };
+  pendingMcqCounts = null;
+  generateMcqInBackground(sourceMaterial, certLevel, locale, generationMode, counts.questionCount, counts.optionCount, () => showDraftReadyActions({ quiet: true }));
 }
 
-// v1.1.81: auto-generate criteria into sessionDraft so the preview pane shows them during
+// Auto-generate criteria into sessionDraft so the preview pane shows them during
 // creation (before save). B2 (#449 redesign) made criteria "content" — they belong in the
 // preview pane, not gated behind save+publish+reopen. Fires once per session-draft when:
 //   - sessionDraft exists with taskText + assessor (otherwise LLM has nothing to work with)
-//   - sessionDraft.criteria not already set (idempotent — handoff/edit may pre-populate it)
+//   - sessionDraft.criteria not already set (idempotent — an edit may pre-populate it)
 // On success, sessionDraft.criteria becomes the storage-shape record that saveDraftBundle
 // then POSTs as a new RubricVersion (the "explicit criteria" branch, not ensure-rubric).
 async function populateSessionDraftCriteriaInBackground() {
@@ -7237,10 +4237,9 @@ async function populateSessionDraftCriteriaInBackground() {
   // and tagging the reply with the live locale files English text as Norwegian — which then looks
   // like a translation that exists.
   const generationLocale = contentLocale;
-  // #926: this repaint used to be unconditional, and `renderPreview` writes straight into
-  // `previewContent.innerHTML` — so it tore down an open Rediger form and rebuilt it from the
-  // bundle, throwing away whatever the author had typed. Same class as §6 itself: content
-  // changing without the author asking, this time by a background job nobody saw start.
+  // #926: never repaint over an open Rediger form. `renderPreview` writes straight into
+  // `previewContent.innerHTML`, so an unconditional repaint here would throw away whatever the
+  // author had typed — content changing without the author asking, by a job nobody saw start.
   //
   // The completion handler at the bottom already makes exactly this distinction. It only ever
   // held for the way OUT; the way IN had no guard at all.
@@ -7258,12 +4257,12 @@ async function populateSessionDraftCriteriaInBackground() {
       }),
     });
     const generated = Array.isArray(result?.rubric?.criteria) ? result.rubric.criteria : [];
-    const record = llmCriteriaArrayToStorageRecord(generated, generationLocale);
+    const record = criteriaTools.llmCriteriaArrayToStorageRecord(generated, generationLocale);
     // QA round 7: the author can open Innstillinger while this is in flight and edit the criteria,
     // and those edits are synced into the draft as they are made. Overwriting the draft here threw
     // them away — and because the sync also used to move the dirty baseline, the guard below then
     // saw a "clean" editor and replaced it with the generated list too. Their work wins.
-    if (sessionDraft && Object.keys(record).length > 0 && !settingsCriteriaEdited()) {
+    if (sessionDraft && Object.keys(record).length > 0 && !settingsTab.settingsCriteriaEdited()) {
       sessionDraft = { ...sessionDraft, criteria: record };
     }
   } catch {
@@ -7271,13 +4270,9 @@ async function populateSessionDraftCriteriaInBackground() {
     // see the criteria in preview until after save in that case.
   } finally {
     criteriaGenerationInFlight = false;
-    // v1.1.91: don't re-render if user has entered Rediger direkte while generation was
-    // in flight — would wipe their edit form. v1.1.92: also notify the active edit-mode
-    // via criteriaReadyCallback so the placeholder is replaced with editor cards.
-    // v1.1.93: previewPaneEl is block-scoped inside enterPreviewEditMode — referencing it
-    // here threw ReferenceError, which prevented renderPreview() from running. Users saw
-    // criteria appear only after Lagre (which triggers loadModule → renderPreview). Use
-    // document.querySelector directly to read the live edit-mode state.
+    // An open edit form must not be re-rendered (it would wipe the typed text); it is told through
+    // criteriaReadyCallback instead, so its placeholder becomes editor cards. The edit-mode state
+    // is read from the live DOM — the pane element itself is scoped inside enterPreviewEditMode.
     const previewPaneNow = document.querySelector(".preview-pane");
     const inEditMode = previewPaneNow?.classList.contains("preview-pane--editing");
     if (inEditMode) {
@@ -7296,10 +4291,9 @@ async function populateSessionDraftCriteriaInBackground() {
     // erased criteria they had added or changed while generation was still running — trading one
     // silent loss for another. If the editor is dirty, their work wins and the generated criteria
     // stay on the draft, where the save still reads them.
-    if (sessionDraft?.criteria && !settingsCriteriaEdited()) {
-      settingsCriteriaState = null;
-      settingsCriteriaBaseline = null;
-      if (activeTab === "settings") renderSettingsPanel();
+    if (sessionDraft?.criteria && !settingsTab.settingsCriteriaEdited()) {
+      settingsTab.resetLocaleBoundState();
+      if (activeTab === "settings") settingsTab.renderSettingsPanel();
       // #926 §6 krav 2: dette er selve tilfellet saken beskriver. Kriteriene er generert
       // asynkront og ligger nå i Innstillinger; står forfatteren i Rediger, kom de uten et
       // eneste tegn. Merkingen er betinget av `activeTab` inne i `markTabAttention`, så den
@@ -7311,14 +4305,13 @@ async function populateSessionDraftCriteriaInBackground() {
 
 function showDraftReadyActions({ quiet = false } = {}) {
   sessionState = "draft-pending";
-  // v1.1.81: kick off criteria-generation in background so preview shows them.
+  // Kick off criteria-generation in the background so the preview shows them.
   // Idempotent — does nothing if sessionDraft.criteria is already populated.
   populateSessionDraftCriteriaInBackground();
   // A freshly generated draft lands on Rediger, and Rediger is editable — the invariant has to
   // hold on the new-module flow too, or the tab is editable everywhere except where a new author
   // meets it first.
   if (activeTab === "edit" && !isEditFormOpen() && (bundle || sessionDraft)) enterPreviewEditMode();
-  const mcqCount = sessionDraft?.mcqQuestions?.length ?? 0;
   const model = deriveShellDraftReadyActionModel({ hasSelectedModule: !!selectedModuleId });
   const actionMap = {
     revise: { labelKey: "shell.draftReady.editInChat", action: () => openReviseDialog() },
@@ -7328,15 +4321,9 @@ function showDraftReadyActions({ quiet = false } = {}) {
   // The message is conversation and stays in the log; the actions go to the fixed bar, where they
   // do not sink out of reach as the log grows. `quiet`: et tomt nytt element har ikke noe utkast
   // å melde om.
-  if (!quiet) {
-    newModulePlaceholder = false;
-    logBot(() => {
-      const parts = [t("shell.draftReady.message")];
-      if (mcqCount > 0) parts.push(tf("shell.draftReady.mcqCount", { count: mcqCount }));
-      parts.push(t("shell.draftReady.hint"));
-      return escapeHtml(parts.join(" "));
-    });
-  }
+  // Ingen egen «utkastet er klart»-melding her: flyten som la utkastet inn har alt sagt det
+  // (commitOrProposeGenerated). To toaster om det samme var støy (stage 17.09).
+  if (!quiet) newModulePlaceholder = false;
   const actions = model.actionKeys.map((key) => actionMap[key] && { key, ...actionMap[key] }).filter(Boolean);
   // Produkteier 13.09 (stage-funn): med et utkast sto bare «Be om endring» igjen — ingen vei til
   // kilder eller generering. Generer innhold (og Generer spørsmål når typen har flervalg) er alltid
@@ -7346,77 +4333,12 @@ function showDraftReadyActions({ quiet = false } = {}) {
     actions.push({ key: "generateMcq", labelKey: "shell.module.generateMcq", action: () => openGenerateDialog({ mcqOnly: true }) });
   }
   renderWorkspaceActions(actions);
-  if (model.shouldOpenUnifiedRevision) {
-    startUnifiedRevisionFlow();
-  }
 }
 
 
-// #1046: antallene valgt i «Generer innhold»-dialogen — da spørres det ikke igjen i samtalen.
-let pendingMcqCounts = null;
-function askForMcqQuestionCount(sourceMaterial, certLevel, locale, generationMode, onAccept) {
-  if (pendingMcqCounts) {
-    const { questionCount, optionCount } = pendingMcqCounts;
-    pendingMcqCounts = null;
-    generateMcqInBackground(sourceMaterial, certLevel, locale, generationMode, questionCount, optionCount, onAccept);
-    return;
-  }
-  logBot(() => t("shell.mcq.questionCountPrompt"), [
-    { labelKey: "shell.mcq.questionCountChoice3", action: () => askForMcqOptionCount(sourceMaterial, certLevel, locale, generationMode, 3, onAccept) },
-    { labelKey: "shell.mcq.questionCountChoice5", action: () => askForMcqOptionCount(sourceMaterial, certLevel, locale, generationMode, 5, onAccept) },
-    { labelKey: "shell.mcq.questionCountChoice10", action: () => askForMcqOptionCount(sourceMaterial, certLevel, locale, generationMode, 10, onAccept) },
-    { labelKey: "shell.mcq.questionCountCustom", action: () => askForCustomMcqQuestionCount(sourceMaterial, certLevel, locale, generationMode, onAccept) },
-  ]);
-}
 
-function askForCustomMcqQuestionCount(sourceMaterial, certLevel, locale, generationMode, onAccept) {
-  logForm(
-    "text",
-    () => t("shell.mcq.questionCountPrompt"),
-    "shell.mcq.questionCountPlaceholder",
-    "shell.action.next",
-    (rawValue) => {
-      const questionCount = parsePositiveIntInRange(rawValue, 1, 20);
-      if (questionCount === null) {
-        logBot(() => t("shell.mcq.questionCountInvalid"), [
-          { labelKey: "shell.action.retry", action: () => askForCustomMcqQuestionCount(sourceMaterial, certLevel, locale, generationMode, onAccept) },
-          { labelKey: "shell.action.cancel", action: () => askForMcqQuestionCount(sourceMaterial, certLevel, locale, generationMode, onAccept) },
-        ]);
-        return;
-      }
-      askForMcqOptionCount(sourceMaterial, certLevel, locale, generationMode, questionCount, onAccept);
-    },
-  );
-}
 
-function askForMcqOptionCount(sourceMaterial, certLevel, locale, generationMode, questionCount, onAccept) {
-  logBot(() => tf("shell.mcq.optionCountPrompt", { count: questionCount }), [
-    { labelKey: "shell.mcq.optionCountChoice3", action: () => generateMcqInBackground(sourceMaterial, certLevel, locale, generationMode, questionCount, 3, onAccept) },
-    { labelKey: "shell.mcq.optionCountChoice4", action: () => generateMcqInBackground(sourceMaterial, certLevel, locale, generationMode, questionCount, 4, onAccept) },
-    { labelKey: "shell.mcq.optionCountChoice5", action: () => generateMcqInBackground(sourceMaterial, certLevel, locale, generationMode, questionCount, 5, onAccept) },
-    { labelKey: "shell.mcq.optionCountCustom", action: () => askForCustomMcqOptionCount(sourceMaterial, certLevel, locale, generationMode, questionCount, onAccept) },
-  ]);
-}
 
-function askForCustomMcqOptionCount(sourceMaterial, certLevel, locale, generationMode, questionCount, onAccept) {
-  logForm(
-    "text",
-    () => tf("shell.mcq.optionCountPrompt", { count: questionCount }),
-    "shell.mcq.optionCountPlaceholder",
-    "shell.action.next",
-    (rawValue) => {
-      const optionCount = parsePositiveIntInRange(rawValue, 2, 6);
-      if (optionCount === null) {
-        logBot(() => t("shell.mcq.optionCountInvalid"), [
-          { labelKey: "shell.action.retry", action: () => askForCustomMcqOptionCount(sourceMaterial, certLevel, locale, generationMode, questionCount, onAccept) },
-          { labelKey: "shell.action.cancel", action: () => askForMcqOptionCount(sourceMaterial, certLevel, locale, generationMode, questionCount, onAccept) },
-        ]);
-        return;
-      }
-      generateMcqInBackground(sourceMaterial, certLevel, locale, generationMode, questionCount, optionCount, onAccept);
-    },
-  );
-}
 
 // ---------------------------------------------------------------------------
 // Nav / version / locale
@@ -7503,40 +4425,34 @@ function populateUiLocaleSelect() {
     // were typed in the OLD language; leaving them behind laid English text over a Norwegian field
     // the moment the section was reopened, and the next save filed it as `nb`.
     //
-    // Round 7: but NOT `discardSettingsEdits()`, which also rolls the draft back to what it held
+    // Round 7: but NOT `settingsTab.discardSettingsEdits()`, which also rolls the draft back to what it held
     // before the panel opened. Criteria already absorbed into a draft are the author's work, not
     // something they asked to throw away — the guard above only established that nothing is at
     // risk of being LOST, which is true precisely because the draft is keeping it.
-    settingsCriteriaState = null;
-    settingsCriteriaBaseline = null;
-    settingsCriteriaDraftBaseline = undefined;
-    settingsDraftValues = null;
+    settingsTab.resetLocaleBoundState();
     // The content language does NOT follow. Stage-tilbakemelding 2026-08-17: it used to, until the
     // author touched the selector — after which it silently stopped, with nothing on screen saying
     // so. Changing the menu language now changes the menus; the content stays in the language it
     // is written in, which is the only rule that can be stated in one sentence.
-    // Direkte redigering bygges INN i forhåndsvisningsruten, så renderPreview() river den.
-    // Forhåndsvisningens EGEN språkvelger er deaktivert under redigering
-    // (.preview-pane--editing .preview-locale-btn { pointer-events: none }) — men denne, i
-    // topplinja, var det ikke. Man havnet i lesemodus med en samtale som fortsatt sa «rediger
-    // feltene og trykk Bekreft», og handlingsknappene var allerede brukt opp og deaktiverte.
-    // Ingen vei videre uten å laste siden på nytt (rapportert fra stage 13.08).
+    // Direkte redigering bygges INN i forhåndsvisningsruten, så renderPreview() river den — åpne
+    // skjemaet igjen etterpå (rapportert fra stage 13.08: man havnet i lesemodus uten vei videre).
     const wasEditing = !!document.getElementById("previewEditConfirm");
     const wasDirty = hasOpenEditForm();
-    // Replay the full chat log in the new locale
-    retranslateChat();
     translatePageStaticText();
-    renderPreviewLocaleBar();
+    // Hodet (form-page.js) bygges fra t(): tegn det på nytt, og legg fanemerkingen (#926) tilbake —
+    // suffikset i aria-label er også oversatt tekst.
+    formPage?.render();
+    for (const tab of tabAttention) {
+      const button = formPage?.tabButton(tab);
+      if (button) button.dataset.attention = "1";
+      applyTabAttentionLabel(tab);
+    }
     renderPreview();
     renderWorkspaceNavigation();
-    // #926: the attention suffix is built from `t()`, so it is stale text after a language change.
-    // `translatePageStaticText` cannot reach it — the tab carries `data-i18n`, not
-    // `data-i18n-aria-label`, and the suffix is not in the markup at all.
-    for (const tab of Object.keys(tabButtons)) applyTabAttentionLabel(tab);
     // #896 S3b: the settings panel is built in JS, so translatePageStaticText cannot reach it.
     // Without this the module types, the "missing component" reasons and the save button stay
     // in the previous language while the page around them switches.
-    renderSettingsPanel();
+    settingsTab.renderSettingsPanel();
     // Handlingsraden og merkene i hodet bygges også i JS (#1046): tegn dem om med samme valg.
     renderWorkspaceActions(workspaceActionChoices);
     updateStateRail();
@@ -7546,7 +4462,7 @@ function populateUiLocaleSelect() {
       // — er borte, og det skal man få vite, ikke oppdage.
       if (wasDirty) {
         logBot(() => escapeHtml(t("shell.directEdit.localeSwitched")));
-        if (!chatPaneVisible()) showToast(t("shell.directEdit.localeSwitched"), "warning");
+        showToast(t("shell.directEdit.localeSwitched"), "warning");
       }
     }
   });
@@ -7585,8 +4501,8 @@ async function loadConsoleConfig() {
 async function initShell() {
   populateUiLocaleSelect();
   translatePageStaticText();
-  bindViewTabs();
-  renderPreviewLocaleBar();
+  createModuleFormPage();
+  applyTabState(activeTab);
   renderPreview();
   loadVersion(appVersionLabel, "A2 Content Workspace");
   await loadConsoleConfig();
@@ -7608,6 +4524,45 @@ async function initShell() {
 
   startIdle();
 }
+
+// ---------------------------------------------------------------------------
+// #1046 punkt 2: Innstillinger-fanen bor i admin-content-settings-tab.js. Den får tilstanden som
+// get/set-egenskaper (så begge sider ser samme verdi) og skallets funksjoner som referanser.
+// ---------------------------------------------------------------------------
+const criteriaTools = createCriteriaTools({
+  get sessionDraft() { return sessionDraft; }, set sessionDraft(v) { sessionDraft = v; },
+  get selectedModuleId() { return selectedModuleId; },
+  get bundle() { return bundle; },
+  get contentLocale() { return contentLocale; },
+  get currentBlueprintHash() { return currentBlueprintHash; },
+  t, tf, logProgress, logResolveSlot, apiErrorText, getHeaders, loadModule, renderPreview, refreshBlueprintHash, getActiveBlueprint, slugifyLabel, certificationLevelForGeneration,
+});
+
+const publishFlow = createPublishFlow({
+  get sessionDraft() { return sessionDraft; }, set sessionDraft(v) { sessionDraft = v; },
+  get previewDraft() { return previewDraft; }, set previewDraft(v) { previewDraft = v; },
+  get latestSavedModuleVersionId() { return latestSavedModuleVersionId; }, set latestSavedModuleVersionId(v) { latestSavedModuleVersionId = v; },
+  get selectedModuleId() { return selectedModuleId; },
+  get bundle() { return bundle; },
+  get contentLocale() { return contentLocale; },
+  t, logBot, logProgress, logResolveSlot, announceStatus, apiErrorText, getHeaders, loadModule, saveDraftBundleInBackground, showModuleActions, startDirectEditFlow, commitSessionDraftPatch,
+});
+
+const settingsTab = createSettingsTab({
+  get currentLocale() { return currentLocale; },
+  get selectedModuleId() { return selectedModuleId; },
+  get bundle() { return bundle; },
+  get contentLocale() { return contentLocale; },
+  get sessionDraft() { return sessionDraft; }, set sessionDraft(v) { sessionDraft = v; },
+  get previewDraft() { return previewDraft; }, set previewDraft(v) { previewDraft = v; },
+  get latestSavedModuleVersionId() { return latestSavedModuleVersionId; }, set latestSavedModuleVersionId(v) { latestSavedModuleVersionId = v; },
+  get formPage() { return formPage; },
+  get newModulePlaceholder() { return newModulePlaceholder; }, set newModulePlaceholder(v) { newModulePlaceholder = v; },
+  get LEVEL_SCOPE_DEFAULTS() { return LEVEL_SCOPE_DEFAULTS; },
+  get CERTIFICATION_LEVELS() { return CERTIFICATION_LEVELS; },
+  get SHELL_MCQ_ONLY_MIN_PERCENT() { return SHELL_MCQ_ONLY_MIN_PERCENT; },
+  t, tf, logProgress, buildCriteriaRecordFromEditorState: criteriaTools.buildCriteriaRecordFromEditorState, announceStatus, applyTabState, dropBlankLocales, logResolveSlot, apiErrorText, loadModule, settingsSelectedMode, getHeaders, switchToTab, certificationLevelValue, localizeValue, wireCriteriaEditor: criteriaTools.wireCriteriaEditor, parsePercentInRange, refreshModuleHeaderState, applyFieldStateValue, fieldStateValue, buildDefaultSubmissionSchema, regenerateCriteriaFromTask: criteriaTools.regenerateCriteriaFromTask,
+});
 
 initShell().catch(() => {
   startIdle();

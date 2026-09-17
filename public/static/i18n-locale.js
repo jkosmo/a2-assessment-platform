@@ -22,6 +22,19 @@ export function resolveInitialLocale(supportedLocales) {
   return "en-GB";
 }
 
+// #1046 punkt 3: ÉN oversetter for forfattersidene — fem sider hadde hver sin `t`/`tf` over det
+// samme språkkartet (og skallets `tf` byttet bare første forekomst). Språket leses ved hvert kall,
+// så et bytte i menyen virker uten at oversetteren lages på nytt.
+export function createTranslator(translations, getLocale) {
+  const t = (key) => translations[getLocale()]?.[key] ?? translations["en-GB"]?.[key] ?? key;
+  const tf = (key, vars = {}) => {
+    let s = t(key);
+    for (const [k, v] of Object.entries(vars)) s = s.replaceAll(`{${k}}`, String(v));
+    return s;
+  };
+  return { t, tf };
+}
+
 // #1046 (produkteier 12.09: «Ja til NB som påkrevd»): når en innholdstekst mangler på leserens språk,
 // vises organisasjonens standardspråk (nb hos A-2) — ikke engelsk. Samme regel som tjeneren
 // (src/i18n/content.ts). Klientene brukte «?? value["en-GB"]» hver for seg; nå ett sted.

@@ -30,8 +30,19 @@ describe("admin content workspace UI contracts", () => {
   it("the module workspace carries its state in the shared header, not a state rail (#1046)", () => {
     const shellHtml = readFile("public/admin-content.html");
     expect(shellHtml).not.toContain('id="stateRail"');
-    for (const id of ["moduleWorkspaceTitle", "moduleLifecycleBadge", "moduleDirtyBadge", "workspaceActions", "previewShows"]) {
-      expect(shellHtml).toContain(`id="${id}"`);
+    // #1046 (14.09): hodet (navn, merker, Lagre/Avbryt, handlinger, språk, faner) tegnes av form-page.js
+    // i #moduleFormHead — modulen har ikke lenger et eget hode i HTML-en.
+    expect(shellHtml).toContain('id="moduleFormHead"');
+    for (const id of ["moduleWorkspaceTitle", "moduleLifecycleBadge", "moduleDirtyBadge", "workspaceActions", "previewLocaleBar", "tabEdit"]) {
+      expect(shellHtml).not.toContain(`id="${id}"`);
+    }
+    expect(shellHtml).toContain('id="previewShows"');
+    const shellJs = readFile("public/static/admin-content-shell.js");
+    expect(shellJs).toContain('import { createFormPage, formPageTexts } from "./form-page.js"');
+    expect(shellJs).toMatch(/formPage = createFormPage\(\{\s*\n\s*host: moduleFormHost/);
+    // Lagre/Avbryt, «ulagret» og fanelinja er form-page sine — skallet har ingen egne.
+    for (const own of ["moduleSaveBtn", "moduleCancelBtn", "moduleDirtyBadge", "tabButtons", "renderPreviewLocaleBar"]) {
+      expect(shellJs).not.toContain(own);
     }
   });
 
@@ -44,15 +55,15 @@ describe("admin content workspace UI contracts", () => {
     const shellHtml = readFile("public/admin-content.html");
     const shellJs = readFile("public/static/admin-content-shell.js");
 
-    expect(shellHtml).toContain('id="tabPreview"');
+    // Panelene står i sida; fanene tegnes av form-page.js (formTab-edit/preview/settings).
     expect(shellHtml).toContain('id="tabPanelModule"');
-    expect(shellHtml).toContain('id="tabEdit"');
-    expect(shellHtml).toContain('id="tabSettings"');
     expect(shellHtml).toContain('id="tabPanelSettings"');
-    expect(shellHtml).toContain('id="chatMessages"');
+    expect(shellJs).toMatch(/TAB_ORDER = \["edit", "preview", "settings"\]/);
+    // #1046 steg 2: ingen samtalerute; spørsmål går i valgdialogen, kilde/plan i Generer-dialogen.
+    expect(shellHtml).not.toContain('id="chatMessages"');
+    expect(shellHtml).toContain('id="dialogChoice"');
+    expect(shellHtml).toContain('id="dialogGeneratePlan"');
     expect(shellHtml).toContain('id="previewContent"');
-    // v2.19.0: the fixed action bar replaced buttons parked in the conversation log.
-    expect(shellHtml).toContain('id="workspaceActions"');
 
     expect(shellHtml).not.toContain('id="settingsOpenAdvanced"');
     expect(shellHtml).not.toContain('id="modeSwitchAdvanced"');
@@ -198,16 +209,17 @@ describe("shell JS contracts", () => {
     expect(js).toContain('querySelectorAll("[data-i18n]")');
   });
 
-  it("shell page h1 carries data-i18n so it translates with locale", () => {
-    const html = readFile("public/admin-content.html");
-    expect(html).toContain('data-i18n="shell.page.title"');
+  it("the module header translates with the UI locale (typen fra t(), hodet tegnes på nytt)", () => {
+    // #1046 (14.09): hodet tegnes av form-page.js fra t(); ved menyspråkbytte tegnes det på nytt.
+    const js = readFile("public/static/admin-content-shell.js");
+    expect(js).toContain('typeLabel: t("shell.page.title")');
+    expect(js).toMatch(/uiLocaleSelect\.addEventListener\("change"[\s\S]*?formPage\?\.render\(\)/);
   });
 
-  it("logForm accepts initialValue argument for pre-fill", () => {
+  it("#1046 steg 2: the source-material form is mounted in the Generate dialog, not a chat log", () => {
     const js = readFile("public/static/admin-content-shell.js");
-    // Signature must carry initialValue so direct-edit flow can pre-fill fields.
-    expect(js).toMatch(/function logForm\s*\([^)]*initialValue/);
-    expect(js).toContain("entry.initialValue");
+    expect(js).not.toMatch(/function logForm\s*\(/);
+    expect(js).toContain("entry.mount.replaceChildren(wrap)");
   });
 
   // v2.18.13 reversed this contract, so the test is inverted rather than deleted — the reason it
@@ -270,7 +282,15 @@ describe("shell JS contracts", () => {
     // står i, og krever at funksjonen enten ER porten, står i GENERATORS, eller er ført opp som et
     // begrunnet unntak. Et nytt kall et sted ingen har vurdert gjør testen rød.
     it("no writer reaches sessionDraft outside the gate without an explicit exemption", () => {
-      const js = readFile("public/static/admin-content-shell.js");
+      // #1046 punkt 2: skallet er delt i moduler som får `commitSessionDraftPatch` gjennom ctx —
+      // vakten leser dem alle. Én kilde til hvilke: ctx-blokkene i skallet nevner funksjonen.
+      const SHELL_MODULES = [
+        "public/static/admin-content-shell.js",
+        "public/static/admin-content-publish.js",
+        "public/static/admin-content-settings-tab.js",
+        "public/static/admin-content-criteria.js",
+      ];
+      const js = SHELL_MODULES.map(readFile).join("\n");
 
       // Bevisste unntak, med grunn. Å legge noe til her er en avgjørelse, ikke en formalitet.
       const EXEMPT = {
@@ -284,8 +304,9 @@ describe("shell JS contracts", () => {
         translateMissingLocalesThenPublish: "explicit gap-fill remedy that saves immediately",
       };
 
-      // Funksjonshoder i filen, i rekkefølge, så et kall kan tilordnes den som omslutter det.
-      const heads = [...js.matchAll(/^(?:async\s+)?function\s+([A-Za-z0-9_$]+)\s*\(/gm)]
+      // Funksjonshoder i filene, i rekkefølge, så et kall kan tilordnes den som omslutter det.
+      // Innrykk tillatt: i de utskilte modulene ligger funksjonene inne i en fabrikk.
+      const heads = [...js.matchAll(/^\s*(?:async\s+)?function\s+([A-Za-z0-9_$]+)\s*\(/gm)]
         .map((m) => ({ name: m[1], index: m.index }));
       const enclosing = (index) => {
         let found = null;
@@ -312,20 +333,13 @@ describe("shell JS contracts", () => {
       ).toEqual([]);
     });
 
-    it("the gate parks rather than commits while the edit form is dirty", () => {
-      const js = readFile("public/static/admin-content-shell.js");
-      const start = js.indexOf("function commitOrProposeGenerated(");
-      expect(start).toBeGreaterThan(-1);
-      const body = js.slice(start, js.indexOf("\n}", js.indexOf("return false;", start)));
-
-      // `hasOpenEditForm` is the dirty check — `isEditFormOpen` is mere presence, and since
-      // v2.18.13 the form is present the whole time Rediger is, so gating on it would turn every
-      // generation into a proposal.
-      expect(body).toContain("hasOpenEditForm()");
-      expect(body).not.toContain("isEditFormOpen()");
-      expect(body).toContain("shell.proposal.use");
-      expect(body).toContain("shell.proposal.discard");
-    });
+    it("#1046 steg 2: no proposal mechanism — the generated result goes into the form the dialog announced", () => {
+    const body = readFile("public/static/admin-content-shell.js");
+    expect(body).not.toContain("pendingProposal");
+    expect(body).not.toContain("shell.proposal.");
+    // Det skrevne tas med i utkastet før resultatet legges inn.
+    expect(body).toMatch(/if \(hasOpenEditForm\(\)\) captureEditFormIntoDraft\(\);\s*\n\s*commitSessionDraftPatch\(patch/);
+  });
 
     it("marks the Innstillinger tab when generated criteria land out of sight", () => {
       const js = readFile("public/static/admin-content-shell.js");
@@ -346,8 +360,6 @@ describe("shell JS contracts", () => {
       "shell.directEdit.nameLabel",
       "shell.directEdit.submit",
       "shell.directEdit.translating",
-      "shell.directEdit.done",
-      "shell.directEdit.translateError",
     ];
     for (const key of keys) {
       // Must appear at least 3 times: en-GB base + nb override + nn override
@@ -366,10 +378,18 @@ describe("shell JS contracts", () => {
     expect(js).toContain("preview-edit-textarea");
   });
 
-  it("preview-pane--editing CSS class locks locale bar during edit", () => {
-    const html = readFile("public/admin-content.html");
-    expect(html).toContain("preview-pane--editing");
-    expect(html).toMatch(/preview-pane--editing[^{]*\{[^}]*pointer-events:\s*none/);
+  it("switching content language with an open edit form asks first and re-opens the form", () => {
+    // Språkpillene er form-page sine; byttet går gjennom switchContentLocale, som spør (#920) når
+    // et skjema med endringer ville blitt tegnet om, og åpner skjemaet igjen i det nye språket.
+    // (Den gamle CSS-låsen `.preview-pane--editing .preview-locale-btn` traff aldri: pillene lå
+    // utenfor forhåndsvisningsruten.)
+    const js = readFile("public/static/admin-content-shell.js");
+    const start = js.indexOf("function switchContentLocale(");
+    const fn = js.slice(start, js.indexOf("\nfunction ", start + 1));
+    expect(fn).toContain("if (!confirmLocaleSwitchDiscard()) return false;");
+    expect(fn).toContain("enterPreviewEditMode({ force: true })");
+    expect(js).toContain("onChange: switchContentLocale");
+    expect(readFile("public/admin-content.html")).not.toContain("preview-locale-btn");
   });
 
   it("PATCH /modules/:id/title route exists in backend router", () => {

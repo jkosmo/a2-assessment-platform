@@ -8,6 +8,21 @@
   z-index: 1000;
   pointer-events: none;
 }
+/* Regionen er en popover (toppsjiktet, over modale dialoger) — nettleserens popover-stil
+   (sentrert boks med ramme og bakgrunn) nullstilles, plasseringen over gjelder. */
+.toast-region:popover-open {
+  display: grid;
+  inset: auto;
+  top: calc(var(--space-2) * 1.25);
+  right: calc(var(--space-2) * 1.25);
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  height: auto;
+  overflow: visible;
+}
 
 .toast {
   pointer-events: auto;

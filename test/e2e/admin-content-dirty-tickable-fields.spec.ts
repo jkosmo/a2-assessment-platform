@@ -45,9 +45,9 @@ test.describe("#973 unsaved-changes guard covers tickable fields", () => {
     await expect(answers.nth(1)).toBeChecked();
 
     // CONTROL: nothing touched, so leaving Rediger must be silent.
-    await page.locator("#tabSettings").click();
+    await page.locator("#formTab-settings").click();
     await expect(page.locator("#dialogUnsavedTabSwitch")).toBeHidden();
-    await page.locator("#tabEdit").click();
+    await page.locator("#formTab-edit").click();
     await page.locator("#previewEditTitle").waitFor();
 
     // The author corrects the answer key — the one field on this form that holds its state in
@@ -56,10 +56,10 @@ test.describe("#973 unsaved-changes guard covers tickable fields", () => {
 
     // Produkteier 13.09: fanebytte spør ikke. Endringen følger med til Innstillinger (hodet sier
     // «Ulagrede endringer») og står der når man kommer tilbake.
-    await page.locator("#tabSettings").click();
+    await page.locator("#formTab-settings").click();
     await expect(page.locator("#dialogUnsavedTabSwitch")).toBeHidden();
-    await expect(page.locator("#moduleDirtyBadge")).toHaveClass(/is-dirty/);
-    await page.locator("#tabEdit").click();
+    await expect(page.locator("#formPageDirty")).toHaveClass(/is-dirty/);
+    await page.locator("#formTab-edit").click();
     await expect(page.locator('input[name="previewEditCorrectAnswer0"]').nth(2)).toBeChecked();
   });
 
@@ -153,23 +153,23 @@ test.describe("#973 unsaved-changes guard covers tickable fields", () => {
     });
 
     await page.goto("/admin-content/module/module-1/conversation");
-    await page.locator("#tabSettings").click();
+    await page.locator("#formTab-settings").click();
     const visible = page.locator("#settingsCriteriaEditor .vk-visible").first();
     await expect(visible).toBeChecked();
 
     // CONTROL: looking at the criteria is not editing them.
-    await page.locator("#tabEdit").click();
+    await page.locator("#formTab-edit").click();
     await expect(page.locator("#dialogUnsavedTabSwitch")).toBeHidden();
-    await page.locator("#tabSettings").click();
+    await page.locator("#formTab-settings").click();
 
     await page.locator("#settingsCriteriaEditor .vk-visible-toggle").first().click();
     await expect(visible).not.toBeChecked();
 
     // Produkteier 13.09: fanebytte spør ikke — endringen følger med og står der ved retur.
-    await page.locator("#tabEdit").click();
+    await page.locator("#formTab-edit").click();
     await expect(page.locator("#dialogUnsavedTabSwitch")).toBeHidden();
-    await expect(page.locator("#moduleDirtyBadge")).toHaveClass(/is-dirty/);
-    await page.locator("#tabSettings").click();
+    await expect(page.locator("#formPageDirty")).toHaveClass(/is-dirty/);
+    await page.locator("#formTab-settings").click();
     await expect(page.locator("#settingsCriteriaEditor .vk-visible").first()).not.toBeChecked();
   });
 });

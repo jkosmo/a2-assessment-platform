@@ -169,8 +169,10 @@ describe("state rail is gone — badges in the header, «preview shows» in the 
     const html = readFile("public/admin-content.html");
     expect(html).not.toContain('id="stateRail"');
     for (const id of ["srEditing", "srLive", "srChanges", "srPreview", "srModuleName"]) expect(html).not.toContain(`id="${id}"`);
-    expect(html).toContain('id="moduleLifecycleBadge"');
-    expect(html).toContain('id="moduleDirtyBadge"');
+    // #1046 (14.09): hodet tegnes av form-page.js inn i #moduleFormHead — sida har bare festet.
+    expect(html).toContain('id="moduleFormHead"');
+    expect(html).not.toContain('id="moduleLifecycleBadge"');
+    expect(html).not.toContain('id="moduleDirtyBadge"');
     expect(html).toContain('id="previewShows"');
   });
 
@@ -182,7 +184,8 @@ describe("state rail is gone — badges in the header, «preview shows» in the 
 
   it("the shell writes the header badges and «preview shows» from the same chain facts", () => {
     const js = readFile("public/static/admin-content-shell.js");
-    expect(js).toContain('getElementById("moduleLifecycleBadge")');
+    // Merkene i hodet: statusHtml til form-page.js.
+    expect(js).toContain("statusHtml: moduleStatusBadgesHtml");
     expect(js).toContain('getElementById("previewShows")');
     expect(js).toContain('"stateRail.live.published"');
     expect(js).toContain('"shell.header.draftVersion"');

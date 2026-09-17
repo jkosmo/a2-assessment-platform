@@ -91,7 +91,7 @@ test.describe("admin content — module-type bugs (#655)", () => {
     await page.goto("/admin-content/module/module-1/conversation?resumeEditing=1");
     await page.locator("#previewEditTitle").waitFor();
 
-    await page.locator("#moduleSaveBtn").click();
+    await page.locator("#formSaveBtn").click();
 
     // The save must succeed — NOT be blocked by the scenario-required guard.
     await expect(
@@ -137,7 +137,7 @@ test.describe("admin content — module-type bugs (#655)", () => {
     // #896 S2: Lagre translates and saves in one step - and an untouched form saves
     // nothing at all, so make a real edit first.
     await page.locator("#previewEditMcqStem0").fill("Oppdatert MCQ-only stamme");
-    await page.locator("#moduleSaveBtn").click();
+    await page.locator("#formSaveBtn").click();
 
     // Save must not hit the scenario-required guard, and must persist MCQ_ONLY.
     await expect(
@@ -182,7 +182,7 @@ test.describe("admin content — module-type bugs (#655)", () => {
     await page.goto("/admin-content/module/module-1/conversation");
     await page.locator("#previewEditTitle").waitFor();
     await page.locator("#previewEditTitle").fill("Union basics");
-    await page.locator("#moduleSaveBtn").click();
+    await page.locator("#formSaveBtn").click();
 
     // Translation runs in the background. v2.18.13: Rediger stays in edit mode after the save, so
     // "settled" is no longer "the form went away" — it is the localisation calls having landed.

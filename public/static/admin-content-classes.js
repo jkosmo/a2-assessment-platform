@@ -5,9 +5,10 @@ import { renderWorkspaceNavigationWithProfile } from "./workspace-nav.js";
 import { showToast } from "/static/toast.js";
 import { describeApiError } from "/static/api-error.js";
 import { supportedLocales, localeLabels, translations as adminContentTranslations } from "/static/i18n/admin-content-translations.js";
+import { resolveInitialLocale, createTranslator } from "/static/i18n-locale.js";
 import { renderOwnerPanel } from "/static/owner-panel.js";
 import { createListPage } from "/static/list-page.js";
-import { createFormPage } from "/static/form-page.js";
+import { createFormPage, formPageTexts } from "/static/form-page.js";
 import { lifecycleOf } from "/static/content-status-badge.js";
 
 // #645/CL-3: admin UI for classes (cohorts) — list, create, manage members, assign courses.
@@ -19,17 +20,8 @@ const localeSelect = document.getElementById("localeSelect");
 const appVersionLabel = document.getElementById("appVersion");
 
 // #705-UX(D): klasser-siden manglet i18n-oppslag, så topp-navet viste råe nøkler (nav.participant …).
-let currentLocale = (() => {
-  const stored = localStorage.getItem("participant.locale");
-  if (stored && supportedLocales.includes(stored)) return stored;
-  const b = navigator.language?.toLowerCase() ?? "";
-  if (b.startsWith("nb")) return "nb";
-  if (b.startsWith("nn")) return "nn";
-  return "en-GB";
-})();
-function tNav(key) {
-  return adminContentTranslations[currentLocale]?.[key] ?? adminContentTranslations["en-GB"]?.[key] ?? key;
-}
+let currentLocale = resolveInitialLocale(supportedLocales);
+const { t: tNav } = createTranslator(adminContentTranslations, () => currentLocale);
 
 // #972/#965: ni toaster og to tomtilstander viste `err.message` — som apiFetch bygger som
 // `"<status>: <hele JSON-kroppen>"`. En norsk forfatter som ikke eier klassen fikk altså
@@ -64,9 +56,9 @@ function escapeHtml(s) {
 }
 
 // #1038: kurstittelen kommer ferdig valgt for leserens språk fra serveren (`title` på
-// klassens tildelinger, `displayTitle` på kurslista). Parseren som sto her hadde sin egen
-// reservekjede (nb → en-GB → nn → første) — en annen enn serverens, og de to var uenige om hva en
-// delvis oversatt tittel skulle vise. Klienten viser strengen den får; språket sendes som `x-locale`.
+// klassens tildelinger, `displayTitle` på kurslista). Klienten skal ikke ha egen reservekjede for
+// språk — den ville vært en annen enn serverens, og de to ville vært uenige om hva en delvis oversatt
+// tittel skal vise. Klienten viser strengen den får; språket sendes som `x-locale`.
 function courseTitle(value) {
   return typeof value === "string" && value.trim() ? value : "(uten tittel)";
 }
@@ -98,14 +90,9 @@ function getListPage() {
     host: pageContent,
     ids: { tbody: "classesTableBody", search: "classesSearch" },
     texts: {
-      title: "Klasser",
-      lead: "Grupper av deltakere som får kurs tildelt samlet. «Alle deltakere» er en systemklasse med alle som har deltakerrolle.",
-      searchPlaceholder: "Søk på klassenavn…",
-      searchLabel: "Søk i klasser",
-      filterGroupLabel: "Filtrer klasser",
-      empty: "Ingen klasser ennå.",
-      emptyFiltered: "Ingen klasser i denne visningen.",
-      loadError: "Kunne ikke laste klasser.",
+      title: tNav("classes.title"), lead: tNav("classes.lead"),
+      searchPlaceholder: tNav("classes.searchPlaceholder"), searchLabel: tNav("classes.searchLabel"), filterGroupLabel: tNav("classes.filterGroupLabel"),
+      empty: tNav("classes.empty"), emptyFiltered: tNav("classes.emptyFiltered"), loadError: tNav("classes.loadError"), more: tNav("form.more"),
     },
     headerActions: [
       { id: "importUsersBtn", label: "Importer brukere", title: "Importer brukere fra en JSON-fil eksportert fra Entra (delta-synk)", hidden: !isAdministrator },
@@ -294,19 +281,13 @@ function goToList() {
   return renderListView();
 }
 
-const FORM_TEXTS = {
-  back: "← Tilbake til klasser", typeLabel: "Klasse", untitled: "Ny klasse",
-  savedAll: "Alt lagret", unsaved: "Ulagrede endringer", save: "Lagre", cancel: "Avbryt",
-  leaveConfirm: "Du har ulagrede endringer. Vil du forlate sida uten å lagre?",
-  discardConfirm: "Forkaste de ulagrede endringene?",
-  contentLocale: "Innholdsspråk:", required: "(påkrevd)",
-};
+const formTexts = () => formPageTexts(tNav, { back: tNav("classes.back"), typeLabel: tNav("classes.typeLabel"), untitled: tNav("classes.untitled") });
 
 function getFormPage() {
   if (formPage) return formPage;
   formPage = createFormPage({
     host: pageContent,
-    texts: FORM_TEXTS,
+    texts: formTexts,
     onBack: () => goToList(),
     title: () => (document.getElementById("className")?.value ?? openClassState?.klass?.name ?? "").trim(),
     item: () => openClassState?.klass ?? null,

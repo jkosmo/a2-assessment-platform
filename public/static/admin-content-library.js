@@ -8,6 +8,7 @@ import {
   localeLabels,
   translations as adminContentTranslations,
 } from "/static/i18n/admin-content-translations.js";
+import { resolveInitialLocale, createTranslator } from "/static/i18n-locale.js";
 import {
   apiFetch,
   buildConsoleHeaders,
@@ -29,26 +30,11 @@ import { renderWorkspaceNavigationWithProfile } from "./workspace-nav.js";
 // i18n
 // ---------------------------------------------------------------------------
 
-let currentLocale = (() => {
-  const stored = localStorage.getItem("participant.locale");
-  if (stored && supportedLocales.includes(stored)) return stored;
-  const b = navigator.language?.toLowerCase() ?? "";
-  if (b.startsWith("nb")) return "nb";
-  if (b.startsWith("nn")) return "nn";
-  return "en-GB";
-})();
+let currentLocale = resolveInitialLocale(supportedLocales);
 
 const translations = { ...adminContentTranslations[currentLocale], ...adminContentTranslations["en-GB"] };
 
-function t(key) {
-  return adminContentTranslations[currentLocale]?.[key] ?? adminContentTranslations["en-GB"]?.[key] ?? key;
-}
-
-function tf(key, vars = {}) {
-  let s = t(key);
-  for (const [k, v] of Object.entries(vars)) s = s.replaceAll(`{${k}}`, String(v));
-  return s;
-}
+const { t, tf } = createTranslator(adminContentTranslations, () => currentLocale);
 
 // #972: fem toaster og fire tekstfelt her viste `err.message` — altså `"<status>: <hele
 // JSON-kroppen>"` fra apiFetch. De norske `?? "Kunne ikke arkivere modul."`-fallbackene var død
@@ -89,7 +75,7 @@ const libraryContent = document.getElementById("libraryContent");
 const coursesPopover = document.getElementById("coursesPopover");
 const coursesPopoverList = document.getElementById("coursesPopoverList");
 const navKalibrering = document.getElementById("navKalibrering");
-// v1.2.11: Rydd upubliserte (kun ADMINISTRATOR).
+// Rydd upubliserte (kun ADMINISTRATOR).
 const purgeUnpublishedBtn = document.getElementById("purgeUnpublishedBtn");
 const purgeUnpublishedDialog = document.getElementById("purgeUnpublishedDialog");
 const purgePreviewLoading = document.getElementById("purgePreviewLoading");
@@ -111,13 +97,12 @@ const purgeError = document.getElementById("purgeError");
 let allModules = []; // siste hentede liste — slås opp av «Brukt i kurs»-popoveren.
 // #1046: lista er den felles listesida (list-page.js). Her ligger bare oppskriften for moduler.
 let listPage = null;
-// v1.2.12 (#348): pendingCreateTarget fjernet — én create-path, alltid Samtale.
 
 // ---------------------------------------------------------------------------
 // Status badge helpers
 // ---------------------------------------------------------------------------
 
-// v1.2.17: bruk i18n-keyene fra adminContent.promptDialog.certificationLevel{Basic,
+// Bruk i18n-nøklene fra adminContent.promptDialog.certificationLevel{Basic,
 // Intermediate,Advanced} i stedet for hardkodet engelsk. "Foundation" var dead-code —
 // skjemaet aksepterer kun basic/intermediate/advanced.
 const CERT_I18N_KEYS = {
@@ -185,15 +170,10 @@ function getListPage() {
     host: libraryContent,
     ids: { tbody: "libraryTableBody", search: "librarySearch", courseFilter: "libraryCourseFilter" },
     texts: {
-      title: "Moduler",
-      lead: "Vurderingsmoduler du kan redigere, publisere og bruke i kurs.",
-      searchPlaceholder: "Søk på modulnavn eller modul-ID…",
-      searchLabel: "Søk i modulbiblioteket",
-      filterGroupLabel: "Filtrer moduler",
-      courseFilterLabel: "Kurs:", courseFilterAll: "Alle kurs", courseFilterNone: "Ikke i noe kurs",
-      empty: "Ingen moduler ennå.",
-      emptyFiltered: "Ingen moduler matcher søket.",
-      loadError: "Kunne ikke laste moduler.",
+      title: t("library.title"), lead: t("library.lead"),
+      searchPlaceholder: t("library.searchPlaceholder"), searchLabel: t("library.searchLabel"), filterGroupLabel: t("library.filterGroupLabel"),
+      courseFilterLabel: t("library.courseFilterLabel"), courseFilterAll: t("library.courseFilterAll"), courseFilterNone: t("library.courseFilterNone"),
+      empty: t("library.empty"), emptyFiltered: t("library.emptyFiltered"), loadError: t("library.loadError"), more: t("form.more"),
     },
     headerActions: [
       { id: "importModulePackageBtn", label: "Importer modul" },
@@ -202,7 +182,7 @@ function getListPage() {
     headerExtraHtml: `<input id="importModulePackageFile" type="file" accept="application/json,.json" hidden />`,
     // #1046 B2: samme rekkefølge som Kurs og Seksjoner; modulens egen «Har upublisert utkast» sist.
     // Default «Aktive», så forfatterne lander på det som er aktuelt nå.
-    // v1.2.20 (#460): «Har upublisert utkast» dekker både aldri publisert OG live med et nyere utkast —
+    // #460: «Har upublisert utkast» dekker både aldri publisert OG live med et nyere utkast —
     // regelen bor i matchesLifecycleFilter (content-status-badge.js), felles for alle listene.
     filters: {
       options: [["all", "Alle"], ["active", "Aktive"], ["published", "Publiserte"], ["archived", "Arkiverte"], ["unpublished_draft", "Har upublisert utkast"]],
@@ -231,7 +211,7 @@ function getListPage() {
       const canManage = m.canManage !== false;
       const id = escapeHtml(m.id);
       const title = escapeHtml(m.title ?? m.id);
-      // v1.2.20 (#459): Avpubliser bare for moduler som er aktivt publisert.
+      // #459: Avpubliser bare for moduler som er aktivt publisert.
       const isPublished = lifecycle === "published" || lifecycle === "published_with_draft";
       return [
         // #896 S3c: knappen sier hva den gjør — åpner modulen.
@@ -363,8 +343,8 @@ async function restoreModule(moduleId, btn) {
   }
 }
 
-// v1.2.20 (#459): Avpubliser fra bibliotek-rad. Krever skrevet bekreftelse via
-// window.confirm. POSTer til samme /unpublish-endepunkt som Avansert bruker.
+// #459: Avpubliser fra bibliotek-rad. Krever bekreftelse via window.confirm. POSTer til
+// /unpublish-endepunktet.
 async function unpublishModuleFromRow(moduleId, moduleTitle, btn) {
   const confirmed = window.confirm(
     `Avpubliser «${moduleTitle}»?\n\n` +
@@ -387,7 +367,7 @@ async function unpublishModuleFromRow(moduleId, moduleTitle, btn) {
 // Duplicate
 // ---------------------------------------------------------------------------
 
-// v1.2.12 (#348): "Dupliser" gjør nå full strukturell kopi via export → import-pipelinen.
+// #348: «Dupliser» er en full strukturell kopi via export → import-pipelinen.
 // Tidligere versjon kopierte kun rubric + promptTemplate, og lot taskText/MCQ/scenario
 // være tomt — det matchet ikke det brukerne forventer av "Dupliser". Pipelinen gjør samme
 // jobb som "Eksporter (.json) → Importer modul-pakke (.json)"-paret, bare bundlet i ett
@@ -398,7 +378,7 @@ async function duplicateModule(moduleId, btn) {
   const sourceTitle = original?.title ?? "Modul";
 
   try {
-    // v1.2.13: bytt fra /export (live editing-bundle) til /export-package — det er
+    // /export-package, ikke /export (live editing-bundle) — det er
     // sistnevnte som returnerer a2-content-export/v1-envelope-en /import faktisk forventer.
     const exportResult = await apiFetch(`/api/admin/content/modules/${encodeURIComponent(moduleId)}/export-package`, getHeaders);
     const envelope = exportResult?.envelope ?? exportResult;
@@ -416,7 +396,7 @@ async function duplicateModule(moduleId, btn) {
       envelope.module.module.title = `${srcTitle} (kopi)`;
     }
 
-    // v1.2.14 (#456): autoPublish=false så kopien lander som "Upublisert utkast" uansett
+    // #456: autoPublish=false så kopien lander som «Upublisert utkast» uansett
     // om kilden var publisert. Forfatter skal eksplisitt publisere etter gjennomgang.
     const importResult = await apiFetch("/api/admin/content/modules/import", getHeaders, {
       method: "POST",
@@ -469,7 +449,7 @@ function openCreateDialog() {
   window.location.href = "/admin-content/module/new/conversation";
 }
 
-// v1.2.11: åpne purge-dialog, hent kandidat-preview fra backend og render lister.
+// Åpne purge-dialogen, hent kandidat-forhåndsvisning fra backend og tegn listene.
 async function openPurgeDialog() {
   if (!purgeUnpublishedDialog) return;
   purgePreviewLoading.hidden = false;
@@ -640,7 +620,7 @@ async function init() {
     fetchQueueCounts(getHeaders).then(counts => applyNavReviewBadge(workspaceNav, counts)).catch(() => {});
   }
 
-  // v1.2.11: Rydd upubliserte — kun ADMINISTRATOR ser knappen.
+  // Rydd upubliserte — kun ADMINISTRATOR ser knappen.
   if (purgeUnpublishedBtn) {
     const isAdmin = resolveActiveWorkspaceRoles().includes("ADMINISTRATOR");
     purgeUnpublishedBtn.hidden = !isAdmin;
@@ -689,9 +669,7 @@ async function init() {
       });
       if (!result?.moduleId) throw new Error("Import-respons mangler moduleId.");
       showToast("Modul-pakken er importert som utkast. Gå gjennom den og publiser når den er klar.");
-      // #896: land i arbeidsrommet, ikke i Avansert. Avansert-siden skal bort (S3c), og å sende
-      // forfatteren dit rett etter en import ga dem den ene flaten epicen forsøker å avvikle —
-      // og den uten publiseringsgatens utbedringshandling. Rapportert fra stage 2026-08-16.
+      // Land i arbeidsrommet: der er publiseringsgaten med «Oversett det som mangler» (#896).
       window.location.href = `/admin-content/module/${encodeURIComponent(result.moduleId)}/conversation`;
     } catch (error) {
       // #937: samme lesbare feil som seksjonsimporten, via den delte oversetteren.
@@ -699,7 +677,7 @@ async function init() {
         notAnEnvelope: t("adminContent.library.importNotAnEnvelope"),
       }, t);
       showToast(tf("adminContent.library.importFailed", { reason: d.headline }), "error", d.detail);
-      // v1.2.18 (#458): toast har role="alert" så SR annonserer feilen. I tillegg flytter
+      // #458: toast har role="alert" så SR annonserer feilen. I tillegg flytter
       // vi fokus tilbake til importbtn så tastatur-bruker kan re-trigge uten å Tab-e fra
       // den (nå tomme) file-input-en.
       importModulePackageBtn?.focus();

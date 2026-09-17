@@ -14,11 +14,11 @@
       /* #896 S3c: `.advanced-link` styled the header link to the Avansert page. Ingen elementer
          bærer klassen lenger — fjernet 2026-08-18. */
 
-      .workspace-shell { display: grid; grid-template-columns: 1fr 380px; gap: var(--space-2); align-items: start; }
+      /* #1046 steg 2: samtaleruta er borte — skjemaet står alene i full bredde. */
+      .workspace-shell { display: block; }
       /* #360 (200% zoom): bump fra 900px → 1024px slik at 1920×1080 + 200% zoom (effektiv
          960px) trigger stablet layout. Sticky-preview er borte globalt (se preview-pane
          CSS), så ingen stacking-overrides her — bare grid-direction. */
-      @media (max-width: 1024px) { .workspace-shell { grid-template-columns: 1fr; } }
 
       /* ── Preview pane ─────────────────────────────────────────────────────── */
       /* v1.1.92 (#360 follow-up): bring back position: sticky, but ONLY in dual-column
@@ -32,17 +32,6 @@
       @media (min-width: 1025px) {
         .preview-pane { position: sticky; top: var(--space-2); }
       }
-      /* Locale bar only shown when a module is loaded (JS adds .visible) */
-      /* Samme rytme som form-page.js: tittel→merker 6, merker→språk 10, språk→faner 8 (+ fanens 8 px). */
-      .preview-locale-bar { display: none; gap: 4px; align-items: center; margin: 0 0 8px; }
-      .preview-locale-bar.visible { display: flex; }
-      .content-locale-label { font-size: 12px; font-weight: 600; color: var(--color-meta); margin-right: 4px; }
-      /* width/min-height: shared.css gir alle knapper `width:100%; min-height:40px` for skjemaer.
-         Inne i den smale forhåndsvisningsruten merket man det ikke; over hele arbeidsflaten ble de
-         tre språkknappene til tre digre bokser. Tredje gang samme felle i denne endringen. */
-      .preview-locale-btn { background: var(--color-surface); border: 1px solid var(--color-border-soft); border-radius: 999px; padding: 4px 12px; font-size: 12px; font-weight: 600; color: var(--color-meta); cursor: pointer; width: auto; min-height: 0; flex: 0 0 auto; }
-      .preview-locale-btn.active { background: var(--color-blue-light); border-color: var(--color-blue); color: var(--color-link-active); }
-      .preview-locale-btn:hover:not(.active) { border-color: var(--color-link-hover-border); color: var(--color-text); }
 
       .preview-module-header { display: flex; justify-content: space-between; align-items: flex-start; gap: var(--space-1); margin-bottom: 8px; }
       .preview-module-title { font-size: 18px; font-weight: 700; color: var(--color-text); }
@@ -53,6 +42,17 @@
       .preview-section-label { font-size: 13px; font-weight: 600; color: var(--color-meta); margin: var(--space-1) 0 4px; }
       .preview-edit-mcq-add { margin: 6px 0 var(--space-2); }
       #dialogGenerate .chat-form-col { gap: 8px; }
+      #dialogGeneratePlan .chat-textarea { padding: 6px 10px; font-size: 13px; }
+      .dialog-choice-body { font-size: 14px; line-height: 1.5; }
+      .dialog-choice-body ul { margin: 8px 0 0; padding-left: 20px; }
+      /* .row er et to-kolonners rutenett (skjema); knapperaden i dialogene er en flex-rad til høyre. */
+      .dialog-actions { display: flex; justify-content: flex-end; gap: var(--space-1); margin-top: var(--space-2); }
+      .dialog-actions button { width: auto; min-height: 0; padding: 8px 14px; }
+      .dialog-status { display: flex; align-items: center; gap: 8px; margin-top: var(--space-2); font-size: 13px; color: var(--color-text); }
+      .dialog-status.is-error { color: #b42318; }
+      .dialog-status.is-error .dialog-status-spinner { display: none; }
+      .dialog-status-spinner { width: 14px; height: 14px; flex: 0 0 auto; border: 2px solid rgba(0, 0, 0, 0.18); border-top-color: var(--color-blue); border-radius: 50%; animation: spin 0.8s linear infinite; }
+      .dialog-status-abort { width: auto; min-height: 0; padding: 2px 8px; font-size: 12px; background: none; border: 1px solid var(--color-border-soft); border-radius: 999px; color: var(--color-meta); cursor: pointer; }
       #dialogGenerate .chat-textarea, .dialog-textarea { width: 100%; box-sizing: border-box; font: inherit; font-size: 14px; padding: 8px 10px; border: 1px solid var(--color-border-soft); border-radius: var(--radius-card); }
       .revise-example { width: auto; min-height: 0; padding: 4px 10px; font-size: 12px; border-radius: 999px; }
       .preview-edit-input { width: 100%; box-sizing: border-box; font: inherit; font-size: 15px; padding: 8px 10px; border: 1px solid var(--color-border-soft); border-radius: var(--radius-card); background: #fff; }
@@ -75,7 +75,6 @@
       .preview-empty { color: var(--color-meta); font-style: italic; }
 
       /* Preview edit mode — fields match preview visual language exactly */
-      .preview-pane--editing .preview-locale-btn { opacity: 0.4; pointer-events: none; }
       .preview-edit-title {
         font-size: 18px; font-weight: 700; color: var(--color-text);
         border: none; border-bottom: 2px solid var(--color-blue);
@@ -135,38 +134,10 @@
       .module-status-badge.draft { background: #fff3db; color: #7a4b00; }
       .module-status-badge.shell { background: #edf1f7; color: #42526b; }
 
-      /* ── Chat pane ────────────────────────────────────────────────────────── */
-      .chat-pane { display: flex; flex-direction: column; min-height: 60vh; }
-      /* Stage-tilbakemelding 2026-08-17: handlingene lå i samtaleloggen og ble stående grå etter
-         bruk, så høyresiden vokste monotont og de gyldige valgene sank til bunns. De står nå
-         øverst og skroller ikke — loggen under er samtalen. */
       /* #1046 (13.09): handlingene står i hodet som .row-actions/.row-action-btn (shared.css). */
       .workspace-action-btn:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 2px; }
-      .chat-messages { flex: 1; display: flex; flex-direction: column; gap: var(--space-1); padding: var(--space-1); overflow-y: auto; min-height: 200px; }
-
-      .chat-msg { display: flex; }
-      /* v1.1.93 (#360 follow-up): stack bubble + choices vertically for bot messages so
-         choice pills appear BELOW the bubble. Previously default flex-direction: row
-         squeezed choices into a narrow right column when bubble was wide (blueprint
-         editor, criteria editor, etc.), causing button text to wrap character-by-character.
-         User messages stay row-based since they typically have no choices. */
-      .chat-msg--bot { flex-direction: column; align-items: flex-start; }
-      .chat-msg--user { justify-content: flex-end; }
-
-      .chat-bubble { max-width: 90%; padding: 10px 14px; border-radius: 16px; font-size: 14px; line-height: 1.5; }
-      .chat-msg--bot .chat-bubble { background: var(--color-blue-light); color: var(--color-text); border-bottom-left-radius: 4px; }
-      .chat-msg--user .chat-bubble { background: var(--color-navy); color: #fff; border-bottom-right-radius: 4px; }
-      .chat-bubble--progress { display: flex; align-items: center; gap: 8px; color: var(--color-meta); }
-
-      .chat-spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid var(--color-border-soft); border-top-color: var(--color-blue); border-radius: 50%; animation: spin 0.7s linear infinite; flex-shrink: 0; }
       @keyframes spin { to { transform: rotate(360deg); } }
-
-      /* Contain bubble content so long error strings don't cause horizontal scroll */
-      .chat-pane { overflow: hidden; }
-      .chat-bubble { overflow-wrap: break-word; word-break: break-word; min-width: 0; }
-
-      .chat-choices { display: flex; flex-wrap: wrap; gap: 6px; padding: 6px var(--space-1) var(--space-1); max-width: 100%; }
-      .chat-choices--column { flex-direction: column; align-items: flex-start; }
+      /* Kildeverktøyet og planen i «Generer innhold»-dialogen bruker disse (var samtalens skjema). */
       .chat-choice-btn { width: auto !important; max-width: 100% !important; padding: 6px 14px !important; font-size: 13px !important; border-radius: 999px !important; transition: transform 80ms ease-out; }
       /* v1.1.97: subtle tactile feedback on click — knappen "presses" et øyeblikk så
          brukeren ser at klikket ble registrert før neste bot-melding kommer. Pure CSS,
@@ -386,13 +357,12 @@
         color: var(--color-link-active);
       }
 
-      /* #1046 (13.09): fanelinja bruker .form-page-tabs fra shared.css (variant A). */
       /* #926 §6 krav 2: noe landet i en fane forfatteren ikke ser på. Prikken sitter INNI
          pillen (position:relative + absolute) i stedet for som en ::after i tekstflyten, så
          den ikke skyver de andre fanene sidelengs når den dukker opp. Den er dobbelt kodet —
          prikk OG (·) i aria-label via JS — fordi farge alene ikke er et signal. */
-      .module-tab[data-attention="1"] { position: relative; }
-      .module-tab[data-attention="1"]::after {
+      .form-page-tab[data-attention="1"] { position: relative; }
+      .form-page-tab[data-attention="1"]::after {
         content: "";
         position: absolute;
         top: 4px;
@@ -402,18 +372,8 @@
         border-radius: 50%;
         background: var(--color-warning, #b45309);
       }
-      /* Three Norwegian labels plus padding overflow a 320px viewport, and the pill row
-         neither shrinks nor wraps. Let it wrap and tighten the padding instead of pushing
-         the page into horizontal scrolling. */
-      @media (max-width: 480px) {
-        .module-tabs { flex-wrap: wrap; }
-        .module-tab { padding: 6px 12px; }
-      }
       /* Forhåndsvisning: the chat pane is hidden, so the preview takes the full width
          instead of leaving a 380px gap where the chat used to be. */
-      .workspace-shell--preview-only { grid-template-columns: 1fr; }
-      .workspace-shell--chat-hidden { grid-template-columns: 1fr; }
-      .chat-pane-head { display: flex; justify-content: flex-end; padding-bottom: 6px; }
       .preview-shows { margin: 0 0 var(--space-1); color: var(--color-meta); }
       /* Lagre/Avbryt står i hodet; skjemaets egne knapper er der for koden som klikker dem. */
       .preview-edit-actions, #settingsSave { display: none !important; }
@@ -513,46 +473,10 @@
         <a href="/admin-content/calibration" class="content-area-nav-link" id="navKalibrering" hidden>Vurderingskvalitet</a>
       </nav>
 
-      <!-- Produkteier 13.09: handlingsraden på samme linje som tilbake-lenka (form-page.js sin
-           .form-page-topline), så navnet får hele bredden under. -->
-      <div class="form-page-topline" style="margin-bottom:var(--space-1)">
-        <a href="/admin-content" class="back-link">← Tilbake til moduler</a>
-        <div class="form-page-actions">
-          <div id="workspaceActions" class="row-actions workspace-actions" role="group" style="display:none"
-               aria-label="Modulhandlinger" data-i18n-aria-label="shell.actions.groupLabel"></div>
-        </div>
-      </div>
-      <!-- #1046 nivå to (13.09): samme hode som kurs, seksjon og klasse (form-page.js sine klasser):
-           typen som merke over NAVNET, statusmerke + «Alt lagret / Ulagrede endringer» rett under,
-           handlingsraden oppe til høyre. Tilstandslinja med versjonsfakta står som småtekst under. -->
-      <div class="module-workspace-header form-page-title-row">
-        <div class="form-page-title">
-          <span class="form-page-type" data-i18n="shell.page.title">Modul</span>
-          <h1 id="moduleWorkspaceTitle" class="is-untitled" data-i18n="shell.newModule.defaultTitle">Ny modul</h1>
-          <div class="form-page-state">
-            <span id="moduleLifecycleBadge"></span>
-            <span id="moduleDirtyBadge" class="form-state-badge is-clean" hidden></span>
-          </div>
-        </div>
-      </div>
-
-      <!-- Stage-tilbakemelding 2026-08-17: dette var «forhåndsvisningsspråk» og lå INNE i
-           forhåndsvisningsruten — men det styrer språket for Forhåndsvisning, Rediger OG
-           Innstillinger. Skjult fra den ene fanen som ikke er forhåndsvisning, mens det avgjorde
-           hva den fanen redigerte. Nå står det over fanene, synlig fra alle tre. -->
-      <div id="previewLocaleBar" class="preview-locale-bar"></div>
-
-      <!-- #896 S1: three views on the same module. Rediger is the default: opening a module lands
-           where the work happens. #1046 (13.09, variant A): fanelinje som nivå to i toppmenyen,
-           samme rekkefølge som seksjonene — Rediger · Forhåndsvisning · Innstillinger. -->
-      <div class="module-tabs form-page-tabs" role="tablist" aria-label="Modulvisning" data-i18n-aria-label="shell.tab.listLabel">
-        <button type="button" class="module-tab form-page-tab active" id="tabEdit" role="tab" aria-selected="true"
-                aria-controls="tabPanelModule" data-i18n="shell.tab.edit">Rediger</button>
-        <button type="button" class="module-tab form-page-tab" id="tabPreview" role="tab" aria-selected="false"
-                aria-controls="tabPanelModule" data-i18n="shell.tab.preview">Forhåndsvisning</button>
-        <button type="button" class="module-tab form-page-tab" id="tabSettings" role="tab" aria-selected="false"
-                aria-controls="tabPanelSettings" data-i18n="shell.tab.settings">Innstillinger</button>
-      </div>
+      <!-- #1046 (14.09): hodet — tilbake-lenke, handlingsrad med Lagre/Avbryt, navn, statusmerker,
+           «Innholdsspråk:»-piller og fanelinja Rediger · Forhåndsvisning · Innstillinger — tegnes av
+           form-page.js (samme som kurs, seksjon og klasse). Panelene under styres av admin-content-shell.js. -->
+      <div id="moduleFormHead"></div>
 
       <!-- Produkteier 13.09: GDPR-varselet tar for mye plass som boks over skjemaet, og «etter kort tid
            lærer brukeren å ignorere den». Det står nå som én linje UNDER oppgavefeltet — der teksten
@@ -571,28 +495,7 @@
           </div>
         </section>
 
-        <!-- Chat pane -->
-        <section class="card chat-pane" aria-label="Samtaleassistent">
-          <!-- Stage-tilbakemelding 2026-08-17: «UI i rediger der tidligere knapper vises som
-               inaktive gir ikke lengre mening nå som dette ikke er et samtale basert UI, den gjør
-               også at høyresiden blir veldig lang».
-               Handlingene bor her, i en fast linje som ikke skroller. Loggen under er samtalen:
-               spørsmål, instrukser, generert innhold, status. Brukte knapperader forsvinner nå
-               i stedet for å bli stående grå og dytte de gyldige valgene nedover. -->
-          <!-- style="display:none", ikke [hidden]. QA 2026-08-19: `.workspace-actions` setter
-               `display:flex`, og en forfatter-origin klasseregel slår UA-arkets `[hidden]{display:none}`
-               — så attributtet gjorde ingenting, og en tom handlingslinje med bunnramme og marg ble
-               malt ved første tegning før `renderWorkspaceActions` rakk å kjøre.
-               Samme felle som `tabPanelSettings`, og samme løsning: `setHidden()` styrer den etterpå,
-               og `display:""` faller tilbake på klassens `flex`. -->
-          <!-- Produkteier 13.09: samtaleruta er til overs i Rediger til assistenten trenger et svar. Den
-               åpnes når en flyt spør (valg, skjema, avbrytbar framdrift) og lukkes her. -->
-          <div class="chat-pane-head">
-            <button type="button" id="chatPaneClose" class="row-action-btn" data-i18n="shell.chat.hide">Skjul samtalen</button>
-          </div>
-          <div id="chatMessages" class="chat-messages" role="log" aria-live="polite" aria-relevant="additions text" aria-atomic="false"></div>
-          <div id="shellStatusAnnouncer" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></div>
-        </section>
+        <div id="shellStatusAnnouncer" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></div>
 
       </div>
 
@@ -617,6 +520,7 @@
       <dialog id="dialogGenerate" aria-labelledby="dialogGenerateTitle">
         <h2 id="dialogGenerateTitle" class="dialog-title" data-i18n="shell.generateDialog.title">Generer innhold</h2>
         <p class="small" id="dialogGenerateContext"></p>
+        <div id="dialogGenerateStep1">
         <div id="dialogGenerateSource"></div>
         <div id="dialogGenerateMcq" class="row" style="gap:var(--space-2);margin-top:var(--space-1);display:none">
           <label style="font-size:13px;color:var(--color-meta)"><span data-i18n="shell.generateDialog.questionCount">Antall spørsmål</span><br>
@@ -625,9 +529,26 @@
             <select id="dialogGenerateOptionCount" class="settings-input"><option value="3">3</option><option value="4" selected>4</option><option value="5">5</option></select></label>
         </div>
         <p class="small" style="margin-top:var(--space-2)" data-i18n="shell.generateDialog.note">Det genererte legges i skjemaet som et ulagret utkast. Lagre for å beholde det, Avbryt for å gå tilbake til det som er lagret.</p>
-        <div class="row" style="justify-content:flex-end;gap:var(--space-1)">
-          <button type="button" id="dialogGenerateCancel" class="btn-secondary" data-i18n="shell.action.cancel">Avbryt</button>
         </div>
+        <!-- Steg 2 (fritekst): vurderingsplanen — læringsmål og temaer som kan redigeres før genereringen. -->
+        <div id="dialogGeneratePlan" hidden style="display:none"></div>
+        <!-- Stage 14.09: det som pågår (crawl, henting, opplasting, analyse) vises HER — toastene lå
+             bak dialogens bakteppe, og knappen som skiftet tekst var for lite. -->
+        <div id="dialogGenerateStatus" class="dialog-status" role="status" aria-live="polite" hidden style="display:none">
+          <span class="dialog-status-spinner" aria-hidden="true"></span>
+          <span class="dialog-status-text"></span>
+          <button type="button" class="dialog-status-abort" data-dialog-status-abort hidden style="display:none" data-i18n="shell.dialogStatus.stop">Stopp</button>
+        </div>
+        <div class="dialog-actions">
+          <button type="button" id="dialogGenerateCancel" class="btn-secondary" data-i18n="shell.action.cancel">Avbryt</button>
+          <span id="dialogGenerateSubmitSlot"></span>
+        </div>
+      </dialog>
+
+      <!-- Ett spørsmål som trenger svar (publiseringsgaten, feil med «Prøv igjen», bekreftelser). -->
+      <dialog id="dialogChoice" aria-labelledby="dialogChoiceBody">
+        <div id="dialogChoiceBody" class="dialog-choice-body"></div>
+        <div id="dialogChoiceActions" class="dialog-actions"></div>
       </dialog>
 
       <dialog id="dialogRevise" aria-labelledby="dialogReviseTitle">
@@ -636,7 +557,7 @@
         <div id="dialogReviseExamples" class="row" style="gap:6px;flex-wrap:wrap;margin:var(--space-1) 0"></div>
         <textarea id="dialogReviseInput" class="dialog-textarea" rows="4" data-i18n-placeholder="shell.revision.placeholder" placeholder="Describe the change you want…"></textarea>
         <p class="small" style="margin-top:var(--space-1)" data-i18n="shell.reviseDialog.note">Endringen legges i skjemaet som et ulagret utkast. Lagre for å beholde den, Avbryt for å gå tilbake til det som er lagret.</p>
-        <div class="row" style="justify-content:flex-end;gap:var(--space-1)">
+        <div class="dialog-actions">
           <button type="button" id="dialogReviseCancel" class="btn-secondary" data-i18n="shell.action.cancel">Avbryt</button>
           <button type="button" id="dialogReviseSubmit" class="btn-primary" data-i18n="shell.revision.submit">Send</button>
         </div>

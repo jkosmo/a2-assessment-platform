@@ -2,6 +2,69 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.69.0 - 2026-09-17
+
+Ti commits, ingen migrasjoner, ingen nye miljøvariabler. Tråden: **oppryddingen etter #1046** —
+det som så likt ut, er nå samme kode — pluss to stage-funn.
+
+### Modulsida: samtaleruta er borte
+
+Steg 2 av «samtalen erstattes av to dialoger». Vurderingsplanen er steg 2 i «Generer innhold»-
+dialogen (mål og temaer kan redigeres, «Bruk denne planen» / «Generer på nytt»); spørsmål som
+trenger svar (publiseringsgaten, feil med «Prøv igjen») går i én valgdialog; framdrift og resultat
+som toast, med «Avbryt» der jobben kan avbrytes. Det som står i skjemaet tas med i utkastet før
+generering og endring, så resultatet legges rett inn — slik dialogen sier. Skjemaet står i full
+bredde. 60 tekstnøkler uten lesere er fjernet.
+
+### «Generer innhold»: det som pågår, vises
+
+Stage-tilbakemelding: uklart hva som skjedde etter «Crawl nettsted» og «Generer» — det kan ta
+minutter. Årsaken var større enn dialogen: en modal `<dialog>` ligger i toppsjiktet, så alle
+toaster (framdrift, feil, «Crawlet 20 sider») lå bak bakteppet. Toast-regionen er nå en popover i
+samme toppsjikt (gjelder alle sidene). I dialogen: statuslinje med spinner («Henter sider fra
+{host} … dette kan ta et par minutter», «Leser {fil} (n av m) …», «Analyserer kildemateriale …»)
+med «Stopp» der det kan stoppes; Generer står ved siden av Avbryt.
+
+### Modulens hode fra form-page.js; skallet delt
+
+Modulen hadde sin egen utgave av skjemahodet. Nå tegner `form-page.js` det, som på kurs, seksjon
+og klasse — og form-page fikk piltaster/Home/End i fanelinja, `aria-controls`, avledet «ulagret»
+og «opptatt». Modulen fikk «forlate sida?»-vakten. Avbryt tar alt ulagret (skjema og utkast) og
+henter modulen fra det lagrede — før kunne det skrevne komme tilbake fra utkastet etter en tur
+innom Innstillinger. Skallet er delt: Innstillinger-fanen (`admin-content-settings-tab.js`),
+kriterier og planavvik (`admin-content-criteria.js`), publisering med gaten
+(`admin-content-publish.js`) — 7 200 → 4 650 linjer, samme kode flyttet.
+
+### Ett tekstsystem
+
+Én oversetter (`createTranslator`) og én språkutregning for alle forfattersidene; skjemaordene
+(Lagre, Avbryt, «Alt lagret», …) ett sted (`form.*`); listesidenes skjelett og seksjonssidas ord i
+den delte oversettelsesfila. Med engelsk menyspråk får forfatteren nå engelsk hode, faner og
+Lagre/Avbryt på Moduler/Kurs/Klasser — resten av de sidene er fortsatt bokmål i koden (#1063).
+
+### Kommentarer
+
+Kommentarer som fortalte hva som sto der før, i hvilken versjon og hvilken QA-runde som fant det,
+sier nå regelen som gjelder. Bare kommentarer; kodelinjene er uendret.
+
+### Stage-funn 17.09
+
+- Et generert fritekstutkast fikk forhåndsvisningen — med kriteriene — tegnet over skjemaet på
+  Rediger (planens hash-oppfriskning tegnet asynkront). Et åpent skjema står nå. Én «utkastet er
+  klart»-toast, som sier hvor det er og hva Lagre/Avbryt gjør.
+- Markeringen av innholdsspråk forsvant etter bytte (pillen ble markert etter elementet som var
+  klikket, som hodet nettopp hadde tegnet på nytt). Markeres etter språket.
+- Stage-suiten: tre stale påstander rettet; rapportflatene får 45 s og filene kjører serielt —
+  målt slik at det er kapasitet (#808), ikke kode.
+
+Kompleksitet (`doc/COMPLEXITY.md`): 65 → 64. Splitten av skallet gir ikke poeng før skallet kommer
+under 1 500 linjer (4 570 nå), og Innstillinger-fanen teller som en ny fil mellom 800 og 1 500;
+oversettelsesnøklene økte fordi seksjonssidas ord nå telles der de bor. Reglene på flere steder
+gikk 33 → 31.
+
+Gjenstår: #1063 (bokmålstekster i koden), #1064 («Kort modulbeskrivelse» oversettes ikke),
+#1060 (SVG-inspeksjon i skillet), #1061/#1062 (repetisjonsmodus for flervalg).
+
 ## 2.68.0 - 2026-09-13
 
 38 commits, ingen migrasjoner, ingen nye miljøvariabler. Tråden: **ett brukergrensesnitt for

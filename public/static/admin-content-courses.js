@@ -1,6 +1,6 @@
 import { createDateFormatter } from "./format-display.js";
 const formatDate = createDateFormatter(() => currentLocale);
-import { pickLocalizedText } from "/static/i18n-locale.js";
+import { pickLocalizedText, resolveInitialLocale, createTranslator } from "/static/i18n-locale.js";
 import { escapeHtml } from "./html-escape.js";
 import { lifecycleBadge, lifecycleOf } from "./content-status-badge.js";
 import {
@@ -34,7 +34,7 @@ import {
 import { renderWorkspaceNavigationWithProfile } from "./workspace-nav.js";
 import { renderOwnerPanel } from "/static/owner-panel.js";
 import { createListPage } from "/static/list-page.js";
-import { createFormPage } from "/static/form-page.js";
+import { createFormPage, formPageTexts } from "/static/form-page.js";
 
 // #1046 C2: bokmål først, som i alle språkvelgere. Bokmål er det påkrevde språket (produkteier 12.09); publiseringsgaten krever fortsatt alle tre.
 const DETAIL_LOCALES = ["nb", "nn", "en-GB"];
@@ -43,24 +43,9 @@ const DETAIL_LOCALES = ["nb", "nn", "en-GB"];
 // i18n
 // ---------------------------------------------------------------------------
 
-let currentLocale = (() => {
-  const stored = localStorage.getItem("participant.locale");
-  if (stored && supportedLocales.includes(stored)) return stored;
-  const b = navigator.language?.toLowerCase() ?? "";
-  if (b.startsWith("nb")) return "nb";
-  if (b.startsWith("nn")) return "nn";
-  return "en-GB";
-})();
+let currentLocale = resolveInitialLocale(supportedLocales);
 
-function t(key) {
-  return adminContentTranslations[currentLocale]?.[key] ?? adminContentTranslations["en-GB"]?.[key] ?? key;
-}
-
-function tf(key, vars = {}) {
-  let s = t(key);
-  for (const [k, v] of Object.entries(vars)) s = s.replaceAll(`{${k}}`, String(v));
-  return s;
-}
+const { t, tf } = createTranslator(adminContentTranslations, () => currentLocale);
 
 // #972: én vei ut for hver fanget apiFetch-feil på denne siden. Åtte steder sendte tidligere
 // `err.message` rett i en toast, med en norsk setning som `??`-reserve — og viste dermed
@@ -594,14 +579,9 @@ function getListPage() {
     host: pageContent,
     ids: { tbody: "coursesTableBody", search: "coursesSearch" },
     texts: {
-      title: "Kurs",
-      lead: "Kurs samler moduler og seksjoner i den rekkefølgen deltakerne skal følge.",
-      searchPlaceholder: "Søk på kursnavn eller kurs-ID…",
-      searchLabel: "Søk i kurs",
-      filterGroupLabel: "Filtrer kurs",
-      empty: "Ingen kurs ennå.",
-      emptyFiltered: "Ingen kurs i denne visningen.",
-      loadError: "Kunne ikke laste kurs.",
+      title: t("courses.title"), lead: t("courses.lead"),
+      searchPlaceholder: t("courses.searchPlaceholder"), searchLabel: t("courses.searchLabel"), filterGroupLabel: t("courses.filterGroupLabel"),
+      empty: t("courses.empty"), emptyFiltered: t("courses.emptyFiltered"), loadError: t("courses.loadError"), more: t("form.more"),
     },
     headerActions: [
       { id: "importCoursePackageBtn", label: "Importer kurs" },
@@ -1006,7 +986,7 @@ let allLibrarySections = [];
 let comboboxQuery = "";
 let comboboxSelectedId = null;
 let comboboxOpen = false;
-// v1.2.16 (#353 part 1): WAI-ARIA combobox keyboard nav. Highlight (visual + a11y focus
+// #353: WAI-ARIA combobox keyboard nav. Highlight (visual + a11y focus
 // via aria-activedescendant) er separat fra selection (det som faktisk legges til). Arrow
 // up/down flytter highlight; Enter velger highlighted og legger den til; Escape lukker.
 //
@@ -1018,7 +998,7 @@ let comboboxHighlightedIndex = -1;
 
 async function renderDetailView(courseId) {
   // #1046 nivå to (1b, produkteier 12.09): «Nytt kurs» åpner det samme skjemaet tomt; kurset lages ved
-  // første Lagre. Sida med ett spørsmål og «Neste» (#506) er borte.
+  // første Lagre.
   aktivtKursId = courseId ?? null;
 
   pageContent.innerHTML = `<div class="page-loading">Laster…</div>`;
@@ -1220,13 +1200,7 @@ function bindCourseDetail() {
 let courseDetail = null; // { courseId, course, localeValues, certLevel, enrollmentPolicy, discussionsEnabled }
 let courseFormPage = null;
 
-const COURSE_FORM_TEXTS = {
-  back: "← Tilbake til kurs", typeLabel: "Kurs", untitled: "Nytt kurs",
-  savedAll: "Alt lagret", unsaved: "Ulagrede endringer", save: "Lagre", cancel: "Avbryt",
-  leaveConfirm: "Du har ulagrede endringer. Vil du forlate sida uten å lagre?",
-  discardConfirm: "Forkaste de ulagrede endringene?",
-  contentLocale: "Innholdsspråk:", required: "(påkrevd)",
-};
+const courseFormTexts = () => formPageTexts(t, { back: t("courses.back"), typeLabel: t("courses.typeLabel"), untitled: t("courses.untitled") });
 
 function switchDetailLocale(loc) {
   activeDetailLocale = loc;
@@ -1239,7 +1213,7 @@ function getCourseFormPage() {
   if (courseFormPage) return courseFormPage;
   courseFormPage = createFormPage({
     host: pageContent,
-    texts: COURSE_FORM_TEXTS,
+    texts: courseFormTexts,
     backHref: "/admin-content/courses",
     title: () => {
       const nb = document.getElementById("title-nb")?.value?.trim();

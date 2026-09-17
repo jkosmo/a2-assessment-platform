@@ -24,6 +24,20 @@ import { setHidden } from "./dom-visibility.js";
 const resolve = (x) => (typeof x === "function" ? x() : x);
 
 /**
+ * Skjemasidenes felles ord fra ett sted (form.* i admin-content-translations.js), pluss sidas egne:
+ * `back`, `typeLabel`, `untitled`. Kall den i `texts: () => formPageTexts(t, {...})`, så følger
+ * ordene menyspråket.
+ */
+export function formPageTexts(t, page) {
+  return {
+    savedAll: t("form.savedAll"), unsaved: t("form.unsaved"), save: t("form.save"), cancel: t("form.cancel"),
+    leaveConfirm: t("form.leaveConfirm"), discardConfirm: t("form.discardConfirm"),
+    contentLocale: t("form.contentLocale"), required: t("form.required"), more: t("form.more"),
+    ...page,
+  };
+}
+
+/**
  * @typedef {object} FormPageConfig
  * @property {HTMLElement} host
  * @property {() => ({ back: string, typeLabel: string, untitled: string, savedAll: string, unsaved: string,
@@ -37,11 +51,15 @@ const resolve = (x) => (typeof x === "function" ? x() : x);
  * @property {{ locales: string[], labels: Record<string,string>, current: () => string, onChange: (l: string) => void, required?: string }} [languages]
  * @property {() => string} body         sidens eget skjema (HTML). Med `tabs` legges hver fanes innhold i
  *   en beholder med `data-form-tab="<id>"`; sida velger selv hva som ligger hvor.
- * @property {{ items: () => Array<{ id: string, label: string }>, initial?: string, onChange?: (id: string) => void }} [tabs]
+ * @property {{ items: () => Array<{ id: string, label: string, panel?: string }>, initial?: string, label?: string, onChange?: (id: string) => void }} [tabs]
  *   fanelinje under hodet (Rediger · Forhåndsvisning · Innstillinger). Fanebytte er ikke navigering og spør ikke.
+ *   Hver knapp får id `formTab-<id>`; `panel` blir `aria-controls` for paneler som ligger utenfor `host`.
+ *   Piltaster, Home og End flytter mellom fanene (én tabstopp).
  * @property {{ onSave: () => Promise<boolean|void>, onDiscard?: () => void, hidden?: boolean }} [save]
  *   onDiscard: forkast ulagrede endringer (standard: last sida på nytt — det viser det som er lagret,
  *   og et nytt element blir tomt igjen)
+ * @property {() => boolean} [isDirty]  sider som avleder «ulagret» fra egen tilstand (modulen: skjema,
+ *   innstillinger eller utkast) i stedet for å bruke markDirty/markClean. Leses ved hver refreshDirty().
  * @property {(root: HTMLElement) => void} [afterRender]
  * @property {(k: string) => string} [t]  oversetter for lifecycleBadge
  */
@@ -49,7 +67,7 @@ const resolve = (x) => (typeof x === "function" ? x() : x);
 /** @param {FormPageConfig} config */
 export function createFormPage(config) {
   const { host } = config;
-  const state = { dirty: false, saving: false, tab: config.tabs?.initial ?? null };
+  const state = { dirty: false, saving: false, busy: false, tab: config.tabs?.initial ?? null };
   let guardInstalled = false;
 
   installRowMoreMenus();
@@ -62,7 +80,7 @@ export function createFormPage(config) {
     const status = config.statusHtml
       ? config.statusHtml(config.t ?? ((k) => k))
       : config.item ? lifecycleBadge(config.item(), config.t ?? ((k) => k)) : "";
-    const rest = config.actions ? rowActionsHtml(config.actions(), { moreLabel: "Mer" }) : "";
+    const rest = config.actions ? rowActionsHtml(config.actions(), { moreLabel: T.more ?? "Mer" }) : "";
     const pair = config.save && !config.save.hidden
       ? `<button type="button" id="formSaveBtn" class="row-action-btn btn-save" disabled>${escapeHtml(T.save)}</button>` +
         `<button type="button" id="formCancelLink" class="row-action-btn btn-cancel" disabled>${escapeHtml(T.cancel)}</button>` +
@@ -106,8 +124,9 @@ export function createFormPage(config) {
     if (!config.tabs) return "";
     const items = config.tabs.items();
     if (!state.tab || !items.some((t) => t.id === state.tab)) state.tab = items[0]?.id ?? null;
-    return `<div class="form-page-tabs" role="tablist">${items.map((t) =>
-      `<button type="button" role="tab" class="form-page-tab${t.id === state.tab ? " active" : ""}" data-form-tab-btn="${escapeHtml(t.id)}" aria-selected="${t.id === state.tab}">${escapeHtml(t.label)}</button>`).join("")}</div>`;
+    const label = config.tabs.label ? ` aria-label="${escapeHtml(config.tabs.label)}"` : "";
+    return `<div class="form-page-tabs" role="tablist"${label}>${items.map((t) =>
+      `<button type="button" role="tab" id="formTab-${escapeHtml(t.id)}" class="form-page-tab${t.id === state.tab ? " active" : ""}" data-form-tab-btn="${escapeHtml(t.id)}" aria-selected="${t.id === state.tab}" tabindex="${t.id === state.tab ? 0 : -1}"${t.panel ? ` aria-controls="${escapeHtml(t.panel)}"` : ""}>${escapeHtml(t.label)}</button>`).join("")}</div>`;
   }
 
   function applyTab() {
@@ -116,6 +135,8 @@ export function createFormPage(config) {
       const on = b.dataset.formTabBtn === state.tab;
       b.classList.toggle("active", on);
       b.setAttribute("aria-selected", String(on));
+      // Én tabstopp for hele fanelinja; piltastene flytter innenfor.
+      b.tabIndex = on ? 0 : -1;
     }
     // setHidden, ikke bare attributtet: paneler med egen display-regel ville ellers slått `hidden` (#975).
     for (const panel of host.querySelectorAll("[data-form-tab]")) setHidden(panel, panel.dataset.formTab !== state.tab);
@@ -129,6 +150,7 @@ export function createFormPage(config) {
   }
 
   function reflectDirty() {
+    if (config.isDirty) state.dirty = !!config.isDirty();
     const T = texts();
     const badge = host.querySelector("#formPageDirty");
     if (badge) {
@@ -136,10 +158,14 @@ export function createFormPage(config) {
       badge.classList.toggle("is-dirty", state.dirty);
       badge.classList.toggle("is-clean", !state.dirty);
     }
+    const off = !state.dirty || state.saving || state.busy;
     const btn = host.querySelector("#formSaveBtn");
-    if (btn) btn.disabled = !state.dirty || state.saving;
+    if (btn) btn.disabled = off;
     const cancel = host.querySelector("#formCancelLink");
-    if (cancel) cancel.disabled = !state.dirty || state.saving;
+    if (cancel) cancel.disabled = off;
+    // Mens noe pågår (lagring, generering) står språkpillene også stille: et bytte ville tegnet om
+    // skjemaet under den jobben som skriver til det.
+    for (const pill of host.querySelectorAll("[data-form-locale]")) pill.disabled = state.busy;
   }
 
   function refreshTitle() {
@@ -151,10 +177,18 @@ export function createFormPage(config) {
     h1.classList.toggle("is-untitled", !title);
   }
 
+  function selectTab(id) {
+    if (id === state.tab) return;
+    state.tab = id;
+    applyTab();
+    config.tabs?.onChange?.(id);
+  }
+
   function markDirty() { if (!state.dirty) { state.dirty = true; reflectDirty(); } }
   function markClean() { state.dirty = false; reflectDirty(); }
 
   function confirmLeave() {
+    if (config.isDirty) state.dirty = !!config.isDirty();
     if (!state.dirty) return true;
     return window.confirm(texts().leaveConfirm);
   }
@@ -211,21 +245,36 @@ export function createFormPage(config) {
     }
     if (target.closest("#formSaveBtn")) { save(); return; }
     const tabBtn = target.closest("[data-form-tab-btn]");
-    if (tabBtn && config.tabs) {
-      state.tab = tabBtn.dataset.formTabBtn;
-      applyTab();
-      config.tabs.onChange?.(state.tab);
-      return;
-    }
+    if (tabBtn && config.tabs) { selectTab(tabBtn.dataset.formTabBtn); return; }
     const pill = target.closest("[data-form-locale]");
     if (pill && config.languages) {
-      config.languages.onChange(pill.dataset.formLocale);
+      if (pill.classList.contains("active")) return;
+      const loc = pill.dataset.formLocale;
+      if (config.languages.onChange(loc) === false) return;
+      // Etter språket, ikke elementet: onChange kan ha tegnet hodet på nytt (refreshHeader), og da
+      // er `pill` et løsrevet element — sammenligning mot det slo av markeringen på alle pillene.
       for (const b of host.querySelectorAll("[data-form-locale]")) {
-        const on = b === pill;
+        const on = b.dataset.formLocale === loc;
         b.classList.toggle("active", on);
         b.setAttribute("aria-pressed", String(on));
       }
     }
+  });
+  // Standard tastaturmodell for faner: fokus følger piltastene, og visningen bytter med det.
+  host.addEventListener("keydown", (event) => {
+    const btn = event.target instanceof Element ? event.target.closest("[data-form-tab-btn]") : null;
+    if (!btn || !config.tabs) return;
+    const buttons = [...host.querySelectorAll("[data-form-tab-btn]")];
+    const i = buttons.indexOf(btn);
+    let next = null;
+    if (event.key === "ArrowRight") next = buttons[(i + 1) % buttons.length];
+    else if (event.key === "ArrowLeft") next = buttons[(i - 1 + buttons.length) % buttons.length];
+    else if (event.key === "Home") next = buttons[0];
+    else if (event.key === "End") next = buttons[buttons.length - 1];
+    if (!next) return;
+    event.preventDefault();
+    next.focus();
+    selectTab(next.dataset.formTabBtn);
   });
   // Skriving i et felt gjør skjemaet ulagret. Sider som lagrer felt for felt (operasjoner) markerer
   // dem med data-form-untracked.
@@ -244,14 +293,27 @@ export function createFormPage(config) {
     state,
     render,
     refreshTitle,
-    refreshHeader() { const head = host.querySelector(".form-page-head"); if (head) head.outerHTML = headerHtml(); reflectDirty(); },
+    /** Tegn hodet (tittel, status, handlinger) og språkpillene på nytt; fanene og kroppen står. */
+    refreshHeader() {
+      const head = host.querySelector(".form-page-head");
+      if (head) head.outerHTML = headerHtml();
+      const langs = host.querySelector(".form-page-languages");
+      if (langs) langs.outerHTML = languagesHtml();
+      reflectDirty();
+    },
+    /** Les «ulagret» på nytt (sider med `isDirty`). */
+    refreshDirty: reflectDirty,
+    /** Slå Lagre, Avbryt og språkpillene av mens en jobb pågår. */
+    setBusy(on) { state.busy = !!on; reflectDirty(); },
+    /** Fanens knapp (for merking utenfra). */
+    tabButton(id) { return host.querySelector(`[data-form-tab-btn="${id}"]`); },
     markDirty,
     markClean,
     confirmLeave,
     save,
     installGuards,
     /** Bytt fane fra sida (f.eks. fra en lenke). */
-    showTab(id) { if (config.tabs) { state.tab = id; applyTab(); config.tabs.onChange?.(id); } },
+    showTab(id) { if (config.tabs) selectTab(id); },
     get tab() { return state.tab; },
   };
 }

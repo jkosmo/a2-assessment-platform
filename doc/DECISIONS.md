@@ -695,6 +695,66 @@ Produkteier, etter omgang 3 på stage:
    framdrift) og kan skjules igjen. Utfallet av handlinger (lagret, importert, avvist) kommer som
    toast når ruta er skjult — som på de andre skjemasidene.
 
+## Kommentarer sier regelen, ikke historien (2026-09-16)
+
+Fjerde og siste punkt i oppryddingsplanen etter #1046. Forfattersidenes kommentarer (24–31 % av
+linjene i modulskallet og fanene) fortalte ofte HVA som sto der før, i hvilken versjon, og hvilken
+QA-runde som fant det — og pekte på flater som ikke finnes lenger (samtaleloggen, Avansert-sida,
+tilstandslinja, «Rediger direkte», «Neste», forslag som parkeres, ekstern-LLM-overlevering).
+Regelen som gjelder nå: en kommentar sier hva som gjelder og hvorfor, i presens; saksnummeret
+beholdes som spor; versjonsnummer, rundenummer og «pleide å» går ut; gravsteiner over slettet kode
+går ut — den regelen koden skulle verne, står igjen som regel. Rent kommentararbeid: kodelinjene er
+byte for byte de samme (diff uten kommentarer er tom).
+
+## Ett tekstsystem for forfattersidene (2026-09-16)
+
+Fem sider hadde hver sin `t`/`tf` og hver sin utregning av menyspråket (skallets `tf` byttet bare
+første forekomst av en plassholder); seksjonssida hadde i tillegg en privat LABELS-tabell med 86
+ord på tre språk, og kurs- og klassesida hadde skjemaordene (Lagre, Avbryt, «Alt lagret», …) som
+bokmålsstrenger i koden — fire kopier av de samme ni ordene. Nå: `createTranslator` og
+`resolveInitialLocale` i `i18n-locale.js` for alle, `form.*` for skjemaordene (gjennom
+`formPageTexts(t, …)`), `courses.*` / `classes.*` / `library.*` for listesidenes skjelett, og
+`sections.*` for seksjonssidas ord — alt i `admin-content-translations.js`, som paritetstesten
+holder lik på tre språk. Sju nøkler i skallet som var de samme ordene, er borte.
+
+Det som står igjen er innhold, ikke mekanisme: ~180 tekster i Moduler/Kurs/Klasser er fortsatt
+bokmål i koden (#1063). Med engelsk menyspråk får forfatteren nå engelsk hode og bokmål i resten —
+et skritt fram fra «alt bokmål uansett», men ikke i mål.
+
+## Modulskallet deles etter fane: Innstillinger først (2026-09-14)
+
+`admin-content-shell.js` var 7 200 linjer med alt på modulsida i én fil. Innstillinger-fanen
+(1 440 linjer: panelet, kriterie-, instruks- og skjemaseksjonene, versjonshistorikken, lagringen)
+er skilt ut til `admin-content-settings-tab.js`. Snittet er en `ctx`: tilstanden skallet eier
+(`bundle`, `sessionDraft`, `contentLocale` …) som get/set-egenskaper, så begge sider ser samme
+verdi uten kopier, og skallets funksjoner som referanser. Fanen svarer med det skallet trenger
+(`renderSettingsPanel`, `hasUnsavedSettingsEdits`, …); tilstanden skallet før nullstilte direkte
+(`settingsCriteriaState` m.fl.) er metoder. `LEGACY_STRING_LOCALE` og `mergeLocaleInto` — brukt av
+begge — ligger i `localized-value.js`. Koden i fanen er flyttet, ikke skrevet om; kommentarene
+følger med.
+
+16.09, to skiver til med samme snitt: **kriteriene og planavviket** (#450 B3: editor, «Behold /
+Regenerer / Vis hva som ville endret seg», diff-modal, sammenslåing, regenerering — 680 linjer →
+`admin-content-criteria.js`) og **publisering med publiseringsgaten** (#896 S4: publiser,
+avpubliser, «Oversett det som mangler» — 460 linjer → `admin-content-publish.js`). Skallet er
+7 200 → 4 650 linjer. Redigeringsskjemaet (`enterPreviewEditMode`, ~470 linjer) står igjen med
+vilje: det leser og skriver 15 av skallets tilstander og kaller 24 av funksjonene — en modul med
+det snittet er skallet under et annet navn. Flytteverktøyet (`split_range`) bytter bare navn i
+kode, ikke i strenger og kommentarer; første skive lærte oss det (`/api/…/ctx.modules/`).
+
+## Modulens hode tegnes av form-page.js; Avbryt tar alt ulagret (2026-09-14)
+
+Oppfølging av «Skjemahodet: Lagre og Avbryt først» (13.09): modulen hadde fortsatt sin egen utgave
+av hodet — egen HTML, egne Lagre/Avbryt-knapper, eget merke, egen språkvelger og fanelinje med egen
+tastaturhåndtering — som *så* lik ut som de tre andre. Nå er det `form-page.js` som tegner det, og
+form-page fikk det modulen trengte og de andre manglet: piltaster/Home/End i fanelinja (én tabstopp),
+`aria-controls` mot paneler utenfor, avledet «ulagret» (`isDirty`) og «opptatt» (Lagre, Avbryt og
+språkpiller står stille mens noe genereres). Modulen fikk «forlate sida?»-vakten (E3) på kjøpet.
+
+Avbryt på modulen: alt ulagret bort, modulen inn fra det lagrede. Å bare lukke skjemaet holdt ikke —
+etter en tur innom Innstillinger sto det skrevne også i utkastet, og skjemaet åpnet igjen med det.
+Et nytt element (uten modul) går tilbake til utkastet sitt; et nytt utkast uten skjema går til lista.
+
 ## SMO ser resultater for egne kurs — også personnivå (2026-09-13)
 
 Produkteier: SUBJECT_MATTER_OWNER skal kunne lese Resultater for kurs hen eier. Først foreslått som
@@ -755,5 +815,9 @@ Lagre beholder, Avbryt går tilbake til det lagrede (produkteier valgte «alltid
 «erstatt med spørsmål først»). Vurderingsplanen og framdriften vises fortsatt i den reduserte
 samtaleruta; spørsmålene om type, nivå, scenario og antall er borte fra flyten.
 
-Steg 2 (gjenstår): planen som del av dialogen, publiseringsgaten («Oversett det som mangler») som
-vanlig dialog, og samtaleruta fjernes.
+Steg 2 (gjort 2026-09-14): samtaleruta er fjernet. Vurderingsplanen er steg 2 i «Generer
+innhold»-dialogen (mål og temaer kan redigeres, «Bruk denne planen» / «Generer på nytt»),
+publiseringsgaten og andre spørsmål som trenger svar går i én valgdialog, og framdrift og
+resultat meldes som toast (framdrift med «Avbryt»). Forslagsmekanismen (#926) er borte: det som
+står i skjemaet tas med i utkastet før generering/endring, så resultatet legges rett inn — slik
+dialogen sier. Skjemaet står alene i full bredde.

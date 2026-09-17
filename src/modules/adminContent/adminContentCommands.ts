@@ -169,7 +169,7 @@ export async function createModule(input: CreateModuleInput, tx?: DbTransactionC
  *
  * The one place the "which language is this?" guess is legitimate is the authoring client, where
  * the author sees the source language prefilled and can correct it before saving
- * (`LEGACY_STRING_LOCALE` in `admin-content-shell.js`). The backend must not make it silently.
+ * (`LEGACY_STRING_LOCALE` in `localized-value.js`). The backend must not make it silently.
  */
 function localizedTitleMergeBase(title: string | null | undefined): LocalizedTextObject {
   const parsed = localizedTextCodec.parse(title);

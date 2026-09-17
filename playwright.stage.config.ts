@@ -9,7 +9,10 @@ import { defineConfig, devices } from "@playwright/test";
 export default defineConfig({
   testDir: "test/stage",
   timeout: 45000,
-  fullyParallel: true,
+  // Filene gaar parallelt, testene i en fil etter hverandre. Maalt 17.09: rapportflatene
+  // (Resultater, Kullstatus) svarer paa 1–8 s alene, men med tre arbeidere paa samme fil passerte
+  // de 20-sekundersgrensen og traff til slutt 429. Serielt i fila maaler vi produktet, ikke koeen.
+  fullyParallel: false,
   // ⚠️ Stage kjorer paa EN B1-instans. Med standard arbeiderantall (en per kjerne) treffer ~10
   // nettlesere den samtidig, og tester som venter paa at en tabell fylles gaar i tidsavbrudd —
   // ikke fordi produktet er i stykker, men fordi instansen er metta.
