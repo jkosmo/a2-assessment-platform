@@ -139,3 +139,56 @@ test("a large bank folds each question; a new one opens; the summary follows the
   await expect(items.nth(7)).toHaveAttribute("open", "");
   await expect(page.locator("#previewEditMcqStem7")).toBeVisible();
 });
+
+// Stage 18.09 (produkteier): «Spørsmål per forsøk» = 3 forsvant da nye spørsmål ble lagret fra
+// Rediger. Lagringen fra Rediger sendte hele policyen som `{ passRules: { mcqMinPercent } }` for
+// rene flervalgsmoduler, og ingen policy for de andre typene. Nå bæres den hel.
+test("saving from Rediger on an MCQ-only module keeps mcq.* and the other pass rules", async ({ page }) => {
+  const moduleExport = buildMockModuleExport({
+    id: "module-1", title: "Trade unions", moduleVersionId: "module-1-version-1",
+    taskText: localizedText("Norsk scenario"), mcqQuestions: questions, assessmentMode: "MCQ_ONLY",
+  });
+  moduleExport.selectedConfiguration.moduleVersion.assessmentPolicy = {
+    passRules: { mcqMinPercent: 65, totalMin: 70, borderlineWindow: { min: 60, max: 64 } },
+    mcq: { questionsPerAttempt: 3, reviewAfterSubmit: true },
+    aiInfluence: { enabled: true },
+  };
+  const state = await mockCommonApis(page, {
+    modules: [{ id: "module-1", title: "Trade unions", activeVersion: { versionNo: 1 } }],
+    moduleExports: { "module-1": moduleExport },
+  });
+  await page.goto("/admin-content/module/module-1/conversation");
+  await expect(page.locator("#previewEditMcqStem0")).toBeVisible();
+  await page.locator("#previewEditMcqStem0").fill("Endret stamme");
+  await page.locator("#formSaveBtn").click();
+  await expect.poll(() => state.lastModuleVersionBody?.assessmentPolicy).toBeTruthy();
+  expect(state.lastModuleVersionBody.assessmentPolicy).toEqual({
+    passRules: { mcqMinPercent: 65, totalMin: 70, borderlineWindow: { min: 60, max: 64 } },
+    mcq: { questionsPerAttempt: 3, reviewAfterSubmit: true },
+    aiInfluence: { enabled: true },
+  });
+});
+
+test("saving from Rediger on a free-text + MCQ module sends the stored policy (it used to send none)", async ({ page }) => {
+  const moduleExport = buildMockModuleExport({
+    id: "module-1", title: "Trade unions", moduleVersionId: "module-1-version-1",
+    taskText: localizedText("Norsk scenario"), mcqQuestions: questions,
+  });
+  moduleExport.selectedConfiguration.moduleVersion.assessmentPolicy = {
+    passRules: { mcqMinPercent: 60, practicalMinPercent: 50 },
+    mcq: { questionsPerAttempt: 2, shuffleQuestions: false },
+  };
+  const state = await mockCommonApis(page, {
+    modules: [{ id: "module-1", title: "Trade unions", activeVersion: { versionNo: 1 } }],
+    moduleExports: { "module-1": moduleExport },
+  });
+  await page.goto("/admin-content/module/module-1/conversation");
+  await expect(page.locator("#previewEditTaskText")).toHaveValue(/Norsk scenario/);
+  await page.locator("#previewEditTaskText").fill("Nytt scenario");
+  await page.locator("#formSaveBtn").click();
+  await expect.poll(() => state.lastModuleVersionBody?.assessmentPolicy).toBeTruthy();
+  expect(state.lastModuleVersionBody.assessmentPolicy).toEqual({
+    passRules: { mcqMinPercent: 60, practicalMinPercent: 50 },
+    mcq: { questionsPerAttempt: 2, shuffleQuestions: false },
+  });
+});

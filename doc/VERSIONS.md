@@ -36,6 +36,14 @@ Noen flervalgsmoduler skal understøtte læring, ikke måle. Fire leveranser:
 - «Kort modulbeskrivelse» oversettes med resten når den lagres fra Rediger — samme vei som tittelen;
   et språk som ikke ble oversatt, slippes og varsles.
 
+### Funnet på stage 18.09: lagring fra Rediger mistet beståttreglene
+
+Lagringen fra Rediger sendte policyen som `{ passRules: { mcqMinPercent } }` for rene
+flervalgsmoduler og ingen policy for de andre typene — så samlet beståttgrense, grensesone,
+KI-innflytelse-overstyring og `mcq.*` forsvant ved hver lagring derfra (produkteier så «Spørsmål per
+forsøk» = 3 bli borte etter å ha lagt til spørsmål). Policyen bæres nå hel fra den lagrede versjonen;
+Rediger eier bare flervalgsgrensen for en ren flervalgsmodul. Eldre feil enn repetisjonsmodus.
+
 ### Småsaker
 
 - #1031 Ekstraheringsjobber leses bare av den som startet dem (404 for andre — ikke 403, som ville

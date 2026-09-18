@@ -2152,6 +2152,27 @@ async function saveDraftBundleInBackground(options = {}) {
     : Number.isFinite(storedMcqMinPercent)
       ? storedMcqMinPercent
       : SHELL_MCQ_ONLY_MIN_PERCENT;
+  // Stage 18.09 (produkteier): «Spørsmål per forsøk» = 3 ble borte da nye spørsmål ble lagret fra
+  // Rediger. Årsaken var eldre enn #1062: denne lagringen sendte `{ passRules: { mcqMinPercent } }`
+  // for rene flervalgsmoduler — HELE policyen erstattet av ett felt — og ingen policy i det hele
+  // tatt for de andre typene, så samlet beståttgrense, grensesone, KI-innflytelse og nå mcq.*
+  // forsvant ved hver lagring fra Rediger. Policyen bæres hel fra den lagrede versjonen; Rediger
+  // eier bare flervalgsgrensen for en ren flervalgsmodul (utkastets verdi, ellers lagret, ellers
+  // standarden) — samme regel som Innstillinger-fanen følger.
+  const resolveAssessmentPolicyPayload = () => {
+    const stored = bundle?.selectedConfiguration?.moduleVersion?.assessmentPolicy ?? null;
+    const policy = stored ? JSON.parse(JSON.stringify(stored)) : {};
+    const passRules = { ...(policy.passRules ?? {}) };
+    if (isFreetextOnly) {
+      delete passRules.mcqMinPercent;
+      delete policy.mcq;
+    } else if (isMcqOnly || Number.isFinite(sessionDraft?.mcqMinPercent)) {
+      passRules.mcqMinPercent = mcqMinPercent;
+    }
+    if (Object.keys(passRules).length > 0) policy.passRules = passRules; else delete policy.passRules;
+    return Object.keys(policy).length > 0 ? policy : null;
+  };
+  const assessmentPolicyPayload = resolveAssessmentPolicyPayload();
   // Produkteier 13.09: ingenting som står i handlingsraden skal gjentas som valg i samtalen.
   // Meldingen sier hva som mangler; veien videre er knappene i hodet og feltene i skjemaet.
   // Skjemaet ble revet ved bekreftelsen; en stoppet lagring skal la forfatteren stå i det igjen.
@@ -2197,7 +2218,7 @@ async function saveDraftBundleInBackground(options = {}) {
         ...(sessionDraft?.description !== undefined ? { description: sessionDraft.description } : {}),
           assessmentMode: "MCQ_ONLY",
           mcqSet: { title: resolveMcqTitlePayload(), questions: mcqQuestions },
-          assessmentPolicy: { passRules: { mcqMinPercent } },
+          ...(assessmentPolicyPayload ? { assessmentPolicy: assessmentPolicyPayload } : {}),
         }),
       });
 
@@ -2283,6 +2304,9 @@ async function saveDraftBundleInBackground(options = {}) {
         // #578: FREETEXT_ONLY has no MCQ set.
         ...(isFreetextOnly ? {} : { mcqSet: { title: resolveMcqTitlePayload(), questions: mcqQuestions } }),
         submissionSchema: resolveSubmissionSchemaPayload(),
+        // Policyen bæres hel — se resolveAssessmentPolicyPayload. Før ble den ikke sendt her i det
+        // hele tatt, og den nye versjonen sto uten beståttregler.
+        ...(assessmentPolicyPayload ? { assessmentPolicy: assessmentPolicyPayload } : {}),
       }),
     });
 
