@@ -184,6 +184,34 @@ describe("reporting service", () => {
     expect(report.totals.rarelyChosenDistractorCount).toBe(1);
   });
 
+  // #1062 leveranse 4: med en spørsmålsbank får spørsmålene ULIKT antall svar (hvert forsøk trekker et
+  // utvalg). Raden per spørsmål må regne over de svarene spørsmålet faktisk fikk, og bære telleren
+  // (attemptCount) så leseren ser grunnlaget — 100 % av 2 svar er ikke det samme som 100 % av 40.
+  it("#1062: per-question rows count only the responses that question received, and carry the count", async () => {
+    const mod = { id: "module-1", title: "Module One", certificationLevel: "basic" };
+    const qA = { id: "qa", stem: "A?", optionsJson: '["Right","Wrong"]', correctAnswer: "Right", module: mod };
+    const qB = { id: "qb", stem: "B?", optionsJson: '["Right","Wrong"]', correctAnswer: "Right", module: mod };
+    // Fire forsøk; hvert trakk to av tre spørsmål. qa fikk fire svar, qb fikk to.
+    findMcqResponsesForQualityReport.mockResolvedValue([
+      { questionId: "qa", isCorrect: true, selectedAnswer: "Right", question: qA, mcqAttempt: { id: "a1", percentScore: 100 } },
+      { questionId: "qa", isCorrect: false, selectedAnswer: "Wrong", question: qA, mcqAttempt: { id: "a2", percentScore: 50 } },
+      { questionId: "qa", isCorrect: true, selectedAnswer: "Right", question: qA, mcqAttempt: { id: "a3", percentScore: 100 } },
+      { questionId: "qa", isCorrect: true, selectedAnswer: "Right", question: qA, mcqAttempt: { id: "a4", percentScore: 50 } },
+      { questionId: "qb", isCorrect: false, selectedAnswer: "Wrong", question: qB, mcqAttempt: { id: "a2", percentScore: 50 } },
+      { questionId: "qb", isCorrect: false, selectedAnswer: "Wrong", question: qB, mcqAttempt: { id: "a4", percentScore: 50 } },
+    ]);
+    const { getMcqQualityReport } = await import("../../src/modules/reporting/index.js");
+    const report = await getMcqQualityReport({ moduleId: "module-1" });
+    const byId = Object.fromEntries(report.rows.map((row: { questionId: string }) => [row.questionId, row]));
+    expect(byId.qa).toMatchObject({ attemptCount: 4, correctCount: 3, difficulty: 0.75 });
+    // qb: to svar, begge feil — nevneren er 2, ikke 4.
+    expect(byId.qb).toMatchObject({ attemptCount: 2, correctCount: 0, difficulty: 0 });
+    // Telleren er med i det som eksporteres (CSV tar alle nøklene i raden).
+    const { toCsv } = await import("../../src/modules/reporting/index.js");
+    const csv = toCsv(report.rows as Array<Record<string, unknown>>);
+    expect(csv.split("\n")[0]).toContain("attemptCount");
+  });
+
   it("exports CSV with escaping for commas, quotes, and null values", async () => {
     const { toCsv } = await import("../../src/modules/reporting/index.js");
 
