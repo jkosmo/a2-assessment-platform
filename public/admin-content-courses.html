@@ -151,6 +151,9 @@
       /* v1.2.16 (#353): tydeligere highlight når brukeren navigerer med piltastene. */
       .combobox-option.highlighted { outline: 2px solid var(--color-link-active); outline-offset: -2px; }
       .combobox-option-id { font-size: 11px; color: var(--color-meta); margin-left: 6px; }
+      /* #935: typemerket i velgeren følger fargen radene i lista har (shared.css). */
+      .combobox-option .form-row-badge { margin-right: 6px; vertical-align: 1px; }
+      .combobox-option[data-item-type="SECTION"] .form-row-badge { background: #d6e4ff; color: #1d4ed8; }
       .combobox-empty { padding: 8px 12px; font-size: 13px; color: var(--color-meta); font-style: italic; }
 
       /* ── Form actions ────────────────────────────────────────────────────── */

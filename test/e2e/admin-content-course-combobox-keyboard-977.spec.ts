@@ -27,13 +27,15 @@ test.describe("#977 — modulsøket i kursbyggeren kan betjenes med tastatur", (
     await page.goto("/admin-content/courses/course-1");
 
     const input = page.locator("#comboboxInput");
-    const addBtn = page.locator("#addModuleBtn");
+    const addBtn = page.locator("#addItemBtn");
     await expect(input).toBeVisible();
     await expect(addBtn).toBeDisabled();
 
     await input.click();
     await input.pressSequentially("Arbeids");
     await expect(page.locator("#comboboxDropdown .combobox-option")).toHaveCount(2);
+    // #935: raden sier hvilken type den er.
+    await expect(page.locator("#comboboxOption-0 .form-row-badge")).toHaveText("MODUL");
 
     // ⚠️ Kjernen: bare tastatur herfra.
     await input.press("ArrowDown");
@@ -43,14 +45,15 @@ test.describe("#977 — modulsøket i kursbyggeren kan betjenes med tastatur", (
     await expect(page.locator("#comboboxOption-1")).toHaveClass(/highlighted/);
     await expect(input).toHaveAttribute("aria-activedescendant", "comboboxOption-1");
 
+    // #935: lista er alfabetisk (Arbeidsmiljø, Arbeidsrett), så den andre raden er Arbeidsrett.
     await input.press("Enter");
     await expect(addBtn).toBeEnabled();
-    await expect(input).toHaveValue("Arbeidsmiljø");
+    await expect(input).toHaveValue("Arbeidsrett");
     await expect(page.locator("#comboboxDropdown")).toBeHidden();
 
     await addBtn.press("Enter");
     await expect(page.locator('.form-row[data-item-type="MODULE"]')).toHaveCount(1);
-    await expect(page.locator('.form-row[data-item-type="MODULE"]')).toContainText("Arbeidsmiljø");
+    await expect(page.locator('.form-row[data-item-type="MODULE"]')).toContainText("Arbeidsrett");
   });
 
   test("Escape lukker lista uten å velge", async ({ page }) => {
@@ -71,6 +74,6 @@ test.describe("#977 — modulsøket i kursbyggeren kan betjenes med tastatur", (
     await expect(page.locator("#comboboxDropdown")).toBeVisible();
     await input.press("Escape");
     await expect(page.locator("#comboboxDropdown")).toBeHidden();
-    await expect(page.locator("#addModuleBtn")).toBeDisabled();
+    await expect(page.locator("#addItemBtn")).toBeDisabled();
   });
 });

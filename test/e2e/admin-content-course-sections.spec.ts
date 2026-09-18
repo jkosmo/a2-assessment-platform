@@ -4,6 +4,15 @@ import { mockCommonApis } from "./admin-content-helpers.js";
 // #524 (U3): the course builder can add a reusable learning section from the library. It must appear in
 // the mixed content list as a [SEKSJON] row — colour-coded / distinct from modules via data-item-type +
 // the type badge — with its title.
+//
+// #935: seksjoner og moduler går gjennom ÉN velger (kombiboksen). Nedtrekket `#sectionSelect` og
+// «Legg til seksjon» er borte; lista åpner ved fokus, så den kan blas i uten søketekst.
+async function openPicker(page: import("@playwright/test").Page) {
+  await page.locator("#comboboxInput").click();
+  await expect(page.locator("#comboboxDropdown")).toBeVisible();
+}
+const optionFor = (page: import("@playwright/test").Page, id: string) => page.locator(`#comboboxDropdown .combobox-option[data-item-id="${id}"]`);
+
 test("course builder: add a section from the library renders it as a [SEKSJON] row", async ({ page }) => {
   await mockCommonApis(page, {
     courses: [
@@ -28,12 +37,15 @@ test("course builder: add a section from the library renders it as a [SEKSJON] r
   await page.goto("/admin-content/courses/course-1");
 
   // The picker is populated, and there is no section row yet.
-  await expect(page.locator("#sectionSelect option[value='sec-1']")).toHaveCount(1);
+  await openPicker(page);
+  await expect(optionFor(page, "sec-1")).toHaveCount(1);
+  await expect(optionFor(page, "sec-1").locator(".form-row-badge")).toHaveText("SEKSJON");
   await expect(page.locator('#moduleList .form-row[data-item-type="SECTION"]')).toHaveCount(0);
 
-  // Add the section from the library.
-  await page.locator("#sectionSelect").selectOption("sec-1");
-  await page.locator("#addSectionBtn").click();
+  // Add the section from the library — same control and same button as for a module (#935).
+  await optionFor(page, "sec-1").dispatchEvent("mousedown");
+  await expect(page.locator("#addItemBtn")).toBeEnabled();
+  await page.locator("#addItemBtn").click();
 
   // It appears as a distinct [SEKSJON] row carrying the section title.
   const sectionRow = page.locator('#moduleList .form-row[data-item-type="SECTION"]');
@@ -42,7 +54,23 @@ test("course builder: add a section from the library renders it as a [SEKSJON] r
   await expect(sectionRow).toContainText("Innføring");
 
   // And it is no longer offered in the picker (can't add the same section twice).
-  await expect(page.locator("#sectionSelect option[value='sec-1']")).toHaveCount(0);
+  await openPicker(page);
+  await expect(page.locator("#comboboxDropdown .combobox-empty")).toBeVisible();
+  await expect(optionFor(page, "sec-1")).toHaveCount(0);
+});
+
+// #935: tomtilstanden nevner begge typene — et kurs kan bestå av bare seksjoner (#476/#580).
+test("course builder: the empty state does not tell the author to add a module", async ({ page }) => {
+  await mockCommonApis(page, {
+    courses: [{ id: "course-1", title: { nb: "Kurs" }, certificationLevel: "basic", moduleCount: 0, modules: [] }],
+    libraryModules: [],
+  });
+  await page.addInitScript(() => { try { localStorage.setItem("participant.locale", "nb"); } catch { /* ignore */ } });
+  await page.goto("/admin-content/courses/course-1");
+  await expect(page.locator("#moduleListContainer .empty-state-title")).toHaveText("Ingenting i kurset ennå");
+  await expect(page.locator("#moduleListContainer .empty-state-text")).toContainText("modul eller en seksjon");
+  await expect(page.locator("#sectionSelect")).toHaveCount(0);
+  await expect(page.locator("#addSectionBtn")).toHaveCount(0);
 });
 
 // #992: kursbyggeren skal ikke by fram noe backend avviser.
@@ -87,9 +115,10 @@ test("#992: kursbyggeren tilbyr ikke arkiverte seksjoner", async ({ page }) => {
   //
   // Den ventingen er samtidig kontrollen: «tøm lista» ville løst funnet og gjort seksjoner umulige
   // å legge inn i det hele tatt.
-  await expect(page.locator("#sectionSelect option[value='sec-live']")).toHaveCount(1);
-  await expect(page.locator("#sectionSelect option[value='sec-arkivert']")).toHaveCount(0);
-  await page.locator("#sectionSelect").selectOption("sec-live");
-  await page.locator("#addSectionBtn").click();
+  await openPicker(page);
+  await expect(optionFor(page, "sec-live")).toHaveCount(1);
+  await expect(optionFor(page, "sec-arkivert")).toHaveCount(0);
+  await optionFor(page, "sec-live").dispatchEvent("mousedown");
+  await page.locator("#addItemBtn").click();
   await expect(page.locator('#moduleList .form-row[data-item-type="SECTION"]')).toContainText("Innføring");
 });
