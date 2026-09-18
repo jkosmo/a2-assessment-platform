@@ -506,6 +506,23 @@ export function createAdminContentRepository(client: AdminContentRepositoryClien
       ]);
     },
 
+    // #1062: modulens aktive versjon (hele raden), til påfylling av banken.
+    findModuleActiveVersion(moduleId: string) {
+      return client.module.findUnique({ where: { id: moduleId }, select: { id: true, activeVersion: true } });
+    },
+    // #1062: siste versjon som hel rad — kilden når modulen ikke er publisert ennå.
+    findLatestModuleVersionRow(moduleId: string) {
+      return client.moduleVersion.findFirst({ where: { moduleId }, orderBy: { versionNo: "desc" } });
+    },
+
+    // #1062: settet med spørsmålene, til påfylling.
+    findMcqSetVersionWithQuestions(mcqSetVersionId: string) {
+      return client.mCQSetVersion.findUnique({
+        where: { id: mcqSetVersionId },
+        include: { questions: { orderBy: { createdAt: "asc" } } },
+      });
+    },
+
     // #525: MCQ_ONLY module versions only depend on an MCQ set (no rubric/prompt).
     findMcqSetSummary(mcqSetVersionId: string) {
       return client.mCQSetVersion.findUnique({

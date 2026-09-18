@@ -110,6 +110,15 @@
         padding: var(--space-1);
       }
       .preview-edit-mcq-options { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
+      /* #1062: spørsmålene i Rediger er <details>; sammenfoldet viser nummer + stamme på én linje. */
+      .preview-edit-mcq-summary { display: flex; align-items: baseline; gap: 10px; cursor: pointer; list-style: none; }
+      .preview-edit-mcq-summary::-webkit-details-marker { display: none; }
+      .preview-edit-mcq-summary::before { content: "▸"; color: var(--color-meta); font-size: 12px; flex: 0 0 auto; }
+      .preview-edit-mcq-item[open] > .preview-edit-mcq-summary::before { content: "▾"; }
+      .preview-edit-mcq-item[open] > .preview-edit-mcq-summary { margin-bottom: 4px; }
+      .preview-edit-mcq-summary .preview-mcq-question-header { margin-bottom: 0; flex: 0 0 auto; }
+      .preview-edit-mcq-summary-stem { font-size: 14px; color: var(--color-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+      .preview-edit-mcq-item[open] > .preview-edit-mcq-summary .preview-edit-mcq-summary-stem { display: none; }
       .preview-edit-mcq-option { display: grid; grid-template-columns: 18px 1fr; gap: 8px; align-items: center; }
       .preview-edit-mcq-help { font-size: 12px; color: var(--color-meta); }
       .preview-edit-actions {
@@ -525,8 +534,9 @@
         <p class="small" id="dialogGenerateContext"></p>
         <div id="dialogGenerateStep1">
         <div id="dialogGenerateSource"></div>
+        <p id="dialogGenerateBankNote" class="small" hidden style="display:none;margin-top:var(--space-1)"></p>
         <div id="dialogGenerateMcq" class="row" style="gap:var(--space-2);margin-top:var(--space-1);display:none">
-          <label style="font-size:13px;color:var(--color-meta)"><span data-i18n="shell.generateDialog.questionCount">Antall spørsmål</span><br>
+          <label style="font-size:13px;color:var(--color-meta)"><span id="dialogGenerateQuestionCountLabel" data-i18n="shell.generateDialog.questionCount">Antall spørsmål</span><br>
             <select id="dialogGenerateQuestionCount" class="settings-input"><option value="3">3</option><option value="5" selected>5</option><option value="10">10</option></select></label>
           <label style="font-size:13px;color:var(--color-meta)"><span data-i18n="shell.generateDialog.optionCount">Svaralternativer per spørsmål</span><br>
             <select id="dialogGenerateOptionCount" class="settings-input"><option value="3">3</option><option value="4" selected>4</option><option value="5">5</option></select></label>

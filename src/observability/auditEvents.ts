@@ -48,6 +48,8 @@ export const auditActions = {
     // from an author editing — knowing which version it was copied from is the only way to read
     // the history correctly afterwards.
     moduleVersionRestored: "module_version_restored",
+    // #1062: spørsmål lagt til banken (ny MCQSetVersion + ny modulversjon, ikke publisert).
+    mcqQuestionsAppended: "mcq_questions_appended",
     calibrationThresholdsPublished: "calibration_thresholds_published",
     moduleExported: "module_exported",
     moduleImported: "module_imported",
@@ -227,6 +229,13 @@ export type AuditMetadataByAction = {
     moduleVersionId: string;
     sourceModuleVersionId: string;
     sourceVersionNo: number;
+  }>;
+  [auditActions.adminContent.mcqQuestionsAppended]: EventMetadata<{
+    moduleId: string;
+    moduleVersionId: string;
+    mcqSetVersionId: string;
+    existingCount: number;
+    addedCount: number;
   }>;
   [auditActions.adminContent.calibrationThresholdsPublished]: EventMetadata<{
     moduleId: string;

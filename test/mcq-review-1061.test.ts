@@ -90,7 +90,9 @@ describe("#1061 mcq-review", () => {
       data: { assessmentPolicyJson: JSON.stringify({ ...base, mcq: { ...(base.mcq ?? {}), reviewAfterSubmit: true } }) },
     });
     const { submissionId, askedIds } = await submitMcq(moduleId, participant);
-    const review = await request(app).get(`/api/submissions/${submissionId}/mcq-review`).set(participant).set("x-locale", "nb");
+    // Samme språk som forsøket ble tatt på: `selectedAnswer` er lagret slik deltakeren ga det, og
+    // sammenligningen under er tekstlig. (Riktigheten avgjøres av tjeneren på tvers av språk.)
+    const review = await request(app).get(`/api/submissions/${submissionId}/mcq-review`).set(participant);
     expect(review.status).toBe(200);
     expect(review.body.enabled).toBe(true);
     const questions = review.body.questions as Array<{ id: string; stem: string; options: string[]; selectedAnswer: string | null; correctAnswer: string; isCorrect: boolean; rationale: string | null }>;

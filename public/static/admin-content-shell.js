@@ -1789,7 +1789,17 @@ async function generateDraftInBackground(sourceMaterial, certLevel, locale, gene
   });
 }
 
-async function generateMcqInBackground(sourceMaterial, certLevel, locale, generationMode, questionCount, optionCount, onAccept) {
+// #1062: banken slik den er nå — utkastets spørsmål hvis det finnes, ellers den lastede versjonens.
+function currentMcqBank() {
+  return sessionDraft?.mcqQuestions?.length
+    ? sessionDraft.mcqQuestions
+    : (bundle?.selectedConfiguration?.mcqSetVersion?.questions ?? []);
+}
+
+async function generateMcqInBackground(sourceMaterial, certLevel, locale, generationMode, questionCount, optionCount, onAccept, { append = false } = {}) {
+  // Påfylling: de nye legges til banken, og modellen får bankens stammer som «ikke gjenta disse».
+  const existing = append ? currentMcqBank() : [];
+  const avoidStems = existing.map((q) => localizeValueForLocale(q?.stem ?? "", locale)).filter((s) => s.trim());
   const abort = startGeneration();
   const slot = logProgress("shell.generating.mcqProgress", { abortable: true });
   slot.abortBtn.addEventListener("click", () => { abort.abort(); slot.abortBtn.disabled = true; });
@@ -1814,7 +1824,7 @@ async function generateMcqInBackground(sourceMaterial, certLevel, locale, genera
       getHeaders,
       {
         method: "POST",
-        body: JSON.stringify({ sourceMaterial, certificationLevel: certLevel, locale, generationMode, questionCount, optionCount, ...(blueprintObject ? { blueprint: blueprintObject } : {}) }),
+        body: JSON.stringify({ sourceMaterial, certificationLevel: certLevel, locale, generationMode, questionCount, optionCount, ...(blueprintObject ? { blueprint: blueprintObject } : {}), ...(avoidStems.length ? { avoidStems } : {}) }),
         signal: abort.signal,
       },
     );
@@ -1828,7 +1838,7 @@ async function generateMcqInBackground(sourceMaterial, certLevel, locale, genera
     }
     const errMsg = apiErrorText(err);
     logResolveSlot(slot, () => `${escapeHtml(t("shell.generating.mcqErrorPrefix"))}${escapeHtml(errMsg)}`, [
-      { labelKey: "shell.action.retry", action: () => generateMcqInBackground(sourceMaterial, certLevel, locale, generationMode, questionCount, optionCount, onAccept) },
+      { labelKey: "shell.action.retry", action: () => generateMcqInBackground(sourceMaterial, certLevel, locale, generationMode, questionCount, optionCount, onAccept, { append }) },
     ]);
     return;
   }
@@ -1844,7 +1854,7 @@ async function generateMcqInBackground(sourceMaterial, certLevel, locale, genera
     ? `<p style="margin:8px 0 0;font-size:13px;color:var(--color-warning,#b45309)">⚠ ${mcqWarnings.map(escapeHtml).join("<br>")}</p>`
     : "";
   commitOrProposeGenerated({
-    patch: { mcqQuestions: localizedQuestions },
+    patch: { mcqQuestions: append ? [...existing, ...localizedQuestions] : localizedQuestions },
     slot,
     scroll: "bottom",
     // #982: kvalitetsadvarslene (#551) som eget `warningHtml`, ikke inne i `readyHtml` — en advarsel
@@ -2608,6 +2618,14 @@ function certificationLevelForGeneration() {
  * here would do it. The guard belongs in one place rather than in each caller — I already got one
  * caller's check wrong (it asked "is it dirty" where it meant "does it exist").
  */
+// #1062: over dette antallet står spørsmålene i Rediger sammenfoldet (stammen som overskrift).
+const MCQ_FOLD_THRESHOLD = 5;
+function mcqSummaryText(stem) {
+  const text = String(stem ?? "").replace(/\s+/g, " ").trim();
+  if (!text) return t("shell.directEdit.newQuestion");
+  return text.length > 90 ? `${text.slice(0, 88).trimEnd()}…` : text;
+}
+
 function enterPreviewEditMode({ force = false } = {}) {
   if (!force && hasOpenEditForm()) return;
   const editingLocale = contentLocale;
@@ -2701,10 +2719,17 @@ function enterPreviewEditMode({ force = false } = {}) {
             })
             .join("");
 
+          // #1062: en bank kan bli lang. Over MCQ_FOLD_THRESHOLD spørsmål står hvert spørsmål
+          // sammenfoldet med stammen som overskrift; nye (tomme) står åpne. Feltene er i DOM-en
+          // uansett, så lagringen leser dem som før.
+          const folded = currentMcqQuestions.length > MCQ_FOLD_THRESHOLD && String(question.stem ?? "").trim() !== "";
           return `
-            <article class="preview-edit-mcq-item" data-preview-edit-question="${questionIndex}">
-              <div class="preview-mcq-question-header" style="display:flex;justify-content:space-between;align-items:center;gap:8px">
-                <span>${questionLabel}</span>
+            <details class="preview-edit-mcq-item" data-preview-edit-question="${questionIndex}"${folded ? "" : " open"}>
+              <summary class="preview-edit-mcq-summary">
+                <span class="preview-mcq-question-header">${questionLabel}</span>
+                <span class="preview-edit-mcq-summary-stem" data-mcq-summary="${questionIndex}">${escapeHtml(mcqSummaryText(question.stem))}</span>
+              </summary>
+              <div class="preview-mcq-question-header" style="display:flex;justify-content:flex-end;align-items:center;gap:8px">
                 <button type="button" class="row-action-btn destructive" data-remove-question="${questionIndex}">${escapeHtml(t("shell.directEdit.removeQuestion"))}</button>
               </div>
               <textarea
@@ -2726,7 +2751,7 @@ function enterPreviewEditMode({ force = false } = {}) {
                 class="preview-edit-textarea preview-edit-textarea--secondary preview-edit-textarea--compact"
                 aria-label="${escapeHtml(`${questionLabel} ${rationaleLabel}`)}"
               >${escapeHtml(question.rationale)}</textarea>
-            </article>
+            </details>
           `.trim();
         }).join("")}
       </div>
@@ -2828,6 +2853,11 @@ function enterPreviewEditMode({ force = false } = {}) {
       const index = Number(btn.dataset.removeQuestion);
       rebuildWithQuestions((list) => list.splice(index, 1));
     });
+  }
+  // #1062: den sammenfoldede overskriften er stammen — følg feltet mens man skriver.
+  for (const summary of previewContent.querySelectorAll("[data-mcq-summary]")) {
+    const stemField = document.getElementById(`previewEditMcqStem${summary.dataset.mcqSummary}`);
+    stemField?.addEventListener("input", () => { summary.textContent = mcqSummaryText(stemField.value); });
   }
   // No auto-focus any more. Moving the caret into the title made sense when opening the form was
   // a deliberate action; now the form opens on every tab switch, every save and every language
@@ -3237,6 +3267,11 @@ function showModuleActions() {
     },
   };
   const actions = model.actionKeys.map((key) => actionMap[key] && { key, ...actionMap[key] }).filter(Boolean);
+  // #1062: banken fylles på over tid — «Generer spørsmål» skal finnes så snart modulen har flervalg,
+  // ikke bare mens et utkast er åpent.
+  if (effectiveModuleMode() !== "FREETEXT_ONLY" && !actions.some((a) => a.key === "generateMcq")) {
+    actions.push({ key: "generateMcq", ...actionMap.generateMcq });
+  }
   // #896 S6: export/import belong on the module page too, not only on the list. Appended rather
   // than folded into `actionKeys` because they are not part of the authoring progression the
   // status model describes — they are available whenever a module is.
@@ -3717,6 +3752,15 @@ async function openGenerateDialog({ mcqOnly = false } = {}) {
     });
   }
   setHidden(document.getElementById("dialogGenerateMcq"), !hasMcq);
+  // #1062: «Generer spørsmål» fyller på banken; «Generer innhold» lager nytt. Dialogen sier hvilket.
+  const bankSize = currentMcqBank().length;
+  const bankNote = document.getElementById("dialogGenerateBankNote");
+  if (bankNote) {
+    bankNote.textContent = mcqOnly && bankSize > 0 ? tf("shell.generateDialog.bankNote", { count: bankSize }) : "";
+    setHidden(bankNote, !(mcqOnly && bankSize > 0));
+  }
+  const countLabel = document.getElementById("dialogGenerateQuestionCountLabel");
+  if (countLabel) countLabel.textContent = t(mcqOnly && bankSize > 0 ? "shell.generateDialog.newQuestionCount" : "shell.generateDialog.questionCount");
   setHidden(document.getElementById("dialogGenerateStep1"), false);
   setHidden(document.getElementById("dialogGeneratePlan"), true);
   setGenerateDialogStatus(null);
@@ -3738,7 +3782,7 @@ async function openGenerateDialog({ mcqOnly = false } = {}) {
       pendingMcqCounts = null;
       if (mcqOnly) {
         dialog.close();
-        generateMcqInBackground(sourceMaterial, cert, contentLocale, "thorough", counts.questionCount, counts.optionCount, () => showDraftReadyActions({ quiet: true }));
+        generateMcqInBackground(sourceMaterial, cert, contentLocale, "thorough", counts.questionCount, counts.optionCount, () => showDraftReadyActions({ quiet: true }), { append: true });
         return;
       }
       if (mode === "MCQ_ONLY") {

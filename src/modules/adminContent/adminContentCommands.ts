@@ -6,7 +6,7 @@ import { getBenchmarkExamplesConfig } from "../../config/benchmarkExamples.js";
 import { assessmentPolicyCodec, type ModuleAssessmentPolicy } from "../../codecs/assessmentPolicyCodec.js";
 import type { AssessmentMode } from "@prisma/client";
 import { localizedTextCodec, type LocalizedText, type LocalizedTextObject } from "../../codecs/localizedTextCodec.js";
-import { NotFoundError } from "../../errors/AppError.js";
+import { ConflictError, NotFoundError } from "../../errors/AppError.js";
 import { assertModuleNotInAnyCourse } from "../course/contentLifecycle.js";
 import { addContentOwner } from "../content/contentOwnershipService.js";
 import {
@@ -1058,6 +1058,79 @@ export async function restoreModuleVersion(input: {
     );
 
     return restored;
+  });
+}
+
+// #1062: fyll på spørsmålsbanken uten å røre noe annet. Ny MCQSetVersion = de aktive spørsmålene
+// i gjeldende sett + de nye; ny modulversjon (utkast, ikke publisert) som ellers er lik kilden.
+// Skillet bruker denne — det kan ikke `replaceExisting` (#651), og det skal ikke måtte sende hele
+// modulen på nytt for å legge til ti spørsmål.
+export async function appendMcqQuestions(input: {
+  moduleId: string;
+  questions: CreateMcqSetVersionInput["questions"];
+  actorId: string;
+}) {
+  await ensureModuleExists(input.moduleId);
+  const module = await adminContentRepository.findModuleActiveVersion(input.moduleId);
+  const sourceVersion = module?.activeVersion ?? (await adminContentRepository.findLatestModuleVersionRow(input.moduleId));
+  if (!sourceVersion) {
+    throw new NotFoundError("ModuleVersion", "module_version_not_found", "The module has no version yet.");
+  }
+  if (!sourceVersion.mcqSetVersionId) {
+    throw new ConflictError("module_has_no_mcq", "The module has no multiple-choice component; change the module type first.");
+  }
+  const currentSet = await adminContentRepository.findMcqSetVersionWithQuestions(sourceVersion.mcqSetVersionId);
+  if (!currentSet) {
+    throw new NotFoundError("MCQSetVersion", "mcq_set_not_found", "The module's MCQ set was not found.");
+  }
+  const existing = currentSet.questions
+    .filter((question) => question.active)
+    .map((question) => ({
+      stem: question.stem,
+      options: JSON.parse(question.optionsJson) as string[],
+      correctAnswer: question.correctAnswer,
+      rationale: question.rationale ?? undefined,
+    }));
+
+  return runInTransaction(async (tx) => {
+    const mcqSet = await createMcqSetVersion({
+      moduleId: input.moduleId,
+      title: currentSet.title,
+      active: true,
+      questions: [...existing, ...input.questions],
+    }, tx);
+    const versionNo = await getNextVersionNo("module", input.moduleId, createAdminContentRepository(tx));
+    const version = await createAdminContentRepository(tx).createModuleVersion({
+      moduleId: input.moduleId,
+      versionNo,
+      assessmentMode: sourceVersion.assessmentMode,
+      taskText: sourceVersion.taskText,
+      assessorExpectedContent: sourceVersion.assessorExpectedContent ?? undefined,
+      candidateTaskConstraints: sourceVersion.candidateTaskConstraints ?? undefined,
+      assessmentBlueprint: sourceVersion.assessmentBlueprint ?? undefined,
+      rubricVersionId: sourceVersion.rubricVersionId,
+      promptTemplateVersionId: sourceVersion.promptTemplateVersionId,
+      mcqSetVersionId: mcqSet.id,
+      submissionSchemaJson: sourceVersion.submissionSchemaJson ?? undefined,
+      assessmentPolicyJson: sourceVersion.assessmentPolicyJson ?? undefined,
+    });
+    await recordAuditEvent(
+      {
+        entityType: auditEntityTypes.moduleVersion,
+        entityId: version.id,
+        action: auditActions.adminContent.mcqQuestionsAppended,
+        actorId: input.actorId,
+        metadata: {
+          moduleId: input.moduleId,
+          moduleVersionId: version.id,
+          mcqSetVersionId: mcqSet.id,
+          existingCount: existing.length,
+          addedCount: input.questions.length,
+        },
+      },
+      tx,
+    );
+    return { moduleVersion: version, mcqSetVersion: mcqSet, existingCount: existing.length, addedCount: input.questions.length };
   });
 }
 

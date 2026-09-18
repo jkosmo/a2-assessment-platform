@@ -11,6 +11,7 @@ export {
   createBenchmarkExampleVersion,
   publishModuleVersion,
   restoreModuleVersion,
+  appendMcqQuestions,
   unpublishModule,
   archiveModule,
   restoreModule,

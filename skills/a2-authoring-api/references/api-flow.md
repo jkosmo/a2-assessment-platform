@@ -55,6 +55,27 @@ with an **empty audit** (no publish history ⇒ can never auto-publish):
 
 `autoPublish: false` is **mandatory**. → `201 { moduleId, moduleVersionId, links: { conversation, advanced }, clientRef }`.
 
+### 3b. Top up a question bank → `POST /api/admin/content/modules/:moduleId/mcq-questions`
+
+For an **existing** module the author names (by ID) — a repetition module whose bank should grow
+(#1062). **Additive only**: the questions you send are appended to the module's current set; a new
+MCQ set version (old + new) and a new **draft** module version are created; nothing else in the
+module changes and nothing is published. The author reviews and publishes in the workspace.
+
+```json
+{ "questions": [ { "stem": {…}, "options": [{…}, {…}], "correctAnswer": {…}, "rationale": {…} } ] }
+```
+
+Same question shape and the same localization rule as `mcqSet.questions` (all three locales, or a
+plain string for "written in one language, not translated yet"). 1–100 questions per call.
+→ `201 { moduleVersion, mcqSetVersionId, existingCount, addedCount }`. `409 module_has_no_mcq` when
+the module is free-text only; `403` when the token's owner does not own the module.
+
+Before generating, **read the bank** so you do not repeat it: the module export (or the author) tells
+you which stems exist. New questions must test other points from the source — a bank of 30 must not
+be 30 variants of the first 10. This is the only way to change an existing module with an agent
+token; `mode: "replaceExisting"` on import stays off-limits (#651).
+
 ### 4. `create_course` → `POST /api/admin/content/courses`
 
 ```json

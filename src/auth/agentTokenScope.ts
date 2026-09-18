@@ -12,6 +12,8 @@ import type { NextFunction, Request, Response } from "express";
 const ALLOWED: Array<{ method: string; pattern: RegExp }> = [
   { method: "POST", pattern: /^\/api\/admin\/content\/agent-authoring\/validate\/?$/ },
   { method: "POST", pattern: /^\/api\/admin\/content\/modules\/import\/?$/ },
+  // #1062: påfylling av spørsmålsbanken — additivt og utkast-bare (ny versjon, ingen publisering).
+  { method: "POST", pattern: /^\/api\/admin\/content\/modules\/[^/]+\/mcq-questions\/?$/ },
   { method: "POST", pattern: /^\/api\/admin\/content\/sections\/?$/ },
   { method: "POST", pattern: /^\/api\/admin\/content\/courses\/?$/ },
   { method: "PUT", pattern: /^\/api\/admin\/content\/courses\/[^/]+\/items\/?$/ },

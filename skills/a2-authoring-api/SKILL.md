@@ -227,7 +227,9 @@ not claim a live platform verdict.
   bearer JWTs and other credentials go in environment variables only.
 - **Stop on validation errors** — never push through by dropping fields blindly; show field paths.
 - Do not use `mode: "replaceExisting"` unless the author explicitly named an existing module to
-  overwrite and gave its ID.
+  overwrite and gave its ID. To **add questions** to an existing module's bank (repetition modules,
+  #1062), use `POST /modules/:moduleId/mcq-questions` instead — additive, draft-only — and read the
+  existing bank first so the new questions test other points (api-flow.md §3b).
 
 ## Environment resolution (multitenant)
 
