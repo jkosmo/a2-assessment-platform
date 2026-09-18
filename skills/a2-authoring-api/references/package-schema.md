@@ -156,7 +156,9 @@ FREETEXT_ONLY example:
 
 MCQ_ONLY: drop the three free-text fields, add
 `"mcqSet": { "title": "…", "questions": [{ "stem": "…", "options": ["…", "…"], "correctAnswer": "…", "rationale": "…" }] }`
-(`correctAnswer` must be one of `options`; 2–6 options; write plausible distractors).
+(`correctAnswer` must be one of `options`; 2–6 options accepted by the schema, **write 3–4**; distractors as
+complete and as long as the answer, correct position rotated across the set — run `scripts/mcq-cue-check.mjs`,
+see playbook §4 and rule 10, #1032).
 FREETEXT_PLUS_MCQ: include both the free-text triple and `mcqSet`.
 
 ### Topping up an existing module's bank (#1062)
@@ -217,6 +219,7 @@ re-wrap:
 {
   "exportFormat": "a2-content-export/v1",
   "exportedAt": "<now ISO>",
+  "provenance": { "producer": "agent_authoring", "tool": "a2-authoring-api", "toolVersion": "<skill version>" },
   "scope": "course",
   "course": {
     "course": {
@@ -279,6 +282,13 @@ this, `asset:<id>` markdown refs would break on the destination). Each entry:
   authoring package carries them on the section payload (see "Section figures" above). This export
   `assets[]` is the *transport* half — how figures on a section travel through the fallback file —
   using the same ref/remap contract.
+- `provenance` (#1033) — who made the file: `producer` is `"agent_authoring"` or `"human"`; optional
+  `tool` (≤80 chars), `toolVersion` (≤40), `agentRunId` (≤120). The import copies an
+  `agent_authoring` claim into its audit row (`source: "agent_authoring"`, `provenanceClaimed: true`,
+  `provenanceTool`, `provenanceToolVersion`). **It is a claim the file makes, not proof** — good
+  enough to measure "did the skill get better?" (#1032), not for anything with legal weight; that
+  needs the API path with an agent token. Content imported before the field existed carries no
+  stamp. The emitters fill it in; `validateExportEnvelopeStructure` rejects a malformed one.
 - `exportFormat` / `exportedAt` / `scope: "course"` on the envelope. **`exportedAt` (and any
   `audit.publishedAt`) MUST be `Date.toISOString()` shape (`YYYY-MM-DDTHH:mm:ss.sssZ`)** — Zod
   `.datetime()` rejects timezone offsets and microseconds. Build this envelope with

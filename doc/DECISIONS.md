@@ -742,6 +742,23 @@ vilje: det leser og skriver 15 av skallets tilstander og kaller 24 av funksjonen
 det snittet er skallet under et annet navn. Flytteverktøyet (`split_range`) bytter bare navn i
 kode, ikke i strenger og kommentarer; første skive lærte oss det (`/api/…/ctx.modules/`).
 
+## Importpakken bærer sin opprinnelse — som påstand, ikke bevis (2026-09-18)
+
+**Regel:** En `a2-content-export/v1`-konvolutt kan si hvem som laget den (`provenance`: produsent,
+verktøy, verktøyversjon, kjøre-id). Importen fører en `agent_authoring`-påstand inn i sin egen
+revisjonsrad med samme `source: "agent_authoring"` som API-veien gir, pluss `provenanceClaimed: true`.
+Skillets emittere skriver feltet alltid. Et ekte agent-token vinner over filas påstand når begge
+finnes. Kursimporten fører også id-ene til modulene den opprettet.
+
+**Hvorfor:** #1033. Filveien er skillets hovedvei, og den ga aldri noe spor — 6 av 348 flervalgs-
+spørsmål på stage bar stempelet. Da kan ingen måle om en strammere instruks (#1032) faktisk virket:
+ny og gammel produksjon er umulige å skille.
+
+**Grensen:** Feltet er en påstand fra fila; hvem som helst kan skrive det. Til måling er det nok. Til
+noe med rettsvirkning er det ikke det — da er API-veien med agent-token den eneste som gjelder.
+Innhold fra før feltet får ikke stempel med tilbakevirkende kraft; målingen i #1032 gjelder derfor
+bare innhold laget etter 2.71.0.
+
 ## Modulens hode tegnes av form-page.js; Avbryt tar alt ulagret (2026-09-14)
 
 Oppfølging av «Skjemahodet: Lagre og Avbryt først» (13.09): modulen hadde fortsatt sin egen utgave

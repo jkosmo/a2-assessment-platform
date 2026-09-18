@@ -37,6 +37,7 @@ import {
   auditActions,
   auditEntityTypes,
   agentAuthoringAuditMetadata,
+  envelopeProvenanceAuditMetadata,
   type AgentAuthoringContext,
 } from "../../observability/auditEvents.js";
 import type {
@@ -387,6 +388,7 @@ export async function importModuleFromEnvelope(
             sourcePublishedAt: moduleEnvelope.activeVersion.audit.publishedAt ?? null,
             sourcePublishedBy: moduleEnvelope.activeVersion.audit.publishedBy ?? null,
             sourceVersionNo: moduleEnvelope.activeVersion.audit.sourceVersionNo ?? null,
+            ...envelopeProvenanceAuditMetadata(envelope.provenance),
             ...agentAuthoringAuditMetadata(options.agent),
           },
         },
@@ -517,6 +519,7 @@ export async function importSectionFromEnvelope(
               // eksportpakke, og ingen kunne i ettertid sett at opphavsdataene var våre egne.
               // Føres bare når den er sann, så eksisterende rader ikke endrer form.
               ...(options.envelopeSynthesized ? { envelopeSynthesized: true, syntheticExportedAt: envelope.exportedAt } : {}),
+              ...envelopeProvenanceAuditMetadata(envelope.provenance),
               ...agentAuthoringAuditMetadata(options.agent),
             },
           },
@@ -709,8 +712,12 @@ export async function importCourseFromEnvelope(
               courseId,
               mode: options.mode,
               moduleCount: importedModuleIds.length,
+              // #1033: modulene i et kursimport har ingen egen importrad — uten id-ene her kunne
+              // ingen måling knytte et spørsmål til pakken det kom med.
+              moduleIds: importedModuleIds,
               sectionCount,
               sourcePublishedAt: payload.course.audit.publishedAt ?? null,
+              ...envelopeProvenanceAuditMetadata(envelope.provenance),
             },
           },
           tx,

@@ -96,6 +96,27 @@ Per module, write real, specific, sourced content:
 - **MCQ questions:** stem tests one idea; 3–4 options; **distractors are real misconceptions**
   (plausible, not obviously wrong); exactly one unambiguously correct option; a short `rationale`.
   Never "all of the above".
+  **The right answer must not give itself away (#1032).** Measured on the platform before this
+  rule: the correct option was the single longest in 76 % of questions and sat first in 78 % —
+  a learner who picks "the longest" or "the first" passes without knowing anything. So:
+  - **Length parity.** Write every option as a complete, specific statement of the same shape
+    and roughly the same length as the correct one. A distractor that is a two-word fragment
+    next to a full-sentence answer is not a distractor. If the correct option needs a qualifier,
+    give the distractors qualifiers too (wrong ones).
+  - **Rotate the position.** Decide the position of the correct option deliberately so that,
+    across the set, every position is used about equally — never mostly first. The platform
+    shuffles options every time it serves a question, so the learner never sees your order —
+    but reviewers, exports and the platform's per-question quality report do, and a set where
+    the answer is always first is a set nobody checked. Length is the cue that reaches the
+    learner; treat it as the serious one.
+  - **Difficulty: apply, don't recall.** At least half the questions put the learner in a
+    situation ("A contractor is about to dig near a live cable — what comes first?") and ask
+    for a judgement, not a definition. Distractors are the *wrong judgements* a real learner
+    would make.
+  - **Run `scripts/mcq-cue-check.mjs` on the package before it is shown or delivered** and fix
+    every finding; it measures length ratio per question and the position/length distribution
+    per set. A clean report is not proof of quality — it removes the mechanical cues so the
+    author's reading is about the content.
 
 Per section: the teaching markdown, grounded in the source. Summarise long source rather than
 copying it verbatim, and keep claims to what the source supports.

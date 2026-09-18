@@ -574,6 +574,21 @@ export type AuditEventInput<TAction extends AuditAction = AuditAction> = {
 // query audit events by agentRunId to see exactly what a run created.
 export type AgentAuthoringContext = { clientRef?: string; agentRunId?: string };
 
+// #1033: opprinnelsen en importert pakke SELV oppgir (`envelope.provenance`). Gir samme
+// `source: "agent_authoring"` som API-veien, så én spørring finner agent-produsert innhold uansett
+// vei — pluss `provenanceClaimed: true`, fordi dette er filas påstand og ikke et token vi har sett.
+// Legges FØR `agentAuthoringAuditMetadata` i metadata, så et ekte agent-token vinner om begge finnes.
+export function envelopeProvenanceAuditMetadata(provenance?: { producer: string; tool?: string; toolVersion?: string; agentRunId?: string } | null) {
+  if (!provenance || provenance.producer !== "agent_authoring") return {};
+  return {
+    source: "agent_authoring" as const,
+    provenanceClaimed: true,
+    ...(provenance.tool ? { provenanceTool: provenance.tool } : {}),
+    ...(provenance.toolVersion ? { provenanceToolVersion: provenance.toolVersion } : {}),
+    ...(provenance.agentRunId ? { agentRunId: provenance.agentRunId } : {}),
+  };
+}
+
 export function agentAuthoringAuditMetadata(agent?: AgentAuthoringContext) {
   if (!agent || (!agent.clientRef && !agent.agentRunId)) return {};
   return {

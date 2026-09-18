@@ -83,7 +83,12 @@ the three references above.
    file is pure ASCII and `æ/ø/å` survive download/editor/transfer intact (raw UTF-8 re-encoded as
    Latin-1 becomes `Ã¦/Ã¸/Ã¥` — unreadable in the course). `buildFallbackEnvelope` +
    `roundTripFallbackExport` do this and fail delivery on any mojibake; if you hand-write the file,
-   emit `\uXXXX` escapes yourself.
+   emit `\uXXXX` escapes yourself. **Every delivered envelope carries `provenance`** (#1033):
+   `buildFallbackEnvelope` and the `synthesize*Envelope` emitters write
+   `{ producer: "agent_authoring", tool: "a2-authoring-api", toolVersion }` (pass `agentRunId` when
+   the run has one); the import copies it into the audit row so agent-produced content can be told
+   apart from hand-written content later. Never strip it, and never write `producer: "human"` for
+   content you produced. If you hand-write the file, add the same object (`skill-provenance.mjs`).
    (export-validation.md; `export-validate.mjs`.)
 8. **Localize to all three languages before production — the delivered file must be complete.** Fix
    one primary language for the dialogue (principle 5), then after the primary is approved produce
@@ -112,6 +117,14 @@ the three references above.
    is **unique content** the preservation audit (#762) must never drop. **Before a figure is shown
    or written, measure and look at it** — `scripts/figure-fit-check.mjs` plus a rendered image —
    and again for every locale variant (#1060). (figure-design.md.)
+
+10. **MCQ options must not reveal the answer (#1032).** Before a module's questions are shown at
+    gate 4 and again before production, run `scripts/mcq-cue-check.mjs` on the package and fix
+    every finding: every option written as a complete statement of similar length, the correct
+    option's position rotated across the set, at least half the questions asking for a
+    judgement in a situation rather than a definition. The platform shuffles option order when it
+    serves a question, so length — not position — is the cue that reaches the learner; both are
+    checked because both mean the set was written on autopilot. (authoring-playbook.md §4.)
 
 ## Level and scope
 
@@ -167,9 +180,9 @@ is not approval of the next step.** Per-gate craft is in the playbook.
 | 1 | **Source** | "What should this course be built on? Upload/paste material, or shall I help you search the web?" If nothing is provided: run a web search, **present the sources found, and get the author to confirm which to use** before anything is built on them. (Playbook §1.) |
 | 2 | **Learning objectives** | "From the source, I propose these objectives ('after this, a learner can …'). Are they right?" (Playbook §2.) |
 | 3 | **Structure** | "Here's the proposed structure — these modules, these sections, this order and assessment modes. Is it right?" Iterate until confirmed. **Agree the certification level and the expected answer length here** — see [Level and scope](#level-and-scope); both shape what you write at gate 4. (Playbook §3.) |
-| 4 | **Each element** | One item at a time: "Here's the content for Module/Section X (task/rubric/MCQs). Approved?" → next. Never write all elements at once. (Playbook §4.) |
+| 4 | **Each element** | One item at a time: "Here's the content for Module/Section X (task/rubric/MCQs). Approved?" → next. Never write all elements at once. MCQs are shown only after `mcq-cue-check.mjs` is clean (rule 10). (Playbook §4.) |
 | 5 | **External QA** | An independent check that the course meets the objectives — re-derive the objectives from the source in isolation, verify each is taught **and** assessed, flag gaps/overclaims. **Prefer a separate agent** (fresh context) where the environment allows it; otherwise a deliberate fresh-context pass. (Playbook §5.) |
-| 6 | **Produce** | Only with a **complete course master in final order** (rule 6): run the loss audit + localization check, build the JSON, validate, and create the drafts (or emit the round-trip-validated fallback file). (Playbook §6 + api-flow.md; rules 6–8.) |
+| 6 | **Produce** | Only with a **complete course master in final order** (rule 6): run the loss audit + localization check + MCQ cue check, build the JSON, validate, and create the drafts (or emit the round-trip-validated fallback file). (Playbook §6 + api-flow.md; rules 6–8, 10.) |
 
 ## External QA — a real second opinion
 
