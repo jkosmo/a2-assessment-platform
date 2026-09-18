@@ -182,6 +182,11 @@ const mcqQuestionSchema = z
     }
   });
 
+// #1062: påfylling av banken — bare spørsmålene.
+export const appendMcqQuestionsBodySchema = z.object({
+  questions: z.array(mcqQuestionSchema).min(1).max(100),
+});
+
 export const mcqSetBodySchema = z.object({
   // Partial too, and not only for symmetry: the client derives an absent MCQ-set title from the
   // MODULE title, which is a one-key map whenever a translation failed (#905/#896 S4). Demanding
@@ -215,6 +220,14 @@ export const assessmentPolicyBodySchema = z.object({
     .object({
       practicalWeight: z.number().min(0).max(100),
       mcqWeight: z.number().min(0).max(100),
+    })
+    .optional(),
+  // #1062/#1061: bruken av flervalgssettet per forsøk. Se assessmentPolicyCodec.
+  mcq: z
+    .object({
+      questionsPerAttempt: z.number().int().min(1).max(500).optional(),
+      shuffleQuestions: z.boolean().optional(),
+      reviewAfterSubmit: z.boolean().optional(),
     })
     .optional(),
   passRules: z
@@ -454,6 +467,8 @@ export const mcqGenerationBodySchema = z.object({
   questionCount: z.number().int().min(1).max(20).default(10),
   optionCount: z.number().int().min(2).max(6).default(4),
   blueprint: assessmentBlueprintSchema.optional(),
+  // #1062: påfylling av en bank — stammene som alt finnes, så de nye ikke gjentar dem.
+  avoidStems: z.array(z.string().trim().min(1).max(1000)).max(500).optional(),
 });
 
 export const mcqRevisionBodySchema = z.object({

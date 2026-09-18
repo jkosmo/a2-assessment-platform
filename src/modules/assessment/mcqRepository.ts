@@ -21,7 +21,7 @@ export function createMcqRepository(client: McqRepositoryClient = prisma) {
       });
     },
 
-    createAttempt(data: { submissionId: string; mcqSetVersionId: string; startedAt: Date }) {
+    createAttempt(data: { submissionId: string; mcqSetVersionId: string; startedAt: Date; questionOrderJson?: string | null }) {
       return client.mCQAttempt.create({ data });
     },
 

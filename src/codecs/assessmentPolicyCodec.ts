@@ -3,6 +3,14 @@ export type ModuleAssessmentPolicy = {
     practicalWeight?: number;
     mcqWeight?: number;
   };
+  // #1062: hvordan flervalgssettet BRUKES per forsøk (ikke hva det inneholder — det er
+  // MCQSetVersion). Tomt/udefinert = alle spørsmål, stokket (produkteier 17.09: stokking er standard).
+  mcq?: {
+    questionsPerAttempt?: number;
+    shuffleQuestions?: boolean;
+    // #1061: deltakeren får se feil svar med riktig svar og begrunnelse etter innlevering.
+    reviewAfterSubmit?: boolean;
+  };
   passRules?: {
     totalMin?: number;
     mcqMinPercent?: number;

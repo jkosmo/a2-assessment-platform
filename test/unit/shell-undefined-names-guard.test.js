@@ -23,6 +23,7 @@ const FILES = [
   "public/static/localized-value.js",
   "public/static/admin-content-criteria.js",
   "public/static/admin-content-publish.js",
+  "public/participant.js",
   "public/static/admin-content-courses.js",
   "public/static/admin-content-sections.js",
   "public/static/admin-content-classes.js",

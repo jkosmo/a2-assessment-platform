@@ -2,6 +2,66 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.70.0 - 2026-09-18
+
+Ni commits, **én migrasjon** (`MCQAttempt.questionOrderJson`, nullable — ingen dataflytting), ingen
+nye miljøvariabler. Tråden: **repetisjonsmodus for flervalg** (#1061, #1062), resten av tekstene i
+forfattersidene, og en batch småsaker.
+
+### Repetisjonsmodus for flervalg (#1061, #1062) — design i `doc/DESIGN_1061_1062.md`
+
+Noen flervalgsmoduler skal understøtte læring, ikke måle. Fire leveranser:
+
+1. **Trekket per forsøk lagres på forsøket.** Under Innstillinger: «Spørsmål per forsøk» (tomt =
+   alle; bankens størrelse står ved siden av) og «Stokk rekkefølgen for hvert forsøk» — **på som
+   standard, også for moduler som fantes** (produkteier 17.09). Trekket gjøres én gang når forsøket
+   opprettes (`mcqDraw.ts`), så ny lasting gir samme spørsmål i samme rekkefølge, og rettingen regner
+   av de stilte. Eldre forsøk uten trekk = alle aktive i lagret rekkefølge.
+2. **Gjennomgang etter innlevering.** `GET /api/submissions/:id/mcq-review` er fasitens ene dør:
+   tomt når modulversjonen ikke har «Vis deltakeren hvilke svar som ble feil …», 404 for andres.
+   Resultatkallet er uendret (ingen fasit, #903). Deltakeren får kortet «Gjennomgang av flervalg»
+   under resultatet — de feile først, med ditt svar, riktig svar og begrunnelse; også ved bestått.
+3. **Banken fylles på.** «Generer spørsmål» legger til (dialogen sier «Banken har N spørsmål»;
+   generatoren får bankens stammer som «ikke gjenta»); handlingen finnes så snart modulen har
+   flervalg. Over fem spørsmål står de sammenfoldet i Rediger med stammen som overskrift. For
+   skillet: `POST /api/admin/content/modules/:id/mcq-questions` — additivt, utkast-bare, tillatt
+   for agent-token (replaceExisting er fortsatt stengt, #651). Skillets dokumentasjon oppdatert.
+4. **Rapporten per spørsmål** (`mcq-quality`) regnet alt riktig fra før — festet med test.
+
+### Tekstene (#1063, #1064)
+
+- Moduler, Kurs og Klasser leser tekstene fra oversettelsesfila: 143 nøkler i tre språk, 0 norske
+  strenger igjen i koden utenom konstanter. Nivå-to-menyene («Kurs · Moduler · …», «Klasser ·
+  Status · …») følger menyspråket i alle ni sidene, også ved bytte uten ny lasting.
+- «Kort modulbeskrivelse» oversettes med resten når den lagres fra Rediger — samme vei som tittelen;
+  et språk som ikke ble oversatt, slippes og varsles.
+
+### Funnet på stage 18.09: lagring fra Rediger mistet beståttreglene
+
+Lagringen fra Rediger sendte policyen som `{ passRules: { mcqMinPercent } }` for rene
+flervalgsmoduler og ingen policy for de andre typene — så samlet beståttgrense, grensesone,
+KI-innflytelse-overstyring og `mcq.*` forsvant ved hver lagring derfra (produkteier så «Spørsmål per
+forsøk» = 3 bli borte etter å ha lagt til spørsmål). Policyen bæres nå hel fra den lagrede versjonen;
+Rediger eier bare flervalgsgrensen for en ren flervalgsmodul. Eldre feil enn repetisjonsmodus.
+
+### Småsaker
+
+- #1031 Ekstraheringsjobber leses bare av den som startet dem (404 for andre — ikke 403, som ville
+  bekreftet at id-en er ekte). Eierskap huskes i web-appen; én instans i dag.
+- #1008 Ankekøens statusfilter avviser ukjente verdier med 400 og navngir dem (før: hele køen).
+- #1009 Hendelse uten avsendere fjernet.
+- #1060 Skillet: figurer måles (`figure-fit-check.mjs`) og ses på (rendret bilde) før de vises —
+  per figur og per språkvariant.
+
+Kompleksitet (`doc/COMPLEXITY.md`): 64 → 63. Innstillinger-fanen passerte 1 500 linjer med de tre
+nye feltene (−5), og oversettelsesnøklene gikk 4 871 → 5 384 fordi tre siders tekster nå bor i fila
+(−4 på størrelse). Begge er prisen for arbeid vi ønsket; det som gir poeng tilbake er å få skallet
+og fanen under 1 500 og sidene under 800.
+
+Gjenstår: #997 («bestått til revidert» er ikke implementert), #1020 (veien videre for den som
+ikke bestod), #1000/#1066 (roller og forholdet «mine kandidater» — design), #1032/#1033 (spørsmåls-
+kvalitet og sporbarhet i skillet), #928, #935.
+
 ## 2.69.0 - 2026-09-17
 
 Ti commits, ingen migrasjoner, ingen nye miljøvariabler. Tråden: **oppryddingen etter #1046** —

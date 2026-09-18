@@ -31,7 +31,7 @@ test.describe("admin content module library", () => {
     // admin-content nav must NOT expose a Klasser tab anymore (it still shows the content tabs).
     await expect(page.locator('a.content-area-nav-link[href="/admin-content/classes"]')).toHaveCount(0);
     await expect(page.locator('a.content-area-nav-link[href="/deltakere/klasser"]')).toHaveCount(0);
-    await expect(page.locator('a.content-area-nav-link[href="/admin-content/courses"]')).toHaveText("Kurs");
+    await expect(page.locator('a.content-area-nav-link[href="/admin-content/courses"]')).toHaveText(/^Kurs$|^Courses$/);
 
     const table = page.locator(".list-table");
     await expect(table).toBeVisible();
@@ -42,7 +42,7 @@ test.describe("admin content module library", () => {
     // the second went to the Avansert editor, which no longer exists.
     await expect(
       page.locator('.list-table a[href="/admin-content/module/module-1/conversation"]'),
-    ).toHaveText("Åpne");
+    ).toHaveText(/^Åpne$|^Open$|^Opne$/);
     await expect(
       page.locator('.list-table a[href="/admin-content/module/module-1/advanced"]'),
     ).toHaveCount(0);
@@ -54,7 +54,7 @@ test.describe("admin content module library", () => {
     await page.goto(LIBRARY_PATH);
 
     await expect(page.locator(".empty-state")).toBeVisible();
-    await expect(page.getByText("Ingen moduler ennå")).toBeVisible();
+    await expect(page.getByText(/Ingen moduler ennå|No modules yet|Ingen modular enno/)).toBeVisible();
     // The empty state offers its own create entry point.
     await expect(page.locator("#emptyCreateBtn")).toBeVisible();
   });

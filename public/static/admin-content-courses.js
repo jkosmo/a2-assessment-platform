@@ -332,7 +332,7 @@ function meldFeiledeLokaler(failedLocales) {
   if (!failedLocales?.length) return;
   showToast(
     `Lagret, men oversettelsen kom ikke for: ${failedLocales.join(", ")}. ` +
-      "Innholdet er ikke merket som oversatt til disse språkene — bruk «Oversett» for å prøve igjen.",
+      t("courses.notTranslatedHint"),
     "error",
   );
 }
@@ -407,7 +407,7 @@ async function commitCoursePublish(courseId, publishItems, triggerButton = null)
       method: "POST",
       body: JSON.stringify({ publishItems }),
     });
-    showToast(t("adminContent.courses.message.published") || "Kurs publisert.", "success");
+    showToast(t("adminContent.courses.message.published") || t("courses.published"), "success");
 
     const route = detectRoute();
     if (route.view === "list") {
@@ -429,8 +429,8 @@ let pendingCascadePublish = null; // { courseId, triggerButton }
 
 function cascadeItemTypeLabel(type) {
   return type === "SECTION"
-    ? (t("adminContent.courses.cascadePublish.sectionLabel") || "Seksjon")
-    : (t("adminContent.courses.cascadePublish.moduleLabel") || "Modul");
+    ? (t("adminContent.courses.cascadePublish.sectionLabel") || t("ui.kind.section"))
+    : (t("adminContent.courses.cascadePublish.moduleLabel") || t("ui.kind.module"));
 }
 
 // #896 S4: translation blockers arrive with `field` + `missingLocales` so they can be rendered in
@@ -469,7 +469,7 @@ function blockerText(blocker, itemType) {
     ? (t("adminContent.courses.cascadePublish.field.mcqQuestion") || "MCQ question {n}").replace("{n}", mcq[1])
     : (t(`adminContent.courses.cascadePublish.field.${blocker.field}`) || blocker.field);
   const template = t("adminContent.courses.cascadePublish.translationBlocker")
-    || "The module is missing a translation of «{field}» in {locales}.";
+    || t("courses.moduleMissingTranslation");
   return template.replace("{field}", label).replace("{locales}", blocker.missingLocales.join(", "));
 }
 
@@ -487,7 +487,7 @@ function renderCascadeItemList(items, { showBlockers }) {
       // module's own workspace, so link straight there. The dialog otherwise offers only "Lukk",
       // leaving the author to find the module by hand.
       const fixLink = blocked && item.type === "MODULE"
-        ? ` <a class="cascade-publish-fix" href="/admin-content/module/${encodeURIComponent(item.id)}/conversation">${escapeHtml(t("adminContent.courses.cascadePublish.openModule") || "Åpne modulen")}</a>`
+        ? ` <a class="cascade-publish-fix" href="/admin-content/module/${encodeURIComponent(item.id)}/conversation">${escapeHtml(t("adminContent.courses.cascadePublish.openModule") || t("courses.openModule"))}</a>`
         : "";
       return `<li class="cascade-publish-item${item.publishable ? "" : " is-blocked"}">${badge} <span class="cascade-publish-item-title">${title}</span>${blockerNote}${fixLink}</li>`;
     })
@@ -500,7 +500,7 @@ function renderCascadeItemList(items, { showBlockers }) {
 function openCascadePublishDialog(courseId, preview, triggerButton) {
   if (!cascadePublishDialog) {
     // Defensive fallback: without the dialog, do not silently publish broken content.
-    showToast("Kurset har upublisert innhold som må publiseres først.", "error");
+    showToast(t("courses.publish.unpublishedFirst"), "error");
     if (triggerButton) triggerButton.disabled = false;
     return;
   }
@@ -517,27 +517,27 @@ function openCascadePublishDialog(courseId, preview, triggerButton) {
 
   if (titleEl) {
     titleEl.textContent = blocked
-      ? (t("adminContent.courses.cascadePublish.blockedTitle") || "Kan ikke publisere ennå")
-      : (t("adminContent.courses.cascadePublish.confirmTitle") || "Publiser kurs og innhold");
+      ? (t("adminContent.courses.cascadePublish.blockedTitle") || t("courses.publish.blockedTitle"))
+      : (t("adminContent.courses.cascadePublish.confirmTitle") || t("courses.publish.cascadeTitle"));
   }
   if (textEl) {
     textEl.textContent = blocked
       ? (t("adminContent.courses.cascadePublish.blockedText") ||
-          "Kurset har innhold som ikke kan publiseres ennå. Rett opp elementene under, så kan du publisere kurset.")
+          t("courses.publish.blockedBody"))
       : (t("adminContent.courses.cascadePublish.confirmText") ||
-          "Kurset har upublisert innhold. Vil du publisere disse elementene sammen med kurset?");
+          t("courses.publish.cascadeBody"));
   }
   if (listEl) listEl.innerHTML = renderCascadeItemList(items, { showBlockers: blocked });
 
   if (confirmBtn) {
-    confirmBtn.textContent = t("adminContent.courses.cascadePublish.confirmBtn") || "Publiser kurset og alt innhold";
+    confirmBtn.textContent = t("adminContent.courses.cascadePublish.confirmBtn") || t("courses.publish.cascadeConfirm");
     // No cascade primary action when something is un-publishable — only a close action (I1).
     setHidden(confirmBtn, blocked);
   }
   if (cancelBtn) {
     cancelBtn.textContent = blocked
-      ? (t("adminContent.courses.cascadePublish.closeBtn") || "Lukk")
-      : (t("adminContent.courses.cascadePublish.cancelBtn") || "Avbryt");
+      ? (t("adminContent.courses.cascadePublish.closeBtn") || t("ui.action.close"))
+      : (t("adminContent.courses.cascadePublish.cancelBtn") || t("ui.action.cancel"));
   }
 
   cascadePublishDialog.showModal();
@@ -584,12 +584,12 @@ function getListPage() {
       empty: t("courses.empty"), emptyFiltered: t("courses.emptyFiltered"), loadError: t("courses.loadError"), more: t("form.more"),
     },
     headerActions: [
-      { id: "importCoursePackageBtn", label: "Importer kurs" },
-      { id: "newCourseBtn", label: "Nytt kurs", kind: "primary", href: "/admin-content/courses/new" },
+      { id: "importCoursePackageBtn", label: t("courses.importCourse") },
+      { id: "newCourseBtn", label: t("courses.newCourse"), kind: "primary", href: "/admin-content/courses/new" },
     ],
     headerExtraHtml: `<input id="importCoursePackageFile" type="file" accept="application/json,.json" hidden />`,
     // #705-UX(A): filter-piller (Alle/Aktive/Publiserte/Arkiverte) likt modul-biblioteket.
-    filters: { options: [["all", "Alle"], ["active", "Aktive"], ["published", "Publiserte"], ["archived", "Arkiverte"]], initial: "active" },
+    filters: { options: [["all", t("ui.filter.all")], ["active", t("ui.filter.active")], ["published", t("ui.filter.published")], ["archived", t("ui.filter.archived")]], initial: "active" },
     // #1046 B1: søk på navn (alle språk) og ID, som på Moduler.
     search: { matches: (c, q) => {
       const titles = c.title && typeof c.title === "object" ? Object.values(c.title) : [c.title, localizedText(c.title)];
@@ -597,12 +597,12 @@ function getListPage() {
     } },
     sort: { key: "title", dir: "asc", locale: () => currentLocale },
     columns: [
-      { key: "title", label: "Navn", className: "col-title", sortValue: (c) => courseRowModel(c).title, render: (c) => escapeHtml(courseRowModel(c).title) },
-      { key: "status", label: "Status", className: "col-status", render: (c) => lifecycleBadge(c, t) },
-      { key: "level", label: "Sertifiseringsnivå", className: "col-level", render: (c) => certBadge(c.certificationLevel) },
-      { key: "moduleCount", label: "Antall moduler", className: "col-module-count", sortValue: (c) => c.moduleCount ?? 0, render: (c) => String(c.moduleCount ?? 0) },
-      { key: "inProgress", label: "Påbegynt", className: "col-inprogress", title: "Deltakere som er midt i kurset (påbegynt, ikke fullført)", sortValue: (c) => c.inProgressCount ?? 0, render: (c) => (c.inProgressCount > 0 ? String(c.inProgressCount) : "–") },
-      { key: "updatedAt", label: "Sist endret", className: "col-updated", sortValue: (c) => c.updatedAt ?? "", render: (c) => escapeHtml(courseRowModel(c).updatedLabel) },
+      { key: "title", label: t("ui.name"), className: "col-title", sortValue: (c) => courseRowModel(c).title, render: (c) => escapeHtml(courseRowModel(c).title) },
+      { key: "status", label: t("ui.status"), className: "col-status", render: (c) => lifecycleBadge(c, t) },
+      { key: "level", label: t("ui.certLevel"), className: "col-level", render: (c) => certBadge(c.certificationLevel) },
+      { key: "moduleCount", label: t("courses.col.moduleCount"), className: "col-module-count", sortValue: (c) => c.moduleCount ?? 0, render: (c) => String(c.moduleCount ?? 0) },
+      { key: "inProgress", label: t("courses.col.inProgress"), className: "col-inprogress", title: t("courses.col.inProgressHint"), sortValue: (c) => c.inProgressCount ?? 0, render: (c) => (c.inProgressCount > 0 ? String(c.inProgressCount) : "–") },
+      { key: "updatedAt", label: t("ui.lastChanged"), className: "col-updated", sortValue: (c) => c.updatedAt ?? "", render: (c) => escapeHtml(courseRowModel(c).updatedLabel) },
     ],
     rowId: (c) => c.id,
     actions: (c) => {
@@ -619,23 +619,23 @@ function getListPage() {
       // Publiser vises bare for et utkast som har innhold (samme krav som canPublishCourse i detaljvisningen).
       const publishToggle = lifecycle === "archived" ? ""
         : lifecycle === "published"
-          ? `<button class="row-action-btn" data-action="unpublish" data-course-id="${cid}" data-course-title="${ctitle}">Avpubliser</button>`
-          : (course.moduleCount > 0 ? `<button class="row-action-btn" data-action="publish" data-course-id="${cid}">Publiser</button>` : "");
+          ? `<button class="row-action-btn" data-action="unpublish" data-course-id="${cid}" data-course-title="${ctitle}">${escapeHtml(t("ui.action.unpublish"))}</button>`
+          : (course.moduleCount > 0 ? `<button class="row-action-btn" data-action="publish" data-course-id="${cid}">${escapeHtml(t("ui.action.publish"))}</button>` : "");
       // #705-UX: Slett vises kun for arkiverte elementer (terminal steg etter arkivering).
       const archiveToggle = lifecycle === "archived"
-        ? `<button class="row-action-btn" data-action="restore" data-course-id="${cid}" data-course-title="${ctitle}">Gjenopprett</button>`
-        : `<button class="row-action-btn" data-action="archive" data-course-id="${cid}" data-course-title="${ctitle}">Arkiver</button>`;
+        ? `<button class="row-action-btn" data-action="restore" data-course-id="${cid}" data-course-title="${ctitle}">${escapeHtml(t("ui.action.restore"))}</button>`
+        : `<button class="row-action-btn" data-action="archive" data-course-id="${cid}" data-course-title="${ctitle}">${escapeHtml(t("ui.action.archive"))}</button>`;
       const deleteBtn = lifecycle === "archived"
-        ? `<button class="row-action-btn destructive" data-action="delete" data-course-id="${cid}" data-course-title="${ctitle}">Slett</button>`
+        ? `<button class="row-action-btn destructive" data-action="delete" data-course-id="${cid}" data-course-title="${ctitle}">${escapeHtml(t("ui.action.delete"))}</button>`
         : "";
       // #762: ADMINISTRATOR-only destructive cleanup — slett kurset + moduler/seksjoner som kun brukes
       // her. Delt innhold beholdes. Skjult for ikke-ADMINISTRATOR (rollen løses fra /api/me).
       const cascadeDeleteBtn = isAdministrator()
-        ? `<button class="row-action-btn destructive" data-action="cascade-delete" data-course-id="${cid}" data-course-title="${ctitle}">Slett kurs og ubrukt innhold</button>`
+        ? `<button class="row-action-btn destructive" data-action="cascade-delete" data-course-id="${cid}" data-course-title="${ctitle}">${escapeHtml(t("courses.deleteWithContent"))}</button>`
         : "";
       return [
-        `<a href="/admin-content/courses/${encodeURIComponent(course.courseId)}" class="row-action-btn">Åpne</a>`,
-        `<button class="row-action-btn" data-action="export" data-course-id="${cid}" data-course-title="${ctitle}">Eksporter</button>`,
+        `<a href="/admin-content/courses/${encodeURIComponent(course.courseId)}" class="row-action-btn">${escapeHtml(t("ui.action.open"))}</a>`,
+        `<button class="row-action-btn" data-action="export" data-course-id="${cid}" data-course-title="${ctitle}">${escapeHtml(t("ui.action.export"))}</button>`,
         publishToggle,
         archiveToggle,
         deleteBtn,
@@ -644,9 +644,9 @@ function getListPage() {
     },
     emptyHtml: () => `
       <div class="empty-state">
-        <p class="empty-state-title">Ingen kurs ennå</p>
-        <p class="empty-state-text">Opprett et kurs for å samle moduler i en kursstruktur, eller importer en kurs-pakke.</p>
-        <a href="/admin-content/courses/new" class="btn btn-primary">Opprett kurs</a>
+        <p class="empty-state-title">${escapeHtml(t("courses.emptyTitle"))}</p>
+        <p class="empty-state-text">${escapeHtml(t("courses.emptyHint"))}</p>
+        <a href="/admin-content/courses/new" class="btn btn-primary">${escapeHtml(t("courses.create"))}</a>
       </div>`,
     load: async () => (await apiFetch("/api/admin/content/courses", getHeaders)).courses ?? [],
     describeError: (err) => apiErrorText(err),
@@ -662,7 +662,7 @@ function getListPage() {
 }
 
 async function renderListView() {
-  pageContent.innerHTML = `<div class="page-loading">Laster kurs…</div>`;
+  pageContent.innerHTML = `<div class="page-loading">${escapeHtml(t("courses.loadingCourses"))}</div>`;
   await getListPage().reload().catch(() => undefined);
 }
 
@@ -672,7 +672,7 @@ async function exportCoursePackage(courseId, courseTitle) {
   try {
     const body = await apiFetch(`/api/admin/content/courses/${encodeURIComponent(courseId)}/export-package`, getHeaders);
     const envelope = body?.envelope ?? null;
-    if (!envelope) throw new Error("Kurs-eksport returnerte tom envelope.");
+    if (!envelope) throw new Error(t("courses.exportEmpty"));
     const safeTitle = String(courseTitle ?? "course").replace(/[^a-z0-9-]+/gi, "-").replace(/^-+|-+$/g, "").toLowerCase() || "course";
     const filename = `course-${safeTitle}-${new Date().toISOString().slice(0, 10)}.json`;
     const blob = new Blob([JSON.stringify(envelope, null, 2)], { type: "application/json" });
@@ -709,7 +709,7 @@ async function handleImportCoursePackageFile(event) {
       method: "POST",
       body: JSON.stringify({ payload, mode: "createNew" }),
     });
-    if (!result?.courseId) throw new Error("Import-respons mangler courseId.");
+    if (!result?.courseId) throw new Error(t("courses.importNoId"));
     // ⚠️ #957/#996: responsen BÆRER forklaringen; her ble den kastet.
     //
     // Forfatteren fikk «Kurs importert» og ble sendt til et kurs som lå som utkast, uten et ord om
@@ -776,7 +776,7 @@ async function archiveCourseInAdmin(courseId, courseTitle, triggerButton = null)
   if (triggerButton) triggerButton.disabled = true;
   try {
     await apiFetch(`/api/admin/content/courses/${encodeURIComponent(courseId)}/archive`, getHeaders, { method: "POST" });
-    showToast("Kurset ble arkivert.", "success");
+    showToast(t("courses.archived"), "success");
     await refreshCourseView(courseId);
   } catch (err) {
     apiErrorToast(err);
@@ -793,7 +793,7 @@ async function unpublishCourseInAdmin(courseId, courseTitle, triggerButton = nul
   if (triggerButton) triggerButton.disabled = true;
   try {
     await apiFetch(`/api/admin/content/courses/${encodeURIComponent(courseId)}/unpublish`, getHeaders, { method: "POST" });
-    showToast("Kurset ble avpublisert.", "success");
+    showToast(t("courses.unpublished"), "success");
     await refreshCourseView(courseId);
   } catch (err) {
     apiErrorToast(err);
@@ -832,7 +832,7 @@ async function confirmDelete() {
   try {
     await apiFetch(`/api/admin/content/courses/${encodeURIComponent(pendingDeleteId)}`, getHeaders, { method: "DELETE" });
     deleteDialog.close();
-    showToast("Kurset ble slettet.", "success");
+    showToast(t("courses.deleted"), "success");
     await renderListView();
   } catch (err) {
     apiErrorToast(err);
@@ -873,22 +873,22 @@ function renderCascadeDeletePreview(preview) {
 
   if (textEl) {
     textEl.textContent = blocked
-      ? "Kan ikke slette kurset ennå. Løs det følgende først:"
+      ? t("courses.delete.blocked")
       : `Dette sletter kurset, ${delModules.length} modul(er) og ${delSections.length} seksjon(er) som kun brukes i dette kurset. Delt innhold beholdes.`;
   }
 
   let html = "";
   if (blocked) {
-    html += `<h3 class="cascade-delete-heading">Blokkeringer</h3>${cascadeDeleteEntryList(blockers)}`;
+    html += `<h3 class="cascade-delete-heading">${escapeHtml(t("courses.delete.blockers"))}</h3>${cascadeDeleteEntryList(blockers)}`;
   }
   if (delModules.length > 0 || delSections.length > 0) {
-    html += `<h3 class="cascade-delete-heading">Slettes</h3>${cascadeDeleteEntryList([...delModules, ...delSections])}`;
+    html += `<h3 class="cascade-delete-heading">${escapeHtml(t("courses.delete.willDelete"))}</h3>${cascadeDeleteEntryList([...delModules, ...delSections])}`;
   }
   if (sparedModules.length > 0 || sparedSections.length > 0) {
-    html += `<h3 class="cascade-delete-heading">Beholdes (delt med andre kurs)</h3>${cascadeDeleteEntryList([...sparedModules, ...sparedSections])}`;
+    html += `<h3 class="cascade-delete-heading">${escapeHtml(t("courses.delete.willKeep"))}</h3>${cascadeDeleteEntryList([...sparedModules, ...sparedSections])}`;
   }
   if (!html) {
-    html = `<p class="dialog-text">Kun kurset slettes – ingen moduler eller seksjoner er knyttet til det.</p>`;
+    html = `<p class="dialog-text">${escapeHtml(t("courses.delete.onlyCourse"))}</p>`;
   }
   if (bodyEl) bodyEl.innerHTML = html;
   if (confirmBtn) {
@@ -900,7 +900,7 @@ function renderCascadeDeletePreview(preview) {
 
 async function openCascadeDeleteDialog(courseId, courseTitle) {
   if (!cascadeDeleteDialog) {
-    showToast("Kunne ikke åpne slettedialogen.", "error");
+    showToast(t("courses.delete.openError"), "error");
     return;
   }
   pendingCascadeDelete = { courseId };
@@ -909,7 +909,7 @@ async function openCascadeDeleteDialog(courseId, courseTitle) {
   const bodyEl = document.getElementById("cascadeDeleteBody");
   const confirmBtn = document.getElementById("cascadeDeleteConfirmBtn");
   if (titleEl) titleEl.textContent = `Slett «${courseTitle}» og ubrukt innhold`;
-  if (textEl) textEl.textContent = "Henter oversikt…";
+  if (textEl) textEl.textContent = t("courses.delete.loading");
   if (bodyEl) bodyEl.innerHTML = "";
   if (confirmBtn) {
     setHidden(confirmBtn, true);
@@ -1001,7 +1001,7 @@ async function renderDetailView(courseId) {
   // første Lagre.
   aktivtKursId = courseId ?? null;
 
-  pageContent.innerHTML = `<div class="page-loading">Laster…</div>`;
+  pageContent.innerHTML = `<div class="page-loading">${escapeHtml(t("ui.loading"))}</div>`;
 
   activeDetailLocale = supportedLocales.includes(currentLocale) ? currentLocale : "en-GB";
 
@@ -1013,9 +1013,9 @@ async function renderDetailView(courseId) {
     } catch (err) {
       pageContent.innerHTML = `
         <div class="empty-state">
-          <p class="empty-state-title">Kunne ikke laste kurs.</p>
+          <p class="empty-state-title">${escapeHtml(t("courses.loadOneError"))}</p>
           <p class="empty-state-text">${escapeHtml(apiErrorText(err))}</p>
-          <a href="/admin-content/courses" class="btn btn-secondary">Tilbake til kurs</a>
+          <a href="/admin-content/courses" class="btn btn-secondary">${escapeHtml(t("courses.backToCourses"))}</a>
         </div>`;
       return;
     }
@@ -1085,7 +1085,7 @@ async function renderDetailView(courseId) {
   const enrollmentPolicy = course?.enrollmentPolicy ?? "OPEN";
   // #495/T-QA-4: default på for nye kurs og når feltet mangler (eldre detaljer).
   const discussionsEnabled = course?.discussionsEnabled !== false;
-  const pageTitle = course ? (localizedText(course.title) || "Kurs") : "Nytt kurs";
+  const pageTitle = course ? (localizedText(course.title) || t("ui.kind.course")) : t("courses.newCourse");
   const showPublishButton = canPublishCourse({
     ...course,
     moduleCount: courseModules.filter(it => it.type === "MODULE").length,
@@ -1104,14 +1104,14 @@ function courseDetailBodyHtml() {
   return `<div class="detail-layout">
     <div data-form-tab="rediger">
       <div class="detail-section">
-        <h2 class="detail-section-title">Kursdetaljer</h2>
+        <h2 class="detail-section-title">${escapeHtml(t("courses.detailsTitle"))}</h2>
 
         ${DETAIL_LOCALES.map(loc => `
           <div class="locale-tab-pane${loc === activeDetailLocale ? " active" : ""}"
             id="pane-${loc}" role="tabpanel" aria-labelledby="tab-${loc}">
             <div class="form-field">
               <label for="title-${loc}">
-                Navn${loc === "nb" ? `<span class="required-note">(påkrevd)</span>` : ""}
+                ${escapeHtml(t("ui.name"))}${loc === "nb" ? `<span class="required-note">${escapeHtml(t("ui.required"))}</span>` : ""}
               </label>
               <input id="title-${loc}" type="text" data-field="title" data-locale="${loc}"${loc === "nb" ? " data-form-title" : ""}
                 value="${escapeHtml(localeValues[loc].title)}"
@@ -1119,16 +1119,16 @@ function courseDetailBodyHtml() {
                 autocomplete="off" />
             </div>
             <div class="form-field">
-              <label for="desc-${loc}">Beskrivelse</label>
+              <label for="desc-${loc}">${escapeHtml(t("ui.description"))}</label>
               <textarea id="desc-${loc}" data-field="description" data-locale="${loc}"
                 placeholder="${loc === "nb" ? "" : "Viser bokmål hvis tomt"}">${escapeHtml(localeValues[loc].description)}</textarea>
             </div>
           </div>`).join("")}
 
         <div class="form-field" style="margin-top: var(--space-2)">
-          <label for="certLevel">Sertifiseringsnivå <span class="required-note">(påkrevd)</span></label>
+          <label for="certLevel">${escapeHtml(t("ui.certLevel"))} <span class="required-note">${escapeHtml(t("ui.required"))}</span></label>
           <select id="certLevel">
-            <option value="">– Velg nivå –</option>
+            <option value="">${escapeHtml(t("courses.pickLevel"))}</option>
             <option value="basic"${certLevel === "basic" ? " selected" : ""}>${escapeHtml(certLabel("basic"))}</option>
             <option value="intermediate"${certLevel === "intermediate" ? " selected" : ""}>${escapeHtml(certLabel("intermediate"))}</option>
             <option value="advanced"${certLevel === "advanced" ? " selected" : ""}>${escapeHtml(certLabel("advanced"))}</option>
@@ -1138,22 +1138,22 @@ function courseDetailBodyHtml() {
       </div>
 
       <div class="detail-section">
-        <h2 class="detail-section-title">Innhold i kurset (moduler og seksjoner)</h2>
+        <h2 class="detail-section-title">${escapeHtml(t("courses.contentTitle"))}</h2>
         <div id="moduleListContainer"></div>
         <div class="form-add-row">
           <div class="combobox-wrap" id="comboboxWrap">
             <input id="comboboxInput" type="text" class="combobox-input"
-              placeholder="Søk på modulnavn eller modul-ID…"
+              placeholder="${escapeHtml(t("courses.moduleSearchPlaceholder"))}"
               autocomplete="off" role="combobox" aria-expanded="false"
               aria-autocomplete="list" aria-controls="comboboxDropdown" />
             <div id="comboboxDropdown" class="combobox-dropdown" role="listbox" hidden></div>
           </div>
-          <button id="addModuleBtn" class="btn btn-secondary" disabled>Legg til modul</button>
+          <button id="addModuleBtn" class="btn btn-secondary" disabled>${escapeHtml(t("courses.addModule"))}</button>
         </div>
         <div class="form-add-row">
-          <label for="sectionSelect" class="sr-only">Velg læringsseksjon</label>
+          <label for="sectionSelect" class="sr-only">${escapeHtml(t("courses.pickSection"))}</label>
           <select id="sectionSelect" class="combobox-input"></select>
-          <button id="addSectionBtn" class="btn btn-secondary">Legg til seksjon</button>
+          <button id="addSectionBtn" class="btn btn-secondary">${escapeHtml(t("courses.addSection"))}</button>
         </div>
       </div>
 
@@ -1162,12 +1162,12 @@ function courseDetailBodyHtml() {
     <div data-form-tab="innstillinger" hidden>
       ${courseId ? `<div class="detail-section" id="ownerPanelHost" data-form-untracked></div>` : ""}
       <div class="detail-section">
-        <h2 class="detail-section-title">Innstillinger</h2>
+        <h2 class="detail-section-title">${escapeHtml(t("ui.tab.settings"))}</h2>
         <div class="form-field">
-          <label for="enrollmentPolicy">Synlighet</label>
+          <label for="enrollmentPolicy">${escapeHtml(t("courses.visibility"))}</label>
           <select id="enrollmentPolicy">
-            <option value="OPEN"${enrollmentPolicy !== "RESTRICTED" ? " selected" : ""}>Åpen – synlig for alle deltakere</option>
-            <option value="RESTRICTED"${enrollmentPolicy === "RESTRICTED" ? " selected" : ""}>Begrenset – kun tildelte (individuelt eller via klasse)</option>
+            <option value="OPEN"${enrollmentPolicy !== "RESTRICTED" ? " selected" : ""}>${escapeHtml(t("courses.visibility.open"))}</option>
+            <option value="RESTRICTED"${enrollmentPolicy === "RESTRICTED" ? " selected" : ""}>${escapeHtml(t("courses.visibility.restricted"))}</option>
           </select>
         </div>
         <div class="form-field" style="margin-top: var(--space-2)">
@@ -1176,7 +1176,7 @@ function courseDetailBodyHtml() {
             Diskusjon på dette kurset (deltakere kan stille spørsmål og diskutere)
           </label>
         </div>
-        ${courseId ? "" : `<p class="small" style="margin:var(--space-2) 0 0">Lagre kurset først, så kan eierne endres her.</p>`}
+        ${courseId ? "" : `<p class="small" style="margin:var(--space-2) 0 0">${escapeHtml(t("courses.saveFirstOwners"))}</p>`}
       </div>
     </div>
     </div>`;
@@ -1228,7 +1228,7 @@ function getCourseFormPage() {
       current: () => activeDetailLocale,
       onChange: (loc) => switchDetailLocale(loc),
     },
-    tabs: { items: () => [{ id: "rediger", label: "Rediger" }, { id: "innstillinger", label: "Innstillinger" }], initial: "rediger" },
+    tabs: { items: () => [{ id: "rediger", label: t("ui.tab.edit") }, { id: "innstillinger", label: t("ui.tab.settings") }], initial: "rediger" },
     body: () => courseDetailBodyHtml(),
     save: { onSave: () => saveCourse(courseDetail?.courseId ?? null) },
     afterRender: () => bindCourseDetail(),
@@ -1246,16 +1246,16 @@ function courseDetailActions() {
   const ctitle = escapeHtml(localizedText(c.title) || c.id);
   const moduleCount = courseModules.filter(it => it.type === "MODULE").length;
   return [
-    `<button type="button" class="row-action-btn" data-action="export" data-course-id="${cid}" data-course-title="${ctitle}">Eksporter</button>`,
+    `<button type="button" class="row-action-btn" data-action="export" data-course-id="${cid}" data-course-title="${ctitle}">${escapeHtml(t("ui.action.export"))}</button>`,
     lifecycle === "archived" ? ""
       : lifecycle === "published"
-        ? `<button type="button" class="row-action-btn" data-action="unpublish" data-course-id="${cid}" data-course-title="${ctitle}">Avpubliser</button>`
-        : (moduleCount > 0 ? `<button type="button" id="publishCourseBtn" class="row-action-btn" data-action="publish" data-course-id="${cid}">Publiser</button>` : ""),
+        ? `<button type="button" class="row-action-btn" data-action="unpublish" data-course-id="${cid}" data-course-title="${ctitle}">${escapeHtml(t("ui.action.unpublish"))}</button>`
+        : (moduleCount > 0 ? `<button type="button" id="publishCourseBtn" class="row-action-btn" data-action="publish" data-course-id="${cid}">${escapeHtml(t("ui.action.publish"))}</button>` : ""),
     lifecycle === "archived"
-      ? `<button type="button" class="row-action-btn" data-action="restore" data-course-id="${cid}" data-course-title="${ctitle}">Gjenopprett</button>`
-      : `<button type="button" class="row-action-btn" data-action="archive" data-course-id="${cid}" data-course-title="${ctitle}">Arkiver</button>`,
-    lifecycle === "archived" ? `<button type="button" class="row-action-btn destructive" data-action="delete" data-course-id="${cid}" data-course-title="${ctitle}">Slett</button>` : "",
-    isAdministrator() ? `<button type="button" class="row-action-btn destructive" data-action="cascade-delete" data-course-id="${cid}" data-course-title="${ctitle}">Slett kurs og ubrukt innhold</button>` : "",
+      ? `<button type="button" class="row-action-btn" data-action="restore" data-course-id="${cid}" data-course-title="${ctitle}">${escapeHtml(t("ui.action.restore"))}</button>`
+      : `<button type="button" class="row-action-btn" data-action="archive" data-course-id="${cid}" data-course-title="${ctitle}">${escapeHtml(t("ui.action.archive"))}</button>`,
+    lifecycle === "archived" ? `<button type="button" class="row-action-btn destructive" data-action="delete" data-course-id="${cid}" data-course-title="${ctitle}">${escapeHtml(t("ui.action.delete"))}</button>` : "",
+    isAdministrator() ? `<button type="button" class="row-action-btn destructive" data-action="cascade-delete" data-course-id="${cid}" data-course-title="${ctitle}">${escapeHtml(t("courses.deleteWithContent"))}</button>` : "",
   ];
 }
 
@@ -1282,8 +1282,8 @@ function renderModuleList() {
   if (courseModules.length === 0) {
     container.innerHTML = `
       <div class="empty-state" style="padding: var(--space-3) var(--space-2)">
-        <p class="empty-state-title" style="font-size: 15px;">Ingen moduler i kurset ennå</p>
-        <p class="empty-state-text">Legg til første modul for å bygge kurset.</p>
+        <p class="empty-state-title" style="font-size: 15px;">${escapeHtml(t("courses.noModulesTitle"))}</p>
+        <p class="empty-state-text">${escapeHtml(t("courses.noModulesHint"))}</p>
       </div>`;
     return;
   }
@@ -1300,10 +1300,10 @@ function renderModuleList() {
         <span class="form-row-badge">${courseItemTypeBadge(m.type)}</span>
         <span class="form-row-title">${escapeHtml(m.title)}</span>
         <div class="form-row-actions">
-          <button type="button" class="row-action-btn" data-move="up" data-index="${i}" ${i === 0 ? "disabled" : ""} aria-label="Flytt opp">↑</button>
-          <button type="button" class="row-action-btn" data-move="down" data-index="${i}" ${i === courseModules.length - 1 ? "disabled" : ""} aria-label="Flytt ned">↓</button>
-          <a href="${openHref}" class="row-action-btn" target="_blank" rel="noopener">Åpne</a>
-          <button type="button" class="row-action-btn destructive" data-remove="${i}" aria-label="Fjern modul">Fjern</button>
+          <button type="button" class="row-action-btn" data-move="up" data-index="${i}" ${i === 0 ? "disabled" : ""} aria-label="${escapeHtml(t("courses.moveUp"))}">↑</button>
+          <button type="button" class="row-action-btn" data-move="down" data-index="${i}" ${i === courseModules.length - 1 ? "disabled" : ""} aria-label="${escapeHtml(t("courses.moveDown"))}">↓</button>
+          <a href="${openHref}" class="row-action-btn" target="_blank" rel="noopener">${escapeHtml(t("ui.action.open"))}</a>
+          <button type="button" class="row-action-btn destructive" data-remove="${i}" aria-label="${escapeHtml(t("courses.removeModule"))}">${escapeHtml(t("ui.action.remove"))}</button>
         </div>
       </li>`;
     }).join("")}
@@ -1371,7 +1371,7 @@ function updateComboboxDropdown() {
   input.setAttribute("aria-expanded", "true");
 
   if (options.length === 0) {
-    dropdown.innerHTML = `<div class="combobox-empty">Ingen moduler matcher søket.</div>`;
+    dropdown.innerHTML = `<div class="combobox-empty">${escapeHtml(t("courses.noModulesMatch"))}</div>`;
     comboboxSelectedId = null;
     if (addBtn) addBtn.disabled = true;
     return;
@@ -1431,7 +1431,7 @@ function renderSectionPicker() {
   const addedIds = new Set(courseModules.filter(m => m.type === "SECTION").map(m => m.refId));
   const available = allLibrarySections.filter(s => !addedIds.has(s.id));
   if (available.length === 0) {
-    select.innerHTML = `<option value="">Ingen ledige seksjoner</option>`;
+    select.innerHTML = `<option value="">${escapeHtml(t("courses.noSectionsAvailable"))}</option>`;
     select.disabled = true;
   } else {
     select.disabled = false;
@@ -1606,7 +1606,7 @@ async function saveCourse(courseId) {
   // bokmål før kurset kan lagres. De andre språkene kan fylles etterpå; publiseringsgaten krever alle tre.
   if (!String(effectiveValues.title?.nb ?? "").trim()) {
     if (errorBanner) {
-      errorBanner.innerHTML = `<div class="error-banner">Navn er påkrevd på bokmål.</div>`;
+      errorBanner.innerHTML = `<div class="error-banner">${escapeHtml(t("courses.nameRequiredNb"))}</div>`;
       errorBanner.hidden = false;
     }
     document.getElementById("title-nb")?.focus();
@@ -1614,7 +1614,7 @@ async function saveCourse(courseId) {
   }
   if (!certLevel) {
     if (errorBanner) {
-      errorBanner.innerHTML = `<div class="error-banner">Sertifiseringsnivå er påkrevd.</div>`;
+      errorBanner.innerHTML = `<div class="error-banner">${escapeHtml(t("courses.levelRequired"))}</div>`;
       errorBanner.hidden = false;
     }
     document.getElementById("certLevel")?.focus();
@@ -1641,7 +1641,7 @@ async function saveCourse(courseId) {
         }),
       });
       savedCourseId = body.course?.id;
-      if (!savedCourseId) throw new Error("Fikk ikke kurs-ID.");
+      if (!savedCourseId) throw new Error(t("courses.noIdReturned"));
     } else {
       // Update
       await apiFetch(`/api/admin/content/courses/${encodeURIComponent(courseId)}`, getHeaders, {
@@ -1668,7 +1668,7 @@ async function saveCourse(courseId) {
       body: JSON.stringify({ items }),
     });
 
-    showToast("Kurs lagret.", "success");
+    showToast(t("courses.saved"), "success");
     initialDetailLocaleValues = cloneCourseLocaleValues(effectiveValues);
 
     // If new, navigate to the saved course URL (skjemaet er lagret — ingen spørsmål ved navigering).

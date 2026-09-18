@@ -4,6 +4,7 @@ import { assessmentPolicyCodec } from "../../codecs/assessmentPolicyCodec.js";
 import { deriveMcqPassFail, resolveMcqMinPercent } from "./mcqPassRule.js";
 import { assessmentJobRepository } from "./assessmentJobRepository.js";
 import { mcqRepository, createMcqRepository } from "./mcqRepository.js";
+import { drawQuestionIds, parseQuestionOrder, questionsForAttempt, resolveMcqDrawPolicy } from "./mcqDraw.js";
 import { enqueueAssessmentJob, processSubmissionJobNow } from "./assessmentJobService.js";
 import { runInTransaction } from "../../db/transaction.js";
 import { ConflictError } from "../../errors/AppError.js";
@@ -53,14 +54,25 @@ export async function startMcqAttempt(
     if (mcqSetVersionId == null) {
       throw new Error("This module has no multiple-choice component.");
     }
+    // #1062: trekket gjøres ÉN gang, her, og lagres på forsøket — så en ny lasting midt i forsøket
+    // gir samme spørsmål i samme rekkefølge, og rettingen og gjennomgangen (#1061) vet hva som ble stilt.
+    const bank = await mcqRepository.findActiveQuestionsForSet(mcqSetVersionId);
+    const drawn = drawQuestionIds(
+      bank.map((question) => question.id),
+      resolveMcqDrawPolicy(assessmentPolicyCodec.parse(submission.moduleVersion.assessmentPolicyJson)),
+    );
     attempt = await mcqRepository.createAttempt({
       submissionId: submission.id,
       mcqSetVersionId,
       startedAt: new Date(),
+      questionOrderJson: JSON.stringify(drawn),
     });
   }
 
-  const questions = await mcqRepository.findActiveQuestionsForSet(attempt.mcqSetVersionId);
+  const questions = questionsForAttempt(
+    await mcqRepository.findActiveQuestionsForSet(attempt.mcqSetVersionId),
+    parseQuestionOrder(attempt.questionOrderJson),
+  );
 
   return {
     attemptId: attempt.id,
@@ -99,7 +111,11 @@ export async function submitMcqAttempt(input: {
     throw new Error("MCQ attempt already submitted.");
   }
 
-  const questions = await mcqRepository.findActiveQuestionsForSet(attempt.mcqSetVersionId);
+  // #1062: rettes mot de spørsmålene forsøket faktisk fikk — ikke hele banken.
+  const questions = questionsForAttempt(
+    await mcqRepository.findActiveQuestionsForSet(attempt.mcqSetVersionId),
+    parseQuestionOrder(attempt.questionOrderJson),
+  );
 
   const questionById = new Map(questions.map((question) => [question.id, question]));
   const evaluated = input.responses

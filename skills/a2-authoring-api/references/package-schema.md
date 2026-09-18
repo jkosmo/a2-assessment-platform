@@ -159,6 +159,12 @@ MCQ_ONLY: drop the three free-text fields, add
 (`correctAnswer` must be one of `options`; 2–6 options; write plausible distractors).
 FREETEXT_PLUS_MCQ: include both the free-text triple and `mcqSet`.
 
+### Topping up an existing module's bank (#1062)
+
+Not a package object: call `POST /api/admin/content/modules/:moduleId/mcq-questions` with
+`{ "questions": [...] }` (same question shape as `mcqSet.questions`). Appends to the current set as
+a new draft version; never replaces, never publishes. See api-flow.md §3b.
+
 ## `type: "course"`
 
 ```json

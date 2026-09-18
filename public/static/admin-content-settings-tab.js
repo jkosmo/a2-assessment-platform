@@ -280,6 +280,35 @@ export function createSettingsTab(ctx) {
         false,
         "mcqThreshold",
       );
+      // #1062: hvordan settet brukes per forsøk. Tomt = alle spørsmål. Stokking er på med mindre
+      // modulen har slått det av (produkteier 17.09: standard på, også for moduler som fantes).
+      const perAttempt = policy?.mcq?.questionsPerAttempt;
+      const bankSize = (cfg.mcqSetVersion?.questions ?? []).length;
+      row(
+        "shell.settings.mcqPerAttempt",
+        `<input id="settingsMcqPerAttempt" class="settings-input" type="number" min="1" max="500" step="1"
+          value="${Number.isInteger(perAttempt) && perAttempt > 0 ? escapeHtml(String(perAttempt)) : ""}"
+          placeholder="${escapeHtml(t("shell.settings.mcqPerAttemptAll"))}" />
+         <span class="small">${escapeHtml(tf("shell.settings.mcqBankSize", { count: bankSize }))}</span>`,
+        false,
+        "mcqPerAttempt",
+      );
+      row(
+        "shell.settings.mcqShuffle",
+        `<label class="settings-check"><input id="settingsMcqShuffle" type="checkbox"${policy?.mcq?.shuffleQuestions === false ? "" : " checked"} />
+          ${escapeHtml(t("shell.settings.mcqShuffleLabel"))}</label>`,
+        false,
+        "mcqShuffle",
+      );
+      // #1061: gjennomgangen etter innlevering. Av som standard — fasit er en egen dør (#903), og en
+      // prøve skal ikke vise den. På for repetisjon.
+      row(
+        "shell.settings.mcqReview",
+        `<label class="settings-check"><input id="settingsMcqReview" type="checkbox"${policy?.mcq?.reviewAfterSubmit === true ? " checked" : ""} />
+          ${escapeHtml(t("shell.settings.mcqReviewLabel"))}</label>`,
+        false,
+        "mcqReview",
+      );
     }
 
     // The rest of the pass rules — the overall pass mark is the field most likely to be adjusted
@@ -504,7 +533,7 @@ export function createSettingsTab(ctx) {
     // Rendered by renderSettingsPanel itself, so always present when the tab is open.
     panel: [
       "settingsModuleType", "settingsCertLevel", "settingsValidFrom", "settingsValidTo",
-      "settingsMcqMinPercent", "settingsTotalMin", "settingsPracticalMin",
+      "settingsMcqMinPercent", "settingsMcqPerAttempt", "settingsMcqShuffle", "settingsMcqReview", "settingsTotalMin", "settingsPracticalMin",
       "settingsBorderlineMin", "settingsBorderlineMax", "settingsPracticalWeight",
     ],
     // Inside collapsible sections: absent from the DOM until the author expands them.
@@ -1161,9 +1190,36 @@ export function createSettingsTab(ctx) {
       }
     }
 
-    const policy = existingPolicy || Object.keys(passRules).length > 0
-      ? { ...(existingPolicy ?? {}), passRules }
+    // #1062: bruken av settet per forsøk. Tomt felt = alle (nøkkelen utelates); stokking lagres
+    // bare når den er slått AV — «på» er standarden og trenger ingen verdi.
+    const perAttemptInput = document.getElementById("settingsMcqPerAttempt");
+    const shuffleInput = document.getElementById("settingsMcqShuffle");
+    const mcqUse = { ...(existingPolicy?.mcq ?? {}) };
+    if (perAttemptInput) {
+      const raw = perAttemptInput.value.trim();
+      const n = raw === "" ? null : Number(raw);
+      if (raw !== "" && (!Number.isInteger(n) || n < 1)) {
+        showToast(t("shell.settings.invalidMcqPerAttempt"), "error");
+        perAttemptInput.focus();
+        reenableSettingsSave();
+        return;
+      }
+      if (n === null) delete mcqUse.questionsPerAttempt; else mcqUse.questionsPerAttempt = n;
+    }
+    if (shuffleInput) {
+      if (shuffleInput.checked) delete mcqUse.shuffleQuestions; else mcqUse.shuffleQuestions = false;
+    }
+    const reviewInput = document.getElementById("settingsMcqReview");
+    if (reviewInput) {
+      if (reviewInput.checked) mcqUse.reviewAfterSubmit = true; else delete mcqUse.reviewAfterSubmit;
+    }
+    if (isFreetextOnly) { delete mcqUse.questionsPerAttempt; delete mcqUse.shuffleQuestions; delete mcqUse.reviewAfterSubmit; }
+    const mcqChanged = JSON.stringify(mcqUse) !== JSON.stringify(existingPolicy?.mcq ?? {});
+
+    const policy = existingPolicy || Object.keys(passRules).length > 0 || Object.keys(mcqUse).length > 0
+      ? { ...(existingPolicy ?? {}), passRules, ...(Object.keys(mcqUse).length > 0 ? { mcq: mcqUse } : {}) }
       : null;
+    if (policy && Object.keys(mcqUse).length === 0) delete policy.mcq;
 
     // Module-level fields. Sent only when the author actually changed them, so a mode switch
     // does not rewrite a description or a date the panel merely displayed.
@@ -1225,7 +1281,7 @@ export function createSettingsTab(ctx) {
     // The whole pass-rule object, not just the MCQ threshold. Adding the other three rules to the
     // payload without adding them here meant editing the overall pass mark hit "no changes" and
     // nothing was written — the field existed and did nothing.
-    const policyChanged = JSON.stringify(passRules) !== JSON.stringify(existingPolicy?.passRules ?? {});
+    const policyChanged = JSON.stringify(passRules) !== JSON.stringify(existingPolicy?.passRules ?? {}) || mcqChanged;
     // #896 S3c: criteria edited here ride along as an INLINE rubric, exactly as the direct-edit save
     // does. Referencing `rubricVersionId` would carry the old criteria forward and quietly discard
     // what the author just typed.

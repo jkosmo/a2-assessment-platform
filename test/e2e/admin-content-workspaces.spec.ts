@@ -2101,7 +2101,9 @@ test.describe("admin content browser coverage", () => {
   // lives in Rediger. It is sent as a locale patch so the composer merges it onto the stored
   // value — writing the whole object would delete the languages the author did not touch, the
   // same failure #892, #902 and #905 each produced in their own corner.
-  test("the description can be corrected from Rediger and is sent as a locale patch", async ({ page }) => {
+  // #1064 (stage 17.09): beskrivelsen ble sendt i ETT språk og aldri oversatt med resten. Nå går den
+  // samme vei som tittelen — ett kall per språk — og sendes med alle tre.
+  test("the description can be corrected from Rediger and is translated to the other locales like the title", async ({ page }) => {
     const state = await mockCommonApis(page, {
       modules: [{ id: "module-1", title: "Trade unions", activeVersion: { versionNo: 1 } }],
       moduleExports: {
@@ -2132,10 +2134,38 @@ test.describe("admin content browser coverage", () => {
 
     await expect.poll(() => state.lastModuleVersionBody?.description).toBeTruthy();
     const sent = state.lastModuleVersionBody.description;
-    // A patch keyed by the edited locale — not a bare string, and not all three locales.
+    // Et språkkart med alle tre: det redigerte språket som skrevet, de to andre oversatt
+    // (mocken merker oversettelsen med [locale]).
     expect(typeof sent).toBe("object");
-    expect(Object.values(sent)).toContain("Rettet beskrivelse");
+    expect(Object.keys(sent).sort()).toEqual(["en-GB", "nb", "nn"]);
+    const source = Object.entries(sent).find(([, v]) => v === "Rettet beskrivelse");
+    expect(source, "det redigerte språket står som skrevet").toBeTruthy();
+    for (const [loc, v] of Object.entries(sent)) {
+      if (loc !== source![0]) expect(v).toBe(`Rettet beskrivelse [${loc}]`);
+    }
+  });
+
+  test("a description that could not be translated is sent in the edited locale only — never source-filled", async ({ page }) => {
+    const state = await mockCommonApis(page, {
+      modules: [{ id: "module-1", title: "Trade unions", activeVersion: { versionNo: 1 } }],
+      moduleExports: {
+        "module-1": buildMockModuleExport({ id: "module-1", title: "Trade unions", moduleVersionId: "module-1-version-1", taskText: localizedText("Norsk scenario"), assessmentMode: "FREETEXT_ONLY" }),
+      },
+    });
+    // Tittel-/kortoversetteren feiler; utkastoversetteren (som ikke tar beskrivelsen) virker.
+    await page.route("**/api/admin/content/sections/localize", (route: Route) => route.fulfill({ status: 500, contentType: "application/json", body: "{}" }));
+
+    await page.goto("/admin-content/module/module-1/conversation");
+    await page.locator("#previewEditTitle").waitFor();
+    await page.locator("#previewEditDescription").fill("Bare på ett språk");
+    await page.locator("#formSaveBtn").click();
+
+    await expect.poll(() => state.lastModuleVersionBody?.description).toBeTruthy();
+    const sent = state.lastModuleVersionBody.description;
     expect(Object.keys(sent).length).toBe(1);
+    expect(Object.values(sent)).toEqual(["Bare på ett språk"]);
+    // Og forfatteren får vite hvilke språk som ikke ble oversatt.
+    await expect(page.locator(".toast").filter({ hasText: /Ikke oversatt til|Not translated to|Ikkje omsett til/ }).first()).toBeVisible();
   });
 
   test("Innstillinger rejects a validity window that ends before it starts", async ({ page }) => {
@@ -3780,7 +3810,7 @@ test.describe("admin content browser coverage", () => {
     // bokmål ved lagring; det som stopper i skjemaet er at det ikke finnes noe navn å oversette.
     await page.locator("#certLevel").selectOption("basic");
     await page.locator("#formSaveBtn").click();
-    await expect(page.locator("#formErrorBanner")).toContainText("bokmål");
+    await expect(page.locator("#formErrorBanner")).toContainText(/bokmål/i);
     expect(state.mutableCourses.length).toBe(0);
 
     await page.locator("[data-form-locale=\"nb\"]").click();

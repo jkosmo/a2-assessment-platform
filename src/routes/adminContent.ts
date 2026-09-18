@@ -16,6 +16,7 @@ import {
   syncActiveRubricBlueprintHash,
   publishModuleVersion,
   restoreModuleVersion,
+  appendMcqQuestions,
   unpublishModule,
   archiveModule,
   restoreModule,
@@ -35,6 +36,7 @@ import {
   mcqSetBodySchema,
   moduleVersionBodySchema,
   composeModuleVersionBodySchema,
+  appendMcqQuestionsBodySchema,
   benchmarkExampleVersionBodySchema,
   blueprintGenerationBodySchema,
   rubricGenerationBodySchema,
@@ -78,6 +80,7 @@ import {
 } from "../modules/adminContent/llmContentGenerationService.js";
 import { validateMcqDistractors, validateScenarioDraft } from "../modules/adminContent/contentValidationService.js";
 import { localizedTextCodec } from "../codecs/localizedTextCodec.js";
+import { isExtractionJobOwner, rememberExtractionJobOwner } from "../modules/adminContent/extractionJobOwners.js";
 import { findCoursesContainingModule, inUseMessage } from "../modules/course/contentLifecycle.js";
 import {
   submitParseJob,
@@ -715,6 +718,48 @@ adminContentRouter.post("/modules/:moduleId/module-versions", async (request, re
 // the granular API agents and imports use. This is the composed path the authoring UI wants.
 // Typed params: with middleware in the chain Express widens `request.params` to string|string[],
 // which the ownership check and composer both reject.
+// #1062: legg spørsmål til banken. Ny MCQSetVersion (gamle + nye) og ny modulversjon som utkast —
+// ingenting publiseres, ingenting annet endres. Eierskap som for versjoner; agent-token tillatt
+// (det er additivt og utkast-bare, i motsetning til replaceExisting, #651).
+adminContentRouter.post("/modules/:moduleId/mcq-questions", idempotency((req) => `modules.mcq-questions.append:${req.params.moduleId}`), async (request: Request<{ moduleId: string }>, response) => {
+  const { data, error } = parseRequest(appendMcqQuestionsBodySchema, request.body);
+  if (error) {
+    response.status(400).json({ error: "validation_error", issues: error });
+    return;
+  }
+  const actorId = request.context?.userId;
+  if (!actorId) {
+    response.status(401).json({ error: "unauthorized" });
+    return;
+  }
+  try {
+    await assertModuleOwnership(request.params.moduleId, actorId, request.context?.roles ?? []);
+    const result = await appendMcqQuestions({
+      moduleId: request.params.moduleId,
+      actorId,
+      questions: data.questions.map((question) => ({
+        stem: localizedTextCodec.serialize(question.stem),
+        options: question.options.map((option) => localizedTextCodec.serialize(option)),
+        correctAnswer: localizedTextCodec.serialize(question.correctAnswer),
+        rationale: question.rationale ? localizedTextCodec.serialize(question.rationale) : undefined,
+      })),
+    });
+    response.status(201).json({
+      moduleVersion: result.moduleVersion,
+      mcqSetVersionId: result.mcqSetVersion.id,
+      existingCount: result.existingCount,
+      addedCount: result.addedCount,
+    });
+  } catch (err) {
+    if (err instanceof AppError) {
+      respondWithAppError(response, err);
+      return;
+    }
+    const message = err instanceof Error ? err.message : "Could not append questions.";
+    response.status(400).json({ error: "append_mcq_questions_failed", message });
+  }
+});
+
 adminContentRouter.post("/modules/:moduleId/versions", idempotency((req) => `modules.versions.compose:${req.params.moduleId}`), async (request: Request<{ moduleId: string }>, response) => {
   const { data, error } = parseRequest(composeModuleVersionBodySchema, request.body);
   if (error) {
@@ -1010,8 +1055,15 @@ adminContentRouter.post("/source-material/extract", extractLimiter, async (reque
     return;
   }
 
+  const actorId = request.context?.userId;
+  if (!actorId) {
+    response.status(401).json({ error: "unauthorized" });
+    return;
+  }
   try {
     const jobId = await submitParseJob(data);
+    // #1031: bare den som startet jobben får lese resultatet.
+    rememberExtractionJobOwner(jobId, actorId);
     response.status(202).json({ jobId });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
@@ -1023,6 +1075,13 @@ adminContentRouter.post("/source-material/extract", extractLimiter, async (reque
 // lookup uten ekstern cost. Tidligere generateLimiter delte budsjett med LLM-generation —
 // multi-fil-flyt med 30 polls/fil × 5 filer blåste gjennom 10/min på sekunder.
 adminContentRouter.get("/source-material/extract/:jobId", async (request, response) => {
+  const actorId = request.context?.userId;
+  // #1031: en annens jobb svarer som om den ikke finnes — ikke 403, som ville bekreftet at id-en
+  // er ekte. Kildemateriale er ofte det mest følsomme en forfatter laster opp.
+  if (!actorId || !isExtractionJobOwner(request.params.jobId as string, actorId)) {
+    response.status(404).json({ error: "job_not_found" });
+    return;
+  }
   try {
     const result = await getParsedResult(request.params.jobId as string);
     if (!result) {

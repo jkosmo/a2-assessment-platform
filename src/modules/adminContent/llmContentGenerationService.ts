@@ -57,6 +57,9 @@ export type McqGenerationInput = {
   // question distribution across topics so the MCQ set covers the contract that the
   // scenario was also generated against. See #372.
   blueprint?: AssessmentBlueprint;
+  // #1062: stems already in the module's question bank. The new questions must cover other
+  // ground — a bank of 30 must not be 30 paraphrases of the first 10.
+  avoidStems?: string[];
 };
 
 export type McqDistractorMetadata = {
@@ -927,7 +930,18 @@ Author notes: ${input.blueprint.notes || "(none)"}
 `;
   }
 
-  const userPrompt = `Generate EXACTLY ${input.questionCount} multiple-choice questions (not fewer, not more) using the source material below as hidden author background only. The questions array in your JSON response must contain exactly ${input.questionCount} items.${mcqBlueprintSection}
+  const avoidSection = input.avoidStems && input.avoidStems.length > 0
+    ? [
+        "",
+        "",
+        "## Already in the question bank — do NOT repeat, paraphrase or trivially vary these",
+        "",
+        "The module already asks the following. Cover other facts, concepts, conditions or situations from the source material. A new question that tests the same point as one below is a failure even if the wording differs.",
+        "",
+        ...input.avoidStems.map((stem) => `- ${stem}`),
+      ].join("\n")
+    : "";
+  const userPrompt = `Generate EXACTLY ${input.questionCount} multiple-choice questions (not fewer, not more) using the source material below as hidden author background only. The questions array in your JSON response must contain exactly ${input.questionCount} items.${mcqBlueprintSection}${avoidSection}
 
 ${buildLanguageEnforcementDirective(input.locale)}
 

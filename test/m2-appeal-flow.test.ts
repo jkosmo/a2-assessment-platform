@@ -219,3 +219,18 @@ describe("MVP appeal flow", () => {
     expect(actions).toContain("participant_notification_sent");
   });
 });
+
+// #1008: en ukjent statusverdi ga hele køen (ukjent → filtrert bort → tom liste → «ikke filtrer»).
+// Nå er den en valideringsfeil som navngir det som ikke ble forstått.
+describe("#1008 appeal queue status filter", () => {
+  it("rejects an unknown status with 400 and names it; a valid list still works", async () => {
+    const bad = await request(app).get("/api/appeals?status=TULLEVERDI").set(appealHandlerHeaders);
+    expect(bad.status).toBe(400);
+    expect(bad.body.error).toBe("validation_error");
+    expect(JSON.stringify(bad.body.issues)).toContain("TULLEVERDI");
+    const mixed = await request(app).get("/api/appeals?status=OPEN,nonsense").set(appealHandlerHeaders);
+    expect(mixed.status).toBe(400);
+    const ok = await request(app).get("/api/appeals?status=open,in_review").set(appealHandlerHeaders);
+    expect(ok.status).toBe(200);
+  });
+});

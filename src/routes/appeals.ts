@@ -5,21 +5,25 @@ import { requestLocale } from "../i18n/requestLocale.js";
 
 const appealsRouter = Router();
 
+const APPEAL_STATUSES = ["OPEN", "IN_REVIEW", "RESOLVED", "REJECTED", "SUPERSEDED"] as const;
+type AppealStatusFilter = (typeof APPEAL_STATUSES)[number];
+
+// #1008: en ukjent verdi ble stille filtrert BORT — og en tom liste betydde «ikke filtrer», så
+// `?status=TULLEVERDI` ga hele køen. Samme klasse som #938/#944/#945/#958: uoppramset input skal
+// avvises, ikke bli en snill standard.
 const listQuerySchema = z.object({
   status: z
     .string()
     .optional()
-    .transform((value) => {
-      if (!value) {
-        return ["OPEN", "IN_REVIEW"] as Array<"OPEN" | "IN_REVIEW" | "RESOLVED" | "REJECTED" | "SUPERSEDED">;
+    .transform((value, ctx): AppealStatusFilter[] => {
+      if (!value) return ["OPEN", "IN_REVIEW"];
+      const items = value.split(",").map((item) => item.trim().toUpperCase()).filter(Boolean);
+      const unknown = items.filter((item) => !(APPEAL_STATUSES as readonly string[]).includes(item));
+      if (unknown.length > 0) {
+        ctx.addIssue({ code: "custom", message: `Unknown status: ${unknown.join(", ")}. Allowed: ${APPEAL_STATUSES.join(", ")}.`, path: ["status"] });
+        return z.NEVER;
       }
-      return value
-        .split(",")
-        .map((item) => item.trim().toUpperCase())
-        .filter(
-          (item): item is "OPEN" | "IN_REVIEW" | "RESOLVED" | "REJECTED" | "SUPERSEDED" =>
-            item === "OPEN" || item === "IN_REVIEW" || item === "RESOLVED" || item === "REJECTED" || item === "SUPERSEDED",
-        );
+      return items as AppealStatusFilter[];
     }),
   limit: z.coerce.number().int().min(1).max(200).default(50),
 });

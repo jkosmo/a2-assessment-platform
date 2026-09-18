@@ -2396,6 +2396,59 @@ function applySettledChrome(hasResult) {
   if (assessmentProgressStatus) setHidden(assessmentProgressStatus, hasResult);
 }
 
+let mcqReviewHost = null;
+async function renderMcqReview(submissionId) {
+  if (!submissionId) return;
+  let review;
+  try {
+    review = await apiFetch(`/api/submissions/${submissionId}/mcq-review`, headers);
+  } catch {
+    return; // Gjennomgangen er et tillegg til resultatet; feiler den, står resultatet.
+  }
+  if (!review?.enabled || !Array.isArray(review.questions) || review.questions.length === 0) return;
+  // Resultatet tegnes på nytt ved hver polling — ett kort, byttet ut, ikke stablet.
+  if (mcqReviewHost?.isConnected) mcqReviewHost.remove();
+  const wrong = review.questions.filter((q) => !q.isCorrect);
+  const card = createSummaryCard(t("result.mcqReview.title"));
+  const lead = document.createElement("p");
+  lead.className = "small";
+  lead.textContent = wrong.length === 0
+    ? fillPlaceholders(t("result.mcqReview.allCorrect"), { count: review.questions.length })
+    : fillPlaceholders(t("result.mcqReview.lead"), { wrong: wrong.length, count: review.questions.length });
+  card.appendChild(lead);
+  const list = document.createElement("ol");
+  list.className = "mcq-review-list";
+  // Feil først — det er dem man lærer av; de riktige står sammenfoldet under.
+  for (const q of [...wrong, ...review.questions.filter((q) => q.isCorrect)]) {
+    const item = document.createElement("li");
+    item.className = q.isCorrect ? "mcq-review-item is-correct" : "mcq-review-item is-wrong";
+    const stem = document.createElement("div");
+    stem.className = "mcq-review-stem";
+    stem.textContent = q.stem;
+    item.appendChild(stem);
+    const yours = document.createElement("div");
+    yours.className = "mcq-review-line";
+    yours.textContent = `${t("result.mcqReview.yourAnswer")}: ${q.selectedAnswer ?? t("result.mcqReview.unanswered")}`;
+    item.appendChild(yours);
+    if (!q.isCorrect) {
+      const correct = document.createElement("div");
+      correct.className = "mcq-review-line mcq-review-correct";
+      correct.textContent = `${t("result.mcqReview.correctAnswer")}: ${q.correctAnswer}`;
+      item.appendChild(correct);
+    }
+    if (q.rationale) {
+      const why = document.createElement("div");
+      why.className = "mcq-review-rationale";
+      why.textContent = q.rationale;
+      item.appendChild(why);
+    }
+    list.appendChild(item);
+  }
+  card.appendChild(list);
+  mcqReviewHost = card;
+  resultSummary.appendChild(card);
+}
+
 function createSummaryCard(title) {
   const card = document.createElement("section");
   card.className = "summary-card";
@@ -2549,6 +2602,10 @@ function renderResultSummary(body) {
     rationaleCard.appendChild(rationaleList);
     resultSummary.appendChild(rationaleCard);
   }
+
+  // #1061: gjennomgangen av flervalgsdelen — eget kall, egen dør for fasiten. Tjeneren svarer tomt
+  // når modulen ikke har slått den på; da vises ingenting.
+  if (body.scoreComponents?.mcqPercentScore != null) void renderMcqReview(body.submissionId);
 
   // #549: celebrate an automatic/confirmed pass — confetti + a clear "passed" banner, shown once
   // per result (the result view re-renders on each poll). De-emphasising retry is handled in
