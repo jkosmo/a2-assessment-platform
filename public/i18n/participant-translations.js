@@ -96,6 +96,8 @@ export const translations = {
     // formuleres her i stedet for å komme som norsk prosa fra serveren.
     // {count} og {courseTitles} fylles fra feilsvarets `details`.
     "errors.api.content_in_use": "This content is used in {count} course(s): {courseTitles}. Remove it from them first, or unpublish those courses.",
+    "errors.api.not_configured": "This function is not set up on the server yet. Ask an administrator.",
+    "errors.api.module_version_unavailable": "The module is not available right now — it has no published version. Try again later, or ask the course owner.",
     "errors.api.course_has_no_items": "A course needs at least one module or section before it can be published.",
     "errors.api.section_archived_cannot_publish": "Restore the section before you publish it.",
     "errors.api.section_has_no_content": "The section has no content to publish yet. Add text first.",
@@ -576,6 +578,8 @@ export const translations = {
 
     // #972/#965/#980 — se merknaden i en-GB-tabellen.
     "errors.api.content_in_use": "Innholdet er i bruk i {count} kurs: {courseTitles}. Fjern det fra kursene først, eller avpubliser dem.",
+    "errors.api.not_configured": "Funksjonen er ikke satt opp på serveren ennå. Kontakt en administrator.",
+    "errors.api.module_version_unavailable": "Modulen er ikke tilgjengelig akkurat nå — den har ingen publisert versjon. Prøv igjen senere, eller kontakt kurseieren.",
     "errors.api.course_has_no_items": "Et kurs må ha minst én modul eller seksjon før det kan publiseres.",
     "errors.api.section_archived_cannot_publish": "Gjenopprett seksjonen før du publiserer den.",
     "errors.api.section_has_no_content": "Seksjonen har ikke noe innhold å publisere ennå. Legg inn tekst først.",
@@ -1049,6 +1053,8 @@ export const translations = {
     "errors.apiGeneric": "Førespurnaden kunne ikkje fullførast ({status}). Prøv igjen — varer det ved, kontakt administrator.",
 
 "errors.api.content_in_use": "Innhaldet er i bruk i {count} kurs: {courseTitles}. Fjern det frå kursa først, eller avpubliser dei.",
+"errors.api.not_configured": "Funksjonen er ikkje sett opp på tenaren enno. Kontakt ein administrator.",
+"errors.api.module_version_unavailable": "Modulen er ikkje tilgjengeleg akkurat no — han har inga publisert utgåve. Prøv igjen seinare, eller kontakt kurseigaren.",
 "errors.api.course_has_no_items": "Eit kurs må ha minst éin modul eller seksjon før det kan publiserast.",
 "errors.api.section_archived_cannot_publish": "Gjenopprett seksjonen før du publiserer henne.",
 "errors.api.section_has_no_content": "Seksjonen har ikkje noko innhald å publisere enno. Legg inn tekst først.",

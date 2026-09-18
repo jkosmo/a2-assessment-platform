@@ -107,12 +107,12 @@ describe("API-002: Module ownership isolation for SUBJECT_MATTER_OWNER", () => {
     await request(app).delete(`/api/admin/content/modules/${moduleId}`).set(adminHeaders);
   });
 
-  it("legacy module (createdById=null) blocks SMO mutation; admin allowed", async () => {
-    // Insert a legacy module directly without createdById
+  it("legacy module (no ContentOwner row) blocks SMO mutation; admin allowed", async () => {
+    // Insert a legacy module directly, outside the command that adds the owner row (#963: the
+    // createdById column is gone; "legacy" now means exactly "no owner row").
     const legacy = await prisma.module.create({
       data: {
         title: JSON.stringify({ "en-GB": "Legacy Module for ownership test" }),
-        createdById: null,
       },
       select: { id: true },
     });

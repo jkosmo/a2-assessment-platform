@@ -3,11 +3,12 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
-// #963: `Module.createdById` og `Class.createdById` er forrige generasjon eierskap. Autorisasjonen
-// leser bare ContentOwner (#787). Kolonnene står til en contract-migrasjon i en SENERE release —
-// gamle containere velger fortsatt alle skalarer og ville feilet om kolonnen forsvant i samme deploy.
+// #963: `Module.createdById` og `Class.createdById` var forrige generasjon eierskap. Autorisasjonen
+// leser bare ContentOwner (#787). Skrivestoppen kom i 2.66.0; kolonnene ble droppet i 2.71.0
+// (`20260918220000_drop_created_by_id_963`), flere releaser senere, så ingen kjørende container
+// valgte dem lenger.
 //
-// ⚠️ Fram til da skal INGEN i src skrive eller lese dem. En ny skriver ville gjenopplivet to
+// ⚠️ Vakta står igjen: INGEN i src skal gjeninnføre navnet. En ny skriver ville gjenopplivet to
 // generasjoner side om side — nettopp det som fikk en leser til å tro at `createdById` betydde noe.
 
 const SRC = fileURLToPath(new URL("../../src", import.meta.url));

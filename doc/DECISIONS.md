@@ -232,8 +232,11 @@ vises.
 **Hvorfor:** konsollene er trespråklige og defaulter til `en-GB`. En norsk setning fra serveren
 vises da ordrett til en engelsk forfatter, og omvendt.
 
-**Håndheves:** `public/static/import-error.js`, publiseringsgatens `issues[]`.
-**Sak:** `FEATURE_SURFACE_MAP` §24, #937 · **Status:** avklart, brutt på mange flater (#972, #980, #983, #985)
+**Håndheves:** `public/static/api-error.js` (alle koder slås opp i `errors.api.*`; `validation_error`
+er bare formfeil), `DomainRuleError` for domeneregler, ratsjen `test/unit/domain-error-codes-999.test.ts`.
+**Sak:** `FEATURE_SURFACE_MAP` §24, #937, #999 · **Status:** gjelder uten forbehold fra 2.71.0 —
+unntaket som viste serverens `message` som overskrift (#996) er fjernet; de siste avsenderne fikk
+egne klasser (`not_configured` 503, `module_version_unavailable` 409).
 
 ## Tilgjengelighet av innhold
 

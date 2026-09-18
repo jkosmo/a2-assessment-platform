@@ -1,5 +1,5 @@
 import { SubmissionStatus } from "../../db/prismaRuntime.js";
-import { ValidationError } from "../../errors/AppError.js";
+import { ConflictError } from "../../errors/AppError.js";
 import type { SupportedLocale } from "../../i18n/locale.js";
 import { submissionRepository, createSubmissionRepository, getModuleWithActiveVersion } from "./submissionRepository.js";
 import { runInTransaction } from "../../db/transaction.js";
@@ -90,10 +90,10 @@ export async function createSubmission(input: CreateSubmissionInput) {
   const module = await getModuleWithActiveVersion(input.moduleId);
 
   if (!module || !module.activeVersion || !module.activeVersion.publishedAt) {
-    // ⚠️ #999: BLIR OGSÅ STÅENDE. Dette er en intern invariant, ikke en regel deltakeren brøt.
-    // Fyrer den, er dataene inkonsistente — modulen er publisert uten aktiv versjon — og svaret er
-    // en feilrapport, ikke en oversatt setning som ber brukeren gjøre noe hen ikke kan gjøre.
-    throw new ValidationError("Module active version is not available.");
+    // #999: modulen har ingen publisert aktiv versjon akkurat nå — en TILSTANDSKONFLIKT (409), ikke
+    // et skjema som feilet. Egen kode så deltakerflaten kan si «modulen er ikke tilgjengelig» på
+    // sitt språk; setningen her er reserven for API-konsumenter og loggen.
+    throw new ConflictError("module_version_unavailable", "Module active version is not available.", { moduleId: input.moduleId });
   }
 
   const parseOutcome = await resolveSubmissionResponseJson({

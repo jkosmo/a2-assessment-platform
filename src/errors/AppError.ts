@@ -53,6 +53,17 @@ export class ValidationError extends AppError {
   }
 }
 
+/**
+ * #999 (siste porsjon): en KONFIGURASJONSFEIL — tjenesten mangler noe drift må sette. Ikke 400
+ * `validation_error` (ingen sendte noe galt), ikke 500 (ikke en uventet feil). 503 med egen kode, så
+ * klienten kan si «ikke satt opp» på brukerens språk og loggen får miljøvariabelen i `message`.
+ */
+export class ConfigurationError extends AppError {
+  constructor(message: string, details?: Record<string, unknown>) {
+    super("not_configured", 503, message, details);
+  }
+}
+
 export class ForbiddenError extends AppError {
   constructor(message = "Forbidden.", code = "forbidden") {
     super(code, 403, message);

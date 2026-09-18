@@ -1,6 +1,6 @@
 import { DefaultAzureCredential } from "@azure/identity";
 import { env } from "../../config/env.js";
-import { ValidationError } from "../../errors/AppError.js";
+import { ConfigurationError } from "../../errors/AppError.js";
 import { fetchWithDeadlineAndRetry, withTimeout } from "../../clients/externalCall.js";
 import { applyOrgDeltaSync } from "./orgSyncService.js";
 
@@ -103,13 +103,10 @@ export async function syncEntraUsersFromGroup(actorId: string): Promise<EntraUse
   if (!groupId) {
     // ⚠️ #999: DENNE BLIR STÅENDE UTEN KODE, med vilje.
     //
-    // En feilkode finnes for at klienten skal kunne si det samme på brukerens språk. Dette er ikke
-    // en domeneregel en bruker kan gjøre noe med — det er en KONFIGURASJONSFEIL som navngir en
-    // miljøvariabel. Å oversette «ENTRA_USER_SYNC_GROUP_ID er ikke satt» til nynorsk hjelper ingen;
-    // den som ser den, skal lese loggen og sette variabelen.
-    //
-    // Å gi den kode ville fått ratsjen ned, men gjort teksten til en løgn om hvem den er til for.
-    throw new ValidationError("Entra user sync is not configured (ENTRA_USER_SYNC_GROUP_ID is unset).");
+    // #999: en KONFIGURASJONSFEIL, ikke en domeneregel og ikke et skjema som feilet. Egen klasse
+    // (503 `not_configured`), så klienten kan si «ikke satt opp» på sitt språk uten å vise denne
+    // setningen — den er til loggen og den som skal sette variabelen.
+    throw new ConfigurationError("Entra user sync is not configured (ENTRA_USER_SYNC_GROUP_ID is unset).", { setting: "ENTRA_USER_SYNC_GROUP_ID" });
   }
 
   const accessToken = await getGraphToken();

@@ -105,12 +105,10 @@ model User {
   deletionRequests              DeletionRequest[]
   courseCompletions             CourseCompletion[]
   courseSectionReads            CourseSectionRead[]
-  createdModules                Module[]                 @relation("CreatedModules")
   courseEnrollments             CourseEnrollment[]       @relation("EnrolledUser")
   enrollmentsAssigned           CourseEnrollment[]       @relation("EnrollmentAssignedBy")
   classMemberships              ClassMember[]            @relation("ClassMembership")
   classMembersAdded             ClassMember[]            @relation("ClassMemberAddedBy")
-  classesCreated                Class[]                  @relation("ClassCreatedBy")
   courseGroupAssignmentsCreated CourseGroupAssignment[]  @relation("CourseGroupAssignedBy")
   discussionThreadsAuthored     DiscussionThread[]       @relation("DiscussionThreadAuthor")
   discussionThreadsDeleted      DiscussionThread[]       @relation("DiscussionThreadDeletedBy")
@@ -252,8 +250,6 @@ model Module {
   archivedAt             DateTime?
   createdAt              DateTime                @default(now())
   updatedAt              DateTime                @updatedAt
-  createdById            String?
-  createdBy              User?                   @relation("CreatedModules", fields: [createdById], references: [id], onDelete: SetNull)
   versions               ModuleVersion[]         @relation("ModuleVersions")
   activeVersion          ModuleVersion?          @relation("ActiveModuleVersion", fields: [activeVersionId], references: [id], onDelete: SetNull)
   submissions            Submission[]
@@ -719,11 +715,9 @@ model Class {
   kind              ClassKind               @default(MANUAL)
   entraGroupId      String? // set only for kind=ENTRA (CL-5)
   isSystem          Boolean                 @default(false)
-  createdById       String?
   createdAt         DateTime                @default(now())
   updatedAt         DateTime                @updatedAt
   archivedAt        DateTime?
-  createdBy         User?                   @relation("ClassCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
   members           ClassMember[]
   courseAssignments CourseGroupAssignment[]
 

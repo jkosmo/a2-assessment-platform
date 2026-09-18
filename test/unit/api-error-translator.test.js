@@ -199,7 +199,10 @@ describe("#996: validation_error uten issues bærer sin egen forklaring", () => 
 
   const err = (status, body) => new Error(`${status}: ${JSON.stringify(body)}`);
 
-  it("viser domenemeldingen når issues mangler", () => {
+  it("#999: uten issues er overskriften fortsatt den generiske — serverens setning blir detalj", () => {
+    // Unntaket fra #996 (vis `message` som overskrift når `issues` mangler) er borte: alle domene-
+    // regler bærer kode nå, så en `validation_error` uten `issues` er enten en formfeil uten Zod-
+    // utdata eller en gammel tjener. Setningen beholdes som detalj, aldri som overskrift.
     const d = describeApiError(
       err(400, {
         error: "validation_error",
@@ -208,10 +211,8 @@ describe("#996: validation_error uten issues bærer sin egen forklaring", () => 
       t,
     );
 
-    expect(d.headline).toContain("kursbevis");
-    expect(d.headline).toContain("Arkiver");
-    // Ingen detaljdump: setningen ER forklaringen, og det er ikke noe mer å vise.
-    expect(d.detail).toBeUndefined();
+    expect(d.headline).not.toContain("kursbevis");
+    expect(d.detail).toContain("kursbevis");
   });
 
   it("KONTROLLCASE: MED issues er det en skjemafeil, og Zod-utdataet blir detalj", () => {
