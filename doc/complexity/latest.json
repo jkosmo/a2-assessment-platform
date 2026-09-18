@@ -1,6 +1,6 @@
 {
   "dato": "2026-09-18",
-  "versjon": "2.70.0",
+  "versjon": "2.71.0",
   "samlet": 63,
   "skår": {
     "reglerFlereSteder": 38,
@@ -63,7 +63,7 @@
       "over1500": [
         {
           "fil": "public/static/admin-content-shell.js",
-          "linjer": 4643
+          "linjer": 4667
         },
         {
           "fil": "public/participant.js",
@@ -75,7 +75,7 @@
         },
         {
           "fil": "public/static/admin-content-courses.js",
-          "linjer": 1815
+          "linjer": 1803
         },
         {
           "fil": "public/review.js",
@@ -157,8 +157,8 @@
       "ruter": 201,
       "tabeller": 39,
       "kolonner": 507,
-      "i18nNøkler": 5384,
-      "testfiler": 357
+      "i18nNøkler": 5381,
+      "testfiler": 360
     }
   }
 }
