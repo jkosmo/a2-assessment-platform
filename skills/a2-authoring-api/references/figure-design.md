@@ -132,11 +132,34 @@ include `xmlns` and a `viewBox`. No `<script>`, `on*`, `<foreignObject>`, `<a>`,
 </svg>
 ```
 
+## Mandatory: look at the figure before you show it (#1060)
+
+Valid SVG is not a finished figure. The failure the eyes catch and the schema never will: a label
+longer than its box, text sitting on an arrow, a label clipped by the `viewBox`. Every drawn
+figure — and later **every locale variant**, because the Nynorsk or English label is often longer
+than the Bokmål one the box was sized for — goes through these two steps before it is presented
+at the per-element gate or written into the package:
+
+1. **Measure.** `node skills/a2-authoring-api/scripts/figure-fit-check.mjs figure.svg` estimates
+   every `<text>` against its enclosing box and the `viewBox` and reports overflows in pixels.
+   It is deliberately a little strict. A `FAIL` is a figure you fix, not a warning you read.
+2. **Look.** Render it and inspect the image — the estimate does not see everything (overlaps,
+   arrows through labels, an ugly wrap). Playwright is in the repo:
+   `npx playwright screenshot --viewport-size=800,400 file:///<abs-path>/figure.svg figure.png`,
+   then open `figure.png` (in Claude Code: the Read tool shows the image). Check: every label
+   inside its shape with air around it; nothing crossing a line or arrow; no two labels touching;
+   nothing cut off at the edge.
+
+If either step fails: widen the box, shorten the label, break it with `<tspan>` lines, or enlarge
+the `viewBox` — then run both steps again. Do this per variant, not once per figure.
+
 ## Localization of figures (after primary approval)
 
 Once the primary-language course is approved, each text-bearing SVG figure gets **localizedVariants**
 for the other two locales: translate the `<text>` runs, keep the geometry identical (same number of
-labels, same positions). The deterministic `checkLocalization` (`localization-check.mjs`,
+labels, same positions) — and run the measure-and-look step above on **each variant** (#1060); a
+longer translation that no longer fits means a wider box in *all* variants, so the geometry stays
+identical. The deterministic `checkLocalization` (`localization-check.mjs`,
 `checkFigureLocalization`) verifies every text-bearing SVG has a variant for each other locale, the
 variant's label count equals the original's, identifiers/formulas/URLs in labels are preserved, and
 the variant is not a blind copy of the original labels. See `localization.md`.

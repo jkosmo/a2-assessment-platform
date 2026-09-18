@@ -109,7 +109,9 @@ the three references above.
    translatable `<text>` (#657). Draw only from the template set (flow / tree-decision /
    boxes-and-arrows / labelled diagram) unless the author explicitly asks free-form. Figures are
    proposed at the **Structure gate** and drafted at the **Per-element gate**; an approved figure
-   is **unique content** the preservation audit (#762) must never drop. (figure-design.md.)
+   is **unique content** the preservation audit (#762) must never drop. **Before a figure is shown
+   or written, measure and look at it** — `scripts/figure-fit-check.mjs` plus a rendered image —
+   and again for every locale variant (#1060). (figure-design.md.)
 
 ## Level and scope
 
