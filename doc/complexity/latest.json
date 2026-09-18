@@ -1,13 +1,13 @@
 {
-  "dato": "2026-09-17",
-  "versjon": "2.69.0",
-  "samlet": 64,
+  "dato": "2026-09-18",
+  "versjon": "2.70.0",
+  "samlet": 63,
   "skår": {
     "reglerFlereSteder": 38,
     "utgaverAvViktigeRegler": 100,
-    "filerAltMåGjennom": 25,
+    "filerAltMåGjennom": 20,
     "filerSomEndresSammen": 90,
-    "størrelse": 69
+    "størrelse": 65
   },
   "tall": {
     "sumRegler": 31,
@@ -63,15 +63,15 @@
       "over1500": [
         {
           "fil": "public/static/admin-content-shell.js",
-          "linjer": 4570
+          "linjer": 4643
         },
         {
           "fil": "public/participant.js",
-          "linjer": 4157
+          "linjer": 4214
         },
         {
           "fil": "src/modules/adminContent/llmContentGenerationService.ts",
-          "linjer": 2091
+          "linjer": 2105
         },
         {
           "fil": "public/static/admin-content-courses.js",
@@ -80,20 +80,20 @@
         {
           "fil": "public/review.js",
           "linjer": 1777
+        },
+        {
+          "fil": "public/static/admin-content-settings-tab.js",
+          "linjer": 1519
         }
       ],
       "over800": [
         {
-          "fil": "public/static/admin-content-settings-tab.js",
-          "linjer": 1463
-        },
-        {
           "fil": "src/routes/adminContent.ts",
-          "linjer": 1361
+          "linjer": 1420
         },
         {
           "fil": "src/modules/adminContent/adminContentCommands.ts",
-          "linjer": 1157
+          "linjer": 1230
         },
         {
           "fil": "public/static/admin-content-sections.js",
@@ -110,12 +110,12 @@
           "importører": 53
         },
         {
-          "fil": "index",
+          "fil": "locale",
           "importører": 39
         },
         {
-          "fil": "locale",
-          "importører": 38
+          "fil": "index",
+          "importører": 39
         },
         {
           "fil": "AppError",
@@ -154,11 +154,11 @@
       }
     ],
     "størrelse": {
-      "ruter": 199,
+      "ruter": 201,
       "tabeller": 39,
-      "kolonner": 506,
-      "i18nNøkler": 4871,
-      "testfiler": 352
+      "kolonner": 507,
+      "i18nNøkler": 5384,
+      "testfiler": 357
     }
   }
 }
