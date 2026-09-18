@@ -8,7 +8,9 @@ export const operationalEvents = {
     overdueDetected: "appeal_overdue_detected",
   },
   course: {
-    completionCheckFailed: "course_completion_check_failed",
+    // #1009: `completionCheckFailed` ("course_completion_check_failed") er fjernet — begge avsenderne
+    // ble erstattet av outboxen i #946, og et hendelsesnavn uten avsender ser ut som dekning man
+    // ikke har.
     // #967: tildelings-e-posten ble holdt tilbake fordi kurset ikke var publisert. Tildelingen
     // gikk gjennom — det er VARSELET som ikke ble sendt, og en e-post som aldri kom er stille.
     assignmentMailSuppressed: "course_assignment_mail_suppressed",
@@ -79,11 +81,6 @@ export const operationalEvents = {
 export type OperationalEventName = NestedValue<typeof operationalEvents>;
 
 export type OperationalEventMetadataByName = {
-  [operationalEvents.course.completionCheckFailed]: EventMetadata<{
-    userId: string;
-    moduleId: string;
-    errorMessage: string;
-  }>;
   // #967: hvor mange medlemmer som IKKE fikk «nytt kurs tildelt», og hvorfor.
   [operationalEvents.course.assignmentMailSuppressed]: EventMetadata<{
     courseId: string;

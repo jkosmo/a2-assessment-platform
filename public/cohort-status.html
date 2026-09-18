@@ -31,10 +31,10 @@
       </div>
       <!-- #498: «Deltakere»-området, med Status-fanen (rollegates av deltakere-subnav.js). -->
       <nav id="deltakereSubnav" class="content-area-nav" aria-label="Deltakere">
-        <a href="/deltakere/klasser" class="content-area-nav-link" id="subnavKlasser">Klasser</a>
-        <a href="/deltakere/status" class="content-area-nav-link" id="subnavStatus">Status</a>
-        <a href="/review" class="content-area-nav-link" id="subnavReview">Manuell behandling</a>
-        <a href="/results" class="content-area-nav-link" id="subnavResults">Resultater</a>
+        <a href="/deltakere/klasser" class="content-area-nav-link" id="subnavKlasser" data-i18n="area.classes">Klasser</a>
+        <a href="/deltakere/status" class="content-area-nav-link" id="subnavStatus" data-i18n="area.status">Status</a>
+        <a href="/review" class="content-area-nav-link" id="subnavReview" data-i18n="area.review">Manuell behandling</a>
+        <a href="/results" class="content-area-nav-link" id="subnavResults" data-i18n="area.results">Resultater</a>
       </nav>
       <!-- #1046 (produkteier 13.09): samme hode og filterrad som listesidene og Resultater. -->
       <div class="page-header">
@@ -118,5 +118,6 @@
     <script src="/static/cohort-status.js" type="module"></script>
     <script src="/static/deltakere-subnav.js" type="module"></script>
     <script src="/static/workspace-help.js" type="module"></script>
+      <script type="module" src="/static/content-area-nav-i18n.js"></script>
   </body>
 </html>

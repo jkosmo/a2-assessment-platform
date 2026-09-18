@@ -40,10 +40,10 @@
       <!-- #765: Klasser lever nå under «Deltakere»-området med felles undernavigasjon (rollegates av
            deltakere-subnav.js). Aktiv fane settes ut fra URL av samme script. -->
       <nav id="deltakereSubnav" class="content-area-nav" aria-label="Deltakere">
-        <a href="/deltakere/klasser" class="content-area-nav-link" id="subnavKlasser">Klasser</a>
-        <a href="/deltakere/status" class="content-area-nav-link" id="subnavStatus">Status</a>
-        <a href="/review" class="content-area-nav-link" id="subnavReview">Manuell behandling</a>
-        <a href="/results" class="content-area-nav-link" id="subnavResults">Resultater</a>
+        <a href="/deltakere/klasser" class="content-area-nav-link" id="subnavKlasser" data-i18n="area.classes">Klasser</a>
+        <a href="/deltakere/status" class="content-area-nav-link" id="subnavStatus" data-i18n="area.status">Status</a>
+        <a href="/review" class="content-area-nav-link" id="subnavReview" data-i18n="area.review">Manuell behandling</a>
+        <a href="/results" class="content-area-nav-link" id="subnavResults" data-i18n="area.results">Resultater</a>
       </nav>
 
       <div id="pageContent">
@@ -54,5 +54,6 @@
     <script type="module" src="/static/admin-content-classes.js"></script>
     <script type="module" src="/static/workspace-help.js"></script>
     <script type="module" src="/static/deltakere-subnav.js"></script>
+      <script type="module" src="/static/content-area-nav-i18n.js"></script>
   </body>
 </html>

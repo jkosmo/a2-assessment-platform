@@ -31,7 +31,7 @@ test.describe("admin content module library", () => {
     // admin-content nav must NOT expose a Klasser tab anymore (it still shows the content tabs).
     await expect(page.locator('a.content-area-nav-link[href="/admin-content/classes"]')).toHaveCount(0);
     await expect(page.locator('a.content-area-nav-link[href="/deltakere/klasser"]')).toHaveCount(0);
-    await expect(page.locator('a.content-area-nav-link[href="/admin-content/courses"]')).toHaveText("Kurs");
+    await expect(page.locator('a.content-area-nav-link[href="/admin-content/courses"]')).toHaveText(/^Kurs$|^Courses$/);
 
     const table = page.locator(".list-table");
     await expect(table).toBeVisible();

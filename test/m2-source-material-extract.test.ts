@@ -123,3 +123,33 @@ describe("API-341: Async source material extraction", () => {
     expect(res.body.error).toBe("validation_error");
   });
 });
+
+// #1031: status-endepunktet visste ikke hvem som spurte. En annens jobb svarer nå 404 — ikke 403,
+// som ville bekreftet at id-en er ekte og at det finnes noe å hente.
+describe("#1031 extraction jobs are read by their owner only", () => {
+  const otherSmo = {
+    "x-user-id": "smo-extract-2",
+    "x-user-email": "smo2@company.com",
+    "x-user-name": "Other SMO",
+    "x-user-roles": "SUBJECT_MATTER_OWNER",
+  };
+
+  it("the submitter reads the job; another SMO and an admin get 404", async () => {
+    const submitted = await request(app)
+      .post("/api/admin/content/source-material/extract")
+      .set(smoHeaders)
+      .send({ fileName: "own.txt", mimeType: "text/plain", contentBase64: base64Encode("Internt notat.") });
+    expect(submitted.status).toBe(202);
+    const jobId = submitted.body.jobId as string;
+
+    const mine = await request(app).get(`/api/admin/content/source-material/extract/${jobId}`).set(smoHeaders);
+    expect(mine.status).toBe(200);
+
+    const theirs = await request(app).get(`/api/admin/content/source-material/extract/${jobId}`).set(otherSmo);
+    expect(theirs.status).toBe(404);
+    expect(theirs.body.error).toBe("job_not_found");
+    // Administratoren startet den ikke heller: kildemateriale er forfatterens, ikke rollens.
+    const admin = await request(app).get(`/api/admin/content/source-material/extract/${jobId}`).set(adminHeaders);
+    expect(admin.status).toBe(404);
+  });
+});

@@ -742,6 +742,15 @@ const adminContentBase = {
   "courses.levelRequired": "Certification level is required.",
   "courses.noIdReturned": "No course ID was returned.",
   "courses.saved": "Course saved.",
+  // #1063: nivå-to-menyene (content-area-nav-i18n.js).
+  "area.courses": "Courses",
+  "area.modules": "Modules",
+  "area.sections": "Sections",
+  "area.quality": "Assessment quality",
+  "area.classes": "Classes",
+  "area.status": "Status",
+  "area.review": "Manual review",
+  "area.results": "Results",
 };
 const nbOverrides = {
   "nav.profile": "Profil",
@@ -1544,6 +1553,15 @@ const adminContentLateOverrides = {
     "courses.levelRequired": "Sertifiseringsnivå er påkrevd.",
     "courses.noIdReturned": "Fikk ikke kurs-ID.",
     "courses.saved": "Kurs lagret.",
+    // #1063: nivå-to-menyene (content-area-nav-i18n.js).
+    "area.courses": "Kurs",
+    "area.modules": "Moduler",
+    "area.sections": "Seksjoner",
+    "area.quality": "Vurderingskvalitet",
+    "area.classes": "Klasser",
+    "area.status": "Status",
+    "area.review": "Manuell behandling",
+    "area.results": "Resultater",
   },
   nn: {
     // #896 S3c-etterslep \u2014 sj\u00e5 merknaden i nb-blokka over.
@@ -2191,6 +2209,15 @@ const adminContentLateOverrides = {
     "courses.levelRequired": "Sertifiseringsnivå er påkravd.",
     "courses.noIdReturned": "Fekk ikkje kurs-ID.",
     "courses.saved": "Kurs lagra.",
+    // #1063: nivå-to-menyene (content-area-nav-i18n.js).
+    "area.courses": "Kurs",
+    "area.modules": "Modular",
+    "area.sections": "Seksjonar",
+    "area.quality": "Vurderingskvalitet",
+    "area.classes": "Klassar",
+    "area.status": "Status",
+    "area.review": "Manuell behandling",
+    "area.results": "Resultat",
   },
 };
 

@@ -80,6 +80,7 @@ import {
 } from "../modules/adminContent/llmContentGenerationService.js";
 import { validateMcqDistractors, validateScenarioDraft } from "../modules/adminContent/contentValidationService.js";
 import { localizedTextCodec } from "../codecs/localizedTextCodec.js";
+import { isExtractionJobOwner, rememberExtractionJobOwner } from "../modules/adminContent/extractionJobOwners.js";
 import { findCoursesContainingModule, inUseMessage } from "../modules/course/contentLifecycle.js";
 import {
   submitParseJob,
@@ -1054,8 +1055,15 @@ adminContentRouter.post("/source-material/extract", extractLimiter, async (reque
     return;
   }
 
+  const actorId = request.context?.userId;
+  if (!actorId) {
+    response.status(401).json({ error: "unauthorized" });
+    return;
+  }
   try {
     const jobId = await submitParseJob(data);
+    // #1031: bare den som startet jobben får lese resultatet.
+    rememberExtractionJobOwner(jobId, actorId);
     response.status(202).json({ jobId });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
@@ -1067,6 +1075,13 @@ adminContentRouter.post("/source-material/extract", extractLimiter, async (reque
 // lookup uten ekstern cost. Tidligere generateLimiter delte budsjett med LLM-generation —
 // multi-fil-flyt med 30 polls/fil × 5 filer blåste gjennom 10/min på sekunder.
 adminContentRouter.get("/source-material/extract/:jobId", async (request, response) => {
+  const actorId = request.context?.userId;
+  // #1031: en annens jobb svarer som om den ikke finnes — ikke 403, som ville bekreftet at id-en
+  // er ekte. Kildemateriale er ofte det mest følsomme en forfatter laster opp.
+  if (!actorId || !isExtractionJobOwner(request.params.jobId as string, actorId)) {
+    response.status(404).json({ error: "job_not_found" });
+    return;
+  }
   try {
     const result = await getParsedResult(request.params.jobId as string);
     if (!result) {
