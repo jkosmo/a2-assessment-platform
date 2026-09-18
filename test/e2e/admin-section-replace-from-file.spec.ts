@@ -109,3 +109,42 @@ test.describe("#1012 — erstatt seksjonsinnhold fra fil", () => {
     expect(importCalled).toBe(false);
   });
 });
+
+// #1057: seksjonens innhold ER Markdown. «Erstatt fra fil» tar imot .md og legger teksten i
+// editoren for det VALGTE innholdsspråket — ingen serverkall, de andre språkene urørt, forfatteren
+// lagrer selv. (JSON-veien over er uendret.)
+test.describe("#1057 — .md rett inn i editoren", () => {
+  test("en .md-fil havner i feltet for aktivt språk, ikke på serveren, og markerer skjemaet endret", async ({ page }) => {
+    await mockAuthoring(page);
+    let importCalled = false;
+    await page.route("**/api/admin/content/sections/import", (route: Route) => {
+      importCalled = true;
+      return route.fulfill({ status: 500, contentType: "application/json", body: "{}" });
+    });
+    await page.route("**/api/admin/content/sections/preview", (route: Route) =>
+      route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ html: "<p>x</p>" }) }));
+    await page.addInitScript(() => { try { localStorage.setItem("participant.locale", "nb"); } catch { /* ignore */ } });
+    // Ingen bekreftelsesdialog for .md — ingenting skrives før Lagre. En dialog her ville hengt testen.
+    page.on("dialog", (d) => d.dismiss());
+
+    await page.goto("/admin-content/sections?id=sec-1");
+    await page.waitForSelector("#replaceFromFileBtn", { state: "attached" });
+    await expect(page.locator("#markdownInput")).toHaveValue("# Før");
+
+    await page.locator("#replaceFromFileInput").setInputFiles({
+      name: "lesestoff.md", mimeType: "text/markdown",
+      buffer: Buffer.from("# Ny tekst\n\nEt avsnitt fra fila.\n", "utf8"),
+    });
+
+    await expect(page.locator("#markdownInput")).toHaveValue("# Ny tekst\n\nEt avsnitt fra fila.\n");
+    // Tittelen sto alt («Kvalitetssikring») og skal ikke overskrives av overskriften i fila.
+    await expect(page.locator("#titleInput")).toHaveValue("Kvalitetssikring");
+    await expect(page.locator("#toastRegion")).toContainText(/Norsk bokmål/);
+    await expect(page.locator("#formSaveBtn")).toBeEnabled();
+    expect(importCalled).toBe(false);
+
+    // ⚠️ De andre språkene er urørt: bytt til engelsk og se den gamle teksten.
+    await page.locator("[data-form-locale='en-GB']").click();
+    await expect(page.locator("#markdownInput")).toHaveValue("# Before");
+  });
+});
