@@ -371,7 +371,10 @@ function fileStem(file) {
  */
 function placeMarkdownInEditor(text, file) {
   const body = String(text ?? "");
-  if (!body.trim()) throw new Error(L("markdownEmpty"));
+  if (!body.trim()) {
+    showToast(`${L("replaceFromFile")}: ${L("markdownEmpty")}`, "error");
+    return;
+  }
   captureInputs();
   const loc = editing.editLocale;
   editing.body[loc] = body;
@@ -393,11 +396,9 @@ async function replaceSectionFromFile(input) {
   if (!editing?.id) return;
 
   if (isMarkdownFile(file)) {
-    try {
-      placeMarkdownInEditor(await file.text(), file);
-    } catch (error) {
-      showToast(`${L("replaceFromFile")}: ${error instanceof Error ? error.message : String(error)}`, "error");
-    }
+    // Lesefeil på en lokal fil er det eneste som kan gå galt her; den viser vi som «fila er tom».
+    const text = await file.text().catch(() => "");
+    placeMarkdownInEditor(text, file);
     return;
   }
 

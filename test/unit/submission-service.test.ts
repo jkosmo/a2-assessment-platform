@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { SubmissionStatus } from "../../src/db/prismaRuntime.js";
-import { ValidationError } from "../../src/errors/AppError.js";
+import { ConflictError } from "../../src/errors/AppError.js";
 import { warmModuleGraph } from "../support/moduleGraphWarmup.js";
 
 const getModuleWithActiveVersion = vi.fn();
@@ -71,7 +71,8 @@ describe("submission service", () => {
         deliveryType: "text",
         responseJson: { response: "raw text", reflection: "reflection", promptExcerpt: "prompt" },
       }),
-    ).rejects.toBeInstanceOf(ValidationError);
+      // #999: ærlig klasse — en tilstandskonflikt (409, egen kode), ikke et skjema som feilet.
+    ).rejects.toSatisfy((e: unknown) => e instanceof ConflictError && (e as ConflictError).code === "module_version_unavailable");
 
     expect(resolveSubmissionResponseJson).not.toHaveBeenCalled();
     expect(submissionCreate).not.toHaveBeenCalled();

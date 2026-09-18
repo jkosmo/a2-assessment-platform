@@ -2,6 +2,25 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.72.0 - 2026-09-18 (stage)
+
+Tre commits, **én migrasjon** (dropper `Module.createdById` og `Class.createdById` — kolonner som
+har vært døde siden 2.66.0; ingen dataflytting), ingen nye miljøvariabler. Bygger på 2.71.0
+(testet av produkteier 18.09).
+
+- **#963 (contract):** de to `createdById`-kolonnene er borte. Skrivestoppen kom i 2.66.0 og vakta
+  `created-by-id-dead-963` står igjen som permanent grense.
+- **#999 (siste porsjon):** de to nåbare `ValidationError`-kastene fikk ærlige klasser —
+  `ConfigurationError` (503 `not_configured`) for Entra-synk uten gruppe-id,
+  `ConflictError("module_version_unavailable")` (409) for modul uten aktiv versjon — med tekster i
+  tre språk. Dermed er unntaket i `api-error.js` borte: `validation_error` gir alltid den generiske,
+  lokaliserte overskriften; serverens setning blir detalj. Ratsj 4 → 2. «Feilkoden er kontrakten»
+  gjelder uten forbehold (DECISIONS).
+- **#1057:** seksjoner tar imot `.md`. «Erstatt fra fil» legger teksten rett i editoren for valgt
+  innholdsspråk (de andre urørt, forfatteren lagrer); «Importer» i lista lager en ny seksjon på
+  valgt språk med navnet fra første overskrift, via samme import som JSON-pakken.
+- #931 lukket: grenen `rester-etter-2.67.0` var alt i prod.
+
 ## 2.71.0 - 2026-09-18 (stage)
 
 Tre commits, ingen migrasjon, ingen nye miljøvariabler. Tråden: **skillet skal kunne måles**, og
