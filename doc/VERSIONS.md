@@ -2,6 +2,39 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.71.0 - 2026-09-18 (stage)
+
+Tre commits, ingen migrasjon, ingen nye miljøvariabler. Tråden: **skillet skal kunne måles**, og
+én oppryddingssak i kursbyggeren. Fire designnotater venter på produkteier.
+
+### Sporbarhet og spørsmålskvalitet i skillet (#1033, #1032)
+
+- **Pakken bærer sin opprinnelse.** `envelope.provenance` (produsent, verktøy, versjon, kjøre-id)
+  på `a2-content-export/v1`. Importen — modul, seksjon, kurs — fører en `agent_authoring`-påstand
+  inn i sin revisjonsrad som `source: "agent_authoring"` + `provenanceClaimed: true`; kursimporten
+  fører også `moduleIds`. Skillets emittere skriver feltet alltid; versjonen er låst til
+  package.json av test. **Påstand, ikke bevis** — står i skjemaet, skillet og DECISIONS. Målingen i
+  #1032 kan først gjøres på innhold laget etter denne versjonen.
+- **Røper fasiten seg?** `scripts/mcq-cue-check.mjs`: lengdeforhold rett svar ÷ distraktorer per
+  spørsmål, posisjons- og lengdefordeling per sett. Spillbok §4 og SKILL.md regel 10 krever
+  sjekken før spørsmål vises (gate 4) og før produksjon (gate 6), med krav om like lange
+  alternativer og anvendelse framfor gjengivelse. Rettet en antakelse underveis: plattformen
+  stokker alternativene ved servering (`mcqService.ts`), så **lengden** er signalet som når
+  deltakeren; posisjonen sjekkes fordi den avslører et sett skrevet på autopilot.
+
+### Kursbyggeren (#935)
+
+Én velger for moduler og seksjoner: kombiboksen dekker begge typene, alfabetisk, med typen som
+merke; åpner ved fokus så den kan blas i; én «Legg til». Seksjonsnedtrekket er borte.
+Tomtilstanden sier «Ingenting i kurset ennå — legg til en modul eller en seksjon».
+
+### Designnotater (venter på beslutning)
+
+`doc/DESIGN_1020.md` (veien videre for den som ikke bestod — liten variant anbefalt),
+`doc/DESIGN_928.md` (drift: ordlikhet ved lagring, ett spørsmål, banneret fjernes),
+`doc/DESIGN_997.md` (revisjon = forfatterens valg ved publisering; `SUPERSEDED`),
+`doc/DESIGN_1000_1066.md` (klasseansvarlig som forhold; roller vises, tildeles i Entra).
+
 ## 2.70.0 - 2026-09-18
 
 Ni commits, **én migrasjon** (`MCQAttempt.questionOrderJson`, nullable — ingen dataflytting), ingen
