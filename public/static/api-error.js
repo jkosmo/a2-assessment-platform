@@ -166,58 +166,30 @@ export function describeApiError(error, t, options = {}) {
   // ikke i overskriften, som klippes ved høyre kant i en 360px-bred toast.
   const issues = Array.isArray(body?.issues) && body.issues.length > 0 ? body.issues : null;
 
-  // ⚠️ #996: `validation_error` er TO ting, og å behandle dem likt gjorde meldingen verre enn før.
+  // Historikk: #972 byttet rå JSON mot en generisk setning; #996 skilte «Zod avviste formen» fra
+  // «en domeneregel sa nei» og viste domeneregelens `message` som overskrift — bevisst unntak fra
+  // «koden er kontrakten» (FEATURE_SURFACE_MAP §24), fordi «noe i skjemaet mangler» var feil diagnose
+  // på et slettevern. #999 ga domenereglene egne koder (`DomainRuleError`), og unntaket krympet til
+  // det var tomt.
   //
-  //   MED `issues`   → Zod avviste formen. Utdataet hører i detaljfeltet, og overskriften er den
-  //                    generiske «noe i skjemaet mangler» — for det er alt vi vet.
-  //   UTEN `issues`  → en DOMENEREGEL sa nei, og serverens `message` ER forklaringen. Zod
-  //                    produserer alltid `issues`, så fraværet er signalet.
+  // #999 (fullført 2.71.0): `validation_error` betyr nå ÉN ting — forespørselen hadde feil form.
+  // Overskriften er den generiske, lokaliserte; `issues` (Zod) eller serverens `message` ligger i
+  // detaljfeltet for den som skal sitere feilen til en utvikler.
   //
-  // Konkret skade før fiksen: forfatteren som prøver å slette en seksjon i et utstedt kursbevis fikk
-  // «Noe i skjemaet mangler eller er feil utfylt» i stedet for «den inngår i N kursbevis — arkiver
-  // den i stedet». Vi byttet rå JSON (#972) mot FEIL DIAGNOSE, som er verre: rå JSON ser i det
-  // minste ut som en systemfeil.
-  //
-  // ⚠️ At vi viser serverens `message` her er et bevisst unntak fra «koden er kontrakten»
-  // (`FEATURE_SURFACE_MAP` §24), ikke en oppmykning av regelen. En forståelig setning på feil språk
-  // slår en misvisende setning på riktig språk.
-  //
-  // #999 krympet unntaket: de fire livssyklusvaktene — innhold i bruk i et kurs, innhold i et
-  // utstedt kursbevis, gammelt bevis uten øyeblikksbilde, kurs med påbegynt deltaker — kaster nå
-  // `DomainRuleError` med egen kode og treffer derfor kodeoppslaget lenger ned.
-  //
-  // ⚠️ #999 SISTE PORSJON: unntaket er fortsatt IKKE fjernet, og her er nøyaktig hvorfor. Tell
-  // avsenderne FØR du rører grenen, ikke etterpå.
-  //
-  // De elleve håndbygde `{ error: "validation_error", message }`-svarene i adminContent,
-  // calibration og adminSections er borte: de var FORMVALIDERING og ligger nå i Zod-skjemaene, så
-  // svarene bærer `issues` og treffer den andre grenen. Igjen står fire `new ValidationError(`, og
-  // TO AV DEM ER NÅBARE over HTTP:
-  //
-  //   `POST /api/org-sync/entra` uten `ENTRA_USER_SYNC_GROUP_ID` — en konfigurasjonsfeil.
-  //   `createSubmission` når modulen mangler aktiv versjon — en intern invariant.
-  //
-  // (De to andre — klasse- og påmeldingsvakta — avvises av Zod på ruta før tjenesten nås. Målt mot
-  // stage 2026-09-10.)
-  //
-  // Fjernes unntaket nå, blir begge til «noe i skjemaet mangler eller er feil utfylt»: feil
-  // diagnose på noe som ikke er et skjema i det hele tatt. Det er regresjonen #996 rettet, og en
-  // konfigurasjonsfeil rammes hardere av den enn en domeneregel gjorde.
-  //
-  // Riktig rekkefølge videre er å gi de to en ÆRLIG klasse først — en konfigurasjonsfeil er ikke
-  // 400 `validation_error`, og en intern invariant er det heller ikke — og så fjerne denne grenen.
-  // Ratsjen i `test/unit/domain-error-codes-999.test.ts` viser tallet; er det 0, kan grenen dø.
+  // Unntaket som viste `body.message` som overskrift når `issues` manglet (#996), er borte: de
+  // siste avsenderne fikk ærlige klasser — konfigurasjonsfeil er 503 `not_configured`, modul uten
+  // aktiv versjon er 409 `module_version_unavailable` — og begge slås opp i tabellen under. De to
+  // `ValidationError`-kastene som står igjen (klassenavn, påmeldingsmål) nås aldri over HTTP: Zod
+  // avviser formen på ruta først (målt mot stage 2026-09-10). Ratsjen i
+  // `test/unit/domain-error-codes-999.test.ts` står på 2 og skal ikke opp.
   if (code === "validation_error") {
-    const domainMessage = !issues && typeof body?.message === "string" && body.message.trim().length > 0
-      ? body.message.trim()
-      : null;
-    if (domainMessage) {
-      return { code, headline: domainMessage, detail: undefined };
-    }
+    const detail = issues
+      ? JSON.stringify(issues, null, 2)
+      : typeof body?.message === "string" && body.message.trim().length > 0 ? body.message.trim() : undefined;
     return {
       code,
       headline: translated(t, API_ERROR_VALIDATION_KEY) ?? "The request was rejected as invalid.",
-      detail: issues ? JSON.stringify(issues, null, 2) : undefined,
+      detail,
     };
   }
 

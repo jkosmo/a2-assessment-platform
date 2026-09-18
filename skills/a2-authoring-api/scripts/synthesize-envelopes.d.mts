@@ -48,6 +48,7 @@ export interface ModuleInEnvelope {
 export interface ExportEnvelope {
   exportFormat: string;
   exportedAt: string;
+  provenance?: import("./skill-provenance.mjs").SkillProvenance;
   scope: "section" | "module" | "course";
   section?: SectionInEnvelope;
   module?: ModuleInEnvelope;

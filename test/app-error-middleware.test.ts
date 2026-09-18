@@ -35,13 +35,13 @@ describe("errorHandlingMiddleware", () => {
   });
 
   it("maps ValidationError to 400", async () => {
-    const response = await request(buildTestApp(new ValidationError("Module active version is not available."))).get(
+    const response = await request(buildTestApp(new ValidationError("Field is required."))).get(
       "/test",
     );
     expect(response.status).toBe(400);
     expect(response.body).toEqual({
       error: "validation_error",
-      message: "Module active version is not available.",
+      message: "Field is required.",
     });
   });
 

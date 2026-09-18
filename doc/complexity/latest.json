@@ -1,16 +1,16 @@
 {
   "dato": "2026-09-18",
-  "versjon": "2.70.0",
+  "versjon": "2.72.0",
   "samlet": 63,
   "skår": {
-    "reglerFlereSteder": 38,
+    "reglerFlereSteder": 42,
     "utgaverAvViktigeRegler": 100,
     "filerAltMåGjennom": 20,
     "filerSomEndresSammen": 90,
     "størrelse": 65
   },
   "tall": {
-    "sumRegler": 31,
+    "sumRegler": 29,
     "regler": [
       {
         "hva": "Skjermer som selv velger hvilket språk et lagret innhold vises på (serveren skal gjøre det)",
@@ -24,7 +24,7 @@
       },
       {
         "hva": "Feil fra serveren uten kode (klienten kan ikke oversette dem)",
-        "steder": 4,
+        "steder": 2,
         "kilde": "test/unit/domain-error-codes-999.test.ts"
       },
       {
@@ -63,7 +63,7 @@
       "over1500": [
         {
           "fil": "public/static/admin-content-shell.js",
-          "linjer": 4643
+          "linjer": 4667
         },
         {
           "fil": "public/participant.js",
@@ -75,7 +75,7 @@
         },
         {
           "fil": "public/static/admin-content-courses.js",
-          "linjer": 1815
+          "linjer": 1803
         },
         {
           "fil": "public/review.js",
@@ -97,7 +97,7 @@
         },
         {
           "fil": "public/static/admin-content-sections.js",
-          "linjer": 1000
+          "linjer": 1072
         },
         {
           "fil": "public/static/workspace-help-content.js",
@@ -156,9 +156,9 @@
     "størrelse": {
       "ruter": 201,
       "tabeller": 39,
-      "kolonner": 507,
-      "i18nNøkler": 5384,
-      "testfiler": 357
+      "kolonner": 501,
+      "i18nNøkler": 5393,
+      "testfiler": 360
     }
   }
 }

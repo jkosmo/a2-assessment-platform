@@ -202,7 +202,7 @@ function getListPage() {
       { id: "importSectionBtn", label: L("importSection") },
       { id: "newSectionBtn", label: L("newSection"), kind: "primary" },
     ],
-    headerExtraHtml: `<input type="file" id="importSectionFile" accept="application/json,.json" hidden>`,
+    headerExtraHtml: `<input type="file" id="importSectionFile" accept="${SECTION_FILE_ACCEPT}" hidden>`,
     filters: {
       options: () => [["all", L("filterAll")], ["active", L("filterActive")], ["published", L("filterPublished")], ["archived", L("filterArchived")]],
       initial: "active",
@@ -344,12 +344,63 @@ async function exportSectionPackage(sectionId, btn) {
  * finnes likevel, fordi «erstatt» leses som noe som ikke kan angres — teksten sier hva som faktisk
  * skjer i stedet for å be om et ja.
  */
+// #1057: seksjonens innhold ER Markdown, og forfattere har lesestoffet som .md-filer. Begge
+// filveiene tar derfor imot .md ved siden av JSON-pakken. JSON er formatet for å flytte innhold
+// mellom installasjoner; .md er formatet forfatteren faktisk har.
+const SECTION_FILE_ACCEPT = "application/json,.json,text/markdown,.md,.markdown";
+
+function isMarkdownFile(file) {
+  const name = String(file?.name ?? "").toLowerCase();
+  return name.endsWith(".md") || name.endsWith(".markdown") || file?.type === "text/markdown";
+}
+
+/** Første `# Overskrift` i fila — brukes som navn når seksjonen mangler ett. Kroppen står urørt. */
+export function markdownHeading(text) {
+  const m = /^\s*#\s+(.+?)\s*#*\s*$/m.exec(String(text ?? ""));
+  return m ? m[1].trim() : "";
+}
+
+function fileStem(file) {
+  return String(file?.name ?? "").replace(/\.(md|markdown)$/i, "").trim();
+}
+
+/**
+ * #1057: en .md-fil inne i editoren legges i feltet for det VALGTE innholdsspråket — ikke sendt
+ * til serveren. De andre språkene står urørt, og forfatteren lagrer selv (lagringen gir det nye
+ * utkastet, som ved JSON-import). Ingen bekreftelse: ingenting er skrevet før Lagre.
+ */
+function placeMarkdownInEditor(text, file) {
+  const body = String(text ?? "");
+  if (!body.trim()) {
+    showToast(`${L("replaceFromFile")}: ${L("markdownEmpty")}`, "error");
+    return;
+  }
+  captureInputs();
+  const loc = editing.editLocale;
+  editing.body[loc] = body;
+  if (!(editing.title[loc] ?? "").trim()) {
+    const heading = markdownHeading(body) || fileStem(file);
+    if (heading) editing.title[loc] = heading;
+  }
+  renderEditorFields();
+  getFormPage().markDirty();
+  showToast(tf("sections.markdownPlaced", { locale: localeLabels[loc] ?? loc }));
+  document.getElementById("markdownInput")?.focus();
+}
+
 async function replaceSectionFromFile(input) {
   const file = input?.files?.[0] ?? null;
   if (!file) return;
   // Nullstill med én gang, så samme fil kan velges på nytt etter en avbrutt eller feilet runde.
   input.value = "";
   if (!editing?.id) return;
+
+  if (isMarkdownFile(file)) {
+    // Lesefeil på en lokal fil er det eneste som kan gå galt her; den viser vi som «fila er tom».
+    const text = await file.text().catch(() => "");
+    placeMarkdownInEditor(text, file);
+    return;
+  }
 
   if (!window.confirm(L("replaceConfirm"))) return;
 
@@ -389,16 +440,37 @@ async function replaceSectionFromFile(input) {
   }
 }
 
+/**
+ * #1057: en .md-fil i lista blir en NY seksjon — kroppen på valgt innholdsspråk, navnet fra første
+ * overskrift (ellers filnavnet). Den går samme vei som en JSON-pakke (importen), så den lander som
+ * utkast og holdes av oversettelsesgaten til de andre språkene finnes.
+ */
+function sectionEnvelopeFromMarkdown(text, file, locale) {
+  const body = String(text ?? "");
+  if (!body.trim()) throw new Error(L("markdownEmpty"));
+  const title = markdownHeading(body) || fileStem(file) || "Untitled";
+  return {
+    exportFormat: "a2-content-export/v1",
+    exportedAt: new Date().toISOString(),
+    scope: "section",
+    section: { title: { [locale]: title }, bodyMarkdown: { [locale]: body }, audit: {} },
+  };
+}
+
 async function importSectionPackage(input) {
   const file = input?.files?.[0] ?? null;
   if (!file) return;
   try {
     const text = await file.text();
     let payload;
-    try {
-      payload = JSON.parse(text);
-    } catch (parseError) {
-      throw new Error(`Filen er ikke gyldig JSON: ${parseError instanceof Error ? parseError.message : "ukjent feil"}`);
+    if (isMarkdownFile(file)) {
+      payload = sectionEnvelopeFromMarkdown(text, file, currentLocale);
+    } else {
+      try {
+        payload = JSON.parse(text);
+      } catch (parseError) {
+        throw new Error(`Filen er ikke gyldig JSON: ${parseError instanceof Error ? parseError.message : "ukjent feil"}`);
+      }
     }
     // Friendly guard: point a module/course package at the page that can actually import it,
     // instead of surfacing the raw scope_mismatch 400.
@@ -592,7 +664,7 @@ function sectionEditorBodyHtml() {
           </div>
           <textarea id="markdownInput">${escapeHtml(editing.body[editing.editLocale])}</textarea>
         </div>
-        <input type="file" id="replaceFromFileInput" accept="application/json,.json" hidden data-form-untracked />
+        <input type="file" id="replaceFromFileInput" accept="${SECTION_FILE_ACCEPT}" hidden data-form-untracked />
         <span class="editor-status" id="editorStatus"></span>
       </div>
     </div>

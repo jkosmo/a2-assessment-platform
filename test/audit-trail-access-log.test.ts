@@ -44,7 +44,7 @@ describe("#1000 — lesing av et revisjonsspor logges, med forholdet", () => {
     created.ownerId = owner.id;
 
     const module = await prisma.module.create({
-      data: { title: "Modul for #1000", description: null, createdById: owner.id },
+      data: { title: "Modul for #1000", description: null },
       select: { id: true },
     });
     created.moduleIds.push(module.id);

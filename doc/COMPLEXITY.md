@@ -1,6 +1,6 @@
 # Hvor innfløkt er løsningen nå?
 
-*Målt 2026-09-18, versjon 2.70.0. Kjør `npm run complexity` for å oppdatere. Reglene for hvert tall står under tallet.*
+*Målt 2026-09-18, versjon 2.72.0. Kjør `npm run complexity` for å oppdatere. Reglene for hvert tall står under tallet.*
 
 ## Samlet: **63 / 100**
 
@@ -8,23 +8,23 @@ Gjennomsnittet av de fem tallene under. 100 betyr «slik vi vil ha det».
 
 | Hva | Skår |
 |---|---|
-| Regler som er skrevet flere steder | **38** |
+| Regler som er skrevet flere steder | **42** |
 | Viktige regler med mer enn én utgave i koden | **100** |
 | Filer alt må gjennom | **20** |
 | Filer som alltid endres sammen | **90** |
 | Størrelse | **65** |
 
-## 1. Regler som er skrevet flere steder — 38
+## 1. Regler som er skrevet flere steder — 42
 
 Når en regel står flere steder i koden, kan den bli rettet ett sted og glemt et annet. Vi har tester
-som teller slike steder og som feiler hvis tallet går opp. Summen nå: **31 steder**.
+som teller slike steder og som feiler hvis tallet går opp. Summen nå: **29 steder**.
 *Regel: 100 minus 2 poeng per sted.*
 
 | Hva telles | Steder | Hvor tallet kommer fra |
 |---|---:|---|
 | Skjermer som selv velger hvilket språk et lagret innhold vises på (serveren skal gjøre det) | 2 | `test/client-locale-parser-guard.test.js` |
 | Steder som viser serverens rå feiltekst i stedet for en oversatt melding | 13 | `test/raw-server-error-guard.test.js` |
-| Feil fra serveren uten kode (klienten kan ikke oversette dem) | 4 | `test/unit/domain-error-codes-999.test.ts` |
+| Feil fra serveren uten kode (klienten kan ikke oversette dem) | 2 | `test/unit/domain-error-codes-999.test.ts` |
 | Steder i forfatterkonsollet som bruker menyspråket (ikke innholdsspråket) | 12 | `test/unit/admin-content-locale-roles-974.test.js` |
 
 ## 2. Viktige regler med mer enn én utgave — 100
@@ -49,15 +49,15 @@ avhengige av gjør hver endring risikabel. Over 1 500 linjer: **6**. Mellom 800 
 
 | Fil | Linjer |
 |---|---:|
-| `public/static/admin-content-shell.js` | 4643 |
+| `public/static/admin-content-shell.js` | 4667 |
 | `public/participant.js` | 4214 |
 | `src/modules/adminContent/llmContentGenerationService.ts` | 2105 |
-| `public/static/admin-content-courses.js` | 1815 |
+| `public/static/admin-content-courses.js` | 1803 |
 | `public/review.js` | 1777 |
 | `public/static/admin-content-settings-tab.js` | 1519 |
 | `src/routes/adminContent.ts` | 1420 |
 | `src/modules/adminContent/adminContentCommands.ts` | 1230 |
-| `public/static/admin-content-sections.js` | 1000 |
+| `public/static/admin-content-sections.js` | 1072 |
 | `public/static/workspace-help-content.js` | 934 |
 
 Mest brukt av andre filer (ikke med i skåren, men verdt å vite):
@@ -94,9 +94,9 @@ Hvor mye det er å holde ved like. Ikke feil i seg selv, men alt her koster tid 
 |---|---:|
 | API-ruter | 201 |
 | Databasetabeller | 39 |
-| Kolonner i databasen | 507 |
-| Oversettelsesnøkler (alle språk) | 5384 |
-| Testfiler | 357 |
+| Kolonner i databasen | 501 |
+| Oversettelsesnøkler (alle språk) | 5393 |
+| Testfiler | 360 |
 
 ## Historikk
 
@@ -106,3 +106,5 @@ Hvor mye det er å holde ved like. Ikke feil i seg selv, men alt her koster tid 
 | 2026-09-14 | 2.68.0 | 65 | 36 | 100 | 30 | 90 | 70 |
 | 2026-09-17 | 2.69.0 | 64 | 38 | 100 | 25 | 90 | 69 |
 | 2026-09-18 | 2.70.0 | 63 | 38 | 100 | 20 | 90 | 65 |
+| 2026-09-18 | 2.71.0 | 63 | 38 | 100 | 20 | 90 | 65 |
+| 2026-09-18 | 2.72.0 | 63 | 42 | 100 | 20 | 90 | 65 |

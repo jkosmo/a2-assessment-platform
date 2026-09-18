@@ -22,6 +22,8 @@
 
 import { writeFile as fsWriteFile, readFile as fsReadFile } from "node:fs/promises";
 
+import { skillProvenance } from "./skill-provenance.mjs";
+
 export const EXPORT_FORMAT_VERSION = "a2-content-export/v1";
 
 // The ONLY datetime shape A2's Zod .datetime() (as configured) accepts: exactly what
@@ -208,6 +210,20 @@ export function validateExportEnvelopeStructure(envelope) {
   // streng: skillets egen rule 7 ("valider mot samme skjema som importen") kunne IKKE oppfylles for
   // seksjoner, fordi validatoren avviste en gyldig seksjonskonvolutt som ukjent scope.
   if (!["module", "course", "section"].includes(envelope.scope)) err("scope", 'must be "module", "course" or "section"');
+  // #1033: valgfritt, men har det form, må formen stemme med `exportProvenanceSchema` — en
+  // feilskrevet påstand ville ellers avvist hele fila ved import.
+  if (envelope.provenance !== undefined) {
+    const p = envelope.provenance;
+    if (!p || typeof p !== "object") err("provenance", "must be an object when present");
+    else {
+      if (!["agent_authoring", "human"].includes(p.producer)) err("provenance.producer", 'must be "agent_authoring" or "human"');
+      for (const [key, max] of [["tool", 80], ["toolVersion", 40], ["agentRunId", 120]]) {
+        if (p[key] !== undefined && (typeof p[key] !== "string" || p[key].trim().length === 0 || p[key].length > max)) {
+          err(`provenance.${key}`, `must be a non-empty string of at most ${max} characters`);
+        }
+      }
+    }
+  }
 
   // scope <-> payload must match (mirrors the three .refine()s).
   if ((envelope.scope === "module") !== (envelope.module !== undefined)) err("scope", "module scope requires a module payload (and vice versa)");
@@ -327,7 +343,7 @@ export function validateImportWrapper(envelope) {
 // The mechanical re-wrap described in references/package-schema.md (Fallback format). This is
 // the "fallback-export generator output" the repo round-trip test runs through the REAL schema.
 // ---------------------------------------------------------------------------
-export function buildFallbackEnvelope(pkg, { exportedAt = new Date(), exportedBy = null } = {}) {
+export function buildFallbackEnvelope(pkg, { exportedAt = new Date(), exportedBy = null, agentRunId = undefined } = {}) {
   const objectsByRef = new Map((pkg.objects ?? []).map((o) => [o.clientRef, o]));
   const courseObject = (pkg.objects ?? []).find((o) => o.type === "course");
   if (!courseObject) throw new Error("buildFallbackEnvelope: package has no course object");
@@ -359,6 +375,8 @@ export function buildFallbackEnvelope(pkg, { exportedAt = new Date(), exportedBy
     exportFormat: EXPORT_FORMAT_VERSION,
     exportedAt: toIsoZ(exportedAt),
     ...(exportedBy ? { exportedBy } : {}),
+    // #1033: kurset bærer sin opprinnelse (skill + versjon), så importen kan stemple det.
+    provenance: skillProvenance({ agentRunId }),
     scope: "course",
     course: {
       course: {

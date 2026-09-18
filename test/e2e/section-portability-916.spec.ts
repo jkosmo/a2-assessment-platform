@@ -378,3 +378,40 @@ test("#937 kontroll: Zod-dumpen havner i detaljfeltet, ikke i overskriften", asy
   await expect(toastOf(page)).toContainText(/seksjonspakke/i);
   await expect(page.locator(".toast__detail")).toContainText("bodyMarkdown");
 });
+
+// #1057: «Importer» i lista tar imot .md. Fila blir en NY seksjon på valgt innholdsspråk, med
+// navnet fra første overskrift — via samme importkall som en JSON-pakke, så den lander som utkast.
+test("importing a .md file posts a one-locale section envelope named after the first heading", async ({ page }) => {
+  await mockBaseApis(page);
+  await mockSectionList(page, []);
+  await page.addInitScript(() => { try { localStorage.setItem("participant.locale", "nb"); } catch { /* ignore */ } });
+
+  type Body = { payload?: { scope?: string; section?: { title?: Record<string, string>; bodyMarkdown?: Record<string, string> } }; mode?: string };
+  let importBody: Body | null = null;
+  await page.route("**/api/admin/content/sections/import", (route: Route) => {
+    importBody = route.request().postDataJSON() as Body;
+    return route.fulfill({
+      status: 201, contentType: "application/json",
+      body: JSON.stringify({ sectionId: "sec-new", sectionVersionId: "v1", assetCount: 0, published: false, links: { editor: "/admin-content/sections?id=sec-new" } }),
+    });
+  });
+  await page.route("**/api/admin/content/sections/sec-new", (route: Route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ section: { id: "sec-new", title: JSON.stringify({ nb: "Innføring i HMS" }), bodyMarkdown: JSON.stringify({ nb: "# Innføring i HMS\n\nTekst." }), activeVersionId: null, versionNo: 1, archivedAt: null, hasUnpublishedChanges: false, updatedAt: "2026-01-01T00:00:00.000Z" } }) }));
+  await page.route("**/api/admin/content/sections/preview", (route: Route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ html: "<p>x</p>" }) }));
+  await page.route("**/api/admin/content-owners/**", (route: Route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ owners: [] }) }));
+
+  await page.goto("/admin-content/sections");
+  await page.locator("#importSectionFile").setInputFiles({
+    name: "innforing.md", mimeType: "text/markdown",
+    buffer: Buffer.from("# Innføring i HMS\n\nTekst.\n", "utf8"),
+  });
+
+  const captured = () => importBody;
+  await expect.poll(() => captured()?.payload?.scope).toBe("section");
+  expect(captured()?.mode).toBe("createNew");
+  expect(captured()?.payload?.section?.title).toEqual({ nb: "Innføring i HMS" });
+  expect(captured()?.payload?.section?.bodyMarkdown).toEqual({ nb: "# Innføring i HMS\n\nTekst.\n" });
+  await expect(page).toHaveURL(/id=sec-new/);
+});

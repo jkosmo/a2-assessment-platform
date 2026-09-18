@@ -22,6 +22,8 @@
 // Produkteier 2026-08-22: API-veien beholdes som en mulighet, men filveien er den som skal virke,
 // og den må dekke isolerte moduler og seksjoner. Se doc/DECISIONS.md.
 
+import { skillProvenance } from "./skill-provenance.mjs";
+
 export const EXPORT_FORMAT = "a2-content-export/v1";
 
 // Injiserbar klokke: en test som ikke kan feste tidspunktet må enten sammenligne løst eller la
@@ -56,6 +58,8 @@ export function synthesizeSectionEnvelope(payload, now = nowIso) {
   return {
     exportFormat: EXPORT_FORMAT,
     exportedAt: now(),
+    // #1033: pakken sier selv at den er agent-produsert — importen fører det inn i revisjonssporet.
+    provenance: skillProvenance(),
     scope: "section",
     section: {
       title: payload.title,
@@ -84,6 +88,7 @@ export function synthesizeModuleEnvelope(payload, now = nowIso) {
   return {
     exportFormat: EXPORT_FORMAT,
     exportedAt: now(),
+    provenance: skillProvenance(),
     scope: "module",
     module: {
       module: payload.module,

@@ -58,7 +58,7 @@ describe("#1022 — feilede vurderinger: modultittelen er lokalisert, ikke rå J
   /** Én feilet vurdering på VÅR bruker, med den gitte tittelen. */
   async function failedAssessmentWithTitle(title: string) {
     const module = await prisma.module.create({
-      data: { title, description: null, createdById: created.userId },
+      data: { title, description: null },
       select: { id: true },
     });
     created.moduleIds.push(module.id);

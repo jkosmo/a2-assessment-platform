@@ -635,11 +635,27 @@ export const courseExportPayloadSchema = z.object({
   ),
 });
 
+// #1033: pakken bærer sin egen opprinnelse. Skillets fil-eksport/-import er hovedveien (DECISIONS),
+// og den veien ga aldri `source: "agent_authoring"` i revisjonssporet — importen skjer lokalt, uten
+// agent i bildet. Med feltet fører importen opprinnelsen inn i sin egen revisjonsrad.
+//
+// ⚠️ Feltet er en PÅSTAND fra fila, ikke et bevis: hvem som helst kan skrive det. Til måling («ble
+// skillet bedre?», #1032) er det godt nok; til noe med rettsvirkning er det ikke det. Innhold som
+// fantes før feltet, får ikke stempel med tilbakevirkende kraft.
+export const exportProvenanceSchema = z.object({
+  producer: z.enum(["agent_authoring", "human"]),
+  tool: z.string().trim().min(1).max(80).optional(),
+  toolVersion: z.string().trim().min(1).max(40).optional(),
+  agentRunId: z.string().trim().min(1).max(120).optional(),
+});
+export type ExportProvenance = z.infer<typeof exportProvenanceSchema>;
+
 export const exportEnvelopeSchema = z.object({
   exportFormat: z.literal(EXPORT_FORMAT_VERSION),
   exportedAt: z.string().datetime(),
   exportedBy: z.string().nullable().optional(),
   exportedByEmail: z.string().email().nullable().optional(),
+  provenance: exportProvenanceSchema.optional(),
   // #916: a section can now travel on its own, not only inlined in a course package. The payload
   // shape is the SAME `sectionExportPayloadSchema` the course envelope already carries, so a
   // section lifted out of a course file and a standalone export are byte-compatible.

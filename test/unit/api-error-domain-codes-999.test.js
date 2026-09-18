@@ -50,13 +50,26 @@ describe("#999 — domenevaktenes feilkoder", () => {
     }
   });
 
-  // Motprøven. Uten den ville «vis alltid den generiske setningen» også vært grønt, og da hadde
-  // forfatteren fått «noe i skjemaet er feil utfylt» for en regel som faktisk forklarte seg.
-  it("en domeneregel UTEN kode viser fortsatt serverens setning", () => {
+  // 2.71.0: unntaket er borte. En `validation_error` uten kode og uten `issues` får den generiske
+  // overskriften på brukerens språk; serverens setning står i detaljfeltet — synlig for den som skal
+  // sitere den, aldri som overskrift på feil språk. (De to `ValidationError`-kastene som finnes,
+  // nås ikke over HTTP; ratsjen i domain-error-codes-999 holder tallet.)
+  it("en validation_error uten kode og uten issues får generisk overskrift og setningen som detalj", () => {
     const err = new Error("400: x");
     err.body = { error: "validation_error", message: "Cannot assign an archived course." };
     const en = describeApiError(err, t("en-GB"));
-    expect(en.headline).toBe("Cannot assign an archived course.");
+    expect(en.headline).not.toBe("Cannot assign an archived course.");
+    expect(en.detail).toBe("Cannot assign an archived course.");
+  });
+
+  it("de ærlige klassene fra 2.71.0 slås opp i tabellen", () => {
+    const cfg = new Error("503: x");
+    cfg.body = { error: "not_configured", message: "Entra user sync is not configured (ENTRA_USER_SYNC_GROUP_ID is unset)." };
+    expect(describeApiError(cfg, t("nb")).headline).toContain("ikke satt opp");
+    const mod = new Error("409: x");
+    mod.body = { error: "module_version_unavailable", message: "Module active version is not available." };
+    expect(describeApiError(mod, t("en-GB")).headline).toContain("not available");
+    expect(describeApiError(mod, t("en-GB")).headline).not.toContain("Module active version");
   });
 
   // Og at Zod-veien er urørt: med `issues` er serverens message IKKE forklaringen.

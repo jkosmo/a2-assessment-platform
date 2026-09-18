@@ -984,7 +984,8 @@ let allLibrarySections = [];
 
 // Combobox state
 let comboboxQuery = "";
-let comboboxSelectedId = null;
+// #935: det valgte elementet er { id, type } — velgeren dekker både moduler og seksjoner.
+let comboboxSelected = null;
 let comboboxOpen = false;
 // #353: WAI-ARIA combobox keyboard nav. Highlight (visual + a11y focus
 // via aria-activedescendant) er separat fra selection (det som faktisk legges til). Arrow
@@ -1140,20 +1141,19 @@ function courseDetailBodyHtml() {
       <div class="detail-section">
         <h2 class="detail-section-title">${escapeHtml(t("courses.contentTitle"))}</h2>
         <div id="moduleListContainer"></div>
+        <!-- #935: ÉN velger for begge typene. Kurset er én ordnet liste av moduler og seksjoner, og
+             forfatteren skal ikke lære to mønstre for én handling. Lista åpner ved fokus, så den
+             kan blas i som nedtrekket kunne, og søkes i som kombiboksen kunne. -->
         <div class="form-add-row">
           <div class="combobox-wrap" id="comboboxWrap">
+            <label for="comboboxInput" class="sr-only">${escapeHtml(t("courses.pickItem"))}</label>
             <input id="comboboxInput" type="text" class="combobox-input"
-              placeholder="${escapeHtml(t("courses.moduleSearchPlaceholder"))}"
+              placeholder="${escapeHtml(t("courses.itemSearchPlaceholder"))}"
               autocomplete="off" role="combobox" aria-expanded="false"
               aria-autocomplete="list" aria-controls="comboboxDropdown" />
             <div id="comboboxDropdown" class="combobox-dropdown" role="listbox" hidden></div>
           </div>
-          <button id="addModuleBtn" class="btn btn-secondary" disabled>${escapeHtml(t("courses.addModule"))}</button>
-        </div>
-        <div class="form-add-row">
-          <label for="sectionSelect" class="sr-only">${escapeHtml(t("courses.pickSection"))}</label>
-          <select id="sectionSelect" class="combobox-input"></select>
-          <button id="addSectionBtn" class="btn btn-secondary">${escapeHtml(t("courses.addSection"))}</button>
+          <button id="addItemBtn" class="btn btn-secondary" disabled>${escapeHtml(t("courses.addItem"))}</button>
         </div>
       </div>
 
@@ -1277,13 +1277,12 @@ function renderModuleList() {
   if (courseFormPage && courseFormPage.state && container.dataset.rendered === "1") courseFormPage.markDirty();
   container.dataset.rendered = "1";
 
-  renderSectionPicker();
-
+  // #935: velgeren tegnes av seg selv ved åpning; det som alt ligger i kurset, filtreres der.
   if (courseModules.length === 0) {
     container.innerHTML = `
       <div class="empty-state" style="padding: var(--space-3) var(--space-2)">
-        <p class="empty-state-title" style="font-size: 15px;">${escapeHtml(t("courses.noModulesTitle"))}</p>
-        <p class="empty-state-text">${escapeHtml(t("courses.noModulesHint"))}</p>
+        <p class="empty-state-title" style="font-size: 15px;">${escapeHtml(t("courses.noItemsTitle"))}</p>
+        <p class="empty-state-text">${escapeHtml(t("courses.noItemsHint"))}</p>
       </div>`;
     return;
   }
@@ -1343,25 +1342,36 @@ function moveModule(idx, dir) {
 // Searchable combobox
 // ---------------------------------------------------------------------------
 
+// #935: moduler og seksjoner i én liste, alfabetisk, med typen som merke i raden. Det som alt
+// ligger i kurset, tilbys ikke igjen (samme regel begge veier — den fantes for begge før også).
 function getComboboxOptions() {
-  const addedIds = new Set(courseModules.filter(m => m.type === "MODULE").map(m => m.refId));
+  const added = new Set(courseModules.map(m => `${m.type}:${m.refId}`));
   const q = comboboxQuery.trim().toLowerCase();
-  return allLibraryModules.filter(m => {
-    if (addedIds.has(m.id)) return false;
-    if (!q) return true;
-    return (m.title ?? "").toLowerCase().includes(q) || m.id.toLowerCase().includes(q);
-  });
+  const items = [
+    ...allLibraryModules.map(m => ({ id: m.id, type: "MODULE", title: localizedText(m.title) || m.id })),
+    ...allLibrarySections.map(s => ({ id: s.id, type: "SECTION", title: localizedText(s.title) || s.id })),
+  ];
+  return items
+    .filter(item => !added.has(`${item.type}:${item.id}`))
+    .filter(item => !q || item.title.toLowerCase().includes(q) || item.id.toLowerCase().includes(q))
+    .sort((a, b) => a.title.localeCompare(b.title, "nb"));
+}
+
+function isComboboxSelected(item) {
+  return !!comboboxSelected && comboboxSelected.id === item.id && comboboxSelected.type === item.type;
 }
 
 function updateComboboxDropdown() {
   const input = document.getElementById("comboboxInput");
   const dropdown = document.getElementById("comboboxDropdown");
-  const addBtn = document.getElementById("addModuleBtn");
+  const addBtn = document.getElementById("addItemBtn");
   if (!input || !dropdown) return;
 
   const options = getComboboxOptions();
 
-  if (!comboboxOpen || comboboxQuery.trim() === "") {
+  // #935: lista står åpen også uten søketekst (ved fokus), så forfatteren kan bla som i et
+  // nedtrekk. Før krevde den tekst — og seksjonene lå i et nedtrekk som ikke kunne søkes i.
+  if (!comboboxOpen) {
     dropdown.hidden = true;
     input.setAttribute("aria-expanded", "false");
     return;
@@ -1371,20 +1381,21 @@ function updateComboboxDropdown() {
   input.setAttribute("aria-expanded", "true");
 
   if (options.length === 0) {
-    dropdown.innerHTML = `<div class="combobox-empty">${escapeHtml(t("courses.noModulesMatch"))}</div>`;
-    comboboxSelectedId = null;
+    dropdown.innerHTML = `<div class="combobox-empty">${escapeHtml(t(comboboxQuery.trim() ? "courses.noItemsMatch" : "courses.noItemsAvailable"))}</div>`;
+    comboboxSelected = null;
     if (addBtn) addBtn.disabled = true;
     return;
   }
 
   if (comboboxHighlightedIndex >= options.length) comboboxHighlightedIndex = options.length - 1;
-  dropdown.innerHTML = options.map((m, index) => `
-    <div class="combobox-option${m.id === comboboxSelectedId ? " selected" : ""}${index === comboboxHighlightedIndex ? " highlighted" : ""}"
+  dropdown.innerHTML = options.map((item, index) => `
+    <div class="combobox-option${isComboboxSelected(item) ? " selected" : ""}${index === comboboxHighlightedIndex ? " highlighted" : ""}"
       id="comboboxOption-${index}"
-      role="option" aria-selected="${m.id === comboboxSelectedId}"
-      data-module-id="${escapeHtml(m.id)}" data-module-title="${escapeHtml(localizedText(m.title) || m.id)}">
-      ${escapeHtml(localizedText(m.title) || m.id)}
-      <span class="combobox-option-id">${escapeHtml(m.id)}</span>
+      role="option" aria-selected="${isComboboxSelected(item)}"
+      data-item-id="${escapeHtml(item.id)}" data-item-type="${item.type}" data-item-title="${escapeHtml(item.title)}">
+      <span class="form-row-badge">${courseItemTypeBadge(item.type)}</span>
+      ${escapeHtml(item.title)}
+      <span class="combobox-option-id">${escapeHtml(item.id)}</span>
     </div>`).join("");
   // #977: skjermleseren følger markeringen via aria-activedescendant; fokus blir i feltet.
   if (comboboxHighlightedIndex >= 0) {
@@ -1397,57 +1408,41 @@ function updateComboboxDropdown() {
   dropdown.querySelectorAll(".combobox-option").forEach(opt => {
     opt.addEventListener("mousedown", e => {
       e.preventDefault();
-      comboboxSelectedId = opt.dataset.moduleId;
-      const title = opt.dataset.moduleTitle;
-      const input2 = document.getElementById("comboboxInput");
-      if (input2) input2.value = escapeHtml(title).replace(/&amp;/g,"&").replace(/&lt;/g,"<").replace(/&gt;/g,">").replace(/&quot;/g,'"');
-      comboboxOpen = false;
-      updateComboboxDropdown();
-      if (addBtn) addBtn.disabled = false;
+      chooseComboboxItem({ id: opt.dataset.itemId, type: opt.dataset.itemType, title: opt.dataset.itemTitle });
     });
   });
 
-  if (addBtn) addBtn.disabled = !comboboxSelectedId;
+  if (addBtn) addBtn.disabled = !comboboxSelected;
 }
 
-function addSelectedModule() {
-  if (!comboboxSelectedId) return;
-  const mod = allLibraryModules.find(m => m.id === comboboxSelectedId);
-  if (!mod) return;
-  courseModules.push({ type: "MODULE", refId: mod.id, title: localizedText(mod.title) || mod.id });
-  comboboxSelectedId = null;
+// Ett valg, samme vei for mus og tastatur: feltet viser tittelen, lista lukkes, «Legg til» åpnes.
+function chooseComboboxItem(item) {
+  comboboxSelected = { id: item.id, type: item.type };
+  const input = document.getElementById("comboboxInput");
+  if (input) input.value = item.title;
+  comboboxOpen = false;
+  comboboxHighlightedIndex = -1;
+  updateComboboxDropdown();
+  const addBtn = document.getElementById("addItemBtn");
+  if (addBtn) addBtn.disabled = false;
+}
+
+// #935: én «Legg til» for begge typene. Seksjonsvelgeren (#490) var et eget nedtrekk med en knapp
+// som alltid var aktiv — nå går seksjoner samme vei som moduler.
+function addSelectedItem() {
+  if (!comboboxSelected) return;
+  const item = getComboboxOptions().find(isComboboxSelected)
+    ?? (comboboxSelected.type === "SECTION"
+      ? allLibrarySections.filter(x => x.id === comboboxSelected.id).map(x => ({ id: x.id, type: "SECTION", title: localizedText(x.title) || x.id }))[0]
+      : allLibraryModules.filter(x => x.id === comboboxSelected.id).map(x => ({ id: x.id, type: "MODULE", title: localizedText(x.title) || x.id }))[0]);
+  if (!item) return;
+  courseModules.push({ type: item.type, refId: item.id, title: item.title });
+  comboboxSelected = null;
   comboboxQuery = "";
   comboboxOpen = false;
   const input = document.getElementById("comboboxInput");
   if (input) input.value = "";
   updateComboboxDropdown();
-  renderModuleList();
-}
-
-// Section picker (#490) — pick a reusable learning section from the library.
-function renderSectionPicker() {
-  const select = document.getElementById("sectionSelect");
-  if (!select) return;
-  const addedIds = new Set(courseModules.filter(m => m.type === "SECTION").map(m => m.refId));
-  const available = allLibrarySections.filter(s => !addedIds.has(s.id));
-  if (available.length === 0) {
-    select.innerHTML = `<option value="">${escapeHtml(t("courses.noSectionsAvailable"))}</option>`;
-    select.disabled = true;
-  } else {
-    select.disabled = false;
-    select.innerHTML = available
-      .map(s => `<option value="${escapeHtml(s.id)}">${escapeHtml(localizedText(s.title) || s.id)}</option>`)
-      .join("");
-  }
-}
-
-function addSelectedSection() {
-  const select = document.getElementById("sectionSelect");
-  const id = select?.value;
-  if (!id) return;
-  const sec = allLibrarySections.find(s => s.id === id);
-  if (!sec) return;
-  courseModules.push({ type: "SECTION", refId: sec.id, title: localizedText(sec.title) || sec.id });
   renderModuleList();
 }
 
@@ -1468,10 +1463,10 @@ function initDetailEventListeners(courseId) {
   const comboboxInput = document.getElementById("comboboxInput");
   comboboxInput?.addEventListener("input", () => {
     comboboxQuery = comboboxInput.value;
-    comboboxSelectedId = null;
+    comboboxSelected = null;
     comboboxHighlightedIndex = -1;
-    comboboxOpen = comboboxQuery.trim().length > 0;
-    const addBtn = document.getElementById("addModuleBtn");
+    comboboxOpen = true;
+    const addBtn = document.getElementById("addItemBtn");
     if (addBtn) addBtn.disabled = true;
     updateComboboxDropdown();
   });
@@ -1482,7 +1477,7 @@ function initDetailEventListeners(courseId) {
     if (e.key === "ArrowDown" || e.key === "ArrowUp") {
       if (options.length === 0) return;
       e.preventDefault();
-      if (!comboboxOpen && comboboxQuery.trim()) comboboxOpen = true;
+      if (!comboboxOpen) comboboxOpen = true;
       const delta = e.key === "ArrowDown" ? 1 : -1;
       comboboxHighlightedIndex = (comboboxHighlightedIndex + delta + options.length) % options.length;
       updateComboboxDropdown();
@@ -1491,14 +1486,7 @@ function initDetailEventListeners(courseId) {
     if (e.key === "Enter") {
       if (!comboboxOpen || comboboxHighlightedIndex < 0 || comboboxHighlightedIndex >= options.length) return;
       e.preventDefault();
-      const chosen = options[comboboxHighlightedIndex];
-      comboboxSelectedId = chosen.id;
-      comboboxInput.value = localizedText(chosen.title) || chosen.id;
-      comboboxOpen = false;
-      comboboxHighlightedIndex = -1;
-      updateComboboxDropdown();
-      const addBtn = document.getElementById("addModuleBtn");
-      if (addBtn) addBtn.disabled = false;
+      chooseComboboxItem(options[comboboxHighlightedIndex]);
       return;
     }
     if (e.key === "Escape" && comboboxOpen) {
@@ -1509,7 +1497,8 @@ function initDetailEventListeners(courseId) {
     }
   });
   comboboxInput?.addEventListener("focus", () => {
-    if (comboboxQuery.trim()) {
+    // #935: åpner ved fokus, også uten tekst — lista kan blas i.
+    if (!comboboxSelected) {
       comboboxOpen = true;
       updateComboboxDropdown();
     }
@@ -1521,8 +1510,7 @@ function initDetailEventListeners(courseId) {
     }, 150);
   });
 
-  document.getElementById("addModuleBtn")?.addEventListener("click", addSelectedModule);
-  document.getElementById("addSectionBtn")?.addEventListener("click", addSelectedSection);
+  document.getElementById("addItemBtn")?.addEventListener("click", addSelectedItem);
 
   // Save
 }

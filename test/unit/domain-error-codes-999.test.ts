@@ -35,7 +35,7 @@ const kilde = filer.map((f) => les(f)).join("\n");
 
 // ⚠️ RATSJ: tallet kan gå ned, aldri opp. Går det ned, settes TAK ned i SAMME commit — ellers
 // måler den ingenting fra da av. Den skal altså feile i begge retninger.
-const TAK = 4;
+const TAK = 2;
 
 // HISTORIKK, så neste porsjon vet hvor den skal lete:
 //
@@ -59,6 +59,11 @@ const TAK = 4;
 //       det var poenget: «url is required» og «Missing file» er FORMVALIDERING. Nå bærer svarene
 //       `issues`, får den generiske overskriften og detaljene i detaljfeltet — formen #996 avgjorde.
 //       Tallet består nå UTELUKKENDE av de fire kastene, og ingen av dem er en domeneregel.
+//
+//    2  2.71.0: de to NÅBARE fikk ærlige klasser — `ConfigurationError` (503 `not_configured`) i
+//       entraUserSyncService og `ConflictError("module_version_unavailable")` i submissionService.
+//       Dermed kunne unntaket i `api-error.js` fjernes: `validation_error` er nå bare formfeil.
+//       De to som står igjen (klassenavn, påmeldingsmål) nås ikke over HTTP — Zod først.
 //
 // ⚠️ HERFRA GÅR TALLET IKKE NED AV SEG SELV. De fire som står igjen skal stå (begrunnelsene under),
 // så en ny nedgang betyr enten at noen fjernet en vakt, eller at en av begrunnelsene er revurdert.
