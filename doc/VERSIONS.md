@@ -2,9 +2,9 @@
 
 This document tracks release versions and what each version includes.
 
-## 2.72.0 - 2026-09-18 (stage)
+## 2.72.0 - 2026-09-18
 
-Tre commits, **én migrasjon** (dropper `Module.createdById` og `Class.createdById` — kolonner som
+I prod 19.09 07:26 (sammen med 2.71.0). Tre commits, **én migrasjon** (dropper `Module.createdById` og `Class.createdById` — kolonner som
 har vært døde siden 2.66.0; ingen dataflytting), ingen nye miljøvariabler. Bygger på 2.71.0
 (testet av produkteier 18.09).
 
@@ -21,7 +21,7 @@ har vært døde siden 2.66.0; ingen dataflytting), ingen nye miljøvariabler. By
   valgt språk med navnet fra første overskrift, via samme import som JSON-pakken.
 - #931 lukket: grenen `rester-etter-2.67.0` var alt i prod.
 
-## 2.71.0 - 2026-09-18 (stage)
+## 2.71.0 - 2026-09-18
 
 Tre commits, ingen migrasjon, ingen nye miljøvariabler. Tråden: **skillet skal kunne måles**, og
 én oppryddingssak i kursbyggeren. Fire designnotater venter på produkteier.
