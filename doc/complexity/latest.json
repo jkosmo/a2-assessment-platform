@@ -1,13 +1,13 @@
 {
-  "dato": "2026-09-18",
-  "versjon": "2.72.0",
+  "dato": "2026-09-19",
+  "versjon": "2.73.0",
   "samlet": 63,
   "skår": {
     "reglerFlereSteder": 42,
     "utgaverAvViktigeRegler": 100,
     "filerAltMåGjennom": 20,
     "filerSomEndresSammen": 90,
-    "størrelse": 65
+    "størrelse": 64
   },
   "tall": {
     "sumRegler": 29,
@@ -63,11 +63,11 @@
       "over1500": [
         {
           "fil": "public/static/admin-content-shell.js",
-          "linjer": 4667
+          "linjer": 4669
         },
         {
           "fil": "public/participant.js",
-          "linjer": 4214
+          "linjer": 4226
         },
         {
           "fil": "src/modules/adminContent/llmContentGenerationService.ts",
@@ -89,11 +89,11 @@
       "over800": [
         {
           "fil": "src/routes/adminContent.ts",
-          "linjer": 1420
+          "linjer": 1461
         },
         {
           "fil": "src/modules/adminContent/adminContentCommands.ts",
-          "linjer": 1230
+          "linjer": 1299
         },
         {
           "fil": "public/static/admin-content-sections.js",
@@ -110,11 +110,11 @@
           "importører": 53
         },
         {
-          "fil": "locale",
-          "importører": 39
+          "fil": "index",
+          "importører": 40
         },
         {
-          "fil": "index",
+          "fil": "locale",
           "importører": 39
         },
         {
@@ -154,11 +154,11 @@
       }
     ],
     "størrelse": {
-      "ruter": 201,
+      "ruter": 202,
       "tabeller": 39,
-      "kolonner": 501,
-      "i18nNøkler": 5393,
-      "testfiler": 360
+      "kolonner": 504,
+      "i18nNøkler": 5414,
+      "testfiler": 363
     }
   }
 }

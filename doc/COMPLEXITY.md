@@ -1,6 +1,6 @@
 # Hvor innfløkt er løsningen nå?
 
-*Målt 2026-09-18, versjon 2.72.0. Kjør `npm run complexity` for å oppdatere. Reglene for hvert tall står under tallet.*
+*Målt 2026-09-19, versjon 2.73.0. Kjør `npm run complexity` for å oppdatere. Reglene for hvert tall står under tallet.*
 
 ## Samlet: **63 / 100**
 
@@ -12,7 +12,7 @@ Gjennomsnittet av de fem tallene under. 100 betyr «slik vi vil ha det».
 | Viktige regler med mer enn én utgave i koden | **100** |
 | Filer alt må gjennom | **20** |
 | Filer som alltid endres sammen | **90** |
-| Størrelse | **65** |
+| Størrelse | **64** |
 
 ## 1. Regler som er skrevet flere steder — 42
 
@@ -49,14 +49,14 @@ avhengige av gjør hver endring risikabel. Over 1 500 linjer: **6**. Mellom 800 
 
 | Fil | Linjer |
 |---|---:|
-| `public/static/admin-content-shell.js` | 4667 |
-| `public/participant.js` | 4214 |
+| `public/static/admin-content-shell.js` | 4669 |
+| `public/participant.js` | 4226 |
 | `src/modules/adminContent/llmContentGenerationService.ts` | 2105 |
 | `public/static/admin-content-courses.js` | 1803 |
 | `public/review.js` | 1777 |
 | `public/static/admin-content-settings-tab.js` | 1519 |
-| `src/routes/adminContent.ts` | 1420 |
-| `src/modules/adminContent/adminContentCommands.ts` | 1230 |
+| `src/routes/adminContent.ts` | 1461 |
+| `src/modules/adminContent/adminContentCommands.ts` | 1299 |
 | `public/static/admin-content-sections.js` | 1072 |
 | `public/static/workspace-help-content.js` | 934 |
 
@@ -65,8 +65,8 @@ Mest brukt av andre filer (ikke med i skåren, men verdt å vite):
 | Modul | Antall filer som bruker den |
 |---|---:|
 | `prisma` | 53 |
+| `index` | 40 |
 | `locale` | 39 |
-| `index` | 39 |
 | `AppError` | 36 |
 | `auditEvents` | 34 |
 | `auditService` | 32 |
@@ -85,18 +85,18 @@ tilfellene der én av dem ble endret. Par nå: **2**.
 | `public/participant-completed.js` | `public/profile.js` | 14 | 70 % |
 | `public/profile.js` | `public/results.js` | 12 | 60 % |
 
-## 5. Størrelse — 65
+## 5. Størrelse — 64
 
 Hvor mye det er å holde ved like. Ikke feil i seg selv, men alt her koster tid ved hver endring.
 *Regel: gjennomsnitt av tre deltall — API-ruter (100 ned til 0 fra 120 til 320), databasetabeller (100 ned fra 30, 2 poeng per tabell) og oversettelsesnøkler (100 ned fra 3 000, 1 poeng per 50).*
 
 | Hva | Antall |
 |---|---:|
-| API-ruter | 201 |
+| API-ruter | 202 |
 | Databasetabeller | 39 |
-| Kolonner i databasen | 501 |
-| Oversettelsesnøkler (alle språk) | 5393 |
-| Testfiler | 360 |
+| Kolonner i databasen | 504 |
+| Oversettelsesnøkler (alle språk) | 5414 |
+| Testfiler | 363 |
 
 ## Historikk
 
@@ -108,3 +108,4 @@ Hvor mye det er å holde ved like. Ikke feil i seg selv, men alt her koster tid 
 | 2026-09-18 | 2.70.0 | 63 | 38 | 100 | 20 | 90 | 65 |
 | 2026-09-18 | 2.71.0 | 63 | 38 | 100 | 20 | 90 | 65 |
 | 2026-09-18 | 2.72.0 | 63 | 42 | 100 | 20 | 90 | 65 |
+| 2026-09-19 | 2.73.0 | 63 | 42 | 100 | 20 | 90 | 64 |

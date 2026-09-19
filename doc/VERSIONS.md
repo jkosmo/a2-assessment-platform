@@ -2,6 +2,54 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.73.0 - 2026-09-19 (stage)
+
+To commits, **én migrasjon** (`SUPERSEDED` som ny livssyklusverdi + `CertificationStatus.supersededByVersionId`,
+nullable — ingen dataflytting), ingen nye miljøvariabler. Tråden: **de siste sakene under #941**,
+epiken fra nattskanningen. Etter denne står ingen funn igjen der.
+
+### #997 — «bestått gjelder til modulen revideres» er nå implementert
+
+#989 lovet det; koden hadde ingen definisjon av en revisjon. Produkteier avgjorde 19.09
+(`doc/DESIGN_997.md`, beslutningen står nederst i notatet):
+
+- **Forfatteren merker revisjonen** ved publisering — avkryssing, av som standard. Ingen utledning,
+  heller ikke som forslag: en terskel er en gjetning, og en gjetning skal stille et spørsmål
+  (samme avveining som #928), ikke ta fra folk en bestått status.
+- **Publiseringen spør først, med tallet.** «N deltakere har bestått denne modulen» — fordi «ja»
+  sender ett varsel per person. Har ingen bestått, spørres det ikke.
+- **Tidligere bestått blir `SUPERSEDED`**, ikke slettet: dato og vedtak står, men verdien er med
+  vilje UTENFOR `CERTIFICATION_PASSED_STATUSES`, så kursbevisporten slutter å telle den **uten at
+  en eneste leser er endret**. Pinnet av `course-certificate-gate-invariant`.
+- **Deltakeren** ser «Revidert — ta den på nytt» med forklaring, og modulen er tilgjengelig igjen.
+  Egen tilstand (`REVISED_RETAKE_REQUIRED`), ikke «ikke påbegynt»: en bestått modul som plutselig
+  ser urørt ut, uten forklaring, er verre enn ingenting.
+- **Rapporten** får «må tas på nytt» som egen kategori — ellers ville en innholdsoppdatering sett
+  ut som at mange plutselig feiler.
+- **Varselet** går gjennom outboxen (idempotent, prøves på nytt, ruller ikke tilbake publiseringen
+  — #1007) på **mottakerens** språk (#970).
+
+Angrefunksjon er bevisst utelatt; administrator kan rette per person.
+
+### #1005 — den lagrede avledede verdien er ute av lesingen
+
+`MCQAttempt.passFailMcq` utledes nå ved lesing på alle fire lesestedene (deltakerens historikk,
+sensorkøen, ankekøen, kalibreringsdataene) av modulversjonens grense — og skrives ikke lenger.
+Hever eieren grensen fra 70 til 80, følger eldre forsøk med; før kunne en lagret verdi motsi
+vedtaket (#949). Kolonnen droppes i neste release (expand/contract, som #963).
+
+### #960 — ingen vakt står lenger etter en skriving
+
+Kaskadepubliseringen slår opp modulversjonene og krever aktøren FØR første element publiseres. De
+to vaktene som lå inne i løkka kunne i teorien etterlate et halvpublisert kurs — tilstanden I1
+lover aldri kan oppstå. G1-duplikatet saken nevnte var allerede ryddet.
+
+### #941 kan lukkes
+
+48 funn: 46 lukket tidligere, de to siste (#997, #960) her, pluss #1005 som fulgte av #949.
+To av funnene viste seg å være udokumenterte beslutninger, ikke feil — de ble skrevet ned i
+DECISIONS i stedet for «rettet».
+
 ## 2.72.0 - 2026-09-18
 
 I prod 19.09 07:26 (sammen med 2.71.0). Tre commits, **én migrasjon** (dropper `Module.createdById` og `Class.createdById` — kolonner som
