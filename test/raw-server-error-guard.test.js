@@ -80,7 +80,15 @@ const RENDER_BASELINE = {
   // «participant.js: de rå linjene går gjennom filas egne oversettere» lenger ned. Uten den kunne
   // `humanizeApiError` falt ut av `log()` uten at tallet her rørte seg.
   // (13 → 12 i #1046 B5: «Oppdater kurslista»-knappen og dens `log()` er borte.)
-  "participant.js": 12,
+  //
+  // 12 → 3 (19.09, forenkling): de ti `log(error.message)` er nå `logApiError(error)`. De var
+  // trygge hele tiden, men hvert kallsted gjentok kunnskapen om at teksten ligger i `.message`,
+  // og vakta kan ikke skille det fra en rå utskrift. Nå står kunnskapen ett sted.
+  //
+  // ⚠️ De tre som står igjen MÅ røre `message`: de er filas egne oversettere
+  // (`participantErrorToast`) og den ene broa (`logApiError`). Tallet kan ikke gå lavere uten at
+  // noen flytter oversettelsen ut av fila — og da måler denne vakta noe annet enn den gjør i dag.
+  "participant.js": 3,
   // #983: de tre søsterflatene brukte serverens engelske `message` rått, med hardkodede engelske
   // reserver som «Error». `profile.js` arvet i tillegg ikke feilkodetabellen i det hele tatt.
   // #1046: begge nede fra 2 til NULL. Reserven på profilsiden var dessuten hardkodet engelsk

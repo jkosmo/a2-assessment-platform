@@ -1499,7 +1499,7 @@ async function startAutomaticAssessmentFlow(submissionId) {
       renderFlowGating();
       stopAutoAssessmentLoop(false);
     } catch (error) {
-      log(error.message);
+      logApiError(error);
     } finally {
       autoAssessmentRequestInFlight = false;
     }
@@ -1860,6 +1860,19 @@ function participantErrorToast(error, fallbackKey) {
     return;
   }
   showToast(error instanceof Error ? error.message : t(fallbackKey), "error");
+}
+
+/**
+ * En API-feil vist i utdataruta — samme vei som `log()`, men kallstedet slipper å vite HVORDAN en
+ * feil bærer teksten sin.
+ *
+ * ⚠️ Ti kallsteder skrev `log(error.message)`. De var trygge (log oversetter selv gjennom den
+ * delte tabellen), men hvert av dem gjentok kunnskapen om at teksten ligger i `.message` — og
+ * vakta `raw-server-error-guard` kan ikke se forskjell på det og en rå utskrift. Nå står den
+ * kunnskapen ett sted, og de ti sier hva de mener i stedet for hvordan de gjør det.
+ */
+function logApiError(error, options = {}) {
+  log(typeof error?.message === "string" ? error.message : String(error), options);
 }
 
 function log(data, options = {}) {
@@ -2776,7 +2789,7 @@ loadMeButton.addEventListener("click", async () => {
       const body = await apiFetch("/api/me", headers);
       log(body);
     } catch (error) {
-      log(error.message);
+      logApiError(error);
     }
   });
 });
@@ -2802,7 +2815,7 @@ loadModulesButton.addEventListener("click", async () => {
       // feilmelding i ett, på feil språk. Setningen er nå oversatt; er koden ukjent, faller
       // `describeApiError` tilbake til en lokalisert generisk med statuskoden i.
       showEmpty(moduleList, describeApiError(error, t).headline);
-      log(error.message);
+      logApiError(error);
     }
   });
 });
@@ -2929,7 +2942,7 @@ createSubmissionButton.addEventListener("click", async () => {
         });
       }
     } catch (error) {
-      log(error.message);
+      logApiError(error);
     }
   }, updateCreateSubmissionAvailability);
 });
@@ -3046,7 +3059,7 @@ submitMcqButton.addEventListener("click", async () => {
       }
       log(body);
     } catch (error) {
-      log(error.message);
+      logApiError(error);
     }
   });
 });
@@ -3073,7 +3086,7 @@ queueAssessmentButton.addEventListener("click", async () => {
       renderFlowGating();
       log(body);
     } catch (error) {
-      log(error.message);
+      logApiError(error);
     }
   }, renderFlowGating);
 });
@@ -3100,7 +3113,7 @@ checkAssessmentButton.addEventListener("click", async () => {
       showEmpty(assessmentProgressStatus, describeApiError(error, t).headline);
       assessmentProgressSeconds.textContent = "";
       assessmentProgressSeconds.classList.add("hidden");
-      log(error.message);
+      logApiError(error);
     }
   }, renderFlowGating);
 });
@@ -3122,7 +3135,7 @@ checkResultButton.addEventListener("click", async () => {
       renderFlowGating();
       log(body);
     } catch (error) {
-      log(error.message);
+      logApiError(error);
     }
   }, renderFlowGating);
 });
@@ -3144,7 +3157,7 @@ createAppealButton.addEventListener("click", async () => {
       renderAppealState();
       log(body);
     } catch (error) {
-      log(error.message);
+      logApiError(error);
     }
   }, renderFlowGating);
 });
@@ -3158,7 +3171,7 @@ loadHistoryButton?.addEventListener("click", async () => {
       log(body);
     } catch (error) {
       showEmpty(historySummary, describeApiError(error, t).headline);
-      log(error.message);
+      logApiError(error);
     }
   });
 });

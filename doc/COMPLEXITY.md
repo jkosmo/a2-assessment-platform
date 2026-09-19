@@ -2,28 +2,28 @@
 
 *Målt 2026-09-19, versjon 2.74.0. Kjør `npm run complexity` for å oppdatere. Reglene for hvert tall står under tallet.*
 
-## Samlet: **63 / 100**
+## Samlet: **67 / 100**
 
 Gjennomsnittet av de fem tallene under. 100 betyr «slik vi vil ha det».
 
 | Hva | Skår |
 |---|---|
-| Regler som er skrevet flere steder | **42** |
+| Regler som er skrevet flere steder | **60** |
 | Viktige regler med mer enn én utgave i koden | **100** |
 | Filer alt må gjennom | **20** |
 | Filer som alltid endres sammen | **90** |
 | Størrelse | **64** |
 
-## 1. Regler som er skrevet flere steder — 42
+## 1. Regler som er skrevet flere steder — 60
 
 Når en regel står flere steder i koden, kan den bli rettet ett sted og glemt et annet. Vi har tester
-som teller slike steder og som feiler hvis tallet går opp. Summen nå: **29 steder**.
+som teller slike steder og som feiler hvis tallet går opp. Summen nå: **20 steder**.
 *Regel: 100 minus 2 poeng per sted.*
 
 | Hva telles | Steder | Hvor tallet kommer fra |
 |---|---:|---|
 | Skjermer som selv velger hvilket språk et lagret innhold vises på (serveren skal gjøre det) | 2 | `test/client-locale-parser-guard.test.js` |
-| Steder som viser serverens rå feiltekst i stedet for en oversatt melding | 13 | `test/raw-server-error-guard.test.js` |
+| Steder som viser serverens rå feiltekst i stedet for en oversatt melding | 4 | `test/raw-server-error-guard.test.js` |
 | Feil fra serveren uten kode (klienten kan ikke oversette dem) | 2 | `test/unit/domain-error-codes-999.test.ts` |
 | Steder i forfatterkonsollet som bruker menyspråket (ikke innholdsspråket) | 12 | `test/unit/admin-content-locale-roles-974.test.js` |
 
@@ -50,7 +50,7 @@ avhengige av gjør hver endring risikabel. Over 1 500 linjer: **6**. Mellom 800 
 | Fil | Linjer |
 |---|---:|
 | `public/static/admin-content-shell.js` | 4669 |
-| `public/participant.js` | 4226 |
+| `public/participant.js` | 4239 |
 | `src/modules/adminContent/llmContentGenerationService.ts` | 2105 |
 | `public/static/admin-content-courses.js` | 1803 |
 | `public/review.js` | 1777 |
@@ -109,4 +109,4 @@ Hvor mye det er å holde ved like. Ikke feil i seg selv, men alt her koster tid 
 | 2026-09-18 | 2.71.0 | 63 | 38 | 100 | 20 | 90 | 65 |
 | 2026-09-18 | 2.72.0 | 63 | 42 | 100 | 20 | 90 | 65 |
 | 2026-09-19 | 2.73.0 | 63 | 42 | 100 | 20 | 90 | 64 |
-| 2026-09-19 | 2.74.0 | 63 | 42 | 100 | 20 | 90 | 64 |
+| 2026-09-19 | 2.74.0 | 67 | 60 | 100 | 20 | 90 | 64 |

@@ -86,9 +86,9 @@
   {
     "dato": "2026-09-19",
     "versjon": "2.74.0",
-    "samlet": 63,
+    "samlet": 67,
     "skår": {
-      "reglerFlereSteder": 42,
+      "reglerFlereSteder": 60,
       "utgaverAvViktigeRegler": 100,
       "filerAltMåGjennom": 20,
       "filerSomEndresSammen": 90,

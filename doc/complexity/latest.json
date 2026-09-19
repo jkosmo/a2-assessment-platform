@@ -1,16 +1,16 @@
 {
   "dato": "2026-09-19",
   "versjon": "2.74.0",
-  "samlet": 63,
+  "samlet": 67,
   "skår": {
-    "reglerFlereSteder": 42,
+    "reglerFlereSteder": 60,
     "utgaverAvViktigeRegler": 100,
     "filerAltMåGjennom": 20,
     "filerSomEndresSammen": 90,
     "størrelse": 64
   },
   "tall": {
-    "sumRegler": 29,
+    "sumRegler": 20,
     "regler": [
       {
         "hva": "Skjermer som selv velger hvilket språk et lagret innhold vises på (serveren skal gjøre det)",
@@ -19,7 +19,7 @@
       },
       {
         "hva": "Steder som viser serverens rå feiltekst i stedet for en oversatt melding",
-        "steder": 13,
+        "steder": 4,
         "kilde": "test/raw-server-error-guard.test.js"
       },
       {
@@ -67,7 +67,7 @@
         },
         {
           "fil": "public/participant.js",
-          "linjer": 4226
+          "linjer": 4239
         },
         {
           "fil": "src/modules/adminContent/llmContentGenerationService.ts",

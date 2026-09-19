@@ -11,6 +11,21 @@ async function openPicker(page: import("@playwright/test").Page) {
   await page.locator("#comboboxInput").click();
   await expect(page.locator("#comboboxDropdown")).toBeVisible();
 }
+
+/**
+ * ⚠️ Velgeren fylles av et API-kall som kan lande ETTER at siden er tegnet. Å åpne lista og
+ * påstå med én gang ga en flake under full kjøring: lista sto med «alt ligger allerede i kurset»
+ * fordi seksjonene ikke var kommet ennå. Vi åpner derfor på nytt til raden er der — å bare vente
+ * på raden holder ikke, for lista tegnes på nytt når dataene kommer.
+ */
+async function openPickerWith(page: import("@playwright/test").Page, itemId: string) {
+  await expect
+    .poll(async () => {
+      await page.locator("#comboboxInput").click();
+      return optionFor(page, itemId).count();
+    }, { timeout: 10000, intervals: [100, 250, 500] })
+    .toBe(1);
+}
 const optionFor = (page: import("@playwright/test").Page, id: string) => page.locator(`#comboboxDropdown .combobox-option[data-item-id="${id}"]`);
 
 test("course builder: add a section from the library renders it as a [SEKSJON] row", async ({ page }) => {
@@ -37,8 +52,7 @@ test("course builder: add a section from the library renders it as a [SEKSJON] r
   await page.goto("/admin-content/courses/course-1");
 
   // The picker is populated, and there is no section row yet.
-  await openPicker(page);
-  await expect(optionFor(page, "sec-1")).toHaveCount(1);
+  await openPickerWith(page, "sec-1");
   await expect(optionFor(page, "sec-1").locator(".form-row-badge")).toHaveText("SEKSJON");
   await expect(page.locator('#moduleList .form-row[data-item-type="SECTION"]')).toHaveCount(0);
 
@@ -115,8 +129,7 @@ test("#992: kursbyggeren tilbyr ikke arkiverte seksjoner", async ({ page }) => {
   //
   // Den ventingen er samtidig kontrollen: «tøm lista» ville løst funnet og gjort seksjoner umulige
   // å legge inn i det hele tatt.
-  await openPicker(page);
-  await expect(optionFor(page, "sec-live")).toHaveCount(1);
+  await openPickerWith(page, "sec-live");
   await expect(optionFor(page, "sec-arkivert")).toHaveCount(0);
   await optionFor(page, "sec-live").dispatchEvent("mousedown");
   await page.locator("#addItemBtn").click();
