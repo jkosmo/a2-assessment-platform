@@ -910,7 +910,7 @@ function Wait-Stable {
     [string]$Label,
     [int]$RequiredSuccesses = 6,
     [int]$DelaySeconds = 20,
-    [int]$MaxConsecutiveFailures = 45,
+    [int]$MaxWaitMinutes = 26,
     [string]$ExpectedVersion = ""
   )
 
@@ -918,8 +918,15 @@ function Wait-Stable {
   # A "success" is then: HTTP 200 AND version matches. This eliminates the OLD-process-still-serving-/healthz
   # false positive that previously caused the dual Wait-Stable + separate version-check race.
   #
-  # MaxConsecutiveFailures budget: each iteration is up to 15s (HTTP timeout) + 20s (sleep) = 35s.
-  # 45 iterations = ~26 min tolerance.
+  # BUDSJETTET ER EN FRIST, IKKE ET ANTALL FORSOEK (2026-09-19).
+  #
+  # ⚠️ Det var et antall foer, og da maalte det noe annet enn kommentaren lovet. Regnestykket var
+  # «45 forsoek x 35 s = ~26 min», der 35 s forutsetter at HTTP-kallet bruker hele tidsavbruddet paa
+  # 15 s. Men naar den gamle containeren fortsatt svarer -- det VANLIGE tilfellet -- kommer svaret
+  # paa under et sekund, og et forsoek koster bare pausen: ~21 s. Reell toleranse var ~16 min.
+  #
+  # Prod-deployen av 2.73.0 (19.09) ga opp etter 17 min; appen serverte ny versjon fem minutter
+  # senere, og roeyktesten etterpaa var groenn. Deployen var vellykket, jobben var roed.
   #
   # History: v1.1.43 used 15 (~9 min) and just barely missed. It was raised to 30 (~17 min) against
   # observed B1 cold starts of 6-9 min -- roughly 2x margin at the time.
@@ -940,12 +947,14 @@ function Wait-Stable {
   #
   # 45 restores roughly 2x margin over the worst time we have actually measured (~13 min).
   $modeDescription = if ($ExpectedVersion) { "/version == $ExpectedVersion" } else { "/healthz HTTP 200" }
-  Write-Host "Confirming $Label is stable on $modeDescription ($RequiredSuccesses successes, ${DelaySeconds}s interval, tolerates $MaxConsecutiveFailures consecutive failures during restart window)..."
+  Write-Host "Confirming $Label is stable on $modeDescription ($RequiredSuccesses successes, ${DelaySeconds}s interval, waits up to $MaxWaitMinutes min for the new container)..."
   $successes = 0
   $consecutiveFailures = 0
-  $totalAttempts = $RequiredSuccesses + $MaxConsecutiveFailures
+  $startedAt = Get-Date
+  $attempt = 0
 
-  for ($attempt = 1; $attempt -le $totalAttempts; $attempt++) {
+  while ($true) {
+    $attempt++
     $isHealthy = $false
     $detail = ""
     if ($ExpectedVersion) {
@@ -973,24 +982,22 @@ function Wait-Stable {
     } else {
       $consecutiveFailures++
       $detailSuffix = if ($detail) { " ($detail)" } else { "" }
-      if ($consecutiveFailures -gt $MaxConsecutiveFailures) {
-        throw "$Label did not transition to $ExpectedVersion after $consecutiveFailures consecutive checks$detailSuffix at $Url. Cold start exceeded budget -- investigate App Service container start."
+      if (Test-WaitDeadlineExceeded -StartedAt $startedAt -Now (Get-Date) -MaxWaitMinutes $MaxWaitMinutes) {
+        $waited = [math]::Round(((Get-Date) - $startedAt).TotalMinutes, 1)
+        throw "$Label did not transition to $ExpectedVersion within $MaxWaitMinutes min (waited $waited min, $consecutiveFailures checks)$detailSuffix at $Url. Cold start exceeded budget -- investigate App Service container start."
       }
       # Version-mismatch (old container still responding) is expected and informational.
       # HTTP timeout/error is the container in restart cycle -- still expected, but louder.
+      $elapsed = [math]::Round(((Get-Date) - $startedAt).TotalMinutes, 1)
       $isVersionMismatch = $ExpectedVersion -and $detail -like "version=*"
       if ($isVersionMismatch) {
-        Write-Host "$Label waiting for new version: $detail (poll $consecutiveFailures/$MaxConsecutiveFailures, old container still serving -- normal during ~5-8 min B1 cold-start)"
+        Write-Host "$Label waiting for new version: $detail ($elapsed/$MaxWaitMinutes min, old container still serving -- normal during ~5-8 min B1 cold-start)"
       } else {
-        Write-Host "$Label not yet responding$detailSuffix (poll $consecutiveFailures/$MaxConsecutiveFailures, new container starting -- normal during ~5-8 min B1 cold-start)"
+        Write-Host "$Label not yet responding$detailSuffix ($elapsed/$MaxWaitMinutes min, new container starting -- normal during ~5-8 min B1 cold-start)"
       }
     }
-    if ($attempt -lt $totalAttempts) {
-      Start-Sleep -Seconds $DelaySeconds
-    }
+    Start-Sleep -Seconds $DelaySeconds
   }
-
-  throw "$Label did not achieve $RequiredSuccesses stable health checks within $totalAttempts attempts at $Url"
 }
 
 $packageVersion = (Get-Content (Join-Path $PSScriptRoot '..\..\package.json') | ConvertFrom-Json).version

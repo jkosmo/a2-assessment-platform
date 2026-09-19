@@ -224,6 +224,40 @@ Describe 'Resolve-PostgresSkipForCredentialSafety' {
   }
 }
 
+Describe 'Test-WaitDeadlineExceeded' {
+  # #941-oppfoelger: ventebudsjettet for «serverer appen den nye versjonen?» skal maales i TID.
+  #
+  # ⚠️ Regresjonen dette vokter mot er ikke en feil i formelen, men i ENHETEN. Budsjettet var 45
+  # forsoek, mens kommentaren regnet i minutter (45 x 35 s = ~26 min) -- og 35 s forutsatte at hvert
+  # HTTP-kall brukte hele tidsavbruddet. Naar den gamle containeren svarer med en gang, koster et
+  # forsoek ~21 s, og de 45 rakk bare ~16 min. Prod-deployen av 2.73.0 ga opp etter 17 min paa en
+  # app som var oppe fem minutter senere.
+  # Pester v5: variabler maa settes i BeforeAll for aa naa It-blokkene (samme felle som
+  # Resolve-AppNames-testen over dokumenterer).
+  BeforeAll { $start = [datetime]'2026-09-19T18:38:00Z' }
+
+  It 'er ikke overskredet rett foer fristen' {
+    Test-WaitDeadlineExceeded -StartedAt $start -Now $start.AddMinutes(25.9) -MaxWaitMinutes 26 | Should -BeFalse
+  }
+
+  It 'er overskredet naar fristen naas' {
+    Test-WaitDeadlineExceeded -StartedAt $start -Now $start.AddMinutes(26) -MaxWaitMinutes 26 | Should -BeTrue
+  }
+
+  It 'er ikke overskredet etter 45 raske forsoek a 21 sekunder -- tilfellet som ga opp for tidlig' {
+    # 45 x 21 s = 15,75 min. Med tellingen var dette slutten paa budsjettet; med fristen er det
+    # ti minutter igjen.
+    $now = $start.AddSeconds(45 * 21)
+    Test-WaitDeadlineExceeded -StartedAt $start -Now $now -MaxWaitMinutes 26 | Should -BeFalse
+  }
+
+  It 'er overskredet etter 45 trege forsoek a 35 sekunder -- samme tall, annen virkelighet' {
+    # 45 x 35 s = 26,25 min. Bare i DETTE tilfellet betydde tellingen det kommentaren lovet.
+    $now = $start.AddSeconds(45 * 35)
+    Test-WaitDeadlineExceeded -StartedAt $start -Now $now -MaxWaitMinutes 26 | Should -BeTrue
+  }
+}
+
 Describe 'Test-RoleAssignmentSucceeded' {
   It 'returns $true when az exited 0 (regardless of output)' {
     Test-RoleAssignmentSucceeded -ExitCode 0 -Output '' | Should -BeTrue
