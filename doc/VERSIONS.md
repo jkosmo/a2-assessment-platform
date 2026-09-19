@@ -2,7 +2,39 @@
 
 This document tracks release versions and what each version includes.
 
-## 2.73.0 - 2026-09-19 (stage)
+## 2.74.0 - 2026-09-19 (stage)
+
+To commits, **én migrasjon** (dropper tre døde ting: `MCQAttempt.passFailMcq`,
+`CertificationStatus.recertificationDueDate` og den ubrukte indeksen på `expiryDate`), ingen nye
+miljøvariabler. Kontraktsfasen for to opprydninger, pluss forenkling.
+
+### Kontraktsfase (#1005, #991)
+
+Regelen som styrer rekkefølgen: en kolonne droppes først i en SENERE release enn den der koden
+sluttet å røre den — gamle containere velger alle skalarer under et bytte. Samme mønster som #963.
+
+- **#1005:** `passFailMcq` var en avledet verdi som ble lagret, og kunne derfor komme i utakt med
+  regelen sin (#949). Siden 2.73.0 utleder alle fire lesestedene den; nå er kolonnen borte.
+- **#991:** `recertificationDueDate` og indeksen er borte. **`expiryDate` blir stående**
+  (produkteier 19.09): innsynseksporten oppgir den som historikk om personen, og å droppe den ville
+  slettet en opplysning vi utleverer. **Enum-verdiene DUE_SOON/DUE/EXPIRED blir også stående** — å
+  migrere radene til ACTIVE ville slettet sporet av at en sertifisering en gang var utløpt.
+  Den døde nøkkelen `results.export.recertification` er fjernet i tre språk.
+
+### Forenkling
+
+- **Policyen leses ett sted.** Den ble lest på tre måter: kodeken, en håndskrevet variant i
+  `submissionReadModels` med en ekstra objektsjekk, og to tynne innpakninger som kom med #1005.
+  Objektsjekken er flyttet inn i kodeken; de tre er borte. `withDerivedMcqPassFail` slår nå opp
+  selv i stedet for å ta en parser som argument.
+- **Deploy-vakta måler tid, ikke runder.** Budsjettet var 45 forsøk, mens kommentaren regnet i
+  minutter og antok 35 s per forsøk. Når den gamle containeren svarer raskt, koster et forsøk
+  ~21 s — reell toleranse var ~16 min, ikke ~26. Prod-deployen av 2.73.0 ga opp etter 17 minutter
+  på en app som var oppe fem minutter senere: rød jobb, vellykket deploy. Budsjettet er nå en frist
+  (26 min), loggen viser medgått tid, regelen ligger i en ren hjelpefunksjon med Pester-dekning, og
+  unit-vakta som selv ganget runder med 35 s leser nå fristen direkte.
+
+## 2.73.0 - 2026-09-19
 
 To commits, **én migrasjon** (`SUPERSEDED` som ny livssyklusverdi + `CertificationStatus.supersededByVersionId`,
 nullable — ingen dataflytting), ingen nye miljøvariabler. Tråden: **de siste sakene under #941**,

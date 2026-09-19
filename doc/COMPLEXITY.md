@@ -1,6 +1,6 @@
 # Hvor innfløkt er løsningen nå?
 
-*Målt 2026-09-19, versjon 2.73.0. Kjør `npm run complexity` for å oppdatere. Reglene for hvert tall står under tallet.*
+*Målt 2026-09-19, versjon 2.74.0. Kjør `npm run complexity` for å oppdatere. Reglene for hvert tall står under tallet.*
 
 ## Samlet: **63 / 100**
 
@@ -94,8 +94,8 @@ Hvor mye det er å holde ved like. Ikke feil i seg selv, men alt her koster tid 
 |---|---:|
 | API-ruter | 202 |
 | Databasetabeller | 39 |
-| Kolonner i databasen | 504 |
-| Oversettelsesnøkler (alle språk) | 5414 |
+| Kolonner i databasen | 502 |
+| Oversettelsesnøkler (alle språk) | 5411 |
 | Testfiler | 363 |
 
 ## Historikk
@@ -109,3 +109,4 @@ Hvor mye det er å holde ved like. Ikke feil i seg selv, men alt her koster tid 
 | 2026-09-18 | 2.71.0 | 63 | 38 | 100 | 20 | 90 | 65 |
 | 2026-09-18 | 2.72.0 | 63 | 42 | 100 | 20 | 90 | 65 |
 | 2026-09-19 | 2.73.0 | 63 | 42 | 100 | 20 | 90 | 64 |
+| 2026-09-19 | 2.74.0 | 63 | 42 | 100 | 20 | 90 | 64 |

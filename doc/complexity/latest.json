@@ -1,6 +1,6 @@
 {
   "dato": "2026-09-19",
-  "versjon": "2.73.0",
+  "versjon": "2.74.0",
   "samlet": 63,
   "skår": {
     "reglerFlereSteder": 42,
@@ -156,8 +156,8 @@
     "størrelse": {
       "ruter": 202,
       "tabeller": 39,
-      "kolonner": 504,
-      "i18nNøkler": 5414,
+      "kolonner": 502,
+      "i18nNøkler": 5411,
       "testfiler": 363
     }
   }
