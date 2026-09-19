@@ -323,6 +323,9 @@ coursesRouter.get("/:courseId", async (request, response, next) => {
       const moduleId = item.moduleId ?? item.module?.id ?? "";
       const certStatus = certStatusByModuleId.get(moduleId);
       const passed = isCertificationPassed(certStatus);
+      // #997: revidert etter at deltakeren besto. EGEN tilstand, ikke «ikke påbegynt»: en modul som
+      // var bestått og plutselig ikke er det, uten forklaring, er verre enn ingenting.
+      const superseded = certStatus === "SUPERSEDED";
       const hasStarted = latestSubmissionByModuleId.has(moduleId);
       // #502-followup/#958: regelen bor nå i `findCourseItemsForParticipant`. Ruta leser en
       // avgjørelse i stedet for å ta en — feltene den ble regnet ut av finnes ikke her lenger.
@@ -337,7 +340,7 @@ coursesRouter.get("/:courseId", async (request, response, next) => {
         moduleId,
         courseItemId: item.id,
         title: localizeContentText(locale, item.module?.title ?? "") ?? item.module?.title ?? moduleId,
-        moduleStatus: passed ? "PASSED" : hasStarted ? "IN_PROGRESS" : "NOT_STARTED",
+        moduleStatus: passed ? "PASSED" : superseded ? "REVISED_RETAKE_REQUIRED" : hasStarted ? "IN_PROGRESS" : "NOT_STARTED",
         discussionsEnabled: item.discussionsEnabled,
         available,
         required: item.required,
@@ -390,12 +393,14 @@ coursesRouter.get("/:courseId", async (request, response, next) => {
         .map((cm) => {
           const certStatus = certStatusByModuleId.get(cm.moduleId);
           const passed = isCertificationPassed(certStatus);
+          const superseded = certStatus === "SUPERSEDED";
           const hasStarted = latestSubmissionByModuleId.has(cm.moduleId);
           return {
             moduleId: cm.moduleId,
             sortOrder: cm.sortOrder,
             title: localizeContentText(locale, cm.module.title) ?? cm.module.title,
-            moduleStatus: passed ? "PASSED" : hasStarted ? "IN_PROGRESS" : "NOT_STARTED",
+            // #997: samme tre-deling som i `items` over — én regel, to steder som viser den.
+            moduleStatus: passed ? "PASSED" : superseded ? "REVISED_RETAKE_REQUIRED" : hasStarted ? "IN_PROGRESS" : "NOT_STARTED",
           };
         }),
       items,

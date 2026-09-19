@@ -759,7 +759,9 @@ definisjon av revisjon (#997). Forfatteren vet hva en endring betyr faglig; en u
 latt en rettet skrivefeil ta fra folk en bestått status. Samme resonnement som #928: en gjetning
 skal stille et spørsmål, ikke handle.
 
-**Sak:** #997, `doc/DESIGN_997.md` · **Status:** besluttet av produkteier 2026-09-19, ikke bygget ennå
+**Sak:** #997, `doc/DESIGN_997.md` · **Status:** bygget 2026-09-19 (2.73.0). Flagget står på publiseringsruta;
+`SUPERSEDED` er med vilje utenfor `CERTIFICATION_PASSED_STATUSES`, pinnet av
+`test/unit/course-certificate-gate-invariant.test.ts`.
 
 ## Importpakken bærer sin opprinnelse — som påstand, ikke bevis (2026-09-18)
 

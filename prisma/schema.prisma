@@ -299,6 +299,8 @@ model ModuleVersion {
   submissions              Submission[]
   assessmentDecisions      AssessmentDecision[]
   llmEvaluations           LLMEvaluation[]
+  // #997: sertifiseringer denne versjonen gjorde foreldet (revisjon merket ved publisering).
+  supersededCertifications CertificationStatus[]  @relation("SupersededCertifications")
 
   @@unique([moduleId, versionNo])
   @@index([moduleId, publishedAt])
@@ -546,6 +548,10 @@ enum CertificationLifecycleStatus {
   DUE
   EXPIRED
   NOT_CERTIFIED
+  // #997: modulen er revidert etter at deltakeren besto den. Statusen bevares (dato og vedtak
+  // står), men teller ikke som bestått — verdien står med vilje UTENFOR
+  // CERTIFICATION_PASSED_STATUSES.
+  SUPERSEDED
 }
 
 model CertificationStatus {
@@ -557,11 +563,14 @@ model CertificationStatus {
   passedAt               DateTime?
   expiryDate             DateTime?
   recertificationDueDate DateTime?
+  // #997: hvilken modulversjon som gjorde denne beståtten foreldet. Null for alle andre statuser.
+  supersededByVersionId  String?
   createdAt              DateTime                     @default(now())
   updatedAt              DateTime                     @updatedAt
   user                   User                         @relation(fields: [userId], references: [id], onDelete: Restrict)
   module                 Module                       @relation(fields: [moduleId], references: [id], onDelete: Restrict)
   latestDecision         AssessmentDecision           @relation(fields: [latestDecisionId], references: [id], onDelete: Restrict)
+  supersededByVersion    ModuleVersion?               @relation("SupersededCertifications", fields: [supersededByVersionId], references: [id], onDelete: SetNull)
 
   @@unique([userId, moduleId])
   @@index([moduleId, status])

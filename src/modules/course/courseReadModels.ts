@@ -24,7 +24,8 @@ export interface CourseModuleEntry {
   moduleId: string;
   sortOrder: number;
   title: string;
-  moduleStatus: "NOT_STARTED" | "PASSED" | "IN_PROGRESS";
+  // #997: REVISED_RETAKE_REQUIRED = deltakeren besto en tidligere versjon, og modulen er revidert.
+  moduleStatus: "NOT_STARTED" | "PASSED" | "IN_PROGRESS" | "REVISED_RETAKE_REQUIRED";
 }
 
 // A single step in the participant course sequence — either a module or a
@@ -40,7 +41,7 @@ export interface CourseModuleEntry {
 // Klienten utledet før «ikke påkrevd» fra `available: false` og tilbød «Avslutt kurset» i kurs
 // serveren ikke ville utstedt bevis for. Feltet finnes for at den ikke skal måtte gjette.
 export type CourseSequenceItem =
-  | { type: "MODULE"; sortOrder: number; moduleId: string; courseItemId: string; title: string; moduleStatus: "NOT_STARTED" | "PASSED" | "IN_PROGRESS"; discussionsEnabled: boolean; available: boolean; required: boolean }
+  | { type: "MODULE"; sortOrder: number; moduleId: string; courseItemId: string; title: string; moduleStatus: "NOT_STARTED" | "PASSED" | "IN_PROGRESS" | "REVISED_RETAKE_REQUIRED"; discussionsEnabled: boolean; available: boolean; required: boolean }
   // #944: `available` er PÅKREVD på begge variantene. Var det valgfritt på SECTION, ville en kaller
   // som glemte det fått `undefined` — som er falsy, men også umulig å skille fra «ikke vurdert».
   // Typen tvinger nå fram et svar, slik at neste sti ikke kan la det stå åpent i stillhet.

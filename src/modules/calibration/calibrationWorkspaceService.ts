@@ -3,6 +3,7 @@ import { calibrationRepository } from "./calibrationRepository.js";
 import { recordAuditEvent } from "../../services/auditService.js";
 import type { SubmissionStatus as SubmissionStatusType } from "@prisma/client";
 import { assessmentPolicyCodec } from "../../codecs/assessmentPolicyCodec.js";
+import { deriveMcqPassFail, resolveMcqMinPercent } from "../assessment/mcqPassRule.js";
 import { redFlagsCodec } from "../../codecs/redFlagsCodec.js";
 import { getAssessmentRules } from "../../config/assessmentRules.js";
 import { auditActions, auditEntityTypes } from "../../observability/auditEvents.js";
@@ -236,7 +237,14 @@ export async function getCalibrationWorkspaceSnapshot(input: CalibrationWorkspac
         ? {
             percentScore: mcq.percentScore,
             scaledScore: mcq.scaledScore,
-            passFailMcq: mcq.passFailMcq,
+            // #1005: utledet av modulversjonens grense, ikke lest fra forsøkets lagrede felt.
+            passFailMcq: deriveMcqPassFail(
+              mcq.percentScore,
+              resolveMcqMinPercent(
+                submission.moduleVersion.assessmentMode,
+                assessmentPolicyCodec.parse(submission.moduleVersion.assessmentPolicyJson),
+              ),
+            ),
             completedAt: mcq.completedAt,
           }
         : null,

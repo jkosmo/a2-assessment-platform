@@ -44,6 +44,10 @@ export const auditActions = {
     moduleRestored: "module_restored",
     benchmarkExampleVersionCreated: "benchmark_example_version_created",
     moduleVersionPublished: "module_version_published",
+    // #997: forfatteren merket versjonen som en revisjon — tidligere beståtte er satt til
+    // SUPERSEDED og varslet. Egen hendelse, ikke et felt på publiseringen: dette er en
+    // livssyklusovergang for ANDRE rader enn den som ble publisert (samme resonnement som #1003).
+    modulePassesSuperseded: "module_passes_superseded",
     // #896 S5: restoring an earlier draft. Recorded because the new version's content did not come
     // from an author editing — knowing which version it was copied from is the only way to read
     // the history correctly afterwards.
@@ -223,6 +227,12 @@ export type AuditMetadataByAction = {
   [auditActions.adminContent.moduleVersionPublished]: EventMetadata<{
     moduleId: string;
     moduleVersionId: string;
+  }>;
+  [auditActions.adminContent.modulePassesSuperseded]: EventMetadata<{
+    moduleId: string;
+    moduleVersionId: string;
+    supersededCount: number;
+    notifiedCount: number;
   }>;
   [auditActions.adminContent.moduleVersionRestored]: EventMetadata<{
     moduleId: string;

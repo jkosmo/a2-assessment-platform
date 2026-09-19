@@ -350,6 +350,43 @@ const courseAssignmentMessages: Record<SupportedLocale, CourseAssignmentLabels> 
   },
 };
 
+// #997: modulen du besto er revidert. Ett varsel per deltaker per revisjon — ikke en kalender
+// (det var maset #989 fjernet). Ingen lenker (#688).
+type ModuleRevisedLabels = {
+  subject: string; // {module}
+  body: string; // {module}
+  closing: string;
+};
+
+const moduleRevisedMessages: Record<SupportedLocale, ModuleRevisedLabels> = {
+  "en-GB": {
+    subject: "Module revised: {module}",
+    body: "Hello!\n\nThe module «{module}», which you had passed, has been revised. Your earlier pass no longer counts towards the course certificate.",
+    closing: "\n\nLog in to the platform to take the module again.",
+  },
+  nb: {
+    subject: "Modulen er revidert: {module}",
+    body: "Hei!\n\nModulen «{module}», som du hadde bestått, er revidert. Den tidligere beståtten teller ikke lenger mot kursbeviset.",
+    closing: "\n\nLogg inn på plattformen for å ta modulen på nytt.",
+  },
+  nn: {
+    subject: "Modulen er revidert: {module}",
+    body: "Hei!\n\nModulen «{module}», som du hadde bestått, er revidert. Den tidlegare beståtten tel ikkje lenger mot kursbeviset.",
+    closing: "\n\nLogg inn på plattforma for å ta modulen på nytt.",
+  },
+};
+
+export function getModuleRevisedNotificationMessage(
+  locale: SupportedLocale,
+  context: { moduleTitle: string },
+): NotificationMessage {
+  const t = moduleRevisedMessages[locale];
+  return {
+    subject: t.subject.replace("{module}", context.moduleTitle),
+    nextStepGuidance: t.body.replace("{module}", context.moduleTitle) + t.closing,
+  };
+}
+
 export function getCourseAssignmentNotificationMessage(
   locale: SupportedLocale,
   context: { courseTitle: string; className: string; dueAt?: Date | null },

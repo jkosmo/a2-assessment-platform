@@ -187,7 +187,9 @@ export function createAppealRepository(client: AppealRepositoryClient = prisma) 
                 },
               },
               moduleVersion: {
-                select: { id: true },
+                // #1005: modus + policy følger med, fordi «bestod flervalgsdelen?» utledes ved
+                // lesing i stedet for å leses fra `MCQAttempt.passFailMcq`.
+                select: { id: true, assessmentMode: true, assessmentPolicyJson: true },
               },
               mcqAttempts: {
                 orderBy: { completedAt: "desc" },

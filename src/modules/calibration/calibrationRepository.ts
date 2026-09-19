@@ -62,6 +62,10 @@ export function createCalibrationRepository(client: CalibrationRepositoryClient 
               id: true,
               versionNo: true,
               promptTemplateVersionId: true,
+              // #1005: kalibreringsdataene er nettopp der en utdatert lagret «bestått» ville
+              // forplantet seg til terskeljusteringer. Grensen leses fra modulversjonen.
+              assessmentMode: true,
+              assessmentPolicyJson: true,
             },
           },
           user: {
@@ -103,7 +107,6 @@ export function createCalibrationRepository(client: CalibrationRepositoryClient 
             select: {
               percentScore: true,
               scaledScore: true,
-              passFailMcq: true,
               completedAt: true,
             },
           },

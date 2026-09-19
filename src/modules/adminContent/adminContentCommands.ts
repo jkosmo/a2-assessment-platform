@@ -17,6 +17,10 @@ import {
   type ModuleRubric,
 } from "./llmContentGenerationService.js";
 import { hashBlueprint } from "./blueprintHash.js";
+import { createCertificationRepository } from "../certification/certificationRepository.js";
+import { recipientLocale } from "../../i18n/recipientLocale.js";
+import { localizeContentText } from "../../i18n/content.js";
+import { enqueueOutboxEvents, OUTBOX_EVENT_TYPES } from "../outbox/outboxService.js";
 
 type CreateRubricVersionInput = {
   moduleId: string;
@@ -945,11 +949,29 @@ export async function unpublishModule(moduleId: string, actorId: string) {
   return result;
 }
 
+/**
+ * #997: «bestått gjelder til modulen revideres» — og en revisjon er noe FORFATTEREN merker.
+ *
+ * `supersedesEarlierPasses` er av som standard. Er den på, mister alle som har bestått modulen
+ * beståttstatusen: raden settes til `SUPERSEDED` (bevart med dato og vedtak, men utenfor
+ * `CERTIFICATION_PASSED_STATUSES`, så kursbevisporten slutter å telle den av seg selv), og hver av
+ * dem får ett varsel.
+ *
+ * ⚠️ Hvorfor forfatteren og ikke koden: en ny versjon kan være en rettet skrivefeil eller en helt
+ * ny oppgave, og en utledet terskel ville latt skrivefeilen ta fra folk en bestått status. Samme
+ * avveining som #928 — en gjetning skal stille et spørsmål, ikke handle. Produkteier 2026-09-19,
+ * `doc/DESIGN_997.md`.
+ *
+ * ⚠️ Statusendringen, revisjonssporet og varslene ligger i SAMME transaksjon som publiseringen.
+ * Varslene går gjennom outboxen nettopp fordi de ikke skal kunne rulle tilbake publiseringen — og
+ * fordi et tapt varsel ellers aldri retter seg (#1007).
+ */
 export async function publishModuleVersion(
   moduleId: string,
   moduleVersionId: string,
   actorId: string,
   tx?: DbTransactionClient,
+  options?: { supersedesEarlierPasses?: boolean },
 ) {
   // #796: the read runs on the tx client when composing an import, so it sees the just-created module.
   const module = await ensureModuleExists(moduleId, tx ? createAdminContentRepository(tx) : adminContentRepository);
@@ -962,6 +984,53 @@ export async function publishModuleVersion(
       actorId,
       now,
     );
+
+    if (options?.supersedesEarlierPasses) {
+      const certRepo = createCertificationRepository(client);
+      const passed = await certRepo.findPassedCertificationsForModule(moduleId);
+      // Tittelen hentes her, ikke fra `module` (sammendraget bærer den ikke) — og den lokaliseres
+      // per mottaker under.
+      const titleRow = await createAdminContentRepository(client).findModuleTitle(moduleId);
+      const storedTitle = titleRow?.title ?? "";
+      await certRepo.supersedeCertificationsForModule(moduleId, moduleVersionId);
+
+      if (passed.length > 0) {
+        await enqueueOutboxEvents(
+          passed.map((row) => {
+            const locale = recipientLocale(row.user);
+            return {
+              type: OUTBOX_EVENT_TYPES.moduleRevisedNotification,
+              payload: {
+                moduleId,
+                moduleVersionId,
+                recipientEmail: row.user.email,
+                recipientName: row.user.name ?? null,
+                // #970: tittelen velges for MOTTAKERENS språk, ikke forfatterens.
+                moduleTitle: localizeContentText(locale, storedTitle) ?? storedTitle,
+                locale,
+              },
+            };
+          }),
+          client,
+        );
+      }
+
+      await recordAuditEvent(
+        {
+          entityType: auditEntityTypes.module,
+          entityId: moduleId,
+          action: auditActions.adminContent.modulePassesSuperseded,
+          actorId,
+          metadata: {
+            moduleId,
+            moduleVersionId,
+            supersededCount: passed.length,
+            notifiedCount: passed.length,
+          },
+        },
+        client,
+      );
+    }
 
     await recordAuditEvent(
       {

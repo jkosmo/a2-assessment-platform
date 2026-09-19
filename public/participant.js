@@ -3762,9 +3762,15 @@ function renderCourseDetailModules(courseId, course) {
       const badgeText = !available
         ? t("courses.module.unavailableShort")
         : isSection ? t("courses.section.todoBadge")
+        // #997: modulen ble revidert etter at deltakeren besto den — egen tekst, ikke «ikke
+        // påbegynt». En bestått modul som plutselig ser urørt ut, uten forklaring, er verre enn
+        // ingenting.
+        : entry.moduleStatus === "REVISED_RETAKE_REQUIRED" ? t("courses.module.revisedRetake")
         : entry.moduleStatus === "IN_PROGRESS" ? t("courses.module.inProgress")
         : t("courses.module.notStarted");
-      const badgeClass = !available ? "unavailable" : entry.moduleStatus === "IN_PROGRESS" ? "retake" : "";
+      const badgeClass = !available
+        ? "unavailable"
+        : entry.moduleStatus === "IN_PROGRESS" || entry.moduleStatus === "REVISED_RETAKE_REQUIRED" ? "retake" : "";
       const position = t("courses.step.position")
         .replace("{n}", String(index + 1))
         .replace("{total}", String(sequence.length));
@@ -3792,9 +3798,15 @@ function renderCourseDetailModules(courseId, course) {
       const badgeText = !available
         ? t("courses.module.unavailableShort")
         : isSection ? t("courses.section.todoBadge")
+        // #997: modulen ble revidert etter at deltakeren besto den — egen tekst, ikke «ikke
+        // påbegynt». En bestått modul som plutselig ser urørt ut, uten forklaring, er verre enn
+        // ingenting.
+        : entry.moduleStatus === "REVISED_RETAKE_REQUIRED" ? t("courses.module.revisedRetake")
         : entry.moduleStatus === "IN_PROGRESS" ? t("courses.module.inProgress")
         : t("courses.module.notStarted");
-      const badgeClass = !available ? "unavailable" : entry.moduleStatus === "IN_PROGRESS" ? "retake" : "";
+      const badgeClass = !available
+        ? "unavailable"
+        : entry.moduleStatus === "IN_PROGRESS" || entry.moduleStatus === "REVISED_RETAKE_REQUIRED" ? "retake" : "";
       row.innerHTML = `
         <span class="course-step-kind">${escapeHtmlP(kindText)}</span>
         <span class="${titleClass}">${escapeHtmlP(title)}</span>

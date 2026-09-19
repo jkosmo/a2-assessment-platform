@@ -5,11 +5,13 @@ export {
   notifyAssessmentResult,
   notifyAppealStatusTransition,
   sendAppealStatusNotification,
+  sendModuleRevisedNotification,
   sendViaAcs,
 } from "./participantNotificationService.js";
 export type {
   AppealNotificationInput,
   AssessmentResultNotificationInput,
+  ModuleRevisedNotificationInput,
 } from "./participantNotificationService.js";
 
 export {

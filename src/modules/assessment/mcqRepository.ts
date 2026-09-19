@@ -62,9 +62,11 @@ export function createMcqRepository(client: McqRepositoryClient = prisma) {
       rawScore: number;
       percentScore: number;
       scaledScore: number;
-      // #949: `null` = «ikke aktuelt» — modulen har ingen MCQ-port å bestå. Kolonnen er nullable i
-      // skjemaet fra før; det var denne typen som var strengere enn databasen.
-      passFailMcq: boolean | null;
+      // #1005: `passFailMcq` skrives IKKE lenger. Den var en avledet verdi som ble lagret, og en
+      // lagret avledet verdi kan komme i utakt med regelen sin — det var #949. Alle fire
+      // lesestedene utleder den nå av modulversjonens grense; kolonnen droppes i neste release
+      // (kontraktsfasen, som #963). Skriv den ikke tilbake «for sikkerhets skyld»: da lever to
+      // generasjoner side om side igjen.
     }) {
       return client.mCQAttempt.updateMany({
         where: { id: data.attemptId, completedAt: null },
@@ -73,7 +75,6 @@ export function createMcqRepository(client: McqRepositoryClient = prisma) {
           rawScore: data.rawScore,
           percentScore: data.percentScore,
           scaledScore: data.scaledScore,
-          passFailMcq: data.passFailMcq,
         },
       });
     },

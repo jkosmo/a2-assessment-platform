@@ -50,6 +50,34 @@ export function createCertificationRepository(client: CertificationRepositoryCli
       });
     },
 
+    /**
+     * #997: hvem har bestått denne modulen akkurat nå? Brukes to steder: publiseringsdialogen
+     * viser tallet FØR forfatteren krysser av (en revisjon kan sende hundrevis av e-poster på ett
+     * klikk), og publiseringen sender varslene til de samme.
+     *
+     * ⚠️ `CERTIFICATION_PASSED_STATUSES`, ikke bare ACTIVE: gamle rader står med DUE/EXPIRED og
+     * telte som bestått før #989. De skal behandles likt her — ellers ville en revisjon latt dem
+     * stå som bestått for alltid, som er nettopp hullet #997 handler om.
+     */
+    findPassedCertificationsForModule(moduleId: string) {
+      return client.certificationStatus.findMany({
+        where: { moduleId, status: { in: CERTIFICATION_PASSED_STATUSES } },
+        select: {
+          id: true,
+          userId: true,
+          user: { select: { email: true, name: true, preferredLocale: true } },
+        },
+      });
+    },
+
+    /** #997: marker dem som foreldet av en ny modulversjon. Returnerer antall rader. */
+    supersedeCertificationsForModule(moduleId: string, supersededByVersionId: string) {
+      return client.certificationStatus.updateMany({
+        where: { moduleId, status: { in: CERTIFICATION_PASSED_STATUSES } },
+        data: { status: "SUPERSEDED", supersededByVersionId },
+      });
+    },
+
     findByUserAndModule(userId: string, moduleId: string) {
       return client.certificationStatus.findUnique({
         where: {
