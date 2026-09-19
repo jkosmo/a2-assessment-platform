@@ -1,7 +1,8 @@
 # Design #997 — «bestått gjelder til modulen revideres»: hva er en revisjon?
 
-Status: **forslag, venter på produkteier** (2026-09-18). Dette er en produktbeslutning før det er
-kode; notatet gir tre svar å velge mellom og én anbefaling.
+Status: **avgjort av produkteier 2026-09-19** — se «Beslutningen» nederst. Notatet står som det
+var da valget ble tatt; beslutningen er ført på slutten, ikke flettet inn, så begrunnelsen kan
+etterprøves mot det som faktisk lå på bordet.
 
 ## Situasjonen
 
@@ -60,3 +61,59 @@ nei av seg selv.
 Migrasjon (én enum-verdi + én nullable kolonne), publiseringskommandoen (`publishModuleVersion` →
 sett `SUPERSEDED` når flagget står), kursbevisporten (ekskluder), deltakerens modulkort (tekst +
 tilgjengelig igjen), statusrapport (ny kategori), skillet (publiserer aldri — uberørt). To kvelder.
+
+---
+
+# Beslutningen (produkteier 2026-09-19)
+
+**1. Hva teller som revisjon: A — forfatteren merker det.** Avkryssing ved publisering, av som
+standard, med teksten som sier hva den gjør. Ingen utledning, heller ikke som forslag: terskelen er
+en gjetning, og #928 avgjorde allerede at en gjetning skal stille et spørsmål, ikke handle.
+
+**2. Tidligere bestått blir `SUPERSEDED`,** ikke slettet. Ny verdi i
+`CertificationLifecycleStatus`, pluss `supersededByVersionId` på `CertificationStatus`.
+
+⚠️ Den som bygger dette: verdien skal **ikke** legges til i `CERTIFICATION_PASSED_STATUSES`
+(`certificationRepository.ts`). Lista er den ene kilden til «har hen bestått modulen», brukt av
+kursbevisporten og rapportene; en verdi utenfor lista slutter å telle av seg selv. Lista er pinnet
+av `test/unit/course-certificate-gate-invariant.test.ts` — utvid testen med `SUPERSEDED` som en
+verdi som IKKE er bestått, ellers måler den ikke det nye tilfellet.
+
+Ingen datamigrasjon utover enum-verdien og kolonnen: eksisterende rader endres først når noen
+publiserer med valget på.
+
+**3. Deltakeren får egen kategori OG e-post.** Produkteier valgte varsling, ikke bare stille
+tilgjengeliggjøring:
+
+- **I deltakerflaten:** modulen blir tilgjengelig igjen med «Modulen er revidert etter at du besto
+  den. Ta den på nytt for at den skal telle i kursbeviset.»
+- **I statusrapporten:** egen kategori «må tas på nytt», adskilt fra ikke bestått — ellers ser en
+  innholdsoppdatering ut som at mange plutselig feiler.
+- **E-post:** ett varsel per deltaker per revidert modul.
+
+  ⚠️ E-posten skal gå gjennom **outboxen** (`OUTBOX_EVENT_TYPES`, ny `moduleRevisedNotification`),
+  enqueuet i samme transaksjon som publiseringen. Grunnen står i #1007: ankevarslene gikk utenom
+  outboxen, og et tapt varsel retter seg aldri av seg selv. Teksten følger **mottakerens** språk
+  (#970 — ikke hardkodet bokmål), og leveringen er idempotent, så en gjenlevering etter krasj ikke
+  sender to.
+
+  ⚠️ Volum: publiserer forfatteren en revisjon av en modul 200 personer har bestått, går det 200
+  e-poster på én knapp. Publiseringsdialogen må derfor si tallet før den sender: «N deltakere har
+  bestått denne modulen og vil få beskjed.» Det er samme avveining som #989 fjernet
+  resertifiseringsmaset for — forskjellen er at dette skjer én gang per revisjon, ikke på en
+  kalender.
+
+**Ikke besluttet, og bevisst utelatt:** en angrefunksjon (en senere versjon som gjenoppretter
+tidligere bestått). Sjelden feil; administrator kan rette per person. Tas opp igjen bare hvis det
+faktisk skjer.
+
+## Rekkefølge når det bygges
+
+1. Migrasjon: enum-verdi `SUPERSEDED` + `supersededByVersionId` (nullable). Ingen dataflytting.
+2. Publiseringskommandoen: flagg på publiseringsforespørselen → sett `SUPERSEDED` på alle
+   `ACTIVE`-rader for modulen, i samme transaksjon, og enqueue ett outbox-varsel per deltaker.
+3. Kursbevisporten: ingen kodeendring (verdien står utenfor lista) — men utvid invariant-testen.
+4. Deltakerens modulkort + statusrapportens kategori.
+5. Publiseringsdialogen: avkryssing + antallet som vil få beskjed.
+
+Skillet er uberørt: det publiserer aldri (#651).

@@ -65,6 +65,9 @@ describe("calibration workspace service", () => {
           id: "module-version-1",
           versionNo: 1,
           promptTemplateVersionId: "prompt-1",
+          // #1005: grensen kommer herfra nå. 90 % mot 70 % ⇒ bestått.
+          assessmentMode: "FREETEXT_PLUS_MCQ",
+          assessmentPolicyJson: JSON.stringify({ passRules: { mcqMinPercent: 70 } }),
         },
         user: { id: "user-1" },
         decisions: [
@@ -85,11 +88,11 @@ describe("calibration workspace service", () => {
             evaluatedAt: new Date("2026-03-10T10:30:00.000Z"),
           },
         ],
+        // #1005: forsøket bærer ikke lenger «bestått» — modulversjonens grense avgjør ved lesing.
         mcqAttempts: [
           {
             percentScore: 90,
             scaledScore: 35,
-            passFailMcq: true,
             completedAt: new Date("2026-03-10T10:20:00.000Z"),
           },
         ],
@@ -102,6 +105,8 @@ describe("calibration workspace service", () => {
           id: "module-version-2",
           versionNo: 2,
           promptTemplateVersionId: "prompt-2",
+          assessmentMode: "FREETEXT_PLUS_MCQ",
+          assessmentPolicyJson: null,
         },
         user: { id: "user-2" },
         decisions: [],

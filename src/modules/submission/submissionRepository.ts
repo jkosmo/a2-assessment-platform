@@ -70,6 +70,11 @@ export function createSubmissionRepository(client: SubmissionRepositoryClient = 
               title: true,
             },
           },
+          // #1005: modulversjonens modus + policy følger med, fordi «bestod flervalgsdelen?»
+          // utledes ved lesing i stedet for å leses fra `MCQAttempt.passFailMcq`.
+          moduleVersion: {
+            select: { assessmentMode: true, assessmentPolicyJson: true },
+          },
           mcqAttempts: {
             where: { completedAt: { not: null } },
             orderBy: { completedAt: "desc" },
@@ -78,7 +83,6 @@ export function createSubmissionRepository(client: SubmissionRepositoryClient = 
               id: true,
               scaledScore: true,
               percentScore: true,
-              passFailMcq: true,
               completedAt: true,
             },
           },

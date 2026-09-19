@@ -745,6 +745,24 @@ vilje: det leser og skriver 15 av skallets tilstander og kaller 24 av funksjonen
 det snittet er skallet under et annet navn. Flytteverktøyet (`split_range`) bytter bare navn i
 kode, ikke i strenger og kommentarer; første skive lærte oss det (`/api/…/ctx.modules/`).
 
+## En revisjon er noe forfatteren merker, og tidligere bestått blir SUPERSEDED (2026-09-19)
+
+**Regel:** Ved publisering av en modulversjon kan forfatteren krysse av for at versjonen erstatter
+tidligere bestått (av som standard). Gjør hen det, settes alle `ACTIVE`-sertifiseringer for modulen
+til `SUPERSEDED` — statusen bevares med dato, men teller ikke som bestått, fordi verdien står
+utenfor `CERTIFICATION_PASSED_STATUSES`. Deltakeren ser modulen tilgjengelig igjen med en
+forklaring, får e-post (gjennom outboxen, på sitt eget språk), og statusrapporten viser «må tas på
+nytt» som egen kategori — ikke som stryk.
+
+**Hvorfor:** #989 lovet «en bestått modul gjelder til den revideres», men koden hadde ingen
+definisjon av revisjon (#997). Forfatteren vet hva en endring betyr faglig; en utledet terskel ville
+latt en rettet skrivefeil ta fra folk en bestått status. Samme resonnement som #928: en gjetning
+skal stille et spørsmål, ikke handle.
+
+**Sak:** #997, `doc/DESIGN_997.md` · **Status:** bygget 2026-09-19 (2.73.0). Flagget står på publiseringsruta;
+`SUPERSEDED` er med vilje utenfor `CERTIFICATION_PASSED_STATUSES`, pinnet av
+`test/unit/course-certificate-gate-invariant.test.ts`.
+
 ## Importpakken bærer sin opprinnelse — som påstand, ikke bevis (2026-09-18)
 
 **Regel:** En `a2-content-export/v1`-konvolutt kan si hvem som laget den (`provenance`: produsent,

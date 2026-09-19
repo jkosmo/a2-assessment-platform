@@ -3283,7 +3283,9 @@ function showModuleActions() {
       // double-confirm dialog was redundant friction. (2026-05-18 author feedback)
       labelKey: "shell.draftReady.publish",
       hintKey: "shell.draftReady.publishHint",
-      action: publishFlow.publishLatestDraftInBackground,
+      // #997: kalles uten argumenter — funksjonen tar valget «erstatter tidligere bestått» som
+      // parameter, og en klikkhendelse skal ikke havne der.
+      action: () => publishFlow.publishLatestDraftInBackground(),
     },
     unpublish: {
       labelKey: "shell.module.unpublish",

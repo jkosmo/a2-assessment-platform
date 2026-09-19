@@ -62,7 +62,10 @@ type CertificationStatusRow = {
   moduleId: string;
   moduleTitle: string;
   latestDecisionId: string;
-  status: "ACTIVE" | "NOT_CERTIFIED";
+  // #997: SUPERSEDED er en EGEN kategori, ikke «ikke bestått». Slår man dem sammen, ser en
+  // innholdsrevisjon ut som at mange plutselig feiler — og tallet rapportleseren handler på,
+  // beskriver da noe annet enn det som skjedde.
+  status: "ACTIVE" | "NOT_CERTIFIED" | "SUPERSEDED";
   passedAt: Date | null;
   updatedAt: Date;
 };
@@ -176,7 +179,12 @@ export async function getCertificationStatusReport(filters: ReportFilters, local
         latestDecisionId: certification.latestDecisionId,
         // Historiske rader kan stå med DUE_SOON/DUE/EXPIRED. De talte som bestått den gang og teller
         // som bestått nå — samme regel som kursbevisporten bruker, én kilde (`isCertificationPassed`).
-        status: isCertificationPassed(certification.status) ? "ACTIVE" : "NOT_CERTIFIED",
+        status: isCertificationPassed(certification.status)
+          ? "ACTIVE"
+          // #997: modulen ble revidert etter at deltakeren besto — «må tas på nytt», ikke stryk.
+          : certification.status === "SUPERSEDED"
+            ? "SUPERSEDED"
+            : "NOT_CERTIFIED",
         passedAt: certification.passedAt,
         updatedAt: certification.updatedAt,
       };
@@ -186,6 +194,7 @@ export async function getCertificationStatusReport(filters: ReportFilters, local
   const statusCounts = {
     ACTIVE: rows.filter((row) => row.status === "ACTIVE").length,
     NOT_CERTIFIED: rows.filter((row) => row.status === "NOT_CERTIFIED").length,
+    SUPERSEDED: rows.filter((row) => row.status === "SUPERSEDED").length,
   };
 
   return {

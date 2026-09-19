@@ -22,7 +22,8 @@ async function seedOpenAttempt() {
   return attempt.id;
 }
 
-const scores = { completedAt: new Date(), rawScore: 1, percentScore: 50, scaledScore: 5, passFailMcq: true };
+// #1005: `passFailMcq` skrives ikke lenger — feltet utledes ved lesing.
+const scores = { completedAt: new Date(), rawScore: 1, percentScore: 50, scaledScore: 5 };
 
 describe("MCQ finalization concurrency (#794)", () => {
   afterAll(async () => {

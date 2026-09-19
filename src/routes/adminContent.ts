@@ -1,4 +1,5 @@
 import { Router, type Request } from "express";
+import { z } from "zod";
 import {
   createModule,
   updateModuleTitle,
@@ -103,6 +104,7 @@ import { assertContentOwnership } from "../modules/content/contentOwnershipServi
 import { respondWithAppError } from "./helpers/respondWithAppError.js";
 import { requestLocale } from "../i18n/requestLocale.js";
 import { evaluateModulePublishGate } from "../modules/adminContent/modulePublishGate.js";
+import { certificationRepository } from "../modules/certification/index.js";
 
 const adminContentRouter = Router();
 
@@ -884,10 +886,47 @@ adminContentRouter.post(
   },
 );
 
+// #997: hvor mange har bestått modulen akkurat nå? Publiseringsdialogen viser tallet FØR
+// forfatteren krysser av for «erstatter tidligere bestått», fordi avkryssingen sender ett varsel
+// per person — en modul 200 har bestått gir 200 e-poster på ett klikk. Et informert valg krever
+// tallet før handlingen, ikke etterpå.
+adminContentRouter.get("/modules/:moduleId/passed-count", async (request, response) => {
+  const actorId = request.context?.userId;
+  if (!actorId) {
+    response.status(401).json({ error: "unauthorized" });
+    return;
+  }
+  try {
+    // Samme vakt som publiseringen den er forspillet til (#943): hvor mange som har bestått en
+    // annens modul, er ikke allmenn lesning.
+    await assertModuleOwnership(request.params.moduleId, actorId, request.context?.roles ?? []);
+    const passed = await certificationRepository.findPassedCertificationsForModule(request.params.moduleId);
+    response.json({ passedCount: passed.length });
+  } catch (error) {
+    if (error instanceof AppError) {
+      respondWithAppError(response, error);
+      return;
+    }
+    response.status(400).json({ error: "passed_count_failed", message: "Could not count passed certifications." });
+  }
+});
+
+// #997: forfatteren kan merke publiseringen som en REVISJON som erstatter tidligere bestått.
+// Av som standard — utelatt felt betyr «nei», så alle eksisterende kallere er uendret.
+const publishModuleVersionBodySchema = z.object({
+  supersedesEarlierPasses: z.boolean().optional(),
+});
+
 adminContentRouter.post("/modules/:moduleId/module-versions/:moduleVersionId/publish", async (request, response) => {
   const actorId = request.context?.userId;
   if (!actorId) {
     response.status(401).json({ error: "unauthorized" });
+    return;
+  }
+
+  const parsedBody = publishModuleVersionBodySchema.safeParse(request.body ?? {});
+  if (!parsedBody.success) {
+    response.status(400).json({ error: "validation_error", issues: parsedBody.error.issues });
     return;
   }
 
@@ -952,6 +991,8 @@ adminContentRouter.post("/modules/:moduleId/module-versions/:moduleVersionId/pub
       request.params.moduleId,
       request.params.moduleVersionId,
       actorId,
+      undefined,
+      { supersedesEarlierPasses: parsedBody.data.supersedesEarlierPasses === true },
     );
     response.json({ moduleVersion, validationWarnings: validation.issues });
   } catch (error) {

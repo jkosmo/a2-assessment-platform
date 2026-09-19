@@ -2,6 +2,7 @@ import request from "supertest";
 import { afterAll, describe, expect, it } from "vitest";
 import { app } from "../src/app.js";
 import { prisma } from "../src/db/prisma.js";
+import { publishCourseCascade } from "../src/modules/course/coursePublishService.js";
 
 // #734 — cascade publish. Publishing a COURSE must not leave it containing unavailable (draft/
 // archived) modules or sections (content-lifecycle invariant I1, doc/design/CONTENT_LIFECYCLE.md).
@@ -212,6 +213,33 @@ describe("Course cascade publish (#734)", () => {
     const course = await prisma.course.findUnique({ where: { id: courseId }, select: { publishedAt: true } });
     const section = await prisma.courseSection.findUnique({ where: { id: sectionId }, select: { activeVersionId: true } });
     expect(course?.publishedAt).toBeNull();
+    expect(section?.activeVersionId).toBeNull();
+  });
+
+  // #960: vaktene inne i kaskadeløkka sto ETTER at tidligere elementer var publisert. Testen
+  // måler reorganiseringen der den lar seg måle deterministisk: kaskaden kalles UTEN aktør.
+  //
+  // ⚠️ Hvorfor ikke over HTTP: ruta kjører sin egen forhåndsvisning først og fanger begge
+  // tilfellene med 422 før tjenesten nås — det er nettopp derfor vaktene inne i løkka var unåbare.
+  // Det som gjensto å hindre, var hva som skjer når de LIKEVEL fyrer, og det krever en kaller
+  // uten HTTP-laget. Det er denne.
+  //
+  // ⚠️ REKKEFØLGEN I KURSET ER POENGET: seksjonen står FØRST. Sto modulen først, ville testen vært
+  // grønn også med vakta inne i løkka — ingenting var skrevet ennå når den feilet.
+  it("a caller without an actor is refused before the first item is published", async () => {
+    const moduleId = await makeModule({ withVersion: true });
+    const sectionId = await makeSection({ published: false });
+    const courseId = await makeCourse([
+      { type: "SECTION", id: sectionId },
+      { type: "MODULE", id: moduleId },
+    ]);
+
+    await expect(publishCourseCascade(courseId)).rejects.toMatchObject({ httpStatus: 500 });
+
+    const course = await prisma.course.findUnique({ where: { id: courseId }, select: { publishedAt: true } });
+    const section = await prisma.courseSection.findUnique({ where: { id: sectionId }, select: { activeVersionId: true } });
+    expect(course?.publishedAt).toBeNull();
+    // Kjernen: seksjonen som sto FØRST i kurset er IKKE publisert.
     expect(section?.activeVersionId).toBeNull();
   });
 });

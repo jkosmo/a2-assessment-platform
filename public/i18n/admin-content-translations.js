@@ -752,6 +752,11 @@ const adminContentBase = {
   "area.status": "Status",
   "area.review": "Manual review",
   "area.results": "Results",
+  "shell.publish.revision.question": "Checking who has passed this module…",
+  "shell.publish.revision.heading": "Is this a revision?",
+  "shell.publish.revision.body": "{count} participant(s) have passed this module. If this version replaces earlier passes, they lose the pass, must take the module again for it to count towards the course certificate, and each of them gets an email.",
+  "shell.publish.revision.keep": "No — earlier passes still count",
+  "shell.publish.revision.supersede": "Yes — replace earlier passes",
 };
 const nbOverrides = {
   "nav.profile": "Profil",
@@ -1564,6 +1569,11 @@ const adminContentLateOverrides = {
     "area.status": "Status",
     "area.review": "Manuell behandling",
     "area.results": "Resultater",
+    "shell.publish.revision.question": "Sjekker hvem som har bestått modulen…",
+    "shell.publish.revision.heading": "Er dette en revisjon?",
+    "shell.publish.revision.body": "{count} deltakere har bestått denne modulen. Erstatter denne versjonen tidligere bestått, mister de beståtten, må ta modulen på nytt for at den skal telle i kursbeviset, og hver av dem får en e-post.",
+    "shell.publish.revision.keep": "Nei — tidligere bestått gjelder fortsatt",
+    "shell.publish.revision.supersede": "Ja — erstatt tidligere bestått",
   },
   nn: {
     // #896 S3c-etterslep \u2014 sj\u00e5 merknaden i nb-blokka over.
@@ -2221,6 +2231,11 @@ const adminContentLateOverrides = {
     "area.status": "Status",
     "area.review": "Manuell behandling",
     "area.results": "Resultat",
+    "shell.publish.revision.question": "Sjekkar kven som har bestått modulen…",
+    "shell.publish.revision.heading": "Er dette ein revisjon?",
+    "shell.publish.revision.body": "{count} deltakarar har bestått denne modulen. Erstattar denne utgåva tidlegare bestått, mistar dei beståtten, må ta modulen på nytt for at han skal telje i kursbeviset, og kvar av dei får ein e-post.",
+    "shell.publish.revision.keep": "Nei — tidlegare bestått gjeld framleis",
+    "shell.publish.revision.supersede": "Ja — erstatt tidlegare bestått",
   },
 };
 

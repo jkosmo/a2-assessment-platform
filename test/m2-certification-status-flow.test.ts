@@ -93,10 +93,12 @@ describe("Certification status without expiry", () => {
     const reportResponse = await request(app).get("/api/reports/recertification").set(adminHeaders);
     expect(reportResponse.status).toBe(200);
     expect(reportResponse.body.reportType).toBe("certification-status");
-    // Tellingen per livssyklustilstand er ryddet: bare de to som betyr noe står igjen.
+    // Tellingen per livssyklustilstand er ryddet: de to som betyr noe, pluss #997s «må tas på
+    // nytt» — som er en EGEN kategori nettopp for at en revisjon ikke skal telles som stryk.
     expect(Object.keys(reportResponse.body.totals).sort()).toEqual([
       "ACTIVE",
       "NOT_CERTIFIED",
+      "SUPERSEDED",
       "certificationCount",
     ]);
 

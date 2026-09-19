@@ -121,4 +121,16 @@ describe("kursbevisporten er uendret av at resertifisering fjernes (#989)", () =
 
     expect(created).toEqual([]);
   });
+
+  // #997: revidert modul. Verdien står med vilje UTENFOR CERTIFICATION_PASSED_STATUSES — det er
+  // hele mekanismen: ingen leser måtte endres for at en revisjon skal slutte å telle.
+  //
+  // ⚠️ Mutasjonsmål: legg "SUPERSEDED" inn i lista. Da blir denne rød, og revisjonen ville vært
+  // et navn uten virkning.
+  it("utsteder IKKE kursbevis for SUPERSEDED — modulen er revidert etter at deltakeren besto", async () => {
+    const created = await issueCompletionsFor("SUPERSEDED");
+
+    expect(created).toEqual([]);
+    expect(recordAuditEvent).not.toHaveBeenCalled();
+  });
 });

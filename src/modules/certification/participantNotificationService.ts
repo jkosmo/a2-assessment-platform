@@ -4,7 +4,7 @@ import { env } from "../../config/env.js";
 import { withTimeout } from "../../clients/externalCall.js";
 import { classifyAcsError, describeAcsFailure, nextAttemptDelayMs } from "./acsThrottle.js";
 import type { SupportedLocale } from "../../i18n/locale.js";
-import { getAppealNotificationMessage, getAssessmentResultNotificationMessage, getCourseAssignmentNotificationMessage } from "../../i18n/notificationMessages.js";
+import { getAppealNotificationMessage, getAssessmentResultNotificationMessage, getCourseAssignmentNotificationMessage, getModuleRevisedNotificationMessage } from "../../i18n/notificationMessages.js";
 import { logOperationalEvent } from "../../observability/operationalLog.js";
 import { auditActions, auditEntityTypes } from "../../observability/auditEvents.js";
 import { operationalEvents } from "../../observability/operationalEvents.js";
@@ -451,6 +451,50 @@ export async function sendCourseAssignmentNotification(
   // log channel (and webhook → log for this notification type).
   logOperationalEvent(operationalEvents.certification.participantNotificationSent, { channel, ...payload });
   return { delivered: true, channel, subject, nextStepGuidance: body };
+}
+
+// #997: modulen deltakeren besto er revidert, og den tidligere beståtten teller ikke lenger.
+// Samme kanaldispatch som de andre deltakervarslene; ingen lenker (#688); teksten på MOTTAKERENS
+// språk (#970), ikke forfatterens.
+export interface ModuleRevisedNotificationInput {
+  recipientEmail: string;
+  recipientName?: string | null;
+  /** Tittelen valgt for mottakerens språk av kalleren — samme språk som `locale`. */
+  moduleTitle: string;
+  moduleId: string;
+  moduleVersionId: string;
+  locale: SupportedLocale;
+}
+
+export async function sendModuleRevisedNotification(
+  input: ModuleRevisedNotificationInput,
+): Promise<NotificationResult> {
+  const message = getModuleRevisedNotificationMessage(input.locale, { moduleTitle: input.moduleTitle });
+  const payload = {
+    notificationType: "module_revised",
+    moduleId: input.moduleId,
+    moduleVersionId: input.moduleVersionId,
+    moduleTitle: input.moduleTitle,
+    recipient: { email: input.recipientEmail, locale: input.locale },
+    subject: message.subject,
+    emittedAt: new Date().toISOString(),
+  };
+
+  const channel = env.PARTICIPANT_NOTIFICATION_CHANNEL;
+  if (channel === "disabled") {
+    return { delivered: false, channel, subject: message.subject, nextStepGuidance: message.nextStepGuidance, failureReason: "channel_disabled" };
+  }
+  if (channel === "acs_email") {
+    return sendViaAcs({
+      recipientEmail: input.recipientEmail,
+      recipientName: input.recipientName ?? undefined,
+      subject: message.subject,
+      body: message.nextStepGuidance,
+      logPayload: payload,
+    });
+  }
+  logOperationalEvent(operationalEvents.certification.participantNotificationSent, { channel, ...payload });
+  return { delivered: true, channel, subject: message.subject, nextStepGuidance: message.nextStepGuidance };
 }
 
 // #495/T-QA-5: generisk sender for diskusjons-varsler (nytt spørsmål → kursets SMO; nytt svar →

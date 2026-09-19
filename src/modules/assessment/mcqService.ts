@@ -139,6 +139,8 @@ export async function submitMcqAttempt(input: {
   const scaledScore = (rawScore / totalQuestions) * rules.weights.mcqMaxScore;
   // #949: var `percentScore >= 50` — en hardkodet grense ingen hadde valgt, som motsa vedtaket
   // i ankebehandlerens skjermbilde. Regelen bor nå ett sted, sammen med den vedtaket bruker.
+  // #1005: verdien SVARES fortsatt tilbake til klienten som del av innleveringssvaret, men den
+  // LAGRES ikke — leserne utleder den på nytt hver gang, av grensen som gjelder da.
   const passFailMcq = deriveMcqPassFail(
     percentScore,
     resolveMcqMinPercent(
@@ -170,7 +172,6 @@ export async function submitMcqAttempt(input: {
       rawScore,
       percentScore,
       scaledScore,
-      passFailMcq,
     });
     if (done.count === 0) {
       throw new ConflictError("mcq_already_submitted", "This MCQ attempt was already submitted.");

@@ -372,36 +372,50 @@ export async function publishCourseCascade(courseId: string, actorId?: string): 
     );
   }
 
+  // #960: ALT som kan avvise, avvises FØR første skriving.
+  //
+  // ⚠️ Her lå to vakter INNE i løkka, etter at tidligere elementer alt var publisert: «modulen har
+  // ingen versjon» og «mangler aktør» (401). Begge var i praksis unåbare — forhåndsvisningen over
+  // avviser versjonsløse moduler, og ruta står bak `requireContentOwnership`, som 403-er uten
+  // aktør — men skulle en av dem likevel fyre (en kappestrid mot forhåndsvisningen, eller en
+  // framtidig kaller uten HTTP-laget), ville seksjonene alt vært publisert og kurset stått
+  // halvpublisert: nøyaktig tilstanden I1 lover aldri kan oppstå.
+  //
+  // Nå slås versjonene opp og aktøren kreves i ett forberedelsessteg. Feiler noe her, er ingenting
+  // skrevet. Vakter som leser som vakter, men står for sent, er verre enn ingen vakter
+  // (`adminSections.ts`-regelen).
+  const plan: Array<{ type: "SECTION"; id: string } | { type: "MODULE"; id: string; versionId: string }> = [];
+  for (const item of preview.unpublishedItems) {
+    if (item.type === "SECTION") {
+      plan.push({ type: "SECTION", id: item.id });
+      continue;
+    }
+    const latest = await prisma.moduleVersion.findFirst({
+      where: { moduleId: item.id },
+      orderBy: { versionNo: "desc" },
+      select: { id: true },
+    });
+    if (!latest) {
+      // Nåbar bare som en kappestrid: versjonen forsvant mellom forhåndsvisningen og nå.
+      throw new AppError("module_no_content", 422, `Module ${item.id} has no version to publish.`, { moduleId: item.id });
+    }
+    plan.push({ type: "MODULE", id: item.id, versionId: latest.id });
+  }
+
+  // Publisering tilskrives en aktør. Ruta garanterer én; en kaller uten HTTP-laget som ikke gjør
+  // det, er en programmeringsfeil — og den skal stoppe her, ikke halvveis i en kaskade.
+  // (`plan` er aldri tom her: vi er forbi `preview.allPublished`.)
+  if (!actorId) {
+    throw new AppError("internal_error", 500, "Publishing course items requires an actor; the caller passed none.");
+  }
+
   const publishedItems: PublishedItemRef[] = [];
   try {
-    for (const item of preview.unpublishedItems) {
+    for (const item of plan) {
       if (item.type === "SECTION") {
         await publishSection(item.id, actorId);
       } else {
-        const latest = await prisma.moduleVersion.findFirst({
-          where: { moduleId: item.id },
-          orderBy: { versionNo: "desc" },
-          select: { id: true },
-        });
-        if (!latest) {
-          // Should not happen — preview marks version-less modules un-publishable — but guard anyway.
-          throw new AppError(
-            "module_no_content",
-            422,
-            `Module ${item.id} has no version to publish.`,
-            { moduleId: item.id },
-          );
-        }
-        if (!actorId) {
-          // publishModuleVersion attributes the publish to an actor; a module publish must be
-          // performed by an authenticated admin (the publish route is behind the admin_content guard).
-          throw new AppError(
-            "unauthorized",
-            401,
-            "Publishing a module requires an authenticated actor.",
-          );
-        }
-        await publishModuleVersion(item.id, latest.id, actorId);
+        await publishModuleVersion(item.id, item.versionId, actorId);
       }
       publishedItems.push({ type: item.type, id: item.id });
     }

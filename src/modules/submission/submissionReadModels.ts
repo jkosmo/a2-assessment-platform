@@ -2,9 +2,10 @@ import { llmResponseCodec } from "../../codecs/llmResponseCodec.js";
 import { localizeContentText } from "../../i18n/content.js";
 import { normalizeLocale } from "../../i18n/locale.js";
 import { parseDecisionReasonParams } from "../assessment/decisionReason.js";
-import { resolveMcqMinPercent, resolveTotalMin } from "../assessment/mcqPassRule.js";
+import { resolveMcqMinPercent, resolveTotalMin, withDerivedMcqPassFail } from "../assessment/mcqPassRule.js";
 import { deriveConfidenceLevel } from "../assessment/assessmentDecisionSignals.js";
 import type { ModuleAssessmentPolicy } from "../../codecs/assessmentPolicyCodec.js";
+import type { AssessmentMode as AssessmentModeType } from "@prisma/client";
 
 /**
  * #940: modulens regler, lest tolerant.
@@ -37,11 +38,11 @@ export type SubmissionHistoryItem = {
     decisionReason: string;
     finalisedAt: Date | null;
   }>;
+  moduleVersion?: { assessmentMode: AssessmentModeType | null; assessmentPolicyJson: string | null } | null;
   mcqAttempts: Array<{
     id: string;
     scaledScore: number | null;
     percentScore: number | null;
-    passFailMcq: boolean | null;
     completedAt: Date | null;
   }>;
   llmEvaluations: Array<{
@@ -138,7 +139,9 @@ export function toSubmissionHistoryItemView(submission: SubmissionHistoryItem, l
     submittedAt: submission.submittedAt,
     status: submission.submissionStatus,
     latestDecision: submission.decisions[0] ?? null,
-    latestMcqAttempt: submission.mcqAttempts[0] ?? null,
+    // #1005: utledet her, ikke lest fra kolonnen — samme regel som vedtaket brukte.
+    latestMcqAttempt:
+      withDerivedMcqPassFail(submission.mcqAttempts, submission.moduleVersion, parseAssessmentPolicy)[0] ?? null,
     latestLlmEvaluation: submission.llmEvaluations[0] ?? null,
   };
 }

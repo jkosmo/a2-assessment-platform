@@ -109,3 +109,28 @@ export function deriveMcqPassFail(
   if (typeof percentScore !== "number" || Number.isNaN(percentScore)) return null;
   return percentScore >= minPercent;
 }
+
+/**
+ * #1005: «bestod flervalgsdelen?» UTLEDES nå ved lesing, for hvert forsøk, av modulversjonens
+ * modus og policy.
+ *
+ * ⚠️ Hvorfor det ikke holder å skrive riktig verdi én gang. `MCQAttempt.passFailMcq` var en
+ * AVLEDET VERDI SOM BLE LAGRET, og en lagret avledet verdi kan alltid komme i utakt med regelen
+ * sin. Det var nøyaktig det som skjedde (#949): forsøket ble skrevet med en hardkodet 50 %-grense
+ * mens vedtaket fulgte modulens policy, og de to sto side om side i ankebehandlerens skjermbilde.
+ * Å rette skrivingen fjernet symptomet; bare utledning fjerner klassen — endrer eieren grensen fra
+ * 70 til 80, følger eldre forsøk med av seg selv.
+ *
+ * Kolonnen skrives ikke lenger og droppes i neste release (kontraktsfasen, som #963 og #991).
+ */
+export function withDerivedMcqPassFail<T extends { percentScore: number | null }>(
+  attempts: readonly T[],
+  moduleVersion: { assessmentMode: AssessmentModeType | null; assessmentPolicyJson: string | null } | null | undefined,
+  parsePolicy: (json: string | null | undefined) => ModuleAssessmentPolicy | null,
+): Array<T & { passFailMcq: boolean | null }> {
+  const minPercent = resolveMcqMinPercent(
+    moduleVersion?.assessmentMode ?? null,
+    parsePolicy(moduleVersion?.assessmentPolicyJson),
+  );
+  return attempts.map((attempt) => ({ ...attempt, passFailMcq: deriveMcqPassFail(attempt.percentScore, minPercent) }));
+}

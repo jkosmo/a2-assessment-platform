@@ -408,12 +408,30 @@ export function createPublishFlow(ctx) {
     await saveDraftBundleInBackground({ afterSave: publishLatestDraftInBackground });
   }
 
-  async function publishLatestDraftInBackground() {
+  /**
+   * #997: «bestått gjelder til modulen revideres» — og revisjonen er noe FORFATTEREN merker.
+   *
+   * Har noen bestått modulen fra før, spør vi før publiseringen: er dette en revisjon som gjør de
+   * beståttene ugyldige? Spørsmålet bærer TALLET, fordi svaret «ja» sender ett varsel per person —
+   * en modul 200 har bestått gir 200 e-poster på ett klikk. Uten tallet er avkryssingen en
+   * overraskelse i stedet for et valg.
+   *
+   * Har ingen bestått, spørres det ikke: da er det ingenting å erstatte.
+   */
+  async function publishLatestDraftInBackground(options = {}) {
     const moduleId = ctx.selectedModuleId;
     const moduleVersionId = ctx.latestSavedModuleVersionId ?? ctx.bundle?.selectedConfiguration?.moduleVersion?.id;
     if (!moduleId || !moduleVersionId) {
       logBot(() => t("shell.publish.versionRequired"));
       return;
+    }
+
+    if (options.supersedesEarlierPasses === undefined) {
+      const passedCount = await countPassedParticipants(moduleId);
+      if (passedCount > 0) {
+        askAboutRevision(passedCount);
+        return;
+      }
     }
 
     const slot = logProgress("shell.publish.progress");
@@ -423,7 +441,7 @@ export function createPublishFlow(ctx) {
       await apiFetch(
         `/api/admin/content/modules/${encodeURIComponent(moduleId)}/module-versions/${encodeURIComponent(moduleVersionId)}/publish`,
         getHeaders,
-        { method: "POST", body: JSON.stringify({}) },
+        { method: "POST", body: JSON.stringify({ supersedesEarlierPasses: options.supersedesEarlierPasses === true }) },
       );
       logResolveSlot(slot, () => `<strong>${escapeHtml(t("shell.publish.success"))}</strong>`);
       showToast(t("shell.publish.success"), "success");
@@ -454,6 +472,42 @@ export function createPublishFlow(ctx) {
         { labelKey: "shell.action.retry", action: publishLatestDraftInBackground },
       ]);
     }
+  }
+
+  /**
+   * Antallet som har bestått modulen nå. Feiler oppslaget, spør vi ikke — publiseringen skal ikke
+   * stoppe fordi en telling ikke gikk, og «ikke spurt» betyr «ingen erstattes», som er det trygge
+   * svaret.
+   */
+  async function countPassedParticipants(moduleId) {
+    try {
+      const body = await apiFetch(`/api/admin/content/modules/${encodeURIComponent(moduleId)}/passed-count`, getHeaders);
+      return Number(body?.passedCount) || 0;
+    } catch {
+      return 0;
+    }
+  }
+
+  function askAboutRevision(passedCount) {
+    const slot = logProgress("shell.publish.revision.question");
+    slot.abortBtn.remove();
+    logResolveSlot(
+      slot,
+      () =>
+        `<strong>${escapeHtml(t("shell.publish.revision.heading"))}</strong><br>${escapeHtml(
+          t("shell.publish.revision.body").replace("{count}", String(passedCount)),
+        )}`,
+      [
+        {
+          labelKey: "shell.publish.revision.keep",
+          action: () => publishLatestDraftInBackground({ supersedesEarlierPasses: false }),
+        },
+        {
+          labelKey: "shell.publish.revision.supersede",
+          action: () => publishLatestDraftInBackground({ supersedesEarlierPasses: true }),
+        },
+      ],
+    );
   }
 
   async function unpublishModuleInBackground() {

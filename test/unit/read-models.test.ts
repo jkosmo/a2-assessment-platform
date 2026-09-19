@@ -30,12 +30,14 @@ describe("module-owned read models", () => {
               finalisedAt: new Date("2026-03-23T10:05:00.000Z"),
             },
           ],
+          // #1005: modulversjonen følger med, og «bestod flervalgsdelen?» utledes av den —
+          // forsøket bærer ikke lenger svaret.
+          moduleVersion: { assessmentMode: "MCQ_ONLY", assessmentPolicyJson: JSON.stringify({ passRules: { mcqMinPercent: 70 } }) },
           mcqAttempts: [
             {
               id: "mcq-1",
               scaledScore: 30,
               percentScore: 100,
-              passFailMcq: true,
               completedAt: new Date("2026-03-23T10:02:00.000Z"),
             },
           ],
@@ -56,6 +58,7 @@ describe("module-owned read models", () => {
     expect(history.history).toHaveLength(1);
     expect(history.history[0].module.title).toBe("Norsk tittel");
     expect(history.history[0].latestDecision?.totalScore).toBe(88);
+    expect(history.history[0].latestMcqAttempt?.passFailMcq).toBe(true);
   });
 
   it("builds submission result guidance from structured LLM output", () => {
