@@ -49,22 +49,37 @@ describe("deployen verifiseres av en maskin, uansett utfall", () => {
   });
 
   it("⚠️ tålmodighetsbudsjettet dekker en kald B1-start med migrasjoner", () => {
-    // Hver runde er inntil 15 s HTTP-timeout + 20 s pause = 35 s. Verste MÅLTE kaldstart er ~13 min.
-    // Under 22 runder (~13 min) ville vi ligget på grensen der 2.63.0 falt.
+    // ⚠️ Vakta LESTE FEIL ENHET fram til 19.09. Den fant «45 runder» og ganget med 35 s — tallet
+    // fra en runde der HTTP-kallet bruker hele tidsavbruddet. Men når den gamle containeren
+    // fortsatt svarer, koster en runde bare pausen (~21 s), og 45 runder rakk ~16 min, ikke ~26.
+    // Prod-deployen av 2.73.0 ga opp etter 17 min på en app som var oppe fem minutter senere.
+    //
+    // Budsjettet er nå en FRIST, og vakta leser den direkte — ingen omregning, ingen antakelse om
+    // hvor lang en runde er.
     const ps = les("../../scripts/azure/deploy-environment.ps1");
-    const rad = ps.split("\n").find((l) => l.includes("[int]$MaxConsecutiveFailures ="));
-    expect(rad, "fant ikke budsjettet — kontrollcase").toBeTruthy();
+    const rad = ps.split("\n").find((l) => l.includes("[int]$MaxWaitMinutes ="));
+    expect(rad, "fant ikke fristen — kontrollcase").toBeTruthy();
 
-    const tall = Number((rad?.match(/=\s*(\d+)/) ?? [])[1]);
-    expect(Number.isFinite(tall), `kunne ikke lese tallet fra: ${rad}`).toBe(true);
+    const minutter = Number((rad?.match(/=\s*(\d+)/) ?? [])[1]);
+    expect(Number.isFinite(minutter), `kunne ikke lese tallet fra: ${rad}`).toBe(true);
 
-    const minutter = (tall * 35) / 60;
     expect(
       minutter,
-      `Budsjettet er ${tall} runder ≈ ${minutter.toFixed(0)} min. Verste målte kaldstart var ~13 min\n` +
-        "(2.63.0, med to migrasjoner ved oppstart på én B1-instans). Under ~20 min er marginen borte,\n" +
+      `Fristen er ${minutter} min. Verste målte kaldstart var ~13 min (2.63.0, med to migrasjoner\n` +
+        "ved oppstart på én B1-instans), og 2.73.0 brukte ~22 min. Under ~20 min er marginen borte,\n" +
         "og da feiler jobben på en deploy som lyktes.",
     ).toBeGreaterThanOrEqual(20);
+  });
+
+  it("⚠️ budsjettet telles ikke i runder — enheten er selve feilen vakta finnes for", () => {
+    // Kontrollcase mot tilbakefall: en «forenkling» tilbake til et antall forsøk ville gjeninnført
+    // avstanden mellom det budsjettet sier og det det faktisk gjør.
+    const ps = les("../../scripts/azure/deploy-environment.ps1");
+    expect(
+      ps.includes("MaxConsecutiveFailures"),
+      "Budsjettet er tilbake i runder. En runde varer ulikt (~21 s når gammel container svarer,\n" +
+        "~35 s når den ikke svarer), så et antall runder måler ikke tid. Bruk MaxWaitMinutes.",
+    ).toBe(false);
   });
 });
 

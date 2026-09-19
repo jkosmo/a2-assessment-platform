@@ -1,6 +1,6 @@
 import { AssessmentMode } from "../../db/prismaRuntime.js";
 import type { AssessmentMode as AssessmentModeType } from "@prisma/client";
-import type { ModuleAssessmentPolicy } from "../../codecs/assessmentPolicyCodec.js";
+import { assessmentPolicyCodec, type ModuleAssessmentPolicy } from "../../codecs/assessmentPolicyCodec.js";
 import { getAssessmentRules } from "../../config/assessmentRules.js";
 
 // ─────────────────────────────────────────────────────────────────────────────────────────────
@@ -126,11 +126,10 @@ export function deriveMcqPassFail(
 export function withDerivedMcqPassFail<T extends { percentScore: number | null }>(
   attempts: readonly T[],
   moduleVersion: { assessmentMode: AssessmentModeType | null; assessmentPolicyJson: string | null } | null | undefined,
-  parsePolicy: (json: string | null | undefined) => ModuleAssessmentPolicy | null,
 ): Array<T & { passFailMcq: boolean | null }> {
   const minPercent = resolveMcqMinPercent(
     moduleVersion?.assessmentMode ?? null,
-    parsePolicy(moduleVersion?.assessmentPolicyJson),
+    assessmentPolicyCodec.parse(moduleVersion?.assessmentPolicyJson),
   );
   return attempts.map((attempt) => ({ ...attempt, passFailMcq: deriveMcqPassFail(attempt.percentScore, minPercent) }));
 }

@@ -328,7 +328,6 @@ async function createSeedPendingManualReview(
       rawScore: input.mcqQuestionIds.length,
       scaledScore: 100,
       percentScore: 100,
-      passFailMcq: true,
     },
   });
 

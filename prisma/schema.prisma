@@ -382,7 +382,6 @@ model MCQAttempt {
   rawScore        Int?
   scaledScore     Float?
   percentScore    Float?
-  passFailMcq     Boolean?
   createdAt       DateTime      @default(now())
   submission      Submission    @relation(fields: [submissionId], references: [id], onDelete: Restrict)
   mcqSetVersion   MCQSetVersion @relation(fields: [mcqSetVersionId], references: [id], onDelete: Restrict)
@@ -561,8 +560,11 @@ model CertificationStatus {
   latestDecisionId       String
   status                 CertificationLifecycleStatus
   passedAt               DateTime?
+  // #989/#991: utløpsdatoer skrives ikke lenger (moduler utløper til de revideres). Kolonnen står
+  // igjen med vilje: innsynseksporten (`/api/me`) oppgir den som HISTORIKK om personen. Søsteren
+  // `recertificationDueDate` og indeksen på denne ble droppet i kontraktsfasen 19.09 — de hadde
+  // ingen lesere.
   expiryDate             DateTime?
-  recertificationDueDate DateTime?
   // #997: hvilken modulversjon som gjorde denne beståtten foreldet. Null for alle andre statuser.
   supersededByVersionId  String?
   createdAt              DateTime                     @default(now())
@@ -574,8 +576,6 @@ model CertificationStatus {
 
   @@unique([userId, moduleId])
   @@index([moduleId, status])
-  // #798: recert reminder scan range-filters expiryDate (<= horizon); index the range column.
-  @@index([expiryDate])
 }
 
 model AuditEvent {
