@@ -1,9 +1,9 @@
 {
   "dato": "2026-09-19",
-  "versjon": "2.74.0",
-  "samlet": 67,
+  "versjon": "2.75.0",
+  "samlet": 74,
   "skår": {
-    "reglerFlereSteder": 60,
+    "reglerFlereSteder": 96,
     "utgaverAvViktigeRegler": 100,
     "filerAltMåGjennom": 20,
     "filerSomEndresSammen": 90,
@@ -11,26 +11,36 @@
   },
   "tall": {
     "sumRegler": 20,
+    "sumGjeld": 2,
+    "sumGulv": 18,
     "regler": [
       {
         "hva": "Skjermer som selv velger hvilket språk et lagret innhold vises på (serveren skal gjøre det)",
         "steder": 2,
-        "kilde": "test/client-locale-parser-guard.test.js"
+        "gulv": 0,
+        "kilde": "test/client-locale-parser-guard.test.js",
+        "gjeld": 2
       },
       {
         "hva": "Steder som viser serverens rå feiltekst i stedet for en oversatt melding",
         "steder": 4,
-        "kilde": "test/raw-server-error-guard.test.js"
+        "gulv": 4,
+        "kilde": "test/raw-server-error-guard.test.js",
+        "gjeld": 0
       },
       {
         "hva": "Feil fra serveren uten kode (klienten kan ikke oversette dem)",
         "steder": 2,
-        "kilde": "test/unit/domain-error-codes-999.test.ts"
+        "gulv": 2,
+        "kilde": "test/unit/domain-error-codes-999.test.ts",
+        "gjeld": 0
       },
       {
         "hva": "Steder i forfatterkonsollet som bruker menyspråket (ikke innholdsspråket)",
         "steder": 12,
-        "kilde": "test/unit/admin-content-locale-roles-974.test.js"
+        "gulv": 12,
+        "kilde": "test/unit/admin-content-locale-roles-974.test.js",
+        "gjeld": 0
       }
     ],
     "utgaver": [

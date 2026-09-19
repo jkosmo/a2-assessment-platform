@@ -23,6 +23,14 @@ import { describe, expect, it } from "vitest";
 
 const SHELL = fileURLToPath(new URL("../../public/static/admin-content-shell.js", import.meta.url));
 const TAK = 12;
+
+// ⚠️ GULVET: alle tolv er de LOVLIGE bruksstedene for menyspråket — definisjonen,
+// oversettelsestabellen, x-locale-hodet, intent-loggen, språkvelgeren (tre), getteren
+// Innstillinger-fanen leser datoformatet gjennom (to på én linje) og to kommentarer som nevner
+// navnet for å forklare regelen. Ingen av dem er gjeld, og rapporten skal ikke trekke for dem.
+//
+// ⚠️ Gulvet kan bare gå ned. Går TAK ned uten at gulvet gjør det, var gulvet satt for høyt.
+const GULV = 12;
 const SETTINGS_TAB = fileURLToPath(new URL("../../public/static/admin-content-settings-tab.js", import.meta.url));
 const TAK_SETTINGS_TAB = 2;
 

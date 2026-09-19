@@ -37,6 +37,13 @@ const kilde = filer.map((f) => les(f)).join("\n");
 // måler den ingenting fra da av. Den skal altså feile i begge retninger.
 const TAK = 2;
 
+// ⚠️ GULVET: begge de to som står igjen skal stå — de nås ikke over HTTP (se forklaringen under),
+// og en kode som aldri når en klient lyver om sin egen rekkevidde. Rapporten teller derfor null
+// gjeld her.
+//
+// ⚠️ Gulvet kan bare gå ned. Blir en av dem nåbar en dag, er den gjeld igjen.
+const GULV = 2;
+
 // HISTORIKK, så neste porsjon vet hvor den skal lete:
 //
 //   35  da saken ble skrevet
@@ -75,14 +82,13 @@ const TAK = 2;
 //
 // ── HVA SOM STÅR IGJEN, OG HVORFOR ────────────────────────────────────────────────────────────
 //
-// ⚠️ DE 2 KASTEDE BLIR STÅENDE. En feilkode finnes for at klienten skal si det samme på brukerens
-// språk. Disse to er ikke domeneregler noen kan handle på:
+// ⚠️ DE 2 SOM STÅR IGJEN BLIR STÅENDE — men ikke de to som sto her før 2.72.0.
 //
-//   entraUserSyncService — en KONFIGURASJONSFEIL som navngir en miljøvariabel. Å oversette
-//   «ENTRA_USER_SYNC_GROUP_ID er ikke satt» til nynorsk hjelper ingen.
-//
-//   submissionService — en INTERN INVARIANT. Fyrer den, er dataene inkonsistente, og svaret er en
-//   feilrapport — ikke en setning som ber brukeren gjøre noe hen ikke kan gjøre.
+// Fram til da var det `entraUserSyncService` (en konfigurasjonsfeil) og `submissionService` (en
+// intern invariant). Begge fikk ærlige klasser i 2.72.0: 503 `not_configured` og 409
+// `module_version_unavailable`. Igjen står klassenavn-vakta og påmeldingsmål-vakta, og de nås
+// ALDRI over HTTP: Zod avviser formen på ruta før tjenesten kalles (målt mot stage 2026-09-10).
+// En kode til dem ville løyet om sin egen rekkevidde — se nedgangen til 15 i historikken over.
 //
 // ⚠️ DE 11 HÅNDBYGDE ER GJORT OPP — men ikke med koder. «url is required», «invalid locale»,
 // «validFrom/validTo må være ISO-verdier», «Missing file» er FORMVALIDERING, ikke domeneregler:

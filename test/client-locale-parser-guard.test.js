@@ -44,6 +44,12 @@ import { describe, expect, it } from "vitest";
 const PUBLIC = fileURLToPath(new URL("../public", import.meta.url));
 
 // Fil -> antall kjente språkvalg på klienten.
+// ⚠️ GULVET er NULL, med vilje. De to i forhåndsvisningen har et reelt behov — å vise forfatteren
+// hva en deltaker ser på et valgt språk — men rekkefølgen er deres egen, og det er nettopp det som
+// gir drift mot serverens. Fiksen er kjent (ruta lokaliserer først, som for #1038), så dette er
+// GJELD, ikke gulv, og rapporten skal fortsette å trekke for den.
+const GULV = 0;
+
 const BASELINE = {
   // #1038 (fjernet 2026-09-11): klasseskjermen fikk tittelen ferdig valgt fra serveren.
   // #1046 (2026-09-12): kurs og seksjoner leser gjennom pickLocalizedText (i18n-locale.js) — 0 igjen.

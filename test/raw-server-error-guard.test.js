@@ -37,6 +37,21 @@ const PUBLIC = fileURLToPath(new URL("../public", import.meta.url));
 
 // Fil -> antall kjente rå bruk i en toast. Arbeidslista for #972; hver linje som forsvinner herfra
 // er en flate som har fått lesbar feiltekst.
+// ⚠️ GULVET: hvor mange av stedene over som IKKE kan fjernes, og hvorfor.
+//
+// Kompleksitetsrapporten trakk lenge poeng for hvert eneste sted, også de som MÅ røre
+// `error.message` fordi de ER oversetteren. Da kunne tallet aldri nå bunnen uansett hvor godt vi
+// jobbet, og en leser kunne ikke se forskjell på gjeld og gulv. Nå teller rapporten bare det som
+// ligger OVER gulvet.
+//
+// ⚠️ Gulvet kan bare gå NED. Å heve det er å slette gjeld med et tastetrykk — og da måler
+// rapporten viljen vår i stedet for koden. Hver post skal kunne forsvares i én setning:
+//
+//   1  toast: oversetterens EGEN reserve i participant.js — teksten er allerede oversatt.
+//   3  render: `participantErrorToast` (to linjer) og broa `logApiError` — de leser feltet fordi
+//      det er jobben deres, og alternativet er at hvert kallsted gjør det selv (det var 12).
+const GULV = 4;
+
 const TOAST_BASELINE = {
   // #988: nede fra 3. Den ene som står igjen er oversetterens EGEN fallback — den viser en
   // allerede oversatt melding (f.eks. «Spørsmål 4 mangler svar»), og skal være der.

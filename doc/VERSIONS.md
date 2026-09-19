@@ -2,6 +2,31 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.75.0 - 2026-09-19 (stage)
+
+Én commit, ingen migrasjon, ingen kodeendring i produktet — **bare målingen**.
+
+### Kompleksitetsrapporten trakk for kode som er riktig
+
+Dimensjon 1 («regler skrevet flere steder») talte hvert eneste sted tellingene fant, også de som
+MÅ være der: den som oversetter en feilmelding og derfor må lese feilteksten, definisjonen av
+menyspråk-variabelen, en feilkode som aldri når en klient. Av 20 steder var rundt 18 slike.
+Dimensjonen kunne derfor aldri nå bunnen uansett hvor godt vi jobbet, og en leser kunne ikke se
+forskjell på gjeld og gulv.
+
+Nå oppgir hver telling sitt **gulv** — hvor mange av stedene som er lovlige — der tallet
+vedlikeholdes, med begrunnelsen ved siden av. Rapporten teller bare det som ligger over, og viser
+begge tallene i tabellen så ingen tror stedene forsvant. Et gulv høyere enn tallet stopper
+rapporten: da har tellingen sluttet å måle noe.
+
+Gulvene i dag: rå servertekst 4 av 4 (oversetterne selv), feil uten kode 2 av 2 (nås ikke over
+HTTP), menyspråk 12 av 12 (alle lovlige), skjermer som velger språk selv **0 av 2** — de to i
+forhåndsvisningen er ekte gjeld med en kjent fiks.
+
+⚠️ **Skåren hoppet fra 67 til 74 uten at koden ble bedre.** Historikktabellen merker raden og
+forklarer hvorfor, slik at ingen leser målestokken som framgang. Reglene ellers ligger fast, som
+avtalt da rapporten ble kalibrert.
+
 ## 2.74.0 - 2026-09-19 (stage)
 
 To commits, **én migrasjon** (dropper tre døde ting: `MCQAttempt.passFailMcq`,

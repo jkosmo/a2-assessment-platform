@@ -1,31 +1,40 @@
 # Hvor innfløkt er løsningen nå?
 
-*Målt 2026-09-19, versjon 2.74.0. Kjør `npm run complexity` for å oppdatere. Reglene for hvert tall står under tallet.*
+*Målt 2026-09-19, versjon 2.75.0. Kjør `npm run complexity` for å oppdatere. Reglene for hvert tall står under tallet.*
 
-## Samlet: **67 / 100**
+## Samlet: **74 / 100**
 
 Gjennomsnittet av de fem tallene under. 100 betyr «slik vi vil ha det».
 
 | Hva | Skår |
 |---|---|
-| Regler som er skrevet flere steder | **60** |
+| Regler som er skrevet flere steder | **96** |
 | Viktige regler med mer enn én utgave i koden | **100** |
 | Filer alt må gjennom | **20** |
 | Filer som alltid endres sammen | **90** |
 | Størrelse | **64** |
 
-## 1. Regler som er skrevet flere steder — 60
+## 1. Regler som er skrevet flere steder — 96
 
 Når en regel står flere steder i koden, kan den bli rettet ett sted og glemt et annet. Vi har tester
-som teller slike steder og som feiler hvis tallet går opp. Summen nå: **20 steder**.
-*Regel: 100 minus 2 poeng per sted.*
+som teller slike steder og som feiler hvis tallet går opp.
 
-| Hva telles | Steder | Hvor tallet kommer fra |
-|---|---:|---|
-| Skjermer som selv velger hvilket språk et lagret innhold vises på (serveren skal gjøre det) | 2 | `test/client-locale-parser-guard.test.js` |
-| Steder som viser serverens rå feiltekst i stedet for en oversatt melding | 4 | `test/raw-server-error-guard.test.js` |
-| Feil fra serveren uten kode (klienten kan ikke oversette dem) | 2 | `test/unit/domain-error-codes-999.test.ts` |
-| Steder i forfatterkonsollet som bruker menyspråket (ikke innholdsspråket) | 12 | `test/unit/admin-content-locale-roles-974.test.js` |
+Stedene nå: **20**. Av dem er **18 et gulv** — de kan ikke fjernes, og
+begrunnelsen står ved siden av tallet i testen som teller dem (den som oversetter en feilmelding
+MÅ lese feilteksten; menyspråket MÅ defineres ett sted). Igjen står **2 som er gjeld**,
+og det er dem skåren regner på.
+*Regel: 100 minus 2 poeng per sted over gulvet.*
+
+| Hva telles | Steder | Gulv | Gjeld | Hvor tallet kommer fra |
+|---|---:|---:|---:|---|
+| Skjermer som selv velger hvilket språk et lagret innhold vises på (serveren skal gjøre det) | 2 | 0 | 2 | `test/client-locale-parser-guard.test.js` |
+| Steder som viser serverens rå feiltekst i stedet for en oversatt melding | 4 | 4 | 0 | `test/raw-server-error-guard.test.js` |
+| Feil fra serveren uten kode (klienten kan ikke oversette dem) | 2 | 2 | 0 | `test/unit/domain-error-codes-999.test.ts` |
+| Steder i forfatterkonsollet som bruker menyspråket (ikke innholdsspråket) | 12 | 12 | 0 | `test/unit/admin-content-locale-roles-974.test.js` |
+
+⚠️ **Gulvet kan bare gå ned.** Å heve det er å slette gjeld med et tastetrykk, og da måler denne
+raden viljen vår i stedet for koden. Rapporten stopper om et gulv er høyere enn tallet det hører
+til — da har tellingen sluttet å måle noe.
 
 ## 2. Viktige regler med mer enn én utgave — 100
 
@@ -110,3 +119,6 @@ Hvor mye det er å holde ved like. Ikke feil i seg selv, men alt her koster tid 
 | 2026-09-18 | 2.72.0 | 63 | 42 | 100 | 20 | 90 | 65 |
 | 2026-09-19 | 2.73.0 | 63 | 42 | 100 | 20 | 90 | 64 |
 | 2026-09-19 | 2.74.0 | 67 | 60 | 100 | 20 | 90 | 64 |
+| 2026-09-19 | 2.75.0 ⚠️ | 74 | 96 | 100 | 20 | 90 | 64 |
+
+⚠️ **2.75.0: måleregelen ble endret.** Dimensjon 1 teller nå bare steder OVER gulvet (de som faktisk kan fjernes). Før talte den alle, også oversetteren som må lese feilteksten og definisjonen av menyspråket — rundt 18 av 20 steder. Hoppet fra 60 til 96 er derfor en ny målestokk, ikke en opprydding.
