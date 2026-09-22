@@ -54,10 +54,22 @@ export type ModuleAssessmentPolicy = {
 // Forfatterflaten VISER den gjeldende verdien i stedet for aa lagre den.
 
 export const assessmentPolicyCodec = {
+  /**
+   * Lest TOLERANT: en oedelagt policy-JSON skal gi en skjerm uten krav-tall, ikke en 500.
+   * Deltakeren har bestaatt eller ikke uansett hva som staar i dette feltet (#940).
+   *
+   * ⚠️ 19.09: dette var TRE lesinger. `submissionReadModels` hadde sin egen med en ekstra sjekk
+   * paa at resultatet er et objekt (ikke en liste, ikke et tall), og sensor-/ankeflaten fikk hver
+   * sin tynne innpakning da #1005 kom. Samme spoersmaal besvart tre steder er nettopp moensteret
+   * #941 handlet om — sjekken er flyttet hit, og de tre er borte.
+   */
   parse(raw: string | null | undefined): ModuleAssessmentPolicy | null {
     if (!raw) return null;
     try {
-      return JSON.parse(raw) as ModuleAssessmentPolicy;
+      const parsed: unknown = JSON.parse(raw);
+      return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+        ? (parsed as ModuleAssessmentPolicy)
+        : null;
     } catch {
       return null;
     }

@@ -82,5 +82,42 @@
       "filerSomEndresSammen": 90,
       "størrelse": 64
     }
+  },
+  {
+    "dato": "2026-09-19",
+    "versjon": "2.74.0",
+    "samlet": 67,
+    "skår": {
+      "reglerFlereSteder": 60,
+      "utgaverAvViktigeRegler": 100,
+      "filerAltMåGjennom": 20,
+      "filerSomEndresSammen": 90,
+      "størrelse": 64
+    }
+  },
+  {
+    "dato": "2026-09-22",
+    "versjon": "2.75.0",
+    "samlet": 76,
+    "skår": {
+      "reglerFlereSteder": 100,
+      "utgaverAvViktigeRegler": 100,
+      "filerAltMåGjennom": 20,
+      "filerSomEndresSammen": 95,
+      "størrelse": 64
+    },
+    "regelendring": "Dimensjon 1 teller nå bare steder OVER gulvet (de som faktisk kan fjernes). Før talte den alle, også oversetteren som må lese feilteksten og definisjonen av menyspråket — rundt 18 av 20 steder. Hoppet fra 60 til 96 er derfor en ny målestokk, ikke en opprydding."
+  },
+  {
+    "dato": "2026-09-22",
+    "versjon": "2.76.0",
+    "samlet": 76,
+    "skår": {
+      "reglerFlereSteder": 100,
+      "utgaverAvViktigeRegler": 100,
+      "filerAltMåGjennom": 20,
+      "filerSomEndresSammen": 95,
+      "størrelse": 64
+    }
   }
 ]

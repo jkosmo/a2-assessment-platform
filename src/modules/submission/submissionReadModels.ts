@@ -4,26 +4,8 @@ import { normalizeLocale } from "../../i18n/locale.js";
 import { parseDecisionReasonParams } from "../assessment/decisionReason.js";
 import { resolveMcqMinPercent, resolveTotalMin, withDerivedMcqPassFail } from "../assessment/mcqPassRule.js";
 import { deriveConfidenceLevel } from "../assessment/assessmentDecisionSignals.js";
-import type { ModuleAssessmentPolicy } from "../../codecs/assessmentPolicyCodec.js";
+import { assessmentPolicyCodec } from "../../codecs/assessmentPolicyCodec.js";
 import type { AssessmentMode as AssessmentModeType } from "@prisma/client";
-
-/**
- * #940: modulens regler, lest tolerant.
- *
- * ⚠️ En ødelagt policy-JSON skal gi en resultatskjerm UTEN krav-tall, ikke en 500 på resultatsiden.
- * Deltakeren har bestått eller ikke uansett hva som står i dette feltet.
- */
-function parseAssessmentPolicy(value: string | null | undefined): ModuleAssessmentPolicy | null {
-  if (!value) return null;
-  try {
-    const parsed: unknown = JSON.parse(value);
-    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
-      ? (parsed as ModuleAssessmentPolicy)
-      : null;
-  } catch {
-    return null;
-  }
-}
 
 export type SubmissionHistoryItem = {
   id: string;
@@ -141,7 +123,7 @@ export function toSubmissionHistoryItemView(submission: SubmissionHistoryItem, l
     latestDecision: submission.decisions[0] ?? null,
     // #1005: utledet her, ikke lest fra kolonnen — samme regel som vedtaket brukte.
     latestMcqAttempt:
-      withDerivedMcqPassFail(submission.mcqAttempts, submission.moduleVersion, parseAssessmentPolicy)[0] ?? null,
+      withDerivedMcqPassFail(submission.mcqAttempts, submission.moduleVersion)[0] ?? null,
     latestLlmEvaluation: submission.llmEvaluations[0] ?? null,
   };
 }
@@ -163,7 +145,7 @@ export function toSubmissionResultView(submission: OwnedSubmission) {
   //
   // ⚠️ Oppslaget MÅ være det samme som avgjørelsen brukte. Regner visningen ut kravet på egen hånd,
   // kan skjermen si 70 % mens vedtaket ble fattet på 80 — nøyaktig utakten #949 rettet.
-  const assessmentPolicy = parseAssessmentPolicy(submission.moduleVersion?.assessmentPolicyJson);
+  const assessmentPolicy = assessmentPolicyCodec.parse(submission.moduleVersion?.assessmentPolicyJson);
   const assessmentMode = submission.moduleVersion?.assessmentMode ?? null;
 
   return {

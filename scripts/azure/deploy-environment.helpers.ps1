@@ -110,6 +110,26 @@ function Get-PostgresPasswordFromConnectionString {
 # - Desired password differs from existing -> $false (rotation intended; force update so server
 #   and Key Vault change atomically -- infra invariant #12).
 # - Passwords match -> $true (skip is safe, no drift).
+# #941-oppfoelger (2026-09-19): ventebudsjettet for «serverer appen den nye versjonen?» maales i
+# TID, ikke i antall forsoek.
+#
+# Hvorfor: budsjettet var 45 forsoek, og kommentaren over det regnet i minutter ved aa anta 35 s per
+# forsoek (15 s tidsavbrudd + 20 s pause). Men den VANLIGE situasjonen er at den gamle containeren
+# svarer med en gang -- da koster et forsoek ~21 s, og 45 forsoek er ~16 min, ikke ~26. Prod-deployen
+# av 2.73.0 ga opp 18:55 etter 17 min; appen svarte med ny versjon 19:00. Jobben ble roed, deployen
+# var vellykket.
+#
+# En vakt som maaler noe annet enn den sier den maaler, laerer oss aa ignorere den -- og da gaar en
+# ekte feil gjennom. Med en frist er toleransen den samme uansett hvor raskt svarene kommer.
+function Test-WaitDeadlineExceeded {
+  param(
+    [datetime]$StartedAt,
+    [datetime]$Now,
+    [int]$MaxWaitMinutes
+  )
+  return (($Now - $StartedAt).TotalMinutes -ge $MaxWaitMinutes)
+}
+
 function Resolve-PostgresSkipForCredentialSafety {
   param(
     [bool]$RequestedSkip,

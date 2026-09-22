@@ -2,7 +2,105 @@
 
 This document tracks release versions and what each version includes.
 
-## 2.73.0 - 2026-09-19 (stage)
+## 2.76.0 - 2026-09-20 (stage)
+
+Én commit, ingen migrasjon. Deltakeren får svar på «hva nå?», og forhåndsvisningen slutter å eie
+sin egen språkregel.
+
+### #1020 — «Slik kommer du videre»
+
+Deltakeren fikk vite AT hen ikke bestod, og hvor mange poeng som manglet. Ikke hva hen skulle gjøre
+med det. Kortet står nå rett under utfallet, **bare ved ikke bestått** (produkteier 20.09) — den som
+besto skal ikke møte en overskrift som antyder at noe mangler.
+
+Kortet finner ikke opp informasjon; det peker på det som finnes, i denne rekkefølgen:
+
+1. Er gjennomgangen av feil svar på (#1061): «Du svarte feil på N av M spørsmål. Gå gjennom dem
+   under før du prøver igjen.» Setningen byttes inn når gjennomgangen er lastet.
+2. Finnes det råd fra vurderingen: de flyttes INN i kortet, i stedet for å stå i sitt eget lenger
+   nede. Ett spørsmål, ett svar.
+3. Ellers: «Gå gjennom modulinnholdet før du prøver igjen.»
+
+⚠️ Seksjonskoblingen saken skisserte er ikke bygget: `MCQQuestion` har ingen referanse til en
+seksjon, og en utledet kobling som bommer sender deltakeren til feil sted.
+
+⚠️ Notatets premiss om at rådene måtte oversettes først, viste seg utdatert — #1024 fjernet
+gjettekartene, og serveren ber nå modellen skrive dem på deltakerens språk. **Et designnotat eldes;
+premissene må kontrolleres mot koden før man handler på dem.**
+
+### Forhåndsvisningen bruker samme språkregel som tjeneren
+
+`localizeValueForLocale` hadde kjeden `[språk, "nb", "en-GB"]` skrevet hos seg, ved siden av
+tjenerens `[språk, organisasjonens standardspråk, "en-GB"]`. To utgaver av samme regel, der bare
+den ene ville fulgt med om standardspråket ble endret — og da ville forfatteren sett noe annet enn
+deltakeren får. Kjeden bor nå i `pickLocalizedText`. Siste gjeld i «regler skrevet flere steder» er
+dermed borte (samlet 74 → 76).
+
+⚠️ Tellingen fanget seg selv til slutt: den siste forekomsten var KOMMENTAREN som forklarte at
+kjeden var fjernet, fordi den siterte den. Kommentarlinjer telles ikke lenger — samme felle som
+`domain-error-codes-999` gikk i.
+
+Rettet også en flake i kursvelger-testen: åpningen av lista påsto etter ett klikk, og klikket kan
+lande før sida har koblet opp velgeren. Den klikker nå til lista står åpen.
+
+## 2.75.0 - 2026-09-19
+
+Én commit, ingen migrasjon, ingen kodeendring i produktet — **bare målingen**.
+
+### Kompleksitetsrapporten trakk for kode som er riktig
+
+Dimensjon 1 («regler skrevet flere steder») talte hvert eneste sted tellingene fant, også de som
+MÅ være der: den som oversetter en feilmelding og derfor må lese feilteksten, definisjonen av
+menyspråk-variabelen, en feilkode som aldri når en klient. Av 20 steder var rundt 18 slike.
+Dimensjonen kunne derfor aldri nå bunnen uansett hvor godt vi jobbet, og en leser kunne ikke se
+forskjell på gjeld og gulv.
+
+Nå oppgir hver telling sitt **gulv** — hvor mange av stedene som er lovlige — der tallet
+vedlikeholdes, med begrunnelsen ved siden av. Rapporten teller bare det som ligger over, og viser
+begge tallene i tabellen så ingen tror stedene forsvant. Et gulv høyere enn tallet stopper
+rapporten: da har tellingen sluttet å måle noe.
+
+Gulvene i dag: rå servertekst 4 av 4 (oversetterne selv), feil uten kode 2 av 2 (nås ikke over
+HTTP), menyspråk 12 av 12 (alle lovlige), skjermer som velger språk selv **0 av 2** — de to i
+forhåndsvisningen er ekte gjeld med en kjent fiks.
+
+⚠️ **Skåren hoppet fra 67 til 74 uten at koden ble bedre.** Historikktabellen merker raden og
+forklarer hvorfor, slik at ingen leser målestokken som framgang. Reglene ellers ligger fast, som
+avtalt da rapporten ble kalibrert.
+
+## 2.74.0 - 2026-09-19 (stage)
+
+To commits, **én migrasjon** (dropper tre døde ting: `MCQAttempt.passFailMcq`,
+`CertificationStatus.recertificationDueDate` og den ubrukte indeksen på `expiryDate`), ingen nye
+miljøvariabler. Kontraktsfasen for to opprydninger, pluss forenkling.
+
+### Kontraktsfase (#1005, #991)
+
+Regelen som styrer rekkefølgen: en kolonne droppes først i en SENERE release enn den der koden
+sluttet å røre den — gamle containere velger alle skalarer under et bytte. Samme mønster som #963.
+
+- **#1005:** `passFailMcq` var en avledet verdi som ble lagret, og kunne derfor komme i utakt med
+  regelen sin (#949). Siden 2.73.0 utleder alle fire lesestedene den; nå er kolonnen borte.
+- **#991:** `recertificationDueDate` og indeksen er borte. **`expiryDate` blir stående**
+  (produkteier 19.09): innsynseksporten oppgir den som historikk om personen, og å droppe den ville
+  slettet en opplysning vi utleverer. **Enum-verdiene DUE_SOON/DUE/EXPIRED blir også stående** — å
+  migrere radene til ACTIVE ville slettet sporet av at en sertifisering en gang var utløpt.
+  Den døde nøkkelen `results.export.recertification` er fjernet i tre språk.
+
+### Forenkling
+
+- **Policyen leses ett sted.** Den ble lest på tre måter: kodeken, en håndskrevet variant i
+  `submissionReadModels` med en ekstra objektsjekk, og to tynne innpakninger som kom med #1005.
+  Objektsjekken er flyttet inn i kodeken; de tre er borte. `withDerivedMcqPassFail` slår nå opp
+  selv i stedet for å ta en parser som argument.
+- **Deploy-vakta måler tid, ikke runder.** Budsjettet var 45 forsøk, mens kommentaren regnet i
+  minutter og antok 35 s per forsøk. Når den gamle containeren svarer raskt, koster et forsøk
+  ~21 s — reell toleranse var ~16 min, ikke ~26. Prod-deployen av 2.73.0 ga opp etter 17 minutter
+  på en app som var oppe fem minutter senere: rød jobb, vellykket deploy. Budsjettet er nå en frist
+  (26 min), loggen viser medgått tid, regelen ligger i en ren hjelpefunksjon med Pester-dekning, og
+  unit-vakta som selv ganget runder med 35 s leser nå fristen direkte.
+
+## 2.73.0 - 2026-09-19
 
 To commits, **én migrasjon** (`SUPERSEDED` som ny livssyklusverdi + `CertificationStatus.supersededByVersionId`,
 nullable — ingen dataflytting), ingen nye miljøvariabler. Tråden: **de siste sakene under #941**,

@@ -1,12 +1,13 @@
-// #1005: «bestod flervalgsdelen?» utledes ved lesing, ikke leses fra `MCQAttempt.passFailMcq`.
+// #1005: «bestod flervalgsdelen?» utledes ved lesing av modulversjonens grense.
 //
-// ⚠️ Testen skriver med vilje en FEIL verdi i kolonnen — nøyaktig utakten #949 fant: forsøket sa
-// «bestått» mens modulens grense sa noe annet. Leser noen fortsatt kolonnen, viser skjermen den
-// feilen. Utleder de, er den borte uten at raden er rørt.
+// ⚠️ Testen så annerledes ut fram til kontraktsfasen 19.09: da fantes kolonnen `passFailMcq`
+// fortsatt, og testen skrev en FEIL verdi i den for å måle at skjermen fulgte grensen og ikke
+// raden. Kolonnen er nå droppet, og den halvdelen kan ikke lenger skrives — den ville bare målt
+// at Prisma avviser et ukjent felt.
 //
-// Kolonnen finnes fortsatt i databasen (den droppes i neste release, kontraktsfasen) — derfor KAN
-// testen skrive den. Når kolonnen er borte, skal denne fila erstattes av en som bare måler
-// utledningen; det står i #1005.
+// Det som står igjen er den sterkeste casen, og den som faktisk beskriver hvorfor utledning er
+// riktig: eieren endrer grensen ETTER at forsøket er levert, og svaret følger med. En lagret verdi
+// kunne aldri gjort det.
 
 import request from "supertest";
 import { afterAll, describe, expect, it } from "vitest";
@@ -22,8 +23,8 @@ const participant = {
 
 const L = (s: string) => JSON.stringify({ "en-GB": s, nb: s, nn: s });
 
-/** En ren flervalgsmodul med grense 70 %, ett forsøk på 60 % — og en LØGN lagret i kolonnen. */
-async function setupStaleAttempt() {
+/** En ren flervalgsmodul med grense 70 % og ett forsøk på 60 % — altså ikke bestått. */
+async function setupAttempt() {
   const stamp = `1005-${Date.now()}`;
   const module = await prisma.module.create({ data: { title: L(`Utledet flervalg ${stamp}`) }, select: { id: true } });
   const mcqSetVersion = await prisma.mCQSetVersion.create({
@@ -70,59 +71,51 @@ async function setupStaleAttempt() {
       rawScore: 6,
       percentScore: 60,
       scaledScore: 18,
-      // ⚠️ LØGNEN: 60 % mot en grense på 70 % er ikke bestått. Slik så radene ut før #949.
-      passFailMcq: true,
     },
   });
   return { moduleId: module.id, submissionId: submission.id };
 }
+
+const historyFor = async () => {
+  const res = await request(app).get("/api/submissions/history").set(participant);
+  expect(res.status, JSON.stringify(res.body)).toBe(200);
+  return res.body.history as Array<{ submissionId: string; latestMcqAttempt: { percentScore: number | null; passFailMcq: boolean | null } | null }>;
+};
 
 describe("#1005 — flervalgsresultatet utledes ved lesing", () => {
   afterAll(async () => {
     await prisma.$disconnect();
   });
 
-  it("historikken viser den GJELDENDE regelen, ikke den lagrede verdien", async () => {
-    await setupStaleAttempt();
+  it("60 % mot en grense på 70 % er ikke bestått", async () => {
+    const { submissionId } = await setupAttempt();
 
-    const res = await request(app).get("/api/submissions/history").set(participant);
-    expect(res.status, JSON.stringify(res.body)).toBe(200);
-    const item = (res.body.history as Array<{ latestMcqAttempt: { percentScore: number; passFailMcq: boolean | null } | null }>)
-      .find((h) => h.latestMcqAttempt?.percentScore === 60);
-    expect(item, "fant ikke forsøket i historikken").toBeTruthy();
-    // Kjernen: kolonnen sier `true`, grensen sier noe annet — skjermen skal følge grensen.
-    expect(item!.latestMcqAttempt!.passFailMcq).toBe(false);
+    const item = (await historyFor()).find((h) => h.submissionId === submissionId);
+    expect(item?.latestMcqAttempt?.passFailMcq).toBe(false);
   });
 
-  it("en høyere grense senere gjør et gammelt forsøk ikke-bestått, uten at raden røres", async () => {
-    const { moduleId } = await setupStaleAttempt();
+  it("senker eieren grensen etterpå, følger et gammelt forsøk med", async () => {
+    const { moduleId, submissionId } = await setupAttempt();
 
-    // Eieren hever grensen til 90 % etterpå — presis den endringen en lagret verdi ikke fanger.
+    // ⚠️ Kjernen i #1005: dette er endringen en LAGRET verdi aldri kunne fanget. Forsøket er
+    // levert og ferdig; det er grensen som flyttet seg.
     await prisma.moduleVersion.updateMany({
       where: { moduleId },
-      data: { assessmentPolicyJson: JSON.stringify({ passRules: { mcqMinPercent: 90 } }) },
+      data: { assessmentPolicyJson: JSON.stringify({ passRules: { mcqMinPercent: 50 } }) },
     });
 
-    const res = await request(app).get("/api/submissions/history").set(participant);
-    expect(res.status).toBe(200);
-    const items = (res.body.history as Array<{ latestMcqAttempt: { percentScore: number; passFailMcq: boolean | null } | null }>)
-      .filter((h) => h.latestMcqAttempt?.percentScore === 60);
-    expect(items.length).toBeGreaterThan(0);
-    expect(items.every((h) => h.latestMcqAttempt!.passFailMcq === false)).toBe(true);
+    const item = (await historyFor()).find((h) => h.submissionId === submissionId);
+    expect(item?.latestMcqAttempt?.passFailMcq).toBe(true);
   });
 
   it("en modul uten flervalgsport svarer «ikke aktuelt» (null), ikke «ikke bestått»", async () => {
-    const { submissionId } = await setupStaleAttempt();
-    // FREETEXT_ONLY har ingen flervalgsgrense — tredje tilstand, jf. mcqPassRule.
+    const { submissionId } = await setupAttempt();
     await prisma.moduleVersion.updateMany({
       where: { submissions: { some: { id: submissionId } } },
       data: { assessmentMode: "FREETEXT_ONLY", assessmentPolicyJson: null },
     });
 
-    const res = await request(app).get("/api/submissions/history").set(participant);
-    expect(res.status).toBe(200);
-    const item = (res.body.history as Array<{ submissionId: string; latestMcqAttempt: { passFailMcq: boolean | null } | null }>)
-      .find((h) => h.submissionId === submissionId);
+    const item = (await historyFor()).find((h) => h.submissionId === submissionId);
     expect(item?.latestMcqAttempt?.passFailMcq).toBeNull();
   });
 });

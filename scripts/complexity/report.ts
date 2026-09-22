@@ -63,6 +63,24 @@ function lesTak(rel: string): number {
   if (!m) throw new Error(`${rel}: fant ikke TAK`);
   return Number(m[1]);
 }
+/**
+ * GULVET til en teller: hvor mange av stedene den teller som IKKE kan fjernes, og hvorfor —
+ * begrunnelsen står i vakta, ved siden av tallet.
+ *
+ * ⚠️ Hvorfor dette finnes (19.09). Rapporten trakk poeng for hvert eneste sted, også de som MÅ
+ * være der: oversetteren som selvsagt leser `error.message`, definisjonen av menyspråk-variabelen,
+ * en feilkode som aldri når en klient. Dimensjonen kunne derfor aldri nå bunnen uansett hvor godt
+ * vi jobbet, og en leser kunne ikke se forskjell på GJELD og GULV. Et mål som straffer riktig kode
+ * lærer oss å ignorere det.
+ *
+ * Rapporten teller nå bare det som ligger OVER gulvet. Rådtallet står fortsatt i tabellen, så
+ * ingen tror stedene forsvant.
+ */
+function lesGulv(rel: string): number {
+  const m = /const GULV = (\d+)/.exec(les(rel));
+  if (!m) throw new Error(`${rel}: fant ikke GULV — hver teller må oppgi hvor mange av stedene sine som er lovlige`);
+  return Number(m[1]);
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 1. Regler som er skrevet flere steder enn de håndheves
@@ -70,12 +88,13 @@ function lesTak(rel: string): number {
 // Vi har allerede tester som TELLER slike steder og feiler om tallet går opp. Summen av dem er det
 // ærligste tallet vi har. Nye tellere legges til her når de lages.
 // ─────────────────────────────────────────────────────────────────────────────
-type Teller = { hva: string; steder: number; kilde: string };
+type Teller = { hva: string; steder: number; gulv: number; gjeld: number; kilde: string };
 function tellRegler(): Teller[] {
   return [
     {
       hva: "Skjermer som selv velger hvilket språk et lagret innhold vises på (serveren skal gjøre det)",
       steder: sumBlokk("test/client-locale-parser-guard.test.js", "BASELINE"),
+      gulv: lesGulv("test/client-locale-parser-guard.test.js"),
       kilde: "test/client-locale-parser-guard.test.js",
     },
     {
@@ -83,19 +102,29 @@ function tellRegler(): Teller[] {
       steder:
         sumBlokk("test/raw-server-error-guard.test.js", "TOAST_BASELINE")
         + sumBlokk("test/raw-server-error-guard.test.js", "RENDER_BASELINE"),
+      gulv: lesGulv("test/raw-server-error-guard.test.js"),
       kilde: "test/raw-server-error-guard.test.js",
     },
     {
       hva: "Feil fra serveren uten kode (klienten kan ikke oversette dem)",
       steder: lesTak("test/unit/domain-error-codes-999.test.ts"),
+      gulv: lesGulv("test/unit/domain-error-codes-999.test.ts"),
       kilde: "test/unit/domain-error-codes-999.test.ts",
     },
     {
       hva: "Steder i forfatterkonsollet som bruker menyspråket (ikke innholdsspråket)",
       steder: lesTak("test/unit/admin-content-locale-roles-974.test.js"),
+      gulv: lesGulv("test/unit/admin-content-locale-roles-974.test.js"),
       kilde: "test/unit/admin-content-locale-roles-974.test.js",
     },
-  ];
+  ].map((t) => {
+    // ⚠️ Et gulv over tallet er ikke en avrunding — det er en teller som har sluttet å måle. Da
+    // skal rapporten stoppe, ikke vise null gjeld.
+    if (t.gulv > t.steder) {
+      throw new Error(`${t.kilde}: GULV (${t.gulv}) er høyere enn antall steder (${t.steder}). Sett gulvet ned.`);
+    }
+    return { ...t, gjeld: t.steder - t.gulv };
+  });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -230,10 +259,12 @@ function main() {
   const dato = new Date().toISOString().slice(0, 10);
 
   const sumRegler = regler.reduce((s, r) => s + r.steder, 0);
+  const sumGjeld = regler.reduce((s, r) => s + r.gjeld, 0);
+  const sumGulv = sumRegler - sumGjeld;
   const sumEkstra = utgaver.reduce((s, r) => s + Math.max(0, r.ekstra), 0);
 
   const skår = {
-    reglerFlereSteder: klem(100 - 2 * sumRegler),
+    reglerFlereSteder: klem(100 - 2 * sumGjeld),
     utgaverAvViktigeRegler: klem(100 - 15 * sumEkstra),
     filerAltMåGjennom: klem(100 - 10 * store.over1500.length - 5 * store.over800.length),
     filerSomEndresSammen: klem(100 - 5 * par.length),
@@ -245,7 +276,7 @@ function main() {
   };
   const samlet = klem(Object.values(skår).reduce((a, b) => a + b, 0) / Object.values(skår).length);
 
-  const json = { dato, versjon, samlet, skår, tall: { sumRegler, regler, utgaver, store, samendring: par, størrelse } };
+  const json = { dato, versjon, samlet, skår, tall: { sumRegler, sumGjeld, sumGulv, regler, utgaver, store, samendring: par, størrelse } };
 
   const md = `# Hvor innfløkt er løsningen nå?
 
@@ -266,12 +297,21 @@ Gjennomsnittet av de fem tallene under. 100 betyr «slik vi vil ha det».
 ## 1. Regler som er skrevet flere steder — ${skår.reglerFlereSteder}
 
 Når en regel står flere steder i koden, kan den bli rettet ett sted og glemt et annet. Vi har tester
-som teller slike steder og som feiler hvis tallet går opp. Summen nå: **${sumRegler} steder**.
-*Regel: 100 minus 2 poeng per sted.*
+som teller slike steder og som feiler hvis tallet går opp.
 
-| Hva telles | Steder | Hvor tallet kommer fra |
-|---|---:|---|
-${regler.map((r) => `| ${r.hva} | ${r.steder} | \`${r.kilde}\` |`).join("\n")}
+Stedene nå: **${sumRegler}**. Av dem er **${sumGulv} et gulv** — de kan ikke fjernes, og
+begrunnelsen står ved siden av tallet i testen som teller dem (den som oversetter en feilmelding
+MÅ lese feilteksten; menyspråket MÅ defineres ett sted). Igjen står **${sumGjeld} som er gjeld**,
+og det er dem skåren regner på.
+*Regel: 100 minus 2 poeng per sted over gulvet.*
+
+| Hva telles | Steder | Gulv | Gjeld | Hvor tallet kommer fra |
+|---|---:|---:|---:|---|
+${regler.map((r) => `| ${r.hva} | ${r.steder} | ${r.gulv} | ${r.gjeld} | \`${r.kilde}\` |`).join("\n")}
+
+⚠️ **Gulvet kan bare gå ned.** Å heve det er å slette gjeld med et tastetrykk, og da måler denne
+raden viljen vår i stedet for koden. Rapporten stopper om et gulv er høyere enn tallet det hører
+til — da har tellingen sluttet å måle noe.
 
 ## 2. Viktige regler med mer enn én utgave — ${skår.utgaverAvViktigeRegler}
 
@@ -337,19 +377,40 @@ ${historikkTabell(json)}
   console.log(`Samlet ${samlet}/100 — skrevet doc/COMPLEXITY.md og doc/complexity/latest.json`);
 }
 
-type Punkt = { dato: string; versjon: string; samlet: number; skår: Record<string, number> };
+type Punkt = { dato: string; versjon: string; samlet: number; skår: Record<string, number>; regelendring?: string };
+
+/**
+ * ⚠️ REGELENDRINGER MÅ STÅ I TABELLEN. Skåren skal kunne følges over tid, og da er det verste som
+ * kan skje at en endring i MÅLEREGELEN leses som framgang i koden. Endres en regel, føres den her
+ * med versjonen den gjaldt fra, og tabellen setter et merke på den raden.
+ *
+ * Reglene ellers ligger fast — de ble kalibrert én gang mot nullpunktet 2026-09-12.
+ */
+const REGELENDRINGER: Record<string, string> = {
+  "2.75.0":
+    "Dimensjon 1 teller nå bare steder OVER gulvet (de som faktisk kan fjernes). Før talte den alle, "
+    + "også oversetteren som må lese feilteksten og definisjonen av menyspråket — rundt 18 av 20 steder. "
+    + "Hoppet fra 60 til 96 er derfor en ny målestokk, ikke en opprydding.",
+};
+
 function historikkTabell(nå: Punkt): string {
   const sti = join(ROOT, "doc/complexity/history.json");
   const historikk: Punkt[] = existsSync(sti) ? (JSON.parse(readFileSync(sti, "utf8")) as Punkt[]) : [];
   const uten = historikk.filter((p) => p.versjon !== nå.versjon);
-  const ny = [...uten, { dato: nå.dato, versjon: nå.versjon, samlet: nå.samlet, skår: nå.skår }];
+  const regelendring = REGELENDRINGER[nå.versjon];
+  const ny = [...uten, { dato: nå.dato, versjon: nå.versjon, samlet: nå.samlet, skår: nå.skår, ...(regelendring ? { regelendring } : {}) }];
   if (!CHECK_ONLY) {
     mkdirSync(join(ROOT, "doc/complexity"), { recursive: true });
     writeFileSync(sti, JSON.stringify(ny, null, 2) + "\n");
   }
-  return `| Dato | Versjon | Samlet | Regler flere steder | Utgaver | Store filer | Endres sammen | Størrelse |\n|---|---|---:|---:|---:|---:|---:|---:|\n${ny
-    .map((p) => `| ${p.dato} | ${p.versjon} | ${p.samlet} | ${p.skår.reglerFlereSteder} | ${p.skår.utgaverAvViktigeRegler} | ${p.skår.filerAltMåGjennom} | ${p.skår.filerSomEndresSammen} | ${p.skår.størrelse} |`)
-    .join("\n")}`;
+  const rader = ny
+    .map((p) => `| ${p.dato} | ${p.versjon}${p.regelendring ? " ⚠️" : ""} | ${p.samlet} | ${p.skår.reglerFlereSteder} | ${p.skår.utgaverAvViktigeRegler} | ${p.skår.filerAltMåGjennom} | ${p.skår.filerSomEndresSammen} | ${p.skår.størrelse} |`)
+    .join("\n");
+  const fotnoter = ny
+    .filter((p) => p.regelendring)
+    .map((p) => `⚠️ **${p.versjon}: måleregelen ble endret.** ${p.regelendring}`)
+    .join("\n\n");
+  return `| Dato | Versjon | Samlet | Regler flere steder | Utgaver | Store filer | Endres sammen | Størrelse |\n|---|---|---:|---:|---:|---:|---:|---:|\n${rader}${fotnoter ? `\n\n${fotnoter}` : ""}`;
 }
 
 main();

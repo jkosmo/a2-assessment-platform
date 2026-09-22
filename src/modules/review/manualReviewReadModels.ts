@@ -2,12 +2,7 @@ import { localizeContentText } from "../../i18n/content.js";
 import { normalizeLocale } from "../../i18n/locale.js";
 
 import { withDerivedMcqPassFail } from "../assessment/mcqPassRule.js";
-import { assessmentPolicyCodec } from "../../codecs/assessmentPolicyCodec.js";
 import type { AssessmentMode as AssessmentModeType } from "@prisma/client";
-
-// #1005: samme tolerante lesing som resten — en ugyldig lagret policy gir «ingen grense», ikke en
-// veltet skjerm for den som skal behandle saken.
-const parseAssessmentPolicyJson = (value: string | null | undefined) => assessmentPolicyCodec.parse(value);
 
 export type ManualReviewWorkspaceRecord = {
   id: string;
@@ -103,7 +98,6 @@ export function toManualReviewWorkspaceView(workspace: ManualReviewWorkspaceReco
         mcqAttempts: withDerivedMcqPassFail(
           sub.mcqAttempts as Array<{ percentScore: number | null }>,
           { assessmentMode: sub.moduleVersion.assessmentMode ?? null, assessmentPolicyJson: sub.moduleVersion.assessmentPolicyJson ?? null },
-          parseAssessmentPolicyJson,
         ),
         llmEvaluations: sub.llmEvaluations,
         decisions: sub.decisions,

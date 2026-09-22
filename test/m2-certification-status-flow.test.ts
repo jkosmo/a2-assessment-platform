@@ -123,8 +123,9 @@ describe("Certification status without expiry", () => {
     });
     expect(stored?.status).toBe("ACTIVE");
     expect(stored?.passedAt).toBeTruthy();
+    // #991 (kontraktsfasen 19.09): `recertificationDueDate` er droppet. `expiryDate` står igjen
+    // med vilje — innsynseksporten oppgir den som historikk — men skrives ikke.
     expect(stored?.expiryDate).toBeNull();
-    expect(stored?.recertificationDueDate).toBeNull();
   });
 
   it("no longer exposes the recertification reminder endpoint", async () => {

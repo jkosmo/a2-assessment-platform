@@ -1,4 +1,5 @@
 import { escapeHtml } from "./html-escape.js";
+import { pickLocalizedText } from "/static/i18n-locale.js";
 /**
  * admin-content-preview.js
  *
@@ -12,39 +13,36 @@ import { escapeHtml } from "./html-escape.js";
 
 
 /**
- * Resolve a potentially-localized field value to a plain string for the given locale.
- * Accepts: plain string, JSON-encoded localized object, or a localized object.
+ * Et lagret felt lest som ren tekst for ett valgt språk. Tar imot ren streng, JSON-kodet språkkart
+ * eller et språkkart som objekt.
  *
- * v1.2.29 (#361 follow-up): fallback-kjeden bruker truthy-sjekk i stedet for ??-coalesce
- * så tomme strenger ("") behandles som "mangler for denne locale" og faller til neste.
- * Tidligere returnerte locale-objekt-shape `{en-GB:"X", nb:"", nn:""}` på nb-locale tom
- * streng (riktig per ??-semantikk siden "" ikke er nullish) — som ga blank tittel i
- * preview-pane når kun en locale var fylt ut.
+ * ⚠️ Rekkefølgen er IKKE vår egen lenger (19.09). Fram til nå sto kjeden `[locale, "nb", "en-GB"]`
+ * skrevet her, ved siden av serverens `[locale, standardspråket, "en-GB"]` — to utgaver av samme
+ * regel, der bare den ene ville fulgt med om organisasjonens standardspråk ble endret. Da ville
+ * forhåndsvisningen vist forfatteren noe annet enn deltakeren får, som er nøyaktig det den finnes
+ * for å hindre.
+ *
+ * Kjeden bor nå i `pickLocalizedText` (i18n-locale.js), som speiler `pickLocalizedValue` på
+ * tjeneren.
+ *
+ * v1.2.29 (#361): tomme strenger må telle som «mangler for dette språket» og falle videre — et
+ * kart som `{en-GB:"X", nb:""}` ga ellers blank tittel på nb. Den delte hjelperen gjør det samme.
  */
-function pickFirstNonEmpty(obj, keys) {
-  for (const k of keys) {
-    const v = obj[k];
-    if (typeof v === "string" && v.trim().length > 0) return v;
-  }
-  const any = Object.values(obj).find((v) => typeof v === "string" && v.trim().length > 0);
-  return any ?? "";
-}
-
 export function localizeValueForLocale(value, locale) {
   if (!value) return "";
   if (typeof value === "string") {
     try {
       const parsed = JSON.parse(value);
       if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-        return pickFirstNonEmpty(parsed, [locale, "nb", "en-GB"]);
+        return pickLocalizedText(parsed, locale);
       }
     } catch {
-      // plain string — return as-is
+      // ren streng — vises som den er
     }
     return value;
   }
   if (typeof value === "object" && !Array.isArray(value)) {
-    return pickFirstNonEmpty(value, [locale, "nb", "en-GB"]);
+    return pickLocalizedText(value, locale);
   }
   return String(value);
 }

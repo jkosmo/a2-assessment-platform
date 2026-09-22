@@ -38,13 +38,21 @@ describe("admin content preview helpers", () => {
       ).toBe("Norsk nynorsk");
     });
 
-    it("falls back to nb and then en-GB when locale is missing", () => {
+    // ⚠️ REGELEN ER ENDRET (19.09), og testen sier nå hva den faktisk er. Kjeden var hardkodet
+    // `[locale, "nb", "en-GB"]` her; nå spør forhåndsvisningen `pickLocalizedText`, som bruker
+    // `[locale, ORGANISASJONENS STANDARDSPRÅK, "en-GB"]` — samme rekkefølge som tjeneren.
+    //
+    // I denne testen er standardspråket «en-GB» (klienten henter det fra `/participant/config`,
+    // og det finnes ingen konfigurasjon her). Derfor faller «fr» til engelsk, ikke til bokmål.
+    // Hos A-2 er standardspråket nb, og da oppfører den seg som før — forskjellen er at den
+    // FØLGER innstillingen i stedet for å anta den.
+    it("faller til standardspråket og så engelsk når språket mangler", () => {
       expect(
         localizeValueForLocale(
           { "en-GB": "English", nb: "Norsk bokmal" },
           "fr",
         ),
-      ).toBe("Norsk bokmal");
+      ).toBe("English");
 
       expect(
         localizeValueForLocale(
@@ -52,6 +60,10 @@ describe("admin content preview helpers", () => {
           "nn",
         ),
       ).toBe("English only");
+
+      // Finnes verken det valgte språket, standardspråket eller engelsk, vises det som ER der —
+      // en blank forhåndsvisning hjelper ingen.
+      expect(localizeValueForLocale({ nn: "Berre nynorsk" }, "fr")).toBe("Berre nynorsk");
     });
 
     it("parses localized JSON strings", () => {

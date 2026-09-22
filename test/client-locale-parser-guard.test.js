@@ -44,6 +44,12 @@ import { describe, expect, it } from "vitest";
 const PUBLIC = fileURLToPath(new URL("../public", import.meta.url));
 
 // Fil -> antall kjente språkvalg på klienten.
+// ⚠️ GULVET er NULL, med vilje. De to i forhåndsvisningen har et reelt behov — å vise forfatteren
+// hva en deltaker ser på et valgt språk — men rekkefølgen er deres egen, og det er nettopp det som
+// gir drift mot serverens. Fiksen er kjent (ruta lokaliserer først, som for #1038), så dette er
+// GJELD, ikke gulv, og rapporten skal fortsette å trekke for den.
+const GULV = 0;
+
 const BASELINE = {
   // #1038 (fjernet 2026-09-11): klasseskjermen fikk tittelen ferdig valgt fra serveren.
   // #1046 (2026-09-12): kurs og seksjoner leser gjennom pickLocalizedText (i18n-locale.js) — 0 igjen.
@@ -54,7 +60,11 @@ const BASELINE = {
   // ⚠️ Forhåndsvisningen har et reelt behov — den skal vise forfatteren hva en deltaker ser på et
   // valgt språk. Men rekkefølgen er dens egen, og det er nettopp det som gir drift mot serverens.
   // Fjernes den, må ruta lokalisere først, som for #1038. Egen endring, ikke en opprydding her.
-  "static/admin-content-preview.js": 2,
+  //
+  // 2 → 0 (19.09): kjeden er borte. `localizeValueForLocale` spør nå `pickLocalizedText`
+  // (i18n-locale.js), som speiler tjenerens rekkefølge — endres organisasjonens standardspråk,
+  // følger forhåndsvisningen med av seg selv.
+  "static/admin-content-preview.js": 0,
 };
 // 5 til sammen, per 2026-09-11 (6 den 2026-09-06).
 //
@@ -125,11 +135,17 @@ const CHAIN = [
 // for en tabell serveren aldri har sett. En vakt som roper på riktig kode blir slått av.
 const UI_TABLE = /\b(\w*[Tt]ranslations|\w*LABELS)\s*\[/;
 
+// ⚠️ KOMMENTARLINJER TELLES IKKE (19.09). Da forhåndsvisningen sluttet å eie sin egen
+// reservekjede, sto den igjen på 1 — og treffet var kommentaren som FORKLARTE at kjeden var
+// fjernet, fordi den siterte den gamle rekkefølgen. En teller som leser prosa måler ikke
+// oppførsel; samme felle som `domain-error-codes-999` gikk i da den talte sin egen begrunnelse.
+const KOMMENTAR = /^\s*(\/\/|\*|\/\*)/;
+
 function localeChoices(src) {
   return src
     .split("\n")
     .map((text, index) => ({ text, line: index + 1 }))
-    .filter(({ text }) => CHAIN.some((pattern) => pattern.test(text)) && !UI_TABLE.test(text));
+    .filter(({ text }) => !KOMMENTAR.test(text) && CHAIN.some((pattern) => pattern.test(text)) && !UI_TABLE.test(text));
 }
 
 describe("klienten velger ikke språk for lagret innhold (#1027)", () => {
