@@ -2409,6 +2409,61 @@ function applySettledChrome(hasResult) {
   if (assessmentProgressStatus) setHidden(assessmentProgressStatus, hasResult);
 }
 
+/**
+ * #1020: «Slik kommer du videre» — svaret på spørsmålet resultatskjermen lot stå åpent.
+ *
+ * Deltakeren fikk vite AT hen ikke bestod, og hvor mange poeng som manglet. Ikke hva hen skulle
+ * gjøre med det. Kortet står rett under utfallet, i den ene tilstanden der begrunnelsen er selve
+ * poenget.
+ *
+ * ⚠️ BARE ved ikke bestått (produkteier 19.09). Den som besto, ser gjennomgangen og rådene som før
+ * — uten en overskrift som antyder at noe mangler.
+ *
+ * ⚠️ Kortet finner opp ingen informasjon. Det peker på det som allerede finnes: gjennomgangen av
+ * feil svar (#1061) når den er slått på, ellers modulinnholdet — og for fritekst flyttes rådene fra
+ * vurderingen INN hit, i stedet for å stå som et eget kort lenger nede. Det er samme spørsmål fra
+ * deltakerens side, og skal ha ett svar.
+ *
+ * Seksjonskoblingen saken skisserte (hvilken seksjon dekket spørsmålet du bommet på?) er IKKE med:
+ * `MCQQuestion` har ingen referanse til en seksjon, og en utledet kobling som bommer sender
+ * deltakeren til feil sted. Se doc/DESIGN_1020.md.
+ */
+let nextStepsHost = null;
+let nextStepsLead = null;
+
+function renderNextSteps(body, adviceItems) {
+  if (nextStepsHost?.isConnected) nextStepsHost.remove();
+  nextStepsHost = null;
+  nextStepsLead = null;
+
+  if (resolveOutcome(body.status, body.decision?.passFailTotal ?? null) !== "failed") return;
+
+  const card = createSummaryCard(t("result.nextSteps.title"));
+  const lead = document.createElement("p");
+  lead.className = "small";
+  // Startteksten er den vi kan stå for uten å vente på gjennomgangen. Kommer den, og har den feil
+  // svar å vise, byttes setningen ut av `renderMcqReview`.
+  lead.textContent = adviceItems.length > 0
+    ? t("result.nextSteps.advice")
+    : t("result.nextSteps.reviewContent");
+  card.appendChild(lead);
+
+  if (adviceItems.length > 0) {
+    const list = document.createElement("ul");
+    list.className = "summary-list";
+    for (const value of adviceItems) {
+      const item = document.createElement("li");
+      item.textContent = value;
+      list.appendChild(item);
+    }
+    card.appendChild(list);
+  }
+
+  nextStepsHost = card;
+  nextStepsLead = lead;
+  resultSummary.appendChild(card);
+}
+
 let mcqReviewHost = null;
 async function renderMcqReview(submissionId) {
   if (!submissionId) return;
@@ -2422,6 +2477,14 @@ async function renderMcqReview(submissionId) {
   // Resultatet tegnes på nytt ved hver polling — ett kort, byttet ut, ikke stablet.
   if (mcqReviewHost?.isConnected) mcqReviewHost.remove();
   const wrong = review.questions.filter((q) => !q.isCorrect);
+  // #1020: nå VET vi hva deltakeren skal gjøre først. Setningen i «Slik kommer du videre» byttes
+  // ut — kortet står allerede der, så teksten skifter uten at noe hopper på skjermen.
+  if (nextStepsLead?.isConnected && wrong.length > 0) {
+    nextStepsLead.textContent = fillPlaceholders(t("result.nextSteps.reviewWrong"), {
+      wrong: wrong.length,
+      count: review.questions.length,
+    });
+  }
   const card = createSummaryCard(t("result.mcqReview.title"));
   const lead = document.createElement("p");
   lead.className = "small";
@@ -2593,11 +2656,15 @@ function renderResultSummary(body) {
   clearSummaryContainer(resultSummary);
   resultSummary.appendChild(buildResultCard(body));
 
-  appendSummaryList(
-    resultSummary,
-    t("result.improvementAdvice"),
-    Array.isArray(body.participantGuidance?.improvementAdvice) ? body.participantGuidance.improvementAdvice : [],
-  );
+  // #1020: rådene hører i «Slik kommer du videre» når deltakeren ikke bestod — ett svar på ett
+  // spørsmål. Bestod hen, står de som før, i sitt eget kort.
+  const adviceItems = Array.isArray(body.participantGuidance?.improvementAdvice)
+    ? body.participantGuidance.improvementAdvice
+    : [];
+  renderNextSteps(body, adviceItems);
+  if (!nextStepsHost) {
+    appendSummaryList(resultSummary, t("result.improvementAdvice"), adviceItems);
+  }
 
   const rationales = body.participantGuidance?.criterionRationales ?? {};
   const rationaleEntries = Object.entries(rationales);

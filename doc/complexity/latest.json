@@ -1,25 +1,25 @@
 {
-  "dato": "2026-09-19",
-  "versjon": "2.75.0",
-  "samlet": 74,
+  "dato": "2026-09-22",
+  "versjon": "2.76.0",
+  "samlet": 76,
   "skår": {
-    "reglerFlereSteder": 96,
+    "reglerFlereSteder": 100,
     "utgaverAvViktigeRegler": 100,
     "filerAltMåGjennom": 20,
-    "filerSomEndresSammen": 90,
+    "filerSomEndresSammen": 95,
     "størrelse": 64
   },
   "tall": {
-    "sumRegler": 20,
-    "sumGjeld": 2,
+    "sumRegler": 18,
+    "sumGjeld": 0,
     "sumGulv": 18,
     "regler": [
       {
         "hva": "Skjermer som selv velger hvilket språk et lagret innhold vises på (serveren skal gjøre det)",
-        "steder": 2,
+        "steder": 0,
         "gulv": 0,
         "kilde": "test/client-locale-parser-guard.test.js",
-        "gjeld": 2
+        "gjeld": 0
       },
       {
         "hva": "Steder som viser serverens rå feiltekst i stedet for en oversatt melding",
@@ -77,7 +77,7 @@
         },
         {
           "fil": "public/participant.js",
-          "linjer": 4239
+          "linjer": 4306
         },
         {
           "fil": "src/modules/adminContent/llmContentGenerationService.ts",
@@ -153,21 +153,15 @@
       {
         "a": "public/participant-completed.js",
         "b": "public/profile.js",
-        "sammen": 14,
-        "andel": 0.7
-      },
-      {
-        "a": "public/profile.js",
-        "b": "public/results.js",
-        "sammen": 12,
-        "andel": 0.6
+        "sammen": 10,
+        "andel": 0.625
       }
     ],
     "størrelse": {
       "ruter": 202,
       "tabeller": 39,
       "kolonner": 502,
-      "i18nNøkler": 5411,
+      "i18nNøkler": 5423,
       "testfiler": 363
     }
   }

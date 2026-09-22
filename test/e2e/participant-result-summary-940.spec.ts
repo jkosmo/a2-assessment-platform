@@ -456,3 +456,80 @@ test.describe("#940 — de åtte elementene fra saken", () => {
     }
   });
 });
+
+// #1020: «Slik kommer du videre» — svaret på spørsmålet skjermen lot stå åpent.
+//
+// ⚠️ Testen måler TRE ting som hver for seg kunne vært grønne på feil grunnlag: at kortet finnes
+// når man strøk, at det IKKE finnes når man besto (ellers gjør vi en bestått prøve om til en
+// mangelliste), og at rådene fra vurderingen står ÉTT sted — ikke både i kortet og i sitt gamle.
+test.describe("#1020 — hva gjør jeg nå?", () => {
+  const ADVICE = ["Vis hvordan du kontrollerte kilden.", "Knytt svaret til et konkret tiltak."];
+
+  test("strøket: kortet står der, med rådene fra vurderingen i seg", async ({ page }) => {
+    await mockBase(page);
+    const summary = await showResult(page, resultBody({
+      decision: { passFailTotal: false, decisionType: "AUTOMATIC" },
+      scoreComponents: { totalScore: 12, mcqScaledScore: 12, mcqPercentScore: 40, practicalScaledScore: 0 },
+      participantGuidance: {
+        decisionReason: null, decisionReasonCode: null, decisionReasonParams: {}, confidenceNote: null,
+        improvementAdvice: ADVICE,
+      },
+    }));
+
+    const card = summary.locator(".summary-card", { hasText: "Slik kommer du videre" });
+    await expect(card).toHaveCount(1);
+    await expect(card).toContainText(ADVICE[0]);
+    // ⚠️ Rådene skal ikke stå to steder. Uten denne ville et kort som DUPLISERER lista bestått.
+    await expect(summary.locator(".summary-card", { hasText: "Forbedringsråd" })).toHaveCount(0);
+  });
+
+  test("bestått: kortet finnes ikke, og rådene står som før", async ({ page }) => {
+    await mockBase(page);
+    const summary = await showResult(page, resultBody({
+      participantGuidance: {
+        decisionReason: null, decisionReasonCode: null, decisionReasonParams: {}, confidenceNote: null,
+        improvementAdvice: ADVICE,
+      },
+    }));
+
+    await expect(summary.locator(".summary-card", { hasText: "Slik kommer du videre" })).toHaveCount(0);
+    await expect(summary.locator(".summary-card", { hasText: "Forbedringsråd" })).toHaveCount(1);
+  });
+
+  test("er gjennomgangen på, sier kortet hvor mange spørsmål som ble feil", async ({ page }) => {
+    await mockBase(page);
+    await page.route("**/api/submissions/*/mcq-review", (route: Route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          enabled: true,
+          questions: [
+            { questionId: "q1", stem: "Spørsmål 1", selectedAnswer: "Feil", correctAnswer: "Riktig", rationale: "Fordi.", isCorrect: false },
+            { questionId: "q2", stem: "Spørsmål 2", selectedAnswer: "Riktig", correctAnswer: "Riktig", rationale: null, isCorrect: true },
+          ],
+        }),
+      }),
+    );
+    const summary = await showResult(page, resultBody({
+      decision: { passFailTotal: false, decisionType: "AUTOMATIC" },
+      scoreComponents: { totalScore: 15, mcqScaledScore: 15, mcqPercentScore: 50, practicalScaledScore: 0 },
+    }));
+
+    const card = summary.locator(".summary-card", { hasText: "Slik kommer du videre" });
+    // Setningen byttes ut når gjennomgangen er lastet — den vet hvor mange som ble feil.
+    await expect(card).toContainText("1 av 2");
+    await expect(card).toContainText(/Gå gjennom dem under/);
+  });
+
+  test("uten råd og uten gjennomgang peker kortet på modulinnholdet", async ({ page }) => {
+    await mockBase(page);
+    const summary = await showResult(page, resultBody({
+      decision: { passFailTotal: false, decisionType: "AUTOMATIC" },
+      scoreComponents: { totalScore: 12, mcqScaledScore: 12, mcqPercentScore: 40, practicalScaledScore: 0 },
+    }));
+
+    await expect(summary.locator(".summary-card", { hasText: "Slik kommer du videre" }))
+      .toContainText("Gå gjennom modulinnholdet");
+  });
+});

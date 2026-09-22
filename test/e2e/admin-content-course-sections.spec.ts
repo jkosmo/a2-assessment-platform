@@ -7,9 +7,18 @@ import { mockCommonApis } from "./admin-content-helpers.js";
 //
 // #935: seksjoner og moduler går gjennom ÉN velger (kombiboksen). Nedtrekket `#sectionSelect` og
 // «Legg til seksjon» er borte; lista åpner ved fokus, så den kan blas i uten søketekst.
+/**
+ * ⚠️ Klikket kan lande før sida har koblet opp velgeren, og da åpner lista seg ikke. Under full
+ * kjøring ble det en flake; alene var den alltid grønn. Vi klikker derfor til lista faktisk står
+ * åpen, i stedet for å påstå det etter ett forsøk.
+ */
 async function openPicker(page: import("@playwright/test").Page) {
-  await page.locator("#comboboxInput").click();
-  await expect(page.locator("#comboboxDropdown")).toBeVisible();
+  await expect
+    .poll(async () => {
+      await page.locator("#comboboxInput").click();
+      return page.locator("#comboboxDropdown").isVisible();
+    }, { timeout: 10000, intervals: [100, 250, 500] })
+    .toBe(true);
 }
 
 /**

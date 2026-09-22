@@ -60,7 +60,11 @@ const BASELINE = {
   // ⚠️ Forhåndsvisningen har et reelt behov — den skal vise forfatteren hva en deltaker ser på et
   // valgt språk. Men rekkefølgen er dens egen, og det er nettopp det som gir drift mot serverens.
   // Fjernes den, må ruta lokalisere først, som for #1038. Egen endring, ikke en opprydding her.
-  "static/admin-content-preview.js": 2,
+  //
+  // 2 → 0 (19.09): kjeden er borte. `localizeValueForLocale` spør nå `pickLocalizedText`
+  // (i18n-locale.js), som speiler tjenerens rekkefølge — endres organisasjonens standardspråk,
+  // følger forhåndsvisningen med av seg selv.
+  "static/admin-content-preview.js": 0,
 };
 // 5 til sammen, per 2026-09-11 (6 den 2026-09-06).
 //
@@ -131,11 +135,17 @@ const CHAIN = [
 // for en tabell serveren aldri har sett. En vakt som roper på riktig kode blir slått av.
 const UI_TABLE = /\b(\w*[Tt]ranslations|\w*LABELS)\s*\[/;
 
+// ⚠️ KOMMENTARLINJER TELLES IKKE (19.09). Da forhåndsvisningen sluttet å eie sin egen
+// reservekjede, sto den igjen på 1 — og treffet var kommentaren som FORKLARTE at kjeden var
+// fjernet, fordi den siterte den gamle rekkefølgen. En teller som leser prosa måler ikke
+// oppførsel; samme felle som `domain-error-codes-999` gikk i da den talte sin egen begrunnelse.
+const KOMMENTAR = /^\s*(\/\/|\*|\/\*)/;
+
 function localeChoices(src) {
   return src
     .split("\n")
     .map((text, index) => ({ text, line: index + 1 }))
-    .filter(({ text }) => CHAIN.some((pattern) => pattern.test(text)) && !UI_TABLE.test(text));
+    .filter(({ text }) => !KOMMENTAR.test(text) && CHAIN.some((pattern) => pattern.test(text)) && !UI_TABLE.test(text));
 }
 
 describe("klienten velger ikke språk for lagret innhold (#1027)", () => {

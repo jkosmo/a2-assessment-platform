@@ -2,7 +2,48 @@
 
 This document tracks release versions and what each version includes.
 
-## 2.75.0 - 2026-09-19 (stage)
+## 2.76.0 - 2026-09-20 (stage)
+
+Én commit, ingen migrasjon. Deltakeren får svar på «hva nå?», og forhåndsvisningen slutter å eie
+sin egen språkregel.
+
+### #1020 — «Slik kommer du videre»
+
+Deltakeren fikk vite AT hen ikke bestod, og hvor mange poeng som manglet. Ikke hva hen skulle gjøre
+med det. Kortet står nå rett under utfallet, **bare ved ikke bestått** (produkteier 20.09) — den som
+besto skal ikke møte en overskrift som antyder at noe mangler.
+
+Kortet finner ikke opp informasjon; det peker på det som finnes, i denne rekkefølgen:
+
+1. Er gjennomgangen av feil svar på (#1061): «Du svarte feil på N av M spørsmål. Gå gjennom dem
+   under før du prøver igjen.» Setningen byttes inn når gjennomgangen er lastet.
+2. Finnes det råd fra vurderingen: de flyttes INN i kortet, i stedet for å stå i sitt eget lenger
+   nede. Ett spørsmål, ett svar.
+3. Ellers: «Gå gjennom modulinnholdet før du prøver igjen.»
+
+⚠️ Seksjonskoblingen saken skisserte er ikke bygget: `MCQQuestion` har ingen referanse til en
+seksjon, og en utledet kobling som bommer sender deltakeren til feil sted.
+
+⚠️ Notatets premiss om at rådene måtte oversettes først, viste seg utdatert — #1024 fjernet
+gjettekartene, og serveren ber nå modellen skrive dem på deltakerens språk. **Et designnotat eldes;
+premissene må kontrolleres mot koden før man handler på dem.**
+
+### Forhåndsvisningen bruker samme språkregel som tjeneren
+
+`localizeValueForLocale` hadde kjeden `[språk, "nb", "en-GB"]` skrevet hos seg, ved siden av
+tjenerens `[språk, organisasjonens standardspråk, "en-GB"]`. To utgaver av samme regel, der bare
+den ene ville fulgt med om standardspråket ble endret — og da ville forfatteren sett noe annet enn
+deltakeren får. Kjeden bor nå i `pickLocalizedText`. Siste gjeld i «regler skrevet flere steder» er
+dermed borte (samlet 74 → 76).
+
+⚠️ Tellingen fanget seg selv til slutt: den siste forekomsten var KOMMENTAREN som forklarte at
+kjeden var fjernet, fordi den siterte den. Kommentarlinjer telles ikke lenger — samme felle som
+`domain-error-codes-999` gikk i.
+
+Rettet også en flake i kursvelger-testen: åpningen av lista påsto etter ett klikk, og klikket kan
+lande før sida har koblet opp velgeren. Den klikker nå til lista står åpen.
+
+## 2.75.0 - 2026-09-19
 
 Én commit, ingen migrasjon, ingen kodeendring i produktet — **bare målingen**.
 
