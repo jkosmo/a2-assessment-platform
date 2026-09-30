@@ -222,6 +222,8 @@ function getListPage() {
     },
     // #745: kursfilteret bygges av seksjonenes `courses`.
     courseFilter: { coursesOf: (s) => s.courses ?? [] },
+    // #894: «bare de som mangler språk» — samme bryter som på Moduler.
+    toggle: { id: "sectionsGapsOnly", label: () => t("ui.lang.onlyGaps"), matches: (s) => manglendeSpraak(s).length > 0 },
     // #1046 B1: søk på navn (alle språk) og ID, som på Moduler.
     search: { matches: (s, q) => Object.values(parseLocalized(s.title)).some((v) => String(v ?? "").toLowerCase().includes(q)) || String(s.id).toLowerCase().includes(q) },
     sort: { key: "title", dir: "asc", locale: () => currentLocale },

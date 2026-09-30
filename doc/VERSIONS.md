@@ -23,6 +23,10 @@ fra. Derfor henger de to delene sammen og kom i samme slengen:
    samlet, i én runde (produkteierens valg). Tallet er antall SYNLIGE elementer med hull, så knappen
    sier hva den kommer til å gjøre — og det følger filteret.
 
+4. **«Bare de som mangler språk».** En bryter i filterraden, ikke en pille til: pillene er ETT
+   valg, og «Aktive» og «mangler språk» er to spørsmål forfatteren stiller samtidig. Den snevrer
+   inn tilstandsfilteret i stedet for å erstatte det, og knappen over følger med på tallet.
+
 Et språk som ikke går gjennom, blir stående **tomt og navngitt**. Det er #892-regelen: en tittel
 fylt med kildeteksten ser oversatt ut og leser som feil språk, og da hjelper ingen markering i lista.
 
@@ -54,17 +58,22 @@ under «Mer» på både moduler og seksjoner (D5-regelen om maks fire slots stå
   `lagretTittelkart` og selve omdøpingsfeltet.
 - `list-page.js` fikk kroken `afterTableRender`. `afterRender` kjører ikke på et filterklikk, så en
   hodeknapp hvis tekst avhenger av hva som er synlig, ville blitt stående med feil tall.
+- `list-page.js` fikk også `toggle` — én avkryssing som snevrer inn utover tilstandsfilteret. Kurs-
+  og klasselista bruker den ikke ennå, men mekanismen er delt.
 
 ### Tester
 
-1516 enhet · 68 DOM · 347 e2e · 707 integrasjon. Nye: `locales-present-894` (5),
-`m2-list-rename-894` (7), `admin-content-list-rename-894` (11).
+1516 enhet · 68 DOM · 348 e2e · 707 integrasjon. Nye: `locales-present-894` (5),
+`m2-list-rename-894` (7), `admin-content-list-rename-894` (12).
 
-Tretten mutasjoner kjørt mot de nye e2e-testene. Elleve ble tatt med én gang. **To overlevde**, og
+Fjorten mutasjoner kjørt mot de nye e2e-testene. Tolv ble tatt med én gang. **To overlevde**, og
 de pekte på ekte hull: den samlede oversettingen på seksjoner kunne droppe de lagrede språkene uten
 at noen test merket det, og ingenting sa fra om en rad forfatteren ikke eier ble talt med i
 «Oversett det som mangler (N)» (patchen ville gitt 403). Begge er nå dekket, og begge mutasjonene
 blir tatt.
+
+⚠️ De to overlevde fordi jeg først satte inn tre mutasjoner samtidig: kjøringen ga «2 failed», og
+det så ut som dekning. Én rød test kan dekke over at nabomutasjonen ikke traff noe. Én om gangen.
 
 ### Kompleksitet: 76 → 73
 

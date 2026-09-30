@@ -107,7 +107,7 @@
         },
         {
           "fil": "public/static/admin-content-sections.js",
-          "linjer": 1171
+          "linjer": 1173
         },
         {
           "fil": "public/static/workspace-help-content.js",
@@ -119,7 +119,7 @@
         },
         {
           "fil": "public/static/admin-content-library.js",
-          "linjer": 802
+          "linjer": 805
         }
       ],
       "mestImportert": [
@@ -175,7 +175,7 @@
       "ruter": 203,
       "tabeller": 39,
       "kolonner": 502,
-      "i18nNøkler": 5456,
+      "i18nNøkler": 5459,
       "testfiler": 366
     }
   }

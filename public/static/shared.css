@@ -1514,6 +1514,10 @@ dialog::backdrop {
 .lang-gap::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
 .lang-complete { font-size: 12px; color: var(--color-meta); }
 .col-lang { white-space: nowrap; }
+/* #894: «bare de som mangler språk» står i filterraden, men er en bryter og ikke en pille —
+   pillene er ett valg, denne snevrer inn det valget. */
+.list-toggle { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--color-text); white-space: nowrap; cursor: pointer; }
+.list-toggle input { width: auto; margin: 0; }
 
 /* Omdøping i raden: feltet erstatter navnet, og kontrakten (Enter/Escape) står ved siden av det
    så den ikke må gjettes. */

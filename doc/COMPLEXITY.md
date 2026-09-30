@@ -66,10 +66,10 @@ avhengige av gjør hver endring risikabel. Over 1 500 linjer: **6**. Mellom 800 
 | `public/static/admin-content-settings-tab.js` | 1519 |
 | `src/routes/adminContent.ts` | 1491 |
 | `src/modules/adminContent/adminContentCommands.ts` | 1299 |
-| `public/static/admin-content-sections.js` | 1171 |
+| `public/static/admin-content-sections.js` | 1173 |
 | `public/static/workspace-help-content.js` | 934 |
 | `src/modules/adminContent/adminContentSchemas.ts` | 809 |
-| `public/static/admin-content-library.js` | 802 |
+| `public/static/admin-content-library.js` | 805 |
 
 Mest brukt av andre filer (ikke med i skåren, men verdt å vite):
 
@@ -106,7 +106,7 @@ Hvor mye det er å holde ved like. Ikke feil i seg selv, men alt her koster tid 
 | API-ruter | 203 |
 | Databasetabeller | 39 |
 | Kolonner i databasen | 502 |
-| Oversettelsesnøkler (alle språk) | 5456 |
+| Oversettelsesnøkler (alle språk) | 5459 |
 | Testfiler | 366 |
 
 ## Historikk

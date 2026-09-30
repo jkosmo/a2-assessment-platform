@@ -43,6 +43,23 @@ test.describe("#894 — omdøping i lista", () => {
     await expect(rad(page, "mod-laast").getByRole("button", { name: "Døp om" })).toHaveCount(0);
   });
 
+  test("«Bare de som mangler språk» snevrer inn — den erstatter ikke tilstandsfilteret", async ({ page }) => {
+    await åpneLista(page);
+    await expect(rad(page, "mod-alle")).toBeVisible();
+
+    await page.getByLabel("Bare de som mangler språk").check();
+
+    // Den fullt oversatte forsvinner; begge med hull står igjen.
+    await expect(rad(page, "mod-alle")).toHaveCount(0);
+    await expect(rad(page, "mod-ett")).toBeVisible();
+    await expect(rad(page, "mod-laast")).toBeVisible();
+    // ⚠️ «Aktive» gjelder fortsatt: brytera er et NYTT spørsmål, ikke et bytte av det gamle.
+    await expect(page.getByRole("button", { name: "Aktive" })).toHaveClass(/active/);
+
+    await page.getByLabel("Bare de som mangler språk").uncheck();
+    await expect(rad(page, "mod-alle")).toBeVisible();
+  });
+
   test("«Døp om» lagrer på språket lista viser, og bare det", async ({ page }) => {
     await åpneLista(page);
     const sendt: { body: { title?: Record<string, string> } | null } = { body: null };

@@ -202,6 +202,9 @@ function getListPage() {
     },
     // #745: kursfilteret bygges av modulenes egne `courses`.
     courseFilter: { coursesOf: (m) => m.courses ?? [] },
+    // #894: «bare de som mangler språk». Saken ber om et filter for det, fordi hullene skal kunne
+    // finnes FØR publisering i stedet for oppdages etterpå.
+    toggle: { id: "libraryGapsOnly", label: () => t("ui.lang.onlyGaps"), matches: (m) => manglendeSpraak(m).length > 0 },
     search: { matches: (m, q) => (m.title ?? "").toLowerCase().includes(q) || m.id.toLowerCase().includes(q) },
     sort: { key: "title", dir: "asc", locale: () => currentLocale },
     columns: [

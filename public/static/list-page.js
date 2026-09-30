@@ -58,6 +58,10 @@ import { matchesLifecycleFilter } from "./content-status-badge.js";
  * @property {(action: string, id: string, btn: HTMLElement, item: any, event: Event) => void} onAction
  * @property {(event: Event) => boolean} [onClick]   andre klikk i lista (returner true når håndtert)
  * @property {(items: any[]) => void} [afterRender]  kjøres etter at hodet er tegnet — bind hode-knapper her
+ * @property {{ id: string, label: () => string, matches: (item: any) => boolean }} [toggle]
+ *   én avkryssing som snevrer inn UTOVER tilstandsfilteret, f.eks. «bare de som mangler språk»
+ *   (#894). Egen bryter og ikke en pille til, fordi pillene er ETT valg: «Aktive» og «mangler
+ *   språk» er to spørsmål, og forfatteren stiller dem samtidig.
  * @property {(visible: any[]) => void} [afterTableRender]  kjøres hver gang TABELLEN er tegnet, også
  *   ved filter- og sorteringsklikk. Her hører en hodeknapp hvis tekst avhenger av hva som er synlig
  *   («Oversett det som mangler (N)»), for `afterRender` kjører ikke på et filterklikk (#894).
@@ -77,6 +81,7 @@ export function createListPage(config) {
     filter: config.filters.initial,
     search: "",
     course: "__all__",
+    toggle: false,
     sortKey: config.sort?.key ?? null,
     sortDir: config.sort?.dir ?? "asc",
     items: /** @type {any[]} */ ([]),
@@ -99,6 +104,7 @@ export function createListPage(config) {
     // oppgir bare `matches` når den har et filter som ikke er en tilstand.
     const matches = config.filters.matches ?? matchesLifecycleFilter;
     result = result.filter((item) => matches(item, state.filter));
+    if (config.toggle && state.toggle) result = result.filter((item) => config.toggle.matches(item));
     const col = state.sortKey ? columns.find((c) => c.key === state.sortKey && c.sortValue) : null;
     if (col) {
       const dir = state.sortDir === "desc" ? -1 : 1;
@@ -164,7 +170,10 @@ export function createListPage(config) {
         <option value="__none__"${state.course === "__none__" ? " selected" : ""}>${escapeHtml(texts.courseFilterNone ?? "Ikke i noe kurs")}</option>
       </select></div>`;
     }
-    return `${search}<div class="list-filters-row">${pills}${course}</div>`;
+    const toggle = config.toggle
+      ? `<label class="list-toggle" for="${escapeHtml(config.toggle.id)}"><input type="checkbox" id="${escapeHtml(config.toggle.id)}"${state.toggle ? " checked" : ""} />${escapeHtml(config.toggle.label())}</label>`
+      : "";
+    return `${search}<div class="list-filters-row">${pills}${course}${toggle}</div>`;
   }
 
   function tableHtml(visible) {
@@ -252,8 +261,14 @@ export function createListPage(config) {
   });
   host.addEventListener("change", (event) => {
     const target = event.target instanceof Element ? event.target : null;
-    if (target && target.id === (ids.courseFilter ?? `${ids.tbody}CourseFilter`)) {
+    if (!target) return;
+    if (target.id === (ids.courseFilter ?? `${ids.tbody}CourseFilter`)) {
       state.course = /** @type {HTMLSelectElement} */ (target).value;
+      renderTable();
+      return;
+    }
+    if (config.toggle && target.id === config.toggle.id) {
+      state.toggle = /** @type {HTMLInputElement} */ (target).checked;
       renderTable();
     }
   });
