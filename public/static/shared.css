@@ -1495,3 +1495,38 @@ dialog::backdrop {
 .owner-edit-toggle:hover, .owner-collapse:hover { background: var(--color-row-hover); }
 .owner-panel-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
 .owner-panel-head .owner-panel-title { margin: 0; }
+
+/* #894: språkhull i listene. Merket sier hva som MANGLER — forfatteren leter etter hull, ikke
+   etter bekreftelse. Samme gule varselflate som resten av plattformen bruker til «se på dette»,
+   med venstrestrek erstattet av en prikk fordi merket står inne i en tabellcelle. */
+.lang-gap {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #fff3db;
+  color: var(--color-warning);
+  border: 1px solid rgba(122, 75, 0, 0.35);
+  white-space: nowrap;
+}
+.lang-gap::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.lang-complete { font-size: 12px; color: var(--color-meta); }
+.col-lang { white-space: nowrap; }
+
+/* Omdøping i raden: feltet erstatter navnet, og kontrakten (Enter/Escape) står ved siden av det
+   så den ikke må gjettes. */
+.row-rename { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.row-rename input {
+  font: inherit;
+  padding: 6px 9px;
+  border: 1px solid var(--color-primary);
+  border-radius: var(--radius-button);
+  background: var(--color-surface);
+  color: var(--color-text);
+  flex: 1 1 14rem;
+  min-width: 0;
+}
+.row-rename input:focus-visible { outline: 3px solid var(--color-focus); outline-offset: 1px; }
+.row-rename-hint { font-size: 12px; color: var(--color-meta); }

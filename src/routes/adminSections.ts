@@ -42,6 +42,7 @@ import { localizeSectionContent } from "../modules/adminContent/llmContentGenera
 import { generateLimiter } from "../middleware/rateLimiting.js";
 import { idempotency } from "../middleware/idempotency.js";
 import { respondWithAppError } from "./helpers/respondWithAppError.js";
+import { localesPresent } from "../i18n/content.js";
 
 const adminSectionsRouter = Router();
 
@@ -354,6 +355,9 @@ adminSectionsRouter.get("/", async (request, response, next) => {
         return {
           id: s.id,
           title: s.title,
+          // #894: hvilke språk tittelen finnes på — grunnlaget for «nn mangler» i lista. En ren
+          // streng gir [], altså «skrevet på ett språk, ikke oversatt».
+          titleLocales: localesPresent(s.title),
           // #705: status-merkelappen i lista trenger activeVersionId (Publisert vs Utkast).
           activeVersionId: s.activeVersionId,
           versionNo: s.activeVersion?.versionNo ?? null,

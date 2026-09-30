@@ -1,8 +1,8 @@
 # Hvor innfløkt er løsningen nå?
 
-*Målt 2026-09-22, versjon 2.76.0. Kjør `npm run complexity` for å oppdatere. Reglene for hvert tall står under tallet.*
+*Målt 2026-09-30, versjon 2.77.0. Kjør `npm run complexity` for å oppdatere. Reglene for hvert tall står under tallet.*
 
-## Samlet: **76 / 100**
+## Samlet: **73 / 100**
 
 Gjennomsnittet av de fem tallene under. 100 betyr «slik vi vil ha det».
 
@@ -10,8 +10,8 @@ Gjennomsnittet av de fem tallene under. 100 betyr «slik vi vil ha det».
 |---|---|
 | Regler som er skrevet flere steder | **100** |
 | Viktige regler med mer enn én utgave i koden | **100** |
-| Filer alt må gjennom | **20** |
-| Filer som alltid endres sammen | **95** |
+| Filer alt må gjennom | **10** |
+| Filer som alltid endres sammen | **90** |
 | Størrelse | **64** |
 
 ## 1. Regler som er skrevet flere steder — 100
@@ -49,25 +49,27 @@ ekstra utgave som kan glide fra den første. Ekstra utgaver nå: **0**.
 | Hvilket språk gjelder for denne forespørselen? | `requestLocale` | 0 | egne reserveverdier for språk i rutene |
 | Er innleveringen avgjort? (hvilke statuser teller som ferdig) | `isSettledSubmission` | 0 | spørringer som lister statusene selv |
 
-## 3. Filer alt må gjennom — 20
+## 3. Filer alt må gjennom — 10
 
 En fil som er svært stor kan ikke endres uten å røre noe annet, og en fil som svært mange andre er
 avhengige av gjør hver endring risikabel. Over 1 500 linjer: **6**. Mellom 800 og
-1 500: **4**.
+1 500: **6**.
 *Regel: 100 minus 10 poeng per fil over 1 500 linjer og 5 per fil mellom 800 og 1 500. Oversettelsestabeller telles ikke.*
 
 | Fil | Linjer |
 |---|---:|
 | `public/static/admin-content-shell.js` | 4669 |
 | `public/participant.js` | 4306 |
-| `src/modules/adminContent/llmContentGenerationService.ts` | 2105 |
+| `src/modules/adminContent/llmContentGenerationService.ts` | 2130 |
 | `public/static/admin-content-courses.js` | 1803 |
 | `public/review.js` | 1777 |
 | `public/static/admin-content-settings-tab.js` | 1519 |
-| `src/routes/adminContent.ts` | 1461 |
+| `src/routes/adminContent.ts` | 1491 |
 | `src/modules/adminContent/adminContentCommands.ts` | 1299 |
-| `public/static/admin-content-sections.js` | 1072 |
+| `public/static/admin-content-sections.js` | 1171 |
 | `public/static/workspace-help-content.js` | 934 |
+| `src/modules/adminContent/adminContentSchemas.ts` | 809 |
+| `public/static/admin-content-library.js` | 802 |
 
 Mest brukt av andre filer (ikke med i skåren, men verdt å vite):
 
@@ -82,16 +84,17 @@ Mest brukt av andre filer (ikke med i skåren, men verdt å vite):
 | `env` | 31 |
 | `prismaRuntime` | 31 |
 
-## 4. Filer som alltid endres sammen — 95
+## 4. Filer som alltid endres sammen — 90
 
 Når to filer nesten alltid endres i samme commit, henger de sammen på en måte koden ikke viser.
 Fra git-historikken de siste 90 dagene: par som er endret sammen minst 5 ganger og i minst 60 % av
-tilfellene der én av dem ble endret. Par nå: **1**.
+tilfellene der én av dem ble endret. Par nå: **2**.
 *Regel: 100 minus 5 poeng per par. Commits som rører mer enn 12 filer telles ikke — de sier lite om kobling.*
 
 | Fil A | Fil B | Ganger sammen | Andel |
 |---|---|---:|---:|
 | `public/participant-completed.js` | `public/profile.js` | 10 | 63 % |
+| `src/modules/course/courseRepository.ts` | `src/routes/courses.ts` | 8 | 62 % |
 
 ## 5. Størrelse — 64
 
@@ -100,11 +103,11 @@ Hvor mye det er å holde ved like. Ikke feil i seg selv, men alt her koster tid 
 
 | Hva | Antall |
 |---|---:|
-| API-ruter | 202 |
+| API-ruter | 203 |
 | Databasetabeller | 39 |
 | Kolonner i databasen | 502 |
-| Oversettelsesnøkler (alle språk) | 5423 |
-| Testfiler | 363 |
+| Oversettelsesnøkler (alle språk) | 5456 |
+| Testfiler | 366 |
 
 ## Historikk
 
@@ -120,5 +123,6 @@ Hvor mye det er å holde ved like. Ikke feil i seg selv, men alt her koster tid 
 | 2026-09-19 | 2.74.0 | 67 | 60 | 100 | 20 | 90 | 64 |
 | 2026-09-22 | 2.75.0 ⚠️ | 76 | 100 | 100 | 20 | 95 | 64 |
 | 2026-09-22 | 2.76.0 | 76 | 100 | 100 | 20 | 95 | 64 |
+| 2026-09-30 | 2.77.0 | 73 | 100 | 100 | 10 | 90 | 64 |
 
 ⚠️ **2.75.0: måleregelen ble endret.** Dimensjon 1 teller nå bare steder OVER gulvet (de som faktisk kan fjernes). Før talte den alle, også oversetteren som må lese feilteksten og definisjonen av menyspråket — rundt 18 av 20 steder. Hoppet fra 60 til 96 er derfor en ny målestokk, ikke en opprydding.

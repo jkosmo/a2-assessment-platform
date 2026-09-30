@@ -29,6 +29,27 @@ export function pickLocalizedValue<T extends Partial<Record<SupportedLocale, str
   return Object.values(map).find((v): v is string => typeof v === "string" && v.trim().length > 0);
 }
 
+/**
+ * #894: hvilke språk teksten FAKTISK finnes på — grunnlaget for «nn mangler» i listene.
+ *
+ * ⚠️ En ren streng regnes som ETT språk, ikke tre. Det er hele poenget: fram til #892 ble titler
+ * skrevet identisk til alle tre, og en statussjekk kunne da ikke skille «bevisst lik» fra «aldri
+ * oversatt». Lagringsformatet er nå ærlig — en streng betyr «skrevet på ett språk, ikke oversatt»
+ * — og denne funksjonen leser det formatet, ikke en gjetning om innholdet.
+ *
+ * Kallere som viser dette til en forfatter, må også si HVILKET språk strengen er på; det vet
+ * lagringsformatet ikke, og `LEGACY_STRING_LOCALE` (klienten) svarer på det.
+ */
+export function localesPresent(input: string | null | undefined): SupportedLocale[] {
+  if (input == null || input.trim().length === 0) return [];
+  const inline = parseInlineLocalizedMap(input);
+  if (!inline) return [];
+  return (Object.keys(inline) as SupportedLocale[]).filter((locale) => {
+    const value = inline[locale];
+    return typeof value === "string" && value.trim().length > 0;
+  });
+}
+
 type InlineLocalizedMap = Partial<Record<SupportedLocale, string>>;
 
 export function parseInlineLocalizedMap(input: string): InlineLocalizedMap | null {

@@ -58,6 +58,9 @@ import { matchesLifecycleFilter } from "./content-status-badge.js";
  * @property {(action: string, id: string, btn: HTMLElement, item: any, event: Event) => void} onAction
  * @property {(event: Event) => boolean} [onClick]   andre klikk i lista (returner true når håndtert)
  * @property {(items: any[]) => void} [afterRender]  kjøres etter at hodet er tegnet — bind hode-knapper her
+ * @property {(visible: any[]) => void} [afterTableRender]  kjøres hver gang TABELLEN er tegnet, også
+ *   ved filter- og sorteringsklikk. Her hører en hodeknapp hvis tekst avhenger av hva som er synlig
+ *   («Oversett det som mangler (N)»), for `afterRender` kjører ikke på et filterklikk (#894).
  * @property {(items: any[]) => string} [emptyHtml]  egen tom-tilstand når det ikke finnes noen elementer i det hele tatt
  */
 
@@ -195,6 +198,7 @@ export function createListPage(config) {
   function renderTable() {
     const body = document.getElementById(listBodyId);
     if (body) body.innerHTML = tableHtml(visibleItems());
+    config.afterTableRender?.(visibleItems());
   }
 
   function renderAll() {
@@ -203,10 +207,12 @@ export function createListPage(config) {
     if (state.items.length === 0 && config.emptyHtml) {
       host.innerHTML = headerHtml() + config.emptyHtml(state.items);
       config.afterRender?.(state.items);
+      config.afterTableRender?.([]);
       return;
     }
     host.innerHTML = `${headerHtml()}${toolbarHtml()}<div id="${escapeHtml(listBodyId)}">${tableHtml(visibleItems())}</div>`;
     config.afterRender?.(state.items);
+    config.afterTableRender?.(visibleItems());
   }
 
   // Én lytter på verten. Den overlever at tabellen (og hele sida) tegnes på nytt.

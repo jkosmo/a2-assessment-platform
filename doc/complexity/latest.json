@@ -1,12 +1,12 @@
 {
-  "dato": "2026-09-22",
-  "versjon": "2.76.0",
-  "samlet": 76,
+  "dato": "2026-09-30",
+  "versjon": "2.77.0",
+  "samlet": 73,
   "skår": {
     "reglerFlereSteder": 100,
     "utgaverAvViktigeRegler": 100,
-    "filerAltMåGjennom": 20,
-    "filerSomEndresSammen": 95,
+    "filerAltMåGjennom": 10,
+    "filerSomEndresSammen": 90,
     "størrelse": 64
   },
   "tall": {
@@ -81,7 +81,7 @@
         },
         {
           "fil": "src/modules/adminContent/llmContentGenerationService.ts",
-          "linjer": 2105
+          "linjer": 2130
         },
         {
           "fil": "public/static/admin-content-courses.js",
@@ -99,7 +99,7 @@
       "over800": [
         {
           "fil": "src/routes/adminContent.ts",
-          "linjer": 1461
+          "linjer": 1491
         },
         {
           "fil": "src/modules/adminContent/adminContentCommands.ts",
@@ -107,11 +107,19 @@
         },
         {
           "fil": "public/static/admin-content-sections.js",
-          "linjer": 1072
+          "linjer": 1171
         },
         {
           "fil": "public/static/workspace-help-content.js",
           "linjer": 934
+        },
+        {
+          "fil": "src/modules/adminContent/adminContentSchemas.ts",
+          "linjer": 809
+        },
+        {
+          "fil": "public/static/admin-content-library.js",
+          "linjer": 802
         }
       ],
       "mestImportert": [
@@ -155,14 +163,20 @@
         "b": "public/profile.js",
         "sammen": 10,
         "andel": 0.625
+      },
+      {
+        "a": "src/modules/course/courseRepository.ts",
+        "b": "src/routes/courses.ts",
+        "sammen": 8,
+        "andel": 0.6153846153846154
       }
     ],
     "størrelse": {
-      "ruter": 202,
+      "ruter": 203,
       "tabeller": 39,
       "kolonner": 502,
-      "i18nNøkler": 5423,
-      "testfiler": 363
+      "i18nNøkler": 5456,
+      "testfiler": 366
     }
   }
 }

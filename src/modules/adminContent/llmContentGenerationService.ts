@@ -1788,7 +1788,11 @@ export function buildSectionLocalizationPrompts(input: SectionLocalizationInput)
   userPrompt: string;
 } {
   const systemPrompt =
-    "You are a professional translator for a certification platform. Translate the provided learning-section content faithfully and return strict JSON only - no commentary.";
+    // #894: samme oversetter brukes nå også til en ren tittel fra modul- eller seksjonslista.
+    // Ordlyden sier derfor «content», ikke «learning-section content» — den var ikke sann for en
+    // modultittel, og en prompt som beskriver noe annet enn det den får, er en kilde til rar
+    // oversettelse.
+    "You are a professional translator for a certification platform. Translate the provided content faithfully and return strict JSON only - no commentary.";
 
   const titleSection = typeof input.title === "string" && input.title.trim().length > 0
     ? `\ntitle:\n${input.title.trim()}\n`
@@ -1801,7 +1805,7 @@ export function buildSectionLocalizationPrompts(input: SectionLocalizationInput)
   if (titleSection) returnFields.push(`  "title": "translated title in ${LOCALE_DISPLAY[input.targetLocale]}"`);
   if (bodySection) returnFields.push(`  "bodyMarkdown": "translated markdown body in ${LOCALE_DISPLAY[input.targetLocale]}"`);
 
-  const userPrompt = `Translate the following learning-section content from ${LOCALE_DISPLAY[input.sourceLocale]} to ${LOCALE_DISPLAY[input.targetLocale]}.
+  const userPrompt = `Translate the following content from ${LOCALE_DISPLAY[input.sourceLocale]} to ${LOCALE_DISPLAY[input.targetLocale]}.
 
 ${buildLanguageEnforcementDirective(input.targetLocale)}
 
@@ -1832,6 +1836,27 @@ ${returnFields.join(",\n")}
 export function normaliseLiteralNewlines(value: string | undefined): string | undefined {
   if (typeof value !== "string") return value;
   return value.includes("\\n") ? value.replace(/\\r\\n|\\n/g, "\n") : value;
+}
+
+/**
+ * #894: én tittel oversatt til ett språk.
+ *
+ * ⚠️ Ingen ny prompt. En tittel er tekst, og oversetteren over tar allerede tittel alene (kroppen
+ * er valgfri). To prompter for samme jobb ville drevet fra hverandre — det er mønsteret #941
+ * handlet om. Denne finnes bare for at kallstedet skal si hva det gjør: lista skal ikke kalle noe
+ * som heter «section content» for å døpe om en modul.
+ */
+export async function localizeTitle(input: {
+  title: string;
+  sourceLocale: GenerationLocale;
+  targetLocale: GenerationLocale;
+}): Promise<string | undefined> {
+  const result = await localizeSectionContent({
+    title: input.title,
+    sourceLocale: input.sourceLocale,
+    targetLocale: input.targetLocale,
+  });
+  return result.title;
 }
 
 export async function localizeSectionContent(input: SectionLocalizationInput): Promise<SectionLocalizationResult> {
