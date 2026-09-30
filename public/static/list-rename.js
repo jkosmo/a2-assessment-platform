@@ -1,4 +1,6 @@
 import { escapeHtml } from "/static/html-escape.js";
+import { LEGACY_STRING_LOCALE } from "/static/localized-value.js";
+import { supportedLocales } from "/static/i18n/participant-translations.js";
 
 /**
  * #894: omdøping direkte i lista, og hvilke språk tittelen mangler.
@@ -17,7 +19,11 @@ import { escapeHtml } from "/static/html-escape.js";
  * sin løsning på det (#941-mønsteret).
  */
 
-export const ALLE_SPRAAK = ["nb", "nn", "en-GB"];
+/**
+ * Språkene, i plattformens egen rekkefølge. Hentet, ikke skrevet på nytt: en fjerde språk her ville
+ * ellers måttet huskes ett sted til.
+ */
+export const ALLE_SPRAAK = supportedLocales;
 /** Kort merkelapp i lista. Ikke oversatt: det ER språkkodene, og de leses likt på alle tre. */
 const KORT = { nb: "nb", nn: "nn", "en-GB": "en" };
 
@@ -29,19 +35,18 @@ const KORT = { nb: "nb", nn: "nn", "en-GB": "en" };
  * (`LEGACY_STRING_LOCALE`), og da mangler de to andre.
  */
 export function manglendeSpraak(item) {
-  const finnes = Array.isArray(item?.titleLocales) && item.titleLocales.length > 0
-    ? item.titleLocales
-    : ["nb"];
+  const finnes = spraakSomFinnes(item);
   return ALLE_SPRAAK.filter((locale) => !finnes.includes(locale));
 }
 
 /**
  * Hele språkkartet for en lagret tittel, slik tjeneren leser det.
  *
- * ⚠️ En REN STRENG hører til bokmål (`LEGACY_STRING_LOCALE`) — ikke til språket lista tilfeldigvis
+ * ⚠️ En REN STRENG hører til `LEGACY_STRING_LOCALE` (bokmål) — ikke til språket lista tilfeldigvis
  * står i. Seksjonssidas egen `parseLocalized` legger den under VISNINGSSPRÅKET, som er riktig i
  * editoren og feil her: en omdøping sett i nynorsk ville flyttet den norske teksten til nynorsk og
- * gitt nøyaktig den tilstanden #892 handler om.
+ * gitt nøyaktig den tilstanden #892 handler om. Konstanten er DEN SAMME som `mergeLocaleInto`
+ * bruker, slik at de to ikke kan gli fra hverandre.
  *
  * ⚠️ Brukes bare der klienten har den lagrede teksten. Modulbibliotekets rader har en OPPSLÅTT
  * tittel (tjeneren har alt valgt språk), og der eier tjeneren sammenslåingen i stedet.
@@ -59,15 +64,20 @@ export function lagretTittelkart(raw) {
       return ut;
     } catch { /* ikke gyldig JSON — les den som ren tekst under */ }
   }
-  return trimmet.length > 0 ? { nb: trimmet } : {};
+  return trimmet.length > 0 ? { [LEGACY_STRING_LOCALE]: trimmet } : {};
 }
 
 /** Språket vi oversetter FRA: det lista viser, hvis tittelen finnes der — ellers det som finnes. */
 export function kildespraakFor(item, visningsspraak) {
-  const finnes = Array.isArray(item?.titleLocales) && item.titleLocales.length > 0
-    ? item.titleLocales
-    : ["nb"];
+  const finnes = spraakSomFinnes(item);
   return finnes.includes(visningsspraak) ? visningsspraak : finnes[0];
+}
+
+/** Tom `titleLocales` betyr «lagret som ren streng», og den leser tjeneren som bokmål. */
+function spraakSomFinnes(item) {
+  return Array.isArray(item?.titleLocales) && item.titleLocales.length > 0
+    ? item.titleLocales
+    : [LEGACY_STRING_LOCALE];
 }
 
 /** Merket i lista: hva som mangler, ikke hva som finnes — forfatteren leter etter hull. */
