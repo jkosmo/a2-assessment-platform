@@ -2,6 +2,43 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.77.0 - 2026-10-03
+
+Bare skillet `a2-authoring-api`. Ingen endring i plattformen, ingen migrasjon. Del av #1073 (epic #1071).
+
+### Skillet animerer figurer der det gir mening
+
+En figur som viser et **forløp** (en prosess, steg i rekkefølge) tegnes nå **animert som standard**:
+stegene lyser opp etter tur, én gang. Hierarkier, deler og sammenligninger står stille. Skillet
+foreslår bevegelsen selv ved strukturporten («animert: ja/nei — fordi …»). Forfatteren skal ikke
+måtte be om det.
+
+Det som håndhever det, er en sjekk som kjører, ikke en setning som skal huskes:
+`scripts/figure-motion-check.mjs`. Den feiler når
+
+- en flytfigur (≥3 bokser med etikett på rad, med streker mellom) verken er animert eller merket
+  `data-motion="static"` (det synlige unntaket),
+- animasjonen går i løkke, varer over 5 sekunder, mangler regelen for redusert bevegelse, skjuler
+  innhold i stillbildet, eller bruker SMIL som plattformen fjerner.
+
+Malen for flytfigur i `figure-design.md` er byttet til den animerte. En test sjekker at alle malene
+i dokumentet består sjekken, så dokumentet ikke kan lære bort en stillestående flyt.
+
+### Målt på plattformen før regelen ble skrevet
+
+- `sanitizeSvg` beholder CSS (`@keyframes`, `animation`, `@media`) og `<animateMotion>`, men fjerner
+  `<animate>` og `<set>` og tar `from`/`to` av `<animateTransform>`. Derfor bare CSS.
+- ⚠️ **Deltakerflaten viser figurer som `<img>`, og Chromium sender ikke leserens «redusert bevegelse»
+  inn i en SVG som vises som bilde.** Det gjør den når SVG-en åpnes direkte. Regelen for redusert
+  bevegelse er derfor påkrevd, men den er ikke nok alene. Animasjonen må være trygg i seg selv: én
+  gang, innen 5 sekunder (WCAG 2.2.2, siden et bilde ikke har pauseknapp), og hvile på et komplett
+  stillbilde. Plattformsiden, som å respektere innstillingen og spille av på nytt, står i #1073.
+- Malen er sjekket i Chromium som blob-`<img>`: den beveger seg i starten og står stille etter
+  ca. 5 sekunder.
+
+Mutasjonssjekk: hver av de seks reglene i skriptet ble skrudd av etter tur, og riktig test ble rød
+hver gang.
+
 ## 2.76.0 - 2026-09-20 (stage)
 
 Én commit, ingen migrasjon. Deltakeren får svar på «hva nå?», og forhåndsvisningen slutter å eie
