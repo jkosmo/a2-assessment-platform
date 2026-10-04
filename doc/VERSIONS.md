@@ -51,7 +51,10 @@ Underveis viste testene en feil til: attributtnavn med tall (`x1`, `y2`) ble ald
 at **hver** figur må si `data-motion="animated"` eller `"static"`, slik at sjekken slipper å gjette.
 Det er en beslutning for produkteier og er ikke gjort.
 
-37 tester i fila, med kontrollcase for det som fortsatt skal passere. 31 mutasjoner, 31 røde.
+Hvitlista gjelder også at-regler: en figur kan ha `@keyframes` og blokka for redusert bevegelse,
+ingenting annet. En evig løkke skrevet inne i `@media (min-width: 0)` ble ellers aldri sett.
+
+39 tester i fila, med kontrollcase for det som fortsatt skal passere. 36 mutasjoner, 36 røde.
 `figure-design.md` beskriver den ene formen og sier det samme som skriptet håndhever.
 
 **En beslutning ligger i dette:** `<animateMotion>` overlever plattformens rensing, så den kunne vært

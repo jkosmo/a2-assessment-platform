@@ -50,7 +50,8 @@ const num = (v, fallback = 0) => {
 function styleText(svg) {
   const blocks = [...svg.matchAll(/<style\b[^>]*>([\s\S]*?)<\/style>/g)].map((m) => m[1]);
   const inline = [...svg.matchAll(new RegExp(`\\bstyle\\s*=\\s*${QUOTED}`, "g"))].map((m) => `${INLINE}{${m[1] ?? m[2]}}`);
-  return [...blocks, ...inline].join("\n").replace(/\/\*[\s\S]*?\*\//g, "");
+  // CDATA markers are XML, not CSS; left in, they would become part of the first selector.
+  return [...blocks, ...inline].join("\n").replace(/\/\*[\s\S]*?\*\//g, "").replace(/<!\[CDATA\[|\]\]>/g, " ");
 }
 
 /** The "selector" of a style="" attribute. No stylesheet selector can name it. */
@@ -239,6 +240,25 @@ export function checkFigureMotion(svg) {
   // spelling is then rejected by default instead of passing by default.
   const keyframeNames = new Set(keyframes.map((b) => (b.text.match(/@keyframes\s+([\w-]+)/) ?? [])[1]?.toLowerCase()).filter(Boolean));
   const unsupported = (d, why) => issues.push({ kind: "unsupported_animation_form", detail: `"${d.selector} { ${d.prop}: ${d.value} }" — ${why}` });
+
+  // The same whitelist for at-rules. Rules inside a block are lifted out before the checks below, so
+  // an animation written inside `@media (min-width: 0)` or `@supports (…)` would not be seen at all.
+  // Two at-rules exist in a figure: @keyframes and the reduced-motion @media. Nothing else.
+  const isReducedMotion = (b) => /^@media\s*\(\s*prefers-reduced-motion\s*:\s*reduce\s*\)\s*\{/.test(b.text);
+  for (const b of media.filter((b) => !isReducedMotion(b))) {
+    issues.push({ kind: "unsupported_animation_form", detail: `"${b.text.slice(0, b.text.indexOf("{")).trim()}" — the only @media block a figure may have is (prefers-reduced-motion: reduce)` });
+  }
+  for (const m of base.matchAll(/@[a-z-]+/gi)) {
+    issues.push({ kind: "unsupported_animation_form", detail: `"${m[0]}" — a figure's CSS may use @keyframes and the reduced-motion @media, no other at-rule` });
+  }
+  // …and inside the reduced-motion block, the only thing said about animation is that there is none.
+  for (const b of media.filter(isReducedMotion)) {
+    for (const d of declarations(b.text.slice(b.text.indexOf("{") + 1, b.text.lastIndexOf("}")))) {
+      if (d.prop.startsWith("animation") && !(d.prop === "animation" && d.value === "none")) {
+        unsupported(d, "inside the reduced-motion block, write `animation: none` and nothing else about animation");
+      }
+    }
+  }
   const animatedRules = []; // { selector, index } of every rule whose animation actually runs
   let maxDuration = 0, maxDelay = 0, maxCount = 1;
   for (const d of animDecls) {
@@ -318,7 +338,7 @@ export function checkFigureMotion(svg) {
     // `.unrelated { animation: none }` is a rule, but the figure still moves; so is `svg *` when the
     // animation sits on the root.
     const off = media
-      .filter((b) => /prefers-reduced-motion\s*:\s*reduce/.test(b.text))
+      .filter(isReducedMotion)
       .flatMap((b) => declarations(b.text.slice(b.text.indexOf("{") + 1, b.text.lastIndexOf("}"))).map((d) => ({ ...d, index: b.index })))
       .filter((d) => d.prop === "animation" && d.value === "none");
     const switchedOff = (rule) => off.some((d) => d.important && selectorParts(d.selector).includes("*"))

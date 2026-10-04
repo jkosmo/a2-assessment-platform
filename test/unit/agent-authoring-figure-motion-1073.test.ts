@@ -138,6 +138,29 @@ describe("figure-motion-check (#1073)", () => {
     expect(kinds(medAnimasjon("lys 1.4s cubic-bezier(.1, .2, .3, 1) 1") + threeSteps)).toEqual(["unsupported_animation_form", "sequence_not_animated"]);
   });
 
+  it("an animation hidden inside another at-rule is not overlooked: only @keyframes and the reduced-motion @media exist", () => {
+    // Regler inne i en blokk løftes ut før sjekkene. Uten hvitlista ville en evig løkke i
+    // `@media (min-width: 0)` aldri blitt sett — figuren er «ren», og beveger seg for alltid.
+    const iMedia = goodStyle.replace("</style>", "@media (min-width: 0) { .steg { animation: lys 9s infinite; } }</style>");
+    expect(kinds(iMedia + threeSteps)).toEqual(["unsupported_animation_form"]);
+    const iSupports = goodStyle.replace("</style>", "@supports (display: block) { .steg { animation: lys 9s infinite; } }</style>");
+    expect(kinds(iSupports + threeSteps)).toContain("unsupported_animation_form");
+    // En sammensatt betingelse er heller ikke «blokka for redusert bevegelse».
+    const sammensatt = medRedusert(".steg { animation: none; }").replace("@media (prefers-reduced-motion: reduce)", "@media (prefers-reduced-motion: reduce) and (min-width: 9999px)");
+    expect(kinds(sammensatt + threeSteps)).toContain("unsupported_animation_form");
+    // Og inne i blokka sies det bare én ting om animasjon.
+    expect(kinds(medRedusert(".steg { animation: none; } .s2 { animation: lys 9s infinite; }") + threeSteps)).toEqual(["unsupported_animation_form"]);
+  });
+
+  it("control: a <style> wrapped in CDATA reads the same as one that is not", () => {
+    // Den animerte regelen står FØRST: blir markøren stående, blir den en del av velgeren
+    // («<![CDATA[.steg»), og regelen for redusert bevegelse treffer ikke lenger samme velger.
+    const cdata = `<style><![CDATA[.steg { animation: lys 1.4s ease-in-out 1; }
+      @keyframes lys { 0%, 70% { fill: #ffd166; } 100% { fill: #eef; } }
+      @media (prefers-reduced-motion: reduce) { .steg { animation: none; } }]]></style>`;
+    expect(kinds(cdata + threeSteps)).toEqual([]);
+  });
+
   it("an animation in a style attribute is unsupported — the <style> block is the one place", () => {
     const inline = threeSteps.replace('class="steg s1"', 'class="s1" style="animation: lys 1s 1"');
     expect(kinds(goodStyle + inline)).toEqual(["unsupported_animation_form"]);

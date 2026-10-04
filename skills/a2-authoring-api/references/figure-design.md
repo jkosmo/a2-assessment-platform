@@ -177,7 +177,9 @@ perfectly valid. That is deliberate: a check that lists the unsafe forms always 
 - the shorthand only — no `animation-name`, `animation-duration`, `animation-iteration-count`, …;
 - easing is a keyword (`linear`, `ease`, `ease-in`, `ease-out`, `ease-in-out`), not
   `cubic-bezier()` or `steps()`;
-- one animation per rule (no comma list), and the name must match a `@keyframes` in the figure.
+- one animation per rule (no comma list), and the name must match a `@keyframes` in the figure;
+- two at-rules only: `@keyframes` and `@media (prefers-reduced-motion: reduce)`. No other `@media`
+  condition, no `@supports` — an animation inside one would not be checked at all.
 
 Copy the template's `<style>` block and change the delays; that is the whole job.
 
