@@ -56,11 +56,20 @@ const num = (v, fallback = 0) => {
   return Number.isFinite(n) ? n : fallback;
 };
 
+// A tag ends at the first `>` that is NOT inside a quoted attribute value. `aria-label="A -> B"` is
+// ordinary markup; ending the tag at that `>` hid every attribute after it — a data-motion="static"
+// that was never read (a false failure), or a style="" attribute that was never seen (a false pass).
+const TAG_REST = `((?:"[^"]*"|'[^']*'|[^>"'])*)`;
+/** Every opening tag — optionally only the named ones — with its attributes read. */
+function openTags(svg, name = "[a-zA-Z][\\w:-]*") {
+  return [...svg.matchAll(new RegExp(`<(${name})\\b${TAG_REST}>`, "g"))].map((m) => ({ tag: m[1], raw: m[2], attrs: attrs(m[2]) }));
+}
+
 // ── The animation: the flow template's style block, and only that ──────────────────────────────
 
 /** The CSS of each <style> element, without the XML CDATA wrapper. Comments are NOT removed. */
 function styleBlocks(svg) {
-  return [...svg.matchAll(/<style\b[^>]*>([\s\S]*?)<\/style>/g)].map((m) => m[1].replace(/<!\[CDATA\[|\]\]>/g, " "));
+  return [...svg.matchAll(new RegExp(`<style\\b${TAG_REST}>([\\s\\S]*?)</style>`, "g"))].map((m) => m[2].replace(/<!\[CDATA\[|\]\]>/g, " "));
 }
 
 /** Layout is free: line breaks, indentation and spaces round punctuation carry no meaning. */
@@ -90,17 +99,24 @@ const TEMPLATE = [
 // <style media="print"> through, where the block never applies. Each was one more shape nobody had
 // listed. So the shapes are listed the other way round: these elements, and no others.
 const TEMPLATE_ELEMENTS = new Set(["svg", "style", "rect", "text", "tspan", "line", "polyline", "path", "title", "desc"]);
-// SMIL elements have their own, more useful message (stripped_by_platform / not_css_only).
-const REPORTED_ELSEWHERE = new Set(["animate", "set", "animateTransform", "animateMotion"]);
+// SMIL elements have their own, more useful message (stripped_by_platform / not_css_only). Matched
+// without regard to case: the platform's sanitizer restores `<animatemotion>` to `<animateMotion>`,
+// so the lower-case spelling runs on the platform just the same.
+const SMIL = ["animate", "set", "animateTransform", "animateMotion"];
+const REPORTED_ELSEWHERE = new Set(SMIL.map((tag) => tag.toLowerCase()));
 /** Shorter than this and the highlight is over before anyone sees it. */
 const MIN_DURATION_SECONDS = 0.3;
+
+/** A stroke that ends where it began encloses an area — with or without a closing `Z`. */
+const returnsToStart = (points) => points.length >= 3
+  && Math.abs(points[0].x - points.at(-1).x) < 0.5 && Math.abs(points[0].y - points.at(-1).y) < 0.5;
 
 /** What in the markup is not the template's markup. */
 function markupProblems(svg) {
   const problems = [];
-  const tags = [...svg.matchAll(/<([a-zA-Z][\w:-]*)\b([^>]*)>/g)].map((m) => ({ tag: m[1], attrs: attrs(m[0]), raw: m[2] }));
+  const tags = openTags(svg);
 
-  const foreign = [...new Set(tags.map((t) => t.tag).filter((tag) => !TEMPLATE_ELEMENTS.has(tag) && !REPORTED_ELSEWHERE.has(tag)))];
+  const foreign = [...new Set(tags.map((t) => t.tag).filter((tag) => !TEMPLATE_ELEMENTS.has(tag) && !REPORTED_ELSEWHERE.has(tag.toLowerCase())))];
   if (foreign.length > 0) problems.push(`an animated figure is made of <rect> step boxes, <line>/<polyline>/<path> connectors, <text> labels and one <style> block — found ${foreign.map((t) => `<${t}>`).join(", ")}`);
   if (tags.filter((t) => t.tag === "svg").length !== 1) problems.push("an animated figure is one <svg>, with none nested inside it");
 
@@ -114,8 +130,12 @@ function markupProblems(svg) {
 
   // A connector is an open stroke. Filled or closed, a <path> or <polyline> is a box drawn another
   // way — a step that carries no step class and never lights up.
+  // (A closing `Z` needs no rule of its own: it takes the path back to its start point.)
+  const encloses = (t) => (t.tag === "path"
+    ? pathSubpaths(t.attrs.d ?? "").some(returnsToStart)
+    : returnsToStart(pointList(t.attrs.points)));
   const shapes = tags.filter((t) => (t.tag === "path" || t.tag === "polyline")
-    && ((t.attrs.fill ?? "").trim().toLowerCase() !== "none" || (t.tag === "path" && /z/i.test(t.attrs.d ?? ""))));
+    && ((t.attrs.fill ?? "").trim().toLowerCase() !== "none" || encloses(t)));
   if (shapes.length > 0) problems.push(`a connector (<path>, <polyline>) is an open stroke with fill="none" — found ${shapes.length} that is filled or closed; a box is a <rect class="steg sN">`);
   return problems;
 }
@@ -132,7 +152,7 @@ function matchTemplate(svg) {
   if (blocks.length !== 1) return { problems: [`an animated figure has exactly one <style> block (found ${blocks.length})`] };
   // An inline style wins over the stylesheet, and an !important there wins over the animation too.
   // An animated figure sets colours and sizes with attributes (fill="…"), which the animation overrides.
-  if (new RegExp(`<[a-zA-Z][^>]*\\sstyle\\s*=\\s*${QUOTED}`).test(svg)) {
+  if (openTags(svg).some((t) => t.attrs.style !== undefined)) {
     return { problems: ["an animated figure has no style=\"\" attributes — use presentation attributes (fill, stroke, …) instead"] };
   }
 
@@ -173,15 +193,15 @@ function matchTemplate(svg) {
   }
   // The step classes belong on the BOXES. On a <text> the same rule would animate the label's
   // colour and leave the boxes still — and a check that counted any element would call that fine.
-  const carriers = [...svg.matchAll(/<([a-zA-Z][\w:-]*)\b[^>]*>/g)]
-    .map((m) => ({ tag: m[1], classes: (attrs(m[0]).class ?? "").split(/\s+/) }))
+  const carriers = openTags(svg)
+    .map((t) => ({ tag: t.tag, classes: (t.attrs.class ?? "").split(/\s+/) }))
     .filter((el) => el.classes.includes("steg"));
   const notBoxes = [...new Set(carriers.filter((el) => el.tag !== "rect").map((el) => `<${el.tag}>`))];
   if (notBoxes.length > 0) problems.push(`class "steg" belongs on the boxes (<rect>) only — found it on ${notBoxes.join(", ")}`);
   // …and EVERY box is a step. A fourth box without the class is a step that never lights up: the
   // figure shows four steps and animates three. Deciding which rects "belong to the flow" would be a
   // guess, so there is none to make: the template has step boxes, lines and labels, nothing else.
-  const plainBoxes = [...svg.matchAll(/<rect\b[^>]*>/g)].filter((m) => !(attrs(m[0]).class ?? "").split(/\s+/).includes("steg")).length;
+  const plainBoxes = openTags(svg, "rect").filter((t) => !(t.attrs.class ?? "").split(/\s+/).includes("steg")).length;
   if (plainBoxes > 0) problems.push(`every <rect> in an animated figure is a step box — found ${plainBoxes} without class "steg" (a box that is not a step never lights up)`);
   const boxSteps = carriers.map((el) => el.classes.filter((c) => /^s\d+$/.test(c)).map((c) => Number(c.slice(1))));
   const stepsOnBoxes = boxSteps.flat().sort((a, b) => a - b);
@@ -222,19 +242,21 @@ function pathSubpaths(d) {
   return subpaths;
 }
 
+/** The points of a `points="…"` attribute. */
+function pointList(value) {
+  const n = (String(value ?? "").match(NUMBER) ?? []).map(Number);
+  const points = [];
+  for (let i = 0; i + 1 < n.length; i += 2) points.push({ x: n[i], y: n[i + 1] });
+  return points;
+}
+
 /** Every drawn connector as the list of points it passes through. */
 function connectorPoints(svg) {
   const out = [];
-  for (const m of svg.matchAll(/<(line|polyline|polygon|path)\b[^>]*>/g)) {
-    const a = attrs(m[0]);
-    if (m[1] === "line") out.push([{ x: num(a.x1), y: num(a.y1) }, { x: num(a.x2), y: num(a.y2) }]);
-    else if (m[1] === "path") out.push(...pathSubpaths(a.d ?? ""));
-    else {
-      const n = ((a.points ?? "").match(NUMBER) ?? []).map(Number);
-      const points = [];
-      for (let i = 0; i + 1 < n.length; i += 2) points.push({ x: n[i], y: n[i + 1] });
-      out.push(points);
-    }
+  for (const { tag, attrs: a } of openTags(svg, "line|polyline|polygon|path")) {
+    if (tag === "line") out.push([{ x: num(a.x1), y: num(a.y1) }, { x: num(a.x2), y: num(a.y2) }]);
+    else if (tag === "path") out.push(...pathSubpaths(a.d ?? ""));
+    else out.push(pointList(a.points));
   }
   return out.filter((points) => points.length >= 2);
 }
@@ -255,18 +277,17 @@ function connectorPoints(svg) {
  */
 function looksLikeSequence(svg) {
   const boxes = [];
-  for (const m of svg.matchAll(/<rect\b[^>]*>/g)) {
-    const a = attrs(m[0]);
+  for (const { attrs: a } of openTags(svg, "rect")) {
     const b = { x: num(a.x), y: num(a.y), w: num(a.width), h: num(a.height) };
     if (b.w > 0 && b.h > 0) boxes.push({ ...b, cx: b.x + b.w / 2, cy: b.y + b.h / 2 });
   }
   // A label sits where its <text> says — or where its <tspan>s say: long labels are broken into
   // lines with <tspan x y>, and then the <text> itself often carries no position at all.
-  const texts = [...svg.matchAll(/<text\b([^>]*)>([\s\S]*?)<\/text>/g)]
+  const texts = [...svg.matchAll(new RegExp(`<text\\b${TAG_REST}>([\\s\\S]*?)</text>`, "g"))]
     .filter((m) => m[2].replace(/<[^>]+>/g, "").trim())
     .flatMap((m) => {
       const own = attrs(m[1]);
-      const spans = [...m[2].matchAll(/<tspan\b([^>]*)>/g)].map((s) => attrs(s[1])).filter((s) => s.x !== undefined || s.y !== undefined);
+      const spans = openTags(m[2], "tspan").map((s) => s.attrs).filter((s) => s.x !== undefined || s.y !== undefined);
       return [own, ...spans.map((s) => ({ x: s.x ?? own.x, y: s.y ?? own.y }))]
         .filter((p) => p.x !== undefined && p.y !== undefined)
         .map((p) => ({ x: num(p.x), y: num(p.y) }));
@@ -307,26 +328,27 @@ function looksLikeSequence(svg) {
 /** @returns {{ ok: boolean, animated: boolean, sequence: boolean, totalSeconds: number | null, issues: Array<{ kind: string, detail: string }> }} */
 export function checkFigureMotion(svg) {
   const issues = [];
-  const root = attrs((svg.match(/<svg\b[^>]*>/) ?? [""])[0]);
+  const root = openTags(svg, "svg")[0]?.attrs ?? {};
   const declaredStatic = root["data-motion"] === "static";
   const sequence = looksLikeSequence(svg);
 
   for (const tag of ["animate", "set", "animateTransform"]) {
-    if (new RegExp(`<${tag}\\b`).test(svg)) {
+    if (new RegExp(`<${tag}\\b`, "i").test(svg)) {
       issues.push({ kind: "stripped_by_platform", detail: `<${tag}> is removed (or disabled) by A2's sanitizer — use CSS @keyframes instead` });
     }
   }
   // The sanitizer KEEPS <animateMotion>, so it would run — which is the problem: it is SMIL, and no
   // CSS reduced-motion rule can switch it off. The rule is CSS only, and it does not count as animated.
-  if (/<animateMotion\b/.test(svg)) {
+  if (/<animateMotion\b/i.test(svg)) {
     issues.push({ kind: "not_css_only", detail: "<animateMotion> is SMIL: the platform keeps it, but no reduced-motion rule can switch it off — animate with CSS @keyframes instead" });
   }
 
   // Does the figure try to move at all? Any mention counts — in a <style> block or in a style
   // attribute — because a figure that mentions animation and is NOT the template must not pass as
-  // a still figure either.
-  const inlineStyles = [...svg.matchAll(new RegExp(`\\sstyle\\s*=\\s*${QUOTED}`, "g"))].map((m) => m[1] ?? m[2]);
-  const triesToAnimate = [...styleBlocks(svg), ...inlineStyles].some((css) => /animation|@keyframes/i.test(css));
+  // a still figure either. A backslash counts too: CSS reads `anim\61tion` as `animation`, and no
+  // figure has a reason to escape a character in its style.
+  const inlineStyles = openTags(svg).map((t) => t.attrs.style).filter((css) => css !== undefined);
+  const triesToAnimate = [...styleBlocks(svg), ...inlineStyles].some((css) => /animation|@keyframes|\\/i.test(css));
 
   let animated = false;
   let totalSeconds = null;
@@ -350,15 +372,14 @@ export function checkFigureMotion(svg) {
       // ⚠️ This catches the attributes that switch an element off. It cannot see everything that
       // makes a figure incomplete (a box drawn outside the viewBox, white on white). The guard for
       // that is the mandatory look at the rendered figure (figure-design.md, #1060) — not this check.
-      for (const m of svg.matchAll(/<[a-zA-Z][^>]*>/g)) {
-        const a = attrs(m[0]);
+      for (const { tag, raw, attrs: a } of openTags(svg)) {
         const value = (name) => (a[name] ?? "").trim().toLowerCase();
         const zero = (name) => {
           const v = value(name);
           return v !== "" && Number.isFinite(Number.parseFloat(v)) && Number.parseFloat(v) <= 0;
         };
         if (value("display") === "none" || ["hidden", "collapse"].includes(value("visibility")) || zero("opacity") || zero("fill-opacity")) {
-          issues.push({ kind: "hidden_at_rest", detail: `${m[0].slice(0, 60)}… is invisible in the still picture` });
+          issues.push({ kind: "hidden_at_rest", detail: `${`<${tag}${raw}>`.slice(0, 60)}… is invisible in the still picture` });
         }
       }
     }

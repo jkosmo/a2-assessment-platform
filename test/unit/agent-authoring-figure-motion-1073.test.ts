@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { checkFigureMotion } from "../../skills/a2-authoring-api/scripts/figure-motion-check.mjs";
 import { checkFigureFit } from "../../skills/a2-authoring-api/scripts/figure-fit-check.mjs";
-import { sanitizeSvg } from "../../src/modules/course/svgSanitizer.js";
+import { applySvgTextTranslations, extractSvgTexts, sanitizeSvg } from "../../src/modules/course/svgSanitizer.js";
 
 // #1073: figurer som viser et forløp skal animeres — og animasjonen skal tåle plattformen og være
 // trygg uten at leserens «redusert bevegelse» når inn i et <img>.
@@ -195,6 +195,8 @@ describe("figure-motion-check (#1073)", () => {
     ["rombe MED stegklassen — klassen hører bare hjemme på <rect>", goodStyle.replace(".s3 { animation-delay: 2.4s; }", ".s3 { animation-delay: 2.4s; } .s4 { animation-delay: 3.6s; }") + fjerdeSteg(`<polygon class="steg s4" points="520,40 560,20 600,40 560,60"/>`), "<polygon>"],
     ["et fjerde steg tegnet som lukket path", goodStyle + fjerdeSteg(`<path d="M520 20 H640 V60 H520 Z" fill="#eef" stroke="#333"/>`), "open stroke"],
     ["en lukket path uten fyll — omrisset av en boks er også en boks", goodStyle + fjerdeSteg(`<path d="M520 20 H640 V60 H520 Z" fill="none" stroke="#333"/>`), "open stroke"],
+    ["et omriss tegnet uten Z, men tilbake til start — like lukket", goodStyle + fjerdeSteg(`<path d="M520 20 H640 V60 H520 V20" fill="none" stroke="#333"/>`), "open stroke"],
+    ["en polyline som ender der den begynte", goodStyle + fjerdeSteg(`<polyline points="520,20 640,20 640,60 520,60 520,20" fill="none" stroke="#333"/>`), "open stroke"],
     ["en fylt path uten Z — fortsatt en flate, ikke en strek", goodStyle + fjerdeSteg(`<path d="M520 20 H640 V60 H520" fill="#eef"/>`), "open stroke"],
     ["en polyline uten fill=\"none\" — nettleseren fyller den svart", goodStyle + threeSteps + `<polyline points="10,70 100,70 100,78"/>`, "open stroke"],
     ["stilblokka gjelder bare utskrift", goodStyle.replace("<style>", `<style media="print">`) + threeSteps, "no attributes"],
@@ -229,6 +231,28 @@ describe("figure-motion-check (#1073)", () => {
     expect(r.sequence).toBe(true);
     // …og en stillestående figur er ikke bundet av malen: den kan ha grupper, sirkler og transform.
     expect(kinds(`<g transform="translate(5,5)"><circle cx="20" cy="20" r="10"/><polygon points="0,0 10,0 5,8"/></g>`)).toEqual([]);
+  });
+
+  // Funnet av gjennomgangen som ga GO (2026-10-04): ikke blokkerende, men ekte.
+  it("a `>` inside an attribute value does not end the tag", () => {
+    // Falsk feil: en helt vanlig aria-label med «->» foran unntaket gjorde at unntaket aldri ble lest.
+    expect(checkFigureMotion(svg(threeSteps, ' aria-label="Motta sak -> Vurder -> Fatt vedtak" data-motion="static"')).ok).toBe(true);
+    // Falsk godkjenning: attributter ETTER en «>» ble ikke sett.
+    const skjultStil = threeSteps.replace('class="steg s1"', 'data-n=">" class="steg s1" style="fill: red !important"');
+    expect(kinds(goodStyle + skjultStil)).toEqual(["unsupported_animation_form"]);
+    const skjultTransform = threeSteps.replace('class="steg s3"', "data-n='>' class=\"steg s3\" transform=\"scale(0)\"");
+    expect(kinds(goodStyle + skjultTransform)).toEqual(["unsupported_animation_form"]);
+    // Kontroll: malen med en slik aria-label på rota er fortsatt malen.
+    expect(checkFigureMotion(svg(goodStyle + threeSteps, ' aria-label="Motta sak -> Vurder"')).issues).toEqual([]);
+  });
+
+  it("spellings the platform or the browser normalises are seen: lower-case SMIL and CSS escapes", () => {
+    // Plattformens rensing retter <animatemotion> til <animateMotion>, så den går i løkke der.
+    const små = threeSteps + `<circle r="4"><animatemotion dur="1s" repeatCount="indefinite" path="M0,0 L100,0"/></circle>`;
+    expect(kinds(små)).toContain("not_css_only");
+    // CSS leser `anim\61tion` som `animation`. En «stillestående» figur med den beveger seg for alltid.
+    const escapet = `<style>.a { anim\\61tion: lys 9s infinite; } @keyfr\\61mes lys { to { opacity: .5 } }</style>` + threeSteps.replace('class="steg s1"', 'class="a"');
+    expect(kinds(escapet)).toEqual(["unsupported_animation_form"]);
   });
 
   it("an animated figure has one <style> block and no style attributes", () => {
@@ -389,6 +413,20 @@ describe("the measured platform facts the rule rests on (#1073)", () => {
     expect(clean).toContain("animation: lys 1.4s");
     expect(clean).toContain("prefers-reduced-motion");
     expect(checkFigureMotion(clean).ok).toBe(true);
+  });
+
+  // #1073 punkt 3: en språkvariant lages ved å bytte etikettene. Stilblokka og stegklassene må stå
+  // urørt — ellers ville den norske figuren bevege seg og den engelske stå stille, uten at noen så det.
+  it("a locale variant keeps the motion: only the labels change", () => {
+    const mal = templateFromDoc();
+    // Bare etikettene tilbys for oversettelse — ikke teksten i <style>.
+    expect(extractSvgTexts(mal)).toEqual(["Steg 1", "Steg 2", "Steg 3"]);
+
+    const engelsk = applySvgTextTranslations(mal, { "Steg 1": "Step 1", "Steg 2": "Step 2", "Steg 3": "Step 3" });
+    expect(engelsk).toContain("Step 2");
+    expect(engelsk).not.toContain("Steg 2");
+    expect(checkFigureMotion(engelsk)).toMatchObject({ ok: true, animated: true, sequence: true });
+    expect(checkFigureMotion(engelsk).totalSeconds).toBe(checkFigureMotion(mal).totalSeconds);
   });
 
   it("sanitizeSvg strips <animate> and <set> — which is why the check rejects them", () => {

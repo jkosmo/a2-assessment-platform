@@ -80,8 +80,16 @@ Det som står igjen fra rundene, uavhengig av malen:
 `<use>` ser den ikke. Kuren er den samme som for stilblokka — slutt å gjette: **hver** figur sier
 `data-motion="animated"` eller `"static"` selv. Det endrer kontrakten for skillet og er ikke besluttet.
 
-90 tester i fila: hullene og naboene deres står som to tabeller («ikke malen» og «ikke malens
-figur»), med kontrollcase for det som fortsatt skal passere. 49 mutasjoner, 49 røde. `SKILL.md`,
+7. **Runde 6 med reserveløsningen: GO**, på commit `ff3faef4` — den som ble rullet til stage.
+   Gjennomgangen fant ingen blokkerende hull og kjørte 15 egne mutasjoner, alle røde. Den pekte på
+   tre ikke-blokkerende ting i sjekken, som er rettet etterpå og ligger på `dev` etter stage-commiten:
+   en `>` inne i en attributtverdi avsluttet taggen (en vanlig `aria-label="A -> B"` foran
+   `data-motion="static"` ga en falsk feil), `<animatemotion>` med små bokstaver og CSS-escapes
+   (`anim\61tion`) ble ikke sett, og et omriss tegnet tilbake til start uten `Z` ble regnet som en
+   åpen strek.
+
+95 tester i fila: hullene og naboene deres står som to tabeller («ikke malen» og «ikke malens
+figur»), med kontrollcase for det som fortsatt skal passere. 53 mutasjoner, 53 røde. `SKILL.md`,
 `authoring-playbook.md` og `figure-design.md` sier det samme som skriptet håndhever.
 
 **Ikke levert av det #1073 ber om** (saken står åpen):
@@ -92,10 +100,17 @@ figur»), med kontrollcase for det som fortsatt skal passere. 49 mutasjoner, 49 
   «redusert bevegelse» og avspilling på nytt.
 - Forfatterveiledningen.
 
+Punkt 3 i saken (oversettelse beholder stilblokka og klassene) er nå festet i en test: en engelsk
+variant av malen laget med `applySvgTextTranslations` består sjekken med samme varighet.
+
 **Kjente grenser, dokumentert og ikke rettet:** stegenes rekkefølge (`s1…sN`) sjekkes ikke mot
 plasseringen i tegningen, så en figur der `s1` står lengst til høyre lyser baklengs og godkjennes.
-Et element kan også gjøres usynlig på måter attributtsjekken ikke ser (`width="0"`,
-`fill="none"` på en etikett). Vakten for begge er den påkrevde visuelle kontrollen av figuren.
+Et steg kan fortsatt tegnes som et omriss som ikke lukkes (tre sider av en boks), og et element kan
+gjøres usynlig på måter attributtsjekken ikke ser (`width="0"`, `fill="none"` på en etikett).
+Vakten for alle tre er den påkrevde visuelle kontrollen av figuren.
+
+**Funnet underveis, egen sak:** #1083 — et hardt mellomrom i en SVG blir til `&nbsp;` i
+`sanitizeSvg`, og figuren vises da ikke. Feilen er eldre enn 2.78.1 og gjelder alle figurer.
 
 **`<animateMotion>`:** den overlever plattformens rensing, så den kunne vært tillatt. Den er avvist
 fordi regelen for redusert bevegelse er CSS og ikke når den.

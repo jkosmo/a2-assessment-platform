@@ -155,7 +155,7 @@ listene. Jeg utvidet ikke regelen for å unngå det — det ville vært en tverr
   && npm run test:integration:native) > "$TEMP/claude/kjoring.log" 2>&1; echo "EXIT=$?"
 ```
 
-Sist målt 2026-10-04, på 2.78.1: **1606 enhet · 69 DOM · 375 e2e · 707 integrasjon**, alle grønne.
+Sist målt 2026-10-04, på 2.78.1: **1611 enhet · 69 DOM · 375 e2e · 707 integrasjon**, alle grønne.
 Ikke pipe utdataene til `tail` — det skjuler feiltellingen og gir exit 0.
 
 **Mot utrullet stage** (krever innlogging, tokenet varer ~85 minutter og er for lengst utløpt nå):

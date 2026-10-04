@@ -188,7 +188,7 @@ What you may change:
 | `<svg>` | the root | exactly one; none nested |
 | `<style>` | the template's block | exactly one, **with no attributes** (`media="print"` or `type="…"` would switch the whole block off) |
 | `<rect>` | a step box | **every** `<rect>` is `class="steg sN"` — one per step, `s1` to the last, matching the delay rules. A box without the class is a step that never lights up |
-| `<line>`, `<polyline>`, `<path>` | connectors | open strokes: `<polyline>` and `<path>` carry `fill="none"`, and a `<path>` is not closed (`Z`). A filled or closed one is a box drawn another way |
+| `<line>`, `<polyline>`, `<path>` | connectors | open strokes: `<polyline>` and `<path>` carry `fill="none"` and do not end where they began (with or without `Z`). A filled or closed one is a box drawn another way |
 | `<text>`, `<tspan>` | labels | never `class="steg"` — it would animate the text and leave the boxes still |
 | `<title>`, `<desc>` | accessible name | — |
 
