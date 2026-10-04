@@ -135,7 +135,9 @@ unit. The figure **diagrams what the text/source says — it never invents** dat
 relationships the source doesn't support. Use a template skeleton from `figure-design.md`, keep
 labels short and in the one primary language as plain `<text>` (never baked into paths), reference
 it from the markdown as `![alt](asset:<sourceId>)`. **Present the figure *with* the text in the
-preview** — show the SVG inline (rendered) AND describe it in words ("flyt: Motta sak → Vurder
+preview** — as a **picture the author can see**, never as SVG source in the chat (most chats print
+it as tags): run `figure-preview.mjs` and show or hand over the page it writes
+(figure-design.md, "Seeing the figure") — AND describe it in words ("flyt: Motta sak → Vurder
 grunnlag → Fatt vedtak") so the author can approve the integrated whole: *"ser tekst + figur
 riktig ut sammen?"*. One figure, one point — if it's getting crowded, split it.
 An animated figure is drawn animated here, not added later: describe the motion in words too

@@ -2,6 +2,43 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.81.1 - 2026-10-04
+
+Bare skillet (`skills/a2-authoring-api`). Ingen endring i plattformkoden, ingen migrasjon.
+
+### Skillet viste figurer som kode i ChatGPT
+
+Produkteier, fra en ChatGPT-samtale: «den rendrer ikke svg … vises som tagger».
+
+Skillet sa «vis SVG-en rendret» uten å si hvordan. I en samtale som ikke tegner SVG, ble figuren
+skrevet ut som kode, og forfatteren ble bedt om å godkjenne en figur ingen hadde sett. Den eneste
+måten skillet nevnte for selv å se på en figur, var Playwright «i repoet» — som en samtale i en
+sandkasse ikke har. Det er veien de fleste forfattere bruker.
+
+- **Nytt skript, `figure-preview.mjs`.** Det lager én selvstendig side der hver figur vises som
+  bilde, slik plattformen viser den, i en bred spalte og en telefonbred, med en knapp som spiller
+  av animasjonen på nytt. Sida kan åpnes i en nettleser eller vises i forhåndsvisningen der
+  samtalen har en.
+- **En stillestående fil ved siden av hver figur** (`<navn>.still.svg`): figuren i ro, uten
+  stilblokk, med fargene skrevet rett på stegene. Tegnere som ikke er nettlesere (cairosvg,
+  rsvg-convert, ImageMagick), leser verken CSS-variabler eller animasjoner, og tegner flyten med
+  faser med svarte steg. Den stillestående fila er det de får.
+- **Regelen i skillet:** vis aldri en figur ved å lime inn SVG-koden. Og: har agenten ingen måte å
+  rendre figuren på, skal den si «ikke sett» — ikke «ser bra ut».
+
+**Målt:** 13 enhetstester og 2 målinger i Chromium (den stillestående fila har samme farger som
+figuren i ro; sida viser hvert bilde i begge spalter, og knappen laster det på nytt). 9 mutasjoner,
+9 røde. Testen fant én feil i skriptet før det ble levert: uten `--out` forsvant den første figuren.
+
+⚠️ **Ikke målt: ChatGPT selv.** Jeg har ingen måte å kjøre skillet i ChatGPT på. Det som er målt,
+er at sida og den stillestående fila er riktige i en nettleser. Om ChatGPT viser sida i canvas,
+eller bare gir den som fil, vet jeg ikke. Heller ikke om sandkassa der har en tegner
+(`cairosvg`); skillet sier hva agenten skal gjøre i begge tilfeller.
+
+**Rotårsak.** Anvisningen for å se på en figur ble skrevet og prøvd i dette repoet, der Playwright
+finnes. Skillet sier selv at sandkassa er hovedveien, men ingen prøvde figurstegene der. Samme
+mønster som #987: det som bare er prøvd der utvikleren sitter, virker bare der.
+
 ## 2.81.0 - 2026-10-04
 
 Plattformen og skillet. **Én migrasjon**, som bare legger til en kolonne.

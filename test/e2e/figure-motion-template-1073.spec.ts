@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { expect, test, type Page } from "@playwright/test";
 import { checkFigureMotion } from "../../skills/a2-authoring-api/scripts/figure-motion-check.mjs";
 import { drawFlowFigure } from "../../skills/a2-authoring-api/scripts/draw-flow-figure.mjs";
+import { buildPreviewHtml, stillFigure } from "../../skills/a2-authoring-api/scripts/figure-preview.mjs";
 import { sanitizeSvg } from "../../src/modules/course/svgSanitizer.js";
 
 // #1073: `figure-motion-check.mjs` SAMMENLIGNER figurer med flytmalen i figure-design.md — den tolker
@@ -303,5 +304,60 @@ test.describe("#1079 — det skriptet tegner, målt i nettleseren", () => {
     const { wide, narrow } = drawFlowFigure(beskrivelse);
     expect(await rader(wide)).toBe(1);
     expect(await rader(narrow)).toBe(2);
+  });
+});
+
+// Forhåndsvisningen fra `figure-preview.mjs`: sida forfatteren åpner for å SE figuren, og den
+// stillestående fila for tegnere som ikke er nettlesere. Nettleseren blir spurt om begge.
+test.describe("figure-preview — målt i nettleseren", () => {
+  const beskrivelse = {
+    name: "flyt", title: "Fire steg", desc: "Fire steg i to faser.",
+    phases: { a: { label: "Først", grunn: "#d9e8dd", lys: "#6fae87" }, b: { label: "Så", grunn: "#e7e2f0", lys: "#a99bc9" } },
+    steps: [{ label: ["Steg", "en"], phase: "a" }, { label: ["Steg", "to"], phase: "a" }, { label: ["Steg", "tre"], phase: "b" }, { label: ["Steg", "fire"], phase: "b" }],
+  };
+
+  test("den stillestående fila ser ut som figuren i ro: samme farger på hvert steg, uten stilblokk", async ({ page }) => {
+    const { wide } = drawFlowFigure(beskrivelse);
+    const farger = () => page.locator("circle").evaluateAll((sirkler) => sirkler.map((s) => `${getComputedStyle(s).fill} / ${getComputedStyle(s).stroke}`));
+
+    await åpne(page, wide);
+    await page.evaluate(() => { for (const a of document.getAnimations()) a.finish(); });
+    const iRo = await farger();
+
+    await åpne(page, stillFigure(wide));
+    expect(await animasjoner(page)).toEqual([]);
+    expect(await page.locator("style").count()).toBe(0);
+    expect(await farger()).toEqual(iRo);
+    // Kontroll: sammenligningen er ikke svart mot svart.
+    expect(new Set(iRo).size).toBe(2);
+    expect(iRo[0]).toBe("rgb(217, 232, 221) / rgb(111, 174, 135)");
+  });
+
+  test("forhåndsvisningssida viser hver figur som bilde, i bred og smal spalte, og knappen laster bildet på nytt", async ({ page }) => {
+    const { wide, narrow } = drawFlowFigure(beskrivelse);
+    await page.setViewportSize({ width: 1100, height: 900 });
+    await page.setContent(buildPreviewHtml([{ name: "flyt.svg", svg: wide }, { name: "flyt.narrow.svg", svg: narrow }]));
+
+    const bilder = page.locator("figure img");
+    await expect(bilder).toHaveCount(4);
+    const mål = await bilder.evaluateAll((els) => Promise.all(els.map(async (el) => {
+      const img = el as HTMLImageElement;
+      if (!img.complete) await new Promise((ferdig) => { img.onload = ferdig; img.onerror = ferdig; });
+      return { lastet: img.naturalWidth > 0, bredde: Math.round(img.getBoundingClientRect().width), spalte: img.closest("figure")!.className };
+    })));
+    expect(mål.every((m) => m.lastet), "hvert bilde lar seg laste").toBe(true);
+    // Telefonspalten er smalere enn den brede — ellers viser ikke sida det den lover.
+    expect(mål.filter((m) => m.spalte === "phone").every((m) => m.bredde < 360)).toBe(true);
+    expect(mål.filter((m) => m.spalte === "wide").every((m) => m.bredde > 400)).toBe(true);
+
+    // Knappen laster figurens to bilder på nytt, så animasjonen går en gang til.
+    await page.evaluate(() => {
+      (window as unknown as { lastinger: number }).lastinger = 0;
+      for (const img of document.querySelectorAll('img[data-figure="0"]')) img.addEventListener("load", () => { (window as unknown as { lastinger: number }).lastinger += 1; });
+    });
+    await page.locator('[data-replay="0"]').click();
+    await expect.poll(() => page.evaluate(() => (window as unknown as { lastinger: number }).lastinger)).toBe(2);
+    // Sida henter ingenting utenfra.
+    expect(await page.locator('script[src], link[href], img:not([src^="data:"])').count()).toBe(0);
   });
 });

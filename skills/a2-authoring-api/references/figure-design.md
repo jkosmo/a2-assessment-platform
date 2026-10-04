@@ -355,14 +355,51 @@ at the per-element gate or written into the package:
    drawn through a label (`stroke_through_label`).
    It is deliberately a little strict. A `FAIL` is a figure you fix, not a warning you read.
 2. **Look.** Render it and inspect the image — the estimate does not see everything (a curved
-   `<path>` through a label, a label on top of a shape, an ugly wrap). Playwright is in the repo:
-   `npx playwright screenshot --viewport-size=800,400 file:///<abs-path>/figure.svg figure.png`,
-   then open `figure.png` (in Claude Code: the Read tool shows the image). Check: every label
-   inside its shape with air around it; nothing crossing a line or arrow; no two labels touching;
-   nothing cut off at the edge.
+   `<path>` through a label, a label on top of a shape, an ugly wrap). How you render depends on
+   where you are running; see [Seeing the figure](#seeing-the-figure--you-and-the-author) below.
+   Check: every label inside its shape with air around it; nothing crossing a line or arrow; no
+   two labels touching; nothing cut off at the edge.
 
 If either step fails: widen the box, shorten the label, break it with `<tspan>` lines, or enlarge
 the `viewBox` — then run both steps again. Do this per variant, not once per figure.
+
+### Seeing the figure — you and the author
+
+**Never show a figure by pasting its SVG source into the chat.** Most chats print it as tags, and
+the author is then asked to approve a figure nobody has seen. This holds in every environment —
+it was first reported from a ChatGPT chat.
+
+**For the author — always the same step.** Write the figure(s) to files and run
+
+`node skills/a2-authoring-api/scripts/figure-preview.mjs figure.svg [figure.narrow.svg …] --out preview.html`
+
+It writes one self-contained page that shows each figure the way the platform shows it — as an
+image — in a wide column and in a phone-width column, with a button that plays the animation
+again. Then put the page in front of the author with what the host offers, in this order:
+
+| The host has | Do this |
+|---|---|
+| a preview pane that renders HTML (a Claude artifact, a ChatGPT canvas) | show `preview.html` there |
+| file download or attachment | give the author `preview.html` (or the `.svg` itself) and say: "open it in your browser" |
+| neither | say so plainly, and describe the figure in words — do not print the source and call it shown |
+
+Describe the figure in words as well, every time (see the playbook): a picture shows one frame.
+
+**For you — the look step.** You need an image you can actually inspect.
+
+| Where you run | Render with |
+|---|---|
+| in this repository (Claude Code, Codex) | `npx playwright screenshot --viewport-size=800,400 file:///<abs-path>/figure.svg figure.png`, then open `figure.png` |
+| a sandbox with a rasteriser but no browser (cairosvg, `rsvg-convert`, ImageMagick, Inkscape) | render **`figure.still.svg`**, which `figure-preview.mjs` writes next to the figure — e.g. `python3 -c "import cairosvg; cairosvg.svg2png(url='figure.still.svg', write_to='figure.png', output_width=1200)"` |
+| nowhere that can render | you cannot do the look step. **Say so** — "målt, men ikke sett: jeg har ingen måte å rendre figuren på her" — and ask the author to look at the preview with the checklist above |
+
+Why the still file: renderers that are not browsers do not read CSS variables or animations. They
+draw the flow with phases with **black steps**, which looks like a broken figure and is not one.
+`figure.still.svg` is the same figure at rest, with the colours written straight on the steps and
+no `<style>` block. It is for looking at; the package carries the figure itself.
+
+A check you did not run is not a check that passed. If you could not render, the gate message
+says "ikke sett", not "ser bra ut".
 
 ## Localization of figures (after primary approval)
 

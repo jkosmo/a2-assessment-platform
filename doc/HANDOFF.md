@@ -14,7 +14,7 @@
 | prod | 2.78.3 | rullet 2026-10-04 kl. 20:13 fra `2433d2b7`, godkjent av produkteier; `/version` og helsesjekk bekreftet. #1080, #1081, #1083 |
 | stage | 2.81.0 | rullet 2026-10-04 kl. 20:27 fra `7f94f41c`, commiten QA-porten ga GO på; `/version` og helsesjekk bekreftet, migrasjonen gikk inn |
 | `main` (git) | 2.78.3 | likt med prod (PR #1086 flettet 2026-10-04) |
-| `dev` (git) | 2.81.0 | #1079 steg 2–4 (sirkler, fasefarger, to oppsett, og plattformen som velger oppsett). **Én migrasjon** |
+| `dev` (git) | 2.81.1 | som stage, pluss en retting bare i skillet: figurer vises som bilde, ikke som kode (se under) |
 
 Fire ting krever et menneske:
 
@@ -207,6 +207,19 @@ sted som leser kolonnen selv, gir filer som ryddes av den ene og blir liggende e
 oppsettet bare på norsk og det brede på engelsk, får en engelsk leser det brede. Står som åpent
 spørsmål i `doc/DECISIONS.md`.
 
+## Hva som ble gjort: skillet viser figurer som bilde (2.81.1)
+
+Produkteier bruker skillet i **ChatGPT**. Der ble en figur skrevet ut som SVG-kode («vises som
+tagger»), fordi skillet sa «vis den rendret» uten å si hvordan, og bare nevnte Playwright «i
+repoet» som måte å se på en figur. `figure-preview.mjs` lager nå en side der figurene vises som
+bilder (bred og telefonbred spalte, knapp for å spille av animasjonen), og en stillestående fil for
+tegnere som ikke er nettlesere. Reglene står i `figure-design.md` («Seeing the figure»).
+
+⚠️ **Ikke prøvd i ChatGPT.** Målt er at sida og den stillestående fila er riktige i en nettleser.
+Om ChatGPT viser sida i canvas eller bare gir den som fil, og om sandkassa der har en tegner, er
+ikke kjent. Produkteier har fått pakka (`dist/skills/a2-authoring-api-v2.81.1.zip`, bygget med
+`npm run skill:package`) og er bedt om å si fra hva som skjer. Forrige pakke på maskinen var 2.61.0.
+
 ## Hva som ble gjort: #1080 (2.78.1)
 
 Telefonvisningen av de fire listene. Cellene manglet kolonnenavn, var bredere enn kortet, og «Mer»
@@ -255,7 +268,7 @@ listene. Jeg utvidet ikke regelen for å unngå det — det ville vært en tverr
   && npm run test:integration:native) > "$TEMP/claude/kjoring.log" 2>&1; echo "EXIT=$?"
 ```
 
-Sist målt 2026-10-04, på 2.81.0: **1798 enhet · 69 DOM · 401 e2e · 740 integrasjon**, alle grønne.
+Sist målt 2026-10-04, på 2.81.1: **1811 enhet · 69 DOM · 403 e2e · 743 integrasjon**, alle grønne.
 ⚠️ Sjekk at port 3001 er fri først: en lokal app som står igjen, plukker vurderingsjobber fra
 testdatabasen og gir tilfeldige feil i `assessment-policy.integration.test.ts`.
 Kjør `npm run build` alene etter å ha skrevet en ny testfil: bygget typesjekker også testene, og en
