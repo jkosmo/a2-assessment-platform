@@ -13,19 +13,22 @@
 |---|---|---|
 | prod | 2.77.0 | rullet 2026-10-04 kl. 08:54 fra `3f111c68`; #894 er lukket |
 | stage | 2.78.1 | rullet 2026-10-04 fra `ff3faef4`, commiten QA-porten ga GO på; #1080 og #1081 |
-| `main` (git) | 2.76.0 | **bak prod** til PR #1082 er merget |
-| `dev` (git) | 2.78.1 | én commit foran stage (`cae1d834`, bare skillet og tester) |
+| `main` (git) | 2.77.0 | likt med prod (PR #1082 merget 2026-10-04) |
+| `dev` (git) | 2.78.2 | foran stage: oppfølging i skillet, og #1083 |
 
 Fire ting krever et menneske:
 
-1. **PR #1082 må merges.** `main` står på 2.76.0 mens prod kjører 2.77.0. En utrulling uten
-   `git_ref` bygger `main` HEAD og ville rullet prod tilbake.
-2. **Manuell test på stage** av 2.78.1. Lista står i `.ai-qa/qa-20261004-122648.md` under «IKKE
-   VERIFISERBART STATISK»: de fire listene på telefon, «Mer» i nederste rad, og en animert figur i
-   deltakerflaten. `npm run test:stage` krever innlogging (`npm run stage:auth`).
-3. **Prod for 2.78.1** krever GitHub-godkjenning fra `jkosmo`, utenfor arbeidstid.
-4. **#1083 (p1)**: en SVG-figur med hardt mellomrom vises ikke. Eldre feil, funnet 2026-10-04.
-   Rettingen ligger i `svgSanitizer.ts` (sikkerhetskode) og bør gå gjennom QA-porten for seg.
+1. **Manuell test på stage** av 2.78.1. Testskriptet ligger utenfor repoet, hos produkteier
+   (`MANUELL_TEST_2.78.1.md`, med en ferdig seksjonspakke til figurtesten): de fire listene på
+   telefon, «Mer» i nederste rad, og en animert figur. `npm run test:stage` krever innlogging
+   (`npm run stage:auth`).
+2. **2.78.2 (#1083) til stage** krever GO fra QA-porten. Endringen ligger i `svgSanitizer.ts`
+   (sikkerhetskode).
+3. **Prod** krever GitHub-godkjenning fra `jkosmo`, utenfor arbeidstid. Planen er én utrulling med
+   2.78.1 og 2.78.2 samlet.
+4. **Lagrede figurer er ikke målt.** `npm run maint:repair-unreadable-svg-assets` (tørrkjøring uten
+   `--apply`) er ikke kjørt mot stage eller prod, så det er ikke kjent hvor mange figurer som
+   allerede er lagret i uleselig form. Se `doc/OPERATIONS_RUNBOOK.md`.
 
 Åpne beslutninger ligger nederst i dette dokumentet.
 
@@ -111,6 +114,15 @@ venter på produkteier.
 «Mer»-menyen i nederste listerad lå skjult bak tabellrammen. `row-actions.js` låner nå luft i
 bunnen av ramma mens menyen er åpen. `test/e2e/row-more-last-row-1081.spec.ts` måler det.
 
+## Hva som ble gjort: #1083 (2.78.2)
+
+En SVG-figur med hardt mellomrom i en etikett ble lagret i en form nettleseren ikke kan lese, og
+deltakeren så ingen figur. `sanitizeSvg` skrev figuren ut som HTML, mens den serveres og leses som
+XML. Rensingen skriver nå XML og avviser et resultat som ikke lar seg lese. Detaljene og målingene
+står i `doc/VERSIONS.md`.
+
+⚠️ **Det som alt er lagret, rettes ikke av seg selv.** Se punkt 4 øverst.
+
 ## Hva som ble gjort: #1080 (2.78.1)
 
 Telefonvisningen av de fire listene. Cellene manglet kolonnenavn, var bredere enn kortet, og «Mer»
@@ -159,7 +171,9 @@ listene. Jeg utvidet ikke regelen for å unngå det — det ville vært en tverr
   && npm run test:integration:native) > "$TEMP/claude/kjoring.log" 2>&1; echo "EXIT=$?"
 ```
 
-Sist målt 2026-10-04, på 2.78.1: **1611 enhet · 69 DOM · 375 e2e · 707 integrasjon**, alle grønne.
+Sist målt 2026-10-04, på 2.78.2: **1622 enhet · 69 DOM · 381 e2e · 709 integrasjon**, alle grønne.
+Kjør `npm run build` alene etter å ha skrevet en ny testfil: bygget typesjekker også testene, og en
+typefeil der stopper hele rekka etter ti sekunder.
 Ikke pipe utdataene til `tail` — det skjuler feiltellingen og gir exit 0.
 
 **Mot utrullet stage** (krever innlogging, tokenet varer ~85 minutter og er for lengst utløpt nå):

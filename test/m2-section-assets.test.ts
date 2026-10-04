@@ -2,7 +2,9 @@ import request from "supertest";
 import { afterAll, describe, expect, it } from "vitest";
 import { app } from "../src/app.js";
 import { prisma } from "../src/db/prisma.js";
-import { getAsset } from "../src/modules/course/assetStorage.js";
+import { JSDOM } from "jsdom";
+import { getAsset, putAsset } from "../src/modules/course/assetStorage.js";
+import { repairUnreadableSvgAssets } from "../src/modules/course/assetCommands.js";
 
 const adminHeaders = {
   "x-user-id": "admin-1",
@@ -173,6 +175,108 @@ describe("Section asset upload + serve", () => {
 
     const english = await request(app).get(`/api/content-assets/${assetId}?locale=en-GB`).set(participantHeaders);
     expect((english.text ?? english.body.toString())).toMatch(/\[en-GB\] Start/);
+
+    await deleteSectionAndCourse(sectionId, courseId);
+  });
+
+  // #1083: en figur med hardt mellomrom i en etikett ble lagret som noe nettleseren ikke kan lese.
+  // Målt hele veien, fra opplasting til det deltakeren får servert.
+  const lesesSomSvg = (svg: string) => {
+    try {
+      new JSDOM(svg, { contentType: "image/svg+xml" });
+      return true;
+    } catch {
+      return false;
+    }
+  };
+  const hentet = (res: { text?: string; body: Buffer }) => res.text ?? res.body.toString();
+
+  it("#1083: en figur med hardt mellomrom vises for deltakeren — også som oversatt variant", async () => {
+    const sectionId = await createSection();
+    const courseId = await linkSectionToOpenCourse(sectionId);
+    const svg = Buffer.from(
+      `<svg xmlns="http://www.w3.org/2000/svg" width="80" height="20" aria-label="a &lt; b"><text x="2" y="12">§ 12</text></svg>`,
+      "utf8",
+    );
+    const upload = await request(app)
+      .post(`/api/admin/content/sections/${sectionId}/assets`)
+      .set(adminHeaders)
+      .attach("file", svg, { filename: "paragraf.svg", contentType: "image/svg+xml" });
+    expect(upload.status).toBe(201);
+    const assetId = upload.body.asset.id as string;
+
+    const servert = hentet(await request(app).get(`/api/content-assets/${assetId}`).set(participantHeaders));
+    expect(lesesSomSvg(servert)).toBe(true);
+    expect(servert).toContain("§ 12");
+    expect(servert).not.toContain("&nbsp;");
+
+    // Varianten lages av applySvgTextTranslations, som renser på nytt: samme vei, samme krav.
+    const localize = await request(app)
+      .post(`/api/admin/content/sections/${sectionId}/assets/localize`)
+      .set(adminHeaders)
+      .send({ sourceLocale: "nb" });
+    expect(localize.body.localizedAssetCount).toBe(1);
+    const engelsk = hentet(await request(app).get(`/api/content-assets/${assetId}?locale=en-GB`).set(participantHeaders));
+    expect(lesesSomSvg(engelsk)).toBe(true);
+    expect(engelsk).toContain(" 12");
+
+    await deleteSectionAndCourse(sectionId, courseId);
+  });
+
+  // #1083: figurene som ALT ligger i lageret rettes ikke av at rensingen er rettet. Vedlikeholds-
+  // kommandoen finner dem og skriver dem på nytt — til samme sti, så raden og referansene står.
+  it("#1083: reparasjonen finner uleselige lagrede figurer, rører ingenting i tørrkjøring, og retter dem med apply", async () => {
+    const sectionId = await createSection();
+    const courseId = await linkSectionToOpenCourse(sectionId);
+    const upload = await request(app)
+      .post(`/api/admin/content/sections/${sectionId}/assets`)
+      .set(adminHeaders)
+      .attach("file", Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="80" height="20"><text x="2" y="12">Start</text></svg>`, "utf8"), { filename: "gammel.svg", contentType: "image/svg+xml" });
+    const assetId = upload.body.asset.id as string;
+    // En frisk figur ved siden av: kontrollen på at reparasjonen ikke rører det som er helt.
+    const frisk = await request(app)
+      .post(`/api/admin/content/sections/${sectionId}/assets`)
+      .set(adminHeaders)
+      .attach("file", Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="80" height="20"><text x="2" y="12">Frisk</text></svg>`, "utf8"), { filename: "frisk.svg", contentType: "image/svg+xml" });
+    const friskId = frisk.body.asset.id as string;
+
+    // Slik figuren ble lagret FØR rettingen: HTML-utskrift, med &nbsp; og en bar < i en attributt.
+    const gammelGrunnfil = `<svg xmlns="http://www.w3.org/2000/svg" width="80" height="20" aria-label="a < b"><text x="2" y="12">§&nbsp;12</text></svg>`;
+    const gammelVariant = `<svg xmlns="http://www.w3.org/2000/svg" width="80" height="20"><text x="2" y="12">Section&nbsp;12</text></svg>`;
+    expect(lesesSomSvg(gammelGrunnfil)).toBe(false);
+    const rad = await prisma.sectionAsset.findUniqueOrThrow({ where: { id: assetId }, select: { blobPath: true } });
+    const variantSti = `sections/${sectionId}/gammel-en-GB.svg`;
+    await putAsset(rad.blobPath, Buffer.from(gammelGrunnfil, "utf8"), "image/svg+xml");
+    await putAsset(variantSti, Buffer.from(gammelVariant, "utf8"), "image/svg+xml");
+    await prisma.sectionAsset.update({ where: { id: assetId }, data: { sourceLocale: "nb", localizedBlobPaths: { "en-GB": variantSti } } });
+
+    const mine = <T extends { assetId: string }>(funn: T[]) => funn.filter((f) => f.assetId === assetId || f.assetId === friskId);
+
+    // Tørrkjøring: begge filene meldes, ingenting skrives.
+    const tørr = await repairUnreadableSvgAssets({ dryRun: true });
+    expect(mine(tørr.unreadable).map((f) => [f.assetId, f.locale, f.repairable, f.repaired])).toEqual([
+      [assetId, null, true, false],
+      [assetId, "en-GB", true, false],
+    ]);
+    expect((await getAsset(rad.blobPath)).toString("utf8")).toBe(gammelGrunnfil);
+
+    // Apply: begge skrives på nytt, til samme sti.
+    const skrevet = await repairUnreadableSvgAssets({ dryRun: false });
+    expect(mine(skrevet.unreadable).map((f) => [f.locale, f.repaired])).toEqual([[null, true], ["en-GB", true]]);
+
+    const servert = hentet(await request(app).get(`/api/content-assets/${assetId}`).set(participantHeaders));
+    expect(lesesSomSvg(servert)).toBe(true);
+    expect(servert).toContain("§ 12");
+    const engelsk = hentet(await request(app).get(`/api/content-assets/${assetId}?locale=en-GB`).set(participantHeaders));
+    expect(lesesSomSvg(engelsk)).toBe(true);
+    expect(engelsk).toContain("Section 12");
+    // Størrelsen i raden følger det som faktisk ligger i lageret.
+    const etter = await prisma.sectionAsset.findUniqueOrThrow({ where: { id: assetId }, select: { sizeBytes: true, blobPath: true } });
+    expect(etter.blobPath).toBe(rad.blobPath);
+    expect(etter.sizeBytes).toBe((await getAsset(rad.blobPath)).byteLength);
+
+    // Idempotent: en ny kjøring finner ingenting igjen på disse figurene.
+    expect(mine((await repairUnreadableSvgAssets({ dryRun: false })).unreadable)).toEqual([]);
 
     await deleteSectionAndCourse(sectionId, courseId);
   });

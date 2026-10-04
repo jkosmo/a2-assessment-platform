@@ -281,14 +281,16 @@ that never reaches the viewer because the locale isn't threaded).
 | Surface | Where | Notes |
 |---------|-------|-------|
 | Allowlist + sanitise on upload | `src/modules/course/assetCommands.ts` → `ALLOWED_ASSET_MIME_TYPES`, `createSectionAsset` | SVG sanitised before `putAsset` |
-| Sanitiser (source of truth) | `src/modules/course/svgSanitizer.ts` → `sanitizeSvg` + text helpers | strips script/handlers/`foreignObject`/`<a>` |
+| Sanitiser (source of truth) | `src/modules/course/svgSanitizer.ts` → `sanitizeSvg` + text helpers | strips script/handlers/`foreignObject`/`<a>`; **writes XML** and rejects a result an XML parser cannot read (#1083) — the file is served as `image/svg+xml` |
+| Every writer goes through the sanitiser | upload (`createSectionAsset`), import (`stageSectionAssets`), locale variants (`applySvgTextTranslations`), agent validation (`agentAuthoringValidationService`) | four writers, one serialiser — a figure that is unreadable from one of them is unreadable from all |
+| Repair of already-stored figures | `assetCommands.ts` → `repairUnreadableSvgAssets`; `npm run maint:repair-unreadable-svg-assets` | dry run by default; rewrites in place |
 | Localise command | `assetCommands.ts` → `localizeSectionAssets`; LLM `localizeSvgTexts` | per-locale variants → `localizedBlobPaths` |
 | Localise route (explicit) | `src/routes/adminSections.ts` `POST /:sectionId/assets/localize` | author "Translate" action only |
 | Serve (headers + variant) | `src/routes/contentAssets.ts`; `getSectionAssetContent(assetId, locale)` | CSP `sandbox` + nosniff for SVG; `?locale=` picks variant |
 | Locale threading (render) | `src/modules/course/sectionContent.ts` → `renderSectionMarkdown(md, locale)` → `resolveAssetUrls` appends `?locale=` | participant: `src/routes/courses.ts`; preview: `adminSections.ts /preview` |
 | Client upload + translate trigger | `public/static/admin-content-sections.js` (`accept` incl. svg; translate loop calls `/assets/localize`; preview sends `locale`) | `hydrateContentAssetImages` preserves the `?locale=` query |
 
-**Guards:** `test/unit/svg-sanitizer.test.ts` (XSS vectors + text round-trip), `test/unit/svg-text-localization.test.ts` (stub + order/count), `test/m2-section-assets.test.ts` (upload sanitised + serve headers + localise→variant).
+**Guards:** `test/unit/svg-sanitizer.test.ts` (XSS vectors + text round-trip + «what is stored can be read as an image»), `test/unit/svg-text-localization.test.ts` (stub + order/count), `test/m2-section-assets.test.ts` (upload sanitised + serve headers + localise→variant + #1083 upload→serve and the repair), `test/e2e/svg-sanitizer-renders-1083.spec.ts` (Chromium shows the sanitised figure as an `<img>`).
 
 ## 12. Admin-content client gating — roles & identity from /api/me, NOT identityDefaults (#690)
 

@@ -2,6 +2,60 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.78.2 - 2026-10-04
+
+Én retting, ingen migrasjon. En figur med hardt mellomrom i en etikett vises igjen.
+
+### #1083 — figuren ble lagret i en form nettleseren ikke kan lese
+
+En SVG-figur leveres som `image/svg+xml`, så nettleseren leser den som XML. `sanitizeSvg` skrev den
+ut som **HTML**. De to er uenige om to ting som er vanlige i norsk tekst og i attributter:
+
+| I figuren | Skrevet ut som HTML | For en XML-leser |
+|---|---|---|
+| hardt mellomrom («§ 12», «10 %», «kr 500») | `&nbsp;` | en entitet som ikke finnes — fila er ugyldig |
+| `<` i en attributtverdi (`aria-label="a < b"`) | en bar `<` | forbudt — fila er ugyldig |
+
+En ugyldig fil vises ikke. Deltakeren så en tom plass der figuren skulle stått, importen gikk
+gjennom, valideringen sa ingenting, og skillets figursjekker sa OK. Hardt mellomrom settes gjerne
+inn av en språkmodell, og figurer oversettes av en — så feilen kunne ligge i den engelske varianten
+mens den norske var hel.
+
+**Rettingen er ikke «bytt `&nbsp;`».** Det ville rettet det ene kjente tilfellet og latt det andre
+stå. Rensingen tar nå det rensede TREET fra DOMPurify og skriver det ut som XML. Da er hele klassen
+borte, og navnerommet på rota følger med av seg selv. Til slutt leses resultatet tilbake med en
+XML-parser: lar det seg ikke lese, avvises figuren (`asset_svg_invalid`) — forfatteren får feilen
+ved opplasting, ikke deltakeren ved lesing. Alle fire veier inn går gjennom samme funksjon:
+opplasting, import, språkvarianter og agent-valideringen.
+
+To ting endrer seg for det som lagres:
+
+- Bare selve figuren lagres. Tekst foran eller bak rota (`<?xml …?>`, løs tekst) er ikke med.
+- Tomme elementer skrives `<rect …/>`, ikke `<rect …></rect>`. Rensingen er stabil: det som alt er
+  renset, endres ikke av å renses igjen.
+
+**Figurer som alt er lagret**, rettes ikke av dette. `npm run maint:repair-unreadable-svg-assets`
+går gjennom hver lagret SVG — grunnfila og hver språkvariant — og lister dem som ikke lar seg lese.
+Med `--apply` renses de på nytt og skrives til samme sti. Tørrkjøring er standard. Se
+`doc/OPERATIONS_RUNBOOK.md`. ⚠️ Skriptet er ikke kjørt mot stage eller prod ennå, så det er ikke
+kjent hvor mange figurer som er rammet.
+
+**Målt:**
+
+- Enhet: fem former som før ga en uleselig fil, gir nå en lesbar; styretegn avvises; rensingen er
+  stabil; en animert figur er fortsatt animert etterpå.
+- Chromium (`test/e2e/svg-sanitizer-renders-1083.spec.ts`): det rensingen skrev før, gir et bilde
+  med bredde 0; det den skriver nå, vises — også som oversatt variant.
+- Integrasjon: opplasting → servering til deltaker, og reparasjonen (tørrkjøring rører ingenting,
+  apply retter grunnfil og variant, andre gang finner den ingenting).
+- Åtte mutasjoner, åtte røde.
+
+**Rotårsak.** Rensingen ble skrevet for å gjøre figuren *trygg*, og testet på det (#657). At
+resultatet også må være *lesbart* i formatet det serveres i, sto ingen steder som krav, og ingen
+test leste resultatet slik nettleseren gjør. Sjekken som manglet, kjører nå tre steder: i selve
+rensingen (avvis det uleselige), i enhetstesten (en XML-parser) og i e2e (nettleseren selv).
+Funnet av QA-gjennomgangen av 2.78.1, som sendte figurer gjennom rensingen og åpnet dem i Chromium.
+
 ## 2.78.1 - 2026-10-04
 
 Tre rettinger, ingen migrasjon. Listene kan leses på telefon, «Mer»-menyen klippes ikke lenger i

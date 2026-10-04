@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import { JSDOM } from "jsdom";
 import {
   sanitizeSvg,
   svgHasText,
@@ -54,6 +55,78 @@ describe("sanitizeSvg — XSS vectors", () => {
     expect(clean).toMatch(/<svg[^>]*xmlns="http:\/\/www\.w3\.org\/2000\/svg"/i);
     expect(clean).toMatch(/<rect/i);
     expect(clean).toMatch(/Start/);
+  });
+});
+
+// #1083: fila leveres som image/svg+xml, så nettleseren leser den som XML. Rensingen skrev den ut
+// som HTML, og de to er uenige om hardt mellomrom (`&nbsp;` finnes ikke i XML) og om `<` i en
+// attributtverdi. Resultatet var en figur nettleseren ikke kunne lese — altså ingen figur, og ingen
+// feilmelding noe sted. Påstanden under er derfor ikke «inneholder ikke &nbsp;», men «lar seg lese
+// som en SVG»: det er den som er sann eller usann for deltakeren.
+function lesesSomSvg(svg: string): boolean {
+  try {
+    const rot = new JSDOM(svg, { contentType: "image/svg+xml" }).window.document.documentElement;
+    return rot.localName === "svg" && rot.namespaceURI === "http://www.w3.org/2000/svg";
+  } catch {
+    return false;
+  }
+}
+
+describe("sanitizeSvg — det som lagres kan leses som et bilde (#1083)", () => {
+  const figur = (innhold: string, rotAttributter = "") =>
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 60"${rotAttributter}>${innhold}</svg>`;
+
+  it("kontroll: testens egen måler skiller en lesbar SVG fra en som ikke er det", () => {
+    expect(lesesSomSvg(figur(`<text x="1" y="1">§ 12</text>`))).toBe(true);
+    // Nøyaktig det rensingen skrev ut før rettingen.
+    expect(lesesSomSvg(figur(`<text x="1" y="1">§&nbsp;12</text>`))).toBe(false);
+    expect(lesesSomSvg(figur(`<rect/>`, ` aria-label="a < b"`))).toBe(false);
+  });
+
+  it.each([
+    ["hardt mellomrom i en etikett («§ 12», «10 %»)", figur(`<text x="10" y="30">§ 12 og 10 %</text>`), "§ 12 og 10 %"],
+    ["&nbsp; skrevet som entitet i kilden", figur(`<text x="10" y="30">kr&nbsp;500</text>`), "kr 500"],
+    ["hardt mellomrom i en attributtverdi", figur(`<rect width="5" height="5"/>`, ` aria-label="§ 12"`), "§ 12"],
+    ["< i en attributtverdi", figur(`<rect width="5" height="5"/>`, ` aria-label="a &lt; b"`), "a &lt; b"],
+    ["& i en etikett", figur(`<text x="10" y="30">Mål &amp; middel</text>`), "Mål &amp; middel"],
+  ])("%s: figuren lar seg lese, og teksten er med", (_navn, inn, forventetTekst) => {
+    const ren = sanitizeSvg(inn);
+    expect(lesesSomSvg(ren)).toBe(true);
+    expect(ren).toContain(forventetTekst);
+    expect(ren).not.toContain("&nbsp;");
+  });
+
+  it("en oversatt variant med hardt mellomrom lar seg også lese — oversettelsen kommer fra en språkmodell", () => {
+    const norsk = sanitizeSvg(figur(`<text x="10" y="30">Paragraf 12</text>`));
+    const engelsk = applySvgTextTranslations(norsk, { "Paragraf 12": "Section 12" });
+    expect(lesesSomSvg(engelsk)).toBe(true);
+    expect(extractSvgTexts(engelsk)).toEqual(["Section 12"]);
+  });
+
+  it("rensing er stabil: det som alt er renset, endres ikke av å renses igjen (eksport → import)", () => {
+    for (const inn of [benignSvg, figur(`<style>.a &gt; .b { fill: #eef; }</style><text x="1" y="9">§ 12</text>`)]) {
+      const én = sanitizeSvg(inn);
+      expect(sanitizeSvg(én)).toBe(én);
+    }
+  });
+
+  it("bare selve figuren lagres: det som står foran og bak rota, er ikke med", () => {
+    const ren = sanitizeSvg(`<?xml version="1.0"?><!DOCTYPE svg>${figur(`<rect width="5" height="5"/>`)}etterpå`);
+    expect(ren.startsWith("<svg ")).toBe(true);
+    expect(ren.endsWith("</svg>")).toBe(true);
+    expect(lesesSomSvg(ren)).toBe(true);
+  });
+
+  it("en figur som ikke kan skrives som lesbar XML, avvises — forfatteren får feilen, ikke deltakeren", () => {
+    // Et styretegn er lovlig i HTML og forbudt i XML. Rensingen kan ikke redde det; den kan nekte.
+    expect(sanitizeSvg(figur(`<text x="10" y="30">a\u0008b</text>`))).toBe("");
+  });
+
+  it("stilblokka overlever: en animert figur er fortsatt animert etter rensing", () => {
+    const ren = sanitizeSvg(figur(`<style>@keyframes lys { to { fill: #fff; } } .a { animation: lys 1s 1; }</style><rect class="a" width="5" height="5"/>`));
+    expect(lesesSomSvg(ren)).toBe(true);
+    expect(ren).toContain("@keyframes lys");
+    expect(ren).toContain("animation: lys 1s 1");
   });
 });
 
