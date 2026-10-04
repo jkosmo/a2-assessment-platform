@@ -161,26 +161,35 @@ the author at the Structure gate; the proposal says, per figure, "animert: ja/ne
 **How — CSS only.** A `<style>` block inside the SVG with `@keyframes` and `animation`. Measured on
 A2 2026-10-03: the sanitizer keeps CSS and `<animateMotion>`, but strips `<animate>` and `<set>` and
 disables `<animateTransform>` — those would silently stop working, so don't use them.
+`<animateMotion>` survives the sanitizer, but it is not CSS: the reduced-motion rule below cannot
+switch it off, so it is not allowed either (`not_css_only`).
 
 **Safety — the animation must be safe on its own.** The participant view shows figures as `<img>`,
 and Chromium does **not** pass the reader's "reduce motion" setting into an SVG shown as an image.
 So the `@media (prefers-reduced-motion: reduce)` rule is required (it is honoured when the figure is
-opened by itself) but it is not enough. In addition:
+opened by itself) but it is not enough. The rule must switch off the animation that is actually
+there: name the **same selector** that carries the animation, or use `* { animation: none
+!important; }`. In addition:
 
 1. **Run once, finish within 5 seconds** in total (largest delay + duration). Moving content that
-   lasts longer needs a pause button (WCAG 2.2.2), and an image has none. No `infinite`.
+   lasts longer needs a pause button (WCAG 2.2.2), and an image has none. No `infinite`, and no
+   repeat count above 1 — three quick repeats inside 5 seconds are still a loop.
 2. **The still picture is the complete figure.** Without the animation — before it starts, after it
    ends, with reduced motion — every box and label is visible. Hide things only inside keyframes,
-   never in the base style, and never end on a hidden frame with `forwards`.
+   never in the base style (`opacity: 0`, `visibility: hidden`, `display: none`), and never end on a
+   hidden frame with `forwards`.
 3. **Motion carries the point, never the content.** Everything the figure says must be readable in
    the still picture; the animation only shows the order.
 4. **Translations keep the motion.** Locale variants change only the `<text>`; the `<style>` block
    is copied as is.
 
 **Check it.** `node skills/a2-authoring-api/scripts/figure-motion-check.mjs figure.svg` — fails on a
-flow-shaped figure (≥3 labelled boxes in a row or column with connectors) that is neither animated
-nor marked `data-motion="static"`, and on any animation that loops, runs over 5 s, lacks the
-reduced-motion rule, hides content at rest, or uses stripped SMIL. Run it with the fit check, on
+flow-shaped figure (three labelled boxes in a row or column, each joined to the next by a line,
+polyline or path) that is neither animated
+nor marked `data-motion="static"`, and on any animation that loops or repeats, runs over 5 s, lacks
+a reduced-motion rule for the animated selector, hides content at rest, or uses stripped SMIL. An
+animation that cannot run — a name with no matching `@keyframes`, or no duration above 0 s — does
+not count as animated and is reported (`animation_never_runs`). Run it with the fit check, on
 every figure and every locale variant. To *see* the motion, open the SVG directly in a browser —
 a single screenshot only shows one frame.
 

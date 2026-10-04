@@ -2,6 +2,69 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.78.1 - 2026-10-04
+
+To rettinger, ingen migrasjon. Listene kan leses på telefon, og figursjekken i skillet håndhever
+reglene den lover.
+
+### #1073 — figursjekken godkjente figurer som brøt reglene
+
+QA-porten gikk gjennom 2.78.0 før stage og ga NO-GO: åtte hull i `figure-motion-check.mjs`. Fem var
+figurer som så animerte ut for et tekstmønster, uten å være trygge eller uten å røre seg. Tre gjaldt
+hva sjekken regner som en flyt.
+
+| Hullet | Nå |
+|---|---|
+| `animation-name` uten varighet, eller et navn uten `@keyframes`, regnet som animert | `animation_never_runs`, og flyten regnes som stillestående |
+| `animation: lys 1s 3` passerte fordi den var kortere enn 5 sekunder | `repeats` — «én gang» er regelen, ikke «kort» |
+| Regelen for redusert bevegelse kunne stå på en urelatert velger | må navngi samme velger, eller være `* { animation: none !important; }` |
+| `display: none` skjulte innhold i stillbildet uten å bli sett | `hidden_at_rest`, i CSS og som attributt |
+| Attributter med enkle anførselstegn ble ikke lest, så en gyldig flyt ble «ingen bokser» | begge former leses |
+| En flyt tegnet med vanlige `<path>`-streker ble ikke sett | `<path>` (også relative kommandoer) og `<polyline>` leses som forbindelser |
+| Et hierarki med tre barn på rad ble krevd animert | en flyt er tre bokser der hver er **koblet til den neste** — ikke tre bokser og to streker et sted |
+| `<animateMotion>` ble godkjent, mot «bare CSS» i alle tre dokumentene | `not_css_only`, og den teller ikke som animasjon |
+
+De to flytfunnene hadde samme årsak: sjekken telte bokser og streker hver for seg. Gjenkjenningen
+måler nå om strekene faktisk forbinder boksene, i rekkefølge. Underveis viste testene en feil til:
+attributtnavn med tall (`x1`, `y2`) ble aldri lest.
+
+17 nye tester, med kontrollcase for det som fortsatt skal passere. 17 mutasjoner, 17 røde.
+`figure-design.md` sier nå det samme som skriptet håndhever.
+
+**En beslutning ligger i dette:** `<animateMotion>` overlever plattformens rensing, så den kunne vært
+tillatt. Den er avvist fordi regelen for redusert bevegelse er CSS og ikke når den. Dokumentene sa
+allerede «bare CSS»; skriptet er rettet etter dem, ikke omvendt.
+
+**Rotårsak.** Skriptet ble mutasjonssjekket da det ble skrevet («seks regler, seks røde tester»),
+men mutasjon måler bare at en regel som finnes blir testet. Den finner ikke en regel som er for
+snever. Det gjorde gjennomgangen fra en annen modell, og den ble ikke kjørt i økta der endringen ble
+skrevet. Sjekken som manglet, var altså QA-porten — den kjører før stage, og fanget dette der.
+
+### #1080 — telefonvisningen av listene
+
+### #1080 — telefonvisningen av listene
+
+Én retting i klienten. Under 600 px blir hver rad i Moduler, Kurs, Seksjoner og Klasser et kort. Kortet skal vise
+kolonnenavnet til venstre og verdien til høyre. Målt på 390 px før rettingen:
+
+- ingen celler hadde kolonnenavn (`list-page.js` satte ikke `data-label`, som kortregelen leser),
+- hver celle var 380 px bred i et kort på rundt 356 px, så «nn, en mangler» ble «nn, en mang»,
+- navnet beholdt skrivebordsbredden (28 %, minst 180 px) og ble brukket midt i ordet,
+- «Mer»-knappen lå utenfor kortet, så handlingene under den ikke kunne nås.
+
+Rettingen er én linje i `list-page.js` og én telefonregel for `.list-table` i `shared.css`.
+Skrivebordsvisningen er uendret, og D5-regelen (handlingsraden brekker aldri) står: uten det tomme
+etikettfeltet foran handlingene får tre knapper og «Mer» plass på én linje.
+
+**Rotårsak.** Kortregelen for `table` og skrivebordsreglene for `.list-table` ble skrevet hver for
+seg. `.list-table td` har høyere spesifisitet og vant over kortregelen på bredde og luft. Ingen test
+åpnet en liste i telefonbredde, så ingenting målte det. Sjekken som manglet finnes nå og kjører:
+`test/e2e/list-mobile-labels-1080.spec.ts` måler i nettleseren at etiketten vises, at ingen celle
+går ut av kortet, og at «Mer» kan åpnes — for både `col-name` (moduler) og `col-title` (kurs), og
+med en kontroll for skrivebord. Fem mutasjoner, fem røde tester.
+
+**Ikke med:** andre tabeller i appen bruker samme kortregel uten `data-label`. De er ikke målt.
+
 ## 2.78.0 - 2026-10-03
 
 Bare skillet `a2-authoring-api`. Ingen endring i plattformen, ingen migrasjon. Del av #1073 (epic #1071).

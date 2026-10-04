@@ -1272,6 +1272,16 @@ dialog::backdrop {
 .list-table .col-name, .list-table .col-title { width: 28%; min-width: 180px; font-weight: 600; }
 .list-table .col-status, .list-table .col-level, .list-table .col-courses, .list-table .col-module-count, .list-table .col-actions { white-space: nowrap; }
 .list-table .col-updated { white-space: nowrap; color: var(--color-meta); font-size: 13px; }
+/* #1080: på telefon blir hver rad et kort (regelen for `table` lenger opp). Skrivebordsreglene over
+   vinner over den på spesifisitet, så cellene ble bredere enn kortet og navnet ble presset sammen.
+   Her tas de tilbake for kortet. Handlingscellen har ikke noe kolonnenavn og skal ikke gi plass til
+   et; D5-regelen (raden brekker aldri) står, og uten det tomme feltet får raden plass. */
+@media (max-width: 600px) {
+  .list-table tr, .list-table td { box-sizing: border-box; }
+  .list-table td { padding: 6px 4px; }
+  .list-table .col-name, .list-table .col-title { width: 100%; min-width: 0; }
+  .list-table td.col-actions::before { content: none; }
+}
 /* #1046 — LISTESIDA (public/static/list-page.js). Alt under her hører til den felles listesida for
    Moduler, Kurs, Seksjoner og Klasser. Sidene skal ikke ha egne kopier av disse reglene. */
 .page-header { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); margin-bottom: var(--space-3); flex-wrap: wrap; }

@@ -13,7 +13,7 @@
 |---|---|---|
 | prod | 2.76.0 | mangler #894 |
 | stage | 2.77.0 | #894, verifisert mot ekte data |
-| `dev` (git) | 2.78.0 | #894 og #1073 foran det prod har; #1073 er ikke rullet ut noe sted |
+| `dev` (git) | 2.78.1 | #894, #1073 og #1080 foran det prod har; de to siste er ikke rullet ut noe sted |
 
 Tre ting krever et menneske:
 
@@ -73,6 +73,17 @@ plattformsiden (respektere «redusert bevegelse», spille av på nytt) er ikke g
 **Lærdom:** en økt som starter fra `main` ser ikke versjonsnumre som bare finnes på `dev`. Start
 nettøkter fra `dev`, eller sjekk `origin/dev` før versjonen settes.
 
+**QA-porten ga NO-GO på 2.78.0** (2026-10-04): åtte hull i figursjekken, rettet i 2.78.1. Det
+viktigste å vite er at sjekken nå regner en figur som en flyt bare når strekene faktisk forbinder
+boksene i rekkefølge, og at `<animateMotion>` avvises (bare CSS). Tabellen står i `doc/VERSIONS.md`.
+
+## Hva som ble gjort: #1080 (2.78.1)
+
+Telefonvisningen av de fire listene. Cellene manglet kolonnenavn, var bredere enn kortet, og «Mer»
+lå utenfor. Én linje i `list-page.js` og én telefonregel i `shared.css`.
+`test/e2e/list-mobile-labels-1080.spec.ts` måler det i nettleseren. Andre tabeller i appen bruker
+samme kortregel uten `data-label` og er ikke målt.
+
 ---
 
 ## ⚠️ Fire feller i denne koden
@@ -114,7 +125,7 @@ listene. Jeg utvidet ikke regelen for å unngå det — det ville vært en tverr
   && npm run test:integration:native) > "$TEMP/claude/kjoring.log" 2>&1; echo "EXIT=$?"
 ```
 
-Sist målt 2026-10-04, på 2.78.0: **1530 enhet · 68 DOM · 348 e2e · 707 integrasjon**, alle grønne.
+Sist målt 2026-10-04, på 2.78.1: **1546 enhet · 69 DOM · 353 e2e · 707 integrasjon**, alle grønne.
 Ikke pipe utdataene til `tail` — det skjuler feiltellingen og gir exit 0.
 
 **Mot utrullet stage** (krever innlogging, tokenet varer ~85 minutter og er for lengst utløpt nå):
@@ -142,7 +153,6 @@ Vertsnavnene står i `doc/ENVIRONMENTS.local.md` (gitignorert, skal ikke skrives
 | Hva | Hvorfor det ikke er gjort |
 |---|---|
 | **Kurs- og klasselista** mangler omdøping og språkkolonne | #894 nevner bare modul- og seksjonslista. Mekanismen er delt, så det er innkobling, ikke ny kode. |
-| **Telefonvisningen mangler kolonnenavn** | Kortvisningen under 600 px leser `td::before { content: attr(data-label) }`, men `list-page.js` setter ikke `data-label`. Verdiene står derfor uten etikett og klippes. Gjelder **alle fire listene** og er eldre enn #894. Én linje å rette — men det endrer mobilvisningen for hele forfatterflaten, så det hører i sin egen sak. |
 | **e2e-suiten rykker** | Fire fulle kjøringer 30.09 ga én feilende test hver gang — fire *forskjellige* tester, alle grønne alene. `fullyParallel: false` gjelder bare innen en fil; filer kjører i parallell mot én statisk server. Det er belastning, ikke kode. |
 | **Kompleksitetsmålingen teller rå linjer** | Skåren falt 76 → 73 fordi to filer så vidt passerte 800-grensa (802 og 809). Målingen teller også kommentarlinjer, som dette prosjektet bevisst skriver mange av. Om grensa skal telle kodelinjer, er det en regelendring — egen commit, med `REGELENDRINGER`-merket i `doc/complexity/history.json`. |
 
