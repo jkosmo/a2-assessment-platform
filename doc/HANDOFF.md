@@ -7,23 +7,27 @@
 
 ## Kort: det som må avgjøres
 
-**Prod og stage står begge på 2.77.0. 2.78.1 ligger på `dev` og er ikke rullet ut noe sted.**
+**Prod står på 2.77.0. Stage står på 2.78.1 og venter på manuell test før prod.**
 
 | Miljø | Versjon | |
 |---|---|---|
 | prod | 2.77.0 | rullet 2026-10-04 kl. 08:54 fra `3f111c68`; #894 er lukket |
-| stage | 2.77.0 | samme commit |
+| stage | 2.78.1 | rullet 2026-10-04 fra `ff3faef4`, commiten QA-porten ga GO på; #1080 og #1081 |
 | `main` (git) | 2.76.0 | **bak prod** til PR #1082 er merget |
-| `dev` (git) | 2.78.1 | #1073, #1080 og #1081 foran prod |
+| `dev` (git) | 2.78.1 | én commit foran stage (`cae1d834`, bare skillet og tester) |
 
-Tre ting krever et menneske:
+Fire ting krever et menneske:
 
 1. **PR #1082 må merges.** `main` står på 2.76.0 mens prod kjører 2.77.0. En utrulling uten
    `git_ref` bygger `main` HEAD og ville rullet prod tilbake.
-2. **2.78.1 til stage** krever GO fra QA-porten først. Den har gitt NO-GO to ganger på denne
-   versjonen (se #1073 under). Prod krever deretter GitHub-godkjenning fra `jkosmo`, utenfor
-   arbeidstid.
-3. **Åpne beslutninger** ligger nederst i dette dokumentet.
+2. **Manuell test på stage** av 2.78.1. Lista står i `.ai-qa/qa-20261004-122648.md` under «IKKE
+   VERIFISERBART STATISK»: de fire listene på telefon, «Mer» i nederste rad, og en animert figur i
+   deltakerflaten. `npm run test:stage` krever innlogging (`npm run stage:auth`).
+3. **Prod for 2.78.1** krever GitHub-godkjenning fra `jkosmo`, utenfor arbeidstid.
+4. **#1083 (p1)**: en SVG-figur med hardt mellomrom vises ikke. Eldre feil, funnet 2026-10-04.
+   Rettingen ligger i `svgSanitizer.ts` (sikkerhetskode) og bør gå gjennom QA-porten for seg.
+
+Åpne beslutninger ligger nederst i dette dokumentet.
 
 ---
 
