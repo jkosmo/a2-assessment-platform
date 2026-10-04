@@ -9,7 +9,7 @@ nederste rad, og figursjekken i skillet håndhever reglene den lover.
 
 ### #1073 — figursjekken godkjente figurer som brøt reglene
 
-QA-porten ga NO-GO **fire ganger** før stage. De tre første rundene fant seks til åtte hull i
+QA-porten ga NO-GO **fem ganger** før stage. De tre første rundene fant seks til åtte hull i
 `figure-motion-check.mjs` hver — tjueto til sammen. Alle var figurer som så animerte ut for et tekstmønster uten å være trygge,
 eller uten å røre seg: en varighet på en annen regel, antall 0, en senere `animation: none`,
 `!important`, en velger som ikke traff noen boks, et keyframe-navn med andre store bokstaver, en
@@ -45,6 +45,14 @@ Veien dit, fordi den er lærdommen:
    godkjent. Lukket: hver `<rect>` i en animert figur er en stegboks. Til kontoen er fylt på, kan
    porten bare kjøres med skriptets reserveløsning (`-Local` og `-Judge`), der en lokal agent gjør
    gjennomgangen etter samme sjekkliste.
+6. **Runde 5 med reserveløsningen: NO-GO, to hull.** Et fjerde steg tegnet som rombe eller ellipse
+   slapp gjennom («hver `<rect>` er et steg» så bare `<rect>`), og `<style media="print">` ble
+   godkjent selv om blokka da aldri gjelder. Plattformendringene var klare, for tredje gjennomgang
+   på rad. Produkteier: **hele figuren låses til malen**, ikke bare stilblokka. En animert figur
+   er nå bygd av malens elementer og ingen andre — `<rect>` som steg, streker, etiketter, én
+   stilblokk uten attributter — uten `transform`, og med åpne, ufylte streker som forbindelser.
+   Det som var en regel per form («ikke polygon», «ikke defs») er blitt én liste over formene som
+   får finnes.
 
 Mønsteret er pre-flight-punkt 3 («hvitliste, ikke svarteliste, når regelen handler om hva som er
 tillatt»), men tatt helt ut: det som er tillatt, er malen — den ene formen som er målt på plattformen.
@@ -53,7 +61,7 @@ tillatt»), men tatt helt ut: det som er tillatt, er malen — den ene formen so
 (`test/e2e/figure-motion-template-1073.spec.ts`): Chromium blir spurt hva som faktisk beveger seg.
 Malen gir tre animasjoner, én gang hver, ferdig innen fem sekunder, tilbake til grunnfargen, og
 ingen med «redusert bevegelse». En variant sjekken godtar (andre farger, andre tider, fire steg)
-beveger seg likt. Seks figurer er målt ødelagt i nettleseren, og hver av dem avvises av sjekken.
+beveger seg likt. Ni figurer er målt ødelagt i nettleseren, og hver av dem avvises av sjekken.
 
 Det som står igjen fra rundene, uavhengig av malen:
 
@@ -72,9 +80,22 @@ Det som står igjen fra rundene, uavhengig av malen:
 `<use>` ser den ikke. Kuren er den samme som for stilblokka — slutt å gjette: **hver** figur sier
 `data-motion="animated"` eller `"static"` selv. Det endrer kontrakten for skillet og er ikke besluttet.
 
-74 tester i fila: hullene og naboene deres står som én tabell («ikke malen»), med kontrollcase for
-det som fortsatt skal passere. 40 mutasjoner, 40 røde. `SKILL.md` og
-`figure-design.md` sier det samme som skriptet håndhever.
+90 tester i fila: hullene og naboene deres står som to tabeller («ikke malen» og «ikke malens
+figur»), med kontrollcase for det som fortsatt skal passere. 49 mutasjoner, 49 røde. `SKILL.md`,
+`authoring-playbook.md` og `figure-design.md` sier det samme som skriptet håndhever.
+
+**Ikke levert av det #1073 ber om** (saken står åpen):
+
+- Malen «sti som tegnes». Bare den animerte flyten er levert. En ny animert mal betyr nå et nytt
+  mønster i `TEMPLATE` og en ny måling i nettleseren, ikke en løsere sjekk.
+- E2e i deltakerflaten: at figuren animeres når den vises som `<img>`, og plattformens håndtering av
+  «redusert bevegelse» og avspilling på nytt.
+- Forfatterveiledningen.
+
+**Kjente grenser, dokumentert og ikke rettet:** stegenes rekkefølge (`s1…sN`) sjekkes ikke mot
+plasseringen i tegningen, så en figur der `s1` står lengst til høyre lyser baklengs og godkjennes.
+Et element kan også gjøres usynlig på måter attributtsjekken ikke ser (`width="0"`,
+`fill="none"` på en etikett). Vakten for begge er den påkrevde visuelle kontrollen av figuren.
 
 **`<animateMotion>`:** den overlever plattformens rensing, så den kunne vært tillatt. Den er avvist
 fordi regelen for redusert bevegelse er CSS og ikke når den.
@@ -162,6 +183,11 @@ i dokumentet består sjekken, så dokumentet ikke kan lære bort en stilleståen
 
 Mutasjonssjekk: hver av de seks reglene i skriptet ble skrudd av etter tur, og riktig test ble rød
 hver gang.
+
+⚠️ **Avsnittene over beskriver skriptet slik det var i 2.78.0.** QA-porten fant at reglene var for
+snevre, og sjekken er skrevet om i 2.78.1: den sammenligner nå figuren med flytmalen i stedet for å
+lese stilregler. Reglene som er nevnt her (løkke, redusert bevegelse, skjult innhold i stilen)
+finnes ikke lenger som egne regler.
 
 ## 2.77.0 - 2026-09-30 (stage)
 

@@ -184,6 +184,53 @@ describe("figure-motion-check (#1073)", () => {
     expect(fire.issues.map((i) => i.detail).join(" ")).toContain("every <rect> in an animated figure is a step box");
   });
 
+  // ⚠️ HELE figuren er malen, ikke bare stilblokka (produkteiers andre beslutning 2026-10-04).
+  // «Hver <rect> er et steg» slapp gjennom et fjerde steg tegnet som rombe; «stilblokka er malen»
+  // slapp gjennom <style media="print">, der blokka aldri gjelder. Hver var én form til som ingen
+  // hadde listet. Nå er det formene som FÅR finnes som er listet.
+  const fjerdeSteg = (form: string) => threeSteps + `<line x1="470" y1="40" x2="520" y2="40"/>${form}<text x="560" y="45">Arkiver</text>`;
+  const ikkeMalensFigur: Array<[string, string, string]> = [
+    ["et fjerde steg tegnet som rombe", goodStyle + fjerdeSteg(`<polygon points="520,40 560,20 600,40 560,60" fill="#eef" stroke="#333"/>`), "<polygon>"],
+    ["et fjerde steg tegnet som ellipse", goodStyle + fjerdeSteg(`<ellipse cx="560" cy="40" rx="40" ry="20" fill="#eef"/>`), "<ellipse>"],
+    ["rombe MED stegklassen — klassen hører bare hjemme på <rect>", goodStyle.replace(".s3 { animation-delay: 2.4s; }", ".s3 { animation-delay: 2.4s; } .s4 { animation-delay: 3.6s; }") + fjerdeSteg(`<polygon class="steg s4" points="520,40 560,20 600,40 560,60"/>`), "<polygon>"],
+    ["et fjerde steg tegnet som lukket path", goodStyle + fjerdeSteg(`<path d="M520 20 H640 V60 H520 Z" fill="#eef" stroke="#333"/>`), "open stroke"],
+    ["en lukket path uten fyll — omrisset av en boks er også en boks", goodStyle + fjerdeSteg(`<path d="M520 20 H640 V60 H520 Z" fill="none" stroke="#333"/>`), "open stroke"],
+    ["en fylt path uten Z — fortsatt en flate, ikke en strek", goodStyle + fjerdeSteg(`<path d="M520 20 H640 V60 H520" fill="#eef"/>`), "open stroke"],
+    ["en polyline uten fill=\"none\" — nettleseren fyller den svart", goodStyle + threeSteps + `<polyline points="10,70 100,70 100,78"/>`, "open stroke"],
+    ["stilblokka gjelder bare utskrift", goodStyle.replace("<style>", `<style media="print">`) + threeSteps, "no attributes"],
+    ["stilblokka er ikke CSS for nettleseren", goodStyle.replace("<style>", `<style type="text/plain">`) + threeSteps, "no attributes"],
+    ["en gruppe rundt boksene", goodStyle + `<g>${threeSteps}</g>`, "<g>"],
+    ["stegbokser gjemt i <defs> — de tegnes aldri", goodStyle + `<defs>${threeSteps}</defs>`, "<defs>"],
+    ["en boks forskjøvet med transform", goodStyle + threeSteps.replace('class="steg s3"', 'class="steg s3" transform="scale(0)"'), "transform"],
+    ["en svg inni figuren", goodStyle + threeSteps + `<svg x="0" y="0"></svg>`, "one <svg>"],
+    ["en <switch> rundt en boks", goodStyle + threeSteps.replace('<rect class="steg s3"', '<switch><rect class="steg s3"') + "</switch>", "<switch>"],
+    ["varighet som ingen rekker å se", medAnimasjon("lys .001s ease-in-out 1") + threeSteps, "at least 0.3s"],
+  ];
+
+  it.each(ikkeMalensFigur)("not the template's figure: %s", (_navn, figur, forklaring) => {
+    const r = checkFigureMotion(svg(figur));
+    expect(r.animated).toBe(false);
+    expect([...new Set(r.issues.map((i) => i.kind))]).toEqual(["unsupported_animation_form"]);
+    // Forklaringen måles: meldingen skal si HVA som ikke er malen, ikke bare at noe er galt.
+    expect(r.issues.map((i) => i.detail).join(" ")).toContain(forklaring);
+  });
+
+  it("control: the template's own elements in other arrangements — path and polyline connectors, tspan labels, title and desc", () => {
+    const medPath = threeSteps
+      .replace('<line x1="130" y1="40" x2="180" y2="40" stroke="#333"/>', '<path d="M130 40 H180" fill="none" stroke="#333"/>')
+      .replace('<line x1="300" y1="40" x2="350" y2="40" stroke="#333"/>', '<polyline points="300,40 325,40 350,40" fill="none" stroke="#333"/>')
+      .replace('<text x="70" y="45" text-anchor="middle" font-size="14">Motta sak</text>', '<text text-anchor="middle" font-size="14"><tspan x="70" y="40">Motta</tspan><tspan x="70" dy="14">sak</tspan></text>');
+    expect(medPath).toContain("<path");
+    expect(medPath).toContain("<polyline");
+    expect(medPath).toContain("<tspan");
+    const r = checkFigureMotion(svg(`<title>Saksgang</title><desc>Tre steg i rekkefølge</desc>${goodStyle}${medPath}`));
+    expect(r.issues).toEqual([]);
+    expect(r.animated).toBe(true);
+    expect(r.sequence).toBe(true);
+    // …og en stillestående figur er ikke bundet av malen: den kan ha grupper, sirkler og transform.
+    expect(kinds(`<g transform="translate(5,5)"><circle cx="20" cy="20" r="10"/><polygon points="0,0 10,0 5,8"/></g>`)).toEqual([]);
+  });
+
   it("an animated figure has one <style> block and no style attributes", () => {
     expect(kinds(goodStyle + "<style>text { fill: #111; }</style>" + threeSteps)).toEqual(["unsupported_animation_form"]);
     // En style-attributt vinner over stilarket, og !important der vinner over animasjonen.
@@ -223,11 +270,11 @@ describe("figure-motion-check (#1073)", () => {
   it("an element switched off by an attribute is missing from the still picture", () => {
     // Verdiene LESES: mellomrom, prosent og «collapse» skjuler like godt som skrivemåten man tenker på først.
     for (const av of ['display="none"', 'display=" none "', 'visibility="hidden"', 'visibility="collapse"', 'opacity="0"', 'opacity=" 0 "', "fill-opacity='0.0'", 'fill-opacity="0%"']) {
-      expect(kinds(goodStyle + threeSteps + `<circle ${av} r="4"/>`), av).toEqual(["hidden_at_rest"]);
+      expect(kinds(goodStyle + threeSteps + `<text ${av} x="5" y="12">Merknad</text>`), av).toEqual(["hidden_at_rest"]);
     }
     // Kontroll: delvis gjennomsiktig er ikke skjult, og synlige verdier er synlige.
     for (const på of ['opacity="0.5"', 'fill-opacity="40%"', 'visibility="visible"', 'display="inline"']) {
-      expect(kinds(goodStyle + threeSteps + `<circle ${på} r="4"/>`), på).toEqual([]);
+      expect(kinds(goodStyle + threeSteps + `<text ${på} x="5" y="12">Merknad</text>`), på).toEqual([]);
     }
   });
 
@@ -322,7 +369,10 @@ describe("what counts as a flow (#1073)", () => {
   });
 
   it("<animateMotion> is rejected: it survives the sanitizer, but CSS cannot switch it off", () => {
-    const medSmil = goodStyle + threeSteps + `<circle r="4"><animateMotion dur="1s" repeatCount="1" path="M0,0 L100,0"/></circle>`;
+    const medSmil = goodStyle + threeSteps.replace('<rect class="steg s1" x="10" y="20" width="120" height="40" rx="6"/>',
+      '<rect class="steg s1" x="10" y="20" width="120" height="40" rx="6"><animateMotion dur="1s" repeatCount="1" path="M0,0 L100,0"/></rect>');
+    expect(medSmil).toContain("<animateMotion");
+    // Én melding, og den som sier hva som er galt — ikke «ukjent element» på toppen.
     expect(checkFigureMotion(svg(medSmil)).issues.map((i) => i.kind)).toEqual(["not_css_only"]);
     // …og den teller ikke som animasjon: en flyt som BARE har den, er fortsatt stillestående.
     const bare = threeSteps + `<circle r="4"><animateMotion dur="1s" path="M0,0 L100,0"/></circle>`;

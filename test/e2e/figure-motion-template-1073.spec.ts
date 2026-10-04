@@ -122,6 +122,13 @@ test.describe("#1073 — sjekken og nettleseren er enige", () => {
       async (page) => { expect(new Set((await animasjoner(page)).map((a) => a.slutt)).size).toBe(2); }],
     ["en fjerde boks uten stegklasse: fire bokser, tre animasjoner", (m) => m.replace("</svg>", `  <rect x="350" y="70" width="120" height="8" rx="2" fill="#eef" stroke="#333"/>\n</svg>`),
       async (page) => { expect((await animasjoner(page)).length).toBe(3); expect(await page.locator("rect").count()).toBe(4); }],
+    ["et fjerde steg tegnet som rombe: fire former, tre animasjoner", (m) => m.replace("</svg>", `  <polygon points="350,74 410,66 470,74 410,79" fill="#eef" stroke="#333"/>\n</svg>`),
+      async (page) => { expect((await animasjoner(page)).length).toBe(3); expect(await page.locator("rect, polygon").count()).toBe(4); }],
+    ["stilblokka gjelder bare utskrift: ingen animasjon, og boksene mister fargen", (m) => m.replace("<style>", `<style media="print">`),
+      async (page) => {
+        expect(await animasjoner(page)).toEqual([]);
+        expect(await page.locator("rect.steg").first().evaluate((b) => getComputedStyle(b).fill)).toBe("rgb(0, 0, 0)");
+      }],
     ["klassene på etikettene: det er teksten som animeres, ikke boksene", (m) => m.replace(/<rect class="steg s\d"/g, "<rect").replace(/<text /g, '<text class="steg" '),
       async (page) => { expect([...new Set((await page.evaluate(() => document.getAnimations().map((a) => ((a.effect as KeyframeEffect).target as Element).tagName))))]).toEqual(["text"]); }],
   ];

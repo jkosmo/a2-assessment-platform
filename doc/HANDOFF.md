@@ -92,6 +92,12 @@ plattformendringene (#1080, #1081) var klare isolert sett.
 er `-Local` (skriver bestillingen til fil) og `-Judge <svarfil>` (dømmer en lokal agents svar etter
 samme krav).
 
+**Femte runde (reserveløsningen) ga også NO-GO**, med to hull: et steg tegnet som rombe, og
+`<style media="print">`. Produkteier bestemte da at **hele figuren låses til malen**: en animert
+figur består av `<rect>` som steg, streker, etiketter og én stilblokk uten attributter, og ingenting
+annet. Ikke levert av det saken ber om: malen «sti som tegnes», e2e i deltakerflaten og
+forfatterveiledningen.
+
 ⚠️ **Flytgjenkjenningen er fortsatt et anslag** og kan bli neste funn. Kuren som finnes, er at hver
 figur selv sier `data-motion="animated"` eller `"static"`. Det endrer kontrakten for skillet og
 venter på produkteier.
@@ -149,7 +155,7 @@ listene. Jeg utvidet ikke regelen for å unngå det — det ville vært en tverr
   && npm run test:integration:native) > "$TEMP/claude/kjoring.log" 2>&1; echo "EXIT=$?"
 ```
 
-Sist målt 2026-10-04, på 2.78.1: **1590 enhet · 69 DOM · 373 e2e · 707 integrasjon**, alle grønne.
+Sist målt 2026-10-04, på 2.78.1: **1606 enhet · 69 DOM · 375 e2e · 707 integrasjon**, alle grønne.
 Ikke pipe utdataene til `tail` — det skjuler feiltellingen og gir exit 0.
 
 **Mot utrullet stage** (krever innlogging, tokenet varer ~85 minutter og er for lengst utløpt nå):

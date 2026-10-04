@@ -120,9 +120,11 @@ the three references above.
    and again for every locale variant (#1060). **Animate where the point is an order or a change
    over time (#1073):** a process/flow figure is animated by default (steps light up in turn), with
    CSS only, once, within 5 seconds, resting on the complete still picture; hierarchies, parts and
-   comparisons stay still. **The animation is the flow template's `<style>` block, unchanged** —
-   only colours, duration, delays and the number of steps may differ; do not write your own
-   animation CSS. A still flow is an explicit choice (`data-motion="static"`).
+   comparisons stay still. **An animated figure is the flow template** — its `<style>` block
+   unchanged (only colours, duration, delays and the number of steps may differ), and nothing in
+   the markup but `<rect>` step boxes, connectors and labels. Do not write your own animation CSS,
+   and do not add other shapes, groups or transforms. A still flow is an explicit choice
+   (`data-motion="static"`).
    `scripts/figure-motion-check.mjs` must be clean for every figure and variant. (figure-design.md.)
 
 10. **MCQ options must not reveal the answer (#1032).** Before a module's questions are shown at

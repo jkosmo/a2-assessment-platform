@@ -84,11 +84,50 @@ const TEMPLATE = [
   ["`@media (prefers-reduced-motion: reduce) { .steg { animation: none; } }` as the last rule", `@media\\(prefers-reduced-motion:reduce\\)\\{\\.steg\\{animation:none;?\\}\\}$`],
 ];
 
+// The WHOLE figure is the template, not only its style block (product owner, 2026-10-04, after the
+// fifth review round). The template is step boxes, connectors, labels and one style block. Checking
+// "every <rect> is a step" let a fourth step drawn as a <polygon> through; checking the CSS let
+// <style media="print"> through, where the block never applies. Each was one more shape nobody had
+// listed. So the shapes are listed the other way round: these elements, and no others.
+const TEMPLATE_ELEMENTS = new Set(["svg", "style", "rect", "text", "tspan", "line", "polyline", "path", "title", "desc"]);
+// SMIL elements have their own, more useful message (stripped_by_platform / not_css_only).
+const REPORTED_ELSEWHERE = new Set(["animate", "set", "animateTransform", "animateMotion"]);
+/** Shorter than this and the highlight is over before anyone sees it. */
+const MIN_DURATION_SECONDS = 0.3;
+
+/** What in the markup is not the template's markup. */
+function markupProblems(svg) {
+  const problems = [];
+  const tags = [...svg.matchAll(/<([a-zA-Z][\w:-]*)\b([^>]*)>/g)].map((m) => ({ tag: m[1], attrs: attrs(m[0]), raw: m[2] }));
+
+  const foreign = [...new Set(tags.map((t) => t.tag).filter((tag) => !TEMPLATE_ELEMENTS.has(tag) && !REPORTED_ELSEWHERE.has(tag)))];
+  if (foreign.length > 0) problems.push(`an animated figure is made of <rect> step boxes, <line>/<polyline>/<path> connectors, <text> labels and one <style> block — found ${foreign.map((t) => `<${t}>`).join(", ")}`);
+  if (tags.filter((t) => t.tag === "svg").length !== 1) problems.push("an animated figure is one <svg>, with none nested inside it");
+
+  // media="print", type="text/plain", disabled: each switches the whole block off while its text
+  // still reads as the template.
+  const styled = tags.filter((t) => t.tag === "style" && t.raw.replace(/\/\s*$/, "").trim() !== "");
+  if (styled.length > 0) problems.push("the <style> element has no attributes — media=\"…\" or type=\"…\" can switch the whole block off");
+
+  // A transform moves or shrinks an element without changing the numbers this check reads.
+  if (tags.some((t) => t.attrs.transform !== undefined)) problems.push("an animated figure has no transform attributes — place elements with x/y instead");
+
+  // A connector is an open stroke. Filled or closed, a <path> or <polyline> is a box drawn another
+  // way — a step that carries no step class and never lights up.
+  const shapes = tags.filter((t) => (t.tag === "path" || t.tag === "polyline")
+    && ((t.attrs.fill ?? "").trim().toLowerCase() !== "none" || (t.tag === "path" && /z/i.test(t.attrs.d ?? ""))));
+  if (shapes.length > 0) problems.push(`a connector (<path>, <polyline>) is an open stroke with fill="none" — found ${shapes.length} that is filled or closed; a box is a <rect class="steg sN">`);
+  return problems;
+}
+
 /**
- * Compares the figure's style with the template.
+ * Compares the figure with the template.
  * @returns {{ totalSeconds: number } | { problems: string[] }}
  */
 function matchTemplate(svg) {
+  const markup = markupProblems(svg);
+  if (markup.length > 0) return { problems: markup };
+
   const blocks = styleBlocks(svg);
   if (blocks.length !== 1) return { problems: [`an animated figure has exactly one <style> block (found ${blocks.length})`] };
   // An inline style wins over the stylesheet, and an !important there wins over the animation too.
@@ -118,7 +157,7 @@ function matchTemplate(svg) {
   if (highlight === baseFill) problems.push(`the highlight colour equals the base fill (${baseFill}) — nothing would be seen to move`);
 
   const duration = Number(animation[1]);
-  if (!(duration > 0)) problems.push("the duration must be above 0s — otherwise nothing moves");
+  if (!(duration >= MIN_DURATION_SECONDS)) problems.push(`the duration must be at least ${MIN_DURATION_SECONDS}s — shorter, and the step lights up without anyone seeing it`);
 
   // The steps: boxes carry `steg s1`, `steg s2`, … and every step after the first has its delay rule.
   // Checked both ways, so a rule cannot point at a class no box has, and no box is left without one.

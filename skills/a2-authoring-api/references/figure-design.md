@@ -166,8 +166,9 @@ disables `<animateTransform>` — those would silently stop working, so don't us
 `<animateMotion>` survives the sanitizer, but it is not CSS: the reduced-motion rule below cannot
 switch it off, so it is not allowed either (`not_css_only`).
 
-**The style block IS the template (product owner's decision, 2026-10-04).** An animated figure
-uses the `<style>` block of the [flow template](#flow-animated) **unchanged**. The check compares
+**The figure IS the template (product owner's decisions, 2026-10-04).** An animated figure is the
+[flow template](#flow-animated): its `<style>` block **unchanged**, and its markup made of the
+template's elements only. The check compares
 the block with the template; it does not try to work out what your CSS would do. Anything that is
 not the template is `unsupported_animation_form` — including CSS that is perfectly valid.
 
@@ -176,15 +177,25 @@ What you may change:
 | May differ | Must stay |
 |---|---|
 | the colours — base fill, stroke, highlight — as **opaque hex**, `#rgb` or `#rrggbb` (no alpha: a transparent base fill makes the boxes vanish from the still picture) | the class names `steg`, `s1`, `s2`, … and the keyframes name `lys` |
-| the duration in `.steg { animation: lys <n>s ease-in-out 1; }` | `ease-in-out`, the count `1`, the shorthand form |
+| the duration in `.steg { animation: lys <n>s ease-in-out 1; }` — at least 0.3 s, or nobody sees the step light up | `ease-in-out`, the count `1`, the shorthand form |
 | the delays, and the number of `.sN` delay rules (one per step after the first) — **each delay larger than the one before**, so the steps light up in order | the order of the rules, and the reduced-motion rule as the last one |
 | line breaks and spacing | one `<style>` block, nothing else in it, and **no comments** in it (comment in the markup instead: `<!-- … -->`) |
 
-And in the markup: every box is a `<rect class="steg sN">` — one box per step, `s1` to the last,
-matching the delay rules — and **every `<rect>` in the figure is a step box**: a box without the
-class is a step that never lights up. An animated flow is step boxes, connectors and labels,
-nothing else (no background panel, no legend box). Class `steg` goes on the boxes only: on a label
-it would animate the text and leave the boxes still. The figure has **no `style=""` attributes**. Colours and sizes
+**The markup is the template too.** An animated figure is made of these elements and no others:
+
+| Element | Role | Rule |
+|---|---|---|
+| `<svg>` | the root | exactly one; none nested |
+| `<style>` | the template's block | exactly one, **with no attributes** (`media="print"` or `type="…"` would switch the whole block off) |
+| `<rect>` | a step box | **every** `<rect>` is `class="steg sN"` — one per step, `s1` to the last, matching the delay rules. A box without the class is a step that never lights up |
+| `<line>`, `<polyline>`, `<path>` | connectors | open strokes: `<polyline>` and `<path>` carry `fill="none"`, and a `<path>` is not closed (`Z`). A filled or closed one is a box drawn another way |
+| `<text>`, `<tspan>` | labels | never `class="steg"` — it would animate the text and leave the boxes still |
+| `<title>`, `<desc>` | accessible name | — |
+
+So: no `<g>`, no `<defs>`/markers, no `<polygon>`/`<circle>`/`<ellipse>`, no background panel, no
+legend box, and **no `transform` attributes** — place elements with x/y. A step is always a
+rectangle. If the figure needs anything else, it is not an animated flow: draw it still
+(`data-motion="static"`), where none of this applies. The figure has **no `style=""` attributes**. Colours and sizes
 on other elements go in presentation attributes (`fill="…"`, `stroke="…"`), which do what you
 expect; a `style` attribute could override the animation.
 
