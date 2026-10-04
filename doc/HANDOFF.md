@@ -76,11 +76,15 @@ plattformsiden (respektere «redusert bevegelse», spille av på nytt) er ikke g
 **Lærdom:** en økt som starter fra `main` ser ikke versjonsnumre som bare finnes på `dev`. Start
 nettøkter fra `dev`, eller sjekk `origin/dev` før versjonen settes.
 
-**QA-porten ga NO-GO to ganger** (2026-10-04), med åtte hull i figursjekken hver gang. Første
-retting lappet hullene ett for ett; andre runde fant åtte til av samme slag. Sjekken er derfor snudd
-til en **hvitliste**: den godtar den ene skrivemåten flytmalen bruker og avviser alt annet
-(`unsupported_animation_form`). `<animateMotion>` avvises (bare CSS). En figur regnes som en flyt
-bare når en strek går direkte fra én boks til den neste. Detaljene står i `doc/VERSIONS.md`.
+**QA-porten ga NO-GO tre ganger** (2026-10-04), med seks til åtte hull i figursjekken hver gang.
+Sjekken prøvde å regne ut hva nettleseren gjør med figurens stilregler, og hver runde fant nye
+kombinasjoner. Produkteier bestemte derfor: **stilblokka i en animert figur er flytmalens stilblokk,
+ordrett.** Farger, varighet, forsinkelser og antall steg kan variere; alt annet er
+`unsupported_animation_form`. Sjekken sammenligner, den tolker ikke. `<animateMotion>` avvises (bare
+CSS). Detaljene og lærdommen står i `doc/VERSIONS.md`.
+
+Produkteier bestemte også at **stage venter på GO fra porten**, selv om porten sa at
+plattformendringene (#1080, #1081) var klare isolert sett.
 
 ⚠️ **Flytgjenkjenningen er fortsatt et anslag** og kan bli neste funn. Kuren som finnes, er at hver
 figur selv sier `data-motion="animated"` eller `"static"`. Det endrer kontrakten for skillet og
@@ -139,7 +143,7 @@ listene. Jeg utvidet ikke regelen for å unngå det — det ville vært en tverr
   && npm run test:integration:native) > "$TEMP/claude/kjoring.log" 2>&1; echo "EXIT=$?"
 ```
 
-Sist målt 2026-10-04, på 2.78.1: **1555 enhet · 69 DOM · 359 e2e · 707 integrasjon**, alle grønne.
+Sist målt 2026-10-04, på 2.78.1: **1580 enhet · 69 DOM · 361 e2e · 707 integrasjon**, alle grønne.
 Ikke pipe utdataene til `tail` — det skjuler feiltellingen og gir exit 0.
 
 **Mot utrullet stage** (krever innlogging, tokenet varer ~85 minutter og er for lengst utløpt nå):
@@ -167,7 +171,7 @@ Vertsnavnene står i `doc/ENVIRONMENTS.local.md` (gitignorert, skal ikke skrives
 | Hva | Hvorfor det ikke er gjort |
 |---|---|
 | **Kurs- og klasselista** mangler omdøping og språkkolonne | #894 nevner bare modul- og seksjonslista. Mekanismen er delt, så det er innkobling, ikke ny kode. |
-| **e2e-suiten rykker** | Fire fulle kjøringer 30.09 ga én feilende test hver gang — fire *forskjellige* tester, alle grønne alene. `fullyParallel: false` gjelder bare innen en fil; filer kjører i parallell mot én statisk server. Det er belastning, ikke kode. |
+| **e2e-suiten rykker** | Fire fulle kjøringer 30.09 ga én feilende test hver gang — fire *forskjellige* tester, alle grønne alene. `fullyParallel: false` gjelder bare innen en fil; filer kjører i parallell mot én statisk server. Det ble lest som belastning, ikke kode. ⚠️ **Det holdt ikke helt:** 2026-10-04 feilet «samlet oversetting bærer de lagrede språkene videre» i `admin-content-list-rename-894.spec.ts` to av fem ganger også ALENE. Testen ventet på den første patchen og sjekket den andre uten å vente. Rettet (120 av 120 etterpå). Neste gang en test feiler i fullkjøringen: kjør den alene med `--repeat-each=5` før den avskrives som last. |
 | **Kompleksitetsmålingen teller rå linjer** | Skåren falt 76 → 73 fordi to filer så vidt passerte 800-grensa (802 og 809). Målingen teller også kommentarlinjer, som dette prosjektet bevisst skriver mange av. Om grensa skal telle kodelinjer, er det en regelendring — egen commit, med `REGELENDRINGER`-merket i `doc/complexity/history.json`. |
 
 ---

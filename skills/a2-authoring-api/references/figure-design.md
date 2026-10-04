@@ -58,7 +58,7 @@ never decoration, never a catch-all. A short definition is prose, not a diagram.
 |---|---|---|---|
 | **flow** | a process / sequence of steps | "these steps, in this order" | **animated** (steps light up in turn) |
 | **tree / decision** | branching choices, a hierarchy | "this choice leads here vs there" | still |
-| **boxes-and-arrows** | relationships between a few entities | "A relates to B relates to C" | still (`data-motion="static"`) — animate only if something actually travels along the arrows |
+| **boxes-and-arrows** | relationships between a few entities | "A relates to B relates to C" | still (`data-motion="static"`) — there is no animated template for arrows; if the point is the order, draw it as a **flow** |
 | **labelled diagram** | parts of one thing | "this thing has these named parts" | still |
 
 If the point doesn't fit one of these, it is probably prose — or two simpler figures.
@@ -79,8 +79,10 @@ include `xmlns` and a `viewBox`. No `<script>`, `on*`, `<foreignObject>`, `<a>`,
 ### flow (animated)
 
 The steps light up one after another, once, then the figure rests as the plain flow. Keep the
-`<style>` block as it is and change only the boxes, labels and — if there are more or fewer steps —
-the delays (see [Animation](#animation--where-it-makes-sense-1073) for the timing budget).
+`<style>` block as it is. Change the boxes and labels; in the style block only the colours, the
+duration and — if there are more or fewer steps — the delay rules (see
+[Animation](#animation--where-it-makes-sense-1073) for exactly what may differ and the timing
+budget). `figure-motion-check.mjs` rejects any other change.
 
 ```svg
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 80" role="img"
@@ -164,40 +166,44 @@ disables `<animateTransform>` — those would silently stop working, so don't us
 `<animateMotion>` survives the sanitizer, but it is not CSS: the reduced-motion rule below cannot
 switch it off, so it is not allowed either (`not_css_only`).
 
-**One form, and only that one.** The check accepts the animation exactly as the flow template
-writes it, and rejects every other spelling (`unsupported_animation_form`) — including CSS that is
-perfectly valid. That is deliberate: a check that lists the unsafe forms always misses the next one.
+**The style block IS the template (product owner's decision, 2026-10-04).** An animated figure
+uses the `<style>` block of the [flow template](#flow-animated) **unchanged**. The check compares
+the block with the template; it does not try to work out what your CSS would do. Anything that is
+not the template is `unsupported_animation_form` — including CSS that is perfectly valid.
 
-```css
-<selector> { animation: <keyframes-name> <duration> [<delay>] [<easing keyword>] [1] [<fill>]; }
-<selector> { animation-delay: <time>; }   /* the stagger between steps */
-```
+What you may change:
 
-- in the `<style>` block, never in a `style=""` attribute;
-- the shorthand only — no `animation-name`, `animation-duration`, `animation-iteration-count`, …;
-- easing is a keyword (`linear`, `ease`, `ease-in`, `ease-out`, `ease-in-out`), not
-  `cubic-bezier()` or `steps()`;
-- one animation per rule (no comma list), and the name must match a `@keyframes` in the figure;
-- two at-rules only: `@keyframes` and `@media (prefers-reduced-motion: reduce)`. No other `@media`
-  condition, no `@supports` — an animation inside one would not be checked at all.
+| May differ | Must stay |
+|---|---|
+| the colours (hex) — base fill, stroke, highlight | the class names `steg`, `s1`, `s2`, … and the keyframes name `lys` |
+| the duration in `.steg { animation: lys <n>s ease-in-out 1; }` | `ease-in-out`, the count `1`, the shorthand form |
+| the delays, and the number of `.sN` delay rules (one per step after the first) | the order of the rules, and the reduced-motion rule as the last one |
+| line breaks and spacing | one `<style>` block, and nothing else in it |
 
-Copy the template's `<style>` block and change the delays; that is the whole job.
+And in the markup: every animated box carries `class="steg sN"` — one box per step, `s1` to the
+last, matching the delay rules — and the figure has **no `style=""` attributes**. Colours and sizes
+on other elements go in presentation attributes (`fill="…"`, `stroke="…"`), which do what you
+expect; a `style` attribute could override the animation.
+
+The last keyframe returns to the base fill (so the figure rests as the plain flow), and the
+highlight colour differs from it (otherwise nothing is seen to move). The check verifies both.
+
+Why so strict: this check first read the CSS and tried to predict the browser. Three review rounds
+each found six to eight ways round it — a later rule that switches the animation off, a count of 0,
+`!important`, a selector that matches no box. A check that lists the unsafe forms always misses the
+next one. The template is the one form that has been measured on the platform.
 
 **Safety — the animation must be safe on its own.** The participant view shows figures as `<img>`,
 and Chromium does **not** pass the reader's "reduce motion" setting into an SVG shown as an image.
-So the `@media (prefers-reduced-motion: reduce)` rule is required (it is honoured when the figure is
-opened by itself) but it is not enough. The rule must switch off the animation that is actually
-there, and win: name the **same selector** that carries the animation, written **after** the
-animated rule (as in the template), or use `* { animation: none !important; }`. A bare `*` without
-`!important` loses to any class, and `svg *` does not reach the root. In addition:
+So the template's `@media (prefers-reduced-motion: reduce)` rule is required (it is honoured when
+the figure is opened by itself) but it is not enough. In addition:
 
 1. **Run once, finish within 5 seconds** in total (largest delay + duration). Moving content that
-   lasts longer needs a pause button (WCAG 2.2.2), and an image has none. No `infinite`, and no
-   repeat count above 1 — three quick repeats inside 5 seconds are still a loop.
+   lasts longer needs a pause button (WCAG 2.2.2), and an image has none. With more steps, shorten
+   the duration and the gaps between delays so the last step still ends within 5 seconds.
 2. **The still picture is the complete figure.** Without the animation — before it starts, after it
-   ends, with reduced motion — every box and label is visible. Hide things only inside keyframes,
-   never in the base style (`opacity: 0`, `visibility: hidden`, `display: none`), and never end on a
-   hidden frame with `forwards`.
+   ends, with reduced motion — every box and label is visible. No element is switched off with
+   `display="none"`, `visibility="hidden"` or `opacity="0"`.
 3. **Motion carries the point, never the content.** Everything the figure says must be readable in
    the still picture; the animation only shows the order.
 4. **Translations keep the motion.** Locale variants change only the `<text>`; the `<style>` block
@@ -206,11 +212,10 @@ animated rule (as in the template), or use `* { animation: none !important; }`. 
 **Check it.** `node skills/a2-authoring-api/scripts/figure-motion-check.mjs figure.svg` — fails on a
 flow-shaped figure (three labelled boxes in a row or column, each joined to the next by a line,
 polyline or path) that is neither animated
-nor marked `data-motion="static"`, and on any animation that loops or repeats, runs over 5 s, lacks
-a reduced-motion rule that wins for the animated selector, hides content at rest, uses SMIL, or is
-written in any other form than the one above. An animation that cannot run — a name with no
-matching `@keyframes`, no duration above 0 s, or a count of 0 — does not count as animated and is
-reported (`animation_never_runs`). Run it with the fit check, on
+nor marked `data-motion="static"`, and on any animated figure whose style block is not the
+template's, whose step classes do not match its delay rules, that runs over 5 s, hides an element
+at rest, or uses SMIL. The message says where the block leaves the template. Run it with the fit
+check, on
 every figure and every locale variant. To *see* the motion, open the SVG directly in a browser —
 a single screenshot only shows one frame.
 

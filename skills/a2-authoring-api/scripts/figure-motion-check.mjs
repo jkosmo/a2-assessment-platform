@@ -11,16 +11,25 @@
 //    - A2's sanitizeSvg keeps CSS (@keyframes + animation in <style>) and <animateMotion>, but strips
 //      <animate> and <set>, and strips from/to on <animateTransform> — those silently stop working.
 //      <animateMotion> survives but is rejected here too: it is SMIL, so the reduced-motion rule
-//      below cannot reach it. CSS only.
+//      cannot reach it. CSS only.
 //    - The participant view shows figures as <img>. Chromium does NOT apply the reader's
 //      `prefers-reduced-motion` inside an SVG shown as an image (it does when the SVG is a document).
 //      So the media rule is kept as a bonus, but the animation must be safe without it: run once,
 //      finish within 5 seconds (WCAG 2.2.2 — moving content that lasts longer needs a pause control,
 //      and an <img> has none), and come to rest in a complete picture.
 //
-// Estimate, not proof: the total running time is computed conservatively (largest delay + largest
-// duration × largest iteration count across all rules). A clean report removes the mechanical cases;
-// whether the motion teaches anything is still the author's call at the per-element gate.
+// ⚠️ HOW the animation is checked: against the template, not by reading CSS.
+//
+// This check first tried to work out what a browser would do with the figure's style rules. Three
+// review rounds (2026-10-04) each found six to eight new ways round it: a duration on another rule,
+// a count of 0, a later `animation: none`, `!important`, a selector that matches no box, a keyframe
+// name in another case, a negative delay… A regex is not a browser, and the cascade has more
+// combinations than a list can hold. Product owner's decision: the style block of an animated
+// figure IS the flow template's block. Colours, the duration, the delays and the number of steps
+// may differ; nothing else. The check therefore compares, it does not interpret — and a spelling
+// nobody thought of is rejected by default instead of accepted by default.
+//
+// Still an estimate: whether a figure is flow-shaped (looksLikeSequence). See its comment.
 //
 // Node stdlib only, pure, repo-testable. Usage:
 //   node figure-motion-check.mjs figure.svg [more.svg ...]     exit 1 when anything fails
@@ -47,72 +56,80 @@ const num = (v, fallback = 0) => {
   return Number.isFinite(n) ? n : fallback;
 };
 
-function styleText(svg) {
-  const blocks = [...svg.matchAll(/<style\b[^>]*>([\s\S]*?)<\/style>/g)].map((m) => m[1]);
-  const inline = [...svg.matchAll(new RegExp(`\\bstyle\\s*=\\s*${QUOTED}`, "g"))].map((m) => `${INLINE}{${m[1] ?? m[2]}}`);
-  // CDATA markers are XML, not CSS; left in, they would become part of the first selector.
-  return [...blocks, ...inline].join("\n").replace(/\/\*[\s\S]*?\*\//g, "").replace(/<!\[CDATA\[|\]\]>/g, " ");
+// ── The animation: the flow template's style block, and only that ──────────────────────────────
+
+/** The CSS of each <style> element, without comments and without the XML CDATA wrapper. */
+function styleBlocks(svg) {
+  return [...svg.matchAll(/<style\b[^>]*>([\s\S]*?)<\/style>/g)]
+    .map((m) => m[1].replace(/\/\*[\s\S]*?\*\//g, "").replace(/<!\[CDATA\[|\]\]>/g, " "));
 }
 
-/** The "selector" of a style="" attribute. No stylesheet selector can name it. */
-const INLINE = "(inline style)";
-// `.a > .b` and `.a>.b` are the same selector; compare them as the browser does, not as text.
-const selectorParts = (selector) => selector.split(",")
-  .map((s) => s.trim().replace(/\s+/g, " ").replace(/\s*([>+~])\s*/g, "$1"))
-  .filter(Boolean);
+/** Layout is free: line breaks, indentation and spaces round punctuation carry no meaning. */
+const squeeze = (css) => css.replace(/\s+/g, " ").replace(/\s*([{}:;,()])\s*/g, "$1").trim();
+
+const HEX = "#[0-9a-fA-F]{3,8}";
+const TIME = "(\\d+(?:\\.\\d+)?|\\.\\d+)s";
+// The template, rule by rule, in the template's order. Case-sensitive on purpose: `Lys` and `lys`
+// are two different keyframes to a browser, `.Steg` and `.steg` two different classes.
+const TEMPLATE = [
+  ["the base rule `.steg { fill: <hex>; stroke: <hex>; }`", `\\.steg\\{fill:(${HEX});stroke:${HEX};?\\}`],
+  ["`@keyframes lys { 0%, 70% { fill: <hex>; } 100% { fill: <hex>; } }`", `@keyframes lys\\{0%,70%\\{fill:(${HEX});?\\}100%\\{fill:(${HEX});?\\}\\}`],
+  ["`.steg { animation: lys <seconds>s ease-in-out 1; }`", `\\.steg\\{animation:lys ${TIME} ease-in-out 1;?\\}`],
+  ["the delay rules `.s2 { animation-delay: <seconds>s; }`, `.s3 { … }`, one per later step", `((?:\\.s\\d+\\{animation-delay:${TIME};?\\})*)`],
+  ["`@media (prefers-reduced-motion: reduce) { .steg { animation: none; } }` as the last rule", `@media\\(prefers-reduced-motion:reduce\\)\\{\\.steg\\{animation:none;?\\}\\}$`],
+];
 
 /**
- * Lifts every `@<name> … { … }` block (with nested braces) out of the CSS. The block is replaced by
- * blanks of the same length, so a position in `rest` is still a position in the original text —
- * that is what lets the reduced-motion check ask which rule comes last.
+ * Compares the figure's style with the template.
+ * @returns {{ totalSeconds: number } | { problems: string[] }}
  */
-function splitAtBlocks(css, name) {
-  const blocks = [];
-  let rest = "";
-  let i = 0;
-  const re = new RegExp(`@${name}\\b`, "g");
-  let m;
-  while ((m = re.exec(css))) {
-    const open = css.indexOf("{", m.index);
-    if (open < 0) break;
-    let depth = 1, j = open + 1;
-    while (j < css.length && depth > 0) {
-      if (css[j] === "{") depth++;
-      else if (css[j] === "}") depth--;
-      j++;
-    }
-    rest += css.slice(i, m.index) + " ".repeat(j - m.index);
-    blocks.push({ text: css.slice(m.index, j), index: m.index });
-    i = j;
-    re.lastIndex = j;
+function matchTemplate(svg) {
+  const blocks = styleBlocks(svg);
+  if (blocks.length !== 1) return { problems: [`an animated figure has exactly one <style> block (found ${blocks.length})`] };
+  // An inline style wins over the stylesheet, and an !important there wins over the animation too.
+  // An animated figure sets colours and sizes with attributes (fill="…"), which the animation overrides.
+  if (new RegExp(`<[a-zA-Z][^>]*\\sstyle\\s*=\\s*${QUOTED}`).test(svg)) {
+    return { problems: ["an animated figure has no style=\"\" attributes — use presentation attributes (fill, stroke, …) instead"] };
   }
-  return { rest: rest + css.slice(i), blocks };
+
+  let rest = squeeze(blocks[0]);
+  const found = [];
+  for (const [what, source] of TEMPLATE) {
+    const m = rest.match(new RegExp(`^${source}`));
+    if (!m) return { problems: [`expected ${what}, found "${rest.slice(0, 60) || "(end of the style block)"}"`] };
+    found.push(m);
+    rest = rest.slice(m[0].length);
+  }
+  const [base, keyframes, animation, delays] = found;
+  const problems = [];
+
+  const [baseFill, highlight, endFill] = [base[1], keyframes[1], keyframes[2]].map((c) => c.toLowerCase());
+  if (endFill !== baseFill) problems.push(`the last keyframe (${endFill}) must return to the base fill (${baseFill}), so the figure rests as the plain flow`);
+  if (highlight === baseFill) problems.push(`the highlight colour equals the base fill (${baseFill}) — nothing would be seen to move`);
+
+  const duration = Number(animation[1]);
+  if (!(duration > 0)) problems.push("the duration must be above 0s — otherwise nothing moves");
+
+  // The steps: boxes carry `steg s1`, `steg s2`, … and every step after the first has its delay rule.
+  // Checked both ways, so a rule cannot point at a class no box has, and no box is left without one.
+  const delayRules = [...delays[0].matchAll(new RegExp(`\\.s(\\d+)\\{animation-delay:${TIME}`, "g"))].map((m) => ({ step: Number(m[1]), delay: Number(m[2]) }));
+  const ruleSteps = delayRules.map((r) => r.step);
+  const expected = delayRules.map((_, i) => i + 2);
+  if (ruleSteps.join() !== expected.join()) problems.push(`the delay rules must be .s2, .s3, … in order, without gaps (found ${ruleSteps.map((s) => `.s${s}`).join(", ") || "none"})`);
+  const boxSteps = [...svg.matchAll(/<[a-zA-Z][^>]*>/g)]
+    .map((m) => (attrs(m[0]).class ?? "").split(/\s+/))
+    .filter((classes) => classes.includes("steg"))
+    .map((classes) => classes.filter((c) => /^s\d+$/.test(c)).map((c) => Number(c.slice(1))));
+  const stepsOnBoxes = boxSteps.flat().sort((a, b) => a - b);
+  if (boxSteps.some((steps) => steps.length !== 1) || stepsOnBoxes.join() !== [1, ...expected].join()) {
+    problems.push(`each animated box carries class "steg" and one step class, s1…s${expected.length + 1} — one box per step (found ${boxSteps.length} box(es) with steps ${stepsOnBoxes.join(", ") || "none"})`);
+  }
+
+  if (problems.length > 0) return { problems };
+  return { totalSeconds: Math.max(0, ...delayRules.map((r) => r.delay)) + duration };
 }
 
-function declarations(css) {
-  const out = [];
-  for (const m of css.matchAll(/([^{}]*)\{([^{}]*)\}/g)) {
-    for (const decl of m[2].split(";")) {
-      const idx = decl.indexOf(":");
-      if (idx < 0) continue;
-      const raw = decl.slice(idx + 1).trim().toLowerCase();
-      // `!important` changes who wins, never what the value is. Keep the two apart so no comparison
-      // below has to remember to strip it.
-      const important = /!\s*important$/.test(raw);
-      out.push({ selector: m[1].trim(), prop: decl.slice(0, idx).trim().toLowerCase(), value: raw.replace(/\s*!\s*important$/, ""), important, index: m.index });
-    }
-  }
-  return out;
-}
-
-const EASING = new Set(["linear", "ease", "ease-in", "ease-out", "ease-in-out"]);
-const FILL = new Set(["forwards", "backwards", "both"]);
-
-const seconds = (token) => {
-  const m = String(token).match(/^(-?[\d.]+)(ms|s)$/);
-  if (!m) return null;
-  return m[2] === "ms" ? Number(m[1]) / 1000 : Number(m[1]);
-};
+// ── Is the figure flow-shaped? ─────────────────────────────────────────────────────────────────
 
 const NUMBER = /-?(?:\d+\.?\d*|\.\d+)(?:e[-+]?\d+)?/gi;
 const PATH_STEP = { M: 2, L: 2, T: 2, H: 1, V: 1, C: 6, S: 4, Q: 4, A: 7 };
@@ -164,8 +181,13 @@ function connectorPoints(svg) {
  *
  * It is the JOINING that makes a flow. Counting boxes and lines separately read a hierarchy — one
  * parent with lines down to three aligned children — as a sequence, and missed a real flow whose
- * arrows were plain <path>s. Known limits: boxes must be <rect>s with x/y attributes (not moved by a
- * transform), and a connector must end within TOUCH_TOLERANCE of the boxes it joins.
+ * arrows were plain <path>s.
+ *
+ * ⚠️ An estimate, and documented as one. It sees <rect>s with x/y attributes, labels in <text> and
+ * <tspan>, and connectors that end within TOUCH_TOLERANCE of the boxes. It does not see boxes moved
+ * by a transform, circles, or <use>. The cure is not a better guess: it is that every figure states
+ * `data-motion="animated"` or `"static"` itself. That changes the skill's contract and is the
+ * product owner's decision (doc/VERSIONS.md, 2.78.1).
  */
 function looksLikeSequence(svg) {
   const boxes = [];
@@ -216,94 +238,13 @@ function looksLikeSequence(svg) {
   return false;
 }
 
+// ── The check ──────────────────────────────────────────────────────────────────────────────────
+
 /** @returns {{ ok: boolean, animated: boolean, sequence: boolean, totalSeconds: number | null, issues: Array<{ kind: string, detail: string }> }} */
 export function checkFigureMotion(svg) {
   const issues = [];
   const root = attrs((svg.match(/<svg\b[^>]*>/) ?? [""])[0]);
   const declaredStatic = root["data-motion"] === "static";
-
-  const css = styleText(svg);
-  const { rest: noKeyframes, blocks: keyframes } = splitAtBlocks(css, "keyframes");
-  const { rest: base, blocks: media } = splitAtBlocks(noKeyframes, "media");
-  const decls = declarations(base);
-  const animDecls = decls.filter((d) => d.prop === "animation" || d.prop.startsWith("animation-"));
-
-  // ⚠️ A WHITELIST, on purpose. This check first listed the unsafe ways to write an animation, and
-  // three review rounds each found one more (a longhand duration on another rule, an iteration count
-  // of 0, commas inside cubic-bezier(), `svg *`, …). CSS has more spellings than a regex can list.
-  // So the question is turned round: the figure may use the ONE form the templates use —
-  //
-  //   <selector> { animation: <keyframes-name> <duration> [<delay>] [<easing keyword>] [1] [<fill>]; }
-  //   <selector> { animation-delay: <time>; }          (the stagger between steps)
-  //
-  // in a <style> block — and everything else is `unsupported_animation_form`, with the reason. A new
-  // spelling is then rejected by default instead of passing by default.
-  const keyframeNames = new Set(keyframes.map((b) => (b.text.match(/@keyframes\s+([\w-]+)/) ?? [])[1]?.toLowerCase()).filter(Boolean));
-  const unsupported = (d, why) => issues.push({ kind: "unsupported_animation_form", detail: `"${d.selector} { ${d.prop}: ${d.value} }" — ${why}` });
-
-  // The same whitelist for at-rules. Rules inside a block are lifted out before the checks below, so
-  // an animation written inside `@media (min-width: 0)` or `@supports (…)` would not be seen at all.
-  // Two at-rules exist in a figure: @keyframes and the reduced-motion @media. Nothing else.
-  const isReducedMotion = (b) => /^@media\s*\(\s*prefers-reduced-motion\s*:\s*reduce\s*\)\s*\{/.test(b.text);
-  for (const b of media.filter((b) => !isReducedMotion(b))) {
-    issues.push({ kind: "unsupported_animation_form", detail: `"${b.text.slice(0, b.text.indexOf("{")).trim()}" — the only @media block a figure may have is (prefers-reduced-motion: reduce)` });
-  }
-  for (const m of base.matchAll(/@[a-z-]+/gi)) {
-    issues.push({ kind: "unsupported_animation_form", detail: `"${m[0]}" — a figure's CSS may use @keyframes and the reduced-motion @media, no other at-rule` });
-  }
-  // …and inside the reduced-motion block, the only thing said about animation is that there is none.
-  for (const b of media.filter(isReducedMotion)) {
-    for (const d of declarations(b.text.slice(b.text.indexOf("{") + 1, b.text.lastIndexOf("}")))) {
-      if (d.prop.startsWith("animation") && !(d.prop === "animation" && d.value === "none")) {
-        unsupported(d, "inside the reduced-motion block, write `animation: none` and nothing else about animation");
-      }
-    }
-  }
-  const animatedRules = []; // { selector, index } of every rule whose animation actually runs
-  let maxDuration = 0, maxDelay = 0, maxCount = 1;
-  for (const d of animDecls) {
-    if (d.selector === INLINE) { unsupported(d, "put the animation in the <style> block, not in a style attribute"); continue; }
-    if (d.prop === "animation-delay") {
-      const delay = seconds(d.value);
-      if (delay === null) unsupported(d, "one time value, e.g. 1.2s");
-      else maxDelay = Math.max(maxDelay, delay);
-      continue;
-    }
-    if (d.prop !== "animation") { unsupported(d, "write it in the `animation` shorthand; only `animation-delay` may stand alone"); continue; }
-    if (d.value === "none") continue;
-    if (d.value.includes("(")) { unsupported(d, "functions such as cubic-bezier() and steps() are not supported — use an easing keyword"); continue; }
-    if (d.value.includes(",")) { unsupported(d, "one animation per rule"); continue; }
-
-    const tokens = d.value.split(/\s+/);
-    const names = tokens.filter((t) => keyframeNames.has(t));
-    const times = tokens.map(seconds).filter((s) => s !== null);
-    const counts = tokens.filter((t) => /^\d+(\.\d+)?$/.test(t)).map(Number);
-    const infinite = tokens.includes("infinite");
-    const unknown = tokens.filter((t) => !keyframeNames.has(t) && seconds(t) === null && !/^\d+(\.\d+)?$/.test(t)
-      && t !== "infinite" && !EASING.has(t) && !FILL.has(t));
-
-    if (names.length === 0) {
-      // A name that matches no @keyframes is the likeliest cause, so say that rather than "unknown word".
-      issues.push({ kind: "animation_never_runs", detail: `"${d.selector} { animation: ${d.value} }" names no @keyframes that exists in the figure — it stays still` });
-      continue;
-    }
-    if (unknown.length > 0 || names.length > 1 || times.length > 2 || counts.length > 1) {
-      unsupported(d, unknown.length > 0 ? `"${unknown.join('", "')}" is not part of the supported form` : "one name, one duration, at most one delay and one count");
-      continue;
-    }
-    const duration = times[0] ?? 0;
-    const count = infinite ? Infinity : (counts[0] ?? 1);
-    if (duration <= 0 || count === 0) {
-      issues.push({ kind: "animation_never_runs", detail: `"${d.selector} { animation: ${d.value} }" has ${duration <= 0 ? "no duration above 0s" : "an iteration count of 0"} — it stays still` });
-      continue;
-    }
-    if (infinite) issues.push({ kind: "infinite_loop", detail: `"animation: ${d.value}" never stops — run once (an <img> offers no pause control)` });
-    animatedRules.push({ selector: d.selector, index: d.index });
-    maxDuration = Math.max(maxDuration, duration);
-    maxDelay = Math.max(maxDelay, times[1] ?? 0);
-    maxCount = Math.max(maxCount, count);
-  }
-  const animated = animatedRules.length > 0;
   const sequence = looksLikeSequence(svg);
 
   for (const tag of ["animate", "set", "animateTransform"]) {
@@ -317,58 +258,34 @@ export function checkFigureMotion(svg) {
     issues.push({ kind: "not_css_only", detail: "<animateMotion> is SMIL: the platform keeps it, but no reduced-motion rule can switch it off — animate with CSS @keyframes instead" });
   }
 
-  if (sequence && !animated && !declaredStatic) {
-    issues.push({ kind: "sequence_not_animated", detail: "flow-shaped figure (≥3 boxes in order) with no animation — animate the order, or mark the root <svg data-motion=\"static\"> if a still picture is the deliberate choice" });
-  }
+  // Does the figure try to move at all? Any mention counts — in a <style> block or in a style
+  // attribute — because a figure that mentions animation and is NOT the template must not pass as
+  // a still figure either.
+  const inlineStyles = [...svg.matchAll(new RegExp(`\\sstyle\\s*=\\s*${QUOTED}`, "g"))].map((m) => m[1] ?? m[2]);
+  const triesToAnimate = [...styleBlocks(svg), ...inlineStyles].some((css) => /animation|@keyframes/i.test(css));
 
+  let animated = false;
   let totalSeconds = null;
-  if (animated) {
-    // "Once" is the rule, not "short": three quick repeats fit inside 5 seconds and still loop.
-    if (Number.isFinite(maxCount) && maxCount > 1) {
-      issues.push({ kind: "repeats", detail: `the animation runs ${maxCount} times — run it once` });
-    }
-    totalSeconds = maxDelay + maxDuration * maxCount;
-    if (Number.isFinite(totalSeconds) && totalSeconds > MAX_TOTAL_SECONDS) {
-      issues.push({ kind: "too_long", detail: `runs for about ${Math.round(totalSeconds * 10) / 10}s (largest delay + duration × iterations) — keep the whole animation within ${MAX_TOTAL_SECONDS}s (WCAG 2.2.2)` });
-    }
-
-    // The rule has to switch off the animation that is actually there — and WIN. Two ways only:
-    //   · the same selector, `animation: none`, written AFTER the animated rule (or !important);
-    //   · `* { animation: none !important; }` — without !important a bare `*` loses to any class.
-    // `.unrelated { animation: none }` is a rule, but the figure still moves; so is `svg *` when the
-    // animation sits on the root.
-    const off = media
-      .filter(isReducedMotion)
-      .flatMap((b) => declarations(b.text.slice(b.text.indexOf("{") + 1, b.text.lastIndexOf("}"))).map((d) => ({ ...d, index: b.index })))
-      .filter((d) => d.prop === "animation" && d.value === "none");
-    const switchedOff = (rule) => off.some((d) => d.important && selectorParts(d.selector).includes("*"))
-      || selectorParts(rule.selector).every((part) => off.some((d) => selectorParts(d.selector).includes(part) && (d.important || d.index > rule.index)));
-    const uncovered = [...new Set(animatedRules.filter((rule) => !switchedOff(rule)).map((rule) => rule.selector))];
-    if (off.length === 0) {
-      issues.push({ kind: "no_reduced_motion_rule", detail: "add @media (prefers-reduced-motion: reduce) { … { animation: none; } } — it is honoured when the figure is opened on its own" });
-    } else if (uncovered.length > 0) {
-      issues.push({ kind: "no_reduced_motion_rule", detail: `the reduced-motion rule does not switch off "${uncovered.join('", "')}" — name the same selector after the animated rule, or use * { animation: none !important; }` });
-    }
-
-    // The picture at rest (no animation, or after it ends) must be complete: nothing hidden in base CSS,
-    // and nothing left hidden by a `forwards` fill whose final keyframe hides it.
-    for (const d of decls) {
-      if ((d.prop === "opacity" && num(d.value, 1) === 0) || (d.prop === "visibility" && d.value === "hidden") || (d.prop === "display" && d.value === "none")) {
-        issues.push({ kind: "hidden_at_rest", detail: `"${d.selector} { ${d.prop}: ${d.value} }" hides content in the still picture — hide it in the keyframes, not the base style` });
+  if (triesToAnimate) {
+    const result = matchTemplate(svg);
+    if ("problems" in result) {
+      for (const problem of result.problems) {
+        issues.push({ kind: "unsupported_animation_form", detail: `${problem} — an animated figure uses the flow template's <style> block unchanged, apart from colours, duration, delays and the number of steps (figure-design.md)` });
+      }
+    } else {
+      animated = true;
+      totalSeconds = result.totalSeconds;
+      if (totalSeconds > MAX_TOTAL_SECONDS) {
+        issues.push({ kind: "too_long", detail: `runs for about ${Math.round(totalSeconds * 10) / 10}s (largest delay + duration) — keep the whole animation within ${MAX_TOTAL_SECONDS}s (WCAG 2.2.2)` });
+      }
+      // The picture at rest must be complete. The template's CSS hides nothing, so what is left to
+      // check is the markup: an element switched off by an attribute stays off when the animation ends.
+      for (const m of svg.matchAll(/<[a-zA-Z]+\b[^>]*\b(?:(?:opacity|fill-opacity)\s*=\s*["']0(?:\.0+)?["']|display\s*=\s*["']none["']|visibility\s*=\s*["']hidden["'])[^>]*>/g)) {
+        issues.push({ kind: "hidden_at_rest", detail: `${m[0].slice(0, 60)}… is invisible in the still picture` });
       }
     }
-    for (const m of svg.matchAll(/<[a-zA-Z]+\b[^>]*\b(?:(?:opacity|fill-opacity)\s*=\s*["']0(?:\.0+)?["']|display\s*=\s*["']none["']|visibility\s*=\s*["']hidden["'])[^>]*>/g)) {
-      issues.push({ kind: "hidden_at_rest", detail: `${m[0].slice(0, 60)}… is invisible in the still picture` });
-    }
-    const fillsForwards = animDecls.some((d) => /\b(forwards|both)\b/.test(d.value));
-    if (fillsForwards) {
-      for (const { text: block } of keyframes) {
-        const last = block.match(/(?:100%|to)\s*\{([^{}]*)\}\s*\}\s*$/);
-        if (last && /opacity\s*:\s*0(\.0+)?\s*(;|$)|visibility\s*:\s*hidden|display\s*:\s*none/.test(last[1])) {
-          issues.push({ kind: "ends_hidden", detail: `${block.slice(0, 40)}… ends hidden and is held there by a forwards fill` });
-        }
-      }
-    }
+  } else if (sequence && !declaredStatic) {
+    issues.push({ kind: "sequence_not_animated", detail: "flow-shaped figure (≥3 boxes in order) with no animation — animate the order with the flow template, or mark the root <svg data-motion=\"static\"> if a still picture is the deliberate choice" });
   }
 
   return { ok: issues.length === 0, animated, sequence, totalSeconds, issues };

@@ -9,65 +9,62 @@ nederste rad, og figursjekken i skillet håndhever reglene den lover.
 
 ### #1073 — figursjekken godkjente figurer som brøt reglene
 
-QA-porten ga NO-GO to ganger før stage. Første runde fant åtte hull i `figure-motion-check.mjs`
-(tabellen under), andre runde åtte til av samme slag: en varighet satt på en annen regel, antall 0,
-komma inne i `cubic-bezier()`, `svg *` som ikke treffer rota, `!important` etter `display: none`,
-etiketter plassert med `<tspan>`, én sammenhengende strek gjennom et hierarki, og mellomrom rundt `>`
-i en velger.
+QA-porten ga NO-GO **tre ganger** før stage, med seks til åtte hull i `figure-motion-check.mjs` hver
+gang — tjueto til sammen. Alle var figurer som så animerte ut for et tekstmønster uten å være trygge,
+eller uten å røre seg: en varighet på en annen regel, antall 0, en senere `animation: none`,
+`!important`, en velger som ikke traff noen boks, et keyframe-navn med andre store bokstaver, en
+negativ forsinkelse.
 
-**Det var samme feil hver gang, og derfor er regelen snudd.** Sjekken listet de utrygge måtene å
-skrive en animasjon på, og hver runde fant en skrivemåte til. CSS har flere skrivemåter enn en liste
-kan romme. Sjekken er nå en **hvitliste**: den godtar den ene formen flytmalen bruker —
-`animation: <navn> <varighet> [<forsinkelse>] [<nøkkelord>] [1] [<fyll>]` i `<style>`-blokken, pluss
-`animation-delay` — og avviser alt annet som `unsupported_animation_form`, med begrunnelse. En ny
-skrivemåte blir da avvist som standard, i stedet for godkjent som standard. Det er pre-flight-punkt 3
-(«hvitliste, ikke svarteliste, når regelen handler om hva som er tillatt») brukt på vårt eget
-verktøy. Gyldig CSS som ikke er på lista, avvises også; malen skal kopieres, ikke omskrives.
+**Sjekken leser ikke lenger stilregler. Den sammenligner med malen** (produkteiers beslutning
+2026-10-04). Stilblokka i en animert figur *er* flytmalens stilblokk. Farger, varighet, forsinkelser
+og antall steg kan variere; ingenting annet. Alt som ikke er malen, er
+`unsupported_animation_form`, og meldingen sier hvor blokka forlater malen. Boksene må bære
+`steg s1`, `steg s2`, … i takt med forsinkelsesreglene, og en animert figur har ingen
+`style`-attributter.
 
-Regelen for redusert bevegelse måles nå på om den **vinner**: samme velger skrevet etter den
-animerte regelen, eller `* { animation: none !important; }`. Velgere sammenlignes slik nettleseren
-leser dem.
+Veien dit, fordi den er lærdommen:
 
-Første runde, som ble stående:
+1. **Runde 1: åtte hull, lappet ett for ett.** Det er kuren `CLAUDE.md` sier har feilet tre ganger
+   («rett utregningen der den er»).
+2. **Runde 2: åtte til.** Svaret var en hvitliste over *skrivemåter*: én form av `animation:` ble
+   godtatt, resten avvist. Riktig retning, feil nivå.
+3. **Runde 3: seks til**, alle om hvilken regel som *vinner* når flere treffer samme element.
+   Hvitlista begrenset hver regel for seg, men sjekken prøvde fortsatt å regne ut hva nettleseren
+   gjør med summen. Et tekstmønster er ikke en nettleser.
+
+Mønsteret er pre-flight-punkt 3 («hvitliste, ikke svarteliste, når regelen handler om hva som er
+tillatt»), men tatt helt ut: det som er tillatt, er malen — den ene formen som er målt på plattformen.
+
+Det som står igjen fra rundene, uavhengig av malen:
 
 | Hullet | Nå |
 |---|---|
-| `animation-name` uten varighet, eller et navn uten `@keyframes`, regnet som animert | `animation_never_runs`, og flyten regnes som stillestående |
-| `animation: lys 1s 3` passerte fordi den var kortere enn 5 sekunder | `repeats` — «én gang» er regelen, ikke «kort» |
-| Regelen for redusert bevegelse kunne stå på en urelatert velger | må navngi samme velger, eller være `* { animation: none !important; }` |
-| `display: none` skjulte innhold i stillbildet uten å bli sett | `hidden_at_rest`, i CSS og som attributt |
 | Attributter med enkle anførselstegn ble ikke lest, så en gyldig flyt ble «ingen bokser» | begge former leses |
+| Attributtnavn med tall (`x1`, `y2`) ble aldri lest | leses |
 | En flyt tegnet med vanlige `<path>`-streker ble ikke sett | `<path>` (også relative kommandoer) og `<polyline>` leses som forbindelser |
-| Et hierarki med tre barn på rad ble krevd animert | en flyt er tre bokser der hver er **koblet til den neste** — ikke tre bokser og to streker et sted |
+| Et hierarki med tre barn på rad ble krevd animert | en flyt er tre bokser der en strek går **direkte** fra hver til den neste |
+| Etiketter plassert med `<tspan>` ble ikke sett | leses |
 | `<animateMotion>` ble godkjent, mot «bare CSS» i alle tre dokumentene | `not_css_only`, og den teller ikke som animasjon |
-
-De to flytfunnene hadde samme årsak: sjekken telte bokser og streker hver for seg. Gjenkjenningen
-måler nå om en strek går **direkte** fra én boks til den neste, uten å besøke en tredje på veien.
-Underveis viste testene en feil til: attributtnavn med tall (`x1`, `y2`) ble aldri lest.
+| Et element slått av med `display="none"` ble ikke sett | `hidden_at_rest` |
 
 ⚠️ **Flytgjenkjenningen er fortsatt et anslag.** Den ser `<rect>` med x/y, etiketter i `<text>` og
 `<tspan>`, og streker som ender innen 12 px fra boksene. Bokser flyttet med `transform`, sirkler og
-`<use>` ser den ikke. Her finnes ingen hvitliste å snu til uten å endre kontrakten: alternativet er
-at **hver** figur må si `data-motion="animated"` eller `"static"`, slik at sjekken slipper å gjette.
-Det er en beslutning for produkteier og er ikke gjort.
+`<use>` ser den ikke. Kuren er den samme som for stilblokka — slutt å gjette: **hver** figur sier
+`data-motion="animated"` eller `"static"` selv. Det endrer kontrakten for skillet og er ikke besluttet.
 
-Hvitlista gjelder også at-regler: en figur kan ha `@keyframes` og blokka for redusert bevegelse,
-ingenting annet. En evig løkke skrevet inne i `@media (min-width: 0)` ble ellers aldri sett.
+64 tester i fila: de tjueto hullene og naboene deres står som én tabell («ikke malen»), med
+kontrollcase for det som fortsatt skal passere. 33 mutasjoner, 33 røde. `SKILL.md` og
+`figure-design.md` sier det samme som skriptet håndhever.
 
-39 tester i fila, med kontrollcase for det som fortsatt skal passere. 36 mutasjoner, 36 røde.
-`figure-design.md` beskriver den ene formen og sier det samme som skriptet håndhever.
-
-**En beslutning ligger i dette:** `<animateMotion>` overlever plattformens rensing, så den kunne vært
-tillatt. Den er avvist fordi regelen for redusert bevegelse er CSS og ikke når den. Dokumentene sa
-allerede «bare CSS»; skriptet er rettet etter dem, ikke omvendt.
+**`<animateMotion>`:** den overlever plattformens rensing, så den kunne vært tillatt. Den er avvist
+fordi regelen for redusert bevegelse er CSS og ikke når den.
 
 **Rotårsak.** Skriptet ble mutasjonssjekket da det ble skrevet («seks regler, seks røde tester»),
 men mutasjon måler bare at en regel som finnes blir testet. Den finner ikke en regel som er for
 snever. Det gjorde gjennomgangen fra en annen modell, og den ble ikke kjørt i økta der endringen ble
-skrevet. Sjekken som manglet, var altså QA-porten — den kjører før stage, og fanget dette der.
-Rotårsaken til at det tok to runder: første retting lappet de åtte hullene ett for ett. Det er
-kuren `CLAUDE.md` sier har feilet tre ganger («rett utregningen der den er»). Formen var gal, ikke
-de åtte tilfellene.
+skrevet. Sjekken som manglet, var QA-porten — den kjører før stage, og fanget dette der. At det
+tok tre runder, skyldes at de to første rettingene beholdt formen: et verktøy som etterligner et
+annet system (her nettleserens kaskade) kan ikke gjøres riktig ved å legge til tilfeller.
 
 ### #1081 — «Mer»-menyen i nederste listerad ble klippet
 
