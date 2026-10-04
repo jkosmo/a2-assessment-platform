@@ -175,6 +175,13 @@ describe("figure-motion-check (#1073)", () => {
     expect(r.issues.map((i) => i.detail).join(" ")).toContain("<text>");
     // …også når boksene har sine klasser i tillegg: en etikett med «steg» blir animert den også.
     expect(typer(goodStyle + threeSteps.replace('<text x="70"', '<text class="steg" x="70"'))).toEqual(["unsupported_animation_form"]);
+
+    // HVER boks er et steg. En fjerde boks uten klassen er et steg som aldri lyser opp: figuren
+    // viser fire steg og animerer tre. (Funnet av QA-porten, runde 5.)
+    const fjerdeUtenKlasse = threeSteps + `<line x1="470" y1="40" x2="520" y2="40"/><rect x="520" y="20" width="120" height="40"/><text x="580" y="45">Arkiver</text>`;
+    const fire = checkFigureMotion(svg(goodStyle + fjerdeUtenKlasse));
+    expect(fire.animated).toBe(false);
+    expect(fire.issues.map((i) => i.detail).join(" ")).toContain("every <rect> in an animated figure is a step box");
   });
 
   it("an animated figure has one <style> block and no style attributes", () => {

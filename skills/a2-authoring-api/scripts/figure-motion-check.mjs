@@ -139,6 +139,11 @@ function matchTemplate(svg) {
     .filter((el) => el.classes.includes("steg"));
   const notBoxes = [...new Set(carriers.filter((el) => el.tag !== "rect").map((el) => `<${el.tag}>`))];
   if (notBoxes.length > 0) problems.push(`class "steg" belongs on the boxes (<rect>) only — found it on ${notBoxes.join(", ")}`);
+  // …and EVERY box is a step. A fourth box without the class is a step that never lights up: the
+  // figure shows four steps and animates three. Deciding which rects "belong to the flow" would be a
+  // guess, so there is none to make: the template has step boxes, lines and labels, nothing else.
+  const plainBoxes = [...svg.matchAll(/<rect\b[^>]*>/g)].filter((m) => !(attrs(m[0]).class ?? "").split(/\s+/).includes("steg")).length;
+  if (plainBoxes > 0) problems.push(`every <rect> in an animated figure is a step box — found ${plainBoxes} without class "steg" (a box that is not a step never lights up)`);
   const boxSteps = carriers.map((el) => el.classes.filter((c) => /^s\d+$/.test(c)).map((c) => Number(c.slice(1))));
   const stepsOnBoxes = boxSteps.flat().sort((a, b) => a - b);
   if (boxSteps.some((steps) => steps.length !== 1) || stepsOnBoxes.join() !== [1, ...expected].join()) {

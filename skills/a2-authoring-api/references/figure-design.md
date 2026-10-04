@@ -180,9 +180,11 @@ What you may change:
 | the delays, and the number of `.sN` delay rules (one per step after the first) — **each delay larger than the one before**, so the steps light up in order | the order of the rules, and the reduced-motion rule as the last one |
 | line breaks and spacing | one `<style>` block, nothing else in it, and **no comments** in it (comment in the markup instead: `<!-- … -->`) |
 
-And in the markup: every animated box is a `<rect class="steg sN">` — one box per step, `s1` to the
-last, matching the delay rules. Class `steg` goes on the boxes only: on a label it would animate
-the text and leave the boxes still. The figure has **no `style=""` attributes**. Colours and sizes
+And in the markup: every box is a `<rect class="steg sN">` — one box per step, `s1` to the last,
+matching the delay rules — and **every `<rect>` in the figure is a step box**: a box without the
+class is a step that never lights up. An animated flow is step boxes, connectors and labels,
+nothing else (no background panel, no legend box). Class `steg` goes on the boxes only: on a label
+it would animate the text and leave the boxes still. The figure has **no `style=""` attributes**. Colours and sizes
 on other elements go in presentation attributes (`fill="…"`, `stroke="…"`), which do what you
 expect; a `style` attribute could override the animation.
 

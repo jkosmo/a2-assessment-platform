@@ -120,6 +120,8 @@ test.describe("#1073 — sjekken og nettleseren er enige", () => {
       async (page) => { expect(await alfaIStillbildet(page)).toEqual([0, 0, 0]); }],
     ["like forsinkelser: to steg lyser samtidig", (m) => m.replace("2.4s", "1.2s"),
       async (page) => { expect(new Set((await animasjoner(page)).map((a) => a.slutt)).size).toBe(2); }],
+    ["en fjerde boks uten stegklasse: fire bokser, tre animasjoner", (m) => m.replace("</svg>", `  <rect x="350" y="70" width="120" height="8" rx="2" fill="#eef" stroke="#333"/>\n</svg>`),
+      async (page) => { expect((await animasjoner(page)).length).toBe(3); expect(await page.locator("rect").count()).toBe(4); }],
     ["klassene på etikettene: det er teksten som animeres, ikke boksene", (m) => m.replace(/<rect class="steg s\d"/g, "<rect").replace(/<text /g, '<text class="steg" '),
       async (page) => { expect([...new Set((await page.evaluate(() => document.getAnimations().map((a) => ((a.effect as KeyframeEffect).target as Element).tagName))))]).toEqual(["text"]); }],
   ];

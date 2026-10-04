@@ -87,6 +87,11 @@ CSS). Detaljene og lærdommen står i `doc/VERSIONS.md`.
 Produkteier bestemte også at **stage venter på GO fra porten**, selv om porten sa at
 plattformendringene (#1080, #1081) var klare isolert sett.
 
+⚠️ **Codex-kontoen gikk tom for kreditt midt i runde fem** (2026-10-04 ca. kl. 11:45), før dommen.
+`scripts/ai-qa.ps1` uten `-Local` feiler derfor med exit 1 til kontoen er fylt på. Reserveløsningen
+er `-Local` (skriver bestillingen til fil) og `-Judge <svarfil>` (dømmer en lokal agents svar etter
+samme krav).
+
 ⚠️ **Flytgjenkjenningen er fortsatt et anslag** og kan bli neste funn. Kuren som finnes, er at hver
 figur selv sier `data-motion="animated"` eller `"static"`. Det endrer kontrakten for skillet og
 venter på produkteier.
@@ -144,7 +149,7 @@ listene. Jeg utvidet ikke regelen for å unngå det — det ville vært en tverr
   && npm run test:integration:native) > "$TEMP/claude/kjoring.log" 2>&1; echo "EXIT=$?"
 ```
 
-Sist målt 2026-10-04, på 2.78.1: **1590 enhet · 69 DOM · 372 e2e · 707 integrasjon**, alle grønne.
+Sist målt 2026-10-04, på 2.78.1: **1590 enhet · 69 DOM · 373 e2e · 707 integrasjon**, alle grønne.
 Ikke pipe utdataene til `tail` — det skjuler feiltellingen og gir exit 0.
 
 **Mot utrullet stage** (krever innlogging, tokenet varer ~85 minutter og er for lengst utløpt nå):

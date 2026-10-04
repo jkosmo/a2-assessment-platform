@@ -40,6 +40,12 @@ Veien dit, fordi den er lærdommen:
    sammenlignes som farger, hver forsinkelse er større enn den foran, `steg` står bare på `<rect>`,
    og stilblokka har ingen kommentarer.
 
+5. **Runde 5 ble avbrutt:** Codex-kontoen gikk tom for kreditt før dommen. Det den rakk å vise, var
+   én ting til av samme slag som runde 4: en flyt med fire bokser der bare tre var steg, ble
+   godkjent. Lukket: hver `<rect>` i en animert figur er en stegboks. Til kontoen er fylt på, kan
+   porten bare kjøres med skriptets reserveløsning (`-Local` og `-Judge`), der en lokal agent gjør
+   gjennomgangen etter samme sjekkliste.
+
 Mønsteret er pre-flight-punkt 3 («hvitliste, ikke svarteliste, når regelen handler om hva som er
 tillatt»), men tatt helt ut: det som er tillatt, er malen — den ene formen som er målt på plattformen.
 
@@ -67,7 +73,7 @@ Det som står igjen fra rundene, uavhengig av malen:
 `data-motion="animated"` eller `"static"` selv. Det endrer kontrakten for skillet og er ikke besluttet.
 
 74 tester i fila: hullene og naboene deres står som én tabell («ikke malen»), med kontrollcase for
-det som fortsatt skal passere. 39 mutasjoner, 39 røde. `SKILL.md` og
+det som fortsatt skal passere. 40 mutasjoner, 40 røde. `SKILL.md` og
 `figure-design.md` sier det samme som skriptet håndhever.
 
 **`<animateMotion>`:** den overlever plattformens rensing, så den kunne vært tillatt. Den er avvist
