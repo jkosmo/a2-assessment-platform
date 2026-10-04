@@ -254,7 +254,10 @@ test.describe("#894 — omdøping i seksjonslista", () => {
       nn: "Avvikshandtering",
       "en-GB": "Avvikshåndtering [en-GB]",
     });
-    expect(patcher["sec-ett"]).toEqual({
+    // Radene oversettes etter tur, i den rekkefølgen lista viser dem. Den andre patchen er derfor
+    // ikke nødvendigvis sendt når den første er sett — vent på den også. (Uten ventingen feilet
+    // denne påstanden to av fem ganger, også når testen kjørte alene.)
+    await expect.poll(() => patcher["sec-ett"]).toEqual({
       nb: "Kvalitetssikring",
       nn: "Kvalitetssikring [nn]",
       "en-GB": "Kvalitetssikring [en-GB]",
