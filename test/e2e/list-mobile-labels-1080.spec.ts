@@ -82,6 +82,27 @@ test.describe("#1080 — listene på telefon", () => {
     await expect(eksporter).toBeInViewport({ ratio: 1 });
   });
 
+  test("«Døp om» (#894) får plass i kortet: feltet ligger i navnecellen, og Escape avbryter", async ({ page }) => {
+    await åpneLista(page, 390);
+    const rad = page.locator('tr[data-row-id="mod-ett"]');
+    await rad.getByRole("button", { name: "Døp om" }).click();
+
+    const felt = rad.locator(".row-rename input");
+    await expect(felt).toBeFocused();
+    const mål = await felt.evaluate((el) => {
+      const f = el.getBoundingClientRect();
+      const celle = el.closest("td")!.getBoundingClientRect();
+      return { venstre: f.left >= celle.left, høyre: f.right <= celle.right, bredde: Math.round(f.width) };
+    });
+    expect(mål.venstre && mål.høyre, "feltet skal ligge innenfor navnecellen").toBe(true);
+    // Bredt nok til å skrive i: en tittel på 15 tegn skal være lesbar uten å rulle i feltet.
+    expect(mål.bredde).toBeGreaterThan(150);
+
+    await page.keyboard.press("Escape");
+    await expect(felt).toHaveCount(0);
+    await expect(rad.locator("td.col-name")).toContainText("Risikovurdering");
+  });
+
   // Kurs- og seksjonslista kaller navnekolonnen `col-title`, modul- og klasselista `col-name`.
   // Det er to velgere i stilarket, så begge måles: en regel som bare dekket den ene ville latt
   // to av fire lister stå igjen.

@@ -7,20 +7,23 @@
 
 ## Kort: det som må avgjøres
 
-**2.77.0 står på stage og er verifisert. Prod står på 2.76.0 og venter på at produkteier sier ja.**
+**Prod og stage står begge på 2.77.0. 2.78.1 ligger på `dev` og er ikke rullet ut noe sted.**
 
 | Miljø | Versjon | |
 |---|---|---|
-| prod | 2.76.0 | mangler #894 |
-| stage | 2.77.0 | #894, verifisert mot ekte data |
-| `dev` (git) | 2.78.1 | #894, #1073 og #1080 foran det prod har; de to siste er ikke rullet ut noe sted |
+| prod | 2.77.0 | rullet 2026-10-04 kl. 08:54 fra `3f111c68`; #894 er lukket |
+| stage | 2.77.0 | samme commit |
+| `main` (git) | 2.76.0 | **bak prod** til PR #1082 er merget |
+| `dev` (git) | 2.78.1 | #1073, #1080 og #1081 foran prod |
 
 Tre ting krever et menneske:
 
-1. **Prod-utrullingen.** Krever GitHub-godkjenning fra `jkosmo` — ingen agent kan godkjenne seg
-   selv. Prod rulles utenfor arbeidstid (se minnet, og `doc/INCIDENTS.md`).
-2. **#894 lukkes ikke før prod.** Saken måles i at mangelen er borte, ikke i at koden er levert.
-3. **Fire åpne beslutninger** ligger nederst i dette dokumentet.
+1. **PR #1082 må merges.** `main` står på 2.76.0 mens prod kjører 2.77.0. En utrulling uten
+   `git_ref` bygger `main` HEAD og ville rullet prod tilbake.
+2. **2.78.1 til stage** krever GO fra QA-porten først. Den har gitt NO-GO to ganger på denne
+   versjonen (se #1073 under). Prod krever deretter GitHub-godkjenning fra `jkosmo`, utenfor
+   arbeidstid.
+3. **Åpne beslutninger** ligger nederst i dette dokumentet.
 
 ---
 
@@ -73,9 +76,20 @@ plattformsiden (respektere «redusert bevegelse», spille av på nytt) er ikke g
 **Lærdom:** en økt som starter fra `main` ser ikke versjonsnumre som bare finnes på `dev`. Start
 nettøkter fra `dev`, eller sjekk `origin/dev` før versjonen settes.
 
-**QA-porten ga NO-GO på 2.78.0** (2026-10-04): åtte hull i figursjekken, rettet i 2.78.1. Det
-viktigste å vite er at sjekken nå regner en figur som en flyt bare når strekene faktisk forbinder
-boksene i rekkefølge, og at `<animateMotion>` avvises (bare CSS). Tabellen står i `doc/VERSIONS.md`.
+**QA-porten ga NO-GO to ganger** (2026-10-04), med åtte hull i figursjekken hver gang. Første
+retting lappet hullene ett for ett; andre runde fant åtte til av samme slag. Sjekken er derfor snudd
+til en **hvitliste**: den godtar den ene skrivemåten flytmalen bruker og avviser alt annet
+(`unsupported_animation_form`). `<animateMotion>` avvises (bare CSS). En figur regnes som en flyt
+bare når en strek går direkte fra én boks til den neste. Detaljene står i `doc/VERSIONS.md`.
+
+⚠️ **Flytgjenkjenningen er fortsatt et anslag** og kan bli neste funn. Kuren som finnes, er at hver
+figur selv sier `data-motion="animated"` eller `"static"`. Det endrer kontrakten for skillet og
+venter på produkteier.
+
+## Hva som ble gjort: #1081 (2.78.1)
+
+«Mer»-menyen i nederste listerad lå skjult bak tabellrammen. `row-actions.js` låner nå luft i
+bunnen av ramma mens menyen er åpen. `test/e2e/row-more-last-row-1081.spec.ts` måler det.
 
 ## Hva som ble gjort: #1080 (2.78.1)
 
@@ -125,7 +139,7 @@ listene. Jeg utvidet ikke regelen for å unngå det — det ville vært en tverr
   && npm run test:integration:native) > "$TEMP/claude/kjoring.log" 2>&1; echo "EXIT=$?"
 ```
 
-Sist målt 2026-10-04, på 2.78.1: **1546 enhet · 69 DOM · 353 e2e · 707 integrasjon**, alle grønne.
+Sist målt 2026-10-04, på 2.78.1: **1553 enhet · 69 DOM · 359 e2e · 707 integrasjon**, alle grønne.
 Ikke pipe utdataene til `tail` — det skjuler feiltellingen og gir exit 0.
 
 **Mot utrullet stage** (krever innlogging, tokenet varer ~85 minutter og er for lengst utløpt nå):

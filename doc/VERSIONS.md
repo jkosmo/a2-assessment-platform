@@ -4,14 +4,31 @@ This document tracks release versions and what each version includes.
 
 ## 2.78.1 - 2026-10-04
 
-To rettinger, ingen migrasjon. Listene kan leses på telefon, og figursjekken i skillet håndhever
-reglene den lover.
+Tre rettinger, ingen migrasjon. Listene kan leses på telefon, «Mer»-menyen klippes ikke lenger i
+nederste rad, og figursjekken i skillet håndhever reglene den lover.
 
 ### #1073 — figursjekken godkjente figurer som brøt reglene
 
-QA-porten gikk gjennom 2.78.0 før stage og ga NO-GO: åtte hull i `figure-motion-check.mjs`. Fem var
-figurer som så animerte ut for et tekstmønster, uten å være trygge eller uten å røre seg. Tre gjaldt
-hva sjekken regner som en flyt.
+QA-porten ga NO-GO to ganger før stage. Første runde fant åtte hull i `figure-motion-check.mjs`
+(tabellen under), andre runde åtte til av samme slag: en varighet satt på en annen regel, antall 0,
+komma inne i `cubic-bezier()`, `svg *` som ikke treffer rota, `!important` etter `display: none`,
+etiketter plassert med `<tspan>`, én sammenhengende strek gjennom et hierarki, og mellomrom rundt `>`
+i en velger.
+
+**Det var samme feil hver gang, og derfor er regelen snudd.** Sjekken listet de utrygge måtene å
+skrive en animasjon på, og hver runde fant en skrivemåte til. CSS har flere skrivemåter enn en liste
+kan romme. Sjekken er nå en **hvitliste**: den godtar den ene formen flytmalen bruker —
+`animation: <navn> <varighet> [<forsinkelse>] [<nøkkelord>] [1] [<fyll>]` i `<style>`-blokken, pluss
+`animation-delay` — og avviser alt annet som `unsupported_animation_form`, med begrunnelse. En ny
+skrivemåte blir da avvist som standard, i stedet for godkjent som standard. Det er pre-flight-punkt 3
+(«hvitliste, ikke svarteliste, når regelen handler om hva som er tillatt») brukt på vårt eget
+verktøy. Gyldig CSS som ikke er på lista, avvises også; malen skal kopieres, ikke omskrives.
+
+Regelen for redusert bevegelse måles nå på om den **vinner**: samme velger skrevet etter den
+animerte regelen, eller `* { animation: none !important; }`. Velgere sammenlignes slik nettleseren
+leser dem.
+
+Første runde, som ble stående:
 
 | Hullet | Nå |
 |---|---|
@@ -25,11 +42,17 @@ hva sjekken regner som en flyt.
 | `<animateMotion>` ble godkjent, mot «bare CSS» i alle tre dokumentene | `not_css_only`, og den teller ikke som animasjon |
 
 De to flytfunnene hadde samme årsak: sjekken telte bokser og streker hver for seg. Gjenkjenningen
-måler nå om strekene faktisk forbinder boksene, i rekkefølge. Underveis viste testene en feil til:
-attributtnavn med tall (`x1`, `y2`) ble aldri lest.
+måler nå om en strek går **direkte** fra én boks til den neste, uten å besøke en tredje på veien.
+Underveis viste testene en feil til: attributtnavn med tall (`x1`, `y2`) ble aldri lest.
 
-17 nye tester, med kontrollcase for det som fortsatt skal passere. 17 mutasjoner, 17 røde.
-`figure-design.md` sier nå det samme som skriptet håndhever.
+⚠️ **Flytgjenkjenningen er fortsatt et anslag.** Den ser `<rect>` med x/y, etiketter i `<text>` og
+`<tspan>`, og streker som ender innen 12 px fra boksene. Bokser flyttet med `transform`, sirkler og
+`<use>` ser den ikke. Her finnes ingen hvitliste å snu til uten å endre kontrakten: alternativet er
+at **hver** figur må si `data-motion="animated"` eller `"static"`, slik at sjekken slipper å gjette.
+Det er en beslutning for produkteier og er ikke gjort.
+
+37 tester i fila, med kontrollcase for det som fortsatt skal passere. 31 mutasjoner, 31 røde.
+`figure-design.md` beskriver den ene formen og sier det samme som skriptet håndhever.
 
 **En beslutning ligger i dette:** `<animateMotion>` overlever plattformens rensing, så den kunne vært
 tillatt. Den er avvist fordi regelen for redusert bevegelse er CSS og ikke når den. Dokumentene sa
@@ -39,8 +62,21 @@ allerede «bare CSS»; skriptet er rettet etter dem, ikke omvendt.
 men mutasjon måler bare at en regel som finnes blir testet. Den finner ikke en regel som er for
 snever. Det gjorde gjennomgangen fra en annen modell, og den ble ikke kjørt i økta der endringen ble
 skrevet. Sjekken som manglet, var altså QA-porten — den kjører før stage, og fanget dette der.
+Rotårsaken til at det tok to runder: første retting lappet de åtte hullene ett for ett. Det er
+kuren `CLAUDE.md` sier har feilet tre ganger («rett utregningen der den er»). Formen var gal, ikke
+de åtte tilfellene.
 
-### #1080 — telefonvisningen av listene
+### #1081 — «Mer»-menyen i nederste listerad ble klippet
+
+Tabellrammen har `overflow-x: auto`, og da klipper nettleseren begge akser. I nederste rad lå menyen
+under rammekanten: målt på 1280 px var 82 av 94 px skjult, så «Eksporter» og «Avpubliser» bare kunne
+nås ved å rulle inni tabellen. Feilen er eldre enn #894, men #894 la «Eksporter» under «Mer».
+
+`row-actions.js` måler nå i stedet for å anta en høyde: når en meny åpnes, får nærmeste ramme som
+klipper akkurat så mye luft i bunnen som menyen trenger, og lufta tas tilbake når menyen lukkes.
+Gjelder alle som bruker `rowActionsHtml`. `test/e2e/row-more-last-row-1081.spec.ts` måler det på
+1280 og 390 px, med én og to rader, og har en kontroll for en meny som allerede har plass. To
+mutasjoner, to røde.
 
 ### #1080 — telefonvisningen av listene
 

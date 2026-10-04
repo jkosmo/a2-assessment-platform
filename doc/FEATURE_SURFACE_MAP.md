@@ -383,6 +383,25 @@ pages — they are separate static JS/HTML files, so consistency is by conventio
 
 **Guards:** `test/e2e/admin-content-classes.spec.ts` "admin buttons + top nav render in prod-shaped config" (asserts a REAL i18n key resolves, not raw); `test/e2e/admin-content-workspaces.spec.ts` course archive (filter pill), unpublish, sections lifecycle; `test/e2e/admin-content-course-links-library-filter.spec.ts` course filter (modules + sections). When adding a column/filter to one list, mirror it where it applies and update this entry.
 
+### Telefonvisningen og «Mer»-menyen (#1080 / #1081)
+
+Siden #1046 tegnes alle fire listene av `public/static/list-page.js`. To ting er likevel lette å
+rette på én liste og glemme på de andre:
+
+| Oppførsel | Hvor regelen bor | Flatene |
+|---|---|---|
+| **Kort under 600 px:** kolonnenavn foran hver verdi, ingenting utenfor kortet | `data-label` settes i `list-page.js`; telefonregelen for `.list-table` i `shared.css` | Navnekolonnen heter `col-name` i Moduler og Klasser, `col-title` i Kurs og Seksjoner — **to velgere**, og en regel som bare nevner den ene lar to lister stå igjen |
+| **«Mer»-menyen klippes ikke** av tabellrammen | `fitOpenMenus` i `row-actions.js` låner luft i bunnen av nærmeste ramme som klipper | Alle som bruker `rowActionsHtml`: de fire listene, `form-page.js`, `admin-content-shell.js`, `results.js` |
+
+**Guards:** `test/e2e/list-mobile-labels-1080.spec.ts` (modullista for `col-name`, kurslista for
+`col-title`, omdøpingsfeltet på 390 px, kontroll for skrivebord) og
+`test/e2e/row-more-last-row-1081.spec.ts` (nederste rad, 1280 og 390 px, én og to rader). Begge måler
+i nettleseren: at en etikett finnes i HTML-en, eller at en meny er «synlig» for DOM-en, sier ikke at
+den vises.
+
+**Ikke dekket:** andre tabeller i appen (`results.html`, `profile.html`, `review.html` m.fl.) bruker
+samme kortregel uten `data-label` og er ikke målt.
+
 Related (course builder, not a list page): the course builder item list (`renderModuleList` in `admin-content-courses.js`) gives each row an **«Åpne»** link (`target="_blank"`) to that item's editor — module → `/admin-content/module/<id>/conversation`, section → `/admin-content/sections?id=<id>` (#744, same guard spec).
 
 ## 15. Agent Authoring — draft-only invariant across 3 entities + token scope (EPIC #647)

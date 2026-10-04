@@ -164,12 +164,30 @@ disables `<animateTransform>` — those would silently stop working, so don't us
 `<animateMotion>` survives the sanitizer, but it is not CSS: the reduced-motion rule below cannot
 switch it off, so it is not allowed either (`not_css_only`).
 
+**One form, and only that one.** The check accepts the animation exactly as the flow template
+writes it, and rejects every other spelling (`unsupported_animation_form`) — including CSS that is
+perfectly valid. That is deliberate: a check that lists the unsafe forms always misses the next one.
+
+```css
+<selector> { animation: <keyframes-name> <duration> [<delay>] [<easing keyword>] [1] [<fill>]; }
+<selector> { animation-delay: <time>; }   /* the stagger between steps */
+```
+
+- in the `<style>` block, never in a `style=""` attribute;
+- the shorthand only — no `animation-name`, `animation-duration`, `animation-iteration-count`, …;
+- easing is a keyword (`linear`, `ease`, `ease-in`, `ease-out`, `ease-in-out`), not
+  `cubic-bezier()` or `steps()`;
+- one animation per rule (no comma list), and the name must match a `@keyframes` in the figure.
+
+Copy the template's `<style>` block and change the delays; that is the whole job.
+
 **Safety — the animation must be safe on its own.** The participant view shows figures as `<img>`,
 and Chromium does **not** pass the reader's "reduce motion" setting into an SVG shown as an image.
 So the `@media (prefers-reduced-motion: reduce)` rule is required (it is honoured when the figure is
 opened by itself) but it is not enough. The rule must switch off the animation that is actually
-there: name the **same selector** that carries the animation, or use `* { animation: none
-!important; }`. In addition:
+there, and win: name the **same selector** that carries the animation, written **after** the
+animated rule (as in the template), or use `* { animation: none !important; }`. A bare `*` without
+`!important` loses to any class, and `svg *` does not reach the root. In addition:
 
 1. **Run once, finish within 5 seconds** in total (largest delay + duration). Moving content that
    lasts longer needs a pause button (WCAG 2.2.2), and an image has none. No `infinite`, and no
@@ -187,9 +205,10 @@ there: name the **same selector** that carries the animation, or use `* { animat
 flow-shaped figure (three labelled boxes in a row or column, each joined to the next by a line,
 polyline or path) that is neither animated
 nor marked `data-motion="static"`, and on any animation that loops or repeats, runs over 5 s, lacks
-a reduced-motion rule for the animated selector, hides content at rest, or uses stripped SMIL. An
-animation that cannot run — a name with no matching `@keyframes`, or no duration above 0 s — does
-not count as animated and is reported (`animation_never_runs`). Run it with the fit check, on
+a reduced-motion rule that wins for the animated selector, hides content at rest, uses SMIL, or is
+written in any other form than the one above. An animation that cannot run — a name with no
+matching `@keyframes`, no duration above 0 s, or a count of 0 — does not count as animated and is
+reported (`animation_never_runs`). Run it with the fit check, on
 every figure and every locale variant. To *see* the motion, open the SVG directly in a browser —
 a single screenshot only shows one frame.
 

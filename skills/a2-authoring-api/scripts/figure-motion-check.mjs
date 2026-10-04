@@ -55,10 +55,16 @@ function styleText(svg) {
 
 /** The "selector" of a style="" attribute. No stylesheet selector can name it. */
 const INLINE = "(inline style)";
-const selectorParts = (selector) => selector.split(",").map((s) => s.trim().replace(/\s+/g, " ")).filter(Boolean);
-const isUniversal = (part) => part === "*" || part === "svg *";
+// `.a > .b` and `.a>.b` are the same selector; compare them as the browser does, not as text.
+const selectorParts = (selector) => selector.split(",")
+  .map((s) => s.trim().replace(/\s+/g, " ").replace(/\s*([>+~])\s*/g, "$1"))
+  .filter(Boolean);
 
-/** Removes every `@<name> … { … }` block (with nested braces), returning the rest and the blocks. */
+/**
+ * Lifts every `@<name> … { … }` block (with nested braces) out of the CSS. The block is replaced by
+ * blanks of the same length, so a position in `rest` is still a position in the original text —
+ * that is what lets the reduced-motion check ask which rule comes last.
+ */
 function splitAtBlocks(css, name) {
   const blocks = [];
   let rest = "";
@@ -74,8 +80,8 @@ function splitAtBlocks(css, name) {
       else if (css[j] === "}") depth--;
       j++;
     }
-    rest += css.slice(i, m.index);
-    blocks.push(css.slice(m.index, j));
+    rest += css.slice(i, m.index) + " ".repeat(j - m.index);
+    blocks.push({ text: css.slice(m.index, j), index: m.index });
     i = j;
     re.lastIndex = j;
   }
@@ -88,11 +94,18 @@ function declarations(css) {
     for (const decl of m[2].split(";")) {
       const idx = decl.indexOf(":");
       if (idx < 0) continue;
-      out.push({ selector: m[1].trim(), prop: decl.slice(0, idx).trim().toLowerCase(), value: decl.slice(idx + 1).trim().toLowerCase() });
+      const raw = decl.slice(idx + 1).trim().toLowerCase();
+      // `!important` changes who wins, never what the value is. Keep the two apart so no comparison
+      // below has to remember to strip it.
+      const important = /!\s*important$/.test(raw);
+      out.push({ selector: m[1].trim(), prop: decl.slice(0, idx).trim().toLowerCase(), value: raw.replace(/\s*!\s*important$/, ""), important, index: m.index });
     }
   }
   return out;
 }
+
+const EASING = new Set(["linear", "ease", "ease-in", "ease-out", "ease-in-out"]);
+const FILL = new Set(["forwards", "backwards", "both"]);
 
 const seconds = (token) => {
   const m = String(token).match(/^(-?[\d.]+)(ms|s)$/);
@@ -160,16 +173,36 @@ function looksLikeSequence(svg) {
     const b = { x: num(a.x), y: num(a.y), w: num(a.width), h: num(a.height) };
     if (b.w > 0 && b.h > 0) boxes.push({ ...b, cx: b.x + b.w / 2, cy: b.y + b.h / 2 });
   }
+  // A label sits where its <text> says — or where its <tspan>s say: long labels are broken into
+  // lines with <tspan x y>, and then the <text> itself often carries no position at all.
   const texts = [...svg.matchAll(/<text\b([^>]*)>([\s\S]*?)<\/text>/g)]
     .filter((m) => m[2].replace(/<[^>]+>/g, "").trim())
-    .map((m) => ({ x: num(attrs(m[1]).x), y: num(attrs(m[1]).y) }));
+    .flatMap((m) => {
+      const own = attrs(m[1]);
+      const spans = [...m[2].matchAll(/<tspan\b([^>]*)>/g)].map((s) => attrs(s[1])).filter((s) => s.x !== undefined || s.y !== undefined);
+      return [own, ...spans.map((s) => ({ x: s.x ?? own.x, y: s.y ?? own.y }))]
+        .filter((p) => p.x !== undefined && p.y !== undefined)
+        .map((p) => ({ x: num(p.x), y: num(p.y) }));
+    });
   const labelled = boxes.filter((b) => texts.some((t) => t.x >= b.x && t.x <= b.x + b.w && t.y >= b.y && t.y <= b.y + b.h));
   if (labelled.length < 3) return false;
 
   const connectors = connectorPoints(svg);
   const touches = (p, b) => p.x >= b.x - TOUCH_TOLERANCE && p.x <= b.x + b.w + TOUCH_TOLERANCE
     && p.y >= b.y - TOUCH_TOLERANCE && p.y <= b.y + b.h + TOUCH_TOLERANCE;
-  const joined = (a, b) => connectors.some((points) => points.some((p) => touches(p, a)) && points.some((p) => touches(p, b)));
+  // Joined DIRECTLY: the connector runs from one box to the other without visiting a third on the
+  // way. One path drawn child → parent → child touches both children, and joins neither to the other.
+  const joined = (a, b) => connectors.some((points) => points.some((start, i) => {
+    const from = touches(start, a) ? a : touches(start, b) ? b : null;
+    if (!from) return false;
+    const to = from === a ? b : a;
+    if (touches(start, to)) return true;
+    for (const p of points.slice(i + 1)) {
+      if (touches(p, to)) return true;
+      if (labelled.some((other) => other !== from && other !== to && touches(p, other))) return false;
+    }
+    return false;
+  }));
 
   for (const [across, along] of [["cy", "cx"], ["cx", "cy"]]) {
     for (const anchor of labelled) {
@@ -194,35 +227,63 @@ export function checkFigureMotion(svg) {
   const decls = declarations(base);
   const animDecls = decls.filter((d) => d.prop === "animation" || d.prop.startsWith("animation-"));
 
-  // An animation only counts when it can actually run: it names a @keyframes that exists and has a
-  // duration above zero. `animation-name: pulse` alone is still (the default duration is 0s), and so
-  // is a misspelt name — both used to pass as "animated" and silence `sequence_not_animated`.
-  const keyframeNames = new Set(keyframes.map((b) => (b.match(/@keyframes\s+([\w-]+)/) ?? [])[1]?.toLowerCase()).filter(Boolean));
-  const durationsOf = (selector) => animDecls
-    .filter((d) => d.prop === "animation-duration" && (selector === null || d.selector === selector))
-    .flatMap((d) => d.value.split(",").map((t) => seconds(t.trim()) ?? 0));
-  const animatedSelectors = new Set();
+  // ⚠️ A WHITELIST, on purpose. This check first listed the unsafe ways to write an animation, and
+  // three review rounds each found one more (a longhand duration on another rule, an iteration count
+  // of 0, commas inside cubic-bezier(), `svg *`, …). CSS has more spellings than a regex can list.
+  // So the question is turned round: the figure may use the ONE form the templates use —
+  //
+  //   <selector> { animation: <keyframes-name> <duration> [<delay>] [<easing keyword>] [1] [<fill>]; }
+  //   <selector> { animation-delay: <time>; }          (the stagger between steps)
+  //
+  // in a <style> block — and everything else is `unsupported_animation_form`, with the reason. A new
+  // spelling is then rejected by default instead of passing by default.
+  const keyframeNames = new Set(keyframes.map((b) => (b.text.match(/@keyframes\s+([\w-]+)/) ?? [])[1]?.toLowerCase()).filter(Boolean));
+  const unsupported = (d, why) => issues.push({ kind: "unsupported_animation_form", detail: `"${d.selector} { ${d.prop}: ${d.value} }" — ${why}` });
+  const animatedRules = []; // { selector, index } of every rule whose animation actually runs
+  let maxDuration = 0, maxDelay = 0, maxCount = 1;
   for (const d of animDecls) {
-    if ((d.prop !== "animation" && d.prop !== "animation-name") || d.value === "none") continue;
-    for (const one of d.value.split(",")) {
-      const tokens = one.trim().split(/\s+/);
-      const name = tokens.find((t) => keyframeNames.has(t));
-      // Shorthand carries its own duration. For `animation-name`, look in the same rule first; a
-      // duration set by another rule cannot be resolved without the cascade, so it is accepted.
-      const own = durationsOf(d.selector);
-      const duration = d.prop === "animation"
-        ? (tokens.map(seconds).filter((s) => s !== null)[0] ?? 0)
-        : Math.max(0, ...(own.length ? own : durationsOf(null)));
-      if (name && duration > 0) { animatedSelectors.add(d.selector); continue; }
-      issues.push({
-        kind: "animation_never_runs",
-        detail: !name
-          ? `"${d.selector} { ${d.prop}: ${d.value} }" names no @keyframes that exists in the figure — it stays still`
-          : `"${d.selector} { ${d.prop}: ${d.value} }" has no duration above 0s — it stays still`,
-      });
+    if (d.selector === INLINE) { unsupported(d, "put the animation in the <style> block, not in a style attribute"); continue; }
+    if (d.prop === "animation-delay") {
+      const delay = seconds(d.value);
+      if (delay === null) unsupported(d, "one time value, e.g. 1.2s");
+      else maxDelay = Math.max(maxDelay, delay);
+      continue;
     }
+    if (d.prop !== "animation") { unsupported(d, "write it in the `animation` shorthand; only `animation-delay` may stand alone"); continue; }
+    if (d.value === "none") continue;
+    if (d.value.includes("(")) { unsupported(d, "functions such as cubic-bezier() and steps() are not supported — use an easing keyword"); continue; }
+    if (d.value.includes(",")) { unsupported(d, "one animation per rule"); continue; }
+
+    const tokens = d.value.split(/\s+/);
+    const names = tokens.filter((t) => keyframeNames.has(t));
+    const times = tokens.map(seconds).filter((s) => s !== null);
+    const counts = tokens.filter((t) => /^\d+(\.\d+)?$/.test(t)).map(Number);
+    const infinite = tokens.includes("infinite");
+    const unknown = tokens.filter((t) => !keyframeNames.has(t) && seconds(t) === null && !/^\d+(\.\d+)?$/.test(t)
+      && t !== "infinite" && !EASING.has(t) && !FILL.has(t));
+
+    if (names.length === 0) {
+      // A name that matches no @keyframes is the likeliest cause, so say that rather than "unknown word".
+      issues.push({ kind: "animation_never_runs", detail: `"${d.selector} { animation: ${d.value} }" names no @keyframes that exists in the figure — it stays still` });
+      continue;
+    }
+    if (unknown.length > 0 || names.length > 1 || times.length > 2 || counts.length > 1) {
+      unsupported(d, unknown.length > 0 ? `"${unknown.join('", "')}" is not part of the supported form` : "one name, one duration, at most one delay and one count");
+      continue;
+    }
+    const duration = times[0] ?? 0;
+    const count = infinite ? Infinity : (counts[0] ?? 1);
+    if (duration <= 0 || count === 0) {
+      issues.push({ kind: "animation_never_runs", detail: `"${d.selector} { animation: ${d.value} }" has ${duration <= 0 ? "no duration above 0s" : "an iteration count of 0"} — it stays still` });
+      continue;
+    }
+    if (infinite) issues.push({ kind: "infinite_loop", detail: `"animation: ${d.value}" never stops — run once (an <img> offers no pause control)` });
+    animatedRules.push({ selector: d.selector, index: d.index });
+    maxDuration = Math.max(maxDuration, duration);
+    maxDelay = Math.max(maxDelay, times[1] ?? 0);
+    maxCount = Math.max(maxCount, count);
   }
-  const animated = animatedSelectors.size > 0;
+  const animated = animatedRules.length > 0;
   const sequence = looksLikeSequence(svg);
 
   for (const tag of ["animate", "set", "animateTransform"]) {
@@ -242,25 +303,6 @@ export function checkFigureMotion(svg) {
 
   let totalSeconds = null;
   if (animated) {
-    let maxDuration = 0, maxDelay = 0, maxCount = 1;
-    for (const d of animDecls) {
-      if (d.value.includes("infinite")) {
-        issues.push({ kind: "infinite_loop", detail: `"${d.prop}: ${d.value}" never stops — run once (an <img> offers no pause control)` });
-        maxCount = Infinity;
-      }
-      if (d.prop === "animation") {
-        const times = d.value.split(/\s+/).map(seconds).filter((s) => s !== null);
-        if (times[0] !== undefined) maxDuration = Math.max(maxDuration, times[0]);
-        if (times[1] !== undefined) maxDelay = Math.max(maxDelay, times[1]);
-        for (const t of d.value.split(/\s+/)) if (/^\d+(\.\d+)?$/.test(t)) maxCount = Math.max(maxCount, Number(t));
-      } else if (d.prop === "animation-duration") {
-        maxDuration = Math.max(maxDuration, ...d.value.split(",").map((t) => seconds(t.trim()) ?? 0));
-      } else if (d.prop === "animation-delay") {
-        maxDelay = Math.max(maxDelay, ...d.value.split(",").map((t) => seconds(t.trim()) ?? 0));
-      } else if (d.prop === "animation-iteration-count") {
-        for (const t of d.value.split(",")) if (/^\d+(\.\d+)?$/.test(t.trim())) maxCount = Math.max(maxCount, Number(t.trim()));
-      }
-    }
     // "Once" is the rule, not "short": three quick repeats fit inside 5 seconds and still loop.
     if (Number.isFinite(maxCount) && maxCount > 1) {
       issues.push({ kind: "repeats", detail: `the animation runs ${maxCount} times — run it once` });
@@ -270,23 +312,22 @@ export function checkFigureMotion(svg) {
       issues.push({ kind: "too_long", detail: `runs for about ${Math.round(totalSeconds * 10) / 10}s (largest delay + duration × iterations) — keep the whole animation within ${MAX_TOTAL_SECONDS}s (WCAG 2.2.2)` });
     }
 
-    // The rule has to switch off the animation that is actually there. `.unrelated { animation: none }`
-    // inside the media block is a rule, but the figure still moves.
+    // The rule has to switch off the animation that is actually there — and WIN. Two ways only:
+    //   · the same selector, `animation: none`, written AFTER the animated rule (or !important);
+    //   · `* { animation: none !important; }` — without !important a bare `*` loses to any class.
+    // `.unrelated { animation: none }` is a rule, but the figure still moves; so is `svg *` when the
+    // animation sits on the root.
     const off = media
-      .filter((b) => /prefers-reduced-motion\s*:\s*reduce/.test(b))
-      .flatMap((b) => declarations(b.slice(b.indexOf("{") + 1, b.lastIndexOf("}"))))
-      .filter((d) => (d.prop === "animation" || d.prop === "animation-name") && d.value.replace(/\s*!important$/, "") === "none");
-    const offParts = new Set(off.flatMap((d) => selectorParts(d.selector)));
-    const universal = [...offParts].some(isUniversal);
-    // An inline style="" beats every stylesheet rule that is not !important.
-    const universalImportant = off.some((d) => d.value.endsWith("!important") && selectorParts(d.selector).some(isUniversal));
-    const uncovered = [...animatedSelectors].filter((selector) => selector === INLINE
-      ? !universalImportant
-      : !universal && !selectorParts(selector).every((part) => offParts.has(part)));
+      .filter((b) => /prefers-reduced-motion\s*:\s*reduce/.test(b.text))
+      .flatMap((b) => declarations(b.text.slice(b.text.indexOf("{") + 1, b.text.lastIndexOf("}"))).map((d) => ({ ...d, index: b.index })))
+      .filter((d) => d.prop === "animation" && d.value === "none");
+    const switchedOff = (rule) => off.some((d) => d.important && selectorParts(d.selector).includes("*"))
+      || selectorParts(rule.selector).every((part) => off.some((d) => selectorParts(d.selector).includes(part) && (d.important || d.index > rule.index)));
+    const uncovered = [...new Set(animatedRules.filter((rule) => !switchedOff(rule)).map((rule) => rule.selector))];
     if (off.length === 0) {
       issues.push({ kind: "no_reduced_motion_rule", detail: "add @media (prefers-reduced-motion: reduce) { … { animation: none; } } — it is honoured when the figure is opened on its own" });
     } else if (uncovered.length > 0) {
-      issues.push({ kind: "no_reduced_motion_rule", detail: `the reduced-motion rule does not switch off "${uncovered.join('", "')}" — name the same selector, or use * { animation: none !important; }` });
+      issues.push({ kind: "no_reduced_motion_rule", detail: `the reduced-motion rule does not switch off "${uncovered.join('", "')}" — name the same selector after the animated rule, or use * { animation: none !important; }` });
     }
 
     // The picture at rest (no animation, or after it ends) must be complete: nothing hidden in base CSS,
@@ -301,9 +342,9 @@ export function checkFigureMotion(svg) {
     }
     const fillsForwards = animDecls.some((d) => /\b(forwards|both)\b/.test(d.value));
     if (fillsForwards) {
-      for (const block of keyframes) {
+      for (const { text: block } of keyframes) {
         const last = block.match(/(?:100%|to)\s*\{([^{}]*)\}\s*\}\s*$/);
-        if (last && /opacity\s*:\s*0(\.0+)?\s*(;|$)|visibility\s*:\s*hidden/.test(last[1])) {
+        if (last && /opacity\s*:\s*0(\.0+)?\s*(;|$)|visibility\s*:\s*hidden|display\s*:\s*none/.test(last[1])) {
           issues.push({ kind: "ends_hidden", detail: `${block.slice(0, 40)}… ends hidden and is held there by a forwards fill` });
         }
       }

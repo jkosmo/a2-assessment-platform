@@ -103,63 +103,102 @@ describe("figure-motion-check (#1073)", () => {
   // Funnet av QA-porten 2026-10-04: sjekken godkjente figurer som brøt reglene den skal håndheve.
   // Hver test under har en figur som SER animert ut for en regex, men ikke er trygg eller ikke rører seg.
 
-  it("an animation that cannot run is not an animation: no duration, or a name without keyframes", () => {
-    const utenVarighet = goodStyle.replace(".steg { animation: lys 1.4s ease-in-out 1; }", ".steg { animation-name: lys; }");
-    const r1 = checkFigureMotion(svg(utenVarighet + threeSteps));
-    expect(r1.animated).toBe(false);
-    expect(r1.issues.map((i) => i.kind)).toEqual(["animation_never_runs", "sequence_not_animated"]);
+  const kinds = (figure: string) => checkFigureMotion(svg(figure)).issues.map((i) => i.kind);
+  const medAnimasjon = (verdi: string) => goodStyle.replace("animation: lys 1.4s ease-in-out 1;", `animation: ${verdi};`);
+  const medRedusert = (regel: string) => goodStyle.replace("{ .steg { animation: none; } }", `{ ${regel} }`);
 
-    const feilNavn = goodStyle.replace("animation: lys 1.4s", "animation: lyss 1.4s");
-    const r2 = checkFigureMotion(svg(feilNavn + threeSteps));
-    expect(r2.animated).toBe(false);
-    expect(r2.issues.map((i) => i.kind)).toEqual(["animation_never_runs", "sequence_not_animated"]);
+  it("an animation that cannot run is not an animation: no duration, a count of 0, or a name without keyframes", () => {
+    for (const verdi of ["lys ease-in-out 1", "lys 0s 1", "lys 1.4s 0", "lyss 1.4s ease-in-out 1"]) {
+      const r = checkFigureMotion(svg(medAnimasjon(verdi) + threeSteps));
+      expect(r.animated, verdi).toBe(false);
+      expect(r.issues.map((i) => i.kind), verdi).toEqual(["animation_never_runs", "sequence_not_animated"]);
+    }
   });
 
-  it("control: animation-name with its own animation-duration runs", () => {
-    const langform = goodStyle.replace(".steg { animation: lys 1.4s ease-in-out 1; }", ".steg { animation-name: lys; animation-duration: 1.4s; }");
-    const r = checkFigureMotion(svg(langform + threeSteps));
-    expect(r.animated).toBe(true);
-    expect(r.issues).toEqual([]);
+  // ⚠️ Hvitlista. Tre QA-runder fant hver sin nye skrivemåte som slapp gjennom. Sjekken godtar nå
+  // den ENE formen malene bruker, og avviser resten — også gyldig CSS den ikke kan gå god for.
+  it("only the template's form is accepted: everything else is unsupported, with the reason", () => {
+    const avvist: Array<[string, string]> = [
+      [goodStyle.replace(".steg { animation: lys 1.4s ease-in-out 1; }", ".steg { animation-name: lys; animation-duration: 1.4s; }"), "shorthand"],
+      [goodStyle.replace("ease-in-out 1; }", "ease-in-out; animation-iteration-count: 2; }"), "shorthand"],
+      // ⚠️ Grunnen måles mot FORKLARINGEN, ikke mot ord som også står i selve deklarasjonen —
+      // meldingen siterer den, så «cubic-bezier» ville stått der uansett hvilken regel som slo til.
+      [medAnimasjon("lys 1.4s cubic-bezier(.1, .2, .3, 1) 1"), "use an easing keyword"],
+      [medAnimasjon("lys 1.4s steps(4, end) 1"), "use an easing keyword"],
+      [medAnimasjon("lys 1s 1, lys 2s 1"), "one animation per rule"],
+      [medAnimasjon("lys 1.4s alternate 1"), "is not part of the supported form"],
+      [goodStyle.replace(".s2 { animation-delay: 1.2s; }", ".s2 { animation-delay: 1.2s, 2s; }"), "one time value"],
+    ];
+    for (const [stil, grunn] of avvist) {
+      const funn = checkFigureMotion(svg(stil + threeSteps)).issues.filter((i) => i.kind === "unsupported_animation_form");
+      expect(funn.length, grunn).toBeGreaterThan(0);
+      expect(funn[0].detail, grunn).toContain(grunn);
+    }
+    // Én melding per feil: komma inne i cubic-bezier() skal ikke gi en ekstra «kjører aldri».
+    expect(kinds(medAnimasjon("lys 1.4s cubic-bezier(.1, .2, .3, 1) 1") + threeSteps)).toEqual(["unsupported_animation_form", "sequence_not_animated"]);
+  });
+
+  it("an animation in a style attribute is unsupported — the <style> block is the one place", () => {
+    const inline = threeSteps.replace('class="steg s1"', 'class="s1" style="animation: lys 1s 1"');
+    expect(kinds(goodStyle + inline)).toEqual(["unsupported_animation_form"]);
+  });
+
+  it("control: the optional parts of the form are accepted — delay, any easing keyword, a fill, no count", () => {
+    for (const verdi of ["lys 1.4s", "lys 1.4s 0.2s linear", "lys 1.4s ease-out 1 backwards", "1.4s lys"]) {
+      expect(kinds(medAnimasjon(verdi) + threeSteps), verdi).toEqual([]);
+    }
   });
 
   it("a short animation that repeats fails — «once» is the rule, not «within 5 seconds»", () => {
-    const tre = goodStyle.replace("lys 1.4s ease-in-out 1;", "lys 0.5s ease-in-out 3;").replace("1.2s", "0.2s").replace("2.4s", "0.4s");
+    const tre = medAnimasjon("lys 0.5s ease-in-out 3").replace("1.2s", "0.2s").replace("2.4s", "0.4s");
     const r = checkFigureMotion(svg(tre + threeSteps));
     expect(r.totalSeconds).toBeLessThan(5);
     expect(r.issues.map((i) => i.kind)).toEqual(["repeats"]);
-
-    const langform = goodStyle.replace("ease-in-out 1; }", "ease-in-out; animation-iteration-count: 2; }").replace("1.2s", "0.2s").replace("2.4s", "0.4s");
-    expect(checkFigureMotion(svg(langform + threeSteps)).issues.map((i) => i.kind)).toEqual(["repeats"]);
   });
 
   it("a reduced-motion rule that names something else does not count", () => {
-    const urelatert = goodStyle.replace("{ .steg { animation: none; } }", "{ .annet { animation: none; } }");
-    const r = checkFigureMotion(svg(urelatert + threeSteps));
+    const r = checkFigureMotion(svg(medRedusert(".annet { animation: none; }") + threeSteps));
     expect(r.issues.map((i) => i.kind)).toEqual(["no_reduced_motion_rule"]);
     expect(r.issues[0].detail).toContain(".steg");
   });
 
-  it("control: a universal reduced-motion rule covers every animated selector", () => {
-    const universell = goodStyle.replace("{ .steg { animation: none; } }", "{ * { animation: none !important; } }");
-    expect(checkFigureMotion(svg(universell + threeSteps)).issues).toEqual([]);
+  it("a reduced-motion rule must also WIN: a bare * loses to a class, svg * misses the root, an earlier rule is overridden", () => {
+    // `*` har lavere spesifisitet enn `.steg` og taper uten !important.
+    expect(kinds(medRedusert("* { animation: none; }") + threeSteps)).toEqual(["no_reduced_motion_rule"]);
+    // `svg *` treffer etterkommere, ikke rota — og er uansett ikke samme velger.
+    expect(kinds(medRedusert("svg * { animation: none !important; }") + threeSteps)).toEqual(["no_reduced_motion_rule"]);
+    // Samme velger, men skrevet FØR den animerte regelen: den siste vinner, og figuren beveger seg.
+    const førFørst = goodStyle
+      .replace("@media (prefers-reduced-motion: reduce) { .steg { animation: none; } }", "")
+      .replace(".steg { fill: #eef; stroke: #333; }", "@media (prefers-reduced-motion: reduce) { .steg { animation: none; } }\n  .steg { fill: #eef; stroke: #333; }");
+    expect(kinds(førFørst + threeSteps)).toEqual(["no_reduced_motion_rule"]);
   });
 
-  it("an inline style animation is only covered by a universal !important rule", () => {
-    const inline = threeSteps.replace('class="steg s1"', 'class="s1" style="animation: lys 1s 1"');
-    // .steg-regelen i goodStyle dekker ikke en style=""-attributt: den vinner over stilarket.
-    expect(checkFigureMotion(svg(goodStyle + inline)).issues.map((i) => i.kind)).toEqual(["no_reduced_motion_rule"]);
-    // En universell regel uten !important taper også mot attributten.
-    const utenImportant = goodStyle.replace("{ .steg { animation: none; } }", "{ * { animation: none; } }");
-    expect(checkFigureMotion(svg(utenImportant + inline)).issues.map((i) => i.kind)).toEqual(["no_reduced_motion_rule"]);
-    const universell = goodStyle.replace("{ .steg { animation: none; } }", "{ * { animation: none !important; } }");
-    expect(checkFigureMotion(svg(universell + inline)).issues).toEqual([]);
+  it("control: the same selector wins when it is !important or comes last, and * wins with !important", () => {
+    const førFørstViktig = goodStyle
+      .replace("@media (prefers-reduced-motion: reduce) { .steg { animation: none; } }", "")
+      .replace(".steg { fill: #eef; stroke: #333; }", "@media (prefers-reduced-motion: reduce) { .steg { animation: none !important; } }\n  .steg { fill: #eef; stroke: #333; }");
+    expect(kinds(førFørstViktig + threeSteps)).toEqual([]);
+    expect(kinds(medRedusert("* { animation: none !important; }") + threeSteps)).toEqual([]);
   });
 
-  it("display: none hides content at rest too — in CSS and as an attribute", () => {
-    const css = goodStyle.replace(".s3 { animation-delay: 2.4s; }", ".s3 { animation-delay: 2.4s; display: none; }");
-    expect(checkFigureMotion(svg(css + threeSteps)).issues.map((i) => i.kind)).toEqual(["hidden_at_rest"]);
+  it("selectors are compared as the browser reads them: spaces round a combinator do not matter", () => {
+    const stil = goodStyle
+      .replace(".steg { animation: lys", ".diagram > .steg, .reserve { animation: lys")
+      .replace("{ .steg { animation: none; } }", "{ .diagram>.steg, .reserve { animation:none } }");
+    expect(kinds(stil + threeSteps)).toEqual([]);
+    // Kontroll: dekker regelen bare den ene delen av kommalista, er den andre fortsatt i bevegelse.
+    const halv = stil.replace("{ .diagram>.steg, .reserve { animation:none } }", "{ .diagram>.steg { animation:none } }");
+    expect(kinds(halv + threeSteps)).toEqual(["no_reduced_motion_rule"]);
+  });
+
+  it("display: none hides content at rest too — in CSS (also with !important) and as an attribute", () => {
+    for (const skjult of ["display: none", "display: none !important", "visibility: hidden !important"]) {
+      const css = goodStyle.replace(".s3 { animation-delay: 2.4s; }", `.s3 { animation-delay: 2.4s; ${skjult}; }`);
+      expect(kinds(css + threeSteps), skjult).toEqual(["hidden_at_rest"]);
+    }
     const attributt = threeSteps.replace('<rect class="steg s3"', '<rect display="none" class="steg s3"');
-    expect(checkFigureMotion(svg(goodStyle + attributt)).issues.map((i) => i.kind)).toEqual(["hidden_at_rest"]);
+    expect(kinds(goodStyle + attributt)).toEqual(["hidden_at_rest"]);
   });
 
   it("single-quoted attributes are read: a still flow written with ' is still a flow", () => {
@@ -207,6 +246,33 @@ describe("what counts as a flow (#1073)", () => {
     const tre = boks(180, 10, "Ledelse") + boks(10, 140, "Salg") + boks(180, 140, "Drift") + boks(350, 140, "HR")
       + `<path d="M240 50 L70 140 M240 50 L240 140 M240 50 L410 140"/>`;
     expect(checkFigureMotion(svg(tre)).sequence).toBe(false);
+  });
+
+  it("control: ONE continuous path child → parent → child → parent → child joins no child to the next", () => {
+    const tre = boks(180, 10, "Ledelse") + boks(10, 140, "Salg") + boks(180, 140, "Drift") + boks(350, 140, "HR")
+      + `<path d="M70 140 L240 50 L240 140 L240 50 L410 140"/>`;
+    expect(checkFigureMotion(svg(tre)).sequence).toBe(false);
+  });
+
+  it("an elbow connector — out, across, in — still joins two boxes directly", () => {
+    const vinkel = `<polyline points="130,40 155,40 155,10 180,10 180,40"/><polyline points="300,40 325,40 325,70 350,70 350,40"/>`;
+    expect(checkFigureMotion(svg(treIRad + vinkel)).sequence).toBe(true);
+  });
+
+  it("labels placed by <tspan x y> count: a long label broken into lines is still a label", () => {
+    const boksTspan = (x: number, y: number, etikett: string) =>
+      `<rect x="${x}" y="${y}" width="120" height="40"/><text text-anchor="middle"><tspan x="${x + 60}" y="${y + 18}">${etikett}</tspan><tspan x="${x + 60}" dy="14">linje to</tspan></text>`;
+    const flyt = boksTspan(10, 20, "Motta") + boksTspan(180, 20, "Vurder") + boksTspan(350, 20, "Vedta")
+      + `<path d="M130 40 H180"/><path d="M300 40 H350"/>`;
+    const r = checkFigureMotion(svg(flyt));
+    expect(r.sequence).toBe(true);
+    expect(r.issues.map((i) => i.kind)).toEqual(["sequence_not_animated"]);
+  });
+
+  it("control: one path of separate tick marks, one under each box, joins nothing", () => {
+    // Tre delbaner i ÉN path. Leses de som én sammenhengende strek, går den «fra boks til boks».
+    const merker = `<path d="M70 60 V70 M240 60 V70 M410 60 V70"/>`;
+    expect(checkFigureMotion(svg(treIRad + merker)).sequence).toBe(false);
   });
 
   it("control: three boxes in a row with lines that join nothing are not a flow", () => {
