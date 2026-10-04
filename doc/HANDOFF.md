@@ -14,7 +14,7 @@
 | prod | 2.77.0 | rullet 2026-10-04 kl. 08:54 fra `3f111c68`; #894 er lukket |
 | stage | 2.78.3 | rullet 2026-10-04 kl. 18:16 fra `2433d2b7`, commiten QA-porten ga GO på; #1080, #1081 og #1083 |
 | `main` (git) | 2.77.0 | likt med prod (PR #1082 merget 2026-10-04) |
-| `dev` (git) | 2.79.0 | foran stage med **bare skillet**: #1079 steg 2 (sirkler og fasefarger). Plattformkoden er lik stage |
+| `dev` (git) | 2.80.0 | foran stage med **bare skillet**: #1079 steg 2 og 3 (sirkler, fasefarger, to oppsett). Plattformkoden er lik stage |
 
 Fire ting krever et menneske:
 
@@ -26,7 +26,7 @@ Fire ting krever et menneske:
 2. **Prod** krever GitHub-godkjenning fra `jkosmo`, utenfor arbeidstid. Det som skal ut, er
    `2433d2b7` (2.78.3): én utrulling med 2.78.1–2.78.3 samlet. ⚠️ **Ikke 2.78.2 alene:** den kan ta
    ned appen på en tett figur på 1 MB, se under.
-3. **2.79.0 trenger ingen utrulling for å virke.** Den endrer bare skillet, som kjører på
+3. **2.79.0 og 2.80.0 trenger ingen utrulling for å virke.** De endrer bare skillet, som kjører på
    forfatterens maskin (`npm run skill:package`). Den følger med neste gang appen rulles ut.
 4. **Lagrede figurer er ikke målt.** `npm run maint:repair-unreadable-svg-assets` (tørrkjøring uten
    `--apply`) er ikke kjørt mot stage eller prod, så det er ikke kjent hvor mange figurer som
@@ -149,7 +149,7 @@ QA-gjennomgangen av 2.78.2 ga GO for stage med to funn. Begge er rettet, og deta
 gjorde før #1083. Det er antall elementer som koster, ikke bytes, og grensa i dag er 5 MB i bytes.
 Heap-grensa i prod er ikke lest av. Se «Åpne beslutninger».
 
-## Hva som ble gjort: #1079 steg 2 (2.79.0) — og hva som gjenstår
+## Hva som ble gjort: #1079 steg 2 og 3 (2.79.0, 2.80.0) — og hva som gjenstår
 
 Saken: en PowerPoint skal bli et kurs der figurene tegnes på nytt som små SVG-er, ikke ett bilde
 per lysark. Produkteier har godkjent retningen og plattformdesignet (kommentarene i #1079).
@@ -158,7 +158,7 @@ per lysark. Produkteier har godkjent retningen og plattformdesignet (kommentaren
 |---|---|---|
 | 1 | Måle en ekte presentasjon, tegne ett lysbilde på nytt, sammenligne med originalen | gjort; beslutningene står i #1079 |
 | 2 | Skillet: sirkler som steg og farge per fase, i malen og sjekkene | **gjort, 2.79.0** |
-| 3 | Skillet: to oppsett (bredt og smalt) fra én beskrivelse | utkast finnes, ikke i repoet (se under) |
+| 3 | Skillet: to oppsett (bredt og smalt) fra én beskrivelse | **gjort, 2.80.0** |
 | 4 | Plattformen: lagre det smale oppsettet (`layoutVariants`) og velge etter spaltebredde | ikke startet; designet står i #1079 |
 | – | Uttrekk fra presentasjonsfila (`pptx-extract.mjs`), og et sammendrag som kilde | ikke startet |
 
@@ -166,11 +166,17 @@ Steg 2: ny mal «flow with phases» i `figure-design.md`, `figure-motion-check.m
 andre form av malen, og `figure-fit-check.mjs` avviser etiketter som overlapper og streker gjennom
 en etikett. Detaljer og målinger i `doc/VERSIONS.md`.
 
-Steg 3, utkastet: `draw-flow-figure.mjs` tar én beskrivelse (steg, faser, farger) som JSON og
-tegner begge oppsettene, og kjører begge figursjekkene på resultatet før det returneres. Kjørt på
-arbeidsflyten fra den ekte presentasjonen gir det de to figurene produkteier godkjente, tegn for
-tegn. Det ligger i øktens arbeidsmappe og må skrives inn i `skills/a2-authoring-api/scripts/` med
-tester. Til plattformen kan velge oppsett (steg 4), brukes bare det brede.
+Steg 3: `skills/a2-authoring-api/scripts/draw-flow-figure.mjs` tar én beskrivelse (steg, faser,
+farger) som JSON og tegner begge oppsettene, og kjører begge figursjekkene på resultatet før det
+returneres. Kjørt på arbeidsflyten fra den ekte presentasjonen gir det de to figurene produkteier
+godkjente, tegn for tegn. En figur har høyst åtte steg (begrunnelsen står i skriptet). Til
+plattformen kan velge oppsett (steg 4), går bare den brede i pakka.
+
+**Steg 4 er neste, og det er tverrgående.** Lista over alt som skriver eller leser en figur, står i
+designkommentaren i #1079: import og eksport, forfatter-API-et, oversettelse av figurtekst,
+servering, sletting, eksportbudsjettet, reparasjonen fra #1083 og klienten
+(`hydrateContentAssetImages`, to kallsteder). Mangler ett av stedene, blir figuren hel i det ene
+oppsettet og borte i det andre. Migrasjonen legger bare til en kolonne.
 
 ## Hva som ble gjort: #1080 (2.78.1)
 
@@ -220,7 +226,7 @@ listene. Jeg utvidet ikke regelen for å unngå det — det ville vært en tverr
   && npm run test:integration:native) > "$TEMP/claude/kjoring.log" 2>&1; echo "EXIT=$?"
 ```
 
-Sist målt 2026-10-04, på 2.79.0: **1728 enhet · 69 DOM · 389 e2e · 709 integrasjon**, alle grønne.
+Sist målt 2026-10-04, på 2.80.0: **1763 enhet · 69 DOM · 392 e2e · 709 integrasjon**, alle grønne.
 Kjør `npm run build` alene etter å ha skrevet en ny testfil: bygget typesjekker også testene, og en
 typefeil der stopper hele rekka etter ti sekunder.
 Ikke pipe utdataene til `tail` — det skjuler feiltellingen og gir exit 0.

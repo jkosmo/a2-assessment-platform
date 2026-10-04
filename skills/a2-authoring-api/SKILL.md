@@ -23,7 +23,8 @@ Translating to all three languages: **[references/localization.md](references/lo
 Designing figures (SVG, "one figure, one point"): **[references/figure-design.md](references/figure-design.md)**.
 Deterministic checks live in `scripts/` (`course-state.mjs`, `export-validate.mjs`,
 `localization-check.mjs`, `mcq-cue-check.mjs`, `figure-fit-check.mjs`, `figure-motion-check.mjs`)
-— run them; they are repo-unit-tested.
+— run them; they are repo-unit-tested. `draw-flow-figure.mjs` draws a flow with phases from a
+description, in a wide and a narrow layout (#1079).
 
 ## What you produce
 
@@ -124,7 +125,8 @@ the three references above.
    unchanged (only colours, duration, delays and the number of steps may differ), and nothing in
    the markup but steps (`<rect>` boxes or `<circle>`s), connectors and labels. When the steps
    belong to phases, use the **flow with phases** template (#1079): numbered circles, each resting
-   and lighting up in its phase's colours. Do not write your own animation CSS,
+   and lighting up in its phase's colours — **described in JSON and drawn by
+   `scripts/draw-flow-figure.mjs`**, not written by hand. Do not write your own animation CSS,
    and do not add other shapes, groups or transforms. A still flow is an explicit choice
    (`data-motion="static"`).
    `scripts/figure-motion-check.mjs` must be clean for every figure and variant. (figure-design.md.)

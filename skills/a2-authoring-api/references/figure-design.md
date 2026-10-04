@@ -154,6 +154,51 @@ step carries exactly one phase class.
 </svg>
 ```
 
+**Do not write this figure by hand — describe it and let the script draw it (#1079).** A figure
+shown as an image cannot re-break itself when the column is narrow, so a flow with phases exists in
+**two layouts**: wide (every step on one row) and narrow (four per row, for a phone). Two
+hand-written SVGs drift apart. `draw-flow-figure.mjs` takes one description and draws both, so
+they cannot disagree, and it runs both figure checks on each before it returns anything.
+
+```json
+{
+  "name": "saksgang",
+  "title": "Saksgang fra mottak til arkiv",
+  "desc": "Fire steg i rekkefølge, fordelt på fasene Forbered og Avslutt.",
+  "phases": {
+    "forbered": { "label": "Forbered", "grunn": "#d9e8dd", "lys": "#6fae87", "tekst": "#3f7a57" },
+    "avslutt": { "label": "Avslutt", "grunn": "#e7e2f0", "lys": "#a99bc9", "tekst": "#6b5a94" }
+  },
+  "steps": [
+    { "label": ["Motta", "saken"], "phase": "forbered" },
+    { "label": ["Sjekk", "vedlegg"], "phase": "forbered" },
+    { "label": ["Skriv", "vedtaket"], "phase": "avslutt" },
+    { "label": ["Arkiver"], "phase": "avslutt" }
+  ]
+}
+```
+
+`node skills/a2-authoring-api/scripts/draw-flow-figure.mjs saksgang.json out/` writes
+`out/saksgang.svg` (wide) and `out/saksgang.narrow.svg`.
+
+- **Steps:** two to eight, each label one or two short lines. Eight is where the wide layout's
+  labels are still readable in the narrowest column it is shown in; a longer flow is two figures.
+- **Phases:** each has a resting colour (`grunn`) and the colour it lights up in (`lys`), both
+  opaque hex — take them from the source when it has them. `label` puts a line and a name over the
+  phase's steps; leave it out for a phase without one (a lone first or last step). `tekst` is the
+  colour of that name.
+- **When it refuses:** the message names what is wrong — a label too long for the space between
+  two steps (`labels_overlap`), a step in a phase that is not listed. Shorten the label or break it
+  differently; do not edit the drawn SVG to make it fit.
+- **Which file goes in the package:** the **wide** one, as the section asset. The platform cannot
+  yet choose a layout by column width (#1079, the platform part), so the narrow file is kept beside
+  the description until it can. Keep the description: it is the figure's source.
+- **Locale variants:** copy the description, translate `title`, `desc`, the phase labels and the
+  step labels — **same number of lines per label** — and draw again. The geometry is then identical
+  by construction, which is what `localizedVariants` requires.
+- You still **look** at both drawings (see below). The script guarantees the form, not that the
+  figure says the right thing.
+
 ### tree / decision
 ```svg
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 200" role="img"

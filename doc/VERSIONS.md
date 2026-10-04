@@ -2,6 +2,50 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.80.0 - 2026-10-04
+
+Bare skillet (`skills/a2-authoring-api`). Ingen endring i plattformkoden, ingen migrasjon.
+
+### #1079, steg 3 av 4 — to oppsett av samme figur, tegnet fra én beskrivelse
+
+En figur som vises som bilde, har fast form. Den kan ikke brekke seg selv om når spalten blir smal.
+Produkteier bestemte derfor (2026-10-04) at en flyt finnes i to oppsett: **bredt**, med alle steg
+på én rad, og **smalt**, med fire per rad for telefon.
+
+To tegninger skrevet for hånd ville sprike: en etikett rettet i den ene, et steg lagt til i den
+andre. `skills/a2-authoring-api/scripts/draw-flow-figure.mjs` tar derfor **én beskrivelse** av
+flyten (steg, rekkefølge, faser, farger) som JSON og tegner begge. Det som kommer ut, er
+fasemalen fra 2.79.0, og skriptet kjører begge figursjekkene på hver tegning før noe returneres.
+En etikett som er for lang for plassen mellom to steg, blir en feil der, med etiketten navngitt.
+
+Dette er standardveien for en flyt med faser: forfatteren beskriver, skriptet tegner. Språk-
+varianter lages ved å oversette beskrivelsen og tegne på nytt, så geometrien er lik av seg selv.
+
+**En figur har høyst åtte steg.** To ting gir samme tall: det brede oppsettet vises ned til en
+spalte på 640 px, og med åtte steg er etikettene da 9 px på skjermen; og åtte steg etter tur er
+ferdig på 4,75 sekunder, innenfor de fem animasjonen har. En lengre flyt er to figurer. Dette er
+en vurdering av lesbarhet, ikke en grense i plattformen.
+
+**Plattformen kan ikke velge oppsett ennå.** Til den kan (steg 4), går den brede figuren i pakka,
+og den smale ligger ved siden av beskrivelsen.
+
+**Målt:**
+
+- Kjørt på flyten fra den ekte presentasjonen (åtte steg, fem faser) gir skriptet de to figurene
+  produkteier godkjente, tegn for tegn: 4,9 kB bred og 5,1 kB smal.
+- Enhet (`test/unit/agent-authoring-draw-flow-figure-1079.test.ts`, 35 tester): begge oppsettene
+  består begge sjekkene, også etter `sanitizeSvg`; de to sier det samme (samme tekster i samme
+  rekkefølge, samme stilblokk, samme steg); atten beskrivelser som ikke kan tegnes, avvises med
+  årsaken navngitt; kommandolinja skriver begge filene, og ingenting når beskrivelsen er gal.
+  Eksempelet i `figure-design.md` tegnes som det står.
+- Chromium (`test/e2e/figure-motion-template-1073.spec.ts`, tre nye): i begge oppsettene lyser
+  seks steg opp etter tur, én gang, og hviler i fasens farge; ingenting er tegnet utenfor figuren;
+  det smale har to rader og det brede én.
+- 16 mutasjoner, 16 røde.
+
+**Gjenstår i #1079:** plattformens lagring og valg av oppsett (`layoutVariants`, designet står i
+saken), og uttrekket fra presentasjonsfila.
+
 ## 2.79.0 - 2026-10-04
 
 Bare skillet (`skills/a2-authoring-api`). Ingen endring i plattformkoden, ingen migrasjon.

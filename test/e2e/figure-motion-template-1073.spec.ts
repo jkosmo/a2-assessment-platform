@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { expect, test, type Page } from "@playwright/test";
 import { checkFigureMotion } from "../../skills/a2-authoring-api/scripts/figure-motion-check.mjs";
+import { drawFlowFigure } from "../../skills/a2-authoring-api/scripts/draw-flow-figure.mjs";
 import { sanitizeSvg } from "../../src/modules/course/svgSanitizer.js";
 
 // #1073: `figure-motion-check.mjs` SAMMENLIGNER figurer med flytmalen i figure-design.md — den tolker
@@ -245,4 +246,62 @@ test.describe("#1079 — fasemalen, målt i nettleseren", () => {
       expect(r.issues.map((i) => i.kind)).toContain("unsupported_animation_form");
     });
   }
+});
+
+// #1079: `draw-flow-figure.mjs` tegner samme flyt i to oppsett. Det smale har noe det brede ikke
+// har — to rader og en strek som går rundt fra den ene til den andre — så nettleseren blir spurt om
+// begge: beveger hvert steg seg, etter tur, og er alt synlig når det er over?
+test.describe("#1079 — det skriptet tegner, målt i nettleseren", () => {
+  const beskrivelse = {
+    name: "flyt",
+    title: "Seks steg i tre faser",
+    desc: "Seks steg i rekkefølge.",
+    phases: {
+      a: { label: "Først", grunn: "#d9e8dd", lys: "#6fae87" },
+      b: { label: "Så", grunn: "#dce7f2", lys: "#7fa3c7" },
+      c: { label: "Sist", grunn: "#e7e2f0", lys: "#a99bc9" },
+    },
+    steps: [
+      { label: ["Steg", "en"], phase: "a" }, { label: ["Steg", "to"], phase: "a" }, { label: ["Steg", "tre"], phase: "b" },
+      { label: ["Steg", "fire"], phase: "b" }, { label: ["Steg", "fem"], phase: "c" }, { label: ["Steg", "seks"], phase: "c" },
+    ],
+  };
+
+  for (const oppsett of ["wide", "narrow"] as const) {
+    test(`${oppsett}: seks steg lyser opp etter tur, én gang, og hviler i fasens farge med alt synlig`, async ({ page }) => {
+      const figur = drawFlowFigure(beskrivelse)[oppsett];
+      await åpne(page, figur);
+
+      const funnet = await animasjoner(page);
+      expect(funnet).toHaveLength(6);
+      // Rekkefølgen i tid følger stegnumrene: s1 er først ferdig, s6 sist.
+      const etterTur = [...funnet].sort((x, y) => x.slutt - y.slutt).map((a) => a.element?.split(" ")[1]);
+      expect(etterTur).toEqual(["s1", "s2", "s3", "s4", "s5", "s6"]);
+      for (const a of funnet) { expect(a.runder).toBe(1); expect(a.slutt).toBeLessThanOrEqual(5000); }
+
+      await page.evaluate(() => { for (const a of document.getAnimations()) a.finish(); });
+      const fyll = await page.locator("circle").evaluateAll((sirkler) => sirkler.map((s) => getComputedStyle(s).fill));
+      expect(fyll).toEqual(["rgb(217, 232, 221)", "rgb(217, 232, 221)", "rgb(220, 231, 242)", "rgb(220, 231, 242)", "rgb(231, 226, 240)", "rgb(231, 226, 240)"]);
+
+      // Alt som er tegnet, ligger innenfor figuren. Et radskifte som gikk utenfor, ville vært kuttet.
+      const utenfor = await page.evaluate(() => {
+        const ramme = document.documentElement.getBoundingClientRect();
+        return [...document.querySelectorAll("circle, text, line, polyline")].filter((el) => {
+          const r = el.getBoundingClientRect();
+          return r.left < ramme.left - 0.5 || r.right > ramme.right + 0.5 || r.top < ramme.top - 0.5 || r.bottom > ramme.bottom + 0.5;
+        }).map((el) => el.tagName + ":" + (el.textContent ?? "").trim());
+      });
+      expect(utenfor).toEqual([]);
+    });
+  }
+
+  test("det smale oppsettet har to rader, det brede én", async ({ page }) => {
+    const rader = async (svg: string) => {
+      await åpne(page, svg);
+      return new Set(await page.locator("circle").evaluateAll((sirkler) => sirkler.map((s) => Math.round(s.getBoundingClientRect().top)))).size;
+    };
+    const { wide, narrow } = drawFlowFigure(beskrivelse);
+    expect(await rader(wide)).toBe(1);
+    expect(await rader(narrow)).toBe(2);
+  });
 });
