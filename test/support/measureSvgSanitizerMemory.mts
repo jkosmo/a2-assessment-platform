@@ -16,10 +16,15 @@ const heapMb = () => { gc(); gc(); return process.memoryUsage().heapUsed / 1024 
 // Rundt 5 kB: omtrent som en nytegnet flytfigur med etiketter.
 const figur = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 200">${Array.from({ length: 60 }, (_, i) => `<rect x="${i}" y="${i}" width="40" height="20" fill="#eef"/><text x="${i}" y="${i}">Steg ${i}</text>`).join("")}</svg>`;
 const renset = sanitizeSvg(figur);
+// Slik en figur så ut på lager før #1083: `&nbsp;` finnes ikke i XML, så den lar seg ikke lese.
+// Reparasjonen sender nettopp slike gjennom kontrollen, og feilveien er en egen vei gjennom koden.
+const uleselig = renset.replace("Steg 1<", "Steg&nbsp;1<");
+if (uleselig === renset || isSvgReadableAsImage(uleselig)) throw new Error("den uleselige figuren er ikke uleselig");
 
 const veier: Record<string, () => void> = {
   sanitizeSvg: () => { sanitizeSvg(figur); },
   isSvgReadableAsImage: () => { isSvgReadableAsImage(renset); },
+  isSvgReadableAsImageUleselig: () => { isSvgReadableAsImage(uleselig); },
   extractSvgTexts: () => { extractSvgTexts(renset); },
   applySvgTextTranslations: () => { applySvgTextTranslations(renset, { "Steg 1": "Step 1" }); },
 };

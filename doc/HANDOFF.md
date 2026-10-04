@@ -7,25 +7,27 @@
 
 ## Kort: det som må avgjøres
 
-**Prod står på 2.77.0. Stage står på 2.78.1 og venter på manuell test før prod.**
+**Prod står på 2.77.0. Stage står på 2.78.2 og venter på manuell test før prod.**
 
 | Miljø | Versjon | |
 |---|---|---|
 | prod | 2.77.0 | rullet 2026-10-04 kl. 08:54 fra `3f111c68`; #894 er lukket |
-| stage | 2.78.1 | rullet 2026-10-04 fra `ff3faef4`, commiten QA-porten ga GO på; #1080 og #1081 |
+| stage | 2.78.2 | rullet 2026-10-04 kl. 15:42 fra `775a323b`, commiten QA-porten ga GO på; #1080, #1081 og #1083 |
 | `main` (git) | 2.77.0 | likt med prod (PR #1082 merget 2026-10-04) |
-| `dev` (git) | 2.78.2 | foran stage: oppfølging i skillet, og #1083 |
+| `dev` (git) | 2.78.3 | foran stage: de to funnene fra gjennomgangen av 2.78.2 er rettet |
 
 Fire ting krever et menneske:
 
-1. **Manuell test på stage** av 2.78.1. Testskriptet ligger utenfor repoet, hos produkteier
+1. **Manuell test på stage.** Testskriptet ligger utenfor repoet, hos produkteier
    (`MANUELL_TEST_2.78.1.md`, med en ferdig seksjonspakke til figurtesten): de fire listene på
-   telefon, «Mer» i nederste rad, og en animert figur. `npm run test:stage` krever innlogging
-   (`npm run stage:auth`).
-2. **2.78.2 (#1083) til stage** krever GO fra QA-porten. Endringen ligger i `svgSanitizer.ts`
-   (sikkerhetskode).
+   telefon, «Mer» i nederste rad, og en animert figur. For #1083 kommer i tillegg lista «Ikke
+   verifiserbart statisk» nederst i `.ai-qa/qa-20261004-150250.md`: en figur med hardt mellomrom
+   lastet opp, lokalisert og importert. `npm run test:stage` krever innlogging (`npm run stage:auth`).
+2. **2.78.3 til stage** krever GO fra QA-porten. Endringen ligger i `svgSanitizer.ts`
+   (sikkerhetskode) og i skillets figursjekk. ⚠️ **2.78.2 skal ikke til prod alene:** den kan ta ned
+   appen på en tett figur på 1 MB, se under.
 3. **Prod** krever GitHub-godkjenning fra `jkosmo`, utenfor arbeidstid. Planen er én utrulling med
-   2.78.1 og 2.78.2 samlet.
+   2.78.1–2.78.3 samlet.
 4. **Lagrede figurer er ikke målt.** `npm run maint:repair-unreadable-svg-assets` (tørrkjøring uten
    `--apply`) er ikke kjørt mot stage eller prod, så det er ikke kjent hvor mange figurer som
    allerede er lagret i uleselig form. Se `doc/OPERATIONS_RUNBOOK.md`.
@@ -129,6 +131,23 @@ den. Årsaken var ett `querySelector` på et tre fra jsdom-vinduet som lever lik
 testen, og les kommentaren i `test/support/measureSvgSanitizerMemory.mts` før du måler minne selv —
 en synkron løkke ser ut som en lekkasje også i frisk kode.
 
+## Hva som ble gjort: 2.78.3 (oppfølging av #1083 og figursjekken)
+
+QA-gjennomgangen av 2.78.2 ga GO for stage med to funn. Begge er rettet, og detaljene står i
+`doc/VERSIONS.md`.
+
+- **Lesbarhetskontrollen i `sanitizeSvg` doblet minnetoppen.** En tett figur på 1 MB (rundt 25 000
+  elementer) tok ned prosessen ved 512 MB heap i 2.78.2. Kontrollen leser nå gjennom teksten med
+  samme XML-leser som før (`saxes`), uten å bygge et dokument. Testen sammenligner svarene med
+  `DOMParser` på 637 tilfeller, og en egen test kjører kontrollen på 4 MB med 256 MB heap.
+- **Skillets figursjekk** avviser nå både en omvendt skråstrek og en tegnreferanse (`&#97;`) i
+  figurens CSS, som `css_escape`. Tegnreferansen var et hull: plattformen gjør `&#97;nimation` om til
+  `animation` ved lagring, og sjekken godkjente figuren som stillestående.
+
+⚠️ **Ikke rettet:** en tett figur på 1,5 MB tar fortsatt ned prosessen ved 512 MB heap, slik den
+gjorde før #1083. Det er antall elementer som koster, ikke bytes, og grensa i dag er 5 MB i bytes.
+Heap-grensa i prod er ikke lest av. Se «Åpne beslutninger».
+
 ## Hva som ble gjort: #1080 (2.78.1)
 
 Telefonvisningen av de fire listene. Cellene manglet kolonnenavn, var bredere enn kortet, og «Mer»
@@ -177,7 +196,7 @@ listene. Jeg utvidet ikke regelen for å unngå det — det ville vært en tverr
   && npm run test:integration:native) > "$TEMP/claude/kjoring.log" 2>&1; echo "EXIT=$?"
 ```
 
-Sist målt 2026-10-04, på 2.78.2: **1623 enhet · 69 DOM · 381 e2e · 709 integrasjon**, alle grønne.
+Sist målt 2026-10-04, på 2.78.3: **1678 enhet · 69 DOM · 381 e2e · 709 integrasjon**, alle grønne.
 Kjør `npm run build` alene etter å ha skrevet en ny testfil: bygget typesjekker også testene, og en
 typefeil der stopper hele rekka etter ti sekunder.
 Ikke pipe utdataene til `tail` — det skjuler feiltellingen og gir exit 0.
@@ -221,6 +240,7 @@ Vertsnavnene står i `doc/ENVIRONMENTS.local.md` (gitignorert, skal ikke skrives
 | **#928** | Drift-varselet er verken synlig eller utløst av den vanligste årsaken (`doc/DESIGN_928.md`) |
 | **#934** | Kursversjonering: målbilde, og det minste som gjør dagens versjon logisk |
 | **#808** | Står åpen med ny utløser: nedetid som flytter seg inn i arbeidstiden, eller deploy-nedetid som ikke lenger godtas. Morgenomstarten (~06:05) er akseptert. |
+| **Tett figur kan ta ned appen** (ingen sak ennå) | En SVG med svært mange elementer (rundt 1,5 MB tett tegnet) bruker opp minnet under rensingen, nå som før #1083. Bare en innlogget forfatter kan laste opp. Skal det settes en grense på antall elementer, og hvor? Les først av heap-grensa i prod. |
 
 ---
 

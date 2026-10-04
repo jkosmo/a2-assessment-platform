@@ -252,7 +252,62 @@ describe("figure-motion-check (#1073)", () => {
     expect(kinds(små)).toContain("not_css_only");
     // CSS leser `anim\61tion` som `animation`. En «stillestående» figur med den beveger seg for alltid.
     const escapet = `<style>.a { anim\\61tion: lys 9s infinite; } @keyfr\\61mes lys { to { opacity: .5 } }</style>` + threeSteps.replace('class="steg s1"', 'class="a"');
-    expect(kinds(escapet)).toEqual(["unsupported_animation_form"]);
+    expect(kinds(escapet)).toEqual(["css_escape"]);
+  });
+
+  // Funnet av gjennomgangen av 2.78.2 (2026-10-04): en STILLESTÅENDE figur med en escape i stilen ble
+  // avvist med en melding om malen for animerte figurer. Regelen står; meldingen var svar på et
+  // annet spørsmål. Samme dag målt: en tegnreferanse staver «animation» like godt som en escape, og
+  // den slapp gjennom som stillestående figur.
+  describe("a character spelled without being written is refused, with its own message", () => {
+    const stille = (stil: string, attributt = "") =>
+      svg(`<style>${stil}</style><rect x="10" y="10" width="80" height="40" fill="#eef"/><text class="t" x="20" y="30"${attributt}>Hei</text>`);
+
+    it("control: a still figure with ordinary CSS passes", () => {
+      expect(checkFigureMotion(stille(`.t { font-family: "Segoe UI", sans-serif; }`)).issues).toEqual([]);
+    });
+
+    it.each([
+      ["a CSS escape in a still figure", stille(`.t { font-family: Segoe\\ UI, sans-serif; }`)],
+      ["an escape that spells animation", stille(`.t { anim\\61tion: x 9s infinite; }`)],
+      ["a character reference that spells animation", stille(`.t { &#97;nimation: x 9s infinite; } @keyfr&#x61;mes x { to { opacity: .5 } }`)],
+      ["a character reference that spells a backslash", stille(`.t { anim&#92;61tion: x 9s infinite; }`)],
+      ["a named reference the platform knows and XML does not", stille(`.t { anim&bsol;61tion: x 9s infinite; }`)],
+      ["a reference without its semicolon", stille(`.t { &#97nimation: x 9s infinite; }`)],
+      ["a character reference in a style attribute", stille(`.t { fill: #111; }`, ` style="&#97;nimation: x 9s infinite"`)],
+    ])("%s", (_navn, figur) => {
+      const r = checkFigureMotion(figur);
+      expect(r.issues.map((i) => i.kind)).toEqual(["css_escape"]);
+      // Meldingen handler om det som er galt, ikke om malen for animerte figurer.
+      expect(r.issues[0]?.detail).not.toMatch(/template|steg/);
+      expect(r.animated).toBe(false);
+    });
+
+    // Grunnen til regelen, målt mot plattformens egen rensing og ikke antatt: det som lagres, ER en
+    // animasjon (eller en escape nettleseren leser som en). Slutter plattformen å gjøre referansene
+    // om, blir denne rød, og da kan regelen vurderes på nytt.
+    it.each([
+      [`.t { &#97;nimation: x 9s infinite; }`, "animation: x 9s infinite"],
+      [`.t { &#97nimation: x 9s infinite; }`, "animation: x 9s infinite"],
+      [`.t { anim&#92;61tion: x 9s infinite; }`, "anim\\61tion: x 9s infinite"],
+      [`.t { anim&bsol;61tion: x 9s infinite; }`, "anim\\61tion: x 9s infinite"],
+    ])("the platform stores %s as running CSS", (stil, lagret) => {
+      expect(sanitizeSvg(stille(stil))).toContain(lagret);
+    });
+    it("the platform stores a character reference in a style attribute as running CSS", () => {
+      expect(sanitizeSvg(stille(`.t { fill: #111; }`, ` style="&#97;nimation: x 9s infinite"`))).toContain(`style="animation: x 9s infinite"`);
+    });
+
+    it("`>`, `<` and `&` written the XML way are not escapes — the platform writes `>` so itself", () => {
+      expect(checkFigureMotion(stille(`.a &gt; .t { fill: #111; } @media (width &lt; 600px) { .t { fill: #222; } }`)).issues).toEqual([]);
+      expect(checkFigureMotion(stille(`.t::after { content: "a &amp; b"; }`)).issues).toEqual([]);
+    });
+
+    it("the animated template is not disturbed, and an escape in it is reported next to what else is wrong", () => {
+      expect(checkFigureMotion(svg(goodStyle + threeSteps)).issues).toEqual([]);
+      const medEscape = goodStyle.replace("</style>", " .steg { font-family: Segoe\\ UI; }</style>");
+      expect(kinds(medEscape + threeSteps).sort()).toEqual(["css_escape", "unsupported_animation_form"]);
+    });
   });
 
   it("an animated figure has one <style> block and no style attributes", () => {

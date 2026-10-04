@@ -2,6 +2,78 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.78.3 - 2026-10-04
+
+To rettinger etter QA-gjennomgangen av 2.78.2, ingen migrasjon. Gjennomgangen ga GO for stage, med
+ett funn som skulle avgjøres før prod. Det er rettet her.
+
+### #1083 — lesbarhetskontrollen kunne ta ned appen på en tett figur
+
+2.78.2 la til en kontroll i `sanitizeSvg`: det som lagres, skal la seg lese som XML. Kontrollen
+leste hele figuren inn i et nytt dokument, mens det rensede treet ennå levde. To trær samtidig
+doblet minnetoppen.
+
+Målt med en tett figur (par av `<rect>` og `<text>`, rundt 25 000 elementer per MB) og 512 MB heap:
+
+| Figur | Før #1083 (2.78.1) | 2.78.2 | 2.78.3 |
+|---|---|---|---|
+| 0,85 MB | lagres | lagres | lagres |
+| 1,0 MB | lagres | **prosessen dør av minnemangel** | lagres |
+| 1,2 MB | lagres | prosessen dør | lagres |
+| 1,5 MB | prosessen dør | prosessen dør | prosessen dør |
+
+Kolonnen for 2.78.1 er målt av gjennomgangen, de to andre er målt på nytt etter rettingen.
+
+Appen går på én instans, så et krasj tar den ned for alle til den har startet på nytt. Bare en
+innlogget forfatter kan laste opp en figur, og en tegnet figur er noen kB — men 2.78.2 gjorde en
+margin som fantes fra før, merkbart mindre.
+
+**Rettingen:** kontrollen bygger ikke lenger noe dokument. Den lar XML-leseren gå gjennom teksten og
+ser bare på to ting: gikk det uten feil, og hva er rota. Leseren er den samme som før (`saxes`, den
+jsdom selv bruker for `image/svg+xml`), satt opp på samme måte, så svaret er det samme. `saxes` er
+derfor ført opp som direkte avhengighet; den lå alt i `node_modules` gjennom jsdom. Selve kontrollen
+av en tett figur på 2 MB tar nå rundt 0,07 sekunder. Hele rensingen av den tar 4,8 sekunder mot 6,8
+i 2.78.2, målt side om side — fortsatt tregt, og fortsatt en blokkert hendelsesløkke så lenge.
+
+**Målt:**
+
+- `test/unit/svg-sanitizer.test.ts`: 37 utvalgte tilfeller og 600 sammensatte gir samme svar som
+  `DOMParser`, som var det kontrollen brukte før. Testen sammenligner de to; den gjetter ikke på
+  regler. Utvalget har både figurer som leses og figurer som ikke gjør det, og testen krever det.
+- `test/unit/svg-sanitizer-memory-1083.test.ts`: kontrollen kjøres på en tett figur på 4 MB med
+  256 MB heap, i en egen prosess. Uten tre trengs lite utover teksten; med tre trengs rundt 1 GB.
+- Samme fil måler nå også feilveien i kontrollen (en figur som *ikke* lar seg lese). Gjennomgangen
+  viste at en lekkasje der, 45 kB per figur, ikke gjorde testen rød. Grensa for kontrollen er
+  strammet fra 200 til 20 kB per kall; frisk kode ligger på 0–2.
+- Ni mutasjoner av `svgSanitizer.ts`, ni røde.
+
+**Kjent, ikke rettet:** en tett figur på 1,5 MB tar fortsatt ned prosessen ved 512 MB heap, slik
+den gjorde før #1083. Grensa for en figur er 5 MB i bytes, og det er antall elementer som koster,
+ikke bytes. Heap-grensa i prod er ikke lest av. En grense på antall elementer er en egen sak.
+
+### Skillet — en tegnreferanse kunne stave «animation» forbi figursjekken
+
+`figure-motion-check.mjs` avviste fra 2.78.1 en omvendt skråstrek i figurens CSS, fordi
+nettleseren leser `anim\61tion` som `animation`. To ting var galt:
+
+| Hva | Før | Nå |
+|---|---|---|
+| En *stillestående* figur med `font-family: Segoe\ UI` | avvist med en melding om malen for animerte figurer | avvist som `css_escape`, med en melding om det som faktisk er galt |
+| `&#97;nimation`, `&bsol;61`, `&#97nimation` i en stilblokk eller en `style`-attributt | **godkjent som stillestående figur** — plattformen gjør referansen om til tegnet ved lagring, og figuren går i løkke for alltid | avvist som `css_escape` |
+
+Det første fant gjennomgangen. Det andre fant jeg da jeg telte opp måtene et tegn kan skrives på
+uten å stå der. `&gt;`, `&lt;` og `&amp;` slipper gjennom ved navn: det er slik `>`, `<` og `&`
+skrives i XML, plattformen skriver `>` slik selv, og ingen av dem kan stave en bokstav. Regelen
+står i `figure-design.md`. At plattformen faktisk lagrer referansene som kjørende CSS, er målt i
+testen mot `sanitizeSvg`, ikke antatt. Sju mutasjoner, sju røde.
+
+**Rotårsak.** *Minnetoppen:* 2.78.2 målte hva rensingen holder igjen **etter** et kall, fordi det
+var den feilen som nettopp var funnet. Hva et kall bruker **mens** det går, ble ikke målt. Sjekken
+som manglet, kjører nå: en stor figur med lav heap-grense. *Tegnreferansen:* regelen om escape ble
+skrevet for det ene tilfellet gjennomgangen den gang viste (`\61`), ikke for klassen «et tegn
+skrevet uten å stå der». Samme feil som i #1073: en liste over kjente tilfeller i stedet for en
+opptelling av veiene inn.
+
 ## 2.78.2 - 2026-10-04
 
 Én retting, ingen migrasjon. En figur med hardt mellomrom i en etikett vises igjen.

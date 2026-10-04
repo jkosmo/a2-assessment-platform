@@ -172,6 +172,12 @@ template's elements only. The check compares
 the block with the template; it does not try to work out what your CSS would do. Anything that is
 not the template is `unsupported_animation_form` — including CSS that is perfectly valid.
 
+**Write every character itself — in a still figure too.** No backslash and no character reference
+(`&#97;`, `&bsol;`) in a `<style>` block or a `style` attribute: `anim\61tion` and `&#97;nimation`
+both run as `animation` once the platform and the browser have read them, and the check cannot see
+it. The check refuses them as `css_escape`. `&gt;`, `&lt;` and `&amp;` are fine — that is how `>`,
+`<` and `&` are written in XML. A font name with a space goes in quotes: `font-family: "Segoe UI"`.
+
 What you may change:
 
 | May differ | Must stay |

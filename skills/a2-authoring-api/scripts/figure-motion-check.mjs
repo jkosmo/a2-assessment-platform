@@ -345,10 +345,23 @@ export function checkFigureMotion(svg) {
 
   // Does the figure try to move at all? Any mention counts — in a <style> block or in a style
   // attribute — because a figure that mentions animation and is NOT the template must not pass as
-  // a still figure either. A backslash counts too: CSS reads `anim\61tion` as `animation`, and no
-  // figure has a reason to escape a character in its style.
+  // a still figure either.
   const inlineStyles = openTags(svg).map((t) => t.attrs.style).filter((css) => css !== undefined);
-  const triesToAnimate = [...styleBlocks(svg), ...inlineStyles].some((css) => /animation|@keyframes|\\/i.test(css));
+  const styles = [...styleBlocks(svg), ...inlineStyles];
+  // Two ways to spell a character without writing it are refused in their own right, in a still
+  // figure too, because either can spell everything this check looks for:
+  //   · a CSS escape — the browser reads `anim\61tion` as `animation`;
+  //   · a character reference — the platform reads `&#97;nimation` as `animation` before the
+  //     browser sees it (measured 2026-10-04: the check passed it as a still figure).
+  // `&gt;`, `&lt;` and `&amp;` are let through by name: they are how `>`, `<` and `&` are written
+  // in XML, the platform writes `>` that way itself, and none of them can spell a letter.
+  // The message is its own — sending the author of a still figure to the animation template would
+  // be an answer to another question.
+  const escaped = styles.some((css) => css.includes("\\") || /&(?!(?:gt|lt|amp);)/.test(css));
+  if (escaped) {
+    issues.push({ kind: "css_escape", detail: "a backslash or a character reference (&#…;) in the figure's CSS — either can spell `animation` without this check seeing it, so neither is allowed; write the character itself (a font name with a space goes in quotes: font-family: \"Segoe UI\")" });
+  }
+  const triesToAnimate = styles.some((css) => /animation|@keyframes/i.test(css));
 
   let animated = false;
   let totalSeconds = null;
@@ -383,7 +396,7 @@ export function checkFigureMotion(svg) {
         }
       }
     }
-  } else if (sequence && !declaredStatic) {
+  } else if (sequence && !declaredStatic && !escaped) {
     issues.push({ kind: "sequence_not_animated", detail: "flow-shaped figure (≥3 boxes in order) with no animation — animate the order with the flow template, or mark the root <svg data-motion=\"static\"> if a still picture is the deliberate choice" });
   }
 

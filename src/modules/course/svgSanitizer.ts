@@ -1,5 +1,6 @@
 import DOMPurify from "dompurify";
 import { JSDOM } from "jsdom";
+import { SaxesParser } from "saxes";
 
 /**
  * Server-side SVG sanitisation for section assets (#657 / #483/F4).
@@ -76,15 +77,33 @@ export function sanitizeSvg(rawSvg: string): string {
  * image. Exported for the #1083 repair of figures stored before sanitizeSvg wrote XML.
  */
 export function isSvgReadableAsImage(xml: string): boolean {
-  // Parsed in the one long-lived window: a new JSDOM per figure costs a window each time and was
-  // measured to retain memory unless closed. A parser error does not throw here — it comes back as a
-  // document whose root is <parsererror>, so the root is what is checked. (No querySelector: see above.)
+  // Read with the parser jsdom's own DOMParser uses for image/svg+xml, set up the way jsdom sets it
+  // up (node_modules/jsdom/lib/jsdom/browser/parser/xml.js) — but WITHOUT building a document. The
+  // answer needs only «did it parse» and «what is the root». Building the tree a second time, while
+  // the sanitised tree was still alive, doubled the peak: measured 2026-10-04, a dense 1 MB figure
+  // (~25 000 elements) ran a 512 MB heap out of memory and took the process down, where the code
+  // before #1083 stored it. test/unit/svg-sanitizer.test.ts holds this to the DOMParser's verdicts.
+  let root: { local: string; uri: string } | undefined;
+  const parser = new SaxesParser({ xmlns: true, defaultXMLVersion: "1.0", forceXMLVersion: true });
+  parser.on("opentag", (tag) => {
+    root ??= { local: tag.local, uri: tag.uri };
+  });
+  // Entities declared in a DOCTYPE are known to the parser, as they are in jsdom. Only a stored file
+  // can have one (the #1083 repair reads those); what sanitizeSvg writes has no DOCTYPE.
+  parser.on("doctype", (doctype) => {
+    for (const [, name, value] of doctype.matchAll(/<!ENTITY ([^ ]+) "([^"]+)">/g)) {
+      if (name !== undefined && value !== undefined && !(name in parser.ENTITIES)) parser.ENTITIES[name] = value;
+    }
+  });
+  parser.on("error", (error) => {
+    throw error;
+  });
   try {
-    const root = new purifierWindow.DOMParser().parseFromString(xml, "image/svg+xml").documentElement;
-    return root?.localName === "svg" && root.namespaceURI === "http://www.w3.org/2000/svg";
+    parser.write(xml).close();
   } catch {
     return false;
   }
+  return root?.local === "svg" && root.uri === "http://www.w3.org/2000/svg";
 }
 
 // ---------------------------------------------------------------------------
