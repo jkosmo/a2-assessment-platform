@@ -122,7 +122,9 @@ the three references above.
    CSS only, once, within 5 seconds, resting on the complete still picture; hierarchies, parts and
    comparisons stay still. **An animated figure is the flow template** — its `<style>` block
    unchanged (only colours, duration, delays and the number of steps may differ), and nothing in
-   the markup but `<rect>` step boxes, connectors and labels. Do not write your own animation CSS,
+   the markup but steps (`<rect>` boxes or `<circle>`s), connectors and labels. When the steps
+   belong to phases, use the **flow with phases** template (#1079): numbered circles, each resting
+   and lighting up in its phase's colours. Do not write your own animation CSS,
    and do not add other shapes, groups or transforms. A still flow is an explicit choice
    (`data-motion="static"`).
    `scripts/figure-motion-check.mjs` must be clean for every figure and variant. (figure-design.md.)

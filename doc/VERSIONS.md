@@ -2,6 +2,64 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.79.0 - 2026-10-04
+
+Bare skillet (`skills/a2-authoring-api`). Ingen endring i plattformkoden, ingen migrasjon.
+
+### #1079, steg 2 av 4 — sirkler som steg, og farge per fase
+
+Produkteier så ett lysbilde fra en ekte presentasjon tegnet på nytt, ved siden av originalen, og
+bestemte to ting malen ikke tillot (2026-10-04): et steg kan være en **sirkel**, og hvert steg har
+**fasens farge**. Regelen «et steg er alltid en firkant» fra #1073 var satt for å tette et hull i
+kontrollen, og hullet er like tett når en sirkel også må bære stegklassen.
+
+- **Ny mal i `figure-design.md`: «flow with phases».** Nummererte sirkler med etiketten under, en
+  strek per fase over. Et steg hviler i fasens lyse tone og lyser opp i fasens sterke.
+- **Figursjekken sammenligner fortsatt med malen.** Malen har fått én form til, ikke et unntak:
+  fargene er enten hex alle fire steder (som før), eller `var(--grunn)` og `var(--lys)` alle fire
+  steder, fulgt av én regel per fase. En blanding er ingen av formene. Hvert steg bærer nøyaktig én
+  faseklasse, hver faseregel brukes av et steg, og en faseklasse står bare på et steg.
+- **En stillestående flyt tegnet med sirkler** gjenkjennes nå som flyt.
+
+**Plassjekken (`figure-fit-check.mjs`) har to nye regler.** En etikett som står fritt, under en
+sirkel eller ved en strek, har ingen boks å få plass i. Den sjekkes i stedet mot naboene:
+`labels_overlap` (to etiketter går inn i hverandre) og `stroke_through_label` (en `<line>` eller et
+ledd i en `<polyline>` er tegnet gjennom en etikett). Den første figuren som ble tegnet på nytt fra
+lysbildet, besto begge sjekkene og hadde likevel en forbindelsesstrek rett gjennom en etikett. Den
+ville blitt avvist nå. Krumme `<path>` leses ikke; å se på bildet er fortsatt påkrevd.
+
+**Målt:**
+
+- Chromium (`test/e2e/figure-motion-template-1073.spec.ts`, åtte nye): hver sirkel i fasemalen har
+  sin animasjon, én gang, etter tur, ferdig innen 5 sekunder. Hvert steg lyser opp i fasens sterke
+  farge og hviler i fasens lyse. Som bilde, etter plattformens rensing, har stegene fasens farge.
+  Fire ødelagte varianter er ødelagt i nettleseren **og** avvist av sjekken: et steg uten
+  faseklasse og en fase uten regel gir **svarte** steg, lik farge i ro og opplyst gir ingen synlig
+  bevegelse, og en sirkel uten stegklasse lyser aldri opp.
+- Enhet (`test/unit/agent-authoring-figure-phases-1079.test.ts`, 45 tester): fire former som er
+  malen, 24 som ikke er det, plassreglene med kontroller for hver, og fasemalen fram og tilbake
+  gjennom `sanitizeSvg`.
+- 20 mutasjoner, 20 røde. Én av de første var uten virkning (siste linje i en geometrifunksjon som
+  aldri avgjør utfallet) og ble byttet mot en som måler det samme: slingringsmonnet for streker.
+
+**To rettinger som fulgte med:**
+
+- **`&quot;` og `&apos;` i figurens CSS** ble avvist som `css_escape` i 2.78.3. Plattformen skriver
+  `"` som `&quot;` i en attributtverdi, så en figur med `style='font-family: "Segoe UI"'` besto som
+  utkast og ble avvist etter en runde gjennom plattformen. Funnet av gjennomgangen av 2.78.3. Alle
+  fem referansene XML selv definerer, slipper nå gjennom, og en test sender figuren gjennom
+  `sanitizeSvg` og tilbake til sjekken.
+- **Malen «labelled diagram» i `figure-design.md` feilet skillets egen plassjekk.** En etikett sto
+  3 px over toppen av figuren. Ingen test kjørte plassjekken på malene; nå gjør én det.
+
+**Rotårsak til de to rettingene.** Begge er samme mangel: sjekkene ble testet på figurer skrevet
+for testen, ikke på det som faktisk går gjennom dem, altså skillets egne maler og det plattformen
+skriver tilbake. Begge kjører nå som test: hver mal gjennom begge sjekkene, og rundturen gjennom
+`sanitizeSvg`.
+
+**Gjenstår i #1079:** to oppsett (bredt og smalt) fra én beskrivelse, plattformens lagring og valg
+av oppsett, og uttrekket fra presentasjonsfila.
+
 ## 2.78.3 - 2026-10-04
 
 To rettinger etter QA-gjennomgangen av 2.78.2, ingen migrasjon. Gjennomgangen ga GO for stage, med

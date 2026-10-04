@@ -56,7 +56,7 @@ never decoration, never a catch-all. A short definition is prose, not a diagram.
 
 | Template | Use it for | One point it makes | Motion |
 |---|---|---|---|
-| **flow** | a process / sequence of steps | "these steps, in this order" | **animated** (steps light up in turn) |
+| **flow** | a process / sequence of steps — as boxes, or as numbered circles with a colour per phase | "these steps, in this order" | **animated** (steps light up in turn) |
 | **tree / decision** | branching choices, a hierarchy | "this choice leads here vs there" | still |
 | **boxes-and-arrows** | relationships between a few entities | "A relates to B relates to C" | still (`data-motion="static"`) — there is no animated template for arrows; if the point is the order, draw it as a **flow** |
 | **labelled diagram** | parts of one thing | "this thing has these named parts" | still |
@@ -106,6 +106,54 @@ budget). `figure-motion-check.mjs` rejects any other change.
 </svg>
 ```
 
+### flow with phases (animated)
+
+The same flow when the steps belong to **phases** (#1079): each step is a circle with its number
+in it and its label under it, and each phase has its own colour. A step rests in the phase's light
+tone (`--grunn`) and lights up in the phase's strong tone (`--lys`) — the colour of the phase line
+above it. Use it when the source groups the steps (a slide with "Data → Analyse → Bygg" over the
+steps); without phases, use the plain flow above.
+
+The style block is the plain flow's with two differences, and both are required together: the
+colours are `var(--grunn)` and `var(--lys)`, and one rule per phase gives them their values. Every
+step carries exactly one phase class.
+
+```svg
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 432 100" role="img"
+     font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif">
+  <style>
+    .steg { fill: var(--grunn); stroke: var(--lys); }
+    @keyframes lys { 0%, 70% { fill: var(--lys); } 100% { fill: var(--grunn); } }
+    .steg { animation: lys 1.2s ease-in-out 1; }
+    .s2 { animation-delay: 0.9s; }
+    .s3 { animation-delay: 1.8s; }
+    .s4 { animation-delay: 2.7s; }
+    .fase1 { --grunn: #d9e8dd; --lys: #6fae87; }
+    .fase2 { --grunn: #e7e2f0; --lys: #a99bc9; }
+    @media (prefers-reduced-motion: reduce) { .steg { animation: none; } }
+  </style>
+  <line x1="12" y1="16" x2="212" y2="16" stroke="#6fae87" stroke-width="3"/>
+  <text x="112" y="11" text-anchor="middle" font-size="11" fill="#3f7a57">Fase 1</text>
+  <line x1="220" y1="16" x2="420" y2="16" stroke="#a99bc9" stroke-width="3"/>
+  <text x="320" y="11" text-anchor="middle" font-size="11" fill="#6b5a94">Fase 2</text>
+  <circle class="steg s1 fase1" cx="60" cy="48" r="22"/>
+  <text x="60" y="53" text-anchor="middle" font-size="15" font-weight="600">1</text>
+  <text x="60" y="88" text-anchor="middle" font-size="12">Steg 1</text>
+  <line x1="82" y1="48" x2="142" y2="48" stroke="#8090a9" stroke-width="1.5"/>
+  <circle class="steg s2 fase1" cx="164" cy="48" r="22"/>
+  <text x="164" y="53" text-anchor="middle" font-size="15" font-weight="600">2</text>
+  <text x="164" y="88" text-anchor="middle" font-size="12">Steg 2</text>
+  <line x1="186" y1="48" x2="246" y2="48" stroke="#8090a9" stroke-width="1.5"/>
+  <circle class="steg s3 fase2" cx="268" cy="48" r="22"/>
+  <text x="268" y="53" text-anchor="middle" font-size="15" font-weight="600">3</text>
+  <text x="268" y="88" text-anchor="middle" font-size="12">Steg 3</text>
+  <line x1="290" y1="48" x2="350" y2="48" stroke="#8090a9" stroke-width="1.5"/>
+  <circle class="steg s4 fase2" cx="372" cy="48" r="22"/>
+  <text x="372" y="53" text-anchor="middle" font-size="15" font-weight="600">4</text>
+  <text x="372" y="88" text-anchor="middle" font-size="12">Steg 4</text>
+</svg>
+```
+
 ### tree / decision
 ```svg
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 200" role="img"
@@ -143,8 +191,8 @@ budget). `figure-motion-check.mjs` rejects any other change.
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 200" role="img"
      font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif">
   <circle cx="160" cy="100" r="70" fill="#eef" stroke="#333"/>
-  <line x1="160" y1="30" x2="160" y2="10" stroke="#333"/>
-  <text x="160" y="8" text-anchor="middle" font-size="13">Del 1</text>
+  <line x1="160" y1="30" x2="160" y2="18" stroke="#333"/>
+  <text x="160" y="14" text-anchor="middle" font-size="13">Del 1</text>
   <line x1="228" y1="118" x2="250" y2="128" stroke="#333"/>
   <text x="252" y="132" font-size="13">Del 2</text>
   <line x1="92" y1="118" x2="70" y2="128" stroke="#333"/>
@@ -175,8 +223,9 @@ not the template is `unsupported_animation_form` — including CSS that is perfe
 **Write every character itself — in a still figure too.** No backslash and no character reference
 (`&#97;`, `&bsol;`) in a `<style>` block or a `style` attribute: `anim\61tion` and `&#97;nimation`
 both run as `animation` once the platform and the browser have read them, and the check cannot see
-it. The check refuses them as `css_escape`. `&gt;`, `&lt;` and `&amp;` are fine — that is how `>`,
-`<` and `&` are written in XML. A font name with a space goes in quotes: `font-family: "Segoe UI"`.
+it. The check refuses them as `css_escape`. `&gt;`, `&lt;`, `&amp;`, `&quot;` and `&apos;` are fine —
+that is how those characters are written in XML, and how the platform writes them back. A font name
+with a space goes in quotes: `font-family: "Segoe UI"`.
 
 What you may change:
 
@@ -186,6 +235,7 @@ What you may change:
 | the duration in `.steg { animation: lys <n>s ease-in-out 1; }` — at least 0.3 s, or nobody sees the step light up | `ease-in-out`, the count `1`, the shorthand form |
 | the delays, and the number of `.sN` delay rules (one per step after the first) — **each delay larger than the one before**, so the steps light up in order | the order of the rules, and the reduced-motion rule as the last one |
 | line breaks and spacing | one `<style>` block, nothing else in it, and **no comments** in it (comment in the markup instead: `<!-- … -->`) |
+| **a colour per phase** (the [flow with phases](#flow-with-phases-animated)): the four colours are `var(--grunn)`, `var(--lys)`, `var(--lys)`, `var(--grunn)` exactly as in that template, followed by one rule per phase, `.<name> { --grunn: <hex>; --lys: <hex>; }`, placed after the delay rules. The phase names (lower-case letters, digits, hyphen) and their two colours are yours | all four colours as variables, or all four as hex — never a mix. Every step carries **exactly one** phase class, every phase rule is used by a step, and a phase class sits on a step only. A step without one has a fill nobody set, and is drawn **black** |
 
 **The markup is the template too.** An animated figure is made of these elements and no others:
 
@@ -193,14 +243,14 @@ What you may change:
 |---|---|---|
 | `<svg>` | the root | exactly one; none nested |
 | `<style>` | the template's block | exactly one, **with no attributes** (`media="print"` or `type="…"` would switch the whole block off) |
-| `<rect>` | a step box | **every** `<rect>` is `class="steg sN"` — one per step, `s1` to the last, matching the delay rules. A box without the class is a step that never lights up |
+| `<rect>`, `<circle>` | a step | **every** `<rect>` and `<circle>` is `class="steg sN"` — one per step, `s1` to the last, matching the delay rules. A shape without the class is a step that never lights up |
 | `<line>`, `<polyline>`, `<path>` | connectors | open strokes: `<polyline>` and `<path>` carry `fill="none"` and do not end where they began (with or without `Z`). A filled or closed one is a box drawn another way |
 | `<text>`, `<tspan>` | labels | never `class="steg"` — it would animate the text and leave the boxes still |
 | `<title>`, `<desc>` | accessible name | — |
 
-So: no `<g>`, no `<defs>`/markers, no `<polygon>`/`<circle>`/`<ellipse>`, no background panel, no
-legend box, and **no `transform` attributes** — place elements with x/y. A step is always a
-rectangle. If the figure needs anything else, it is not an animated flow: draw it still
+So: no `<g>`, no `<defs>`/markers, no `<polygon>`/`<ellipse>`, no background panel, no
+legend box, and **no `transform` attributes** — place elements with x/y. A step is a rectangle or
+a circle. If the figure needs anything else, it is not an animated flow: draw it still
 (`data-motion="static"`), where none of this applies. The figure has **no `style=""` attributes**. Colours and sizes
 on other elements go in presentation attributes (`fill="…"`, `stroke="…"`), which do what you
 expect; a `style` attribute could override the animation.
@@ -232,8 +282,8 @@ the figure is opened by itself) but it is not enough. In addition:
    is copied as is.
 
 **Check it.** `node skills/a2-authoring-api/scripts/figure-motion-check.mjs figure.svg` — fails on a
-flow-shaped figure (three labelled boxes in a row or column, each joined to the next by a line,
-polyline or path) that is neither animated
+flow-shaped figure (three labelled boxes or circles in a row or column, each joined to the next by
+a line, polyline or path) that is neither animated
 nor marked `data-motion="static"`, and on any animated figure whose style block is not the
 template's, whose step classes do not match its delay rules, that runs over 5 s, hides an element
 at rest, or uses SMIL. The message says where the block leaves the template. Run it with the fit
@@ -252,9 +302,12 @@ at the per-element gate or written into the package:
 1. **Measure.** `node skills/a2-authoring-api/scripts/figure-fit-check.mjs figure.svg` (and
    `figure-motion-check.mjs` — see [Animation](#animation--where-it-makes-sense-1073)) estimates
    every `<text>` against its enclosing box and the `viewBox` and reports overflows in pixels.
+   A label that stands free (under a circle, beside a line) is checked against its neighbours
+   instead: two labels that run into each other (`labels_overlap`), and a `<line>` or `<polyline>`
+   drawn through a label (`stroke_through_label`).
    It is deliberately a little strict. A `FAIL` is a figure you fix, not a warning you read.
-2. **Look.** Render it and inspect the image — the estimate does not see everything (overlaps,
-   arrows through labels, an ugly wrap). Playwright is in the repo:
+2. **Look.** Render it and inspect the image — the estimate does not see everything (a curved
+   `<path>` through a label, a label on top of a shape, an ugly wrap). Playwright is in the repo:
    `npx playwright screenshot --viewport-size=800,400 file:///<abs-path>/figure.svg figure.png`,
    then open `figure.png` (in Claude Code: the Read tool shows the image). Check: every label
    inside its shape with air around it; nothing crossing a line or arrow; no two labels touching;

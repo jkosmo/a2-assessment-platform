@@ -85,11 +85,18 @@ const TIME = "(\\d+(?:\\.\\d+)?|\\.\\d+)s";
 const sameColour = (hex) => (hex.length === 4 ? `#${[...hex.slice(1)].map((c) => c + c).join("")}` : hex).toLowerCase();
 // The template, rule by rule, in the template's order. Case-sensitive on purpose: `Lys` and `lys`
 // are two different keyframes to a browser, `.Steg` and `.steg` two different classes.
+// A colour slot holds a hex colour (one colour for every step) or the phase variable that belongs
+// in that slot (a colour per phase — product owner, 2026-10-04, #1079). Which of the two is decided
+// once for the whole block, in matchTemplate: a block that mixes them is neither form.
+const BASE = `(${HEX}|var\\(--grunn\\))`;
+const LIGHT = `(${HEX}|var\\(--lys\\))`;
+const PHASE_RULE = `\\.([a-z][a-z0-9-]*)\\{--grunn:(${HEX});--lys:(${HEX});?\\}`;
 const TEMPLATE = [
-  ["the base rule `.steg { fill: <hex>; stroke: <hex>; }`", `\\.steg\\{fill:(${HEX});stroke:${HEX};?\\}`],
-  ["`@keyframes lys { 0%, 70% { fill: <hex>; } 100% { fill: <hex>; } }`", `@keyframes lys\\{0%,70%\\{fill:(${HEX});?\\}100%\\{fill:(${HEX});?\\}\\}`],
+  ["the base rule `.steg { fill: <colour>; stroke: <colour>; }`", `\\.steg\\{fill:${BASE};stroke:${LIGHT};?\\}`],
+  ["`@keyframes lys { 0%, 70% { fill: <colour>; } 100% { fill: <colour>; } }`", `@keyframes lys\\{0%,70%\\{fill:${LIGHT};?\\}100%\\{fill:${BASE};?\\}\\}`],
   ["`.steg { animation: lys <seconds>s ease-in-out 1; }`", `\\.steg\\{animation:lys ${TIME} ease-in-out 1;?\\}`],
   ["the delay rules `.s2 { animation-delay: <seconds>s; }`, `.s3 { … }`, one per later step", `((?:\\.s\\d+\\{animation-delay:${TIME};?\\})*)`],
+  ["the phase rules `.<phase> { --grunn: <hex>; --lys: <hex>; }`, one per phase", `((?:${PHASE_RULE})*)`],
   ["`@media (prefers-reduced-motion: reduce) { .steg { animation: none; } }` as the last rule", `@media\\(prefers-reduced-motion:reduce\\)\\{\\.steg\\{animation:none;?\\}\\}$`],
 ];
 
@@ -98,7 +105,10 @@ const TEMPLATE = [
 // "every <rect> is a step" let a fourth step drawn as a <polygon> through; checking the CSS let
 // <style media="print"> through, where the block never applies. Each was one more shape nobody had
 // listed. So the shapes are listed the other way round: these elements, and no others.
-const TEMPLATE_ELEMENTS = new Set(["svg", "style", "rect", "text", "tspan", "line", "polyline", "path", "title", "desc"]);
+// A step is a box or a circle (#1079: the original slide drew its steps as circles, and there was no
+// good reason ours could not). Both carry the step class, so "every step lights up" holds for both.
+const STEP_ELEMENTS = new Set(["rect", "circle"]);
+const TEMPLATE_ELEMENTS = new Set(["svg", "style", "rect", "circle", "text", "tspan", "line", "polyline", "path", "title", "desc"]);
 // SMIL elements have their own, more useful message (stripped_by_platform / not_css_only). Matched
 // without regard to case: the platform's sanitizer restores `<animatemotion>` to `<animateMotion>`,
 // so the lower-case spelling runs on the platform just the same.
@@ -117,7 +127,7 @@ function markupProblems(svg) {
   const tags = openTags(svg);
 
   const foreign = [...new Set(tags.map((t) => t.tag).filter((tag) => !TEMPLATE_ELEMENTS.has(tag) && !REPORTED_ELSEWHERE.has(tag.toLowerCase())))];
-  if (foreign.length > 0) problems.push(`an animated figure is made of <rect> step boxes, <line>/<polyline>/<path> connectors, <text> labels and one <style> block — found ${foreign.map((t) => `<${t}>`).join(", ")}`);
+  if (foreign.length > 0) problems.push(`an animated figure is made of <rect> or <circle> steps, <line>/<polyline>/<path> connectors, <text> labels and one <style> block — found ${foreign.map((t) => `<${t}>`).join(", ")}`);
   if (tags.filter((t) => t.tag === "svg").length !== 1) problems.push("an animated figure is one <svg>, with none nested inside it");
 
   // media="print", type="text/plain", disabled: each switches the whole block off while its text
@@ -136,7 +146,7 @@ function markupProblems(svg) {
     : returnsToStart(pointList(t.attrs.points)));
   const shapes = tags.filter((t) => (t.tag === "path" || t.tag === "polyline")
     && ((t.attrs.fill ?? "").trim().toLowerCase() !== "none" || encloses(t)));
-  if (shapes.length > 0) problems.push(`a connector (<path>, <polyline>) is an open stroke with fill="none" — found ${shapes.length} that is filled or closed; a box is a <rect class="steg sN">`);
+  if (shapes.length > 0) problems.push(`a connector (<path>, <polyline>) is an open stroke with fill="none" — found ${shapes.length} that is filled or closed; a step is a <rect> or a <circle> with class="steg sN"`);
   return problems;
 }
 
@@ -169,12 +179,36 @@ function matchTemplate(svg) {
     found.push(m);
     rest = rest.slice(m[0].length);
   }
-  const [base, keyframes, animation, delays] = found;
+  const [base, keyframes, animation, delays, phaseRules] = found;
   const problems = [];
 
-  const [baseFill, highlight, endFill] = [base[1], keyframes[1], keyframes[2]].map(sameColour);
-  if (endFill !== baseFill) problems.push(`the last keyframe (${endFill}) must return to the base fill (${baseFill}), so the figure rests as the plain flow`);
-  if (highlight === baseFill) problems.push(`the highlight colour equals the base fill (${baseFill}) — nothing would be seen to move`);
+  // One colour for every step, or one per phase. The four colour slots agree on which: all hex and
+  // no phase rules, or all the phase variables and at least one phase rule. Anything in between
+  // leaves a step with a variable nobody set — and a fill that cannot be read is black.
+  const slots = [base[1], base[2], keyframes[1], keyframes[2]];
+  const phases = [...phaseRules[0].matchAll(new RegExp(PHASE_RULE, "g"))].map((m) => ({ name: m[1], base: sameColour(m[2]), light: sameColour(m[3]) }));
+  const perPhase = slots.every((slot) => slot.startsWith("var("));
+  if (!perPhase && !slots.every((slot) => slot.startsWith("#"))) {
+    return { problems: ["the colours are either all hex (one colour for every step) or all `var(--grunn)` / `var(--lys)` (a colour per phase) — not a mix"] };
+  }
+  if (!perPhase && phases.length > 0) return { problems: ["phase rules (`.<phase> { --grunn: …; --lys: …; }`) belong with `fill: var(--grunn)` in the base rule — this block sets one hex colour for every step"] };
+  if (perPhase && phases.length === 0) return { problems: ["`var(--grunn)` and `var(--lys)` need at least one phase rule `.<phase> { --grunn: <hex>; --lys: <hex>; }` to give them a value"] };
+
+  if (!perPhase) {
+    const [baseFill, highlight, endFill] = [base[1], keyframes[1], keyframes[2]].map(sameColour);
+    if (endFill !== baseFill) problems.push(`the last keyframe (${endFill}) must return to the base fill (${baseFill}), so the figure rests as the plain flow`);
+    if (highlight === baseFill) problems.push(`the highlight colour equals the base fill (${baseFill}) — nothing would be seen to move`);
+  }
+  // Per phase the two keyframes are the two variables, so the figure rests in --grunn by
+  // construction; what is left to check is that each phase has two different colours, and a name
+  // that is its own.
+  const phaseNames = phases.map((p) => p.name);
+  const reserved = phaseNames.filter((name) => name === "steg" || /^s\d+$/.test(name));
+  if (reserved.length > 0) problems.push(`a phase cannot be named ${reserved.map((n) => `.${n}`).join(", ")} — those are the step classes`);
+  if (new Set(phaseNames).size !== phaseNames.length) problems.push("each phase has one rule — found the same phase name twice");
+  for (const p of phases) {
+    if (p.base === p.light) problems.push(`phase .${p.name}: --lys equals --grunn (${p.base}) — nothing would be seen to move`);
+  }
 
   const duration = Number(animation[1]);
   if (!(duration >= MIN_DURATION_SECONDS)) problems.push(`the duration must be at least ${MIN_DURATION_SECONDS}s — shorter, and the step lights up without anyone seeing it`);
@@ -196,13 +230,28 @@ function matchTemplate(svg) {
   const carriers = openTags(svg)
     .map((t) => ({ tag: t.tag, classes: (t.attrs.class ?? "").split(/\s+/) }))
     .filter((el) => el.classes.includes("steg"));
-  const notBoxes = [...new Set(carriers.filter((el) => el.tag !== "rect").map((el) => `<${el.tag}>`))];
-  if (notBoxes.length > 0) problems.push(`class "steg" belongs on the boxes (<rect>) only — found it on ${notBoxes.join(", ")}`);
-  // …and EVERY box is a step. A fourth box without the class is a step that never lights up: the
-  // figure shows four steps and animates three. Deciding which rects "belong to the flow" would be a
-  // guess, so there is none to make: the template has step boxes, lines and labels, nothing else.
-  const plainBoxes = openTags(svg, "rect").filter((t) => !(t.attrs.class ?? "").split(/\s+/).includes("steg")).length;
-  if (plainBoxes > 0) problems.push(`every <rect> in an animated figure is a step box — found ${plainBoxes} without class "steg" (a box that is not a step never lights up)`);
+  const notBoxes = [...new Set(carriers.filter((el) => !STEP_ELEMENTS.has(el.tag)).map((el) => `<${el.tag}>`))];
+  if (notBoxes.length > 0) problems.push(`class "steg" belongs on the steps (<rect> or <circle>) only — found it on ${notBoxes.join(", ")}`);
+  // …and EVERY box and circle is a step. A fourth one without the class is a step that never lights
+  // up: the figure shows four steps and animates three. Deciding which shapes "belong to the flow"
+  // would be a guess, so there is none to make: the template has steps, lines and labels, nothing else.
+  const plainBoxes = openTags(svg, "rect|circle").filter((t) => !(t.attrs.class ?? "").split(/\s+/).includes("steg")).length;
+  if (plainBoxes > 0) problems.push(`every <rect> and <circle> in an animated figure is a step — found ${plainBoxes} without class "steg" (a shape that is not a step never lights up)`);
+  // A colour per phase: every step says which phase it is in, with exactly one phase class that has
+  // a rule. Without one its fill is a variable nobody set. Checked both ways, like the step classes:
+  // no phase rule without a step, and no phase class on anything that is not a step.
+  if (perPhase) {
+    const known = new Set(phaseNames);
+    const without = carriers.filter((el) => el.classes.filter((c) => known.has(c)).length !== 1).length;
+    if (without > 0) problems.push(`with a colour per phase every step carries exactly one phase class (${phaseNames.map((n) => `.${n}`).join(", ")}) — found ${without} step(s) with none or several`);
+    const used = new Set(carriers.flatMap((el) => el.classes.filter((c) => known.has(c))));
+    const unused = phaseNames.filter((name) => !used.has(name));
+    if (unused.length > 0) problems.push(`phase rule(s) ${unused.map((n) => `.${n}`).join(", ")} match no step`);
+    const strays = [...new Set(openTags(svg)
+      .filter((t) => !(t.attrs.class ?? "").split(/\s+/).includes("steg") && (t.attrs.class ?? "").split(/\s+/).some((c) => known.has(c)))
+      .map((t) => `<${t.tag}>`))];
+    if (strays.length > 0) problems.push(`a phase class belongs on a step only — found one on ${strays.join(", ")}`);
+  }
   const boxSteps = carriers.map((el) => el.classes.filter((c) => /^s\d+$/.test(c)).map((c) => Number(c.slice(1))));
   const stepsOnBoxes = boxSteps.flat().sort((a, b) => a - b);
   if (boxSteps.some((steps) => steps.length !== 1) || stepsOnBoxes.join() !== [1, ...expected].join()) {
@@ -281,6 +330,11 @@ function looksLikeSequence(svg) {
     const b = { x: num(a.x), y: num(a.y), w: num(a.width), h: num(a.height) };
     if (b.w > 0 && b.h > 0) boxes.push({ ...b, cx: b.x + b.w / 2, cy: b.y + b.h / 2 });
   }
+  // A step drawn as a circle is a box for this purpose: the square it fills.
+  for (const { attrs: a } of openTags(svg, "circle")) {
+    const r = num(a.r);
+    if (r > 0) boxes.push({ x: num(a.cx) - r, y: num(a.cy) - r, w: 2 * r, h: 2 * r, cx: num(a.cx), cy: num(a.cy) });
+  }
   // A label sits where its <text> says — or where its <tspan>s say: long labels are broken into
   // lines with <tspan x y>, and then the <text> itself often carries no position at all.
   const texts = [...svg.matchAll(new RegExp(`<text\\b${TAG_REST}>([\\s\\S]*?)</text>`, "g"))]
@@ -353,11 +407,14 @@ export function checkFigureMotion(svg) {
   //   · a CSS escape — the browser reads `anim\61tion` as `animation`;
   //   · a character reference — the platform reads `&#97;nimation` as `animation` before the
   //     browser sees it (measured 2026-10-04: the check passed it as a still figure).
-  // `&gt;`, `&lt;` and `&amp;` are let through by name: they are how `>`, `<` and `&` are written
-  // in XML, the platform writes `>` that way itself, and none of them can spell a letter.
+  // The five references XML itself defines are let through by name: `&gt;`, `&lt;`, `&amp;`,
+  // `&quot;` and `&apos;`. They are how those characters are written in XML, and none of them can
+  // spell a letter. The platform writes them itself: a figure with `style='font-family: "Segoe UI"'`
+  // comes back from it as `style="font-family: &quot;Segoe UI&quot;"`, and a figure that has been
+  // through the platform must still pass (found by the review of 2.78.3: it did not).
   // The message is its own — sending the author of a still figure to the animation template would
   // be an answer to another question.
-  const escaped = styles.some((css) => css.includes("\\") || /&(?!(?:gt|lt|amp);)/.test(css));
+  const escaped = styles.some((css) => css.includes("\\") || /&(?!(?:gt|lt|amp|quot|apos);)/.test(css));
   if (escaped) {
     issues.push({ kind: "css_escape", detail: "a backslash or a character reference (&#…;) in the figure's CSS — either can spell `animation` without this check seeing it, so neither is allowed; write the character itself (a font name with a space goes in quotes: font-family: \"Segoe UI\")" });
   }

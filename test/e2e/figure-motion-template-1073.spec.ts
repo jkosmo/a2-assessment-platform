@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { expect, test, type Page } from "@playwright/test";
 import { checkFigureMotion } from "../../skills/a2-authoring-api/scripts/figure-motion-check.mjs";
+import { sanitizeSvg } from "../../src/modules/course/svgSanitizer.js";
 
 // #1073: `figure-motion-check.mjs` SAMMENLIGNER figurer med flytmalen i figure-design.md — den tolker
 // ikke lenger stilregler. Da hviler alt på at malen selv gjør det den lover. Det måles her, i en
@@ -137,6 +138,105 @@ test.describe("#1073 — sjekken og nettleseren er enige", () => {
     test(`ødelagt i nettleseren, og avvist av sjekken: ${navn}`, async ({ page }) => {
       const figur = ødelegg(malen());
       expect(figur, "varianten må faktisk være en annen enn malen").not.toBe(malen());
+      await åpne(page, figur);
+      await målIBrowser(page);
+
+      const r = checkFigureMotion(figur);
+      expect(r.animated).toBe(false);
+      expect(r.issues.map((i) => i.kind)).toContain("unsupported_animation_form");
+    });
+  }
+});
+
+// #1079: malen har fått én form til — steg som sirkler, med fasens farge. Fargene står som
+// variabler (`var(--grunn)`, `var(--lys)`) som hver fase gir verdi. Det er nytt for malen, så det
+// samme spørsmålet stilles til nettleseren en gang til: gjør denne formen det sjekken lover?
+function fasemalen(): string {
+  const doc = readFileSync("skills/a2-authoring-api/references/figure-design.md", "utf8");
+  const match = doc.split("### flow with phases (animated)")[1]?.match(/```svg\r?\n([\s\S]*?)```/);
+  if (!match) throw new Error("fant ikke fasemalen i figure-design.md");
+  return match[1];
+}
+
+const FASE1 = { grunn: "rgb(217, 232, 221)", lys: "rgb(111, 174, 135)" };
+const FASE2 = { grunn: "rgb(231, 226, 240)", lys: "rgb(169, 155, 201)" };
+
+test.describe("#1079 — fasemalen, målt i nettleseren", () => {
+  const fyll = (page: Page) => page.locator("circle").evaluateAll((sirkler) => sirkler.map((s) => getComputedStyle(s).fill));
+
+  test("hver sirkel har sin animasjon, den går én gang, etter tur, og alt er over innen 5 sekunder", async ({ page }) => {
+    await åpne(page, fasemalen());
+    const funnet = await animasjoner(page);
+    expect(funnet.map((a) => a.element).sort()).toEqual(["steg s1 fase1", "steg s2 fase1", "steg s3 fase2", "steg s4 fase2"]);
+    for (const a of funnet) {
+      expect(a.navn).toBe("lys");
+      expect(a.runder).toBe(1);
+      expect(a.slutt).toBeLessThanOrEqual(5000);
+    }
+    expect(new Set(funnet.map((a) => a.slutt)).size).toBe(4);
+    expect(checkFigureMotion(fasemalen()).issues).toEqual([]);
+  });
+
+  test("hvert steg lyser opp i fasens sterke farge og hviler i fasens lyse", async ({ page }) => {
+    await åpne(page, fasemalen());
+    // Midt i sin egen opplysning (innen de første 70 %) har hvert steg fasens sterke farge.
+    await page.evaluate(() => { for (const a of document.getAnimations()) { a.pause(); a.currentTime = Number(a.effect!.getComputedTiming().delay) + 100; } });
+    expect(await fyll(page)).toEqual([FASE1.lys, FASE1.lys, FASE2.lys, FASE2.lys]);
+
+    await page.evaluate(() => { for (const a of document.getAnimations()) a.finish(); });
+    expect(await fyll(page)).toEqual([FASE1.grunn, FASE1.grunn, FASE2.grunn, FASE2.grunn]);
+  });
+
+  test("med «redusert bevegelse» står figuren stille, i fasenes farger", async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await åpne(page, fasemalen());
+    expect(await animasjoner(page)).toEqual([]);
+    expect(await fyll(page)).toEqual([FASE1.grunn, FASE1.grunn, FASE2.grunn, FASE2.grunn]);
+  });
+
+  test("som bilde, etter plattformens rensing — slik deltakeren ser den — har stegene fasens farge", async ({ page }) => {
+    const lagret = sanitizeSvg(fasemalen());
+    expect(lagret).not.toBe("");
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await page.setContent(`<img id="f" alt="" width="432" height="100">`);
+    const farger = await page.evaluate((kilde) => new Promise<string[]>((ferdig, feil) => {
+      const bilde = document.getElementById("f") as HTMLImageElement;
+      bilde.onerror = () => feil(new Error("figuren lot seg ikke lese som bilde"));
+      bilde.onload = () => {
+        const lerret = document.createElement("canvas");
+        lerret.width = 432; lerret.height = 100;
+        const ctx = lerret.getContext("2d")!;
+        ctx.drawImage(bilde, 0, 0, 432, 100);
+        // Et punkt inne i hver sirkel, til side for tallet. Sentrum: (60 + i·104, 48), radius 22.
+        ferdig([0, 1, 2, 3].map((i) => { const d = ctx.getImageData(60 + i * 104 - 12, 36, 1, 1).data; return `rgb(${d[0]}, ${d[1]}, ${d[2]})`; }));
+      };
+      bilde.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(kilde)}`;
+    }), lagret);
+    // Et bilde får ikke leserens innstilling for bevegelse (#1073), så animasjonen går. Fargen er
+    // derfor enten fasens lyse eller fasens sterke — aldri svart, og aldri en annen fases.
+    for (const [i, fase] of [FASE1, FASE1, FASE2, FASE2].entries()) {
+      expect([fase.grunn, fase.lys], `steg ${i + 1}`).toContain(farger[i]);
+    }
+  });
+
+  const ødelagt: Array<[string, (mal: string) => string, (page: Page) => Promise<void>]> = [
+    ["et steg uten faseklasse er svart", (m) => m.replace('class="steg s2 fase1"', 'class="steg s2"'),
+      async (page) => { await page.evaluate(() => { for (const a of document.getAnimations()) a.finish(); }); expect((await fyll(page))[1]).toBe("rgb(0, 0, 0)"); }],
+    ["en fase uten regel: stegene i den er svarte", (m) => m.replace(/\s*\.fase2 \{[^}]*\}/, ""),
+      async (page) => { await page.evaluate(() => { for (const a of document.getAnimations()) a.finish(); }); expect((await fyll(page)).slice(2)).toEqual(["rgb(0, 0, 0)", "rgb(0, 0, 0)"]); }],
+    ["samme farge i ro og opplyst: ingenting ses å bevege seg", (m) => m.replace("--lys: #6fae87", "--lys: #d9e8dd"),
+      async (page) => {
+        await page.evaluate(() => { for (const a of document.getAnimations()) { a.pause(); a.currentTime = Number(a.effect!.getComputedTiming().delay) + 100; } });
+        expect((await fyll(page))[0]).toBe(FASE1.grunn);
+      }],
+    ["en sirkel uten stegklasse: fem sirkler, fire animasjoner", (m) => m.replace("</svg>", `  <circle cx="420" cy="80" r="8" fill="#eee"/>\n</svg>`),
+      async (page) => { expect((await animasjoner(page)).length).toBe(4); expect(await page.locator("circle").count()).toBe(5); }],
+  ];
+
+  for (const [navn, ødelegg, målIBrowser] of ødelagt) {
+    test(`ødelagt i nettleseren, og avvist av sjekken: ${navn}`, async ({ page }) => {
+      const figur = ødelegg(fasemalen());
+      expect(figur, "varianten må faktisk være en annen enn malen").not.toBe(fasemalen());
       await åpne(page, figur);
       await målIBrowser(page);
 

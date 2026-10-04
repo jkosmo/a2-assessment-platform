@@ -181,7 +181,7 @@ describe("figure-motion-check (#1073)", () => {
     const fjerdeUtenKlasse = threeSteps + `<line x1="470" y1="40" x2="520" y2="40"/><rect x="520" y="20" width="120" height="40"/><text x="580" y="45">Arkiver</text>`;
     const fire = checkFigureMotion(svg(goodStyle + fjerdeUtenKlasse));
     expect(fire.animated).toBe(false);
-    expect(fire.issues.map((i) => i.detail).join(" ")).toContain("every <rect> in an animated figure is a step box");
+    expect(fire.issues.map((i) => i.detail).join(" ")).toContain("every <rect> and <circle> in an animated figure is a step");
   });
 
   // ⚠️ HELE figuren er malen, ikke bare stilblokka (produkteiers andre beslutning 2026-10-04).
@@ -301,6 +301,25 @@ describe("figure-motion-check (#1073)", () => {
     it("`>`, `<` and `&` written the XML way are not escapes — the platform writes `>` so itself", () => {
       expect(checkFigureMotion(stille(`.a &gt; .t { fill: #111; } @media (width &lt; 600px) { .t { fill: #222; } }`)).issues).toEqual([]);
       expect(checkFigureMotion(stille(`.t::after { content: "a &amp; b"; }`)).issues).toEqual([]);
+    });
+
+    // Funnet av gjennomgangen av 2.78.3: plattformen skriver `"` som `&quot;` i en attributtverdi, så
+    // en figur som besto som utkast, ble avvist etter en runde gjennom plattformen (eksport → sjekk).
+    // Ingen test gikk den veien. Denne gjør det, for hver form en referanse kan komme tilbake i.
+    it.each([
+      ["quotes in a style attribute", stille(`.t { fill: #111; }`, ` style='font-family: "Segoe UI", sans-serif'`)],
+      ["quotes, `>` and `&` in a style block", stille(`.a > .t { font-family: "Segoe UI", 'Helvetica Neue'; } .t::after { content: "a &amp; b"; }`)],
+      ["a non-breaking space in a style block", stille(`.t::after { content: "§ 12"; }`)],
+      ["`<` in a media query", stille(`@media (width &lt; 600px) { .t { fill: #222; } }`)],
+    ])("what the platform writes back still passes: %s", (_navn, utkast) => {
+      expect(checkFigureMotion(utkast).issues, "utkastet").toEqual([]);
+      const lagret = sanitizeSvg(utkast);
+      expect(lagret).not.toBe("");
+      expect(checkFigureMotion(lagret).issues, lagret).toEqual([]);
+    });
+
+    it("control: the platform does write `&quot;` in a style attribute — the case above is real", () => {
+      expect(sanitizeSvg(stille(`.t { fill: #111; }`, ` style='font-family: "Segoe UI"'`))).toContain(`style="font-family: &quot;Segoe UI&quot;"`);
     });
 
     it("the animated template is not disturbed, and an escape in it is reported next to what else is wrong", () => {
