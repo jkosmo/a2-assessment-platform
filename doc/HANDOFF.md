@@ -35,12 +35,17 @@ Fire ting krever et menneske:
    allerede er lagret i uleselig form. Se `doc/OPERATIONS_RUNBOOK.md`.
 
 **QA-gjennomgangen av 2.81.0** (`.ai-qa/qa-20261004-200538.md`, GO) fant ingenting som stopper
-stage eller prod, men fire ting som bør bli saker: skillets kopi av etikettregelen er løsere enn
-plattformens (`<title>` og mellomrom); `?locale=constructor` gir 500 på en figur (fantes fra før,
-rettes med `Object.hasOwn`); forfatter-API-et lager seksjonen før figurene er sjekket; og en ny
-oversettelse lar de forrige oversatte filene ligge. Den pekte også på tre veier integrasjonstesten
-min ikke dekker: kursimport, `replaceExisting` og `POST /sections` med figurer. Gjennomgangen
-kjørte dem og de virker; testene mangler.
+stage eller prod. Fire funn er blitt saker, alle p2:
+
+| Sak | Hva |
+|---|---|
+| #1087 | Skillets kopi av etikettregelen er løsere enn plattformens (`<title>` og mellomrom) |
+| #1088 | `?locale=constructor` gir 500 på en figur. Fantes fra før; rettes med `Object.hasOwn` |
+| #1089 | Forfatter-API-et lager seksjonen før figurene er sjekket, så en avvist figur etterlater et utkast |
+| #1090 | En ny oversettelse av figurer lar de forrige oversatte filene ligge i lageret |
+
+De tre veiene inn som integrasjonstesten ikke dekket (kursimport, `replaceExisting`,
+`POST /sections` med figurer), har fått tester i `test/m2-section-asset-layouts-1079.test.ts`.
 
 **Slik testes en utgivelse på stage nå:** produkteier logger inn én gang (`npm run stage:auth`),
 `npm run test:stage:release` kjører målingene med den ekte klienten mot de ekte dataene, og
