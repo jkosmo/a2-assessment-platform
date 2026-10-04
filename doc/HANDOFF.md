@@ -123,6 +123,12 @@ står i `doc/VERSIONS.md`.
 
 ⚠️ **Det som alt er lagret, rettes ikke av seg selv.** Se punkt 4 øverst.
 
+⚠️ **Første utgave av rettingen lekket minne** (rundt 1,5 MB per figur), og QA-porten ga NO-GO på
+den. Årsaken var ett `querySelector` på et tre fra jsdom-vinduet som lever like lenge som prosessen.
+`test/unit/svg-sanitizer-memory-1083.test.ts` måler nå heapen. Rører du `svgSanitizer.ts`: kjør den
+testen, og les kommentaren i `test/support/measureSvgSanitizerMemory.mts` før du måler minne selv —
+en synkron løkke ser ut som en lekkasje også i frisk kode.
+
 ## Hva som ble gjort: #1080 (2.78.1)
 
 Telefonvisningen av de fire listene. Cellene manglet kolonnenavn, var bredere enn kortet, og «Mer»
@@ -171,7 +177,7 @@ listene. Jeg utvidet ikke regelen for å unngå det — det ville vært en tverr
   && npm run test:integration:native) > "$TEMP/claude/kjoring.log" 2>&1; echo "EXIT=$?"
 ```
 
-Sist målt 2026-10-04, på 2.78.2: **1622 enhet · 69 DOM · 381 e2e · 709 integrasjon**, alle grønne.
+Sist målt 2026-10-04, på 2.78.2: **1623 enhet · 69 DOM · 381 e2e · 709 integrasjon**, alle grønne.
 Kjør `npm run build` alene etter å ha skrevet en ny testfil: bygget typesjekker også testene, og en
 typefeil der stopper hele rekka etter ti sekunder.
 Ikke pipe utdataene til `tail` — det skjuler feiltellingen og gir exit 0.

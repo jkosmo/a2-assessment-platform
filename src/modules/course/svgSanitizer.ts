@@ -43,10 +43,17 @@ export function sanitizeSvg(rawSvg: string): string {
     // Never resolve external/data documents; keep everything self-contained.
     ADD_URI_SAFE_ATTR: [],
     RETURN_DOM: true,
-  }) as unknown as Element;
+  }) as unknown as Element | null;
 
-  // A non-SVG payload yields no <svg> root, which we reject rather than store.
-  const root = cleanTree.querySelector("svg");
+  // A non-SVG payload yields no <svg> root, which we reject rather than store. (DOMPurify can also
+  // return null, on pathologically deep nesting.)
+  //
+  // ⚠️ getElementsByTagName, NOT querySelector. The tree belongs to a jsdom window that lives as long
+  // as the process, and a querySelector on it pins the whole tree for good: measured 2026-10-04, about
+  // 1.5 MB retained per call for a 5 kB figure, against nothing with getElementsByTagName. The app
+  // runs on one small instance; a course import with figures would have filled it. The guard is
+  // test/unit/svg-sanitizer-memory-1083.test.ts, which measures the heap rather than the spelling.
+  const root = cleanTree?.getElementsByTagName("svg")[0];
   if (!root) return "";
 
   // #1083: the file is served as image/svg+xml, so the browser reads it as XML — and it has to be
@@ -69,9 +76,12 @@ export function sanitizeSvg(rawSvg: string): string {
  * image. Exported for the #1083 repair of figures stored before sanitizeSvg wrote XML.
  */
 export function isSvgReadableAsImage(xml: string): boolean {
+  // Parsed in the one long-lived window: a new JSDOM per figure costs a window each time and was
+  // measured to retain memory unless closed. A parser error does not throw here — it comes back as a
+  // document whose root is <parsererror>, so the root is what is checked. (No querySelector: see above.)
   try {
-    new JSDOM(xml, { contentType: "image/svg+xml" });
-    return true;
+    const root = new purifierWindow.DOMParser().parseFromString(xml, "image/svg+xml").documentElement;
+    return root?.localName === "svg" && root.namespaceURI === "http://www.w3.org/2000/svg";
   } catch {
     return false;
   }

@@ -48,7 +48,38 @@ kjent hvor mange figurer som er rammet.
   med bredde 0; det den skriver nå, vises — også som oversatt variant.
 - Integrasjon: opplasting → servering til deltaker, og reparasjonen (tørrkjøring rører ingenting,
   apply retter grunnfil og variant, andre gang finner den ingenting).
-- Åtte mutasjoner, åtte røde.
+- Ti mutasjoner, ti røde.
+
+**QA-porten ga NO-GO på første utgave av rettingen, med ett funn: en minnelekkasje.** Rettingen
+hentet `<svg>`-rota ut av det rensede treet med `querySelector`. Treet tilhører et jsdom-vindu som
+lever like lenge som prosessen, og et `querySelector` på det holder hele treet igjen for godt:
+rundt 1,5 MB per figur på 5 kB. Appen går på én liten instans; en kursimport med figurer ville fylt
+den. Resultatet var riktig hver gang, så ingen test kunne se det. Nå brukes
+`getElementsByTagName`, XML-kontrollen leser i det faste vinduet i stedet for å åpne et nytt per
+figur, og `test/unit/svg-sanitizer-memory-1083.test.ts` måler heapen i en egen prosess for alle
+fire veiene gjennom fila (under 10 kB per kall nå, mot 1500 med lekkasjen).
+
+⚠️ **Lærdom om selve målingen.** Den første etterprøvingen min «bekreftet» en lekkasje på 3 MB per
+kall — også i den gamle, friske koden. Løkka var synkron, og Node holder på alt som er nådd gjennom
+en `WeakRef` til turen er over. Først da hvert kall fikk sin egen tur i hendelsesløkka, slik en
+forespørsel på tjeneren har, viste målingen det som var sant: ett kall lekket, resten ikke. Måle-
+skriptet (`test/support/measureSvgSanitizerMemory.mts`) sier dette i klartekst, for det er lett å
+gjøre feilen igjen.
+
+**Sikkerhet, målt av QA-gjennomgangen:** 82 angrepsvektorer og 4000 tilfeldig genererte tilfeller
+gikk gjennom gammel og ny rensing og ble åpnet i Chromium som dokument uten CSP og som `<img>`.
+Ingen ga skript, hendelseshåndterer, `javascript:`, `foreignObject`, `<a>`, `<use>` eller et element
+i et annet navnerom. Den nye utskriften er strammere enn den gamle. Én forskjell: et `xlink:href`
+der forfatteren har bundet `xlink`-prefikset til XHTML, var dødt før og laster nå et eksternt
+bilde. Det gir ingen ny evne (`<image href="https://…">` er tillatt i begge), og
+`default-src 'none'` på serveringsendepunktet stopper lastingen.
+
+**Kjent, ikke rettet:**
+
+- Rensingen er 1,5–2,6 ganger tregere enn før. En syntetisk SVG på 4,9 MB tar 14 sekunder mot 5,5,
+  og blokkerer hendelsesløkka så lenge. Grensa for en figur er 5 MB, men en tegnet figur er noen kB.
+- `role` og `<use>` fjernes av rensingen, nå som før. `figure-design.md` viser `role="img"` i
+  malene, og den forsvinner stille ved lagring.
 
 **Rotårsak.** Rensingen ble skrevet for å gjøre figuren *trygg*, og testet på det (#657). At
 resultatet også må være *lesbart* i formatet det serveres i, sto ingen steder som krav, og ingen
