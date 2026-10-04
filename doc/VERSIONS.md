@@ -67,6 +67,26 @@ skrives i XML, plattformen skriver `>` slik selv, og ingen av dem kan stave en b
 står i `figure-design.md`. At plattformen faktisk lagrer referansene som kjørende CSS, er målt i
 testen mot `sanitizeSvg`, ikke antatt. Sju mutasjoner, sju røde.
 
+⚠️ **Kjent, ikke rettet — og ikke noe som bør lappes videre.** Klassen er ikke tettet. Målt rett
+etter rettingen: seks skrivemåter til gir en figur som sjekken godkjenner som stillestående, og som
+plattformen lagrer som en animasjon i løkke:
+
+| Forfatteren skriver | Plattformen lagrer |
+|---|---|
+| `<STYLE>` eller `<Style>` | `<style>` |
+| `STYLE="animation: …"` | `style="animation: …"` |
+| `style=animation:x_9s` (uten anførselstegn) | `style="animation:x_9s"` |
+| `</style >` med mellomrom, eller `<style>` uten sluttag | en vanlig, lukket stilblokk |
+
+Årsaken er den samme i alle: sjekken leser **forfatterens tekst** med mønstre, mens plattformen
+leser den med en HTML-leser som retter opp skrivemåten. Sjekken etterligner altså en leser den ikke
+har. Det er feilen fra #1073 én gang til, nå i den stillestående veien. Skillet kjører på
+forfatterens maskin uten annet enn Node, så det kan ikke lese slik plattformen gjør.
+
+Ingen av skrivemåtene oppstår ved et uhell, så dette stopper ingenting. Men garantien «ingen figur
+går i løkke på plattformen» kan bare gis der figuren faktisk leses: i plattformens validering, på
+det rensede resultatet. Det er en beslutning for produkteier og står i `doc/HANDOFF.md`.
+
 **Rotårsak.** *Minnetoppen:* 2.78.2 målte hva rensingen holder igjen **etter** et kall, fordi det
 var den feilen som nettopp var funnet. Hva et kall bruker **mens** det går, ble ikke målt. Sjekken
 som manglet, kjører nå: en stor figur med lav heap-grense. *Tegnreferansen:* regelen om escape ble

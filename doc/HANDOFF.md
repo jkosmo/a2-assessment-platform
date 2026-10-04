@@ -142,7 +142,8 @@ QA-gjennomgangen av 2.78.2 ga GO for stage med to funn. Begge er rettet, og deta
   `DOMParser` på 637 tilfeller, og en egen test kjører kontrollen på 4 MB med 256 MB heap.
 - **Skillets figursjekk** avviser nå både en omvendt skråstrek og en tegnreferanse (`&#97;`) i
   figurens CSS, som `css_escape`. Tegnreferansen var et hull: plattformen gjør `&#97;nimation` om til
-  `animation` ved lagring, og sjekken godkjente figuren som stillestående.
+  `animation` ved lagring, og sjekken godkjente figuren som stillestående. ⚠️ Klassen er **ikke**
+  tettet: seks skrivemåter til slipper gjennom. Ikke lapp videre; se «Åpne beslutninger».
 
 ⚠️ **Ikke rettet:** en tett figur på 1,5 MB tar fortsatt ned prosessen ved 512 MB heap, slik den
 gjorde før #1083. Det er antall elementer som koster, ikke bytes, og grensa i dag er 5 MB i bytes.
@@ -240,6 +241,7 @@ Vertsnavnene står i `doc/ENVIRONMENTS.local.md` (gitignorert, skal ikke skrives
 | **#928** | Drift-varselet er verken synlig eller utløst av den vanligste årsaken (`doc/DESIGN_928.md`) |
 | **#934** | Kursversjonering: målbilde, og det minste som gjør dagens versjon logisk |
 | **#808** | Står åpen med ny utløser: nedetid som flytter seg inn i arbeidstiden, eller deploy-nedetid som ikke lenger godtas. Morgenomstarten (~06:05) er akseptert. |
+| **#1073: hvor skal animasjonsreglene håndheves?** | Skillets figursjekk leser forfatterens tekst med mønstre; plattformen leser med en HTML-leser som retter skrivemåten (`<STYLE>`, attributter uten anførselstegn, tegnreferanser). Seks kjente skrivemåter slipper gjennom som «stillestående» og lagres som animasjon i løkke (`doc/VERSIONS.md`, 2.78.3). Ingen oppstår ved et uhell. Forslag: slutt å lappe skillet, og la plattformens validering kontrollere det **rensede** resultatet hvis garantien skal gjelde. Skillet blir da en hjelp, ikke en vakt. |
 | **Tett figur kan ta ned appen** (ingen sak ennå) | En SVG med svært mange elementer (rundt 1,5 MB tett tegnet) bruker opp minnet under rensingen, nå som før #1083. Bare en innlogget forfatter kan laste opp. Skal det settes en grense på antall elementer, og hvor? Les først av heap-grensa i prod. |
 
 ---
