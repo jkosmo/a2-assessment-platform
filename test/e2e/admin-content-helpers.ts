@@ -16,6 +16,12 @@ type MockLibraryModule = {
   title?: string;
   status?: string;
   courseCount?: number;
+  // #894: hvilke språk tittelen faktisk finnes på. Tom liste = lagret som ren streng, altså
+  // «skrevet på ett språk» — og da mangler de to andre.
+  titleLocales?: string[];
+  // #787/#894: en rad forfatteren ikke eier. Den skal ikke telles med i en samlet oversetting —
+  // patchen ville gitt 403.
+  canManage?: boolean;
   // #745: modules carry the courses they belong to (used by the "Brukt i kurs" popover
   // and the course filter). Kept optional so existing fixtures are unaffected.
   courses?: Array<{ id: string; title: string }>;

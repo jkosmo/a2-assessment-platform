@@ -2,6 +2,93 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.77.0 - 2026-09-30 (stage)
+
+Én commit, ingen migrasjon. Å døpe om et element koster nå to klikk i stedet for sju steg — og
+lista sier for første gang hvilke språk navnet mangler.
+
+### #894 — omdøping i lista, og synlig oversettelsesstatus
+
+Saken ble målt i klikk: en forfatter døpte om 18 elementer og brukte over hundre interaksjoner,
+fordi hver tittel måtte åpnes, endres, oversettes, lagres og publiseres. Verre enn tidsbruken var at
+den billigste veien ga feil resultat — et halvt kurs endte med titler på feil språk, uten at noe sa
+fra. Derfor henger de to delene sammen og kom i samme slengen:
+
+1. **«Døp om» i raden.** Navnecella blir et skrivefelt. Enter lagrer på det språket lista viser,
+   Escape avbryter, og kontrakten står som et hint ved siden av feltet så den ikke må gjettes. Egen
+   knapp, ikke klikk på navnet: et klikk i raden åpner elementet, og det skal det fortsette å gjøre.
+2. **En språkkolonne som viser HULLENE** — «nn, en mangler», ikke «nb, nn». Forfatteren leter etter
+   det som ikke er der. Er alle tre på plass, står det bare «alle tre», stille og grått.
+3. **Én knapp øverst: «Oversett det som mangler (N)».** Oversettingen kommer ETTER omdøpingene,
+   samlet, i én runde (produkteierens valg). Tallet er antall SYNLIGE elementer med hull, så knappen
+   sier hva den kommer til å gjøre — og det følger filteret.
+
+4. **«Bare de som mangler språk».** En bryter i filterraden, ikke en pille til: pillene er ETT
+   valg, og «Aktive» og «mangler språk» er to spørsmål forfatteren stiller samtidig. Den snevrer
+   inn tilstandsfilteret i stedet for å erstatte det, og knappen over følger med på tallet.
+
+Et språk som ikke går gjennom, blir stående **tomt og navngitt**. Det er #892-regelen: en tittel
+fylt med kildeteksten ser oversatt ut og leser som feil språk, og da hjelper ingen markering i lista.
+
+Gjelder modul- og seksjonslista. Kurs og klasser står igjen.
+
+**⚠️ To kontrakter, ikke én.** Modulenes tittel-PATCH SLÅR SAMMEN på tjeneren; seksjonenes
+ERSTATTER. Klienten sender derfor kildespråkets tekst med i modulpatchen (uten den slettes en tittel
+som er lagret som ren streng), og hele språkkartet i seksjonspatchen (uten det slettes de andre
+språkene). Begge fellene er festet i tester, og begge ble mutasjonsverifisert.
+
+**⚠️ En ren streng er bokmål.** Seksjonssidas egen `parseLocalized` legger en ulokalisert tittel
+under visningsspråket — riktig i editoren, feil i lista: en omdøping sett i nynorsk ville flyttet den
+norske teksten til nynorsk. `lagretTittelkart` i `list-rename.js` leser den som tjeneren gjør.
+
+**Synlig sidevirkning:** radene fikk en sjette handling, og med plass til tre ligger «Eksporter» nå
+under «Mer» på både moduler og seksjoner (D5-regelen om maks fire slots står urørt).
+
+### Tjenersiden
+
+- `localesPresent()` i `src/i18n/content.ts` — hvilke språk en lagret tekst faktisk har. En ren
+  streng gir tom liste: «skrevet på ett språk, ikke oversatt».
+- `titleLocales` på radene fra modulbiblioteket og seksjonslista.
+- `POST /api/admin/content/titles/localize` — oversetter en tittel til inntil tre språk og svarer
+  per språk: hvert mål havner enten i `title` eller i `failedLocales`. Ingen språk forsvinner stille.
+
+### Delt klientkode
+
+- `public/static/list-rename.js` — ny, delt av begge listene: språkmerket, kildespråksvalget,
+  `lagretTittelkart` og selve omdøpingsfeltet.
+- `list-page.js` fikk kroken `afterTableRender`. `afterRender` kjører ikke på et filterklikk, så en
+  hodeknapp hvis tekst avhenger av hva som er synlig, ville blitt stående med feil tall.
+- `list-page.js` fikk også `toggle` — én avkryssing som snevrer inn utover tilstandsfilteret. Kurs-
+  og klasselista bruker den ikke ennå, men mekanismen er delt.
+
+### Tester
+
+1516 enhet · 68 DOM · 348 e2e · 707 integrasjon. Nye: `locales-present-894` (5),
+`m2-list-rename-894` (7), `admin-content-list-rename-894` (12).
+
+Fjorten mutasjoner kjørt mot de nye e2e-testene. Tolv ble tatt med én gang. **To overlevde**, og
+de pekte på ekte hull: den samlede oversettingen på seksjoner kunne droppe de lagrede språkene uten
+at noen test merket det, og ingenting sa fra om en rad forfatteren ikke eier ble talt med i
+«Oversett det som mangler (N)» (patchen ville gitt 403). Begge er nå dekket, og begge mutasjonene
+blir tatt.
+
+⚠️ De to overlevde fordi jeg først satte inn tre mutasjoner samtidig: kjøringen ga «2 failed», og
+det så ut som dekning. Én rød test kan dekke over at nabomutasjonen ikke traff noe. Én om gangen.
+
+### Kompleksitet: 76 → 73
+
+Den falt, og det står her fordi tallet skal leses, ikke pyntes på. To ting skjedde:
+
+- **«Filer alt må gjennom» 20 → 10.** `admin-content-library.js` (802 linjer) og
+  `adminContentSchemas.ts` (809) passerte 800-grensa. Begge så vidt — og målingen teller rå linjer,
+  også kommentarlinjer, som vi bevisst skriver mange av. Den delte runden i `list-rename.js` tok
+  allerede ~70 linjer ut av de to listene; resten er ærlig vekst.
+- **«Filer som alltid endres sammen» 95 → 90.** Et nytt par i git-historikken
+  (`participant-completed.js` / `profile.js`), ikke fra denne saken.
+
+Om grensa skal telle kodelinjer i stedet for rå linjer, er en regelendring — den hører hjemme i sin
+egen commit, med `REGELENDRINGER`-merket, ikke smuglet inn sammen med en funksjon.
+
 ## 2.76.0 - 2026-09-20 (stage)
 
 Én commit, ingen migrasjon. Deltakeren får svar på «hva nå?», og forhåndsvisningen slutter å eie

@@ -30,6 +30,7 @@ import { hasAnyRole, ADMIN_ONLY } from "../auth/roleSets.js";
 import {
   moduleCreateBodySchema,
   moduleTitleUpdateBodySchema,
+  titleLocalizeBodySchema,
   rubricBodySchema,
   rubricEnsureBodySchema,
   rubricSyncBlueprintBodySchema,
@@ -78,6 +79,7 @@ import {
   reviseModuleDraft,
   reviseMcqQuestions,
   checkScenarioAnswerability,
+  localizeTitle,
 } from "../modules/adminContent/llmContentGenerationService.js";
 import { validateMcqDistractors, validateScenarioDraft } from "../modules/adminContent/contentValidationService.js";
 import { localizedTextCodec } from "../codecs/localizedTextCodec.js";
@@ -287,6 +289,34 @@ adminContentRouter.patch("/modules/:moduleId/title", async (request, response) =
     }
     response.status(400).json({ error: "update_title_failed", message: "Could not update module title." });
   }
+});
+
+/**
+ * #894: oversett en tittel til språkene som mangler den.
+ *
+ * ⚠️ Svarer per språk, og et språk som feiler SLIPPES — det føres i `failedLocales` i stedet for å
+ * fylles med kildeteksten. Å kopiere kilden inn ville gitt en tittel som ser oversatt ut og leser
+ * som feil språk; det er #892, og det er nettopp det denne saken finnes for å hindre.
+ */
+adminContentRouter.post("/titles/localize", generateLimiter, async (request, response) => {
+  const { data, error } = parseRequest(titleLocalizeBodySchema, request.body);
+  if (error) {
+    response.status(400).json({ error: "validation_error", issues: error });
+    return;
+  }
+  const title: Record<string, string> = {};
+  const failedLocales: string[] = [];
+  for (const target of data.targetLocales) {
+    if (target === data.sourceLocale) continue;
+    try {
+      const translated = await localizeTitle({ title: data.title, sourceLocale: data.sourceLocale, targetLocale: target });
+      if (translated && translated.trim()) title[target] = translated.trim();
+      else failedLocales.push(target);
+    } catch {
+      failedLocales.push(target);
+    }
+  }
+  response.json({ title, failedLocales });
 });
 
 adminContentRouter.delete("/modules/:moduleId", async (request, response) => {

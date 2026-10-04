@@ -25,6 +25,15 @@ import { describeImportError } from "/static/import-error.js";
 import { describeApiError } from "/static/api-error.js";
 import { showToast } from "/static/toast.js";
 import { renderWorkspaceNavigationWithProfile } from "./workspace-nav.js";
+import {
+  manglendeSpraak,
+  medHullAv,
+  oppdaterHullknapp,
+  oversettManglende,
+  oversettToast,
+  spraakMerkeHtml,
+  startOmdoping,
+} from "/static/list-rename.js";
 
 // ---------------------------------------------------------------------------
 // i18n
@@ -176,6 +185,9 @@ function getListPage() {
       empty: t("library.empty"), emptyFiltered: t("library.emptyFiltered"), loadError: t("library.loadError"), more: t("form.more"),
     },
     headerActions: [
+      // #894: oversettingen kommer ETTER omdøpingene, samlet. Tallet er antall elementer med hull,
+      // så forfatteren ser hva knappen kommer til å gjøre før hen trykker.
+      { id: "translateGapsBtn", label: tf("ui.lang.translateGaps", { count: 0 }) },
       { id: "importModulePackageBtn", label: t("library.importModule") },
       { id: "createModuleBtn", label: t("library.newModule"), kind: "primary" },
     ],
@@ -190,10 +202,16 @@ function getListPage() {
     },
     // #745: kursfilteret bygges av modulenes egne `courses`.
     courseFilter: { coursesOf: (m) => m.courses ?? [] },
+    // #894: «bare de som mangler språk». Saken ber om et filter for det, fordi hullene skal kunne
+    // finnes FØR publisering i stedet for oppdages etterpå.
+    toggle: { id: "libraryGapsOnly", label: () => t("ui.lang.onlyGaps"), matches: (m) => manglendeSpraak(m).length > 0 },
     search: { matches: (m, q) => (m.title ?? "").toLowerCase().includes(q) || m.id.toLowerCase().includes(q) },
     sort: { key: "title", dir: "asc", locale: () => currentLocale },
     columns: [
       { key: "title", label: t("ui.name"), className: "col-name", sortValue: (m) => m.title ?? "", render: (m) => escapeHtml(m.title ?? m.id) },
+      // #894: hvilke språk tittelen MANGLER. Står ved siden av navnet fordi det er navnet det
+      // gjelder — ikke modulens tilstand.
+      { key: "lang", label: t("ui.lang.col"), className: "col-lang", sortValue: (m) => manglendeSpraak(m).length, render: (m) => spraakMerkeHtml(m, tf) },
       { key: "status", label: t("ui.status"), className: "col-status", render: (m) => lifecycleBadge(m, t) },
       { key: "level", label: t("ui.certLevel"), className: "col-level", render: (m) => certBadge(m.certificationLevel) },
       { key: "courses", label: t("library.col.usedInCourses"), className: "col-courses", sortValue: (m) => m.courseCount ?? 0, render: (m) => (m.courseCount > 0
@@ -216,6 +234,9 @@ function getListPage() {
       return [
         // #896 S3c: knappen sier hva den gjør — åpner modulen.
         canManage ? `<a href="${openConvUrl}" class="row-action-btn">${escapeHtml(t("ui.action.open"))}</a>` : "",
+        // #894: omdøping er en langt vanligere handling enn innholdsredigering, og krever ingen av
+        // trinnene rundt. Egen knapp, ikke klikk på navnet — et klikk i raden åpner elementet.
+        canManage ? `<button class="row-action-btn" data-action="rename" data-module-id="${id}">${escapeHtml(t("ui.action.rename"))}</button>` : "",
         `<button class="row-action-btn" data-action="duplicate" data-module-id="${id}">${escapeHtml(t("ui.action.duplicate"))}</button>`,
         `<button class="row-action-btn" data-action="export" data-module-id="${id}" data-module-title="${title}">${escapeHtml(t("ui.action.export"))}</button>`,
         canManage && isPublished ? `<button class="row-action-btn" data-action="unpublish" data-module-id="${id}" data-module-title="${title}">${escapeHtml(t("ui.action.unpublish"))}</button>` : "",
@@ -245,11 +266,20 @@ function getListPage() {
       return true;
     },
     describeError: (err) => apiErrorText(err),
-    onAction: (_action, _id, btn) => handleTableClick(btn),
+    onAction: (action, id, btn, item) => {
+      if (action === "rename") { omdopModulIRad(id, btn, item); return; }
+      handleTableClick(btn);
+    },
     afterRender: () => {
       document.getElementById("createModuleBtn")?.addEventListener("click", openCreateDialog);
       document.getElementById("emptyCreateBtn")?.addEventListener("click", openCreateDialog);
+      // #894: lytteren bindes én gang per full tegning, men HVILKE moduler den gjelder leses ved
+      // klikk. Et filterbytte i mellomtiden skal ikke kunne sende oss over et annet sett.
+      document.getElementById("translateGapsBtn")?.addEventListener("click", () => oversettManglendeTitler(modulerMedHull()));
     },
+    // #894: tallet på knappen skal si hva den kommer til å gjøre. Et filterklikk tegner bare
+    // tabellen, så etiketten hører her — ikke i afterRender, som da ikke kjører.
+    afterTableRender: () => oppdaterOversettKnapp(),
   });
   return listPage;
 }
@@ -257,6 +287,83 @@ function getListPage() {
 // ---------------------------------------------------------------------------
 // Table click handler
 // ---------------------------------------------------------------------------
+
+/**
+ * #894: modulene i det SYNLIGE utvalget som mangler tittel på minst ett språk.
+ *
+ * ⚠️ Synlige, ikke alle innlastede. Lista står som regel på «Aktive»; en samlet oversetting som
+ * også tok arkiverte moduler ville gjort mer enn knappen sier.
+ */
+function modulerMedHull() {
+  return medHullAv(listPage?.visibleItems());
+}
+
+function oppdaterOversettKnapp() {
+  oppdaterHullknapp("translateGapsBtn", modulerMedHull(), tf);
+}
+
+/**
+ * #894: døp om modulen i raden. Lagrer på språket lista viser, og rører ikke de andre.
+ *
+ * ⚠️ De andre språkene blir STÅENDE med den gamle teksten — ikke tomme. Det er derfor lista både
+ * viser hull og tilbyr samlet oversetting: en omdøping i ett språk gjør de andre utdaterte, og før
+ * denne saken var det en tilstand ingenting sa fra om.
+ */
+async function omdopModulIRad(moduleId, btn, item) {
+  const rad = btn?.closest("tr");
+  if (!rad || !item) return;
+  startOmdoping({
+    rad,
+    gjeldendeTittel: item.title ?? "",
+    visningsspraak: currentLocale,
+    spraakNavn: localeLabels[currentLocale] ?? currentLocale,
+    tf,
+    onCancel: () => getListPage().renderTable(),
+    onSave: async (nyTittel, spraak) => {
+      try {
+        await apiFetch(`/api/admin/content/modules/${encodeURIComponent(moduleId)}/title`, getHeaders, {
+          method: "PATCH",
+          body: JSON.stringify({ title: { [spraak]: nyTittel } }),
+        });
+        showToast(t("ui.rename.saved"), "success");
+        await loadModules();
+      } catch (err) {
+        apiErrorToast(err);
+        getListPage().renderTable();
+      }
+    },
+  });
+}
+
+/** #894: oversett titlene som mangler språk — de synlige modulene, i én runde. */
+async function oversettManglendeTitler(moduler) {
+  if (moduler.length === 0) return;
+  const knapp = document.getElementById("translateGapsBtn");
+  if (knapp) knapp.disabled = true;
+  try {
+    const resultat = await oversettManglende(moduler, {
+      visningsspraak: currentLocale,
+      // Biblioteksraden bærer en OPPSLÅTT tittel — tjeneren har alt valgt språk for lista.
+      kildetekstFor: (modul) => modul.title,
+      oversett: (kropp) => apiFetch("/api/admin/content/titles/localize", getHeaders, {
+        method: "POST",
+        body: JSON.stringify(kropp),
+      }),
+      // ⚠️ Kildespråkets tekst sendes MED. Modulenes patch slår sammen på tjeneren, men grunnlaget
+      // er TOMT når tittelen er lagret som ren streng — uten denne linja forsvinner originalen og
+      // bare de nye språkene blir stående. Festet i `test/m2-list-rename-894.test.ts`.
+      lagre: (modul, nye, kilde, kildetekst) => apiFetch(`/api/admin/content/modules/${encodeURIComponent(modul.id)}/title`, getHeaders, {
+        method: "PATCH",
+        body: JSON.stringify({ title: { [kilde]: kildetekst, ...nye } }),
+      }),
+    });
+    await loadModules();
+    showToast(...oversettToast(resultat, tf));
+  } finally {
+    // Ikke «false»: etter runden kan hullene være borte, og da skal knappen bli stående av.
+    oppdaterOversettKnapp();
+  }
+}
 
 function handleTableClick(btn) {
   if (!btn) return;

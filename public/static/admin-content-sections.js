@@ -18,6 +18,16 @@ import { lifecycleStatusBadge, lifecycleBadge, lifecycleOf } from "/static/conte
 import { renderOwnerPanel } from "/static/owner-panel.js";
 import { sanitizeSectionHtml } from "/static/sanitize.js";
 import { createListPage } from "/static/list-page.js";
+import {
+  lagretTittelkart,
+  manglendeSpraak,
+  medHullAv,
+  oppdaterHullknapp,
+  oversettManglende,
+  oversettToast,
+  spraakMerkeHtml,
+  startOmdoping,
+} from "/static/list-rename.js";
 import { createFormPage, formPageTexts } from "/static/form-page.js";
 import {
   SECTION_EDITOR_LOCALES,
@@ -199,6 +209,9 @@ function getListPage() {
       empty: L("empty"), emptyFiltered: L("empty"), more: t("form.more"), loadError: L("loadError"),
     }),
     headerActions: () => [
+      // #894: samme knapp som på Moduler — oversettingen kommer ETTER omdøpingene, samlet, og
+      // tallet sier hvor mange av de synlige seksjonene den vil ta.
+      { id: "translateGapsBtn", label: tf("ui.lang.translateGaps", { count: 0 }) },
       { id: "importSectionBtn", label: L("importSection") },
       { id: "newSectionBtn", label: L("newSection"), kind: "primary" },
     ],
@@ -209,11 +222,15 @@ function getListPage() {
     },
     // #745: kursfilteret bygges av seksjonenes `courses`.
     courseFilter: { coursesOf: (s) => s.courses ?? [] },
+    // #894: «bare de som mangler språk» — samme bryter som på Moduler.
+    toggle: { id: "sectionsGapsOnly", label: () => t("ui.lang.onlyGaps"), matches: (s) => manglendeSpraak(s).length > 0 },
     // #1046 B1: søk på navn (alle språk) og ID, som på Moduler.
     search: { matches: (s, q) => Object.values(parseLocalized(s.title)).some((v) => String(v ?? "").toLowerCase().includes(q)) || String(s.id).toLowerCase().includes(q) },
     sort: { key: "title", dir: "asc", locale: () => currentLocale },
     columns: () => [
       { key: "title", label: L("colTitle"), className: "col-title", sortValue: (s) => displayTitle(s.title), render: (s) => escapeHtml(displayTitle(s.title)) },
+      // #894: hvilke språk tittelen MANGLER. Ved siden av navnet, fordi det er navnet det gjelder.
+      { key: "lang", label: t("ui.lang.col"), className: "col-lang", sortValue: (s) => manglendeSpraak(s).length, render: (s) => spraakMerkeHtml(s, tf) },
       // #1046 steg B/C8: «Nyere utkast»-brikken følger med når tjeneren sier published_with_draft.
       { key: "status", label: L("colStatus"), className: "col-status", render: (s) => lifecycleBadge(s, tNav) },
       { key: "version", label: L("colVersion"), className: "col-version", render: (s) => `v${escapeHtml(s.versionNo ?? "1")}` },
@@ -245,6 +262,8 @@ function getListPage() {
       // arkiverte seksjonen.
       return [
         canManage ? `<button class="row-action-btn" data-action="edit" data-id="${id}">${escapeHtml(L("edit"))}</button>` : "",
+        // #894: å døpe om er ikke å redigere innholdet, og skal ikke koste en tur gjennom editoren.
+        canManage ? `<button class="row-action-btn" data-action="rename" data-id="${id}">${escapeHtml(t("ui.action.rename"))}</button>` : "",
         `<button class="row-action-btn" data-action="duplicate" data-id="${id}">${escapeHtml(L("duplicate"))}</button>`,
         `<button class="row-action-btn" data-action="export" data-id="${id}">${escapeHtml(L("exportSection"))}</button>`,
         canManage ? publishToggle : "",
@@ -264,8 +283,9 @@ function getListPage() {
       return true;
     },
     describeError: (err) => apiErrorText(err),
-    onAction: (action, id, btn) => {
+    onAction: (action, id, btn, item) => {
       if (action === "edit") goTo("editor", id);
+      else if (action === "rename") omdopSeksjonIRad(id, btn, item);
       else if (action === "export") exportSectionPackage(id, btn);
       else if (action === "duplicate") duplicateSection(id, btn);
       else if (action === "publish") sectionLifecycle(id, "publish", "published");
@@ -280,9 +300,90 @@ function getListPage() {
       const importFile = document.getElementById("importSectionFile");
       importBtn?.addEventListener("click", () => importFile?.click());
       importFile?.addEventListener("change", (event) => importSectionPackage(event.target));
+      // #894: lytteren bindes én gang per full tegning; HVILKE seksjoner den gjelder leses ved klikk.
+      document.getElementById("translateGapsBtn")?.addEventListener("click", () => oversettManglendeSeksjonstitler(seksjonerMedHull()));
     },
+    // #894: tallet skal si hva knappen kommer til å gjøre. Et filterklikk tegner bare tabellen, så
+    // etiketten hører her — `afterRender` kjører ikke da.
+    afterTableRender: () => oppdaterOversettKnapp(),
   });
   return listPage;
+}
+
+/**
+ * #894: seksjonene i det SYNLIGE utvalget som mangler tittel på minst ett språk.
+ * Synlige, ikke alle innlastede — lista står som regel på «Aktive».
+ */
+function seksjonerMedHull() {
+  return medHullAv(listPage?.visibleItems());
+}
+
+function oppdaterOversettKnapp() {
+  oppdaterHullknapp("translateGapsBtn", seksjonerMedHull(), tf);
+}
+
+/**
+ * #894: døp om seksjonen i raden, på språket lista viser.
+ *
+ * ⚠️ HELE språkkartet sendes. Seksjonenes tittel-PATCH ERSTATTER verdien (adminSections.ts
+ * serialiserer det den får), i motsetning til modulenes, som slår sammen. En delvis patch her ville
+ * slettet de andre språkene — og det ville sett ut som en vellykket omdøping.
+ */
+async function omdopSeksjonIRad(sectionId, btn, item) {
+  const rad = btn?.closest("tr");
+  if (!rad || !item) return;
+  const kart = lagretTittelkart(item.title);
+  startOmdoping({
+    rad,
+    gjeldendeTittel: kart[currentLocale] ?? "",
+    visningsspraak: currentLocale,
+    spraakNavn: localeLabels[currentLocale] ?? currentLocale,
+    tf,
+    onCancel: () => getListPage().renderTable(),
+    onSave: async (nyTittel, spraak) => {
+      try {
+        await apiFetch(`/api/admin/content/sections/${encodeURIComponent(sectionId)}/title`, getHeaders, {
+          method: "PATCH",
+          body: JSON.stringify({ title: { ...kart, [spraak]: nyTittel } }),
+        });
+        showToast(t("ui.rename.saved"), "success");
+        renderListView();
+      } catch (err) {
+        apiErrorToast(err);
+        getListPage().renderTable();
+      }
+    },
+  });
+}
+
+/** #894: oversett seksjonstitlene som mangler språk — de synlige, i én runde. */
+async function oversettManglendeSeksjonstitler(seksjoner) {
+  if (seksjoner.length === 0) return;
+  const knapp = document.getElementById("translateGapsBtn");
+  if (knapp) knapp.disabled = true;
+  try {
+    const resultat = await oversettManglende(seksjoner, {
+      visningsspraak: currentLocale,
+      // Seksjonsraden bærer den LAGREDE teksten, ikke en oppslått — kildespråket plukkes ut her.
+      kildetekstFor: (seksjon, kilde) => lagretTittelkart(seksjon.title)[kilde],
+      oversett: (kropp) => apiFetch("/api/admin/content/titles/localize", getHeaders, {
+        method: "POST",
+        body: JSON.stringify(kropp),
+      }),
+      // ⚠️ HELE språkkartet sendes. Seksjonenes tittel-PATCH ERSTATTER verdien (adminSections.ts),
+      // i motsetning til modulenes, som slår sammen. En delvis patch ville slettet de andre
+      // språkene — og det ville sett ut som en vellykket oversetting.
+      lagre: (seksjon, nye) => apiFetch(`/api/admin/content/sections/${encodeURIComponent(seksjon.id)}/title`, getHeaders, {
+        method: "PATCH",
+        body: JSON.stringify({ title: { ...lagretTittelkart(seksjon.title), ...nye } }),
+      }),
+    });
+    await renderListView();
+    showToast(...oversettToast(resultat, tf));
+  } finally {
+    // Ikke «false»: etter runden kan hullene være borte, og da skal knappen bli stående av.
+    oppdaterOversettKnapp();
+  }
 }
 
 async function renderListView() {

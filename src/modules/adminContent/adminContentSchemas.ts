@@ -134,6 +134,7 @@ export const moduleTitleUpdateBodySchema = z.object({
   title: localizedTextPatchSchema,
 });
 
+
 // B3 (#450): "Behold kriteriene" sync — accepts the current blueprint hash. Null is allowed
 // so caller can also clear the stored hash if blueprint was deleted.
 export const rubricSyncBlueprintBodySchema = z.object({
@@ -362,6 +363,15 @@ export const benchmarkExampleVersionBodySchema = z.object({
 });
 
 export const generationLocaleSchema = z.enum(["en-GB", "nb", "nn"]);
+
+// #894: oversett ÉN tittel til de språkene som mangler den. Lista bruker denne når forfatteren
+// har døpt om elementer og ber om «oversett det som mangler» — én runde i stedet for å åpne hvert
+// element.
+export const titleLocalizeBodySchema = z.object({
+  title: z.string().trim().min(1).max(300),
+  sourceLocale: generationLocaleSchema,
+  targetLocales: z.array(generationLocaleSchema).min(1).max(3),
+});
 export const certificationLevelSchema = z.enum(["basic", "intermediate", "advanced"]);
 export const generationModeSchema = z.enum(["ordinary", "thorough"]);
 

@@ -84,6 +84,9 @@ test("«Eksporter» calls the export-package endpoint for that row", async ({ pa
   });
 
   await page.goto("/admin-content/sections");
+  // #894: raden fikk «Døp om», og med seks handlinger og plass til tre viser lista resten under
+  // «Mer» (rowActionsHtml, D5). Eksporter er altså ikke borte — den ligger ett klikk unna.
+  await page.locator("details.row-more > summary").first().click();
   await page.getByRole("button", { name: /^Eksporter$/ }).click();
 
   await expect.poll(() => exportedPath).toBe("/api/admin/content/sections/sec-916/export-package");

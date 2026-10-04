@@ -1,6 +1,6 @@
 import { adminContentRepository } from "./adminContentRepository.js";
 import type { SupportedLocale } from "../../i18n/locale.js";
-import { localizeContentText } from "../../i18n/content.js";
+import { localizeContentText, localesPresent } from "../../i18n/content.js";
 import { deriveContentLifecycle } from "../content/lifecycle.js";
 import { decodeLocalizedText, safeParseJson, mapMcqSetVersion } from "./adminContentProjections.js";
 import { DomainRuleError, ValidationError } from "../../errors/AppError.js";
@@ -45,6 +45,9 @@ export async function listLibraryModules(
   return modules.map((module) => ({
     id: module.id,
     title: localizeContentText(locale, module.title) ?? module.title,
+    // #894: hvilke språk tittelen finnes på. Lista viser «nn mangler» av dette — og en ren
+    // streng gir [], altså «skrevet på ett språk, ikke oversatt».
+    titleLocales: localesPresent(module.title),
     certificationLevel: localizeContentText(locale, module.certificationLevel) ?? module.certificationLevel ?? null,
     status: deriveLibraryStatus(module),
     // #1046 steg B: samme tilstandsord som kurs og seksjoner. `status` (fem verdier) står til
