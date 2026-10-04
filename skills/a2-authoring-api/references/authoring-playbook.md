@@ -82,8 +82,10 @@ only (which point, which template) — you draw the SVG at Gate 4 with the text.
 which figures to design. See `figure-design.md`.
 
 **Say, per figure, whether it moves (#1073).** Each proposed figure carries *"animert: ja/nei —
-fordi …"*. Yes when its point is an order or a change over time (every **flow**, and a
-boxes-and-arrows figure where something actually travels); no for trees, parts and comparisons.
+fordi …"*. Yes when its point is an order or a change over time — and then the figure is a
+**flow**, the one animated template; no for trees, boxes-and-arrows, parts and comparisons. If
+something travels between the entities of a boxes-and-arrows figure, the point is an order: propose
+it as a flow instead.
 Don't wait to be asked — proposing the motion is part of proposing the figure. If the author wants
 a flow still, note it; it is drawn with `data-motion="static"`.
 

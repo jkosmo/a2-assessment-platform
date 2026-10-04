@@ -175,13 +175,14 @@ What you may change:
 
 | May differ | Must stay |
 |---|---|
-| the colours (hex) — base fill, stroke, highlight | the class names `steg`, `s1`, `s2`, … and the keyframes name `lys` |
+| the colours — base fill, stroke, highlight — as **opaque hex**, `#rgb` or `#rrggbb` (no alpha: a transparent base fill makes the boxes vanish from the still picture) | the class names `steg`, `s1`, `s2`, … and the keyframes name `lys` |
 | the duration in `.steg { animation: lys <n>s ease-in-out 1; }` | `ease-in-out`, the count `1`, the shorthand form |
-| the delays, and the number of `.sN` delay rules (one per step after the first) | the order of the rules, and the reduced-motion rule as the last one |
-| line breaks and spacing | one `<style>` block, and nothing else in it |
+| the delays, and the number of `.sN` delay rules (one per step after the first) — **each delay larger than the one before**, so the steps light up in order | the order of the rules, and the reduced-motion rule as the last one |
+| line breaks and spacing | one `<style>` block, nothing else in it, and **no comments** in it (comment in the markup instead: `<!-- … -->`) |
 
-And in the markup: every animated box carries `class="steg sN"` — one box per step, `s1` to the
-last, matching the delay rules — and the figure has **no `style=""` attributes**. Colours and sizes
+And in the markup: every animated box is a `<rect class="steg sN">` — one box per step, `s1` to the
+last, matching the delay rules. Class `steg` goes on the boxes only: on a label it would animate
+the text and leave the boxes still. The figure has **no `style=""` attributes**. Colours and sizes
 on other elements go in presentation attributes (`fill="…"`, `stroke="…"`), which do what you
 expect; a `style` attribute could override the animation.
 
@@ -203,7 +204,9 @@ the figure is opened by itself) but it is not enough. In addition:
    the duration and the gaps between delays so the last step still ends within 5 seconds.
 2. **The still picture is the complete figure.** Without the animation — before it starts, after it
    ends, with reduced motion — every box and label is visible. No element is switched off with
-   `display="none"`, `visibility="hidden"` or `opacity="0"`.
+   `display="none"`, `visibility="hidden"` or `opacity="0"`. The check catches those attributes; it
+   cannot see a box drawn outside the `viewBox` or white on white. **Looking at the rendered still
+   picture (below) is the guard for completeness** — the check is not.
 3. **Motion carries the point, never the content.** Everything the figure says must be readable in
    the still picture; the animation only shows the order.
 4. **Translations keep the motion.** Locale variants change only the `<text>`; the `<style>` block

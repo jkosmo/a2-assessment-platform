@@ -58,17 +58,22 @@ const num = (v, fallback = 0) => {
 
 // ── The animation: the flow template's style block, and only that ──────────────────────────────
 
-/** The CSS of each <style> element, without comments and without the XML CDATA wrapper. */
+/** The CSS of each <style> element, without the XML CDATA wrapper. Comments are NOT removed. */
 function styleBlocks(svg) {
-  return [...svg.matchAll(/<style\b[^>]*>([\s\S]*?)<\/style>/g)]
-    .map((m) => m[1].replace(/\/\*[\s\S]*?\*\//g, "").replace(/<!\[CDATA\[|\]\]>/g, " "));
+  return [...svg.matchAll(/<style\b[^>]*>([\s\S]*?)<\/style>/g)].map((m) => m[1].replace(/<!\[CDATA\[|\]\]>/g, " "));
 }
 
 /** Layout is free: line breaks, indentation and spaces round punctuation carry no meaning. */
 const squeeze = (css) => css.replace(/\s+/g, " ").replace(/\s*([{}:;,()])\s*/g, "$1").trim();
 
-const HEX = "#[0-9a-fA-F]{3,8}";
+// The slots that may vary are deliberately narrow — each one was a way through when it was wider:
+//  · colours are OPAQUE hex, three or six digits. With an alpha channel (#0000) the base fill can be
+//    invisible: the boxes light up once and then vanish from the still picture.
+//  · times are plain non-negative seconds.
+const HEX = "#(?:[0-9a-fA-F]{6}|[0-9a-fA-F]{3})";
 const TIME = "(\\d+(?:\\.\\d+)?|\\.\\d+)s";
+/** `#EEF` and `#eeeeff` are one colour. */
+const sameColour = (hex) => (hex.length === 4 ? `#${[...hex.slice(1)].map((c) => c + c).join("")}` : hex).toLowerCase();
 // The template, rule by rule, in the template's order. Case-sensitive on purpose: `Lys` and `lys`
 // are two different keyframes to a browser, `.Steg` and `.steg` two different classes.
 const TEMPLATE = [
@@ -92,6 +97,11 @@ function matchTemplate(svg) {
     return { problems: ["an animated figure has no style=\"\" attributes — use presentation attributes (fill, stroke, …) instead"] };
   }
 
+  // A comment may sit anywhere a browser allows one, including inside a value: `1/**/.4s` reads as
+  // "1.4s" once the comment is deleted, and as two tokens — an invalid declaration, a still figure —
+  // to the browser. The template has no comments, so neither has the figure.
+  if (blocks[0].includes("/*")) return { problems: ["the style block of an animated figure has no comments — put them in the markup (<!-- … -->)"] };
+
   let rest = squeeze(blocks[0]);
   const found = [];
   for (const [what, source] of TEMPLATE) {
@@ -103,7 +113,7 @@ function matchTemplate(svg) {
   const [base, keyframes, animation, delays] = found;
   const problems = [];
 
-  const [baseFill, highlight, endFill] = [base[1], keyframes[1], keyframes[2]].map((c) => c.toLowerCase());
+  const [baseFill, highlight, endFill] = [base[1], keyframes[1], keyframes[2]].map(sameColour);
   if (endFill !== baseFill) problems.push(`the last keyframe (${endFill}) must return to the base fill (${baseFill}), so the figure rests as the plain flow`);
   if (highlight === baseFill) problems.push(`the highlight colour equals the base fill (${baseFill}) — nothing would be seen to move`);
 
@@ -116,10 +126,20 @@ function matchTemplate(svg) {
   const ruleSteps = delayRules.map((r) => r.step);
   const expected = delayRules.map((_, i) => i + 2);
   if (ruleSteps.join() !== expected.join()) problems.push(`the delay rules must be .s2, .s3, … in order, without gaps (found ${ruleSteps.map((s) => `.s${s}`).join(", ") || "none"})`);
-  const boxSteps = [...svg.matchAll(/<[a-zA-Z][^>]*>/g)]
-    .map((m) => (attrs(m[0]).class ?? "").split(/\s+/))
-    .filter((classes) => classes.includes("steg"))
-    .map((classes) => classes.filter((c) => /^s\d+$/.test(c)).map((c) => Number(c.slice(1))));
+  // "One after another" is the point of the figure. Equal delays light two steps at once, and a
+  // smaller delay on a later step plays the order backwards. The first step starts at 0.
+  const delaysInOrder = [0, ...delayRules.map((r) => r.delay)];
+  if (delaysInOrder.some((delay, i) => i > 0 && !(delay > delaysInOrder[i - 1]))) {
+    problems.push(`each step's delay must be larger than the one before it, so the steps light up in order (found ${delaysInOrder.slice(1).map((d) => `${d}s`).join(", ")})`);
+  }
+  // The step classes belong on the BOXES. On a <text> the same rule would animate the label's
+  // colour and leave the boxes still — and a check that counted any element would call that fine.
+  const carriers = [...svg.matchAll(/<([a-zA-Z][\w:-]*)\b[^>]*>/g)]
+    .map((m) => ({ tag: m[1], classes: (attrs(m[0]).class ?? "").split(/\s+/) }))
+    .filter((el) => el.classes.includes("steg"));
+  const notBoxes = [...new Set(carriers.filter((el) => el.tag !== "rect").map((el) => `<${el.tag}>`))];
+  if (notBoxes.length > 0) problems.push(`class "steg" belongs on the boxes (<rect>) only — found it on ${notBoxes.join(", ")}`);
+  const boxSteps = carriers.map((el) => el.classes.filter((c) => /^s\d+$/.test(c)).map((c) => Number(c.slice(1))));
   const stepsOnBoxes = boxSteps.flat().sort((a, b) => a - b);
   if (boxSteps.some((steps) => steps.length !== 1) || stepsOnBoxes.join() !== [1, ...expected].join()) {
     problems.push(`each animated box carries class "steg" and one step class, s1…s${expected.length + 1} — one box per step (found ${boxSteps.length} box(es) with steps ${stepsOnBoxes.join(", ") || "none"})`);
@@ -279,9 +299,23 @@ export function checkFigureMotion(svg) {
         issues.push({ kind: "too_long", detail: `runs for about ${Math.round(totalSeconds * 10) / 10}s (largest delay + duration) — keep the whole animation within ${MAX_TOTAL_SECONDS}s (WCAG 2.2.2)` });
       }
       // The picture at rest must be complete. The template's CSS hides nothing, so what is left to
-      // check is the markup: an element switched off by an attribute stays off when the animation ends.
-      for (const m of svg.matchAll(/<[a-zA-Z]+\b[^>]*\b(?:(?:opacity|fill-opacity)\s*=\s*["']0(?:\.0+)?["']|display\s*=\s*["']none["']|visibility\s*=\s*["']hidden["'])[^>]*>/g)) {
-        issues.push({ kind: "hidden_at_rest", detail: `${m[0].slice(0, 60)}… is invisible in the still picture` });
+      // check is the markup: an element switched off by an attribute stays off when the animation
+      // ends. Values are READ, not pattern-matched: `opacity=" 0 "`, `0%` and `visibility="collapse"`
+      // hide just as well as the spellings one thinks of first.
+      //
+      // ⚠️ This catches the attributes that switch an element off. It cannot see everything that
+      // makes a figure incomplete (a box drawn outside the viewBox, white on white). The guard for
+      // that is the mandatory look at the rendered figure (figure-design.md, #1060) — not this check.
+      for (const m of svg.matchAll(/<[a-zA-Z][^>]*>/g)) {
+        const a = attrs(m[0]);
+        const value = (name) => (a[name] ?? "").trim().toLowerCase();
+        const zero = (name) => {
+          const v = value(name);
+          return v !== "" && Number.isFinite(Number.parseFloat(v)) && Number.parseFloat(v) <= 0;
+        };
+        if (value("display") === "none" || ["hidden", "collapse"].includes(value("visibility")) || zero("opacity") || zero("fill-opacity")) {
+          issues.push({ kind: "hidden_at_rest", detail: `${m[0].slice(0, 60)}… is invisible in the still picture` });
+        }
       }
     }
   } else if (sequence && !declaredStatic) {

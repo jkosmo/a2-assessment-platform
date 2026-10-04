@@ -9,8 +9,8 @@ nederste rad, og figursjekken i skillet håndhever reglene den lover.
 
 ### #1073 — figursjekken godkjente figurer som brøt reglene
 
-QA-porten ga NO-GO **tre ganger** før stage, med seks til åtte hull i `figure-motion-check.mjs` hver
-gang — tjueto til sammen. Alle var figurer som så animerte ut for et tekstmønster uten å være trygge,
+QA-porten ga NO-GO **fire ganger** før stage. De tre første rundene fant seks til åtte hull i
+`figure-motion-check.mjs` hver — tjueto til sammen. Alle var figurer som så animerte ut for et tekstmønster uten å være trygge,
 eller uten å røre seg: en varighet på en annen regel, antall 0, en senere `animation: none`,
 `!important`, en velger som ikke traff noen boks, et keyframe-navn med andre store bokstaver, en
 negativ forsinkelse.
@@ -32,8 +32,22 @@ Veien dit, fordi den er lærdommen:
    Hvitlista begrenset hver regel for seg, men sjekken prøvde fortsatt å regne ut hva nettleseren
    gjør med summen. Et tekstmønster er ikke en nettleser.
 
+4. **Runde 4: malen holdt.** Ingen funn handlet lenger om å tolke stilregler. De gjaldt det som
+   *får* variere, som var for romslig: farger med alfakanal (en gjennomsiktig grunnfarge fjerner
+   boksene fra stillbildet), samme farge i to skrivemåter, forsinkelser som ikke steg, stegklasser
+   på etikettene i stedet for boksene, og en kommentar inne i en verdi (`1/*x*/.4s`). Det er en
+   endelig liste, og den er lukket: farger er ugjennomsiktig hex med tre eller seks sifre og
+   sammenlignes som farger, hver forsinkelse er større enn den foran, `steg` står bare på `<rect>`,
+   og stilblokka har ingen kommentarer.
+
 Mønsteret er pre-flight-punkt 3 («hvitliste, ikke svarteliste, når regelen handler om hva som er
 tillatt»), men tatt helt ut: det som er tillatt, er malen — den ene formen som er målt på plattformen.
+
+**Malen er målt i en ekte nettleser**, og sjekken er koblet til målingen
+(`test/e2e/figure-motion-template-1073.spec.ts`): Chromium blir spurt hva som faktisk beveger seg.
+Malen gir tre animasjoner, én gang hver, ferdig innen fem sekunder, tilbake til grunnfargen, og
+ingen med «redusert bevegelse». En variant sjekken godtar (andre farger, andre tider, fire steg)
+beveger seg likt. Seks figurer er målt ødelagt i nettleseren, og hver av dem avvises av sjekken.
 
 Det som står igjen fra rundene, uavhengig av malen:
 
@@ -52,8 +66,8 @@ Det som står igjen fra rundene, uavhengig av malen:
 `<use>` ser den ikke. Kuren er den samme som for stilblokka — slutt å gjette: **hver** figur sier
 `data-motion="animated"` eller `"static"` selv. Det endrer kontrakten for skillet og er ikke besluttet.
 
-64 tester i fila: de tjueto hullene og naboene deres står som én tabell («ikke malen»), med
-kontrollcase for det som fortsatt skal passere. 33 mutasjoner, 33 røde. `SKILL.md` og
+74 tester i fila: hullene og naboene deres står som én tabell («ikke malen»), med kontrollcase for
+det som fortsatt skal passere. 39 mutasjoner, 39 røde. `SKILL.md` og
 `figure-design.md` sier det samme som skriptet håndhever.
 
 **`<animateMotion>`:** den overlever plattformens rensing, så den kunne vært tillatt. Den er avvist

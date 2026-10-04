@@ -115,6 +115,17 @@ describe("figure-motion-check (#1073)", () => {
     ["siste nøkkelbilde går ikke tilbake til grunnfargen", goodStyle.replace("100% { fill: #eef; }", "100% { fill: #fff; }")],
     ["fremhevingsfargen er lik grunnfargen — ingenting ses", goodStyle.replace("fill: #ffd166;", "fill: #EEF;")],
     ["varighet 0s", medAnimasjon("lys 0s ease-in-out 1")],
+    // Runde 4: malen holdt, men det som FÅR variere var for romslig.
+    ["en kommentar i stilblokka", goodStyle.replace("<style>", "<style>/* stegene lyser opp etter tur */")],
+    ["en kommentar inne i en verdi — nettleseren leser «1» og «.4s»", medAnimasjon("lys 1/*x*/.4s ease-in-out 1")],
+    ["gjennomsiktig grunnfarge — boksene forsvinner fra stillbildet", goodStyle.replaceAll("#eef", "#0000")],
+    ["åttesifret farge med alfakanal", goodStyle.replaceAll("#eef", "#eeeeff00")],
+    ["femsifret farge — ikke en farge", goodStyle.replaceAll("#eef", "#eeeef")],
+    ["gjennomsiktig strek", goodStyle.replace("stroke: #333", "stroke: #3330")],
+    ["fremhevingsfargen er grunnfargen i en annen skrivemåte", goodStyle.replace("fill: #ffd166;", "fill: #eeeeff;")],
+    ["to steg med samme forsinkelse — de lyser samtidig", goodStyle.replace("2.4s", "1.2s")],
+    ["forsinkelsene går baklengs — rekkefølgen spilles feil vei", goodStyle.replace("1.2s", "3s")],
+    ["andre steg uten forsinkelse — det lyser sammen med første", goodStyle.replace("1.2s", "0s")],
   ];
 
   it.each(ikkeMalen)("not the template: %s", (_navn, stil) => {
@@ -130,6 +141,13 @@ describe("figure-motion-check (#1073)", () => {
     const r = checkFigureMotion(svg(medAnimasjon("lys 1.4s ease-in-out infinite") + threeSteps));
     expect(r.issues[0].detail).toContain("expected `.steg { animation: lys <seconds>s ease-in-out 1; }`");
     expect(r.issues[0].detail).toContain("infinite");
+    // En kommentar får sin egen forklaring: «forventet regel X, fant /* … */» sier ikke hva som er galt.
+    const medKommentar = checkFigureMotion(svg(goodStyle.replace("<style>", "<style>/* stegene */") + threeSteps));
+    expect(medKommentar.issues[0].detail).toContain("no comments");
+    // …og like forsinkelser sier hva regelen er, og hva som ble funnet.
+    const like = checkFigureMotion(svg(goodStyle.replace("2.4s", "1.2s") + threeSteps));
+    expect(like.issues[0].detail).toContain("larger than the one before it");
+    expect(like.issues[0].detail).toContain("1.2s, 1.2s");
   });
 
   it("the step classes on the boxes and the delay rules must agree, both ways", () => {
@@ -147,6 +165,16 @@ describe("figure-motion-check (#1073)", () => {
     expect(typer(hull + threeSteps.replace('class="steg s3"', 'class="steg s4"'))).toEqual(["unsupported_animation_form"]);
     // …og når boksene er riktige (s1, s2, s3), men regelen peker på .s4: tredje boks får aldri sin forsinkelse.
     expect(checkFigureMotion(svg(hull + threeSteps)).issues.map((i) => i.detail).join(" ")).toContain("in order, without gaps");
+
+    // Klassene skal stå på BOKSENE. På etikettene ville samme regel animert tekstfargen og latt
+    // boksene stå stille — og tellingen «tre elementer med steg s1…s3» ville stemt likevel.
+    const påEtikettene = threeSteps.replace(/<rect class="steg (s\d)"/g, "<rect").replace(/<text /g, () => "<text ")
+      .replace('<text x="70"', '<text class="steg s1" x="70"').replace('<text x="240"', '<text class="steg s2" x="240"').replace('<text x="410"', '<text class="steg s3" x="410"');
+    const r = checkFigureMotion(svg(goodStyle + påEtikettene));
+    expect(r.animated).toBe(false);
+    expect(r.issues.map((i) => i.detail).join(" ")).toContain("<text>");
+    // …også når boksene har sine klasser i tillegg: en etikett med «steg» blir animert den også.
+    expect(typer(goodStyle + threeSteps.replace('<text x="70"', '<text class="steg" x="70"'))).toEqual(["unsupported_animation_form"]);
   });
 
   it("an animated figure has one <style> block and no style attributes", () => {
@@ -160,8 +188,8 @@ describe("figure-motion-check (#1073)", () => {
   it("control: what MAY differ from the template — layout, colours, duration, delays, number of steps", () => {
     const minifisert = goodStyle.replace(/\s+/g, " ").replace(/\s*([{}:;,])\s*/g, "$1").replace("<style>", "<style>\n");
     expect(kinds(minifisert + threeSteps)).toEqual([]);
-    const medKommentar = goodStyle.replace("<style>", "<style>/* stegene lyser opp etter tur */");
-    expect(kinds(medKommentar + threeSteps)).toEqual([]);
+    // En kommentar i MARKUPEN er fri — det er i stilblokka den ikke kan stå.
+    expect(kinds(goodStyle + "<!-- stegene lyser opp etter tur -->" + threeSteps)).toEqual([]);
     const cdata = goodStyle.replace("<style>", "<style><![CDATA[").replace("</style>", "]]></style>");
     expect(kinds(cdata + threeSteps)).toEqual([]);
     const andreFarger = goodStyle.replaceAll("#eef", "#E8F0FE").replace("#333", "#1a73e8").replace("#ffd166", "#fbbc04");
@@ -186,11 +214,14 @@ describe("figure-motion-check (#1073)", () => {
   });
 
   it("an element switched off by an attribute is missing from the still picture", () => {
-    for (const av of ['display="none"', 'visibility="hidden"', 'opacity="0"', "fill-opacity='0.0'"]) {
+    // Verdiene LESES: mellomrom, prosent og «collapse» skjuler like godt som skrivemåten man tenker på først.
+    for (const av of ['display="none"', 'display=" none "', 'visibility="hidden"', 'visibility="collapse"', 'opacity="0"', 'opacity=" 0 "', "fill-opacity='0.0'", 'fill-opacity="0%"']) {
       expect(kinds(goodStyle + threeSteps + `<circle ${av} r="4"/>`), av).toEqual(["hidden_at_rest"]);
     }
-    // Kontroll: delvis gjennomsiktig er ikke skjult.
-    expect(kinds(goodStyle + threeSteps + `<circle opacity="0.5" r="4"/>`)).toEqual([]);
+    // Kontroll: delvis gjennomsiktig er ikke skjult, og synlige verdier er synlige.
+    for (const på of ['opacity="0.5"', 'fill-opacity="40%"', 'visibility="visible"', 'display="inline"']) {
+      expect(kinds(goodStyle + threeSteps + `<circle ${på} r="4"/>`), på).toEqual([]);
+    }
   });
 
   it("SMIL the platform strips is reported, even when CSS also animates", () => {

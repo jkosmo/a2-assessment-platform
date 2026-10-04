@@ -76,7 +76,8 @@ plattformsiden (respektere «redusert bevegelse», spille av på nytt) er ikke g
 **Lærdom:** en økt som starter fra `main` ser ikke versjonsnumre som bare finnes på `dev`. Start
 nettøkter fra `dev`, eller sjekk `origin/dev` før versjonen settes.
 
-**QA-porten ga NO-GO tre ganger** (2026-10-04), med seks til åtte hull i figursjekken hver gang.
+**QA-porten ga NO-GO fire ganger** (2026-10-04). De tre første rundene fant seks til åtte hull i
+figursjekken hver; den fjerde fant at det som får variere i malen, var for romslig (nå strammet inn).
 Sjekken prøvde å regne ut hva nettleseren gjør med figurens stilregler, og hver runde fant nye
 kombinasjoner. Produkteier bestemte derfor: **stilblokka i en animert figur er flytmalens stilblokk,
 ordrett.** Farger, varighet, forsinkelser og antall steg kan variere; alt annet er
@@ -143,7 +144,7 @@ listene. Jeg utvidet ikke regelen for å unngå det — det ville vært en tverr
   && npm run test:integration:native) > "$TEMP/claude/kjoring.log" 2>&1; echo "EXIT=$?"
 ```
 
-Sist målt 2026-10-04, på 2.78.1: **1580 enhet · 69 DOM · 361 e2e · 707 integrasjon**, alle grønne.
+Sist målt 2026-10-04, på 2.78.1: **1590 enhet · 69 DOM · 372 e2e · 707 integrasjon**, alle grønne.
 Ikke pipe utdataene til `tail` — det skjuler feiltellingen og gir exit 0.
 
 **Mot utrullet stage** (krever innlogging, tokenet varer ~85 minutter og er for lengst utløpt nå):
