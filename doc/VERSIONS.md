@@ -2,6 +2,385 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.78.3 - 2026-10-04
+
+To rettinger etter QA-gjennomgangen av 2.78.2, ingen migrasjon. Gjennomgangen ga GO for stage, med
+ett funn som skulle avgjøres før prod. Det er rettet her.
+
+### #1083 — lesbarhetskontrollen kunne ta ned appen på en tett figur
+
+2.78.2 la til en kontroll i `sanitizeSvg`: det som lagres, skal la seg lese som XML. Kontrollen
+leste hele figuren inn i et nytt dokument, mens det rensede treet ennå levde. To trær samtidig
+doblet minnetoppen.
+
+Målt med en tett figur (par av `<rect>` og `<text>`, rundt 25 000 elementer per MB) og 512 MB heap:
+
+| Figur | Før #1083 (2.78.1) | 2.78.2 | 2.78.3 |
+|---|---|---|---|
+| 0,85 MB | lagres | lagres | lagres |
+| 1,0 MB | lagres | **prosessen dør av minnemangel** | lagres |
+| 1,2 MB | lagres | prosessen dør | lagres |
+| 1,5 MB | prosessen dør | prosessen dør | prosessen dør |
+
+Kolonnen for 2.78.1 er målt av gjennomgangen, de to andre er målt på nytt etter rettingen.
+
+Appen går på én instans, så et krasj tar den ned for alle til den har startet på nytt. Bare en
+innlogget forfatter kan laste opp en figur, og en tegnet figur er noen kB — men 2.78.2 gjorde en
+margin som fantes fra før, merkbart mindre.
+
+**Rettingen:** kontrollen bygger ikke lenger noe dokument. Den lar XML-leseren gå gjennom teksten og
+ser bare på to ting: gikk det uten feil, og hva er rota. Leseren er den samme som før (`saxes`, den
+jsdom selv bruker for `image/svg+xml`), satt opp på samme måte, så svaret er det samme. `saxes` er
+derfor ført opp som direkte avhengighet; den lå alt i `node_modules` gjennom jsdom. Selve kontrollen
+av en tett figur på 2 MB tar nå rundt 0,07 sekunder. Hele rensingen av den tar 4,8 sekunder mot 6,8
+i 2.78.2, målt side om side — fortsatt tregt, og fortsatt en blokkert hendelsesløkke så lenge.
+
+**Målt:**
+
+- `test/unit/svg-sanitizer.test.ts`: 37 utvalgte tilfeller og 600 sammensatte gir samme svar som
+  `DOMParser`, som var det kontrollen brukte før. Testen sammenligner de to; den gjetter ikke på
+  regler. Utvalget har både figurer som leses og figurer som ikke gjør det, og testen krever det.
+- `test/unit/svg-sanitizer-memory-1083.test.ts`: kontrollen kjøres på en tett figur på 4 MB med
+  256 MB heap, i en egen prosess. Uten tre trengs lite utover teksten; med tre trengs rundt 1 GB.
+- Samme fil måler nå også feilveien i kontrollen (en figur som *ikke* lar seg lese). Gjennomgangen
+  viste at en lekkasje der, 45 kB per figur, ikke gjorde testen rød. Grensa for kontrollen er
+  strammet fra 200 til 20 kB per kall; frisk kode ligger på 0–2.
+- Ni mutasjoner av `svgSanitizer.ts`, ni røde.
+
+**Kjent, ikke rettet:** en tett figur på 1,5 MB tar fortsatt ned prosessen ved 512 MB heap, slik
+den gjorde før #1083. Grensa for en figur er 5 MB i bytes, og det er antall elementer som koster,
+ikke bytes. Heap-grensa i prod er ikke lest av. En grense på antall elementer er en egen sak.
+
+### Skillet — en tegnreferanse kunne stave «animation» forbi figursjekken
+
+`figure-motion-check.mjs` avviste fra 2.78.1 en omvendt skråstrek i figurens CSS, fordi
+nettleseren leser `anim\61tion` som `animation`. To ting var galt:
+
+| Hva | Før | Nå |
+|---|---|---|
+| En *stillestående* figur med `font-family: Segoe\ UI` | avvist med en melding om malen for animerte figurer | avvist som `css_escape`, med en melding om det som faktisk er galt |
+| `&#97;nimation`, `&bsol;61`, `&#97nimation` i en stilblokk eller en `style`-attributt | **godkjent som stillestående figur** — plattformen gjør referansen om til tegnet ved lagring, og figuren går i løkke for alltid | avvist som `css_escape` |
+
+Det første fant gjennomgangen. Det andre fant jeg da jeg telte opp måtene et tegn kan skrives på
+uten å stå der. `&gt;`, `&lt;` og `&amp;` slipper gjennom ved navn: det er slik `>`, `<` og `&`
+skrives i XML, plattformen skriver `>` slik selv, og ingen av dem kan stave en bokstav. Regelen
+står i `figure-design.md`. At plattformen faktisk lagrer referansene som kjørende CSS, er målt i
+testen mot `sanitizeSvg`, ikke antatt. Sju mutasjoner, sju røde.
+
+⚠️ **Kjent, ikke rettet — og ikke noe som bør lappes videre.** Klassen er ikke tettet. Målt rett
+etter rettingen: seks skrivemåter til gir en figur som sjekken godkjenner som stillestående, og som
+plattformen lagrer som en animasjon i løkke:
+
+| Forfatteren skriver | Plattformen lagrer |
+|---|---|
+| `<STYLE>` eller `<Style>` | `<style>` |
+| `STYLE="animation: …"` | `style="animation: …"` |
+| `style=animation:x_9s` (uten anførselstegn) | `style="animation:x_9s"` |
+| `</style >` med mellomrom, eller `<style>` uten sluttag | en vanlig, lukket stilblokk |
+
+Årsaken er den samme i alle: sjekken leser **forfatterens tekst** med mønstre, mens plattformen
+leser den med en HTML-leser som retter opp skrivemåten. Sjekken etterligner altså en leser den ikke
+har. Det er feilen fra #1073 én gang til, nå i den stillestående veien. Skillet kjører på
+forfatterens maskin uten annet enn Node, så det kan ikke lese slik plattformen gjør.
+
+Ingen av skrivemåtene oppstår ved et uhell, så dette stopper ingenting. Men garantien «ingen figur
+går i løkke på plattformen» kan bare gis der figuren faktisk leses: i plattformens validering, på
+det rensede resultatet. Det er en beslutning for produkteier og står i `doc/HANDOFF.md`.
+
+**Rotårsak.** *Minnetoppen:* 2.78.2 målte hva rensingen holder igjen **etter** et kall, fordi det
+var den feilen som nettopp var funnet. Hva et kall bruker **mens** det går, ble ikke målt. Sjekken
+som manglet, kjører nå: en stor figur med lav heap-grense. *Tegnreferansen:* regelen om escape ble
+skrevet for det ene tilfellet gjennomgangen den gang viste (`\61`), ikke for klassen «et tegn
+skrevet uten å stå der». Samme feil som i #1073: en liste over kjente tilfeller i stedet for en
+opptelling av veiene inn.
+
+## 2.78.2 - 2026-10-04
+
+Én retting, ingen migrasjon. En figur med hardt mellomrom i en etikett vises igjen.
+
+### #1083 — figuren ble lagret i en form nettleseren ikke kan lese
+
+En SVG-figur leveres som `image/svg+xml`, så nettleseren leser den som XML. `sanitizeSvg` skrev den
+ut som **HTML**. De to er uenige om to ting som er vanlige i norsk tekst og i attributter:
+
+| I figuren | Skrevet ut som HTML | For en XML-leser |
+|---|---|---|
+| hardt mellomrom («§ 12», «10 %», «kr 500») | `&nbsp;` | en entitet som ikke finnes — fila er ugyldig |
+| `<` i en attributtverdi (`aria-label="a < b"`) | en bar `<` | forbudt — fila er ugyldig |
+
+En ugyldig fil vises ikke. Deltakeren så en tom plass der figuren skulle stått, importen gikk
+gjennom, valideringen sa ingenting, og skillets figursjekker sa OK. Hardt mellomrom settes gjerne
+inn av en språkmodell, og figurer oversettes av en — så feilen kunne ligge i den engelske varianten
+mens den norske var hel.
+
+**Rettingen er ikke «bytt `&nbsp;`».** Det ville rettet det ene kjente tilfellet og latt det andre
+stå. Rensingen tar nå det rensede TREET fra DOMPurify og skriver det ut som XML. Da er hele klassen
+borte, og navnerommet på rota følger med av seg selv. Til slutt leses resultatet tilbake med en
+XML-parser: lar det seg ikke lese, avvises figuren (`asset_svg_invalid`) — forfatteren får feilen
+ved opplasting, ikke deltakeren ved lesing. Alle fire veier inn går gjennom samme funksjon:
+opplasting, import, språkvarianter og agent-valideringen.
+
+To ting endrer seg for det som lagres:
+
+- Bare selve figuren lagres. Tekst foran eller bak rota (`<?xml …?>`, løs tekst) er ikke med.
+- Tomme elementer skrives `<rect …/>`, ikke `<rect …></rect>`. Rensingen er stabil: det som alt er
+  renset, endres ikke av å renses igjen.
+
+**Figurer som alt er lagret**, rettes ikke av dette. `npm run maint:repair-unreadable-svg-assets`
+går gjennom hver lagret SVG — grunnfila og hver språkvariant — og lister dem som ikke lar seg lese.
+Med `--apply` renses de på nytt og skrives til samme sti. Tørrkjøring er standard. Se
+`doc/OPERATIONS_RUNBOOK.md`. ⚠️ Skriptet er ikke kjørt mot stage eller prod ennå, så det er ikke
+kjent hvor mange figurer som er rammet.
+
+**Målt:**
+
+- Enhet: fem former som før ga en uleselig fil, gir nå en lesbar; styretegn avvises; rensingen er
+  stabil; en animert figur er fortsatt animert etterpå.
+- Chromium (`test/e2e/svg-sanitizer-renders-1083.spec.ts`): det rensingen skrev før, gir et bilde
+  med bredde 0; det den skriver nå, vises — også som oversatt variant.
+- Integrasjon: opplasting → servering til deltaker, og reparasjonen (tørrkjøring rører ingenting,
+  apply retter grunnfil og variant, andre gang finner den ingenting).
+- Ti mutasjoner, ti røde.
+
+**QA-porten ga NO-GO på første utgave av rettingen, med ett funn: en minnelekkasje.** Rettingen
+hentet `<svg>`-rota ut av det rensede treet med `querySelector`. Treet tilhører et jsdom-vindu som
+lever like lenge som prosessen, og et `querySelector` på det holder hele treet igjen for godt:
+rundt 1,5 MB per figur på 5 kB. Appen går på én liten instans; en kursimport med figurer ville fylt
+den. Resultatet var riktig hver gang, så ingen test kunne se det. Nå brukes
+`getElementsByTagName`, XML-kontrollen leser i det faste vinduet i stedet for å åpne et nytt per
+figur, og `test/unit/svg-sanitizer-memory-1083.test.ts` måler heapen i en egen prosess for alle
+fire veiene gjennom fila (under 10 kB per kall nå, mot 1500 med lekkasjen).
+
+⚠️ **Lærdom om selve målingen.** Den første etterprøvingen min «bekreftet» en lekkasje på 3 MB per
+kall — også i den gamle, friske koden. Løkka var synkron, og Node holder på alt som er nådd gjennom
+en `WeakRef` til turen er over. Først da hvert kall fikk sin egen tur i hendelsesløkka, slik en
+forespørsel på tjeneren har, viste målingen det som var sant: ett kall lekket, resten ikke. Måle-
+skriptet (`test/support/measureSvgSanitizerMemory.mts`) sier dette i klartekst, for det er lett å
+gjøre feilen igjen.
+
+**Sikkerhet, målt av QA-gjennomgangen:** 82 angrepsvektorer og 4000 tilfeldig genererte tilfeller
+gikk gjennom gammel og ny rensing og ble åpnet i Chromium som dokument uten CSP og som `<img>`.
+Ingen ga skript, hendelseshåndterer, `javascript:`, `foreignObject`, `<a>`, `<use>` eller et element
+i et annet navnerom. Den nye utskriften er strammere enn den gamle. Én forskjell: et `xlink:href`
+der forfatteren har bundet `xlink`-prefikset til XHTML, var dødt før og laster nå et eksternt
+bilde. Det gir ingen ny evne (`<image href="https://…">` er tillatt i begge), og
+`default-src 'none'` på serveringsendepunktet stopper lastingen.
+
+**Kjent, ikke rettet:**
+
+- Rensingen er 1,5–2,6 ganger tregere enn før. En syntetisk SVG på 4,9 MB tar 14 sekunder mot 5,5,
+  og blokkerer hendelsesløkka så lenge. Grensa for en figur er 5 MB, men en tegnet figur er noen kB.
+- `role` og `<use>` fjernes av rensingen, nå som før. `figure-design.md` viser `role="img"` i
+  malene, og den forsvinner stille ved lagring.
+
+**Rotårsak.** Rensingen ble skrevet for å gjøre figuren *trygg*, og testet på det (#657). At
+resultatet også må være *lesbart* i formatet det serveres i, sto ingen steder som krav, og ingen
+test leste resultatet slik nettleseren gjør. Sjekken som manglet, kjører nå tre steder: i selve
+rensingen (avvis det uleselige), i enhetstesten (en XML-parser) og i e2e (nettleseren selv).
+Funnet av QA-gjennomgangen av 2.78.1, som sendte figurer gjennom rensingen og åpnet dem i Chromium.
+
+## 2.78.1 - 2026-10-04
+
+Tre rettinger, ingen migrasjon. Listene kan leses på telefon, «Mer»-menyen klippes ikke lenger i
+nederste rad, og figursjekken i skillet håndhever reglene den lover.
+
+### #1073 — figursjekken godkjente figurer som brøt reglene
+
+QA-porten ga NO-GO **fem ganger** før stage. De tre første rundene fant seks til åtte hull i
+`figure-motion-check.mjs` hver — tjueto til sammen. Alle var figurer som så animerte ut for et tekstmønster uten å være trygge,
+eller uten å røre seg: en varighet på en annen regel, antall 0, en senere `animation: none`,
+`!important`, en velger som ikke traff noen boks, et keyframe-navn med andre store bokstaver, en
+negativ forsinkelse.
+
+**Sjekken leser ikke lenger stilregler. Den sammenligner med malen** (produkteiers beslutning
+2026-10-04). Stilblokka i en animert figur *er* flytmalens stilblokk. Farger, varighet, forsinkelser
+og antall steg kan variere; ingenting annet. Alt som ikke er malen, er
+`unsupported_animation_form`, og meldingen sier hvor blokka forlater malen. Boksene må bære
+`steg s1`, `steg s2`, … i takt med forsinkelsesreglene, og en animert figur har ingen
+`style`-attributter.
+
+Veien dit, fordi den er lærdommen:
+
+1. **Runde 1: åtte hull, lappet ett for ett.** Det er kuren `CLAUDE.md` sier har feilet tre ganger
+   («rett utregningen der den er»).
+2. **Runde 2: åtte til.** Svaret var en hvitliste over *skrivemåter*: én form av `animation:` ble
+   godtatt, resten avvist. Riktig retning, feil nivå.
+3. **Runde 3: seks til**, alle om hvilken regel som *vinner* når flere treffer samme element.
+   Hvitlista begrenset hver regel for seg, men sjekken prøvde fortsatt å regne ut hva nettleseren
+   gjør med summen. Et tekstmønster er ikke en nettleser.
+
+4. **Runde 4: malen holdt.** Ingen funn handlet lenger om å tolke stilregler. De gjaldt det som
+   *får* variere, som var for romslig: farger med alfakanal (en gjennomsiktig grunnfarge fjerner
+   boksene fra stillbildet), samme farge i to skrivemåter, forsinkelser som ikke steg, stegklasser
+   på etikettene i stedet for boksene, og en kommentar inne i en verdi (`1/*x*/.4s`). Det er en
+   endelig liste, og den er lukket: farger er ugjennomsiktig hex med tre eller seks sifre og
+   sammenlignes som farger, hver forsinkelse er større enn den foran, `steg` står bare på `<rect>`,
+   og stilblokka har ingen kommentarer.
+
+5. **Runde 5 ble avbrutt:** Codex-kontoen gikk tom for kreditt før dommen. Det den rakk å vise, var
+   én ting til av samme slag som runde 4: en flyt med fire bokser der bare tre var steg, ble
+   godkjent. Lukket: hver `<rect>` i en animert figur er en stegboks. Til kontoen er fylt på, kan
+   porten bare kjøres med skriptets reserveløsning (`-Local` og `-Judge`), der en lokal agent gjør
+   gjennomgangen etter samme sjekkliste.
+6. **Runde 5 med reserveløsningen: NO-GO, to hull.** Et fjerde steg tegnet som rombe eller ellipse
+   slapp gjennom («hver `<rect>` er et steg» så bare `<rect>`), og `<style media="print">` ble
+   godkjent selv om blokka da aldri gjelder. Plattformendringene var klare, for tredje gjennomgang
+   på rad. Produkteier: **hele figuren låses til malen**, ikke bare stilblokka. En animert figur
+   er nå bygd av malens elementer og ingen andre — `<rect>` som steg, streker, etiketter, én
+   stilblokk uten attributter — uten `transform`, og med åpne, ufylte streker som forbindelser.
+   Det som var en regel per form («ikke polygon», «ikke defs») er blitt én liste over formene som
+   får finnes.
+
+Mønsteret er pre-flight-punkt 3 («hvitliste, ikke svarteliste, når regelen handler om hva som er
+tillatt»), men tatt helt ut: det som er tillatt, er malen — den ene formen som er målt på plattformen.
+
+**Malen er målt i en ekte nettleser**, og sjekken er koblet til målingen
+(`test/e2e/figure-motion-template-1073.spec.ts`): Chromium blir spurt hva som faktisk beveger seg.
+Malen gir tre animasjoner, én gang hver, ferdig innen fem sekunder, tilbake til grunnfargen, og
+ingen med «redusert bevegelse». En variant sjekken godtar (andre farger, andre tider, fire steg)
+beveger seg likt. Ni figurer er målt ødelagt i nettleseren, og hver av dem avvises av sjekken.
+
+Det som står igjen fra rundene, uavhengig av malen:
+
+| Hullet | Nå |
+|---|---|
+| Attributter med enkle anførselstegn ble ikke lest, så en gyldig flyt ble «ingen bokser» | begge former leses |
+| Attributtnavn med tall (`x1`, `y2`) ble aldri lest | leses |
+| En flyt tegnet med vanlige `<path>`-streker ble ikke sett | `<path>` (også relative kommandoer) og `<polyline>` leses som forbindelser |
+| Et hierarki med tre barn på rad ble krevd animert | en flyt er tre bokser der en strek går **direkte** fra hver til den neste |
+| Etiketter plassert med `<tspan>` ble ikke sett | leses |
+| `<animateMotion>` ble godkjent, mot «bare CSS» i alle tre dokumentene | `not_css_only`, og den teller ikke som animasjon |
+| Et element slått av med `display="none"` ble ikke sett | `hidden_at_rest` |
+
+⚠️ **Flytgjenkjenningen er fortsatt et anslag.** Den ser `<rect>` med x/y, etiketter i `<text>` og
+`<tspan>`, og streker som ender innen 12 px fra boksene. Bokser flyttet med `transform`, sirkler og
+`<use>` ser den ikke. Kuren er den samme som for stilblokka — slutt å gjette: **hver** figur sier
+`data-motion="animated"` eller `"static"` selv. Det endrer kontrakten for skillet og er ikke besluttet.
+
+7. **Runde 6 med reserveløsningen: GO**, på commit `ff3faef4` — den som ble rullet til stage.
+   Gjennomgangen fant ingen blokkerende hull og kjørte 15 egne mutasjoner, alle røde. Den pekte på
+   tre ikke-blokkerende ting i sjekken, som er rettet etterpå og ligger på `dev` etter stage-commiten:
+   en `>` inne i en attributtverdi avsluttet taggen (en vanlig `aria-label="A -> B"` foran
+   `data-motion="static"` ga en falsk feil), `<animatemotion>` med små bokstaver og CSS-escapes
+   (`anim\61tion`) ble ikke sett, og et omriss tegnet tilbake til start uten `Z` ble regnet som en
+   åpen strek.
+
+95 tester i fila: hullene og naboene deres står som to tabeller («ikke malen» og «ikke malens
+figur»), med kontrollcase for det som fortsatt skal passere. 53 mutasjoner, 53 røde. `SKILL.md`,
+`authoring-playbook.md` og `figure-design.md` sier det samme som skriptet håndhever.
+
+**Ikke levert av det #1073 ber om** (saken står åpen):
+
+- Malen «sti som tegnes». Bare den animerte flyten er levert. En ny animert mal betyr nå et nytt
+  mønster i `TEMPLATE` og en ny måling i nettleseren, ikke en løsere sjekk.
+- E2e i deltakerflaten: at figuren animeres når den vises som `<img>`, og plattformens håndtering av
+  «redusert bevegelse» og avspilling på nytt.
+- Forfatterveiledningen.
+
+Punkt 3 i saken (oversettelse beholder stilblokka og klassene) er nå festet i en test: en engelsk
+variant av malen laget med `applySvgTextTranslations` består sjekken med samme varighet.
+
+**Kjente grenser, dokumentert og ikke rettet:** stegenes rekkefølge (`s1…sN`) sjekkes ikke mot
+plasseringen i tegningen, så en figur der `s1` står lengst til høyre lyser baklengs og godkjennes.
+Et steg kan fortsatt tegnes som et omriss som ikke lukkes (tre sider av en boks), og et element kan
+gjøres usynlig på måter attributtsjekken ikke ser (`width="0"`, `fill="none"` på en etikett).
+Vakten for alle tre er den påkrevde visuelle kontrollen av figuren.
+
+**Funnet underveis, egen sak:** #1083 — et hardt mellomrom i en SVG blir til `&nbsp;` i
+`sanitizeSvg`, og figuren vises da ikke. Feilen er eldre enn 2.78.1 og gjelder alle figurer.
+
+**`<animateMotion>`:** den overlever plattformens rensing, så den kunne vært tillatt. Den er avvist
+fordi regelen for redusert bevegelse er CSS og ikke når den.
+
+**Rotårsak.** Skriptet ble mutasjonssjekket da det ble skrevet («seks regler, seks røde tester»),
+men mutasjon måler bare at en regel som finnes blir testet. Den finner ikke en regel som er for
+snever. Det gjorde gjennomgangen fra en annen modell, og den ble ikke kjørt i økta der endringen ble
+skrevet. Sjekken som manglet, var QA-porten — den kjører før stage, og fanget dette der. At det
+tok tre runder, skyldes at de to første rettingene beholdt formen: et verktøy som etterligner et
+annet system (her nettleserens kaskade) kan ikke gjøres riktig ved å legge til tilfeller.
+
+### #1081 — «Mer»-menyen i nederste listerad ble klippet
+
+Tabellrammen har `overflow-x: auto`, og da klipper nettleseren begge akser. I nederste rad lå menyen
+under rammekanten: målt på 1280 px var 82 av 94 px skjult, så «Eksporter» og «Avpubliser» bare kunne
+nås ved å rulle inni tabellen. Feilen er eldre enn #894, men #894 la «Eksporter» under «Mer».
+
+`row-actions.js` måler nå i stedet for å anta en høyde: når en meny åpnes, får nærmeste ramme som
+klipper akkurat så mye luft i bunnen som menyen trenger, og lufta tas tilbake når menyen lukkes.
+Gjelder alle som bruker `rowActionsHtml`. `test/e2e/row-more-last-row-1081.spec.ts` måler det på
+1280 og 390 px, med én og to rader, og har en kontroll for en meny som allerede har plass. To
+mutasjoner, to røde.
+
+### #1080 — telefonvisningen av listene
+
+Én retting i klienten. Under 600 px blir hver rad i Moduler, Kurs, Seksjoner og Klasser et kort. Kortet skal vise
+kolonnenavnet til venstre og verdien til høyre. Målt på 390 px før rettingen:
+
+- ingen celler hadde kolonnenavn (`list-page.js` satte ikke `data-label`, som kortregelen leser),
+- hver celle var 380 px bred i et kort på rundt 356 px, så «nn, en mangler» ble «nn, en mang»,
+- navnet beholdt skrivebordsbredden (28 %, minst 180 px) og ble brukket midt i ordet,
+- «Mer»-knappen lå utenfor kortet, så handlingene under den ikke kunne nås.
+
+Rettingen er én linje i `list-page.js` og én telefonregel for `.list-table` i `shared.css`.
+Skrivebordsvisningen er uendret, og D5-regelen (handlingsraden brekker aldri) står: uten det tomme
+etikettfeltet foran handlingene får tre knapper og «Mer» plass på én linje.
+
+**Rotårsak.** Kortregelen for `table` og skrivebordsreglene for `.list-table` ble skrevet hver for
+seg. `.list-table td` har høyere spesifisitet og vant over kortregelen på bredde og luft. Ingen test
+åpnet en liste i telefonbredde, så ingenting målte det. Sjekken som manglet finnes nå og kjører:
+`test/e2e/list-mobile-labels-1080.spec.ts` måler i nettleseren at etiketten vises, at ingen celle
+går ut av kortet, og at «Mer» kan åpnes — for både `col-name` (moduler) og `col-title` (kurs), og
+med en kontroll for skrivebord. Fem mutasjoner, fem røde tester.
+
+**Ikke med:** andre tabeller i appen bruker samme kortregel uten `data-label`. De er ikke målt.
+
+## 2.78.0 - 2026-10-03
+
+Bare skillet `a2-authoring-api`. Ingen endring i plattformen, ingen migrasjon. Del av #1073 (epic #1071).
+
+Skrevet i en egen økt oppå 2.76.0 og kalt 2.77.0 der. Nummeret var alt brukt av #894 på stage, så
+endringen fikk 2.78.0 da den ble tatt inn i `dev` 2026-10-04. Innholdet er uendret, med ett unntak:
+testen som leser malene ut av `figure-design.md` krevde linjeskift i Linux-form og var rød på en
+Windows-kopi. Den tåler nå begge.
+
+### Skillet animerer figurer der det gir mening
+
+En figur som viser et **forløp** (en prosess, steg i rekkefølge) tegnes nå **animert som standard**:
+stegene lyser opp etter tur, én gang. Hierarkier, deler og sammenligninger står stille. Skillet
+foreslår bevegelsen selv ved strukturporten («animert: ja/nei — fordi …»). Forfatteren skal ikke
+måtte be om det.
+
+Det som håndhever det, er en sjekk som kjører, ikke en setning som skal huskes:
+`scripts/figure-motion-check.mjs`. Den feiler når
+
+- en flytfigur (≥3 bokser med etikett på rad, med streker mellom) verken er animert eller merket
+  `data-motion="static"` (det synlige unntaket),
+- animasjonen går i løkke, varer over 5 sekunder, mangler regelen for redusert bevegelse, skjuler
+  innhold i stillbildet, eller bruker SMIL som plattformen fjerner.
+
+Malen for flytfigur i `figure-design.md` er byttet til den animerte. En test sjekker at alle malene
+i dokumentet består sjekken, så dokumentet ikke kan lære bort en stillestående flyt.
+
+### Målt på plattformen før regelen ble skrevet
+
+- `sanitizeSvg` beholder CSS (`@keyframes`, `animation`, `@media`) og `<animateMotion>`, men fjerner
+  `<animate>` og `<set>` og tar `from`/`to` av `<animateTransform>`. Derfor bare CSS.
+- ⚠️ **Deltakerflaten viser figurer som `<img>`, og Chromium sender ikke leserens «redusert bevegelse»
+  inn i en SVG som vises som bilde.** Det gjør den når SVG-en åpnes direkte. Regelen for redusert
+  bevegelse er derfor påkrevd, men den er ikke nok alene. Animasjonen må være trygg i seg selv: én
+  gang, innen 5 sekunder (WCAG 2.2.2, siden et bilde ikke har pauseknapp), og hvile på et komplett
+  stillbilde. Plattformsiden, som å respektere innstillingen og spille av på nytt, står i #1073.
+- Malen er sjekket i Chromium som blob-`<img>`: den beveger seg i starten og står stille etter
+  ca. 5 sekunder.
+
+Mutasjonssjekk: hver av de seks reglene i skriptet ble skrudd av etter tur, og riktig test ble rød
+hver gang.
+
+⚠️ **Avsnittene over beskriver skriptet slik det var i 2.78.0.** QA-porten fant at reglene var for
+snevre, og sjekken er skrevet om i 2.78.1: den sammenligner nå figuren med flytmalen i stedet for å
+lese stilregler. Reglene som er nevnt her (løkke, redusert bevegelse, skjult innhold i stilen)
+finnes ikke lenger som egne regler.
+
 ## 2.77.0 - 2026-09-30 (stage)
 
 Én commit, ingen migrasjon. Å døpe om et element koster nå to klikk i stedet for sju steg — og

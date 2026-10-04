@@ -110,6 +110,19 @@ describe("#1046 — den felles listesida", () => {
     expect(navn(host)).toEqual(["Alfa", "Bravo"]);
   });
 
+  it("#1080: hver celle bærer kolonnenavnet sitt — også en kolonne med skjult overskrift", async () => {
+    const { host, page } = lag({
+      columns: [
+        { key: "name", label: "Navn", className: "col-name", render: (it) => it.name },
+        { key: "flag", label: "", srLabel: "Merke", render: () => "•" },
+      ],
+    });
+    await page.reload();
+    const celler = [...host.querySelectorAll('#tb tr[data-row-id="b"] td')];
+    // Telefonvisningen skjuler tabellhodet og leser navnet herfra. At det VISES måles i e2e-testen.
+    expect(celler.map((td) => td.getAttribute("data-label"))).toEqual(["Navn", "Merke", null]);
+  });
+
   it("raden viser tre handlinger pluss «Mer»; handlinger meldes med id", async () => {
     const { host, page, kalt } = lag();
     await page.reload();

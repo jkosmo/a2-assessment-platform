@@ -4,7 +4,7 @@ import { prisma } from "../../db/prisma.js";
 import { DomainRuleError, NotFoundError } from "../../errors/AppError.js";
 import { putAsset, getAsset, deleteAsset } from "./assetStorage.js";
 import { canParticipantReadSection } from "./enrollmentService.js";
-import { sanitizeSvg, svgHasText, extractSvgTexts, applySvgTextTranslations } from "./svgSanitizer.js";
+import { sanitizeSvg, svgHasText, extractSvgTexts, applySvgTextTranslations, isSvgReadableAsImage } from "./svgSanitizer.js";
 import { localizeSvgTexts, type GenerationLocale } from "../adminContent/llmContentGenerationService.js";
 import { SUPPORTED_LOCALES, type SupportedLocale } from "../../i18n/locale.js";
 import { hasAnyRole, CONTENT_AUTHORS } from "../../auth/roleSets.js";
@@ -143,6 +143,74 @@ export async function collectSectionAssetBlobPaths(sectionIds: string[]): Promis
     }
   }
   return [...paths];
+}
+
+// #1083: figurer lagret FØR rensingen skrev XML. `sanitizeSvg` skrev resultatet ut som HTML, og en
+// figur med hardt mellomrom i en etikett (eller `<` i en attributtverdi) ble da lagret som noe
+// nettleseren ikke kan lese som bilde. Rettingen i rensingen gjelder bare det som lagres fra nå av;
+// det som alt ligger i lageret, er like uleselig som før.
+//
+// Dette går gjennom hver lagret SVG — grunnfila og hver språkvariant — og finner dem som ikke lar
+// seg lese. En uleselig fil renses på nytt: den ble skrevet som HTML, og rensingen leser HTML, så
+// innholdet kommer tilbake slik det var ment. Fila skrives til SAMME sti, så verken raden,
+// markdown-referansene eller språkvariantene trenger å røres.
+//
+// ⚠️ Tørrkjøring er standard i skriptet som kaller denne. Uten `dryRun: false` endres ingenting.
+export type UnreadableSvgAsset = {
+  assetId: string;
+  sectionId: string;
+  /** `null` for grunnfila, ellers språket varianten gjelder. */
+  locale: string | null;
+  blobPath: string;
+  /** `false` når fila mangler i lageret, eller ikke lar seg redde av en ny rensing. */
+  repairable: boolean;
+  repaired: boolean;
+};
+
+export async function repairUnreadableSvgAssets(options: { dryRun: boolean }): Promise<{
+  dryRun: boolean;
+  scanned: number;
+  unreadable: UnreadableSvgAsset[];
+}> {
+  const assets = await prisma.sectionAsset.findMany({
+    where: { mimeType: SVG_MIME_TYPE },
+    orderBy: { createdAt: "asc" },
+    select: { id: true, sectionId: true, blobPath: true, localizedBlobPaths: true },
+  });
+
+  let scanned = 0;
+  const unreadable: UnreadableSvgAsset[] = [];
+  for (const asset of assets) {
+    const files: Array<[string | null, string]> = [
+      [null, asset.blobPath],
+      ...Object.entries(readLocalizedBlobPaths(asset.localizedBlobPaths)),
+    ];
+    for (const [locale, blobPath] of files) {
+      scanned += 1;
+      const funn = { assetId: asset.id, sectionId: asset.sectionId, locale, blobPath };
+      let stored: string;
+      try {
+        stored = (await getAsset(blobPath)).toString("utf8");
+      } catch {
+        // Raden peker på en fil som ikke finnes. Det er et annet problem enn dette, men det er
+        // også en figur deltakeren ikke ser — og bedre meldt her enn tiet om.
+        unreadable.push({ ...funn, repairable: false, repaired: false });
+        continue;
+      }
+      if (isSvgReadableAsImage(stored)) continue;
+
+      const fixed = sanitizeSvg(stored);
+      const repairable = fixed !== "";
+      if (repairable && !options.dryRun) {
+        await putAsset(blobPath, Buffer.from(fixed, "utf8"), SVG_MIME_TYPE);
+        if (locale === null) {
+          await prisma.sectionAsset.update({ where: { id: asset.id }, data: { sizeBytes: Buffer.byteLength(fixed, "utf8") } });
+        }
+      }
+      unreadable.push({ ...funn, repairable, repaired: repairable && !options.dryRun });
+    }
+  }
+  return { dryRun: options.dryRun, scanned, unreadable };
 }
 
 // #758: best-effort blob reclamation. Call AFTER the DB delete has COMMITTED — never before, or a

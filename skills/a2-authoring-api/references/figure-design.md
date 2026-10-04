@@ -46,15 +46,20 @@ never decoration, never a catch-all. A short definition is prose, not a diagram.
    against the platform UI. Set `font-family="system-ui, -apple-system, 'Segoe UI', Roboto,
    sans-serif"` **once on the root `<svg>`** (inherited by all labels). `font-family` is a
    presentation attribute the sanitiser keeps — verified.
+8. **Animate what happens over time — and only that (#1073).** A figure whose point is an order
+   or a change over time (a process, steps in sequence, something travelling from A to B) is drawn
+   **animated by default**; everything else stays still. Animation uses CSS only and follows the
+   safety rules in [Animation](#animation--where-it-makes-sense-1073). A flow drawn still is an
+   explicit choice, marked `data-motion="static"` on the root `<svg>` and agreed with the author.
 
 ## The template set (the only shapes the skill draws)
 
-| Template | Use it for | One point it makes |
-|---|---|---|
-| **flow** | a process / sequence of steps | "these steps, in this order" |
-| **tree / decision** | branching choices, a hierarchy | "this choice leads here vs there" |
-| **boxes-and-arrows** | relationships between a few entities | "A relates to B relates to C" |
-| **labelled diagram** | parts of one thing | "this thing has these named parts" |
+| Template | Use it for | One point it makes | Motion |
+|---|---|---|---|
+| **flow** | a process / sequence of steps | "these steps, in this order" | **animated** (steps light up in turn) |
+| **tree / decision** | branching choices, a hierarchy | "this choice leads here vs there" | still |
+| **boxes-and-arrows** | relationships between a few entities | "A relates to B relates to C" | still (`data-motion="static"`) — there is no animated template for arrows; if the point is the order, draw it as a **flow** |
+| **labelled diagram** | parts of one thing | "this thing has these named parts" | still |
 
 If the point doesn't fit one of these, it is probably prose — or two simpler figures.
 
@@ -71,17 +76,32 @@ should be referenced (validate reports `missing_asset` / `unreferenced_asset`).
 Fill these in — keep the geometry, replace the `<text>` labels (short, primary language). Always
 include `xmlns` and a `viewBox`. No `<script>`, `on*`, `<foreignObject>`, `<a>`, no baked-in text.
 
-### flow
+### flow (animated)
+
+The steps light up one after another, once, then the figure rests as the plain flow. Keep the
+`<style>` block as it is. Change the boxes and labels; in the style block only the colours, the
+duration and — if there are more or fewer steps — the delay rules (see
+[Animation](#animation--where-it-makes-sense-1073) for exactly what may differ and the timing
+budget). `figure-motion-check.mjs` rejects any other change.
+
 ```svg
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 80" role="img"
      font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif">
-  <rect x="10" y="20" width="120" height="40" rx="6" fill="#eef" stroke="#333"/>
+  <style>
+    .steg { fill: #eef; stroke: #333; }
+    @keyframes lys { 0%, 70% { fill: #ffd166; } 100% { fill: #eef; } }
+    .steg { animation: lys 1.4s ease-in-out 1; }
+    .s2 { animation-delay: 1.2s; }
+    .s3 { animation-delay: 2.4s; }
+    @media (prefers-reduced-motion: reduce) { .steg { animation: none; } }
+  </style>
+  <rect class="steg s1" x="10" y="20" width="120" height="40" rx="6"/>
   <text x="70" y="45" text-anchor="middle" font-size="14">Steg 1</text>
   <line x1="130" y1="40" x2="180" y2="40" stroke="#333"/>
-  <rect x="180" y="20" width="120" height="40" rx="6" fill="#eef" stroke="#333"/>
+  <rect class="steg s2" x="180" y="20" width="120" height="40" rx="6"/>
   <text x="240" y="45" text-anchor="middle" font-size="14">Steg 2</text>
   <line x1="300" y1="40" x2="350" y2="40" stroke="#333"/>
-  <rect x="350" y="20" width="120" height="40" rx="6" fill="#eef" stroke="#333"/>
+  <rect class="steg s3" x="350" y="20" width="120" height="40" rx="6"/>
   <text x="410" y="45" text-anchor="middle" font-size="14">Steg 3</text>
 </svg>
 ```
@@ -103,7 +123,7 @@ include `xmlns` and a `viewBox`. No `<script>`, `on*`, `<foreignObject>`, `<a>`,
 
 ### boxes-and-arrows
 ```svg
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 420 120" role="img"
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 420 120" role="img" data-motion="static"
      font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif">
   <rect x="10" y="40" width="110" height="40" rx="6" fill="#eef" stroke="#333"/>
   <text x="65" y="65" text-anchor="middle" font-size="14">A</text>
@@ -132,6 +152,95 @@ include `xmlns` and a `viewBox`. No `<script>`, `on*`, `<foreignObject>`, `<a>`,
 </svg>
 ```
 
+## Animation — where it makes sense (#1073)
+
+**When.** Animate when the figure's one point is *an order or a change over time*: a process, steps
+in sequence, a case moving through a system, a value building up. Motion then carries the point —
+the learner sees the order instead of reading it. Do **not** animate a hierarchy, a set of parts, a
+comparison or a definition: motion there is decoration, and decoration is noise. When in doubt, ask
+the author at the Structure gate; the proposal says, per figure, "animert: ja/nei — fordi …".
+
+**How — CSS only.** A `<style>` block inside the SVG with `@keyframes` and `animation`. Measured on
+A2 2026-10-03: the sanitizer keeps CSS and `<animateMotion>`, but strips `<animate>` and `<set>` and
+disables `<animateTransform>` — those would silently stop working, so don't use them.
+`<animateMotion>` survives the sanitizer, but it is not CSS: the reduced-motion rule below cannot
+switch it off, so it is not allowed either (`not_css_only`).
+
+**The figure IS the template (product owner's decisions, 2026-10-04).** An animated figure is the
+[flow template](#flow-animated): its `<style>` block **unchanged**, and its markup made of the
+template's elements only. The check compares
+the block with the template; it does not try to work out what your CSS would do. Anything that is
+not the template is `unsupported_animation_form` — including CSS that is perfectly valid.
+
+**Write every character itself — in a still figure too.** No backslash and no character reference
+(`&#97;`, `&bsol;`) in a `<style>` block or a `style` attribute: `anim\61tion` and `&#97;nimation`
+both run as `animation` once the platform and the browser have read them, and the check cannot see
+it. The check refuses them as `css_escape`. `&gt;`, `&lt;` and `&amp;` are fine — that is how `>`,
+`<` and `&` are written in XML. A font name with a space goes in quotes: `font-family: "Segoe UI"`.
+
+What you may change:
+
+| May differ | Must stay |
+|---|---|
+| the colours — base fill, stroke, highlight — as **opaque hex**, `#rgb` or `#rrggbb` (no alpha: a transparent base fill makes the boxes vanish from the still picture) | the class names `steg`, `s1`, `s2`, … and the keyframes name `lys` |
+| the duration in `.steg { animation: lys <n>s ease-in-out 1; }` — at least 0.3 s, or nobody sees the step light up | `ease-in-out`, the count `1`, the shorthand form |
+| the delays, and the number of `.sN` delay rules (one per step after the first) — **each delay larger than the one before**, so the steps light up in order | the order of the rules, and the reduced-motion rule as the last one |
+| line breaks and spacing | one `<style>` block, nothing else in it, and **no comments** in it (comment in the markup instead: `<!-- … -->`) |
+
+**The markup is the template too.** An animated figure is made of these elements and no others:
+
+| Element | Role | Rule |
+|---|---|---|
+| `<svg>` | the root | exactly one; none nested |
+| `<style>` | the template's block | exactly one, **with no attributes** (`media="print"` or `type="…"` would switch the whole block off) |
+| `<rect>` | a step box | **every** `<rect>` is `class="steg sN"` — one per step, `s1` to the last, matching the delay rules. A box without the class is a step that never lights up |
+| `<line>`, `<polyline>`, `<path>` | connectors | open strokes: `<polyline>` and `<path>` carry `fill="none"` and do not end where they began (with or without `Z`). A filled or closed one is a box drawn another way |
+| `<text>`, `<tspan>` | labels | never `class="steg"` — it would animate the text and leave the boxes still |
+| `<title>`, `<desc>` | accessible name | — |
+
+So: no `<g>`, no `<defs>`/markers, no `<polygon>`/`<circle>`/`<ellipse>`, no background panel, no
+legend box, and **no `transform` attributes** — place elements with x/y. A step is always a
+rectangle. If the figure needs anything else, it is not an animated flow: draw it still
+(`data-motion="static"`), where none of this applies. The figure has **no `style=""` attributes**. Colours and sizes
+on other elements go in presentation attributes (`fill="…"`, `stroke="…"`), which do what you
+expect; a `style` attribute could override the animation.
+
+The last keyframe returns to the base fill (so the figure rests as the plain flow), and the
+highlight colour differs from it (otherwise nothing is seen to move). The check verifies both.
+
+Why so strict: this check first read the CSS and tried to predict the browser. Three review rounds
+each found six to eight ways round it — a later rule that switches the animation off, a count of 0,
+`!important`, a selector that matches no box. A check that lists the unsafe forms always misses the
+next one. The template is the one form that has been measured on the platform.
+
+**Safety — the animation must be safe on its own.** The participant view shows figures as `<img>`,
+and Chromium does **not** pass the reader's "reduce motion" setting into an SVG shown as an image.
+So the template's `@media (prefers-reduced-motion: reduce)` rule is required (it is honoured when
+the figure is opened by itself) but it is not enough. In addition:
+
+1. **Run once, finish within 5 seconds** in total (largest delay + duration). Moving content that
+   lasts longer needs a pause button (WCAG 2.2.2), and an image has none. With more steps, shorten
+   the duration and the gaps between delays so the last step still ends within 5 seconds.
+2. **The still picture is the complete figure.** Without the animation — before it starts, after it
+   ends, with reduced motion — every box and label is visible. No element is switched off with
+   `display="none"`, `visibility="hidden"` or `opacity="0"`. The check catches those attributes; it
+   cannot see a box drawn outside the `viewBox` or white on white. **Looking at the rendered still
+   picture (below) is the guard for completeness** — the check is not.
+3. **Motion carries the point, never the content.** Everything the figure says must be readable in
+   the still picture; the animation only shows the order.
+4. **Translations keep the motion.** Locale variants change only the `<text>`; the `<style>` block
+   is copied as is.
+
+**Check it.** `node skills/a2-authoring-api/scripts/figure-motion-check.mjs figure.svg` — fails on a
+flow-shaped figure (three labelled boxes in a row or column, each joined to the next by a line,
+polyline or path) that is neither animated
+nor marked `data-motion="static"`, and on any animated figure whose style block is not the
+template's, whose step classes do not match its delay rules, that runs over 5 s, hides an element
+at rest, or uses SMIL. The message says where the block leaves the template. Run it with the fit
+check, on
+every figure and every locale variant. To *see* the motion, open the SVG directly in a browser —
+a single screenshot only shows one frame.
+
 ## Mandatory: look at the figure before you show it (#1060)
 
 Valid SVG is not a finished figure. The failure the eyes catch and the schema never will: a label
@@ -140,7 +249,8 @@ figure — and later **every locale variant**, because the Nynorsk or English la
 than the Bokmål one the box was sized for — goes through these two steps before it is presented
 at the per-element gate or written into the package:
 
-1. **Measure.** `node skills/a2-authoring-api/scripts/figure-fit-check.mjs figure.svg` estimates
+1. **Measure.** `node skills/a2-authoring-api/scripts/figure-fit-check.mjs figure.svg` (and
+   `figure-motion-check.mjs` — see [Animation](#animation--where-it-makes-sense-1073)) estimates
    every `<text>` against its enclosing box and the `viewBox` and reports overflows in pixels.
    It is deliberately a little strict. A `FAIL` is a figure you fix, not a warning you read.
 2. **Look.** Render it and inspect the image — the estimate does not see everything (overlaps,
@@ -166,7 +276,7 @@ the variant is not a blind copy of the original labels. See `localization.md`.
 
 ## Preservation
 
-An approved figure is **unique content, not redundancy**. "Remove redundancy" may trim repeated
+An approved figure — including its animation — is **unique content, not redundancy**. "Remove redundancy" may trim repeated
 prose but must never drop an approved figure or empty its labels. `course-state.mjs` treats a
 missing figure ref (`asset:<sourceId>`) or an emptied label as a blocking mandatory loss. See
 `content-preservation.md`.

@@ -195,7 +195,8 @@ export function createListPage(config) {
       return `<th scope="col"${cls ? ` class="${cls}"` : ""}${aria}${title}${data}>${label}${indicator}</th>`;
     }).join("");
     const rows = visible.map((item) => {
-      const tds = columns.map((col) => `<td${col.className ? ` class="${col.className}"` : ""}>${col.render(item)}</td>`).join("");
+      // #1080: kortvisningen på telefon skjuler tabellhodet og leser kolonnenavnet fra cellen.
+      const tds = columns.map((col) => `<td${col.className ? ` class="${col.className}"` : ""} data-label="${escapeHtml(col.label || col.srLabel || "")}">${col.render(item)}</td>`).join("");
       const actions = rowActionsHtml(config.actions(item), { moreLabel: texts.more ?? "Mer" });
       return `<tr data-row-id="${escapeHtml(config.rowId(item))}"${config.rowAttrs ? ` ${config.rowAttrs(item)}` : ""}>${tds}<td class="col-actions"><div class="row-actions">${actions}</div></td></tr>`;
     }).join("");

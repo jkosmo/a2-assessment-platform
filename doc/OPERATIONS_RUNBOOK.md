@@ -363,6 +363,32 @@ az postgres flexible-server firewall-rule delete -g rg-a2-assessment-stg `
 create → run → remove-lock → delete-rule → **re-create-lock** → verify recipe in the operator memory
 `prod-db-firewall-lock-gotcha`, in small separate steps, and re-verify the lock is restored afterwards.
 
+### Repair SVG figures stored in an unreadable form (#1083)
+
+Before v2.78.2 `sanitizeSvg` wrote the cleaned figure as HTML. A non-breaking space in a label («§ 12»,
+«10 %») became `&nbsp;`, which XML does not have, so the stored file could not be shown as an image: the
+participant saw no figure, and nothing reported it. The sanitiser now writes XML, but that only covers what
+is stored from now on. This script finds the files already in storage — base figure and every locale
+variant — that an XML parser rejects, and re-sanitises them **in place** (same blob path, so the row, the
+markdown references and the variants are untouched).
+
+**Dry run by default.** `--apply` is required to write; the dry run lists every affected file:
+
+```bash
+dotenv -e .env.<env> -- npm run maint:repair-unreadable-svg-assets             # dry run — count and list
+dotenv -e .env.<env> -- npm run maint:repair-unreadable-svg-assets -- --apply  # rewrite the repairable ones
+```
+
+It needs **both** the database and the asset storage of the same environment: `DATABASE_URL` and
+`COURSE_ASSETS_BLOB_ENDPOINT` (your account needs read access to the storage account, and write access for
+`--apply`). Without the endpoint the storage layer falls back to the local folder, so the script refuses to
+run against a non-local database rather than report every figure as missing. Reach the database with the
+same temporary firewall rule as above.
+
+Each line is one file: `repairable: false` means the blob is missing or cannot be saved by re-sanitising —
+those need a human. Idempotent; a second run after `--apply` reports 0 unreadable. Browsers cache a figure
+for an hour (`Cache-Control: private, max-age=3600`), so a repaired figure can take that long to appear.
+
 ### Translating section and module titles in one course
 
 `scripts/maintenance/translate-course-titles.ts` fills **missing** locale values for the titles of

@@ -22,7 +22,8 @@ Validating the fallback export: **[references/export-validation.md](references/e
 Translating to all three languages: **[references/localization.md](references/localization.md)**.
 Designing figures (SVG, "one figure, one point"): **[references/figure-design.md](references/figure-design.md)**.
 Deterministic checks live in `scripts/` (`course-state.mjs`, `export-validate.mjs`,
-`localization-check.mjs`) — run them; they are repo-unit-tested.
+`localization-check.mjs`, `mcq-cue-check.mjs`, `figure-fit-check.mjs`, `figure-motion-check.mjs`)
+— run them; they are repo-unit-tested.
 
 ## What you produce
 
@@ -116,7 +117,15 @@ the three references above.
    proposed at the **Structure gate** and drafted at the **Per-element gate**; an approved figure
    is **unique content** the preservation audit (#762) must never drop. **Before a figure is shown
    or written, measure and look at it** — `scripts/figure-fit-check.mjs` plus a rendered image —
-   and again for every locale variant (#1060). (figure-design.md.)
+   and again for every locale variant (#1060). **Animate where the point is an order or a change
+   over time (#1073):** a process/flow figure is animated by default (steps light up in turn), with
+   CSS only, once, within 5 seconds, resting on the complete still picture; hierarchies, parts and
+   comparisons stay still. **An animated figure is the flow template** — its `<style>` block
+   unchanged (only colours, duration, delays and the number of steps may differ), and nothing in
+   the markup but `<rect>` step boxes, connectors and labels. Do not write your own animation CSS,
+   and do not add other shapes, groups or transforms. A still flow is an explicit choice
+   (`data-motion="static"`).
+   `scripts/figure-motion-check.mjs` must be clean for every figure and variant. (figure-design.md.)
 
 10. **MCQ options must not reveal the answer (#1032).** Before a module's questions are shown at
     gate 4 and again before production, run `scripts/mcq-cue-check.mjs` on the package and fix

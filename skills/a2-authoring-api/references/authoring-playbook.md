@@ -81,6 +81,14 @@ Several small figures beat one crowded one; a short definition stays prose. Prop
 only (which point, which template) — you draw the SVG at Gate 4 with the text. The author confirms
 which figures to design. See `figure-design.md`.
 
+**Say, per figure, whether it moves (#1073).** Each proposed figure carries *"animert: ja/nei —
+fordi …"*. Yes when its point is an order or a change over time — and then the figure is a
+**flow**, the one animated template; no for trees, boxes-and-arrows, parts and comparisons. If
+something travels between the entities of a boxes-and-arrows figure, the point is an order: propose
+it as a flow instead.
+Don't wait to be asked — proposing the motion is part of proposing the figure. If the author wants
+a flow still, note it; it is drawn with `data-motion="static"`.
+
 ## Gate 4 — Each element (one at a time)
 
 Now write content, **one element per turn**, grounded in the source, and get each approved
@@ -130,6 +138,10 @@ it from the markdown as `![alt](asset:<sourceId>)`. **Present the figure *with* 
 preview** — show the SVG inline (rendered) AND describe it in words ("flyt: Motta sak → Vurder
 grunnlag → Fatt vedtak") so the author can approve the integrated whole: *"ser tekst + figur
 riktig ut sammen?"*. One figure, one point — if it's getting crowded, split it.
+An animated figure is drawn animated here, not added later: describe the motion in words too
+("stegene lyser opp etter tur, én gang, ca. 4 sekunder") and run `figure-motion-check.mjs` with
+the fit check before showing it — a screenshot shows one frame, so the words are how the author
+approves the motion in a chat that can't play it.
 
 Anything the source doesn't cover → `[Avklaring: …]`, not invention (figures included). Approve
 each element (text + figure together), then move to the next.
@@ -153,7 +165,9 @@ rubber stamp.
   approved text** (diagrams it, invents nothing beyond it); its labels are short and in the **one
   primary language**; it is SVG with real `<text>` (not raster, not text-as-paths). Flag a figure
   that is decorative, over-packed, contradicts the text, or has drifted language — fix before
-  producing.
+  producing. **Motion (#1073):** every figure showing an order or change over time is animated
+  (or deliberately `data-motion="static"`), no still-only content is hidden by the animation, and
+  `figure-motion-check.mjs` is clean on every figure and locale variant.
 - Report findings to the author; fix gaps/overclaims before producing. Overclaims are resolved by
   softening to what the source supports or by `[Avklaring: …]`, never by inventing support.
 
@@ -167,7 +181,9 @@ Only after QA passes and the author approves:
    variants) to that section payload's `assets[]` — `{ sourceId, filename, mimeType:
    "image/svg+xml", sizeBytes, contentBase64, sourceLocale, localizedVariants }` — and keep the
    markdown ref as `asset:<sourceId>` (the server remaps it on create/import; never pre-remap).
-   Every `asset:<ref>` needs a matching entry and vice versa.
+   Every `asset:<ref>` needs a matching entry and vice versa. Run `figure-motion-check.mjs` and
+   `figure-fit-check.mjs` once more on the final SVGs and every variant — the delivered file, not
+   the draft.
 2. Validate (dry-run) and fix errors; if a fix changes what the learner sees, re-confirm with the
    author. Validate now also checks figures: `missing_asset` / `unreferenced_asset`, mime,
    per-asset size, and that each SVG survives sanitisation.

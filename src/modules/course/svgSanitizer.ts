@@ -1,5 +1,6 @@
 import DOMPurify from "dompurify";
 import { JSDOM } from "jsdom";
+import { SaxesParser } from "saxes";
 
 /**
  * Server-side SVG sanitisation for section assets (#657 / #483/F4).
@@ -18,7 +19,8 @@ import { JSDOM } from "jsdom";
  * in isolation.
  */
 
-const svgPurifier = DOMPurify(new JSDOM("").window as unknown as Window & typeof globalThis);
+const purifierWindow = new JSDOM("").window;
+const svgPurifier = DOMPurify(purifierWindow as unknown as Window & typeof globalThis);
 
 // `<a>`, `<foreignObject>`, and `<script>` are removed outright. Drawings do not need
 // hyperlinks, and both foreignObject (embeds arbitrary XHTML/iframes) and script are
@@ -34,27 +36,74 @@ const FORBIDDEN_SVG_TAGS = ["script", "foreignObject", "a"] as const;
 export function sanitizeSvg(rawSvg: string): string {
   if (typeof rawSvg !== "string" || rawSvg.trim().length === 0) return "";
 
-  const clean = svgPurifier.sanitize(rawSvg, {
+  // The sanitised TREE, not a string: what is written out below is decided here, not by
+  // DOMPurify's own serialiser.
+  const cleanTree = svgPurifier.sanitize(rawSvg, {
     USE_PROFILES: { svg: true, svgFilters: true },
     FORBID_TAGS: [...FORBIDDEN_SVG_TAGS],
     // Never resolve external/data documents; keep everything self-contained.
     ADD_URI_SAFE_ATTR: [],
-  });
+    RETURN_DOM: true,
+  }) as unknown as Element | null;
 
-  // DOMPurify returns a string in HTML serialisation; a non-SVG payload yields no
-  // <svg> root, which we reject rather than store.
-  if (!/<svg[\s>]/i.test(clean)) return "";
+  // A non-SVG payload yields no <svg> root, which we reject rather than store. (DOMPurify can also
+  // return null, on pathologically deep nesting.)
+  //
+  // ⚠️ getElementsByTagName, NOT querySelector. The tree belongs to a jsdom window that lives as long
+  // as the process, and a querySelector on it pins the whole tree for good: measured 2026-10-04, about
+  // 1.5 MB retained per call for a 5 kB figure, against nothing with getElementsByTagName. The app
+  // runs on one small instance; a course import with figures would have filled it. The guard is
+  // test/unit/svg-sanitizer-memory-1083.test.ts, which measures the heap rather than the spelling.
+  const root = cleanTree?.getElementsByTagName("svg")[0];
+  if (!root) return "";
 
-  // Some DOMPurify/jsdom versions drop the SVG namespace when serialising in HTML
-  // mode; re-add it so the file renders as an image. No-op when already present.
-  return ensureSvgNamespace(clean);
+  // #1083: the file is served as image/svg+xml, so the browser reads it as XML — and it has to be
+  // WRITTEN as XML. DOMPurify's string output is HTML serialisation, and the two disagree in ways
+  // that leave the figure unreadable and therefore invisible, with no error anywhere:
+  //   · a non-breaking space becomes `&nbsp;`, an entity XML does not have («§ 12», «10 %»);
+  //   · a `<` in an attribute value is left bare, which XML forbids.
+  // Serialising the sanitised tree as XML removes the whole class rather than its known members,
+  // and declares the SVG namespace on the root as a matter of course.
+  const xml = new purifierWindow.XMLSerializer().serializeToString(root);
+
+  // The guard that makes the promise in the doc comment true: what is stored can be read back as
+  // an image. A figure that cannot is rejected here, where the author is told — not stored and
+  // found missing by a participant.
+  return isSvgReadableAsImage(xml) ? xml : "";
 }
 
-function ensureSvgNamespace(svg: string): string {
-  return svg.replace(/<svg\b([^>]*)>/i, (match, attrs: string) => {
-    if (/\bxmlns\s*=/.test(attrs)) return match;
-    return `<svg xmlns="http://www.w3.org/2000/svg"${attrs}>`;
+/**
+ * True when an XML parser accepts the text — which is what a browser needs to show the file as an
+ * image. Exported for the #1083 repair of figures stored before sanitizeSvg wrote XML.
+ */
+export function isSvgReadableAsImage(xml: string): boolean {
+  // Read with the parser jsdom's own DOMParser uses for image/svg+xml, set up the way jsdom sets it
+  // up (node_modules/jsdom/lib/jsdom/browser/parser/xml.js) — but WITHOUT building a document. The
+  // answer needs only «did it parse» and «what is the root». Building the tree a second time, while
+  // the sanitised tree was still alive, doubled the peak: measured 2026-10-04, a dense 1 MB figure
+  // (~25 000 elements) ran a 512 MB heap out of memory and took the process down, where the code
+  // before #1083 stored it. test/unit/svg-sanitizer.test.ts holds this to the DOMParser's verdicts.
+  let root: { local: string; uri: string } | undefined;
+  const parser = new SaxesParser({ xmlns: true, defaultXMLVersion: "1.0", forceXMLVersion: true });
+  parser.on("opentag", (tag) => {
+    root ??= { local: tag.local, uri: tag.uri };
   });
+  // Entities declared in a DOCTYPE are known to the parser, as they are in jsdom. Only a stored file
+  // can have one (the #1083 repair reads those); what sanitizeSvg writes has no DOCTYPE.
+  parser.on("doctype", (doctype) => {
+    for (const [, name, value] of doctype.matchAll(/<!ENTITY ([^ ]+) "([^"]+)">/g)) {
+      if (name !== undefined && value !== undefined && !(name in parser.ENTITIES)) parser.ENTITIES[name] = value;
+    }
+  });
+  parser.on("error", (error) => {
+    throw error;
+  });
+  try {
+    parser.write(xml).close();
+  } catch {
+    return false;
+  }
+  return root?.local === "svg" && root.uri === "http://www.w3.org/2000/svg";
 }
 
 // ---------------------------------------------------------------------------
