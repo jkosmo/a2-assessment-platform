@@ -859,3 +859,42 @@ publiseringsgaten og andre spørsmål som trenger svar går i én valgdialog, og
 resultat meldes som toast (framdrift med «Avbryt»). Forslagsmekanismen (#926) er borte: det som
 står i skjemaet tas med i utkastet før generering/endring, så resultatet legges rett inn — slik
 dialogen sier. Skjemaet står alene i full bredde.
+
+## En figur i to oppsett: bredt og smalt (2026-10-04)
+
+### Språk går foran oppsett
+
+Blir det smale oppsettet bedt om på et språk figuren bare har i det brede, leveres det **brede**
+på riktig språk — ikke det smale på feil språk. En figur som er liten, kan leses; en på feil språk
+kan ikke. Rekkefølgen er: ønsket oppsett på ønsket språk → bredt på ønsket språk → ønsket oppsett
+slik det ble tegnet → bredt slik det ble tegnet.
+
+**Hvorfor:** det motsatte valget (alltid det smale på telefon) er like enkelt å bygge, og gir en
+penere figur med etiketter leseren ikke forstår.
+**Håndheves:** `chooseAssetFile` i `src/modules/course/assetCommands.ts`, alle tolv kombinasjonene
+målt i `test/m2-section-asset-layouts-1079.test.ts`. Sak #1079. Status: åpent spørsmål — bygget slik
+etter utviklerens vurdering; produkteier har ikke tatt stilling.
+
+### Grensa for smalt oppsett er én fast bredde: 640 px
+
+Klienten viser det smale oppsettet når spalten figuren står i, er under 640 px. Tallet er det samme
+for alle figurer, ikke utledet av hver figurs bredde.
+
+**Hvorfor:** produkteier, 2026-10-04 (godkjent designforslag i #1079). Den bredeste figuren skillet
+tegner, er 848 bred med 12 px etiketter; under 640 px blir de mindre enn 9 px på skjermen. Samme
+tall setter taket på åtte steg per figur i `draw-flow-figure.mjs`. Det skal måles på en ekte telefon
+og et nettbrett før det regnes som endelig.
+**Håndheves:** `ASSET_NARROW_BELOW` i `public/api-client.js`. Sak #1079. Status: avklart, med måling
+på ekte enheter utestående.
+
+### Et oppsett har de samme etikettene som den brede figuren
+
+Plattformen avviser et smalt oppsett som har en etikett den brede figuren ikke har, eller mangler en
+(`asset_layout_text_mismatch`).
+
+**Hvorfor:** oversettelsen spør språkmodellen én gang, fra den brede figuren, og skriver svarene inn
+i hvert oppsett ved å kjenne igjen originalteksten. En etikett som bare finnes i det smale, ville
+ikke fått noe svar og blitt stående på kildespråket: en figur på to språk på telefon, og hel på PC.
+Alternativet, én oversettelse per oppsett, dobler kostnaden og lar de to sprike.
+**Håndheves:** `prepareLayoutVariants` i `assetCommands.ts` (alle veier inn går gjennom
+`stageSectionAssets`), og speilet i skillets `localization-check.mjs`. Sak #1079. Status: avklart.

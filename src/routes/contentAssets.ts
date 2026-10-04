@@ -18,12 +18,18 @@ contentAssetsRouter.get("/:assetId", async (request, response, next) => {
     const localeParam = typeof request.query.locale === "string" ? request.query.locale : undefined;
     // #778/#786: pass the viewer so the command enforces object-level access (participant must have
     // access to the asset's section's published course; authors bypass for draft preview).
-    const { mimeType, buffer } = await getSectionAssetContent(request.params.assetId, localeParam, {
+    // #1079: `?layout=narrow` asks for the figure's narrow layout. A figure without one answers with
+    // the wide layout, and the two headers say what was served and what the figure has — so the
+    // client can tell, from one request, whether asking again at another width is any use.
+    const layoutParam = typeof request.query.layout === "string" ? request.query.layout : undefined;
+    const { mimeType, buffer, layout, layouts } = await getSectionAssetContent(request.params.assetId, localeParam, {
       userId,
       roles: request.context?.roles ?? [],
       groupIds: request.context?.principal?.groupIds,
-    });
+    }, layoutParam);
     response.setHeader("Content-Type", mimeType);
+    response.setHeader("X-Asset-Layout", layout);
+    response.setHeader("X-Asset-Layouts", layouts.join(","));
     response.setHeader("Cache-Control", "private, max-age=3600");
     // #657: defence-in-depth for SVG. The stored bytes are already sanitised, but if a victim
     // navigates DIRECTLY to this URL the browser would render the SVG as a same-origin document.

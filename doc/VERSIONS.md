@@ -2,6 +2,105 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.81.0 - 2026-10-04
+
+Plattformen og skillet. **Én migrasjon**, som bare legger til en kolonne.
+
+### #1079, steg 4 av 4 — plattformen lagrer det smale oppsettet og velger etter spaltebredden
+
+En SVG som vises som bilde, kan ikke brekke seg selv om når spalten blir smal. Fra 2.80.0 tegner
+skillet en flyt i to oppsett. Nå tar plattformen imot begge, og viser det som passer.
+
+**For deltakeren:** en figur som har et smalt oppsett, vises i det når spalten den står i, er under
+640 px bred (telefon), og i det brede ellers. Snus telefonen eller dras vinduet, bytter figuren.
+En figur uten smalt oppsett vises som før.
+
+**Slik er det bygget** (designet produkteier godkjente i #1079):
+
+- **Lagring.** `SectionAsset` har fått kolonnen `layoutVariants`. Det brede oppsettet er figuren
+  slik den alltid har vært lagret; det smale ligger ved siden av, med sine egne språkvarianter.
+  Migrasjonen legger bare til kolonnen, og alt som finnes fra før, har den tom.
+- **Levering.** `GET /api/content-assets/:id?layout=narrow` gir det smale oppsettet når figuren har
+  det, ellers det brede. Svaret sier hvilket oppsett som kom og hvilke figuren har
+  (`X-Asset-Layout`, `X-Asset-Layouts`).
+- **Valget.** Klienten henter allerede hver figur med innlogging (`hydrateContentAssetImages`). Der
+  måler den nå spalten og ber om oppsettet som passer. En figur med begge oppsett følger spalten sin.
+- **Inn og ut.** Import, eksport og forfatter-API-et bærer det smale oppsettet (`layoutVariants` på
+  figuren). Oversettelsen oversetter begge oppsettene med de samme oversettelsene. Sletting og
+  reparasjonen fra #1083 går gjennom begge.
+- **Skillet** legger begge figurene i pakka, og de tre sjekkene som leser figurer, kjenner det smale.
+
+**Tre regler som er valg, ikke følger** (alle står i `doc/DECISIONS.md`):
+
+| Regel | Hvorfor |
+|---|---|
+| **Språk går foran oppsett.** Finnes det smale bare på norsk og det brede på engelsk, får en engelsk leser det brede | En liten figur kan leses; en på feil språk kan ikke. ⚠️ Dette har jeg bestemt under bygging; produkteier har ikke tatt stilling |
+| **Grensa er 640 px**, én fast bredde for alle figurer | Produkteiers beslutning. Skal måles på ekte telefon og nettbrett |
+| **Et smalt oppsett har de samme etikettene som det brede**, språk for språk — ellers avvises det | Oversettelsen spør språkmodellen én gang og skriver svarene inn i begge. En etikett bare i det smale ville blitt stående uoversatt |
+
+**To oppryddinger som fulgte med, fordi endringen ellers måtte gjøres to steder:**
+
+- De to veiene en figur kom inn (`importSectionAssets` for forfatter-API-et, `stageSectionAssets`
+  for filimport) var kopier av hverandre. Den første kaller nå den andre.
+- **Alt sjekkes før noe skrives.** Før ble hver figur skrevet til lageret etter tur. Ble figur
+  nummer tre avvist, lå filene til de to første igjen uten noen rad som pekte på dem.
+
+**Én leser.** Kolonnen er JSON, og ingenting hindrer et nytt sted i å lese den på sin egen måte.
+Alt som trenger filene til en figur, går derfor gjennom én funksjon (`assetFiles`): sletting,
+reparasjon og eksport er bygget på samme liste. Oversikten over alle tolv stedene står i
+`doc/FEATURE_SURFACE_MAP.md` §11b.
+
+**Målt:**
+
+- Integrasjon (`test/m2-section-asset-layouts-1079.test.ts`, 31 tester mot ekte database): import →
+  levering → oversettelse → eksport → ny import → sletting → reparasjon, sju avvisninger som ikke
+  lagrer noe, og alle kombinasjonene av språk og oppsett i leveringen.
+- Chromium (`test/e2e/asset-layout-by-column-1079.spec.ts`, 9 tester): hvilket oppsett som blir bedt
+  om og vist ved 1280 og 390 px, ved endring av bredde, i deltakervisningen og i forhåndsvisningen i
+  editoren. Kjørt tolv ganger uten avvik.
+- Enhet (`test/unit/asset-layout-variants-1079.test.ts`, 35 tester): skjemaene, regelen for et
+  oppsett, tørrkjøringen av en forfatterpakke, og skillets tre sjekker.
+- 35 mutasjoner av tjeneren, ruta, valideringen, klienten og skillets sjekker: 35 røde. Én sto først
+  grønn: at figurer med bare ett oppsett også ble fulgt ved endring av bredde. Testen endret bredden
+  to ganger rett etter hverandre, nettleseren slo endringene sammen, og bare sluttbredden ble målt.
+  Hver bredde får nå stå til sida er tegnet.
+
+### Utgivelsestest mot stage, og en rapport med skjermbilder
+
+Produkteier ba om at han ikke skal teste for hånd det en maskin kan måle (2026-10-04).
+`test/stage/release-2-78-x.spec.ts` kjører derfor det som før var et manuelt testskript, med den
+ekte klienten mot de ekte dataene på stage: #1083, #1073, #1080, #1081 og #894.
+`npm run test:stage:release` kjører den og lager `test-results/stage-rapport/rapport.html` med
+utfallet og skjermbildene. Det som blir igjen til et menneske, er å logge inn (`npm run stage:auth`)
+og se over bildene.
+
+Første kjøring mot stage 2.78.3: 21 målinger, 16 besto. De fem som feilet, er to feil som fantes
+fra før, og som de mockede e2e-testene ikke kunne se fordi de har korte navn og få merker:
+
+| Sak | Funn |
+|---|---|
+| #1084 | På modullista på PC er tabellen 67 px bredere enn ramma, og «Mer» ligger utenfor |
+| #1085 | På telefonbredde er menylinja over listene bredere enn skjermen (13–28 px) |
+
+**Rotårsak til at de ikke ble funnet før.** E2e-testene mocker API-et med data jeg selv har
+skrevet. Layoutfeil som avhenger av hvor mye som står i en rad, finnes ikke i en fikstur med to
+korte rader. Sjekken som manglet, kjører nå mot ekte data, og den er mekanisk: den krever bare en
+innlogging.
+
+⚠️ **En feil i min egen arbeidsmåte underveis:** for å prøvekjøre stage-testen startet jeg appen
+lokalt mot testdatabasen. Den starter også arbeideren, som plukker vurderingsjobber. Prosessen ble
+stående etter at jeg stoppet den, og ga én til fire tilfeldige feil i
+`assessment-policy.integration.test.ts` i neste fullkjøring — samme symptom som #1028. Sjekk at
+port 3001 er fri før en integrasjonskjøring.
+
+**Kjent, ikke gjort:**
+
+- Opplasting for hånd i seksjonseditoren gir fortsatt bare det brede oppsettet.
+- Bare flyt med faser tegnes i to oppsett. De andre figurtypene i skillet har ett.
+- Grensa på 640 px er ikke målt på en ekte telefon eller et nettbrett.
+- Forhåndsvisningen i editoren viser oppsettet som passer **dens egen** bredde. På en smal skjerm
+  ser forfatteren altså det smale oppsettet, slik deltakeren på telefon gjør.
+
 ## 2.80.0 - 2026-10-04
 
 Bare skillet (`skills/a2-authoring-api`). Ingen endring i plattformkoden, ingen migrasjon.

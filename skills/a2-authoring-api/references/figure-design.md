@@ -190,12 +190,15 @@ they cannot disagree, and it runs both figure checks on each before it returns a
 - **When it refuses:** the message names what is wrong — a label too long for the space between
   two steps (`labels_overlap`), a step in a phase that is not listed. Shorten the label or break it
   differently; do not edit the drawn SVG to make it fit.
-- **Which file goes in the package:** the **wide** one, as the section asset. The platform cannot
-  yet choose a layout by column width (#1079, the platform part), so the narrow file is kept beside
-  the description until it can. Keep the description: it is the figure's source.
+- **Both files go in the package.** The **wide** one is the section asset (`contentBase64`); the
+  **narrow** one goes in the same asset's `layoutVariants` as `{ "layout": "narrow", … }`
+  (package-schema.md). The platform shows the narrow layout when the column the figure stands in is
+  under 640 px wide, and the wide one otherwise. Keep the description: it is the figure's source.
 - **Locale variants:** copy the description, translate `title`, `desc`, the phase labels and the
   step labels — **same number of lines per label** — and draw again. The geometry is then identical
-  by construction, which is what `localizedVariants` requires.
+  by construction, which is what `localizedVariants` requires. Each language gives two files: the
+  wide one goes in the asset's `localizedVariants`, the narrow one in the narrow layout's own
+  `localizedVariants`. `localization-check.mjs` reports a layout that lacks a language.
 - You still **look** at both drawings (see below). The script guarantees the form, not that the
   figure says the right thing.
 

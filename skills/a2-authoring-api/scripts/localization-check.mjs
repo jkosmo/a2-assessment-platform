@@ -190,7 +190,7 @@ export function collectFigures(pkg) {
     const assets = object.payload?.assets ?? [];
     assets.forEach((asset, index) => {
       if (asset?.mimeType !== "image/svg+xml") return;
-      figures.push({
+      const wide = {
         path: `${ref}.assets[${index}]`,
         sourceId: asset.sourceId,
         sourceLocale: asset.sourceLocale ?? null,
@@ -199,6 +199,25 @@ export function collectFigures(pkg) {
           locale: variant.locale,
           runs: extractSvgTextRuns(decodeSvg(variant.contentBase64)),
         })),
+      };
+      figures.push(wide);
+      // #1079: the other layouts of a figure (narrow) are figures in their own right — each needs
+      // its variants, its label count and its preserved tokens — so each is collected as one, and
+      // every check below applies to it without knowing what a layout is. `wide` is what it is
+      // compared with: a layout carries the same texts as the wide figure, language by language.
+      (Array.isArray(asset.layoutVariants) ? asset.layoutVariants : []).forEach((layoutVariant, layoutIndex) => {
+        figures.push({
+          path: `${ref}.assets[${index}].layoutVariants[${layoutIndex}]`,
+          sourceId: asset.sourceId,
+          layout: layoutVariant?.layout ?? null,
+          sourceLocale: asset.sourceLocale ?? null,
+          runs: extractSvgTextRuns(decodeSvg(layoutVariant?.contentBase64)),
+          variants: (layoutVariant?.localizedVariants ?? []).map((variant) => ({
+            locale: variant.locale,
+            runs: extractSvgTextRuns(decodeSvg(variant.contentBase64)),
+          })),
+          wide,
+        });
       });
     });
   }
@@ -231,8 +250,25 @@ export function checkFigureLocalization(pkg, { languages = LANGUAGES, primary = 
   const textCountMismatches = [];
   const tokenDrift = [];
   const blindCopies = [];
+  const layoutTextMismatches = [];
+
+  // #1079: the platform translates the wide figure and writes the answers into every layout by
+  // matching the original text, so it refuses a layout whose texts differ from the wide figure.
+  // The same rule is applied here — a package this check passes must not be one the import refuses.
+  const sameTexts = (a, b) => a.length === b.length && a.every((run) => b.includes(run));
 
   for (const figure of collectFigures(pkg)) {
+    if (figure.wide) {
+      if (!sameTexts(figure.runs, figure.wide.runs)) {
+        layoutTextMismatches.push({ path: figure.path, sourceId: figure.sourceId, layout: figure.layout, locale: null });
+      }
+      for (const variant of figure.variants) {
+        const wideVariant = figure.wide.variants.find((v) => v.locale === variant.locale);
+        if (wideVariant && !sameTexts(variant.runs, wideVariant.runs)) {
+          layoutTextMismatches.push({ path: figure.path, sourceId: figure.sourceId, layout: figure.layout, locale: variant.locale });
+        }
+      }
+    }
     if (figure.runs.length === 0) continue; // no translatable text → nothing to localize
     const source = figure.sourceLocale ?? primary;
     const targets = languages.filter((lang) => lang !== source);
@@ -270,7 +306,9 @@ export function checkFigureLocalization(pkg, { languages = LANGUAGES, primary = 
   if (tokenDrift.length > 0) reasons.push(`${tokenDrift.length} identifier/formula/URL(s) lost in an SVG figure variant`);
   if (blindCopies.length > 0) reasons.push(`${blindCopies.length} SVG figure variant(s) are a blind copy of the original labels`);
 
-  return { missingVariants, textCountMismatches, tokenDrift, blindCopies, blocks: reasons.length > 0, reasons };
+  if (layoutTextMismatches.length > 0) reasons.push(`${layoutTextMismatches.length} figure layout(s) do not carry the same labels as the wide figure — draw both from one description (draw-flow-figure.mjs)`);
+
+  return { missingVariants, textCountMismatches, tokenDrift, blindCopies, layoutTextMismatches, blocks: reasons.length > 0, reasons };
 }
 
 // Full localization check over the package. Blocks on any missing locale, structural loss,

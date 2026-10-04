@@ -7,30 +7,32 @@
 
 ## Kort: det som må avgjøres
 
-**Prod står på 2.77.0. Stage står på 2.78.3 og venter på manuell test før prod.**
+**Prod-utrulling av 2.78.3 pågikk da dette ble skrevet (godkjent 2026-10-04 kl. 19:58). Stage står på 2.78.3. 2.81.0 venter på QA-porten.**
 
 | Miljø | Versjon | |
 |---|---|---|
-| prod | 2.77.0 | rullet 2026-10-04 kl. 08:54 fra `3f111c68`; #894 er lukket |
-| stage | 2.78.3 | rullet 2026-10-04 kl. 18:16 fra `2433d2b7`, commiten QA-porten ga GO på; #1080, #1081 og #1083 |
-| `main` (git) | 2.77.0 | likt med prod (PR #1082 merget 2026-10-04) |
-| `dev` (git) | 2.80.0 | foran stage med **bare skillet**: #1079 steg 2 og 3 (sirkler, fasefarger, to oppsett). Plattformkoden er lik stage |
+| prod | 2.77.0 → 2.78.3 | utrulling av `2433d2b7` startet 2026-10-04 kl. 19:48 og godkjent 19:58. **Bekreft med `/version`** før du stoler på tallet |
+| stage | 2.78.3 | rullet 2026-10-04 kl. 18:16 fra `2433d2b7`; #1080, #1081 og #1083. Utgivelsestesten mot stage er kjørt (se under) |
+| `main` (git) | 2.77.0 | skal synkroniseres til `2433d2b7` når prod er bekreftet |
+| `dev` (git) | 2.81.0 | foran stage: #1079 steg 2–4 (sirkler, fasefarger, to oppsett, og plattformen som velger oppsett). **Én migrasjon** |
 
 Fire ting krever et menneske:
 
-1. **Manuell test på stage.** To testskript ligger utenfor repoet, hos produkteier:
-   `MANUELL_TEST_2.78.1.md` (de fire listene på telefon, «Mer» i nederste rad, en animert figur) og
-   `MANUELL_TEST_2.78.2.md` (#1083: en figur med hardt mellomrom importert, oversatt og lastet opp).
-   Begge har ferdige testpakker ved siden av seg. `npm run test:stage` krever innlogging
-   (`npm run stage:auth`).
-2. **Prod** krever GitHub-godkjenning fra `jkosmo`, utenfor arbeidstid. Det som skal ut, er
-   `2433d2b7` (2.78.3): én utrulling med 2.78.1–2.78.3 samlet. ⚠️ **Ikke 2.78.2 alene:** den kan ta
-   ned appen på en tett figur på 1 MB, se under.
-3. **2.79.0 og 2.80.0 trenger ingen utrulling for å virke.** De endrer bare skillet, som kjører på
-   forfatterens maskin (`npm run skill:package`). Den følger med neste gang appen rulles ut.
+1. **2.81.0 til stage** krever GO fra QA-porten (produkteier 2026-10-04: «QA først, stage ved GO»).
+   Den har en migrasjon (én ny kolonne, bare utvidelse) og endrer hvordan figurer leveres.
+2. **Etter stage:** kjør utgivelsestesten for smalt og bredt oppsett. Den finnes ikke ennå for
+   #1079; `test/stage/release-2-78-x.spec.ts` er mønsteret. Krever at produkteier logger inn
+   (`npm run stage:auth`, sesjonen varer rundt 85 minutter).
+3. **To feil funnet på stage, som også finnes i prod:** #1084 («Mer» ligger utenfor rammen på
+   modullista på PC) og #1085 (menylinja er bredere enn skjermen på telefon). #1084 er viktigst.
 4. **Lagrede figurer er ikke målt.** `npm run maint:repair-unreadable-svg-assets` (tørrkjøring uten
    `--apply`) er ikke kjørt mot stage eller prod, så det er ikke kjent hvor mange figurer som
    allerede er lagret i uleselig form. Se `doc/OPERATIONS_RUNBOOK.md`.
+
+**Slik testes en utgivelse på stage nå:** produkteier logger inn én gang (`npm run stage:auth`),
+`npm run test:stage:release` kjører målingene med den ekte klienten mot de ekte dataene, og
+`test-results/stage-rapport/rapport.html` viser utfallet med skjermbilder. Han skal ikke klikke seg
+gjennom det en maskin kan måle. Kjørt mot 2.78.3: 16 av 21 besto; de fem andre er #1084 og #1085.
 
 Åpne beslutninger ligger nederst i dette dokumentet.
 
@@ -159,7 +161,7 @@ per lysark. Produkteier har godkjent retningen og plattformdesignet (kommentaren
 | 1 | Måle en ekte presentasjon, tegne ett lysbilde på nytt, sammenligne med originalen | gjort; beslutningene står i #1079 |
 | 2 | Skillet: sirkler som steg og farge per fase, i malen og sjekkene | **gjort, 2.79.0** |
 | 3 | Skillet: to oppsett (bredt og smalt) fra én beskrivelse | **gjort, 2.80.0** |
-| 4 | Plattformen: lagre det smale oppsettet (`layoutVariants`) og velge etter spaltebredde | ikke startet; designet står i #1079 |
+| 4 | Plattformen: lagre det smale oppsettet (`layoutVariants`) og velge etter spaltebredde | **gjort, 2.81.0** — venter på QA og stage |
 | – | Uttrekk fra presentasjonsfila (`pptx-extract.mjs`), og et sammendrag som kilde | ikke startet |
 
 Steg 2: ny mal «flow with phases» i `figure-design.md`, `figure-motion-check.mjs` godtar den som en
@@ -170,13 +172,22 @@ Steg 3: `skills/a2-authoring-api/scripts/draw-flow-figure.mjs` tar én beskrivel
 farger) som JSON og tegner begge oppsettene, og kjører begge figursjekkene på resultatet før det
 returneres. Kjørt på arbeidsflyten fra den ekte presentasjonen gir det de to figurene produkteier
 godkjente, tegn for tegn. En figur har høyst åtte steg (begrunnelsen står i skriptet). Til
-plattformen kan velge oppsett (steg 4), går bare den brede i pakka.
+begge går nå i pakka: den brede som figuren selv, den smale i `layoutVariants`.
 
-**Steg 4 er neste, og det er tverrgående.** Lista over alt som skriver eller leser en figur, står i
-designkommentaren i #1079: import og eksport, forfatter-API-et, oversettelse av figurtekst,
-servering, sletting, eksportbudsjettet, reparasjonen fra #1083 og klienten
-(`hydrateContentAssetImages`, to kallsteder). Mangler ett av stedene, blir figuren hel i det ene
-oppsettet og borte i det andre. Migrasjonen legger bare til en kolonne.
+**Steg 4 (2.81.0): plattformen lagrer det smale oppsettet og velger etter spaltebredden.** En figur
+med smalt oppsett vises i det når spalten er under 640 px. Alt som skriver eller leser en figur,
+kjenner det smale oppsettet: lagring (ny kolonne `layoutVariants`), import, eksport, forfatter-API,
+oversettelse, levering (`?layout=narrow`), sletting, reparasjonen fra #1083, klienten
+(`hydrateContentAssetImages`, to kallsteder) og skillets tre sjekker. Oversikten står i
+`doc/FEATURE_SURFACE_MAP.md` §11b, reglene som er valg i `doc/DECISIONS.md`.
+
+⚠️ **Én leser.** `layoutVariants` er JSON. Les den bare gjennom `readLayoutVariants` og `assetFiles`
+i `assetCommands.ts` — sletting, reparasjon og eksport er bygget på samme liste over filer. Et nytt
+sted som leser kolonnen selv, gir filer som ryddes av den ene og blir liggende etter den andre.
+
+⚠️ **«Språk går foran oppsett» er min avgjørelse, ikke produkteiers.** Har figuren det smale
+oppsettet bare på norsk og det brede på engelsk, får en engelsk leser det brede. Står som åpent
+spørsmål i `doc/DECISIONS.md`.
 
 ## Hva som ble gjort: #1080 (2.78.1)
 
@@ -226,7 +237,9 @@ listene. Jeg utvidet ikke regelen for å unngå det — det ville vært en tverr
   && npm run test:integration:native) > "$TEMP/claude/kjoring.log" 2>&1; echo "EXIT=$?"
 ```
 
-Sist målt 2026-10-04, på 2.80.0: **1763 enhet · 69 DOM · 392 e2e · 709 integrasjon**, alle grønne.
+Sist målt 2026-10-04, på 2.81.0: **1798 enhet · 69 DOM · 401 e2e · 740 integrasjon**, alle grønne.
+⚠️ Sjekk at port 3001 er fri først: en lokal app som står igjen, plukker vurderingsjobber fra
+testdatabasen og gir tilfeldige feil i `assessment-policy.integration.test.ts`.
 Kjør `npm run build` alene etter å ha skrevet en ny testfil: bygget typesjekker også testene, og en
 typefeil der stopper hele rekka etter ti sekunder.
 Ikke pipe utdataene til `tail` — det skjuler feiltellingen og gir exit 0.

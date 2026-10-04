@@ -292,6 +292,35 @@ that never reaches the viewer because the locale isn't threaded).
 
 **Guards:** `test/unit/svg-sanitizer.test.ts` (XSS vectors + text round-trip + «what is stored can be read as an image»), `test/unit/svg-text-localization.test.ts` (stub + order/count), `test/m2-section-assets.test.ts` (upload sanitised + serve headers + localise→variant + #1083 upload→serve and the repair), `test/e2e/svg-sanitizer-renders-1083.spec.ts` (Chromium shows the sanitised figure as an `<img>`).
 
+### 11b. A figure in two layouts — wide and narrow (#1079)
+
+An SVG shown as an image cannot re-break itself, so a flow figure exists in a wide layout (the asset
+itself: `blobPath` + `localizedBlobPaths`) and, optionally, a narrow one (`layoutVariants.narrow`,
+with its own translated variants). **Everything that writes or reads a figure has to know the narrow
+layout.** A place that does not, leaves a figure that is whole in one layout and missing,
+untranslated or orphaned in the other — and none of those gives an error.
+
+| Surface | Where | Notes |
+|---------|-------|-------|
+| The shape, and the ONE reader of it | `assetCommands.ts` → `readLayoutVariants`, `assetFiles`, `ASSET_LAYOUTS` | `assetFiles` lists EVERY stored file of an asset; deletion, repair and export are built on it. Do not read `layoutVariants` anywhere else |
+| Storage | `prisma/schema.prisma` `SectionAsset.layoutVariants` (JSON, nullable); migration `20261004170000_…` | additive; everything stored before has NULL |
+| Every way in | `stageSectionAssets` (file import) and `importSectionAssets` (authoring API) — the second now calls the first | one place decodes, sanitises and checks; everything is checked before anything is written |
+| The rules for a layout | `prepareLayoutVariants`: SVG only · `narrow`, once · same labels as the wide figure, language by language | codes `asset_layout_not_svg`, `asset_layout_unknown`, `asset_layout_text_mismatch` (+ i18n in `participant-translations.js`) |
+| Schemas | `sectionAssetExportSchema` (export/import), `authoringSectionAssetSchema` (agent, strict) | the layout NAME is checked in staging, not in the schema, so every way in refuses it with the same code |
+| Dry-run validation of an authoring package | `agentAuthoringValidationService` → `findLayoutVariantProblem` | RUNS the staging rule instead of restating it |
+| Serving | `chooseAssetFile` (pure) + `getSectionAssetContent(…, layout)`; `src/routes/contentAssets.ts` `?layout=narrow` | headers `X-Asset-Layout`, `X-Asset-Layouts`; **language before layout** (`doc/DECISIONS.md`) |
+| Translation | `localizeSectionAssets` | one LLM call per language, written into every layout; «up to date» includes every layout |
+| Export | `loadSectionAssetsForExport` | carries the layout and its variants; their bytes count towards the 25 MB cap |
+| Deletion | `collectSectionAssetBlobPaths` (section delete, course cascade delete) | via `assetFiles` |
+| Repair (#1083) | `repairUnreadableSvgAssets` | via `assetFiles`; the report says which layout |
+| Client: which layout to show | `public/api-client.js` → `hydrateContentAssetImages`, `ASSET_NARROW_BELOW` (640) | asks for `narrow` when the figure's column is under the threshold; a figure with both layouts follows its column (ResizeObserver) |
+| Client call sites | `public/participant.js` (section reader), `public/static/admin-content-sections.js` (editor preview) | the preview replaces its content at every pause — removed images are forgotten |
+| Manual upload in the editor | `createSectionAsset` | unchanged: one file, the wide layout |
+| The skill: drawing | `skills/a2-authoring-api/scripts/draw-flow-figure.mjs` | one description → both layouts; both go in the package |
+| The skill: checks | `export-validate.mjs` (shape + `ASSET_LAYOUTS`), `localization-check.mjs` (each layout is a figure: variants, label count, `layoutTextMismatches`), `course-state.mjs` (preservation sees the labels) | `ASSET_LAYOUTS` is repeated in the skill; a unit test fails if it differs from the platform's |
+
+**Guards:** `test/m2-section-asset-layouts-1079.test.ts` (import → serve → translate → export → re-import → delete → repair, the refusals, and all combinations of `chooseAssetFile`), `test/unit/asset-layout-variants-1079.test.ts` (schemas, the layout rule, the dry-run validation, the skill's three checks), `test/e2e/asset-layout-by-column-1079.spec.ts` (Chromium: which layout is asked for and shown at 1280 and 390 px, on resize, in the participant reader and the editor preview).
+
 ## 12. Admin-content client gating — roles & identity from /api/me, NOT identityDefaults (#690)
 
 Every admin-content page (`/admin-content/*`) decides what to show based on the signed-in user's

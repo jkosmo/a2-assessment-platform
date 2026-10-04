@@ -4,7 +4,7 @@ import { AppError, DomainRuleError, NotFoundError, ValidationError } from "../..
 import { recordAuditEvent } from "../../services/auditService.js";
 import { auditActions, auditEntityTypes, agentAuthoringAuditMetadata, type AgentAuthoringContext } from "../../observability/auditEvents.js";
 import { assertSectionNotInAnyCourse, assertSectionNotInIssuedCertificate } from "./contentLifecycle.js";
-import { importSectionAssets, collectSectionAssetBlobPaths, reclaimAssetBlobs } from "./assetCommands.js";
+import { importSectionAssets, collectSectionAssetBlobPaths, reclaimAssetBlobs, type IncomingSectionAsset } from "./assetCommands.js";
 import { addContentOwner } from "../content/contentOwnershipService.js";
 import {
   validateSectionTranslationCompleteness,
@@ -18,15 +18,9 @@ import {
 export const SECTION_CREATE_BODY_LIMIT_BYTES = 15 * 1024 * 1024; // 15 MB
 
 // One inline figure/image an agent supplies alongside a section (see authoringSectionAssetSchema).
-export interface SectionAssetImportInput {
-  sourceId: string;
-  filename: string;
-  mimeType: string;
-  sizeBytes: number;
-  contentBase64: string;
-  sourceLocale?: string | null;
-  localizedVariants?: Array<{ locale: string; contentBase64: string }>;
-}
+// The same shape the import of a file takes: one type, so a field a figure can carry (#1079: its
+// other layouts) cannot be known to one way in and unknown to the other.
+export type SectionAssetImportInput = IncomingSectionAsset;
 
 // #763 (Layer B): rewrite every `asset:<sourceId>` markdown reference to the created SectionAsset
 // id, using the sourceId→newId map from importSectionAssets. Wider grammar ([a-zA-Z0-9_-]) than the
