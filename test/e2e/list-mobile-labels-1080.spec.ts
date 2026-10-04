@@ -131,6 +131,46 @@ test.describe("#1080 — listene på telefon", () => {
     }
   });
 
+  // De to siste listene. Fire sider deler `list-page.js`, men hver side velger sine egne kolonner
+  // og klasser — og det var nettopp «rettet på én liste, glemt på de andre» #1080 handlet om.
+  async function forventKort(page: Page, rad: string, navneklasse: string) {
+    await expect(page.locator(rad).first()).toBeVisible();
+    const celler = await målRad(page, `${rad}:first-child`);
+    const navn = celler.find((c) => c.klasse === navneklasse);
+    expect(navn, `lista skal ha en ${navneklasse}-celle`).toBeTruthy();
+    expect(navn!.bredde, "navnecella skal fylle kortet").toBeGreaterThan(300);
+    for (const c of celler) {
+      if (c.klasse !== "col-actions") expect(c.etikettVist, `«${c.klasse}» skal ha et synlig kolonnenavn`).toMatch(/^"[^"]+"$/);
+      expect(c.utenforKortet, `«${c.klasse}»: piksler utenfor kortet`).toBe(0);
+      expect(c.klippet, `«${c.klasse}»: innholdet er bredere enn cellen`).toBe(false);
+    }
+  }
+
+  test("seksjonslista (col-title) får samme kort", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await mockCommonApis(page);
+    await page.addInitScript(() => { try { localStorage.setItem("participant.locale", "nb"); } catch { /* ignore */ } });
+    const sections = [{
+      id: "seksjon-1", title: "Arbeidsmiljø og sikkerhetskultur", titleLocales: [], versionNo: 1, activeVersionId: "v1",
+      archivedAt: null, updatedAt: "2026-09-30T10:00:00.000Z", courseCount: 1, courses: [{ id: "kurs-a", title: "Kurs A" }],
+    }];
+    await page.route("**/api/admin/content/sections", (route) =>
+      route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ sections }) }));
+    await page.goto("/admin-content/sections");
+    await forventKort(page, ".list-table tbody tr", "col-title");
+  });
+
+  test("klasselista (col-name, og kolonner uten egen klasse) får samme kort", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await mockCommonApis(page);
+    await page.addInitScript(() => { try { localStorage.setItem("participant.locale", "nb"); } catch { /* ignore */ } });
+    const classes = [{ id: "klasse-1", name: "Nyansatte høsten 2026", isSystem: false, _count: { members: 12, courseAssignments: 3 } }];
+    await page.route("**/api/admin/content/classes", (route) =>
+      route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ classes }) }));
+    await page.goto("/deltakere/klasser");
+    await forventKort(page, ".list-table tbody tr", "col-name");
+  });
+
   test("kontroll: på skrivebord vises tabellhodet, og cellene får ingen etikett foran seg", async ({ page }) => {
     await åpneLista(page, 1280);
     await expect(page.locator(".list-table thead")).toBeVisible();
