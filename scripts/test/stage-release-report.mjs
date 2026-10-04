@@ -19,7 +19,9 @@ import fs from "node:fs";
 import path from "node:path";
 
 const RAPPORT = path.resolve(process.cwd(), "test-results", "stage-rapport");
-const SPEC = "test/stage/release-2-78-x.spec.ts";
+// Begge utgivelsestestene kjøres som standard. Gi én fil som argument for å kjøre bare den:
+//   npm run test:stage:release -- test/stage/release-2-81-layouts.spec.ts
+const SPEC = process.argv.slice(2).join(" ") || "test/stage/release-2-78-x.spec.ts test/stage/release-2-81-layouts.spec.ts";
 
 fs.rmSync(RAPPORT, { recursive: true, force: true });
 fs.mkdirSync(RAPPORT, { recursive: true });
@@ -85,6 +87,8 @@ const BILDETEKST = [
   [/^1081-(.+)-1280/, "#1081 — «Mer» åpnet i nederste rad, PC-bredde", "Alle valgene i menyen er synlige. Ingen er kuttet av rammekanten."],
   [/^1081-(.+)-390/, "#1081 — «Mer» åpnet i nederste kort, telefonbredde", "Alle valgene i menyen er synlige."],
   [/^894-/, "#894 — en testseksjon døpt om fra lista", "Raden viser det nye navnet."],
+  [/^1079-forhaandsvisning-(\d+)/, "#1079 — figur i to oppsett, forhåndsvisningen i editoren, skjermbredde", "På 390 px: stegene står på to rader. På 1280 px: oppsettet som passer bredden forhåndsvisningen har."],
+  [/^1079-deltaker-(\d+)/, "#1079 — figur i to oppsett, slik deltakeren ser den, skjermbredde", "På 1280 px: alle stegene på én rad. På 390 px: to rader, og etikettene er lesbare."],
   [/^pc-(.+)-1280/, "PC-bredde — lista slik den åpner seg, uten å rulle", "Er «Mer» helt til høyre synlig i hver rad, eller kuttet av rammekanten?"],
 ];
 const bildetekst = (fil) => {
@@ -135,7 +139,7 @@ const html = `<!doctype html>
 </head>
 <body>
 <main>
-<h1>Stage-rapport — utgivelsene 2.78.1 til 2.78.3</h1>
+<h1>Stage-rapport — utgivelsestestene</h1>
 <p class="dempet">${lokal ? "LOKAL PRØVEKJØRING — ikke stage. " : ""}Kjørt ${new Date().toLocaleString("nb-NO")}. Den ekte klienten mot de ekte dataene, i Chromium.</p>
 <div class="konklusjon">${konklusjon}</div>
 

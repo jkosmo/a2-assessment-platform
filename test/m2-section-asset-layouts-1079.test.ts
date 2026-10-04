@@ -279,6 +279,74 @@ describe("#1079 — en figur i bredt og smalt oppsett", () => {
     await slett(sectionId);
   });
 
+  // QA-gjennomgangen av 2.81.0 pekte på at testene over bare går ÉN vei inn: seksjonsimport som ny
+  // seksjon. De tre andre veiene en figur kan komme inn, virket da gjennomgangen kjørte dem — men
+  // ingenting voktet dem. En figur som mister det smale oppsettet på én av veiene, gir ingen feil.
+  describe("de andre veiene inn bærer også det smale oppsettet", () => {
+    it("forfatter-API-et: en seksjon opprettet med figurer (POST /sections) får det smale oppsettet lagret", async () => {
+      const res = await request(app)
+        .post("/api/admin/content/sections")
+        .set(adminHeaders)
+        .send({
+          title: three(`Oppsett forfatter ${Date.now()}`),
+          bodyMarkdown: three("# Flyt\n\n![Saksgang](asset:flyt)"),
+          draft: true,
+          clientRef: "sek-oppsett",
+          assets: [{ sourceId: "flyt", filename: "flyt.svg", mimeType: "image/svg+xml", sizeBytes: BRED.length, contentBase64: b64(BRED), sourceLocale: "nb", layoutVariants: [{ layout: "narrow", contentBase64: b64(SMAL) }] }],
+        });
+      expect(res.status, JSON.stringify(res.body)).toBe(201);
+      const sectionId = res.body.section.id as string;
+      const assetId = (res.body.assetMap as Record<string, string>)["flyt"]!;
+      expect((await lagret(assetId)).layoutVariants?.narrow?.blobPath).toBeTruthy();
+      expect(bredde(await hent(assetId, "?layout=narrow"))).toBe("480");
+      await slett(sectionId);
+    });
+
+    it("erstatning av en eksisterende seksjon (replaceExisting) gir den nye figuren begge oppsettene", async () => {
+      const { sectionId } = await importerMedSmalt();
+      const før = await prisma.sectionAsset.findMany({ where: { sectionId }, select: { id: true } });
+      const res = await request(app)
+        .post("/api/admin/content/sections/import")
+        .set(adminHeaders)
+        .send({ payload: pakke({ layoutVariants: [{ layout: "narrow", contentBase64: b64(SMAL) }] }), mode: "replaceExisting", targetId: sectionId });
+      expect(res.status, JSON.stringify(res.body)).toBeLessThan(300);
+
+      const etter = await prisma.sectionAsset.findMany({ where: { sectionId }, orderBy: { createdAt: "asc" }, select: { id: true } });
+      const nye = etter.filter((a) => !før.some((f) => f.id === a.id));
+      expect(nye).toHaveLength(1);
+      expect((await lagret(nye[0]!.id)).layoutVariants?.narrow?.blobPath).toBeTruthy();
+      expect(bredde(await hent(nye[0]!.id, "?layout=narrow"))).toBe("480");
+      await slett(sectionId);
+    });
+
+    it("kurseksport og kursimport: figuren i kurset kommer fram med det smale oppsettet", async () => {
+      const { sectionId } = await importerMedSmalt();
+      const kurs = await request(app).post("/api/admin/content/courses").set(adminHeaders).send({ title: three(`Oppsett-kurs ${Date.now()}`) });
+      expect(kurs.status, JSON.stringify(kurs.body)).toBe(201);
+      const courseId = kurs.body.course.id as string;
+      expect((await request(app).put(`/api/admin/content/courses/${courseId}/items`).set(adminHeaders).send({ items: [{ type: "SECTION", sectionId }] })).status).toBe(204);
+
+      const eksport = await request(app).get(`/api/admin/content/courses/${courseId}/export-package`).set(adminHeaders);
+      expect(eksport.status, JSON.stringify(eksport.body)).toBe(200);
+      const elementer = eksport.body.envelope.course.course.items as Array<{ type: string; section?: { assets?: Array<{ layoutVariants?: Layout[] }> } }>;
+      expect(elementer.find((e) => e.type === "SECTION")?.section?.assets?.[0]?.layoutVariants?.[0]?.layout).toBe("narrow");
+
+      const inn = await request(app).post("/api/admin/content/courses/import").set(adminHeaders).send({ payload: eksport.body.envelope, mode: "createNew" });
+      expect(inn.status, JSON.stringify(inn.body)).toBe(201);
+      const nyttKurs = inn.body.courseId as string;
+      const innhold = await request(app).get(`/api/admin/content/courses/${nyttKurs}/items`).set(adminHeaders);
+      const nySeksjon = (innhold.body.items as Array<{ type: string; sectionId?: string }>).find((i) => i.type === "SECTION")!.sectionId!;
+      expect(nySeksjon).not.toBe(sectionId);
+      const nyFigur = await prisma.sectionAsset.findFirstOrThrow({ where: { sectionId: nySeksjon }, select: { id: true } });
+      expect((await lagret(nyFigur.id)).layoutVariants?.narrow?.blobPath).toBeTruthy();
+      expect(bredde(await hent(nyFigur.id, "?layout=narrow"))).toBe("480");
+
+      for (const id of [nyttKurs, courseId]) await prisma.course.delete({ where: { id } });
+      await slett(nySeksjon);
+      await slett(sectionId);
+    });
+  });
+
   describe("det som ikke er et gyldig oppsett, avvises med årsaken navngitt — og ingenting lagres", () => {
     const antallSeksjoner = () => prisma.courseSection.count();
 

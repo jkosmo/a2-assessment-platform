@@ -7,27 +7,40 @@
 
 ## Kort: det som må avgjøres
 
-**Prod-utrulling av 2.78.3 pågikk da dette ble skrevet (godkjent 2026-10-04 kl. 19:58). Stage står på 2.78.3. 2.81.0 venter på QA-porten.**
+**Prod står på 2.78.3. Stage står på 2.81.0. På telefon er figuren i smalt oppsett fortsatt for liten til å lese — det må avgjøres før 2.81.0 går til prod.**
 
 | Miljø | Versjon | |
 |---|---|---|
-| prod | 2.77.0 → 2.78.3 | utrulling av `2433d2b7` startet 2026-10-04 kl. 19:48 og godkjent 19:58. **Bekreft med `/version`** før du stoler på tallet |
-| stage | 2.78.3 | rullet 2026-10-04 kl. 18:16 fra `2433d2b7`; #1080, #1081 og #1083. Utgivelsestesten mot stage er kjørt (se under) |
-| `main` (git) | 2.77.0 | skal synkroniseres til `2433d2b7` når prod er bekreftet |
-| `dev` (git) | 2.81.0 | foran stage: #1079 steg 2–4 (sirkler, fasefarger, to oppsett, og plattformen som velger oppsett). **Én migrasjon** |
+| prod | 2.78.3 | rullet 2026-10-04 kl. 20:13 fra `2433d2b7`, godkjent av produkteier; `/version` og helsesjekk bekreftet. #1080, #1081, #1083 |
+| stage | 2.81.0 | rullet 2026-10-04 kl. 20:27 fra `7f94f41c`, commiten QA-porten ga GO på; `/version` og helsesjekk bekreftet, migrasjonen gikk inn |
+| `main` (git) | 2.78.3 | likt med prod (PR #1086 flettet 2026-10-04) |
+| `dev` (git) | 2.81.0 | #1079 steg 2–4 (sirkler, fasefarger, to oppsett, og plattformen som velger oppsett). **Én migrasjon** |
 
 Fire ting krever et menneske:
 
-1. **2.81.0 til stage** krever GO fra QA-porten (produkteier 2026-10-04: «QA først, stage ved GO»).
-   Den har en migrasjon (én ny kolonne, bare utvidelse) og endrer hvordan figurer leveres.
-2. **Etter stage:** kjør utgivelsestesten for smalt og bredt oppsett. Den finnes ikke ennå for
-   #1079; `test/stage/release-2-78-x.spec.ts` er mønsteret. Krever at produkteier logger inn
-   (`npm run stage:auth`, sesjonen varer rundt 85 minutter).
-3. **To feil funnet på stage, som også finnes i prod:** #1084 («Mer» ligger utenfor rammen på
-   modullista på PC) og #1085 (menylinja er bredere enn skjermen på telefon). #1084 er viktigst.
+1. **Det smale oppsettet er for lite på telefon.** Stage-testen av 2.81.0 (kjørt 2026-10-04 kl.
+   20:30, alle åtte målingene for #1079 besto) viste at mekanismen virker: deltakeren får bredt
+   oppsett på PC og smalt på telefon, og figuren bytter når bredden endres. Men spalten figuren
+   står i hos deltakeren på en 390 px telefon, er bare **201 px** bred. Det smale oppsettet er 480
+   bredt, så figuren vises i 42 % størrelse og etikettene blir rundt 5 px. Oppsettet ble tegnet
+   for en spalte på 480 px, målt i en prøveside og ikke i den ekte leseren. To veier, som kan
+   kombineres: gjør lesespalten bredere på telefon (den ligger i tre rammer med hver sin luft), og
+   tegn det smale oppsettet med tre steg per rad (360 bredt). Produkteier må velge.
+2. **Prod for 2.81.0** krever GitHub-godkjenning fra `jkosmo`, utenfor arbeidstid. Den har en
+   migrasjon (én ny kolonne, bare utvidelse). «Språk går foran oppsett» bør avklares først.
+3. **To feil som finnes i prod:** #1084 («Mer» ligger utenfor rammen på modullista på PC) og #1085
+   (menylinja er bredere enn skjermen på telefon). #1084 er viktigst.
 4. **Lagrede figurer er ikke målt.** `npm run maint:repair-unreadable-svg-assets` (tørrkjøring uten
    `--apply`) er ikke kjørt mot stage eller prod, så det er ikke kjent hvor mange figurer som
    allerede er lagret i uleselig form. Se `doc/OPERATIONS_RUNBOOK.md`.
+
+**QA-gjennomgangen av 2.81.0** (`.ai-qa/qa-20261004-200538.md`, GO) fant ingenting som stopper
+stage eller prod, men fire ting som bør bli saker: skillets kopi av etikettregelen er løsere enn
+plattformens (`<title>` og mellomrom); `?locale=constructor` gir 500 på en figur (fantes fra før,
+rettes med `Object.hasOwn`); forfatter-API-et lager seksjonen før figurene er sjekket; og en ny
+oversettelse lar de forrige oversatte filene ligge. Den pekte også på tre veier integrasjonstesten
+min ikke dekker: kursimport, `replaceExisting` og `POST /sections` med figurer. Gjennomgangen
+kjørte dem og de virker; testene mangler.
 
 **Slik testes en utgivelse på stage nå:** produkteier logger inn én gang (`npm run stage:auth`),
 `npm run test:stage:release` kjører målingene med den ekte klienten mot de ekte dataene, og
