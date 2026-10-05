@@ -1,8 +1,8 @@
 # Design: skillet `a2-authoring-api`, og veien fra presentasjon til kurs (#1079)
 
-> **Status: forslag, 2026-10-05. Ingenting her er besluttet eller bygget.** Produkteier leser og
-> bestemmer. Sju valg, hvert med alternativer og en anbefaling. Beslutningene føres i
-> `doc/DECISIONS.md` når de er tatt.
+> **Status: besluttet av produkteier 2026-10-05, valg for valg. Ingenting er bygget.** Sju valg.
+> På fem fulgte han anbefalingen. På to valgte han annerledes enn det første forslaget (3 og 6);
+> teksten under er rettet etter det han bestemte. Beslutningene står også i `doc/DECISIONS.md`.
 
 ## Kort
 
@@ -12,17 +12,17 @@ vei for det forfatterne faktisk kommer med: en presentasjon. Da produkteier lage
 ChatGPT og i Claude.ai 2026-10-05, fikk begge tre figurer av samme type, ingen av kildens ikoner og
 ingen av kortene.
 
-Anbefalingene, i én tabell:
+Beslutningene, i én tabell:
 
-| # | Valg | Anbefaling |
+| # | Valg | Besluttet |
 |---|---|---|
 | 1 | Ett skill eller flere | **Ett skill å installere, delt i arbeidsganger inni.** «Fra presentasjon» blir en egen arbeidsgang, lest bare når kilden er en presentasjon |
-| 2 | Gangen fra presentasjon til kurs | **Sju faste steg.** Skript gjør det som kan regnes ut, modellen gjør det som krever skjønn, forfatteren godkjenner på tre steder |
-| 3 | Hvordan modellen får se lysarkene | **Forfatteren laster opp presentasjonen og en PDF av den.** Skriptet leser fila; modellen ser på PDF-en |
-| 4 | Hva skillet får levere til plattformen | **Fire innholdsblokker skrevet som vanlig tekst** (utheving, prompt, kort, ikon), som også kan leses uten plattformen. Bilder krympes av plattformen |
-| 5 | Hva som står hvor i skillet | **Hovedfila er en oversikt på under 200 linjer.** Hver regel står ett sted. Ferdige eksempler. Historikken flyttes til repoet |
-| 6 | Personopplysninger og rettigheter | **Et bilde fra kilden tas aldri med stilltiende.** Standard er å la det være ute; forfatteren må si ja for hvert |
-| 7 | Hvordan vi måler | **De tre testtilfellene, etter hver endring som betyr noe**, i begge produktene. Et tall som går ned, krever en forklaring |
+| 2 | Gangen fra presentasjon til kurs | **Sju faste steg**, med en liste over hva hvert lysark blir til, som forfatteren godkjenner før noe skrives |
+| 3 | Hvordan modellen får se det som står i bilder | **Forfatteren laster bare opp presentasjonen.** Skriptet henter ut bildene; modellen ser på dem |
+| 4 | Hva skillet får levere til plattformen | **Fire innholdsblokker:** uthevet boks, prompt-boks, kort ved siden av hverandre, og ikon. Prøveside før noe bygges. Plattformen krymper store bilder |
+| 5 | Hva som står hvor i skillet | **Hele skillet ryddes**, på en egen kopi: kort forside, hver regel ett sted, ferdige eksempler, historikken ut |
+| 6 | Bilder med navn, ansikter eller interne sider | **Alle bilder tas med hvis forfatteren ikke sier nei.** Lista viser hvilke bilder som blir med |
+| 7 | Hvordan vi måler | **Full runde ved to milepæler** (seks kurs: tre presentasjoner i to produkter): når skillet er bygget om, og når innholdsblokkene er på plass |
 
 Bærende prinsipper, begge fra produkteier tidligere:
 
@@ -101,7 +101,7 @@ arbeidsgangen sender modellen dit. B tas opp igjen hvis hovedfila ikke lar seg h
 | Steg | Hva | Skript | Modellen | Forfatteren |
 |---|---|---|---|---|
 | 1 | **Les fila.** Per lysark: oppsett (flyt, kort, tabell …), tekst per ramme, tabeller, farger, notater. Ikoner og bilder hentes ut som filer | `pptx-extract` | – | laster opp |
-| 2 | **Se på lysarkene.** Det skriptet ikke kan se, føres på: tekst i bilder, hva et skjermbilde viser, om det er navn eller ansikter i det | – | ser og fører på | – |
+| 2 | **Se på bildene.** Det skriptet ikke kan se, føres på: tekst i bilder, hva et skjermbilde viser, om det er navn eller ansikter i det | – | ser og fører på | – |
 | 3 | **Behandling per lysark.** For hvert lysark med innhold: figur, innholdsblokk, tabell, bilde, prompt som tekst, tekst eller utelatt — med én linje begrunnelse | lager tabellen fra steg 1 og 2 | velger behandling | **godkjenner** |
 | 4 | **Læringsmål og struktur**, fra lysarkene og notatene | – | foreslår | **godkjenner** (dagens port 2 og 3) |
 | 5 | **Hvert element**: tekst, blokker og figurer sammen, vist ved siden av lysarket det kom fra | tegner figurer med kjent form; sjekker mål | skriver, og tegner fritt der formen ikke har skript | **godkjenner** (dagens port 4) |
@@ -121,27 +121,26 @@ Regler som forsvinner: «en figur der seksjonen ellers ville vært en tekstvegg�
 malene», «gjør det om til en flyt når noe beveger seg». Låsen på animasjon blir stående — den er
 skjør og håndheves av plattformen — men den gjelder bare figurer som beveger seg.
 
-## 3. Hvordan får modellen se lysarkene?
+## 3. Hvordan får modellen se det som står i bilder?
 
-Skjermbildene og infografikkene kan bare leses med øynene.
+Skriptet kan lese tekst og former i presentasjonsfila. Det kan ikke lese det som står *inni* et
+bilde: en prompt i et skjermbilde, eller en infografikk som er ett stort bilde.
 
-| Alternativ | Virker i begge produktene? | Merknad |
-|---|---|---|
-| **A. Forfatteren laster også opp en PDF av presentasjonen** (anbefalt) | Claude.ai leser PDF-sider som bilder. For ChatGPT er det ikke målt, og kan avhenge av abonnement | Ett ekstra steg for forfatteren: «Lagre som PDF» |
-| B. Skriptet tegner lysarkene | Ikke dokumentert at noen av flatene har et program som kan tegne en presentasjon. Ikke målt | – |
-| C. Skriptet henter ut bildene, og modellen åpner dem | Ikke målt | Dekker skjermbilder, men ikke lysark som er tegnet med former |
+**Besluttet: forfatteren laster bare opp presentasjonen.** Skriptet henter ut bildene som ligger i
+den, og modellen ser på dem og fører på det som står der.
 
-**Anbefaling: A, med C som tillegg hvis prøven viser at det virker.** Skillet ber om begge filene
-i steg 1. Mangler PDF-en, sier skillet hva det da ikke kan se, og går videre med det skriptet fant
-— det later ikke som om det har sett.
+- Skjermbildene og infografikkene ligger allerede som bildefiler inni presentasjonen.
+- Lysark som er tegnet med former (kort, flyt), leser skriptet selv: hvilke rammer som står ved
+  siden av hverandre, overskrifter, ikoner, farger. Der trengs ikke et bilde for å forstå oppsettet.
 
-**Må måles før dette bygges**, i ChatGPT og i Claude.ai, fem minutter i hvert:
+Det første forslaget ba også om en PDF av presentasjonen, slik at modellen kunne se hele lysark.
+Produkteier spurte hvorfor, og svaret var at det var en reserveløsning. Den er tatt ut: et ekstra
+steg for hver forfatter skal ikke være standardveien.
 
-1. Ser modellen bildene på en PDF-side (for eksempel teksten i et skjermbilde)?
-2. Kan modellen åpne en bildefil som et skript har hentet ut av presentasjonen?
-
-Svarene avgjør om A holder alene, om C trengs, eller om forfatteren må laste opp lysarkene som
-bilder.
+**Må måles før dette bygges:** kan modellen i ChatGPT og i Claude.ai åpne en bildefil som et
+skript har hentet ut av presentasjonen, og lese det som står i den? Én prøve i hvert produkt.
+Virker det ikke i ett av dem, må det finnes en annen vei der — og den legges fram for produkteier,
+ikke bygges stilltiende.
 
 ## 4. Hva får skillet levere til plattformen?
 
@@ -205,29 +204,30 @@ scripts/                     som i dag, pluss pptx-extract og coverage-check
 - **En test i repoet** holder strukturen: ingen sti ut av pakka, ingen saksnumre, hovedfila under
   grensa.
 
-## 6. Personopplysninger og rettigheter
+## 6. Bilder med navn, ansikter eller interne sider
 
 To skjermbilder i Tilbudsarbeid viser navn på personer; ett viser en person vurdert mot en
 kompetansematrise. Flere viser interne sider og dokumentnavn.
 
-**Anbefaling:**
+**Besluttet: alle bilder tas med hvis forfatteren ikke sier nei.** Anbefalingen var det motsatte
+(slike bilder ute som standard); produkteier valgte den raskeste veien. Ansvaret for innholdet er
+forfatterens, som for alt annet.
 
-- **Et bilde fra kilden tas aldri med stilltiende.** Tabellen i steg 3 har en egen kolonne: viser
-  bildet navn, ansikter eller interne sider?
-- **Standard for slike bilder er «utelatt».** Innholdet de viser, føres som tekst (stegene,
-  prompten) uten navnene. Forfatteren kan si ja til et bestemt bilde.
-- **Bilder fra malen** (pyntebilder) tas ikke med.
-- **Forfatteren bekrefter én gang** at materialet kan brukes i et kurs.
-- Skillet kan ikke *garantere* at det ser et navn i et bilde. Regelen gjør at spørsmålet blir
-  stilt; ansvaret er forfatterens, slik det er for alt annet innhold.
+- **Lista i steg 3 viser hvert bilde som blir med.** Forfatteren stryker dem som ikke skal med.
+- **Lista merker bilder der modellen ser et navn eller et ansikt** — til opplysning, uten å spørre
+  og uten å stoppe.
+- **Bilder fra malen** (pyntebilder som ikke bærer innhold) tas ikke med. Det er ikke et spørsmål
+  om personvern, men om at de ikke sier noe.
+- Skillet kan ikke *garantere* at det ser et navn i et bilde.
 
 ## 7. Hvordan måler vi?
 
 - **De tre testtilfellene** kjøres etter hver endring som endrer hva skillet lager. Oppskriften
   står i `skills/a2-authoring-api-evals/README.md`: ny samtale, bare «godkjent» ved portene, tell.
 - **Seks kjøringer per runde** (tre tilfeller, to produkter). De må kjøres av et menneske i
-  ChatGPT og Claude.ai; det kan ikke jeg. Mellom rundene kan jeg kjøre skillet i Claude Code som
-  en grov prøve — det er samme skill, men ikke samme flate.
+  ChatGPT og Claude.ai. **Besluttet: full runde ved to milepæler** — når skillet er bygget om, og
+  når innholdsblokkene er på plass. Mellom rundene kjøres skillet i Claude Code som en grov
+  prøve: samme skill, men ikke samme flate.
 - **Mål for første runde etter ombyggingen**, mot nullpunktet:
 
 | | Nullpunkt | Mål |
@@ -237,18 +237,21 @@ kompetansematrise. Flere viser interne sider og dokumentnavn.
 | Figurformer | 1 | minst 2 der kilden har det |
 | Tekst fra bilder gjengitt som tekst | ikke målt | alle promptene |
 | Bilder over 300 kB | ikke målt | ingen |
-| Bilder med navn tatt med uten spørsmål | ikke målt | ingen |
+| Bilder fra kilden som står i lista forfatteren godkjente | finnes ikke | alle som er med i kurset |
 
 ---
 
 ## Rekkefølge, hvis anbefalingene følges
 
-1. **Mål det som er uavklart:** kan modellen åpne et uthentet bilde (valg 3)?
-2. **Bygg om skillet på en egen gren:** ny oppdeling (valg 5) og arbeidsgangen fra presentasjon
+1. **Mål det som er uavklart:** kan modellen åpne et uthentet bilde (valg 3)? Produkteier kjører
+   prøven i begge produktene.
+2. **Bygg om skillet på en egen kopi:** ny oppdeling (valg 5) og arbeidsgangen fra presentasjon
    (valg 2, 3 og 6), med `pptx-extract` og `coverage-check`. Dagens skill blir liggende urørt til
    det nye er målt.
-3. **Kjør de tre testtilfellene** i begge produktene. Bytt ut skillet når tallene er bedre.
-4. **Innholdsblokker** (valg 4): prototype, så bygging i plattformen, så lærer skillet å bruke dem.
+3. **Milepæl 1:** produkteier kjører de tre testtilfellene i begge produktene (valg 7). Skillet
+   byttes ut når tallene er bedre.
+4. **Innholdsblokker** (valg 4): prøveside som produkteier godkjenner, så bygging i plattformen, så
+   lærer skillet å bruke dem. **Milepæl 2:** full runde igjen.
 5. **Flere figurformer**, etter hva testtilfellene viser at mangler.
 
 Steg 2 og 4 kan gå samtidig. Steg 2 gir bedre kurs også før blokkene finnes: kortene blir da

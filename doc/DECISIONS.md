@@ -941,3 +941,29 @@ plattformendring, men gir tekst som bilde.
 skript som leser presentasjonen, regelen i skillet snus fra «figur ved behov» til «gjør rede for
 hver grafikk i kilden», innholdsblokker i plattformen (prototype først), og skillet ryddes etter
 Anthropics råd for skills. Status: avklart retning; ingenting av det er bygget.
+
+## Skillet `a2-authoring-api`: sju valg om oppbygging og veien fra presentasjon til kurs (2026-10-05)
+
+Produkteier, valg for valg, etter designforslaget i `doc/DESIGN_1079_SKILL.md` (alternativene og
+begrunnelsene står der). Sak #1079.
+
+1. **Ett skill, delt i arbeidsganger inni.** Én pakke å installere i ChatGPT og Claude.ai; kort
+   forside, og «fra presentasjon» som egen arbeidsgang. Valgt bort: to skills.
+2. **Sju faste steg fra presentasjon til kurs**, med en liste over hva hvert lysark blir til
+   (figur, innholdsblokk, tabell, bilde, tekst, utelatt), som forfatteren godkjenner før noe
+   skrives. Valgt bort: uten lista, og at skriptet bestemmer alene.
+3. **Forfatteren laster bare opp presentasjonen.** Skriptet henter ut bildene, og modellen ser på
+   dem. Valgt bort: at forfatteren også lager en PDF. Forutsetter at modellen kan åpne et uthentet
+   bilde i begge produktene; det er ikke målt.
+4. **Fire innholdsblokker:** uthevet boks, prompt-boks, kort ved siden av hverandre, ikon. En
+   prøveside godkjennes før noe bygges. Plattformen krymper store bilder.
+5. **Hele skillet ryddes**, på en egen kopi til det nye er målt: kort forside, hver regel ett sted,
+   ferdige eksempler, historikken ut. Valgt bort: bare å legge til et kapittel.
+6. **Alle bilder fra kilden tas med hvis forfatteren ikke sier nei.** Lista i punkt 2 viser dem,
+   og merker bilder der modellen ser navn eller ansikt, uten å spørre. ⚠️ Anbefalingen var det
+   motsatte (slike bilder ute som standard). Produkteier valgte den raskeste veien; ansvaret er
+   forfatterens.
+7. **Full målerunde ved to milepæler** (tre presentasjoner i to produkter): når skillet er bygget
+   om, og når innholdsblokkene er på plass. Imellom prøves skillet i Claude Code.
+
+**Håndheves:** ikke bygget. Status: avklart; rekkefølgen står nederst i designnotatet.

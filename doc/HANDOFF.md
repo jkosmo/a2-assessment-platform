@@ -66,7 +66,11 @@ hadde tenkt gjennom design og arkitektur, eller bare hoppet på implementering. 
 `doc/DESIGN_1079_SKILL.md` er forslaget: sju valg med alternativer og anbefaling (ett skill delt i
 arbeidsganger, sju faste steg fra presentasjon til kurs, PDF for at modellen skal se lysarkene,
 fire innholdsblokker skrevet som vanlig tekst, ny oppdeling av filene, bilder fra kilden aldri
-stilltiende, måling mot testtilfellene). **Han har ikke lest eller besluttet noe av det ennå.**
+stilltiende, måling mot testtilfellene). **Han besluttet alle sju samme kveld, valg for valg**
+(`doc/DECISIONS.md`). To ble annerledes enn forslaget: han laster bare opp presentasjonen (ingen
+PDF), og alle bilder tas med hvis han ikke sier nei. Notatet er rettet etter beslutningene.
+**Neste steg står nederst i notatet:** først en prøve han kjører i ChatGPT og Claude.ai (kan
+modellen åpne et bilde skriptet har hentet ut?), så ombygging av skillet på en egen kopi.
 Det som finnes fra før designet: testtilfellene (`skills/a2-authoring-api-evals/`, tre
 presentasjoner, nullpunkt målt for Rapportskriving) og en prøveutgave av leseskriptet som bare
 ligger i arbeidsmappa, ikke i repoet.
