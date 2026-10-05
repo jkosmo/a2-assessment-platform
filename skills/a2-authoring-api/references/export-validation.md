@@ -1,91 +1,52 @@
-# Export validation — the fallback file must survive A2's real import
+# The import file — what "validated" means
 
-Why this exists: a fallback `a2-content-export/v1` file was called "validated" without ever
-being checked against A2's real import schema. Its `exportedAt` was
-`2026-07-10T21:01:25.216841+00:00` (timezone offset **+** microseconds); A2's import **rejected**
-it. `2026-07-10T21:05:15.364Z` was accepted. "Validated" had meant "looks right", not "checked".
+The import file is an `a2-content-export/v1` envelope. `scripts/produce-course.mjs` builds it from
+the package; you do not write it by hand. This file says what the command guarantees, so that you
+report it correctly.
 
-Deterministic helpers: [scripts/export-validate.mjs](../scripts/export-validate.mjs). Unit-tested
-in `test/unit/agent-authoring-export-validate.test.ts`; the **real-schema** guarantee is in
-`test/unit/agent-authoring-export-schema-roundtrip.test.ts`.
+## The rule
 
-## Headline rule
+> An import file is validated only when the **finished file** has been read back from disk and
+> checked against the same rules as the platform's import.
 
-> **A fallback export is not validated until the finished file has been read back and checked
-> against the same schema as A2's import function.**
+`produce-course.mjs` does exactly that, in this order: build the complete envelope → write it →
+read the written file back → parse it → validate it → name it after `DELIVER` only if everything
+passed. A file that fails is removed, so it cannot be handed over by mistake. Never validate one
+copy and deliver another.
 
-## The datetime trap
+## The checks, by name
 
-In `src/modules/adminContent/adminContentSchemas.ts`:
-
-- `exportEnvelopeSchema.exportedAt = z.string().datetime()`
-- `exportAuditSchema.publishedAt = z.string().datetime()` (on the course, every module
-  `activeVersion`, and every section)
-
-Zod `.datetime()` (as configured here) accepts **only** the JS `Date.prototype.toISOString()`
-shape — `YYYY-MM-DDTHH:mm:ss.sssZ`. It **rejects** a timezone offset (`+00:00`) and rejects
-microseconds. So:
-
-- Always generate `exportedAt` with `new Date().toISOString()` — never a locale/offset string.
-- Normalise **any** incoming or copied date the same way. `toIsoZ(input)` does this for a Date,
-  an offset string, microseconds, or epoch ms — and **throws** on an unparseable value rather
-  than emitting garbage.
-- `collectDatetimeFields(envelope)` enumerates every at-risk field; `strictDatetimeFieldsOk`
-  flags offenders; `normalizeEnvelopeDates` fixes them all (leaving a `null` publishedAt —
-  "draft, no publish history" — untouched).
-
-These two are the only datetime fields in the export contract; both are covered.
-
-## The round-trip (`roundTripFallbackExport`)
-
-The fallback file must be, in order: **(1) generated complete → (2) written to file → (3) read
-back → (4) parsed → (5) validated against the same schema as A2's import → (6) delivered only if
-validation passes.** The validated file **is** the delivered file — never validate an in-memory
-object and then hand over a differently-written one.
-
-`roundTripFallbackExport(envelope, { filePath, contentIntegrity? })` performs exactly this
-(dates normalised before the write) and returns `{ delivered, file, checks, envelope }`.
-`delivered` is `true` only when JSON parsing, export-schema validation, import-schema validation
-and encoding-integrity all pass and content-integrity did not fail. The write is **ASCII-safe**
-(#754): every non-ASCII char is emitted as a `\uXXXX` escape so `æ/ø/å` survive any
-download/editor/transfer re-encoding, and `encoding-integrity` refuses to deliver a file that
-already contains double-encoded (`Ã¦/Ã¸/Ã¥`) text.
-
-## The bundled validator, and why the repo test matters
-
-The distributed zip cannot import `src`. So the skill script carries a **bundled** structural
-validator (`validateExportEnvelopeStructure`) that mirrors `exportEnvelopeSchema` — envelope
-format, scope↔payload match, ≥1 module/item, item shape + `sortOrder`, required localized
-titles, required `activeVersion.audit`, and MCQ `correctAnswer ∈ options` **by localized
-identity in every locale** — plus the strict `exportedAt`/`publishedAt` format check.
-
-The bundled validator is best-effort by nature. The thing that keeps it **faithful** is the repo
-test `agent-authoring-export-schema-roundtrip.test.ts`, which imports the **real**
-`exportEnvelopeSchema` / `importBodySchema` and runs this script's generator output — including
-the offset/microseconds bad cases — through them. If the real schema drifts, that test fails.
-
-## Name the checks — never say "validated" generically
-
-The production report must distinguish these by name; `describeChecks(report)` prints them and
-`claimsImportValidated(report)` is `true` only when import-schema validation actually passed:
-
-| Check | Meaning |
+| Check in the report | Means |
 |---|---|
-| **JSON parsing** | the written file parsed back |
-| **export-schema validation** | structure matches `a2-content-export/v1` |
-| **import-schema validation** | passes the same acceptance A2's import applies (incl. strict datetimes) |
-| **content-integrity** | loss audit vs the master (see content-preservation.md) |
-| **encoding-integrity** | the read-back file has no double-encoded (`Ã¦/Ã¸/Ã¥`) text; the delivered file is ASCII-safe (`\uXXXX`) (#754) |
-| **API dry-run** | **unavailable** — A2 has no import dry-run endpoint (course import writes) |
-| **actual import** | done by a human in the admin UI; the skill never imports |
+| **JSON parsing** | the written file parses |
+| **export-schema validation** | its structure is `a2-content-export/v1`: scope and payload agree, every item has its place, titles are there, every multiple-choice answer equals one of its options in every language |
+| **import-schema validation** | it passes what the import itself requires, including the date format |
+| **content-integrity** | nothing recorded in the course state is missing from the file (run when `--state` is given) |
+| **encoding-integrity** | no garbled characters (`Ã¦`, `Ã¸`, `Ã¥`) |
 
-If only JSON parsing ran, the report must **not** claim import validation.
+Two things are never checked here, and you say so:
 
-## Known limitation / recommended follow-up
+- **There is no trial import.** The platform's import writes; it cannot be asked for a verdict
+  without creating the drafts.
+- **The import itself** is done by the author in the admin UI.
 
-There is **no import dry-run endpoint**: `POST /api/admin/content/courses/import`
-(`importCourseFromEnvelope`) **writes**. The skill therefore validates against the bundled mirror
-of the schema, guaranteed faithful by the repo test — it cannot get a live verdict from the
-platform without creating drafts. **Recommended follow-up (not built here):** a
-`courses/import?dryRun=true` endpoint that runs the real schema + integrity checks and returns
-the verdict without writing. Flagged only.
+So the report names the checks that ran. It never says "validert" on its own, and it never claims
+that the platform has accepted the file.
+
+## What the command takes care of
+
+You do not do these by hand; they are listed so that you recognise them in a file.
+
+- **Dates** are written as `2026-07-10T21:05:15.364Z` — three decimals and `Z`. The import
+  refuses a timezone offset (`+00:00`) and microseconds.
+- **Every character outside ASCII is written as `\uXXXX`.** `æ`, `ø` and `å` then survive any
+  download or editor that re-encodes the file. A source that already contains garbled characters
+  cannot be repaired by the command: it fails, and you fix the text in the package.
+- **Every section and module carries an empty `audit`.** No publish history means the import can
+  only create drafts.
+- **`provenance`** says the file was made by this skill and which version. Never remove it, and
+  never change it to say a human wrote the content.
+
+If the command cannot run where you are, you cannot produce a validated import file. Say so, and
+hand over the package (`work/package.json`) for someone to run production on — do not write the
+envelope by hand.

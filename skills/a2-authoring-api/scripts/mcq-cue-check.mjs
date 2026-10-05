@@ -18,7 +18,7 @@
 // remove obvious cues before the human look, not to certify quality):
 //   - per question: correct option is longer than the mean distractor by more than LENGTH_RATIO;
 //     fewer than MIN_OPTIONS options; an "all/none of the above"-style option. Difficulty (recall
-//     vs. application) cannot be measured here — that stays a reading step in the playbook.
+//     vs. application) cannot be measured here — that stays a reading step (references/modules.md).
 //   - per set (n >= MIN_SET_FOR_DISTRIBUTION): share of correct answers in any one position above
 //     POSITION_SHARE_MAX; share of "correct is uniquely longest" above LONGEST_SHARE_MAX.
 //
@@ -91,7 +91,7 @@ export function checkMcqCues(questions, { primary } = {}) {
     const label = stem.length > 60 ? `${stem.slice(0, 57)}…` : stem;
 
     if (options.length < MIN_OPTIONS) {
-      issues.push({ index: i, kind: "too_few_options", detail: `${options.length} options — write at least ${MIN_OPTIONS} (playbook: 3–4)` });
+      issues.push({ index: i, kind: "too_few_options", detail: `${options.length} options — write at least ${MIN_OPTIONS} (write 3–4)` });
     }
     for (const o of options) {
       if (CATCH_ALL.test(o)) issues.push({ index: i, kind: "catch_all_option", detail: `«${o}» — never "all/none of the above"` });

@@ -1,0 +1,49 @@
+{
+  "name": "arbeidsgang",
+  "title": "Fra møte til referat",
+  "desc": "Fire steg i rekkefølge, fordelt på fasene Før og Etter.",
+  "phases": {
+    "for": {
+      "label": "Før",
+      "grunn": "#d9e8dd",
+      "lys": "#6fae87",
+      "tekst": "#3f7a57"
+    },
+    "etter": {
+      "label": "Etter",
+      "grunn": "#e7e2f0",
+      "lys": "#a99bc9",
+      "tekst": "#6b5a94"
+    }
+  },
+  "steps": [
+    {
+      "label": [
+        "Avklar",
+        "formålet"
+      ],
+      "phase": "for"
+    },
+    {
+      "label": [
+        "Samle",
+        "notatene"
+      ],
+      "phase": "for"
+    },
+    {
+      "label": [
+        "Lag et",
+        "utkast"
+      ],
+      "phase": "etter"
+    },
+    {
+      "label": [
+        "Les og",
+        "rett"
+      ],
+      "phase": "etter"
+    }
+  ]
+}

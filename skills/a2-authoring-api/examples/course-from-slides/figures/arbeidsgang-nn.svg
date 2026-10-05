@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 432 116" role="img"
+     font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif">
+  <title>Frå møte til referat</title>
+  <desc>Fire steg i rekkjefølgje, fordelte på fasane Før og Etter.</desc>
+  <style>
+    .steg { fill: var(--grunn); stroke: var(--lys); }
+    @keyframes lys { 0%, 70% { fill: var(--lys); } 100% { fill: var(--grunn); } }
+    .steg { animation: lys 0.9s ease-in-out 1; }
+    .s2 { animation-delay: 0.55s; }
+    .s3 { animation-delay: 1.1s; }
+    .s4 { animation-delay: 1.65s; }
+    .for { --grunn: #d9e8dd; --lys: #6fae87; }
+    .etter { --grunn: #e7e2f0; --lys: #a99bc9; }
+    @media (prefers-reduced-motion: reduce) { .steg { animation: none; } }
+  </style>
+  <line x1="12" y1="16" x2="212" y2="16" stroke="#6fae87" stroke-width="3"/>
+  <text x="112" y="11" text-anchor="middle" font-size="11" fill="#3f7a57">Før</text>
+  <line x1="220" y1="16" x2="420" y2="16" stroke="#a99bc9" stroke-width="3"/>
+  <text x="320" y="11" text-anchor="middle" font-size="11" fill="#6b5a94">Etter</text>
+  <circle class="steg s1 for" cx="60" cy="48" r="22"/>
+  <text x="60" y="53" text-anchor="middle" font-size="15" font-weight="600" fill="#2d3b55">1</text>
+  <text x="60" y="88" text-anchor="middle" font-size="12" fill="#2d3b55">Avklar</text>
+  <text x="60" y="103" text-anchor="middle" font-size="12" fill="#2d3b55">føremålet</text>
+  <line x1="82" y1="48" x2="142" y2="48" stroke="#8090a9" stroke-width="1.5"/>
+  <circle class="steg s2 for" cx="164" cy="48" r="22"/>
+  <text x="164" y="53" text-anchor="middle" font-size="15" font-weight="600" fill="#2d3b55">2</text>
+  <text x="164" y="88" text-anchor="middle" font-size="12" fill="#2d3b55">Samle</text>
+  <text x="164" y="103" text-anchor="middle" font-size="12" fill="#2d3b55">notata</text>
+  <line x1="186" y1="48" x2="246" y2="48" stroke="#8090a9" stroke-width="1.5"/>
+  <circle class="steg s3 etter" cx="268" cy="48" r="22"/>
+  <text x="268" y="53" text-anchor="middle" font-size="15" font-weight="600" fill="#2d3b55">3</text>
+  <text x="268" y="88" text-anchor="middle" font-size="12" fill="#2d3b55">Lag eit</text>
+  <text x="268" y="103" text-anchor="middle" font-size="12" fill="#2d3b55">utkast</text>
+  <line x1="290" y1="48" x2="350" y2="48" stroke="#8090a9" stroke-width="1.5"/>
+  <circle class="steg s4 etter" cx="372" cy="48" r="22"/>
+  <text x="372" y="53" text-anchor="middle" font-size="15" font-weight="600" fill="#2d3b55">4</text>
+  <text x="372" y="88" text-anchor="middle" font-size="12" fill="#2d3b55">Les og</text>
+  <text x="372" y="103" text-anchor="middle" font-size="12" fill="#2d3b55">rett</text>
+</svg>

@@ -78,7 +78,7 @@ export function describeProblems(description) {
     if (phase?.tekst !== undefined && !HEX.test(phase.tekst)) problems.push(`phase "${name}": \`tekst\` is an opaque hex colour`);
     if (phase?.label !== undefined && !String(phase.label).trim()) problems.push(`phase "${name}": \`label\` is empty — leave it out for a phase without a line`);
   }
-  if (Object.keys(phases).length === 0) problems.push("`phases` needs at least one phase — a flow without phases is the plain flow template, drawn by hand");
+  if (Object.keys(phases).length === 0) problems.push("`phases` needs at least one phase — give a flow without groups one phase without a `label`");
 
   const steps = Array.isArray(d.steps) ? d.steps : [];
   if (steps.length < 2) problems.push("`steps` needs at least two steps");

@@ -967,4 +967,19 @@ begrunnelsene står der). Sak #1079.
 7. **Full målerunde ved to milepæler** (tre presentasjoner i to produkter): når skillet er bygget
    om, og når innholdsblokkene er på plass. Imellom prøves skillet i Claude Code.
 
-**Håndheves:** ikke bygget. Status: avklart; rekkefølgen står nederst i designnotatet.
+**Håndheves:** punkt 1, 2, 3, 5 og 6 er bygget på grenen `skill-ombygging-1079` (ikke flettet,
+ikke målt). Lysarklista i punkt 2 og 6 holdes av `scripts/slide-coverage.mjs`
+(`test/unit/agent-authoring-slide-coverage-1079.test.ts`), oppbyggingen i punkt 1 og 5 av
+`test/unit/skill-structure-guard-1079.test.ts`. Punkt 4 er ikke bygget. Status: avklart;
+rekkefølgen står nederst i designnotatet.
+
+⚠️ **Tre valg under byggingen er mine, ikke produkteiers** (2026-10-05). Han kan snu dem:
+
+- **Til innholdsblokkene finnes i plattformen, skriver skillet dem i former plattformen alt
+  tegner:** uthevet boks som sitat med fet merkelapp, prompt som kodeblokk, kort som
+  underoverskrifter med ikonet over. Alternativet var å vente med kort og bokser til plattformen
+  kan tegne dem. Valgt fordi milepæl 1 da måler arbeidsgangen, ikke plattformen.
+- **Et kurs uten modul stoppes ved produksjon.** Plattformen tar det imot med en advarsel, men
+  det kan aldri fullføres. Skillet lager det derfor ikke.
+- **Et bilde som ligger i en seksjon uten å vises i teksten, stopper produksjonen.** Plattformen
+  bare advarer. I skillet betyr det at et bilde forfatteren godkjente, ikke blir sett av noen.

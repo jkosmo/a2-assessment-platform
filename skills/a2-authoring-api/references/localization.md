@@ -1,107 +1,78 @@
-# Localization — one primary language for the dialogue, three real translations before production
+# Translation — one language while writing, three in the delivery
 
-Why this exists: an imported package had content in only **one** language. The supported set is
-**nb** (bokmål), **nn** (nynorsk) and **en-GB** (British English). The rule is: fix ONE primary
-language for the whole dialogue (core principle 5 — never mix languages while authoring), then,
-once the primary version is approved, produce **real translations** for all three before
-production — never the same bokmål text copied into every locale field.
+Contents: [The rule](#the-rule) · [What is translated](#what-is-translated) ·
+[What a translation must keep](#what-a-translation-must-keep) · [Figures](#figures) ·
+[Pictures](#pictures) · [What the check catches](#what-the-check-catches)
 
-**The delivered course must be complete in all three languages — including sections.** The platform
-*can* translate a missing locale on demand, but it does so with a central LLM call that costs tokens
-every time. Translating once, here at production, avoids that recurring central cost entirely — so
-completeness is **mandatory, not "nice to have."** Note the schema asymmetry that makes this easy to
-get wrong: `section.title`/`bodyMarkdown` accept a *partial* object (only `nb` validates at import),
-so a single-language section will **not** be rejected by the platform — the skill must self-enforce
-completeness via `checkLocalization` before delivering.
+## The rule
 
-Deterministic helper: [scripts/localization-check.mjs](../scripts/localization-check.mjs)
-(`checkLocalization`). Unit-tested in `test/unit/agent-authoring-localization.test.ts`.
+The course is written and approved in **one** language. After that, and before production, every
+text a learner sees is translated to the other two. The platform's languages are **nb** (bokmål),
+**nn** (nynorsk) and **en-GB** (British English).
 
-## Which fields the schema localizes (and which it does NOT)
+A delivered course is complete in all three — **sections included**. The import accepts a section
+written in one language only, so nothing on the platform will stop you; the check here does. What
+you leave untranslated, a person must later have translated on the platform, one text at a time.
 
-Use the CORRECT localized datatype per field — they are not uniform
-(`src/modules/adminContent/adminContentSchemas.ts`):
+## What is translated
 
-| Field | Datatype | Requirement |
-|---|---|---|
-| module `title`, `description` | `localizedTextSchema` | string **or** strict `{en-GB, nb, nn}` (all three) |
-| `promptTemplate.systemPrompt` / `userPromptTemplate`, `mcqSet` `title` | `localizedTextSchema` | strict object needs all three |
-| MCQ question `stem`, each `options[]`, `correctAnswer`, `rationale` | `localizedTextSchema` | strict object needs all three |
-| `taskText`, `assessorExpectedContent`, `candidateTaskConstraints` | `localizedTextSchema` | strict object needs all three |
-| `submissionSchema.fields[].label` / `placeholder` | `localizedTextSchema` | strict object needs all three |
-| course `title`, `description` | `localizedTextSchema` | strict object needs all three |
-| section `title`, `bodyMarkdown` | **patch** `localizedTextPatchSchema` | string **or** *partial* object |
+| In | Fields |
+|---|---|
+| the course | `title`, `description` |
+| a section | `title`, `bodyMarkdown` |
+| a module | `title`, `description`, `taskText`, `assessorExpectedContent`, `candidateTaskConstraints`, the labels and placeholders of `submissionSchema.fields[]`, `promptTemplate.systemPrompt` and `userPromptTemplate` |
+| a multiple-choice set | `title`, and per question `stem`, every entry in `options`, `correctAnswer`, `rationale` |
+| a figure | every label (below) |
 
-**MCQ correctAnswer** must equal one of `options` **by value** (`localizedTextIdentity`) — a
-localized `correctAnswer` must match a localized option **structurally in every locale**, not by
-index.
+Each of these is written as `{ "nb": "…", "nn": "…", "en-GB": "…" }`. A plain string is only for
+a value that is the same in every language — a product name, a number.
 
-**Not localized by the contract:** `rubric.criteria` and `rubric.scalingRule` are
-`z.record(z.unknown())` — plain JSON, **not** a localized datatype. The platform does not enforce
-per-locale rubric criteria. If the author wants translated criteria, they must author the record
-values themselves; this skill does **not** change the API contract to add localization the
-platform doesn't have. Document this to the author rather than silently faking it.
+**Not translated by the format:** `rubric.criteria` and `rubric.scalingRule` are plain data with
+one value each. Write them in the course's primary language, and tell the author that the
+criteria exist in one language.
 
-## What to translate
+## What a translation must keep
 
-Every **student-facing** field the schema localizes: course title/description, section
-titles/body, module title/description, task text, submission/answer constraints, assessor
-expected content, MCQ title/questions/options/rationales, and any attachment/reference intros.
+- **The meaning and the level.** A translation makes no new claim and is neither easier nor
+  harder than the original.
+- **The right answer.** `correctAnswer` equals one of the `options` in every language — the same
+  option, in the same position. After translating a question, check again which option is right.
+- **The number and order of options**, questions and criteria.
+- **Every formula, code, identifier, file name and address**, unchanged.
+- **The markdown:** the same headings, lists, tables, boxes and `![…](asset:…)` references in
+  every language. Alt texts are translated; the `asset:` reference is not.
+- **A prompt** is translated, so that the learner can use it in their language. Names of menus
+  and buttons in a product stay as the product shows them.
 
-Translations must **preserve**: meaning, assessment level/difficulty, the correct answer, option
-count **and** order, and every formula / code / identifier / filename / URL. Use natural
-nynorsk and natural British English — not a gloss of bokmål. Introduce **no new claims** in a
-translation. For MCQ, verify the correct answer is **semantically identical** across languages by
-re-checking the option mapping after translating — not just the index.
+Write natural Nynorsk and natural British English, not Bokmål with the words swapped.
 
-## The localization check (`checkLocalization`)
+## Figures
 
-Run before production. Returns `{ missing, blindCopies, answerKeyChanges, tokenDrift, blocks,
-reasons }`. It **blocks** when any of these hold:
+A figure with labels in one language breaks the promise as surely as untranslated text. Every
+figure with labels gets a drawing per language, with identical geometry: the same number of
+labels in the same places, only the words changed. How to draw them:
+[figure-design.md](figure-design.md#the-other-languages).
 
-- **missing** — a localized field lacks one of the three languages (a language "lost" a section,
-  question, option, or field);
-- **answerKeyChanges** — an MCQ `correctAnswer` maps to a **different option position** in some
-  language than in the primary (a translation changed the correct answer), or fails to match any
-  option in some locale;
-- **tokenDrift** — a formula / URL / identifier / filename / legal-article reference present in
-  the primary locale is **missing** from a translation;
-- **blindCopies** — a prose field is identical across all three languages (the primary copied
-  verbatim instead of translated). Short tokens, proper nouns and numbers ("GDPR", "72") are not
-  flagged; only translatable prose is.
+A figure's narrow layout needs the same languages as the wide one.
 
-Block production if any mandatory localized field is missing. Equal structure across languages
-(same questions, same option count/order, same criteria) is verified by the missing/answer-key
-checks — options are single localized objects shared across locales, so "one language lost an
-option" surfaces as that option missing a locale.
+## Pictures
 
-## Figures are localized too (#763, Layer B)
+A screenshot or photo is the same file in all three languages; text inside it cannot be
+translated. Where that text matters and is in another language than the reader's, the sentence
+before the picture says what it shows ([section-content.md](section-content.md#pictures-from-the-source)).
 
-A figure whose labels are in one language breaks the multilingual promise exactly as untranslated
-prose does. After the primary is approved, **each text-bearing SVG figure gets `localizedVariants`
-for the other two locales**: translate the `<text>` runs, keep the geometry identical (same number
-of labels, same positions — geometry never changes, only the label strings). This reuses the #657
-SVG-localization mechanism (`sourceLocale` + per-locale variant blobs); it does not invent a new
-one. **Raster figures cannot be localized** (baked pixels) — if an author-supplied raster carries
-text, flag it as untranslatable and advise an SVG instead.
+## What the check catches
 
-`checkLocalization` (via `checkFigureLocalization`) extends the check to figures and **blocks** when:
+`produce-course.mjs` runs the check under **languages**. It fails on
 
-- **missingVariants** — a text-bearing SVG figure lacks a variant for one of the other two locales;
-- **textCountMismatches** — a variant's label count differs from the original's (a label was lost
-  or added — the geometry/structure drifted);
-- **tokenDrift** — a formula / URL / identifier / filename / article-reference present in an
-  original label is missing from a variant;
-- **blindCopies** — a variant's labels are identical to the original's translatable prose (the
-  figure was copied, not translated). Short single-word labels ("Start", "A", "72") that
-  legitimately stay identical are not flagged.
+- a field that lacks one of the three languages;
+- a text that is identical in all three — copied, not translated. Short words, names and numbers
+  that are rightly the same ("GDPR", "72") are not counted;
+- a right answer that sits in a different position, or matches no option, in some language;
+- a formula, address, identifier or file name that is in the primary language and missing from a
+  translation;
+- a figure that lacks a language, has a different number of labels in one, or whose labels were
+  copied instead of translated; a narrow layout whose labels differ from the wide figure's.
 
-The figure findings are returned under `result.figures` and folded into the top-level `blocks`.
-
-## What is deterministic vs behavioral
-
-The check deterministically catches missing locales, answer-key drift, token loss and blind
-copies — for prose fields **and** figure labels. It cannot judge **translation quality** (is the
-nynorsk natural? is the meaning faithful? do the translated labels still fit the drawing?) — that
-remains the skill's behavioral responsibility, ideally confirmed in the Gate 5 external QA pass
-with a reviewer who reads all three languages.
+It cannot judge whether a translation is good. That is your reading, and part of the independent
+check where the reviewer reads all three languages.

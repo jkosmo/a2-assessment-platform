@@ -197,6 +197,19 @@ export function darkenLightIcon(svg) {
   return { svg: svg.replace(/((?:fill|stroke)\s*[:=]\s*"?\s*)(#[0-9A-Fa-f]{6}|#[0-9A-Fa-f]{3})\b/g, `$1${ICON_INK}`), recoloured: true };
 }
 
+/** The side, in px, an icon is shown at when the page it stands on does not size it. */
+export const ICON_SIZE = 40;
+
+/**
+ * An icon that states no size of its own is shown as wide as the column it stands in: a small
+ * drawing blown up to fill the page. An icon without `width` and `height` gets them.
+ */
+export function sizeIcon(svg) {
+  const root = /<svg[^>]*>/.exec(svg);
+  if (!root || / (?:width|height)\s*=/.test(root[0])) return svg;
+  return svg.replace("<svg", `<svg width="${ICON_SIZE}" height="${ICON_SIZE}"`);
+}
+
 // ── one slide ────────────────────────────────────────────────────────────────
 
 const inside = (a, b) => a !== b && a.cx >= b.x && a.cx <= b.x + b.w && a.cy >= b.y && a.cy <= b.y + b.h;
@@ -405,7 +418,8 @@ export function readPresentation(buffer) {
   for (const name of new Set(slides.flatMap((s) => s.icons))) {
     const source = zip.text(`ppt/media/${name}`);
     if (!source) continue;
-    const { svg, recoloured } = darkenLightIcon(source);
+    const { svg: inked, recoloured } = darkenLightIcon(source);
+    const svg = sizeIcon(inked);
     icons.push({ file: name, svg, recoloured, slides: slides.filter((s) => s.icons.includes(name)).map((s) => s.number) });
   }
   return { size, slides, images, icons };

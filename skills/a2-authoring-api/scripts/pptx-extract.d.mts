@@ -36,3 +36,5 @@ export interface Presentation {
 export function readPresentation(buffer: Buffer): Presentation;
 export function describePresentation(presentation: Presentation, options?: { name?: string }): string;
 export function darkenLightIcon(svg: string): { svg: string; recoloured: boolean };
+export const ICON_SIZE: number;
+export function sizeIcon(svg: string): string;

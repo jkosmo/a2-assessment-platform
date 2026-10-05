@@ -2,6 +2,79 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.83.0 - 2026-10-05 (på grenen `skill-ombygging-1079`, ikke flettet, ikke rullet ut)
+
+### Skillet er bygget om: en presentasjon er en egen kilde, og hvert lysark gjøres rede for (#1079)
+
+Produkteier laget samme kurs med skillet i ChatGPT og i Claude.ai fra presentasjonen
+«Rapportskriving». Begge ga tre figurer av samme type, ingen av de rundt 25 ikonene og ingen av
+kortene. Han spurte så om skillet hadde et design, eller om vi bare hadde hoppet på
+implementering. Det hadde ikke et design: det hadde vokst ved at hver feil fikk sin regel.
+Designet ble besluttet valg for valg samme kveld (`doc/DESIGN_1079_SKILL.md`), og dette er
+ombyggingen. **Bare skillet er endret. Plattformen er som i 2.82.2.**
+
+**Rotårsaken til at grafikken forsvant** var fire ting som virket sammen, ikke én regel:
+
+1. Skillet kunne ikke lese en presentasjon. Modellen fikk teksten og gjettet resten.
+2. Figurer ble valgt ut fra den nye prosaen («der det ellers blir en tekstvegg»), ikke ut fra
+   hva lysarket viste.
+3. Bare flyten hadde tegneskript og animasjon, så alt som skulle bli en figur, ble en flyt.
+4. Kort og uthevede striper hadde ingen form å bli til, og ble løst opp i avsnitt.
+
+**Det som er nytt:**
+
+- **Forsiden er en oversikt på rundt 115 linjer** (var 250): seks regler, hvilken arbeidsflyt som
+  åpnes for hvilken kilde, portene, og en tabell over hvor faget står. Historikk, datoer og
+  saksnumre er ute av skillet. Beskrivelsen har ordene som utløser det: presentasjon, PowerPoint,
+  lysark.
+- **To arbeidsflyter:** `workflows/from-presentation.md` og `workflows/from-text.md`. Fra en
+  presentasjon leser modellen fila med et skript, ser på hvert bilde selv, og legger fram en
+  **liste over hva hvert lysark blir til** (figur, kort, uthevet boks, prompt, tabell, bilde,
+  tekst, utelatt med grunn) som forfatteren godkjenner før noe skrives.
+- **`scripts/slide-coverage.mjs`** leser den godkjente lista mot det ferdige kurset og melder
+  hvert lysark som ikke fikk det lista sier — og, lest mot presentasjonen, hvert lysark og hvert
+  bilde lista ikke nevner.
+- **`scripts/produce-course.mjs`** er port 6 som én kommando: legger ved bildene, kjører alle
+  kontrollene i fast rekkefølge, og skriver importfila bare når alle går gjennom. Fire av
+  kontrollene var før bare funksjoner modellen selv måtte kalle fra egen kode.
+- **Nye kapitler:** `references/section-content.md` (uthevet boks, prompt-boks, kort, ikon, bilde
+  fra kilden), `references/course-design.md`, `references/modules.md`,
+  `references/check-and-produce.md`. `authoring-playbook.md` er borte; innholdet er fordelt.
+- **Figurkapitlet er åpnet:** sju former i stedet for fire, med skjeletter for tre, bokser og
+  piler, matrise, merket diagram og tidslinje. Regelen om at figurer hører hjemme «der det ellers
+  blir en tekstvegg» er borte; en figur tegnes der kilden har en.
+- **Et helt eksempelkurs** ligger i `examples/course-from-slides/`, og går gjennom alle
+  kontrollene.
+- **Ikoner får oppgitt størrelse (40 px) når de hentes ut.** PowerPoint skriver dem uten, og
+  plattformen viser da et ikon så bredt som spalten det står i.
+
+**Tre ting produksjonen nå stopper, som plattformen selv bare advarer om eller ikke ser:** et kurs
+uten modul, et bilde som ligger i en seksjon uten å vises i teksten, og en seksjonstekst som åpner
+med seksjonens egen tittel som overskrift (plattformen viser tittelen fra før).
+
+**Slik er det målt.** Fire nye testfiler: `agent-authoring-slide-coverage-1079` (47),
+`agent-authoring-produce-course-1079` (42), `skill-structure-guard-1079` (16) og
+integrasjonstesten `m2-skill-example-course-1079` (eksempelkurset importeres gjennom plattformens
+egen kursimport, og teksten tegnes med plattformens egen gjengivelse). 101 ødeleggelser ble lagt
+inn én om gangen; alle ble fanget. To overlevde første runde og viste to blinde tester (utheving
+midt i et uttrykk, og en sitatlinje som åpner med fet skrift); testene er rettet. Vakta for
+oppbyggingen fant en mangel med en gang den ble skrevet: arbeidsflyten for presentasjoner var
+over 100 linjer uten innholdsliste.
+
+**Ikke målt:** skillet er ikke kjørt i ChatGPT eller Claude.ai. Det er milepæl 1, og den krever
+et menneske (`skills/a2-authoring-api-evals/README.md`).
+
+**Funnet underveis, ikke rettet her (plattformen):**
+
+- **En tabell i en seksjon mister kolonneoverskriftene på telefon.** `shared.css` gjør alle
+  tabeller om til stablede rader under 600 px og skjuler overskriftsraden. Listesidene setter
+  navnet på kolonnen på hver celle; en tabell skrevet i en seksjon har ikke det. Deltakeren ser da
+  cellene under hverandre, høyrestilt, uten å vite hva som er hva. Gjelder alle seksjoner med
+  tabell, også i prod.
+- **Tabeller, sitater og kodeblokker har ingen egen stil i leseren på PC.** Tabellen står uten
+  linjer og luft, den uthevede boksen er bare et innrykk, og prompten er liten skrift uten
+  bakgrunn. Innholdsblokkene (valg 4) retter de to siste; tabellen må tas med der.
+
 ## 2.82.2 - 2026-10-05
 
 ### Et kurs med lange stegtitler gikk ut av skjermen på telefon

@@ -3,7 +3,7 @@ import { existsSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } fro
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { darkenLightIcon, describePresentation, readPresentation } from "../../skills/a2-authoring-api/scripts/pptx-extract.mjs";
+import { ICON_SIZE, darkenLightIcon, describePresentation, readPresentation, sizeIcon } from "../../skills/a2-authoring-api/scripts/pptx-extract.mjs";
 import { buildPptx, connector, group, picture, pngHeader, shape, smartArt, table, zip, type SlideSpec } from "../support/buildPptx.js";
 
 // #1079: skillet fikk en presentasjon som løs tekst. Det som gjorde den til en presentasjon, var
@@ -213,9 +213,24 @@ describe("pptx-extract — leser hva som står på hvert lysark, og hvordan det 
       expect(hvitt.svg).not.toMatch(/#FFFFFF/i);
     });
 
-    it("et mørkt ikon og et ikon med flere farger står som de er", () => {
-      expect(p.icons.find((i) => i.file === "image3.svg")).toMatchObject({ recoloured: false, svg: MØRKT_IKON });
-      expect(p.icons.find((i) => i.file === "image4.svg")).toMatchObject({ recoloured: false, svg: FLERFARGET });
+    it("et mørkt ikon og et ikon med flere farger beholder fargene sine", () => {
+      expect(p.icons.find((i) => i.file === "image3.svg")).toMatchObject({ recoloured: false, svg: sizeIcon(MØRKT_IKON) });
+      expect(p.icons.find((i) => i.file === "image4.svg")).toMatchObject({ recoloured: false, svg: sizeIcon(FLERFARGET) });
+    });
+
+    // Et ikon uten oppgitt størrelse vises så bredt som spalten det står i: en liten tegning
+    // blåst opp over hele siden. PowerPoint skriver ikonene uten størrelse.
+    it("hvert ikon som hentes ut, har en oppgitt størrelse", () => {
+      expect(p.icons.length).toBeGreaterThan(0);
+      for (const ikon of p.icons) expect(ikon.svg, ikon.file).toMatch(new RegExp(`^<svg width="${ICON_SIZE}" height="${ICON_SIZE}" `));
+    });
+
+    it("et ikon som alt oppgir bredde eller høyde, får stå — også når bare én av dem er oppgitt", () => {
+      for (const svg of [`<svg width="24" height="24" viewBox="0 0 96 96"><path d="M0 0"/></svg>`, `<svg viewBox="0 0 96 96" height="1em"><path d="M0 0"/></svg>`]) {
+        expect(sizeIcon(svg)).toBe(svg);
+      }
+      // «stroke-width» er strekens bredde, ikke ikonets — også når den står på selve svg-elementet.
+      expect(sizeIcon(`<svg viewBox="0 0 96 96" stroke-width="6"><path d="M0 0"/></svg>`)).toBe(`<svg width="${ICON_SIZE}" height="${ICON_SIZE}" viewBox="0 0 96 96" stroke-width="6"><path d="M0 0"/></svg>`);
     });
 
     it.each<[string, string, boolean]>([

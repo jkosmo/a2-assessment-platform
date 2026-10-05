@@ -1,7 +1,12 @@
-# `a2-authoring-package/v1` — contract reference
+# The package — `a2-authoring-package/v1`
 
-Authoritative Zod schema: `src/modules/adminContent/agentAuthoringSchemas.ts`.
-Design rationale: `doc/design/AGENT_AUTHORING_647.md` §2.
+Contents: [Top level](#top-level) · [Text in three languages](#text-in-three-languages) ·
+[A section](#a-section) · [Pictures and figures — `assets[]`](#pictures-and-figures--assets) ·
+[A module](#a-module) · [The course](#the-course) · [From package to delivery](#from-package-to-delivery)
+
+The package is the one file you assemble: `work/package.json`. Production reads it and makes the
+import file from it; the API takes it as it is. A whole package:
+[examples/course-from-slides/package.json](../examples/course-from-slides/package.json).
 
 ## Top level
 
@@ -10,151 +15,106 @@ Design rationale: `doc/design/AGENT_AUTHORING_647.md` §2.
   "packageFormat": "a2-authoring-package/v1",
   "locale": "nb",
   "constraints": { "source": "…", "requirements": "…" },
-  "objects": [ { "clientRef": "…", "type": "module|section|course", "payload": { … } } ]
+  "objects": [ { "clientRef": "…", "type": "section", "payload": { } } ]
 }
 ```
 
-- `packageFormat` — required literal.
-- `locale` — optional, informative only (the primary language you authored in).
-- `constraints` — optional free-form JSON; record the user's requirements verbatim for
-  audit/debug. The server never interprets it. **Never put secrets here.**
-- `objects` — 1+ entries. `clientRef` must match `[a-z0-9-]{1,64}` and be unique in the
-  package.
-- **All objects are strict**: unknown fields are rejected (`unknown_field`). There are no
-  publish/audit fields — do not invent `publishedAt`, `autoPublish`, `audit`, `status`, …
+- `packageFormat` — required, exactly this value.
+- `locale` — the language the course was written in. The checks read it as the primary language.
+- `constraints` — free-form. Put the confirmed sources and the author's stated requirements here,
+  in the author's words. The platform keeps it for the record and never interprets it. **Never a
+  token or any other secret.**
+- `objects` — one entry per section, module and course. `type` is `section`, `module` or
+  `course`. `clientRef` is the id you give it: 1–64 of `a–z`, `0–9` and `-`, unique in the
+  package, and the same id as in the course state and the slide list.
+- **Unknown fields are refused.** There are no publish, status or audit fields — do not add any.
 
-## Localized text
+## Text in three languages
 
-Every `title`/text field accepts either a **plain string** or a locale object. Module/course titles
-use the strict object form (`{"en-GB": "…", "nb": "…", "nn": "…"}` — all three required); section
-`title`/`bodyMarkdown` accept a *partial* object (e.g. only `nb`).
-
-> **⚠️ Deliver ALL THREE languages (`nb`, `nn`, `en-GB`) for every localized field — sections
-> included.** The partial-object allowance on `section.title`/`bodyMarkdown` exists for incremental
-> edits in the admin UI; it is **NOT** a licence for an agent to ship a single-language course. A
-> course produced by this skill must be complete in nb, nn **and** en-GB at generation time, with
-> **real translations** — never the primary text copied into every locale, and never one locale left
-> out. **Why it is mandatory, not "ideal":** anything left in one language must be translated later
-> by a human via the platform's on-demand LLM localizer — **central token cost we avoid entirely by
-> translating once, here, at production.** `checkLocalization` blocks a missing locale and flags a
-> blind-copy (see [localization.md](localization.md)). Use a plain string ONLY for a genuinely
-> locale-independent value (a proper noun, a number) — never as a shortcut past translating prose.
-
-## `type: "section"`
+Every text a learner sees is written as an object with all three languages:
 
 ```json
-{
-  "clientRef": "intro",
-  "type": "section",
-  "payload": {
-    "title": { "nb": "Introduksjon til GDPR", "nn": "Introduksjon til GDPR", "en-GB": "Introduction to GDPR" },
-    "bodyMarkdown": {
-      "nb": "## Hva er GDPR\n\nGDPR regulerer behandling av personopplysninger …",
-      "nn": "## Kva er GDPR\n\nGDPR regulerer behandling av personopplysningar …",
-      "en-GB": "## What is the GDPR\n\nThe GDPR governs the processing of personal data …"
-    }
-  }
-}
+{ "nb": "Introduksjon til GDPR", "nn": "Introduksjon til GDPR", "en-GB": "Introduction to the GDPR" }
 ```
 
-A section needs `title` + `bodyMarkdown`, **each carrying all three locales** (`nb`, `nn`, `en-GB`)
-with real translations — see the mandatory-completeness note above. To include a figure, add an
-optional `assets[]` and reference each figure from the markdown as `![alt](asset:<sourceId>)` —
-below.
+A plain string is only for a value that is the same in every language. Which fields this covers,
+and what a translation must keep: [localization.md](localization.md).
 
-### Section figures — optional `assets[]` (#763, Layer B)
-
-The skill **designs** figures as part of authoring — propose one simple figure per visual point in
-the structure gate, draw it as SVG alongside the text (see [figure-design.md](figure-design.md)) —
-and carries them inline on the section payload:
+## A section
 
 ```json
 {
-  "clientRef": "prosess",
+  "clientRef": "sec-kilder",
   "type": "section",
   "payload": {
-    "title": { "nb": "Saksgangen", "nn": "Sakshandsaminga", "en-GB": "The case workflow" },
+    "title": { "nb": "Hva du gir KI", "nn": "Kva du gir KI", "en-GB": "What you give the AI" },
     "bodyMarkdown": {
-      "nb": "## Saksgang\n\n![Saksflyt](asset:fig-flow)",
-      "nn": "## Sakshandsaming\n\n![Saksflyt](asset:fig-flow)",
-      "en-GB": "## Case workflow\n\n![Case flow](asset:fig-flow)"
+      "nb": "Utkastet blir aldri bedre enn det du legger inn. Tre kilder er vanlige.\n\n### …",
+      "nn": "Utkastet blir aldri betre enn det du legg inn. Tre kjelder er vanlege.\n\n### …",
+      "en-GB": "The draft is never better than what you put in. Three sources are common.\n\n### …"
     },
-    "assets": [
-      {
-        "sourceId": "fig-flow",
-        "filename": "saksflyt.svg",
-        "mimeType": "image/svg+xml",
-        "sizeBytes": 1234,
-        "contentBase64": "PHN2Zy…",
-        "sourceLocale": "nb",
-        "localizedVariants": [
-          { "locale": "nn", "contentBase64": "PHN2Zy…" },
-          { "locale": "en-GB", "contentBase64": "PHN2Zy…" }
-        ]
-      }
-    ]
+    "assets": [ ]
   }
 }
 ```
 
-- **`sourceId` is a client-chosen token** (`[a-zA-Z0-9_-]{1,64}`) you invent — NOT a DB id. The
-  markdown references it as `asset:<sourceId>`; leave the ref pointing at your `sourceId`, never
-  pre-remap it.
-- On `create_section`, A2 imports each asset (re-sanitises SVG, mime/size guards), remaps every
-  `asset:<sourceId>` in the stored markdown to the new `SectionAsset` id, and **echoes the
-  `sourceId → assetId` map** back so you can track your refs. Same ref/remap + mime/limit contract as
-  the export `assets[]` (below): allowed mimes `image/svg+xml`, `image/png`, `image/jpeg`,
-  `image/gif`, `image/webp`; 5 MB per asset. Omit `assets` entirely for a text-only section.
-- The validate report checks figure consistency per section: `missing_asset`, `unreferenced_asset`
-  (warning), `unsupported_asset_mime`, `asset_too_large`, `asset_svg_unsanitizable`,
-  `duplicate_asset_source_id`.
-- **`localizedVariants`** carries the #657 translated-SVG variants (one base64 per locale), added
-  after the primary language is approved; omit for raster or untranslated figures.
-- **`layoutVariants`** (#1079, optional, SVG only) carries the **narrow layout** of the same figure
-  — the one a phone gets: the column there is about 200 px wide. The asset itself
-  (`contentBase64`) is the wide layout.
+`title` and `bodyMarkdown` are required. `assets` is left out for a section with text only. How
+to write the body: [section-content.md](section-content.md).
 
-  ```json
-  "layoutVariants": [
-    {
-      "layout": "narrow",
-      "contentBase64": "PHN2Zy…",
-      "localizedVariants": [
-        { "locale": "nn", "contentBase64": "PHN2Zy…" },
-        { "locale": "en-GB", "contentBase64": "PHN2Zy…" }
-      ]
-    }
-  ]
-  ```
+## Pictures and figures — `assets[]`
 
-  `narrow` is the only layout, once per figure. **It carries the same labels as the wide figure, in
-  every language** — the platform refuses a layout whose labels differ (`asset_layout_text_mismatch`,
-  also `asset_layout_unknown`, `asset_layout_not_svg`), and `localization-check.mjs` reports it as
-  `layoutTextMismatches`. Both files come from `draw-flow-figure.mjs`, which draws them from one
-  description, so they agree by construction; do not write a narrow figure by hand. The narrow
-  layout needs the same locale variants as the wide one. A platform older than 2.81.0 does not know
-  the field: the fallback file imports with the wide figure only, and the API refuses the package —
-  leave `layoutVariants` out when the target reports an older version.
+Each picture, icon and figure a section shows is one entry. While you work, the entry **points
+at the file**:
 
-## `type: "module"`
+```json
+"assets": [
+  { "sourceId": "img-innstillinger", "file": "deck/images/slide-10-1.png" },
+  { "sourceId": "ikon-sakliste", "file": "deck/icons/image7.svg" },
+  { "sourceId": "fig-arbeidsgang", "file": "figures/arbeidsgang.svg", "sourceLocale": "nb",
+    "localizedVariants": [
+      { "locale": "nn", "file": "figures/arbeidsgang-nn.svg" },
+      { "locale": "en-GB", "file": "figures/arbeidsgang-en.svg" } ],
+    "layoutVariants": [
+      { "layout": "narrow", "file": "figures/arbeidsgang.narrow.svg",
+        "localizedVariants": [
+          { "locale": "nn", "file": "figures/arbeidsgang-nn.narrow.svg" },
+          { "locale": "en-GB", "file": "figures/arbeidsgang-en.narrow.svg" } ] } ] }
+]
+```
 
-`payload.module` = metadata; `payload.activeVersion` = the assessable content. Which
-`activeVersion` fields are required/forbidden depends on `assessmentMode`
-(`required_for_mode` / `forbidden_for_mode` in the validate report):
+- **`file`** is relative to the folder the package is in. `produce-course.mjs` reads each file and
+  writes what the platform's format carries instead — `filename`, `mimeType`, `sizeBytes` and
+  `contentBase64`. Do not encode files yourself.
+- **`sourceId`** is a name you choose (1–64 of letters, digits, `_` and `-`), unique in the
+  section. The text shows the picture as `![alt text](asset:<sourceId>)`. The platform replaces
+  the name with its own id at import; leave the reference as you wrote it.
+- Every entry is shown in the text, in every language, and every `asset:` reference has an entry.
+- **Types:** svg, png, jpg, gif, webp. 5 MB per file; 25 MB for a course in all.
+- **`sourceLocale` and `localizedVariants`** are for a figure with labels: the language of the
+  drawing in `file`, and one drawing per other language. A picture or an icon has neither.
+- **`layoutVariants`** holds the narrow layout of a flow, with its own language variants.
+  `narrow` is the only layout, and only a flow drawn by `draw-flow-figure.mjs` has one. It must
+  carry the same labels as the wide drawing, in every language.
 
-| Field | FREETEXT_PLUS_MCQ (default) | FREETEXT_ONLY | MCQ_ONLY |
+## A module
+
+`payload.module` describes the module; `payload.activeVersion` is what is tested. Which fields
+`activeVersion` needs depends on `assessmentMode`:
+
+| Field | `FREETEXT_PLUS_MCQ` | `FREETEXT_ONLY` | `MCQ_ONLY` |
 |---|---|---|---|
-| `taskText` | required | required | forbidden |
-| `rubric` | required | required | forbidden |
-| `promptTemplate` | required | required | forbidden |
-| `mcqSet` | required | forbidden | required |
-| `assessorExpectedContent`, `candidateTaskConstraints`, `submissionSchema`, `assessmentPolicy`, `assessmentBlueprint` | optional | optional | optional (`assessmentPolicy.passRules.mcqMinPercent` recommended) |
+| `taskText` | required | required | not allowed |
+| `rubric` | required | required | not allowed |
+| `promptTemplate` | required | required | not allowed |
+| `mcqSet` | required | not allowed | required |
+| `assessorExpectedContent`, `candidateTaskConstraints`, `submissionSchema`, `assessmentPolicy`, `assessmentBlueprint` | optional | optional | optional |
 
-FREETEXT_ONLY example:
+A free-text module (texts shown in one language here to keep the example short — write all
+three):
 
 ```json
 {
-  "clientRef": "module-1",
+  "clientRef": "mod-behandlingsgrunnlag",
   "type": "module",
   "payload": {
     "module": {
@@ -167,7 +127,7 @@ FREETEXT_ONLY example:
       "taskText": "Beskriv hvilket behandlingsgrunnlag som gjelder når …",
       "assessorExpectedContent": "Kandidaten identifiserer artikkel 6(1)(b) og begrunner …",
       "rubric": {
-        "criteria": { "identifisering": "0-4: …", "begrunnelse": "0-4: …" },
+        "criteria": { "identifisering": "0–4: …", "begrunnelse": "0–4: …" },
         "scalingRule": { "practical_weight": 100, "max_total": 8 }
       },
       "promptTemplate": {
@@ -179,158 +139,54 @@ FREETEXT_ONLY example:
 }
 ```
 
-MCQ_ONLY: drop the three free-text fields, add
-`"mcqSet": { "title": "…", "questions": [{ "stem": "…", "options": ["…", "…"], "correctAnswer": "…", "rationale": "…" }] }`
-(`correctAnswer` must be one of `options`; 2–6 options accepted by the schema, **write 3–4**; distractors as
-complete and as long as the answer, correct position rotated across the set — run `scripts/mcq-cue-check.mjs`,
-see playbook §4 and rule 10, #1032).
-FREETEXT_PLUS_MCQ: include both the free-text triple and `mcqSet`.
+A multiple-choice module has no `taskText`, `rubric` or `promptTemplate`, and has
 
-### Topping up an existing module's bank (#1062)
+```json
+"mcqSet": {
+  "title": "…",
+  "questions": [
+    { "stem": "…", "options": ["…", "…", "…"], "correctAnswer": "…", "rationale": "…" }
+  ]
+},
+"assessmentPolicy": { "passRules": { "mcqMinPercent": 75 } }
+```
 
-Not a package object: call `POST /api/admin/content/modules/:moduleId/mcq-questions` with
-`{ "questions": [...] }` (same question shape as `mcqSet.questions`). Appends to the current set as
-a new draft version; never replaces, never publishes. See api-flow.md §3b.
+`correctAnswer` is written out in full and equals one of `options` exactly — in every language.
+Write three or four options. A module with both has the free-text fields and `mcqSet`.
 
-## `type: "course"`
+`certificationLevel` is `basic`, `intermediate` or `advanced`
+([course-design.md](course-design.md#level-and-scope)). How to write tasks, criteria and
+questions: [modules.md](modules.md).
+
+## The course
 
 ```json
 {
-  "clientRef": "course-main",
+  "clientRef": "kurs-motereferat",
   "type": "course",
   "payload": {
-    "course": { "title": "GDPR for saksbehandlere", "description": "…", "certificationLevel": "basic" },
+    "course": { "title": "…", "description": "…", "certificationLevel": "basic" },
     "items": [
-      { "type": "SECTION", "ref": "intro" },
-      { "type": "MODULE", "ref": "module-1" },
-      { "type": "MODULE", "moduleId": "cmr8…existing" }
+      { "type": "SECTION", "ref": "sec-arbeidsgang" },
+      { "type": "SECTION", "ref": "sec-kilder" },
+      { "type": "MODULE", "ref": "mod-referat" }
     ]
   }
 }
 ```
 
-- Each item has **exactly one** of `ref` (package object) or `moduleId`/`sectionId`
-  (existing content, checked against the DB). Array order = course order.
-- A course without any MODULE item validates but warns (`course_without_modules`) — it can
-  never be completed/published until a module is added.
+- `items` is the course's order. Each `ref` is the `clientRef` of a section or module in the
+  package; every section and module in the package is placed.
+- A course needs at least one module: without one it can never be completed.
+- Through the API only, an item may instead name content that already exists on the platform:
+  `{ "type": "MODULE", "moduleId": "…" }` or `{ "type": "SECTION", "sectionId": "…" }`. An import
+  file cannot.
+- A package **without** a course object is a delivery of lone sections and modules
+  ([check-and-produce.md](check-and-produce.md#a-lone-section-or-module)).
 
-## Validate report
+## From package to delivery
 
-`POST /api/admin/content/agent-authoring/validate` → `200`:
-
-```json
-{
-  "valid": false,
-  "summary": { "errors": 1, "warnings": 1, "objects": 3 },
-  "issues": [
-    { "severity": "error", "path": "objects[1].payload.activeVersion.mcqSet", "code": "required_for_mode", "message": "assessmentMode MCQ_ONLY requires mcqSet." }
-  ],
-  "plan": []
-}
-```
-
-`plan` (only when `errors == 0`) is the execution order:
-`create_section`* → `create_module`* → `create_course` → `set_course_items`.
-
-## Fallback format: `a2-content-export/v1` course envelope (for manual import)
-
-When the agent can't call the API (see playbook §4), emit the course as a **self-contained
-`a2-content-export/v1` course envelope** written to disk; the user imports it via the
-existing admin-UI course import. The **leaf payloads are identical** to the authoring
-package (same `module`/`activeVersion`/`section` shapes) — the conversion is a mechanical
-re-wrap:
-
-```json
-{
-  "exportFormat": "a2-content-export/v1",
-  "exportedAt": "<now ISO>",
-  "provenance": { "producer": "agent_authoring", "tool": "a2-authoring-api", "toolVersion": "<skill version>" },
-  "scope": "course",
-  "course": {
-    "course": {
-      "title": "…", "description": "…", "certificationLevel": "…",
-      "audit": {},
-      "items": [
-        { "type": "SECTION", "sortOrder": 0, "section": { …section payload…, "audit": {} } },
-        { "type": "MODULE",  "sortOrder": 1, "module":  { …module payload…  } }
-      ]
-    }
-  }
-}
-```
-
-Mapping from an `a2-authoring-package/v1`:
-- Each package `course.items[]` entry → a `course.items[]` entry here, in array order, with
-  `sortOrder` = index; resolve `ref` → the referenced object's inlined payload.
-- Inline each referenced module/section payload directly (this format is self-contained —
-  no `clientRef`).
-- Add `audit: {}` to each module `activeVersion`, each section, and the course. Empty audit
-  = no publish history ⇒ import never auto-publishes (drafts only).
-
-### Section figures/images — optional `assets[]` (#749, Layer A)
-
-A section payload MAY carry its figures/images inline so they survive export/import (without
-this, `asset:<id>` markdown refs would break on the destination). Each entry:
-
-```json
-{
-  "type": "SECTION", "sortOrder": 0,
-  "section": {
-    "title": "…", "bodyMarkdown": "![Diagram](asset:cmr8src…)", "audit": {},
-    "assets": [
-      {
-        "sourceId": "cmr8src…",
-        "filename": "diagram.svg",
-        "mimeType": "image/svg+xml",
-        "sizeBytes": 1234,
-        "contentBase64": "PHN2Zy…",
-        "sourceLocale": "nb",
-        "localizedVariants": [ { "locale": "en-GB", "contentBase64": "PHN2Zy…" } ]
-      }
-    ]
-  }
-}
-```
-
-- **Ref/remap contract:** `bodyMarkdown` references each figure as `![alt](asset:<sourceId>)`,
-  where `<sourceId>` equals the asset's `sourceId`. On import, A2 decodes each blob, **re-sanitises
-  SVG**, stores it to a fresh blob, creates a new `SectionAsset`, and rewrites every
-  `asset:<sourceId>` in the markdown to the new asset id — so `sourceId` is a *matching key only*,
-  never a destination id. Leave the markdown refs pointing at `sourceId`; do not pre-remap them.
-- **Allowed mime types:** `image/svg+xml`, `image/png`, `image/jpeg`, `image/gif`, `image/webp`.
-  Per-asset limit 5 MB; the whole export is capped at 25 MB of decoded asset bytes.
-- **`localizedVariants`** carries the #657 translated-SVG variants (one base64 per locale); omit
-  for raster or untranslated figures. `assets` is fully optional — omit it entirely for a
-  markdown-only section (old asset-less files import unchanged).
-- **`layoutVariants`** (#1079) carries the narrow layout of an SVG figure with its own
-  `localizedVariants` — same shape and rules as in "Section figures" above. Its bytes count towards
-  the 25 MB export cap.
-- **Figures are designed by the skill (Layer B, shipped).** The skill proposes figures in the
-  structure gate and draws them as SVG alongside the text ([figure-design.md](figure-design.md)); an
-  authoring package carries them on the section payload (see "Section figures" above). This export
-  `assets[]` is the *transport* half — how figures on a section travel through the fallback file —
-  using the same ref/remap contract.
-- `provenance` (#1033) — who made the file: `producer` is `"agent_authoring"` or `"human"`; optional
-  `tool` (≤80 chars), `toolVersion` (≤40), `agentRunId` (≤120). The import copies an
-  `agent_authoring` claim into its audit row (`source: "agent_authoring"`, `provenanceClaimed: true`,
-  `provenanceTool`, `provenanceToolVersion`). **It is a claim the file makes, not proof** — good
-  enough to measure "did the skill get better?" (#1032), not for anything with legal weight; that
-  needs the API path with an agent token. Content imported before the field existed carries no
-  stamp. The emitters fill it in; `validateExportEnvelopeStructure` rejects a malformed one.
-- `exportFormat` / `exportedAt` / `scope: "course"` on the envelope. **`exportedAt` (and any
-  `audit.publishedAt`) MUST be `Date.toISOString()` shape (`YYYY-MM-DDTHH:mm:ss.sssZ`)** — Zod
-  `.datetime()` rejects timezone offsets and microseconds. Build this envelope with
-  `buildFallbackEnvelope` and validate it with the round-trip in
-  [export-validation.md](export-validation.md) (`scripts/export-validate.mjs`); do not hand-roll
-  the date or call the file "validated" without the read-back check.
-- **Encoding — write ASCII-safe JSON (#754).** Escape every non-ASCII character as a `\uXXXX` JSON
-  escape so the delivered file is pure ASCII. A `\uXXXX` escape decodes to the correct codepoint in
-  any JSON parser regardless of the file's byte encoding, so Norwegian `æ/ø/å` cannot be corrupted by
-  a download/editor/transfer that re-encodes UTF-8 as Latin-1 (which turns them into `Ã¦/Ã¸/Ã¥`).
-  `buildFallbackEnvelope` + `roundTripFallbackExport` emit ASCII-safe output and **refuse to deliver**
-  a file that already contains such mojibake (the `encoding-integrity` check); if you hand-write the
-  file instead, emit the `\uXXXX` escapes yourself. (SVG figure text is unaffected — it uses XML
-  numeric entities like `&#248;`.)
-
-Only whole courses use this fallback path; a lone module can use the module-scoped envelope
-(`scope: "module"`) the same way.
+`node scripts/produce-course.mjs work/package.json …` checks the package and writes the import
+file ([check-and-produce.md](check-and-produce.md#gate-6--production)). With
+`--package-out work/package.complete.json` it also writes the package with every file attached —
+the form the API takes ([api-flow.md](api-flow.md)).

@@ -1,0 +1,84 @@
+{
+  "source": "Møtereferat med KI.pptx",
+  "slides": [
+    {
+      "slide": 1,
+      "becomes": [
+        "omitted"
+      ],
+      "why": "title slide"
+    },
+    {
+      "slide": 2,
+      "becomes": [
+        "figure",
+        "text",
+        "callout"
+      ],
+      "in": "sec-arbeidsgang",
+      "phrases": [
+        "Avklar formålet",
+        "Les og rett",
+        "Du står ansvarlig for referatet"
+      ]
+    },
+    {
+      "slide": 3,
+      "becomes": [
+        "cards"
+      ],
+      "in": "sec-kilder",
+      "phrases": [
+        "Sakliste",
+        "Egne notater",
+        "Opptak",
+        "tatt opp med samtykke"
+      ]
+    },
+    {
+      "slide": 4,
+      "becomes": [
+        "prompt",
+        "image"
+      ],
+      "in": "sec-kilder",
+      "images": [
+        "slide-04-1.png"
+      ],
+      "imagesLeftOut": {
+        "slide-04-2.png": "a screenshot of the prompt — written out as text instead"
+      },
+      "phrases": [
+        "Du skal skrive et møtereferat",
+        "Skriv «uklart» der notatene ikke sier noe"
+      ]
+    },
+    {
+      "slide": 5,
+      "becomes": [
+        "table"
+      ],
+      "in": "sec-kilder",
+      "phrases": [
+        "Hvem som gjør hva, og når"
+      ]
+    },
+    {
+      "slide": 5,
+      "becomes": [
+        "task"
+      ],
+      "in": "mod-referat",
+      "phrases": [
+        "Hva kommer først i formen prompten ber om"
+      ]
+    },
+    {
+      "slide": 6,
+      "becomes": [
+        "omitted"
+      ],
+      "why": "practical information for the live session"
+    }
+  ]
+}

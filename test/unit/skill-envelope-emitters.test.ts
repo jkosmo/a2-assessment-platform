@@ -116,7 +116,7 @@ describe("#987: skillets emittere produserer konvolutter importen godtar", () =>
     // En agent som treffer denne skal vite HVA som manglet. «Noe gikk galt» sender den tilbake til
     // å gjette — og forrige gang den gjettet, leverte den planen sin som importfil.
     expect(() => synthesizeEnvelope({ type: "quiz", payload: {} })).toThrow(/quiz/);
-    expect(() => synthesizeEnvelope({ type: "course", payload: {} })).toThrow(/SKILL\.md/);
+    expect(() => synthesizeEnvelope({ type: "course", payload: {} })).toThrow(/produce-course\.mjs/);
   });
 
   it("manglende felter avvises før de blir en ugyldig fil", () => {

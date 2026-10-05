@@ -112,7 +112,7 @@ export function synthesizeEnvelope(object, now = nowIso) {
       // kurskonvolutt kan ikke bygges fra ett objekt alene. Filveien for HELE kurs er dokumentert
       // i SKILL.md og virker; den er ikke rørt av #987.
       throw new TypeError(
-        "synthesizeEnvelope: kurs bygges ikke per objekt — se SKILL.md, reservevei for kurs",
+        "synthesizeEnvelope: kurs bygges ikke per objekt — bruk produce-course.mjs",
       );
     default:
       throw new TypeError(`synthesizeEnvelope: ukjent objekttype "${object?.type ?? "(mangler)"}"`);

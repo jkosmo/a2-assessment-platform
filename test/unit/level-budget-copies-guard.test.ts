@@ -48,7 +48,9 @@ describe("#1049 — kopiene av nivågrensene er enige med kilden", () => {
     // serveren, så tallene MÅ stå der — og da må de holdes i takt. En Skill som er ute av takt er
     // verre enn de andre kopiene: den kjører hos noen andre, og vi ser ikke hva den produserer
     // før en JSON kommer tilbake.
-    const kilde = les("../../skills/a2-authoring-api/SKILL.md");
+    //
+    // Tabellene sto i SKILL.md til skillet ble delt opp (#1079); nå står de i kapitlet om kursdesign.
+    const kilde = les("../../skills/a2-authoring-api/references/course-design.md");
     const avvik: string[] = [];
 
     for (const nivå of NIVÅER) {
@@ -65,13 +67,13 @@ describe("#1049 — kopiene av nivågrensene er enige med kilden", () => {
         ["minWords", LEVEL_SCOPE[nivå].minWords],
         ["maxWords", LEVEL_SCOPE[nivå].maxWords],
       ] as const) {
-        if (!tall.includes(verdi)) avvik.push(`${nivå}.${navn}=${verdi} står ikke i SKILL.md`);
+        if (!tall.includes(verdi)) avvik.push(`${nivå}.${navn}=${verdi} står ikke i references/course-design.md`);
       }
     }
 
     expect(
       avvik.join("\n"),
-      "SKILL.md og plattformens grenser er uenige.\n" +
+      "Skillets nivåtabeller (references/course-design.md) og plattformens grenser er uenige.\n" +
         "Skill-en kjører hos en ekstern modell og produserer innhold vi importerer — er tallene\n" +
         "ute av takt, får vi kurs bygget mot grenser vi ikke har.\n" +
         "Husk `npm run skill:package` og redeploy etter endring.",

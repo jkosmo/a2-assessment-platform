@@ -1,0 +1,49 @@
+{
+  "name": "arbeidsgang-nn",
+  "title": "Frå møte til referat",
+  "desc": "Fire steg i rekkjefølgje, fordelte på fasane Før og Etter.",
+  "phases": {
+    "for": {
+      "label": "Før",
+      "grunn": "#d9e8dd",
+      "lys": "#6fae87",
+      "tekst": "#3f7a57"
+    },
+    "etter": {
+      "label": "Etter",
+      "grunn": "#e7e2f0",
+      "lys": "#a99bc9",
+      "tekst": "#6b5a94"
+    }
+  },
+  "steps": [
+    {
+      "label": [
+        "Avklar",
+        "føremålet"
+      ],
+      "phase": "for"
+    },
+    {
+      "label": [
+        "Samle",
+        "notata"
+      ],
+      "phase": "for"
+    },
+    {
+      "label": [
+        "Lag eit",
+        "utkast"
+      ],
+      "phase": "etter"
+    },
+    {
+      "label": [
+        "Les og",
+        "rett"
+      ],
+      "phase": "etter"
+    }
+  ]
+}

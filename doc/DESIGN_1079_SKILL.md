@@ -1,8 +1,12 @@
 # Design: skillet `a2-authoring-api`, og veien fra presentasjon til kurs (#1079)
 
-> **Status: besluttet av produkteier 2026-10-05, valg for valg. Ingenting er bygget.** Sju valg.
-> På fem fulgte han anbefalingen. På to valgte han annerledes enn det første forslaget (3 og 6);
-> teksten under er rettet etter det han bestemte. Beslutningene står også i `doc/DECISIONS.md`.
+> **Status: besluttet av produkteier 2026-10-05, valg for valg.** Sju valg. På fem fulgte han
+> anbefalingen. På to valgte han annerledes enn det første forslaget (3 og 6); teksten under er
+> rettet etter det han bestemte. Beslutningene står også i `doc/DECISIONS.md`.
+>
+> **Bygget samme kveld, på grenen `skill-ombygging-1079`:** steg 2 i rekkefølgen nederst (skillet
+> bygget om). Ikke målt i ChatGPT og Claude.ai ennå (milepæl 1), og ikke flettet til `dev`. Hva som
+> ble annerledes enn notatet under bygging, står i avsnittet «Slik ble det bygget» nederst.
 
 ## Kort
 
@@ -274,3 +278,53 @@ tabeller eller lister, men de blir gjort rede for.
 - **Tegning på høyde med originalen.** Figurene blir enklere enn lysarkene. Målet er at innholdet
   og formen er bevart, ikke at kurset ser ut som presentasjonen.
 - **Safari og forstørret skrift** for de nye blokkene må ses på ekte enheter, som figurene.
+
+## Slik ble det bygget (2026-10-05, grenen `skill-ombygging-1079`)
+
+Oppdelingen følger valg 5, med engelske filnavn som resten av skillet:
+
+```
+SKILL.md                          rundt 115 linjer: seks regler, hvilken arbeidsflyt, portene,
+                                  hvor faget står, kommandoene
+workflows/from-presentation.md    port for port når kilden er en presentasjon
+workflows/from-text.md            port for port når kilden er tekst
+references/course-design.md       læringsmål, struktur, testform, nivå og omfang
+references/section-content.md     tekst, tabell, uthevet boks, prompt, kort, ikon, bilde fra kilden
+references/figure-design.md       hvilken form, hvordan den tegnes og sjekkes
+references/modules.md             oppgave, vurderingskriterier, flervalg
+references/content-preservation.md, check-and-produce.md, localization.md,
+references/package-schema.md, export-validation.md, api-flow.md
+examples/course-from-slides/      et helt lite kurs: lysarkliste, pakke, tilstand, figurer, bilder
+scripts/                          som før, pluss pptx-extract, slide-coverage, produce-course
+```
+
+Fem ting ble annerledes enn notatet, eller sto ikke i det:
+
+1. **Blokkene skrives foreløpig i former plattformen alt tegner.** Notatet sier `[!HUSK]` og
+   `:::kort`. Plattformen tegner ikke dem ennå, og en deltaker ville sett tegnene som tekst. Til
+   blokkene er bygget (steg 4), skriver skillet: uthevet boks som et sitat som åpner med fet
+   merkelapp (`> **Husk:** …`), prompt som en kodeblokk merket `prompt`, kort som
+   underoverskrifter (`###`) med ikonet først. Når plattformen får blokkene, endres
+   `references/section-content.md` og tellingen i `scripts/slide-coverage.mjs` — ikke noe annet.
+2. **Port 6 er én kommando.** Fire av kontrollene (tap av godkjent tekst, språk, importfil,
+   konvolutt) var bare funksjoner modellen selv måtte kalle fra egen kode. `produce-course.mjs`
+   kjører alle i fast rekkefølge og skriver importfila bare når alle går gjennom.
+3. **Pakken peker på filer** (`"file": "deck/images/slide-10-1.png"`) mens kurset skrives.
+   Kommandoen legger dem ved. En pakke med megabyte av bildeinnhold kan ikke lenger leses eller
+   rettes i en samtale, og et bilde kodet for hånd er der bilder blir borte.
+4. **Ikoner får en oppgitt størrelse (40 px)** når de hentes ut. PowerPoint skriver dem uten, og
+   da viser plattformen dem så brede som spalten.
+5. **Stillestående figurer har fem former** med ferdige skjeletter: tre, bokser og piler,
+   matrise, merket diagram, tidslinje. Alle er tegnet 340 brede, så etikettene er lesbare i
+   spalten på en telefon uten et eget smalt oppsett. Tegneskript for matrise og tidslinje (notatets
+   steg 5) er ikke laget; de tegnes for hånd etter skjelettet.
+
+Tre vakter holder oppbyggingen: `test/unit/skill-structure-guard-1079.test.ts` (lenker, lengde,
+ingen historikk, hver kommando kan kjøres), `test/unit/level-budget-copies-guard.test.ts`
+(nivåtabellene, nå i `references/course-design.md`), og `test/m2-skill-example-course-1079.test.ts`
+(eksempelkurset importeres gjennom plattformens egen import).
+
+**Målet «ingen bilder over 300 kB» kan ikke nås i milepæl 1.** Skillet kan ikke krympe bilder
+(bare Nodes standardbibliotek), og plattformen gjør det ikke ennå. Skjermbildene i de tre
+testpresentasjonene er opptil 2,3 MB hver; samlet 2,6 til 5,4 MB per presentasjon, innenfor
+plattformens grenser (5 MB per bilde, 25 MB per kurs).

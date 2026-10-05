@@ -300,3 +300,39 @@ export function extractEnvelopeElements(envelope, order) {
     attachmentsText: payloadText((item.module ?? item.section)?.attachments),
   }));
 }
+
+// ---------------------------------------------------------------------------
+// Command line: review a proposed revision of an approved element before it replaces it.
+//   node scripts/course-state.mjs review work/course-state.json <clientRef> work/revised.md [--reduction-approved]
+// The functions above stay pure; the files are read here only.
+// ---------------------------------------------------------------------------
+export function formatReview(review) {
+  const out = [];
+  const percent = Math.round(review.reductionRatio * 100);
+  out.push(`${review.blocks ? "FAIL" : "OK  "} ${review.clientRef}: ${percent} % shorter, ${review.preservedCount} item(s) in place, ${review.movedCount} moved to an attachment`);
+  for (const entry of review.lostMandatory) out.push(`  - lost (${entry.category}): «${entry.item}» — put it back, or move it to an attachment`);
+  for (const entry of review.lostUnique) out.push(`  - missing (${entry.category}): «${entry.item}» — put it back, or record the author's consent in deliberatelyRemoved`);
+  if (review.requiresApproval) {
+    out.push(`  - more than ${REDUCTION_APPROVAL_THRESHOLD * 100} % shorter: ask the author to approve the shortening, then run again with --reduction-approved`);
+  }
+  return out.join("\n");
+}
+
+const isMain = process.argv[1] && import.meta.url.endsWith(process.argv[1].replace(/\\/g, "/").split("/").pop());
+if (isMain) {
+  const [command, stateFile, clientRef, revisedFile, flag] = process.argv.slice(2);
+  if (command !== "review" || !stateFile || !clientRef || !revisedFile || (flag !== undefined && flag !== "--reduction-approved")) {
+    console.error("usage: node scripts/course-state.mjs review work/course-state.json <clientRef> work/revised.md [--reduction-approved]");
+    process.exit(2);
+  }
+  const { readFileSync } = await import("node:fs");
+  const state = JSON.parse(readFileSync(stateFile, "utf8"));
+  const element = (state.elements ?? []).find((entry) => entry.clientRef === clientRef);
+  if (!element) {
+    console.error(`FAIL "${clientRef}" is not in ${stateFile}`);
+    process.exit(2);
+  }
+  const review = reviewRevision(element, readFileSync(revisedFile, "utf8"), { reductionApproved: flag === "--reduction-approved" });
+  console.log(formatReview(review));
+  process.exit(review.blocks ? 1 : 0);
+}
