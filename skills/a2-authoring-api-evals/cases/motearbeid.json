@@ -1,0 +1,28 @@
+{
+  "navn": "Møtearbeid og møtefasilitering med generativ KI",
+  "kilde": "Intro_Modul_1_Møtearbeid_med_generativ_KI_A2.pptx",
+  "preg": "Skjermbildetung presentasjon med lite tekst på lysarkene. Det faglige innholdet står i skjermbildene (prompter skrevet inn i et chatvindu, innstillinger i Teams med røde ringer) og i notatene, som har hovedbudskap og selve promptene på 14 av 20 lysark. Tre lysark er SmartArt.",
+  "ikonerIKilden": 0,
+  "lysark": [
+    { "nr": 3, "form": "smartart", "hva": "Sju læringsmål som bokser (SmartArt)", "forventet": ["læringsmål", "tekst"], "nøkkelord": ["før, under og etter", "råmateriale", "beslutningsklart", "fire øyne", "bedre prompt", "tunge filformat", "åpent og profesjonelt"] },
+    { "nr": 5, "form": "kort", "hva": "Tre kort — Før, Under, Etter møtet — med punkter og et eksempel. Samme lysark kommer igjen som nr. 9 og 13 med en annen ramme uthevet: det er kursets inndeling, ikke nytt innhold", "forventet": ["innholdsblokk", "struktur"], "nøkkelord": ["Før møtet", "Under møtet", "Etter møtet", "stram agenda", "Gruppere innspill", "beslutningsklart referat"] },
+    { "nr": 6, "form": "skjermbilde-prompt", "hva": "Skjermbilde av et chatvindu der prompten er skrevet inn, og en boks med seks nummererte steg", "forventet": ["prompt-som-tekst"], "nøkkelord": ["Last opp notater", "Ikke aksepter første resultat"], "bildetekst": ["Hjelp meg å forberede et møte", "ønsket utfall per punkt"] },
+    { "nr": 7, "form": "skjermbilde-prompt", "hva": "Skjermbilde av en prompt for et kreativt møte. Lysarket har ingen annen tekst", "forventet": ["prompt-som-tekst"], "nøkkelord": [], "bildetekst": ["fasilitere et arbeidsmøte", "åpne spørsmål", "gruppere innspill"] },
+    { "nr": 8, "form": "skjermbilde-prompt", "hva": "En kort prompt i et skjermbilde, en pil, og den lange prompten den ga, som tekst på lysarket", "forventet": ["prompt-som-tekst"], "nøkkelord": ["tidsatt agenda", "beslutningsorientert"], "bildetekst": ["forbedre en prompt"] },
+    { "nr": 10, "form": "skjermbilde-grensesnitt", "hva": "To skjermbilder av Teams, nummerert 1 og 2, med røde ringer rundt det som skal trykkes på", "forventet": ["bilde"], "nøkkelord": ["Transkripsjon", "rene teamsmøter"], "bildetekst": ["Møtealternativer", "Opptak og transkripsjon"] },
+    { "nr": 11, "form": "skjermbilde-grensesnitt", "hva": "To skjermbilder av Teams (menyvalg i rød ramme, og svaret i møtechatten), med to punkter tekst", "forventet": ["bilde"], "nøkkelord": ["Facilitator", "agendaen"], "bildetekst": ["Aktiver Facilitator"] },
+    { "nr": 12, "form": "skjermbilde-grensesnitt", "hva": "Skjermbilde av Copilot i et Teams-møte, med to punkter tekst", "forventet": ["bilde"], "nøkkelord": ["Copilot", "oppfølgingsspørsmål", "transkriberingen"] },
+    { "nr": 14, "form": "skjermbilde-prompt", "hva": "To skjermbilder av prompter (referat fra transkripsjon; oppdatering av et dokument), og én setning ved siden av", "forventet": ["prompt-som-tekst"], "nøkkelord": ["oppsummering basert på transkriberingen"], "bildetekst": ["strukturert møtereferat", "Fjern fyllord", "utredningsdokumentet"] },
+    { "nr": 15, "form": "skjermbilde-prompt", "hva": "Punkter til venstre, og to skjermbilder av prompter for kvalitetssikring til høyre", "forventet": ["prompt-som-tekst"], "nøkkelord": ["Be om referanser", "Risikovurder", "uavhengig tråd"], "bildetekst": ["kvalitetssikre dette referatet", "hallusinasjoner"] },
+    { "nr": 16, "form": "liste", "hva": "Punkter til venstre og en boks med seks nummererte steg til høyre", "forventet": ["innholdsblokk", "tekst"], "nøkkelord": ["Word og Powerpoint", ".md", "Lag ny KI-tråd", "går tom for kontekst"] },
+    { "nr": 17, "form": "sitat", "hva": "Et sitat over hele lysarket: slik forklarer vi vår bruk av KI", "forventet": ["innholdsblokk"], "nøkkelord": ["strukturere agenda", "kontrollert beslutninger", "forklare vår bruk"] },
+    { "nr": 19, "form": "oppgave", "hva": "Oppgaven (lysark 19) og hva som skal leveres (lysark 20)", "forventet": ["oppgave"], "nøkkelord": ["virkelige møter", "Prompter brukt", "Kildedokumenter"] },
+    { "nr": 18, "form": "tidslinje", "hva": "To uker som tidslinje med fire ikoner (praktisk opplegg, ikke fag)", "forventet": ["utelatt", "figur"], "valgfri": true, "nøkkelord": ["Veiledning", "Innlevering", "Sertifisering"] }
+  ],
+  "manuellSjekk": [
+    "Er promptene gjengitt ordrett som tekst (de står i notatene), ikke som bilde og ikke omskrevet?",
+    "Er skjermbildene av Teams med: beskåret til det som vises, under 300 kB, med en bildetekst som sier hva man skal trykke på?",
+    "Lysark 5, 9 og 13 er samme lysark tre ganger. Er det blitt kursets inndeling, og ikke tre like seksjoner?",
+    "Er hovedbudskapene fra notatene med i teksten?"
+  ]
+}
