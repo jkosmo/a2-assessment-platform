@@ -171,8 +171,18 @@ Da gjelder regelen også bilder lastet opp for hånd, og skillet trenger ikke et
 Først matrise (Tilbudsarbeid, lysark 9) og tidslinje. Figurer som står stille, kan også tegnes
 fritt.
 
-**Prototype før bygging:** blokkene vises for produkteier som en side han kan se på, på PC og
-telefon, med innholdet fra tre ekte lysark, før noe bygges i plattformen.
+**Prøvesiden er godkjent** (produkteier, 2026-10-05): de fire blokkene vist med tre ekte lysark, på
+PC og telefon. Tre avklaringer derfra:
+
+- **Kortene får plattformens stil** (lys bunn, tynn ramme), ikke presentasjonens mørke stripe. Et
+  kurs ser da likt ut uansett hvilken presentasjon det kom fra. Farger per kort tas ikke med.
+- **Blokkene er som vist:** uthevet boks med ikon og fet merkelapp («Husk», «Tips», «Viktig» —
+  den siste i varselfarge), prompt-boks med «Kopier»-knapp, kort som står under hverandre på
+  telefon. En uthevet boks kan stå inni et kort.
+- **Ingen flere blokker trengs nå.**
+
+⚠️ Ikonene i Rapportskriving er hvite: de er tegnet for mørke striper. På lys bunn er de
+usynlige. Leseskriptet gjør derfor ensfargede ikoner mørke når det henter dem ut.
 
 ## 5. Hva står hvor i skillet?
 

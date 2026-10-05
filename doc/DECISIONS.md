@@ -956,7 +956,8 @@ begrunnelsene står der). Sak #1079.
    dem. Valgt bort: at forfatteren også lager en PDF. Forutsetter at modellen kan åpne et uthentet
    bilde i begge produktene; målt samme kveld i ChatGPT og Claude.ai, og begge kan.
 4. **Fire innholdsblokker:** uthevet boks, prompt-boks, kort ved siden av hverandre, ikon. En
-   prøveside godkjennes før noe bygges. Plattformen krymper store bilder.
+   prøveside godkjennes før noe bygges. Plattformen krymper store bilder. Prøvesiden ble godkjent samme
+   kveld: kortene får plattformens stil, ikke presentasjonens farger, og ingen flere blokker trengs nå.
 5. **Hele skillet ryddes**, på en egen kopi til det nye er målt: kort forside, hver regel ett sted,
    ferdige eksempler, historikken ut. Valgt bort: bare å legge til et kapittel.
 6. **Alle bilder fra kilden tas med hvis forfatteren ikke sier nei.** Lista i punkt 2 viser dem,
