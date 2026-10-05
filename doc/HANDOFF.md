@@ -51,6 +51,16 @@ stage-testen sletter det — så lenge ingen har trykket «Avslutt kurset».
 Det ble fullført på telefonen, fikk et kursbevis, og kan derfor ikke slettes
 (`course_has_completions`). Stage-testen teller det som «står igjen» ved hver kjøring.
 
+**#1079 har fått ny retning (2026-10-05, kvelden).** Produkteier laget samme kurs med skillet i
+ChatGPT og i Claude.ai fra presentasjonen «Rapportskriving». Begge fikk tre figurer av samme type,
+ingen ikoner og ingen av kortene. Han besluttet at kort og «Husk»-bokser skal bli innholdsblokker
+i plattformen (`doc/DECISIONS.md`). Gjennomgangen, skillet målt mot Anthropics råd for skills, og
+planen i fem punkter står i #1079 (kommentar 2026-10-05). **Start der.** Rekkefølgen:
+testtilfeller først (venter på to presentasjoner til fra produkteier), så skriptet som leser
+presentasjonen, så regelen i skillet, med innholdsblokkene som eget spor (prototype først).
+Node er bekreftet i begge flatene han bruker (22.16 i ChatGPT, 22.22 i Claude.ai).
+⚠️ Det finnes ingen regel om «tre illustrasjoner» i skillet; se saken for hva som faktisk styrer dit.
+
 Seks ting krever et menneske:
 
 1. **Tre synlige endringer er mine valg, ikke produkteiers.** Han skal se dem på stage og kan si
@@ -232,7 +242,7 @@ per lysark. Produkteier har godkjent retningen og plattformdesignet (kommentaren
 | 3 | Skillet: to oppsett (bredt og smalt) fra én beskrivelse | **gjort, 2.80.0** |
 | 4 | Plattformen: lagre det smale oppsettet (`layoutVariants`) og velge etter spaltebredde | **gjort, 2.81.0** |
 | 5 | Det smale oppsettet kan leses på telefon: to steg per rad, egen størrelse, smalere marger rundt leseren | **gjort, 2.82.0** — ikke sett på en ekte telefon |
-| – | Uttrekk fra presentasjonsfila (`pptx-extract.mjs`), og et sammendrag som kilde | ikke startet |
+| – | Uttrekk fra presentasjonsfila (`pptx-extract.mjs`), og et sammendrag som kilde | prøveutgave kjørt utenfor repoet 2026-10-05; ikke bygget |
 
 Steg 2: ny mal «flow with phases» i `figure-design.md`, `figure-motion-check.mjs` godtar den som en
 andre form av malen, og `figure-fit-check.mjs` avviser etiketter som overlapper og streker gjennom

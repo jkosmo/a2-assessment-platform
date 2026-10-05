@@ -917,5 +917,27 @@ ut på et nettbrett). Det krever et nytt navn i `ASSET_LAYOUTS`, en grense til i
 rekkefølge for hva som vises når ett av dem mangler. Ett smalt oppsett må passe den smaleste
 spalten.
 **Håndheves:** `LAYOUTS` i `skills/a2-authoring-api/scripts/draw-flow-figure.mjs`; målt i den ekte
-deltakersida i `test/e2e/figure-legible-on-phone-1079.spec.ts`. Sak #1079. Status: utviklerens
-vurdering etter måling; produkteier har ikke sett resultatet på en ekte telefon.
+deltakersida i `test/e2e/figure-legible-on-phone-1079.spec.ts`. Sak #1079. Status: avklart —
+sett på en ekte telefon og godkjent av produkteier 2026-10-05 («Test ok»).
+
+## En presentasjon som kilde: kort og uthevede bokser er innholdsblokker, ikke figurer (2026-10-05)
+
+Når et kurs lages fra en presentasjon, blir lysarkenes kort (rammer ved siden av hverandre med
+overskrift, ikon og punkter) og uthevede striper («Husk») til **innholdsblokker i plattformen** —
+ikke til SVG-figurer.
+
+**Hvorfor:** produkteier, 2026-10-05, etter å ha laget samme kurs med skillet i ChatGPT og i
+Claude.ai. Begge kursene fikk tre figurer av samme type (steg på en rekke), ingen av
+presentasjonens 25 ikoner, og ingen av kortene eller stripene som fem–seks av lysarkene er bygget
+av. Det meste av grafikken i en slik presentasjon er ikke diagrammer, men oppsett av innhold, og
+seksjonene har i dag bare overskrift, avsnitt, liste, tabell og bilde: kortene har ikke noe sted å
+lande. Som innholdsblokk er teksten vanlig tekst — den kan oversettes, leses opp og brekke på
+telefon. Som SVG ville hvert kort vært et bilde med tekst i.
+**Forholdet til tidligere beslutning:** «bygg det i skillet, ikke i plattformen» (#1079,
+2026-10-04) gjelder fortsatt figurer. Den gjelder ikke oppsett av innhold.
+**Valgt bort:** å tegne kort og striper som SVG-figurer i skillet. Det krever ingen
+plattformendring, men gir tekst som bilde.
+**Håndheves:** ikke bygget. Planen står i #1079 (kommentar 2026-10-05): testtilfeller først, et
+skript som leser presentasjonen, regelen i skillet snus fra «figur ved behov» til «gjør rede for
+hver grafikk i kilden», innholdsblokker i plattformen (prototype først), og skillet ryddes etter
+Anthropics råd for skills. Status: avklart retning; ingenting av det er bygget.
