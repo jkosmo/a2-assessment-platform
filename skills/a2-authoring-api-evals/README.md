@@ -49,9 +49,10 @@ Hvert lysark med faglig innhold har:
    presentasjonen.»* Ikke noe mer.
 2. **Svar bare «godkjent» ved portene.** Det som måles, er hva skillet foreslår av seg selv. En
    forfatter som ber om flere figurer, får flere figurer — og da måles forfatteren.
-3. **Hent kurset** som JSON: enten pakka skillet lager (`a2-authoring-package/v1`), eller en
-   eksport fra plattformen etter import (`GET /api/admin/content/courses/<id>/export-package`).
-   Skriptet leser begge.
+3. **Hent kurset** som JSON. Importfila skillet leverer er nok, og det enkleste. Skriptet leser
+   også en eksport fra plattformen etter import
+   (`GET /api/admin/content/courses/<id>/export-package`) og pakka skillet arbeider i
+   (`a2-authoring-package/v1`, men bare når teksten står i pakka og ikke i filer ved siden av).
 4. **Tell:** `node skills/a2-authoring-api-evals/score-course.mjs skills/a2-authoring-api-evals/cases/<tilfelle>.json <kurs.json>`
 5. **Les `manuellSjekk`** i tilfellet, og se på kurset.
 6. **Før tallene inn** under «Målinger» nederst, med dato, skillversjon og hvor det ble kjørt.
@@ -93,3 +94,30 @@ kjøring.
 Det tallene viser: Claude.ai tok med alt innholdet, men i tre former (flyt, tabell, tekst).
 ChatGPT skrev kortere og mistet fem lysark. Ingen av dem brukte et ikon eller en annen figurform
 enn flyt.
+
+### 2026-10-05 — skill 2.83.0, grov prøve (IKKE milepæl 1)
+
+To hjelpeagenter (Sonnet, i Claude Code) fikk det ombygde skillet og hver sin presentasjon, og
+fulgte skillet ordrett med «godkjent» ved hver port. Det er en annen flate og en annen modell enn
+ChatGPT og Claude.ai: tallene sier at skillet lar seg følge fra start til importfil, ikke hvordan
+det går der produkteier bruker det. «Forventet behandling» teller fra og med denne målingen kort,
+uthevede bokser og prompt-bokser i formen skillet skriver dem (rekke av `###`, sitat med fet
+merkelapp, kodeblokk); nullpunktet over ville fått samme tall med den tellingen, for de kursene
+hadde ingen slike.
+
+| Tilfelle | Hvor | Innhold med | Forventet behandling | Figurer | Former | Smalt oppsett | Ikoner | Tabeller | Bilder | Tekst fra bilder |
+|---|---|---|---|---|---|---|---|---|---|---|
+| Rapportskriving | Claude Code, Sonnet | 9 av 9 | 8 av 9 | 2 | flyt | 2 | 21 (kilden har 25) | 3 | 0 | – |
+| Møtearbeid | Claude Code, Sonnet | 12 av 13 | 12 av 13 | 1 | flyt | 1 | kilden har ingen | 0 | 5 (213 kB) | 14 av 14 |
+| Tilbudsarbeid | – | ikke kjørt | | | | | | | | |
+
+Det tallene ikke viser, lest ut av kursene:
+
+- Lysarket som ikke fikk forventet behandling i begge kursene, er oppgaven. Den ble en fritekstmodul
+  begge steder; måleskriptet har ingen måte å kjenne igjen en oppgave på.
+- Rapportskriving: stripene med flere punkter ble til fire og fem bokser etter hverandre. Skillet
+  sier nå at én stripe er én boks med liste.
+- Møtearbeid: et skjermbilde med møte-ID og passord ble tatt med. Skillet foreslår nå å utelate
+  slike.
+- Begge kursene har bare flytfigurer. Presentasjonene har ingen matrise, tre eller tidslinje;
+  Tilbudsarbeid har en matrise og er ikke kjørt.
