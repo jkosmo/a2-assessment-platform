@@ -2,6 +2,34 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.82.1 - 2026-10-05
+
+To feil som 2.82.0 innførte, funnet av QA-gjennomgangen (`.ai-qa/qa-20261005-100836.md`, GO) før
+noen hadde sett dem. Ingen migrasjon.
+
+- **Seksjonseditoren på telefon: linja med «Last opp bilde» havnet bak menyen** når sida ble rullet,
+  på telefoner under 375 px. Menyen er festet øverst på den sida, og linja under er festet 46 px
+  ned — et tall som forutsetter at menyen er én linje. Da menyen fikk brekke (#1085), ble den to.
+  Under 600 px ruller menyen nå bort med sida, og linja festes helt øverst.
+  ⚠️ Synlig endring: på telefon står ikke menyen lenger igjen øverst mens man redigerer en seksjon.
+- **Skillet ba agenten ta bilde av figuren i et vindu på 400 px.** Det smale oppsettet er opptil
+  590 px høyt og vises i sin egen størrelse, så bildet stoppet midt i figuren — og agenten skulle
+  bedømme om noe var kuttet. Vinduet i anvisningen er nå 700 px. `--full-page`, som gjennomgangen
+  foreslo, er prøvd og virker ikke: på en SVG-fil blir kommandoen aldri ferdig. Det står nå i skillet.
+
+**Målt:** to nye nettlesertester (360 og 320 px: ingen del av linja er dekket etter rulling; røde
+før rettingen), og én enhetstest som leser vinduet ut av anvisningen og krever at det rommer den
+høyeste figuren skriptet tegner (rød med 400). «Se på figuren»-steget og forhåndsvisningen er kjørt
+ende til ende på en figur med åtte steg, og bildene er sett.
+
+**Rotårsak.** Begge er følger av en endring ett sted som en regel et annet sted stilltiende bygget
+på: tallet 46 bygget på en meny på én linje, og vinduet på 400 px på en figur som skalerte seg til
+vinduet. Ingen av dem sto i en test.
+
+**To funn som fantes fra før, ikke rettet her:** `?locale=xx` på modulbiblioteket og arkivet gir
+feil 500 (samme type feil som #1088, bare ved en adresse skrevet for hånd), og «Mer» på en av de
+nederste radene kan kuttes av tabellrammen når lista har svært få rader.
+
 ## 2.82.0 - 2026-10-05
 
 Sju rettinger samlet, slik at produkteier kan teste alt på stage i én omgang. Ingen migrasjon.

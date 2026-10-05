@@ -14,7 +14,7 @@
 | prod | 2.78.3 | rullet 2026-10-04 kl. 20:13 fra `2433d2b7`, godkjent av produkteier. #1080, #1081, #1083 |
 | stage | 2.81.0 | rullet 2026-10-04 kl. 20:27 fra `7f94f41c`. **2.82.0 rulles når QA-porten har gitt GO** |
 | `main` (git) | 2.78.3 | likt med prod (PR #1086 flettet 2026-10-04) |
-| `dev` (git) | 2.82.0 | sju rettinger, se under |
+| `dev` (git) | 2.82.1 | sju rettinger (2.82.0) og to oppfølgere etter QA (2.82.1), se under |
 
 **2.82.0, i én setning hver** (detaljer og rotårsaker i `doc/VERSIONS.md`):
 
@@ -290,8 +290,8 @@ listene. Jeg utvidet ikke regelen for å unngå det — det ville vært en tverr
   && npm run test:integration:native) > "$TEMP/claude/kjoring.log" 2>&1; echo "EXIT=$?"
 ```
 
-Sist målt 2026-10-05, på 2.82.0: **1839 enhet · 69 DOM · 430 e2e · 757 integrasjon**, alle grønne.
-(Nettleserrekka trengte to kjøringer: i den første feilet «add a section from the library» i
+Sist målt 2026-10-05, på 2.82.1: **1840 enhet · 69 DOM · 432 e2e · 757 integrasjon**, alle grønne.
+(På 2.82.0 trengte nettleserrekka to kjøringer: i den første feilet «add a section from the library» i
 `admin-content-course-sections.spec.ts` — nedtrekkslista i kursbyggeren, som ikke er rørt. 15 av
 15 alene, 430 av 430 i neste fullkjøring. Se «e2e-suiten rykker» under.)
 ⚠️ Sjekk at port 3001 er fri først: en lokal app som står igjen, plukker vurderingsjobber fra

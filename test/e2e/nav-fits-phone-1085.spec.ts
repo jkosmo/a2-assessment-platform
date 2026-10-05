@@ -85,6 +85,35 @@ test.describe("#1085 — menylinja får plass på telefon", () => {
     });
   }
 
+  // Funnet av QA-gjennomgangen av 2.82.0. I seksjonseditoren er menyen festet øverst, og linja med
+  // «Last opp bilde» er festet 46 px under toppen — et tall som forutsetter at menyen er ÉN linje.
+  // Da menyen fikk brekke, ble den to linjer på en smal telefon, og dekket linja under seg.
+  for (const bredde of [360, 320]) {
+    test(`seksjonseditoren, ${bredde} px: linja med «Last opp bilde» ligger ikke bak menyen når sida rulles`, async ({ page }) => {
+      await åpne(page, "/admin-content/sections", bredde);
+      // Kontroll: her ER menyen to linjer — det er tilfellet som ga overlappen.
+      const linjer = await page.locator(".content-area-nav .content-area-nav-link:visible").evaluateAll((els) => new Set(els.map((el) => Math.round(el.getBoundingClientRect().top))).size);
+      expect(linjer, "kontroll: menyen står på to linjer på denne bredden").toBeGreaterThanOrEqual(2);
+
+      await page.getByRole("button", { name: /Ny seksjon/ }).click();
+      const felt = page.locator("#markdownInput");
+      await expect(felt).toBeVisible();
+      // En lang seksjon: tekstfeltet er høyere enn skjermen, så linja over det blir stående festet.
+      await felt.evaluate((el) => { (el as HTMLElement).style.height = "1600px"; });
+      const linje = page.locator(".editor-pane-label").filter({ has: page.locator(":scope button, :scope label, :scope input") }).first();
+      await linje.evaluate((el) => { window.scrollTo(0, el.getBoundingClientRect().top + window.scrollY + 400); });
+      await expect(linje).toBeInViewport({ ratio: 1 });
+
+      const dekket = await linje.evaluate((el) => {
+        const r = el.getBoundingClientRect();
+        const punkter = [0.1, 0.5, 0.9].flatMap((x) => [2, r.height / 2, r.height - 2].map((y) => [r.left + r.width * x, r.top + y] as const));
+        return punkter.filter(([x, y]) => { const øverst = document.elementFromPoint(x, y); return !(øverst === el || el.contains(øverst)); })
+          .map(([x, y]) => `${Math.round(x)},${Math.round(y)}: ${(document.elementFromPoint(x, y) as HTMLElement | null)?.className ?? "ingenting"}`);
+      });
+      expect(dekket, "punkter på linja som er dekket av noe annet").toEqual([]);
+    });
+  }
+
   test("kontroll: på PC-bredde står menylenkene på én linje, som før", async ({ page }) => {
     await åpne(page, "/admin-content", 1280);
     const topper = await page.locator(".content-area-nav .content-area-nav-link:visible").evaluateAll((els) => [...new Set(els.map((el) => Math.round(el.getBoundingClientRect().top)))]);

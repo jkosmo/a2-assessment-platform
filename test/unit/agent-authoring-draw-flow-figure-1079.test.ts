@@ -153,6 +153,25 @@ describe("draw-flow-figure — two layouts from one description (#1079)", () => 
     expect(antall(narrow, "circle")).toBe(beskrivelse.steps.length);
   });
 
+  // Funnet av QA-gjennomgangen av 2.82.0: skillet ba agenten ta bilde av figuren i et vindu på 400 px.
+  // Det smale oppsettet oppgir sin egen størrelse og vises i den, så bildet stoppet midt i figuren —
+  // og agenten skulle bedømme om «ingenting er kuttet i kanten». Vinduet i anvisningen må romme den
+  // høyeste figuren skriptet tegner. (`--full-page` er ingen utvei: på en SVG-fil blir kommandoen
+  // aldri ferdig. Prøvd 2026-10-05.)
+  it("the window figure-design.md tells the agent to screenshot in holds the tallest figure the script draws", () => {
+    const doc = readFileSync("skills/a2-authoring-api/references/figure-design.md", "utf8");
+    const kommando = /npx playwright screenshot [^`]*/.exec(doc)?.[0] ?? "";
+    const vindu = /--viewport-size=(\d+),(\d+)/.exec(kommando);
+    expect(vindu, "anvisningen oppgir et vindu").toBeTruthy();
+    expect(kommando).not.toContain("--full-page");
+    const { narrow } = drawFlowFigure(saksgang());
+    // Kontroll: figuren i testen er den høyeste — åtte steg er taket.
+    expect(saksgang().steps).toHaveLength(8);
+    const [, bredde, høyde] = /<svg\b[^>]* width="(\d+)" height="(\d+)"/.exec(narrow)!;
+    expect(Number(vindu![2])).toBeGreaterThanOrEqual(Number(høyde));
+    expect(Number(vindu![1])).toBeGreaterThanOrEqual(Number(bredde));
+  });
+
   it("drawing is repeatable: the same description gives the same figure, byte for byte", () => {
     expect(drawFlowFigure(saksgang())).toEqual(drawFlowFigure(saksgang()));
   });

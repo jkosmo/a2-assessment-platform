@@ -393,7 +393,7 @@ Describe the figure in words as well, every time (see the playbook): a picture s
 
 | Where you run | Render with |
 |---|---|
-| in this repository (Claude Code, Codex) | `npx playwright screenshot --viewport-size=800,400 file:///<abs-path>/figure.svg figure.png`, then open `figure.png` |
+| in this repository (Claude Code, Codex) | `npx playwright screenshot --viewport-size=800,700 file:///<abs-path>/figure.svg figure.png`, then open `figure.png`. The window is 700 high because the narrow layout is up to 590 px tall and is shown at its own size — in a lower window the picture stops halfway down the figure. Do not use `--full-page`: on an SVG file the command never finishes |
 | a sandbox with a rasteriser but no browser (cairosvg, `rsvg-convert`, ImageMagick, Inkscape) | render **`figure.still.svg`**, which `figure-preview.mjs` writes next to the figure — e.g. `python3 -c "import cairosvg; cairosvg.svg2png(url='figure.still.svg', write_to='figure.png', output_width=1200)"` |
 | nowhere that can render | you cannot do the look step. **Say so** — "målt, men ikke sett: jeg har ingen måte å rendre figuren på her" — and ask the author to look at the preview with the checklist above |
 

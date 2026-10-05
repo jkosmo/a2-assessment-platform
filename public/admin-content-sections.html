@@ -61,6 +61,13 @@
          sticky workspace-tab-baren (.content-area-nav: top:0, ~44px) så den ikke havner bak den. */
       /* #1046 D1: etikett i vanlig skrift, som .form-field label. */
       .editor-pane-label { font-size: 13px; font-weight: 600; color: var(--color-meta); margin-bottom: 4px; position: sticky; top: 46px; z-index: 5; background: var(--color-surface); padding: 6px 0; }
+      /* #1085: på telefon kan menyen brekke til to linjer, og de 46 px over forutsetter én. En
+         festet meny på to linjer ville også tatt en tidel av skjermen. Der ruller menyen bort med
+         sida, og linja med «Last opp bilde» festes helt øverst. */
+      @media (max-width: 600px) {
+        .content-area-nav { position: static; }
+        .editor-pane-label { top: 0; }
+      }
       .preview-pane { border: 1px solid var(--color-border-soft); border-radius: var(--radius-card); padding: var(--space-2); min-height: 320px; flex: 1 1 auto; overflow-y: auto; }
       .preview-pane img { max-width: 100%; height: auto; }
       .preview-pane iframe { max-width: 100%; }
