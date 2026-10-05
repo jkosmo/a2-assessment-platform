@@ -20,7 +20,8 @@ kommende steg har en tittel på mer enn rundt 17 tegn — altså de fleste.
   ellers aldri smalere enn det bredeste den inneholder. Det gjaldt ikke bare stegradene:
   diskusjonslinja under stegene, som står på hvert kurs, har en tekst på én linje og kuttet
   kursinnholdet 20 px på en telefon på 390 på engelsk. En diskusjonstråd med en lang adresse i
-  tittelen kuttet 106 px.
+  tittelen gjorde hele kurset 106 px bredere; nå holder kurset bredden. (Adressen selv går
+  fortsatt ut av trådens egen boks — se «ikke rettet her».)
 - **På telefon får tittelen sin egen linje, hel**, over typen, statusen og «Se igjen». Da
   overflyten var rettet, viste det seg at tittelen ikke hadde noe sted å være: den fikk 20 px på
   en telefon på 360, og 0 på 320. Samme valg som modullista allerede har under 600 px.
@@ -28,14 +29,15 @@ kommende steg har en tittel på mer enn rundt 17 tegn — altså de fleste.
 - **Statusmerkene står i samme kolonne på telefon**, også i raden som ikke gjentar tittelen (en
   test rett etter en seksjon med samme navn). Uten dette hoppet merket ut til høyre i den ene raden.
 - **Et ord som er lengre enn raden, brekker**: i stegtittelen på telefon, og en lang adresse i
-  teksten i leseren. Før gikk det ut over kanten og ble kuttet midt i en bokstav.
+  teksten i leseren (`overflow-wrap: break-word`). Før gikk det ut over kanten og ble kuttet midt
+  i en bokstav.
 
-**Målt** i `test/e2e/course-steps-fit-phone.spec.ts` (16 tester). Kurset åpnes slik det er hos en
+**Målt** i `test/e2e/course-steps-fit-phone.spec.ts` (18 tester). Kurset åpnes slik det er hos en
 deltaker — diskusjon på, ett lest steg, ett som står for tur og ett som kommer, alle med lange
 titler — på 390, 360 og 320 px på bokmål og 390 og 360 px på engelsk. Ingenting stikker ut eller
 er kuttet av kursrammen, hele tittelen kan leses, og et lest steg kan åpnes igjen med leseren
-innenfor skjermen. På 640 px (rett over telefongrensa) står tittelen på én linje og forkortes.
-7 mutasjoner, 7 røde. Stage-testen måler det samme mot det utrullede miljøet: testkurset har nå to
+innenfor skjermen. På 640 px (rett over telefongrensa) står tittelen på én linje og forkortes. En
+tabell i leseren har hele ord på 700 og 1280 px. 8 mutasjoner, 8 røde. Stage-testen måler det samme mot det utrullede miljøet: testkurset har nå to
 seksjoner, og den første merkes som lest.
 
 **QA-gjennomgangen sa først NO-GO** (`.ai-qa/qa-20261005-162033.md`), med rette. Første utgave
@@ -46,15 +48,32 @@ testene før den: én tilstand. **En mutasjon som overlever, betyr enten at kode
 testen er blind.** De to andre vaktene som ble fjernet i dag (2.82.0), var begrunnet i koden selv,
 ikke bare i at testen var grønn uten dem; denne var det ikke.
 
+**Runde to sa også NO-GO** (`.ai-qa/qa-20261005-175339.md`), også det med rette. Regelen for lange
+adresser i leseren, som jeg tok med som en ekstra retting i runde to, var `overflow-wrap:
+anywhere`. Den lar nettleseren regne en tabellkolonne som én bokstav bred, og brakk ord midt i —
+«MN/OK», «125/0» — i alle tabeller på nettbrett og PC. Byttet til `break-word`, som bare brekker
+det som ellers ville gått ut av boksen, og testen har fått en tabell. **Hver «liten ekstra
+retting» i denne utgaven har kostet en QA-runde.** De øvrige funnene står derfor som kjente under,
+i stedet for å bli rettet i samme omgang.
+
 **Rotårsak — i testene, ikke bare i koden.** Alle testene som åpner et kurs på telefonbredde,
 også de jeg skrev tidligere i dag, åpner et kurs med ETT steg som ikke er lest. Det steget vises
 som et kort, der tittelen brekker. Tilstanden etter første steg ble aldri åpnet. Nettleseren hadde
 ingenting med det å gjøre: feilen kom fram i Chromium med en gang kurset ble åpnet i riktig tilstand.
 
-**Funnet av samme gjennomgang, ikke rettet her** (fantes fra før): modullista («Last moduler») har
-samme konstruksjon og kan rulles 14 px sidelengs mellom 600 og 700 px når en modul har en svært
-lang tittel; og topplinja i et åpent test-panel har ikke plass til tittelen på telefon («U…» på
-360 px).
+**Funnet av de to gjennomgangene, ikke rettet her** (alle fantes fra før):
+
+- Modullista («Last moduler») har samme konstruksjon og kan rulles 14 px sidelengs mellom 600 og
+  700 px når en modul har en svært lang tittel.
+- Topplinja i et åpent test-panel har ikke plass til tittelen på telefon («U…» på 360 px).
+- Et ord på over rundt 22 tegn i tittelen på kortet for steget som står for tur, går ut av kortet
+  på en telefon på 320 px (`.course-step--now .course-step-title` har ingen `overflow-wrap`).
+- En adresse i tittelen på en diskusjonstråd går ut av trådens boks og kuttes (79 px på 360).
+- «Mine kurs» på 320–360 px: et langt ord i kurstittelen presser statusmerket ut, og tittelen i en
+  fullført rad kan overlappe lenka til kursbeviset.
+- Kursbyggerens velger lukker seg selv hvis feltet trykkes innen 150 ms etter «Legg til», og
+  åpnes da ikke av et nytt trykk. Rammer i praksis bare tastaturbruk — og testen som feilet to av
+  seks fullkjøringer i dag. Testen venter nå ut tidsavbruddet; produktet er ikke endret.
 
 ⚠️ **Ett testkurs står igjen på stage, arkivert.** Testkurset som ble latt stå for å kunne ses på
 en ekte telefon, ble fullført der. Fullføringen ga et kursbevis, og et kurs med kursbevis kan ikke

@@ -77,15 +77,15 @@ test("course builder: add a section from the library renders it as a [SEKSJON] r
   await expect(sectionRow).toContainText("Innføring");
 
   // And it is no longer offered in the picker (can't add the same section twice).
-  // ⚠️ Lista tegnes på nytt når kurset er lagret, og en liste som nettopp ble åpnet, lukkes da
-  // igjen. Å åpne én gang og så vente på «tom»-teksten feilet to av seks fullkjøringer 2026-10-05
-  // (alltid grønn alene). Vi åpner derfor på nytt til teksten faktisk står der.
-  await expect
-    .poll(async () => {
-      await openPicker(page);
-      return page.locator("#comboboxDropdown .combobox-empty").isVisible();
-    }, { timeout: 10000, intervals: [100, 250, 500] })
-    .toBe(true);
+  // ⚠️ Velgeren lukker lista 150 ms etter at feltet mistet fokus (admin-content-courses.js), også
+  // når fokus er kommet tilbake i mellomtiden. Klikket på «Legg til» tar fokus fra feltet, så en
+  // liste som åpnes innen 150 ms etterpå, lukkes igjen — og et nytt klikk åpner den ikke, for feltet
+  // har alt fokus. Det feilet to av seks fullkjøringer 2026-10-05 (alltid grønn alene). Testen
+  // venter derfor til tidsavbruddet er over før den åpner lista. Produktet har samme kappløp for en
+  // forfatter som bruker tastaturet (QA-gjennomgangen av 2.82.2, ikke rettet her).
+  await page.waitForTimeout(300);
+  await openPicker(page);
+  await expect(page.locator("#comboboxDropdown .combobox-empty")).toBeVisible();
   await expect(optionFor(page, "sec-1")).toHaveCount(0);
 });
 

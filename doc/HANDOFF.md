@@ -318,7 +318,7 @@ listene. Jeg utvidet ikke regelen for å unngå det — det ville vært en tverr
   && npm run test:integration:native) > "$TEMP/claude/kjoring.log" 2>&1; echo "EXIT=$?"
 ```
 
-Sist målt 2026-10-05, på 2.82.2: **1840 enhet · 69 DOM · 448 e2e · 757 integrasjon**, alle grønne.
+Sist målt 2026-10-05, på 2.82.2: **1840 enhet · 69 DOM · 450 e2e · 757 integrasjon**, alle grønne.
 (På 2.82.0 trengte nettleserrekka to kjøringer: i den første feilet «add a section from the library» i
 `admin-content-course-sections.spec.ts` — nedtrekkslista i kursbyggeren, som ikke er rørt. 15 av
 15 alene, 430 av 430 i neste fullkjøring. Se «e2e-suiten rykker» under.)

@@ -277,7 +277,7 @@
       @media (max-width: 600px) {
         .course-step--done, .course-step--ahead { flex-wrap: wrap; row-gap: 2px; }
         .course-step--done .course-step-title,
-        .course-step--ahead .course-step-title { order: -1; flex: 0 0 100%; white-space: normal; overflow: visible; overflow-wrap: anywhere; }
+        .course-step--ahead .course-step-title { order: -1; flex: 0 0 100%; white-space: normal; overflow: visible; overflow-wrap: break-word; }
       }
       /* Modul rett etter en seksjon med samme tittel: tittelen får .sr-only, altså position:absolute,
          og forsvinner ut av flex-flyten. Da mister raden elementet med flex:1 som skjøv statuspillen
@@ -366,8 +366,10 @@
       .course-inline-panel-title { font-size: 13px; font-weight: 700; color: var(--color-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
       .course-inline-panel-close { margin-left: auto; width: auto; min-height: 0; padding: 4px 10px; font-size: 13px; flex-shrink: 0; }
       .course-inline-panel-body { padding: 12px; }
-      /* overflow-wrap: en lang adresse i teksten brekker i stedet for å gå ut av leseren og bli kuttet. */
-      .course-inline-panel-body .section-reader-body { background: var(--color-surface, #fff); border: 1px solid var(--color-border-soft); border-radius: 8px; padding: 14px 18px; overflow-wrap: anywhere; }
+      /* overflow-wrap: en lang adresse i teksten brekker i stedet for å gå ut av leseren og bli kuttet.
+         `break-word`, ikke `anywhere`: den siste lar også en tabellkolonne regnes som én bokstav
+         bred, og brakk ord midt i («MN/OK») i alle tabeller på nettbrett og PC. */
+      .course-inline-panel-body .section-reader-body { background: var(--color-surface, #fff); border: 1px solid var(--color-border-soft); border-radius: 8px; padding: 14px 18px; overflow-wrap: break-word; }
       .course-inline-panel-body .section-reader-body img { max-width: 100%; height: auto; display: block; margin: 8px 0; }
       .course-inline-panel-body .section-reader-body iframe { max-width: 100%; }
       /* #1079: on a phone the reader sits inside three frames, and their margins took 189 of 390 px.

@@ -192,6 +192,36 @@ test.describe("et kurs med lange stegtitler får plass på telefon", () => {
     expect((await mål(page)).kuttet).toBe(0);
   });
 
+  // Funnet av QA-gjennomgangen, runde to: regelen som lar en lang adresse brekke i leseren, var
+  // først `overflow-wrap: anywhere`. Den lar også nettleseren regne en tabellkolonne som én bokstav
+  // bred, så ord ble brukket midt i — «MN/OK», «125/0» — i alle tabeller på nettbrett og PC.
+  // `break-word` brekker bare det som ellers ville gått ut av boksen. En tabell med god plass skal
+  // se ut som før: hvert ord helt, og tall og overskrifter på én linje.
+  for (const bredde of [700, 1280]) {
+    test(`${bredde} px: en tabell i leseren har hele ord — ingen brukket midt i`, async ({ page }) => {
+      const tabell = `<p>Rammen fordeles slik:</p><table><thead><tr><th>Post</th><th>Beskrivelse</th><th>MNOK</th></tr></thead><tbody>
+        <tr><td>Grunnkalkyle</td><td>Summen av alle kjente kostnader i prosjektet, uten påslag for det som ikke er kjent ennå.</td><td>1250</td></tr>
+        <tr><td>Usikkerhetsavsetning</td><td>Det prosjekteieren holder tilbake for hendelser prosjektet ikke selv rår over.</td><td>180</td></tr>
+      </tbody></table>`;
+      await åpneKurset(page, bredde, { seksjonstekst: tabell });
+      await page.locator(".course-step--done").click();
+      const leser = page.locator("#sectionReaderBody");
+      await expect(leser.locator("table")).toBeVisible();
+      // Ett ord i en celle er helt når cellen er én linje høy. Måles på cellene som har ett ord.
+      const linjer = await leser.locator("th, td").evaluateAll((celler) => celler
+        .filter((c) => !/\s/.test((c.textContent ?? "").trim()))
+        .map((c) => {
+          const område = document.createRange();
+          område.selectNodeContents(c);
+          return { tekst: (c.textContent ?? "").trim(), linjer: new Set([...område.getClientRects()].map((r) => Math.round(r.top))).size };
+        }));
+      // Kontroll: tabellen har cellene målingen gjelder.
+      expect(linjer.map((l) => l.tekst)).toEqual(["Post", "Beskrivelse", "MNOK", "Grunnkalkyle", "1250", "Usikkerhetsavsetning", "180"]);
+      expect(linjer.filter((l) => l.linjer !== 1), "celler der ett ord står på mer enn én linje").toEqual([]);
+      expect((await mål(page)).kuttet).toBe(0);
+    });
+  }
+
   test("kontroll: på PC står tittelen på samme linje som typen og statusen, uforkortet — som før", async ({ page }) => {
     await åpneKurset(page, 1280);
     const tittel = page.locator(".course-step--done .course-step-title");
