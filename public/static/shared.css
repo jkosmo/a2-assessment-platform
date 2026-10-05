@@ -1491,7 +1491,8 @@ dialog::backdrop {
    kunne rulles sidelengs: «Vurderingskvalitet» stakk 13 px ut på innholdssidene, «Resultater» 28 px
    på Klasser. Lenkene får brekke til en ny linje når de ikke får plass — det er sikkerhetsnettet.
    På telefon står de også tettere, så de fire lenkene får plass på én linje på en vanlig telefon
-   (390 px) og ikke trenger å brekke. */
+   (390 px) på bokmål og nynorsk. På engelsk er «Assessment quality» for lang; der står menyen på
+   to linjer opp til rundt 480 px. */
 .content-area-nav { display: flex; flex-wrap: wrap; gap: 0; border-bottom: 2px solid var(--color-border-soft); margin-bottom: var(--space-3); }
 .content-area-nav-link { padding: 10px var(--space-2); font-size: 14px; font-weight: 600; color: var(--color-meta); text-decoration: none; border-bottom: 2px solid transparent; margin-bottom: -2px; white-space: nowrap; }
 .content-area-nav-link:hover { color: var(--color-text); }

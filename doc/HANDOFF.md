@@ -7,12 +7,12 @@
 
 ## Kort: det som må avgjøres
 
-**Prod står på 2.78.3. 2.82.0 samler sju rettinger som produkteier skal teste samlet på stage. Ingenting av 2.79–2.82 er i prod.**
+**Prod står på 2.78.3. Stage står på 2.82.1: sju rettinger som produkteier skal teste samlet (kvelden 2026-10-05). Ingenting av 2.79–2.82 er i prod.**
 
 | Miljø | Versjon | |
 |---|---|---|
 | prod | 2.78.3 | rullet 2026-10-04 kl. 20:13 fra `2433d2b7`, godkjent av produkteier. #1080, #1081, #1083 |
-| stage | 2.81.0 | rullet 2026-10-04 kl. 20:27 fra `7f94f41c`. **2.82.0 rulles når QA-porten har gitt GO** |
+| stage | 2.82.1 | rullet 2026-10-05 kl. 11:00 fra `5538cdc3`, commiten QA-porten ga GO på (`.ai-qa/qa-20261005-100836.md` og `-103917.md`); `/version` og helsesjekk bekreftet |
 | `main` (git) | 2.78.3 | likt med prod (PR #1086 flettet 2026-10-04) |
 | `dev` (git) | 2.82.1 | sju rettinger (2.82.0) og to oppfølgere etter QA (2.82.1), se under |
 
@@ -28,7 +28,7 @@
 | #1089 | En avvist figur etterlater ikke lenger et utkast: figurene sjekkes før seksjonen lages, alt i én transaksjon | samme, og `test/unit/section-create-with-assets-1089.test.ts` |
 | #1090 | En ny oversettelse av figurer fjerner de forrige oversatte filene | samme |
 
-Fem ting krever et menneske:
+Seks ting krever et menneske:
 
 1. **Tre synlige endringer er mine valg, ikke produkteiers.** Han skal se dem på stage og kan si
    nei før prod:
@@ -47,7 +47,11 @@ Fem ting krever et menneske:
 4. **Skillet i ChatGPT er ikke prøvd.** Produkteier fikk 2.81.1-pakka og er bedt om å si fra om
    figurene vises som bilder der. 2.82.0 endrer skillet igjen (det smale oppsettet,
    etikettsjekken, forhåndsvisningen), så pakka må bygges på nytt: `npm run skill:package`.
-5. **Lagrede figurer er ikke målt.** `npm run maint:repair-unreadable-svg-assets` (tørrkjøring uten
+5. **To funn fra QA som fantes fra før, er ikke blitt saker.** `?locale=xx` på modulbiblioteket og
+   arkivet gir feil 500 (`src/routes/adminContent.ts`, samme type feil som #1088, bare ved en adresse
+   skrevet for hånd). Og «Mer» på en av de nederste radene kan kuttes av tabellrammen når lista
+   har svært få rader. Produkteier avgjør om de skal bli saker.
+6. **Lagrede figurer er ikke målt.** `npm run maint:repair-unreadable-svg-assets` (tørrkjøring uten
    `--apply`) er ikke kjørt mot stage eller prod. Se `doc/OPERATIONS_RUNBOOK.md`.
 
 ⚠️ **Figurer som alt er lagret med det gamle smale oppsettet** (fire per rad, uten egen størrelse)
@@ -68,8 +72,13 @@ blir ikke tegnet på nytt av seg selv. De vises som før: for små på telefon. 
 `npm run test:stage:release` kjører målingene med den ekte klienten mot de ekte dataene, og
 `test-results/stage-rapport/rapport.html` viser utfallet med skjermbilder. Han skal ikke klikke seg
 gjennom det en maskin kan måle. Sist kjørt mot 2.81.0 (2026-10-04): alle målingene for #1079 besto,
-#1084 og #1085 feilet som ventet. Mot 2.82.0 skal alle bestå, og målingen av deltakeren på telefon
-krever nå at etikettene er minst 9 px på skjermen.
+#1084 og #1085 feilet som ventet. Mot 2.82.1 skal alle bestå, og målingen av deltakeren på telefon
+krever nå at etikettene er minst 9 px på skjermen. Testen er prøvekjørt mot en lokal app
+(`STAGE_LOKAL=http://127.0.0.1:3001`): 35 besto, 2 hoppet over (ingen kurs med «Mer» lokalt).
+Den holder seg under appens grense på 120 forespørsler i minuttet (`test/stage/pace.ts`, én
+arbeider) — uten det ga prøvekjøringen svar 429 og tomme lister. `STAGE_BEHOLD=1` lar testkurset
+stå igjen, så figuren kan ses på en ekte telefon; neste kjøring rydder det bort.
+Det produkteier skal gjøre, står i `C:\Dev\Assessment\MANUELL_TEST_STAGE_2.82.1.md` (utenfor repoet).
 
 Åpne beslutninger ligger nederst i dette dokumentet.
 

@@ -27,7 +27,9 @@ fs.rmSync(RAPPORT, { recursive: true, force: true });
 fs.mkdirSync(RAPPORT, { recursive: true });
 const jsonFil = path.join(RAPPORT, "playwright.json");
 
-const kjøring = spawnSync(`npx playwright test --config playwright.stage.config.ts ${SPEC} --reporter=list,json`, {
+// Én arbeider: takten i test/stage/pace.ts holder forespørslene under appens grense (120 i
+// minuttet per bruker), og den gjelder bare innenfor én prosess.
+const kjøring = spawnSync(`npx playwright test --config playwright.stage.config.ts ${SPEC} --workers=1 --reporter=list,json`, {
   shell: true,
   stdio: "inherit",
   env: { ...process.env, PLAYWRIGHT_JSON_OUTPUT_NAME: jsonFil },

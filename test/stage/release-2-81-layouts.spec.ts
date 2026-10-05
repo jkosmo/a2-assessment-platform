@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { expect, test, type Page, type Route } from "@playwright/test";
 import { readAuth, stageBaseUrl } from "./stageAuth.js";
+import { vent } from "./pace.js";
 import { drawFlowFigure } from "../../skills/a2-authoring-api/scripts/draw-flow-figure.mjs";
 
 // #1079 mot UTRULLET stage: en figur i bredt og smalt oppsett, hele kjeden med den ekte klienten
@@ -39,6 +40,7 @@ const noter = (hva: string, verdi: unknown) => {
 const bilde = (page: Page, navn: string) => { fs.mkdirSync(RAPPORT, { recursive: true }); return page.screenshot({ path: path.join(RAPPORT, `${navn}.png`), fullPage: false }); };
 
 async function api(metode: string, sti: string, body?: unknown): Promise<{ status: number; json: Record<string, unknown>; tekst: string }> {
+  await vent();
   const svar = await fetch(`${BASE}${sti}`, {
     method: metode,
     headers: { ...hoder(), ...(body === undefined ? {} : { "content-type": "application/json" }) },
@@ -51,6 +53,7 @@ async function api(metode: string, sti: string, body?: unknown): Promise<{ statu
 }
 
 const hentFigur = async (assetId: string, spørring = "") => {
+  await vent();
   const svar = await fetch(`${BASE}/api/content-assets/${assetId}${spørring}`, { headers: hoder() });
   return { status: svar.status, oppsett: svar.headers.get("x-asset-layout"), harOppsett: svar.headers.get("x-asset-layouts"), svg: await svar.text() };
 };
@@ -136,7 +139,7 @@ test.afterAll(async () => {
 
 let configCache: Record<string, unknown> | null = null;
 async function forberedSide(page: Page) {
-  await page.route("**/api/**", async (r: Route) => r.continue({ headers: { ...r.request().headers(), ...hoder() } }));
+  await page.route("**/api/**", async (r: Route) => { await vent(); await r.continue({ headers: { ...r.request().headers(), ...hoder() } }); });
   configCache ??= (await (await fetch(`${BASE}/participant/config`)).json()) as Record<string, unknown>;
   await page.route("**/participant/config", (r: Route) =>
     r.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ...configCache, authMode: "mock" }) }),
@@ -197,6 +200,16 @@ test.describe("#1079 — en figur i bredt og smalt oppsett, på stage", () => {
     // De to oppsettene sier det samme.
     expect(etiketter(smal.svg).sort()).toEqual(etiketter(bred.svg).sort());
     noter("levert bredt og smalt", `viewBox ${BRED_BREDDE} og ${SMAL_BREDDE} bred, ${etiketter(bred.svg).length} ulike etiketter i begge`);
+
+    // #1088 (2.82.0): et språk som ikke finnes, gir figuren slik den ble tegnet. «constructor» er
+    // navnet på noe alle objekter arver, og ga feil 500. Myk påstand: resten av kjeden skal måles.
+    const arvet = await hentFigur(assetId, "?locale=constructor");
+    const arvetSmal = await hentFigur(assetId, "?layout=narrow&locale=constructor");
+    expect.soft(arvet.status, "?locale=constructor").toBe(200);
+    expect.soft(bredde(arvet.svg), "?locale=constructor gir den brede figuren").toBe(BRED_BREDDE);
+    expect.soft(arvetSmal.status, "?layout=narrow&locale=constructor").toBe(200);
+    expect.soft(arvetSmal.oppsett, "?layout=narrow&locale=constructor gir det smale oppsettet").toBe("narrow");
+    noter("#1088: ?locale=constructor", `svar ${arvet.status} (bredt) og ${arvetSmal.status} (smalt)`);
   });
 
   test("oversettelsen oversetter begge oppsettene, med de samme etikettene", async () => {
@@ -291,5 +304,32 @@ test.describe("#1079 — en figur i bredt og smalt oppsett, på stage", () => {
     await expect(figur).toHaveAttribute("data-asset-layout", "wide", { timeout: VENT_MS });
     await page.setViewportSize({ width: 390, height: 844 });
     await expect(figur).toHaveAttribute("data-asset-layout", "narrow", { timeout: VENT_MS });
+  });
+
+  // Står sist med vilje, og uten nytt forsøk: testene i fila går i rekkefølge, og et nytt forsøk
+  // ville kjørt HELE rekka på nytt — ny import, ny oversettelse, nytt kurs.
+  test.describe("etter målingene", () => {
+  test.describe.configure({ retries: 0 });
+  test("#1089: forfatter-API-et avviser en figur med gale etiketter, og lager ingen seksjon", async () => {
+    // Det smale oppsettet sier noe annet enn det brede: en etikett er byttet ut.
+    const galSmal = SMAL.replace(">Arkiver<", ">Avslutt saken<");
+    expect(galSmal).not.toBe(SMAL);
+    const tittel = `${TITTEL_START}avvist ${stempel}`;
+    const svar = await api("POST", "/api/admin/content/sections", {
+      title: three(tittel),
+      bodyMarkdown: three(`# ${tittel}\n\n![Saksgang](asset:flyt)`),
+      draft: true,
+      clientRef: "stage-test-1089",
+      assets: [{ sourceId: "flyt", filename: "saksgang.svg", mimeType: "image/svg+xml", sizeBytes: Buffer.byteLength(BRED), contentBase64: b64(BRED), sourceLocale: "nb", layoutVariants: [{ layout: "narrow", contentBase64: b64(galSmal) }] }],
+    });
+    expect.soft(svar.status, svar.tekst.slice(0, 300)).toBe(400);
+    expect.soft(svar.tekst).toContain("asset_layout_text_mismatch");
+    // Før 2.82.0 svarte den 400 og lot seksjonen ligge igjen som utkast, uten figuren.
+    const seksjoner = ((await api("GET", "/api/admin/content/sections")).json.sections ?? []) as Array<{ id: string; title: unknown }>;
+    const igjen = seksjoner.filter((s) => JSON.stringify(s.title ?? "").includes(tittel));
+    for (const s of igjen) await slettSeksjon(s.id);
+    expect.soft(igjen.length, "seksjoner som ble liggende igjen etter avvisningen").toBe(0);
+    noter("#1089: avvist figur", `svar ${svar.status}, ${igjen.length} seksjon(er) ble liggende igjen`);
+  });
   });
 });

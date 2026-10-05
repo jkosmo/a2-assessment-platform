@@ -8,7 +8,7 @@ To feil som 2.82.0 innførte, funnet av QA-gjennomgangen (`.ai-qa/qa-20261005-10
 noen hadde sett dem. Ingen migrasjon.
 
 - **Seksjonseditoren på telefon: linja med «Last opp bilde» havnet bak menyen** når sida ble rullet,
-  på telefoner under 375 px. Menyen er festet øverst på den sida, og linja under er festet 46 px
+  på telefoner under 375 px (på engelsk, der menylenkene er lengre, opp til rundt 480 px). Menyen er festet øverst på den sida, og linja under er festet 46 px
   ned — et tall som forutsetter at menyen er én linje. Da menyen fikk brekke (#1085), ble den to.
   Under 600 px ruller menyen nå bort med sida, og linja festes helt øverst.
   ⚠️ Synlig endring: på telefon står ikke menyen lenger igjen øverst mens man redigerer en seksjon.
@@ -25,6 +25,16 @@ ende til ende på en figur med åtte steg, og bildene er sett.
 **Rotårsak.** Begge er følger av en endring ett sted som en regel et annet sted stilltiende bygget
 på: tallet 46 bygget på en meny på én linje, og vinduet på 400 px på en figur som skalerte seg til
 vinduet. Ingen av dem sto i en test.
+
+QA-gjennomgangen av 2.82.1 (`.ai-qa/qa-20261005-103917.md`, GO) målte editoren på 11 bredder og tre
+språk uten å finne noe dekket.
+
+**Stage-testen holder seg nå under appens grense for forespørsler.** En prøvekjøring mot en lokal
+app ga svar 429: testen er én bruker som åpner mange sider raskt, og appen slipper gjennom 120
+forespørsler i minuttet per bruker. Lister kom tomme tilbake, og rapporten ville vist feil som ikke
+finnes. `test/stage/pace.ts` gir hver forespørsel en tur med jevn avstand (100 i minuttet), og
+utgivelsestesten kjøres med én arbeider. Den måler også #1088 og #1089 mot det utrullede miljøet, og
+`STAGE_BEHOLD=1` lar testkurset stå igjen så figuren kan ses på en ekte telefon.
 
 **To funn som fantes fra før, ikke rettet her:** `?locale=xx` på modulbiblioteket og arkivet gir
 feil 500 (samme type feil som #1088, bare ved en adresse skrevet for hånd), og «Mer» på en av de
@@ -85,7 +95,8 @@ andre testene har korte titler og ett statusmerke per rad; feilen krevde ekte in
 ### #1085: menylinja var bredere enn skjermen på telefon
 
 Hele sida kunne rulles sidelengs. Lenkene står nå tettere på telefon, så de fire får plass på én
-linje på 390 px, og de får brekke til en ny linje på smalere skjermer.
+linje på 390 px (bokmål og nynorsk; på engelsk to linjer), og de får brekke til en ny linje på
+smalere skjermer.
 `test/e2e/nav-fits-phone-1085.spec.ts` (14 tester). **Rotårsak:** testene kjørte som
 fagansvarlig, som har færre lenker i menyen. Feilen viste seg bare for administrator.
 

@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { expect, test, type Page, type Route } from "@playwright/test";
 import { readAuth, stageBaseUrl } from "./stageAuth.js";
+import { vent } from "./pace.js";
 
 // Utgivelsene 2.78.1–2.78.3 mot UTRULLET stage, med EKTE innhold: #1080, #1081, #1083 og #1073.
 //
@@ -44,6 +45,7 @@ const bilde = (page: Page, navn: string) => { fs.mkdirSync(RAPPORT, { recursive:
 // ── API ────────────────────────────────────────────────────────────────────────────────────────
 
 async function api(metode: string, sti: string, body?: unknown): Promise<{ status: number; json: Record<string, unknown>; tekst: string }> {
+  await vent();
   const svar = await fetch(`${BASE}${sti}`, {
     method: metode,
     headers: { ...hoder(), ...(body === undefined ? {} : { "content-type": "application/json" }) },
@@ -56,6 +58,7 @@ async function api(metode: string, sti: string, body?: unknown): Promise<{ statu
 }
 
 const hentFigur = async (assetId: string, spørring = "") => {
+  await vent();
   const svar = await fetch(`${BASE}/api/content-assets/${assetId}${spørring}`, { headers: hoder() });
   return { status: svar.status, type: svar.headers.get("content-type") ?? "", svg: await svar.text() };
 };
@@ -138,6 +141,7 @@ async function forberedSide(page: Page) {
   // Samme grep som de andre stage-suitene: appen tror den kjører i mock-modus, og hver API-
   // forespørsel får den ekte innloggingen lagt på. Da kjører den EKTE klienten mot de EKTE dataene.
   await page.route("**/api/**", async (r: Route) => {
+    await vent();
     await r.continue({ headers: { ...r.request().headers(), ...hoder() } });
   });
   configCache ??= (await (await fetch(`${BASE}/participant/config`)).json()) as Record<string, unknown>;
@@ -181,7 +185,7 @@ test.describe("#1083 — en figur med hardt mellomrom vises", () => {
   });
 
   test("åpnet direkte i en fane vises figuren som SVG, ikke som en XML-feilside", async ({ page }) => {
-    await page.route("**/api/**", async (r: Route) => r.continue({ headers: { ...r.request().headers(), ...hoder() } }));
+    await page.route("**/api/**", async (r: Route) => { await vent(); await r.continue({ headers: { ...r.request().headers(), ...hoder() } }); });
     await page.goto(`${BASE}/api/content-assets/${seksjon.assetId}`);
     const rot = await page.evaluate(() => ({ navn: document.documentElement.localName, feil: document.querySelector("parsererror") !== null, tekster: [...document.querySelectorAll("text")].length }));
     expect(rot).toEqual({ navn: "svg", feil: false, tekster: 4 });
@@ -225,6 +229,7 @@ test.describe("#1083 — en figur med hardt mellomrom vises", () => {
   test("opplasting for hånd: samme figur lastet opp som fil vises også", async ({ page }) => {
     const skjema = new FormData();
     skjema.append("file", new Blob([FIGUR_HARDT_MELLOMROM], { type: "image/svg+xml" }), "hardt-mellomrom.svg");
+    await vent();
     const svar = await fetch(`${BASE}/api/admin/content/sections/${seksjon.sectionId}/assets`, { method: "POST", headers: hoder(), body: skjema });
     expect(svar.status).toBe(201);
     const { asset } = (await svar.json()) as { asset: { id: string } };
