@@ -45,7 +45,6 @@ export {
   getSectionAssetContent,
   localizeSectionAssets,
   loadSectionAssetsForExport,
-  importSectionAssets,
   ALLOWED_ASSET_MIME_TYPES,
   MAX_ASSET_BYTES,
   MAX_EXPORT_ASSET_TOTAL_BYTES,

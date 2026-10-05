@@ -4,7 +4,8 @@ import { AppError, DomainRuleError, NotFoundError, ValidationError } from "../..
 import { recordAuditEvent } from "../../services/auditService.js";
 import { auditActions, auditEntityTypes, agentAuthoringAuditMetadata, type AgentAuthoringContext } from "../../observability/auditEvents.js";
 import { assertSectionNotInAnyCourse, assertSectionNotInIssuedCertificate } from "./contentLifecycle.js";
-import { importSectionAssets, collectSectionAssetBlobPaths, reclaimAssetBlobs, type IncomingSectionAsset } from "./assetCommands.js";
+import { randomUUID } from "node:crypto";
+import { stageSectionAssets, collectSectionAssetBlobPaths, reclaimAssetBlobs, type IncomingSectionAsset } from "./assetCommands.js";
 import { addContentOwner } from "../content/contentOwnershipService.js";
 import {
   validateSectionTranslationCompleteness,
@@ -23,7 +24,7 @@ export const SECTION_CREATE_BODY_LIMIT_BYTES = 15 * 1024 * 1024; // 15 MB
 export type SectionAssetImportInput = IncomingSectionAsset;
 
 // #763 (Layer B): rewrite every `asset:<sourceId>` markdown reference to the created SectionAsset
-// id, using the sourceId→newId map from importSectionAssets. Wider grammar ([a-zA-Z0-9_-]) than the
+// id, using the sourceId→newId map built when the assets are staged. Wider grammar ([a-zA-Z0-9_-]) than the
 // import path's remap because authoring sourceIds are client-chosen ref tokens (may carry `_`/`-`),
 // not DB cuids. Refs with no mapping are left untouched (a mistyped ref is not silently mangled).
 export function remapAssetRefs(serializedMarkdown: string, idMap: Map<string, string>): string {
@@ -150,13 +151,17 @@ export async function createSection(input: {
   return tx ? run(tx) : runInTransaction(run);
 }
 
-// #763 (Layer B): create a section AND its inline figures/images in one call. Ordering matches the
-// import path (importSectionPayload): create the section (version 1) with the SOURCE markdown →
-// import the assets to obtain their new ids → rewrite the version's `asset:<sourceId>` refs to the
-// new ids IN PLACE. The in-place update is deliberate: it never publishes a draft (activeVersionId
-// and publishedAt are untouched) and keeps a published section published without minting a new
-// version. Returns the (refreshed) section plus the sourceId→assetId map for the API response.
-// Any invalid asset throws (ValidationError) via importSectionAssets — no silent skip.
+// #763 (Layer B): create a section AND its inline figures/images in one call. Returns the section
+// plus the sourceId→assetId map for the API response. Any invalid asset throws — no silent skip.
+//
+// ⚠️ #1089 — THE FIGURES ARE CHECKED BEFORE THE SECTION EXISTS. This used to create the section
+// first and import its figures afterwards. A refused figure answered 400, and left the section
+// behind: a draft without its figure, with an `asset:<ref>` in the text that pointed at nothing — and
+// an agent that tried again made the section twice. The order is now the one the file import has
+// always had (contentImportService): stage the figures (everything is checked before anything is
+// written), then create the section and its asset rows in ONE transaction. Either all of it exists
+// afterwards, or none of it does. The markdown is written with its final asset ids from the start,
+// so nothing has to be patched in place afterwards.
 export async function createSectionWithAssets(input: {
   title: string;
   bodyMarkdown: string;
@@ -165,33 +170,43 @@ export async function createSectionWithAssets(input: {
   agent?: AgentAuthoringContext;
   assets: ReadonlyArray<SectionAssetImportInput>;
 }) {
-  const section = await createSection({
-    title: input.title,
-    bodyMarkdown: input.bodyMarkdown,
-    actorId: input.actorId,
-    draft: input.draft,
-    agent: input.agent,
+  const sectionId = randomUUID();
+  const staged = await stageSectionAssets(sectionId, input.assets);
+
+  const idMap = new Map<string, string>();
+  const rows = staged.map((asset) => {
+    const id = randomUUID();
+    idMap.set(asset.sourceId, id);
+    return { id, rowData: asset.rowData };
   });
 
-  const idMap = await importSectionAssets(section.id, input.assets);
-
-  const remapped = remapAssetRefs(input.bodyMarkdown, idMap);
-  if (remapped !== input.bodyMarkdown) {
-    const latest = await prisma.courseSectionVersion.findFirst({
-      where: { sectionId: section.id },
-      orderBy: { versionNo: "desc" },
-      select: { id: true },
+  let section: Awaited<ReturnType<typeof createSection>>;
+  try {
+    section = await runInTransaction(async (tx) => {
+      const created = await createSection(
+        {
+          id: sectionId,
+          title: input.title,
+          bodyMarkdown: remapAssetRefs(input.bodyMarkdown, idMap),
+          actorId: input.actorId,
+          draft: input.draft,
+          agent: input.agent,
+        },
+        tx,
+      );
+      for (const row of rows) {
+        await tx.sectionAsset.create({ data: { id: row.id, sectionId, ...row.rowData } });
+      }
+      return created;
     });
-    if (latest) {
-      await prisma.courseSectionVersion.update({
-        where: { id: latest.id },
-        data: { bodyMarkdown: remapped },
-      });
-    }
+  } catch (error) {
+    // The transaction rolled back, so no row points at the staged files. Remove them.
+    await reclaimAssetBlobs(staged.flatMap((asset) => asset.blobPaths));
+    throw error;
   }
 
   const refreshed = await prisma.courseSection.findUniqueOrThrow({
-    where: { id: section.id },
+    where: { id: sectionId },
     include: { activeVersion: true, versions: { orderBy: { versionNo: "desc" }, take: 1 } },
   });
   // #916: carry the gate verdict from createSection through the refresh, or the caller would see a

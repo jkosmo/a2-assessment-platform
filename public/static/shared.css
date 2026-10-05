@@ -1264,14 +1264,34 @@ dialog::backdrop {
 .list-table th {
   text-align: left; padding: 10px 12px;
   font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--color-meta);
-  border-bottom: 1px solid var(--color-table-border); white-space: nowrap; background: var(--color-bg);
+  border-bottom: 1px solid var(--color-table-border); background: var(--color-bg);
 }
 .list-table td { padding: 10px 12px; border-bottom: 1px solid var(--color-table-border); vertical-align: middle; }
 .list-table tr:last-child td { border-bottom: none; }
 .list-table tr:hover td { background: var(--color-row-hover); }
 .list-table .col-name, .list-table .col-title { width: 28%; min-width: 180px; font-weight: 600; }
-.list-table .col-status, .list-table .col-level, .list-table .col-courses, .list-table .col-module-count, .list-table .col-actions { white-space: nowrap; }
-.list-table .col-updated { white-space: nowrap; color: var(--color-meta); font-size: 13px; }
+/* Verdiene står på én linje. Overskriftene har de samme klassene, og får brekke (#1084). */
+.list-table td.col-level, .list-table td.col-courses, .list-table td.col-module-count, .list-table .col-actions { white-space: nowrap; }
+.list-table td.col-updated { white-space: nowrap; color: var(--color-meta); font-size: 13px; }
+/* #1084: med ekte innhold var modullista 67 px bredere enn ramma, og «Mer» ytterst til høyre lå
+   utenfor til man rullet tabellen sidelengs. To ting, i denne rekkefølgen:
+
+   1. Lista får plass der det er plass å hente. Kolonneoverskriftene og statusmerkene får brekke:
+      «SERTIFISERINGSNIVÅ» var bredere enn alt som sto under den, og «Publisert» med «Nyere utkast»
+      ved siden av holdt statuskolonnen dobbelt så bred som ett merke. To merker står nå under
+      hverandre, og plassen går til navnet (navnekolonnen tar sin andel først, på alle bredder).
+
+   2. Handlingene står alltid innenfor ramma. Blir tabellen likevel for bred (et smalt vindu, en
+      kolonne til), ruller resten av raden inn under dem. En regel som bare gjorde kolonnene
+      smalere, ville holdt til neste kolonne kom; denne holder uansett hva raden inneholder. */
+.list-table .col-status { line-height: 1.9; }
+.list-table .col-status > * { white-space: nowrap; }
+.list-table th.col-actions, .list-table td.col-actions { position: sticky; right: 0; }
+.list-table td.col-actions { background: var(--color-surface); }
+.list-table tr:hover td.col-actions { background: var(--color-row-hover); }
+/* En åpen «Mer»-meny henger ned over radene under. Cellene der er også festet, og ville ellers
+   ligget oppå menyen. */
+.list-table td.col-actions:has(.row-more[open]) { z-index: 2; }
 /* #1080: på telefon blir hver rad et kort (regelen for `table` lenger opp). Skrivebordsreglene over
    vinner over den på spesifisitet, så cellene ble bredere enn kortet og navnet ble presset sammen.
    Her tas de tilbake for kortet. Handlingscellen har ikke noe kolonnenavn og skal ikke gi plass til
@@ -1281,6 +1301,8 @@ dialog::backdrop {
   .list-table td { padding: 6px 4px; }
   .list-table .col-name, .list-table .col-title { width: 100%; min-width: 0; }
   .list-table td.col-actions::before { content: none; }
+  /* I kortet står handlingene nederst i kortet, ikke festet til en kant (#1084). */
+  .list-table th.col-actions, .list-table td.col-actions { position: static; }
 }
 /* #1046 — LISTESIDA (public/static/list-page.js). Alt under her hører til den felles listesida for
    Moduler, Kurs, Seksjoner og Klasser. Sidene skal ikke ha egne kopier av disse reglene. */
@@ -1299,7 +1321,8 @@ dialog::backdrop {
 .list-course-select:focus { outline: 2px solid var(--color-blue); outline-offset: 1px; border-color: transparent; }
 .list-table th.sortable { cursor: pointer; user-select: none; }
 .list-table th.sortable:hover { color: var(--color-link-active); }
-.list-table .sort-indicator { display: inline-block; margin-left: 4px; opacity: 0.4; font-style: normal; }
+/* Ikke inline-block: da kan linja brekke foran pila, og den blir stående alene under overskriften (#1084). */
+.list-table .sort-indicator { margin-left: 2px; opacity: 0.4; font-style: normal; }
 .list-table th.sort-asc .sort-indicator, .list-table th.sort-desc .sort-indicator { opacity: 1; color: var(--color-link-active); }
 .empty-state { text-align: center; padding: var(--space-5) var(--space-3); background: var(--color-surface); border: 1px solid var(--color-table-wrap-border); border-radius: var(--radius-card); }
 .empty-state-title { font-size: 18px; font-weight: 700; color: var(--color-text); margin: 0 0 8px; }
@@ -1464,10 +1487,19 @@ dialog::backdrop {
 /* #765: shared content-area sub-navigation bar (used by the «Deltakere» area on the classes/review/
    results pages, and by the admin-content tabs). Previously each admin-content page defined these
    inline; centralised here so review/results can host the same bar. */
-.content-area-nav { display: flex; gap: 0; border-bottom: 2px solid var(--color-border-soft); margin-bottom: var(--space-3); }
+/* #1085: med alle lenkene (administrator) var menylinja bredere enn en telefonskjerm, og hele sida
+   kunne rulles sidelengs: «Vurderingskvalitet» stakk 13 px ut på innholdssidene, «Resultater» 28 px
+   på Klasser. Lenkene får brekke til en ny linje når de ikke får plass — det er sikkerhetsnettet.
+   På telefon står de også tettere, så de fire lenkene får plass på én linje på en vanlig telefon
+   (390 px) og ikke trenger å brekke. */
+.content-area-nav { display: flex; flex-wrap: wrap; gap: 0; border-bottom: 2px solid var(--color-border-soft); margin-bottom: var(--space-3); }
 .content-area-nav-link { padding: 10px var(--space-2); font-size: 14px; font-weight: 600; color: var(--color-meta); text-decoration: none; border-bottom: 2px solid transparent; margin-bottom: -2px; white-space: nowrap; }
 .content-area-nav-link:hover { color: var(--color-text); }
 .content-area-nav-link.active { color: var(--color-link-active); border-bottom-color: var(--color-blue); }
+/* To klasser i velgeren, med vilje: fem av sidene har sin egen kopi av regelen over i en stilblokk
+   som kommer etter denne fila, og en velger med én klasse ville tapt for kopien. (Den første
+   utgaven av denne regelen gjorde det, og virket aldri — mutasjonssjekken fant det.) */
+@media (max-width: 600px) { .content-area-nav .content-area-nav-link { padding-left: 10px; padding-right: 10px; } }
 
 /* #787 slice 5: content-owner management panel (owner-panel.js). Uses the design tokens + shares the
    .btn styling so it matches the rest of the workspace. The remove button MUST set width:auto to escape

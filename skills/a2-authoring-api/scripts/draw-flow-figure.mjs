@@ -1,7 +1,7 @@
 // #1079: draws a flow figure from a DESCRIPTION — in two layouts.
 //
 // A figure shown as an image has a fixed shape: it cannot re-break itself when the column gets
-// narrow. So a flow is drawn twice, wide (every step on one row) and narrow (four per row), and the
+// narrow. So a flow is drawn twice, wide (every step on one row) and narrow (two per row), and the
 // platform picks by column width. Two hand-drawn SVGs would drift apart — a label corrected in one,
 // a step added in the other. Here the content is stated once (steps, order, phases, colours) and
 // both drawings are made from it, so they cannot disagree.
@@ -34,12 +34,22 @@ const INK = "#2d3b55";
 const CONNECTOR = "#8090a9";
 const FONT = "system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif";
 
-/** Wide: every step on one row. Narrow: four per row, for a phone-width column. */
+// Wide: every step on one row. Narrow: two per row, for the column a phone gives.
+//
+// Why two. A label needs the room between two steps, so a row of n steps is about 104·n wide, and
+// its 12 px labels are 9 px on screen — the smallest that reads — when the column is 78·n px. The
+// column a participant reads in on a 390 px phone is about 200 px (measured in the real reader,
+// 2026-10-05): room for two steps, not three. The first narrow layout had four per row, drawn for a
+// 480 px column nobody had measured, and its labels were 5 px on that phone.
+//
+// `shownAt` is the largest the layout is shown: the drawing states its own size (`width`, `height`),
+// and an image is scaled down to its column but not up past that. Without it the narrow layout would
+// fill a 600 px column — a tablet — with labels 30 px high. The wide layout states none and fills
+// its column, as it always has.
 const LAYOUTS = {
-  wide: { perRow: Infinity, spacing: 104, r: 22, rowHeight: 0, phaseHalf: 48 },
-  narrow: { perRow: 4, spacing: 120, r: 24, rowHeight: 118, phaseHalf: 40 },
+  wide: { perRow: Infinity, margin: 60, spacing: 104, r: 22, rowHeight: 0, phaseHalf: 48, shownAt: null },
+  narrow: { perRow: 2, margin: 66, spacing: 108, r: 24, rowHeight: 118, phaseHalf: 40, shownAt: 1.25 },
 };
-const MARGIN = 60;
 const TOP = 48;
 /** Seconds between one step lighting up and the next. */
 const GAP = 0.55;
@@ -88,9 +98,9 @@ function draw(description, layoutName) {
   const layout = LAYOUTS[layoutName];
   const perRow = Math.min(layout.perRow, steps.length);
   const rows = Math.ceil(steps.length / perRow);
-  const width = 2 * MARGIN + (perRow - 1) * layout.spacing;
+  const width = 2 * layout.margin + (perRow - 1) * layout.spacing;
   const { r } = layout;
-  const at = steps.map((_, i) => ({ cx: MARGIN + (i % perRow) * layout.spacing, cy: TOP + Math.floor(i / perRow) * layout.rowHeight, row: Math.floor(i / perRow) }));
+  const at = steps.map((_, i) => ({ cx: layout.margin + (i % perRow) * layout.spacing, cy: TOP + Math.floor(i / perRow) * layout.rowHeight, row: Math.floor(i / perRow) }));
   const out = [];
 
   // The phase lines: one piece per run of steps in the same phase on the same row.
@@ -126,7 +136,8 @@ function draw(description, layoutName) {
   });
 
   const height = TOP + (rows - 1) * layout.rowHeight + r + 46;
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" role="img"
+  const size = layout.shownAt ? ` width="${Math.round(width * layout.shownAt)}" height="${Math.round(height * layout.shownAt)}"` : "";
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}"${size} role="img"
      font-family="${FONT}">
   <title>${xml(title)}</title>
   <desc>${xml(desc)}</desc>

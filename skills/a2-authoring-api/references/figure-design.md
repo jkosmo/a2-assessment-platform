@@ -156,7 +156,7 @@ step carries exactly one phase class.
 
 **Do not write this figure by hand — describe it and let the script draw it (#1079).** A figure
 shown as an image cannot re-break itself when the column is narrow, so a flow with phases exists in
-**two layouts**: wide (every step on one row) and narrow (four per row, for a phone). Two
+**two layouts**: wide (every step on one row) and narrow (two per row, for a phone). Two
 hand-written SVGs drift apart. `draw-flow-figure.mjs` takes one description and draws both, so
 they cannot disagree, and it runs both figure checks on each before it returns anything.
 
@@ -194,6 +194,10 @@ they cannot disagree, and it runs both figure checks on each before it returns a
   **narrow** one goes in the same asset's `layoutVariants` as `{ "layout": "narrow", … }`
   (package-schema.md). The platform shows the narrow layout when the column the figure stands in is
   under 640 px wide, and the wide one otherwise. Keep the description: it is the figure's source.
+- **Why two per row.** The column a participant reads in on a phone is about 200 px wide. A row of
+  n steps needs about 78·n px for its labels to be 9 px on screen, the smallest that reads — so a
+  phone has room for two. The narrow drawing states its own size (`width`, `height`) and is never
+  enlarged past it: on a tablet it stands at that size instead of filling the column.
 - **Locale variants:** copy the description, translate `title`, `desc`, the phase labels and the
   step labels — **same number of lines per label** — and draw again. The geometry is then identical
   by construction, which is what `localizedVariants` requires. Each language gives two files: the
@@ -374,8 +378,8 @@ it was first reported from a ChatGPT chat.
 `node skills/a2-authoring-api/scripts/figure-preview.mjs figure.svg [figure.narrow.svg …] --out preview.html`
 
 It writes one self-contained page that shows each figure the way the platform shows it — as an
-image — in a wide column and in a phone-width column, with a button that plays the animation
-again. Then put the page in front of the author with what the host offers, in this order:
+image — in a wide column and in the column a phone gives (220 px), with a button that plays the
+animation again. Then put the page in front of the author with what the host offers, in this order:
 
 | The host has | Do this |
 |---|---|

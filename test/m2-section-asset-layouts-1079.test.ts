@@ -11,7 +11,7 @@ import { afterAll, describe, expect, it } from "vitest";
 import { app } from "../src/app.js";
 import { prisma } from "../src/db/prisma.js";
 import { getAsset, putAsset } from "../src/modules/course/assetStorage.js";
-import { chooseAssetFile, repairUnreadableSvgAssets } from "../src/modules/course/assetCommands.js";
+import { chooseAssetFile, localizeSectionAssets, repairUnreadableSvgAssets } from "../src/modules/course/assetCommands.js";
 import { extractSvgTexts } from "../src/modules/course/svgSanitizer.js";
 
 const adminHeaders = { "x-user-id": "admin-1", "x-user-email": "admin@company.com", "x-user-name": "Platform Admin" };
@@ -61,6 +61,11 @@ type Lagret = { blobPath: string; localizedBlobPaths: Record<string, string> | n
 const lagret = async (assetId: string) =>
   (await prisma.sectionAsset.findUniqueOrThrow({ where: { id: assetId }, select: { blobPath: true, localizedBlobPaths: true, layoutVariants: true } })) as unknown as Lagret;
 
+// Oversettelsesruta slipper gjennom ti kall i minuttet per bruker. Den er testens emne ÉN gang
+// (første test under «oversettelse»); ellers kalles kommandoen bak den direkte. Med ruta overalt
+// fikk det ellevte kallet 429, og en test som ikke sjekket svaret, gikk videre uten oversettelser.
+const oversettFigurer = (sectionId: string, kilde: "nb" | "en-GB") => localizeSectionAssets(sectionId, kilde);
+
 async function slett(sectionId: string): Promise<void> {
   await prisma.courseSection.update({ where: { id: sectionId }, data: { activeVersionId: null } });
   await prisma.courseSectionVersion.deleteMany({ where: { sectionId } });
@@ -98,6 +103,19 @@ describe("#1079 — en figur i bredt og smalt oppsett", () => {
     expect(bredde(ukjent)).toBe("848");
     expect(ukjent.headers["x-asset-layout"]).toBe("wide");
 
+    await slett(sectionId);
+  });
+
+  it("#1088: ?locale=constructor gir figuren, ikke feil 500 — for begge oppsettene", async () => {
+    const { sectionId, assetId } = await importerMedSmalt();
+    for (const språk of ["constructor", "__proto__", "toString"]) {
+      const bred = await hent(assetId, `?locale=${språk}`);
+      expect(bred.status, `locale=${språk}`).toBe(200);
+      expect(bredde(bred)).toBe("848");
+      const smal = await hent(assetId, `?layout=narrow&locale=${språk}`);
+      expect(smal.status, `layout=narrow&locale=${språk}`).toBe(200);
+      expect(bredde(smal)).toBe("480");
+    }
     await slett(sectionId);
   });
 
@@ -176,7 +194,7 @@ describe("#1079 — en figur i bredt og smalt oppsett", () => {
 
     it("en figur som er oversatt i det brede oppsettet, men ikke i det smale, regnes ikke som ferdig", async () => {
       const { sectionId, assetId } = await importerMedSmalt();
-      const oversett = () => request(app).post(`/api/admin/content/sections/${sectionId}/assets/localize`).set(adminHeaders).send({ sourceLocale: "nb" });
+      const oversett = async () => ({ body: await oversettFigurer(sectionId, "nb") });
       await oversett();
       // Slik en figur ville sett ut om det smale oppsettet kom til etter oversettelsen.
       const rad = await lagret(assetId);
@@ -185,6 +203,47 @@ describe("#1079 — en figur i bredt og smalt oppsett", () => {
       const igjen = await oversett();
       expect(igjen.body.localizedAssetCount).toBe(1);
       expect(Object.keys((await lagret(assetId)).layoutVariants?.narrow?.localizedBlobPaths ?? {}).sort()).toEqual(["en-GB", "nn"]);
+      await slett(sectionId);
+    });
+
+    // #1090: en ny oversettelse skrev nye stier på raden og lot de gamle filene ligge. Ingen rad
+    // pekte på dem lenger, så ingenting ryddet dem.
+    it("#1090: oversatt på nytt fra et annet kildespråk — de forrige oversatte filene er borte, de nye finnes", async () => {
+      const { sectionId, assetId } = await importerMedSmalt();
+      const oversett = async (kilde: "nb" | "en-GB") => ({ body: await oversettFigurer(sectionId, kilde) });
+      const oversatteFiler = (rad: Lagret) => [...Object.values(rad.localizedBlobPaths ?? {}), ...Object.values(rad.layoutVariants?.narrow?.localizedBlobPaths ?? {})];
+
+      expect((await oversett("nb")).body.localizedAssetCount).toBe(1);
+      const første = await lagret(assetId);
+      const gamle = oversatteFiler(første);
+      expect(gamle).toHaveLength(4);
+      for (const fil of gamle) await expect(getAsset(fil)).resolves.toBeInstanceOf(Buffer);
+
+      expect((await oversett("en-GB")).body.localizedAssetCount).toBe(1);
+      const andre = await lagret(assetId);
+      const nye = oversatteFiler(andre);
+      expect(nye).toHaveLength(4);
+      expect(nye.filter((fil) => gamle.includes(fil)), "ingen av de nye er en gammel fil").toEqual([]);
+      for (const fil of nye) await expect(getAsset(fil), `ny fil ${fil}`).resolves.toBeInstanceOf(Buffer);
+      for (const fil of gamle) await expect(getAsset(fil), `gammel fil ${fil}`).rejects.toThrow();
+      // Figuren selv, i begge oppsett, er urørt.
+      await expect(getAsset(andre.blobPath)).resolves.toBeInstanceOf(Buffer);
+      await expect(getAsset(andre.layoutVariants!.narrow!.blobPath)).resolves.toBeInstanceOf(Buffer);
+      expect(andre.blobPath).toBe(første.blobPath);
+      await slett(sectionId);
+    });
+
+    it("#1090: kontroll — en oversettelse som hoppes over fordi figuren alt er oversatt, sletter ingenting", async () => {
+      const { sectionId, assetId } = await importerMedSmalt();
+      const oversett = async () => ({ body: await oversettFigurer(sectionId, "nb") });
+      await oversett();
+      const før = await lagret(assetId);
+      expect((await oversett()).body.skippedAssetCount).toBe(1);
+      const etter = await lagret(assetId);
+      expect(etter).toEqual(før);
+      for (const fil of [...Object.values(etter.localizedBlobPaths ?? {}), ...Object.values(etter.layoutVariants!.narrow!.localizedBlobPaths)]) {
+        await expect(getAsset(fil)).resolves.toBeInstanceOf(Buffer);
+      }
       await slett(sectionId);
     });
 
@@ -208,7 +267,7 @@ describe("#1079 — en figur i bredt og smalt oppsett", () => {
 
   it("eksporten bærer det smale oppsettet med oversettelsene, og en ny import gir en figur med begge", async () => {
     const { sectionId, assetId } = await importerMedSmalt();
-    await request(app).post(`/api/admin/content/sections/${sectionId}/assets/localize`).set(adminHeaders).send({ sourceLocale: "nb" });
+    expect((await oversettFigurer(sectionId, "nb")).localizedAssetCount).toBe(1);
 
     const eksport = await request(app).get(`/api/admin/content/sections/${sectionId}/export-package`).set(adminHeaders);
     expect(eksport.status, JSON.stringify(eksport.body)).toBe(200);
@@ -238,7 +297,7 @@ describe("#1079 — en figur i bredt og smalt oppsett", () => {
 
   it("sletting av seksjonen fjerner HVER fil: bredt, smalt og alle oversettelsene av begge", async () => {
     const { sectionId, assetId } = await importerMedSmalt();
-    await request(app).post(`/api/admin/content/sections/${sectionId}/assets/localize`).set(adminHeaders).send({ sourceLocale: "nb" });
+    expect((await oversettFigurer(sectionId, "nb")).localizedAssetCount).toBe(1);
     const rad = await lagret(assetId);
     const filer = [
       rad.blobPath,
@@ -256,7 +315,7 @@ describe("#1079 — en figur i bredt og smalt oppsett", () => {
 
   it("reparasjonen fra #1083 går også gjennom det smale oppsettet og oversettelsene av det", async () => {
     const { sectionId, assetId } = await importerMedSmalt();
-    await request(app).post(`/api/admin/content/sections/${sectionId}/assets/localize`).set(adminHeaders).send({ sourceLocale: "nb" });
+    expect((await oversettFigurer(sectionId, "nb")).localizedAssetCount).toBe(1);
     const rad = await lagret(assetId);
     // Slik rensingen skrev før #1083: &nbsp; finnes ikke i XML, så fila lar seg ikke lese.
     const uleselig = (svg: string) => svg.replace("Motta", "Motta&nbsp;sak");
@@ -300,6 +359,60 @@ describe("#1079 — en figur i bredt og smalt oppsett", () => {
       expect((await lagret(assetId)).layoutVariants?.narrow?.blobPath).toBeTruthy();
       expect(bredde(await hent(assetId, "?layout=narrow"))).toBe("480");
       await slett(sectionId);
+    });
+
+    // #1089: forfatter-API-et laget seksjonen FØR figurene var sjekket. En avvist figur ga 400, og
+    // lot seksjonen ligge igjen — uten figuren, med en `asset:`-referanse som ikke pekte på noe.
+    // Prøvde agenten igjen, fantes seksjonen to ganger.
+    describe("#1089: forfatter-API-et sjekker figurene før seksjonen lages", () => {
+      const opprett = (assets: unknown[]) =>
+        request(app).post("/api/admin/content/sections").set(adminHeaders).send({
+          title: three(`Oppsett 1089 ${Date.now()}`),
+          bodyMarkdown: three("# Flyt\n\n![Saksgang](asset:flyt)"),
+          draft: true,
+          clientRef: "sek-1089",
+          assets,
+        });
+      const figuren = (ekstra: Record<string, unknown> = {}) => ({ sourceId: "flyt", filename: "flyt.svg", mimeType: "image/svg+xml", sizeBytes: BRED.length, contentBase64: b64(BRED), sourceLocale: "nb", ...ekstra });
+      const tell = async () => ({ seksjoner: await prisma.courseSection.count(), figurer: await prisma.sectionAsset.count(), versjoner: await prisma.courseSectionVersion.count() });
+
+      it.each<[string, Record<string, unknown>, string]>([
+        ["et smalt oppsett med andre etiketter", { layoutVariants: [{ layout: "narrow", contentBase64: b64(figur(480, ["Motta", "Vurder", "Arkiver"])) }] }, "asset_layout_text_mismatch"],
+        ["en figur som ikke er en SVG", { contentBase64: b64("<p>ikke en figur</p>") }, "asset_svg_invalid"],
+        ["en ukjent bildetype", { mimeType: "image/tiff", filename: "flyt.tiff" }, "asset_unsupported_type"],
+      ])("%s: 400, og ingen seksjon, ingen versjon og ingen figur er laget", async (_navn, ekstra, kode) => {
+        const før = await tell();
+        const res = await opprett([figuren(ekstra)]);
+        expect(res.status, JSON.stringify(res.body)).toBe(400);
+        expect(JSON.stringify(res.body)).toContain(kode);
+        expect(await tell()).toEqual(før);
+      });
+
+      it("den andre figuren avvises: den første er heller ikke lagret", async () => {
+        const før = await tell();
+        const res = await opprett([figuren(), figuren({ sourceId: "to", contentBase64: b64("<p>nei</p>") })]);
+        expect(res.status).toBe(400);
+        expect(await tell()).toEqual(før);
+      });
+
+      it("kontroll: en gyldig figur gir seksjonen, figuren og teksten med figurens endelige id — i én versjon", async () => {
+        const før = await tell();
+        const res = await opprett([figuren({ layoutVariants: [{ layout: "narrow", contentBase64: b64(SMAL) }] })]);
+        expect(res.status, JSON.stringify(res.body)).toBe(201);
+        const sectionId = res.body.section.id as string;
+        const assetId = (res.body.assetMap as Record<string, string>)["flyt"]!;
+        expect(await tell()).toEqual({ seksjoner: før.seksjoner + 1, figurer: før.figurer + 1, versjoner: før.versjoner + 1 });
+
+        const versjoner = await prisma.courseSectionVersion.findMany({ where: { sectionId }, select: { versionNo: true, bodyMarkdown: true } });
+        expect(versjoner).toHaveLength(1);
+        expect(versjoner[0]!.bodyMarkdown).toContain(`asset:${assetId}`);
+        expect(versjoner[0]!.bodyMarkdown).not.toContain("asset:flyt");
+        // Figuren hører til seksjonen, og filene ligger under seksjonens egen sti.
+        const rad = await prisma.sectionAsset.findUniqueOrThrow({ where: { id: assetId }, select: { sectionId: true, blobPath: true } });
+        expect(rad.sectionId).toBe(sectionId);
+        expect(rad.blobPath.startsWith(`sections/${sectionId}/`)).toBe(true);
+        await slett(sectionId);
+      });
     });
 
     it("erstatning av en eksisterende seksjon (replaceExisting) gir den nye figuren begge oppsettene", async () => {
@@ -402,6 +515,20 @@ describe("#1079 — en figur i bredt og smalt oppsett", () => {
       ["et språk figuren ikke har", rad(true, true, true), { layout: "narrow", locale: "nn" }, "smal"],
     ])("%s", (_navn, asset, ønsket, forventet) => {
       expect(chooseAssetFile(asset, ønsket).blobPath).toBe(forventet);
+    });
+
+    // #1088: `?locale=constructor` ga feil 500. Et vanlig oppslag i et objekt treffer også det alle
+    // objekter arver, og `constructor` ga en funksjon der det skulle stått en sti.
+    it.each(["constructor", "__proto__", "toString", "hasOwnProperty", "valueOf"])("#1088: språket «%s» finnes ikke på figuren, og gir figuren slik den ble tegnet", (språk) => {
+      expect(chooseAssetFile(rad(true, true, true), { locale: språk })).toEqual({ blobPath: "bred", layout: "wide" });
+      expect(chooseAssetFile(rad(true, true, true), { locale: språk, layout: "narrow" })).toEqual({ blobPath: "smal", layout: "narrow" });
+      expect(chooseAssetFile(rad(false, false, false), { locale: språk, layout: "narrow" })).toEqual({ blobPath: "bred", layout: "wide" });
+    });
+
+    it("#1088: et språk som står i kolonnen med noe annet enn en sti, regnes som at det mangler", () => {
+      for (const rart of [{ "en-GB": "" }, { "en-GB": 7 }, { "en-GB": null }, { "en-GB": { sti: "x" } }]) {
+        expect(chooseAssetFile({ blobPath: "bred", localizedBlobPaths: rart, layoutVariants: null }, { locale: "en-GB" })).toEqual({ blobPath: "bred", layout: "wide" });
+      }
     });
 
     it("svaret sier hvilket oppsett fila er", () => {

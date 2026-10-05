@@ -76,6 +76,10 @@ const { wide: BRED, narrow: SMAL } = drawFlowFigure({
 });
 const BRED_BREDDE = bredde(BRED)!;
 const SMAL_BREDDE = bredde(SMAL)!;
+/** Størrelsen det smale oppsettet oppgir for seg selv, slik skriptet skrev den. */
+const STØRRELSE = / width="\d+" height="\d+"/.exec(SMAL)![0];
+/** Etikettene er 12 px i figurens egne mål; under 9 px på skjermen kan de ikke leses. */
+const etikettPx = (bildebredde: number, viewBoxBredde: string) => Math.round(((12 * bildebredde) / Number(viewBoxBredde)) * 10) / 10;
 
 const stempel = Date.now();
 const TITTEL = `Stage-test figur i to oppsett ${stempel}`;
@@ -84,17 +88,48 @@ let sectionId = "";
 let assetId = "";
 let courseId = "";
 
-test.afterAll(async () => {
+// STAGE_BEHOLD=1 lar testkurset stå igjen på stage, publisert, så det kan åpnes på en EKTE telefon —
+// det eneste denne testen ikke kan måle. Neste kjøring uten flagget rydder det bort (se under).
+const behold = process.env.STAGE_BEHOLD === "1";
+const TITTEL_START = "Stage-test figur i to oppsett ";
+
+async function slettKurs(id: string) {
   // Kurset først: en seksjon som står i et kurs, kan ikke slettes.
+  await api("POST", `/api/admin/content/courses/${id}/unpublish`);
+  await api("POST", `/api/admin/content/courses/${id}/archive`);
+  return api("DELETE", `/api/admin/content/courses/${id}`);
+}
+async function slettSeksjon(id: string) {
+  await api("POST", `/api/admin/content/sections/${id}/archive`);
+  return api("DELETE", `/api/admin/content/sections/${id}`);
+}
+/** Lista gir tittelen som en tekst, et kart per språk, eller kartet skrevet som tekst. Testens navn står i alle tre. */
+const erTestens = (tittel: unknown): boolean => JSON.stringify(tittel ?? "").includes(TITTEL_START);
+
+// Rydder bort det en tidligere kjøring med STAGE_BEHOLD lot stå. Bare innhold med denne testens
+// eget navn, tegn for tegn — ekte innhold røres ikke.
+test.beforeAll(async () => {
+  if (!lokal && !auth) return;
+  const kurs = ((await api("GET", "/api/admin/content/courses")).json.courses ?? []) as Array<{ id: string; title: unknown }>;
+  const seksjoner = ((await api("GET", "/api/admin/content/sections")).json.sections ?? []) as Array<{ id: string; title: unknown }>;
+  const gamleKurs = kurs.filter((k) => erTestens(k.title));
+  const gamleSeksjoner = seksjoner.filter((s) => erTestens(s.title));
+  for (const k of gamleKurs) await slettKurs(k.id);
+  for (const s of gamleSeksjoner) await slettSeksjon(s.id);
+  if (gamleKurs.length + gamleSeksjoner.length > 0) noter("opprydding før start", `${gamleKurs.length} testkurs og ${gamleSeksjoner.length} testseksjoner fra en tidligere kjøring er slettet`);
+});
+
+test.afterAll(async () => {
+  if (behold) {
+    if (courseId) noter("STÅR IGJEN PÅ STAGE (for å se på en ekte telefon)", `kurset «${TITTEL}» — slettes av neste kjøring`);
+    return;
+  }
   if (courseId) {
-    await api("POST", `/api/admin/content/courses/${courseId}/unpublish`);
-    await api("POST", `/api/admin/content/courses/${courseId}/archive`);
-    const slettet = await api("DELETE", `/api/admin/content/courses/${courseId}`);
+    const slettet = await slettKurs(courseId);
     noter("opprydding: testkurset", slettet.status === 204 || slettet.status === 200 ? "slettet" : `IKKE slettet (${slettet.status}: ${slettet.tekst.slice(0, 120)})`);
   }
   if (sectionId) {
-    await api("POST", `/api/admin/content/sections/${sectionId}/archive`);
-    const slettet = await api("DELETE", `/api/admin/content/sections/${sectionId}`);
+    const slettet = await slettSeksjon(sectionId);
     noter("opprydding: testseksjonen", slettet.status === 204 ? "slettet" : `IKKE slettet (${slettet.status}: ${slettet.tekst.slice(0, 120)})`);
   }
 });
@@ -121,7 +156,7 @@ async function vist(page: Page, velger: string) {
     let spalteEl = img.parentElement;
     while (spalteEl && spalteEl.clientWidth === 0) spalteEl = spalteEl.parentElement;
     // SVG-en har bare viewBox, så bildets naturlige mål følger sideforholdet: bredde / høyde.
-    return { oppsett: img.dataset.assetLayout, harOppsett: img.dataset.assetLayouts, spalte: spalteEl?.clientWidth ?? 0, forhold: Math.round((img.naturalWidth / img.naturalHeight) * 100) / 100 };
+    return { oppsett: img.dataset.assetLayout, harOppsett: img.dataset.assetLayouts, spalte: spalteEl?.clientWidth ?? 0, bildebredde: img.getBoundingClientRect().width, forhold: Math.round((img.naturalWidth / img.naturalHeight) * 100) / 100 };
   });
   await expect.poll(async () => { const s = await les(); return s.oppsett === (s.spalte < 640 ? "narrow" : "wide"); }, { timeout: VENT_MS, message: "oppsettet som vises, skal passe spalten" }).toBe(true);
   return les();
@@ -177,6 +212,9 @@ test.describe("#1079 — en figur i bredt og smalt oppsett, på stage", () => {
       expect(smal.oppsett, `${språk}: det smale oppsettet finnes på språket`).toBe("narrow");
       expect(bredde(smal.svg)).toBe(SMAL_BREDDE);
       expect(bredde(bred.svg)).toBe(BRED_BREDDE);
+      // Det smale oppsettet sier selv hvor stort det er på det meste. Det må overleve oversettelsen,
+      // ellers blåses den oversatte figuren opp på et nettbrett.
+      expect(smal.svg, `${språk}: det smale oppsettet har fortsatt sin egen størrelse`).toContain(STØRRELSE);
       expect(etiketter(smal.svg).sort(), `${språk}: begge oppsettene har de samme etikettene`).toEqual(etiketter(bred.svg).sort());
       expect(etiketter(bred.svg), `${språk}: etikettene er oversatt, ikke kopiert`).not.toEqual(etiketter(norsk.svg));
       noter(`etiketter på ${språk} (begge oppsett)`, etiketter(smal.svg).join(" · "));
@@ -192,7 +230,7 @@ test.describe("#1079 — en figur i bredt og smalt oppsett, på stage", () => {
       const s = await vist(page, "#previewPane img");
       expect(s.harOppsett).toBe("wide,narrow");
       // Bildets mål er hele piksler, så forholdet stemmer ikke på hundredelen. De to oppsettene er
-      // langt fra hverandre (rundt 5,5 mot 2,0), så en halv i slingringsmonn skiller dem trygt.
+      // langt fra hverandre (rundt 5,5 mot 0,7), så en halv i slingringsmonn skiller dem trygt.
       expect(Math.abs(s.forhold - forhold(s.oppsett === "narrow" ? SMAL : BRED))).toBeLessThan(0.5);
       if (skjerm.w === 390) expect(s.oppsett).toBe("narrow");
       noter(`forhåndsvisning, ${skjerm.navn}`, `spalten er ${s.spalte} px → ${s.oppsett === "narrow" ? "smalt" : "bredt"} oppsett`);
@@ -228,7 +266,11 @@ test.describe("#1079 — en figur i bredt og smalt oppsett, på stage", () => {
       expect(s.harOppsett).toBe("wide,narrow");
       expect(s.oppsett).toBe(skjerm.w === 390 ? "narrow" : "wide");
       expect(Math.abs(s.forhold - forhold(skjerm.w === 390 ? SMAL : BRED))).toBeLessThan(0.5);
-      noter(`deltaker, ${skjerm.navn}`, `spalten er ${s.spalte} px → ${s.oppsett === "narrow" ? "smalt" : "bredt"} oppsett`);
+      // Det som teller for den som leser: hvor store etikettene er på skjermen. Første utgave valgte
+      // riktig oppsett og hadde etiketter på 5 px på telefon — riktig valg er ikke nok.
+      const px = etikettPx(s.bildebredde, skjerm.w === 390 ? SMAL_BREDDE : BRED_BREDDE);
+      expect(px, `etikettene er ${px} px på skjermen (bildet er ${Math.round(s.bildebredde)} px bredt)`).toBeGreaterThanOrEqual(9);
+      noter(`deltaker, ${skjerm.navn}`, `spalten er ${s.spalte} px → ${s.oppsett === "narrow" ? "smalt" : "bredt"} oppsett, etikettene er ${px} px på skjermen`);
       await page.locator("#sectionReaderBody img").first().scrollIntoViewIfNeeded();
       await bilde(page, `1079-deltaker-${skjerm.w}`);
     });

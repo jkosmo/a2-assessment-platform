@@ -8,8 +8,9 @@
 // What it writes, for one or more figures:
 //
 //   <out>.html         one self-contained page. Each figure is shown the way the platform shows
-//                      it — as an image — in a wide column and in a phone-width column, with a
-//                      button that plays the animation again. Open it in a browser, or show it in
+//                      it — as an image — in a wide column and in the column a phone gives
+//                      (220 px, measured in the participant's reader), with a button that plays the
+//                      animation again. Open it in a browser, or show it in
 //                      the host's preview pane (a Claude artifact, a ChatGPT canvas).
 //   <name>.still.svg   the figure AT REST, with no <style> block: colours written straight on the
 //                      steps. For renderers that are not browsers (cairosvg, rsvg-convert,
@@ -72,7 +73,7 @@ export function buildPreviewHtml(figures, { title = "Figurer" } = {}) {
   <p class="meta">${kind} · ${Buffer.byteLength(svg, "utf8")} byte</p>
   <div class="columns">
     <figure class="wide"><figcaption>Bred spalte (PC)</figcaption><img alt="${esc(name)}" data-figure="${index}" src="${uri(svg)}"></figure>
-    <figure class="phone"><figcaption>Smal spalte (telefon, 360 px)</figcaption><img alt="${esc(name)}" data-figure="${index}" src="${uri(svg)}"></figure>
+    <figure class="phone"><figcaption>Smal spalte (telefon, 220 px)</figcaption><img alt="${esc(name)}" data-figure="${index}" src="${uri(svg)}"></figure>
   </div>
   ${motion.animated ? `<button type="button" data-replay="${index}">Spill av animasjonen på nytt</button>` : ""}
 </section>`;
@@ -95,15 +96,17 @@ export function buildPreviewHtml(figures, { title = "Figurer" } = {}) {
   .columns { display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-start; margin: 8px 0; }
   figure { margin: 0; padding: 12px; border: 1px solid var(--line); border-radius: 8px; background: #fffdf9; box-sizing: border-box; }
   figure.wide { flex: 1 1 520px; min-width: 0; }
-  figure.phone { width: 360px; max-width: 100%; }
-  figure img { display: block; width: 100%; height: auto; margin-top: 8px; }
+  /* 220 px of image: the column a participant reads in on a 390 px phone (#1079). */
+  figure.phone { width: 246px; max-width: 100%; }
+  /* As the platform shows a figure: scaled down to its column, never up past its own size. */
+  figure img { display: block; max-width: 100%; height: auto; margin-top: 8px; }
   button { font: inherit; padding: 6px 12px; border-radius: 6px; border: 1px solid var(--line); background: var(--panel); color: var(--fg); cursor: pointer; }
 </style>
 </head>
 <body>
 <main>
 <h1>${esc(title)}</h1>
-<p class="meta">Figurene vises som bilder, slik plattformen viser dem. Den smale spalten viser hvor liten figuren blir på en telefon.</p>
+<p class="meta">Figurene vises som bilder, slik plattformen viser dem. Den smale spalten er så bred som leseren er på en telefon: der skal det smale oppsettet kunne leses.</p>
 ${sections}
 </main>
 <script>

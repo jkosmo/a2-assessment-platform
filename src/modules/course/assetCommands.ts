@@ -131,7 +131,7 @@ function readLocalizedBlobPaths(value: unknown): Record<string, string> {
 //
 // An SVG shown as an image has a fixed shape: it cannot re-break itself when the column gets narrow.
 // A flow is therefore drawn twice from one description — wide (every step on one row) and narrow
-// (four per row). The WIDE layout is the asset as it has always been stored: `blobPath` and
+// (two per row). The WIDE layout is the asset as it has always been stored: `blobPath` and
 // `localizedBlobPaths`. A NARROW layout, when the figure has one, sits beside it in
 // `layoutVariants`, with its own translated variants:
 //
@@ -305,7 +305,15 @@ export function chooseAssetFile(
   const layout = ASSET_LAYOUTS.find((name) => name === wanted.layout && layouts[name] !== undefined);
   const other = layout ? layouts[layout] : undefined;
 
-  const inLanguage = (paths: Record<string, string>) => (wanted.locale ? paths[wanted.locale] : undefined);
+  // #1088: a language counts only when what stands under it is a path. A plain lookup
+  // (`paths[locale]`) also finds what every object inherits: `?locale=constructor` gave a function
+  // instead of a path, and the read from storage threw — a 500 where the answer is the original
+  // figure, as for any unknown language. Nothing an object inherits is a string, so this one check
+  // covers both that and a column holding something other than a path.
+  const inLanguage = (paths: Record<string, string>) => {
+    const path: unknown = wanted.locale ? paths[wanted.locale] : undefined;
+    return typeof path === "string" && path.length > 0 ? path : undefined;
+  };
   if (layout && other) {
     const translated = inLanguage(other.localizedBlobPaths);
     if (translated) return { blobPath: translated, layout };
@@ -452,6 +460,14 @@ export async function localizeSectionAssets(
       where: { id: asset.id },
       data: { sourceLocale, localizedBlobPaths, ...(otherLayouts.length > 0 ? { layoutVariants } : {}) },
     });
+    // #1090: nothing points at the translated files the row pointed at BEFORE. They used to stay in
+    // storage for good — two per figure for every new translation, four when the figure has a narrow
+    // layout. Every file written above has a new name, so none of the old ones is still in use.
+    // Removed after the row is written, never before: an update that failed would otherwise be
+    // left with paths to files that were gone.
+    const replaced = [...Object.values(existingVariants), ...otherLayouts.flatMap(([, variant]) => Object.values(variant.localizedBlobPaths))]
+      .filter((path) => typeof path === "string" && path.length > 0);
+    await reclaimAssetBlobs(replaced);
     localizedAssetCount += 1;
   }
 
@@ -775,27 +791,4 @@ export async function stageSectionAssets(
   }
 
   return staged;
-}
-
-/**
- * #749: recreate one section's exported assets in the destination, rows included. The blobs are
- * staged by `stageSectionAssets` — the ONE place a figure is decoded, checked and written, so the
- * two ways in (the import of a file, and an authoring package) cannot come to treat a figure
- * differently — and a SectionAsset row is then created for each. Returns a `sourceId -> newAssetId`
- * map so the caller can remap the section's `asset:<sourceId>` markdown refs. Any invalid asset
- * throws (no silent skip); the thrown error names the offending asset.
- */
-export async function importSectionAssets(
-  sectionId: string,
-  assets: ReadonlyArray<IncomingSectionAsset>,
-): Promise<Map<string, string>> {
-  const idMap = new Map<string, string>();
-  for (const staged of await stageSectionAssets(sectionId, assets)) {
-    const created = await prisma.sectionAsset.create({
-      data: { sectionId, ...staged.rowData },
-      select: { id: true },
-    });
-    idMap.set(staged.sourceId, created.id);
-  }
-  return idMap;
 }

@@ -50,7 +50,7 @@ vi.mock("../../src/modules/course/contentLifecycle.js", () => ({
 vi.mock("../../src/modules/course/assetCommands.js", () => ({
   collectSectionAssetBlobPaths,
   reclaimAssetBlobs,
-  importSectionAssets: vi.fn(),
+  stageSectionAssets: vi.fn(),
 }));
 
 vi.mock("../../src/modules/content/contentOwnershipService.js", () => ({ addContentOwner: vi.fn() }));

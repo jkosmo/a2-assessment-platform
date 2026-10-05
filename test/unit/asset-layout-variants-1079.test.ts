@@ -17,7 +17,7 @@ import { validateAuthoringPackage, type AuthoringValidationLookups } from "../..
 // @ts-expect-error — .mjs skill script consumed as a library
 import { ASSET_LAYOUTS as SKILL_ASSET_LAYOUTS, validateExportEnvelopeStructure } from "../../skills/a2-authoring-api/scripts/export-validate.mjs";
 // @ts-expect-error — .mjs skill script consumed as a library
-import { checkFigureLocalization } from "../../skills/a2-authoring-api/scripts/localization-check.mjs";
+import { checkFigureLocalization, extractLayoutLabels } from "../../skills/a2-authoring-api/scripts/localization-check.mjs";
 // @ts-expect-error — .mjs skill script consumed as a library
 import { extractPackageElements } from "../../skills/a2-authoring-api/scripts/course-state.mjs";
 import { drawFlowFigure } from "../../skills/a2-authoring-api/scripts/draw-flow-figure.mjs";
@@ -117,6 +117,74 @@ describe("#1079 — regelen for hva et oppsett må være (findLayoutVariantProbl
 
   it("skillet og plattformen kjenner de samme oppsettene", () => {
     expect([...SKILL_ASSET_LAYOUTS]).toEqual([...ASSET_LAYOUTS]);
+  });
+});
+
+// #1087: skillet og plattformen hadde hver sin utgave av regelen «et oppsett har de samme
+// etikettene som den brede figuren», og skillets var løsere: den slo sammen mellomrom og leste
+// ikke `<title>`. En pakke besto da skillets sjekk og ble avvist av importen.
+//
+// Testen etterligner ikke regelen. Den sender de SAMME figurparene gjennom begge, og krever samme
+// svar. Endres den ene, sier testen fra.
+describe("#1087 — skillet og plattformen er enige om når et oppsett har de samme etikettene", () => {
+  const svg = (innhold: string, bredde = 848) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${bredde} 100">${innhold}</svg>`;
+  const t = (...tekster: string[]) => tekster.map((x, i) => `<text x="1" y="${10 + i * 10}">${x}</text>`).join("");
+
+  // [navn, den brede figuren, det smale oppsettet]
+  const par: Array<[string, string, string]> = [
+    ["like etiketter", svg(t("Motta", "Vurder")), svg(t("Motta", "Vurder"), 480)],
+    ["like etiketter i annen rekkefølge", svg(t("Motta", "Vurder")), svg(t("Vurder", "Motta"), 480)],
+    ["en etikett to ganger i det smale", svg(t("Motta", "Vurder")), svg(t("Motta", "Vurder", "Motta"), 480)],
+    ["en etikett bare i det smale", svg(t("Motta", "Vurder")), svg(t("Motta", "Vurder", "Arkiver"), 480)],
+    ["en etikett mangler i det smale", svg(t("Motta", "Vurder")), svg(t("Motta"), 480)],
+    // De to tilfellene QA-gjennomgangen av 2.81.0 pekte på:
+    ["ulik <title>", svg(`<title>Saksgang</title>${t("Motta")}`), svg(`<title>Saksgang (smal)</title>${t("Motta")}`, 480)],
+    ["linjeskift inni en etikett i det smale", svg(t("Klargjør kilder")), svg(t("Klargjør\n  kilder"), 480)],
+    ["lik <title> og <desc> i begge", svg(`<title>Saksgang</title><desc>Seks steg</desc>${t("Motta")}`), svg(`<title>Saksgang</title><desc>Seks steg</desc>${t("Motta")}`, 480)],
+    ["ulik <desc> — den regnes ikke som en etikett", svg(`<desc>Bred</desc>${t("Motta")}`), svg(`<desc>Smal</desc>${t("Motta")}`, 480)],
+    ["<title> bare i det brede", svg(`<title>Saksgang</title>${t("Motta")}`), svg(t("Motta"), 480)],
+    ["mellomrom rundt etiketten", svg(t("Motta")), svg(t("  Motta  "), 480)],
+    ["to mellomrom inni etiketten", svg(t("Motta saken")), svg(t("Motta  saken"), 480)],
+    ["hardt mellomrom mot vanlig", svg(t("§ 12")), svg(t("§ 12"), 480)],
+    ["store og små bokstaver", svg(t("Motta")), svg(t("motta"), 480)],
+    ["etiketten delt i to <tspan> i det smale", svg(t("Motta saken")), svg(`<text x="1" y="10"><tspan x="1">Motta</tspan><tspan x="1" dy="12">saken</tspan></text>`, 480)],
+    ["samme <tspan>-deling i begge", svg(`<text><tspan>Motta</tspan><tspan>saken</tspan></text>`), svg(`<text><tspan x="1">Motta</tspan><tspan x="1">saken</tspan></text>`, 480)],
+    ["tekst foran en <tspan> telles ikke", svg(`<text>Steg <tspan>en</tspan></text>`), svg(`<text><tspan>en</tspan></text>`, 480)],
+    ["& skrevet som &amp; i begge", svg(t("Mål &amp; middel")), svg(t("Mål &amp; middel"), 480)],
+    ["& skrevet som &amp; og som &#38;", svg(t("Mål &amp; middel")), svg(t("Mål &#38; middel"), 480)],
+    ["tom etikett i det smale", svg(t("Motta")), svg(`${t("Motta")}<text x="1" y="40"> </text>`, 480)],
+    ["ingen etiketter i noen av dem", svg(`<rect width="5" height="5"/>`), svg(`<rect width="5" height="5"/>`, 480)],
+  ];
+
+  const pakke = (bred: string, smal: string) => ({
+    packageFormat: "a2-authoring-package/v1",
+    objects: [{ clientRef: "sek", type: "section", payload: { title: "S", bodyMarkdown: "![f](asset:flyt)", assets: [asset({ contentBase64: b64(bred), layoutVariants: [{ layout: "narrow", contentBase64: b64(smal) }] })] } }],
+  });
+  const plattformenGodtar = (bred: string, smal: string) => findLayoutVariantProblem(asset({ contentBase64: b64(bred), layoutVariants: [{ layout: "narrow", contentBase64: b64(smal) }] })) === null;
+  const skilletGodtar = (bred: string, smal: string) => checkFigureLocalization(pakke(bred, smal)).layoutTextMismatches.length === 0;
+
+  it.each(par)("%s", (_navn, bred, smal) => {
+    expect(skilletGodtar(bred, smal)).toBe(plattformenGodtar(bred, smal));
+  });
+
+  it("kontroll: parene dekker begge svarene — noen godtas, noen avvises, og de to fra gjennomgangen avvises", () => {
+    const svar = new Map(par.map(([navn, bred, smal]) => [navn, plattformenGodtar(bred, smal)]));
+    expect([...svar.values()].filter(Boolean).length).toBeGreaterThanOrEqual(6);
+    expect([...svar.values()].filter((godtatt) => !godtatt).length).toBeGreaterThanOrEqual(6);
+    expect(svar.get("ulik <title>")).toBe(false);
+    expect(svar.get("linjeskift inni en etikett i det smale")).toBe(false);
+  });
+
+  it("det skriptet tegner, har de samme etikettene i begge oppsett — også etter skillets telling", () => {
+    const { wide, narrow } = drawFlowFigure({
+      name: "flyt", title: "Saksgang", desc: "Seks steg.",
+      phases: { a: { label: "Først", grunn: "#d9e8dd", lys: "#6fae87" }, b: { label: "Så", grunn: "#dce7f2", lys: "#7fa3c7" }, c: { label: "Sist", grunn: "#e7e2f0", lys: "#a99bc9" } },
+      steps: [{ label: ["Motta", "saken"], phase: "a" }, { label: ["Sjekk"], phase: "a" }, { label: ["Vurder", "vilkårene"], phase: "b" }, { label: ["Drøft"], phase: "b" }, { label: ["Skriv"], phase: "c" }, { label: ["Arkiver"], phase: "c" }],
+    });
+    expect([...extractLayoutLabels(narrow)].sort()).toEqual([...extractLayoutLabels(wide)].sort());
+    expect(extractLayoutLabels(wide)).toContain("Saksgang");
+    expect(skilletGodtar(wide, narrow)).toBe(true);
+    expect(plattformenGodtar(wide, narrow)).toBe(true);
   });
 });
 

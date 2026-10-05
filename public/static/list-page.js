@@ -188,7 +188,8 @@ export function createListPage(config) {
       const label = col.label
         ? escapeHtml(col.label)
         : `<span class="sr-only">${escapeHtml(col.srLabel ?? "")}</span>`;
-      const indicator = sortable ? ` <span class="sort-indicator" aria-hidden="true">${active ? (state.sortDir === "asc" ? "↑" : "↓") : "↕"}</span>` : "";
+      // Hardt mellomrom: pila følger siste ord når overskriften brekker over to linjer (#1084).
+      const indicator = sortable ? `&nbsp;<span class="sort-indicator" aria-hidden="true">${active ? (state.sortDir === "asc" ? "↑" : "↓") : "↕"}</span>` : "";
       const aria = sortable ? ` aria-sort="${active ? (state.sortDir === "asc" ? "ascending" : "descending") : "none"}"` : "";
       const title = col.title ? ` title="${escapeHtml(col.title)}"` : sortable && texts.sortHint ? ` title="${escapeHtml(texts.sortHint)}"` : "";
       const data = sortable ? ` data-sort-key="${escapeHtml(col.key)}"` : "";

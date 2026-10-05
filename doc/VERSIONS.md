@@ -2,6 +2,116 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.82.0 - 2026-10-05
+
+Sju rettinger samlet, slik at produkteier kan teste alt på stage i én omgang. Ingen migrasjon.
+Skillet er endret (det smale oppsettet og etikettsjekken), så pakka må bygges på nytt.
+
+### #1079: figuren kunne ikke leses på telefon
+
+Stage-testen av 2.81.0 viste at riktig oppsett ble valgt på telefon — og at etikettene var 5 px høye.
+
+- **Det smale oppsettet har to steg per rad, ikke fire** (`draw-flow-figure.mjs`). Regelen bak:
+  en etikett trenger plassen mellom to steg, så en rad med n steg er om lag 104·n bred, og
+  etikettene på 12 px er 9 px på skjermen — det minste som kan leses — når spalten er 78·n px.
+  Spalten deltakeren leser i på en telefon på 390 px, er målt til 201 px: plass til to steg, ikke
+  tre. Tre steg per rad (det som først var planen) ville gitt 7 px.
+- **Det smale oppsettet oppgir sin egen størrelse** (`width`, `height` på tegningen, 1,25 ganger
+  målene den er tegnet i). Et bilde krympes til spalten, men blåses ikke opp forbi egen størrelse.
+  Uten dette ville figuren fylt en spalte på 600 px (nettbrett på høykant) med etiketter på 30 px.
+  Der står den nå 300 px bred. Det brede oppsettet fyller spalten som før.
+- **Leseren har smalere marger på telefon** (`participant.html`, under 600 px): de to innerste
+  rammene gir 20 px tilbake. På en telefon på 360 px er det forskjellen på 8,5 og 9,5 px etiketter.
+  ⚠️ **Ikke godkjent av produkteier ennå** — det er en synlig endring av deltakersida på telefon.
+  Tre linjer CSS; fjernes de, er 390 px-telefoner fortsatt lesbare (10 px), 360 px ikke helt.
+- Forhåndsvisningen fra `figure-preview.mjs` viser telefonspalten i 220 px (før: 360) og blåser
+  ikke lenger opp en figur som har egen størrelse — den viste noe annet enn plattformen gjør.
+
+**Målt** i den ekte deltakersida i Chromium, med figuren skriptet tegner for åtte steg
+(`test/e2e/figure-legible-on-phone-1079.spec.ts`): etikettene er minst 9 px på 390 og 360 px,
+figuren står i 300 px på et nettbrett, og det brede oppsettet fyller spalten på PC.
+
+⚠️ **Det som er valgt bort:** på et nettbrett på høykant (spalte rundt 580 px) ville fire steg per
+rad sett bedre ut enn to. Det ville krevd et tredje oppsett og en ny grense i klienten. Ett smalt
+oppsett må passe den smaleste spalten, og det er telefonen.
+
+**Rotårsak.** Det smale oppsettet ble tegnet for en spalte på 480 px, et tall fra en prøveside.
+Ingen målte spalten i den ekte leseren, der tre rammer med hver sin marg tar 189 av 390 px. Alle
+testene målte *hvilket* oppsett som ble valgt; ingen målte om det kunne leses.
+
+### #1084: «Mer» lå utenfor rammen på listene på PC
+
+Med ekte innhold var modullista 67 px bredere enn ramma, og handlingene ytterst til høyre kom
+først fram når tabellen ble rullet sidelengs. To ting i `shared.css`:
+
+- Kolonneoverskriftene og statusmerkene får brekke. «SERTIFISERINGSNIVÅ» var bredere enn alt som
+  sto under den.
+- Handlingskolonnen er festet til høyre kant (`position: sticky`). Blir tabellen likevel for bred,
+  ruller resten av raden inn under den. Regelen holder uansett hva raden inneholder — en regel som
+  bare gjorde kolonnene smalere, ville holdt til neste kolonne kom.
+
+`test/e2e/list-fits-frame-1084.spec.ts` (9 tester) bruker rader som de på stage. **Rotårsak:** de
+andre testene har korte titler og ett statusmerke per rad; feilen krevde ekte innhold.
+(Se også «synlig bivirkning» under #1085.)
+
+### #1085: menylinja var bredere enn skjermen på telefon
+
+Hele sida kunne rulles sidelengs. Lenkene står nå tettere på telefon, så de fire får plass på én
+linje på 390 px, og de får brekke til en ny linje på smalere skjermer.
+`test/e2e/nav-fits-phone-1085.spec.ts` (14 tester). **Rotårsak:** testene kjørte som
+fagansvarlig, som har færre lenker i menyen. Feilen viste seg bare for administrator.
+
+### #1084, synlig bivirkning: to statusmerker står under hverandre
+
+«Publisert» og «Nyere utkast» står nå under hverandre i listene, på alle bredder, og plassen går
+til navnekolonnen. Rader med utkast blir én linje høyere. Ikke bestilt av produkteier.
+
+### #1087: skillets etikettsjekk var løsere enn plattformens
+
+En pakke kunne bestå skillets sjekk av «det smale oppsettet har de samme etikettene som det
+brede» og bli avvist av importen: skillet slo sammen mellomrom og leste ikke `<title>`.
+`localization-check.mjs` teller nå etikettene slik plattformen gjør (`extractLayoutLabels`).
+
+Testen etterligner ikke regelen: 21 figurpar sendes gjennom både skillets sjekk og plattformens
+`findLayoutVariantProblem`, og svarene skal være like. **Rotårsak:** to utgaver av samme regel,
+skrevet hver for seg, uten noe som holdt dem sammen.
+
+### #1088: `?locale=constructor` ga feil 500 på en figur
+
+Språket ble slått opp med `paths[locale]`, som også treffer det alle objekter arver. Nå teller et
+språk bare når det som står under det, er en sti (tekst). Fantes før 2.81.0.
+
+### #1089: en avvist figur etterlot et utkast
+
+Forfatter-API-et (`POST /sections` med figurer) laget seksjonen først og importerte figurene
+etterpå. Ble en figur avvist, svarte det 400 — og seksjonen ble liggende, uten figuren. En agent
+som prøvde igjen, laget seksjonen to ganger. Rekkefølgen er nå den filimporten alltid har hatt:
+figurene sjekkes og lagres, så skrives seksjonen og radene i én transaksjon. Feiler den, fjernes
+filene. `importSectionAssets` er fjernet; `stageSectionAssets` er den eneste veien inn.
+
+### #1090: en ny oversettelse lot de gamle filene ligge
+
+`localizeSectionAssets` skrev nye oversatte filer og pekte radene på dem, men fjernet ikke de
+forrige. Nå fjernes de som ikke lenger brukes.
+
+### Mutasjonssjekk
+
+Hver retting er ødelagt med vilje, én om gangen, og testen som skal vokte den, er kjørt:
+**19 mutasjoner, 19 røde** (#1084: 6, #1085: 3, #1079: 4, #1087: 1, #1088: 1, #1089: 3, #1090: 1).
+Det tok to runder. Første runde fant fire ting i mine egne rettinger:
+
+- **Regelen som skulle gjøre menylenkene tettere på telefon, virket aldri** (#1085). Fem sider har
+  sin egen kopi av menystilen i en stilblokk som kommer etter `shared.css`, og kopien vant. Menyen
+  brakk til to linjer der den skulle stå på én. Regelen har nå to klasser i velgeren, og fire
+  tester krever én linje på 390 px. Kopiene i de fem sidene bør fjernes; det er ikke gjort her.
+- **Kontrollen av at statusmerkene sto under hverandre, godtok merker side om side** (#1084): den
+  sammenlignet toppene, og merkene er ulike høye. Den sammenligner nå bunn mot topp.
+- **To vakter gjorde ingenting** og er fjernet: `Object.hasOwn` ved siden av tekstsjekken (#1088 —
+  ingenting et objekt arver, er tekst), og en sjekk av at en gammel oversatt fil ikke fortsatt var
+  i bruk (#1090 — hver ny fil får nytt navn, så det kan ikke skje).
+- Veien der transaksjonen feiler etter at filene er lagret (#1089), hadde ingen test. Den har fått
+  en (`test/unit/section-create-with-assets-1089.test.ts`).
+
 ## 2.81.1 - 2026-10-04
 
 Bare skillet (`skills/a2-authoring-api`). Ingen endring i plattformkoden, ingen migrasjon.

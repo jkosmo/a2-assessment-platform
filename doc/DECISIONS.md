@@ -898,3 +898,24 @@ ikke fått noe svar og blitt stående på kildespråket: en figur på to språk 
 Alternativet, én oversettelse per oppsett, dobler kostnaden og lar de to sprike.
 **Håndheves:** `prepareLayoutVariants` i `assetCommands.ts` (alle veier inn går gjennom
 `stageSectionAssets`), og speilet i skillets `localization-check.mjs`. Sak #1079. Status: avklart.
+Fra 2.82.0 teller skillet etikettene slik plattformen gjør, og en test sender de samme figurparene
+gjennom begge og krever samme svar (#1087).
+
+### Det smale oppsettet er tegnet for telefonen: to steg per rad, og aldri større enn egen størrelse (2026-10-05)
+
+Skillet tegner det smale oppsettet med to steg per rad (240 bredt), og tegningen oppgir sin egen
+størrelse (300 px bred). Plattformen krymper et bilde til spalten, men blåser det ikke opp.
+
+**Hvorfor:** spalten deltakeren leser i på en telefon på 390 px, er målt til 201 px. En rad med n
+steg trenger om lag 78·n px for at etikettene skal være 9 px på skjermen; det er plass til to steg,
+ikke tre. Første utgave (2.81.0) hadde fire per rad, tegnet for en spalte på 480 px ingen hadde
+målt, og ga etiketter på 5 px. Egen størrelse trengs fordi det smale oppsettet også vises i
+spalter mellom 300 og 640 px (nettbrett på høykant), der det ellers ville fylt spalten med
+etiketter på 30 px.
+**Valgt bort:** et tredje oppsett for spalter mellom telefon og PC (fire per rad ville sett bedre
+ut på et nettbrett). Det krever et nytt navn i `ASSET_LAYOUTS`, en grense til i klienten og en
+rekkefølge for hva som vises når ett av dem mangler. Ett smalt oppsett må passe den smaleste
+spalten.
+**Håndheves:** `LAYOUTS` i `skills/a2-authoring-api/scripts/draw-flow-figure.mjs`; målt i den ekte
+deltakersida i `test/e2e/figure-legible-on-phone-1079.spec.ts`. Sak #1079. Status: utviklerens
+vurdering etter måling; produkteier har ikke sett resultatet på en ekte telefon.

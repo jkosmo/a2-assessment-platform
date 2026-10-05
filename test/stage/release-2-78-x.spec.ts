@@ -355,6 +355,49 @@ test.describe("PC-bredde — handlingene er synlige uten å rulle tabellen sidel
       expect.soft(måling.forBred, "piksler tabellen er bredere enn ramma").toBeLessThanOrEqual(0);
       expect.soft(måling.merUtenfor ?? 0, "piksler «Mer» stikker ut av ramma").toBe(0);
     });
+
+    // #1084 (2.82.0): i et smalere vindu får ikke alle kolonnene plass. Da skal handlingene stå
+    // igjen innenfor ramma mens resten av raden ruller inn under dem — uansett hva raden inneholder.
+    test(`${liste.navn}, 1024 px: «Mer» står innenfor ramma, også når tabellen er rullet helt til høyre`, async ({ page }) => {
+      await åpneListe(page, liste.rute, 1024);
+      const mål = () => page.locator(".list-table-wrap").evaluate((wrap) => {
+        const ramme = wrap.getBoundingClientRect();
+        const utenfor = [...wrap.querySelectorAll("tbody td.col-actions .row-more > summary")].filter((mer) => mer.getBoundingClientRect().right > ramme.right + 0.5).length;
+        return { forBred: wrap.scrollWidth - wrap.clientWidth, rader: wrap.querySelectorAll("tbody tr").length, utenfor };
+      });
+      const før = await mål();
+      await page.locator(".list-table-wrap").evaluate((wrap) => { wrap.scrollLeft = wrap.scrollWidth; });
+      const etter = await mål();
+      noter("PC-bredde", `${liste.navn}, 1024 px: tabellen er bredere enn ramma med`, `${før.forBred} px (${før.rader} rader)`);
+      await page.locator(".list-table-wrap").evaluate((wrap) => { wrap.scrollLeft = 0; });
+      await bilde(page, `pc-${liste.navn}-1024`);
+      expect(før.utenfor, "rader der «Mer» ligger utenfor ramma").toBe(0);
+      expect(etter.utenfor, "rader der «Mer» ligger utenfor ramma etter rulling").toBe(0);
+    });
+  }
+});
+
+// #1085 (2.82.0): menylinja over listene var bredere enn en telefonskjerm for en administrator.
+// At sida ikke kan rulles sidelengs, måles i #1080-testene over. Her: hvor mange linjer menyen står på.
+test.describe("#1085 — menylinja på telefon (390 px)", () => {
+  for (const liste of LISTER) {
+    test(`${liste.navn}: hver menylenke er innenfor skjermen, og menyen står på én linje`, async ({ page }) => {
+      await åpneListe(page, liste.rute, 390);
+      const meny = await page.evaluate(() => {
+        const skjerm = document.documentElement.clientWidth;
+        const lenker = [...document.querySelectorAll<HTMLElement>(".content-area-nav .content-area-nav-link")].filter((a) => a.getBoundingClientRect().width > 0);
+        return {
+          lenker: lenker.map((a) => (a.textContent ?? "").trim()),
+          utenfor: lenker.filter((a) => a.getBoundingClientRect().right > skjerm + 0.5).map((a) => (a.textContent ?? "").trim()),
+          linjer: new Set(lenker.map((a) => Math.round(a.getBoundingClientRect().top))).size,
+        };
+      });
+      noter("#1085", `${liste.navn}: menyen`, `${meny.lenker.join(" · ")} — ${meny.linjer} linje(r)`);
+      expect(meny.lenker.length).toBeGreaterThan(0);
+      expect(meny.utenfor, "menylenker som stikker ut av skjermen").toEqual([]);
+      // Myk påstand: to linjer er ikke en feil som skjuler noe, men det er ikke det som er lovet.
+      expect.soft(meny.linjer, "linjer menyen står på").toBe(1);
+    });
   }
 });
 

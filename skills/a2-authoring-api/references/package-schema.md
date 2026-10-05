@@ -111,7 +111,8 @@ and carries them inline on the section payload:
 - **`localizedVariants`** carries the #657 translated-SVG variants (one base64 per locale), added
   after the primary language is approved; omit for raster or untranslated figures.
 - **`layoutVariants`** (#1079, optional, SVG only) carries the **narrow layout** of the same figure
-  — the one a phone-width column gets. The asset itself (`contentBase64`) is the wide layout.
+  — the one a phone gets: the column there is about 200 px wide. The asset itself
+  (`contentBase64`) is the wide layout.
 
   ```json
   "layoutVariants": [

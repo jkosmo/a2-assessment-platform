@@ -8,7 +8,7 @@ import { checkFigureFit } from "../../skills/a2-authoring-api/scripts/figure-fit
 import { checkFigureMotion } from "../../skills/a2-authoring-api/scripts/figure-motion-check.mjs";
 import { extractSvgTexts, sanitizeSvg } from "../../src/modules/course/svgSanitizer.js";
 
-// #1079: en flyt tegnes i to oppsett — bredt (alle steg på én rad) og smalt (fire per rad) — fordi
+// #1079: en flyt tegnes i to oppsett — bredt (alle steg på én rad) og smalt (to per rad) — fordi
 // en figur som vises som bilde, ikke kan brekke seg selv om når spalten blir smal. To tegninger
 // laget for hånd ville sprike. Her står innholdet ÉN gang, og begge tegnes fra det.
 //
@@ -64,31 +64,55 @@ describe("draw-flow-figure — two layouts from one description (#1079)", () => 
     expect(antall(wide, "circle")).toBe(8);
   });
 
-  it("wide puts every step on one row; narrow breaks to four per row and joins the rows", () => {
+  it("wide puts every step on one row; narrow breaks to two per row and joins the rows", () => {
     const { wide, narrow } = drawFlowFigure(saksgang());
     expect(viewBox(wide)).toBe("0 0 848 116");
-    expect(viewBox(narrow)).toBe("0 0 480 236");
+    expect(viewBox(narrow)).toBe("0 0 240 472");
     expect(new Set(wide.match(/<circle [^>]*cy="(\d+)"/g)?.map((c) => /cy="(\d+)"/.exec(c)?.[1])).size).toBe(1);
-    expect(new Set(narrow.match(/<circle [^>]*cy="(\d+)"/g)?.map((c) => /cy="(\d+)"/.exec(c)?.[1])).size).toBe(2);
+    expect(new Set(narrow.match(/<circle [^>]*cy="(\d+)"/g)?.map((c) => /cy="(\d+)"/.exec(c)?.[1])).size).toBe(4);
     // Radskiftet er én sammenhengende strek fra siste steg i raden til første i neste.
     expect(antall(wide, "polyline")).toBe(0);
-    expect(antall(narrow, "polyline")).toBe(1);
+    expect(antall(narrow, "polyline")).toBe(3);
   });
 
-  it("a flow of four steps or fewer is one row in both layouts", () => {
-    const fire = med((d) => { d.steps = d.steps.slice(0, 4); delete d.phases.avslutt; });
-    const { wide, narrow } = drawFlowFigure(fire);
-    expect(antall(narrow, "polyline")).toBe(0);
-    expect(antall(wide, "circle")).toBe(4);
-    expect(antall(narrow, "circle")).toBe(4);
+  // Det smale oppsettet er tegnet for spalten en telefon gir. Uten en egen størrelse ville bildet
+  // fylt en spalte på 600 px — et nettbrett — med etiketter på 30 px. Tegningen sier derfor selv
+  // hvor stor den er på det meste; et bilde krympes til spalten, men blåses ikke opp forbi det.
+  it("the narrow layout states its own size, so it is never enlarged past it; the wide one fills its column", () => {
+    const { wide, narrow } = drawFlowFigure(saksgang());
+    const rot = (svg: string) => /<svg[^>]*>/.exec(svg)![0];
+    expect(rot(narrow)).toContain(`viewBox="0 0 240 472" width="300" height="590"`);
+    expect(rot(wide)).not.toMatch(/ (width|height)=/);
+    // Størrelsen overlever lagringen — ellers gjelder den bare i forhåndsvisningen hos forfatteren.
+    expect(rot(sanitizeSvg(narrow))).toMatch(/width="300"/);
+    expect(rot(sanitizeSvg(narrow))).toMatch(/height="590"/);
+  });
+
+  // 78 px per steg i raden gir etiketter på 9 px. To steg trenger 156 px; spalten på en telefon på
+  // 390 px er målt til 201 px. Tre steg ville trengt 234 px og får ikke plass.
+  it("the narrow layout is narrow enough for a phone: its labels are at least 9 px in a 200 px column", () => {
+    const { narrow } = drawFlowFigure(saksgang());
+    const bredde = Number(/viewBox="0 0 (\d+) /.exec(narrow)![1]);
+    expect((12 * 200) / bredde).toBeGreaterThanOrEqual(9);
+  });
+
+  it("a flow of two steps is one row in both layouts; three steps break in the narrow one", () => {
+    const to = med((d) => { d.steps = d.steps.slice(0, 2); d.phases = { start: d.phases.start!, forbered: d.phases.forbered! }; });
+    expect(antall(drawFlowFigure(to).narrow, "polyline")).toBe(0);
+    expect(antall(drawFlowFigure(to).narrow, "circle")).toBe(2);
+    const tre = med((d) => { d.steps = d.steps.slice(0, 3); d.phases = { start: d.phases.start!, forbered: d.phases.forbered! }; });
+    const { wide, narrow } = drawFlowFigure(tre);
+    expect(antall(narrow, "polyline")).toBe(1);
+    expect(antall(wide, "circle")).toBe(3);
+    expect(antall(narrow, "circle")).toBe(3);
   });
 
   it("a phase with a label gets its line over its steps; a phase without gets none", () => {
     const { wide, narrow } = drawFlowFigure(saksgang());
     // Bredt: tre faser med navn, én strek hver. «start» har ikke navn og får ingen.
     expect(wide.match(/stroke-width="3"/g)).toHaveLength(3);
-    // Smalt: «vurder» står på to rader (steg 4 og 5), så streken deles i to — og navnet står to ganger.
-    expect(narrow.match(/stroke-width="3"/g)).toHaveLength(4);
+    // Smalt: hver av de tre fasene står på to rader, så streken deles i to — og navnet står to ganger.
+    expect(narrow.match(/stroke-width="3"/g)).toHaveLength(6);
     expect(wide).not.toContain(">start<");
   });
 

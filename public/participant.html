@@ -350,6 +350,12 @@
       .course-inline-panel-body .section-reader-body { background: var(--color-surface, #fff); border: 1px solid var(--color-border-soft); border-radius: 8px; padding: 14px 18px; }
       .course-inline-panel-body .section-reader-body img { max-width: 100%; height: auto; display: block; margin: 8px 0; }
       .course-inline-panel-body .section-reader-body iframe { max-width: 100%; }
+      /* #1079: on a phone the reader sits inside three frames, and their margins took 189 of 390 px.
+         The two innermost — the reader's own — give 20 px back to the text and the figures. */
+      @media (max-width: 600px) {
+        .course-inline-panel-body { padding: 8px; }
+        .course-inline-panel-body .section-reader-body { padding: 12px; }
+      }
       .course-inline-actions { display: flex; gap: var(--space-1); align-items: center; flex-wrap: wrap; margin-top: 12px; }
       /* App buttons default to width:100%; keep the inline action buttons auto-width so «Marker som
          lest» + «Gå til neste element» sit side by side instead of stacking full-width (#865 cosmetic). */

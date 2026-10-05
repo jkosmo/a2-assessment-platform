@@ -285,25 +285,33 @@ test.describe("#1079 — det skriptet tegner, målt i nettleseren", () => {
       expect(fyll).toEqual(["rgb(217, 232, 221)", "rgb(217, 232, 221)", "rgb(220, 231, 242)", "rgb(220, 231, 242)", "rgb(231, 226, 240)", "rgb(231, 226, 240)"]);
 
       // Alt som er tegnet, ligger innenfor figuren. Et radskifte som gikk utenfor, ville vært kuttet.
+      // Målt i figurens EGNE enheter, mot figurens egen ramme (viewBox). Det smale oppsettet oppgir
+      // sin egen størrelse, så ramma er figuren; det brede fyller vinduet, og der er ramma romsligere.
+      // Former får en halv enhet i slingringsmonn. Tekst får én: boksen nettleseren oppgir for en
+      // tekst er linja, som er høyere enn bokstavene. Fasenavnet øverst (11 px, grunnlinje på 11) har
+      // en boks som går mellom en halv og én enhet over kanten (målt), mens bokstavene er innenfor.
       const utenfor = await page.evaluate(() => {
-        const ramme = document.documentElement.getBoundingClientRect();
+        const rot = document.documentElement as unknown as SVGSVGElement;
+        const ramme = rot.getBoundingClientRect();
+        const enhet = Math.min(ramme.width / rot.viewBox.baseVal.width, ramme.height / rot.viewBox.baseVal.height);
         return [...document.querySelectorAll("circle, text, line, polyline")].filter((el) => {
           const r = el.getBoundingClientRect();
-          return r.left < ramme.left - 0.5 || r.right > ramme.right + 0.5 || r.top < ramme.top - 0.5 || r.bottom > ramme.bottom + 0.5;
+          const monn = (el.tagName === "text" ? 1 : 0.5) * enhet;
+          return r.left < ramme.left - monn || r.right > ramme.right + monn || r.top < ramme.top - monn || r.bottom > ramme.bottom + monn;
         }).map((el) => el.tagName + ":" + (el.textContent ?? "").trim());
       });
       expect(utenfor).toEqual([]);
     });
   }
 
-  test("det smale oppsettet har to rader, det brede én", async ({ page }) => {
+  test("det smale oppsettet har to steg per rad — tre rader for seks steg — og det brede har én", async ({ page }) => {
     const rader = async (svg: string) => {
       await åpne(page, svg);
       return new Set(await page.locator("circle").evaluateAll((sirkler) => sirkler.map((s) => Math.round(s.getBoundingClientRect().top)))).size;
     };
     const { wide, narrow } = drawFlowFigure(beskrivelse);
     expect(await rader(wide)).toBe(1);
-    expect(await rader(narrow)).toBe(2);
+    expect(await rader(narrow)).toBe(3);
   });
 });
 
@@ -343,12 +351,15 @@ test.describe("figure-preview — målt i nettleseren", () => {
     const mål = await bilder.evaluateAll((els) => Promise.all(els.map(async (el) => {
       const img = el as HTMLImageElement;
       if (!img.complete) await new Promise((ferdig) => { img.onload = ferdig; img.onerror = ferdig; });
-      return { lastet: img.naturalWidth > 0, bredde: Math.round(img.getBoundingClientRect().width), spalte: img.closest("figure")!.className };
+      return { lastet: img.naturalWidth > 0, bredde: Math.round(img.getBoundingClientRect().width), spalte: img.closest("figure")!.className, figur: img.dataset.figure };
     })));
     expect(mål.every((m) => m.lastet), "hvert bilde lar seg laste").toBe(true);
-    // Telefonspalten er smalere enn den brede — ellers viser ikke sida det den lover.
-    expect(mål.filter((m) => m.spalte === "phone").every((m) => m.bredde < 360)).toBe(true);
-    expect(mål.filter((m) => m.spalte === "wide").every((m) => m.bredde > 400)).toBe(true);
+    // Telefonspalten er så bred som leseren er på en telefon (220 px), og begge figurene krympes til den.
+    expect(mål.filter((m) => m.spalte === "phone").map((m) => m.bredde)).toEqual([220, 220]);
+    // I den brede spalten fyller den brede figuren (0) spalten. Den smale (1) står i sin egen
+    // størrelse og blåses ikke opp — slik plattformen viser den på et nettbrett.
+    expect(mål.find((m) => m.spalte === "wide" && m.figur === "0")!.bredde).toBeGreaterThan(400);
+    expect(mål.find((m) => m.spalte === "wide" && m.figur === "1")!.bredde).toBe(300);
 
     // Knappen laster figurens to bilder på nytt, så animasjonen går en gang til.
     await page.evaluate(() => {
