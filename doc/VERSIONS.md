@@ -15,24 +15,46 @@ ut til 668 px på en skjerm på 390: tittelen, «Lest» og «Se igjen» gikk ut 
 leseren ble kuttet. **Feilen ligger også i prod**, og gjelder ethvert kurs der et lest eller
 kommende steg har en tittel på mer enn rundt 17 tegn — altså de fleste.
 
-- **Rutenettet rundt hvert steg holder nå på bredden** (`.course-item`, `minmax(0, 1fr)`). En
-  kolonne i et rutenett er ellers aldri smalere enn det bredeste den inneholder.
+- **Rutenettene rundt kursinnholdet og rundt hvert steg holder nå på bredden**
+  (`.course-accordion-body` og `.course-item`, `minmax(0, 1fr)`). En kolonne i et rutenett er
+  ellers aldri smalere enn det bredeste den inneholder. Det gjaldt ikke bare stegradene:
+  diskusjonslinja under stegene, som står på hvert kurs, har en tekst på én linje og kuttet
+  kursinnholdet 20 px på en telefon på 390 på engelsk. En diskusjonstråd med en lang adresse i
+  tittelen kuttet 106 px.
 - **På telefon får tittelen sin egen linje, hel**, over typen, statusen og «Se igjen». Da
   overflyten var rettet, viste det seg at tittelen ikke hadde noe sted å være: den fikk 20 px på
   en telefon på 360, og 0 på 320. Samme valg som modullista allerede har under 600 px.
   ⚠️ Synlig endring på telefon som produkteier ikke har bestilt. På PC er det som før.
+- **Statusmerkene står i samme kolonne på telefon**, også i raden som ikke gjentar tittelen (en
+  test rett etter en seksjon med samme navn). Uten dette hoppet merket ut til høyre i den ene raden.
+- **Et ord som er lengre enn raden, brekker**: i stegtittelen på telefon, og en lang adresse i
+  teksten i leseren. Før gikk det ut over kanten og ble kuttet midt i en bokstav.
 
-**Målt** i `test/e2e/course-steps-fit-phone.spec.ts` (9 tester): et kurs med ett lest steg, ett
-som står for tur og ett som kommer, alle med lange titler, på 390, 360 og 320 px — ingenting
-stikker ut, hele tittelen kan leses, og et lest steg kan åpnes igjen med leseren innenfor skjermen.
-På 640 px (rett over telefongrensa) står tittelen på én linje og forkortes. 6 av testene er røde
-uten rettingen; 3 mutasjoner, 3 røde. Stage-testen måler det samme mot det utrullede miljøet:
-testkurset har nå to seksjoner, og den første merkes som lest.
+**Målt** i `test/e2e/course-steps-fit-phone.spec.ts` (16 tester). Kurset åpnes slik det er hos en
+deltaker — diskusjon på, ett lest steg, ett som står for tur og ett som kommer, alle med lange
+titler — på 390, 360 og 320 px på bokmål og 390 og 360 px på engelsk. Ingenting stikker ut eller
+er kuttet av kursrammen, hele tittelen kan leses, og et lest steg kan åpnes igjen med leseren
+innenfor skjermen. På 640 px (rett over telefongrensa) står tittelen på én linje og forkortes.
+7 mutasjoner, 7 røde. Stage-testen måler det samme mot det utrullede miljøet: testkurset har nå to
+seksjoner, og den første merkes som lest.
+
+**QA-gjennomgangen sa først NO-GO** (`.ai-qa/qa-20261005-162033.md`), med rette. Første utgave
+rettet bare rutenettet rundt hvert steg. Jeg hadde lagt samme linje på rutenettet rundt
+kursinnholdet også, men tok den ut igjen fordi mutasjonssjekken viste at ingen test trengte den.
+Testen trengte den ikke fordi den åpnet kurset uten diskusjon og bare på bokmål — samme feil som
+testene før den: én tilstand. **En mutasjon som overlever, betyr enten at koden er død eller at
+testen er blind.** De to andre vaktene som ble fjernet i dag (2.82.0), var begrunnet i koden selv,
+ikke bare i at testen var grønn uten dem; denne var det ikke.
 
 **Rotårsak — i testene, ikke bare i koden.** Alle testene som åpner et kurs på telefonbredde,
 også de jeg skrev tidligere i dag, åpner et kurs med ETT steg som ikke er lest. Det steget vises
 som et kort, der tittelen brekker. Tilstanden etter første steg ble aldri åpnet. Nettleseren hadde
 ingenting med det å gjøre: feilen kom fram i Chromium med en gang kurset ble åpnet i riktig tilstand.
+
+**Funnet av samme gjennomgang, ikke rettet her** (fantes fra før): modullista («Last moduler») har
+samme konstruksjon og kan rulles 14 px sidelengs mellom 600 og 700 px når en modul har en svært
+lang tittel; og topplinja i et åpent test-panel har ikke plass til tittelen på telefon («U…» på
+360 px).
 
 ⚠️ **Ett testkurs står igjen på stage, arkivert.** Testkurset som ble latt stå for å kunne ses på
 en ekte telefon, ble fullført der. Fullføringen ga et kursbevis, og et kurs med kursbevis kan ikke

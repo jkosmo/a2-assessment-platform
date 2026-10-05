@@ -31,8 +31,10 @@
 **2.82.2: et kurs med lange stegtitler gikk ut av skjermen på telefon — og gjør det i prod.**
 Produkteier åpnet testkurset på en ekte telefon og fant det. Når et steg er lest eller kommer
 senere, vises det som en rad med tittelen på én linje, og den raden presset hele kursinnholdet ut
-til 668 px på en skjerm på 390. Rettet: rutenettet rundt hvert steg holder på bredden, og på
-telefon får tittelen sin egen linje. `test/e2e/course-steps-fit-phone.spec.ts`. Feilen fantes før
+til 668 px på en skjerm på 390. Rettet: rutenettene rundt kursinnholdet og rundt hvert steg holder
+på bredden, og på telefon får tittelen sin egen linje. (Første utgave rettet bare det ene
+rutenettet og fikk NO-GO fra QA: diskusjonslinja under stegene presset fortsatt innholdet ut på
+engelsk. Se `doc/VERSIONS.md`.) `test/e2e/course-steps-fit-phone.spec.ts`. Feilen fantes før
 dagens arbeid og ligger i prod (2.78.3) til 2.82 er rullet dit.
 
 ⚠️ **Lærdommen gjelder testene:** alt som åpnet et kurs på telefonbredde, åpnet et kurs med ETT
@@ -316,7 +318,7 @@ listene. Jeg utvidet ikke regelen for å unngå det — det ville vært en tverr
   && npm run test:integration:native) > "$TEMP/claude/kjoring.log" 2>&1; echo "EXIT=$?"
 ```
 
-Sist målt 2026-10-05, på 2.82.2: **1840 enhet · 69 DOM · 441 e2e · 757 integrasjon**, alle grønne.
+Sist målt 2026-10-05, på 2.82.2: **1840 enhet · 69 DOM · 448 e2e · 757 integrasjon**, alle grønne.
 (På 2.82.0 trengte nettleserrekka to kjøringer: i den første feilet «add a section from the library» i
 `admin-content-course-sections.spec.ts` — nedtrekkslista i kursbyggeren, som ikke er rørt. 15 av
 15 alene, 430 av 430 i neste fullkjøring. Se «e2e-suiten rykker» under.)

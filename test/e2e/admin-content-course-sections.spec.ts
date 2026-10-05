@@ -77,8 +77,15 @@ test("course builder: add a section from the library renders it as a [SEKSJON] r
   await expect(sectionRow).toContainText("Innføring");
 
   // And it is no longer offered in the picker (can't add the same section twice).
-  await openPicker(page);
-  await expect(page.locator("#comboboxDropdown .combobox-empty")).toBeVisible();
+  // ⚠️ Lista tegnes på nytt når kurset er lagret, og en liste som nettopp ble åpnet, lukkes da
+  // igjen. Å åpne én gang og så vente på «tom»-teksten feilet to av seks fullkjøringer 2026-10-05
+  // (alltid grønn alene). Vi åpner derfor på nytt til teksten faktisk står der.
+  await expect
+    .poll(async () => {
+      await openPicker(page);
+      return page.locator("#comboboxDropdown .combobox-empty").isVisible();
+    }, { timeout: 10000, intervals: [100, 250, 500] })
+    .toBe(true);
   await expect(optionFor(page, "sec-1")).toHaveCount(0);
 });
 
