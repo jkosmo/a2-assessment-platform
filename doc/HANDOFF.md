@@ -61,6 +61,16 @@ presentasjonen, så regelen i skillet, med innholdsblokkene som eget spor (proto
 Node er bekreftet i begge flatene han bruker (22.16 i ChatGPT, 22.22 i Claude.ai).
 ⚠️ Det finnes ingen regel om «tre illustrasjoner» i skillet; se saken for hva som faktisk styrer dit.
 
+**Ikke bygg videre på skillet før designet er besluttet.** Produkteier spurte 2026-10-05 om vi
+hadde tenkt gjennom design og arkitektur, eller bare hoppet på implementering. Svaret var nei.
+`doc/DESIGN_1079_SKILL.md` er forslaget: sju valg med alternativer og anbefaling (ett skill delt i
+arbeidsganger, sju faste steg fra presentasjon til kurs, PDF for at modellen skal se lysarkene,
+fire innholdsblokker skrevet som vanlig tekst, ny oppdeling av filene, bilder fra kilden aldri
+stilltiende, måling mot testtilfellene). **Han har ikke lest eller besluttet noe av det ennå.**
+Det som finnes fra før designet: testtilfellene (`skills/a2-authoring-api-evals/`, tre
+presentasjoner, nullpunkt målt for Rapportskriving) og en prøveutgave av leseskriptet som bare
+ligger i arbeidsmappa, ikke i repoet.
+
 Seks ting krever et menneske:
 
 1. **Tre synlige endringer er mine valg, ikke produkteiers.** Han skal se dem på stage og kan si
