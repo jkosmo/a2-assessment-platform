@@ -91,6 +91,7 @@ const BILDETEKST = [
   [/^894-/, "#894 — en testseksjon døpt om fra lista", "Raden viser det nye navnet."],
   [/^1079-forhaandsvisning-(\d+)/, "#1079 — figur i to oppsett, forhåndsvisningen i editoren, skjermbredde", "På 390 px: to steg per rad. På 1280 px: oppsettet som passer bredden forhåndsvisningen har."],
   [/^1079-deltaker-(\d+)/, "#1079 — figur i to oppsett, slik deltakeren ser den, skjermbredde", "På 1280 px: alle stegene på én rad. På 390 px: to steg per rad. VALG 1 og 2: kan du lese etikettene, og ser margene rundt teksten greie ut?"],
+  [/^kurs-lest-steg-(\d+)/, "Kurset på telefon etter at første seksjon er lest, skjermbredde", "Det leste steget er en rad med hele tittelen på egen linje, og «Lest» og «Se igjen» under. Ingenting går ut av skjermen til høyre."],
   [/^pc-(.+)-1280/, "#1084 — lista på PC (1280 px), slik den åpner seg, uten å rulle", "«Mer» helt til høyre er synlig i hver rad. VALG 3: «Publisert» og «Nyere utkast» står under hverandre — er lista grei å lese slik?"],
   [/^pc-(.+)-1024/, "#1084 — lista i et smalere vindu (1024 px)", "Ikke alle kolonnene får plass. Handlingene står likevel innenfor ramma til høyre, og resten av raden kan rulles inn under dem."],
 ];

@@ -267,6 +267,14 @@
         flex: 1; min-width: 0; font-weight: 500;
         overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
       }
+      /* På telefon er det ikke plass til tittelen ved siden av typen, statusen og «Se igjen»: på
+         360 px fikk den 20 px, og raden viste ingen tittel. Der får tittelen sin egen linje, hel,
+         over resten — som titlene i modullista (.module-list.compact) allerede gjør under 600 px. */
+      @media (max-width: 600px) {
+        .course-step--done, .course-step--ahead { flex-wrap: wrap; row-gap: 2px; }
+        .course-step--done .course-step-title,
+        .course-step--ahead .course-step-title { order: -1; flex: 0 0 100%; white-space: normal; overflow: visible; }
+      }
       /* Modul rett etter en seksjon med samme tittel: tittelen får .sr-only, altså position:absolute,
          og forsvinner ut av flex-flyten. Da mister raden elementet med flex:1 som skjøv statuspillen
          mot høyre — uten dette klistrer pillen seg inntil typeetiketten. */
@@ -337,7 +345,11 @@
          med en klebrig topplinje (tittel + Lukk) og «Gå til neste element» på slutten. */
       /* scroll-margin-top: når en seksjon åpnes rulles radens topp til toppen av skjermen
          (participant.js: scrollItemIntoView). Uten litt luft klistrer den seg inntil kanten. */
-      .course-item { position: relative; display: grid; gap: 4px; scroll-margin-top: var(--space-2); }
+      /* `minmax(0, 1fr)`: kolonnen i et rutenett er ellers aldri smalere enn det bredeste den
+         inneholder. En stegtittel på én linje (leste og kommende steg) presset da hele
+         kursinnholdet ut til 668 px på en skjerm på 390, i stedet for å bli forkortet med «…».
+         Funnet på en ekte telefon 2026-10-05. */
+      .course-item { position: relative; display: grid; grid-template-columns: minmax(0, 1fr); gap: 4px; scroll-margin-top: var(--space-2); }
       .course-item .course-module-row { width: 100%; }
       .course-inline-panel { border-left: 3px solid var(--color-blue); background: var(--color-blue-light); border-radius: 0 8px 8px 0; overflow: hidden; }
       /* #975: `.course-inline-panel[hidden] { display: none; }` er fjernet — samme grunn som for

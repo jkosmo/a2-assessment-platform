@@ -2,6 +2,44 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.82.2 - 2026-10-05
+
+### Et kurs med lange stegtitler gikk ut av skjermen på telefon
+
+Produkteier, etter å ha åpnet testkurset på en ekte telefon: «illustrasjonen oppførte seg bedre
+enn selve applikasjonen».
+
+Når et steg i et kurs er lest (eller kommer senere), vises det som en rad med tittelen på én linje.
+Tittelen skulle forkortes med «…» når den ikke fikk plass. I stedet presset den hele kursinnholdet
+ut til 668 px på en skjerm på 390: tittelen, «Lest» og «Se igjen» gikk ut til høyre, og teksten i
+leseren ble kuttet. **Feilen ligger også i prod**, og gjelder ethvert kurs der et lest eller
+kommende steg har en tittel på mer enn rundt 17 tegn — altså de fleste.
+
+- **Rutenettet rundt hvert steg holder nå på bredden** (`.course-item`, `minmax(0, 1fr)`). En
+  kolonne i et rutenett er ellers aldri smalere enn det bredeste den inneholder.
+- **På telefon får tittelen sin egen linje, hel**, over typen, statusen og «Se igjen». Da
+  overflyten var rettet, viste det seg at tittelen ikke hadde noe sted å være: den fikk 20 px på
+  en telefon på 360, og 0 på 320. Samme valg som modullista allerede har under 600 px.
+  ⚠️ Synlig endring på telefon som produkteier ikke har bestilt. På PC er det som før.
+
+**Målt** i `test/e2e/course-steps-fit-phone.spec.ts` (9 tester): et kurs med ett lest steg, ett
+som står for tur og ett som kommer, alle med lange titler, på 390, 360 og 320 px — ingenting
+stikker ut, hele tittelen kan leses, og et lest steg kan åpnes igjen med leseren innenfor skjermen.
+På 640 px (rett over telefongrensa) står tittelen på én linje og forkortes. 6 av testene er røde
+uten rettingen; 3 mutasjoner, 3 røde. Stage-testen måler det samme mot det utrullede miljøet:
+testkurset har nå to seksjoner, og den første merkes som lest.
+
+**Rotårsak — i testene, ikke bare i koden.** Alle testene som åpner et kurs på telefonbredde,
+også de jeg skrev tidligere i dag, åpner et kurs med ETT steg som ikke er lest. Det steget vises
+som et kort, der tittelen brekker. Tilstanden etter første steg ble aldri åpnet. Nettleseren hadde
+ingenting med det å gjøre: feilen kom fram i Chromium med en gang kurset ble åpnet i riktig tilstand.
+
+⚠️ **Ett testkurs står igjen på stage, arkivert.** Testkurset som ble latt stå for å kunne ses på
+en ekte telefon, ble fullført der. Fullføringen ga et kursbevis, og et kurs med kursbevis kan ikke
+slettes (`course_has_completions`). Det er avpublisert og arkivert («Stage-test figur i to oppsett
+1791205999067»), og seksjonen med det. Testen teller nå det som ikke lar seg slette, og sier at
+«Avslutt kurset» ikke skal trykkes på testkurset.
+
 ## 2.82.1 - 2026-10-05
 
 To feil som 2.82.0 innførte, funnet av QA-gjennomgangen (`.ai-qa/qa-20261005-100836.md`, GO) før

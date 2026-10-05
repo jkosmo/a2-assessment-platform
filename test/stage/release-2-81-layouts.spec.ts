@@ -88,6 +88,9 @@ const stempel = Date.now();
 const TITTEL = `Stage-test figur i to oppsett ${stempel}`;
 const three = (tekst: string) => ({ nb: tekst, nn: tekst, "en-GB": tekst });
 let sectionId = "";
+/** En seksjon til i kurset, uten figur: et kurs med ETT steg viser aldri et lest steg ved siden av et ulest. */
+let sectionId2 = "";
+const TITTEL_2 = `${TITTEL} – del 2, med en tittel som er lengre enn raden på en telefon`;
 let assetId = "";
 let courseId = "";
 
@@ -117,23 +120,29 @@ test.beforeAll(async () => {
   const seksjoner = ((await api("GET", "/api/admin/content/sections")).json.sections ?? []) as Array<{ id: string; title: unknown }>;
   const gamleKurs = kurs.filter((k) => erTestens(k.title));
   const gamleSeksjoner = seksjoner.filter((s) => erTestens(s.title));
-  for (const k of gamleKurs) await slettKurs(k.id);
-  for (const s of gamleSeksjoner) await slettSeksjon(s.id);
-  if (gamleKurs.length + gamleSeksjoner.length > 0) noter("opprydding før start", `${gamleKurs.length} testkurs og ${gamleSeksjoner.length} testseksjoner fra en tidligere kjøring er slettet`);
+  // ⚠️ Et kurs noen har FULLFØRT, kan ikke slettes: fullføringen gir et kursbevis, og appen lar ikke
+  // et kurs med kursbevis forsvinne. Det blir da stående arkivert, og seksjonene med det. Skjedde
+  // 2026-10-05, da testkurset ble fullført på telefonen. Derfor telles det som ikke lot seg slette.
+  let slettet = 0;
+  let igjen = 0;
+  for (const k of gamleKurs) ((await slettKurs(k.id)).status < 300 ? slettet++ : igjen++);
+  for (const s of gamleSeksjoner) ((await slettSeksjon(s.id)).status < 300 ? slettet++ : igjen++);
+  if (slettet > 0) noter("opprydding før start", `${slettet} testkurs/-seksjoner fra en tidligere kjøring er slettet`);
+  if (igjen > 0) noter("opprydding før start: STÅR IGJEN, arkivert", `${igjen} testkurs/-seksjoner kan ikke slettes fordi kurset er fullført og har kursbevis`);
 });
 
 test.afterAll(async () => {
   if (behold) {
-    if (courseId) noter("STÅR IGJEN PÅ STAGE (for å se på en ekte telefon)", `kurset «${TITTEL}» — slettes av neste kjøring`);
+    if (courseId) noter("STÅR IGJEN PÅ STAGE (for å se på en ekte telefon)", `kurset «${TITTEL}» — slettes av neste kjøring. Ikke trykk «Avslutt kurset»: et fullført kurs kan ikke slettes`);
     return;
   }
   if (courseId) {
     const slettet = await slettKurs(courseId);
     noter("opprydding: testkurset", slettet.status === 204 || slettet.status === 200 ? "slettet" : `IKKE slettet (${slettet.status}: ${slettet.tekst.slice(0, 120)})`);
   }
-  if (sectionId) {
-    const slettet = await slettSeksjon(sectionId);
-    noter("opprydding: testseksjonen", slettet.status === 204 ? "slettet" : `IKKE slettet (${slettet.status}: ${slettet.tekst.slice(0, 120)})`);
+  for (const id of [sectionId, sectionId2].filter(Boolean)) {
+    const slettet = await slettSeksjon(id);
+    noter("opprydding: testseksjon", slettet.status === 204 ? "slettet" : `IKKE slettet (${slettet.status}: ${slettet.tekst.slice(0, 120)})`);
   }
 });
 
@@ -258,7 +267,12 @@ test.describe("#1079 — en figur i bredt og smalt oppsett, på stage", () => {
     const kurs = await api("POST", "/api/admin/content/courses", { title: three(TITTEL) });
     expect(kurs.status, kurs.tekst.slice(0, 300)).toBe(201);
     courseId = (kurs.json.course as { id: string }).id;
-    const innhold = await api("PUT", `/api/admin/content/courses/${courseId}/items`, { items: [{ type: "SECTION", sectionId }] });
+    const del2 = await api("POST", "/api/admin/content/sections", { title: three(TITTEL_2), bodyMarkdown: three(`# ${TITTEL_2}\n\nLaget av den automatiske stage-testen. Kan slettes.`), draft: true, clientRef: "stage-test-del-2" });
+    expect(del2.status, del2.tekst.slice(0, 300)).toBe(201);
+    sectionId2 = (del2.json.section as { id: string }).id;
+    const del2Publisert = await api("POST", `/api/admin/content/sections/${sectionId2}/publish`);
+    expect(del2Publisert.status, del2Publisert.tekst.slice(0, 300)).toBe(200);
+    const innhold = await api("PUT", `/api/admin/content/courses/${courseId}/items`, { items: [{ type: "SECTION", sectionId }, { type: "SECTION", sectionId: sectionId2 }] });
     expect(innhold.status, innhold.tekst.slice(0, 300)).toBe(204);
     const kursPublisert = await api("POST", `/api/admin/content/courses/${courseId}/publish`);
     expect(kursPublisert.status, kursPublisert.tekst.slice(0, 300)).toBe(200);
@@ -310,6 +324,40 @@ test.describe("#1079 — en figur i bredt og smalt oppsett, på stage", () => {
   // ville kjørt HELE rekka på nytt — ny import, ny oversettelse, nytt kurs.
   test.describe("etter målingene", () => {
   test.describe.configure({ retries: 0 });
+
+  // Funnet av produkteier på en ekte telefon 2026-10-05: når et steg er lest, vises det som en rad
+  // med tittelen på én linje, og den raden presset hele kursinnholdet ut av skjermen. Alle
+  // målingene over åpner kurset før noe er lest, og kunne ikke se det.
+  test("deltakeren, telefon (390 px), etter at første seksjon er lest: ingenting i kurset stikker ut av skjermen", async ({ page }) => {
+    await forberedSide(page);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto(`${BASE}/participant`, { waitUntil: "domcontentloaded" });
+    const kurs = page.locator(".course-accordion-header").filter({ hasText: TITTEL }).first();
+    await expect(kurs).toBeVisible({ timeout: VENT_MS });
+    await kurs.click();
+    await page.locator(".course-item").filter({ hasText: TITTEL }).locator(".course-module-row").first().click();
+    await expect(page.locator("#sectionReaderMarkRead")).toBeVisible({ timeout: VENT_MS });
+    await page.locator("#sectionReaderMarkRead").click();
+    // Første steg er nå en rad med «Lest»; det andre står for tur.
+    await expect(page.locator(".course-step--done")).toHaveCount(1, { timeout: VENT_MS });
+    await page.waitForTimeout(800);
+
+    const m = await page.evaluate(() => {
+      const skjerm = document.documentElement.clientWidth;
+      const ute = [...document.querySelectorAll<HTMLElement>("#courseSection *")]
+        .filter((el) => { const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0 && (r.right > skjerm + 0.5 || r.left < -0.5); })
+        .map((el) => `${el.tagName.toLowerCase()}.${String(el.className).split(" ")[0]} ${Math.round(el.getBoundingClientRect().left)}–${Math.round(el.getBoundingClientRect().right)}`);
+      const tittel = document.querySelector<HTMLElement>(".course-step--done .course-step-title");
+      return { ute, tittelHel: tittel ? tittel.scrollWidth <= tittel.clientWidth + 1 : false, sidelengs: document.documentElement.scrollWidth - window.innerWidth };
+    });
+    noter("deltaker, telefon, lest steg", `${m.ute.length} elementer stikker ut av skjermen; tittelen på det leste steget er ${m.tittelHel ? "hel" : "kuttet"}`);
+    await page.locator(".course-step--done").scrollIntoViewIfNeeded();
+    await bilde(page, "kurs-lest-steg-390");
+    expect.soft(m.ute, "det som stikker ut av skjermen").toEqual([]);
+    expect.soft(m.tittelHel, "tittelen på det leste steget er hel").toBe(true);
+    expect.soft(m.sidelengs, "piksler sida kan rulles sidelengs").toBeLessThanOrEqual(0);
+  });
+
   test("#1089: forfatter-API-et avviser en figur med gale etiketter, og lager ingen seksjon", async () => {
     // Det smale oppsettet sier noe annet enn det brede: en etikett er byttet ut.
     const galSmal = SMAL.replace(">Arkiver<", ">Avslutt saken<");

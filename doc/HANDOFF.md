@@ -14,7 +14,7 @@
 | prod | 2.78.3 | rullet 2026-10-04 kl. 20:13 fra `2433d2b7`, godkjent av produkteier. #1080, #1081, #1083 |
 | stage | 2.82.1 | rullet 2026-10-05 kl. 11:00 fra `5538cdc3`, commiten QA-porten ga GO på (`.ai-qa/qa-20261005-100836.md` og `-103917.md`); `/version` og helsesjekk bekreftet |
 | `main` (git) | 2.78.3 | likt med prod (PR #1086 flettet 2026-10-04) |
-| `dev` (git) | 2.82.1 | sju rettinger (2.82.0) og to oppfølgere etter QA (2.82.1), se under |
+| `dev` (git) | 2.82.2 | sju rettinger (2.82.0), to oppfølgere etter QA (2.82.1), og kurset på telefon (2.82.2), se under |
 
 **2.82.0, i én setning hver** (detaljer og rotårsaker i `doc/VERSIONS.md`):
 
@@ -27,6 +27,23 @@
 | #1088 | `?locale=constructor` gir ikke lenger feil 500 på en figur | `test/m2-section-asset-layouts-1079.test.ts` |
 | #1089 | En avvist figur etterlater ikke lenger et utkast: figurene sjekkes før seksjonen lages, alt i én transaksjon | samme, og `test/unit/section-create-with-assets-1089.test.ts` |
 | #1090 | En ny oversettelse av figurer fjerner de forrige oversatte filene | samme |
+
+**2.82.2: et kurs med lange stegtitler gikk ut av skjermen på telefon — og gjør det i prod.**
+Produkteier åpnet testkurset på en ekte telefon og fant det. Når et steg er lest eller kommer
+senere, vises det som en rad med tittelen på én linje, og den raden presset hele kursinnholdet ut
+til 668 px på en skjerm på 390. Rettet: rutenettet rundt hvert steg holder på bredden, og på
+telefon får tittelen sin egen linje. `test/e2e/course-steps-fit-phone.spec.ts`. Feilen fantes før
+dagens arbeid og ligger i prod (2.78.3) til 2.82 er rullet dit.
+
+⚠️ **Lærdommen gjelder testene:** alt som åpnet et kurs på telefonbredde, åpnet et kurs med ETT
+ulest steg. Mål en side i de tilstandene en bruker kommer i, ikke bare slik den åpner seg.
+Produkteier bruker Fairphone 6 med Firefox, men har sagt at det ikke skal testes mot mange
+telefoner — «det viktige er at det er testet på en liten skjerm». Firefox ble prøvd én gang
+(samme svar som Chromium) og er ikke lagt inn i oppsettet.
+
+⚠️ **Ett testkurs står igjen på stage, arkivert:** «Stage-test figur i to oppsett 1791205999067».
+Det ble fullført på telefonen, fikk et kursbevis, og kan derfor ikke slettes
+(`course_has_completions`). Stage-testen teller det som «står igjen» ved hver kjøring.
 
 Seks ting krever et menneske:
 
@@ -299,7 +316,7 @@ listene. Jeg utvidet ikke regelen for å unngå det — det ville vært en tverr
   && npm run test:integration:native) > "$TEMP/claude/kjoring.log" 2>&1; echo "EXIT=$?"
 ```
 
-Sist målt 2026-10-05, på 2.82.1: **1840 enhet · 69 DOM · 432 e2e · 757 integrasjon**, alle grønne.
+Sist målt 2026-10-05, på 2.82.2: **1840 enhet · 69 DOM · 441 e2e · 757 integrasjon**, alle grønne.
 (På 2.82.0 trengte nettleserrekka to kjøringer: i den første feilet «add a section from the library» i
 `admin-content-course-sections.spec.ts` — nedtrekkslista i kursbyggeren, som ikke er rørt. 15 av
 15 alene, 430 av 430 i neste fullkjøring. Se «e2e-suiten rykker» under.)
