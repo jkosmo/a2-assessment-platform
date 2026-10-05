@@ -954,7 +954,7 @@ begrunnelsene står der). Sak #1079.
    skrives. Valgt bort: uten lista, og at skriptet bestemmer alene.
 3. **Forfatteren laster bare opp presentasjonen.** Skriptet henter ut bildene, og modellen ser på
    dem. Valgt bort: at forfatteren også lager en PDF. Forutsetter at modellen kan åpne et uthentet
-   bilde i begge produktene; det er ikke målt.
+   bilde i begge produktene; målt samme kveld i ChatGPT og Claude.ai, og begge kan.
 4. **Fire innholdsblokker:** uthevet boks, prompt-boks, kort ved siden av hverandre, ikon. En
    prøveside godkjennes før noe bygges. Plattformen krymper store bilder.
 5. **Hele skillet ryddes**, på en egen kopi til det nye er målt: kort forside, hver regel ett sted,

@@ -137,10 +137,10 @@ Det første forslaget ba også om en PDF av presentasjonen, slik at modellen kun
 Produkteier spurte hvorfor, og svaret var at det var en reserveløsning. Den er tatt ut: et ekstra
 steg for hver forfatter skal ikke være standardveien.
 
-**Må måles før dette bygges:** kan modellen i ChatGPT og i Claude.ai åpne en bildefil som et
-skript har hentet ut av presentasjonen, og lese det som står i den? Én prøve i hvert produkt.
-Virker det ikke i ett av dem, må det finnes en annen vei der — og den legges fram for produkteier,
-ikke bygges stilltiende.
+**Målt 2026-10-05, i begge produktene:** produkteier lastet opp Møtearbeid-presentasjonen i en ny
+samtale i ChatGPT og i Claude.ai og ba modellen pakke ut ett skjermbilde og si hva som sto i det
+(valgt språk i en nedtrekksliste, og sju menyvalg). Teksten finnes bare inni bildet. Begge svarte
+riktig på alt. Modellen kan altså se et bilde som et skript har hentet ut, og valget holder.
 
 ## 4. Hva får skillet levere til plattformen?
 
@@ -243,8 +243,8 @@ forfatterens, som for alt annet.
 
 ## Rekkefølge, hvis anbefalingene følges
 
-1. **Mål det som er uavklart:** kan modellen åpne et uthentet bilde (valg 3)? Produkteier kjører
-   prøven i begge produktene.
+1. ~~Mål det som er uavklart: kan modellen åpne et uthentet bilde (valg 3)?~~ Målt 2026-10-05: ja,
+   i begge produktene.
 2. **Bygg om skillet på en egen kopi:** ny oppdeling (valg 5) og arbeidsgangen fra presentasjon
    (valg 2, 3 og 6), med `pptx-extract` og `coverage-check`. Dagens skill blir liggende urørt til
    det nye er målt.
