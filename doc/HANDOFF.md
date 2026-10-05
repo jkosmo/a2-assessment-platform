@@ -7,12 +7,12 @@
 
 ## Kort: det som må avgjøres
 
-**Prod står på 2.78.3. Stage står på 2.82.1: sju rettinger som produkteier skal teste samlet (kvelden 2026-10-05). Ingenting av 2.79–2.82 er i prod.**
+**Prod står på 2.78.3. Stage står på 2.82.2: sju rettinger pluss kurset på telefon, som produkteier tester samlet (kvelden 2026-10-05). Ingenting av 2.79–2.82 er i prod.**
 
 | Miljø | Versjon | |
 |---|---|---|
 | prod | 2.78.3 | rullet 2026-10-04 kl. 20:13 fra `2433d2b7`, godkjent av produkteier. #1080, #1081, #1083 |
-| stage | 2.82.1 | rullet 2026-10-05 kl. 11:00 fra `5538cdc3`, commiten QA-porten ga GO på (`.ai-qa/qa-20261005-100836.md` og `-103917.md`); `/version` og helsesjekk bekreftet |
+| stage | 2.82.2 | rullet 2026-10-05 kl. 18:49 fra `96632019`, commiten QA-porten ga GO på i tredje runde (`.ai-qa/qa-20261005-182600.md`); `/version` og helsesjekk bekreftet. Stage-testen kjørt 18:50–18:53: 38 av 38 besto |
 | `main` (git) | 2.78.3 | likt med prod (PR #1086 flettet 2026-10-04) |
 | `dev` (git) | 2.82.2 | sju rettinger (2.82.0), to oppfølgere etter QA (2.82.1), og kurset på telefon (2.82.2), se under |
 
@@ -42,6 +42,10 @@ ulest steg. Mål en side i de tilstandene en bruker kommer i, ikke bare slik den
 Produkteier bruker Fairphone 6 med Firefox, men har sagt at det ikke skal testes mot mange
 telefoner — «det viktige er at det er testet på en liten skjerm». Firefox ble prøvd én gang
 (samme svar som Chromium) og er ikke lagt inn i oppsettet.
+
+⚠️ **Ett testkurs til står på stage, publisert, til produkteier har sett på det på telefonen:**
+«Stage-test figur i to oppsett 1791219142832» (to seksjoner, den første lest). Neste kjøring av
+stage-testen sletter det — så lenge ingen har trykket «Avslutt kurset».
 
 ⚠️ **Ett testkurs står igjen på stage, arkivert:** «Stage-test figur i to oppsett 1791205999067».
 Det ble fullført på telefonen, fikk et kursbevis, og kan derfor ikke slettes

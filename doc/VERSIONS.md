@@ -51,10 +51,12 @@ ikke bare i at testen var grønn uten dem; denne var det ikke.
 **Runde to sa også NO-GO** (`.ai-qa/qa-20261005-175339.md`), også det med rette. Regelen for lange
 adresser i leseren, som jeg tok med som en ekstra retting i runde to, var `overflow-wrap:
 anywhere`. Den lar nettleseren regne en tabellkolonne som én bokstav bred, og brakk ord midt i —
-«MN/OK», «125/0» — i alle tabeller på nettbrett og PC. Byttet til `break-word`, som bare brekker
+«MN/OK», «125/0» — i tabeller med en lang tekstkolonne, på nettbrett og PC. Byttet til `break-word`, som bare brekker
 det som ellers ville gått ut av boksen, og testen har fått en tabell. **Hver «liten ekstra
 retting» i denne utgaven har kostet en QA-runde.** De øvrige funnene står derfor som kjente under,
-i stedet for å bli rettet i samme omgang.
+i stedet for å bli rettet i samme omgang. Runde tre ga GO (`.ai-qa/qa-20261005-182600.md`):
+kolonnebreddene i tabeller er de samme som før endringen, og ingen boks har flyttet seg for innhold
+som fikk plass (62 elementer målt på 390, 700 og 1280 px).
 
 **Rotårsak — i testene, ikke bare i koden.** Alle testene som åpner et kurs på telefonbredde,
 også de jeg skrev tidligere i dag, åpner et kurs med ETT steg som ikke er lest. Det steget vises
@@ -71,6 +73,8 @@ ingenting med det å gjøre: feilen kom fram i Chromium med en gang kurset ble �
 - En adresse i tittelen på en diskusjonstråd går ut av trådens boks og kuttes (79 px på 360).
 - «Mine kurs» på 320–360 px: et langt ord i kurstittelen presser statusmerket ut, og tittelen i en
   fullført rad kan overlappe lenka til kursbeviset.
+- En tabell som er bredere enn leseren (fem kolonner), kuttes mellom 600 og rundt 800 px og kan
+  ikke rulles fram (238 px på 601, 99 px på 740). Under 600 px står tabeller som kort og får plass.
 - Kursbyggerens velger lukker seg selv hvis feltet trykkes innen 150 ms etter «Legg til», og
   åpnes da ikke av et nytt trykk. Rammer i praksis bare tastaturbruk — og testen som feilet to av
   seks fullkjøringer i dag. Testen venter nå ut tidsavbruddet; produktet er ikke endret.
