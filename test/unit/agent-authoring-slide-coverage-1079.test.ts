@@ -96,6 +96,16 @@ describe("checkSlideCoverage — fikk hvert lysark det lista sier? (#1079)", () 
     expect(feil({ slides: [alt] }, pakke(helSeksjon))).toEqual([]);
   });
 
+  it("seksjonstekst som står i en fil ved siden av pakken, leses — og en fil som mangler, meldes", () => {
+    const iFil = pakke({ clientRef: "sec-kilder", type: "section", payload: { title: { nb: "Kilder" }, bodyFiles: { nb: "sections/sec-kilder.nb.md" } } });
+    const liste = { slides: [{ slide: 5, becomes: ["table", "prompt"], in: "sec-kilder", phrases: ["Hvem som gjør hva, og når"] }] };
+    // Bildene i den teksten er ikke i denne lille pakken; det er tabellen, prompten og uttrykket som sjekkes.
+    expect(checkSlideCoverage(liste, iFil, { baseDir: EKSEMPEL }).rows[0]!.problems).toEqual([]);
+    const borte = checkSlideCoverage(liste, iFil, { baseDir: "finnes-ikke" });
+    expect(borte.problems.join(" | ")).toContain(`sec-kilder.bodyFiles: cannot read the file "sections/sec-kilder.nb.md"`);
+    expect(borte.ok).toBe(false);
+  });
+
   it("en tom liste er ikke en godkjent liste", () => {
     expect(checkSlideCoverage({ slides: [] }, pakke(helSeksjon)).ok).toBe(false);
     expect(checkSlideCoverage({}, pakke()).ok).toBe(false);

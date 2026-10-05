@@ -326,7 +326,8 @@ if (isMain) {
     process.exit(2);
   }
   const { readFileSync } = await import("node:fs");
-  const state = JSON.parse(readFileSync(stateFile, "utf8"));
+  const { readCourseState } = await import("./package-assets.mjs");
+  const state = readCourseState(stateFile);
   const element = (state.elements ?? []).find((entry) => entry.clientRef === clientRef);
   if (!element) {
     console.error(`FAIL "${clientRef}" is not in ${stateFile}`);

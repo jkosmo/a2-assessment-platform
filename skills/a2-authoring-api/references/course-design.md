@@ -9,6 +9,8 @@ Objectives are the backbone: the structure and the tests follow from them.
 
 - Propose 3–6 objectives, each as "Etter dette kan deltakeren …" with a verb that can be observed
   (identifisere, bruke, avgjøre, forklare). Each rests on something the source supports.
+- Where the source states its own objectives, they are the proposal — all of them, also when
+  there are more than six.
 - An objective the source cannot support is flagged `[Avklaring: …]`, not given invented support.
 - Confirm the course's language here (default: the language of the source).
 

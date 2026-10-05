@@ -16,7 +16,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { extractSvgTextRuns } from "./localization-check.mjs";
-import { SVG_MIME, assetFileName, assetMimeType } from "./package-assets.mjs";
+import { SVG_MIME, assetFileName, assetMimeType, resolveSectionText } from "./package-assets.mjs";
 
 /** What a slide can become. `omitted` stands alone and needs a reason. */
 export const FORMS = Object.freeze([
@@ -156,7 +156,10 @@ export function checkSlideCoverage(treatment, pkg, { deck = null, baseDir = "." 
   const list = Array.isArray(treatment?.slides) ? treatment.slides : [];
   if (list.length === 0) problems.push("the slide list has no slides — save the list approved at gate 3 as { \"slides\": [ … ] }");
 
-  const objects = describeObjects(pkg, { baseDir });
+  // A section's text may still stand in files beside the package.
+  const text = resolveSectionText(pkg, { baseDir });
+  for (const problem of text.problems) problems.push(`${problem.path}: ${problem.message}`);
+  const objects = describeObjects(text.pkg, { baseDir });
   const used = new Map(); // "<ref> <form>" -> how many slides have claimed one so far
   const listedPictures = new Map(); // "<ref> <file>" -> true
 

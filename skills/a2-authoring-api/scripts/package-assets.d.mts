@@ -9,4 +9,9 @@ export function resolvePackageAssets(
   pkg: unknown,
   options?: { baseDir?: string; readFile?: (file: string) => Uint8Array | string },
 ): { pkg: any; attached: number; problems: AssetProblem[] };
+export function resolveSectionText(
+  pkg: unknown,
+  options?: { baseDir?: string; readFile?: (file: string) => Uint8Array | string },
+): { pkg: any; problems: AssetProblem[] };
+export function readCourseState(stateFile: string, options?: { readFile?: (file: string) => Uint8Array | string }): any;
 export function checkAssets(pkg: unknown): { ok: boolean; count: number; totalBytes: number; problems: AssetProblem[] };

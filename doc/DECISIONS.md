@@ -973,7 +973,13 @@ ikke målt). Lysarklista i punkt 2 og 6 holdes av `scripts/slide-coverage.mjs`
 `test/unit/skill-structure-guard-1079.test.ts`. Punkt 4 er ikke bygget. Status: avklart;
 rekkefølgen står nederst i designnotatet.
 
-⚠️ **Tre valg under byggingen er mine, ikke produkteiers** (2026-10-05). Han kan snu dem:
+⚠️ **Fire valg under byggingen er mine, ikke produkteiers** (2026-10-05). Han kan snu dem:
+
+- **Et bilde som viser et passord, en kode, en nøkkel eller et token foreslås utelatt**, med
+  grunn i lysarklista, og tas bare med når forfatteren sier det med rene ord. Dette er et unntak
+  fra punkt 6. I prøvekjøringen tok modellen med et skjermbilde av en møteinvitasjon med møte-ID
+  og passord, fordi regelen sa «alle bilder med». Navn og ansikter følger fortsatt punkt 6: merkes,
+  og tas med.
 
 - **Til innholdsblokkene finnes i plattformen, skriver skillet dem i former plattformen alt
   tegner:** uthevet boks som sitat med fet merkelapp, prompt som kodeblokk, kort som

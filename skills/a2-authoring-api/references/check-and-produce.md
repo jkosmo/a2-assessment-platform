@@ -36,10 +36,12 @@ Start only when every element is approved and stored in full in the course state
 ([content-preservation.md](content-preservation.md)).
 
 1. **Translate** to the other two languages — text, questions, figure labels:
-   [localization.md](localization.md).
-2. **Assemble the package** as `work/package.json`: every section and module, and the course that
-   orders them ([package-schema.md](package-schema.md)). Pictures and figures point at their
-   files. Put the confirmed sources and the author's stated requirements in `constraints`.
+   [localization.md](localization.md). Each section gets a file per language beside the first
+   (`sections/<clientRef>.nn.md`, `sections/<clientRef>.en-GB.md`).
+2. **Complete the package**, `work/package.json`: every section and module in three languages, and
+   the course that orders them ([package-schema.md](package-schema.md)). Texts, pictures and
+   figures point at their files. Put the confirmed sources and the author's stated requirements
+   in `constraints`.
 3. **Run production:**
 
    ```

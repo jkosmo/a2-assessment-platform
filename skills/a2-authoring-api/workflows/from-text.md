@@ -48,7 +48,10 @@ Say in the same table what each section will **show**, not only what it will say
 One section or module per turn, approved before the next.
 
 - **A section:** the text, written from the source, with its figures, tables, boxes and pictures
-  in place — shown together, because they are approved together.
+  in place — shown together, because they are approved together. Write it to its own file,
+  `work/sections/<clientRef>.nb.md`, and add it to `work/package.json` as you go
+  ([package-schema.md](../references/package-schema.md)). Until gate 6 the package holds the
+  course's one language only.
   [section-content.md](../references/section-content.md),
   [figure-design.md](../references/figure-design.md).
 - **A module:** the task, the assessment criteria and the questions.

@@ -16,6 +16,81 @@
 | `main` (git) | 2.78.3 | likt med prod (PR #1086 flettet 2026-10-04) |
 | `dev` (git) | 2.82.2 | sju rettinger (2.82.0), to oppfølgere etter QA (2.82.1), og kurset på telefon (2.82.2), se under |
 
+### Skillet er bygget om, på en egen gren (2026-10-05, sent på kvelden)
+
+**Grenen `skill-ombygging-1079` har det nye skillet (2.83.0). `dev` og stage er urørt (2.82.2).
+Neste steg er produkteiers: milepæl 1 — tre presentasjoner i ChatGPT og Claude.ai.**
+
+| | |
+|---|---|
+| Hva som er gjort | Skillet er bygget om etter `doc/DESIGN_1079_SKILL.md`: kort forside, to arbeidsflyter, lysarkliste som forfatteren godkjenner, én kommando for port 6. Detaljer i `doc/VERSIONS.md` (2.83.0) og nederst i designnotatet |
+| Målt i repoet | Alle fire suitene grønne på grenen. Mutasjonssjekk av hver ny kontroll |
+| Grov prøve | To hjelpeagenter (Sonnet, i Claude Code) laget hvert sitt kurs ved å følge skillet ordrett. Begge kom i mål med godkjent importfil. Tallene står under |
+| Ikke målt | ChatGPT og Claude.ai. Det er milepæl 1 og krever et menneske |
+| Pakka | `npm run skill:package` på grenen gir `dist/skills/a2-authoring-api-v2.83.0.zip` |
+
+**Den grove prøven, talt med `skills/a2-authoring-api-evals/score-course.mjs`:**
+
+| | Nullpunkt (2.82.2, i produktene) | Grov prøve (2.83.0, Sonnet i Claude Code) |
+|---|---|---|
+| Rapportskriving: lysark med innholdet i kurset | 9 av 9 (Claude.ai), 4 av 9 (ChatGPT) | 9 av 9 |
+| Rapportskriving: lysark i forventet form | 4 av 9 | 8 av 9 |
+| Rapportskriving: ikoner fra kilden | 0 av 25 | 21 |
+| Møtearbeid: lysark med innholdet / i forventet form | ikke målt | 12 av 13 / 12 av 13 |
+| Møtearbeid: tekst som bare sto i bilder, skrevet ut | ikke målt | 14 av 14 |
+| Møtearbeid: skjermbilder tatt med | ikke målt | 5 (213 kB), 7 skrevet ut som prompter |
+
+⚠️ **Tallene til høyre er ikke milepæl 1.** De er fra en annen flate og en annen modell enn
+produkteier bruker. De sier at skillet lar seg følge fra start til importfil, ikke hvordan det går
+i ChatGPT. «Forventet form» teller kort, uthevede bokser og prompt-bokser i formen skillet skriver
+dem i dag (se under); måleskriptet ble lært det samme kveld.
+
+**Prøven ga 37 funn, og de viktigste er rettet på grenen:**
+
+- En oversettelseskontroll avviste etiketter som rettmessig er like på bokmål og nynorsk
+  («Samle data»), og modellen måtte bytte til et dårligere ord. Rettet.
+- Modellen måtte skrive sitt eget byggeskript for å få markdown inn i JSON. Nå står seksjonsteksten
+  i filer, og pakken peker på dem (`bodyFiles`); tilstanden peker på samme fil (`contentFile`).
+- **Et skjermbilde med møte-ID og passord ble tatt med i kurset.** Det følger av valg 6 (alle
+  bilder med hvis forfatteren ikke sier nei). Skillet foreslår nå å utelate bilder som viser
+  passord, koder, nøkler eller tokens. ⚠️ Det er mitt valg, ikke produkteiers; se
+  `doc/DECISIONS.md`.
+- Kildens egne læringsmål beholdes, også når de er flere enn seks. En stripe med flere punkter
+  blir én boks med liste, ikke fem bokser. Skrivefeil i en prompt rettes og sies fra om.
+
+**Ikke rettet, fra prøven:**
+
+- Leseskriptet kaller noen ganger en stripe for en ramme, og rammer på rad for en flyt. Skillet
+  sier nå at oppsettlinja er en første gjetning. Skriptet selv er ikke endret.
+- Den uavhengige kontrollen (port 5) er i en vanlig samtale samme modell som leser sitt eget
+  arbeid. Den er så uavhengig som modellen er ærlig.
+- Å se på en figur krever en nettleser eller et tegneprogram i sandkassa. Den ene agenten lastet
+  ned Chromium (115 MB) for å få det til; skillet sier nå at den ikke skal gjøre det, men si «ikke
+  sett».
+- Begge prøvekursene har bare flytfigurer. Presentasjonene har ikke andre figurformer, så
+  skjelettene for matrise, tre og tidslinje er ikke prøvd av en modell.
+
+**To funn i plattformen, ikke rettet (gjelder også prod):**
+
+- En tabell i en seksjon mister kolonneoverskriftene på telefon: cellene stables og står
+  høyrestilt uten navn (`shared.css`, regelen som gjør alle tabeller om til rader under 600 px).
+- Tabeller, sitater og kodeblokker har ingen egen stil i leseren. Innholdsblokkene (valg 4) bør ta
+  med tabellen.
+
+**Det som krever produkteier:**
+
+1. **Milepæl 1:** installer `a2-authoring-api-v2.83.0.zip` i ChatGPT og Claude.ai og kjør de tre
+   presentasjonene som `skills/a2-authoring-api-evals/README.md` sier. Send importfilene tilbake,
+   så telles de.
+2. **Tre valg i skillet er mine** (`doc/DECISIONS.md`): blokkene skrives i former plattformen alt
+   tegner, et kurs uten modul stoppes, og et bilde som ikke vises i teksten stoppes. Pluss det
+   fjerde over: bilder med passord foreslås utelatt.
+3. Når tallene er bedre: grenen flettes til `dev`, QA-porten kjøres, og skillet byttes ut.
+
+**Neste arbeid som ikke venter på ham:** innholdsblokkene i plattformen (valg 4; prøvesiden er
+godkjent). Når de finnes, endres `references/section-content.md` og tellingen i
+`scripts/slide-coverage.mjs` til den endelige skrivemåten.
+
 **2.82.0, i én setning hver** (detaljer og rotårsaker i `doc/VERSIONS.md`):
 
 | Sak | Hva som er rettet | Målt i |
@@ -61,7 +136,7 @@ presentasjonen, så regelen i skillet, med innholdsblokkene som eget spor (proto
 Node er bekreftet i begge flatene han bruker (22.16 i ChatGPT, 22.22 i Claude.ai).
 ⚠️ Det finnes ingen regel om «tre illustrasjoner» i skillet; se saken for hva som faktisk styrer dit.
 
-**Ikke bygg videre på skillet før designet er besluttet.** Produkteier spurte 2026-10-05 om vi
+**Slik kom designet til (gjort; ombyggingen står øverst).** Produkteier spurte 2026-10-05 om vi
 hadde tenkt gjennom design og arkitektur, eller bare hoppet på implementering. Svaret var nei.
 `doc/DESIGN_1079_SKILL.md` er forslaget: sju valg med alternativer og anbefaling (ett skill delt i
 arbeidsganger, sju faste steg fra presentasjon til kurs, PDF for at modellen skal se lysarkene,

@@ -71,8 +71,10 @@ before the picture says what it shows ([section-content.md](section-content.md#p
 - a right answer that sits in a different position, or matches no option, in some language;
 - a formula, address, identifier or file name that is in the primary language and missing from a
   translation;
-- a figure that lacks a language, has a different number of labels in one, or whose labels were
-  copied instead of translated; a narrow layout whose labels differ from the wide figure's.
+- a figure that lacks a language, has a different number of pieces of label text in one, or whose
+  English labels are the Norwegian ones (or the other way round); a narrow layout whose labels
+  differ from the wide figure's. Labels that are the same in Bokmål and Nynorsk are accepted:
+  between those two, a short label is often rightly the same word.
 
 It cannot judge whether a translation is good. That is your reading, and part of the independent
 check where the reviewer reads all three languages.

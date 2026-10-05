@@ -48,7 +48,9 @@ Say in the gate-3 proposal, per figure, which form it gets and whether it moves.
 3. **Labels are short, in the course's one language.** A few words. The explanation stands in the
    text under the figure.
 4. **Take the colours from the source** where it has them (a presentation's phase colours are
-   listed per slide in `slides.md`). Otherwise use the light tones in the skeletons below.
+   listed per slide in `slides.md`). Where the source gives one colour per phase, it is the resting
+   colour; choose a darker tone of the same colour to light up in and for the phase's name.
+   Otherwise use the light tones in the skeletons below.
 5. **Sans-serif**, set once on the root: `font-family="system-ui, -apple-system, 'Segoe UI',
    Roboto, sans-serif"`.
 6. **Nothing the platform removes:** no `<script>`, no `on…` attributes, no `<foreignObject>`, no
@@ -372,6 +374,10 @@ frame, and the words are how the author approves the motion.
 | an environment with Playwright installed | `npx playwright screenshot --viewport-size=800,700 file:///<abs-path>/figure.svg figure.png`. The window is 700 high because the narrow layout is up to 590 px tall and is shown at its own size. Do not use `--full-page`: on an SVG file the command never finishes |
 | nowhere that can render | you cannot do the look step. **Say so** — "målt, men ikke sett: jeg har ingen måte å rendre figuren på her" — and ask the author to look at the preview with the checklist above |
 
+If Playwright is there and its browser is not, add `--channel=msedge` or `--channel=chrome` to use
+one that is installed. Do not download a browser to do the look step; say "ikke sett" instead. A
+screenshot of an animated figure shows its first moment: the first step lit, the rest at rest.
+
 Why the still file: renderers that are not browsers do not read CSS variables or animations, and
 draw a flow with phases with **black steps**. `figure.still.svg` is the same figure at rest, with
 the colours written straight on the steps and no `<style>` block. It is for looking at; the
@@ -413,5 +419,7 @@ languages, with **identical geometry**:
   not move anything. If a translated label no longer fits, widen the box in **all** languages.
 
 Run measure-and-look on every variant. `produce-course.mjs` reports a figure that lacks a
-language, has a different number of labels, has lost a formula or an identifier, or whose labels
-were copied instead of translated ([localization.md](localization.md)).
+language, has a different number of pieces of label text (each line of a label is one), has lost
+a formula or an identifier, or whose labels were copied instead of translated
+([localization.md](localization.md)). A label that is rightly the same in Bokmål and Nynorsk
+stays the same.

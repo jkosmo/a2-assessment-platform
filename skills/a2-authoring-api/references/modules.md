@@ -43,8 +43,9 @@ node scripts/mcq-cue-check.mjs work/package.json
 ```
 
 It measures the length of the right option against the others per question, and the spread of
-position and length across the set. Fix every finding. A clean report does not say the questions
-are good; it removes the mechanical cues so the author's reading is about the content.
+position and length across the set. A line that starts with `OK` has passed; the numbers after it
+are for your information. Fix every finding on a `FAIL` line. A clean report does not say the
+questions are good; it removes the mechanical cues so the author's reading is about the content.
 
 To add questions to a module that already exists on the platform, read its question bank first and
 write questions that test other points ([api-flow.md](api-flow.md)).

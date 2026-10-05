@@ -49,7 +49,10 @@ function figurform(svg) {
 export function readCourse(pakke) {
   const seksjoner = [];
   const moduler = [];
-  const kurs = pakke?.envelope?.course?.course ?? pakke?.envelope?.course ?? null;
+  // Tre former: svaret fra plattformens eksport ({ envelope }), importfila skillet leverer
+  // (konvolutten selv), og pakken skillet arbeider i ({ objects }).
+  const konvolutt = pakke?.envelope ?? (pakke?.exportFormat ? pakke : null);
+  const kurs = konvolutt?.course?.course ?? konvolutt?.course ?? null;
   if (kurs?.items) {
     for (const el of kurs.items) {
       if (el.section) seksjoner.push(el.section);
@@ -65,10 +68,22 @@ export function readCourse(pakke) {
   const deler = [];
   const figurer = [];
   const tabeller = [];
+  // Innholdsblokker i formen skillet skriver dem: kort er en rekke «###»-overskrifter under samme
+  // del, en uthevet boks er et sitat som åpner med fet merkelapp, en prompt er en kodeblokk.
+  const blokker = [];
   for (const seksjon of seksjoner) {
     const markdown = tekstAv(seksjon.bodyMarkdown);
     deler.push(tekstAv(seksjon.title), markdown);
     for (const blokk of markdown.match(/(?:^\|.*\|[ \t]*\r?\n?)+/gm) ?? []) tabeller.push(flat(blokk));
+    const utenKode = markdown.replace(/^(`{3,}|~{3,})[^\n]*\n[\s\S]*?^\1[^\n]*$/gm, (kode) => {
+      blokker.push(flat(kode));
+      return "";
+    });
+    for (const del of utenKode.split(/^##\s.*$/m)) {
+      const kort = del.split(/^(?=###\s)/m).filter((k) => /^###\s/.test(k));
+      if (kort.length >= 2) blokker.push(flat(kort.join("\n")));
+    }
+    for (const sitat of utenKode.match(/(?:^>.*\n?)+/gm) ?? []) if (/^>\s*\*\*/.test(sitat)) blokker.push(flat(sitat));
     const alt = new Map([...markdown.matchAll(/!\[([^\]]*)\]\(asset:([^)\s]+)\)/g)].map((m) => [m[2], m[1]]));
     for (const asset of seksjon.assets ?? []) {
       const erSvg = String(asset.mimeType ?? "").includes("svg");
@@ -93,7 +108,7 @@ export function readCourse(pakke) {
     for (const spørsmål of modul.mcqSet?.questions ?? []) deler.push(tekstAv(spørsmål.stem), ...(spørsmål.options ?? []).map(tekstAv));
   }
   const tekst = flat(deler.join("\n"));
-  return { tekst, ord: ordI(deler.join(" ")), seksjoner: seksjoner.length, moduler: moduler.length, figurer, tabeller };
+  return { tekst, ord: ordI(deler.join(" ")), seksjoner: seksjoner.length, moduler: moduler.length, figurer, tabeller, blokker };
 }
 
 /** Hvor mange av uttrykkene står i teksten? */
@@ -116,11 +131,12 @@ export function scoreCourse(tilfelle, pakke) {
     // Hvilken form fikk lysarket i kurset? Den første som passer, i denne rekkefølgen.
     const iFigur = kurs.figurer.find((f) => f.svg && treff(alle, f.tekst) >= Math.min(2, alle.length));
     const iTabell = kurs.tabeller.find((t) => treff(alle, t) >= Math.min(2, alle.length));
+    const iBlokk = kurs.blokker.find((b) => treff(alle, b) >= Math.min(2, alle.length));
     const iBildefil = kurs.figurer.find((f) => !f.svg && treff(alle, f.tekst) >= 1);
     const bildetekstGjengitt = iBilde.length > 0 && dekket(iBilde, kurs.tekst);
     const innholdMed = dekket(alle, altSomKanLeses);
 
-    const funnet = iFigur ? "figur" : iTabell ? "tabell" : iBildefil ? "bilde" : bildetekstGjengitt ? "prompt-som-tekst" : innholdMed ? "tekst" : "borte";
+    const funnet = iFigur ? "figur" : iTabell ? "tabell" : iBildefil ? "bilde" : iBlokk ? "innholdsblokk" : bildetekstGjengitt ? "prompt-som-tekst" : innholdMed ? "tekst" : "borte";
     const forventet = ark.forventet ?? [];
     const somForventet =
       forventet.includes(funnet) ||
@@ -147,7 +163,8 @@ export function scoreCourse(tilfelle, pakke) {
       lysarkMedInnhold: teller.length,
       innholdMed: teller.filter((l) => l.innholdMed).length,
       somForventet: teller.filter((l) => l.somForventet).length,
-      // Kan ikke finnes ennå: plattformen har ingen innholdsblokker (plan punkt 4, #1079).
+      // Lysark som skulle blitt en innholdsblokk og ble noe annet. Skillet skriver blokkene som
+      // kort («###»), sitat med fet merkelapp og kodeblokk til plattformen har egne (#1079).
       venterPåInnholdsblokker: teller.filter((l) => !l.somForventet && l.forventet.includes("innholdsblokk")).length,
       figurer: svg.length,
       figurformer: [...new Set(svg.map((f) => f.form))].sort(),
@@ -172,7 +189,7 @@ export function formatScore(resultat) {
   const linjer = [
     `${resultat.navn}`,
     `  Lysark med innholdet i kurset:       ${s.innholdMed} av ${s.lysarkMedInnhold}`,
-    `  Lysark som fikk forventet behandling: ${s.somForventet} av ${s.lysarkMedInnhold}${s.venterPåInnholdsblokker ? `   (${s.venterPåInnholdsblokker} venter på innholdsblokker i plattformen)` : ""}`,
+    `  Lysark som fikk forventet behandling: ${s.somForventet} av ${s.lysarkMedInnhold}${s.venterPåInnholdsblokker ? `   (${s.venterPåInnholdsblokker} skulle vært kort, uthevet boks eller prompt-boks)` : ""}`,
     `  Figurer: ${s.figurer} · former: ${s.figurformer.join(", ") || "ingen"} · med smalt oppsett: ${s.figurerMedSmaltOppsett} · med tegning/ikon: ${s.figurerMedTegning} (kilden har ${s.ikonerIKilden} ikoner)`,
     `  Tabeller: ${s.tabeller} · rasterbilder: ${s.rasterbilder} (${s.rasterKB} kB)${s.tungeBilder.length ? ` · FOR TUNGE: ${s.tungeBilder.join(", ")}` : ""}`,
     `  Tekst som bare sto i bilder, gjengitt som tekst: ${s.tekstFraBilder}`,

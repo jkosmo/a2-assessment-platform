@@ -52,10 +52,10 @@ ombyggingen. **Bare skillet er endret. Plattformen er som i 2.82.2.**
 uten modul, et bilde som ligger i en seksjon uten å vises i teksten, og en seksjonstekst som åpner
 med seksjonens egen tittel som overskrift (plattformen viser tittelen fra før).
 
-**Slik er det målt.** Fire nye testfiler: `agent-authoring-slide-coverage-1079` (47),
-`agent-authoring-produce-course-1079` (42), `skill-structure-guard-1079` (16) og
+**Slik er det målt.** Fire nye testfiler: `agent-authoring-slide-coverage-1079` (48),
+`agent-authoring-produce-course-1079` (53), `skill-structure-guard-1079` (16) og
 integrasjonstesten `m2-skill-example-course-1079` (eksempelkurset importeres gjennom plattformens
-egen kursimport, og teksten tegnes med plattformens egen gjengivelse). 101 ødeleggelser ble lagt
+egen kursimport, og teksten tegnes med plattformens egen gjengivelse). 121 ødeleggelser ble lagt
 inn én om gangen; alle ble fanget. To overlevde første runde og viste to blinde tester (utheving
 midt i et uttrykk, og en sitatlinje som åpner med fet skrift); testene er rettet. Vakta for
 oppbyggingen fant en mangel med en gang den ble skrevet: arbeidsflyten for presentasjoner var
@@ -63,6 +63,26 @@ over 100 linjer uten innholdsliste.
 
 **Ikke målt:** skillet er ikke kjørt i ChatGPT eller Claude.ai. Det er milepæl 1, og den krever
 et menneske (`skills/a2-authoring-api-evals/README.md`).
+
+**Grov prøve samme kveld:** to hjelpeagenter laget hvert sitt kurs (Rapportskriving og
+Møtearbeid) ved å følge skillet ordrett, uten å lese skriptene. Begge kom i mål med godkjent
+importfil; tallene står i `doc/HANDOFF.md`. Prøven ga 37 funn, og disse er rettet:
+
+- **Like etiketter på bokmål og nynorsk ble kalt en kopi.** «Samle data» heter det samme på
+  begge, og modellen måtte bytte til et dårligere ord for å komme gjennom. Mellom bokmål og
+  nynorsk godtas nå like figuretiketter; engelsk kopiert til norsk (og omvendt) stoppes som før.
+  Meldingen om ulikt antall etiketter sier nå hva som telles (hver linje i en etikett er én).
+- **Seksjonstekst står i filer.** Begge agentene skrev sitt eget byggeskript for å få markdown
+  inn i JSON. Pakken kan nå peke på én fil per språk (`bodyFiles`), og tilstanden på den samme
+  fila (`contentFile`). Mens kurset skrives, har pakken bare ett språk.
+- **Et skjermbilde med møte-ID og passord ble tatt med.** Skillet foreslår nå å utelate bilder
+  som viser passord, koder, nøkler eller tokens (mitt valg, se `doc/DECISIONS.md`).
+- Kildens egne læringsmål beholdes også når de er flere enn seks; en stripe med flere punkter er
+  én boks med liste; en skrivefeil i en prompt rettes og sies fra om; det som står inni en ramme,
+  blir stående inni kortet.
+- **Måleskriptet leste ikke importfila** skillet leverer, bare eksportsvaret fra plattformen, og
+  ga «0 av 9». Det kjenner nå også igjen kort, uthevede bokser og prompt-bokser i formen skillet
+  skriver dem.
 
 **Funnet underveis, ikke rettet her (plattformen):**
 

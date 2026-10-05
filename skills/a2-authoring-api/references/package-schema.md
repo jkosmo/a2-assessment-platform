@@ -58,8 +58,30 @@ and what a translation must keep: [localization.md](localization.md).
 }
 ```
 
-`title` and `bodyMarkdown` are required. `assets` is left out for a section with text only. How
-to write the body: [section-content.md](section-content.md).
+`title` and the text are required. `assets` is left out for a section with text only. How to
+write the body: [section-content.md](section-content.md).
+
+**Keep the text in files**, one per language, and point at them with `bodyFiles` instead of
+`bodyMarkdown`:
+
+```json
+"payload": {
+  "title": { "nb": "Hva du gir KI", "nn": "Kva du gir KI", "en-GB": "What you give the AI" },
+  "bodyFiles": {
+    "nb": "sections/sec-kilder.nb.md",
+    "nn": "sections/sec-kilder.nn.md",
+    "en-GB": "sections/sec-kilder.en-GB.md"
+  }
+}
+```
+
+The paths are relative to the folder the package is in. The scripts read the files; production
+writes the text into the import file. Markdown typed into a JSON string must be escaped line by
+line, and one missed quote breaks the package.
+
+**While the course is being written, the package holds one language:** `{ "nb": "…" }` for each
+text, and one file per section. The slide check and the cue check run on that. The other two
+languages are added at gate 6, before production — which refuses a package that lacks one.
 
 ## Pictures and figures — `assets[]`
 

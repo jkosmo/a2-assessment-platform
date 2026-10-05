@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { exportEnvelopeSchema, importBodySchema } from "../../src/modules/adminContent/adminContentSchemas.js";
-import { MAX_ASSET_BYTES, checkAssets, resolvePackageAssets } from "../../skills/a2-authoring-api/scripts/package-assets.mjs";
+import { MAX_ASSET_BYTES, checkAssets, readCourseState, resolvePackageAssets, resolveSectionText } from "../../skills/a2-authoring-api/scripts/package-assets.mjs";
 import { formatProduction, produceCourse } from "../../skills/a2-authoring-api/scripts/produce-course.mjs";
 // @ts-expect-error — .mjs skill script consumed as a library
 import { formatReview, reviewRevision } from "../../skills/a2-authoring-api/scripts/course-state.mjs";
@@ -16,13 +16,23 @@ import { formatReview, reviewRevision } from "../../skills/a2-authoring-api/scri
 const EKSEMPEL = "skills/a2-authoring-api/examples/course-from-slides";
 type Pakke = { locale: string; objects: Array<{ clientRef: string; type: string; payload: any }> };
 
-/** En kopi av eksempelkurset i en egen mappe, med pakken endret slik testen vil. */
-function kopi(endre: (pkg: Pakke, mappe: string) => void = () => {}) {
+/**
+ * En kopi av eksempelkurset i en egen mappe. Uten `endre` står den som i skillet, med
+ * seksjonstekstene i filer. Med `endre` leses tekstene inn i pakken først, så testen kan endre dem.
+ */
+function kopi(endre?: (pkg: Pakke, mappe: string) => void) {
   const mappe = mkdtempSync(join(tmpdir(), "produksjon-"));
   cpSync(EKSEMPEL, mappe, { recursive: true });
-  const pkg = JSON.parse(readFileSync(join(mappe, "package.json"), "utf8")) as Pakke;
-  endre(pkg, mappe);
-  writeFileSync(join(mappe, "package.json"), JSON.stringify(pkg), "utf8");
+  if (endre) {
+    const pkg = JSON.parse(readFileSync(join(mappe, "package.json"), "utf8")) as Pakke;
+    for (const o of pkg.objects) {
+      if (!o.payload.bodyFiles) continue;
+      o.payload.bodyMarkdown = Object.fromEntries(Object.entries(o.payload.bodyFiles as Record<string, string>).map(([språk, fil]) => [språk, readFileSync(join(mappe, fil), "utf8").replaceAll("\r\n", "\n")]));
+      delete o.payload.bodyFiles;
+    }
+    endre(pkg, mappe);
+    writeFileSync(join(mappe, "package.json"), JSON.stringify(pkg), "utf8");
+  }
   return {
     mappe,
     ut: join(mappe, "ut", "kurs.json"),
@@ -102,9 +112,44 @@ describe("produce-course — eksempelkurset går gjennom alt (#1079)", () => {
     expect(JSON.parse(tekst).objects[1].payload.assets).toHaveLength(4);
   });
 
-  it("den lesbare seksjonen i eksempelmappa er ordrett den som står i pakken", () => {
+  it("seksjonstekstene står i filer pakken peker på, og importfila bærer dem ordrett", async () => {
     const pkg = JSON.parse(readFileSync(`${EKSEMPEL}/package.json`, "utf8")) as Pakke;
-    expect(readFileSync(`${EKSEMPEL}/section-sec-kilder.nb.md`, "utf8").replaceAll("\r\n", "\n")).toBe(objekt(pkg, "sec-kilder").payload.bodyMarkdown.nb);
+    expect(objekt(pkg, "sec-kilder").payload.bodyMarkdown).toBeUndefined();
+    expect(objekt(pkg, "sec-kilder").payload.bodyFiles).toEqual({ nb: "sections/sec-kilder.nb.md", nn: "sections/sec-kilder.nn.md", "en-GB": "sections/sec-kilder.en-GB.md" });
+    const k = kopi();
+    await k.kjør();
+    const seksjon = JSON.parse(readFileSync(k.ut, "utf8")).course.course.items[1].section;
+    expect(seksjon.bodyFiles).toBeUndefined();
+    for (const språk of ["nb", "nn", "en-GB"]) {
+      expect(seksjon.bodyMarkdown[språk], språk).toBe(readFileSync(`${EKSEMPEL}/sections/sec-kilder.${språk}.md`, "utf8").replaceAll("\r\n", "\n"));
+    }
+  });
+
+  it("en tekstfil som mangler, stopper produksjonen med filnavnet", async () => {
+    const mappe = mkdtempSync(join(tmpdir(), "produksjon-"));
+    cpSync(EKSEMPEL, mappe, { recursive: true });
+    const fil = join(mappe, "package.json");
+    writeFileSync(fil, readFileSync(fil, "utf8").replace("sections/sec-kilder.nn.md", "sections/sec-kilder.nynorsk.md"), "utf8");
+    const r = await produceCourse({ packageFile: fil, outFile: join(mappe, "ut", "kurs.json") });
+    expect(status(r).pictures).toBe("fail");
+    expect(funn(r, "pictures")).toContain(`sec-kilder.bodyFiles: cannot read the file "sections/sec-kilder.nynorsk.md"`);
+    // Språket som mangler, meldes også der det hører hjemme.
+    expect(status(r).languages).toBe("fail");
+  });
+
+  it("godkjent tekst i tilstanden kan være fila selv; en fil som mangler der, er et element uten tekst", async () => {
+    const tilstand = JSON.parse(readFileSync(`${EKSEMPEL}/course-state.json`, "utf8"));
+    expect(tilstand.elements[1]).toMatchObject({ contentFile: "sections/sec-kilder.nb.md" });
+    expect(tilstand.elements[1].content).toBeUndefined();
+    const k = kopi((_p, mappe) => {
+      const fil = join(mappe, "course-state.json");
+      const endret = JSON.parse(readFileSync(fil, "utf8"));
+      endret.elements[1].contentFile = "sections/finnes-ikke.md";
+      writeFileSync(fil, JSON.stringify(endret), "utf8");
+    });
+    const r = await k.kjør();
+    expect(status(r)["approved text"]).toBe("fail");
+    expect(funn(r, "approved text")).toContain(`element "sec-kilder" has no stored full-text content`);
   });
 });
 
@@ -122,6 +167,7 @@ describe("produce-course — hver kontroll stopper leveransen (#1079)", () => {
     ["teksten viser et bilde seksjonen ikke har", (p) => void objekt(p, "sec-kilder").payload.assets.pop(), "pictures", "the text in nb shows asset:img-innstillinger, and the section has no such picture"],
     ["en filtype plattformen ikke tar", (p) => void (objekt(p, "sec-kilder").payload.assets[3].file = "course-state.json"), "pictures", `"course-state.json" is not a picture the platform takes`],
     ["en engelsk figur byttet ut med den norske", (p) => void (objekt(p, "sec-arbeidsgang").payload.assets[0].localizedVariants[1].file = "figures/arbeidsgang.svg"), "languages", "blind copy"],
+    ["en språkvariant av figuren med et annet antall etiketter — og meldingen sier hva som telles", (p) => void (objekt(p, "sec-arbeidsgang").payload.assets[0].localizedVariants[0].file = "deck/icons/image7.svg"), "languages", "0 pieces of label text, the original has 14 — keep the same number of lines in every label"],
     ["en seksjonstittel som mangler nynorsk", (p) => void delete objekt(p, "sec-kilder").payload.title.nn, "languages", "sec-kilder"],
     ["nynorsk tekst som har mistet tabellen", (p) => { const b = objekt(p, "sec-kilder").payload.bodyMarkdown; b.nn = b.nn.replace("|---|---|---|", ""); }, "languages", "sec-kilder: nn has 0 table(s), nb has 1"],
     ["engelsk tekst der prompt-boksen ble vanlig tekst", (p) => { const b = objekt(p, "sec-kilder").payload.bodyMarkdown; b["en-GB"] = b["en-GB"].replaceAll("```", ""); }, "languages", "sec-kilder: en-GB has 0 prompt box(es), nb has 1"],
@@ -334,6 +380,45 @@ describe("package-assets — fra filpeker til innhold (#1079)", () => {
     expect(seks.totalBytes).toBe(6 * MAX_ASSET_BYTES);
   });
 
+  describe("seksjonstekst i filer (bodyFiles)", () => {
+    const seksjon = (payload: Record<string, unknown>) => ({ objects: [{ clientRef: "sec", type: "section", payload }] });
+    const filer: Record<string, string> = { "a.nb.md": String.fromCharCode(0xfeff) + "Første linje\r\nAndre linje\r\n", "a.nn.md": "Fyrste linje\n" };
+    const les = (fil: string) => {
+      const navn = fil.replaceAll("\\", "/").split("/").pop()!;
+      if (!(navn in filer)) throw new Error("finnes ikke");
+      return Buffer.from(filer[navn]!, "utf8");
+    };
+
+    it("leses inn som teksten i fila: uten byte-rekkefølgemerke og med vanlige linjeskift", () => {
+      const inn = seksjon({ bodyFiles: { nb: "a.nb.md", nn: "a.nn.md" } });
+      const r = resolveSectionText(inn, { readFile: les });
+      expect(r.problems).toEqual([]);
+      expect(r.pkg.objects[0].payload).toEqual({ bodyMarkdown: { nb: "Første linje\nAndre linje\n", nn: "Fyrste linje\n" } });
+      expect(inn.objects[0]!.payload.bodyFiles).toBeDefined();
+    });
+
+    it("tekst skrevet rett i pakken og tekst i fil kan stå side om side, språk for språk", () => {
+      const r = resolveSectionText(seksjon({ bodyMarkdown: { "en-GB": "First line" }, bodyFiles: { nb: "a.nb.md" } }), { readFile: les });
+      expect(r.problems).toEqual([]);
+      expect(Object.keys(r.pkg.objects[0].payload.bodyMarkdown).sort()).toEqual(["en-GB", "nb"]);
+    });
+
+    it.each<[string, Record<string, unknown>, string]>([
+      ["samme språk gitt to ganger", { bodyMarkdown: { nb: "x" }, bodyFiles: { nb: "a.nb.md" } }, "nb is given both in bodyMarkdown and in bodyFiles"],
+      ["hele teksten gitt som streng i tillegg", { bodyMarkdown: "x", bodyFiles: { nn: "a.nn.md" } }, "the section has both bodyMarkdown and bodyFiles"],
+      ["en fil som ikke finnes", { bodyFiles: { nb: "borte.md" } }, `cannot read the file "borte.md"`],
+      ["en streng i stedet for én fil per språk", { bodyFiles: "a.nb.md" }, "must be an object with one file per language"],
+    ])("%s meldes", (_navn, payload, ventet) => {
+      const r = resolveSectionText(seksjon(payload), { readFile: les });
+      expect(r.problems.map((p) => `${p.path}: ${p.message}`).join(" | ")).toContain(`sec.bodyFiles: ${ventet}`);
+    });
+
+    it("en pakke uten bodyFiles står urørt", () => {
+      const inn = seksjon({ bodyMarkdown: { nb: "x" } });
+      expect(resolveSectionText(inn, { readFile: les })).toEqual({ pkg: inn, problems: [] });
+    });
+  });
+
   it("språkvarianter og oppsett teller med i samlet størrelse", () => {
     const r = checkAssets(pkg([{ sourceId: "a", filename: "a.svg", mimeType: "image/svg+xml", contentBase64: "AAAA", localizedVariants: [{ locale: "nn", contentBase64: "AAAA" }], layoutVariants: [{ layout: "narrow", contentBase64: "AAAA", localizedVariants: [{ locale: "nn", contentBase64: "AAAA" }] }] }]));
     expect(r.totalBytes).toBe(12);
@@ -341,7 +426,12 @@ describe("package-assets — fra filpeker til innhold (#1079)", () => {
 });
 
 describe("course-state review — kortere tekst uten tap (#1079)", () => {
-  const element = JSON.parse(readFileSync(`${EKSEMPEL}/course-state.json`, "utf8")).elements[1];
+  const element = readCourseState(`${EKSEMPEL}/course-state.json`).elements[1];
+
+  it("teksten leses fra fila tilstanden peker på", () => {
+    expect(element.content).toBe(readFileSync(`${EKSEMPEL}/sections/sec-kilder.nb.md`, "utf8").replaceAll("\r\n", "\n"));
+    expect(element.content.length).toBeGreaterThan(500);
+  });
 
   it("teksten som den står, går gjennom", () => {
     const r = reviewRevision(element, element.content);

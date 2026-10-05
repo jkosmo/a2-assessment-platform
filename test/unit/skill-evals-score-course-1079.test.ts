@@ -132,6 +132,45 @@ describe("score-course — hva ble det av hvert lysark?", () => {
     expect(s.figurerMedSmaltOppsett).toBe(1);
   });
 
+  it("importfila skillet leverer (konvolutten selv, uten { envelope } rundt) leses som eksporten", () => {
+    // Prøvekjøringen 2026-10-05: fila fra produce-course ga «0 av 9» fordi bare eksportsvaret
+    // fra plattformen ble kjent igjen.
+    expect(scoreCourse(tilfelle, eksport.envelope).sum).toEqual(r.sum);
+  });
+
+  describe("innholdsblokker i formen skillet skriver dem", () => {
+    const blokktilfelle = { navn: "Blokker", lysark: [
+      { nr: 1, form: "kort", forventet: ["innholdsblokk"], nøkkelord: ["Sakliste", "Egne notater", "Opptak"] },
+      { nr: 2, form: "stripe", forventet: ["innholdsblokk"], nøkkelord: ["Du står ansvarlig", "bare utkastet"] },
+      { nr: 3, form: "prompt", forventet: ["innholdsblokk"], nøkkelord: ["Du skal skrive et møtereferat", "Bruk bare det som står"] },
+      { nr: 4, form: "kort", forventet: ["innholdsblokk"], nøkkelord: ["Ensom overskrift", "med punkter under"] },
+      { nr: 5, form: "kort", forventet: ["innholdsblokk"], nøkkelord: ["Et vanlig sitat", "uten merkelapp"] },
+    ] } as unknown as EvalCase;
+    const gjerde = "```";
+    const medBlokker = (markdown: string) => ({ exportFormat: "a2-content-export/v1", course: { course: { items: [{ type: "SECTION", section: { title: tre("S"), bodyMarkdown: tre(markdown) } }] } } });
+    const kurs = medBlokker([
+      "### Sakliste", "- gir rekkefølgen", "### Egne notater", "- fanger vedtak", "### Opptak", "- ordrett",
+      "## Ny del", "### Ensom overskrift", "med punkter under",
+      "> **Husk:** Du står ansvarlig. KI lager bare utkastet.",
+      "", "> Et vanlig sitat", "> uten merkelapp",
+      "", `${gjerde}prompt`, "Du skal skrive et møtereferat.", "Bruk bare det som står i notatene.", gjerde,
+    ].join("\n"));
+    const funnet = (nr: number) => scoreCourse(blokktilfelle, kurs).lysark.find((l) => l.nr === nr)!.funnet;
+
+    it("kort (minst to underoverskrifter under samme del), uthevet boks og prompt-boks kjennes igjen", () => {
+      expect([funnet(1), funnet(2), funnet(3)]).toEqual(["innholdsblokk", "innholdsblokk", "innholdsblokk"]);
+    });
+
+    it("én underoverskrift alene er ikke kort, og et sitat uten fet merkelapp er ikke en uthevet boks", () => {
+      expect([funnet(4), funnet(5)]).toEqual(["tekst", "tekst"]);
+    });
+
+    it("de samme ordene som løpende tekst er tekst — tellingen gir ikke blokker bort", () => {
+      const flatt = medBlokker("Sakliste, Egne notater og Opptak. Du står ansvarlig. KI lager bare utkastet. Du skal skrive et møtereferat. Bruk bare det som står i notatene.");
+      expect(scoreCourse(blokktilfelle, flatt).lysark.slice(0, 3).map((l) => l.funnet)).toEqual(["tekst", "tekst", "tekst"]);
+    });
+  });
+
   it("et tomt kurs gir null, ikke en feil", () => {
     const tomt = scoreCourse(tilfelle, { packageFormat: "a2-authoring-package/v1", objects: [] });
     expect(tomt.sum).toMatchObject({ innholdMed: 0, somForventet: 0, figurer: 0, figurformer: [], ord: 0 });

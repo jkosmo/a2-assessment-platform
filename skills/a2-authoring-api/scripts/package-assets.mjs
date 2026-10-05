@@ -46,6 +46,72 @@ export function assetMimeType(asset) {
   return null;
 }
 
+// A text file as the text in it: without a byte-order mark, and with plain line breaks.
+const BYTE_ORDER_MARK = String.fromCharCode(0xfeff);
+function readText(readFile, file) {
+  const text = Buffer.from(readFile(file)).toString("utf8").replaceAll("\r\n", "\n");
+  return text.startsWith(BYTE_ORDER_MARK) ? text.slice(1) : text;
+}
+
+/**
+ * A copy of the package with every section's `bodyFiles` read into `bodyMarkdown`.
+ *
+ *   "bodyFiles": { "nb": "sections/sec-kilder.nb.md", "nn": "sections/sec-kilder.nn.md" }
+ *
+ * A section's text is markdown with headings, tables and fenced blocks. Typed into a JSON string
+ * it must be escaped line by line, and one missed quote breaks the whole package. Kept as a file
+ * it can be read, shown and corrected as it is.
+ *
+ * @returns {{ pkg: object, problems: Array<{ path: string, message: string }> }}
+ */
+export function resolveSectionText(pkg, { baseDir = ".", readFile = readFileSync } = {}) {
+  const resolved = structuredClone(pkg ?? {});
+  const problems = [];
+  for (const object of resolved.objects ?? []) {
+    const files = object?.type === "section" ? object.payload?.bodyFiles : undefined;
+    if (files === undefined) continue;
+    delete object.payload.bodyFiles;
+    const where = `${object.clientRef}.bodyFiles`;
+    if (!files || typeof files !== "object" || Array.isArray(files)) {
+      problems.push({ path: where, message: "must be an object with one file per language, like { \"nb\": \"sections/intro.nb.md\" }" });
+      continue;
+    }
+    const inline = object.payload.bodyMarkdown;
+    const body = inline && typeof inline === "object" ? inline : {};
+    if (typeof inline === "string") problems.push({ path: where, message: "the section has both bodyMarkdown and bodyFiles — give the text one way" });
+    for (const [language, file] of Object.entries(files)) {
+      if (typeof body[language] === "string") {
+        problems.push({ path: where, message: `${language} is given both in bodyMarkdown and in bodyFiles — give the text one way` });
+        continue;
+      }
+      try {
+        body[language] = readText(readFile, path.resolve(baseDir, String(file)));
+      } catch {
+        problems.push({ path: where, message: `cannot read the file "${file}" (looked in ${path.resolve(baseDir)})` });
+      }
+    }
+    object.payload.bodyMarkdown = body;
+  }
+  return { pkg: resolved, problems };
+}
+
+/**
+ * The course state, with every element's `contentFile` read into `content`. The approved text of
+ * a section is then the same file the package points at — written once.
+ */
+export function readCourseState(stateFile, { readFile = readFileSync } = {}) {
+  const state = JSON.parse(Buffer.from(readFile(stateFile)).toString("utf8"));
+  for (const element of state?.elements ?? []) {
+    if (typeof element?.contentFile !== "string" || typeof element.content === "string") continue;
+    try {
+      element.content = readText(readFile, path.resolve(path.dirname(stateFile), element.contentFile));
+    } catch {
+      element.content = ""; // reported by the readiness check: "has no stored full-text content"
+    }
+  }
+  return state;
+}
+
 /**
  * A copy of the package with every `file` replaced by the bytes it points at.
  * A file that cannot be read is reported, never skipped: the entry is left without content, so the
@@ -54,8 +120,9 @@ export function assetMimeType(asset) {
  * @returns {{ pkg: object, attached: number, problems: Array<{ path: string, message: string }> }}
  */
 export function resolvePackageAssets(pkg, { baseDir = ".", readFile = readFileSync } = {}) {
-  const resolved = structuredClone(pkg ?? {});
-  const problems = [];
+  const text = resolveSectionText(pkg, { baseDir, readFile });
+  const resolved = text.pkg;
+  const problems = [...text.problems];
   let attached = 0;
 
   const inline = (entry, where, whole) => {

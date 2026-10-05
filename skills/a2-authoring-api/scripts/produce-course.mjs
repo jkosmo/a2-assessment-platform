@@ -28,7 +28,7 @@ import { checkFigureFit } from "./figure-fit-check.mjs";
 import { checkFigureMotion } from "./figure-motion-check.mjs";
 import { LANGUAGES, checkLocalization, extractSvgTextRuns } from "./localization-check.mjs";
 import { checkMcqCues, collectMcqSets } from "./mcq-cue-check.mjs";
-import { SVG_MIME, checkAssets, resolvePackageAssets } from "./package-assets.mjs";
+import { SVG_MIME, checkAssets, readCourseState, resolvePackageAssets } from "./package-assets.mjs";
 import { checkSlideCoverage, countForms, readDeck } from "./slide-coverage.mjs";
 import { synthesizeStandaloneEnvelopes } from "./synthesize-envelopes.mjs";
 
@@ -197,7 +197,12 @@ function checkQuestions(pkg, primary) {
 function checkLanguages(pkg, primary) {
   const result = checkLocalization(pkg, { primary });
   const details = [...result.reasons];
-  const where = (entry) => [entry.path, entry.locale, entry.missingLocales?.join("+"), entry.token, entry.detail].filter(Boolean).join(" · ");
+  // A figure's labels are counted per piece of text: each line of a label is one.
+  const counts = (entry) =>
+    Number.isInteger(entry.expected) && Number.isInteger(entry.actual)
+      ? `${entry.actual} pieces of label text, the original has ${entry.expected} — keep the same number of lines in every label`
+      : null;
+  const where = (entry) => [entry.path, entry.locale, entry.missingLocales?.join("+"), entry.token, entry.detail, counts(entry)].filter(Boolean).join(" · ");
   const lists = [result.missing, result.answerKeyChanges, result.optionCountMismatches, result.tokenDrift, result.blindCopies];
   for (const list of [...lists, ...Object.values(result.figures ?? {}).filter(Array.isArray)]) {
     for (const entry of list ?? []) if (entry && typeof entry === "object") details.push(`  ${where(entry)}`);
@@ -302,7 +307,11 @@ export async function produceCourse({ packageFile, outFile, stateFile, slidesFil
   let master = null;
   if (stateFile) {
     const problems = [];
-    master = readJson(stateFile, "the course state", problems);
+    try {
+      master = readCourseState(stateFile);
+    } catch (error) {
+      problems.push(`cannot read the course state ${stateFile}: ${error instanceof Error ? error.message : String(error)}`);
+    }
     checks.push(master ? checkApprovedText(master, pkg) : { name: "approved text", status: "fail", summary: "not read", details: problems });
   } else {
     checks.push({ name: "approved text", status: "skipped", summary: "NOT RUN — no --state file. Say so in the report", details: [] });

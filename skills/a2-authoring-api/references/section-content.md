@@ -18,6 +18,8 @@ pictures and figures where the text places them.
 - **Summarise long source text**; do not copy pages of it.
 - **Level** governs how tangled a section may be
   ([course-design.md](course-design.md#level-and-scope)). Length is the author's call.
+- **One file per section and language:** `work/sections/<clientRef>.nb.md`. The package points at
+  the files ([package-schema.md](package-schema.md#a-section)); do not type markdown into JSON.
 
 ## Headings and lists
 
@@ -51,9 +53,16 @@ its label in bold:
 > **Husk:** Du står ansvarlig for referatet. KI lager bare utkastet.
 ```
 
-- The label is one word, in the course's language, and is translated with the rest (`Hugs`,
+- The label is the source's own where it has one ("Husk", "Tips", "Viktig", "NB", "Best
+  praksis") — a word or two, in the course's language, translated with the rest (`Hugs`,
   `Remember`).
-- One point per box, in the source's own words where they are short.
+- One strip on the slide is one box. A strip with several points keeps them as a list inside it:
+
+  ```markdown
+  > **Gode vaner:**
+  > - Lagre kildene i prosjektet før du begynner.
+  > - Start en ny samtale når tråden blir lang.
+  ```
 - Only what the source sets apart, or what the author asks to have stressed. Ordinary text in a
   box stresses nothing.
 
@@ -75,6 +84,8 @@ Bruk bare det som står i notatene under. Skriv «uklart» der notatene ikke sie
 
 - **Word for word from the source.** When the prompt is a screenshot on a slide, type out what
   the picture says — a prompt inside a picture cannot be copied, translated or read aloud.
+- Correct an obvious typing error, and tell the author that you did. Where the speaker notes hold
+  the same prompt in a cleaner form, use the notes' wording and say so.
 - What the learner fills in stands in `[square brackets]`.
 - A line before the block says what the prompt is for.
 - The prompt is translated like the rest of the section. Names of menus and buttons in a product
@@ -104,7 +115,10 @@ the same order.
 
 - Two to six cards. Keep every frame of the slide, with the slide's own headings.
 - Keep the parts inside each frame ("Når bruke", "Fordeler", "Begrensninger") as bold lead-ins or
-  short lists, the same in every card.
+  short lists. Where the frames share parts, keep them in the same order; a frame with a part of
+  its own keeps it.
+- What stands inside a frame stays inside its card: a strip becomes a callout under the card's
+  points, a prompt a prompt box.
 - A sentence before the first card says what is being set side by side.
 - When the frames compare the same few properties in a word or two each, a [table](#table) reads
   better than cards. When each frame holds sentences or lists, use cards.
@@ -118,8 +132,9 @@ text (`![](asset:…)`), because the icon repeats the heading and says nothing m
   `slides.md`. Never draw an icon, and never fetch one.
 - Each icon is an entry in the section's `assets[]`: `{ "sourceId": "ikon-sakliste", "file":
   "deck/icons/image7.svg" }`.
-- A flow's steps often carry icons too. They do not go in the figure. Where the slide explains
-  each step, put the icon first in that step's row of a table under the figure:
+- A strip's own icon is left out; the label says the same.
+- A flow's steps, or a row of points, often carry an icon each. They do not go in a figure. Put
+  the icon first in that step's or point's row of a table:
 
   ```markdown
   | | Steg | Hva du gjør |
@@ -149,6 +164,9 @@ Språket i utkastet velger du på innstillingssiden, i feltet som er markert med
   reader's, the sentence before it says what the marked field is called.
 - The platform takes 5 MB per picture. A larger one is reported at production; ask the author for
   a smaller file.
+- **A picture that shows a password, an access code, a key or a token is the exception.** Propose
+  leaving it out, say why, and ask whether the author has a version without it. It is included
+  only when the author says so in as many words.
 
 What is **not** included as a picture:
 
@@ -169,6 +187,5 @@ line of explanation — the figure shows the order, the text says what each step
 
 ## A finished section
 
-[examples/course-from-slides/section-sec-kilder.nb.md](../examples/course-from-slides/section-sec-kilder.nb.md)
-is a whole section with cards and icons, a prompt, a picture and a table, as it stands in the
-example package.
+[examples/course-from-slides/sections/sec-kilder.nb.md](../examples/course-from-slides/sections/sec-kilder.nb.md)
+is a whole section with cards and icons, a prompt, a picture and a table.

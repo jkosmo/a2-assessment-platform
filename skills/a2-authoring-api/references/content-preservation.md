@@ -23,7 +23,7 @@ One file, `work/course-state.json`, separate from the chat:
       "type": "section",
       "title": "Hva du gir KI",
       "status": "approved",
-      "content": "Utkastet blir aldri bedre enn det du legger inn. Tre kilder er vanlige.\n\n### …",
+      "contentFile": "sections/sec-kilder.nb.md",
       "mandatory": {
         "examples": [],
         "formulas": [],
@@ -44,9 +44,10 @@ One file, `work/course-state.json`, separate from the chat:
 | `order` | the elements' `clientRef`s in the course's final order |
 | `clientRef` | the element's id (`a–z`, `0–9`, `-`), the same as in the package; never reused |
 | `status` | `draft` until the author has approved the element, then `approved` |
-| `content` | the **full text as last approved**, word for word — never a summary |
+| `contentFile` | for a section: the file that holds its text as last approved — the same file the package points at, relative to the state file |
+| `content` | for a module and the course: the **full text as last approved**, written out — the task, the criteria, every question with its options. Never a summary |
 | `mandatory` | the exact strings that must survive: `examples`, `formulas`, `templates` (prompts, forms, attachments), `tasks`, `assessmentCriteria`. `terms` and any other list you add are tracked too |
-| `figures` | per approved figure: `{ "sourceId": "fig-…", "labels": ["…", "…"] }` |
+| `figures` | per approved figure: `{ "sourceId": "fig-…", "labels": ["…", "…"] }` — every piece of label text, as it stands in the primary language |
 | `deliberatelyRemoved` | strings the author has agreed to drop — only possible for `terms` and your own lists; a mandatory item cannot be removed, only moved to an attachment |
 
 A whole state file: [examples/course-from-slides/course-state.json](../examples/course-from-slides/course-state.json).
@@ -62,8 +63,9 @@ survive:
 - every figure, with its labels.
 
 Choosing what is mandatory is your judgement. Once a string is recorded, losing it is caught
-mechanically. A revision is always made from `content` — never from what you remember of the
-chat.
+mechanically. Write each string in the course's primary language, exactly as it stands in the
+text (a string may run over several lines). A revision is always made from the approved text —
+never from what you remember of the chat.
 
 ## When the author asks for a shorter text
 
@@ -84,7 +86,8 @@ It fails when
 - the text is more than 20 % shorter and the author has not approved the shortening. Show the
   author what goes, get a yes, and run again with `--reduction-approved`.
 
-When it passes and the author approves the revision, it replaces `content` in the state.
+When it passes and the author approves the revision, it replaces the approved text: the
+section's file, or `content` in the state.
 
 ## Before production
 

@@ -20,6 +20,7 @@
 // Node stdlib only, pure, repo-testable (test/unit/agent-authoring-localization.test.ts).
 
 export const LANGUAGES = Object.freeze(["nb", "nn", "en-GB"]);
+const NORWEGIAN = new Set(["nb", "nn"]);
 
 // Read one locale's string from a localizedText value (plain string applies to all locales).
 export function localeValue(localized, lang) {
@@ -337,7 +338,10 @@ export function checkFigureLocalization(pkg, { languages = LANGUAGES, primary = 
       for (const token of originalTokens) {
         if (!variantTokens.has(token)) tokenDrift.push({ path: figure.path, sourceId: figure.sourceId, locale, token });
       }
-      if (figureRunsAreBlindCopy(figure.runs, variantRuns)) {
+      // Bokmål and Nynorsk often share a short label word for word ("Samle data"): between those
+      // two, identical labels are a translation, not a copy. Refusing them forces a worse word.
+      const bothNorwegian = NORWEGIAN.has(source) && NORWEGIAN.has(locale);
+      if (!bothNorwegian && figureRunsAreBlindCopy(figure.runs, variantRuns)) {
         blindCopies.push({ path: figure.path, sourceId: figure.sourceId, locale });
       }
     }
