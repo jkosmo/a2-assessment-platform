@@ -102,8 +102,8 @@ fulgte skillet ordrett med «godkjent» ved hver port. Det er en annen flate og 
 ChatGPT og Claude.ai: tallene sier at skillet lar seg følge fra start til importfil, ikke hvordan
 det går der produkteier bruker det. «Forventet behandling» teller fra og med denne målingen kort,
 uthevede bokser og prompt-bokser i formen skillet skriver dem (rekke av `###`, sitat med fet
-merkelapp, kodeblokk); nullpunktet over ville fått samme tall med den tellingen, for de kursene
-hadde ingen slike.
+merkelapp, kodeblokk). Nullpunktet over er talt på nytt med den tellingen og får de samme
+tallene: 4 av 9 i begge.
 
 | Tilfelle | Hvor | Innhold med | Forventet behandling | Figurer | Former | Smalt oppsett | Ikoner | Tabeller | Bilder | Tekst fra bilder |
 |---|---|---|---|---|---|---|---|---|---|---|
