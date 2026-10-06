@@ -7,7 +7,27 @@
 
 ## Kort: det som må avgjøres
 
-**Prod står på 2.78.3. Stage står på 2.84.1 (innholdsblokkene + avbrutte kall som klientforhold, rullet 2026-10-06 kl. 09:37 fra `82815746`; `/version` og helsesjekk bekreftet). `dev` = stage. Ingenting av 2.79–2.84 er i prod.**
+**Prod står på 2.78.3. Stage står på 2.85.0 (lesemodus, rullet 2026-10-06 kl. 21:31 fra `17743d55`; `/version` og helsesjekk bekreftet). `dev` = stage. Ingenting av 2.79–2.85 er i prod.**
+
+### Lesemodus er bygget (2026-10-06 kveld, 2.85.0, grenen `lesemodus-1079`)
+
+Produkteier: «for lite skille mellom hva som er kursportalen, og kontroller i den, vs. innholdet
+som vises innenfor den». Fire grader av skille ble vist på en prøveside; han valgte lesemodus med
+valgbar spaltebredde («Smal»/«Bred», huskes i nettleseren). Når en seksjon åpnes, viker kurset;
+igjen står hodet («Steg n av N», spaltevelger, «Lukk») og innholdet på et ark. `doc/VERSIONS.md`
+(2.85.0) sier hva og hvor, `doc/FEATURE_SURFACE_MAP.md` § 6b har raden.
+
+**QA-porten ga GO i andre runde** (`.ai-qa/qa-20261006-211010.md`). Runde én fant at lesemodus falt
+bort når kurset ble tegnet på nytt med seksjonen åpen (språkbytte, og «gå videre» når kurslista
+svarer sist — det vanlige på stage). Rettet i `reopenInlineAfterRender`; to e2e-tester faller uten.
+
+**Til den manuelle testen på stage** (fra QA-porten): les tre seksjoner på rad med «Marker seksjon
+lest, og gå videre» — hver skal stå i lesemodus uten at kurshodet blinker fram; bytt språk med en
+seksjon åpen («Step n of N» i hodet); Safari på telefon (kurset skjult, hodet med «Lukk» fast
+øverst ved rulling); kurs med 20+ steg på treg maskin (hakking ved åpne/lukke). **Til avgjørelse:**
+med «Smal» på PC blir spalten under 640 px og en flytfigur hentes i det smale oppsettet (to steg per
+rad). Konsekvent, men si fra om figurer alltid skal få det brede på PC.
+
 
 ### Innholdsblokkene er bygget (2026-10-06, 2.84.0, grenen `innholdsblokker-1079`)
 
@@ -46,9 +66,9 @@ ikoner. Bygges etter milepæl 1.
 | Miljø | Versjon | |
 |---|---|---|
 | prod | 2.78.3 | rullet 2026-10-04 kl. 20:13 fra `2433d2b7`, godkjent av produkteier. #1080, #1081, #1083 |
-| stage | 2.84.1 | rullet 2026-10-06 kl. 09:37 fra `82815746` (QA-porten GO, `.ai-qa/qa-20261006-091043.md`). Før det 2.84.0: rullet 2026-10-06 kl. 07:12 fra `ad3f0192`, QA-porten GO i tredje runde (`.ai-qa/qa-20261006-064930.md`); `/version` og helsesjekk bekreftet. Før det 2.82.2: rullet 2026-10-05 kl. 18:49 fra `96632019`, commiten QA-porten ga GO på i tredje runde (`.ai-qa/qa-20261005-182600.md`); `/version` og helsesjekk bekreftet. Stage-testen kjørt 18:50–18:53: 38 av 38 besto |
+| stage | 2.85.0 | rullet 2026-10-06 kl. 21:31 fra `17743d55` (QA-porten GO i andre runde, `.ai-qa/qa-20261006-211010.md`); `/version` og helsesjekk bekreftet. Før det 2.84.1: rullet 2026-10-06 kl. 09:37 fra `82815746` (QA-porten GO, `.ai-qa/qa-20261006-091043.md`). Før det 2.84.0: rullet 2026-10-06 kl. 07:12 fra `ad3f0192`, QA-porten GO i tredje runde (`.ai-qa/qa-20261006-064930.md`); `/version` og helsesjekk bekreftet. Før det 2.82.2: rullet 2026-10-05 kl. 18:49 fra `96632019`, commiten QA-porten ga GO på i tredje runde (`.ai-qa/qa-20261005-182600.md`); `/version` og helsesjekk bekreftet. Stage-testen kjørt 18:50–18:53: 38 av 38 besto |
 | `main` (git) | 2.78.3 | likt med prod (PR #1086 flettet 2026-10-04) |
-| `dev` (git) | 2.84.1 | sju rettinger (2.82.0), to oppfølgere etter QA (2.82.1), og kurset på telefon (2.82.2), se under |
+| `dev` (git) | 2.85.0 | lesemodus (2.85.0), innholdsblokkene og feilklassifiseringen (2.84.x), sju rettinger (2.82.0), to oppfølgere etter QA (2.82.1), og kurset på telefon (2.82.2), se under |
 
 **2.82.0, i én setning hver** (detaljer og rotårsaker i `doc/VERSIONS.md`):
 
