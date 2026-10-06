@@ -2,6 +2,7 @@ import express from "express";
 import createError from "http-errors";
 import request from "supertest";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { warmModuleGraph } from "../support/moduleGraphWarmup.js";
 
 // Prod 2026-10-05/06: fire ganger «stream is not readable» — en forespørsel med innhold som klienten
 // avbrøt mens tjeneren ventet på innlogging. Ingen fikk et svar og ingen så en feil, men feilen ble
@@ -10,6 +11,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const logOperationalEvent = vi.fn();
 vi.mock("../../src/observability/operationalLog.js", () => ({ logOperationalEvent }));
+warmModuleGraph(() => import("../../src/middleware/errorHandling.js"));
 
 const { errorHandlingMiddleware, isClientAbort } = await import("../../src/middleware/errorHandling.js");
 
