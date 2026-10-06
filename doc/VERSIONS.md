@@ -13,8 +13,11 @@ body-parseren). Ingen fikk et svar, ingen så en feil — men feilen ble logget 
 `unhandled_error`, og varselet utløser ved to slike på fem minutter. Samme feil én gang dagen før.
 
 - **`errorHandlingMiddleware` skiller nå klientens forhold fra tjenerens.** Et avbrutt kall logges
-  som `request_aborted` på nivå `warn` og svares med 400. En klientfeil fra body-parseren (ugyldig
-  JSON, for stort innhold, feil tegnsett — feil med 4xx-status og `type` fra http-errors) logges
+  som `request_aborted` på nivå `warn` og svares med 400 — bare når klienten faktisk er borte
+  (`request.destroyed`); «stream is not readable» mens klienten er der, betyr at vår egen kode har
+  lest innholdet to ganger, og er fortsatt en tjenerfeil (QA-portens funn). En klientfeil fra body-parseren (ugyldig
+  JSON, for stort innhold, feil tegnsett — feil med 4xx-status som sier selv at de kan vises
+  (`expose`) eller har en `type` fra http-errors; også `send` sitt 416 ved et umulig Range-hode) logges
   som `bad_request_body` på `warn` og svares med sin egen status og årsak, ikke 500. Alt annet er
   som før: `unhandled_error`, 500, meldingen lekker ikke. En vilkårlig feil med et status-felt
   regnes fortsatt som tjenerfeil.
@@ -24,8 +27,10 @@ body-parseren). Ingen fikk et svar, ingen så en feil — men feilen ble logget 
   satt direkte i prod samme morgen. Uten den kunne de tre forespørslene ikke knyttes til en
   adresse: konsolloggen får bare svar som ble ferdige, og et avbrutt kall blir aldri ferdig.
 
-**Slik er det målt:** `test/unit/error-handling-client-errors.test.ts` (avbrutt kall, ugyldig
-JSON, for stort innhold, vilkårlig feil med status-felt, vanlig feil, `isClientAbort`).
+**Slik er det målt:** `test/unit/error-handling-client-errors.test.ts` (avbrutt kall med og uten
+klient, ugyldig JSON, for stort innhold, 416 uten type, vilkårlig feil med status-felt, vanlig
+feil, `isClientAbort`); åtte mutasjoner, alle fanget. QA-porten GO (`.ai-qa/qa-20261006-091043.md`);
+den gjenskapte feilen fra prod med en ekte TCP-klient som koblet fra midt i forespørselen.
 
 **Ikke rettet, til produkteier:** en klage (appeal) har stått åpen i 141 dager og gir
 `appeal_overdue_detected` hvert tiende minutt. Den bør behandles eller lukkes.

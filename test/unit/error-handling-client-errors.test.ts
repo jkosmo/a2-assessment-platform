@@ -15,9 +15,14 @@ warmModuleGraph(() => import("../../src/middleware/errorHandling.js"));
 
 const { errorHandlingMiddleware, isClientAbort } = await import("../../src/middleware/errorHandling.js");
 
-function appThatFailsWith(error: unknown) {
+function appThatFailsWith(error: unknown, { klientenBorte = false } = {}) {
   const app = express();
-  app.post("/api/ting", (_request, _response, next) => next(error));
+  app.post("/api/ting", (request, _response, next) => {
+    // Slik Node merker en forespørsel når socketen er lukket. Svaret kan likevel skrives her,
+    // for testens egen socket lever.
+    if (klientenBorte) Object.defineProperty(request, "destroyed", { value: true });
+    next(error);
+  });
   app.use(errorHandlingMiddleware);
   return app;
 }
@@ -29,12 +34,29 @@ describe("errorHandlingMiddleware — klientens forhold er ikke tjenerens feil",
 
   it("et avbrutt kall (raw-body: stream is not readable) logges som request_aborted på warn, ikke som unhandled_error", async () => {
     const feil = createError(500, "stream is not readable", { type: "stream.not.readable" });
-    const svar = await request(appThatFailsWith(feil)).post("/api/ting").send({ a: 1 });
+    const svar = await request(appThatFailsWith(feil, { klientenBorte: true })).post("/api/ting").send({ a: 1 });
     expect(svar.status).toBe(400);
     expect(svar.body.error).toBe("request_aborted");
     expect(hendelser()).toEqual([
       expect.objectContaining({ event: "request_aborted", level: "warn", method: "POST", path: "/api/ting", reason: "stream is not readable" }),
     ]);
+  });
+
+  // QA-porten (2.84.1): «stream is not readable» betyr også at noe i vår egen kode alt har lest
+  // innholdet. Da er klienten der fortsatt, og det er en tjenerfeil som skal varsles.
+  it("«stream is not readable» mens klienten fortsatt er der, er en tjenerfeil: 500 og unhandled_error", async () => {
+    const feil = createError(500, "stream is not readable", { type: "stream.not.readable" });
+    const svar = await request(appThatFailsWith(feil)).post("/api/ting").send({ a: 1 });
+    expect(svar.status).toBe(500);
+    expect(hendelser().map((h) => h.event)).toEqual(["unhandled_error"]);
+  });
+
+  it("en 4xx-feil som sier selv at den kan vises (expose), uten type, får sin status og koden bad_request", async () => {
+    // `send` svarer slik på et Range-hode utenfor fila. Før: 500 og en unhandled_error som talte mot Sev1.
+    const svar = await request(appThatFailsWith(createError(416))).post("/api/ting").send({});
+    expect(svar.status).toBe(416);
+    expect(svar.body).toEqual({ error: "bad_request", message: "Range Not Satisfiable" });
+    expect(hendelser()).toEqual([expect.objectContaining({ event: "bad_request_body", level: "warn", status: 416 })]);
   });
 
   it("«request aborted» fra body-parser behandles likt", async () => {
@@ -74,7 +96,11 @@ describe("errorHandlingMiddleware — klientens forhold er ikke tjenerens feil",
   });
 
   it("isClientAbort kjenner igjen typene og meldingene, og ikke annet", () => {
-    expect(isClientAbort(createError(500, "stream is not readable", { type: "stream.not.readable" }))).toBe(true);
+    const strøm = createError(500, "stream is not readable", { type: "stream.not.readable" });
+    expect(isClientAbort(strøm, { destroyed: true, socket: undefined as never })).toBe(true);
+    expect(isClientAbort(strøm, { destroyed: false, socket: { destroyed: true } as never })).toBe(true);
+    expect(isClientAbort(strøm, { destroyed: false, socket: { destroyed: false } as never })).toBe(false);
+    expect(isClientAbort(strøm)).toBe(false);
     expect(isClientAbort(new Error("request aborted"))).toBe(true);
     expect(isClientAbort(Object.assign(new Error("socket hang up"), { code: "ECONNABORTED" }))).toBe(true);
     expect(isClientAbort(new Error("stream is not readable, said nobody"))).toBe(false);

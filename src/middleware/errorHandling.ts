@@ -17,16 +17,26 @@ interface HttpLikeError {
   message?: unknown;
 }
 
-const ABORTED_TYPES = new Set(["request.aborted", "stream.not.readable"]);
-const ABORTED_MESSAGES = new Set(["request aborted", "stream is not readable", "aborted"]);
+/** Er klienten borte? Node setter `destroyed` på forespørselen når socketen er lukket. */
+function requestIsGone(request: Pick<express.Request, "destroyed" | "socket"> | undefined): boolean {
+  if (!request) return false;
+  return request.destroyed === true || request.socket?.destroyed === true;
+}
 
-/** Klienten gikk sin vei før innholdet var lest. */
-export function isClientAbort(error: unknown): boolean {
+/**
+ * Klienten gikk sin vei før innholdet var lest.
+ *
+ * «stream is not readable» betyr også «noe annet har alt lest innholdet» — en feil i vår egen kode
+ * (QA-porten, 2.84.1). Den regnes derfor som avbrudd bare når klienten faktisk er borte; ellers er
+ * den en tjenerfeil som skal varsles.
+ */
+export function isClientAbort(error: unknown, request?: Pick<express.Request, "destroyed" | "socket">): boolean {
   if (!error || typeof error !== "object") return false;
   const e = error as HttpLikeError;
-  if (typeof e.type === "string" && ABORTED_TYPES.has(e.type)) return true;
-  if (typeof e.message === "string" && ABORTED_MESSAGES.has(e.message)) return true;
-  return (error as { code?: unknown }).code === "ECONNABORTED";
+  if (e.type === "request.aborted" || e.message === "request aborted") return true;
+  if ((error as { code?: unknown }).code === "ECONNABORTED") return true;
+  if (e.type === "stream.not.readable" || e.message === "stream is not readable") return requestIsGone(request);
+  return false;
 }
 
 /** En klientfeil fra body-parseren: ugyldig JSON, for stort innhold, feil tegnsett. */
@@ -35,8 +45,9 @@ function clientBodyStatus(error: unknown): number | null {
   const e = error as HttpLikeError;
   const status = typeof e.status === "number" ? e.status : typeof e.statusCode === "number" ? e.statusCode : null;
   if (status === null || status < 400 || status >= 500) return null;
-  // Bare feil som sier selv at de kan vises (http-errors setter `expose` for 4xx). En vilkårlig
-  // feil med et status-felt er fortsatt en tjenerfeil.
+  // Bare feil som sier selv at de kan vises (http-errors setter `expose` for all 4xx — også `send`
+  // sitt 416 ved et umulig Range-hode går hit) eller som har en `type`. En vilkårlig feil med et
+  // status-felt er fortsatt en tjenerfeil.
   return e.expose === true || typeof e.type === "string" ? status : null;
 }
 
@@ -62,7 +73,7 @@ export function errorHandlingMiddleware(
 
   const correlationId = request.context?.correlationId ?? null;
 
-  if (isClientAbort(error)) {
+  if (isClientAbort(error, request)) {
     logOperationalEvent(
       operationalEvents.http.requestAborted,
       { correlationId, method: request.method, path: request.path, reason: error instanceof Error ? error.message : String(error) },
