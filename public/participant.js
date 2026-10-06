@@ -4135,11 +4135,16 @@ function reopenInlineAfterRender(courseId, container) {
     // The item disappeared (e.g. module became unavailable) — release the workspace safely.
     if (inlineOpen.type === "MODULE") restoreModuleWorkspaceHome();
     inlineOpen = null;
+    // Lesemodus (#1079): uten et åpent steg ville klassen skjult hele kurset.
+    container.closest(".course-accordion-item")?.classList.remove("course-reading");
     return;
   }
   const panel = itemWrap.querySelector(".course-inline-panel");
   const row = itemWrap.querySelector(".course-module-row");
   itemWrap.classList.add("open");
+  // Lesemodus (#1079): kurskortet er tegnet på nytt uten klassen (språkbytte, kurslista hentet på
+  // nytt etter «gå videre»). QA-porten så seksjonen stå åpen med alle stegene synlige rundt seg.
+  itemWrap.closest(".course-accordion-item")?.classList.toggle("course-reading", inlineOpen.type === "SECTION");
   setHidden(panel, false);
   row?.setAttribute("aria-expanded", "true");
   if (row) row.disabled = false;

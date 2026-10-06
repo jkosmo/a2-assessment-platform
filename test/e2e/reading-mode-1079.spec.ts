@@ -162,6 +162,38 @@ test.describe("lesemodus — kurset viker når en seksjon leses (#1079)", () => 
     expect(await page.locator(".course-reading").count(), "lesemodus-klassen er borte").toBe(0);
   });
 
+  // QA-porten (2.85.0): klassen ble bare satt ved åpning. Tegnes kurset på nytt mens seksjonen er
+  // åpen, sto seksjonen igjen med alle stegene synlige rundt seg.
+  test("språkbytte mens seksjonen er åpen: lesemodus står", async ({ page }) => {
+    await åpneKurset(page, 1280);
+    await åpneSeksjonen(page);
+    await page.locator("#localeSelect").selectOption("en-GB");
+    await expect(page.locator("#sectionReaderBody .content-cards")).toBeVisible();
+    await expect(page.locator(".course-reading-position")).toHaveText("Step 1 of 3");
+    const m = await hvaSomVises(page);
+    expect(m.kurshode, "kurskortets hode er fortsatt borte").toBe(0);
+    expect(m.andreSteg, "de andre stegene er fortsatt borte").toBe(0);
+    expect(m.arkSkygge).toBe(true);
+  });
+
+  test("«gå videre» når kurslista svarer sent: neste seksjon åpner i lesemodus", async ({ page }) => {
+    await åpneKurset(page, 1280);
+    // Kurslista svarer ETTER kurset, slik den ofte gjør på stage.
+    await page.route("**/api/courses", async (route: Route) => {
+      await new Promise((r) => setTimeout(r, 400));
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ courses: [{ id: "c1", title: "Rapportskriving med generativ KI", description: null, moduleCount: 1, progress: { completed: 1, total: 3, courseStatus: "IN_PROGRESS" }, publishedAt: "2026-01-01T00:00:00.000Z" }] }) });
+    });
+    await page.route("**/api/courses/c1/sections/s1/read", (route: Route) => route.fulfill({ status: 204, body: "" }));
+    await åpneSeksjonen(page);
+    await page.locator("#sectionReaderMarkRead").click();
+    await expect(page.locator(".course-reading-position")).toHaveText("Steg 2 av 3");
+    await page.waitForTimeout(700); // la kurslista komme sist
+    const m = await hvaSomVises(page);
+    expect(m.posisjon).toBe("Steg 2 av 3");
+    expect(m.kurshode, "kurskortets hode er borte også etter at kurslista kom").toBe(0);
+    expect(m.andreSteg).toBe(0);
+  });
+
   for (const bredde of [390, 360]) {
     test(`${bredde} px: én spalte uten velger, hodet med «Lukk», og ingenting går ut av skjermen`, async ({ page }) => {
       await åpneKurset(page, bredde);
