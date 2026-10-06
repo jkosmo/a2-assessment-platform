@@ -48,6 +48,17 @@ describe("uthevet boks — et sitat som åpner med fet merkelapp (#1079)", () =>
     expect(ut).not.toContain("content-callout");
   });
 
+  // QA-porten (2.84.0): rendereren tegnet sitatet og svarte så «ikke mitt», og marked tegnet det en
+  // gang til — for hvert nivå i et nøstet sitat. 22 nivåer tok sekunder; 30 ville tatt minutter.
+  it("et dypt nøstet sitat tegnes én gang per nivå, ikke dobbelt", () => {
+    const dypt = `${">".repeat(26)} innerst`;
+    const start = performance.now();
+    const ut = html(dypt);
+    expect(performance.now() - start).toBeLessThan(500);
+    expect(ut.match(/<blockquote>/g)).toHaveLength(26);
+    expect(ut).toContain("innerst");
+  });
+
   it("bare den første fete teksten er merkelappen", () => {
     const ut = html("> **Husk:** bruk **alltid** kildene.");
     expect(ut.match(/content-callout-label/g)).toHaveLength(1);
@@ -104,20 +115,27 @@ describe("tabell — hver celle bærer navnet på kolonnen sin (#1079)", () => {
     expect(ut).toContain('<table class="content-table">');
     expect(ut).toContain("<th>Del</th>");
     expect(ut).toContain("<strong>KI</strong> gjør</th>");
-    expect(ut).toContain('<td data-label="Del">Vedtak</td>');
-    expect(ut).toMatch(/<td[^>]* data-label="Hva KI gjør"[^>]*>Skriver <em>utkast<\/em><\/td>/);
+    expect(ut).toContain('<td data-label="Del"><span>Vedtak</span></td>');
+    expect(ut).toMatch(/<td[^>]* data-label="Hva KI gjør"[^>]*><span>Skriver <em>utkast<\/em><\/span><\/td>/);
     expect(ut.match(/<tr>/g)).toHaveLength(3);
   });
 
   it("justeringen forfatteren har satt, er med", () => {
     expect(html(tabell)).toMatch(/<th align="center">Hva/);
-    expect(html(tabell)).toMatch(/<td align="center" data-label="Hva KI gjør">Lister opp<\/td>/);
+    expect(html(tabell)).toMatch(/<td align="center" data-label="Hva KI gjør"><span>Lister opp<\/span><\/td>/);
   });
 
   it("et kolonnenavn med anførselstegn eller tegn som < kan ikke bryte seg ut av attributtet", () => {
     const ut = html('| A "x" <b>y</b> & z | B |\n|---|---|\n| 1 | 2 |');
     expect(ut).toContain('data-label="A &quot;x&quot; y &amp; z"');
     expect(ut).not.toContain('data-label="A "x"');
+  });
+
+  // QA-porten (2.84.0): cellen er flex på telefon, så hvert ord og hver fete bit i cellen ble sitt eget
+  // element — «ut k a st». Innholdet står derfor samlet i én span.
+  it("innholdet i hver celle står samlet i ett element", () => {
+    const ut = html(["| A |", "|---|", "| Skriv **et** godt *utkast* med [lenke](https://a.no) |"].join("\n"));
+    expect(ut).toMatch(/<td data-label="A"><span>Skriv <strong>et<\/strong> godt <em>utkast<\/em> med <a [^>]*>lenke<\/a><\/span><\/td>/);
   });
 
   it("en tabell uten rader er fortsatt en tabell", () => {

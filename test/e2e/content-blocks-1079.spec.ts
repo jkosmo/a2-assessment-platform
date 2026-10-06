@@ -51,7 +51,7 @@ const MARKDOWN = [
   "",
   "| Kapittel | Innhold | KI hjelper med |",
   "|---|---|---|",
-  "| Sammendrag | Hovedfunn og anbefalinger | Førsteutkast fra ferdig rapport |",
+  "| Sammendrag | Hovedfunn og **anbefalinger** til ledelsen | Førsteutkast fra ferdig rapport |",
   "| Metode | Hvordan dataene er samlet inn | Struktur og språk |",
 ].join("\n");
 
@@ -157,6 +157,24 @@ test.describe("innholdsblokker i leseren (#1079)", () => {
       const merker = await page.locator("#sectionReaderBody .content-table td").evaluateAll((els) => els.map((el) => getComputedStyle(el, "::before").content));
       expect(merker).toEqual(['"Kapittel"', '"Innhold"', '"KI hjelper med"', '"Kapittel"', '"Innhold"', '"KI hjelper med"']);
       expect(await page.locator("#sectionReaderBody .content-table thead").evaluate((el) => getComputedStyle(el).display)).toBe("none");
+      // QA-porten: cellen er flex på telefon, og uten ett element rundt innholdet ble hvert ord og
+      // hver fete bit sitt eget flex-element — «ut k a st». Innholdet står på sammenhengende linjer.
+      const celle = page.locator("#sectionReaderBody .content-table td", { hasText: "anbefalinger" });
+      const biter = await celle.evaluate((td) => {
+        const r = document.createRange();
+        const linjer = new Set<number>();
+        const walker = document.createTreeWalker(td, NodeFilter.SHOW_TEXT);
+        for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+          r.selectNodeContents(node);
+          for (const rect of r.getClientRects()) if (rect.width > 0) linjer.add(Math.round(rect.top));
+        }
+        // childNodes, ikke children: tekstbitene mellom de fete ordene er også flex-elementer.
+        return { linjer: linjer.size, barn: td.childNodes.length, tekst: td.textContent?.trim() };
+      });
+      expect(biter.barn, "ett flex-element i cellen: alt innholdet samlet").toBe(1);
+      // Fem ord i en halv spalte brekker til to–fire linjer; med feilen ble hvert ord (og hver bokstav i et
+      // langt ord) sin egen linje — fem eller flere.
+      expect(biter.linjer, `innholdet «${biter.tekst}» står på færre linjer enn det har ord`).toBeLessThan(5);
 
       // Prompten brekker; den ruller ikke sidelengs.
       const prompt = page.locator("#sectionReaderBody .content-prompt-text");

@@ -109,14 +109,17 @@ function createSectionMarked(locale?: string): Marked {
       blockquote(token: Tokens.Blockquote) {
         const body = this.parser.parse(token.tokens);
         const label = /^<p><strong>([^<]{1,60})<\/strong>/.exec(body);
-        if (!label) return false;
+        // Ikke `return false` her: da tegner marked sitatet en gang til, og i et nøstet sitat dobles
+        // arbeidet for hvert nivå (QA-porten målte 30 nivåer til minutter). Dette er markeds eget resultat.
+        if (!label) return `<blockquote>\n${body}</blockquote>\n`;
         const name = textOf(label[1]!).replace(/[:.!\s]+$/, "").toLowerCase();
         const classes = WARNING_LABELS.has(name) ? "content-callout content-callout--warning" : "content-callout";
         return `<blockquote class="${classes}">${body.replace("<p><strong>", '<p><strong class="content-callout-label">')}</blockquote>\n`;
       },
 
       // Hver celle bærer navnet på kolonnen sin. På telefon står cellene under hverandre
-      // (shared.css), og uten navnet vet ikke leseren hva som er hva.
+      // (shared.css), og uten navnet vet ikke leseren hva som er hva. Innholdet står i én <span>:
+      // cellen er flex på telefon, og uten den blir hvert ord og hver fet bit sitt eget element.
       table(token: Tokens.Table) {
         const align = (value: string | null) => (value ? ` align="${value}"` : "");
         const headers = token.header.map((cell) => this.parser.parseInline(cell.tokens));
@@ -125,7 +128,7 @@ function createSectionMarked(locale?: string): Marked {
           .map(
             (row) =>
               `<tr>${row
-                .map((cell, i) => `<td${align(cell.align)} data-label="${escapeHtml(textOf(headers[i] ?? ""))}">${this.parser.parseInline(cell.tokens)}</td>`)
+                .map((cell, i) => `<td${align(cell.align)} data-label="${escapeHtml(textOf(headers[i] ?? ""))}"><span>${this.parser.parseInline(cell.tokens)}</span></td>`)
                 .join("")}</tr>`,
           )
           .join("\n");
