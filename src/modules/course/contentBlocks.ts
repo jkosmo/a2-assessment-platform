@@ -32,7 +32,8 @@ const escapeHtml = (text: string) =>
 /** Et bilde først i en kortoverskrift, eller i en tabellcelle i en kolonne uten navn, er et ikon: fast
  *  størrelse (shared.css), ikke et bilde over hele bredden. I tabellen ble ikonet ellers klemt til 8 px i
  *  en smal spalte (stage, 2.85.0). Et bilde i en navngitt kolonne er et bilde (skjermbilde, foto) og
- *  beholder størrelsen sin — QA-porten målte 480 × 270 som ble 24 × 24. */
+ *  beholder størrelsen sin — QA-porten målte 480 × 270 som ble 24 × 24. En tabell der ingen kolonne har
+ *  navn, er den vanlige måten å sette bilder ved siden av hverandre på, ikke en stegtabell. */
 function markLeadingIcon(html: string): string {
   return html.replace(/^\s*<img /, '<img class="content-icon" ');
 }
@@ -132,6 +133,7 @@ function createSectionMarked(locale?: string): Marked {
         const align = (value: string | null) => (value ? ` align="${value}"` : "");
         const headers = token.header.map((cell) => this.parser.parseInline(cell.tokens));
         const head = token.header.map((cell, i) => `<th${align(cell.align)}>${headers[i]}</th>`).join("");
+        const hasNamedColumn = headers.some((header) => textOf(header) !== "");
         const rows = token.rows
           .map(
             (row) =>
@@ -139,7 +141,7 @@ function createSectionMarked(locale?: string): Marked {
                 .map((cell, i) => {
                   const label = textOf(headers[i] ?? "");
                   const inner = this.parser.parseInline(cell.tokens);
-                  return `<td${align(cell.align)} data-label="${escapeHtml(label)}"><span>${label ? inner : markLeadingIcon(inner)}</span></td>`;
+                  return `<td${align(cell.align)} data-label="${escapeHtml(label)}"><span>${!label && hasNamedColumn ? markLeadingIcon(inner) : inner}</span></td>`;
                 })
                 .join("")}</tr>`,
           )

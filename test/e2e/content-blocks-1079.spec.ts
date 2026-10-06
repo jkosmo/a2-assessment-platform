@@ -181,6 +181,19 @@ test.describe("innholdsblokker i leseren (#1079)", () => {
     const h2 = await page.locator("#sectionReaderBody h2").first().evaluate((el) => parseFloat(getComputedStyle(el).fontSize));
     expect(tittel, `tittelen (${tittel} px) er større enn innholdets h2 (${h2} px)`).toBeGreaterThan(h2);
     await expect(page.locator(".course-reading-title"), "på PC står tittelen bare i hodet").toBeHidden();
+    expect(await page.evaluate(() => document.activeElement?.className ?? ""), "fokus står på tittelen i hodet").toContain("course-inline-panel-title");
+    expect(await utenfor(page)).toEqual([]);
+  });
+
+  // QA-porten (runde 2): rettingen for det høye hodet gjaldt bare telefon; på nettbrett (601–900 px) ble
+  // hodet 131–214 px med en lang tittel. Grensen er 900 px.
+  test("nettbrett (768 px): hodet er lavt, tittelen står på arket og har fokus", async ({ page }) => {
+    await åpneLeseren(page, 768);
+    const hode = (await page.locator(".course-inline-panel-sticky").boundingBox())!;
+    expect(hode.height, `hodet er lavt (${Math.round(hode.height)} px)`).toBeLessThanOrEqual(56);
+    await expect(page.locator(".course-inline-panel-title")).toBeHidden();
+    await expect(page.locator(".course-reading-title")).toBeVisible();
+    expect(await page.evaluate(() => document.activeElement?.className ?? ""), "fokus står på tittelen på arket").toContain("course-reading-title");
     expect(await utenfor(page)).toEqual([]);
   });
 
@@ -208,6 +221,11 @@ test.describe("innholdsblokker i leseren (#1079)", () => {
       const arkTittel = page.locator(".course-reading-title");
       await expect(arkTittel).toBeVisible();
       await expect(arkTittel).toHaveText("Arbeidsformer");
+      // QA-porten (runde 2): tittelen var borte for skjermlesere (skjult i hodet, aria-hidden på arket), og
+      // fokus havnet på <body>. Nå er tittelen på arket en overskrift og den som får fokus.
+      await expect(arkTittel).not.toHaveAttribute("aria-hidden", "true");
+      expect(await arkTittel.evaluate((el) => el.tagName.toLowerCase())).toBe("h2");
+      expect(await page.evaluate(() => document.activeElement?.className ?? ""), "fokus står på tittelen på arket").toContain("course-reading-title");
       const arkTittelPx = await arkTittel.evaluate((el) => parseFloat(getComputedStyle(el).fontSize));
       const h2Px = await page.locator("#sectionReaderBody h2").first().evaluate((el) => parseFloat(getComputedStyle(el).fontSize));
       expect(arkTittelPx, `tittelen (${arkTittelPx} px) er større enn h2 (${h2Px} px)`).toBeGreaterThan(h2Px);

@@ -400,9 +400,16 @@
       /* Tittelen er seksjonens egen og står over innholdets overskrifter (h2 er 20 px). Produkteier på
          stage 2026-10-06: «unaturlig at tittel er mindre enn overskriftene i innhold». På PC står den i
          hodet og brekker i stedet for å kuttes. På telefon ville den gjort det faste hodet 85–190 px
-         høyt (QA-porten); der er hodet én lav linje («Leser», «Lukk»), og tittelen står øverst på arket. */
+         høyt (QA-porten); der er hodet én lav linje («Leser», «Lukk»), og tittelen står øverst på arket.
+         Grensen er 900 px: på nettbrett (601–900 px) ble hodet 131–214 px med en lang tittel (QA-porten,
+         runde 2). Tittelen på arket er en ekte overskrift og den som får fokus når den vises. */
       .course-reading .course-inline-panel-title { font-size: 22px; font-weight: 600; line-height: 1.25; white-space: normal; overflow: visible; text-overflow: clip; flex: 0 1 auto; min-width: 0; }
       .course-reading-title { display: none; }
+      @media (max-width: 900px) {
+        .course-reading .course-inline-panel-title { display: none; }
+        .course-reading .course-reading-title { display: block; margin: 0 0 10px; padding: 0 2px; font-size: 22px; font-weight: 600; line-height: 1.25; color: var(--color-text); overflow-wrap: anywhere; }
+        .course-reading .course-reading-title:focus-visible { outline: 3px solid var(--color-focus); outline-offset: 2px; }
+      }
       .course-reading-position { font-size: 13px; color: var(--color-meta); white-space: nowrap; }
       .course-reading-width { display: none; }
       .course-reading .course-reading-width { display: inline-flex; margin-left: auto; border: 1px solid var(--color-border-soft); border-radius: var(--radius-button); overflow: hidden; flex-shrink: 0; }
@@ -426,8 +433,6 @@
         .course-reading .course-reading-width { display: none; }
         .course-reading .course-inline-panel-close { margin-left: auto; }
         .course-reading .course-reading-position { display: none; }
-        .course-reading .course-inline-panel-title { display: none; }
-        .course-reading .course-reading-title { display: block; margin: 0 0 10px; padding: 0 2px; font-size: 22px; font-weight: 600; line-height: 1.25; color: var(--color-text); overflow-wrap: anywhere; }
         .course-reading .course-inline-panel-body { padding-top: 10px; }
         .course-reading .course-inline-panel-body .section-reader-body { padding: 18px 14px 22px; font-size: 15px; }
       }

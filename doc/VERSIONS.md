@@ -15,17 +15,22 @@ Produkteier på stage med 2.85.0, samme kveld:
   `object-fit: contain`). Et bilde i en navngitt kolonne, eller inne i teksten i en celle, er fortsatt
   et bilde og beholder størrelsen sin (QA-porten: et skjermbilde på 480 × 270 ble 24 × 24 i første
   utkast). På telefon står ikke lenger en tom linje over ikonet.
-- **Tittelen i hodet var mindre enn overskriftene i innholdet** (13 px mot h2 på 20 px). På PC er den
-  22 px i hodet og brekker i stedet for å kuttes. På telefon ville det gjort det faste hodet 85–190 px
-  høyt (QA-porten); der er hodet én lav linje («Leser», «Lukk»), og tittelen står øverst på arket i
-  22 px (`.course-reading-title`, skjult på PC).
+- **Tittelen i hodet var mindre enn overskriftene i innholdet** (13 px mot h2 på 20 px). På PC (over
+  900 px) er den 22 px i hodet og brekker i stedet for å kuttes. På telefon og nettbrett ville det gjort
+  det faste hodet 85–214 px høyt (QA-porten, to runder); der er hodet én lav linje, og tittelen står
+  øverst på arket som en ekte overskrift i 22 px (`.course-reading-title`, skjult på PC). Fokus ved
+  åpning går til den tittelen som vises — i runde to havnet det på `<body>` på smal skjerm, og
+  tittelen var borte for skjermlesere.
+- En tabell der ingen kolonne har navn (den vanlige måten å sette bilder ved siden av hverandre på)
+  er ikke en stegtabell: bildene forblir bilder (QA-portens forbehold).
 - Stage-testen `release-2-81-layouts` antok at kurset vises etter «gå videre»; i lesemodus står neste
   seksjon alene. Testen lukker leseren før det leste steget måles.
 
 **Slik er det målt:** `test/unit/section-content-blocks-1079.test.ts` (ikon først i cellen uten
 kolonnenavn; bilde i navngitt kolonne og bilde i teksten er ikke ikon), `test/e2e/content-blocks-1079.spec.ts`
-(PC med «Smal»: 24 px, skjermbilde i navngitt kolonne > 200 px, tittel > h2; 390/360 px: 24 px, ingen tom
-linje, hodet ≤ 56 px, tittelen på arket > h2).
+(PC med «Smal»: 24 px, skjermbilde i navngitt kolonne > 200 px, tittel > h2, fokus i hodet; 768 px og
+390/360 px: hodet ≤ 56 px, tittelen på arket synlig, `h2` uten `aria-hidden`, fokus på den; 390/360 px
+også 24 px og ingen tom linje).
 
 ## 2.85.0 - 2026-10-06
 

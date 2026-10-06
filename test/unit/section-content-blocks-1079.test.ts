@@ -153,6 +153,14 @@ describe("tabell — hver celle bærer navnet på kolonnen sin (#1079)", () => {
     expect(ut).not.toContain("content-icon");
   });
 
+  // QA-porten (runde 2): en tabell der ingen kolonne har navn, er den vanlige måten å sette bilder ved
+  // siden av hverandre på — ikke en stegtabell. Bildene forblir bilder.
+  it("en tabell uten noen navngitt kolonne gjør ikke bildene til ikoner", () => {
+    const ut = html("| | |\n|---|---|\n| ![](asset:a) | ![](asset:b) |");
+    expect(ut).toContain('<td data-label=""><span><img src=');
+    expect(ut).not.toContain("content-icon");
+  });
+
   it("et bilde inne i teksten i en celle er et bilde, ikke et ikon", () => {
     const ut = html("| A |\n|---|\n| Se ![](asset:b) her |");
     expect(ut).toContain("<span>Se <img ");

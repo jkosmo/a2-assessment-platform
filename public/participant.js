@@ -4029,7 +4029,10 @@ function mountModuleWorkspaceInto(panelBodyEl) {
 }
 
 function focusInlinePanel(panel) {
-  const heading = panel?.querySelector(".course-inline-panel-title");
+  // Lesemodus på smal skjerm (2.85.1): tittelen i hodet er skjult, og tittelen på arket er den som
+  // vises. Fokus går til den som vises — ellers havnet det på <body> (QA-porten målte 600 px og ned).
+  const candidates = [panel?.querySelector(".course-inline-panel-title"), panel?.querySelector(".course-reading-title")].filter(Boolean);
+  const heading = candidates.find((el) => getComputedStyle(el).display !== "none") || candidates[0];
   if (!heading) return;
   heading.setAttribute("tabindex", "-1");
   try { heading.focus({ preventScroll: true }); } catch { heading.focus(); }
@@ -4242,7 +4245,7 @@ async function renderSectionReaderInto(panel, courseId, entry) {
       <button type="button" class="btn-secondary course-inline-panel-close" data-role="close">${escapeHtmlP(t("courses.section.close"))}</button>
     </div>
     <div class="course-inline-panel-body">
-      <div class="course-reading-title" aria-hidden="true">${escapeHtmlP(localizePreviewText(entry.title) || "")}</div>
+      <h2 class="course-reading-title">${escapeHtmlP(localizePreviewText(entry.title) || "")}</h2>
       <div id="sectionReaderBody" class="section-reader-body">${escapeHtmlP(t("courses.section.loading"))}</div>
       <div class="course-inline-actions">${actionsMarkup}</div>
     </div>`;

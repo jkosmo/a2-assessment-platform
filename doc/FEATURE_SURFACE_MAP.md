@@ -222,7 +222,8 @@ Four blocks are ordinary markdown read a second way while `marked` renders it �
 their own: `> **Husk:** …` (highlighted box; the labels Viktig/NB/Advarsel/Important/Warning give
 the warning colour), a fenced block marked `prompt` (prompt box with a copy button), `:::kort` …
 `:::` around `###` headings (cards; `:::cards` works too), and an image first in a card heading or
-in a table cell whose column has no name (icon, 24 px; an image in a named column stays a picture). Tables get `data-label` on every cell so the phone stacking rule in `shared.css` shows the
+in a table cell whose column has no name while another column has one (icon, 24 px; an image in a
+named column, or in a table with no named column at all, stays a picture). Tables get `data-label` on every cell so the phone stacking rule in `shared.css` shows the
 column name.
 
 | Surface | Where |
