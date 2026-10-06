@@ -17,8 +17,23 @@ valg og står i `doc/DECISIONS.md`. Versjonen hopper over 2.83.0, som er det omb
 egen gren (`skill-ombygging-1079`): to grener, to versjonsnumre, så importfiler fra skillet kan
 kjennes igjen på `toolVersion`. Når begge er flettet, blir det 2.85.0 med begge deler.
 
-**Status:** QA-port og stage står nederst i denne overleveringen. Skillet på denne grenen er det
-gamle (2.82.2-innholdet) med nytt versjonsnummer; zip-fila herfra skal ikke installeres.
+**QA-porten ga GO i tredje runde** (`.ai-qa/qa-20261006-064930.md`). Rundene før fant tre ting,
+alle rettet og hver med sin test og sin mutasjon:
+
+1. Et vanlig sitat ble tegnet dobbelt for hvert nivå i et nøstet sitat (rendereren svarte «ikke
+   mitt» etter å ha tegnet det). 22 nivåer tok sekunder; 30 ville tatt minutter på prod-instansen.
+2. Tabellceller på telefon delte innholdet i ord («ut k a st»): cellen er flex, og hvert ord og
+   hver fete bit ble sitt eget element. Innholdet står nå i én span. Feilen fantes fra før.
+3. Et langt kolonnenavn skjøv verdien ut av skjermen på telefon. Navnet står nå over verdien.
+
+**Til den manuelle testen på stage** (fra QA-portens plan): «Kopier» i seksjonsredigeringens
+forhåndsvisning og i modularbeidsflaten (e2e dekker bare deltakerleseren); oppgavetekst hos
+deltakeren; utklippstavla på en ekte telefon over HTTPS; **eksisterende seksjoner med sitater som
+åpner med fet skrift** — de blir nå bokser med lyspære, og det er med vilje, men bør ses; ikon fra
+et ekte opplastet bilde i et kort.
+
+Skillet på denne grenen er det gamle (2.82.2-innholdet) med nytt versjonsnummer; zip-fila herfra
+skal ikke installeres.
 
 **Ikoner: et fast bibliotek i plattformen (produkteiers spørsmål 2026-10-06, morgen).** Skillets
 regel «bare presentasjonens egne ikoner, aldri tegn eller hent» er optimalisert for
