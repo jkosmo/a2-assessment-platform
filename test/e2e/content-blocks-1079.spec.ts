@@ -60,9 +60,15 @@ const MARKDOWN = [
   "|---|---|---|",
   "| ![](asset:ikon-c) | **Forstå oppdraget** | Avklar mandat, målgruppe og krav til leveransen. |",
   "| ![](asset:ikon-d) | **Klargjør kilder** | Samle dokumenter, intervjuer, data og notater. |",
+  "",
+  "| Verktøy | Slik ser det ut |",
+  "|---|---|",
+  "| Lerret | ![](asset:bilde-stor) |",
 ].join("\n");
 
 const IKON = '<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 96 96" fill="none" stroke="#33312b" stroke-width="6"><path d="M24 28h48M24 48h48M24 68h30"/></svg>';
+/** Et skjermbilde i en navngitt kolonne: 480 × 270, skal beholde størrelsen sin (QA-porten, 2.85.1). */
+const SKJERMBILDE = '<svg xmlns="http://www.w3.org/2000/svg" width="480" height="270" viewBox="0 0 480 270"><rect width="480" height="270" fill="#d8d2c4"/></svg>';
 
 async function åpneLeseren(page: Page, bredde: number) {
   await page.setViewportSize({ width: bredde, height: 900 });
@@ -87,6 +93,8 @@ async function åpneLeseren(page: Page, bredde: number) {
   // Plattformens egen gjengivelse av teksten, slik tjeneren ville svart.
   await page.route("**/api/courses/c1/sections/*", (route: Route) => route.fulfill(json({ title: "Arbeidsformer", html: renderSectionMarkdown(MARKDOWN, "nb") })));
   await page.route("**/api/content-assets/**", (route: Route) => route.fulfill({ status: 200, contentType: "image/svg+xml", body: IKON }));
+  // Registrert etter den generelle: Playwright prøver den sist registrerte ruta først.
+  await page.route("**/api/content-assets/bilde-stor*", (route: Route) => route.fulfill({ status: 200, contentType: "image/svg+xml", body: SKJERMBILDE }));
   await page.addInitScript(() => { try { localStorage.setItem("participant.locale", "nb"); } catch { /* ignore */ } });
   await page.goto("/participant");
   await page.locator(".course-accordion-header").click();
@@ -165,9 +173,14 @@ test.describe("innholdsblokker i leseren (#1079)", () => {
       expect(Math.round(boks.width), "ikonet er 24 px bredt").toBe(24);
       expect(Math.round(boks.height), "ikonet er 24 px høyt").toBe(24);
     }
+    // QA-porten: et skjermbilde i en navngitt kolonne er et bilde, ikke et ikon, og beholder størrelsen.
+    const skjermbilde = page.locator("#sectionReaderBody .content-table img:not(.content-icon)");
+    await expect(skjermbilde).toHaveCount(1);
+    expect((await skjermbilde.boundingBox())!.width, "skjermbildet er ikke krympet til ikon").toBeGreaterThan(200);
     const tittel = await page.locator(".course-inline-panel-title").evaluate((el) => parseFloat(getComputedStyle(el).fontSize));
     const h2 = await page.locator("#sectionReaderBody h2").first().evaluate((el) => parseFloat(getComputedStyle(el).fontSize));
     expect(tittel, `tittelen (${tittel} px) er større enn innholdets h2 (${h2} px)`).toBeGreaterThan(h2);
+    await expect(page.locator(".course-reading-title"), "på PC står tittelen bare i hodet").toBeHidden();
     expect(await utenfor(page)).toEqual([]);
   });
 
@@ -187,6 +200,17 @@ test.describe("innholdsblokker i leseren (#1079)", () => {
       const ikonCelle = page.locator("#sectionReaderBody .content-table td img.content-icon").first();
       expect(Math.round((await ikonCelle.boundingBox())!.width)).toBe(24);
       expect(await ikonCelle.locator("xpath=ancestor::td[1]").evaluate((el) => getComputedStyle(el, "::before").display)).toBe("none");
+      // QA-porten (2.85.1): tittelen i det faste hodet gjorde hodet 85–190 px høyt på telefon. Der står
+      // den øverst på arket i stedet, større enn innholdets h2, og hodet er én lav linje.
+      const hode = (await page.locator(".course-inline-panel-sticky").boundingBox())!;
+      expect(hode.height, `hodet er lavt (${Math.round(hode.height)} px)`).toBeLessThanOrEqual(56);
+      await expect(page.locator(".course-inline-panel-title")).toBeHidden();
+      const arkTittel = page.locator(".course-reading-title");
+      await expect(arkTittel).toBeVisible();
+      await expect(arkTittel).toHaveText("Arbeidsformer");
+      const arkTittelPx = await arkTittel.evaluate((el) => parseFloat(getComputedStyle(el).fontSize));
+      const h2Px = await page.locator("#sectionReaderBody h2").first().evaluate((el) => parseFloat(getComputedStyle(el).fontSize));
+      expect(arkTittelPx, `tittelen (${arkTittelPx} px) er større enn h2 (${h2Px} px)`).toBeGreaterThan(h2Px);
       // QA-porten: et langt kolonnenavn skjøv verdien ut av skjermen. Verdien skal være synlig innenfor leseren.
       const verdi = page.locator("#sectionReaderBody .content-table td", { hasText: "Førsteutkast" }).locator("span");
       const leser = (await page.locator("#sectionReaderBody").boundingBox())!;

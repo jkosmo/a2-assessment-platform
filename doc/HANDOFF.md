@@ -7,7 +7,7 @@
 
 ## Kort: det som må avgjøres
 
-**Prod står på 2.78.3. Stage står på 2.85.0 (lesemodus, rullet 2026-10-06 kl. 21:31 fra `17743d55`; `/version` og helsesjekk bekreftet). `dev` = stage. Ingenting av 2.79–2.85 er i prod.**
+**Prod står på 2.85.0 (rullet 2026-10-06 kl. 22:09 fra `17743d55`, godkjent av produkteier; `/version` og helsesjekk bekreftet — hele spennet 2.79–2.85 er nå i prod). Stage står på 2.85.0 (rullet kl. 21:31 fra samme commit). `dev` = stage.**
 
 ### Lesemodus er bygget (2026-10-06 kveld, 2.85.0, grenen `lesemodus-1079`)
 
@@ -65,7 +65,7 @@ ikoner. Bygges etter milepæl 1.
 
 | Miljø | Versjon | |
 |---|---|---|
-| prod | 2.78.3 | rullet 2026-10-04 kl. 20:13 fra `2433d2b7`, godkjent av produkteier. #1080, #1081, #1083 |
+| prod | 2.85.0 | rullet 2026-10-06 kl. 22:09 fra `17743d55` (run 37521860878), godkjent av produkteier; `/version` og helsesjekk bekreftet. Før det 2.78.3: rullet 2026-10-04 kl. 20:13 fra `2433d2b7`. #1080, #1081, #1083 |
 | stage | 2.85.0 | rullet 2026-10-06 kl. 21:31 fra `17743d55` (QA-porten GO i andre runde, `.ai-qa/qa-20261006-211010.md`); `/version` og helsesjekk bekreftet. Før det 2.84.1: rullet 2026-10-06 kl. 09:37 fra `82815746` (QA-porten GO, `.ai-qa/qa-20261006-091043.md`). Før det 2.84.0: rullet 2026-10-06 kl. 07:12 fra `ad3f0192`, QA-porten GO i tredje runde (`.ai-qa/qa-20261006-064930.md`); `/version` og helsesjekk bekreftet. Før det 2.82.2: rullet 2026-10-05 kl. 18:49 fra `96632019`, commiten QA-porten ga GO på i tredje runde (`.ai-qa/qa-20261005-182600.md`); `/version` og helsesjekk bekreftet. Stage-testen kjørt 18:50–18:53: 38 av 38 besto |
 | `main` (git) | 2.78.3 | likt med prod (PR #1086 flettet 2026-10-04) |
 | `dev` (git) | 2.85.0 | lesemodus (2.85.0), innholdsblokkene og feilklassifiseringen (2.84.x), sju rettinger (2.82.0), to oppfølgere etter QA (2.82.1), og kurset på telefon (2.82.2), se under |

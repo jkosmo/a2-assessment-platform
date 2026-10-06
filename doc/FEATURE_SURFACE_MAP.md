@@ -221,8 +221,8 @@ or `showToast` (textContent); see `public/admin-platform.js` / `public/profile.j
 Four blocks are ordinary markdown read a second way while `marked` renders it — never a format of
 their own: `> **Husk:** …` (highlighted box; the labels Viktig/NB/Advarsel/Important/Warning give
 the warning colour), a fenced block marked `prompt` (prompt box with a copy button), `:::kort` …
-`:::` around `###` headings (cards; `:::cards` works too), and an image first in a card heading
-(icon). Tables get `data-label` on every cell so the phone stacking rule in `shared.css` shows the
+`:::` around `###` headings (cards; `:::cards` works too), and an image first in a card heading or
+in a table cell whose column has no name (icon, 24 px; an image in a named column stays a picture). Tables get `data-label` on every cell so the phone stacking rule in `shared.css` shows the
 column name.
 
 | Surface | Where |

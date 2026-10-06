@@ -146,6 +146,13 @@ describe("tabell — hver celle bærer navnet på kolonnen sin (#1079)", () => {
     expect(ut).toContain('<td data-label="Steg"><span><strong>Forstå</strong></span></td>');
   });
 
+  // QA-porten: et skjermbilde på 480 × 270 i en navngitt kolonne ble 24 × 24. Bare kolonner uten navn gir ikon.
+  it("et bilde først i en celle i en navngitt kolonne er et bilde, ikke et ikon", () => {
+    const ut = html("| Verktøy | Slik ser det ut |\n|---|---|\n| Lerret | ![](asset:bilde) |");
+    expect(ut).toMatch(/<td data-label="Slik ser det ut"><span><img src="[^"]*bilde/);
+    expect(ut).not.toContain("content-icon");
+  });
+
   it("et bilde inne i teksten i en celle er et bilde, ikke et ikon", () => {
     const ut = html("| A |\n|---|\n| Se ![](asset:b) her |");
     expect(ut).toContain("<span>Se <img ");

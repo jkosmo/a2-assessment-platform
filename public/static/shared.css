@@ -1712,10 +1712,11 @@ dialog::backdrop {
    viser navnet på kolonnen sin (data-label, satt av tjeneren). Radene får da ramme og luft, og uten
    border-box blir de 18 px bredere enn spalten og stikker ut av leseren. */
 .content-table tr, .content-table td { box-sizing: border-box; }
-/* Et ikon først i en celle (skillets form: ikonet i radens egen kolonne; tjeneren setter klassen).
-   Leserens regel for bilder (max-width: 100 %) lar tabellen klemme kolonnen til ingenting i en smal
-   spalte — ikonene ble 8 px på PC med «Smal» (produkteier på stage, 2026-10-06). Fast som i kortene. */
-.content-table td img.content-icon { display: inline-block; width: 24px; height: 24px; max-width: none; margin: 0; vertical-align: middle; }
+/* Et ikon først i en celle i en kolonne uten navn (skillets form: ikonet i radens egen kolonne;
+   tjeneren setter klassen). Leserens regel for bilder (max-width: 100 %) lar tabellen klemme kolonnen
+   til ingenting i en smal spalte — ikonene ble 8 px på PC med «Smal» (produkteier på stage,
+   2026-10-06). Fast som i kortene; et ikon som ikke er kvadratisk, strekkes ikke. */
+.content-table td img.content-icon { display: inline-block; width: 24px; height: 24px; max-width: none; margin: 0; vertical-align: middle; object-fit: contain; }
 @media (max-width: 600px) {
   /* Kolonnenavnet over verdien, ikke ved siden av: den generelle regelen gir navnet fast bredde
      og lar det ikke brekke, og et navn på 25 tegn skjøv verdien ut av skjermen (QA-porten, 2.84.0). */

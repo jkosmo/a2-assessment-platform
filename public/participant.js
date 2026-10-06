@@ -4242,6 +4242,7 @@ async function renderSectionReaderInto(panel, courseId, entry) {
       <button type="button" class="btn-secondary course-inline-panel-close" data-role="close">${escapeHtmlP(t("courses.section.close"))}</button>
     </div>
     <div class="course-inline-panel-body">
+      <div class="course-reading-title" aria-hidden="true">${escapeHtmlP(localizePreviewText(entry.title) || "")}</div>
       <div id="sectionReaderBody" class="section-reader-body">${escapeHtmlP(t("courses.section.loading"))}</div>
       <div class="course-inline-actions">${actionsMarkup}</div>
     </div>`;
