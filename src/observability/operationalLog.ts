@@ -1,7 +1,9 @@
 import crypto from "node:crypto";
 import type { OperationalEventMetadataByName, OperationalEventName } from "./operationalEvents.js";
 
-type LogLevel = "info" | "error";
+// «warn» er for det som er klientens forhold (et avbrutt kall, ugyldig JSON): verdt å se, men ikke
+// en tjenerfeil, og ikke noe varslene på «error» skal utløse på.
+type LogLevel = "info" | "warn" | "error";
 
 export function resolveCorrelationId(headerValue: string | undefined) {
   const trimmed = headerValue?.trim();
@@ -27,6 +29,10 @@ export function logOperationalEvent<TEvent extends OperationalEventName>(
   const line = JSON.stringify(payload);
   if (level === "error") {
     console.error(line);
+    return;
+  }
+  if (level === "warn") {
+    console.warn(line);
     return;
   }
   console.log(line);

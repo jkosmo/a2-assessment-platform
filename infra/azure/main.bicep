@@ -895,6 +895,12 @@ resource webAppDiagnostics 'Microsoft.Insights/diagnosticSettings@2021-05-01-pre
         category: 'AppServiceConsoleLogs'
         enabled: true
       }
+      {
+        // HTTP-loggen (adresse, status, tid per forespørsel). Uten den kunne et avbrutt kall i prod
+        // (2026-10-06) ikke knyttes til en adresse: konsolloggen får bare svar som ble ferdige.
+        category: 'AppServiceHTTPLogs'
+        enabled: true
+      }
     ]
     metrics: [
       {

@@ -2,6 +2,34 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.84.1 - 2026-10-06
+
+### Et avbrutt klientkall er ikke en tjenerfeil: Sev1-varselet i prod slutter å utløse på det
+
+Produkteier fikk Azure-varselet «Unhandled runtime errors detected» (Sev1) kl. 08:46. Årsaken var
+tre forespørsler kl. 08:41 som klienten avbrøt (siden ble lastet på nytt) mens tjeneren ventet på
+innlogging; da innholdet skulle leses, var strømmen stengt (`stream is not readable` fra
+body-parseren). Ingen fikk et svar, ingen så en feil — men feilen ble logget som
+`unhandled_error`, og varselet utløser ved to slike på fem minutter. Samme feil én gang dagen før.
+
+- **`errorHandlingMiddleware` skiller nå klientens forhold fra tjenerens.** Et avbrutt kall logges
+  som `request_aborted` på nivå `warn` og svares med 400. En klientfeil fra body-parseren (ugyldig
+  JSON, for stort innhold, feil tegnsett — feil med 4xx-status og `type` fra http-errors) logges
+  som `bad_request_body` på `warn` og svares med sin egen status og årsak, ikke 500. Alt annet er
+  som før: `unhandled_error`, 500, meldingen lekker ikke. En vilkårlig feil med et status-felt
+  regnes fortsatt som tjenerfeil.
+- **Loggeren har fått nivået `warn`** (`console.warn`). Varselreglene i prod leser bare
+  hendelsesnavnene `unhandled_error`, `unhandled_rejection` og `uncaught_exception`.
+- **HTTP-loggen (AppServiceHTTPLogs) er slått på for web-appen** i `infra/azure/main.bicep`, og
+  satt direkte i prod samme morgen. Uten den kunne de tre forespørslene ikke knyttes til en
+  adresse: konsolloggen får bare svar som ble ferdige, og et avbrutt kall blir aldri ferdig.
+
+**Slik er det målt:** `test/unit/error-handling-client-errors.test.ts` (avbrutt kall, ugyldig
+JSON, for stort innhold, vilkårlig feil med status-felt, vanlig feil, `isClientAbort`).
+
+**Ikke rettet, til produkteier:** en klage (appeal) har stått åpen i 141 dager og gir
+`appeal_overdue_detected` hvert tiende minutt. Den bør behandles eller lukkes.
+
 ## 2.84.0 - 2026-10-06
 
 ### Innholdsblokker i seksjonstekst: uthevet boks, prompt-boks, kort og ikon (#1079)

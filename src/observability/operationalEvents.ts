@@ -53,6 +53,8 @@ export const operationalEvents = {
   },
   http: {
     request: "http_request",
+    requestAborted: "request_aborted",
+    badRequestBody: "bad_request_body",
   },
   orgSync: {
     deltaStarted: "org_sync_delta_started",
@@ -254,6 +256,19 @@ export type OperationalEventMetadataByName = {
   [operationalEvents.process.unhandledError]: EventMetadata<{
     correlationId: string | null;
     error: string;
+  }>;
+  [operationalEvents.http.requestAborted]: EventMetadata<{
+    correlationId: string | null;
+    method: string;
+    path: string;
+    reason: string;
+  }>;
+  [operationalEvents.http.badRequestBody]: EventMetadata<{
+    correlationId: string | null;
+    method: string;
+    path: string;
+    status: number;
+    reason: string;
   }>;
   [operationalEvents.pseudonymization.skipped]: EventMetadata<{
     userId: string;
