@@ -57,6 +57,27 @@ export const authoringSectionAssetSchema = z
           .strict(),
       )
       .optional(),
+    // #1079: the figure's other layouts (today: `narrow`), each with its own translated variants.
+    layoutVariants: z
+      .array(
+        z
+          .object({
+            layout: z.string().min(1),
+            contentBase64: z.string().min(1),
+            localizedVariants: z
+              .array(
+                z
+                  .object({
+                    locale: z.string().min(1),
+                    contentBase64: z.string().min(1),
+                  })
+                  .strict(),
+              )
+              .optional(),
+          })
+          .strict(),
+      )
+      .optional(),
   })
   .strict();
 

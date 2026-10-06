@@ -1,0 +1,28 @@
+{
+  "navn": "Tilbudsarbeid med generativ KI",
+  "kilde": "Presentasjon i introduksjonsøkt.pptx",
+  "preg": "Blandet: to helsides infografikker som er rene bilder på 2 MB hver (all teksten ligger i bildet), en arbeidsflyt tegnet som matrise, og skjermbilder av et chatvindu med opplastede dokumenter ved siden av en boks med nummererte steg. To av skjermbildene viser navn på personer.",
+  "ikonerIKilden": 0,
+  "lysark": [
+    { "nr": 3, "form": "smartart", "hva": "Åtte læringsmål som bokser (SmartArt)", "forventet": ["læringsmål", "tekst"], "nøkkelord": ["kundens forespørsel", "tilbudsstrategi", "konsulenter", "referanser", "Spisse CVer", "Klassifisere kompetanse", "metoder og rutiner"] },
+    { "nr": 5, "form": "liste", "hva": "To kolonner med punkter i to nivåer: generelle og spesifikke ferdigheter", "forventet": ["innholdsblokk", "tekst"], "nøkkelord": ["Generelle ferdigheter", "Spesifikke ferdigheter", "Prosjekt vs. chat", "CV-chat"] },
+    { "nr": 6, "form": "infografikk-som-bilde", "hva": "Helsides infografikk som ett bilde (2 MB): seks måter å gi kontekst på, hver med fordeler og ulemper, og to sidebokser", "forventet": ["innholdsblokk", "tabell"], "nøkkelord": [], "bildetekst": ["Alt i én samtale", "Last opp filer", "Tilpassede instrukser", "Hukommelse", "Prosjekter", "Eksterne kilder"] },
+    { "nr": 7, "form": "infografikk-som-bilde", "hva": "Helsides infografikk som ett bilde (2 MB): seks tekniske byggesteiner, et eksempel på samspillet, og begrensninger", "forventet": ["innholdsblokk", "figur", "tabell"], "nøkkelord": [], "bildetekst": ["Arbeidsminne", "Indeksert kildemateriale", "Oppsummeringer", "RAG", "Språkmodellen"] },
+    { "nr": 8, "form": "liste", "hva": "Fem nummererte prinsipper med uthevet navn, og et bilde fra malen", "forventet": ["innholdsblokk", "tekst"], "nøkkelord": ["KI-først", "Context is King", "Struktur før innhold", "riktige porsjoner", "enhetstesting"] },
+    { "nr": 9, "form": "matrise", "hva": "Arbeidsflyt som matrise: seks fargede bånd (prinsippene) på tvers av fem spor, med bokser og piler mellom", "forventet": ["figur"], "nøkkelord": ["Hva skal leveres", "Hvordan vinne", "Disposisjon", "Innholdsbiter", "Scoring", "Rett formatering"] },
+    { "nr": 10, "form": "skjermbilde-prompt", "hva": "Skjermbilde av et chatvindu med to opplastede dokumenter og en kort prompt, og en boks med fem nummererte steg", "forventet": ["prompt-som-tekst", "innholdsblokk"], "nøkkelord": ["Last opp aktuelle dokumenter", "Chat med dokumentene"], "bildetekst": ["Hva skal leveres"] },
+    { "nr": 12, "form": "skjermbilde-prompt", "hva": "Skjermbilde av en samtale med en opplastet CV, og en boks med fire steg. Skjermbildet viser navnet på en person", "forventet": ["prompt-som-tekst", "innholdsblokk"], "personopplysninger": true, "nøkkelord": ["Last opp aktuelle CVer", "samme chat"], "bildetekst": ["bedt om referanser"] },
+    { "nr": 13, "form": "skjermbilde-prompt", "hva": "Skjermbilde av en tabell der en navngitt person er vurdert mot en kompetansematrise, og en boks med tre steg", "forventet": ["prompt-som-tekst", "innholdsblokk"], "personopplysninger": true, "nøkkelord": ["kompetansematrise", "tabellform"], "bildetekst": ["Foreslått score", "Begrunnelse"] },
+    { "nr": 14, "form": "skjermbilde-prompt", "hva": "Skjermbilde av ti opplastede dokumenter og prompten under, og en boks med steg og fire understeg", "forventet": ["prompt-som-tekst", "innholdsblokk"], "nøkkelord": ["Metoder", "Rutiner", "Tidligere tilbud"], "bildetekst": ["leveransemodell", "bakgrunnsinformasjon"] },
+    { "nr": 15, "form": "liste", "hva": "Oppsummering i fem punkter, og et bilde fra malen", "forventet": ["tekst", "innholdsblokk"], "nøkkelord": ["KI leser fortere enn deg", "relevant kontekst", "bit for bit", "Formatering"] },
+    { "nr": 17, "form": "skjermbilde-grensesnitt", "hva": "Skjermbilde av kanaloversikten i Teams med to røde understrekinger, og ni nummererte steg for oppgaven", "forventet": ["oppgave", "innholdsblokk"], "nøkkelord": ["Teamsområdet", "Kjør chat", "refleksjoner"] },
+    { "nr": 11, "form": "skjermbilde-grensesnitt", "hva": "Tre skjermbilder av et internt nettsted (1,3 MB til sammen). Lysarket har ingen annen tekst enn tittelen", "forventet": ["utelatt", "bilde"], "valgfri": true, "nøkkelord": ["Hvilke konsulenter"] },
+    { "nr": 16, "form": "tidslinje", "hva": "To uker som tidslinje med fire ikoner (praktisk opplegg, ikke fag)", "forventet": ["utelatt", "figur"], "valgfri": true, "nøkkelord": ["Veiledning", "Innlevering", "Sertifisering"] }
+  ],
+  "manuellSjekk": [
+    "Er de to infografikkene (lysark 6 og 7) lest og bygget opp igjen som tekst, kort eller tabell — ikke lagt inn som bilder på 2 MB?",
+    "Er skjermbildene med navn på personer (lysark 12 og 13) utelatt eller erstattet, og har skillet spurt forfatteren før noe slikt tas med?",
+    "Er matrisen på lysark 9 blitt en figur som viser både båndene og sporene, ikke en rett flyt?",
+    "Er promptene gjengitt som tekst?"
+  ]
+}

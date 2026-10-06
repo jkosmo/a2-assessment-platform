@@ -11,7 +11,7 @@ import { z } from "zod";
 import { prisma } from "../../db/prisma.js";
 import { localizedTextCodec, type LocalizedText } from "../../codecs/localizedTextCodec.js";
 import { sanitizeSvg } from "../course/svgSanitizer.js";
-import { ALLOWED_ASSET_MIME_TYPES, MAX_ASSET_BYTES, SVG_MIME_TYPE } from "../course/assetCommands.js";
+import { ALLOWED_ASSET_MIME_TYPES, MAX_ASSET_BYTES, SVG_MIME_TYPE, findLayoutVariantProblem } from "../course/assetCommands.js";
 import {
   AUTHORING_PACKAGE_FORMAT,
   authoringPackageSchema,
@@ -234,6 +234,7 @@ function checkSectionAssets(payload: AuthoringSectionPayload, basePath: string):
       });
     }
 
+    const issuesBefore = issues.length;
     const buffer = Buffer.from(asset.contentBase64, "base64");
     if (buffer.byteLength === 0) {
       issues.push({
@@ -258,6 +259,16 @@ function checkSectionAssets(payload: AuthoringSectionPayload, basePath: string):
           code: "asset_svg_unsanitizable",
           message: `Asset '${asset.sourceId}' SVG is empty or invalid after sanitisation.`,
         });
+      }
+    }
+
+    // #1079: the figure's other layouts. The rule is not restated here: the same function the
+    // import runs is asked what it would refuse. Only when the figure itself is accepted — a
+    // figure that is refused has already said why, and its layouts have nothing to be compared with.
+    if (issues.length === issuesBefore) {
+      const layoutProblem = findLayoutVariantProblem(asset);
+      if (layoutProblem) {
+        issues.push({ severity: "error", path: `${assetPath}.layoutVariants`, code: layoutProblem.code, message: layoutProblem.message });
       }
     }
   });

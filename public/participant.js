@@ -3987,6 +3987,17 @@ function renderCourseDetailModules(courseId, course) {
 let inlineOpen = null; // { courseId, key, type, moduleId?, sectionId?, courseItemId?, read?, title? }
 const courseSequences = {}; // courseId -> ordered items, for "next element" navigation
 
+// Lesemodus (#1079): spaltebredden leseren valgte sist. «wide» til noe annet er valgt: løpende tekst
+// holdes på rundt 72 tegn uansett, mens kort, tabeller og figurer får hele arket.
+const READER_WIDTH_KEY = "participant.readerWidth";
+function readReaderWidth() {
+  try {
+    return safeLocalStorage()?.getItem(READER_WIDTH_KEY) === "narrow" ? "narrow" : "wide";
+  } catch {
+    return "wide";
+  }
+}
+
 function courseItemKey(entry) {
   return entry.courseItemId || (entry.type === "SECTION" ? `s:${entry.sectionId}` : `m:${entry.moduleId}`);
 }
@@ -4050,6 +4061,7 @@ function collapseInlineOpen() {
     const row = itemWrap.querySelector(".course-module-row");
     if (panel) { panel.innerHTML = ""; setHidden(panel, true); }
     itemWrap.classList.remove("open");
+    itemWrap.closest(".course-accordion-item")?.classList.remove("course-reading");
     if (row) { row.setAttribute("aria-expanded", "false"); row.disabled = false; }
   }
 }
@@ -4082,6 +4094,9 @@ async function openInlineItemByEntry(courseId, entry) {
       read: entry.read, title: entry.title,
     };
     itemWrap.classList.add("open");
+    // Lesemodus (#1079): kurset rundt viker mens seksjonen leses. Klassen settes på kurskortet;
+    // CSS-en i participant.html skjuler alt i det som ikke er den åpne seksjonen.
+    itemWrap.closest(".course-accordion-item")?.classList.add("course-reading");
     setHidden(panel, false);
     row?.setAttribute("aria-expanded", "true");
     // ⚠️ Rull ETTER at innholdet er rendret. Sto før `await`-en, altså mot et tomt panel — og da
@@ -4120,11 +4135,16 @@ function reopenInlineAfterRender(courseId, container) {
     // The item disappeared (e.g. module became unavailable) — release the workspace safely.
     if (inlineOpen.type === "MODULE") restoreModuleWorkspaceHome();
     inlineOpen = null;
+    // Lesemodus (#1079): uten et åpent steg ville klassen skjult hele kurset.
+    container.closest(".course-accordion-item")?.classList.remove("course-reading");
     return;
   }
   const panel = itemWrap.querySelector(".course-inline-panel");
   const row = itemWrap.querySelector(".course-module-row");
   itemWrap.classList.add("open");
+  // Lesemodus (#1079): kurskortet er tegnet på nytt uten klassen (språkbytte, kurslista hentet på
+  // nytt etter «gå videre»). QA-porten så seksjonen stå åpen med alle stegene synlige rundt seg.
+  itemWrap.closest(".course-accordion-item")?.classList.toggle("course-reading", inlineOpen.type === "SECTION");
   setHidden(panel, false);
   row?.setAttribute("aria-expanded", "true");
   if (row) row.disabled = false;
@@ -4201,10 +4221,24 @@ async function renderSectionReaderInto(panel, courseId, entry) {
       t("courses.section.finishBlocked").replace("{remaining}", String(outstanding.length)),
     )}</p>`;
   }
+  // Lesemodus (#1079): hodet sier hvor i kurset leseren er, og lar den velge spaltebredde. Valget
+  // huskes i nettleseren. På telefon er det bare én spalte, og velgeren er skjult (CSS).
+  const sequence = courseSequences[courseId] || [];
+  const position = sequence.findIndex((item) => courseItemKey(item) === courseItemKey(entry));
+  const positionLabel = position >= 0
+    ? t("courses.step.position").replace("{n}", String(position + 1)).replace("{total}", String(sequence.length))
+    : "";
+  const readerWidth = readReaderWidth();
+  panel.dataset.readerWidth = readerWidth;
   panel.innerHTML = `
     <div class="course-inline-panel-sticky">
       <span class="course-inline-panel-tag">${escapeHtmlP(t("courses.section.readerTag"))}</span>
       <span class="course-inline-panel-title" id="sectionReaderTitle">${escapeHtmlP(localizePreviewText(entry.title) || "")}</span>
+      ${positionLabel ? `<span class="course-reading-position">${escapeHtmlP(positionLabel)}</span>` : ""}
+      <span class="course-reading-width" role="group" aria-label="${escapeHtmlP(t("courses.section.widthLabel"))}">
+        <button type="button" data-reader-width="narrow" aria-pressed="${readerWidth === "narrow"}">${escapeHtmlP(t("courses.section.widthNarrow"))}</button>
+        <button type="button" data-reader-width="wide" aria-pressed="${readerWidth === "wide"}">${escapeHtmlP(t("courses.section.widthWide"))}</button>
+      </span>
       <button type="button" class="btn-secondary course-inline-panel-close" data-role="close">${escapeHtmlP(t("courses.section.close"))}</button>
     </div>
     <div class="course-inline-panel-body">
@@ -4213,6 +4247,14 @@ async function renderSectionReaderInto(panel, courseId, entry) {
     </div>`;
 
   panel.querySelector('[data-role="close"]').addEventListener("click", () => collapseInlineOpen());
+  for (const button of panel.querySelectorAll("[data-reader-width]")) {
+    button.addEventListener("click", () => {
+      const width = button.dataset.readerWidth === "narrow" ? "narrow" : "wide";
+      panel.dataset.readerWidth = width;
+      for (const other of panel.querySelectorAll("[data-reader-width]")) other.setAttribute("aria-pressed", String(other === button));
+      try { safeLocalStorage()?.setItem(READER_WIDTH_KEY, width); } catch { /* lagring avslått: valget gjelder til siden lukkes */ }
+    });
+  }
 
   // #924: marker lest OG gå videre, i ett. Rekkefølgen er nøye: kursdetaljen hentes på nytt før vi
   // åpner neste element, så radene i DOM er de ferske openCourseItemEntry slår opp i — og

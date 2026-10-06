@@ -170,6 +170,42 @@ export function extractSvgTextRuns(svg) {
   return runs;
 }
 
+/**
+ * The labels of a figure THE WAY THE PLATFORM COUNTS THEM when it compares a layout with the wide
+ * figure (#1079, #1087): the text of every `<text>`, `<tspan>`, `<textPath>` and `<title>` that has
+ * no `<tspan>`/`<textPath>` inside it, trimmed at the ends and otherwise untouched, each counted once.
+ *
+ * ⚠️ Not `extractSvgTextRuns`. That one collapses white space and does not read `<title>`; used for
+ * this comparison it passed layouts the import then refused (a line break inside a label, a
+ * different title). The two are held to the same answer by a repo unit test that sends the same
+ * figures through this function and through the platform — change one, and the test says so.
+ */
+export function extractLayoutLabels(svg) {
+  const source = String(svg ?? "");
+  const labels = [];
+  const seen = new Set();
+  const decode = (text) => text
+    .replace(/&#x([0-9a-fA-F]+);/g, (_, hex) => String.fromCodePoint(Number.parseInt(hex, 16)))
+    .replace(/&#(\d+);/g, (_, dec) => String.fromCodePoint(Number.parseInt(dec, 10)))
+    .replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&amp;/g, "&");
+  const push = (raw) => {
+    const value = decode(String(raw).replace(/<[^>]*>/g, "")).trim();
+    if (value.length > 0 && !seen.has(value)) {
+      seen.add(value);
+      labels.push(value);
+    }
+  };
+  const holdsRuns = (inner) => /<(?:tspan|textPath)\b/i.test(inner);
+  for (const match of source.matchAll(/<(text|title)\b[^>]*>([\s\S]*?)<\/\1>/gi)) {
+    const inner = match[2];
+    if (match[1].toLowerCase() === "title" || !holdsRuns(inner)) { push(inner); continue; }
+    for (const run of inner.matchAll(/<(tspan|textPath)\b[^>]*>([\s\S]*?)<\/\1>/gi)) {
+      if (!holdsRuns(run[2])) push(run[2]);
+    }
+  }
+  return labels;
+}
+
 function decodeSvg(contentBase64) {
   try {
     return Buffer.from(String(contentBase64 ?? ""), "base64").toString("utf8");
@@ -190,15 +226,39 @@ export function collectFigures(pkg) {
     const assets = object.payload?.assets ?? [];
     assets.forEach((asset, index) => {
       if (asset?.mimeType !== "image/svg+xml") return;
-      figures.push({
+      const wide = {
         path: `${ref}.assets[${index}]`,
         sourceId: asset.sourceId,
         sourceLocale: asset.sourceLocale ?? null,
         runs: extractSvgTextRuns(decodeSvg(asset.contentBase64)),
+        // `labels` is what a layout is compared on (#1087) — counted the platform's way, not `runs`.
+        labels: extractLayoutLabels(decodeSvg(asset.contentBase64)),
         variants: (asset.localizedVariants ?? []).map((variant) => ({
           locale: variant.locale,
           runs: extractSvgTextRuns(decodeSvg(variant.contentBase64)),
+          labels: extractLayoutLabels(decodeSvg(variant.contentBase64)),
         })),
+      };
+      figures.push(wide);
+      // #1079: the other layouts of a figure (narrow) are figures in their own right — each needs
+      // its variants, its label count and its preserved tokens — so each is collected as one, and
+      // every check below applies to it without knowing what a layout is. `wide` is what it is
+      // compared with: a layout carries the same texts as the wide figure, language by language.
+      (Array.isArray(asset.layoutVariants) ? asset.layoutVariants : []).forEach((layoutVariant, layoutIndex) => {
+        figures.push({
+          path: `${ref}.assets[${index}].layoutVariants[${layoutIndex}]`,
+          sourceId: asset.sourceId,
+          layout: layoutVariant?.layout ?? null,
+          sourceLocale: asset.sourceLocale ?? null,
+          runs: extractSvgTextRuns(decodeSvg(layoutVariant?.contentBase64)),
+          labels: extractLayoutLabels(decodeSvg(layoutVariant?.contentBase64)),
+          variants: (layoutVariant?.localizedVariants ?? []).map((variant) => ({
+            locale: variant.locale,
+            runs: extractSvgTextRuns(decodeSvg(variant.contentBase64)),
+            labels: extractLayoutLabels(decodeSvg(variant.contentBase64)),
+          })),
+          wide,
+        });
       });
     });
   }
@@ -231,8 +291,27 @@ export function checkFigureLocalization(pkg, { languages = LANGUAGES, primary = 
   const textCountMismatches = [];
   const tokenDrift = [];
   const blindCopies = [];
+  const layoutTextMismatches = [];
+
+  // #1079: the platform translates the wide figure and writes the answers into every layout by
+  // matching the original text, so it refuses a layout whose texts differ from the wide figure.
+  // The same rule is applied here — a package this check passes must not be one the import refuses.
+  // #1087: on the labels as the platform counts them (`extractLayoutLabels`), which a repo unit
+  // test holds to the platform's own answer. The first version compared `runs`, and was looser.
+  const sameTexts = (a, b) => a.length === b.length && a.every((label) => b.includes(label));
 
   for (const figure of collectFigures(pkg)) {
+    if (figure.wide) {
+      if (!sameTexts(figure.labels, figure.wide.labels)) {
+        layoutTextMismatches.push({ path: figure.path, sourceId: figure.sourceId, layout: figure.layout, locale: null });
+      }
+      for (const variant of figure.variants) {
+        const wideVariant = figure.wide.variants.find((v) => v.locale === variant.locale);
+        if (wideVariant && !sameTexts(variant.labels, wideVariant.labels)) {
+          layoutTextMismatches.push({ path: figure.path, sourceId: figure.sourceId, layout: figure.layout, locale: variant.locale });
+        }
+      }
+    }
     if (figure.runs.length === 0) continue; // no translatable text → nothing to localize
     const source = figure.sourceLocale ?? primary;
     const targets = languages.filter((lang) => lang !== source);
@@ -270,7 +349,9 @@ export function checkFigureLocalization(pkg, { languages = LANGUAGES, primary = 
   if (tokenDrift.length > 0) reasons.push(`${tokenDrift.length} identifier/formula/URL(s) lost in an SVG figure variant`);
   if (blindCopies.length > 0) reasons.push(`${blindCopies.length} SVG figure variant(s) are a blind copy of the original labels`);
 
-  return { missingVariants, textCountMismatches, tokenDrift, blindCopies, blocks: reasons.length > 0, reasons };
+  if (layoutTextMismatches.length > 0) reasons.push(`${layoutTextMismatches.length} figure layout(s) do not carry the same labels as the wide figure — draw both from one description (draw-flow-figure.mjs)`);
+
+  return { missingVariants, textCountMismatches, tokenDrift, blindCopies, layoutTextMismatches, blocks: reasons.length > 0, reasons };
 }
 
 // Full localization check over the package. Blocks on any missing locale, structural loss,

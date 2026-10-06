@@ -140,6 +140,8 @@ are two distinct code paths + a relocated singleton to keep in sync when touchin
 | Shared state | `inlineOpen`, `courseSequences`, `collapseInlineOpen`, `nextEntryAfter` | One-open-at-a-time + «Gå til neste element» nav (module panel only — the section reader’s nav is the #924 combined button). |
 | List vs. course state | `focusedCourseId`, `applyCourseFocusState`, `focusCourse`, `unfocusCourse` (#921/#922) | Opening a course hides every OTHER `.course-accordion-item` and reveals `#courseBackBar`. An inline-open item MUST be collapsed before the course is hidden (`unfocusCourse` → `collapseInlineOpen`) or the singleton workspace ends up inside a `display:none` subtree. |
 
+| Reading mode (#1079) | `openInlineItemByEntry` adds `course-reading` on the `.course-accordion-item` when a SECTION opens; `collapseInlineOpen` removes it. CSS in `participant.html` («Lesemodus») hides everything in the course that is not the open section (`:has()`, never `.hidden`), restyles the panel as a sheet, and shows the width switch (`.course-reading-width`, `data-reader-width` on the panel, remembered in `localStorage` `participant.readerWidth`). Modules are NOT in reading mode. | Guard: `test/e2e/reading-mode-1079.spec.ts`. A test that expects the course header, other steps or the discussion toggle to be visible while a section is open must close the reader first (`participant-section-advance.spec.ts` was changed for this). |
+
 **Pre-deploy gate:** `npx playwright test --config playwright.admin-content.config.ts test/e2e/participant-section-reader.spec.ts test/e2e/participant-mcq-only.spec.ts test/e2e/participant-inline-open.spec.ts test/e2e/participant-course-sequence.spec.ts test/e2e/participant-course-focus.spec.ts test/e2e/participant-section-advance.spec.ts` (~10s, no Docker/Postgres). `participant-inline-open` is the consistency guard (section + module both inline, one open, workspace relocated); `participant-course-sequence` guards the serial presentation; `participant-course-focus` guards list-vs-course state (#921/#922); `participant-section-advance` guards the combined advance button and the absent item-level discussion (#923/#924).
 
 ## 6b-2. Participant course view — the serial sequence (spine)
@@ -213,6 +215,27 @@ client-side (defense-in-depth). The client policy MUST match the server or allow
 `test/e2e/participant-section-sanitize.spec.ts` (strips script/onerror/non-allowlisted iframe, keeps the
 YouTube embed). Error strings must never be interpolated raw into `innerHTML` — `escapeHtml(String(err))`
 or `showToast` (textContent); see `public/admin-platform.js` / `public/profile.js`.
+
+## 6d. Content blocks in section text (#1079)
+
+Four blocks are ordinary markdown read a second way while `marked` renders it — never a format of
+their own: `> **Husk:** …` (highlighted box; the labels Viktig/NB/Advarsel/Important/Warning give
+the warning colour), a fenced block marked `prompt` (prompt box with a copy button), `:::kort` …
+`:::` around `###` headings (cards; `:::cards` works too), and an image first in a card heading
+(icon). Tables get `data-label` on every cell so the phone stacking rule in `shared.css` shows the
+column name.
+
+| Surface | Where |
+| --- | --- |
+| Rendering (source of truth) | `src/modules/course/contentBlocks.ts` — a `Marked` instance per locale with a block extension (`contentCards`) and renderers for `code`, `blockquote`, `table`. Output is plain HTML with classes `content-callout`, `content-prompt`, `content-cards`, `content-card`, `content-icon`, `content-table`; both sanitizers (above) let it through on their default allowlist |
+| Styles | `public/static/shared.css`, the block at the end («Innholdsblokker i seksjonstekst») — one place for the reader, the editor preview and module task text |
+| Copy button | `public/static/content-blocks.js` — one delegated click listener. Loaded by `participant.html`, `admin-content-sections.html`, and via `import` in `admin-content-preview.js` (module workspace) |
+| Guard tests | `test/unit/section-content-blocks-1079.test.ts` (forms, non-forms, sanitisation inside blocks, `?locale=constructor`), `test/e2e/content-blocks-1079.spec.ts` (1280/390/360: cards side by side vs stacked, column names on phone, copy) |
+
+**Maintenance hazard:** a new page that shows section HTML needs the script tag for the copy button;
+the CSS comes with `shared.css`. The skill (`skills/a2-authoring-api/references/section-content.md`)
+writes these forms — change the syntax in both places or courses from the skill stop rendering as
+blocks.
 
 ## 7. Conditional visibility — the `.hidden` cascade trap
 
@@ -291,6 +314,36 @@ that never reaches the viewer because the locale isn't threaded).
 | Client upload + translate trigger | `public/static/admin-content-sections.js` (`accept` incl. svg; translate loop calls `/assets/localize`; preview sends `locale`) | `hydrateContentAssetImages` preserves the `?locale=` query |
 
 **Guards:** `test/unit/svg-sanitizer.test.ts` (XSS vectors + text round-trip + «what is stored can be read as an image»), `test/unit/svg-text-localization.test.ts` (stub + order/count), `test/m2-section-assets.test.ts` (upload sanitised + serve headers + localise→variant + #1083 upload→serve and the repair), `test/e2e/svg-sanitizer-renders-1083.spec.ts` (Chromium shows the sanitised figure as an `<img>`).
+
+### 11b. A figure in two layouts — wide and narrow (#1079)
+
+An SVG shown as an image cannot re-break itself, so a flow figure exists in a wide layout (the asset
+itself: `blobPath` + `localizedBlobPaths`) and, optionally, a narrow one (`layoutVariants.narrow`,
+with its own translated variants). **Everything that writes or reads a figure has to know the narrow
+layout.** A place that does not, leaves a figure that is whole in one layout and missing,
+untranslated or orphaned in the other — and none of those gives an error.
+
+| Surface | Where | Notes |
+|---------|-------|-------|
+| The shape, and the ONE reader of it | `assetCommands.ts` → `readLayoutVariants`, `assetFiles`, `ASSET_LAYOUTS` | `assetFiles` lists EVERY stored file of an asset; deletion, repair and export are built on it. Do not read `layoutVariants` anywhere else |
+| Storage | `prisma/schema.prisma` `SectionAsset.layoutVariants` (JSON, nullable); migration `20261004170000_…` | additive; everything stored before has NULL |
+| Every way in | `stageSectionAssets` — called by the file import (`contentImportService`) and by the authoring API (`createSectionWithAssets`, #1089) | one place decodes, sanitises and checks; everything is checked before anything is written, and the section and its asset rows are created in one transaction afterwards |
+| The rules for a layout | `prepareLayoutVariants`: SVG only · `narrow`, once · same labels as the wide figure, language by language | codes `asset_layout_not_svg`, `asset_layout_unknown`, `asset_layout_text_mismatch` (+ i18n in `participant-translations.js`) |
+| Schemas | `sectionAssetExportSchema` (export/import), `authoringSectionAssetSchema` (agent, strict) | the layout NAME is checked in staging, not in the schema, so every way in refuses it with the same code |
+| Dry-run validation of an authoring package | `agentAuthoringValidationService` → `findLayoutVariantProblem` | RUNS the staging rule instead of restating it |
+| Serving | `chooseAssetFile` (pure) + `getSectionAssetContent(…, layout)`; `src/routes/contentAssets.ts` `?layout=narrow` | headers `X-Asset-Layout`, `X-Asset-Layouts`; **language before layout** (`doc/DECISIONS.md`) |
+| Translation | `localizeSectionAssets` | one LLM call per language, written into every layout; «up to date» includes every layout |
+| Export | `loadSectionAssetsForExport` | carries the layout and its variants; their bytes count towards the 25 MB cap |
+| Deletion | `collectSectionAssetBlobPaths` (section delete, course cascade delete) | via `assetFiles` |
+| Repair (#1083) | `repairUnreadableSvgAssets` | via `assetFiles`; the report says which layout |
+| Client: which layout to show | `public/api-client.js` → `hydrateContentAssetImages`, `ASSET_NARROW_BELOW` (640) | asks for `narrow` when the figure's column is under the threshold; a figure with both layouts follows its column (ResizeObserver) |
+| Client call sites | `public/participant.js` (section reader), `public/static/admin-content-sections.js` (editor preview) | the preview replaces its content at every pause — removed images are forgotten |
+| Manual upload in the editor | `createSectionAsset` | unchanged: one file, the wide layout |
+| The skill: drawing | `skills/a2-authoring-api/scripts/draw-flow-figure.mjs` | one description → both layouts; both go in the package. The narrow one is two steps per row, drawn for the ~200 px column a phone gives, and states its own size (`width`/`height`) so it is never enlarged past it (`doc/DECISIONS.md`) |
+| How wide the column really is | `public/participant.html` (the reader sits inside three frames); `test/e2e/figure-legible-on-phone-1079.spec.ts` | measures the LABEL SIZE ON SCREEN in the real reader at 390, 360, 768 and 1280 px — a change to any margin around the reader, or to the narrow drawing, is measured here |
+| The skill: checks | `export-validate.mjs` (shape + `ASSET_LAYOUTS`), `localization-check.mjs` (each layout is a figure: variants, label count, `layoutTextMismatches`), `course-state.mjs` (preservation sees the labels) | `ASSET_LAYOUTS` is repeated in the skill; a unit test fails if it differs from the platform's |
+
+**Guards:** `test/m2-section-asset-layouts-1079.test.ts` (import → serve → translate → export → re-import → delete → repair, the refusals, and all combinations of `chooseAssetFile`), `test/unit/asset-layout-variants-1079.test.ts` (schemas, the layout rule, the dry-run validation, the skill's three checks), `test/e2e/asset-layout-by-column-1079.spec.ts` (Chromium: which layout is asked for and shown at 1280 and 390 px, on resize, in the participant reader and the editor preview).
 
 ## 12. Admin-content client gating — roles & identity from /api/me, NOT identityDefaults (#690)
 

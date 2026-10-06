@@ -1,0 +1,22 @@
+{
+  "navn": "Rapportskriving med generativ KI",
+  "kilde": "Rapportskriving (1).pptx, og en skriftlig oppsummering av det som ble sagt",
+  "preg": "Gjennomtegnet presentasjon: flyt med faser og ikoner, kort ved siden av hverandre, uthevede striper nederst, tabeller. Rundt 25 strekikoner som ferdige SVG-filer. Notater på 4 av 19 lysark.",
+  "ikonerIKilden": 25,
+  "lysark": [
+    { "nr": 4, "form": "flyt", "hva": "Arbeidsflyt i åtte steg under tre faser, ikon og forklaring per steg, og en uthevet stripe nederst", "forventet": ["figur"], "nøkkelord": ["Forstå oppdrag", "Klargjør kilder", "analysegrunnlag", "Snakk med KI", "Tenk selv", "Kvalitetssikre", "Ferdigstill"] },
+    { "nr": 5, "form": "kort", "hva": "Fire kort ved siden av hverandre (arbeidsformer), hvert med ikon og tre deler, og en «Husk»-stripe", "forventet": ["innholdsblokk"], "nøkkelord": ["Chat", "Lerret", "Prosjekt", "Grundig tenkemodus", "kontekstvindu"] },
+    { "nr": 7, "form": "kort", "hva": "Fem nummererte kort med ikon og punkter, og en «Husk»-stripe med fire råd", "forventet": ["innholdsblokk", "figur"], "nøkkelord": ["Finn og samle kilder", "Vurder kvalitet", "Trekk ut og organiser", "Sammenlign", "analysegrunnlag"] },
+    { "nr": 9, "form": "kort", "hva": "Tre kort med overskriftsstripe, og en rad «Best praksis» med tre ikonpunkter", "forventet": ["innholdsblokk"], "nøkkelord": ["Typiske metoder", "Observasjoner", "problemstillingen", "Vær kritisk", "hypoteser"] },
+    { "nr": 11, "form": "tabell", "hva": "Kapitteloversikt som tabell (seks kapitler × fem kolonner), med et kort for eksempelprompten og en tipsstripe", "forventet": ["tabell"], "nøkkelord": ["Innledning", "Metode", "Vurderinger", "Konklusjon", "kapitteloversikt"] },
+    { "nr": 12, "form": "liste", "hva": "Fem nummererte steg i en kolonne, en rad med fire ikonpunkter, tips, og en liten flyt i fire steg", "forventet": ["figur", "innholdsblokk"], "nøkkelord": ["Del opp teksten", "tydelig oppgave", "Få forslag", "Vurder og tilpass", "Gå videre"] },
+    { "nr": 13, "form": "kort", "hva": "Begrepstabell i seks rader, et kort med fordeler og en eksempelinstruksjon, og en «Husk»-stripe", "forventet": ["tabell", "innholdsblokk"], "nøkkelord": ["Målgruppe", "Intensjon", "Stil og tone", "Faguttrykk", "språklig mal"] },
+    { "nr": 14, "form": "kort", "hva": "Tre kort, hvert med en uthevet «Husk»/«Viktig»-linje, og en stripe «Gode vaner»", "forventet": ["innholdsblokk"], "nøkkelord": ["gjentar seg", "Kilder og lenker", "Sjekk lenker", "troverdighet", "Ta ansvar"] },
+    { "nr": 15, "form": "kort", "hva": "Oppgaven som fire nummererte kort i hver sin farge", "forventet": ["innholdsblokk", "oppgave"], "nøkkelord": ["Skaff data", "Gjør analyse", "Skriv rapporten", "Lever"] },
+    { "nr": 17, "form": "tidslinje", "hva": "To uker som tidslinje med fire ikoner (praktisk opplegg, ikke fag)", "forventet": ["utelatt", "figur"], "valgfri": true, "nøkkelord": ["Veiledning", "Innlevering", "Sertifisering"] }
+  ],
+  "manuellSjekk": [
+    "Er forklaringslinja under hvert steg i arbeidsflyten (lysark 4) med — i figuren eller i teksten rett ved?",
+    "Er ikonene fra kilden brukt der kortene og stegene hadde dem?"
+  ]
+}

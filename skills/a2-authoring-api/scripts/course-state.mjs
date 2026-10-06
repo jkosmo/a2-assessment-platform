@@ -260,6 +260,11 @@ function figureSearchText(payloadWithAssets) {
     if (asset.mimeType !== "image/svg+xml") continue;
     parts.push(decodeSvgText(asset.contentBase64));
     for (const variant of asset.localizedVariants ?? []) parts.push(decodeSvgText(variant.contentBase64));
+    // #1079: the other layouts of the figure, and their variants, are the same approved labels drawn again.
+    for (const layoutVariant of Array.isArray(asset.layoutVariants) ? asset.layoutVariants : []) {
+      parts.push(decodeSvgText(layoutVariant?.contentBase64));
+      for (const variant of layoutVariant?.localizedVariants ?? []) parts.push(decodeSvgText(variant.contentBase64));
+    }
   }
   return parts.join(" ");
 }

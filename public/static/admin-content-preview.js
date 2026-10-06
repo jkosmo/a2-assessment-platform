@@ -1,5 +1,7 @@
 import { escapeHtml } from "./html-escape.js";
 import { pickLocalizedText } from "/static/i18n-locale.js";
+// «Kopier» i prompt-bokser i forhåndsvisningen (#1079). Importeres for virkningen, ikke for et navn.
+import "/static/content-blocks.js";
 /**
  * admin-content-preview.js
  *

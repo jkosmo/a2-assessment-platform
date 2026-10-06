@@ -2,6 +2,601 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.85.0 - 2026-10-06
+
+### Lesemodus: kurset viker når en seksjon leses, og leseren velger smal eller bred spalte (#1079)
+
+Produkteier, etter innholdsblokkene på stage: «for lite skille mellom hva som er kursportalen, og
+kontroller i den, vs. innholdet som vises innenfor den». Innholdet lå fire rammer dypt — sidekort,
+kurskort, stegkort, lesepanel — alle med samme lyse flate, tynne ramme og runde hjørner som
+innholdets egne kort og bokser, og «Lukk», «Kopier» og «Les» så ut som kortene i teksten. Fire
+grader av skille ble vist på en prøveside; han valgte lesemodus, med valgbar spaltebredde.
+
+- **Når en seksjon åpnes, viker kurset.** Kurskortets hode, de andre stegene, stegkortet med «Les»,
+  diskusjonslinja og «Alle kurs» skjules; igjen står hodet (hvor du er: «Steg 1 av 3», spaltevelger,
+  «Lukk seksjonen») og innholdet på et hvitt ark med skygge og egen lesestørrelse. «Marker seksjon
+  lest, og gå videre» står under arket. Kurset kommer tilbake når seksjonen lukkes. Tester (moduler)
+  åpner som før.
+- **Spaltebredde:** «Bred» (standard) lar kort, tabeller, figurer og bokser bruke hele arket (inntil
+  1100 px), mens løpende tekst holdes på rundt 72 tegn per linje. «Smal» setter hele arket på 72
+  tegn. Valget huskes i nettleseren. Et avsnitt som bare er en figur, får full bredde også i
+  «Bred» — ellers hadde klienten målt spalten som smal og hentet det smale oppsettet på en PC.
+- **På telefon** er det én spalte og ingen velger; hodet har bare tittel og «Lukk».
+- «Kopier» i en prompt-boks er innholdets egen knapp og tegnes som tekstlenke på arket, så portalens
+  knapper er de eneste knappene.
+
+**Slik er det målt.** `test/e2e/reading-mode-1079.spec.ts` (PC: alt rundt er borte, hode med
+posisjon og velger, bred spalte med tekst under 800 px og fire kort på én rad; «Smal» huskes
+etter ny lasting; lukk gir kurset tilbake; 390 og 360 px: én spalte, ingen velger, ingenting ut av
+skjermen). To eldre tester måtte endres: den som ventet at diskusjonslinja var synlig mens
+seksjonen var åpen, og den som ventet at en kort seksjon rulles helt opp (siden er nå ofte for kort
+til å rulle; kravet er at leseren er innenfor skjermen). Figurtestene (`asset-layout-by-column`,
+`figure-legible-on-phone`) fant at figuravsnittet først fikk tekstbredden; rettet før de ble grønne.
+QA-porten fant i første runde at lesemodus forsvant når kurset ble tegnet på nytt mens seksjonen
+var åpen (språkbytte; «gå videre» når kurslista svarte etter kurset): klassen ble bare satt ved
+åpning. `reopenInlineAfterRender` setter den igjen, og to tester dekker begge tilfellene.
+
+**Ikke med:** moduler (tester) i lesemodus; en egen innstilling for skriftstørrelse; prøvesidens
+«Mørk ramme».
+
+## 2.84.1 - 2026-10-06
+
+### Et avbrutt klientkall er ikke en tjenerfeil: Sev1-varselet i prod slutter å utløse på det
+
+Produkteier fikk Azure-varselet «Unhandled runtime errors detected» (Sev1) kl. 08:46. Årsaken var
+tre forespørsler kl. 08:41 som klienten avbrøt (siden ble lastet på nytt) mens tjeneren ventet på
+innlogging; da innholdet skulle leses, var strømmen stengt (`stream is not readable` fra
+body-parseren). Ingen fikk et svar, ingen så en feil — men feilen ble logget som
+`unhandled_error`, og varselet utløser ved to slike på fem minutter. Samme feil én gang dagen før.
+
+- **`errorHandlingMiddleware` skiller nå klientens forhold fra tjenerens.** Et avbrutt kall logges
+  som `request_aborted` på nivå `warn` og svares med 400 — bare når klienten faktisk er borte
+  (`request.destroyed`); «stream is not readable» mens klienten er der, betyr at vår egen kode har
+  lest innholdet to ganger, og er fortsatt en tjenerfeil (QA-portens funn). En klientfeil fra body-parseren (ugyldig
+  JSON, for stort innhold, feil tegnsett — feil med 4xx-status som sier selv at de kan vises
+  (`expose`) eller har en `type` fra http-errors; også `send` sitt 416 ved et umulig Range-hode) logges
+  som `bad_request_body` på `warn` og svares med sin egen status og årsak, ikke 500. Alt annet er
+  som før: `unhandled_error`, 500, meldingen lekker ikke. En vilkårlig feil med et status-felt
+  regnes fortsatt som tjenerfeil.
+- **Loggeren har fått nivået `warn`** (`console.warn`). Varselreglene i prod leser bare
+  hendelsesnavnene `unhandled_error`, `unhandled_rejection` og `uncaught_exception`.
+- **HTTP-loggen (AppServiceHTTPLogs) er slått på for web-appen** i `infra/azure/main.bicep`, og
+  satt direkte i prod samme morgen. Uten den kunne de tre forespørslene ikke knyttes til en
+  adresse: konsolloggen får bare svar som ble ferdige, og et avbrutt kall blir aldri ferdig.
+
+**Slik er det målt:** `test/unit/error-handling-client-errors.test.ts` (avbrutt kall med og uten
+klient, ugyldig JSON, for stort innhold, 416 uten type, vilkårlig feil med status-felt, vanlig
+feil, `isClientAbort`); åtte mutasjoner, alle fanget. QA-porten GO (`.ai-qa/qa-20261006-091043.md`);
+den gjenskapte feilen fra prod med en ekte TCP-klient som koblet fra midt i forespørselen.
+
+**Ikke rettet, til produkteier:** en klage (appeal) har stått åpen i 141 dager og gir
+`appeal_overdue_detected` hvert tiende minutt. Den bør behandles eller lukkes.
+
+## 2.84.0 - 2026-10-06
+
+### Innholdsblokker i seksjonstekst: uthevet boks, prompt-boks, kort og ikon (#1079)
+
+Produkteier laget samme kurs fra en presentasjon i ChatGPT og i Claude.ai (2026-10-05). Kortene
+og «Husk»-stripene fra lysarkene forsvant i begge, fordi plattformen ikke hadde noe å legge dem i:
+en seksjon var overskrifter, avsnitt, lister, tabeller og bilder. Fire blokker ble besluttet og en
+prøveside godkjent samme kveld (`doc/DESIGN_1079_SKILL.md`, valg 4). Dette er dem.
+
+**Blokkene er vanlig markdown som leses en gang til mens den blir til HTML** — ikke et eget
+format. Teksten lagres, oversettes, eksporteres og importeres som før, og gir mening også i
+redigeringsfeltet og i en eksportfil:
+
+| Skrives som | Blir |
+|---|---|
+| `> **Husk:** …` — et sitat som åpner med fet merkelapp | uthevet boks med ikon. «Viktig», «NB», «Advarsel» (og de engelske) gir varselfargen, med venstrestrek, som `.field-warning` |
+| en kodeblokk merket `prompt` | prompt-boks med «Kopier» (på leserens språk), teksten ordrett og brekkende |
+| `:::kort` … `:::` rundt `###`-overskrifter | kort ved siden av hverandre der det er plass, under hverandre på telefon; plattformens stil uansett kilde |
+| et bilde først i en kortoverskrift | ikonet, i overskriftens størrelse |
+| en tabell | som før på PC, men med rammer og luft; på telefon viser hver celle kolonnenavnet sitt |
+
+Et vanlig sitat, en vanlig kodeblokk og underoverskrifter uten ramme står som før. En ramme som
+ikke lukkes, er ikke en ramme: teksten står som skrevet, og ingenting forsvinner.
+
+**Hvor:** `src/modules/course/contentBlocks.ts` (gjengivelsen), slutten av
+`public/static/shared.css` (stilen, ett sted for leseren, forhåndsvisningen og oppgavetekst i
+moduler), `public/static/content-blocks.js` (knappen). Plattformens rensing kjører etterpå, på
+resultatet, som før; begge renserne slipper blokkene gjennom på standardlista si.
+
+**To feil fra før som rettes med dette:**
+
+- **En tabell i en seksjon mistet kolonneoverskriftene på telefon.** `shared.css` gjør alle
+  tabeller om til stablede rader under 600 px og skjuler overskriftsraden; listesidene setter
+  kolonnenavnet på hver celle, men en tabell skrevet i en seksjon hadde ikke det. Deltakeren så
+  cellene under hverandre, høyrestilt, uten navn. Nå setter gjengivelsen `data-label` på hver
+  celle. (Radene stakk dessuten 18 px ut av leseren; `box-sizing` rettet.)
+- **Tabeller hadde ingen stil i leseren på PC** — ingen linjer, ingen luft.
+
+**Rotårsaken til at kortene forsvant** ligger i skillet (2.83.0, egen gren) og i plattformen
+sammen: skillet hadde ingen form å skrive dem i, og plattformen ingen å tegne. Skillet skriver nå
+den uthevede boksen og prompt-boksen slik denne versjonen tegner dem; kortrammen (`:::kort`)
+legges inn i skillet når milepæl 1 er målt.
+
+**Slik er det målt.** `test/unit/section-content-blocks-1079.test.ts` (53: hver form, det som
+ikke er en form, rensing inni blokkene, `?locale=constructor`) og
+`test/e2e/content-blocks-1079.spec.ts` (PC: fire kort på én rad, bokser med farge, tabell med
+rammer, «Kopier» legger prompten på utklippstavla; 390 og 360 px: kortene under hverandre, hver
+tabellcelle med kolonnenavn, ingenting ut av leseren). Sett på PC og 390 px før testene ble
+skrevet. Enhetstesten fant at språkkoden `constructor` i adressen ga krasj (samme slag som
+#1088) før den kom så langt som til stage.
+
+**Ikke med:** figurer er som før; redigeringsfeltet har ingen knapper for blokkene (en forfatter
+skriver dem som tekst, eller får dem fra skillet); bilder krympes ikke ved import ennå (valg 4,
+anbefalingen om 300 kB).
+
+## 2.82.2 - 2026-10-05
+
+### Et kurs med lange stegtitler gikk ut av skjermen på telefon
+
+Produkteier, etter å ha åpnet testkurset på en ekte telefon: «illustrasjonen oppførte seg bedre
+enn selve applikasjonen».
+
+Når et steg i et kurs er lest (eller kommer senere), vises det som en rad med tittelen på én linje.
+Tittelen skulle forkortes med «…» når den ikke fikk plass. I stedet presset den hele kursinnholdet
+ut til 668 px på en skjerm på 390: tittelen, «Lest» og «Se igjen» gikk ut til høyre, og teksten i
+leseren ble kuttet. **Feilen ligger også i prod**, og gjelder ethvert kurs der et lest eller
+kommende steg har en tittel på mer enn rundt 17 tegn — altså de fleste.
+
+- **Rutenettene rundt kursinnholdet og rundt hvert steg holder nå på bredden**
+  (`.course-accordion-body` og `.course-item`, `minmax(0, 1fr)`). En kolonne i et rutenett er
+  ellers aldri smalere enn det bredeste den inneholder. Det gjaldt ikke bare stegradene:
+  diskusjonslinja under stegene, som står på hvert kurs, har en tekst på én linje og kuttet
+  kursinnholdet 20 px på en telefon på 390 på engelsk. En diskusjonstråd med en lang adresse i
+  tittelen gjorde hele kurset 106 px bredere; nå holder kurset bredden. (Adressen selv går
+  fortsatt ut av trådens egen boks — se «ikke rettet her».)
+- **På telefon får tittelen sin egen linje, hel**, over typen, statusen og «Se igjen». Da
+  overflyten var rettet, viste det seg at tittelen ikke hadde noe sted å være: den fikk 20 px på
+  en telefon på 360, og 0 på 320. Samme valg som modullista allerede har under 600 px.
+  ⚠️ Synlig endring på telefon som produkteier ikke har bestilt. På PC er det som før.
+- **Statusmerkene står i samme kolonne på telefon**, også i raden som ikke gjentar tittelen (en
+  test rett etter en seksjon med samme navn). Uten dette hoppet merket ut til høyre i den ene raden.
+- **Et ord som er lengre enn raden, brekker**: i stegtittelen på telefon, og en lang adresse i
+  teksten i leseren (`overflow-wrap: break-word`). Før gikk det ut over kanten og ble kuttet midt
+  i en bokstav.
+
+**Målt** i `test/e2e/course-steps-fit-phone.spec.ts` (18 tester). Kurset åpnes slik det er hos en
+deltaker — diskusjon på, ett lest steg, ett som står for tur og ett som kommer, alle med lange
+titler — på 390, 360 og 320 px på bokmål og 390 og 360 px på engelsk. Ingenting stikker ut eller
+er kuttet av kursrammen, hele tittelen kan leses, og et lest steg kan åpnes igjen med leseren
+innenfor skjermen. På 640 px (rett over telefongrensa) står tittelen på én linje og forkortes. En
+tabell i leseren har hele ord på 700 og 1280 px. 8 mutasjoner, 8 røde. Stage-testen måler det samme mot det utrullede miljøet: testkurset har nå to
+seksjoner, og den første merkes som lest.
+
+**QA-gjennomgangen sa først NO-GO** (`.ai-qa/qa-20261005-162033.md`), med rette. Første utgave
+rettet bare rutenettet rundt hvert steg. Jeg hadde lagt samme linje på rutenettet rundt
+kursinnholdet også, men tok den ut igjen fordi mutasjonssjekken viste at ingen test trengte den.
+Testen trengte den ikke fordi den åpnet kurset uten diskusjon og bare på bokmål — samme feil som
+testene før den: én tilstand. **En mutasjon som overlever, betyr enten at koden er død eller at
+testen er blind.** De to andre vaktene som ble fjernet i dag (2.82.0), var begrunnet i koden selv,
+ikke bare i at testen var grønn uten dem; denne var det ikke.
+
+**Runde to sa også NO-GO** (`.ai-qa/qa-20261005-175339.md`), også det med rette. Regelen for lange
+adresser i leseren, som jeg tok med som en ekstra retting i runde to, var `overflow-wrap:
+anywhere`. Den lar nettleseren regne en tabellkolonne som én bokstav bred, og brakk ord midt i —
+«MN/OK», «125/0» — i tabeller med en lang tekstkolonne, på nettbrett og PC. Byttet til `break-word`, som bare brekker
+det som ellers ville gått ut av boksen, og testen har fått en tabell. **Hver «liten ekstra
+retting» i denne utgaven har kostet en QA-runde.** De øvrige funnene står derfor som kjente under,
+i stedet for å bli rettet i samme omgang. Runde tre ga GO (`.ai-qa/qa-20261005-182600.md`):
+kolonnebreddene i tabeller er de samme som før endringen, og ingen boks har flyttet seg for innhold
+som fikk plass (62 elementer målt på 390, 700 og 1280 px).
+
+**Rotårsak — i testene, ikke bare i koden.** Alle testene som åpner et kurs på telefonbredde,
+også de jeg skrev tidligere i dag, åpner et kurs med ETT steg som ikke er lest. Det steget vises
+som et kort, der tittelen brekker. Tilstanden etter første steg ble aldri åpnet. Nettleseren hadde
+ingenting med det å gjøre: feilen kom fram i Chromium med en gang kurset ble åpnet i riktig tilstand.
+
+**Funnet av de to gjennomgangene, ikke rettet her** (alle fantes fra før):
+
+- Modullista («Last moduler») har samme konstruksjon og kan rulles 14 px sidelengs mellom 600 og
+  700 px når en modul har en svært lang tittel.
+- Topplinja i et åpent test-panel har ikke plass til tittelen på telefon («U…» på 360 px).
+- Et ord på over rundt 22 tegn i tittelen på kortet for steget som står for tur, går ut av kortet
+  på en telefon på 320 px (`.course-step--now .course-step-title` har ingen `overflow-wrap`).
+- En adresse i tittelen på en diskusjonstråd går ut av trådens boks og kuttes (79 px på 360).
+- «Mine kurs» på 320–360 px: et langt ord i kurstittelen presser statusmerket ut, og tittelen i en
+  fullført rad kan overlappe lenka til kursbeviset.
+- En tabell som er bredere enn leseren (fem kolonner), kuttes mellom 600 og rundt 800 px og kan
+  ikke rulles fram (238 px på 601, 99 px på 740). Under 600 px står tabeller som kort og får plass.
+- Kursbyggerens velger lukker seg selv hvis feltet trykkes innen 150 ms etter «Legg til», og
+  åpnes da ikke av et nytt trykk. Rammer i praksis bare tastaturbruk — og testen som feilet to av
+  seks fullkjøringer i dag. Testen venter nå ut tidsavbruddet; produktet er ikke endret.
+
+⚠️ **Ett testkurs står igjen på stage, arkivert.** Testkurset som ble latt stå for å kunne ses på
+en ekte telefon, ble fullført der. Fullføringen ga et kursbevis, og et kurs med kursbevis kan ikke
+slettes (`course_has_completions`). Det er avpublisert og arkivert («Stage-test figur i to oppsett
+1791205999067»), og seksjonen med det. Testen teller nå det som ikke lar seg slette, og sier at
+«Avslutt kurset» ikke skal trykkes på testkurset.
+
+## 2.82.1 - 2026-10-05
+
+To feil som 2.82.0 innførte, funnet av QA-gjennomgangen (`.ai-qa/qa-20261005-100836.md`, GO) før
+noen hadde sett dem. Ingen migrasjon.
+
+- **Seksjonseditoren på telefon: linja med «Last opp bilde» havnet bak menyen** når sida ble rullet,
+  på telefoner under 375 px (på engelsk, der menylenkene er lengre, opp til rundt 480 px). Menyen er festet øverst på den sida, og linja under er festet 46 px
+  ned — et tall som forutsetter at menyen er én linje. Da menyen fikk brekke (#1085), ble den to.
+  Under 600 px ruller menyen nå bort med sida, og linja festes helt øverst.
+  ⚠️ Synlig endring: på telefon står ikke menyen lenger igjen øverst mens man redigerer en seksjon.
+- **Skillet ba agenten ta bilde av figuren i et vindu på 400 px.** Det smale oppsettet er opptil
+  590 px høyt og vises i sin egen størrelse, så bildet stoppet midt i figuren — og agenten skulle
+  bedømme om noe var kuttet. Vinduet i anvisningen er nå 700 px. `--full-page`, som gjennomgangen
+  foreslo, er prøvd og virker ikke: på en SVG-fil blir kommandoen aldri ferdig. Det står nå i skillet.
+
+**Målt:** to nye nettlesertester (360 og 320 px: ingen del av linja er dekket etter rulling; røde
+før rettingen), og én enhetstest som leser vinduet ut av anvisningen og krever at det rommer den
+høyeste figuren skriptet tegner (rød med 400). «Se på figuren»-steget og forhåndsvisningen er kjørt
+ende til ende på en figur med åtte steg, og bildene er sett.
+
+**Rotårsak.** Begge er følger av en endring ett sted som en regel et annet sted stilltiende bygget
+på: tallet 46 bygget på en meny på én linje, og vinduet på 400 px på en figur som skalerte seg til
+vinduet. Ingen av dem sto i en test.
+
+QA-gjennomgangen av 2.82.1 (`.ai-qa/qa-20261005-103917.md`, GO) målte editoren på 11 bredder og tre
+språk uten å finne noe dekket.
+
+**Stage-testen holder seg nå under appens grense for forespørsler.** En prøvekjøring mot en lokal
+app ga svar 429: testen er én bruker som åpner mange sider raskt, og appen slipper gjennom 120
+forespørsler i minuttet per bruker. Lister kom tomme tilbake, og rapporten ville vist feil som ikke
+finnes. `test/stage/pace.ts` gir hver forespørsel en tur med jevn avstand (100 i minuttet), og
+utgivelsestesten kjøres med én arbeider. Den måler også #1088 og #1089 mot det utrullede miljøet, og
+`STAGE_BEHOLD=1` lar testkurset stå igjen så figuren kan ses på en ekte telefon.
+
+**To funn som fantes fra før, ikke rettet her:** `?locale=xx` på modulbiblioteket og arkivet gir
+feil 500 (samme type feil som #1088, bare ved en adresse skrevet for hånd), og «Mer» på en av de
+nederste radene kan kuttes av tabellrammen når lista har svært få rader.
+
+## 2.82.0 - 2026-10-05
+
+Sju rettinger samlet, slik at produkteier kan teste alt på stage i én omgang. Ingen migrasjon.
+Skillet er endret (det smale oppsettet og etikettsjekken), så pakka må bygges på nytt.
+
+### #1079: figuren kunne ikke leses på telefon
+
+Stage-testen av 2.81.0 viste at riktig oppsett ble valgt på telefon — og at etikettene var 5 px høye.
+
+- **Det smale oppsettet har to steg per rad, ikke fire** (`draw-flow-figure.mjs`). Regelen bak:
+  en etikett trenger plassen mellom to steg, så en rad med n steg er om lag 104·n bred, og
+  etikettene på 12 px er 9 px på skjermen — det minste som kan leses — når spalten er 78·n px.
+  Spalten deltakeren leser i på en telefon på 390 px, er målt til 201 px: plass til to steg, ikke
+  tre. Tre steg per rad (det som først var planen) ville gitt 7 px.
+- **Det smale oppsettet oppgir sin egen størrelse** (`width`, `height` på tegningen, 1,25 ganger
+  målene den er tegnet i). Et bilde krympes til spalten, men blåses ikke opp forbi egen størrelse.
+  Uten dette ville figuren fylt en spalte på 600 px (nettbrett på høykant) med etiketter på 30 px.
+  Der står den nå 300 px bred. Det brede oppsettet fyller spalten som før.
+- **Leseren har smalere marger på telefon** (`participant.html`, under 600 px): de to innerste
+  rammene gir 20 px tilbake. På en telefon på 360 px er det forskjellen på 8,5 og 9,5 px etiketter.
+  ⚠️ **Ikke godkjent av produkteier ennå** — det er en synlig endring av deltakersida på telefon.
+  Tre linjer CSS; fjernes de, er 390 px-telefoner fortsatt lesbare (10 px), 360 px ikke helt.
+- Forhåndsvisningen fra `figure-preview.mjs` viser telefonspalten i 220 px (før: 360) og blåser
+  ikke lenger opp en figur som har egen størrelse — den viste noe annet enn plattformen gjør.
+
+**Målt** i den ekte deltakersida i Chromium, med figuren skriptet tegner for åtte steg
+(`test/e2e/figure-legible-on-phone-1079.spec.ts`): etikettene er minst 9 px på 390 og 360 px,
+figuren står i 300 px på et nettbrett, og det brede oppsettet fyller spalten på PC.
+
+⚠️ **Det som er valgt bort:** på et nettbrett på høykant (spalte rundt 580 px) ville fire steg per
+rad sett bedre ut enn to. Det ville krevd et tredje oppsett og en ny grense i klienten. Ett smalt
+oppsett må passe den smaleste spalten, og det er telefonen.
+
+**Rotårsak.** Det smale oppsettet ble tegnet for en spalte på 480 px, et tall fra en prøveside.
+Ingen målte spalten i den ekte leseren, der tre rammer med hver sin marg tar 189 av 390 px. Alle
+testene målte *hvilket* oppsett som ble valgt; ingen målte om det kunne leses.
+
+### #1084: «Mer» lå utenfor rammen på listene på PC
+
+Med ekte innhold var modullista 67 px bredere enn ramma, og handlingene ytterst til høyre kom
+først fram når tabellen ble rullet sidelengs. To ting i `shared.css`:
+
+- Kolonneoverskriftene og statusmerkene får brekke. «SERTIFISERINGSNIVÅ» var bredere enn alt som
+  sto under den.
+- Handlingskolonnen er festet til høyre kant (`position: sticky`). Blir tabellen likevel for bred,
+  ruller resten av raden inn under den. Regelen holder uansett hva raden inneholder — en regel som
+  bare gjorde kolonnene smalere, ville holdt til neste kolonne kom.
+
+`test/e2e/list-fits-frame-1084.spec.ts` (9 tester) bruker rader som de på stage. **Rotårsak:** de
+andre testene har korte titler og ett statusmerke per rad; feilen krevde ekte innhold.
+(Se også «synlig bivirkning» under #1085.)
+
+### #1085: menylinja var bredere enn skjermen på telefon
+
+Hele sida kunne rulles sidelengs. Lenkene står nå tettere på telefon, så de fire får plass på én
+linje på 390 px (bokmål og nynorsk; på engelsk to linjer), og de får brekke til en ny linje på
+smalere skjermer.
+`test/e2e/nav-fits-phone-1085.spec.ts` (14 tester). **Rotårsak:** testene kjørte som
+fagansvarlig, som har færre lenker i menyen. Feilen viste seg bare for administrator.
+
+### #1084, synlig bivirkning: to statusmerker står under hverandre
+
+«Publisert» og «Nyere utkast» står nå under hverandre i listene, på alle bredder, og plassen går
+til navnekolonnen. Rader med utkast blir én linje høyere. Ikke bestilt av produkteier.
+
+### #1087: skillets etikettsjekk var løsere enn plattformens
+
+En pakke kunne bestå skillets sjekk av «det smale oppsettet har de samme etikettene som det
+brede» og bli avvist av importen: skillet slo sammen mellomrom og leste ikke `<title>`.
+`localization-check.mjs` teller nå etikettene slik plattformen gjør (`extractLayoutLabels`).
+
+Testen etterligner ikke regelen: 21 figurpar sendes gjennom både skillets sjekk og plattformens
+`findLayoutVariantProblem`, og svarene skal være like. **Rotårsak:** to utgaver av samme regel,
+skrevet hver for seg, uten noe som holdt dem sammen.
+
+### #1088: `?locale=constructor` ga feil 500 på en figur
+
+Språket ble slått opp med `paths[locale]`, som også treffer det alle objekter arver. Nå teller et
+språk bare når det som står under det, er en sti (tekst). Fantes før 2.81.0.
+
+### #1089: en avvist figur etterlot et utkast
+
+Forfatter-API-et (`POST /sections` med figurer) laget seksjonen først og importerte figurene
+etterpå. Ble en figur avvist, svarte det 400 — og seksjonen ble liggende, uten figuren. En agent
+som prøvde igjen, laget seksjonen to ganger. Rekkefølgen er nå den filimporten alltid har hatt:
+figurene sjekkes og lagres, så skrives seksjonen og radene i én transaksjon. Feiler den, fjernes
+filene. `importSectionAssets` er fjernet; `stageSectionAssets` er den eneste veien inn.
+
+### #1090: en ny oversettelse lot de gamle filene ligge
+
+`localizeSectionAssets` skrev nye oversatte filer og pekte radene på dem, men fjernet ikke de
+forrige. Nå fjernes de som ikke lenger brukes.
+
+### Mutasjonssjekk
+
+Hver retting er ødelagt med vilje, én om gangen, og testen som skal vokte den, er kjørt:
+**19 mutasjoner, 19 røde** (#1084: 6, #1085: 3, #1079: 4, #1087: 1, #1088: 1, #1089: 3, #1090: 1).
+Det tok to runder. Første runde fant fire ting i mine egne rettinger:
+
+- **Regelen som skulle gjøre menylenkene tettere på telefon, virket aldri** (#1085). Fem sider har
+  sin egen kopi av menystilen i en stilblokk som kommer etter `shared.css`, og kopien vant. Menyen
+  brakk til to linjer der den skulle stå på én. Regelen har nå to klasser i velgeren, og fire
+  tester krever én linje på 390 px. Kopiene i de fem sidene bør fjernes; det er ikke gjort her.
+- **Kontrollen av at statusmerkene sto under hverandre, godtok merker side om side** (#1084): den
+  sammenlignet toppene, og merkene er ulike høye. Den sammenligner nå bunn mot topp.
+- **To vakter gjorde ingenting** og er fjernet: `Object.hasOwn` ved siden av tekstsjekken (#1088 —
+  ingenting et objekt arver, er tekst), og en sjekk av at en gammel oversatt fil ikke fortsatt var
+  i bruk (#1090 — hver ny fil får nytt navn, så det kan ikke skje).
+- Veien der transaksjonen feiler etter at filene er lagret (#1089), hadde ingen test. Den har fått
+  en (`test/unit/section-create-with-assets-1089.test.ts`).
+
+## 2.81.1 - 2026-10-04
+
+Bare skillet (`skills/a2-authoring-api`). Ingen endring i plattformkoden, ingen migrasjon.
+
+### Skillet viste figurer som kode i ChatGPT
+
+Produkteier, fra en ChatGPT-samtale: «den rendrer ikke svg … vises som tagger».
+
+Skillet sa «vis SVG-en rendret» uten å si hvordan. I en samtale som ikke tegner SVG, ble figuren
+skrevet ut som kode, og forfatteren ble bedt om å godkjenne en figur ingen hadde sett. Den eneste
+måten skillet nevnte for selv å se på en figur, var Playwright «i repoet» — som en samtale i en
+sandkasse ikke har. Det er veien de fleste forfattere bruker.
+
+- **Nytt skript, `figure-preview.mjs`.** Det lager én selvstendig side der hver figur vises som
+  bilde, slik plattformen viser den, i en bred spalte og en telefonbred, med en knapp som spiller
+  av animasjonen på nytt. Sida kan åpnes i en nettleser eller vises i forhåndsvisningen der
+  samtalen har en.
+- **En stillestående fil ved siden av hver figur** (`<navn>.still.svg`): figuren i ro, uten
+  stilblokk, med fargene skrevet rett på stegene. Tegnere som ikke er nettlesere (cairosvg,
+  rsvg-convert, ImageMagick), leser verken CSS-variabler eller animasjoner, og tegner flyten med
+  faser med svarte steg. Den stillestående fila er det de får.
+- **Regelen i skillet:** vis aldri en figur ved å lime inn SVG-koden. Og: har agenten ingen måte å
+  rendre figuren på, skal den si «ikke sett» — ikke «ser bra ut».
+
+**Målt:** 13 enhetstester og 2 målinger i Chromium (den stillestående fila har samme farger som
+figuren i ro; sida viser hvert bilde i begge spalter, og knappen laster det på nytt). 9 mutasjoner,
+9 røde. Testen fant én feil i skriptet før det ble levert: uten `--out` forsvant den første figuren.
+
+⚠️ **Ikke målt: ChatGPT selv.** Jeg har ingen måte å kjøre skillet i ChatGPT på. Det som er målt,
+er at sida og den stillestående fila er riktige i en nettleser. Om ChatGPT viser sida i canvas,
+eller bare gir den som fil, vet jeg ikke. Heller ikke om sandkassa der har en tegner
+(`cairosvg`); skillet sier hva agenten skal gjøre i begge tilfeller.
+
+**Rotårsak.** Anvisningen for å se på en figur ble skrevet og prøvd i dette repoet, der Playwright
+finnes. Skillet sier selv at sandkassa er hovedveien, men ingen prøvde figurstegene der. Samme
+mønster som #987: det som bare er prøvd der utvikleren sitter, virker bare der.
+
+## 2.81.0 - 2026-10-04
+
+Plattformen og skillet. **Én migrasjon**, som bare legger til en kolonne.
+
+### #1079, steg 4 av 4 — plattformen lagrer det smale oppsettet og velger etter spaltebredden
+
+En SVG som vises som bilde, kan ikke brekke seg selv om når spalten blir smal. Fra 2.80.0 tegner
+skillet en flyt i to oppsett. Nå tar plattformen imot begge, og viser det som passer.
+
+**For deltakeren:** en figur som har et smalt oppsett, vises i det når spalten den står i, er under
+640 px bred (telefon), og i det brede ellers. Snus telefonen eller dras vinduet, bytter figuren.
+En figur uten smalt oppsett vises som før.
+
+**Slik er det bygget** (designet produkteier godkjente i #1079):
+
+- **Lagring.** `SectionAsset` har fått kolonnen `layoutVariants`. Det brede oppsettet er figuren
+  slik den alltid har vært lagret; det smale ligger ved siden av, med sine egne språkvarianter.
+  Migrasjonen legger bare til kolonnen, og alt som finnes fra før, har den tom.
+- **Levering.** `GET /api/content-assets/:id?layout=narrow` gir det smale oppsettet når figuren har
+  det, ellers det brede. Svaret sier hvilket oppsett som kom og hvilke figuren har
+  (`X-Asset-Layout`, `X-Asset-Layouts`).
+- **Valget.** Klienten henter allerede hver figur med innlogging (`hydrateContentAssetImages`). Der
+  måler den nå spalten og ber om oppsettet som passer. En figur med begge oppsett følger spalten sin.
+- **Inn og ut.** Import, eksport og forfatter-API-et bærer det smale oppsettet (`layoutVariants` på
+  figuren). Oversettelsen oversetter begge oppsettene med de samme oversettelsene. Sletting og
+  reparasjonen fra #1083 går gjennom begge.
+- **Skillet** legger begge figurene i pakka, og de tre sjekkene som leser figurer, kjenner det smale.
+
+**Tre regler som er valg, ikke følger** (alle står i `doc/DECISIONS.md`):
+
+| Regel | Hvorfor |
+|---|---|
+| **Språk går foran oppsett.** Finnes det smale bare på norsk og det brede på engelsk, får en engelsk leser det brede | En liten figur kan leses; en på feil språk kan ikke. ⚠️ Dette har jeg bestemt under bygging; produkteier har ikke tatt stilling |
+| **Grensa er 640 px**, én fast bredde for alle figurer | Produkteiers beslutning. Skal måles på ekte telefon og nettbrett |
+| **Et smalt oppsett har de samme etikettene som det brede**, språk for språk — ellers avvises det | Oversettelsen spør språkmodellen én gang og skriver svarene inn i begge. En etikett bare i det smale ville blitt stående uoversatt |
+
+**To oppryddinger som fulgte med, fordi endringen ellers måtte gjøres to steder:**
+
+- De to veiene en figur kom inn (`importSectionAssets` for forfatter-API-et, `stageSectionAssets`
+  for filimport) var kopier av hverandre. Den første kaller nå den andre.
+- **Alt sjekkes før noe skrives.** Før ble hver figur skrevet til lageret etter tur. Ble figur
+  nummer tre avvist, lå filene til de to første igjen uten noen rad som pekte på dem.
+
+**Én leser.** Kolonnen er JSON, og ingenting hindrer et nytt sted i å lese den på sin egen måte.
+Alt som trenger filene til en figur, går derfor gjennom én funksjon (`assetFiles`): sletting,
+reparasjon og eksport er bygget på samme liste. Oversikten over alle tolv stedene står i
+`doc/FEATURE_SURFACE_MAP.md` §11b.
+
+**Målt:**
+
+- Integrasjon (`test/m2-section-asset-layouts-1079.test.ts`, 31 tester mot ekte database): import →
+  levering → oversettelse → eksport → ny import → sletting → reparasjon, sju avvisninger som ikke
+  lagrer noe, og alle kombinasjonene av språk og oppsett i leveringen.
+- Chromium (`test/e2e/asset-layout-by-column-1079.spec.ts`, 9 tester): hvilket oppsett som blir bedt
+  om og vist ved 1280 og 390 px, ved endring av bredde, i deltakervisningen og i forhåndsvisningen i
+  editoren. Kjørt tolv ganger uten avvik.
+- Enhet (`test/unit/asset-layout-variants-1079.test.ts`, 35 tester): skjemaene, regelen for et
+  oppsett, tørrkjøringen av en forfatterpakke, og skillets tre sjekker.
+- 35 mutasjoner av tjeneren, ruta, valideringen, klienten og skillets sjekker: 35 røde. Én sto først
+  grønn: at figurer med bare ett oppsett også ble fulgt ved endring av bredde. Testen endret bredden
+  to ganger rett etter hverandre, nettleseren slo endringene sammen, og bare sluttbredden ble målt.
+  Hver bredde får nå stå til sida er tegnet.
+
+### Utgivelsestest mot stage, og en rapport med skjermbilder
+
+Produkteier ba om at han ikke skal teste for hånd det en maskin kan måle (2026-10-04).
+`test/stage/release-2-78-x.spec.ts` kjører derfor det som før var et manuelt testskript, med den
+ekte klienten mot de ekte dataene på stage: #1083, #1073, #1080, #1081 og #894.
+`npm run test:stage:release` kjører den og lager `test-results/stage-rapport/rapport.html` med
+utfallet og skjermbildene. Det som blir igjen til et menneske, er å logge inn (`npm run stage:auth`)
+og se over bildene.
+
+Første kjøring mot stage 2.78.3: 21 målinger, 16 besto. De fem som feilet, er to feil som fantes
+fra før, og som de mockede e2e-testene ikke kunne se fordi de har korte navn og få merker:
+
+| Sak | Funn |
+|---|---|
+| #1084 | På modullista på PC er tabellen 67 px bredere enn ramma, og «Mer» ligger utenfor |
+| #1085 | På telefonbredde er menylinja over listene bredere enn skjermen (13–28 px) |
+
+**Rotårsak til at de ikke ble funnet før.** E2e-testene mocker API-et med data jeg selv har
+skrevet. Layoutfeil som avhenger av hvor mye som står i en rad, finnes ikke i en fikstur med to
+korte rader. Sjekken som manglet, kjører nå mot ekte data, og den er mekanisk: den krever bare en
+innlogging.
+
+⚠️ **En feil i min egen arbeidsmåte underveis:** for å prøvekjøre stage-testen startet jeg appen
+lokalt mot testdatabasen. Den starter også arbeideren, som plukker vurderingsjobber. Prosessen ble
+stående etter at jeg stoppet den, og ga én til fire tilfeldige feil i
+`assessment-policy.integration.test.ts` i neste fullkjøring — samme symptom som #1028. Sjekk at
+port 3001 er fri før en integrasjonskjøring.
+
+**Kjent, ikke gjort:**
+
+- Opplasting for hånd i seksjonseditoren gir fortsatt bare det brede oppsettet.
+- Bare flyt med faser tegnes i to oppsett. De andre figurtypene i skillet har ett.
+- Grensa på 640 px er ikke målt på en ekte telefon eller et nettbrett.
+- Forhåndsvisningen i editoren viser oppsettet som passer **dens egen** bredde. På en smal skjerm
+  ser forfatteren altså det smale oppsettet, slik deltakeren på telefon gjør.
+
+## 2.80.0 - 2026-10-04
+
+Bare skillet (`skills/a2-authoring-api`). Ingen endring i plattformkoden, ingen migrasjon.
+
+### #1079, steg 3 av 4 — to oppsett av samme figur, tegnet fra én beskrivelse
+
+En figur som vises som bilde, har fast form. Den kan ikke brekke seg selv om når spalten blir smal.
+Produkteier bestemte derfor (2026-10-04) at en flyt finnes i to oppsett: **bredt**, med alle steg
+på én rad, og **smalt**, med fire per rad for telefon.
+
+To tegninger skrevet for hånd ville sprike: en etikett rettet i den ene, et steg lagt til i den
+andre. `skills/a2-authoring-api/scripts/draw-flow-figure.mjs` tar derfor **én beskrivelse** av
+flyten (steg, rekkefølge, faser, farger) som JSON og tegner begge. Det som kommer ut, er
+fasemalen fra 2.79.0, og skriptet kjører begge figursjekkene på hver tegning før noe returneres.
+En etikett som er for lang for plassen mellom to steg, blir en feil der, med etiketten navngitt.
+
+Dette er standardveien for en flyt med faser: forfatteren beskriver, skriptet tegner. Språk-
+varianter lages ved å oversette beskrivelsen og tegne på nytt, så geometrien er lik av seg selv.
+
+**En figur har høyst åtte steg.** To ting gir samme tall: det brede oppsettet vises ned til en
+spalte på 640 px, og med åtte steg er etikettene da 9 px på skjermen; og åtte steg etter tur er
+ferdig på 4,75 sekunder, innenfor de fem animasjonen har. En lengre flyt er to figurer. Dette er
+en vurdering av lesbarhet, ikke en grense i plattformen.
+
+**Plattformen kan ikke velge oppsett ennå.** Til den kan (steg 4), går den brede figuren i pakka,
+og den smale ligger ved siden av beskrivelsen.
+
+**Målt:**
+
+- Kjørt på flyten fra den ekte presentasjonen (åtte steg, fem faser) gir skriptet de to figurene
+  produkteier godkjente, tegn for tegn: 4,9 kB bred og 5,1 kB smal.
+- Enhet (`test/unit/agent-authoring-draw-flow-figure-1079.test.ts`, 35 tester): begge oppsettene
+  består begge sjekkene, også etter `sanitizeSvg`; de to sier det samme (samme tekster i samme
+  rekkefølge, samme stilblokk, samme steg); atten beskrivelser som ikke kan tegnes, avvises med
+  årsaken navngitt; kommandolinja skriver begge filene, og ingenting når beskrivelsen er gal.
+  Eksempelet i `figure-design.md` tegnes som det står.
+- Chromium (`test/e2e/figure-motion-template-1073.spec.ts`, tre nye): i begge oppsettene lyser
+  seks steg opp etter tur, én gang, og hviler i fasens farge; ingenting er tegnet utenfor figuren;
+  det smale har to rader og det brede én.
+- 16 mutasjoner, 16 røde.
+
+**Gjenstår i #1079:** plattformens lagring og valg av oppsett (`layoutVariants`, designet står i
+saken), og uttrekket fra presentasjonsfila.
+
+## 2.79.0 - 2026-10-04
+
+Bare skillet (`skills/a2-authoring-api`). Ingen endring i plattformkoden, ingen migrasjon.
+
+### #1079, steg 2 av 4 — sirkler som steg, og farge per fase
+
+Produkteier så ett lysbilde fra en ekte presentasjon tegnet på nytt, ved siden av originalen, og
+bestemte to ting malen ikke tillot (2026-10-04): et steg kan være en **sirkel**, og hvert steg har
+**fasens farge**. Regelen «et steg er alltid en firkant» fra #1073 var satt for å tette et hull i
+kontrollen, og hullet er like tett når en sirkel også må bære stegklassen.
+
+- **Ny mal i `figure-design.md`: «flow with phases».** Nummererte sirkler med etiketten under, en
+  strek per fase over. Et steg hviler i fasens lyse tone og lyser opp i fasens sterke.
+- **Figursjekken sammenligner fortsatt med malen.** Malen har fått én form til, ikke et unntak:
+  fargene er enten hex alle fire steder (som før), eller `var(--grunn)` og `var(--lys)` alle fire
+  steder, fulgt av én regel per fase. En blanding er ingen av formene. Hvert steg bærer nøyaktig én
+  faseklasse, hver faseregel brukes av et steg, og en faseklasse står bare på et steg.
+- **En stillestående flyt tegnet med sirkler** gjenkjennes nå som flyt.
+
+**Plassjekken (`figure-fit-check.mjs`) har to nye regler.** En etikett som står fritt, under en
+sirkel eller ved en strek, har ingen boks å få plass i. Den sjekkes i stedet mot naboene:
+`labels_overlap` (to etiketter går inn i hverandre) og `stroke_through_label` (en `<line>` eller et
+ledd i en `<polyline>` er tegnet gjennom en etikett). Den første figuren som ble tegnet på nytt fra
+lysbildet, besto begge sjekkene og hadde likevel en forbindelsesstrek rett gjennom en etikett. Den
+ville blitt avvist nå. Krumme `<path>` leses ikke; å se på bildet er fortsatt påkrevd.
+
+**Målt:**
+
+- Chromium (`test/e2e/figure-motion-template-1073.spec.ts`, åtte nye): hver sirkel i fasemalen har
+  sin animasjon, én gang, etter tur, ferdig innen 5 sekunder. Hvert steg lyser opp i fasens sterke
+  farge og hviler i fasens lyse. Som bilde, etter plattformens rensing, har stegene fasens farge.
+  Fire ødelagte varianter er ødelagt i nettleseren **og** avvist av sjekken: et steg uten
+  faseklasse og en fase uten regel gir **svarte** steg, lik farge i ro og opplyst gir ingen synlig
+  bevegelse, og en sirkel uten stegklasse lyser aldri opp.
+- Enhet (`test/unit/agent-authoring-figure-phases-1079.test.ts`, 45 tester): fire former som er
+  malen, 24 som ikke er det, plassreglene med kontroller for hver, og fasemalen fram og tilbake
+  gjennom `sanitizeSvg`.
+- 20 mutasjoner, 20 røde. Én av de første var uten virkning (siste linje i en geometrifunksjon som
+  aldri avgjør utfallet) og ble byttet mot en som måler det samme: slingringsmonnet for streker.
+
+**To rettinger som fulgte med:**
+
+- **`&quot;` og `&apos;` i figurens CSS** ble avvist som `css_escape` i 2.78.3. Plattformen skriver
+  `"` som `&quot;` i en attributtverdi, så en figur med `style='font-family: "Segoe UI"'` besto som
+  utkast og ble avvist etter en runde gjennom plattformen. Funnet av gjennomgangen av 2.78.3. Alle
+  fem referansene XML selv definerer, slipper nå gjennom, og en test sender figuren gjennom
+  `sanitizeSvg` og tilbake til sjekken.
+- **Malen «labelled diagram» i `figure-design.md` feilet skillets egen plassjekk.** En etikett sto
+  3 px over toppen av figuren. Ingen test kjørte plassjekken på malene; nå gjør én det.
+
+**Rotårsak til de to rettingene.** Begge er samme mangel: sjekkene ble testet på figurer skrevet
+for testen, ikke på det som faktisk går gjennom dem, altså skillets egne maler og det plattformen
+skriver tilbake. Begge kjører nå som test: hver mal gjennom begge sjekkene, og rundturen gjennom
+`sanitizeSvg`.
+
+**Gjenstår i #1079:** to oppsett (bredt og smalt) fra én beskrivelse, plattformens lagring og valg
+av oppsett, og uttrekket fra presentasjonsfila.
+
 ## 2.78.3 - 2026-10-04
 
 To rettinger etter QA-gjennomgangen av 2.78.2, ingen migrasjon. Gjennomgangen ga GO for stage, med

@@ -583,6 +583,10 @@ export const moduleExportPayloadSchema = z.object({
 // refs are remapped to the newly created SectionAsset id. `sourceId` is the SectionAsset
 // id in the SOURCE environment — used ONLY to match markdown refs, never persisted as an id.
 // `sourceLocale` + `localizedVariants` carry the #657 localized-SVG variants.
+// `layoutVariants` (#1079) carries the figure's other layouts — today one, `narrow`, for a
+// phone-width column — each with its own translated variants. The asset itself is the wide layout.
+// The layout name is a plain string here and checked where the figure is stored
+// (`stageSectionAssets`), so an unknown layout gets the same named refusal from every way in.
 export const sectionAssetExportSchema = z.object({
   sourceId: z.string().min(1),
   filename: z.string().min(1),
@@ -595,6 +599,22 @@ export const sectionAssetExportSchema = z.object({
       z.object({
         locale: z.string().min(1),
         contentBase64: z.string().min(1),
+      }),
+    )
+    .optional(),
+  layoutVariants: z
+    .array(
+      z.object({
+        layout: z.string().min(1),
+        contentBase64: z.string().min(1),
+        localizedVariants: z
+          .array(
+            z.object({
+              locale: z.string().min(1),
+              contentBase64: z.string().min(1),
+            }),
+          )
+          .optional(),
       }),
     )
     .optional(),

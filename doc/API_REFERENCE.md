@@ -602,6 +602,17 @@ did not change the format version: older files have no `section` field and valid
 
 The participant/preview serve endpoint `GET /api/content-assets/:assetId` accepts an optional `?locale=` query: when a translated SVG variant exists for that locale it is returned, else the original. SVG responses carry `Content-Security-Policy: …; sandbox` + `X-Content-Type-Options: nosniff` as defence-in-depth for direct navigation (#657).
 
+**Layouts (#1079).** An SVG figure can have a narrow layout beside the wide one. `?layout=narrow` asks for it; a figure without one, and an unknown layout name, answer with the wide layout (never an error). Two response headers say what was served and what the figure has, so a client can tell from one request whether asking again at another width is any use:
+
+| Header | Value |
+|---|---|
+| `X-Asset-Layout` | `wide` or `narrow` — the layout of the file in the response |
+| `X-Asset-Layouts` | the layouts the figure has, comma-separated: `wide` or `wide,narrow` |
+
+Language goes before layout: asked for the narrow layout in a language the figure has only in the wide one, the answer is the wide layout in that language (`doc/DECISIONS.md`). Access rules are the same for every layout.
+
+The narrow layout arrives through import and the authoring API as `layoutVariants` on the asset (`[{ "layout": "narrow", "contentBase64": "…", "localizedVariants": [...] }]`), and is carried by export. It is refused with `asset_layout_unknown` (not `narrow`, or given twice), `asset_layout_not_svg` (the asset is a raster image) or `asset_layout_text_mismatch` (its labels differ from the wide figure, in the original or in a translated variant). The validate report of an authoring package reports the same codes at `…assets[n].layoutVariants`. Manual upload in the section editor is unchanged: one file, the wide layout.
+
 ---
 
 ## Admin - Modules

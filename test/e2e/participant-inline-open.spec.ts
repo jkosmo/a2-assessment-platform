@@ -107,8 +107,13 @@ test("participant: section and module both open inline in-place; only one open a
   const panelBox = await sectionItem.locator(".course-inline-panel").boundingBox();
   expect(boxA && panelBox && boxA.width < panelBox.width * 0.9).toBe(true); // not full-width
 
-  // Open the MODULE → the workspace relocates INLINE under the module row (in-place, same pattern),
-  // and the section panel collapses (one open at a time).
+  // Lesemodus (#1079): mens seksjonen leses, er de andre radene skjult — veien videre er «Lukk» eller
+  // «Marker lest, og gå videre». Lukk først; så åpnes modulen fra rada.
+  await sectionItem.locator(".course-inline-panel-close").click();
+  await expect(page.locator("#sectionReaderBody")).toHaveCount(0);
+  await expect(moduleItem.locator(".course-module-row")).toBeVisible();
+
+  // Open the MODULE → the workspace relocates INLINE under the module row (in-place, same pattern).
   await moduleItem.locator(".course-module-row").click();
   await expect(moduleItem.locator(".course-inline-panel #submissionSection")).toBeVisible();
   await expect(page.locator("#sectionReaderBody")).toHaveCount(0); // section collapsed

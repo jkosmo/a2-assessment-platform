@@ -799,6 +799,10 @@ model SectionAsset {
   // a variant whose <text> has been translated. Both null for raster images and untranslated SVGs.
   sourceLocale       String?
   localizedBlobPaths Json?
+  // #1079: det smale oppsettet av samme figur, for en smal spalte (telefon). blobPath over er det
+  // brede. Formen er { narrow: { blobPath, localizedBlobPaths } }, og den leses BARE gjennom
+  // readLayoutVariants i assetCommands.ts. Null for raster og for figurer med ett oppsett.
+  layoutVariants     Json?
   section            CourseSection @relation(fields: [sectionId], references: [id], onDelete: Cascade)
 
   @@index([sectionId])

@@ -1,0 +1,13 @@
+-- #1079: en figur kan ha et smalt oppsett i tillegg til det brede.
+--
+-- En SVG som vises som bilde, har fast form og kan ikke brekke seg selv om når spalten blir smal.
+-- En flyt tegnes derfor to ganger fra samme beskrivelse: bredt (alle steg på én rad) og smalt (fire
+-- per rad). Det brede er figuren slik den lagres i dag (`blobPath`). Det smale ligger her:
+--
+--   { "narrow": { "blobPath": "…", "localizedBlobPaths": { "nn": "…", "en-GB": "…" } } }
+--
+-- Kolonnen er valgfri. En figur uten smalt oppsett er uendret, og alt som finnes i dag, har NULL.
+--
+-- Bare utvidelse: én ny kolonne som kan være NULL. Gamle containere som kjører under et bytte,
+-- velger og skriver ikke kolonnen, og merker den ikke.
+ALTER TABLE "SectionAsset" ADD COLUMN "layoutVariants" JSONB;

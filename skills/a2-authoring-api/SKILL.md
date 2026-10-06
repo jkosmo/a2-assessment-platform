@@ -23,7 +23,9 @@ Translating to all three languages: **[references/localization.md](references/lo
 Designing figures (SVG, "one figure, one point"): **[references/figure-design.md](references/figure-design.md)**.
 Deterministic checks live in `scripts/` (`course-state.mjs`, `export-validate.mjs`,
 `localization-check.mjs`, `mcq-cue-check.mjs`, `figure-fit-check.mjs`, `figure-motion-check.mjs`)
-— run them; they are repo-unit-tested.
+— run them; they are repo-unit-tested. `draw-flow-figure.mjs` draws a flow with phases from a
+description, in a wide and a narrow layout (#1079). `figure-preview.mjs` turns figures into a
+page the author can open and see — use it in every chat; never show a figure as SVG source.
 
 ## What you produce
 
@@ -117,12 +119,17 @@ the three references above.
    proposed at the **Structure gate** and drafted at the **Per-element gate**; an approved figure
    is **unique content** the preservation audit (#762) must never drop. **Before a figure is shown
    or written, measure and look at it** — `scripts/figure-fit-check.mjs` plus a rendered image —
-   and again for every locale variant (#1060). **Animate where the point is an order or a change
+   and again for every locale variant (#1060). **Show the author a picture, never SVG source:**
+   `scripts/figure-preview.mjs` writes a page to show in the host's preview pane or hand over as a
+   file. If you have no way to render the figure yourself, say "ikke sett" — do not claim it looks right. **Animate where the point is an order or a change
    over time (#1073):** a process/flow figure is animated by default (steps light up in turn), with
    CSS only, once, within 5 seconds, resting on the complete still picture; hierarchies, parts and
    comparisons stay still. **An animated figure is the flow template** — its `<style>` block
    unchanged (only colours, duration, delays and the number of steps may differ), and nothing in
-   the markup but `<rect>` step boxes, connectors and labels. Do not write your own animation CSS,
+   the markup but steps (`<rect>` boxes or `<circle>`s), connectors and labels. When the steps
+   belong to phases, use the **flow with phases** template (#1079): numbered circles, each resting
+   and lighting up in its phase's colours — **described in JSON and drawn by
+   `scripts/draw-flow-figure.mjs`**, not written by hand. Do not write your own animation CSS,
    and do not add other shapes, groups or transforms. A still flow is an explicit choice
    (`data-motion="static"`).
    `scripts/figure-motion-check.mjs` must be clean for every figure and variant. (figure-design.md.)

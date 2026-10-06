@@ -179,31 +179,130 @@ export async function apiFetch(url, getHeadersOrOptions = {}, maybeOptions = {})
 // can't carry the Bearer/console auth headers, so the server returns 401 and the image breaks.
 // This fetches each such image WITH the authenticated headers and swaps in an object URL.
 // Call after injecting rendered section HTML (editor preview + participant reader).
+//
+// #1079: a figure can have a NARROW layout beside the wide one. An SVG shown as an image has a fixed
+// shape and cannot re-break itself, so it is the client that picks: this is the one place every
+// figure is fetched, and it knows how wide the column is. Under ASSET_NARROW_BELOW the narrow layout
+// is asked for; a figure without one answers with the wide layout, and says so.
 export async function hydrateContentAssetImages(root, getHeadersOrFn) {
   if (!root || typeof root.querySelectorAll !== "function") return;
   const images = Array.from(root.querySelectorAll('img[src^="/api/content-assets/"]'));
   if (images.length === 0) return;
 
-  const baseHeaders = typeof getHeadersOrFn === "function" ? { ...getHeadersOrFn() } : { ...(getHeadersOrFn ?? {}) };
-  delete baseHeaders["Content-Type"];
-  delete baseHeaders["content-type"];
-  const token = await getAccessToken();
-  if (token) baseHeaders["Authorization"] = `Bearer ${token}`;
-
   await Promise.all(
     images.map(async (img) => {
       const src = img.getAttribute("src");
       if (!src) return;
-      try {
-        const response = await fetch(src, { headers: baseHeaders });
-        if (!response.ok) return;
-        const blob = await response.blob();
-        img.src = URL.createObjectURL(blob);
-      } catch {
-        /* leave the broken image; non-fatal */
-      }
+      // The address the page was rendered with. `src` becomes an object URL below, so this is
+      // what a later fetch — the other layout, when the column changes width — starts from.
+      img.dataset.assetSrc = src;
+      await loadAssetLayout(img, wantedAssetLayout(img), getHeadersOrFn);
+      if ((img.dataset.assetLayouts ?? "").split(",").includes("narrow")) watchAssetColumn(img, getHeadersOrFn);
     }),
   );
+}
+
+/**
+ * The column width under which a figure's narrow layout is shown. ONE fixed number for every figure
+ * (product owner, 2026-10-04): the widest figure the skill draws is 848 wide with 12 px labels, and
+ * under 640 px those labels are smaller than 9 px on screen. Measured on a real phone and a tablet
+ * before it is called final.
+ */
+export const ASSET_NARROW_BELOW = 640;
+
+/**
+ * The column a figure stands in: the nearest ancestor that has a width. An image inside an inline
+ * element (a link, emphasis) has a parent without one, and the answer would be «not laid out».
+ */
+function assetColumn(img) {
+  let element = img.parentElement;
+  while (element && element.clientWidth === 0) element = element.parentElement;
+  return element;
+}
+
+/** Which layout fits the column the figure stands in. A page not laid out at all is wide. */
+function wantedAssetLayout(img) {
+  const width = assetColumn(img)?.clientWidth ?? 0;
+  return width > 0 && width < ASSET_NARROW_BELOW ? "narrow" : "wide";
+}
+
+/** Fetches the figure in the given layout, with the viewer's credentials, and shows it. */
+async function loadAssetLayout(img, layout, getHeadersOrFn) {
+  const headers = typeof getHeadersOrFn === "function" ? { ...getHeadersOrFn() } : { ...(getHeadersOrFn ?? {}) };
+  delete headers["Content-Type"];
+  delete headers["content-type"];
+
+  // What was ASKED for, not what came back: a figure that has the narrow layout only in another
+  // language answers with the wide one, and asking again at every resize would get the same answer.
+  img.dataset.assetWanted = layout;
+  try {
+    const token = await getAccessToken();
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+    const url = new URL(img.dataset.assetSrc, window.location.origin);
+    if (layout === "narrow") url.searchParams.set("layout", "narrow");
+    const response = await fetch(url.pathname + url.search, { headers });
+    if (!response.ok) return;
+    const blob = await response.blob();
+    // The column changed width again while this was on its way: a later request owns the image now.
+    if (img.dataset.assetWanted !== layout) return;
+    const previous = img.src;
+    img.src = URL.createObjectURL(blob);
+    if (previous.startsWith("blob:")) URL.revokeObjectURL(previous);
+    img.dataset.assetLayout = response.headers.get("X-Asset-Layout") ?? "wide";
+    img.dataset.assetLayouts = response.headers.get("X-Asset-Layouts") ?? "wide";
+  } catch {
+    /* leave the broken image; non-fatal */
+  }
+}
+
+// A figure with both layouts follows its column: a phone turned on its side, a window dragged
+// narrower. Only such figures are watched — for the rest there is nothing to change to.
+let assetColumnObserver = null;
+/** column element → (image → how to get its headers). */
+const watchedAssetColumns = new Map();
+
+// The editor preview replaces its whole content at every keystroke pause, so images come and go all
+// the time. An image that has left the page is forgotten here — at every hydration, and whenever
+// its column changes width — or the observer would hold on to every figure ever previewed.
+function forgetRemovedAssetImages() {
+  for (const [column, images] of watchedAssetColumns) {
+    for (const image of images.keys()) {
+      if (!image.isConnected) images.delete(image);
+    }
+    if (images.size === 0 || !column.isConnected) {
+      assetColumnObserver?.unobserve(column);
+      watchedAssetColumns.delete(column);
+    }
+  }
+}
+
+function watchAssetColumn(img, getHeadersOrFn) {
+  const column = assetColumn(img);
+  if (!column || typeof ResizeObserver !== "function") return;
+  if (!assetColumnObserver) {
+    assetColumnObserver = new ResizeObserver((entries) => {
+      forgetRemovedAssetImages();
+      for (const entry of entries) {
+        for (const [image, headersOrFn] of watchedAssetColumns.get(entry.target) ?? []) {
+          const layout = wantedAssetLayout(image);
+          if (layout !== image.dataset.assetWanted) void loadAssetLayout(image, layout, headersOrFn);
+        }
+      }
+    });
+  }
+  forgetRemovedAssetImages();
+  if (!watchedAssetColumns.has(column)) {
+    watchedAssetColumns.set(column, new Map());
+    assetColumnObserver.observe(column);
+  }
+  watchedAssetColumns.get(column).set(img, getHeadersOrFn);
+}
+
+/** For tests: how many figures are being followed for a change of column width. */
+export function watchedAssetImageCount() {
+  let count = 0;
+  for (const images of watchedAssetColumns.values()) count += images.size;
+  return count;
 }
 
 // ---------------------------------------------------------------------------

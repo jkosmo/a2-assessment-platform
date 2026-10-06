@@ -177,6 +177,8 @@ test("#923: seksjonsleseren har ikke lenger sitt eget diskusjonsboard — kursni
   await expect(first.locator(".discussion-panel")).toHaveCount(0);
 
   // Kursnivået er den ene gjenværende diskusjonen — den skal fortsatt være der (kollapset).
+  // Lesemodus (#1079): mens seksjonen leses, viker kurset — også diskusjonslinja. Lukk leseren først.
+  await first.locator(".course-inline-panel-close").click();
   await expect(page.locator(".course-discussion-toggle")).toBeVisible();
   await page.locator(".course-discussion-toggle").click();
   await expect(page.locator(".course-discussion-body .discussion-panel")).toHaveCount(1);
@@ -612,6 +614,12 @@ test("#UI: også en KORT seksjon åpner med starten øverst", async ({ page }) =
   await target.locator(".course-module-row").click();
   await expect(target.locator("#sectionReaderBody")).toContainText("Kort tekst.");
 
-  await expect.poll(async () => Math.round((await target.boundingBox())!.y), { timeout: 5000 })
-    .toBeLessThanOrEqual(40);
+  // Lesemodus (#1079): mens seksjonen leses, er de 23 andre stegene skjult, og siden er ofte for kort
+  // til å rulle leseren helt opp. Da er kravet at hele leseren er innenfor skjermen — starten er
+  // synlig uansett.
+  await expect.poll(async () => {
+    const boks = (await target.boundingBox())!;
+    const høyde = page.viewportSize()!.height;
+    return Math.round(boks.y) <= 40 || Math.round(boks.y + boks.height) <= høyde;
+  }, { timeout: 5000 }).toBe(true);
 });

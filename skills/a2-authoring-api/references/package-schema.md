@@ -110,6 +110,31 @@ and carries them inline on the section payload:
   `duplicate_asset_source_id`.
 - **`localizedVariants`** carries the #657 translated-SVG variants (one base64 per locale), added
   after the primary language is approved; omit for raster or untranslated figures.
+- **`layoutVariants`** (#1079, optional, SVG only) carries the **narrow layout** of the same figure
+  — the one a phone gets: the column there is about 200 px wide. The asset itself
+  (`contentBase64`) is the wide layout.
+
+  ```json
+  "layoutVariants": [
+    {
+      "layout": "narrow",
+      "contentBase64": "PHN2Zy…",
+      "localizedVariants": [
+        { "locale": "nn", "contentBase64": "PHN2Zy…" },
+        { "locale": "en-GB", "contentBase64": "PHN2Zy…" }
+      ]
+    }
+  ]
+  ```
+
+  `narrow` is the only layout, once per figure. **It carries the same labels as the wide figure, in
+  every language** — the platform refuses a layout whose labels differ (`asset_layout_text_mismatch`,
+  also `asset_layout_unknown`, `asset_layout_not_svg`), and `localization-check.mjs` reports it as
+  `layoutTextMismatches`. Both files come from `draw-flow-figure.mjs`, which draws them from one
+  description, so they agree by construction; do not write a narrow figure by hand. The narrow
+  layout needs the same locale variants as the wide one. A platform older than 2.81.0 does not know
+  the field: the fallback file imports with the wide figure only, and the API refuses the package —
+  leave `layoutVariants` out when the target reports an older version.
 
 ## `type: "module"`
 
@@ -277,6 +302,9 @@ this, `asset:<id>` markdown refs would break on the destination). Each entry:
 - **`localizedVariants`** carries the #657 translated-SVG variants (one base64 per locale); omit
   for raster or untranslated figures. `assets` is fully optional — omit it entirely for a
   markdown-only section (old asset-less files import unchanged).
+- **`layoutVariants`** (#1079) carries the narrow layout of an SVG figure with its own
+  `localizedVariants` — same shape and rules as in "Section figures" above. Its bytes count towards
+  the 25 MB export cap.
 - **Figures are designed by the skill (Layer B, shipped).** The skill proposes figures in the
   structure gate and draws them as SVG alongside the text ([figure-design.md](figure-design.md)); an
   authoring package carries them on the section payload (see "Section figures" above). This export

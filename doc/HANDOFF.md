@@ -1,36 +1,185 @@
 # Overlevering — hvor arbeidet står
 
-> **Skrevet 2026-10-04.** Dette dokumentet skrives om ved hver overlevering; les datoen før du
+> **Skrevet 2026-10-05.** Dette dokumentet skrives om ved hver overlevering; les datoen før du
 > stoler på tallene. Metodikken ligger i `doc/TEST_AND_RELEASE_PLAYBOOK.md` og endres ikke her.
 
 ---
 
 ## Kort: det som må avgjøres
 
-**Prod står på 2.77.0. Stage står på 2.78.2 og venter på manuell test før prod.**
+**Prod står på 2.78.3. Stage står på 2.85.0 (lesemodus, rullet 2026-10-06 kl. 21:31 fra `17743d55`; `/version` og helsesjekk bekreftet). `dev` = stage. Ingenting av 2.79–2.85 er i prod.**
+
+### Lesemodus er bygget (2026-10-06 kveld, 2.85.0, grenen `lesemodus-1079`)
+
+Produkteier: «for lite skille mellom hva som er kursportalen, og kontroller i den, vs. innholdet
+som vises innenfor den». Fire grader av skille ble vist på en prøveside; han valgte lesemodus med
+valgbar spaltebredde («Smal»/«Bred», huskes i nettleseren). Når en seksjon åpnes, viker kurset;
+igjen står hodet («Steg n av N», spaltevelger, «Lukk») og innholdet på et ark. `doc/VERSIONS.md`
+(2.85.0) sier hva og hvor, `doc/FEATURE_SURFACE_MAP.md` § 6b har raden.
+
+**QA-porten ga GO i andre runde** (`.ai-qa/qa-20261006-211010.md`). Runde én fant at lesemodus falt
+bort når kurset ble tegnet på nytt med seksjonen åpen (språkbytte, og «gå videre» når kurslista
+svarer sist — det vanlige på stage). Rettet i `reopenInlineAfterRender`; to e2e-tester faller uten.
+
+**Til den manuelle testen på stage** (fra QA-porten): les tre seksjoner på rad med «Marker seksjon
+lest, og gå videre» — hver skal stå i lesemodus uten at kurshodet blinker fram; bytt språk med en
+seksjon åpen («Step n of N» i hodet); Safari på telefon (kurset skjult, hodet med «Lukk» fast
+øverst ved rulling); kurs med 20+ steg på treg maskin (hakking ved åpne/lukke). **Til avgjørelse:**
+med «Smal» på PC blir spalten under 640 px og en flytfigur hentes i det smale oppsettet (to steg per
+rad). Konsekvent, men si fra om figurer alltid skal få det brede på PC.
+
+
+### Innholdsblokkene er bygget (2026-10-06, 2.84.0, grenen `innholdsblokker-1079`)
+
+Uthevet boks, prompt-boks med «Kopier», kort med ikon, og tabeller som kan leses på telefon — slik
+prøvesiden produkteier godkjente. `doc/VERSIONS.md` (2.84.0) sier hva og hvor; skrivemåten er mitt
+valg og står i `doc/DECISIONS.md`. Versjonen hopper over 2.83.0, som er det ombygde skillet på sin
+egen gren (`skill-ombygging-1079`): to grener, to versjonsnumre, så importfiler fra skillet kan
+kjennes igjen på `toolVersion`. Når begge er flettet, blir det 2.85.0 med begge deler.
+
+**QA-porten ga GO i tredje runde** (`.ai-qa/qa-20261006-064930.md`). Rundene før fant tre ting,
+alle rettet og hver med sin test og sin mutasjon:
+
+1. Et vanlig sitat ble tegnet dobbelt for hvert nivå i et nøstet sitat (rendereren svarte «ikke
+   mitt» etter å ha tegnet det). 22 nivåer tok sekunder; 30 ville tatt minutter på prod-instansen.
+2. Tabellceller på telefon delte innholdet i ord («ut k a st»): cellen er flex, og hvert ord og
+   hver fete bit ble sitt eget element. Innholdet står nå i én span. Feilen fantes fra før.
+3. Et langt kolonnenavn skjøv verdien ut av skjermen på telefon. Navnet står nå over verdien.
+
+**Til den manuelle testen på stage** (fra QA-portens plan): «Kopier» i seksjonsredigeringens
+forhåndsvisning og i modularbeidsflaten (e2e dekker bare deltakerleseren); oppgavetekst hos
+deltakeren; utklippstavla på en ekte telefon over HTTPS; **eksisterende seksjoner med sitater som
+åpner med fet skrift** — de blir nå bokser med lyspære, og det er med vilje, men bør ses; ikon fra
+et ekte opplastet bilde i et kort.
+
+Skillet på denne grenen er det gamle (2.82.2-innholdet) med nytt versjonsnummer; zip-fila herfra
+skal ikke installeres.
+
+**Ikoner: et fast bibliotek i plattformen (produkteiers spørsmål 2026-10-06, morgen).** Skillets
+regel «bare presentasjonens egne ikoner, aldri tegn eller hent» er optimalisert for
+Rapportskriving: to av tre testpresentasjoner har null ikoner og får dermed ingen. Anbefalt: et
+permissivt sett (Lucide, ISC; eller Tabler, MIT) servert av plattformen selv, skrevet som
+`![](icon:<navn>)`, med en katalog med norske stikkord i skillet. Spørsmålet til ham: standard for
+alle kurs (anbefalt, samme grunn som kortene i plattformens stil), eller reserve der kilden mangler
+ikoner. Bygges etter milepæl 1.
 
 | Miljø | Versjon | |
 |---|---|---|
-| prod | 2.77.0 | rullet 2026-10-04 kl. 08:54 fra `3f111c68`; #894 er lukket |
-| stage | 2.78.2 | rullet 2026-10-04 kl. 15:42 fra `775a323b`, commiten QA-porten ga GO på; #1080, #1081 og #1083 |
-| `main` (git) | 2.77.0 | likt med prod (PR #1082 merget 2026-10-04) |
-| `dev` (git) | 2.78.3 | foran stage: de to funnene fra gjennomgangen av 2.78.2 er rettet |
+| prod | 2.78.3 | rullet 2026-10-04 kl. 20:13 fra `2433d2b7`, godkjent av produkteier. #1080, #1081, #1083 |
+| stage | 2.85.0 | rullet 2026-10-06 kl. 21:31 fra `17743d55` (QA-porten GO i andre runde, `.ai-qa/qa-20261006-211010.md`); `/version` og helsesjekk bekreftet. Før det 2.84.1: rullet 2026-10-06 kl. 09:37 fra `82815746` (QA-porten GO, `.ai-qa/qa-20261006-091043.md`). Før det 2.84.0: rullet 2026-10-06 kl. 07:12 fra `ad3f0192`, QA-porten GO i tredje runde (`.ai-qa/qa-20261006-064930.md`); `/version` og helsesjekk bekreftet. Før det 2.82.2: rullet 2026-10-05 kl. 18:49 fra `96632019`, commiten QA-porten ga GO på i tredje runde (`.ai-qa/qa-20261005-182600.md`); `/version` og helsesjekk bekreftet. Stage-testen kjørt 18:50–18:53: 38 av 38 besto |
+| `main` (git) | 2.78.3 | likt med prod (PR #1086 flettet 2026-10-04) |
+| `dev` (git) | 2.85.0 | lesemodus (2.85.0), innholdsblokkene og feilklassifiseringen (2.84.x), sju rettinger (2.82.0), to oppfølgere etter QA (2.82.1), og kurset på telefon (2.82.2), se under |
 
-Fire ting krever et menneske:
+**2.82.0, i én setning hver** (detaljer og rotårsaker i `doc/VERSIONS.md`):
 
-1. **Manuell test på stage.** Testskriptet ligger utenfor repoet, hos produkteier
-   (`MANUELL_TEST_2.78.1.md`, med en ferdig seksjonspakke til figurtesten): de fire listene på
-   telefon, «Mer» i nederste rad, og en animert figur. For #1083 kommer i tillegg lista «Ikke
-   verifiserbart statisk» nederst i `.ai-qa/qa-20261004-150250.md`: en figur med hardt mellomrom
-   lastet opp, lokalisert og importert. `npm run test:stage` krever innlogging (`npm run stage:auth`).
-2. **2.78.3 til stage** krever GO fra QA-porten. Endringen ligger i `svgSanitizer.ts`
-   (sikkerhetskode) og i skillets figursjekk. ⚠️ **2.78.2 skal ikke til prod alene:** den kan ta ned
-   appen på en tett figur på 1 MB, se under.
-3. **Prod** krever GitHub-godkjenning fra `jkosmo`, utenfor arbeidstid. Planen er én utrulling med
-   2.78.1–2.78.3 samlet.
-4. **Lagrede figurer er ikke målt.** `npm run maint:repair-unreadable-svg-assets` (tørrkjøring uten
-   `--apply`) er ikke kjørt mot stage eller prod, så det er ikke kjent hvor mange figurer som
-   allerede er lagret i uleselig form. Se `doc/OPERATIONS_RUNBOOK.md`.
+| Sak | Hva som er rettet | Målt i |
+|---|---|---|
+| #1079 | Figuren kan leses på telefon: det smale oppsettet har to steg per rad og oppgir sin egen størrelse; leseren har smalere marger på telefon | `test/e2e/figure-legible-on-phone-1079.spec.ts` |
+| #1084 | «Mer» står innenfor rammen på listene: overskrifter og statusmerker får brekke, og handlingskolonnen er festet til høyre | `test/e2e/list-fits-frame-1084.spec.ts` |
+| #1085 | Menylinja får plass på telefon: én linje på 390 px, og lenkene brekker i stedet for å stikke ut på smalere skjermer | `test/e2e/nav-fits-phone-1085.spec.ts` |
+| #1087 | Skillet teller etiketter slik plattformen gjør; de samme figurparene sendes gjennom begge | `test/unit/asset-layout-variants-1079.test.ts` |
+| #1088 | `?locale=constructor` gir ikke lenger feil 500 på en figur | `test/m2-section-asset-layouts-1079.test.ts` |
+| #1089 | En avvist figur etterlater ikke lenger et utkast: figurene sjekkes før seksjonen lages, alt i én transaksjon | samme, og `test/unit/section-create-with-assets-1089.test.ts` |
+| #1090 | En ny oversettelse av figurer fjerner de forrige oversatte filene | samme |
+
+**2.82.2: et kurs med lange stegtitler gikk ut av skjermen på telefon — og gjør det i prod.**
+Produkteier åpnet testkurset på en ekte telefon og fant det. Når et steg er lest eller kommer
+senere, vises det som en rad med tittelen på én linje, og den raden presset hele kursinnholdet ut
+til 668 px på en skjerm på 390. Rettet: rutenettene rundt kursinnholdet og rundt hvert steg holder
+på bredden, og på telefon får tittelen sin egen linje. (Første utgave rettet bare det ene
+rutenettet og fikk NO-GO fra QA: diskusjonslinja under stegene presset fortsatt innholdet ut på
+engelsk. Se `doc/VERSIONS.md`.) `test/e2e/course-steps-fit-phone.spec.ts`. Feilen fantes før
+dagens arbeid og ligger i prod (2.78.3) til 2.82 er rullet dit.
+
+⚠️ **Lærdommen gjelder testene:** alt som åpnet et kurs på telefonbredde, åpnet et kurs med ETT
+ulest steg. Mål en side i de tilstandene en bruker kommer i, ikke bare slik den åpner seg.
+Produkteier bruker Fairphone 6 med Firefox, men har sagt at det ikke skal testes mot mange
+telefoner — «det viktige er at det er testet på en liten skjerm». Firefox ble prøvd én gang
+(samme svar som Chromium) og er ikke lagt inn i oppsettet.
+
+⚠️ **Ett testkurs til står på stage, publisert, til produkteier har sett på det på telefonen:**
+«Stage-test figur i to oppsett 1791219142832» (to seksjoner, den første lest). Neste kjøring av
+stage-testen sletter det — så lenge ingen har trykket «Avslutt kurset».
+
+⚠️ **Ett testkurs står igjen på stage, arkivert:** «Stage-test figur i to oppsett 1791205999067».
+Det ble fullført på telefonen, fikk et kursbevis, og kan derfor ikke slettes
+(`course_has_completions`). Stage-testen teller det som «står igjen» ved hver kjøring.
+
+**#1079 har fått ny retning (2026-10-05, kvelden).** Produkteier laget samme kurs med skillet i
+ChatGPT og i Claude.ai fra presentasjonen «Rapportskriving». Begge fikk tre figurer av samme type,
+ingen ikoner og ingen av kortene. Han besluttet at kort og «Husk»-bokser skal bli innholdsblokker
+i plattformen (`doc/DECISIONS.md`). Gjennomgangen, skillet målt mot Anthropics råd for skills, og
+planen i fem punkter står i #1079 (kommentar 2026-10-05). **Start der.** Rekkefølgen:
+testtilfeller først (venter på to presentasjoner til fra produkteier), så skriptet som leser
+presentasjonen, så regelen i skillet, med innholdsblokkene som eget spor (prototype først).
+Node er bekreftet i begge flatene han bruker (22.16 i ChatGPT, 22.22 i Claude.ai).
+⚠️ Det finnes ingen regel om «tre illustrasjoner» i skillet; se saken for hva som faktisk styrer dit.
+
+**Ikke bygg videre på skillet før designet er besluttet.** Produkteier spurte 2026-10-05 om vi
+hadde tenkt gjennom design og arkitektur, eller bare hoppet på implementering. Svaret var nei.
+`doc/DESIGN_1079_SKILL.md` er forslaget: sju valg med alternativer og anbefaling (ett skill delt i
+arbeidsganger, sju faste steg fra presentasjon til kurs, PDF for at modellen skal se lysarkene,
+fire innholdsblokker skrevet som vanlig tekst, ny oppdeling av filene, bilder fra kilden aldri
+stilltiende, måling mot testtilfellene). **Han besluttet alle sju samme kveld, valg for valg**
+(`doc/DECISIONS.md`). To ble annerledes enn forslaget: han laster bare opp presentasjonen (ingen
+PDF), og alle bilder tas med hvis han ikke sier nei. Notatet er rettet etter beslutningene.
+**Neste steg står nederst i notatet:** først en prøve han kjører i ChatGPT og Claude.ai (kan
+modellen åpne et bilde skriptet har hentet ut?), så ombygging av skillet på en egen kopi.
+Det som finnes fra før designet: testtilfellene (`skills/a2-authoring-api-evals/`, tre
+presentasjoner, nullpunkt målt for Rapportskriving) og en prøveutgave av leseskriptet som bare
+ligger i arbeidsmappa, ikke i repoet.
+
+Seks ting krever et menneske:
+
+1. **Tre synlige endringer er mine valg, ikke produkteiers.** Han skal se dem på stage og kan si
+   nei før prod:
+   - *Leseren har smalere marger på telefon* (`participant.html`, under 600 px). Tre linjer CSS.
+     Uten dem er etikettene 8,5 px på en telefon på 360 px; med dem 9,5.
+   - *To statusmerker står under hverandre* i listene («Publisert» over «Nyere utkast»), på alle
+     bredder. Plassen går til navnekolonnen. Radene med utkast blir én linje høyere.
+   - *På et nettbrett på høykant* står den smale figuren i sin egen størrelse (300 px) til venstre
+     i en spalte på 580 px. Lesbart, men fire steg per rad ville sett bedre ut der. Det krever et
+     tredje oppsett (`doc/DECISIONS.md`).
+2. **Ekte telefon er ikke prøvd.** Alt om telefon er målt i Chromium med telefonbredde. Spalten
+   (201 px på 390) og etikettstørrelsen bør ses på en ekte telefon før #1079 regnes som ferdig.
+3. **Prod for 2.82.0** krever GitHub-godkjenning fra `jkosmo`, utenfor arbeidstid. Den har én
+   migrasjon (fra 2.81.0: én ny kolonne, bare utvidelse). «Språk går foran oppsett» er fortsatt
+   mitt valg (`doc/DECISIONS.md`).
+4. **Skillet i ChatGPT er ikke prøvd.** Produkteier fikk 2.81.1-pakka og er bedt om å si fra om
+   figurene vises som bilder der. 2.82.0 endrer skillet igjen (det smale oppsettet,
+   etikettsjekken, forhåndsvisningen), så pakka må bygges på nytt: `npm run skill:package`.
+5. **To funn fra QA som fantes fra før, er ikke blitt saker.** `?locale=xx` på modulbiblioteket og
+   arkivet gir feil 500 (`src/routes/adminContent.ts`, samme type feil som #1088, bare ved en adresse
+   skrevet for hånd). Og «Mer» på en av de nederste radene kan kuttes av tabellrammen når lista
+   har svært få rader. Produkteier avgjør om de skal bli saker.
+6. **Lagrede figurer er ikke målt.** `npm run maint:repair-unreadable-svg-assets` (tørrkjøring uten
+   `--apply`) er ikke kjørt mot stage eller prod. Se `doc/OPERATIONS_RUNBOOK.md`.
+
+⚠️ **Figurer som alt er lagret med det gamle smale oppsettet** (fire per rad, uten egen størrelse)
+blir ikke tegnet på nytt av seg selv. De vises som før: for små på telefon. I prod finnes ingen
+(2.81.0 kom aldri dit). På stage finnes bare det testene og produkteier selv har lagt inn.
+
+**Mutasjonssjekken fant to ting i dag, begge i mine egne rettinger:**
+
+- Regelen som skulle gjøre menylenkene tettere på telefon, virket aldri. Fem sider har sin egen
+  kopi av menystilen i en stilblokk som kommer etter `shared.css`, og kopien vant. Menyen brakk
+  til to linjer i stedet for å stå på én. Regelen har nå to klasser i velgeren.
+  **Kopiene bør fjernes** (`admin-content-library.html`, `-courses`, `-sections`, `-classes`,
+  `-calibration`): det er de som gjør at en endring i `shared.css` ser ut til å virke og ikke gjør det.
+- En kontroll av at statusmerkene sto under hverandre, godtok merker side om side (den sammenlignet
+  toppene, og merkene er ulike høye).
+
+**Slik testes en utgivelse på stage:** produkteier logger inn én gang (`npm run stage:auth`),
+`npm run test:stage:release` kjører målingene med den ekte klienten mot de ekte dataene, og
+`test-results/stage-rapport/rapport.html` viser utfallet med skjermbilder. Han skal ikke klikke seg
+gjennom det en maskin kan måle. Sist kjørt mot 2.81.0 (2026-10-04): alle målingene for #1079 besto,
+#1084 og #1085 feilet som ventet. Mot 2.82.1 skal alle bestå, og målingen av deltakeren på telefon
+krever nå at etikettene er minst 9 px på skjermen. Testen er prøvekjørt mot en lokal app
+(`STAGE_LOKAL=http://127.0.0.1:3001`): 35 besto, 2 hoppet over (ingen kurs med «Mer» lokalt).
+Den holder seg under appens grense på 120 forespørsler i minuttet (`test/stage/pace.ts`, én
+arbeider) — uten det ga prøvekjøringen svar 429 og tomme lister. `STAGE_BEHOLD=1` lar testkurset
+stå igjen, så figuren kan ses på en ekte telefon; neste kjøring rydder det bort.
+Det produkteier skal gjøre, står i `C:\Dev\Assessment\MANUELL_TEST_STAGE_2.82.1.md` (utenfor repoet).
 
 Åpne beslutninger ligger nederst i dette dokumentet.
 
@@ -149,6 +298,60 @@ QA-gjennomgangen av 2.78.2 ga GO for stage med to funn. Begge er rettet, og deta
 gjorde før #1083. Det er antall elementer som koster, ikke bytes, og grensa i dag er 5 MB i bytes.
 Heap-grensa i prod er ikke lest av. Se «Åpne beslutninger».
 
+## Hva som ble gjort: #1079 steg 2 og 3 (2.79.0, 2.80.0) — og hva som gjenstår
+
+Saken: en PowerPoint skal bli et kurs der figurene tegnes på nytt som små SVG-er, ikke ett bilde
+per lysark. Produkteier har godkjent retningen og plattformdesignet (kommentarene i #1079).
+
+| Steg | Hva | Status |
+|---|---|---|
+| 1 | Måle en ekte presentasjon, tegne ett lysbilde på nytt, sammenligne med originalen | gjort; beslutningene står i #1079 |
+| 2 | Skillet: sirkler som steg og farge per fase, i malen og sjekkene | **gjort, 2.79.0** |
+| 3 | Skillet: to oppsett (bredt og smalt) fra én beskrivelse | **gjort, 2.80.0** |
+| 4 | Plattformen: lagre det smale oppsettet (`layoutVariants`) og velge etter spaltebredde | **gjort, 2.81.0** |
+| 5 | Det smale oppsettet kan leses på telefon: to steg per rad, egen størrelse, smalere marger rundt leseren | **gjort, 2.82.0** — ikke sett på en ekte telefon |
+| – | Uttrekk fra presentasjonsfila (`pptx-extract.mjs`), og et sammendrag som kilde | prøveutgave kjørt utenfor repoet 2026-10-05; ikke bygget |
+
+Steg 2: ny mal «flow with phases» i `figure-design.md`, `figure-motion-check.mjs` godtar den som en
+andre form av malen, og `figure-fit-check.mjs` avviser etiketter som overlapper og streker gjennom
+en etikett. Detaljer og målinger i `doc/VERSIONS.md`.
+
+Steg 3: `skills/a2-authoring-api/scripts/draw-flow-figure.mjs` tar én beskrivelse (steg, faser,
+farger) som JSON og tegner begge oppsettene, og kjører begge figursjekkene på resultatet før det
+returneres. Kjørt på arbeidsflyten fra den ekte presentasjonen gir det de to figurene produkteier
+godkjente, tegn for tegn. En figur har høyst åtte steg (begrunnelsen står i skriptet). Til
+begge går nå i pakka: den brede som figuren selv, den smale i `layoutVariants`.
+⚠️ Fra 2.82.0 er det smale oppsettet et annet enn det produkteier godkjente 2026-10-04 (to steg
+per rad i stedet for fire) — se steg 5 og `doc/DECISIONS.md`.
+
+**Steg 4 (2.81.0): plattformen lagrer det smale oppsettet og velger etter spaltebredden.** En figur
+med smalt oppsett vises i det når spalten er under 640 px. Alt som skriver eller leser en figur,
+kjenner det smale oppsettet: lagring (ny kolonne `layoutVariants`), import, eksport, forfatter-API,
+oversettelse, levering (`?layout=narrow`), sletting, reparasjonen fra #1083, klienten
+(`hydrateContentAssetImages`, to kallsteder) og skillets tre sjekker. Oversikten står i
+`doc/FEATURE_SURFACE_MAP.md` §11b, reglene som er valg i `doc/DECISIONS.md`.
+
+⚠️ **Én leser.** `layoutVariants` er JSON. Les den bare gjennom `readLayoutVariants` og `assetFiles`
+i `assetCommands.ts` — sletting, reparasjon og eksport er bygget på samme liste over filer. Et nytt
+sted som leser kolonnen selv, gir filer som ryddes av den ene og blir liggende etter den andre.
+
+⚠️ **«Språk går foran oppsett» er min avgjørelse, ikke produkteiers.** Har figuren det smale
+oppsettet bare på norsk og det brede på engelsk, får en engelsk leser det brede. Står som åpent
+spørsmål i `doc/DECISIONS.md`.
+
+## Hva som ble gjort: skillet viser figurer som bilde (2.81.1)
+
+Produkteier bruker skillet i **ChatGPT**. Der ble en figur skrevet ut som SVG-kode («vises som
+tagger»), fordi skillet sa «vis den rendret» uten å si hvordan, og bare nevnte Playwright «i
+repoet» som måte å se på en figur. `figure-preview.mjs` lager nå en side der figurene vises som
+bilder (bred og telefonbred spalte, knapp for å spille av animasjonen), og en stillestående fil for
+tegnere som ikke er nettlesere. Reglene står i `figure-design.md` («Seeing the figure»).
+
+⚠️ **Ikke prøvd i ChatGPT.** Målt er at sida og den stillestående fila er riktige i en nettleser.
+Om ChatGPT viser sida i canvas eller bare gir den som fil, og om sandkassa der har en tegner, er
+ikke kjent. Produkteier har fått pakka (`dist/skills/a2-authoring-api-v2.81.1.zip`, bygget med
+`npm run skill:package`) og er bedt om å si fra hva som skjer. Forrige pakke på maskinen var 2.61.0.
+
 ## Hva som ble gjort: #1080 (2.78.1)
 
 Telefonvisningen av de fire listene. Cellene manglet kolonnenavn, var bredere enn kortet, og «Mer»
@@ -197,7 +400,12 @@ listene. Jeg utvidet ikke regelen for å unngå det — det ville vært en tverr
   && npm run test:integration:native) > "$TEMP/claude/kjoring.log" 2>&1; echo "EXIT=$?"
 ```
 
-Sist målt 2026-10-04, på 2.78.3: **1678 enhet · 69 DOM · 381 e2e · 709 integrasjon**, alle grønne.
+Sist målt 2026-10-05, på 2.82.2: **1840 enhet · 69 DOM · 450 e2e · 757 integrasjon**, alle grønne.
+(På 2.82.0 trengte nettleserrekka to kjøringer: i den første feilet «add a section from the library» i
+`admin-content-course-sections.spec.ts` — nedtrekkslista i kursbyggeren, som ikke er rørt. 15 av
+15 alene, 430 av 430 i neste fullkjøring. Se «e2e-suiten rykker» under.)
+⚠️ Sjekk at port 3001 er fri først: en lokal app som står igjen, plukker vurderingsjobber fra
+testdatabasen og gir tilfeldige feil i `assessment-policy.integration.test.ts`.
 Kjør `npm run build` alene etter å ha skrevet en ny testfil: bygget typesjekker også testene, og en
 typefeil der stopper hele rekka etter ti sekunder.
 Ikke pipe utdataene til `tail` — det skjuler feiltellingen og gir exit 0.
@@ -228,6 +436,7 @@ Vertsnavnene står i `doc/ENVIRONMENTS.local.md` (gitignorert, skal ikke skrives
 |---|---|
 | **Kurs- og klasselista** mangler omdøping og språkkolonne | #894 nevner bare modul- og seksjonslista. Mekanismen er delt, så det er innkobling, ikke ny kode. |
 | **e2e-suiten rykker** | Fire fulle kjøringer 30.09 ga én feilende test hver gang — fire *forskjellige* tester, alle grønne alene. `fullyParallel: false` gjelder bare innen en fil; filer kjører i parallell mot én statisk server. Det ble lest som belastning, ikke kode. ⚠️ **Det holdt ikke helt:** 2026-10-04 feilet «samlet oversetting bærer de lagrede språkene videre» i `admin-content-list-rename-894.spec.ts` to av fem ganger også ALENE. Testen ventet på den første patchen og sjekket den andre uten å vente. Rettet (120 av 120 etterpå). Neste gang en test feiler i fullkjøringen: kjør den alene med `--repeat-each=5` før den avskrives som last. |
+| **Fem sider har sin egen kopi av menystilen** (`.content-area-nav`, `.content-area-nav-link` i `admin-content-library.html`, `-courses`, `-sections`, `-classes`, `-calibration`) | Kopiene kommer etter `shared.css` og vinner over den. En endring i `shared.css` ser ut til å virke og gjør det ikke (#1085, funnet av mutasjonssjekken 2026-10-05). Å fjerne dem er opprydding på tvers av fem sider, og ble ikke tatt med i en samling småfeil. |
 | **Kompleksitetsmålingen teller rå linjer** | Skåren falt 76 → 73 fordi to filer så vidt passerte 800-grensa (802 og 809). Målingen teller også kommentarlinjer, som dette prosjektet bevisst skriver mange av. Om grensa skal telle kodelinjer, er det en regelendring — egen commit, med `REGELENDRINGER`-merket i `doc/complexity/history.json`. |
 
 ---

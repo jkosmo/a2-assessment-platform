@@ -1264,14 +1264,34 @@ dialog::backdrop {
 .list-table th {
   text-align: left; padding: 10px 12px;
   font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--color-meta);
-  border-bottom: 1px solid var(--color-table-border); white-space: nowrap; background: var(--color-bg);
+  border-bottom: 1px solid var(--color-table-border); background: var(--color-bg);
 }
 .list-table td { padding: 10px 12px; border-bottom: 1px solid var(--color-table-border); vertical-align: middle; }
 .list-table tr:last-child td { border-bottom: none; }
 .list-table tr:hover td { background: var(--color-row-hover); }
 .list-table .col-name, .list-table .col-title { width: 28%; min-width: 180px; font-weight: 600; }
-.list-table .col-status, .list-table .col-level, .list-table .col-courses, .list-table .col-module-count, .list-table .col-actions { white-space: nowrap; }
-.list-table .col-updated { white-space: nowrap; color: var(--color-meta); font-size: 13px; }
+/* Verdiene står på én linje. Overskriftene har de samme klassene, og får brekke (#1084). */
+.list-table td.col-level, .list-table td.col-courses, .list-table td.col-module-count, .list-table .col-actions { white-space: nowrap; }
+.list-table td.col-updated { white-space: nowrap; color: var(--color-meta); font-size: 13px; }
+/* #1084: med ekte innhold var modullista 67 px bredere enn ramma, og «Mer» ytterst til høyre lå
+   utenfor til man rullet tabellen sidelengs. To ting, i denne rekkefølgen:
+
+   1. Lista får plass der det er plass å hente. Kolonneoverskriftene og statusmerkene får brekke:
+      «SERTIFISERINGSNIVÅ» var bredere enn alt som sto under den, og «Publisert» med «Nyere utkast»
+      ved siden av holdt statuskolonnen dobbelt så bred som ett merke. To merker står nå under
+      hverandre, og plassen går til navnet (navnekolonnen tar sin andel først, på alle bredder).
+
+   2. Handlingene står alltid innenfor ramma. Blir tabellen likevel for bred (et smalt vindu, en
+      kolonne til), ruller resten av raden inn under dem. En regel som bare gjorde kolonnene
+      smalere, ville holdt til neste kolonne kom; denne holder uansett hva raden inneholder. */
+.list-table .col-status { line-height: 1.9; }
+.list-table .col-status > * { white-space: nowrap; }
+.list-table th.col-actions, .list-table td.col-actions { position: sticky; right: 0; }
+.list-table td.col-actions { background: var(--color-surface); }
+.list-table tr:hover td.col-actions { background: var(--color-row-hover); }
+/* En åpen «Mer»-meny henger ned over radene under. Cellene der er også festet, og ville ellers
+   ligget oppå menyen. */
+.list-table td.col-actions:has(.row-more[open]) { z-index: 2; }
 /* #1080: på telefon blir hver rad et kort (regelen for `table` lenger opp). Skrivebordsreglene over
    vinner over den på spesifisitet, så cellene ble bredere enn kortet og navnet ble presset sammen.
    Her tas de tilbake for kortet. Handlingscellen har ikke noe kolonnenavn og skal ikke gi plass til
@@ -1281,6 +1301,8 @@ dialog::backdrop {
   .list-table td { padding: 6px 4px; }
   .list-table .col-name, .list-table .col-title { width: 100%; min-width: 0; }
   .list-table td.col-actions::before { content: none; }
+  /* I kortet står handlingene nederst i kortet, ikke festet til en kant (#1084). */
+  .list-table th.col-actions, .list-table td.col-actions { position: static; }
 }
 /* #1046 — LISTESIDA (public/static/list-page.js). Alt under her hører til den felles listesida for
    Moduler, Kurs, Seksjoner og Klasser. Sidene skal ikke ha egne kopier av disse reglene. */
@@ -1299,7 +1321,8 @@ dialog::backdrop {
 .list-course-select:focus { outline: 2px solid var(--color-blue); outline-offset: 1px; border-color: transparent; }
 .list-table th.sortable { cursor: pointer; user-select: none; }
 .list-table th.sortable:hover { color: var(--color-link-active); }
-.list-table .sort-indicator { display: inline-block; margin-left: 4px; opacity: 0.4; font-style: normal; }
+/* Ikke inline-block: da kan linja brekke foran pila, og den blir stående alene under overskriften (#1084). */
+.list-table .sort-indicator { margin-left: 2px; opacity: 0.4; font-style: normal; }
 .list-table th.sort-asc .sort-indicator, .list-table th.sort-desc .sort-indicator { opacity: 1; color: var(--color-link-active); }
 .empty-state { text-align: center; padding: var(--space-5) var(--space-3); background: var(--color-surface); border: 1px solid var(--color-table-wrap-border); border-radius: var(--radius-card); }
 .empty-state-title { font-size: 18px; font-weight: 700; color: var(--color-text); margin: 0 0 8px; }
@@ -1464,10 +1487,20 @@ dialog::backdrop {
 /* #765: shared content-area sub-navigation bar (used by the «Deltakere» area on the classes/review/
    results pages, and by the admin-content tabs). Previously each admin-content page defined these
    inline; centralised here so review/results can host the same bar. */
-.content-area-nav { display: flex; gap: 0; border-bottom: 2px solid var(--color-border-soft); margin-bottom: var(--space-3); }
+/* #1085: med alle lenkene (administrator) var menylinja bredere enn en telefonskjerm, og hele sida
+   kunne rulles sidelengs: «Vurderingskvalitet» stakk 13 px ut på innholdssidene, «Resultater» 28 px
+   på Klasser. Lenkene får brekke til en ny linje når de ikke får plass — det er sikkerhetsnettet.
+   På telefon står de også tettere, så de fire lenkene får plass på én linje på en vanlig telefon
+   (390 px) på bokmål og nynorsk. På engelsk er «Assessment quality» for lang; der står menyen på
+   to linjer opp til rundt 480 px. */
+.content-area-nav { display: flex; flex-wrap: wrap; gap: 0; border-bottom: 2px solid var(--color-border-soft); margin-bottom: var(--space-3); }
 .content-area-nav-link { padding: 10px var(--space-2); font-size: 14px; font-weight: 600; color: var(--color-meta); text-decoration: none; border-bottom: 2px solid transparent; margin-bottom: -2px; white-space: nowrap; }
 .content-area-nav-link:hover { color: var(--color-text); }
 .content-area-nav-link.active { color: var(--color-link-active); border-bottom-color: var(--color-blue); }
+/* To klasser i velgeren, med vilje: fem av sidene har sin egen kopi av regelen over i en stilblokk
+   som kommer etter denne fila, og en velger med én klasse ville tapt for kopien. (Den første
+   utgaven av denne regelen gjorde det, og virket aldri — mutasjonssjekken fant det.) */
+@media (max-width: 600px) { .content-area-nav .content-area-nav-link { padding-left: 10px; padding-right: 10px; } }
 
 /* #787 slice 5: content-owner management panel (owner-panel.js). Uses the design tokens + shares the
    .btn styling so it matches the rest of the workspace. The remove button MUST set width:auto to escape
@@ -1544,3 +1577,154 @@ dialog::backdrop {
 }
 .row-rename input:focus-visible { outline: 3px solid var(--color-focus); outline-offset: 1px; }
 .row-rename-hint { font-size: 12px; color: var(--color-meta); }
+
+/* ── Innholdsblokker i seksjonstekst (#1079) ─────────────────────────────────────────────────
+   Tjeneren setter klassene (src/modules/course/contentBlocks.ts); stilen står her, ett sted, så
+   leseren, forhåndsvisningen i seksjonsredigeringen og oppgaveteksten i en modul tegner dem likt.
+   Kortene har plattformens stil — lys bunn, tynn ramme — uansett hvilken presentasjon de kom fra
+   (produkteier, 2026-10-05). */
+
+/* Uthevet boks: et sitat som åpner med fet merkelapp. */
+.content-callout {
+  margin: 0 0 12px;
+  padding: 10px 12px 10px 44px;
+  border: 0;
+  border-radius: 8px;
+  background-color: var(--color-primary-tint);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2363604f' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M9 18h6M10 21h4M12 3a6 6 0 0 0-3.6 10.8c.6.5 1 1.3 1 2.2h5.2c0-.9.4-1.7 1-2.2A6 6 0 0 0 12 3z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: 12px 10px;
+  background-size: 22px 22px;
+  color: var(--color-text);
+  font-style: normal;
+}
+.content-callout > * { margin: 0; }
+.content-callout > * + * { margin-top: 4px; }
+.content-callout ul, .content-callout ol { padding-left: 18px; }
+.content-callout-label { font-weight: 700; }
+.content-callout--warning {
+  /* Varselfargen og venstrestreken er de samme som .field-warning (formregelen øverst i fila). */
+  background-color: #fff3db;
+  border-left: 3px solid var(--color-warning);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%237a4b00' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 4 2.5 20h19L12 4zM12 10v5M12 17.6v.4'/%3E%3C/svg%3E");
+}
+.content-callout--warning .content-callout-label { color: var(--color-warning); }
+
+/* Prompt-boks: en kodeblokk merket «prompt». Teksten brekker; den ruller ikke sidelengs. */
+.content-prompt {
+  margin: 0 0 12px;
+  border: 1px solid var(--color-border-soft);
+  border-radius: 8px;
+  background: #fff;
+  overflow: hidden;
+}
+.content-prompt-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px 6px 12px;
+  border-bottom: 1px solid var(--color-border-soft);
+  background: var(--color-surface);
+}
+.content-prompt-header span {
+  font-size: 12px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--color-meta);
+  font-weight: 600;
+}
+.content-prompt .content-prompt-copy {
+  width: auto;
+  min-height: 0;
+  margin: 0;
+  font: inherit;
+  font-size: 13px;
+  padding: 4px 10px;
+  border: 1px solid var(--color-border-soft);
+  border-radius: 6px;
+  background: var(--color-surface);
+  color: var(--color-text);
+  cursor: pointer;
+}
+.content-prompt .content-prompt-copy:hover { border-color: var(--color-primary); color: var(--color-primary-hover); }
+.content-prompt .content-prompt-text {
+  margin: 0;
+  padding: 10px 12px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  overflow: visible;
+}
+
+/* Kort: ved siden av hverandre der det er plass, under hverandre på telefon. */
+.content-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(175px, 1fr));
+  gap: 12px;
+  margin: 0 0 12px;
+}
+.content-card {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--color-border-soft);
+  border-radius: 8px;
+  background: #fff;
+}
+.content-cards .content-card-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding: 10px 12px 8px;
+  border-bottom: 1px solid var(--color-border-soft);
+  font-size: 15px;
+  line-height: 1.25;
+}
+/* Tre klasser: sidene har egne regler for bilder i seksjonstekst, og ikonet skal ikke arve dem. */
+.content-cards .content-card-title img.content-icon {
+  display: block;
+  flex: none;
+  width: 24px;
+  height: 24px;
+  max-width: none;
+  margin: 0;
+}
+.content-card-body {
+  flex: 1;
+  display: grid;
+  gap: 8px;
+  align-content: start;
+  padding: 10px 12px 12px;
+  font-size: 14px;
+  min-width: 0;
+}
+.content-cards .content-card-body > * { margin: 0; min-width: 0; }
+.content-card-body ul, .content-card-body ol { padding-left: 18px; }
+.content-cards .content-card-body > .content-callout { font-size: 13px; }
+
+/* Tabell skrevet i en seksjon. Under 600 px stables radene av regelen lenger opp, og hver celle
+   viser navnet på kolonnen sin (data-label, satt av tjeneren). Radene får da ramme og luft, og uten
+   border-box blir de 18 px bredere enn spalten og stikker ut av leseren. */
+.content-table tr, .content-table td { box-sizing: border-box; }
+@media (max-width: 600px) {
+  /* Kolonnenavnet over verdien, ikke ved siden av: den generelle regelen gir navnet fast bredde
+     og lar det ikke brekke, og et navn på 25 tegn skjøv verdien ut av skjermen (QA-porten, 2.84.0). */
+  .content-table td { display: block; }
+  .content-table td::before { display: block; min-width: 0; margin-bottom: 2px; }
+}
+@media (min-width: 601px) {
+  .content-table { width: 100%; border-collapse: collapse; margin: 0 0 12px; }
+  .content-table th, .content-table td {
+    border: 1px solid var(--color-table-wrap-border);
+    padding: 6px 10px;
+    text-align: left;
+    vertical-align: top;
+  }
+  .content-table th { background: var(--color-module-summary-bg); font-weight: 600; }
+}

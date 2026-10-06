@@ -859,3 +859,134 @@ publiseringsgaten og andre spørsmål som trenger svar går i én valgdialog, og
 resultat meldes som toast (framdrift med «Avbryt»). Forslagsmekanismen (#926) er borte: det som
 står i skjemaet tas med i utkastet før generering/endring, så resultatet legges rett inn — slik
 dialogen sier. Skjemaet står alene i full bredde.
+
+## En figur i to oppsett: bredt og smalt (2026-10-04)
+
+### Språk går foran oppsett
+
+Blir det smale oppsettet bedt om på et språk figuren bare har i det brede, leveres det **brede**
+på riktig språk — ikke det smale på feil språk. En figur som er liten, kan leses; en på feil språk
+kan ikke. Rekkefølgen er: ønsket oppsett på ønsket språk → bredt på ønsket språk → ønsket oppsett
+slik det ble tegnet → bredt slik det ble tegnet.
+
+**Hvorfor:** det motsatte valget (alltid det smale på telefon) er like enkelt å bygge, og gir en
+penere figur med etiketter leseren ikke forstår.
+**Håndheves:** `chooseAssetFile` i `src/modules/course/assetCommands.ts`, alle tolv kombinasjonene
+målt i `test/m2-section-asset-layouts-1079.test.ts`. Sak #1079. Status: åpent spørsmål — bygget slik
+etter utviklerens vurdering; produkteier har ikke tatt stilling.
+
+### Grensa for smalt oppsett er én fast bredde: 640 px
+
+Klienten viser det smale oppsettet når spalten figuren står i, er under 640 px. Tallet er det samme
+for alle figurer, ikke utledet av hver figurs bredde.
+
+**Hvorfor:** produkteier, 2026-10-04 (godkjent designforslag i #1079). Den bredeste figuren skillet
+tegner, er 848 bred med 12 px etiketter; under 640 px blir de mindre enn 9 px på skjermen. Samme
+tall setter taket på åtte steg per figur i `draw-flow-figure.mjs`. Det skal måles på en ekte telefon
+og et nettbrett før det regnes som endelig.
+**Håndheves:** `ASSET_NARROW_BELOW` i `public/api-client.js`. Sak #1079. Status: avklart, med måling
+på ekte enheter utestående.
+
+### Et oppsett har de samme etikettene som den brede figuren
+
+Plattformen avviser et smalt oppsett som har en etikett den brede figuren ikke har, eller mangler en
+(`asset_layout_text_mismatch`).
+
+**Hvorfor:** oversettelsen spør språkmodellen én gang, fra den brede figuren, og skriver svarene inn
+i hvert oppsett ved å kjenne igjen originalteksten. En etikett som bare finnes i det smale, ville
+ikke fått noe svar og blitt stående på kildespråket: en figur på to språk på telefon, og hel på PC.
+Alternativet, én oversettelse per oppsett, dobler kostnaden og lar de to sprike.
+**Håndheves:** `prepareLayoutVariants` i `assetCommands.ts` (alle veier inn går gjennom
+`stageSectionAssets`), og speilet i skillets `localization-check.mjs`. Sak #1079. Status: avklart.
+Fra 2.82.0 teller skillet etikettene slik plattformen gjør, og en test sender de samme figurparene
+gjennom begge og krever samme svar (#1087).
+
+### Det smale oppsettet er tegnet for telefonen: to steg per rad, og aldri større enn egen størrelse (2026-10-05)
+
+Skillet tegner det smale oppsettet med to steg per rad (240 bredt), og tegningen oppgir sin egen
+størrelse (300 px bred). Plattformen krymper et bilde til spalten, men blåser det ikke opp.
+
+**Hvorfor:** spalten deltakeren leser i på en telefon på 390 px, er målt til 201 px. En rad med n
+steg trenger om lag 78·n px for at etikettene skal være 9 px på skjermen; det er plass til to steg,
+ikke tre. Første utgave (2.81.0) hadde fire per rad, tegnet for en spalte på 480 px ingen hadde
+målt, og ga etiketter på 5 px. Egen størrelse trengs fordi det smale oppsettet også vises i
+spalter mellom 300 og 640 px (nettbrett på høykant), der det ellers ville fylt spalten med
+etiketter på 30 px.
+**Valgt bort:** et tredje oppsett for spalter mellom telefon og PC (fire per rad ville sett bedre
+ut på et nettbrett). Det krever et nytt navn i `ASSET_LAYOUTS`, en grense til i klienten og en
+rekkefølge for hva som vises når ett av dem mangler. Ett smalt oppsett må passe den smaleste
+spalten.
+**Håndheves:** `LAYOUTS` i `skills/a2-authoring-api/scripts/draw-flow-figure.mjs`; målt i den ekte
+deltakersida i `test/e2e/figure-legible-on-phone-1079.spec.ts`. Sak #1079. Status: avklart —
+sett på en ekte telefon og godkjent av produkteier 2026-10-05 («Test ok»).
+
+## En presentasjon som kilde: kort og uthevede bokser er innholdsblokker, ikke figurer (2026-10-05)
+
+Når et kurs lages fra en presentasjon, blir lysarkenes kort (rammer ved siden av hverandre med
+overskrift, ikon og punkter) og uthevede striper («Husk») til **innholdsblokker i plattformen** —
+ikke til SVG-figurer.
+
+**Hvorfor:** produkteier, 2026-10-05, etter å ha laget samme kurs med skillet i ChatGPT og i
+Claude.ai. Begge kursene fikk tre figurer av samme type (steg på en rekke), ingen av
+presentasjonens 25 ikoner, og ingen av kortene eller stripene som fem–seks av lysarkene er bygget
+av. Det meste av grafikken i en slik presentasjon er ikke diagrammer, men oppsett av innhold, og
+seksjonene har i dag bare overskrift, avsnitt, liste, tabell og bilde: kortene har ikke noe sted å
+lande. Som innholdsblokk er teksten vanlig tekst — den kan oversettes, leses opp og brekke på
+telefon. Som SVG ville hvert kort vært et bilde med tekst i.
+**Forholdet til tidligere beslutning:** «bygg det i skillet, ikke i plattformen» (#1079,
+2026-10-04) gjelder fortsatt figurer. Den gjelder ikke oppsett av innhold.
+**Valgt bort:** å tegne kort og striper som SVG-figurer i skillet. Det krever ingen
+plattformendring, men gir tekst som bilde.
+**Håndheves:** ikke bygget. Planen står i #1079 (kommentar 2026-10-05): testtilfeller først, et
+skript som leser presentasjonen, regelen i skillet snus fra «figur ved behov» til «gjør rede for
+hver grafikk i kilden», innholdsblokker i plattformen (prototype først), og skillet ryddes etter
+Anthropics råd for skills. Status: avklart retning; ingenting av det er bygget.
+
+## Skillet `a2-authoring-api`: sju valg om oppbygging og veien fra presentasjon til kurs (2026-10-05)
+
+Produkteier, valg for valg, etter designforslaget i `doc/DESIGN_1079_SKILL.md` (alternativene og
+begrunnelsene står der). Sak #1079.
+
+1. **Ett skill, delt i arbeidsganger inni.** Én pakke å installere i ChatGPT og Claude.ai; kort
+   forside, og «fra presentasjon» som egen arbeidsgang. Valgt bort: to skills.
+2. **Sju faste steg fra presentasjon til kurs**, med en liste over hva hvert lysark blir til
+   (figur, innholdsblokk, tabell, bilde, tekst, utelatt), som forfatteren godkjenner før noe
+   skrives. Valgt bort: uten lista, og at skriptet bestemmer alene.
+3. **Forfatteren laster bare opp presentasjonen.** Skriptet henter ut bildene, og modellen ser på
+   dem. Valgt bort: at forfatteren også lager en PDF. Forutsetter at modellen kan åpne et uthentet
+   bilde i begge produktene; målt samme kveld i ChatGPT og Claude.ai, og begge kan.
+4. **Fire innholdsblokker:** uthevet boks, prompt-boks, kort ved siden av hverandre, ikon. En
+   prøveside godkjennes før noe bygges. Plattformen krymper store bilder. Prøvesiden ble godkjent samme
+   kveld: kortene får plattformens stil, ikke presentasjonens farger, og ingen flere blokker trengs nå.
+5. **Hele skillet ryddes**, på en egen kopi til det nye er målt: kort forside, hver regel ett sted,
+   ferdige eksempler, historikken ut. Valgt bort: bare å legge til et kapittel.
+6. **Alle bilder fra kilden tas med hvis forfatteren ikke sier nei.** Lista i punkt 2 viser dem,
+   og merker bilder der modellen ser navn eller ansikt, uten å spørre. ⚠️ Anbefalingen var det
+   motsatte (slike bilder ute som standard). Produkteier valgte den raskeste veien; ansvaret er
+   forfatterens.
+7. **Full målerunde ved to milepæler** (tre presentasjoner i to produkter): når skillet er bygget
+   om, og når innholdsblokkene er på plass. Imellom prøves skillet i Claude Code.
+
+**Håndheves:** ikke bygget. Status: avklart; rekkefølgen står nederst i designnotatet.
+
+## Innholdsblokkene skrives som vanlig markdown med fet merkelapp, kodeblokk og ramme (2026-10-06)
+
+Produkteier besluttet de fire blokkene og godkjente prøvesiden (valg 4 over). Skrivemåten er min:
+
+- **Uthevet boks: et sitat som åpner med merkelappen i fet skrift** (`> **Husk:** …`), ikke
+  GitHubs `[!HUSK]`. Begrunnelse: den leses riktig også der blokkene ikke tegnes (redigeringsfelt,
+  eksportfil, eldre versjon), merkelappen oversettes som tekst, og kilden får beholde sin egen
+  («Best praksis», «Gode vaner», «NB»). «Viktig», «NB», «Advarsel» og de engelske motstykkene gir
+  varselfargen, med venstrestrek, slik varsler alt har i plattformen (formregelen i `shared.css`).
+- **Prompt: en kodeblokk merket `prompt`.** En vanlig kodeblokk står som før.
+- **Kort: en ramme `:::kort` (eller `:::cards`) rundt `###`-overskrifter.** Underoverskrifter
+  uten ramme er overskrifter som før: en seksjon med vanlige underoverskrifter skal ikke bli kort
+  av seg selv. En ramme som ikke lukkes, er ikke en ramme.
+- **Ikon: et bilde først i en kortoverskrift.** Ingen annen plass for ikoner.
+- **Tabeller:** hver celle får kolonnenavnet sitt (`data-label`), så den stablede visningen på
+  telefon kan leses. Dette var en feil fra før, også i prod.
+
+**Håndheves:** `src/modules/course/contentBlocks.ts`; `test/unit/section-content-blocks-1079.test.ts`
+og `test/e2e/content-blocks-1079.spec.ts`. Skillet skriver den uthevede boksen og prompt-boksen i
+denne formen alt (2.83.0); kortrammen legges inn der etter milepæl 1. Status: mitt valg, ikke
+produkteiers — han kan snu skrivemåten før den kommer i prod.

@@ -182,6 +182,10 @@ function isNonEmptyLocalized(value) {
 // Ukjente nøkler ignoreres med vilje: `z.object` stripper dem uten å feile, så en konvolutt med
 // `{ nb: "T", sv: "..." }` er gyldig for importen, og må være det her også.
 const LOCALES = ["en-GB", "nb", "nn"];
+// #1079: the layouts a figure can have beside the wide one. The platform owns the list
+// (`ASSET_LAYOUTS` in src/modules/course/assetCommands.ts); the skill runs without the platform's
+// code, so it is repeated here, and a repo unit test fails if the two come apart.
+export const ASSET_LAYOUTS = ["narrow"];
 
 function isNonEmptyLocalizedPartial(value) {
   if (typeof value === "string") return value.trim().length > 0;
@@ -290,6 +294,32 @@ export function validateExportEnvelopeStructure(envelope) {
               if (typeof v.locale !== "string" || v.locale.length === 0) err(`${vp}.locale`, "required non-empty string");
               if (typeof v.contentBase64 !== "string" || v.contentBase64.length === 0) err(`${vp}.contentBase64`, "required non-empty string");
             });
+          }
+          // #1079: the other layouts of the figure. One exists today, `narrow`; the import refuses
+          // any other, a layout given twice, and a layout on anything but an SVG.
+          if (asset.layoutVariants !== undefined) {
+            if (!Array.isArray(asset.layoutVariants)) err(`${ap}.layoutVariants`, "must be an array");
+            else {
+              if (asset.layoutVariants.length > 0 && asset.mimeType !== "image/svg+xml") err(`${ap}.layoutVariants`, "only an image/svg+xml figure can have layout variants");
+              const seenLayouts = new Set();
+              asset.layoutVariants.forEach((lv, li) => {
+                const lp = `${ap}.layoutVariants[${li}]`;
+                if (!lv || typeof lv !== "object") return err(lp, "layout variant must be an object");
+                if (!ASSET_LAYOUTS.includes(lv.layout)) err(`${lp}.layout`, `must be one of: ${ASSET_LAYOUTS.join(", ")}`);
+                else if (seenLayouts.has(lv.layout)) err(`${lp}.layout`, `layout "${lv.layout}" is given twice`);
+                seenLayouts.add(lv.layout);
+                if (typeof lv.contentBase64 !== "string" || lv.contentBase64.length === 0) err(`${lp}.contentBase64`, "required non-empty string");
+                if (lv.localizedVariants !== undefined) {
+                  if (!Array.isArray(lv.localizedVariants)) err(`${lp}.localizedVariants`, "must be an array");
+                  else lv.localizedVariants.forEach((v, vi) => {
+                    const vp = `${lp}.localizedVariants[${vi}]`;
+                    if (!v || typeof v !== "object") return err(vp, "variant must be an object");
+                    if (typeof v.locale !== "string" || v.locale.length === 0) err(`${vp}.locale`, "required non-empty string");
+                    if (typeof v.contentBase64 !== "string" || v.contentBase64.length === 0) err(`${vp}.contentBase64`, "required non-empty string");
+                  });
+                }
+              });
+            }
           }
         });
       }
