@@ -20,6 +20,14 @@ kjennes igjen på `toolVersion`. Når begge er flettet, blir det 2.85.0 med begg
 **Status:** QA-port og stage står nederst i denne overleveringen. Skillet på denne grenen er det
 gamle (2.82.2-innholdet) med nytt versjonsnummer; zip-fila herfra skal ikke installeres.
 
+**Ikoner: et fast bibliotek i plattformen (produkteiers spørsmål 2026-10-06, morgen).** Skillets
+regel «bare presentasjonens egne ikoner, aldri tegn eller hent» er optimalisert for
+Rapportskriving: to av tre testpresentasjoner har null ikoner og får dermed ingen. Anbefalt: et
+permissivt sett (Lucide, ISC; eller Tabler, MIT) servert av plattformen selv, skrevet som
+`![](icon:<navn>)`, med en katalog med norske stikkord i skillet. Spørsmålet til ham: standard for
+alle kurs (anbefalt, samme grunn som kortene i plattformens stil), eller reserve der kilden mangler
+ikoner. Bygges etter milepæl 1.
+
 | Miljø | Versjon | |
 |---|---|---|
 | prod | 2.78.3 | rullet 2026-10-04 kl. 20:13 fra `2433d2b7`, godkjent av produkteier. #1080, #1081, #1083 |

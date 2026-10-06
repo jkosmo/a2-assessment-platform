@@ -1712,6 +1712,12 @@ dialog::backdrop {
    viser navnet på kolonnen sin (data-label, satt av tjeneren). Radene får da ramme og luft, og uten
    border-box blir de 18 px bredere enn spalten og stikker ut av leseren. */
 .content-table tr, .content-table td { box-sizing: border-box; }
+@media (max-width: 600px) {
+  /* Kolonnenavnet over verdien, ikke ved siden av: den generelle regelen gir navnet fast bredde
+     og lar det ikke brekke, og et navn på 25 tegn skjøv verdien ut av skjermen (QA-porten, 2.84.0). */
+  .content-table td { display: block; }
+  .content-table td::before { display: block; min-width: 0; margin-bottom: 2px; }
+}
 @media (min-width: 601px) {
   .content-table { width: 100%; border-collapse: collapse; margin: 0 0 12px; }
   .content-table th, .content-table td {
