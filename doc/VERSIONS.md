@@ -2,6 +2,26 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.85.1 - 2026-10-06
+
+### Lesemodus: ikoner i tabeller holder størrelsen, og tittelen står over innholdets overskrifter (#1079)
+
+Produkteier på stage med 2.85.0, samme kveld:
+
+- **Ikonene i en stegtabell forsvant med «Smal» spalte.** Leserens regel for bilder (`max-width: 100 %`)
+  lar tabellen klemme ikonkolonnen til ingenting når spalten blir trang; ikonene ble 8 px. Et bilde
+  først i en celle er nå et ikon: tjeneren setter klassen kortene bruker (`content-icon`), og
+  `shared.css` gir den fast størrelse (24 px). Et bilde inne i teksten i en celle er fortsatt et bilde.
+  På telefon står ikke lenger en tom linje over ikonet (kolonnen har tomt navn).
+- **Tittelen i hodet var mindre enn overskriftene i innholdet** (13 px mot h2 på 20 px). I lesemodus
+  er den 22 px og brekker i stedet for å kuttes; 17 px på telefon.
+- Stage-testen `release-2-81-layouts` antok at kurset vises etter «gå videre»; i lesemodus står neste
+  seksjon alene. Testen lukker leseren før det leste steget måles.
+
+**Slik er det målt:** `test/unit/section-content-blocks-1079.test.ts` (ikon først i cellen; bilde i
+teksten er ikke ikon), `test/e2e/content-blocks-1079.spec.ts` (PC med «Smal»: 24 px og tittel > h2;
+390/360 px: 24 px og ingen tom linje).
+
 ## 2.85.0 - 2026-10-06
 
 ### Lesemodus: kurset viker når en seksjon leses, og leseren velger smal eller bred spalte (#1079)
