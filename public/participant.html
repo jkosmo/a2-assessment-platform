@@ -379,6 +379,50 @@
         .course-inline-panel-body .section-reader-body { padding: 12px; }
       }
       .course-inline-actions { display: flex; gap: var(--space-1); align-items: center; flex-wrap: wrap; margin-top: 12px; }
+
+      /* Lesemodus (#1079). Innholdet lå fire rammer dypt — sidekort, kurskort, stegkort, lesepanel —
+         alle med samme lyse flate, tynne ramme og runde hjørner som innholdets egne kort og bokser, og
+         «Lukk», «Kopier» og «Les» så ut som kortene i teksten. Når en seksjon er åpen, viker kurset:
+         bare hodet (hvor du er, spaltebredde, lukk) og arket med innholdet står igjen. Kurset kommer
+         tilbake når seksjonen lukkes. Besluttet av produkteier på prøvesiden 2026-10-06.
+         Alt som ikke er den åpne seksjonen, skjules med :has() — ikke .hidden (se § 7 i surface map). */
+      .course-accordion-item.course-reading { border-color: transparent; background: transparent; overflow: visible; }
+      .course-accordion-item.course-reading > .course-accordion-header { display: none; }
+      .course-accordion-item.course-reading .course-accordion-body { border-top: 0; padding: 0; }
+      .course-accordion-item.course-reading .course-accordion-body :not(:has(.course-item.open)):not(.course-item.open):not(.course-item.open *) { display: none; }
+      .course-accordion-item.course-reading .course-item.open > :not(.course-inline-panel) { display: none; }
+      .course-accordion-item.course-reading .course-item.open::before { display: none; }
+      .course-accordion-item.course-reading .course-sequence { padding-left: 0; }
+      .course-accordion-item.course-reading .course-sequence::before { display: none; }
+      #courseSection:has(.course-reading) .course-back-bar { display: none !important; }
+      .course-reading .course-inline-panel { border-left: 0; background: transparent; border-radius: 0; overflow: visible; }
+      .course-reading .course-inline-panel-sticky { background: var(--color-surface); border-bottom: 1px solid var(--color-border-soft); padding: 10px 14px; gap: 12px; }
+      .course-reading-position { font-size: 13px; color: var(--color-meta); white-space: nowrap; }
+      .course-reading-width { display: none; }
+      .course-reading .course-reading-width { display: inline-flex; margin-left: auto; border: 1px solid var(--color-border-soft); border-radius: var(--radius-button); overflow: hidden; flex-shrink: 0; }
+      .course-reading-width button { width: auto; min-height: 0; font: inherit; font-size: 12px; padding: 4px 10px; border: 0; border-radius: 0; background: var(--color-surface); color: var(--color-text); cursor: pointer; }
+      .course-reading-width button + button { border-left: 1px solid var(--color-border-soft); }
+      .course-reading-width button[aria-pressed="true"] { background: var(--color-primary-tint); color: var(--color-primary-hover); font-weight: 600; }
+      .course-reading-width button:focus-visible { outline: 3px solid var(--color-focus); outline-offset: -3px; }
+      .course-reading .course-inline-panel-close { margin-left: 0; }
+      .course-reading .course-inline-panel-body { padding: 16px 0 0; max-width: 1100px; margin: 0 auto; }
+      .course-reading .course-inline-panel[data-reader-width="narrow"] .course-inline-panel-body { max-width: 72ch; }
+      .course-reading .course-inline-panel-body .section-reader-body { border: 0; border-radius: 2px; padding: 28px 36px 32px; font-size: 16px; line-height: 1.6; box-shadow: 0 1px 2px rgba(34, 31, 25, 0.10), 0 10px 30px -18px rgba(34, 31, 25, 0.45); }
+      .course-reading .section-reader-body h2 { font-size: 20px; }
+      /* Bred spalte: løpende tekst holdes lesbar, kort, tabeller, figurer og bokser får hele arket. */
+      /* Et avsnitt som bare er et bilde (en figur), får hele arket: ellers måler klienten spalten som smal
+         og henter det smale oppsettet på en PC. */
+      .course-reading .course-inline-panel[data-reader-width="wide"] .section-reader-body > :is(p:not(:has(img)), ul, ol, h1, h2, h3, h4) { max-width: 72ch; }
+      /* «Kopier» i en prompt-boks er innholdets egen knapp, ikke portalens: en tekstlenke på arket. */
+      .course-reading .section-reader-body .content-prompt .content-prompt-copy { border: 0; background: transparent; color: var(--color-primary-hover); text-decoration: underline; padding: 2px 4px; }
+      .course-reading .course-inline-actions { justify-content: center; margin-top: 16px; }
+      @media (max-width: 600px) {
+        .course-reading .course-reading-width { display: none; }
+        .course-reading .course-inline-panel-close { margin-left: auto; }
+        .course-reading .course-reading-position { display: none; }
+        .course-reading .course-inline-panel-body { padding-top: 10px; }
+        .course-reading .course-inline-panel-body .section-reader-body { padding: 18px 14px 22px; font-size: 15px; }
+      }
       /* App buttons default to width:100%; keep the inline action buttons auto-width so «Marker som
          lest» + «Gå til neste element» sit side by side instead of stacking full-width (#865 cosmetic). */
       .course-inline-actions > .btn-primary, .course-inline-actions > .btn-secondary { width: auto; }

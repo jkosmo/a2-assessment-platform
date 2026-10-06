@@ -2,6 +2,40 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.85.0 - 2026-10-06
+
+### Lesemodus: kurset viker når en seksjon leses, og leseren velger smal eller bred spalte (#1079)
+
+Produkteier, etter innholdsblokkene på stage: «for lite skille mellom hva som er kursportalen, og
+kontroller i den, vs. innholdet som vises innenfor den». Innholdet lå fire rammer dypt — sidekort,
+kurskort, stegkort, lesepanel — alle med samme lyse flate, tynne ramme og runde hjørner som
+innholdets egne kort og bokser, og «Lukk», «Kopier» og «Les» så ut som kortene i teksten. Fire
+grader av skille ble vist på en prøveside; han valgte lesemodus, med valgbar spaltebredde.
+
+- **Når en seksjon åpnes, viker kurset.** Kurskortets hode, de andre stegene, stegkortet med «Les»,
+  diskusjonslinja og «Alle kurs» skjules; igjen står hodet (hvor du er: «Steg 1 av 3», spaltevelger,
+  «Lukk seksjonen») og innholdet på et hvitt ark med skygge og egen lesestørrelse. «Marker seksjon
+  lest, og gå videre» står under arket. Kurset kommer tilbake når seksjonen lukkes. Tester (moduler)
+  åpner som før.
+- **Spaltebredde:** «Bred» (standard) lar kort, tabeller, figurer og bokser bruke hele arket (inntil
+  1100 px), mens løpende tekst holdes på rundt 72 tegn per linje. «Smal» setter hele arket på 72
+  tegn. Valget huskes i nettleseren. Et avsnitt som bare er en figur, får full bredde også i
+  «Bred» — ellers hadde klienten målt spalten som smal og hentet det smale oppsettet på en PC.
+- **På telefon** er det én spalte og ingen velger; hodet har bare tittel og «Lukk».
+- «Kopier» i en prompt-boks er innholdets egen knapp og tegnes som tekstlenke på arket, så portalens
+  knapper er de eneste knappene.
+
+**Slik er det målt.** `test/e2e/reading-mode-1079.spec.ts` (PC: alt rundt er borte, hode med
+posisjon og velger, bred spalte med tekst under 800 px og fire kort på én rad; «Smal» huskes
+etter ny lasting; lukk gir kurset tilbake; 390 og 360 px: én spalte, ingen velger, ingenting ut av
+skjermen). To eldre tester måtte endres: den som ventet at diskusjonslinja var synlig mens
+seksjonen var åpen, og den som ventet at en kort seksjon rulles helt opp (siden er nå ofte for kort
+til å rulle; kravet er at leseren er innenfor skjermen). Figurtestene (`asset-layout-by-column`,
+`figure-legible-on-phone`) fant at figuravsnittet først fikk tekstbredden; rettet før de ble grønne.
+
+**Ikke med:** moduler (tester) i lesemodus; en egen innstilling for skriftstørrelse; prøvesidens
+«Mørk ramme».
+
 ## 2.84.1 - 2026-10-06
 
 ### Et avbrutt klientkall er ikke en tjenerfeil: Sev1-varselet i prod slutter å utløse på det
