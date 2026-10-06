@@ -32,6 +32,9 @@ skjermen). To eldre tester måtte endres: den som ventet at diskusjonslinja var 
 seksjonen var åpen, og den som ventet at en kort seksjon rulles helt opp (siden er nå ofte for kort
 til å rulle; kravet er at leseren er innenfor skjermen). Figurtestene (`asset-layout-by-column`,
 `figure-legible-on-phone`) fant at figuravsnittet først fikk tekstbredden; rettet før de ble grønne.
+QA-porten fant i første runde at lesemodus forsvant når kurset ble tegnet på nytt mens seksjonen
+var åpen (språkbytte; «gå videre» når kurslista svarte etter kurset): klassen ble bare satt ved
+åpning. `reopenInlineAfterRender` setter den igjen, og to tester dekker begge tilfellene.
 
 **Ikke med:** moduler (tester) i lesemodus; en egen innstilling for skriftstørrelse; prøvesidens
 «Mørk ramme».
