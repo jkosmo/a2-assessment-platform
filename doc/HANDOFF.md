@@ -9,6 +9,17 @@
 
 **Prod står på 2.78.3. Stage står på 2.82.2: sju rettinger pluss kurset på telefon, som produkteier tester samlet (kvelden 2026-10-05). Ingenting av 2.79–2.82 er i prod.**
 
+### Innholdsblokkene er bygget (2026-10-06, 2.84.0, grenen `innholdsblokker-1079`)
+
+Uthevet boks, prompt-boks med «Kopier», kort med ikon, og tabeller som kan leses på telefon — slik
+prøvesiden produkteier godkjente. `doc/VERSIONS.md` (2.84.0) sier hva og hvor; skrivemåten er mitt
+valg og står i `doc/DECISIONS.md`. Versjonen hopper over 2.83.0, som er det ombygde skillet på sin
+egen gren (`skill-ombygging-1079`): to grener, to versjonsnumre, så importfiler fra skillet kan
+kjennes igjen på `toolVersion`. Når begge er flettet, blir det 2.85.0 med begge deler.
+
+**Status:** QA-port og stage står nederst i denne overleveringen. Skillet på denne grenen er det
+gamle (2.82.2-innholdet) med nytt versjonsnummer; zip-fila herfra skal ikke installeres.
+
 | Miljø | Versjon | |
 |---|---|---|
 | prod | 2.78.3 | rullet 2026-10-04 kl. 20:13 fra `2433d2b7`, godkjent av produkteier. #1080, #1081, #1083 |

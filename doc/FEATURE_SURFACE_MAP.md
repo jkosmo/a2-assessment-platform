@@ -214,6 +214,27 @@ client-side (defense-in-depth). The client policy MUST match the server or allow
 YouTube embed). Error strings must never be interpolated raw into `innerHTML` — `escapeHtml(String(err))`
 or `showToast` (textContent); see `public/admin-platform.js` / `public/profile.js`.
 
+## 6d. Content blocks in section text (#1079)
+
+Four blocks are ordinary markdown read a second way while `marked` renders it — never a format of
+their own: `> **Husk:** …` (highlighted box; the labels Viktig/NB/Advarsel/Important/Warning give
+the warning colour), a fenced block marked `prompt` (prompt box with a copy button), `:::kort` …
+`:::` around `###` headings (cards; `:::cards` works too), and an image first in a card heading
+(icon). Tables get `data-label` on every cell so the phone stacking rule in `shared.css` shows the
+column name.
+
+| Surface | Where |
+| --- | --- |
+| Rendering (source of truth) | `src/modules/course/contentBlocks.ts` — a `Marked` instance per locale with a block extension (`contentCards`) and renderers for `code`, `blockquote`, `table`. Output is plain HTML with classes `content-callout`, `content-prompt`, `content-cards`, `content-card`, `content-icon`, `content-table`; both sanitizers (above) let it through on their default allowlist |
+| Styles | `public/static/shared.css`, the block at the end («Innholdsblokker i seksjonstekst») — one place for the reader, the editor preview and module task text |
+| Copy button | `public/static/content-blocks.js` — one delegated click listener. Loaded by `participant.html`, `admin-content-sections.html`, and via `import` in `admin-content-preview.js` (module workspace) |
+| Guard tests | `test/unit/section-content-blocks-1079.test.ts` (forms, non-forms, sanitisation inside blocks, `?locale=constructor`), `test/e2e/content-blocks-1079.spec.ts` (1280/390/360: cards side by side vs stacked, column names on phone, copy) |
+
+**Maintenance hazard:** a new page that shows section HTML needs the script tag for the copy button;
+the CSS comes with `shared.css`. The skill (`skills/a2-authoring-api/references/section-content.md`)
+writes these forms — change the syntax in both places or courses from the skill stop rendering as
+blocks.
+
 ## 7. Conditional visibility — the `.hidden` cascade trap
 
 `.hidden` (`display:none` without `!important`) loses the cascade to `display`-setting classes

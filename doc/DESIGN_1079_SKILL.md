@@ -152,11 +152,16 @@ samtalen, og den skal gi mening alle stedene.
 
 | Blokk | Skrives som | Uten plattformen ser den ut som |
 |---|---|---|
-| **Utheving** («Husk», «Tips», «Viktig») | et sitat som begynner med `[!HUSK]` (samme skrivemåte som GitHub bruker) | et sitat |
+| **Utheving** («Husk», «Tips», «Viktig») | et sitat som åpner med merkelappen i fet skrift: `> **Husk:** …` | et sitat med fet merkelapp |
 | **Prompt** eller eksempel til å kopiere | en kodeblokk merket `prompt` | en kodeblokk |
 | **Kort** ved siden av hverandre | en ramme `:::kort` rundt underoverskrifter, én per kort | overskrifter med punkter under |
 | **Ikon** | et lite bilde først i en kortoverskrift | et bilde |
 
+- **Bygget 2026-10-06 (2.84.0, grenen `innholdsblokker-1079`).** Merkelappen skrives i fet
+  skrift, ikke som GitHubs `[!HUSK]`: en fet merkelapp leses riktig overalt, også der blokkene ikke
+  tegnes, den oversettes som tekst, og kilden får beholde sin egen («Best praksis», «NB»). Tegnet i
+  `src/modules/course/contentBlocks.ts` mens markdown blir til HTML — ingen DOM per forespørsel.
+  Prøvekjøringen av skillet skrev allerede denne formen.
 - Blokkene er tekst. De oversettes, eksporteres og importeres som resten av seksjonen, uten
   endring i lagring eller pakkeformat.
 - Plattformen tegner dem på tjeneren, samme sted som resten (`marked`), og renser resultatet.

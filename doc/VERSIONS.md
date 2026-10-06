@@ -2,6 +2,61 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.84.0 - 2026-10-06
+
+### Innholdsblokker i seksjonstekst: uthevet boks, prompt-boks, kort og ikon (#1079)
+
+Produkteier laget samme kurs fra en presentasjon i ChatGPT og i Claude.ai (2026-10-05). Kortene
+og «Husk»-stripene fra lysarkene forsvant i begge, fordi plattformen ikke hadde noe å legge dem i:
+en seksjon var overskrifter, avsnitt, lister, tabeller og bilder. Fire blokker ble besluttet og en
+prøveside godkjent samme kveld (`doc/DESIGN_1079_SKILL.md`, valg 4). Dette er dem.
+
+**Blokkene er vanlig markdown som leses en gang til mens den blir til HTML** — ikke et eget
+format. Teksten lagres, oversettes, eksporteres og importeres som før, og gir mening også i
+redigeringsfeltet og i en eksportfil:
+
+| Skrives som | Blir |
+|---|---|
+| `> **Husk:** …` — et sitat som åpner med fet merkelapp | uthevet boks med ikon. «Viktig», «NB», «Advarsel» (og de engelske) gir varselfargen, med venstrestrek, som `.field-warning` |
+| en kodeblokk merket `prompt` | prompt-boks med «Kopier» (på leserens språk), teksten ordrett og brekkende |
+| `:::kort` … `:::` rundt `###`-overskrifter | kort ved siden av hverandre der det er plass, under hverandre på telefon; plattformens stil uansett kilde |
+| et bilde først i en kortoverskrift | ikonet, i overskriftens størrelse |
+| en tabell | som før på PC, men med rammer og luft; på telefon viser hver celle kolonnenavnet sitt |
+
+Et vanlig sitat, en vanlig kodeblokk og underoverskrifter uten ramme står som før. En ramme som
+ikke lukkes, er ikke en ramme: teksten står som skrevet, og ingenting forsvinner.
+
+**Hvor:** `src/modules/course/contentBlocks.ts` (gjengivelsen), slutten av
+`public/static/shared.css` (stilen, ett sted for leseren, forhåndsvisningen og oppgavetekst i
+moduler), `public/static/content-blocks.js` (knappen). Plattformens rensing kjører etterpå, på
+resultatet, som før; begge renserne slipper blokkene gjennom på standardlista si.
+
+**To feil fra før som rettes med dette:**
+
+- **En tabell i en seksjon mistet kolonneoverskriftene på telefon.** `shared.css` gjør alle
+  tabeller om til stablede rader under 600 px og skjuler overskriftsraden; listesidene setter
+  kolonnenavnet på hver celle, men en tabell skrevet i en seksjon hadde ikke det. Deltakeren så
+  cellene under hverandre, høyrestilt, uten navn. Nå setter gjengivelsen `data-label` på hver
+  celle. (Radene stakk dessuten 18 px ut av leseren; `box-sizing` rettet.)
+- **Tabeller hadde ingen stil i leseren på PC** — ingen linjer, ingen luft.
+
+**Rotårsaken til at kortene forsvant** ligger i skillet (2.83.0, egen gren) og i plattformen
+sammen: skillet hadde ingen form å skrive dem i, og plattformen ingen å tegne. Skillet skriver nå
+den uthevede boksen og prompt-boksen slik denne versjonen tegner dem; kortrammen (`:::kort`)
+legges inn i skillet når milepæl 1 er målt.
+
+**Slik er det målt.** `test/unit/section-content-blocks-1079.test.ts` (53: hver form, det som
+ikke er en form, rensing inni blokkene, `?locale=constructor`) og
+`test/e2e/content-blocks-1079.spec.ts` (PC: fire kort på én rad, bokser med farge, tabell med
+rammer, «Kopier» legger prompten på utklippstavla; 390 og 360 px: kortene under hverandre, hver
+tabellcelle med kolonnenavn, ingenting ut av leseren). Sett på PC og 390 px før testene ble
+skrevet. Enhetstesten fant at språkkoden `constructor` i adressen ga krasj (samme slag som
+#1088) før den kom så langt som til stage.
+
+**Ikke med:** figurer er som før; redigeringsfeltet har ingen knapper for blokkene (en forfatter
+skriver dem som tekst, eller får dem fra skillet); bilder krympes ikke ved import ennå (valg 4,
+anbefalingen om 300 kB).
+
 ## 2.82.2 - 2026-10-05
 
 ### Et kurs med lange stegtitler gikk ut av skjermen på telefon

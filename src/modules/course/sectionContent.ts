@@ -1,6 +1,6 @@
 import DOMPurify from "dompurify";
 import { JSDOM } from "jsdom";
-import { marked } from "marked";
+import { renderSectionBlocks } from "./contentBlocks.js";
 
 /**
  * Markdown rendering + sanitisation for course learning sections (#476).
@@ -95,6 +95,6 @@ function resolveAssetUrls(html: string, locale?: string): string {
  */
 export function renderSectionMarkdown(markdownInput: string, locale?: string): string {
   if (typeof markdownInput !== "string" || markdownInput.length === 0) return "";
-  const rawHtml = marked.parse(markdownInput, { async: false }) as string;
+  const rawHtml = renderSectionBlocks(markdownInput, locale);
   return sanitizeSectionHtml(resolveAssetUrls(rawHtml, locale));
 }

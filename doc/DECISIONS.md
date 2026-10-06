@@ -968,3 +968,25 @@ begrunnelsene står der). Sak #1079.
    om, og når innholdsblokkene er på plass. Imellom prøves skillet i Claude Code.
 
 **Håndheves:** ikke bygget. Status: avklart; rekkefølgen står nederst i designnotatet.
+
+## Innholdsblokkene skrives som vanlig markdown med fet merkelapp, kodeblokk og ramme (2026-10-06)
+
+Produkteier besluttet de fire blokkene og godkjente prøvesiden (valg 4 over). Skrivemåten er min:
+
+- **Uthevet boks: et sitat som åpner med merkelappen i fet skrift** (`> **Husk:** …`), ikke
+  GitHubs `[!HUSK]`. Begrunnelse: den leses riktig også der blokkene ikke tegnes (redigeringsfelt,
+  eksportfil, eldre versjon), merkelappen oversettes som tekst, og kilden får beholde sin egen
+  («Best praksis», «Gode vaner», «NB»). «Viktig», «NB», «Advarsel» og de engelske motstykkene gir
+  varselfargen, med venstrestrek, slik varsler alt har i plattformen (formregelen i `shared.css`).
+- **Prompt: en kodeblokk merket `prompt`.** En vanlig kodeblokk står som før.
+- **Kort: en ramme `:::kort` (eller `:::cards`) rundt `###`-overskrifter.** Underoverskrifter
+  uten ramme er overskrifter som før: en seksjon med vanlige underoverskrifter skal ikke bli kort
+  av seg selv. En ramme som ikke lukkes, er ikke en ramme.
+- **Ikon: et bilde først i en kortoverskrift.** Ingen annen plass for ikoner.
+- **Tabeller:** hver celle får kolonnenavnet sitt (`data-label`), så den stablede visningen på
+  telefon kan leses. Dette var en feil fra før, også i prod.
+
+**Håndheves:** `src/modules/course/contentBlocks.ts`; `test/unit/section-content-blocks-1079.test.ts`
+og `test/e2e/content-blocks-1079.spec.ts`. Skillet skriver den uthevede boksen og prompt-boksen i
+denne formen alt (2.83.0); kortrammen legges inn der etter milepæl 1. Status: mitt valg, ikke
+produkteiers — han kan snu skrivemåten før den kommer i prod.
