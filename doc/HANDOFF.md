@@ -7,7 +7,19 @@
 
 ## Kort: det som må avgjøres
 
-**Prod står på 2.85.0 (rullet 2026-10-06 kl. 22:09 fra `17743d55`, godkjent av produkteier; `/version` og helsesjekk bekreftet — hele spennet 2.79–2.85.0 er i prod). Stage står på 2.85.1 (to detaljer i lesemodus, rullet 2026-10-06 kl. 23:07 fra `4d5d9f4e`; `/version` og helsesjekk bekreftet). `dev` = stage. `main` = prod (PR #1091).**
+**Prod står på 2.85.0 (rullet 2026-10-06 kl. 22:09 fra `17743d55`, godkjent av produkteier; `/version` og helsesjekk bekreftet — hele spennet 2.79–2.85.0 er i prod). Stage står på 2.85.2 (to småfunn i lesemodus, rullet 2026-10-07 kl. 07:22 fra `11baab53`; `/version` og helsesjekk bekreftet). `dev` = stage. `main` = prod (PR #1091). **Produkteier 2026-10-07: vi samler mer på stage før neste prod-slipp.****
+
+### 2.85.2: to småfunn fra QA-porten (2026-10-07 morgen, grenen `lesemodus-smaafunn-1079`)
+
+Tittelen på arket følger seksjonssvaret, og fokus kommer tilbake til leseren når kurslista svarer
+sist og panelet bygges på nytt (bare når fokus alt står på `<body>`, så språkbyttet beholder fokus på
+velgeren). QA-porten GO i første runde (`.ai-qa/qa-20261007-064305.md`). **Oppfølging fra QA:** fokus
+settes mens panelet viser «Laster …»; ved tilbake-/fram-navigering til samme kurs kuttes
+rulleposisjonen til toppen (målt: 3571 → 9 på PC). Veien dit (ankerlenker i seksjonsteksten) var
+ødelagt fra før, så det stopper ingenting; løsningen er å gi fokus først når teksten er satt inn
+(`.then()` på `renderSectionReaderInto`). **For hånd på stage:** skjermleser på iPhone og Android ved
+«gå videre»; språkbytte på iPhone med rulleposisjon; tastaturfokus med NVDA på PC.
+
 
 ### 2.85.1: to detaljer produkteier fant på stage i lesemodus (2026-10-06 kveld, grenen `lesemodus-detaljer-1079`)
 
@@ -84,9 +96,9 @@ produkteier har kjørt Møtearbeid og Tilbudsarbeid med 2.83.0 i ChatGPT og Clau
 | Miljø | Versjon | |
 |---|---|---|
 | prod | 2.85.0 | rullet 2026-10-06 kl. 22:09 fra `17743d55` (run 37521860878), godkjent av produkteier; `/version` og helsesjekk bekreftet. Før det 2.78.3: rullet 2026-10-04 kl. 20:13 fra `2433d2b7`. #1080, #1081, #1083 |
-| stage | 2.85.1 | rullet 2026-10-06 kl. 23:07 fra `4d5d9f4e` (QA-porten GO i tredje runde, `.ai-qa/qa-20261006-222752.md`); `/version` og helsesjekk bekreftet. Stage-testen kjørt 2026-10-07 kl. 06:17–06:21: 44 av 44 besto, også den tilpassede figurtesten. Før det 2.85.0: rullet 2026-10-06 kl. 21:31 fra `17743d55` (QA-porten GO i andre runde, `.ai-qa/qa-20261006-211010.md`). Før det 2.84.1: rullet 2026-10-06 kl. 09:37 fra `82815746` (QA-porten GO, `.ai-qa/qa-20261006-091043.md`). Før det 2.84.0: rullet 2026-10-06 kl. 07:12 fra `ad3f0192`, QA-porten GO i tredje runde (`.ai-qa/qa-20261006-064930.md`); `/version` og helsesjekk bekreftet. Før det 2.82.2: rullet 2026-10-05 kl. 18:49 fra `96632019`, commiten QA-porten ga GO på i tredje runde (`.ai-qa/qa-20261005-182600.md`); `/version` og helsesjekk bekreftet. Stage-testen kjørt 18:50–18:53: 38 av 38 besto |
+| stage | 2.85.2 | rullet 2026-10-07 kl. 07:22 fra `11baab53` (QA-porten GO, `.ai-qa/qa-20261007-064305.md`); `/version` og helsesjekk bekreftet. Før det 2.85.1: rullet 2026-10-06 kl. 23:07 fra `4d5d9f4e` (QA-porten GO i tredje runde, `.ai-qa/qa-20261006-222752.md`); stage-testen 2026-10-07 kl. 06:17–06:21: 44 av 44. Før det 2.85.0: rullet 2026-10-06 kl. 21:31 fra `17743d55` (QA-porten GO i andre runde, `.ai-qa/qa-20261006-211010.md`). Før det 2.84.1: rullet 2026-10-06 kl. 09:37 fra `82815746` (QA-porten GO, `.ai-qa/qa-20261006-091043.md`). Før det 2.84.0: rullet 2026-10-06 kl. 07:12 fra `ad3f0192`, QA-porten GO i tredje runde (`.ai-qa/qa-20261006-064930.md`); `/version` og helsesjekk bekreftet. Før det 2.82.2: rullet 2026-10-05 kl. 18:49 fra `96632019`, commiten QA-porten ga GO på i tredje runde (`.ai-qa/qa-20261005-182600.md`); `/version` og helsesjekk bekreftet. Stage-testen kjørt 18:50–18:53: 38 av 38 besto |
 | `main` (git) | 2.85.0 | likt med prod (PR #1091 flettet 2026-10-06) |
-| `dev` (git) | 2.85.1 | to detaljer i lesemodus (2.85.1), lesemodus (2.85.0), innholdsblokkene og feilklassifiseringen (2.84.x), sju rettinger (2.82.0), to oppfølgere etter QA (2.82.1), og kurset på telefon (2.82.2), se under |
+| `dev` (git) | 2.85.2 | to småfunn (2.85.2), to detaljer i lesemodus (2.85.1), lesemodus (2.85.0), innholdsblokkene og feilklassifiseringen (2.84.x), sju rettinger (2.82.0), to oppfølgere etter QA (2.82.1), og kurset på telefon (2.82.2), se under |
 
 **2.82.0, i én setning hver** (detaljer og rotårsaker i `doc/VERSIONS.md`):
 
