@@ -4155,6 +4155,11 @@ function reopenInlineAfterRender(courseId, container) {
     buildModuleInlinePanel(panel, courseId, inlineOpen);
   } else {
     renderSectionReaderInto(panel, courseId, inlineOpen);
+    // Panelet er bygget på nytt, og elementet som hadde fokus (tittelen, satt ved åpning) er borte;
+    // da står fokus på <body>. Det skjer hver gang kurslista svarer etter kurset ved «gå videre»
+    // (QA-porten, 2.85.1). Fokus går tilbake til leseren — men bare når det alt er tapt: står det
+    // på noe annet (språkvelgeren etter et språkbytte), rører vi det ikke.
+    if (!document.activeElement || document.activeElement === document.body) focusInlinePanel(panel);
   }
 }
 
@@ -4302,6 +4307,9 @@ async function renderSectionReaderInto(panel, courseId, entry) {
     const titleEl = panel.querySelector("#sectionReaderTitle");
     const bodyEl = panel.querySelector("#sectionReaderBody");
     if (titleEl && body.title) titleEl.textContent = body.title;
+    // Tittelen på arket (telefon og nettbrett) følger det samme svaret som tittelen i hodet.
+    const sheetTitleEl = panel.querySelector(".course-reading-title");
+    if (sheetTitleEl && body.title) sheetTitleEl.textContent = body.title;
     // body.html is already sanitised server-side with the F3/X1 policy; #814 re-applies the same
     // policy client-side (defense-in-depth) before this innerHTML sink.
     if (bodyEl) {

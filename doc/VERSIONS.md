@@ -2,6 +2,28 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.85.2 - 2026-10-07
+
+### Lesemodus: to småfunn fra QA-porten (#1079)
+
+Produkteier valgte 2026-10-07 å ta de to små av QA-portens tre småfunn fra 2.85.1:
+
+- **Tittelen på arket følger seksjonssvaret.** Hodets tittel ble oppdatert med tittelen fra
+  `/api/courses/:id/sections/:sid`; tittelen på arket (telefon og nettbrett) sto igjen med tittelen
+  fra kurslista. Nå følger begge svaret.
+- **Fokus kommer tilbake til leseren når panelet tegnes på nytt.** Ved «Marker seksjon lest, og gå
+  videre» settes fokus på den nye seksjonens tittel, men når kurslista svarer sist (det vanlige på
+  stage) bygges panelet på nytt og fokus havnet på `<body>`. Dette var slik før lesemodus også.
+  `reopenInlineAfterRender` gir fokus tilbake til leseren — bare når det alt er tapt, så et
+  språkbytte beholder fokus på språkvelgeren.
+
+**Ikke rettet (produkteiers valg):** store telefoner i liggende format (bredere enn 900 px) får
+tittelen i hodet igjen, og hodet blir 76 av 430 px. Venter til noen melder det.
+
+**Slik er det målt:** `test/e2e/reading-mode-1079.spec.ts` (fokus i leseren etter sen kursliste;
+fokus på språkvelgeren etter språkbytte), `test/e2e/content-blocks-1079.spec.ts` (begge titler viser
+svarets tittel på PC, 768 og 390/360 px).
+
 ## 2.85.1 - 2026-10-06
 
 ### Lesemodus: ikoner i tabeller holder størrelsen, og tittelen står over innholdets overskrifter (#1079)

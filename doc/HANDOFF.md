@@ -75,13 +75,11 @@ et ekte opplastet bilde i et kort.
 Skillet på denne grenen er det gamle (2.82.2-innholdet) med nytt versjonsnummer; zip-fila herfra
 skal ikke installeres.
 
-**Ikoner: et fast bibliotek i plattformen (produkteiers spørsmål 2026-10-06, morgen).** Skillets
-regel «bare presentasjonens egne ikoner, aldri tegn eller hent» er optimalisert for
-Rapportskriving: to av tre testpresentasjoner har null ikoner og får dermed ingen. Anbefalt: et
-permissivt sett (Lucide, ISC; eller Tabler, MIT) servert av plattformen selv, skrevet som
-`![](icon:<navn>)`, med en katalog med norske stikkord i skillet. Spørsmålet til ham: standard for
-alle kurs (anbefalt, samme grunn som kortene i plattformens stil), eller reserve der kilden mangler
-ikoner. Bygges etter milepæl 1.
+**Ikoner: Lucide som standard for alle kurs (besluttet 2026-10-07, `doc/DECISIONS.md`).** Skillets
+regel «bare presentasjonens egne ikoner» er optimalisert for Rapportskriving: to av tre
+testpresentasjoner har null ikoner. Plattformen skal servere Lucide (ISC) selv, skrevet som
+`![](icon:<navn>)`, med en katalog med norske stikkord i skillet. **Bygges etter milepæl 1** (når
+produkteier har kjørt Møtearbeid og Tilbudsarbeid med 2.83.0 i ChatGPT og Claude.ai).
 
 | Miljø | Versjon | |
 |---|---|---|

@@ -91,7 +91,8 @@ async function åpneLeseren(page: Page, bredde: number) {
   await page.route("**/api/courses/c1", (route: Route) =>
     route.fulfill(json({ course: { id: "c1", title: "Rapportskriving med generativ KI", discussionsEnabled: true, items: [{ type: "SECTION", sectionId: "s1", title: "Arbeidsformer", read: false }] } })));
   // Plattformens egen gjengivelse av teksten, slik tjeneren ville svart.
-  await page.route("**/api/courses/c1/sections/*", (route: Route) => route.fulfill(json({ title: "Arbeidsformer", html: renderSectionMarkdown(MARKDOWN, "nb") })));
+  // Tittelen i svaret skiller seg fra tittelen i kurslista: begge titlene i leseren skal følge svaret (2.85.2).
+  await page.route("**/api/courses/c1/sections/*", (route: Route) => route.fulfill(json({ title: "Arbeidsformer, oppdatert", html: renderSectionMarkdown(MARKDOWN, "nb") })));
   await page.route("**/api/content-assets/**", (route: Route) => route.fulfill({ status: 200, contentType: "image/svg+xml", body: IKON }));
   // Registrert etter den generelle: Playwright prøver den sist registrerte ruta først.
   await page.route("**/api/content-assets/bilde-stor*", (route: Route) => route.fulfill({ status: 200, contentType: "image/svg+xml", body: SKJERMBILDE }));
@@ -177,6 +178,7 @@ test.describe("innholdsblokker i leseren (#1079)", () => {
     const skjermbilde = page.locator("#sectionReaderBody .content-table img:not(.content-icon)");
     await expect(skjermbilde).toHaveCount(1);
     expect((await skjermbilde.boundingBox())!.width, "skjermbildet er ikke krympet til ikon").toBeGreaterThan(200);
+    await expect(page.locator(".course-inline-panel-title")).toHaveText("Arbeidsformer, oppdatert");
     const tittel = await page.locator(".course-inline-panel-title").evaluate((el) => parseFloat(getComputedStyle(el).fontSize));
     const h2 = await page.locator("#sectionReaderBody h2").first().evaluate((el) => parseFloat(getComputedStyle(el).fontSize));
     expect(tittel, `tittelen (${tittel} px) er større enn innholdets h2 (${h2} px)`).toBeGreaterThan(h2);
@@ -193,6 +195,7 @@ test.describe("innholdsblokker i leseren (#1079)", () => {
     expect(hode.height, `hodet er lavt (${Math.round(hode.height)} px)`).toBeLessThanOrEqual(56);
     await expect(page.locator(".course-inline-panel-title")).toBeHidden();
     await expect(page.locator(".course-reading-title")).toBeVisible();
+    await expect(page.locator(".course-reading-title")).toHaveText("Arbeidsformer, oppdatert");
     expect(await page.evaluate(() => document.activeElement?.className ?? ""), "fokus står på tittelen på arket").toContain("course-reading-title");
     expect(await utenfor(page)).toEqual([]);
   });
@@ -220,7 +223,7 @@ test.describe("innholdsblokker i leseren (#1079)", () => {
       await expect(page.locator(".course-inline-panel-title")).toBeHidden();
       const arkTittel = page.locator(".course-reading-title");
       await expect(arkTittel).toBeVisible();
-      await expect(arkTittel).toHaveText("Arbeidsformer");
+      await expect(arkTittel).toHaveText("Arbeidsformer, oppdatert");
       // QA-porten (runde 2): tittelen var borte for skjermlesere (skjult i hodet, aria-hidden på arket), og
       // fokus havnet på <body>. Nå er tittelen på arket en overskrift og den som får fokus.
       await expect(arkTittel).not.toHaveAttribute("aria-hidden", "true");

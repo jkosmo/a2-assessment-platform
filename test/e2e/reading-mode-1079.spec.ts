@@ -167,6 +167,8 @@ test.describe("lesemodus — kurset viker når en seksjon leses (#1079)", () => 
   test("språkbytte mens seksjonen er åpen: lesemodus står", async ({ page }) => {
     await åpneKurset(page, 1280);
     await åpneSeksjonen(page);
+    // Fokus settes eksplisitt: det er det omtegningen ikke skal ta (2.85.2).
+    await page.locator("#localeSelect").focus();
     await page.locator("#localeSelect").selectOption("en-GB");
     await expect(page.locator("#sectionReaderBody .content-cards")).toBeVisible();
     await expect(page.locator(".course-reading-position")).toHaveText("Step 1 of 3");
@@ -174,6 +176,8 @@ test.describe("lesemodus — kurset viker når en seksjon leses (#1079)", () => 
     expect(m.kurshode, "kurskortets hode er fortsatt borte").toBe(0);
     expect(m.andreSteg, "de andre stegene er fortsatt borte").toBe(0);
     expect(m.arkSkygge).toBe(true);
+    // 2.85.2: omtegningen tar ikke fokus fra språkvelgeren.
+    expect(await page.evaluate(() => document.activeElement?.id ?? ""), "fokus står på språkvelgeren").toBe("localeSelect");
   });
 
   test("«gå videre» når kurslista svarer sent: neste seksjon åpner i lesemodus", async ({ page }) => {
@@ -192,6 +196,8 @@ test.describe("lesemodus — kurset viker når en seksjon leses (#1079)", () => 
     expect(m.posisjon).toBe("Steg 2 av 3");
     expect(m.kurshode, "kurskortets hode er borte også etter at kurslista kom").toBe(0);
     expect(m.andreSteg).toBe(0);
+    // 2.85.2 (QA-porten): da kurslista kom sist, ble panelet bygget på nytt og fokus havnet på <body>.
+    expect(await page.evaluate(() => document.activeElement?.className ?? ""), "fokus står i leseren").toContain("course-inline-panel-title");
   });
 
   for (const bredde of [390, 360]) {

@@ -990,3 +990,20 @@ Produkteier besluttet de fire blokkene og godkjente prøvesiden (valg 4 over). S
 og `test/e2e/content-blocks-1079.spec.ts`. Skillet skriver den uthevede boksen og prompt-boksen i
 denne formen alt (2.83.0); kortrammen legges inn der etter milepæl 1. Status: mitt valg, ikke
 produkteiers — han kan snu skrivemåten før den kommer i prod.
+
+## Lesemodus, ikoner og prod-takt: produkteiers avgjørelser etter 2.85.1 på stage (2026-10-07)
+
+Spurt samlet morgenen etter at 2.85.0 gikk til prod og 2.85.1 til stage. Svarene, med ett ord hver:
+
+- **«Smal» spalte på PC gir det smale figuroppsettet** (to steg per rad), fordi spalten blir under
+  640 px. Konsekvent med at «Smal» er smal, og «Bred» er ett klikk unna. Ingen særregel for PC.
+- **2.85.1 venter på neste samling.** Prod står på 2.85.0; vi samler mer på stage før neste prod-slipp
+  (samme takt som før). Ingen kurs i prod har stegtabeller med ikoner ennå.
+- **Ikonbibliotek: Lucide, som standard for alle kurs** (ISC-lisens, rundt 1500 ikoner), servert av
+  plattformen selv og skrevet som `![](icon:<navn>)`, med en katalog med norske stikkord i skillet.
+  Begrunnelsen er den samme som for kortene i plattformens stil: ett uttrykk på tvers av kurs, ikke
+  bare der kilden tilfeldigvis har ikoner. Bygges etter milepæl 1.
+- **Skillets sju valg (2026-10-05) og blokkenes skrivemåte (2026-10-06) står.**
+- **Av QA-portens tre småfunn tas de to små** (tittelen på arket følger svaret; fokus tilbake til
+  leseren etter sen kursliste) i 2.85.2. Liggende telefon bredere enn 900 px venter.
+- **#1080, #1081 og #1083 lukket**: i prod siden 2.78.3 og sett på telefon.
