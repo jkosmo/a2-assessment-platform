@@ -7,7 +7,27 @@
 
 ## Kort: det som må avgjøres
 
-**Prod står på 2.85.0 (rullet 2026-10-06 kl. 22:09 fra `17743d55`, godkjent av produkteier; `/version` og helsesjekk bekreftet — hele spennet 2.79–2.85 er nå i prod). Stage står på 2.85.0 (rullet kl. 21:31 fra samme commit). `dev` = stage.**
+**Prod står på 2.85.0 (rullet 2026-10-06 kl. 22:09 fra `17743d55`, godkjent av produkteier; `/version` og helsesjekk bekreftet — hele spennet 2.79–2.85.0 er i prod). Stage står på 2.85.1 (to detaljer i lesemodus, rullet 2026-10-06 kl. 23:07 fra `4d5d9f4e`; `/version` og helsesjekk bekreftet). `dev` = stage. `main` = prod (PR #1091).**
+
+### 2.85.1: to detaljer produkteier fant på stage i lesemodus (2026-10-06 kveld, grenen `lesemodus-detaljer-1079`)
+
+Ikonene i en stegtabell ble klemt til 8 px med «Smal» spalte, og tittelen i hodet (13 px) var mindre
+enn innholdets overskrifter. `doc/VERSIONS.md` (2.85.1) sier hva og hvor. **QA-porten ga GO i tredje
+runde** (`.ai-qa/qa-20261006-222752.md`); de to rundene før fant at ikonregelen rammet alle bilder
+først i en celle (nå bare kolonner uten navn, i en tabell med minst én navngitt kolonne), at hodet ble
+85–214 px høyt på telefon og nettbrett (nå står tittelen på arket under 900 px), og at tittelen der
+var usynlig for skjermlesere og uten fokus (nå `h2` med fokus).
+
+**Småfunn fra QA-porten som ikke er rettet** (ingen stopper noe): store telefoner i liggende format
+er bredere enn 900 px og får tittelen i hodet igjen (76 px av 430 px høyde; kan løses med
+`(max-width: 900px), (max-height: 500px)`); etter «gå videre» havner fokus på `<body>` — likt før
+grenen, trolig fordi kurslista tegnes på nytt etter at fokus er satt; tittelen på arket oppdateres ikke
+med tittelen fra seksjonssvaret slik tittelen i hodet gjør (én linje).
+
+**Til den manuelle testen på stage:** åpne en seksjon med stegtabell (ikoner i kolonne uten navn) på
+PC med «Smal» — ikonene skal være 24 px; på telefon og nettbrett skal tittelen stå øverst på arket og
+hodet være én lav linje; Safari på telefon.
+
 
 ### Lesemodus er bygget (2026-10-06 kveld, 2.85.0, grenen `lesemodus-1079`)
 
@@ -66,9 +86,9 @@ ikoner. Bygges etter milepæl 1.
 | Miljø | Versjon | |
 |---|---|---|
 | prod | 2.85.0 | rullet 2026-10-06 kl. 22:09 fra `17743d55` (run 37521860878), godkjent av produkteier; `/version` og helsesjekk bekreftet. Før det 2.78.3: rullet 2026-10-04 kl. 20:13 fra `2433d2b7`. #1080, #1081, #1083 |
-| stage | 2.85.0 | rullet 2026-10-06 kl. 21:31 fra `17743d55` (QA-porten GO i andre runde, `.ai-qa/qa-20261006-211010.md`); `/version` og helsesjekk bekreftet. Før det 2.84.1: rullet 2026-10-06 kl. 09:37 fra `82815746` (QA-porten GO, `.ai-qa/qa-20261006-091043.md`). Før det 2.84.0: rullet 2026-10-06 kl. 07:12 fra `ad3f0192`, QA-porten GO i tredje runde (`.ai-qa/qa-20261006-064930.md`); `/version` og helsesjekk bekreftet. Før det 2.82.2: rullet 2026-10-05 kl. 18:49 fra `96632019`, commiten QA-porten ga GO på i tredje runde (`.ai-qa/qa-20261005-182600.md`); `/version` og helsesjekk bekreftet. Stage-testen kjørt 18:50–18:53: 38 av 38 besto |
-| `main` (git) | 2.78.3 | likt med prod (PR #1086 flettet 2026-10-04) |
-| `dev` (git) | 2.85.0 | lesemodus (2.85.0), innholdsblokkene og feilklassifiseringen (2.84.x), sju rettinger (2.82.0), to oppfølgere etter QA (2.82.1), og kurset på telefon (2.82.2), se under |
+| stage | 2.85.1 | rullet 2026-10-06 kl. 23:07 fra `4d5d9f4e` (QA-porten GO i tredje runde, `.ai-qa/qa-20261006-222752.md`); `/version` og helsesjekk bekreftet. Før det 2.85.0: rullet 2026-10-06 kl. 21:31 fra `17743d55` (QA-porten GO i andre runde, `.ai-qa/qa-20261006-211010.md`). Før det 2.84.1: rullet 2026-10-06 kl. 09:37 fra `82815746` (QA-porten GO, `.ai-qa/qa-20261006-091043.md`). Før det 2.84.0: rullet 2026-10-06 kl. 07:12 fra `ad3f0192`, QA-porten GO i tredje runde (`.ai-qa/qa-20261006-064930.md`); `/version` og helsesjekk bekreftet. Før det 2.82.2: rullet 2026-10-05 kl. 18:49 fra `96632019`, commiten QA-porten ga GO på i tredje runde (`.ai-qa/qa-20261005-182600.md`); `/version` og helsesjekk bekreftet. Stage-testen kjørt 18:50–18:53: 38 av 38 besto |
+| `main` (git) | 2.85.0 | likt med prod (PR #1091 flettet 2026-10-06) |
+| `dev` (git) | 2.85.1 | to detaljer i lesemodus (2.85.1), lesemodus (2.85.0), innholdsblokkene og feilklassifiseringen (2.84.x), sju rettinger (2.82.0), to oppfølgere etter QA (2.82.1), og kurset på telefon (2.82.2), se under |
 
 **2.82.0, i én setning hver** (detaljer og rotårsaker i `doc/VERSIONS.md`):
 

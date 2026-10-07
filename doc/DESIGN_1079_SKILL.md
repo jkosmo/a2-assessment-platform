@@ -155,7 +155,7 @@ samtalen, og den skal gi mening alle stedene.
 | **Utheving** («Husk», «Tips», «Viktig») | et sitat som åpner med merkelappen i fet skrift: `> **Husk:** …` | et sitat med fet merkelapp |
 | **Prompt** eller eksempel til å kopiere | en kodeblokk merket `prompt` | en kodeblokk |
 | **Kort** ved siden av hverandre | en ramme `:::kort` rundt underoverskrifter, én per kort | overskrifter med punkter under |
-| **Ikon** | et lite bilde først i en kortoverskrift, eller i en tabellcelle i en kolonne uten navn | et bilde |
+| **Ikon** | et lite bilde først i en kortoverskrift, eller i en tabellcelle i en kolonne uten navn når minst én annen kolonne har navn | et bilde |
 
 - **Bygget 2026-10-06 (2.84.0, grenen `innholdsblokker-1079`).** Merkelappen skrives i fet
   skrift, ikke som GitHubs `[!HUSK]`: en fet merkelapp leses riktig overalt, også der blokkene ikke
