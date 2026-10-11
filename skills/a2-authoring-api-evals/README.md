@@ -95,6 +95,35 @@ Det tallene viser: Claude.ai tok med alt innholdet, men i tre former (flyt, tabe
 ChatGPT skrev kortere og mistet fem lysark. Ingen av dem brukte et ikon eller en annen figurform
 enn flyt.
 
+### 2026-10-11 — skill 2.86.0, milepæl 1 fullført: alle tre, publisert i prod
+
+Produkteier lagde alle tre kursene med pakka 2.86.0 (bare flervalgstester, som sist) og publiserte
+dem i prod; de ble eksportert derfra og talt med den nye tellingen (oppgave kjennes igjen,
+bibliotekikoner telles). Ingen kildehenvisninger i tekstene, alle kortrammer lukket, 10 spørsmål
+per test (6–7 seksjoner).
+
+| Tilfelle | Innhold med | Forventet behandling | Figurer | Former | Smalt oppsett | Ikoner (bibliotek) | Tabeller | Blokker | Rasterbilder |
+|---|---|---|---|---|---|---|---|---|---|
+| Møtearbeid | 13 av 13 | 13 av 13 | 1 | flyt | 1 | 18 (kilden har 0) | 2 | 23 | 5 (213 kB) |
+| Tilbudsarbeid | 12 av 12 | 8 av 12 | 2 | flyt | 2 | 46 (kilden har 0) | 6 | 32 | 8 (1,5 MB; to over 300 kB) |
+| Rapportskriving | 9 av 9 | 7 av 9 | 1 | flyt | 1 | 34 (kilden har 25) | 5 | 19 | 0 |
+
+Det tallene ikke viser, lest ut av kursene:
+
+- **Ikonene virker uavhengig av kilden:** Møtearbeid og Tilbudsarbeid har null ikoner i
+  presentasjonen og fikk 18 og 46 fra biblioteket. Det var hele poenget med byttet.
+- **Tilbudsarbeid, 4 bom:** tre prompt-skjermbilder ble beholdt som bilde i stedet for å skrives
+  av til prompt-boks (lysark 10, 12, 13); to tekstlysark (liste, lysark 5 og 8) ble beholdt som
+  bilde/figur i stedet for tekst; matrisen (lysark 9) ble tabell, ikke figur. To skjermbilder er
+  tunge (444 og 785 kB).
+- **Rapportskriving, 2 bom:** to kortlysark (7, 12) ble tabeller. Det er et lovlig valg etter
+  regelen «sammenligner rammene få egenskaper, er tabell bedre», og telles ikke som alvorlig.
+- Tidslinjene (valgfrie) ble boks eller bilde i alle tre, aldri figur.
+
+Neste forbedringer i skillet, i rekkefølge: (1) et prompt-skjermbilde skrives alltid av til en
+prompt-boks, aldri beholdt som bilde; (2) et tekstlysark (liste, SmartArt) beholdes aldri som
+bilde; (3) et skjermbilde over 300 kB beskjæres eller erstattes; (4) matrise som figur.
+
 ### 2026-10-06 — skill 2.83.0, milepæl 1, Rapportskriving (produkteier, i produktene)
 
 Produkteier kjørte Rapportskriving i Claude.ai (Opus 5.5, medium) og ChatGPT (5.6 Sol, high) med
