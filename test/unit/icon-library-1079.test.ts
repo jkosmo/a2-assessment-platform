@@ -1,6 +1,7 @@
 import express from "express";
 import request from "supertest";
 import { describe, expect, it, vi } from "vitest";
+import { warmModuleGraph } from "../support/moduleGraphWarmup.js";
 
 // #1079: ikonbiblioteket plattformen serverer selv (Lucide). Produkteier valgte ett bibliotek som
 // standard for alle kurs: skillets gamle regel «bare presentasjonens egne ikoner» ga ingen ikoner i
@@ -11,6 +12,11 @@ import { describe, expect, it, vi } from "vitest";
 // seksjonstekst blir et ikon med fast størrelse uansett hvor det står.
 
 vi.mock("../../src/db/prisma.js", () => ({ prisma: {} }));
+// #994: produksjonskode lastes utenfor testenes tidsbudsjett — hver modul testen henter.
+warmModuleGraph(() => import("../../src/modules/course/iconLibrary.js"));
+warmModuleGraph(() => import("../../src/routes/icons.js"));
+warmModuleGraph(() => import("../../src/modules/course/sectionContent.js"));
+warmModuleGraph(() => import("../../src/modules/adminContent/agentAuthoringValidationService.js"));
 
 const { ICON_STROKE, hasIcon, iconLibraryInfo, iconSvg, iconUrl, listIconNames } = await import("../../src/modules/course/iconLibrary.js");
 const { iconsRouter } = await import("../../src/routes/icons.js");
