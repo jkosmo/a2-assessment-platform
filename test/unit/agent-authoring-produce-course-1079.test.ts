@@ -200,7 +200,7 @@ describe("produce-course — kontrollen «learner text» stopper ikke vanlig fag
 });
 
 describe("produce-course — hver kontroll stopper leveransen (#1079)", () => {
-  it.each<[string, (pkg: Pakke) => void, string, string]>([
+  it.each<[string, (pkg: Pakke, mappe: string) => void, string, string]>([
     ["en seksjon som ikke er plassert i kurset", (p) => void objekt(p, "kurs-motereferat").payload.items.splice(1, 1), "package", `"sec-kilder" is in the package and not in the course`],
     ["kurset peker på noe som ikke er i pakken", (p) => void (objekt(p, "kurs-motereferat").payload.items[0].ref = "sec-borte"), "package", `course item 1: "sec-borte" is not in the package`],
     ["en modul oppført som seksjon", (p) => void (objekt(p, "kurs-motereferat").payload.items[2].type = "SECTION"), "package", `"mod-referat" is a module, listed as SECTION`],
