@@ -73,6 +73,7 @@ Read the file when you reach the work it covers — not before.
 | propose objectives, structure, test form or level | [references/course-design.md](references/course-design.md) |
 | write a section's text: headings, lists, tables, highlighted boxes, prompts, cards, pictures | [references/section-content.md](references/section-content.md) |
 | draw or check a figure | [references/figure-design.md](references/figure-design.md) |
+| give a card or a step an icon | [references/icons.md](references/icons.md) |
 | write a module: task, assessment criteria, multiple-choice questions | [references/modules.md](references/modules.md) |
 | keep track of what has been approved | [references/content-preservation.md](references/content-preservation.md) |
 | run the independent check and produce the course | [references/check-and-produce.md](references/check-and-produce.md) |

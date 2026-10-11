@@ -1,25 +1,27 @@
 The draft is never better than what you put in. Three sources are common.
 
-### ![](asset:ikon-sakliste) Agenda
+:::kort
+### ![](icon:list-checks) Agenda
 
 **Use when** the meeting followed a fixed plan.
 
 - Gives the order of the minutes
 - Shows which items were to be decided
 
-### ![](asset:ikon-notater) Your own notes
+### ![](icon:notebook-pen) Your own notes
 
 **Use when** you took notes as the meeting went on.
 
 - Capture decisions and deadlines
 - Must be tidied before they are pasted in
 
-### ![](asset:ikon-opptak) Recording
+### ![](icon:mic) Recording
 
 **Use when** the meeting was recorded with consent.
 
 - Gives a word-for-word account
 - Takes the longest to go through
+:::
 
 ## How to ask for the draft
 

@@ -18,6 +18,10 @@ gate 3 ([course-design.md](course-design.md#level-and-scope)).
 
 ## Multiple-choice questions
 
+- **The set covers what the module tests.** A module follows one or more sections; write at least
+  one question per section it follows, and at least three in all. Few whole tests, not many thin
+  ones: a four-question quiz after six sections leaves four of them untested. `produce-course.mjs`
+  counts this.
 - The stem tests **one** idea.
 - 3–4 options. Exactly one is unambiguously right. Never "alle de over".
 - **Distractors are real misconceptions** — the wrong judgements a real learner would make.

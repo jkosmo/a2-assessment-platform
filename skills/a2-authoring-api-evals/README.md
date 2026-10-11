@@ -154,3 +154,12 @@ Det tallene ikke viser, lest ut av kursene:
   slike.
 - Begge kursene har bare flytfigurer. Presentasjonene har ingen matrise, tre eller tidslinje;
   Tilbudsarbeid har en matrise og er ikke kjørt.
+
+### 2026-10-11 — tellingen kjenner igjen oppgaver og teller bibliotekikoner
+
+To endringer i `score-course.mjs` før neste måling: et lysark som skulle bli en oppgave, telles som
+«oppgave» når ordene står i oppgaveteksten til en fritekstmodul (før: bare som «tekst»), og ikoner
+fra plattformens bibliotek (`icon:navn`) telles for seg — presentasjonens egne ikoner kopieres ikke
+lenger inn, så «med tegning/ikon» blant figurene vil gå ned uten at noe er tapt. Nullpunktet og
+milepæl 1 er ikke talt på nytt; neste måling (Møtearbeid og Tilbudsarbeid med 2.86.0) bruker den nye
+tellingen.

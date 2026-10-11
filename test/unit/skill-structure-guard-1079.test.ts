@@ -94,7 +94,8 @@ describe("#1079 — lenker og pekere i skillet", () => {
     const brudd: string[] = [];
     for (const fil of tekster) {
       for (const [, mål] of prosa(les(fil)).matchAll(/\]\(([^)\s]+)\)/g)) {
-        if (/^(https?:|asset:|mailto:)/.test(mål!)) continue;
+        // icon: er et ikon fra plattformens bibliotek, ikke en fil i pakken.
+        if (/^(https?:|asset:|icon:|mailto:)/.test(mål!)) continue;
         const [sti, anker] = mål!.split("#");
         const målfil = sti ? resolve(dirname(fil), sti) : resolve(fil);
         if (relative(resolve(ROT), målfil).startsWith("..")) brudd.push(`${fil}: ${mål} peker ut av pakken`);
@@ -168,7 +169,8 @@ describe("#1079 — eksempelkurset henger sammen", () => {
 
   it("hver fil pakken peker på, ligger i eksempelmappa", () => {
     const pekere = [...les(`${mappe}/package.json`).matchAll(/"file": "([^"]+)"/g)].map((m) => m[1]!);
-    expect(pekere.length).toBeGreaterThanOrEqual(10);
+    // Sju filpekere: figuren i to oppsett og tre språk, og skjermbildet. Ikonene kommer fra biblioteket og har ingen fil.
+    expect(pekere.length).toBeGreaterThanOrEqual(7);
     expect(pekere.filter((f) => !existsSync(join(mappe, f)))).toEqual([]);
   });
 

@@ -12,6 +12,7 @@ import { prisma } from "../../db/prisma.js";
 import { localizedTextCodec, type LocalizedText } from "../../codecs/localizedTextCodec.js";
 import { sanitizeSvg } from "../course/svgSanitizer.js";
 import { ALLOWED_ASSET_MIME_TYPES, MAX_ASSET_BYTES, SVG_MIME_TYPE, findLayoutVariantProblem } from "../course/assetCommands.js";
+import { hasIcon } from "../course/iconLibrary.js";
 import {
   AUTHORING_PACKAGE_FORMAT,
   authoringPackageSchema,
@@ -177,6 +178,27 @@ function checkAssessmentMode(payload: AuthoringModulePayload, basePath: string):
 // Matches the wider authoring sourceId grammar ([a-zA-Z0-9_-]), a superset of the runtime
 // `asset:<id>` grammar in sectionContent.ts.
 const ASSET_REF_RE = /asset:([a-zA-Z0-9_-]+)/g;
+// Et ikon fra plattformens bibliotek: `![](icon:<navn>)`. Navnet må finnes, ellers tegnes ingenting.
+const ICON_REF_RE = /!\[[^\]]*\]\(icon:([^)\s]*)\)/g;
+
+function checkIconRefs(payload: AuthoringSectionPayload, basePath: string): AuthoringIssue[] {
+  const issues: AuthoringIssue[] = [];
+  const seen = new Set<string>();
+  for (const text of localizedStringValues(payload.bodyMarkdown)) {
+    for (const match of text.matchAll(ICON_REF_RE)) {
+      const name = match[1] ?? "";
+      if (seen.has(name) || hasIcon(name)) continue;
+      seen.add(name);
+      issues.push({
+        severity: "error",
+        path: `${basePath}.bodyMarkdown`,
+        code: "unknown_icon",
+        message: `Markdown references icon:${name}, and the platform's icon library has no icon with that name (names are Lucide's, e.g. "check", "file-text").`,
+      });
+    }
+  }
+  return issues;
+}
 
 function localizedStringValues(value: unknown): string[] {
   if (typeof value === "string") return [value];
@@ -371,6 +393,7 @@ export async function validateAuthoringPackage(
   pkg.objects.forEach((object, index) => {
     if (object.type === "section") {
       issues.push(...checkSectionAssets(object.payload, `objects[${index}].payload`));
+      issues.push(...checkIconRefs(object.payload, `objects[${index}].payload`));
     }
   });
 

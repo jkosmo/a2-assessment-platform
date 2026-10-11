@@ -71,18 +71,6 @@
         },
         "assets": [
           {
-            "sourceId": "ikon-sakliste",
-            "file": "deck/icons/image7.svg"
-          },
-          {
-            "sourceId": "ikon-notater",
-            "file": "deck/icons/image8.svg"
-          },
-          {
-            "sourceId": "ikon-opptak",
-            "file": "deck/icons/image9.svg"
-          },
-          {
             "sourceId": "img-innstillinger",
             "file": "deck/images/slide-04-1.png"
           }

@@ -60,8 +60,9 @@ Start only when every element is approved and stored in full in the course state
 
 ```
 OK   package        2 section(s), 1 module(s), one course
-OK   pictures       5 picture(s) and figure(s), 18 kB with every layout and language
+OK   pictures       2 picture(s) and figure(s), 18 kB with every layout and language; 3 icon(s) from the platform library
 OK   figures        9 drawing(s) measured
+OK   learner text   2 section(s) read for the learner's voice and card frames
 OK   questions      4 question(s) in 1 set(s)
 OK   languages      nb, nn, en-GB — written in nb
 OK   approved text  20 item(s) in place, 0 moved to an attachment, 0 removed with the author's consent
@@ -74,9 +75,10 @@ DELIVER work/kurs-motereferat.json  —  the author imports it at Innholdsforval
 | Check | A `FAIL` means | Fix it in |
 |---|---|---|
 | **package** | an item of the course is not in the package, something in the package is not in the course, a `clientRef` is wrong or used twice | [package-schema.md](package-schema.md) |
-| **pictures** | a file is not found; the text shows a picture the section does not have, or the section has one the text does not show (in some language); a file is too large | [section-content.md](section-content.md#pictures-from-the-source) |
+| **pictures** | a file is not found; the text shows a picture the section does not have, or the section has one the text does not show (in some language); a file is too large; an `icon:` name the platform does not know | [section-content.md](section-content.md#pictures-from-the-source) |
 | **figures** | a label does not fit, or an animated figure is not the template — in the figure, a layout or a language variant | [figure-design.md](figure-design.md#measure-and-look) |
-| **questions** | an option gives the answer away | [modules.md](modules.md#multiple-choice-questions) |
+| **learner text** | a sentence points at the source ("som vist på lysark 4"); a `:::kort` frame is not closed | [section-content.md](section-content.md#the-source-stays-behind-the-text) |
+| **questions** | an option gives the answer away; a module has fewer questions than the sections it follows (and fewer than three) | [modules.md](modules.md#multiple-choice-questions) |
 | **languages** | a language is missing, a text was copied instead of translated, the right answer differs between languages, a formula or address was lost | [localization.md](localization.md) |
 | **approved text** | something the author approved is gone | [content-preservation.md](content-preservation.md) |
 | **slides** | a slide did not get what the slide list says | [from-presentation.md](../workflows/from-presentation.md) |

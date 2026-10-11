@@ -1,25 +1,27 @@
 Utkastet blir aldri betre enn det du legg inn. Tre kjelder er vanlege.
 
-### ![](asset:ikon-sakliste) Sakliste
+:::kort
+### ![](icon:list-checks) Sakliste
 
 **Bruk når** møtet følgde ein fast plan.
 
 - Gir rekkjefølgja i referatet
 - Viser kva saker som skulle avgjerast
 
-### ![](asset:ikon-notater) Eigne notat
+### ![](icon:notebook-pen) Eigne notat
 
 **Bruk når** du noterte undervegs.
 
 - Fangar vedtak og fristar
 - Må ryddast før dei blir limte inn
 
-### ![](asset:ikon-opptak) Opptak
+### ![](icon:mic) Opptak
 
 **Bruk når** møtet vart teke opp med samtykke.
 
 - Gir ordrett attgjeving
 - Tek lengst tid å gå gjennom
+:::
 
 ## Slik ber du om utkastet
 

@@ -71,8 +71,11 @@ export function readCourse(pakke) {
   // Innholdsblokker i formen skillet skriver dem: kort er en rekke «###»-overskrifter under samme
   // del, en uthevet boks er et sitat som åpner med fet merkelapp, en prompt er en kodeblokk.
   const blokker = [];
+  // Ikoner fra plattformens eget bibliotek (`icon:navn`): de har ingen fil, og telles for seg.
+  let bibliotekIkoner = 0;
   for (const seksjon of seksjoner) {
     const markdown = tekstAv(seksjon.bodyMarkdown);
+    bibliotekIkoner += (markdown.match(/!\[[^\]]*\]\(icon:[^)\s]+\)/g) ?? []).length;
     deler.push(tekstAv(seksjon.title), markdown);
     for (const blokk of markdown.match(/(?:^\|.*\|[ \t]*\r?\n?)+/gm) ?? []) tabeller.push(flat(blokk));
     const utenKode = markdown.replace(/^(`{3,}|~{3,})[^\n]*\n[\s\S]*?^\1[^\n]*$/gm, (kode) => {
@@ -103,12 +106,16 @@ export function readCourse(pakke) {
       });
     }
   }
+  // Fritekstoppgavene for seg: et lysark som er en oppgave, kan bli en fritekstmodul — da er det
+  // oppgaveteksten, ikke seksjonsteksten, som skal ha ordene.
+  const oppgaver = [];
   for (const modul of moduler) {
     deler.push(tekstAv(modul.title), tekstAv(modul.description), tekstAv(modul.taskText));
+    if (String(modul.assessmentMode ?? "").startsWith("FREETEXT") && tekstAv(modul.taskText).trim()) oppgaver.push(flat(tekstAv(modul.taskText)));
     for (const spørsmål of modul.mcqSet?.questions ?? []) deler.push(tekstAv(spørsmål.stem), ...(spørsmål.options ?? []).map(tekstAv));
   }
   const tekst = flat(deler.join("\n"));
-  return { tekst, ord: ordI(deler.join(" ")), seksjoner: seksjoner.length, moduler: moduler.length, figurer, tabeller, blokker };
+  return { tekst, ord: ordI(deler.join(" ")), seksjoner: seksjoner.length, moduler: moduler.length, figurer, tabeller, blokker, bibliotekIkoner, oppgaver };
 }
 
 /** Hvor mange av uttrykkene står i teksten? */
@@ -133,10 +140,11 @@ export function scoreCourse(tilfelle, pakke) {
     const iTabell = kurs.tabeller.find((t) => treff(alle, t) >= Math.min(2, alle.length));
     const iBlokk = kurs.blokker.find((b) => treff(alle, b) >= Math.min(2, alle.length));
     const iBildefil = kurs.figurer.find((f) => !f.svg && treff(alle, f.tekst) >= 1);
+    const iOppgave = kurs.oppgaver.find((o) => treff(alle, o) >= Math.min(2, alle.length));
     const bildetekstGjengitt = iBilde.length > 0 && dekket(iBilde, kurs.tekst);
     const innholdMed = dekket(alle, altSomKanLeses);
 
-    const funnet = iFigur ? "figur" : iTabell ? "tabell" : iBildefil ? "bilde" : iBlokk ? "innholdsblokk" : bildetekstGjengitt ? "prompt-som-tekst" : innholdMed ? "tekst" : "borte";
+    const funnet = iFigur ? "figur" : iTabell ? "tabell" : iBildefil ? "bilde" : iBlokk ? "innholdsblokk" : iOppgave ? "oppgave" : bildetekstGjengitt ? "prompt-som-tekst" : innholdMed ? "tekst" : "borte";
     const forventet = ark.forventet ?? [];
     const somForventet =
       forventet.includes(funnet) ||
@@ -171,6 +179,7 @@ export function scoreCourse(tilfelle, pakke) {
       figurerMedSmaltOppsett: svg.filter((f) => f.smaltOppsett).length,
       figurerMedTegning: svg.filter((f) => f.harTegning).length,
       ikonerIKilden: tilfelle.ikonerIKilden ?? 0,
+      bibliotekIkoner: kurs.bibliotekIkoner,
       tabeller: kurs.tabeller.length,
       rasterbilder: raster.length,
       rasterKB: Math.round(raster.reduce((s, f) => s + f.byte, 0) / 1024),
@@ -190,7 +199,7 @@ export function formatScore(resultat) {
     `${resultat.navn}`,
     `  Lysark med innholdet i kurset:       ${s.innholdMed} av ${s.lysarkMedInnhold}`,
     `  Lysark som fikk forventet behandling: ${s.somForventet} av ${s.lysarkMedInnhold}${s.venterPåInnholdsblokker ? `   (${s.venterPåInnholdsblokker} skulle vært kort, uthevet boks eller prompt-boks)` : ""}`,
-    `  Figurer: ${s.figurer} · former: ${s.figurformer.join(", ") || "ingen"} · med smalt oppsett: ${s.figurerMedSmaltOppsett} · med tegning/ikon: ${s.figurerMedTegning} (kilden har ${s.ikonerIKilden} ikoner)`,
+    `  Figurer: ${s.figurer} · former: ${s.figurformer.join(", ") || "ingen"} · med smalt oppsett: ${s.figurerMedSmaltOppsett} · med tegning/ikon: ${s.figurerMedTegning} · ikoner fra biblioteket: ${s.bibliotekIkoner} (kilden har ${s.ikonerIKilden} ikoner)`,
     `  Tabeller: ${s.tabeller} · rasterbilder: ${s.rasterbilder} (${s.rasterKB} kB)${s.tungeBilder.length ? ` · FOR TUNGE: ${s.tungeBilder.join(", ")}` : ""}`,
     `  Tekst som bare sto i bilder, gjengitt som tekst: ${s.tekstFraBilder}`,
     `  Kurset: ${s.seksjoner} seksjoner, ${s.moduler} tester, ${s.ord} ord`,

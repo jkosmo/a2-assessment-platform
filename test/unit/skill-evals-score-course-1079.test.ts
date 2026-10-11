@@ -138,6 +138,46 @@ describe("score-course — hva ble det av hvert lysark?", () => {
     expect(scoreCourse(tilfelle, eksport.envelope).sum).toEqual(r.sum);
   });
 
+  describe("en oppgave som ble en fritekstmodul", () => {
+    const oppgavetilfelle = { navn: "Oppgave", lysark: [
+      { nr: 1, form: "oppgave", forventet: ["oppgave"], nøkkelord: ["Skriv et referat", "frister", "ansvarlig"] },
+    ] } as unknown as EvalCase;
+    const medModul = (assessmentMode: string, taskText: string, seksjon = "Innledning.") => ({ exportFormat: "a2-content-export/v1", course: { course: { items: [
+      { type: "SECTION", section: { title: tre("S"), bodyMarkdown: tre(seksjon) } },
+      { type: "MODULE", module: { module: { title: tre("Oppgave") }, activeVersion: { assessmentMode, taskText: tre(taskText) } } },
+    ] } } });
+
+    it("ordene i oppgaveteksten til en fritekstmodul gir formen «oppgave», som forventet", () => {
+      const ark = scoreCourse(oppgavetilfelle, medModul("FREETEXT_ONLY", "Skriv et referat fra møtet med frister og ansvarlig for hvert punkt.")).lysark[0]!;
+      expect(ark).toMatchObject({ funnet: "oppgave", somForventet: true });
+    });
+
+    it("de samme ordene i en seksjon er tekst — og godtas fortsatt som behandling av en oppgave", () => {
+      const ark = scoreCourse(oppgavetilfelle, medModul("MCQ_ONLY", "", "Skriv et referat med frister og ansvarlig.")).lysark[0]!;
+      expect(ark).toMatchObject({ funnet: "tekst", somForventet: true });
+    });
+
+    it("en flervalgsmodul med ordene i oppgaveteksten er ikke en oppgave", () => {
+      const ark = scoreCourse(oppgavetilfelle, medModul("MCQ_ONLY", "Skriv et referat med frister og ansvarlig.", "Ingenting.")).lysark[0]!;
+      expect(ark.funnet).not.toBe("oppgave");
+    });
+  });
+
+  describe("ikoner fra plattformens bibliotek", () => {
+    const medIkoner = (markdown: string) => ({ exportFormat: "a2-content-export/v1", course: { course: { items: [{ type: "SECTION", section: { title: tre("S"), bodyMarkdown: tre(markdown) } }] } } });
+    const ingen = { navn: "Ikoner", ikonerIKilden: 3, lysark: [] } as unknown as EvalCase;
+
+    it("telles for seg — de har ingen fil og er ikke figurer", () => {
+      const s = scoreCourse(ingen, medIkoner([":::kort", "### ![](icon:list-checks) A", "", "x", "### ![](icon:mic) B", "", "y", ":::", "", "| | Steg |", "|---|---|", "| ![](icon:target) | **C** |"].join("\n")));
+      expect(s.sum).toMatchObject({ bibliotekIkoner: 3, figurer: 0, ikonerIKilden: 3 });
+      expect(formatScore(s)).toContain("ikoner fra biblioteket: 3 (kilden har 3 ikoner)");
+    });
+
+    it("et bilde fra assets er ikke et bibliotekikon", () => {
+      expect(scoreCourse(ingen, medIkoner("![](asset:fig) tekst")).sum.bibliotekIkoner).toBe(0);
+    });
+  });
+
   describe("innholdsblokker i formen skillet skriver dem", () => {
     const blokktilfelle = { navn: "Blokker", lysark: [
       { nr: 1, form: "kort", forventet: ["innholdsblokk"], nøkkelord: ["Sakliste", "Egne notater", "Opptak"] },

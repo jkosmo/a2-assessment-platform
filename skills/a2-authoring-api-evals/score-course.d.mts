@@ -41,6 +41,7 @@ export interface ScoreResult {
     figurerMedSmaltOppsett: number;
     figurerMedTegning: number;
     ikonerIKilden: number;
+    bibliotekIkoner: number;
     tabeller: number;
     rasterbilder: number;
     rasterKB: number;

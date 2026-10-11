@@ -15,6 +15,7 @@
 
 import { readFileSync } from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 export const ASSET_MIME = Object.freeze({
   ".svg": "image/svg+xml",
@@ -31,6 +32,18 @@ export const MAX_TOTAL_BYTES = 25 * 1024 * 1024;
 
 const SOURCE_ID = /^[a-zA-Z0-9_-]{1,64}$/;
 const ASSET_REF = /\]\(asset:([^)\s]+)\)/g;
+/** An icon from the platform's own library: `![](icon:<name>)`. No file travels with it. */
+const ICON_REF = /\]\(icon:([^)\s]*)\)/g;
+
+let iconNames = null;
+/** The names the platform knows, from references/icon-names.txt next to this script's folder. */
+export function knownIconNames() {
+  if (!iconNames) {
+    const file = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "references", "icon-names.txt");
+    iconNames = new Set(readFileSync(file, "utf8").split(/\r?\n/).map((line) => line.trim()).filter(Boolean));
+  }
+  return iconNames;
+}
 
 /** The name a picture is known by in the slide list: its file name, without folders. */
 export function assetFileName(asset) {
@@ -189,6 +202,7 @@ export function checkAssets(pkg) {
   const problems = [];
   let count = 0;
   let totalBytes = 0;
+  let icons = 0;
 
   for (const object of pkg?.objects ?? []) {
     if (object?.type !== "section") continue;
@@ -227,6 +241,11 @@ export function checkAssets(pkg) {
     for (const [language, markdown] of Object.entries(bodies)) {
       const shown = new Set([...String(markdown ?? "").matchAll(ASSET_REF)].map((m) => m[1]));
       const inLanguage = language ? ` in ${language}` : "";
+      for (const match of String(markdown ?? "").matchAll(ICON_REF)) {
+        icons += 1;
+        const name = match[1];
+        if (!knownIconNames().has(name)) problems.push({ path: ref, message: `the text${inLanguage} shows icon:${name}, and the platform's icon library has no icon with that name — pick one from references/icons.md` });
+      }
       for (const id of shown) {
         if (!ids.has(id)) problems.push({ path: ref, message: `the text${inLanguage} shows asset:${id}, and the section has no such picture` });
       }
@@ -239,5 +258,5 @@ export function checkAssets(pkg) {
   if (totalBytes > MAX_TOTAL_BYTES) {
     problems.push({ path: "package", message: `${(totalBytes / 1024 / 1024).toFixed(1)} MB of pictures — the platform takes 25 MB per course` });
   }
-  return { ok: problems.length === 0, count, totalBytes, problems };
+  return { ok: problems.length === 0, count, icons, totalBytes, problems };
 }

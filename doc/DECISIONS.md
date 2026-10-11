@@ -1029,3 +1029,43 @@ Spurt samlet morgenen etter at 2.85.0 gikk til prod og 2.85.1 til stage. Svarene
 - **Av QA-portens tre småfunn tas de to små** (tittelen på arket følger svaret; fokus tilbake til
   leseren etter sen kursliste) i 2.85.2. Liggende telefon bredere enn 900 px venter.
 - **#1080, #1081 og #1083 lukket**: i prod siden 2.78.3 og sett på telefon.
+
+## Ikonbiblioteket: hvordan et ikon skrives, hvor det får stå, og hva skillet gjør med kildens ikoner (2026-10-11)
+
+Produkteier valgte Lucide som standard for alle kurs (2026-10-07) og ba om at ikonene skal virke også
+når kurset ikke kommer fra en presentasjon. Resten er mitt:
+
+- **Skrivemåten er `![](icon:<navn>)` med Lucides eget navn**, ikke en egen katalog av norske navn.
+  Begrunnelse: navnet er det samme i plattformen, i skillet og i Lucides egen dokumentasjon, og
+  en ny versjon av biblioteket trenger bare pakkeskriptet. Den norske katalogen i skillet er et
+  oppslag fra betydning til navn, ikke et navnerom.
+- **Biblioteket er sjekket inn som én fil**, ikke 1877 SVG-filer, og tegnes av en rute. Ruta setter
+  farge og størrelse ett sted, og sier 404 for det som ikke finnes. Et ikon som ikke finnes, tas
+  bort av gjengivelsen: et brukket bilde sier ingenting.
+- **Et bibliotekikon er alltid et ikon** (24 px), uansett hvor det står — i motsetning til et bilde
+  fra `assets[]`, som bare er ikon først i en kortoverskrift eller i en navnløs tabellkolonne.
+- **Skillet kopierer ikke lenger presentasjonens egne ikoner inn** i kurset. De sier hva et kort
+  eller steg står for; skillet velger bibliotekets ikon for den betydningen. Dermed ser alle kurs
+  like ut, og kurs fra tekst får ikoner på samme vilkår. `pptx-extract` henter dem fortsatt ut, som
+  grunnlag for valget.
+- **Hvor et ikon får stå, er uendret:** først i en kortoverskrift, eller i første, navnløse kolonne
+  i en stegtabell. Ingen andre steder.
+
+Status: mine valg; produkteier kan snu skrivemåten før den kommer i prod (ingen kurs bruker
+`icon:` ennå).
+
+## Skillets kontroller etter milepæl 1: kilden bak teksten, lukket kortramme, spørsmål per seksjon (2026-10-11)
+
+Tre av funnene fra sammenligningen av Rapportskriving ble regler med en kontroll i
+`produce-course.mjs`, ikke bare tekst i skillet — av samme grunn som før: en regel modellen skal
+huske, glemmes; en kontroll som faller, rettes.
+
+- **«Learner text»** faller på uttrykk som peker på kilden (lysark, «i denne presentasjonen», «on
+  this slide» …) i prosa, ikke i kodeblokker. Grensen er satt snevert: «presentasjon» alene er
+  lov, for et kurs kan handle om presentasjoner.
+- **En åpen `:::kort`-ramme** faller: plattformen viser den som tekst.
+- **Spørsmål per seksjon:** en modul må ha minst like mange spørsmål som seksjonene den følger, og
+  minst tre. Fritekstmoduler telles ikke. Tallet er et gulv, ikke et mål — se «Standardveien, ikke
+  taket» i HANDOFF-lærdommene.
+
+Nivået fra kilden ble bare tekst i `course-design.md`: det kan ikke kontrolleres av et skript.

@@ -30,7 +30,7 @@ const MARKDOWN = [
   "",
   "> **Tips:** Bruk lerretet til selve rapportteksten.",
   "",
-  "### Prosjekt",
+  "### ![](icon:folder-kanban) Prosjekt",
   "",
   "Komplekse oppgaver med mange kilder.",
   "",
@@ -60,6 +60,7 @@ const MARKDOWN = [
   "|---|---|---|",
   "| ![](asset:ikon-c) | **Forstå oppdraget** | Avklar mandat, målgruppe og krav til leveransen. |",
   "| ![](asset:ikon-d) | **Klargjør kilder** | Samle dokumenter, intervjuer, data og notater. |",
+  "| ![](icon:target) | **Lag arbeidsfiler** | Strukturer og bearbeid kildene til arbeidsfiler. |",
   "",
   "| Verktøy | Slik ser det ut |",
   "|---|---|",
@@ -168,7 +169,7 @@ test.describe("innholdsblokker i leseren (#1079)", () => {
     await åpneLeseren(page, 1280);
     if (BILDER) await page.screenshot({ path: `${BILDER}/blokker-1280-smal.png`, fullPage: true });
     const ikoner = page.locator("#sectionReaderBody .content-table td img.content-icon");
-    await expect(ikoner).toHaveCount(2);
+    await expect(ikoner).toHaveCount(3);
     const bokser = await ikoner.evaluateAll((els) => els.map((el) => { const r = el.getBoundingClientRect(); return { width: r.width, height: r.height }; }));
     for (const boks of bokser) {
       expect(Math.round(boks.width), "ikonet er 24 px bredt").toBe(24);
@@ -179,6 +180,16 @@ test.describe("innholdsblokker i leseren (#1079)", () => {
     await expect(skjermbilde).toHaveCount(1);
     expect((await skjermbilde.boundingBox())!.width, "skjermbildet er ikke krympet til ikon").toBeGreaterThan(200);
     await expect(page.locator(".course-inline-panel-title")).toHaveText("Arbeidsformer, oppdatert");
+    // Ikoner fra plattformens eget bibliotek (`icon:navn`): tegnet av tjeneren, 24 px, lastet — i et
+    // kort og i stegtabellen. Produkteier valgte biblioteket som standard for alle kurs.
+    for (const [sted, navn] of [[".content-card-title", "folder-kanban"], [".content-table td", "target"]] as const) {
+      const ikon = page.locator(`#sectionReaderBody ${sted} img.content-icon[src="/static/icons/${navn}.svg"]`);
+      await expect(ikon, `${navn} i ${sted}`).toBeVisible();
+      const mål = await ikon.evaluate((el) => { const r = el.getBoundingClientRect(); return { b: r.width, h: r.height, lastet: (el as HTMLImageElement).naturalWidth > 0 }; });
+      expect(Math.round(mål.b), `${navn} er 24 px bredt`).toBe(24);
+      expect(Math.round(mål.h), `${navn} er 24 px høyt`).toBe(24);
+      expect(mål.lastet, `${navn} ble lastet fra tjeneren`).toBe(true);
+    }
     const tittel = await page.locator(".course-inline-panel-title").evaluate((el) => parseFloat(getComputedStyle(el).fontSize));
     const h2 = await page.locator("#sectionReaderBody h2").first().evaluate((el) => parseFloat(getComputedStyle(el).fontSize));
     expect(tittel, `tittelen (${tittel} px) er større enn innholdets h2 (${h2} px)`).toBeGreaterThan(h2);

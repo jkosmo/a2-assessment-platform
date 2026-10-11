@@ -4154,12 +4154,17 @@ function reopenInlineAfterRender(courseId, container) {
   if (inlineOpen.type === "MODULE") {
     buildModuleInlinePanel(panel, courseId, inlineOpen);
   } else {
-    renderSectionReaderInto(panel, courseId, inlineOpen);
     // Panelet er bygget på nytt, og elementet som hadde fokus (tittelen, satt ved åpning) er borte;
     // da står fokus på <body>. Det skjer hver gang kurslista svarer etter kurset ved «gå videre»
     // (QA-porten, 2.85.1). Fokus går tilbake til leseren — men bare når det alt er tapt: står det
-    // på noe annet (språkvelgeren etter et språkbytte), rører vi det ikke.
-    if (!document.activeElement || document.activeElement === document.body) focusInlinePanel(panel);
+    // på noe annet (språkvelgeren etter et språkbytte), rører vi det ikke. Og først når teksten er
+    // satt inn: med fokus på tittelen mens panelet bare viste «Laster …», holdt nettleseren fast på
+    // den korte siden, og rulleposisjonen ble kuttet til toppen ved tilbake-navigering (QA-porten,
+    // 2.85.2).
+    renderSectionReaderInto(panel, courseId, inlineOpen).then(() => {
+      if (inlineOpen?.key !== itemWrap.dataset.key) return;
+      if (!document.activeElement || document.activeElement === document.body) focusInlinePanel(panel);
+    });
   }
 }
 

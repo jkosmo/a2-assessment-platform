@@ -2,6 +2,67 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.86.0 - 2026-10-11
+
+### Ikonbibliotek i plattformen, det ombygde skillet flettet inn, og skillforbedringene etter milepæl 1 (#1079)
+
+Produkteier 2026-10-11: «kjør på med de tre siste punktene» — ikonbiblioteket, skillforbedringene og
+QA-oppfølgingen — «så en samlet test, så prod», før han oppdaterer kurs og tar inn flere brukere.
+Og: ikonene skal virke også når kurset ikke kommer fra en presentasjon.
+
+**Ikonbiblioteket (Lucide, ISC, 1877 ikoner) serveres av plattformen selv.** Et ikon i seksjonstekst
+skrives `![](icon:<navn>)` med Lucides eget navn. Valgt som standard for alle kurs (`doc/DECISIONS.md`
+2026-10-07): ett uttrykk på tvers av kurs, uavhengig av om kilden har ikoner.
+
+- `scripts/icons/vendor-lucide.mjs` (`npm run icons:vendor`) henter biblioteket inn i repoet som én
+  fil, `public/static/icons/lucide-icons.json` (navn → ikonets indre SVG), med lisensen ved siden
+  av, og skriver navnelista til skillet (`references/icon-names.txt`). Verken utrullingen eller
+  skillet avhenger av node_modules; `lucide-static` er en utviklingsavhengighet.
+- `src/modules/course/iconLibrary.ts` slår opp (bare gyldige navn når oppslaget; `constructor` og
+  `../x` finnes ikke) og tegner: 24 × 24, strek i plattformens tekstfarge.
+- Ruta `GET /static/icons/<navn>.svg` (`src/routes/icons.ts`, åpen) svarer SVG med én dags
+  mellomlager, og 404 for det som ikke finnes — aldri et tomt bilde.
+- Gjengivelsen (`sectionContent.ts`) skriver `icon:` om til ruta før rensingen og gir bildet
+  klassen `content-icon` (24 px) uansett hvor det står. Et navn som ikke finnes, tas helt bort.
+- Valideringen av en forfatterpakke (`agentAuthoringValidationService.ts`) avviser ukjente navn
+  (`unknown_icon`). E2e-tjeneren for testene serverer ikonene på samme måte som ruta.
+
+**Det ombygde skillet (2.83.0, grenen `skill-ombygging-1079`) er flettet inn** — det lå ved siden av
+`dev` siden 5. oktober. Konflikter bare i dokumenter og versjonsfiler.
+
+**Ikonene i skillet:** `references/icons.md` — hvordan et ikon skrives, hvor det får stå (først i en
+kortoverskrift; i første, navnløse kolonne i en stegtabell), hvordan det velges (etter betydning), og
+en katalog med norske stikkord → ikonnavn (235 navn i sju grupper), kontrollert mot biblioteket. Den
+gjelder begge arbeidsflytene; `from-text.md` sier at en kilde uten bilder også får ikoner.
+Presentasjonens egne ikoner kopieres ikke lenger inn: de sier hva et kort eller steg står for.
+`package-assets.mjs` avviser ukjente navn; `produce-course.mjs` teller ikonene; poenggiveren teller
+«ikoner fra biblioteket». Eksempelkurset bruker biblioteket.
+
+**Skillforbedringene etter milepæl 1** (sammenligningen av Rapportskriving fra to modeller):
+
+- **Kilden holdes bak teksten.** `section-content.md` sier at deltakeren aldri ser kilden («som vist
+  på lysark 4» er forfatterens stemme som lekker). `produce-course.mjs` har en ny kontroll, «learner
+  text», som faller på slike uttrykk på nb, nn og en-GB — utenom kodeblokker.
+- **Kortramma `:::kort` … `:::` er inne i skillet.** Uten ramma viste plattformen vanlige
+  underoverskrifter; en ramme som ikke lukkes, vises som tekst. Samme kontroll faller på en åpen ramme.
+- **Nivået leses i kilden** (`course-design.md`): hvem kilden henvender seg til, hva den forutsetter,
+  hvor langt den går — ikke hvor mye modellen kan om emnet.
+- **Få, hele tester:** `modules.md` — minst ett spørsmål per seksjon modulen følger, og minst tre.
+  Kontrollen «questions» faller når en modul har færre (fritekstmoduler telles ikke).
+- **Poenggiveren kjenner igjen en oppgave** som ble en fritekstmodul: ordene i oppgaveteksten gir
+  formen «oppgave». Før var det bare «tekst».
+
+**QA-oppfølging fra 2.85.2:** ved omtegning av leserpanelet gis fokus først når seksjonsteksten er
+satt inn, ikke mens panelet viser «Laster …» (da var siden kort, og rulleposisjonen ble kuttet til
+toppen ved tilbake-navigering).
+
+**Slik er det målt:** `test/unit/icon-library-1079.test.ts` (15: bibliotek, rute, gjengivelse,
+validering), `test/e2e/content-blocks-1079.spec.ts` (bibliotekikon i kort og tabell tegnet av
+tjeneren, 24 px), `test/m2-skill-example-course-1079.test.ts` (eksempelkurset med bibliotekikoner
+importeres og tegnes), `test/unit/agent-authoring-produce-course-1079.test.ts` (kildehenvisning nb
+og en, åpen kortramme, for få spørsmål, ukjent ikonnavn), `test/unit/skill-evals-score-course-1079.test.ts`
+(oppgave), `test/e2e/reading-mode-1079.spec.ts` (fokus etter teksten). Tolv mutasjoner, alle fanget.
+
 ## 2.85.2 - 2026-10-07
 
 ### Lesemodus: to småfunn fra QA-porten (#1079)

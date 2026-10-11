@@ -37,6 +37,12 @@ Choose it per module, deliberately. It is the most common design mistake.
 Every module carries `certificationLevel`. The platform reads it. It sets two separate things;
 agree both with the author at gate 3.
 
+**Read the level in the source before you propose it.** Who the source addresses (an audience
+slide, "for whom", prerequisites), what it assumes without explaining, and how far it goes decide
+the level — not how much you know about the subject. An introduction for people who have never
+used the tool is `basic`, even if the topic could fill an advanced course. Propose the level with
+that evidence, in one sentence, and let the author confirm or move it.
+
 **Complexity** — how tangled the material may be. It follows the level and governs sections as
 well as modules: a basic section explains one situation plainly; an advanced one may hold
 competing considerations.

@@ -42,6 +42,8 @@ Say in the same table what each section will **show**, not only what it will say
   [figure-design.md](../references/figure-design.md#which-form)).
 - A prompt, a template or an example the learner is meant to reuse gets its own box, so it can be
   copied.
+- Cards and the steps of a flow get icons from the platform's library, chosen by meaning
+  ([icons.md](../references/icons.md)) — a source without pictures still gets them.
 
 ## Gate 4 — Each element
 

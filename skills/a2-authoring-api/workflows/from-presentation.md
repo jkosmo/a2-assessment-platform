@@ -95,7 +95,9 @@ Rules for the list:
 - **A slide with several parts gets several entries** (cards + callout).
 - **A slide that feeds two places gets two rows** (a table in a section, the assignment in a
   module).
-- **Use the deck's own icons** where its frames or steps have them (`icons/`).
+- **Where the deck's frames or steps have icons** (`icons/`), the cards and steps get icons from
+  the platform's library with the same meaning ([icons.md](../references/icons.md)); the deck's
+  own files are not copied in.
 - **Account for every picture**, by file name, with what it shows. Pictures are included unless
   the author says no. Mark a picture where you saw a name, a face or an internal page with ⚠ so
   the author sees it — and go on; the choice is theirs.

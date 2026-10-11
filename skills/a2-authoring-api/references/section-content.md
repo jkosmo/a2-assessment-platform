@@ -94,25 +94,30 @@ Bruk bare det som står i notatene under. Skriv «uklart» der notatene ikke sie
 ## Cards
 
 Frames side by side on a slide — alternatives, roles, tools, phases, each with a heading and its
-own points — become cards: one `###` heading per card, all in a row, each with the same parts in
-the same order.
+own points — become cards: a frame `:::kort` … `:::` around one `###` heading per card, each with
+the same parts in the same order.
 
 ```markdown
-### ![](asset:ikon-sakliste) Sakliste
+:::kort
+### ![](icon:list-checks) Sakliste
 
 **Bruk når** møtet fulgte en fast plan.
 
 - Gir rekkefølgen i referatet
 - Viser hvilke saker som skulle avgjøres
 
-### ![](asset:ikon-notater) Egne notater
+### ![](icon:notebook-pen) Egne notater
 
 **Bruk når** du noterte underveis.
 
 - Fanger vedtak og frister
 - Må ryddes før de limes inn
+:::
 ```
 
+- **The frame is what makes them cards.** `:::kort` on its own line before the first heading,
+  `:::` on its own line after the last card. Without the frame the platform shows plain
+  sub-headings; a frame that is not closed is shown as text. `produce-course.mjs` fails on one.
 - Two to six cards. Keep every frame of the slide, with the slide's own headings.
 - Keep the parts inside each frame ("Når bruke", "Fordeler", "Begrensninger") as bold lead-ins or
   short lists. Where the frames share parts, keep them in the same order; a frame with a part of
@@ -125,23 +130,37 @@ the same order.
 
 ## Icons
 
-Where the source gives a card an icon, the card keeps it: first in the heading, with empty alt
-text (`![](asset:…)`), because the icon repeats the heading and says nothing more.
+Icons come from the platform's own library, written `![](icon:<name>)` — the same icons in every
+course, whether the source was a presentation, a document or the author's words. How to choose
+one, and the catalogue by meaning: [icons.md](icons.md).
 
-- **Only the source's own icons** — the files `pptx-extract` puts in `icons/`, named per slide in
-  `slides.md`. Never draw an icon, and never fetch one.
-- Each icon is an entry in the section's `assets[]`: `{ "sourceId": "ikon-sakliste", "file":
-  "deck/icons/image7.svg" }`.
-- A strip's own icon is left out; the label says the same.
-- A flow's steps, or a row of points, often carry an icon each. They do not go in a figure. Put
-  the icon first in that step's or point's row of a table:
+- **Cards get an icon**, first in the heading, with empty alt text: `### ![](icon:lightbulb) Idé`.
+  The icon repeats the heading and says nothing more.
+- **A flow's steps, or a row of points, often carry an icon each.** They do not go in a figure.
+  Put the icon first in that step's or point's row of a table, in a first column with no name:
 
   ```markdown
   | | Steg | Hva du gjør |
   |---|---|---|
-  | ![](asset:ikon-oppdrag) | **Forstå oppdraget** | Mandat, målgruppe, krav og rapportmal. |
+  | ![](icon:target) | **Forstå oppdraget** | Mandat, målgruppe, krav og rapportmal. |
   ```
+- **The source's own icons are not copied in.** They tell you what each card or step stands for;
+  pick the library's icon for that meaning. Never draw an icon, and never fetch one.
+- A strip's own icon is left out; the label says the same.
 - Nowhere else. An icon in running text is noise.
+
+## The source stays behind the text
+
+The learner reads the course, never the source. Write the point itself, not where it came from.
+
+- Never "som vist på lysark 4", "i denne presentasjonen", "som foredragsholderen sa", "on this
+  slide". The slide is yours to read; the learner has a section.
+- A figure or a picture is introduced by what it shows ("Arbeidsgangen har åtte steg"), not by its
+  origin.
+- The exception is a source the learner is meant to go to — a law, a standard, a handbook. Name it
+  as a reference, with a link where there is one.
+
+`produce-course.mjs` fails on the phrases above, in every language.
 
 ## Pictures from the source
 

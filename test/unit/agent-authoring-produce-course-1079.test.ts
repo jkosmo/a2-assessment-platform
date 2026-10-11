@@ -58,6 +58,7 @@ describe("produce-course — eksempelkurset går gjennom alt (#1079)", () => {
       package: "ok",
       pictures: "ok",
       figures: "ok",
+      "learner text": "ok",
       questions: "ok",
       languages: "ok",
       "approved text": "ok",
@@ -109,7 +110,8 @@ describe("produce-course — eksempelkurset går gjennom alt (#1079)", () => {
     await k.kjør({ packageOut: hel });
     const tekst = readFileSync(hel, "utf8");
     expect(tekst).not.toContain('"file"');
-    expect(JSON.parse(tekst).objects[1].payload.assets).toHaveLength(4);
+    // Ett bilde: ikonene i kortene kommer fra plattformens bibliotek og reiser ikke med som filer.
+    expect(JSON.parse(tekst).objects[1].payload.assets).toHaveLength(1);
   });
 
   it("seksjonstekstene står i filer pakken peker på, og importfila bærer dem ordrett", async () => {
@@ -162,10 +164,16 @@ describe("produce-course — hver kontroll stopper leveransen (#1079)", () => {
     ["samme clientRef to ganger", (p) => void p.objects.push(structuredClone(p.objects[0]!)), "package", `clientRef "sec-arbeidsgang" is used twice`],
     ["et kurs uten modul", (p) => { p.objects = p.objects.filter((o) => o.type !== "module"); objekt(p, "kurs-motereferat").payload.items.pop(); }, "package", "the course has no module"],
     ["teksten åpner med seksjonens egen tittel som overskrift", (p) => { const b = objekt(p, "sec-kilder").payload.bodyMarkdown; b.nn = `## Kva du gir  **KI**\n\n${b.nn}`; }, "package", `"sec-kilder" (nn): the text opens with the section's own title as a heading`],
-    ["en bildefil som ikke finnes", (p) => void (objekt(p, "sec-kilder").payload.assets[3].file = "deck/images/slide-99-1.png"), "pictures", `cannot read the file "deck/images/slide-99-1.png"`],
+    // Skillforbedringene etter milepæl 1: kilden holdes bak teksten, kortramma lukkes, settet dekker seksjonene.
+    ["en henvisning til lysarket i deltakerteksten", (p) => void (objekt(p, "sec-kilder").payload.bodyMarkdown.nb += "\n\nSom vist på lysark 4 er dette viktig."), "learner text", "«lysark 4» points at the source"],
+    ["en henvisning til presentasjonen på engelsk", (p) => void (objekt(p, "sec-kilder").payload.bodyMarkdown["en-GB"] += "\n\nAs shown on the slide, start with the agenda."), "learner text", "points at the source"],
+    ["en kortramme som ikke lukkes", (p) => void (objekt(p, "sec-kilder").payload.bodyMarkdown.nb = objekt(p, "sec-kilder").payload.bodyMarkdown.nb.replace("\n:::\n", "\n")), "learner text", "opened and never closed"],
+    ["en modul med færre spørsmål enn tre", (p) => void objekt(p, "mod-referat").payload.activeVersion.mcqSet.questions.splice(2), "questions", "at least one question per section and at least 3"],
+    ["et ikonnavn plattformen ikke kjenner", (p) => void (objekt(p, "sec-kilder").payload.bodyMarkdown.nb += "\n\n:::kort\n### ![](icon:ikke-et-ikon) Kort\n\nTekst.\n:::\n"), "pictures", "icon:ikke-et-ikon, and the platform's icon library has no icon with that name"],
+    ["en bildefil som ikke finnes", (p) => void (objekt(p, "sec-kilder").payload.assets[0].file = "deck/images/slide-99-1.png"), "pictures", `cannot read the file "deck/images/slide-99-1.png"`],
     ["et bilde som ikke vises på nynorsk", (p) => { const b = objekt(p, "sec-kilder").payload.bodyMarkdown; b.nn = b.nn.replace(/!\[[^\]]*\]\(asset:img-innstillinger\)/, ""); }, "pictures", `the picture "img-innstillinger" is not shown in the text in nn`],
     ["teksten viser et bilde seksjonen ikke har", (p) => void objekt(p, "sec-kilder").payload.assets.pop(), "pictures", "the text in nb shows asset:img-innstillinger, and the section has no such picture"],
-    ["en filtype plattformen ikke tar", (p) => void (objekt(p, "sec-kilder").payload.assets[3].file = "course-state.json"), "pictures", `"course-state.json" is not a picture the platform takes`],
+    ["en filtype plattformen ikke tar", (p) => void (objekt(p, "sec-kilder").payload.assets[0].file = "course-state.json"), "pictures", `"course-state.json" is not a picture the platform takes`],
     ["en engelsk figur byttet ut med den norske", (p) => void (objekt(p, "sec-arbeidsgang").payload.assets[0].localizedVariants[1].file = "figures/arbeidsgang.svg"), "languages", "blind copy"],
     ["en språkvariant av figuren med et annet antall etiketter — og meldingen sier hva som telles", (p) => void (objekt(p, "sec-arbeidsgang").payload.assets[0].localizedVariants[0].file = "deck/icons/image7.svg"), "languages", "0 pieces of label text, the original has 14 — keep the same number of lines in every label"],
     ["en seksjonstittel som mangler nynorsk", (p) => void delete objekt(p, "sec-kilder").payload.title.nn, "languages", "sec-kilder"],

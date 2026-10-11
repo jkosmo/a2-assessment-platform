@@ -157,7 +157,7 @@ function checkPictures(resolved) {
   return {
     name: "pictures",
     status: details.length === 0 ? "ok" : "fail",
-    summary: `${assets.count} picture(s) and figure(s), ${(assets.totalBytes / 1024).toFixed(0)} kB with every layout and language`,
+    summary: `${assets.count} picture(s) and figure(s), ${(assets.totalBytes / 1024).toFixed(0)} kB with every layout and language; ${assets.icons} icon(s) from the platform library`,
     details,
   };
 }
@@ -180,7 +180,52 @@ function checkFigures(pkg) {
   return { name: "figures", status: details.length === 0 ? "ok" : "fail", summary: `${measured} drawing(s) measured`, details };
 }
 
-function checkQuestions(pkg, primary) {
+// The learner reads the course, never the source. A sentence that points at the slide ("som vist på
+// lysark 4") or the presentation is the author's voice leaking through; the point itself is what
+// belongs in the text. In every language, with the phrases each language uses.
+const SOURCE_REFERENCES = [
+  /\blysark(?:et|ene|a)?(?:\s+\d+)?\b/i,
+  /\b(?:i|på) (?:denne|dette) (?:presentasjonen|foredraget|lysarket|lysbildet|kursbildet)\b/i,
+  /\bpresentasjonen (?:viser|seier|sier|tar opp|går gjennom)\b/i,
+  /\bsom (?:vist|nemnt|nevnt|forklart) (?:på|i) (?:lysark|lysbild|presentasjon|foredrag)/i,
+  /\bforedragsholdar(?:en)?\b|\bforedragsholder(?:en)?\b/i,
+  /\b(?:on|in) this (?:slide|deck|presentation)\b/i,
+  /\bslide \d+\b/i,
+  /\bthe (?:deck|presentation|presenter) (?:shows|says|covers|explains)\b/i,
+  /\bas (?:shown|explained|mentioned) (?:on|in) the (?:slide|deck|presentation)\b/i,
+];
+
+function checkLearnerText(pkg) {
+  const details = [];
+  let sections = 0;
+  for (const object of pkg.objects ?? []) {
+    if (object?.type !== "section") continue;
+    sections += 1;
+    const body = object.payload?.bodyMarkdown;
+    const languages = body && typeof body === "object" ? Object.entries(body) : [["", body]];
+    for (const [language, markdown] of languages) {
+      const text = String(markdown ?? "");
+      const where = `"${object.clientRef}"${language ? ` (${language})` : ""}`;
+      // Without code blocks: a prompt may legitimately tell a model what a slide is.
+      const prose = text.replace(/^(`{3,}|~{3,})[^\n]*\n[\s\S]*?^\1[^\n]*$/gm, "");
+      for (const pattern of SOURCE_REFERENCES) {
+        const match = pattern.exec(prose);
+        if (match) {
+          details.push(`${where}: «${match[0]}» points at the source — the learner reads the course, not the slides; say the point itself`);
+          break;
+        }
+      }
+      // A card frame that is not closed is shown as text, headings and all.
+      const opened = (text.match(/^:::(?:kort|cards)\s*$/gm) ?? []).length;
+      const closed = (text.match(/^:::\s*$/gm) ?? []).length;
+      if (opened > closed) details.push(`${where}: a :::kort frame is opened and never closed — the platform shows the cards as plain text; close it with ::: on its own line`);
+      if (closed > opened) details.push(`${where}: a ::: closes a card frame that was never opened`);
+    }
+  }
+  return { name: "learner text", status: details.length === 0 ? "ok" : "fail", summary: `${sections} section(s) read for the learner's voice and card frames`, details };
+}
+
+function checkQuestions(pkg, primary, course) {
   const details = [];
   const sets = collectMcqSets(pkg);
   let questions = 0;
@@ -190,6 +235,29 @@ function checkQuestions(pkg, primary) {
     for (const issue of result.issues) {
       details.push(`${set.path} ${issue.index == null ? "the set" : `question ${issue.index + 1}`}: ${issue.kind} — ${issue.detail}`);
     }
+  }
+  // A module tests the whole of what the sections before it teach: at least one question per
+  // section it follows, and at least three. A four-question quiz after six sections leaves four
+  // sections untested. Free-text-only modules are not counted; their task covers the ground.
+  const byRef = new Map((pkg.objects ?? []).map((object) => [object?.clientRef, object]));
+  let sectionsBefore = 0;
+  for (const item of course?.payload?.items ?? []) {
+    const target = byRef.get(item?.ref);
+    if (!target) continue;
+    if (target.type === "section") {
+      sectionsBefore += 1;
+      continue;
+    }
+    if (target.type !== "module") continue;
+    const version = target.payload?.activeVersion ?? {};
+    if (version.assessmentMode !== "FREETEXT_ONLY") {
+      const count = version.mcqSet?.questions?.length ?? 0;
+      const needed = Math.max(3, sectionsBefore);
+      if (count < needed) {
+        details.push(`"${target.clientRef}": ${count} question(s) after ${sectionsBefore} section(s) — a module tests the whole of what its sections teach: at least one question per section and at least 3 (${needed} here)`);
+      }
+    }
+    sectionsBefore = 0;
   }
   return { name: "questions", status: details.length === 0 ? "ok" : "fail", summary: `${questions} question(s) in ${sets.length} set(s)`, details };
 }
@@ -301,7 +369,8 @@ export async function produceCourse({ packageFile, outFile, stateFile, slidesFil
   const pkg = resolved.pkg;
   checks.push(checkPictures(resolved));
   checks.push(checkFigures(pkg));
-  checks.push(checkQuestions(pkg, primary));
+  checks.push(checkLearnerText(pkg));
+  checks.push(checkQuestions(pkg, primary, course));
   checks.push(checkLanguages(pkg, primary));
 
   let master = null;

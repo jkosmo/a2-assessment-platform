@@ -18,7 +18,6 @@ import { app } from "../src/app.js";
 import { prisma } from "../src/db/prisma.js";
 import { getAsset } from "../src/modules/course/assetStorage.js";
 import { renderSectionMarkdown } from "../src/modules/course/sectionContent.js";
-import { ICON_SIZE } from "../skills/a2-authoring-api/scripts/pptx-extract.mjs";
 import { produceCourse } from "../skills/a2-authoring-api/scripts/produce-course.mjs";
 
 const admin = { "x-user-id": "admin-1", "x-user-email": "admin@company.com", "x-user-name": "Platform Admin" };
@@ -87,16 +86,9 @@ describe("#1079 eksempelkurset fra skillet importeres som det er", () => {
     expect((await getAsset(smal.localizedBlobPaths.nn!)).toString("utf8")).toContain("føremålet");
   });
 
-  it("ikonene og skjermbildet kom inn, og ikonene tåler plattformens rensing med størrelsen i behold", async () => {
+  it("skjermbildet kom inn som eneste fil — ikonene kommer fra plattformens bibliotek og reiser ikke med", async () => {
     const assets = await prisma.sectionAsset.findMany({ where: { sectionId: seksjoner[1]! } });
-    expect(assets.map((a) => a.mimeType).sort()).toEqual(["image/png", "image/svg+xml", "image/svg+xml", "image/svg+xml"]);
-    for (const ikon of assets.filter((a) => a.mimeType === "image/svg+xml")) {
-      const svg = (await getAsset(ikon.blobPath)).toString("utf8");
-      expect(svg, ikon.filename).toContain("<path");
-      expect(svg, ikon.filename).toMatch(new RegExp(`width="${ICON_SIZE}"`));
-      // Et ikon har ingen etiketter: det skal ikke ha, og får ikke, språkvarianter.
-      expect(ikon.localizedBlobPaths).toBeNull();
-    }
+    expect(assets.map((a) => a.mimeType)).toEqual(["image/png"]);
     const bilde = assets.find((a) => a.mimeType === "image/png")!;
     expect(bilde.filename).toBe("slide-04-1.png");
     expect((await getAsset(bilde.blobPath)).equals(readFileSync(`${EKSEMPEL}/deck/images/slide-04-1.png`))).toBe(true);
@@ -114,11 +106,14 @@ describe("#1079 eksempelkurset fra skillet importeres som det er", () => {
   it("leseren får kort med ikon, uthevet boks, prompt-boks, tabell og bilde som HTML den kan vise", async () => {
     for (const språk of SPRÅK) {
       const html = renderSectionMarkdown((await tekst(seksjoner[1]!))[språk], språk);
-      // Tre kort, hvert med ikonet først i overskriften.
-      expect(html.match(/<h3[^>]*>\s*<img /g), språk).toHaveLength(3);
-      // Prompten er en kodeblokk — teksten står ordrett, med linjeskift, og kan kopieres.
-      expect(html, språk).toMatch(/<pre><code class="language-prompt">[^<]*\n[^<]*\n/);
-      expect(html, språk).toContain("<table>");
+      // Tre kort i ramme, hvert med et bibliotekikon først i overskriften, tegnet av plattformens egen rute.
+      expect(html, språk).toContain('<div class="content-cards">');
+      expect(html.match(/<h3[^>]*>\s*<img class="content-icon" src="\/static\/icons\/[a-z-]+\.svg" alt="">/g), språk).toHaveLength(3);
+      expect(html, språk).not.toContain("icon:");
+      // Prompten er en prompt-boks med «Kopier» — teksten står ordrett, med linjeskift.
+      expect(html, språk).toContain('<div class="content-prompt">');
+      expect(html, språk).toMatch(/content-prompt-text[^>]*>[^<]*\n[^<]*\n/);
+      expect(html, språk).toContain('<table class="content-table">');
       expect(html.match(/<tr>/g)!.length, språk).toBe(4);
       // Skjermbildet har alt-tekst; ikonene har tom.
       expect(html.match(/<img [^>]*alt="[^"]{20,}"/g), språk).toHaveLength(1);
@@ -126,7 +121,7 @@ describe("#1079 eksempelkurset fra skillet importeres som det er", () => {
       expect(html, språk).not.toContain("asset:");
     }
     const første = renderSectionMarkdown((await tekst(seksjoner[0]!)).nb, "nb");
-    expect(første).toMatch(/<blockquote>\s*<p><strong>Husk:<\/strong> Du står ansvarlig/);
+    expect(første).toMatch(/<blockquote class="content-callout">\s*<p><strong class="content-callout-label">Husk:<\/strong> Du står ansvarlig/);
     expect(første).toMatch(/<ol>[\s\S]*<strong>Avklar formålet\.<\/strong>/);
   });
 
