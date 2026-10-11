@@ -73,6 +73,8 @@ All routes use the `courses` capability: PARTICIPANT, SUBJECT_MATTER_OWNER, ADMI
 
 `GET /api/courses` hides **RESTRICTED** courses from users without an active enrollment; OPEN courses are visible to everyone (#496/EN-2).
 
+`GET /api/courses` returns the courses in the order the participant sees them (#1093): courses with a `sortOrder` first, ascending, then the rest alphabetically by the title in the request locale (`Intl.Collator`, numeric, case-insensitive). Each item carries `sortOrder` (integer or `null`). The client only partitions into ongoing and completed; it never re-sorts.
+
 `GET /api/courses/:courseId` also returns `discussionsEnabled` (course master toggle) and, per `items[]` element, `courseItemId` + `discussionsEnabled` — used by the discussion panel (#495).
 
 ---
@@ -95,6 +97,8 @@ Threads hang on the course (course-level board, `courseItemId` absent) or on a s
 | `DELETE` | `/api/courses/:courseId/discussions/:threadId/subscription` | participant+ | Unsubscribe |
 
 The course master toggle is set via the admin course API: `POST`/`PUT /api/admin/content/courses[/:courseId]` accept `discussionsEnabled` (boolean, default `true`); the admin course detail returns it.
+
+The same endpoints accept `sortOrder` (#1093): an integer 0–9999 places the course first in «Mine kurs», `null` clears it (alphabetical, the default); omitting the field leaves the stored value. The admin course detail returns `sortOrder`, and the course export/import envelope carries it as an optional field (`course.course.sortOrder`), so files from before 2.87.0 import unchanged.
 
 > **#923 (v2.20.0) — item-level discussion has no UI any more, but the API is unchanged.** The
 > participant section reader no longer mounts a board, and the SMO course editor no longer shows the
