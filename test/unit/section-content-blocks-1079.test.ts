@@ -138,6 +138,35 @@ describe("tabell — hver celle bærer navnet på kolonnen sin (#1079)", () => {
     expect(ut).toMatch(/<td data-label="A"><span>Skriv <strong>et<\/strong> godt <em>utkast<\/em> med <a [^>]*>lenke<\/a><\/span><\/td>/);
   });
 
+  // Produkteier på stage (2.85.0): med smal spalte ble ikonene i en stegtabell så små at de ikke vistes.
+  // Et bilde først i cellen er et ikon og får klassen kortene bruker; shared.css gir den fast størrelse.
+  it("et bilde først i en celle er et ikon", () => {
+    const ut = html("| | Steg |\n|---|---|\n| ![](asset:ikon-x) | **Forstå** |");
+    expect(ut).toMatch(/<td data-label=""><span><img class="content-icon" [^>]*ikon-x/);
+    expect(ut).toContain('<td data-label="Steg"><span><strong>Forstå</strong></span></td>');
+  });
+
+  // QA-porten: et skjermbilde på 480 × 270 i en navngitt kolonne ble 24 × 24. Bare kolonner uten navn gir ikon.
+  it("et bilde først i en celle i en navngitt kolonne er et bilde, ikke et ikon", () => {
+    const ut = html("| Verktøy | Slik ser det ut |\n|---|---|\n| Lerret | ![](asset:bilde) |");
+    expect(ut).toMatch(/<td data-label="Slik ser det ut"><span><img src="[^"]*bilde/);
+    expect(ut).not.toContain("content-icon");
+  });
+
+  // QA-porten (runde 2): en tabell der ingen kolonne har navn, er den vanlige måten å sette bilder ved
+  // siden av hverandre på — ikke en stegtabell. Bildene forblir bilder.
+  it("en tabell uten noen navngitt kolonne gjør ikke bildene til ikoner", () => {
+    const ut = html("| | |\n|---|---|\n| ![](asset:a) | ![](asset:b) |");
+    expect(ut).toContain('<td data-label=""><span><img src=');
+    expect(ut).not.toContain("content-icon");
+  });
+
+  it("et bilde inne i teksten i en celle er et bilde, ikke et ikon", () => {
+    const ut = html("| A |\n|---|\n| Se ![](asset:b) her |");
+    expect(ut).toContain("<span>Se <img ");
+    expect(ut).not.toContain("content-icon");
+  });
+
   it("en tabell uten rader er fortsatt en tabell", () => {
     const ut = html("| A | B |\n|---|---|");
     expect(ut).toContain('<table class="content-table"><thead><tr><th>A</th><th>B</th></tr></thead></table>');

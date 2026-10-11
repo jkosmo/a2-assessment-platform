@@ -967,6 +967,28 @@ begrunnelsene står der). Sak #1079.
 7. **Full målerunde ved to milepæler** (tre presentasjoner i to produkter): når skillet er bygget
    om, og når innholdsblokkene er på plass. Imellom prøves skillet i Claude Code.
 
+**Håndheves:** punkt 1, 2, 3, 5 og 6 er bygget på grenen `skill-ombygging-1079` (ikke flettet,
+ikke målt). Lysarklista i punkt 2 og 6 holdes av `scripts/slide-coverage.mjs`
+(`test/unit/agent-authoring-slide-coverage-1079.test.ts`), oppbyggingen i punkt 1 og 5 av
+`test/unit/skill-structure-guard-1079.test.ts`. Punkt 4 er ikke bygget. Status: avklart;
+rekkefølgen står nederst i designnotatet.
+
+⚠️ **Fire valg under byggingen er mine, ikke produkteiers** (2026-10-05). Han kan snu dem:
+
+- **Et bilde som viser et passord, en kode, en nøkkel eller et token foreslås utelatt**, med
+  grunn i lysarklista, og tas bare med når forfatteren sier det med rene ord. Dette er et unntak
+  fra punkt 6. I prøvekjøringen tok modellen med et skjermbilde av en møteinvitasjon med møte-ID
+  og passord, fordi regelen sa «alle bilder med». Navn og ansikter følger fortsatt punkt 6: merkes,
+  og tas med.
+
+- **Til innholdsblokkene finnes i plattformen, skriver skillet dem i former plattformen alt
+  tegner:** uthevet boks som sitat med fet merkelapp, prompt som kodeblokk, kort som
+  underoverskrifter med ikonet over. Alternativet var å vente med kort og bokser til plattformen
+  kan tegne dem. Valgt fordi milepæl 1 da måler arbeidsgangen, ikke plattformen.
+- **Et kurs uten modul stoppes ved produksjon.** Plattformen tar det imot med en advarsel, men
+  det kan aldri fullføres. Skillet lager det derfor ikke.
+- **Et bilde som ligger i en seksjon uten å vises i teksten, stopper produksjonen.** Plattformen
+  bare advarer. I skillet betyr det at et bilde forfatteren godkjente, ikke blir sett av noen.
 **Håndheves:** ikke bygget. Status: avklart; rekkefølgen står nederst i designnotatet.
 
 ## Innholdsblokkene skrives som vanlig markdown med fet merkelapp, kodeblokk og ramme (2026-10-06)
@@ -990,3 +1012,60 @@ Produkteier besluttet de fire blokkene og godkjente prøvesiden (valg 4 over). S
 og `test/e2e/content-blocks-1079.spec.ts`. Skillet skriver den uthevede boksen og prompt-boksen i
 denne formen alt (2.83.0); kortrammen legges inn der etter milepæl 1. Status: mitt valg, ikke
 produkteiers — han kan snu skrivemåten før den kommer i prod.
+
+## Lesemodus, ikoner og prod-takt: produkteiers avgjørelser etter 2.85.1 på stage (2026-10-07)
+
+Spurt samlet morgenen etter at 2.85.0 gikk til prod og 2.85.1 til stage. Svarene, med ett ord hver:
+
+- **«Smal» spalte på PC gir det smale figuroppsettet** (to steg per rad), fordi spalten blir under
+  640 px. Konsekvent med at «Smal» er smal, og «Bred» er ett klikk unna. Ingen særregel for PC.
+- **2.85.1 venter på neste samling.** Prod står på 2.85.0; vi samler mer på stage før neste prod-slipp
+  (samme takt som før). Ingen kurs i prod har stegtabeller med ikoner ennå.
+- **Ikonbibliotek: Lucide, som standard for alle kurs** (ISC-lisens, rundt 1500 ikoner), servert av
+  plattformen selv og skrevet som `![](icon:<navn>)`, med en katalog med norske stikkord i skillet.
+  Begrunnelsen er den samme som for kortene i plattformens stil: ett uttrykk på tvers av kurs, ikke
+  bare der kilden tilfeldigvis har ikoner. Bygges etter milepæl 1.
+- **Skillets sju valg (2026-10-05) og blokkenes skrivemåte (2026-10-06) står.**
+- **Av QA-portens tre småfunn tas de to små** (tittelen på arket følger svaret; fokus tilbake til
+  leseren etter sen kursliste) i 2.85.2. Liggende telefon bredere enn 900 px venter.
+- **#1080, #1081 og #1083 lukket**: i prod siden 2.78.3 og sett på telefon.
+
+## Ikonbiblioteket: hvordan et ikon skrives, hvor det får stå, og hva skillet gjør med kildens ikoner (2026-10-11)
+
+Produkteier valgte Lucide som standard for alle kurs (2026-10-07) og ba om at ikonene skal virke også
+når kurset ikke kommer fra en presentasjon. Resten er mitt:
+
+- **Skrivemåten er `![](icon:<navn>)` med Lucides eget navn**, ikke en egen katalog av norske navn.
+  Begrunnelse: navnet er det samme i plattformen, i skillet og i Lucides egen dokumentasjon, og
+  en ny versjon av biblioteket trenger bare pakkeskriptet. Den norske katalogen i skillet er et
+  oppslag fra betydning til navn, ikke et navnerom.
+- **Biblioteket er sjekket inn som én fil**, ikke 1877 SVG-filer, og tegnes av en rute. Ruta setter
+  farge og størrelse ett sted, og sier 404 for det som ikke finnes. Et ikon som ikke finnes, tas
+  bort av gjengivelsen: et brukket bilde sier ingenting.
+- **Et bibliotekikon er alltid et ikon** (24 px), uansett hvor det står — i motsetning til et bilde
+  fra `assets[]`, som bare er ikon først i en kortoverskrift eller i en navnløs tabellkolonne.
+- **Skillet kopierer ikke lenger presentasjonens egne ikoner inn** i kurset. De sier hva et kort
+  eller steg står for; skillet velger bibliotekets ikon for den betydningen. Dermed ser alle kurs
+  like ut, og kurs fra tekst får ikoner på samme vilkår. `pptx-extract` henter dem fortsatt ut, som
+  grunnlag for valget.
+- **Hvor et ikon får stå, er uendret:** først i en kortoverskrift, eller i første, navnløse kolonne
+  i en stegtabell. Ingen andre steder.
+
+Status: mine valg; produkteier kan snu skrivemåten før den kommer i prod (ingen kurs bruker
+`icon:` ennå).
+
+## Skillets kontroller etter milepæl 1: kilden bak teksten, lukket kortramme, spørsmål per seksjon (2026-10-11)
+
+Tre av funnene fra sammenligningen av Rapportskriving ble regler med en kontroll i
+`produce-course.mjs`, ikke bare tekst i skillet — av samme grunn som før: en regel modellen skal
+huske, glemmes; en kontroll som faller, rettes.
+
+- **«Learner text»** faller på uttrykk som peker på kilden (lysark, «i denne presentasjonen», «on
+  this slide» …) i prosa, ikke i kodeblokker. Grensen er satt snevert: «presentasjon» alene er
+  lov, for et kurs kan handle om presentasjoner.
+- **En åpen `:::kort`-ramme** faller: plattformen viser den som tekst.
+- **Spørsmål per seksjon:** en modul må ha minst like mange spørsmål som seksjonene den følger, og
+  minst tre. Fritekstmoduler telles ikke. Tallet er et gulv, ikke et mål — se «Standardveien, ikke
+  taket» i HANDOFF-lærdommene.
+
+Nivået fra kilden ble bare tekst i `course-design.md`: det kan ikke kontrolleres av et skript.

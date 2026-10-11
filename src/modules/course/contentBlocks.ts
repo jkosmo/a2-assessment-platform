@@ -29,6 +29,15 @@ const COPY_LABELS: Record<string, { copy: string; copied: string }> = {
 const escapeHtml = (text: string) =>
   text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 
+/** Et bilde først i en kortoverskrift, eller i en tabellcelle i en kolonne uten navn, er et ikon: fast
+ *  størrelse (shared.css), ikke et bilde over hele bredden. I tabellen ble ikonet ellers klemt til 8 px i
+ *  en smal spalte (stage, 2.85.0). Et bilde i en navngitt kolonne er et bilde (skjermbilde, foto) og
+ *  beholder størrelsen sin — QA-porten målte 480 × 270 som ble 24 × 24. En tabell der ingen kolonne har
+ *  navn, er den vanlige måten å sette bilder ved siden av hverandre på, ikke en stegtabell. */
+function markLeadingIcon(html: string): string {
+  return html.replace(/^\s*<img /, '<img class="content-icon" ');
+}
+
 /** Teksten i en bit HTML, uten merkene — til `data-label` og til å kjenne igjen merkelappen. */
 const textOf = (html: string) =>
   html
@@ -82,7 +91,7 @@ function createSectionMarked(locale?: string): Marked {
             let end = at + 1;
             while (end < inner.length && inner[end]!.type !== "heading") end += 1;
             // Et bilde først i overskriften er kortets ikon.
-            const title = this.parser.parseInline(heading.tokens).replace(/^\s*<img /, '<img class="content-icon" ');
+            const title = markLeadingIcon(this.parser.parseInline(heading.tokens));
             const body = this.parser.parse(inner.slice(at + 1, end) as never);
             const level = Math.min(Math.max(heading.depth, 3), 6);
             cards.push(
@@ -124,11 +133,16 @@ function createSectionMarked(locale?: string): Marked {
         const align = (value: string | null) => (value ? ` align="${value}"` : "");
         const headers = token.header.map((cell) => this.parser.parseInline(cell.tokens));
         const head = token.header.map((cell, i) => `<th${align(cell.align)}>${headers[i]}</th>`).join("");
+        const hasNamedColumn = headers.some((header) => textOf(header) !== "");
         const rows = token.rows
           .map(
             (row) =>
               `<tr>${row
-                .map((cell, i) => `<td${align(cell.align)} data-label="${escapeHtml(textOf(headers[i] ?? ""))}"><span>${this.parser.parseInline(cell.tokens)}</span></td>`)
+                .map((cell, i) => {
+                  const label = textOf(headers[i] ?? "");
+                  const inner = this.parser.parseInline(cell.tokens);
+                  return `<td${align(cell.align)} data-label="${escapeHtml(label)}"><span>${!label && hasNamedColumn ? markLeadingIcon(inner) : inner}</span></td>`;
+                })
                 .join("")}</tr>`,
           )
           .join("\n");

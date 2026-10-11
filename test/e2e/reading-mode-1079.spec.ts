@@ -167,6 +167,8 @@ test.describe("lesemodus — kurset viker når en seksjon leses (#1079)", () => 
   test("språkbytte mens seksjonen er åpen: lesemodus står", async ({ page }) => {
     await åpneKurset(page, 1280);
     await åpneSeksjonen(page);
+    // Fokus settes eksplisitt: det er det omtegningen ikke skal ta (2.85.2).
+    await page.locator("#localeSelect").focus();
     await page.locator("#localeSelect").selectOption("en-GB");
     await expect(page.locator("#sectionReaderBody .content-cards")).toBeVisible();
     await expect(page.locator(".course-reading-position")).toHaveText("Step 1 of 3");
@@ -174,6 +176,8 @@ test.describe("lesemodus — kurset viker når en seksjon leses (#1079)", () => 
     expect(m.kurshode, "kurskortets hode er fortsatt borte").toBe(0);
     expect(m.andreSteg, "de andre stegene er fortsatt borte").toBe(0);
     expect(m.arkSkygge).toBe(true);
+    // 2.85.2: omtegningen tar ikke fokus fra språkvelgeren.
+    expect(await page.evaluate(() => document.activeElement?.id ?? ""), "fokus står på språkvelgeren").toBe("localeSelect");
   });
 
   test("«gå videre» når kurslista svarer sent: neste seksjon åpner i lesemodus", async ({ page }) => {
@@ -192,6 +196,34 @@ test.describe("lesemodus — kurset viker når en seksjon leses (#1079)", () => 
     expect(m.posisjon).toBe("Steg 2 av 3");
     expect(m.kurshode, "kurskortets hode er borte også etter at kurslista kom").toBe(0);
     expect(m.andreSteg).toBe(0);
+    // 2.85.2 (QA-porten): da kurslista kom sist, ble panelet bygget på nytt og fokus havnet på <body>.
+    expect(await page.evaluate(() => document.activeElement?.className ?? ""), "fokus står i leseren").toContain("course-inline-panel-title");
+  });
+
+  // QA-porten (2.85.2): etter en omtegning fikk tittelen fokus mens panelet bare viste «Laster …».
+  // Siden var da kort, og rulleposisjonen ble kuttet til toppen. Fokus skal komme når teksten står.
+  test("«gå videre» når både kurslista og seksjonsteksten svarer sent: fokus gis først når teksten er på plass", async ({ page }) => {
+    await åpneKurset(page, 1280);
+    await page.route("**/api/courses", async (route: Route) => {
+      await new Promise((r) => setTimeout(r, 300));
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ courses: [{ id: "c1", title: "Rapportskriving med generativ KI", description: null, moduleCount: 1, progress: { completed: 1, total: 3, courseStatus: "IN_PROGRESS" }, publishedAt: "2026-01-01T00:00:00.000Z" }] }) });
+    });
+    await page.route("**/api/courses/c1/sections/s1/read", (route: Route) => route.fulfill({ status: 204, body: "" }));
+    await åpneSeksjonen(page);
+    // Fra nå svarer seksjonsteksten sent: omtegningen (kurslista etter 300 ms) rekker å bygge panelet
+    // på nytt lenge før teksten kommer.
+    let forsinkelse = 0;
+    await page.route("**/api/courses/c1/sections/s2", async (route: Route) => {
+      await new Promise((r) => setTimeout(r, forsinkelse));
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ title: "Neste", html: "<p>Neste seksjon.</p>" }) });
+    });
+    forsinkelse = 1500;
+    await page.locator("#sectionReaderMarkRead").click();
+    await expect(page.locator(".course-reading-position")).toHaveText("Steg 2 av 3");
+    await page.waitForTimeout(900); // kurslista har kommet og panelet er bygget på nytt; teksten lar vente på seg
+    expect(await page.evaluate(() => document.activeElement?.tagName ?? ""), "mens panelet laster, står fokus på body").toBe("BODY");
+    await expect(page.locator("#sectionReaderBody")).toHaveText("Neste seksjon.", { timeout: 4000 });
+    await expect.poll(() => page.evaluate(() => document.activeElement?.className ?? ""), { message: "når teksten står, får leseren fokus" }).toContain("course-inline-panel-title");
   });
 
   for (const bredde of [390, 360]) {

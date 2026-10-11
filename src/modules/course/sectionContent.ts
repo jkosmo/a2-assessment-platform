@@ -1,6 +1,7 @@
 import DOMPurify from "dompurify";
 import { JSDOM } from "jsdom";
 import { renderSectionBlocks } from "./contentBlocks.js";
+import { hasIcon, iconUrl } from "./iconLibrary.js";
 
 /**
  * Markdown rendering + sanitisation for course learning sections (#476).
@@ -88,6 +89,20 @@ function resolveAssetUrls(html: string, locale?: string): string {
   return html.replace(/(<img\b[^>]*\bsrc=")asset:([a-zA-Z0-9_-]+)(")/gi, `$1/api/content-assets/$2${suffix}$3`);
 }
 
+// Et ikon fra plattformens eget bibliotek: `![](icon:<navn>)`. Lenka skrives om til ruta som tegner
+// ikonet, og bildet får klassen som gir det fast størrelse (shared.css) — uansett hvor det står, for
+// et bibliotekikon er alltid et ikon. Et navn som ikke finnes i biblioteket, tas helt bort: et
+// brukket bilde sier ingenting, og valideringen ved lagring har alt pekt på navnet. Kjører før
+// rensingen, som ellers hadde strøket `icon:` som ukjent protokoll.
+function resolveIconUrls(html: string): string {
+  return html.replace(/<img\b[^>]*\bsrc="icon:([^"]*)"[^>]*>/gi, (tag, rawName: string) => {
+    const name = rawName.trim();
+    if (!hasIcon(name)) return "";
+    const withSrc = tag.replace(/\bsrc="icon:[^"]*"/i, `src="${iconUrl(name)}"`);
+    return /\bclass="/i.test(withSrc) ? withSrc : withSrc.replace(/^<img\b/i, '<img class="content-icon"');
+  });
+}
+
 /**
  * Renders SMO-authored markdown to sanitised HTML safe to inject into the
  * participant view. Returns an empty string for empty / non-string input.
@@ -96,5 +111,5 @@ function resolveAssetUrls(html: string, locale?: string): string {
 export function renderSectionMarkdown(markdownInput: string, locale?: string): string {
   if (typeof markdownInput !== "string" || markdownInput.length === 0) return "";
   const rawHtml = renderSectionBlocks(markdownInput, locale);
-  return sanitizeSectionHtml(resolveAssetUrls(rawHtml, locale));
+  return sanitizeSectionHtml(resolveIconUrls(resolveAssetUrls(rawHtml, locale)));
 }

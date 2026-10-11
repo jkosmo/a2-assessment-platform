@@ -132,6 +132,85 @@ describe("score-course — hva ble det av hvert lysark?", () => {
     expect(s.figurerMedSmaltOppsett).toBe(1);
   });
 
+  it("importfila skillet leverer (konvolutten selv, uten { envelope } rundt) leses som eksporten", () => {
+    // Prøvekjøringen 2026-10-05: fila fra produce-course ga «0 av 9» fordi bare eksportsvaret
+    // fra plattformen ble kjent igjen.
+    expect(scoreCourse(tilfelle, eksport.envelope).sum).toEqual(r.sum);
+  });
+
+  describe("en oppgave som ble en fritekstmodul", () => {
+    const oppgavetilfelle = { navn: "Oppgave", lysark: [
+      { nr: 1, form: "oppgave", forventet: ["oppgave"], nøkkelord: ["Skriv et referat", "frister", "ansvarlig"] },
+    ] } as unknown as EvalCase;
+    const medModul = (assessmentMode: string, taskText: string, seksjon = "Innledning.") => ({ exportFormat: "a2-content-export/v1", course: { course: { items: [
+      { type: "SECTION", section: { title: tre("S"), bodyMarkdown: tre(seksjon) } },
+      { type: "MODULE", module: { module: { title: tre("Oppgave") }, activeVersion: { assessmentMode, taskText: tre(taskText) } } },
+    ] } } });
+
+    it("ordene i oppgaveteksten til en fritekstmodul gir formen «oppgave», som forventet", () => {
+      const ark = scoreCourse(oppgavetilfelle, medModul("FREETEXT_ONLY", "Skriv et referat fra møtet med frister og ansvarlig for hvert punkt.")).lysark[0]!;
+      expect(ark).toMatchObject({ funnet: "oppgave", somForventet: true });
+    });
+
+    it("de samme ordene i en seksjon er tekst — og godtas fortsatt som behandling av en oppgave", () => {
+      const ark = scoreCourse(oppgavetilfelle, medModul("MCQ_ONLY", "", "Skriv et referat med frister og ansvarlig.")).lysark[0]!;
+      expect(ark).toMatchObject({ funnet: "tekst", somForventet: true });
+    });
+
+    it("en flervalgsmodul med ordene i oppgaveteksten er ikke en oppgave", () => {
+      const ark = scoreCourse(oppgavetilfelle, medModul("MCQ_ONLY", "Skriv et referat med frister og ansvarlig.", "Ingenting.")).lysark[0]!;
+      expect(ark.funnet).not.toBe("oppgave");
+    });
+  });
+
+  describe("ikoner fra plattformens bibliotek", () => {
+    const medIkoner = (markdown: string) => ({ exportFormat: "a2-content-export/v1", course: { course: { items: [{ type: "SECTION", section: { title: tre("S"), bodyMarkdown: tre(markdown) } }] } } });
+    const ingen = { navn: "Ikoner", ikonerIKilden: 3, lysark: [] } as unknown as EvalCase;
+
+    it("telles for seg — de har ingen fil og er ikke figurer", () => {
+      const s = scoreCourse(ingen, medIkoner([":::kort", "### ![](icon:list-checks) A", "", "x", "### ![](icon:mic) B", "", "y", ":::", "", "| | Steg |", "|---|---|", "| ![](icon:target) | **C** |"].join("\n")));
+      expect(s.sum).toMatchObject({ bibliotekIkoner: 3, figurer: 0, ikonerIKilden: 3 });
+      expect(formatScore(s)).toContain("ikoner fra biblioteket: 3 (kilden har 3 ikoner)");
+    });
+
+    it("et bilde fra assets er ikke et bibliotekikon", () => {
+      expect(scoreCourse(ingen, medIkoner("![](asset:fig) tekst")).sum.bibliotekIkoner).toBe(0);
+    });
+  });
+
+  describe("innholdsblokker i formen skillet skriver dem", () => {
+    const blokktilfelle = { navn: "Blokker", lysark: [
+      { nr: 1, form: "kort", forventet: ["innholdsblokk"], nøkkelord: ["Sakliste", "Egne notater", "Opptak"] },
+      { nr: 2, form: "stripe", forventet: ["innholdsblokk"], nøkkelord: ["Du står ansvarlig", "bare utkastet"] },
+      { nr: 3, form: "prompt", forventet: ["innholdsblokk"], nøkkelord: ["Du skal skrive et møtereferat", "Bruk bare det som står"] },
+      { nr: 4, form: "kort", forventet: ["innholdsblokk"], nøkkelord: ["Ensom overskrift", "med punkter under"] },
+      { nr: 5, form: "kort", forventet: ["innholdsblokk"], nøkkelord: ["Et vanlig sitat", "uten merkelapp"] },
+    ] } as unknown as EvalCase;
+    const gjerde = "```";
+    const medBlokker = (markdown: string) => ({ exportFormat: "a2-content-export/v1", course: { course: { items: [{ type: "SECTION", section: { title: tre("S"), bodyMarkdown: tre(markdown) } }] } } });
+    const kurs = medBlokker([
+      "### Sakliste", "- gir rekkefølgen", "### Egne notater", "- fanger vedtak", "### Opptak", "- ordrett",
+      "## Ny del", "### Ensom overskrift", "med punkter under",
+      "> **Husk:** Du står ansvarlig. KI lager bare utkastet.",
+      "", "> Et vanlig sitat", "> uten merkelapp",
+      "", `${gjerde}prompt`, "Du skal skrive et møtereferat.", "Bruk bare det som står i notatene.", gjerde,
+    ].join("\n"));
+    const funnet = (nr: number) => scoreCourse(blokktilfelle, kurs).lysark.find((l) => l.nr === nr)!.funnet;
+
+    it("kort (minst to underoverskrifter under samme del), uthevet boks og prompt-boks kjennes igjen", () => {
+      expect([funnet(1), funnet(2), funnet(3)]).toEqual(["innholdsblokk", "innholdsblokk", "innholdsblokk"]);
+    });
+
+    it("én underoverskrift alene er ikke kort, og et sitat uten fet merkelapp er ikke en uthevet boks", () => {
+      expect([funnet(4), funnet(5)]).toEqual(["tekst", "tekst"]);
+    });
+
+    it("de samme ordene som løpende tekst er tekst — tellingen gir ikke blokker bort", () => {
+      const flatt = medBlokker("Sakliste, Egne notater og Opptak. Du står ansvarlig. KI lager bare utkastet. Du skal skrive et møtereferat. Bruk bare det som står i notatene.");
+      expect(scoreCourse(blokktilfelle, flatt).lysark.slice(0, 3).map((l) => l.funnet)).toEqual(["tekst", "tekst", "tekst"]);
+    });
+  });
+
   it("et tomt kurs gir null, ikke en feil", () => {
     const tomt = scoreCourse(tilfelle, { packageFormat: "a2-authoring-package/v1", objects: [] });
     expect(tomt.sum).toMatchObject({ innholdMed: 0, somForventet: 0, figurer: 0, figurformer: [], ord: 0 });

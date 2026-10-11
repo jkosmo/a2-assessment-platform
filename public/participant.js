@@ -4029,7 +4029,10 @@ function mountModuleWorkspaceInto(panelBodyEl) {
 }
 
 function focusInlinePanel(panel) {
-  const heading = panel?.querySelector(".course-inline-panel-title");
+  // Lesemodus på smal skjerm (2.85.1): tittelen i hodet er skjult, og tittelen på arket er den som
+  // vises. Fokus går til den som vises — ellers havnet det på <body> (QA-porten målte 600 px og ned).
+  const candidates = [panel?.querySelector(".course-inline-panel-title"), panel?.querySelector(".course-reading-title")].filter(Boolean);
+  const heading = candidates.find((el) => getComputedStyle(el).display !== "none") || candidates[0];
   if (!heading) return;
   heading.setAttribute("tabindex", "-1");
   try { heading.focus({ preventScroll: true }); } catch { heading.focus(); }
@@ -4151,7 +4154,17 @@ function reopenInlineAfterRender(courseId, container) {
   if (inlineOpen.type === "MODULE") {
     buildModuleInlinePanel(panel, courseId, inlineOpen);
   } else {
-    renderSectionReaderInto(panel, courseId, inlineOpen);
+    // Panelet er bygget på nytt, og elementet som hadde fokus (tittelen, satt ved åpning) er borte;
+    // da står fokus på <body>. Det skjer hver gang kurslista svarer etter kurset ved «gå videre»
+    // (QA-porten, 2.85.1). Fokus går tilbake til leseren — men bare når det alt er tapt: står det
+    // på noe annet (språkvelgeren etter et språkbytte), rører vi det ikke. Og først når teksten er
+    // satt inn: med fokus på tittelen mens panelet bare viste «Laster …», holdt nettleseren fast på
+    // den korte siden, og rulleposisjonen ble kuttet til toppen ved tilbake-navigering (QA-porten,
+    // 2.85.2).
+    renderSectionReaderInto(panel, courseId, inlineOpen).then(() => {
+      if (inlineOpen?.key !== itemWrap.dataset.key) return;
+      if (!document.activeElement || document.activeElement === document.body) focusInlinePanel(panel);
+    });
   }
 }
 
@@ -4242,6 +4255,7 @@ async function renderSectionReaderInto(panel, courseId, entry) {
       <button type="button" class="btn-secondary course-inline-panel-close" data-role="close">${escapeHtmlP(t("courses.section.close"))}</button>
     </div>
     <div class="course-inline-panel-body">
+      <h2 class="course-reading-title">${escapeHtmlP(localizePreviewText(entry.title) || "")}</h2>
       <div id="sectionReaderBody" class="section-reader-body">${escapeHtmlP(t("courses.section.loading"))}</div>
       <div class="course-inline-actions">${actionsMarkup}</div>
     </div>`;
@@ -4298,6 +4312,9 @@ async function renderSectionReaderInto(panel, courseId, entry) {
     const titleEl = panel.querySelector("#sectionReaderTitle");
     const bodyEl = panel.querySelector("#sectionReaderBody");
     if (titleEl && body.title) titleEl.textContent = body.title;
+    // Tittelen på arket (telefon og nettbrett) følger det samme svaret som tittelen i hodet.
+    const sheetTitleEl = panel.querySelector(".course-reading-title");
+    if (sheetTitleEl && body.title) sheetTitleEl.textContent = body.title;
     // body.html is already sanitised server-side with the F3/X1 policy; #814 re-applies the same
     // policy client-side (defense-in-depth) before this innerHTML sink.
     if (bodyEl) {

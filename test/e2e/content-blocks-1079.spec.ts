@@ -30,7 +30,7 @@ const MARKDOWN = [
   "",
   "> **Tips:** Bruk lerretet til selve rapportteksten.",
   "",
-  "### Prosjekt",
+  "### ![](icon:folder-kanban) Prosjekt",
   "",
   "Komplekse oppgaver med mange kilder.",
   "",
@@ -53,9 +53,23 @@ const MARKDOWN = [
   "|---|---|---|",
   "| Sammendrag | Hovedfunn og **anbefalinger** til ledelsen | Førsteutkast fra ferdig rapport |",
   "| Metode | Hvordan dataene er samlet inn | Struktur og språk |",
+  "",
+  "## Åtte steg",
+  "",
+  "| | Steg | Hva du gjør |",
+  "|---|---|---|",
+  "| ![](asset:ikon-c) | **Forstå oppdraget** | Avklar mandat, målgruppe og krav til leveransen. |",
+  "| ![](asset:ikon-d) | **Klargjør kilder** | Samle dokumenter, intervjuer, data og notater. |",
+  "| ![](icon:target) | **Lag arbeidsfiler** | Strukturer og bearbeid kildene til arbeidsfiler. |",
+  "",
+  "| Verktøy | Slik ser det ut |",
+  "|---|---|",
+  "| Lerret | ![](asset:bilde-stor) |",
 ].join("\n");
 
 const IKON = '<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 96 96" fill="none" stroke="#33312b" stroke-width="6"><path d="M24 28h48M24 48h48M24 68h30"/></svg>';
+/** Et skjermbilde i en navngitt kolonne: 480 × 270, skal beholde størrelsen sin (QA-porten, 2.85.1). */
+const SKJERMBILDE = '<svg xmlns="http://www.w3.org/2000/svg" width="480" height="270" viewBox="0 0 480 270"><rect width="480" height="270" fill="#d8d2c4"/></svg>';
 
 async function åpneLeseren(page: Page, bredde: number) {
   await page.setViewportSize({ width: bredde, height: 900 });
@@ -78,8 +92,11 @@ async function åpneLeseren(page: Page, bredde: number) {
   await page.route("**/api/courses/c1", (route: Route) =>
     route.fulfill(json({ course: { id: "c1", title: "Rapportskriving med generativ KI", discussionsEnabled: true, items: [{ type: "SECTION", sectionId: "s1", title: "Arbeidsformer", read: false }] } })));
   // Plattformens egen gjengivelse av teksten, slik tjeneren ville svart.
-  await page.route("**/api/courses/c1/sections/*", (route: Route) => route.fulfill(json({ title: "Arbeidsformer", html: renderSectionMarkdown(MARKDOWN, "nb") })));
+  // Tittelen i svaret skiller seg fra tittelen i kurslista: begge titlene i leseren skal følge svaret (2.85.2).
+  await page.route("**/api/courses/c1/sections/*", (route: Route) => route.fulfill(json({ title: "Arbeidsformer, oppdatert", html: renderSectionMarkdown(MARKDOWN, "nb") })));
   await page.route("**/api/content-assets/**", (route: Route) => route.fulfill({ status: 200, contentType: "image/svg+xml", body: IKON }));
+  // Registrert etter den generelle: Playwright prøver den sist registrerte ruta først.
+  await page.route("**/api/content-assets/bilde-stor*", (route: Route) => route.fulfill({ status: 200, contentType: "image/svg+xml", body: SKJERMBILDE }));
   await page.addInitScript(() => { try { localStorage.setItem("participant.locale", "nb"); } catch { /* ignore */ } });
   await page.goto("/participant");
   await page.locator(".course-accordion-header").click();
@@ -144,6 +161,56 @@ test.describe("innholdsblokker i leseren (#1079)", () => {
     expect(await utenfor(page)).toEqual([]);
   });
 
+  // Produkteier på stage (2.85.0): med «Smal» spalte ble ikonene i stegtabellen så små at de ikke
+  // vistes — leserens regel for bilder (max-width: 100 %) lot tabellen klemme ikonkolonnen til
+  // ingenting. Og tittelen i hodet (13 px) var mindre enn innholdets overskrifter.
+  test("PC, smal spalte: ikonene i tabellen holder størrelsen, og tittelen i hodet er større enn innholdets overskrifter", async ({ page }) => {
+    await page.addInitScript(() => { try { localStorage.setItem("participant.readerWidth", "narrow"); } catch { /* ignore */ } });
+    await åpneLeseren(page, 1280);
+    if (BILDER) await page.screenshot({ path: `${BILDER}/blokker-1280-smal.png`, fullPage: true });
+    const ikoner = page.locator("#sectionReaderBody .content-table td img.content-icon");
+    await expect(ikoner).toHaveCount(3);
+    const bokser = await ikoner.evaluateAll((els) => els.map((el) => { const r = el.getBoundingClientRect(); return { width: r.width, height: r.height }; }));
+    for (const boks of bokser) {
+      expect(Math.round(boks.width), "ikonet er 24 px bredt").toBe(24);
+      expect(Math.round(boks.height), "ikonet er 24 px høyt").toBe(24);
+    }
+    // QA-porten: et skjermbilde i en navngitt kolonne er et bilde, ikke et ikon, og beholder størrelsen.
+    const skjermbilde = page.locator("#sectionReaderBody .content-table img:not(.content-icon)");
+    await expect(skjermbilde).toHaveCount(1);
+    expect((await skjermbilde.boundingBox())!.width, "skjermbildet er ikke krympet til ikon").toBeGreaterThan(200);
+    await expect(page.locator(".course-inline-panel-title")).toHaveText("Arbeidsformer, oppdatert");
+    // Ikoner fra plattformens eget bibliotek (`icon:navn`): tegnet av tjeneren, 24 px, lastet — i et
+    // kort og i stegtabellen. Produkteier valgte biblioteket som standard for alle kurs.
+    for (const [sted, navn] of [[".content-card-title", "folder-kanban"], [".content-table td", "target"]] as const) {
+      const ikon = page.locator(`#sectionReaderBody ${sted} img.content-icon[src="/static/icons/${navn}.svg"]`);
+      await expect(ikon, `${navn} i ${sted}`).toBeVisible();
+      const mål = await ikon.evaluate((el) => { const r = el.getBoundingClientRect(); return { b: r.width, h: r.height, lastet: (el as HTMLImageElement).naturalWidth > 0 }; });
+      expect(Math.round(mål.b), `${navn} er 24 px bredt`).toBe(24);
+      expect(Math.round(mål.h), `${navn} er 24 px høyt`).toBe(24);
+      expect(mål.lastet, `${navn} ble lastet fra tjeneren`).toBe(true);
+    }
+    const tittel = await page.locator(".course-inline-panel-title").evaluate((el) => parseFloat(getComputedStyle(el).fontSize));
+    const h2 = await page.locator("#sectionReaderBody h2").first().evaluate((el) => parseFloat(getComputedStyle(el).fontSize));
+    expect(tittel, `tittelen (${tittel} px) er større enn innholdets h2 (${h2} px)`).toBeGreaterThan(h2);
+    await expect(page.locator(".course-reading-title"), "på PC står tittelen bare i hodet").toBeHidden();
+    expect(await page.evaluate(() => document.activeElement?.className ?? ""), "fokus står på tittelen i hodet").toContain("course-inline-panel-title");
+    expect(await utenfor(page)).toEqual([]);
+  });
+
+  // QA-porten (runde 2): rettingen for det høye hodet gjaldt bare telefon; på nettbrett (601–900 px) ble
+  // hodet 131–214 px med en lang tittel. Grensen er 900 px.
+  test("nettbrett (768 px): hodet er lavt, tittelen står på arket og har fokus", async ({ page }) => {
+    await åpneLeseren(page, 768);
+    const hode = (await page.locator(".course-inline-panel-sticky").boundingBox())!;
+    expect(hode.height, `hodet er lavt (${Math.round(hode.height)} px)`).toBeLessThanOrEqual(56);
+    await expect(page.locator(".course-inline-panel-title")).toBeHidden();
+    await expect(page.locator(".course-reading-title")).toBeVisible();
+    await expect(page.locator(".course-reading-title")).toHaveText("Arbeidsformer, oppdatert");
+    expect(await page.evaluate(() => document.activeElement?.className ?? ""), "fokus står på tittelen på arket").toContain("course-reading-title");
+    expect(await utenfor(page)).toEqual([]);
+  });
+
   for (const bredde of [390, 360]) {
     test(`${bredde} px: kortene står under hverandre, tabellcellene har kolonnenavn, og ingenting går ut av leseren`, async ({ page }) => {
       await åpneLeseren(page, bredde);
@@ -154,15 +221,35 @@ test.describe("innholdsblokker i leseren (#1079)", () => {
       for (let i = 1; i < kanter.length; i += 1) expect(kanter[i]!.top, `kort ${i + 1} står under kort ${i}`).toBeGreaterThanOrEqual(kanter[i - 1]!.bottom);
 
       // Tabellen er stablet, og hver celle sier hvilken kolonne den er — det leseren ellers ikke ser.
-      const merker = await page.locator("#sectionReaderBody .content-table td").evaluateAll((els) => els.map((el) => getComputedStyle(el, "::before").content));
+      const merker = await page.locator("#sectionReaderBody .content-table").first().locator("td").evaluateAll((els) => els.map((el) => getComputedStyle(el, "::before").content));
       expect(merker).toEqual(['"Kapittel"', '"Innhold"', '"Eksempel på en god formulering i teksten"', '"Kapittel"', '"Innhold"', '"Eksempel på en god formulering i teksten"']);
+      // Ikonet i stegtabellen holder størrelsen sin, og den tomme kolonnen får ikke et tomt navn over seg.
+      const ikonCelle = page.locator("#sectionReaderBody .content-table td img.content-icon").first();
+      expect(Math.round((await ikonCelle.boundingBox())!.width)).toBe(24);
+      expect(await ikonCelle.locator("xpath=ancestor::td[1]").evaluate((el) => getComputedStyle(el, "::before").display)).toBe("none");
+      // QA-porten (2.85.1): tittelen i det faste hodet gjorde hodet 85–190 px høyt på telefon. Der står
+      // den øverst på arket i stedet, større enn innholdets h2, og hodet er én lav linje.
+      const hode = (await page.locator(".course-inline-panel-sticky").boundingBox())!;
+      expect(hode.height, `hodet er lavt (${Math.round(hode.height)} px)`).toBeLessThanOrEqual(56);
+      await expect(page.locator(".course-inline-panel-title")).toBeHidden();
+      const arkTittel = page.locator(".course-reading-title");
+      await expect(arkTittel).toBeVisible();
+      await expect(arkTittel).toHaveText("Arbeidsformer, oppdatert");
+      // QA-porten (runde 2): tittelen var borte for skjermlesere (skjult i hodet, aria-hidden på arket), og
+      // fokus havnet på <body>. Nå er tittelen på arket en overskrift og den som får fokus.
+      await expect(arkTittel).not.toHaveAttribute("aria-hidden", "true");
+      expect(await arkTittel.evaluate((el) => el.tagName.toLowerCase())).toBe("h2");
+      expect(await page.evaluate(() => document.activeElement?.className ?? ""), "fokus står på tittelen på arket").toContain("course-reading-title");
+      const arkTittelPx = await arkTittel.evaluate((el) => parseFloat(getComputedStyle(el).fontSize));
+      const h2Px = await page.locator("#sectionReaderBody h2").first().evaluate((el) => parseFloat(getComputedStyle(el).fontSize));
+      expect(arkTittelPx, `tittelen (${arkTittelPx} px) er større enn h2 (${h2Px} px)`).toBeGreaterThan(h2Px);
       // QA-porten: et langt kolonnenavn skjøv verdien ut av skjermen. Verdien skal være synlig innenfor leseren.
       const verdi = page.locator("#sectionReaderBody .content-table td", { hasText: "Førsteutkast" }).locator("span");
       const leser = (await page.locator("#sectionReaderBody").boundingBox())!;
       const v = (await verdi.boundingBox())!;
       expect(v.width, "verdien har plass").toBeGreaterThan(100);
       expect(v.x + v.width, "verdien står innenfor leseren").toBeLessThanOrEqual(leser.x + leser.width + 0.5);
-      expect(await page.locator("#sectionReaderBody .content-table thead").evaluate((el) => getComputedStyle(el).display)).toBe("none");
+      expect(await page.locator("#sectionReaderBody .content-table thead").first().evaluate((el) => getComputedStyle(el).display)).toBe("none");
       // QA-porten: cellen er flex på telefon, og uten ett element rundt innholdet ble hvert ord og
       // hver fete bit sitt eget flex-element — «ut k a st». Innholdet står på sammenhengende linjer.
       const celle = page.locator("#sectionReaderBody .content-table td", { hasText: "anbefalinger" });

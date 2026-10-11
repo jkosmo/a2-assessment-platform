@@ -41,6 +41,7 @@ export interface ScoreResult {
     figurerMedSmaltOppsett: number;
     figurerMedTegning: number;
     ikonerIKilden: number;
+    bibliotekIkoner: number;
     tabeller: number;
     rasterbilder: number;
     rasterKB: number;
@@ -58,6 +59,7 @@ export function readCourse(pakke: unknown): {
   moduler: number;
   figurer: Array<{ fil: string; svg: boolean; form: string; tekst: string; smaltOppsett: boolean; animert: boolean; harTegning: boolean; byte: number }>;
   tabeller: string[];
+  blokker: string[];
 };
 export function scoreCourse(tilfelle: EvalCase, pakke: unknown): ScoreResult;
 export function formatScore(resultat: ScoreResult): string;

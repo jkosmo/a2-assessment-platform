@@ -340,6 +340,10 @@ test.describe("#1079 — en figur i bredt og smalt oppsett, på stage", () => {
     await page.locator("#sectionReaderMarkRead").click();
     // Første steg er nå en rad med «Lest»; det andre står for tur.
     await expect(page.locator(".course-step--done")).toHaveCount(1, { timeout: VENT_MS });
+    // Lesemodus (2.85.0): «gå videre» åpnet neste seksjon i lesemodus, som skjuler kurset rundt.
+    // Lukk den, så det leste steget vises og kan måles.
+    await page.locator(".course-inline-panel-close").click();
+    await expect(page.locator(".course-step--done")).toBeVisible({ timeout: VENT_MS });
     await page.waitForTimeout(800);
 
     const m = await page.evaluate(() => {

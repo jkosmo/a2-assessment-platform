@@ -16,6 +16,7 @@ import { generalApiLimiter, preBodyApiLimiter } from "./middleware/rateLimiting.
 import { errorHandlingMiddleware } from "./middleware/errorHandling.js";
 import { requireConsent } from "./middleware/consentMiddleware.js";
 import { meRouter } from "./routes/me.js";
+import { iconsRouter } from "./routes/icons.js";
 import { coursesRouter } from "./routes/courses.js";
 import { contentAssetsRouter } from "./routes/contentAssets.js";
 import { modulesRouter } from "./routes/modules.js";
@@ -87,6 +88,9 @@ app.use(
   express.json({ limit: SECTION_CREATE_BODY_LIMIT_BYTES }),
 );
 app.use(express.json({ limit: "5mb" }));
+// Ikonbiblioteket (Lucide): /static/icons/<navn>.svg tegnes av ruta, ikke lest fra disk. Står foran
+// de statiske mappene så ruta vinner; selve biblioteksfila og lisensen ligger i public/static/icons.
+app.use("/static/icons", iconsRouter);
 app.use("/static", express.static(publicStaticPath));
 app.use("/static", express.static(publicRootPath));
 

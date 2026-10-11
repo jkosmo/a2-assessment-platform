@@ -7,7 +7,65 @@
 
 ## Kort: det som må avgjøres
 
-**Prod står på 2.78.3. Stage står på 2.85.0 (lesemodus, rullet 2026-10-06 kl. 21:31 fra `17743d55`; `/version` og helsesjekk bekreftet). `dev` = stage. Ingenting av 2.79–2.85 er i prod.**
+**Prod står på 2.86.0 (rullet 2026-10-11 kl. 17:21 fra `a6aec30a`, godkjent av produkteier; `/version`, helsesjekk og ikonruta bekreftet). Stage står på 2.86.0 (ikonbiblioteket, det ombygde skillet, skillforbedringene, rullet 2026-10-11 kl. 16:50 fra `a6aec30a`; `/version` og helsesjekk bekreftet). `dev` = stage. `main` = prod (PR #1091). **Produkteier 2026-10-11: samlet test på stage, så prod — deretter oppdaterer han kurs og tar inn flere brukere.****
+
+### 2.86.0: ikonbibliotek, skillet flettet inn, skillforbedringer (2026-10-11, grenen `ikoner-1079`)
+
+Produkteier ba om de tre siste punktene i ett: ikonbiblioteket (Lucide som standard, også for kurs
+som ikke kommer fra en presentasjon), skillforbedringene etter milepæl 1, og QA-oppfølgingen om
+fokus. `doc/VERSIONS.md` (2.86.0) sier hva og hvor; `doc/DECISIONS.md` (to innslag 2026-10-11) sier
+hvilke valg som er mine. Det ombygde skillet (2.83.0) lå på egen gren siden 5. oktober og er nå
+flettet inn i `dev`-linja — skillpakka `dist/skills/a2-authoring-api-v2.86.0.zip` er sendt produkteier.
+
+**QA-porten ga GO i femte runde** (`.ai-qa/qa-20261011-161938.md`). Rundene én til fire fant at skillets nye
+kontroll «learner text» slo ut på vanlig fagtekst («lysark» som emne, punktlister, «første lysbildet»)
+eller slapp bøyninger gjennom; nå fanger ett mønster alle bøyninger av lysark/lysbilde og slide(s) +
+tall, utenom formater som 16:9. Kortrammer telles slik plattformen leser dem. Alt rettet med tester og
+mutasjoner. Plattformdelen (rute, oppslag, rensing, utrulling) holdt i runde én.
+
+**Til den manuelle testen på stage** (fra QA-portens plan): ikonruta uten innlogging
+(`/static/icons/check.svg` → SVG, `/static/icons/finnes-ikke.svg` → 404); et kurs med `![](icon:…)` i et
+kort og i en stegtabell hos deltakeren og i forhåndsvisningen, 1280 og 390 px; fokus og rulleposisjon
+etter «gå videre» og tilbake-knappen; fokus ved språkbytte. **Ingen kurs i prod bruker `icon:` ennå** —
+produkteier kan snu skrivemåten før den kommer i prod.
+
+**Neste for produkteier:** kjør Møtearbeid og Tilbudsarbeid med skillpakke 2.86.0 i ChatGPT og
+Claude.ai (milepæl 1 fullføres med den nye tellingen, som også kjenner igjen oppgaver og teller
+bibliotekikoner); godkjenn prod når stage-testen er grønn. **Deretter (bestilt):** gjennomgang av
+hvilke språkmodeller prod og stage bruker til vurdering — de bør kanskje oppdateres.
+
+
+### 2.85.2: to småfunn fra QA-porten (2026-10-07 morgen, grenen `lesemodus-smaafunn-1079`)
+
+Tittelen på arket følger seksjonssvaret, og fokus kommer tilbake til leseren når kurslista svarer
+sist og panelet bygges på nytt (bare når fokus alt står på `<body>`, så språkbyttet beholder fokus på
+velgeren). QA-porten GO i første runde (`.ai-qa/qa-20261007-064305.md`). **Oppfølging fra QA:** fokus
+settes mens panelet viser «Laster …»; ved tilbake-/fram-navigering til samme kurs kuttes
+rulleposisjonen til toppen (målt: 3571 → 9 på PC). Veien dit (ankerlenker i seksjonsteksten) var
+ødelagt fra før, så det stopper ingenting; løsningen er å gi fokus først når teksten er satt inn
+(`.then()` på `renderSectionReaderInto`). **For hånd på stage:** skjermleser på iPhone og Android ved
+«gå videre»; språkbytte på iPhone med rulleposisjon; tastaturfokus med NVDA på PC.
+
+
+### 2.85.1: to detaljer produkteier fant på stage i lesemodus (2026-10-06 kveld, grenen `lesemodus-detaljer-1079`)
+
+Ikonene i en stegtabell ble klemt til 8 px med «Smal» spalte, og tittelen i hodet (13 px) var mindre
+enn innholdets overskrifter. `doc/VERSIONS.md` (2.85.1) sier hva og hvor. **QA-porten ga GO i tredje
+runde** (`.ai-qa/qa-20261006-222752.md`); de to rundene før fant at ikonregelen rammet alle bilder
+først i en celle (nå bare kolonner uten navn, i en tabell med minst én navngitt kolonne), at hodet ble
+85–214 px høyt på telefon og nettbrett (nå står tittelen på arket under 900 px), og at tittelen der
+var usynlig for skjermlesere og uten fokus (nå `h2` med fokus).
+
+**Småfunn fra QA-porten som ikke er rettet** (ingen stopper noe): store telefoner i liggende format
+er bredere enn 900 px og får tittelen i hodet igjen (76 px av 430 px høyde; kan løses med
+`(max-width: 900px), (max-height: 500px)`); etter «gå videre» havner fokus på `<body>` — likt før
+grenen, trolig fordi kurslista tegnes på nytt etter at fokus er satt; tittelen på arket oppdateres ikke
+med tittelen fra seksjonssvaret slik tittelen i hodet gjør (én linje).
+
+**Til den manuelle testen på stage:** åpne en seksjon med stegtabell (ikoner i kolonne uten navn) på
+PC med «Smal» — ikonene skal være 24 px; på telefon og nettbrett skal tittelen stå øverst på arket og
+hodet være én lav linje; Safari på telefon.
+
 
 ### Lesemodus er bygget (2026-10-06 kveld, 2.85.0, grenen `lesemodus-1079`)
 
@@ -55,20 +113,93 @@ et ekte opplastet bilde i et kort.
 Skillet på denne grenen er det gamle (2.82.2-innholdet) med nytt versjonsnummer; zip-fila herfra
 skal ikke installeres.
 
-**Ikoner: et fast bibliotek i plattformen (produkteiers spørsmål 2026-10-06, morgen).** Skillets
-regel «bare presentasjonens egne ikoner, aldri tegn eller hent» er optimalisert for
-Rapportskriving: to av tre testpresentasjoner har null ikoner og får dermed ingen. Anbefalt: et
-permissivt sett (Lucide, ISC; eller Tabler, MIT) servert av plattformen selv, skrevet som
-`![](icon:<navn>)`, med en katalog med norske stikkord i skillet. Spørsmålet til ham: standard for
-alle kurs (anbefalt, samme grunn som kortene i plattformens stil), eller reserve der kilden mangler
-ikoner. Bygges etter milepæl 1.
+**Ikoner: Lucide som standard for alle kurs (besluttet 2026-10-07, `doc/DECISIONS.md`).** Skillets
+regel «bare presentasjonens egne ikoner» er optimalisert for Rapportskriving: to av tre
+testpresentasjoner har null ikoner. Plattformen skal servere Lucide (ISC) selv, skrevet som
+`![](icon:<navn>)`, med en katalog med norske stikkord i skillet. **Bygges etter milepæl 1** (når
+produkteier har kjørt Møtearbeid og Tilbudsarbeid med 2.83.0 i ChatGPT og Claude.ai).
 
 | Miljø | Versjon | |
 |---|---|---|
-| prod | 2.78.3 | rullet 2026-10-04 kl. 20:13 fra `2433d2b7`, godkjent av produkteier. #1080, #1081, #1083 |
-| stage | 2.85.0 | rullet 2026-10-06 kl. 21:31 fra `17743d55` (QA-porten GO i andre runde, `.ai-qa/qa-20261006-211010.md`); `/version` og helsesjekk bekreftet. Før det 2.84.1: rullet 2026-10-06 kl. 09:37 fra `82815746` (QA-porten GO, `.ai-qa/qa-20261006-091043.md`). Før det 2.84.0: rullet 2026-10-06 kl. 07:12 fra `ad3f0192`, QA-porten GO i tredje runde (`.ai-qa/qa-20261006-064930.md`); `/version` og helsesjekk bekreftet. Før det 2.82.2: rullet 2026-10-05 kl. 18:49 fra `96632019`, commiten QA-porten ga GO på i tredje runde (`.ai-qa/qa-20261005-182600.md`); `/version` og helsesjekk bekreftet. Stage-testen kjørt 18:50–18:53: 38 av 38 besto |
-| `main` (git) | 2.78.3 | likt med prod (PR #1086 flettet 2026-10-04) |
-| `dev` (git) | 2.85.0 | lesemodus (2.85.0), innholdsblokkene og feilklassifiseringen (2.84.x), sju rettinger (2.82.0), to oppfølgere etter QA (2.82.1), og kurset på telefon (2.82.2), se under |
+| prod | 2.86.0 | rullet 2026-10-11 kl. 17:21 fra `a6aec30a` (run 38149518968), godkjent av produkteier; `/version`, helsesjekk og ikonruta bekreftet. Før det 2.85.0: rullet 2026-10-06 kl. 22:09 fra `17743d55` (run 37521860878). Før det 2.78.3: rullet 2026-10-04 kl. 20:13 fra `2433d2b7`. #1080, #1081, #1083 |
+| stage | 2.86.0 | rullet 2026-10-11 kl. 16:50 fra `a6aec30a` (QA-porten GO i femte runde, `.ai-qa/qa-20261011-161938.md`); `/version`, helsesjekk og ikonruta bekreftet. Stage-testen kjørt 2026-10-11 kl. 16:55–17:00: 44 av 44, ingen nye forsøk. Før det 2.85.2: rullet 2026-10-07 kl. 07:22 fra `11baab53` (QA-porten GO, `.ai-qa/qa-20261007-064305.md`); `/version` og helsesjekk bekreftet. Stage-testen kjørt 07:23–07:30, rett etter utrullingen: 44 av 44 besto, men tre trengte nytt forsøk (45 s tidsavbrudd mens stage startet opp — #1080-/#1081-listene og importsteget i 2.84-testen). Ny kjøring 07:32 ble ugyldig: tokenet gikk ut midt i (401), ikke appen. Før det 2.85.1: rullet 2026-10-06 kl. 23:07 fra `4d5d9f4e` (QA-porten GO i tredje runde, `.ai-qa/qa-20261006-222752.md`); stage-testen 2026-10-07 kl. 06:17–06:21: 44 av 44. Før det 2.85.0: rullet 2026-10-06 kl. 21:31 fra `17743d55` (QA-porten GO i andre runde, `.ai-qa/qa-20261006-211010.md`). Før det 2.84.1: rullet 2026-10-06 kl. 09:37 fra `82815746` (QA-porten GO, `.ai-qa/qa-20261006-091043.md`). Før det 2.84.0: rullet 2026-10-06 kl. 07:12 fra `ad3f0192`, QA-porten GO i tredje runde (`.ai-qa/qa-20261006-064930.md`); `/version` og helsesjekk bekreftet. Før det 2.82.2: rullet 2026-10-05 kl. 18:49 fra `96632019`, commiten QA-porten ga GO på i tredje runde (`.ai-qa/qa-20261005-182600.md`); `/version` og helsesjekk bekreftet. Stage-testen kjørt 18:50–18:53: 38 av 38 besto |
+| `main` (git) | 2.86.0 | likt med prod (PR flettet 2026-10-11) |
+| `dev` (git) | 2.86.0 | ikonbibliotek + skillet flettet inn + skillforbedringer (2.86.0), to småfunn (2.85.2), to detaljer i lesemodus (2.85.1), lesemodus (2.85.0), innholdsblokkene og feilklassifiseringen (2.84.x), sju rettinger (2.82.0), to oppfølgere etter QA (2.82.1), og kurset på telefon (2.82.2), se under |
+
+### Skillet er bygget om, på en egen gren (2026-10-05, sent på kvelden)
+
+**Grenen `skill-ombygging-1079` har det nye skillet (2.83.0). `dev` og stage er urørt (2.82.2).
+Neste steg er produkteiers: milepæl 1 — tre presentasjoner i ChatGPT og Claude.ai.**
+
+| | |
+|---|---|
+| Hva som er gjort | Skillet er bygget om etter `doc/DESIGN_1079_SKILL.md`: kort forside, to arbeidsflyter, lysarkliste som forfatteren godkjenner, én kommando for port 6. Detaljer i `doc/VERSIONS.md` (2.83.0) og nederst i designnotatet |
+| Målt i repoet | Alle fire suitene grønne på grenen. Mutasjonssjekk av hver ny kontroll |
+| Grov prøve | To hjelpeagenter (Sonnet, i Claude Code) laget hvert sitt kurs ved å følge skillet ordrett. Begge kom i mål med godkjent importfil. Tallene står under |
+| Ikke målt | ChatGPT og Claude.ai. Det er milepæl 1 og krever et menneske |
+| Pakka | `npm run skill:package` på grenen gir `dist/skills/a2-authoring-api-v2.83.0.zip` |
+
+**Den grove prøven, talt med `skills/a2-authoring-api-evals/score-course.mjs`:**
+
+| | Nullpunkt (2.82.2, i produktene) | Grov prøve (2.83.0, Sonnet i Claude Code) |
+|---|---|---|
+| Rapportskriving: lysark med innholdet i kurset | 9 av 9 (Claude.ai), 4 av 9 (ChatGPT) | 9 av 9 |
+| Rapportskriving: lysark i forventet form | 4 av 9 | 8 av 9 |
+| Rapportskriving: ikoner fra kilden | 0 av 25 | 21 |
+| Møtearbeid: lysark med innholdet / i forventet form | ikke målt | 12 av 13 / 12 av 13 |
+| Møtearbeid: tekst som bare sto i bilder, skrevet ut | ikke målt | 14 av 14 |
+| Møtearbeid: skjermbilder tatt med | ikke målt | 5 (213 kB), 7 skrevet ut som prompter |
+
+⚠️ **Tallene til høyre er ikke milepæl 1.** De er fra en annen flate og en annen modell enn
+produkteier bruker. De sier at skillet lar seg følge fra start til importfil, ikke hvordan det går
+i ChatGPT. «Forventet form» teller kort, uthevede bokser og prompt-bokser i formen skillet skriver
+dem i dag (se under); måleskriptet ble lært det samme kveld.
+
+**Prøven ga 37 funn, og de viktigste er rettet på grenen:**
+
+- En oversettelseskontroll avviste etiketter som rettmessig er like på bokmål og nynorsk
+  («Samle data»), og modellen måtte bytte til et dårligere ord. Rettet.
+- Modellen måtte skrive sitt eget byggeskript for å få markdown inn i JSON. Nå står seksjonsteksten
+  i filer, og pakken peker på dem (`bodyFiles`); tilstanden peker på samme fil (`contentFile`).
+- **Et skjermbilde med møte-ID og passord ble tatt med i kurset.** Det følger av valg 6 (alle
+  bilder med hvis forfatteren ikke sier nei). Skillet foreslår nå å utelate bilder som viser
+  passord, koder, nøkler eller tokens. ⚠️ Det er mitt valg, ikke produkteiers; se
+  `doc/DECISIONS.md`.
+- Kildens egne læringsmål beholdes, også når de er flere enn seks. En stripe med flere punkter
+  blir én boks med liste, ikke fem bokser. Skrivefeil i en prompt rettes og sies fra om.
+
+**Ikke rettet, fra prøven:**
+
+- Leseskriptet kaller noen ganger en stripe for en ramme, og rammer på rad for en flyt. Skillet
+  sier nå at oppsettlinja er en første gjetning. Skriptet selv er ikke endret.
+- Den uavhengige kontrollen (port 5) er i en vanlig samtale samme modell som leser sitt eget
+  arbeid. Den er så uavhengig som modellen er ærlig.
+- Å se på en figur krever en nettleser eller et tegneprogram i sandkassa. Den ene agenten lastet
+  ned Chromium (115 MB) for å få det til; skillet sier nå at den ikke skal gjøre det, men si «ikke
+  sett».
+- Begge prøvekursene har bare flytfigurer. Presentasjonene har ikke andre figurformer, så
+  skjelettene for matrise, tre og tidslinje er ikke prøvd av en modell.
+
+**To funn i plattformen, ikke rettet (gjelder også prod):**
+
+- En tabell i en seksjon mister kolonneoverskriftene på telefon: cellene stables og står
+  høyrestilt uten navn (`shared.css`, regelen som gjør alle tabeller om til rader under 600 px).
+- Tabeller, sitater og kodeblokker har ingen egen stil i leseren. Innholdsblokkene (valg 4) bør ta
+  med tabellen.
+
+**Det som krever produkteier:**
+
+1. **Milepæl 1:** installer `a2-authoring-api-v2.83.0.zip` i ChatGPT og Claude.ai og kjør de tre
+   presentasjonene som `skills/a2-authoring-api-evals/README.md` sier. Send importfilene tilbake,
+   så telles de.
+2. **Tre valg i skillet er mine** (`doc/DECISIONS.md`): blokkene skrives i former plattformen alt
+   tegner, et kurs uten modul stoppes, og et bilde som ikke vises i teksten stoppes. Pluss det
+   fjerde over: bilder med passord foreslås utelatt.
+3. Når tallene er bedre: grenen flettes til `dev`, QA-porten kjøres, og skillet byttes ut.
+
+**Neste arbeid som ikke venter på ham:** innholdsblokkene i plattformen (valg 4; prøvesiden er
+godkjent). Når de finnes, endres `references/section-content.md` og tellingen i
+`scripts/slide-coverage.mjs` til den endelige skrivemåten.
 
 **2.82.0, i én setning hver** (detaljer og rotårsaker i `doc/VERSIONS.md`):
 
@@ -115,7 +246,7 @@ presentasjonen, så regelen i skillet, med innholdsblokkene som eget spor (proto
 Node er bekreftet i begge flatene han bruker (22.16 i ChatGPT, 22.22 i Claude.ai).
 ⚠️ Det finnes ingen regel om «tre illustrasjoner» i skillet; se saken for hva som faktisk styrer dit.
 
-**Ikke bygg videre på skillet før designet er besluttet.** Produkteier spurte 2026-10-05 om vi
+**Slik kom designet til (gjort; ombyggingen står øverst).** Produkteier spurte 2026-10-05 om vi
 hadde tenkt gjennom design og arkitektur, eller bare hoppet på implementering. Svaret var nei.
 `doc/DESIGN_1079_SKILL.md` er forslaget: sju valg med alternativer og anbefaling (ett skill delt i
 arbeidsganger, sju faste steg fra presentasjon til kurs, PDF for at modellen skal se lysarkene,

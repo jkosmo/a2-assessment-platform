@@ -1,0 +1,49 @@
+{
+  "name": "arbeidsgang-en",
+  "title": "From meeting to minutes",
+  "desc": "Four steps in order, in the phases Before and After.",
+  "phases": {
+    "for": {
+      "label": "Before",
+      "grunn": "#d9e8dd",
+      "lys": "#6fae87",
+      "tekst": "#3f7a57"
+    },
+    "etter": {
+      "label": "After",
+      "grunn": "#e7e2f0",
+      "lys": "#a99bc9",
+      "tekst": "#6b5a94"
+    }
+  },
+  "steps": [
+    {
+      "label": [
+        "Settle the",
+        "purpose"
+      ],
+      "phase": "for"
+    },
+    {
+      "label": [
+        "Gather",
+        "the notes"
+      ],
+      "phase": "for"
+    },
+    {
+      "label": [
+        "Write a",
+        "draft"
+      ],
+      "phase": "etter"
+    },
+    {
+      "label": [
+        "Read and",
+        "correct"
+      ],
+      "phase": "etter"
+    }
+  ]
+}

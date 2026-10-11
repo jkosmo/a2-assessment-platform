@@ -2,6 +2,119 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.86.0 - 2026-10-11
+
+### Ikonbibliotek i plattformen, det ombygde skillet flettet inn, og skillforbedringene etter milepæl 1 (#1079)
+
+Produkteier 2026-10-11: «kjør på med de tre siste punktene» — ikonbiblioteket, skillforbedringene og
+QA-oppfølgingen — «så en samlet test, så prod», før han oppdaterer kurs og tar inn flere brukere.
+Og: ikonene skal virke også når kurset ikke kommer fra en presentasjon.
+
+**Ikonbiblioteket (Lucide, ISC, 1877 ikoner) serveres av plattformen selv.** Et ikon i seksjonstekst
+skrives `![](icon:<navn>)` med Lucides eget navn. Valgt som standard for alle kurs (`doc/DECISIONS.md`
+2026-10-07): ett uttrykk på tvers av kurs, uavhengig av om kilden har ikoner.
+
+- `scripts/icons/vendor-lucide.mjs` (`npm run icons:vendor`) henter biblioteket inn i repoet som én
+  fil, `public/static/icons/lucide-icons.json` (navn → ikonets indre SVG), med lisensen ved siden
+  av, og skriver navnelista til skillet (`references/icon-names.txt`). Verken utrullingen eller
+  skillet avhenger av node_modules; `lucide-static` er en utviklingsavhengighet.
+- `src/modules/course/iconLibrary.ts` slår opp (bare gyldige navn når oppslaget; `constructor` og
+  `../x` finnes ikke) og tegner: 24 × 24, strek i plattformens tekstfarge.
+- Ruta `GET /static/icons/<navn>.svg` (`src/routes/icons.ts`, åpen) svarer SVG med én dags
+  mellomlager, og 404 for det som ikke finnes — aldri et tomt bilde.
+- Gjengivelsen (`sectionContent.ts`) skriver `icon:` om til ruta før rensingen og gir bildet
+  klassen `content-icon` (24 px) uansett hvor det står. Et navn som ikke finnes, tas helt bort.
+- Valideringen av en forfatterpakke (`agentAuthoringValidationService.ts`) avviser ukjente navn
+  (`unknown_icon`). E2e-tjeneren for testene serverer ikonene på samme måte som ruta.
+
+**Det ombygde skillet (2.83.0, grenen `skill-ombygging-1079`) er flettet inn** — det lå ved siden av
+`dev` siden 5. oktober. Konflikter bare i dokumenter og versjonsfiler.
+
+**Ikonene i skillet:** `references/icons.md` — hvordan et ikon skrives, hvor det får stå (først i en
+kortoverskrift; i første, navnløse kolonne i en stegtabell), hvordan det velges (etter betydning), og
+en katalog med norske stikkord → ikonnavn (235 navn i sju grupper), kontrollert mot biblioteket. Den
+gjelder begge arbeidsflytene; `from-text.md` sier at en kilde uten bilder også får ikoner.
+Presentasjonens egne ikoner kopieres ikke lenger inn: de sier hva et kort eller steg står for.
+`package-assets.mjs` avviser ukjente navn; `produce-course.mjs` teller ikonene; poenggiveren teller
+«ikoner fra biblioteket». Eksempelkurset bruker biblioteket.
+
+**Skillforbedringene etter milepæl 1** (sammenligningen av Rapportskriving fra to modeller):
+
+- **Kilden holdes bak teksten.** `section-content.md` sier at deltakeren aldri ser kilden («som vist
+  på lysark 4» er forfatterens stemme som lekker). `produce-course.mjs` har en ny kontroll, «learner
+  text», som faller på slike uttrykk på nb, nn og en-GB — utenom kodeblokker.
+- **Kortramma `:::kort` … `:::` er inne i skillet.** Uten ramma viste plattformen vanlige
+  underoverskrifter; en ramme som ikke lukkes, vises som tekst. Samme kontroll faller på en åpen ramme.
+- **Nivået leses i kilden** (`course-design.md`): hvem kilden henvender seg til, hva den forutsetter,
+  hvor langt den går — ikke hvor mye modellen kan om emnet.
+- **Få, hele tester:** `modules.md` — minst ett spørsmål per seksjon modulen følger, og minst tre.
+  Kontrollen «questions» faller når en modul har færre (fritekstmoduler telles ikke).
+- **Poenggiveren kjenner igjen en oppgave** som ble en fritekstmodul: ordene i oppgaveteksten gir
+  formen «oppgave». Før var det bare «tekst».
+
+**QA-oppfølging fra 2.85.2:** ved omtegning av leserpanelet gis fokus først når seksjonsteksten er
+satt inn, ikke mens panelet viser «Laster …» (da var siden kort, og rulleposisjonen ble kuttet til
+toppen ved tilbake-navigering).
+
+**Slik er det målt:** `test/unit/icon-library-1079.test.ts` (15: bibliotek, rute, gjengivelse,
+validering), `test/e2e/content-blocks-1079.spec.ts` (bibliotekikon i kort og tabell tegnet av
+tjeneren, 24 px), `test/m2-skill-example-course-1079.test.ts` (eksempelkurset med bibliotekikoner
+importeres og tegnes), `test/unit/agent-authoring-produce-course-1079.test.ts` (kildehenvisning nb
+og en, åpen kortramme, for få spørsmål, ukjent ikonnavn), `test/unit/skill-evals-score-course-1079.test.ts`
+(oppgave), `test/e2e/reading-mode-1079.spec.ts` (fokus etter teksten). Tolv mutasjoner, alle fanget.
+
+## 2.85.2 - 2026-10-07
+
+### Lesemodus: to småfunn fra QA-porten (#1079)
+
+Produkteier valgte 2026-10-07 å ta de to små av QA-portens tre småfunn fra 2.85.1:
+
+- **Tittelen på arket følger seksjonssvaret.** Hodets tittel ble oppdatert med tittelen fra
+  `/api/courses/:id/sections/:sid`; tittelen på arket (telefon og nettbrett) sto igjen med tittelen
+  fra kurslista. Nå følger begge svaret.
+- **Fokus kommer tilbake til leseren når panelet tegnes på nytt.** Ved «Marker seksjon lest, og gå
+  videre» settes fokus på den nye seksjonens tittel, men når kurslista svarer sist (det vanlige på
+  stage) bygges panelet på nytt og fokus havnet på `<body>`. Dette var slik før lesemodus også.
+  `reopenInlineAfterRender` gir fokus tilbake til leseren — bare når det alt er tapt, så et
+  språkbytte beholder fokus på språkvelgeren.
+
+**Ikke rettet (produkteiers valg):** store telefoner i liggende format (bredere enn 900 px) får
+tittelen i hodet igjen, og hodet blir 76 av 430 px. Venter til noen melder det.
+
+**Slik er det målt:** `test/e2e/reading-mode-1079.spec.ts` (fokus i leseren etter sen kursliste;
+fokus på språkvelgeren etter språkbytte), `test/e2e/content-blocks-1079.spec.ts` (begge titler viser
+svarets tittel på PC, 768 og 390/360 px).
+
+## 2.85.1 - 2026-10-06
+
+### Lesemodus: ikoner i tabeller holder størrelsen, og tittelen står over innholdets overskrifter (#1079)
+
+Produkteier på stage med 2.85.0, samme kveld:
+
+- **Ikonene i en stegtabell forsvant med «Smal» spalte.** Leserens regel for bilder (`max-width: 100 %`)
+  lar tabellen klemme ikonkolonnen til ingenting når spalten blir trang; ikonene ble 8 px. Et bilde
+  først i en celle **i en kolonne uten navn** (skillets form for stegtabeller) er nå et ikon: tjeneren
+  setter klassen kortene bruker (`content-icon`), og `shared.css` gir den fast størrelse (24 px,
+  `object-fit: contain`). Et bilde i en navngitt kolonne, eller inne i teksten i en celle, er fortsatt
+  et bilde og beholder størrelsen sin (QA-porten: et skjermbilde på 480 × 270 ble 24 × 24 i første
+  utkast). På telefon står ikke lenger en tom linje over ikonet.
+- **Tittelen i hodet var mindre enn overskriftene i innholdet** (13 px mot h2 på 20 px). På PC (over
+  900 px) er den 22 px i hodet og brekker i stedet for å kuttes. På telefon og nettbrett ville det gjort
+  det faste hodet 85–214 px høyt (QA-porten, to runder); der er hodet én lav linje, og tittelen står
+  øverst på arket som en ekte overskrift i 22 px (`.course-reading-title`, skjult på PC). Fokus ved
+  åpning går til den tittelen som vises — i runde to havnet det på `<body>` på smal skjerm, og
+  tittelen var borte for skjermlesere.
+- En tabell der ingen kolonne har navn (den vanlige måten å sette bilder ved siden av hverandre på)
+  er ikke en stegtabell: bildene forblir bilder (QA-portens forbehold).
+- Stage-testen `release-2-81-layouts` antok at kurset vises etter «gå videre»; i lesemodus står neste
+  seksjon alene. Testen lukker leseren før det leste steget måles.
+
+**Slik er det målt:** `test/unit/section-content-blocks-1079.test.ts` (ikon først i cellen uten
+kolonnenavn; bilde i navngitt kolonne og bilde i teksten er ikke ikon), `test/e2e/content-blocks-1079.spec.ts`
+(PC med «Smal»: 24 px, skjermbilde i navngitt kolonne > 200 px, tittel > h2, fokus i hodet; 768 px og
+390/360 px: hodet ≤ 56 px, tittelen på arket synlig, `h2` uten `aria-hidden`, fokus på den; 390/360 px
+også 24 px og ingen tom linje).
+
 ## 2.85.0 - 2026-10-06
 
 ### Lesemodus: kurset viker når en seksjon leses, og leseren velger smal eller bred spalte (#1079)
@@ -126,6 +239,98 @@ skrevet. Enhetstesten fant at språkkoden `constructor` i adressen ga krasj (sam
 **Ikke med:** figurer er som før; redigeringsfeltet har ingen knapper for blokkene (en forfatter
 skriver dem som tekst, eller får dem fra skillet); bilder krympes ikke ved import ennå (valg 4,
 anbefalingen om 300 kB).
+## 2.83.0 - 2026-10-05 (på grenen `skill-ombygging-1079`, ikke flettet, ikke rullet ut)
+
+### Skillet er bygget om: en presentasjon er en egen kilde, og hvert lysark gjøres rede for (#1079)
+
+Produkteier laget samme kurs med skillet i ChatGPT og i Claude.ai fra presentasjonen
+«Rapportskriving». Begge ga tre figurer av samme type, ingen av de rundt 25 ikonene og ingen av
+kortene. Han spurte så om skillet hadde et design, eller om vi bare hadde hoppet på
+implementering. Det hadde ikke et design: det hadde vokst ved at hver feil fikk sin regel.
+Designet ble besluttet valg for valg samme kveld (`doc/DESIGN_1079_SKILL.md`), og dette er
+ombyggingen. **Bare skillet er endret. Plattformen er som i 2.82.2.**
+
+**Rotårsaken til at grafikken forsvant** var fire ting som virket sammen, ikke én regel:
+
+1. Skillet kunne ikke lese en presentasjon. Modellen fikk teksten og gjettet resten.
+2. Figurer ble valgt ut fra den nye prosaen («der det ellers blir en tekstvegg»), ikke ut fra
+   hva lysarket viste.
+3. Bare flyten hadde tegneskript og animasjon, så alt som skulle bli en figur, ble en flyt.
+4. Kort og uthevede striper hadde ingen form å bli til, og ble løst opp i avsnitt.
+
+**Det som er nytt:**
+
+- **Forsiden er en oversikt på rundt 115 linjer** (var 250): seks regler, hvilken arbeidsflyt som
+  åpnes for hvilken kilde, portene, og en tabell over hvor faget står. Historikk, datoer og
+  saksnumre er ute av skillet. Beskrivelsen har ordene som utløser det: presentasjon, PowerPoint,
+  lysark.
+- **To arbeidsflyter:** `workflows/from-presentation.md` og `workflows/from-text.md`. Fra en
+  presentasjon leser modellen fila med et skript, ser på hvert bilde selv, og legger fram en
+  **liste over hva hvert lysark blir til** (figur, kort, uthevet boks, prompt, tabell, bilde,
+  tekst, utelatt med grunn) som forfatteren godkjenner før noe skrives.
+- **`scripts/slide-coverage.mjs`** leser den godkjente lista mot det ferdige kurset og melder
+  hvert lysark som ikke fikk det lista sier — og, lest mot presentasjonen, hvert lysark og hvert
+  bilde lista ikke nevner.
+- **`scripts/produce-course.mjs`** er port 6 som én kommando: legger ved bildene, kjører alle
+  kontrollene i fast rekkefølge, og skriver importfila bare når alle går gjennom. Fire av
+  kontrollene var før bare funksjoner modellen selv måtte kalle fra egen kode.
+- **Nye kapitler:** `references/section-content.md` (uthevet boks, prompt-boks, kort, ikon, bilde
+  fra kilden), `references/course-design.md`, `references/modules.md`,
+  `references/check-and-produce.md`. `authoring-playbook.md` er borte; innholdet er fordelt.
+- **Figurkapitlet er åpnet:** sju former i stedet for fire, med skjeletter for tre, bokser og
+  piler, matrise, merket diagram og tidslinje. Regelen om at figurer hører hjemme «der det ellers
+  blir en tekstvegg» er borte; en figur tegnes der kilden har en.
+- **Et helt eksempelkurs** ligger i `examples/course-from-slides/`, og går gjennom alle
+  kontrollene.
+- **Ikoner får oppgitt størrelse (40 px) når de hentes ut.** PowerPoint skriver dem uten, og
+  plattformen viser da et ikon så bredt som spalten det står i.
+
+**Tre ting produksjonen nå stopper, som plattformen selv bare advarer om eller ikke ser:** et kurs
+uten modul, et bilde som ligger i en seksjon uten å vises i teksten, og en seksjonstekst som åpner
+med seksjonens egen tittel som overskrift (plattformen viser tittelen fra før).
+
+**Slik er det målt.** Fire nye testfiler: `agent-authoring-slide-coverage-1079` (48),
+`agent-authoring-produce-course-1079` (53), `skill-structure-guard-1079` (16) og
+integrasjonstesten `m2-skill-example-course-1079` (eksempelkurset importeres gjennom plattformens
+egen kursimport, og teksten tegnes med plattformens egen gjengivelse). 121 ødeleggelser ble lagt
+inn én om gangen; alle ble fanget. To overlevde første runde og viste to blinde tester (utheving
+midt i et uttrykk, og en sitatlinje som åpner med fet skrift); testene er rettet. Vakta for
+oppbyggingen fant en mangel med en gang den ble skrevet: arbeidsflyten for presentasjoner var
+over 100 linjer uten innholdsliste.
+
+**Ikke målt:** skillet er ikke kjørt i ChatGPT eller Claude.ai. Det er milepæl 1, og den krever
+et menneske (`skills/a2-authoring-api-evals/README.md`).
+
+**Grov prøve samme kveld:** to hjelpeagenter laget hvert sitt kurs (Rapportskriving og
+Møtearbeid) ved å følge skillet ordrett, uten å lese skriptene. Begge kom i mål med godkjent
+importfil; tallene står i `doc/HANDOFF.md`. Prøven ga 37 funn, og disse er rettet:
+
+- **Like etiketter på bokmål og nynorsk ble kalt en kopi.** «Samle data» heter det samme på
+  begge, og modellen måtte bytte til et dårligere ord for å komme gjennom. Mellom bokmål og
+  nynorsk godtas nå like figuretiketter; engelsk kopiert til norsk (og omvendt) stoppes som før.
+  Meldingen om ulikt antall etiketter sier nå hva som telles (hver linje i en etikett er én).
+- **Seksjonstekst står i filer.** Begge agentene skrev sitt eget byggeskript for å få markdown
+  inn i JSON. Pakken kan nå peke på én fil per språk (`bodyFiles`), og tilstanden på den samme
+  fila (`contentFile`). Mens kurset skrives, har pakken bare ett språk.
+- **Et skjermbilde med møte-ID og passord ble tatt med.** Skillet foreslår nå å utelate bilder
+  som viser passord, koder, nøkler eller tokens (mitt valg, se `doc/DECISIONS.md`).
+- Kildens egne læringsmål beholdes også når de er flere enn seks; en stripe med flere punkter er
+  én boks med liste; en skrivefeil i en prompt rettes og sies fra om; det som står inni en ramme,
+  blir stående inni kortet.
+- **Måleskriptet leste ikke importfila** skillet leverer, bare eksportsvaret fra plattformen, og
+  ga «0 av 9». Det kjenner nå også igjen kort, uthevede bokser og prompt-bokser i formen skillet
+  skriver dem.
+
+**Funnet underveis, ikke rettet her (plattformen):**
+
+- **En tabell i en seksjon mister kolonneoverskriftene på telefon.** `shared.css` gjør alle
+  tabeller om til stablede rader under 600 px og skjuler overskriftsraden. Listesidene setter
+  navnet på kolonnen på hver celle; en tabell skrevet i en seksjon har ikke det. Deltakeren ser da
+  cellene under hverandre, høyrestilt, uten å vite hva som er hva. Gjelder alle seksjoner med
+  tabell, også i prod.
+- **Tabeller, sitater og kodeblokker har ingen egen stil i leseren på PC.** Tabellen står uten
+  linjer og luft, den uthevede boksen er bare et innrykk, og prompten er liten skrift uten
+  bakgrunn. Innholdsblokkene (valg 4) retter de to siste; tabellen må tas med der.
 
 ## 2.82.2 - 2026-10-05
 

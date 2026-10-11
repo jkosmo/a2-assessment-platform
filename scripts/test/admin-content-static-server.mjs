@@ -99,9 +99,27 @@ function resolvePublicFile(requestPath) {
   return path.join(publicRoot, requestPath.replace(/^\/+/, ""));
 }
 
+// Ikonbiblioteket (#1079): i produksjon tegner ruta src/routes/icons.ts ikonet fra den innsjekkede
+// biblioteksfila. Denne tjeneren har ikke appen, så den gjør det samme her (samme ramme som ruta), slik
+// at en e2e kan måle et ekte ikon i leseren. Ruta selv er målt i enhetstesten.
+let iconBundle = null;
+function iconSvg(name) {
+  if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(name)) return null;
+  if (!iconBundle) iconBundle = JSON.parse(fs.readFileSync(path.join(publicRoot, "static", "icons", "lucide-icons.json"), "utf8"));
+  if (!Object.hasOwn(iconBundle.icons, name)) return null;
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#33312b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${iconBundle.icons[name]}</svg>`;
+}
+
 const server = http.createServer((request, response) => {
   const url = new URL(request.url || "/", `http://${request.headers.host || "127.0.0.1"}`);
   const pathname = decodeURIComponent(url.pathname);
+  const icon = /^\/static\/icons\/([^/]+)\.svg$/.exec(pathname);
+  if (icon) {
+    const svg = iconSvg(icon[1]);
+    if (svg) send(response, 200, svg, { "Content-Type": "image/svg+xml; charset=utf-8", "Cache-Control": "no-store" });
+    else send(response, 404, "Not found");
+    return;
+  }
   const resolvedPath = resolvePublicFile(pathname);
 
   if (!resolvedPath.startsWith(publicRoot)) {
