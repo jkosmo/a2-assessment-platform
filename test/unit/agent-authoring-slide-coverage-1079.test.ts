@@ -310,6 +310,10 @@ describe("checkSlideCoverage — fikk hvert lysark det lista sier? (#1079)", () 
       expect([...r.problems, ...r.rows.flatMap((x) => x.problems)]).toEqual([]);
       const ukjent = { ...valgtBort, pictures: { "slide-04-1.png": "photo", "slide-02-2.png": "click" } };
       expect(checkSlideCoverage({ slides: [tittel, ukjent, siste] }, pakke(seksjon("sec-a", "Tekst.")), { deck }).rows[1]!.problems.join()).toContain('has the kind "photo"');
+      // Bare et lysark der ALLE radene er utelatt, slipper dommen: en seksjonsrad med prompt-bildet tatt med
+      // faller selv om en annen del av lysarket er valgt bort.
+      const delvis = [{ ...alt, pictures: { "slide-04-1.png": "prompt", "slide-02-2.png": "decoration" } }, { slide: 2, becomes: ["omitted"], why: "resten er valgt bort" }];
+      expect(checkSlideCoverage({ slides: [tittel, ...delvis, siste] }, pakke(helSeksjon), { deck }).rows[1]!.problems.join()).toContain("write it out as a prompt box");
       const medNull = checkSlideCoverage({ slides: [tittel, null, { ...alt, ...arter }, siste] }, pakke(helSeksjon), { deck });
       expect(medNull.ok).toBe(false);
       expect(medNull.rows[1]!.problems.length).toBeGreaterThan(0);
