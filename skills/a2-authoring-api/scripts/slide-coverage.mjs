@@ -236,20 +236,6 @@ export function checkSlideCoverage(treatment, pkg, { deck = null, baseDir = "." 
     }
 
     const images = Array.isArray(entry.images) ? entry.images : [];
-    // The kind of each picture, and what follows from it.
-    const kinds = entry.pictures && typeof entry.pictures === "object" && !Array.isArray(entry.pictures) ? entry.pictures : {};
-    for (const [file, kind] of Object.entries(kinds)) {
-      if (!PICTURE_KINDS.includes(kind)) {
-        fail(`the picture ${file} has the kind "${kind}" — say what it is: ${PICTURE_KINDS.join(", ")}`);
-        continue;
-      }
-      if (kind === "prompt") {
-        if (!becomes.includes("prompt")) fail(`the picture ${file} is a prompt — the slide must become prompt, written out as a prompt box`);
-        if (images.includes(file)) fail(`the picture ${file} is a prompt — write it out as a prompt box; the screenshot itself is not included`);
-      }
-      if (kind === "infographic" && images.includes(file)) fail(`the picture ${file} is an infographic — rebuild its content (figure, table, cards or text); the picture itself is not included`);
-      if ((kind === "click" || kind === "content") && !images.includes(file)) fail(`the picture ${file} is ${kind === "click" ? "a screenshot that shows where to click" : "itself the content"} — include it under \`images\``);
-    }
     if (becomes.includes("image") && images.length === 0) fail("was to become image, and `images` lists no file");
     if (!becomes.includes("image") && images.length > 0) fail("`images` lists files, and `becomes` does not include image");
     for (const file of images) {
@@ -269,6 +255,50 @@ export function checkSlideCoverage(treatment, pkg, { deck = null, baseDir = "." 
   for (const [ref, object] of objects) {
     for (const file of object.pictures.keys()) {
       if (!listedPictures.has(`${ref} ${file}`)) problems.push(`the picture ${file} is in "${ref}" and no slide lists it under \`images\``);
+    }
+  }
+
+  // The kind of each picture, and what follows from it — judged per SLIDE, with every row for that
+  // slide taken together: a slide that feeds two places has two rows, and the picture is listed on
+  // one of them. A click or content picture is included — or left out with a reason (the author said
+  // no; it shows a password). A prompt or an infographic is written out, never included.
+  {
+    const bySlide = new Map();
+    for (const [index, entry] of list.entries()) {
+      if (!bySlide.has(entry?.slide)) bySlide.set(entry?.slide, []);
+      bySlide.get(entry?.slide).push({ entry, row: rows[index] });
+    }
+    for (const group of bySlide.values()) {
+      const becomes = new Set(group.flatMap(({ entry }) => (Array.isArray(entry.becomes) ? entry.becomes : [])));
+      const images = new Set(group.flatMap(({ entry }) => (Array.isArray(entry.images) ? entry.images : [])));
+      const leftOut = new Set();
+      for (const { entry } of group) {
+        const map = entry.imagesLeftOut && typeof entry.imagesLeftOut === "object" ? entry.imagesLeftOut : {};
+        for (const [file, reason] of Object.entries(map)) if (typeof reason === "string" && reason.trim().length > 0) leftOut.add(file);
+      }
+      const kinds = new Map();
+      const fail = (text) => group[0].row.problems.push(text);
+      for (const { entry } of group) {
+        const map = entry.pictures && typeof entry.pictures === "object" && !Array.isArray(entry.pictures) ? entry.pictures : {};
+        for (const [file, kind] of Object.entries(map)) {
+          if (kinds.has(file) && kinds.get(file) !== kind) fail(`the picture ${file} is "${kinds.get(file)}" on one row and "${kind}" on another — one kind per picture`);
+          kinds.set(file, kind);
+        }
+      }
+      for (const [file, kind] of kinds) {
+        if (!PICTURE_KINDS.includes(kind)) {
+          fail(`the picture ${file} has the kind "${kind}" — say what it is: ${PICTURE_KINDS.join(", ")}`);
+          continue;
+        }
+        if (kind === "prompt") {
+          if (!becomes.has("prompt")) fail(`the picture ${file} is a prompt — the slide must become prompt, written out as a prompt box`);
+          if (images.has(file)) fail(`the picture ${file} is a prompt — write it out as a prompt box; the screenshot itself is not included`);
+        }
+        if (kind === "infographic" && images.has(file)) fail(`the picture ${file} is an infographic — rebuild its content (figure, table, cards or text); the picture itself is not included`);
+        if ((kind === "click" || kind === "content") && !images.has(file) && !leftOut.has(file)) {
+          fail(`the picture ${file} is ${kind === "click" ? "a screenshot that shows where to click" : "itself the content"} — include it under \`images\`, or leave it out with a reason under \`imagesLeftOut\``);
+        }
+      }
     }
   }
 

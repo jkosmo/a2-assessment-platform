@@ -273,11 +273,33 @@ describe("checkSlideCoverage — fikk hvert lysark det lista sier? (#1079)", () 
 
     it("et skjermbilde som viser hvor en klikker, tas med; en infografikk bygges om og tas ikke med", () => {
       const klikkUtelatt = { ...alt, images: [], becomes: ["text"], pictures: { "slide-04-1.png": "click", "slide-02-2.png": "decoration" } };
-      expect(checkSlideCoverage({ slides: [tittel, klikkUtelatt, siste] }, pakke(helSeksjon), { deck }).rows[1]!.problems).toContain("the picture slide-04-1.png is a screenshot that shows where to click — include it under `images`");
+      expect(checkSlideCoverage({ slides: [tittel, klikkUtelatt, siste] }, pakke(helSeksjon), { deck }).rows[1]!.problems).toContain("the picture slide-04-1.png is a screenshot that shows where to click — include it under `images`, or leave it out with a reason under `imagesLeftOut`");
+      // QA-porten: forfatteren kan si nei til et bilde, eller det viser et passord — en grunn under imagesLeftOut er nok.
+      const klikkMedGrunn = { ...klikkUtelatt, imagesLeftOut: { "slide-04-1.png": "viser et passord — forfatteren sa nei" } };
+      // Pakken har da heller ikke bildet: det ble utelatt.
+      const ok = checkSlideCoverage({ slides: [tittel, klikkMedGrunn, siste] }, pakke(seksjon("sec-a", "Tekst uten bilde.")), { deck });
+      expect([...ok.problems, ...ok.rows.flatMap((r) => r.problems)]).toEqual([]);
       const infografikkMed = { ...alt, pictures: { "slide-04-1.png": "infographic", "slide-02-2.png": "decoration" } };
       expect(checkSlideCoverage({ slides: [tittel, infografikkMed, siste] }, pakke(helSeksjon), { deck }).rows[1]!.problems).toContain("the picture slide-04-1.png is an infographic — rebuild its content (figure, table, cards or text); the picture itself is not included");
       const ukjentArt = { ...alt, pictures: { "slide-04-1.png": "photo", "slide-02-2.png": "decoration" } };
       expect(checkSlideCoverage({ slides: [tittel, ukjentArt, siste] }, pakke(helSeksjon), { deck }).rows[1]!.problems.join()).toContain('has the kind "photo"');
+    });
+
+    // QA-porten: et lysark som brukes to steder har to rader; bildet står på én av dem, og en
+    // oppgaverad for et prompt-lysark blir ikke selv prompt. Arten dømmes per lysark, ikke per rad.
+    it("arten dømmes per lysark: to rader for samme lysark regnes sammen", () => {
+      const seksjonsrad = { ...alt, pictures: { "slide-04-1.png": "click", "slide-02-2.png": "decoration" } };
+      const oppgaverad = { slide: 2, becomes: ["task"], in: "mod-a", pictures: { "slide-04-1.png": "click", "slide-02-2.png": "decoration" } };
+      const r = checkSlideCoverage({ slides: [tittel, seksjonsrad, oppgaverad, siste] }, pakke(helSeksjon, modul("mod-a", "Hva kommer først?")), { deck });
+      expect([...r.problems, ...r.rows.flatMap((x) => x.problems)]).toEqual([]);
+      const promptSeksjon = { ...alt, images: [], becomes: ["prompt", "text"], pictures: { "slide-04-1.png": "prompt", "slide-02-2.png": "decoration" } };
+      const promptOppgave = { slide: 2, becomes: ["task"], in: "mod-a" };
+      // Seksjonen har prompt-boksen, men ikke skjermbildet av den.
+      const utenBilde = seksjon("sec-a", ["```prompt", "Du skal skrive et referat.", "```", "", "Tekst."].join(String.fromCharCode(10)));
+      const r2 = checkSlideCoverage({ slides: [tittel, promptSeksjon, promptOppgave, siste] }, pakke(utenBilde, modul("mod-a", "Hva kommer først?")), { deck });
+      expect([...r2.problems, ...r2.rows.flatMap((x) => x.problems)]).toEqual([]);
+      const uenige = { slide: 2, becomes: ["task"], in: "mod-a", pictures: { "slide-04-1.png": "prompt" } };
+      expect(checkSlideCoverage({ slides: [tittel, seksjonsrad, uenige, siste] }, pakke(helSeksjon, modul("mod-a", "Hva kommer først?")), { deck }).rows[1]!.problems.join()).toContain("one kind per picture");
     });
 
     it("et lysark med tekst som bare blir et bilde, meldes; med teksten skrevet ut går det", () => {
