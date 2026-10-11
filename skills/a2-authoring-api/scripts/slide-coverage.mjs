@@ -286,7 +286,8 @@ export function checkSlideCoverage(treatment, pkg, { deck = null, baseDir = "." 
         }
       }
       // A slide the author left out is not judged on what its pictures should have become: the
-      // kinds are still named (so the pictures are accounted for), but nothing follows from them.
+      // kinds are still named, and a click or content picture still needs a reason under
+      // imagesLeftOut (the deck check below), but nothing else follows from the kind.
       const omitted = group.every(({ entry }) => Array.isArray(entry?.becomes) && entry.becomes.includes("omitted"));
       for (const [file, kind] of kinds) {
         if (!PICTURE_KINDS.includes(kind)) {

@@ -29,8 +29,9 @@ sto alt i skillets tekst; modellen fulgte dem ikke. Nå står de i kontrollene:
   fikk ingen regel.
 
 **Slik er det målt:** `test/unit/agent-authoring-slide-coverage-1079.test.ts` (fire nye tester:
-prompt som bilde, prompt uten prompt-form, klikk utelatt, infografikk tatt med, ukjent art, bilde
-uten art, tekstlysark som bilde med og uten ordgrense), `test/unit/agent-authoring-produce-course-1079.test.ts`
+prompt som bilde, prompt uten prompt-form, klikk utelatt uten og med grunn, infografikk tatt med,
+ukjent art, bilde uten art, to rader for samme lysark, ulik art på to rader, utelatt lysark med
+prompt-bilde, delvis utelatt lysark, null-rad, tekstlysark som bilde med og uten ordgrense), `test/unit/agent-authoring-produce-course-1079.test.ts`
 (700 kB stopper, 400 kB listes, 200 kB stille, SVG på 700 kB går; eksempelkurset med et 700 kB
 skjermbilde stopper). Ti mutasjoner, alle fanget.
 
