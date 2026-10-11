@@ -1,128 +1,117 @@
-# API call flow — orchestrating an authoring package
+# Creating the drafts through the API
 
-Reference implementation: [scripts/import-package.mjs](../scripts/import-package.mjs)
-(use it directly when you have a shell; follow the same sequence when calling the API
-through another mechanism). Endpoint catalog: `doc/API_REFERENCE.md` (Admin Content).
+Contents: [When](#when) · [Which installation](#which-installation) · [The token](#the-token) ·
+[Running it](#running-it) · [The calls, in order](#the-calls-in-order) ·
+[Adding questions to an existing module](#adding-questions-to-an-existing-module) ·
+[The run id](#the-run-id) · [When something fails](#when-something-fails) · [Links for the report](#links-for-the-report)
 
-All calls: `Content-Type: application/json`, auth per SKILL.md (mock headers locally,
-`Authorization: Bearer …` in shared environments — preferably a short-lived `aat_...`
-agent authoring token issued by the user via
-`POST /api/admin/content/agent-authoring/tokens`). All routes require the `admin_content`
-capability (ADMINISTRATOR or SUBJECT_MATTER_OWNER).
+## When
 
-Note when running on an agent token: the API enforces the draft-only rules below
-(`draft: true`, `autoPublish: false`, `mode: "createNew"`, items only on draft courses) —
-deviating returns `403 agent_token_scope`. The token cannot call anything outside this
-flow, and cannot issue or revoke tokens.
+Only when you can reach the author's installation over the network **and** the author has given
+you an agent token. A chat without network access delivers an import file instead
+([check-and-produce.md](check-and-produce.md#delivering)).
 
-## Sequence
+## Which installation
 
-Execute the `plan` from the validate report in order, maintaining a
-`clientRef → serverId` map. **Never call any `.../publish` endpoint.**
+The platform is installed per organisation; each installation has its own address. There is no
+default. Use, in this order: an address the author gives you in this conversation; the
+`A2_BASE_URL` environment variable; otherwise **ask**. Never guess an address, and never fall back
+to localhost. Say the address back to the author before the first call that creates anything.
 
-### 1. `POST /api/admin/content/agent-authoring/validate`
+Ids of modules and sections are valid only in the installation they come from.
 
-Body `{ "package": <pkg> }` → `200 { valid, summary, issues, plan }`. Abort (fix package)
-unless `valid: true`.
+## The token
 
-### 2. `create_section` → `POST /api/admin/content/sections`
+The author issues a short-lived agent token in their own installation (*Profil → «Agent-tilgang»*)
+and pastes it into the conversation. It starts with `aat_`, is shown once, expires within the
+hour, can be revoked, and can only create drafts.
 
-```json
-{ "title": <payload.title>, "bodyMarkdown": <payload.bodyMarkdown>, "draft": true, "clientRef": "<ref>" }
+- Put it in the `A2_AUTH_BEARER` environment variable for the command. Never repeat it back,
+  never write it to a file, a package or a report.
+- A token works only in the installation that issued it.
+- If a call answers `401` in the middle of a run, the token has expired: report what was created
+  so far and ask for a new one.
+
+With an agent token the API enforces the draft rules itself: a call that would publish, or that
+overwrites existing content, is answered `403 agent_token_scope`.
+
+## Running it
+
+Produce first, with the complete package written out
+([check-and-produce.md](check-and-produce.md#through-the-api)). Then:
+
+```
+node scripts/import-package.mjs --file work/package.complete.json --base-url https://<installation> --validate-only
+node scripts/import-package.mjs --file work/package.complete.json --base-url https://<installation>
 ```
 
-`draft: true` is **mandatory** in agent flows (without it the section auto-publishes).
-→ `201 { section: { id, … }, links: { editor }, clientRef }` — store `section.id`.
+The first asks the platform to validate the package without creating anything, and prints the
+verdict. Fix every error it lists — it names the field — and validate again. The second validates
+and then creates the drafts in order, printing each created object with its link, and the run id.
 
-### 3. `create_module` → `POST /api/admin/content/modules/import`
+## The calls, in order
 
-Wrap the module payload in a synthesized module-scoped `a2-content-export/v1` envelope
-with an **empty audit** (no publish history ⇒ can never auto-publish):
+What the command does. Follow the same sequence if you must make the calls another way. All
+bodies are JSON; all calls carry `Authorization: Bearer <token>`.
 
-```json
-{
-  "payload": {
-    "exportFormat": "a2-content-export/v1",
-    "exportedAt": "<now ISO>",
-    "scope": "module",
-    "module": { "module": <payload.module>, "activeVersion": { …<payload.activeVersion>, "audit": {} } }
-  },
-  "mode": "createNew",
-  "autoPublish": false,
-  "clientRef": "<ref>"
-}
-```
+1. **Validate** — `POST /api/admin/content/agent-authoring/validate` with `{ "package": <package> }`.
+   Answers `{ valid, summary, issues, plan }`. Go on only when `valid` is `true`. `plan` is the
+   order of the calls below.
+2. **Each section** — `POST /api/admin/content/sections` with
+   `{ "title", "bodyMarkdown", "assets", "draft": true, "clientRef", "agentRunId" }`.
+   `draft: true` is required. The answer holds the section's id, a link to its editor, and — when
+   it has pictures — which id each `sourceId` got.
+3. **Each module** — `POST /api/admin/content/modules/import` with the module wrapped as the
+   command does it, `"mode": "createNew"` and `"autoPublish": false`. Both are required. The
+   answer holds the module's id and links.
+4. **The course** — `POST /api/admin/content/courses` with the title, description and level.
+5. **The course's order** — `PUT /api/admin/content/courses/<courseId>/items` with the items,
+   each `ref` replaced by the id its section or module got.
 
-`autoPublish: false` is **mandatory**. → `201 { moduleId, moduleVersionId, links: { conversation, advanced }, clientRef }`.
+Never call an address that ends in `/publish`.
 
-### 3b. Top up a question bank → `POST /api/admin/content/modules/:moduleId/mcq-questions`
+## Adding questions to an existing module
 
-For an **existing** module the author names (by ID) — a repetition module whose bank should grow
-(#1062). **Additive only**: the questions you send are appended to the module's current set; a new
-MCQ set version (old + new) and a new **draft** module version are created; nothing else in the
-module changes and nothing is published. The author reviews and publishes in the workspace.
+When the author names an existing module (by id) whose question bank should grow:
 
-```json
-{ "questions": [ { "stem": {…}, "options": [{…}, {…}], "correctAnswer": {…}, "rationale": {…} } ] }
-```
+`POST /api/admin/content/modules/<moduleId>/mcq-questions` with
+`{ "questions": [ { "stem": {…}, "options": [{…}, {…}, {…}], "correctAnswer": {…}, "rationale": {…} } ] }`
 
-Same question shape and the same localization rule as `mcqSet.questions` (all three locales, or a
-plain string for "written in one language, not translated yet"). 1–100 questions per call.
-→ `201 { moduleVersion, mcqSetVersionId, existingCount, addedCount }`. `409 module_has_no_mcq` when
-the module is free-text only; `403` when the token's owner does not own the module.
+- The questions are **added** to the module's current set, as a new draft version. Nothing is
+  replaced and nothing is published. 1–100 questions per call, in the same form and with the same
+  three languages as in a package.
+- **Read the bank first** — ask the author for the module's export, or for the existing
+  questions — and write questions that test other points from the source. A bank of thirty must
+  not be thirty variants of the first ten.
+- Run the cue check on the new questions before you send them
+  ([modules.md](modules.md#the-cue-check)).
+- `409 module_has_no_mcq`: the module is free text only. `403`: the token's owner does not own
+  the module.
 
-Before generating, **read the bank** so you do not repeat it: the module export (or the author) tells
-you which stems exist. New questions must test other points from the source — a bank of 30 must not
-be 30 variants of the first 10. This is the only way to change an existing module with an agent
-token; `mode: "replaceExisting"` on import stays off-limits (#651).
+This is the only way to change an existing module. `"mode": "replaceExisting"` is never used.
 
-### 4. `create_course` → `POST /api/admin/content/courses`
+## The run id
 
-```json
-{ "title": <payload.course.title>, "description": <…if set>, "certificationLevel": <…if set>, "clientRef": "<ref>" }
-```
+The command makes one id per run (`aar-…`) and sends it with every call that creates something.
+The platform logs each of them with that id, so a person can later see exactly what the run
+made, also after a partial failure. Give the run id in your report, always.
 
-→ `201 { course: { id, publishedAt: null, … }, links: { course }, clientRef }`.
+## When something fails
 
-### 5. `set_course_items` → `PUT /api/admin/content/courses/:courseId/items`
+- **`400 validation_error`** lists the fields at fault. Show the paths and fix the package.
+- **Other errors** come as `{ error, message }`.
+- **Part of the way:** the command stops at the failed call and prints what was created before
+  it. Report it per step — done, failed, skipped — with ids, links, the error and the run id.
+  **Delete nothing**; cleaning up or completing is the author's decision.
+- **Do not simply run again.** A second run creates everything once more. After a timeout, ask
+  the author to look in the library before anything is retried.
 
-Resolve each item: `ref` → mapped server ID; explicit `moduleId`/`sectionId` pass through.
+## Links for the report
 
-```json
-{ "items": [ { "type": "SECTION", "sectionId": "…" }, { "type": "MODULE", "moduleId": "…" } ] }
-```
-
-→ `204` (no body).
-
-## Audit trace (agentRunId)
-
-Generate ONE `agentRunId` per orchestration run (pattern `[a-zA-Z0-9._-]{1,64}`, e.g.
-`aar-<timestamp>-<random>`; the reference script does this automatically) and send it in
-the body of every write (`POST /sections`, `POST /modules/import`, `POST /courses`,
-`PUT .../items`). Every write is then audit-logged with
-`source: "agent_authoring" + clientRef + agentRunId` — so a human can reconstruct exactly
-what a run created, even after a partial failure. Always include the `agentRunId` in your
-final summary to the user.
-
-## Error handling
-
-- Validation failures on create calls: `400 { error: "validation_error", issues: [...] }` —
-  same Zod-issue shape as the validate report; show field paths.
-- Other errors: `{ error: "<code>", message }` (e.g. `module_import_failed`, 403
-  `forbidden`, 404 `import_target_not_found`).
-- **Partial failure**: stop at the failed step; report per step what happened
-  (done / failed / skipped — the reference script returns this as `steps[]`), the created
-  IDs + links, the error body, and the `agentRunId`. Never auto-delete — cleanup (archive +
-  delete in the admin UI) or completion is the human's decision; a retry of the remaining
-  steps can reuse the `clientRef → id` map you already have. Retries of CREATE steps
-  currently create duplicates (Idempotency-Key is tracked in #726) — on a timeout, check
-  with the user / the library list before re-running a create step.
-
-## Admin links (for the final summary)
-
-| Object | Link |
+| Created | Link |
 |---|---|
-| Module (conversational editor) | `/admin-content/module/:moduleId/conversation` |
-| Module (advanced editor) | `/admin-content/module/:moduleId/advanced` |
-| Course builder | `/admin-content/courses/:courseId` |
-| Section editor | `/admin-content/sections?id=:sectionId` |
+| a module | `/admin-content/module/<moduleId>/conversation` |
+| a section | `/admin-content/sections?id=<sectionId>` |
+| a course | `/admin-content/courses/<courseId>` |
+
+Close with: *"Alt er opprettet som utkast — gjennomgå og publiser manuelt i admin-UI."*

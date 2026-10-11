@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 236" width="300" height="295" role="img"
+     font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif">
+  <title>From meeting to minutes</title>
+  <desc>Four steps in order, in the phases Before and After.</desc>
+  <style>
+    .steg { fill: var(--grunn); stroke: var(--lys); }
+    @keyframes lys { 0%, 70% { fill: var(--lys); } 100% { fill: var(--grunn); } }
+    .steg { animation: lys 0.9s ease-in-out 1; }
+    .s2 { animation-delay: 0.55s; }
+    .s3 { animation-delay: 1.1s; }
+    .s4 { animation-delay: 1.65s; }
+    .for { --grunn: #d9e8dd; --lys: #6fae87; }
+    .etter { --grunn: #e7e2f0; --lys: #a99bc9; }
+    @media (prefers-reduced-motion: reduce) { .steg { animation: none; } }
+  </style>
+  <line x1="26" y1="16" x2="214" y2="16" stroke="#6fae87" stroke-width="3"/>
+  <text x="120" y="11" text-anchor="middle" font-size="11" fill="#3f7a57">Before</text>
+  <line x1="26" y1="134" x2="214" y2="134" stroke="#a99bc9" stroke-width="3"/>
+  <text x="120" y="129" text-anchor="middle" font-size="11" fill="#6b5a94">After</text>
+  <circle class="steg s1 for" cx="66" cy="48" r="24"/>
+  <text x="66" y="53" text-anchor="middle" font-size="15" font-weight="600" fill="#2d3b55">1</text>
+  <text x="66" y="90" text-anchor="middle" font-size="12" fill="#2d3b55">Settle the</text>
+  <text x="66" y="105" text-anchor="middle" font-size="12" fill="#2d3b55">purpose</text>
+  <line x1="90" y1="48" x2="150" y2="48" stroke="#8090a9" stroke-width="1.5"/>
+  <circle class="steg s2 for" cx="174" cy="48" r="24"/>
+  <text x="174" y="53" text-anchor="middle" font-size="15" font-weight="600" fill="#2d3b55">2</text>
+  <text x="174" y="90" text-anchor="middle" font-size="12" fill="#2d3b55">Gather</text>
+  <text x="174" y="105" text-anchor="middle" font-size="12" fill="#2d3b55">the notes</text>
+  <polyline points="198,48 228,48 228,116 12,116 12,166 42,166" fill="none" stroke="#8090a9" stroke-width="1.5"/>
+  <circle class="steg s3 etter" cx="66" cy="166" r="24"/>
+  <text x="66" y="171" text-anchor="middle" font-size="15" font-weight="600" fill="#2d3b55">3</text>
+  <text x="66" y="208" text-anchor="middle" font-size="12" fill="#2d3b55">Write a</text>
+  <text x="66" y="223" text-anchor="middle" font-size="12" fill="#2d3b55">draft</text>
+  <line x1="90" y1="166" x2="150" y2="166" stroke="#8090a9" stroke-width="1.5"/>
+  <circle class="steg s4 etter" cx="174" cy="166" r="24"/>
+  <text x="174" y="171" text-anchor="middle" font-size="15" font-weight="600" fill="#2d3b55">4</text>
+  <text x="174" y="208" text-anchor="middle" font-size="12" fill="#2d3b55">Read and</text>
+  <text x="174" y="223" text-anchor="middle" font-size="12" fill="#2d3b55">correct</text>
+</svg>

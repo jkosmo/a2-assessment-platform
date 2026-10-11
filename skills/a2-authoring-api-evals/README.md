@@ -49,9 +49,10 @@ Hvert lysark med faglig innhold har:
    presentasjonen.»* Ikke noe mer.
 2. **Svar bare «godkjent» ved portene.** Det som måles, er hva skillet foreslår av seg selv. En
    forfatter som ber om flere figurer, får flere figurer — og da måles forfatteren.
-3. **Hent kurset** som JSON: enten pakka skillet lager (`a2-authoring-package/v1`), eller en
-   eksport fra plattformen etter import (`GET /api/admin/content/courses/<id>/export-package`).
-   Skriptet leser begge.
+3. **Hent kurset** som JSON. Importfila skillet leverer er nok, og det enkleste. Skriptet leser
+   også en eksport fra plattformen etter import
+   (`GET /api/admin/content/courses/<id>/export-package`) og pakka skillet arbeider i
+   (`a2-authoring-package/v1`, men bare når teksten står i pakka og ikke i filer ved siden av).
 4. **Tell:** `node skills/a2-authoring-api-evals/score-course.mjs skills/a2-authoring-api-evals/cases/<tilfelle>.json <kurs.json>`
 5. **Les `manuellSjekk`** i tilfellet, og se på kurset.
 6. **Før tallene inn** under «Målinger» nederst, med dato, skillversjon og hvor det ble kjørt.
@@ -93,3 +94,63 @@ kjøring.
 Det tallene viser: Claude.ai tok med alt innholdet, men i tre former (flyt, tabell, tekst).
 ChatGPT skrev kortere og mistet fem lysark. Ingen av dem brukte et ikon eller en annen figurform
 enn flyt.
+
+### 2026-10-06 — skill 2.83.0, milepæl 1, Rapportskriving (produkteier, i produktene)
+
+Produkteier kjørte Rapportskriving i Claude.ai (Opus 5.5, medium) og ChatGPT (5.6 Sol, high) med
+pakka 2.83.0, importerte på stage, og kursene ble eksportert derfra og talt. ⚠️ Avvik fra
+oppskriften: han ba begge om **bare flervalgstester, ingen fritekst**. Lysark 15 (oppgaven) kan
+derfor ikke bli en fritekstoppgave her, og telles ikke som bom.
+
+| Tilfelle | Hvor | Innhold med | Forventet behandling | Figurer | Former | Smalt oppsett | Ikoner | Tabeller | Bokser/kort/prompter |
+|---|---|---|---|---|---|---|---|---|---|
+| Rapportskriving | Claude.ai, Opus 5.5 | 9 av 9 | 8 av 9 (9 av 9 når lysark 15 regnes med «bare flervalg») | 3 | flyt | 3 | 17 (kilden har 25) | 3 | 11 / 11 / 2 |
+| Rapportskriving | ChatGPT, 5.6 Sol | 9 av 9 | 8 av 9 (samme) | 3 | flyt | 3 | 17 | 3 | 9 / 18 / 2 |
+
+Mot nullpunktet (4 av 9 i form, 0 ikoner, 4 av 9 i innhold for ChatGPT): begge produktene gir nå
+alt innholdet, i riktig form, med kildens ikoner og flytene i to oppsett på tre språk. Kursene er
+nesten like i oppbygging — det er skillet som bestemmer formen, ikke modellen.
+
+Det tallene ikke viser, lest ut av kursene:
+
+- **Claude:** oppbygging etter presentasjonens faser, nivå basic (som kilden), to tester à åtte
+  situasjonsspørsmål. Mangler den ene av to prompter på lysark 13.
+- **ChatGPT:** begge promptene med, oppgaven som egen seksjon; men nivå intermediate, en test etter
+  hver seksjon (seks tester à fire), og spørsmål som viser til kilden: «Hvilken arbeidsform peker
+  presentasjonen på?» — en deltaker ser aldri presentasjonen.
+- Begge tegner kortene som `###`-overskrifter (2.83 kjenner ikke `:::kort`-ramma som stage fikk
+  samme dag i 2.84.0), så kortene ser ut som overskrifter med punkter på stage inntil skillet
+  oppdateres.
+- Ingen av presentasjonens to bilder er med (malfoto og en reklame-infografikk) — riktig.
+
+**Til skillet, etter at de to andre presentasjonene er kjørt med samme pakke:** (1) teksten
+deltakeren ser skal aldri vise til kilden; (2) nivået tas fra kilden når den sier det selv;
+(3) få, hele tester — én per læringsmål, og lysarklista viser hvor testene kommer; (4) kortramma
+`:::kort`. Måleskriptet mangler dessuten en form for «oppgave» (lysark 15 telles som tabell/figur).
+
+### 2026-10-05 — skill 2.83.0, grov prøve (IKKE milepæl 1)
+
+To hjelpeagenter (Sonnet, i Claude Code) fikk det ombygde skillet og hver sin presentasjon, og
+fulgte skillet ordrett med «godkjent» ved hver port. Det er en annen flate og en annen modell enn
+ChatGPT og Claude.ai: tallene sier at skillet lar seg følge fra start til importfil, ikke hvordan
+det går der produkteier bruker det. «Forventet behandling» teller fra og med denne målingen kort,
+uthevede bokser og prompt-bokser i formen skillet skriver dem (rekke av `###`, sitat med fet
+merkelapp, kodeblokk). Nullpunktet over er talt på nytt med den tellingen og får de samme
+tallene: 4 av 9 i begge.
+
+| Tilfelle | Hvor | Innhold med | Forventet behandling | Figurer | Former | Smalt oppsett | Ikoner | Tabeller | Bilder | Tekst fra bilder |
+|---|---|---|---|---|---|---|---|---|---|---|
+| Rapportskriving | Claude Code, Sonnet | 9 av 9 | 8 av 9 | 2 | flyt | 2 | 21 (kilden har 25) | 3 | 0 | – |
+| Møtearbeid | Claude Code, Sonnet | 12 av 13 | 12 av 13 | 1 | flyt | 1 | kilden har ingen | 0 | 5 (213 kB) | 14 av 14 |
+| Tilbudsarbeid | – | ikke kjørt | | | | | | | | |
+
+Det tallene ikke viser, lest ut av kursene:
+
+- Lysarket som ikke fikk forventet behandling i begge kursene, er oppgaven. Den ble en fritekstmodul
+  begge steder; måleskriptet har ingen måte å kjenne igjen en oppgave på.
+- Rapportskriving: stripene med flere punkter ble til fire og fem bokser etter hverandre. Skillet
+  sier nå at én stripe er én boks med liste.
+- Møtearbeid: et skjermbilde med møte-ID og passord ble tatt med. Skillet foreslår nå å utelate
+  slike.
+- Begge kursene har bare flytfigurer. Presentasjonene har ingen matrise, tre eller tidslinje;
+  Tilbudsarbeid har en matrise og er ikke kjørt.

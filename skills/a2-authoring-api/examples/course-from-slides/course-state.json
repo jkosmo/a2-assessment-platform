@@ -1,0 +1,127 @@
+{
+  "primaryLanguage": "nb",
+  "order": [
+    "sec-arbeidsgang",
+    "sec-kilder",
+    "mod-referat"
+  ],
+  "elements": [
+    {
+      "clientRef": "sec-arbeidsgang",
+      "type": "section",
+      "title": "Fra møte til referat",
+      "status": "approved",
+      "contentFile": "sections/sec-arbeidsgang.nb.md",
+      "learningObjectives": [
+        "Etter dette kan deltakeren følge de fire stegene fra møte til ferdig referat"
+      ],
+      "mandatory": {
+        "examples": [],
+        "formulas": [],
+        "templates": [],
+        "tasks": [],
+        "assessmentCriteria": [],
+        "terms": [
+          "Du står ansvarlig for referatet"
+        ]
+      },
+      "figures": [
+        {
+          "sourceId": "fig-arbeidsgang",
+          "labels": [
+            "Før",
+            "Etter",
+            "Avklar",
+            "formålet",
+            "Samle",
+            "notatene",
+            "Lag et",
+            "utkast",
+            "Les og",
+            "rett"
+          ]
+        }
+      ],
+      "sources": [
+        "Lysark 2 med talenotater"
+      ],
+      "deliberatelyRemoved": [],
+      "revisionHistory": [
+        {
+          "at": "gate 4",
+          "note": "approved as written",
+          "length": 583
+        }
+      ]
+    },
+    {
+      "clientRef": "sec-kilder",
+      "type": "section",
+      "title": "Hva du gir KI",
+      "status": "approved",
+      "contentFile": "sections/sec-kilder.nb.md",
+      "learningObjectives": [
+        "Etter dette kan deltakeren velge kilder og be KI om et utkast"
+      ],
+      "mandatory": {
+        "examples": [],
+        "formulas": [],
+        "templates": [
+          "Bruk bare det som står i notatene under. Skriv «uklart» der notatene ikke sier noe."
+        ],
+        "tasks": [],
+        "assessmentCriteria": [],
+        "terms": [
+          "Sakliste",
+          "Egne notater",
+          "Opptak"
+        ]
+      },
+      "sources": [
+        "Lysark 3, 4 og 5"
+      ],
+      "deliberatelyRemoved": [],
+      "revisionHistory": [
+        {
+          "at": "gate 4",
+          "note": "approved as written",
+          "length": 1230
+        }
+      ]
+    },
+    {
+      "clientRef": "mod-referat",
+      "type": "module",
+      "title": "Test: møtereferat med KI",
+      "status": "approved",
+      "content": "Du har fått et utkast fra KI og skal sende referatet om ti minutter. Hva gjør du først?\nMøtet fulgte en fast plan, og du rakk ikke å notere. Hvilken kilde gir rekkefølgen i referatet?\nNotatene dine sier ingenting om hvem som skal følge opp en sak. Hva skal stå i utkastet?\nHva kommer først i formen prompten ber om?",
+      "learningObjectives": [
+        "Begge læringsmålene"
+      ],
+      "mandatory": {
+        "examples": [],
+        "formulas": [],
+        "templates": [],
+        "tasks": [
+          "Du har fått et utkast fra KI og skal sende referatet om ti minutter. Hva gjør du først?",
+          "Møtet fulgte en fast plan, og du rakk ikke å notere. Hvilken kilde gir rekkefølgen i referatet?",
+          "Notatene dine sier ingenting om hvem som skal følge opp en sak. Hva skal stå i utkastet?",
+          "Hva kommer først i formen prompten ber om?"
+        ],
+        "assessmentCriteria": [],
+        "terms": []
+      },
+      "sources": [
+        "Seksjonene over"
+      ],
+      "deliberatelyRemoved": [],
+      "revisionHistory": [
+        {
+          "at": "gate 4",
+          "note": "approved as written",
+          "length": 0
+        }
+      ]
+    }
+  ]
+}

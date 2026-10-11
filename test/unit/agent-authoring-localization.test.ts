@@ -248,6 +248,27 @@ describe("#763 (Layer B) SVG figure localization", () => {
     expect(result.blindCopies.some((b: { locale: string }) => b.locale === "en-GB")).toBe(true);
   });
 
+  // #1079, funnet i prøvekjøringen av det ombygde skillet: «Samle data» og «Bearbeide data» heter det
+  // samme på bokmål og nynorsk. Kontrollen kalte det en kopi, og modellen måtte bytte til et
+  // dårligere ord for å komme gjennom.
+  it("identical labels between bokmål and nynorsk are a translation, not a copy", () => {
+    const result = checkFigureLocalization(
+      figurePackage(NB_FIG, [
+        { locale: "nn", svg: NB_FIG },
+        { locale: "en-GB", svg: EN_FIG },
+      ]),
+    );
+    expect(result.blindCopies).toEqual([]);
+    expect(result.blocks).toBe(false);
+  });
+
+  it("the same holds the other way, and an English figure copied into a Norwegian variant still FAILS", () => {
+    const fromNynorsk = checkFigureLocalization(figurePackage(NN_FIG, [{ locale: "nb", svg: NN_FIG }, { locale: "en-GB", svg: EN_FIG }], "nn"));
+    expect(fromNynorsk.blindCopies).toEqual([]);
+    const fromEnglish = checkFigureLocalization(figurePackage(EN_FIG, [{ locale: "nb", svg: EN_FIG }, { locale: "nn", svg: NN_FIG }], "en-GB"));
+    expect(fromEnglish.blindCopies).toEqual([expect.objectContaining({ locale: "nb" })]);
+  });
+
   it("an identifier/URL dropped from a variant label → FAILS (token drift)", () => {
     const NB_URL = '<svg xmlns="http://www.w3.org/2000/svg"><text>Se https://gdpr.eu/art-5</text></svg>';
     const NN_URL = '<svg xmlns="http://www.w3.org/2000/svg"><text>Sjå https://gdpr.eu/art-5</text></svg>';
