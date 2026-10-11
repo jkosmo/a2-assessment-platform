@@ -17,9 +17,11 @@ fokus. `doc/VERSIONS.md` (2.86.0) sier hva og hvor; `doc/DECISIONS.md` (to innsl
 hvilke valg som er mine. Det ombygde skillet (2.83.0) lå på egen gren siden 5. oktober og er nå
 flettet inn i `dev`-linja — skillpakka `dist/skills/a2-authoring-api-v2.86.0.zip` er sendt produkteier.
 
-**QA-porten ga GO i andre runde** (`.ai-qa/qa-20261011-161938.md`). Runde én fant at skillets nye kontroll «learner text»
-slo ut på vanlig fagtekst («lysark» som emne) og at kortrammer ble talt strengere enn plattformen
-leser dem — begge rettet med tester. Plattformdelen (rute, oppslag, rensing, utrulling) holdt i runde én.
+**QA-porten ga GO i femte runde** (`.ai-qa/qa-20261011-161938.md`). Rundene én til fire fant at skillets nye
+kontroll «learner text» slo ut på vanlig fagtekst («lysark» som emne, punktlister, «første lysbildet»)
+eller slapp bøyninger gjennom; nå fanger ett mønster alle bøyninger av lysark/lysbilde og slide(s) +
+tall, utenom formater som 16:9. Kortrammer telles slik plattformen leser dem. Alt rettet med tester og
+mutasjoner. Plattformdelen (rute, oppslag, rensing, utrulling) holdt i runde én.
 
 **Til den manuelle testen på stage** (fra QA-portens plan): ikonruta uten innlogging
 (`/static/icons/check.svg` → SVG, `/static/icons/finnes-ikke.svg` → 404); et kurs med `![](icon:…)` i et
