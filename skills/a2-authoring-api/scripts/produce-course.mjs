@@ -190,12 +190,13 @@ function checkFigures(pkg) {
 const SOURCE_REFERENCES = [
   // `[ \t]+`, not `\s+`: a list "1. Ett budskap per lysark\n2. Store tall" is not "lysark 2".
   // "første/siste lysbildet" is left alone: a course on presentations says that about its subject.
-  /\blysark(?:et|ene|a)?[ \t]+(?:nr\.?[ \t]*)?\d+\b/i,
-  /\blysbil(?:d|et)(?:e|et|ene|a)?[ \t]+(?:nr\.?[ \t]*)?\d+\b/i,
+  // Every inflection at once (lysark, lysarket, lysbilde, lysbilder, lysbilete, lysbileta …) — not one
+  // ending per round. A ratio like "16:9" after the word is a format, not a slide number.
+  /\b(?:lysark|lysbil(?:d|et))[a-zæøå]*[ \t]+(?:nr\.?[ \t]*)?\d+\b(?!:\d)/i,
   /\b(?:dette|forrige|neste) (?:lysarket|lysbildet|lysbiletet)\b/i,
   /\b(?:i|på) (?:denne|dette) (?:presentasjonen|foredraget|lysarket|lysbildet|lysbiletet)\b/i,
   /\bsom (?:vist|nemnt|nevnt|forklart) (?:på|i) (?:lysark|lysbild|lysbilet|presentasjon|foredrag)/i,
-  /\bslide (?:no\.?[ \t]*)?\d+\b/i,
+  /\bslides?[ \t]+(?:no\.?[ \t]*)?\d+\b(?!:\d)/i,
   /\b(?:on|in) (?:this|the previous|the next) (?:slide|deck|presentation)\b/i,
   /\bthis (?:slide|deck|presentation) (?:shows|says|covers|explains)\b/i,
   /\bas (?:shown|explained|mentioned|described) (?:on|in) the (?:slide|deck|presentation)\b/i,

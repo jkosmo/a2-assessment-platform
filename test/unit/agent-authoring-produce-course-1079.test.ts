@@ -175,7 +175,7 @@ describe("produce-course — kontrollen «learner text» stopper ikke vanlig fag
   // første lysbildet» er noe et kurs i presentasjonsteknikk sier om emnet sitt.
   it("en punktliste der «lysark» står sist på én linje og et tall først på neste, og «det første lysbildet» som emne, stopper ikke", async () => {
     const k = kopi((p) => {
-      objekt(p, "sec-kilder").payload.bodyMarkdown.nb += ["", "Tre råd:", "", "1. Ett budskap per lysark", "2. Store tall og lite tekst", "3. Det første lysbildet skal bare ha tittel og navn, og det siste lysbildet en kontaktadresse."].join("\n");
+      objekt(p, "sec-kilder").payload.bodyMarkdown.nb += ["", "Tre råd:", "", "1. Ett budskap per lysark", "2. Store tall og lite tekst", "3. Det første lysbildet skal bare ha tittel og navn, og det siste lysbildet en kontaktadresse.", "4. Bruk lysbilde 16:9-format, og slides 16:9 in English decks."].join("\n");
     });
     const r = await k.kjør();
     expect(tekst(r), tekst(r).details.join("; ")).toMatchObject({ status: "ok" });
@@ -209,6 +209,8 @@ describe("produce-course — hver kontroll stopper leveransen (#1079)", () => {
     ["et kurs uten modul", (p) => { p.objects = p.objects.filter((o) => o.type !== "module"); objekt(p, "kurs-motereferat").payload.items.pop(); }, "package", "the course has no module"],
     ["teksten åpner med seksjonens egen tittel som overskrift", (p) => { const b = objekt(p, "sec-kilder").payload.bodyMarkdown; b.nn = `## Kva du gir  **KI**\n\n${b.nn}`; }, "package", `"sec-kilder" (nn): the text opens with the section's own title as a heading`],
     // Skillforbedringene etter milepæl 1: kilden holdes bak teksten, kortramma lukkes, settet dekker seksjonene.
+    ["«Se lysbilder 3–5» (flertall) i deltakerteksten", (p) => void (objekt(p, "sec-kilder").payload.bodyMarkdown.nb += "\n\nSe lysbilder 3–5 for detaljene."), "learner text", "«lysbilder 3» points at the source"],
+    ["«See slides 3–5» i deltakerteksten", (p) => void (objekt(p, "sec-kilder").payload.bodyMarkdown["en-GB"] += "\n\nSee slides 3–5 for the details."), "learner text", "«slides 3» points at the source"],
     ["«Se lysbilde 3» (ubestemt form) i deltakerteksten", (p) => void (objekt(p, "sec-kilder").payload.bodyMarkdown.nb += "\n\nSe lysbilde 3 for et eksempel."), "learner text", "«lysbilde 3» points at the source"],
     ["nynorsk «Sjå lysbilete 4» (ubunden form) i deltakarteksten", (p) => void (objekt(p, "sec-kilder").payload.bodyMarkdown.nn += "\n\nSjå lysbilete 4 for eit døme."), "learner text", "«lysbilete 4» points at the source"],
     ["nynorsk «lysbiletet 3» i deltakarteksten", (p) => void (objekt(p, "sec-kilder").payload.bodyMarkdown.nn += "\n\nSjå lysbiletet 3 for døme."), "learner text", "«lysbiletet 3» points at the source"],
