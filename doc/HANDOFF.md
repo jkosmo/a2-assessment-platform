@@ -42,10 +42,17 @@ er liten (prod: 10 kall siste 30 dager; stage: 140), så kostnad betyr ingenting
   feiler mot streng side; 5.4-nano er raus. **Stage sin vurdering er pekt mot 5.4-mini** via
   `AZURE_OPENAI_ASSESSMENT_DEPLOYMENT` på web og worker (kl. 18:17; helsesjekk OK etterpå).
   ⚠️ Innstillingen ligger IKKE i Bicep: en full infrastruktur-utrulling av stage visker den ut.
-- **Neste:** se ekte innleveringer på stage i «Vurderingskvalitet»; gi benchmarken modulens faktiske
-  kriterier (`rubricCriteriaIds`, åpen sak fra mars) før prod-beslutningen; så prod via Bicep-parameterne
-  (`azureOpenAiModelName/Version/DeploymentShortName`) — og sjekk prod-workerens innstillinger utenfor
-  Bicep først. Stage avviker også fra prod på API-versjon, svargrense og token-parameter; bør samkjøres.
+- **Prod fulgte etter samme kveld (produkteier: «ikke overraskende at den er bedre»):** ny utrulling
+  `a2-assessment-prod-gpt-5.4-mini` på prod-kontoen (versjon 2026-03-17, GlobalStandard 50), og
+  `AZURE_OPENAI_ASSESSMENT_DEPLOYMENT` + `AZURE_OPENAI_API_VERSION=2025-01-01-preview` (lik stage) satt
+  på prod web og worker kl. 19:22. Helsesjekk web og worker 200 etter omstarten (én forbigående 503
+  under omstarten). gpt-4.1-mini-utrullingen står urørt og brukes fortsatt til forfatting.
+  ⚠️ Begge innstillingene ligger utenfor Bicep i begge miljøer — en full infrastruktur-utrulling
+  (`deploy-azure.yml`) visker dem ut. Neste rydding: ta `AZURE_OPENAI_ASSESSMENT_DEPLOYMENT` og
+  API-versjonen inn i Bicep som parametere, og lag utrullingen der.
+- **Neste:** følg de første ekte vurderingene i prod (feil varsles automatisk); gi benchmarken
+  modulens faktiske kriterier (`rubricCriteriaIds`, åpen sak fra mars); samkjør svargrense og
+  token-parameter mellom stage og prod.
 - Forfatting (innholdsgenerering) kan få en sterkere modell for seg (`AZURE_OPENAI_AUTHORING_DEPLOYMENT`);
   måles med `npm run benchmark:content`.
 
