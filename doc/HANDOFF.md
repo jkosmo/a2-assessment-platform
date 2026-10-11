@@ -29,6 +29,26 @@ kort og i en stegtabell hos deltakeren og i forhåndsvisningen, 1280 og 390 px; 
 etter «gå videre» og tilbake-knappen; fokus ved språkbytte. **Ingen kurs i prod bruker `icon:` ennå** —
 produkteier kan snu skrivemåten før den kommer i prod.
 
+### Språkmodellen for vurdering: forsøk på stage (2026-10-11 kveld)
+
+Prod og stage kjørte gpt-4.1-mini (2025-04-14) til alt, uten egen vurderings- eller forfattermodell,
+og uten at valget var målt (mars-sammenligningen anbefalte 5.4-nano, men ble ikke tatt i bruk). Bruken
+er liten (prod: 10 kall siste 30 dager; stage: 140), så kostnad betyr ingenting — konsistens og fart gjør.
+
+- **Gjort:** to nye utrullinger på stage sin Azure OpenAI-konto, `a2-assessment-stg-gpt-5.4-mini` og
+  `a2-assessment-stg-gpt-5.4-nano` (versjon 2026-03-17, GlobalStandard 50). Benchmarken kjørt lokalt
+  (GitHub-arbeidsflyten mangler sine hemmeligheter): `doc/benchmarks/model-comparison-2026-10-11.md`.
+  Funn: 4.1-mini er den minst konsistente og tregeste; 5.4-mini er deterministisk, 40–50 % raskere og
+  feiler mot streng side; 5.4-nano er raus. **Stage sin vurdering er pekt mot 5.4-mini** via
+  `AZURE_OPENAI_ASSESSMENT_DEPLOYMENT` på web og worker (kl. 18:17; helsesjekk OK etterpå).
+  ⚠️ Innstillingen ligger IKKE i Bicep: en full infrastruktur-utrulling av stage visker den ut.
+- **Neste:** se ekte innleveringer på stage i «Vurderingskvalitet»; gi benchmarken modulens faktiske
+  kriterier (`rubricCriteriaIds`, åpen sak fra mars) før prod-beslutningen; så prod via Bicep-parameterne
+  (`azureOpenAiModelName/Version/DeploymentShortName`) — og sjekk prod-workerens innstillinger utenfor
+  Bicep først. Stage avviker også fra prod på API-versjon, svargrense og token-parameter; bør samkjøres.
+- Forfatting (innholdsgenerering) kan få en sterkere modell for seg (`AZURE_OPENAI_AUTHORING_DEPLOYMENT`);
+  måles med `npm run benchmark:content`.
+
 **Neste for produkteier:** kjør Møtearbeid og Tilbudsarbeid med skillpakke 2.86.0 i ChatGPT og
 Claude.ai (milepæl 1 fullføres med den nye tellingen, som også kjenner igjen oppgaver og teller
 bibliotekikoner); godkjenn prod når stage-testen er grønn. **Deretter (bestilt):** gjennomgang av
