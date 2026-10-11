@@ -191,7 +191,7 @@ const SOURCE_REFERENCES = [
   // `[ \t]+`, not `\s+`: a list "1. Ett budskap per lysark\n2. Store tall" is not "lysark 2".
   // "første/siste lysbildet" is left alone: a course on presentations says that about its subject.
   /\blysark(?:et|ene|a)?[ \t]+(?:nr\.?[ \t]*)?\d+\b/i,
-  /\blysbil(?:d|et)(?:et|ene|a)?[ \t]+(?:nr\.?[ \t]*)?\d+\b/i,
+  /\blysbil(?:d|et)(?:e|et|ene|a)?[ \t]+(?:nr\.?[ \t]*)?\d+\b/i,
   /\b(?:dette|forrige|neste) (?:lysarket|lysbildet|lysbiletet)\b/i,
   /\b(?:i|på) (?:denne|dette) (?:presentasjonen|foredraget|lysarket|lysbildet|lysbiletet)\b/i,
   /\bsom (?:vist|nemnt|nevnt|forklart) (?:på|i) (?:lysark|lysbild|lysbilet|presentasjon|foredrag)/i,

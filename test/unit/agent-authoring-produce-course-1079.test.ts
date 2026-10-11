@@ -209,6 +209,8 @@ describe("produce-course — hver kontroll stopper leveransen (#1079)", () => {
     ["et kurs uten modul", (p) => { p.objects = p.objects.filter((o) => o.type !== "module"); objekt(p, "kurs-motereferat").payload.items.pop(); }, "package", "the course has no module"],
     ["teksten åpner med seksjonens egen tittel som overskrift", (p) => { const b = objekt(p, "sec-kilder").payload.bodyMarkdown; b.nn = `## Kva du gir  **KI**\n\n${b.nn}`; }, "package", `"sec-kilder" (nn): the text opens with the section's own title as a heading`],
     // Skillforbedringene etter milepæl 1: kilden holdes bak teksten, kortramma lukkes, settet dekker seksjonene.
+    ["«Se lysbilde 3» (ubestemt form) i deltakerteksten", (p) => void (objekt(p, "sec-kilder").payload.bodyMarkdown.nb += "\n\nSe lysbilde 3 for et eksempel."), "learner text", "«lysbilde 3» points at the source"],
+    ["nynorsk «Sjå lysbilete 4» (ubunden form) i deltakarteksten", (p) => void (objekt(p, "sec-kilder").payload.bodyMarkdown.nn += "\n\nSjå lysbilete 4 for eit døme."), "learner text", "«lysbilete 4» points at the source"],
     ["nynorsk «lysbiletet 3» i deltakarteksten", (p) => void (objekt(p, "sec-kilder").payload.bodyMarkdown.nn += "\n\nSjå lysbiletet 3 for døme."), "learner text", "«lysbiletet 3» points at the source"],
     ["«This slide shows» i deltakerteksten", (p) => void (objekt(p, "sec-kilder").payload.bodyMarkdown["en-GB"] += "\n\nThis slide shows the three sources."), "learner text", "«This slide shows» points at the source"],
     ["«dette lysarket» i deltakerteksten", (p) => void (objekt(p, "sec-kilder").payload.bodyMarkdown.nb += "\n\nDette lysarket oppsummerer kildene."), "learner text", "«Dette lysarket» points at the source"],
