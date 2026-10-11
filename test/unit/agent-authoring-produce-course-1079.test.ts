@@ -221,6 +221,7 @@ describe("produce-course — hver kontroll stopper leveransen (#1079)", () => {
     ["en kortramme som ikke lukkes", (p) => void (objekt(p, "sec-kilder").payload.bodyMarkdown.nb = objekt(p, "sec-kilder").payload.bodyMarkdown.nb.replace("\n:::\n", "\n")), "learner text", "opened and never closed"],
     ["en modul med færre spørsmål enn tre", (p) => void objekt(p, "mod-referat").payload.activeVersion.mcqSet.questions.splice(2), "questions", "at least one question per section and at least 3"],
     ["et ikonnavn plattformen ikke kjenner", (p) => void (objekt(p, "sec-kilder").payload.bodyMarkdown.nb += "\n\n:::kort\n### ![](icon:ikke-et-ikon) Kort\n\nTekst.\n:::\n"), "pictures", "icon:ikke-et-ikon, and the platform's icon library has no icon with that name"],
+    ["et skjermbilde på 700 kB", (p, mappe) => { writeFileSync(join(mappe, "deck", "images", "tung.png"), Buffer.alloc(700 * 1024)); const sek = objekt(p, "sec-kilder").payload; sek.assets.push({ sourceId: "tung", file: "deck/images/tung.png" }); for (const språk of ["nb", "nn", "en-GB"]) sek.bodyMarkdown[språk] += "\n\n![Et tungt skjermbilde](asset:tung)"; }, "pictures", "700 kB — a picture this heavy slows the section on a phone"],
     ["en bildefil som ikke finnes", (p) => void (objekt(p, "sec-kilder").payload.assets[0].file = "deck/images/slide-99-1.png"), "pictures", `cannot read the file "deck/images/slide-99-1.png"`],
     ["et bilde som ikke vises på nynorsk", (p) => { const b = objekt(p, "sec-kilder").payload.bodyMarkdown; b.nn = b.nn.replace(/!\[[^\]]*\]\(asset:img-innstillinger\)/, ""); }, "pictures", `the picture "img-innstillinger" is not shown in the text in nn`],
     ["teksten viser et bilde seksjonen ikke har", (p) => void objekt(p, "sec-kilder").payload.assets.pop(), "pictures", "the text in nb shows asset:img-innstillinger, and the section has no such picture"],
@@ -428,15 +429,29 @@ describe("package-assets — fra filpeker til innhold (#1079)", () => {
   it("et bilde over 5 MB meldes, akkurat 5 MB går; over 25 MB til sammen meldes", () => {
     const akkurat = Buffer.alloc(MAX_ASSET_BYTES).toString("base64");
     const over = Buffer.alloc(MAX_ASSET_BYTES + 1).toString("base64");
-    const en = (innhold: string) => checkAssets(pkg([{ sourceId: "a", filename: "a.png", mimeType: "image/png", contentBase64: innhold }]));
+    // Figurer (SVG) har ingen vektgrense under 5 MB; rasterbilder har en egen (testen under).
+    const en = (innhold: string) => checkAssets(pkg([{ sourceId: "a", filename: "a.svg", mimeType: "image/svg+xml", contentBase64: innhold }]));
     expect(en(akkurat).problems).toEqual([]);
     expect(en(over).problems.map((p) => p.message).join()).toContain("5.0 MB — the platform takes 5 MB per picture");
     const seks = checkAssets(pkg(
-      ["a", "b", "c", "d", "e", "f"].map((id) => ({ sourceId: id, filename: `${id}.png`, mimeType: "image/png", contentBase64: akkurat })),
+      ["a", "b", "c", "d", "e", "f"].map((id) => ({ sourceId: id, filename: `${id}.svg`, mimeType: "image/svg+xml", contentBase64: akkurat })),
       "![](asset:a) ![](asset:b) ![](asset:c) ![](asset:d) ![](asset:e) ![](asset:f)",
     ));
     expect(seks.problems.map((p) => p.message)).toEqual(["30.0 MB of pictures — the platform takes 25 MB per course"]);
     expect(seks.totalBytes).toBe(6 * MAX_ASSET_BYTES);
+  });
+
+  // Milepæl 1 i prod (Tilbudsarbeid): to skjermbilder på 444 og 785 kB. Over 600 kB stopper; 300–600 kB listes som verdt å beskjære.
+  it("et rasterbilde over 600 kB meldes, 300–600 kB listes som verdt å beskjære, en figur på samme størrelse går", () => {
+    const kb = (n: number) => Buffer.alloc(n * 1024).toString("base64");
+    const med = (filename: string, mimeType: string, innhold: string) => checkAssets(pkg([{ sourceId: "a", filename, mimeType, contentBase64: innhold }]));
+    const tung = med("a.png", "image/png", kb(700));
+    expect(tung.problems.map((p) => p.message).join()).toContain("700 kB — a picture this heavy slows the section on a phone");
+    const stor = med("a.png", "image/png", kb(400));
+    expect(stor.problems).toEqual([]);
+    expect(stor.large).toEqual(["a (400 kB)"]);
+    expect(med("a.png", "image/png", kb(200)).large).toEqual([]);
+    expect(med("a.svg", "image/svg+xml", kb(700)).problems).toEqual([]);
   });
 
   describe("seksjonstekst i filer (bodyFiles)", () => {

@@ -98,6 +98,13 @@ Rules for the list:
 - **Where the deck's frames or steps have icons** (`icons/`), the cards and steps get icons from
   the platform's library with the same meaning ([icons.md](../references/icons.md)); the deck's
   own files are not copied in.
+- **Say what every picture is**, by file name, under `pictures`: `prompt` (text typed into a chat
+  window — becomes a prompt box, the screenshot is not included), `click` (shows where to click —
+  included), `content` (the picture is itself the content — included), `infographic` (rebuilt as
+  figure, table, cards or text — not included), `decoration`. `slide-coverage.mjs` holds the list
+  to this: a prompt kept as a picture, or a click screenshot left out, fails.
+- **A slide with text never becomes only a picture.** Bullet points, a list, SmartArt: written
+  out as text, cards, a table or a figure. A picture of text cannot be read on a phone or searched.
 - **Account for every picture**, by file name, with what it shows. Pictures are included unless
   the author says no. Mark a picture where you saw a name, a face or an internal page with ⚠ so
   the author sees it — and go on; the choice is theirs.
@@ -117,7 +124,7 @@ Save the approved list as `work/treatment.json`:
   "slides": [
     { "slide": 5, "becomes": ["cards", "callout"], "in": "sec-arbeidsform", "phrases": ["Lerret", "Grundig tenkemodus", "kontekstvinduet"] },
     { "slide": 6, "becomes": ["prompt", "text"], "in": "sec-for-motet", "phrases": ["Hjelp meg å forberede et møte"] },
-    { "slide": 10, "becomes": ["image"], "in": "sec-under-motet", "images": ["slide-10-1.png", "slide-10-2.png"],
+    { "slide": 10, "becomes": ["image"], "in": "sec-under-motet", "pictures": { "slide-10-1.png": "click", "slide-10-2.png": "click", "slide-10-3.png": "decoration" }, "images": ["slide-10-1.png", "slide-10-2.png"],
       "imagesLeftOut": { "slide-10-3.png": "decoration from the template" } },
     { "slide": 17, "becomes": ["omitted"], "why": "practical information for the live course" } ] }
 ```
@@ -127,6 +134,8 @@ Save the approved list as `work/treatment.json`:
 - `becomes` uses the words in the table above. `omitted` stands alone and needs `why`.
 - `phrases` are two to four expressions from that slide that must be found in the finished
   element — for a prompt or an infographic, expressions that were only in the picture.
+- `pictures` says what each file from `images/` on that slide is (`prompt`, `click`, `content`,
+  `infographic`, `decoration`) — the note you made at gate 1, now where the check can read it.
 - `images` are the files from `images/` that are included; `imagesLeftOut` gives each of the
   slide's other pictures a reason.
 

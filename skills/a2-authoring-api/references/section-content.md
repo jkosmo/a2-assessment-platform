@@ -165,7 +165,13 @@ The learner reads the course, never the source. Write the point itself, not wher
 ## Pictures from the source
 
 A screenshot that shows **where to click** or what something looks like, and a picture that is
-itself the content, are included as they are.
+itself the content, are included as they are. A screenshot of **text** — a prompt, a list, a
+slide of bullet points — is not a picture: write the text out ([prompt](#prompt), text, a table).
+
+**Size:** a picture over 600 kB fails the production check; one over 300 kB is listed as worth
+cropping. Crop a screenshot to the part that matters (the dialog, not the whole desktop), or ask
+the author for a smaller file. The platform takes up to 5 MB, but a phone on a slow connection
+loads every picture in the section before the learner can read on.
 
 ```markdown
 Språket i utkastet velger du på innstillingssiden, i feltet som er markert med rødt:

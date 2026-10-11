@@ -1069,3 +1069,23 @@ huske, glemmes; en kontroll som faller, rettes.
   taket» i HANDOFF-lærdommene.
 
 Nivået fra kilden ble bare tekst i `course-design.md`: det kan ikke kontrolleres av et skript.
+
+## Skillet: hva et bilde på lysarket er, står i lysarklista — og tunge bilder stoppes (2026-10-11, kveld)
+
+Milepæl 1 i prod viste at regler i prosa ikke holdt: Opus 5.5 beholdt tre prompt-skjermbilder som
+bilde i Tilbudsarbeid selv om `from-presentation.md` sa «prompt, også når det er et skjermbilde».
+Mine valg:
+
+- **Notatet fra port 1 blir et felt.** Modellen må alt se på hvert bilde og si hva det er; nå skrives
+  det inn i `work/treatment.json` som `pictures` (`prompt`, `click`, `content`, `infographic`,
+  `decoration`), og `slide-coverage.mjs` holder lysarklista til det. Fem arter, ikke flere: det er de
+  fem som avgjør hva som skjer med bildet. Begrunnelse: en regel som kan telles, telles; en regel
+  modellen skal huske, glemmes — samme mønster som «learner text» i 2.86.0.
+- **Grensa for et tekstlysark er 20 ord.** Under det er det en bildetekst eller en tittel; over det
+  er det tekst som må skrives ut. Tallet er et gulv satt etter testpresentasjonene, ikke målt bredt.
+- **Tunge bilder: 600 kB stopper, 300 kB varsler.** Plattformen tar 5 MB, men en seksjon på telefon
+  laster alle bildene før teksten kan leses. 600 er satt så et vanlig fullskjermbilde (300–500 kB)
+  går gjennom med varsel, og bare de som åpenbart kan beskjæres, stopper. Figurer (SVG) rammes
+  ikke; de er tekst.
+
+Status: mine valg; produkteier ba om de fire forbedringene og bestemte rekkefølgen.

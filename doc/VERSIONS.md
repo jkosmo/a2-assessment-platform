@@ -2,6 +2,35 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.86.1 - 2026-10-11 (skillpakke; plattformen er ikke rullet ut på nytt)
+
+### Skillet etter milepæl 1: bildene på et lysark får en art kontrollen håndhever (#1079)
+
+Milepæl 1 ble fullført i prod med 2.86.0 (`skills/a2-authoring-api-evals/README.md`): alt innhold
+med i alle tre kursene, men i Tilbudsarbeid ble tre prompt-skjermbilder beholdt som bilde i stedet
+for prompt-boks, to listelysark ble bilde, og to skjermbilder var tunge (444 og 785 kB). Reglene
+sto alt i skillets tekst; modellen fulgte dem ikke. Nå står de i kontrollene:
+
+- **`pictures` i lysarklista:** hva hvert bilde på lysarket ER — `prompt`, `click`, `content`,
+  `infographic`, `decoration` — notatet fra port 1, nå der `slide-coverage.mjs` kan lese det. En
+  prompt som tas med som bilde, eller et lysark med et prompt-bilde som ikke blir prompt-boks,
+  faller; et klikk-skjermbilde som utelates, faller; en infografikk som tas med som bilde, faller;
+  et bilde uten art faller (når presentasjonen er med). Arten `prompt`/`infographic`/`decoration`
+  er selv grunnen til at bildet ikke tas med.
+- **Et tekstlysark blir aldri bare et bilde:** 20 ord eller mer på lysarket, og `becomes` uten
+  noen tekstbærende form, faller.
+- **Tunge rasterbilder:** over 600 kB faller i `pictures`-kontrollen (beskjær, eller be om et
+  mindre); 300–600 kB listes i sammendraget som verdt å beskjære. Figurer (SVG) rammes ikke.
+- Eksempelkursets lysarkliste har arter; `from-presentation.md`, `section-content.md` og
+  `check-and-produce.md` beskriver det. Matrise som figur er alt dekket i `figure-design.md` og
+  fikk ingen regel.
+
+**Slik er det målt:** `test/unit/agent-authoring-slide-coverage-1079.test.ts` (fire nye tester:
+prompt som bilde, prompt uten prompt-form, klikk utelatt, infografikk tatt med, ukjent art, bilde
+uten art, tekstlysark som bilde med og uten ordgrense), `test/unit/agent-authoring-produce-course-1079.test.ts`
+(700 kB stopper, 400 kB listes, 200 kB stille, SVG på 700 kB går; eksempelkurset med et 700 kB
+skjermbilde stopper). Ti mutasjoner, alle fanget.
+
 ## 2.86.0 - 2026-10-11
 
 ### Ikonbibliotek i plattformen, det ombygde skillet flettet inn, og skillforbedringene etter milepæl 1 (#1079)

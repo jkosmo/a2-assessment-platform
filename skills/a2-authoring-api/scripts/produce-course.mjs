@@ -157,7 +157,7 @@ function checkPictures(resolved) {
   return {
     name: "pictures",
     status: details.length === 0 ? "ok" : "fail",
-    summary: `${assets.count} picture(s) and figure(s), ${(assets.totalBytes / 1024).toFixed(0)} kB with every layout and language; ${assets.icons} icon(s) from the platform library`,
+    summary: `${assets.count} picture(s) and figure(s), ${(assets.totalBytes / 1024).toFixed(0)} kB with every layout and language; ${assets.icons} icon(s) from the platform library${assets.large?.length ? `; worth cropping (300–600 kB): ${assets.large.join(", ")}` : ""}`,
     details,
   };
 }

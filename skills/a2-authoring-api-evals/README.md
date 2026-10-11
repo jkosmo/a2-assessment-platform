@@ -123,6 +123,9 @@ Det tallene ikke viser, lest ut av kursene:
 Neste forbedringer i skillet, i rekkefølge: (1) et prompt-skjermbilde skrives alltid av til en
 prompt-boks, aldri beholdt som bilde; (2) et tekstlysark (liste, SmartArt) beholdes aldri som
 bilde; (3) et skjermbilde over 300 kB beskjæres eller erstattes; (4) matrise som figur.
+**Gjort i 2.86.1 samme kveld:** (1)–(3) som kontroller i `slide-coverage.mjs` og
+`package-assets.mjs` (bildenes art i lysarklista; tekstlysark aldri bare bilde; over 600 kB
+stopper, 300–600 kB varsler). (4) var alt dekket i `figure-design.md`.
 
 ### 2026-10-06 — skill 2.83.0, milepæl 1, Rapportskriving (produkteier, i produktene)
 

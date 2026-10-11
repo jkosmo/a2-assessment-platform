@@ -591,6 +591,7 @@ Vertsnavnene står i `doc/ENVIRONMENTS.local.md` (gitignorert, skal ikke skrives
 ## Det som gjenstår
 
 - **#1093 «Mine kurs»: alfabetisk som standard, valgfri plassering per kurs** (produkteier 2026-10-11). Liten sak; tas etter milepæl 1.
+- **Skillpakke 2.86.1** (2026-10-11 kveld): bildenes art i lysarklista, tekstlysark aldri bare bilde, tunge bilder — `doc/VERSIONS.md` 2.86.1. Plattformen er ikke rullet ut på nytt (package.json 2.86.1 ligger i `dev`; neste stage-utrulling tar den med). Neste måling: produkteier lager et kurs av Tilbudsarbeid på nytt med 2.86.1 — prompt-skjermbildene skal nå bli prompt-bokser.
 
 | Hva | Hvorfor det ikke er gjort |
 |---|---|
