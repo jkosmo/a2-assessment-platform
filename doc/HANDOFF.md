@@ -590,6 +590,8 @@ Vertsnavnene står i `doc/ENVIRONMENTS.local.md` (gitignorert, skal ikke skrives
 
 ## Det som gjenstår
 
+- **#1093 «Mine kurs»: alfabetisk som standard, valgfri plassering per kurs** (produkteier 2026-10-11). Liten sak; tas etter milepæl 1.
+
 | Hva | Hvorfor det ikke er gjort |
 |---|---|
 | **Kurs- og klasselista** mangler omdøping og språkkolonne | #894 nevner bare modul- og seksjonslista. Mekanismen er delt, så det er innkobling, ikke ny kode. |
