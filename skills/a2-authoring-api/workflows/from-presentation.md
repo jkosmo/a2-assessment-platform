@@ -102,7 +102,9 @@ Rules for the list:
   window — becomes a prompt box, the screenshot is not included), `click` (shows where to click —
   included), `content` (the picture is itself the content — included), `infographic` (rebuilt as
   figure, table, cards or text — not included), `decoration`. `slide-coverage.mjs` holds the list
-  to this: a prompt kept as a picture, or a click screenshot left out, fails.
+  to this: a prompt kept as a picture fails, and a click screenshot left out without a reason
+  under `imagesLeftOut` fails. The kind is judged per slide, with every row for that slide taken
+  together; a slide the author left out is not judged.
 - **A slide with text never becomes only a picture.** Bullet points, a list, SmartArt: written
   out as text, cards, a table or a figure. A picture of text cannot be read on a phone or searched.
 - **Account for every picture**, by file name, with what it shows. Pictures are included unless

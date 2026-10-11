@@ -81,7 +81,7 @@ DELIVER work/kurs-motereferat.json  —  the author imports it at Innholdsforval
 | **questions** | an option gives the answer away; a module has fewer questions than the sections it follows (and fewer than three) | [modules.md](modules.md#multiple-choice-questions) |
 | **languages** | a language is missing, a text was copied instead of translated, the right answer differs between languages, a formula or address was lost | [localization.md](localization.md) |
 | **approved text** | something the author approved is gone | [content-preservation.md](content-preservation.md) |
-| **slides** | a slide did not get what the slide list says; a picture has no kind, a prompt screenshot was kept as a picture, a click screenshot was left out; a slide with text became only a picture | [from-presentation.md](../workflows/from-presentation.md) |
+| **slides** | a slide did not get what the slide list says; a picture has no kind, a prompt screenshot was kept as a picture, a click screenshot was left out without a reason; a slide with text became only a picture | [from-presentation.md](../workflows/from-presentation.md) |
 | **import file** | the written file did not pass when read back | the line under it names the field |
 
 A line that starts with `--` was **not run**. Without `--state`, nobody has checked that the

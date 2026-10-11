@@ -269,27 +269,31 @@ export function checkSlideCoverage(treatment, pkg, { deck = null, baseDir = "." 
       bySlide.get(entry?.slide).push({ entry, row: rows[index] });
     }
     for (const group of bySlide.values()) {
-      const becomes = new Set(group.flatMap(({ entry }) => (Array.isArray(entry.becomes) ? entry.becomes : [])));
-      const images = new Set(group.flatMap(({ entry }) => (Array.isArray(entry.images) ? entry.images : [])));
+      const becomes = new Set(group.flatMap(({ entry }) => (Array.isArray(entry?.becomes) ? entry.becomes : [])));
+      const images = new Set(group.flatMap(({ entry }) => (Array.isArray(entry?.images) ? entry.images : [])));
       const leftOut = new Set();
       for (const { entry } of group) {
-        const map = entry.imagesLeftOut && typeof entry.imagesLeftOut === "object" ? entry.imagesLeftOut : {};
+        const map = entry?.imagesLeftOut && typeof entry.imagesLeftOut === "object" ? entry.imagesLeftOut : {};
         for (const [file, reason] of Object.entries(map)) if (typeof reason === "string" && reason.trim().length > 0) leftOut.add(file);
       }
       const kinds = new Map();
       const fail = (text) => group[0].row.problems.push(text);
       for (const { entry } of group) {
-        const map = entry.pictures && typeof entry.pictures === "object" && !Array.isArray(entry.pictures) ? entry.pictures : {};
+        const map = entry?.pictures && typeof entry.pictures === "object" && !Array.isArray(entry.pictures) ? entry.pictures : {};
         for (const [file, kind] of Object.entries(map)) {
           if (kinds.has(file) && kinds.get(file) !== kind) fail(`the picture ${file} is "${kinds.get(file)}" on one row and "${kind}" on another — one kind per picture`);
           kinds.set(file, kind);
         }
       }
+      // A slide the author left out is not judged on what its pictures should have become: the
+      // kinds are still named (so the pictures are accounted for), but nothing follows from them.
+      const omitted = group.every(({ entry }) => Array.isArray(entry?.becomes) && entry.becomes.includes("omitted"));
       for (const [file, kind] of kinds) {
         if (!PICTURE_KINDS.includes(kind)) {
           fail(`the picture ${file} has the kind "${kind}" — say what it is: ${PICTURE_KINDS.join(", ")}`);
           continue;
         }
+        if (omitted) continue;
         if (kind === "prompt") {
           if (!becomes.has("prompt")) fail(`the picture ${file} is a prompt — the slide must become prompt, written out as a prompt box`);
           if (images.has(file)) fail(`the picture ${file} is a prompt — write it out as a prompt box; the screenshot itself is not included`);

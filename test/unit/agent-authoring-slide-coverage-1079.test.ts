@@ -302,6 +302,19 @@ describe("checkSlideCoverage — fikk hvert lysark det lista sier? (#1079)", () 
       expect(checkSlideCoverage({ slides: [tittel, seksjonsrad, uenige, siste] }, pakke(helSeksjon, modul("mod-a", "Hva kommer først?")), { deck }).rows[1]!.problems.join()).toContain("one kind per picture");
     });
 
+    // QA-porten, runde 2: et lysark forfatteren har valgt bort, dømmes ikke på hva bildene skulle blitt;
+    // og en null-rad krasjer ikke kontrollen.
+    it("et utelatt lysark med et prompt-skjermbilde går, og en null-rad gir en vanlig feil", () => {
+      const valgtBort = { slide: 2, becomes: ["omitted"], why: "forfatteren tok det ut", pictures: { "slide-04-1.png": "prompt", "slide-02-2.png": "click" }, imagesLeftOut: { "slide-02-2.png": "lysarket er tatt ut" } };
+      const r = checkSlideCoverage({ slides: [tittel, valgtBort, siste] }, pakke(seksjon("sec-a", "Tekst.")), { deck });
+      expect([...r.problems, ...r.rows.flatMap((x) => x.problems)]).toEqual([]);
+      const ukjent = { ...valgtBort, pictures: { "slide-04-1.png": "photo", "slide-02-2.png": "click" } };
+      expect(checkSlideCoverage({ slides: [tittel, ukjent, siste] }, pakke(seksjon("sec-a", "Tekst.")), { deck }).rows[1]!.problems.join()).toContain('has the kind "photo"');
+      const medNull = checkSlideCoverage({ slides: [tittel, null, { ...alt, ...arter }, siste] }, pakke(helSeksjon), { deck });
+      expect(medNull.ok).toBe(false);
+      expect(medNull.rows[1]!.problems.length).toBeGreaterThan(0);
+    });
+
     it("et lysark med tekst som bare blir et bilde, meldes; med teksten skrevet ut går det", () => {
       const tekstDeck = { slides: [{ number: 1, pictures: [] }, { number: 2, words: 48, pictures: [{ file: "slide-04-1.png" }, { file: "slide-02-2.png" }] }, { number: 3 }] };
       const bareBilde = { slide: 2, becomes: ["image"], in: "sec-a", images: ["slide-04-1.png"], pictures: { "slide-04-1.png": "content", "slide-02-2.png": "decoration" } };

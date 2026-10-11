@@ -14,9 +14,12 @@ sto alt i skillets tekst; modellen fulgte dem ikke. Nå står de i kontrollene:
 - **`pictures` i lysarklista:** hva hvert bilde på lysarket ER — `prompt`, `click`, `content`,
   `infographic`, `decoration` — notatet fra port 1, nå der `slide-coverage.mjs` kan lese det. En
   prompt som tas med som bilde, eller et lysark med et prompt-bilde som ikke blir prompt-boks,
-  faller; et klikk-skjermbilde som utelates, faller; en infografikk som tas med som bilde, faller;
-  et bilde uten art faller (når presentasjonen er med). Arten `prompt`/`infographic`/`decoration`
-  er selv grunnen til at bildet ikke tas med.
+  faller; et klikk-skjermbilde som utelates uten grunn under `imagesLeftOut`, faller (forfatteren
+  kan si nei, og et passord skal ut); en infografikk som tas med som bilde, faller; et bilde uten
+  art faller (når presentasjonen er med). Arten `prompt`/`infographic`/`decoration` er selv
+  grunnen til at bildet ikke tas med. Arten dømmes per lysark med alle radene samlet (en seksjonsrad
+  og en oppgaverad for samme lysark), én art per bilde; et lysark forfatteren har valgt bort,
+  dømmes ikke (QA-porten, to runder).
 - **Et tekstlysark blir aldri bare et bilde:** 20 ord eller mer på lysarket, og `becomes` uten
   noen tekstbærende form, faller.
 - **Tunge rasterbilder:** over 600 kB faller i `pictures`-kontrollen (beskjær, eller be om et
