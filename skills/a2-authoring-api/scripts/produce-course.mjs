@@ -183,17 +183,30 @@ function checkFigures(pkg) {
 // The learner reads the course, never the source. A sentence that points at the slide ("som vist på
 // lysark 4") or the presentation is the author's voice leaking through; the point itself is what
 // belongs in the text. In every language, with the phrases each language uses.
+//
+// Only the POINTING forms. A course about presentations says "lysark" and "slide" as its subject
+// ("Hold deg til ett budskap per lysark") and must not be stopped; what is caught is a slide
+// number, a demonstrative ("dette lysarket", "this slide") or "as shown on the slide".
 const SOURCE_REFERENCES = [
-  /\blysark(?:et|ene|a)?(?:\s+\d+)?\b/i,
-  /\b(?:i|på) (?:denne|dette) (?:presentasjonen|foredraget|lysarket|lysbildet|kursbildet)\b/i,
-  /\bpresentasjonen (?:viser|seier|sier|tar opp|går gjennom)\b/i,
+  /\blysark(?:et|ene|a)?\s+(?:nr\.?\s*)?\d+\b/i,
+  /\blysbild(?:et|ene|a)?\s+(?:nr\.?\s*)?\d+\b/i,
+  /\b(?:dette|forrige|neste|første|siste) (?:lysarket|lysbildet)\b/i,
+  /\b(?:i|på) (?:denne|dette) (?:presentasjonen|foredraget|lysarket|lysbildet)\b/i,
   /\bsom (?:vist|nemnt|nevnt|forklart) (?:på|i) (?:lysark|lysbild|presentasjon|foredrag)/i,
-  /\bforedragsholdar(?:en)?\b|\bforedragsholder(?:en)?\b/i,
-  /\b(?:on|in) this (?:slide|deck|presentation)\b/i,
-  /\bslide \d+\b/i,
-  /\bthe (?:deck|presentation|presenter) (?:shows|says|covers|explains)\b/i,
-  /\bas (?:shown|explained|mentioned) (?:on|in) the (?:slide|deck|presentation)\b/i,
+  /\bslide (?:no\.?\s*)?\d+\b/i,
+  /\b(?:on|in) (?:this|the previous|the next) (?:slide|deck|presentation)\b/i,
+  /\bas (?:shown|explained|mentioned|described) (?:on|in) the (?:slide|deck|presentation)\b/i,
 ];
+
+/** The text without code blocks — fenced at any indent, as in a list item. A prompt may say "slide 3". */
+function withoutCodeBlocks(text) {
+  return String(text ?? "").replace(/^[ \t]*(`{3,}|~{3,})[^\n]*\n[\s\S]*?^[ \t]*\1[^\n]*$/gm, "");
+}
+
+// The platform's own reading of a card frame (`:::kort`, `::: Kort`, `:::cards` — blanks and case
+// do not matter), so the count here agrees with what the reader will show.
+const FRAME_OPEN = /^:::[ \t]*(?:kort|cards)[ \t]*$/gim;
+const FRAME_CLOSE = /^:::[ \t]*$/gm;
 
 function checkLearnerText(pkg) {
   const details = [];
@@ -206,8 +219,7 @@ function checkLearnerText(pkg) {
     for (const [language, markdown] of languages) {
       const text = String(markdown ?? "");
       const where = `"${object.clientRef}"${language ? ` (${language})` : ""}`;
-      // Without code blocks: a prompt may legitimately tell a model what a slide is.
-      const prose = text.replace(/^(`{3,}|~{3,})[^\n]*\n[\s\S]*?^\1[^\n]*$/gm, "");
+      const prose = withoutCodeBlocks(text);
       for (const pattern of SOURCE_REFERENCES) {
         const match = pattern.exec(prose);
         if (match) {
@@ -215,9 +227,10 @@ function checkLearnerText(pkg) {
           break;
         }
       }
-      // A card frame that is not closed is shown as text, headings and all.
-      const opened = (text.match(/^:::(?:kort|cards)\s*$/gm) ?? []).length;
-      const closed = (text.match(/^:::\s*$/gm) ?? []).length;
+      // A card frame that is not closed is shown as text, headings and all. Counted the way the
+      // platform reads frames, and only outside code blocks (a code block may show the syntax).
+      const opened = (prose.match(FRAME_OPEN) ?? []).length;
+      const closed = (prose.match(FRAME_CLOSE) ?? []).length;
       if (opened > closed) details.push(`${where}: a :::kort frame is opened and never closed — the platform shows the cards as plain text; close it with ::: on its own line`);
       if (closed > opened) details.push(`${where}: a ::: closes a card frame that was never opened`);
     }

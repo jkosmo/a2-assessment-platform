@@ -155,6 +155,40 @@ describe("produce-course — eksempelkurset går gjennom alt (#1079)", () => {
   });
 });
 
+// QA-porten på det første utkastet: «lysark» alene stoppet et kurs i presentasjonsteknikk, en
+// prompt-kodeblokk med innrykk ble ikke tatt bort før sjekken, og `::: Kort` (som plattformen
+// godtar) ble talt som en ramme som aldri ble åpnet.
+describe("produce-course — kontrollen «learner text» stopper ikke vanlig fagtekst (#1079)", () => {
+  const tekst = (r: Awaited<ReturnType<typeof produceCourse>>) => r.checks.find((c) => c.name === "learner text")!;
+
+  it("«lysark» og «presentasjonen viser» som emne, og «slide 3» i en innrykket kodeblokk, er ikke kildehenvisninger", async () => {
+    const k = kopi((p) => {
+      const sek = objekt(p, "sec-kilder").payload;
+      sek.bodyMarkdown.nb += ["", "Hold deg til ett budskap per lysark. Når presentasjonen viser tall, sett kilden under.", "", "- Slik ber du om hjelp:", "", "    ```prompt", "    Lag notater til slide 3 i presentasjonen min.", "    ```"].join("\n");
+      sek.bodyMarkdown["en-GB"] += "\n\nKeep one message per slide; a deck that shows numbers names the source.";
+    });
+    const r = await k.kjør();
+    expect(tekst(r), tekst(r).details.join("; ")).toMatchObject({ status: "ok" });
+  });
+
+  it("en ramme skrevet «::: Kort», slik plattformen også leser den, teller som åpnet og lukket", async () => {
+    const k = kopi((p) => {
+      const sek = objekt(p, "sec-kilder").payload;
+      for (const språk of ["nb", "nn", "en-GB"]) sek.bodyMarkdown[språk] = sek.bodyMarkdown[språk].replace(":::kort", "::: Kort");
+    });
+    const r = await k.kjør();
+    expect(tekst(r), tekst(r).details.join("; ")).toMatchObject({ status: "ok" });
+  });
+
+  it("rammer inne i en kodeblokk telles ikke", async () => {
+    const k = kopi((p) => {
+      objekt(p, "sec-kilder").payload.bodyMarkdown.nb += ["", "Slik skrives kort:", "", "```markdown", ":::kort", "### Et kort", "```"].join("\n");
+    });
+    const r = await k.kjør();
+    expect(tekst(r), tekst(r).details.join("; ")).toMatchObject({ status: "ok" });
+  });
+});
+
 describe("produce-course — hver kontroll stopper leveransen (#1079)", () => {
   it.each<[string, (pkg: Pakke) => void, string, string]>([
     ["en seksjon som ikke er plassert i kurset", (p) => void objekt(p, "kurs-motereferat").payload.items.splice(1, 1), "package", `"sec-kilder" is in the package and not in the course`],
@@ -165,6 +199,7 @@ describe("produce-course — hver kontroll stopper leveransen (#1079)", () => {
     ["et kurs uten modul", (p) => { p.objects = p.objects.filter((o) => o.type !== "module"); objekt(p, "kurs-motereferat").payload.items.pop(); }, "package", "the course has no module"],
     ["teksten åpner med seksjonens egen tittel som overskrift", (p) => { const b = objekt(p, "sec-kilder").payload.bodyMarkdown; b.nn = `## Kva du gir  **KI**\n\n${b.nn}`; }, "package", `"sec-kilder" (nn): the text opens with the section's own title as a heading`],
     // Skillforbedringene etter milepæl 1: kilden holdes bak teksten, kortramma lukkes, settet dekker seksjonene.
+    ["«dette lysarket» i deltakerteksten", (p) => void (objekt(p, "sec-kilder").payload.bodyMarkdown.nb += "\n\nDette lysarket oppsummerer kildene."), "learner text", "«Dette lysarket» points at the source"],
     ["en henvisning til lysarket i deltakerteksten", (p) => void (objekt(p, "sec-kilder").payload.bodyMarkdown.nb += "\n\nSom vist på lysark 4 er dette viktig."), "learner text", "«lysark 4» points at the source"],
     ["en henvisning til presentasjonen på engelsk", (p) => void (objekt(p, "sec-kilder").payload.bodyMarkdown["en-GB"] += "\n\nAs shown on the slide, start with the agenda."), "learner text", "points at the source"],
     ["en kortramme som ikke lukkes", (p) => void (objekt(p, "sec-kilder").payload.bodyMarkdown.nb = objekt(p, "sec-kilder").payload.bodyMarkdown.nb.replace("\n:::\n", "\n")), "learner text", "opened and never closed"],
