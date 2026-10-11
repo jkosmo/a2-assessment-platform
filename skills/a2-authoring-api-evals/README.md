@@ -97,8 +97,8 @@ enn flyt.
 
 ### 2026-10-11 — skill 2.86.0, milepæl 1 fullført: alle tre, publisert i prod
 
-Produkteier lagde alle tre kursene med pakka 2.86.0 (bare flervalgstester, som sist) og publiserte
-dem i prod; de ble eksportert derfra og talt med den nye tellingen (oppgave kjennes igjen,
+Produkteier lagde alle tre kursene i Claude.ai (Opus 5.5, high) med pakka 2.86.0 (bare
+flervalgstester, som sist) og publiserte dem i prod; de ble eksportert derfra og talt med den nye tellingen (oppgave kjennes igjen,
 bibliotekikoner telles). Ingen kildehenvisninger i tekstene, alle kortrammer lukket, 10 spørsmål
 per test (6–7 seksjoner).
 
