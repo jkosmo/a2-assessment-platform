@@ -1086,13 +1086,15 @@ async function renderDetailView(courseId) {
   const enrollmentPolicy = course?.enrollmentPolicy ?? "OPEN";
   // #495/T-QA-4: default på for nye kurs og når feltet mangler (eldre detaljer).
   const discussionsEnabled = course?.discussionsEnabled !== false;
+  // #1093: plassering i «Mine kurs»; tomt = alfabetisk.
+  const sortOrder = Number.isInteger(course?.sortOrder) ? String(course.sortOrder) : "";
   const pageTitle = course ? (localizedText(course.title) || t("ui.kind.course")) : t("courses.newCourse");
   const showPublishButton = canPublishCourse({
     ...course,
     moduleCount: courseModules.filter(it => it.type === "MODULE").length,
   });
 
-  courseDetail = { courseId: courseId ?? null, course, localeValues, certLevel, enrollmentPolicy, discussionsEnabled };
+  courseDetail = { courseId: courseId ?? null, course, localeValues, certLevel, enrollmentPolicy, discussionsEnabled, sortOrder };
   const page = getCourseFormPage();
   page.render();
   page.markClean();
@@ -1101,7 +1103,7 @@ async function renderDetailView(courseId) {
 
 // Kroppen i skjemasida: kursdetaljer + innhold. Feltene beholder id-ene sine (title-nb, certLevel …).
 function courseDetailBodyHtml() {
-  const { courseId, localeValues, certLevel, enrollmentPolicy, discussionsEnabled } = courseDetail;
+  const { courseId, localeValues, certLevel, enrollmentPolicy, discussionsEnabled, sortOrder } = courseDetail;
   return `<div class="detail-layout">
     <div data-form-tab="rediger">
       <div class="detail-section">
@@ -1169,6 +1171,11 @@ function courseDetailBodyHtml() {
             <option value="OPEN"${enrollmentPolicy !== "RESTRICTED" ? " selected" : ""}>${escapeHtml(t("courses.visibility.open"))}</option>
             <option value="RESTRICTED"${enrollmentPolicy === "RESTRICTED" ? " selected" : ""}>${escapeHtml(t("courses.visibility.restricted"))}</option>
           </select>
+        </div>
+        <div class="form-field" style="margin-top: var(--space-2)">
+          <label for="sortOrder">${escapeHtml(t("courses.sortOrder"))}</label>
+          <input type="number" id="sortOrder" min="0" max="9999" step="1" inputmode="numeric" value="${escapeHtml(sortOrder)}" style="max-width: 8rem" />
+          <p class="small" style="margin: 4px 0 0">${escapeHtml(t("courses.sortOrderHelp"))}</p>
         </div>
         <div class="form-field" style="margin-top: var(--space-2)">
           <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
@@ -1577,6 +1584,9 @@ async function saveCourse(courseId) {
   const certLevel = document.getElementById("certLevel")?.value ?? "";
   const enrollmentPolicy = document.getElementById("enrollmentPolicy")?.value === "RESTRICTED" ? "RESTRICTED" : "OPEN";
   const discussionsEnabled = document.getElementById("discussionsEnabled")?.checked !== false;
+  // #1093: tomt felt sendes som null (alfabetisk); et tall sendes som tall.
+  const sortOrderRaw = (document.getElementById("sortOrder")?.value ?? "").trim();
+  const sortOrder = sortOrderRaw === "" ? null : Number.parseInt(sortOrderRaw, 10);
   const sourceLocale = resolveCourseLocalizationSourceLocale(collectedValues, initialDetailLocaleValues);
   const effectiveValues = sourceLocale
     ? await localizeCourseCopyAcrossLocales({
@@ -1626,6 +1636,7 @@ async function saveCourse(courseId) {
           certificationLevel: certLevel || undefined,
           enrollmentPolicy,
           discussionsEnabled,
+          sortOrder,
         }),
       });
       savedCourseId = body.course?.id;
@@ -1640,6 +1651,7 @@ async function saveCourse(courseId) {
           certificationLevel: certLevel || undefined,
           enrollmentPolicy,
           discussionsEnabled,
+          sortOrder,
         }),
       });
     }

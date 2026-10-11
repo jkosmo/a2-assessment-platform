@@ -289,6 +289,7 @@ export async function buildCourseExportEnvelope(
         title: decodeLocalizedText(course.title) as never ?? course.title as never,
         description: (course.description ? decodeLocalizedText(course.description) : null) as never,
         certificationLevel: (course.certificationLevel ? decodeLocalizedText(course.certificationLevel) : null) as never,
+        sortOrder: course.sortOrder ?? null,
         audit: {
           publishedAt: course.publishedAt ? new Date(course.publishedAt).toISOString() : null,
           publishedBy: null,

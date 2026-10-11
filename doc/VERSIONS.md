@@ -2,6 +2,32 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.87.0 - 2026-10-11
+
+### «Mine kurs» sorteres alfabetisk, med valgfri plassering per kurs (#1093)
+
+Produkteier, idet han publiserte en rekke kurs i prod: «Hva avgjør rekkefølgen på kurs i Mine
+kurs?» Svaret var publiseringstidspunktet, eldst først, og det eneste som flyttet et kurs var å
+avpublisere og publisere på nytt. Han valgte alfabetisk som standard, med mulighet for begge deler.
+
+- **Regelen bor ett sted:** `src/modules/course/courseOrdering.ts`. Kurs med satt plassering først,
+  stigende; resten alfabetisk på tittelen i deltakerens språk, tallbevisst («Modul 2» før «Modul
+  10») og uten å skille store og små bokstaver. Sorteres på tjeneren i `GET /api/courses`, der
+  titlene alt er oversatt per forespørsel. Klienten deler lista i pågående og fullførte som før,
+  uten å sortere om.
+- **Nytt felt `Course.sortOrder` (heltall, kan være tomt)** — migrasjon
+  `20261011210000_course_sort_order_1093`, bare utvidelse. Settes i kursskjemaet under
+  «Innstillinger» («Plassering i Mine kurs»; tomt = alfabetisk), gjennom admin-API-et (`POST`/`PUT
+  /api/admin/content/courses`, 0–9999 eller null), og følger med i eksport og import (valgfritt
+  felt, så eldre filer leses som før). Kursdetaljen for deltakeren og administratoren viser feltet.
+- Publiseringstidspunktet styrer ikke lenger rekkefølgen.
+
+**Slik er det målt:** `test/unit/course-ordering-1093.test.ts` (7: alfabetisk, tallbevisst, nb/nn
+mot en-GB, plassering først, likt tall, ugyldig tall, ukjent språk), `test/m2-courses-participant-flow.test.ts`
+(rekkefølgen på nb og en-GB med ekte kurs; feltet satt, tømt og avvist gjennom admin-API-et;
+rundtur eksport → import), `test/e2e/admin-content-course-sort-order-1093.spec.ts` (feltet i
+skjemaet: viser lagret verdi, sender tall, sender null når tomt). Ti mutasjoner, alle fanget.
+
 ## 2.86.1 - 2026-10-11 (skillpakke; plattformen er ikke rullet ut på nytt)
 
 ### Skillet etter milepæl 1: bildene på et lysark får en art kontrollen håndhever (#1079)

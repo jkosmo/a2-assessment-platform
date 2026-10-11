@@ -1089,3 +1089,18 @@ Mine valg:
   ikke; de er tekst.
 
 Status: mine valg; produkteier ba om de fire forbedringene og bestemte rekkefølgen.
+
+## «Mine kurs»: alfabetisk som standard, plassering som unntak (2026-10-11)
+
+Produkteier valgte alfabetisk, med mulighet for å styre. Resten er mitt:
+
+- **Alfabetisk på tittelen i deltakerens språk**, ikke på en fast nøkkel: to deltakere med ulikt
+  språk kan se ulik rekkefølge, og det er riktig — hver av dem ser en liste som er sortert slik
+  skjermen deres leser. Tallbevisst, fordi kurs ofte er nummerert («Modul 2», «Modul 10»).
+- **Plasseringen er et tall, ikke dra-og-slipp.** Tomt er det vanlige; et tall brukes bare for
+  kurs som skal løftes (et introduksjonskurs). Kurs med tall kommer først, stigende, og to med
+  samme tall sorteres alfabetisk seg imellom. Enklere å forklare og å teste enn en full rekkefølge.
+- **Sortert på tjeneren.** Titlene oversettes der, og alle sider (kurslista, framtidige
+  oversikter) får samme rekkefølge uten egen logikk.
+- **Publiseringstidspunktet slutter å bety noe.** Omstokking ved republisering var en bivirkning
+  ingen ba om.

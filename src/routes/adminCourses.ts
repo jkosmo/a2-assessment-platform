@@ -49,6 +49,8 @@ const courseBodySchema = z.object({
   enrollmentPolicy: z.enum(["OPEN", "RESTRICTED"]).optional(),
   // #495/T-QA-4: kurs-master av/på for diskusjon (default true i datamodellen).
   discussionsEnabled: z.boolean().optional(),
+  // #1093: plassering i «Mine kurs». null = alfabetisk (det vanlige).
+  sortOrder: z.number().int().min(0).max(9999).nullable().optional(),
 });
 
 const setCourseModulesBodySchema = z.object({
@@ -102,6 +104,7 @@ adminCoursesRouter.post("/", idempotency("courses.create"), async (request, resp
       certificationLevel: parsed.data.certificationLevel ? localizedTextCodec.serialize(parsed.data.certificationLevel) : null,
       enrollmentPolicy: parsed.data.enrollmentPolicy,
       discussionsEnabled: parsed.data.discussionsEnabled,
+      sortOrder: parsed.data.sortOrder,
       actorId: request.context?.userId,
       agent: { clientRef: parsed.data.clientRef, agentRunId: parsed.data.agentRunId },
     });
@@ -346,6 +349,7 @@ adminCoursesRouter.get("/:courseId", async (request, response, next) => {
       certificationLevel: course.certificationLevel,
       enrollmentPolicy: course.enrollmentPolicy,
       discussionsEnabled: course.discussionsEnabled,
+      sortOrder: course.sortOrder ?? null,
       updatedAt: course.updatedAt.toISOString(),
       publishedAt: course.publishedAt?.toISOString() ?? null,
       archivedAt: course.archivedAt?.toISOString() ?? null,
@@ -376,6 +380,7 @@ adminCoursesRouter.put("/:courseId", requireContentOwnership("COURSE", "courseId
       certificationLevel: parsed.data.certificationLevel ? localizedTextCodec.serialize(parsed.data.certificationLevel) : undefined,
       enrollmentPolicy: parsed.data.enrollmentPolicy,
       discussionsEnabled: parsed.data.discussionsEnabled,
+      sortOrder: parsed.data.sortOrder,
     }, request.context?.userId);
     response.json({ course });
   } catch (error) {

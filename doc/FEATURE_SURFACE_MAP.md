@@ -144,6 +144,18 @@ are two distinct code paths + a relocated singleton to keep in sync when touchin
 
 **Pre-deploy gate:** `npx playwright test --config playwright.admin-content.config.ts test/e2e/participant-section-reader.spec.ts test/e2e/participant-mcq-only.spec.ts test/e2e/participant-inline-open.spec.ts test/e2e/participant-course-sequence.spec.ts test/e2e/participant-course-focus.spec.ts test/e2e/participant-section-advance.spec.ts` (~10s, no Docker/Postgres). `participant-inline-open` is the consistency guard (section + module both inline, one open, workspace relocated); `participant-course-sequence` guards the serial presentation; `participant-course-focus` guards list-vs-course state (#921/#922); `participant-section-advance` guards the combined advance button and the absent item-level discussion (#923/#924).
 
+## 6b-1. Participant course list — order (#1093)
+
+`GET /api/courses` sorts in `src/modules/course/courseOrdering.ts` (`sortCoursesForParticipant`):
+courses with `Course.sortOrder` first, ascending; the rest alphabetically by the title in the
+participant's locale (`Intl.Collator`, numeric, case-insensitive). `participant.js` only partitions
+into ongoing / completed (#936) and never re-sorts. `sortOrder` is set in the course form
+(«Innstillinger» tab, `#sortOrder`), accepted by `POST`/`PUT /api/admin/content/courses` (0–9999 or
+null), and carried by course export/import (`courseExportPayloadSchema.course.sortOrder`, optional).
+Guard tests: `test/unit/course-ordering-1093.test.ts`, `test/m2-courses-participant-flow.test.ts`,
+`test/e2e/admin-content-course-sort-order-1093.spec.ts`. **Hazard:** a new list of courses for
+participants must call the same function, or two lists order differently.
+
 ## 6b-2. Participant course view — the serial sequence (spine)
 
 `renderCourseDetailModules` renders the course as **one spine with a single focal point**, not a flat

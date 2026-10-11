@@ -640,6 +640,9 @@ model Course {
   // kurs får diskusjon på når feature lander (besluttet 2026-06-27). Effektiv regel for et
   // item: Course.discussionsEnabled && CourseItem.discussionsEnabled.
   discussionsEnabled Boolean                 @default(true)
+  // #1093: valgfri plassering i «Mine kurs». Satt: først, stigende. Tomt (det vanlige): alfabetisk
+  // på tittelen i deltakerens språk. Regelen bor i courseOrdering.ts.
+  sortOrder          Int?
   publishedAt        DateTime?
   archivedAt         DateTime?
   createdAt          DateTime                @default(now())

@@ -650,6 +650,8 @@ export const courseExportPayloadSchema = z.object({
     title: localizedTextMaybeUntranslatedSchema,
     description: localizedTextMaybeUntranslatedSchema.nullable().optional(),
     certificationLevel: certificationLevelInputSchema.nullable(),
+    // #1093: plassering i «Mine kurs». Valgfri, så eldre eksportfiler leses som før.
+    sortOrder: z.number().int().min(0).max(9999).nullable().optional(),
     audit: exportAuditSchema,
     modules: z.array(z.object({
       sortOrder: z.number().int().min(0),

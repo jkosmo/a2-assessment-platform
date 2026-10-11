@@ -603,6 +603,7 @@ export async function importCourseFromEnvelope(
               certificationLevel: payload.course.certificationLevel
                 ? serializeLocalized(payload.course.certificationLevel as LocalizedText)
                 : null,
+              sortOrder: payload.course.sortOrder ?? undefined,
               actorId: options.actorId,
             },
             tx,
