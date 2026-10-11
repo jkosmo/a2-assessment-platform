@@ -171,6 +171,16 @@ describe("produce-course — kontrollen «learner text» stopper ikke vanlig fag
     expect(tekst(r), tekst(r).details.join("; ")).toMatchObject({ status: "ok" });
   });
 
+  // QA-porten, runde 2: `\s+` krysset linjeskift, så en punktliste ble lest som «lysark 2»; og «det
+  // første lysbildet» er noe et kurs i presentasjonsteknikk sier om emnet sitt.
+  it("en punktliste der «lysark» står sist på én linje og et tall først på neste, og «det første lysbildet» som emne, stopper ikke", async () => {
+    const k = kopi((p) => {
+      objekt(p, "sec-kilder").payload.bodyMarkdown.nb += ["", "Tre råd:", "", "1. Ett budskap per lysark", "2. Store tall og lite tekst", "3. Det første lysbildet skal bare ha tittel og navn, og det siste lysbildet en kontaktadresse."].join("\n");
+    });
+    const r = await k.kjør();
+    expect(tekst(r), tekst(r).details.join("; ")).toMatchObject({ status: "ok" });
+  });
+
   it("en ramme skrevet «::: Kort», slik plattformen også leser den, teller som åpnet og lukket", async () => {
     const k = kopi((p) => {
       const sek = objekt(p, "sec-kilder").payload;
@@ -199,6 +209,8 @@ describe("produce-course — hver kontroll stopper leveransen (#1079)", () => {
     ["et kurs uten modul", (p) => { p.objects = p.objects.filter((o) => o.type !== "module"); objekt(p, "kurs-motereferat").payload.items.pop(); }, "package", "the course has no module"],
     ["teksten åpner med seksjonens egen tittel som overskrift", (p) => { const b = objekt(p, "sec-kilder").payload.bodyMarkdown; b.nn = `## Kva du gir  **KI**\n\n${b.nn}`; }, "package", `"sec-kilder" (nn): the text opens with the section's own title as a heading`],
     // Skillforbedringene etter milepæl 1: kilden holdes bak teksten, kortramma lukkes, settet dekker seksjonene.
+    ["nynorsk «lysbiletet 3» i deltakarteksten", (p) => void (objekt(p, "sec-kilder").payload.bodyMarkdown.nn += "\n\nSjå lysbiletet 3 for døme."), "learner text", "«lysbiletet 3» points at the source"],
+    ["«This slide shows» i deltakerteksten", (p) => void (objekt(p, "sec-kilder").payload.bodyMarkdown["en-GB"] += "\n\nThis slide shows the three sources."), "learner text", "«This slide shows» points at the source"],
     ["«dette lysarket» i deltakerteksten", (p) => void (objekt(p, "sec-kilder").payload.bodyMarkdown.nb += "\n\nDette lysarket oppsummerer kildene."), "learner text", "«Dette lysarket» points at the source"],
     ["en henvisning til lysarket i deltakerteksten", (p) => void (objekt(p, "sec-kilder").payload.bodyMarkdown.nb += "\n\nSom vist på lysark 4 er dette viktig."), "learner text", "«lysark 4» points at the source"],
     ["en henvisning til presentasjonen på engelsk", (p) => void (objekt(p, "sec-kilder").payload.bodyMarkdown["en-GB"] += "\n\nAs shown on the slide, start with the agenda."), "learner text", "points at the source"],

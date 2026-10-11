@@ -188,13 +188,16 @@ function checkFigures(pkg) {
 // ("Hold deg til ett budskap per lysark") and must not be stopped; what is caught is a slide
 // number, a demonstrative ("dette lysarket", "this slide") or "as shown on the slide".
 const SOURCE_REFERENCES = [
-  /\blysark(?:et|ene|a)?\s+(?:nr\.?\s*)?\d+\b/i,
-  /\blysbild(?:et|ene|a)?\s+(?:nr\.?\s*)?\d+\b/i,
-  /\b(?:dette|forrige|neste|første|siste) (?:lysarket|lysbildet)\b/i,
-  /\b(?:i|på) (?:denne|dette) (?:presentasjonen|foredraget|lysarket|lysbildet)\b/i,
-  /\bsom (?:vist|nemnt|nevnt|forklart) (?:på|i) (?:lysark|lysbild|presentasjon|foredrag)/i,
-  /\bslide (?:no\.?\s*)?\d+\b/i,
+  // `[ \t]+`, not `\s+`: a list "1. Ett budskap per lysark\n2. Store tall" is not "lysark 2".
+  // "første/siste lysbildet" is left alone: a course on presentations says that about its subject.
+  /\blysark(?:et|ene|a)?[ \t]+(?:nr\.?[ \t]*)?\d+\b/i,
+  /\blysbil(?:d|et)(?:et|ene|a)?[ \t]+(?:nr\.?[ \t]*)?\d+\b/i,
+  /\b(?:dette|forrige|neste) (?:lysarket|lysbildet|lysbiletet)\b/i,
+  /\b(?:i|på) (?:denne|dette) (?:presentasjonen|foredraget|lysarket|lysbildet|lysbiletet)\b/i,
+  /\bsom (?:vist|nemnt|nevnt|forklart) (?:på|i) (?:lysark|lysbild|lysbilet|presentasjon|foredrag)/i,
+  /\bslide (?:no\.?[ \t]*)?\d+\b/i,
   /\b(?:on|in) (?:this|the previous|the next) (?:slide|deck|presentation)\b/i,
+  /\bthis (?:slide|deck|presentation) (?:shows|says|covers|explains)\b/i,
   /\bas (?:shown|explained|mentioned|described) (?:on|in) the (?:slide|deck|presentation)\b/i,
 ];
 
