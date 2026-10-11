@@ -7,7 +7,31 @@
 
 ## Kort: det som må avgjøres
 
-**Prod står på 2.85.0 (rullet 2026-10-06 kl. 22:09 fra `17743d55`, godkjent av produkteier; `/version` og helsesjekk bekreftet — hele spennet 2.79–2.85.0 er i prod). Stage står på 2.85.2 (to småfunn i lesemodus, rullet 2026-10-07 kl. 07:22 fra `11baab53`; `/version` og helsesjekk bekreftet). `dev` = stage. `main` = prod (PR #1091). **Produkteier 2026-10-07: vi samler mer på stage før neste prod-slipp.****
+**Prod står på 2.85.0 (rullet 2026-10-06 kl. 22:09 fra `17743d55`, godkjent av produkteier; `/version` og helsesjekk bekreftet — hele spennet 2.79–2.85.0 er i prod). Stage står på 2.86.0 (ikonbiblioteket, det ombygde skillet, skillforbedringene, rullet 2026-10-11 kl. 16:50 fra `a6aec30a`; `/version` og helsesjekk bekreftet). `dev` = stage. `main` = prod (PR #1091). **Produkteier 2026-10-11: samlet test på stage, så prod — deretter oppdaterer han kurs og tar inn flere brukere.****
+
+### 2.86.0: ikonbibliotek, skillet flettet inn, skillforbedringer (2026-10-11, grenen `ikoner-1079`)
+
+Produkteier ba om de tre siste punktene i ett: ikonbiblioteket (Lucide som standard, også for kurs
+som ikke kommer fra en presentasjon), skillforbedringene etter milepæl 1, og QA-oppfølgingen om
+fokus. `doc/VERSIONS.md` (2.86.0) sier hva og hvor; `doc/DECISIONS.md` (to innslag 2026-10-11) sier
+hvilke valg som er mine. Det ombygde skillet (2.83.0) lå på egen gren siden 5. oktober og er nå
+flettet inn i `dev`-linja — skillpakka `dist/skills/a2-authoring-api-v2.86.0.zip` er sendt produkteier.
+
+**QA-porten ga GO i andre runde** (`.ai-qa/qa-20261011-161938.md`). Runde én fant at skillets nye kontroll «learner text»
+slo ut på vanlig fagtekst («lysark» som emne) og at kortrammer ble talt strengere enn plattformen
+leser dem — begge rettet med tester. Plattformdelen (rute, oppslag, rensing, utrulling) holdt i runde én.
+
+**Til den manuelle testen på stage** (fra QA-portens plan): ikonruta uten innlogging
+(`/static/icons/check.svg` → SVG, `/static/icons/finnes-ikke.svg` → 404); et kurs med `![](icon:…)` i et
+kort og i en stegtabell hos deltakeren og i forhåndsvisningen, 1280 og 390 px; fokus og rulleposisjon
+etter «gå videre» og tilbake-knappen; fokus ved språkbytte. **Ingen kurs i prod bruker `icon:` ennå** —
+produkteier kan snu skrivemåten før den kommer i prod.
+
+**Neste for produkteier:** kjør Møtearbeid og Tilbudsarbeid med skillpakke 2.86.0 i ChatGPT og
+Claude.ai (milepæl 1 fullføres med den nye tellingen, som også kjenner igjen oppgaver og teller
+bibliotekikoner); godkjenn prod når stage-testen er grønn. **Deretter (bestilt):** gjennomgang av
+hvilke språkmodeller prod og stage bruker til vurdering — de bør kanskje oppdateres.
+
 
 ### 2.85.2: to småfunn fra QA-porten (2026-10-07 morgen, grenen `lesemodus-smaafunn-1079`)
 
@@ -96,9 +120,9 @@ produkteier har kjørt Møtearbeid og Tilbudsarbeid med 2.83.0 i ChatGPT og Clau
 | Miljø | Versjon | |
 |---|---|---|
 | prod | 2.85.0 | rullet 2026-10-06 kl. 22:09 fra `17743d55` (run 37521860878), godkjent av produkteier; `/version` og helsesjekk bekreftet. Før det 2.78.3: rullet 2026-10-04 kl. 20:13 fra `2433d2b7`. #1080, #1081, #1083 |
-| stage | 2.85.2 | rullet 2026-10-07 kl. 07:22 fra `11baab53` (QA-porten GO, `.ai-qa/qa-20261007-064305.md`); `/version` og helsesjekk bekreftet. Stage-testen kjørt 07:23–07:30, rett etter utrullingen: 44 av 44 besto, men tre trengte nytt forsøk (45 s tidsavbrudd mens stage startet opp — #1080-/#1081-listene og importsteget i 2.84-testen). Ny kjøring 07:32 ble ugyldig: tokenet gikk ut midt i (401), ikke appen. Før det 2.85.1: rullet 2026-10-06 kl. 23:07 fra `4d5d9f4e` (QA-porten GO i tredje runde, `.ai-qa/qa-20261006-222752.md`); stage-testen 2026-10-07 kl. 06:17–06:21: 44 av 44. Før det 2.85.0: rullet 2026-10-06 kl. 21:31 fra `17743d55` (QA-porten GO i andre runde, `.ai-qa/qa-20261006-211010.md`). Før det 2.84.1: rullet 2026-10-06 kl. 09:37 fra `82815746` (QA-porten GO, `.ai-qa/qa-20261006-091043.md`). Før det 2.84.0: rullet 2026-10-06 kl. 07:12 fra `ad3f0192`, QA-porten GO i tredje runde (`.ai-qa/qa-20261006-064930.md`); `/version` og helsesjekk bekreftet. Før det 2.82.2: rullet 2026-10-05 kl. 18:49 fra `96632019`, commiten QA-porten ga GO på i tredje runde (`.ai-qa/qa-20261005-182600.md`); `/version` og helsesjekk bekreftet. Stage-testen kjørt 18:50–18:53: 38 av 38 besto |
+| stage | 2.86.0 | rullet 2026-10-11 kl. 16:50 fra `a6aec30a` (QA-porten GO i andre runde, `.ai-qa/qa-20261011-161938.md`); `/version` og helsesjekk bekreftet. Før det 2.85.2: rullet 2026-10-07 kl. 07:22 fra `11baab53` (QA-porten GO, `.ai-qa/qa-20261007-064305.md`); `/version` og helsesjekk bekreftet. Stage-testen kjørt 07:23–07:30, rett etter utrullingen: 44 av 44 besto, men tre trengte nytt forsøk (45 s tidsavbrudd mens stage startet opp — #1080-/#1081-listene og importsteget i 2.84-testen). Ny kjøring 07:32 ble ugyldig: tokenet gikk ut midt i (401), ikke appen. Før det 2.85.1: rullet 2026-10-06 kl. 23:07 fra `4d5d9f4e` (QA-porten GO i tredje runde, `.ai-qa/qa-20261006-222752.md`); stage-testen 2026-10-07 kl. 06:17–06:21: 44 av 44. Før det 2.85.0: rullet 2026-10-06 kl. 21:31 fra `17743d55` (QA-porten GO i andre runde, `.ai-qa/qa-20261006-211010.md`). Før det 2.84.1: rullet 2026-10-06 kl. 09:37 fra `82815746` (QA-porten GO, `.ai-qa/qa-20261006-091043.md`). Før det 2.84.0: rullet 2026-10-06 kl. 07:12 fra `ad3f0192`, QA-porten GO i tredje runde (`.ai-qa/qa-20261006-064930.md`); `/version` og helsesjekk bekreftet. Før det 2.82.2: rullet 2026-10-05 kl. 18:49 fra `96632019`, commiten QA-porten ga GO på i tredje runde (`.ai-qa/qa-20261005-182600.md`); `/version` og helsesjekk bekreftet. Stage-testen kjørt 18:50–18:53: 38 av 38 besto |
 | `main` (git) | 2.85.0 | likt med prod (PR #1091 flettet 2026-10-06) |
-| `dev` (git) | 2.85.2 | to småfunn (2.85.2), to detaljer i lesemodus (2.85.1), lesemodus (2.85.0), innholdsblokkene og feilklassifiseringen (2.84.x), sju rettinger (2.82.0), to oppfølgere etter QA (2.82.1), og kurset på telefon (2.82.2), se under |
+| `dev` (git) | 2.86.0 | ikonbibliotek + skillet flettet inn + skillforbedringer (2.86.0), to småfunn (2.85.2), to detaljer i lesemodus (2.85.1), lesemodus (2.85.0), innholdsblokkene og feilklassifiseringen (2.84.x), sju rettinger (2.82.0), to oppfølgere etter QA (2.82.1), og kurset på telefon (2.82.2), se under |
 
 ### Skillet er bygget om, på en egen gren (2026-10-05, sent på kvelden)
 
