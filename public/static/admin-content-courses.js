@@ -22,7 +22,7 @@ import {
 } from "/static/participant-console-state.js";
 import { describeImportError } from "/static/import-error.js";
 import { apiErrorCodeText, describeApiError } from "/static/api-error.js";
-import { showToast } from "/static/toast.js";
+import { flushQueuedToast, queueToast, showToast } from "/static/toast.js";
 import {
   detectCoursesRoute,
   buildCourseDeleteDialogText,
@@ -719,11 +719,17 @@ async function handleImportCoursePackageFile(event) {
       });
       if (!updated?.courseId) throw new Error(t("courses.importNoId"));
       const s = updated.summary ?? {};
-      showToast(tf("adminContent.courses.updated", {
-        updated: (s.updatedSections ?? 0) + (s.updatedModules ?? 0),
-        created: (s.createdSections ?? 0) + (s.createdModules ?? 0),
-        removed: (s.removedSections ?? 0) + (s.removedModules ?? 0),
-      }));
+      // Oppsummeringen skal leses på kurssiden, ikke forsvinne med denne siden.
+      const unplaced = Array.isArray(s.unplacedModuleIds) ? s.unplacedModuleIds.length : 0;
+      queueToast(
+        tf("adminContent.courses.updated", {
+          updated: (s.updatedSections ?? 0) + (s.updatedModules ?? 0),
+          created: (s.createdSections ?? 0) + (s.createdModules ?? 0),
+          removed: (s.removedSections ?? 0) + (s.removedModules ?? 0),
+        }),
+        unplaced > 0 ? "warning" : "success",
+        unplaced > 0 ? tf("adminContent.courses.updatedUnplaced", { count: unplaced }) : "",
+      );
       window.location.href = `/admin-content/courses/${encodeURIComponent(updated.courseId)}`;
       return;
     }
@@ -742,10 +748,11 @@ async function handleImportCoursePackageFile(event) {
     // Teksten sier også hva forfatteren skal GJØRE. «Lagret som utkast» uten neste steg er en
     // beskjed om systemets tilstand, ikke hjelp.
     const count = result.moduleIds?.length ?? 0;
+    // #1095: samme for disse — de ble vist og navigert bort fra i samme øyeblikk.
     if (result.heldBackByTranslationGate) {
-      showToast(tf("adminContent.courses.importedHeldBack", { count }), "warning");
+      queueToast(tf("adminContent.courses.importedHeldBack", { count }), "warning");
     } else {
-      showToast(tf("adminContent.courses.imported", { count }));
+      queueToast(tf("adminContent.courses.imported", { count }), "success");
     }
     window.location.href = `/admin-content/courses/${encodeURIComponent(result.courseId)}`;
   } catch (error) {
@@ -759,13 +766,16 @@ async function handleImportCoursePackageFile(event) {
 }
 
 // #1095: finnes kurset fila peker på, i dette miljøet — og får forfatteren se det? 404 og 403 er
-// begge «nei»: da importeres fila som nytt kurs, slik den alltid ble.
+// begge «nei»: da importeres fila som nytt kurs, slik den alltid ble. Alt annet (500, nettverk)
+// er IKKE «nei»: da vet vi ikke, og å importere som nytt kurs ville lage et duplikat av et kurs
+// som finnes. Feilen går videre og importen stopper med melding.
 async function findImportTargetCourse(courseId) {
   try {
     const body = await apiFetch(`/api/admin/content/courses/${encodeURIComponent(courseId)}`, getHeaders);
     return body?.course ?? null;
-  } catch {
-    return null;
+  } catch (error) {
+    if (error?.status === 404 || error?.status === 403) return null;
+    throw error;
   }
 }
 
@@ -1867,11 +1877,20 @@ async function init() {
   initCascadeDeleteDialog();
 
   const route = detectRoute();
+  // #1095: statisk tekst i HTML-kilden (dialogtitler og -knapper) følger språket. Modulskallet
+  // gjør det samme i `translatePageStaticText`; kurssiden gjorde det ikke, så `data-i18n` her sto
+  // på bokmål uansett valgt språk.
+  for (const el of document.querySelectorAll("[data-i18n]")) {
+    const key = el.getAttribute("data-i18n");
+    if (key) el.textContent = t(key);
+  }
   if (route.view === "list") {
     await renderListView();
   } else {
     await renderDetailView(route.courseId);
   }
+  // #1095: en melding lagt i kø av siden som navigerte hit (importens oppsummering).
+  flushQueuedToast();
 }
 
 init();

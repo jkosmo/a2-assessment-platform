@@ -5,11 +5,13 @@
 // ikke til dette kurset, eller elementet er tatt ut etter eksporten.
 
 export type UpdatePlanItem =
-  | { type: "SECTION"; origin?: { sectionId?: string } }
-  | { type: "MODULE"; origin?: { moduleId?: string } };
+  | { type: "SECTION"; origin?: { sectionId?: string; versionNo?: number } }
+  | { type: "MODULE"; origin?: { moduleId?: string; versionNo?: number } };
 
 export type UpdatePlanEntry =
-  | { index: number; type: "SECTION" | "MODULE"; action: "update"; targetId: string }
+  // `exportedVersionNo`: elementets høyeste versjonsnummer da fila ble eksportert. Har elementet
+  // fått en nyere versjon siden, er fila utdatert — den sjekken gjør tjenesten mot databasen.
+  | { index: number; type: "SECTION" | "MODULE"; action: "update"; targetId: string; exportedVersionNo?: number }
   | { index: number; type: "SECTION" | "MODULE"; action: "create" };
 
 export interface CourseUpdatePlan {
@@ -46,7 +48,8 @@ export function planCourseUpdate(
       return;
     }
     seen.add(key);
-    entries.push({ index, type: item.type, action: "update", targetId });
+    const exportedVersionNo = item.origin?.versionNo;
+    entries.push({ index, type: item.type, action: "update", targetId, ...(exportedVersionNo !== undefined ? { exportedVersionNo } : {}) });
   });
 
   return {

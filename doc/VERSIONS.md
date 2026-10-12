@@ -14,27 +14,39 @@ elementer tas ut, ikke slettes.
 - **Eksporten bærer identiteter.** `course.course.origin` (`courseId`, `exportedAt`) og `origin`
   per element (`sectionId` / `moduleId`). Valgfrie felt: eldre filer og skillets «lag kurs»-filer
   leses som før, og en fil som flyttes til et annet miljø importeres som nytt kurs der.
-- **Importmodus `updateExisting`** (bare kurs, `targetId` kreves, samme eierskapsvakt som
-  `replaceExisting`). Planen regnes ut før noe skrives (`courseUpdatePlan.ts`, ren funksjon): et
-  element fila kjenner igjen får en **ny, upublisert versjon** (seksjon: som seksjonsimporten,
-  bildene under seksjonens egen id; modul: som modulimporten, uten auto-publisering); et element
-  uten `origin` **opprettes som utkast**; elementer kurset har som fila ikke nevner, **tas ut av
-  kurset** (ikke slettet); rekkefølgen følger fila; kursets tittel, beskrivelse, nivå og plassering
-  oppdateres. Kursets id, publiseringstilstand, klassetildeling, diskusjoner og deltakernes
-  framdrift er urørt. En fil fra et annet kurs, eller med et element kurset ikke har, avvises
-  (400 med koden `origin_mismatch`, en `DomainRuleError` slik #999 krever) uten at noe skrives. Svaret bærer `summary` (oppdatert/opprettet/tatt ut),
-  og revisjonssporet for importen har det samme.
+- **Importmodus `updateExisting`** (bare kurs, `targetId` kreves; eierskap sjekkes på kurset i
+  ruta og **per element** i tjenesten, som seksjons- og modulimporten). Planen regnes ut før noe
+  skrives (`courseUpdatePlan.ts`, ren funksjon): et element fila kjenner igjen får en **ny,
+  upublisert versjon** (seksjon: som seksjonsimporten, bildene under seksjonens egen id; modul: som
+  modulimporten, uten auto-publisering); et element uten `origin` **opprettes som utkast** (en ny
+  modul legges inn i kurset bare når kurset er upublisert — i et publisert kurs blir den liggende i
+  Moduler, `summary.unplacedModuleIds`, så kurset fortsatt kan fullføres); elementer kurset har som
+  fila ikke nevner, **tas ut av kurset** (ikke slettet). Det som trer i kraft straks: rekkefølgen,
+  uttakene, og kursets tittel, beskrivelse, nivå og plassering. Kursets id, publiseringstilstand,
+  klassetildeling, diskusjoner og deltakernes framdrift er urørt; elementtitler i fila ignoreres for
+  en levende seksjon og for moduler (#931). Avvises uten at noe skrives: fil fra et annet kurs eller
+  med et element kurset ikke har (400 `origin_mismatch`, `DomainRuleError` slik #999 krever),
+  **utdatert fil** — et element har fått nyere versjon enn `origin.versionNo` sier (400
+  `origin_stale`), element forfatteren ikke eier (403). Svaret bærer `summary`; revisjonssporet har
+  kursets `course_imported` og ett `section_imported` / `module_imported` per element.
 - **Dialogen i Innholdsforvaltning:** når fila peker på et kurs som finnes her (og forfatteren får
   se det), spør importen: «Oppdater dette kurset» (nye versjoner legges klar; ingenting publiseres),
-  «Importer som nytt kurs», eller avbryt. Ellers som før.
+  «Importer som nytt kurs», eller avbryt. Ellers som før. Tekstene via i18n (kurssiden oversetter nå
+  `data-i18n` ved oppstart, som modulskallet). Svarer oppslaget på kurset med 500, stopper importen
+  med melding (ikke stille nytt kurs). Oppsummeringen vises på kurssiden etter navigasjonen
+  (`queueToast`/`flushQueuedToast` i `toast.js`) — det gjelder nå også «Kurs importert»-meldingene,
+  som før forsvant med siden.
 - Fase B (skillets arbeidsflyt for justering) og fase C (forskjellsvisning) står igjen.
 
 **Slik er det målt:** `test/unit/course-update-plan-1095.test.ts` (5), `test/m2-course-update-import-1095.test.ts`
 (eksporten bærer identiteter; oppdatering med ny versjon, nytt utkast, tatt ut, og alt urørt som
 skal være urørt, inkludert deltakerens «lest» og det hun får servert; fil fra annet kurs, fil uten
 mål, fremmed element → 400 uten skriving; fil uten identiteter → nytt kurs), `test/e2e/admin-content-course-update-import-1095.spec.ts`
-(dialogens tre valg; uten identitet eller med ukjent id spørres det ikke). Tolv mutasjoner, alle
-fanget (én ble dødkode og fjernet: ruta sin egen sjekk på `targetId`, som tjenesten alt gjør).
+(dialogens tre valg; uten identitet eller med ukjent id spørres det ikke; oppsummeringen på
+kurssiden; en-GB-tekster; 500 stopper). QA-porten runde 1 ga NO-GO på fire punkter (modulutkast i
+publisert kurs, eierskap per element, utdatert fil, hardkodet bokmål) — alle rettet med egne tester
+(ny modul i publisert og upublisert kurs, 403 for fagansvarlig uten eierskap og 201 for
+administrator, `origin_stale` og eldre fil uten versjonsnummer, revisjonsspor per element).
 
 ## 2.87.0 - 2026-10-11
 

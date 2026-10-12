@@ -38,6 +38,8 @@ Eksportfila får en valgfri blokk `origin` på kurset og på hvert element:
 { "course": { "course": { "origin": { "courseId": "…", "exportedAt": "…", "platformVersion": "2.88.0" }, "items": [
   { "type": "SECTION", "sortOrder": 0, "origin": { "sectionId": "…", "versionNo": 3 }, "section": { … } },
   { "type": "MODULE",  "sortOrder": 1, "origin": { "moduleId": "…",  "versionNo": 2 }, "module":  { … } }
+  // versionNo = elementets HØYESTE versjonsnummer ved eksport. Er det høyere når fila kommer tilbake,
+  // er fila utdatert og avvises (origin_stale): noen justerte elementet i mellomtiden.
 ] } } }
 ```
 
@@ -75,14 +77,25 @@ dialogen **«Oppdater dette kurset»** ved siden av «Importer som nytt kurs», 
 | Element | Hva skjer |
 |---|---|
 | seksjon/modul med `origin` som finnes i kurset | **ny versjon** på det eksisterende elementet (seksjon: som dagens seksjonsimport; modul: som dagens modulimport) |
-| element uten `origin` | **opprettes** og legges inn i rekkefølgen |
+| element uten `origin` | **opprettes** som utkast. Seksjon: legges inn i rekkefølgen (deltakeren ser den ikke før den publiseres). Modul: legges inn bare når kurset er **upublisert**; i et publisert kurs ville et modulutkast gjort kurset umulig å fullføre, så den blir liggende i Moduler (`summary.unplacedModuleIds`) til forfatteren publiserer og legger den inn (#440) |
 | element i kurset som ikke er i fila | **tas ut av kurset** (ikke slettet; blir liggende i biblioteket, arkiveres manuelt) |
 | element med `origin` som ikke finnes | avvist med melding — fila hører ikke til dette kurset |
 | kursets tittel, beskrivelse, nivå, plassering | oppdateres |
 
-Alt i én transaksjon, med revisjonsspor per element (samme hendelser som i dag). Kursets id,
-klassetildeling, påmeldinger, diskusjoner og deltakernes framdrift er urørt. Oversettelsesporten
-virker som i dag: et element som mangler et språk, holdes tilbake, og kurset avpubliseres (#996).
+Alt i én transaksjon, med revisjonsspor per element (`section_imported` / `module_imported` med
+`mode: "updateExisting"` og kursets id) i tillegg til kursets `course_imported`. Kursets id,
+publiseringstilstand, klassetildeling, påmeldinger, diskusjoner og deltakernes framdrift er urørt.
+Oversettelsesporten gjelder per element som før (et element som mangler et språk, kan ikke
+publiseres); kurset avpubliseres IKKE av en oppdatering — ingenting i den rører publiseringen.
+
+**Eierskap per element.** Kursets eier kan ha satt inn en annen forfatters modul eller seksjon
+(#903). En oppdatering som skriver ny versjon på et slikt element, krever at forfatteren eier det
+(eller er administrator) — samme vakt som seksjons- og modulimporten med `replaceExisting`. Ellers
+403, og ingenting skrives; forfatteren tar elementet ut av fila eller får eierskap.
+
+**Det som trer i kraft straks**, uten publisering: kursets egne felt (tittel, beskrivelse, nivå,
+plassering), rekkefølgen, og at elementer tas ut. Tittelendringer i fila på en seksjon som har en
+levende versjon, og på alle moduler, ignoreres — tittelen følger elementet, ikke versjonen (#931).
 
 Teknisk er dette en orkestrering av de to importveiene som alt finnes (`replaceExisting` for
 seksjon og modul) pluss `setCourseItems`; det nye er gjenkjenningen av fila og dialogen.

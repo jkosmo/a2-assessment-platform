@@ -232,6 +232,8 @@ adminCoursesRouter.post("/import", async (request, response, next) => {
       actorId,
       mode,
       targetCourseId: data.targetId,
+      // #1095: eierskapet sjekkes per element i tjenesten (seksjoner og moduler kan ha andre eiere enn kurset).
+      actorRoles: request.context?.roles ?? [],
     });
     // AA-2 (#650): links + clientRef echo make the response agent-orchestrable.
     response.status(201).json({

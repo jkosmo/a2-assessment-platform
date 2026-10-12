@@ -30,8 +30,10 @@ import { randomUUID } from "node:crypto";
 import { createSection } from "../course/sectionCommands.js";
 import { stageSectionAssets, reclaimAssetBlobs, type StagedSectionAsset } from "../course/assetCommands.js";
 import { DomainRuleError, ValidationError } from "../../errors/AppError.js";
+import { assertContentOwnership } from "../content/contentOwnershipService.js";
 import { localizedTextCodec, type LocalizedText } from "../../codecs/localizedTextCodec.js";
 import { recordAuditEvent } from "../../services/auditService.js";
+import type { AuditAction, AuditEntityType } from "../../observability/auditEvents.js";
 import { evaluateModulePublishGate } from "./modulePublishGate.js";
 import { planCourseUpdate, type CourseUpdatePlan } from "./courseUpdatePlan.js";
 import {
@@ -57,6 +59,8 @@ export interface CourseUpdateSummary {
   createdModules: number;
   removedSections: number;
   removedModules: number;
+  /** #1095: nye moduler som ble opprettet som utkast men IKKE lagt inn, fordi kurset er publisert. */
+  unplacedModuleIds: string[];
 }
 
 // #749 (Layer A): the course-import route carries inlined section assets (base64), so the JSON body
@@ -432,7 +436,7 @@ async function appendInactiveSectionVersion(
   staged: StagedImportSection,
   targetSectionId: string,
   keepLiveTitle: boolean,
-): Promise<void> {
+): Promise<{ sectionVersionId: string; versionNo: number }> {
   const last = await tx.courseSectionVersion.findFirst({
     where: { sectionId: targetSectionId },
     orderBy: { versionNo: "desc" },
@@ -442,7 +446,7 @@ async function appendInactiveSectionVersion(
     where: { id: targetSectionId },
     data: keepLiveTitle ? { updatedAt: new Date() } : { title: staged.title, updatedAt: new Date() },
   });
-  await tx.courseSectionVersion.create({
+  const created = await tx.courseSectionVersion.create({
     data: {
       sectionId: targetSectionId,
       versionNo: (last?.versionNo ?? 0) + 1,
@@ -450,10 +454,12 @@ async function appendInactiveSectionVersion(
       publishedBy: null,
       publishedAt: null,
     },
+    select: { id: true, versionNo: true },
   });
   for (const asset of staged.stagedAssets) {
     await tx.sectionAsset.create({ data: { id: asset.id, sectionId: targetSectionId, ...asset.rowData } });
   }
+  return { sectionVersionId: created.id, versionNo: created.versionNo };
 }
 
 export async function importSectionFromEnvelope(
@@ -567,6 +573,11 @@ export async function importCourseFromEnvelope(
     actorId: string;
     mode: ImportMode;
     targetCourseId?: string;
+    // #1095: `updateExisting` skriver nye versjoner på seksjoner og moduler som kan ha andre eiere
+    // enn kurset. Eierskapet sjekkes derfor PER ELEMENT, som seksjons- og modulimporten gjør, og
+    // vakta trenger rollene (administrator går forbi). Uten roller behandles kalleren som vanlig
+    // forfatter — strengt, ikke åpent.
+    actorRoles?: string[];
   },
   // #957: samme form som søsterfunksjonene — `importModulePayload` (:336) og `persistStagedSection`
   // (:169) rapporterer begge `heldBackByTranslationGate` oppover. Kursimporten regnet ut flagget,
@@ -588,6 +599,10 @@ export async function importCourseFromEnvelope(
   // nåværende elementer: hva blir ny versjon, hva opprettes, hva tas ut — og hva som er feil.
   let updatePlan: CourseUpdatePlan | null = null;
   const updateTargets = new Map<number, { targetId: string; keepLiveTitle: boolean }>();
+  // Er kurset publisert, kan en NY modul ikke legges inn som utkast: deltakeren må da fullføre
+  // en modul som ikke kan åpnes (I1). Den opprettes, men legges ikke inn i kurset før forfatteren
+  // publiserer den og legger den inn selv — slik kursbyggeren krever (#440).
+  let targetCourseIsPublished = false;
   if (options.mode === "updateExisting") {
     // #999: domeneregler bærer koder, så klienten kan si det på brukerens språk.
     if (!options.targetCourseId) throw new DomainRuleError("import_target_required", "targetCourseId is required when mode is updateExisting.");
@@ -604,12 +619,39 @@ export async function importCourseFromEnvelope(
     if (updatePlan.problems.length > 0) {
       throw new DomainRuleError("origin_mismatch", `The file does not match this course: ${updatePlan.problems.join("; ")}.`, { problems: updatePlan.problems });
     }
+    const targetCourse = await prisma.course.findUnique({ where: { id: options.targetCourseId }, select: { publishedAt: true } });
+    if (!targetCourse) throw new DomainRuleError("import_target_not_found", "Target course not found for updateExisting.");
+    targetCourseIsPublished = targetCourse.publishedAt != null;
     for (const entry of updatePlan.entries) {
       if (entry.action !== "update") continue;
+      // Eierskap per element: kursets eier kan ha satt inn en annen forfatters modul eller seksjon.
+      // Den får ikke ny versjon herfra uten at forfatteren eier den (eller er administrator) — samme
+      // vakt som `POST /sections/import` og `POST /modules/import` med `replaceExisting`.
+      await assertContentOwnership({
+        contentType: entry.type,
+        contentId: entry.targetId,
+        actorUserId: options.actorId,
+        roles: options.actorRoles ?? [],
+      });
       let keepLiveTitle = false;
+      let currentVersionNo: number | null = null;
       if (entry.type === "SECTION") {
         const section = await prisma.courseSection.findUnique({ where: { id: entry.targetId }, select: { activeVersionId: true } });
         keepLiveTitle = section?.activeVersionId != null;
+        currentVersionNo = (await prisma.courseSectionVersion.findFirst({ where: { sectionId: entry.targetId }, orderBy: { versionNo: "desc" }, select: { versionNo: true } }))?.versionNo ?? null;
+      } else {
+        currentVersionNo = (await prisma.moduleVersion.findFirst({ where: { moduleId: entry.targetId }, orderBy: { versionNo: "desc" }, select: { versionNo: true } }))?.versionNo ?? null;
+      }
+      // Utdatert fil: elementet har fått en nyere versjon etter eksporten (noen har justert det i
+      // plattformen, eller en annen fil kom først). Da ville denne fila skrive over den endringen
+      // uten at forfatteren vet det. Avvis; forfatteren eksporterer på nytt og justerer den fila.
+      if (entry.exportedVersionNo !== undefined && currentVersionNo !== null && currentVersionNo > entry.exportedVersionNo) {
+        throw new DomainRuleError("origin_stale", `The file is out of date: ${entry.type.toLowerCase()} ${entry.targetId} has version ${currentVersionNo}, the file was exported at version ${entry.exportedVersionNo}.`, {
+          type: entry.type,
+          id: entry.targetId,
+          exportedVersionNo: entry.exportedVersionNo,
+          currentVersionNo,
+        });
       }
       updateTargets.set(entry.index, { targetId: entry.targetId, keepLiveTitle });
     }
@@ -687,11 +729,18 @@ export async function importCourseFromEnvelope(
         // missing a locale. The course must then stay a draft too.
         let anyContentHeldBack = false;
 
-        const summary: CourseUpdateSummary = { updatedSections: 0, updatedModules: 0, createdSections: 0, createdModules: 0, removedSections: 0, removedModules: 0 };
+        const summary: CourseUpdateSummary = { updatedSections: 0, updatedModules: 0, createdSections: 0, createdModules: 0, removedSections: 0, removedModules: 0, unplacedModuleIds: [] };
         if (orderedItems && updatePlan) {
           // #1095: oppdatering. Ny versjon på det fila kjenner igjen, utkast av det nye, og den nye
-          // rekkefølgen. Ingenting publiseres her.
+          // rekkefølgen. Ingenting publiseres her. Hvert element får sitt eget revisjonsspor, som når
+          // det importeres alene — kursraden alene sier ikke HVILKE elementer som fikk ny versjon.
           const courseItemInputs: CourseItemInput[] = [];
+          const elementAudit = async (entityType: AuditEntityType, entityId: string, action: AuditAction, metadata: Record<string, unknown>) => {
+            await recordAuditEvent(
+              { entityType, entityId, action, actorId: options.actorId, metadata: { mode: "updateExisting", courseId, ...metadata } },
+              tx,
+            );
+          };
           for (let i = 0; i < orderedItems.length; i += 1) {
             const entry = orderedItems[i];
             const target = updateTargets.get(i);
@@ -699,13 +748,25 @@ export async function importCourseFromEnvelope(
               const staged = stagedSections.get(i);
               if (!staged) throw new Error("Internal: section was not staged before the import transaction.");
               if (target) {
-                await appendInactiveSectionVersion(tx, staged, target.targetId, target.keepLiveTitle);
+                const version = await appendInactiveSectionVersion(tx, staged, target.targetId, target.keepLiveTitle);
                 courseItemInputs.push({ type: "SECTION", sectionId: target.targetId });
                 summary.updatedSections += 1;
+                await elementAudit(auditEntityTypes.courseSection, target.targetId, auditActions.adminContent.sectionImported, {
+                  sectionId: target.targetId,
+                  sectionVersionId: version.sectionVersionId,
+                  versionNo: version.versionNo,
+                  ...(target.keepLiveTitle ? { titleKeptLive: true } : {}),
+                  assetCount: staged.stagedAssets.length,
+                });
               } else {
                 await persistStagedSection(tx, staged, options.actorId, { draft: true });
                 courseItemInputs.push({ type: "SECTION", sectionId: staged.sectionId });
                 summary.createdSections += 1;
+                await elementAudit(auditEntityTypes.courseSection, staged.sectionId, auditActions.adminContent.sectionImported, {
+                  sectionId: staged.sectionId,
+                  created: true,
+                  assetCount: staged.stagedAssets.length,
+                });
               }
               sectionCount += 1;
             } else if (target) {
@@ -713,11 +774,23 @@ export async function importCourseFromEnvelope(
               courseItemInputs.push({ type: "MODULE", moduleId: imported.moduleId });
               importedModuleIds.push(imported.moduleId);
               summary.updatedModules += 1;
+              await elementAudit(auditEntityTypes.module, imported.moduleId, auditActions.adminContent.moduleImported, { moduleId: imported.moduleId, moduleVersionId: imported.moduleVersionId });
             } else {
               const imported = await importModulePayload(entry.module, { actorId: options.actorId, mode: "createNew", autoPublish: false }, tx);
-              courseItemInputs.push({ type: "MODULE", moduleId: imported.moduleId });
               importedModuleIds.push(imported.moduleId);
               summary.createdModules += 1;
+              if (targetCourseIsPublished) {
+                // Utkastet ligger i Moduler; forfatteren publiserer det og legger det inn i kurset.
+                summary.unplacedModuleIds.push(imported.moduleId);
+              } else {
+                courseItemInputs.push({ type: "MODULE", moduleId: imported.moduleId });
+              }
+              await elementAudit(auditEntityTypes.module, imported.moduleId, auditActions.adminContent.moduleImported, {
+                moduleId: imported.moduleId,
+                moduleVersionId: imported.moduleVersionId,
+                created: true,
+                ...(targetCourseIsPublished ? { notPlacedInCourse: true } : {}),
+              });
             }
           }
           summary.removedSections = updatePlan.removed.sectionIds.length;

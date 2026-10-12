@@ -40,6 +40,17 @@ describe("planCourseUpdate (#1095)", () => {
     expect(plan.removed).toEqual({ sectionIds: ["s1", "s2"], moduleIds: ["m1"] });
   });
 
+  it("versjonsnummeret fra fila følger oppdateringen, så tjenesten kan avvise en utdatert fil", () => {
+    const plan = planCourseUpdate(
+      [{ type: "SECTION", origin: { sectionId: "s1", versionNo: 3 } }, { type: "MODULE", origin: { moduleId: "m1" } }],
+      kurset,
+    );
+    expect(plan.entries).toEqual([
+      { index: 0, type: "SECTION", action: "update", targetId: "s1", exportedVersionNo: 3 },
+      { index: 1, type: "MODULE", action: "update", targetId: "m1" },
+    ]);
+  });
+
   it("en fil uten identiteter oppretter alt og tar ut alt — kontrollcase mot en tom plan", () => {
     const plan = planCourseUpdate([seksjon(), modul()], kurset);
     expect(plan.entries.map((e) => e.action)).toEqual(["create", "create"]);

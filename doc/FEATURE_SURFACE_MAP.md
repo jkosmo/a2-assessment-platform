@@ -151,11 +151,17 @@ in `contentImportService.ts`): `createNew` (default: a new course, items created
 file says so), `replaceExisting` (API only: keeps the course id, recreates every item — progress is
 lost; the skill never uses it), and **`updateExisting`** (#1095: new unpublished versions on items
 the file recognises by `origin`, drafts for new items, unlisted items taken out of the course,
-nothing published). The export (`adminContentQueries.ts`) writes `origin` on the course and on every
-item; the plan is `courseUpdatePlan.ts` (pure). The admin dialog `#courseImportChoiceDialog`
-(`admin-content-courses.js`, `askImportChoice`) offers update vs new when the file's course exists.
+nothing published; a new MODULE is not placed in a published course — `summary.unplacedModuleIds`).
+The export (`adminContentQueries.ts`) writes `origin` (ids + highest `versionNo`) on the course and
+on every item; the plan is `courseUpdatePlan.ts` (pure); the service rejects a stale file
+(`origin_stale`) and checks ownership per updated item (`assertContentOwnership`, admin bypass). The
+admin dialog `#courseImportChoiceDialog` (`admin-content-courses.js`, `askImportChoice`, texts via
+`data-i18n`, translated in the page's `init`) offers update vs new when the file's course exists;
+the summary is shown on the course page after navigation (`queueToast`/`flushQueuedToast` in
+`toast.js`).
 **Hazard:** a new way to add items to a course must go through `setCourseItems`, and a new way to
-write a section version must keep the live version untouched (`appendInactiveSectionVersion`).
+write a section version must keep the live version untouched (`appendInactiveSectionVersion`). A
+draft module must never be placed in a published course (I1: participants cannot complete it).
 
 ## 6b-1. Participant course list — order (#1093)
 

@@ -1,4 +1,5 @@
 import { adminContentRepository } from "./adminContentRepository.js";
+import { prisma } from "../../db/prisma.js";
 import type { SupportedLocale } from "../../i18n/locale.js";
 import { localizeContentText, localesPresent } from "../../i18n/content.js";
 import { deriveContentLifecycle } from "../content/lifecycle.js";
@@ -265,12 +266,16 @@ export async function buildCourseExportEnvelope(
       .map(async (item) => {
         if (item.itemType === "SECTION" && item.section) {
           const sectionVersion = await buildSectionExportPayload(item.section.id, assetBudget);
-          // #1095: identiteten følger med, så fila kan komme tilbake som en oppdatering.
-          return { type: "SECTION" as const, sortOrder: item.sortOrder, origin: { sectionId: item.section.id }, section: sectionVersion };
+          // #1095: identiteten følger med, så fila kan komme tilbake som en oppdatering. `versionNo` er
+          // elementets HØYESTE versjonsnummer nå (også upubliserte): får elementet en nyere versjon
+          // før fila kommer tilbake, er fila utdatert, og oppdateringen avvises.
+          const latestSection = await prisma.courseSectionVersion.findFirst({ where: { sectionId: item.section.id }, orderBy: { versionNo: "desc" }, select: { versionNo: true } });
+          return { type: "SECTION" as const, sortOrder: item.sortOrder, origin: { sectionId: item.section.id, ...(latestSection ? { versionNo: latestSection.versionNo } : {}) }, section: sectionVersion };
         }
         const moduleId = item.moduleId ?? item.module?.id;
         if (!moduleId) throw new Error("Course item is missing its module reference.");
-        return { type: "MODULE" as const, sortOrder: item.sortOrder, origin: { moduleId }, module: await buildModuleExportPayload(moduleId) };
+        const latestModule = await prisma.moduleVersion.findFirst({ where: { moduleId }, orderBy: { versionNo: "desc" }, select: { versionNo: true } });
+        return { type: "MODULE" as const, sortOrder: item.sortOrder, origin: { moduleId, ...(latestModule ? { versionNo: latestModule.versionNo } : {}) }, module: await buildModuleExportPayload(moduleId) };
       }),
   );
 

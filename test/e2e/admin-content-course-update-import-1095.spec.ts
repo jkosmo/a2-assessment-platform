@@ -46,7 +46,7 @@ test.describe("#1095 kursimport — oppdater kurset fila hører til, eller impor
     const sendt: unknown[] = [];
     await page.route("**/api/admin/content/courses/import", async (route: Route) => {
       sendt.push(route.request().postDataJSON());
-      await route.fulfill({ status: 201, contentType: "application/json", body: JSON.stringify({ courseId: "course-1", moduleIds: [], heldBackByTranslationGate: false, summary: { updatedSections: 2, updatedModules: 1, createdSections: 1, createdModules: 0, removedSections: 1, removedModules: 0 } }) });
+      await route.fulfill({ status: 201, contentType: "application/json", body: JSON.stringify({ courseId: "course-1", moduleIds: [], heldBackByTranslationGate: false, summary: { updatedSections: 2, updatedModules: 1, createdSections: 1, createdModules: 1, removedSections: 1, removedModules: 0, unplacedModuleIds: ["mod-ny"] } }) });
     });
     await page.goto(LIBRARY);
     await lastOpp(page, pakke({ courseId: "course-1" }));
@@ -58,8 +58,41 @@ test.describe("#1095 kursimport — oppdater kurset fila hører til, eller impor
 
     await expect.poll(() => sendt.length).toBe(1);
     expect(sendt[0]).toMatchObject({ mode: "updateExisting", targetId: "course-1" });
-    // Etterpå går siden til kurset, der de nye versjonene ligger klar.
+    // Etterpå går siden til kurset, der de nye versjonene ligger klar — og oppsummeringen vises DER,
+    // ikke på siden som forsvant. En ny modul som ikke ble lagt inn, forklares i detaljen.
     await expect(page).toHaveURL(/\/admin-content\/courses\/course-1$/);
+    await expect(page.locator(".toast__message")).toContainText("Course updated: 3 element(s)");
+    await expect(page.locator(".toast__detail")).toContainText("not added to the course");
+  });
+
+  test("dialogens tekster følger språket (en-GB), ikke bokmål hardkodet i HTML", async ({ page }) => {
+    await page.addInitScript(() => {
+      try { window.localStorage.setItem("participant.locale", "en-GB"); } catch { /* blokkert lagring: testen faller på teksten */ }
+    });
+    await page.route("**/api/admin/content/courses/import", (route: Route) => route.fulfill({ status: 201, contentType: "application/json", body: JSON.stringify({ courseId: "course-1", moduleIds: [] }) }));
+    await page.goto(LIBRARY);
+    await lastOpp(page, pakke({ courseId: "course-1" }));
+    await expect(page.locator("#courseImportChoiceDialog")).toBeVisible();
+    await expect(page.locator("#courseImportChoiceTitle")).toHaveText("Update the course?");
+    await expect(page.locator("#courseImportUpdateBtn")).toHaveText("Update this course");
+    await expect(page.locator("#courseImportCreateBtn")).toHaveText("Import as a new course");
+    await expect(page.locator("#courseImportCancelBtn")).toHaveText("Cancel");
+    await page.locator("#courseImportCancelBtn").click();
+  });
+
+  test("svarer oppslaget på kurset med 500, stopper importen med feilmelding — det blir ikke laget et nytt kurs", async ({ page }) => {
+    const sendt: unknown[] = [];
+    await page.route("**/api/admin/content/courses/import", async (route: Route) => {
+      sendt.push(route.request().postDataJSON());
+      await route.fulfill({ status: 201, contentType: "application/json", body: JSON.stringify({ courseId: "course-9", moduleIds: [], heldBackByTranslationGate: false }) });
+    });
+    await page.route("**/api/admin/content/courses/course-1", (route: Route) => route.fulfill({ status: 500, contentType: "application/json", body: JSON.stringify({ error: "internal_error" }) }));
+    await page.goto(LIBRARY);
+    await lastOpp(page, pakke({ courseId: "course-1" }));
+    await expect(page.locator(".toast--error .toast__message")).toContainText("Course import failed");
+    await page.waitForTimeout(300);
+    expect(sendt).toHaveLength(0);
+    await expect(page.locator("#courseImportChoiceDialog")).toBeHidden();
   });
 
   test("«Importer som nytt kurs» i dialogen sender createNew; «Avbryt» sender ingenting", async ({ page }) => {

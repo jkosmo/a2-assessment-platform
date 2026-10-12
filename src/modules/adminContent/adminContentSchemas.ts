@@ -668,8 +668,8 @@ export const courseExportPayloadSchema = z.object({
       module: moduleExportPayloadSchema,
     })).optional(),
     items: z.array(z.discriminatedUnion("type", [
-      z.object({ type: z.literal("MODULE"), sortOrder: z.number().int().min(0), origin: z.object({ moduleId: z.string().min(1) }).optional(), module: moduleExportPayloadSchema }),
-      z.object({ type: z.literal("SECTION"), sortOrder: z.number().int().min(0), origin: z.object({ sectionId: z.string().min(1) }).optional(), section: sectionExportPayloadSchema }),
+      z.object({ type: z.literal("MODULE"), sortOrder: z.number().int().min(0), origin: z.object({ moduleId: z.string().min(1), versionNo: z.number().int().min(1).optional() }).optional(), module: moduleExportPayloadSchema }),
+      z.object({ type: z.literal("SECTION"), sortOrder: z.number().int().min(0), origin: z.object({ sectionId: z.string().min(1), versionNo: z.number().int().min(1).optional() }).optional(), section: sectionExportPayloadSchema }),
     ])).optional(),
   }).refine(
     (c) => (c.modules?.length ?? 0) > 0 || (c.items?.length ?? 0) > 0,
