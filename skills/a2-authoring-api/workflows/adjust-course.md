@@ -1,5 +1,9 @@
 # Workflow: adjust a course that is already on the platform
 
+Contents: [Gate 1 — the export file](#gate-1--source-the-export-file) · [Gate 2 — the change list](#gate-2--the-change-list) ·
+[Gate 3 — each changed element](#gate-3--each-changed-element) · [Gate 4 — independent check](#gate-4--independent-check) ·
+[Gate 5 — production](#gate-5--production) · [Delivering](#delivering)
+
 Use this when the author wants a course that **exists on the platform** changed — a section
 rewritten, a test replaced, a figure redrawn, a new section added, something taken out — and
 hands you the course's **export file** from the platform. It is a shorter path than the two

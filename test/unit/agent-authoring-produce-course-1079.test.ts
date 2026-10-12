@@ -63,6 +63,8 @@ describe("produce-course — eksempelkurset går gjennom alt (#1079)", () => {
       languages: "ok",
       "approved text": "ok",
       slides: "ok",
+      // #1095: bare et kurs justert fra plattformens eksport har en endringsliste.
+      changes: "skipped",
       "import file": "ok",
     });
     expect(r.ok).toBe(true);
@@ -347,7 +349,7 @@ describe("produce-course — det som ikke ble kjørt, sies (#1079)", () => {
     expect(status(r)["approved text"]).toBe("skipped");
     const rapport = formatProduction(r);
     expect(rapport).toContain("--   approved text  NOT RUN — no --state file. Say so in the report");
-    expect(rapport).toContain("Not run: approved text. Name them as not run when you report.");
+    expect(rapport).toContain("Not run: approved text, changes. Name them as not run when you report.");
     expect(rapport).toContain(`DELIVER ${k.ut}  —  the author imports it at Innholdsforvaltning → Kurs → «Importer kurs»`);
   });
 
