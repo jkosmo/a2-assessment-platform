@@ -52,6 +52,14 @@ One file, `work/course-state.json`, separate from the chat:
 
 A whole state file: [examples/course-from-slides/course-state.json](../examples/course-from-slides/course-state.json).
 
+When a course is **adjusted from the platform's export**, `scripts/adjust-from-export.mjs` writes
+the state with every element `approved` as it stands in the file — the export is the approved
+baseline — with empty `mandatory` lists and the labels of each SVG figure. A section whose text is
+one plain string (the same in every language) keeps it inline, in `content`, not in a file. Fill in what must
+survive for the elements that change, as you would after an approval. An element the author
+removes gets `status: "removed"` and leaves `order`; an approved element that is simply missing
+from the package is a loss, and production stops.
+
 ## After each approval
 
 Write the element to the state **in full**, set `status` to `approved`, and record what must

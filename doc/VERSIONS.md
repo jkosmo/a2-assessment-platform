@@ -2,6 +2,216 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.88.2 - 2026-10-12
+
+### Justere et publisert kurs, fase B: skillets arbeidsflyt (#1095)
+
+Skillet `a2-authoring-api` 2.88.2 kan justere et kurs som alt ligger på plattformen, fra kursets
+eksportfil, og endrer bare det forfatteren ber om.
+
+- **`workflows/adjust-course.md`** (ny, tredje rad i «which workflow»): port 1 eksportfila (bare
+  plattformens egen eksport duger — den bærer `origin`); port 2 endringslista (uendret / endret /
+  ny / fjernet per element, med reglene: tittel endres i admin-UI, ny modul i publisert kurs
+  lander i Moduler, fjernet tas ut men slettes ikke, fremmede elementer byttes ut); port 3 hvert
+  endret element for seg, alt annet ordrett; port 4 uavhengig kontroll bare av det endrede; port 5
+  oversettelse av det endrede og produksjon med `--changes`. Leveransen: fila, endringslista og
+  «Oppdater dette kurset».
+- **`scripts/adjust-from-export.mjs`** (nytt): eksportfila → `work/package.json` (seksjoner som
+  filer per språk, bilder som filer med språk- og layoutvarianter, moduler inline, `origin` på
+  alt og på kurset), `work/course-state.json` (alt godkjent som det står, SVG-etiketter som
+  figurer), `work/changes.json` (alt «unchanged») og `work/baseline.json`. Uten `origin` stopper
+  det: fila er ikke en plattformeksport.
+- **`produce-course.mjs --changes work/changes.json`**: ny kontroll **changes** — et element
+  listet «unchanged» må være ordrett som i eksporten (tekst, tittel, bilder; `audit` og
+  nøkkelrekkefølge teller ikke), «changed» må være endret, «new» har ingen `origin`, «removed» er
+  ute av pakka, og alt på begge sider må være med i lista. Et kurs med `origin` uten `--changes`
+  produseres ikke. `origin` føres inn i importfila (elementer og kurs), og DELIVER-linja sier
+  «Oppdater dette kurset».
+- Skillets skjemakontroll godtar og sjekker `origin`. Språkkontrollen regner `null` (slik
+  plattformen eksporterer tomme valgfrie felt) som fraværende felt, ikke som manglende språk.
+- QA-porten (runde 1 på fase B): bildenes `filename` fra plattformen beholdes i pakka (på disk får
+  de entydige navn, så to innlimte `image.png` ikke overskriver hverandre); en brødtekst som er én
+  streng forblir én streng (#892); kvalitetskontrollene (figurer, lesertekst, spørsmål, språk)
+  kjører bare på endrede og nye elementer når det er en endringsliste; kursets egne felt har sin
+  egen linje (`course`) i lista, siden plattformen skriver dem rett på det levende kurset; «fjernet»
+  matches mot riktig element via `refs`. Plattformen: tittelen teller som endring på en seksjon
+  uten levende versjon (der følger tittelen fila) — også for fremmede utkast (kopien får fila sin
+  tittel). Runde 2: spørsmålsregelen teller hele kurset og rapporteres for endrede og nye tester;
+  et bilde tegnet om til en annen filtype får type og navn fra fila; rekkefølgen har sin egen linje
+  (`order`) i endringslista. Runde 3 (GO): en endret test som alt hadde for få spørsmål i eksporten
+  tvinges ikke til å vokse for en liten retting (kravet går ikke over det eksporten hadde).
+- Referansene oppdatert: package-schema (`origin`), export-validation, check-and-produce (changes
+  i rapporttabellen, leveransen), content-preservation (tilstand fra eksport; fjernet element).
+- **Plattformen (samme versjon):** et element forfatteren eier som fila ikke endret (brødtekst og
+  bilder; modulversjonen — som for fremmede elementer), får **ingen ny versjon**; det meldes i
+  `summary.unchangedIds`. Skillet leverer hele kurset ordrett, og en liten justering skal ikke
+  legge N versjoner klar til gjennomsyn. Integrasjonstesten: uendret modul → ingen versjon, meldt;
+  mutasjon fanget.
+
+**Slik er det målt:** `test/unit/skill-adjust-course-1095.test.ts` (6): rundturen eksport →
+arbeidssett → produksjon med alt uendret gir en fil der hvert element er ordrett som i eksporten,
+med `origin` og tom `audit`; uendret-men-endret stopper, endret-men-ordrett stopper; nytt uten
+origin, fjernet (også i kurstilstanden), glemt element stopper; kurs med origin uten liste
+stopper. Åtte mutasjoner (origin på element og kurs, de tre utfallene i changes-kontrollen,
+kurs med origin uten liste, null som manglende språk, bildet skrevet feil), alle fanget med grønn
+grunnlinje.
+
+## 2.88.1 - 2026-10-12
+
+### Justere et publisert kurs (#1095): elementer forfatteren ikke eier byttes ut, ikke hoppet over
+
+Produkteier 2026-10-12, på spørsmålet fra 2.88.0: «Hvis du er eier av kurset så vil modul/seksjon
+byttes ut med deg som ny eier, gammel modul eller seksjon vil bli bevart i arkivert versjon.» Og
+fullføring av byttede moduler kan nullstilles (valg 1 av to).
+
+- **Byttet:** et element i fila som forfatteren ikke eier (#903), får en egen kopi med forfatteren
+  som eier. Kopiens **v1 er det deltakerne ser i dag** (den levende versjonen, publisert — kurset
+  endrer seg ikke før forfatteren publiserer), **v2 er fila**, lagt klar. Kopien tar elementets
+  plass i rekkefølgen. Det gamle tas ut av kurset og **arkiveres når ingen andre kurs bruker det**
+  (avpublisert + arkivert, som «Arkiver»); brukes det et annet sted, blir det liggende hos eieren.
+  «Lest» kopieres til den nye seksjonen for dette kurset. Innleveringer og vurderinger hører til
+  den gamle modulen — deltakere som hadde fullført den, står uten fullføring på kopien (godtatt).
+  Har det gamle elementet ingen levende versjon, får kopien bare fila som utkast.
+- **Bare det fila endret, byttes.** Et fremmed element fila ikke rørte (samme innhold som
+  plattformens nyeste versjon i det byttet faktisk bruker: brødtekst og bilder for seksjoner,
+  versjonen for moduler — tittel, beskrivelse og nivå teller ikke, `audit` og nøkkelrekkefølge
+  heller ikke), står som det er — skillet
+  leverer hele kurset ordrett, og et bytte ville nullstilt deltakernes fullføring for ingenting.
+  Passerer den levende versjonen ikke dagens publiseringsport (eldre innhold), kan kopien ikke ta
+  plassen: elementet står som det er og meldes (`summary.keptUnownedIds` med `reason`
+  `unchanged` / `not_publishable`), i stedet for at hele importen stopper.
+- Utdatert-sjekken (`origin_stale`) kjører FØR eierskapet, så også et fremmed element som eieren
+  rettet etter eksporten, stopper fila — ellers manglet kopiens v2 rettingen (QA-funn).
+- `summary.replacedUnownedIds: [{ type, oldId, newId, oldArchived }]` erstatter
+  `skippedUnownedIds`; oppsummeringen i Innholdsforvaltning sier det. Revisjonssporet på kopien
+  bærer `replacedUnowned` (det den erstattet), `liveCopied` og `readsCopied`; det gamle får
+  `section_archived` / `module_archived` når det arkiveres.
+- `buildSectionExportPayload` kan ta en bestemt versjon (kopien bygges fra den levende, ikke nyeste).
+
+**Slik er det målt:** `test/m2-course-update-import-1095.test.ts` (fagansvarlig eier kurset og én
+seksjon; administratorens seksjon, en delt seksjon brukt i et annet kurs, og modulen byttes ut:
+v1/v2 på kopiene, eierrad, «lest» fulgt med, deltakeren ser den levende teksten på kopien, det
+gamle arkivert bare når ubrukt, rekkefølgen, revisjonssporet; administrator bytter ingenting).
+Sju mutasjoner (kopiens v1 fra fila, «lest» ikke kopiert, ikke arkivert, arkivert selv om i bruk,
+modulkopi upublisert, kopi uten eier, oppsummeringen taus), alle fanget.
+
+## 2.88.0 - 2026-10-12
+
+### Justere et publisert kurs, fase A: eksport med identiteter og import som oppdaterer (#1095)
+
+Produkteier: «strømlinjeformet eksport, med reimport etter justering». Designet i
+`doc/DESIGN_1095_ADJUST_COURSE.md`, avgjørelsene i `doc/DECISIONS.md` (2026-10-12): nye versjoner
+legges klar, publisering er en bevisst handling; framdrift som ved manuell justering; fjernede
+elementer tas ut, ikke slettes.
+
+- **Eksporten bærer identiteter.** `course.course.origin` (`courseId`, `exportedAt`) og `origin`
+  per element (`sectionId` / `moduleId`). Valgfrie felt: eldre filer og skillets «lag kurs»-filer
+  leses som før, og en fil som flyttes til et annet miljø importeres som nytt kurs der.
+- **Importmodus `updateExisting`** (bare kurs, `targetId` kreves; eierskap sjekkes på kurset i
+  ruta og **per element** i tjenesten, som seksjons- og modulimporten). Planen regnes ut før noe
+  skrives (`courseUpdatePlan.ts`, ren funksjon): et element fila kjenner igjen får en **ny,
+  upublisert versjon** (seksjon: som seksjonsimporten, bildene under seksjonens egen id; modul: som
+  modulimporten, uten auto-publisering); et element uten `origin` **opprettes som utkast** (en ny
+  modul legges inn i kurset bare når kurset er upublisert — i et publisert kurs blir den liggende i
+  Moduler, `summary.unplacedModuleIds`, så kurset fortsatt kan fullføres); elementer kurset har som
+  fila ikke nevner, **tas ut av kurset** (ikke slettet). Det som trer i kraft straks: rekkefølgen,
+  uttakene, og kursets tittel, beskrivelse, nivå og plassering. Kursets id, publiseringstilstand,
+  klassetildeling, diskusjoner og deltakernes framdrift er urørt; elementtitler i fila ignoreres for
+  en levende seksjon og for moduler (#931). Avvises uten at noe skrives: fil fra et annet kurs eller
+  med et element kurset ikke har (400 `origin_mismatch`, `DomainRuleError` slik #999 krever),
+  **utdatert fil** — et element har en nyere versjon enn `origin.versionNo` sier (400
+  `origin_stale`; `versionNo` er versjonen fila bærer — den nyeste, også et utkast. Kurseksporten
+  bærer nå nyeste modulversjon som seksjonene alt gjorde, så runde to av en justering ikke avvises;
+  importeres en fil med et modulutkast som nytt kurs, lander modulen upublisert og kurset holdes
+  tilbake som utkast, meldt i oppsummeringen). Et element forfatteren **ikke
+  eier**, ble i 2.88.0 hoppet over (`summary.skippedUnownedIds`) — fra 2.88.1 byttes det ut, se over.
+  Svaret bærer `summary`; revisjonssporet har kursets `course_imported` og ett `section_imported` /
+  `module_imported` per element. Kjent begrensning: elementer lagt inn i kurset etter eksporten tas
+  ut (telles, men pekes ikke ut før fase C).
+- **Dialogen i Innholdsforvaltning:** når fila peker på et kurs som finnes her (og forfatteren får
+  se det), spør importen: «Oppdater dette kurset» (nye versjoner legges klar; ingenting publiseres),
+  «Importer som nytt kurs», eller avbryt. Ellers som før; teksten sier hva som trer i kraft straks.
+  Tekstene via i18n (kurssiden oversetter nå `data-i18n` ved oppstart og ved språkbytte, som
+  modulskallet). Svarer oppslaget på kurset med 500, stopper importen
+  med melding (ikke stille nytt kurs). Oppsummeringen vises på kurssiden etter navigasjonen
+  (`queueToast`/`flushQueuedToast` i `toast.js`) — det gjelder nå også «Kurs importert»-meldingene,
+  som før forsvant med siden.
+- Fase B (skillets arbeidsflyt for justering) og fase C (forskjellsvisning) står igjen.
+
+**Slik er det målt:** `test/unit/course-update-plan-1095.test.ts` (5), `test/m2-course-update-import-1095.test.ts`
+(eksporten bærer identiteter; oppdatering med ny versjon, nytt utkast, tatt ut, og alt urørt som
+skal være urørt, inkludert deltakerens «lest» og det hun får servert; fil fra annet kurs, fil uten
+mål, fremmed element → 400 uten skriving; fil uten identiteter → nytt kurs), `test/e2e/admin-content-course-update-import-1095.spec.ts`
+(dialogens tre valg; uten identitet eller med ukjent id spørres det ikke; oppsummeringen på
+kurssiden; en-GB-tekster; 500 stopper). QA-porten runde 1 ga NO-GO på fire punkter (modulutkast i
+publisert kurs, eierskap per element, utdatert fil, hardkodet bokmål) — alle rettet med egne tester
+(ny modul i publisert og upublisert kurs, fagansvarlig uten eierskap til en modul får resten
+oppdatert og modulen meldt, administrator oppdaterer alt, `origin_stale` for endret element og for
+modul med utkast ved eksporten, eldre fil uten versjonsnummer går gjennom, revisjonsspor per
+element). Runde 2 pekte på modulutkastet og på at hele fila stoppet — begge rettet. Runde 3 pekte
+på blindveien (runde to av en justering avvist til alt var publisert) og på bildestaging for
+seksjoner som hoppes over — begge rettet, med tester (samme fil to ganger → utdatert; utkast som
+nytt kurs → holdt tilbake; fremmed seksjon med ugyldig bilde → importen går gjennom).
+
+## 2.87.0 - 2026-10-11
+
+### «Mine kurs» sorteres alfabetisk, med valgfri plassering per kurs (#1093)
+
+Produkteier, idet han publiserte en rekke kurs i prod: «Hva avgjør rekkefølgen på kurs i Mine
+kurs?» Svaret var publiseringstidspunktet, eldst først, og det eneste som flyttet et kurs var å
+avpublisere og publisere på nytt. Han valgte alfabetisk som standard, med mulighet for begge deler.
+
+- **Regelen bor ett sted:** `src/modules/course/courseOrdering.ts`. Kurs med satt plassering først,
+  stigende; resten alfabetisk på tittelen i deltakerens språk, tallbevisst («Modul 2» før «Modul
+  10») og uten å skille store og små bokstaver. Sorteres på tjeneren i `GET /api/courses`, der
+  titlene alt er oversatt per forespørsel. Klienten deler lista i pågående og fullførte som før,
+  uten å sortere om.
+- **Nytt felt `Course.sortOrder` (heltall, kan være tomt)** — migrasjon
+  `20261011210000_course_sort_order_1093`, bare utvidelse. Settes i kursskjemaet under
+  «Innstillinger» («Plassering i Mine kurs»; tomt = alfabetisk), gjennom admin-API-et (`POST`/`PUT
+  /api/admin/content/courses`, 0–9999 eller null), og følger med i eksport og import (valgfritt
+  felt, så eldre filer leses som før). Kursdetaljen for deltakeren og administratoren viser feltet.
+- Publiseringstidspunktet styrer ikke lenger rekkefølgen.
+
+**Slik er det målt:** `test/unit/course-ordering-1093.test.ts` (7: alfabetisk, tallbevisst, nb/nn
+mot en-GB, plassering først, likt tall, ugyldig tall, ukjent språk), `test/m2-courses-participant-flow.test.ts`
+(rekkefølgen på nb og en-GB med ekte kurs; feltet satt, tømt og avvist gjennom admin-API-et;
+rundtur eksport → import), `test/e2e/admin-content-course-sort-order-1093.spec.ts` (feltet i
+skjemaet: viser lagret verdi, sender tall, sender null når tomt). Ti mutasjoner, alle fanget.
+
+## 2.86.1 - 2026-10-11 (skillpakke; plattformen er ikke rullet ut på nytt)
+
+### Skillet etter milepæl 1: bildene på et lysark får en art kontrollen håndhever (#1079)
+
+Milepæl 1 ble fullført i prod med 2.86.0 (`skills/a2-authoring-api-evals/README.md`): alt innhold
+med i alle tre kursene, men i Tilbudsarbeid ble tre prompt-skjermbilder beholdt som bilde i stedet
+for prompt-boks, to listelysark ble bilde, og to skjermbilder var tunge (444 og 785 kB). Reglene
+sto alt i skillets tekst; modellen fulgte dem ikke. Nå står de i kontrollene:
+
+- **`pictures` i lysarklista:** hva hvert bilde på lysarket ER — `prompt`, `click`, `content`,
+  `infographic`, `decoration` — notatet fra port 1, nå der `slide-coverage.mjs` kan lese det. En
+  prompt som tas med som bilde, eller et lysark med et prompt-bilde som ikke blir prompt-boks,
+  faller; et klikk-skjermbilde som utelates uten grunn under `imagesLeftOut`, faller (forfatteren
+  kan si nei, og et passord skal ut); en infografikk som tas med som bilde, faller; et bilde uten
+  art faller (når presentasjonen er med). Arten `prompt`/`infographic`/`decoration` er selv
+  grunnen til at bildet ikke tas med. Arten dømmes per lysark med alle radene samlet (en seksjonsrad
+  og en oppgaverad for samme lysark), én art per bilde; et lysark forfatteren har valgt bort,
+  dømmes ikke (QA-porten, to runder).
+- **Et tekstlysark blir aldri bare et bilde:** 20 ord eller mer på lysarket, og `becomes` uten
+  noen tekstbærende form, faller.
+- **Tunge rasterbilder:** over 600 kB faller i `pictures`-kontrollen (beskjær, eller be om et
+  mindre); 300–600 kB listes i sammendraget som verdt å beskjære. Figurer (SVG) rammes ikke.
+- Eksempelkursets lysarkliste har arter; `from-presentation.md`, `section-content.md` og
+  `check-and-produce.md` beskriver det. Matrise som figur er alt dekket i `figure-design.md` og
+  fikk ingen regel.
+
+**Slik er det målt:** `test/unit/agent-authoring-slide-coverage-1079.test.ts` (fire nye tester:
+prompt som bilde, prompt uten prompt-form, klikk utelatt uten og med grunn, infografikk tatt med,
+ukjent art, bilde uten art, to rader for samme lysark, ulik art på to rader, utelatt lysark med
+prompt-bilde, delvis utelatt lysark, null-rad, tekstlysark som bilde med og uten ordgrense), `test/unit/agent-authoring-produce-course-1079.test.ts`
+(700 kB stopper, 400 kB listes, 200 kB stille, SVG på 700 kB går; eksempelkurset med et 700 kB
+skjermbilde stopper). Ti mutasjoner, alle fanget.
+
 ## 2.86.0 - 2026-10-11
 
 ### Ikonbibliotek i plattformen, det ombygde skillet flettet inn, og skillforbedringene etter milepæl 1 (#1079)

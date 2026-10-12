@@ -258,6 +258,15 @@ export function validateExportEnvelopeStructure(envelope) {
     }
   };
 
+  // #1095: `origin` is optional; when it is there, it must have the platform's shape, or the
+  // import would refuse the whole file at the door.
+  const validateOrigin = (origin, path, idField) => {
+    if (origin === undefined) return;
+    if (!origin || typeof origin !== "object") return err(path, "origin must be an object when present");
+    if (typeof origin[idField] !== "string" || origin[idField].length === 0) err(`${path}.${idField}`, "required non-empty string");
+    if (origin.versionNo !== undefined && (!Number.isInteger(origin.versionNo) || origin.versionNo < 1)) err(`${path}.versionNo`, "must be a positive integer when present");
+  };
+
   const validateSectionPayload = (section, path) => {
     if (!section || typeof section !== "object") return err(path, "section payload required");
     // ⚠️ #992: sto som `!isNonEmptyLocalized(title) && title == null`, som bare kunne slå til når
@@ -333,6 +342,7 @@ export function validateExportEnvelopeStructure(envelope) {
     } else {
       if (!isNonEmptyLocalized(course.title)) err("course.course.title", "required localized title");
       validateAudit(course.audit, "course.course.audit");
+      validateOrigin(course.origin, "course.course.origin", "courseId");
       const modules = course.modules ?? [];
       const items = course.items ?? [];
       if (modules.length === 0 && items.length === 0) err("course.course", "must contain at least one module or item");
@@ -341,6 +351,7 @@ export function validateExportEnvelopeStructure(envelope) {
         if (item.type === "MODULE") validateModulePayload(item.module, `${p}.module`);
         else if (item.type === "SECTION") validateSectionPayload(item.section, `${p}.section`);
         else err(`${p}.type`, 'must be "MODULE" or "SECTION"');
+        validateOrigin(item.origin, `${p}.origin`, item.type === "MODULE" ? "moduleId" : "sectionId");
         if (!Number.isInteger(item.sortOrder) || item.sortOrder < 0) err(`${p}.sortOrder`, "must be a non-negative integer");
       });
     }
@@ -388,12 +399,17 @@ export function buildFallbackEnvelope(pkg, { exportedAt = new Date(), exportedBy
     // Deep-clone so the generated envelope never aliases the source package (a shallow spread
     // would share nested mcqSet/rubric objects and let a later edit mutate the source).
     const payload = structuredClone(ref.payload);
+    // #1095: an object that came from the platform's own export carries `origin` (the platform's
+    // ids). It travels into the import file untouched, so the platform updates the SAME section or
+    // module instead of creating a new one. An object without it is new.
+    const origin = ref.origin ? { origin: structuredClone(ref.origin) } : {};
     if (item.type === "SECTION") {
-      return { type: "SECTION", sortOrder: index, section: { ...payload, audit: {} } };
+      return { type: "SECTION", sortOrder: index, ...origin, section: { ...payload, audit: {} } };
     }
     return {
       type: "MODULE",
       sortOrder: index,
+      ...origin,
       module: {
         module: payload.module,
         activeVersion: { ...payload.activeVersion, audit: {} },
@@ -413,6 +429,7 @@ export function buildFallbackEnvelope(pkg, { exportedAt = new Date(), exportedBy
         title: structuredClone(coursePayload.title),
         ...(coursePayload.description != null ? { description: structuredClone(coursePayload.description) } : {}),
         certificationLevel: coursePayload.certificationLevel ?? null,
+        ...(courseObject.origin?.courseId ? { origin: { courseId: courseObject.origin.courseId } } : {}),
         audit: {},
         items,
       },

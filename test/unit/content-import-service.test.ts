@@ -178,6 +178,8 @@ describe("contentImportService.importModuleFromEnvelope", () => {
       // #896 S4: reported so a COURSE import knows whether it may publish the course. This package
       // was never published at source, so nothing was held back.
       heldBackByTranslationGate: false,
+      // #1095: and nothing was published — a course import holds the course back around it.
+      published: false,
     });
   });
 
@@ -334,6 +336,7 @@ describe("contentImportService.importModuleFromEnvelope", () => {
       moduleId: "new-module-id",
       moduleVersionId: "module-version-id",
       heldBackByTranslationGate: true,
+      published: false,
     });
     expect(createModuleVersion).toHaveBeenCalledTimes(1);
   });

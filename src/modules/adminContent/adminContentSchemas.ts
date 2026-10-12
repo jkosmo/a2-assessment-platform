@@ -637,6 +637,13 @@ export const sectionExportPayloadSchema = z.object({
 // self-contained (chosen 2026-05-19 over reference-only). #512 adds an optional
 // `items` array carrying the full mixed module/section sequence; `modules` is
 // kept (now optional) so v1 importers that only understand modules still work.
+// #1095: identiteten til kurset fila ble eksportert fra. Kursets id i DETTE miljøet; en fil som
+// flyttes til et annet miljø (stage → prod) importeres som nytt kurs der, og `origin` ignoreres.
+export const courseOriginSchema = z.object({
+  courseId: z.string().min(1),
+  exportedAt: z.string().optional(),
+});
+
 export const courseExportPayloadSchema = z.object({
   course: z.object({
     // #930: eksporten skriver tittelen slik den er lagret, og etter #930 kan den vaere et DELVIS
@@ -650,14 +657,19 @@ export const courseExportPayloadSchema = z.object({
     title: localizedTextMaybeUntranslatedSchema,
     description: localizedTextMaybeUntranslatedSchema.nullable().optional(),
     certificationLevel: certificationLevelInputSchema.nullable(),
+    // #1093: plassering i «Mine kurs». Valgfri, så eldre eksportfiler leses som før.
+    sortOrder: z.number().int().min(0).max(9999).nullable().optional(),
+    // #1095: hvor fila kom fra, så den kan komme tilbake som en oppdatering av det samme kurset
+    // (`mode: "updateExisting"`). Valgfri: filer fra skillets «lag kurs»-flyt og eldre filer har den ikke.
+    origin: courseOriginSchema.optional(),
     audit: exportAuditSchema,
     modules: z.array(z.object({
       sortOrder: z.number().int().min(0),
       module: moduleExportPayloadSchema,
     })).optional(),
     items: z.array(z.discriminatedUnion("type", [
-      z.object({ type: z.literal("MODULE"), sortOrder: z.number().int().min(0), module: moduleExportPayloadSchema }),
-      z.object({ type: z.literal("SECTION"), sortOrder: z.number().int().min(0), section: sectionExportPayloadSchema }),
+      z.object({ type: z.literal("MODULE"), sortOrder: z.number().int().min(0), origin: z.object({ moduleId: z.string().min(1), versionNo: z.number().int().min(1).optional() }).optional(), module: moduleExportPayloadSchema }),
+      z.object({ type: z.literal("SECTION"), sortOrder: z.number().int().min(0), origin: z.object({ sectionId: z.string().min(1), versionNo: z.number().int().min(1).optional() }).optional(), section: sectionExportPayloadSchema }),
     ])).optional(),
   }).refine(
     (c) => (c.modules?.length ?? 0) > 0 || (c.items?.length ?? 0) > 0,
@@ -796,7 +808,10 @@ export function normalizeImportPayload(
 export const importBodySchema = z.object({
   payload: exportEnvelopeSchema,
   // Explicit collision handling — import never silently overwrites (#433 ACL).
-  mode: z.enum(["createNew", "replaceExisting"]).default("createNew"),
+  // #1095: `updateExisting` (bare kurs) legger en ny, upublisert versjon på hvert element fila kjenner
+  // igjen (`origin`), oppretter nye som utkast, og tar ut av kurset det fila ikke nevner. Publiserer
+  // ingenting — produkteier: «det bør en bevisst handling til for å publisere».
+  mode: z.enum(["createNew", "replaceExisting", "updateExisting"]).default("createNew"),
   // When mode=replaceExisting: ID of the existing module/course to attach the
   // imported content to as a NEW active version (history is preserved in the
   // destination's normal version chain; the source's history is NOT replayed).

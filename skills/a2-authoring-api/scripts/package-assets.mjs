@@ -28,6 +28,10 @@ export const ASSET_MIME = Object.freeze({
 export const SVG_MIME = "image/svg+xml";
 // The platform's own limits: one picture, and all pictures of a course together (decoded bytes).
 export const MAX_ASSET_BYTES = 5 * 1024 * 1024;
+/** A raster picture above this is too heavy for a section on a phone: crop it, or ask for a smaller one. */
+export const HEAVY_PICTURE_BYTES = 600 * 1024;
+/** Above this a raster picture is worth a look: can it be cropped to the part that matters? */
+export const LARGE_PICTURE_BYTES = 300 * 1024;
 export const MAX_TOTAL_BYTES = 25 * 1024 * 1024;
 
 const SOURCE_ID = /^[a-zA-Z0-9_-]{1,64}$/;
@@ -153,6 +157,15 @@ export function resolvePackageAssets(pkg, { baseDir = ".", readFile = readFileSy
       attached += 1;
       entry.contentBase64 = bytes.toString("base64");
       if (whole) {
+        // #1095: an entry from the platform's export carries the platform's `filename` and
+        // `mimeType`. When the author redraws the picture as another type (png → svg), the file on
+        // disk is the truth: a type that disagrees with the file's extension is replaced, with the
+        // name — otherwise the import file would say image/png over SVG bytes.
+        const fromFile = ASSET_MIME[path.extname(file).toLowerCase()];
+        if (fromFile && typeof entry.mimeType === "string" && entry.mimeType !== fromFile) {
+          entry.mimeType = fromFile;
+          entry.filename = path.basename(file);
+        }
         entry.filename ??= path.basename(file);
         entry.mimeType ??= ASSET_MIME[path.extname(file).toLowerCase()];
         if (!entry.mimeType) {
@@ -203,6 +216,7 @@ export function checkAssets(pkg) {
   let count = 0;
   let totalBytes = 0;
   let icons = 0;
+  const large = [];
 
   for (const object of pkg?.objects ?? []) {
     if (object?.type !== "section") continue;
@@ -229,6 +243,10 @@ export function checkAssets(pkg) {
       const own = base64Bytes(asset?.contentBase64);
       if (own > MAX_ASSET_BYTES) {
         problems.push({ path: where, message: `${(own / 1024 / 1024).toFixed(1)} MB — the platform takes 5 MB per picture. Ask the author for a smaller one` });
+      } else if (asset?.mimeType && asset.mimeType !== SVG_MIME && own > HEAVY_PICTURE_BYTES) {
+        problems.push({ path: where, message: `${Math.round(own / 1024)} kB — a picture this heavy slows the section on a phone. Crop it to the part that matters, or ask the author for a smaller one (under ${Math.round(HEAVY_PICTURE_BYTES / 1024)} kB)` });
+      } else if (asset?.mimeType && asset.mimeType !== SVG_MIME && own > LARGE_PICTURE_BYTES) {
+        large.push(`${asset?.sourceId ?? where} (${Math.round(own / 1024)} kB)`);
       }
       totalBytes += own;
       for (const variant of asset?.localizedVariants ?? []) totalBytes += base64Bytes(variant?.contentBase64);
@@ -258,5 +276,5 @@ export function checkAssets(pkg) {
   if (totalBytes > MAX_TOTAL_BYTES) {
     problems.push({ path: "package", message: `${(totalBytes / 1024 / 1024).toFixed(1)} MB of pictures — the platform takes 25 MB per course` });
   }
-  return { ok: problems.length === 0, count, icons, totalBytes, problems };
+  return { ok: problems.length === 0, count, icons, totalBytes, large, problems };
 }

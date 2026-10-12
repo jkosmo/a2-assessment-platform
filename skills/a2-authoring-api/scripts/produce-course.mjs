@@ -14,6 +14,9 @@
 //   languages      nb, nn and en-GB complete, real translations, same answer in each
 //   approved text  nothing the author approved has gone missing        (needs --state)
 //   slides         every slide got what the slide list says           (needs --slides)
+//   changes        unchanged is unchanged: every element the change list calls "unchanged" is
+//                  word for word as in the export it came from; "changed" differs; "new" has no
+//                  origin; "removed" is gone                        (needs --changes, #1095)
 //   import file    built, written, read back, validated against the import's own rules
 //
 // A package without a course object gives one import file per section and module instead.
@@ -38,6 +41,8 @@ const NOT_PROSE = new Set(["contentBase64", "filename", "mimeType", "sourceId", 
 // Where the author uploads each kind of file, as the admin UI names it.
 const IMPORT_AT = Object.freeze({
   course: "Innholdsforvaltning → Kurs → «Importer kurs»",
+  // #1095: a file that carries `origin` is offered as an UPDATE of the course it came from.
+  courseUpdate: "Innholdsforvaltning → Kurs → «Importer kurs», and chooses «Oppdater dette kurset» — new versions are laid ready, nothing is published",
   section: "Innholdsforvaltning → Seksjoner → «Importer seksjon»",
   module: "Innholdsforvaltning → Moduler → «Importer modul»",
 });
@@ -157,7 +162,7 @@ function checkPictures(resolved) {
   return {
     name: "pictures",
     status: details.length === 0 ? "ok" : "fail",
-    summary: `${assets.count} picture(s) and figure(s), ${(assets.totalBytes / 1024).toFixed(0)} kB with every layout and language; ${assets.icons} icon(s) from the platform library`,
+    summary: `${assets.count} picture(s) and figure(s), ${(assets.totalBytes / 1024).toFixed(0)} kB with every layout and language; ${assets.icons} icon(s) from the platform library${assets.large?.length ? `; worth cropping (300–600 kB): ${assets.large.join(", ")}` : ""}`,
     details,
   };
 }
@@ -242,9 +247,14 @@ function checkLearnerText(pkg) {
   return { name: "learner text", status: details.length === 0 ? "ok" : "fail", summary: `${sections} section(s) read for the learner's voice and card frames`, details };
 }
 
-function checkQuestions(pkg, primary, course) {
+// `onlyRefs` (#1095, adjusting): the rule is computed over the WHOLE course — a new test after four
+// unchanged sections still needs four questions — but reported only for the changed and new modules.
+// `baselineCounts` (ref → questions in the export): a CHANGED test that already had too few questions
+// is not asked to grow for a typo fix — the requirement does not exceed what the export had.
+function checkQuestions(pkg, primary, course, { onlyRefs = null, baselineCounts = null } = {}) {
   const details = [];
-  const sets = collectMcqSets(pkg);
+  const inScope = (ref) => !onlyRefs || onlyRefs.has(ref);
+  const sets = collectMcqSets(pkg).filter((set) => inScope(set.clientRef ?? String(set.path).replace(/^objects\[([^\]]+)\].*$/, "$1")));
   let questions = 0;
   for (const set of sets) {
     const result = checkMcqCues(set.questions, { primary });
@@ -269,8 +279,9 @@ function checkQuestions(pkg, primary, course) {
     const version = target.payload?.activeVersion ?? {};
     if (version.assessmentMode !== "FREETEXT_ONLY") {
       const count = version.mcqSet?.questions?.length ?? 0;
-      const needed = Math.max(3, sectionsBefore);
-      if (count < needed) {
+      const had = baselineCounts?.get(target.clientRef);
+      const needed = Math.min(Math.max(3, sectionsBefore), had === undefined ? Infinity : Math.max(had, 0));
+      if (count < needed && inScope(target.clientRef)) {
         details.push(`"${target.clientRef}": ${count} question(s) after ${sectionsBefore} section(s) — a module tests the whole of what its sections teach: at least one question per section and at least 3 (${needed} here)`);
       }
     }
@@ -340,6 +351,143 @@ function checkApprovedText(master, pkg) {
   };
 }
 
+// #1095: the change list against the baseline export. Comparable form: what the platform's update
+// looks at, without `audit` (publish history), without `sortOrder`, keys in a fixed order.
+function comparable(value) {
+  if (Array.isArray(value)) return value.map(comparable);
+  if (value && typeof value === "object") {
+    const out = {};
+    for (const key of Object.keys(value).sort()) {
+      if (key === "audit") continue;
+      out[key] = comparable(value[key]);
+    }
+    return out;
+  }
+  return value;
+}
+const sameContent = (a, b) => JSON.stringify(comparable(a)) === JSON.stringify(comparable(b));
+
+function sectionContent(payload) {
+  return { title: payload?.title, bodyMarkdown: payload?.bodyMarkdown, assets: payload?.assets ?? [] };
+}
+function moduleContent(payload) {
+  return { module: payload?.module, activeVersion: payload?.activeVersion };
+}
+
+/**
+ * Unchanged is unchanged. The change list (`changes.json`) says, per clientRef, what the author
+ * decided: unchanged | changed | new | removed. Against the baseline (the platform's export the
+ * package was made from), an "unchanged" element must be word for word the same — text, title and
+ * pictures — a "changed" one must differ, a "new" one has no origin, and a "removed" one is out of
+ * the package. Every element on both sides must be accounted for.
+ */
+function checkChanges(changes, baseline, pkg) {
+  const details = [];
+  const decisions = changes?.elements && typeof changes.elements === "object" ? changes.elements : null;
+  if (!decisions) details.push("changes.json has no `elements` map (clientRef → unchanged | changed | new | removed)");
+  // The course's own title, description and level: the platform writes them straight onto the live
+  // course at import, without a version — so they are part of the change list too (`course`).
+  const courseObject = (pkg.objects ?? []).find((o) => o?.type === "course");
+  const baseCourse = baseline?.course?.course;
+  if (courseObject && baseCourse) {
+    const fields = (c) => ({ title: c?.title, description: c?.description ?? null, certificationLevel: c?.certificationLevel ?? null });
+    const courseSame = sameContent(fields(courseObject.payload?.course), fields(baseCourse));
+    const courseDecision = changes?.course;
+    if (courseDecision === undefined) details.push("changes.json has no `course` decision (unchanged | changed) for the course's own title, description and level");
+    else if (!["unchanged", "changed"].includes(courseDecision)) details.push(`course: "${courseDecision}" is not a decision the course can have (unchanged | changed)`);
+    else if (courseDecision === "unchanged" && !courseSame) details.push("course: listed as unchanged, but its title, description or level differs from the export — the platform would change the live course at import; restore it, or list the course as changed");
+    else if (courseDecision === "changed" && courseSame) details.push("course: listed as changed, but its title, description and level are as in the export");
+  }
+  const refs = changes?.refs && typeof changes.refs === "object" ? changes.refs : null;
+  // The order of the course: a moved element is word for word the same, so it is not "changed" —
+  // but the platform applies the new order at once. It has its own line, `order`.
+  if (courseObject && baseCourse) {
+    const idOf = (o) => (o?.type === "section" ? (o.origin?.sectionId ? `SECTION:${o.origin.sectionId}` : null) : o?.type === "module" ? (o.origin?.moduleId ? `MODULE:${o.origin.moduleId}` : null) : null);
+    const byRef = new Map((pkg.objects ?? []).map((o) => [o?.clientRef, o]));
+    const packageSequence = (courseObject.payload?.items ?? []).map((item) => idOf(byRef.get(item?.ref))).filter(Boolean);
+    const inPackage = new Set(packageSequence);
+    const baselineSequence = [...(baseline?.course?.course?.items ?? [])].sort((x, y) => (x.sortOrder ?? 0) - (y.sortOrder ?? 0)).map((item) => (item.type === "SECTION" ? `SECTION:${item.origin?.sectionId}` : `MODULE:${item.origin?.moduleId}`)).filter((key) => inPackage.has(key));
+    const orderSame = JSON.stringify(packageSequence) === JSON.stringify(baselineSequence);
+    const orderDecision = changes?.order;
+    if (orderDecision === undefined) details.push("changes.json has no `order` decision (unchanged | changed) for the course's order");
+    else if (!["unchanged", "changed"].includes(orderDecision)) details.push(`order: "${orderDecision}" is not a decision the order can have (unchanged | changed)`);
+    else if (orderDecision === "unchanged" && !orderSame) details.push("order: listed as unchanged, but the elements stand in another order than in the export — the platform applies the order at import; restore it, or list the order as changed");
+    else if (orderDecision === "changed" && orderSame) details.push("order: listed as changed, but the elements stand as in the export");
+  }
+  const items = [...(baseline?.course?.course?.items ?? [])].sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
+  if (!baseline?.course?.course) details.push("the baseline is not a course export");
+  const baselineById = new Map();
+  for (const item of items) {
+    const id = item.type === "SECTION" ? item.origin?.sectionId : item.origin?.moduleId;
+    if (id) baselineById.set(`${item.type}:${id}`, item);
+  }
+  const counts = { unchanged: 0, changed: 0, new: 0, removed: 0 };
+  const seenBaseline = new Set();
+  for (const object of pkg.objects ?? []) {
+    if (object?.type === "course") continue;
+    const ref = object?.clientRef;
+    const decision = decisions?.[ref];
+    const typeKey = object.type === "section" ? "SECTION" : "MODULE";
+    const originId = object.type === "section" ? object.origin?.sectionId : object.origin?.moduleId;
+    const key = originId ? `${typeKey}:${originId}` : null;
+    const baseItem = key ? baselineById.get(key) : undefined;
+    if (key) seenBaseline.add(key);
+    if (!decision) {
+      details.push(`"${ref}": not in the change list — say what happens to it (unchanged | changed | new)`);
+      continue;
+    }
+    if (!["unchanged", "changed", "new"].includes(decision)) {
+      details.push(`"${ref}": "${decision}" is not a decision an element in the package can have (unchanged | changed | new; "removed" is for elements that are out of the package)`);
+      continue;
+    }
+    if (decision === "new") {
+      if (object.origin) details.push(`"${ref}": listed as new, but it carries an origin from the baseline — it is "changed" or "unchanged", or drop the origin if it really is a new element`);
+      else counts.new += 1;
+      continue;
+    }
+    if (!object.origin) {
+      details.push(`"${ref}": listed as ${decision}, but it has no origin — an element from the export keeps its origin; a new one is listed as "new"`);
+      continue;
+    }
+    if (!baseItem) {
+      details.push(`"${ref}": its origin is not in the baseline export — the package and the baseline are not from the same file`);
+      continue;
+    }
+    const same = object.type === "section"
+      ? sameContent(sectionContent(object.payload), sectionContent(baseItem.section))
+      : sameContent(moduleContent(object.payload), moduleContent(baseItem.module));
+    if (decision === "unchanged" && !same) details.push(`"${ref}": listed as unchanged, but it differs from the export (text, title or a picture) — restore it word for word, or list it as changed and show the author`);
+    if (decision === "changed" && same) details.push(`"${ref}": listed as changed, but it is word for word as in the export — list it as unchanged, or make the change`);
+    if (same === (decision === "unchanged")) counts[decision] += 1;
+  }
+  for (const [key, item] of baselineById) {
+    if (seenBaseline.has(key)) continue;
+    const title = item.section?.title ?? item.module?.module?.title;
+    const name = typeof title === "object" && title ? Object.values(title).find((v) => typeof v === "string") : title;
+    // A removed element is named by its ref in the change list; `refs` (written with the working
+    // set) says which element of the export that ref was. Without `refs`, any "removed" counts.
+    const removedRefs = decisions ? Object.entries(decisions).filter(([, d]) => d === "removed").map(([ref]) => ref) : [];
+    const matched = refs
+      ? removedRefs.some((ref) => refs[ref] && `${refs[ref].type}:${refs[ref].id}` === key)
+      : removedRefs.length > 0;
+    if (matched) counts.removed += 1;
+    else details.push(`baseline element «${name ?? key}» is not in the package and the change list does not say "removed" for it — restore it, or list its ref as removed`);
+  }
+  if (decisions) {
+    const refsInPackage = new Set((pkg.objects ?? []).map((o) => o?.clientRef));
+    for (const [ref, decision] of Object.entries(decisions)) {
+      if (decision === "removed" && refsInPackage.has(ref)) details.push(`"${ref}": listed as removed, but it is still in the package — take it out, or change the decision`);
+      if (decision !== "removed" && !refsInPackage.has(ref)) details.push(`"${ref}": in the change list as ${decision}, but not in the package`);
+    }
+  }
+  return {
+    name: "changes",
+    status: details.length === 0 ? "ok" : "fail",
+    summary: `${counts.unchanged} unchanged (word for word), ${counts.changed} changed, ${counts.new} new, ${counts.removed} removed — against the export the package was made from`,
+    details,
+  };
+}
+
 function checkSlides(treatment, pkg, deck) {
   const result = checkSlideCoverage(treatment, pkg, { deck });
   const details = [
@@ -364,10 +512,10 @@ function readJson(file, what, problems) {
 }
 
 /**
- * @param {{ packageFile: string, outFile?: string, stateFile?: string, slidesFile?: string, deckDir?: string, packageOut?: string, now?: Date }} options
+ * @param {{ packageFile: string, outFile?: string, stateFile?: string, slidesFile?: string, deckDir?: string, packageOut?: string, changesFile?: string, now?: Date }} options
  * @returns {Promise<{ ok: boolean, checks: Array<{ name: string, status: "ok" | "fail" | "skipped", summary: string, details: string[] }>, files: Array<{ file: string, importAt: string }> }>}
  */
-export async function produceCourse({ packageFile, outFile, stateFile, slidesFile, deckDir, packageOut, now = new Date() }) {
+export async function produceCourse({ packageFile, outFile, stateFile, slidesFile, deckDir, packageOut, changesFile, now = new Date() }) {
   const checks = [];
   const files = [];
   const unreadable = [];
@@ -385,10 +533,39 @@ export async function produceCourse({ packageFile, outFile, stateFile, slidesFil
   const resolved = resolvePackageAssets(source, { baseDir });
   const pkg = resolved.pkg;
   checks.push(checkPictures(resolved));
-  checks.push(checkFigures(pkg));
-  checks.push(checkLearnerText(pkg));
-  checks.push(checkQuestions(pkg, primary, course));
-  checks.push(checkLanguages(pkg, primary));
+
+  // #1095: when the course is adjusted from the platform's export, the craft checks (figures,
+  // learner text, questions, languages) run on the CHANGED and NEW elements only. The unchanged ones
+  // are what the platform already holds — a partly translated title or a test with three questions
+  // is the author's course as it stands, and the workflow forbids touching it. The `changes` check
+  // below is what guards them: word for word.
+  let changesEarly = null;
+  if (changesFile) changesEarly = readJson(changesFile, "the change list", []);
+  const inScope = (object) => {
+    if (!changesEarly?.elements || object?.type === "course") return true;
+    const decision = changesEarly.elements[object?.clientRef];
+    return decision === "changed" || decision === "new";
+  };
+  const scoped = changesEarly?.elements
+    ? (() => {
+        const kept = new Set((pkg.objects ?? []).filter(inScope).map((o) => o.clientRef));
+        const objects = (pkg.objects ?? []).filter((o) => kept.has(o?.clientRef)).map((o) =>
+          o.type === "course" ? { ...o, payload: { ...o.payload, items: (o.payload?.items ?? []).filter((item) => kept.has(item?.ref)) } } : o,
+        );
+        return { pkg: { ...pkg, objects }, course: objects.find((o) => o.type === "course") ?? null };
+      })()
+    : { pkg, course };
+  checks.push(checkFigures(scoped.pkg));
+  checks.push(checkLearnerText(scoped.pkg));
+  let baselineCounts = null;
+  if (changesEarly?.elements) {
+    // Questions each changed module had in the export, by its origin.
+    const baselineEarly = changesEarly.baseline ? readJson(path.resolve(path.dirname(changesFile), changesEarly.baseline), "the baseline export", []) : null;
+    const byModuleId = new Map((baselineEarly?.course?.course?.items ?? []).filter((i) => i?.type === "MODULE" && i.origin?.moduleId).map((i) => [i.origin.moduleId, i.module?.activeVersion?.mcqSet?.questions?.length ?? 0]));
+    baselineCounts = new Map((pkg.objects ?? []).filter((o) => o?.type === "module" && o.origin?.moduleId && byModuleId.has(o.origin.moduleId)).map((o) => [o.clientRef, byModuleId.get(o.origin.moduleId)]));
+  }
+  checks.push(checkQuestions(pkg, primary, course, changesEarly?.elements ? { onlyRefs: new Set(scoped.pkg.objects.map((o) => o.clientRef)), baselineCounts } : {}));
+  checks.push(checkLanguages(scoped.pkg, primary));
 
   let master = null;
   if (stateFile) {
@@ -410,6 +587,23 @@ export async function produceCourse({ packageFile, outFile, stateFile, slidesFil
     checks.push(treatment ? checkSlides(treatment, pkg, deck) : { name: "slides", status: "fail", summary: "not read", details: problems });
   } else {
     checks.push({ name: "slides", status: "skipped", summary: "not run — no --slides file (only a course from a presentation has one)", details: [] });
+  }
+
+  // #1095: a course made from the platform's export is an UPDATE; the change list keeps it honest.
+  let isUpdate = false;
+  if (changesFile) {
+    const problems = [];
+    const changes = readJson(changesFile, "the change list", problems);
+    const baselineFile = changes?.baseline ? path.resolve(path.dirname(changesFile), changes.baseline) : null;
+    const baseline = baselineFile ? readJson(baselineFile, "the baseline export", problems) : null;
+    if (!baselineFile) problems.push("changes.json names no `baseline` (the export the package was made from)");
+    checks.push(changes && baseline ? checkChanges(changes, baseline, pkg) : { name: "changes", status: "fail", summary: "not read", details: problems });
+    isUpdate = Boolean(course?.origin?.courseId);
+    if (changes && !isUpdate) checks.push({ name: "changes", status: "fail", summary: "the course object has no origin", details: ["a change list only makes sense for a course made from the platform's export (scripts/adjust-from-export.mjs)"] });
+  } else if (course?.origin?.courseId) {
+    checks.push({ name: "changes", status: "fail", summary: "NOT RUN — the course carries an origin (it is an update) but no --changes file was given", details: ["run with --changes work/changes.json so that unchanged is unchanged"] });
+  } else {
+    checks.push({ name: "changes", status: "skipped", summary: "not run — no --changes file (only a course adjusted from the platform's export has one)", details: [] });
   }
 
   if (checks.some((check) => check.status === "fail")) {
@@ -450,7 +644,7 @@ export async function produceCourse({ packageFile, outFile, stateFile, slidesFil
             ]);
           }
         : undefined;
-      await deliver(buildFallbackEnvelope(pkg, { exportedAt: now }), file, IMPORT_AT.course, integrity);
+      await deliver(buildFallbackEnvelope(pkg, { exportedAt: now }), file, isUpdate ? IMPORT_AT.courseUpdate : IMPORT_AT.course, integrity);
     } else {
       const dir = outFile ?? baseDir;
       for (const entry of synthesizeStandaloneEnvelopes(pkg, () => now.toISOString())) {
@@ -495,7 +689,7 @@ export function formatProduction(result) {
 
 function parseArgs(argv) {
   const args = {};
-  const names = { "--out": "outFile", "--state": "stateFile", "--slides": "slidesFile", "--deck": "deckDir", "--package-out": "packageOut" };
+  const names = { "--out": "outFile", "--state": "stateFile", "--slides": "slidesFile", "--deck": "deckDir", "--package-out": "packageOut", "--changes": "changesFile" };
   for (let i = 0; i < argv.length; i += 1) {
     const name = names[argv[i]];
     if (name) {
@@ -518,7 +712,7 @@ if (isMain) {
     console.error(error instanceof Error ? error.message : error);
     console.error(
       "usage: node scripts/produce-course.mjs work/package.json [--out course.json] [--state work/course-state.json]\n" +
-        "       [--slides work/treatment.json] [--deck work/deck] [--package-out work/package.complete.json]",
+        "       [--slides work/treatment.json] [--deck work/deck] [--package-out work/package.complete.json] [--changes work/changes.json]",
     );
     process.exit(2);
   }

@@ -7,7 +7,7 @@
 
 ## Kort: det som må avgjøres
 
-**Prod står på 2.86.0 (rullet 2026-10-11 kl. 17:21 fra `a6aec30a`, godkjent av produkteier; `/version`, helsesjekk og ikonruta bekreftet). Stage står på 2.86.0 (ikonbiblioteket, det ombygde skillet, skillforbedringene, rullet 2026-10-11 kl. 16:50 fra `a6aec30a`; `/version` og helsesjekk bekreftet). `dev` = stage. `main` = prod (PR #1091). **Produkteier 2026-10-11: samlet test på stage, så prod — deretter oppdaterer han kurs og tar inn flere brukere.****
+**Prod står på 2.86.0 (rullet 2026-10-11 kl. 17:21 fra `a6aec30a`, godkjent av produkteier; `/version`, helsesjekk og ikonruta bekreftet). Stage står på 2.87.0 (#1093 rekkefølgen i «Mine kurs», rullet 2026-10-11 kl. 21:31 fra `e8a9006f`; `/version` og helsesjekk bekreftet; én ny NULL-kolonne). `dev` = stage. `main` = prod (PR #1091). **Produkteier 2026-10-11: samlet test på stage, så prod — deretter oppdaterer han kurs og tar inn flere brukere.****
 
 ### 2.86.0: ikonbibliotek, skillet flettet inn, skillforbedringer (2026-10-11, grenen `ikoner-1079`)
 
@@ -28,6 +28,33 @@ mutasjoner. Plattformdelen (rute, oppslag, rensing, utrulling) holdt i runde én
 kort og i en stegtabell hos deltakeren og i forhåndsvisningen, 1280 og 390 px; fokus og rulleposisjon
 etter «gå videre» og tilbake-knappen; fokus ved språkbytte. **Ingen kurs i prod bruker `icon:` ennå** —
 produkteier kan snu skrivemåten før den kommer i prod.
+
+### Språkmodellen for vurdering: forsøk på stage (2026-10-11 kveld)
+
+Prod og stage kjørte gpt-4.1-mini (2025-04-14) til alt, uten egen vurderings- eller forfattermodell,
+og uten at valget var målt (mars-sammenligningen anbefalte 5.4-nano, men ble ikke tatt i bruk). Bruken
+er liten (prod: 10 kall siste 30 dager; stage: 140), så kostnad betyr ingenting — konsistens og fart gjør.
+
+- **Gjort:** to nye utrullinger på stage sin Azure OpenAI-konto, `a2-assessment-stg-gpt-5.4-mini` og
+  `a2-assessment-stg-gpt-5.4-nano` (versjon 2026-03-17, GlobalStandard 50). Benchmarken kjørt lokalt
+  (GitHub-arbeidsflyten mangler sine hemmeligheter): `doc/benchmarks/model-comparison-2026-10-11.md`.
+  Funn: 4.1-mini er den minst konsistente og tregeste; 5.4-mini er deterministisk, 40–50 % raskere og
+  feiler mot streng side; 5.4-nano er raus. **Stage sin vurdering er pekt mot 5.4-mini** via
+  `AZURE_OPENAI_ASSESSMENT_DEPLOYMENT` på web og worker (kl. 18:17; helsesjekk OK etterpå).
+  ⚠️ Innstillingen ligger IKKE i Bicep: en full infrastruktur-utrulling av stage visker den ut.
+- **Prod fulgte etter samme kveld (produkteier: «ikke overraskende at den er bedre»):** ny utrulling
+  `a2-assessment-prod-gpt-5.4-mini` på prod-kontoen (versjon 2026-03-17, GlobalStandard 50), og
+  `AZURE_OPENAI_ASSESSMENT_DEPLOYMENT` + `AZURE_OPENAI_API_VERSION=2025-01-01-preview` (lik stage) satt
+  på prod web og worker kl. 19:22. Helsesjekk web og worker 200 etter omstarten (én forbigående 503
+  under omstarten). gpt-4.1-mini-utrullingen står urørt og brukes fortsatt til forfatting.
+  ⚠️ Begge innstillingene ligger utenfor Bicep i begge miljøer — en full infrastruktur-utrulling
+  (`deploy-azure.yml`) visker dem ut. Neste rydding: ta `AZURE_OPENAI_ASSESSMENT_DEPLOYMENT` og
+  API-versjonen inn i Bicep som parametere, og lag utrullingen der.
+- **Neste:** følg de første ekte vurderingene i prod (feil varsles automatisk); gi benchmarken
+  modulens faktiske kriterier (`rubricCriteriaIds`, åpen sak fra mars); samkjør svargrense og
+  token-parameter mellom stage og prod.
+- Forfatting (innholdsgenerering) kan få en sterkere modell for seg (`AZURE_OPENAI_AUTHORING_DEPLOYMENT`);
+  måles med `npm run benchmark:content`.
 
 **Neste for produkteier:** kjør Møtearbeid og Tilbudsarbeid med skillpakke 2.86.0 i ChatGPT og
 Claude.ai (milepæl 1 fullføres med den nye tellingen, som også kjenner igjen oppgaver og teller
@@ -122,9 +149,9 @@ produkteier har kjørt Møtearbeid og Tilbudsarbeid med 2.83.0 i ChatGPT og Clau
 | Miljø | Versjon | |
 |---|---|---|
 | prod | 2.86.0 | rullet 2026-10-11 kl. 17:21 fra `a6aec30a` (run 38149518968), godkjent av produkteier; `/version`, helsesjekk og ikonruta bekreftet. Før det 2.85.0: rullet 2026-10-06 kl. 22:09 fra `17743d55` (run 37521860878). Før det 2.78.3: rullet 2026-10-04 kl. 20:13 fra `2433d2b7`. #1080, #1081, #1083 |
-| stage | 2.86.0 | rullet 2026-10-11 kl. 16:50 fra `a6aec30a` (QA-porten GO i femte runde, `.ai-qa/qa-20261011-161938.md`); `/version`, helsesjekk og ikonruta bekreftet. Stage-testen kjørt 2026-10-11 kl. 16:55–17:00: 44 av 44, ingen nye forsøk. Før det 2.85.2: rullet 2026-10-07 kl. 07:22 fra `11baab53` (QA-porten GO, `.ai-qa/qa-20261007-064305.md`); `/version` og helsesjekk bekreftet. Stage-testen kjørt 07:23–07:30, rett etter utrullingen: 44 av 44 besto, men tre trengte nytt forsøk (45 s tidsavbrudd mens stage startet opp — #1080-/#1081-listene og importsteget i 2.84-testen). Ny kjøring 07:32 ble ugyldig: tokenet gikk ut midt i (401), ikke appen. Før det 2.85.1: rullet 2026-10-06 kl. 23:07 fra `4d5d9f4e` (QA-porten GO i tredje runde, `.ai-qa/qa-20261006-222752.md`); stage-testen 2026-10-07 kl. 06:17–06:21: 44 av 44. Før det 2.85.0: rullet 2026-10-06 kl. 21:31 fra `17743d55` (QA-porten GO i andre runde, `.ai-qa/qa-20261006-211010.md`). Før det 2.84.1: rullet 2026-10-06 kl. 09:37 fra `82815746` (QA-porten GO, `.ai-qa/qa-20261006-091043.md`). Før det 2.84.0: rullet 2026-10-06 kl. 07:12 fra `ad3f0192`, QA-porten GO i tredje runde (`.ai-qa/qa-20261006-064930.md`); `/version` og helsesjekk bekreftet. Før det 2.82.2: rullet 2026-10-05 kl. 18:49 fra `96632019`, commiten QA-porten ga GO på i tredje runde (`.ai-qa/qa-20261005-182600.md`); `/version` og helsesjekk bekreftet. Stage-testen kjørt 18:50–18:53: 38 av 38 besto |
+| stage | 2.87.0 | rullet 2026-10-11 kl. 21:31 fra `e8a9006f` (QA-porten GO, `.ai-qa/qa-20261011-210415.md`); `/version` og helsesjekk bekreftet. Stage-testen kjørt 2026-10-11 kl. 21:33–21:38: 44 av 44, ingen nye forsøk. Før det 2.86.0: rullet 2026-10-11 kl. 16:50 fra `a6aec30a` (QA-porten GO i femte runde, `.ai-qa/qa-20261011-161938.md`); stage-testen 16:55–17:00: 44 av 44. Før det 2.85.2: rullet 2026-10-07 kl. 07:22 fra `11baab53` (QA-porten GO, `.ai-qa/qa-20261007-064305.md`); `/version` og helsesjekk bekreftet. Stage-testen kjørt 07:23–07:30, rett etter utrullingen: 44 av 44 besto, men tre trengte nytt forsøk (45 s tidsavbrudd mens stage startet opp — #1080-/#1081-listene og importsteget i 2.84-testen). Ny kjøring 07:32 ble ugyldig: tokenet gikk ut midt i (401), ikke appen. Før det 2.85.1: rullet 2026-10-06 kl. 23:07 fra `4d5d9f4e` (QA-porten GO i tredje runde, `.ai-qa/qa-20261006-222752.md`); stage-testen 2026-10-07 kl. 06:17–06:21: 44 av 44. Før det 2.85.0: rullet 2026-10-06 kl. 21:31 fra `17743d55` (QA-porten GO i andre runde, `.ai-qa/qa-20261006-211010.md`). Før det 2.84.1: rullet 2026-10-06 kl. 09:37 fra `82815746` (QA-porten GO, `.ai-qa/qa-20261006-091043.md`). Før det 2.84.0: rullet 2026-10-06 kl. 07:12 fra `ad3f0192`, QA-porten GO i tredje runde (`.ai-qa/qa-20261006-064930.md`); `/version` og helsesjekk bekreftet. Før det 2.82.2: rullet 2026-10-05 kl. 18:49 fra `96632019`, commiten QA-porten ga GO på i tredje runde (`.ai-qa/qa-20261005-182600.md`); `/version` og helsesjekk bekreftet. Stage-testen kjørt 18:50–18:53: 38 av 38 besto |
 | `main` (git) | 2.86.0 | likt med prod (PR flettet 2026-10-11) |
-| `dev` (git) | 2.86.0 | ikonbibliotek + skillet flettet inn + skillforbedringer (2.86.0), to småfunn (2.85.2), to detaljer i lesemodus (2.85.1), lesemodus (2.85.0), innholdsblokkene og feilklassifiseringen (2.84.x), sju rettinger (2.82.0), to oppfølgere etter QA (2.82.1), og kurset på telefon (2.82.2), se under |
+| `dev` (git) | 2.87.0 | #1093 rekkefølgen i «Mine kurs» (2.87.0), skillpakke 2.86.1 (bare skill), ikonbibliotek + skillet flettet inn + skillforbedringer (2.86.0), to småfunn (2.85.2), to detaljer i lesemodus (2.85.1), lesemodus (2.85.0), innholdsblokkene og feilklassifiseringen (2.84.x), sju rettinger (2.82.0), to oppfølgere etter QA (2.82.1), og kurset på telefon (2.82.2), se under |
 
 ### Skillet er bygget om, på en egen gren (2026-10-05, sent på kvelden)
 
@@ -562,6 +589,11 @@ Vertsnavnene står i `doc/ENVIRONMENTS.local.md` (gitignorert, skal ikke skrives
 ---
 
 ## Det som gjenstår
+
+- **#1095 justere et publisert kurs** — fase A bygget 2026-10-12 som 2.88.0 (grenen `juster-kurs-1095`, `doc/VERSIONS.md`): eksport med `origin` (id + versjonsnummer), import `updateExisting` (eierskap per element, utdatert fil avvises, ny modul legges ikke inn i publisert kurs), dialogen med i18n. QA-porten runde 1–3 ga NO-GO (modulutkast i publisert kurs, eierskap per element, utdatert fil — også modul med upublisert utkast ved eksport —, i18n, hele fila stoppet ved fremmed element, runde to av en justering avvist som utdatert, bildestaging for seksjoner som hoppes over), alle rettet med tester og mutasjoner; runde 4 fant at skillets filer ble meldt «holdt tilbake» (rettet: teller bare når fila ber om publisering), runde 5 ga GO (`.ai-qa/qa-20261012-131425.md`, med testplan for stage). Stage står igjen. Eksisterende hull QA pekte på, ikke fra #1095: `replaceExisting` for kurs (bare API) med utkastkilde og modulutkast lar et publisert målkurs stå publisert med en modul uten aktiv versjon — avpubliseringen bør slå til uavhengig av kildens publiseringsdato. Kurseksporten bærer nå nyeste modulversjon (som seksjonene); importeres en fil med et modulutkast som nytt kurs, holdes kurset tilbake som utkast. Fase B (skillets arbeidsflyt `adjust-course`) bygget 2026-10-12 kveld som 2.88.2 (`workflows/adjust-course.md`, `scripts/adjust-from-export.mjs`, `produce-course.mjs --changes`; `doc/VERSIONS.md`). Plattformen hopper nå over uendrede egne elementer (`summary.unchangedIds`, samme versjon). QA-porten på fase B: runde 1 og 2 NO-GO (filnavn, like bildenavn, ren streng, kontroller bare på det endrede, kursets felt, presis fjernet, tittel på utkast; så spørsmålsregelen over hele kurset, omtegnet bilde, order-linje), runde 3 GO (`.ai-qa/qa-20261012-212816.md`, med testplan for stage). 2.88.2 på stage 2026-10-12 22:02 (dev b9e96576), stage-testene 46/46. **Prod 2.88.2 2026-10-12 22:47** (kjøring 38304804150, godkjent av produkteier; `/healthz`, `/version`, ikonruta verifisert; PR #1097 dev → main). Produkteier justerer kursene i prod 2026-10-13 — det er den ekte prøven av skillets justeringsflyt. Kosmetisk funn i prod fra produkteier: #1096 (rå `area.*`-nøkler under Deltakere) — tas i neste release etter 2.88.x. Står igjen: evalen med Tilbudsarbeid fra prod (krever modell i sløyfa); ny zip til produkteier (`dist/skills/a2-authoring-api-v2.88.2.zip`). **Produkteier avgjorde 2026-10-12 (kveld):** (1) elementer forfatteren ikke eier byttes ut med egne kopier (v1 = levende versjon publisert, v2 = fila lagt klar; det gamle arkiveres når ubrukt; fullføring av byttede moduler nullstilles) — bygget som 2.88.1, på stage 2026-10-12 20:31 (dev 58d831bc): QA GO i runde 2 på byttet, stage-testene 43 bestått + 1 ustabil, og ny stage-test `test/stage/release-2-88-oppdater-kurs.spec.ts` (eksport → oppdatering → utdatert → nytt kurs, og dialogen i ekte klient) grønn. Prod venter: 2.86.1, 2.87.0, 2.88.0, 2.88.1 (QA-funn tatt med: bare elementer fila endret byttes; upubliserbar levende versjon → står, meldt; utdatert-sjekk før eierskap). **Til produkteier:** en kurseier kan dermed arkivere en annens modul/seksjon ved å endre den i fila — bare når ingen andre kurs bruker den, og det gamle er bevart (arkivert, ikke slettet); en publisert modul utenfor kurs vises ellers i deltakernes modulliste, så arkiveringen tar den derfra; (2) elementer lagt inn i kurset etter eksporten tas ut uten å pekes ut, og tittel/beskrivelse/rekkefølge trer i kraft straks — godtatt, forskjellsvisning er fase C.
+
+- **#1093 «Mine kurs»: alfabetisk som standard, valgfri plassering per kurs** — 2.87.0 på stage 2026-10-11 kl. 21:31 (`doc/VERSIONS.md`). QA-porten GO i første runde (`.ai-qa/qa-20261011-210415.md`); fire suiter grønne (2137/69/464/766). Oppfølging i #1094 (ugyldig tall i feltet lagres stille som tomt; kurslista i admin viser ikke plasseringen). **Til den manuelle testen på stage** (QA-portens plan): sett plassering 1 på et kurs og se det øverst; bytt språk uten å laste siden på nytt; tøm feltet (alfabetisk igjen); verdien 0; 10000 gir feilbanner; eksport → import med plassering. Stage-testen 21:33–21:38: 44 av 44.
+- **Skillpakke 2.86.1** (2026-10-11 kveld, flettet til `dev` som `acbf0b72`): bildenes art i lysarklista, tekstlysark aldri bare bilde, tunge bilder — `doc/VERSIONS.md` 2.86.1. QA-porten GO i tredje runde (`.ai-qa/qa-20261011-203535.md`; rundene før fant at klikkbilder ikke kunne utelates med grunn, at arten ble dømt per rad, og at utelatte lysark falt — alt rettet med tester og mutasjoner). Fire suiter grønne (2130/69/463/763). Zip sendt produkteier. Plattformen er ikke rullet ut på nytt (package.json 2.86.1 ligger i `dev`; neste stage-utrulling tar den med). Neste måling: produkteier lager et kurs av Tilbudsarbeid på nytt med 2.86.1 — prompt-skjermbildene skal nå bli prompt-bokser.
 
 | Hva | Hvorfor det ikke er gjort |
 |---|---|

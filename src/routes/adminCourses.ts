@@ -49,6 +49,8 @@ const courseBodySchema = z.object({
   enrollmentPolicy: z.enum(["OPEN", "RESTRICTED"]).optional(),
   // #495/T-QA-4: kurs-master av/på for diskusjon (default true i datamodellen).
   discussionsEnabled: z.boolean().optional(),
+  // #1093: plassering i «Mine kurs». null = alfabetisk (det vanlige).
+  sortOrder: z.number().int().min(0).max(9999).nullable().optional(),
 });
 
 const setCourseModulesBodySchema = z.object({
@@ -102,6 +104,7 @@ adminCoursesRouter.post("/", idempotency("courses.create"), async (request, resp
       certificationLevel: parsed.data.certificationLevel ? localizedTextCodec.serialize(parsed.data.certificationLevel) : null,
       enrollmentPolicy: parsed.data.enrollmentPolicy,
       discussionsEnabled: parsed.data.discussionsEnabled,
+      sortOrder: parsed.data.sortOrder,
       actorId: request.context?.userId,
       agent: { clientRef: parsed.data.clientRef, agentRunId: parsed.data.agentRunId },
     });
@@ -214,7 +217,9 @@ adminCoursesRouter.post("/import", async (request, response, next) => {
     // den. Tjenestelaget hjelper ikke: `importCourseFromEnvelope` gjør kun en eksistenssjekk på
     // targetCourseId og har ingen referanse til eierskap i det hele tatt.
     const mode = data.mode ?? "createNew";
-    if (mode === "replaceExisting" && data.targetId) {
+    // #1095: `updateExisting` skriver nye versjoner inn i targetId — samme vakt som `replaceExisting`.
+    // (Uten targetId stopper tjenesten selv med en valideringsfeil.)
+    if ((mode === "replaceExisting" || mode === "updateExisting") && data.targetId) {
       await assertContentOwnership({
         contentType: "COURSE",
         contentId: data.targetId,
@@ -227,6 +232,8 @@ adminCoursesRouter.post("/import", async (request, response, next) => {
       actorId,
       mode,
       targetCourseId: data.targetId,
+      // #1095: eierskapet sjekkes per element i tjenesten (seksjoner og moduler kan ha andre eiere enn kurset).
+      actorRoles: request.context?.roles ?? [],
     });
     // AA-2 (#650): links + clientRef echo make the response agent-orchestrable.
     response.status(201).json({
@@ -240,6 +247,7 @@ adminCoursesRouter.post("/import", async (request, response, next) => {
       // slapp det så på gulvet i sin egen retur — mens modul- og seksjonsimporten rapporterte det.
       // Kommentaren i `contentImportService.ts` lovet at det ble rapportert. Nå gjør det det.
       heldBackByTranslationGate: result.heldBackByTranslationGate,
+      ...(result.summary ? { summary: result.summary } : {}),
       links: courseAdminLinks(result.courseId),
       ...(data.clientRef !== undefined ? { clientRef: data.clientRef } : {}),
     });
@@ -346,6 +354,7 @@ adminCoursesRouter.get("/:courseId", async (request, response, next) => {
       certificationLevel: course.certificationLevel,
       enrollmentPolicy: course.enrollmentPolicy,
       discussionsEnabled: course.discussionsEnabled,
+      sortOrder: course.sortOrder ?? null,
       updatedAt: course.updatedAt.toISOString(),
       publishedAt: course.publishedAt?.toISOString() ?? null,
       archivedAt: course.archivedAt?.toISOString() ?? null,
@@ -376,6 +385,7 @@ adminCoursesRouter.put("/:courseId", requireContentOwnership("COURSE", "courseId
       certificationLevel: parsed.data.certificationLevel ? localizedTextCodec.serialize(parsed.data.certificationLevel) : undefined,
       enrollmentPolicy: parsed.data.enrollmentPolicy,
       discussionsEnabled: parsed.data.discussionsEnabled,
+      sortOrder: parsed.data.sortOrder,
     }, request.context?.userId);
     response.json({ course });
   } catch (error) {

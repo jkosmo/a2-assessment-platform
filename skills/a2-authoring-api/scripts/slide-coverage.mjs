@@ -35,6 +35,15 @@ export const FORMS = Object.freeze([
 const SECTION_FORMS = new Set(["figure", "cards", "callout", "prompt", "table", "image", "text"]);
 // A group of cards is at least two.
 const CARDS_PER_GROUP = 2;
+// What a picture on a slide IS — noted at gate 1, recorded in the slide list, enforced here. A
+// prompt typed into a chat window is text and becomes a prompt box; a screenshot that shows where
+// to click is included as a picture; an infographic is rebuilt; decoration is left out.
+export const PICTURE_KINDS = Object.freeze(["prompt", "click", "content", "infographic", "decoration"]);
+// Forms that carry a slide's text into the course. A slide with text that becomes none of these
+// (only `image`) was kept as a picture — the text is then unreadable on a phone and unsearchable.
+const TEXT_FORMS = new Set(["figure", "cards", "callout", "prompt", "table", "text", "objectives", "task"]);
+// Fewer words than this is a caption or a title; more is a slide whose text must be written out.
+const TEXT_SLIDE_WORDS = 20;
 const NOT_PROSE = new Set(["contentBase64", "file", "filename", "mimeType", "sourceId", "sizeBytes"]);
 
 function fold(text) {
@@ -249,6 +258,55 @@ export function checkSlideCoverage(treatment, pkg, { deck = null, baseDir = "." 
     }
   }
 
+  // The kind of each picture, and what follows from it — judged per SLIDE, with every row for that
+  // slide taken together: a slide that feeds two places has two rows, and the picture is listed on
+  // one of them. A click or content picture is included — or left out with a reason (the author said
+  // no; it shows a password). A prompt or an infographic is written out, never included.
+  {
+    const bySlide = new Map();
+    for (const [index, entry] of list.entries()) {
+      if (!bySlide.has(entry?.slide)) bySlide.set(entry?.slide, []);
+      bySlide.get(entry?.slide).push({ entry, row: rows[index] });
+    }
+    for (const group of bySlide.values()) {
+      const becomes = new Set(group.flatMap(({ entry }) => (Array.isArray(entry?.becomes) ? entry.becomes : [])));
+      const images = new Set(group.flatMap(({ entry }) => (Array.isArray(entry?.images) ? entry.images : [])));
+      const leftOut = new Set();
+      for (const { entry } of group) {
+        const map = entry?.imagesLeftOut && typeof entry.imagesLeftOut === "object" ? entry.imagesLeftOut : {};
+        for (const [file, reason] of Object.entries(map)) if (typeof reason === "string" && reason.trim().length > 0) leftOut.add(file);
+      }
+      const kinds = new Map();
+      const fail = (text) => group[0].row.problems.push(text);
+      for (const { entry } of group) {
+        const map = entry?.pictures && typeof entry.pictures === "object" && !Array.isArray(entry.pictures) ? entry.pictures : {};
+        for (const [file, kind] of Object.entries(map)) {
+          if (kinds.has(file) && kinds.get(file) !== kind) fail(`the picture ${file} is "${kinds.get(file)}" on one row and "${kind}" on another — one kind per picture`);
+          kinds.set(file, kind);
+        }
+      }
+      // A slide the author left out is not judged on what its pictures should have become: the
+      // kinds are still named, and a click or content picture still needs a reason under
+      // imagesLeftOut (the deck check below), but nothing else follows from the kind.
+      const omitted = group.every(({ entry }) => Array.isArray(entry?.becomes) && entry.becomes.includes("omitted"));
+      for (const [file, kind] of kinds) {
+        if (!PICTURE_KINDS.includes(kind)) {
+          fail(`the picture ${file} has the kind "${kind}" — say what it is: ${PICTURE_KINDS.join(", ")}`);
+          continue;
+        }
+        if (omitted) continue;
+        if (kind === "prompt") {
+          if (!becomes.has("prompt")) fail(`the picture ${file} is a prompt — the slide must become prompt, written out as a prompt box`);
+          if (images.has(file)) fail(`the picture ${file} is a prompt — write it out as a prompt box; the screenshot itself is not included`);
+        }
+        if (kind === "infographic" && images.has(file)) fail(`the picture ${file} is an infographic — rebuild its content (figure, table, cards or text); the picture itself is not included`);
+        if ((kind === "click" || kind === "content") && !images.has(file) && !leftOut.has(file)) {
+          fail(`the picture ${file} is ${kind === "click" ? "a screenshot that shows where to click" : "itself the content"} — include it under \`images\`, or leave it out with a reason under \`imagesLeftOut\``);
+        }
+      }
+    }
+  }
+
   if (deck && Array.isArray(deck.slides)) {
     const bySlide = new Map();
     for (const entry of list) {
@@ -262,14 +320,23 @@ export function checkSlideCoverage(treatment, pkg, { deck = null, baseDir = "." 
         continue;
       }
       for (const picture of slide.pictures ?? []) {
+        const kind = entries.map((entry) => entry.pictures?.[picture.file]).find((k) => typeof k === "string");
+        if (!kind) problems.push(`slide ${slide.number}: say what the picture ${picture.file} is under \`pictures\`: ${PICTURE_KINDS.join(", ")}`);
         const accounted = entries.some((entry) => {
           const leftOut = entry.imagesLeftOut && typeof entry.imagesLeftOut === "object" ? entry.imagesLeftOut : {};
           const reason = leftOut[picture.file];
           return (entry.images ?? []).includes(picture.file) || (typeof reason === "string" && reason.trim().length > 0);
         });
-        if (!accounted) {
+        // A prompt, an infographic or decoration is accounted for by its kind: the kind says why it is not included.
+        if (!accounted && !["prompt", "infographic", "decoration"].includes(kind ?? "")) {
           problems.push(`slide ${slide.number}: the picture ${picture.file} is neither in \`images\` nor in \`imagesLeftOut\` with a reason`);
         }
+      }
+      // A slide with text that becomes only a picture: the text is in the picture and nowhere else.
+      const words = Number(slide.words ?? 0);
+      const forms = new Set(entries.flatMap((entry) => (Array.isArray(entry.becomes) ? entry.becomes : [])));
+      if (words >= TEXT_SLIDE_WORDS && forms.has("image") && ![...forms].some((form) => TEXT_FORMS.has(form))) {
+        problems.push(`slide ${slide.number} has ${words} words of text and becomes only a picture — a text slide is written out (text, cards, table or figure); a picture of text cannot be read on a phone or searched`);
       }
     }
     const last = deck.slides.length;

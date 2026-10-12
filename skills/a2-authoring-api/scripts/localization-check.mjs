@@ -74,7 +74,9 @@ export function collectLocalizedFields(pkg) {
   const prose = [];
   const mcqQuestions = [];
   const push = (path, value) => {
-    if (value !== undefined) prose.push({ path, value });
+    // #1095: `null` is an absent optional field, as the platform exports one that was never set
+    // (an MCQ-only module has `taskText: null`) — not a field that is missing its languages.
+    if (value !== undefined && value !== null) prose.push({ path, value });
   };
 
   for (const object of pkg.objects ?? []) {

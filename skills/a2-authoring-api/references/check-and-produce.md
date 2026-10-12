@@ -75,13 +75,14 @@ DELIVER work/kurs-motereferat.json  —  the author imports it at Innholdsforval
 | Check | A `FAIL` means | Fix it in |
 |---|---|---|
 | **package** | an item of the course is not in the package, something in the package is not in the course, a `clientRef` is wrong or used twice | [package-schema.md](package-schema.md) |
-| **pictures** | a file is not found; the text shows a picture the section does not have, or the section has one the text does not show (in some language); a file is too large; an `icon:` name the platform does not know | [section-content.md](section-content.md#pictures-from-the-source) |
+| **pictures** | a file is not found; the text shows a picture the section does not have, or the section has one the text does not show (in some language); a file is too large (over 5 MB) or too heavy for a phone (over 600 kB); an `icon:` name the platform does not know | [section-content.md](section-content.md#pictures-from-the-source) |
 | **figures** | a label does not fit, or an animated figure is not the template — in the figure, a layout or a language variant | [figure-design.md](figure-design.md#measure-and-look) |
 | **learner text** | a sentence points at the source ("som vist på lysark 4"); a `:::kort` frame is not closed | [section-content.md](section-content.md#the-source-stays-behind-the-text) |
 | **questions** | an option gives the answer away; a module has fewer questions than the sections it follows (and fewer than three) | [modules.md](modules.md#multiple-choice-questions) |
 | **languages** | a language is missing, a text was copied instead of translated, the right answer differs between languages, a formula or address was lost | [localization.md](localization.md) |
 | **approved text** | something the author approved is gone | [content-preservation.md](content-preservation.md) |
-| **slides** | a slide did not get what the slide list says | [from-presentation.md](../workflows/from-presentation.md) |
+| **slides** | a slide did not get what the slide list says; a picture has no kind, a prompt screenshot was kept as a picture, a click screenshot was left out without a reason; a slide with text became only a picture | [from-presentation.md](../workflows/from-presentation.md) |
+| **changes** | (adjusting a course) an element listed `unchanged` differs from the export — text, title or a picture — or the course's own title, description or level differs while `course` is `unchanged`, or the elements stand in another order while `order` is `unchanged`; one listed `changed` is word for word the same; a `new` element carries an `origin`; a removed element is still in the package, or an element of the export is gone without being listed `removed`; an element is not in the list at all | [adjust-course.md](../workflows/adjust-course.md) |
 | **import file** | the written file did not pass when read back | the line under it names the field |
 
 A line that starts with `--` was **not run**. Without `--state`, nobody has checked that the
@@ -97,7 +98,9 @@ Give the author the file named after `DELIVER`, and say:
   check, and the author does it;
 - **where to import it:** the place the report names — *Innholdsforvaltning → Kurs → «Importer
   kurs»*. Each kind of file has its own page; a course file uploaded on the modules page is
-  refused;
+  refused. For a course adjusted from its export, the report adds that the author chooses
+  **«Oppdater dette kurset»** in the dialog — new versions are laid ready, nothing is published
+  ([adjust-course.md](../workflows/adjust-course.md#delivering));
 - anything marked `[Avklaring: …]` that the author must settle before publishing;
 - the closing line: *"Alt er opprettet som utkast — gjennomgå og publiser manuelt i admin-UI."*
 

@@ -22,7 +22,7 @@ import {
 } from "/static/participant-console-state.js";
 import { describeImportError } from "/static/import-error.js";
 import { apiErrorCodeText, describeApiError } from "/static/api-error.js";
-import { showToast } from "/static/toast.js";
+import { flushQueuedToast, queueToast, showToast } from "/static/toast.js";
 import {
   detectCoursesRoute,
   buildCourseDeleteDialogText,
@@ -705,6 +705,41 @@ async function handleImportCoursePackageFile(event) {
     } catch (parseError) {
       throw new Error(`Filen er ikke gyldig JSON: ${parseError instanceof Error ? parseError.message : "ukjent feil"}`);
     }
+    // #1095: fila kan bære kursets id fra en eksport i dette miljøet. Finnes kurset her, velger
+    // forfatteren: oppdatere det (nye versjoner legges klar, ingenting publiseres) eller importere
+    // som nytt kurs. En fil fra et annet miljø peker på et kurs som ikke finnes, og går som før.
+    const originCourseId = payload?.course?.course?.origin?.courseId;
+    const existing = originCourseId ? await findImportTargetCourse(originCourseId) : null;
+    const choice = existing ? await askImportChoice(existing) : "createNew";
+    if (choice === "cancel") return;
+    if (choice === "updateExisting") {
+      const updated = await apiFetch("/api/admin/content/courses/import", getHeaders, {
+        method: "POST",
+        body: JSON.stringify({ payload, mode: "updateExisting", targetId: originCourseId }),
+      });
+      if (!updated?.courseId) throw new Error(t("courses.importNoId"));
+      const s = updated.summary ?? {};
+      // Oppsummeringen skal leses på kurssiden, ikke forsvinne med denne siden.
+      const unplaced = Array.isArray(s.unplacedModuleIds) ? s.unplacedModuleIds.length : 0;
+      const replaced = Array.isArray(s.replacedUnownedIds) ? s.replacedUnownedIds.length : 0;
+      const notPublishable = Array.isArray(s.keptUnownedIds) ? s.keptUnownedIds.filter((k) => k?.reason === "not_publishable").length : 0;
+      const details = [
+        unplaced > 0 ? tf("adminContent.courses.updatedUnplaced", { count: unplaced }) : "",
+        replaced > 0 ? tf("adminContent.courses.updatedReplacedUnowned", { count: replaced }) : "",
+        notPublishable > 0 ? tf("adminContent.courses.updatedKeptNotPublishable", { count: notPublishable }) : "",
+      ].filter(Boolean);
+      queueToast(
+        tf("adminContent.courses.updated", {
+          updated: (s.updatedSections ?? 0) + (s.updatedModules ?? 0),
+          created: (s.createdSections ?? 0) + (s.createdModules ?? 0),
+          removed: (s.removedSections ?? 0) + (s.removedModules ?? 0),
+        }),
+        details.length > 0 ? "warning" : "success",
+        details.join(" "),
+      );
+      window.location.href = `/admin-content/courses/${encodeURIComponent(updated.courseId)}`;
+      return;
+    }
     const result = await apiFetch("/api/admin/content/courses/import", getHeaders, {
       method: "POST",
       body: JSON.stringify({ payload, mode: "createNew" }),
@@ -720,10 +755,11 @@ async function handleImportCoursePackageFile(event) {
     // Teksten sier også hva forfatteren skal GJØRE. «Lagret som utkast» uten neste steg er en
     // beskjed om systemets tilstand, ikke hjelp.
     const count = result.moduleIds?.length ?? 0;
+    // #1095: samme for disse — de ble vist og navigert bort fra i samme øyeblikk.
     if (result.heldBackByTranslationGate) {
-      showToast(tf("adminContent.courses.importedHeldBack", { count }), "warning");
+      queueToast(tf("adminContent.courses.importedHeldBack", { count }), "warning");
     } else {
-      showToast(tf("adminContent.courses.imported", { count }));
+      queueToast(tf("adminContent.courses.imported", { count }), "success");
     }
     window.location.href = `/admin-content/courses/${encodeURIComponent(result.courseId)}`;
   } catch (error) {
@@ -734,6 +770,50 @@ async function handleImportCoursePackageFile(event) {
   } finally {
     target.value = "";
   }
+}
+
+// #1095: finnes kurset fila peker på, i dette miljøet — og får forfatteren se det? 404 og 403 er
+// begge «nei»: da importeres fila som nytt kurs, slik den alltid ble. Alt annet (500, nettverk)
+// er IKKE «nei»: da vet vi ikke, og å importere som nytt kurs ville lage et duplikat av et kurs
+// som finnes. Feilen går videre og importen stopper med melding.
+async function findImportTargetCourse(courseId) {
+  try {
+    const body = await apiFetch(`/api/admin/content/courses/${encodeURIComponent(courseId)}`, getHeaders);
+    return body?.course ?? null;
+  } catch (error) {
+    if (error?.status === 404 || error?.status === 403) return null;
+    throw error;
+  }
+}
+
+/** Spør forfatteren: oppdater kurset fila hører til, importer som nytt, eller avbryt. */
+function askImportChoice(course) {
+  const dialog = document.getElementById("courseImportChoiceDialog");
+  if (!dialog || typeof dialog.showModal !== "function") return Promise.resolve("createNew");
+  const textEl = document.getElementById("courseImportChoiceText");
+  if (textEl) textEl.textContent = tf("adminContent.courses.importChoice.text", { title: localizedText(course.title) || course.id });
+  return new Promise((resolve) => {
+    const done = (value) => {
+      dialog.removeEventListener("close", onClose);
+      updateBtn?.removeEventListener("click", onUpdate);
+      createBtn?.removeEventListener("click", onCreate);
+      cancelBtn?.removeEventListener("click", onCancel);
+      if (dialog.open) dialog.close();
+      resolve(value);
+    };
+    const updateBtn = document.getElementById("courseImportUpdateBtn");
+    const createBtn = document.getElementById("courseImportCreateBtn");
+    const cancelBtn = document.getElementById("courseImportCancelBtn");
+    const onUpdate = () => done("updateExisting");
+    const onCreate = () => done("createNew");
+    const onCancel = () => done("cancel");
+    const onClose = () => done("cancel");
+    updateBtn?.addEventListener("click", onUpdate);
+    createBtn?.addEventListener("click", onCreate);
+    cancelBtn?.addEventListener("click", onCancel);
+    dialog.addEventListener("close", onClose);
+    dialog.showModal();
+  });
 }
 
 function handleListTableClick(event, btn = event.target.closest("[data-action]")) {
@@ -1086,13 +1166,15 @@ async function renderDetailView(courseId) {
   const enrollmentPolicy = course?.enrollmentPolicy ?? "OPEN";
   // #495/T-QA-4: default på for nye kurs og når feltet mangler (eldre detaljer).
   const discussionsEnabled = course?.discussionsEnabled !== false;
+  // #1093: plassering i «Mine kurs»; tomt = alfabetisk.
+  const sortOrder = Number.isInteger(course?.sortOrder) ? String(course.sortOrder) : "";
   const pageTitle = course ? (localizedText(course.title) || t("ui.kind.course")) : t("courses.newCourse");
   const showPublishButton = canPublishCourse({
     ...course,
     moduleCount: courseModules.filter(it => it.type === "MODULE").length,
   });
 
-  courseDetail = { courseId: courseId ?? null, course, localeValues, certLevel, enrollmentPolicy, discussionsEnabled };
+  courseDetail = { courseId: courseId ?? null, course, localeValues, certLevel, enrollmentPolicy, discussionsEnabled, sortOrder };
   const page = getCourseFormPage();
   page.render();
   page.markClean();
@@ -1101,7 +1183,7 @@ async function renderDetailView(courseId) {
 
 // Kroppen i skjemasida: kursdetaljer + innhold. Feltene beholder id-ene sine (title-nb, certLevel …).
 function courseDetailBodyHtml() {
-  const { courseId, localeValues, certLevel, enrollmentPolicy, discussionsEnabled } = courseDetail;
+  const { courseId, localeValues, certLevel, enrollmentPolicy, discussionsEnabled, sortOrder } = courseDetail;
   return `<div class="detail-layout">
     <div data-form-tab="rediger">
       <div class="detail-section">
@@ -1169,6 +1251,11 @@ function courseDetailBodyHtml() {
             <option value="OPEN"${enrollmentPolicy !== "RESTRICTED" ? " selected" : ""}>${escapeHtml(t("courses.visibility.open"))}</option>
             <option value="RESTRICTED"${enrollmentPolicy === "RESTRICTED" ? " selected" : ""}>${escapeHtml(t("courses.visibility.restricted"))}</option>
           </select>
+        </div>
+        <div class="form-field" style="margin-top: var(--space-2)">
+          <label for="sortOrder">${escapeHtml(t("courses.sortOrder"))}</label>
+          <input type="number" id="sortOrder" min="0" max="9999" step="1" inputmode="numeric" value="${escapeHtml(sortOrder)}" style="max-width: 8rem" />
+          <p class="small" style="margin: 4px 0 0">${escapeHtml(t("courses.sortOrderHelp"))}</p>
         </div>
         <div class="form-field" style="margin-top: var(--space-2)">
           <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
@@ -1577,6 +1664,9 @@ async function saveCourse(courseId) {
   const certLevel = document.getElementById("certLevel")?.value ?? "";
   const enrollmentPolicy = document.getElementById("enrollmentPolicy")?.value === "RESTRICTED" ? "RESTRICTED" : "OPEN";
   const discussionsEnabled = document.getElementById("discussionsEnabled")?.checked !== false;
+  // #1093: tomt felt sendes som null (alfabetisk); et tall sendes som tall.
+  const sortOrderRaw = (document.getElementById("sortOrder")?.value ?? "").trim();
+  const sortOrder = sortOrderRaw === "" ? null : Number.parseInt(sortOrderRaw, 10);
   const sourceLocale = resolveCourseLocalizationSourceLocale(collectedValues, initialDetailLocaleValues);
   const effectiveValues = sourceLocale
     ? await localizeCourseCopyAcrossLocales({
@@ -1626,6 +1716,7 @@ async function saveCourse(courseId) {
           certificationLevel: certLevel || undefined,
           enrollmentPolicy,
           discussionsEnabled,
+          sortOrder,
         }),
       });
       savedCourseId = body.course?.id;
@@ -1640,6 +1731,7 @@ async function saveCourse(courseId) {
           certificationLevel: certLevel || undefined,
           enrollmentPolicy,
           discussionsEnabled,
+          sortOrder,
         }),
       });
     }
@@ -1708,6 +1800,16 @@ function renderContentAreaNav() {
 // Locale selector
 // ---------------------------------------------------------------------------
 
+// #1095: statisk tekst i HTML-kilden (dialogtitler og -knapper) følger språket. Modulskallet gjør
+// det samme i `translatePageStaticText`; kurssiden gjorde det ikke, så `data-i18n` her sto på
+// bokmål uansett valgt språk. Kjøres ved oppstart og ved språkbytte.
+function translateStaticText() {
+  for (const el of document.querySelectorAll("[data-i18n]")) {
+    const key = el.getAttribute("data-i18n");
+    if (key) el.textContent = t(key);
+  }
+}
+
 function buildLocaleSelector() {
   if (!localeSelect) return;
   localeSelect.innerHTML = supportedLocales
@@ -1719,6 +1821,7 @@ function buildLocaleSelector() {
     if (_headerValues && typeof _headerValues === "object") {
       _headerValues["x-locale"] = currentLocale;
     }
+    translateStaticText();
     const route = detectRoute();
     if (route.view === "list") {
       renderListView();
@@ -1792,11 +1895,14 @@ async function init() {
   initCascadeDeleteDialog();
 
   const route = detectRoute();
+  translateStaticText();
   if (route.view === "list") {
     await renderListView();
   } else {
     await renderDetailView(route.courseId);
   }
+  // #1095: en melding lagt i kø av siden som navigerte hit (importens oppsummering).
+  flushQueuedToast();
 }
 
 init();

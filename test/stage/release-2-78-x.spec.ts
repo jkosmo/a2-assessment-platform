@@ -427,8 +427,11 @@ test.describe("#1081 — «Mer» i nederste rad, med ekte innhold", () => {
           const ramme = knapper[0]!.closest(".list-table-wrap")!.getBoundingClientRect();
           return knapper.filter((k) => k.getBoundingClientRect().bottom > ramme.bottom + 0.5).map((k) => (k.textContent ?? "").trim());
         }), { message: "valg som ligger under rammekanten" }).toEqual([]);
-        const rullerInni = await page.locator(".list-table-wrap").evaluate((w) => w.scrollHeight > w.clientHeight);
-        expect(rullerInni, "tabellen skal ikke få et eget rullefelt").toBe(false);
+        // 1 px slingringsmonn: når menyen klemmes mot rammekanten, kan avrundingen gi scrollHeight ett
+        // piksel over clientHeight uten at noe ruller (målt på stage 2026-10-12, raden «wewe» — 4755
+        // mot 4754, ingen synlig rullefelt). Det testen vokter er at menyen ikke tvinger fram rulling.
+        const rullerInni = await page.locator(".list-table-wrap").evaluate((w) => w.scrollHeight - w.clientHeight);
+        expect(rullerInni, "tabellen skal ikke få et eget rullefelt (px overskudd)").toBeLessThanOrEqual(1);
         noter("#1081", `${liste.navn}, ${bredde} px: valg i menyen`, (await valg.allInnerTexts()).map((t) => t.trim()).join(" · "));
         await sisteMedMer.locator(".row-more-menu").scrollIntoViewIfNeeded();
         await bilde(page, `1081-${liste.navn}-${bredde}`);

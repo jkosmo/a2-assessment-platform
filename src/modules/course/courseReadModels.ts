@@ -6,6 +6,8 @@ export interface CourseListItem {
   id: string;
   title: string;
   description: string | null;
+  /** #1093: satt plassering i «Mine kurs», eller null (alfabetisk). */
+  sortOrder: number | null;
   moduleCount: number;
   progress: {
     completed: number;
@@ -87,6 +89,8 @@ export interface AdminCourseDetail {
   certificationLevel: string | null;
   enrollmentPolicy: string;
   discussionsEnabled: boolean;
+  /** #1093: plassering i «Mine kurs», eller null (alfabetisk). */
+  sortOrder: number | null;
   updatedAt: string;
   publishedAt: string | null;
   archivedAt: string | null;

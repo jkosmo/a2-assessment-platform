@@ -46,6 +46,9 @@ You do not do these by hand; they are listed so that you recognise them in a fil
   only create drafts.
 - **`provenance`** says the file was made by this skill and which version. Never remove it, and
   never change it to say a human wrote the content.
+- **`origin`** (a course adjusted from the platform's export) is carried through untouched: the
+  course's id, and each element's id and version number. The platform uses it to update the same
+  course and to refuse a file that is out of date. A file without it imports as a new course.
 
 If the command cannot run where you are, you cannot produce a validated import file. Say so, and
 hand over the package (`work/package.json`) for someone to run production on — do not write the

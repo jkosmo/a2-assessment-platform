@@ -74,6 +74,8 @@ export async function createCourse(input: {
   certificationLevel?: string | null;
   enrollmentPolicy?: "OPEN" | "RESTRICTED";
   discussionsEnabled?: boolean;
+  /** #1093: plassering i «Mine kurs»; null eller utelatt = alfabetisk. */
+  sortOrder?: number | null;
   actorId?: string;
   // AA-5 (#653): agent-orchestrated creates carry a trace in the audit metadata.
   agent?: AgentAuthoringContext;
@@ -87,6 +89,7 @@ export async function createCourse(input: {
         certificationLevel: input.certificationLevel ?? null,
         ...(input.enrollmentPolicy ? { enrollmentPolicy: input.enrollmentPolicy } : {}),
         ...(input.discussionsEnabled !== undefined ? { discussionsEnabled: input.discussionsEnabled } : {}),
+        ...(input.sortOrder !== undefined ? { sortOrder: input.sortOrder } : {}),
       },
     });
     await recordAuditEvent(
@@ -119,6 +122,7 @@ export async function updateCourse(
     certificationLevel?: string | null;
     enrollmentPolicy?: "OPEN" | "RESTRICTED";
     discussionsEnabled?: boolean;
+    sortOrder?: number | null;
   },
   actorId?: string,
 ) {

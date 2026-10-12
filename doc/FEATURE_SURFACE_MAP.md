@@ -144,6 +144,42 @@ are two distinct code paths + a relocated singleton to keep in sync when touchin
 
 **Pre-deploy gate:** `npx playwright test --config playwright.admin-content.config.ts test/e2e/participant-section-reader.spec.ts test/e2e/participant-mcq-only.spec.ts test/e2e/participant-inline-open.spec.ts test/e2e/participant-course-sequence.spec.ts test/e2e/participant-course-focus.spec.ts test/e2e/participant-section-advance.spec.ts` (~10s, no Docker/Postgres). `participant-inline-open` is the consistency guard (section + module both inline, one open, workspace relocated); `participant-course-sequence` guards the serial presentation; `participant-course-focus` guards list-vs-course state (#921/#922); `participant-section-advance` guards the combined advance button and the absent item-level discussion (#923/#924).
 
+## 6a. Course import — three modes (#433 / #1095)
+
+`POST /api/admin/content/courses/import` (`src/routes/adminCourses.ts` → `importCourseFromEnvelope`
+in `contentImportService.ts`): `createNew` (default: a new course, items created, published if the
+file says so), `replaceExisting` (API only: keeps the course id, recreates every item — progress is
+lost; the skill never uses it), and **`updateExisting`** (#1095: new unpublished versions on items
+the file recognises by `origin`, drafts for new items, unlisted items taken out of the course,
+nothing published; a new MODULE is not placed in a published course — `summary.unplacedModuleIds`).
+The export (`adminContentQueries.ts`) writes `origin` (ids + highest `versionNo`) on the course and
+on every item (`versionNo` = the version the file carries); the plan is `courseUpdatePlan.ts`
+(pure); the service rejects a stale file (`origin_stale`) and REPLACES items the author does not
+own with the author's own copies — v1 = published copy of the live version, v2 = the file, old item
+out of the course and archived when unused elsewhere (`assertContentOwnership`, admin bypass;
+`summary.replacedUnownedIds`; `buildSectionExportPayload(id, budget, versionId)` builds the live
+copy). The
+admin dialog `#courseImportChoiceDialog` (`admin-content-courses.js`, `askImportChoice`, texts via
+`data-i18n`, translated by `translateStaticText` at init and on language switch) offers update vs
+new when the file's course exists;
+the summary is shown on the course page after navigation (`queueToast`/`flushQueuedToast` in
+`toast.js`).
+**Hazard:** a new way to add items to a course must go through `setCourseItems`, and a new way to
+write a section version must keep the live version untouched (`appendInactiveSectionVersion`). A
+draft module must never be placed in a published course (I1: participants cannot complete it).
+
+## 6b-1. Participant course list — order (#1093)
+
+`GET /api/courses` sorts in `src/modules/course/courseOrdering.ts` (`sortCoursesForParticipant`):
+courses with `Course.sortOrder` first, ascending; the rest alphabetically by the title in the
+participant's locale (`Intl.Collator`, numeric, case-insensitive). `participant.js` only partitions
+into ongoing / completed (#936) and never re-sorts. `sortOrder` is set in the course form
+(«Innstillinger» tab, `#sortOrder`), accepted by `POST`/`PUT /api/admin/content/courses` (0–9999 or
+null), and carried by course export/import (`courseExportPayloadSchema.course.sortOrder`, optional).
+Guard tests: `test/unit/course-ordering-1093.test.ts`, `test/m2-courses-participant-flow.test.ts`,
+`test/e2e/admin-content-course-sort-order-1093.spec.ts`. **Hazard:** a new list of courses for
+participants must call the same function, or two lists order differently.
+
 ## 6b-2. Participant course view — the serial sequence (spine)
 
 `renderCourseDetailModules` renders the course as **one spine with a single focal point**, not a flat

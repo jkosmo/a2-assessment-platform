@@ -131,3 +131,32 @@ export function showToast(message, type = "info", detail = "", options = {}) {
   }
   return toast;
 }
+
+// #1095: en toast som vises RETT FØR siden navigerer, forsvinner med siden. Kursimporten viste
+// «Kurset er oppdatert: 2 elementer …» og gikk så til kurset — oppsummeringen var borte før
+// forfatteren rakk å lese den. Meldingen legges i sessionStorage og vises av neste side som
+// kaller `flushQueuedToast()` (kurs-flaten gjør det i init). Er lagringen blokkert, vises den nå.
+const QUEUED_TOAST_KEY = "toast.queued";
+export function queueToast(message, type = "info", detail = "") {
+  try {
+    sessionStorage.setItem(QUEUED_TOAST_KEY, JSON.stringify({ message: String(message), type: normalizeType(type), detail: String(detail ?? "") }));
+  } catch {
+    showToast(message, type, detail);
+  }
+}
+export function flushQueuedToast() {
+  let raw = null;
+  try {
+    raw = sessionStorage.getItem(QUEUED_TOAST_KEY);
+    if (raw) sessionStorage.removeItem(QUEUED_TOAST_KEY);
+  } catch {
+    return null;
+  }
+  if (!raw) return null;
+  try {
+    const queued = JSON.parse(raw);
+    return showToast(queued.message, queued.type, queued.detail);
+  } catch {
+    return null;
+  }
+}

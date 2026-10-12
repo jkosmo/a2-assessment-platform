@@ -28,6 +28,11 @@ import file from it; the API takes it as it is. A whole package:
   `course`. `clientRef` is the id you give it: 1–64 of `a–z`, `0–9` and `-`, unique in the
   package, and the same id as in the course state and the slide list.
 - **Unknown fields are refused.** There are no publish, status or audit fields — do not add any.
+- `origin` — only on objects made by `adjust-from-export.mjs` from the platform's export: the
+  platform's own ids (`{ "sectionId": "…", "versionNo": 3 }`, `{ "moduleId": "…", "versionNo": 2 }`,
+  and `{ "courseId": "…" }` on the course). Production copies it into the import file, so the
+  platform updates the same course. Never write one by hand, never move one to another object,
+  and leave it out of anything new ([workflows/adjust-course.md](../workflows/adjust-course.md)).
 
 ## Text in three languages
 

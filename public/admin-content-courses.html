@@ -261,6 +261,18 @@
       </div>
     </dialog>
 
+    <!-- #1095: a course package exported from THIS environment carries its course id. The author
+         chooses: update that course (new, unpublished versions laid ready) or import as a new course. -->
+    <dialog id="courseImportChoiceDialog" aria-labelledby="courseImportChoiceTitle">
+      <h2 class="dialog-title" id="courseImportChoiceTitle" data-i18n="adminContent.courses.importChoice.title">Oppdatere kurset?</h2>
+      <p class="dialog-text" id="courseImportChoiceText"></p>
+      <div class="dialog-actions">
+        <button type="button" id="courseImportUpdateBtn" class="btn btn-primary" data-i18n="adminContent.courses.importChoice.update">Oppdater dette kurset</button>
+        <button type="button" id="courseImportCreateBtn" class="btn btn-secondary" data-i18n="adminContent.courses.importChoice.createNew">Importer som nytt kurs</button>
+        <button type="button" class="dialog-cancel" id="courseImportCancelBtn" data-i18n="adminContent.courses.importChoice.cancel">Avbryt</button>
+      </div>
+    </dialog>
+
     <!-- Cascade-delete confirmation dialog (#762, ADMINISTRATOR-only): lists what will be deleted
          (course + exclusively-owned modules/sections), what will be spared (shared items), and any
          blockers. The confirm button only appears when there are no blockers. -->

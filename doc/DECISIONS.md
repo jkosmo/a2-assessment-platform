@@ -1069,3 +1069,71 @@ huske, glemmes; en kontroll som faller, rettes.
   taket» i HANDOFF-lærdommene.
 
 Nivået fra kilden ble bare tekst i `course-design.md`: det kan ikke kontrolleres av et skript.
+
+## Skillet: hva et bilde på lysarket er, står i lysarklista — og tunge bilder stoppes (2026-10-11, kveld)
+
+Milepæl 1 i prod viste at regler i prosa ikke holdt: Opus 5.5 beholdt tre prompt-skjermbilder som
+bilde i Tilbudsarbeid selv om `from-presentation.md` sa «prompt, også når det er et skjermbilde».
+Mine valg:
+
+- **Notatet fra port 1 blir et felt.** Modellen må alt se på hvert bilde og si hva det er; nå skrives
+  det inn i `work/treatment.json` som `pictures` (`prompt`, `click`, `content`, `infographic`,
+  `decoration`), og `slide-coverage.mjs` holder lysarklista til det. Fem arter, ikke flere: det er de
+  fem som avgjør hva som skjer med bildet. Begrunnelse: en regel som kan telles, telles; en regel
+  modellen skal huske, glemmes — samme mønster som «learner text» i 2.86.0.
+- **Grensa for et tekstlysark er 20 ord.** Under det er det en bildetekst eller en tittel; over det
+  er det tekst som må skrives ut. Tallet er et gulv satt etter testpresentasjonene, ikke målt bredt.
+- **Tunge bilder: 600 kB stopper, 300 kB varsler.** Plattformen tar 5 MB, men en seksjon på telefon
+  laster alle bildene før teksten kan leses. 600 er satt så et vanlig fullskjermbilde (300–500 kB)
+  går gjennom med varsel, og bare de som åpenbart kan beskjæres, stopper. Figurer (SVG) rammes
+  ikke; de er tekst.
+
+Status: mine valg; produkteier ba om de fire forbedringene og bestemte rekkefølgen.
+
+## «Mine kurs»: alfabetisk som standard, plassering som unntak (2026-10-11)
+
+Produkteier valgte alfabetisk, med mulighet for å styre. Resten er mitt:
+
+- **Alfabetisk på tittelen i deltakerens språk**, ikke på en fast nøkkel: to deltakere med ulikt
+  språk kan se ulik rekkefølge, og det er riktig — hver av dem ser en liste som er sortert slik
+  skjermen deres leser. Tallbevisst, fordi kurs ofte er nummerert («Modul 2», «Modul 10»).
+- **Plasseringen er et tall, ikke dra-og-slipp.** Tomt er det vanlige; et tall brukes bare for
+  kurs som skal løftes (et introduksjonskurs). Kurs med tall kommer først, stigende, og to med
+  samme tall sorteres alfabetisk seg imellom. Enklere å forklare og å teste enn en full rekkefølge.
+- **Sortert på tjeneren.** Titlene oversettes der, og alle sider (kurslista, framtidige
+  oversikter) får samme rekkefølge uten egen logikk.
+- **Publiseringstidspunktet slutter å bety noe.** Omstokking ved republisering var en bivirkning
+  ingen ba om.
+
+## Justere et publisert kurs (#1095): nye versjoner legges klar, publisering er en bevisst handling (2026-10-12)
+
+Produkteier, på fire spørsmål i `doc/DESIGN_1095_ADJUST_COURSE.md`:
+
+- **Nye versjoner publiseres ikke av importen.** «Det bør en bevisst handling til for å publisere
+  dem på plattformen med ny versjon.» Importen legger en upublisert versjon på hvert eksisterende
+  element; forfatteren publiserer i seksjonens og modulens egne flater. Dialogen har derfor ikke noe
+  «publiser nå».
+- **Framdrift som ved manuell justering.** En deltaker som har lest seksjonen, står som «lest»
+  også etter en ny versjon — slik plattformen alt gjør når en forfatter redigerer og publiserer en
+  seksjon på nytt.
+- **Fjernede elementer tas ut av kurset, men slettes ikke.**
+- **Skillet kan foreslå endringer utover bestillingen** i endringslista, men gjør dem ikke uten et ja.
+
+Mitt valg som følger av dette: nye elementer i fila opprettes som utkast og legges inn i rekkefølgen
+med en gang; deltakeren ser dem først når de publiseres, fordi et element uten aktiv versjon ikke er
+tilgjengelig. Alternativet — holde nye elementer utenfor kurset til de er publisert — ville gitt
+forfatteren to steder å huske (publiser, og legg inn), mot ett.
+
+## Justere et publisert kurs (#1095): elementer forfatteren ikke eier byttes ut (2026-10-12, kveld)
+
+Produkteier, på to spørsmål etter QA-rundene på fase A:
+
+1. Et element i fila som forfatteren ikke eier: «Hvis du er eier av kurset så vil modul/seksjon
+   byttes ut med deg som ny eier, gammel modul eller seksjon vil bli bevart i arkivert versjon.»
+   På oppfølgingen om framdrift (innleveringer kan ikke flyttes til en ny modul) valgte han å bytte
+   ut både seksjoner og moduler og godta at fullføring av byttede moduler nullstilles — framfor å
+   hoppe over moduler. Kopiens v1 er det deltakerne ser i dag (publisert), v2 er fila (lagt klar);
+   det gamle arkiveres bare når ingen andre kurs bruker det.
+2. Elementer lagt inn i kurset etter eksporten tas ut uten å pekes ut, og kursets tittel,
+   beskrivelse og rekkefølge trer i kraft straks: «Enig.» Forskjellsvisning før import er fase C.
+

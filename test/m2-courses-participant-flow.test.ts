@@ -202,3 +202,68 @@ describe("Participant courses API", () => {
     ]);
   });
 });
+
+// #1093: rekkefølgen i «Mine kurs» — alfabetisk på tittelen i deltakerens språk, kurs med satt
+// plassering først. Før lå kursene i publiseringsrekkefølge, eldst først.
+describe("«Mine kurs»: rekkefølge (#1093)", () => {
+  const stempel = Date.now();
+  const admin = { "x-user-id": "admin-1093", "x-user-email": "admin1093@company.com", "x-user-name": "Admin", "x-user-roles": "ADMINISTRATOR" };
+  const deltaker = { "x-user-id": "deltaker-1093", "x-user-email": "deltaker1093@company.com", "x-user-name": "Deltaker", "x-user-roles": "PARTICIPANT" };
+  const tittel = (nb: string, en: string) => JSON.stringify({ nb, nn: nb, "en-GB": en });
+
+  it("alfabetisk på tittelen i deltakerens språk, tallbevisst; satt plassering kommer først", async () => {
+    const lag = (nb: string, en: string, sortOrder: number | null = null) =>
+      prisma.course.create({ data: { title: tittel(`${nb} ${stempel}`, `${en} ${stempel}`), publishedAt: new Date(), sortOrder }, select: { id: true } });
+    const modul10 = await lag("Modul 10 Oppsummering", "Module 10 Summary");
+    const modul2 = await lag("Modul 2 Tilbud", "Module 2 Bids");
+    const velkommen = await lag("Velkommen", "Welcome", 1);
+    // «Økonomi» heter det samme på engelsk; «Zebra» skiller språkene: norsk sorterer Ø etter Z, engelsk Ø som O.
+    const zebra = await lag("Zebra-kurs", "Zebra course");
+    const okonomi = await lag("Økonomi", "Økonomi");
+    const egne = new Set([modul10.id, modul2.id, velkommen.id, zebra.id, okonomi.id]);
+
+    const nb = await request(app).get("/api/courses").set({ ...deltaker, "accept-language": "nb" });
+    expect(nb.status).toBe(200);
+    const nbRekke = (nb.body.courses as Array<{ id: string; title: string }>).filter((c) => egne.has(c.id)).map((c) => c.id);
+    expect(nbRekke).toEqual([velkommen.id, modul2.id, modul10.id, zebra.id, okonomi.id]);
+
+    // På engelsk kommer «Økonomi» før «Zebra course»: det er tittelen i deltakerens språk som avgjør.
+    const en = await request(app).get("/api/courses").set({ ...deltaker, "accept-language": "en-GB" });
+    const enRekke = (en.body.courses as Array<{ id: string; title: string }>).filter((c) => egne.has(c.id)).map((c) => c.id);
+    expect(enRekke).toEqual([velkommen.id, modul2.id, modul10.id, okonomi.id, zebra.id]);
+  });
+
+  it("plasseringen settes og tømmes gjennom admin-API-et, og vises i kursdetaljen", async () => {
+    const opprettet = await request(app).post("/api/admin/content/courses").set(admin).send({ title: { nb: `Rekkefølge ${stempel}`, nn: `Rekkefølge ${stempel}`, "en-GB": `Order ${stempel}` }, sortOrder: 3 });
+    expect(opprettet.status, JSON.stringify(opprettet.body).slice(0, 300)).toBe(201);
+    const id = opprettet.body.course.id as string;
+    const detalj = await request(app).get(`/api/admin/content/courses/${id}`).set(admin);
+    expect(detalj.body.course.sortOrder).toBe(3);
+
+    const nullet = await request(app).put(`/api/admin/content/courses/${id}`).set(admin).send({ sortOrder: null });
+    expect(nullet.status).toBe(200);
+    expect((await request(app).get(`/api/admin/content/courses/${id}`).set(admin)).body.course.sortOrder).toBeNull();
+
+    const ugyldig = await request(app).put(`/api/admin/content/courses/${id}`).set(admin).send({ sortOrder: -1 });
+    expect(ugyldig.status).toBe(400);
+  });
+
+  it("plasseringen følger med gjennom eksport og import", async () => {
+    const opprettet = await request(app).post("/api/admin/content/courses").set(admin).send({ title: { nb: `Rundtur ${stempel}`, nn: `Rundtur ${stempel}`, "en-GB": `Round trip ${stempel}` }, sortOrder: 7 });
+    expect(opprettet.status).toBe(201);
+    const id = opprettet.body.course.id as string;
+    // Eksporten krever minst ett element i kurset.
+    const seksjon = await request(app).post("/api/admin/content/sections").set(admin).send({ title: { nb: `Seksjon ${stempel}`, nn: `Seksjon ${stempel}`, "en-GB": `Section ${stempel}` }, bodyMarkdown: { nb: "Tekst.", nn: "Tekst.", "en-GB": "Text." } });
+    expect(seksjon.status, JSON.stringify(seksjon.body).slice(0, 300)).toBe(201);
+    const elementer = await request(app).put(`/api/admin/content/courses/${id}/items`).set(admin).send({ items: [{ type: "SECTION", sectionId: seksjon.body.section.id }] });
+    expect(elementer.status, JSON.stringify(elementer.body).slice(0, 300)).toBe(204);
+    const eksport = await request(app).get(`/api/admin/content/courses/${id}/export-package`).set(admin);
+    expect(eksport.status, JSON.stringify(eksport.body).slice(0, 300)).toBe(200);
+    const konvolutt = eksport.body.envelope ?? eksport.body;
+    expect(konvolutt.course.course.sortOrder).toBe(7);
+    const importert = await request(app).post("/api/admin/content/courses/import").set(admin).send({ payload: konvolutt, mode: "createNew" });
+    expect(importert.status, JSON.stringify(importert.body).slice(0, 300)).toBe(201);
+    const detalj = await request(app).get(`/api/admin/content/courses/${importert.body.courseId}`).set(admin);
+    expect(detalj.body.course.sortOrder).toBe(7);
+  });
+});

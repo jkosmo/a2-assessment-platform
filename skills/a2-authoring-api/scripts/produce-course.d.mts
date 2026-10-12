@@ -7,6 +7,7 @@ export function produceCourse(options: {
   slidesFile?: string;
   deckDir?: string;
   packageOut?: string;
+  changesFile?: string;
   now?: Date;
 }): Promise<ProductionResult>;
 export function formatProduction(result: ProductionResult): string;

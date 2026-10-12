@@ -1,0 +1,159 @@
+# Design #1095 — Justere et publisert kurs: eksport med identiteter, skill som justerer, reimport som oppdaterer
+
+Produkteier, 2026-10-12: «Vi trenger funksjonalitet for dette. Strømlinjeformet eksport, med
+reimport etter justering. Skillet må da også understøtte at dette er justeringer og ikke en full
+omskriving.»
+
+## Dagens situasjon, og hvorfor det ikke holder
+
+- Eksportfila (`a2-content-export/v1`, `scope: course`) bærer innholdet, men **ingen identiteter**:
+  ikke kursets id, ikke seksjonenes, ikke modulenes. En fil kan derfor ikke si «jeg er en ny
+  utgave av det der».
+- Kursimport lager alltid et **nytt kurs**. API-ets `replaceExisting` på kursnivå beholder kursets
+  id, men lager nye seksjoner og moduler under, så all framdrift (lest/bestått er knyttet til
+  seksjons- og modul-id) nullstilles, og de gamle elementene blir liggende i biblioteket.
+- På elementnivå finnes det riktige alt: seksjonsimport med `replaceExisting` legger en **ny,
+  upublisert versjon** på en eksisterende seksjon; modulimport med `replaceExisting` legger en ny
+  versjon på en eksisterende modul. Men det er ett steg per element, i hver sin flate.
+- Skillet er laget for å lage et kurs **fra en kilde**, og er instruert til aldri å skrive over
+  (`replaceExisting` er forbudt). Det har ingen arbeidsflyt for «her er kurset; endre dette».
+
+## Målbilde
+
+```
+Innholdsforvaltning ──«Eksporter for justering»──▶ kurs.json (med identiteter)
+                                                        │
+                                              Skillet: justér (ny arbeidsflyt)
+                                                        │  endringsliste + importfil (samme identiteter)
+Innholdsforvaltning ◀──«Oppdater dette kurset»─────────┘
+   hvert element: ny versjon · nye elementer: opprettes · fjernede: tas ut av kurset
+   kursets id, klasser, diskusjoner og framdrift beholdes
+```
+
+## Del 1 — Eksport med identiteter (plattform)
+
+Eksportfila får en valgfri blokk `origin` på kurset og på hvert element:
+
+```json
+{ "course": { "course": { "origin": { "courseId": "…", "exportedAt": "…", "platformVersion": "2.88.0" }, "items": [
+  { "type": "SECTION", "sortOrder": 0, "origin": { "sectionId": "…", "versionNo": 3 }, "section": { … } },
+  { "type": "MODULE",  "sortOrder": 1, "origin": { "moduleId": "…",  "versionNo": 2 }, "module":  { … } }
+  // versionNo = nummeret på versjonen fila BÆRER — den nyeste, for seksjon og modul. Finnes en
+  // høyere versjon når fila kommer tilbake, er fila utdatert og avvises (origin_stale): noen
+  // justerte elementet etter eksporten. Runde to av en justering går dermed rett gjennom: fila
+  // eksporteres med utkastene fra runde én, og neste import legger versjon tre.
+] } } }
+```
+
+- Samme eksport som i dag, pluss `origin`. Knappen i Innholdsforvaltning heter «Eksporter»
+  som før; «for justering» er ikke et eget format, bare det at fila nå kan komme tilbake.
+- `origin` er valgfri i skjemaet, så eldre filer og filer fra skillets «lag kurs»-flyt leses som før.
+- Import til **et annet miljø** (stage → prod) ignorerer `origin` når kurset ikke finnes der, og
+  lager et nytt kurs som i dag. Ingen kopiering av id-er på tvers av miljøer.
+
+## Del 2 — Skillet justerer (skill)
+
+Ny arbeidsflyt `workflows/adjust-course.md`, med samme porter som de to andre, men kortere:
+
+1. **Kilde = eksportfila.** Skillet leser den som **godkjent grunnlag**: hver seksjon, modul og
+   figur går inn i `course-state.json` som «godkjent» før noe er gjort. Det er samme mekanisme som
+   holder innhold på plass i dag (`content-preservation.md`, `course-state.mjs review`).
+2. **Port: hva skal endres.** Forfatteren sier hva som skal justeres (en seksjon, en test, en
+   figur; eventuelt med en ny kilde, som en oppdatert presentasjon). Skillet foreslår en
+   endringsliste — element for element: endres / uendret / nytt / fjernes — og venter.
+3. **Justér, ett element om gangen,** som i port 4 i dag. Alt som ikke står i endringslista,
+   skal være **ordrett** som i fila. `course-state.mjs review` faller når noe godkjent er borte uten
+   at forfatteren ba om det; en ny kontroll faller når et element merket «uendret» likevel er endret.
+4. **Produser** med `produce-course.mjs` som i dag; importfila beholder `origin` på alt som
+   fantes, og mangler det på det som er nytt. Leveransen er fila **og** endringslista.
+
+Reglene som gjelder nytt innhold (ikoner, kortramme, kilden bak teksten, spørsmål per seksjon)
+gjelder bare det som endres; skillet skal ikke «rydde» i det som ikke er bestilt. Oversettelsene:
+bare endrede elementer oversettes på nytt; uendrede beholder sine tre språk fra fila.
+
+## Del 3 — Reimport som oppdatering (plattform)
+
+Importdialogen for kurs leser fila før noe skjer. Finnes `origin.courseId` i dette miljøet, viser
+dialogen **«Oppdater dette kurset»** ved siden av «Importer som nytt kurs», med en oversikt:
+
+| Element | Hva skjer |
+|---|---|
+| seksjon/modul med `origin` som finnes i kurset | **ny versjon** på det eksisterende elementet (seksjon: som dagens seksjonsimport; modul: som dagens modulimport) — men bare når fila faktisk endret det (brødtekst/bilder, modulversjonen); et uendret element får ingen versjon og meldes i `summary.unchangedIds` (2.88.2) |
+| element uten `origin` | **opprettes** som utkast. Seksjon: legges inn i rekkefølgen (deltakeren ser den ikke før den publiseres). Modul: legges inn bare når kurset er **upublisert**; i et publisert kurs ville et modulutkast gjort kurset umulig å fullføre, så den blir liggende i Moduler (`summary.unplacedModuleIds`) til forfatteren publiserer og legger den inn (#440) |
+| element i kurset som ikke er i fila | **tas ut av kurset** (ikke slettet; blir liggende i biblioteket, arkiveres manuelt) |
+| element med `origin` som ikke finnes | avvist med melding — fila hører ikke til dette kurset |
+| kursets tittel, beskrivelse, nivå, plassering | oppdateres |
+
+Alt i én transaksjon, med revisjonsspor per element (`section_imported` / `module_imported` med
+`mode: "updateExisting"` og kursets id) i tillegg til kursets `course_imported`. Kursets id,
+publiseringstilstand, klassetildeling, påmeldinger, diskusjoner og deltakernes framdrift er urørt.
+Oversettelsesporten gjelder per element som før (et element som mangler et språk, kan ikke
+publiseres); kurset avpubliseres IKKE av en oppdatering — ingenting i den rører publiseringen.
+
+**Eierskap per element — avgjort 2026-10-12.** Kursets eier kan ha satt inn en annen forfatters
+modul eller seksjon (#903). En oppdatering skriver ny versjon bare på elementer forfatteren eier
+(eller er administrator for). Et element hen ikke eier, **byttes ut** (produkteier: «modul/seksjon
+byttes ut med deg som ny eier, gammel modul eller seksjon vil bli bevart i arkivert versjon»): en
+kopi med forfatteren som eier tar plassen, med v1 = det deltakerne ser i dag (publisert) og v2 =
+fila (lagt klar). Det gamle tas ut av kurset og arkiveres når ingen andre kurs bruker det. «Lest»
+følger med til kopien; innleveringer blir på den gamle modulen, så fullføring av byttede moduler
+nullstilles — produkteier valgte det framfor å hoppe over moduler. Meldes i
+`summary.replacedUnownedIds`. Bare elementer fila faktisk endret, byttes: uendrede står som de er,
+og det gjør også et element hvis levende versjon ikke passerer dagens port (`keptUnownedIds`).
+(2.88.0 hoppet elementet over; 2.88.1 bytter.)
+
+**Fila er «kurset slik det står».** Kurseksporten bærer nyeste versjon av hvert element, også
+upubliserte utkast (seksjoner gjorde det alt, #916; moduler fra 2.88.0). Importeres en slik fil som
+NYTT kurs et annet sted, lander et modulutkast upublisert, og kurset holdes tilbake som utkast
+(samme vei som publiseringsporten, #896 S4) — det meldes i oppsummeringen.
+
+**Kjent begrensning (fase A).** Et element som er lagt inn i kurset ETTER eksporten, nevnes ikke i
+fila, og tas derfor ut ved oppdateringen — det telles i «tatt ut» i oppsummeringen, men pekes ikke
+ut. `exportedAt` leses ikke. Fase C (forskjellsvisning før import) viser hva som tas ut, med navn.
+
+**Det som trer i kraft straks**, uten publisering: kursets egne felt (tittel, beskrivelse, nivå,
+plassering), rekkefølgen, og at elementer tas ut. Tittelendringer i fila på en seksjon som har en
+levende versjon, og på alle moduler, ignoreres — tittelen følger elementet, ikke versjonen (#931).
+
+Teknisk er dette en orkestrering av de to importveiene som alt finnes (`replaceExisting` for
+seksjon og modul) pluss `setCourseItems`; det nye er gjenkjenningen av fila og dialogen.
+
+## Valg som er produkteiers — avgjort 2026-10-12
+
+**Produkteiers svar:** (1) legg dem klar — det skal en bevisst handling til for å publisere en ny
+versjon på plattformen; (2) framdrift håndteres som ved en manuell justering i plattformen i dag,
+det vil si «lest» beholdes (en ny versjon nullstiller ikke lesestatus); (3) enig; (4) enig.
+Dermed: importen legger nye, upubliserte versjoner og publiserer ingenting; dialogen har ikke
+valget «publiser nå». Nye elementer opprettes som utkast og legges i rekkefølgen; deltakeren ser
+dem først når de publiseres (tilgjengelighetsregelen i `sectionAvailability.ts`).
+
+1. **Publisere de nye versjonene med en gang, eller legge dem klar til gjennomsyn?**
+   Anbefaling: dialogen har et valg, standard **publiser nå** når fila kommer fra skillet med
+   grønne kontroller og endringslista er vist — det er «strømlinjeformet». Velger forfatteren
+   «legg klar», får hver seksjon og modul en upublisert versjon som publiseres i sin egen flate.
+2. **Framdrift på en justert seksjon.** En deltaker som har lest den, står som «lest» selv om
+   teksten er ny. Anbefaling: **behold** — dette er justeringer. Trengs «må leses på nytt» en gang,
+   er det et eget valg per element senere, ikke nå.
+3. **Fjernede elementer.** Tas ut av kurset, men slettes ikke. Anbefaling: **ja**, slik tabellen
+   sier; kursbevis og historikk kan peke på dem.
+4. **Skal skillet få lov til å foreslå endringer utover bestillingen** («jeg ser også at …»)?
+   Anbefaling: det kan **nevne** dem i endringslista som forslag, men ikke gjøre dem uten et ja.
+
+## Omfang og rekkefølge
+
+- **Fase A (plattform, liten):** `origin` i eksporten; import med `mode: "updateExisting"` som
+  orkestrerer elementimportene; dialogen med oversikt og valget publiser nå / legg klar.
+  Integrasjonstest: eksporter → endre to elementer i fila → oppdater → framdrift og klasser
+  urørt, to nye versjoner, ett element tatt ut. E2e: dialogen.
+- **Fase B (skill, middels) — bygget 2026-10-12 (2.88.2):** `workflows/adjust-course.md`;
+  `scripts/adjust-from-export.mjs` gjør eksportfila om til arbeidssettet (pakke med `origin`,
+  kurstilstand med alt godkjent, endringsliste, grunnlag); `produce-course.mjs --changes` har
+  kontrollen «uendret er uendret» (ordrett mot eksporten, også bilder), og fører `origin` inn i
+  importfila; leveransen sier «Oppdater dette kurset»; oversettelse bare av det endrede; forsiden
+  har en tredje rad. Målt mekanisk i `test/unit/skill-adjust-course-1095.test.ts` (rundturen
+  eksport → arbeidssett → fil er ordrett; «uendret» som er endret stopper; «endret» som er
+  ordrett stopper; nytt uten origin; fjernet; glemt). Evalen med Tilbudsarbeid fra prod krever en
+  modell i sløyfa og står igjen.
+- **Fase C (senere):** forskjellsvisning i dialogen (før/etter per element).
+
+Versjon: A og B kan gå hver for seg; A først, så B kan måles mot et ekte miljø.

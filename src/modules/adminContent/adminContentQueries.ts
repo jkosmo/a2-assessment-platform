@@ -1,4 +1,5 @@
 import { adminContentRepository } from "./adminContentRepository.js";
+import { prisma } from "../../db/prisma.js";
 import type { SupportedLocale } from "../../i18n/locale.js";
 import { localizeContentText, localesPresent } from "../../i18n/content.js";
 import { deriveContentLifecycle } from "../content/lifecycle.js";
@@ -226,8 +227,9 @@ export async function getModuleContentBundle(moduleId: string) {
 // (which inlines each module's payload).
 async function buildModuleExportPayload(
   moduleId: string,
+  moduleVersionId?: string,
 ): Promise<import("./adminContentSchemas.js").ModuleExportPayload> {
-  const envelope = await buildModuleExportEnvelope(moduleId, { userId: null, email: null });
+  const envelope = await buildModuleExportEnvelope(moduleId, { userId: null, email: null }, moduleVersionId);
   if (!envelope.module) {
     throw new Error("Internal: module envelope did not include module payload.");
   }
@@ -265,11 +267,25 @@ export async function buildCourseExportEnvelope(
       .map(async (item) => {
         if (item.itemType === "SECTION" && item.section) {
           const sectionVersion = await buildSectionExportPayload(item.section.id, assetBudget);
-          return { type: "SECTION" as const, sortOrder: item.sortOrder, section: sectionVersion };
+          // #1095: identiteten følger med, så fila kan komme tilbake som en oppdatering. `versionNo` er
+          // nummeret på versjonen fila FAKTISK BÆRER (seksjon: nyeste; modul: den publiserte). Finnes
+          // det en nyere versjon når fila kommer tilbake — noen justerte elementet, eller modulen
+          // hadde et upublisert utkast alt ved eksporten — er fila utdatert, og oppdateringen
+          // avvises. Et høyere tall enn innholdet ville sagt «jeg har sett utkastet» uten å ha det.
+          const sectionVersionNo = sectionVersion.audit?.sourceVersionNo ?? null;
+          return { type: "SECTION" as const, sortOrder: item.sortOrder, origin: { sectionId: item.section.id, ...(sectionVersionNo != null ? { versionNo: sectionVersionNo } : {}) }, section: sectionVersion };
         }
         const moduleId = item.moduleId ?? item.module?.id;
         if (!moduleId) throw new Error("Course item is missing its module reference.");
-        return { type: "MODULE" as const, sortOrder: item.sortOrder, module: await buildModuleExportPayload(moduleId) };
+        // Kurseksporten bærer modulens NYESTE versjon, som seksjonseksporten alt gjør (#916): fila er
+        // «kurset slik det står», også det som ligger klart. Ellers ble runde to av en justering en
+        // blindvei — oppdateringen la utkast, neste eksport bar den publiserte teksten, og importen
+        // avviste fila som utdatert til alt var publisert. Et utkast reiser som utkast: importeres
+        // fila som nytt kurs et annet sted, lander modulen upublisert og kurset holdes tilbake.
+        const newestModuleVersion = await prisma.moduleVersion.findFirst({ where: { moduleId }, orderBy: { versionNo: "desc" }, select: { id: true } });
+        const modulePayload = await buildModuleExportPayload(moduleId, newestModuleVersion?.id);
+        const moduleVersionNo = modulePayload.activeVersion?.audit?.sourceVersionNo ?? null;
+        return { type: "MODULE" as const, sortOrder: item.sortOrder, origin: { moduleId, ...(moduleVersionNo != null ? { versionNo: moduleVersionNo } : {}) }, module: modulePayload };
       }),
   );
 
@@ -289,6 +305,8 @@ export async function buildCourseExportEnvelope(
         title: decodeLocalizedText(course.title) as never ?? course.title as never,
         description: (course.description ? decodeLocalizedText(course.description) : null) as never,
         certificationLevel: (course.certificationLevel ? decodeLocalizedText(course.certificationLevel) : null) as never,
+        sortOrder: course.sortOrder ?? null,
+        origin: { courseId: course.id, exportedAt: new Date().toISOString() },
         audit: {
           publishedAt: course.publishedAt ? new Date(course.publishedAt).toISOString() : null,
           publishedBy: null,
@@ -307,9 +325,12 @@ export async function buildCourseExportEnvelope(
 // figures survive the round-trip. The markdown's `asset:<sourceId>` refs are left unchanged;
 // import remaps them to the newly created asset ids. `assetBudget` accumulates decoded asset bytes
 // across the whole envelope; the envelope-wide cap is enforced here so a figure is never dropped.
-async function buildSectionExportPayload(
+export async function buildSectionExportPayload(
   sectionId: string,
   assetBudget?: { total: number },
+  // #1095: hvilken versjon pakken skal bære. Byttet av et element forfatteren ikke eier, kopierer
+  // den LEVENDE versjonen (det deltakerne ser) som kopiens v1 — ikke den nyeste.
+  versionId?: string,
 ): Promise<import("./adminContentSchemas.js").SectionExportPayload> {
   const { getSection } = await import("../course/sectionCommands.js");
   const { loadSectionAssetsForExport, MAX_EXPORT_ASSET_TOTAL_BYTES } = await import("../course/assetCommands.js");
@@ -324,7 +345,9 @@ async function buildSectionExportPayload(
   // #896 S6 ga moduler. Live seksjon på v1, forfatter redigerer, gaten holder v2 tilbake: eksporten
   // ga v1, og en pakke fra «det jeg nettopp skrev» inneholdt det gamle. `versions` er sortert nyeste
   // først; den aktive er reserve for en seksjon uten versjoner i lista.
-  const sourceVersion = section.versions[0] ?? section.activeVersion ?? null;
+  const sourceVersion = versionId
+    ? (section.versions.find((v) => v.id === versionId) ?? (section.activeVersion?.id === versionId ? section.activeVersion : null))
+    : (section.versions[0] ?? section.activeVersion ?? null);
   if (!sourceVersion) {
     throw new Error("Section has no versions to export.");
   }
@@ -393,8 +416,8 @@ export async function buildModuleExportEnvelope(
   moduleId: string,
   exportedBy: { userId?: string | null; email?: string | null },
   // #896 S6: which version to package. Default (undefined) keeps the historical rule — the live
-  // version, falling back to the latest — which is what the module list and course export want:
-  // a package of what participants actually get.
+  // version, falling back to the latest — which is what the module list wants: a package of what
+  // participants actually get. (#1095: the COURSE export passes the newest version, like sections.)
   //
   // The module WORKSPACE passes the version it is displaying. An author standing in Rediger
   // looking at an unpublished v2 and clicking "Export" got a file containing the published v1,

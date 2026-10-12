@@ -5,6 +5,7 @@ import { renderSectionMarkdown } from "../modules/course/sectionContent.js";
 import { localizeContentText } from "../i18n/content.js";
 import { normalizeLocale } from "../i18n/locale.js";
 import { NotFoundError } from "../errors/AppError.js";
+import { sortCoursesForParticipant } from "../modules/course/courseOrdering.js";
 import {
   listUserEnrollments,
   selfEnroll,
@@ -94,6 +95,7 @@ coursesRouter.get("/", async (request, response, next) => {
         id: course.id,
         title: localizeContentText(locale, course.title) ?? course.title,
         description: localizeContentText(locale, course.description) ?? course.description,
+        sortOrder: course.sortOrder ?? null,
         moduleCount: moduleIds.length,
         progress: {
           completed,
@@ -107,7 +109,9 @@ coursesRouter.get("/", async (request, response, next) => {
       };
     });
 
-    response.json({ courses: items });
+    // #1093: satt rekkefølge først, resten alfabetisk på tittelen i deltakerens språk. Klienten
+    // deler lista i pågående og fullførte uten å sortere om, så dette er rekkefølgen innad i hver.
+    response.json({ courses: sortCoursesForParticipant(items, locale) });
   } catch (error) {
     next(error);
   }
@@ -365,6 +369,7 @@ coursesRouter.get("/:courseId", async (request, response, next) => {
       title: localizeContentText(locale, course.title) ?? course.title,
       description: localizeContentText(locale, course.description) ?? course.description,
       certificationLevel: localizeContentText(locale, course.certificationLevel) ?? course.certificationLevel,
+      sortOrder: course.sortOrder ?? null,
       publishedAt: course.publishedAt.toISOString(),
       discussionsEnabled: course.discussionsEnabled,
       moduleCount: moduleIds.length,

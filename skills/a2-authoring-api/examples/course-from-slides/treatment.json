@@ -45,6 +45,10 @@
       "images": [
         "slide-04-1.png"
       ],
+      "pictures": {
+        "slide-04-1.png": "click",
+        "slide-04-2.png": "prompt"
+      },
       "imagesLeftOut": {
         "slide-04-2.png": "a screenshot of the prompt — written out as text instead"
       },

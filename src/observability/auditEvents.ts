@@ -258,7 +258,7 @@ export type AuditMetadataByAction = {
   [auditActions.adminContent.moduleImported]: EventMetadata<{
     moduleId: string;
     moduleVersionId: string;
-    mode: "createNew" | "replaceExisting";
+    mode: "createNew" | "replaceExisting" | "updateExisting";
     sourcePublishedAt: string | null;
     sourcePublishedBy: string | null;
     sourceVersionNo: number | null;
@@ -270,14 +270,14 @@ export type AuditMetadataByAction = {
   }>;
   [auditActions.adminContent.courseImported]: EventMetadata<{
     courseId: string;
-    mode: "createNew" | "replaceExisting";
+    mode: "createNew" | "replaceExisting" | "updateExisting";
     moduleCount: number;
     sourcePublishedAt: string | null;
   }>;
   [auditActions.adminContent.sectionImported]: EventMetadata<{
     sectionId: string;
     sectionVersionId: string;
-    mode: "createNew" | "replaceExisting";
+    mode: "createNew" | "replaceExisting" | "updateExisting";
     assetCount: number;
     // Opaque source-environment attribution, display only — never matched against local users.
     sourcePublishedAt: string | null;

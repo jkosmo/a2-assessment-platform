@@ -36,6 +36,8 @@ type MockCourse = {
   updatedAt?: string;
   publishedAt?: string | null;
   description?: Record<string, string> | string | null;
+  /** #1093: plassering i «Mine kurs»; null/utelatt = alfabetisk. */
+  sortOrder?: number | null;
   modules?: Array<{
     moduleId: string;
     sortOrder: number;
