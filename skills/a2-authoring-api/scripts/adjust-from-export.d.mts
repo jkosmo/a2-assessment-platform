@@ -3,7 +3,7 @@ export interface ConversionResult {
   problems: string[];
   pkg?: Record<string, unknown>;
   state?: { primaryLanguage: string; order: string[]; elements: Array<Record<string, unknown>> };
-  changes?: { baseline: string; elements: Record<string, string> };
+  changes?: { baseline: string; course?: string; elements: Record<string, string>; refs?: Record<string, { type: string; id: string }> };
   files?: string[];
   primaryLanguage?: string;
   courseRef?: string;

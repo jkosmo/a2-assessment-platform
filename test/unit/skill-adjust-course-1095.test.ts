@@ -150,7 +150,7 @@ describe("#1095 fase B — skillets justeringsflyt", () => {
     expect(result.state!.elements.every((e) => e.status === "approved")).toBe(true);
     expect(result.changes!.elements).toEqual({ "sec-01-innledning": "unchanged", "mod-02-test-moter": "unchanged", "sec-03-gammel-del": "unchanged" });
     expect(result.changes!.course).toBe("unchanged");
-    expect((result.changes as { refs: Record<string, unknown> }).refs).toEqual({ "sec-01-innledning": { type: "SECTION", id: "sec-abc" }, "mod-02-test-moter": { type: "MODULE", id: "mod-abc" }, "sec-03-gammel-del": { type: "SECTION", id: "sec-gammel" } });
+    expect(result.changes!.refs).toEqual({ "sec-01-innledning": { type: "SECTION", id: "sec-abc" }, "mod-02-test-moter": { type: "MODULE", id: "mod-abc" }, "sec-03-gammel-del": { type: "SECTION", id: "sec-gammel" } });
     // Teksten ligger som filer per språk; bildene som filer med entydige navn, men plattformens filnavn beholdes i pakka.
     expect(readFileSync(path.join(work, "sections/sec-01-innledning.nn.md"), "utf8")).toContain("Eit møte treng eit mål.");
     expect(readFileSync(path.join(work, "assets/sec-01-innledning/01-skjermbilde-2026-10-01.png")).length).toBe(Buffer.from(PNG, "base64").length);
