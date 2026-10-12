@@ -145,10 +145,15 @@ dem først når de publiseres (tilgjengelighetsregelen i `sectionAvailability.ts
   orkestrerer elementimportene; dialogen med oversikt og valget publiser nå / legg klar.
   Integrasjonstest: eksporter → endre to elementer i fila → oppdater → framdrift og klasser
   urørt, to nye versjoner, ett element tatt ut. E2e: dialogen.
-- **Fase B (skill, middels):** `workflows/adjust-course.md`; `course-state` lastes fra eksportfila;
-  kontrollen «uendret er uendret»; endringslista i leveransen; oversettelse bare av det endrede;
-  forsiden får en tredje rad i «which workflow». Eval: Tilbudsarbeid eksportert fra prod →
-  «skriv prompt-skjermbildene om til prompt-bokser» → importfil der alt annet er ordrett.
+- **Fase B (skill, middels) — bygget 2026-10-12 (2.88.2):** `workflows/adjust-course.md`;
+  `scripts/adjust-from-export.mjs` gjør eksportfila om til arbeidssettet (pakke med `origin`,
+  kurstilstand med alt godkjent, endringsliste, grunnlag); `produce-course.mjs --changes` har
+  kontrollen «uendret er uendret» (ordrett mot eksporten, også bilder), og fører `origin` inn i
+  importfila; leveransen sier «Oppdater dette kurset»; oversettelse bare av det endrede; forsiden
+  har en tredje rad. Målt mekanisk i `test/unit/skill-adjust-course-1095.test.ts` (rundturen
+  eksport → arbeidssett → fil er ordrett; «uendret» som er endret stopper; «endret» som er
+  ordrett stopper; nytt uten origin; fjernet; glemt). Evalen med Tilbudsarbeid fra prod krever en
+  modell i sløyfa og står igjen.
 - **Fase C (senere):** forskjellsvisning i dialogen (før/etter per element).
 
 Versjon: A og B kan gå hver for seg; A først, så B kan måles mot et ekte miljø.

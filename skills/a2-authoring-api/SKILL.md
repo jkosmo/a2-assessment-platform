@@ -6,10 +6,12 @@ description: >
   section, module or test made for the platform — from a PowerPoint presentation (.pptx, slides,
   lysark, presentasjon), from documents, notes or a transcript, from web sources, or from their own
   description (e.g. "lag et kurs av denne presentasjonen", "lag et kurs for prosjektledere i
-  agentisk KI", "lag en test til denne seksjonen"). Reads the presentation file itself, keeps its
-  graphics (figures, cards, callouts, icons, screenshots), writes multiple-choice and free-text
-  tests, translates to nb, nn and en-GB, and delivers an import file or creates drafts through the
-  API. Never invents content without a source; never publishes.
+  agentisk KI", "lag en test til denne seksjonen") — or ADJUSTS a course that is already on the
+  platform from its export file ("juster kurset", "oppdater seksjon 3", "bytt ut testen"), changing
+  only what the author asks for. Reads the presentation file itself, keeps its graphics (figures,
+  cards, callouts, icons, screenshots), writes multiple-choice and free-text tests, translates to
+  nb, nn and en-GB, and delivers an import file or creates drafts through the API. Never invents
+  content without a source; never publishes.
 compatibility: Requires Node.js 20 or newer to run the bundled scripts (scripts/*.mjs).
 ---
 
@@ -49,8 +51,10 @@ example "bare lag et utkast fra det du vet"). Warn that it is unverified, mark e
 |---|---|
 | a PowerPoint presentation (`.pptx`) | [workflows/from-presentation.md](workflows/from-presentation.md) |
 | documents, notes, a transcript, web sources, or the author's own description | [workflows/from-text.md](workflows/from-text.md) |
+| a course that is **already on the platform**, to be adjusted — the author brings its export file | [workflows/adjust-course.md](workflows/adjust-course.md) |
 
-Both workflows pass the same gates. Open the workflow file before you ask the author anything; it
+The two make-a-course workflows pass the same gates; adjusting has fewer, and only what the author
+asks for changes. Open the workflow file before you ask the author anything; it
 says what to do at each gate for that kind of source.
 
 ## The gates
@@ -99,6 +103,8 @@ to this skill's folder.
 | `node scripts/course-state.mjs review work/course-state.json <clientRef> work/revised.md` | checks that a shortened text has lost nothing the author approved |
 | `node scripts/slide-coverage.mjs work/treatment.json work/package.json` | checks that every slide got what the approved slide list says |
 | `node scripts/produce-course.mjs work/package.json --out <file> --state work/course-state.json` | gate 6: attaches the pictures, runs every check, and writes the validated import file |
+| `node scripts/adjust-from-export.mjs <export.json> work` | turns the platform's export of a course into the working set for adjusting it: package, course state (everything approved), change list, baseline |
+| `… produce-course.mjs … --changes work/changes.json` | when adjusting: also checks that unchanged is unchanged, word for word, against the export |
 | `node scripts/import-package.mjs --file <package> --base-url <url>` | creates the drafts through the API, where you can reach it |
 
 Keep your working files in a folder named `work/`.

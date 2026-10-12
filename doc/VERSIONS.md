@@ -2,6 +2,44 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.88.2 - 2026-10-12
+
+### Justere et publisert kurs, fase B: skillets arbeidsflyt (#1095)
+
+Skillet `a2-authoring-api` 2.88.2 kan justere et kurs som alt ligger på plattformen, fra kursets
+eksportfil, og endrer bare det forfatteren ber om.
+
+- **`workflows/adjust-course.md`** (ny, tredje rad i «which workflow»): port 1 eksportfila (bare
+  plattformens egen eksport duger — den bærer `origin`); port 2 endringslista (uendret / endret /
+  ny / fjernet per element, med reglene: tittel endres i admin-UI, ny modul i publisert kurs
+  lander i Moduler, fjernet tas ut men slettes ikke, fremmede elementer byttes ut); port 3 hvert
+  endret element for seg, alt annet ordrett; port 4 uavhengig kontroll bare av det endrede; port 5
+  oversettelse av det endrede og produksjon med `--changes`. Leveransen: fila, endringslista og
+  «Oppdater dette kurset».
+- **`scripts/adjust-from-export.mjs`** (nytt): eksportfila → `work/package.json` (seksjoner som
+  filer per språk, bilder som filer med språk- og layoutvarianter, moduler inline, `origin` på
+  alt og på kurset), `work/course-state.json` (alt godkjent som det står, SVG-etiketter som
+  figurer), `work/changes.json` (alt «unchanged») og `work/baseline.json`. Uten `origin` stopper
+  det: fila er ikke en plattformeksport.
+- **`produce-course.mjs --changes work/changes.json`**: ny kontroll **changes** — et element
+  listet «unchanged» må være ordrett som i eksporten (tekst, tittel, bilder; `audit` og
+  nøkkelrekkefølge teller ikke), «changed» må være endret, «new» har ingen `origin`, «removed» er
+  ute av pakka, og alt på begge sider må være med i lista. Et kurs med `origin` uten `--changes`
+  produseres ikke. `origin` føres inn i importfila (elementer og kurs), og DELIVER-linja sier
+  «Oppdater dette kurset».
+- Skillets skjemakontroll godtar og sjekker `origin`. Språkkontrollen regner `null` (slik
+  plattformen eksporterer tomme valgfrie felt) som fraværende felt, ikke som manglende språk.
+- Referansene oppdatert: package-schema (`origin`), export-validation, check-and-produce (changes
+  i rapporttabellen, leveransen), content-preservation (tilstand fra eksport; fjernet element).
+
+**Slik er det målt:** `test/unit/skill-adjust-course-1095.test.ts` (6): rundturen eksport →
+arbeidssett → produksjon med alt uendret gir en fil der hvert element er ordrett som i eksporten,
+med `origin` og tom `audit`; uendret-men-endret stopper, endret-men-ordrett stopper; nytt uten
+origin, fjernet (også i kurstilstanden), glemt element stopper; kurs med origin uten liste
+stopper. Åtte mutasjoner (origin på element og kurs, de tre utfallene i changes-kontrollen,
+kurs med origin uten liste, null som manglende språk, bildet skrevet feil), alle fanget med grønn
+grunnlinje.
+
 ## 2.88.1 - 2026-10-12
 
 ### Justere et publisert kurs (#1095): elementer forfatteren ikke eier byttes ut, ikke hoppet over
