@@ -751,6 +751,10 @@ export async function importCourseFromEnvelope(
         // #896 S4: set when any module in this course could not be auto-published because it is
         // missing a locale. The course must then stay a draft too.
         let anyContentHeldBack = false;
+        // #1095: en modul som landet upublisert holder kurset tilbake BARE når fila ber om at kurset
+        // publiseres. Et kurs som var utkast ved kilden (skillets filer har ingen publiseringsdato
+        // på modulene), er utkast fordi kilden var det — ikke «holdt tilbake» (#957 skiller de to).
+        const courseWantsPublish = Boolean(payload.course.audit?.publishedAt);
 
         const summary: CourseUpdateSummary = { updatedSections: 0, updatedModules: 0, createdSections: 0, createdModules: 0, removedSections: 0, removedModules: 0, unplacedModuleIds: [], skippedUnownedIds };
         if (orderedItems && updatePlan) {
@@ -840,7 +844,7 @@ export async function importCourseFromEnvelope(
               sectionCount += 1;
             } else {
               const imported = await importModulePayload(entry.module, { actorId: options.actorId, mode: "createNew" }, tx);
-              if (imported.heldBackByTranslationGate || !imported.published) anyContentHeldBack = true;
+              if (imported.heldBackByTranslationGate || (courseWantsPublish && !imported.published)) anyContentHeldBack = true;
               courseItemInputs.push({ type: "MODULE", moduleId: imported.moduleId });
               importedModuleIds.push(imported.moduleId);
             }
@@ -850,7 +854,7 @@ export async function importCourseFromEnvelope(
           const importedModules: Array<{ moduleId: string; sortOrder: number }> = [];
           for (const item of payload.course.modules ?? []) {
             const imported = await importModulePayload(item.module, { actorId: options.actorId, mode: "createNew" }, tx);
-            if (imported.heldBackByTranslationGate || !imported.published) anyContentHeldBack = true;
+            if (imported.heldBackByTranslationGate || (courseWantsPublish && !imported.published)) anyContentHeldBack = true;
             importedModules.push({ moduleId: imported.moduleId, sortOrder: item.sortOrder });
           }
           importedModules.sort((a, b) => a.sortOrder - b.sortOrder);

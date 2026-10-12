@@ -215,6 +215,16 @@ describe("#1095 oppdatere et publisert kurs fra en eksportfil", () => {
     expect(nytt.publishedAt).toBeNull();
     const modul = await prisma.module.findUniqueOrThrow({ where: { id: svar.body.moduleIds[0] }, select: { activeVersionId: true } });
     expect(modul.activeVersionId).toBeNull();
+
+    // Men et kurs som var UTKAST ved kilden (som skillets filer, uten publiseringsdato) er utkast
+    // fordi kilden var det — ikke «holdt tilbake». Flagget skal være usant (#957 skiller de to).
+    const utkast = JSON.parse(JSON.stringify(fil));
+    utkast.course.course.audit.publishedAt = null;
+    utkast.course.course.title = tre(`Utkastkurs ${stempel}`);
+    const svar2 = await request(app).post("/api/admin/content/courses/import").set(admin).send({ payload: utkast, mode: "createNew" });
+    expect(svar2.status, JSON.stringify(svar2.body).slice(0, 400)).toBe(201);
+    expect(svar2.body.heldBackByTranslationGate).toBe(false);
+    expect((await prisma.course.findUniqueOrThrow({ where: { id: svar2.body.courseId }, select: { publishedAt: true } })).publishedAt).toBeNull();
   });
 
   it("en ny modul i et PUBLISERT kurs opprettes som utkast men legges ikke inn — kurset må kunne fullføres", async () => {
