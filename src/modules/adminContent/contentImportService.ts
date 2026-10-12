@@ -589,13 +589,12 @@ export async function importCourseFromEnvelope(
   let updatePlan: CourseUpdatePlan | null = null;
   const updateTargets = new Map<number, { targetId: string; keepLiveTitle: boolean }>();
   if (options.mode === "updateExisting") {
-    if (!options.targetCourseId) throw new ValidationError("targetCourseId is required when mode is updateExisting.");
-    if (!orderedItems) throw new ValidationError("The file has no items; an update needs the full item sequence.");
+    // #999: domeneregler bærer koder, så klienten kan si det på brukerens språk.
+    if (!options.targetCourseId) throw new DomainRuleError("import_target_required", "targetCourseId is required when mode is updateExisting.");
+    if (!orderedItems) throw new DomainRuleError("import_items_required", "The file has no items; an update needs the full item sequence.");
     const originCourseId = payload.course.origin?.courseId;
     if (originCourseId && originCourseId !== options.targetCourseId) {
-      throw new ValidationError("The file was exported from a different course; it cannot update this one.", {
-        code: "origin_mismatch",
-      });
+      throw new DomainRuleError("origin_mismatch", "The file was exported from a different course; it cannot update this one.", { originCourseId, targetCourseId: options.targetCourseId });
     }
     const courseRepo = (await import("../course/courseRepository.js")).courseRepository;
     const existingItems = await courseRepo.findAllCourseItems(options.targetCourseId);
@@ -603,7 +602,7 @@ export async function importCourseFromEnvelope(
     const existingModuleIds = existingItems.filter((i) => i.itemType === "MODULE").map((i) => (i.moduleId ?? i.module?.id) as string).filter(Boolean);
     updatePlan = planCourseUpdate(orderedItems, { sectionIds: existingSectionIds, moduleIds: existingModuleIds });
     if (updatePlan.problems.length > 0) {
-      throw new ValidationError(`The file does not match this course: ${updatePlan.problems.join("; ")}.`, { code: "origin_mismatch" });
+      throw new DomainRuleError("origin_mismatch", `The file does not match this course: ${updatePlan.problems.join("; ")}.`, { problems: updatePlan.problems });
     }
     for (const entry of updatePlan.entries) {
       if (entry.action !== "update") continue;
@@ -643,7 +642,7 @@ export async function importCourseFromEnvelope(
         let courseId: string;
         if (options.mode === "updateExisting") {
           const existing = await tx.course.findUnique({ where: { id: options.targetCourseId! }, select: { id: true } });
-          if (!existing) throw new ValidationError("Target course not found for updateExisting.");
+          if (!existing) throw new DomainRuleError("import_target_not_found", "Target course not found for updateExisting.");
           courseId = options.targetCourseId!;
           // Kursets egne felt følger fila; publiseringstilstanden rører vi ikke.
           await tx.course.update({

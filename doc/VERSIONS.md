@@ -22,7 +22,7 @@ elementer tas ut, ikke slettes.
   kurset** (ikke slettet); rekkefølgen følger fila; kursets tittel, beskrivelse, nivå og plassering
   oppdateres. Kursets id, publiseringstilstand, klassetildeling, diskusjoner og deltakernes
   framdrift er urørt. En fil fra et annet kurs, eller med et element kurset ikke har, avvises
-  (400, `origin_mismatch`) uten at noe skrives. Svaret bærer `summary` (oppdatert/opprettet/tatt ut),
+  (400 med koden `origin_mismatch`, en `DomainRuleError` slik #999 krever) uten at noe skrives. Svaret bærer `summary` (oppdatert/opprettet/tatt ut),
   og revisjonssporet for importen har det samme.
 - **Dialogen i Innholdsforvaltning:** når fila peker på et kurs som finnes her (og forfatteren får
   se det), spør importen: «Oppdater dette kurset» (nye versjoner legges klar; ingenting publiseres),

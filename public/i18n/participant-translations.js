@@ -97,6 +97,10 @@ export const translations = {
     // {count} og {courseTitles} fylles fra feilsvarets `details`.
     "errors.api.content_in_use": "This content is used in {count} course(s): {courseTitles}. Remove it from them first, or unpublish those courses.",
     "errors.api.not_configured": "This function is not set up on the server yet. Ask an administrator.",
+    "errors.api.origin_mismatch": "This file does not belong to the course you are updating. Export the course again and adjust that file, or import it as a new course.",
+    "errors.api.import_target_required": "Choose which course the file should update.",
+    "errors.api.import_target_not_found": "The course the file points to no longer exists here. Import the file as a new course.",
+    "errors.api.import_items_required": "The file has no items. An update needs the whole course, exported from the platform.",
     "errors.api.module_version_unavailable": "The module is not available right now — it has no published version. Try again later, or ask the course owner.",
     "errors.api.course_has_no_items": "A course needs at least one module or section before it can be published.",
     "errors.api.section_archived_cannot_publish": "Restore the section before you publish it.",
@@ -591,6 +595,10 @@ export const translations = {
     // #972/#965/#980 — se merknaden i en-GB-tabellen.
     "errors.api.content_in_use": "Innholdet er i bruk i {count} kurs: {courseTitles}. Fjern det fra kursene først, eller avpubliser dem.",
     "errors.api.not_configured": "Funksjonen er ikke satt opp på serveren ennå. Kontakt en administrator.",
+    "errors.api.origin_mismatch": "Denne fila hører ikke til kurset du oppdaterer. Eksporter kurset på nytt og juster den fila, eller importer fila som et nytt kurs.",
+    "errors.api.import_target_required": "Velg hvilket kurs fila skal oppdatere.",
+    "errors.api.import_target_not_found": "Kurset fila peker på finnes ikke lenger her. Importer fila som et nytt kurs.",
+    "errors.api.import_items_required": "Fila har ingen elementer. En oppdatering trenger hele kurset, eksportert fra plattformen.",
     "errors.api.module_version_unavailable": "Modulen er ikke tilgjengelig akkurat nå — den har ingen publisert versjon. Prøv igjen senere, eller kontakt kurseieren.",
     "errors.api.course_has_no_items": "Et kurs må ha minst én modul eller seksjon før det kan publiseres.",
     "errors.api.section_archived_cannot_publish": "Gjenopprett seksjonen før du publiserer den.",
@@ -1078,6 +1086,10 @@ export const translations = {
 
 "errors.api.content_in_use": "Innhaldet er i bruk i {count} kurs: {courseTitles}. Fjern det frå kursa først, eller avpubliser dei.",
 "errors.api.not_configured": "Funksjonen er ikkje sett opp på tenaren enno. Kontakt ein administrator.",
+"errors.api.origin_mismatch": "Denne fila høyrer ikkje til kurset du oppdaterer. Eksporter kurset på nytt og juster den fila, eller importer fila som eit nytt kurs.",
+"errors.api.import_target_required": "Vel kva kurs fila skal oppdatere.",
+"errors.api.import_target_not_found": "Kurset fila peikar på finst ikkje lenger her. Importer fila som eit nytt kurs.",
+"errors.api.import_items_required": "Fila har ingen element. Ei oppdatering treng heile kurset, eksportert frå plattforma.",
 "errors.api.module_version_unavailable": "Modulen er ikkje tilgjengeleg akkurat no — han har inga publisert utgåve. Prøv igjen seinare, eller kontakt kurseigaren.",
 "errors.api.course_has_no_items": "Eit kurs må ha minst éin modul eller seksjon før det kan publiserast.",
 "errors.api.section_archived_cannot_publish": "Gjenopprett seksjonen før du publiserer henne.",
