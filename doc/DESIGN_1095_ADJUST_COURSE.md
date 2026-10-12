@@ -98,7 +98,9 @@ kopi med forfatteren som eier tar plassen, med v1 = det deltakerne ser i dag (pu
 fila (lagt klar). Det gamle tas ut av kurset og arkiveres når ingen andre kurs bruker det. «Lest»
 følger med til kopien; innleveringer blir på den gamle modulen, så fullføring av byttede moduler
 nullstilles — produkteier valgte det framfor å hoppe over moduler. Meldes i
-`summary.replacedUnownedIds`. (2.88.0 hoppet elementet over; 2.88.1 bytter.)
+`summary.replacedUnownedIds`. Bare elementer fila faktisk endret, byttes: uendrede står som de er,
+og det gjør også et element hvis levende versjon ikke passerer dagens port (`keptUnownedIds`).
+(2.88.0 hoppet elementet over; 2.88.1 bytter.)
 
 **Fila er «kurset slik det står».** Kurseksporten bærer nyeste versjon av hvert element, også
 upubliserte utkast (seksjoner gjorde det alt, #916; moduler fra 2.88.0). Importeres en slik fil som

@@ -27,7 +27,8 @@ import { prisma } from "../../db/prisma.js";
 import { courseRepository } from "../course/courseRepository.js";
 import { createCourse, setCourseModules, setCourseItems, publishCourse, type CourseItemInput } from "../course/courseCommands.js";
 import { randomUUID } from "node:crypto";
-import { createSection } from "../course/sectionCommands.js";
+import { createSection, evaluateSectionTranslationGate } from "../course/sectionCommands.js";
+import { moduleExportPayloadSchema, sectionExportPayloadSchema } from "./adminContentSchemas.js";
 import { stageSectionAssets, reclaimAssetBlobs, type StagedSectionAsset } from "../course/assetCommands.js";
 import { DomainRuleError, ForbiddenError, ValidationError } from "../../errors/AppError.js";
 import { assertContentOwnership } from "../content/contentOwnershipService.js";
@@ -66,6 +67,12 @@ export interface CourseUpdateSummary {
    * med forfatterens egne kopier. `oldArchived`: det gamle ble arkivert (ingen andre kurs brukte det).
    */
   replacedUnownedIds: Array<{ type: "SECTION" | "MODULE"; oldId: string; newId: string; oldArchived: boolean }>;
+  /**
+   * #1095: elementer forfatteren ikke eier som står som de er: fila endret dem ikke (`unchanged` —
+   * et bytte ville nullstilt deltakernes fullføring for ingenting), eller den levende versjonen
+   * passerer ikke dagens publiseringsport, så en kopi kunne ikke tatt plassen (`not_publishable`).
+   */
+  keptUnownedIds: Array<{ type: "SECTION" | "MODULE"; id: string; reason: "unchanged" | "not_publishable" }>;
 }
 
 // #749 (Layer A): the course-import route carries inlined section assets (base64), so the JSON body
@@ -205,6 +212,57 @@ function serializeRequired(value: LocalizedText): string {
   return localizedTextCodec.serialize(value);
 }
 
+// #1095: er fila sitt element det samme som det plattformen har? `audit` (tidsstempler, hvem) teller
+// ikke, og rekkefølgen på nøkler teller ikke — skillet kan ha skrevet fila på nytt. Alt annet teller:
+// ulik tekst, et bilde til, et spørsmål mindre. Begge sider har vært gjennom eksportskjemaet (zod
+// stripper nøkler skjemaet ikke kjenner, som rå `createdAt`-datoer), så formen er lik før sammenligningen.
+function stripAudit(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(stripAudit);
+  if (value && typeof value === "object") {
+    const out: Record<string, unknown> = {};
+    for (const key of Object.keys(value as Record<string, unknown>).sort()) {
+      if (key === "audit") continue;
+      out[key] = stripAudit((value as Record<string, unknown>)[key]);
+    }
+    return out;
+  }
+  return value;
+}
+function samePayload(a: unknown, b: unknown): boolean {
+  return JSON.stringify(stripAudit(a)) === JSON.stringify(stripAudit(b));
+}
+
+// Porten en modulpakke må gjennom for å publiseres ved import — samme som publiser-knappen (#956).
+// Egen funksjon (#1095) så byttet av et element forfatteren ikke eier kan spørre FØR transaksjonen
+// om den levende versjonen lar seg publisere på nytt som kopiens v1.
+function moduleImportGate(payload: ModuleExportPayload) {
+  return evaluateModulePublishGate({
+    module: {
+      title: serializeRequired(payload.module.title),
+      description: (payload.module.description ? serializeLocalized(payload.module.description) : null) ?? null,
+      archivedAt: null,
+    },
+    version: {
+      taskText: payload.activeVersion.taskText ? serializeRequired(payload.activeVersion.taskText) : null,
+      candidateTaskConstraints: (payload.activeVersion.candidateTaskConstraints
+        ? serializeLocalized(payload.activeVersion.candidateTaskConstraints)
+        : null) ?? null,
+      assessorExpectedContent: (payload.activeVersion.assessorExpectedContent
+        ? serializeLocalized(payload.activeVersion.assessorExpectedContent)
+        : null) ?? null,
+      assessmentBlueprint: payload.activeVersion.assessmentBlueprint
+        ? JSON.stringify(payload.activeVersion.assessmentBlueprint)
+        : null,
+    },
+    mcqQuestions: (payload.activeVersion.mcqSet?.questions ?? []).map((question) => ({
+      stem: serializeRequired(question.stem),
+      optionsJson: JSON.stringify(question.options.map((option) => serializeRequired(option))),
+      correctAnswer: serializeRequired(question.correctAnswer),
+      rationale: question.rationale ? serializeRequired(question.rationale) : null,
+    })),
+  });
+}
+
 async function importModulePayload(
   payload: ModuleExportPayload,
   options: {
@@ -326,31 +384,7 @@ async function importModulePayload(
   // ran the blueprint check, so `MCQ_COUNT_FAR_BELOW_BLUEPRINT` — the one blocking rule there —
   // did not exist on this door. A gate that checks fewer things here is a gate with a hole shaped
   // exactly like an import.
-  const importGate = evaluateModulePublishGate({
-    module: {
-      title: serializeRequired(payload.module.title),
-      description: (payload.module.description ? serializeLocalized(payload.module.description) : null) ?? null,
-      archivedAt: null,
-    },
-    version: {
-      taskText: payload.activeVersion.taskText ? serializeRequired(payload.activeVersion.taskText) : null,
-      candidateTaskConstraints: (payload.activeVersion.candidateTaskConstraints
-        ? serializeLocalized(payload.activeVersion.candidateTaskConstraints)
-        : null) ?? null,
-      assessorExpectedContent: (payload.activeVersion.assessorExpectedContent
-        ? serializeLocalized(payload.activeVersion.assessorExpectedContent)
-        : null) ?? null,
-      assessmentBlueprint: payload.activeVersion.assessmentBlueprint
-        ? JSON.stringify(payload.activeVersion.assessmentBlueprint)
-        : null,
-    },
-    mcqQuestions: (payload.activeVersion.mcqSet?.questions ?? []).map((question) => ({
-      stem: serializeRequired(question.stem),
-      optionsJson: JSON.stringify(question.options.map((option) => serializeRequired(option))),
-      correctAnswer: serializeRequired(question.correctAnswer),
-      rationale: question.rationale ? serializeRequired(question.rationale) : null,
-    })),
-  });
+  const importGate = moduleImportGate(payload);
   const importTranslationIssues = importGate.issues.filter((issue) => issue.severity === "blocking");
   // `heldBackByTranslationGate` is reported to the caller, not just acted on locally. A course
   // import publishes the course after its modules; if a module was held back and the course goes
@@ -614,8 +648,9 @@ export async function importCourseFromEnvelope(
   type Replacement =
     | { type: "SECTION"; newId: string; liveSection: SectionExportPayload | null }
     | { type: "MODULE"; liveModule: ModuleExportPayload | null };
-  const updateTargets = new Map<number, { targetId: string; keepLiveTitle: boolean; replace?: Replacement }>();
+  const updateTargets = new Map<number, { targetId: string; keepLiveTitle: boolean; replace?: Replacement; keep?: boolean }>();
   const stagedCopies = new Map<number, StagedImportSection>();
+  const keptUnownedIds: CourseUpdateSummary["keptUnownedIds"] = [];
   // Er kurset publisert, kan en NY modul ikke legges inn som utkast: deltakeren må da fullføre
   // en modul som ikke kan åpnes (I1). Den opprettes, men legges ikke inn i kurset før forfatteren
   // publiserer den og legger den inn selv — slik kursbyggeren krever (#440).
@@ -641,6 +676,37 @@ export async function importCourseFromEnvelope(
     targetCourseIsPublished = targetCourse.publishedAt != null;
     for (const entry of updatePlan.entries) {
       if (entry.action !== "update") continue;
+      let keepLiveTitle = false;
+      let currentVersionNo: number | null = null;
+      let newestVersionId: string | null = null;
+      let activeVersionId: string | null = null;
+      if (entry.type === "SECTION") {
+        const section = await prisma.courseSection.findUnique({ where: { id: entry.targetId }, select: { activeVersionId: true } });
+        activeVersionId = section?.activeVersionId ?? null;
+        keepLiveTitle = activeVersionId != null;
+        const newest = await prisma.courseSectionVersion.findFirst({ where: { sectionId: entry.targetId }, orderBy: { versionNo: "desc" }, select: { id: true, versionNo: true } });
+        currentVersionNo = newest?.versionNo ?? null;
+        newestVersionId = newest?.id ?? null;
+      } else {
+        const module = await prisma.module.findUnique({ where: { id: entry.targetId }, select: { activeVersionId: true } });
+        activeVersionId = module?.activeVersionId ?? null;
+        const newest = await prisma.moduleVersion.findFirst({ where: { moduleId: entry.targetId }, orderBy: { versionNo: "desc" }, select: { id: true, versionNo: true } });
+        currentVersionNo = newest?.versionNo ?? null;
+        newestVersionId = newest?.id ?? null;
+      }
+      // Utdatert fil: elementet har fått en nyere versjon etter eksporten (noen har justert det i
+      // plattformen, eller en annen fil kom først). Da ville denne fila skrive over den endringen
+      // uten at forfatteren vet det. Avvis; forfatteren eksporterer på nytt og justerer den fila.
+      // Sjekkes FØR eierskapet: også et element forfatteren ikke eier, byttes ut fra fila — og
+      // kopiens v2 ville da manglet eierens siste retting.
+      if (entry.exportedVersionNo !== undefined && currentVersionNo !== null && currentVersionNo > entry.exportedVersionNo) {
+        throw new DomainRuleError("origin_stale", `The file is out of date: ${entry.type.toLowerCase()} ${entry.targetId} has version ${currentVersionNo}, the file was exported at version ${entry.exportedVersionNo}.`, {
+          type: entry.type,
+          id: entry.targetId,
+          exportedVersionNo: entry.exportedVersionNo,
+          currentVersionNo,
+        });
+      }
       // Eierskap per element: kursets eier kan ha satt inn en annen forfatters modul eller seksjon
       // (#903). Den får ikke ny versjon herfra uten at forfatteren eier den (eller er administrator)
       // — samme vakt som `POST /sections/import` og `POST /modules/import` med `replaceExisting`.
@@ -648,6 +714,10 @@ export async function importCourseFromEnvelope(
       // Kopiens v1 er det deltakerne ser i dag (publisert — kurset endrer seg ikke før forfatteren
       // publiserer), v2 er fila, lagt klar. Det gamle tas ut av kurset og arkiveres når ingen andre
       // kurs bruker det. «Lest» følger med for seksjoner; innleveringer hører til den gamle modulen.
+      // Men bare når fila faktisk ENDRET elementet: skillet leverer hele kurset ordrett, og et bytte
+      // av et uendret element ville nullstilt deltakernes fullføring for ingenting. Og bare når den
+      // levende versjonen passerer dagens port — ellers kunne kopien ikke tatt plassen, og elementet
+      // står som det er (meldt), i stedet for at hele importen stopper.
       try {
         await assertContentOwnership({
           contentType: entry.type,
@@ -658,36 +728,38 @@ export async function importCourseFromEnvelope(
       } catch (error) {
         if (!(error instanceof ForbiddenError)) throw error;
         const queries = await import("./adminContentQueries.js");
-        if (entry.type === "SECTION") {
-          const old = await prisma.courseSection.findUnique({ where: { id: entry.targetId }, select: { activeVersionId: true } });
-          const liveSection = old?.activeVersionId ? await queries.buildSectionExportPayload(entry.targetId, undefined, old.activeVersionId) : null;
+        const fileItem = orderedItems[entry.index]!;
+        if (entry.type === "SECTION" && fileItem.type === "SECTION") {
+          const newest = newestVersionId ? await queries.buildSectionExportPayload(entry.targetId, undefined, newestVersionId) : null;
+          // Fila er lest gjennom skjemaet (standardverdier, ukjente nøkler); den ferske pakken må samme vei.
+          if (newest && samePayload(sectionExportPayloadSchema.parse(newest), fileItem.section)) {
+            keptUnownedIds.push({ type: "SECTION", id: entry.targetId, reason: "unchanged" });
+            updateTargets.set(entry.index, { targetId: entry.targetId, keepLiveTitle: false, keep: true });
+            continue;
+          }
+          const liveSection = activeVersionId ? await queries.buildSectionExportPayload(entry.targetId, undefined, activeVersionId) : null;
+          if (liveSection && !evaluateSectionTranslationGate({ title: serializeRequired(liveSection.title), bodyMarkdown: serializeRequired(liveSection.bodyMarkdown) }).ok) {
+            keptUnownedIds.push({ type: "SECTION", id: entry.targetId, reason: "not_publishable" });
+            updateTargets.set(entry.index, { targetId: entry.targetId, keepLiveTitle: false, keep: true });
+            continue;
+          }
           updateTargets.set(entry.index, { targetId: entry.targetId, keepLiveTitle: false, replace: { type: "SECTION", newId: randomUUID(), liveSection } });
-        } else {
-          const old = await prisma.module.findUnique({ where: { id: entry.targetId }, select: { activeVersionId: true } });
-          const liveModule = old?.activeVersionId ? (await queries.buildModuleExportEnvelope(entry.targetId, { userId: null, email: null })).module ?? null : null;
+        } else if (entry.type === "MODULE" && fileItem.type === "MODULE") {
+          const newest = newestVersionId ? (await queries.buildModuleExportEnvelope(entry.targetId, { userId: null, email: null }, newestVersionId)).module ?? null : null;
+          if (newest && samePayload(moduleExportPayloadSchema.parse(newest), fileItem.module)) {
+            keptUnownedIds.push({ type: "MODULE", id: entry.targetId, reason: "unchanged" });
+            updateTargets.set(entry.index, { targetId: entry.targetId, keepLiveTitle: false, keep: true });
+            continue;
+          }
+          const liveModule = activeVersionId ? (await queries.buildModuleExportEnvelope(entry.targetId, { userId: null, email: null })).module ?? null : null;
+          if (liveModule && !moduleImportGate(liveModule).valid) {
+            keptUnownedIds.push({ type: "MODULE", id: entry.targetId, reason: "not_publishable" });
+            updateTargets.set(entry.index, { targetId: entry.targetId, keepLiveTitle: false, keep: true });
+            continue;
+          }
           updateTargets.set(entry.index, { targetId: entry.targetId, keepLiveTitle: false, replace: { type: "MODULE", liveModule } });
         }
         continue;
-      }
-      let keepLiveTitle = false;
-      let currentVersionNo: number | null = null;
-      if (entry.type === "SECTION") {
-        const section = await prisma.courseSection.findUnique({ where: { id: entry.targetId }, select: { activeVersionId: true } });
-        keepLiveTitle = section?.activeVersionId != null;
-        currentVersionNo = (await prisma.courseSectionVersion.findFirst({ where: { sectionId: entry.targetId }, orderBy: { versionNo: "desc" }, select: { versionNo: true } }))?.versionNo ?? null;
-      } else {
-        currentVersionNo = (await prisma.moduleVersion.findFirst({ where: { moduleId: entry.targetId }, orderBy: { versionNo: "desc" }, select: { versionNo: true } }))?.versionNo ?? null;
-      }
-      // Utdatert fil: elementet har fått en nyere versjon etter eksporten (noen har justert det i
-      // plattformen, eller en annen fil kom først). Da ville denne fila skrive over den endringen
-      // uten at forfatteren vet det. Avvis; forfatteren eksporterer på nytt og justerer den fila.
-      if (entry.exportedVersionNo !== undefined && currentVersionNo !== null && currentVersionNo > entry.exportedVersionNo) {
-        throw new DomainRuleError("origin_stale", `The file is out of date: ${entry.type.toLowerCase()} ${entry.targetId} has version ${currentVersionNo}, the file was exported at version ${entry.exportedVersionNo}.`, {
-          type: entry.type,
-          id: entry.targetId,
-          exportedVersionNo: entry.exportedVersionNo,
-          currentVersionNo,
-        });
       }
       updateTargets.set(entry.index, { targetId: entry.targetId, keepLiveTitle });
     }
@@ -703,6 +775,7 @@ export async function importCourseFromEnvelope(
       const entry = orderedItems[i];
       if (entry.type === "SECTION") {
         const target = updateTargets.get(i);
+        if (target?.keep) continue;
         if (target?.replace?.type === "SECTION") {
           // #1095: byttes seksjonen ut, får kopien sin egen id; den levende teksten (med bildene)
           // staged som v1, fila som v2 — begge under den nye id-en.
@@ -783,7 +856,7 @@ export async function importCourseFromEnvelope(
         // på modulene), er utkast fordi kilden var det — ikke «holdt tilbake» (#957 skiller de to).
         const courseWantsPublish = Boolean(payload.course.audit?.publishedAt);
 
-        const summary: CourseUpdateSummary = { updatedSections: 0, updatedModules: 0, createdSections: 0, createdModules: 0, removedSections: 0, removedModules: 0, unplacedModuleIds: [], replacedUnownedIds: [] };
+        const summary: CourseUpdateSummary = { updatedSections: 0, updatedModules: 0, createdSections: 0, createdModules: 0, removedSections: 0, removedModules: 0, unplacedModuleIds: [], replacedUnownedIds: [], keptUnownedIds };
         if (orderedItems && updatePlan) {
           // #1095: oppdatering. Ny versjon på det fila kjenner igjen, utkast av det nye, og den nye
           // rekkefølgen. Ingenting publiseres her. Hvert element får sitt eget revisjonsspor, som når
@@ -798,6 +871,12 @@ export async function importCourseFromEnvelope(
           for (let i = 0; i < orderedItems.length; i += 1) {
             const entry = orderedItems[i];
             const target = updateTargets.get(i);
+            if (target?.keep) {
+              // Ikke forfatterens, og uendret i fila (eller ikke publiserbart på nytt): står som det er.
+              courseItemInputs.push(entry.type === "SECTION" ? { type: "SECTION", sectionId: target.targetId } : { type: "MODULE", moduleId: target.targetId });
+              if (entry.type === "SECTION") sectionCount += 1;
+              continue;
+            }
             if (target?.replace?.type === "SECTION" && entry.type === "SECTION") {
               // Ikke forfatterens: byttes ut med en egen kopi (se planen over).
               const staged = stagedSections.get(i);
