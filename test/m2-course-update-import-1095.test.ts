@@ -270,6 +270,7 @@ describe("#1095 oppdatere et publisert kurs fra en eksportfil", () => {
     const deltSeksjon = await seksjon(`Delt del ${stempel}`, "Brukes også i et annet kurs.");
     const uendretSeksjon = await seksjon(`Uendret del ${stempel}`, "Denne rører fila ikke.");
     const uendretModul = await publisertModul(`Uendret test ${stempel}`);
+    const tittelSeksjon = await seksjon(`Tittel del ${stempel}`, "Bare tittelen endres i fila.");
     // En seksjon som er levende, men som ikke ville passert dagens port (bare bokmål): lagt rett i
     // databasen, som eldre innhold fra før språkreglene. Ingen eier → ikke fagansvarligs.
     const gammel = await prisma.courseSection.create({ data: { title: JSON.stringify({ nb: `Gammel del ${stempel}` }), versions: { create: { versionNo: 1, bodyMarkdown: JSON.stringify({ nb: "Tekst bare på bokmål." }), publishedAt: new Date() } } }, select: { id: true, versions: { select: { id: true } } } });
@@ -283,6 +284,7 @@ describe("#1095 oppdatere et publisert kurs fra en eksportfil", () => {
     const elementer = await request(app).put(`/api/admin/content/courses/${smoKurs}/items`).set(smo).send({ items: [
       { type: "SECTION", sectionId: egenId }, { type: "SECTION", sectionId: adminsSeksjon }, { type: "SECTION", sectionId: deltSeksjon }, { type: "MODULE", moduleId: adminsModul },
       { type: "SECTION", sectionId: uendretSeksjon }, { type: "SECTION", sectionId: gammel.id }, { type: "MODULE", moduleId: uendretModul },
+      { type: "SECTION", sectionId: tittelSeksjon },
     ] });
     expect(elementer.status).toBe(204);
     expect((await request(app).post(`/api/admin/content/courses/${smoKurs}/publish`).set(smo)).status).toBe(200);
@@ -301,7 +303,8 @@ describe("#1095 oppdatere et publisert kurs fra en eksportfil", () => {
       item(gammel.id).section.bodyMarkdown = tre("Gammel del, justert.");
       // uendretSeksjon røres ikke.
       fil.course.course.items.find((i: any) => i.origin?.moduleId === adminsModul).module.activeVersion.taskText = tre("Justert oppgave.");
-      // uendretModul røres ikke.
+      // uendretModul røres ikke. tittelSeksjon: bare tittelen — den bruker ikke byttet, så ingen bytte.
+      item(tittelSeksjon).section.title = tre(`Tittel del ${stempel} (ny tittel)`);
       return fil;
     };
 
@@ -320,7 +323,7 @@ describe("#1095 oppdatere et publisert kurs fra en eksportfil", () => {
     expect(svar.status, JSON.stringify(svar.body).slice(0, 400)).toBe(201);
     expect(svar.body.summary).toMatchObject({ updatedSections: 1, updatedModules: 0, createdSections: 0, createdModules: 0, removedSections: 0, removedModules: 0 });
     // Uendret i fila → står som det er. Levende versjon som ikke passerer porten → står, meldt.
-    expect(svar.body.summary.keptUnownedIds).toEqual([{ type: "SECTION", id: uendretSeksjon, reason: "unchanged" }, { type: "SECTION", id: gammel.id, reason: "not_publishable" }, { type: "MODULE", id: uendretModul, reason: "unchanged" }]);
+    expect(svar.body.summary.keptUnownedIds).toEqual([{ type: "SECTION", id: uendretSeksjon, reason: "unchanged" }, { type: "SECTION", id: gammel.id, reason: "not_publishable" }, { type: "MODULE", id: uendretModul, reason: "unchanged" }, { type: "SECTION", id: tittelSeksjon, reason: "unchanged" }]);
     expect(await prisma.courseItem.count({ where: { courseId: smoKurs, moduleId: uendretModul } })).toBe(1);
     expect(await prisma.module.findUniqueOrThrow({ where: { id: uendretModul }, select: { archivedAt: true, versions: { select: { versionNo: true } } } })).toMatchObject({ archivedAt: null, versions: [{ versionNo: 1 }] });
     for (const id of [uendretSeksjon, gammel.id]) {
@@ -360,7 +363,7 @@ describe("#1095 oppdatere et publisert kurs fra en eksportfil", () => {
     expect((await prisma.module.findUniqueOrThrow({ where: { id: adminsModul }, select: { archivedAt: true } })).archivedAt).not.toBeNull();
     // Kurset: fortsatt publisert, rekkefølgen som i fila, med kopiene.
     const rekke = await prisma.courseItem.findMany({ where: { courseId: smoKurs }, orderBy: { sortOrder: "asc" }, select: { sectionId: true, moduleId: true } });
-    expect(rekke.map((i) => i.sectionId ?? i.moduleId)).toEqual([egenId, nyAdmins, nyDelt, nyModul, uendretSeksjon, gammel.id, uendretModul]);
+    expect(rekke.map((i) => i.sectionId ?? i.moduleId)).toEqual([egenId, nyAdmins, nyDelt, nyModul, uendretSeksjon, gammel.id, uendretModul, tittelSeksjon]);
     expect((await prisma.course.findUniqueOrThrow({ where: { id: smoKurs }, select: { publishedAt: true } })).publishedAt).not.toBeNull();
     // Revisjonssporet på kopien peker på det den erstattet.
     const spor = await prisma.auditEvent.findFirst({ where: { entityId: nyAdmins, action: "section_imported" }, select: { metadataJson: true } });

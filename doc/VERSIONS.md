@@ -19,7 +19,9 @@ fullføring av byttede moduler kan nullstilles (valg 1 av to).
   den gamle modulen — deltakere som hadde fullført den, står uten fullføring på kopien (godtatt).
   Har det gamle elementet ingen levende versjon, får kopien bare fila som utkast.
 - **Bare det fila endret, byttes.** Et fremmed element fila ikke rørte (samme innhold som
-  plattformens nyeste versjon, `audit` og nøkkelrekkefølge teller ikke), står som det er — skillet
+  plattformens nyeste versjon i det byttet faktisk bruker: brødtekst og bilder for seksjoner,
+  versjonen for moduler — tittel, beskrivelse og nivå teller ikke, `audit` og nøkkelrekkefølge
+  heller ikke), står som det er — skillet
   leverer hele kurset ordrett, og et bytte ville nullstilt deltakernes fullføring for ingenting.
   Passerer den levende versjonen ikke dagens publiseringsport (eldre innhold), kan kopien ikke ta
   plassen: elementet står som det er og meldes (`summary.keptUnownedIds` med `reason`

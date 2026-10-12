@@ -732,7 +732,10 @@ export async function importCourseFromEnvelope(
         if (entry.type === "SECTION" && fileItem.type === "SECTION") {
           const newest = newestVersionId ? await queries.buildSectionExportPayload(entry.targetId, undefined, newestVersionId) : null;
           // Fila er lest gjennom skjemaet (standardverdier, ukjente nøkler); den ferske pakken må samme vei.
-          if (newest && samePayload(sectionExportPayloadSchema.parse(newest), fileItem.section)) {
+          // Bare det byttet faktisk BRUKER teller: brødtekst og bilder. Tittelen følger elementet (#931)
+          // og brukes ikke av byttet — en ren tittelendring skal ikke bytte (og nullstille) noe.
+          const brukt = (p: SectionExportPayload) => ({ bodyMarkdown: p.bodyMarkdown, assets: p.assets ?? [] });
+          if (newest && samePayload(brukt(sectionExportPayloadSchema.parse(newest)), brukt(fileItem.section))) {
             keptUnownedIds.push({ type: "SECTION", id: entry.targetId, reason: "unchanged" });
             updateTargets.set(entry.index, { targetId: entry.targetId, keepLiveTitle: false, keep: true });
             continue;
@@ -746,7 +749,9 @@ export async function importCourseFromEnvelope(
           updateTargets.set(entry.index, { targetId: entry.targetId, keepLiveTitle: false, replace: { type: "SECTION", newId: randomUUID(), liveSection } });
         } else if (entry.type === "MODULE" && fileItem.type === "MODULE") {
           const newest = newestVersionId ? (await queries.buildModuleExportEnvelope(entry.targetId, { userId: null, email: null }, newestVersionId)).module ?? null : null;
-          if (newest && samePayload(moduleExportPayloadSchema.parse(newest), fileItem.module)) {
+          // Samme for moduler: byttet bruker versjonen (oppgave, rubrikk, prompt, flervalg), ikke
+          // tittel, beskrivelse eller nivå.
+          if (newest && samePayload(moduleExportPayloadSchema.parse(newest).activeVersion, fileItem.module.activeVersion)) {
             keptUnownedIds.push({ type: "MODULE", id: entry.targetId, reason: "unchanged" });
             updateTargets.set(entry.index, { targetId: entry.targetId, keepLiveTitle: false, keep: true });
             continue;
