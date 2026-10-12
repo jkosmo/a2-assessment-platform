@@ -606,6 +606,7 @@ Vertsnavnene står i `doc/ENVIRONMENTS.local.md` (gitignorert, skal ikke skrives
 
 | Sak | Hva som trengs |
 |---|---|
+| **#1095 justere et publisert kurs** | Fire valg i `doc/DESIGN_1095_ADJUST_COURSE.md` (publiser nå eller legg klar; framdrift på justert seksjon; fjernede elementer; skillets forslag utover bestillingen). Fase A (plattform) kan starte når valgene er tatt. |
 | **#1000** | Tre spørsmål i `doc/DESIGN_1000_1066.md` — oppfølgingsrollene er begrunnet med et forhold datamodellen ikke har |
 | **#1066** | Skal administrator kunne tildele fagansvarlig-rollen i appen? Rolle- og sikkerhetsregimet må avklares først |
 | **#928** | Drift-varselet er verken synlig eller utløst av den vanligste årsaken (`doc/DESIGN_928.md`) |
