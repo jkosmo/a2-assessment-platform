@@ -31,6 +31,11 @@ eksportfil, og endrer bare det forfatteren ber om.
   plattformen eksporterer tomme valgfrie felt) som fraværende felt, ikke som manglende språk.
 - Referansene oppdatert: package-schema (`origin`), export-validation, check-and-produce (changes
   i rapporttabellen, leveransen), content-preservation (tilstand fra eksport; fjernet element).
+- **Plattformen (samme versjon):** et element forfatteren eier som fila ikke endret (brødtekst og
+  bilder; modulversjonen — som for fremmede elementer), får **ingen ny versjon**; det meldes i
+  `summary.unchangedIds`. Skillet leverer hele kurset ordrett, og en liten justering skal ikke
+  legge N versjoner klar til gjennomsyn. Integrasjonstesten: uendret modul → ingen versjon, meldt;
+  mutasjon fanget.
 
 **Slik er det målt:** `test/unit/skill-adjust-course-1095.test.ts` (6): rundturen eksport →
 arbeidssett → produksjon med alt uendret gir en fil der hvert element er ordrett som i eksporten,

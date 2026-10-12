@@ -73,6 +73,12 @@ export interface CourseUpdateSummary {
    * passerer ikke dagens publiseringsport, så en kopi kunne ikke tatt plassen (`not_publishable`).
    */
   keptUnownedIds: Array<{ type: "SECTION" | "MODULE"; id: string; reason: "unchanged" | "not_publishable" }>;
+  /**
+   * #1095 fase B: forfatterens egne elementer som fila ikke endret (samme innhold som plattformens
+   * nyeste versjon). De får ingen ny versjon — skillet leverer hele kurset ordrett, og en liten
+   * justering skal ikke legge N versjoner klar til gjennomsyn.
+   */
+  unchangedIds: string[];
 }
 
 // #749 (Layer A): the course-import route carries inlined section assets (base64), so the JSON body
@@ -651,6 +657,7 @@ export async function importCourseFromEnvelope(
   const updateTargets = new Map<number, { targetId: string; keepLiveTitle: boolean; replace?: Replacement; keep?: boolean }>();
   const stagedCopies = new Map<number, StagedImportSection>();
   const keptUnownedIds: CourseUpdateSummary["keptUnownedIds"] = [];
+  const unchangedIds: string[] = [];
   // Er kurset publisert, kan en NY modul ikke legges inn som utkast: deltakeren må da fullføre
   // en modul som ikke kan åpnes (I1). Den opprettes, men legges ikke inn i kurset før forfatteren
   // publiserer den og legger den inn selv — slik kursbyggeren krever (#440).
@@ -718,6 +725,7 @@ export async function importCourseFromEnvelope(
       // av et uendret element ville nullstilt deltakernes fullføring for ingenting. Og bare når den
       // levende versjonen passerer dagens port — ellers kunne kopien ikke tatt plassen, og elementet
       // står som det er (meldt), i stedet for at hele importen stopper.
+      const fileItem = orderedItems[entry.index]!;
       try {
         await assertContentOwnership({
           contentType: entry.type,
@@ -728,7 +736,6 @@ export async function importCourseFromEnvelope(
       } catch (error) {
         if (!(error instanceof ForbiddenError)) throw error;
         const queries = await import("./adminContentQueries.js");
-        const fileItem = orderedItems[entry.index]!;
         if (entry.type === "SECTION" && fileItem.type === "SECTION") {
           const newest = newestVersionId ? await queries.buildSectionExportPayload(entry.targetId, undefined, newestVersionId) : null;
           // Fila er lest gjennom skjemaet (standardverdier, ukjente nøkler); den ferske pakken må samme vei.
@@ -765,6 +772,25 @@ export async function importCourseFromEnvelope(
           updateTargets.set(entry.index, { targetId: entry.targetId, keepLiveTitle: false, replace: { type: "MODULE", liveModule } });
         }
         continue;
+      }
+      // Forfatterens eget element, uendret i fila: ingen ny versjon. Samme mål som for fremmede
+      // elementer — det byttet/oppdateringen faktisk bruker (brødtekst og bilder; modulversjonen).
+      if (newestVersionId) {
+        const queries = await import("./adminContentQueries.js");
+        let same = false;
+        if (entry.type === "SECTION" && fileItem.type === "SECTION") {
+          const newest = sectionExportPayloadSchema.parse(await queries.buildSectionExportPayload(entry.targetId, undefined, newestVersionId));
+          const brukt = (p: SectionExportPayload) => ({ bodyMarkdown: p.bodyMarkdown, assets: p.assets ?? [] });
+          same = samePayload(brukt(newest), brukt(fileItem.section));
+        } else if (entry.type === "MODULE" && fileItem.type === "MODULE") {
+          const newest = (await queries.buildModuleExportEnvelope(entry.targetId, { userId: null, email: null }, newestVersionId)).module;
+          same = Boolean(newest) && samePayload(moduleExportPayloadSchema.parse(newest).activeVersion, fileItem.module.activeVersion);
+        }
+        if (same) {
+          unchangedIds.push(entry.targetId);
+          updateTargets.set(entry.index, { targetId: entry.targetId, keepLiveTitle, keep: true });
+          continue;
+        }
       }
       updateTargets.set(entry.index, { targetId: entry.targetId, keepLiveTitle });
     }
@@ -861,7 +887,7 @@ export async function importCourseFromEnvelope(
         // på modulene), er utkast fordi kilden var det — ikke «holdt tilbake» (#957 skiller de to).
         const courseWantsPublish = Boolean(payload.course.audit?.publishedAt);
 
-        const summary: CourseUpdateSummary = { updatedSections: 0, updatedModules: 0, createdSections: 0, createdModules: 0, removedSections: 0, removedModules: 0, unplacedModuleIds: [], replacedUnownedIds: [], keptUnownedIds };
+        const summary: CourseUpdateSummary = { updatedSections: 0, updatedModules: 0, createdSections: 0, createdModules: 0, removedSections: 0, removedModules: 0, unplacedModuleIds: [], replacedUnownedIds: [], keptUnownedIds, unchangedIds };
         if (orderedItems && updatePlan) {
           // #1095: oppdatering. Ny versjon på det fila kjenner igjen, utkast av det nye, og den nye
           // rekkefølgen. Ingenting publiseres her. Hvert element får sitt eget revisjonsspor, som når
@@ -877,7 +903,7 @@ export async function importCourseFromEnvelope(
             const entry = orderedItems[i];
             const target = updateTargets.get(i);
             if (target?.keep) {
-              // Ikke forfatterens, og uendret i fila (eller ikke publiserbart på nytt): står som det er.
+              // Uendret i fila (eget eller fremmed), eller fremmed og ikke publiserbart på nytt: står som det er.
               courseItemInputs.push(entry.type === "SECTION" ? { type: "SECTION", sectionId: target.targetId } : { type: "MODULE", moduleId: target.targetId });
               if (entry.type === "SECTION") sectionCount += 1;
               continue;

@@ -78,7 +78,7 @@ dialogen **«Oppdater dette kurset»** ved siden av «Importer som nytt kurs», 
 
 | Element | Hva skjer |
 |---|---|
-| seksjon/modul med `origin` som finnes i kurset | **ny versjon** på det eksisterende elementet (seksjon: som dagens seksjonsimport; modul: som dagens modulimport) |
+| seksjon/modul med `origin` som finnes i kurset | **ny versjon** på det eksisterende elementet (seksjon: som dagens seksjonsimport; modul: som dagens modulimport) — men bare når fila faktisk endret det (brødtekst/bilder, modulversjonen); et uendret element får ingen versjon og meldes i `summary.unchangedIds` (2.88.2) |
 | element uten `origin` | **opprettes** som utkast. Seksjon: legges inn i rekkefølgen (deltakeren ser den ikke før den publiseres). Modul: legges inn bare når kurset er **upublisert**; i et publisert kurs ville et modulutkast gjort kurset umulig å fullføre, så den blir liggende i Moduler (`summary.unplacedModuleIds`) til forfatteren publiserer og legger den inn (#440) |
 | element i kurset som ikke er i fila | **tas ut av kurset** (ikke slettet; blir liggende i biblioteket, arkiveres manuelt) |
 | element med `origin` som ikke finnes | avvist med melding — fila hører ikke til dette kurset |

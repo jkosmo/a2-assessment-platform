@@ -105,7 +105,8 @@ describe("#1095 oppdatere et publisert kurs fra en eksportfil", () => {
     const svar = await request(app).post("/api/admin/content/courses/import").set(admin).send({ payload: fil, mode: "updateExisting", targetId: courseId });
     expect(svar.status, JSON.stringify(svar.body).slice(0, 400)).toBe(201);
     expect(svar.body.courseId).toBe(courseId);
-    expect(svar.body.summary).toEqual({ updatedSections: 1, updatedModules: 1, createdSections: 1, createdModules: 0, removedSections: 1, removedModules: 0, unplacedModuleIds: [], replacedUnownedIds: [], keptUnownedIds: [] });
+    // Testen (m1) er uendret i fila: ingen ny versjon, men meldt som uendret.
+    expect(svar.body.summary).toEqual({ updatedSections: 1, updatedModules: 0, createdSections: 1, createdModules: 0, removedSections: 1, removedModules: 0, unplacedModuleIds: [], replacedUnownedIds: [], keptUnownedIds: [], unchangedIds: [m1] });
 
     // Kurset: samme id, fortsatt publisert, ny tittel, plasseringen beholdt.
     const kursRad = await prisma.course.findUniqueOrThrow({ where: { id: courseId }, select: { publishedAt: true, title: true, sortOrder: true } });
@@ -124,8 +125,7 @@ describe("#1095 oppdatere et publisert kurs fra en eksportfil", () => {
 
     // Testen: ny versjon, upublisert; den aktive er fortsatt v1.
     const m1Rad = await prisma.module.findUniqueOrThrow({ where: { id: m1 }, select: { activeVersionId: true, versions: { select: { versionNo: true, publishedAt: true } } } });
-    expect(m1Rad.versions.map((v) => v.versionNo).sort()).toEqual([1, 2]);
-    expect(m1Rad.versions.find((v) => v.versionNo === 2)!.publishedAt).toBeNull();
+    expect(m1Rad.versions.map((v) => v.versionNo)).toEqual([1]);
 
     // Rekkefølgen: s1, den nye (utkast), m1. Den gamle delen er ute av kurset, men finnes.
     const elementer = await prisma.courseItem.findMany({ where: { courseId }, orderBy: { sortOrder: "asc" }, select: { itemType: true, sectionId: true, moduleId: true } });
@@ -151,9 +151,8 @@ describe("#1095 oppdatere et publisert kurs fra en eksportfil", () => {
     // Revisjonsspor PER ELEMENT, ikke bare på kurset: hvem fikk ny versjon, hva ble opprettet.
     const spor = await prisma.auditEvent.findMany({ where: { entityId: { in: [s1, m1, elementer[1]!.sectionId!] }, action: { in: ["section_imported", "module_imported"] } }, select: { entityId: true, action: true, metadataJson: true } });
     const metaFor = (id: string) => JSON.parse(spor.find((e) => e.entityId === id)!.metadataJson);
-    expect(spor.map((e) => e.entityId).sort()).toEqual([s1, m1, elementer[1]!.sectionId!].sort());
+    expect(spor.map((e) => e.entityId).sort()).toEqual([s1, elementer[1]!.sectionId!].sort());
     expect(metaFor(s1)).toMatchObject({ mode: "updateExisting", courseId, sectionVersionId: expect.any(String), versionNo: 2, titleKeptLive: true });
-    expect(metaFor(m1)).toMatchObject({ mode: "updateExisting", courseId, moduleVersionId: expect.any(String) });
     expect(metaFor(elementer[1]!.sectionId!)).toMatchObject({ mode: "updateExisting", courseId, created: true });
   });
 
@@ -166,7 +165,7 @@ describe("#1095 oppdatere et publisert kurs fra en eksportfil", () => {
     expect(svar.body.error).toBe("origin_stale");
     expect(svar.body.details).toMatchObject({ type: "SECTION", id: s1, exportedVersionNo: 1, currentVersionNo: 2 });
     expect(await prisma.courseSectionVersion.count({ where: { sectionId: s1 } })).toBe(2);
-    expect(await prisma.moduleVersion.count({ where: { moduleId: m1 } })).toBe(2);
+    expect(await prisma.moduleVersion.count({ where: { moduleId: m1 } })).toBe(1);
     expect(await prisma.courseItem.count({ where: { courseId } })).toBe(3);
 
     // En fil uten versjonsnummer (eldre eksport) sjekkes ikke mot versjonen — den går gjennom.
@@ -178,28 +177,29 @@ describe("#1095 oppdatere et publisert kurs fra en eksportfil", () => {
     expect(await prisma.courseSectionVersion.count({ where: { sectionId: s1 } })).toBe(3);
   });
 
-  it("runde to: en modul med utkast ved eksporten — fila bærer nyeste versjon og sier det, importen går gjennom; samme fil igjen er utdatert", async () => {
-    // m1 har v1 publisert og v2 og v3 som utkast (fra de to oppdateringene over). Eksporten bærer v3-teksten.
+  it("runde to: fila endrer bare testen — seksjonen er uendret og får ingen versjon; samme fil igjen er utdatert", async () => {
+    // Etter testene over: s1 har v1 levende og v2, v3 som utkast; m1 har bare v1 (uendret i filene).
     const ut = await request(app).get(`/api/admin/content/courses/${courseId}/export-package`).set(admin);
     expect(ut.status).toBe(200);
     const fil = JSON.parse(JSON.stringify(ut.body.envelope ?? ut.body));
     const modulItem = fil.course.course.items.find((i: any) => i.type === "MODULE");
-    expect(modulItem.origin).toEqual({ moduleId: m1, versionNo: 3 });
-    expect(modulItem.module.activeVersion.audit).toMatchObject({ sourceVersionNo: 3, publishedAt: null });
+    expect(modulItem.origin).toEqual({ moduleId: m1, versionNo: 1 });
     // Seksjonen eksporteres som nyeste versjon, og sier det.
     expect(fil.course.course.items[0].origin).toEqual({ sectionId: s1, versionNo: 3 });
+    modulItem.module.activeVersion.taskText = tre("Reflekter — justert.");
 
     const svar = await request(app).post("/api/admin/content/courses/import").set(admin).send({ payload: fil, mode: "updateExisting", targetId: courseId });
     expect(svar.status, JSON.stringify(svar.body).slice(0, 400)).toBe(201);
-    expect(await prisma.moduleVersion.count({ where: { moduleId: m1 } })).toBe(4);
+    expect(svar.body.summary).toMatchObject({ updatedSections: 0, updatedModules: 1, unchangedIds: [s1] });
+    expect(await prisma.moduleVersion.count({ where: { moduleId: m1 } })).toBe(2);
+    expect(await prisma.courseSectionVersion.count({ where: { sectionId: s1 } })).toBe(3);
 
-    // Den samme fila en gang til: elementene har nå en nyere versjon enn fila bærer. Det første
-    // elementet i rekkefølgen (seksjonen) er det som meldes.
+    // Den samme fila en gang til: testen har nå en nyere versjon enn fila bærer; seksjonen er fortsatt lik.
     const igjen = await request(app).post("/api/admin/content/courses/import").set(admin).send({ payload: fil, mode: "updateExisting", targetId: courseId });
     expect(igjen.status, JSON.stringify(igjen.body).slice(0, 400)).toBe(400);
     expect(igjen.body.error).toBe("origin_stale");
-    expect(igjen.body.details).toMatchObject({ type: "SECTION", id: s1, exportedVersionNo: 3, currentVersionNo: 4 });
-    expect(await prisma.moduleVersion.count({ where: { moduleId: m1 } })).toBe(4);
+    expect(igjen.body.details).toMatchObject({ type: "MODULE", id: m1, exportedVersionNo: 1, currentVersionNo: 2 });
+    expect(await prisma.moduleVersion.count({ where: { moduleId: m1 } })).toBe(2);
   });
 
   it("et utkast reiser som utkast: importeres fila som NYTT kurs, lander modulen upublisert og kurset holdes tilbake", async () => {
@@ -230,13 +230,13 @@ describe("#1095 oppdatere et publisert kurs fra en eksportfil", () => {
   it("en ny modul i et PUBLISERT kurs opprettes som utkast men legges ikke inn — kurset må kunne fullføres", async () => {
     // Publiser det nyeste utkastet på m1, så den publiserte og den nyeste er samme versjon.
     const nyeste = await prisma.moduleVersion.findFirstOrThrow({ where: { moduleId: m1 }, orderBy: { versionNo: "desc" }, select: { id: true, versionNo: true } });
-    expect(nyeste.versionNo).toBe(4);
+    expect(nyeste.versionNo).toBe(2);
     const pub = await request(app).post(`/api/admin/content/modules/${m1}/module-versions/${nyeste.id}/publish`).set(admin).send({});
     expect(pub.status, JSON.stringify(pub.body).slice(0, 300)).toBeLessThan(300);
     const ut = await request(app).get(`/api/admin/content/courses/${courseId}/export-package`).set(admin);
     expect(ut.status).toBe(200);
     const fil = JSON.parse(JSON.stringify(ut.body.envelope ?? ut.body));
-    expect(fil.course.course.items.find((i: any) => i.type === "MODULE").origin).toEqual({ moduleId: m1, versionNo: 4 });
+    expect(fil.course.course.items.find((i: any) => i.type === "MODULE").origin).toEqual({ moduleId: m1, versionNo: 2 });
     const items = fil.course.course.items as Array<any>;
     const nyModul = JSON.parse(JSON.stringify(items.find((i) => i.type === "MODULE")));
     delete nyModul.origin;
