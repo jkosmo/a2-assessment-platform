@@ -721,14 +721,19 @@ async function handleImportCoursePackageFile(event) {
       const s = updated.summary ?? {};
       // Oppsummeringen skal leses på kurssiden, ikke forsvinne med denne siden.
       const unplaced = Array.isArray(s.unplacedModuleIds) ? s.unplacedModuleIds.length : 0;
+      const skipped = Array.isArray(s.skippedUnownedIds) ? s.skippedUnownedIds.length : 0;
+      const details = [
+        unplaced > 0 ? tf("adminContent.courses.updatedUnplaced", { count: unplaced }) : "",
+        skipped > 0 ? tf("adminContent.courses.updatedSkippedUnowned", { count: skipped }) : "",
+      ].filter(Boolean);
       queueToast(
         tf("adminContent.courses.updated", {
           updated: (s.updatedSections ?? 0) + (s.updatedModules ?? 0),
           created: (s.createdSections ?? 0) + (s.createdModules ?? 0),
           removed: (s.removedSections ?? 0) + (s.removedModules ?? 0),
         }),
-        unplaced > 0 ? "warning" : "success",
-        unplaced > 0 ? tf("adminContent.courses.updatedUnplaced", { count: unplaced }) : "",
+        details.length > 0 ? "warning" : "success",
+        details.join(" "),
       );
       window.location.href = `/admin-content/courses/${encodeURIComponent(updated.courseId)}`;
       return;
@@ -1793,6 +1798,16 @@ function renderContentAreaNav() {
 // Locale selector
 // ---------------------------------------------------------------------------
 
+// #1095: statisk tekst i HTML-kilden (dialogtitler og -knapper) følger språket. Modulskallet gjør
+// det samme i `translatePageStaticText`; kurssiden gjorde det ikke, så `data-i18n` her sto på
+// bokmål uansett valgt språk. Kjøres ved oppstart og ved språkbytte.
+function translateStaticText() {
+  for (const el of document.querySelectorAll("[data-i18n]")) {
+    const key = el.getAttribute("data-i18n");
+    if (key) el.textContent = t(key);
+  }
+}
+
 function buildLocaleSelector() {
   if (!localeSelect) return;
   localeSelect.innerHTML = supportedLocales
@@ -1804,6 +1819,7 @@ function buildLocaleSelector() {
     if (_headerValues && typeof _headerValues === "object") {
       _headerValues["x-locale"] = currentLocale;
     }
+    translateStaticText();
     const route = detectRoute();
     if (route.view === "list") {
       renderListView();
@@ -1877,13 +1893,7 @@ async function init() {
   initCascadeDeleteDialog();
 
   const route = detectRoute();
-  // #1095: statisk tekst i HTML-kilden (dialogtitler og -knapper) følger språket. Modulskallet
-  // gjør det samme i `translatePageStaticText`; kurssiden gjorde det ikke, så `data-i18n` her sto
-  // på bokmål uansett valgt språk.
-  for (const el of document.querySelectorAll("[data-i18n]")) {
-    const key = el.getAttribute("data-i18n");
-    if (key) el.textContent = t(key);
-  }
+  translateStaticText();
   if (route.view === "list") {
     await renderListView();
   } else {

@@ -46,7 +46,7 @@ test.describe("#1095 kursimport — oppdater kurset fila hører til, eller impor
     const sendt: unknown[] = [];
     await page.route("**/api/admin/content/courses/import", async (route: Route) => {
       sendt.push(route.request().postDataJSON());
-      await route.fulfill({ status: 201, contentType: "application/json", body: JSON.stringify({ courseId: "course-1", moduleIds: [], heldBackByTranslationGate: false, summary: { updatedSections: 2, updatedModules: 1, createdSections: 1, createdModules: 1, removedSections: 1, removedModules: 0, unplacedModuleIds: ["mod-ny"] } }) });
+      await route.fulfill({ status: 201, contentType: "application/json", body: JSON.stringify({ courseId: "course-1", moduleIds: [], heldBackByTranslationGate: false, summary: { updatedSections: 2, updatedModules: 1, createdSections: 1, createdModules: 1, removedSections: 1, removedModules: 0, unplacedModuleIds: ["mod-ny"], skippedUnownedIds: ["mod-fremmed"] } }) });
     });
     await page.goto(LIBRARY);
     await lastOpp(page, pakke({ courseId: "course-1" }));
@@ -63,6 +63,7 @@ test.describe("#1095 kursimport — oppdater kurset fila hører til, eller impor
     await expect(page).toHaveURL(/\/admin-content\/courses\/course-1$/);
     await expect(page.locator(".toast__message")).toContainText("Course updated: 3 element(s)");
     await expect(page.locator(".toast__detail")).toContainText("not added to the course");
+    await expect(page.locator(".toast__detail")).toContainText("left as they are");
   });
 
   test("dialogens tekster følger språket (en-GB), ikke bokmål hardkodet i HTML", async ({ page }) => {
@@ -78,6 +79,11 @@ test.describe("#1095 kursimport — oppdater kurset fila hører til, eller impor
     await expect(page.locator("#courseImportCreateBtn")).toHaveText("Import as a new course");
     await expect(page.locator("#courseImportCancelBtn")).toHaveText("Cancel");
     await page.locator("#courseImportCancelBtn").click();
+
+    // Bytter forfatteren språk uten å laste siden på nytt, følger dialogen med.
+    await page.selectOption("#localeSelect", "nb");
+    await expect(page.locator("#courseImportChoiceTitle")).toHaveText("Oppdatere kurset?");
+    await expect(page.locator("#courseImportUpdateBtn")).toHaveText("Oppdater dette kurset");
   });
 
   test("svarer oppslaget på kurset med 500, stopper importen med feilmelding — det blir ikke laget et nytt kurs", async ({ page }) => {

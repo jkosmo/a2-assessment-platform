@@ -29,7 +29,7 @@ import { createCourse, setCourseModules, setCourseItems, publishCourse, type Cou
 import { randomUUID } from "node:crypto";
 import { createSection } from "../course/sectionCommands.js";
 import { stageSectionAssets, reclaimAssetBlobs, type StagedSectionAsset } from "../course/assetCommands.js";
-import { DomainRuleError, ValidationError } from "../../errors/AppError.js";
+import { DomainRuleError, ForbiddenError, ValidationError } from "../../errors/AppError.js";
 import { assertContentOwnership } from "../content/contentOwnershipService.js";
 import { localizedTextCodec, type LocalizedText } from "../../codecs/localizedTextCodec.js";
 import { recordAuditEvent } from "../../services/auditService.js";
@@ -61,6 +61,8 @@ export interface CourseUpdateSummary {
   removedModules: number;
   /** #1095: nye moduler som ble opprettet som utkast men IKKE lagt inn, fordi kurset er publisert. */
   unplacedModuleIds: string[];
+  /** #1095: elementer fila ville oppdatert som forfatteren ikke eier — de står som de er. */
+  skippedUnownedIds: string[];
 }
 
 // #749 (Layer A): the course-import route carries inlined section assets (base64), so the JSON body
@@ -598,7 +600,8 @@ export async function importCourseFromEnvelope(
   // #1095: en oppdatering av kurset fila hører til. Planen regnes ut FØR noe skrives, mot kursets
   // nåværende elementer: hva blir ny versjon, hva opprettes, hva tas ut — og hva som er feil.
   let updatePlan: CourseUpdatePlan | null = null;
-  const updateTargets = new Map<number, { targetId: string; keepLiveTitle: boolean }>();
+  const updateTargets = new Map<number, { targetId: string; keepLiveTitle: boolean; skipped: boolean }>();
+  const skippedUnownedIds: string[] = [];
   // Er kurset publisert, kan en NY modul ikke legges inn som utkast: deltakeren må da fullføre
   // en modul som ikke kan åpnes (I1). Den opprettes, men legges ikke inn i kurset før forfatteren
   // publiserer den og legger den inn selv — slik kursbyggeren krever (#440).
@@ -624,15 +627,26 @@ export async function importCourseFromEnvelope(
     targetCourseIsPublished = targetCourse.publishedAt != null;
     for (const entry of updatePlan.entries) {
       if (entry.action !== "update") continue;
-      // Eierskap per element: kursets eier kan ha satt inn en annen forfatters modul eller seksjon.
-      // Den får ikke ny versjon herfra uten at forfatteren eier den (eller er administrator) — samme
-      // vakt som `POST /sections/import` og `POST /modules/import` med `replaceExisting`.
-      await assertContentOwnership({
-        contentType: entry.type,
-        contentId: entry.targetId,
-        actorUserId: options.actorId,
-        roles: options.actorRoles ?? [],
-      });
+      // Eierskap per element: kursets eier kan ha satt inn en annen forfatters modul eller seksjon
+      // (#903). Den får ikke ny versjon herfra uten at forfatteren eier den (eller er administrator)
+      // — samme vakt som `POST /sections/import` og `POST /modules/import` med `replaceExisting`.
+      // Men fila er hele kurset, og det meste i den er forfatterens eget: et element hen ikke eier,
+      // HOPPES OVER (blir stående som det er, i kurset) og meldes i `summary.skippedUnownedIds`,
+      // i stedet for at hele oppdateringen stopper. Å ta elementet ut av fila ville tatt det ut av
+      // kurset.
+      try {
+        await assertContentOwnership({
+          contentType: entry.type,
+          contentId: entry.targetId,
+          actorUserId: options.actorId,
+          roles: options.actorRoles ?? [],
+        });
+      } catch (error) {
+        if (!(error instanceof ForbiddenError)) throw error;
+        skippedUnownedIds.push(entry.targetId);
+        updateTargets.set(entry.index, { targetId: entry.targetId, keepLiveTitle: false, skipped: true });
+        continue;
+      }
       let keepLiveTitle = false;
       let currentVersionNo: number | null = null;
       if (entry.type === "SECTION") {
@@ -653,7 +667,7 @@ export async function importCourseFromEnvelope(
           currentVersionNo,
         });
       }
-      updateTargets.set(entry.index, { targetId: entry.targetId, keepLiveTitle });
+      updateTargets.set(entry.index, { targetId: entry.targetId, keepLiveTitle, skipped: false });
     }
   }
 
@@ -729,7 +743,7 @@ export async function importCourseFromEnvelope(
         // missing a locale. The course must then stay a draft too.
         let anyContentHeldBack = false;
 
-        const summary: CourseUpdateSummary = { updatedSections: 0, updatedModules: 0, createdSections: 0, createdModules: 0, removedSections: 0, removedModules: 0, unplacedModuleIds: [] };
+        const summary: CourseUpdateSummary = { updatedSections: 0, updatedModules: 0, createdSections: 0, createdModules: 0, removedSections: 0, removedModules: 0, unplacedModuleIds: [], skippedUnownedIds };
         if (orderedItems && updatePlan) {
           // #1095: oppdatering. Ny versjon på det fila kjenner igjen, utkast av det nye, og den nye
           // rekkefølgen. Ingenting publiseres her. Hvert element får sitt eget revisjonsspor, som når
@@ -744,6 +758,12 @@ export async function importCourseFromEnvelope(
           for (let i = 0; i < orderedItems.length; i += 1) {
             const entry = orderedItems[i];
             const target = updateTargets.get(i);
+            if (target?.skipped) {
+              // Ikke forfatterens: står som det er, på sin plass i rekkefølgen.
+              courseItemInputs.push(entry.type === "SECTION" ? { type: "SECTION", sectionId: target.targetId } : { type: "MODULE", moduleId: target.targetId });
+              if (entry.type === "SECTION") sectionCount += 1;
+              continue;
+            }
             if (entry.type === "SECTION") {
               const staged = stagedSections.get(i);
               if (!staged) throw new Error("Internal: section was not staged before the import transaction.");

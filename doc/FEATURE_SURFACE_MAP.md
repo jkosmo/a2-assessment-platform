@@ -153,10 +153,12 @@ lost; the skill never uses it), and **`updateExisting`** (#1095: new unpublished
 the file recognises by `origin`, drafts for new items, unlisted items taken out of the course,
 nothing published; a new MODULE is not placed in a published course — `summary.unplacedModuleIds`).
 The export (`adminContentQueries.ts`) writes `origin` (ids + highest `versionNo`) on the course and
-on every item; the plan is `courseUpdatePlan.ts` (pure); the service rejects a stale file
-(`origin_stale`) and checks ownership per updated item (`assertContentOwnership`, admin bypass). The
+on every item (`versionNo` = the version the file carries); the plan is `courseUpdatePlan.ts`
+(pure); the service rejects a stale file (`origin_stale`) and skips items the author does not own
+(`assertContentOwnership`, admin bypass; `summary.skippedUnownedIds`). The
 admin dialog `#courseImportChoiceDialog` (`admin-content-courses.js`, `askImportChoice`, texts via
-`data-i18n`, translated in the page's `init`) offers update vs new when the file's course exists;
+`data-i18n`, translated by `translateStaticText` at init and on language switch) offers update vs
+new when the file's course exists;
 the summary is shown on the course page after navigation (`queueToast`/`flushQueuedToast` in
 `toast.js`).
 **Hazard:** a new way to add items to a course must go through `setCourseItems`, and a new way to

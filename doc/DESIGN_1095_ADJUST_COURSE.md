@@ -38,8 +38,9 @@ Eksportfila får en valgfri blokk `origin` på kurset og på hvert element:
 { "course": { "course": { "origin": { "courseId": "…", "exportedAt": "…", "platformVersion": "2.88.0" }, "items": [
   { "type": "SECTION", "sortOrder": 0, "origin": { "sectionId": "…", "versionNo": 3 }, "section": { … } },
   { "type": "MODULE",  "sortOrder": 1, "origin": { "moduleId": "…",  "versionNo": 2 }, "module":  { … } }
-  // versionNo = elementets HØYESTE versjonsnummer ved eksport. Er det høyere når fila kommer tilbake,
-  // er fila utdatert og avvises (origin_stale): noen justerte elementet i mellomtiden.
+  // versionNo = nummeret på versjonen fila BÆRER (seksjon: nyeste; modul: den publiserte). Finnes en
+  // høyere versjon når fila kommer tilbake, er fila utdatert og avvises (origin_stale): noen justerte
+  // elementet i mellomtiden, eller modulen hadde et upublisert utkast alt da fila ble eksportert.
 ] } } }
 ```
 
@@ -89,9 +90,16 @@ Oversettelsesporten gjelder per element som før (et element som mangler et spr�
 publiseres); kurset avpubliseres IKKE av en oppdatering — ingenting i den rører publiseringen.
 
 **Eierskap per element.** Kursets eier kan ha satt inn en annen forfatters modul eller seksjon
-(#903). En oppdatering som skriver ny versjon på et slikt element, krever at forfatteren eier det
-(eller er administrator) — samme vakt som seksjons- og modulimporten med `replaceExisting`. Ellers
-403, og ingenting skrives; forfatteren tar elementet ut av fila eller får eierskap.
+(#903). En oppdatering skriver ny versjon bare på elementer forfatteren eier (eller er
+administrator for) — samme vakt som seksjons- og modulimporten med `replaceExisting`. Et element
+hen ikke eier, **hoppes over**: det står som det er, på sin plass i kurset, og meldes i
+`summary.skippedUnownedIds` og i oppsummeringen. Hele fila stoppes ikke, og forfatteren trenger
+ikke ta elementet ut av fila (det ville tatt det ut av kurset). Eieren eller en administrator
+oppdaterer det elementet. *Produkteier bekrefter dette valget; alternativet er å avvise hele fila.*
+
+**Kjent begrensning (fase A).** Et element som er lagt inn i kurset ETTER eksporten, nevnes ikke i
+fila, og tas derfor ut ved oppdateringen — det telles i «tatt ut» i oppsummeringen, men pekes ikke
+ut. `exportedAt` leses ikke. Fase C (forskjellsvisning før import) viser hva som tas ut, med navn.
 
 **Det som trer i kraft straks**, uten publisering: kursets egne felt (tittel, beskrivelse, nivå,
 plassering), rekkefølgen, og at elementer tas ut. Tittelendringer i fila på en seksjon som har en

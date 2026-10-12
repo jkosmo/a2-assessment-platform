@@ -267,15 +267,18 @@ export async function buildCourseExportEnvelope(
         if (item.itemType === "SECTION" && item.section) {
           const sectionVersion = await buildSectionExportPayload(item.section.id, assetBudget);
           // #1095: identiteten følger med, så fila kan komme tilbake som en oppdatering. `versionNo` er
-          // elementets HØYESTE versjonsnummer nå (også upubliserte): får elementet en nyere versjon
-          // før fila kommer tilbake, er fila utdatert, og oppdateringen avvises.
-          const latestSection = await prisma.courseSectionVersion.findFirst({ where: { sectionId: item.section.id }, orderBy: { versionNo: "desc" }, select: { versionNo: true } });
-          return { type: "SECTION" as const, sortOrder: item.sortOrder, origin: { sectionId: item.section.id, ...(latestSection ? { versionNo: latestSection.versionNo } : {}) }, section: sectionVersion };
+          // nummeret på versjonen fila FAKTISK BÆRER (seksjon: nyeste; modul: den publiserte). Finnes
+          // det en nyere versjon når fila kommer tilbake — noen justerte elementet, eller modulen
+          // hadde et upublisert utkast alt ved eksporten — er fila utdatert, og oppdateringen
+          // avvises. Et høyere tall enn innholdet ville sagt «jeg har sett utkastet» uten å ha det.
+          const sectionVersionNo = sectionVersion.audit?.sourceVersionNo ?? null;
+          return { type: "SECTION" as const, sortOrder: item.sortOrder, origin: { sectionId: item.section.id, ...(sectionVersionNo != null ? { versionNo: sectionVersionNo } : {}) }, section: sectionVersion };
         }
         const moduleId = item.moduleId ?? item.module?.id;
         if (!moduleId) throw new Error("Course item is missing its module reference.");
-        const latestModule = await prisma.moduleVersion.findFirst({ where: { moduleId }, orderBy: { versionNo: "desc" }, select: { versionNo: true } });
-        return { type: "MODULE" as const, sortOrder: item.sortOrder, origin: { moduleId, ...(latestModule ? { versionNo: latestModule.versionNo } : {}) }, module: await buildModuleExportPayload(moduleId) };
+        const modulePayload = await buildModuleExportPayload(moduleId);
+        const moduleVersionNo = modulePayload.activeVersion?.audit?.sourceVersionNo ?? null;
+        return { type: "MODULE" as const, sortOrder: item.sortOrder, origin: { moduleId, ...(moduleVersionNo != null ? { versionNo: moduleVersionNo } : {}) }, module: modulePayload };
       }),
   );
 

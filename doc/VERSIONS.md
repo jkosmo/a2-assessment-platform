@@ -26,13 +26,18 @@ elementer tas ut, ikke slettes.
   klassetildeling, diskusjoner og deltakernes framdrift er urørt; elementtitler i fila ignoreres for
   en levende seksjon og for moduler (#931). Avvises uten at noe skrives: fil fra et annet kurs eller
   med et element kurset ikke har (400 `origin_mismatch`, `DomainRuleError` slik #999 krever),
-  **utdatert fil** — et element har fått nyere versjon enn `origin.versionNo` sier (400
-  `origin_stale`), element forfatteren ikke eier (403). Svaret bærer `summary`; revisjonssporet har
-  kursets `course_imported` og ett `section_imported` / `module_imported` per element.
+  **utdatert fil** — et element har en nyere versjon enn `origin.versionNo` sier (400
+  `origin_stale`; `versionNo` er versjonen fila bærer: seksjon nyeste, modul den publiserte, så en
+  modul med upublisert utkast ved eksporten gir også «utdatert»). Et element forfatteren **ikke
+  eier**, hoppes over og står som det er (`summary.skippedUnownedIds`); hele fila stoppes ikke.
+  Svaret bærer `summary`; revisjonssporet har kursets `course_imported` og ett `section_imported` /
+  `module_imported` per element. Kjent begrensning: elementer lagt inn i kurset etter eksporten tas
+  ut (telles, men pekes ikke ut før fase C).
 - **Dialogen i Innholdsforvaltning:** når fila peker på et kurs som finnes her (og forfatteren får
   se det), spør importen: «Oppdater dette kurset» (nye versjoner legges klar; ingenting publiseres),
-  «Importer som nytt kurs», eller avbryt. Ellers som før. Tekstene via i18n (kurssiden oversetter nå
-  `data-i18n` ved oppstart, som modulskallet). Svarer oppslaget på kurset med 500, stopper importen
+  «Importer som nytt kurs», eller avbryt. Ellers som før; teksten sier hva som trer i kraft straks.
+  Tekstene via i18n (kurssiden oversetter nå `data-i18n` ved oppstart og ved språkbytte, som
+  modulskallet). Svarer oppslaget på kurset med 500, stopper importen
   med melding (ikke stille nytt kurs). Oppsummeringen vises på kurssiden etter navigasjonen
   (`queueToast`/`flushQueuedToast` i `toast.js`) — det gjelder nå også «Kurs importert»-meldingene,
   som før forsvant med siden.
@@ -45,8 +50,10 @@ mål, fremmed element → 400 uten skriving; fil uten identiteter → nytt kurs)
 (dialogens tre valg; uten identitet eller med ukjent id spørres det ikke; oppsummeringen på
 kurssiden; en-GB-tekster; 500 stopper). QA-porten runde 1 ga NO-GO på fire punkter (modulutkast i
 publisert kurs, eierskap per element, utdatert fil, hardkodet bokmål) — alle rettet med egne tester
-(ny modul i publisert og upublisert kurs, 403 for fagansvarlig uten eierskap og 201 for
-administrator, `origin_stale` og eldre fil uten versjonsnummer, revisjonsspor per element).
+(ny modul i publisert og upublisert kurs, fagansvarlig uten eierskap til en modul får resten
+oppdatert og modulen meldt, administrator oppdaterer alt, `origin_stale` for endret element og for
+modul med utkast ved eksporten, eldre fil uten versjonsnummer går gjennom, revisjonsspor per
+element). Runde 2 pekte på modulutkastet og på at hele fila stoppet — begge rettet.
 
 ## 2.87.0 - 2026-10-11
 
