@@ -33,6 +33,7 @@ import { DomainRuleError, ValidationError } from "../../errors/AppError.js";
 import { localizedTextCodec, type LocalizedText } from "../../codecs/localizedTextCodec.js";
 import { recordAuditEvent } from "../../services/auditService.js";
 import { evaluateModulePublishGate } from "./modulePublishGate.js";
+import { planCourseUpdate, type CourseUpdatePlan } from "./courseUpdatePlan.js";
 import {
   auditActions,
   auditEntityTypes,
@@ -46,7 +47,17 @@ import type {
   SectionExportPayload,
 } from "./adminContentSchemas.js";
 
-export type ImportMode = "createNew" | "replaceExisting";
+export type ImportMode = "createNew" | "replaceExisting" | "updateExisting";
+
+/** #1095: hva en oppdatering gjorde med kurset — til dialogen og revisjonssporet. */
+export interface CourseUpdateSummary {
+  updatedSections: number;
+  updatedModules: number;
+  createdSections: number;
+  createdModules: number;
+  removedSections: number;
+  removedModules: number;
+}
 
 // #749 (Layer A): the course-import route carries inlined section assets (base64), so the JSON body
 // can be far larger than the 5 MB global parser allows. Sized to cover the 25 MB total-asset cap
@@ -413,6 +424,38 @@ export async function importModuleFromEnvelope(
 //      participants read it). The publish gate (#916) then applies when the author publishes.
 //   2. `replaceExisting` appends a NEW, inactive version to an existing section, so a live section
 //      keeps serving its current version until the author reviews the import and publishes.
+// #1095/#916: en ny, UPUBLISERT versjon på en seksjon som finnes. Den levende versjonen rører
+// vi ikke; forfatteren publiserer den nye i seksjonens egen flate. Tittelen følger samme regel som
+// seksjonsimporten (#931 pkt 3): en levende seksjon beholder sin, et utkast tar filas.
+async function appendInactiveSectionVersion(
+  tx: DbTransactionClient,
+  staged: StagedImportSection,
+  targetSectionId: string,
+  keepLiveTitle: boolean,
+): Promise<void> {
+  const last = await tx.courseSectionVersion.findFirst({
+    where: { sectionId: targetSectionId },
+    orderBy: { versionNo: "desc" },
+    select: { versionNo: true },
+  });
+  await tx.courseSection.update({
+    where: { id: targetSectionId },
+    data: keepLiveTitle ? { updatedAt: new Date() } : { title: staged.title, updatedAt: new Date() },
+  });
+  await tx.courseSectionVersion.create({
+    data: {
+      sectionId: targetSectionId,
+      versionNo: (last?.versionNo ?? 0) + 1,
+      bodyMarkdown: staged.bodyMarkdown,
+      publishedBy: null,
+      publishedAt: null,
+    },
+  });
+  for (const asset of staged.stagedAssets) {
+    await tx.sectionAsset.create({ data: { id: asset.id, sectionId: targetSectionId, ...asset.rowData } });
+  }
+}
+
 export async function importSectionFromEnvelope(
   envelope: ExportEnvelope,
   options: {
@@ -460,30 +503,9 @@ export async function importSectionFromEnvelope(
       async (tx) => {
         let sectionId: string;
         if (targetSectionId) {
-          const last = await tx.courseSectionVersion.findFirst({
-            where: { sectionId: targetSectionId },
-            orderBy: { versionNo: "desc" },
-            select: { versionNo: true },
-          });
           // Content becomes a new INACTIVE version — the section's live content does not change
-          // until the author publishes (and passes the gate). #931 pkt 3: the title follows the
-          // same rule when the section is live (see `keepLiveTitle`); a draft section takes it.
-          await tx.courseSection.update({
-            where: { id: targetSectionId },
-            data: keepLiveTitle ? { updatedAt: new Date() } : { title: staged.title, updatedAt: new Date() },
-          });
-          await tx.courseSectionVersion.create({
-            data: {
-              sectionId: targetSectionId,
-              versionNo: (last?.versionNo ?? 0) + 1,
-              bodyMarkdown: staged.bodyMarkdown,
-              publishedBy: null,
-              publishedAt: null,
-            },
-          });
-          for (const asset of staged.stagedAssets) {
-            await tx.sectionAsset.create({ data: { id: asset.id, sectionId: targetSectionId, ...asset.rowData } });
-          }
+          // until the author publishes (and passes the gate).
+          await appendInactiveSectionVersion(tx, staged, targetSectionId, keepLiveTitle);
           sectionId = targetSectionId;
         } else {
           // Always a draft on this door, so the gate result adds nothing the caller does not
@@ -550,7 +572,7 @@ export async function importCourseFromEnvelope(
   // (:169) rapporterer begge `heldBackByTranslationGate` oppover. Kursimporten regnet ut flagget,
   // brukte det til å holde kurset som utkast, og kastet det så. Kommentaren over `anyContentHeldBack`
   // lovet at flagget «is reported to the caller, not just acted on locally» — nå gjør det det.
-): Promise<{ courseId: string; moduleIds: string[]; heldBackByTranslationGate: boolean }> {
+): Promise<{ courseId: string; moduleIds: string[]; heldBackByTranslationGate: boolean; summary?: CourseUpdateSummary }> {
   if (envelope.scope !== "course" || !envelope.course) {
     throw new Error("Envelope is not a course export.");
   }
@@ -562,6 +584,38 @@ export async function importCourseFromEnvelope(
       ? [...payload.course.items].sort((a, b) => a.sortOrder - b.sortOrder)
       : null;
 
+  // #1095: en oppdatering av kurset fila hører til. Planen regnes ut FØR noe skrives, mot kursets
+  // nåværende elementer: hva blir ny versjon, hva opprettes, hva tas ut — og hva som er feil.
+  let updatePlan: CourseUpdatePlan | null = null;
+  const updateTargets = new Map<number, { targetId: string; keepLiveTitle: boolean }>();
+  if (options.mode === "updateExisting") {
+    if (!options.targetCourseId) throw new ValidationError("targetCourseId is required when mode is updateExisting.");
+    if (!orderedItems) throw new ValidationError("The file has no items; an update needs the full item sequence.");
+    const originCourseId = payload.course.origin?.courseId;
+    if (originCourseId && originCourseId !== options.targetCourseId) {
+      throw new ValidationError("The file was exported from a different course; it cannot update this one.", {
+        code: "origin_mismatch",
+      });
+    }
+    const courseRepo = (await import("../course/courseRepository.js")).courseRepository;
+    const existingItems = await courseRepo.findAllCourseItems(options.targetCourseId);
+    const existingSectionIds = existingItems.filter((i) => i.itemType === "SECTION" && i.section).map((i) => i.section!.id);
+    const existingModuleIds = existingItems.filter((i) => i.itemType === "MODULE").map((i) => (i.moduleId ?? i.module?.id) as string).filter(Boolean);
+    updatePlan = planCourseUpdate(orderedItems, { sectionIds: existingSectionIds, moduleIds: existingModuleIds });
+    if (updatePlan.problems.length > 0) {
+      throw new ValidationError(`The file does not match this course: ${updatePlan.problems.join("; ")}.`, { code: "origin_mismatch" });
+    }
+    for (const entry of updatePlan.entries) {
+      if (entry.action !== "update") continue;
+      let keepLiveTitle = false;
+      if (entry.type === "SECTION") {
+        const section = await prisma.courseSection.findUnique({ where: { id: entry.targetId }, select: { activeVersionId: true } });
+        keepLiveTitle = section?.activeVersionId != null;
+      }
+      updateTargets.set(entry.index, { targetId: entry.targetId, keepLiveTitle });
+    }
+  }
+
   // #796: STAGE every section's asset blobs BEFORE the transaction — blob I/O must not happen inside the
   // DB tx (a B1 pool must not hold a connection open across uploads, and the tx would blow its timeout).
   // Each staged section carries its pre-generated id + remapped markdown so the graph builds atomically.
@@ -571,7 +625,8 @@ export async function importCourseFromEnvelope(
     for (let i = 0; i < orderedItems.length; i += 1) {
       const entry = orderedItems[i];
       if (entry.type === "SECTION") {
-        const staged = await stageSectionForImport(entry.section);
+        // #1095: en seksjon som finnes, får bildene sine under sin egen id (#916).
+        const staged = await stageSectionForImport(entry.section, updateTargets.get(i)?.targetId);
         stagedSections.set(i, staged);
         stagedBlobPaths.push(...staged.blobPaths);
       }
@@ -586,7 +641,21 @@ export async function importCourseFromEnvelope(
     return await runInTransaction(
       async (tx) => {
         let courseId: string;
-        if (options.mode === "replaceExisting") {
+        if (options.mode === "updateExisting") {
+          const existing = await tx.course.findUnique({ where: { id: options.targetCourseId! }, select: { id: true } });
+          if (!existing) throw new ValidationError("Target course not found for updateExisting.");
+          courseId = options.targetCourseId!;
+          // Kursets egne felt følger fila; publiseringstilstanden rører vi ikke.
+          await tx.course.update({
+            where: { id: courseId },
+            data: {
+              title: serializeRequired(payload.course.title),
+              description: serializeLocalized(payload.course.description),
+              certificationLevel: payload.course.certificationLevel ? serializeLocalized(payload.course.certificationLevel as LocalizedText) : null,
+              ...(payload.course.sortOrder !== undefined ? { sortOrder: payload.course.sortOrder } : {}),
+            },
+          });
+        } else if (options.mode === "replaceExisting") {
           if (!options.targetCourseId) {
             throw new Error("targetCourseId is required when mode is replaceExisting.");
           }
@@ -619,7 +688,43 @@ export async function importCourseFromEnvelope(
         // missing a locale. The course must then stay a draft too.
         let anyContentHeldBack = false;
 
-        if (orderedItems) {
+        const summary: CourseUpdateSummary = { updatedSections: 0, updatedModules: 0, createdSections: 0, createdModules: 0, removedSections: 0, removedModules: 0 };
+        if (orderedItems && updatePlan) {
+          // #1095: oppdatering. Ny versjon på det fila kjenner igjen, utkast av det nye, og den nye
+          // rekkefølgen. Ingenting publiseres her.
+          const courseItemInputs: CourseItemInput[] = [];
+          for (let i = 0; i < orderedItems.length; i += 1) {
+            const entry = orderedItems[i];
+            const target = updateTargets.get(i);
+            if (entry.type === "SECTION") {
+              const staged = stagedSections.get(i);
+              if (!staged) throw new Error("Internal: section was not staged before the import transaction.");
+              if (target) {
+                await appendInactiveSectionVersion(tx, staged, target.targetId, target.keepLiveTitle);
+                courseItemInputs.push({ type: "SECTION", sectionId: target.targetId });
+                summary.updatedSections += 1;
+              } else {
+                await persistStagedSection(tx, staged, options.actorId, { draft: true });
+                courseItemInputs.push({ type: "SECTION", sectionId: staged.sectionId });
+                summary.createdSections += 1;
+              }
+              sectionCount += 1;
+            } else if (target) {
+              const imported = await importModulePayload(entry.module, { actorId: options.actorId, mode: "replaceExisting", targetModuleId: target.targetId, autoPublish: false }, tx);
+              courseItemInputs.push({ type: "MODULE", moduleId: imported.moduleId });
+              importedModuleIds.push(imported.moduleId);
+              summary.updatedModules += 1;
+            } else {
+              const imported = await importModulePayload(entry.module, { actorId: options.actorId, mode: "createNew", autoPublish: false }, tx);
+              courseItemInputs.push({ type: "MODULE", moduleId: imported.moduleId });
+              importedModuleIds.push(imported.moduleId);
+              summary.createdModules += 1;
+            }
+          }
+          summary.removedSections = updatePlan.removed.sectionIds.length;
+          summary.removedModules = updatePlan.removed.moduleIds.length;
+          await setCourseItems(courseId, courseItemInputs, undefined, tx);
+        } else if (orderedItems) {
           const courseItemInputs: CourseItemInput[] = [];
           for (let i = 0; i < orderedItems.length; i += 1) {
             const entry = orderedItems[i];
@@ -664,7 +769,10 @@ export async function importCourseFromEnvelope(
         // live course whose module has no active version — the participant hits "module not
         // available". The course waits with its modules; the author publishes both once the gaps
         // are filled.
-        if (payload.course.audit?.publishedAt && !anyContentHeldBack) {
+        if (updatePlan) {
+          // #1095: en oppdatering rører ikke publiseringstilstanden — verken kursets eller
+          // elementenes. Produkteier: «det bør en bevisst handling til for å publisere dem».
+        } else if (payload.course.audit?.publishedAt && !anyContentHeldBack) {
           await publishCourse(courseId, options.actorId, tx);
         } else if (anyContentHeldBack) {
           // ⚠️ #996: å HOPPE OVER publiseringen er ikke det samme som å sørge for at kurset er
@@ -712,6 +820,7 @@ export async function importCourseFromEnvelope(
             metadata: {
               courseId,
               mode: options.mode,
+              ...(updatePlan ? { summary } : {}),
               moduleCount: importedModuleIds.length,
               // #1033: modulene i et kursimport har ingen egen importrad — uten id-ene her kunne
               // ingen måling knytte et spørsmål til pakken det kom med.
@@ -728,7 +837,7 @@ export async function importCourseFromEnvelope(
         // uten et ord om hvorfor. `anyContentHeldBack` er den ENESTE kilden til den forklaringen —
         // den utledes ikke av kursets tilstand alene (et kurs kan også være utkast fordi kilden
         // var det).
-        return { courseId, moduleIds: importedModuleIds, heldBackByTranslationGate: anyContentHeldBack };
+        return { courseId, moduleIds: importedModuleIds, heldBackByTranslationGate: anyContentHeldBack, ...(updatePlan ? { summary } : {}) };
       },
       { timeout: IMPORT_TX_TIMEOUT_MS },
     );

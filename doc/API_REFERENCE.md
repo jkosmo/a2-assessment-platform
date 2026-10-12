@@ -98,6 +98,8 @@ Threads hang on the course (course-level board, `courseItemId` absent) or on a s
 
 The course master toggle is set via the admin course API: `POST`/`PUT /api/admin/content/courses[/:courseId]` accept `discussionsEnabled` (boolean, default `true`); the admin course detail returns it.
 
+**Updating a course from its own export (#1095):** a course export now carries `course.course.origin` (`courseId`, `exportedAt`) and `origin` on every item (`sectionId` or `moduleId`). `POST /api/admin/content/courses/import` with `mode: "updateExisting"` and `targetId` lays a new **unpublished** version on every item the file recognises, creates items without `origin` as drafts, takes items the file does not list out of the course (not deleted), reorders to the file, and updates the course's own fields. Nothing is published; the course keeps its id, publish state, class assignments and participant progress. A file exported from another course, or naming an item the course does not have, is rejected with `400 { error: "validation_error", code: "origin_mismatch" }` before anything is written. The `201` response adds `summary: { updatedSections, updatedModules, createdSections, createdModules, removedSections, removedModules }`.
+
 The same endpoints accept `sortOrder` (#1093): an integer 0–9999 places the course first in «Mine kurs», `null` clears it (alphabetical, the default); omitting the field leaves the stored value. The admin course detail returns `sortOrder`, and the course export/import envelope carries it as an optional field (`course.course.sortOrder`), so files from before 2.87.0 import unchanged.
 
 > **#923 (v2.20.0) — item-level discussion has no UI any more, but the API is unchanged.** The

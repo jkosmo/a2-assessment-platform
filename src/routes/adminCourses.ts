@@ -217,7 +217,9 @@ adminCoursesRouter.post("/import", async (request, response, next) => {
     // den. Tjenestelaget hjelper ikke: `importCourseFromEnvelope` gjør kun en eksistenssjekk på
     // targetCourseId og har ingen referanse til eierskap i det hele tatt.
     const mode = data.mode ?? "createNew";
-    if (mode === "replaceExisting" && data.targetId) {
+    // #1095: `updateExisting` skriver nye versjoner inn i targetId — samme vakt som `replaceExisting`.
+    // (Uten targetId stopper tjenesten selv med en valideringsfeil.)
+    if ((mode === "replaceExisting" || mode === "updateExisting") && data.targetId) {
       await assertContentOwnership({
         contentType: "COURSE",
         contentId: data.targetId,
@@ -243,6 +245,7 @@ adminCoursesRouter.post("/import", async (request, response, next) => {
       // slapp det så på gulvet i sin egen retur — mens modul- og seksjonsimporten rapporterte det.
       // Kommentaren i `contentImportService.ts` lovet at det ble rapportert. Nå gjør det det.
       heldBackByTranslationGate: result.heldBackByTranslationGate,
+      ...(result.summary ? { summary: result.summary } : {}),
       links: courseAdminLinks(result.courseId),
       ...(data.clientRef !== undefined ? { clientRef: data.clientRef } : {}),
     });

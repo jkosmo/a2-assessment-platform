@@ -705,6 +705,28 @@ async function handleImportCoursePackageFile(event) {
     } catch (parseError) {
       throw new Error(`Filen er ikke gyldig JSON: ${parseError instanceof Error ? parseError.message : "ukjent feil"}`);
     }
+    // #1095: fila kan bære kursets id fra en eksport i dette miljøet. Finnes kurset her, velger
+    // forfatteren: oppdatere det (nye versjoner legges klar, ingenting publiseres) eller importere
+    // som nytt kurs. En fil fra et annet miljø peker på et kurs som ikke finnes, og går som før.
+    const originCourseId = payload?.course?.course?.origin?.courseId;
+    const existing = originCourseId ? await findImportTargetCourse(originCourseId) : null;
+    const choice = existing ? await askImportChoice(existing) : "createNew";
+    if (choice === "cancel") return;
+    if (choice === "updateExisting") {
+      const updated = await apiFetch("/api/admin/content/courses/import", getHeaders, {
+        method: "POST",
+        body: JSON.stringify({ payload, mode: "updateExisting", targetId: originCourseId }),
+      });
+      if (!updated?.courseId) throw new Error(t("courses.importNoId"));
+      const s = updated.summary ?? {};
+      showToast(tf("adminContent.courses.updated", {
+        updated: (s.updatedSections ?? 0) + (s.updatedModules ?? 0),
+        created: (s.createdSections ?? 0) + (s.createdModules ?? 0),
+        removed: (s.removedSections ?? 0) + (s.removedModules ?? 0),
+      }));
+      window.location.href = `/admin-content/courses/${encodeURIComponent(updated.courseId)}`;
+      return;
+    }
     const result = await apiFetch("/api/admin/content/courses/import", getHeaders, {
       method: "POST",
       body: JSON.stringify({ payload, mode: "createNew" }),
@@ -734,6 +756,47 @@ async function handleImportCoursePackageFile(event) {
   } finally {
     target.value = "";
   }
+}
+
+// #1095: finnes kurset fila peker på, i dette miljøet — og får forfatteren se det? 404 og 403 er
+// begge «nei»: da importeres fila som nytt kurs, slik den alltid ble.
+async function findImportTargetCourse(courseId) {
+  try {
+    const body = await apiFetch(`/api/admin/content/courses/${encodeURIComponent(courseId)}`, getHeaders);
+    return body?.course ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** Spør forfatteren: oppdater kurset fila hører til, importer som nytt, eller avbryt. */
+function askImportChoice(course) {
+  const dialog = document.getElementById("courseImportChoiceDialog");
+  if (!dialog || typeof dialog.showModal !== "function") return Promise.resolve("createNew");
+  const textEl = document.getElementById("courseImportChoiceText");
+  if (textEl) textEl.textContent = tf("adminContent.courses.importChoice.text", { title: localizedText(course.title) || course.id });
+  return new Promise((resolve) => {
+    const done = (value) => {
+      dialog.removeEventListener("close", onClose);
+      updateBtn?.removeEventListener("click", onUpdate);
+      createBtn?.removeEventListener("click", onCreate);
+      cancelBtn?.removeEventListener("click", onCancel);
+      if (dialog.open) dialog.close();
+      resolve(value);
+    };
+    const updateBtn = document.getElementById("courseImportUpdateBtn");
+    const createBtn = document.getElementById("courseImportCreateBtn");
+    const cancelBtn = document.getElementById("courseImportCancelBtn");
+    const onUpdate = () => done("updateExisting");
+    const onCreate = () => done("createNew");
+    const onCancel = () => done("cancel");
+    const onClose = () => done("cancel");
+    updateBtn?.addEventListener("click", onUpdate);
+    createBtn?.addEventListener("click", onCreate);
+    cancelBtn?.addEventListener("click", onCancel);
+    dialog.addEventListener("close", onClose);
+    dialog.showModal();
+  });
 }
 
 function handleListTableClick(event, btn = event.target.closest("[data-action]")) {

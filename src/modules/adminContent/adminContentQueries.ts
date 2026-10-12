@@ -265,11 +265,12 @@ export async function buildCourseExportEnvelope(
       .map(async (item) => {
         if (item.itemType === "SECTION" && item.section) {
           const sectionVersion = await buildSectionExportPayload(item.section.id, assetBudget);
-          return { type: "SECTION" as const, sortOrder: item.sortOrder, section: sectionVersion };
+          // #1095: identiteten følger med, så fila kan komme tilbake som en oppdatering.
+          return { type: "SECTION" as const, sortOrder: item.sortOrder, origin: { sectionId: item.section.id }, section: sectionVersion };
         }
         const moduleId = item.moduleId ?? item.module?.id;
         if (!moduleId) throw new Error("Course item is missing its module reference.");
-        return { type: "MODULE" as const, sortOrder: item.sortOrder, module: await buildModuleExportPayload(moduleId) };
+        return { type: "MODULE" as const, sortOrder: item.sortOrder, origin: { moduleId }, module: await buildModuleExportPayload(moduleId) };
       }),
   );
 
@@ -290,6 +291,7 @@ export async function buildCourseExportEnvelope(
         description: (course.description ? decodeLocalizedText(course.description) : null) as never,
         certificationLevel: (course.certificationLevel ? decodeLocalizedText(course.certificationLevel) : null) as never,
         sortOrder: course.sortOrder ?? null,
+        origin: { courseId: course.id, exportedAt: new Date().toISOString() },
         audit: {
           publishedAt: course.publishedAt ? new Date(course.publishedAt).toISOString() : null,
           publishedBy: null,

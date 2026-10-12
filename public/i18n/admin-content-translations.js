@@ -465,6 +465,8 @@ const adminContentBase = {
   // kodetabellen (`errors.api.*` i participant-bunten); disse nøklene er bare rammen.
   "adminContent.courses.exportFailed": "Course export failed: {reason}",
   "adminContent.courses.imported": "Course imported ({count} modules).",
+  "adminContent.courses.updated": "Course updated: {updated} element(s) got a new version ready to publish, {created} new, {removed} taken out of the course.",
+  "adminContent.courses.importChoice.text": "This file was exported from the course «{title}». Update that course (new versions are laid ready; nothing is published), or import the file as a new course?",
   "adminContent.courses.importedHeldBack": "Course imported ({count} modules), but saved as a DRAFT: some content is missing a language and cannot go live yet. Open the course and fill the gaps, then publish.",
   "adminContent.courses.importFailed": "Course import failed: {reason}",
   "adminContent.courses.importNotAnEnvelope": "This does not look like a course package. The file is missing the fields an export adds (exportFormat, exportedAt and scope). Use Export on a course to produce a valid file.",
@@ -839,6 +841,8 @@ const nbOverrides = {
   // #972/#980 — se merknaden i en-GB-tabellen.
   "adminContent.courses.exportFailed": "Kurs-eksporten feilet: {reason}",
   "adminContent.courses.imported": "Kurs importert ({count} moduler).",
+  "adminContent.courses.updated": "Kurset er oppdatert: {updated} element(er) har fått ny versjon klar til publisering, {created} nye, {removed} tatt ut av kurset.",
+  "adminContent.courses.importChoice.text": "Denne fila ble eksportert fra kurset «{title}». Oppdatere det kurset (nye versjoner legges klar; ingenting publiseres), eller importere fila som et nytt kurs?",
   "adminContent.courses.importedHeldBack": "Kurset er importert ({count} moduler), men lagret som UTKAST: noe innhold mangler et språk og kan ikke publiseres ennå. Åpne kurset, fyll hullene, og publiser.",
   "adminContent.courses.importFailed": "Kurs-importen feilet: {reason}",
   "adminContent.courses.importNotAnEnvelope": "Dette ser ikke ut som en kurs-pakke. Fila mangler feltene en eksport legger på (exportFormat, exportedAt og scope). Bruk «Eksporter» på et kurs for å lage en gyldig fil.",
@@ -914,6 +918,8 @@ const nnOverrides = {
   // #972/#980 — sjå merknaden i en-GB-tabellen.
   "adminContent.courses.exportFailed": "Kurs-eksporten feila: {reason}",
   "adminContent.courses.imported": "Kurset er importert ({count} modular).",
+  "adminContent.courses.updated": "Kurset er oppdatert: {updated} element har fått ny versjon klar til publisering, {created} nye, {removed} tekne ut av kurset.",
+  "adminContent.courses.importChoice.text": "Denne fila vart eksportert frå kurset «{title}». Oppdatere det kurset (nye versjonar vert lagde klare; ingenting vert publisert), eller importere fila som eit nytt kurs?",
   "adminContent.courses.importedHeldBack": "Kurset er importert ({count} modular), men lagra som UTKAST: noko innhald manglar eit språk og kan ikkje publiserast enno. Opne kurset, fyll hola, og publiser.",
   "adminContent.courses.importFailed": "Kurs-importen feila: {reason}",
   "adminContent.courses.importNotAnEnvelope": "Dette ser ikkje ut som ein kurs-pakke. Fila manglar felta ein eksport legg på (exportFormat, exportedAt og scope). Bruk «Eksporter» på eit kurs for å lage ei gyldig fil.",

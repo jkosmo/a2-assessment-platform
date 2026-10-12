@@ -144,6 +144,19 @@ are two distinct code paths + a relocated singleton to keep in sync when touchin
 
 **Pre-deploy gate:** `npx playwright test --config playwright.admin-content.config.ts test/e2e/participant-section-reader.spec.ts test/e2e/participant-mcq-only.spec.ts test/e2e/participant-inline-open.spec.ts test/e2e/participant-course-sequence.spec.ts test/e2e/participant-course-focus.spec.ts test/e2e/participant-section-advance.spec.ts` (~10s, no Docker/Postgres). `participant-inline-open` is the consistency guard (section + module both inline, one open, workspace relocated); `participant-course-sequence` guards the serial presentation; `participant-course-focus` guards list-vs-course state (#921/#922); `participant-section-advance` guards the combined advance button and the absent item-level discussion (#923/#924).
 
+## 6a. Course import — three modes (#433 / #1095)
+
+`POST /api/admin/content/courses/import` (`src/routes/adminCourses.ts` → `importCourseFromEnvelope`
+in `contentImportService.ts`): `createNew` (default: a new course, items created, published if the
+file says so), `replaceExisting` (API only: keeps the course id, recreates every item — progress is
+lost; the skill never uses it), and **`updateExisting`** (#1095: new unpublished versions on items
+the file recognises by `origin`, drafts for new items, unlisted items taken out of the course,
+nothing published). The export (`adminContentQueries.ts`) writes `origin` on the course and on every
+item; the plan is `courseUpdatePlan.ts` (pure). The admin dialog `#courseImportChoiceDialog`
+(`admin-content-courses.js`, `askImportChoice`) offers update vs new when the file's course exists.
+**Hazard:** a new way to add items to a course must go through `setCourseItems`, and a new way to
+write a section version must keep the live version untouched (`appendInactiveSectionVersion`).
+
 ## 6b-1. Participant course list — order (#1093)
 
 `GET /api/courses` sorts in `src/modules/course/courseOrdering.ts` (`sortCoursesForParticipant`):

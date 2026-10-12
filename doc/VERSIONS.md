@@ -2,6 +2,40 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.88.0 - 2026-10-12
+
+### Justere et publisert kurs, fase A: eksport med identiteter og import som oppdaterer (#1095)
+
+Produkteier: «strømlinjeformet eksport, med reimport etter justering». Designet i
+`doc/DESIGN_1095_ADJUST_COURSE.md`, avgjørelsene i `doc/DECISIONS.md` (2026-10-12): nye versjoner
+legges klar, publisering er en bevisst handling; framdrift som ved manuell justering; fjernede
+elementer tas ut, ikke slettes.
+
+- **Eksporten bærer identiteter.** `course.course.origin` (`courseId`, `exportedAt`) og `origin`
+  per element (`sectionId` / `moduleId`). Valgfrie felt: eldre filer og skillets «lag kurs»-filer
+  leses som før, og en fil som flyttes til et annet miljø importeres som nytt kurs der.
+- **Importmodus `updateExisting`** (bare kurs, `targetId` kreves, samme eierskapsvakt som
+  `replaceExisting`). Planen regnes ut før noe skrives (`courseUpdatePlan.ts`, ren funksjon): et
+  element fila kjenner igjen får en **ny, upublisert versjon** (seksjon: som seksjonsimporten,
+  bildene under seksjonens egen id; modul: som modulimporten, uten auto-publisering); et element
+  uten `origin` **opprettes som utkast**; elementer kurset har som fila ikke nevner, **tas ut av
+  kurset** (ikke slettet); rekkefølgen følger fila; kursets tittel, beskrivelse, nivå og plassering
+  oppdateres. Kursets id, publiseringstilstand, klassetildeling, diskusjoner og deltakernes
+  framdrift er urørt. En fil fra et annet kurs, eller med et element kurset ikke har, avvises
+  (400, `origin_mismatch`) uten at noe skrives. Svaret bærer `summary` (oppdatert/opprettet/tatt ut),
+  og revisjonssporet for importen har det samme.
+- **Dialogen i Innholdsforvaltning:** når fila peker på et kurs som finnes her (og forfatteren får
+  se det), spør importen: «Oppdater dette kurset» (nye versjoner legges klar; ingenting publiseres),
+  «Importer som nytt kurs», eller avbryt. Ellers som før.
+- Fase B (skillets arbeidsflyt for justering) og fase C (forskjellsvisning) står igjen.
+
+**Slik er det målt:** `test/unit/course-update-plan-1095.test.ts` (5), `test/m2-course-update-import-1095.test.ts`
+(eksporten bærer identiteter; oppdatering med ny versjon, nytt utkast, tatt ut, og alt urørt som
+skal være urørt, inkludert deltakerens «lest» og det hun får servert; fil fra annet kurs, fil uten
+mål, fremmed element → 400 uten skriving; fil uten identiteter → nytt kurs), `test/e2e/admin-content-course-update-import-1095.spec.ts`
+(dialogens tre valg; uten identitet eller med ukjent id spørres det ikke). Tolv mutasjoner, alle
+fanget (én ble dødkode og fjernet: ruta sin egen sjekk på `targetId`, som tjenesten alt gjør).
+
 ## 2.87.0 - 2026-10-11
 
 ### «Mine kurs» sorteres alfabetisk, med valgfri plassering per kurs (#1093)
