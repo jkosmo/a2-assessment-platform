@@ -59,7 +59,11 @@ Rules the list must respect:
   import, without a version to review. They have their own line in the change list, `course`,
   and stay `unchanged` unless the author asks.
 - The **order** of the course is applied at import too. Moving an element does not make it
-  `changed` (it is word for word the same); the order has its own line, `order`.
+  `changed` (it is word for word the same); the order has its own line, `order`. Adding a new
+  element or removing one does not change the order of the others — `order` stays `unchanged`
+  unless existing elements swap places.
+- A **changed test** that already had fewer questions than the rule asks for (one per section
+  before it, at least three) is not asked to grow for a small fix; a **new** test is.
 - A **new module** in a course that is published is not placed in the course by the import: it
   lands as a draft under *Moduler*, and the author publishes it and places it. Say so.
 - A **removed** element is taken out of the course, not deleted; it stays in the library.

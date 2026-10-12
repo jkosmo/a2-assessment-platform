@@ -38,7 +38,8 @@ eksportfil, og endrer bare det forfatteren ber om.
   uten levende versjon (der følger tittelen fila) — også for fremmede utkast (kopien får fila sin
   tittel). Runde 2: spørsmålsregelen teller hele kurset og rapporteres for endrede og nye tester;
   et bilde tegnet om til en annen filtype får type og navn fra fila; rekkefølgen har sin egen linje
-  (`order`) i endringslista.
+  (`order`) i endringslista. Runde 3 (GO): en endret test som alt hadde for få spørsmål i eksporten
+  tvinges ikke til å vokse for en liten retting (kravet går ikke over det eksporten hadde).
 - Referansene oppdatert: package-schema (`origin`), export-validation, check-and-produce (changes
   i rapporttabellen, leveransen), content-preservation (tilstand fra eksport; fjernet element).
 - **Plattformen (samme versjon):** et element forfatteren eier som fila ikke endret (brødtekst og

@@ -249,7 +249,9 @@ function checkLearnerText(pkg) {
 
 // `onlyRefs` (#1095, adjusting): the rule is computed over the WHOLE course — a new test after four
 // unchanged sections still needs four questions — but reported only for the changed and new modules.
-function checkQuestions(pkg, primary, course, { onlyRefs = null } = {}) {
+// `baselineCounts` (ref → questions in the export): a CHANGED test that already had too few questions
+// is not asked to grow for a typo fix — the requirement does not exceed what the export had.
+function checkQuestions(pkg, primary, course, { onlyRefs = null, baselineCounts = null } = {}) {
   const details = [];
   const inScope = (ref) => !onlyRefs || onlyRefs.has(ref);
   const sets = collectMcqSets(pkg).filter((set) => inScope(set.clientRef ?? String(set.path).replace(/^objects\[([^\]]+)\].*$/, "$1")));
@@ -277,7 +279,8 @@ function checkQuestions(pkg, primary, course, { onlyRefs = null } = {}) {
     const version = target.payload?.activeVersion ?? {};
     if (version.assessmentMode !== "FREETEXT_ONLY") {
       const count = version.mcqSet?.questions?.length ?? 0;
-      const needed = Math.max(3, sectionsBefore);
+      const had = baselineCounts?.get(target.clientRef);
+      const needed = Math.min(Math.max(3, sectionsBefore), had === undefined ? Infinity : Math.max(had, 0));
       if (count < needed && inScope(target.clientRef)) {
         details.push(`"${target.clientRef}": ${count} question(s) after ${sectionsBefore} section(s) — a module tests the whole of what its sections teach: at least one question per section and at least 3 (${needed} here)`);
       }
@@ -554,7 +557,14 @@ export async function produceCourse({ packageFile, outFile, stateFile, slidesFil
     : { pkg, course };
   checks.push(checkFigures(scoped.pkg));
   checks.push(checkLearnerText(scoped.pkg));
-  checks.push(checkQuestions(pkg, primary, course, changesEarly?.elements ? { onlyRefs: new Set(scoped.pkg.objects.map((o) => o.clientRef)) } : {}));
+  let baselineCounts = null;
+  if (changesEarly?.elements) {
+    // Questions each changed module had in the export, by its origin.
+    const baselineEarly = changesEarly.baseline ? readJson(path.resolve(path.dirname(changesFile), changesEarly.baseline), "the baseline export", []) : null;
+    const byModuleId = new Map((baselineEarly?.course?.course?.items ?? []).filter((i) => i?.type === "MODULE" && i.origin?.moduleId).map((i) => [i.origin.moduleId, i.module?.activeVersion?.mcqSet?.questions?.length ?? 0]));
+    baselineCounts = new Map((pkg.objects ?? []).filter((o) => o?.type === "module" && o.origin?.moduleId && byModuleId.has(o.origin.moduleId)).map((o) => [o.clientRef, byModuleId.get(o.origin.moduleId)]));
+  }
+  checks.push(checkQuestions(pkg, primary, course, changesEarly?.elements ? { onlyRefs: new Set(scoped.pkg.objects.map((o) => o.clientRef)), baselineCounts } : {}));
   checks.push(checkLanguages(scoped.pkg, primary));
 
   let master = null;

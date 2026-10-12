@@ -268,6 +268,19 @@ describe("#1095 fase B — skillets justeringsflyt", () => {
     writeFileSync(changesFil, JSON.stringify(changes), "utf8");
     const nok = await produser(work, "nok");
     expect(nok.ok, nok.checks.filter((c) => c.status === "fail").map((c) => `${c.name}: ${c.details.join(" | ")}`).join("; ")).toBe(true);
+
+    // En ENDRET test som alt hadde tre spørsmål i eksporten, flyttet bak fire seksjoner (en skrivefeil
+    // rettes): den tvinges ikke til å vokse — kravet går ikke over det eksporten hadde.
+    // Rekkefølge nå: sec-01, sec-03, tre uendrede, mod-02 (endret, 3 spørsmål, hadde 3), mod-07 (ny, etter 0 seksjoner).
+    course.payload.items = course.payload.items.filter((i: { ref: string }) => i.ref !== "mod-02-test-moter" && i.ref !== "mod-07-ny-test");
+    course.payload.items.push({ type: "MODULE", ref: "mod-02-test-moter" }, { type: "MODULE", ref: "mod-07-ny-test" });
+    mal.payload.activeVersion.mcqSet.questions[0].rationale = tre("Målet styrer møtet — alltid.", "Målet styrer møtet — alltid.", "The goal steers the meeting — always.");
+    writeFileSync(pkgFil, JSON.stringify(pkg), "utf8");
+    changes.elements["mod-02-test-moter"] = "changed";
+    changes.order = "changed";
+    writeFileSync(changesFil, JSON.stringify(changes), "utf8");
+    const liten = await produser(work, "liten");
+    expect(liten.ok, liten.checks.filter((c) => c.status === "fail").map((c) => `${c.name}: ${c.details.join(" | ")}`).join("; ")).toBe(true);
   });
 
   it("rekkefølgen har sin egen linje: flyttede elementer uten «order: changed» stopper", async () => {
