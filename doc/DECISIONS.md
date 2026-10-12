@@ -1104,3 +1104,22 @@ Produkteier valgte alfabetisk, med mulighet for å styre. Resten er mitt:
   oversikter) får samme rekkefølge uten egen logikk.
 - **Publiseringstidspunktet slutter å bety noe.** Omstokking ved republisering var en bivirkning
   ingen ba om.
+
+## Justere et publisert kurs (#1095): nye versjoner legges klar, publisering er en bevisst handling (2026-10-12)
+
+Produkteier, på fire spørsmål i `doc/DESIGN_1095_ADJUST_COURSE.md`:
+
+- **Nye versjoner publiseres ikke av importen.** «Det bør en bevisst handling til for å publisere
+  dem på plattformen med ny versjon.» Importen legger en upublisert versjon på hvert eksisterende
+  element; forfatteren publiserer i seksjonens og modulens egne flater. Dialogen har derfor ikke noe
+  «publiser nå».
+- **Framdrift som ved manuell justering.** En deltaker som har lest seksjonen, står som «lest»
+  også etter en ny versjon — slik plattformen alt gjør når en forfatter redigerer og publiserer en
+  seksjon på nytt.
+- **Fjernede elementer tas ut av kurset, men slettes ikke.**
+- **Skillet kan foreslå endringer utover bestillingen** i endringslista, men gjør dem ikke uten et ja.
+
+Mitt valg som følger av dette: nye elementer i fila opprettes som utkast og legges inn i rekkefølgen
+med en gang; deltakeren ser dem først når de publiseres, fordi et element uten aktiv versjon ikke er
+tilgjengelig. Alternativet — holde nye elementer utenfor kurset til de er publisert — ville gitt
+forfatteren to steder å huske (publiser, og legg inn), mot ett.

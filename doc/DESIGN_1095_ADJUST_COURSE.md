@@ -87,7 +87,14 @@ virker som i dag: et element som mangler et språk, holdes tilbake, og kurset av
 Teknisk er dette en orkestrering av de to importveiene som alt finnes (`replaceExisting` for
 seksjon og modul) pluss `setCourseItems`; det nye er gjenkjenningen av fila og dialogen.
 
-## Valg som er produkteiers
+## Valg som er produkteiers — avgjort 2026-10-12
+
+**Produkteiers svar:** (1) legg dem klar — det skal en bevisst handling til for å publisere en ny
+versjon på plattformen; (2) framdrift håndteres som ved en manuell justering i plattformen i dag,
+det vil si «lest» beholdes (en ny versjon nullstiller ikke lesestatus); (3) enig; (4) enig.
+Dermed: importen legger nye, upubliserte versjoner og publiserer ingenting; dialogen har ikke
+valget «publiser nå». Nye elementer opprettes som utkast og legges i rekkefølgen; deltakeren ser
+dem først når de publiseres (tilgjengelighetsregelen i `sectionAvailability.ts`).
 
 1. **Publisere de nye versjonene med en gang, eller legge dem klar til gjennomsyn?**
    Anbefaling: dialogen har et valg, standard **publiser nå** når fila kommer fra skillet med

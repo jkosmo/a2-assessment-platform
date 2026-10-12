@@ -590,6 +590,8 @@ Vertsnavnene står i `doc/ENVIRONMENTS.local.md` (gitignorert, skal ikke skrives
 
 ## Det som gjenstår
 
+- **#1095 justere et publisert kurs** — avgjort 2026-10-12 (`doc/DESIGN_1095_ADJUST_COURSE.md`, `doc/DECISIONS.md`): fase A (plattform: eksport med `origin`, import `updateExisting` som legger versjoner klar, dialog) er i arbeid; fase B (skillets arbeidsflyt) etterpå.
+
 - **#1093 «Mine kurs»: alfabetisk som standard, valgfri plassering per kurs** — 2.87.0 på stage 2026-10-11 kl. 21:31 (`doc/VERSIONS.md`). QA-porten GO i første runde (`.ai-qa/qa-20261011-210415.md`); fire suiter grønne (2137/69/464/766). Oppfølging i #1094 (ugyldig tall i feltet lagres stille som tomt; kurslista i admin viser ikke plasseringen). **Til den manuelle testen på stage** (QA-portens plan): sett plassering 1 på et kurs og se det øverst; bytt språk uten å laste siden på nytt; tøm feltet (alfabetisk igjen); verdien 0; 10000 gir feilbanner; eksport → import med plassering. Stage-testen 21:33–21:38: 44 av 44.
 - **Skillpakke 2.86.1** (2026-10-11 kveld, flettet til `dev` som `acbf0b72`): bildenes art i lysarklista, tekstlysark aldri bare bilde, tunge bilder — `doc/VERSIONS.md` 2.86.1. QA-porten GO i tredje runde (`.ai-qa/qa-20261011-203535.md`; rundene før fant at klikkbilder ikke kunne utelates med grunn, at arten ble dømt per rad, og at utelatte lysark falt — alt rettet med tester og mutasjoner). Fire suiter grønne (2130/69/463/763). Zip sendt produkteier. Plattformen er ikke rullet ut på nytt (package.json 2.86.1 ligger i `dev`; neste stage-utrulling tar den med). Neste måling: produkteier lager et kurs av Tilbudsarbeid på nytt med 2.86.1 — prompt-skjermbildene skal nå bli prompt-bokser.
 
@@ -606,7 +608,6 @@ Vertsnavnene står i `doc/ENVIRONMENTS.local.md` (gitignorert, skal ikke skrives
 
 | Sak | Hva som trengs |
 |---|---|
-| **#1095 justere et publisert kurs** | Fire valg i `doc/DESIGN_1095_ADJUST_COURSE.md` (publiser nå eller legg klar; framdrift på justert seksjon; fjernede elementer; skillets forslag utover bestillingen). Fase A (plattform) kan starte når valgene er tatt. |
 | **#1000** | Tre spørsmål i `doc/DESIGN_1000_1066.md` — oppfølgingsrollene er begrunnet med et forhold datamodellen ikke har |
 | **#1066** | Skal administrator kunne tildele fagansvarlig-rollen i appen? Rolle- og sikkerhetsregimet må avklares først |
 | **#928** | Drift-varselet er verken synlig eller utløst av den vanligste årsaken (`doc/DESIGN_928.md`) |
