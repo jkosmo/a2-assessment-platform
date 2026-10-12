@@ -741,7 +741,9 @@ export async function importCourseFromEnvelope(
           // Fila er lest gjennom skjemaet (standardverdier, ukjente nøkler); den ferske pakken må samme vei.
           // Bare det byttet faktisk BRUKER teller: brødtekst og bilder. Tittelen følger elementet (#931)
           // og brukes ikke av byttet — en ren tittelendring skal ikke bytte (og nullstille) noe.
-          const brukt = (p: SectionExportPayload) => ({ bodyMarkdown: p.bodyMarkdown, assets: p.assets ?? [] });
+          // Tittelen teller når kopien ville brukt den: en fremmed seksjon uten levende versjon får
+          // kopien med fila sin tittel (ingen levende tittel å beholde).
+          const brukt = (p: SectionExportPayload) => ({ bodyMarkdown: p.bodyMarkdown, assets: p.assets ?? [], ...(activeVersionId ? {} : { title: p.title }) });
           if (newest && samePayload(brukt(sectionExportPayloadSchema.parse(newest)), brukt(fileItem.section))) {
             keptUnownedIds.push({ type: "SECTION", id: entry.targetId, reason: "unchanged" });
             updateTargets.set(entry.index, { targetId: entry.targetId, keepLiveTitle: false, keep: true });

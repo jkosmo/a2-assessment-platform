@@ -58,6 +58,8 @@ Rules the list must respect:
 - The **course's own title, description and level** are written straight onto the course at
   import, without a version to review. They have their own line in the change list, `course`,
   and stay `unchanged` unless the author asks.
+- The **order** of the course is applied at import too. Moving an element does not make it
+  `changed` (it is word for word the same); the order has its own line, `order`.
 - A **new module** in a course that is published is not placed in the course by the import: it
   lands as a draft under *Moduler*, and the author publishes it and places it. Say so.
 - A **removed** element is taken out of the course, not deleted; it stays in the library.
@@ -68,7 +70,7 @@ Rules the list must respect:
 When the author approves, write the decisions into `work/changes.json`:
 
 ```json
-{ "baseline": "baseline.json", "course": "unchanged", "elements": { "sec-01-innledning": "unchanged", "sec-02-metode": "changed", "mod-03-test": "unchanged", "sec-04-ny-del": "new" }, "refs": { … } }
+{ "baseline": "baseline.json", "course": "unchanged", "order": "unchanged", "elements": { "sec-01-innledning": "unchanged", "sec-02-metode": "changed", "mod-03-test": "unchanged", "sec-04-ny-del": "new" }, "refs": { … } }
 ```
 
 A removed element keeps its `clientRef` in the list, marked `removed`, and is taken out of the
@@ -117,7 +119,9 @@ source does not support, is the language one throughout. Do not re-review unchan
    The command runs the craft checks (figures, learner text, questions, languages) on the changed
    and new elements only — the unchanged ones are the author's course as it stands — and one more,
    **changes**: every element listed `unchanged` must be word for word as in the export — text,
-   title and pictures — and so must the course's own fields when `course` is `unchanged`; a
+   title and pictures — and so must the course's own fields when `course` is `unchanged`, and the
+   order when `order` is `unchanged`; the questions rule (one per section before the test, at
+   least three) counts the whole course and is reported for changed and new tests; a
    `changed` one must differ; a `new` one carries no `origin`; a `removed` one is gone. A `FAIL`
    there means you touched something nobody asked for, or forgot a change: fix it, do not relist it.
 3. Fix every `FAIL` and run again. Deliver only the file named after `DELIVER`.

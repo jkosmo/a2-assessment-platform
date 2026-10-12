@@ -35,7 +35,10 @@ eksportfil, og endrer bare det forfatteren ber om.
   kjører bare på endrede og nye elementer når det er en endringsliste; kursets egne felt har sin
   egen linje (`course`) i lista, siden plattformen skriver dem rett på det levende kurset; «fjernet»
   matches mot riktig element via `refs`. Plattformen: tittelen teller som endring på en seksjon
-  uten levende versjon (der følger tittelen fila).
+  uten levende versjon (der følger tittelen fila) — også for fremmede utkast (kopien får fila sin
+  tittel). Runde 2: spørsmålsregelen teller hele kurset og rapporteres for endrede og nye tester;
+  et bilde tegnet om til en annen filtype får type og navn fra fila; rekkefølgen har sin egen linje
+  (`order`) i endringslista.
 - Referansene oppdatert: package-schema (`origin`), export-validation, check-and-produce (changes
   i rapporttabellen, leveransen), content-preservation (tilstand fra eksport; fjernet element).
 - **Plattformen (samme versjon):** et element forfatteren eier som fila ikke endret (brødtekst og

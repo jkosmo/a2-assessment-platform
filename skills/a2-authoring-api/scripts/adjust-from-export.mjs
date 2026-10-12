@@ -244,8 +244,9 @@ export function convertExport(envelope, { outDir, baselineFile = "baseline.json"
   const state = { primaryLanguage, order, elements };
   const changes = {
     baseline: baselineFile,
-    note: "Every element is \"unchanged\" until the author asks for a change. Values: unchanged | changed | new | removed. `course` covers the course's own title, description and level.",
+    note: "Every element is \"unchanged\" until the author asks for a change. Values: unchanged | changed | new | removed. `course` covers the course's own title, description and level; `order` the course's order.",
     course: "unchanged",
+    order: "unchanged",
     elements: Object.fromEntries(order.map((ref) => [ref, "unchanged"])),
     // Which element of the export each ref came from — so a ref listed "removed" can be matched to
     // the element that is gone, and nothing else can go missing unnoticed.

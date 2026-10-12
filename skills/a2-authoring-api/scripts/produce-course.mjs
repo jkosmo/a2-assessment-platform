@@ -247,9 +247,12 @@ function checkLearnerText(pkg) {
   return { name: "learner text", status: details.length === 0 ? "ok" : "fail", summary: `${sections} section(s) read for the learner's voice and card frames`, details };
 }
 
-function checkQuestions(pkg, primary, course) {
+// `onlyRefs` (#1095, adjusting): the rule is computed over the WHOLE course — a new test after four
+// unchanged sections still needs four questions — but reported only for the changed and new modules.
+function checkQuestions(pkg, primary, course, { onlyRefs = null } = {}) {
   const details = [];
-  const sets = collectMcqSets(pkg);
+  const inScope = (ref) => !onlyRefs || onlyRefs.has(ref);
+  const sets = collectMcqSets(pkg).filter((set) => inScope(set.clientRef ?? String(set.path).replace(/^objects\[([^\]]+)\].*$/, "$1")));
   let questions = 0;
   for (const set of sets) {
     const result = checkMcqCues(set.questions, { primary });
@@ -275,7 +278,7 @@ function checkQuestions(pkg, primary, course) {
     if (version.assessmentMode !== "FREETEXT_ONLY") {
       const count = version.mcqSet?.questions?.length ?? 0;
       const needed = Math.max(3, sectionsBefore);
-      if (count < needed) {
+      if (count < needed && inScope(target.clientRef)) {
         details.push(`"${target.clientRef}": ${count} question(s) after ${sectionsBefore} section(s) — a module tests the whole of what its sections teach: at least one question per section and at least 3 (${needed} here)`);
       }
     }
@@ -393,6 +396,21 @@ function checkChanges(changes, baseline, pkg) {
     else if (courseDecision === "changed" && courseSame) details.push("course: listed as changed, but its title, description and level are as in the export");
   }
   const refs = changes?.refs && typeof changes.refs === "object" ? changes.refs : null;
+  // The order of the course: a moved element is word for word the same, so it is not "changed" —
+  // but the platform applies the new order at once. It has its own line, `order`.
+  if (courseObject && baseCourse) {
+    const idOf = (o) => (o?.type === "section" ? (o.origin?.sectionId ? `SECTION:${o.origin.sectionId}` : null) : o?.type === "module" ? (o.origin?.moduleId ? `MODULE:${o.origin.moduleId}` : null) : null);
+    const byRef = new Map((pkg.objects ?? []).map((o) => [o?.clientRef, o]));
+    const packageSequence = (courseObject.payload?.items ?? []).map((item) => idOf(byRef.get(item?.ref))).filter(Boolean);
+    const inPackage = new Set(packageSequence);
+    const baselineSequence = [...(baseline?.course?.course?.items ?? [])].sort((x, y) => (x.sortOrder ?? 0) - (y.sortOrder ?? 0)).map((item) => (item.type === "SECTION" ? `SECTION:${item.origin?.sectionId}` : `MODULE:${item.origin?.moduleId}`)).filter((key) => inPackage.has(key));
+    const orderSame = JSON.stringify(packageSequence) === JSON.stringify(baselineSequence);
+    const orderDecision = changes?.order;
+    if (orderDecision === undefined) details.push("changes.json has no `order` decision (unchanged | changed) for the course's order");
+    else if (!["unchanged", "changed"].includes(orderDecision)) details.push(`order: "${orderDecision}" is not a decision the order can have (unchanged | changed)`);
+    else if (orderDecision === "unchanged" && !orderSame) details.push("order: listed as unchanged, but the elements stand in another order than in the export — the platform applies the order at import; restore it, or list the order as changed");
+    else if (orderDecision === "changed" && orderSame) details.push("order: listed as changed, but the elements stand as in the export");
+  }
   const items = [...(baseline?.course?.course?.items ?? [])].sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
   if (!baseline?.course?.course) details.push("the baseline is not a course export");
   const baselineById = new Map();
@@ -536,7 +554,7 @@ export async function produceCourse({ packageFile, outFile, stateFile, slidesFil
     : { pkg, course };
   checks.push(checkFigures(scoped.pkg));
   checks.push(checkLearnerText(scoped.pkg));
-  checks.push(checkQuestions(scoped.pkg, primary, scoped.course));
+  checks.push(checkQuestions(pkg, primary, course, changesEarly?.elements ? { onlyRefs: new Set(scoped.pkg.objects.map((o) => o.clientRef)) } : {}));
   checks.push(checkLanguages(scoped.pkg, primary));
 
   let master = null;

@@ -271,6 +271,10 @@ describe("#1095 oppdatere et publisert kurs fra en eksportfil", () => {
     const uendretSeksjon = await seksjon(`Uendret del ${stempel}`, "Denne rører fila ikke.");
     const uendretModul = await publisertModul(`Uendret test ${stempel}`);
     const tittelSeksjon = await seksjon(`Tittel del ${stempel}`, "Bare tittelen endres i fila.");
+    // Et fremmed UTKAST (ingen levende versjon) der bare tittelen endres: tittelen følger fila, så det er en endring.
+    const adminsUtkast = await request(app).post("/api/admin/content/sections").set(admin).send({ title: tre(`Admins utkast ${stempel}`), bodyMarkdown: tre("Utkast fra administratoren."), draft: true });
+    expect(adminsUtkast.status).toBe(201);
+    const adminsUtkastId = adminsUtkast.body.section.id as string;
     // En seksjon som er levende, men som ikke ville passert dagens port (bare bokmål): lagt rett i
     // databasen, som eldre innhold fra før språkreglene. Ingen eier → ikke fagansvarligs.
     const gammel = await prisma.courseSection.create({ data: { title: JSON.stringify({ nb: `Gammel del ${stempel}` }), versions: { create: { versionNo: 1, bodyMarkdown: JSON.stringify({ nb: "Tekst bare på bokmål." }), publishedAt: new Date() } } }, select: { id: true, versions: { select: { id: true } } } });
@@ -288,6 +292,13 @@ describe("#1095 oppdatere et publisert kurs fra en eksportfil", () => {
     ] });
     expect(elementer.status).toBe(204);
     expect((await request(app).post(`/api/admin/content/courses/${smoKurs}/publish`).set(smo)).status).toBe(200);
+    // Utkastet legges inn etter publiseringen (et publisert kurs kan ikke publiseres med et utkast i).
+    const medUtkast = await request(app).put(`/api/admin/content/courses/${smoKurs}/items`).set(smo).send({ items: [
+      { type: "SECTION", sectionId: egenId }, { type: "SECTION", sectionId: adminsSeksjon }, { type: "SECTION", sectionId: deltSeksjon }, { type: "MODULE", moduleId: adminsModul },
+      { type: "SECTION", sectionId: uendretSeksjon }, { type: "SECTION", sectionId: gammel.id }, { type: "MODULE", moduleId: uendretModul },
+      { type: "SECTION", sectionId: tittelSeksjon }, { type: "SECTION", sectionId: adminsUtkastId },
+    ] });
+    expect(medUtkast.status, JSON.stringify(medUtkast.body).slice(0, 300)).toBe(204);
     const klasse = await prisma.class.create({ data: { name: `Klasse B ${stempel}` }, select: { id: true } });
     await prisma.courseGroupAssignment.create({ data: { classId: klasse.id, courseId: smoKurs } });
     expect((await request(app).post(`/api/courses/${smoKurs}/sections/${adminsSeksjon}/read`).set(deltaker)).status).toBe(204);
@@ -305,6 +316,7 @@ describe("#1095 oppdatere et publisert kurs fra en eksportfil", () => {
       fil.course.course.items.find((i: any) => i.origin?.moduleId === adminsModul).module.activeVersion.taskText = tre("Justert oppgave.");
       // uendretModul røres ikke. tittelSeksjon: bare tittelen — den bruker ikke byttet, så ingen bytte.
       item(tittelSeksjon).section.title = tre(`Tittel del ${stempel} (ny tittel)`);
+      item(adminsUtkastId).section.title = tre(`Admins utkast ${stempel} (ny tittel)`);
       return fil;
     };
 
@@ -331,7 +343,12 @@ describe("#1095 oppdatere et publisert kurs fra en eksportfil", () => {
       expect(await prisma.courseSection.findUniqueOrThrow({ where: { id }, select: { archivedAt: true, versions: { select: { versionNo: true } } } })).toMatchObject({ archivedAt: null, versions: [{ versionNo: 1 }] });
     }
     const byttet = svar.body.summary.replacedUnownedIds as Array<{ type: string; oldId: string; newId: string; oldArchived: boolean }>;
-    expect(byttet.map((b) => [b.type, b.oldId, b.oldArchived])).toEqual([["SECTION", adminsSeksjon, true], ["SECTION", deltSeksjon, false], ["MODULE", adminsModul, true]]);
+    expect(byttet.map((b) => [b.type, b.oldId, b.oldArchived])).toEqual([["SECTION", adminsSeksjon, true], ["SECTION", deltSeksjon, false], ["MODULE", adminsModul, true], ["SECTION", adminsUtkastId, true]]);
+    // Kopien av utkastet har fila sin tittel, og bare én versjon (ingen levende å kopiere).
+    const utkastKopi = await prisma.courseSection.findUniqueOrThrow({ where: { id: byttet[3]!.newId }, select: { title: true, activeVersionId: true, versions: { select: { versionNo: true } } } });
+    expect(JSON.parse(utkastKopi.title).nb).toBe(`Admins utkast ${stempel} (ny tittel)`);
+    expect(utkastKopi.activeVersionId).toBeNull();
+    expect(utkastKopi.versions).toHaveLength(1);
     const nyAdmins = byttet[0]!.newId; const nyDelt = byttet[1]!.newId; const nyModul = byttet[2]!.newId;
     const smoBruker = await prisma.user.findUniqueOrThrow({ where: { externalId: smo["x-user-id"] }, select: { id: true } });
 
@@ -363,7 +380,7 @@ describe("#1095 oppdatere et publisert kurs fra en eksportfil", () => {
     expect((await prisma.module.findUniqueOrThrow({ where: { id: adminsModul }, select: { archivedAt: true } })).archivedAt).not.toBeNull();
     // Kurset: fortsatt publisert, rekkefølgen som i fila, med kopiene.
     const rekke = await prisma.courseItem.findMany({ where: { courseId: smoKurs }, orderBy: { sortOrder: "asc" }, select: { sectionId: true, moduleId: true } });
-    expect(rekke.map((i) => i.sectionId ?? i.moduleId)).toEqual([egenId, nyAdmins, nyDelt, nyModul, uendretSeksjon, gammel.id, uendretModul, tittelSeksjon]);
+    expect(rekke.map((i) => i.sectionId ?? i.moduleId)).toEqual([egenId, nyAdmins, nyDelt, nyModul, uendretSeksjon, gammel.id, uendretModul, tittelSeksjon, byttet[3]!.newId]);
     expect((await prisma.course.findUniqueOrThrow({ where: { id: smoKurs }, select: { publishedAt: true } })).publishedAt).not.toBeNull();
     // Revisjonssporet på kopien peker på det den erstattet.
     const spor = await prisma.auditEvent.findFirst({ where: { entityId: nyAdmins, action: "section_imported" }, select: { metadataJson: true } });

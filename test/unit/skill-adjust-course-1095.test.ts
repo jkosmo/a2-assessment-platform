@@ -150,6 +150,7 @@ describe("#1095 fase B — skillets justeringsflyt", () => {
     expect(result.state!.elements.every((e) => e.status === "approved")).toBe(true);
     expect(result.changes!.elements).toEqual({ "sec-01-innledning": "unchanged", "mod-02-test-moter": "unchanged", "sec-03-gammel-del": "unchanged" });
     expect(result.changes!.course).toBe("unchanged");
+    expect((result.changes as { order?: string }).order).toBe("unchanged");
     expect(result.changes!.refs).toEqual({ "sec-01-innledning": { type: "SECTION", id: "sec-abc" }, "mod-02-test-moter": { type: "MODULE", id: "mod-abc" }, "sec-03-gammel-del": { type: "SECTION", id: "sec-gammel" } });
     // Teksten ligger som filer per språk; bildene som filer med entydige navn, men plattformens filnavn beholdes i pakka.
     expect(readFileSync(path.join(work, "sections/sec-01-innledning.nn.md"), "utf8")).toContain("Eit møte treng eit mål.");
@@ -210,6 +211,83 @@ describe("#1095 fase B — skillets justeringsflyt", () => {
     const fil = JSON.parse(readFileSync(sann.files[0]!.file, "utf8"));
     expect(fil.course.course.items[0].section.bodyMarkdown.nb).toContain("med én setning");
     expect(fil.course.course.items[0].origin).toEqual({ sectionId: "sec-abc", versionNo: 3 });
+
+    // Bildet tegnes om fra png til svg: fila på disk er sannheten, så importfila sier svg — ikke png over svg-bytes.
+    const pkgFil = path.join(work, "package.json");
+    const pkg = JSON.parse(readFileSync(pkgFil, "utf8"));
+    writeFileSync(path.join(work, "assets/sec-01-innledning/agenda.svg"), '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 40"><rect x="5" y="5" width="90" height="30" fill="#eee"/></svg>', "utf8");
+    pkg.objects[0].payload.assets[0].file = "assets/sec-01-innledning/agenda.svg";
+    writeFileSync(pkgFil, JSON.stringify(pkg), "utf8");
+    const omtegnet = await produser(work, "omtegnet");
+    expect(omtegnet.ok, omtegnet.checks.filter((c) => c.status === "fail").map((c) => `${c.name}: ${c.details.join(" | ")}`).join("; ")).toBe(true);
+    const fil2 = JSON.parse(readFileSync(omtegnet.files[0]!.file, "utf8"));
+    expect(fil2.course.course.items[0].section.assets[0]).toMatchObject({ sourceId: "bilde-agenda", filename: "agenda.svg", mimeType: "image/svg+xml" });
+  });
+
+  it("spørsmålsregelen teller hele kurset: en ny test etter fire uendrede seksjoner trenger fire spørsmål", async () => {
+    const work = path.join(dir, "sporsmal");
+    const fire = eksport();
+    // Tre seksjoner til, uendret, foran testen.
+    for (let n = 0; n < 3; n += 1) {
+      fire.course.course.items.push({ type: "SECTION", sortOrder: 3 + n, origin: { sectionId: `sec-x${n}`, versionNo: 1 }, section: { title: tre(`Del ${n}`, `Del ${n}`, `Part ${n}`), bodyMarkdown: tre(`Tekst ${n}.`, `Tekst ${n}.`, `Text ${n}.`), audit: { publishedAt: null, publishedBy: null, publishedByEmail: null, sourceVersionNo: 1 } } } as never);
+    }
+    expect(convertExport(fire, { outDir: work }).ok).toBe(true);
+    const pkgFil = path.join(work, "package.json");
+    const pkg = JSON.parse(readFileSync(pkgFil, "utf8"));
+    const course = pkg.objects.find((o: { type: string }) => o.type === "course");
+    const mal = pkg.objects.find((o: { clientRef: string }) => o.clientRef === "mod-02-test-moter");
+    const nyTest = JSON.parse(JSON.stringify(mal));
+    delete nyTest.origin;
+    nyTest.clientRef = "mod-07-ny-test";
+    nyTest.payload.module.title = tre("Ny test", "Ny test", "New test");
+    // Riktig svar på ulike plasser, så cue-kontrollen (posisjonsskjevhet) ikke er det som stopper.
+    for (const [i, q] of (nyTest.payload.activeVersion.mcqSet.questions as Array<{ options: unknown[]; correctAnswer: unknown }>).entries()) {
+      const riktig = q.options.find((o) => JSON.stringify(o) === JSON.stringify(q.correctAnswer))!;
+      const andre = q.options.filter((o) => o !== riktig);
+      andre.splice((i + 1) % 3, 0, riktig);
+      q.options = andre;
+    }
+    pkg.objects.splice(pkg.objects.indexOf(course), 0, nyTest);
+    course.payload.items.push({ type: "MODULE", ref: "mod-07-ny-test" });
+    writeFileSync(pkgFil, JSON.stringify(pkg), "utf8");
+    const changesFil = path.join(work, "changes.json");
+    const changes = JSON.parse(readFileSync(changesFil, "utf8"));
+    changes.elements["mod-07-ny-test"] = "new";
+    changes.order = "changed"; // et nytt element på slutten endrer ikke rekkefølgen til de gamle — men lista sier det eksplisitt
+    writeFileSync(changesFil, JSON.stringify(changes), "utf8");
+
+    // Fire uendrede seksjoner foran (sec-03 og tre til), tre spørsmål: for få — og det sies, selv om seksjonene er uendret.
+    const forFaa = await produser(work, "forfaa");
+    expect(forFaa.ok).toBe(false);
+    expect(sjekk(forFaa, "questions").details.join(" ")).toContain('"mod-07-ny-test": 3 question(s) after 4 section(s)');
+    // Den uendrede testen (mod-02) rapporteres ikke, selv om den har tre spørsmål etter én seksjon (som er greit uansett).
+    expect(sjekk(forFaa, "questions").details.join(" ")).not.toContain("mod-02-test-moter");
+    changes.order = "unchanged";
+    nyTest.payload.activeVersion.mcqSet.questions.push({ stem: tre("Hva avslutter et møte?", "Kva avsluttar eit møte?", "What ends a meeting?"), options: [tre("En oppsummering", "Ei oppsummering", "A summary"), tre("Et nytt møte", "Eit nytt møte", "Another meeting"), tre("Ingen avslutning", "Inga avslutning", "No ending")], correctAnswer: tre("En oppsummering", "Ei oppsummering", "A summary"), rationale: tre("Oppsummeringen samler.", "Oppsummeringa samlar.", "The summary gathers.") });
+    writeFileSync(pkgFil, JSON.stringify(pkg), "utf8");
+    writeFileSync(changesFil, JSON.stringify(changes), "utf8");
+    const nok = await produser(work, "nok");
+    expect(nok.ok, nok.checks.filter((c) => c.status === "fail").map((c) => `${c.name}: ${c.details.join(" | ")}`).join("; ")).toBe(true);
+  });
+
+  it("rekkefølgen har sin egen linje: flyttede elementer uten «order: changed» stopper", async () => {
+    const work = path.join(dir, "rekkefolge");
+    expect(convertExport(eksport(), { outDir: work }).ok).toBe(true);
+    const pkgFil = path.join(work, "package.json");
+    const pkg = JSON.parse(readFileSync(pkgFil, "utf8"));
+    const course = pkg.objects.find((o: { type: string }) => o.type === "course");
+    course.payload.items = [course.payload.items[1], course.payload.items[0], course.payload.items[2]];
+    writeFileSync(pkgFil, JSON.stringify(pkg), "utf8");
+    const stille = await produser(work, "stille");
+    expect(stille.ok).toBe(false);
+    expect(sjekk(stille, "changes").details.join(" ")).toContain("order: listed as unchanged, but the elements stand in another order");
+    const changesFil = path.join(work, "changes.json");
+    const changes = JSON.parse(readFileSync(changesFil, "utf8"));
+    changes.order = "changed";
+    writeFileSync(changesFil, JSON.stringify(changes), "utf8");
+    const sagt = await produser(work, "sagt");
+    expect(sagt.ok, sagt.checks.filter((c) => c.status === "fail").map((c) => `${c.name}: ${c.details.join(" | ")}`).join("; ")).toBe(true);
+    expect(sjekk(sagt, "changes").summary).toContain("3 unchanged");
   });
 
   it("nytt element uten origin listes som «new»; et fjernet element listes som «removed»; et glemt element stopper", async () => {

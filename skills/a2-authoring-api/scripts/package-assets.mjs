@@ -157,6 +157,15 @@ export function resolvePackageAssets(pkg, { baseDir = ".", readFile = readFileSy
       attached += 1;
       entry.contentBase64 = bytes.toString("base64");
       if (whole) {
+        // #1095: an entry from the platform's export carries the platform's `filename` and
+        // `mimeType`. When the author redraws the picture as another type (png → svg), the file on
+        // disk is the truth: a type that disagrees with the file's extension is replaced, with the
+        // name — otherwise the import file would say image/png over SVG bytes.
+        const fromFile = ASSET_MIME[path.extname(file).toLowerCase()];
+        if (fromFile && typeof entry.mimeType === "string" && entry.mimeType !== fromFile) {
+          entry.mimeType = fromFile;
+          entry.filename = path.basename(file);
+        }
         entry.filename ??= path.basename(file);
         entry.mimeType ??= ASSET_MIME[path.extname(file).toLowerCase()];
         if (!entry.mimeType) {
