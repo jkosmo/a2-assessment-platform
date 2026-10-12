@@ -379,6 +379,20 @@ function checkChanges(changes, baseline, pkg) {
   const details = [];
   const decisions = changes?.elements && typeof changes.elements === "object" ? changes.elements : null;
   if (!decisions) details.push("changes.json has no `elements` map (clientRef → unchanged | changed | new | removed)");
+  // The course's own title, description and level: the platform writes them straight onto the live
+  // course at import, without a version — so they are part of the change list too (`course`).
+  const courseObject = (pkg.objects ?? []).find((o) => o?.type === "course");
+  const baseCourse = baseline?.course?.course;
+  if (courseObject && baseCourse) {
+    const fields = (c) => ({ title: c?.title, description: c?.description ?? null, certificationLevel: c?.certificationLevel ?? null });
+    const courseSame = sameContent(fields(courseObject.payload?.course), fields(baseCourse));
+    const courseDecision = changes?.course;
+    if (courseDecision === undefined) details.push("changes.json has no `course` decision (unchanged | changed) for the course's own title, description and level");
+    else if (!["unchanged", "changed"].includes(courseDecision)) details.push(`course: "${courseDecision}" is not a decision the course can have (unchanged | changed)`);
+    else if (courseDecision === "unchanged" && !courseSame) details.push("course: listed as unchanged, but its title, description or level differs from the export — the platform would change the live course at import; restore it, or list the course as changed");
+    else if (courseDecision === "changed" && courseSame) details.push("course: listed as changed, but its title, description and level are as in the export");
+  }
+  const refs = changes?.refs && typeof changes.refs === "object" ? changes.refs : null;
   const items = [...(baseline?.course?.course?.items ?? [])].sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
   if (!baseline?.course?.course) details.push("the baseline is not a course export");
   const baselineById = new Map();
@@ -429,11 +443,14 @@ function checkChanges(changes, baseline, pkg) {
     if (seenBaseline.has(key)) continue;
     const title = item.section?.title ?? item.module?.module?.title;
     const name = typeof title === "object" && title ? Object.values(title).find((v) => typeof v === "string") : title;
-    const listedRemoved = decisions ? Object.entries(decisions).some(([, d]) => d === "removed") : false;
-    // A removed element is named by its ref in the change list; the package no longer has the ref,
-    // so the baseline is the only place to find it. Count it when the list says something was removed.
-    if (listedRemoved) counts.removed += 1;
-    else details.push(`baseline element «${name ?? key}» is not in the package and the change list does not say "removed" — restore it, or list its ref as removed`);
+    // A removed element is named by its ref in the change list; `refs` (written with the working
+    // set) says which element of the export that ref was. Without `refs`, any "removed" counts.
+    const removedRefs = decisions ? Object.entries(decisions).filter(([, d]) => d === "removed").map(([ref]) => ref) : [];
+    const matched = refs
+      ? removedRefs.some((ref) => refs[ref] && `${refs[ref].type}:${refs[ref].id}` === key)
+      : removedRefs.length > 0;
+    if (matched) counts.removed += 1;
+    else details.push(`baseline element «${name ?? key}» is not in the package and the change list does not say "removed" for it — restore it, or list its ref as removed`);
   }
   if (decisions) {
     const refsInPackage = new Set((pkg.objects ?? []).map((o) => o?.clientRef));
@@ -495,10 +512,32 @@ export async function produceCourse({ packageFile, outFile, stateFile, slidesFil
   const resolved = resolvePackageAssets(source, { baseDir });
   const pkg = resolved.pkg;
   checks.push(checkPictures(resolved));
-  checks.push(checkFigures(pkg));
-  checks.push(checkLearnerText(pkg));
-  checks.push(checkQuestions(pkg, primary, course));
-  checks.push(checkLanguages(pkg, primary));
+
+  // #1095: when the course is adjusted from the platform's export, the craft checks (figures,
+  // learner text, questions, languages) run on the CHANGED and NEW elements only. The unchanged ones
+  // are what the platform already holds — a partly translated title or a test with three questions
+  // is the author's course as it stands, and the workflow forbids touching it. The `changes` check
+  // below is what guards them: word for word.
+  let changesEarly = null;
+  if (changesFile) changesEarly = readJson(changesFile, "the change list", []);
+  const inScope = (object) => {
+    if (!changesEarly?.elements || object?.type === "course") return true;
+    const decision = changesEarly.elements[object?.clientRef];
+    return decision === "changed" || decision === "new";
+  };
+  const scoped = changesEarly?.elements
+    ? (() => {
+        const kept = new Set((pkg.objects ?? []).filter(inScope).map((o) => o.clientRef));
+        const objects = (pkg.objects ?? []).filter((o) => kept.has(o?.clientRef)).map((o) =>
+          o.type === "course" ? { ...o, payload: { ...o.payload, items: (o.payload?.items ?? []).filter((item) => kept.has(item?.ref)) } } : o,
+        );
+        return { pkg: { ...pkg, objects }, course: objects.find((o) => o.type === "course") ?? null };
+      })()
+    : { pkg, course };
+  checks.push(checkFigures(scoped.pkg));
+  checks.push(checkLearnerText(scoped.pkg));
+  checks.push(checkQuestions(scoped.pkg, primary, scoped.course));
+  checks.push(checkLanguages(scoped.pkg, primary));
 
   let master = null;
   if (stateFile) {

@@ -75,11 +75,14 @@ function svgLabels(contentBase64) {
   }
 }
 
-function fileNameFor(asset, index) {
+// The name of the file ON DISK, in the working set: unique within the section (two pasted
+// screenshots are both called `image.png` on the platform), safe characters. The platform's own
+// `filename` is kept in the package entry — it is part of what "unchanged" compares.
+function diskNameFor(asset, index) {
   const given = typeof asset.filename === "string" && asset.filename.trim() ? path.basename(asset.filename.trim()) : "";
   const ext = EXT_BY_MIME[asset.mimeType] ?? (given ? path.extname(given) : "") ?? "";
   const stem = (given ? given.replace(/\.[^.]*$/, "") : "") || `${asset.sourceId || "bilde"}`;
-  return `${slugify(stem, `bilde-${index + 1}`)}${ext || path.extname(given) || ""}`;
+  return `${String(index + 1).padStart(2, "0")}-${slugify(stem, "bilde")}${ext || path.extname(given) || ""}`;
 }
 
 /**
@@ -124,7 +127,10 @@ export function convertExport(envelope, { outDir, baselineFile = "baseline.json"
     if (item.type === "SECTION" && item.section) {
       const section = item.section;
       const ref = uniqueRef(`sec-${number}-${slugify(textIn(section.title, primaryLanguage))}`);
-      const body = typeof section.bodyMarkdown === "string" ? { [primaryLanguage]: section.bodyMarkdown } : (section.bodyMarkdown ?? {});
+      // A plain string is a text that is the same in every language (#892): it stays a string,
+      // inline — turning it into { nb: … } would change its meaning, and "unchanged" would differ.
+      const plainBody = typeof section.bodyMarkdown === "string" ? section.bodyMarkdown : null;
+      const body = plainBody !== null ? {} : (section.bodyMarkdown ?? {});
       const bodyFiles = {};
       for (const language of Object.keys(body)) {
         if (typeof body[language] !== "string") continue;
@@ -135,13 +141,16 @@ export function convertExport(envelope, { outDir, baselineFile = "baseline.json"
       const assets = [];
       const figures = [];
       (section.assets ?? []).forEach((asset, assetIndex) => {
-        const name = fileNameFor(asset, assetIndex);
+        const name = diskNameFor(asset, assetIndex);
         const stem = name.replace(/\.[^.]*$/, "");
         const ext = path.extname(name);
         const dir = `assets/${ref}`;
         const entry = { sourceId: asset.sourceId, file: `${dir}/${name}` };
         put(entry.file, Buffer.from(String(asset.contentBase64 ?? ""), "base64"));
-        if (asset.mimeType && ASSET_MIME[ext] !== asset.mimeType) entry.mimeType = asset.mimeType;
+        // The platform's own filename and type travel with the entry, so the finished file carries
+        // them unchanged (production fills them from the disk name only when they are missing).
+        if (typeof asset.filename === "string" && asset.filename) entry.filename = asset.filename;
+        if (asset.mimeType) entry.mimeType = asset.mimeType;
         if (asset.sourceLocale) entry.sourceLocale = asset.sourceLocale;
         if (Array.isArray(asset.localizedVariants) && asset.localizedVariants.length > 0) {
           entry.localizedVariants = asset.localizedVariants.map((variant) => {
@@ -172,14 +181,14 @@ export function convertExport(envelope, { outDir, baselineFile = "baseline.json"
         clientRef: ref,
         type: "section",
         ...(item.origin ? { origin: structuredClone(item.origin) } : {}),
-        payload: { title: structuredClone(section.title), bodyFiles, ...(assets.length > 0 ? { assets } : {}) },
+        payload: { title: structuredClone(section.title), ...(plainBody !== null ? { bodyMarkdown: plainBody } : { bodyFiles }), ...(assets.length > 0 ? { assets } : {}) },
       });
       elements.push({
         clientRef: ref,
         type: "section",
         title: textIn(section.title, primaryLanguage),
         status: "approved",
-        contentFile: bodyFiles[primaryLanguage] ?? Object.values(bodyFiles)[0] ?? "",
+        ...(plainBody !== null ? { content: plainBody } : { contentFile: bodyFiles[primaryLanguage] ?? Object.values(bodyFiles)[0] ?? "" }),
         mandatory: { examples: [], formulas: [], templates: [], tasks: [], assessmentCriteria: [], terms: [] },
         figures,
         deliberatelyRemoved: [],
@@ -235,8 +244,12 @@ export function convertExport(envelope, { outDir, baselineFile = "baseline.json"
   const state = { primaryLanguage, order, elements };
   const changes = {
     baseline: baselineFile,
-    note: "Every element is \"unchanged\" until the author asks for a change. Values: unchanged | changed | new | removed.",
+    note: "Every element is \"unchanged\" until the author asks for a change. Values: unchanged | changed | new | removed. `course` covers the course's own title, description and level.",
+    course: "unchanged",
     elements: Object.fromEntries(order.map((ref) => [ref, "unchanged"])),
+    // Which element of the export each ref came from — so a ref listed "removed" can be matched to
+    // the element that is gone, and nothing else can go missing unnoticed.
+    refs: Object.fromEntries(objects.filter((o) => o.type !== "course" && o.origin).map((o) => [o.clientRef, o.type === "section" ? { type: "SECTION", id: o.origin.sectionId } : { type: "MODULE", id: o.origin.moduleId }])),
   };
 
   if (problems.length > 0) return { ok: false, problems, pkg, state, changes, files };

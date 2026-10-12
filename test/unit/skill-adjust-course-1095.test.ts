@@ -13,6 +13,8 @@ import { produceCourse } from "../../skills/a2-authoring-api/scripts/produce-cou
 const tre = (nb: string, nn: string, en: string) => ({ nb, nn, "en-GB": en });
 // Et 1×1 png: et «bilde», ikke en figur, så ingen etikettkontroll kommer i veien.
 const PNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
+// Et annet 1×1 png (annen farge), så to «image.png» kan skilles på innhold.
+const PNG2 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg==";
 
 function eksport() {
   return {
@@ -42,7 +44,23 @@ function eksport() {
                 "A meeting needs a goal.\n\n![Agenda](asset:bilde-agenda)\n\nWrite the goal at the top.",
               ),
               audit: { publishedAt: "2026-10-01T10:00:00.000Z", publishedBy: null, publishedByEmail: null, sourceVersionNo: 3 },
-              assets: [{ sourceId: "bilde-agenda", filename: "agenda.png", mimeType: "image/png", sizeBytes: Buffer.from(PNG, "base64").length, contentBase64: PNG }],
+              assets: [{ sourceId: "bilde-agenda", filename: "Skjermbilde_2026-10-01.PNG", mimeType: "image/png", sizeBytes: Buffer.from(PNG, "base64").length, contentBase64: PNG }],
+            },
+          },
+          {
+            // Slik eldre innhold ser ut: én streng som brødtekst (#892), tittel bare på bokmål, og to
+            // innlimte skjermbilder som begge heter image.png.
+            type: "SECTION",
+            sortOrder: 2,
+            origin: { sectionId: "sec-gammel", versionNo: 1 },
+            section: {
+              title: { nb: "Gammel del" },
+              bodyMarkdown: "![Første](asset:img-1)\n\nTo bilder.\n\n![Andre](asset:img-2)",
+              audit: { publishedAt: null, publishedBy: null, publishedByEmail: null, sourceVersionNo: 1 },
+              assets: [
+                { sourceId: "img-1", filename: "image.png", mimeType: "image/png", sizeBytes: Buffer.from(PNG, "base64").length, contentBase64: PNG },
+                { sourceId: "img-2", filename: "image.png", mimeType: "image/png", sizeBytes: Buffer.from(PNG2, "base64").length, contentBase64: PNG2 },
+              ],
             },
           },
           {
@@ -128,25 +146,36 @@ describe("#1095 fase B — skillets justeringsflyt", () => {
     const work = path.join(dir, "rundtur");
     const result = convertExport(eksport(), { outDir: work });
     expect(result.ok, result.problems.join("; ")).toBe(true);
-    expect(result.state!.order).toEqual(["sec-01-innledning", "mod-02-test-moter"]);
+    expect(result.state!.order).toEqual(["sec-01-innledning", "mod-02-test-moter", "sec-03-gammel-del"]);
     expect(result.state!.elements.every((e) => e.status === "approved")).toBe(true);
-    expect(result.changes!.elements).toEqual({ "sec-01-innledning": "unchanged", "mod-02-test-moter": "unchanged" });
-    // Teksten ligger som filer per språk, bildet som fil.
+    expect(result.changes!.elements).toEqual({ "sec-01-innledning": "unchanged", "mod-02-test-moter": "unchanged", "sec-03-gammel-del": "unchanged" });
+    expect(result.changes!.course).toBe("unchanged");
+    expect((result.changes as { refs: Record<string, unknown> }).refs).toEqual({ "sec-01-innledning": { type: "SECTION", id: "sec-abc" }, "mod-02-test-moter": { type: "MODULE", id: "mod-abc" }, "sec-03-gammel-del": { type: "SECTION", id: "sec-gammel" } });
+    // Teksten ligger som filer per språk; bildene som filer med entydige navn, men plattformens filnavn beholdes i pakka.
     expect(readFileSync(path.join(work, "sections/sec-01-innledning.nn.md"), "utf8")).toContain("Eit møte treng eit mål.");
-    expect(readFileSync(path.join(work, "assets/sec-01-innledning/agenda.png")).length).toBe(Buffer.from(PNG, "base64").length);
+    expect(readFileSync(path.join(work, "assets/sec-01-innledning/01-skjermbilde-2026-10-01.png")).length).toBe(Buffer.from(PNG, "base64").length);
+    const pkgObjs = (result.pkg as { objects: Array<{ clientRef: string; payload: { assets?: Array<{ file: string; filename: string }>; bodyMarkdown?: unknown } }> }).objects;
+    expect(pkgObjs[0]!.payload.assets![0]).toMatchObject({ file: "assets/sec-01-innledning/01-skjermbilde-2026-10-01.png", filename: "Skjermbilde_2026-10-01.PNG", mimeType: "image/png" });
+    // To «image.png» får hver sin fil på disk, med hvert sitt innhold; og strengen forblir en streng.
+    expect(pkgObjs[2]!.payload.assets!.map((a) => a.file)).toEqual(["assets/sec-03-gammel-del/01-image.png", "assets/sec-03-gammel-del/02-image.png"]);
+    expect(readFileSync(path.join(work, "assets/sec-03-gammel-del/02-image.png")).equals(Buffer.from(PNG2, "base64"))).toBe(true);
+    expect(pkgObjs[2]!.payload.bodyMarkdown).toBe("![Første](asset:img-1)\n\nTo bilder.\n\n![Andre](asset:img-2)");
 
     const produced = await produser(work, "oppdatert");
     expect(produced.ok, produced.checks.filter((c) => c.status === "fail").map((c) => `${c.name}: ${c.details.join(" | ")}`).join("\n")).toBe(true);
-    expect(sjekk(produced, "changes").summary).toContain("2 unchanged");
+    expect(sjekk(produced, "changes").summary).toContain("3 unchanged");
     expect(produced.files[0]!.importAt).toContain("Oppdater dette kurset");
 
     const fil = JSON.parse(readFileSync(produced.files[0]!.file, "utf8"));
     expect(fil.course.course.origin).toEqual({ courseId: "course-abc" });
     const items = fil.course.course.items;
-    expect(items.map((i: { origin: unknown }) => i.origin)).toEqual([{ sectionId: "sec-abc", versionNo: 3 }, { moduleId: "mod-abc", versionNo: 2 }]);
-    const baseline = eksport().course.course.items;
+    expect(items.map((i: { origin: unknown }) => i.origin)).toEqual([{ sectionId: "sec-abc", versionNo: 3 }, { moduleId: "mod-abc", versionNo: 2 }, { sectionId: "sec-gammel", versionNo: 1 }]);
+    const baseline = [...eksport().course.course.items].sort((x, y) => x.sortOrder - y.sortOrder);
     expect(comparable(items[0].section)).toEqual(comparable(baseline[0]!.section));
     expect(comparable(items[1].module)).toEqual(comparable(baseline[1]!.module));
+    // Den gamle delen — delvis tittel, ren streng, to like filnavn — er også ordrett, og stoppet ikke språkkontrollen.
+    expect(comparable(items[2].section)).toEqual(comparable(baseline[2]!.section));
+    expect(sjekk(produced, "languages").status).toBe("ok");
     // Ingen publiseringshistorikk i fila: plattformen publiserer ingenting.
     expect(items[0].section.audit).toEqual({});
     expect(items[1].module.activeVersion.audit).toEqual({});
@@ -177,7 +206,7 @@ describe("#1095 fase B — skillets justeringsflyt", () => {
     writeFileSync(changesFil, JSON.stringify(changes), "utf8");
     const sann = await produser(work, "sann");
     expect(sann.ok, sann.checks.filter((c) => c.status === "fail").map((c) => `${c.name}: ${c.details.join(" | ")}`).join("\n")).toBe(true);
-    expect(sjekk(sann, "changes").summary).toContain("1 unchanged (word for word), 1 changed");
+    expect(sjekk(sann, "changes").summary).toContain("2 unchanged (word for word), 1 changed");
     const fil = JSON.parse(readFileSync(sann.files[0]!.file, "utf8"));
     expect(fil.course.course.items[0].section.bodyMarkdown.nb).toContain("med én setning");
     expect(fil.course.course.items[0].origin).toEqual({ sectionId: "sec-abc", versionNo: 3 });
@@ -191,7 +220,7 @@ describe("#1095 fase B — skillets justeringsflyt", () => {
     writeFileSync(path.join(work, "sections/sec-03-oppsummering.nb.md"), "Oppsummering av møtet.", "utf8");
     writeFileSync(path.join(work, "sections/sec-03-oppsummering.nn.md"), "Oppsummering av møtet.", "utf8");
     writeFileSync(path.join(work, "sections/sec-03-oppsummering.en-GB.md"), "Summary of the meeting.", "utf8");
-    pkg.objects.splice(2, 0, { clientRef: "sec-03-oppsummering", type: "section", payload: { title: tre("Oppsummering", "Oppsummering", "Summary"), bodyFiles: { nb: "sections/sec-03-oppsummering.nb.md", nn: "sections/sec-03-oppsummering.nn.md", "en-GB": "sections/sec-03-oppsummering.en-GB.md" } } });
+    pkg.objects.splice(3, 0, { clientRef: "sec-03-oppsummering", type: "section", payload: { title: tre("Oppsummering", "Oppsummering", "Summary"), bodyFiles: { nb: "sections/sec-03-oppsummering.nb.md", nn: "sections/sec-03-oppsummering.nn.md", "en-GB": "sections/sec-03-oppsummering.en-GB.md" } } });
     const course = pkg.objects.find((o: { type: string }) => o.type === "course");
     course.payload.items.push({ type: "SECTION", ref: "sec-03-oppsummering" });
     writeFileSync(pkgFil, JSON.stringify(pkg), "utf8");
@@ -209,7 +238,7 @@ describe("#1095 fase B — skillets justeringsflyt", () => {
     const ny = await produser(work, "ny");
     expect(ny.ok, ny.checks.filter((c) => c.status === "fail").map((c) => `${c.name}: ${c.details.join(" | ")}`).join("\n")).toBe(true);
     const fil = JSON.parse(readFileSync(ny.files[0]!.file, "utf8"));
-    expect(fil.course.course.items.map((i: { origin?: unknown }) => i.origin ?? null)).toEqual([{ sectionId: "sec-abc", versionNo: 3 }, { moduleId: "mod-abc", versionNo: 2 }, null]);
+    expect(fil.course.course.items.map((i: { origin?: unknown }) => i.origin ?? null)).toEqual([{ sectionId: "sec-abc", versionNo: 3 }, { moduleId: "mod-abc", versionNo: 2 }, { sectionId: "sec-gammel", versionNo: 1 }, null]);
 
     // Ta ut innledningen: ut av pakka, av rekkefølgen og av kurstilstanden (status removed), og listet som removed.
     pkg.objects = pkg.objects.filter((o: { clientRef: string }) => o.clientRef !== "sec-01-innledning");
@@ -223,11 +252,37 @@ describe("#1095 fase B — skillets justeringsflyt", () => {
     const uten = await produser(work, "uten");
     expect(uten.ok).toBe(false);
     expect(sjekk(uten, "changes").details.join(" ")).toContain("does not say \"removed\"");
+    // Feil element listet som removed (modulen står fortsatt i pakka): innledningen mangler likevel uten forklaring.
+    changes.elements["mod-02-test-moter"] = "removed";
+    writeFileSync(changesFil, JSON.stringify(changes), "utf8");
+    const feilRef = await produser(work, "feilref");
+    expect(feilRef.ok).toBe(false);
+    expect(sjekk(feilRef, "changes").details.join(" ")).toContain("still in the package");
+    expect(sjekk(feilRef, "changes").details.join(" ")).toContain('does not say "removed" for it');
+    changes.elements["mod-02-test-moter"] = "unchanged";
     changes.elements["sec-01-innledning"] = "removed";
     writeFileSync(changesFil, JSON.stringify(changes), "utf8");
     const fjernet = await produser(work, "fjernet");
     expect(fjernet.ok, fjernet.checks.filter((c) => c.status === "fail").map((c) => `${c.name}: ${c.details.join(" | ")}`).join("\n")).toBe(true);
     expect(sjekk(fjernet, "changes").summary).toContain("1 removed");
+  });
+
+  it("kursets egne felt har sin egen linje: endret tittel uten «course: changed» stopper", async () => {
+    const work = path.join(dir, "kursfelt");
+    expect(convertExport(eksport(), { outDir: work }).ok).toBe(true);
+    const pkgFil = path.join(work, "package.json");
+    const pkg = JSON.parse(readFileSync(pkgFil, "utf8"));
+    pkg.objects.find((o: { type: string }) => o.type === "course").payload.course.title = tre("Møtearbeid 2", "Møtearbeid 2", "Meeting work 2");
+    writeFileSync(pkgFil, JSON.stringify(pkg), "utf8");
+    const stille = await produser(work, "stille");
+    expect(stille.ok).toBe(false);
+    expect(sjekk(stille, "changes").details.join(" ")).toContain("course: listed as unchanged, but its title");
+    const changesFil = path.join(work, "changes.json");
+    const changes = JSON.parse(readFileSync(changesFil, "utf8"));
+    changes.course = "changed";
+    writeFileSync(changesFil, JSON.stringify(changes), "utf8");
+    const sagt = await produser(work, "sagt");
+    expect(sagt.ok, sagt.checks.filter((c) => c.status === "fail").map((c) => `${c.name}: ${c.details.join(" | ")}`).join("; ")).toBe(true);
   });
 
   it("et kurs med origin uten endringsliste produseres ikke — «uendret er uendret» må kjøres", async () => {

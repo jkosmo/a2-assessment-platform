@@ -51,9 +51,13 @@ such; they become changes only on a clear yes.
 
 Rules the list must respect:
 
-- The **title** of a section that is live, and of any module, is not changed by the import — the
-  title belongs to the element, not to its version. A new title is set in the admin UI; say so
-  rather than changing it in the file.
+- The **title** of a section that is live, and the **title, description and level** of any
+  module, are not changed by the import — they belong to the element, not to its version. They
+  are set in the admin UI; say so rather than changing them in the file. (The title of a section
+  that is still a draft does follow the file.)
+- The **course's own title, description and level** are written straight onto the course at
+  import, without a version to review. They have their own line in the change list, `course`,
+  and stay `unchanged` unless the author asks.
 - A **new module** in a course that is published is not placed in the course by the import: it
   lands as a draft under *Moduler*, and the author publishes it and places it. Say so.
 - A **removed** element is taken out of the course, not deleted; it stays in the library.
@@ -64,11 +68,12 @@ Rules the list must respect:
 When the author approves, write the decisions into `work/changes.json`:
 
 ```json
-{ "baseline": "baseline.json", "elements": { "sec-01-innledning": "unchanged", "sec-02-metode": "changed", "mod-03-test": "unchanged", "sec-04-ny-del": "new" } }
+{ "baseline": "baseline.json", "course": "unchanged", "elements": { "sec-01-innledning": "unchanged", "sec-02-metode": "changed", "mod-03-test": "unchanged", "sec-04-ny-del": "new" }, "refs": { … } }
 ```
 
 A removed element keeps its `clientRef` in the list, marked `removed`, and is taken out of the
-package and of the course's `items`.
+package and of the course's `items`. Leave `refs` as the script wrote it: it says which element of
+the export each ref was, so a removal is matched to the right element.
 
 ## Gate 3 — Each changed element
 
@@ -109,9 +114,11 @@ source does not support, is the language one throughout. Do not re-review unchan
    node scripts/produce-course.mjs work/package.json --out work/kurs-<navn>-oppdatert.json --state work/course-state.json --changes work/changes.json
    ```
 
-   The command runs every check of the make-a-course workflows and one more, **changes**: every
-   element listed `unchanged` must be word for word as in the export — text, title and pictures;
-   a `changed` one must differ; a `new` one carries no `origin`; a `removed` one is gone. A `FAIL`
+   The command runs the craft checks (figures, learner text, questions, languages) on the changed
+   and new elements only — the unchanged ones are the author's course as it stands — and one more,
+   **changes**: every element listed `unchanged` must be word for word as in the export — text,
+   title and pictures — and so must the course's own fields when `course` is `unchanged`; a
+   `changed` one must differ; a `new` one carries no `origin`; a `removed` one is gone. A `FAIL`
    there means you touched something nobody asked for, or forgot a change: fix it, do not relist it.
 3. Fix every `FAIL` and run again. Deliver only the file named after `DELIVER`.
 

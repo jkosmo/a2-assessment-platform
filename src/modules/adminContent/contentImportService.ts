@@ -780,7 +780,9 @@ export async function importCourseFromEnvelope(
         let same = false;
         if (entry.type === "SECTION" && fileItem.type === "SECTION") {
           const newest = sectionExportPayloadSchema.parse(await queries.buildSectionExportPayload(entry.targetId, undefined, newestVersionId));
-          const brukt = (p: SectionExportPayload) => ({ bodyMarkdown: p.bodyMarkdown, assets: p.assets ?? [] });
+          // Tittelen teller bare når oppdateringen faktisk ville brukt den: på en seksjon uten
+          // levende versjon (keepLiveTitle er usann) følger tittelen fila (#931).
+          const brukt = (p: SectionExportPayload) => ({ bodyMarkdown: p.bodyMarkdown, assets: p.assets ?? [], ...(keepLiveTitle ? {} : { title: p.title }) });
           same = samePayload(brukt(newest), brukt(fileItem.section));
         } else if (entry.type === "MODULE" && fileItem.type === "MODULE") {
           const newest = (await queries.buildModuleExportEnvelope(entry.targetId, { userId: null, email: null }, newestVersionId)).module;

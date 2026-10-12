@@ -29,6 +29,13 @@ eksportfil, og endrer bare det forfatteren ber om.
   «Oppdater dette kurset».
 - Skillets skjemakontroll godtar og sjekker `origin`. Språkkontrollen regner `null` (slik
   plattformen eksporterer tomme valgfrie felt) som fraværende felt, ikke som manglende språk.
+- QA-porten (runde 1 på fase B): bildenes `filename` fra plattformen beholdes i pakka (på disk får
+  de entydige navn, så to innlimte `image.png` ikke overskriver hverandre); en brødtekst som er én
+  streng forblir én streng (#892); kvalitetskontrollene (figurer, lesertekst, spørsmål, språk)
+  kjører bare på endrede og nye elementer når det er en endringsliste; kursets egne felt har sin
+  egen linje (`course`) i lista, siden plattformen skriver dem rett på det levende kurset; «fjernet»
+  matches mot riktig element via `refs`. Plattformen: tittelen teller som endring på en seksjon
+  uten levende versjon (der følger tittelen fila).
 - Referansene oppdatert: package-schema (`origin`), export-validation, check-and-produce (changes
   i rapporttabellen, leveransen), content-preservation (tilstand fra eksport; fjernet element).
 - **Plattformen (samme versjon):** et element forfatteren eier som fila ikke endret (brødtekst og

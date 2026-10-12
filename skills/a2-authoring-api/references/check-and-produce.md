@@ -82,7 +82,7 @@ DELIVER work/kurs-motereferat.json  —  the author imports it at Innholdsforval
 | **languages** | a language is missing, a text was copied instead of translated, the right answer differs between languages, a formula or address was lost | [localization.md](localization.md) |
 | **approved text** | something the author approved is gone | [content-preservation.md](content-preservation.md) |
 | **slides** | a slide did not get what the slide list says; a picture has no kind, a prompt screenshot was kept as a picture, a click screenshot was left out without a reason; a slide with text became only a picture | [from-presentation.md](../workflows/from-presentation.md) |
-| **changes** | (adjusting a course) an element listed `unchanged` differs from the export — text, title or a picture; one listed `changed` is word for word the same; a `new` element carries an `origin`; a removed element is still in the package, or an element of the export is gone without being listed `removed`; an element is not in the list at all | [adjust-course.md](../workflows/adjust-course.md) |
+| **changes** | (adjusting a course) an element listed `unchanged` differs from the export — text, title or a picture — or the course's own title, description or level differs while `course` is `unchanged`; one listed `changed` is word for word the same; a `new` element carries an `origin`; a removed element is still in the package, or an element of the export is gone without being listed `removed`; an element is not in the list at all | [adjust-course.md](../workflows/adjust-course.md) |
 | **import file** | the written file did not pass when read back | the line under it names the field |
 
 A line that starts with `--` was **not run**. Without `--state`, nobody has checked that the

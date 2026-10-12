@@ -379,6 +379,26 @@ describe("#1095 oppdatere et publisert kurs fra en eksportfil", () => {
     await prisma.class.delete({ where: { id: klasse.id } });
   });
 
+  it("en seksjon uten levende versjon: bare tittelen endret i fila er en endring — ny versjon og ny tittel", async () => {
+    // Et upublisert kurs med en utkastseksjon (ingen aktiv versjon): tittelen følger fila (#931).
+    const utkast = await request(app).post("/api/admin/content/sections").set(admin).send({ title: tre(`Utkastdel ${stempel}`), bodyMarkdown: tre("Utkasttekst."), draft: true });
+    expect(utkast.status).toBe(201);
+    const utkastId = utkast.body.section.id as string;
+    expect((await prisma.courseSection.findUniqueOrThrow({ where: { id: utkastId }, select: { activeVersionId: true } })).activeVersionId).toBeNull();
+    const kurs = await request(app).post("/api/admin/content/courses").set(admin).send({ title: tre(`Utkastkurs ${stempel}`) });
+    const kursId = kurs.body.course.id as string;
+    expect((await request(app).put(`/api/admin/content/courses/${kursId}/items`).set(admin).send({ items: [{ type: "SECTION", sectionId: utkastId }, { type: "MODULE", moduleId: m1 }] })).status).toBe(204);
+    const ut = await request(app).get(`/api/admin/content/courses/${kursId}/export-package`).set(admin);
+    const fil = JSON.parse(JSON.stringify(ut.body.envelope ?? ut.body));
+    fil.course.course.items[0].section.title = tre(`Utkastdel ${stempel} (ny tittel)`);
+    const svar = await request(app).post("/api/admin/content/courses/import").set(admin).send({ payload: fil, mode: "updateExisting", targetId: kursId });
+    expect(svar.status, JSON.stringify(svar.body).slice(0, 400)).toBe(201);
+    expect(svar.body.summary).toMatchObject({ updatedSections: 1, unchangedIds: [m1] });
+    const rad = await prisma.courseSection.findUniqueOrThrow({ where: { id: utkastId }, select: { title: true, versions: { select: { versionNo: true } } } });
+    expect(JSON.parse(rad.title).nb).toBe(`Utkastdel ${stempel} (ny tittel)`);
+    expect(rad.versions).toHaveLength(2);
+  });
+
   it("en fil fra et annet kurs avvises, og uten targetId avvises forespørselen", async () => {
     const annet = await request(app).post("/api/admin/content/courses").set(admin).send({ title: tre(`Annet kurs ${stempel}`) });
     const fil = JSON.parse(JSON.stringify(eksport));
