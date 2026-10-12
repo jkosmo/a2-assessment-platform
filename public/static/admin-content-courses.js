@@ -721,10 +721,10 @@ async function handleImportCoursePackageFile(event) {
       const s = updated.summary ?? {};
       // Oppsummeringen skal leses på kurssiden, ikke forsvinne med denne siden.
       const unplaced = Array.isArray(s.unplacedModuleIds) ? s.unplacedModuleIds.length : 0;
-      const skipped = Array.isArray(s.skippedUnownedIds) ? s.skippedUnownedIds.length : 0;
+      const replaced = Array.isArray(s.replacedUnownedIds) ? s.replacedUnownedIds.length : 0;
       const details = [
         unplaced > 0 ? tf("adminContent.courses.updatedUnplaced", { count: unplaced }) : "",
-        skipped > 0 ? tf("adminContent.courses.updatedSkippedUnowned", { count: skipped }) : "",
+        replaced > 0 ? tf("adminContent.courses.updatedReplacedUnowned", { count: replaced }) : "",
       ].filter(Boolean);
       queueToast(
         tf("adminContent.courses.updated", {

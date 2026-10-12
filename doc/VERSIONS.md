@@ -2,6 +2,37 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.88.1 - 2026-10-12
+
+### Justere et publisert kurs (#1095): elementer forfatteren ikke eier byttes ut, ikke hoppet over
+
+Produkteier 2026-10-12, på spørsmålet fra 2.88.0: «Hvis du er eier av kurset så vil modul/seksjon
+byttes ut med deg som ny eier, gammel modul eller seksjon vil bli bevart i arkivert versjon.» Og
+fullføring av byttede moduler kan nullstilles (valg 1 av to).
+
+- **Byttet:** et element i fila som forfatteren ikke eier (#903), får en egen kopi med forfatteren
+  som eier. Kopiens **v1 er det deltakerne ser i dag** (den levende versjonen, publisert — kurset
+  endrer seg ikke før forfatteren publiserer), **v2 er fila**, lagt klar. Kopien tar elementets
+  plass i rekkefølgen. Det gamle tas ut av kurset og **arkiveres når ingen andre kurs bruker det**
+  (avpublisert + arkivert, som «Arkiver»); brukes det et annet sted, blir det liggende hos eieren.
+  «Lest» kopieres til den nye seksjonen for dette kurset. Innleveringer og vurderinger hører til
+  den gamle modulen — deltakere som hadde fullført den, står uten fullføring på kopien (godtatt).
+  Har det gamle elementet ingen levende versjon, får kopien bare fila som utkast.
+- Passerer den levende versjonen ikke publiseringsporten (et språk mangler), avvises importen
+  (400 `replacement_not_publishable`) uten at noe skrives — ellers ville kurset mistet elementet.
+- `summary.replacedUnownedIds: [{ type, oldId, newId, oldArchived }]` erstatter
+  `skippedUnownedIds`; oppsummeringen i Innholdsforvaltning sier det. Revisjonssporet på kopien
+  bærer `replacedUnowned` (det den erstattet), `liveCopied` og `readsCopied`; det gamle får
+  `section_archived` / `module_archived` når det arkiveres.
+- `buildSectionExportPayload` kan ta en bestemt versjon (kopien bygges fra den levende, ikke nyeste).
+
+**Slik er det målt:** `test/m2-course-update-import-1095.test.ts` (fagansvarlig eier kurset og én
+seksjon; administratorens seksjon, en delt seksjon brukt i et annet kurs, og modulen byttes ut:
+v1/v2 på kopiene, eierrad, «lest» fulgt med, deltakeren ser den levende teksten på kopien, det
+gamle arkivert bare når ubrukt, rekkefølgen, revisjonssporet; administrator bytter ingenting).
+Sju mutasjoner (kopiens v1 fra fila, «lest» ikke kopiert, ikke arkivert, arkivert selv om i bruk,
+modulkopi upublisert, kopi uten eier, oppsummeringen taus), alle fanget.
+
 ## 2.88.0 - 2026-10-12
 
 ### Justere et publisert kurs, fase A: eksport med identiteter og import som oppdaterer (#1095)
@@ -30,9 +61,8 @@ elementer tas ut, ikke slettes.
   `origin_stale`; `versionNo` er versjonen fila bærer — den nyeste, også et utkast. Kurseksporten
   bærer nå nyeste modulversjon som seksjonene alt gjorde, så runde to av en justering ikke avvises;
   importeres en fil med et modulutkast som nytt kurs, lander modulen upublisert og kurset holdes
-  tilbake som utkast, meldt i oppsummeringen). En seksjon som hoppes over, får ikke bildene sine
-  lastet opp. Et element forfatteren **ikke
-  eier**, hoppes over og står som det er (`summary.skippedUnownedIds`); hele fila stoppes ikke.
+  tilbake som utkast, meldt i oppsummeringen). Et element forfatteren **ikke
+  eier**, ble i 2.88.0 hoppet over (`summary.skippedUnownedIds`) — fra 2.88.1 byttes det ut, se over.
   Svaret bærer `summary`; revisjonssporet har kursets `course_imported` og ett `section_imported` /
   `module_imported` per element. Kjent begrensning: elementer lagt inn i kurset etter eksporten tas
   ut (telles, men pekes ikke ut før fase C).

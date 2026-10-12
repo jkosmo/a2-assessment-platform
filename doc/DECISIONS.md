@@ -1123,3 +1123,17 @@ Mitt valg som følger av dette: nye elementer i fila opprettes som utkast og leg
 med en gang; deltakeren ser dem først når de publiseres, fordi et element uten aktiv versjon ikke er
 tilgjengelig. Alternativet — holde nye elementer utenfor kurset til de er publisert — ville gitt
 forfatteren to steder å huske (publiser, og legg inn), mot ett.
+
+## Justere et publisert kurs (#1095): elementer forfatteren ikke eier byttes ut (2026-10-12, kveld)
+
+Produkteier, på to spørsmål etter QA-rundene på fase A:
+
+1. Et element i fila som forfatteren ikke eier: «Hvis du er eier av kurset så vil modul/seksjon
+   byttes ut med deg som ny eier, gammel modul eller seksjon vil bli bevart i arkivert versjon.»
+   På oppfølgingen om framdrift (innleveringer kan ikke flyttes til en ny modul) valgte han å bytte
+   ut både seksjoner og moduler og godta at fullføring av byttede moduler nullstilles — framfor å
+   hoppe over moduler. Kopiens v1 er det deltakerne ser i dag (publisert), v2 er fila (lagt klar);
+   det gamle arkiveres bare når ingen andre kurs bruker det.
+2. Elementer lagt inn i kurset etter eksporten tas ut uten å pekes ut, og kursets tittel,
+   beskrivelse og rekkefølge trer i kraft straks: «Enig.» Forskjellsvisning før import er fase C.
+

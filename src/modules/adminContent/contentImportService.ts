@@ -61,8 +61,11 @@ export interface CourseUpdateSummary {
   removedModules: number;
   /** #1095: nye moduler som ble opprettet som utkast men IKKE lagt inn, fordi kurset er publisert. */
   unplacedModuleIds: string[];
-  /** #1095: elementer fila ville oppdatert som forfatteren ikke eier — de står som de er. */
-  skippedUnownedIds: string[];
+  /**
+   * #1095 (produkteier 2026-10-12): elementer fila oppdaterte som forfatteren ikke eide, er BYTTET UT
+   * med forfatterens egne kopier. `oldArchived`: det gamle ble arkivert (ingen andre kurs brukte det).
+   */
+  replacedUnownedIds: Array<{ type: "SECTION" | "MODULE"; oldId: string; newId: string; oldArchived: boolean }>;
 }
 
 // #749 (Layer A): the course-import route carries inlined section assets (base64), so the JSON body
@@ -606,8 +609,13 @@ export async function importCourseFromEnvelope(
   // #1095: en oppdatering av kurset fila hører til. Planen regnes ut FØR noe skrives, mot kursets
   // nåværende elementer: hva blir ny versjon, hva opprettes, hva tas ut — og hva som er feil.
   let updatePlan: CourseUpdatePlan | null = null;
-  const updateTargets = new Map<number, { targetId: string; keepLiveTitle: boolean; skipped: boolean }>();
-  const skippedUnownedIds: string[] = [];
+  // `replace`: elementet er ikke forfatterens (#903) — det byttes ut med en egen kopi: `liveSection` /
+  // `liveModule` er det deltakerne ser i dag (kopiens v1, publisert), fila blir v2 lagt klar.
+  type Replacement =
+    | { type: "SECTION"; newId: string; liveSection: SectionExportPayload | null }
+    | { type: "MODULE"; liveModule: ModuleExportPayload | null };
+  const updateTargets = new Map<number, { targetId: string; keepLiveTitle: boolean; replace?: Replacement }>();
+  const stagedCopies = new Map<number, StagedImportSection>();
   // Er kurset publisert, kan en NY modul ikke legges inn som utkast: deltakeren må da fullføre
   // en modul som ikke kan åpnes (I1). Den opprettes, men legges ikke inn i kurset før forfatteren
   // publiserer den og legger den inn selv — slik kursbyggeren krever (#440).
@@ -636,10 +644,10 @@ export async function importCourseFromEnvelope(
       // Eierskap per element: kursets eier kan ha satt inn en annen forfatters modul eller seksjon
       // (#903). Den får ikke ny versjon herfra uten at forfatteren eier den (eller er administrator)
       // — samme vakt som `POST /sections/import` og `POST /modules/import` med `replaceExisting`.
-      // Men fila er hele kurset, og det meste i den er forfatterens eget: et element hen ikke eier,
-      // HOPPES OVER (blir stående som det er, i kurset) og meldes i `summary.skippedUnownedIds`,
-      // i stedet for at hele oppdateringen stopper. Å ta elementet ut av fila ville tatt det ut av
-      // kurset.
+      // Produkteier 2026-10-12: et element forfatteren ikke eier, BYTTES UT med en egen kopi.
+      // Kopiens v1 er det deltakerne ser i dag (publisert — kurset endrer seg ikke før forfatteren
+      // publiserer), v2 er fila, lagt klar. Det gamle tas ut av kurset og arkiveres når ingen andre
+      // kurs bruker det. «Lest» følger med for seksjoner; innleveringer hører til den gamle modulen.
       try {
         await assertContentOwnership({
           contentType: entry.type,
@@ -649,8 +657,16 @@ export async function importCourseFromEnvelope(
         });
       } catch (error) {
         if (!(error instanceof ForbiddenError)) throw error;
-        skippedUnownedIds.push(entry.targetId);
-        updateTargets.set(entry.index, { targetId: entry.targetId, keepLiveTitle: false, skipped: true });
+        const queries = await import("./adminContentQueries.js");
+        if (entry.type === "SECTION") {
+          const old = await prisma.courseSection.findUnique({ where: { id: entry.targetId }, select: { activeVersionId: true } });
+          const liveSection = old?.activeVersionId ? await queries.buildSectionExportPayload(entry.targetId, undefined, old.activeVersionId) : null;
+          updateTargets.set(entry.index, { targetId: entry.targetId, keepLiveTitle: false, replace: { type: "SECTION", newId: randomUUID(), liveSection } });
+        } else {
+          const old = await prisma.module.findUnique({ where: { id: entry.targetId }, select: { activeVersionId: true } });
+          const liveModule = old?.activeVersionId ? (await queries.buildModuleExportEnvelope(entry.targetId, { userId: null, email: null })).module ?? null : null;
+          updateTargets.set(entry.index, { targetId: entry.targetId, keepLiveTitle: false, replace: { type: "MODULE", liveModule } });
+        }
         continue;
       }
       let keepLiveTitle = false;
@@ -673,7 +689,7 @@ export async function importCourseFromEnvelope(
           currentVersionNo,
         });
       }
-      updateTargets.set(entry.index, { targetId: entry.targetId, keepLiveTitle, skipped: false });
+      updateTargets.set(entry.index, { targetId: entry.targetId, keepLiveTitle });
     }
   }
 
@@ -685,12 +701,23 @@ export async function importCourseFromEnvelope(
   if (orderedItems) {
     for (let i = 0; i < orderedItems.length; i += 1) {
       const entry = orderedItems[i];
-      // #1095: en seksjon forfatteren ikke eier, hoppes over — da skal heller ikke bildene dens
-      // lastes opp (de ville blitt foreldreløse), og et ugyldig bilde i den skal ikke stoppe importen.
-      if (updateTargets.get(i)?.skipped) continue;
       if (entry.type === "SECTION") {
+        const target = updateTargets.get(i);
+        if (target?.replace?.type === "SECTION") {
+          // #1095: byttes seksjonen ut, får kopien sin egen id; den levende teksten (med bildene)
+          // staged som v1, fila som v2 — begge under den nye id-en.
+          if (target.replace.liveSection) {
+            const copy = await stageSectionForImport(target.replace.liveSection, target.replace.newId);
+            stagedCopies.set(i, copy);
+            stagedBlobPaths.push(...copy.blobPaths);
+          }
+          const staged = await stageSectionForImport(entry.section, target.replace.newId);
+          stagedSections.set(i, staged);
+          stagedBlobPaths.push(...staged.blobPaths);
+          continue;
+        }
         // #1095: en seksjon som finnes, får bildene sine under sin egen id (#916).
-        const staged = await stageSectionForImport(entry.section, updateTargets.get(i)?.targetId);
+        const staged = await stageSectionForImport(entry.section, target?.targetId);
         stagedSections.set(i, staged);
         stagedBlobPaths.push(...staged.blobPaths);
       }
@@ -756,7 +783,7 @@ export async function importCourseFromEnvelope(
         // på modulene), er utkast fordi kilden var det — ikke «holdt tilbake» (#957 skiller de to).
         const courseWantsPublish = Boolean(payload.course.audit?.publishedAt);
 
-        const summary: CourseUpdateSummary = { updatedSections: 0, updatedModules: 0, createdSections: 0, createdModules: 0, removedSections: 0, removedModules: 0, unplacedModuleIds: [], skippedUnownedIds };
+        const summary: CourseUpdateSummary = { updatedSections: 0, updatedModules: 0, createdSections: 0, createdModules: 0, removedSections: 0, removedModules: 0, unplacedModuleIds: [], replacedUnownedIds: [] };
         if (orderedItems && updatePlan) {
           // #1095: oppdatering. Ny versjon på det fila kjenner igjen, utkast av det nye, og den nye
           // rekkefølgen. Ingenting publiseres her. Hvert element får sitt eget revisjonsspor, som når
@@ -771,10 +798,61 @@ export async function importCourseFromEnvelope(
           for (let i = 0; i < orderedItems.length; i += 1) {
             const entry = orderedItems[i];
             const target = updateTargets.get(i);
-            if (target?.skipped) {
-              // Ikke forfatterens: står som det er, på sin plass i rekkefølgen.
-              courseItemInputs.push(entry.type === "SECTION" ? { type: "SECTION", sectionId: target.targetId } : { type: "MODULE", moduleId: target.targetId });
-              if (entry.type === "SECTION") sectionCount += 1;
+            if (target?.replace?.type === "SECTION" && entry.type === "SECTION") {
+              // Ikke forfatterens: byttes ut med en egen kopi (se planen over).
+              const staged = stagedSections.get(i);
+              if (!staged) throw new Error("Internal: section was not staged before the import transaction.");
+              const copy = stagedCopies.get(i);
+              const newId = target.replace.newId;
+              if (copy) {
+                const persisted = await persistStagedSection(tx, copy, options.actorId, { draft: false });
+                if (persisted.heldBackByTranslationGate) {
+                  throw new DomainRuleError("replacement_not_publishable", `The live version of section ${target.targetId} cannot be republished as your copy (publish gate).`, { type: "SECTION", id: target.targetId });
+                }
+                await appendInactiveSectionVersion(tx, staged, newId, true);
+              } else {
+                await persistStagedSection(tx, staged, options.actorId, { draft: true });
+              }
+              // «Lest» følger med til kopien, i dette kurset.
+              const reads = await tx.courseSectionRead.findMany({ where: { courseId, sectionId: target.targetId }, select: { userId: true, readAt: true } });
+              if (reads.length > 0) {
+                await tx.courseSectionRead.createMany({ data: reads.map((r) => ({ userId: r.userId, courseId, sectionId: newId, readAt: r.readAt })), skipDuplicates: true });
+              }
+              courseItemInputs.push({ type: "SECTION", sectionId: newId });
+              sectionCount += 1;
+              summary.replacedUnownedIds.push({ type: "SECTION", oldId: target.targetId, newId, oldArchived: false });
+              await elementAudit(auditEntityTypes.courseSection, newId, auditActions.adminContent.sectionImported, {
+                sectionId: newId,
+                created: true,
+                replacedUnowned: target.targetId,
+                liveCopied: Boolean(copy),
+                readsCopied: reads.length,
+                assetCount: staged.stagedAssets.length,
+              });
+              continue;
+            }
+            if (target?.replace?.type === "MODULE" && entry.type === "MODULE") {
+              const live = target.replace.liveModule;
+              let newModuleId: string;
+              if (live) {
+                const copy = await importModulePayload(live, { actorId: options.actorId, mode: "createNew", autoPublish: true }, tx);
+                if (!copy.published) {
+                  throw new DomainRuleError("replacement_not_publishable", `The live version of module ${target.targetId} cannot be republished as your copy (publish gate).`, { type: "MODULE", id: target.targetId });
+                }
+                const next = await importModulePayload(entry.module, { actorId: options.actorId, mode: "replaceExisting", targetModuleId: copy.moduleId, autoPublish: false }, tx);
+                newModuleId = next.moduleId;
+              } else {
+                newModuleId = (await importModulePayload(entry.module, { actorId: options.actorId, mode: "createNew", autoPublish: false }, tx)).moduleId;
+              }
+              courseItemInputs.push({ type: "MODULE", moduleId: newModuleId });
+              importedModuleIds.push(newModuleId);
+              summary.replacedUnownedIds.push({ type: "MODULE", oldId: target.targetId, newId: newModuleId, oldArchived: false });
+              await elementAudit(auditEntityTypes.module, newModuleId, auditActions.adminContent.moduleImported, {
+                moduleId: newModuleId,
+                created: true,
+                replacedUnowned: target.targetId,
+                liveCopied: Boolean(live),
+              });
               continue;
             }
             if (entry.type === "SECTION") {
@@ -829,6 +907,24 @@ export async function importCourseFromEnvelope(
           summary.removedSections = updatePlan.removed.sectionIds.length;
           summary.removedModules = updatePlan.removed.moduleIds.length;
           await setCourseItems(courseId, courseItemInputs, undefined, tx);
+          // Det som ble byttet ut, er nå ute av dette kurset. Bruker ingen andre kurs det, arkiveres
+          // det (som «Arkiver» i biblioteket: avpublisert + arkivert, I3) — det er bevart, ikke slettet.
+          // Brukes det et annet sted, blir det liggende hos eieren sin.
+          const now = new Date();
+          for (const replaced of summary.replacedUnownedIds) {
+            if (replaced.type === "SECTION") {
+              const elsewhere = await tx.courseItem.count({ where: { sectionId: replaced.oldId } });
+              if (elsewhere > 0) continue;
+              await tx.courseSection.update({ where: { id: replaced.oldId }, data: { archivedAt: now, activeVersionId: null } });
+              await recordAuditEvent({ entityType: auditEntityTypes.courseSection, entityId: replaced.oldId, action: auditActions.section.archived, actorId: options.actorId, metadata: { sectionId: replaced.oldId } }, tx);
+            } else {
+              const elsewhere = await tx.courseItem.count({ where: { moduleId: replaced.oldId } });
+              if (elsewhere > 0) continue;
+              await createAdminContentRepository(tx).archiveModule(replaced.oldId, now);
+              await recordAuditEvent({ entityType: auditEntityTypes.module, entityId: replaced.oldId, action: auditActions.adminContent.moduleArchived, actorId: options.actorId, metadata: { moduleId: replaced.oldId } }, tx);
+            }
+            replaced.oldArchived = true;
+          }
         } else if (orderedItems) {
           const courseItemInputs: CourseItemInput[] = [];
           for (let i = 0; i < orderedItems.length; i += 1) {

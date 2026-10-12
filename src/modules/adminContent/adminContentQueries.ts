@@ -325,9 +325,12 @@ export async function buildCourseExportEnvelope(
 // figures survive the round-trip. The markdown's `asset:<sourceId>` refs are left unchanged;
 // import remaps them to the newly created asset ids. `assetBudget` accumulates decoded asset bytes
 // across the whole envelope; the envelope-wide cap is enforced here so a figure is never dropped.
-async function buildSectionExportPayload(
+export async function buildSectionExportPayload(
   sectionId: string,
   assetBudget?: { total: number },
+  // #1095: hvilken versjon pakken skal bære. Byttet av et element forfatteren ikke eier, kopierer
+  // den LEVENDE versjonen (det deltakerne ser) som kopiens v1 — ikke den nyeste.
+  versionId?: string,
 ): Promise<import("./adminContentSchemas.js").SectionExportPayload> {
   const { getSection } = await import("../course/sectionCommands.js");
   const { loadSectionAssetsForExport, MAX_EXPORT_ASSET_TOTAL_BYTES } = await import("../course/assetCommands.js");
@@ -342,7 +345,9 @@ async function buildSectionExportPayload(
   // #896 S6 ga moduler. Live seksjon på v1, forfatter redigerer, gaten holder v2 tilbake: eksporten
   // ga v1, og en pakke fra «det jeg nettopp skrev» inneholdt det gamle. `versions` er sortert nyeste
   // først; den aktive er reserve for en seksjon uten versjoner i lista.
-  const sourceVersion = section.versions[0] ?? section.activeVersion ?? null;
+  const sourceVersion = versionId
+    ? (section.versions.find((v) => v.id === versionId) ?? (section.activeVersion?.id === versionId ? section.activeVersion : null))
+    : (section.versions[0] ?? section.activeVersion ?? null);
   if (!sourceVersion) {
     throw new Error("Section has no versions to export.");
   }

@@ -90,13 +90,15 @@ publiseringstilstand, klassetildeling, påmeldinger, diskusjoner og deltakernes 
 Oversettelsesporten gjelder per element som før (et element som mangler et språk, kan ikke
 publiseres); kurset avpubliseres IKKE av en oppdatering — ingenting i den rører publiseringen.
 
-**Eierskap per element.** Kursets eier kan ha satt inn en annen forfatters modul eller seksjon
-(#903). En oppdatering skriver ny versjon bare på elementer forfatteren eier (eller er
-administrator for) — samme vakt som seksjons- og modulimporten med `replaceExisting`. Et element
-hen ikke eier, **hoppes over**: det står som det er, på sin plass i kurset, og meldes i
-`summary.skippedUnownedIds` og i oppsummeringen. Hele fila stoppes ikke, og forfatteren trenger
-ikke ta elementet ut av fila (det ville tatt det ut av kurset). Eieren eller en administrator
-oppdaterer det elementet. *Produkteier bekrefter dette valget; alternativet er å avvise hele fila.*
+**Eierskap per element — avgjort 2026-10-12.** Kursets eier kan ha satt inn en annen forfatters
+modul eller seksjon (#903). En oppdatering skriver ny versjon bare på elementer forfatteren eier
+(eller er administrator for). Et element hen ikke eier, **byttes ut** (produkteier: «modul/seksjon
+byttes ut med deg som ny eier, gammel modul eller seksjon vil bli bevart i arkivert versjon»): en
+kopi med forfatteren som eier tar plassen, med v1 = det deltakerne ser i dag (publisert) og v2 =
+fila (lagt klar). Det gamle tas ut av kurset og arkiveres når ingen andre kurs bruker det. «Lest»
+følger med til kopien; innleveringer blir på den gamle modulen, så fullføring av byttede moduler
+nullstilles — produkteier valgte det framfor å hoppe over moduler. Meldes i
+`summary.replacedUnownedIds`. (2.88.0 hoppet elementet over; 2.88.1 bytter.)
 
 **Fila er «kurset slik det står».** Kurseksporten bærer nyeste versjon av hvert element, også
 upubliserte utkast (seksjoner gjorde det alt, #916; moduler fra 2.88.0). Importeres en slik fil som

@@ -154,8 +154,11 @@ the file recognises by `origin`, drafts for new items, unlisted items taken out 
 nothing published; a new MODULE is not placed in a published course — `summary.unplacedModuleIds`).
 The export (`adminContentQueries.ts`) writes `origin` (ids + highest `versionNo`) on the course and
 on every item (`versionNo` = the version the file carries); the plan is `courseUpdatePlan.ts`
-(pure); the service rejects a stale file (`origin_stale`) and skips items the author does not own
-(`assertContentOwnership`, admin bypass; `summary.skippedUnownedIds`). The
+(pure); the service rejects a stale file (`origin_stale`) and REPLACES items the author does not
+own with the author's own copies — v1 = published copy of the live version, v2 = the file, old item
+out of the course and archived when unused elsewhere (`assertContentOwnership`, admin bypass;
+`summary.replacedUnownedIds`; `buildSectionExportPayload(id, budget, versionId)` builds the live
+copy). The
 admin dialog `#courseImportChoiceDialog` (`admin-content-courses.js`, `askImportChoice`, texts via
 `data-i18n`, translated by `translateStaticText` at init and on language switch) offers update vs
 new when the file's course exists;
