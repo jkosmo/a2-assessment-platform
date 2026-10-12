@@ -227,8 +227,9 @@ export async function getModuleContentBundle(moduleId: string) {
 // (which inlines each module's payload).
 async function buildModuleExportPayload(
   moduleId: string,
+  moduleVersionId?: string,
 ): Promise<import("./adminContentSchemas.js").ModuleExportPayload> {
-  const envelope = await buildModuleExportEnvelope(moduleId, { userId: null, email: null });
+  const envelope = await buildModuleExportEnvelope(moduleId, { userId: null, email: null }, moduleVersionId);
   if (!envelope.module) {
     throw new Error("Internal: module envelope did not include module payload.");
   }
@@ -276,7 +277,13 @@ export async function buildCourseExportEnvelope(
         }
         const moduleId = item.moduleId ?? item.module?.id;
         if (!moduleId) throw new Error("Course item is missing its module reference.");
-        const modulePayload = await buildModuleExportPayload(moduleId);
+        // Kurseksporten bærer modulens NYESTE versjon, som seksjonseksporten alt gjør (#916): fila er
+        // «kurset slik det står», også det som ligger klart. Ellers ble runde to av en justering en
+        // blindvei — oppdateringen la utkast, neste eksport bar den publiserte teksten, og importen
+        // avviste fila som utdatert til alt var publisert. Et utkast reiser som utkast: importeres
+        // fila som nytt kurs et annet sted, lander modulen upublisert og kurset holdes tilbake.
+        const newestModuleVersion = await prisma.moduleVersion.findFirst({ where: { moduleId }, orderBy: { versionNo: "desc" }, select: { id: true } });
+        const modulePayload = await buildModuleExportPayload(moduleId, newestModuleVersion?.id);
         const moduleVersionNo = modulePayload.activeVersion?.audit?.sourceVersionNo ?? null;
         return { type: "MODULE" as const, sortOrder: item.sortOrder, origin: { moduleId, ...(moduleVersionNo != null ? { versionNo: moduleVersionNo } : {}) }, module: modulePayload };
       }),
@@ -404,8 +411,8 @@ export async function buildModuleExportEnvelope(
   moduleId: string,
   exportedBy: { userId?: string | null; email?: string | null },
   // #896 S6: which version to package. Default (undefined) keeps the historical rule — the live
-  // version, falling back to the latest — which is what the module list and course export want:
-  // a package of what participants actually get.
+  // version, falling back to the latest — which is what the module list wants: a package of what
+  // participants actually get. (#1095: the COURSE export passes the newest version, like sections.)
   //
   // The module WORKSPACE passes the version it is displaying. An author standing in Rediger
   // looking at an unpublished v2 and clicking "Export" got a file containing the published v1,

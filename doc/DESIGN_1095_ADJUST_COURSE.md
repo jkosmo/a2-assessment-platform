@@ -38,9 +38,10 @@ Eksportfila får en valgfri blokk `origin` på kurset og på hvert element:
 { "course": { "course": { "origin": { "courseId": "…", "exportedAt": "…", "platformVersion": "2.88.0" }, "items": [
   { "type": "SECTION", "sortOrder": 0, "origin": { "sectionId": "…", "versionNo": 3 }, "section": { … } },
   { "type": "MODULE",  "sortOrder": 1, "origin": { "moduleId": "…",  "versionNo": 2 }, "module":  { … } }
-  // versionNo = nummeret på versjonen fila BÆRER (seksjon: nyeste; modul: den publiserte). Finnes en
-  // høyere versjon når fila kommer tilbake, er fila utdatert og avvises (origin_stale): noen justerte
-  // elementet i mellomtiden, eller modulen hadde et upublisert utkast alt da fila ble eksportert.
+  // versionNo = nummeret på versjonen fila BÆRER — den nyeste, for seksjon og modul. Finnes en
+  // høyere versjon når fila kommer tilbake, er fila utdatert og avvises (origin_stale): noen
+  // justerte elementet etter eksporten. Runde to av en justering går dermed rett gjennom: fila
+  // eksporteres med utkastene fra runde én, og neste import legger versjon tre.
 ] } } }
 ```
 
@@ -96,6 +97,11 @@ hen ikke eier, **hoppes over**: det står som det er, på sin plass i kurset, og
 `summary.skippedUnownedIds` og i oppsummeringen. Hele fila stoppes ikke, og forfatteren trenger
 ikke ta elementet ut av fila (det ville tatt det ut av kurset). Eieren eller en administrator
 oppdaterer det elementet. *Produkteier bekrefter dette valget; alternativet er å avvise hele fila.*
+
+**Fila er «kurset slik det står».** Kurseksporten bærer nyeste versjon av hvert element, også
+upubliserte utkast (seksjoner gjorde det alt, #916; moduler fra 2.88.0). Importeres en slik fil som
+NYTT kurs et annet sted, lander et modulutkast upublisert, og kurset holdes tilbake som utkast
+(samme vei som publiseringsporten, #896 S4) — det meldes i oppsummeringen.
 
 **Kjent begrensning (fase A).** Et element som er lagt inn i kurset ETTER eksporten, nevnes ikke i
 fila, og tas derfor ut ved oppdateringen — det telles i «tatt ut» i oppsummeringen, men pekes ikke

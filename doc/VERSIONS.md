@@ -27,8 +27,11 @@ elementer tas ut, ikke slettes.
   en levende seksjon og for moduler (#931). Avvises uten at noe skrives: fil fra et annet kurs eller
   med et element kurset ikke har (400 `origin_mismatch`, `DomainRuleError` slik #999 krever),
   **utdatert fil** — et element har en nyere versjon enn `origin.versionNo` sier (400
-  `origin_stale`; `versionNo` er versjonen fila bærer: seksjon nyeste, modul den publiserte, så en
-  modul med upublisert utkast ved eksporten gir også «utdatert»). Et element forfatteren **ikke
+  `origin_stale`; `versionNo` er versjonen fila bærer — den nyeste, også et utkast. Kurseksporten
+  bærer nå nyeste modulversjon som seksjonene alt gjorde, så runde to av en justering ikke avvises;
+  importeres en fil med et modulutkast som nytt kurs, lander modulen upublisert og kurset holdes
+  tilbake som utkast, meldt i oppsummeringen). En seksjon som hoppes over, får ikke bildene sine
+  lastet opp. Et element forfatteren **ikke
   eier**, hoppes over og står som det er (`summary.skippedUnownedIds`); hele fila stoppes ikke.
   Svaret bærer `summary`; revisjonssporet har kursets `course_imported` og ett `section_imported` /
   `module_imported` per element. Kjent begrensning: elementer lagt inn i kurset etter eksporten tas
@@ -53,7 +56,10 @@ publisert kurs, eierskap per element, utdatert fil, hardkodet bokmål) — alle 
 (ny modul i publisert og upublisert kurs, fagansvarlig uten eierskap til en modul får resten
 oppdatert og modulen meldt, administrator oppdaterer alt, `origin_stale` for endret element og for
 modul med utkast ved eksporten, eldre fil uten versjonsnummer går gjennom, revisjonsspor per
-element). Runde 2 pekte på modulutkastet og på at hele fila stoppet — begge rettet.
+element). Runde 2 pekte på modulutkastet og på at hele fila stoppet — begge rettet. Runde 3 pekte
+på blindveien (runde to av en justering avvist til alt var publisert) og på bildestaging for
+seksjoner som hoppes over — begge rettet, med tester (samme fil to ganger → utdatert; utkast som
+nytt kurs → holdt tilbake; fremmed seksjon med ugyldig bilde → importen går gjennom).
 
 ## 2.87.0 - 2026-10-11
 

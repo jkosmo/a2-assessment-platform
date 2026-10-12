@@ -219,7 +219,7 @@ async function importModulePayload(
   // #896 S4: `heldBackByTranslationGate` is true when the source was published but the package is
   // missing a locale, so this module stayed a draft. A course import needs to know, or it publishes
   // a course whose module is not live.
-): Promise<{ moduleId: string; moduleVersionId: string; heldBackByTranslationGate: boolean }> {
+): Promise<{ moduleId: string; moduleVersionId: string; heldBackByTranslationGate: boolean; published: boolean }> {
   let moduleId: string;
   if (options.mode === "replaceExisting") {
     if (!options.targetModuleId) {
@@ -360,11 +360,17 @@ async function importModulePayload(
     && Boolean(payload.activeVersion.audit?.publishedAt)
     && !importGate.valid;
 
+  let published = false;
   if (options.autoPublish !== false && payload.activeVersion.audit?.publishedAt && !heldBackByTranslationGate) {
     await publishModuleVersion(moduleId, moduleVersion.id, options.actorId, tx);
+    published = true;
   }
 
-  return { moduleId, moduleVersionId: moduleVersion.id, heldBackByTranslationGate };
+  // #1095: `published` sier om modulen har en levende versjon etter importen. Kursimporten trenger
+  // det: en modul som reiste som utkast (kurseksporten bærer nyeste versjon) lander upublisert, og
+  // da kan kurset ikke publiseres uten å bryte I1 — på samme måte som når publiseringsporten holder
+  // modulen tilbake.
+  return { moduleId, moduleVersionId: moduleVersion.id, heldBackByTranslationGate, published };
 }
 
 export async function importModuleFromEnvelope(
@@ -377,7 +383,7 @@ export async function importModuleFromEnvelope(
     // AA-5 (#653): agent-orchestrated imports carry a trace in the audit metadata.
     agent?: AgentAuthoringContext;
   },
-): Promise<{ moduleId: string; moduleVersionId: string; heldBackByTranslationGate: boolean }> {
+): Promise<{ moduleId: string; moduleVersionId: string; heldBackByTranslationGate: boolean; published: boolean }> {
   // #995: returtypen strupte flagget som faktisk ble returnert i runtime (den eksisterende
   // enhetstesten målte på det). Modulimport-ruta kunne derfor ikke fortelle kalleren at pakken ble
   // holdt tilbake — samme mønster som #957 for kurs, annen rute.
@@ -679,6 +685,9 @@ export async function importCourseFromEnvelope(
   if (orderedItems) {
     for (let i = 0; i < orderedItems.length; i += 1) {
       const entry = orderedItems[i];
+      // #1095: en seksjon forfatteren ikke eier, hoppes over — da skal heller ikke bildene dens
+      // lastes opp (de ville blitt foreldreløse), og et ugyldig bilde i den skal ikke stoppe importen.
+      if (updateTargets.get(i)?.skipped) continue;
       if (entry.type === "SECTION") {
         // #1095: en seksjon som finnes, får bildene sine under sin egen id (#916).
         const staged = await stageSectionForImport(entry.section, updateTargets.get(i)?.targetId);
@@ -831,7 +840,7 @@ export async function importCourseFromEnvelope(
               sectionCount += 1;
             } else {
               const imported = await importModulePayload(entry.module, { actorId: options.actorId, mode: "createNew" }, tx);
-              if (imported.heldBackByTranslationGate) anyContentHeldBack = true;
+              if (imported.heldBackByTranslationGate || !imported.published) anyContentHeldBack = true;
               courseItemInputs.push({ type: "MODULE", moduleId: imported.moduleId });
               importedModuleIds.push(imported.moduleId);
             }
@@ -841,7 +850,7 @@ export async function importCourseFromEnvelope(
           const importedModules: Array<{ moduleId: string; sortOrder: number }> = [];
           for (const item of payload.course.modules ?? []) {
             const imported = await importModulePayload(item.module, { actorId: options.actorId, mode: "createNew" }, tx);
-            if (imported.heldBackByTranslationGate) anyContentHeldBack = true;
+            if (imported.heldBackByTranslationGate || !imported.published) anyContentHeldBack = true;
             importedModules.push({ moduleId: imported.moduleId, sortOrder: item.sortOrder });
           }
           importedModules.sort((a, b) => a.sortOrder - b.sortOrder);
