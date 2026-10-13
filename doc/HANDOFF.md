@@ -1,13 +1,13 @@
 # Overlevering — hvor arbeidet står
 
-> **Skrevet 2026-10-05.** Dette dokumentet skrives om ved hver overlevering; les datoen før du
+> **Skrevet 2026-10-13.** Dette dokumentet skrives om ved hver overlevering; les datoen før du
 > stoler på tallene. Metodikken ligger i `doc/TEST_AND_RELEASE_PLAYBOOK.md` og endres ikke her.
 
 ---
 
 ## Kort: det som må avgjøres
 
-**Prod står på 2.86.0 (rullet 2026-10-11 kl. 17:21 fra `a6aec30a`, godkjent av produkteier; `/version`, helsesjekk og ikonruta bekreftet). Stage står på 2.87.0 (#1093 rekkefølgen i «Mine kurs», rullet 2026-10-11 kl. 21:31 fra `e8a9006f`; `/version` og helsesjekk bekreftet; én ny NULL-kolonne). `dev` = stage. `main` = prod (PR #1091). **Produkteier 2026-10-11: samlet test på stage, så prod — deretter oppdaterer han kurs og tar inn flere brukere.****
+**Prod og stage står på 2.90.0** (prod rullet 2026-10-13 kl. 22:49 fra `5b4ebe71`, run 38463267515, godkjent av produkteier; stage rullet kl. 14:51, stage-testen 46 av 46, QA-porten GO i `.ai-qa/qa-20261013-141739.md`). `dev` = stage = prod. `main` = prod etter PR #1098. Ny skillpakke 2.90.0 («tenk først») skal lastes opp i ChatGPT og Claude.ai nå som prod har blokken. **Neste:** produkteier justerer kursene i prod med oppdateringsflyten (#1095); #1072 punkt 6 (veiledning i seksjonseditoren) gjenstår; CI er rød på `nav-fits-phone-1085` (består lokalt, ikke på Linux) siden 2026-10-11.
 
 ### 2.86.0: ikonbibliotek, skillet flettet inn, skillforbedringer (2026-10-11, grenen `ikoner-1079`)
 
@@ -147,10 +147,10 @@ produkteier har kjørt Møtearbeid og Tilbudsarbeid med 2.83.0 i ChatGPT og Clau
 
 | Miljø | Versjon | |
 |---|---|---|
-| prod | 2.86.0 | rullet 2026-10-11 kl. 17:21 fra `a6aec30a` (run 38149518968), godkjent av produkteier; `/version`, helsesjekk og ikonruta bekreftet. Før det 2.85.0: rullet 2026-10-06 kl. 22:09 fra `17743d55` (run 37521860878). Før det 2.78.3: rullet 2026-10-04 kl. 20:13 fra `2433d2b7`. #1080, #1081, #1083 |
-| stage | 2.87.0 | rullet 2026-10-11 kl. 21:31 fra `e8a9006f` (QA-porten GO, `.ai-qa/qa-20261011-210415.md`); `/version` og helsesjekk bekreftet. Stage-testen kjørt 2026-10-11 kl. 21:33–21:38: 44 av 44, ingen nye forsøk. Før det 2.86.0: rullet 2026-10-11 kl. 16:50 fra `a6aec30a` (QA-porten GO i femte runde, `.ai-qa/qa-20261011-161938.md`); stage-testen 16:55–17:00: 44 av 44. Før det 2.85.2: rullet 2026-10-07 kl. 07:22 fra `11baab53` (QA-porten GO, `.ai-qa/qa-20261007-064305.md`); `/version` og helsesjekk bekreftet. Stage-testen kjørt 07:23–07:30, rett etter utrullingen: 44 av 44 besto, men tre trengte nytt forsøk (45 s tidsavbrudd mens stage startet opp — #1080-/#1081-listene og importsteget i 2.84-testen). Ny kjøring 07:32 ble ugyldig: tokenet gikk ut midt i (401), ikke appen. Før det 2.85.1: rullet 2026-10-06 kl. 23:07 fra `4d5d9f4e` (QA-porten GO i tredje runde, `.ai-qa/qa-20261006-222752.md`); stage-testen 2026-10-07 kl. 06:17–06:21: 44 av 44. Før det 2.85.0: rullet 2026-10-06 kl. 21:31 fra `17743d55` (QA-porten GO i andre runde, `.ai-qa/qa-20261006-211010.md`). Før det 2.84.1: rullet 2026-10-06 kl. 09:37 fra `82815746` (QA-porten GO, `.ai-qa/qa-20261006-091043.md`). Før det 2.84.0: rullet 2026-10-06 kl. 07:12 fra `ad3f0192`, QA-porten GO i tredje runde (`.ai-qa/qa-20261006-064930.md`); `/version` og helsesjekk bekreftet. Før det 2.82.2: rullet 2026-10-05 kl. 18:49 fra `96632019`, commiten QA-porten ga GO på i tredje runde (`.ai-qa/qa-20261005-182600.md`); `/version` og helsesjekk bekreftet. Stage-testen kjørt 18:50–18:53: 38 av 38 besto |
-| `main` (git) | 2.86.0 | likt med prod (PR flettet 2026-10-11) |
-| `dev` (git) | 2.87.0 | #1093 rekkefølgen i «Mine kurs» (2.87.0), skillpakke 2.86.1 (bare skill), ikonbibliotek + skillet flettet inn + skillforbedringer (2.86.0), to småfunn (2.85.2), to detaljer i lesemodus (2.85.1), lesemodus (2.85.0), innholdsblokkene og feilklassifiseringen (2.84.x), sju rettinger (2.82.0), to oppfølgere etter QA (2.82.1), og kurset på telefon (2.82.2), se under |
+| prod | 2.90.0 | rullet 2026-10-13 kl. 22:49 fra `5b4ebe71` (run 38463267515), godkjent av produkteier; `/version` og helsesjekk bekreftet. Før det 2.88.2: rullet 2026-10-12 kl. 22:47. Før det 2.86.0: 2026-10-11 kl. 17:21 fra `a6aec30a`. |
+| stage | 2.90.0 | rullet 2026-10-13 kl. 14:51 fra `5b4ebe71` (QA-porten GO etter to runder); stage-testen 46 av 46; vurderingsraden lagrer `a2-assessment-stg-gpt-5.4-mini:primary` (sjekket med én innlevering). |
+| `main` (git) | 2.90.0 | likt med prod (PR #1098) |
+| `dev` (git) | 2.90.0 | likt med prod: «tenk først» (#1072), modellinnstillingene i Bicep og riktig modellnavn (2.90.0); plassering i «Mine kurs» (#1094), undermenyen for deltakere (#1096) (2.89.x); «Publiser ny versjon» (2.88.3); #1095 fase A+B (2.88.x) |
 
 ### Skillet er bygget om, på en egen gren (2026-10-05, sent på kvelden)
 
