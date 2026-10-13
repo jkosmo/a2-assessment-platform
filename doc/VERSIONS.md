@@ -2,6 +2,31 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.90.0 - 2026-10-13
+
+### «Tenk først», modellinnstillingene i infrastrukturkoden, lesemodus i liggende format
+
+Produkteier: «La oss legge på mer, det er lenge til kvelden.»
+
+- **#1072 «Tenk først, se svaret etterpå»** — ny blokk i seksjonstekst:
+  `:::tenk Hva tror du skjer hvis …?` / svaret i vanlig markdown / `:::` (også `:::think`). Tegnes
+  som `<details>/<summary>` med merkelapp «Tenk først»/«Think first» og «Vis svaret»; åpnes med
+  klikk, Enter eller mellomrom uten skript; rensingen gjelder inni. Uten spørsmål på åpningslinja,
+  eller uten avsluttende `:::`, er det ingen blokk. Seksjonsoversetteren lar blokkmarkørene stå.
+  Skillet: `section-content.md` «Think first» (fra kilden, 1–2 per seksjon, etter problemet og før
+  forklaringen); `produce-course.mjs` fanger en ramme som ikke lukkes. Tester: enhet (blokk, språk,
+  rensing, ikke-blokker, skillets ramme), e2e i deltakerflaten (klikk, tastatur, 390 px); fire
+  mutasjoner fanget.
+- **Vurderings- og forfattermodellen i infrastrukturkoden.** `AZURE_OPENAI_ASSESSMENT_DEPLOYMENT`
+  (gpt-5.4-mini i begge miljøer siden 2026-10-11) og API-versjonen var satt for hånd; en full
+  infrastruktur-utrulling ville flyttet vurderingen tilbake til gpt-4.1-mini. Nå parametere i
+  `main.bicep` (web og worker), videre fra `deploy-environment.ps1` og `deploy-azure.yml`, med
+  GitHub-miljøvariablene satt til det som kjører (begge miljøer: assessment-utrullingen; prod:
+  API-versjon 2025-01-01-preview). `env.ts` tolker tom verdi som «ikke satt». Bicep kompilert
+  lokalt; ingen utrulling. Kommentaren med ekte kontonavn i `main.bicep` er erstattet med mønsteret.
+- **Lesemodus:** tittelen flyttes til arket også ved lav høyde (telefon i liggende format); fokus
+  etter «gå videre» har fått test (var rettet i 2.85.2).
+
 ## 2.89.1 - 2026-10-13
 
 ### Tre rester til kveldens utgivelse
