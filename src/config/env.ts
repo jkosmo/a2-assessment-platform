@@ -77,8 +77,10 @@ const envSchema = z.object({
   AZURE_OPENAI_ENDPOINT: z.string().optional(),
   AZURE_OPENAI_API_KEY: z.string().optional().transform((v) => v?.replace(/^﻿/, "")),
   AZURE_OPENAI_DEPLOYMENT: z.string().optional(),
-  AZURE_OPENAI_AUTHORING_DEPLOYMENT: z.string().optional(),
-  AZURE_OPENAI_ASSESSMENT_DEPLOYMENT: z.string().optional(),
+  // Tom verdi = ikke satt: infrastrukturkoden setter alltid innstillingen, og tom betyr «bruk
+  // AZURE_OPENAI_DEPLOYMENT». Uten dette ville `""` gått forbi `??` og gitt et kall uten modell.
+  AZURE_OPENAI_AUTHORING_DEPLOYMENT: z.string().optional().transform((v) => (v && v.trim() ? v.trim() : undefined)),
+  AZURE_OPENAI_ASSESSMENT_DEPLOYMENT: z.string().optional().transform((v) => (v && v.trim() ? v.trim() : undefined)),
   AZURE_OPENAI_API_VERSION: z.string().default("2024-10-21"),
   AZURE_OPENAI_TIMEOUT_MS: z.coerce.number().int().positive().default(120000),
   AZURE_OPENAI_TEMPERATURE: z.coerce.number().min(0).max(2).default(0),

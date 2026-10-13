@@ -38,6 +38,8 @@ param(
   [int]$AzureOpenAiMaxTokens = 1200,
   [string]$AzureOpenAiTokenLimitParameter = "auto",
   [string]$AzureOpenAiAuthoringTokenLimitParameter = "",
+  [string]$AzureOpenAiAssessmentDeployment = "",
+  [string]$AzureOpenAiAuthoringDeployment = "",
   [string]$SkipRoleAssignments = "false",
   # Bump to a new value (e.g. "a", "b") only if App Services were recreated without the RG being deleted,
   # to reset role assignment GUIDs and avoid RoleAssignmentExists conflicts from stale managed identity assignments.
@@ -687,6 +689,8 @@ az deployment group create `
               azureOpenAiMaxTokens=$AzureOpenAiMaxTokens `
               azureOpenAiTokenLimitParameter=$AzureOpenAiTokenLimitParameter `
               azureOpenAiAuthoringTokenLimitParameter=$AzureOpenAiAuthoringTokenLimitParameter `
+              azureOpenAiAssessmentDeployment=$AzureOpenAiAssessmentDeployment `
+              azureOpenAiAuthoringDeployment=$AzureOpenAiAuthoringDeployment `
               skipRoleAssignments=$SkipRoleAssignments `
               skipPostgresUpdate=$skipPostgresUpdate `
               roleAssignmentSalt=$RoleAssignmentSalt `

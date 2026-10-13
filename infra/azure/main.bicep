@@ -143,6 +143,12 @@ param azureOpenAiTokenLimitParameter string = 'auto'
 ])
 param azureOpenAiAuthoringTokenLimitParameter string = ''
 
+@description('Azure OpenAI deployment for assessment (scoring). Empty = use azureOpenAiDeployment. Set in prod and stage since 2026-10-11 (gpt-5.4-mini); without it here, a full infra deploy would drop the app setting and move assessment back to the default deployment.')
+param azureOpenAiAssessmentDeployment string = ''
+
+@description('Azure OpenAI deployment for authoring (content generation). Empty = use azureOpenAiDeployment.')
+param azureOpenAiAuthoringDeployment string = ''
+
 // #607: the Azure OpenAI account + model deployment, brought into IaC so the TPM capacity is
 // codified/reproducible (previously provisioned + capacity-bumped manually via az).
 @description('Azure OpenAI model deployment short name (appended after the env token: a2-assessment-<stg|prod>-<this>). Matches the existing deployment.')
@@ -254,7 +260,7 @@ var postgresHost = '${postgresServerName}.postgres.database.azure.com'
 var keyVaultName = 'a2-${envCode}-kv-${suffix}'
 // #607: the Azure OpenAI account uses a DISTINCT env token (stg / prod) — NOT envCode (stg / prd) —
 // plus a -weu region tag, matching the names it was provisioned with before being brought into IaC.
-// Reproduces a2-assessment-stg-openai-weu-x6eyx4 (staging) and a2-assessment-prod-openai-weu-hea5kl (prod).
+// Reproduces the names the staging and prod accounts were provisioned with (a2-assessment-<stg|prod>-openai-weu-<suffix>).
 var openAiEnvToken = environmentName == 'production' ? 'prod' : 'stg'
 var openAiAccountName = toLower('a2-assessment-${openAiEnvToken}-openai-weu-${suffix}')
 var openAiModelDeploymentName = 'a2-assessment-${openAiEnvToken}-${azureOpenAiModelDeploymentShortName}'
@@ -823,6 +829,14 @@ resource webAppSettingsConfig 'Microsoft.Web/sites/config@2023-12-01' = {
           value: azureOpenAiAuthoringTokenLimitParameter
         }
         {
+          name: 'AZURE_OPENAI_ASSESSMENT_DEPLOYMENT'
+          value: azureOpenAiAssessmentDeployment
+        }
+        {
+          name: 'AZURE_OPENAI_AUTHORING_DEPLOYMENT'
+          value: azureOpenAiAuthoringDeployment
+        }
+        {
           name: 'ASSESSMENT_RULES_FILE'
           value: 'config/assessment-rules.json'
         }
@@ -1052,6 +1066,14 @@ resource workerAppSettingsConfig 'Microsoft.Web/sites/config@2023-12-01' = {
         {
           name: 'AZURE_OPENAI_AUTHORING_TOKEN_LIMIT_PARAMETER'
           value: azureOpenAiAuthoringTokenLimitParameter
+        }
+        {
+          name: 'AZURE_OPENAI_ASSESSMENT_DEPLOYMENT'
+          value: azureOpenAiAssessmentDeployment
+        }
+        {
+          name: 'AZURE_OPENAI_AUTHORING_DEPLOYMENT'
+          value: azureOpenAiAuthoringDeployment
         }
         {
           name: 'ASSESSMENT_RULES_FILE'
