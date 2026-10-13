@@ -402,10 +402,12 @@
          hodet og brekker i stedet for å kuttes. På telefon ville den gjort det faste hodet 85–190 px
          høyt (QA-porten); der er hodet én lav linje («Leser», «Lukk»), og tittelen står øverst på arket.
          Grensen er 900 px: på nettbrett (601–900 px) ble hodet 131–214 px med en lang tittel (QA-porten,
-         runde 2). Tittelen på arket er en ekte overskrift og den som får fokus når den vises. */
+         runde 2). Tittelen på arket er en ekte overskrift og den som får fokus når den vises.
+         Store telefoner i liggende format er bredere enn 900 px, men bare ~430 px høye: der tok tittelen
+         i hodet 76 px av høyden (QA-porten) — lav høyde behandles som smal skjerm. */
       .course-reading .course-inline-panel-title { font-size: 22px; font-weight: 600; line-height: 1.25; white-space: normal; overflow: visible; text-overflow: clip; flex: 0 1 auto; min-width: 0; }
       .course-reading-title { display: none; }
-      @media (max-width: 900px) {
+      @media (max-width: 900px), (max-height: 500px) {
         .course-reading .course-inline-panel-title { display: none; }
         .course-reading .course-reading-title { display: block; margin: 0 0 10px; padding: 0 2px; font-size: 22px; font-weight: 600; line-height: 1.25; color: var(--color-text); overflow-wrap: anywhere; }
         .course-reading .course-reading-title:focus-visible { outline: 3px solid var(--color-focus); outline-offset: 2px; }

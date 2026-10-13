@@ -140,6 +140,39 @@ test("#924: neste element er en seksjon — én knapp som markerer lest og åpne
   await expect(first.locator("#sectionReaderBody")).toHaveCount(0);
 });
 
+for (const bredde of [1280, 390]) {
+  test(`«gå videre» flytter fokus til tittelen på seksjonen som åpnes (${bredde} px), ikke til <body>`, async ({ page }) => {
+    // QA-porten (lesemodus, 2.85.x): etter «gå videre» havnet fokus på <body>. En skjermleserbruker
+    // hørte ingenting om at en ny seksjon var åpnet, og Tab begynte fra toppen av sida.
+    await page.setViewportSize({ width: bredde, height: 844 });
+    await mockBase(page);
+    await mockCourse(page);
+    await openCourse(page);
+    const first = page.locator('.course-item[data-key="ci1"]');
+    await first.locator(".course-module-row").click();
+    await expect(first.locator("#sectionReaderBody")).toContainText("Tekst i s1");
+    await first.locator("#sectionReaderMarkRead").click();
+    const second = page.locator('.course-item[data-key="ci2"]');
+    await expect(second.locator("#sectionReaderBody")).toContainText("Tekst i s2");
+    await expect.poll(async () => page.evaluate(() => {
+      const el = document.activeElement;
+      return el ? `${el.tagName.toLowerCase()}.${(el as HTMLElement).className}` : "ingen";
+    })).toMatch(/course-inline-panel-title|course-reading-title/);
+  });
+}
+
+test("telefon i liggende format (932×430): tittelen står på arket, ikke i det faste hodet", async ({ page }) => {
+  await page.setViewportSize({ width: 932, height: 430 });
+  await mockBase(page);
+  await mockCourse(page);
+  await openCourse(page);
+  const first = page.locator('.course-item[data-key="ci1"]');
+  await first.locator(".course-module-row").click();
+  await expect(first.locator("#sectionReaderBody")).toContainText("Tekst i s1");
+  await expect(first.locator(".course-reading-title")).toBeVisible();
+  await expect(first.locator(".course-inline-panel-title")).toBeHidden();
+});
+
 test("#924: neste element er en MODUL — knappen sier det, og fører dit", async ({ page }) => {
   await mockBase(page);
   await mockCourse(page);
