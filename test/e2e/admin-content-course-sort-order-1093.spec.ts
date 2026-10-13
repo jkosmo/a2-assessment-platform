@@ -134,6 +134,33 @@ test.describe("#1093 kursskjemaet — plassering i «Mine kurs»", () => {
     expect(sendt).toEqual([]);
   });
 
+  test("eksisterende kurs, engelsk grensesnitt: etter en navnefeil (hodet tegnes på nytt) virker knappene i hodet fortsatt", async ({ page }) => {
+    await mockCommonApis(page, {
+      courses: [{ id: "course-1", title: "Velkommen", description: null, certificationLevel: "basic", moduleCount: 0, updatedAt: "2026-10-11T12:00:00.000Z", publishedAt: null, archivedAt: null, sortOrder: null, modules: [] }],
+      libraryModules: [],
+    });
+    await page.route("**/api/admin/content/courses/*/items", (route: Route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ items: [] }) }));
+    const eksport: string[] = [];
+    await page.route("**/api/admin/content/courses/course-1/export-package", async (route: Route) => {
+      eksport.push("export");
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ envelope: { exportFormat: "a2-content-export/v1", scope: "course", course: { course: { title: "Velkommen", items: [] } } } }) });
+    });
+    await page.addInitScript(() => { try { localStorage.setItem("participant.locale", "en-GB"); } catch { /* ignore */ } });
+    await page.goto("/admin-content/courses/course-1");
+    await expect(page.locator("#title-en-GB")).toBeVisible();
+    // Tøm bokmålsnavnet (feltet ligger i det skjulte bokmålspanelet), så lagring gir navnefeil.
+    await page.locator("#title-nb").evaluate((el: HTMLInputElement) => { el.value = ""; el.dispatchEvent(new Event("input", { bubbles: true })); });
+    await page.locator("#formSaveBtn").click();
+    await expect(page.locator("#title-nb")).toBeFocused();
+    // Hodet er tegnet på nytt: «Export» (synlig eller under «More») skal fortsatt virke.
+    page.once("dialog", (d) => d.accept());
+    const knapp = page.locator('.form-page-actions [data-action="export"]');
+    const meny = knapp.locator("xpath=ancestor::details[contains(@class, 'row-more')]");
+    if ((await meny.count()) > 0) await meny.first().locator("summary").click();
+    await knapp.click();
+    await expect.poll(() => eksport).toEqual(["export"]);
+  });
+
   test("#1094: kurslista viser plasseringen som merke ved navnet, og ingenting for kurs uten plassering", async ({ page }) => {
     await mockCommonApis(page, {
       courses: [

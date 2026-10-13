@@ -1542,14 +1542,25 @@ function addSelectedItem() {
 // Detail event listeners
 // ---------------------------------------------------------------------------
 
-function initDetailEventListeners(courseId) {
-  // Handlingsraden i skjemasidas hode — samme handlere som lista (handleListTableClick).
-  pageContent.querySelector(".form-page-actions")?.addEventListener("click", (e) => {
-    const btn = e.target.closest("[data-action]");
+// Handlingsraden i skjemasidas hode — samme handlere som lista (handleListTableClick). ⚠️ Delegert fra
+// `pageContent`, bundet ÉN gang: hodet tegnes på nytt (`refreshHeader`, f.eks. når en navnefeil bytter
+// til bokmålspanelet), og en lytter på `.form-page-actions` fulgte med det gamle elementet ut — knappene
+// sluttet å virke til sida ble lastet på nytt (QA-porten 2.89.1; samme feil som seksjonsredigereren
+// hadde i 2.88.3). Lista har ingen `.form-page-actions`, så dette rører ikke radhandlingene.
+let headerActionsBound = false;
+function bindHeaderActions() {
+  if (headerActionsBound) return;
+  headerActionsBound = true;
+  pageContent.addEventListener("click", (e) => {
+    const btn = e.target.closest(".form-page-actions [data-action]");
     if (!btn) return;
     if (!getCourseFormPage().confirmLeave()) return;
     handleListTableClick(e, btn);
   });
+}
+
+function initDetailEventListeners(courseId) {
+  bindHeaderActions();
 
   // Combobox
   const comboboxInput = document.getElementById("comboboxInput");

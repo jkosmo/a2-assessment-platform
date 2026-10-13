@@ -17,7 +17,9 @@ Produkteier: «Se om det er noe mer som vi kan pakke inn i denne releasen.»
   byttes fanen til «Rediger» — og for navnet også språkpanelet til bokmål, som følger grensesnittspråket
   (QA-porten) — før feltet får fokus (det havnet i et skjult felt). e2e med bokmål og engelsk
   grensesnitt; mutasjoner fanget. API_REFERENCE sier at `replaceExisting` kan ta ned et publisert kurs
-  med `heldBackByTranslationGate: false`.
+  med `heldBackByTranslationGate: false`. Knappene i kursskjemaets hode bindes nå én gang fra
+  sideinnholdet (som seksjonsredigereren i 2.88.3): byttet til bokmålspanelet tegner hodet på nytt,
+  og den gamle lytteren gjorde knappene døde (QA-porten, runde 2). e2e; mutasjon fanget.
 - **Profilsiden:** knappen i testbrukerpanelet pekte på `identity.load`, som ingen bunt har; nå
   `identity.loadMe`. Ny e2e: ingen statisk tekst på siden er en rå nøkkel, på nb, nn og en-GB.
 
