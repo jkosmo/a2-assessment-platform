@@ -262,7 +262,10 @@ their own: `> **Husk:** …` (highlighted box; the labels Viktig/NB/Advarsel/Imp
 the warning colour), a fenced block marked `prompt` (prompt box with a copy button), `:::kort` …
 `:::` around `###` headings (cards; `:::cards` works too), and an image first in a card heading or
 in a table cell whose column has no name while another column has one (icon, 24 px; an image in a
-named column, or in a table with no named column at all, stays a picture). Tables get `data-label` on every cell so the phone stacking rule in `shared.css` shows the
+named column, or in a table with no named column at all, stays a picture). **#1072:** `:::tenk <question>`
+… `:::` (also `:::think`) becomes `<details class="content-think">` with the question in `<summary>`
+and the answer inside (opens with click/Enter/Space, no script; the label follows the locale). Frames
+cannot be nested — the first `:::` closes whichever frame is open. Tables get `data-label` on every cell so the phone stacking rule in `shared.css` shows the
 column name.
 
 | Surface | Where |

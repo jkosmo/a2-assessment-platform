@@ -89,7 +89,9 @@ export async function runLlmEvaluationPipeline(ctx: EvaluatorContext): Promise<E
         modelName:
           env.LLM_MODE === "stub"
             ? `${env.LLM_STUB_MODEL_NAME}:${assessmentPass}`
-            : `${env.AZURE_OPENAI_DEPLOYMENT ?? "azure_openai"}:${assessmentPass}`,
+            // Vurderingen bruker AZURE_OPENAI_ASSESSMENT_DEPLOYMENT når den er satt (gpt-5.4-mini siden
+            // 2026-10-11); raden sa likevel standardmodellen, så vurderingsrapporten viste feil modell.
+            : `${env.AZURE_OPENAI_ASSESSMENT_DEPLOYMENT ?? env.AZURE_OPENAI_DEPLOYMENT ?? "azure_openai"}:${assessmentPass}`,
         promptTemplateVersionId,
         requestPayloadHash: sha256(JSON.stringify(requestPayload)),
         responseJson: llmResponseCodec.serialize(llmResult),

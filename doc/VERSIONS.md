@@ -26,6 +26,11 @@ Produkteier: «La oss legge på mer, det er lenge til kvelden.»
   lokalt; ingen utrulling. Kommentaren med ekte kontonavn i `main.bicep` er erstattet med mønsteret.
 - **Lesemodus:** tittelen flyttes til arket også ved lav høyde (telefon i liggende format); fokus
   etter «gå videre» har fått test (var rettet i 2.85.2).
+- QA-porten: stage-aktiveringen (`activate-staging-app-layer.yml`, full Bicep-utrulling) sender også
+  de nye modellinnstillingene; skillet nekter en ramme inni en annen (`:::tenk` i `:::kort` eller
+  omvendt — den første `:::` lukker begge); vurderingsraden lagrer navnet på modellen som faktisk
+  vurderte (`AZURE_OPENAI_ASSESSMENT_DEPLOYMENT`), ikke standardmodellen. NB: `deploy-azure.yml`
+  kjøres fra `main`, så den sender innstillingene først når denne utgivelsen er flettet til `main`.
 
 ## 2.89.1 - 2026-10-13
 

@@ -153,6 +153,8 @@ KI leser alt, men sammendraget blir **generelt**. Spør heller etter det du tren
   Without the question on the opening line it is not a box. `produce-course.mjs` fails on a frame
   that is not closed.
 - In the other languages the marker word stays `:::tenk`; translate the question and the answer.
+- **Never inside a card frame, and no frame inside it.** Frames cannot be nested: the first `:::`
+  closes both, and the learner sees the markers as text. `produce-course.mjs` fails on it.
 
 ## Icons
 
