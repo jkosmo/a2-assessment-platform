@@ -178,7 +178,8 @@ async function evaluateModule(moduleId: string): Promise<ModuleEvaluation> {
       where: { id: latest.mcqSetVersionId },
       select: {
         _count: { select: { questions: true } },
-        questions: { select: { stem: true, optionsJson: true, correctAnswer: true, rationale: true } },
+        // Samme rekkefølge som de andre lesestedene (porten nummererer spørsmålene i meldingene).
+        questions: { orderBy: [{ createdAt: "asc" }, { id: "asc" }], select: { stem: true, optionsJson: true, correctAnswer: true, rationale: true } },
       },
     });
     mcqQuestions = set?.questions ?? [];

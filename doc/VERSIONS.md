@@ -34,8 +34,9 @@ redigereren skjuler ikke livssyklusknappene for den som ikke eier seksjonen (403
 riktig vaktet).
 
 Også i 2.88.3: flervalgsspørsmål leses i stabil rekkefølge. Spørsmål som skrives i ett kall, får ofte
-samme `createdAt` (millisekund), og alle tre lesestedene (eksport/innholdspakke, påfylling #1062,
-deltakerens test) sorterte bare på den — rekkefølgen var da vilkårlig. Nå `id` som andre nøkkel (cuid,
+samme `createdAt` (millisekund), og lesestedene (eksport/innholdspakke, påfylling #1062, deltakerens
+test) sorterte bare på den — rekkefølgen var da vilkårlig; publiseringsporten i kurskaskaden sorterte
+ikke i det hele tatt (den nummererer spørsmålene i meldingene). Nå `id` som andre nøkkel (cuid,
 stigende i skriverekkefølgen). Oppdaget av #1062-testen, som feilet to fulle kjøringer på rad.
 
 ## 2.88.2 - 2026-10-12
