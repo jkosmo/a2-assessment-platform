@@ -597,7 +597,10 @@ function getListPage() {
     } },
     sort: { key: "title", dir: "asc", locale: () => currentLocale },
     columns: [
-      { key: "title", label: t("ui.name"), className: "col-title", sortValue: (c) => courseRowModel(c).title, render: (c) => escapeHtml(courseRowModel(c).title) },
+      // #1094: plasseringen i «Mine kurs» som merke ved navnet — forfatteren slipper å åpne hvert kurs
+      // for å se den. Et merke, ikke en kolonne: lista skal ikke bli bredere enn ramma (#1084).
+      { key: "title", label: t("ui.name"), className: "col-title", sortValue: (c) => courseRowModel(c).title, render: (c) => escapeHtml(courseRowModel(c).title)
+        + (Number.isInteger(c.sortOrder) ? ` <span class="status-chip course-placement-chip" title="${escapeHtml(t("courses.sortOrder"))}">${escapeHtml(tf("courses.list.placement", { n: c.sortOrder }))}</span>` : "") },
       { key: "status", label: t("ui.status"), className: "col-status", render: (c) => lifecycleBadge(c, t) },
       { key: "level", label: t("ui.certLevel"), className: "col-level", render: (c) => certBadge(c.certificationLevel) },
       { key: "moduleCount", label: t("courses.col.moduleCount"), className: "col-module-count", sortValue: (c) => c.moduleCount ?? 0, render: (c) => String(c.moduleCount ?? 0) },
@@ -1665,7 +1668,21 @@ async function saveCourse(courseId) {
   const enrollmentPolicy = document.getElementById("enrollmentPolicy")?.value === "RESTRICTED" ? "RESTRICTED" : "OPEN";
   const discussionsEnabled = document.getElementById("discussionsEnabled")?.checked !== false;
   // #1093: tomt felt sendes som null (alfabetisk); et tall sendes som tall.
-  const sortOrderRaw = (document.getElementById("sortOrder")?.value ?? "").trim();
+  // #1094: et tallfelt gir tom verdi for «1-» (validity.badInput), og «1e2» ble tolket som 1 — begge
+  // lagret stille noe annet enn forfatteren skrev. Bare et helt tall 0–9999, ellers melding og stopp.
+  const sortOrderInput = document.getElementById("sortOrder");
+  const sortOrderRaw = (sortOrderInput?.value ?? "").trim();
+  const sortOrderBad = Boolean(sortOrderInput?.validity?.badInput)
+    || (sortOrderRaw !== "" && (!/^\d+$/.test(sortOrderRaw) || Number(sortOrderRaw) > 9999));
+  if (sortOrderBad) {
+    if (errorBanner) {
+      errorBanner.innerHTML = `<div class="error-banner">${escapeHtml(t("courses.sortOrderInvalid"))}</div>`;
+      errorBanner.hidden = false;
+    }
+    courseFormPage?.showTab?.("innstillinger");
+    sortOrderInput?.focus();
+    return false;
+  }
   const sortOrder = sortOrderRaw === "" ? null : Number.parseInt(sortOrderRaw, 10);
   const sourceLocale = resolveCourseLocalizationSourceLocale(collectedValues, initialDetailLocaleValues);
   const effectiveValues = sourceLocale

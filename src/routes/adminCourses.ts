@@ -164,6 +164,7 @@ adminCoursesRouter.get("/", async (request, response, next) => {
       description: c.description,
       certificationLevel: c.certificationLevel,
       moduleCount: c._count.modules,
+      sortOrder: c.sortOrder ?? null,
       updatedAt: c.updatedAt.toISOString(),
       publishedAt: c.publishedAt?.toISOString() ?? null,
       archivedAt: c.archivedAt?.toISOString() ?? null,
