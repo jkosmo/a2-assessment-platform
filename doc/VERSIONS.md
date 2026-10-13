@@ -14,7 +14,10 @@ Produkteier: «Se om det er noe mer som vi kan pakke inn i denne releasen.»
   flagget som meldes tilbake (#957) er uendret — et utkast fra kilden er ikke «holdt tilbake». QA
   pekte på hullet 2026-10-12. Integrasjonstest; mutasjon fanget.
 - **Kursskjemaet:** mangler navn på bokmål eller nivå mens forfatteren står på «Innstillinger»,
-  byttes fanen til «Rediger» før feltet får fokus (det havnet i et skjult felt). e2e; mutasjon fanget.
+  byttes fanen til «Rediger» — og for navnet også språkpanelet til bokmål, som følger grensesnittspråket
+  (QA-porten) — før feltet får fokus (det havnet i et skjult felt). e2e med bokmål og engelsk
+  grensesnitt; mutasjoner fanget. API_REFERENCE sier at `replaceExisting` kan ta ned et publisert kurs
+  med `heldBackByTranslationGate: false`.
 - **Profilsiden:** knappen i testbrukerpanelet pekte på `identity.load`, som ingen bunt har; nå
   `identity.loadMe`. Ny e2e: ingen statisk tekst på siden er en rå nøkkel, på nb, nn og en-GB.
 

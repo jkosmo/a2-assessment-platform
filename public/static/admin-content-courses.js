@@ -1706,8 +1706,13 @@ async function saveCourse(courseId) {
       errorBanner.innerHTML = `<div class="error-banner">${escapeHtml(t("courses.nameRequiredNb"))}</div>`;
       errorBanner.hidden = false;
     }
-    // Feltet ligger i «Rediger»; står forfatteren på «Innstillinger», havnet fokus i et skjult felt.
+    // Feltet ligger i «Rediger», og i bokmålspanelet. Står forfatteren på «Innstillinger», eller er
+    // et annet språkpanel valgt (det følger grensesnittspråket), havnet fokus i et skjult felt.
     courseFormPage?.showTab?.("rediger");
+    if (activeDetailLocale !== "nb") {
+      switchDetailLocale("nb");
+      courseFormPage?.refreshHeader?.();
+    }
     document.getElementById("title-nb")?.focus();
     return false;
   }
