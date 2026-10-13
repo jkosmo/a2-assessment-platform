@@ -2,6 +2,129 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.90.0 - 2026-10-13
+
+### «Tenk først», modellinnstillingene i infrastrukturkoden, lesemodus i liggende format
+
+Produkteier: «La oss legge på mer, det er lenge til kvelden.»
+
+- **#1072 «Tenk først, se svaret etterpå»** — ny blokk i seksjonstekst:
+  `:::tenk Hva tror du skjer hvis …?` / svaret i vanlig markdown / `:::` (også `:::think`). Tegnes
+  som `<details>/<summary>` med merkelapp «Tenk først»/«Think first» og «Vis svaret»; åpnes med
+  klikk, Enter eller mellomrom uten skript; rensingen gjelder inni. Uten spørsmål på åpningslinja,
+  eller uten avsluttende `:::`, er det ingen blokk. Seksjonsoversetteren lar blokkmarkørene stå.
+  Skillet: `section-content.md` «Think first» (fra kilden, 1–2 per seksjon, etter problemet og før
+  forklaringen); `produce-course.mjs` fanger en ramme som ikke lukkes. Tester: enhet (blokk, språk,
+  rensing, ikke-blokker, skillets ramme), e2e i deltakerflaten (klikk, tastatur, 390 px); fire
+  mutasjoner fanget.
+- **Vurderings- og forfattermodellen i infrastrukturkoden.** `AZURE_OPENAI_ASSESSMENT_DEPLOYMENT`
+  (gpt-5.4-mini i begge miljøer siden 2026-10-11) og API-versjonen var satt for hånd; en full
+  infrastruktur-utrulling ville flyttet vurderingen tilbake til gpt-4.1-mini. Nå parametere i
+  `main.bicep` (web og worker), videre fra `deploy-environment.ps1` og `deploy-azure.yml`, med
+  GitHub-miljøvariablene satt til det som kjører (begge miljøer: assessment-utrullingen; prod:
+  API-versjon 2025-01-01-preview). `env.ts` tolker tom verdi som «ikke satt». Bicep kompilert
+  lokalt; ingen utrulling. Kommentaren med ekte kontonavn i `main.bicep` er erstattet med mønsteret.
+- **Lesemodus:** tittelen flyttes til arket også ved lav høyde (telefon i liggende format); fokus
+  etter «gå videre» har fått test (var rettet i 2.85.2).
+- QA-porten: stage-aktiveringen (`activate-staging-app-layer.yml`, full Bicep-utrulling) sender også
+  de nye modellinnstillingene; skillet nekter en ramme inni en annen (`:::tenk` i `:::kort` eller
+  omvendt — den første `:::` lukker begge); vurderingsraden lagrer navnet på modellen som faktisk
+  vurderte (`AZURE_OPENAI_ASSESSMENT_DEPLOYMENT`), ikke standardmodellen. Vurderinger fra 2026-10-11 og fram
+  til denne versjonen står med gpt-4.1-mini som modellnavn, selv om gpt-5.4-mini vurderte dem; sammenlign
+  modellene etter dato, ikke etter dette feltet, for den perioden. NB: `deploy-azure.yml`
+  kjøres fra `main`, så den sender innstillingene først når denne utgivelsen er flettet til `main`.
+
+## 2.89.1 - 2026-10-13
+
+### Tre rester til kveldens utgivelse
+
+Produkteier: «Se om det er noe mer som vi kan pakke inn i denne releasen.»
+
+- **Kursimport `replaceExisting` (bare API):** med en fil der kurset og modulen var utkast, ble et
+  publisert målkurs stående publisert med en modul uten aktiv versjon (I1: «modul ikke
+  tilgjengelig»). Nå avpubliseres kurset, med eget spor (`reason: import_unpublished_module`);
+  flagget som meldes tilbake (#957) er uendret — et utkast fra kilden er ikke «holdt tilbake». QA
+  pekte på hullet 2026-10-12. Integrasjonstest; mutasjon fanget.
+- **Kursskjemaet:** mangler navn på bokmål eller nivå mens forfatteren står på «Innstillinger»,
+  byttes fanen til «Rediger» — og for navnet også språkpanelet til bokmål, som følger grensesnittspråket
+  (QA-porten) — før feltet får fokus (det havnet i et skjult felt). e2e med bokmål og engelsk
+  grensesnitt; mutasjoner fanget. API_REFERENCE sier at `replaceExisting` kan ta ned et publisert kurs
+  med `heldBackByTranslationGate: false`. Knappene i kursskjemaets hode bindes nå én gang fra
+  sideinnholdet (som seksjonsredigereren i 2.88.3): byttet til bokmålspanelet tegner hodet på nytt,
+  og den gamle lytteren gjorde knappene døde (QA-porten, runde 2). e2e; mutasjon fanget.
+- **Profilsiden:** knappen i testbrukerpanelet pekte på `identity.load`, som ingen bunt har; nå
+  `identity.loadMe`. Ny e2e: ingen statisk tekst på siden er en rå nøkkel, på nb, nn og en-GB.
+
+## 2.89.0 - 2026-10-13
+
+### Kveldens utgivelse: menyen under Deltakere, plassering i kurslista, redigereren for ikke-eiere
+
+Produkteier 2026-10-13: «Finn noe mer vi kan ta i kveldens release» — små, avgrensede saker som
+kan testes samme dag. Følger med 2.88.3 («Publiser ny versjon») i samme prod-setting.
+
+- **#1096 Undermenyen under Deltakere viste rå nøkler** (`area.classes`, `area.status`, …) i prod.
+  Ordene settes av `content-area-nav-i18n.js` (admin-buntens `area.*`), men Status, Resultater og
+  Manuell behandling oversatte etterpå alle `[data-i18n]` med sin egen bunt, der `area.*` ikke finnes,
+  og oversetteren ga nøkkelen tilbake. Nå skriver sidene bare over teksten når bunten har nøkkelen
+  (også for placeholder). e2e: tre sider × nb/en-GB; feilet på Status før rettelsen.
+- **#1094 Plassering i «Mine kurs»:** et ugyldig tall («1-», «1e2», «2.5», over 9999) lagres ikke
+  lenger stille som tomt eller noe annet — feilbanner, fanen «Innstillinger» åpnes, feltet får fokus,
+  ingenting sendes. Kurslista viser plasseringen som merke ved navnet («Nr. 2»), ikke som kolonne
+  (lista skal holde seg innenfor ramma, #1084); lista-API-et leverer `sortOrder`.
+- **Seksjonsredigereren for den som ikke eier seksjonen** (funn fra QA-porten på 2.88.3): «Publiser ny
+  versjon», «Avpubliser», «Erstatt fra fil», «Arkiver» og «Slett» ble vist og ga 403. `GET
+  /sections/:id` leverer nå `canManage` (samme merke som lista), og redigereren er da ren lesing:
+  bare Eksporter — heller ikke Oversett (lagrer figurer), Lagre eller Last opp bilde, og tittel- og
+  tekstfeltet er skrivebeskyttet (QA-porten, to runder).
+  Lesing er fortsatt åpen for alle forfattere (produkteier 2026-09-08).
+- Feilbanneret i kursskjemaet ligger utenfor fanepanelene, så meldingen ses også fra «Innstillinger»
+  (QA-porten: en ugyldig plassering byttet fane og skjulte sin egen melding).
+- **#1087** var alt rettet i 2.82.0 (skillet bruker plattformens etikettregel, med en test som holder
+  dem like), men saken sto åpen — lukket.
+
+**Slik er det målt:** `test/e2e/deltakere-subnav-keys-1096.spec.ts` (6), nye tester i
+`test/e2e/admin-content-course-sort-order-1093.spec.ts` (ugyldige verdier, merket i lista),
+`test/e2e/section-publish-new-version-1095.spec.ts` (ikke-eier) og `test/m2-admin-sections.test.ts`
+(`canManage` for eier, administrator og annen fagansvarlig). Mutasjoner: #1094 fire, ikke-eier to,
+alle fanget; #1096 feilet før rettelsen og er grønn etter.
+
+## 2.88.3 - 2026-10-13
+
+### «Publiser ny versjon» for en publisert seksjon (#1095 oppfølging)
+
+Funnet da oppskriften for å justere kursene i prod ble skrevet: en kursoppdatering legger en ny,
+upublisert versjon på en seksjon som er publisert, og leveransen sier «publiser manuelt i admin-UI».
+Men lista og redigereren viste bare «Avpubliser» for en slik seksjon, og «Lagre» var grå uten endring
+— den nye versjonen kunne ikke publiseres uten omvei. Serveren kunne alt (`publishSection` aktiverer
+nyeste versjon); knappen manglet. Moduler har det alt (arbeidsflatens «publiser siste utkast»).
+
+- **Lista:** en seksjon med `lifecycle: "published_with_draft"` får **«Publiser ny versjon»** først i
+  raden (synlig, ikke under «Mer»), ved siden av «Avpubliser».
+- **Redigereren:** viser den nye versjonen (som før), og nå merket **«Nyere utkast»** i hodet og
+  knappen **«Publiser ny versjon»**; etter publisering er begge borte. Tilstanden leses fra
+  `hasUnpublishedChanges` i tjenerens svar og holdes i takt ved lagring og publisering.
+- Tekster i tre språk (`sections.publishNewVersion`, `sections.newVersionPublished`).
+
+**Slik er det målt:** `test/e2e/section-publish-new-version-1095.spec.ts` (3: lista med og uten
+nyere utkast, redigereren med merke og knapp som forsvinner etter publisering, redigereren uten),
+integrasjonstest i `test/m2-course-update-import-1095.test.ts` (oppdatering → `published_with_draft`
+og `hasUnpublishedChanges` → publiser → deltakeren ser ny tekst, kurset fortsatt publisert, «lest»
+står). Seks mutasjoner, alle fanget med grønn grunnlinje.
+
+QA-porten (runde 1) fant at knappene i redigererens hode sluttet å virke når hodet ble tegnet på nytt
+etter lagring eller publisering — lytteren satt på det gamle elementet. Gjaldt også «Avpubliser»,
+«Eksporter», «Arkiver» før 2.88.3, men rammet nå akkurat veien den nye knappen skal dekke (en lagring
+porten holder tilbake). Rettet: klikkene delegeres fra sideinnholdet, bundet én gang. e2e: tilbakeholdt
+lagring → «Publiser ny versjon» publiserer → «Avpubliser» virker; mutasjon fanget. Kjent, eldre:
+redigereren skjuler ikke livssyklusknappene for den som ikke eier seksjonen (403 ved klikk; lista er
+riktig vaktet).
+
+Også i 2.88.3: flervalgsspørsmål leses i stabil rekkefølge. Spørsmål som skrives i ett kall, får ofte
+samme `createdAt` (millisekund), og lesestedene (eksport/innholdspakke, påfylling #1062, deltakerens
+test) sorterte bare på den — rekkefølgen var da vilkårlig; publiseringsporten i kurskaskaden sorterte
+ikke i det hele tatt (den nummererer spørsmålene i meldingene). Nå `id` som andre nøkkel (cuid,
+stigende i skriverekkefølgen). Oppdaget av #1062-testen, som feilet to fulle kjøringer på rad.
+
 ## 2.88.2 - 2026-10-12
 
 ### Justere et publisert kurs, fase B: skillets arbeidsflyt (#1095)

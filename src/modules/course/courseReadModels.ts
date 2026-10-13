@@ -70,6 +70,8 @@ export interface AdminCourseListItem {
   description: string | null;
   certificationLevel: string | null;
   moduleCount: number;
+  // #1094: plasseringen i «Mine kurs» (null = alfabetisk), så kurslista kan vise den.
+  sortOrder: number | null;
   updatedAt: string;
   publishedAt: string | null;
   archivedAt: string | null;

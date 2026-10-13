@@ -289,6 +289,42 @@ describe("rensingen gjelder også inni blokkene (#1079)", () => {
   });
 });
 
+describe("«tenk først» — spørsmål med svaret bak et klikk (#1072)", () => {
+  const blokk = ":::tenk Hva tror du skjer hvis du laster opp **hele** anbudet?\nKI leser alt, men:\n\n- den finner kravene\n- den glemmer ingenting\n:::\n\nEtterpå.";
+
+  it("blir <details> med spørsmålet i <summary> og svaret inni — markdown virker i begge", () => {
+    const ut = html(blokk);
+    expect(ut).toContain('<details class="content-think"><summary class="content-think-question">');
+    expect(ut).toContain('<span class="content-think-label">Tenk først</span>');
+    expect(ut).toContain('<span class="content-think-text">Hva tror du skjer hvis du laster opp <strong>hele</strong> anbudet?</span>');
+    expect(ut).toContain('<span class="content-think-hint">Vis svaret</span>');
+    expect(ut).toMatch(/<div class="content-think-answer"><p>KI leser alt, men:<\/p>\s*<ul>\s*<li>den finner kravene<\/li>/);
+    expect(ut).toContain("</div></details>");
+    expect(ut).toContain("<p>Etterpå.</p>");
+    // Svaret er IKKE åpent fra start.
+    expect(ut).not.toMatch(/<details[^>]*\sopen/);
+  });
+
+  it("merkelappen følger språket, og «think» er samme blokk", () => {
+    expect(html(blokk, "en-GB")).toContain('<span class="content-think-label">Think first</span>');
+    expect(html(blokk, "en-GB")).toContain('<span class="content-think-hint">Show the answer</span>');
+    expect(html(blokk.replace(":::tenk", ":::think"), "nn")).toContain('<details class="content-think">');
+  });
+
+  it("rensingen gjelder inni blokken: <script> og onerror forsvinner, teksten står", () => {
+    const ut = html(':::tenk Spørsmål <img src=x onerror="alert(1)">?\nSvar <script>alert(1)</script> her.\n:::');
+    expect(ut).toContain('<details class="content-think">');
+    expect(ut).not.toContain("<script");
+    expect(ut).not.toContain("onerror");
+    expect(ut).toContain("Svar");
+  });
+
+  it("uten spørsmål, eller uten avsluttende :::, er det ingen blokk — teksten står som den er", () => {
+    expect(html(":::tenk\nSvar.\n:::")).not.toContain("<details");
+    expect(html(":::tenk Spørsmål?\nSvar uten slutt.")).not.toContain("<details");
+  });
+});
+
 describe("det som ikke er en blokk, står som før (#1079)", () => {
   it("avsnitt, lister, overskrifter og bilder tegnes uendret", () => {
     const ut = html("## Del\n\nEt avsnitt med **fet** tekst.\n\n1. en\n2. to\n\n![Figur](asset:fig-1)");

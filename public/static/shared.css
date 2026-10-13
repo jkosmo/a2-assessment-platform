@@ -1610,6 +1610,40 @@ dialog::backdrop {
 }
 .content-callout--warning .content-callout-label { color: var(--color-warning); }
 
+/* «Tenk først» (#1072): et spørsmål midt i teksten, svaret bak et klikk. <details>/<summary> gir
+   tastatur (Enter/mellomrom) og skjermleser uten skript. */
+.content-think {
+  margin: 0 0 12px;
+  border: 1px solid var(--color-border-soft);
+  border-left: 3px solid var(--color-primary);
+  border-radius: 8px;
+  background: #fff;
+}
+.content-think-question {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+  padding: 10px 12px;
+  cursor: pointer;
+  list-style: none;
+}
+.content-think-question::-webkit-details-marker { display: none; }
+.content-think-question:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; border-radius: 6px; }
+.content-think-label {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--color-primary);
+}
+.content-think-text { flex: 1 1 16rem; font-weight: 600; color: var(--color-text); }
+.content-think-hint { font-size: 13px; color: var(--color-meta); text-decoration: underline; }
+.content-think[open] .content-think-hint { display: none; }
+.content-think-answer { padding: 0 12px 10px; border-top: 1px solid var(--color-border-soft); }
+.content-think-answer > :first-child { margin-top: 10px; }
+.content-think-answer > :last-child { margin-bottom: 0; }
+
 /* Prompt-boks: en kodeblokk merket «prompt». Teksten brekker; den ruller ikke sidelengs. */
 .content-prompt {
   margin: 0 0 12px;

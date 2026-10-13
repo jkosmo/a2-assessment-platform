@@ -64,7 +64,7 @@ describe("#1062 append MCQ questions", () => {
     expect(newVersion.publishedAt).toBeNull();
     expect(newVersion.assessmentMode).toBe("MCQ_ONLY");
     expect(JSON.parse(newVersion.assessmentPolicyJson ?? "{}")).toMatchObject({ mcq: { questionsPerAttempt: 1 } });
-    const questions = await prisma.mCQQuestion.findMany({ where: { mcqSetVersionId: res.body.mcqSetVersionId }, orderBy: { createdAt: "asc" } });
+    const questions = await prisma.mCQQuestion.findMany({ where: { mcqSetVersionId: res.body.mcqSetVersionId }, orderBy: [{ createdAt: "asc" }, { id: "asc" }] });
     expect(questions).toHaveLength(4);
     const stems = questions.map((x) => JSON.parse(x.stem)["en-GB"]);
     expect(stems).toEqual(["Stem 1", "Stem 2", "Stem 3", "Stem 4"]);

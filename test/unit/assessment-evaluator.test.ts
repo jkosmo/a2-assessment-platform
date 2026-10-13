@@ -2,14 +2,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { warmModuleGraph } from "../support/moduleGraphWarmup.js";
 import { decisionReason, decisionReasonCodes } from "../../src/modules/assessment/decisionReason.js";
 
-vi.mock("../../src/config/env.js", () => ({
-  env: {
-    LLM_MODE: "stub",
-    LLM_STUB_MODEL_NAME: "stub-model",
-    AZURE_OPENAI_DEPLOYMENT: null,
-    ASSESSMENT_JOB_MAX_ATTEMPTS: 3,
-  },
+// Ett felles objekt (vi.hoisted), slik at en test kan bytte modus: evaluatoren leser env ved hvert kall.
+const mockEnv = vi.hoisted(() => ({
+  LLM_MODE: "stub" as string,
+  LLM_STUB_MODEL_NAME: "stub-model",
+  AZURE_OPENAI_DEPLOYMENT: null as string | null,
+  AZURE_OPENAI_ASSESSMENT_DEPLOYMENT: undefined as string | undefined,
+  ASSESSMENT_JOB_MAX_ATTEMPTS: 3,
 }));
+
+vi.mock("../../src/config/env.js", () => ({ env: mockEnv }));
 
 const evaluateSecondaryAssessmentTrigger = vi.fn();
 const evaluateSecondaryAssessmentDisagreement = vi.fn();
@@ -155,6 +157,32 @@ describe("AssessmentEvaluator — runLlmEvaluationPipeline", () => {
     expect(result.forceManualReviewReason).toBeUndefined();
     expect(evaluatePracticalWithLlm).toHaveBeenCalledTimes(1);
     expect(evaluatePracticalWithLlm).toHaveBeenCalledWith(expect.objectContaining({ assessmentPass: "primary" }));
+  });
+
+  it("2.90.0: vurderingsraden bærer navnet på vurderingsmodellen, ikke standardmodellen", async () => {
+    // QA-porten: vurderingen har brukt AZURE_OPENAI_ASSESSMENT_DEPLOYMENT siden 2026-10-11, men raden
+    // lagret AZURE_OPENAI_DEPLOYMENT, så vurderingsrapporten viste feil modell.
+    Object.assign(mockEnv, {
+      LLM_MODE: "azure_openai",
+      AZURE_OPENAI_DEPLOYMENT: "a2-standardmodell",
+      AZURE_OPENAI_ASSESSMENT_DEPLOYMENT: "a2-assessment-stg-gpt-5.4-mini",
+    });
+    try {
+      evaluatePracticalWithLlm.mockResolvedValue(buildLlmResult());
+      const { runLlmEvaluationPipeline } = await import("../../src/modules/assessment/AssessmentEvaluator.js");
+      await runLlmEvaluationPipeline({ ...BASE_CTX, inputContext: buildInputContext() });
+      expect(createLlmEvaluation).toHaveBeenCalledWith(
+        expect.objectContaining({ modelName: "a2-assessment-stg-gpt-5.4-mini:primary" }),
+      );
+
+      // Uten egen vurderingsmodell: standardmodellen, som før.
+      createLlmEvaluation.mockClear();
+      mockEnv.AZURE_OPENAI_ASSESSMENT_DEPLOYMENT = undefined;
+      await runLlmEvaluationPipeline({ ...BASE_CTX, inputContext: buildInputContext() });
+      expect(createLlmEvaluation).toHaveBeenCalledWith(expect.objectContaining({ modelName: "a2-standardmodell:primary" }));
+    } finally {
+      Object.assign(mockEnv, { LLM_MODE: "stub", AZURE_OPENAI_DEPLOYMENT: null, AZURE_OPENAI_ASSESSMENT_DEPLOYMENT: undefined });
+    }
   });
 
   it("runs secondary when primary recommends manual review", async () => {

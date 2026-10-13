@@ -451,7 +451,14 @@ adminSectionsRouter.get("/:sectionId", async (request, response, next) => {
     if (!section) {
       throw new NotFoundError("CourseSection", "section_not_found", "Course section not found.");
     }
-    response.json({ section: toDetail(section) });
+    // Redigereren skjuler handlingene en ikke-eier ville fått 403 på — samme merke som lista bruker.
+    const manageable = await listManageableContentIds({
+      contentType: "SECTION",
+      contentIds: [section.id],
+      actorUserId: request.context?.userId ?? "",
+      roles: request.context?.roles ?? [],
+    });
+    response.json({ section: { ...toDetail(section), canManage: manageable.has(section.id) } });
   } catch (error) {
     next(error);
   }

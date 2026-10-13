@@ -293,6 +293,45 @@ describe("#896 S4 translation gate — every publish door", () => {
     await request(app).delete(`/api/admin/content/modules/${moduleId}`).set(adminHeaders);
   });
 
+  // Hull QA-porten pekte på (2026-10-12): `replaceExisting` med en fil der kurset og modulen er UTKAST
+  // lot et publisert målkurs stå publisert med en modul uten aktiv versjon — «modul ikke tilgjengelig».
+  it("replaceExisting fra en utkastfil tar et publisert målkurs ned (modulen lander upublisert), med eget spor — men meldes ikke som holdt tilbake", async () => {
+    const moduleId = await createModule(threeLocales("Task"));
+    const courseId = await createCourseWith(moduleId);
+    const versions = await prisma.moduleVersion.findMany({ where: { moduleId }, orderBy: { versionNo: "desc" }, take: 1, select: { id: true } });
+    await request(app).post(`/api/admin/content/modules/${moduleId}/module-versions/${versions[0]!.id}/publish`).set(adminHeaders).send({}).expect(200);
+    await request(app).post(`/api/admin/content/courses/${courseId}/publish`).set(adminHeaders).send({}).expect(200);
+
+    const exportRes = await request(app).get(`/api/admin/content/courses/${courseId}/export-package`).set(adminHeaders);
+    expect(exportRes.status).toBe(200);
+    const envelope = exportRes.body.envelope;
+    // En fil der kurset og modulen er utkast (som en fil fra skillet, eller et upublisert kurs).
+    envelope.course.course.audit.publishedAt = null;
+    for (const item of envelope.course.course.items ?? []) if (item.module) item.module.activeVersion.audit.publishedAt = null;
+
+    const importRes = await request(app).post("/api/admin/content/courses/import").set(adminHeaders).send({ payload: envelope, mode: "replaceExisting", targetId: courseId });
+    expect(importRes.status, JSON.stringify(importRes.body)).toBe(201);
+    expect(importRes.body.heldBackByTranslationGate).toBe(false);
+
+    const after = await prisma.course.findUniqueOrThrow({ where: { id: courseId }, select: { publishedAt: true, items: { select: { moduleId: true } } } });
+    expect(after.publishedAt).toBeNull();
+    const nyModul = after.items.find((i) => i.moduleId)!.moduleId!;
+    expect((await prisma.module.findUniqueOrThrow({ where: { id: nyModul }, select: { activeVersionId: true } })).activeVersionId).toBeNull();
+    const spor = await prisma.auditEvent.findMany({ where: { entityType: "course", entityId: courseId, action: "course_unpublished" }, orderBy: { timestamp: "desc" }, select: { metadataJson: true } });
+    expect(JSON.parse(spor[0]!.metadataJson)).toMatchObject({ reason: "import_unpublished_module", mode: "replaceExisting" });
+
+    // Kontroll: createNew av samme utkastfil lager et upublisert kurs uten å melde «holdt tilbake».
+    const nytt = await request(app).post("/api/admin/content/courses/import").set(adminHeaders).send({ payload: envelope, mode: "createNew" });
+    expect(nytt.status).toBe(201);
+    expect(nytt.body.heldBackByTranslationGate).toBe(false);
+    expect((await prisma.course.findUniqueOrThrow({ where: { id: nytt.body.courseId }, select: { publishedAt: true } })).publishedAt).toBeNull();
+
+    await request(app).delete(`/api/admin/content/courses/${nytt.body.courseId}`).set(adminHeaders);
+    await request(app).delete(`/api/admin/content/courses/${courseId}`).set(adminHeaders);
+    await request(app).post(`/api/admin/content/modules/${moduleId}/unpublish`).set(adminHeaders);
+    await request(app).delete(`/api/admin/content/modules/${moduleId}`).set(adminHeaders);
+  });
+
   it("still auto-publishes an imported package that has every locale", async () => {
     const moduleId = await createModule(threeLocales("Task"));
     const versions = await prisma.moduleVersion.findMany({

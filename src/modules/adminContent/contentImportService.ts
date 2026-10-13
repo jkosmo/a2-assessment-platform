@@ -890,6 +890,11 @@ export async function importCourseFromEnvelope(
         // publiseres. Et kurs som var utkast ved kilden (skillets filer har ingen publiseringsdato
         // på modulene), er utkast fordi kilden var det — ikke «holdt tilbake» (#957 skiller de to).
         const courseWantsPublish = Boolean(payload.course.audit?.publishedAt);
+        // Ved `replaceExisting` kan målkurset alt være publisert. Lander en modul upublisert (fila var et
+        // utkast), må kurset ned — ellers står et levende kurs med en modul deltakeren ikke kan åpne (I1).
+        // Holdes adskilt fra `anyContentHeldBack`, som er det som MELDES tilbake (#957): et utkast fra
+        // kilden er ikke «holdt tilbake».
+        let anyModuleUnpublished = false;
 
         const summary: CourseUpdateSummary = { updatedSections: 0, updatedModules: 0, createdSections: 0, createdModules: 0, removedSections: 0, removedModules: 0, unplacedModuleIds: [], replacedUnownedIds: [], keptUnownedIds, unchangedIds };
         if (orderedItems && updatePlan) {
@@ -1055,6 +1060,7 @@ export async function importCourseFromEnvelope(
             } else {
               const imported = await importModulePayload(entry.module, { actorId: options.actorId, mode: "createNew" }, tx);
               if (imported.heldBackByTranslationGate || (courseWantsPublish && !imported.published)) anyContentHeldBack = true;
+              if (!imported.published) anyModuleUnpublished = true;
               courseItemInputs.push({ type: "MODULE", moduleId: imported.moduleId });
               importedModuleIds.push(imported.moduleId);
             }
@@ -1065,6 +1071,7 @@ export async function importCourseFromEnvelope(
           for (const item of payload.course.modules ?? []) {
             const imported = await importModulePayload(item.module, { actorId: options.actorId, mode: "createNew" }, tx);
             if (imported.heldBackByTranslationGate || (courseWantsPublish && !imported.published)) anyContentHeldBack = true;
+            if (!imported.published) anyModuleUnpublished = true;
             importedModules.push({ moduleId: imported.moduleId, sortOrder: item.sortOrder });
           }
           importedModules.sort((a, b) => a.sortOrder - b.sortOrder);
@@ -1089,7 +1096,7 @@ export async function importCourseFromEnvelope(
           // elementenes. Produkteier: «det bør en bevisst handling til for å publisere dem».
         } else if (payload.course.audit?.publishedAt && !anyContentHeldBack) {
           await publishCourse(courseId, options.actorId, tx);
-        } else if (anyContentHeldBack) {
+        } else if (anyContentHeldBack || (options.mode === "replaceExisting" && anyModuleUnpublished)) {
           // ⚠️ #996: å HOPPE OVER publiseringen er ikke det samme som å sørge for at kurset er
           // upublisert.
           //
@@ -1116,7 +1123,7 @@ export async function importCourseFromEnvelope(
                 actorId: options.actorId,
                 metadata: {
                   courseId,
-                  reason: "import_translation_gate_holdback",
+                  reason: anyContentHeldBack ? "import_translation_gate_holdback" : "import_unpublished_module",
                   previousPublishedAt: before.publishedAt.toISOString(),
                   mode: options.mode,
                 },

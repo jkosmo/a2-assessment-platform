@@ -597,7 +597,10 @@ function getListPage() {
     } },
     sort: { key: "title", dir: "asc", locale: () => currentLocale },
     columns: [
-      { key: "title", label: t("ui.name"), className: "col-title", sortValue: (c) => courseRowModel(c).title, render: (c) => escapeHtml(courseRowModel(c).title) },
+      // #1094: plasseringen i «Mine kurs» som merke ved navnet — forfatteren slipper å åpne hvert kurs
+      // for å se den. Et merke, ikke en kolonne: lista skal ikke bli bredere enn ramma (#1084).
+      { key: "title", label: t("ui.name"), className: "col-title", sortValue: (c) => courseRowModel(c).title, render: (c) => escapeHtml(courseRowModel(c).title)
+        + (Number.isInteger(c.sortOrder) ? ` <span class="status-chip course-placement-chip" title="${escapeHtml(t("courses.sortOrder"))}">${escapeHtml(tf("courses.list.placement", { n: c.sortOrder }))}</span>` : "") },
       { key: "status", label: t("ui.status"), className: "col-status", render: (c) => lifecycleBadge(c, t) },
       { key: "level", label: t("ui.certLevel"), className: "col-level", render: (c) => certBadge(c.certificationLevel) },
       { key: "moduleCount", label: t("courses.col.moduleCount"), className: "col-module-count", sortValue: (c) => c.moduleCount ?? 0, render: (c) => String(c.moduleCount ?? 0) },
@@ -1239,8 +1242,10 @@ function courseDetailBodyHtml() {
         </div>
       </div>
 
-      <div id="formErrorBanner" hidden></div>
     </div>
+    <!-- #1094 (QA): utenfor fanepanelene, så meldingen ses fra «Innstillinger» også — en ugyldig plassering
+         bytter dit, og feil fra tjeneren kan komme mens forfatteren står der. -->
+    <div id="formErrorBanner" hidden></div>
     <div data-form-tab="innstillinger" hidden>
       ${courseId ? `<div class="detail-section" id="ownerPanelHost" data-form-untracked></div>` : ""}
       <div class="detail-section">
@@ -1537,14 +1542,25 @@ function addSelectedItem() {
 // Detail event listeners
 // ---------------------------------------------------------------------------
 
-function initDetailEventListeners(courseId) {
-  // Handlingsraden i skjemasidas hode — samme handlere som lista (handleListTableClick).
-  pageContent.querySelector(".form-page-actions")?.addEventListener("click", (e) => {
-    const btn = e.target.closest("[data-action]");
+// Handlingsraden i skjemasidas hode — samme handlere som lista (handleListTableClick). ⚠️ Delegert fra
+// `pageContent`, bundet ÉN gang: hodet tegnes på nytt (`refreshHeader`, f.eks. når en navnefeil bytter
+// til bokmålspanelet), og en lytter på `.form-page-actions` fulgte med det gamle elementet ut — knappene
+// sluttet å virke til sida ble lastet på nytt (QA-porten 2.89.1; samme feil som seksjonsredigereren
+// hadde i 2.88.3). Lista har ingen `.form-page-actions`, så dette rører ikke radhandlingene.
+let headerActionsBound = false;
+function bindHeaderActions() {
+  if (headerActionsBound) return;
+  headerActionsBound = true;
+  pageContent.addEventListener("click", (e) => {
+    const btn = e.target.closest(".form-page-actions [data-action]");
     if (!btn) return;
     if (!getCourseFormPage().confirmLeave()) return;
     handleListTableClick(e, btn);
   });
+}
+
+function initDetailEventListeners(courseId) {
+  bindHeaderActions();
 
   // Combobox
   const comboboxInput = document.getElementById("comboboxInput");
@@ -1665,7 +1681,21 @@ async function saveCourse(courseId) {
   const enrollmentPolicy = document.getElementById("enrollmentPolicy")?.value === "RESTRICTED" ? "RESTRICTED" : "OPEN";
   const discussionsEnabled = document.getElementById("discussionsEnabled")?.checked !== false;
   // #1093: tomt felt sendes som null (alfabetisk); et tall sendes som tall.
-  const sortOrderRaw = (document.getElementById("sortOrder")?.value ?? "").trim();
+  // #1094: et tallfelt gir tom verdi for «1-» (validity.badInput), og «1e2» ble tolket som 1 — begge
+  // lagret stille noe annet enn forfatteren skrev. Bare et helt tall 0–9999, ellers melding og stopp.
+  const sortOrderInput = document.getElementById("sortOrder");
+  const sortOrderRaw = (sortOrderInput?.value ?? "").trim();
+  const sortOrderBad = Boolean(sortOrderInput?.validity?.badInput)
+    || (sortOrderRaw !== "" && (!/^\d+$/.test(sortOrderRaw) || Number(sortOrderRaw) > 9999));
+  if (sortOrderBad) {
+    if (errorBanner) {
+      errorBanner.innerHTML = `<div class="error-banner">${escapeHtml(t("courses.sortOrderInvalid"))}</div>`;
+      errorBanner.hidden = false;
+    }
+    courseFormPage?.showTab?.("innstillinger");
+    sortOrderInput?.focus();
+    return false;
+  }
   const sortOrder = sortOrderRaw === "" ? null : Number.parseInt(sortOrderRaw, 10);
   const sourceLocale = resolveCourseLocalizationSourceLocale(collectedValues, initialDetailLocaleValues);
   const effectiveValues = sourceLocale
@@ -1687,6 +1717,13 @@ async function saveCourse(courseId) {
       errorBanner.innerHTML = `<div class="error-banner">${escapeHtml(t("courses.nameRequiredNb"))}</div>`;
       errorBanner.hidden = false;
     }
+    // Feltet ligger i «Rediger», og i bokmålspanelet. Står forfatteren på «Innstillinger», eller er
+    // et annet språkpanel valgt (det følger grensesnittspråket), havnet fokus i et skjult felt.
+    courseFormPage?.showTab?.("rediger");
+    if (activeDetailLocale !== "nb") {
+      switchDetailLocale("nb");
+      courseFormPage?.refreshHeader?.();
+    }
     document.getElementById("title-nb")?.focus();
     return false;
   }
@@ -1695,6 +1732,7 @@ async function saveCourse(courseId) {
       errorBanner.innerHTML = `<div class="error-banner">${escapeHtml(t("courses.levelRequired"))}</div>`;
       errorBanner.hidden = false;
     }
+    courseFormPage?.showTab?.("rediger");
     document.getElementById("certLevel")?.focus();
     return false;
   }

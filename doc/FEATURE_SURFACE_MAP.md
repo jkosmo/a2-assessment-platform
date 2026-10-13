@@ -167,6 +167,9 @@ the summary is shown on the course page after navigation (`queueToast`/`flushQue
 **Hazard:** a new way to add items to a course must go through `setCourseItems`, and a new way to
 write a section version must keep the live version untouched (`appendInactiveSectionVersion`). A
 draft module must never be placed in a published course (I1: participants cannot complete it).
+After an update, a live section with a newer version shows «Publiser ny versjon» in the sections list
+(`data-action="publish-new"`) and in the editor (`#sectionPublishNewBtn`, from `hasUnpublishedChanges`);
+both call the ordinary `POST /sections/:id/publish`, which activates the newest version (2.88.3).
 
 ## 6b-1. Participant course list — order (#1093)
 
@@ -254,21 +257,24 @@ or `showToast` (textContent); see `public/admin-platform.js` / `public/profile.j
 
 ## 6d. Content blocks in section text (#1079)
 
-Four blocks are ordinary markdown read a second way while `marked` renders it — never a format of
+Five blocks are ordinary markdown read a second way while `marked` renders it — never a format of
 their own: `> **Husk:** …` (highlighted box; the labels Viktig/NB/Advarsel/Important/Warning give
 the warning colour), a fenced block marked `prompt` (prompt box with a copy button), `:::kort` …
 `:::` around `###` headings (cards; `:::cards` works too), and an image first in a card heading or
 in a table cell whose column has no name while another column has one (icon, 24 px; an image in a
-named column, or in a table with no named column at all, stays a picture). Tables get `data-label` on every cell so the phone stacking rule in `shared.css` shows the
+named column, or in a table with no named column at all, stays a picture). **#1072:** `:::tenk <question>`
+… `:::` (also `:::think`) becomes `<details class="content-think">` with the question in `<summary>`
+and the answer inside (opens with click/Enter/Space, no script; the label follows the locale). Frames
+cannot be nested — the first `:::` closes whichever frame is open. Tables get `data-label` on every cell so the phone stacking rule in `shared.css` shows the
 column name.
 
 | Surface | Where |
 | --- | --- |
-| Rendering (source of truth) | `src/modules/course/contentBlocks.ts` — a `Marked` instance per locale with a block extension (`contentCards`) and renderers for `code`, `blockquote`, `table`. Output is plain HTML with classes `content-callout`, `content-prompt`, `content-cards`, `content-card`, `content-icon`, `content-table`; both sanitizers (above) let it through on their default allowlist |
+| Rendering (source of truth) | `src/modules/course/contentBlocks.ts` — a `Marked` instance per locale with block extensions (`contentCards`, `contentThink` for #1072) and renderers for `code`, `blockquote`, `table`. Output is plain HTML with classes `content-callout`, `content-prompt`, `content-cards`, `content-card`, `content-icon`, `content-table`; both sanitizers (above) let it through on their default allowlist |
 | Styles | `public/static/shared.css`, the block at the end («Innholdsblokker i seksjonstekst») — one place for the reader, the editor preview and module task text |
 | Copy button | `public/static/content-blocks.js` — one delegated click listener. Loaded by `participant.html`, `admin-content-sections.html`, and via `import` in `admin-content-preview.js` (module workspace) |
 | Icon library | `![](icon:<name>)` — Lucide's names. `src/modules/course/iconLibrary.ts` reads the vendored bundle `public/static/icons/lucide-icons.json` (made by `scripts/icons/vendor-lucide.mjs`, `npm run icons:vendor`); `src/routes/icons.ts` serves `GET /static/icons/<name>.svg` (open, 404 for unknown); `sectionContent.ts` rewrites `icon:` to the route before sanitising and adds `content-icon`, dropping unknown names; `agentAuthoringValidationService.ts` rejects unknown names (`unknown_icon`). The skill's copy of the name list is `skills/a2-authoring-api/references/icon-names.txt` — regenerate both with the vendor script when the library is upgraded. The e2e static server (`scripts/test/admin-content-static-server.mjs`) mirrors the route |
-| Guard tests | `test/unit/section-content-blocks-1079.test.ts` (forms, non-forms, sanitisation inside blocks, `?locale=constructor`), `test/unit/icon-library-1079.test.ts` (library, route, rendering, validation), `test/e2e/content-blocks-1079.spec.ts` (1280/390/360: cards side by side vs stacked, column names on phone, copy, library icons at 24 px) |
+| Guard tests | `test/e2e/participant-think-first-1072.spec.ts` (think-first: opens, keyboard, label per locale); `test/unit/section-content-blocks-1079.test.ts` (forms, non-forms, sanitisation inside blocks, `?locale=constructor`), `test/unit/icon-library-1079.test.ts` (library, route, rendering, validation), `test/e2e/content-blocks-1079.spec.ts` (1280/390/360: cards side by side vs stacked, column names on phone, copy, library icons at 24 px) |
 
 **Maintenance hazard:** a new page that shows section HTML needs the script tag for the copy button;
 the CSS comes with `shared.css`. The skill (`skills/a2-authoring-api/references/section-content.md`)

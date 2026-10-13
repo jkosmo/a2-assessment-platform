@@ -52,4 +52,127 @@ test.describe("#1093 kursskjemaet — plassering i «Mine kurs»", () => {
     await expect.poll(() => sendt.length).toBe(2);
     expect(sendt[1]).toMatchObject({ sortOrder: null });
   });
+
+  test("#1094: et ugyldig tall lagres ikke stille — melding, fanen «Innstillinger» og feltet i fokus; ingenting sendes", async ({ page }) => {
+    await mockCommonApis(page, {
+      courses: [{ id: "course-1", title: "Velkommen", description: null, certificationLevel: "basic", moduleCount: 0, updatedAt: "2026-10-11T12:00:00.000Z", publishedAt: null, archivedAt: null, sortOrder: 3, modules: [] }],
+      libraryModules: [],
+    });
+    await page.route("**/api/admin/content/courses/*/items", (route: Route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ items: [] }) }));
+    const sendt: unknown[] = [];
+    await page.route("**/api/admin/content/courses/course-1", async (route: Route) => {
+      if (route.request().method() !== "PUT") return route.fallback();
+      sendt.push(route.request().postDataJSON());
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ course: { id: "course-1" } }) });
+    });
+    await page.addInitScript(() => { try { localStorage.setItem("participant.locale", "nb"); } catch { /* ignore */ } });
+    await page.goto("/admin-content/courses/course-1");
+    const innstillinger = page.locator('[data-form-tab-btn="innstillinger"]');
+    const felt = page.locator("#sortOrder");
+    for (const ugyldig of ["1-", "1e2", "10000", "2.5"]) {
+      if (!(await felt.isVisible())) await innstillinger.click();
+      await felt.fill("");
+      await felt.pressSequentially(ugyldig);
+      // Gå til en annen fane, så lagringen må hente oss tilbake til feltet.
+      await page.locator('[data-form-tab-btn]').first().click();
+      await page.locator("#formSaveBtn").click();
+      // Synlig, ikke bare i DOM-en: banneret lå i «Rediger»-fanen og ble skjult når skjemaet byttet fane.
+      await expect(page.locator("#formErrorBanner")).toBeVisible();
+      await expect(page.locator("#formErrorBanner")).toContainText("helt tall fra 0 til 9999");
+      await expect(felt).toBeVisible();
+      await expect(felt).toBeFocused();
+    }
+    expect(sendt).toEqual([]);
+    // Et gyldig tall går gjennom etterpå.
+    await felt.fill("7");
+    await page.locator("#formSaveBtn").click();
+    await expect.poll(() => sendt.length).toBe(1);
+    expect(sendt[0]).toMatchObject({ sortOrder: 7 });
+  });
+
+  test("navn eller nivå mangler mens forfatteren står på «Innstillinger»: skjemaet bytter til «Rediger» og feltet får fokus", async ({ page }) => {
+    await mockCommonApis(page, {
+      courses: [{ id: "course-1", title: "Velkommen", description: null, certificationLevel: "basic", moduleCount: 0, updatedAt: "2026-10-11T12:00:00.000Z", publishedAt: null, archivedAt: null, sortOrder: null, modules: [] }],
+      libraryModules: [],
+    });
+    await page.route("**/api/admin/content/courses/*/items", (route: Route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ items: [] }) }));
+    const sendt: unknown[] = [];
+    await page.route("**/api/admin/content/courses/course-1", async (route: Route) => {
+      if (route.request().method() !== "PUT") return route.fallback();
+      sendt.push(route.request().postDataJSON());
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ course: { id: "course-1" } }) });
+    });
+    await page.addInitScript(() => { try { localStorage.setItem("participant.locale", "nb"); } catch { /* ignore */ } });
+    await page.goto("/admin-content/courses/course-1");
+    await page.locator("#certLevel").selectOption("");
+    await page.locator('[data-form-tab-btn="innstillinger"]').click();
+    await page.locator("#formSaveBtn").click();
+    await expect(page.locator("#formErrorBanner")).toBeVisible();
+    await expect(page.locator("#certLevel")).toBeVisible();
+    await expect(page.locator("#certLevel")).toBeFocused();
+    expect(sendt).toEqual([]);
+  });
+
+  test("nytt kurs uten bokmålsnavn, med engelsk grensesnitt og «Innstillinger» åpen: bokmålspanelet og feltet vises og får fokus", async ({ page }) => {
+    await mockCommonApis(page, { courses: [], libraryModules: [] });
+    const sendt: unknown[] = [];
+    await page.route("**/api/admin/content/courses", async (route: Route) => {
+      if (route.request().method() !== "POST") return route.fallback();
+      sendt.push(route.request().postDataJSON());
+      await route.fulfill({ status: 201, contentType: "application/json", body: JSON.stringify({ course: { id: "ny" } }) });
+    });
+    await page.addInitScript(() => { try { localStorage.setItem("participant.locale", "en-GB"); } catch { /* ignore */ } });
+    await page.goto("/admin-content/courses/new");
+    await expect(page.locator("#title-en-GB")).toBeVisible();
+    await expect(page.locator("#title-nb")).toBeHidden();
+    await page.locator("#certLevel").selectOption("basic");
+    await page.locator('[data-form-tab-btn="innstillinger"]').click();
+    await page.locator("#formSaveBtn").click();
+    await expect(page.locator("#formErrorBanner")).toBeVisible();
+    await expect(page.locator("#title-nb")).toBeVisible();
+    await expect(page.locator("#title-nb")).toBeFocused();
+    expect(sendt).toEqual([]);
+  });
+
+  test("eksisterende kurs, engelsk grensesnitt: etter en navnefeil (hodet tegnes på nytt) virker knappene i hodet fortsatt", async ({ page }) => {
+    await mockCommonApis(page, {
+      courses: [{ id: "course-1", title: "Velkommen", description: null, certificationLevel: "basic", moduleCount: 0, updatedAt: "2026-10-11T12:00:00.000Z", publishedAt: null, archivedAt: null, sortOrder: null, modules: [] }],
+      libraryModules: [],
+    });
+    await page.route("**/api/admin/content/courses/*/items", (route: Route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ items: [] }) }));
+    const eksport: string[] = [];
+    await page.route("**/api/admin/content/courses/course-1/export-package", async (route: Route) => {
+      eksport.push("export");
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ envelope: { exportFormat: "a2-content-export/v1", scope: "course", course: { course: { title: "Velkommen", items: [] } } } }) });
+    });
+    await page.addInitScript(() => { try { localStorage.setItem("participant.locale", "en-GB"); } catch { /* ignore */ } });
+    await page.goto("/admin-content/courses/course-1");
+    await expect(page.locator("#title-en-GB")).toBeVisible();
+    // Tøm bokmålsnavnet (feltet ligger i det skjulte bokmålspanelet), så lagring gir navnefeil.
+    await page.locator("#title-nb").evaluate((el: HTMLInputElement) => { el.value = ""; el.dispatchEvent(new Event("input", { bubbles: true })); });
+    await page.locator("#formSaveBtn").click();
+    await expect(page.locator("#title-nb")).toBeFocused();
+    // Hodet er tegnet på nytt: «Export» (synlig eller under «More») skal fortsatt virke.
+    page.once("dialog", (d) => d.accept());
+    const knapp = page.locator('.form-page-actions [data-action="export"]');
+    const meny = knapp.locator("xpath=ancestor::details[contains(@class, 'row-more')]");
+    if ((await meny.count()) > 0) await meny.first().locator("summary").click();
+    await knapp.click();
+    await expect.poll(() => eksport).toEqual(["export"]);
+  });
+
+  test("#1094: kurslista viser plasseringen som merke ved navnet, og ingenting for kurs uten plassering", async ({ page }) => {
+    await mockCommonApis(page, {
+      courses: [
+        { id: "course-1", title: "Velkommen", description: null, certificationLevel: "basic", moduleCount: 0, updatedAt: "2026-10-11T12:00:00.000Z", publishedAt: null, archivedAt: null, sortOrder: 2, modules: [] },
+        { id: "course-2", title: "Rutiner", description: null, certificationLevel: "basic", moduleCount: 0, updatedAt: "2026-10-11T12:00:00.000Z", publishedAt: null, archivedAt: null, sortOrder: null, modules: [] },
+      ],
+      libraryModules: [],
+    });
+    await page.addInitScript(() => { try { localStorage.setItem("participant.locale", "nb"); } catch { /* ignore */ } });
+    await page.goto("/admin-content/courses");
+    const rad = (navn: string) => page.locator(".list-table tbody tr", { hasText: navn });
+    await expect(rad("Velkommen").locator(".course-placement-chip")).toHaveText("Nr. 2");
+    await expect(rad("Rutiner").locator(".course-placement-chip")).toHaveCount(0);
+  });
 });

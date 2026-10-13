@@ -214,8 +214,27 @@ function withoutCodeBlocks(text) {
 
 // The platform's own reading of a card frame (`:::kort`, `::: Kort`, `:::cards` — blanks and case
 // do not matter), so the count here agrees with what the reader will show.
-const FRAME_OPEN = /^:::[ \t]*(?:kort|cards)[ \t]*$/gim;
-const FRAME_CLOSE = /^:::[ \t]*$/gm;
+/** The frames in a text, line by line: unclosed, stray closing lines, and a frame opened inside another. */
+function frameProblems(prose) {
+  const problems = [];
+  let open = null;
+  for (const line of String(prose ?? "").split(/\r?\n/)) {
+    const opener = /^:::[ \t]*(kort|cards|tenk|think)\b/i.exec(line);
+    if (opener && (/^(kort|cards)$/i.test(opener[1]) ? /^:::[ \t]*(?:kort|cards)[ \t]*$/i.test(line) : /^:::[ \t]*(?:tenk|think)[ \t]+\S/i.test(line))) {
+      const kind = opener[1].toLowerCase();
+      if (open) problems.push(`a :::${kind} frame is opened inside a :::${open} frame — frames cannot be nested; the first ::: closes both, and the learner sees the markers as text`);
+      else open = kind;
+      continue;
+    }
+    if (/^:::[ \t]*$/.test(line)) {
+      if (open) open = null;
+      else problems.push("a ::: closes a frame that was never opened");
+    }
+  }
+  if (open) problems.push(`a :::${open} frame is opened and never closed — the platform shows it as plain text; close it with ::: on its own line`);
+  return problems;
+}
+
 
 function checkLearnerText(pkg) {
   const details = [];
@@ -236,12 +255,10 @@ function checkLearnerText(pkg) {
           break;
         }
       }
-      // A card frame that is not closed is shown as text, headings and all. Counted the way the
-      // platform reads frames, and only outside code blocks (a code block may show the syntax).
-      const opened = (prose.match(FRAME_OPEN) ?? []).length;
-      const closed = (prose.match(FRAME_CLOSE) ?? []).length;
-      if (opened > closed) details.push(`${where}: a :::kort frame is opened and never closed — the platform shows the cards as plain text; close it with ::: on its own line`);
-      if (closed > opened) details.push(`${where}: a ::: closes a card frame that was never opened`);
+      // A frame that is not closed is shown as text. Read the way the platform reads frames — the
+      // first ::: line closes whatever frame is open, so a frame inside a frame (#1072: a «tenk
+      // først» inside cards, or the other way round) breaks both — and only outside code blocks.
+      for (const problem of frameProblems(prose)) details.push(`${where}: ${problem}`);
     }
   }
   return { name: "learner text", status: details.length === 0 ? "ok" : "fail", summary: `${sections} section(s) read for the learner's voice and card frames`, details };

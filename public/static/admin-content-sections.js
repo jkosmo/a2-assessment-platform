@@ -250,6 +250,12 @@ function getListPage() {
       // regel som eierskaps-vakta, så vi ikke viser knapper som gir 403.
       const canManage = s.canManage !== false;
       const isLive = lifecycle === "published" || lifecycle === "published_with_draft";
+      // #1095: en publisert seksjon med en nyere, upublisert versjon (lagt klar av en kursoppdatering,
+      // eller en lagring publiseringsporten holdt tilbake) fikk bare «Avpubliser». Nå kan den nye
+      // versjonen publiseres herfra; serveren aktiverer den nyeste versjonen.
+      const publishNew = lifecycle === "published_with_draft"
+        ? `<button class="row-action-btn" data-action="publish-new" data-id="${id}">${escapeHtml(L("publishNewVersion"))}</button>`
+        : "";
       const publishToggle = lifecycle === "archived" ? ""
         : isLive
           ? `<button class="row-action-btn" data-action="unpublish" data-id="${id}">${escapeHtml(L("unpublish"))}</button>`
@@ -261,6 +267,8 @@ function getListPage() {
       // og finnes også for den som ikke eier seksjonen. «Slett» er ute av lista (D3) og ligger inne på den
       // arkiverte seksjonen.
       return [
+        // Først, så den står synlig og ikke under «Mer»: det er det forfatteren kom for.
+        canManage ? publishNew : "",
         canManage ? `<button class="row-action-btn" data-action="edit" data-id="${id}">${escapeHtml(L("edit"))}</button>` : "",
         // #894: å døpe om er ikke å redigere innholdet, og skal ikke koste en tur gjennom editoren.
         canManage ? `<button class="row-action-btn" data-action="rename" data-id="${id}">${escapeHtml(t("ui.action.rename"))}</button>` : "",
@@ -289,6 +297,7 @@ function getListPage() {
       else if (action === "export") exportSectionPackage(id, btn);
       else if (action === "duplicate") duplicateSection(id, btn);
       else if (action === "publish") sectionLifecycle(id, "publish", "published");
+      else if (action === "publish-new") sectionLifecycle(id, "publish", "newVersionPublished");
       else if (action === "unpublish") sectionLifecycle(id, "unpublish", "unpublished");
       else if (action === "archive") { if (window.confirm(L("confirmArchive"))) sectionLifecycle(id, "archive", "archived"); }
       else if (action === "restore") sectionLifecycle(id, "restore", "restored");
@@ -694,7 +703,7 @@ function getFormPage() {
     texts: sectionFormTexts,
     onBack: goBackFromEditor,
     title: () => (editing?.title?.[editing.editLocale] ?? "").trim() || pickLocalizedText(editing?.title ?? {}, currentLocale),
-    item: () => (editing?.id ? { lifecycle: editorSectionStatus() } : null),
+    item: () => (editing?.id ? { lifecycle: editorSectionStatus() === "published" && editing.hasUnpublishedChanges ? "published_with_draft" : editorSectionStatus() } : null),
     t: tNav,
     actions: () => sectionActions(),
     languages: {
@@ -713,7 +722,8 @@ function getFormPage() {
       onChange: (id) => { if (id === "forhandsvisning") refreshPreview(); },
     },
     body: () => sectionEditorBodyHtml(),
-    save: { onSave: () => persistSection() },
+    // Lagring krever eierskap: skjul knappen for den som ikke kan styre seksjonen (den ga 403).
+    save: { onSave: () => persistSection(), get hidden() { return editing?.canManage === false; } },
     afterRender: () => bindEditorHandlers(),
   });
   formPage.installGuards();
@@ -724,23 +734,31 @@ function getFormPage() {
 // finnes her (Oversett, Erstatt fra fil, Last opp bilde er inne i skjemaet).
 function sectionActions() {
   if (!editing) return [];
+  const manage = editing.canManage !== false;
   const status = editorSectionStatus();
   const id = editing.id ? escapeHtml(editing.id) : "";
   // Rekkefølge som i lista (D2): det man gjør ofte først, det farlige sist — tre vises, resten under «Mer».
   return [
-    `<button type="button" class="row-action-btn" id="translateBtn" data-editor-action="translate">${escapeHtml(L("translate"))}</button>`,
+    // «Oversett» lagrer oversatte figurer (krever eierskap) — ikke en lesehandling for en lagret seksjon.
+    !id || manage ? `<button type="button" class="row-action-btn" id="translateBtn" data-editor-action="translate">${escapeHtml(L("translate"))}</button>` : "",
     id ? `<button type="button" class="row-action-btn" data-editor-action="export">${escapeHtml(L("exportSection"))}</button>` : "",
-    id && status && status !== "archived"
+    // #1095: den nye versjonen redigereren viser, er ikke den deltakerne ser — publiser den.
+    // Livssyklus og «Erstatt fra fil» bare for den som kan styre seksjonen (eier eller administrator) —
+    // en ikke-eier fikk 403 (QA-porten 2.88.3). Oversett og Eksporter er lese-/kopihandlinger.
+    id && manage && status === "published" && editing.hasUnpublishedChanges
+      ? `<button type="button" class="row-action-btn" id="sectionPublishNewBtn" data-editor-action="publish">${escapeHtml(L("publishNewVersion"))}</button>`
+      : "",
+    id && manage && status && status !== "archived"
       ? (status === "published"
         ? `<button type="button" class="row-action-btn" id="sectionLifecycleBtn" data-editor-action="unpublish">${escapeHtml(L("unpublish"))}</button>`
         : `<button type="button" class="row-action-btn" id="sectionLifecycleBtn" data-editor-action="publish">${escapeHtml(L("publish"))}</button>`)
       : "",
-    id ? `<button type="button" class="row-action-btn" id="replaceFromFileBtn" data-editor-action="replace">${escapeHtml(L("replaceFromFile"))}</button>` : "",
-    id && status ? (status === "archived"
+    id && manage ? `<button type="button" class="row-action-btn" id="replaceFromFileBtn" data-editor-action="replace">${escapeHtml(L("replaceFromFile"))}</button>` : "",
+    id && manage && status ? (status === "archived"
       ? `<button type="button" class="row-action-btn" data-editor-action="restore">${escapeHtml(L("restore"))}</button>`
       : `<button type="button" class="row-action-btn" data-editor-action="archive">${escapeHtml(L("archive"))}</button>`) : "",
     // #1046 D3: sletting bor her, ikke i lista — og bare for en arkivert seksjon.
-    id && status === "archived" ? `<button type="button" class="row-action-btn destructive" id="sectionDeleteBtn" data-editor-action="delete">${escapeHtml(L("del"))}</button>` : "",
+    id && manage && status === "archived" ? `<button type="button" class="row-action-btn destructive" id="sectionDeleteBtn" data-editor-action="delete">${escapeHtml(L("del"))}</button>` : "",
   ];
 }
 
@@ -753,17 +771,17 @@ function sectionEditorBodyHtml() {
       <div class="section-editor card">
         <div class="form-field">
           <label for="titleInput">${escapeHtml(L("titleLabel"))}${editing.editLocale === "nb" ? ` <span class="required-note">${escapeHtml(t("form.required"))}</span>` : ""}</label>
-          <input type="text" id="titleInput" data-form-title value="${escapeHtml(editing.title[editing.editLocale])}" autocomplete="off" />
+          <input type="text" id="titleInput" data-form-title value="${escapeHtml(editing.title[editing.editLocale])}" autocomplete="off" ${editing.canManage === false ? "readonly" : ""} />
         </div>
         <div class="editor-single">
           <div class="editor-pane-label" style="display:flex;justify-content:space-between;align-items:center;gap:8px">
             <span>${escapeHtml(L("markdown"))} <span class="required-note">${escapeHtml(t("form.required"))}</span></span>
             <span data-form-untracked>
-              <button type="button" id="uploadImageBtn" class="btn btn-secondary" style="width:auto;font-size:12px;padding:2px 8px" ${editing.id ? "" : `disabled title="${escapeHtml(L("saveFirst"))}"`}>${escapeHtml(L("uploadImage"))}</button>
+              ${editing.canManage === false ? "" : `<button type="button" id="uploadImageBtn" class="btn btn-secondary" style="width:auto;font-size:12px;padding:2px 8px" ${editing.id ? "" : `disabled title="${escapeHtml(L("saveFirst"))}"`}>${escapeHtml(L("uploadImage"))}</button>`}
               <input type="file" id="imageFileInput" accept="image/png,image/jpeg,image/gif,image/webp,image/svg+xml,.svg" hidden />
             </span>
           </div>
-          <textarea id="markdownInput">${escapeHtml(editing.body[editing.editLocale])}</textarea>
+          <textarea id="markdownInput" ${editing.canManage === false ? "readonly" : ""}>${escapeHtml(editing.body[editing.editLocale])}</textarea>
         </div>
         <input type="file" id="replaceFromFileInput" accept="${SECTION_FILE_ACCEPT}" hidden data-form-untracked />
         <span class="editor-status" id="editorStatus"></span>
@@ -779,10 +797,17 @@ function sectionEditorBodyHtml() {
     </div>`;
 }
 
-function bindEditorHandlers() {
-  // Handlingsraden i hodet.
-  pageContent.querySelector(".form-page-actions")?.addEventListener("click", async (e) => {
-    const btn = e.target.closest("[data-editor-action]");
+// Handlingsraden i hodet. ⚠️ Delegert fra `pageContent`, bundet ÉN gang: hodet tegnes på nytt etter
+// lagring og publisering (`refreshSectionLifecycleUI` → `formPage.refreshHeader`), og en lytter på
+// `.form-page-actions` fulgte med det gamle elementet ut — knappene sluttet å virke til sida ble
+// lastet på nytt (QA-porten, 2.88.3: «Publiser ny versjon» etter en tilbakeholdt lagring, og
+// «Avpubliser» etter publisering).
+let headerActionsBound = false;
+function bindHeaderActions() {
+  if (headerActionsBound) return;
+  headerActionsBound = true;
+  pageContent.addEventListener("click", async (e) => {
+    const btn = e.target.closest(".form-page-actions [data-editor-action]");
     if (!btn || !editing) return;
     const action = btn.dataset.editorAction;
     if (action === "translate") return translateFromCurrent();
@@ -794,6 +819,10 @@ function bindEditorHandlers() {
     if (action === "restore") return lifecycleInEditor("restore", "restored");
     if (action === "delete") return deleteSection(editing.id);
   });
+}
+
+function bindEditorHandlers() {
+  bindHeaderActions();
   document.getElementById("replaceFromFileInput")?.addEventListener("change", (event) => replaceSectionFromFile(event.target));
   document.getElementById("titleInput")?.addEventListener("input", captureInputs);
   document.getElementById("markdownInput")?.addEventListener("input", () => { captureInputs(); schedulePreview(); });
@@ -818,6 +847,7 @@ async function lifecycleInEditor(action, toastKey) {
     const data = await apiFetch(`/api/admin/content/sections/${encodeURIComponent(editing.id)}/${action}`, getHeaders, { method: "POST" });
     editing.archivedAt = data.section?.archivedAt ?? (action === "archive" ? new Date().toISOString() : null);
     editing.activeVersionId = data.section?.activeVersionId ?? editing.activeVersionId;
+    editing.hasUnpublishedChanges = Boolean(data.section?.hasUnpublishedChanges);
     showToast(L(toastKey));
     refreshSectionLifecycleUI();
   } catch (err) {
@@ -834,6 +864,9 @@ async function renderEditorView(sectionId) {
       editing.title = parseLocalized(data.section.title);
       editing.body = parseLocalized(data.section.bodyMarkdown);
       editing.activeVersionId = data.section.activeVersionId ?? null;
+      editing.hasUnpublishedChanges = Boolean(data.section.hasUnpublishedChanges);
+      // Uten merket (eldre svar) antas eierskap, som i lista: tjeneren vakter skrivingen uansett.
+      editing.canManage = data.section.canManage !== false;
       editing.archivedAt = data.section.archivedAt ?? null;
     } catch (err) {
       pageContent.innerHTML = `<div class="empty-state"><p class="empty-state-title">${escapeHtml(apiErrorText(err))}</p></div>`;
@@ -866,9 +899,11 @@ async function toggleSectionLifecycle(action, btn) {
   btn.disabled = true;
   try {
     const data = await apiFetch(`/api/admin/content/sections/${encodeURIComponent(editing.id)}/${action}`, getHeaders, { method: "POST" });
+    const hadNewVersion = action === "publish" && editing.hasUnpublishedChanges && Boolean(editing.activeVersionId);
     editing.activeVersionId = data.section?.activeVersionId ?? null;
+    editing.hasUnpublishedChanges = Boolean(data.section?.hasUnpublishedChanges);
     editing.archivedAt = data.section?.archivedAt ?? null;
-    showToast(L(action === "publish" ? "published" : "unpublished"));
+    showToast(L(action === "publish" ? (hadNewVersion ? "newVersionPublished" : "published") : "unpublished"));
     refreshSectionLifecycleUI();
   } catch (err) {
     // #916: same gate rendering as the list's Publiser — both are the same door.
@@ -941,6 +976,7 @@ async function persistSection({ silent } = {}) {
       });
       editing.id = data.section.id;
       editing.activeVersionId = data.section.activeVersionId ?? null;
+      editing.hasUnpublishedChanges = Boolean(data.section.hasUnpublishedChanges);
       editing.archivedAt = data.section.archivedAt ?? null;
       heldBack = data.translationGate?.heldBack ? data.translationGate.issues : null;
       history.replaceState({}, "", `/admin-content/sections?id=${encodeURIComponent(editing.id)}`);
@@ -957,6 +993,7 @@ async function persistSection({ silent } = {}) {
       });
       // Lagring publiserer (latest-wins) — oppdater status så merkelappen blir riktig.
       editing.activeVersionId = contentRes.section?.activeVersionId ?? null;
+      editing.hasUnpublishedChanges = Boolean(contentRes.section?.hasUnpublishedChanges);
       heldBack = contentRes.translationGate?.heldBack ? contentRes.translationGate.issues : null;
     }
     // #705: hold status-merkelappen + Publiser/Avpubliser-knappen i editoren i synk etter lagring.
