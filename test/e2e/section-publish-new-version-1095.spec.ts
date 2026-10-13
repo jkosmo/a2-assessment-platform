@@ -98,6 +98,45 @@ test.describe("#1095 — publiser den nye versjonen av en publisert seksjon", ()
     await expect(page.locator(".status-chip")).toHaveCount(0);
   });
 
+  test("knappene i hodet virker også etter at hodet er tegnet på nytt: tilbakeholdt lagring → «Publiser ny versjon» publiserer; så virker «Avpubliser»", async ({ page }) => {
+    // QA-porten (2.88.3): hodet tegnes på nytt etter lagring og publisering; en lytter på det gamle
+    // elementet gjorde knappene døde til sida ble lastet på nytt.
+    await mockBase(page);
+    await page.route("**/api/admin/content/sections", (route: Route) =>
+      route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ sections: [rad("sec-x", "published")] }) }),
+    );
+    const sek = { id: "sec-x", title: tittel, bodyMarkdown: JSON.stringify({ nb: "Tekst", nn: "Tekst", "en-GB": "Text" }), activeVersionId: "v1", archivedAt: null, hasUnpublishedChanges: false, assets: [] };
+    await page.route("**/api/admin/content/sections/sec-x", (route: Route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ section: sek }) }));
+    await page.route("**/api/admin/content/sections/sec-x/title", (route: Route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ section: sek }) }));
+    // Lagringen holdes tilbake av porten: den nye versjonen står upublisert.
+    await page.route("**/api/admin/content/sections/sec-x/content", (route: Route) =>
+      route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ section: { ...sek, hasUnpublishedChanges: true }, translationGate: { heldBack: true, issues: [{ field: "bodyMarkdown", missingLocales: ["nn", "en-GB"] }] } }) }),
+    );
+    const kall: string[] = [];
+    await page.route("**/api/admin/content/sections/sec-x/publish", (route: Route) => {
+      kall.push("publish");
+      return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ section: { ...sek, activeVersionId: "v2", hasUnpublishedChanges: false } }) });
+    });
+    await page.route("**/api/admin/content/sections/sec-x/unpublish", (route: Route) => {
+      kall.push("unpublish");
+      return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ section: { ...sek, activeVersionId: null, hasUnpublishedChanges: false } }) });
+    });
+
+    await page.goto("/admin-content/sections?id=sec-x");
+    await expect(page.locator("#sectionPublishNewBtn")).toHaveCount(0);
+    await page.locator("#markdownInput").fill("Bare bokmål nå.");
+    await page.locator("#formSaveBtn").click();
+    // Hodet er tegnet på nytt: merket og knappen er der — og knappen virker.
+    await expect(page.locator(".status-chip")).toHaveText("Nyere utkast");
+    await page.locator("#sectionPublishNewBtn").click();
+    await expect.poll(() => kall).toEqual(["publish"]);
+    await expect(page.locator("#sectionPublishNewBtn")).toHaveCount(0);
+    // Hodet er tegnet på nytt igjen: «Avpubliser» virker også.
+    page.once("dialog", (d) => d.accept());
+    await page.locator("#sectionLifecycleBtn").click();
+    await expect.poll(() => kall).toEqual(["publish", "unpublish"]);
+  });
+
   test("redigereren: en publisert seksjon uten nyere versjon har ingen slik knapp", async ({ page }) => {
     await mockBase(page);
     await page.route("**/api/admin/content/sections", (route: Route) =>

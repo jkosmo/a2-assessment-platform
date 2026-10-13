@@ -25,6 +25,14 @@ integrasjonstest i `test/m2-course-update-import-1095.test.ts` (oppdatering → 
 og `hasUnpublishedChanges` → publiser → deltakeren ser ny tekst, kurset fortsatt publisert, «lest»
 står). Seks mutasjoner, alle fanget med grønn grunnlinje.
 
+QA-porten (runde 1) fant at knappene i redigererens hode sluttet å virke når hodet ble tegnet på nytt
+etter lagring eller publisering — lytteren satt på det gamle elementet. Gjaldt også «Avpubliser»,
+«Eksporter», «Arkiver» før 2.88.3, men rammet nå akkurat veien den nye knappen skal dekke (en lagring
+porten holder tilbake). Rettet: klikkene delegeres fra sideinnholdet, bundet én gang. e2e: tilbakeholdt
+lagring → «Publiser ny versjon» publiserer → «Avpubliser» virker; mutasjon fanget. Kjent, eldre:
+redigereren skjuler ikke livssyklusknappene for den som ikke eier seksjonen (403 ved klikk; lista er
+riktig vaktet).
+
 ## 2.88.2 - 2026-10-12
 
 ### Justere et publisert kurs, fase B: skillets arbeidsflyt (#1095)

@@ -792,10 +792,17 @@ function sectionEditorBodyHtml() {
     </div>`;
 }
 
-function bindEditorHandlers() {
-  // Handlingsraden i hodet.
-  pageContent.querySelector(".form-page-actions")?.addEventListener("click", async (e) => {
-    const btn = e.target.closest("[data-editor-action]");
+// Handlingsraden i hodet. ⚠️ Delegert fra `pageContent`, bundet ÉN gang: hodet tegnes på nytt etter
+// lagring og publisering (`refreshSectionLifecycleUI` → `formPage.refreshHeader`), og en lytter på
+// `.form-page-actions` fulgte med det gamle elementet ut — knappene sluttet å virke til sida ble
+// lastet på nytt (QA-porten, 2.88.3: «Publiser ny versjon» etter en tilbakeholdt lagring, og
+// «Avpubliser» etter publisering).
+let headerActionsBound = false;
+function bindHeaderActions() {
+  if (headerActionsBound) return;
+  headerActionsBound = true;
+  pageContent.addEventListener("click", async (e) => {
+    const btn = e.target.closest(".form-page-actions [data-editor-action]");
     if (!btn || !editing) return;
     const action = btn.dataset.editorAction;
     if (action === "translate") return translateFromCurrent();
@@ -807,6 +814,10 @@ function bindEditorHandlers() {
     if (action === "restore") return lifecycleInEditor("restore", "restored");
     if (action === "delete") return deleteSection(editing.id);
   });
+}
+
+function bindEditorHandlers() {
+  bindHeaderActions();
   document.getElementById("replaceFromFileInput")?.addEventListener("change", (event) => replaceSectionFromFile(event.target));
   document.getElementById("titleInput")?.addEventListener("input", captureInputs);
   document.getElementById("markdownInput")?.addEventListener("input", () => { captureInputs(); schedulePreview(); });
