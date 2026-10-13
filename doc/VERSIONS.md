@@ -29,7 +29,9 @@ Produkteier: «La oss legge på mer, det er lenge til kvelden.»
 - QA-porten: stage-aktiveringen (`activate-staging-app-layer.yml`, full Bicep-utrulling) sender også
   de nye modellinnstillingene; skillet nekter en ramme inni en annen (`:::tenk` i `:::kort` eller
   omvendt — den første `:::` lukker begge); vurderingsraden lagrer navnet på modellen som faktisk
-  vurderte (`AZURE_OPENAI_ASSESSMENT_DEPLOYMENT`), ikke standardmodellen. NB: `deploy-azure.yml`
+  vurderte (`AZURE_OPENAI_ASSESSMENT_DEPLOYMENT`), ikke standardmodellen. Vurderinger fra 2026-10-11 og fram
+  til denne versjonen står med gpt-4.1-mini som modellnavn, selv om gpt-5.4-mini vurderte dem; sammenlign
+  modellene etter dato, ikke etter dette feltet, for den perioden. NB: `deploy-azure.yml`
   kjøres fra `main`, så den sender innstillingene først når denne utgivelsen er flettet til `main`.
 
 ## 2.89.1 - 2026-10-13

@@ -1,7 +1,7 @@
 # Section content — text, boxes, prompts, cards, pictures
 
 Contents: [Writing the text](#writing-the-text) · [Headings and lists](#headings-and-lists) ·
-[Table](#table) · [Callout](#callout) · [Prompt](#prompt) · [Cards](#cards) · [Icons](#icons) ·
+[Table](#table) · [Callout](#callout) · [Prompt](#prompt) · [Cards](#cards) · [Think first](#think-first) · [Icons](#icons) ·
 [Pictures from the source](#pictures-from-the-source) · [Figures](#figures) ·
 [A finished section](#a-finished-section)
 
