@@ -11,6 +11,8 @@ import { Marked, type Tokens } from "marked";
  *   > **Husk:** …            et sitat som åpner med fet merkelapp      → uthevet boks
  *   ```prompt … ```          en kodeblokk merket «prompt»              → prompt-boks med «Kopier»
  *   :::kort … :::            en ramme rundt underoverskrifter          → kort ved siden av hverandre
+ *   :::tenk Spørsmål? … :::  et spørsmål med svaret inni rammen        → «tenk først», svaret bak et
+ *                                                                        klikk (<details>, #1072)
  *   ### ![](asset:x) Tittel  et bilde først i en kortoverskrift        → ikon
  *
  * Alt gjøres mens markdown blir til HTML (marked), som tekst. Ingen DOM bygges: plattformens
@@ -24,6 +26,13 @@ const COPY_LABELS: Record<string, { copy: string; copied: string }> = {
   nb: { copy: "Kopier", copied: "Kopiert" },
   nn: { copy: "Kopier", copied: "Kopiert" },
   "en-GB": { copy: "Copy", copied: "Copied" },
+};
+
+// #1072: merkelappen foran spørsmålet, og hintet som står til svaret er åpnet.
+const THINK_LABELS: Record<string, { label: string; show: string }> = {
+  nb: { label: "Tenk først", show: "Vis svaret" },
+  nn: { label: "Tenk først", show: "Vis svaret" },
+  "en-GB": { label: "Think first", show: "Show the answer" },
 };
 
 const escapeHtml = (text: string) =>
@@ -57,12 +66,54 @@ interface CardsToken extends Tokens.Generic {
   tokens: Tokens.Generic[];
 }
 
+interface ThinkToken extends Tokens.Generic {
+  type: "contentThink";
+  raw: string;
+  question: Tokens.Generic[];
+  tokens: Tokens.Generic[];
+}
+
 /** `locale` er alt siktet av renderSectionBlocks: et av språkene i COPY_LABELS, eller ingen. */
 function createSectionMarked(locale?: string): Marked {
   const labels = COPY_LABELS[locale ?? "nb"]!;
+  const think = THINK_LABELS[locale ?? "nb"]!;
 
   return new Marked({
     extensions: [
+      {
+        // #1072: «Tenk først» — et spørsmål midt i teksten, svaret skjult til deltakeren trykker.
+        //   :::tenk Hva tror du skjer hvis …?
+        //   Svaret, i vanlig markdown (avsnitt, lister, fet skrift).
+        //   :::
+        // Spørsmålet står på åpningslinja (uten spørsmål er det ingen blokk, og teksten står som den
+        // er). Tegnes som <details>/<summary>: åpnes med klikk, Enter eller mellomrom uten skript, og
+        // rensingen slipper elementene gjennom. «think» er samme blokk på engelsk.
+        name: "contentThink",
+        level: "block",
+        start(src: string) {
+          return src.match(/^:::[ \t]*(?:tenk|think)[ \t]+\S/im)?.index;
+        },
+        tokenizer(src: string) {
+          const match = /^:::[ \t]*(?:tenk|think)[ \t]+([^\r\n]*\S)[ \t]*\r?\n([\s\S]*?)\r?\n:::[ \t]*(?=\r?\n|$)/i.exec(src);
+          if (!match) return undefined;
+          const token: ThinkToken = { type: "contentThink", raw: match[0], question: [], tokens: [] };
+          this.lexer.inlineTokens(match[1]!, token.question as Tokens.Generic[] as never);
+          this.lexer.blockTokens(match[2]!, token.tokens as Tokens.Generic[] as never);
+          return token;
+        },
+        renderer(token) {
+          const t = token as ThinkToken;
+          const question = this.parser.parseInline(t.question as never);
+          const answer = this.parser.parse(t.tokens as never);
+          return (
+            `<details class="content-think"><summary class="content-think-question">` +
+            `<span class="content-think-label">${escapeHtml(think.label)}</span>` +
+            `<span class="content-think-text">${question}</span>` +
+            `<span class="content-think-hint">${escapeHtml(think.show)}</span>` +
+            `</summary><div class="content-think-answer">${answer}</div></details>\n`
+          );
+        },
+      },
       {
         name: "contentCards",
         level: "block",

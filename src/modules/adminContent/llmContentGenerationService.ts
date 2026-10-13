@@ -1813,6 +1813,7 @@ ${buildLanguageEnforcementDirective(input.targetLocale)}
 
 - Translate ONLY human-readable text. Preserve meaning, tone and intended audience.
 - Keep ALL markdown formatting exactly: headings (#), lists, links, emphasis, code blocks, tables, images.
+- Keep block markers exactly as written: a line \`:::kort\`, \`:::cards\`, \`:::tenk\` or \`:::think\` keeps its marker word untranslated, and a closing line \`:::\` stays. Translate the question after \`:::tenk\` / \`:::think\` on the same line, and the text inside the block.
 - Do NOT translate or alter URLs, code, or {{asset:...}} placeholders.
 - Do not add or remove content, fields, or markdown structure.
 

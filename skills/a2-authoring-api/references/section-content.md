@@ -128,6 +128,32 @@ the same parts in the same order.
 - When the frames compare the same few properties in a word or two each, a [table](#table) reads
   better than cards. When each frame holds sentences or lists, use cards.
 
+## Think first
+
+A question in the middle of the text, with the answer hidden until the learner opens it — guessing
+before being told is what makes the explanation stick. A frame `:::tenk` with the question on the
+same line, the answer inside, `:::` to close:
+
+```markdown
+:::tenk Hva tror du skjer hvis du laster opp hele konkurransegrunnlaget og ber om et sammendrag?
+KI leser alt, men sammendraget blir **generelt**. Spør heller etter det du trenger:
+
+- kravene til leveransen
+- tildelingskriteriene og vektingen
+:::
+```
+
+- **Where:** after a problem or a situation has been set out, before the text explains it. One or
+  two per section at most; a section that only asks is a quiz, and the quiz is the module's job.
+- **From the source only.** The question is one the source raises, and the answer is what the source
+  says. Never a question the source does not answer.
+- The answer is ordinary markdown — sentences, a short list, bold. Keep it short; the explanation
+  that follows in the text can go further.
+- The platform shows it as a box labelled «Tenk først» / «Think first» with «Vis svaret» to open.
+  Without the question on the opening line it is not a box. `produce-course.mjs` fails on a frame
+  that is not closed.
+- In the other languages the marker word stays `:::tenk`; translate the question and the answer.
+
 ## Icons
 
 Icons come from the platform's own library, written `![](icon:<name>)` — the same icons in every

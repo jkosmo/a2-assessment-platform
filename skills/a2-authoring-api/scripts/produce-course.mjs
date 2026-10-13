@@ -214,7 +214,8 @@ function withoutCodeBlocks(text) {
 
 // The platform's own reading of a card frame (`:::kort`, `::: Kort`, `:::cards` — blanks and case
 // do not matter), so the count here agrees with what the reader will show.
-const FRAME_OPEN = /^:::[ \t]*(?:kort|cards)[ \t]*$/gim;
+// #1072: «tenk først» er også en ramme (spørsmålet står på åpningslinja). Én som ikke lukkes, vises som tekst.
+const FRAME_OPEN = /^:::[ \t]*(?:(?:kort|cards)[ \t]*|(?:tenk|think)[ \t]+\S.*)$/gim;
 const FRAME_CLOSE = /^:::[ \t]*$/gm;
 
 function checkLearnerText(pkg) {
