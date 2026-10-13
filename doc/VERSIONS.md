@@ -2,6 +2,35 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.89.0 - 2026-10-13
+
+### Kveldens utgivelse: menyen under Deltakere, plassering i kurslista, redigereren for ikke-eiere
+
+Produkteier 2026-10-13: «Finn noe mer vi kan ta i kveldens release» — små, avgrensede saker som
+kan testes samme dag. Følger med 2.88.3 («Publiser ny versjon») i samme prod-setting.
+
+- **#1096 Undermenyen under Deltakere viste rå nøkler** (`area.classes`, `area.status`, …) i prod.
+  Ordene settes av `content-area-nav-i18n.js` (admin-buntens `area.*`), men Status, Resultater og
+  Manuell behandling oversatte etterpå alle `[data-i18n]` med sin egen bunt, der `area.*` ikke finnes,
+  og oversetteren ga nøkkelen tilbake. Nå skriver sidene bare over teksten når bunten har nøkkelen
+  (også for placeholder). e2e: tre sider × nb/en-GB; feilet på Status før rettelsen.
+- **#1094 Plassering i «Mine kurs»:** et ugyldig tall («1-», «1e2», «2.5», over 9999) lagres ikke
+  lenger stille som tomt eller noe annet — feilbanner, fanen «Innstillinger» åpnes, feltet får fokus,
+  ingenting sendes. Kurslista viser plasseringen som merke ved navnet («Nr. 2»), ikke som kolonne
+  (lista skal holde seg innenfor ramma, #1084); lista-API-et leverer `sortOrder`.
+- **Seksjonsredigereren for den som ikke eier seksjonen** (funn fra QA-porten på 2.88.3): «Publiser ny
+  versjon», «Avpubliser», «Erstatt fra fil», «Arkiver» og «Slett» ble vist og ga 403. `GET
+  /sections/:id` leverer nå `canManage` (samme merke som lista), og redigereren viser da bare
+  Oversett og Eksporter. Lesing er fortsatt åpen for alle forfattere (produkteier 2026-09-08).
+- **#1087** var alt rettet i 2.82.0 (skillet bruker plattformens etikettregel, med en test som holder
+  dem like), men saken sto åpen — lukket.
+
+**Slik er det målt:** `test/e2e/deltakere-subnav-keys-1096.spec.ts` (6), nye tester i
+`test/e2e/admin-content-course-sort-order-1093.spec.ts` (ugyldige verdier, merket i lista),
+`test/e2e/section-publish-new-version-1095.spec.ts` (ikke-eier) og `test/m2-admin-sections.test.ts`
+(`canManage` for eier, administrator og annen fagansvarlig). Mutasjoner: #1094 fire, ikke-eier to,
+alle fanget; #1096 feilet før rettelsen og er grønn etter.
+
 ## 2.88.3 - 2026-10-13
 
 ### «Publiser ny versjon» for en publisert seksjon (#1095 oppfølging)
