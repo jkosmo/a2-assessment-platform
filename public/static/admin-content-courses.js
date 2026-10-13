@@ -1706,6 +1706,8 @@ async function saveCourse(courseId) {
       errorBanner.innerHTML = `<div class="error-banner">${escapeHtml(t("courses.nameRequiredNb"))}</div>`;
       errorBanner.hidden = false;
     }
+    // Feltet ligger i «Rediger»; står forfatteren på «Innstillinger», havnet fokus i et skjult felt.
+    courseFormPage?.showTab?.("rediger");
     document.getElementById("title-nb")?.focus();
     return false;
   }
@@ -1714,6 +1716,7 @@ async function saveCourse(courseId) {
       errorBanner.innerHTML = `<div class="error-banner">${escapeHtml(t("courses.levelRequired"))}</div>`;
       errorBanner.hidden = false;
     }
+    courseFormPage?.showTab?.("rediger");
     document.getElementById("certLevel")?.focus();
     return false;
   }

@@ -95,3 +95,16 @@ test("profile: switching locale re-renders the completed tables, not just the he
   await expect(page.locator("#modulesBody")).not.toContainText("Pass");
   await expect(page.locator("#coursesBody")).not.toContainText("View certificate");
 });
+
+// Profilsiden hadde én nøkkel uten tekst i noen bunt (`identity.load`), så knappen i testbrukerpanelet
+// viste nøkkelen. Ingen statisk tekst på siden skal være en rå nøkkel, på noe språk.
+test("profile: ingen [data-i18n]-tekst på siden er en rå nøkkel (nb, nn, en-GB)", async ({ page }) => {
+  await mockProfile(page);
+  await page.goto("/profile");
+  for (const locale of ["en-GB", "nb", "nn"]) {
+    await page.selectOption("#localeSelect", locale);
+    const tekster = await page.locator("[data-i18n]").evaluateAll((els) => els.map((el) => [el.getAttribute("data-i18n"), (el.textContent ?? "").trim()]));
+    const raa = tekster.filter(([key, text]) => key && text === key);
+    expect(raa, `rå nøkler på ${locale}`).toEqual([]);
+  }
+});

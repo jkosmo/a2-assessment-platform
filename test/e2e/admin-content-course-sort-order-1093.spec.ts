@@ -90,6 +90,29 @@ test.describe("#1093 kursskjemaet — plassering i «Mine kurs»", () => {
     expect(sendt[0]).toMatchObject({ sortOrder: 7 });
   });
 
+  test("navn eller nivå mangler mens forfatteren står på «Innstillinger»: skjemaet bytter til «Rediger» og feltet får fokus", async ({ page }) => {
+    await mockCommonApis(page, {
+      courses: [{ id: "course-1", title: "Velkommen", description: null, certificationLevel: "basic", moduleCount: 0, updatedAt: "2026-10-11T12:00:00.000Z", publishedAt: null, archivedAt: null, sortOrder: null, modules: [] }],
+      libraryModules: [],
+    });
+    await page.route("**/api/admin/content/courses/*/items", (route: Route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ items: [] }) }));
+    const sendt: unknown[] = [];
+    await page.route("**/api/admin/content/courses/course-1", async (route: Route) => {
+      if (route.request().method() !== "PUT") return route.fallback();
+      sendt.push(route.request().postDataJSON());
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ course: { id: "course-1" } }) });
+    });
+    await page.addInitScript(() => { try { localStorage.setItem("participant.locale", "nb"); } catch { /* ignore */ } });
+    await page.goto("/admin-content/courses/course-1");
+    await page.locator("#certLevel").selectOption("");
+    await page.locator('[data-form-tab-btn="innstillinger"]').click();
+    await page.locator("#formSaveBtn").click();
+    await expect(page.locator("#formErrorBanner")).toBeVisible();
+    await expect(page.locator("#certLevel")).toBeVisible();
+    await expect(page.locator("#certLevel")).toBeFocused();
+    expect(sendt).toEqual([]);
+  });
+
   test("#1094: kurslista viser plasseringen som merke ved navnet, og ingenting for kurs uten plassering", async ({ page }) => {
     await mockCommonApis(page, {
       courses: [
