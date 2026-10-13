@@ -70,7 +70,10 @@ function log(data) {
 function applyTranslations() {
   for (const el of document.querySelectorAll("[data-i18n]")) {
     const key = el.getAttribute("data-i18n");
-    if (key) el.textContent = t(key);
+    // #1096: bare nøkler denne bunten kjenner. `area.*` (menyen under Deltakere) eies av
+    // content-area-nav-i18n.js; en manglende nøkkel ga før selve nøkkelen som tekst.
+    const text = key ? t(key) : key;
+    if (key && text !== key) el.textContent = text;
   }
   renderWorkspaceNavigation();
 }
