@@ -733,6 +733,7 @@ function getFormPage() {
 // finnes her (Oversett, Erstatt fra fil, Last opp bilde er inne i skjemaet).
 function sectionActions() {
   if (!editing) return [];
+  const manage = editing.canManage !== false;
   const status = editorSectionStatus();
   const id = editing.id ? escapeHtml(editing.id) : "";
   // Rekkefølge som i lista (D2): det man gjør ofte først, det farlige sist — tre vises, resten under «Mer».
@@ -740,20 +741,22 @@ function sectionActions() {
     `<button type="button" class="row-action-btn" id="translateBtn" data-editor-action="translate">${escapeHtml(L("translate"))}</button>`,
     id ? `<button type="button" class="row-action-btn" data-editor-action="export">${escapeHtml(L("exportSection"))}</button>` : "",
     // #1095: den nye versjonen redigereren viser, er ikke den deltakerne ser — publiser den.
-    id && status === "published" && editing.hasUnpublishedChanges
+    // Livssyklus og «Erstatt fra fil» bare for den som kan styre seksjonen (eier eller administrator) —
+    // en ikke-eier fikk 403 (QA-porten 2.88.3). Oversett og Eksporter er lese-/kopihandlinger.
+    id && manage && status === "published" && editing.hasUnpublishedChanges
       ? `<button type="button" class="row-action-btn" id="sectionPublishNewBtn" data-editor-action="publish">${escapeHtml(L("publishNewVersion"))}</button>`
       : "",
-    id && status && status !== "archived"
+    id && manage && status && status !== "archived"
       ? (status === "published"
         ? `<button type="button" class="row-action-btn" id="sectionLifecycleBtn" data-editor-action="unpublish">${escapeHtml(L("unpublish"))}</button>`
         : `<button type="button" class="row-action-btn" id="sectionLifecycleBtn" data-editor-action="publish">${escapeHtml(L("publish"))}</button>`)
       : "",
-    id ? `<button type="button" class="row-action-btn" id="replaceFromFileBtn" data-editor-action="replace">${escapeHtml(L("replaceFromFile"))}</button>` : "",
-    id && status ? (status === "archived"
+    id && manage ? `<button type="button" class="row-action-btn" id="replaceFromFileBtn" data-editor-action="replace">${escapeHtml(L("replaceFromFile"))}</button>` : "",
+    id && manage && status ? (status === "archived"
       ? `<button type="button" class="row-action-btn" data-editor-action="restore">${escapeHtml(L("restore"))}</button>`
       : `<button type="button" class="row-action-btn" data-editor-action="archive">${escapeHtml(L("archive"))}</button>`) : "",
     // #1046 D3: sletting bor her, ikke i lista — og bare for en arkivert seksjon.
-    id && status === "archived" ? `<button type="button" class="row-action-btn destructive" id="sectionDeleteBtn" data-editor-action="delete">${escapeHtml(L("del"))}</button>` : "",
+    id && manage && status === "archived" ? `<button type="button" class="row-action-btn destructive" id="sectionDeleteBtn" data-editor-action="delete">${escapeHtml(L("del"))}</button>` : "",
   ];
 }
 
@@ -860,6 +863,8 @@ async function renderEditorView(sectionId) {
       editing.body = parseLocalized(data.section.bodyMarkdown);
       editing.activeVersionId = data.section.activeVersionId ?? null;
       editing.hasUnpublishedChanges = Boolean(data.section.hasUnpublishedChanges);
+      // Uten merket (eldre svar) antas eierskap, som i lista: tjeneren vakter skrivingen uansett.
+      editing.canManage = data.section.canManage !== false;
       editing.archivedAt = data.section.archivedAt ?? null;
     } catch (err) {
       pageContent.innerHTML = `<div class="empty-state"><p class="empty-state-title">${escapeHtml(apiErrorText(err))}</p></div>`;

@@ -135,4 +135,19 @@ describe("Admin course-section management", () => {
     await prisma.course.delete({ where: { id: course.id } });
     await request(app).delete(`/api/admin/content/sections/${sectionId}`).set(adminHeaders);
   });
+
+  it("detaljsvaret sier om leseren kan styre seksjonen: eieren og administrator ja, en annen fagansvarlig nei (redigereren skjuler da livssyklusknappene)", async () => {
+    const eier = { "x-user-id": `eier-${Date.now()}`, "x-user-email": `eier-${Date.now()}@company.com`, "x-user-name": "Eier", "x-user-roles": "SUBJECT_MATTER_OWNER" };
+    const annen = { "x-user-id": `annen-${Date.now()}`, "x-user-email": `annen-${Date.now()}@company.com`, "x-user-name": "Annen", "x-user-roles": "SUBJECT_MATTER_OWNER" };
+    const laget = await request(app).post("/api/admin/content/sections").set(eier).send({ title: { nb: "Eiers del", nn: "Eigars del", "en-GB": "Owner's part" }, bodyMarkdown: { nb: "Tekst", nn: "Tekst", "en-GB": "Text" } });
+    expect(laget.status).toBe(201);
+    const id = laget.body.section.id as string;
+    expect((await request(app).get(`/api/admin/content/sections/${id}`).set(eier)).body.section.canManage).toBe(true);
+    expect((await request(app).get(`/api/admin/content/sections/${id}`).set(adminHeaders)).body.section.canManage).toBe(true);
+    const somAnnen = await request(app).get(`/api/admin/content/sections/${id}`).set(annen);
+    expect(somAnnen.status).toBe(200); // lesing er åpen for alle forfattere (produkteier 2026-09-08)
+    expect(somAnnen.body.section.canManage).toBe(false);
+    await request(app).post(`/api/admin/content/sections/${id}/archive`).set(adminHeaders);
+    await request(app).delete(`/api/admin/content/sections/${id}`).set(adminHeaders);
+  });
 });

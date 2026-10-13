@@ -137,6 +137,23 @@ test.describe("#1095 — publiser den nye versjonen av en publisert seksjon", ()
     await expect.poll(() => kall).toEqual(["publish", "unpublish"]);
   });
 
+  test("redigereren: den som ikke eier seksjonen, ser ingen livssyklusknapper (de ga 403) — men kan oversette og eksportere", async ({ page }) => {
+    await mockBase(page);
+    await page.route("**/api/admin/content/sections", (route: Route) =>
+      route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ sections: [{ ...rad("sec-f", "published_with_draft"), canManage: false }] }) }),
+    );
+    await page.route("**/api/admin/content/sections/sec-f", (route: Route) =>
+      route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ section: { id: "sec-f", title: tittel, bodyMarkdown: JSON.stringify({ nb: "Tekst", nn: "Tekst", "en-GB": "Text" }), activeVersionId: "v1", archivedAt: null, hasUnpublishedChanges: true, canManage: false, assets: [] } }) }),
+    );
+    await page.goto("/admin-content/sections?id=sec-f");
+    await expect(page.locator("#formPageTitle")).toBeVisible();
+    for (const handling of ["publish", "unpublish", "replace", "archive", "restore", "delete"]) {
+      await expect(page.locator(`.form-page-actions [data-editor-action="${handling}"]`), handling).toHaveCount(0);
+    }
+    await expect(page.locator('.form-page-actions [data-editor-action="translate"]')).toHaveCount(1);
+    await expect(page.locator('.form-page-actions [data-editor-action="export"]')).toHaveCount(1);
+  });
+
   test("redigereren: en publisert seksjon uten nyere versjon har ingen slik knapp", async ({ page }) => {
     await mockBase(page);
     await page.route("**/api/admin/content/sections", (route: Route) =>
