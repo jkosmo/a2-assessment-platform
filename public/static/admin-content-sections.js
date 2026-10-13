@@ -722,7 +722,8 @@ function getFormPage() {
       onChange: (id) => { if (id === "forhandsvisning") refreshPreview(); },
     },
     body: () => sectionEditorBodyHtml(),
-    save: { onSave: () => persistSection() },
+    // Lagring krever eierskap: skjul knappen for den som ikke kan styre seksjonen (den ga 403).
+    save: { onSave: () => persistSection(), get hidden() { return editing?.canManage === false; } },
     afterRender: () => bindEditorHandlers(),
   });
   formPage.installGuards();
@@ -738,7 +739,8 @@ function sectionActions() {
   const id = editing.id ? escapeHtml(editing.id) : "";
   // Rekkefølge som i lista (D2): det man gjør ofte først, det farlige sist — tre vises, resten under «Mer».
   return [
-    `<button type="button" class="row-action-btn" id="translateBtn" data-editor-action="translate">${escapeHtml(L("translate"))}</button>`,
+    // «Oversett» lagrer oversatte figurer (krever eierskap) — ikke en lesehandling for en lagret seksjon.
+    !id || manage ? `<button type="button" class="row-action-btn" id="translateBtn" data-editor-action="translate">${escapeHtml(L("translate"))}</button>` : "",
     id ? `<button type="button" class="row-action-btn" data-editor-action="export">${escapeHtml(L("exportSection"))}</button>` : "",
     // #1095: den nye versjonen redigereren viser, er ikke den deltakerne ser — publiser den.
     // Livssyklus og «Erstatt fra fil» bare for den som kan styre seksjonen (eier eller administrator) —
@@ -775,7 +777,7 @@ function sectionEditorBodyHtml() {
           <div class="editor-pane-label" style="display:flex;justify-content:space-between;align-items:center;gap:8px">
             <span>${escapeHtml(L("markdown"))} <span class="required-note">${escapeHtml(t("form.required"))}</span></span>
             <span data-form-untracked>
-              <button type="button" id="uploadImageBtn" class="btn btn-secondary" style="width:auto;font-size:12px;padding:2px 8px" ${editing.id ? "" : `disabled title="${escapeHtml(L("saveFirst"))}"`}>${escapeHtml(L("uploadImage"))}</button>
+              ${editing.canManage === false ? "" : `<button type="button" id="uploadImageBtn" class="btn btn-secondary" style="width:auto;font-size:12px;padding:2px 8px" ${editing.id ? "" : `disabled title="${escapeHtml(L("saveFirst"))}"`}>${escapeHtml(L("uploadImage"))}</button>`}
               <input type="file" id="imageFileInput" accept="image/png,image/jpeg,image/gif,image/webp,image/svg+xml,.svg" hidden />
             </span>
           </div>

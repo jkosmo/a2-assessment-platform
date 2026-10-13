@@ -76,6 +76,8 @@ test.describe("#1093 kursskjemaet — plassering i «Mine kurs»", () => {
       // Gå til en annen fane, så lagringen må hente oss tilbake til feltet.
       await page.locator('[data-form-tab-btn]').first().click();
       await page.locator("#formSaveBtn").click();
+      // Synlig, ikke bare i DOM-en: banneret lå i «Rediger»-fanen og ble skjult når skjemaet byttet fane.
+      await expect(page.locator("#formErrorBanner")).toBeVisible();
       await expect(page.locator("#formErrorBanner")).toContainText("helt tall fra 0 til 9999");
       await expect(felt).toBeVisible();
       await expect(felt).toBeFocused();

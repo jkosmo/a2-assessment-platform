@@ -500,7 +500,7 @@ have nothing to do with, not about partitioning content inside a course you asse
 
 | Method | Route | Description |
 |---|---|---|
-| `GET` | `/api/admin/content/courses` | List courses (with module count) |
+| `GET` | `/api/admin/content/courses` | List courses (with module count, and `sortOrder` — the placement in «Mine kurs», null = alphabetical, #1094) |
 | `POST` | `/api/admin/content/courses` | Create a course |
 | `GET` | `/api/admin/content/courses/:courseId` | Course detail (modules). **`403 content_ownership`** for a non-owner SMO (#943) |
 | `PUT` | `/api/admin/content/courses/:courseId` | Update course metadata |
@@ -589,7 +589,7 @@ did not change the format version: older files have no `section` field and valid
 |---|---|---|
 | `POST` | `/api/admin/content/sections` | Create a section (`title` + `bodyMarkdown`) → section + version 1. Optional `draft`, `clientRef`, `agentRunId`, and (#763, Layer B) `assets[]` inline figures/images — imported + `asset:<sourceId>` refs remapped, `assetMap` (`sourceId→assetId`) echoed back. Larger 15 MB body for inlined assets. **Auto-publish-on-save is conditional (#916):** if the translation gate finds a gap the section is created as a DRAFT and the response carries `translationGate: { heldBack: true, issues[] }` |
 | `GET` | `/api/admin/content/sections` | List sections |
-| `GET` | `/api/admin/content/sections/:sectionId` | Section detail. `bodyMarkdown` + `versionNo` come from the **newest** version (not only the active one), so a save held back by the gate is still visible to its author; `hasUnpublishedChanges` is true when the newest version is not the published one (#916) |
+| `GET` | `/api/admin/content/sections/:sectionId` | Section detail. `canManage` says whether the caller may manage the section (owner or administrator; 2.89.0) — the editor hides lifecycle and write actions when false. `bodyMarkdown` + `versionNo` come from the **newest** version (not only the active one), so a save held back by the gate is still visible to its author; `hasUnpublishedChanges` is true when the newest version is not the published one (#916) |
 | `PATCH` | `/api/admin/content/sections/:sectionId/title` | Update title |
 | `PUT` | `/api/admin/content/sections/:sectionId/content` | Store a new immutable content version. It becomes the active (participant-visible) one unless the translation gate blocks — then the version is stored, `activeVersionId` is left untouched, and the response carries `translationGate: { heldBack: true, issues[] }` (#916) |
 | `POST` | `/api/admin/content/sections/:sectionId/publish` | Re-point active version to latest (G1 needs content, #705). Blocked `422 publish_blocked_by_validation` with `issues[]` (`field` + `missingLocales`) when a participant-visible field lacks a locale (#916) |

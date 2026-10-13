@@ -33,11 +33,12 @@ async function mockAlt(page: Page, locale: string) {
 
 const FORVENTET: Record<string, Record<string, string>> = {
   nb: { subnavKlasser: "Klasser", subnavStatus: "Status", subnavReview: "Manuell behandling", subnavResults: "Resultater" },
+  nn: { subnavKlasser: "Klassar", subnavStatus: "Status", subnavReview: "Manuell behandling", subnavResults: "Resultat" },
   "en-GB": { subnavKlasser: "Classes", subnavStatus: "Status", subnavReview: "Manual review", subnavResults: "Results" },
 };
 
 for (const side of ["/deltakere/status", "/results", "/review"]) {
-  for (const locale of ["nb", "en-GB"]) {
+  for (const locale of ["nb", "nn", "en-GB"]) {
     test(`${side} (${locale}): undermenyen under Deltakere viser ord, ikke nøkler`, async ({ page }) => {
       await mockAlt(page, locale);
       await page.goto(side);

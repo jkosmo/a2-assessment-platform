@@ -1242,8 +1242,10 @@ function courseDetailBodyHtml() {
         </div>
       </div>
 
-      <div id="formErrorBanner" hidden></div>
     </div>
+    <!-- #1094 (QA): utenfor fanepanelene, så meldingen ses fra «Innstillinger» også — en ugyldig plassering
+         bytter dit, og feil fra tjeneren kan komme mens forfatteren står der. -->
+    <div id="formErrorBanner" hidden></div>
     <div data-form-tab="innstillinger" hidden>
       ${courseId ? `<div class="detail-section" id="ownerPanelHost" data-form-untracked></div>` : ""}
       <div class="detail-section">
