@@ -2,6 +2,22 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.89.1 - 2026-10-13
+
+### Tre rester til kveldens utgivelse
+
+Produkteier: «Se om det er noe mer som vi kan pakke inn i denne releasen.»
+
+- **Kursimport `replaceExisting` (bare API):** med en fil der kurset og modulen var utkast, ble et
+  publisert målkurs stående publisert med en modul uten aktiv versjon (I1: «modul ikke
+  tilgjengelig»). Nå avpubliseres kurset, med eget spor (`reason: import_unpublished_module`);
+  flagget som meldes tilbake (#957) er uendret — et utkast fra kilden er ikke «holdt tilbake». QA
+  pekte på hullet 2026-10-12. Integrasjonstest; mutasjon fanget.
+- **Kursskjemaet:** mangler navn på bokmål eller nivå mens forfatteren står på «Innstillinger»,
+  byttes fanen til «Rediger» før feltet får fokus (det havnet i et skjult felt). e2e; mutasjon fanget.
+- **Profilsiden:** knappen i testbrukerpanelet pekte på `identity.load`, som ingen bunt har; nå
+  `identity.loadMe`. Ny e2e: ingen statisk tekst på siden er en rå nøkkel, på nb, nn og en-GB.
+
 ## 2.89.0 - 2026-10-13
 
 ### Kveldens utgivelse: menyen under Deltakere, plassering i kurslista, redigereren for ikke-eiere
