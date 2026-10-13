@@ -416,6 +416,36 @@ describe("#1095 oppdatere et publisert kurs fra en eksportfil", () => {
     expect(rad.versions).toHaveLength(2);
   });
 
+  it("etter oppdateringen: seksjonen meldes med nyere utkast, og «publiser» gjør den nye versjonen levende for deltakeren", async () => {
+    const del = await seksjon(`Publiseres etterpå ${stempel}`, "Gammel tekst som deltakeren ser.");
+    const kurs = await request(app).post("/api/admin/content/courses").set(admin).send({ title: tre(`Publiseringskurs ${stempel}`) });
+    const kursId = kurs.body.course.id as string;
+    expect((await request(app).put(`/api/admin/content/courses/${kursId}/items`).set(admin).send({ items: [{ type: "SECTION", sectionId: del }, { type: "MODULE", moduleId: m1 }] })).status).toBe(204);
+    expect((await request(app).post(`/api/admin/content/courses/${kursId}/publish`).set(admin)).status).toBe(200);
+    expect((await request(app).post(`/api/courses/${kursId}/sections/${del}/read`).set(deltaker)).status).toBe(204);
+    const ut = await request(app).get(`/api/admin/content/courses/${kursId}/export-package`).set(admin);
+    const fil = JSON.parse(JSON.stringify(ut.body.envelope ?? ut.body));
+    fil.course.course.items[0].section.bodyMarkdown = tre("Ny tekst lagt klar av oppdateringen.");
+    expect((await request(app).post("/api/admin/content/courses/import").set(admin).send({ payload: fil, mode: "updateExisting", targetId: kursId })).status).toBe(201);
+
+    // Admin ser at en nyere versjon ligger klar; deltakeren ser fortsatt den gamle.
+    const detalj = await request(app).get(`/api/admin/content/sections/${del}`).set(admin);
+    expect(detalj.body.section).toMatchObject({ hasUnpublishedChanges: true });
+    const liste = await request(app).get("/api/admin/content/sections").set(admin);
+    expect((liste.body.sections as Array<{ id: string; lifecycle: string }>).find((x) => x.id === del)!.lifecycle).toBe("published_with_draft");
+    expect((await request(app).get(`/api/courses/${kursId}/sections/${del}`).set(deltaker)).body.html).toContain("Gammel tekst");
+
+    // «Publiser ny versjon» er det vanlige publiseringskallet: nyeste versjon blir levende.
+    const pub = await request(app).post(`/api/admin/content/sections/${del}/publish`).set(admin);
+    expect(pub.status, JSON.stringify(pub.body).slice(0, 300)).toBe(200);
+    expect(pub.body.section).toMatchObject({ hasUnpublishedChanges: false });
+    expect((await request(app).get(`/api/courses/${kursId}/sections/${del}`).set(deltaker)).body.html).toContain("Ny tekst lagt klar");
+    // Kurset er fortsatt publisert, og «lest» står.
+    expect((await prisma.course.findUniqueOrThrow({ where: { id: kursId }, select: { publishedAt: true } })).publishedAt).not.toBeNull();
+    const bruker = await prisma.user.findUniqueOrThrow({ where: { externalId: deltaker["x-user-id"] }, select: { id: true } });
+    expect(await prisma.courseSectionRead.count({ where: { courseId: kursId, sectionId: del, userId: bruker.id } })).toBe(1);
+  });
+
   it("en fil fra et annet kurs avvises, og uten targetId avvises forespørselen", async () => {
     const annet = await request(app).post("/api/admin/content/courses").set(admin).send({ title: tre(`Annet kurs ${stempel}`) });
     const fil = JSON.parse(JSON.stringify(eksport));

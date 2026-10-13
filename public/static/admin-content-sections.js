@@ -250,6 +250,12 @@ function getListPage() {
       // regel som eierskaps-vakta, så vi ikke viser knapper som gir 403.
       const canManage = s.canManage !== false;
       const isLive = lifecycle === "published" || lifecycle === "published_with_draft";
+      // #1095: en publisert seksjon med en nyere, upublisert versjon (lagt klar av en kursoppdatering,
+      // eller en lagring publiseringsporten holdt tilbake) fikk bare «Avpubliser». Nå kan den nye
+      // versjonen publiseres herfra; serveren aktiverer den nyeste versjonen.
+      const publishNew = lifecycle === "published_with_draft"
+        ? `<button class="row-action-btn" data-action="publish-new" data-id="${id}">${escapeHtml(L("publishNewVersion"))}</button>`
+        : "";
       const publishToggle = lifecycle === "archived" ? ""
         : isLive
           ? `<button class="row-action-btn" data-action="unpublish" data-id="${id}">${escapeHtml(L("unpublish"))}</button>`
@@ -261,6 +267,8 @@ function getListPage() {
       // og finnes også for den som ikke eier seksjonen. «Slett» er ute av lista (D3) og ligger inne på den
       // arkiverte seksjonen.
       return [
+        // Først, så den står synlig og ikke under «Mer»: det er det forfatteren kom for.
+        canManage ? publishNew : "",
         canManage ? `<button class="row-action-btn" data-action="edit" data-id="${id}">${escapeHtml(L("edit"))}</button>` : "",
         // #894: å døpe om er ikke å redigere innholdet, og skal ikke koste en tur gjennom editoren.
         canManage ? `<button class="row-action-btn" data-action="rename" data-id="${id}">${escapeHtml(t("ui.action.rename"))}</button>` : "",
@@ -289,6 +297,7 @@ function getListPage() {
       else if (action === "export") exportSectionPackage(id, btn);
       else if (action === "duplicate") duplicateSection(id, btn);
       else if (action === "publish") sectionLifecycle(id, "publish", "published");
+      else if (action === "publish-new") sectionLifecycle(id, "publish", "newVersionPublished");
       else if (action === "unpublish") sectionLifecycle(id, "unpublish", "unpublished");
       else if (action === "archive") { if (window.confirm(L("confirmArchive"))) sectionLifecycle(id, "archive", "archived"); }
       else if (action === "restore") sectionLifecycle(id, "restore", "restored");
@@ -694,7 +703,7 @@ function getFormPage() {
     texts: sectionFormTexts,
     onBack: goBackFromEditor,
     title: () => (editing?.title?.[editing.editLocale] ?? "").trim() || pickLocalizedText(editing?.title ?? {}, currentLocale),
-    item: () => (editing?.id ? { lifecycle: editorSectionStatus() } : null),
+    item: () => (editing?.id ? { lifecycle: editorSectionStatus() === "published" && editing.hasUnpublishedChanges ? "published_with_draft" : editorSectionStatus() } : null),
     t: tNav,
     actions: () => sectionActions(),
     languages: {
@@ -730,6 +739,10 @@ function sectionActions() {
   return [
     `<button type="button" class="row-action-btn" id="translateBtn" data-editor-action="translate">${escapeHtml(L("translate"))}</button>`,
     id ? `<button type="button" class="row-action-btn" data-editor-action="export">${escapeHtml(L("exportSection"))}</button>` : "",
+    // #1095: den nye versjonen redigereren viser, er ikke den deltakerne ser — publiser den.
+    id && status === "published" && editing.hasUnpublishedChanges
+      ? `<button type="button" class="row-action-btn" id="sectionPublishNewBtn" data-editor-action="publish">${escapeHtml(L("publishNewVersion"))}</button>`
+      : "",
     id && status && status !== "archived"
       ? (status === "published"
         ? `<button type="button" class="row-action-btn" id="sectionLifecycleBtn" data-editor-action="unpublish">${escapeHtml(L("unpublish"))}</button>`
@@ -818,6 +831,7 @@ async function lifecycleInEditor(action, toastKey) {
     const data = await apiFetch(`/api/admin/content/sections/${encodeURIComponent(editing.id)}/${action}`, getHeaders, { method: "POST" });
     editing.archivedAt = data.section?.archivedAt ?? (action === "archive" ? new Date().toISOString() : null);
     editing.activeVersionId = data.section?.activeVersionId ?? editing.activeVersionId;
+    editing.hasUnpublishedChanges = Boolean(data.section?.hasUnpublishedChanges);
     showToast(L(toastKey));
     refreshSectionLifecycleUI();
   } catch (err) {
@@ -834,6 +848,7 @@ async function renderEditorView(sectionId) {
       editing.title = parseLocalized(data.section.title);
       editing.body = parseLocalized(data.section.bodyMarkdown);
       editing.activeVersionId = data.section.activeVersionId ?? null;
+      editing.hasUnpublishedChanges = Boolean(data.section.hasUnpublishedChanges);
       editing.archivedAt = data.section.archivedAt ?? null;
     } catch (err) {
       pageContent.innerHTML = `<div class="empty-state"><p class="empty-state-title">${escapeHtml(apiErrorText(err))}</p></div>`;
@@ -866,9 +881,11 @@ async function toggleSectionLifecycle(action, btn) {
   btn.disabled = true;
   try {
     const data = await apiFetch(`/api/admin/content/sections/${encodeURIComponent(editing.id)}/${action}`, getHeaders, { method: "POST" });
+    const hadNewVersion = action === "publish" && editing.hasUnpublishedChanges && Boolean(editing.activeVersionId);
     editing.activeVersionId = data.section?.activeVersionId ?? null;
+    editing.hasUnpublishedChanges = Boolean(data.section?.hasUnpublishedChanges);
     editing.archivedAt = data.section?.archivedAt ?? null;
-    showToast(L(action === "publish" ? "published" : "unpublished"));
+    showToast(L(action === "publish" ? (hadNewVersion ? "newVersionPublished" : "published") : "unpublished"));
     refreshSectionLifecycleUI();
   } catch (err) {
     // #916: same gate rendering as the list's Publiser — both are the same door.
@@ -941,6 +958,7 @@ async function persistSection({ silent } = {}) {
       });
       editing.id = data.section.id;
       editing.activeVersionId = data.section.activeVersionId ?? null;
+      editing.hasUnpublishedChanges = Boolean(data.section.hasUnpublishedChanges);
       editing.archivedAt = data.section.archivedAt ?? null;
       heldBack = data.translationGate?.heldBack ? data.translationGate.issues : null;
       history.replaceState({}, "", `/admin-content/sections?id=${encodeURIComponent(editing.id)}`);
@@ -957,6 +975,7 @@ async function persistSection({ silent } = {}) {
       });
       // Lagring publiserer (latest-wins) — oppdater status så merkelappen blir riktig.
       editing.activeVersionId = contentRes.section?.activeVersionId ?? null;
+      editing.hasUnpublishedChanges = Boolean(contentRes.section?.hasUnpublishedChanges);
       heldBack = contentRes.translationGate?.heldBack ? contentRes.translationGate.issues : null;
     }
     // #705: hold status-merkelappen + Publiser/Avpubliser-knappen i editoren i synk etter lagring.

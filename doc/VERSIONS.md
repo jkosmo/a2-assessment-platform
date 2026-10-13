@@ -2,6 +2,29 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.88.3 - 2026-10-13
+
+### «Publiser ny versjon» for en publisert seksjon (#1095 oppfølging)
+
+Funnet da oppskriften for å justere kursene i prod ble skrevet: en kursoppdatering legger en ny,
+upublisert versjon på en seksjon som er publisert, og leveransen sier «publiser manuelt i admin-UI».
+Men lista og redigereren viste bare «Avpubliser» for en slik seksjon, og «Lagre» var grå uten endring
+— den nye versjonen kunne ikke publiseres uten omvei. Serveren kunne alt (`publishSection` aktiverer
+nyeste versjon); knappen manglet. Moduler har det alt (arbeidsflatens «publiser siste utkast»).
+
+- **Lista:** en seksjon med `lifecycle: "published_with_draft"` får **«Publiser ny versjon»** først i
+  raden (synlig, ikke under «Mer»), ved siden av «Avpubliser».
+- **Redigereren:** viser den nye versjonen (som før), og nå merket **«Nyere utkast»** i hodet og
+  knappen **«Publiser ny versjon»**; etter publisering er begge borte. Tilstanden leses fra
+  `hasUnpublishedChanges` i tjenerens svar og holdes i takt ved lagring og publisering.
+- Tekster i tre språk (`sections.publishNewVersion`, `sections.newVersionPublished`).
+
+**Slik er det målt:** `test/e2e/section-publish-new-version-1095.spec.ts` (3: lista med og uten
+nyere utkast, redigereren med merke og knapp som forsvinner etter publisering, redigereren uten),
+integrasjonstest i `test/m2-course-update-import-1095.test.ts` (oppdatering → `published_with_draft`
+og `hasUnpublishedChanges` → publiser → deltakeren ser ny tekst, kurset fortsatt publisert, «lest»
+står). Seks mutasjoner, alle fanget med grønn grunnlinje.
+
 ## 2.88.2 - 2026-10-12
 
 ### Justere et publisert kurs, fase B: skillets arbeidsflyt (#1095)

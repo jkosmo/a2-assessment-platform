@@ -167,6 +167,9 @@ the summary is shown on the course page after navigation (`queueToast`/`flushQue
 **Hazard:** a new way to add items to a course must go through `setCourseItems`, and a new way to
 write a section version must keep the live version untouched (`appendInactiveSectionVersion`). A
 draft module must never be placed in a published course (I1: participants cannot complete it).
+After an update, a live section with a newer version shows «Publiser ny versjon» in the sections list
+(`data-action="publish-new"`) and in the editor (`#sectionPublishNewBtn`, from `hasUnpublishedChanges`);
+both call the ordinary `POST /sections/:id/publish`, which activates the newest version (2.88.3).
 
 ## 6b-1. Participant course list — order (#1093)
 
