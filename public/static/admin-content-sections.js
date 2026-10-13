@@ -771,7 +771,7 @@ function sectionEditorBodyHtml() {
       <div class="section-editor card">
         <div class="form-field">
           <label for="titleInput">${escapeHtml(L("titleLabel"))}${editing.editLocale === "nb" ? ` <span class="required-note">${escapeHtml(t("form.required"))}</span>` : ""}</label>
-          <input type="text" id="titleInput" data-form-title value="${escapeHtml(editing.title[editing.editLocale])}" autocomplete="off" />
+          <input type="text" id="titleInput" data-form-title value="${escapeHtml(editing.title[editing.editLocale])}" autocomplete="off" ${editing.canManage === false ? "readonly" : ""} />
         </div>
         <div class="editor-single">
           <div class="editor-pane-label" style="display:flex;justify-content:space-between;align-items:center;gap:8px">
@@ -781,7 +781,7 @@ function sectionEditorBodyHtml() {
               <input type="file" id="imageFileInput" accept="image/png,image/jpeg,image/gif,image/webp,image/svg+xml,.svg" hidden />
             </span>
           </div>
-          <textarea id="markdownInput">${escapeHtml(editing.body[editing.editLocale])}</textarea>
+          <textarea id="markdownInput" ${editing.canManage === false ? "readonly" : ""}>${escapeHtml(editing.body[editing.editLocale])}</textarea>
         </div>
         <input type="file" id="replaceFromFileInput" accept="${SECTION_FILE_ACCEPT}" hidden data-form-untracked />
         <span class="editor-status" id="editorStatus"></span>

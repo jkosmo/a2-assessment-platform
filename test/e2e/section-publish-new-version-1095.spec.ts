@@ -154,6 +154,9 @@ test.describe("#1095 — publiser den nye versjonen av en publisert seksjon", ()
     await expect(page.locator('.form-page-actions [data-editor-action="translate"]')).toHaveCount(0);
     await expect(page.locator("#formSaveBtn")).toHaveCount(0);
     await expect(page.locator("#uploadImageBtn")).toHaveCount(0);
+    // Feltene er skrivebeskyttet: ingen «ulagrede endringer» uten en knapp å lagre med.
+    await expect(page.locator("#titleInput")).toHaveAttribute("readonly", "");
+    await expect(page.locator("#markdownInput")).toHaveAttribute("readonly", "");
     await expect(page.locator('.form-page-actions [data-editor-action="export"]')).toHaveCount(1);
   });
 

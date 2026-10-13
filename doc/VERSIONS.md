@@ -21,7 +21,8 @@ kan testes samme dag. Følger med 2.88.3 («Publiser ny versjon») i samme prod-
 - **Seksjonsredigereren for den som ikke eier seksjonen** (funn fra QA-porten på 2.88.3): «Publiser ny
   versjon», «Avpubliser», «Erstatt fra fil», «Arkiver» og «Slett» ble vist og ga 403. `GET
   /sections/:id` leverer nå `canManage` (samme merke som lista), og redigereren er da ren lesing:
-  bare Eksporter — heller ikke Oversett (lagrer figurer), Lagre eller Last opp bilde (QA-porten).
+  bare Eksporter — heller ikke Oversett (lagrer figurer), Lagre eller Last opp bilde, og tittel- og
+  tekstfeltet er skrivebeskyttet (QA-porten, to runder).
   Lesing er fortsatt åpen for alle forfattere (produkteier 2026-09-08).
 - Feilbanneret i kursskjemaet ligger utenfor fanepanelene, så meldingen ses også fra «Innstillinger»
   (QA-porten: en ugyldig plassering byttet fane og skjulte sin egen melding).
