@@ -316,7 +316,8 @@ export function createAdminContentRepository(client: AdminContentRepositoryClien
               createdAt: true,
               updatedAt: true,
               questions: {
-                orderBy: { createdAt: "asc" },
+                // Samme createdAt for spørsmål skrevet i ett kall: id holder skriverekkefølgen.
+                orderBy: [{ createdAt: "asc" }, { id: "asc" }],
                 select: {
                   id: true,
                   stem: true,
@@ -519,7 +520,8 @@ export function createAdminContentRepository(client: AdminContentRepositoryClien
     findMcqSetVersionWithQuestions(mcqSetVersionId: string) {
       return client.mCQSetVersion.findUnique({
         where: { id: mcqSetVersionId },
-        include: { questions: { orderBy: { createdAt: "asc" } } },
+        // Samme createdAt for spørsmål skrevet i ett kall: id holder skriverekkefølgen.
+        include: { questions: { orderBy: [{ createdAt: "asc" }, { id: "asc" }] } },
       });
     },
 

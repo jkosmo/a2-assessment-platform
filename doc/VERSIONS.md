@@ -33,6 +33,11 @@ lagring → «Publiser ny versjon» publiserer → «Avpubliser» virker; mutasj
 redigereren skjuler ikke livssyklusknappene for den som ikke eier seksjonen (403 ved klikk; lista er
 riktig vaktet).
 
+Også i 2.88.3: flervalgsspørsmål leses i stabil rekkefølge. Spørsmål som skrives i ett kall, får ofte
+samme `createdAt` (millisekund), og alle tre lesestedene (eksport/innholdspakke, påfylling #1062,
+deltakerens test) sorterte bare på den — rekkefølgen var da vilkårlig. Nå `id` som andre nøkkel (cuid,
+stigende i skriverekkefølgen). Oppdaget av #1062-testen, som feilet to fulle kjøringer på rad.
+
 ## 2.88.2 - 2026-10-12
 
 ### Justere et publisert kurs, fase B: skillets arbeidsflyt (#1095)

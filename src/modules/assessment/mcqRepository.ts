@@ -31,7 +31,8 @@ export function createMcqRepository(client: McqRepositoryClient = prisma) {
           mcqSetVersionId,
           active: true,
         },
-        orderBy: { createdAt: "asc" },
+        // Samme createdAt for spørsmål skrevet i ett kall: id holder skriverekkefølgen.
+        orderBy: [{ createdAt: "asc" }, { id: "asc" }],
       });
     },
 
