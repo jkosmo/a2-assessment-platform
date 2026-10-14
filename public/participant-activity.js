@@ -483,6 +483,8 @@ async function loadReport() {
       ui.department = report.department ?? "";
       renderControls();
       renderDepartments();
+      // Avdelingsbyttet lukket raden i tilstanden; tegn lista, så det som vises er det som gjelder.
+      renderTable();
     }
     showToast(describeApiError(error, t).headline || t("activity.error"), "error");
   }

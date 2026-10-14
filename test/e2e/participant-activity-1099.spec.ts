@@ -124,7 +124,8 @@ test("administrator: nøkkeltall, to grafer og lista — og Aktivitet er aktiv f
   await expect(rows).toHaveCount(3);
   await expect(rows.nth(0)).toContainText("Kari Aktiv");
   await expect(rows.nth(0).locator(".activity-pill")).toHaveText("Aktiv");
-  await expect(rows.nth(0)).toContainText("I dag");
+  // Tidspunktet er «for en time siden»; rett etter midnatt er det «I går».
+  await expect(rows.nth(0)).toContainText(/I dag|I går/);
   await expect(rows.nth(1).locator(".activity-pill")).toHaveText("Rolig");
   await expect(rows.nth(2).locator(".activity-pill")).toHaveText("Ikke startet");
   await expect(rows.nth(2).locator("td").nth(3)).toContainText("Aldri");
