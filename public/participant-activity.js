@@ -480,7 +480,9 @@ async function loadReport() {
     if (report) {
       ui.period = report.period ?? ui.period;
       ui.grain = report.grain ?? ui.grain;
+      ui.department = report.department ?? "";
       renderControls();
+      renderDepartments();
     }
     showToast(describeApiError(error, t).headline || t("activity.error"), "error");
   }

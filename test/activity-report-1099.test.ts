@@ -35,13 +35,13 @@ describe("Aktivitet under Deltakere (#1099)", () => {
   let submissionId = "";
   const submissionIds: string[] = [];
 
-  async function makeUser(tag: string, opts: { participant?: boolean; otherRole?: "REVIEWER"; active?: boolean; lastLoginAt?: Date } = {}) {
+  async function makeUser(tag: string, opts: { participant?: boolean; otherRole?: "REVIEWER"; active?: boolean; lastLoginAt?: Date; dept?: string } = {}) {
     const user = await prisma.user.create({
       data: {
         externalId: `act-${tag}-${stamp}`,
         name: `Akt ${tag}`,
         email: `act-${tag}-${stamp}@x.test`,
-        department,
+        department: opts.dept ?? department,
         activeStatus: opts.active ?? true,
         lastLoginAt: opts.lastLoginAt ?? null,
       },
@@ -133,6 +133,29 @@ describe("Aktivitet under Deltakere (#1099)", () => {
         passFailTotal: true, decisionType: "AUTOMATIC", decisionReason: "Fikstur for #1099.", finalisedAt: ago(3),
       },
     });
+
+    // sensor: et fritekstforsøk levert for ti dager siden og bestått av sensor i dag, og deretter
+    // seksten nyere forsøk. Det beståtte skal stå i «det siste hen har gjort» selv om innleveringen
+    // ikke er blant de 15 siste. Egen avdeling, så tallene i den første testen ikke påvirkes.
+    const sensor = await makeUser("sensor", { dept: `${department}-b` });
+    const gammelt = (await prisma.submission.create({
+      data: { userId: sensor, moduleId, moduleVersionId, deliveryType: "text", submissionStatus: "COMPLETED", submittedAt: ago(10) },
+      select: { id: true },
+    })).id;
+    submissionIds.push(gammelt);
+    await prisma.assessmentDecision.create({
+      data: {
+        submissionId: gammelt, moduleVersionId, mcqScaledScore: 1, practicalScaledScore: 1, totalScore: 1, redFlagsJson: "[]",
+        passFailTotal: true, decisionType: "MANUAL_OVERRIDE", decisionReason: "Fikstur for #1099.", finalisedAt: ago(0, 1),
+      },
+    });
+    for (let i = 0; i < 16; i++) {
+      const id = (await prisma.submission.create({
+        data: { userId: sensor, moduleId, moduleVersionId, deliveryType: "text", submissionStatus: "SUPERSEDED", submittedAt: ago(5, i) },
+        select: { id: true },
+      })).id;
+      submissionIds.push(id);
+    }
 
     // rolig: én lesing for 20 dager siden.
     await prisma.courseSectionRead.create({ data: { userId: b, courseId, sectionId, readAt: ago(20) } });
@@ -226,6 +249,12 @@ describe("Aktivitet under Deltakere (#1099)", () => {
       const res = await request(app).get(`/api/reports/activity/users/${userIds[tag]}/recent`).set(headersFor("ADMINISTRATOR"));
       expect(res.status, tag).toBe(404);
     }
+  });
+
+  it("et bestått vedtak på en gammel innlevering står i «det siste hen har gjort», også bak mange nyere forsøk", async () => {
+    const res = await request(app).get(`/api/reports/activity/users/${userIds.sensor}/recent`).set(headersFor("ADMINISTRATOR"));
+    expect(res.status).toBe(200);
+    expect(res.body.events[0]).toMatchObject({ type: "passed", itemTitle: "Aktivitetsmodul" });
   });
 
   it("det ankede forsøket står som levert, ikke bestått, i «det siste hen har gjort»", async () => {

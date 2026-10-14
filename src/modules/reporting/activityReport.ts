@@ -3,14 +3,14 @@ import { AppRole } from "../../db/prismaRuntime.js";
 import { localizeContentText } from "../../i18n/content.js";
 import type { SupportedLocale } from "../../i18n/locale.js";
 import type { SubmissionStatus as SubmissionStatusType } from "@prisma/client";
-import { isSettledSubmission } from "../submission/submissionOutcome.js";
+import { isSettledSubmission, SETTLED_SUBMISSION_STATUSES } from "../submission/submissionOutcome.js";
 
 // #1099: «Aktivitet» under Deltakere — samlet aktivitet over tid og hvem som er aktive, for alle kurs.
 //
 // ⚠️ INGEN NY LAGRING. Alt regnes ut av fire tabeller som har tidspunkt fra første dag: lesinger
 // (CourseSectionRead), innleveringer (Submission), beståtte vedtak (AssessmentDecision) og fullførte
-// kurs (CourseCompletion). «Sist innlogget» er User.lastLoginAt, som oppdateres ved hver
-// autentiserte forespørsel. Innlogginger PER UKE finnes ikke i dag, og vises derfor ikke.
+// kurs (CourseCompletion). «Sist sett» er User.lastLoginAt, som til tross for navnet oppdateres ved
+// hver autentiserte forespørsel. Innlogginger PER UKE finnes ikke i dag, og vises derfor ikke.
 //
 // ⚠️ DAGER OG UKER ER NORSKE. Serveren går i UTC; en lesing kl. 00:30 norsk tid hører til den dagen
 // deltakeren opplevde. Alle dag- og ukenøkler er kalenderdatoer i Europe/Oslo (YYYY-MM-DD), og
@@ -307,7 +307,8 @@ export async function getActivityReport(options: {
 
   // ⚠️ Hele historikken lastes: «har kommet i gang» og «sist aktiv» trenger første og siste hendelse
   // uansett periode. Radene er små (bruker + tidspunkt), og antallet følger antall deltakere ganger
-  // seksjoner — titusener, ikke millioner. QA målte utregningen: 100 000 hendelser tar under 0,2 s.
+  // seksjoner — titusener, ikke millioner. QA målte selve dag- og ukeutregningen på en utviklermaskin:
+  // 100 000 hendelser tok 0,2 s og 32 MB (uten databasehentingen).
   // Blir det mye mer, er neste steg å la databasen gruppere første/siste per person og bare hente
   // hendelsene i perioden.
   const [reads, submissions, completions] = await Promise.all([
@@ -352,7 +353,7 @@ export async function getActivityRecent(userId: string, locale: SupportedLocale,
   if (!user) return null;
   const title = (text: string | null | undefined) => (text ? localizeContentText(locale, text) ?? text : "");
 
-  const [reads, submissions, completions] = await Promise.all([
+  const [reads, submissions, passedSubmissions, completions] = await Promise.all([
     prisma.courseSectionRead.findMany({
       where: { userId },
       orderBy: { readAt: "desc" },
@@ -364,7 +365,14 @@ export async function getActivityRecent(userId: string, locale: SupportedLocale,
       where: { userId },
       orderBy: { submittedAt: "desc" },
       take: limit,
-      select: { submittedAt: true, submissionStatus: true, module: { select: { title: true } }, decisions: LATEST_DECISION },
+      select: { submittedAt: true, module: { select: { title: true } } },
+    }),
+    // ⚠️ Beståtte forsøk hentes for seg: et vedtak kan komme lenge etter innleveringen (sensor), så de
+    // 15 siste innleveringene er ikke de 15 siste beståtte. Bare avgjorte innleveringer med et bestått
+    // vedtak er kandidater; `passedAt` avgjør på det siste vedtaket.
+    prisma.submission.findMany({
+      where: { userId, submissionStatus: { in: [...SETTLED_SUBMISSION_STATUSES] }, decisions: { some: { passFailTotal: true } } },
+      select: { submissionStatus: true, module: { select: { title: true } }, decisions: LATEST_DECISION },
     }),
     prisma.courseCompletion.findMany({
       where: { userId },
@@ -377,7 +385,7 @@ export async function getActivityRecent(userId: string, locale: SupportedLocale,
   const events: Array<ActivityRecentEvent & { t: number }> = [
     ...distinctReads(reads).map((r) => ({ type: "read" as const, t: r.readAt.getTime(), at: r.readAt.toISOString(), courseTitle: title(r.course.title), itemTitle: title(r.section.title) })),
     ...submissions.map((s) => ({ type: "submitted" as const, t: s.submittedAt.getTime(), at: s.submittedAt.toISOString(), courseTitle: null, itemTitle: title(s.module.title) })),
-    ...submissions.flatMap((s) => {
+    ...passedSubmissions.flatMap((s) => {
       const at = passedAt(s);
       return at ? [{ type: "passed" as const, t: at.getTime(), at: at.toISOString(), courseTitle: null, itemTitle: title(s.module.title) }] : [];
     }),

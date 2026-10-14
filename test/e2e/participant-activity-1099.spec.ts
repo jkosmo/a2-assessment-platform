@@ -317,6 +317,20 @@ test("feiler et nytt valg, viser knappene valget tallene faktisk gjelder", async
   await expect(page.locator("#activityPeriod button[data-v='4']")).toHaveAttribute("aria-pressed", "false");
 });
 
+test("feiler et avdelingsvalg, viser velgeren avdelingen tallene faktisk gjelder", async ({ page }) => {
+  await mockBase(page, ["ADMINISTRATOR"]);
+  await page.route("**/api/reports/activity?**", (route: Route) => {
+    if (new URL(route.request().url()).searchParams.get("department") === "IT") {
+      return route.fulfill({ status: 500, contentType: "application/json", body: JSON.stringify({ error: "internal_error" }) });
+    }
+    return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(report()) });
+  });
+  await page.goto("/deltakere/aktivitet");
+  await expect(page.locator("#activityRows tr.person")).toHaveCount(3);
+  await page.locator("#activityDepartment").selectOption("IT");
+  await expect(page.locator("#activityDepartment")).toHaveValue("");
+});
+
 test("feil fra tjeneren gir en melding, ikke en tom side uten forklaring", async ({ page }) => {
   await mockBase(page, ["ADMINISTRATOR"]);
   await page.route("**/api/reports/activity?**", (route: Route) =>

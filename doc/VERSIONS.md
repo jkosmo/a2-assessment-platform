@@ -14,7 +14,7 @@ Produkteier: «Jeg ønsker å følge aktivitet og hvordan den øker, hvem som er
   siste 7 dager mot uka før, aktive siste 30, har kommet i gang, hendelser siste 7 dager), grafen
   «Personer» (aktive per uke/dag og hvor mange som har kommet i gang totalt, mot alle deltakere),
   grafen «Hva de gjør» (seksjoner lest, forsøk levert, moduler bestått, kurs fullført) og lista
-  «Hvem er aktive» med status, sist aktiv, sist innlogget, aktive dager per uke og «det siste hen
+  «Hvem er aktive» med status, sist aktiv, sist sett, aktive dager per uke og «det siste hen
   har gjort». Filtre: periode, per dag/uke, avdeling.
 - **API:** `GET /api/reports/activity?period=4|12|all&grain=day|week&department=…` og
   `GET /api/reports/activity/users/:userId/recent` (`src/modules/reporting/activityReport.ts`).
