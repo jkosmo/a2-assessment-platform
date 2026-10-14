@@ -76,7 +76,12 @@ test.describe("#1085 — menylinja får plass på telefon", () => {
 
   // At lenkene KAN brekke, er sikkerhetsnettet. På en vanlig telefon skal de ikke trenge det: de står
   // tettere der, så menyen er én linje — to linjer meny tar plass fra lista under.
-  for (const side of SIDER) {
+  // #1099: under Deltakere har administrator fem faner (Klasser, Status, Aktivitet, Manuell behandling,
+  // Resultater). Teksten alene er 328 px av 358 på en 390 px telefon, så de kan ikke stå på én linje
+  // med luft rundt seg. Den menyen er ikke festet øverst (bare innholdsmenyen i seksjonseditoren er
+  // det, se under), så to linjer koster bare høyde. Kravet om én linje gjelder derfor innholdssidene;
+  // for Klasser måles at ingen lenke stikker ut (over) og at menyen ikke blir mer enn to linjer.
+  for (const side of SIDER.filter((s) => s.navn !== "Klasser")) {
     test(`${side.navn}, 390 px: lenkene får plass på én linje`, async ({ page }) => {
       await åpne(page, side.rute, 390);
       const topper = await page.locator(".content-area-nav .content-area-nav-link:visible").evaluateAll((els) => [...new Set(els.map((el) => Math.round(el.getBoundingClientRect().top)))]);
@@ -84,6 +89,13 @@ test.describe("#1085 — menylinja får plass på telefon", () => {
       expect((await mål(page)).lenker).toContain(side.skalHa);
     });
   }
+
+  test("Klasser, 390 px, administrator: menyen under Deltakere er høyst to linjer, med Aktivitet", async ({ page }) => {
+    await åpne(page, "/deltakere/klasser", 390);
+    const topper = await page.locator(".content-area-nav .content-area-nav-link:visible").evaluateAll((els) => [...new Set(els.map((el) => Math.round(el.getBoundingClientRect().top)))]);
+    expect(topper.length, "linjer menyen står på").toBeLessThanOrEqual(2);
+    expect((await mål(page)).lenker).toEqual(expect.arrayContaining(["Aktivitet", "Resultater"]));
+  });
 
   // Funnet av QA-gjennomgangen av 2.82.0. I seksjonseditoren er menyen festet øverst, og linja med
   // «Last opp bilde» er festet 46 px under toppen — et tall som forutsetter at menyen er ÉN linje.
