@@ -7,7 +7,7 @@
 
 ## Kort: det som må avgjøres
 
-**Prod og stage står på 2.90.0** (prod rullet 2026-10-13 kl. 22:49 fra `5b4ebe71`, run 38463267515, godkjent av produkteier; stage rullet kl. 14:51, stage-testen 46 av 46, QA-porten GO i `.ai-qa/qa-20261013-141739.md`). `dev` = stage = prod. `main` = prod etter PR #1098. Ny skillpakke 2.90.0 («tenk først») skal lastes opp i ChatGPT og Claude.ai nå som prod har blokken. **Neste:** produkteier justerer kursene i prod med oppdateringsflyten (#1095); #1072 punkt 6 (veiledning i seksjonseditoren) gjenstår; CI er rød på `nav-fits-phone-1085` (består lokalt, ikke på Linux) siden 2026-10-11.
+**Prod og stage står på 2.90.0** (prod rullet 2026-10-13 kl. 22:49 fra `5b4ebe71`, run 38463267515, godkjent av produkteier; stage rullet kl. 14:51, stage-testen 46 av 46, QA-porten GO i `.ai-qa/qa-20261013-141739.md`). `dev` = stage = prod. `main` = prod etter PR #1098. Ny skillpakke 2.90.0 («tenk først») skal lastes opp i ChatGPT og Claude.ai nå som prod har blokken. **Neste:** #1095 er lukket (kursene var alt justert på en annen måte); #1072 punkt 6 (veiledning i seksjonseditoren) gjenstår; CI er rød på `nav-fits-phone-1085` (består lokalt, ikke på Linux) siden 2026-10-11.
 
 ### 2.86.0: ikonbibliotek, skillet flettet inn, skillforbedringer (2026-10-11, grenen `ikoner-1079`)
 
