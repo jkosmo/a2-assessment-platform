@@ -71,7 +71,7 @@ the same translation gate as a module (see `doc/FEATURE_SURFACE_MAP.md` § 23).
 ## Participant, «Deltakere» and review workspaces
 
 The **«Deltakere»** top-nav area (#765) groups the participant-/outcome-oriented surfaces —
-`/deltakere/klasser`, `/deltakere/status`, `/review`, `/results` — behind one menu item, with a shared,
+`/deltakere/klasser`, `/deltakere/status`, `/deltakere/aktivitet`, `/review`, `/results` — behind one menu item, with a shared,
 role-gated sub-navigation bar (`public/static/deltakere-subnav.js`). `/review` and `/results` keep their
 URLs; only Klasser moved (from `/admin-content/classes`).
 
@@ -82,6 +82,7 @@ URLs; only Klasser moved (from `/admin-content/classes`).
 | `/certificate?id=<certificateId>` | Printable course certificate view (#550) |
 | `/deltakere/klasser` | Classes (cohorts) admin — list, create, members, course assignment (#645/CL-3; moved here in #765) |
 | `/deltakere/status` | Teacher/SMO cohort-status dashboard — enrollment status counts per course (#498) |
+| `/deltakere/aktivitet` | Admin / report reader: activity across all courses over time, and who is active (#1099) |
 | `/review` | Manual review queue and workspace (a «Deltakere» sub-tab) |
 | `/calibration` | **Retired (#836)** — 301-redirects to `/admin-content/calibration` |
 | `/results` | Results / history view (a «Deltakere» sub-tab) |

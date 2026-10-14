@@ -1139,6 +1139,13 @@ samme release, og en «kanonisk regel» uten kallere er bare død kode. Kalibrer
 fortsatt `passFailTotal` uten status. Om KPI-en skal måle maskinens råvedtak eller det endelige
 utfallet er en åpen produktbeslutning — se #948.
 
+⚠️ **Rapportene på serveren** spør `isSettledSubmission(status)` og leser det SISTE vedtaket
+(`completionReport.ts`, `mcqSemanticReport.ts`, og «Moduler bestått» i aktivitetsrapporten #1099 via
+`passedAt()` i `src/modules/reporting/activityReport.ts`). Første utgave av aktivitetsrapporten talte
+«ett bestått vedtak finnes» — et forsøk som ble strøket etter anke sto som bestått, og et erstattet
+forsøk med et gammelt automatisk vedtak like så. QA-porten fant det. En ny rapport som teller
+bestått, skal bruke samme to spørsmål.
+
 ⚠️ **Aliaser er fella.** Første utkast av vakta lette etter `passFailTotal` og overså
 `flowState.resultPassFail === true` i `participant.js` — samme verdi, annet navn, vakta grønn.
 Regexen matcher nå ethvert navn som inneholder «passFail». Skrivinger (`passFailTotal:` i

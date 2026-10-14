@@ -168,6 +168,32 @@ const FLATER: Flate[] = [
     }],
   },
   {
+    // #1099: titlene i «det siste hen har gjort» lokaliseres av tjeneren og hentes ved klikk.
+    navn: "aktivitet",
+    rute: "/deltakere/aktivitet",
+    roller: ["ADMINISTRATOR"],
+    beholder: "#activityRows",
+    tekst: { nb: "Kravmatrise i praksis", "en-GB": "Requirements matrix" },
+    ekstra: [{
+      mønster: "**/api/reports/activity?**",
+      svar: {
+        generatedAt: "2026-10-14T10:00:00.000Z", period: "12", grain: "week", department: null,
+        range: { from: "2026-10-12", to: "2026-10-14" }, departments: [], population: 1,
+        kpis: { active7: 1, active7Prev: 0, active30: 1, started: 1, startedBefore7: 0, events7: { read: 0, submitted: 0, passed: 1, completed: 0 } },
+        buckets: [{ from: "2026-10-12", to: "2026-10-18", partial: true, active: 1, startedTotal: 1, counts: { read: 0, submitted: 0, passed: 1, completed: 0 } }],
+        people: [{ userId: "u-a", name: "Kari", email: "kari@x.no", department: null, status: "active", lastActivityAt: "2026-10-14T09:00:00.000Z", lastLoginAt: null, activeDaysByWeek: new Array(12).fill(0), counts: { read: 0, submitted: 0, passed: 1, completed: 0 } }],
+      },
+    }],
+    data: [{
+      mønster: "**/api/reports/activity/users/*/recent",
+      svar: (locale) => ({
+        userId: "u-a", name: "Kari",
+        events: [{ type: "passed", at: "2026-10-14T09:00:00.000Z", courseTitle: null, itemTitle: locale === "nb" ? "Kravmatrise i praksis" : "Requirements matrix" }],
+      }),
+    }],
+    forbered: async (page) => { await page.locator("#activityRows tr.person").first().click(); },
+  },
+  {
     navn: "kohortstatus",
     rute: "/deltakere/status",
     roller: ["SUBJECT_MATTER_OWNER"],

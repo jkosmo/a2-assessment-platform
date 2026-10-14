@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 import {
   addDaysToKey,
   buildActivityReport,
+  distinctReads,
   mondayOfKey,
+  passedAt,
   osloDayKey,
   type ActivityEvent,
   type ActivityPerson,
@@ -174,5 +176,31 @@ describe("buildActivityReport", () => {
       events: [at("2026-10-01T08:00:00Z", "a"), at("2026-10-13T08:00:00Z", "b")],
     });
     expect(report.people.map((p) => p.userId)).toEqual(["b", "a", "c"]);
+  });
+});
+
+describe("bestått og leste seksjoner (QA-porten, #1099)", () => {
+  const t1 = new Date("2026-10-10T10:00:00Z");
+  const t2 = new Date("2026-10-11T10:00:00Z");
+
+  it("bestått = avgjort innlevering der det SISTE vedtaket er bestått, på det vedtakets tidspunkt", () => {
+    expect(passedAt({ submissionStatus: "COMPLETED", decisions: [{ passFailTotal: true, finalisedAt: t2 }] })).toEqual(t2);
+    // Strøket etter anke: siste vedtak er strøket, selv om et tidligere var bestått.
+    expect(passedAt({ submissionStatus: "COMPLETED", decisions: [{ passFailTotal: false, finalisedAt: t2 }, { passFailTotal: true, finalisedAt: t1 }] })).toBeNull();
+    // Erstattet eller til vurdering: ikke avgjort, uansett hva et gammelt vedtak sier.
+    expect(passedAt({ submissionStatus: "SUPERSEDED", decisions: [{ passFailTotal: true, finalisedAt: t1 }] })).toBeNull();
+    expect(passedAt({ submissionStatus: "UNDER_REVIEW", decisions: [{ passFailTotal: true, finalisedAt: t1 }] })).toBeNull();
+    expect(passedAt({ submissionStatus: "COMPLETED", decisions: [] })).toBeNull();
+  });
+
+  it("en lesing som «oppdater kurs» har kopiert til en ny seksjon, er én lesing", () => {
+    const reads = [
+      { userId: "a", courseId: "k", sectionId: "gammel", readAt: t1 },
+      { userId: "a", courseId: "k", sectionId: "ny", readAt: t1 },
+      { userId: "a", courseId: "k", sectionId: "annen", readAt: t2 },
+      { userId: "b", courseId: "k", sectionId: "gammel", readAt: t1 },
+      { userId: "a", courseId: "annet-kurs", sectionId: "gammel", readAt: t1 },
+    ];
+    expect(distinctReads(reads).map((r) => r.sectionId)).toEqual(["gammel", "annen", "gammel", "gammel"]);
   });
 });

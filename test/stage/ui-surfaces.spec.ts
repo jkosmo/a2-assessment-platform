@@ -54,6 +54,8 @@ const FLATER = [
   // nøyaktig blind for feilen #1040 beskriver.
   { navn: "admin-plattform", rute: "/admin-platform", beholder: "body", innhold: "#failedAssessmentsBody" },
   { navn: "kohortstatus", rute: "/deltakere/status", beholder: "#courseSelect", innhold: "#courseSelect" },
+  // #1099: lista fylles alltid (minst «ingen deltakere ennå»).
+  { navn: "aktivitet", rute: "/deltakere/aktivitet", beholder: "#activityRows", innhold: "#activityRows" },
 ];
 
 // Hvor lenge en flate får på å fylle beholderen sin. Målt 17.09 på stage (én B1-instans): rapport-

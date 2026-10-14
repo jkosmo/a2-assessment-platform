@@ -476,18 +476,30 @@ async function loadReport() {
     render();
   } catch (error) {
     if (seq !== requestSeq) return;
+    // Knappene skal vise valget tallene faktisk gjelder, ikke det som feilet.
+    if (report) {
+      ui.period = report.period ?? ui.period;
+      ui.grain = report.grain ?? ui.grain;
+      renderControls();
+    }
     showToast(describeApiError(error, t).headline || t("activity.error"), "error");
   }
 }
 
 async function loadRecent(userId) {
-  recentCache.set(userId, { state: "loading" });
+  // ⚠️ Et svar som kommer etter et språkbytte (eller etter at mellomlageret er tømt) tilhører en
+  // henting som ikke lenger gjelder. Uten merket ville titlene på det gamle språket blitt stående.
+  const token = {};
+  recentCache.set(userId, { state: "loading", token });
+  let next;
   try {
     const data = await apiFetch(`/api/reports/activity/users/${encodeURIComponent(userId)}/recent`, headers);
-    recentCache.set(userId, { state: "ready", data });
+    next = { state: "ready", data, token };
   } catch {
-    recentCache.set(userId, { state: "error" });
+    next = { state: "error", token };
   }
+  if (recentCache.get(userId)?.token !== token) return;
+  recentCache.set(userId, next);
   if (ui.open === userId && report) renderTable();
 }
 
@@ -495,7 +507,9 @@ function toggleRow(userId) {
   ui.open = ui.open === userId ? null : userId;
   if (ui.open) {
     const person = report?.people.find((p) => p.userId === ui.open);
-    if (person && person.status !== "not_started" && !recentCache.has(ui.open)) void loadRecent(ui.open);
+    // En feil hentes på nytt neste gang raden åpnes, i stedet for å bli liggende til sida lastes på nytt.
+    const cached = recentCache.get(ui.open);
+    if (person && person.status !== "not_started" && (!cached || cached.state === "error")) void loadRecent(ui.open);
   }
   renderTable();
   const again = Array.from(rowsBody.querySelectorAll("tr.person")).find((tr) => tr.dataset.id === userId);

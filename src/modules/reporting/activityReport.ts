@@ -2,6 +2,8 @@ import { prisma } from "../../db/prisma.js";
 import { AppRole } from "../../db/prismaRuntime.js";
 import { localizeContentText } from "../../i18n/content.js";
 import type { SupportedLocale } from "../../i18n/locale.js";
+import type { SubmissionStatus as SubmissionStatusType } from "@prisma/client";
+import { isSettledSubmission } from "../submission/submissionOutcome.js";
 
 // #1099: «Aktivitet» under Deltakere — samlet aktivitet over tid og hvem som er aktive, for alle kurs.
 //
@@ -241,37 +243,54 @@ export function buildActivityReport(input: {
 }
 
 /** Deltakerne: aktive brukere med gyldig deltakerrolle, ikke anonymisert (samme regel som «Alle deltakere»). */
-async function findReportParticipants(now: Date): Promise<ActivityPerson[]> {
-  const users = await prisma.user.findMany({
-    where: {
-      activeStatus: true,
-      isAnonymized: false,
-      roleAssignments: {
-        some: {
-          appRole: AppRole.PARTICIPANT,
-          validFrom: { lte: now },
-          OR: [{ validTo: null }, { validTo: { gte: now } }],
-        },
+function participantWhere(now: Date) {
+  return {
+    activeStatus: true,
+    isAnonymized: false,
+    roleAssignments: {
+      some: {
+        appRole: AppRole.PARTICIPANT,
+        validFrom: { lte: now },
+        OR: [{ validTo: null }, { validTo: { gte: now } }],
       },
     },
+  };
+}
+
+async function findReportParticipants(now: Date): Promise<ActivityPerson[]> {
+  const users = await prisma.user.findMany({
+    where: participantWhere(now),
     select: { id: true, name: true, email: true, department: true, lastLoginAt: true },
   });
   return users.map((u) => ({ userId: u.id, name: u.name, email: u.email, department: u.department, lastLoginAt: u.lastLoginAt }));
 }
 
 /**
- * Et vedtak kan komme i flere runder (ny vurdering, anke). Et bestått forsøk telles én gang, på
- * tidspunktet for det FØRSTE beståtte vedtaket — ellers ville en anke som opprettholder et bestått
- * gitt to «bestått» for samme innlevering.
+ * «Bestått» følger samme regel som resten av rapportene (#948/#951): innleveringen er AVGJORT
+ * (`isSettledSubmission`), og det SISTE vedtaket er bestått. Et forsøk som ble bestått og så strøket
+ * etter anke, er ikke bestått; et erstattet forsøk med et gammelt automatisk vedtak er ikke avgjort.
+ * Tidspunktet er det siste vedtakets.
  */
-function firstPassPerSubmission(rows: Array<{ submissionId: string; finalisedAt: Date; userId: string }>) {
-  const first = new Map<string, { userId: string; at: Date }>();
-  for (const row of rows) {
-    const seen = first.get(row.submissionId);
-    if (!seen || row.finalisedAt < seen.at) first.set(row.submissionId, { userId: row.userId, at: row.finalisedAt });
-  }
-  return Array.from(first.values());
+export function passedAt(submission: { submissionStatus: SubmissionStatusType; decisions: Array<{ passFailTotal: boolean; finalisedAt: Date }> }): Date | null {
+  const latest = submission.decisions[0];
+  return isSettledSubmission(submission.submissionStatus) && latest?.passFailTotal ? latest.finalisedAt : null;
 }
+
+/**
+ * «Oppdater kurs» (#1095) kopierer lesingene til den nye seksjonen med SAMME tidspunkt, og den gamle
+ * raden blir stående. Samme person, samme kurs, samme øyeblikk er derfor én lesing, ikke to.
+ */
+export function distinctReads<T extends { userId: string; courseId: string; readAt: Date }>(reads: T[]): T[] {
+  const seen = new Set<string>();
+  return reads.filter((r) => {
+    const key = `${r.userId}|${r.courseId}|${r.readAt.getTime()}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+const LATEST_DECISION = { orderBy: { finalisedAt: "desc" as const }, take: 1, select: { passFailTotal: true, finalisedAt: true } };
 
 export async function getActivityReport(options: {
   period: ActivityPeriod;
@@ -288,22 +307,25 @@ export async function getActivityReport(options: {
 
   // ⚠️ Hele historikken lastes: «har kommet i gang» og «sist aktiv» trenger første og siste hendelse
   // uansett periode. Radene er små (bruker + tidspunkt), og antallet følger antall deltakere ganger
-  // seksjoner — titusener, ikke millioner. Blir det for mye, er neste steg å la databasen gruppere.
-  const [reads, submissions, passes, completions] = await Promise.all([
-    prisma.courseSectionRead.findMany({ where: { userId: { in: ids }, readAt: { lte: now } }, select: { userId: true, readAt: true } }),
-    prisma.submission.findMany({ where: { userId: { in: ids }, submittedAt: { lte: now } }, select: { userId: true, submittedAt: true } }),
-    prisma.assessmentDecision.findMany({
-      where: { passFailTotal: true, finalisedAt: { lte: now }, submission: { userId: { in: ids } } },
-      select: { submissionId: true, finalisedAt: true, submission: { select: { userId: true } } },
+  // seksjoner — titusener, ikke millioner. QA målte utregningen: 100 000 hendelser tar under 0,2 s.
+  // Blir det mye mer, er neste steg å la databasen gruppere første/siste per person og bare hente
+  // hendelsene i perioden.
+  const [reads, submissions, completions] = await Promise.all([
+    prisma.courseSectionRead.findMany({ where: { userId: { in: ids }, readAt: { lte: now } }, select: { userId: true, courseId: true, readAt: true } }),
+    prisma.submission.findMany({
+      where: { userId: { in: ids }, submittedAt: { lte: now } },
+      select: { userId: true, submittedAt: true, submissionStatus: true, decisions: LATEST_DECISION },
     }),
     prisma.courseCompletion.findMany({ where: { userId: { in: ids }, completedAt: { lte: now } }, select: { userId: true, completedAt: true } }),
   ]);
 
   const events: ActivityEvent[] = [
-    ...reads.map((r) => ({ userId: r.userId, at: r.readAt, type: "read" as const })),
+    ...distinctReads(reads).map((r) => ({ userId: r.userId, at: r.readAt, type: "read" as const })),
     ...submissions.map((s) => ({ userId: s.userId, at: s.submittedAt, type: "submitted" as const })),
-    ...firstPassPerSubmission(passes.map((p) => ({ submissionId: p.submissionId, finalisedAt: p.finalisedAt, userId: p.submission.userId })))
-      .map((p) => ({ userId: p.userId, at: p.at, type: "passed" as const })),
+    ...submissions.flatMap((s) => {
+      const at = passedAt(s);
+      return at && at <= now ? [{ userId: s.userId, at, type: "passed" as const }] : [];
+    }),
     ...completions.map((c) => ({ userId: c.userId, at: c.completedAt, type: "completed" as const })),
   ];
 
@@ -321,28 +343,28 @@ export type ActivityRecentEvent = {
 
 export type ActivityRecent = { userId: string; name: string; events: ActivityRecentEvent[] };
 
-/** Det siste én person har gjort, på tvers av kurs. null når personen ikke finnes eller er anonymisert. */
-export async function getActivityRecent(userId: string, locale: SupportedLocale, limit = 15): Promise<ActivityRecent | null> {
-  const user = await prisma.user.findUnique({ where: { id: userId }, select: { id: true, name: true, isAnonymized: true } });
-  if (!user || user.isAnonymized) return null;
+/**
+ * Det siste én person har gjort, på tvers av kurs. null når personen ikke er blant deltakerne i
+ * rapporten — sluttet, anonymisert eller uten deltakerrolle. Oppslaget skal ikke nå lenger enn lista.
+ */
+export async function getActivityRecent(userId: string, locale: SupportedLocale, limit = 15, now = new Date()): Promise<ActivityRecent | null> {
+  const user = await prisma.user.findFirst({ where: { id: userId, ...participantWhere(now) }, select: { id: true, name: true } });
+  if (!user) return null;
   const title = (text: string | null | undefined) => (text ? localizeContentText(locale, text) ?? text : "");
 
-  const [reads, submissions, passes, completions] = await Promise.all([
+  const [reads, submissions, completions] = await Promise.all([
     prisma.courseSectionRead.findMany({
       where: { userId },
       orderBy: { readAt: "desc" },
-      take: limit,
-      select: { readAt: true, section: { select: { title: true } }, course: { select: { title: true } } },
+      // Kopierte lesinger (se distinctReads) kan ta plass; hent litt ekstra.
+      take: limit * 2,
+      select: { userId: true, courseId: true, readAt: true, section: { select: { title: true } }, course: { select: { title: true } } },
     }),
     prisma.submission.findMany({
       where: { userId },
       orderBy: { submittedAt: "desc" },
       take: limit,
-      select: { submittedAt: true, module: { select: { title: true } } },
-    }),
-    prisma.assessmentDecision.findMany({
-      where: { passFailTotal: true, submission: { userId } },
-      select: { submissionId: true, finalisedAt: true, submission: { select: { module: { select: { title: true } } } } },
+      select: { submittedAt: true, submissionStatus: true, module: { select: { title: true } }, decisions: LATEST_DECISION },
     }),
     prisma.courseCompletion.findMany({
       where: { userId },
@@ -352,17 +374,13 @@ export async function getActivityRecent(userId: string, locale: SupportedLocale,
     }),
   ]);
 
-  // Samme regel som i rapporten: første beståtte vedtak per innlevering.
-  const firstPass = new Map<string, { at: Date; title: string }>();
-  for (const p of passes) {
-    const seen = firstPass.get(p.submissionId);
-    if (!seen || p.finalisedAt < seen.at) firstPass.set(p.submissionId, { at: p.finalisedAt, title: p.submission.module.title });
-  }
-
   const events: Array<ActivityRecentEvent & { t: number }> = [
-    ...reads.map((r) => ({ type: "read" as const, t: r.readAt.getTime(), at: r.readAt.toISOString(), courseTitle: title(r.course.title), itemTitle: title(r.section.title) })),
+    ...distinctReads(reads).map((r) => ({ type: "read" as const, t: r.readAt.getTime(), at: r.readAt.toISOString(), courseTitle: title(r.course.title), itemTitle: title(r.section.title) })),
     ...submissions.map((s) => ({ type: "submitted" as const, t: s.submittedAt.getTime(), at: s.submittedAt.toISOString(), courseTitle: null, itemTitle: title(s.module.title) })),
-    ...Array.from(firstPass.values()).map((p) => ({ type: "passed" as const, t: p.at.getTime(), at: p.at.toISOString(), courseTitle: null, itemTitle: title(p.title) })),
+    ...submissions.flatMap((s) => {
+      const at = passedAt(s);
+      return at ? [{ type: "passed" as const, t: at.getTime(), at: at.toISOString(), courseTitle: null, itemTitle: title(s.module.title) }] : [];
+    }),
     ...completions.map((c) => ({ type: "completed" as const, t: c.completedAt.getTime(), at: c.completedAt.toISOString(), courseTitle: title(c.course.title), itemTitle: title(c.course.title) })),
   ];
   events.sort((a, b) => b.t - a.t);

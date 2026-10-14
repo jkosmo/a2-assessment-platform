@@ -29,9 +29,11 @@ describe("Aktivitet under Deltakere (#1099)", () => {
   const userIds: Record<string, string> = {};
   let courseId = "";
   let sectionId = "";
+  let copySectionId = "";
   let moduleId = "";
   let moduleVersionId = "";
   let submissionId = "";
+  const submissionIds: string[] = [];
 
   async function makeUser(tag: string, opts: { participant?: boolean; otherRole?: "REVIEWER"; active?: boolean; lastLoginAt?: Date } = {}) {
     const user = await prisma.user.create({
@@ -64,6 +66,10 @@ describe("Aktivitet under Deltakere (#1099)", () => {
       data: { title: JSON.stringify({ nb: "Les meg først", "en-GB": "Read me first" }) },
       select: { id: true },
     })).id;
+    copySectionId = (await prisma.courseSection.create({
+      data: { title: JSON.stringify({ nb: "Les meg først (kopi)", "en-GB": "Read me first (copy)" }) },
+      select: { id: true },
+    })).id;
     moduleId = (await prisma.module.create({ data: { title: JSON.stringify({ nb: "Aktivitetsmodul", "en-GB": "Activity module" }) }, select: { id: true } })).id;
     moduleVersionId = (await prisma.moduleVersion.create({
       data: { moduleId, versionNo: 1, assessmentMode: "MCQ_ONLY", publishedAt: new Date() },
@@ -79,7 +85,10 @@ describe("Aktivitet under Deltakere (#1099)", () => {
     const ikkeDeltaker = await makeUser("ikke-deltaker", { participant: false, otherRole: "REVIEWER" });
 
     // aktiv: alle fire hendelsestypene i går.
-    await prisma.courseSectionRead.create({ data: { userId: a, courseId, sectionId, readAt: ago(1, 3) } });
+    const lest = ago(1, 3);
+    await prisma.courseSectionRead.create({ data: { userId: a, courseId, sectionId, readAt: lest } });
+    // «Oppdater kurs» (#1095) kopierer lesingen til den nye seksjonen med samme tidspunkt: én lesing.
+    await prisma.courseSectionRead.create({ data: { userId: a, courseId, sectionId: copySectionId, readAt: lest } });
     submissionId = (await prisma.submission.create({
       data: { userId: a, moduleId, moduleVersionId, deliveryType: "text", submissionStatus: "COMPLETED", submittedAt: ago(1, 2) },
       select: { id: true },
@@ -95,6 +104,36 @@ describe("Aktivitet under Deltakere (#1099)", () => {
     }
     await prisma.courseCompletion.create({ data: { userId: a, courseId, moduleSnapshotJson: "[]", completedAt: ago(1) } });
 
+    submissionIds.push(submissionId);
+
+    // anket: et forsøk som ble bestått og så strøket etter anke, og et erstattet forsøk som bærer et
+    // gammelt automatisk bestått. Ingen av dem er bestått (#948/#951) — begge er levert.
+    const anket = await makeUser("anket");
+    const anketForsøk = (await prisma.submission.create({
+      data: { userId: anket, moduleId, moduleVersionId, deliveryType: "text", submissionStatus: "COMPLETED", submittedAt: ago(2) },
+      select: { id: true },
+    })).id;
+    submissionIds.push(anketForsøk);
+    for (const [hours, pass] of [[3, true], [1, false]] as const) {
+      await prisma.assessmentDecision.create({
+        data: {
+          submissionId: anketForsøk, moduleVersionId, mcqScaledScore: 1, practicalScaledScore: 1, totalScore: 1, redFlagsJson: "[]",
+          passFailTotal: pass, decisionType: pass ? "AUTOMATIC" : "APPEAL_RESOLUTION", decisionReason: "Fikstur for #1099.", finalisedAt: ago(1, hours),
+        },
+      });
+    }
+    const erstattet = (await prisma.submission.create({
+      data: { userId: anket, moduleId, moduleVersionId, deliveryType: "text", submissionStatus: "SUPERSEDED", submittedAt: ago(3) },
+      select: { id: true },
+    })).id;
+    submissionIds.push(erstattet);
+    await prisma.assessmentDecision.create({
+      data: {
+        submissionId: erstattet, moduleVersionId, mcqScaledScore: 1, practicalScaledScore: 1, totalScore: 1, redFlagsJson: "[]",
+        passFailTotal: true, decisionType: "AUTOMATIC", decisionReason: "Fikstur for #1099.", finalisedAt: ago(3),
+      },
+    });
+
     // rolig: én lesing for 20 dager siden.
     await prisma.courseSectionRead.create({ data: { userId: b, courseId, sectionId, readAt: ago(20) } });
 
@@ -105,13 +144,13 @@ describe("Aktivitet under Deltakere (#1099)", () => {
 
   afterAll(async () => {
     const ids = Object.values(userIds);
-    await prisma.assessmentDecision.deleteMany({ where: { submissionId } });
+    await prisma.assessmentDecision.deleteMany({ where: { submissionId: { in: submissionIds } } });
     await prisma.submission.deleteMany({ where: { userId: { in: ids } } });
     await prisma.courseCompletion.deleteMany({ where: { userId: { in: ids } } });
     await prisma.courseSectionRead.deleteMany({ where: { userId: { in: ids } } });
     if (moduleVersionId) await prisma.moduleVersion.deleteMany({ where: { id: moduleVersionId } });
     if (moduleId) await prisma.module.deleteMany({ where: { id: moduleId } });
-    if (sectionId) await prisma.courseSection.deleteMany({ where: { id: sectionId } });
+    await prisma.courseSection.deleteMany({ where: { id: { in: [sectionId, copySectionId].filter(Boolean) } } });
     if (courseId) await prisma.course.deleteMany({ where: { id: courseId } });
     if (ids.length) await prisma.user.deleteMany({ where: { id: { in: ids } } });
     await prisma.$disconnect();
@@ -125,16 +164,18 @@ describe("Aktivitet under Deltakere (#1099)", () => {
     expect(res.status).toBe(200);
     expect(res.body.department).toBe(department);
     expect(res.body.departments).toContain(department);
-    // aktiv, rolig og ikke-startet. Ikke den som har sluttet, og ikke den uten deltakerrolle.
-    expect(res.body.population).toBe(3);
-    expect(res.body.kpis).toMatchObject({ active7: 1, active30: 2, started: 2 });
-    expect(res.body.kpis.events7).toEqual({ read: 1, submitted: 1, passed: 1, completed: 1 });
+    // aktiv, anket, rolig og ikke-startet. Ikke den som har sluttet, og ikke den uten deltakerrolle.
+    expect(res.body.population).toBe(4);
+    expect(res.body.kpis).toMatchObject({ active7: 2, active30: 3, started: 3 });
+    // Den kopierte lesingen er én; det ankede og det erstattede forsøket er levert, ikke bestått.
+    expect(res.body.kpis.events7).toEqual({ read: 1, submitted: 3, passed: 1, completed: 1 });
 
     const status = Object.fromEntries(
       (res.body.people as Array<{ userId: string; status: string }>).map((p) => [p.userId, p.status]),
     );
     expect(status).toEqual({
       [userIds.aktiv!]: "active",
+      [userIds.anket!]: "active",
       [userIds.rolig!]: "quiet",
       [userIds["ikke-startet"]!]: "not_started",
     });
@@ -144,7 +185,7 @@ describe("Aktivitet under Deltakere (#1099)", () => {
 
     const total = (res.body.buckets as Array<{ counts: Record<string, number> }>)
       .reduce((sum, b) => sum + b.counts.read + b.counts.submitted + b.counts.passed + b.counts.completed, 0);
-    expect(total).toBe(5); // fire fra «aktiv» og én fra «rolig»
+    expect(total).toBe(7); // fire fra «aktiv», to leverte fra «anket» og én fra «rolig»
   });
 
   it("rapportleser får rapporten; fagansvarlig og deltaker får det ikke", async () => {
@@ -178,5 +219,18 @@ describe("Aktivitet under Deltakere (#1099)", () => {
   it("en ukjent person gir 404", async () => {
     const res = await request(app).get("/api/reports/activity/users/finnes-ikke/recent").set(headersFor("ADMINISTRATOR"));
     expect(res.status).toBe(404);
+  });
+
+  it("oppslaget når ikke lenger enn lista: en som har sluttet, og en uten deltakerrolle, gir 404", async () => {
+    for (const tag of ["sluttet", "ikke-deltaker"]) {
+      const res = await request(app).get(`/api/reports/activity/users/${userIds[tag]}/recent`).set(headersFor("ADMINISTRATOR"));
+      expect(res.status, tag).toBe(404);
+    }
+  });
+
+  it("det ankede forsøket står som levert, ikke bestått, i «det siste hen har gjort»", async () => {
+    const res = await request(app).get(`/api/reports/activity/users/${userIds.anket}/recent`).set(headersFor("ADMINISTRATOR"));
+    expect(res.status).toBe(200);
+    expect((res.body.events as Array<{ type: string }>).map((e) => e.type)).toEqual(["submitted", "submitted"]);
   });
 });

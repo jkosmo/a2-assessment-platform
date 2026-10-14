@@ -19,9 +19,14 @@ Produkteier: «Jeg ønsker å følge aktivitet og hvordan den øker, hvem som er
 - **API:** `GET /api/reports/activity?period=4|12|all&grain=day|week&department=…` og
   `GET /api/reports/activity/users/:userId/recent` (`src/modules/reporting/activityReport.ts`).
 - **Ingen ny lagring.** Alt regnes ut av lesinger, innleveringer, vedtak og fullføringer, som har
-  tidspunkt fra første dag. Et forsøk med flere beståtte vedtak (ny vurdering, anke) telles én gang.
-  «Sist innlogget» er siste autentiserte forespørsel. Innlogginger per uke er ikke med: det krever at
-  innloggingsdager lagres.
+  tidspunkt fra første dag. «Bestått» følger rapportenes regel (#948/#951): innleveringen er avgjort
+  og det siste vedtaket er bestått. Lesinger som «oppdater kurs» har kopiert til en ny seksjon, telles
+  én gang. «Sist sett» er siste besøk i plattformen (siste autentiserte forespørsel). Innlogginger per
+  uke er ikke med: det krever at innloggingsdager lagres.
+- Oppslaget «det siste hen har gjort» gjelder bare deltakerne i lista (ikke folk som har sluttet,
+  anonymiserte eller brukere uten deltakerrolle).
+- Under Deltakere har administrator nå fem faner; på en 390 px telefon står menyen på to linjer
+  (den er ikke festet øverst, så det koster bare høyde).
 - **Dager og uker følger norsk tid** (Europe/Oslo), regnet på kalenderdatoer, så sommertid ikke
   flytter en dag.
 - Deltakere = aktive brukere med gyldig deltakerrolle, ikke sluttet eller anonymisert (samme regel

@@ -152,7 +152,7 @@ test("klikk på en person henter det siste hen har gjort; en som ikke har starte
   await page.keyboard.press("Enter");
   await expect(detail).toHaveCount(0);
   await page.locator("#activityRows tr.person", { hasText: "Nina Ny" }).click();
-  await expect(page.locator("#activityRows tr.activity-detail")).toContainText("Har ikke gjort noe ennå. Var innlogget");
+  await expect(page.locator("#activityRows tr.activity-detail")).toContainText("Har ikke gjort noe ennå. Sist sett");
   expect(recentCalls).toHaveLength(1);
 });
 
@@ -285,6 +285,37 @@ for (const width of [390, 360]) {
     expect(scale).toBeGreaterThan(0.9);
   });
 }
+
+test("en feil i «det siste hen har gjort» hentes på nytt neste gang raden åpnes", async ({ page }) => {
+  await mockBase(page, ["ADMINISTRATOR"]);
+  await mockActivity(page);
+  let feil = true;
+  await page.route("**/api/reports/activity/users/*/recent", (route: Route) => {
+    if (feil) { feil = false; return route.fulfill({ status: 500, contentType: "application/json", body: JSON.stringify({ error: "internal_error" }) }); }
+    return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ userId: "u-a", name: "Kari Aktiv", events: [{ type: "read", at: iso(60000), courseTitle: "Tilbudsarbeid", itemTitle: "Kravmatrisen" }] }) });
+  });
+  await page.goto("/deltakere/aktivitet");
+  const kari = page.locator("#activityRows tr.person", { hasText: "Kari Aktiv" });
+  await kari.click();
+  await expect(page.locator("#activityRows tr.activity-detail")).toContainText("Kunne ikke hente");
+  await kari.click();
+  await kari.click();
+  await expect(page.locator("#activityRows tr.activity-detail")).toContainText("Leste seksjonen «Kravmatrisen»");
+});
+
+test("feiler et nytt valg, viser knappene valget tallene faktisk gjelder", async ({ page }) => {
+  await mockBase(page, ["ADMINISTRATOR"]);
+  await page.route("**/api/reports/activity?**", (route: Route) => {
+    const period = new URL(route.request().url()).searchParams.get("period");
+    if (period === "4") return route.fulfill({ status: 500, contentType: "application/json", body: JSON.stringify({ error: "internal_error" }) });
+    return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(report({ period: "12" })) });
+  });
+  await page.goto("/deltakere/aktivitet");
+  await expect(page.locator("#activityRows tr.person")).toHaveCount(3);
+  await page.locator("#activityPeriod button[data-v='4']").click();
+  await expect(page.locator("#activityPeriod button[data-v='12']")).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator("#activityPeriod button[data-v='4']")).toHaveAttribute("aria-pressed", "false");
+});
 
 test("feil fra tjeneren gir en melding, ikke en tom side uten forklaring", async ({ page }) => {
   await mockBase(page, ["ADMINISTRATOR"]);
