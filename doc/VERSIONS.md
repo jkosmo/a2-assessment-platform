@@ -2,6 +2,33 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.91.0 - 2026-10-14
+
+### «Aktivitet» under Deltakere (#1099)
+
+Produkteier: «Jeg ønsker å følge aktivitet og hvordan den øker, hvem som er aktive er også fint. Jeg
+ønsker å se samlet aktivitet, ikke per kurs.» Skissen ble godkjent («Ser bra ut. Lag»).
+
+- **Ny fane `/deltakere/aktivitet`** for administrator og rapportleser (samme som rapportene på
+  tvers av organisasjonen; fagansvarlig ser bare egne kurs og får ikke fanen). Nøkkeltall (aktive
+  siste 7 dager mot uka før, aktive siste 30, har kommet i gang, hendelser siste 7 dager), grafen
+  «Personer» (aktive per uke/dag og hvor mange som har kommet i gang totalt, mot alle deltakere),
+  grafen «Hva de gjør» (seksjoner lest, forsøk levert, moduler bestått, kurs fullført) og lista
+  «Hvem er aktive» med status, sist aktiv, sist innlogget, aktive dager per uke og «det siste hen
+  har gjort». Filtre: periode, per dag/uke, avdeling.
+- **API:** `GET /api/reports/activity?period=4|12|all&grain=day|week&department=…` og
+  `GET /api/reports/activity/users/:userId/recent` (`src/modules/reporting/activityReport.ts`).
+- **Ingen ny lagring.** Alt regnes ut av lesinger, innleveringer, vedtak og fullføringer, som har
+  tidspunkt fra første dag. Et forsøk med flere beståtte vedtak (ny vurdering, anke) telles én gang.
+  «Sist innlogget» er siste autentiserte forespørsel. Innlogginger per uke er ikke med: det krever at
+  innloggingsdager lagres.
+- **Dager og uker følger norsk tid** (Europe/Oslo), regnet på kalenderdatoer, så sommertid ikke
+  flytter en dag.
+- Deltakere = aktive brukere med gyldig deltakerrolle, ikke sluttet eller anonymisert (samme regel
+  som klassen «Alle deltakere»).
+- Stage-test `test/stage/release-2-91-aktivitet.spec.ts` (bare lesing): grafen og lista må telle
+  de samme hendelsene.
+
 ## 2.90.0 - 2026-10-13
 
 ### «Tenk først», modellinnstillingene i infrastrukturkoden, lesemodus i liggende format

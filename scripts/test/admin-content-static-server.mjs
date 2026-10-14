@@ -49,6 +49,10 @@ function resolvePublicFile(requestPath) {
   if (requestPath === "/deltakere/status") {
     return path.join(publicRoot, "cohort-status.html");
   }
+  // #1099: «Aktivitet», en fane under Deltakere.
+  if (requestPath === "/deltakere/aktivitet") {
+    return path.join(publicRoot, "participant-activity.html");
+  }
   if (requestPath === "/review") {
     return path.join(publicRoot, "review.html");
   }

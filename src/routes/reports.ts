@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { DomainRuleError } from "../errors/AppError.js";
+import { DomainRuleError, NotFoundError } from "../errors/AppError.js";
 import type { NextFunction } from "express";
 import { z } from "zod";
 import { parseCsvFilter, parseQueryDate } from "./helpers/queryParsing.js";
@@ -16,6 +16,8 @@ import {
   getPassRatesReport,
   getReportingDataQualityReport,
   getCertificationStatusReport,
+  getActivityReport,
+  getActivityRecent,
   toCsv,
   type ReportFilters,
 } from "../modules/reporting/index.js";
@@ -166,6 +168,40 @@ reportsRouter.get("/courses/details", async (request, response, next) => {
       requestLocale(request),
     );
     response.json(report);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// #1099: «Aktivitet» under Deltakere — samlet for alle kurs, derfor bare for dem som leser på tvers
+// av organisasjonen. En fagansvarlig ser bare egne kurs (#1058) og får ikke denne.
+const activityQuerySchema = z.object({
+  period: z.enum(["4", "12", "all"]).default("12"),
+  grain: z.enum(["day", "week"]).default("week"),
+  department: z.string().trim().min(1).max(200).optional(),
+});
+
+reportsRouter.get("/activity", orgWideOnly, async (request, response, next) => {
+  const parsed = activityQuerySchema.safeParse(request.query);
+  if (!parsed.success) {
+    avvisFiltre(next);
+    return;
+  }
+  try {
+    response.json(await getActivityReport(parsed.data));
+  } catch (error) {
+    next(error);
+  }
+});
+
+reportsRouter.get("/activity/users/:userId/recent", orgWideOnly, async (request, response, next) => {
+  try {
+    const recent = await getActivityRecent(String(request.params.userId), requestLocale(request));
+    if (!recent) {
+      next(new NotFoundError("User"));
+      return;
+    }
+    response.json(recent);
   } catch (error) {
     next(error);
   }

@@ -233,6 +233,12 @@ app.get("/deltakere/status", (_request, response) => {
   response.sendFile(path.resolve(process.cwd(), "public", "cohort-status.html"));
 });
 
+// #1099: samlet aktivitet over tid og hvem som er aktive — en fane under «Deltakere». Dataene er
+// rollestyrt i /api/reports/activity (administrator og rapportleser).
+app.get("/deltakere/aktivitet", (_request, response) => {
+  response.sendFile(path.resolve(process.cwd(), "public", "participant-activity.html"));
+});
+
 app.get("/participant/config", generalApiLimiter, (_request, response) => {
   response.json(participantConsoleRuntimeConfig);
 });

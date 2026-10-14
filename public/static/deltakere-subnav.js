@@ -11,6 +11,8 @@ const LINK_ROLES = {
   subnavKlasser: ["SUBJECT_MATTER_OWNER", "ADMINISTRATOR"],
   // #498: cohort-status dashboard — same audience as Resultater.
   subnavStatus: ["SUBJECT_MATTER_OWNER", "ADMINISTRATOR", "REPORT_READER"],
+  // #1099: samlet for alle kurs — samme som rapportene på tvers av organisasjonen (ikke SMO).
+  subnavActivity: ["ADMINISTRATOR", "REPORT_READER"],
   subnavReview: ["REVIEWER", "APPEAL_HANDLER", "ADMINISTRATOR"],
   subnavResults: ["SUBJECT_MATTER_OWNER", "ADMINISTRATOR", "REPORT_READER"],
 };
@@ -18,6 +20,7 @@ const LINK_ROLES = {
 const ACTIVE_BY_PREFIX = [
   ["/deltakere/klasser", "subnavKlasser"],
   ["/deltakere/status", "subnavStatus"],
+  ["/deltakere/aktivitet", "subnavActivity"],
   ["/review", "subnavReview"],
   ["/results", "subnavResults"],
 ];
