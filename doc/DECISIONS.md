@@ -1137,3 +1137,15 @@ Produkteier, på to spørsmål etter QA-rundene på fase A:
 2. Elementer lagt inn i kurset etter eksporten tas ut uten å pekes ut, og kursets tittel,
    beskrivelse og rekkefølge trer i kraft straks: «Enig.» Forskjellsvisning før import er fase C.
 
+
+## «Aktivitet» under Deltakere (#1099): rapportleser ser aktiviteten for alle (2026-10-15)
+
+Produkteier, på spørsmålet om rapportleser skal se «sist sett» og «det siste hen har gjort» for
+alle ansatte: «Dette er et internt kompetanseverktøy, vi bruker persondata i henhold til intensjon.»
+
+- Fanen står som bygget: administrator og rapportleser ser lista, «sist sett» (siste besøk i
+  plattformen) og hendelsene til hver deltaker. Fagansvarlig får ikke fanen, fordi den er samlet
+  for alle kurs og fagansvarlig ellers bare ser egne kurs (#1058).
+- Oppslagene logges ikke. Samme begrunnelse som for revisjonssporet: rollene har et
+  oppfølgingsforhold til kandidatene (se «SMO leser revisjonsspor fordi SMO er lærer»).
+- Innlogginger per uke er fortsatt ikke med. De krever ny lagring og er et eget valg.
