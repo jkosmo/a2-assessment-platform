@@ -1149,3 +1149,7 @@ alle ansatte: «Dette er et internt kompetanseverktøy, vi bruker persondata i h
 - Oppslagene logges ikke. Samme begrunnelse som for revisjonssporet: rollene har et
   oppfølgingsforhold til kandidatene (se «SMO leser revisjonsspor fordi SMO er lærer»).
 - Innlogginger per uke er fortsatt ikke med. De krever ny lagring og er et eget valg.
+- «Bestått» telles på tidspunktet for det SISTE vedtaket (en anke som stadfester et bestått, flytter
+  det til ankeuka), ikke det første beståtte. Produkteier: «OK».
+- Under Deltakere har administrator fem faner, og menyen står på to linjer på en vanlig telefon.
+  Produkteier: «OK».
