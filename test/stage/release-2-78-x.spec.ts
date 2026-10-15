@@ -401,7 +401,10 @@ test.describe("#1085 — menylinja på telefon (390 px)", () => {
       expect(meny.lenker.length).toBeGreaterThan(0);
       expect(meny.utenfor, "menylenker som stikker ut av skjermen").toEqual([]);
       // Myk påstand: to linjer er ikke en feil som skjuler noe, men det er ikke det som er lovet.
-      expect.soft(meny.linjer, "linjer menyen står på").toBe(1);
+      // #1099 (produkteier 2026-10-15, «OK»): under Deltakere har administrator fem faner, og der
+      // står menyen på to linjer på telefon. Innholdssidene skal fortsatt ha én.
+      const tillatt = liste.rute.startsWith("/deltakere") ? 2 : 1;
+      expect.soft(meny.linjer, "linjer menyen står på").toBeLessThanOrEqual(tillatt);
     });
   }
 });

@@ -2,6 +2,17 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.91.1 - 2026-10-15
+
+### «Aktivitet»: deltakerne er alle brukere, ikke «har deltakerrollen» (#1099)
+
+- Stage-testen fant null deltakere: med Entra står app-rollene bare i innloggingstokenet og lagres
+  ikke, så kravet om en lagret deltakerrolle traff ingen. Deltakerne er nå alle brukere som ikke har
+  sluttet eller er anonymisert. Stage-testen har fått en kontroll på at stage har deltakere.
+- Samme regel gjør systemklassen «Alle deltakere» tom med Entra: #1100.
+- Produkteiers avgjørelser (DECISIONS): rapportleser ser aktiviteten for alle; «bestått» på siste
+  vedtaks tidspunkt; menyen under Deltakere kan stå på to linjer på telefon.
+
 ## 2.91.0 - 2026-10-14
 
 ### «Aktivitet» under Deltakere (#1099)
@@ -24,12 +35,14 @@ Produkteier: «Jeg ønsker å følge aktivitet og hvordan den øker, hvem som er
   én gang. «Sist sett» er siste besøk i plattformen (siste autentiserte forespørsel). Innlogginger per
   uke er ikke med: det krever at innloggingsdager lagres.
 - Oppslaget «det siste hen har gjort» gjelder bare deltakerne i lista (ikke folk som har sluttet,
-  anonymiserte eller brukere uten deltakerrolle).
+  eller anonymiserte).
 - Under Deltakere har administrator nå fem faner; på en 390 px telefon står menyen på to linjer
   (den er ikke festet øverst, så det koster bare høyde).
 - **Dager og uker følger norsk tid** (Europe/Oslo), regnet på kalenderdatoer, så sommertid ikke
   flytter en dag.
-- Deltakere = aktive brukere med gyldig deltakerrolle, ikke sluttet eller anonymisert (samme regel
+- Deltakere = alle brukere som ikke har sluttet eller er anonymisert. Ikke «har deltakerrollen»:
+  med Entra står rollene bare i innloggingstokenet, og stage-testen fant null deltakere med det
+  kravet. (Første utgave brukte samme regel
   som klassen «Alle deltakere»).
 - Stage-test `test/stage/release-2-91-aktivitet.spec.ts` (bare lesing): grafen og lista må telle
   de samme hendelsene.

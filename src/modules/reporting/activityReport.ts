@@ -1,5 +1,4 @@
 import { prisma } from "../../db/prisma.js";
-import { AppRole } from "../../db/prismaRuntime.js";
 import { localizeContentText } from "../../i18n/content.js";
 import type { SupportedLocale } from "../../i18n/locale.js";
 import type { SubmissionStatus as SubmissionStatusType } from "@prisma/client";
@@ -242,19 +241,16 @@ export function buildActivityReport(input: {
   };
 }
 
-/** Deltakerne: aktive brukere med gyldig deltakerrolle, ikke anonymisert (samme regel som «Alle deltakere»). */
-function participantWhere(now: Date) {
-  return {
-    activeStatus: true,
-    isAnonymized: false,
-    roleAssignments: {
-      some: {
-        appRole: AppRole.PARTICIPANT,
-        validFrom: { lte: now },
-        OR: [{ validTo: null }, { validTo: { gte: now } }],
-      },
-    },
-  };
+/**
+ * Deltakerne: alle brukere som ikke har sluttet (activeStatus) og ikke er anonymisert.
+ *
+ * ⚠️ IKKE «har deltakerrollen». Første utgave krevde en RoleAssignment med PARTICIPANT, som klassen
+ * «Alle deltakere» gjør. Med Entra står rollene i innloggingstokenet og lagres ikke (authenticate.ts),
+ * så stage-testen fant null deltakere der det fantes aktivitet. Databasen kan ikke se hvem som har
+ * deltakerrollen; den kan se hvem som er brukere.
+ */
+function participantWhere(_now: Date) {
+  return { activeStatus: true, isAnonymized: false };
 }
 
 async function findReportParticipants(now: Date): Promise<ActivityPerson[]> {
@@ -346,7 +342,7 @@ export type ActivityRecent = { userId: string; name: string; events: ActivityRec
 
 /**
  * Det siste én person har gjort, på tvers av kurs. null når personen ikke er blant deltakerne i
- * rapporten — sluttet, anonymisert eller uten deltakerrolle. Oppslaget skal ikke nå lenger enn lista.
+ * rapporten — sluttet eller anonymisert. Oppslaget skal ikke nå lenger enn lista.
  */
 export async function getActivityRecent(userId: string, locale: SupportedLocale, limit = 15, now = new Date()): Promise<ActivityRecent | null> {
   const user = await prisma.user.findFirst({ where: { id: userId, ...participantWhere(now) }, select: { id: true, name: true } });

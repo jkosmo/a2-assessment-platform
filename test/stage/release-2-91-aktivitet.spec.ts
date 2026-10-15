@@ -48,6 +48,10 @@ test("rapporten: tolv uker, og søylene og lista teller de samme hendelsene", as
   expect(svar.status).toBe(200);
   rapport = svar.json;
   const r = rapport!;
+  // ⚠️ KONTROLL: stage har brukere. Første kjøring fant null deltakere (rollekravet, se
+  // participantWhere), og alle påstandene under var da sanne uten å måle noe.
+  expect(r.population, "stage skal ha deltakere").toBeGreaterThan(0);
+  expect(r.kpis.started, "noen på stage har gjort noe").toBeGreaterThan(0);
   expect(r.buckets).toHaveLength(12);
   expect(r.people).toHaveLength(r.population);
   expect(r.kpis.started).toBeLessThanOrEqual(r.population);
@@ -82,7 +86,9 @@ test("per dag de siste 4 ukene, og hele perioden", async () => {
   expect(dag.json.buckets.length).toBeLessThanOrEqual(28);
   const alt = await api("/api/reports/activity?period=all&grain=week");
   expect(alt.status).toBe(200);
-  expect(alt.json.buckets.length).toBeGreaterThanOrEqual(12);
+  // Hele perioden begynner mandagen i uka for den første hendelsen på stage.
+  expect(alt.json.buckets.length).toBeGreaterThanOrEqual(1);
+  expect(alt.json.range.from <= alt.json.buckets[0].from).toBe(true);
   noter("uker i hele perioden", alt.json.buckets.length);
   noter("første uke", alt.json.range.from);
 });

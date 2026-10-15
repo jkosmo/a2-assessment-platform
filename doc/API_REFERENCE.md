@@ -192,7 +192,7 @@ courseArchived }`.
 
 Activity across all courses: reads, submitted attempts, passed modules (settled submission whose
 latest decision passed, the same rule as the other reports) and completed courses. Participants are
-active users with a valid PARTICIPANT role who are not anonymised. Days and weeks are Europe/Oslo
+all users who have not left (activeStatus) and are not anonymised — not «has the PARTICIPANT role», since Entra app roles live only in the token. Days and weeks are Europe/Oslo
 calendar dates.
 
 | Method | Route | Roles |
@@ -202,7 +202,7 @@ calendar dates.
 
 `GET /activity` returns `{ generatedAt, period, grain, department, range, departments, population,
 kpis, buckets, people }`. `/recent` returns the latest events with titles in the reader's locale, and
-404 for anyone who is not among the report's participants (left, anonymised, no participant role).
+404 for anyone who is not among the report's participants (left or anonymised).
 
 **#967 — reminders and this dashboard treat an unreachable course in opposite ways, deliberately.**
 The reminder schedule **suppresses** due-date mail for a course that is unpublished or archived (the
