@@ -1,5 +1,4 @@
 import { prisma } from "../../db/prisma.js";
-import { AppRole } from "../../db/prismaRuntime.js";
 import { localizeContentText } from "../../i18n/content.js";
 import type { SupportedLocale } from "../../i18n/locale.js";
 import type { SubmissionStatus as SubmissionStatusType } from "@prisma/client";
@@ -243,30 +242,19 @@ export function buildActivityReport(input: {
 }
 
 /**
- * Deltakerne: brukere som ikke har sluttet og ikke er anonymisert, og som ENTEN har en gyldig lagret
- * deltakerrolle ELLER har gjort noe (lest, levert eller fullført).
+ * Deltakerne: alle som har gjort noe i plattformen (lest, levert eller fullført), og som ikke har
+ * sluttet eller er anonymisert. Produkteier 2026-10-18: «Telles som deltager: alle som har gjort noe
+ * på plattformen.»
  *
- * ⚠️ To miljøer, to sannheter om rollen. I prod skriver innloggingen en PARTICIPANT-rad for
- * medlemmene av gruppa for alle ansatte (ENTRA_SYNC_GROUP_ROLES=true, userRepository.ts). På stage
- * er synken av, rollene står bare i tokenet, og rollekravet alene fant null deltakere. «Alle
- * brukere» ville i prod tatt med alle i tenanten som har åpnet en lenke (gjester), fordi brukerraden
- * opprettes før noen rollesjekk. Rollen ELLER aktivitet gir de ansatte i prod, alle som har gjort
- * noe på stage, og ingen gjester som bare har logget inn.
+ * ⚠️ Ikke «har deltakerrollen». Rollen lagres bare der gruppesynken er på (prod, ikke stage), og
+ * «alle brukere» ville tatt med alle i tenanten som har åpnet en lenke. Følgen er at ingen står som
+ * «ikke startet»: den som ikke har gjort noe, er ikke med i lista.
  */
-function participantWhere(now: Date) {
+function participantWhere(_now: Date) {
   return {
     activeStatus: true,
     isAnonymized: false,
     OR: [
-      {
-        roleAssignments: {
-          some: {
-            appRole: AppRole.PARTICIPANT,
-            validFrom: { lte: now },
-            OR: [{ validTo: null }, { validTo: { gte: now } }],
-          },
-        },
-      },
       { courseSectionReads: { some: {} } },
       { submissions: { some: {} } },
       { courseCompletions: { some: {} } },

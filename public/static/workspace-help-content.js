@@ -791,7 +791,7 @@ const workspaceContent = {
         { title: "Good to know", items: [
           "Active means the person read a section, submitted an attempt, passed a module or completed a course. «Active» in the list covers the last 14 days.",
           "Last seen is the last visit to the platform, also when the person did nothing.",
-          "Participants are everyone with the participant role, plus anyone who has done something on the platform — not those who have left or been anonymised.",
+          "Participants are everyone who has done something on the platform — not those who have left or been anonymised.",
         ] },
       ],
       nb: [
@@ -802,7 +802,7 @@ const workspaceContent = {
         { title: "Greit å vite", items: [
           "Aktiv betyr at personen har lest en seksjon, levert et forsøk, bestått en modul eller fullført et kurs. «Aktiv» i lista gjelder de siste 14 dagene.",
           "Sist sett er siste besøk i plattformen, også når personen ikke gjorde noe.",
-          "Deltakere er alle med deltakerrollen, pluss alle som har gjort noe i plattformen — ikke de som har sluttet eller er anonymisert.",
+          "Deltakere er alle som har gjort noe i plattformen — ikke de som har sluttet eller er anonymisert.",
         ] },
       ],
       nn: [
@@ -813,7 +813,7 @@ const workspaceContent = {
         { title: "Greitt å vite", items: [
           "Aktiv tyder at personen har lese ein seksjon, levert eit forsøk, bestått ein modul eller fullført eit kurs. «Aktiv» i lista gjeld dei siste 14 dagane.",
           "Sist sett er siste besøk i plattforma, også når personen ikkje gjorde noko.",
-          "Deltakarar er alle med deltakarrolla, pluss alle som har gjort noko i plattforma — ikkje dei som har slutta eller er anonymiserte.",
+          "Deltakarar er alle som har gjort noko i plattforma — ikkje dei som har slutta eller er anonymiserte.",
         ] },
       ],
     },

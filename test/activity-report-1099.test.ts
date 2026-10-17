@@ -192,8 +192,10 @@ describe("Aktivitet under Deltakere (#1099)", () => {
     expect(res.status).toBe(200);
     expect(res.body.department).toBe(department);
     expect(res.body.departments).toContain(department);
-    // aktiv, anket, uten-rolle, rolig og ikke-startet. Ikke den som har sluttet, gjesten eller vurdereren.
-    expect(res.body.population).toBe(5);
+    // aktiv, anket, uten-rolle og rolig: de som har gjort noe. Ikke den som har sluttet, gjesten,
+    // vurdereren — og ikke «ikke-startet», som har deltakerrollen men ikke har gjort noe (produkteier
+    // 2026-10-18: «alle som har gjort noe på plattformen»).
+    expect(res.body.population).toBe(4);
     expect(res.body.kpis).toMatchObject({ active7: 3, active30: 4, started: 4 });
     // Den kopierte lesingen er én; det ankede og det erstattede forsøket er levert, ikke bestått.
     expect(res.body.kpis.events7).toEqual({ read: 2, submitted: 3, passed: 1, completed: 1 });
@@ -206,11 +208,9 @@ describe("Aktivitet under Deltakere (#1099)", () => {
       [userIds.anket!]: "active",
       [userIds["uten-rolle"]!]: "active",
       [userIds.rolig!]: "quiet",
-      [userIds["ikke-startet"]!]: "not_started",
     });
-    const ikkeStartet = res.body.people.find((p: { userId: string }) => p.userId === userIds["ikke-startet"]);
-    expect(ikkeStartet.lastLoginAt).toBeTruthy();
-    expect(ikkeStartet.activeDaysByWeek).toHaveLength(12);
+    const rolig = res.body.people.find((p: { userId: string }) => p.userId === userIds.rolig);
+    expect(rolig.activeDaysByWeek).toHaveLength(12);
 
     const total = (res.body.buckets as Array<{ counts: Record<string, number> }>)
       .reduce((sum, b) => sum + b.counts.read + b.counts.submitted + b.counts.passed + b.counts.completed, 0);
