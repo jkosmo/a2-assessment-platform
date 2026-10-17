@@ -243,7 +243,7 @@ export function buildActivityReport(input: {
 
 /**
  * Deltakerne: alle som har gjort noe i plattformen (lest, levert eller fullført), og som ikke har
- * sluttet eller er anonymisert. Produkteier 2026-10-18: «Telles som deltager: alle som har gjort noe
+ * sluttet eller er anonymisert. Produkteier 2026-10-17: «Telles som deltager: alle som har gjort noe
  * på plattformen.»
  *
  * ⚠️ Ikke «har deltakerrollen». Rollen lagres bare der gruppesynken er på (prod, ikke stage), og

@@ -39,6 +39,11 @@ export function pageTitle(page, locale) {
   return name ? `${BRAND[loc]} – ${name}` : BRAND[loc];
 }
 
+/** Setter tittelen på et gitt språk — for sider som bytter språk uten å gå via #localeSelect. */
+export function applyPageTitle(locale) {
+  apply(locale);
+}
+
 function apply(locale) {
   const page = document.documentElement.dataset.page ?? "";
   document.title = pageTitle(page, locale);

@@ -7,7 +7,7 @@
 
 ## Kort: det som må avgjøres
 
-**Stage står på 2.91.1** (#1099 «Aktivitet» under Deltakere, rullet 2026-10-17 kl. 07:30 fra `84ce25cb`; QA-porten GO etter fire runder; stage-testen 51 av 51 kl. 07:40). Deltakere = deltakerrollen ELLER har gjort noe (prod lagrer rollen via gruppesynk, stage ikke). Produkteiers avgjørelser står i DECISIONS. Venter på: produkteiers bekreftelse av deltakerregelen, så prod-setting om kvelden. #1100: «Alle deltakere» er tom på stage (gruppesynken er av der).
+**2.92.0 er klar for stage og prod** (2026-10-17): sidetittel «A-2 læringsplattform – <side>» på brukerens språk uten versjonsnummer, og #1099 «Aktivitet» med deltakerne = alle som har gjort noe (produkteier). Prod står på 2.90.0; produkteier har åpnet for prod-setting i helgens vedlikeholdsvindu. #1100 er lukket (stage-oppsett).
 
 **Prod og stage står på 2.90.0** (prod rullet 2026-10-13 kl. 22:49 fra `5b4ebe71`, run 38463267515, godkjent av produkteier; stage rullet kl. 14:51, stage-testen 46 av 46, QA-porten GO i `.ai-qa/qa-20261013-141739.md`). `dev` = stage = prod. `main` = prod etter PR #1098. Ny skillpakke 2.90.0 («tenk først») skal lastes opp i ChatGPT og Claude.ai nå som prod har blokken. **Neste:** #1095 er lukket (kursene var alt justert på en annen måte); #1072 punkt 6 (veiledning i seksjonseditoren) gjenstår; CI er rød på `nav-fits-phone-1085` (består lokalt, ikke på Linux) siden 2026-10-11.
 

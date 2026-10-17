@@ -192,7 +192,7 @@ courseArchived }`.
 
 Activity across all courses: reads, submitted attempts, passed modules (settled submission whose
 latest decision passed, the same rule as the other reports) and completed courses. Participants are
-users who have done something (read, submitted, completed) and have not left or been anonymised (product owner 2026-10-18). Nobody appears as «not started». Days and weeks are Europe/Oslo
+users who have done something (read, submitted, completed) and have not left or been anonymised (product owner 2026-10-17). Nobody appears as «not started». Days and weeks are Europe/Oslo
 calendar dates.
 
 | Method | Route | Roles |

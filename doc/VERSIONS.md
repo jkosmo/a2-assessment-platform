@@ -2,7 +2,7 @@
 
 This document tracks release versions and what each version includes.
 
-## 2.92.0 - 2026-10-18
+## 2.92.0 - 2026-10-17
 
 ### Sidetittel på brukerens språk, uten versjonsnummer
 
@@ -12,7 +12,9 @@ Produkteier: tittelen (og dermed lenker og bokmerker) var «A2 Participant Test 
   på valgt språk og uten versjonsnummer. Én hjelper, `public/static/page-title.js`; hver side sier
   hvilken side den er med `<html data-page>`. Den faste `<title>` i HTML-fila er bokmålsversjonen,
   fordi lenkeforhåndsvisninger ikke kjører skript.
-- «Aktivitet» (#1099): deltakerne er alle som har gjort noe i plattformen (produkteier).
+- «Aktivitet» (#1099): deltakerne er alle som har gjort noe i plattformen (produkteier: «Telles som
+  deltager: alle som har gjort noe på plattformen»). Ingen står som «ikke startet», og filteret,
+  tallet og detaljteksten for det er fjernet.
 - Vakter: `test/unit/page-title.test.ts` (alle sider, fast tittel = bokmål, ingen side setter
   tittelen selv), `test/e2e/page-title.spec.ts` (tre språk og språkbytte).
 
@@ -23,9 +25,8 @@ Produkteier: tittelen (og dermed lenker og bokmerker) var «A2 Participant Test 
 - Stage-testen fant null deltakere. Rapporten krevde en lagret deltakerrolle, og på stage står
   rollene bare i innloggingstokenet (ENTRA_SYNC_GROUP_ROLES er av). I prod er gruppesynken på, og
   rollen lagres for alle ansatte.
-- Deltakerne er alle som har gjort noe i plattformen (lest, levert, fullført), og som ikke har
-  sluttet eller er anonymisert. Produkteier 2026-10-18: «Telles som deltager: alle som har gjort noe
-  på plattformen.» Ingen står derfor som «ikke startet».
+- Deltakerne er alle med en gyldig lagret deltakerrolle ELLER som har gjort noe (lest, levert,
+  fullført), og som ikke har sluttet eller er anonymisert. (Endret i 2.92.0 til bare «har gjort noe».)
 - Stage-testen har fått kontroller på at stage har deltakere, og på at «hele perioden» begynner
   der den første hendelsen er.
 - Systemklassen «Alle deltakere» er tom på stage av samme grunn: #1100 (stage-oppsett, ikke en

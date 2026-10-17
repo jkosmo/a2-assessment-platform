@@ -57,9 +57,10 @@ test("rapporten: tolv uker, og søylene og lista teller de samme hendelsene", as
   expect(r.kpis.started).toBeLessThanOrEqual(r.population);
   expect(r.kpis.active7).toBeLessThanOrEqual(r.kpis.active30);
   for (const p of r.people) {
-    expect(["active", "quiet", "not_started"]).toContain(p.status);
+    // Deltakerne er de som har gjort noe (produkteier 2026-10-17): ingen står som «ikke startet».
+    expect(["active", "quiet"]).toContain(p.status);
+    expect(p.lastActivityAt).not.toBeNull();
     expect(p.activeDaysByWeek).toHaveLength(12);
-    if (p.status === "not_started") expect(p.lastActivityAt).toBeNull();
   }
   // Grafen og lista er to veier til de samme hendelsene i perioden: de må gå opp.
   for (const type of TYPER) {

@@ -59,3 +59,13 @@ test("språkbytte skifter tittelen uten ny lasting", async ({ page }) => {
   await page.locator("#localeSelect").selectOption("en-GB");
   await expect(page).toHaveTitle("A-2 learning platform – My courses");
 });
+
+test("profilen: når språket hos tjeneren avviker fra nettleserens, følger tittelen med", async ({ page }) => {
+  await mock(page, "en-GB");
+  await page.route("**/api/me", (route: Route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ user: { roles: ROLLER, locale: "nb" }, consent: { accepted: true, currentVersion: "1.0" } }) }),
+  );
+  await page.goto("/profile");
+  await expect(page.locator("#localeSelect")).toHaveValue("nb");
+  await expect(page).toHaveTitle("A-2 læringsplattform – Profil");
+});

@@ -1154,4 +1154,4 @@ alle ansatte: «Dette er et internt kompetanseverktøy, vi bruker persondata i h
 - Under Deltakere har administrator fem faner, og menyen står på to linjer på en vanlig telefon.
   Produkteier: «OK».
 - Hvem som telles som deltaker: «Telles som deltager: alle som har gjort noe på plattformen.»
-  (2026-10-18.) Rollen alene teller ikke, og ingen står som «ikke startet».
+  (2026-10-17.) Rollen alene teller ikke, og ingen står som «ikke startet».

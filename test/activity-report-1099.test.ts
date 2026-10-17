@@ -194,7 +194,7 @@ describe("Aktivitet under Deltakere (#1099)", () => {
     expect(res.body.departments).toContain(department);
     // aktiv, anket, uten-rolle og rolig: de som har gjort noe. Ikke den som har sluttet, gjesten,
     // vurdereren — og ikke «ikke-startet», som har deltakerrollen men ikke har gjort noe (produkteier
-    // 2026-10-18: «alle som har gjort noe på plattformen»).
+    // 2026-10-17: «alle som har gjort noe på plattformen»).
     expect(res.body.population).toBe(4);
     expect(res.body.kpis).toMatchObject({ active7: 3, active30: 4, started: 4 });
     // Den kopierte lesingen er én; det ankede og det erstattede forsøket er levert, ikke bestått.

@@ -38,7 +38,7 @@ function report(overrides: Record<string, unknown> = {}) {
     people: [
       { userId: "u-a", name: "Kari Aktiv", email: "kari@x.no", department: "Salg", status: "active", lastActivityAt: iso(60 * 60 * 1000), lastLoginAt: iso(30 * 60 * 1000), activeDaysByWeek: [0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 3, 1], counts: { read: 7, submitted: 2, passed: 1, completed: 0 } },
       { userId: "u-b", name: "Ola Rolig", email: "ola@x.no", department: "IT", status: "quiet", lastActivityAt: iso(20 * DAY), lastLoginAt: iso(19 * DAY), activeDaysByWeek: [0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0], counts: { read: 1, submitted: 0, passed: 0, completed: 0 } },
-      { userId: "u-c", name: "Nina Ny", email: "nina@x.no", department: "IT", status: "not_started", lastActivityAt: null, lastLoginAt: iso(2 * DAY), activeDaysByWeek: new Array(12).fill(0), counts: { read: 0, submitted: 0, passed: 0, completed: 0 } },
+      { userId: "u-c", name: "Nina Ny", email: "nina@x.no", department: "IT", status: "quiet", lastActivityAt: iso(30 * DAY), lastLoginAt: iso(2 * DAY), activeDaysByWeek: new Array(12).fill(0), counts: { read: 0, submitted: 0, passed: 0, completed: 0 } },
     ],
     ...overrides,
   };
@@ -108,7 +108,8 @@ test("administrator: nøkkeltall, to grafer og lista — og Aktivitet er aktiv f
   await expect(kpis.nth(0).locator(".value")).toHaveText("1");
   await expect(kpis.nth(0)).toContainText("▲ 1");
   await expect(kpis.nth(1).locator(".value")).toHaveText("2 av 3");
-  await expect(kpis.nth(2)).toContainText("1 har ikke startet");
+  // Deltakerne har alle gjort noe (produkteier 2026-10-17): ingen tekst om «ikke startet».
+  await expect(kpis.nth(2)).not.toContainText("ikke startet");
   await expect(kpis.nth(3).locator(".value")).toHaveText("6");
   await expect(kpis.nth(3)).toContainText("4 lest · 1 levert · 1 bestått · 0 fullført");
 
@@ -119,7 +120,7 @@ test("administrator: nøkkeltall, to grafer og lista — og Aktivitet er aktiv f
   expect(await page.locator("#activityEventsChart rect[fill='var(--act-read)']").count()).toBeGreaterThan(5);
   await expect(page.locator("#activityPeopleSub")).toHaveText("Aktive per uke, og hvor mange som har kommet i gang totalt.");
 
-  await expect(page.locator("#activityChips button")).toHaveText(["Alle 3", "Aktive 1", "Rolige 1", "Ikke startet 1"]);
+  await expect(page.locator("#activityChips button")).toHaveText(["Alle 3", "Aktive 1", "Rolige 2"]);
   const rows = page.locator("#activityRows tr.person");
   await expect(rows).toHaveCount(3);
   await expect(rows.nth(0)).toContainText("Kari Aktiv");
@@ -127,12 +128,11 @@ test("administrator: nøkkeltall, to grafer og lista — og Aktivitet er aktiv f
   // Tidspunktet er «for en time siden»; rett etter midnatt er det «I går».
   await expect(rows.nth(0)).toContainText(/I dag|I går/);
   await expect(rows.nth(1).locator(".activity-pill")).toHaveText("Rolig");
-  await expect(rows.nth(2).locator(".activity-pill")).toHaveText("Ikke startet");
-  await expect(rows.nth(2).locator("td").nth(3)).toContainText("Aldri");
+  await expect(rows.nth(2).locator(".activity-pill")).toHaveText("Rolig");
   await expect(page.locator("#activityDepartment option")).toHaveText(["Alle avdelinger", "IT", "Salg"]);
 });
 
-test("klikk på en person henter det siste hen har gjort; en som ikke har startet viser innloggingen uten å hente", async ({ page }) => {
+test("klikk på en person henter det siste hen har gjort, og lukkes med tastaturet", async ({ page }) => {
   const recentCalls: string[] = [];
   await mockBase(page, ["ADMINISTRATOR"]);
   await mockActivity(page, [], recentCalls);
@@ -148,12 +148,12 @@ test("klikk på en person henter det siste hen har gjort; en som ikke har starte
   await expect(kari).toHaveAttribute("aria-expanded", "true");
   expect(recentCalls).toHaveLength(1);
 
-  // Lukk med tastaturet, og åpne en som ikke har startet.
+  // Lukk med tastaturet; åpnes den igjen, brukes det som alt er hentet.
   await kari.focus();
   await page.keyboard.press("Enter");
   await expect(detail).toHaveCount(0);
-  await page.locator("#activityRows tr.person", { hasText: "Nina Ny" }).click();
-  await expect(page.locator("#activityRows tr.activity-detail")).toContainText("Har ikke gjort noe ennå. Sist sett");
+  await kari.click();
+  await expect(detail).toContainText("Besto «Kravmatrise i praksis»");
   expect(recentCalls).toHaveLength(1);
 });
 
@@ -164,9 +164,9 @@ test("filter, søk og sortering i lista", async ({ page }) => {
   const rows = page.locator("#activityRows tr.person");
   await expect(rows).toHaveCount(3);
 
-  await page.locator("#activityChips button", { hasText: "Ikke startet" }).click();
-  await expect(rows).toHaveCount(1);
-  await expect(rows.first()).toContainText("Nina Ny");
+  await page.locator("#activityChips button", { hasText: "Rolige" }).click();
+  await expect(rows).toHaveCount(2);
+  await expect(rows.first()).toContainText("Ola Rolig");
   await page.locator("#activityChips button", { hasText: "Alle" }).click();
 
   await page.locator("#activitySearch").fill("ola");
@@ -226,7 +226,7 @@ test("språkbytte: tekstene skifter, og det siste personen har gjort hentes på 
   expect(recentCalls).toEqual(["nb", "en-GB"]);
 
   await page.locator("#localeSelect").selectOption("nn");
-  await expect(page.locator("#activityChips button").nth(2)).toHaveText("Rolege 1");
+  await expect(page.locator("#activityChips button").nth(2)).toHaveText("Rolege 2");
 });
 
 test("språkbytte: en person som åpnes igjen etterpå, vises på det nye språket — ikke fra et gammelt mellomlager", async ({ page }) => {

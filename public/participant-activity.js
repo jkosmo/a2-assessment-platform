@@ -45,7 +45,7 @@ const tableHead = document.querySelector(".activity-table thead");
 
 const TYPES = ["read", "submitted", "passed", "completed"];
 const TYPE_COLOR = { read: "var(--act-read)", submitted: "var(--act-submitted)", passed: "var(--act-passed)", completed: "var(--act-completed)" };
-const STATUS_ORDER = { active: 0, quiet: 1, not_started: 2 };
+const STATUS_ORDER = { active: 0, quiet: 1 };
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 let currentLocale = resolveInitialLocale(supportedLocales);
@@ -236,7 +236,7 @@ function renderKpis() {
   const newly = k.started - k.startedBefore7;
   const startedNote = (newly > 0
     ? `<span class="delta-up">▲ ${newly}</span> ${escapeHtml(t("activity.kpi.started.new", { n: "" }).trim())}`
-    : escapeHtml(t("activity.kpi.started.none"))) + ` · ${escapeHtml(t("activity.kpi.notStarted", { n: n - k.started }))}`;
+    : escapeHtml(t("activity.kpi.started.none")));
   const e = k.events7;
   const total = TYPES.reduce((sum, type) => sum + (e[type] ?? 0), 0);
   const breakdown = TYPES.map((type) => `${e[type] ?? 0} ${t(`activity.short.${type}`)}`).join(" · ");
@@ -370,12 +370,6 @@ function spark(values) {
 function detailHtml(person) {
   const cached = recentCache.get(person.userId);
   const title = `<p class="activity-log-title">${escapeHtml(t("activity.detail.title", { name: person.name }))}</p>`;
-  if (person.status === "not_started") {
-    const text = person.lastLoginAt
-      ? t("activity.detail.notStartedLogin", { when: formatDateTime(person.lastLoginAt) })
-      : t("activity.detail.notStartedNever");
-    return `${title}<p class="dept" style="margin:0">${escapeHtml(text)}</p>`;
-  }
   if (!cached || cached.state === "loading") return `${title}<p class="dept" style="margin:0">${escapeHtml(t("activity.detail.loading"))}</p>`;
   if (cached.state === "error") return `${title}<p class="dept" style="margin:0">${escapeHtml(t("activity.detail.error"))}</p>`;
   const items = cached.data.events.map((event) => {
@@ -388,10 +382,10 @@ function detailHtml(person) {
 
 function renderTable() {
   const people = report.people;
-  const counts = { all: people.length, active: 0, quiet: 0, not_started: 0 };
+  const counts = { all: people.length, active: 0, quiet: 0 };
   for (const person of people) counts[person.status] += 1;
   chips.setAttribute("aria-label", t("activity.people.title"));
-  chips.innerHTML = ["all", "active", "quiet", "not_started"].map((key) =>
+  chips.innerHTML = ["all", "active", "quiet"].map((key) =>
     `<button type="button" class="activity-chip" data-f="${key}" aria-pressed="${ui.filter === key}">${escapeHtml(t(`activity.filter.${key}`))} ${counts[key]}</button>`,
   ).join("");
 
@@ -513,7 +507,7 @@ function toggleRow(userId) {
     const person = report?.people.find((p) => p.userId === ui.open);
     // En feil hentes på nytt neste gang raden åpnes, i stedet for å bli liggende til sida lastes på nytt.
     const cached = recentCache.get(ui.open);
-    if (person && person.status !== "not_started" && (!cached || cached.state === "error")) void loadRecent(ui.open);
+    if (person && (!cached || cached.state === "error")) void loadRecent(ui.open);
   }
   renderTable();
   const again = Array.from(rowsBody.querySelectorAll("tr.person")).find((tr) => tr.dataset.id === userId);
@@ -629,7 +623,7 @@ localeSelect?.addEventListener("change", () => {
   recentCache.clear();
   if (ui.open && report) {
     const person = report.people.find((p) => p.userId === ui.open);
-    if (person && person.status !== "not_started") void loadRecent(ui.open);
+    if (person) void loadRecent(ui.open);
   }
   render();
 });

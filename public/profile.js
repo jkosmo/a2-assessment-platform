@@ -1,4 +1,5 @@
 import { renderWorkspaceNavigationWithProfile } from "/static/workspace-nav.js";
+import { applyPageTitle } from "/static/page-title.js";
 import { applyIdentityDefaults as delApplyIdentityDefaults } from "/static/identity-defaults.js";
 import { renderRolePresetControl as delRenderRolePresetControl } from "/static/role-preset-control.js";
 import { runWithBusyButton } from "/static/busy-button.js";
@@ -576,6 +577,8 @@ async function loadProfileData() {
   if (serverLocale && supportedLocales.includes(serverLocale) && serverLocale !== currentLocale) {
     setLocale(serverLocale);
     localeSelect.value = serverLocale;
+    // Språket byttes her uten en change-hendelse, så tittelen får beskjed direkte.
+    applyPageTitle(serverLocale);
   }
 
   // ⚠️ #1042: FØRSTEHENTINGEN går gjennom den samme ressursen som språkbyttet. Første forsøk lot
