@@ -302,7 +302,6 @@ async function loadVersion() {
   try {
     const body = await apiFetch("/version", { headers: {} });
     const version = body.version ?? "unknown";
-    document.title = `A2 Completed Modules v${version}`;
     appVersionLabel.textContent = `v${version}`;
   } catch {
     appVersionLabel.textContent = "unknown";
