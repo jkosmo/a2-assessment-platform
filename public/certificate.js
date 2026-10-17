@@ -45,7 +45,6 @@ function applyTranslations() {
     if (key) el.textContent = t(key);
   }
   document.documentElement.lang = currentLocale;
-  document.title = t("certificate.docTitle");
 }
 
 function formatDate(value) {

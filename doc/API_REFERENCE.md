@@ -188,6 +188,22 @@ enrolments + class-assigned members), evaluated at read time.
 `GET /course/:courseId` returns `{ courseId, total, counts, byClass, generatedAt, coursePublished,
 courseArchived }`.
 
+### Activity (#1099)
+
+Activity across all courses: reads, submitted attempts, passed modules (settled submission whose
+latest decision passed, the same rule as the other reports) and completed courses. Participants are
+users who have done something (read, submitted, completed) and have not left or been anonymised (product owner 2026-10-17). Nobody appears as «not started». Days and weeks are Europe/Oslo
+calendar dates.
+
+| Method | Route | Roles |
+|---|---|---|
+| `GET` | `/api/reports/activity?period=4\|12\|all&grain=day\|week&department=…` | ADMINISTRATOR, REPORT_READER |
+| `GET` | `/api/reports/activity/users/:userId/recent` | ADMINISTRATOR, REPORT_READER |
+
+`GET /activity` returns `{ generatedAt, period, grain, department, range, departments, population,
+kpis, buckets, people }`. `/recent` returns the latest events with titles in the reader's locale, and
+404 for anyone who is not among the report's participants.
+
 **#967 — reminders and this dashboard treat an unreachable course in opposite ways, deliberately.**
 The reminder schedule **suppresses** due-date mail for a course that is unpublished or archived (the
 participant cannot open it, so the mail asks for something they cannot do) and counts each suppression

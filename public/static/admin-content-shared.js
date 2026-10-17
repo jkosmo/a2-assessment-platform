@@ -12,15 +12,13 @@
 import { apiFetch } from "/static/api-client.js";
 
 /**
- * Load the app version and stamp it into the document title + the version label. The two shells differed
- * only in the title prefix ("A2 Content Setup Workspace" vs "A2 Content Workspace") and a null-guard on
- * the label element — both preserved by parameterizing.
+ * Load the app version into the version label. The page title is set by /static/page-title.js and
+ * carries no version number.
  */
-export async function loadVersion(appVersionLabel, documentTitlePrefix) {
+export async function loadVersion(appVersionLabel) {
   try {
     const body = await apiFetch("/version", { headers: {} });
     const version = body.version ?? "unknown";
-    document.title = `${documentTitlePrefix} v${version}`;
     if (appVersionLabel) appVersionLabel.textContent = `v${version}`;
   } catch {
     if (appVersionLabel) appVersionLabel.textContent = "unknown";

@@ -1196,7 +1196,6 @@ async function init() {
   try {
     const body = await apiFetch("/version", { headers: {} });
     const version = body.version ?? "unknown";
-    document.title = `Seksjoner – A2 v${version}`;
     if (appVersionLabel) appVersionLabel.textContent = `v${version}`;
   } catch {
     if (appVersionLabel) appVersionLabel.textContent = "unknown";

@@ -2,6 +2,72 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.92.0 - 2026-10-17
+
+### Sidetittel på brukerens språk, uten versjonsnummer
+
+Produkteier: tittelen (og dermed lenker og bokmerker) var «A2 Participant Test Console v2.90.0».
+
+- Tittelen er nå «A-2 læringsplattform – <side>» («A-2 learning platform – My courses» på engelsk),
+  på valgt språk og uten versjonsnummer. Én hjelper, `public/static/page-title.js`; hver side sier
+  hvilken side den er med `<html data-page>`. Den faste `<title>` i HTML-fila er bokmålsversjonen,
+  fordi lenkeforhåndsvisninger ikke kjører skript.
+- «Aktivitet» (#1099): deltakerne er alle som har gjort noe i plattformen (produkteier: «Telles som
+  deltager: alle som har gjort noe på plattformen»). Ingen står som «ikke startet», og filteret,
+  tallet og detaljteksten for det er fjernet.
+- Vakter: `test/unit/page-title.test.ts` (alle sider, fast tittel = bokmål, ingen side setter
+  tittelen selv), `test/e2e/page-title.spec.ts` (tre språk og språkbytte).
+
+## 2.91.1 - 2026-10-15
+
+### «Aktivitet»: hvem som telles som deltaker (#1099)
+
+- Stage-testen fant null deltakere. Rapporten krevde en lagret deltakerrolle, og på stage står
+  rollene bare i innloggingstokenet (ENTRA_SYNC_GROUP_ROLES er av). I prod er gruppesynken på, og
+  rollen lagres for alle ansatte.
+- Deltakerne er alle med en gyldig lagret deltakerrolle ELLER som har gjort noe (lest, levert,
+  fullført), og som ikke har sluttet eller er anonymisert. (Endret i 2.92.0 til bare «har gjort noe».)
+- Stage-testen har fått kontroller på at stage har deltakere, og på at «hele perioden» begynner
+  der den første hendelsen er.
+- Systemklassen «Alle deltakere» er tom på stage av samme grunn: #1100 (stage-oppsett, ikke en
+  feil i prod).
+- Produkteiers avgjørelser (DECISIONS): rapportleser ser aktiviteten for alle; «bestått» på siste
+  vedtaks tidspunkt; menyen under Deltakere kan stå på to linjer på telefon.
+
+## 2.91.0 - 2026-10-14
+
+### «Aktivitet» under Deltakere (#1099)
+
+Produkteier: «Jeg ønsker å følge aktivitet og hvordan den øker, hvem som er aktive er også fint. Jeg
+ønsker å se samlet aktivitet, ikke per kurs.» Skissen ble godkjent («Ser bra ut. Lag»).
+
+- **Ny fane `/deltakere/aktivitet`** for administrator og rapportleser (samme som rapportene på
+  tvers av organisasjonen; fagansvarlig ser bare egne kurs og får ikke fanen). Nøkkeltall (aktive
+  siste 7 dager mot uka før, aktive siste 30, har kommet i gang, hendelser siste 7 dager), grafen
+  «Personer» (aktive per uke/dag og hvor mange som har kommet i gang totalt, mot alle deltakere),
+  grafen «Hva de gjør» (seksjoner lest, forsøk levert, moduler bestått, kurs fullført) og lista
+  «Hvem er aktive» med status, sist aktiv, sist sett, aktive dager per uke og «det siste hen
+  har gjort». Filtre: periode, per dag/uke, avdeling.
+- **API:** `GET /api/reports/activity?period=4|12|all&grain=day|week&department=…` og
+  `GET /api/reports/activity/users/:userId/recent` (`src/modules/reporting/activityReport.ts`).
+- **Ingen ny lagring.** Alt regnes ut av lesinger, innleveringer, vedtak og fullføringer, som har
+  tidspunkt fra første dag. «Bestått» følger rapportenes regel (#948/#951): innleveringen er avgjort
+  og det siste vedtaket er bestått. Lesinger som «oppdater kurs» har kopiert til en ny seksjon, telles
+  én gang. «Sist sett» er siste besøk i plattformen (siste autentiserte forespørsel). Innlogginger per
+  uke er ikke med: det krever at innloggingsdager lagres.
+- Oppslaget «det siste hen har gjort» gjelder bare deltakerne i lista (ikke folk som har sluttet,
+  eller anonymiserte).
+- Under Deltakere har administrator nå fem faner; på en 390 px telefon står menyen på to linjer
+  (den er ikke festet øverst, så det koster bare høyde).
+- **Dager og uker følger norsk tid** (Europe/Oslo), regnet på kalenderdatoer, så sommertid ikke
+  flytter en dag.
+- Deltakere = alle brukere som ikke har sluttet eller er anonymisert. Ikke «har deltakerrollen»:
+  med Entra står rollene bare i innloggingstokenet, og stage-testen fant null deltakere med det
+  kravet. (Første utgave brukte samme regel
+  som klassen «Alle deltakere»).
+- Stage-test `test/stage/release-2-91-aktivitet.spec.ts` (bare lesing): grafen og lista må telle
+  de samme hendelsene.
+
 ## 2.90.0 - 2026-10-13
 
 ### «Tenk først», modellinnstillingene i infrastrukturkoden, lesemodus i liggende format

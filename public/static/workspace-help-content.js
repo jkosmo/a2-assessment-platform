@@ -775,6 +775,49 @@ const workspaceContent = {
       nn: [ { title: "Dette gjer du her", items: [ "Vel eit kurs. Tala blir oppdaterte med ein gong.", "«Forfalle» tyder at fristen til klassen er passert utan at kurset er fullført." ] } ],
     },
   },
+  "participant-activity": {
+    title: { "en-GB": "Activity", nb: "Aktivitet", nn: "Aktivitet" },
+    summary: {
+      "en-GB": "What participants do on the platform, across all courses: how activity grows, and who is active.",
+      nb: "Hva deltakerne gjør i plattformen, samlet for alle kurs: hvordan aktiviteten øker, og hvem som er aktive.",
+      nn: "Kva deltakarane gjer i plattforma, samla for alle kurs: korleis aktiviteten aukar, og kven som er aktive.",
+    },
+    sections: {
+      "en-GB": [
+        { title: "What to do here", items: [
+          "Choose the period, whether to count per day or per week, and a department if you want one.",
+          "Click a person in the list to see what they did most recently.",
+        ] },
+        { title: "Good to know", items: [
+          "Active means the person read a section, submitted an attempt, passed a module or completed a course. «Active» in the list covers the last 14 days.",
+          "Last seen is the last visit to the platform, also when the person did nothing.",
+          "Participants are everyone who has done something on the platform — not those who have left or been anonymised.",
+        ] },
+      ],
+      nb: [
+        { title: "Dette gjør du her", items: [
+          "Velg periode, om du vil telle per dag eller per uke, og eventuelt en avdeling.",
+          "Klikk på en person i lista for å se det siste hen har gjort.",
+        ] },
+        { title: "Greit å vite", items: [
+          "Aktiv betyr at personen har lest en seksjon, levert et forsøk, bestått en modul eller fullført et kurs. «Aktiv» i lista gjelder de siste 14 dagene.",
+          "Sist sett er siste besøk i plattformen, også når personen ikke gjorde noe.",
+          "Deltakere er alle som har gjort noe i plattformen — ikke de som har sluttet eller er anonymisert.",
+        ] },
+      ],
+      nn: [
+        { title: "Dette gjer du her", items: [
+          "Vel periode, om du vil telje per dag eller per veke, og eventuelt ei avdeling.",
+          "Klikk på ein person i lista for å sjå det siste hen har gjort.",
+        ] },
+        { title: "Greitt å vite", items: [
+          "Aktiv tyder at personen har lese ein seksjon, levert eit forsøk, bestått ein modul eller fullført eit kurs. «Aktiv» i lista gjeld dei siste 14 dagane.",
+          "Sist sett er siste besøk i plattforma, også når personen ikkje gjorde noko.",
+          "Deltakarar er alle som har gjort noko i plattforma — ikkje dei som har slutta eller er anonymiserte.",
+        ] },
+      ],
+    },
+  },
   "admin-content-calibration": {
     title: {
       "en-GB": "Calibration in Admin Content",

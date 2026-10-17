@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="en-GB" data-page="participant-activity">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>A-2 læringsplattform – Aktivitet</title>
+    <link rel="stylesheet" href="/static/shared.css" />
+    <link rel="stylesheet" href="/static/toast.css" />
+    <style>
+      /* #1099 «Aktivitet». Fargene på hendelsestypene står her, én gang; grafene og forklaringene leser dem. */
+      :root { --act-read: #c39a45; --act-submitted: #3f6f8f; --act-passed: #1f6b45; --act-completed: #221f19; }
+      .activity-filters { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center; margin-bottom: var(--space-2); }
+      .activity-filters .lbl, .activity-filters label { font-size: 13px; font-weight: 600; color: var(--color-meta); margin-right: 6px; }
+      .seg { display: inline-flex; border: 1px solid var(--color-border-soft); border-radius: var(--radius-card); overflow: hidden; background: var(--color-surface); vertical-align: middle; }
+      .seg button { width: auto; min-height: 0; margin: 0; font: inherit; font-size: 13px; padding: 5px 12px; border: 0; border-radius: 0; background: transparent; color: var(--color-text); cursor: pointer; }
+      .seg button + button { border-left: 1px solid var(--color-border-soft); }
+      .seg button[aria-pressed="true"] { background: var(--color-primary-tint); color: var(--color-link-active); font-weight: 600; }
+      .activity-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: var(--space-2); margin-bottom: var(--space-2); }
+      .activity-kpi { background: var(--color-surface); border-radius: var(--radius-card); box-shadow: var(--shadow-card); padding: 14px var(--space-2); display: grid; gap: 2px; align-content: start; }
+      .activity-kpi .label { font-size: 12px; font-weight: 600; color: var(--color-meta); }
+      .activity-kpi .value { font-size: 28px; font-weight: 700; color: var(--color-navy); font-variant-numeric: tabular-nums; }
+      .activity-kpi .value small { font-size: 14px; font-weight: 600; color: var(--color-meta); }
+      .activity-kpi .note { font-size: 12px; color: var(--color-meta); font-variant-numeric: tabular-nums; }
+      .delta-up { color: var(--color-success); font-weight: 600; }
+      .delta-down { color: var(--color-error); font-weight: 600; }
+      .activity-charts { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 460px), 1fr)); gap: var(--space-2); margin-bottom: var(--space-2); }
+      .activity-charts .card { margin-bottom: 0; position: relative; min-width: 0; }
+      .activity-charts h2, .activity-people h2 { margin: 0; font-size: 16px; }
+      .activity-sub { font-size: 12px; color: var(--color-meta); margin: 2px 0 10px; }
+      .activity-legend { display: flex; flex-wrap: wrap; gap: 12px; font-size: 12px; color: var(--color-meta); margin-bottom: 6px; }
+      .activity-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; }
+      .activity-legend i.dash { height: 0; width: 14px; border-top: 2px dashed var(--color-meta); border-radius: 0; vertical-align: 3px; }
+      .activity-chart { display: block; width: 100%; height: auto; }
+      .activity-chart text { font-family: inherit; font-size: 11px; fill: var(--color-meta); }
+      .activity-tip { position: absolute; pointer-events: none; background: var(--color-navy); color: var(--color-surface); font-size: 12px; border-radius: 6px; padding: 6px 9px; white-space: nowrap; box-shadow: 0 2px 8px rgba(0,0,0,.2); font-variant-numeric: tabular-nums; z-index: 2; }
+      .activity-tip b { display: block; margin-bottom: 2px; }
+      .activity-people-head { display: flex; justify-content: space-between; align-items: center; gap: var(--space-2); flex-wrap: wrap; margin-bottom: 10px; }
+      .activity-tools { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+      .activity-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+      .activity-chip { width: auto; min-height: 0; margin: 0; font: inherit; font-size: 13px; border: 1px solid var(--color-border-soft); background: var(--color-surface); color: var(--color-text); border-radius: 999px; padding: 3px 10px; cursor: pointer; font-variant-numeric: tabular-nums; }
+      .activity-chip[aria-pressed="true"] { background: var(--color-navy); border-color: var(--color-navy); color: var(--color-surface); }
+      #activitySearch { width: 220px; max-width: 100%; min-height: 0; padding: 5px 10px; font-size: 13px; border-radius: var(--radius-card); }
+      .activity-table { font-variant-numeric: tabular-nums; }
+      .activity-table th button { width: auto; min-height: 0; margin: 0; padding: 0; font: inherit; color: inherit; background: none; border: 0; cursor: pointer; text-transform: inherit; letter-spacing: inherit; }
+      .activity-table td.num, .activity-table th.num { text-align: right; }
+      .activity-table tr.person { cursor: pointer; }
+      .activity-table .who { font-weight: 600; color: var(--color-navy); }
+      .activity-table .who small, .activity-table .when small { display: block; font-weight: 400; color: var(--color-meta); font-size: 12px; }
+      .activity-table .when { white-space: nowrap; }
+      .activity-table .dept { color: var(--color-meta); font-size: 13px; }
+      .activity-pill { display: inline-block; font-size: 12px; font-weight: 600; border-radius: 999px; padding: 1px 9px; white-space: nowrap; }
+      .activity-pill.active { color: var(--color-success); background: #e3f0e8; }
+      .activity-pill.quiet { color: var(--color-warning); background: #f6ecd8; }
+      .activity-spark { display: inline-block; vertical-align: middle; width: 96px; height: 22px; }
+      .activity-detail td { background: var(--color-module-summary-bg); padding: 12px var(--space-2) var(--space-2); }
+      .activity-detail td::before { display: none; }
+      .activity-log { display: grid; gap: 4px; margin: 0; padding: 0; list-style: none; }
+      .activity-log li { display: grid; grid-template-columns: 160px 1fr; gap: 12px; font-size: 13px; }
+      .activity-log time { color: var(--color-meta); font-variant-numeric: tabular-nums; }
+      .activity-log .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; vertical-align: 1px; }
+      .activity-log-title { font-size: 12px; font-weight: 600; color: var(--color-meta); margin: 0 0 8px; }
+      .activity-note { font-size: 12px; color: var(--color-meta); margin: var(--space-1) 0 0; max-width: 80ch; }
+      /* Telefon: hver rad er et kort (shared.css). Etiketten kan brekke, så stolpene får plass; tallene står
+         til høyre i kortet, ikke etiketten. */
+      @media (max-width: 600px) {
+        .activity-log li { grid-template-columns: 1fr; gap: 0; }
+        .activity-table td::before { flex-shrink: 1; }
+        .activity-table td.num { text-align: left; }
+        .activity-table td.spark-cell > span { flex-shrink: 0; white-space: nowrap; }
+      }
+    </style>
+  </head>
+  <body>
+    <a href="#main-content" class="skip-nav" data-i18n="nav.skipToContent">Skip to main content</a>
+    <main id="main-content" class="layout-container">
+      <div class="page-top-bar">
+        <nav id="workspaceNav" class="workspace-nav"></nav>
+        <div class="locale-picker">
+          <span id="appVersion" class="version-badge">…</span>
+          <label for="localeSelect" class="sr-only" data-i18n="locale.label">Language</label>
+          <select id="localeSelect" class="locale-select-compact"></select>
+        </div>
+      </div>
+      <!-- #1099: «Deltakere»-området, med Aktivitet-fanen (rollegates av deltakere-subnav.js). -->
+      <nav id="deltakereSubnav" class="content-area-nav" aria-label="Deltakere">
+        <a href="/deltakere/klasser" class="content-area-nav-link" id="subnavKlasser" data-i18n="area.classes">Klasser</a>
+        <a href="/deltakere/status" class="content-area-nav-link" id="subnavStatus" data-i18n="area.status">Status</a>
+        <a href="/deltakere/aktivitet" class="content-area-nav-link" id="subnavActivity" data-i18n="area.activity">Aktivitet</a>
+        <a href="/review" class="content-area-nav-link" id="subnavReview" data-i18n="area.review">Manuell behandling</a>
+        <a href="/results" class="content-area-nav-link" id="subnavResults" data-i18n="area.results">Resultater</a>
+      </nav>
+      <div class="page-header">
+        <div>
+          <h1 data-i18n="activityPage.title">Activity</h1>
+          <p class="page-lead" data-i18n="activityPage.subtitle">What participants do on the platform, across all courses.</p>
+        </div>
+      </div>
+
+      <section class="card mock-identity-card">
+        <details class="mock-identity-panel">
+          <summary><span data-i18n="identity.title">Test User</span><span class="mock-identity-dev-badge" data-i18n="identity.devOnlyBadge">Dev only</span></summary>
+          <div class="mock-identity-panel-body">
+            <div class="row">
+              <div><label for="userId" data-i18n="identity.userId">User Id</label><input id="userId" value="content-owner-1" autocomplete="off" /></div>
+              <div><label for="email" data-i18n="identity.email">Email</label><input id="email" value="smo@company.com" autocomplete="email" /></div>
+            </div>
+            <div class="row">
+              <div><label for="name" data-i18n="identity.name">Name</label><input id="name" value="Platform Subject Matter Owner" autocomplete="name" /></div>
+              <div><label for="department" data-i18n="identity.department">Department</label><input id="department" value="Learning" autocomplete="organization" /></div>
+            </div>
+            <div>
+              <label for="roles" data-i18n="identity.roles">Roles (comma-separated)</label>
+              <input id="roles" value="SUBJECT_MATTER_OWNER" autocomplete="off" />
+            </div>
+            <div id="mockRolePresetContainer">
+              <label for="mockRolePreset" data-i18n="identity.rolePreset">Role preset</label>
+              <select id="mockRolePreset"></select>
+              <div class="small" id="mockRolePresetHint"></div>
+            </div>
+            <button id="loadMe" class="btn-secondary" data-i18n="identity.loadMe">Show my user details</button>
+          </div>
+        </details>
+      </section>
+
+      <div class="activity-filters">
+        <div><span class="lbl" id="lblPeriod" data-i18n="activity.filter.period">Period</span><span class="seg" role="group" aria-labelledby="lblPeriod" id="activityPeriod">
+          <button type="button" data-v="4" data-i18n="activity.period.4">Last 4 weeks</button><button type="button" data-v="12" data-i18n="activity.period.12">Last 12 weeks</button><button type="button" data-v="all" data-i18n="activity.period.all">All time</button>
+        </span></div>
+        <div><span class="lbl" id="lblGrain" data-i18n="activity.filter.grain">Count per</span><span class="seg" role="group" aria-labelledby="lblGrain" id="activityGrain">
+          <button type="button" data-v="day" data-i18n="activity.grain.day">Day</button><button type="button" data-v="week" data-i18n="activity.grain.week">Week</button>
+        </span></div>
+        <div class="list-course-filter"><label for="activityDepartment" data-i18n="activity.filter.department">Department</label><select id="activityDepartment" class="list-course-select"></select></div>
+        <span class="small" id="activityMeta" aria-live="polite"></span>
+      </div>
+
+      <section class="activity-kpis" id="activityKpis" aria-live="polite"></section>
+
+      <section class="activity-charts">
+        <div class="card">
+          <h2 data-i18n="activity.chart.people">People</h2>
+          <p class="activity-sub" id="activityPeopleSub"></p>
+          <div class="activity-legend">
+            <span><i style="background:var(--color-primary)"></i><span data-i18n="activity.legend.active">Active</span></span>
+            <span><i style="background:var(--color-primary-tint);box-shadow:inset 0 0 0 1px var(--color-primary)"></i><span data-i18n="activity.legend.started">Have got started, in total</span></span>
+            <span><i class="dash"></i><span data-i18n="activity.legend.population">All participants</span></span>
+          </div>
+          <svg id="activityPeopleChart" class="activity-chart" viewBox="0 0 640 250" role="img"></svg>
+          <div class="activity-tip" id="activityPeopleTip" hidden></div>
+        </div>
+        <div class="card">
+          <h2 data-i18n="activity.chart.events">What they do</h2>
+          <p class="activity-sub" id="activityEventsSub"></p>
+          <div class="activity-legend">
+            <span><i style="background:var(--act-read)"></i><span data-i18n="activity.type.read">Sections read</span></span>
+            <span><i style="background:var(--act-submitted)"></i><span data-i18n="activity.type.submitted">Attempts submitted</span></span>
+            <span><i style="background:var(--act-passed)"></i><span data-i18n="activity.type.passed">Modules passed</span></span>
+            <span><i style="background:var(--act-completed)"></i><span data-i18n="activity.type.completed">Courses completed</span></span>
+          </div>
+          <svg id="activityEventsChart" class="activity-chart" viewBox="0 0 640 250" role="img"></svg>
+          <div class="activity-tip" id="activityEventsTip" hidden></div>
+        </div>
+      </section>
+
+      <section class="card activity-people" aria-labelledby="activityPeopleTitle">
+        <div class="activity-people-head">
+          <div>
+            <h2 id="activityPeopleTitle" data-i18n="activity.people.title">Who is active</h2>
+            <p class="activity-sub" style="margin-bottom:0" data-i18n="activity.people.sub">Click a person to see what they did most recently.</p>
+          </div>
+          <div class="activity-tools">
+            <div class="activity-chips" id="activityChips" role="group"></div>
+            <label for="activitySearch" class="sr-only" data-i18n="activity.search.label">Search by name</label>
+            <input type="search" id="activitySearch" autocomplete="off" />
+          </div>
+        </div>
+        <div class="list-table-wrap" tabindex="0" role="region" aria-labelledby="activityPeopleTitle">
+          <table class="list-table activity-table">
+            <thead>
+              <tr>
+                <th scope="col"><button type="button" data-k="name" data-i18n="activity.col.name">Name</button></th>
+                <th scope="col"><button type="button" data-k="department" data-i18n="activity.col.department">Department</button></th>
+                <th scope="col"><button type="button" data-k="status" data-i18n="activity.col.status">Status</button></th>
+                <th scope="col"><button type="button" data-k="lastActivityAt" data-i18n="activity.col.lastActivity">Last active</button></th>
+                <th scope="col"><button type="button" data-k="lastLoginAt" data-i18n="activity.col.lastLogin">Last seen</button></th>
+                <th scope="col" data-i18n="activity.col.spark">Active days per week, last 12 weeks</th>
+                <th scope="col" class="num"><button type="button" data-k="read" data-i18n="activity.col.read">Read</button></th>
+                <th scope="col" class="num"><button type="button" data-k="submitted" data-i18n="activity.col.submitted">Submitted</button></th>
+                <th scope="col" class="num"><button type="button" data-k="passed" data-i18n="activity.col.passed">Passed</button></th>
+                <th scope="col" class="num"><button type="button" data-k="completed" data-i18n="activity.col.completed">Completed</button></th>
+              </tr>
+            </thead>
+            <tbody id="activityRows"></tbody>
+          </table>
+        </div>
+        <p class="activity-note" data-i18n="activity.note"></p>
+      </section>
+
+      <div class="small" id="outputStatus" aria-live="polite" aria-atomic="true" style="margin: var(--space-1) 0;"></div>
+      <section id="debugOutputSection" class="card" hidden>
+        <h2 data-i18n="output.title">System response</h2>
+        <pre id="output" class="pre-content"></pre>
+      </section>
+    </main>
+    <script src="/static/i18n/participant-activity-translations.js" type="module"></script>
+    <script src="/static/participant-activity.js" type="module"></script>
+    <script src="/static/deltakere-subnav.js" type="module"></script>
+    <script src="/static/workspace-help.js" type="module"></script>
+      <script type="module" src="/static/content-area-nav-i18n.js"></script>
+      <script type="module" src="/static/page-title.js"></script>
+  </body>
+</html>

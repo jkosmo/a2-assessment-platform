@@ -1,13 +1,15 @@
 # Overlevering — hvor arbeidet står
 
-> **Skrevet 2026-10-13.** Dette dokumentet skrives om ved hver overlevering; les datoen før du
+> **Skrevet 2026-10-17.** Dette dokumentet skrives om ved hver overlevering; les datoen før du
 > stoler på tallene. Metodikken ligger i `doc/TEST_AND_RELEASE_PLAYBOOK.md` og endres ikke her.
 
 ---
 
 ## Kort: det som må avgjøres
 
-**Prod og stage står på 2.90.0** (prod rullet 2026-10-13 kl. 22:49 fra `5b4ebe71`, run 38463267515, godkjent av produkteier; stage rullet kl. 14:51, stage-testen 46 av 46, QA-porten GO i `.ai-qa/qa-20261013-141739.md`). `dev` = stage = prod. `main` = prod etter PR #1098. Ny skillpakke 2.90.0 («tenk først») skal lastes opp i ChatGPT og Claude.ai nå som prod har blokken. **Neste:** produkteier justerer kursene i prod med oppdateringsflyten (#1095); #1072 punkt 6 (veiledning i seksjonseditoren) gjenstår; CI er rød på `nav-fits-phone-1085` (består lokalt, ikke på Linux) siden 2026-10-11.
+**Prod og stage står på 2.92.0** (prod rullet 2026-10-17 kl. 08:52 fra `3531162f`, run 39010981889, godkjent av produkteier i helgens vedlikeholdsvindu; stage-testen 51 av 51 kl. 08:42). Med: #1099 «Aktivitet» under Deltakere (deltakerne = alle som har gjort noe), sidetittel «A-2 læringsplattform – <side>» på brukerens språk uten versjonsnummer. `dev` = stage = prod; `main` etter PR. #1100 lukket (stage-oppsett).
+
+Før det: prod 2.90.0 (rullet 2026-10-13 kl. 22:49 fra `5b4ebe71`).
 
 ### 2.86.0: ikonbibliotek, skillet flettet inn, skillforbedringer (2026-10-11, grenen `ikoner-1079`)
 
@@ -147,10 +149,10 @@ produkteier har kjørt Møtearbeid og Tilbudsarbeid med 2.83.0 i ChatGPT og Clau
 
 | Miljø | Versjon | |
 |---|---|---|
-| prod | 2.90.0 | rullet 2026-10-13 kl. 22:49 fra `5b4ebe71` (run 38463267515), godkjent av produkteier; `/version` og helsesjekk bekreftet. Før det 2.88.2: rullet 2026-10-12 kl. 22:47. Før det 2.86.0: 2026-10-11 kl. 17:21 fra `a6aec30a`. |
-| stage | 2.90.0 | rullet 2026-10-13 kl. 14:51 fra `5b4ebe71` (QA-porten GO etter to runder); stage-testen 46 av 46; vurderingsraden lagrer `a2-assessment-stg-gpt-5.4-mini:primary` (sjekket med én innlevering). |
-| `main` (git) | 2.90.0 | likt med prod (PR #1098) |
-| `dev` (git) | 2.90.0 | likt med prod: «tenk først» (#1072), modellinnstillingene i Bicep og riktig modellnavn (2.90.0); plassering i «Mine kurs» (#1094), undermenyen for deltakere (#1096) (2.89.x); «Publiser ny versjon» (2.88.3); #1095 fase A+B (2.88.x) |
+| prod | 2.92.0 | rullet 2026-10-17 kl. 08:52 fra `3531162f` (run 39010981889), godkjent av produkteier; `/version`, helsesjekk og ny tittel bekreftet. Før det 2.90.0: 2026-10-13 kl. 22:49. |
+| stage | 2.92.0 | rullet 2026-10-17 kl. 08:35 fra `3531162f`; stage-testen 51 av 51. |
+| `main` (git) | 2.92.0 | likt med prod (PR etter prod-settingen) |
+| `dev` (git) | 2.92.0 | likt med prod. |
 
 ### Skillet er bygget om, på en egen gren (2026-10-05, sent på kvelden)
 

@@ -4603,7 +4603,7 @@ async function initShell() {
   createModuleFormPage();
   applyTabState(activeTab);
   renderPreview();
-  loadVersion(appVersionLabel, "A2 Content Workspace");
+  loadVersion(appVersionLabel);
   await loadConsoleConfig();
 
   // Path-based moduleId: /admin-content/module/:moduleId/conversation

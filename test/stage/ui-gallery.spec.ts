@@ -24,6 +24,7 @@ const SIDER: Array<{ fil: string; navn: string; rute: string; vent?: string; han
   { fil: "04-sensor", navn: "Sensor: køer", rute: "/review", vent: "#manualReviewQueueBody" },
   { fil: "05-rapporter", navn: "Rapporter", rute: "/results", vent: "#completionBody" },
   { fil: "06-kullstatus", navn: "Kullstatus", rute: "/deltakere/status", vent: "#courseSelect", handling: async (page) => { await page.locator("#courseSelect").selectOption({ index: 1 }).catch(() => undefined); } },
+  { fil: "06b-aktivitet", navn: "Aktivitet", rute: "/deltakere/aktivitet", vent: "#activityRows tr" },
   { fil: "07-admin-plattform", navn: "Admin: plattform", rute: "/admin-platform", vent: "#failedAssessmentsBody" },
   // /admin-content ER biblioteket (modulvelgeren); samtalen ligger under /module/:id/conversation.
   { fil: "08-forfatter-bibliotek", navn: "Forfatter: bibliotek", rute: "/admin-content" },

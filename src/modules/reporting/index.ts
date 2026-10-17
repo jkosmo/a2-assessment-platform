@@ -23,3 +23,5 @@ export {
 } from "./mcqSemanticReport.js";
 
 export { getReportingDataQualityReport } from "./dataQualityReport.js";
+
+export { getActivityReport, getActivityRecent } from "./activityReport.js";
