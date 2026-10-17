@@ -86,9 +86,14 @@ test("per dag de siste 4 ukene, og hele perioden", async () => {
   expect(dag.json.buckets.length).toBeLessThanOrEqual(28);
   const alt = await api("/api/reports/activity?period=all&grain=week");
   expect(alt.status).toBe(200);
-  // Hele perioden begynner mandagen i uka for den første hendelsen på stage.
-  expect(alt.json.buckets.length).toBeGreaterThanOrEqual(1);
-  expect(alt.json.range.from <= alt.json.buckets[0].from).toBe(true);
+  // Hele perioden slutter i samme uke som de tolv ukene, og inneholder minst like mange hendelser.
+  const tolv = rapport!;
+  expect(alt.json.buckets.at(-1).from).toBe(tolv.buckets.at(-1).from);
+  const sum = (r: any) => r.buckets.reduce((s: number, b: any) => s + TYPER.reduce((t, k) => t + b.counts[k], 0), 0);
+  expect(sum(alt.json)).toBeGreaterThanOrEqual(sum(tolv));
+  // Den første uka i hele perioden har aktivitet (den begynner der den første hendelsen er).
+  const første = alt.json.buckets[0];
+  expect(TYPER.reduce((t, k) => t + første.counts[k], 0), "første uke har hendelser").toBeGreaterThan(0);
   noter("uker i hele perioden", alt.json.buckets.length);
   noter("første uke", alt.json.range.from);
 });

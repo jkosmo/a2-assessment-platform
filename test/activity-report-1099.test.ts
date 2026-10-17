@@ -80,9 +80,14 @@ describe("Aktivitet under Deltakere (#1099)", () => {
     const b = await makeUser("rolig");
     await makeUser("ikke-startet", { lastLoginAt: ago(2) });
     const sluttet = await makeUser("sluttet", { active: false });
-    // En bruker uten lagret deltakerrolle som har lest noe. Med Entra står rollene bare i tokenet, så
-    // de fleste brukere har ingen lagret rolle — og de skal telles (stage-testen fant null deltakere).
-    const ikkeDeltaker = await makeUser("uten-rolle", { participant: false, otherRole: "REVIEWER" });
+    // En bruker uten noen lagret rolle som har lest noe — det vanlige på stage, der rollene bare står i
+    // tokenet. Skal telles, fordi hen har gjort noe.
+    const ikkeDeltaker = await makeUser("uten-rolle", { participant: false });
+    // En gjest: logget inn, ingen lagret rolle, ingenting gjort. Skal IKKE telles — i prod opprettes en
+    // brukerrad for alle i tenanten som åpner en lenke.
+    await makeUser("gjest", { participant: false, lastLoginAt: ago(3) });
+    // En vurderer med lagret rolle, men ingen deltakerrolle og ingenting gjort: telles ikke.
+    await makeUser("vurderer", { participant: false, otherRole: "REVIEWER" });
 
     // aktiv: alle fire hendelsestypene i går.
     const lest = ago(1, 3);
@@ -160,7 +165,7 @@ describe("Aktivitet under Deltakere (#1099)", () => {
     // rolig: én lesing for 20 dager siden.
     await prisma.courseSectionRead.create({ data: { userId: b, courseId, sectionId, readAt: ago(20) } });
 
-    // Skal ikke telles: en som har sluttet. Skal telles: en uten lagret deltakerrolle.
+    // Skal ikke telles: en som har sluttet. Skal telles: en uten lagret rolle som har lest noe.
     await prisma.courseSectionRead.create({ data: { userId: sluttet, courseId, sectionId, readAt: ago(1) } });
     await prisma.courseSectionRead.create({ data: { userId: ikkeDeltaker, courseId, sectionId, readAt: ago(1) } });
   });
@@ -187,7 +192,7 @@ describe("Aktivitet under Deltakere (#1099)", () => {
     expect(res.status).toBe(200);
     expect(res.body.department).toBe(department);
     expect(res.body.departments).toContain(department);
-    // aktiv, anket, uten-rolle, rolig og ikke-startet. Ikke den som har sluttet.
+    // aktiv, anket, uten-rolle, rolig og ikke-startet. Ikke den som har sluttet, gjesten eller vurdereren.
     expect(res.body.population).toBe(5);
     expect(res.body.kpis).toMatchObject({ active7: 3, active30: 4, started: 4 });
     // Den kopierte lesingen er én; det ankede og det erstattede forsøket er levert, ikke bestått.
@@ -245,9 +250,11 @@ describe("Aktivitet under Deltakere (#1099)", () => {
     expect(res.status).toBe(404);
   });
 
-  it("oppslaget når ikke lenger enn lista: en som har sluttet gir 404; en uten lagret rolle gir svar", async () => {
+  it("oppslaget når ikke lenger enn lista: sluttet og gjest gir 404; en uten lagret rolle som har gjort noe gir svar", async () => {
     const sluttet = await request(app).get(`/api/reports/activity/users/${userIds.sluttet}/recent`).set(headersFor("ADMINISTRATOR"));
     expect(sluttet.status).toBe(404);
+    const gjest = await request(app).get(`/api/reports/activity/users/${userIds.gjest}/recent`).set(headersFor("ADMINISTRATOR"));
+    expect(gjest.status).toBe(404);
     const utenRolle = await request(app).get(`/api/reports/activity/users/${userIds["uten-rolle"]}/recent`).set(headersFor("ADMINISTRATOR"));
     expect(utenRolle.status).toBe(200);
     expect(utenRolle.body.events).toHaveLength(1);

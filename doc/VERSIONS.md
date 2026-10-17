@@ -4,12 +4,19 @@ This document tracks release versions and what each version includes.
 
 ## 2.91.1 - 2026-10-15
 
-### «Aktivitet»: deltakerne er alle brukere, ikke «har deltakerrollen» (#1099)
+### «Aktivitet»: hvem som telles som deltaker (#1099)
 
-- Stage-testen fant null deltakere: med Entra står app-rollene bare i innloggingstokenet og lagres
-  ikke, så kravet om en lagret deltakerrolle traff ingen. Deltakerne er nå alle brukere som ikke har
-  sluttet eller er anonymisert. Stage-testen har fått en kontroll på at stage har deltakere.
-- Samme regel gjør systemklassen «Alle deltakere» tom med Entra: #1100.
+- Stage-testen fant null deltakere. Rapporten krevde en lagret deltakerrolle, og på stage står
+  rollene bare i innloggingstokenet (ENTRA_SYNC_GROUP_ROLES er av). I prod er gruppesynken på, og
+  rollen lagres for alle ansatte.
+- Deltakerne er nå alle med en gyldig lagret deltakerrolle ELLER som har gjort noe (lest, levert,
+  fullført), og som ikke har sluttet eller er anonymisert. Det gir de ansatte i prod, alle som har
+  gjort noe på stage, og ingen gjester som bare har logget inn (i prod opprettes en brukerrad for
+  alle i tenanten som åpner en lenke).
+- Stage-testen har fått kontroller på at stage har deltakere, og på at «hele perioden» begynner
+  der den første hendelsen er.
+- Systemklassen «Alle deltakere» er tom på stage av samme grunn: #1100 (stage-oppsett, ikke en
+  feil i prod).
 - Produkteiers avgjørelser (DECISIONS): rapportleser ser aktiviteten for alle; «bestått» på siste
   vedtaks tidspunkt; menyen under Deltakere kan stå på to linjer på telefon.
 

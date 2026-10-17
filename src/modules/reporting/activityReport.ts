@@ -1,4 +1,5 @@
 import { prisma } from "../../db/prisma.js";
+import { AppRole } from "../../db/prismaRuntime.js";
 import { localizeContentText } from "../../i18n/content.js";
 import type { SupportedLocale } from "../../i18n/locale.js";
 import type { SubmissionStatus as SubmissionStatusType } from "@prisma/client";
@@ -242,15 +243,35 @@ export function buildActivityReport(input: {
 }
 
 /**
- * Deltakerne: alle brukere som ikke har sluttet (activeStatus) og ikke er anonymisert.
+ * Deltakerne: brukere som ikke har sluttet og ikke er anonymisert, og som ENTEN har en gyldig lagret
+ * deltakerrolle ELLER har gjort noe (lest, levert eller fullført).
  *
- * ⚠️ IKKE «har deltakerrollen». Første utgave krevde en RoleAssignment med PARTICIPANT, som klassen
- * «Alle deltakere» gjør. Med Entra står rollene i innloggingstokenet og lagres ikke (authenticate.ts),
- * så stage-testen fant null deltakere der det fantes aktivitet. Databasen kan ikke se hvem som har
- * deltakerrollen; den kan se hvem som er brukere.
+ * ⚠️ To miljøer, to sannheter om rollen. I prod skriver innloggingen en PARTICIPANT-rad for
+ * medlemmene av gruppa for alle ansatte (ENTRA_SYNC_GROUP_ROLES=true, userRepository.ts). På stage
+ * er synken av, rollene står bare i tokenet, og rollekravet alene fant null deltakere. «Alle
+ * brukere» ville i prod tatt med alle i tenanten som har åpnet en lenke (gjester), fordi brukerraden
+ * opprettes før noen rollesjekk. Rollen ELLER aktivitet gir de ansatte i prod, alle som har gjort
+ * noe på stage, og ingen gjester som bare har logget inn.
  */
-function participantWhere(_now: Date) {
-  return { activeStatus: true, isAnonymized: false };
+function participantWhere(now: Date) {
+  return {
+    activeStatus: true,
+    isAnonymized: false,
+    OR: [
+      {
+        roleAssignments: {
+          some: {
+            appRole: AppRole.PARTICIPANT,
+            validFrom: { lte: now },
+            OR: [{ validTo: null }, { validTo: { gte: now } }],
+          },
+        },
+      },
+      { courseSectionReads: { some: {} } },
+      { submissions: { some: {} } },
+      { courseCompletions: { some: {} } },
+    ],
+  };
 }
 
 async function findReportParticipants(now: Date): Promise<ActivityPerson[]> {
@@ -342,7 +363,7 @@ export type ActivityRecent = { userId: string; name: string; events: ActivityRec
 
 /**
  * Det siste én person har gjort, på tvers av kurs. null når personen ikke er blant deltakerne i
- * rapporten — sluttet eller anonymisert. Oppslaget skal ikke nå lenger enn lista.
+ * rapporten (se participantWhere). Oppslaget skal ikke nå lenger enn lista.
  */
 export async function getActivityRecent(userId: string, locale: SupportedLocale, limit = 15, now = new Date()): Promise<ActivityRecent | null> {
   const user = await prisma.user.findFirst({ where: { id: userId, ...participantWhere(now) }, select: { id: true, name: true } });
