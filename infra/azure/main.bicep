@@ -225,7 +225,7 @@ param participantNotificationWebhookUrl string = ''
 param participantNotificationWebhookTimeoutMs int = 5000
 
 @description('Display name used as the sender name in ACS email notifications.')
-param acsEmailSenderDisplayName string = 'A2 Assessment Platform'
+param acsEmailSenderDisplayName string = 'A-2 læringsplattform'
 
 @description('Allowed outbound IP address ranges for PostgreSQL firewall. Each element: { name: string, startIpAddress: string, endIpAddress: string }. Query from App Service outbound IPs before deploying.')
 param dbAllowedIpAddresses array = []
@@ -342,6 +342,18 @@ resource acsEmailDomain 'Microsoft.Communication/emailServices/domains@2023-04-0
   location: 'global'
   properties: {
     domainManagement: 'AzureManaged'
+  }
+}
+
+// Avsendernavnet mottakeren ser. ACS tar bare en ren adresse i senderAddress (DoNotReply@…); navnet
+// står på avsenderen på domenet. Uten denne ressursen het avsenderen «DoNotReply», og app-
+// innstillingen ACS_EMAIL_SENDER_DISPLAY_NAME ble ikke lest av noe (QA 2026-10-18).
+resource acsEmailSenderUsername 'Microsoft.Communication/emailServices/domains/senderUsernames@2023-04-01' = if (createAcsEmail) {
+  parent: acsEmailDomain
+  name: 'DoNotReply'
+  properties: {
+    username: 'DoNotReply'
+    displayName: acsEmailSenderDisplayName
   }
 }
 

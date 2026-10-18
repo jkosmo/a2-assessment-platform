@@ -135,7 +135,7 @@ For each environment, define variables/secrets used by workflow:
 - `APPEAL_SLA_MONITOR_INTERVAL_MS` (optional, default `600000`)
 - `PARTICIPANT_NOTIFICATION_CHANNEL` (optional, `disabled` | `log` | `webhook` | `acs_email`, default `log`)
 - `PARTICIPANT_NOTIFICATION_WEBHOOK_TIMEOUT_MS` (optional, default `5000`)
-- `ACS_EMAIL_SENDER_DISPLAY_NAME` (optional, default `A2 Assessment Platform`; used when `PARTICIPANT_NOTIFICATION_CHANNEL=acs_email`)
+- `ACS_EMAIL_SENDER_DISPLAY_NAME` (optional, default `A-2 læringsplattform`; used when `PARTICIPANT_NOTIFICATION_CHANNEL=acs_email`)
 - `PARTICIPANT_CONSOLE_CONFIG_FILE` (optional, default `config/participant-console.json`)
 - `PARTICIPANT_CONSOLE_DEBUG_MODE` (optional, `auto` | `true` | `false`, default `auto`)
 - `PARTICIPANT_COURSE_ONLY` (optional, `true` | `false`, default `true`) — når `true` når deltakere moduler KUN gjennom kurs; den frittstående modul-lista og -innleveringen er gated av (SMO/ADMIN unntatt). Sett `false` for å gjenåpne frittstående modul-tilgang for deltakere.
@@ -348,11 +348,12 @@ Why:
 When `PARTICIPANT_NOTIFICATION_CHANNEL=acs_email` is set, the Bicep template automatically provisions:
 - An Azure Communication Services resource
 - An Email Communication Service with AzureManagedDomain (`dataLocation: Europe`)
+- The domain's `DoNotReply` sender, whose display name is what recipients see (`acsEmailSenderDisplayName`, from the GitHub variable `ACS_EMAIL_SENDER_DISPLAY_NAME`). A name changed in the portal is overwritten by the next infra deploy.
 - App settings: `AZURE_COMMUNICATION_SERVICES_CONNECTION_STRING`, `ACS_EMAIL_SENDER`, `ACS_EMAIL_SENDER_DISPLAY_NAME`
 
 No manual resource creation is required. To activate:
 1. Set GitHub Actions variable `PARTICIPANT_NOTIFICATION_CHANNEL=acs_email` for the target environment.
-2. Optionally set `ACS_EMAIL_SENDER_DISPLAY_NAME` (default: `A2 Assessment Platform`).
+2. Optionally set `ACS_EMAIL_SENDER_DISPLAY_NAME` (default: `A-2 læringsplattform`).
 3. Trigger a deploy. ACS resources will be provisioned on the first run.
 
 Note: AzureManagedDomain uses an auto-generated `azurecomm.net` sender address. To use a custom verified domain, replace the domain resource in `infra/azure/main.bicep`.

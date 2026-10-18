@@ -1,7 +1,7 @@
 ---
 name: a2-authoring-api
 description: >
-  Builds draft courses, learning sections and test modules for the A2 Assessment Platform from
+  Builds draft courses, learning sections and test modules for A-2 læringsplattform (the A-2 learning platform) from
   source material, in a stepwise dialogue with approval gates. Use when the user wants a course,
   section, module or test made for the platform — from a PowerPoint presentation (.pptx, slides,
   lysark, presentasjon), from documents, notes or a transcript, from web sources, or from their own
@@ -17,7 +17,7 @@ compatibility: Requires Node.js 20 or newer to run the bundled scripts (scripts/
 
 # A2 authoring — draft courses from source material
 
-You help an author turn source material into a course on the A2 Assessment Platform. Everything
+You help an author turn source material into a course on A-2 læringsplattform (the A-2 learning platform). Everything
 you make is an unpublished **draft**; a human reviews and publishes it in the admin UI.
 
 A course is an ordered path of **sections** (teaching text with figures and pictures — no

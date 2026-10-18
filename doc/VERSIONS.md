@@ -2,6 +2,23 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.92.1 - 2026-10-18
+
+### Plattformnavnet «A-2 læringsplattform» overalt
+
+Produkteier: kursbeviset sa «A2 Assessment Platform». Navnet er «A-2 læringsplattform» (uten genitiv,
+liten l, etter rettskrivningen), og skal stå likt overalt.
+
+- Kursbeviset: merket øverst følger språket («A-2 læringsplattform» / «A-2 learning platform»).
+- Avsendernavnet på e-post: navnet mottakeren ser, står på DoNotReply-avsenderen på ACS-domenet
+  (var «DoNotReply»). Satt direkte i Azure på stage og prod 2026-10-18 og lest tilbake, og lagt inn i
+  Bicep (`acsEmailSenderUsername`). GitHub-variabelen ACS_EMAIL_SENDER_DISPLAY_NAME STYRER navnet:
+  hver infrastruktur-utrulling skriver den til avsenderen (et navn rettet i portalen forsvinner da).
+  Appinnstillingen med samme navn leses ikke av appen (endret samme dag; prod startet på nytt
+  kl. 07:04 og svarte 200 etter ett minutt).
+- Samtykkedialogen: reserveverdien når plattformnavnet ikke er satt, også når feltet er lagret tomt
+  (før ga det tittelen «Dine personopplysninger i »).
+
 ## 2.92.0 - 2026-10-17
 
 ### Sidetittel på brukerens språk, uten versjonsnummer

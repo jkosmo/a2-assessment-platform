@@ -89,7 +89,7 @@ function renderConsentModal(config, locale, onAccept, onLogout) {
     "padding:16px;",
   ].join("");
 
-  const title = tg(locale, "consent.title").replace("{platformName}", config.platformName ?? "Assessment Platform");
+  const title = tg(locale, "consent.title").replace("{platformName}", (config.platformName || "").trim() || "A-2 læringsplattform");
   const changelogHtml = config.changelog
     ? `<p class="consent-changelog"><strong>${tg(locale, "consent.newVersion")}</strong><br>${escHtml(config.changelog)}</p>`
     : "";

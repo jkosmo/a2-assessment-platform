@@ -68,6 +68,20 @@ describe("GDPR consent and data-rights API", () => {
       expect(response.body.body.length).toBeGreaterThan(50);
       expect(typeof response.body.platformName).toBe("string");
     });
+
+    it("et tomt plattformnavn (lagret som \"\") gir plattformens navn, ikke en tittel uten navn", async () => {
+      const adminHeaders = { "x-user-id": "consent-admin-ext", "x-user-email": "consent-admin@x.test", "x-user-name": "Consent Admin", "x-user-roles": "ADMINISTRATOR" };
+      const before = await request(app).get("/api/admin/platform").set(adminHeaders);
+      expect(before.status).toBe(200);
+      try {
+        const saved = await request(app).put("/api/admin/platform").set(adminHeaders).send({ platformName: "" });
+        expect(saved.status).toBeLessThan(300);
+        const response = await request(app).get("/api/me/consent").set(gdprUserHeaders);
+        expect(response.body.platformName).toBe("A-2 læringsplattform");
+      } finally {
+        await request(app).put("/api/admin/platform").set(adminHeaders).send({ platformName: before.body.platformName ?? "" });
+      }
+    });
   });
 
   // ── POST /api/me/consent ──────────────────────────────────────────────────
