@@ -4427,14 +4427,9 @@ test.describe("admin content browser coverage", () => {
   // accepting a proposal wholesale wrote a one-locale map over a criterion that had three and
   // deleted two translations that were never shown and never edited.
   //
-  // NOTE on how these two tests reach the banner. `[data-drift-banner]` is rendered by
-  // `renderPreview()`, and since #896 S3c / v2.18.13 there is no tab where that output is both
-  // drawn AND visible: Rediger immediately overwrites the pane with the edit form, Forhåndsvisning
-  // suppresses the banner as a participant view, and Innstillinger hides the whole panel. The
-  // element is in the DOM (count 1 after Forhåndsvisning → Innstillinger) but `isVisible()` is
-  // false, so the click is dispatched rather than performed. That is a REACHABILITY defect in its
-  // own right, reported separately — it is not what these tests are about, and the handler chain
-  // they exercise from there is the real one.
+  // #928: the banner these tests used to reach (never visible since v2.18.13) is gone. The diff now
+  // opens from the question that follows a save from Rediger when the task text changed
+  // substantially — the real path an author takes.
   // ---------------------------------------------------------------------------
 
   const CLARITY_LABEL = { "en-GB": "Clarity", nb: "Klarhet", nn: "Klårleik" };
@@ -4456,8 +4451,11 @@ test.describe("admin content browser coverage", () => {
       title: "Trade unions",
       moduleVersionId: "module-1-version-1",
     });
-    // Drift is "the plan the criteria were generated from is not the plan that is stored now".
-    // A blueprint plus a stale hash on the rubric is the whole condition.
+    // #928: the question is about the TEXT. A scenario of some length, so a one-word fix stays
+    // under the threshold and a rewrite goes over it.
+    moduleExport.selectedConfiguration.moduleVersion.taskText = DRIFT_SCENARIO as never;
+    // Fritekst uten flervalg: lagringen krever ellers spørsmål, og drift gjelder fritekstkriteriene.
+    (moduleExport.selectedConfiguration.moduleVersion as { assessmentMode?: string }).assessmentMode = "FREETEXT_ONLY";
     moduleExport.selectedConfiguration.moduleVersion.assessmentBlueprint = {
       criteria: [{ id: "clarity", label: "Clarity" }, { id: "accuracy", label: "Accuracy" }],
     };
@@ -4504,17 +4502,48 @@ test.describe("admin content browser coverage", () => {
     return state;
   }
 
-  async function openDriftDiff(page: Page) {
+  const DRIFT_SCENARIO = localizedText(
+    "A trade union is negotiating a new collective agreement with an employer. Members have asked for higher wages, shorter working hours and better pension terms, and the board must prioritise.",
+  );
+  const REWRITTEN_SCENARIO =
+    "You lead a bid team. The buyer has sent tender documents of eighty pages, and you must use AI to build a requirements matrix before the deadline on Friday.";
+  const DRIFT_QUESTION = /task text has changed substantially|Oppgaveteksten er vesentlig endret/;
+
+  async function saveTaskText(page: Page, text: string) {
     await page.goto("/admin-content/module/module-1/conversation");
     await page.locator("#previewEditTitle").waitFor();
-    // Forhåndsvisning → Innstillinger is the one transition that re-renders the preview pane and
-    // then leaves it alone; see the NOTE above.
-    await page.locator("#formTab-preview").click();
-    await page.locator("#formTab-settings").click();
-    await expect(page.locator("[data-drift-banner]")).toHaveCount(1);
-    await page.locator('[data-drift-action="show-diff"]').dispatchEvent("click");
+    await page.locator("#previewEditTaskText").fill(text);
+    await page.locator("#formSaveBtn").click();
+    await expect(page.getByText(/Draft saved as a new module version|Utkastet er lagret som en ny modulversjon/).last()).toBeVisible();
+  }
+
+  async function openDriftDiff(page: Page) {
+    await saveTaskText(page, REWRITTEN_SCENARIO);
+    const question = page.locator(".toast", { hasText: DRIFT_QUESTION });
+    await expect(question).toBeVisible();
+    await question.locator(".toast__action").click();
     await expect(page.locator(".drift-diff-overlay")).toBeVisible();
   }
+
+  test("#928: a rewritten scenario asks once after the save, and marks Innstillinger", async ({ page }) => {
+    await mockDriftedModule(page);
+    await saveTaskText(page, REWRITTEN_SCENARIO);
+    const question = page.locator(".toast", { hasText: DRIFT_QUESTION });
+    await expect(question).toHaveCount(1);
+    await expect(question.locator(".toast__action")).toHaveText(/Suggest new criteria|Foreslå nye kriterier/);
+    await expect(page.locator("#formTab-settings")).toHaveAttribute("data-attention", "1");
+    // Closing it keeps the criteria: nothing is regenerated, no rubric is written.
+    await question.locator(".toast__close").click();
+    await expect(question).toHaveCount(0);
+  });
+
+  test("#928: a one-word fix saves without asking", async ({ page }) => {
+    await mockDriftedModule(page);
+    const fixed = DRIFT_SCENARIO["en-GB"].replace("prioritise", "prioritize");
+    await saveTaskText(page, fixed);
+    await page.waitForTimeout(500);
+    await expect(page.locator(".toast", { hasText: DRIFT_QUESTION })).toHaveCount(0);
+  });
 
   test("accepting a drift proposal keeps the two languages it was not shown in", async ({ page }) => {
     const state = await mockDriftedModule(page);

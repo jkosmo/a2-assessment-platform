@@ -2,6 +2,22 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.93.0 - 2026-10-18
+
+### Spørsmål etter lagring når oppgaveteksten er vesentlig endret (#928); prompt-blokker oversettes
+
+- **#928:** etter en lagring fra Rediger sammenlignes oppgavetekst, forventning og rammer (innholdsspråket)
+  med forrige versjon som ordmengder (`public/static/text-drift.js`). Er likheten under 0,85, og
+  kriteriene ble gjenbrukt i lagringen, kommer én beskjed: «Oppgaveteksten er vesentlig endret …» med
+  «Foreslå nye kriterier», som åpner forskjellsvisningen (godta alle eller noen). Å lukke beskjeden er
+  å beholde kriteriene. Innstillinger-fanen merkes. En rettet skrivefeil er stille.
+- Banneret som klassifiserte planen (blueprint-hashen) er fjernet. Det var ikke synlig i noen fane
+  siden v2.18.13. Hashen beholdes som lagret felt.
+- Grensen 0,85 og «lukk = behold» er designnotatets anbefaling; grensen justeres etter ekte lagringer.
+- **Oversetteren:** en `prompt`-blokk er ikke kode, men en prompt deltakeren kopierer. Teksten i den
+  oversettes; gjerdelinjene står (QA-funn: «behold kodeblokker» og «ikke oversett kode» kunne la den
+  stå på bokmål).
+
 ## 2.92.2 - 2026-10-18
 
 ### Veiledning for blokkene i seksjonseditoren (#1072 punkt 5 og 6)
