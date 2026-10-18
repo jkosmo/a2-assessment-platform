@@ -577,6 +577,12 @@ export function createCriteriaTools(ctx) {
   // samme transaksjon som versjonen.
   async function persistMergedRubric(criteriaRecord) {
     if (!ctx.selectedModuleId) return;
+    // Endret forfatteren skjemaet eller Innstillinger mens forslaget var åpent, ville lagringen
+    // kastet det. Be om lagring først.
+    if (ctx.unsavedOutsideDraft?.()) {
+      showToast(t("shell.drift.saveFirst"), "warning");
+      return;
+    }
     ctx.sessionDraft = { ...(ctx.sessionDraft ?? {}), criteria: criteriaRecord };
     await ctx.saveDraftBundleInBackground();
     await refreshBlueprintHash();

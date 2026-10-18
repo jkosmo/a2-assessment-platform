@@ -4445,7 +4445,7 @@ test.describe("admin content browser coverage", () => {
     nn: "Får fakta rett.",
   };
 
-  async function mockDriftedModule(page: Page, opts: { englishOnly?: boolean } = {}) {
+  async function mockDriftedModule(page: Page, opts: { englishOnly?: boolean; plainString?: boolean } = {}) {
     const moduleExport = buildMockModuleExport({
       id: "module-1",
       title: "Trade unions",
@@ -4453,7 +4453,7 @@ test.describe("admin content browser coverage", () => {
     });
     // #928: the question is about the TEXT. A scenario of some length, so a one-word fix stays
     // under the threshold and a rewrite goes over it.
-    moduleExport.selectedConfiguration.moduleVersion.taskText = (opts.englishOnly ? { "en-GB": DRIFT_SCENARIO["en-GB"] } : DRIFT_SCENARIO) as never;
+    moduleExport.selectedConfiguration.moduleVersion.taskText = (opts.plainString ? DRIFT_SCENARIO["en-GB"] : opts.englishOnly ? { "en-GB": DRIFT_SCENARIO["en-GB"] } : DRIFT_SCENARIO) as never;
     // Fritekst uten flervalg: lagringen krever ellers spørsmål, og drift gjelder fritekstkriteriene.
     (moduleExport.selectedConfiguration.moduleVersion as { assessmentMode?: string }).assessmentMode = "FREETEXT_ONLY";
     moduleExport.selectedConfiguration.moduleVersion.assessmentBlueprint = {
@@ -4549,6 +4549,34 @@ test.describe("admin content browser coverage", () => {
     await expect(page.getByText(/Draft saved as a new module version|Utkastet er lagret som en ny modulversjon/).last()).toBeVisible();
     await page.waitForTimeout(500);
     await expect(page.locator(".toast", { hasText: DRIFT_QUESTION })).toHaveCount(0);
+  });
+
+  test("#928: a text stored as one plain string (Norwegian) is not compared with a new language", async ({ page }) => {
+    // A plain string means «one language, not translated yet» — Bokmål (#905). Saving the Nynorsk
+    // translation compared it with the Bokmål text and raised a false question (QA 2.93.0, round 2).
+    await mockDriftedModule(page, { plainString: true });
+    await page.goto("/admin-content/module/module-1/conversation");
+    await page.locator("#previewEditTitle").waitFor();
+    await page.locator(".form-page-languages button", { hasText: /nynorsk/i }).click();
+    await page.locator("#previewEditTaskText").fill("Ein fagforeining forhandlar om ein ny tariffavtale med ein arbeidsgivar. Medlemmane vil ha høgare løn, kortare arbeidstid og betre pensjon, og styret må prioritere.");
+    await page.locator("#formSaveBtn").click();
+    await expect(page.getByText(/Draft saved as a new module version|Utkastet er lagret som en ny modulversjon|Utkastet er lagra/).last()).toBeVisible();
+    await page.waitForTimeout(500);
+    await expect(page.locator(".toast", { hasText: DRIFT_QUESTION })).toHaveCount(0);
+  });
+
+  test("#928: with unsaved edits in the form, the question asks for a save first and stays", async ({ page }) => {
+    await mockDriftedModule(page);
+    await saveTaskText(page, REWRITTEN_SCENARIO);
+    const question = page.locator(".toast", { hasText: DRIFT_QUESTION });
+    await expect(question).toBeVisible();
+    // The author keeps typing without saving. Accepting a proposal would have thrown this away.
+    await page.locator("#previewEditTaskText").fill(REWRITTEN_SCENARIO + " One more sentence the author is still writing.");
+    await question.locator(".toast__action").click();
+    await expect(page.locator(".toast", { hasText: /Save or cancel your changes first|Lagre eller forkast endringene først/ })).toBeVisible();
+    await expect(page.locator(".drift-diff-overlay")).toHaveCount(0);
+    await expect(page.locator(".toast", { hasText: DRIFT_QUESTION })).toHaveCount(1);
+    await expect(page.locator("#previewEditTaskText")).toHaveValue(/One more sentence/);
   });
 
   test("#928: a one-word fix saves without asking", async ({ page }) => {

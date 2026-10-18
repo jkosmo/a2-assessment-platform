@@ -2089,9 +2089,11 @@ async function saveDraftBundleInBackground(options = {}) {
   // kriterier. Leses FØR lagringen, fordi lagringen laster modulen på nytt.
   // ⚠️ EKSAKT språk, uten reservespråk. Med reserve ble bokmål sammenlignet med nynorsk første gang
   // en oversettelse ble lagret, og likheten ble lav selv om innholdet var det samme (QA 2.93.0).
+  // En ren streng er «ett språk, ikke oversatt» — bokmål (#905). Den teller bare når innholdsspråket
+  // er bokmål; ellers ble bokmål sammenlignet med oversettelsen (QA 2.93.0, runde 2).
   const exactLocaleText = (value) => {
     if (value && typeof value === "object") return typeof value[contentLocale] === "string" ? value[contentLocale] : "";
-    return typeof value === "string" ? value : "";
+    return typeof value === "string" && contentLocale === "nb" ? value : "";
   };
   // Felt for felt: bare felt som HADDE tekst på språket, sammenlignes. Et felt som får sin første
   // tekst på et nytt språk (en oversettelse), er ikke en endring av noe kriteriene ble laget fra.
@@ -3627,8 +3629,26 @@ function offerCriteriaRefresh() {
   showToast(t("shell.drift.changed"), "warning", "", {
     sticky: true,
     actionLabel: t("shell.drift.changed.action"),
-    onAction: () => { void criteriaTools.handleDriftShowDiff(); },
+    onAction: () => {
+      // Forslaget lages fra den LAGREDE teksten, og «Godta» lagrer. Ulagret i skjemaet eller i
+      // Innstillinger ville forsvunnet uten melding (QA 2.93.0); be om lagring først, og la
+      // spørsmålet stå til forfatteren er klar.
+      if (unsavedOutsideDraft()) {
+        showToast(t("shell.drift.saveFirst"), "warning");
+        // Etter at denne toasten er fjernet (toast.js fjerner den ETTER onAction, og like meldinger
+        // vises ikke to ganger).
+        window.setTimeout(offerCriteriaRefresh, 0);
+        return;
+      }
+      void criteriaTools.handleDriftShowDiff();
+    },
   });
+}
+
+/** Ulagret i det åpne skjemaet eller i Innstillinger — det en lagring av utkastet ikke tar med. */
+function unsavedOutsideDraft() {
+  const kind = moduleDirtyKind();
+  return kind === "form" || kind === "settings";
 }
 
 function markTabAttention(tab) {
@@ -4633,6 +4653,7 @@ const criteriaTools = createCriteriaTools({
   get currentBlueprintHash() { return currentBlueprintHash; },
   t, tf, logProgress, logResolveSlot, apiErrorText, getHeaders, loadModule, renderPreview, refreshBlueprintHash, getActiveBlueprint, slugifyLabel, certificationLevelForGeneration,
   saveDraftBundleInBackground,
+  unsavedOutsideDraft,
 });
 
 const publishFlow = createPublishFlow({
