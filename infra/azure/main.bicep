@@ -345,6 +345,18 @@ resource acsEmailDomain 'Microsoft.Communication/emailServices/domains@2023-04-0
   }
 }
 
+// Avsendernavnet mottakeren ser. ACS tar bare en ren adresse i senderAddress (DoNotReply@…); navnet
+// står på avsenderen på domenet. Uten denne ressursen het avsenderen «DoNotReply», og app-
+// innstillingen ACS_EMAIL_SENDER_DISPLAY_NAME ble ikke lest av noe (QA 2026-10-18).
+resource acsEmailSenderUsername 'Microsoft.Communication/emailServices/domains/senderUsernames@2023-04-01' = if (createAcsEmail) {
+  parent: acsEmailDomain
+  name: 'DoNotReply'
+  properties: {
+    username: 'DoNotReply'
+    displayName: acsEmailSenderDisplayName
+  }
+}
+
 resource acsService 'Microsoft.Communication/communicationServices@2023-04-01' = if (createAcsEmail) {
   name: acsName
   location: 'global'

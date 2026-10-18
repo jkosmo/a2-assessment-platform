@@ -123,6 +123,8 @@ const envSchema = z.object({
     (value) => (typeof value === "string" && value.trim().length === 0 ? undefined : value),
     z.string().optional(),
   ),
+  // ⚠️ Leses ikke av appen. Navnet mottakeren ser, står på DoNotReply-avsenderen på ACS-domenet
+  // (Bicep: acsEmailSenderUsername). Innstillingen speiler bare det samme navnet.
   ACS_EMAIL_SENDER_DISPLAY_NAME: z.string().default("A-2 læringsplattform"),
   PARTICIPANT_CONSOLE_CONFIG_FILE: z.string().default("config/participant-console.json"),
   PARTICIPANT_CONSOLE_DEBUG_MODE: z.enum(["auto", "true", "false"]).default("auto"),
