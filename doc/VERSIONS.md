@@ -2,6 +2,16 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.92.2 - 2026-10-18
+
+### Veiledning for blokkene i seksjonseditoren (#1072 punkt 5 og 6)
+
+- Hjelpen i seksjonseditoren («?») har fått avsnittet «Blokker i teksten» på tre språk: uthevet boks,
+  prompt med kopiknapp, kort, «tenk først» (hvor og hvor ofte, aldri inni en kortramme) og ikon.
+  Markørene står uoversatt på alle språk.
+- Skillets pakkeskjema har et eksempel på «tenk først» i en JSON-streng.
+- Vakt: `test/workspace-help-contracts.test.js`.
+
 ## 2.92.1 - 2026-10-18
 
 ### Plattformnavnet «A-2 læringsplattform» overalt
