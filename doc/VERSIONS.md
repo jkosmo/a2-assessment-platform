@@ -2,6 +2,19 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.92.1 - 2026-10-18
+
+### Plattformnavnet «A-2 læringsplattform» overalt
+
+Produkteier: kursbeviset sa «A2 Assessment Platform». Navnet er «A-2 læringsplattform» (uten genitiv,
+liten l, etter rettskrivningen), og skal stå likt overalt.
+
+- Kursbeviset: merket øverst følger språket («A-2 læringsplattform» / «A-2 learning platform»).
+- Avsendernavnet på e-post: reserveverdi i koden, Bicep, utrullingsskriptet og arbeidsflytene, og
+  GitHub-variabelen og appinnstillingen på stage og prod (satt 2026-10-18 kl. 07:04; prod startet på
+  nytt, helsesjekken var 200 etter ett minutt).
+- Samtykkedialogen: reserveverdien når plattformnavnet ikke er satt under Plattforminnstillinger.
+
 ## 2.92.0 - 2026-10-17
 
 ### Sidetittel på brukerens språk, uten versjonsnummer
