@@ -4,7 +4,7 @@ export const localeLabels = { "en-GB": "English", nb: "Norsk bokmål", nn: "Nyno
 
 export const translations = {
   "en-GB": {
-    "certificate.docTitle": "Course certificate",
+    "certificate.kicker": "A-2 learning platform",
     "certificate.heading": "Certificate of completion",
     "certificate.awardedTo": "This certifies that",
     "certificate.completedCourse": "has successfully completed the course",
@@ -23,7 +23,7 @@ export const translations = {
     "locale.label": "Language",
   },
   nb: {
-    "certificate.docTitle": "Kursbevis",
+    "certificate.kicker": "A-2 læringsplattform",
     "certificate.heading": "Kursbevis",
     "certificate.awardedTo": "Dette bekrefter at",
     "certificate.completedCourse": "har fullført kurset",
@@ -42,7 +42,7 @@ export const translations = {
     "locale.label": "Språk",
   },
   nn: {
-    "certificate.docTitle": "Kursbevis",
+    "certificate.kicker": "A-2 læringsplattform",
     "certificate.heading": "Kursbevis",
     "certificate.awardedTo": "Dette stadfestar at",
     "certificate.completedCourse": "har fullført kurset",

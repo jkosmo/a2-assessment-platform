@@ -53,6 +53,9 @@ test("certificate: renders the completion as a printable document", async ({ pag
 
   // The certificate card is shown (loading state hidden) with the completion details.
   await expect(page.locator("#certificate")).toBeVisible();
+  // Merket øverst følger språket og plattformens navn (ikke «A2 Assessment Platform»).
+  await expect(page.locator(".cert-kicker")).toHaveText("A-2 learning platform");
+  await expect(page).toHaveTitle("A-2 learning platform – Course certificate");
   await expect(page.locator("#certState")).toBeHidden();
   await expect(page.locator("#certName")).toHaveText("Kari Nordmann");
   await expect(page.locator("#certCourse")).toHaveText("Labour Law");
