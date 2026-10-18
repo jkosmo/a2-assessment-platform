@@ -581,6 +581,9 @@ export function createCriteriaTools(ctx) {
     // kastet det. Be om lagring først.
     if (ctx.unsavedOutsideDraft?.()) {
       showToast(t("shell.drift.saveFirst"), "warning");
+      // Spørsmålet ble fjernet av klikket på «Foreslå», og forskjellsvisningen er lukket. Uten dette
+      // fantes ingen vei tilbake til forslaget etter lagringen (QA 2.93.0, runde 3).
+      ctx.offerCriteriaRefresh?.();
       return;
     }
     ctx.sessionDraft = { ...(ctx.sessionDraft ?? {}), criteria: criteriaRecord };

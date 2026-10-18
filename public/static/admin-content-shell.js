@@ -4654,6 +4654,7 @@ const criteriaTools = createCriteriaTools({
   t, tf, logProgress, logResolveSlot, apiErrorText, getHeaders, loadModule, renderPreview, refreshBlueprintHash, getActiveBlueprint, slugifyLabel, certificationLevelForGeneration,
   saveDraftBundleInBackground,
   unsavedOutsideDraft,
+  offerCriteriaRefresh,
 });
 
 const publishFlow = createPublishFlow({

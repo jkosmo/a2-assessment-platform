@@ -4579,6 +4579,25 @@ test.describe("admin content browser coverage", () => {
     await expect(page.locator("#previewEditTaskText")).toHaveValue(/One more sentence/);
   });
 
+  test("#928: editing while the proposal is generated, then accepting, keeps the edit and brings the question back", async ({ page }) => {
+    const state = await mockDriftedModule(page);
+    // The proposal takes a moment; the author keeps writing in Rediger meanwhile.
+    await page.route("**/api/admin/content/generate/rubric", async (route: Route) => {
+      await new Promise((resolve) => setTimeout(resolve, 1200));
+      await route.fallback();
+    });
+    await saveTaskText(page, REWRITTEN_SCENARIO);
+    const versionsBefore = state.lastModuleVersionBody;
+    await page.locator(".toast", { hasText: DRIFT_QUESTION }).locator(".toast__action").click();
+    await page.locator("#previewEditTaskText").fill(REWRITTEN_SCENARIO + " Written while the proposal was made.");
+    await expect(page.locator(".drift-diff-overlay")).toBeVisible();
+    await clickEnabledButton(page, "Accept all");
+    await expect(page.locator(".toast", { hasText: /Save or cancel your changes first|Lagre eller forkast endringene først/ })).toBeVisible();
+    await expect(page.locator(".toast", { hasText: DRIFT_QUESTION })).toHaveCount(1);
+    await expect(page.locator("#previewEditTaskText")).toHaveValue(/Written while the proposal was made/);
+    expect(state.lastModuleVersionBody).toBe(versionsBefore);
+  });
+
   test("#928: a one-word fix saves without asking", async ({ page }) => {
     await mockDriftedModule(page);
     const fixed = DRIFT_SCENARIO["en-GB"].replace("prioritise", "prioritize");
