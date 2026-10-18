@@ -348,6 +348,7 @@ Why:
 When `PARTICIPANT_NOTIFICATION_CHANNEL=acs_email` is set, the Bicep template automatically provisions:
 - An Azure Communication Services resource
 - An Email Communication Service with AzureManagedDomain (`dataLocation: Europe`)
+- The domain's `DoNotReply` sender, whose display name is what recipients see (`acsEmailSenderDisplayName`, from the GitHub variable `ACS_EMAIL_SENDER_DISPLAY_NAME`). A name changed in the portal is overwritten by the next infra deploy.
 - App settings: `AZURE_COMMUNICATION_SERVICES_CONNECTION_STRING`, `ACS_EMAIL_SENDER`, `ACS_EMAIL_SENDER_DISPLAY_NAME`
 
 No manual resource creation is required. To activate:

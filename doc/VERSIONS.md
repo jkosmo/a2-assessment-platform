@@ -12,9 +12,10 @@ liten l, etter rettskrivningen), og skal stå likt overalt.
 - Kursbeviset: merket øverst følger språket («A-2 læringsplattform» / «A-2 learning platform»).
 - Avsendernavnet på e-post: navnet mottakeren ser, står på DoNotReply-avsenderen på ACS-domenet
   (var «DoNotReply»). Satt direkte i Azure på stage og prod 2026-10-18 og lest tilbake, og lagt inn i
-  Bicep (`acsEmailSenderUsername`), så en infrastruktur-utrulling holder det. Appinnstillingen
-  ACS_EMAIL_SENDER_DISPLAY_NAME leses ikke av appen; den og GitHub-variabelen speiler bare navnet
-  (endret samme dag; prod startet på nytt kl. 07:04 og svarte 200 etter ett minutt).
+  Bicep (`acsEmailSenderUsername`). GitHub-variabelen ACS_EMAIL_SENDER_DISPLAY_NAME STYRER navnet:
+  hver infrastruktur-utrulling skriver den til avsenderen (et navn rettet i portalen forsvinner da).
+  Appinnstillingen med samme navn leses ikke av appen (endret samme dag; prod startet på nytt
+  kl. 07:04 og svarte 200 etter ett minutt).
 - Samtykkedialogen: reserveverdien når plattformnavnet ikke er satt, også når feltet er lagret tomt
   (før ga det tittelen «Dine personopplysninger i »).
 
