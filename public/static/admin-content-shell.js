@@ -38,7 +38,8 @@ import {
   humaniseCriterionId,
 } from "/static/criteria-editor.js";
 import { setHidden } from "/static/dom-visibility.js";
-import { hashBlueprintAsync, classifyDriftState } from "/static/admin-content-blueprint-hash.js";
+import { hashBlueprintAsync } from "/static/admin-content-blueprint-hash.js";
+import { isSubstantialTextChange } from "/static/text-drift.js";
 import {
   classifyShellEditInstruction,
   detectShellRevisionTargets,
@@ -882,48 +883,10 @@ async function refreshBlueprintHash() {
   renderPreview();
 }
 
-// B3: read the stored blueprint-hash off the active rubric's scalingRule. null when no
-// rubric, no scalingRule, or no hash (pre-B3 rubric).
-function getStoredBlueprintHash() {
-  const sr = bundle?.selectedConfiguration?.rubricVersion?.scalingRule;
-  if (!sr || typeof sr !== "object") return null;
-  const v = sr.generated_from_blueprint_hash;
-  return typeof v === "string" && v.length > 0 ? v : null;
-}
 
-// B3: classify drift for the current shell state. Returns the classifyDriftState code.
-function resolveDriftState() {
-  const hasBlueprint = !!getActiveBlueprint();
-  const hasRubric = !!bundle?.selectedConfiguration?.rubricVersion;
-  return classifyDriftState(currentBlueprintHash, getStoredBlueprintHash(), { hasBlueprint, hasRubric });
-}
-
-function renderDriftBannerHtml() {
-  return `
-    <div class="drift-banner" role="status" data-drift-banner>
-      <div class="drift-banner-message">
-        <span class="drift-banner-icon" aria-hidden="true">⚠</span>
-        <p>
-          <strong>${escapeHtml(t("shell.drift.title"))}</strong><br>
-          ${escapeHtml(t("shell.drift.body"))}
-        </p>
-      </div>
-      <div class="drift-banner-actions">
-        <button type="button" class="btn-secondary" data-drift-action="keep">${escapeHtml(t("shell.drift.action.keep"))}</button>
-        <button type="button" class="btn-secondary" data-drift-action="show-diff">${escapeHtml(t("shell.drift.action.showDiff"))}</button>
-        <button type="button" class="btn-primary" data-drift-action="regenerate">${escapeHtml(t("shell.drift.action.regenerate"))}</button>
-      </div>
-    </div>
-  `;
-}
-
-function attachDriftBannerHandlers() {
-  const banner = previewContent?.querySelector("[data-drift-banner]");
-  if (!banner) return;
-  banner.querySelector('[data-drift-action="keep"]')?.addEventListener("click", criteriaTools.handleDriftKeep);
-  banner.querySelector('[data-drift-action="show-diff"]')?.addEventListener("click", criteriaTools.handleDriftShowDiff);
-  banner.querySelector('[data-drift-action="regenerate"]')?.addEventListener("click", criteriaTools.handleDriftRegenerate);
-}
+// #928: banneret som klassifiserte planen (blueprint-hashen) er fjernet. Det har ikke vært synlig i
+// noen fane siden v2.18.13, og det målte planen, ikke teksten forfatteren endrer. Spørsmålet stilles
+// nå etter lagring fra Rediger: se offerCriteriaRefresh.
 
 function renderPreview() {
   const opts = { locale: contentLocale, t, tf };
@@ -936,11 +899,7 @@ function renderPreview() {
 
   const activeDraft = previewDraft ?? sessionDraft;
   const hasDraft = !!activeDraft;
-  const driftState = resolveDriftState();
-  // The drift banner offers author actions ("Regenerer", "Vis forskjell"), so it belongs to
-  // the author view only - a participant view must not hand out controls at all.
   const forParticipant = activeTab === "preview";
-  const driftBanner = (driftState === "drifted" && !forParticipant) ? renderDriftBannerHtml() : "";
 
   if (bundle) {
     const mod = bundle?.module ?? null;
@@ -974,8 +933,6 @@ function renderPreview() {
       // "genereres…" placeholder while criteria-generation is in flight for the current sessionDraft.
       // Generation status is an authoring signal too - the learner has no business seeing it.
       criteriaLoadingText: (criteriaGenerationInFlight && !forParticipant) ? t("shell.criteria.generating") : "",
-      // B3 (#450): drift banner rendered above the criteria section.
-      driftBanner,
       // #896 S1: the Forhaandsvisning tab claims to show what the participant meets, so it
       // must not leak the assessor expectation, the MCQ answer key and rationale, or criteria
       // marked candidateVisible:false. Rediger keeps showing all of it - that is the author's
@@ -989,7 +946,6 @@ function renderPreview() {
         : isDraft ? t("adminContent.status.badge.draft")
         : t("adminContent.status.badge.shellOnly"),
     }, opts);
-    if (!forParticipant) attachDriftBannerHandlers();
   } else if (hasDraft) {
     previewContent.innerHTML = buildPreviewHtml({
       title: activeDraft.title || t("shell.newModule.defaultTitle"),
@@ -2129,6 +2085,28 @@ async function saveDraftBundleInBackground(options = {}) {
   }
 
   const { taskText, assessorExpectedContent, candidateTaskConstraints, assessmentBlueprint, mcqQuestions, criteria } = resolveDraftForSave();
+  // #928: teksten kriteriene ble laget fra (forrige versjon, innholdsspråket), og om det fantes
+  // kriterier. Leses FØR lagringen, fordi lagringen laster modulen på nytt.
+  // ⚠️ EKSAKT språk, uten reservespråk. Med reserve ble bokmål sammenlignet med nynorsk første gang
+  // en oversettelse ble lagret, og likheten ble lav selv om innholdet var det samme (QA 2.93.0).
+  // En ren streng er «ett språk, ikke oversatt» — bokmål (#905). Den teller bare når innholdsspråket
+  // er bokmål; ellers ble bokmål sammenlignet med oversettelsen (QA 2.93.0, runde 2).
+  const exactLocaleText = (value) => {
+    if (value && typeof value === "object") return typeof value[contentLocale] === "string" ? value[contentLocale] : "";
+    return typeof value === "string" && contentLocale === "nb" ? value : "";
+  };
+  // Felt for felt: bare felt som HADDE tekst på språket, sammenlignes. Et felt som får sin første
+  // tekst på et nytt språk (en oversettelse), er ikke en endring av noe kriteriene ble laget fra.
+  const previousVersion = bundle?.selectedConfiguration?.moduleVersion ?? null;
+  const previousFieldsForDrift = previousVersion
+    ? [previousVersion.taskText, previousVersion.assessorExpectedContent, previousVersion.candidateTaskConstraints].map(exactLocaleText)
+    : ["", "", ""];
+  const textsForDrift = (task, expected, constraints) => {
+    const next = [task, expected, constraints].map(exactLocaleText);
+    const kept = previousFieldsForDrift.map((text, i) => [text, next[i]]).filter(([text]) => text.trim() !== "");
+    return [kept.map(([text]) => text).join(" "), kept.map(([, text]) => text).join(" ")];
+  };
+  const hadCriteriaBeforeSave = Object.keys(bundle?.selectedConfiguration?.rubricVersion?.criteria ?? {}).length > 0;
   // #555: MCQ-only drafts have no taskText/rubric/prompt — they save a single MCQ_ONLY module
   // version with a pass-mark policy. assessmentMode/mcqMinPercent are flagged on sessionDraft by
   // createMcqOnlyModuleThenGenerate.
@@ -2317,6 +2295,12 @@ async function saveDraftBundleInBackground(options = {}) {
     logResolveSlot(slot, () => `<strong>${escapeHtml(t("shell.save.success"))}</strong>`);
     showToast(t("shell.save.success"), "success");
     announceStatus(t("shell.save.success"));
+    // #928: kriteriene fulgte ikke med (de ble gjenbrukt), og teksten er vesentlig endret. Valgte
+    // forfatteren kriterier i samme lagring, er spørsmålet besvart alt.
+    if (!isMcqOnly && hadCriteriaBeforeSave && !inlineRubric
+      && isSubstantialTextChange(...textsForDrift(taskText, assessorExpectedContent, candidateTaskConstraints))) {
+      offerCriteriaRefresh();
+    }
     if (afterSave) afterSave();
   } catch (err) {
     const errMsg = apiErrorText(err);
@@ -3634,6 +3618,39 @@ function confirmLocaleSwitchDiscard() {
 // ---------------------------------------------------------------------------
 const tabAttention = new Set();
 
+/**
+ * #928: én beskjed der forfatteren står, etter en lagring som endret oppgaveteksten vesentlig.
+ * «Foreslå nye kriterier» åpner forskjellsvisningen (forslaget fra den nye teksten, godta alle eller
+ * noen); å lukke beskjeden er å beholde kriteriene. Neste lagring måler mot den nye versjonen, så
+ * samme endring spør ikke igjen. Innstillinger-fanen merkes uansett, til forfatteren har vært der.
+ */
+function offerCriteriaRefresh() {
+  markTabAttention("settings");
+  showToast(t("shell.drift.changed"), "warning", "", {
+    sticky: true,
+    actionLabel: t("shell.drift.changed.action"),
+    onAction: () => {
+      // Forslaget lages fra den LAGREDE teksten, og «Godta» lagrer. Ulagret i skjemaet eller i
+      // Innstillinger ville forsvunnet uten melding (QA 2.93.0); be om lagring først, og la
+      // spørsmålet stå til forfatteren er klar.
+      if (unsavedOutsideDraft()) {
+        showToast(t("shell.drift.saveFirst"), "warning");
+        // Etter at denne toasten er fjernet (toast.js fjerner den ETTER onAction, og like meldinger
+        // vises ikke to ganger).
+        window.setTimeout(offerCriteriaRefresh, 0);
+        return;
+      }
+      void criteriaTools.handleDriftShowDiff();
+    },
+  });
+}
+
+/** Ulagret i det åpne skjemaet eller i Innstillinger — det en lagring av utkastet ikke tar med. */
+function unsavedOutsideDraft() {
+  const kind = moduleDirtyKind();
+  return kind === "form" || kind === "settings";
+}
+
 function markTabAttention(tab) {
   // Ingen grunn til å merke fanen forfatteren står i — der ER endringen synlig.
   if (tab === activeTab) return;
@@ -4635,6 +4652,9 @@ const criteriaTools = createCriteriaTools({
   get contentLocale() { return contentLocale; },
   get currentBlueprintHash() { return currentBlueprintHash; },
   t, tf, logProgress, logResolveSlot, apiErrorText, getHeaders, loadModule, renderPreview, refreshBlueprintHash, getActiveBlueprint, slugifyLabel, certificationLevelForGeneration,
+  saveDraftBundleInBackground,
+  unsavedOutsideDraft,
+  offerCriteriaRefresh,
 });
 
 const publishFlow = createPublishFlow({

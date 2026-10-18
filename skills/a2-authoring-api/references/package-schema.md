@@ -66,6 +66,16 @@ and what a translation must keep: [localization.md](localization.md).
 `title` and the text are required. `assets` is left out for a section with text only. How to
 write the body: [section-content.md](section-content.md).
 
+**Blocks in a JSON string** keep their markers on lines of their own — each line break is `\n`. A
+«think first» question in `bodyMarkdown`:
+
+```json
+"nb": "Du har fått et konkurransegrunnlag på 80 sider.\n\n:::tenk Hva skjer hvis du ber KI om et sammendrag av hele dokumentet?\nSammendraget blir generelt. Spør heller etter kravene og tildelingskriteriene.\n:::\n\nDerfor begynner vi med kravmatrisen."
+```
+
+The question stands on the `:::tenk` line; the answer below it; `:::` closes it. Never inside a
+`:::kort` frame. When to use it: [section-content.md](section-content.md#think-first).
+
 **Keep the text in files**, one per language, and point at them with `bodyFiles` instead of
 `bodyMarkdown`:
 

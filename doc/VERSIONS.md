@@ -2,6 +2,36 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.93.0 - 2026-10-18
+
+### Spørsmål etter lagring når oppgaveteksten er vesentlig endret (#928); prompt-blokker oversettes
+
+- **#928:** etter en lagring fra Rediger sammenlignes oppgavetekst, forventning og rammer (innholdsspråket)
+  med forrige versjon som ordmengder (`public/static/text-drift.js`). Er likheten under 0,85, og
+  kriteriene ble gjenbrukt i lagringen, kommer én beskjed: «Oppgaveteksten er vesentlig endret …» med
+  «Foreslå nye kriterier», som åpner forskjellsvisningen (godta alle eller noen). Å lukke beskjeden er
+  å beholde kriteriene. Innstillinger-fanen merkes. En rettet skrivefeil er stille.
+- Banneret som klassifiserte planen (blueprint-hashen) er fjernet. Det var ikke synlig i noen fane
+  siden v2.18.13. Hashen beholdes som lagret felt.
+- Grensen 0,85 og «lukk = behold» er designnotatets anbefaling; grensen justeres etter ekte lagringer.
+- QA-porten: «Godta» i forskjellsvisningen lagrer nå en ny modulversjon med kriteriene. Før ble bare en
+  løs rubrikkversjon lagret, og vurderingen brukte fortsatt de gamle kriteriene. Målingen sammenligner
+  felt for felt på det eksakte språket, så en første oversettelse ikke spør. Kriterier som byttes uten
+  å spørre etter «Rediger i samtale»/«Oversett» (fantes før): #1104.
+- **Oversetteren:** en `prompt`-blokk er ikke kode, men en prompt deltakeren kopierer. Teksten i den
+  oversettes; gjerdelinjene står (QA-funn: «behold kodeblokker» og «ikke oversett kode» kunne la den
+  stå på bokmål).
+
+## 2.92.2 - 2026-10-18
+
+### Veiledning for blokkene i seksjonseditoren (#1072 punkt 5 og 6)
+
+- Hjelpen i seksjonseditoren («?») har fått avsnittet «Blokker i teksten» på tre språk: uthevet boks,
+  prompt med kopiknapp, kort, «tenk først» (hvor og hvor ofte, aldri inni en kortramme) og ikon.
+  Markørene står uoversatt på alle språk.
+- Skillets pakkeskjema har et eksempel på «tenk først» i en JSON-streng.
+- Vakt: `test/workspace-help-contracts.test.js`.
+
 ## 2.92.1 - 2026-10-18
 
 ### Plattformnavnet «A-2 læringsplattform» overalt

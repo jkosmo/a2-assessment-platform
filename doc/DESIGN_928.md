@@ -1,6 +1,6 @@
 # Design #928 — drift mellom oppgavetekst og vurderingskriterier: sjekk ved lagring
 
-Status: **forslag, venter på produkteier** (2026-09-18). Produkteiers beslutning fra 18.08 står:
+Status: **bygget i 2.93.0** (2026-10-18) etter anbefalingen under: grense 0,85, lukk = behold. «Generer på nytt» er erstattet av «Foreslå nye kriterier», som åpner forskjellsvisningen, slik at forfatteren kan godta alle eller noen. Opprinnelig forslag: 2026-09-18. Produkteiers beslutning fra 18.08 står:
 *sjekk ved lagring, ikke ved tastetrykk; ett varsel per reell endring; beskjeden der forfatteren
 står, med henvisning til Innstillinger.*
 

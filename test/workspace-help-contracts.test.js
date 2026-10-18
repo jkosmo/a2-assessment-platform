@@ -58,3 +58,16 @@ describe("workspace help contracts", () => {
     }
   });
 });
+
+// #1072 punkt 6: seksjonseditoren forklarer hvordan blokkene skrives, «tenk først» medregnet.
+describe("seksjonseditorens hjelp forklarer blokkene i teksten", () => {
+  for (const locale of ["nb", "nn", "en-GB"]) {
+    it(`${locale}: «tenk først», kort, prompt, uthevet boks og ikon`, () => {
+      const content = getWorkspaceHelpContent("admin-content-sections", locale);
+      const text = JSON.stringify(content);
+      for (const marker of [":::tenk", ":::kort", "```prompt", "> **", "![](icon:"]) {
+        expect(text, marker).toContain(marker);
+      }
+    });
+  }
+});

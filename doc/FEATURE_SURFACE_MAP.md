@@ -725,18 +725,20 @@ vist og aldri redigert. Rettelsen er den samme regelen som over, i `mergePropose
 ID-er som «valgte». Et helt nytt kriterium har ingenting å flette mot og lagres som ettspråks-kart —
 å finne på de to andre språkene der er nøyaktig løgnen #892 finnes for å stoppe.
 
-⚠️ **Drift-banneret er i dag ikke synlig noe sted.** `[data-drift-banner]` tegnes av
-`renderPreview()`, men etter #896 S3c / v2.18.13 finnes ingen fane der den utskriften både tegnes og
-vises: Rediger overskriver ruta med redigeringsskjemaet umiddelbart, Forhåndsvisning undertrykker
-banneret (deltakervisning), og Innstillinger skjuler hele panelet. Elementet ligger i DOM-en etter
-Forhåndsvisning → Innstillinger, men `isVisible()` er `false`. E2e-vaktene under må derfor
-`dispatchEvent("click")` i stedet for å klikke. Det er en egen sak — fletting er rettet, men ingen
-forfatter når flaten.
+**#928 (2.93.0): banneret er fjernet.** Det var ikke synlig i noen fane siden v2.18.13. Inngangen er
+nå spørsmålet etter en lagring fra Rediger når oppgaveteksten er vesentlig endret
+(`offerCriteriaRefresh`, `public/static/text-drift.js`): «Foreslå nye kriterier» åpner
+forskjellsvisningen. ⚠️ **Godta lagrer en NY MODULVERSJON** (kriteriene i utkastet, lagret med
+`inlineRubric`). Den gamle veien postet bare en rubrikkversjon; modulversjonen pekte fortsatt på den
+gamle, og både Innstillinger og vurderingen brukte de gamle kriteriene. Målingen sammenligner felt for
+felt på det eksakte innholdsspråket, og bare felt som hadde tekst før (en første oversettelse spør
+ikke).
 
 **Guards:** e2e "editing a criterion in one language keeps the other two", "Innstillinger edits
 the assessment instruction in one language and keeps the others", "accepting a drift proposal keeps
 the two languages it was not shown in" og "accept-all merges too, and a brand-new criterion is
-stored as the one language it has".
+stored as the one language it has", og #928-testene (spørsmålet, ingen spørsmål ved én rettet
+skrivefeil eller første oversettelse).
 
 ## 22. Generert innhold som lander i utkastet — seks produsenter, én port (#896 §6 / #926)
 

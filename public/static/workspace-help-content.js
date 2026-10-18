@@ -706,6 +706,14 @@ const workspaceContent = {
           "A section needs all three languages before it can be published.",
           "Archive a section you no longer use; it can be deleted from inside the archived section.",
         ] },
+        { title: "Blocks in the text", items: [
+          "Highlighted box: start a paragraph with > **Remember:** and the text. The labels Important, NB and Warning give the warning colour.",
+          "Prompt with a copy button: a code block that starts with ```prompt on its own line and ends with ``` on its own line.",
+          "Cards: :::kort on its own line, one ### heading per card with its text below, and ::: on its own line at the end.",
+          "Think first: :::tenk followed by the question on the same line, the answer on the lines below, and ::: on its own line at the end. The participant sees the question and opens the answer when ready. Put it after a problem has been set out, before the text explains it; one or two per section. Never inside a card frame.",
+          "Icon: ![](icon:name) first in a card heading, for example ### ![](icon:lightbulb) Idea. The names are Lucide's own, in small letters (lucide.dev/icons); an unknown name shows no icon.",
+          "In the other languages the markers stay as they are (:::kort, :::tenk, ```prompt); translate only the text.",
+        ] },
       ],
       nb: [
         { title: "Dette gjør du her", items: [
@@ -717,6 +725,14 @@ const workspaceContent = {
           "En seksjon må ha alle tre språk før den kan publiseres.",
           "Arkiver en seksjon du ikke bruker lenger; den kan slettes inne på den arkiverte seksjonen.",
         ] },
+        { title: "Blokker i teksten", items: [
+          "Uthevet boks: start et avsnitt med > **Husk:** og teksten. Merkelappene Viktig, NB og Advarsel gir varselfarge.",
+          "Prompt med kopiknapp: en kodeblokk som starter med ```prompt på egen linje og slutter med ``` på egen linje.",
+          "Kort: :::kort på egen linje, én ### overskrift per kort med teksten under, og ::: på egen linje til slutt.",
+          "Tenk først: :::tenk og spørsmålet på samme linje, svaret på linjene under, og ::: på egen linje til slutt. Deltakeren ser spørsmålet og åpner svaret selv. Sett den etter at et problem er lagt fram, før teksten forklarer det; én eller to per seksjon. Aldri inni en kortramme.",
+          "Ikon: ![](icon:navn) først i en kortoverskrift, for eksempel ### ![](icon:lightbulb) Idé. Navnene er Lucides egne, med små bokstaver (lucide.dev/icons); et ukjent navn gir ikke noe ikon.",
+          "På de andre språkene står markørene som de er (:::kort, :::tenk, ```prompt); bare teksten oversettes.",
+        ] },
       ],
       nn: [
         { title: "Dette gjer du her", items: [
@@ -727,6 +743,14 @@ const workspaceContent = {
         { title: "Greitt å vite", items: [
           "Ein seksjon må ha alle tre språka før han kan publiserast.",
           "Arkiver ein seksjon du ikkje brukar lenger; han kan slettast inne på den arkiverte seksjonen.",
+        ] },
+        { title: "Blokker i teksten", items: [
+          "Utheva boks: start eit avsnitt med > **Hugs:** og teksten. Merkelappane Viktig, NB og Åtvaring gir varselfarge.",
+          "Prompt med kopiknapp: ein kodeblokk som startar med ```prompt på eiga linje og sluttar med ``` på eiga linje.",
+          "Kort: :::kort på eiga linje, éi ### overskrift per kort med teksten under, og ::: på eiga linje til slutt.",
+          "Tenk først: :::tenk og spørsmålet på same linja, svaret på linjene under, og ::: på eiga linje til slutt. Deltakaren ser spørsmålet og opnar svaret sjølv. Set det etter at eit problem er lagt fram, før teksten forklarer det; eitt eller to per seksjon. Aldri inni ei kortramme.",
+          "Ikon: ![](icon:namn) først i ei kortoverskrift, til dømes ### ![](icon:lightbulb) Idé. Namna er dei same som hos Lucide, med små bokstavar (lucide.dev/icons); eit ukjent namn gir ikkje noko ikon.",
+          "På dei andre språka står markørane som dei er (:::kort, :::tenk, ```prompt); berre teksten blir omsett.",
         ] },
       ],
     },
