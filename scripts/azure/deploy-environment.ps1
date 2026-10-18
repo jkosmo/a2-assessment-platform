@@ -54,7 +54,7 @@ param(
   [string]$ParticipantNotificationChannel = "log",
   [string]$ParticipantNotificationWebhookUrl = "",
   [int]$ParticipantNotificationWebhookTimeoutMs = 5000,
-  [string]$AcsEmailSenderDisplayName = "A2 Assessment Platform",
+  [string]$AcsEmailSenderDisplayName = "A-2 læringsplattform",
   [string]$BudgetContactEmail = "",
   [double]$MonthlyBudgetAmount = 30,
   [string]$ParserWorkerAuthKey = "",

@@ -123,7 +123,7 @@ const envSchema = z.object({
     (value) => (typeof value === "string" && value.trim().length === 0 ? undefined : value),
     z.string().optional(),
   ),
-  ACS_EMAIL_SENDER_DISPLAY_NAME: z.string().default("A2 Assessment Platform"),
+  ACS_EMAIL_SENDER_DISPLAY_NAME: z.string().default("A-2 læringsplattform"),
   PARTICIPANT_CONSOLE_CONFIG_FILE: z.string().default("config/participant-console.json"),
   PARTICIPANT_CONSOLE_DEBUG_MODE: z.enum(["auto", "true", "false"]).default("auto"),
   ASSESSMENT_RULES_FILE: z.string().default("config/assessment-rules.json"),

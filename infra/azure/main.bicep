@@ -225,7 +225,7 @@ param participantNotificationWebhookUrl string = ''
 param participantNotificationWebhookTimeoutMs int = 5000
 
 @description('Display name used as the sender name in ACS email notifications.')
-param acsEmailSenderDisplayName string = 'A2 Assessment Platform'
+param acsEmailSenderDisplayName string = 'A-2 læringsplattform'
 
 @description('Allowed outbound IP address ranges for PostgreSQL firewall. Each element: { name: string, startIpAddress: string, endIpAddress: string }. Query from App Service outbound IPs before deploying.')
 param dbAllowedIpAddresses array = []

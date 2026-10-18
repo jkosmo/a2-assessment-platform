@@ -77,7 +77,7 @@ export async function getConsentConfig(locale: SupportedLocale): Promise<Consent
     body,
     dpoName: config["dpo.name"] ?? null,
     dpoEmail: config["dpo.email"] ?? null,
-    platformName: config["platform.name"] ?? "Assessment Platform",
+    platformName: config["platform.name"] ?? "A-2 læringsplattform",
   };
 }
 
