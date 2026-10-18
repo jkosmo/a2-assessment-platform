@@ -7,7 +7,7 @@
 
 ## Kort: det som må avgjøres
 
-**Prod og stage står på 2.92.0** (prod rullet 2026-10-17 kl. 08:52 fra `3531162f`, run 39010981889, godkjent av produkteier i helgens vedlikeholdsvindu; stage-testen 51 av 51 kl. 08:42). Med: #1099 «Aktivitet» under Deltakere (deltakerne = alle som har gjort noe), sidetittel «A-2 læringsplattform – <side>» på brukerens språk uten versjonsnummer. `dev` = stage = prod; `main` etter PR. #1100 lukket (stage-oppsett).
+**Prod og stage står på 2.93.0** (prod rullet 2026-10-18 kl. 11:03, run 39113371024; stage-testen 51 av 51). Med siden 2.92.0: plattformnavnet «A-2 læringsplattform» overalt (kursbevis, avsender på e-post via ACS-domenet, samtykke), veiledning for blokkene i seksjonseditoren (#1072), spørsmål om nye kriterier når oppgaveteksten er vesentlig endret (#928), og oversettelse av prompt-blokker. Neste batch: #1104 (kriterier byttes ikke ut etter «Be om endring»/«Oversett») ligger på grenen `kriterier-1104`.
 
 Før det: prod 2.90.0 (rullet 2026-10-13 kl. 22:49 fra `5b4ebe71`).
 
@@ -149,10 +149,10 @@ produkteier har kjørt Møtearbeid og Tilbudsarbeid med 2.83.0 i ChatGPT og Clau
 
 | Miljø | Versjon | |
 |---|---|---|
-| prod | 2.92.0 | rullet 2026-10-17 kl. 08:52 fra `3531162f` (run 39010981889), godkjent av produkteier; `/version`, helsesjekk og ny tittel bekreftet. Før det 2.90.0: 2026-10-13 kl. 22:49. |
-| stage | 2.92.0 | rullet 2026-10-17 kl. 08:35 fra `3531162f`; stage-testen 51 av 51. |
-| `main` (git) | 2.92.0 | likt med prod (PR etter prod-settingen) |
-| `dev` (git) | 2.92.0 | likt med prod. |
+| prod | 2.93.0 | rullet 2026-10-18 kl. 11:03 (run 39113371024), godkjent av produkteier. Før det 2.92.1 kl. 08:15 og 2.92.0 kl. 08:52 2026-10-17. |
+| stage | 2.93.0 | rullet 2026-10-18 kl. 10:48; stage-testen 51 av 51; oversettelse av prompt-blokker bekreftet med ekte modell. |
+| `main` (git) | 2.93.0 | likt med prod (PR #1105) |
+| `dev` (git) | 2.93.0 | likt med prod. |
 
 ### Skillet er bygget om, på en egen gren (2026-10-05, sent på kvelden)
 
