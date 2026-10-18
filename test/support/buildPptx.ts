@@ -131,6 +131,11 @@ export function buildPptx(slides: SlideSpec[]): Buffer {
     }
     files[`ppt/slides/_rels/slide${n}.xml.rels`] = relsFile(rels);
   });
+  // #1103: innholdslista og rotkoblingen som en ekte .pptx har. Skillets uttrekk leste filene direkte
+  // og trengte dem ikke; plattformens tolker (officeparser) kjenner igjen formatet på dem.
+  const PML = "application/vnd.openxmlformats-officedocument.presentationml";
+  files["[Content_Types].xml"] = `<?xml version="1.0"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/ppt/presentation.xml" ContentType="${PML}.presentation.main+xml"/>${slides.map((slide, i) => `<Override PartName="/ppt/slides/slide${i + 1}.xml" ContentType="${PML}.slide+xml"/>${slide.notes !== undefined ? `<Override PartName="/ppt/notesSlides/notesSlide${i + 1}.xml" ContentType="${PML}.notesSlide+xml"/>` : ""}`).join("")}</Types>`;
+  files["_rels/.rels"] = `<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="${REL}/officeDocument" Target="ppt/presentation.xml"/></Relationships>`;
   return zip(files);
 }
 
