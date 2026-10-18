@@ -65,7 +65,7 @@ describe("seksjonseditorens hjelp forklarer blokkene i teksten", () => {
     it(`${locale}: «tenk først», kort, prompt, uthevet boks og ikon`, () => {
       const content = getWorkspaceHelpContent("admin-content-sections", locale);
       const text = JSON.stringify(content);
-      for (const marker of [":::tenk", ":::kort", "```prompt", "> **", "![](icon:"]) {
+      for (const marker of [":::tenk", ":::sjekk", "- [x]", ":::kort", "```prompt", "> **", "![](icon:"]) {
         expect(text, marker).toContain(marker);
       }
     });

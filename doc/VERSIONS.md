@@ -2,6 +2,21 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.94.0 - 2026-10-18
+
+### «Sjekk deg selv» i seksjoner (#1074); kriterier byttes ikke ut uten å spørre (#1104)
+
+- **#1074:** et flervalgsspørsmål midt i seksjonsteksten. Forfatteren skriver `:::sjekk Spørsmålet`,
+  alternativene som `- [ ]`, det riktige som `- [x]`, en forklaring og `:::`. Deltakeren velger, ser
+  riktig/feil og forklaringen med en gang. Teller ikke og lagres ikke. Ramme i teksten som «tenk først»
+  (produkteier valgte det framfor egne felt): ingen migrasjon; oversetter, eksport/import og skillet
+  virker. Skillet skriver det (section-content.md «Check yourself»), kontrollen krever 2+ alternativer
+  og nøyaktig ett riktig, og språkkontrollen krever samme fasit på alle språk.
+- **#1104:** «Be om endring» og «Oversett» lager ikke lenger nye kriterier for en modul som har
+  kriterier; lagringen bytter dem ikke ut. Er teksten vesentlig endret, spør #928 etter lagringen.
+- **#1103:** talenotater kommer med når en .pptx brukes som kilde ved KI-generering (var allerede
+  slik; vakt med den ekte tolkeren).
+
 ## 2.93.0 - 2026-10-18
 
 ### Spørsmål etter lagring når oppgaveteksten er vesentlig endret (#928); prompt-blokker oversettes

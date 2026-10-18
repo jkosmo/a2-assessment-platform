@@ -75,7 +75,7 @@ Read the file when you reach the work it covers — not before.
 | When you | Read |
 |---|---|
 | propose objectives, structure, test form or level | [references/course-design.md](references/course-design.md) |
-| write a section's text: headings, lists, tables, highlighted boxes, prompts, cards, think-first questions, pictures | [references/section-content.md](references/section-content.md) |
+| write a section's text: headings, lists, tables, highlighted boxes, prompts, cards, think-first and check-yourself questions, pictures | [references/section-content.md](references/section-content.md) |
 | draw or check a figure | [references/figure-design.md](references/figure-design.md) |
 | give a card or a step an icon | [references/icons.md](references/icons.md) |
 | write a module: task, assessment criteria, multiple-choice questions | [references/modules.md](references/modules.md) |

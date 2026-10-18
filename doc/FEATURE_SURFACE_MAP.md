@@ -265,7 +265,12 @@ in a table cell whose column has no name while another column has one (icon, 24 
 named column, or in a table with no named column at all, stays a picture). **#1072:** `:::tenk <question>`
 … `:::` (also `:::think`) becomes `<details class="content-think">` with the question in `<summary>`
 and the answer inside (opens with click/Enter/Space, no script; the label follows the locale). Frames
-cannot be nested — the first `:::` closes whichever frame is open. Tables get `data-label` on every cell so the phone stacking rule in `shared.css` shows the
+cannot be nested — the first `:::` closes whichever frame is open. **#1074:** `:::sjekk <question>`
+(also `:::check`), then 2+ options `- [ ]` with exactly one `- [x]`, then an explanation, then `:::`,
+becomes `<div class="content-check" data-content-check>` with one `<button data-check-option
+data-correct>` per option; `public/static/content-blocks.js` (`answerCheck`) marks right/wrong, shows
+the explanation and announces the verdict (`aria-live`). Nothing is sent or stored; the answer key is
+in the HTML by design. Fewer than two options or not exactly one `- [x]` → no block (text stays). Tables get `data-label` on every cell so the phone stacking rule in `shared.css` shows the
 column name.
 
 | Surface | Where |

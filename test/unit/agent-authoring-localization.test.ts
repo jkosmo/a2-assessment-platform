@@ -291,3 +291,41 @@ describe("#763 (Layer B) SVG figure localization", () => {
     expect(result.missingVariants).toEqual([]);
   });
 });
+
+// #1074: fasiten i «sjekk deg selv» står i teksten (`- [x]`), så den kan flytte seg i en oversettelse.
+describe("«sjekk deg selv» på tre språk (#1074)", () => {
+  const block = (q: string, a: string, b: string, right: 0 | 1) =>
+    [`:::sjekk ${q}`, `- [${right === 0 ? "x" : " "}] ${a}`, `- [${right === 1 ? "x" : " "}] ${b}`, ":::"].join("\n");
+  const sectionPackage = (en: string) => ({
+    packageFormat: "a2-authoring-package/v1",
+    objects: [{
+      clientRef: "sec-sjekk",
+      type: "section",
+      payload: {
+        title: L("Kilder", "Kjelder", "Sources"),
+        bodyMarkdown: L(
+          "Innledning.\n\n" + block("Hvilken kilde er viktigst?", "Innkallingen", "Notatene", 1),
+          "Innleiing.\n\n" + block("Kva kjelde er viktigast?", "Innkallinga", "Notata", 1),
+          en,
+        ),
+      },
+    }],
+  });
+
+  it("samme plass på alle språk: ingen merknad", () => {
+    const result = checkLocalization(sectionPackage("Introduction.\n\n" + block("Which source matters most?", "The invitation", "The notes", 1)));
+    expect(result.answerKeyChanges).toEqual([]);
+  });
+
+  it("fasiten flyttet i engelsk: stopper", () => {
+    const result = checkLocalization(sectionPackage("Introduction.\n\n" + block("Which source matters most?", "The invitation", "The notes", 0)));
+    expect(result.answerKeyChanges.map((c: { detail: string }) => c.detail).join(" ")).toContain("right option (- [x]) in another place");
+    expect(result.answerKeyChanges[0].detail).toContain("en-GB");
+    expect(result.blocks).toBe(true);
+  });
+
+  it("spørsmålet mangler i engelsk: stopper", () => {
+    const result = checkLocalization(sectionPackage("Introduction only."));
+    expect(result.answerKeyChanges.some((c: { detail: string }) => c.detail.includes("en-GB"))).toBe(true);
+  });
+});

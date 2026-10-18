@@ -1644,6 +1644,60 @@ dialog::backdrop {
 .content-think-answer > :first-child { margin-top: 10px; }
 .content-think-answer > :last-child { margin-bottom: 0; }
 
+/* «Sjekk deg selv» (#1074): et flervalgsspørsmål midt i teksten. Svaret teller ikke. Knappene får
+   aria-disabled (ikke disabled) etter svaret, så fokus blir stående der deltakeren trykket. */
+.content-check {
+  margin: 0 0 12px;
+  padding: 10px 12px 12px;
+  border: 1px solid var(--color-border-soft);
+  border-left: 3px solid var(--color-primary);
+  border-radius: 8px;
+  background: #fff;
+}
+.content-check-question { margin: 0 0 10px; display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
+.content-check-label {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--color-primary);
+}
+.content-check-text { flex: 1 1 16rem; font-weight: 600; color: var(--color-text); }
+.content-check-options { display: grid; gap: 6px; }
+.content-check .content-check-option {
+  width: 100%;
+  min-height: 0;
+  margin: 0;
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 9px 12px;
+  text-align: left;
+  font: inherit;
+  color: var(--color-text);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border-soft);
+  border-radius: 8px;
+  cursor: pointer;
+}
+.content-check .content-check-option:hover:not([aria-disabled="true"]) { border-color: var(--color-primary); background: var(--color-row-hover); }
+.content-check .content-check-option:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 2px; }
+.content-check .content-check-option[aria-disabled="true"] { cursor: default; }
+.content-check-mark { flex: 0 0 1.4em; font-weight: 700; text-align: center; color: var(--color-meta); }
+.content-check .content-check-option.is-correct { border-color: var(--color-success); background: #e3f0e8; }
+.content-check .content-check-option.is-correct .content-check-mark { color: var(--color-success); }
+.content-check .content-check-option.is-wrong { border-color: var(--color-error); background: #f8e6e3; }
+.content-check .content-check-option.is-wrong .content-check-mark { color: var(--color-error); }
+.content-check .content-check-option.is-dimmed { opacity: 0.65; }
+.content-check-verdict { margin: 0; font-weight: 700; }
+.content-check-verdict:empty { display: none; }
+.content-check-verdict.is-ok { color: var(--color-success); }
+.content-check-verdict.is-bad { color: var(--color-error); }
+.content-check-explanation { margin-top: 4px; }
+.content-check-feedback:has(.content-check-verdict:not(:empty)) { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--color-border-soft); }
+.content-check-explanation > :first-child { margin-top: 0; }
+.content-check-explanation > :last-child { margin-bottom: 0; }
+
 /* Prompt-boks: en kodeblokk merket «prompt». Teksten brekker; den ruller ikke sidelengs. */
 .content-prompt {
   margin: 0 0 12px;

@@ -25,6 +25,43 @@ function selectText(element) {
   selection?.addRange(range);
 }
 
+// #1074 «Sjekk deg selv»: deltakeren velger ett alternativ. Det riktige markeres, et feil valg
+// markeres som feil, og forklaringen vises. Ingenting sendes eller lagres — svaret teller ikke.
+// aria-disabled, ikke disabled: fokus blir stående på knappen deltakeren trykket på, og
+// tilbakemeldingen leses opp fra aria-live-feltet.
+export function answerCheck(option) {
+  const box = option.closest("[data-content-check]");
+  if (!box || box.dataset.answered === "true") return;
+  box.dataset.answered = "true";
+  const right = option.dataset.correct === "true";
+  for (const button of box.querySelectorAll("[data-check-option]")) {
+    button.setAttribute("aria-disabled", "true");
+    const mark = button.querySelector(".content-check-mark");
+    if (button.dataset.correct === "true") {
+      button.classList.add("is-correct");
+      if (mark) mark.textContent = "✓";
+    } else if (button === option) {
+      button.classList.add("is-wrong");
+      if (mark) mark.textContent = "✗";
+    } else {
+      button.classList.add("is-dimmed");
+    }
+  }
+  option.setAttribute("aria-pressed", "true");
+  const explanation = box.querySelector(".content-check-explanation");
+  if (explanation) explanation.hidden = false;
+  const verdict = box.querySelector(".content-check-verdict");
+  if (verdict) {
+    verdict.classList.add(right ? "is-ok" : "is-bad");
+    verdict.textContent = (right ? box.dataset.right : box.dataset.wrong) ?? "";
+  }
+}
+
+if (typeof document !== "undefined") document.addEventListener("click", (event) => {
+  const option = event.target instanceof Element ? event.target.closest("[data-check-option]") : null;
+  if (option) answerCheck(option);
+});
+
 // Uten et dokument (en enhetstest som importerer en modul som importerer denne) er det ingenting å lytte på.
 if (typeof document !== "undefined") document.addEventListener("click", async (event) => {
   const button = event.target instanceof Element ? event.target.closest(".content-prompt-copy") : null;

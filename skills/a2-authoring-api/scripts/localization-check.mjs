@@ -364,6 +364,27 @@ export function checkFigureLocalization(pkg, { languages = LANGUAGES, primary = 
 // answer-key change, or preserved-token drift. Blind copies are reported and (by default) block,
 // because the requirement is REAL translations, not the primary copied into every locale.
 // #763 (Layer B): text-bearing SVG figures are localized too — folded into `figures` + `blocks`.
+/**
+ * #1074: fasiten i hver «sjekk deg selv»-ramme i en tekst, som et mønster per ramme ("010" = det andre
+ * av tre alternativer er riktig). Plattformen leser rammen slik (src/modules/course/contentBlocks.ts):
+ * alternativene står først, `- [ ]` eller `- [x]`.
+ */
+export function checkAnswerPatterns(text) {
+  const patterns = [];
+  const frame = /^:::[ \t]*(?:sjekk|check)[ \t]+\S[^\r\n]*\r?\n([\s\S]*?)\r?\n:::[ \t]*$/gim;
+  for (const match of String(text ?? "").matchAll(frame)) {
+    let pattern = "";
+    for (const line of match[1].split(/\r?\n/)) {
+      if (pattern === "" && line.trim() === "") continue;
+      const option = /^[ \t]*[-*][ \t]+\[([ xX])\][ \t]+\S/.exec(line);
+      if (!option) break;
+      pattern += option[1].toLowerCase() === "x" ? "1" : "0";
+    }
+    patterns.push(pattern);
+  }
+  return patterns;
+}
+
 export function checkLocalization(pkg, { languages = LANGUAGES, primary = "nb", blindCopyBlocks = true } = {}) {
   const { prose, mcqQuestions } = collectLocalizedFields(pkg);
   const missing = [];
@@ -381,6 +402,17 @@ export function checkLocalization(pkg, { languages = LANGUAGES, primary = "nb", 
   };
 
   for (const field of prose) checkField(field.path, field.value);
+
+  // #1074: fasiten i «sjekk deg selv» skal stå på samme plass på alle språk, i like mange rammer.
+  for (const field of prose) {
+    const reference = checkAnswerPatterns(localeValue(field.value, primary));
+    if (reference.length === 0) continue;
+    const drifted = languages.filter((lang) => lang !== primary && presentLocales(field.value).includes(lang)
+      && checkAnswerPatterns(localeValue(field.value, lang)).join("|") !== reference.join("|"));
+    if (drifted.length > 0) {
+      answerKeyChanges.push({ path: field.path, detail: `a «sjekk deg selv» question has its right option (- [x]) in another place, or a question is missing, in: ${drifted.join(", ")}` });
+    }
+  }
 
   for (const q of mcqQuestions) {
     checkField(`${q.path}.stem`, q.stem);

@@ -1,7 +1,8 @@
 # Section content — text, boxes, prompts, cards, pictures
 
 Contents: [Writing the text](#writing-the-text) · [Headings and lists](#headings-and-lists) ·
-[Table](#table) · [Callout](#callout) · [Prompt](#prompt) · [Cards](#cards) · [Think first](#think-first) · [Icons](#icons) ·
+[Table](#table) · [Callout](#callout) · [Prompt](#prompt) · [Cards](#cards) · [Think first](#think-first) ·
+[Check yourself](#check-yourself) · [Icons](#icons) ·
 [Pictures from the source](#pictures-from-the-source) · [Figures](#figures) ·
 [A finished section](#a-finished-section)
 
@@ -155,6 +156,36 @@ KI leser alt, men sammendraget blir **generelt**. Spør heller etter det du tren
 - In the other languages the marker word stays `:::tenk`; translate the question and the answer.
 - **Never inside a card frame, and no frame inside it.** Frames cannot be nested: the first `:::`
   closes both, and the learner sees the markers as text. `produce-course.mjs` fails on it.
+
+## Check yourself
+
+A short multiple-choice question right after something has been explained. The learner picks an
+answer and sees at once whether it was right, with the explanation. It does not count and is not
+stored — it is there for the learning:
+
+```markdown
+:::sjekk Hvilken kilde er viktigst når du skal skrive referatet?
+- [ ] E-posten med innkallingen
+- [x] Notatene fra møtet
+- [ ] Fjorårets referat
+
+Notatene viser hva som faktisk ble bestemt. Innkallingen sier bare hva som skulle skje.
+:::
+```
+
+- **Where:** right after the core of an explanation, one to three per section. Use it where
+  applying what was just read is the point («anvend, ikke husk») — not to repeat a fact.
+- **From the source only.** The question, the options and the explanation rest on what the source
+  says. The module's test is still the test; this is practice.
+- **Options:** two to four, straight after the question line, each `- [ ]`; exactly one `- [x]`.
+  The wrong options are plausible mistakes, not jokes. Same rules as the module's questions: no
+  option gives the answer away ([modules.md](modules.md#multiple-choice-questions)).
+- **Explanation:** after the options, in ordinary markdown; say why the right one is right. It can
+  be left out, but rarely should be.
+- In the other languages the marker word stays `:::sjekk` and `- [x]` stays where it is; translate
+  the question, the options and the explanation.
+- **Never inside a card frame, and no frame inside it** — as for «think first».
+  `produce-course.mjs` fails on a nested frame, fewer than two options, or not exactly one `- [x]`.
 
 ## Icons
 

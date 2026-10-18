@@ -1155,3 +1155,11 @@ alle ansatte: «Dette er et internt kompetanseverktøy, vi bruker persondata i h
   Produkteier: «OK».
 - Hvem som telles som deltaker: «Telles som deltager: alle som har gjort noe på plattformen.»
   (2026-10-17.) Rollen alene teller ikke, og ingen står som «ikke startet».
+
+## «Sjekk deg selv» (#1074): ramme i teksten, ikke egne felt (2026-10-18)
+
+Produkteier valgte ramme i teksten (`:::sjekk` med `- [ ]` / `- [x]`), samme mønster som «tenk først»,
+framfor sakens forslag om en markør og spørsmålet i egne felt på seksjonsversjonen. Ingen migrasjon,
+og oversetter, eksport/import og skillet virker uten egne spor. Svaret lagres ikke; statistikk per
+spørsmål krever egne felt senere hvis det blir ønsket. Utseendet ble godkjent fra en skisse («Ser
+fint ut»).
