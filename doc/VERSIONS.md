@@ -14,6 +14,10 @@ This document tracks release versions and what each version includes.
 - Banneret som klassifiserte planen (blueprint-hashen) er fjernet. Det var ikke synlig i noen fane
   siden v2.18.13. Hashen beholdes som lagret felt.
 - Grensen 0,85 og «lukk = behold» er designnotatets anbefaling; grensen justeres etter ekte lagringer.
+- QA-porten: «Godta» i forskjellsvisningen lagrer nå en ny modulversjon med kriteriene. Før ble bare en
+  løs rubrikkversjon lagret, og vurderingen brukte fortsatt de gamle kriteriene. Målingen sammenligner
+  felt for felt på det eksakte språket, så en første oversettelse ikke spør. Kriterier som byttes uten
+  å spørre etter «Rediger i samtale»/«Oversett» (fantes før): #1104.
 - **Oversetteren:** en `prompt`-blokk er ikke kode, men en prompt deltakeren kopierer. Teksten i den
   oversettes; gjerdelinjene står (QA-funn: «behold kodeblokker» og «ikke oversett kode» kunne la den
   stå på bokmål).

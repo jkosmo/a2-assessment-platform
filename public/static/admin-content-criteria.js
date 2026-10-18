@@ -567,48 +567,19 @@ export function createCriteriaTools(ctx) {
     return next ?? proposed;
   }
 
-  // B3 (#450): POST the merged criteria as a new RubricVersion. Server-side createRubricVersion
-  // bumps versionNo and stamps generated_from_blueprint_hash via scalingRule passed here.
+  // #928: de godtatte kriteriene lagres som en NY MODULVERSJON, gjennom den vanlige lagringen.
+  //
+  // ⚠️ Første utgave (B3, #450) postet bare en ny rubrikkversjon. Modulversjonen pekte fortsatt på
+  // den gamle, og både Innstillinger og vurderingen leser rubrikken modulversjonen peker på — så
+  // forfatteren fikk «Nye kriterier lagret» mens deltakerne ble vurdert etter de gamle. Koden var
+  // ikke nåbar siden v2.18.13; spørsmålet etter lagring (#928) gjorde den til hovedveien, og
+  // QA-porten fant det. Kriteriene legges i utkastet, og lagringen tar dem med (inlineRubric) i
+  // samme transaksjon som versjonen.
   async function persistMergedRubric(criteriaRecord) {
     if (!ctx.selectedModuleId) return;
-    const blueprintHash = ctx.currentBlueprintHash;
-    const totalMax = Object.values(criteriaRecord).reduce((sum, c) => sum + (Number(c?.maxScore) || 0), 0) || 1;
-    const existingScalingRule = ctx.bundle?.selectedConfiguration?.rubricVersion?.scalingRule ?? {};
-    const scalingRule = {
-      ...existingScalingRule,
-      // `|| 70` turned a legitimate 0 into 70: an author who deliberately set the practical weight
-      // to zero got it silently restored the next time they accepted a criteria-drift suggestion.
-      // Now that the weight is editable in Innstillinger (#896 S3c), 0 is a real value someone can
-      // actually choose.
-      practical_weight: Number.isFinite(Number(existingScalingRule.practical_weight))
-        ? Number(existingScalingRule.practical_weight)
-        : 70,
-      max_total: totalMax,
-    };
-    if (blueprintHash) scalingRule.generated_from_blueprint_hash = blueprintHash;
-    else delete scalingRule.generated_from_blueprint_hash;
-
-    const slot = logProgress("shell.drift.diff.persisting");
-    try {
-      await apiFetch(
-        `/api/admin/content/modules/${encodeURIComponent(ctx.selectedModuleId)}/rubric-versions`,
-        getHeaders,
-        {
-          method: "POST",
-          body: JSON.stringify({ criteria: criteriaRecord, scalingRule, active: true }),
-        },
-      );
-      logResolveSlot(slot, () => escapeHtml(t("shell.drift.diff.persisted")));
-      if (ctx.sessionDraft?.criteria) {
-        ctx.sessionDraft = { ...ctx.sessionDraft, criteria: null };
-      }
-      await loadModule(ctx.selectedModuleId);
-      await refreshBlueprintHash();
-    } catch (err) {
-      logResolveSlot(slot, () =>
-        `${escapeHtml(t("shell.drift.diff.persistError"))}: ${escapeHtml(apiErrorText(err))}`,
-      );
-    }
+    ctx.sessionDraft = { ...(ctx.sessionDraft ?? {}), criteria: criteriaRecord };
+    await ctx.saveDraftBundleInBackground();
+    await refreshBlueprintHash();
   }
 
   // B2 (#449 redesign): fetch new criteria from /generate/rubric using the current taskText

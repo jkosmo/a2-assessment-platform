@@ -2087,12 +2087,23 @@ async function saveDraftBundleInBackground(options = {}) {
   const { taskText, assessorExpectedContent, candidateTaskConstraints, assessmentBlueprint, mcqQuestions, criteria } = resolveDraftForSave();
   // #928: teksten kriteriene ble laget fra (forrige versjon, innholdsspråket), og om det fantes
   // kriterier. Leses FØR lagringen, fordi lagringen laster modulen på nytt.
-  const textForDrift = (task, expected, constraints) =>
-    [task, expected, constraints].map((value) => String(localizeValueForLocale(value ?? "", contentLocale) ?? "")).join(" ");
+  // ⚠️ EKSAKT språk, uten reservespråk. Med reserve ble bokmål sammenlignet med nynorsk første gang
+  // en oversettelse ble lagret, og likheten ble lav selv om innholdet var det samme (QA 2.93.0).
+  const exactLocaleText = (value) => {
+    if (value && typeof value === "object") return typeof value[contentLocale] === "string" ? value[contentLocale] : "";
+    return typeof value === "string" ? value : "";
+  };
+  // Felt for felt: bare felt som HADDE tekst på språket, sammenlignes. Et felt som får sin første
+  // tekst på et nytt språk (en oversettelse), er ikke en endring av noe kriteriene ble laget fra.
   const previousVersion = bundle?.selectedConfiguration?.moduleVersion ?? null;
-  const previousTextForDrift = previousVersion
-    ? textForDrift(previousVersion.taskText, previousVersion.assessorExpectedContent, previousVersion.candidateTaskConstraints)
-    : "";
+  const previousFieldsForDrift = previousVersion
+    ? [previousVersion.taskText, previousVersion.assessorExpectedContent, previousVersion.candidateTaskConstraints].map(exactLocaleText)
+    : ["", "", ""];
+  const textsForDrift = (task, expected, constraints) => {
+    const next = [task, expected, constraints].map(exactLocaleText);
+    const kept = previousFieldsForDrift.map((text, i) => [text, next[i]]).filter(([text]) => text.trim() !== "");
+    return [kept.map(([text]) => text).join(" "), kept.map(([, text]) => text).join(" ")];
+  };
   const hadCriteriaBeforeSave = Object.keys(bundle?.selectedConfiguration?.rubricVersion?.criteria ?? {}).length > 0;
   // #555: MCQ-only drafts have no taskText/rubric/prompt — they save a single MCQ_ONLY module
   // version with a pass-mark policy. assessmentMode/mcqMinPercent are flagged on sessionDraft by
@@ -2285,7 +2296,7 @@ async function saveDraftBundleInBackground(options = {}) {
     // #928: kriteriene fulgte ikke med (de ble gjenbrukt), og teksten er vesentlig endret. Valgte
     // forfatteren kriterier i samme lagring, er spørsmålet besvart alt.
     if (!isMcqOnly && hadCriteriaBeforeSave && !inlineRubric
-      && isSubstantialTextChange(previousTextForDrift, textForDrift(taskText, assessorExpectedContent, candidateTaskConstraints))) {
+      && isSubstantialTextChange(...textsForDrift(taskText, assessorExpectedContent, candidateTaskConstraints))) {
       offerCriteriaRefresh();
     }
     if (afterSave) afterSave();
@@ -4621,6 +4632,7 @@ const criteriaTools = createCriteriaTools({
   get contentLocale() { return contentLocale; },
   get currentBlueprintHash() { return currentBlueprintHash; },
   t, tf, logProgress, logResolveSlot, apiErrorText, getHeaders, loadModule, renderPreview, refreshBlueprintHash, getActiveBlueprint, slugifyLabel, certificationLevelForGeneration,
+  saveDraftBundleInBackground,
 });
 
 const publishFlow = createPublishFlow({

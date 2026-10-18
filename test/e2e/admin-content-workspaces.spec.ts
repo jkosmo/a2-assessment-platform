@@ -4445,7 +4445,7 @@ test.describe("admin content browser coverage", () => {
     nn: "Får fakta rett.",
   };
 
-  async function mockDriftedModule(page: Page) {
+  async function mockDriftedModule(page: Page, opts: { englishOnly?: boolean } = {}) {
     const moduleExport = buildMockModuleExport({
       id: "module-1",
       title: "Trade unions",
@@ -4453,7 +4453,7 @@ test.describe("admin content browser coverage", () => {
     });
     // #928: the question is about the TEXT. A scenario of some length, so a one-word fix stays
     // under the threshold and a rewrite goes over it.
-    moduleExport.selectedConfiguration.moduleVersion.taskText = DRIFT_SCENARIO as never;
+    moduleExport.selectedConfiguration.moduleVersion.taskText = (opts.englishOnly ? { "en-GB": DRIFT_SCENARIO["en-GB"] } : DRIFT_SCENARIO) as never;
     // Fritekst uten flervalg: lagringen krever ellers spørsmål, og drift gjelder fritekstkriteriene.
     (moduleExport.selectedConfiguration.moduleVersion as { assessmentMode?: string }).assessmentMode = "FREETEXT_ONLY";
     moduleExport.selectedConfiguration.moduleVersion.assessmentBlueprint = {
@@ -4537,6 +4537,20 @@ test.describe("admin content browser coverage", () => {
     await expect(question).toHaveCount(0);
   });
 
+  test("#928: the first save of a new language is not a substantial change", async ({ page }) => {
+    await mockDriftedModule(page, { englishOnly: true });
+    // The stored text exists in English only. Saving the Norwegian translation compared Norwegian
+    // with English (fallback lookup), and the low similarity raised a false question.
+    await page.goto("/admin-content/module/module-1/conversation");
+    await page.locator("#previewEditTitle").waitFor();
+    await page.locator(".form-page-languages button", { hasText: /Norsk bokmål/ }).click();
+    await page.locator("#previewEditTaskText").fill("En fagforening forhandler om en ny tariffavtale med en arbeidsgiver. Medlemmene vil ha høyere lønn, kortere arbeidstid og bedre pensjon, og styret må prioritere.");
+    await page.locator("#formSaveBtn").click();
+    await expect(page.getByText(/Draft saved as a new module version|Utkastet er lagret som en ny modulversjon/).last()).toBeVisible();
+    await page.waitForTimeout(500);
+    await expect(page.locator(".toast", { hasText: DRIFT_QUESTION })).toHaveCount(0);
+  });
+
   test("#928: a one-word fix saves without asking", async ({ page }) => {
     await mockDriftedModule(page);
     const fixed = DRIFT_SCENARIO["en-GB"].replace("prioritise", "prioritize");
@@ -4553,8 +4567,10 @@ test.describe("admin content browser coverage", () => {
     await page.locator('input[data-diff-checkbox][data-criterion-id="structure"]').uncheck();
     await clickEnabledButton(page, "Accept selected");
 
-    await expect.poll(() => state.lastRubricVersionBody?.criteria).toBeTruthy();
-    const criteria = state.lastRubricVersionBody.criteria;
+    // #928 QA: the accepted criteria travel in a NEW MODULE VERSION (inline rubric). A loose rubric
+    // version left the module pointing at the old one, and assessment used the old criteria.
+    await expect.poll(() => state.lastModuleVersionBody?.rubric?.criteria).toBeTruthy();
+    const criteria = state.lastModuleVersionBody.rubric.criteria;
 
     // The accepted change lands in the language it was proposed in — and ONLY there.
     expect(criteria.clarity.label).toEqual({ ...CLARITY_LABEL, "en-GB": "Clarity of reasoning" });
@@ -4575,8 +4591,10 @@ test.describe("admin content browser coverage", () => {
     // is the button an author in a hurry presses.
     await clickEnabledButton(page, "Accept all");
 
-    await expect.poll(() => state.lastRubricVersionBody?.criteria).toBeTruthy();
-    const criteria = state.lastRubricVersionBody.criteria;
+    // #928 QA: the accepted criteria travel in a NEW MODULE VERSION (inline rubric). A loose rubric
+    // version left the module pointing at the old one, and assessment used the old criteria.
+    await expect.poll(() => state.lastModuleVersionBody?.rubric?.criteria).toBeTruthy();
+    const criteria = state.lastModuleVersionBody.rubric.criteria;
 
     expect(criteria.clarity.label).toEqual({ ...CLARITY_LABEL, "en-GB": "Clarity of reasoning" });
     expect(criteria.clarity.description).toEqual(CLARITY_DESCRIPTION);
