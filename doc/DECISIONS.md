@@ -1155,3 +1155,22 @@ alle ansatte: «Dette er et internt kompetanseverktøy, vi bruker persondata i h
   Produkteier: «OK».
 - Hvem som telles som deltaker: «Telles som deltager: alle som har gjort noe på plattformen.»
   (2026-10-17.) Rollen alene teller ikke, og ingen står som «ikke startet».
+
+## «Sjekk deg selv» (#1074): ramme i teksten, ikke egne felt (2026-10-18)
+
+Produkteier valgte ramme i teksten (`:::sjekk` med `- [ ]` / `- [x]`), samme mønster som «tenk først»,
+framfor sakens forslag om en markør og spørsmålet i egne felt på seksjonsversjonen. Ingen migrasjon,
+og oversetter, eksport/import og skillet virker uten egne spor. Svaret lagres ikke; statistikk per
+spørsmål krever egne felt senere hvis det blir ønsket. Utseendet ble godkjent fra en skisse («Ser
+fint ut»). Sakens punkt 3 (forfatter-HTML skal ikke kunne lage interaktive elementer) er
+ikke fulgt: rensingen beholder data-attributter, så en forfatter kan lage en lignende knapp. Det er
+godtatt fordi det er ufarlig — skript og hendelsesattributter fjernes, og klikket endrer bare
+utseende og tekst.
+
+## «Fullføring per modul» teller personer, siste forsøk (2026-10-19)
+
+Produkteier: «Endre til telling per person», etter å ha sett seg selv telt både som bestått og ikke
+bestått i samme modul. Hver deltaker telles én gang per modul, med det SISTE forsøket (ikke det beste
+eller det første). En som strøk og venter på sensor etter et nytt forsøk, står derfor under «under
+vurdering», ikke «ikke bestått». Alle forsøk vises i en egen kolonne «Forsøk». Feltnavnene i API og
+CSV (`totalSubmissions` osv.) er beholdt for ikke å brekke eksporter; betydningen er nå personer.

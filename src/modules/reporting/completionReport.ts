@@ -11,10 +11,15 @@ import { moduleIdClause } from "./scope.js";
 type CompletionRow = {
   moduleId: string;
   moduleTitle: string;
+  /** Deltakere med minst ett forsøk (feltnavnet er beholdt for eksport og klient). */
   totalSubmissions: number;
+  /** Deltakere der det siste forsøket er fullført. */
   completedSubmissions: number;
+  /** Deltakere der det siste forsøket er til vurdering. */
   underReviewSubmissions: number;
   completionRate: number;
+  /** Alle forsøk, også tidligere forsøk som er tatt på nytt. */
+  attempts: number;
 };
 
 type PassRatesRow = {
@@ -55,15 +60,31 @@ export async function getCompletionReport(filters: ReportFilters, locale: Suppor
         }
       : {}),
     ...(filters.orgUnit ? { user: { department: filters.orgUnit } } : {}),
-    ...(filters.statuses && filters.statuses.length > 0
-      ? { submissionStatus: { in: asSubmissionStatuses(filters.statuses) } }
-      : {}),
   } as const;
 
   const submissions = scope === null ? [] : await reportingRepository.findSubmissionsForCompletionReport(where);
+  // Statusfilteret gjelder personens SISTE forsøk, ikke hvert forsøk — ellers ville en som strøk og
+  // så besto, telt med under «ikke fullført» på det gamle forsøket.
+  const statusFilter = filters.statuses && filters.statuses.length > 0 ? new Set<string>(asSubmissionStatuses(filters.statuses)) : null;
+
+  // ⚠️ PER PERSON, ikke per forsøk (produkteier 2026-10-19). En deltaker som strøk og tok modulen
+  // på nytt, ble telt to ganger — én gang som «ikke bestått» — selv om det siste forsøket besto.
+  // Det siste forsøket er det som gjelder, som i deltakerdetaljene (getCompletionLearnerReport).
+  //
+  // Spørringen sorterer nyeste først per bruker, så det første forsøket vi ser per (modul, person) er
+  // det siste. Forsøkene telles per person, så en person som er filtrert bort, heller ikke teller med
+  // i forsøkene.
+  const latestByPerson = new Map<string, { submission: (typeof submissions)[number]; attempts: number }>();
+  for (const submission of submissions) {
+    const personKey = `${submission.module.id}|${submission.userId}`;
+    const seen = latestByPerson.get(personKey);
+    if (seen) seen.attempts += 1;
+    else latestByPerson.set(personKey, { submission, attempts: 1 });
+  }
 
   const rowsByModule = new Map<string, CompletionRow>();
-  for (const submission of submissions) {
+  for (const { submission, attempts } of latestByPerson.values()) {
+    if (statusFilter && !statusFilter.has(submission.submissionStatus)) continue;
     const key = submission.module.id;
     const current = rowsByModule.get(key) ?? {
       moduleId: submission.module.id,
@@ -80,7 +101,10 @@ export async function getCompletionReport(filters: ReportFilters, locale: Suppor
       completedSubmissions: 0,
       underReviewSubmissions: 0,
       completionRate: 0,
+      attempts: 0,
     };
+    current.attempts += attempts;
+    rowsByModule.set(key, current);
     current.totalSubmissions += 1;
     if (submission.submissionStatus === SubmissionStatus.COMPLETED) {
       current.completedSubmissions += 1;
@@ -88,18 +112,22 @@ export async function getCompletionReport(filters: ReportFilters, locale: Suppor
     if (submission.submissionStatus === SubmissionStatus.UNDER_REVIEW) {
       current.underReviewSubmissions += 1;
     }
-    rowsByModule.set(key, current);
   }
 
-  const rows = Array.from(rowsByModule.values()).map((row) => ({
-    ...row,
-    completionRate: row.totalSubmissions > 0 ? round2(row.completedSubmissions / row.totalSubmissions) : 0,
-  }));
+  const rows = Array.from(rowsByModule.values())
+    .map((row) => ({
+      ...row,
+      completionRate: row.totalSubmissions > 0 ? round2(row.completedSubmissions / row.totalSubmissions) : 0,
+    }))
+    // Fast rekkefølge: spørringen sorterer på bruker (siste forsøk per person), og uten dette ville
+    // radene byttet plass hver gang en ny deltaker leverte.
+    .sort((a, b) => a.moduleTitle.localeCompare(b.moduleTitle, locale));
 
   const totals = {
     totalSubmissions: rows.reduce((sum, row) => sum + row.totalSubmissions, 0),
     completedSubmissions: rows.reduce((sum, row) => sum + row.completedSubmissions, 0),
     underReviewSubmissions: rows.reduce((sum, row) => sum + row.underReviewSubmissions, 0),
+    attempts: rows.reduce((sum, row) => sum + row.attempts, 0),
   };
 
   return {
@@ -131,8 +159,14 @@ export async function getPassRatesReport(filters: ReportFilters, locale: Support
   const submissions = scope === null ? [] : await reportingRepository.findSubmissionsForPassRatesReport(where);
 
   const outcomeFilter = new Set((filters.statuses ?? []).map((value) => value.toUpperCase()));
+  // ⚠️ Per person, siste forsøk — se getCompletionReport. Et strøket forsøk som er tatt på nytt og
+  // bestått, er ikke en «ikke bestått».
   const rowsByModule = new Map<string, PassRatesRow>();
+  const counted = new Set<string>();
   for (const submission of submissions) {
+    const personKey = `${submission.module.id}|${submission.userId}`;
+    if (counted.has(personKey)) continue;
+    counted.add(personKey);
     const latestDecision = submission.decisions[0];
     const outcome =
       // ⚠️ Spør om STATUSEN er avgjort, ikke om det finnes et vedtak (#951). En erstattet

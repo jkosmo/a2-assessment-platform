@@ -21,7 +21,7 @@ import path from "node:path";
 const RAPPORT = path.resolve(process.cwd(), "test-results", "stage-rapport");
 // Begge utgivelsestestene kjøres som standard. Gi én fil som argument for å kjøre bare den:
 //   npm run test:stage:release -- test/stage/release-2-81-layouts.spec.ts
-const SPEC = process.argv.slice(2).join(" ") || "test/stage/release-2-78-x.spec.ts test/stage/release-2-81-layouts.spec.ts test/stage/release-2-84-blokker.spec.ts test/stage/release-2-88-oppdater-kurs.spec.ts test/stage/release-2-91-aktivitet.spec.ts";
+const SPEC = process.argv.slice(2).join(" ") || "test/stage/release-2-78-x.spec.ts test/stage/release-2-81-layouts.spec.ts test/stage/release-2-84-blokker.spec.ts test/stage/release-2-88-oppdater-kurs.spec.ts test/stage/release-2-91-aktivitet.spec.ts test/stage/release-2-95-telling.spec.ts";
 
 fs.rmSync(RAPPORT, { recursive: true, force: true });
 fs.mkdirSync(RAPPORT, { recursive: true });

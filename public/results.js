@@ -247,6 +247,10 @@ function renderCompletion(passRatesRows, completionRows) {
       rateTd.textContent = "—";
     }
     tr.appendChild(rateTd);
+    // Alle forsøk, også dem som er tatt på nytt. De andre kolonnene teller personer (siste forsøk).
+    const attemptsTd = document.createElement("td");
+    attemptsTd.textContent = String(row.attempts ?? "—");
+    tr.appendChild(attemptsTd);
     completionBody.appendChild(tr);
   }
 }

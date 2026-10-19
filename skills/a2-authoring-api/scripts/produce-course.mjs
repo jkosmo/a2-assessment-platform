@@ -218,23 +218,68 @@ function withoutCodeBlocks(text) {
 function frameProblems(prose) {
   const problems = [];
   let open = null;
+  // #1074: linjene i en :::sjekk-ramme, til kontrollen når den lukkes.
+  let checkLines = null;
+  // Linja over: en åpningslinje skal ha en BLANK linje over seg (eller en overskrift, eller slutten på en
+  // annen ramme). Uten den kan plattformen lese åpningslinja som en del av det over — en liste, et
+  // sitat, en tabell, en HTML-blokk — og rammen blir ikke tegnet; for :::sjekk ser deltakeren da fasiten
+  // som en avkrysset liste (QA 2.94.0).
+  //
+  // ⚠️ Låst til malen, ikke en etterligning av hva plattformen leser som hva. Første utgave lette etter
+  // lister og tabeller og bommet på fortsettelseslinjer, sitater og HTML; den neste ville bommet på noe
+  // annet. En blank linje virker alltid.
+  let previous = "";
   for (const line of String(prose ?? "").split(/\r?\n/)) {
-    const opener = /^:::[ \t]*(kort|cards|tenk|think)\b/i.exec(line);
-    if (opener && (/^(kort|cards)$/i.test(opener[1]) ? /^:::[ \t]*(?:kort|cards)[ \t]*$/i.test(line) : /^:::[ \t]*(?:tenk|think)[ \t]+\S/i.test(line))) {
+    const above = previous;
+    previous = line;
+    const opener = /^:::[ \t]*(kort|cards|tenk|think|sjekk|check)\b/i.exec(line);
+    if (opener && (/^(kort|cards)$/i.test(opener[1]) ? /^:::[ \t]*(?:kort|cards)[ \t]*$/i.test(line) : /^:::[ \t]*(?:tenk|think|sjekk|check)[ \t]+\S/i.test(line))) {
       const kind = opener[1].toLowerCase();
+      if (above.trim() !== "" && !/^#{1,6}[ \t]/.test(above) && !/^:::[ \t]*$/.test(above)) {
+        problems.push(`a :::${kind} line has text right above it — put a blank line above the frame; without one the platform can read the frame as part of the list, quote or table above, and not draw it`);
+      }
       if (open) problems.push(`a :::${kind} frame is opened inside a :::${open} frame — frames cannot be nested; the first ::: closes both, and the learner sees the markers as text`);
-      else open = kind;
+      else {
+        open = kind;
+        checkLines = kind === "sjekk" || kind === "check" ? [] : null;
+      }
       continue;
     }
     if (/^:::[ \t]*$/.test(line)) {
-      if (open) open = null;
-      else problems.push("a ::: closes a frame that was never opened");
+      if (open) {
+        if (checkLines) problems.push(...checkProblems(open, checkLines));
+        open = null;
+        checkLines = null;
+      } else problems.push("a ::: closes a frame that was never opened");
+      continue;
     }
+    if (checkLines) checkLines.push(line);
   }
   if (open) problems.push(`a :::${open} frame is opened and never closed — the platform shows it as plain text; close it with ::: on its own line`);
   return problems;
 }
 
+
+/**
+ * #1074: en «sjekk deg selv»-ramme er en blokk bare med minst to alternativer først i rammen og nøyaktig
+ * ett riktig (`- [x]`). Ellers viser plattformen markørene som tekst — samme regel som
+ * src/modules/course/contentBlocks.ts.
+ */
+function checkProblems(kind, lines) {
+  let at = 0;
+  while (at < lines.length && lines[at].trim() === "") at += 1;
+  const options = [];
+  while (at < lines.length) {
+    const option = /^[ \t]*[-*][ \t]+\[([ xX])\][ \t]+\S/.exec(lines[at]);
+    if (!option) break;
+    options.push(option[1].toLowerCase() === "x");
+    at += 1;
+  }
+  const right = options.filter(Boolean).length;
+  if (options.length < 2) return [`a :::${kind} question needs at least two options (\`- [ ]\` / \`- [x]\`) straight after the question line — the learner sees the markers as text`];
+  if (right !== 1) return [`a :::${kind} question needs exactly one right option marked \`- [x]\` (it has ${right}) — the learner sees the markers as text`];
+  return [];
+}
 
 function checkLearnerText(pkg) {
   const details = [];

@@ -1813,7 +1813,8 @@ ${buildLanguageEnforcementDirective(input.targetLocale)}
 
 - Translate ONLY human-readable text. Preserve meaning, tone and intended audience.
 - Keep ALL markdown formatting exactly: headings (#), lists, links, emphasis, code blocks, tables, images.
-- Keep block markers exactly as written: a line \`:::kort\`, \`:::cards\`, \`:::tenk\` or \`:::think\` keeps its marker word untranslated, and a closing line \`:::\` stays. Translate the question after \`:::tenk\` / \`:::think\` on the same line, and the text inside the block.
+- Keep block markers exactly as written: a line \`:::kort\`, \`:::cards\`, \`:::tenk\`, \`:::think\`, \`:::sjekk\` or \`:::check\` keeps its marker word untranslated, and a closing line \`:::\` stays. Translate the question after \`:::tenk\` / \`:::think\` / \`:::sjekk\` / \`:::check\` on the same line, and the text inside the block.
+- In a \`:::sjekk\` / \`:::check\` block, each option line starts with \`- [ ]\` or \`- [x]\`. Keep that start EXACTLY (the \`x\` marks the right answer — never move it); translate only the option text after it.
 - A fenced block marked \`prompt\` (\`\`\`prompt … \`\`\`) is NOT code: it is a prompt the learner copies into an AI tool, written in natural language. Translate its text like the rest, including what stands in [square brackets]; keep the fence lines \`\`\`prompt and \`\`\` exactly.
 - Do NOT translate or alter URLs, code, or {{asset:...}} placeholders.
 - Do not add or remove content, fields, or markdown structure.

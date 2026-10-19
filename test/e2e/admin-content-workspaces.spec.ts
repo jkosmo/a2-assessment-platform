@@ -4598,6 +4598,37 @@ test.describe("admin content browser coverage", () => {
     expect(state.lastModuleVersionBody).toBe(versionsBefore);
   });
 
+  test("#1104: «Request a change» on a module with criteria keeps them; the #928 question asks instead", async ({ page }) => {
+    const state = await mockDriftedModule(page);
+    let rubricGenerations = 0;
+    await page.route("**/api/admin/content/generate/rubric", async (route: Route) => {
+      rubricGenerations += 1;
+      await route.fallback();
+    });
+    await page.route("**/generate/module-draft/revise", async (route: Route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ draft: { taskText: REWRITTEN_SCENARIO, assessorExpectedContent: "Guidance text", candidateTaskConstraints: "" } }),
+      });
+    });
+    await page.goto("/admin-content/module/module-1/conversation");
+    await page.locator("#previewEditTitle").waitFor();
+    await clickEnabledButton(page, /^Request a change$|^Be om endring$/);
+    await page.locator("#dialogReviseInput").fill("Gjør det om til et anbudsscenario");
+    await page.locator("#dialogReviseSubmit").click();
+    await expect(page.locator("#previewEditTaskText")).toHaveValue(REWRITTEN_SCENARIO);
+    await page.locator("#formSaveBtn").click();
+    await expect(page.getByText(/Draft saved as a new module version|Utkastet er lagret som en ny modulversjon/).last()).toBeVisible();
+
+    // The stored criteria were referenced, not replaced — and none were generated behind the author's back.
+    expect(state.lastModuleVersionBody?.rubric).toBeUndefined();
+    expect(state.lastModuleVersionBody?.rubricVersionId).toBeTruthy();
+    expect(rubricGenerations).toBe(0);
+    // The text changed substantially, so the author is asked.
+    await expect(page.locator(".toast", { hasText: DRIFT_QUESTION })).toHaveCount(1);
+  });
+
   test("#928: a one-word fix saves without asking", async ({ page }) => {
     await mockDriftedModule(page);
     const fixed = DRIFT_SCENARIO["en-GB"].replace("prioritise", "prioritize");

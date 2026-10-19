@@ -35,6 +35,19 @@ const THINK_LABELS: Record<string, { label: string; show: string }> = {
   "en-GB": { label: "Think first", show: "Show the answer" },
 };
 
+// #1074: merkelappen og tilbakemeldingen. Tilbakemeldingen settes av content-blocks.js fra data-
+// attributtene, så skriptet trenger ingen oversettelser.
+// srRight/srChosen: skjult tekst for skjermlesere på det riktige og det valgte alternativet, når
+// deltakeren har svart — merket (✓/✗) og fargen er ellers det eneste som viser det.
+const CHECK_LABELS: Record<string, { label: string; right: string; wrong: string; srRight: string; srChosen: string }> = {
+  nb: { label: "Sjekk deg selv", right: "Riktig!", wrong: "Ikke helt. Riktig svar er markert.", srRight: "riktig svar", srChosen: "ditt svar" },
+  nn: { label: "Sjekk deg sjølv", right: "Rett!", wrong: "Ikkje heilt. Rett svar er markert.", srRight: "rett svar", srChosen: "svaret ditt" },
+  "en-GB": { label: "Check yourself", right: "Correct!", wrong: "Not quite. The right answer is marked.", srRight: "right answer", srChosen: "your answer" },
+};
+
+/** Et alternativ: `- [ ] tekst` eller `- [x] tekst` (også `*`, og stor X). */
+const CHECK_OPTION = /^[ \t]*[-*][ \t]+\[([ xX])\][ \t]+(\S.*)$/;
+
 const escapeHtml = (text: string) =>
   text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 
@@ -60,6 +73,14 @@ const textOf = (html: string) =>
     .replace(/\s+/g, " ")
     .trim();
 
+interface CheckToken extends Tokens.Generic {
+  type: "contentCheck";
+  raw: string;
+  question: Tokens.Generic[];
+  options: Array<{ correct: boolean; tokens: Tokens.Generic[] }>;
+  tokens: Tokens.Generic[];
+}
+
 interface CardsToken extends Tokens.Generic {
   type: "contentCards";
   raw: string;
@@ -77,6 +98,7 @@ interface ThinkToken extends Tokens.Generic {
 function createSectionMarked(locale?: string): Marked {
   const labels = COPY_LABELS[locale ?? "nb"]!;
   const think = THINK_LABELS[locale ?? "nb"]!;
+  const check = CHECK_LABELS[locale ?? "nb"]!;
 
   return new Marked({
     extensions: [
@@ -111,6 +133,67 @@ function createSectionMarked(locale?: string): Marked {
             `<span class="content-think-text">${question}</span>` +
             `<span class="content-think-hint">${escapeHtml(think.show)}</span>` +
             `</summary><div class="content-think-answer">${answer}</div></details>\n`
+          );
+        },
+      },
+      {
+        // #1074: «Sjekk deg selv» — et flervalgsspørsmål midt i teksten. Teller ikke og lagres ikke.
+        //   :::sjekk Hvilken kilde er viktigst?
+        //   - [ ] Innkallingen
+        //   - [x] Notatene fra møtet
+        //   Forklaringen, i vanlig markdown.
+        //   :::
+        // Minst to alternativer og nøyaktig ett riktig; ellers er det ingen blokk, og teksten står som
+        // den er (skillets kontroll melder det). Klikket håndteres av public/static/content-blocks.js.
+        // Rensingen beholder data-attributter, så en forfatter KAN skrive en lignende knapp selv; det er
+        // ufarlig — skript og hendelsesattributter fjernes, og klikket endrer bare utseende og tekst.
+        name: "contentCheck",
+        level: "block",
+        start(src: string) {
+          return src.match(/^:::[ \t]*(?:sjekk|check)[ \t]+\S/im)?.index;
+        },
+        tokenizer(src: string) {
+          const match = /^:::[ \t]*(?:sjekk|check)[ \t]+([^\r\n]*\S)[ \t]*\r?\n([\s\S]*?)\r?\n:::[ \t]*(?=\r?\n|$)/i.exec(src);
+          if (!match) return undefined;
+          const lines = match[2]!.split(/\r?\n/);
+          let at = 0;
+          while (at < lines.length && lines[at]!.trim() === "") at += 1;
+          const options: Array<{ correct: boolean; text: string }> = [];
+          while (at < lines.length) {
+            const option = CHECK_OPTION.exec(lines[at]!);
+            if (!option) break;
+            options.push({ correct: option[1]!.toLowerCase() === "x", text: option[2]! });
+            at += 1;
+          }
+          if (options.length < 2 || options.filter((o) => o.correct).length !== 1) return undefined;
+          const token: CheckToken = { type: "contentCheck", raw: match[0], question: [], options: [], tokens: [] };
+          this.lexer.inlineTokens(match[1]!, token.question as Tokens.Generic[] as never);
+          for (const option of options) {
+            const tokens: Tokens.Generic[] = [];
+            this.lexer.inlineTokens(option.text, tokens as never);
+            token.options.push({ correct: option.correct, tokens });
+          }
+          this.lexer.blockTokens(lines.slice(at).join("\n"), token.tokens as Tokens.Generic[] as never);
+          return token;
+        },
+        renderer(token) {
+          const t = token as CheckToken;
+          const question = this.parser.parseInline(t.question as never);
+          const options = t.options
+            .map((option, i) =>
+              `<button type="button" class="content-check-option" data-check-option data-correct="${option.correct ? "true" : "false"}">` +
+              `<span class="content-check-mark" aria-hidden="true">${String.fromCharCode(65 + i)}</span>` +
+              `<span class="content-check-option-text">${this.parser.parseInline(option.tokens as never)}</span></button>`,
+            )
+            .join("");
+          const explanation = this.parser.parse(t.tokens as never);
+          return (
+            `<div class="content-check" data-content-check data-right="${escapeHtml(check.right)}" data-wrong="${escapeHtml(check.wrong)}" data-sr-right="${escapeHtml(check.srRight)}" data-sr-chosen="${escapeHtml(check.srChosen)}">` +
+            `<p class="content-check-question"><span class="content-check-label">${escapeHtml(check.label)}</span>` +
+            `<span class="content-check-text">${question}</span></p>` +
+            `<div class="content-check-options" role="group" aria-label="${escapeHtml(textOf(question))}">${options}</div>` +
+            `<div class="content-check-feedback" aria-live="polite"><p class="content-check-verdict"></p>` +
+            `<div class="content-check-explanation" hidden>${explanation}</div></div></div>\n`
           );
         },
       },

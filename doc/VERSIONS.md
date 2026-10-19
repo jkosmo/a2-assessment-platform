@@ -2,6 +2,45 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.95.0 - 2026-10-19
+
+### «Fullføring per modul» teller personer, ikke forsøk
+
+- Resultater → «Fullføring per modul» og bestått-rapporten teller nå hver deltaker én gang, med det
+  SISTE forsøket. Før ble hvert forsøk telt: en som strøk og så besto, sto under både «Bestått» og
+  «Ikke bestått», og «Totalt» var antall innleveringer. Produkteier oppdaget det på egne tall.
+- «Totalt» heter «Deltakere», og en ny siste kolonne «Forsøk» viser alle forsøk (også i CSV-eksporten,
+  feltet `attempts`). Nøkkeltallet «avgjørelser» heter «vurderte» og teller personer per modul
+  (fire deltakere med tre moduler hver gir 12).
+- Statusfilteret gjelder det siste forsøket: et gammelt forsøk drar ikke med seg en person som har
+  levert på nytt.
+- Samme regel som deltakerdetaljene under tabellen har brukt hele tiden; stage-testen sammenligner de
+  to for hver modul.
+- QA-porten: modulradene står i fast rekkefølge (tittel); «erstattet av et nyere forsøk» har fått
+  tekst i deltakerdetaljene (vistes som rå nøkkel når datofilteret kuttet bort det nye forsøket).
+- Rotårsak: de to modulrapportene ble skrevet før deltakerdetaljene og fikk aldri regelen «siste forsøk
+  per person». Ingen test hadde en deltaker med mer enn ett forsøk. Den nye integrasjonstesten har det.
+
+## 2.94.0 - 2026-10-18
+
+### «Sjekk deg selv» i seksjoner (#1074); kriterier byttes ikke ut uten å spørre (#1104)
+
+- **#1074:** et flervalgsspørsmål midt i seksjonsteksten. Forfatteren skriver `:::sjekk Spørsmålet`,
+  alternativene som `- [ ]`, det riktige som `- [x]`, en forklaring og `:::`. Deltakeren velger, ser
+  riktig/feil og forklaringen med en gang. Teller ikke og lagres ikke. Ramme i teksten som «tenk først»
+  (produkteier valgte det framfor egne felt): ingen migrasjon; oversetter, eksport/import og skillet
+  virker. Skillet skriver det (section-content.md «Check yourself»), kontrollen krever 2+ alternativer
+  og nøyaktig ett riktig, og språkkontrollen krever samme fasit på alle språk.
+- **#1104:** «Be om endring», «Oversett» og «Generer innhold» lager ikke lenger nye kriterier for en
+  modul som har kriterier; lagringen bytter dem ikke ut. Er teksten vesentlig endret, spør #928 etter
+  lagringen. Bytte fra flervalg til fritekst lager kriterier som før.
+- QA-porten: skjermlesere får «riktig svar»/«ditt svar» på alternativene etter svaret; skillet krever
+  en blank linje over hver ramme (`:::sjekk`, `:::tenk`, `:::kort`), unntatt etter en overskrift eller
+  en annen ramme. Rett under en liste, et sitat eller en tabell tegner plattformen ikke rammen (for
+  `:::sjekk` ville deltakeren sett fasiten som en avkrysset liste).
+- **#1103:** talenotater kommer med når en .pptx brukes som kilde ved KI-generering (var allerede
+  slik; vakt med den ekte tolkeren).
+
 ## 2.93.0 - 2026-10-18
 
 ### Spørsmål etter lagring når oppgaveteksten er vesentlig endret (#928); prompt-blokker oversettes

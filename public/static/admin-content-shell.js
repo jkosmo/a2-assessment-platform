@@ -4330,6 +4330,11 @@ function askForMcqGeneration(sourceMaterial, certLevel, locale, generationMode) 
 async function populateSessionDraftCriteriaInBackground() {
   if (!sessionDraft) return;
   if (sessionDraft.criteria) return;
+  // #1104: bare når modulen IKKE har kriterier fra før. Etter «Be om endring» eller «Oversett» på en
+  // modul med kriterier ble det laget nye her, og lagringen sendte dem med (inlineRubric) — de
+  // lagrede, også håndredigerte, ble byttet ut uten å spørre, og de nye fantes bare på ett språk.
+  // Nå beholdes de; er teksten vesentlig endret, spør #928 etter lagringen (offerCriteriaRefresh).
+  if (Object.keys(bundle?.selectedConfiguration?.rubricVersion?.criteria ?? {}).length > 0) return;
   // translateLocalizedText returns a locale MAP, so String() on it produced the literal
   // "[object Object]" - and the criteria generator was asked to build a rubric for a task it
   // never saw. localizeValue picks the text for the active locale, which is what was meant.

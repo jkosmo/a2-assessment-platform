@@ -12,11 +12,14 @@ type ReportingRepositoryClient = Pick<
 
 export function createReportingRepository(client: ReportingRepositoryClient = prisma) {
   return {
+    // Nyeste først per person: rapporten teller det SISTE forsøket til hver deltaker.
     findSubmissionsForCompletionReport(where: object) {
       return client.submission.findMany({
         where,
+        orderBy: [{ userId: "asc" }, { submittedAt: "desc" }],
         select: {
           moduleId: true,
+          userId: true,
           submissionStatus: true,
           module: { select: { id: true, title: true } },
         },
@@ -26,8 +29,10 @@ export function createReportingRepository(client: ReportingRepositoryClient = pr
     findSubmissionsForPassRatesReport(where: object) {
       return client.submission.findMany({
         where,
+        orderBy: [{ userId: "asc" }, { submittedAt: "desc" }],
         select: {
           id: true,
+          userId: true,
           submissionStatus: true,
           module: { select: { id: true, title: true } },
           decisions: {

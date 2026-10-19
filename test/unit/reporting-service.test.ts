@@ -3,11 +3,13 @@ import { SubmissionStatus } from "../../src/db/prismaRuntime.js";
 import { warmModuleGraph } from "../support/moduleGraphWarmup.js";
 
 const findSubmissionsForPassRatesReport = vi.fn();
+const findSubmissionsForCompletionReport = vi.fn();
 const findMcqResponsesForQualityReport = vi.fn();
 
 vi.mock("../../src/repositories/reportingRepository.js", () => ({
   reportingRepository: {
     findSubmissionsForPassRatesReport,
+    findSubmissionsForCompletionReport,
     findMcqResponsesForQualityReport,
   },
 }));
@@ -55,18 +57,21 @@ describe("reporting service", () => {
     findSubmissionsForPassRatesReport.mockResolvedValue([
       {
         id: "submission-1",
+        userId: "user-1",
         submissionStatus: SubmissionStatus.COMPLETED,
         module: { id: "module-1", title: "Module One" },
         decisions: [{ passFailTotal: true }],
       },
       {
         id: "submission-2",
+        userId: "user-2",
         submissionStatus: SubmissionStatus.COMPLETED,
         module: { id: "module-1", title: "Module One" },
         decisions: [{ passFailTotal: false }],
       },
       {
         id: "submission-3",
+        userId: "user-3",
         submissionStatus: SubmissionStatus.UNDER_REVIEW,
         module: { id: "module-1", title: "Module One" },
         decisions: [],
@@ -104,6 +109,19 @@ describe("reporting service", () => {
       underReviewCount: 0,
       passRate: 1,
     });
+  });
+
+  it("completion: one row per module in title order, people counted once by their latest attempt", async () => {
+    // Spørringen leverer nyeste først per bruker; Beta kommer før Alfa i svaret.
+    findSubmissionsForCompletionReport.mockResolvedValue([
+      { moduleId: "m-b", userId: "u-1", submissionStatus: SubmissionStatus.COMPLETED, module: { id: "m-b", title: "Beta" } },
+      { moduleId: "m-a", userId: "u-1", submissionStatus: SubmissionStatus.UNDER_REVIEW, module: { id: "m-a", title: "Alfa" } },
+      { moduleId: "m-a", userId: "u-1", submissionStatus: SubmissionStatus.COMPLETED, module: { id: "m-a", title: "Alfa" } },
+    ]);
+    const { getCompletionReport } = await import("../../src/modules/reporting/index.js");
+    const report = await getCompletionReport({}, "nb");
+    expect(report.rows.map((row) => row.moduleTitle)).toEqual(["Alfa", "Beta"]);
+    expect(report.rows[0]).toMatchObject({ totalSubmissions: 1, completedSubmissions: 0, underReviewSubmissions: 1, attempts: 2 });
   });
 
   it("flags MCQ quality issues for easy and low-discrimination questions", async () => {
