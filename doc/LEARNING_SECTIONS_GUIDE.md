@@ -99,7 +99,7 @@ eksporteres og importeres som resten. Hjelpen i seksjonseditoren (spørsmålsteg
 
   Oppgaven står på første linje. Eksempelsvaret er teksten under; sjekklista er `- [ ]`-linjene til
   slutt (den kan sløyfes). Deltakeren skriver i et tekstfelt, åpner **Vis eksempelsvar** og krysser
-  av. Ingenting sendes eller teller; teksten deltakeren skrev, blir bare i nettleseren hens.
+  av. Ingenting sendes eller teller; teksten deltakeren skrev, blir bare i nettleserfanen hens og forsvinner når fanen lukkes.
 - **Repetisjonskort** (#1078): begrep på forsiden, forklaring på baksiden.
 
   ```markdown
@@ -171,7 +171,7 @@ fortsatt.)
   **«Marker seksjon lest, og gå til testen»** — for da er det dit du skal, ikke forbi (#924).
 - I teksten kan det stå små øvelser som ikke teller: «tenk først», «sjekk deg selv», **steg for
   steg** (bla med Neste/Forrige eller piltastene), **skriv selv** (skriv, se eksempelsvaret og kryss av;
-  teksten blir bare i nettleseren din) og **repetisjonskort** (snu kortet med klikk, mellomrom eller
+  teksten blir bare i nettleserfanen din til du lukker den) og **repetisjonskort** (snu kortet med klikk, mellomrom eller
   Enter, og marker «Kunne det» eller «Øv mer»).
 - **Siste element i kurset har ingen knapp.** Det er ingenting å gå videre til; lesningen
   registreres av systemet når du åpner seksjonen.

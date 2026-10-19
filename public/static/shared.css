@@ -1753,7 +1753,10 @@ dialog::backdrop {
 .content-step-body img { max-width: 100%; height: auto; }
 .content-steps[data-ready="true"] .content-steps-list { padding: 0; list-style: none; }
 .content-steps[data-ready="true"] .content-step:not(.is-current) { display: none; }
-.content-steps:focus { outline: none; }
+/* Fokus på selve blokken: ingen ring etter et klikk i teksten, men synlig når den kom fra tastaturet
+   (piltast fra en lenke i et steg som ble skjult). */
+.content-steps:focus:not(:focus-visible) { outline: none; }
+.content-steps:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 2px; }
 .content-steps-nav { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--color-border-soft); }
 .content-steps-status { flex: 1 1 auto; min-width: 0; text-align: center; font-size: 13px; color: var(--color-meta); font-variant-numeric: tabular-nums; }
 .content-steps-count { margin: 0; }

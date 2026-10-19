@@ -169,7 +169,12 @@ export function showStep(block, index) {
   const total = state.items.length;
   const at = Math.min(Math.max(index, 0), total - 1);
   state.at = at;
+  // Står fokus på en lenke eller knapp i steget som skjules, mister nettleseren fokus til <body>, og
+  // neste piltast treffer ikke gjennomgangen (QA-porten, 2.96.0). Fokus flyttes da til blokken selv.
+  const active = block.ownerDocument.activeElement;
+  const hidesFocus = Boolean(active) && state.items.some((item, i) => i !== at && item.contains(active));
   state.items.forEach((item, i) => item.classList.toggle("is-current", i === at));
+  if (hidesFocus) block.focus();
   state.dots.forEach((dot, i) => dot.classList.toggle("is-on", i === at));
   state.prev.setAttribute("aria-disabled", at === 0 ? "true" : "false");
   state.next.setAttribute("aria-disabled", at === total - 1 ? "true" : "false");
@@ -192,11 +197,12 @@ export function moveStep(block, delta) {
   showStep(block, target);
 }
 
-// #1076: tekstfeltet virker uten skript. Skriptet tar bare vare på teksten i denne nettleseren, så den
-// ikke forsvinner om siden lastes på nytt. Nøkkelen (data-write-key) lager tjeneren av oppgaven og
-// eksempelsvaret — den skiller øvelsene fra hverandre, også på tvers av seksjoner og språk. Alt mot
-// localStorage står i try/catch: privat vindu, blokkert lagring eller full kvote skal bare bety at
-// teksten ikke huskes.
+// #1076: tekstfeltet virker uten skript. Skriptet tar bare vare på teksten i denne fanen, så den ikke
+// forsvinner om siden lastes på nytt. sessionStorage, ikke localStorage (QA-porten, 2.96.0): teksten
+// forsvinner når fanen lukkes, så neste bruker av en delt PC ikke finner den. Nøkkelen (data-write-key)
+// lager tjeneren av oppgaven og eksempelsvaret — den skiller øvelsene fra hverandre, også på tvers av
+// seksjoner og språk. Alt mot lagringen står i try/catch: privat vindu, blokkert lagring eller full
+// kvote skal bare bety at teksten ikke huskes.
 const WRITE_PREFIX = "a2.skriv.";
 
 function writeStorageKey(block) {
@@ -212,7 +218,7 @@ export function enhanceWrite(block) {
   // Har deltakeren alt skrevet noe her, skal ikke en lagret tekst skrive over det.
   if (!field || !key || field.value) return;
   try {
-    const saved = window.localStorage.getItem(key);
+    const saved = window.sessionStorage.getItem(key);
     if (saved) field.value = saved;
   } catch {
     // Ingen lagring: feltet står tomt.
@@ -223,8 +229,8 @@ export function saveWrite(field) {
   const key = writeStorageKey(field.closest(WRITE));
   if (!key) return;
   try {
-    if (field.value) window.localStorage.setItem(key, field.value);
-    else window.localStorage.removeItem(key);
+    if (field.value) window.sessionStorage.setItem(key, field.value);
+    else window.sessionStorage.removeItem(key);
   } catch {
     // Ingen lagring: teksten huskes ikke etter en omlasting, men står i feltet.
   }

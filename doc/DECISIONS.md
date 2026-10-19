@@ -1190,8 +1190,10 @@ og «sjekk deg selv» — `:::steg Tittel`, `:::skriv Oppgaven`, `:::repetisjon`
 - **Én regel for elementene:** i `:::kort`, `:::steg` og `:::repetisjon` begynner en overskrift et nytt
   element (`###` i malen; nivået spiller ingen rolle, som for kortene fra før). Én hjelper i
   `contentBlocks.ts`. Minst to steg eller kort; ellers er det ingen blokk, og teksten står som den er.
-- **Skriv selv: teksten lagres bare i nettleseren** (localStorage), aldri på tjeneren, og avkrysningen
-  lagres ikke. Nøkkelen er `a2.skriv.` + 16 tegn av en SHA-256 av oppgaven og eksempelsvaret, laget av
+- **Skriv selv: teksten lagres bare i nettleserfanen** (sessionStorage), aldri på tjeneren, og avkrysningen
+  lagres ikke. sessionStorage, ikke localStorage (QA-porten 2.96.0): teksten overlever en omlasting, som
+  saken ba om, men forsvinner når fanen lukkes — neste bruker av en delt PC skal ikke finne den.
+  Nøkkelen er `a2.skriv.` + 16 tegn av en SHA-256 av oppgaven og eksempelsvaret, laget av
   tjeneren. Ikke seksjonen eller adressen: leseren har samme adresse for alle seksjoner, og tegningen
   vet ikke hvilken seksjon den står i. Oppgave + eksempelsvar skiller to seksjoner med samme generelle
   oppgavetekst, og hvert språk får sin egen tekst. Sjekklista er ikke med, så et nytt sjekkpunkt ikke

@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { Marked, type Tokens } from "marked";
+import { Lexer, Marked, type Tokens } from "marked";
 
 /**
  * Innholdsblokker i seksjonstekst (#1079): uthevet boks, prompt-boks, kort og ikon — pluss
@@ -157,6 +157,19 @@ function splitAtHeadings(tokens: Tokens.Generic[]): { intro: Tokens.Generic[]; i
   return { intro: tokens.slice(0, first), items };
 }
 
+/**
+ * Hvor mange elementer (overskrifter på rammens eget nivå) en ramme har — avgjort FØR noe leses inn i
+ * dokumentets lexer. En tokenizer som leser innholdet inn og så gir opp, etterlater avsnitt i lexerens
+ * kø, og står rammen rett under et avsnitt, slår marked sammen avsnittet med en av disse foreldreløse
+ * postene: teksten i rammen forsvinner (QA-porten, 2.96.0). Derfor en egen lexer med samme utvidelser og
+ * sin egen tokenizer (en delt tokenizer ville blitt pekt om til den nye lexeren). Ikke en linjesjekk: den
+ * er uenig med marked om overskrifter i en liste eller en HTML-blokk, og da kommer feilen tilbake.
+ */
+function countItems(lexer: Lexer, inner: string): number {
+  const probe = new Lexer({ ...lexer.options, tokenizer: undefined });
+  return splitAtHeadings(probe.blockTokens(inner, []) as Tokens.Generic[]).items.length;
+}
+
 /** Overskriftsnivået følger teksten, men et element i en ramme er aldri en hovedoverskrift. */
 const itemLevel = (heading: Tokens.Heading) => Math.min(Math.max(heading.depth, 3), 6);
 
@@ -219,7 +232,7 @@ function splitWriteFrame(inner: string): { example: string; checklist: string[] 
 }
 
 /**
- * #1076: nøkkelen teksten lagres under i nettleseren. Oppgaven og eksempelsvaret sammen skiller én
+ * #1076: nøkkelen teksten lagres under i nettleserfanen (sessionStorage). Oppgaven og eksempelsvaret sammen skiller én
  * øvelse fra en annen — også i to seksjoner med samme generelle oppgavetekst, og på hvert språk for seg.
  * Ikke seksjonen eller adressen: leseren har samme adresse for alle seksjoner, og tegningen vet ikke
  * hvilken seksjon den er i. En forfatter som endrer oppgaven eller eksempelsvaret, får en ny øvelse.
@@ -379,10 +392,9 @@ function createSectionMarked(locale?: string): Marked {
         },
         tokenizer(src: string) {
           const match = /^:::[ \t]*(?:steg|steps)(?:[ \t]+([^\r\n]*?))?[ \t]*\r?\n([\s\S]*?)\r?\n:::[ \t]*(?=\r?\n|$)/i.exec(src);
-          if (!match) return undefined;
+          if (!match || countItems(this.lexer, match[2]!) < 2) return undefined;
           const token: ItemsToken = { type: "contentSteps", raw: match[0], title: [], tokens: [] };
           this.lexer.blockTokens(match[2]!, token.tokens as Tokens.Generic[] as never);
-          if (splitAtHeadings(token.tokens).items.length < 2) return undefined;
           if (match[1]) this.lexer.inlineTokens(match[1], token.title as Tokens.Generic[] as never);
           return token;
         },
@@ -421,7 +433,7 @@ function createSectionMarked(locale?: string): Marked {
         // Oppgaven står på åpningslinja og er påkrevd. Sjekklista er `- [ ]`-linjene helt til slutt;
         // resten er eksempelsvaret, som ikke kan være tomt (ellers ingen blokk, og teksten står som den
         // er). Alt virker uten skript: tekstfeltet, <details> for eksempelsvaret og vanlige
-        // avkrysningsbokser. content-blocks.js tar bare vare på teksten i nettleseren. «write» er samme
+        // avkrysningsbokser. content-blocks.js tar bare vare på teksten i nettleserfanen (sessionStorage). «write» er samme
         // blokk på engelsk.
         name: "contentWrite",
         level: "block",
@@ -487,10 +499,9 @@ function createSectionMarked(locale?: string): Marked {
         },
         tokenizer(src: string) {
           const match = /^:::[ \t]*(?:repetisjon|flashcards)(?:[ \t]+([^\r\n]*?))?[ \t]*\r?\n([\s\S]*?)\r?\n:::[ \t]*(?=\r?\n|$)/i.exec(src);
-          if (!match) return undefined;
+          if (!match || countItems(this.lexer, match[2]!) < 2) return undefined;
           const token: ItemsToken = { type: "contentFlash", raw: match[0], title: [], tokens: [] };
           this.lexer.blockTokens(match[2]!, token.tokens as Tokens.Generic[] as never);
-          if (splitAtHeadings(token.tokens).items.length < 2) return undefined;
           if (match[1]) this.lexer.inlineTokens(match[1], token.title as Tokens.Generic[] as never);
           return token;
         },

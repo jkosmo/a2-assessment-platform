@@ -248,6 +248,54 @@ describe("#1078 «Repetisjonskort»: begrep på forsiden, forklaring på bakside
   });
 });
 
+// QA-porten, 2.96.0 [REGRESJON]: en ugyldig ramme rett under et avsnitt (uten blank linje) slettet
+// teksten sin. Tokeniseren leste innholdet inn i lexeren før den ga opp, og marked slo avsnittet over
+// sammen med restene. Testene av ugyldige rammer hadde aldri tekst rett over. «Som den er» måles mot
+// samme tekst med et markørord plattformen ikke kjenner — vanlig markdown.
+describe("en ugyldig ramme rett under et avsnitt står som den er (QA 2.96.0)", () => {
+  const plain = (markdown: string, marker: string) => renderSectionBlocks(markdown.replace(marker, ":::ingenramme"), "nb").replace(":::ingenramme", marker);
+
+  it.each<[string, string, string]>([
+    ["repetisjon uten overskrifter", ":::repetisjon", lines("Her er fagordene fra seksjonen.", ":::repetisjon Fagord", "**Vedtak** - det møtet bestemte.", "**Referent** - den som skriver referatet.", ":::", "", "Neste avsnitt.")],
+    ["repetisjon med ett kort", ":::repetisjon", lines("Her er fagordene.", ":::repetisjon", "### Vedtak", "Det møtet bestemte.", ":::", "", "Neste avsnitt.")],
+    ["steg med ett steg", ":::steg", lines("Slik gjør du det:", ":::steg Behandling", "### Registrer", "Før den inn.", ":::", "", "Neste avsnitt.")],
+    ["steg uten overskrifter", ":::steg", lines("Slik gjør du det:", ":::steg Behandling", "Først dette, så det.", ":::", "", "Neste avsnitt.")],
+    ["skriv uten eksempelsvar", ":::skriv", lines("Prøv selv:", ":::skriv Skriv vedtaket.", "- [ ] hva?", "- [ ] når?", ":::", "", "Neste avsnitt.")],
+    // Overskriftene står i en liste: en linjesjekk ville telt to, men marked ser ingen på rammens nivå.
+    ["repetisjon der overskriftene står i en liste", ":::repetisjon", lines("Her er fagordene.", ":::repetisjon", "- Punkt", "  ### Vedtak", "  ### Referent", ":::", "", "Neste avsnitt.")],
+  ])("%s", (_name, marker, markdown) => {
+    const html = renderSectionBlocks(markdown, "nb");
+    expect(html).not.toMatch(/content-(steps|flash|write)"/);
+    expect(html).toBe(plain(markdown, marker));
+    expect(html).toContain(marker.slice(3));
+    expect(html).toContain("Neste avsnitt.");
+  });
+
+  it("teksten i den ugyldige rammen er med, ord for ord", () => {
+    const html = renderSectionBlocks(lines("Her er fagordene fra seksjonen.", ":::repetisjon Fagord", "**Vedtak** - det møtet bestemte.", "**Referent** - den som skriver referatet.", ":::", "", "Neste avsnitt."), "nb");
+    expect(html).toContain("<strong>Vedtak</strong> - det møtet bestemte.");
+    expect(html).toContain("<strong>Referent</strong> - den som skriver referatet.");
+  });
+
+  it("kontroll: en gyldig ramme rett under et avsnitt blir en blokk, og teksten over står", () => {
+    for (const [markdown, cls] of [
+      [lines("Slik gjør du det:", ":::steg T", "### A", "en", "### B", "to", ":::"), "content-steps"],
+      [lines("Her er fagordene:", ":::repetisjon", "### A", "en", "### B", "to", ":::"), "content-flash"],
+      [lines("Prøv selv:", ":::skriv Oppgave", "Svaret.", ":::"), "content-write"],
+    ] as const) {
+      const html = renderSectionBlocks(markdown, "nb");
+      expect(html, cls).toContain(`<div class="${cls}"`);
+      expect(html, cls).toMatch(/^<p>[^<]+:<\/p>/);
+    }
+  });
+
+  it("etter en ugyldig ramme tegnes neste ramme som vanlig", () => {
+    const html = renderSectionBlocks(lines("Tekst.", ":::repetisjon", "### Bare ett", "kort", ":::", "", ":::kort", "### K1", "x", "### K2", "y", ":::"), "nb");
+    expect(html).not.toContain("content-flash");
+    expect(html.match(/<section class="content-card">/g)).toHaveLength(2);
+  });
+});
+
 // Det tjeneren tegner, må overleve tjenerens rensing (DOMPurify). Klientens rensing har samme regel
 // (public/static/sanitize.js) og prøves i e2e-testen.
 describe("rensingen på tjeneren slipper gjennom det blokkene tegner", () => {

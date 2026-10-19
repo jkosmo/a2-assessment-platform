@@ -262,7 +262,7 @@ Sekretariatet oppdaterer møteplanen og sender ny innkalling innen 25. oktober.
 - The task is written to the learner, as a task: «Skriv …», «Formuler …». It is required.
 - The checklist is the run of `- [ ]` lines **at the very end**. The example answer may itself have a
   list, as long as something else stands after it.
-- What the learner writes stays in their browser and is not sent; the box says so.
+- What the learner writes stays in their browser tab until it is closed, and is not sent; the box says so.
 - In the other languages the marker word stays `:::skriv` and every `- [ ]` line stays; translate the
   task, the example answer and the points. `produce-course.mjs` fails on a frame without an example
   answer.

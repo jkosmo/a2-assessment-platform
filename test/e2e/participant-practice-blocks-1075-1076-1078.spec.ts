@@ -13,7 +13,7 @@ const MD = [
   "",
   ":::steg Slik behandler du en innsynsbegjæring",
   "### Registrer begjæringen",
-  "Før den inn i saksarkivet samme dag.",
+  "Før den inn i saksarkivet samme dag. Se [veilederen](https://example.com/veileder).",
   "",
   "### Finn dokumentene",
   "Søk i arkivet etter alt begjæringen gjelder.",
@@ -163,6 +163,20 @@ test.describe("#1075 «Steg for steg» i lesevisningen", () => {
     await expect(steps.nth(1)).toBeVisible();
   });
 
+  // QA-porten, 2.96.0: med fokus på en lenke i steget som skjules, havnet fokus på <body>, og neste
+  // piltast gjorde ingenting.
+  test("tastaturet: fokus på en lenke i steget — piltastene blar videre", async ({ page }) => {
+    await open(page);
+    const block = page.locator(".content-steps");
+    const count = block.locator(".content-steps-count");
+    await block.locator(".content-step").nth(0).getByRole("link", { name: "veilederen" }).focus();
+    await page.keyboard.press("ArrowRight");
+    await expect(count).toContainText("Steg 2 av 3");
+    await expect(block).toBeFocused();
+    await page.keyboard.press("ArrowRight");
+    await expect(count).toContainText("Steg 3 av 3");
+  });
+
   test("engelsk: etikettene følger språket", async ({ page }) => {
     await open(page, "en-GB");
     const block = page.locator(".content-steps");
@@ -216,7 +230,7 @@ test.describe("#1076 «Skriv selv» i lesevisningen", () => {
     await expect(first).toBeChecked();
     await expect(block.getByRole("checkbox", { name: "fra når det gjelder?" })).not.toBeChecked();
 
-    const stored = await page.evaluate(() => Object.keys(localStorage).filter((key) => key.startsWith("a2.skriv.")));
+    const stored = await page.evaluate(() => Object.keys(sessionStorage).filter((key) => key.startsWith("a2.skriv.")));
     expect(stored).toHaveLength(1);
 
     await page.reload();
@@ -225,7 +239,7 @@ test.describe("#1076 «Skriv selv» i lesevisningen", () => {
 
     // Tømmer deltakeren feltet, glemmes teksten.
     await page.locator(".content-write-field").fill("");
-    expect(await page.evaluate(() => Object.keys(localStorage).filter((key) => key.startsWith("a2.skriv.")))).toHaveLength(0);
+    expect(await page.evaluate(() => Object.keys(sessionStorage).filter((key) => key.startsWith("a2.skriv.")))).toHaveLength(0);
   });
 
   test("blokkert lagring (privat vindu): feltet virker, og ingen feil", async ({ page }) => {

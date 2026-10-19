@@ -284,7 +284,7 @@ without script. Labels per locale go to the client as `data-*` attributes. `cont
 (`enhanceContentBlocks`, run at load and by a `MutationObserver` for HTML inserted later) turns the
 steps into one-at-a-time with Forrige/Neste (`aria-disabled` at the ends), arrow keys, dots and an
 `aria-live` count; builds the flashcard practice from the `<dl>` (the list stays for screen readers,
-visually hidden); and keeps the write text in `localStorage` under `a2.skriv.<key>` (every access in
+visually hidden); and keeps the write text in `sessionStorage` (gone when the tab closes — shared PCs) under `a2.skriv.<key>` (every access in
 try/catch). Nothing is sent to the server or counted. Tables get `data-label` on every cell so the phone stacking rule in `shared.css` shows the
 column name.
 

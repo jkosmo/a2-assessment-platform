@@ -12,8 +12,8 @@ This document tracks release versions and what each version includes.
   nummerert liste.
 - **Skriv selv:** `:::skriv Oppgaven`, eksempelsvaret under og sjekklista som `- [ ]`-linjer til slutt.
   Deltakeren skriver i et tekstfelt, åpner «Vis eksempelsvar» og krysser av i «Fikk du med …». Virker
-  uten skript. Teksten blir bare i nettleseren (lagres der, så den overlever en omlasting); ingenting
-  sendes eller teller.
+  uten skript. Teksten blir bare i nettleserfanen (overlever en omlasting, forsvinner når fanen
+  lukkes, så neste bruker av en delt PC ikke ser den); ingenting sendes eller teller.
 - **Repetisjonskort:** `:::repetisjon`, én `###`-overskrift per kort (begrepet) med forklaringen under.
   Deltakeren snur kortet (klikk, mellomrom, Enter), markerer «Kunne det» eller «Øv mer», og får
   «Du kunne X av Y» med «Øv på de N igjen» til slutt. Skjermlesere og deltakere uten skript får
@@ -29,6 +29,16 @@ This document tracks release versions and what each version includes.
   steg eller kort, en bakside på hvert kort og et eksempelsvar; språkkontrollen krever like mange
   steg, sjekkpunkter og kort på alle språk.
 - Hjelpen i seksjonseditoren og forfatterveiledningen (LEARNING_SECTIONS_GUIDE.md) viser formene.
+- QA-porten (NO-GO, rettet): en ugyldig `:::steg`/`:::repetisjon` (færre enn to overskrifter) rett under
+  et avsnitt uten blank linje slettet teksten i rammen. Tokeniseren leste innholdet inn i markeds lexer
+  før den sjekket antall overskrifter, og marked slo avsnittet over sammen med restene i køen. Nå
+  telles overskriftene først i en egen lexer, og rammen står som vanlig tekst. Piltast med fokus på en
+  lenke i et steg som skjules, flytter nå fokus til gjennomgangen (før havnet det på siden, og neste
+  piltast gjorde ingenting). «Skriv selv» lagrer i sessionStorage i stedet for localStorage.
+- Rotårsak: testene av ugyldige rammer hadde aldri tekst rett over rammen — den ene formen der marked
+  gjenbruker køen. Kontrollen i skillet krever blank linje over, men plattformens egen editor har ingen
+  slik kontroll, så forfattere kan skrive det. Nye enhetstester har tekst rett over en ugyldig ramme for
+  alle tre, måler mot samme tekst som vanlig markdown, og har en kontroll med gyldig ramme.
 
 ## 2.95.0 - 2026-10-19
 

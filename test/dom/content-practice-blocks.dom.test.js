@@ -32,7 +32,7 @@ function mount(markdown) {
 
 afterEach(() => {
   document.body.replaceChildren();
-  try { window.localStorage.clear(); } catch { /* ignore */ }
+  try { window.sessionStorage.clear(); } catch { /* ignore */ }
   vi.restoreAllMocks();
 });
 
@@ -97,6 +97,21 @@ describe("#1075 steg for steg", () => {
     expect(count.textContent).toMatch(/^Steg 2 av 3/);
   });
 
+  // QA-porten, 2.96.0: står fokus på en lenke i steget som skjules, havnet fokus på <body>, og neste
+  // piltast gjorde ingenting.
+  it("fokus i steget som skjules flyttes til blokken; fokus andre steder blir stående", () => {
+    const md = [":::steg Tittel", "### Først", "Les [veilederen](https://example.com).", "### Så", "to", "### Til slutt", "tre", ":::"].join(NL);
+    const block = mount(md).querySelector("[data-content-steps]");
+    enhanceSteps(block);
+    block.querySelector(".content-step a").focus();
+    moveStep(block, 1);
+    expect(document.activeElement).toBe(block);
+    const next = block.querySelector("[data-steps-next]");
+    next.focus();
+    moveStep(block, 1);
+    expect(document.activeElement).toBe(next);
+  });
+
   it("tekst som settes inn etter at skriptet er lastet, gjøres klar av seg selv", async () => {
     const host = document.createElement("div");
     document.body.appendChild(host);
@@ -114,7 +129,7 @@ describe("#1076 skriv selv", () => {
     const field = block.querySelector("[data-write-field]");
     field.value = "Mitt svar";
     saveWrite(field);
-    expect(window.localStorage.getItem(key)).toBe("Mitt svar");
+    expect(window.sessionStorage.getItem(key)).toBe("Mitt svar");
 
     document.body.replaceChildren();
     const again = mount(WRITE).querySelector("[data-content-write]");
@@ -128,15 +143,15 @@ describe("#1076 skriv selv", () => {
     const field = block.querySelector("[data-write-field]");
     field.value = "Utkast";
     field.dispatchEvent(new Event("input", { bubbles: true }));
-    expect(window.localStorage.getItem(key)).toBe("Utkast");
+    expect(window.sessionStorage.getItem(key)).toBe("Utkast");
     field.value = "";
     field.dispatchEvent(new Event("input", { bubbles: true }));
-    expect(window.localStorage.getItem(key)).toBeNull();
+    expect(window.sessionStorage.getItem(key)).toBeNull();
   });
 
   it("en lagret tekst skriver ikke over det deltakeren alt har skrevet", () => {
     const block = mount(WRITE).querySelector("[data-content-write]");
-    window.localStorage.setItem(`a2.skriv.${block.dataset.writeKey}`, "Gammel");
+    window.sessionStorage.setItem(`a2.skriv.${block.dataset.writeKey}`, "Gammel");
     delete block.dataset.ready;
     block.querySelector("[data-write-field]").value = "Ny";
     enhanceWrite(block);
@@ -160,7 +175,7 @@ describe("#1076 skriv selv", () => {
     const field = block.querySelector("[data-write-field]");
     field.value = "Tekst";
     saveWrite(field);
-    expect(window.localStorage.length).toBe(0);
+    expect(window.sessionStorage.length).toBe(0);
   });
 });
 
