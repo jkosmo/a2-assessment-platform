@@ -165,12 +165,6 @@ det var før serveren lokaliserte.
 |---|---|---|
 | `GET` | `/api/reports/completion` | ADMINISTRATOR, REPORT_READER, SUBJECT_MATTER_OWNER |
 | `GET` | `/api/reports/pass-rates` | ADMINISTRATOR, REPORT_READER, SUBJECT_MATTER_OWNER |
-
-`completion` and `pass-rates` count **people, not attempts** (2.95.0): each participant once per module,
-by their latest submission. `totalSubmissions`, `completedSubmissions`, `underReviewSubmissions`,
-`passCount`, `failCount` and `decisionCount` are people; `completion` rows and totals also carry
-`attempts` (every submission, including retaken ones). `status` filters apply to the latest
-submission.
 | `GET` | `/api/reports/manual-review-queue` | ADMINISTRATOR, REPORT_READER, SUBJECT_MATTER_OWNER |
 | `GET` | `/api/reports/appeals` | ADMINISTRATOR, REPORT_READER, SUBJECT_MATTER_OWNER |
 | `GET` | `/api/reports/mcq-quality` | ADMINISTRATOR, REPORT_READER, SUBJECT_MATTER_OWNER |
@@ -180,6 +174,12 @@ submission.
 | `GET` | `/api/reports/analytics/cohorts?cohortBy=<month\|department>` | ADMINISTRATOR, REPORT_READER, SUBJECT_MATTER_OWNER |
 | `GET` | `/api/reports/analytics/data-quality` | ADMINISTRATOR, REPORT_READER, SUBJECT_MATTER_OWNER |
 | `GET` | `/api/reports/export?type=<report>&format=csv` | ADMINISTRATOR, REPORT_READER, SUBJECT_MATTER_OWNER |
+
+`completion` and `pass-rates` count **people, not attempts** (2.95.0): each participant once per module,
+by their latest submission. `totalSubmissions`, `completedSubmissions`, `underReviewSubmissions`,
+`passCount`, `failCount` and `decisionCount` are people; `completion` rows and totals also carry
+`attempts` (every submission, including retaken ones). `status` filters apply to the latest
+submission.
 
 ## Cohort status (#498)
 

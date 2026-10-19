@@ -10,11 +10,14 @@ This document tracks release versions and what each version includes.
   SISTE forsøket. Før ble hvert forsøk telt: en som strøk og så besto, sto under både «Bestått» og
   «Ikke bestått», og «Totalt» var antall innleveringer. Produkteier oppdaget det på egne tall.
 - «Totalt» heter «Deltakere», og en ny siste kolonne «Forsøk» viser alle forsøk (også i CSV-eksporten,
-  feltet `attempts`). Nøkkeltallet «avgjørelser» heter «vurderte» og teller personer.
+  feltet `attempts`). Nøkkeltallet «avgjørelser» heter «vurderte» og teller personer per modul
+  (fire deltakere med tre moduler hver gir 12).
 - Statusfilteret gjelder det siste forsøket: et gammelt forsøk drar ikke med seg en person som har
   levert på nytt.
 - Samme regel som deltakerdetaljene under tabellen har brukt hele tiden; stage-testen sammenligner de
   to for hver modul.
+- QA-porten: modulradene står i fast rekkefølge (tittel); «erstattet av et nyere forsøk» har fått
+  tekst i deltakerdetaljene (vistes som rå nøkkel når datofilteret kuttet bort det nye forsøket).
 - Rotårsak: de to modulrapportene ble skrevet før deltakerdetaljene og fikk aldri regelen «siste forsøk
   per person». Ingen test hadde en deltaker med mer enn ett forsøk. Den nye integrasjonstesten har det.
 

@@ -98,6 +98,7 @@ const extraTranslations = {
     "results.status.PROCESSING": "Processing",
     "results.status.SCORED": "Scored",
     "results.status.REJECTED": "Rejected",
+    "results.status.SUPERSEDED": "Replaced by a newer attempt",
   },
   nb: {
     "nav.profile": "Profil",
@@ -189,6 +190,7 @@ const extraTranslations = {
     "results.status.PROCESSING": "Behandles",
     "results.status.SCORED": "Skåret",
     "results.status.REJECTED": "Avvist",
+    "results.status.SUPERSEDED": "Erstattet av et nyere forsøk",
   },
   nn: {
     "nav.profile": "Profil",
@@ -280,6 +282,7 @@ const extraTranslations = {
     "results.status.PROCESSING": "Blir behandla",
     "results.status.SCORED": "Skåra",
     "results.status.REJECTED": "Avvist",
+    "results.status.SUPERSEDED": "Erstatta av eit nyare forsøk",
   },
 };
 

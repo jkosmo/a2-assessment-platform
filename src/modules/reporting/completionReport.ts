@@ -114,10 +114,14 @@ export async function getCompletionReport(filters: ReportFilters, locale: Suppor
     }
   }
 
-  const rows = Array.from(rowsByModule.values()).map((row) => ({
-    ...row,
-    completionRate: row.totalSubmissions > 0 ? round2(row.completedSubmissions / row.totalSubmissions) : 0,
-  }));
+  const rows = Array.from(rowsByModule.values())
+    .map((row) => ({
+      ...row,
+      completionRate: row.totalSubmissions > 0 ? round2(row.completedSubmissions / row.totalSubmissions) : 0,
+    }))
+    // Fast rekkefølge: spørringen sorterer på bruker (siste forsøk per person), og uten dette ville
+    // radene byttet plass hver gang en ny deltaker leverte.
+    .sort((a, b) => a.moduleTitle.localeCompare(b.moduleTitle, locale));
 
   const totals = {
     totalSubmissions: rows.reduce((sum, row) => sum + row.totalSubmissions, 0),
