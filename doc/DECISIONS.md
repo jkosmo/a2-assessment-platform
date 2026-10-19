@@ -1162,4 +1162,7 @@ Produkteier valgte ramme i teksten (`:::sjekk` med `- [ ]` / `- [x]`), samme mø
 framfor sakens forslag om en markør og spørsmålet i egne felt på seksjonsversjonen. Ingen migrasjon,
 og oversetter, eksport/import og skillet virker uten egne spor. Svaret lagres ikke; statistikk per
 spørsmål krever egne felt senere hvis det blir ønsket. Utseendet ble godkjent fra en skisse («Ser
-fint ut»).
+fint ut»). Sakens punkt 3 (forfatter-HTML skal ikke kunne lage interaktive elementer) er
+ikke fulgt: rensingen beholder data-attributter, så en forfatter kan lage en lignende knapp. Det er
+godtatt fordi det er ufarlig — skript og hendelsesattributter fjernes, og klikket endrer bare
+utseende og tekst.

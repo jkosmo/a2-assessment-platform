@@ -184,6 +184,9 @@ Notatene viser hva som faktisk ble bestemt. Innkallingen sier bare hva som skull
   be left out, but rarely should be.
 - In the other languages the marker word stays `:::sjekk` and `- [x]` stays where it is; translate
   the question, the options and the explanation.
+- **A blank line above every frame** (`:::kort`, `:::tenk`, `:::sjekk`). Right under a list, a quote
+  or a table, the platform reads the frame as part of it — for `:::sjekk` the learner then sees the
+  answer as a ticked list. `produce-course.mjs` fails on a frame with text right above it.
 - **Never inside a card frame, and no frame inside it** — as for «think first».
   `produce-course.mjs` fails on a nested frame, fewer than two options, or not exactly one `- [x]`.
 

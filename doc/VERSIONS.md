@@ -15,9 +15,10 @@ This document tracks release versions and what each version includes.
 - **#1104:** «Be om endring», «Oversett» og «Generer innhold» lager ikke lenger nye kriterier for en
   modul som har kriterier; lagringen bytter dem ikke ut. Er teksten vesentlig endret, spør #928 etter
   lagringen. Bytte fra flervalg til fritekst lager kriterier som før.
-- QA-porten: skjermlesere får «riktig svar»/«ditt svar» på alternativene etter svaret; skillet nekter
-  en ramme (`:::sjekk`, `:::tenk`, `:::kort`) rett under en liste eller tabell, der plattformen ikke
-  tegner den (for `:::sjekk` ville deltakeren sett fasiten som en avkrysset liste).
+- QA-porten: skjermlesere får «riktig svar»/«ditt svar» på alternativene etter svaret; skillet krever
+  en blank linje over hver ramme (`:::sjekk`, `:::tenk`, `:::kort`), unntatt etter en overskrift eller
+  en annen ramme. Rett under en liste, et sitat eller en tabell tegner plattformen ikke rammen (for
+  `:::sjekk` ville deltakeren sett fasiten som en avkrysset liste).
 - **#1103:** talenotater kommer med når en .pptx brukes som kilde ved KI-generering (var allerede
   slik; vakt med den ekte tolkeren).
 
