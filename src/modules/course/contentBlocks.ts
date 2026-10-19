@@ -37,10 +37,12 @@ const THINK_LABELS: Record<string, { label: string; show: string }> = {
 
 // #1074: merkelappen og tilbakemeldingen. Tilbakemeldingen settes av content-blocks.js fra data-
 // attributtene, så skriptet trenger ingen oversettelser.
-const CHECK_LABELS: Record<string, { label: string; right: string; wrong: string }> = {
-  nb: { label: "Sjekk deg selv", right: "Riktig!", wrong: "Ikke helt. Riktig svar er markert." },
-  nn: { label: "Sjekk deg sjølv", right: "Rett!", wrong: "Ikkje heilt. Rett svar er markert." },
-  "en-GB": { label: "Check yourself", right: "Correct!", wrong: "Not quite. The right answer is marked." },
+// srRight/srChosen: skjult tekst for skjermlesere på det riktige og det valgte alternativet, når
+// deltakeren har svart — merket (✓/✗) og fargen er ellers det eneste som viser det.
+const CHECK_LABELS: Record<string, { label: string; right: string; wrong: string; srRight: string; srChosen: string }> = {
+  nb: { label: "Sjekk deg selv", right: "Riktig!", wrong: "Ikke helt. Riktig svar er markert.", srRight: "riktig svar", srChosen: "ditt svar" },
+  nn: { label: "Sjekk deg sjølv", right: "Rett!", wrong: "Ikkje heilt. Rett svar er markert.", srRight: "rett svar", srChosen: "svaret ditt" },
+  "en-GB": { label: "Check yourself", right: "Correct!", wrong: "Not quite. The right answer is marked.", srRight: "right answer", srChosen: "your answer" },
 };
 
 /** Et alternativ: `- [ ] tekst` eller `- [x] tekst` (også `*`, og stor X). */
@@ -142,8 +144,9 @@ function createSectionMarked(locale?: string): Marked {
         //   Forklaringen, i vanlig markdown.
         //   :::
         // Minst to alternativer og nøyaktig ett riktig; ellers er det ingen blokk, og teksten står som
-        // den er (skillets kontroll melder det). Knappene tegnes her, ETTER at forfatterens markdown er
-        // lest — forfatter-HTML kan ikke lage dem. Klikket håndteres av public/static/content-blocks.js.
+        // den er (skillets kontroll melder det). Klikket håndteres av public/static/content-blocks.js.
+        // Rensingen beholder data-attributter, så en forfatter KAN skrive en lignende knapp selv; det er
+        // ufarlig — skript og hendelsesattributter fjernes, og klikket endrer bare utseende og tekst.
         name: "contentCheck",
         level: "block",
         start(src: string) {
@@ -185,7 +188,7 @@ function createSectionMarked(locale?: string): Marked {
             .join("");
           const explanation = this.parser.parse(t.tokens as never);
           return (
-            `<div class="content-check" data-content-check data-right="${escapeHtml(check.right)}" data-wrong="${escapeHtml(check.wrong)}">` +
+            `<div class="content-check" data-content-check data-right="${escapeHtml(check.right)}" data-wrong="${escapeHtml(check.wrong)}" data-sr-right="${escapeHtml(check.srRight)}" data-sr-chosen="${escapeHtml(check.srChosen)}">` +
             `<p class="content-check-question"><span class="content-check-label">${escapeHtml(check.label)}</span>` +
             `<span class="content-check-text">${question}</span></p>` +
             `<div class="content-check-options" role="group" aria-label="${escapeHtml(textOf(question))}">${options}</div>` +

@@ -81,6 +81,10 @@ test.describe("#1074 «Sjekk deg selv» i lesevisningen", () => {
     await expect(box.locator(".content-check-verdict")).toHaveText("Ikke helt. Riktig svar er markert.");
     await expect(box.locator(".content-check-explanation")).toBeVisible();
     await expect(box.locator(".content-check-explanation")).toContainText("Notatene viser hva som ble bestemt.");
+    // Skjermleseren får vite hvilket som er riktig og hvilket som ble valgt, ikke bare fargen.
+    await expect(options.nth(1).locator(".sr-only")).toHaveText(" (riktig svar)");
+    await expect(options.nth(0).locator(".sr-only")).toHaveText(" (ditt svar)");
+    await expect(options.nth(1)).toHaveAccessibleName(/Notatene fra møtet.*riktig svar/);
     // Låst etter første svar: et nytt klikk endrer ingenting.
     await options.nth(2).click({ force: true });
     await expect(options.nth(2)).not.toHaveClass(/is-wrong/);

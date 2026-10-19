@@ -12,8 +12,12 @@ This document tracks release versions and what each version includes.
   (produkteier valgte det framfor egne felt): ingen migrasjon; oversetter, eksport/import og skillet
   virker. Skillet skriver det (section-content.md «Check yourself»), kontrollen krever 2+ alternativer
   og nøyaktig ett riktig, og språkkontrollen krever samme fasit på alle språk.
-- **#1104:** «Be om endring» og «Oversett» lager ikke lenger nye kriterier for en modul som har
-  kriterier; lagringen bytter dem ikke ut. Er teksten vesentlig endret, spør #928 etter lagringen.
+- **#1104:** «Be om endring», «Oversett» og «Generer innhold» lager ikke lenger nye kriterier for en
+  modul som har kriterier; lagringen bytter dem ikke ut. Er teksten vesentlig endret, spør #928 etter
+  lagringen. Bytte fra flervalg til fritekst lager kriterier som før.
+- QA-porten: skjermlesere får «riktig svar»/«ditt svar» på alternativene etter svaret; skillet nekter
+  en ramme (`:::sjekk`, `:::tenk`, `:::kort`) rett under en liste eller tabell, der plattformen ikke
+  tegner den (for `:::sjekk` ville deltakeren sett fasiten som en avkrysset liste).
 - **#1103:** talenotater kommer med når en .pptx brukes som kilde ved KI-generering (var allerede
   slik; vakt med den ekte tolkeren).
 

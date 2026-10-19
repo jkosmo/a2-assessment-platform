@@ -48,6 +48,16 @@ export function answerCheck(option) {
     }
   }
   option.setAttribute("aria-pressed", "true");
+  // For skjermlesere: hvilket alternativ som er riktig, og hvilket deltakeren valgte (QA 2.94.0).
+  const addSrText = (button, text) => {
+    if (!button || !text) return;
+    const span = document.createElement("span");
+    span.className = "sr-only";
+    span.textContent = ` (${text})`;
+    button.appendChild(span);
+  };
+  addSrText(box.querySelector('[data-check-option][data-correct="true"]'), box.dataset.srRight);
+  if (!right) addSrText(option, box.dataset.srChosen);
   const explanation = box.querySelector(".content-check-explanation");
   if (explanation) explanation.hidden = false;
   const verdict = box.querySelector(".content-check-verdict");

@@ -220,10 +220,19 @@ function frameProblems(prose) {
   let open = null;
   // #1074: linjene i en :::sjekk-ramme, til kontrollen når den lukkes.
   let checkLines = null;
+  // Linja over: står en liste eller tabell rett over åpningslinja, leser plattformen den som en del av
+  // lista/tabellen, og rammen blir ikke tegnet. For :::sjekk betyr det at deltakeren ser fasiten som en
+  // avkrysset liste (QA 2.94.0).
+  let previous = "";
   for (const line of String(prose ?? "").split(/\r?\n/)) {
+    const above = previous;
+    previous = line;
     const opener = /^:::[ \t]*(kort|cards|tenk|think|sjekk|check)\b/i.exec(line);
     if (opener && (/^(kort|cards)$/i.test(opener[1]) ? /^:::[ \t]*(?:kort|cards)[ \t]*$/i.test(line) : /^:::[ \t]*(?:tenk|think|sjekk|check)[ \t]+\S/i.test(line))) {
       const kind = opener[1].toLowerCase();
+      if (/^[ \t]*(?:[-*+]|\d+[.)])[ \t]+\S|^[ \t]*\|/.test(above)) {
+        problems.push(`a :::${kind} line stands right under a list or table — the platform reads it as part of the list, and the frame is not drawn; put a blank line above it`);
+      }
       if (open) problems.push(`a :::${kind} frame is opened inside a :::${open} frame — frames cannot be nested; the first ::: closes both, and the learner sees the markers as text`);
       else {
         open = kind;

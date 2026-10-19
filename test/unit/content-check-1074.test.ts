@@ -21,7 +21,7 @@ const BLOCK = [
 describe("renderSectionBlocks: «Sjekk deg selv»", () => {
   it("blir en boks med spørsmål, knapper og en skjult forklaring", () => {
     const html = renderSectionBlocks(BLOCK, "nb");
-    expect(html).toContain('<div class="content-check" data-content-check data-right="Riktig!" data-wrong="Ikke helt. Riktig svar er markert.">');
+    expect(html).toContain('<div class="content-check" data-content-check data-right="Riktig!" data-wrong="Ikke helt. Riktig svar er markert." data-sr-right="riktig svar" data-sr-chosen="ditt svar">');
     expect(html).toContain('<span class="content-check-label">Sjekk deg selv</span>');
     expect(html).toContain('<span class="content-check-text">Hvilken kilde er <strong>viktigst</strong>?</span>');
     const options = html.match(/<button type="button" class="content-check-option" data-check-option data-correct="(true|false)">/g) ?? [];
@@ -59,8 +59,8 @@ describe("renderSectionBlocks: «Sjekk deg selv»", () => {
     const html = renderSectionMarkdown([":::sjekk Spørsmål?", '- [x] <button onclick="alert(1)">Ja</button>', '- [ ] <img src=x onerror="alert(1)">', ":::"].join("\n"), "nb");
     expect(html).not.toContain("onclick");
     expect(html).not.toContain("onerror");
-    // Rensingen fjerner hendelsesattributtene. En knapp forfatteren skriver selv, er uten virkning:
-    // lytteren reagerer bare på et klikk innenfor en ekte blokk (data-content-check).
+    // Rensingen fjerner hendelsesattributtene. Data-attributtene står, så en forfatter kan lage en
+    // lignende knapp selv — ufarlig: klikket endrer bare utseende og tekst.
   });
 
   it("rensingen på tjeneren beholder knappene, data-attributtene og aria-feltene", () => {
