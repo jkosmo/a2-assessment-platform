@@ -661,8 +661,10 @@ describe("section localization prompts (#514)", () => {
       sourceLocale: "nb",
       targetLocale: "en-GB",
     });
+    // Regelen om markørordene er én linje; ordene må stå i DEN, ikke bare et annet sted i prompten.
+    const markerRule = userPrompt.split("\n").find((line) => line.startsWith("- Keep block markers exactly as written")) ?? "";
     for (const marker of [":::kort", ":::tenk", ":::sjekk", ":::steg", ":::steps", ":::skriv", ":::write", ":::repetisjon", ":::flashcards"]) {
-      expect(userPrompt, marker).toContain(`\`${marker}\``);
+      expect(markerRule, marker).toContain(`\`${marker}\``);
     }
     expect(userPrompt).toMatch(/In a `:::skriv` \/ `:::write` block, the lines at the end that start with `- \[ \]` are the learner's checklist\. Keep that start EXACTLY and keep every line/);
     expect(userPrompt).toMatch(/In a `:::steg` \/ `:::steps` and a `:::repetisjon` \/ `:::flashcards` block, every heading starts a step or a card\. Keep every heading as a heading/);

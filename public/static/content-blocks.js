@@ -357,8 +357,9 @@ export function flashAction(block, action) {
   }
   if (action === "repeat" || action === "restart") {
     // «Øv på de N igjen»: bare kortene deltakeren ville øve mer på, i samme rekkefølge som før.
+    // «Begynn på nytt» trenger ingen nullstilling av poengsummen: runden går gjennom alle kortene, og
+    // hvert svar overskriver det forrige for det kortet.
     state.queue = action === "repeat" ? [...state.again].sort((a, b) => a - b) : state.cards.map((_, i) => i);
-    if (action === "restart") state.needsPractice.clear();
     state.again = new Set();
     state.pos = 0;
     state.flipped = false;
