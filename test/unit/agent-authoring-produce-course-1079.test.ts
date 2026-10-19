@@ -192,6 +192,20 @@ describe("produce-course — kontrollen «learner text» stopper ikke vanlig fag
     expect(tekst(r), tekst(r).details.join("; ")).toMatchObject({ status: "ok" });
   });
 
+  // Kontrollen til radene over (#1075, #1076, #1078): riktig skrevne rammer, på alle tre språk, slipper
+  // gjennom både teksten og språkkontrollen — ellers vet vi ikke om radene målte regelen eller noe annet.
+  it("steg, skriv selv og repetisjonskort skrevet etter malen, på alle tre språk, stopper ikke", async () => {
+    const k = kopi((p) => {
+      const b = objekt(p, "sec-kilder").payload.bodyMarkdown;
+      b.nb += "\n\n:::steg Slik skriver du referatet\n### Les notatene\nFinn vedtakene.\n\n### Skriv vedtakene\nMed ansvarlig og frist.\n:::\n\n:::skriv Skriv ett vedtakspunkt.\n**Vedtak:** Møtene flyttes til torsdag.\n\n- [ ] hva som ble bestemt?\n- [ ] fra når?\n:::\n\n:::repetisjon\n### Vedtak\nDet møtet bestemte.\n\n### Referent\nDen som skriver referatet.\n:::\n";
+      b.nn += "\n\n:::steg Slik skriv du referatet\n### Les notata\nFinn vedtaka.\n\n### Skriv vedtaka\nMed ansvarleg og frist.\n:::\n\n:::skriv Skriv eitt vedtakspunkt.\n**Vedtak:** Møta blir flytte til torsdag.\n\n- [ ] kva som vart bestemt?\n- [ ] frå når?\n:::\n\n:::repetisjon\n### Vedtak\nDet møtet bestemde.\n\n### Referent\nDen som skriv referatet.\n:::\n";
+      b["en-GB"] += "\n\n:::steg How to write the minutes\n### Read the notes\nFind the decisions.\n\n### Write the decisions\nWith owner and deadline.\n:::\n\n:::skriv Write one decision.\n**Decision:** Meetings move to Thursday.\n\n- [ ] what was decided?\n- [ ] from when?\n:::\n\n:::repetisjon\n### Decision\nWhat the meeting decided.\n\n### Minute-taker\nThe person who writes the minutes.\n:::\n";
+    });
+    const r = await k.kjør();
+    expect(tekst(r), tekst(r).details.join("; ")).toMatchObject({ status: "ok" });
+    expect(status(r).languages, formatProduction(r)).toBe("ok");
+  });
+
   it("rammer inne i en kodeblokk telles ikke", async () => {
     const k = kopi((p) => {
       objekt(p, "sec-kilder").payload.bodyMarkdown.nb += ["", "Slik skrives kort:", "", "```markdown", ":::kort", "### Et kort", "```"].join("\n");
@@ -228,6 +242,18 @@ describe("produce-course — hver kontroll stopper leveransen (#1079)", () => {
     ["en «sjekk deg selv» rett under en fortsettelseslinje i en liste (#1074, QA runde 2)", (p) => void (objekt(p, "sec-kilder").payload.bodyMarkdown.nb += "\n\n- Et punkt som fortsetter\npå neste linje\n:::sjekk Hva stemmer?\n- [x] Ja\n- [ ] Nei\n:::\n"), "learner text", "put a blank line above the frame"],
     ["en «sjekk deg selv» uten riktig svar (#1074)", (p) => void (objekt(p, "sec-kilder").payload.bodyMarkdown.nb += "\n\n:::sjekk Hva stemmer?\n- [ ] Ja\n- [ ] Nei\n:::\n"), "learner text", "needs exactly one right option"],
     ["en «sjekk deg selv» med bare ett alternativ (#1074)", (p) => void (objekt(p, "sec-kilder").payload.bodyMarkdown.nb += "\n\n:::sjekk Hva stemmer?\n- [x] Ja\n:::\n"), "learner text", "needs at least two options"],
+    // #1075, #1076, #1078: de nye rammene har samme regler som de gamle (blank linje over, ingen nøsting),
+    // og en form plattformen krever for å tegne dem.
+    ["et «steg for steg» med bare ett steg (#1075)", (p) => void (objekt(p, "sec-kilder").payload.bodyMarkdown.nb += "\n\n:::steg Slik gjør du\n### Eneste steg\nTekst.\n:::\n"), "learner text", "a :::steg frame needs at least two steps — one ### heading per step (it has 1)"],
+    ["et «steps» uten overskrifter (#1075)", (p) => void (objekt(p, "sec-kilder").payload.bodyMarkdown.nb += "\n\n:::steps\nBare tekst.\n:::\n"), "learner text", "a :::steps frame needs at least two steps"],
+    ["et «steg for steg» rett under et avsnitt (#1075)", (p) => void (objekt(p, "sec-kilder").payload.bodyMarkdown.nb += "\n\nSlik gjør du:\n:::steg\n### A\nen\n### B\nto\n:::\n"), "learner text", "a :::steg line has text right above it"],
+    ["et «steg for steg» inni en kortramme (#1075)", (p) => void (objekt(p, "sec-kilder").payload.bodyMarkdown.nb += "\n\n:::kort\n### Kort\n\n:::steg\n### A\nen\n### B\nto\n:::\n\nMer.\n:::\n"), "learner text", "a :::steg frame is opened inside a :::kort frame"],
+    ["en «skriv selv» uten eksempelsvar (#1076)", (p) => void (objekt(p, "sec-kilder").payload.bodyMarkdown.nb += "\n\n:::skriv Skriv vedtaket.\n- [ ] hva som ble bestemt?\n- [ ] fra når?\n:::\n"), "learner text", "a :::skriv frame needs an example answer above the checklist"],
+    ["en «skriv selv» uten oppgave på åpningslinja (#1076) er ingen ramme, og ::: lukker ingenting", (p) => void (objekt(p, "sec-kilder").payload.bodyMarkdown.nb += "\n\n:::skriv\nSvaret.\n:::\n"), "learner text", "a ::: closes a frame that was never opened"],
+    ["repetisjonskort med bare ett kort (#1078)", (p) => void (objekt(p, "sec-kilder").payload.bodyMarkdown.nb += "\n\n:::repetisjon\n### Vedtak\nDet møtet bestemte.\n:::\n"), "learner text", "a :::repetisjon frame needs at least two cards — one ### heading per card (it has 1)"],
+    ["et repetisjonskort uten bakside (#1078)", (p) => void (objekt(p, "sec-kilder").payload.bodyMarkdown.nb += "\n\n:::flashcards\n### Vedtak\n\n### Referent\nDen som skriver.\n:::\n"), "learner text", "a card in a :::flashcards frame has nothing on its back: «Vedtak»"],
+    ["et steg som forsvant i den engelske oversettelsen (#1075)", (p) => { const b = objekt(p, "sec-kilder").payload.bodyMarkdown; b.nb += "\n\n:::steg\n### Les\nFinn.\n### Skriv\nMed frist.\n### Send\nTil alle.\n:::\n"; b.nn += "\n\n:::steg\n### Les\nFinn.\n### Skriv\nMed frist.\n### Send\nTil alle.\n:::\n"; b["en-GB"] += "\n\n:::steg\n### Read\nFind.\n### Write\nWith a deadline.\n:::\n"; }, "languages", "another number of steps, checklist points or cards, or is missing, in: en-GB (nb has steg:3)"],
+    ["en repetisjonsramme som ikke lukkes (#1078)", (p) => void (objekt(p, "sec-kilder").payload.bodyMarkdown.nb += "\n\n:::repetisjon\n### Vedtak\nDet møtet bestemte.\n### Referent\nDen som skriver."), "learner text", "a :::repetisjon frame is opened and never closed"],
     ["en kortramme som ikke lukkes", (p) => void (objekt(p, "sec-kilder").payload.bodyMarkdown.nb = objekt(p, "sec-kilder").payload.bodyMarkdown.nb.replace("\n:::\n", "\n")), "learner text", "opened and never closed"],
     ["en modul med færre spørsmål enn tre", (p) => void objekt(p, "mod-referat").payload.activeVersion.mcqSet.questions.splice(2), "questions", "at least one question per section and at least 3"],
     ["et ikonnavn plattformen ikke kjenner", (p) => void (objekt(p, "sec-kilder").payload.bodyMarkdown.nb += "\n\n:::kort\n### ![](icon:ikke-et-ikon) Kort\n\nTekst.\n:::\n"), "pictures", "icon:ikke-et-ikon, and the platform's icon library has no icon with that name"],

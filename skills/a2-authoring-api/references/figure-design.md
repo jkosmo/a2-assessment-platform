@@ -32,6 +32,7 @@ highlighted box), a prompt, a table. Those are written as text —
 | two dimensions that give four fields | **matrix** | you | no |
 | the parts of one thing | **labelled diagram** | you | no |
 | events placed in time, with dates or periods | **timeline** | you | no |
+| the steps of a step-by-step walk-through, one figure per step | **same figure, one step highlighted** | you | no |
 
 A point that fits none of these is drawn freely as a still figure, by the same rules. If the same
 thing can be shown as a flow or a timeline, choose by what the source stresses: the order of the
@@ -213,6 +214,48 @@ one — the point is the relation, written on each arrow — so it carries `data
   <text x="52" y="180" font-size="14">Innlevering</text>
 </svg>
 ```
+
+### same figure, one step highlighted
+
+For a [step-by-step walk-through](section-content.md#step-by-step): **one** drawing of the whole
+process, copied once per step, with only that step highlighted. The learner sees where they are in
+the whole, and the figure does not jump between steps. The copies differ in nothing but the
+highlight — the same `viewBox`, the same boxes in the same places, the same labels:
+
+- the step being explained: the dark tone, white bold label (`fill="#8a5f10"`, label
+  `fill="#fff" font-weight="700"`), or the source's own colour for it;
+- the steps before it: the light tone with a dark outline (done);
+- the steps after it: the resting tone with a thin grey outline (to come).
+
+Boxes in a column joined by lines look like a flow to the motion check; this figure stands still
+on purpose, so it carries `data-motion="static"`. Step 2 of three:
+
+```svg
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 340 200" width="340" height="200" role="img" data-motion="static"
+     font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif">
+  <defs><marker id="pil" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+    <path d="M0,0 L6,3 L0,6 Z" fill="#63604f"/></marker></defs>
+  <rect x="40" y="10" width="260" height="44" rx="8" fill="#faf3e3" stroke="#8a5f10"/>
+  <text x="170" y="37" text-anchor="middle" font-size="14" fill="#33312b">1. Registrer</text>
+  <line x1="170" y1="54" x2="170" y2="73" stroke="#63604f" marker-end="url(#pil)"/>
+  <rect x="40" y="78" width="260" height="44" rx="8" fill="#8a5f10" stroke="#8a5f10" stroke-width="2"/>
+  <text x="170" y="105" text-anchor="middle" font-size="14" font-weight="700" fill="#fff">2. Finn dokumentene</text>
+  <line x1="170" y1="122" x2="170" y2="141" stroke="#63604f" marker-end="url(#pil)"/>
+  <rect x="40" y="146" width="260" height="44" rx="8" fill="#fffdfa" stroke="#cfcabe"/>
+  <text x="170" y="173" text-anchor="middle" font-size="14" fill="#33312b">3. Svar og begrunn</text>
+</svg>
+```
+
+- **One file per step**, each its own entry in `assets[]` (`fig-innsyn-1`, `fig-innsyn-2` …), placed
+  in its step: `![Arbeidsgangen med «Finn dokumentene» uthevet](asset:fig-innsyn-2)`. The alt text
+  names the step that is highlighted.
+- Draw step 1 first, have it approved, then copy it and move the highlight. Change one copy and you
+  change them all — the same edit in every file.
+- **The other languages:** translate the labels of one copy and copy that one, exactly as for the
+  primary language; every language has as many files as there are steps.
+- Up to seven steps stack in a column inside 340 px. A process the source draws as one wide flow is
+  drawn by the script instead ([flows](#flows--drawn-by-a-script)), once, and placed before the
+  walk-through — not copied per step.
 
 ## The animated template
 

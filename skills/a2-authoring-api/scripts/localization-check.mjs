@@ -385,6 +385,34 @@ export function checkAnswerPatterns(text) {
   return patterns;
 }
 
+const PRACTICE_KIND = { steg: "steg", steps: "steg", skriv: "skriv", write: "skriv", repetisjon: "repetisjon", flashcards: "repetisjon" };
+
+/**
+ * #1075, #1076, #1078: formen på hver øvingsramme i en tekst, i rekkefølge — "steg:4" (fire steg),
+ * "skriv:3" (tre punkter i sjekklista), "repetisjon:5" (fem kort). Leses slik plattformen leser rammen
+ * (src/modules/course/contentBlocks.ts): en overskrift begynner et steg eller et kort, og sjekklista er
+ * `- [ ]`-linjene til slutt i en skriv-ramme. Det engelske markørordet er samme ramme.
+ */
+export function practiceBlockShapes(text) {
+  const shapes = [];
+  const frame = /^:::[ \t]*(steg|steps|skriv|write|repetisjon|flashcards)\b[^\r\n]*\r?\n([\s\S]*?)\r?\n:::[ \t]*$/gim;
+  for (const match of String(text ?? "").matchAll(frame)) {
+    const kind = PRACTICE_KIND[match[1].toLowerCase()];
+    const lines = match[2].split(/\r?\n/);
+    let count = 0;
+    if (kind === "skriv") {
+      let end = lines.length;
+      while (end > 0 && lines[end - 1].trim() === "") end -= 1;
+      while (end > 0 && /^[ \t]*[-*][ \t]+\[[ xX]\][ \t]+\S/.test(lines[end - 1])) {
+        count += 1;
+        end -= 1;
+      }
+    } else count = lines.filter((line) => /^ {0,3}#{1,6}[ \t]+\S/.test(line)).length;
+    shapes.push(`${kind}:${count}`);
+  }
+  return shapes;
+}
+
 export function checkLocalization(pkg, { languages = LANGUAGES, primary = "nb", blindCopyBlocks = true } = {}) {
   const { prose, mcqQuestions } = collectLocalizedFields(pkg);
   const missing = [];
@@ -411,6 +439,22 @@ export function checkLocalization(pkg, { languages = LANGUAGES, primary = "nb", 
       && checkAnswerPatterns(localeValue(field.value, lang)).join("|") !== reference.join("|"));
     if (drifted.length > 0) {
       answerKeyChanges.push({ path: field.path, detail: `a «sjekk deg selv» question has its right option (- [x]) in another place, or a question is missing, in: ${drifted.join(", ")}` });
+    }
+  }
+
+  // #1075/#1076/#1078: like mange steg, sjekkpunkter og kort på alle språk. Et steg eller et kort som
+  // forsvant i oversettelsen, ser deltakeren aldri; et sjekkpunkt som forsvant, sjekker hen aldri.
+  const blockShapeChanges = [];
+  for (const field of prose) {
+    const reference = practiceBlockShapes(localeValue(field.value, primary));
+    if (reference.length === 0) continue;
+    const drifted = languages.filter((lang) => lang !== primary && presentLocales(field.value).includes(lang)
+      && practiceBlockShapes(localeValue(field.value, lang)).join("|") !== reference.join("|"));
+    if (drifted.length > 0) {
+      blockShapeChanges.push({
+        path: field.path,
+        detail: `a step-by-step, write-it-yourself or flashcard frame has another number of steps, checklist points or cards, or is missing, in: ${drifted.join(", ")} (${primary} has ${reference.join(", ")})`,
+      });
     }
   }
 
@@ -447,6 +491,7 @@ export function checkLocalization(pkg, { languages = LANGUAGES, primary = "nb", 
   if (missing.length > 0) reasons.push(`${missing.length} localized field(s) missing a language`);
   if (optionCountMismatches.length > 0) reasons.push(`${optionCountMismatches.length} option-count mismatch(es)`);
   if (answerKeyChanges.length > 0) reasons.push(`${answerKeyChanges.length} answer-key change(s) across languages`);
+  if (blockShapeChanges.length > 0) reasons.push(`${blockShapeChanges.length} step, checklist or flashcard frame(s) with another shape in a translation`);
   if (tokenDrift.length > 0) reasons.push(`${tokenDrift.length} formula/URL/identifier(s) lost in a translation`);
   if (blindCopyBlocks && blindCopies.length > 0) reasons.push(`${blindCopies.length} field(s) are a blind copy of the primary language`);
   reasons.push(...figures.reasons);
@@ -457,6 +502,7 @@ export function checkLocalization(pkg, { languages = LANGUAGES, primary = "nb", 
     missing,
     blindCopies,
     answerKeyChanges,
+    blockShapeChanges,
     optionCountMismatches,
     tokenDrift,
     figures,

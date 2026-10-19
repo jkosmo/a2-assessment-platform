@@ -2,7 +2,8 @@
 
 Contents: [Writing the text](#writing-the-text) · [Headings and lists](#headings-and-lists) ·
 [Table](#table) · [Callout](#callout) · [Prompt](#prompt) · [Cards](#cards) · [Think first](#think-first) ·
-[Check yourself](#check-yourself) · [Icons](#icons) ·
+[Check yourself](#check-yourself) · [Step by step](#step-by-step) · [Write it yourself](#write-it-yourself) ·
+[Flashcards](#flashcards) · [Icons](#icons) ·
 [Pictures from the source](#pictures-from-the-source) · [Figures](#figures) ·
 [A finished section](#a-finished-section)
 
@@ -25,7 +26,8 @@ pictures and figures where the text places them.
 ## Headings and lists
 
 - The section's name is its `title`. Do not repeat it as a heading in the body.
-- `##` starts a part of the section. `###` is a card (below) or a sub-part.
+- `##` starts a part of the section. `###` is a card, a step or a flashcard inside a frame (below),
+  or a sub-part.
 - A numbered list for steps in an order; a bulleted list for points without one.
 - **Bold** for the term a paragraph is about — not for whole sentences.
 
@@ -184,11 +186,118 @@ Notatene viser hva som faktisk ble bestemt. Innkallingen sier bare hva som skull
   be left out, but rarely should be.
 - In the other languages the marker word stays `:::sjekk` and `- [x]` stays where it is; translate
   the question, the options and the explanation.
-- **A blank line above every frame** (`:::kort`, `:::tenk`, `:::sjekk`). Right under a list, a quote
-  or a table, the platform reads the frame as part of it — for `:::sjekk` the learner then sees the
-  answer as a ticked list. `produce-course.mjs` fails on a frame with text right above it.
+- **A blank line above every frame** (`:::kort`, `:::tenk`, `:::sjekk`, `:::steg`, `:::skriv`,
+  `:::repetisjon`). Right under a list, a quote or a table, the platform reads the frame as part of
+  it — for `:::sjekk` the learner then sees the answer as a ticked list. `produce-course.mjs` fails on
+  a frame with text right above it.
 - **Never inside a card frame, and no frame inside it** — as for «think first».
   `produce-course.mjs` fails on a nested frame, fewer than two options, or not exactly one `- [x]`.
+
+## Step by step
+
+A process the learner pages through one step at a time, with «Neste» and «Forrige» — case handling,
+a routine, a rule applied in order («først sjekker du …, så …»). Each step says what happens in it.
+A frame `:::steg` with a title on the same line, one `###` heading per step, `:::` to close:
+
+```markdown
+:::steg Slik behandler du en innsynsbegjæring
+### Registrer begjæringen
+Før den inn i saksarkivet samme dag, med dato for mottak. Fristen regnes fra den dagen.
+
+![Arbeidsgangen med «Registrer» uthevet](asset:fig-innsyn-1)
+
+### Finn dokumentene
+Søk i arkivet etter alt begjæringen gjelder, også journalført e-post.
+
+![Arbeidsgangen med «Finn dokumentene» uthevet](asset:fig-innsyn-2)
+
+### Vurder unntak
+Gå gjennom dokumentene ett for ett. Et unntak skal ha hjemmel.
+:::
+```
+
+- **When:** the source walks through a process in an order, and each step changes something — a
+  document is registered, a decision is taken, a form is sent. Use it instead of a long paragraph
+  or a numbered list when the steps each need a few sentences; a numbered list is enough when each
+  step is a line. Use it instead of a single figure when the learner should stop at each step.
+- **Three to seven steps.** The platform needs at least two; fewer than three is not a walk-through,
+  more than seven is a chapter.
+- **Each step says what changes** — what the learner does, and what is different afterwards. The
+  heading is the action («Registrer begjæringen»), not a number; the platform numbers the steps.
+- **From the source only**, in its order. A step the source does not have is `[Avklaring: …]`.
+- **A figure per step, if the source has one:** the same figure each time, with that step
+  highlighted ([figure-design.md](figure-design.md#same-figure-one-step-highlighted)). Not a new
+  figure per step.
+- The learner without a script, and a screen reader without one, gets all the steps as a numbered
+  list; nothing is lost.
+- In the other languages the marker word stays `:::steg` and every `###` heading stays; translate
+  the title, the headings and the text. `produce-course.mjs` fails on fewer than two steps.
+
+## Write it yourself
+
+A short writing task in the section: the learner writes an answer, then opens an **example answer**
+and a **checklist** («Fikk du med …») and ticks off what they got. It practises what a free-text
+module assesses — formulating it — but nothing is assessed, sent or counted. A frame `:::skriv` with
+the task on the same line, the example answer inside, and the checklist as `- [ ]` lines at the end:
+
+```markdown
+:::skriv Skriv vedtakspunktet for at styremøtene flyttes fra tirsdag til torsdag.
+**Vedtak:** Styremøtene flyttes fra tirsdag til torsdag kl. 09.00, gjeldende fra 1. november.
+Sekretariatet oppdaterer møteplanen og sender ny innkalling innen 25. oktober.
+
+- [ ] hva som ble bestemt, med dag og klokkeslett?
+- [ ] fra når det gjelder?
+- [ ] hvem som følger opp, og innen når?
+:::
+```
+
+- **When:** as a warm-up before a free-text module, in the section that comes before it — the same
+  kind of situation as the module's task, smaller. One per section at most.
+- **The checklist mirrors the module's assessment criteria** ([modules.md](modules.md#free-text-modules)):
+  one point per thing an assessor would look for, phrased as a question to the learner. Two to five
+  points. It can be left out; then the example answer stands alone.
+- **The example answer comes from the source** — a model the source gives, or the source's own
+  wording put together. Never an answer you invented; mark a gap `[Avklaring: …]`. Keep it as long
+  as an answer the learner could write in a few minutes.
+- The task is written to the learner, as a task: «Skriv …», «Formuler …». It is required.
+- The checklist is the run of `- [ ]` lines **at the very end**. The example answer may itself have a
+  list, as long as something else stands after it.
+- What the learner writes stays in their browser and is not sent; the box says so.
+- In the other languages the marker word stays `:::skriv` and every `- [ ]` line stays; translate the
+  task, the example answer and the points. `produce-course.mjs` fails on a frame without an example
+  answer.
+
+## Flashcards
+
+Cards the learner pages through: a term on the front, the explanation on the back. The learner turns
+each card, marks «Kunne det» or «Øv mer», and the cards marked «Øv mer» come back after the round.
+Nothing is stored. A frame `:::repetisjon` (not `:::kort` — that is cards side by side), one `###`
+heading per card with the explanation below:
+
+```markdown
+:::repetisjon Fagord i møtearbeid
+### Vedtak
+Det møtet bestemte, med ansvarlig og frist.
+
+### Referent
+Den som skriver referatet.
+
+### Habil
+Uten personlig interesse i saken, så du kan delta i behandlingen.
+:::
+```
+
+- **When:** at the end of the section that defined the terms — for technical words and short facts,
+  not for reasoning. The terms are the ones **this section** defines.
+- **Four to ten cards.** The platform needs at least two.
+- **The text comes from the source:** the term as the source writes it, the explanation in the
+  source's words, shortened to a sentence or two. Never a definition the source does not give.
+- The front is the term alone; the back explains it. A card with nothing on its back is not a card.
+- A screen reader, and a learner without a script, gets the cards as a list of terms with their
+  explanations.
+- In the other languages the marker word stays `:::repetisjon` and every `###` heading stays;
+  translate the terms and the explanations. `produce-course.mjs` fails on fewer than two cards or a
+  card without a back.
 
 ## Icons
 

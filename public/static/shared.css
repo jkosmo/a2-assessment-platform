@@ -1698,6 +1698,164 @@ dialog::backdrop {
 .content-check-explanation > :first-child { margin-top: 0; }
 .content-check-explanation > :last-child { margin-bottom: 0; }
 
+/* Steg for steg (#1075), skriv selv (#1076) og repetisjonskort (#1078): samme ramme og merkelapp som
+   «sjekk deg selv». Uten skript står stegene som en nummerert liste og kortene som en definisjonsliste;
+   content-blocks.js setter data-ready="true" når blokken er gjort interaktiv. */
+.content-steps, .content-write, .content-flash {
+  margin: 0 0 12px;
+  padding: 10px 12px 12px;
+  min-width: 0;
+  border: 1px solid var(--color-border-soft);
+  border-left: 3px solid var(--color-primary);
+  border-radius: 8px;
+  background: #fff;
+}
+.content-steps-head, .content-write-head, .content-flash-head { margin: 0 0 10px; display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
+.content-steps-label, .content-write-label, .content-flash-label {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--color-primary);
+}
+.content-steps-title, .content-write-task, .content-flash-title { flex: 1 1 16rem; min-width: 0; font-weight: 600; color: var(--color-text); }
+/* Knappene i blokkene. To klasser: sidene har egne regler for button (full bredde, høyde). Skriptet
+   skjuler ingenting med [hidden]: det tegner bare det som skal vises (cascade-fella i CLAUDE.md). */
+.content-steps .content-block-btn, .content-write .content-write-show, .content-flash .content-block-btn {
+  width: auto;
+  min-height: 0;
+  margin: 0;
+  padding: 7px 14px;
+  font: inherit;
+  font-size: 14px;
+  color: var(--color-text);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border-soft);
+  border-radius: 8px;
+  cursor: pointer;
+}
+.content-steps .content-block-btn:hover:not([aria-disabled="true"]),
+.content-write .content-write-show:hover,
+.content-flash .content-block-btn:hover { border-color: var(--color-primary); background: var(--color-row-hover); }
+.content-steps .content-block-btn:focus-visible, .content-write .content-write-show:focus-visible,
+.content-flash .content-block-btn:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 2px; }
+.content-steps .content-block-btn--primary, .content-flash .content-block-btn--primary { background: var(--color-primary); border-color: var(--color-primary); color: #fff; }
+.content-steps .content-block-btn--primary:hover:not([aria-disabled="true"]),
+.content-flash .content-block-btn--primary:hover { background: var(--color-primary-hover); border-color: var(--color-primary-hover); }
+.content-steps .content-block-btn[aria-disabled="true"] { opacity: 0.45; cursor: default; }
+
+/* Steg for steg */
+.content-steps-list { margin: 0; padding-left: 22px; display: grid; gap: 12px; }
+.content-steps .content-step-title { margin: 0 0 4px; font-size: 15px; line-height: 1.3; }
+.content-step-body { min-width: 0; }
+.content-step-body > :first-child { margin-top: 0; }
+.content-step-body > :last-child { margin-bottom: 0; }
+.content-step-body img { max-width: 100%; height: auto; }
+.content-steps[data-ready="true"] .content-steps-list { padding: 0; list-style: none; }
+.content-steps[data-ready="true"] .content-step:not(.is-current) { display: none; }
+.content-steps:focus { outline: none; }
+.content-steps-nav { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--color-border-soft); }
+.content-steps-status { flex: 1 1 auto; min-width: 0; text-align: center; font-size: 13px; color: var(--color-meta); font-variant-numeric: tabular-nums; }
+.content-steps-count { margin: 0; }
+.content-steps-dots { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; margin-top: 4px; }
+.content-steps-dots span { width: 8px; height: 8px; border-radius: 50%; background: var(--color-border-soft); }
+.content-steps-dots span.is-on { background: var(--color-primary); }
+
+/* Skriv selv */
+.content-write .content-write-field {
+  display: block;
+  width: 100%;
+  min-height: 96px;
+  margin: 0;
+  padding: 8px 10px;
+  resize: vertical;
+  font: inherit;
+  color: var(--color-text);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border-soft);
+  border-radius: 8px;
+}
+.content-write .content-write-field:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 2px; }
+.content-write-hint { margin: 6px 0 10px; font-size: 12.5px; color: var(--color-meta); }
+.content-write .content-write-show { list-style: none; display: inline-block; }
+.content-write .content-write-show::-webkit-details-marker { display: none; }
+.content-write-answer { display: grid; gap: 10px; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--color-border-soft); }
+.content-write-example { min-width: 0; padding: 10px 12px; border-radius: 8px; background: var(--color-primary-tint); }
+.content-write-example > * { margin: 0; }
+.content-write-example > * + * { margin-top: 8px; }
+.content-write-example ul, .content-write-example ol { padding-left: 18px; }
+.content-write-example-label, .content-write .content-write-checklist-label {
+  margin: 0 0 4px;
+  padding: 0;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--color-meta);
+}
+.content-write-check { min-width: 0; margin: 0; padding: 0; border: 0; }
+.content-write-checklist { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.content-write .content-write-checklist label { display: flex; align-items: flex-start; gap: 8px; margin: 0; font-size: inherit; cursor: pointer; }
+.content-write .content-write-checklist input[type="checkbox"] { flex: none; width: auto; margin: 4px 0 0; padding: 0; accent-color: var(--color-success); }
+
+/* Repetisjonskort. Når øvingen er bygget, står lista igjen bare for skjermlesere. */
+.content-flash-list { display: grid; gap: 4px; margin: 0; }
+.content-flash-front { font-weight: 600; }
+.content-flash-back { margin: 0 0 8px; }
+.content-flash-back > * { margin: 0; }
+.content-flash[data-ready="true"] > .content-flash-list {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+.content-flash-practice, .content-flash-stage { display: grid; gap: 10px; min-width: 0; }
+.content-flash .content-flash-card {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  min-height: 150px;
+  padding: 18px;
+  text-align: center;
+  font-size: 15px;
+  background: var(--color-surface);
+  border-radius: 10px;
+}
+.content-flash .content-flash-card:hover { border-color: var(--color-primary); background: var(--color-surface); }
+.content-flash-faces { display: block; min-width: 0; max-width: 100%; }
+.content-flash-side { display: block; margin-bottom: 6px; font-size: 12px; font-weight: 700; letter-spacing: 0.03em; text-transform: uppercase; color: var(--color-meta); }
+.content-flash-face { display: block; overflow-wrap: break-word; }
+.content-flash-face.is-front { font-size: 20px; font-weight: 600; }
+.content-flash-face.is-back { max-width: 46ch; margin: 0 auto; }
+.content-flash-face > * { margin: 0; }
+.content-flash-face > * + * { margin-top: 6px; }
+.content-flash-face ul, .content-flash-face ol { text-align: left; padding-left: 18px; }
+.content-flash-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 10px; }
+.content-flash-count { flex: 1 1 auto; text-align: center; font-size: 13px; color: var(--color-meta); font-variant-numeric: tabular-nums; }
+.content-flash .content-flash-known { border-color: var(--color-success); color: var(--color-success); }
+.content-flash .content-flash-known:hover { border-color: var(--color-success); background: #e3f0e8; }
+.content-flash .content-flash-again { border-color: var(--color-error); color: var(--color-error); }
+.content-flash .content-flash-again:hover { border-color: var(--color-error); background: #f8e6e3; }
+.content-flash-done { display: grid; justify-items: center; gap: 8px; padding: 10px 0; text-align: center; }
+.content-flash-done-title { margin: 0; font-size: 17px; font-weight: 700; }
+.content-flash-score { margin: 0; }
+
+@media (prefers-reduced-motion: no-preference) {
+  .content-steps[data-ready="true"] .content-step.is-current { animation: content-step-in 0.2s ease-out; }
+  .content-flash .content-flash-card { transition: border-color 0.15s ease; }
+}
+@media (prefers-reduced-motion: reduce) {
+  /* Ingen bevegelse: knappene i blokkene hopper ikke ved trykk, og ingenting tones inn. */
+  .content-steps .content-block-btn, .content-write .content-write-show, .content-flash .content-block-btn { transition: none; }
+  .content-steps .content-block-btn:active, .content-flash .content-block-btn:active { transform: none; }
+}
+@keyframes content-step-in { from { opacity: 0; } to { opacity: 1; } }
+
 /* Prompt-boks: en kodeblokk merket «prompt». Teksten brekker; den ruller ikke sidelengs. */
 .content-prompt {
   margin: 0 0 12px;

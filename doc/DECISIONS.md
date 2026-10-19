@@ -1174,3 +1174,34 @@ bestått i samme modul. Hver deltaker telles én gang per modul, med det SISTE f
 eller det første). En som strøk og venter på sensor etter et nytt forsøk, står derfor under «under
 vurdering», ikke «ikke bestått». Alle forsøk vises i en egen kolonne «Forsøk». Feltnavnene i API og
 CSV (`totalSubmissions` osv.) er beholdt for ikke å brekke eksporter; betydningen er nå personer.
+
+## Steg for steg, skriv selv og repetisjonskort (#1075, #1076, #1078): rammer i teksten (2026-10-19)
+
+Produkteier godkjente skissen («Ser fint ut»): alle tre er rammer i seksjonsteksten, som «tenk først»
+og «sjekk deg selv» — `:::steg Tittel`, `:::skriv Oppgaven`, `:::repetisjon` (engelsk: `:::steps`,
+`:::write`, `:::flashcards`). Ingen migrasjon, ingen egne felt.
+
+- **Ingen egen forfattereditor.** Sakene ba om en editor for å legge til, flytte og slette steg og
+  kort. Forfatteren redigerer teksten, som for de andre rammene; seksjonseditorens hjelp viser
+  formen. Avviket er bevisst: én måte å skrive blokker på, og oversetter, eksport/import og skillet
+  virker uten egne spor.
+- **`:::repetisjon`, ikke `:::kort`.** «Kort» er allerede kort ved siden av hverandre (#1079), i bruk i
+  prod.
+- **Én regel for elementene:** i `:::kort`, `:::steg` og `:::repetisjon` begynner en overskrift et nytt
+  element (`###` i malen; nivået spiller ingen rolle, som for kortene fra før). Én hjelper i
+  `contentBlocks.ts`. Minst to steg eller kort; ellers er det ingen blokk, og teksten står som den er.
+- **Skriv selv: teksten lagres bare i nettleseren** (localStorage), aldri på tjeneren, og avkrysningen
+  lagres ikke. Nøkkelen er `a2.skriv.` + 16 tegn av en SHA-256 av oppgaven og eksempelsvaret, laget av
+  tjeneren. Ikke seksjonen eller adressen: leseren har samme adresse for alle seksjoner, og tegningen
+  vet ikke hvilken seksjon den står i. Oppgave + eksempelsvar skiller to seksjoner med samme generelle
+  oppgavetekst, og hvert språk får sin egen tekst. Sjekklista er ikke med, så et nytt sjekkpunkt ikke
+  sletter det deltakeren skrev. To helt like øvelser deler tekst — godtatt, det er samme øvelse.
+- **Repetisjonskort: ingenting lagres.** «Øv mer»-kortene tas igjen fra sluttskjermen («Øv på de N
+  igjen»), som i skissen. «Du kunne X av Y» teller kortene deltakeren sist svarte «Kunne det» på.
+- **Skjermlesere:** stegene er én nummerert liste uten skript; med skript ett steg av gangen, og
+  «Steg 2 av 4» med stegets tittel kunngjøres (aria-live). Kortene står som en definisjonsliste
+  (begrep/forklaring i par), som skjermleseren leser også når øvingen vises; lista er bare skjult for
+  øyet.
+- Tittel på åpningslinja er valgfri for steg og repetisjonskort; oppgaven er påkrevd for skriv selv
+  (den er etiketten til tekstfeltet), og eksempelsvaret kan ikke være tomt. Sjekklista er `- [ ]`-linjene
+  helt til slutt, så eksempelsvaret selv kan ha lister.

@@ -270,19 +270,37 @@ cannot be nested — the first `:::` closes whichever frame is open. **#1074:** 
 becomes `<div class="content-check" data-content-check>` with one `<button data-check-option
 data-correct>` per option; `public/static/content-blocks.js` (`answerCheck`) marks right/wrong, shows
 the explanation and announces the verdict (`aria-live`). Nothing is sent or stored; the answer key is
-in the HTML by design. Fewer than two options or not exactly one `- [x]` → no block (text stays). Tables get `data-label` on every cell so the phone stacking rule in `shared.css` shows the
+in the HTML by design. Fewer than two options or not exactly one `- [x]` → no block (text stays).
+**#1075/#1076/#1078:** `:::steg [title]` (also `:::steps`) and `:::repetisjon [title]` (also
+`:::flashcards`) split their content at headings with the SAME helper as `:::kort`
+(`splitAtHeadings` — a heading at any level starts an item; ≥2 items or no block). `:::steg` becomes
+`<div class="content-steps" data-content-steps>` with an `<ol>` of every step (the no-script and
+no-JS screen-reader form); `:::repetisjon` becomes `<div class="content-flash" data-content-flash>`
+with a `<dl>` of term/explanation pairs. `:::skriv <task>` (also `:::write`): the trailing run of
+`- [ ]` lines is the checklist, the rest the example answer (must be non-empty) → `<div
+class="content-write" data-content-write data-write-key="<sha256(task+example), 16 hex>">` with a
+`<textarea>`, `<details>` for the example and `<input type="checkbox">` per point — all working
+without script. Labels per locale go to the client as `data-*` attributes. `content-blocks.js`
+(`enhanceContentBlocks`, run at load and by a `MutationObserver` for HTML inserted later) turns the
+steps into one-at-a-time with Forrige/Neste (`aria-disabled` at the ends), arrow keys, dots and an
+`aria-live` count; builds the flashcard practice from the `<dl>` (the list stays for screen readers,
+visually hidden); and keeps the write text in `localStorage` under `a2.skriv.<key>` (every access in
+try/catch). Nothing is sent to the server or counted. Tables get `data-label` on every cell so the phone stacking rule in `shared.css` shows the
 column name.
 
 | Surface | Where |
 | --- | --- |
-| Rendering (source of truth) | `src/modules/course/contentBlocks.ts` — a `Marked` instance per locale with block extensions (`contentCards`, `contentThink` for #1072) and renderers for `code`, `blockquote`, `table`. Output is plain HTML with classes `content-callout`, `content-prompt`, `content-cards`, `content-card`, `content-icon`, `content-table`; both sanitizers (above) let it through on their default allowlist |
+| Rendering (source of truth) | `src/modules/course/contentBlocks.ts` — a `Marked` instance per locale with block extensions (`contentCards`, `contentThink` for #1072, `contentCheck` for #1074, `contentSteps`/`contentWrite`/`contentFlash` for #1075/#1076/#1078) and renderers for `code`, `blockquote`, `table`. Output is plain HTML with classes `content-callout`, `content-prompt`, `content-cards`, `content-card`, `content-icon`, `content-table`; both sanitizers (above) let it through on their default allowlist |
 | Styles | `public/static/shared.css`, the block at the end («Innholdsblokker i seksjonstekst») — one place for the reader, the editor preview and module task text |
-| Copy button | `public/static/content-blocks.js` — one delegated click listener. Loaded by `participant.html`, `admin-content-sections.html`, and via `import` in `admin-content-preview.js` (module workspace) |
+| Copy button, check yourself, steps, write, flashcards | `public/static/content-blocks.js` — delegated click/keydown/input listeners on the document, plus a `MutationObserver` that enhances steps/write/flashcards when section HTML is inserted. Loaded by `participant.html` (section reader AND module task text, which is rendered by the same `renderSectionMarkdown`), `admin-content-sections.html` (editor preview), and via `import` in `admin-content-preview.js` (module workspace preview) |
+| Translator | `buildSectionLocalizationPrompts` in `src/modules/adminContent/llmContentGenerationService.ts` — marker words stay, `- [x]`/`- [ ]` stay, every heading in `:::steg`/`:::repetisjon` stays (guard: `test/unit/llm-content-generation-service.test.ts`) |
+| Skill | `produce-course.mjs` `frameProblems` (blank line above, nesting, unclosed; `FRAME_SHAPE_CHECKS`: 2+ options/one `- [x]`, 2+ steps/cards, a back on every card, an example answer); `localization-check.mjs` `checkAnswerPatterns` (#1074) and `practiceBlockShapes` (same number of steps, checklist points and cards in every language); `references/section-content.md`, `figure-design.md` («same figure, one step highlighted») |
 | Icon library | `![](icon:<name>)` — Lucide's names. `src/modules/course/iconLibrary.ts` reads the vendored bundle `public/static/icons/lucide-icons.json` (made by `scripts/icons/vendor-lucide.mjs`, `npm run icons:vendor`); `src/routes/icons.ts` serves `GET /static/icons/<name>.svg` (open, 404 for unknown); `sectionContent.ts` rewrites `icon:` to the route before sanitising and adds `content-icon`, dropping unknown names; `agentAuthoringValidationService.ts` rejects unknown names (`unknown_icon`). The skill's copy of the name list is `skills/a2-authoring-api/references/icon-names.txt` — regenerate both with the vendor script when the library is upgraded. The e2e static server (`scripts/test/admin-content-static-server.mjs`) mirrors the route |
-| Guard tests | `test/e2e/participant-think-first-1072.spec.ts` (think-first: opens, keyboard, label per locale); `test/unit/section-content-blocks-1079.test.ts` (forms, non-forms, sanitisation inside blocks, `?locale=constructor`), `test/unit/icon-library-1079.test.ts` (library, route, rendering, validation), `test/e2e/content-blocks-1079.spec.ts` (1280/390/360: cards side by side vs stacked, column names on phone, copy, library icons at 24 px) |
+| Guard tests | `test/unit/content-cards-characterization-1075.test.ts` (`:::kort` HTML pinned character for character from 2.95.0, before the heading rule moved into the shared helper); `test/unit/content-practice-blocks-1075-1076-1078.test.ts` (forms, non-forms, CRLF, nesting, sanitiser keeps textarea/checkbox/details/fieldset/dl/data-*/aria-*); `test/dom/content-practice-blocks.dom.test.js` (client functions, observer, storage errors); `test/e2e/participant-practice-blocks-1075-1076-1078.spec.ts` (reader: buttons + keyboard, write + reload, flashcards mouse + keyboard, 390 px, reduced motion, no-script CSS; editor preview); `test/e2e/participant-check-yourself-1074.spec.ts`; `test/e2e/participant-think-first-1072.spec.ts` (think-first: opens, keyboard, label per locale); `test/unit/section-content-blocks-1079.test.ts` (forms, non-forms, sanitisation inside blocks, `?locale=constructor`), `test/unit/icon-library-1079.test.ts` (library, route, rendering, validation), `test/e2e/content-blocks-1079.spec.ts` (1280/390/360: cards side by side vs stacked, column names on phone, copy, library icons at 24 px) |
 
-**Maintenance hazard:** a new page that shows section HTML needs the script tag for the copy button;
-the CSS comes with `shared.css`. The skill (`skills/a2-authoring-api/references/section-content.md`)
+**Maintenance hazard:** a new page that shows section HTML needs the `content-blocks.js` script tag
+(copy, check yourself, and the steps/flashcards would otherwise stay plain lists); the CSS comes with
+`shared.css`. A new frame that splits at headings uses `splitAtHeadings` — not a copy of the loop. The skill (`skills/a2-authoring-api/references/section-content.md`)
 writes these forms — change the syntax in both places or courses from the skill stop rendering as
 blocks.
 
