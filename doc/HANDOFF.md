@@ -7,7 +7,9 @@
 
 ## Kort: det som må avgjøres
 
-**Prod og stage står på 2.93.0** (prod rullet 2026-10-18 kl. 11:03, run 39113371024; stage-testen 51 av 51). Med siden 2.92.0: plattformnavnet «A-2 læringsplattform» overalt (kursbevis, avsender på e-post via ACS-domenet, samtykke), veiledning for blokkene i seksjonseditoren (#1072), spørsmål om nye kriterier når oppgaveteksten er vesentlig endret (#928), og oversettelse av prompt-blokker. Neste batch: #1104 (kriterier byttes ikke ut etter «Be om endring»/«Oversett») ligger på grenen `kriterier-1104`.
+**Prod og stage står på 2.95.0** (prod rullet 2026-10-19 kl. 19:59, run 39297134328; stage-testen 52 av 52). 2.94.0: «Sjekk deg selv» i seksjoner (#1074), kriterier byttes ikke ut uten å spørre (#1104), talenotater fra .pptx (#1103). 2.95.0: «Fullføring per modul» teller personer (siste forsøk) med ny kolonne «Forsøk». Neste: #1075, #1076 og #1078 (steg for steg, skriv selv, repetisjonskort) — skissen er godkjent av produkteier, implementeres av en egen agent.
+
+Før det: prod 2.93.0. **Prod og stage stod på 2.93.0** (prod rullet 2026-10-18 kl. 11:03, run 39113371024; stage-testen 51 av 51). Med siden 2.92.0: plattformnavnet «A-2 læringsplattform» overalt (kursbevis, avsender på e-post via ACS-domenet, samtykke), veiledning for blokkene i seksjonseditoren (#1072), spørsmål om nye kriterier når oppgaveteksten er vesentlig endret (#928), og oversettelse av prompt-blokker. Neste batch: #1104 (kriterier byttes ikke ut etter «Be om endring»/«Oversett») ligger på grenen `kriterier-1104`.
 
 Før det: prod 2.90.0 (rullet 2026-10-13 kl. 22:49 fra `5b4ebe71`).
 
