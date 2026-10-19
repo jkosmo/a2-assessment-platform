@@ -55,18 +55,21 @@ describe("reporting service", () => {
     findSubmissionsForPassRatesReport.mockResolvedValue([
       {
         id: "submission-1",
+        userId: "user-1",
         submissionStatus: SubmissionStatus.COMPLETED,
         module: { id: "module-1", title: "Module One" },
         decisions: [{ passFailTotal: true }],
       },
       {
         id: "submission-2",
+        userId: "user-2",
         submissionStatus: SubmissionStatus.COMPLETED,
         module: { id: "module-1", title: "Module One" },
         decisions: [{ passFailTotal: false }],
       },
       {
         id: "submission-3",
+        userId: "user-3",
         submissionStatus: SubmissionStatus.UNDER_REVIEW,
         module: { id: "module-1", title: "Module One" },
         decisions: [],

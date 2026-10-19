@@ -2,6 +2,22 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.95.0 - 2026-10-19
+
+### «Fullføring per modul» teller personer, ikke forsøk
+
+- Resultater → «Fullføring per modul» og bestått-rapporten teller nå hver deltaker én gang, med det
+  SISTE forsøket. Før ble hvert forsøk telt: en som strøk og så besto, sto under både «Bestått» og
+  «Ikke bestått», og «Totalt» var antall innleveringer. Produkteier oppdaget det på egne tall.
+- «Totalt» heter «Deltakere», og en ny siste kolonne «Forsøk» viser alle forsøk (også i CSV-eksporten,
+  feltet `attempts`). Nøkkeltallet «avgjørelser» heter «vurderte» og teller personer.
+- Statusfilteret gjelder det siste forsøket: et gammelt forsøk drar ikke med seg en person som har
+  levert på nytt.
+- Samme regel som deltakerdetaljene under tabellen har brukt hele tiden; stage-testen sammenligner de
+  to for hver modul.
+- Rotårsak: de to modulrapportene ble skrevet før deltakerdetaljene og fikk aldri regelen «siste forsøk
+  per person». Ingen test hadde en deltaker med mer enn ett forsøk. Den nye integrasjonstesten har det.
+
 ## 2.94.0 - 2026-10-18
 
 ### «Sjekk deg selv» i seksjoner (#1074); kriterier byttes ikke ut uten å spørre (#1104)

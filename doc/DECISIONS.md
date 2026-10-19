@@ -1166,3 +1166,11 @@ fint ut»). Sakens punkt 3 (forfatter-HTML skal ikke kunne lage interaktive elem
 ikke fulgt: rensingen beholder data-attributter, så en forfatter kan lage en lignende knapp. Det er
 godtatt fordi det er ufarlig — skript og hendelsesattributter fjernes, og klikket endrer bare
 utseende og tekst.
+
+## «Fullføring per modul» teller personer, siste forsøk (2026-10-19)
+
+Produkteier: «Endre til telling per person», etter å ha sett seg selv telt både som bestått og ikke
+bestått i samme modul. Hver deltaker telles én gang per modul, med det SISTE forsøket (ikke det beste
+eller det første). En som strøk og venter på sensor etter et nytt forsøk, står derfor under «under
+vurdering», ikke «ikke bestått». Alle forsøk vises i en egen kolonne «Forsøk». Feltnavnene i API og
+CSV (`totalSubmissions` osv.) er beholdt for ikke å brekke eksporter; betydningen er nå personer.
