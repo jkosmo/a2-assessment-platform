@@ -217,7 +217,7 @@ test.describe("#1076 «Skriv selv» i lesevisningen", () => {
     await open(page);
     const block = page.locator(".content-write");
     const field = block.getByRole("textbox", { name: "Skriv vedtakspunktet for at styremøtene flyttes fra tirsdag til torsdag." });
-    await expect(block.locator(".content-write-hint")).toHaveText("Teksten blir bare i denne nettleseren. Den sendes ikke og teller ikke.");
+    await expect(block.locator(".content-write-hint")).toHaveText("Teksten blir bare i denne fanen til du lukker den. Den sendes ikke og teller ikke.");
     await expect(block.locator(".content-write-example")).toBeHidden();
 
     await field.fill("Styremøtene flyttes til torsdag.");

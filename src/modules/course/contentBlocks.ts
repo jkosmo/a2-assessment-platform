@@ -63,7 +63,7 @@ const WRITE_LABELS: Record<string, { label: string; placeholder: string; hint: s
   nb: {
     label: "Skriv selv",
     placeholder: "Skriv svaret ditt her …",
-    hint: "Teksten blir bare i denne nettleseren. Den sendes ikke og teller ikke.",
+    hint: "Teksten blir bare i denne fanen til du lukker den. Den sendes ikke og teller ikke.",
     show: "Vis eksempelsvar",
     example: "Eksempelsvar",
     checklist: "Fikk du med …",
@@ -71,7 +71,7 @@ const WRITE_LABELS: Record<string, { label: string; placeholder: string; hint: s
   nn: {
     label: "Skriv sjølv",
     placeholder: "Skriv svaret ditt her …",
-    hint: "Teksten blir berre i denne nettlesaren. Han blir ikkje send og tel ikkje.",
+    hint: "Teksten blir berre i denne fana til du lukkar ho. Han blir ikkje send og tel ikkje.",
     show: "Vis døme på svar",
     example: "Døme på svar",
     checklist: "Fekk du med …",
@@ -79,7 +79,7 @@ const WRITE_LABELS: Record<string, { label: string; placeholder: string; hint: s
   "en-GB": {
     label: "Write it yourself",
     placeholder: "Write your answer here …",
-    hint: "Your text stays in this browser. It is not sent and does not count.",
+    hint: "Your text stays in this tab until you close it. It is not sent and does not count.",
     show: "Show an example answer",
     example: "Example answer",
     checklist: "Did you include …",

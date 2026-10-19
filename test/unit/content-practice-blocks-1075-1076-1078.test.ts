@@ -134,7 +134,7 @@ describe("#1076 «Skriv selv»: eksempelsvar og sjekkliste", () => {
     expect(html).toMatch(/^<div class="content-write" data-content-write data-write-key="[0-9a-f]{16}">/);
     expect(html).toContain('<span class="content-write-label">Skriv selv</span><span class="content-write-task">Skriv vedtakspunktet for at møtene flyttes.</span>');
     expect(html).toContain('<textarea class="content-write-field" data-write-field rows="4" aria-label="Skriv vedtakspunktet for at møtene flyttes." placeholder="Skriv svaret ditt her …"></textarea>');
-    expect(html).toContain('<p class="content-write-hint">Teksten blir bare i denne nettleseren. Den sendes ikke og teller ikke.</p>');
+    expect(html).toContain('<p class="content-write-hint">Teksten blir bare i denne fanen til du lukker den. Den sendes ikke og teller ikke.</p>');
     expect(html).toContain('<details class="content-write-reveal"><summary class="content-write-show">Vis eksempelsvar</summary>');
     expect(html).toContain('<p class="content-write-example-label">Eksempelsvar</p><p><strong>Vedtak:</strong> Møtene flyttes til torsdag.</p>');
     expect(html).toContain('<legend class="content-write-checklist-label">Fikk du med …</legend>');
