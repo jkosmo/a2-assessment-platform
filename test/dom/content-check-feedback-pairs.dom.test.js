@@ -73,7 +73,7 @@ function game(host) {
 }
 
 describe("#1107 finn parene", () => {
-  it("lista blir to kolonner: begrepene i rekkefølge, forklaringene stokket — aldri rett overfor sine egne", () => {
+  it("lista blir to kolonner: begrepene i rekkefølge, forklaringene stokket — aldri alle i sin egen rekkefølge", () => {
     const host = mount(PAIRS);
     // 0.999… gir ingen bytter i Fisher–Yates (identiteten); funksjonen må stokke på nytt.
     enhancePairs(host.querySelector("[data-content-pairs]"), sequence([0.9999, 0.9999, 0.9999, 0, 0, 0]));
@@ -150,6 +150,15 @@ describe("#1107 finn parene", () => {
     left.forEach((b, i) => { pickPair(b); pickPair(def(i)); });
     expect(status()).toBe("Alle 4 parene er riktige.");
     expect(block.querySelector(".content-pairs-status").classList.contains("is-done")).toBe(true);
+  });
+
+  it("en lenke i et par blir vanlig tekst i knappen, men står i lista for skjermlesere", () => {
+    const host = mount([":::par", "- [Hjemmel](https://lovdata.no) = Lovbestemmelsen", "- B = b", "- C = c", ":::"].join(NL));
+    enhanceContentBlocks(host);
+    const { left, block } = game(host);
+    expect(left[0].querySelector("a")).toBeNull();
+    expect(left[0].textContent).toBe("Hjemmel");
+    expect(block.querySelector(".content-pairs-list a")).not.toBeNull();
   });
 
   it("gjøres klar én gang, også når den kalles igjen", () => {

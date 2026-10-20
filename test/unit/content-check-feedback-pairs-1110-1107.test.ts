@@ -107,6 +107,8 @@ describe("#1107 «finn parene»", () => {
     ["samme begrep to ganger", lines(":::par", "- A = a", "- a = b", "- C = c", ":::")],
     ["samme forklaring to ganger", lines(":::par", "- A = samme", "- B = Samme ", "- C = c", ":::")],
     ["et par uten mellomrom rundt =", lines(":::par", "- A=a", "- B = b", "- C = c", ":::")],
+    ["samme begrep med og uten fet skrift (QA 2.98.0)", lines(":::par", "- **Vedtak** = a", "- Vedtak = b", "- C = c", ":::")],
+    ["« = » bare inne i kode", lines(":::par", "- `a = b`", "- B = b", "- C = c", ":::")],
   ])("%s: ingen blokk, teksten står", (_navn, md) => {
     const html = renderSectionBlocks(md, "nb");
     expect(html).not.toContain("content-pairs");
@@ -122,6 +124,11 @@ describe("#1107 «finn parene»", () => {
     expect(html).toContain("B = b");
     expect(html).toContain("Neste avsnitt.");
     expect(html).toContain("Her er fagordene.");
+  });
+
+  it("« = » i et kodespenn deler ikke paret (QA 2.98.0)", () => {
+    const html = renderSectionBlocks(lines(":::par", "- `a = b` = Formelen", "- B = b", "- C = c", ":::"), "nb");
+    expect(html).toContain('<span class="content-pairs-term"><code>a = b</code></span><span class="content-pairs-sep"> – </span><span class="content-pairs-def">Formelen</span>');
   });
 
   it("CRLF tegnes som LF", () => {

@@ -385,7 +385,8 @@ export function flashAction(block, action) {
 // skjermlesere (shared.css skjuler den bare for øyet), som for repetisjonskortene. Ingenting lagres.
 const MISS_MS = 700;
 
-/** Stokker rekkefølgen, og aldri slik at forklaringene står rett overfor sine egne begreper. */
+/** Stokker rekkefølgen — aldri slik at ALLE forklaringene står i sin egen rekkefølge (enkelte kan havne rett
+ *  overfor sitt eget begrep; med tre par skjer det ofte, og det er greit). */
 function shuffledOrder(count, random = Math.random) {
   const order = [...Array(count).keys()];
   if (count < 2) return order;
@@ -424,6 +425,13 @@ export function enhancePairs(block, random = Math.random) {
   const item = (source, key, side) => {
     const button = makeButton(`content-pairs-item content-pairs-item--${side === "L" ? "term" : "def"}`, "data-pair-item", "");
     for (const node of source.childNodes) button.appendChild(node.cloneNode(true));
+    // En lenke inni en knapp ville både valgt og navigert bort fra siden (QA-porten, 2.98.0): teksten står,
+    // lenken ikke. Lista for skjermlesere beholder lenken.
+    for (const link of button.querySelectorAll("a")) {
+      const span = document.createElement("span");
+      span.append(...link.childNodes);
+      link.replaceWith(span);
+    }
     button.dataset.pairKey = String(key);
     button.dataset.pairSide = side;
     button.setAttribute("aria-pressed", "false");

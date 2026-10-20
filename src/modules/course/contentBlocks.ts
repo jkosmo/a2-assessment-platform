@@ -139,8 +139,32 @@ const CHECK_OPTION = /^[ \t]*[-*][ \t]+\[([ xX])\][ \t]+(\S.*)$/;
  */
 const CHECK_FEEDBACK = /^(?: {2,}|\t)[ \t]*(\S.*?)[ \t]*$/;
 
-/** #1107: et par — `- Begrep = Forklaring`. Delt ved første « = ». */
-const PAIR_LINE = /^[ \t]*[-*][ \t]+(\S.*?)[ \t]+=[ \t]+(\S.*?)[ \t]*$/;
+/** #1107: en linje i en «finn parene»-ramme — et listepunkt; selve paret deles av splitPairLine. */
+const PAIR_ITEM = /^[ \t]*[-*][ \t]+(\S.*?)[ \t]*$/;
+
+/**
+ * #1107: `Begrep = Forklaring` delt ved første « = » (med mellomrom rundt) som ikke står i et kodespenn —
+ * `` `a = b` = Formel `` er begrepet `a = b` (QA-porten, 2.98.0). Uten slikt skille: `null`.
+ */
+export function splitPairLine(line: string): { term: string; def: string } | null {
+  const item = PAIR_ITEM.exec(line);
+  if (!item) return null;
+  const body = item[1]!;
+  let inCode = false;
+  for (let i = 0; i < body.length; i += 1) {
+    if (body[i] === "`") inCode = !inCode;
+    if (inCode || (body[i] !== " " && body[i] !== "\t")) continue;
+    const sep = /^[ \t]+=[ \t]+/.exec(body.slice(i));
+    if (!sep) continue;
+    const term = body.slice(0, i).trim();
+    const def = body.slice(i + sep[0].length).trim();
+    if (term && def) return { term, def };
+  }
+  return null;
+}
+
+/** Teksten i et begrep eller en forklaring uten markdown-tegn og store bokstaver: `**Vedtak**` = `vedtak`. */
+const comparablePairText = (text: string) => text.replace(/[*_`~]/g, "").replace(/\s+/g, " ").trim().toLowerCase();
 
 /**
  * #1107: parene i en «finn parene»-ramme, eller `null` når rammen ikke er en blokk: hver linje som ikke er
@@ -151,12 +175,14 @@ function splitPairs(inner: string): Array<{ term: string; def: string }> | null 
   const pairs: Array<{ term: string; def: string }> = [];
   for (const line of inner.split(/\r?\n/)) {
     if (line.trim() === "") continue;
-    const pair = PAIR_LINE.exec(line);
+    const pair = splitPairLine(line);
     if (!pair) return null;
-    pairs.push({ term: pair[1]!, def: pair[2]! });
+    pairs.push(pair);
   }
   if (pairs.length < 3) return null;
-  const distinct = (values: string[]) => new Set(values.map((v) => v.trim().toLowerCase())).size === values.length;
+  // Like for deltakeren er like her: `**Vedtak**` og `Vedtak` ville blitt to knapper med samme tekst,
+  // der bare den ene er riktig (QA-porten, 2.98.0).
+  const distinct = (values: string[]) => new Set(values.map(comparablePairText)).size === values.length;
   if (!distinct(pairs.map((p) => p.term)) || !distinct(pairs.map((p) => p.def))) return null;
   return pairs;
 }

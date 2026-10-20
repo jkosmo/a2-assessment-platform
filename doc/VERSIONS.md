@@ -18,6 +18,10 @@ This document tracks release versions and what each version includes.
   følger og stopper en ugyldig `:::par` (linje som ikke er et par, færre enn tre, like begreper eller
   forklaringer); språkkontrollen krever samme følger og like mange par på alle språk; veiledningen har
   fått «A case» og «Match the pairs».
+- QA-porten: en lenke i et par blir vanlig tekst i knappen (et klikk navigerte ellers bort); `**Vedtak**`
+  og `Vedtak` regnes som samme begrep; « = » inne i kode deler ikke paret. Merk: en forklaring skrevet
+  innrykket rett under siste alternativ, eller et alternativ brutt over to linjer med innrykk, leses nå som
+  følge (stage har ingen slike; skillet skriver alltid forklaringen etter en blank linje).
 
 ## 2.96.1 - 2026-10-20
 

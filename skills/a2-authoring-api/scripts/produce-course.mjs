@@ -336,8 +336,28 @@ function writeProblems(kind, lines) {
   return [`a :::${kind} frame needs an example answer above the checklist — the learner compares with it; without one the learner sees the markers as text`];
 }
 
-/** A line in a «par» frame — the platform's rule: `- term = explanation`, split at the first « = ». */
-const PAIR_LINE = /^[ \t]*[-*][ \t]+(\S.*?)[ \t]+=[ \t]+(\S.*?)[ \t]*$/;
+/**
+ * A line in a «par» frame — the platform's rule (splitPairLine in src/modules/course/contentBlocks.ts):
+ * `- term = explanation`, split at the first « = » that is not inside a code span.
+ */
+function splitPairLine(line) {
+  const item = /^[ \t]*[-*][ \t]+(\S.*?)[ \t]*$/.exec(line);
+  if (!item) return null;
+  const body = item[1];
+  let inCode = false;
+  for (let i = 0; i < body.length; i += 1) {
+    if (body[i] === "`") inCode = !inCode;
+    if (inCode || (body[i] !== " " && body[i] !== "\t")) continue;
+    const sep = /^[ \t]+=[ \t]+/.exec(body.slice(i));
+    if (!sep) continue;
+    const term = body.slice(0, i).trim();
+    const def = body.slice(i + sep[0].length).trim();
+    if (term && def) return { term, def };
+  }
+  return null;
+}
+/** What the learner reads: `**Vedtak**` and `Vedtak` are the same term. */
+const comparablePairText = (text) => text.replace(/[*_`~]/g, "").replace(/\s+/g, " ").trim().toLowerCase();
 
 /**
  * #1107: a «par» frame is a block only when every line is a pair, there are at least three, and no
@@ -347,9 +367,9 @@ function pairsProblems(kind, lines) {
   const pairs = [];
   for (const line of lines) {
     if (line.trim() === "") continue;
-    const pair = PAIR_LINE.exec(line);
+    const pair = splitPairLine(line);
     if (!pair) return [`a :::${kind} frame has a line that is not a pair «- term = explanation»: «${line.trim()}» — the learner sees the markers as text`];
-    pairs.push({ term: pair[1].trim().toLowerCase(), def: pair[2].trim().toLowerCase() });
+    pairs.push({ term: comparablePairText(pair.term), def: comparablePairText(pair.def) });
   }
   if (pairs.length < 3) return [`a :::${kind} frame needs at least three pairs (it has ${pairs.length}) — with fewer the learner sees the markers as text`];
   const repeated = (values) => values.length !== new Set(values).size;
