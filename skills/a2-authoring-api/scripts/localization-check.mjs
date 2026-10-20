@@ -377,15 +377,24 @@ export function checkAnswerPatterns(text) {
     for (const line of match[1].split(/\r?\n/)) {
       if (pattern === "" && line.trim() === "") continue;
       const option = /^[ \t]*[-*][ \t]+\[([ xX])\][ \t]+\S/.exec(line);
-      if (!option) break;
-      pattern += option[1].toLowerCase() === "x" ? "1" : "0";
+      if (option) {
+        pattern += option[1].toLowerCase() === "x" ? "1" : "0";
+        continue;
+      }
+      // #1110: an indented line under an option is its feedback — "f" after the option, once, so a
+      // translation that drops or moves a feedback shows up as another pattern.
+      if (pattern !== "" && /^(?: {2,}|\t)[ \t]*\S/.test(line)) {
+        if (!pattern.endsWith("f")) pattern += "f";
+        continue;
+      }
+      break;
     }
     patterns.push(pattern);
   }
   return patterns;
 }
 
-const PRACTICE_KIND = { steg: "steg", steps: "steg", skriv: "skriv", write: "skriv", repetisjon: "repetisjon", flashcards: "repetisjon" };
+const PRACTICE_KIND = { steg: "steg", steps: "steg", skriv: "skriv", write: "skriv", repetisjon: "repetisjon", flashcards: "repetisjon", par: "par", pairs: "par" };
 
 /**
  * #1075, #1076, #1078: formen på hver øvingsramme i en tekst, i rekkefølge — "steg:4" (fire steg),
@@ -395,7 +404,7 @@ const PRACTICE_KIND = { steg: "steg", steps: "steg", skriv: "skriv", write: "skr
  */
 export function practiceBlockShapes(text) {
   const shapes = [];
-  const frame = /^:::[ \t]*(steg|steps|skriv|write|repetisjon|flashcards)\b[^\r\n]*\r?\n([\s\S]*?)\r?\n:::[ \t]*$/gim;
+  const frame = /^:::[ \t]*(steg|steps|skriv|write|repetisjon|flashcards|par|pairs)\b[^\r\n]*\r?\n([\s\S]*?)\r?\n:::[ \t]*$/gim;
   for (const match of String(text ?? "").matchAll(frame)) {
     const kind = PRACTICE_KIND[match[1].toLowerCase()];
     const lines = match[2].split(/\r?\n/);
@@ -407,6 +416,9 @@ export function practiceBlockShapes(text) {
         count += 1;
         end -= 1;
       }
+    } else if (kind === "par") {
+      // #1107: one pair per line, «- term = explanation».
+      count = lines.filter((line) => /^[ \t]*[-*][ \t]+\S.*?[ \t]+=[ \t]+\S/.test(line)).length;
     } else count = lines.filter((line) => /^ {0,3}#{1,6}[ \t]+\S/.test(line)).length;
     shapes.push(`${kind}:${count}`);
   }
@@ -438,7 +450,7 @@ export function checkLocalization(pkg, { languages = LANGUAGES, primary = "nb", 
     const drifted = languages.filter((lang) => lang !== primary && presentLocales(field.value).includes(lang)
       && checkAnswerPatterns(localeValue(field.value, lang)).join("|") !== reference.join("|"));
     if (drifted.length > 0) {
-      answerKeyChanges.push({ path: field.path, detail: `a «sjekk deg selv» question has its right option (- [x]) in another place, or a question is missing, in: ${drifted.join(", ")}` });
+      answerKeyChanges.push({ path: field.path, detail: `a «sjekk deg selv» question has its right option (- [x]) in another place, a feedback line under another option, or a question is missing, in: ${drifted.join(", ")}` });
     }
   }
 
@@ -453,7 +465,7 @@ export function checkLocalization(pkg, { languages = LANGUAGES, primary = "nb", 
     if (drifted.length > 0) {
       blockShapeChanges.push({
         path: field.path,
-        detail: `a step-by-step, write-it-yourself or flashcard frame has another number of steps, checklist points or cards, or is missing, in: ${drifted.join(", ")} (${primary} has ${reference.join(", ")})`,
+        detail: `a step-by-step, write-it-yourself, flashcard or match-the-pairs frame has another number of steps, checklist points, cards or pairs, or is missing, in: ${drifted.join(", ")} (${primary} has ${reference.join(", ")})`,
       });
     }
   }

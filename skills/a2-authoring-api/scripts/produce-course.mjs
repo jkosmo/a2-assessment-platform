@@ -215,17 +215,17 @@ function withoutCodeBlocks(text) {
 // The platform's own reading of a frame's opening line (`:::kort`, `::: Kort`, `:::cards` — blanks and
 // case do not matter), so what is counted here agrees with what the reader will show. The words and
 // their English twins are the platform's (src/modules/course/contentBlocks.ts).
-const FRAME_OPENER = /^:::[ \t]*(kort|cards|tenk|think|sjekk|check|steg|steps|skriv|write|repetisjon|flashcards)\b/i;
-/** Cards take nothing after the word; think, check and write need their question or task there; steps and flashcards may have a title. */
+const FRAME_OPENER = /^:::[ \t]*(kort|cards|tenk|think|sjekk|check|steg|steps|skriv|write|repetisjon|flashcards|par|pairs)\b/i;
+/** Cards take nothing after the word; think, check and write need their question or task there; steps, flashcards and pairs may have a title. */
 function isFrameOpener(word, line) {
   const kind = word.toLowerCase();
   if (kind === "kort" || kind === "cards") return /^:::[ \t]*(?:kort|cards)[ \t]*$/i.test(line);
-  if (["steg", "steps", "repetisjon", "flashcards"].includes(kind)) return new RegExp(`^:::[ \\t]*${kind}(?:[ \\t].*)?$`, "i").test(line);
+  if (["steg", "steps", "repetisjon", "flashcards", "par", "pairs"].includes(kind)) return new RegExp(`^:::[ \\t]*${kind}(?:[ \\t].*)?$`, "i").test(line);
   return new RegExp(`^:::[ \\t]*${kind}[ \\t]+\\S`, "i").test(line);
 }
 
 /** The frames that are drawn only in a section, never in a module's text (2.96.1). */
-const SECTION_ONLY_FRAME = /^:::[ \t]*(steg|steps|skriv|write|repetisjon|flashcards)\b/i;
+const SECTION_ONLY_FRAME = /^:::[ \t]*(steg|steps|skriv|write|repetisjon|flashcards|par|pairs)\b/i;
 /** A module's text fields the learner reads. */
 const MODULE_TEXT_FIELDS = ["taskText", "candidateTaskConstraints"];
 
@@ -287,8 +287,9 @@ function checkProblems(kind, lines) {
   const options = [];
   while (at < lines.length) {
     const option = /^[ \t]*[-*][ \t]+\[([ xX])\][ \t]+\S/.exec(lines[at]);
-    if (!option) break;
-    options.push(option[1].toLowerCase() === "x");
+    if (option) options.push(option[1].toLowerCase() === "x");
+    // #1110: an indented line right under an option is that option's feedback.
+    else if (!(options.length > 0 && /^(?: {2,}|\t)[ \t]*\S/.test(lines[at]))) break;
     at += 1;
   }
   const right = options.filter(Boolean).length;
@@ -335,8 +336,33 @@ function writeProblems(kind, lines) {
   return [`a :::${kind} frame needs an example answer above the checklist — the learner compares with it; without one the learner sees the markers as text`];
 }
 
+/** A line in a «par» frame — the platform's rule: `- term = explanation`, split at the first « = ». */
+const PAIR_LINE = /^[ \t]*[-*][ \t]+(\S.*?)[ \t]+=[ \t]+(\S.*?)[ \t]*$/;
+
+/**
+ * #1107: a «par» frame is a block only when every line is a pair, there are at least three, and no
+ * term or explanation is repeated (two right answers). Otherwise the learner sees the markers as text.
+ */
+function pairsProblems(kind, lines) {
+  const pairs = [];
+  for (const line of lines) {
+    if (line.trim() === "") continue;
+    const pair = PAIR_LINE.exec(line);
+    if (!pair) return [`a :::${kind} frame has a line that is not a pair «- term = explanation»: «${line.trim()}» — the learner sees the markers as text`];
+    pairs.push({ term: pair[1].trim().toLowerCase(), def: pair[2].trim().toLowerCase() });
+  }
+  if (pairs.length < 3) return [`a :::${kind} frame needs at least three pairs (it has ${pairs.length}) — with fewer the learner sees the markers as text`];
+  const repeated = (values) => values.length !== new Set(values).size;
+  if (repeated(pairs.map((p) => p.term)) || repeated(pairs.map((p) => p.def))) {
+    return [`a :::${kind} frame repeats a term or an explanation — every pair must be different, or two answers would be right; the learner sees the markers as text`];
+  }
+  return [];
+}
+
 /** The frames with a shape the platform requires, and the check for each. */
 const FRAME_SHAPE_CHECKS = {
+  par: pairsProblems,
+  pairs: pairsProblems,
   sjekk: checkProblems,
   check: checkProblems,
   steg: itemsProblems,
