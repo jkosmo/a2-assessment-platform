@@ -1167,6 +1167,15 @@ ikke fulgt: rensingen beholder data-attributter, så en forfatter kan lage en li
 godtatt fordi det er ufarlig — skript og hendelsesattributter fjernes, og klikket endrer bare
 utseende og tekst.
 
+## Skillet velger øvelse etter kilden, uten mekanisk telling (#1108, 2026-10-20)
+
+Produkteier godkjente rekkefølgen i en seksjon («Ide 4: OK», 2026-10-19). Skillet har én tabell fra hva
+kilden har til øvelsen, og standardveien er ingen eller én øvelse per seksjon, høyst to. Saken foreslo
+«gjerne» en varsling i `produce-course.mjs` ved mer enn tre; den er bevisst utelatt. Plattformen leser
+eller håndhever ikke et antall øvelser, og forfatterprosessen hører mellom forfatter og modell
+(prinsippet fra 2026-09-06: ikke kod forfatterdialogen). Det som spesifiseres, er standardveien —
+det skillet lager når ingen passer på — ikke et tak.
+
 ## Case og «finn parene» (#1110, #1107, 2026-10-20)
 
 Fra Duolingo-researchen 2026-10-19, valgt av produkteier etter skisser:

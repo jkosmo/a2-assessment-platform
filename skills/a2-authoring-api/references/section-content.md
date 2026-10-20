@@ -1,6 +1,6 @@
 # Section content — text, boxes, prompts, cards, pictures
 
-Contents: [Writing the text](#writing-the-text) · [Headings and lists](#headings-and-lists) ·
+Contents: [Choosing the practice](#choosing-the-practice) · [Writing the text](#writing-the-text) · [Headings and lists](#headings-and-lists) ·
 [Table](#table) · [Callout](#callout) · [Prompt](#prompt) · [Cards](#cards) · [Think first](#think-first) ·
 [Check yourself](#check-yourself) · [A case](#a-case) · [Step by step](#step-by-step) ·
 [Write it yourself](#write-it-yourself) · [Flashcards](#flashcards) · [Match the pairs](#match-the-pairs) ·
@@ -10,6 +10,29 @@ Contents: [Writing the text](#writing-the-text) · [Headings and lists](#heading
 
 A section teaches. Its body is markdown (`bodyMarkdown`); the platform renders it and shows
 pictures and figures where the text places them.
+
+## Choosing the practice
+
+The learner should do something while reading — not only read. But a section is not a quiz: the
+module tests. **Most sections get none or one exercise; two at most** (a case is one exercise, even
+with three questions). Choose by what the source gives, not to use every kind:
+
+| The source has … | Use | Not |
+|---|---|---|
+| a problem or a situation the text then explains | [Think first](#think-first) before the explanation | — |
+| a rule or a point the learner should apply | [Check yourself](#check-yourself) right after it | a check that repeats a fact |
+| a routine applied in a situation from the work | [A case](#a-case) | a quiz of separate facts |
+| a process in an order, each step changing something | [Step by step](#step-by-step) | a one-line-per-step list |
+| a formulation the module will assess (free text) | [Write it yourself](#write-it-yourself), in the section before the module | — |
+| terms the section defines | [Flashcards](#flashcards) (4–10) or [Match the pairs](#match-the-pairs) (3–6) | both for the same terms |
+| nothing of these | no exercise — plain text with a box, a table or a figure | an exercise made up to have one |
+
+**Order in a section**, when there are two: from recognising to applying to formulating —
+think first → the text (with step by step) → check yourself or match the pairs → a case → write it
+yourself → flashcards at the end. The module that follows is what counts.
+
+Name the exercises in the outline, per section, so the author approves them with the structure
+([course-design.md](course-design.md)).
 
 ## Writing the text
 
@@ -147,8 +170,8 @@ KI leser alt, men sammendraget blir **generelt**. Spør heller etter det du tren
 :::
 ```
 
-- **Where:** after a problem or a situation has been set out, before the text explains it. One or
-  two per section at most; a section that only asks is a quiz, and the quiz is the module's job.
+- **Where:** after a problem or a situation has been set out, before the text explains it. It
+  counts towards the section's one or two exercises ([Choosing the practice](#choosing-the-practice)).
 - **From the source only.** The question is one the source raises, and the answer is what the source
   says. Never a question the source does not answer.
 - The answer is ordinary markdown — sentences, a short list, bold. Keep it short; the explanation
@@ -176,8 +199,9 @@ Notatene viser hva som faktisk ble bestemt. Innkallingen sier bare hva som skull
 :::
 ```
 
-- **Where:** right after the core of an explanation, one to three per section. Use it where
-  applying what was just read is the point («anvend, ikke husk») — not to repeat a fact.
+- **Where:** right after the core of an explanation. Use it where applying what was just read is
+  the point («anvend, ikke husk») — not to repeat a fact. It counts towards the section's one or two
+  exercises ([Choosing the practice](#choosing-the-practice)); a case is one exercise.
 - **From the source only.** The question, the options and the explanation rest on what the source
   says. The module's test is still the test; this is practice.
 - **Options:** two to four, straight after the question line, each `- [ ]`; exactly one `- [x]`.

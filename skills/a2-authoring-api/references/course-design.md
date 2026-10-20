@@ -23,9 +23,12 @@ Objectives are the backbone: the structure and the tests follow from them.
 - **Practice inside the sections**, where the source gives the material for it: a step-by-step
   walk-through for a process, a case (a situation with «sjekk deg selv» and feedback per option) where
   a routine is applied, a «skriv selv» before a free-text module, flashcards or «finn parene» for the
-  terms a section defines ([section-content.md](section-content.md#step-by-step)). Name them in
-  the outline, so the author approves them with the structure. None of it counts; the modules test.
-- Present the outline as a table: element, order, test form, the objective it serves, level.
+  terms a section defines — none or one per section, two at most; which one follows from what the
+  source gives ([section-content.md](section-content.md#choosing-the-practice)). Name them in the
+  outline, per section, so the author approves them with the structure. None of it counts; the
+  modules test.
+- Present the outline as a table: element, order, test form (for a section: its exercise, or none),
+  the objective it serves, level.
 
 ## Test form
 

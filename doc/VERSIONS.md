@@ -4,7 +4,15 @@ This document tracks release versions and what each version includes.
 
 ## 2.98.0 - 2026-10-20
 
-### Case med følge per alternativ (#1110) og «finn parene» (#1107)
+### Case med følge per alternativ (#1110) og «finn parene» (#1107); skillet velger øvelse (#1108)
+
+- **#1108 (bare skillet):** én regel for hvilken øvelse en seksjon får — en tabell fra hva kilden har
+  (et problem, en regel, en rutine, en prosess, en formulering, begreper) til øvelsen, og «ingen» når
+  kilden ikke gir noe. Standard er ingen eller én per seksjon, høyst to (et case er én), i rekkefølgen
+  kjenne igjen → bruke → formulere. Kursoversikten viser øvelsen per seksjon, så forfatteren godkjenner
+  den med strukturen. Grensene som sto spredt per byggekloss («én til tre», «én eller to»), er samlet
+  her. Ingen mekanisk varsling: plattformen håndhever ikke et antall, og regelen hører mellom forfatter
+  og modell (se DECISIONS).
 
 - **#1110:** i «sjekk deg selv» kan hvert alternativ få sin egen følge — en innrykket linje (to
   mellomrom) rett under det, som vises når deltakeren velger det. Et case er da en situasjon og ett–tre
