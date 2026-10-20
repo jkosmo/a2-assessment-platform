@@ -19,7 +19,7 @@ gate 3 ([course-design.md](course-design.md#level-and-scope)).
   section it follows: the same kind of situation, smaller, with an example answer from the source
   and a checklist that mirrors these criteria — so the learner has practised formulating it before
   it is assessed ([section-content.md](section-content.md#write-it-yourself)). The frames `:::steg`,
-  `:::skriv` and `:::repetisjon` are not drawn in a module's text: there they show as markers, and
+  `:::skriv`, `:::repetisjon` and `:::par` are not drawn in a module's text: there they show as markers, and
   `produce-course.mjs` fails on them. «Think first» and «check yourself» work in both.
 
 ## Multiple-choice questions

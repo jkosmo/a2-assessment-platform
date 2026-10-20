@@ -115,8 +115,38 @@ eksporteres og importeres som resten. Hjelpen i seksjonseditoren (spørsmålsteg
   Én `###`-overskrift per kort, minst to (helst fire til ti). Deltakeren snur kortene, markerer
   **Kunne det** eller **Øv mer**, og kan øve på «øv mer»-kortene igjen etterpå. Ingenting lagres.
   `:::kort` er noe annet: kort ved siden av hverandre.
+- **Finn parene** (#1107): deltakeren kobler begreper med forklaringer.
 
-**Bare i seksjoner (2.96.1):** steg for steg, skriv selv og repetisjonskort tegnes ikke i en moduls
+  ```markdown
+  :::par Koble begrepet med forklaringen
+  - Hjemmel = Lovbestemmelsen et vedtak bygger på
+  - Merinnsyn = Innsyn selv om dokumentet kunne vært unntatt
+  - Klagefrist = Tiden parten har til å klage på vedtaket
+  :::
+  ```
+
+  Én linje per par, `- begrep = forklaring` (delt ved første « = »), minst tre par og ingen like
+  begreper eller forklaringer. Deltakeren velger et begrep og så forklaringen; et riktig par blir grønt
+  og står, et feil blinker rødt. Forklaringene stokkes hver gang. Ingen tidtaker, ingenting lagres.
+- **Case** (#1110): en situasjon fra jobben og ett til tre «sjekk deg selv» om hva deltakeren gjør. En
+  innrykket linje (to mellomrom) rett under et alternativ er **følgen** av det valget, og vises når
+  deltakeren velger det:
+
+  ```markdown
+  En innbygger ringer og vil se dokumentene i saken om naboens byggesøknad.
+
+  :::sjekk Søknaden inneholder naboens personnummer. Hva gjør du?
+  - [ ] Avslår hele innsynet
+    For mye. Bare opplysningen som skal unntas, kan holdes tilbake.
+  - [x] Sladder personnummeret og gir innsyn i resten
+    Riktig. Du unntar det som må unntas.
+  :::
+  ```
+
+  Saken deler seg ikke etter valget; et dårligere valg vises med følgen, og deltakeren går videre.
+  Uten følger ser «sjekk deg selv» ut som før.
+
+**Bare i seksjoner (2.96.1):** steg for steg, skriv selv, repetisjonskort og finn parene tegnes ikke i en moduls
 oppgavetekst eller veiledning — der står de som vanlig tekst. Oppgaveteksten er det deltakeren svarer
 på, og et «skriv selv»-felt rett over svarfeltet fikk deltakeren til å skrive på feil sted. Legg
 øvelsen i seksjonen før modulen. «Tenk først», «sjekk deg selv», kort, prompt og uthevet boks virker
@@ -181,8 +211,9 @@ fortsatt.)
   **«Marker seksjon lest, og gå til testen»** — for da er det dit du skal, ikke forbi (#924).
 - I teksten kan det stå små øvelser som ikke teller: «tenk først», «sjekk deg selv», **steg for
   steg** (bla med Neste/Forrige eller piltastene), **skriv selv** (skriv, se eksempelsvaret og kryss av;
-  teksten blir bare i nettleserfanen din til du lukker den) og **repetisjonskort** (snu kortet med klikk, mellomrom eller
-  Enter, og marker «Kunne det» eller «Øv mer»).
+  teksten blir bare i nettleserfanen din til du lukker den), **repetisjonskort** (snu kortet med klikk, mellomrom eller
+  Enter, og marker «Kunne det» eller «Øv mer») og **finn parene** (velg et begrep og så forklaringen). I
+  «sjekk deg selv» kan du få en egen tilbakemelding på valget du gjorde.
 - **Siste element i kurset har ingen knapp.** Det er ingenting å gå videre til; lesningen
   registreres av systemet når du åpner seksjonen.
 - **Fremdrift** teller **alle elementer**: en seksjon som er lest og en modul som er bestått

@@ -2,6 +2,29 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.98.0 - 2026-10-20
+
+### Case med følge per alternativ (#1110) og «finn parene» (#1107)
+
+- **#1110:** i «sjekk deg selv» kan hvert alternativ få sin egen følge — en innrykket linje (to
+  mellomrom) rett under det, som vises når deltakeren velger det. Et case er da en situasjon og ett–tre
+  «sjekk deg selv»: deltakeren ser hva hvert valg fører til. Uten følger er HTML-en nøyaktig som før
+  (fasit tatt opp fra 2.96.1 før endringen).
+- **#1107:** ny ramme `:::par` (også `:::pairs`), én linje per par `- begrep = forklaring`. Deltakeren
+  velger et begrep og så forklaringen; et riktig par blir grønt og står, et feil blinker rødt.
+  Forklaringene stokkes. Klikk, ikke dra; ingen tidtaker; ingenting lagres. Minst tre par, ingen like.
+  Bare i seksjoner, som de andre øvelsene.
+- Oversetteren beholder innrykket på en følge og `- ` / ` = ` i hvert par. Skillet: kontrollen godtar
+  følger og stopper en ugyldig `:::par` (linje som ikke er et par, færre enn tre, like begreper eller
+  forklaringer); språkkontrollen krever samme følger og like mange par på alle språk; veiledningen har
+  fått «A case» og «Match the pairs».
+- Kontrollen etter oversettelse (#1109, 2.97.0) kjenner begge: følgene telles i fasitmønsteret, og `:::par`
+  er en egen oppføring i regeltabellen (`FRAME_KINDS`). En ny vakt tegner hver rammetype i tabellen med
+  plattformens tegner og krever tabellens klasse, så tabellen og tegneren ikke glir fra hverandre.
+- QA-porten: en lenke i et par blir vanlig tekst i knappen (et klikk navigerte ellers bort); `**Vedtak**`
+  og `Vedtak` regnes som samme begrep; « = » inne i kode deler ikke paret. Merk: en forklaring skrevet
+  innrykket rett under siste alternativ, eller et alternativ brutt over to linjer med innrykk, leses nå som
+  følge (stage har ingen slike; skillet skriver alltid forklaringen etter en blank linje).
 ## 2.97.0 - 2026-10-20
 
 ### Oversetteren kontrollerer blokkene etter oversettelse (#1109)

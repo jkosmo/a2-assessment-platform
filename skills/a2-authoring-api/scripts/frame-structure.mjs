@@ -61,7 +61,14 @@ export function countHeadingLines(text) {
   return count;
 }
 
-/** Fasiten i en «sjekk deg selv»: "010" = det andre av tre alternativer er riktig. `null` = ikke tegnet. */
+/** #1110: følgen til et alternativ — en innrykket linje (to mellomrom eller en tabulator) under det. */
+const CHECK_FEEDBACK = /^(?: {2,}|\t)[ \t]*\S/;
+
+/**
+ * Fasiten i en «sjekk deg selv»: "010" = det andre av tre alternativer er riktig; "0f1" = det første har en
+ * følge (#1110). `null` = ikke tegnet. En følge som forsvant eller flyttet seg i en oversettelse, gir en
+ * annen form — deltakeren ville fått følgen på feil valg, eller ingen.
+ */
 function checkShape(inner) {
   const lines = inner.split("\n");
   let at = 0;
@@ -69,13 +76,53 @@ function checkShape(inner) {
   let pattern = "";
   while (at < lines.length) {
     const option = CHECK_OPTION.exec(lines[at]);
-    if (!option) break;
-    pattern += option[1].toLowerCase() === "x" ? "1" : "0";
+    if (option) pattern += option[1].toLowerCase() === "x" ? "1" : "0";
+    else if (pattern !== "" && CHECK_FEEDBACK.test(lines[at])) {
+      if (!pattern.endsWith("f")) pattern += "f";
+    } else break;
     at += 1;
   }
   // contentBlocks.ts: minst to alternativer og nøyaktig ett riktig, ellers ingen blokk.
-  if (pattern.length < 2 || pattern.replace(/0/g, "").length !== 1) return null;
+  const options = pattern.replace(/f/g, "");
+  if (options.length < 2 || options.replace(/0/g, "").length !== 1) return null;
   return pattern;
+}
+
+/**
+ * #1107: et par i «finn parene» — `- begrep = forklaring`, delt ved første « = » utenfor et kodespenn.
+ * Samme regel som splitPairLine i src/modules/course/contentBlocks.ts.
+ */
+function splitPairLine(line) {
+  const item = /^[ \t]*[-*][ \t]+(\S.*?)[ \t]*$/.exec(line);
+  if (!item) return null;
+  const body = item[1];
+  let inCode = false;
+  for (let i = 0; i < body.length; i += 1) {
+    if (body[i] === "`") inCode = !inCode;
+    if (inCode || (body[i] !== " " && body[i] !== "\t")) continue;
+    const sep = /^[ \t]+=[ \t]+/.exec(body.slice(i));
+    if (!sep) continue;
+    const term = body.slice(0, i).trim();
+    const def = body.slice(i + sep[0].length).trim();
+    if (term && def) return { term, def };
+  }
+  return null;
+}
+const comparablePairText = (text) => text.replace(/[*_`~]/g, "").replace(/\s+/g, " ").trim().toLowerCase();
+
+/** «Finn parene»: antall par. `null` = ikke tegnet (en linje som ikke er et par, færre enn tre, like par). */
+function pairsShape(inner) {
+  const pairs = [];
+  for (const line of inner.split("\n")) {
+    if (line.trim() === "") continue;
+    const pair = splitPairLine(line);
+    if (!pair) return null;
+    pairs.push(pair);
+  }
+  if (pairs.length < 3) return null;
+  const distinct = (values) => new Set(values.map(comparablePairText)).size === values.length;
+  if (!distinct(pairs.map((p) => p.term)) || !distinct(pairs.map((p) => p.def))) return null;
+  return String(pairs.length);
 }
 
 /** Antall punkter i sjekklista i «skriv selv». `null` = ikke tegnet (eksempelsvaret er tomt). */
@@ -110,6 +157,7 @@ export const FRAME_KINDS = Object.freeze([
   { kind: "steg", words: ["steg", "steps"], opener: "optional", drawnAs: 'class="content-steps"', counts: "steps (headings)", shape: itemsShape },
   { kind: "skriv", words: ["skriv", "write"], opener: "text", drawnAs: 'class="content-write"', counts: "checklist points (- [ ] at the end)", shape: writeShape },
   { kind: "repetisjon", words: ["repetisjon", "flashcards"], opener: "optional", drawnAs: 'class="content-flash"', counts: "cards (headings)", shape: itemsShape },
+  { kind: "par", words: ["par", "pairs"], opener: "optional", drawnAs: 'class="content-pairs"', counts: "pairs (- term = explanation)", shape: pairsShape },
 ]);
 
 /** Åpningslinja, innholdet og lukkelinja for én rammetype — samme uttrykk som tokenizeren i contentBlocks.ts. */

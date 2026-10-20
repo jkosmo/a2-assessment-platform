@@ -42,9 +42,10 @@ criteria exist in one language.
 - **The markdown:** the same headings, lists, tables, boxes and `![…](asset:…)` references in
   every language. Alt texts are translated; the `asset:` reference is not.
 - **The frames:** the marker word on the opening line stays as it is (`:::kort`, `:::tenk`,
-  `:::sjekk`, `:::steg`, `:::skriv`, `:::repetisjon`); the text after it is translated. The same
-  number of steps and cards (`###` headings) in a `:::steg` or `:::repetisjon`, the `- [x]` on the
-  same option in a `:::sjekk`, and every `- [ ]` point of a `:::skriv` checklist.
+  `:::sjekk`, `:::steg`, `:::skriv`, `:::repetisjon`, `:::par`); the text after it is translated. The
+  same number of steps and cards (`###` headings) in a `:::steg` or `:::repetisjon`, the `- [x]` on the
+  same option in a `:::sjekk` — and each feedback line still indented under its option —, every `- [ ]`
+  point of a `:::skriv` checklist, and every `- term = explanation` line of a `:::par`.
 - **A prompt** is translated, so that the learner can use it in their language. Names of menus
   and buttons in a product stay as the product shows them.
 
@@ -74,10 +75,11 @@ before the picture says what it shows ([section-content.md](section-content.md#p
   that are rightly the same ("GDPR", "72") are not counted;
 - a right answer that sits in a different position, or matches no option, in some language — also
   the `- [x]` in a «sjekk deg selv» frame;
-- a «steg», «skriv» or «repetisjon» frame with another number of steps, checklist points or cards in
-  some language, or missing from it — and any frame («tenk», «kort» too) that is missing from a
-  language or appears only in one. The rules are the platform's own: its translator runs the same
-  check (`frame-structure.mjs`) and refuses a translation that breaks a frame;
+- a «steg», «skriv», «repetisjon» or «par» frame with another number of steps, checklist points, cards
+  or pairs in some language, or missing from it; a «sjekk deg selv» option that has its feedback line in
+  one language and not in another — and any frame («tenk», «kort» too) that is missing from a language
+  or appears only in one. The rules are the platform's own: its translator runs the same check
+  (`frame-structure.mjs`) and refuses a translation that breaks a frame;
 - a formula, address, identifier or file name that is in the primary language and missing from a
   translation;
 - a figure that lacks a language, has a different number of pieces of label text in one, or whose

@@ -4,6 +4,7 @@
 
 import { describe, expect, it } from "vitest";
 import {
+  checkAnswerPatterns,
   checkLocalization,
   checkFigureLocalization,
   extractSvgTextRuns,
@@ -346,6 +347,11 @@ describe("steg, skriv selv og repetisjonskort på tre språk (#1075, #1076, #107
     expect(practiceBlockShapes("Ingen rammer her.")).toEqual([]);
   });
 
+  it("#1107: «finn parene» telles i par, også med engelsk markørord", () => {
+    const par = [":::par Koble", "- A = a", "- B = b = mer", "* C = c", ":::"].join(NL);
+    expect(practiceBlockShapes(`${par}${NL}${NL}${par.replace(":::par Koble", ":::pairs")}`)).toEqual(["par:3", "par:3"]);
+  });
+
   const sectionPackage = (nb: string, nn: string, en: string) => ({
     packageFormat: "a2-authoring-package/v1",
     objects: [{ clientRef: "sec-ovelser", type: "section", payload: { title: L("Øvelser", "Øvingar", "Exercises"), bodyMarkdown: L(`Innledning med flere ord.${NL}${NL}${nb}`, `Innleiing med fleire ord.${NL}${NL}${nn}`, `Introduction with more words.${NL}${NL}${en}`) } }],
@@ -371,5 +377,24 @@ describe("steg, skriv selv og repetisjonskort på tre språk (#1075, #1076, #107
     expect(result.blockShapeChanges[0].detail).toContain("in: en-GB");
     expect(result.blocks).toBe(true);
     expect(result.reasons.join(" ")).toContain("step, checklist or flashcard frame(s) with another shape in a translation");
+  });
+});
+
+
+// #1110: en følge (innrykket linje under et alternativ) skal stå under samme alternativ på alle språk.
+describe("følge per alternativ i fasitmønsteret (#1110)", () => {
+  const NL = String.fromCharCode(10);
+  const TAB = String.fromCharCode(9);
+  it("en følge gir «f» etter alternativet; mønsteret leser videre forbi den", () => {
+    const md = [":::sjekk Hva?", "- [ ] En", "  Fordi en.", "  Og mer.", "- [x] To", "- [ ] Tre", `${TAB}Fordi tre.`, ":::"].join(NL);
+    expect(checkAnswerPatterns(md)).toEqual(["0f10f"]);
+  });
+  it("uten følger er mønsteret som før", () => {
+    expect(checkAnswerPatterns([":::sjekk Hva?", "- [ ] En", "- [x] To", "", "Forklaring.", ":::"].join(NL))).toEqual(["01"]);
+  });
+  it("en følge flyttet til et annet alternativ gir et annet mønster", () => {
+    const a = [":::sjekk Hva?", "- [ ] En", "  Følge.", "- [x] To", ":::"].join(NL);
+    const b = [":::sjekk Hva?", "- [ ] En", "- [x] To", "  Følge.", ":::"].join(NL);
+    expect(checkAnswerPatterns(a)).not.toEqual(checkAnswerPatterns(b));
   });
 });

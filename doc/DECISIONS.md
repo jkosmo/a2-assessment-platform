@@ -1167,6 +1167,22 @@ ikke fulgt: rensingen beholder data-attributter, så en forfatter kan lage en li
 godtatt fordi det er ufarlig — skript og hendelsesattributter fjernes, og klikket endrer bare
 utseende og tekst.
 
+## Case og «finn parene» (#1110, #1107, 2026-10-20)
+
+Fra Duolingo-researchen 2026-10-19, valgt av produkteier etter skisser:
+
+- **Case uten ny byggekloss (#1110).** Et case er en situasjon og ett–tre «sjekk deg selv», der hvert
+  alternativ kan ha en **følge** (en innrykket linje under det). Saker som deler seg etter valget er
+  bevisst utelatt: krevende å skrive og kontrollere, og bare 1 % av det som lages i H5P. Uten følger er
+  HTML-en uendret. Følge: en innrykket linje rett under det siste alternativet, som før var en del av
+  forklaringen, er nå følgen til det alternativet (vises bare når det velges). Skillet har alltid
+  skrevet forklaringen etter en blank linje.
+- **Finn parene med klikk, ikke dra (#1107).** Dra kolliderer med rulling på telefon og trenger uansett
+  en klikkvariant for tastatur og skjermleser; Duolingo bruker selv trykk. Ingen tidtaker. Forklaringene
+  stokkes, aldri i sin egen rekkefølge. Lista med par står for skjermlesere, som for repetisjonskortene.
+- **«Finn parene» bare i seksjoner**, på linje med steg, skriv selv og repetisjonskort: samme
+  begrunnelse som produkteiers avgjørelse 2026-10-20 (øvelser hører til seksjonen før modulen).
+
 ## «Fullføring per modul» teller personer, siste forsøk (2026-10-19)
 
 Produkteier: «Endre til telling per person», etter å ha sett seg selv telt både som bestått og ikke

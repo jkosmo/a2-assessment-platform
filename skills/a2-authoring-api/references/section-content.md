@@ -2,8 +2,9 @@
 
 Contents: [Writing the text](#writing-the-text) · [Headings and lists](#headings-and-lists) ·
 [Table](#table) · [Callout](#callout) · [Prompt](#prompt) · [Cards](#cards) · [Think first](#think-first) ·
-[Check yourself](#check-yourself) · [Step by step](#step-by-step) · [Write it yourself](#write-it-yourself) ·
-[Flashcards](#flashcards) · [Icons](#icons) ·
+[Check yourself](#check-yourself) · [A case](#a-case) · [Step by step](#step-by-step) ·
+[Write it yourself](#write-it-yourself) · [Flashcards](#flashcards) · [Match the pairs](#match-the-pairs) ·
+[Icons](#icons) ·
 [Pictures from the source](#pictures-from-the-source) · [Figures](#figures) ·
 [A finished section](#a-finished-section)
 
@@ -184,18 +185,47 @@ Notatene viser hva som faktisk ble bestemt. Innkallingen sier bare hva som skull
   option gives the answer away ([modules.md](modules.md#multiple-choice-questions)).
 - **Explanation:** after the options, in ordinary markdown; say why the right one is right. It can
   be left out, but rarely should be.
+- **Feedback per option (optional):** an indented line (two spaces) right under an option is shown
+  when the learner picks that option — what happens, or why it is not the best. Use it in a case
+  (below). Without feedback lines the question looks as before.
 - In the other languages the marker word stays `:::sjekk` and `- [x]` stays where it is; translate
-  the question, the options and the explanation.
+  the question, the options, the feedback (still indented under its option) and the explanation.
 - **A blank line above every frame** (`:::kort`, `:::tenk`, `:::sjekk`, `:::steg`, `:::skriv`,
-  `:::repetisjon`). Right under a list, a quote or a table, the platform reads the frame as part of
+  `:::repetisjon`, `:::par`). Right under a list, a quote or a table, the platform reads the frame as part of
   it — for `:::sjekk` the learner then sees the answer as a ticked list. `produce-course.mjs` fails on
   a frame with text right above it.
 - **Never inside a card frame, and no frame inside it** — as for «think first».
   `produce-course.mjs` fails on a nested frame, fewer than two options, or not exactly one `- [x]`.
 
+## A case
+
+A situation from the learner's work, and one to three «check yourself» questions about what they do
+— each option with its consequence. This is the strongest practice for routines and casework: the
+learner applies the rule in a situation, and sees what each choice leads to. No new frame: a short
+paragraph with the situation, then `:::sjekk` questions with feedback lines:
+
+```markdown
+En innbygger ringer og vil se dokumentene i saken om naboens byggesøknad. Hun vil ha dem i dag.
+
+:::sjekk Søknaden inneholder naboens personnummer. Hva gjør du?
+- [ ] Avslår hele innsynet
+  For mye. Bare opplysningen som skal unntas, kan holdes tilbake.
+- [x] Sladder personnummeret og gir innsyn i resten
+  Riktig. Du unntar det som må unntas og gir innsyn i resten.
+
+Innsyn er hovedregelen; unntak gjelder bare det som må unntas.
+:::
+```
+
+- **From the source:** the situation and the right choice rest on the source's rules or examples.
+- **The story does not branch.** Every choice leads to the next question; a worse choice is shown
+  with its consequence, and the learner goes on. One to three questions per case.
+- **Every option gets a feedback line** in a case: the consequence of that choice, in one or two
+  sentences.
+
 ## Step by step
 
-**Step by step, write it yourself and flashcards work only in a section.** In a module's task
+**Step by step, write it yourself, flashcards and match the pairs work only in a section.** In a module's task
 text or guidance — what the learner answers — the platform shows the markers as plain text, and
 `produce-course.mjs` fails on one there. Put the exercise in the section before the module.
 
@@ -302,6 +332,33 @@ Uten personlig interesse i saken, så du kan delta i behandlingen.
 - In the other languages the marker word stays `:::repetisjon` and every `###` heading stays;
   translate the terms and the explanations. `produce-course.mjs` fails on fewer than two cards or a
   card without a back.
+
+## Match the pairs
+
+The learner matches terms with their explanations: picks a term, then the explanation that belongs to
+it. A right pair turns green and stays; a wrong pair flashes red. The explanations are shuffled every
+time. No timer, nothing is stored. Works only in a section, like step by step. A frame `:::par` (an
+instruction after it is optional), one line per pair, `- term = explanation`:
+
+```markdown
+:::par Koble begrepet med forklaringen
+- Hjemmel = Lovbestemmelsen et vedtak bygger på
+- Merinnsyn = Innsyn selv om dokumentet kunne vært unntatt
+- Klagefrist = Tiden parten har til å klage på vedtaket
+- Journalføring = Registrering av et dokument i arkivet
+:::
+```
+
+- **When:** for three to six terms this section defines — to tell similar terms apart. Not the same
+  terms as the flashcards in the same section; choose one of the two.
+- **Every line is a pair**, split at the first « = »; no other lines in the frame. At least three
+  pairs; no term or explanation twice.
+- **The text comes from the source**, shortened to a phrase — the explanations are read side by side,
+  so keep them about the same length (a much longer one gives itself away).
+- A screen reader, and a learner without a script, gets the pairs as a list.
+- In the other languages the marker word stays `:::par`, and every line keeps `- ` and ` = `;
+  translate the terms and the explanations. `produce-course.mjs` fails on a line that is not a pair,
+  fewer than three pairs, or a repeated term or explanation.
 
 ## Icons
 

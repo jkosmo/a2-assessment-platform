@@ -376,7 +376,7 @@ export function checkAnswerPatterns(text) {
   return readFrames(text).filter((frame) => frame.kind === "sjekk").map((frame) => frame.shape);
 }
 
-const PRACTICE_KINDS = new Set(["steg", "skriv", "repetisjon"]);
+const PRACTICE_KINDS = new Set(["steg", "skriv", "repetisjon", "par"]);
 
 /**
  * #1075, #1076, #1078: formen på hver øvingsramme i en tekst, i rekkefølge — "steg:4" (fire steg),
@@ -425,14 +425,14 @@ export function checkLocalization(pkg, { languages = LANGUAGES, primary = "nb", 
       for (const problem of shapeProblems) driftedKinds.add(problem.kind);
     }
     if (answerDrift.length > 0) {
-      answerKeyChanges.push({ path: field.path, detail: `a «sjekk deg selv» question has its right option (- [x]) in another place, or a question is missing, in: ${answerDrift.join(", ")}` });
+      answerKeyChanges.push({ path: field.path, detail: `a «sjekk deg selv» question has its right option (- [x]) in another place, a feedback line under another option, or a question is missing, in: ${answerDrift.join(", ")}` });
     }
     if (shapeDrift.length > 0) {
       // Formen på hovedspråket, bare for rammetypene som avviker — det er dem modellen skal rette.
       const referenceShape = frameSignature(reference).filter((shape) => driftedKinds.has(shape.split(":")[0])).join(", ") || "no such frame";
       blockShapeChanges.push({
         path: field.path,
-        detail: `a step-by-step, write-it-yourself, flashcard, cards or think-first frame has another number of steps, checklist points or cards, or is missing, in: ${shapeDrift.join(", ")} (${primary} has ${referenceShape})`,
+        detail: `a step-by-step, write-it-yourself, flashcard, match-the-pairs, cards or think-first frame has another number of steps, checklist points, cards or pairs, or is missing, in: ${shapeDrift.join(", ")} (${primary} has ${referenceShape})`,
       });
     }
   }

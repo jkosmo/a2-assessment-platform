@@ -21,8 +21,9 @@ Objectives are the backbone: the structure and the tests follow from them.
 - **Teaching comes before testing.** An introduction first; a summary last if the material needs one.
 - **Few, well-formed modules** rather than many thin ones — roughly one per objective.
 - **Practice inside the sections**, where the source gives the material for it: a step-by-step
-  walk-through for a process, a «skriv selv» before a free-text module, flashcards at the end of a
-  section that defines terms ([section-content.md](section-content.md#step-by-step)). Name them in
+  walk-through for a process, a case (a situation with «sjekk deg selv» and feedback per option) where
+  a routine is applied, a «skriv selv» before a free-text module, flashcards or «finn parene» for the
+  terms a section defines ([section-content.md](section-content.md#step-by-step)). Name them in
   the outline, so the author approves them with the structure. None of it counts; the modules test.
 - Present the outline as a table: element, order, test form, the objective it serves, level.
 

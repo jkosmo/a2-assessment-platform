@@ -65,7 +65,7 @@ describe("frame-structure.mjs — formen på hver rammetype (#1109)", () => {
   });
 
   it("tabellen har én oppføring per rammetype, og hver har ord, åpning og tegnemerke", () => {
-    expect(FRAME_KINDS.map((entry) => entry.kind)).toEqual(["tenk", "sjekk", "kort", "steg", "skriv", "repetisjon"]);
+    expect(FRAME_KINDS.map((entry) => entry.kind)).toEqual(["tenk", "sjekk", "kort", "steg", "skriv", "repetisjon", "par"]);
     for (const entry of FRAME_KINDS) {
       expect(entry.words.length).toBeGreaterThanOrEqual(2);
       expect(["text", "optional", "none"]).toContain(entry.opener);
@@ -298,5 +298,67 @@ describe("oversetterens tre funksjoner kaster når rammene endres (#1109)", () =
     const result = await localizeSectionContent({ title: "Tittel", bodyMarkdown: body, sourceLocale: "nb", targetLocale: "nn" });
     expect(result.bodyMarkdown).toContain("[nn]");
     expect(frameSignature(result.bodyMarkdown)).toEqual(["sjekk:01"]);
+  });
+});
+
+// #1110 (følge per alternativ) og #1107 («finn parene»), lagt til i tabellen ved fletting med #1109.
+describe("frame-structure.mjs — følger og par (#1110, #1107)", () => {
+  const caseFrame = (feedbackOn: number[]) => lines(
+    ":::sjekk Hva gjør du?",
+    ...["Avslår", "Sladder", "Sender"].flatMap((t, i) => [`- [${i === 1 ? "x" : " "}] ${t}`, ...(feedbackOn.includes(i) ? [`  Følge ${i}.`] : [])]),
+    ":::",
+  );
+  const pairs = (...rows: string[]) => lines(":::par Koble", ...rows.map((r) => `- ${r}`), ":::");
+
+  it("en følge gir «f» etter alternativet; uten følger er formen som før", () => {
+    expect(frameSignature(caseFrame([0, 1]))).toEqual(["sjekk:0f1f0"]);
+    expect(frameSignature(caseFrame([]))).toEqual(["sjekk:010"]);
+  });
+
+  it("en følge som forsvant eller flyttet seg i oversettelsen, er et avvik i fasiten", () => {
+    expect(compareFrames(caseFrame([0]), caseFrame([]))).toEqual([{ kind: "sjekk", problem: "shape", position: 1, expected: "0f10", actual: "010" }]);
+    expect(compareFrames(caseFrame([0]), caseFrame([2]))).toHaveLength(1);
+    expect(compareFrames(caseFrame([0, 2]), caseFrame([0, 2]))).toEqual([]);
+  });
+
+  it("«finn parene» telles i par; en ugyldig ramme (to par, like par, en linje som ikke er et par) er ingen ramme", () => {
+    expect(frameSignature(pairs("A = a", "B = b", "C = c"))).toEqual(["par:3"]);
+    expect(frameSignature(lines(":::pairs", "- A = a", "- B = b", "- C = c", "- D = d", ":::"))).toEqual(["par:4"]);
+    expect(frameSignature(pairs("A = a", "B = b"))).toEqual([]);
+    expect(frameSignature(pairs("**A** = a", "A = b", "C = c"))).toEqual([]);
+    expect(frameSignature(lines(":::par", "- A = a", "- B = b", "- C = c", "En setning.", ":::"))).toEqual([]);
+    expect(frameSignature(pairs("`a = b` = Formelen", "B = b", "C = c"))).toEqual(["par:3"]);
+  });
+
+  it("et par som forsvant i oversettelsen, er et avvik i formen; en riktig oversettelse er det ikke", () => {
+    expect(compareFrames(pairs("A = a", "B = b", "C = c", "D = d"), pairs("A2 = a2", "B2 = b2", "C2 = c2"))).toEqual([{ kind: "par", problem: "shape", position: 1, expected: "4", actual: "3" }]);
+    expect(compareFrames(pairs("A = a", "B = b", "C = c"), pairs("A2 = a2", "B2 = b2", "C2 = c2"))).toEqual([]);
+  });
+});
+
+// ⚠️ Vakt mot at tabellen og tegneren glir fra hverandre (QA-porten, 2.98.0: markørordene stod fem steder).
+// Hver rammetype i tabellen, skrevet på minste gyldige måte med hvert markørord, skal tegnes av plattformen
+// med klassen tabellen sier — og tabellen skal lese den som én ramme.
+describe("FRAME_KINDS stemmer med plattformens tegner", () => {
+  const minimal: Record<string, (word: string) => string> = {
+    tenk: (w) => lines(`:::${w} Spørsmål?`, "Svar.", ":::"),
+    sjekk: (w) => lines(`:::${w} Spørsmål?`, "- [x] Ja", "- [ ] Nei", ":::"),
+    kort: (w) => lines(`:::${w}`, "### En", "Tekst.", ":::"),
+    steg: (w) => lines(`:::${w}`, "### En", "a", "### To", "b", ":::"),
+    skriv: (w) => lines(`:::${w} Oppgave`, "Svaret.", ":::"),
+    repetisjon: (w) => lines(`:::${w}`, "### En", "a", "### To", "b", ":::"),
+    par: (w) => lines(`:::${w}`, "- A = a", "- B = b", "- C = c", ":::"),
+  };
+  it("hver type og hvert markørord tegnes med tabellens klasse, og leses som én ramme", async () => {
+    const { renderSectionBlocks } = await import("../../src/modules/course/contentBlocks.js");
+    for (const entry of FRAME_KINDS) {
+      const make = minimal[entry.kind];
+      expect(make, `mangler eksempel for ${entry.kind} i vakta`).toBeTypeOf("function");
+      for (const word of entry.words) {
+        const md = make!(word);
+        expect(renderSectionBlocks(md, "nb"), `${entry.kind} / :::${word}`).toContain(entry.drawnAs);
+        expect(readFrames(md).map((f: { kind: string }) => f.kind), `${entry.kind} / :::${word}`).toEqual([entry.kind]);
+      }
+    }
   });
 });
