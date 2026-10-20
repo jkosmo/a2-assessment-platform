@@ -15,7 +15,8 @@ pictures and figures where the text places them.
 
 The learner should do something while reading — not only read. But a section is not a quiz: the
 module tests. **Most sections get none or one exercise; two at most** (a case is one exercise, even
-with three questions). Choose by what the source gives, not to use every kind:
+with three questions). Every kind in the table counts — step by step and flashcards too. Choose by
+what the source gives, not to use every kind:
 
 | The source has … | Use | Not |
 |---|---|---|
@@ -28,7 +29,7 @@ with three questions). Choose by what the source gives, not to use every kind:
 | nothing of these | no exercise — plain text with a box, a table or a figure | an exercise made up to have one |
 
 **Order in a section**, when there are two: from recognising to applying to formulating —
-think first → the text (with step by step) → check yourself or match the pairs → a case → write it
+think first → the text (or step by step) → check yourself or match the pairs → a case → write it
 yourself → flashcards at the end. The module that follows is what counts.
 
 Name the exercises in the outline, per section, so the author approves them with the structure
