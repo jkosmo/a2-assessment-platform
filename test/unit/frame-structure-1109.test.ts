@@ -12,6 +12,7 @@ import {
   practiceBlockShapes,
   // @ts-expect-error — .mjs skill script consumed as a library
 } from "../../skills/a2-authoring-api/scripts/localization-check.mjs";
+import { renderSectionBlocks } from "../../src/modules/course/contentBlocks.js";
 import { env } from "../../src/config/env.js";
 import { AppError } from "../../src/errors/AppError.js";
 import {
@@ -349,8 +350,7 @@ describe("FRAME_KINDS stemmer med plattformens tegner", () => {
     repetisjon: (w) => lines(`:::${w}`, "### En", "a", "### To", "b", ":::"),
     par: (w) => lines(`:::${w}`, "- A = a", "- B = b", "- C = c", ":::"),
   };
-  it("hver type og hvert markørord tegnes med tabellens klasse, og leses som én ramme", async () => {
-    const { renderSectionBlocks } = await import("../../src/modules/course/contentBlocks.js");
+  it("hver type og hvert markørord tegnes med tabellens klasse, og leses som én ramme", () => {
     for (const entry of FRAME_KINDS) {
       const make = minimal[entry.kind];
       expect(make, `mangler eksempel for ${entry.kind} i vakta`).toBeTypeOf("function");
