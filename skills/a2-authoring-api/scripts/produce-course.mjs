@@ -224,6 +224,11 @@ function isFrameOpener(word, line) {
   return new RegExp(`^:::[ \\t]*${kind}[ \\t]+\\S`, "i").test(line);
 }
 
+/** The frames that are drawn only in a section, never in a module's text (2.96.1). */
+const SECTION_ONLY_FRAME = /^:::[ \t]*(steg|steps|skriv|write|repetisjon|flashcards)\b/i;
+/** A module's text fields the learner reads. */
+const MODULE_TEXT_FIELDS = ["taskText", "candidateTaskConstraints"];
+
 /** The frames in a text, line by line: unclosed, stray closing lines, and a frame opened inside another. */
 function frameProblems(prose) {
   const problems = [];
@@ -365,6 +370,23 @@ function checkLearnerText(pkg) {
       // first ::: line closes whatever frame is open, so a frame inside a frame (#1072: a «tenk
       // først» inside cards, or the other way round) breaks both — and only outside code blocks.
       for (const problem of frameProblems(prose)) details.push(`${where}: ${problem}`);
+    }
+  }
+  // 2.96.1 (produkteier 2026-10-20): steg for steg, skriv selv og repetisjonskort tegnes bare i
+  // seksjoner. I modulens tekst — det deltakeren svarer på — står markørene som tekst.
+  for (const object of pkg.objects ?? []) {
+    if (object?.type !== "module") continue;
+    const version = object.payload?.activeVersion ?? {};
+    for (const field of MODULE_TEXT_FIELDS) {
+      const value = version[field];
+      const languages = value && typeof value === "object" ? Object.entries(value) : [["", value]];
+      for (const [language, markdown] of languages) {
+        for (const line of withoutCodeBlocks(String(markdown ?? "")).split(/\r?\n/)) {
+          const opener = SECTION_ONLY_FRAME.exec(line);
+          if (!opener) continue;
+          details.push(`"${object.clientRef}" ${field}${language ? ` (${language})` : ""}: a :::${opener[1].toLowerCase()} frame works only in a section — in a module's text the learner sees the markers as text; move the exercise to the section before the module`);
+        }
+      }
     }
   }
   return { name: "learner text", status: details.length === 0 ? "ok" : "fail", summary: `${sections} section(s) read for the learner's voice and card frames`, details };

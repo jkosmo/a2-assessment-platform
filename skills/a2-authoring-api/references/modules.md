@@ -15,10 +15,12 @@ gate 3 ([course-design.md](course-design.md#level-and-scope)).
   alternativene"`. Every criterion is something an assessor can observe in an answer; no lone
   "kvalitet".
 - **Expected content:** what a strong answer contains. It guides the automatic assessment.
-- **A warm-up in the section before it.** A free-text module gets a «skriv selv» frame in the
+- **A warm-up in the section before it — never in the task text.** A free-text module gets a «skriv selv» frame in the
   section it follows: the same kind of situation, smaller, with an example answer from the source
   and a checklist that mirrors these criteria — so the learner has practised formulating it before
-  it is assessed ([section-content.md](section-content.md#write-it-yourself)).
+  it is assessed ([section-content.md](section-content.md#write-it-yourself)). The frames `:::steg`,
+  `:::skriv` and `:::repetisjon` are not drawn in a module's text: there they show as markers, and
+  `produce-course.mjs` fails on them. «Think first» and «check yourself» work in both.
 
 ## Multiple-choice questions
 

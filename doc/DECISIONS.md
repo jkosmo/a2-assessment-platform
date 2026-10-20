@@ -1207,3 +1207,14 @@ og «sjekk deg selv» — `:::steg Tittel`, `:::skriv Oppgaven`, `:::repetisjon`
 - Tittel på åpningslinja er valgfri for steg og repetisjonskort; oppgaven er påkrevd for skriv selv
   (den er etiketten til tekstfeltet), og eksempelsvaret kan ikke være tomt. Sjekklista er `- [ ]`-linjene
   helt til slutt, så eksempelsvaret selv kan ha lister.
+
+## Øvelsene bare i seksjoner, ikke i modulens oppgavetekst (2026-10-20)
+
+Produkteier avgjorde QA-portens funn 2 fra 2.96.0: steg for steg, skriv selv og repetisjonskort skal
+ikke tegnes i modulens oppgavetekst. Der skal de stå som vanlig tekst — samme oppførsel som en ugyldig
+ramme. Oppgaveteksten er det deltakeren svarer på: et «skriv selv»-felt rett over det ekte svarfeltet
+fikk deltakeren til å skrive svaret på feil sted (det sendes ikke inn), og eksempelsvaret var en fasit
+til selve oppgaven. «Tenk først», «sjekk deg selv», kort, prompt-boks og uthevet boks tegnes som før
+2.96.0. Avgjørelsen tas på tjeneren ved tegning (`ContentBlockVariant` i `contentBlocks.ts`, variant
+`moduleText`), ikke i CSS eller klienten, så ingen leser kan avvike. Det gjelder også veiledningen og
+det forventede innholdet, som tegnes av samme funksjon.

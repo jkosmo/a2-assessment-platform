@@ -195,6 +195,10 @@ Notatene viser hva som faktisk ble bestemt. Innkallingen sier bare hva som skull
 
 ## Step by step
 
+**Step by step, write it yourself and flashcards work only in a section.** In a module's task
+text or guidance — what the learner answers — the platform shows the markers as plain text, and
+`produce-course.mjs` fails on one there. Put the exercise in the section before the module.
+
 A process the learner pages through one step at a time, with «Neste» and «Forrige» — case handling,
 a routine, a rule applied in order («først sjekker du …, så …»). Each step says what happens in it.
 A frame `:::steg` with a title on the same line, one `###` heading per step, `:::` to close:

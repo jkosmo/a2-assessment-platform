@@ -622,7 +622,7 @@ did not change the format version: older files have no `section` field and valid
 | `POST` | `/api/admin/content/sections/:sectionId/archive` | Archive. Blocked `400` if used in any course (G2); auto-unpublishes (I3, #705) |
 | `POST` | `/api/admin/content/sections/:sectionId/restore` | Restore an archived section (lands in Utkast, #705) |
 | `DELETE` | `/api/admin/content/sections/:sectionId` | Delete (blocked `400` if the section is used in a course; names the courses, #705) |
-| `POST` | `/api/admin/content/sections/preview` | Render markdown → sanitised HTML (same F3/X1 policy as participant view) |
+| `POST` | `/api/admin/content/sections/preview` | Render markdown → sanitised HTML (same F3/X1 policy as participant view). Body `{ markdown, locale?, variant? }`; `variant: "moduleText"` (2.96.1) renders a module's text — step by step, write it yourself and flashcards stay plain text, as the participant gets it. Default `"section"`. |
 | `POST` | `/api/admin/content/sections/localize` | LLM-translate title + bodyMarkdown to another locale (markdown-preserving). Rate-limited. |
 | `POST` | `/api/admin/content/sections/:sectionId/assets` | Upload a section image (multipart `file`). PNG/JPEG/GIF/WebP/SVG, max 5 MB. SVG is sanitised server-side before storage (scripts/handlers/`foreignObject`/`<a>` stripped, #657). Returns `asset` + `ref` (`asset:<id>`). |
 | `GET` | `/api/admin/content/sections/:sectionId/assets` | List section assets. |

@@ -2,6 +2,21 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.96.1 - 2026-10-20
+
+### Øvelsene fra seksjoner tegnes ikke i modulens oppgavetekst
+
+- Steg for steg, skriv selv og repetisjonskort tegnes bare i seksjoner. I modulens oppgavetekst,
+  veiledning og forventede innhold står de som vanlig tekst (produkteier 2026-10-20, QA-portens funn 2
+  fra 2.96.0). Et «skriv selv»-felt rett over svarfeltet fikk deltakeren til å skrive svaret på feil
+  sted, og eksempelsvaret var en fasit til oppgaven.
+- «Tenk først», «sjekk deg selv», kort, prompt-boks og uthevet boks tegnes som før i oppgaveteksten.
+- Tjeneren avgjør det ved tegning (variant `moduleText`): deltakerens modulside og forhåndsvisningen i
+  modularbeidsflaten får samme svar.
+- Skillet stopper en slik ramme i modulens tekst (`produce-course.mjs`, «learner text») og sier i
+  veiledningen at rammene hører hjemme i seksjonen før modulen. Hjelpen i seksjonseditoren og
+  forfatterveiledningen sier det samme.
+
 ## 2.96.0 - 2026-10-19
 
 ### Steg for steg (#1075), skriv selv (#1076) og repetisjonskort (#1078) i seksjoner
