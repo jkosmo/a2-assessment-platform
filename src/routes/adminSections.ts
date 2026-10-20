@@ -97,7 +97,13 @@ const createSectionSchema = z.object({
 });
 const titleSchema = z.object({ title: localizedTextPatchSchema });
 const contentSchema = z.object({ bodyMarkdown: localizedTextPatchSchema });
-const previewSchema = z.object({ markdown: z.string(), locale: generationLocaleSchema.optional() });
+// `variant: "moduleText"` (modularbeidsflatens forhåndsvisning, #1051): modulens tekst tegnes uten øvelsene
+// steg for steg, skriv selv og repetisjonskort, slik deltakeren får den (ContentBlockVariant).
+const previewSchema = z.object({
+  markdown: z.string(),
+  locale: generationLocaleSchema.optional(),
+  variant: z.enum(["section", "moduleText"]).optional(),
+});
 const localizeSchema = z.object({
   title: z.string().trim().min(1).optional(),
   bodyMarkdown: z.string().trim().min(1).optional(),
@@ -310,7 +316,7 @@ adminSectionsRouter.post("/preview", async (request, response, next) => {
     return;
   }
   try {
-    response.json({ html: renderSectionMarkdown(parsed.data.markdown, parsed.data.locale) });
+    response.json({ html: renderSectionMarkdown(parsed.data.markdown, parsed.data.locale, parsed.data.variant ?? "section") });
   } catch (error) {
     next(error);
   }

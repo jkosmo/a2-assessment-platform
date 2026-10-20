@@ -123,6 +123,62 @@ describe("#1051 — oppgaveteksten rendres som markdown", () => {
     expect(m.candidateTaskConstraintsHtml).toContain("<em>300</em>");
   });
 
+  // 2.96.1 (produkteier 2026-10-20): steg for steg, skriv selv og repetisjonskort tegnes bare i seksjoner.
+  // I oppgaveteksten — det deltakeren svarer på — står de som vanlig tekst. «Tenk først» tegnes som før.
+  it("øvelsene fra seksjoner tegnes ikke i oppgaveteksten eller veiledningen; «tenk først» tegnes fortsatt", async () => {
+    const øvelser = [
+      ":::steg Slik gjør du",
+      "### Les",
+      "Les saken.",
+      "### Skriv",
+      "Skriv svaret.",
+      ":::",
+      "",
+      ":::skriv Skriv et vedtak.",
+      "Eksempelsvaret.",
+      "",
+      "- [ ] hva?",
+      ":::",
+      "",
+      ":::repetisjon",
+      "### Vedtak",
+      "Det møtet bestemte.",
+      "### Referent",
+      "Den som skriver.",
+      ":::",
+      "",
+      ":::tenk Hva tror du?",
+      "Svaret.",
+      ":::",
+    ].join("\n");
+    const moduleId = await modulMed(øvelser, øvelser);
+
+    const svar = await request(app).get(`/api/modules/${moduleId}`).set(deltaker);
+    expect(svar.status).toBe(200);
+    const m = svar.body.module ?? svar.body;
+    for (const html of [String(m.taskTextHtml), String(m.candidateTaskConstraintsHtml)]) {
+      expect(html).not.toMatch(/content-(steps|write|flash)/);
+      expect(html).not.toContain("<textarea");
+      expect(html).toContain(":::steg Slik gjør du");
+      expect(html).toContain(":::skriv Skriv et vedtak.");
+      expect(html).toContain('<details class="content-think">');
+    }
+  });
+
+  // Forhåndsvisningen i modularbeidsflaten bruker samme rute som seksjonseditoren, med variant «moduleText».
+  it("forhåndsvisningsruta: variant «moduleText» tegner ikke øvelsene; uten variant er det seksjon (kontroll)", async () => {
+    const markdown = [":::steg Slik", "### A", "en", "### B", "to", ":::"].join("\n");
+    const modul = await request(app).post("/api/admin/content/sections/preview").set(admin).send({ markdown, locale: "nb", variant: "moduleText" });
+    expect(modul.status).toBe(200);
+    expect(modul.body.html).not.toContain("content-steps");
+    expect(modul.body.html).toContain(":::steg Slik");
+    const seksjon = await request(app).post("/api/admin/content/sections/preview").set(admin).send({ markdown, locale: "nb" });
+    expect(seksjon.status).toBe(200);
+    expect(seksjon.body.html).toContain('<div class="content-steps"');
+    const ukjent = await request(app).post("/api/admin/content/sections/preview").set(admin).send({ markdown, variant: "noe-annet" });
+    expect(ukjent.status).toBe(400);
+  });
+
   it("en modul uten oppgavetekst gir null, ikke tom HTML — kontrollcase", async () => {
     // MCQ-only-moduler har ingen oppgavetekst. Klienten skjuler hele blokka på `taskText == null`
     // (#525); en tom streng her ville vist en tom OPPGAVE-overskrift.

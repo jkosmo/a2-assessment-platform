@@ -116,6 +116,12 @@ eksporteres og importeres som resten. Hjelpen i seksjonseditoren (spørsmålsteg
   **Kunne det** eller **Øv mer**, og kan øve på «øv mer»-kortene igjen etterpå. Ingenting lagres.
   `:::kort` er noe annet: kort ved siden av hverandre.
 
+**Bare i seksjoner (2.96.1):** steg for steg, skriv selv og repetisjonskort tegnes ikke i en moduls
+oppgavetekst eller veiledning — der står de som vanlig tekst. Oppgaveteksten er det deltakeren svarer
+på, og et «skriv selv»-felt rett over svarfeltet fikk deltakeren til å skrive på feil sted. Legg
+øvelsen i seksjonen før modulen. «Tenk først», «sjekk deg selv», kort, prompt og uthevet boks virker
+begge steder.
+
 Felles regler: **en blank linje over hver ramme**, og **ingen ramme inni en annen** (første `:::`
 lukker). Er formen feil — for eksempel bare ett steg, eller ingen eksempelsvar — tegnes ingen blokk,
 og forhåndsvisningen viser teksten som den er. På de andre språkene står markørordene (`:::steg`,

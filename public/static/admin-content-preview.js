@@ -315,7 +315,9 @@ export async function hydratePreviewMarkdown(container, { apiFetch, getHeaders, 
     try {
       const svar = await apiFetch("/api/admin/content/sections/preview", getHeaders, {
         method: "POST",
-        body: JSON.stringify({ markdown, locale }),
+        // Modulens tekst: øvelsene i seksjoner (steg, skriv selv, repetisjonskort) tegnes ikke her, slik
+        // deltakeren får den (tjeneren avgjør, ContentBlockVariant i contentBlocks.ts).
+        body: JSON.stringify({ markdown, locale, variant: "moduleText" }),
       });
       if (mitt !== hydreringsLøpenummer) return; // en nyere render har tatt over
       if (typeof svar?.html !== "string" || !svar.html) return;

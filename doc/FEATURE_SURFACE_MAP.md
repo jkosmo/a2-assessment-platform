@@ -285,7 +285,13 @@ without script. Labels per locale go to the client as `data-*` attributes. `cont
 steps into one-at-a-time with Forrige/Neste (`aria-disabled` at the ends), arrow keys, dots and an
 `aria-live` count; builds the flashcard practice from the `<dl>` (the list stays for screen readers,
 visually hidden); and keeps the write text in `sessionStorage` (gone when the tab closes — shared PCs) under `a2.skriv.<key>` (every access in
-try/catch). Nothing is sent to the server or counted. Tables get `data-label` on every cell so the phone stacking rule in `shared.css` shows the
+try/catch). Nothing is sent to the server or counted. **2.96.1:** the three are drawn ONLY in sections —
+`renderSectionBlocks(markdown, locale, variant)` with `variant: "moduleText"` leaves their extensions out,
+so in a module's text (task text, guidance, expected content) they stay plain text. Every server path
+for module text goes through `renderModuleTextMarkdown` (`moduleService.briefFields`), and the module
+workspace preview asks `POST /api/admin/content/sections/preview` for `variant: "moduleText"`
+(`admin-content-preview.js` `hydratePreviewMarkdown`). Guards: `test/unit/module-text-blocks-2-96-1.test.ts`,
+`test/module-task-markdown-1051.test.ts`, `test/e2e/module-text-without-practice-2-96-1.spec.ts`. Tables get `data-label` on every cell so the phone stacking rule in `shared.css` shows the
 column name.
 
 | Surface | Where |

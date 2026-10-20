@@ -1,6 +1,6 @@
 import DOMPurify from "dompurify";
 import { JSDOM } from "jsdom";
-import { renderSectionBlocks } from "./contentBlocks.js";
+import { renderSectionBlocks, type ContentBlockVariant } from "./contentBlocks.js";
 import { hasIcon, iconUrl } from "./iconLibrary.js";
 
 /**
@@ -108,8 +108,17 @@ function resolveIconUrls(html: string): string {
  * participant view. Returns an empty string for empty / non-string input.
  * `locale` (optional) selects translated SVG asset variants for that language.
  */
-export function renderSectionMarkdown(markdownInput: string, locale?: string): string {
+export function renderSectionMarkdown(markdownInput: string, locale?: string, variant: ContentBlockVariant = "section"): string {
   if (typeof markdownInput !== "string" || markdownInput.length === 0) return "";
-  const rawHtml = renderSectionBlocks(markdownInput, locale);
+  const rawHtml = renderSectionBlocks(markdownInput, locale, variant);
   return sanitizeSectionHtml(resolveIconUrls(resolveAssetUrls(rawHtml, locale)));
+}
+
+/**
+ * Modulens tekst (oppgavetekst, veiledning, forventet innhold): samme tegning og rensing som en seksjon,
+ * men uten øvelsene steg for steg, skriv selv og repetisjonskort — de står som vanlig tekst
+ * (produkteier, 2026-10-20; se ContentBlockVariant). Alle som tegner modulens tekst, går hit.
+ */
+export function renderModuleTextMarkdown(markdownInput: string, locale?: string): string {
+  return renderSectionMarkdown(markdownInput, locale, "moduleText");
 }

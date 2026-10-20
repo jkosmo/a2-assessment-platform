@@ -206,6 +206,16 @@ describe("produce-course — kontrollen «learner text» stopper ikke vanlig fag
     expect(status(r).languages, formatProduction(r)).toBe("ok");
   });
 
+  // Kontroll til 2.96.1-radene: «tenk først» i oppgaveteksten tegnes fortsatt, og stopper ikke.
+  it("«tenk først» i modulens oppgavetekst stopper ikke (2.96.1)", async () => {
+    const k = kopi((p) => {
+      const v = objekt(p, "mod-referat").payload.activeVersion;
+      v.taskText = { nb: "Oppgave.", nn: "Oppgåve.", "en-GB": "Task." }; for (const s of ["nb", "nn", "en-GB"]) v.taskText[s] += "\n\n:::tenk Hva tror du?\nSvaret.\n:::";
+    });
+    const r = await k.kjør();
+    expect(tekst(r), tekst(r).details.join("; ")).toMatchObject({ status: "ok" });
+  });
+
   it("rammer inne i en kodeblokk telles ikke", async () => {
     const k = kopi((p) => {
       objekt(p, "sec-kilder").payload.bodyMarkdown.nb += ["", "Slik skrives kort:", "", "```markdown", ":::kort", "### Et kort", "```"].join("\n");
@@ -253,6 +263,9 @@ describe("produce-course — hver kontroll stopper leveransen (#1079)", () => {
     ["repetisjonskort med bare ett kort (#1078)", (p) => void (objekt(p, "sec-kilder").payload.bodyMarkdown.nb += "\n\n:::repetisjon\n### Vedtak\nDet møtet bestemte.\n:::\n"), "learner text", "a :::repetisjon frame needs at least two cards — one ### heading per card (it has 1)"],
     ["et repetisjonskort uten bakside (#1078)", (p) => void (objekt(p, "sec-kilder").payload.bodyMarkdown.nb += "\n\n:::flashcards\n### Vedtak\n\n### Referent\nDen som skriver.\n:::\n"), "learner text", "a card in a :::flashcards frame has nothing on its back: «Vedtak»"],
     ["et steg som forsvant i den engelske oversettelsen (#1075)", (p) => { const b = objekt(p, "sec-kilder").payload.bodyMarkdown; b.nb += "\n\n:::steg\n### Les\nFinn.\n### Skriv\nMed frist.\n### Send\nTil alle.\n:::\n"; b.nn += "\n\n:::steg\n### Les\nFinn.\n### Skriv\nMed frist.\n### Send\nTil alle.\n:::\n"; b["en-GB"] += "\n\n:::steg\n### Read\nFind.\n### Write\nWith a deadline.\n:::\n"; }, "languages", "another number of steps, checklist points or cards, or is missing, in: en-GB (nb has steg:3)"],
+    // 2.96.1 (produkteier 2026-10-20): øvelsene tegnes bare i seksjoner, ikke i modulens tekst.
+    ["et «steg for steg» i modulens oppgavetekst (2.96.1)", (p) => { const v = objekt(p, "mod-referat").payload.activeVersion; v.taskText = { nb: "Oppgave.\n\n:::steg\n### A\nen\n### B\nto\n:::", nn: "Oppgåve.", "en-GB": "Task." }; }, "learner text", '"mod-referat" taskText (nb): a :::steg frame works only in a section'],
+    ["en «skriv selv» i modulens veiledning (2.96.1)", (p) => { const v = objekt(p, "mod-referat").payload.activeVersion; v.candidateTaskConstraints = "Maks 300 ord.\n\n:::write Skriv et vedtak.\nSvaret.\n:::"; }, "learner text", '"mod-referat" candidateTaskConstraints: a :::write frame works only in a section'],
     ["en repetisjonsramme som ikke lukkes (#1078)", (p) => void (objekt(p, "sec-kilder").payload.bodyMarkdown.nb += "\n\n:::repetisjon\n### Vedtak\nDet møtet bestemte.\n### Referent\nDen som skriver."), "learner text", "a :::repetisjon frame is opened and never closed"],
     ["en kortramme som ikke lukkes", (p) => void (objekt(p, "sec-kilder").payload.bodyMarkdown.nb = objekt(p, "sec-kilder").payload.bodyMarkdown.nb.replace("\n:::\n", "\n")), "learner text", "opened and never closed"],
     ["en modul med færre spørsmål enn tre", (p) => void objekt(p, "mod-referat").payload.activeVersion.mcqSet.questions.splice(2), "questions", "at least one question per section and at least 3"],

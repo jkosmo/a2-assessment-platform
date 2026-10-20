@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { Lexer, Marked, type Tokens } from "marked";
+import { Lexer, Marked, type TokenizerAndRendererExtension, type Tokens } from "marked";
 
 /**
  * Innholdsblokker i seksjonstekst (#1079): uthevet boks, prompt-boks, kort og ikon — pluss
@@ -239,8 +239,21 @@ function splitWriteFrame(inner: string): { example: string; checklist: string[] 
  */
 const writeKey = (task: string, example: string) => createHash("sha256").update(`${task}\n${example}`).digest("hex").slice(0, 16);
 
+/**
+ * Hvor teksten skal stå. `section` er seksjonstekst: alle blokkene. `moduleText` er modulens oppgavetekst,
+ * veiledning og forventede innhold — det deltakeren svarer på. Der tegnes ikke øvelsene steg for steg,
+ * skriv selv og repetisjonskort (produkteier, 2026-10-20): et «skriv selv»-felt rett over det ekte
+ * svarfeltet fikk deltakere til å skrive svaret på feil sted, og eksempelsvaret var en fasit. Rammene står
+ * der som vanlig tekst, slik en ugyldig ramme gjør. Tenk først, sjekk deg selv, kort, prompt-boks og
+ * uthevet boks tegnes som før 2.96.0.
+ */
+export type ContentBlockVariant = "section" | "moduleText";
+
+/** Utvidelsene som bare hører hjemme i seksjoner. */
+const SECTION_ONLY_EXTENSIONS = new Set(["contentSteps", "contentWrite", "contentFlash"]);
+
 /** `locale` er alt siktet av renderSectionBlocks: et av språkene i COPY_LABELS, eller ingen. */
-function createSectionMarked(locale?: string): Marked {
+function createSectionMarked(locale: string | undefined, variant: ContentBlockVariant): Marked {
   const labels = COPY_LABELS[locale ?? "nb"]!;
   const think = THINK_LABELS[locale ?? "nb"]!;
   const check = CHECK_LABELS[locale ?? "nb"]!;
@@ -248,8 +261,10 @@ function createSectionMarked(locale?: string): Marked {
   const write = WRITE_LABELS[locale ?? "nb"]!;
   const flash = FLASH_LABELS[locale ?? "nb"]!;
 
+  const allowed = (extension: { name: string }) => variant === "section" || !SECTION_ONLY_EXTENSIONS.has(extension.name);
+
   return new Marked({
-    extensions: [
+    extensions: ([
       {
         // #1072: «Tenk først» — et spørsmål midt i teksten, svaret skjult til deltakeren trykker.
         //   :::tenk Hva tror du skjer hvis …?
@@ -528,7 +543,7 @@ function createSectionMarked(locale?: string): Marked {
           );
         },
       },
-    ],
+    ] satisfies TokenizerAndRendererExtension[]).filter(allowed),
     renderer: {
       // ```prompt — en prompt, mal eller et eksempel deltakeren skal kopiere.
       code(token: Tokens.Code) {
@@ -578,15 +593,19 @@ function createSectionMarked(locale?: string): Marked {
   });
 }
 
-const byLocale = new Map<string, Marked>();
+const byLocaleAndVariant = new Map<string, Marked>();
 
-/** Seksjonsmarkdown til HTML, med innholdsblokkene tegnet. Resultatet er IKKE renset. */
-export function renderSectionBlocks(markdown: string, locale?: string): string {
-  const key = locale && Object.hasOwn(COPY_LABELS, locale) ? locale : "";
-  let instance = byLocale.get(key);
+/**
+ * Markdown til HTML, med innholdsblokkene tegnet. Resultatet er IKKE renset. `variant` sier hvor teksten
+ * står (seksjon eller modulens tekst) — se ContentBlockVariant.
+ */
+export function renderSectionBlocks(markdown: string, locale?: string, variant: ContentBlockVariant = "section"): string {
+  const language = locale && Object.hasOwn(COPY_LABELS, locale) ? locale : "";
+  const key = `${variant}:${language}`;
+  let instance = byLocaleAndVariant.get(key);
   if (!instance) {
-    instance = createSectionMarked(key || undefined);
-    byLocale.set(key, instance);
+    instance = createSectionMarked(language || undefined, variant);
+    byLocaleAndVariant.set(key, instance);
   }
   return instance.parse(markdown, { async: false }) as string;
 }
