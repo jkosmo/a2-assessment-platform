@@ -2,6 +2,7 @@ import { z } from "zod";
 import { env } from "../../config/env.js";
 import { fetchAzureOpenAiWithRetry } from "../llm/azureOpenAiRetry.js";
 import type { LocalizedText } from "../../codecs/localizedTextCodec.js";
+import { assertTranslationKeepsStructure } from "./translationStructureGuard.js";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -1670,6 +1671,13 @@ export async function localizeModuleDraft(input: ModuleDraftLocalizationInput): 
   if (!parsed.success) {
     throw new Error(`Module draft localization failed validation: ${JSON.stringify(parsed.error.issues)}`);
   }
+  // #1109: samme rammer som kilden, ellers forkastes språket (TranslationStructureError, 422).
+  assertTranslationKeepsStructure(input.targetLocale, [
+    { field: "title", source: input.title, translated: parsed.data.title },
+    { field: "taskText", source: input.taskText, translated: parsed.data.taskText },
+    { field: "candidateTaskConstraints", source: input.candidateTaskConstraints, translated: parsed.data.candidateTaskConstraints },
+    { field: "assessorExpectedContent", source: input.assessorExpectedContent, translated: parsed.data.assessorExpectedContent },
+  ]);
   return parsed.data;
 }
 
@@ -1777,6 +1785,12 @@ export async function localizeCourseCopy(input: CourseCopyLocalizationInput): Pr
   if (!parsed.success) {
     throw new Error(`Course copy localization failed validation: ${JSON.stringify(parsed.error.issues)}`);
   }
+  // #1109: kursets tekst tegner ingen rammer i dag, men oversetteren er den samme — og en ramme som
+  // dukker opp eller forsvinner i en oversettelse er feil uansett hvor teksten står.
+  assertTranslationKeepsStructure(input.targetLocale, [
+    { field: "title", source: input.title, translated: parsed.data.title },
+    { field: "description", source: input.description, translated: parsed.data.description },
+  ]);
   return parsed.data;
 }
 
@@ -1868,25 +1882,36 @@ export async function localizeSectionContent(input: SectionLocalizationInput): P
   // Stub mode (local dev / CI): return a deterministic, clearly-tagged localisation
   // so the translate client→server flow is exercisable without a live LLM. Real
   // translation quality is validated against azure_openai on staging.
+  let result: SectionLocalizationResult;
   if (env.LLM_MODE !== "azure_openai") {
     const tag = `[${input.targetLocale}]`;
-    return {
+    result = {
       title: input.title ? `${tag} ${input.title}` : undefined,
-      bodyMarkdown: input.bodyMarkdown ? `${tag} ${input.bodyMarkdown}` : undefined,
+      // #1109: merket står på en egen linje. «[nb] :::sjekk …» er ikke lenger en åpningslinje, så en
+      // tekst som begynner med en ramme mistet rammen i stubben — og stubben skal oversette slik en
+      // riktig oversettelse gjør, ellers stopper kontrollen under hver lokal kjøring.
+      bodyMarkdown: input.bodyMarkdown ? `${tag}\n\n${input.bodyMarkdown}` : undefined,
+    };
+  } else {
+    const { systemPrompt, userPrompt } = buildSectionLocalizationPrompts(input);
+
+    const raw = await callLlm(systemPrompt, userPrompt);
+    const parsed = sectionLocalizationResponseCodec.safeParse(raw);
+    if (!parsed.success) {
+      throw new Error(`Section localization failed validation: ${JSON.stringify(parsed.error.issues)}`);
+    }
+    result = {
+      title: parsed.data.title,
+      bodyMarkdown: normaliseLiteralNewlines(parsed.data.bodyMarkdown),
     };
   }
-
-  const { systemPrompt, userPrompt } = buildSectionLocalizationPrompts(input);
-
-  const raw = await callLlm(systemPrompt, userPrompt);
-  const parsed = sectionLocalizationResponseCodec.safeParse(raw);
-  if (!parsed.success) {
-    throw new Error(`Section localization failed validation: ${JSON.stringify(parsed.error.issues)}`);
-  }
-  return {
-    title: parsed.data.title,
-    bodyMarkdown: normaliseLiteralNewlines(parsed.data.bodyMarkdown),
-  };
+  // #1109: samme rammer som kilden, ellers forkastes språket (TranslationStructureError, 422). Gjelder
+  // også en tittel alene (`localizeTitle`) og modulens felt som publiseringsporten oversetter ett og ett.
+  assertTranslationKeepsStructure(input.targetLocale, [
+    { field: "title", source: input.title, translated: result.title },
+    { field: "bodyMarkdown", source: input.bodyMarkdown, translated: result.bodyMarkdown },
+  ]);
+  return result;
 }
 
 // ---------------------------------------------------------------------------

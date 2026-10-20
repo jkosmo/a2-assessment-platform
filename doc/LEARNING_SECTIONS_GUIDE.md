@@ -126,7 +126,11 @@ Felles regler: **en blank linje over hver ramme**, og **ingen ramme inni en anne
 lukker). Er formen feil — for eksempel bare ett steg, eller ingen eksempelsvar — tegnes ingen blokk,
 og forhåndsvisningen viser teksten som den er. På de andre språkene står markørordene (`:::steg`,
 `:::skriv`, `:::repetisjon` …), `- [ ]`/`- [x]` og overskriftene urørt; «Oversett fra dette språket»
-holder dem slik.
+holder dem slik — og kontrollerer det etterpå (2.97.0). Har en oversettelse flyttet riktig svar i en
+«sjekk deg selv», mistet et steg, et kort eller et punkt i en sjekkliste, eller fått en blokk for mye
+eller for lite, brukes den ikke: teksten på det språket står som før, og du får beskjed om hvilket språk
+det gjelder. Trykk «Oversett fra dette språket» igjen, eller rett teksten selv. Det samme gjelder når en
+modul oversettes ved lagring: språket står da tomt, med beskjeden «Ikke oversatt til …».
 
 ### 4. Embedded video
 

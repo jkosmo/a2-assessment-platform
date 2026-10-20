@@ -75,7 +75,9 @@ before the picture says what it shows ([section-content.md](section-content.md#p
 - a right answer that sits in a different position, or matches no option, in some language — also
   the `- [x]` in a «sjekk deg selv» frame;
 - a «steg», «skriv» or «repetisjon» frame with another number of steps, checklist points or cards in
-  some language, or missing from it;
+  some language, or missing from it — and any frame («tenk», «kort» too) that is missing from a
+  language or appears only in one. The rules are the platform's own: its translator runs the same
+  check (`frame-structure.mjs`) and refuses a translation that breaks a frame;
 - a formula, address, identifier or file name that is in the primary language and missing from a
   translation;
 - a figure that lacks a language, has a different number of pieces of label text in one, or whose

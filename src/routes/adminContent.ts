@@ -1416,6 +1416,12 @@ adminContentRouter.post("/generate/module-draft/localize", generateLimiter, asyn
     const draft = await localizeModuleDraft(data);
     response.json({ draft });
   } catch (err) {
+    // #1109: en oversettelse som endret rammene er ikke en tjenerfeil — 422 med kode og detaljer, så
+    // klienten kan si hvorfor språket ikke ble oversatt.
+    if (err instanceof AppError) {
+      respondWithAppError(response, err);
+      return;
+    }
     const message = err instanceof Error ? err.message : "Unknown error";
     response.status(500).json({ error: "generation_failed", message });
   }

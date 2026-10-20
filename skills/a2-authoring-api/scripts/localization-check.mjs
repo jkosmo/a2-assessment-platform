@@ -19,6 +19,8 @@
 //
 // Node stdlib only, pure, repo-testable (test/unit/agent-authoring-localization.test.ts).
 
+import { compareFrames, frameSignature, readFrames } from "./frame-structure.mjs";
+
 export const LANGUAGES = Object.freeze(["nb", "nn", "en-GB"]);
 const NORWEGIAN = new Set(["nb", "nn"]);
 
@@ -366,51 +368,23 @@ export function checkFigureLocalization(pkg, { languages = LANGUAGES, primary = 
 // #763 (Layer B): text-bearing SVG figures are localized too — folded into `figures` + `blocks`.
 /**
  * #1074: fasiten i hver «sjekk deg selv»-ramme i en tekst, som et mønster per ramme ("010" = det andre
- * av tre alternativer er riktig). Plattformen leser rammen slik (src/modules/course/contentBlocks.ts):
- * alternativene står først, `- [ ]` eller `- [x]`.
+ * av tre alternativer er riktig). #1109: lest av den delte tabellen i frame-structure.mjs, som også
+ * plattformens oversetter bruker — en ramme som ikke ville blitt tegnet (to riktige, ett alternativ),
+ * er ingen ramme.
  */
 export function checkAnswerPatterns(text) {
-  const patterns = [];
-  const frame = /^:::[ \t]*(?:sjekk|check)[ \t]+\S[^\r\n]*\r?\n([\s\S]*?)\r?\n:::[ \t]*$/gim;
-  for (const match of String(text ?? "").matchAll(frame)) {
-    let pattern = "";
-    for (const line of match[1].split(/\r?\n/)) {
-      if (pattern === "" && line.trim() === "") continue;
-      const option = /^[ \t]*[-*][ \t]+\[([ xX])\][ \t]+\S/.exec(line);
-      if (!option) break;
-      pattern += option[1].toLowerCase() === "x" ? "1" : "0";
-    }
-    patterns.push(pattern);
-  }
-  return patterns;
+  return readFrames(text).filter((frame) => frame.kind === "sjekk").map((frame) => frame.shape);
 }
 
-const PRACTICE_KIND = { steg: "steg", steps: "steg", skriv: "skriv", write: "skriv", repetisjon: "repetisjon", flashcards: "repetisjon" };
+const PRACTICE_KINDS = new Set(["steg", "skriv", "repetisjon"]);
 
 /**
  * #1075, #1076, #1078: formen på hver øvingsramme i en tekst, i rekkefølge — "steg:4" (fire steg),
- * "skriv:3" (tre punkter i sjekklista), "repetisjon:5" (fem kort). Leses slik plattformen leser rammen
- * (src/modules/course/contentBlocks.ts): en overskrift begynner et steg eller et kort, og sjekklista er
- * `- [ ]`-linjene til slutt i en skriv-ramme. Det engelske markørordet er samme ramme.
+ * "skriv:3" (tre punkter i sjekklista), "repetisjon:5" (fem kort). #1109: lest av den delte tabellen i
+ * frame-structure.mjs. Det engelske markørordet er samme ramme.
  */
 export function practiceBlockShapes(text) {
-  const shapes = [];
-  const frame = /^:::[ \t]*(steg|steps|skriv|write|repetisjon|flashcards)\b[^\r\n]*\r?\n([\s\S]*?)\r?\n:::[ \t]*$/gim;
-  for (const match of String(text ?? "").matchAll(frame)) {
-    const kind = PRACTICE_KIND[match[1].toLowerCase()];
-    const lines = match[2].split(/\r?\n/);
-    let count = 0;
-    if (kind === "skriv") {
-      let end = lines.length;
-      while (end > 0 && lines[end - 1].trim() === "") end -= 1;
-      while (end > 0 && /^[ \t]*[-*][ \t]+\[[ xX]\][ \t]+\S/.test(lines[end - 1])) {
-        count += 1;
-        end -= 1;
-      }
-    } else count = lines.filter((line) => /^ {0,3}#{1,6}[ \t]+\S/.test(line)).length;
-    shapes.push(`${kind}:${count}`);
-  }
-  return shapes;
+  return readFrames(text).filter((frame) => PRACTICE_KINDS.has(frame.kind)).map((frame) => `${frame.kind}:${frame.shape}`);
 }
 
 export function checkLocalization(pkg, { languages = LANGUAGES, primary = "nb", blindCopyBlocks = true } = {}) {
@@ -431,29 +405,34 @@ export function checkLocalization(pkg, { languages = LANGUAGES, primary = "nb", 
 
   for (const field of prose) checkField(field.path, field.value);
 
-  // #1074: fasiten i «sjekk deg selv» skal stå på samme plass på alle språk, i like mange rammer.
-  for (const field of prose) {
-    const reference = checkAnswerPatterns(localeValue(field.value, primary));
-    if (reference.length === 0) continue;
-    const drifted = languages.filter((lang) => lang !== primary && presentLocales(field.value).includes(lang)
-      && checkAnswerPatterns(localeValue(field.value, lang)).join("|") !== reference.join("|"));
-    if (drifted.length > 0) {
-      answerKeyChanges.push({ path: field.path, detail: `a «sjekk deg selv» question has its right option (- [x]) in another place, or a question is missing, in: ${drifted.join(", ")}` });
-    }
-  }
-
-  // #1075/#1076/#1078: like mange steg, sjekkpunkter og kort på alle språk. Et steg eller et kort som
-  // forsvant i oversettelsen, ser deltakeren aldri; et sjekkpunkt som forsvant, sjekker hen aldri.
+  // #1074–#1078, #1109: rammene skal ha samme form på alle språk — samme fasit i hver «sjekk deg selv»,
+  // like mange steg, sjekkpunkter og kort, like mange rammer av hver type. Lest av den delte tabellen i
+  // frame-structure.mjs (samme som plattformens oversetter bruker). En fasit som flyttet seg, eller et
+  // spørsmål som mangler, er en fasitendring; resten er en formendring.
   const blockShapeChanges = [];
   for (const field of prose) {
-    const reference = practiceBlockShapes(localeValue(field.value, primary));
-    if (reference.length === 0) continue;
-    const drifted = languages.filter((lang) => lang !== primary && presentLocales(field.value).includes(lang)
-      && practiceBlockShapes(localeValue(field.value, lang)).join("|") !== reference.join("|"));
-    if (drifted.length > 0) {
+    const reference = localeValue(field.value, primary);
+    // Ingen ramme på hovedspråket sjekkes også: en ramme som dukker opp i en oversettelse, er like feil.
+    const answerDrift = [];
+    const shapeDrift = [];
+    const driftedKinds = new Set();
+    for (const lang of languages) {
+      if (lang === primary || !presentLocales(field.value).includes(lang)) continue;
+      const problems = compareFrames(reference, localeValue(field.value, lang));
+      if (problems.some((problem) => problem.kind === "sjekk")) answerDrift.push(lang);
+      const shapeProblems = problems.filter((problem) => problem.kind !== "sjekk");
+      if (shapeProblems.length > 0) shapeDrift.push(lang);
+      for (const problem of shapeProblems) driftedKinds.add(problem.kind);
+    }
+    if (answerDrift.length > 0) {
+      answerKeyChanges.push({ path: field.path, detail: `a «sjekk deg selv» question has its right option (- [x]) in another place, or a question is missing, in: ${answerDrift.join(", ")}` });
+    }
+    if (shapeDrift.length > 0) {
+      // Formen på hovedspråket, bare for rammetypene som avviker — det er dem modellen skal rette.
+      const referenceShape = frameSignature(reference).filter((shape) => driftedKinds.has(shape.split(":")[0])).join(", ") || "no such frame";
       blockShapeChanges.push({
         path: field.path,
-        detail: `a step-by-step, write-it-yourself or flashcard frame has another number of steps, checklist points or cards, or is missing, in: ${drifted.join(", ")} (${primary} has ${reference.join(", ")})`,
+        detail: `a step-by-step, write-it-yourself, flashcard, cards or think-first frame has another number of steps, checklist points or cards, or is missing, in: ${shapeDrift.join(", ")} (${primary} has ${referenceShape})`,
       });
     }
   }
@@ -491,7 +470,7 @@ export function checkLocalization(pkg, { languages = LANGUAGES, primary = "nb", 
   if (missing.length > 0) reasons.push(`${missing.length} localized field(s) missing a language`);
   if (optionCountMismatches.length > 0) reasons.push(`${optionCountMismatches.length} option-count mismatch(es)`);
   if (answerKeyChanges.length > 0) reasons.push(`${answerKeyChanges.length} answer-key change(s) across languages`);
-  if (blockShapeChanges.length > 0) reasons.push(`${blockShapeChanges.length} step, checklist or flashcard frame(s) with another shape in a translation`);
+  if (blockShapeChanges.length > 0) reasons.push(`${blockShapeChanges.length} step, checklist or flashcard frame(s) with another shape in a translation (or a cards or think-first frame missing or added)`);
   if (tokenDrift.length > 0) reasons.push(`${tokenDrift.length} formula/URL/identifier(s) lost in a translation`);
   if (blindCopyBlocks && blindCopies.length > 0) reasons.push(`${blindCopies.length} field(s) are a blind copy of the primary language`);
   reasons.push(...figures.reasons);

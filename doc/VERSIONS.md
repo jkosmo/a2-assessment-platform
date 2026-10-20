@@ -2,6 +2,32 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.97.0 - 2026-10-20
+
+### Oversetteren kontrollerer blokkene etter oversettelse (#1109)
+
+- Når plattformen oversetter en seksjon, en modul eller et kurs, sammenlignes oversettelsen med kilden
+  før den brukes. Hver blokk (`:::tenk`, `:::sjekk`, `:::kort`, `:::steg`, `:::skriv`, `:::repetisjon`)
+  skal finnes like mange ganger, riktig svar i hver «sjekk deg selv» skal stå på samme plass, og hvert
+  steg for steg, hver kortramme, hvert sett repetisjonskort og hver sjekkliste skal ha like mange steg,
+  kort og punkter. Tjeneren sjekker også at den tegner like mange blokker som i kilden — en oversettelse
+  som fjernet den blanke linja over «sjekk deg selv», fikk alternativene inn i lista over, og blokken ble
+  borte.
+- Endret oversettelsen blokkene, brukes den ikke. I seksjonseditoren står teksten på det språket som
+  før, de andre språkene oversettes, og forfatteren får beskjed om hvilket språk og hvorfor. Ved lagring
+  av en modul står språket tomt med beskjeden «Ikke oversatt til …», som for en oversettelse som feilet.
+  En riktig oversettelse lagres som før.
+- Gjelder alle veier plattformen oversetter: «Oversett fra dette språket», lagring fra Rediger, «Be om
+  endring» og «Generer innhold», oversettelse i chatten, publiseringsporten som fyller hull, kursets
+  tittel og beskrivelse, og navneendring i listene.
+- Reglene står i én tabell som både plattformen og skillet bruker
+  (`skills/a2-authoring-api/scripts/frame-structure.mjs`). En ny blokk legges inn der én gang. Skillets
+  språkkontroll stopper nå også en «tenk først» eller en kortramme som mangler i ett språk, og en blokk
+  som bare finnes i en oversettelse.
+- API: oversettelsesrutene svarer `422 translation_structure_changed` med språk og avvik
+  (doc/API_REFERENCE.md). Lokalt uten KI setter stubben `[nb]` på en egen linje, så en tekst som begynner
+  med en blokk, beholder den.
+
 ## 2.96.1 - 2026-10-20
 
 ### Øvelsene fra seksjoner tegnes ikke i modulens oppgavetekst
