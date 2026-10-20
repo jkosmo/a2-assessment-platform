@@ -653,6 +653,23 @@ describe("section localization prompts (#514)", () => {
     expect(userPrompt).toContain("{{asset:fig1}}");
   });
 
+  // #1074–#1078: rammene i seksjonsteksten. Markørordet står urørt, og det deltakeren svarer mot eller
+  // blar i — fasiten, sjekklista, stegene og kortene — skal ha samme form på alle språk.
+  it("beholder markørene for rammene, sjekklista i «skriv selv» og overskriftene i steg og repetisjonskort", () => {
+    const { userPrompt } = buildSectionLocalizationPrompts({
+      bodyMarkdown: ":::steg Tittel\n### A\nen\n### B\nto\n:::",
+      sourceLocale: "nb",
+      targetLocale: "en-GB",
+    });
+    // Regelen om markørordene er én linje; ordene må stå i DEN, ikke bare et annet sted i prompten.
+    const markerRule = userPrompt.split("\n").find((line) => line.startsWith("- Keep block markers exactly as written")) ?? "";
+    for (const marker of [":::kort", ":::tenk", ":::sjekk", ":::steg", ":::steps", ":::skriv", ":::write", ":::repetisjon", ":::flashcards"]) {
+      expect(markerRule, marker).toContain(`\`${marker}\``);
+    }
+    expect(userPrompt).toMatch(/In a `:::skriv` \/ `:::write` block, the lines at the end that start with `- \[ \]` are the learner's checklist\. Keep that start EXACTLY and keep every line/);
+    expect(userPrompt).toMatch(/In a `:::steg` \/ `:::steps` and a `:::repetisjon` \/ `:::flashcards` block, every heading starts a step or a card\. Keep every heading as a heading/);
+  });
+
   it("omits a field that was not provided", () => {
     const { userPrompt } = buildSectionLocalizationPrompts({
       title: "Bare tittel",

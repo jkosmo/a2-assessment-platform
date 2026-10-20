@@ -212,8 +212,18 @@ function withoutCodeBlocks(text) {
   return String(text ?? "").replace(/^[ \t]*(`{3,}|~{3,})[^\n]*\n[\s\S]*?^[ \t]*\1[^\n]*$/gm, "");
 }
 
-// The platform's own reading of a card frame (`:::kort`, `::: Kort`, `:::cards` — blanks and case
-// do not matter), so the count here agrees with what the reader will show.
+// The platform's own reading of a frame's opening line (`:::kort`, `::: Kort`, `:::cards` — blanks and
+// case do not matter), so what is counted here agrees with what the reader will show. The words and
+// their English twins are the platform's (src/modules/course/contentBlocks.ts).
+const FRAME_OPENER = /^:::[ \t]*(kort|cards|tenk|think|sjekk|check|steg|steps|skriv|write|repetisjon|flashcards)\b/i;
+/** Cards take nothing after the word; think, check and write need their question or task there; steps and flashcards may have a title. */
+function isFrameOpener(word, line) {
+  const kind = word.toLowerCase();
+  if (kind === "kort" || kind === "cards") return /^:::[ \t]*(?:kort|cards)[ \t]*$/i.test(line);
+  if (["steg", "steps", "repetisjon", "flashcards"].includes(kind)) return new RegExp(`^:::[ \\t]*${kind}(?:[ \\t].*)?$`, "i").test(line);
+  return new RegExp(`^:::[ \\t]*${kind}[ \\t]+\\S`, "i").test(line);
+}
+
 /** The frames in a text, line by line: unclosed, stray closing lines, and a frame opened inside another. */
 function frameProblems(prose) {
   const problems = [];
@@ -232,8 +242,8 @@ function frameProblems(prose) {
   for (const line of String(prose ?? "").split(/\r?\n/)) {
     const above = previous;
     previous = line;
-    const opener = /^:::[ \t]*(kort|cards|tenk|think|sjekk|check)\b/i.exec(line);
-    if (opener && (/^(kort|cards)$/i.test(opener[1]) ? /^:::[ \t]*(?:kort|cards)[ \t]*$/i.test(line) : /^:::[ \t]*(?:tenk|think|sjekk|check)[ \t]+\S/i.test(line))) {
+    const opener = FRAME_OPENER.exec(line);
+    if (opener && isFrameOpener(opener[1], line)) {
       const kind = opener[1].toLowerCase();
       if (above.trim() !== "" && !/^#{1,6}[ \t]/.test(above) && !/^:::[ \t]*$/.test(above)) {
         problems.push(`a :::${kind} line has text right above it — put a blank line above the frame; without one the platform can read the frame as part of the list, quote or table above, and not draw it`);
@@ -241,13 +251,14 @@ function frameProblems(prose) {
       if (open) problems.push(`a :::${kind} frame is opened inside a :::${open} frame — frames cannot be nested; the first ::: closes both, and the learner sees the markers as text`);
       else {
         open = kind;
-        checkLines = kind === "sjekk" || kind === "check" ? [] : null;
+        // #1074–#1078: rammene med en form plattformen krever, samles til de lukkes og kontrolleres da.
+        checkLines = FRAME_SHAPE_CHECKS[kind] ? [] : null;
       }
       continue;
     }
     if (/^:::[ \t]*$/.test(line)) {
       if (open) {
-        if (checkLines) problems.push(...checkProblems(open, checkLines));
+        if (checkLines) problems.push(...FRAME_SHAPE_CHECKS[open](open, checkLines));
         open = null;
         checkLines = null;
       } else problems.push("a ::: closes a frame that was never opened");
@@ -280,6 +291,56 @@ function checkProblems(kind, lines) {
   if (right !== 1) return [`a :::${kind} question needs exactly one right option marked \`- [x]\` (it has ${right}) — the learner sees the markers as text`];
   return [];
 }
+
+/** A heading line at the frame's own level — what starts a step or a card on the platform. */
+const ITEM_HEADING = /^ {0,3}#{1,6}[ \t]+(\S.*)$/;
+
+/**
+ * #1075 and #1078: a «steg» or «repetisjon» frame is a block only with at least two headings — one per
+ * step or card, the rule of `:::kort`. With fewer the platform shows the markers as text. A card with
+ * nothing under its heading has no back to turn to.
+ */
+function itemsProblems(kind, lines) {
+  const steps = kind === "steg" || kind === "steps";
+  const items = [];
+  for (const line of lines) {
+    const heading = ITEM_HEADING.exec(line);
+    if (heading) items.push({ title: heading[1].trim(), body: 0 });
+    else if (items.length > 0 && line.trim() !== "") items[items.length - 1].body += 1;
+  }
+  if (items.length < 2) {
+    return [`a :::${kind} frame needs at least two ${steps ? "steps" : "cards"} — one ### heading per ${steps ? "step" : "card"} (it has ${items.length}); with fewer the learner sees the markers as text`];
+  }
+  if (steps) return [];
+  return items.filter((item) => item.body === 0).map((item) => `a card in a :::${kind} frame has nothing on its back: «${item.title}» — write the explanation under the heading`);
+}
+
+/** The checklist line in a «skriv» frame — the platform's rule: `- [ ] text`. */
+const WRITE_CHECK_ITEM = /^[ \t]*[-*][ \t]+\[[ xX]\][ \t]+\S/;
+
+/**
+ * #1076: a «skriv» frame is a block only with an example answer — text above the checklist (the run of
+ * `- [ ]` lines at the end). A frame with only a checklist is shown as text.
+ */
+function writeProblems(kind, lines) {
+  let end = lines.length;
+  while (end > 0 && lines[end - 1].trim() === "") end -= 1;
+  while (end > 0 && WRITE_CHECK_ITEM.test(lines[end - 1])) end -= 1;
+  if (lines.slice(0, end).some((line) => line.trim() !== "")) return [];
+  return [`a :::${kind} frame needs an example answer above the checklist — the learner compares with it; without one the learner sees the markers as text`];
+}
+
+/** The frames with a shape the platform requires, and the check for each. */
+const FRAME_SHAPE_CHECKS = {
+  sjekk: checkProblems,
+  check: checkProblems,
+  steg: itemsProblems,
+  steps: itemsProblems,
+  repetisjon: itemsProblems,
+  flashcards: itemsProblems,
+  skriv: writeProblems,
+  write: writeProblems,
+};
 
 function checkLearnerText(pkg) {
   const details = [];
@@ -361,7 +422,7 @@ function checkLanguages(pkg, primary) {
       ? `${entry.actual} pieces of label text, the original has ${entry.expected} — keep the same number of lines in every label`
       : null;
   const where = (entry) => [entry.path, entry.locale, entry.missingLocales?.join("+"), entry.token, entry.detail, counts(entry)].filter(Boolean).join(" · ");
-  const lists = [result.missing, result.answerKeyChanges, result.optionCountMismatches, result.tokenDrift, result.blindCopies];
+  const lists = [result.missing, result.answerKeyChanges, result.blockShapeChanges, result.optionCountMismatches, result.tokenDrift, result.blindCopies];
   for (const list of [...lists, ...Object.values(result.figures ?? {}).filter(Array.isArray)]) {
     for (const entry of list ?? []) if (entry && typeof entry === "object") details.push(`  ${where(entry)}`);
   }

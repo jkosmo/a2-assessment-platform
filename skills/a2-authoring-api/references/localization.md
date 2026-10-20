@@ -41,6 +41,10 @@ criteria exist in one language.
 - **Every formula, code, identifier, file name and address**, unchanged.
 - **The markdown:** the same headings, lists, tables, boxes and `![…](asset:…)` references in
   every language. Alt texts are translated; the `asset:` reference is not.
+- **The frames:** the marker word on the opening line stays as it is (`:::kort`, `:::tenk`,
+  `:::sjekk`, `:::steg`, `:::skriv`, `:::repetisjon`); the text after it is translated. The same
+  number of steps and cards (`###` headings) in a `:::steg` or `:::repetisjon`, the `- [x]` on the
+  same option in a `:::sjekk`, and every `- [ ]` point of a `:::skriv` checklist.
 - **A prompt** is translated, so that the learner can use it in their language. Names of menus
   and buttons in a product stay as the product shows them.
 
@@ -68,7 +72,10 @@ before the picture says what it shows ([section-content.md](section-content.md#p
 - a field that lacks one of the three languages;
 - a text that is identical in all three — copied, not translated. Short words, names and numbers
   that are rightly the same ("GDPR", "72") are not counted;
-- a right answer that sits in a different position, or matches no option, in some language;
+- a right answer that sits in a different position, or matches no option, in some language — also
+  the `- [x]` in a «sjekk deg selv» frame;
+- a «steg», «skriv» or «repetisjon» frame with another number of steps, checklist points or cards in
+  some language, or missing from it;
 - a formula, address, identifier or file name that is in the primary language and missing from a
   translation;
 - a figure that lacks a language, has a different number of pieces of label text in one, or whose

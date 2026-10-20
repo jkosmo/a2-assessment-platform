@@ -9,6 +9,7 @@ import {
   extractSvgTextRuns,
   extractPreservedTokens,
   isBlindCopy,
+  practiceBlockShapes,
   presentLocales,
   // @ts-expect-error — .mjs skill script consumed as a library
 } from "../../skills/a2-authoring-api/scripts/localization-check.mjs";
@@ -327,5 +328,48 @@ describe("«sjekk deg selv» på tre språk (#1074)", () => {
   it("spørsmålet mangler i engelsk: stopper", () => {
     const result = checkLocalization(sectionPackage("Introduction only."));
     expect(result.answerKeyChanges.some((c: { detail: string }) => c.detail.includes("en-GB"))).toBe(true);
+  });
+});
+
+// #1075, #1076, #1078: et steg, et kort eller et sjekkpunkt som forsvinner i en oversettelse, ser
+// deltakeren aldri. Formen skal være lik på alle språk.
+describe("steg, skriv selv og repetisjonskort på tre språk (#1075, #1076, #1078)", () => {
+  const NL = String.fromCharCode(10);
+  const steps = (...titles: string[]) => [":::steg Tittel", ...titles.flatMap((t) => [`### ${t}`, "Tekst."]), ":::"].join(NL);
+  const write = (...items: string[]) => [":::skriv Oppgave", "Eksempelsvaret.", "", "- [ ] et punkt i svaret, med tekst etter", "", "Mer svar.", "", ...items.map((i) => `- [ ] ${i}`), ":::"].join(NL);
+  const flash = (...terms: string[]) => [":::flashcards", ...terms.flatMap((t) => [`### ${t}`, "Forklaring."]), ":::"].join(NL);
+
+  it("formen leses som plattformen leser den: overskrifter per steg og kort, sjekkpunkter til slutt", () => {
+    expect(practiceBlockShapes(`Innledning.${NL}${NL}${steps("A", "B", "C")}${NL}${NL}${write("x", "y")}${NL}${NL}${flash("V", "R")}`)).toEqual(["steg:3", "skriv:2", "repetisjon:2"]);
+    // Engelsk markørord er samme ramme; Windows-linjeskift gir samme form.
+    expect(practiceBlockShapes(steps("A", "B").replace(":::steg", ":::steps").split(NL).join(String.fromCharCode(13, 10)))).toEqual(["steg:2"]);
+    expect(practiceBlockShapes("Ingen rammer her.")).toEqual([]);
+  });
+
+  const sectionPackage = (nb: string, nn: string, en: string) => ({
+    packageFormat: "a2-authoring-package/v1",
+    objects: [{ clientRef: "sec-ovelser", type: "section", payload: { title: L("Øvelser", "Øvingar", "Exercises"), bodyMarkdown: L(`Innledning med flere ord.${NL}${NL}${nb}`, `Innleiing med fleire ord.${NL}${NL}${nn}`, `Introduction with more words.${NL}${NL}${en}`) } }],
+  });
+
+  it("lik form på alle språk: ingen merknad", () => {
+    const result = checkLocalization(sectionPackage(
+      `${steps("Les", "Skriv")}${NL}${NL}${write("hva", "når")}${NL}${NL}${flash("Vedtak", "Referent")}`,
+      `${steps("Les", "Skriv")}${NL}${NL}${write("kva", "når")}${NL}${NL}${flash("Vedtak", "Referent")}`,
+      `${steps("Read", "Write")}${NL}${NL}${write("what", "when")}${NL}${NL}${flash("Decision", "Minute-taker")}`,
+    ));
+    expect(result.blockShapeChanges).toEqual([]);
+  });
+
+  it.each<[string, string, string]>([
+    ["et steg mangler", steps("Les", "Skriv"), steps("Read")],
+    ["et sjekkpunkt mangler", write("hva", "når"), write("what")],
+    ["et kort mangler", flash("Vedtak", "Referent"), flash("Decision")],
+    ["rammen mangler", steps("Les", "Skriv"), "Only text."],
+  ])("%s i engelsk: stopper, og sier hvilket språk", (_name, nb, en) => {
+    const result = checkLocalization(sectionPackage(nb, nb.replace("Eksempelsvaret", "Dømesvaret"), en));
+    expect(result.blockShapeChanges).toHaveLength(1);
+    expect(result.blockShapeChanges[0].detail).toContain("in: en-GB");
+    expect(result.blocks).toBe(true);
+    expect(result.reasons.join(" ")).toContain("step, checklist or flashcard frame(s) with another shape in a translation");
   });
 });

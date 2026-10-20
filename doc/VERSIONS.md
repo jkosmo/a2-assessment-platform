@@ -2,6 +2,44 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.96.0 - 2026-10-19
+
+### Steg for steg (#1075), skriv selv (#1076) og repetisjonskort (#1078) i seksjoner
+
+- **Steg for steg:** forfatteren skriver `:::steg Tittel`, én `###`-overskrift per steg (med tekst og
+  gjerne en figur) og `:::`. Deltakeren ser ett steg av gangen med «Steg 2 av 4», Forrige og Neste
+  (låst på første og siste), prikker, og kan bla med piltastene. Uten skript står stegene som en
+  nummerert liste.
+- **Skriv selv:** `:::skriv Oppgaven`, eksempelsvaret under og sjekklista som `- [ ]`-linjer til slutt.
+  Deltakeren skriver i et tekstfelt, åpner «Vis eksempelsvar» og krysser av i «Fikk du med …». Virker
+  uten skript. Teksten blir bare i nettleserfanen (overlever en omlasting, forsvinner når fanen
+  lukkes, så neste bruker av en delt PC ikke ser den); ingenting sendes eller teller.
+- **Repetisjonskort:** `:::repetisjon`, én `###`-overskrift per kort (begrepet) med forklaringen under.
+  Deltakeren snur kortet (klikk, mellomrom, Enter), markerer «Kunne det» eller «Øv mer», og får
+  «Du kunne X av Y» med «Øv på de N igjen» til slutt. Skjermlesere og deltakere uten skript får
+  begrep og forklaring i par. Ingenting lagres. (`:::kort` er fortsatt kort ved siden av hverandre.)
+- Alle tre er rammer i teksten som «sjekk deg selv»: ingen migrasjon og ingen egen editor
+  (produkteier godkjente skissen; avviket fra sakene står i DECISIONS). Engelske markørord:
+  `:::steps`, `:::write`, `:::flashcards`. Etikettene følger deltakerens språk.
+- `:::kort`, `:::steg` og `:::repetisjon` deler nå én regel for «en overskrift begynner et nytt
+  element». En test fester HTML-en for `:::kort` tegn for tegn slik den var på 2.95.0.
+- **Oversetteren** beholder markørordene, sjekklista og overskriftene i steg og kort.
+- **Skillet** skriver de tre (section-content.md, med når hver brukes; figure-design.md har en mal for
+  «samme figur, ulikt uthevet steg»). Produksjonskontrollen krever blank linje over rammene, minst to
+  steg eller kort, en bakside på hvert kort og et eksempelsvar; språkkontrollen krever like mange
+  steg, sjekkpunkter og kort på alle språk.
+- Hjelpen i seksjonseditoren og forfatterveiledningen (LEARNING_SECTIONS_GUIDE.md) viser formene.
+- QA-porten (NO-GO, rettet): en ugyldig `:::steg`/`:::repetisjon` (færre enn to overskrifter) rett under
+  et avsnitt uten blank linje slettet teksten i rammen. Tokeniseren leste innholdet inn i markeds lexer
+  før den sjekket antall overskrifter, og marked slo avsnittet over sammen med restene i køen. Nå
+  telles overskriftene først i en egen lexer, og rammen står som vanlig tekst. Piltast med fokus på en
+  lenke i et steg som skjules, flytter nå fokus til gjennomgangen (før havnet det på siden, og neste
+  piltast gjorde ingenting). «Skriv selv» lagrer i sessionStorage i stedet for localStorage.
+- Rotårsak: testene av ugyldige rammer hadde aldri tekst rett over rammen — den ene formen der marked
+  gjenbruker køen. Kontrollen i skillet krever blank linje over, men plattformens egen editor har ingen
+  slik kontroll, så forfattere kan skrive det. Nye enhetstester har tekst rett over en ugyldig ramme for
+  alle tre, måler mot samme tekst som vanlig markdown, og har en kontroll med gyldig ramme.
+
 ## 2.95.0 - 2026-10-19
 
 ### «Fullføring per modul» teller personer, ikke forsøk

@@ -64,6 +64,64 @@ rekkefølgen forfatteren bestemmer.
   oversatt tekst kan bli lengre/kortere, og SVG-tekst flyter ikke om automatisk — kontroller at den
   fortsatt får plass. (Tegningen må være lagret før den kan oversettes.)
 
+### 3b. Blokker i teksten
+
+Noen former i teksten tegnes som egne blokker. De skrives som vanlig tekst, så de oversettes,
+eksporteres og importeres som resten. Hjelpen i seksjonseditoren (spørsmålstegnet) viser alle.
+
+- **Uthevet boks** (`> **Husk:** …`), **prompt med kopiknapp** (` ```prompt `), **kort ved siden av
+  hverandre** (`:::kort`), **«tenk først»** (`:::tenk Spørsmål?`) og **«sjekk deg selv»**
+  (`:::sjekk Spørsmål?` med `- [ ]`/`- [x]`).
+- **Steg for steg** (#1075): en prosess deltakeren blar gjennom ett steg av gangen.
+
+  ```markdown
+  :::steg Slik behandler du en innsynsbegjæring
+  ### Registrer begjæringen
+  Før den inn i saksarkivet samme dag.
+
+  ### Finn dokumentene
+  Søk i arkivet etter alt begjæringen gjelder.
+  :::
+  ```
+
+  Én `###`-overskrift per steg, minst to (helst tre til sju). Et steg kan ha en figur. Deltakeren ser
+  «Steg 1 av 4» med **Forrige** og **Neste**, og kan bla med piltastene.
+- **Skriv selv** (#1076): en kort skriveoppgave med eksempelsvar og sjekkliste.
+
+  ```markdown
+  :::skriv Skriv vedtakspunktet for at styremøtene flyttes fra tirsdag til torsdag.
+  **Vedtak:** Styremøtene flyttes fra tirsdag til torsdag kl. 09.00, gjeldende fra 1. november.
+
+  - [ ] hva som ble bestemt, med dag og klokkeslett?
+  - [ ] fra når det gjelder?
+  :::
+  ```
+
+  Oppgaven står på første linje. Eksempelsvaret er teksten under; sjekklista er `- [ ]`-linjene til
+  slutt (den kan sløyfes). Deltakeren skriver i et tekstfelt, åpner **Vis eksempelsvar** og krysser
+  av. Ingenting sendes eller teller; teksten deltakeren skrev, blir bare i nettleserfanen hens og forsvinner når fanen lukkes.
+- **Repetisjonskort** (#1078): begrep på forsiden, forklaring på baksiden.
+
+  ```markdown
+  :::repetisjon Fagord i møtearbeid
+  ### Vedtak
+  Det møtet bestemte, med ansvarlig og frist.
+
+  ### Referent
+  Den som skriver referatet.
+  :::
+  ```
+
+  Én `###`-overskrift per kort, minst to (helst fire til ti). Deltakeren snur kortene, markerer
+  **Kunne det** eller **Øv mer**, og kan øve på «øv mer»-kortene igjen etterpå. Ingenting lagres.
+  `:::kort` er noe annet: kort ved siden av hverandre.
+
+Felles regler: **en blank linje over hver ramme**, og **ingen ramme inni en annen** (første `:::`
+lukker). Er formen feil — for eksempel bare ett steg, eller ingen eksempelsvar — tegnes ingen blokk,
+og forhåndsvisningen viser teksten som den er. På de andre språkene står markørordene (`:::steg`,
+`:::skriv`, `:::repetisjon` …), `- [ ]`/`- [x]` og overskriftene urørt; «Oversett fra dette språket»
+holder dem slik.
+
 ### 4. Embedded video
 
 Du kan lime inn en `<iframe>` mot **betrodde video-verter** (YouTube, youtube-nocookie, Vimeo).
@@ -111,6 +169,10 @@ fortsatt.)
 - Nederst står **én** knapp: **«Marker seksjon lest, og gå videre»**. Den registrerer lesningen og
   åpner neste element i kurset i samme klikk. Er neste element en test, sier knappen det —
   **«Marker seksjon lest, og gå til testen»** — for da er det dit du skal, ikke forbi (#924).
+- I teksten kan det stå små øvelser som ikke teller: «tenk først», «sjekk deg selv», **steg for
+  steg** (bla med Neste/Forrige eller piltastene), **skriv selv** (skriv, se eksempelsvaret og kryss av;
+  teksten blir bare i nettleserfanen din til du lukker den) og **repetisjonskort** (snu kortet med klikk, mellomrom eller
+  Enter, og marker «Kunne det» eller «Øv mer»).
 - **Siste element i kurset har ingen knapp.** Det er ingenting å gå videre til; lesningen
   registreres av systemet når du åpner seksjonen.
 - **Fremdrift** teller **alle elementer**: en seksjon som er lest og en modul som er bestått
