@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { Lexer, Marked, type Tokens } from "marked";
+import { Lexer, Marked, type TokenizerAndRendererExtension, type Tokens } from "marked";
 
 /**
  * Innholdsblokker i seksjonstekst (#1079): uthevet boks, prompt-boks, kort og ikon — pluss
@@ -14,10 +14,12 @@ import { Lexer, Marked, type Tokens } from "marked";
  *   :::kort … :::            en ramme rundt underoverskrifter          → kort ved siden av hverandre
  *   :::tenk Spørsmål? … :::  et spørsmål med svaret inni rammen        → «tenk først», svaret bak et
  *                                                                        klikk (<details>, #1072)
- *   :::sjekk Spørsmål? … ::: alternativer `- [ ]`/`- [x]`             → «sjekk deg selv» (#1074)
+ *   :::sjekk Spørsmål? … ::: alternativer `- [ ]`/`- [x]`             → «sjekk deg selv» (#1074), med
+ *                                                                        valgfri følge per alternativ (#1110)
  *   :::steg Tittel … :::     en ramme rundt underoverskrifter          → steg for steg (#1075)
  *   :::skriv Oppgave … :::   eksempelsvaret, så en sjekkliste `- [ ]`  → skriv selv (#1076)
  *   :::repetisjon … :::      en ramme rundt underoverskrifter          → repetisjonskort (#1078)
+ *   :::par … :::             linjer `- Begrep = Forklaring`            → finn parene (#1107)
  *   ### ![](asset:x) Tittel  et bilde først i en kortoverskrift        → ikon
  *
  * Alt gjøres mens markdown blir til HTML (marked), som tekst. Ingen DOM bygges: plattformens
@@ -109,8 +111,81 @@ const FLASH_LABELS: Record<string, {
   },
 };
 
+// #1107 «Finn parene». Statusen og tilbakemeldingen settes av content-blocks.js fra data-attributtene.
+const PAIRS_LABELS: Record<string, {
+  label: string; terms: string; defs: string; status: string; miss: string; done: string; matched: string;
+}> = {
+  nb: {
+    label: "Finn parene", terms: "Begreper", defs: "Forklaringer", status: "{n} av {total} par",
+    miss: "Ikke et par. Prøv igjen.", done: "Alle {total} parene er riktige.", matched: "koblet",
+  },
+  nn: {
+    label: "Finn para", terms: "Omgrep", defs: "Forklaringar", status: "{n} av {total} par",
+    miss: "Ikkje eit par. Prøv igjen.", done: "Alle dei {total} para er rette.", matched: "kopla",
+  },
+  "en-GB": {
+    label: "Match the pairs", terms: "Terms", defs: "Explanations", status: "{n} of {total} pairs",
+    miss: "Not a pair. Try again.", done: "All {total} pairs are correct.", matched: "matched",
+  },
+};
+
 /** Et alternativ: `- [ ] tekst` eller `- [x] tekst` (også `*`, og stor X). */
 const CHECK_OPTION = /^[ \t]*[-*][ \t]+\[([ xX])\][ \t]+(\S.*)$/;
+
+/**
+ * #1110: følgen til et alternativ — en innrykket linje (to mellomrom eller en tabulator) rett under det,
+ * som ikke selv er et alternativ. Flere slike linjer er én følge. Uten følger tegnes rammen nøyaktig som før
+ * (test/unit/content-check-characterization-1110.test.ts).
+ */
+const CHECK_FEEDBACK = /^(?: {2,}|\t)[ \t]*(\S.*?)[ \t]*$/;
+
+/** #1107: en linje i en «finn parene»-ramme — et listepunkt; selve paret deles av splitPairLine. */
+const PAIR_ITEM = /^[ \t]*[-*][ \t]+(\S.*?)[ \t]*$/;
+
+/**
+ * #1107: `Begrep = Forklaring` delt ved første « = » (med mellomrom rundt) som ikke står i et kodespenn —
+ * `` `a = b` = Formel `` er begrepet `a = b` (QA-porten, 2.98.0). Uten slikt skille: `null`.
+ */
+export function splitPairLine(line: string): { term: string; def: string } | null {
+  const item = PAIR_ITEM.exec(line);
+  if (!item) return null;
+  const body = item[1]!;
+  let inCode = false;
+  for (let i = 0; i < body.length; i += 1) {
+    if (body[i] === "`") inCode = !inCode;
+    if (inCode || (body[i] !== " " && body[i] !== "\t")) continue;
+    const sep = /^[ \t]+=[ \t]+/.exec(body.slice(i));
+    if (!sep) continue;
+    const term = body.slice(0, i).trim();
+    const def = body.slice(i + sep[0].length).trim();
+    if (term && def) return { term, def };
+  }
+  return null;
+}
+
+/** Teksten i et begrep eller en forklaring uten markdown-tegn og store bokstaver: `**Vedtak**` = `vedtak`. */
+const comparablePairText = (text: string) => text.replace(/[*_`~]/g, "").replace(/\s+/g, " ").trim().toLowerCase();
+
+/**
+ * #1107: parene i en «finn parene»-ramme, eller `null` når rammen ikke er en blokk: hver linje som ikke er
+ * tom, må være et par; minst tre par; ingen begreper eller forklaringer like (da kunne to svar vært riktige).
+ * Avgjøres av linjene alene, før noe leses inn i lexeren (se countItems).
+ */
+function splitPairs(inner: string): Array<{ term: string; def: string }> | null {
+  const pairs: Array<{ term: string; def: string }> = [];
+  for (const line of inner.split(/\r?\n/)) {
+    if (line.trim() === "") continue;
+    const pair = splitPairLine(line);
+    if (!pair) return null;
+    pairs.push(pair);
+  }
+  if (pairs.length < 3) return null;
+  // Like for deltakeren er like her: `**Vedtak**` og `Vedtak` ville blitt to knapper med samme tekst,
+  // der bare den ene er riktig (QA-porten, 2.98.0).
+  const distinct = (values: string[]) => new Set(values.map(comparablePairText)).size === values.length;
+  if (!distinct(pairs.map((p) => p.term)) || !distinct(pairs.map((p) => p.def))) return null;
+  return pairs;
+}
 
 const escapeHtml = (text: string) =>
   text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
@@ -177,8 +252,15 @@ interface CheckToken extends Tokens.Generic {
   type: "contentCheck";
   raw: string;
   question: Tokens.Generic[];
-  options: Array<{ correct: boolean; tokens: Tokens.Generic[] }>;
+  options: Array<{ correct: boolean; tokens: Tokens.Generic[]; feedback: Tokens.Generic[] | null }>;
   tokens: Tokens.Generic[];
+}
+
+interface PairsToken extends Tokens.Generic {
+  type: "contentPairs";
+  raw: string;
+  title: Tokens.Generic[];
+  pairs: Array<{ term: Tokens.Generic[]; def: Tokens.Generic[] }>;
 }
 
 interface CardsToken extends Tokens.Generic {
@@ -239,17 +321,34 @@ function splitWriteFrame(inner: string): { example: string; checklist: string[] 
  */
 const writeKey = (task: string, example: string) => createHash("sha256").update(`${task}\n${example}`).digest("hex").slice(0, 16);
 
+/**
+ * Hvor teksten skal stå. `section` er seksjonstekst: alle blokkene. `moduleText` er modulens oppgavetekst,
+ * veiledning og forventede innhold — det deltakeren svarer på. Der tegnes ikke øvelsene steg for steg,
+ * skriv selv og repetisjonskort (produkteier, 2026-10-20): et «skriv selv»-felt rett over det ekte
+ * svarfeltet fikk deltakere til å skrive svaret på feil sted, og eksempelsvaret var en fasit. Rammene står
+ * der som vanlig tekst, slik en ugyldig ramme gjør. Tenk først, sjekk deg selv, kort, prompt-boks og
+ * uthevet boks tegnes som før 2.96.0.
+ */
+export type ContentBlockVariant = "section" | "moduleText";
+
+/** Utvidelsene som bare hører hjemme i seksjoner. */
+// «Finn parene» (#1107) er en øvelse på linje med de tre: samme avgjørelse (produkteier 2026-10-20).
+const SECTION_ONLY_EXTENSIONS = new Set(["contentSteps", "contentWrite", "contentFlash", "contentPairs"]);
+
 /** `locale` er alt siktet av renderSectionBlocks: et av språkene i COPY_LABELS, eller ingen. */
-function createSectionMarked(locale?: string): Marked {
+function createSectionMarked(locale: string | undefined, variant: ContentBlockVariant): Marked {
   const labels = COPY_LABELS[locale ?? "nb"]!;
   const think = THINK_LABELS[locale ?? "nb"]!;
   const check = CHECK_LABELS[locale ?? "nb"]!;
   const steps = STEPS_LABELS[locale ?? "nb"]!;
   const write = WRITE_LABELS[locale ?? "nb"]!;
   const flash = FLASH_LABELS[locale ?? "nb"]!;
+  const pairsLabels = PAIRS_LABELS[locale ?? "nb"]!;
+
+  const allowed = (extension: { name: string }) => variant === "section" || !SECTION_ONLY_EXTENSIONS.has(extension.name);
 
   return new Marked({
-    extensions: [
+    extensions: ([
       {
         // #1072: «Tenk først» — et spørsmål midt i teksten, svaret skjult til deltakeren trykker.
         //   :::tenk Hva tror du skjer hvis …?
@@ -306,11 +405,18 @@ function createSectionMarked(locale?: string): Marked {
           const lines = match[2]!.split(/\r?\n/);
           let at = 0;
           while (at < lines.length && lines[at]!.trim() === "") at += 1;
-          const options: Array<{ correct: boolean; text: string }> = [];
+          const options: Array<{ correct: boolean; text: string; feedback: string[] }> = [];
           while (at < lines.length) {
             const option = CHECK_OPTION.exec(lines[at]!);
-            if (!option) break;
-            options.push({ correct: option[1]!.toLowerCase() === "x", text: option[2]! });
+            if (option) {
+              options.push({ correct: option[1]!.toLowerCase() === "x", text: option[2]!, feedback: [] });
+              at += 1;
+              continue;
+            }
+            // #1110: en innrykket linje under et alternativ er følgen til det alternativet.
+            const feedback = options.length > 0 ? CHECK_FEEDBACK.exec(lines[at]!) : null;
+            if (!feedback) break;
+            options[options.length - 1]!.feedback.push(feedback[1]!);
             at += 1;
           }
           if (options.length < 2 || options.filter((o) => o.correct).length !== 1) return undefined;
@@ -319,7 +425,12 @@ function createSectionMarked(locale?: string): Marked {
           for (const option of options) {
             const tokens: Tokens.Generic[] = [];
             this.lexer.inlineTokens(option.text, tokens as never);
-            token.options.push({ correct: option.correct, tokens });
+            let feedback: Tokens.Generic[] | null = null;
+            if (option.feedback.length > 0) {
+              feedback = [];
+              this.lexer.inlineTokens(option.feedback.join(" "), feedback as never);
+            }
+            token.options.push({ correct: option.correct, tokens, feedback });
           }
           this.lexer.blockTokens(lines.slice(at).join("\n"), token.tokens as Tokens.Generic[] as never);
           return token;
@@ -335,12 +446,17 @@ function createSectionMarked(locale?: string): Marked {
             )
             .join("");
           const explanation = this.parser.parse(t.tokens as never);
+          // #1110: følgene står skjult i tilbakemeldingen, i alternativenes rekkefølge; content-blocks.js viser
+          // den som hører til det valgte. Uten følger blir ingenting lagt til (HTML-en er som før).
+          const feedback = t.options
+            .map((option, i) => (option.feedback ? `<p class="content-check-option-feedback" data-check-feedback="${i}" hidden>${this.parser.parseInline(option.feedback as never)}</p>` : ""))
+            .join("");
           return (
             `<div class="content-check" data-content-check data-right="${escapeHtml(check.right)}" data-wrong="${escapeHtml(check.wrong)}" data-sr-right="${escapeHtml(check.srRight)}" data-sr-chosen="${escapeHtml(check.srChosen)}">` +
             `<p class="content-check-question"><span class="content-check-label">${escapeHtml(check.label)}</span>` +
             `<span class="content-check-text">${question}</span></p>` +
             `<div class="content-check-options" role="group" aria-label="${escapeHtml(textOf(question))}">${options}</div>` +
-            `<div class="content-check-feedback" aria-live="polite"><p class="content-check-verdict"></p>` +
+            `<div class="content-check-feedback" aria-live="polite"><p class="content-check-verdict"></p>${feedback}` +
             `<div class="content-check-explanation" hidden>${explanation}</div></div></div>\n`
           );
         },
@@ -528,7 +644,65 @@ function createSectionMarked(locale?: string): Marked {
           );
         },
       },
-    ],
+      {
+        // #1107: «Finn parene» — deltakeren kobler begreper med forklaringer. Teller ikke, lagres ikke.
+        //   :::par Koble begrepet med forklaringen
+        //   - Hjemmel = Lovbestemmelsen et vedtak bygger på
+        //   - Merinnsyn = Innsyn selv om dokumentet kunne vært unntatt
+        //   - Klagefrist = Tiden parten har til å klage
+        //   :::
+        // Instruksjonen er valgfri. Hver linje er et par, delt ved første « = ». Minst tre par, ingen like
+        // begreper eller forklaringer, og ingen andre linjer — ellers ingen blokk, og teksten står som den
+        // er. Tegnes som en liste med parene: det er det som vises uten skript, og det skjermlesere leser.
+        // content-blocks.js bygger spillet (to kolonner, klikk på et begrep og en forklaring) av lista.
+        // Klikk, ikke dra (produkteier 2026-10-19): dra kolliderer med rulling på telefon og trenger uansett
+        // en klikkvariant for tastatur og skjermleser. «pairs» er samme blokk på engelsk.
+        name: "contentPairs",
+        level: "block",
+        start(src: string) {
+          return src.match(/^:::[ \t]*(?:par|pairs)(?=[ \t\r\n]|$)/im)?.index;
+        },
+        tokenizer(src: string) {
+          const match = /^:::[ \t]*(?:par|pairs)(?:[ \t]+([^\r\n]*?))?[ \t]*\r?\n([\s\S]*?)\r?\n:::[ \t]*(?=\r?\n|$)/i.exec(src);
+          if (!match) return undefined;
+          const pairs = splitPairs(match[2]!);
+          if (!pairs) return undefined;
+          const token: PairsToken = { type: "contentPairs", raw: match[0], title: [], pairs: [] };
+          if (match[1]) this.lexer.inlineTokens(match[1], token.title as Tokens.Generic[] as never);
+          for (const pair of pairs) {
+            const term: Tokens.Generic[] = [];
+            const def: Tokens.Generic[] = [];
+            this.lexer.inlineTokens(pair.term, term as never);
+            this.lexer.inlineTokens(pair.def, def as never);
+            token.pairs.push({ term, def });
+          }
+          return token;
+        },
+        renderer(token) {
+          const t = token as PairsToken;
+          const title = this.parser.parseInline(t.title as never);
+          const name = textOf(title);
+          const items = t.pairs
+            .map((pair) =>
+              `<li class="content-pairs-pair"><span class="content-pairs-term">${this.parser.parseInline(pair.term as never)}</span>` +
+              `<span class="content-pairs-sep"> – </span><span class="content-pairs-def">${this.parser.parseInline(pair.def as never)}</span></li>`,
+            )
+            .join("");
+          const data = [
+            ["terms", pairsLabels.terms], ["defs", pairsLabels.defs], ["status", pairsLabels.status],
+            ["miss", pairsLabels.miss], ["done", pairsLabels.done], ["matched", pairsLabels.matched],
+          ]
+            .map(([key, value]) => ` data-${key}="${escapeHtml(value!)}"`)
+            .join("");
+          return (
+            `<div class="content-pairs" data-content-pairs role="group" aria-label="${escapeHtml(name ? `${pairsLabels.label}: ${name}` : pairsLabels.label)}"${data}>` +
+            `<p class="content-pairs-head"><span class="content-pairs-label">${escapeHtml(pairsLabels.label)}</span>` +
+            (title ? `<span class="content-pairs-title">${title}</span>` : "") +
+            `</p><ul class="content-pairs-list">${items}</ul></div>\n`
+          );
+        },
+      },
+    ] satisfies TokenizerAndRendererExtension[]).filter(allowed),
     renderer: {
       // ```prompt — en prompt, mal eller et eksempel deltakeren skal kopiere.
       code(token: Tokens.Code) {
@@ -578,15 +752,19 @@ function createSectionMarked(locale?: string): Marked {
   });
 }
 
-const byLocale = new Map<string, Marked>();
+const byLocaleAndVariant = new Map<string, Marked>();
 
-/** Seksjonsmarkdown til HTML, med innholdsblokkene tegnet. Resultatet er IKKE renset. */
-export function renderSectionBlocks(markdown: string, locale?: string): string {
-  const key = locale && Object.hasOwn(COPY_LABELS, locale) ? locale : "";
-  let instance = byLocale.get(key);
+/**
+ * Markdown til HTML, med innholdsblokkene tegnet. Resultatet er IKKE renset. `variant` sier hvor teksten
+ * står (seksjon eller modulens tekst) — se ContentBlockVariant.
+ */
+export function renderSectionBlocks(markdown: string, locale?: string, variant: ContentBlockVariant = "section"): string {
+  const language = locale && Object.hasOwn(COPY_LABELS, locale) ? locale : "";
+  const key = `${variant}:${language}`;
+  let instance = byLocaleAndVariant.get(key);
   if (!instance) {
-    instance = createSectionMarked(key || undefined);
-    byLocale.set(key, instance);
+    instance = createSectionMarked(language || undefined, variant);
+    byLocaleAndVariant.set(key, instance);
   }
   return instance.parse(markdown, { async: false }) as string;
 }

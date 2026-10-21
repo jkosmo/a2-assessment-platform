@@ -55,7 +55,8 @@ describe("#1051 — hydratePreviewMarkdown", () => {
     await hydratePreviewMarkdown(el, { apiFetch, getHeaders: () => ({}), locale: "nb", sanitize });
 
     expect(kall[0].sti, "samme endepunkt som seksjonene — ett regime").toBe("/api/admin/content/sections/preview");
-    expect(kall[0].body).toEqual({ markdown: "## A", locale: "nb" });
+    // Modulens tekst (2.96.1): tjeneren tegner den uten øvelsene steg, skriv selv og repetisjonskort.
+    expect(kall[0].body).toEqual({ markdown: "## A", locale: "nb", variant: "moduleText" });
     expect(sanert.length, "klienten skal sanere selv om serveren svarte").toBe(1);
     const blokk = el.querySelector("[data-markdown-source]");
     expect(blokk.innerHTML).toBe("<h2>A</h2>");

@@ -1,9 +1,12 @@
 {
   "name": "a2-assessment-platform",
-  "version": "2.96.0",
+  "version": "2.98.0",
   "private": true,
   "description": "Internal assessment platform backend bootstrap (M0 foundation).",
   "type": "module",
+  "imports": {
+    "#frame-structure": "./skills/a2-authoring-api/scripts/frame-structure.mjs"
+  },
   "scripts": {
     "dev": "npm run postgres:setup && dotenv -e .env.postgres.local -- tsx watch src/index.ts",
     "dev:local": "dotenv -e .env.postgres.local -- tsx watch src/index.ts",

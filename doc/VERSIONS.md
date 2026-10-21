@@ -2,6 +2,78 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.98.0 - 2026-10-20
+
+### Case med følge per alternativ (#1110) og «finn parene» (#1107); skillet velger øvelse (#1108)
+
+- **#1108 (bare skillet):** én regel for hvilken øvelse en seksjon får — en tabell fra hva kilden har
+  (et problem, en regel, en rutine, en prosess, en formulering, begreper) til øvelsen, og «ingen» når
+  kilden ikke gir noe. Standard er ingen eller én per seksjon, høyst to (et case er én), i rekkefølgen
+  kjenne igjen → bruke → formulere. Kursoversikten viser øvelsen per seksjon, så forfatteren godkjenner
+  den med strukturen. Grensene som sto spredt per byggekloss («én til tre», «én eller to»), er samlet
+  her. Ingen mekanisk varsling: plattformen håndhever ikke et antall, og regelen hører mellom forfatter
+  og modell (se DECISIONS).
+
+- **#1110:** i «sjekk deg selv» kan hvert alternativ få sin egen følge — en innrykket linje (to
+  mellomrom) rett under det, som vises når deltakeren velger det. Et case er da en situasjon og ett–tre
+  «sjekk deg selv»: deltakeren ser hva hvert valg fører til. Uten følger er HTML-en nøyaktig som før
+  (fasit tatt opp fra 2.96.1 før endringen).
+- **#1107:** ny ramme `:::par` (også `:::pairs`), én linje per par `- begrep = forklaring`. Deltakeren
+  velger et begrep og så forklaringen; et riktig par blir grønt og står, et feil blinker rødt.
+  Forklaringene stokkes. Klikk, ikke dra; ingen tidtaker; ingenting lagres. Minst tre par, ingen like.
+  Bare i seksjoner, som de andre øvelsene.
+- Oversetteren beholder innrykket på en følge og `- ` / ` = ` i hvert par. Skillet: kontrollen godtar
+  følger og stopper en ugyldig `:::par` (linje som ikke er et par, færre enn tre, like begreper eller
+  forklaringer); språkkontrollen krever samme følger og like mange par på alle språk; veiledningen har
+  fått «A case» og «Match the pairs».
+- Kontrollen etter oversettelse (#1109, 2.97.0) kjenner begge: følgene telles i fasitmønsteret, og `:::par`
+  er en egen oppføring i regeltabellen (`FRAME_KINDS`). En ny vakt tegner hver rammetype i tabellen med
+  plattformens tegner og krever tabellens klasse, så tabellen og tegneren ikke glir fra hverandre.
+- QA-porten: en lenke i et par blir vanlig tekst i knappen (et klikk navigerte ellers bort); `**Vedtak**`
+  og `Vedtak` regnes som samme begrep; « = » inne i kode deler ikke paret. Merk: en forklaring skrevet
+  innrykket rett under siste alternativ, eller et alternativ brutt over to linjer med innrykk, leses nå som
+  følge (stage har ingen slike; skillet skriver alltid forklaringen etter en blank linje).
+## 2.97.0 - 2026-10-20
+
+### Oversetteren kontrollerer blokkene etter oversettelse (#1109)
+
+- Når plattformen oversetter en seksjon, en modul eller et kurs, sammenlignes oversettelsen med kilden
+  før den brukes. Hver blokk (`:::tenk`, `:::sjekk`, `:::kort`, `:::steg`, `:::skriv`, `:::repetisjon`)
+  skal finnes like mange ganger, riktig svar i hver «sjekk deg selv» skal stå på samme plass, og hvert
+  steg for steg, hver kortramme, hvert sett repetisjonskort og hver sjekkliste skal ha like mange steg,
+  kort og punkter. Tjeneren sjekker også at den tegner like mange blokker som i kilden — en oversettelse
+  som fjernet den blanke linja over «sjekk deg selv», fikk alternativene inn i lista over, og blokken ble
+  borte.
+- Endret oversettelsen blokkene, brukes den ikke. I seksjonseditoren står teksten på det språket som
+  før, de andre språkene oversettes, og forfatteren får beskjed om hvilket språk og hvorfor. Ved lagring
+  av en modul står språket tomt med beskjeden «Ikke oversatt til …», som for en oversettelse som feilet.
+  En riktig oversettelse lagres som før.
+- Gjelder alle veier plattformen oversetter: «Oversett fra dette språket», lagring fra Rediger, «Be om
+  endring» og «Generer innhold», oversettelse i chatten, publiseringsporten som fyller hull, kursets
+  tittel og beskrivelse, og navneendring i listene.
+- Reglene står i én tabell som både plattformen og skillet bruker
+  (`skills/a2-authoring-api/scripts/frame-structure.mjs`). En ny blokk legges inn der én gang. Skillets
+  språkkontroll stopper nå også en «tenk først» eller en kortramme som mangler i ett språk, og en blokk
+  som bare finnes i en oversettelse.
+- API: oversettelsesrutene svarer `422 translation_structure_changed` med språk og avvik
+  (doc/API_REFERENCE.md). Lokalt uten KI setter stubben `[nb]` på en egen linje, så en tekst som begynner
+  med en blokk, beholder den.
+
+## 2.96.1 - 2026-10-20
+
+### Øvelsene fra seksjoner tegnes ikke i modulens oppgavetekst
+
+- Steg for steg, skriv selv og repetisjonskort tegnes bare i seksjoner. I modulens oppgavetekst,
+  veiledning og forventede innhold står de som vanlig tekst (produkteier 2026-10-20, QA-portens funn 2
+  fra 2.96.0). Et «skriv selv»-felt rett over svarfeltet fikk deltakeren til å skrive svaret på feil
+  sted, og eksempelsvaret var en fasit til oppgaven.
+- «Tenk først», «sjekk deg selv», kort, prompt-boks og uthevet boks tegnes som før i oppgaveteksten.
+- Tjeneren avgjør det ved tegning (variant `moduleText`): deltakerens modulside og forhåndsvisningen i
+  modularbeidsflaten får samme svar.
+- Skillet stopper en slik ramme i modulens tekst (`produce-course.mjs`, «learner text») og sier i
+  veiledningen at rammene hører hjemme i seksjonen før modulen. Hjelpen i seksjonseditoren og
+  forfatterveiledningen sier det samme.
+
 ## 2.96.0 - 2026-10-19
 
 ### Steg for steg (#1075), skriv selv (#1076) og repetisjonskort (#1078) i seksjoner

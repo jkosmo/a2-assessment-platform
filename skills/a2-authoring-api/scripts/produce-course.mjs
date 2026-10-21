@@ -215,14 +215,19 @@ function withoutCodeBlocks(text) {
 // The platform's own reading of a frame's opening line (`:::kort`, `::: Kort`, `:::cards` — blanks and
 // case do not matter), so what is counted here agrees with what the reader will show. The words and
 // their English twins are the platform's (src/modules/course/contentBlocks.ts).
-const FRAME_OPENER = /^:::[ \t]*(kort|cards|tenk|think|sjekk|check|steg|steps|skriv|write|repetisjon|flashcards)\b/i;
-/** Cards take nothing after the word; think, check and write need their question or task there; steps and flashcards may have a title. */
+const FRAME_OPENER = /^:::[ \t]*(kort|cards|tenk|think|sjekk|check|steg|steps|skriv|write|repetisjon|flashcards|par|pairs)\b/i;
+/** Cards take nothing after the word; think, check and write need their question or task there; steps, flashcards and pairs may have a title. */
 function isFrameOpener(word, line) {
   const kind = word.toLowerCase();
   if (kind === "kort" || kind === "cards") return /^:::[ \t]*(?:kort|cards)[ \t]*$/i.test(line);
-  if (["steg", "steps", "repetisjon", "flashcards"].includes(kind)) return new RegExp(`^:::[ \\t]*${kind}(?:[ \\t].*)?$`, "i").test(line);
+  if (["steg", "steps", "repetisjon", "flashcards", "par", "pairs"].includes(kind)) return new RegExp(`^:::[ \\t]*${kind}(?:[ \\t].*)?$`, "i").test(line);
   return new RegExp(`^:::[ \\t]*${kind}[ \\t]+\\S`, "i").test(line);
 }
+
+/** The frames that are drawn only in a section, never in a module's text (2.96.1). */
+const SECTION_ONLY_FRAME = /^:::[ \t]*(steg|steps|skriv|write|repetisjon|flashcards|par|pairs)\b/i;
+/** A module's text fields the learner reads. */
+const MODULE_TEXT_FIELDS = ["taskText", "candidateTaskConstraints"];
 
 /** The frames in a text, line by line: unclosed, stray closing lines, and a frame opened inside another. */
 function frameProblems(prose) {
@@ -282,8 +287,9 @@ function checkProblems(kind, lines) {
   const options = [];
   while (at < lines.length) {
     const option = /^[ \t]*[-*][ \t]+\[([ xX])\][ \t]+\S/.exec(lines[at]);
-    if (!option) break;
-    options.push(option[1].toLowerCase() === "x");
+    if (option) options.push(option[1].toLowerCase() === "x");
+    // #1110: an indented line right under an option is that option's feedback.
+    else if (!(options.length > 0 && /^(?: {2,}|\t)[ \t]*\S/.test(lines[at]))) break;
     at += 1;
   }
   const right = options.filter(Boolean).length;
@@ -330,8 +336,53 @@ function writeProblems(kind, lines) {
   return [`a :::${kind} frame needs an example answer above the checklist — the learner compares with it; without one the learner sees the markers as text`];
 }
 
+/**
+ * A line in a «par» frame — the platform's rule (splitPairLine in src/modules/course/contentBlocks.ts):
+ * `- term = explanation`, split at the first « = » that is not inside a code span.
+ */
+function splitPairLine(line) {
+  const item = /^[ \t]*[-*][ \t]+(\S.*?)[ \t]*$/.exec(line);
+  if (!item) return null;
+  const body = item[1];
+  let inCode = false;
+  for (let i = 0; i < body.length; i += 1) {
+    if (body[i] === "`") inCode = !inCode;
+    if (inCode || (body[i] !== " " && body[i] !== "\t")) continue;
+    const sep = /^[ \t]+=[ \t]+/.exec(body.slice(i));
+    if (!sep) continue;
+    const term = body.slice(0, i).trim();
+    const def = body.slice(i + sep[0].length).trim();
+    if (term && def) return { term, def };
+  }
+  return null;
+}
+/** What the learner reads: `**Vedtak**` and `Vedtak` are the same term. */
+const comparablePairText = (text) => text.replace(/[*_`~]/g, "").replace(/\s+/g, " ").trim().toLowerCase();
+
+/**
+ * #1107: a «par» frame is a block only when every line is a pair, there are at least three, and no
+ * term or explanation is repeated (two right answers). Otherwise the learner sees the markers as text.
+ */
+function pairsProblems(kind, lines) {
+  const pairs = [];
+  for (const line of lines) {
+    if (line.trim() === "") continue;
+    const pair = splitPairLine(line);
+    if (!pair) return [`a :::${kind} frame has a line that is not a pair «- term = explanation»: «${line.trim()}» — the learner sees the markers as text`];
+    pairs.push({ term: comparablePairText(pair.term), def: comparablePairText(pair.def) });
+  }
+  if (pairs.length < 3) return [`a :::${kind} frame needs at least three pairs (it has ${pairs.length}) — with fewer the learner sees the markers as text`];
+  const repeated = (values) => values.length !== new Set(values).size;
+  if (repeated(pairs.map((p) => p.term)) || repeated(pairs.map((p) => p.def))) {
+    return [`a :::${kind} frame repeats a term or an explanation — every pair must be different, or two answers would be right; the learner sees the markers as text`];
+  }
+  return [];
+}
+
 /** The frames with a shape the platform requires, and the check for each. */
 const FRAME_SHAPE_CHECKS = {
+  par: pairsProblems,
+  pairs: pairsProblems,
   sjekk: checkProblems,
   check: checkProblems,
   steg: itemsProblems,
@@ -365,6 +416,23 @@ function checkLearnerText(pkg) {
       // first ::: line closes whatever frame is open, so a frame inside a frame (#1072: a «tenk
       // først» inside cards, or the other way round) breaks both — and only outside code blocks.
       for (const problem of frameProblems(prose)) details.push(`${where}: ${problem}`);
+    }
+  }
+  // 2.96.1 (produkteier 2026-10-20): steg for steg, skriv selv og repetisjonskort tegnes bare i
+  // seksjoner. I modulens tekst — det deltakeren svarer på — står markørene som tekst.
+  for (const object of pkg.objects ?? []) {
+    if (object?.type !== "module") continue;
+    const version = object.payload?.activeVersion ?? {};
+    for (const field of MODULE_TEXT_FIELDS) {
+      const value = version[field];
+      const languages = value && typeof value === "object" ? Object.entries(value) : [["", value]];
+      for (const [language, markdown] of languages) {
+        for (const line of withoutCodeBlocks(String(markdown ?? "")).split(/\r?\n/)) {
+          const opener = SECTION_ONLY_FRAME.exec(line);
+          if (!opener) continue;
+          details.push(`"${object.clientRef}" ${field}${language ? ` (${language})` : ""}: a :::${opener[1].toLowerCase()} frame works only in a section — in a module's text the learner sees the markers as text; move the exercise to the section before the module`);
+        }
+      }
     }
   }
   return { name: "learner text", status: details.length === 0 ? "ok" : "fail", summary: `${sections} section(s) read for the learner's voice and card frames`, details };

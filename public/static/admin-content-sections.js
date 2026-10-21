@@ -12,7 +12,7 @@ const formatDate = createDateFormatter(() => currentLocale);
 import { resolveWorkspaceNavigationItems } from "/static/participant-console-state.js";
 import { renderWorkspaceNavigationWithProfile } from "./workspace-nav.js";
 import { describeImportError } from "/static/import-error.js";
-import { describeApiError } from "/static/api-error.js";
+import { apiErrorCode, describeApiError } from "/static/api-error.js";
 import { showToast } from "/static/toast.js";
 import { lifecycleStatusBadge, lifecycleBadge, lifecycleOf } from "/static/content-status-badge.js";
 import { renderOwnerPanel } from "/static/owner-panel.js";
@@ -1044,12 +1044,23 @@ async function translateFromCurrent() {
   const btn = document.getElementById("translateBtn");
   setLocked(true);
   if (btn) btn.textContent = L("translating");
+  // #1109: språk der oversettelsen endret rammene (fasiten i en «sjekk deg selv», et steg, et kort …).
+  // Tjeneren forkaster dem (422 `translation_structure_changed`); teksten på det språket står urørt, og
+  // de andre språkene oversettes som før.
+  const structureChanged = [];
   try {
     for (const target of EDITOR_LOCALES.filter((l) => l !== src)) {
-      const res = await apiFetch("/api/admin/content/sections/localize", getHeaders, {
-        method: "POST",
-        body: JSON.stringify({ title: title || undefined, bodyMarkdown: body || undefined, sourceLocale: src, targetLocale: target }),
-      });
+      let res;
+      try {
+        res = await apiFetch("/api/admin/content/sections/localize", getHeaders, {
+          method: "POST",
+          body: JSON.stringify({ title: title || undefined, bodyMarkdown: body || undefined, sourceLocale: src, targetLocale: target }),
+        });
+      } catch (err) {
+        if (apiErrorCode(err) !== "translation_structure_changed") throw err;
+        structureChanged.push(target);
+        continue;
+      }
       if (res.title) editing.title[target] = res.title;
       if (res.bodyMarkdown) editing.body[target] = res.bodyMarkdown;
     }
@@ -1068,9 +1079,18 @@ async function translateFromCurrent() {
         apiErrorToast(assetErr);
       }
     }
-    showToast(L("translated"));
-    renderEditorFields();
-    getFormPage().markDirty();
+    const translatedSome = structureChanged.length < EDITOR_LOCALES.length - 1;
+    if (structureChanged.length > 0) {
+      // Ikke «Oversatt»: forfatteren skal vite at et språk står som før, og hvorfor.
+      const locales = structureChanged.map((code) => localeLabels[code] ?? code).join(", ");
+      showToast(tf("sections.translateStructureChanged", { locales }), "error");
+    } else {
+      showToast(L("translated"));
+    }
+    if (translatedSome) {
+      renderEditorFields();
+      getFormPage().markDirty();
+    }
   } catch (err) {
     apiErrorToast(err);
   } finally {

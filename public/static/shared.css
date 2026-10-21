@@ -1694,6 +1694,8 @@ dialog::backdrop {
 .content-check-verdict.is-ok { color: var(--color-success); }
 .content-check-verdict.is-bad { color: var(--color-error); }
 .content-check-explanation { margin-top: 4px; }
+/* #1110: følgen til det valgte alternativet, mellom dommen og forklaringen. */
+.content-check-option-feedback { margin: 4px 0 0; }
 .content-check-feedback:has(.content-check-verdict:not(:empty)) { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--color-border-soft); }
 .content-check-explanation > :first-child { margin-top: 0; }
 .content-check-explanation > :last-child { margin-bottom: 0; }
@@ -1701,7 +1703,7 @@ dialog::backdrop {
 /* Steg for steg (#1075), skriv selv (#1076) og repetisjonskort (#1078): samme ramme og merkelapp som
    «sjekk deg selv». Uten skript står stegene som en nummerert liste og kortene som en definisjonsliste;
    content-blocks.js setter data-ready="true" når blokken er gjort interaktiv. */
-.content-steps, .content-write, .content-flash {
+.content-steps, .content-write, .content-flash, .content-pairs {
   margin: 0 0 12px;
   padding: 10px 12px 12px;
   min-width: 0;
@@ -1710,15 +1712,15 @@ dialog::backdrop {
   border-radius: 8px;
   background: #fff;
 }
-.content-steps-head, .content-write-head, .content-flash-head { margin: 0 0 10px; display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
-.content-steps-label, .content-write-label, .content-flash-label {
+.content-steps-head, .content-write-head, .content-flash-head, .content-pairs-head { margin: 0 0 10px; display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
+.content-steps-label, .content-write-label, .content-flash-label, .content-pairs-label {
   font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.02em;
   text-transform: uppercase;
   color: var(--color-primary);
 }
-.content-steps-title, .content-write-task, .content-flash-title { flex: 1 1 16rem; min-width: 0; font-weight: 600; color: var(--color-text); }
+.content-steps-title, .content-write-task, .content-flash-title, .content-pairs-title { flex: 1 1 16rem; min-width: 0; font-weight: 600; color: var(--color-text); }
 /* Knappene i blokkene. To klasser: sidene har egne regler for button (full bredde, høyde). Skriptet
    skjuler ingenting med [hidden]: det tegner bare det som skal vises (cascade-fella i CLAUDE.md). */
 .content-steps .content-block-btn, .content-write .content-write-show, .content-flash .content-block-btn {
@@ -1848,8 +1850,50 @@ dialog::backdrop {
 .content-flash-done-title { margin: 0; font-size: 17px; font-weight: 700; }
 .content-flash-score { margin: 0; }
 
+/* Finn parene (#1107). Uten skript står parene som en liste; når spillet er bygget, står lista igjen bare
+   for skjermlesere. To kolonner også på telefon — teksten brekker i knappene. */
+.content-pairs-list { display: grid; gap: 4px; margin: 0; padding-left: 18px; }
+.content-pairs-term { font-weight: 600; }
+.content-pairs[data-ready="true"] > .content-pairs-list {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+.content-pairs-game { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px 12px; }
+.content-pairs-col { display: grid; gap: 6px; align-content: start; min-width: 0; }
+.content-pairs .content-pairs-item {
+  width: 100%;
+  min-height: 44px;
+  margin: 0;
+  padding: 8px 10px;
+  font: inherit;
+  font-size: 14px;
+  text-align: left;
+  overflow-wrap: break-word;
+  color: var(--color-text);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border-soft);
+  border-radius: 8px;
+  cursor: pointer;
+}
+.content-pairs .content-pairs-item--term { font-weight: 600; }
+.content-pairs .content-pairs-item:hover:not([aria-disabled="true"]) { border-color: var(--color-primary); }
+.content-pairs .content-pairs-item:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 2px; }
+.content-pairs .content-pairs-item.is-selected { border-color: var(--color-primary); background: var(--color-row-hover); box-shadow: inset 0 0 0 1px var(--color-primary); }
+.content-pairs .content-pairs-item.is-done { border-color: var(--color-success); background: #e3f0e8; color: var(--color-success); cursor: default; }
+.content-pairs .content-pairs-item.is-miss { border-color: var(--color-error); background: #f8e6e3; }
+.content-pairs-status { margin: 10px 0 0; font-size: 13px; color: var(--color-meta); font-variant-numeric: tabular-nums; }
+.content-pairs-status.is-done { color: var(--color-success); font-weight: 600; }
+
 @media (prefers-reduced-motion: no-preference) {
   .content-steps[data-ready="true"] .content-step.is-current { animation: content-step-in 0.2s ease-out; }
+  .content-pairs .content-pairs-item { transition: background 0.15s ease, border-color 0.15s ease; }
   .content-flash .content-flash-card { transition: border-color 0.15s ease; }
 }
 @media (prefers-reduced-motion: reduce) {

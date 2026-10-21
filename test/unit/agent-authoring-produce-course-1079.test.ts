@@ -206,6 +206,30 @@ describe("produce-course — kontrollen «learner text» stopper ikke vanlig fag
     expect(status(r).languages, formatProduction(r)).toBe("ok");
   });
 
+  // Kontrollen til radene for #1110 og #1107: et case med følger og en «finn parene», riktig skrevet på
+  // alle tre språk, slipper gjennom både teksten og språkkontrollen.
+  it("et case med følger og en «finn parene» etter malen, på alle tre språk, stopper ikke (#1110, #1107)", async () => {
+    const k = kopi((p) => {
+      const b = objekt(p, "sec-kilder").payload.bodyMarkdown;
+      b.nb += "\n\nEn innbygger ringer.\n\n:::sjekk Hva gjør du?\n- [ ] Avslår alt\n  For mye.\n- [x] Sladder og gir innsyn\n  Riktig.\n\nInnsyn er hovedregelen.\n:::\n\n:::par Koble\n- Vedtak = Det møtet bestemte\n- Referent = Den som skriver referatet\n- Habil = Uten interesse i saken\n:::\n";
+      b.nn += "\n\nEin innbyggjar ringjer.\n\n:::sjekk Kva gjer du?\n- [ ] Avslår alt\n  For mykje.\n- [x] Sladdar og gir innsyn\n  Rett.\n\nInnsyn er hovudregelen.\n:::\n\n:::par Kople\n- Vedtak = Det møtet bestemde\n- Referent = Den som skriv referatet\n- Habil = Utan interesse i saka\n:::\n";
+      b["en-GB"] += "\n\nA citizen calls.\n\n:::sjekk What do you do?\n- [ ] Refuse everything\n  Too much.\n- [x] Redact and give access\n  Right.\n\nAccess is the main rule.\n:::\n\n:::par Match\n- Decision = What the meeting decided\n- Minute-taker = The person who writes the minutes\n- Impartial = No interest in the case\n:::\n";
+    });
+    const r = await k.kjør();
+    expect(tekst(r), tekst(r).details.join("; ")).toMatchObject({ status: "ok" });
+    expect(status(r).languages, formatProduction(r)).toBe("ok");
+  });
+
+  // Kontroll til 2.96.1-radene: «tenk først» i oppgaveteksten tegnes fortsatt, og stopper ikke.
+  it("«tenk først» i modulens oppgavetekst stopper ikke (2.96.1)", async () => {
+    const k = kopi((p) => {
+      const v = objekt(p, "mod-referat").payload.activeVersion;
+      v.taskText = { nb: "Oppgave.", nn: "Oppgåve.", "en-GB": "Task." }; for (const s of ["nb", "nn", "en-GB"]) v.taskText[s] += "\n\n:::tenk Hva tror du?\nSvaret.\n:::";
+    });
+    const r = await k.kjør();
+    expect(tekst(r), tekst(r).details.join("; ")).toMatchObject({ status: "ok" });
+  });
+
   it("rammer inne i en kodeblokk telles ikke", async () => {
     const k = kopi((p) => {
       objekt(p, "sec-kilder").payload.bodyMarkdown.nb += ["", "Slik skrives kort:", "", "```markdown", ":::kort", "### Et kort", "```"].join("\n");
@@ -252,7 +276,20 @@ describe("produce-course — hver kontroll stopper leveransen (#1079)", () => {
     ["en «skriv selv» uten oppgave på åpningslinja (#1076) er ingen ramme, og ::: lukker ingenting", (p) => void (objekt(p, "sec-kilder").payload.bodyMarkdown.nb += "\n\n:::skriv\nSvaret.\n:::\n"), "learner text", "a ::: closes a frame that was never opened"],
     ["repetisjonskort med bare ett kort (#1078)", (p) => void (objekt(p, "sec-kilder").payload.bodyMarkdown.nb += "\n\n:::repetisjon\n### Vedtak\nDet møtet bestemte.\n:::\n"), "learner text", "a :::repetisjon frame needs at least two cards — one ### heading per card (it has 1)"],
     ["et repetisjonskort uten bakside (#1078)", (p) => void (objekt(p, "sec-kilder").payload.bodyMarkdown.nb += "\n\n:::flashcards\n### Vedtak\n\n### Referent\nDen som skriver.\n:::\n"), "learner text", "a card in a :::flashcards frame has nothing on its back: «Vedtak»"],
-    ["et steg som forsvant i den engelske oversettelsen (#1075)", (p) => { const b = objekt(p, "sec-kilder").payload.bodyMarkdown; b.nb += "\n\n:::steg\n### Les\nFinn.\n### Skriv\nMed frist.\n### Send\nTil alle.\n:::\n"; b.nn += "\n\n:::steg\n### Les\nFinn.\n### Skriv\nMed frist.\n### Send\nTil alle.\n:::\n"; b["en-GB"] += "\n\n:::steg\n### Read\nFind.\n### Write\nWith a deadline.\n:::\n"; }, "languages", "another number of steps, checklist points or cards, or is missing, in: en-GB (nb has steg:3)"],
+    ["et steg som forsvant i den engelske oversettelsen (#1075)", (p) => { const b = objekt(p, "sec-kilder").payload.bodyMarkdown; b.nb += "\n\n:::steg\n### Les\nFinn.\n### Skriv\nMed frist.\n### Send\nTil alle.\n:::\n"; b.nn += "\n\n:::steg\n### Les\nFinn.\n### Skriv\nMed frist.\n### Send\nTil alle.\n:::\n"; b["en-GB"] += "\n\n:::steg\n### Read\nFind.\n### Write\nWith a deadline.\n:::\n"; }, "languages", "another number of steps, checklist points, cards or pairs, or is missing, in: en-GB (nb has steg:3)"],
+    // #1107 «finn parene» og #1110 følge per alternativ.
+    ["en «finn parene» med bare to par (#1107)", (p) => void (objekt(p, "sec-kilder").payload.bodyMarkdown.nb += "\n\n:::par\n- Vedtak = Det som ble bestemt\n- Referent = Den som skriver\n:::\n"), "learner text", "a :::par frame needs at least three pairs (it has 2)"],
+    ["en «finn parene» med en linje som ikke er et par (#1107)", (p) => void (objekt(p, "sec-kilder").payload.bodyMarkdown.nb += "\n\n:::pairs Koble\n- A = a\n- B = b\n- C = c\nEn setning.\n:::\n"), "learner text", "a :::pairs frame has a line that is not a pair «- term = explanation»: «En setning.»"],
+    ["en «finn parene» med samme begrep med og uten fet skrift (#1107, QA 2.98.0)", (p) => void (objekt(p, "sec-kilder").payload.bodyMarkdown.nb += "\n\n:::par\n- **Vedtak** = a\n- Vedtak = b\n- C = c\n:::\n"), "learner text", "a :::par frame repeats a term or an explanation"],
+    ["en «finn parene» der « = » bare står i kode (#1107, QA 2.98.0)", (p) => void (objekt(p, "sec-kilder").payload.bodyMarkdown.nb += "\n\n:::par\n- `a = b`\n- B = b\n- C = c\n:::\n"), "learner text", "a :::par frame has a line that is not a pair «- term = explanation»: «- `a = b`»"],
+    ["en «finn parene» med samme forklaring to ganger (#1107)", (p) => void (objekt(p, "sec-kilder").payload.bodyMarkdown.nb += "\n\n:::par\n- A = samme\n- B = Samme\n- C = c\n:::\n"), "learner text", "a :::par frame repeats a term or an explanation"],
+    ["en «finn parene» rett under et avsnitt (#1107)", (p) => void (objekt(p, "sec-kilder").payload.bodyMarkdown.nb += "\n\nKoble:\n:::par\n- A = a\n- B = b\n- C = c\n:::\n"), "learner text", "a :::par line has text right above it"],
+    ["en «finn parene» i modulens oppgavetekst (#1107)", (p) => { const v = objekt(p, "mod-referat").payload.activeVersion; v.taskText = { nb: "Oppgave.\n\n:::par\n- A = a\n- B = b\n- C = c\n:::", nn: "Oppgåve.", "en-GB": "Task." }; }, "learner text", '"mod-referat" taskText (nb): a :::par frame works only in a section'],
+    ["et par som forsvant i den nynorske oversettelsen (#1107)", (p) => { const b = objekt(p, "sec-kilder").payload.bodyMarkdown; const par = (x: string) => `\n\n:::par\n- A = ${x}1\n- B = ${x}2\n- C = ${x}3\n:::\n`; b.nb += par("a"); b.nn += "\n\n:::par\n- A = n1\n- B = n2\n:::\n"; b["en-GB"] += par("e"); }, "languages", "in: nn (nb has par:3)"],
+    ["en følge som forsvant i den engelske oversettelsen (#1110)", (p) => { const b = objekt(p, "sec-kilder").payload.bodyMarkdown; b.nb += "\n\n:::sjekk Hva gjør du?\n- [ ] Avslår\n  For mye.\n- [x] Sladder\n:::\n"; b.nn += "\n\n:::sjekk Kva gjer du?\n- [ ] Avslår\n  For mykje.\n- [x] Sladdar\n:::\n"; b["en-GB"] += "\n\n:::sjekk What do you do?\n- [ ] Refuse\n- [x] Redact\n:::\n"; }, "languages", "a feedback line under another option, or a question is missing, in: en-GB"],
+    // 2.96.1 (produkteier 2026-10-20): øvelsene tegnes bare i seksjoner, ikke i modulens tekst.
+    ["et «steg for steg» i modulens oppgavetekst (2.96.1)", (p) => { const v = objekt(p, "mod-referat").payload.activeVersion; v.taskText = { nb: "Oppgave.\n\n:::steg\n### A\nen\n### B\nto\n:::", nn: "Oppgåve.", "en-GB": "Task." }; }, "learner text", '"mod-referat" taskText (nb): a :::steg frame works only in a section'],
+    ["en «skriv selv» i modulens veiledning (2.96.1)", (p) => { const v = objekt(p, "mod-referat").payload.activeVersion; v.candidateTaskConstraints = "Maks 300 ord.\n\n:::write Skriv et vedtak.\nSvaret.\n:::"; }, "learner text", '"mod-referat" candidateTaskConstraints: a :::write frame works only in a section'],
     ["en repetisjonsramme som ikke lukkes (#1078)", (p) => void (objekt(p, "sec-kilder").payload.bodyMarkdown.nb += "\n\n:::repetisjon\n### Vedtak\nDet møtet bestemte.\n### Referent\nDen som skriver."), "learner text", "a :::repetisjon frame is opened and never closed"],
     ["en kortramme som ikke lukkes", (p) => void (objekt(p, "sec-kilder").payload.bodyMarkdown.nb = objekt(p, "sec-kilder").payload.bodyMarkdown.nb.replace("\n:::\n", "\n")), "learner text", "opened and never closed"],
     ["en modul med færre spørsmål enn tre", (p) => void objekt(p, "mod-referat").payload.activeVersion.mcqSet.questions.splice(2), "questions", "at least one question per section and at least 3"],

@@ -1,5 +1,6 @@
 // Innholdsblokker i seksjonstekst (#1079): «Kopier»-knappen i en prompt-boks, «sjekk deg selv»
-// (#1074), steg for steg (#1075), skriv selv (#1076) og repetisjonskort (#1078).
+// (#1074, med følge per alternativ #1110), steg for steg (#1075), skriv selv (#1076), repetisjonskort
+// (#1078) og finn parene (#1107).
 //
 // Tjeneren tegner blokkene (src/modules/course/contentBlocks.ts), og alt kan leses uten skript.
 // Klikk og taster fanges av én lytter på dokumentet, så de virker også for tekst som settes inn etter
@@ -61,6 +62,11 @@ export function answerCheck(option) {
   };
   addSrText(box.querySelector('[data-check-option][data-correct="true"]'), box.dataset.srRight);
   if (!right) addSrText(option, box.dataset.srChosen);
+  // #1110: følgen til det valgte alternativet, hvis forfatteren har skrevet en. Plassen i rekken av
+  // alternativer er nøkkelen — knappene bærer ingen egen merking, så HTML uten følger er som før.
+  const index = [...box.querySelectorAll("[data-check-option]")].indexOf(option);
+  const feedback = box.querySelector(`[data-check-feedback="${index}"]`);
+  if (feedback) feedback.hidden = false;
   const explanation = box.querySelector(".content-check-explanation");
   if (explanation) explanation.hidden = false;
   const verdict = box.querySelector(".content-check-verdict");
@@ -102,6 +108,7 @@ if (typeof document !== "undefined") document.addEventListener("click", async (e
 const STEPS = "[data-content-steps]";
 const WRITE = "[data-content-write]";
 const FLASH = "[data-content-flash]";
+const PAIRS = "[data-content-pairs]";
 
 /** Fyller `{n}`, `{total}` … i en etikett fra tjeneren. */
 function fillLabel(template, values) {
@@ -373,10 +380,130 @@ export function flashAction(block, action) {
   }
 }
 
+// #1107: lista med par blir et spill: begrepene i én kolonne, forklaringene stokket i den andre. Velg ett
+// fra hver side; et riktig par blir grønt og står, et feil par blinker rødt. Lista står igjen for
+// skjermlesere (shared.css skjuler den bare for øyet), som for repetisjonskortene. Ingenting lagres.
+const MISS_MS = 700;
+
+/** Stokker rekkefølgen — aldri slik at ALLE forklaringene står i sin egen rekkefølge (enkelte kan havne rett
+ *  overfor sitt eget begrep; med tre par skjer det ofte, og det er greit). */
+function shuffledOrder(count, random = Math.random) {
+  const order = [...Array(count).keys()];
+  if (count < 2) return order;
+  do {
+    for (let i = count - 1; i > 0; i -= 1) {
+      const j = Math.floor(random() * (i + 1));
+      [order[i], order[j]] = [order[j], order[i]];
+    }
+  } while (order.every((value, i) => value === i));
+  return order;
+}
+
+export function enhancePairs(block, random = Math.random) {
+  if (block.dataset.ready === "true") return;
+  const list = block.querySelector(":scope > .content-pairs-list");
+  const pairs = [];
+  for (const item of list ? list.children : []) {
+    const term = item.querySelector(".content-pairs-term");
+    const def = item.querySelector(".content-pairs-def");
+    if (term && def) pairs.push({ term, def });
+  }
+  if (pairs.length < 2) return;
+  block.dataset.ready = "true";
+
+  const game = document.createElement("div");
+  game.className = "content-pairs-game";
+  const column = (label) => {
+    const col = document.createElement("div");
+    col.className = "content-pairs-col";
+    col.setAttribute("role", "group");
+    col.setAttribute("aria-label", label ?? "");
+    return col;
+  };
+  const left = column(block.dataset.terms);
+  const right = column(block.dataset.defs);
+  const item = (source, key, side) => {
+    const button = makeButton(`content-pairs-item content-pairs-item--${side === "L" ? "term" : "def"}`, "data-pair-item", "");
+    for (const node of source.childNodes) button.appendChild(node.cloneNode(true));
+    // En lenke inni en knapp ville både valgt og navigert bort fra siden (QA-porten, 2.98.0): teksten står,
+    // lenken ikke. Lista for skjermlesere beholder lenken.
+    for (const link of button.querySelectorAll("a")) {
+      const span = document.createElement("span");
+      span.append(...link.childNodes);
+      link.replaceWith(span);
+    }
+    button.dataset.pairKey = String(key);
+    button.dataset.pairSide = side;
+    button.setAttribute("aria-pressed", "false");
+    return button;
+  };
+  pairs.forEach((pair, i) => left.appendChild(item(pair.term, i, "L")));
+  for (const i of shuffledOrder(pairs.length, random)) right.appendChild(item(pairs[i].def, i, "R"));
+  const status = document.createElement("p");
+  status.className = "content-pairs-status";
+  status.setAttribute("aria-live", "polite");
+  game.append(left, right);
+
+  blockState.set(block, { status, total: pairs.length, done: 0, selected: null });
+  pairsStatus(block);
+  block.append(game, status);
+}
+
+function pairsStatus(block, text) {
+  const state = blockState.get(block);
+  const finished = state.done === state.total;
+  state.status.classList.toggle("is-done", finished);
+  state.status.textContent = text ?? fillLabel(finished ? block.dataset.done : block.dataset.status, { n: state.done, total: state.total });
+}
+
+/** Et trykk på et begrep eller en forklaring. To fra hver sin side avgjør om det er et par. */
+export function pickPair(button) {
+  const block = button.closest(PAIRS);
+  const state = block && blockState.get(block);
+  if (!state || button.getAttribute("aria-disabled") === "true") return;
+  const selected = state.selected;
+  const select = (target, on) => {
+    target.classList.toggle("is-selected", on);
+    target.setAttribute("aria-pressed", on ? "true" : "false");
+  };
+  // Første valg, eller et nytt valg på samme side: det nye er valgt.
+  if (!selected || selected === button || selected.dataset.pairSide === button.dataset.pairSide) {
+    if (selected) select(selected, false);
+    if (selected === button) {
+      state.selected = null;
+      return;
+    }
+    state.selected = button;
+    select(button, true);
+    return;
+  }
+  state.selected = null;
+  select(selected, false);
+  if (selected.dataset.pairKey === button.dataset.pairKey) {
+    for (const target of [selected, button]) {
+      target.classList.add("is-done");
+      target.setAttribute("aria-disabled", "true");
+      const sr = document.createElement("span");
+      sr.className = "sr-only";
+      sr.textContent = ` (${block.dataset.matched ?? ""})`;
+      target.appendChild(sr);
+    }
+    state.done += 1;
+    pairsStatus(block);
+    return;
+  }
+  for (const target of [selected, button]) {
+    target.classList.add("is-miss");
+    setTimeout(() => target.classList.remove("is-miss"), MISS_MS);
+  }
+  pairsStatus(block, block.dataset.miss ?? "");
+}
+
 const ENHANCERS = [
   [STEPS, enhanceSteps],
   [WRITE, enhanceWrite],
   [FLASH, enhanceFlash],
+  [PAIRS, (block) => enhancePairs(block)],
 ];
 
 /** Gjør blokkene i `root` klare (og `root` selv, er den en blokk). Kan kalles flere ganger. */
@@ -414,6 +541,8 @@ if (typeof document !== "undefined") {
         return;
       }
     }
+    const pairButton = target.closest("[data-pair-item]");
+    if (pairButton) pickPair(pairButton);
   });
 
   // Piltastene blar når fokus er i en gjennomgang — men ikke mens deltakeren skriver i et felt.

@@ -1,14 +1,39 @@
 # Section content — text, boxes, prompts, cards, pictures
 
-Contents: [Writing the text](#writing-the-text) · [Headings and lists](#headings-and-lists) ·
+Contents: [Choosing the practice](#choosing-the-practice) · [Writing the text](#writing-the-text) · [Headings and lists](#headings-and-lists) ·
 [Table](#table) · [Callout](#callout) · [Prompt](#prompt) · [Cards](#cards) · [Think first](#think-first) ·
-[Check yourself](#check-yourself) · [Step by step](#step-by-step) · [Write it yourself](#write-it-yourself) ·
-[Flashcards](#flashcards) · [Icons](#icons) ·
+[Check yourself](#check-yourself) · [A case](#a-case) · [Step by step](#step-by-step) ·
+[Write it yourself](#write-it-yourself) · [Flashcards](#flashcards) · [Match the pairs](#match-the-pairs) ·
+[Icons](#icons) ·
 [Pictures from the source](#pictures-from-the-source) · [Figures](#figures) ·
 [A finished section](#a-finished-section)
 
 A section teaches. Its body is markdown (`bodyMarkdown`); the platform renders it and shows
 pictures and figures where the text places them.
+
+## Choosing the practice
+
+The learner should do something while reading — not only read. But a section is not a quiz: the
+module tests. **Most sections get none or one exercise; two at most** (a case is one exercise, even
+with three questions). Every kind in the table counts — step by step and flashcards too. Choose by
+what the source gives, not to use every kind:
+
+| The source has … | Use | Not |
+|---|---|---|
+| a problem or a situation the text then explains | [Think first](#think-first) before the explanation | — |
+| a rule or a point the learner should apply | [Check yourself](#check-yourself) right after it | a check that repeats a fact |
+| a routine applied in a situation from the work | [A case](#a-case) | a quiz of separate facts |
+| a process in an order, each step changing something | [Step by step](#step-by-step) | a one-line-per-step list |
+| a formulation the module will assess (free text) | [Write it yourself](#write-it-yourself), in the section before the module | — |
+| terms the section defines | [Flashcards](#flashcards) (4–10) or [Match the pairs](#match-the-pairs) (3–6) | both for the same terms |
+| nothing of these | no exercise — plain text with a box, a table or a figure | an exercise made up to have one |
+
+**Order in a section**, when there are two: from recognising to applying to formulating —
+think first → the text (or step by step) → check yourself or match the pairs → a case → write it
+yourself → flashcards at the end. The module that follows is what counts.
+
+Name the exercises in the outline, per section, so the author approves them with the structure
+([course-design.md](course-design.md)).
 
 ## Writing the text
 
@@ -146,8 +171,8 @@ KI leser alt, men sammendraget blir **generelt**. Spør heller etter det du tren
 :::
 ```
 
-- **Where:** after a problem or a situation has been set out, before the text explains it. One or
-  two per section at most; a section that only asks is a quiz, and the quiz is the module's job.
+- **Where:** after a problem or a situation has been set out, before the text explains it. It
+  counts towards the section's one or two exercises ([Choosing the practice](#choosing-the-practice)).
 - **From the source only.** The question is one the source raises, and the answer is what the source
   says. Never a question the source does not answer.
 - The answer is ordinary markdown — sentences, a short list, bold. Keep it short; the explanation
@@ -175,8 +200,9 @@ Notatene viser hva som faktisk ble bestemt. Innkallingen sier bare hva som skull
 :::
 ```
 
-- **Where:** right after the core of an explanation, one to three per section. Use it where
-  applying what was just read is the point («anvend, ikke husk») — not to repeat a fact.
+- **Where:** right after the core of an explanation. Use it where applying what was just read is
+  the point («anvend, ikke husk») — not to repeat a fact. It counts towards the section's one or two
+  exercises ([Choosing the practice](#choosing-the-practice)); a case is one exercise.
 - **From the source only.** The question, the options and the explanation rest on what the source
   says. The module's test is still the test; this is practice.
 - **Options:** two to four, straight after the question line, each `- [ ]`; exactly one `- [x]`.
@@ -184,16 +210,49 @@ Notatene viser hva som faktisk ble bestemt. Innkallingen sier bare hva som skull
   option gives the answer away ([modules.md](modules.md#multiple-choice-questions)).
 - **Explanation:** after the options, in ordinary markdown; say why the right one is right. It can
   be left out, but rarely should be.
+- **Feedback per option (optional):** an indented line (two spaces) right under an option is shown
+  when the learner picks that option — what happens, or why it is not the best. Use it in a case
+  (below). Without feedback lines the question looks as before.
 - In the other languages the marker word stays `:::sjekk` and `- [x]` stays where it is; translate
-  the question, the options and the explanation.
+  the question, the options, the feedback (still indented under its option) and the explanation.
 - **A blank line above every frame** (`:::kort`, `:::tenk`, `:::sjekk`, `:::steg`, `:::skriv`,
-  `:::repetisjon`). Right under a list, a quote or a table, the platform reads the frame as part of
+  `:::repetisjon`, `:::par`). Right under a list, a quote or a table, the platform reads the frame as part of
   it — for `:::sjekk` the learner then sees the answer as a ticked list. `produce-course.mjs` fails on
   a frame with text right above it.
 - **Never inside a card frame, and no frame inside it** — as for «think first».
   `produce-course.mjs` fails on a nested frame, fewer than two options, or not exactly one `- [x]`.
 
+## A case
+
+A situation from the learner's work, and one to three «check yourself» questions about what they do
+— each option with its consequence. This is the strongest practice for routines and casework: the
+learner applies the rule in a situation, and sees what each choice leads to. No new frame: a short
+paragraph with the situation, then `:::sjekk` questions with feedback lines:
+
+```markdown
+En innbygger ringer og vil se dokumentene i saken om naboens byggesøknad. Hun vil ha dem i dag.
+
+:::sjekk Søknaden inneholder naboens personnummer. Hva gjør du?
+- [ ] Avslår hele innsynet
+  For mye. Bare opplysningen som skal unntas, kan holdes tilbake.
+- [x] Sladder personnummeret og gir innsyn i resten
+  Riktig. Du unntar det som må unntas og gir innsyn i resten.
+
+Innsyn er hovedregelen; unntak gjelder bare det som må unntas.
+:::
+```
+
+- **From the source:** the situation and the right choice rest on the source's rules or examples.
+- **The story does not branch.** Every choice leads to the next question; a worse choice is shown
+  with its consequence, and the learner goes on. One to three questions per case.
+- **Every option gets a feedback line** in a case: the consequence of that choice, in one or two
+  sentences.
+
 ## Step by step
+
+**Step by step, write it yourself, flashcards and match the pairs work only in a section.** In a module's task
+text or guidance — what the learner answers — the platform shows the markers as plain text, and
+`produce-course.mjs` fails on one there. Put the exercise in the section before the module.
 
 A process the learner pages through one step at a time, with «Neste» and «Forrige» — case handling,
 a routine, a rule applied in order («først sjekker du …, så …»). Each step says what happens in it.
@@ -298,6 +357,33 @@ Uten personlig interesse i saken, så du kan delta i behandlingen.
 - In the other languages the marker word stays `:::repetisjon` and every `###` heading stays;
   translate the terms and the explanations. `produce-course.mjs` fails on fewer than two cards or a
   card without a back.
+
+## Match the pairs
+
+The learner matches terms with their explanations: picks a term, then the explanation that belongs to
+it. A right pair turns green and stays; a wrong pair flashes red. The explanations are shuffled every
+time. No timer, nothing is stored. Works only in a section, like step by step. A frame `:::par` (an
+instruction after it is optional), one line per pair, `- term = explanation`:
+
+```markdown
+:::par Koble begrepet med forklaringen
+- Hjemmel = Lovbestemmelsen et vedtak bygger på
+- Merinnsyn = Innsyn selv om dokumentet kunne vært unntatt
+- Klagefrist = Tiden parten har til å klage på vedtaket
+- Journalføring = Registrering av et dokument i arkivet
+:::
+```
+
+- **When:** for three to six terms this section defines — to tell similar terms apart. Not the same
+  terms as the flashcards in the same section; choose one of the two.
+- **Every line is a pair**, split at the first « = »; no other lines in the frame. At least three
+  pairs; no term or explanation twice.
+- **The text comes from the source**, shortened to a phrase — the explanations are read side by side,
+  so keep them about the same length (a much longer one gives itself away).
+- A screen reader, and a learner without a script, gets the pairs as a list.
+- In the other languages the marker word stays `:::par`, and every line keeps `- ` and ` = `;
+  translate the terms and the explanations. `produce-course.mjs` fails on a line that is not a pair,
+  fewer than three pairs, or a repeated term or explanation.
 
 ## Icons
 

@@ -3,7 +3,7 @@ import { AppRole } from "../../db/prismaRuntime.js";
 import { hasAnyRole, MODULE_ADMIN_READERS } from "../../auth/roleSets.js";
 import type { SupportedLocale } from "../../i18n/locale.js";
 import { localizeContentText } from "../../i18n/content.js";
-import { renderSectionMarkdown } from "../course/sectionContent.js";
+import { renderModuleTextMarkdown } from "../course/sectionContent.js";
 import { assessmentPolicyCodec } from "../../codecs/assessmentPolicyCodec.js";
 import { submissionSchemaCodec } from "../../codecs/submissionSchemaCodec.js";
 import {
@@ -58,10 +58,10 @@ function briefFields(
   const candidateTaskConstraints = localizeContentText(locale, version?.candidateTaskConstraints as never) ?? null;
   return {
     taskText,
-    taskTextHtml: typeof taskText === "string" ? renderSectionMarkdown(taskText, locale) : null,
+    taskTextHtml: typeof taskText === "string" ? renderModuleTextMarkdown(taskText, locale) : null,
     candidateTaskConstraints,
     candidateTaskConstraintsHtml:
-      typeof candidateTaskConstraints === "string" ? renderSectionMarkdown(candidateTaskConstraints, locale) : null,
+      typeof candidateTaskConstraints === "string" ? renderModuleTextMarkdown(candidateTaskConstraints, locale) : null,
   };
 }
 

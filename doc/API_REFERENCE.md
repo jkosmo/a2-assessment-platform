@@ -414,7 +414,33 @@ so the redaction left the owner editing their own module without its answer key.
 
 | `DELETE` | `/api/admin/content/modules/:moduleId` | ADMINISTRATOR, SUBJECT_MATTER_OWNER |
 | `POST` | `/api/admin/content/generate/module-draft` | ADMINISTRATOR, SUBJECT_MATTER_OWNER |
+| `POST` | `/api/admin/content/generate/module-draft/localize` | ADMINISTRATOR, SUBJECT_MATTER_OWNER. Translates title, task text, guidance and expected content to one locale. **#1109:** `422 translation_structure_changed` when the translation changed the frames (see below); other failures stay `500 generation_failed`. |
 | `POST` | `/api/admin/content/generate/mcq` | ADMINISTRATOR, SUBJECT_MATTER_OWNER |
+
+#### The translator keeps the frames (#1109)
+
+The platform's translator — `POST /generate/module-draft/localize`, `POST /sections/localize` (also
+used for a title alone and for one module field at a time by the publish gate's gap-fill) and
+`POST /courses/localize-copy` — compares the translation with the source before answering. Every
+frame (`:::tenk`, `:::sjekk`, `:::kort`, `:::steg`, `:::skriv`, `:::repetisjon`, English marker words
+included) must be there as often as in the source, each «sjekk deg selv» must have its `- [x]` in the
+same place, and each steps, cards, flashcards and write frame the same number of steps, cards or
+checklist points; and the server must draw as many frames of each kind as it draws in the source. If
+not, the translation to that locale is discarded:
+
+```json
+{ "error": "translation_structure_changed",
+  "message": "The translation to nn changed the frames in the text and was not used. …",
+  "details": { "locale": "nn", "fields": [ { "field": "bodyMarkdown",
+    "problems": [ { "kind": "sjekk", "problem": "shape", "position": 1, "expected": "010", "actual": "100" } ] } ] } }
+```
+
+Status `422`. `problem` is `count` (another number of frames of that kind), `shape` (frame no.
+`position` of that kind has another answer pattern / number of items) or `drawn` (as many frames, but
+the server draws a different number — e.g. a blank line above `:::sjekk` was removed, so the options
+became part of the list above). Clients treat the locale as not translated, as for any failed
+translation: nothing is stored for it and the author is told. The rule table is shared with the skill:
+`skills/a2-authoring-api/scripts/frame-structure.mjs` (`FRAME_KINDS`).
 
 #### Source-material ingest (#454/#479)
 
@@ -551,7 +577,7 @@ have nothing to do with, not about partitioning content inside a course you asse
 | `GET` | `/api/admin/content/users/search?q=` | Search users by name/email (min 2 chars, capped 20) for class membership (#645/CL-3) |
 
 Classes (cohorts) assign a course to a group of participants dynamically: a participant is assigned a course if they belong to a class it is assigned to (evaluated at read time, never materialised). The built-in **"Alle deltakere"** system class covers all PARTICIPANT users. `GET /api/courses` and `GET /api/courses/enrollments` reflect class assignments (the latter with `source: "CLASS"`). Entra-linked classes (`kind=ENTRA`) are gated by the `classEntraLinkingEnabled` platform config (default off, CL-5).
-| `POST` | `/api/admin/content/courses/:courseId/localize-copy` | LLM-translate course title/description |
+| `POST` | `/api/admin/content/courses/localize-copy` | LLM-translate course title/description (no course id: the body carries the text). `422 translation_structure_changed` if the translation adds or drops a frame (#1109, see «The translator keeps the frames») |
 | `GET` | `/api/admin/content/courses/:courseId/export-package` | **Owner or admin only (#903).** Export envelope (inlines modules **and** sections in order, #512). An empty course returns `422 course_not_exportable`. Section figures/images travel inline as base64 (#749, see below) |
 | `POST` | `/api/admin/content/courses/import` | Import a course envelope (recreates sections via `items`, falls back to modules-only v1). Recreates section assets + remaps `asset:` refs (#749). Larger 35 MB body limit to carry inlined assets. **#937:** also accepts a bare course payload `{ course: {…} }`; anything unrecognisable returns `400 not_an_export_envelope` (a code, not prose — clients render it in the author's language). **#942 (security):** `mode: "replaceExisting"` requires ownership of `targetId` (403 `content_ownership` otherwise) — the same guard module and section import already had. **#957/#996:** responsen bærer `heldBackByTranslationGate: boolean`. Med `mode: "replaceExisting"` kan et **publisert** målkurs også bli tatt ned mens svaret har `heldBackByTranslationGate: false`: når fila er et utkast og en modul lander upublisert, avpubliseres kurset (2.89.1) — det står i revisjonssporet (`course_unpublished`, `reason: import_unpublished_module`), ikke i svaret. `true` betyr at kurset ble lagret som **utkast** selv om kilden var publisert, fordi minst én modul eller seksjon mangler et språk, eller (#1095) fordi en modul reiste som upublisert utkast i fila og kurset ikke kan publiseres rundt den — og selv om et eksisterende målkurs var publisert før importen (da avpubliseres det, ellers ville deltakere møtt «modul ikke tilgjengelig» i et levende kurs). Uten feltet fikk forfatteren `201 Created` uten forklaring. |
 | `DELETE` | `/api/admin/content/courses/:courseId` | Delete course |
@@ -622,8 +648,8 @@ did not change the format version: older files have no `section` field and valid
 | `POST` | `/api/admin/content/sections/:sectionId/archive` | Archive. Blocked `400` if used in any course (G2); auto-unpublishes (I3, #705) |
 | `POST` | `/api/admin/content/sections/:sectionId/restore` | Restore an archived section (lands in Utkast, #705) |
 | `DELETE` | `/api/admin/content/sections/:sectionId` | Delete (blocked `400` if the section is used in a course; names the courses, #705) |
-| `POST` | `/api/admin/content/sections/preview` | Render markdown → sanitised HTML (same F3/X1 policy as participant view) |
-| `POST` | `/api/admin/content/sections/localize` | LLM-translate title + bodyMarkdown to another locale (markdown-preserving). Rate-limited. |
+| `POST` | `/api/admin/content/sections/preview` | Render markdown → sanitised HTML (same F3/X1 policy as participant view). Body `{ markdown, locale?, variant? }`; `variant: "moduleText"` (2.96.1) renders a module's text — step by step, write it yourself and flashcards stay plain text, as the participant gets it. Default `"section"`. |
+| `POST` | `/api/admin/content/sections/localize` | LLM-translate title + bodyMarkdown to another locale (markdown-preserving). Rate-limited. **#1109:** `422 translation_structure_changed` with `details.locale` and `details.fields[].problems` when the translation changed the frames — see «The translator keeps the frames». |
 | `POST` | `/api/admin/content/sections/:sectionId/assets` | Upload a section image (multipart `file`). PNG/JPEG/GIF/WebP/SVG, max 5 MB. SVG is sanitised server-side before storage (scripts/handlers/`foreignObject`/`<a>` stripped, #657). Returns `asset` + `ref` (`asset:<id>`). |
 | `GET` | `/api/admin/content/sections/:sectionId/assets` | List section assets. |
 | `POST` | `/api/admin/content/sections/:sectionId/assets/localize` | Generate translated SVG variants for the section's SVG drawings. Body `{ sourceLocale }`. Extracts `<text>`/`<tspan>` labels, translates to each other supported locale, stores a per-locale variant. Explicit author action (never implicit). Rate-limited (#657). |

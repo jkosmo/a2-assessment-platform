@@ -1167,6 +1167,31 @@ ikke fulgt: rensingen beholder data-attributter, så en forfatter kan lage en li
 godtatt fordi det er ufarlig — skript og hendelsesattributter fjernes, og klikket endrer bare
 utseende og tekst.
 
+## Skillet velger øvelse etter kilden, uten mekanisk telling (#1108, 2026-10-20)
+
+Produkteier godkjente rekkefølgen i en seksjon («Ide 4: OK», 2026-10-19). Skillet har én tabell fra hva
+kilden har til øvelsen, og standardveien er ingen eller én øvelse per seksjon, høyst to. Saken foreslo
+«gjerne» en varsling i `produce-course.mjs` ved mer enn tre; den er bevisst utelatt. Plattformen leser
+eller håndhever ikke et antall øvelser, og forfatterprosessen hører mellom forfatter og modell
+(prinsippet fra 2026-09-06: ikke kod forfatterdialogen). Det som spesifiseres, er standardveien —
+det skillet lager når ingen passer på — ikke et tak.
+
+## Case og «finn parene» (#1110, #1107, 2026-10-20)
+
+Fra Duolingo-researchen 2026-10-19, valgt av produkteier etter skisser:
+
+- **Case uten ny byggekloss (#1110).** Et case er en situasjon og ett–tre «sjekk deg selv», der hvert
+  alternativ kan ha en **følge** (en innrykket linje under det). Saker som deler seg etter valget er
+  bevisst utelatt: krevende å skrive og kontrollere, og bare 1 % av det som lages i H5P. Uten følger er
+  HTML-en uendret. Følge: en innrykket linje rett under det siste alternativet, som før var en del av
+  forklaringen, er nå følgen til det alternativet (vises bare når det velges). Skillet har alltid
+  skrevet forklaringen etter en blank linje.
+- **Finn parene med klikk, ikke dra (#1107).** Dra kolliderer med rulling på telefon og trenger uansett
+  en klikkvariant for tastatur og skjermleser; Duolingo bruker selv trykk. Ingen tidtaker. Forklaringene
+  stokkes, aldri i sin egen rekkefølge. Lista med par står for skjermlesere, som for repetisjonskortene.
+- **«Finn parene» bare i seksjoner**, på linje med steg, skriv selv og repetisjonskort: samme
+  begrunnelse som produkteiers avgjørelse 2026-10-20 (øvelser hører til seksjonen før modulen).
+
 ## «Fullføring per modul» teller personer, siste forsøk (2026-10-19)
 
 Produkteier: «Endre til telling per person», etter å ha sett seg selv telt både som bestått og ikke
@@ -1207,3 +1232,47 @@ og «sjekk deg selv» — `:::steg Tittel`, `:::skriv Oppgaven`, `:::repetisjon`
 - Tittel på åpningslinja er valgfri for steg og repetisjonskort; oppgaven er påkrevd for skriv selv
   (den er etiketten til tekstfeltet), og eksempelsvaret kan ikke være tomt. Sjekklista er `- [ ]`-linjene
   helt til slutt, så eksempelsvaret selv kan ha lister.
+
+## Øvelsene bare i seksjoner, ikke i modulens oppgavetekst (2026-10-20)
+
+Produkteier avgjorde QA-portens funn 2 fra 2.96.0: steg for steg, skriv selv og repetisjonskort skal
+ikke tegnes i modulens oppgavetekst. Der skal de stå som vanlig tekst — samme oppførsel som en ugyldig
+ramme. Oppgaveteksten er det deltakeren svarer på: et «skriv selv»-felt rett over det ekte svarfeltet
+fikk deltakeren til å skrive svaret på feil sted (det sendes ikke inn), og eksempelsvaret var en fasit
+til selve oppgaven. «Tenk først», «sjekk deg selv», kort, prompt-boks og uthevet boks tegnes som før
+2.96.0. Avgjørelsen tas på tjeneren ved tegning (`ContentBlockVariant` i `contentBlocks.ts`, variant
+`moduleText`), ikke i CSS eller klienten, så ingen leser kan avvike. Det gjelder også veiledningen og
+det forventede innholdet, som tegnes av samme funksjon.
+
+## Oversetteren kontrollerer rammene (#1109): én tabell, delt med skillet (2026-10-20)
+
+Plattformens oversetter ba modellen la rammene stå, men kontrollerte ingenting etterpå. Nå sammenlignes
+oversettelsen med kilden før svaret går til forfatteren. Valgene som kunne vært tatt annerledes:
+
+- **Én regeltabell, i skillets mappe, som plattformen importerer.** `FRAME_KINDS` i
+  `skills/a2-authoring-api/scripts/frame-structure.mjs`, lest av skillets språkkontroll og av tjeneren
+  (`#frame-structure` i `imports` i package.json, så samme sti virker fra `src/` under test og fra `dist/`
+  i drift; utrullingspakken er hele repoet). Alternativet var en TypeScript-kopi holdt lik skillets med
+  en test, slik `ASSET_LAYOUTS` er. Det ble ikke valgt fordi nye rammer kommer nå (#1107, #1110): to
+  tabeller betyr to oppføringer per ny ramme, og den som glemmes er den som ikke kontrolleres. Skillet må
+  være selvstendig (zip-fila kjøres i ChatGPT), så tabellen bor der og kan ikke bruke marked.
+- **Tjeneren teller det den selv tegner.** Formen (fasitmønster, antall steg, kort og sjekkpunkter) leses
+  fra markdown med tabellen; overskriftene telles av marked (`countTopLevelHeadings`, samme som
+  `countItems` i contentBlocks.ts), ikke linje for linje som skillet gjør. I tillegg sammenlignes antallet
+  rammer av hver type i HTML-en `renderSectionBlocks` lager: en oversettelse som fjerner den blanke linja
+  over `:::sjekk`, har samme form, men rammen tegnes ikke (alternativene blir en del av lista over).
+- **Avvik forkaster språket; ingen ny runde mot modellen.** Svaret er 422 `translation_structure_changed`,
+  og klientene behandler språket som ikke oversatt, slik en feilet oversettelse alltid er behandlet
+  (#905/#982): ingenting lagres for det, og forfatteren får beskjed. En automatisk ny runde med en
+  påminnelse i prompten ville økt sjansen for at det gikk, men endrer oversetterens prompt, og en ny
+  runde koster tid i hvert språk. Forfatteren kan trykke «Oversett» igjen.
+- **Alle rammetyper i alle felt.** Også i modulens oppgavetekst, der steg, skriv selv og repetisjonskort
+  ikke tegnes (2.96.1), i det skjulte forventede innholdet, og i kursets tittel og beskrivelse. En
+  overskrift som forsvant, er tapt innhold selv der den ikke tegnes som et steg, og det er samme
+  oversetter.
+- **Seksjonseditoren: språket som ble avvist, står urørt.** De andre språkene oversettes som før, og
+  forfatteren får vite hvilket språk som ikke ble oversatt og hvorfor. Tidligere stoppet enhver feil hele
+  oversettelsen.
+- **Stubben (lokalt uten KI) setter merket `[nb]` på en egen linje** i stedet for foran teksten. Foran en
+  tekst som begynner med en ramme, gjorde merket åpningslinja til vanlig tekst, og kontrollen ville stoppet
+  hver lokale oversettelse av en slik seksjon.
