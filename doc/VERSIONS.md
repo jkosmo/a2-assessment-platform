@@ -2,11 +2,18 @@
 
 This document tracks release versions and what each version includes.
 
-## 2.98.1 - 2026-10-21
+## 2.98.1 - 2026-10-22
+
+### Siste seksjon sier hva som gjenstår
+
+- Når siste seksjon i et kurs åpnes mens noe annet står igjen, sto det bare «Du har 1 igjen før du kan
+  avslutte kurset». Nå står det hva («Før du kan avslutte kurset, må du fullføre: Kunnskapstest. Kom
+  tilbake hit etterpå for å avslutte»), med en knapp «Gå til …» til det første som gjenstår og kan
+  åpnes. En avpublisert modul (#996) nevnes, men får ingen knapp. Fullføringsregelen er uendret.
 
 ### Skillet: justering stopper to ganger; øvelser røper ikke testen; merkelapper på ett språk
 
-Bare skillet. Lærdom fra Repetisjon Modul 3 justert med skillet 2.98.0 i Claude og i ChatGPT: Claude
+Lærdom fra Repetisjon Modul 3 justert med skillet 2.98.0 i Claude og i ChatGPT: Claude
 ba om godkjenning per element (som skillet sa), ChatGPT hoppet over godkjenningene og endret metode,
 fjernet skjermbilder og promptpakken, og lagde øvelser med testens tall.
 

@@ -302,9 +302,24 @@ test("#929: gjenstår det noe, er det ingen knapp — men en forklaring", async 
 
   // ⚠️ Og deltakeren skal FÅ VITE hvorfor. En blindvei uten begrunnelse er verre enn en manglende
   // knapp: man vet ikke om det er en selv eller systemet det er noe galt med.
-  await expect(page.locator(".course-inline-actions")).toContainText(/1 igjen/);
+  // Produkteier 2026-10-22: «1 igjen» var ikke nok — teksten sier HVA, og at avslutningen skjer her.
+  await expect(page.locator(".course-inline-actions")).toContainText("må du fullføre: Testen. Kom tilbake hit");
 
   // Og ingenting registreres i det stille bare fordi siden ble åpnet.
+  expect(readCalled).toBe(false);
+
+  // Knappen tar deltakeren til det som gjenstår (modulen må finnes i deltakerens modulliste).
+  await page.route("**/api/modules**", (route: Route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ modules: [{ id: "m1", title: "Testen", description: null, assessmentMode: "FREETEXT_PLUS_MCQ", submissionSchema: null, assessmentPolicy: null, taskText: "Oppgave", activeVersion: { versionNo: 1 }, participantStatus: null }] }),
+    }),
+  );
+  await expect(page.locator("#sectionReaderGoOutstanding")).toHaveText("Gå til Testen →");
+  await page.locator("#sectionReaderGoOutstanding").click();
+  await expect(page.locator('.course-item[data-key="ci1"] .course-inline-panel')).toBeVisible();
+  await expect(page.locator("#sectionReaderBody")).toHaveCount(0);
   expect(readCalled).toBe(false);
 });
 
@@ -429,7 +444,8 @@ test("#992 KONTROLLCASE: en TILGJENGELIG ikke-bestått modul blokkerer fortsatt"
   await expect(page.locator("#sectionReaderBody")).toContainText("Tekst i s1");
 
   await expect(page.locator("#sectionReaderFinish")).toHaveCount(0);
-  await expect(page.locator(".course-inline-actions")).toContainText(/1 igjen/);
+  await expect(page.locator(".course-inline-actions")).toContainText("må du fullføre: Ekte test.");
+  await expect(page.locator("#sectionReaderGoOutstanding")).toHaveText("Gå til Ekte test →");
 });
 
 // ---------------------------------------------------------------------------
@@ -517,9 +533,11 @@ test("#996: en AVPUBLISERT modul blokkerer «Avslutt kurset» — den teller for
   await page.locator('.course-item[data-key="ci2"] .course-module-row').click();
   await expect(page.locator("#sectionReaderBody")).toContainText("Tekst i s1");
 
-  // Ingen knapp — og en forklaring, ikke en blindvei.
+  // Ingen knapp — og en forklaring, ikke en blindvei. Den avpubliserte modulen nevnes, men får ingen
+  // «gå til»-knapp: den kan ikke åpnes.
   await expect(page.locator("#sectionReaderFinish")).toHaveCount(0);
-  await expect(page.locator(".course-inline-actions")).toContainText(/1 igjen/);
+  await expect(page.locator(".course-inline-actions")).toContainText("må du fullføre: Midlertidig nede.");
+  await expect(page.locator("#sectionReaderGoOutstanding")).toHaveCount(0);
 
   // ⚠️ Kjernen: ingenting registreres. Før fiksen ble lesningen skrevet av et klikk som ikke førte
   // til noe, og deltakeren mistet den siste handlingen som kunne gitt en forklaring.

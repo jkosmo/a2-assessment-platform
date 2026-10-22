@@ -4227,11 +4227,21 @@ async function renderSectionReaderInto(panel, courseId, entry) {
   } else if (canFinish) {
     actionsMarkup = `<button type="button" id="sectionReaderFinish" class="btn-primary" data-role="finishCourse">${escapeHtmlP(t("courses.section.finishCourse"))}</button>`;
   } else {
-    // Ingen knapp, men en forklaring. En blindvei uten begrunnelse er verre enn en knapp som
+    // Ingen avslutt-knapp, men en forklaring. En blindvei uten begrunnelse er verre enn en knapp som
     // mangler — deltakeren vet ikke om det er dem eller systemet det er noe galt med.
-    actionsMarkup = `<p class="small" style="color:var(--color-meta);margin:0">${escapeHtmlP(
-      t("courses.section.finishBlocked").replace("{remaining}", String(outstanding.length)),
-    )}</p>`;
+    // Produkteier 2026-10-22: «1 igjen» sa ikke HVA, ga ingen vei dit og ikke at man skal tilbake hit.
+    // Nå: navnene, en knapp til det første som gjenstår, og at avslutningen skjer her.
+    const names = outstanding.map((e) => localizePreviewText(e.title) || "").filter(Boolean);
+    const blockedText = names.length === outstanding.length
+      ? t("courses.section.finishBlockedNamed").replace("{items}", names.join(", "))
+      : t("courses.section.finishBlocked").replace("{remaining}", String(outstanding.length));
+    // Knappen bare til noe som kan åpnes: en avpublisert modul teller (#996), men å klikke seg dit gir
+    // bare «ikke tilgjengelig».
+    const goTarget = outstanding.find(isEntryAvailable);
+    actionsMarkup = `<p class="small" style="color:var(--color-meta);margin:0">${escapeHtmlP(blockedText)}</p>`
+      + (goTarget ? `<button type="button" id="sectionReaderGoOutstanding" class="btn-secondary" data-role="goOutstanding">${escapeHtmlP(
+        t("courses.section.goToOutstanding").replace("{title}", localizePreviewText(goTarget.title) || ""),
+      )}</button>` : "");
   }
   // Lesemodus (#1079): hodet sier hvor i kurset leseren er, og lar den velge spaltebredde. Valget
   // huskes i nettleseren. På telefon er det bare én spalte, og velgeren er skjult (CSS).
@@ -4286,6 +4296,11 @@ async function renderSectionReaderInto(panel, courseId, entry) {
       markReadBtn.disabled = false;
       participantErrorToast(error, "courses.loadError");
     }
+  });
+
+  panel.querySelector("#sectionReaderGoOutstanding")?.addEventListener("click", () => {
+    const target = outstanding.find(isEntryAvailable);
+    if (target) openCourseItemEntry(courseId, target);
   });
 
   // #929: «Avslutt kurset». Samme serverkall som «marker lest og gå videre» — det er lesningen som
