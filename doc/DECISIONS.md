@@ -1167,6 +1167,16 @@ ikke fulgt: rensingen beholder data-attributter, så en forfatter kan lage en li
 godtatt fordi det er ufarlig — skript og hendelsesattributter fjernes, og klikket endrer bare
 utseende og tekst.
 
+## Justering av et kurs stopper to ganger (2.98.1, 2026-10-21)
+
+Produkteier godkjente forslaget etter å ha justert Repetisjon Modul 3 med Claude og ChatGPT
+(2026-10-21). Når skillet justerer et kurs fra eksporten, stopper det ved endringslista og ved én
+samlet gjennomgang av endringene — ikke per element, som før. Per element ga en langsom dialog
+(Claude); ingen stopp ga endringer forfatteren ikke hadde bedt om (ChatGPT). Endringslista er
+stoppet som aldri hoppes over. Å lage et nytt kurs har fortsatt godkjenning per element (port 4).
+Håndheves i `workflows/adjust-course.md`; `produce-course.mjs --changes` fanger det som er endret
+uten å stå i lista. Status: avklart.
+
 ## Skillet velger øvelse etter kilden, uten mekanisk telling (#1108, 2026-10-20)
 
 Produkteier godkjente rekkefølgen i en seksjon («Ide 4: OK», 2026-10-19). Skillet har én tabell fra hva

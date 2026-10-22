@@ -34,8 +34,8 @@ assessment) and **modules** (tests: multiple choice, free text, or both).
 3. **One language while you write.** Agree the course's primary language first (default: the
    source's) and write every title, text, question and figure label in it. The other two
    languages are translated at the end, never mixed in.
-4. **One gate at a time.** Stop at each gate below and wait for the author. An approval covers
-   that gate only.
+4. **One gate at a time.** Stop at each gate your workflow names and wait for the author. An
+   approval covers that gate only. Adjusting a course has its own, fewer stops.
 5. **A check you did not run did not pass.** Say which checks you ran and what they reported. If
    you could not look at a figure or a picture, say "ikke sett".
 6. **Secrets stay secret.** An agent token (`aat_…`) the author pastes is used for this run and
@@ -53,8 +53,8 @@ example "bare lag et utkast fra det du vet"). Warn that it is unverified, mark e
 | documents, notes, a transcript, web sources, or the author's own description | [workflows/from-text.md](workflows/from-text.md) |
 | a course that is **already on the platform**, to be adjusted — the author brings its export file | [workflows/adjust-course.md](workflows/adjust-course.md) |
 
-The two make-a-course workflows pass the same gates; adjusting has fewer, and only what the author
-asks for changes. Open the workflow file before you ask the author anything; it
+The two make-a-course workflows pass the same gates; adjusting stops only twice — at the change
+list and at one review of the changes — and only what the author asks for changes. Open the workflow file before you ask the author anything; it
 says what to do at each gate for that kind of source.
 
 ## The gates
@@ -64,7 +64,7 @@ says what to do at each gate for that kind of source.
 | 1 | **Source** | what the course is built on |
 | 2 | **Learning objectives** | what a learner can do afterwards, and the language |
 | 3 | **Structure** | sections, modules, order, test form, level — and, from a presentation, what becomes of each slide |
-| 4 | **Each element** | one section or module at a time: its text, figures and questions together |
+| 4 | **Each element** | one section or module at a time: its text, figures and questions together (adjusting: all changes in one review) |
 | 5 | **Independent check** | your report on whether the course delivers the objectives |
 | 6 | **Production** | the finished, translated, validated course |
 

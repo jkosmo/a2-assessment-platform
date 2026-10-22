@@ -30,6 +30,8 @@ gate 3 ([course-design.md](course-design.md#level-and-scope)).
   ones: a four-question quiz after six sections leaves four of them untested. `produce-course.mjs`
   counts this.
 - The stem tests **one** idea.
+- **Not answered in a section already.** A question does not repeat a section's exercise — the same
+  situation or the same numbers ([section-content.md](section-content.md#choosing-the-practice)).
 - 3–4 options. Exactly one is unambiguously right. Never "alle de over".
 - **Distractors are real misconceptions** — the wrong judgements a real learner would make.
 - A short `rationale` says why the right answer is right.

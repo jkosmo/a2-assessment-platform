@@ -82,6 +82,10 @@ before the picture says what it shows ([section-content.md](section-content.md#p
   (`frame-structure.mjs`) and refuses a translation that breaks a frame;
 - a formula, address, identifier or file name that is in the primary language and missing from a
   translation;
+- a label in brackets and capitals (`[KILDEBASERT]`) that a text translates in some places and leaves
+  in the primary language in others — in a table, a «finn parene» and a prompt the learner should
+  meet the same label. A label left the same everywhere (a placeholder, a word that is the same in
+  Nynorsk) is accepted;
 - a figure that lacks a language, has a different number of pieces of label text in one, or whose
   English labels are the Norwegian ones (or the other way round); a narrow layout whose labels
   differ from the wide figure's. Labels that are the same in Bokmål and Nynorsk are accepted:

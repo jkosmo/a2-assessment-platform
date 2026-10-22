@@ -490,7 +490,7 @@ function checkLanguages(pkg, primary) {
       ? `${entry.actual} pieces of label text, the original has ${entry.expected} — keep the same number of lines in every label`
       : null;
   const where = (entry) => [entry.path, entry.locale, entry.missingLocales?.join("+"), entry.token, entry.detail, counts(entry)].filter(Boolean).join(" · ");
-  const lists = [result.missing, result.answerKeyChanges, result.blockShapeChanges, result.optionCountMismatches, result.tokenDrift, result.blindCopies];
+  const lists = [result.missing, result.answerKeyChanges, result.blockShapeChanges, result.optionCountMismatches, result.tokenDrift, result.labelDrift, result.blindCopies];
   for (const list of [...lists, ...Object.values(result.figures ?? {}).filter(Array.isArray)]) {
     for (const entry of list ?? []) if (entry && typeof entry === "object") details.push(`  ${where(entry)}`);
   }

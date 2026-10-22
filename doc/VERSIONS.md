@@ -2,6 +2,26 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.98.1 - 2026-10-21
+
+### Skillet: justering stopper to ganger; øvelser røper ikke testen; merkelapper på ett språk
+
+Bare skillet. Lærdom fra Repetisjon Modul 3 justert med skillet 2.98.0 i Claude og i ChatGPT: Claude
+ba om godkjenning per element (som skillet sa), ChatGPT hoppet over godkjenningene og endret metode,
+fjernet skjermbilder og promptpakken, og lagde øvelser med testens tall.
+
+- **Justering av et kurs** stopper to ganger: ved endringslista og ved én samlet gjennomgang av alt
+  som er endret. Ikke godkjenning per element eller per steg; den uavhengige kontrollen og
+  produksjonen går uten å vente. Endringslista er stoppet som aldri hoppes over. En endret seksjon
+  beholder bilder, øvelser, prompter og metode med mindre linja sier noe annet; råd kurset gir, endres
+  bare som forslag med begrunnelse; en endring som berører kursbeskrivelsen eller testen, sier det.
+- **Øvelsene i seksjonene** bruker ikke spørsmål, case eller tall fra modulens test (i veiledningen
+  for seksjoner og moduler, og i den uavhengige kontrollen).
+- **Deltakeren leser ikke om forfatterarbeidet:** eksporten, importfila, en tidligere versjon av
+  kurset.
+- **Språkkontrollen** stopper en `[MERKELAPP]` som er oversatt noen steder og latt stå andre steder i
+  samme tekst (den engelske tabellen sa [SOURCE-BASED], «finn parene» under sa [KILDEBASERT]).
+
 ## 2.98.0 - 2026-10-20
 
 ### Case med følge per alternativ (#1110) og «finn parene» (#1107); skillet velger øvelse (#1108)

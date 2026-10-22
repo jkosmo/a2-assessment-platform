@@ -1,7 +1,7 @@
 # Workflow: adjust a course that is already on the platform
 
 Contents: [Gate 1 — the export file](#gate-1--source-the-export-file) · [Gate 2 — the change list](#gate-2--the-change-list) ·
-[Gate 3 — each changed element](#gate-3--each-changed-element) · [Gate 4 — independent check](#gate-4--independent-check) ·
+[Gate 3 — the changes, reviewed together](#gate-3--the-changes-reviewed-together) · [Gate 4 — independent check](#gate-4--independent-check) ·
 [Gate 5 — production](#gate-5--production) · [Delivering](#delivering)
 
 Use this when the author wants a course that **exists on the platform** changed — a section
@@ -16,7 +16,10 @@ changed gets a new, unpublished version laid ready for review, new elements come
 and the course keeps its id, its publish state, its classes and the participants' progress.
 Nothing is published by the import.
 
-Stop at every gate and wait for the author.
+You stop **twice**: at the change list (gate 2), and at one review of everything you changed
+(gate 3). The other gates run without waiting, unless something there needs the author's decision.
+Do not ask for approval per element or per step after that — the author approved what changes at
+gate 2.
 
 ## Gate 1 — Source: the export file
 
@@ -48,6 +51,26 @@ Ask what should change, then propose the change list — one line per element, i
 order, each marked **unchanged / changed / new / removed**, with one sentence on what the change
 is. Add elements the author did not name only as *suggestions* ("jeg ser også at …"), marked as
 such; they become changes only on a clear yes.
+
+**This is the stop you never skip** — also when the author asks you to work fast. It is one
+question, and everything after it follows from the answer; without it, you decide what the author's
+course says.
+
+**What a changed element keeps.** A line marked `changed` changes what that line says, nothing
+more. The element's pictures, exercises, prompts and the method it teaches stay unless the line
+names them:
+
+- a picture, an exercise or a prompt taken out, or moved elsewhere (another section, outside the
+  course), is said in the line ("tar ut de tre skjermbildene av …", "flytter promptene til Teams");
+- advice the course gives that you would change — even where you think it is out of date — is a
+  *suggestion* with your reason ("Kurset sier at deltakeren skal slette originalene; jeg foreslår å
+  beholde dem fordi …"). The method is the author's;
+- an update for currency (a product that changed, a feature that moved) names each claim that
+  changes and the source for the new one. A claim no source the author has seen supports is not
+  changed; mark it `[Avklaring: …]`.
+
+When a change also touches the course's description, a module's questions or their rationale, the
+line says so — the description and the test must still agree with the sections.
 
 Rules the list must respect:
 
@@ -81,13 +104,18 @@ A removed element keeps its `clientRef` in the list, marked `removed`, and is ta
 package and of the course's `items`. Leave `refs` as the script wrote it: it says which element of
 the export each ref was, so a removal is matched to the right element.
 
-## Gate 3 — Each changed element
+## Gate 3 — The changes, reviewed together
 
-One element per turn, approved before the next — as gate 4 of the make-a-course workflows, with
-the same craft ([section-content.md](../references/section-content.md),
+Write every changed and new element on the approved list, with the craft of the make-a-course
+workflows ([section-content.md](../references/section-content.md),
 [figure-design.md](../references/figure-design.md), [modules.md](../references/modules.md),
 [icons.md](../references/icons.md)) applied to **what changes only**. Everything else stays word
 for word as it came from the file.
+
+Then show the author all of it in **one review**, in the course's order: per element, the changed
+passages before and after, a new element in full, and the checks you ran. The author approves it
+all, or points at what to fix; fix that and show only that again. If the author asks to see the
+elements one at a time, do that.
 
 - A **changed section:** revise the primary-language file `work/sections/<ref>.<lang>.md` from the
   approved text, never from memory. When the author shortens, run
@@ -101,13 +129,19 @@ for word as it came from the file.
   `work/course-state.json` it leaves `order` and gets `status: "removed"` — an approved element
   that is merely missing is a loss, and production stops.
 
-After each approval, update the course state: the element's stored text, and what must survive.
+After the approval, update the course state: each element's stored text, and what must survive.
 
 ## Gate 4 — Independent check
 
 A fresh pass over the **changed and new** elements only ([check-and-produce.md](../references/check-and-produce.md#gate-5--independent-check)):
 does the course still deliver its objectives with these changes, is nothing claimed that the
-source does not support, is the language one throughout. Do not re-review unchanged elements.
+source does not support, is the language one throughout, does no exercise give away a test answer,
+does the learner read nothing about the export or the course as it was, and do the course's
+description and its tests still agree with the changed sections. Do not re-review unchanged
+elements.
+
+Do not wait for approval here. Fix what is plainly a slip and go on to production; stop only for
+what needs the author's decision, and report the rest with the delivery.
 
 ## Gate 5 — Production
 
@@ -141,7 +175,8 @@ Give the author the file, the change list as approved, and say:
   elements get a new version laid ready, nothing is published; the author reviews each new
   version and publishes it. The course's order, its title and description, and the removals take
   effect at once;
-- **which checks ran, by name**, including `changes`, and which did not;
+- **which checks ran, by name**, including `changes`, and which did not, and what the independent
+  check found and fixed;
 - the title rule and the new-module rule from gate 2, where they apply;
 - the closing line: *"Nye versjoner ligger klar — gjennomgå og publiser dem manuelt i admin-UI."*
 

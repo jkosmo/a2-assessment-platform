@@ -10,6 +10,7 @@ import {
   extractSvgTextRuns,
   extractPreservedTokens,
   isBlindCopy,
+  partlyTranslatedLabels,
   practiceBlockShapes,
   presentLocales,
   // @ts-expect-error — .mjs skill script consumed as a library
@@ -396,5 +397,49 @@ describe("følge per alternativ i fasitmønsteret (#1110)", () => {
     const a = [":::sjekk Hva?", "- [ ] En", "  Følge.", "- [x] To", ":::"].join(NL);
     const b = [":::sjekk Hva?", "- [ ] En", "- [x] To", "  Følge.", ":::"].join(NL);
     expect(checkAnswerPatterns(a)).not.toEqual(checkAnswerPatterns(b));
+  });
+});
+
+// Repetisjon Modul 3 (2.98.0): den engelske tabellen sa [SOURCE-BASED], «finn parene» rett under sa
+// [KILDEBASERT]. En merkelapp skal være den samme overalt på ett språk.
+describe("merkelapper oversatt bare noen steder", () => {
+  const NL = String.fromCharCode(10);
+  const nb = ["| Merke | Betyr |", "|---|---|", "| [KILDEBASERT] | står i kilden |", "", ":::par", "[KILDEBASERT] = står i kilden", "[AVLEDET] = utledet", "[UKJENT] = mangler", ":::"].join(NL);
+  const nn = nb.replace("står i kilden |", "står i kjelda |").replace("står i kilden", "står i kjelda");
+  const pkg = (en: string) => ({
+    packageFormat: "a2-authoring-package/v1",
+    objects: [{ clientRef: "sec-merker", type: "section", payload: { title: L("Merker", "Merke", "Labels"), bodyMarkdown: L(nb, nn, en) } }],
+  });
+
+  it("oversatt i tabellen, latt stå i øvelsen: stopper", () => {
+    const en = nb.replace("| [KILDEBASERT] | står i kilden |", "| [SOURCE-BASED] | in the source |").replace("Merke | Betyr", "Label | Means");
+    const result = checkLocalization(pkg(en));
+    expect(result.labelDrift.map((d: { detail: string }) => d.detail).join(" ")).toContain("en-GB: [KILDEBASERT] is left 1 time(s) where nb has it 2");
+    expect(result.blocks).toBe(true);
+  });
+
+  it("nynorsk sjekkes også", () => {
+    const nnHalf = nn.replace("| [KILDEBASERT] | står i kjelda |", "| [KJELDEBASERT] | står i kjelda |");
+    const en = nb.replaceAll("[KILDEBASERT]", "[SOURCE-BASED]").replace("[AVLEDET]", "[DERIVED]").replace("[UKJENT]", "[UNKNOWN]");
+    const result = checkLocalization({ packageFormat: "a2-authoring-package/v1", objects: [{ clientRef: "sec-merker", type: "section", payload: { title: L("Merker", "Merke", "Labels"), bodyMarkdown: L(nb, nnHalf, en) } }] });
+    expect(result.labelDrift.map((d: { detail: string }) => d.detail).join(" ")).toContain("nn: [KILDEBASERT] is left 1 time(s)");
+  });
+
+  it("oversatt overalt: ingen merknad", () => {
+    const en = nb.replaceAll("[KILDEBASERT]", "[SOURCE-BASED]").replace("[AVLEDET]", "[DERIVED]").replace("[UKJENT]", "[UNKNOWN]");
+    expect(checkLocalization(pkg(en)).labelDrift).toEqual([]);
+  });
+
+  it("nynorsk oversetter én merkelapp og lar en annen stå overalt: ingen merknad", () => {
+    expect(partlyTranslatedLabels(nb, nn.replaceAll("[KILDEBASERT]", "[KJELDEBASERT]"))).toEqual([]);
+  });
+
+  it("nynorsk med samme merkelapper, én setning skrevet om: ingen merknad", () => {
+    const nnShorter = nn.replace("| [KILDEBASERT] | står i kjelda |", "| (kjelda) | står i kjelda |");
+    expect(partlyTranslatedLabels(nb, nnShorter)).toEqual([]);
+  });
+
+  it("lenketekst i store bokstaver er ikke en merkelapp", () => {
+    expect(partlyTranslatedLabels("[GDPR](https://a) og [GDPR](https://b)", "[GDPR](https://a) og [EØS](https://b)")).toEqual([]);
   });
 });

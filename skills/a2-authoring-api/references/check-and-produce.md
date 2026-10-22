@@ -21,6 +21,11 @@ what a learner should be able to do, without looking at the objectives, then com
 - **Nothing is claimed that the source does not support.** A claim without support is softened to
   what the source says or marked `[Avklaring: …]` — never given invented support.
 - **One language throughout:** every title, text, task, criterion, question and figure label.
+- **No exercise gives away a test answer:** a «sjekk deg selv», a case or a «finn parene» that asks
+  what a module question asks, in the same situation or with the same numbers.
+- **The learner reads the course as it is:** no sentence about the export, the import, an earlier
+  version or how the course was made; the course's description and its modules agree with the
+  sections.
 - **The figures:** each shows what the approved text says and nothing more; labels are short.
 - **From a presentation:** the slide check is clean
   (`node scripts/slide-coverage.mjs work/treatment.json work/package.json`), and for each slide
@@ -28,7 +33,8 @@ what a learner should be able to do, without looking at the objectives, then com
   that the form and the expressions are there, not that the meaning is.
 
 **Report to the author** what was checked, what was found, and what you propose to change. Fix
-what the author agrees to, then ask for approval to produce.
+what the author agrees to, then ask for approval to produce. (Adjusting a course does not wait
+here: [adjust-course.md](../workflows/adjust-course.md#gate-4--independent-check).)
 
 ## Gate 6 — production
 
@@ -79,7 +85,7 @@ DELIVER work/kurs-motereferat.json  —  the author imports it at Innholdsforval
 | **figures** | a label does not fit, or an animated figure is not the template — in the figure, a layout or a language variant | [figure-design.md](figure-design.md#measure-and-look) |
 | **learner text** | a sentence points at the source ("som vist på lysark 4"); a frame (`:::kort`, `:::tenk`, `:::sjekk`, `:::steg`, `:::skriv`, `:::repetisjon`, `:::par`) is not closed, has text right above it, or is opened inside another; a `:::sjekk` question without two options or exactly one `- [x]`; a `:::steg` or `:::repetisjon` with fewer than two headings, a flashcard without a back, a `:::skriv` without an example answer; a `:::par` with a line that is not a pair, fewer than three pairs, or a repeated term or explanation | [section-content.md](section-content.md#the-source-stays-behind-the-text), frames: [section-content.md](section-content.md#think-first) |
 | **questions** | an option gives the answer away; a module has fewer questions than the sections it follows (and fewer than three) | [modules.md](modules.md#multiple-choice-questions) |
-| **languages** | a language is missing, a text was copied instead of translated, the right answer differs between languages, a step, card, checklist point, pair or feedback line was lost, a formula or address was lost | [localization.md](localization.md) |
+| **languages** | a language is missing, a text was copied instead of translated, the right answer differs between languages, a step, card, checklist point, pair or feedback line was lost, a formula or address was lost, a `[LABEL]` is translated in some places and left in others | [localization.md](localization.md) |
 | **approved text** | something the author approved is gone | [content-preservation.md](content-preservation.md) |
 | **slides** | a slide did not get what the slide list says; a picture has no kind, a prompt screenshot was kept as a picture, a click screenshot was left out without a reason; a slide with text became only a picture | [from-presentation.md](../workflows/from-presentation.md) |
 | **changes** | (adjusting a course) an element listed `unchanged` differs from the export — text, title or a picture — or the course's own title, description or level differs while `course` is `unchanged`, or the elements stand in another order while `order` is `unchanged`; one listed `changed` is word for word the same; a `new` element carries an `origin`; a removed element is still in the package, or an element of the export is gone without being listed `removed`; an element is not in the list at all | [adjust-course.md](../workflows/adjust-course.md) |

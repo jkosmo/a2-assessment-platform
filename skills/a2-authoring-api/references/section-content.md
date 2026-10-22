@@ -32,6 +32,11 @@ what the source gives, not to use every kind:
 think first → the text (or step by step) → check yourself or match the pairs → a case → write it
 yourself → flashcards at the end. The module that follows is what counts.
 
+**Not the module's questions.** An exercise never uses a question, a case or the numbers the module
+asks about — the learner who did it has been handed the answer. Practise the same skill in another
+situation, with other numbers. When you write or change a module, look over the exercises in the
+sections before it.
+
 Name the exercises in the outline, per section, so the author approves them with the structure
 ([course-design.md](course-design.md)).
 
@@ -414,6 +419,9 @@ The learner reads the course, never the source. Write the point itself, not wher
   slide". The slide is yours to read; the learner has a section.
 - A figure or a picture is introduced by what it shows ("Arbeidsgangen har åtte steg"), not by its
   origin.
+- The making of the course stays behind too. The learner never reads about the export or the
+  import file, an earlier version of the course, or what they "no longer need to open". Write the
+  course as it is now, for someone who never saw it before.
 - The exception is a source the learner is meant to go to — a law, a standard, a handbook. Name it
   as a reference, with a link where there is one.
 
