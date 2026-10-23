@@ -887,6 +887,25 @@ og et nettbrett før det regnes som endelig.
 **Håndheves:** `ASSET_NARROW_BELOW` i `public/api-client.js`. Sak #1079. Status: avklart, med måling
 på ekte enheter utestående.
 
+⚠️ **Erstattet 2026-10-22** (produkteier, «Ja»): grensa regnes nå **per figur**, med samme krav —
+det smale oppsettet tar over der det brede oppsettets 12 px etiketter ville blitt under 9 px, altså
+under 0,75 × figurens bredde. Åtte steg (848) bytter fortsatt ved 636 px; tre steg (328) først under
+246 px. Den faste grensa ga korte flyter på to linjer i «Smal»-visningen (549 px), der de hadde plass.
+Tjeneren sier bredden på det brede oppsettet (`X-Asset-Wide-Width`); 640 er bare gjetningen før
+første svar. **Håndheves:** `wantedAssetLayout` i `public/api-client.js`, `wideLayoutWidth` i
+`assetCommands.ts`. Status: avklart.
+
+### En figur vises på det meste 1,25 ganger tegnet størrelse (2026-10-22)
+
+En tegning som oppgir egen bredde, vises i den; en som bare oppgir viewBox, vises i 1,25 × viewBox.
+Spalten krymper den fortsatt. Før fylte en tegning uten bredde hele spalten: en flyt med tre steg ble
+1000 px bred, med etiketter på 37 px mot brødtekstens 16. 1,25 gjør 12 px etiketter til 15 px.
+**Hvorfor:** produkteier, 2026-10-22 («figurene ser overdimensjonerte ut», godkjent forslag).
+Gjelder også figurer som alt ligger i kurs — plattformen setter størrelsen, ingen ny import trengs.
+Skillet tegner det brede oppsettet med samme størrelse fra 2.98.2. **Håndheves:** `sizeSvgFigure`
+og `ASSET_SHOWN_AT` i `public/api-client.js`; `LAYOUTS.wide.shownAt` i `draw-flow-figure.mjs`.
+Status: avklart.
+
 ### Et oppsett har de samme etikettene som den brede figuren
 
 Plattformen avviser et smalt oppsett som har en etikett den brede figuren ikke har, eller mangler en
@@ -1019,6 +1038,8 @@ Spurt samlet morgenen etter at 2.85.0 gikk til prod og 2.85.1 til stage. Svarene
 
 - **«Smal» spalte på PC gir det smale figuroppsettet** (to steg per rad), fordi spalten blir under
   640 px. Konsekvent med at «Smal» er smal, og «Bred» er ett klikk unna. Ingen særregel for PC.
+  ⚠️ Endret 2026-10-22: bare når figuren trenger det — grensa regnes per figur (se «Grensa for smalt
+  oppsett»). En kort flyt står på én linje også i «Smal».
 - **2.85.1 venter på neste samling.** Prod står på 2.85.0; vi samler mer på stage før neste prod-slipp
   (samme takt som før). Ingen kurs i prod har stegtabeller med ikoner ennå.
 - **Ikonbibliotek: Lucide, som standard for alle kurs** (ISC-lisens, rundt 1500 ikoner), servert av

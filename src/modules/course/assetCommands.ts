@@ -4,7 +4,7 @@ import { prisma } from "../../db/prisma.js";
 import { DomainRuleError, NotFoundError } from "../../errors/AppError.js";
 import { putAsset, getAsset, deleteAsset } from "./assetStorage.js";
 import { canParticipantReadSection } from "./enrollmentService.js";
-import { sanitizeSvg, svgHasText, extractSvgTexts, applySvgTextTranslations, isSvgReadableAsImage } from "./svgSanitizer.js";
+import { sanitizeSvg, svgHasText, extractSvgTexts, applySvgTextTranslations, isSvgReadableAsImage, svgDrawnWidth } from "./svgSanitizer.js";
 import { localizeSvgTexts, type GenerationLocale } from "../adminContent/llmContentGenerationService.js";
 import { SUPPORTED_LOCALES, type SupportedLocale } from "../../i18n/locale.js";
 import { hasAnyRole, CONTENT_AUTHORS } from "../../auth/roleSets.js";
@@ -329,7 +329,7 @@ export async function getSectionAssetContent(
   locale: string | undefined,
   viewer: { userId: string; roles: AppRoleType[]; groupIds?: string[] },
   layout?: string,
-): Promise<{ mimeType: string; filename: string; buffer: Buffer; layout: AssetLayout | "wide"; layouts: Array<AssetLayout | "wide"> }> {
+): Promise<{ mimeType: string; filename: string; buffer: Buffer; layout: AssetLayout | "wide"; layouts: Array<AssetLayout | "wide">; wideWidth?: number }> {
   const asset = await prisma.sectionAsset.findUnique({ where: { id: assetId } });
   if (!asset) {
     throw new NotFoundError("SectionAsset", "asset_not_found", "Asset not found.");
@@ -358,7 +358,24 @@ export async function getSectionAssetContent(
   const chosen = chooseAssetFile(asset, { locale, layout });
   const buffer = await getAsset(chosen.blobPath);
   const layouts: Array<AssetLayout | "wide"> = ["wide", ...ASSET_LAYOUTS.filter((name) => readLayoutVariants(asset.layoutVariants)[name] !== undefined)];
-  return { mimeType: asset.mimeType, filename: asset.filename, buffer, layout: chosen.layout, layouts };
+  // 2026-10-22: a figure with a narrow layout also says how wide its WIDE layout is drawn. The client
+  // switches to the narrow one only where the wide one's labels would be too small — a three-step
+  // flow fits a column an eight-step one does not. One fixed width for every figure broke short
+  // flows over two lines in a 500 px column that held them.
+  const wideWidth = layouts.length > 1
+    ? await wideLayoutWidth(asset.blobPath, chosen.layout === "wide" && chosen.blobPath === asset.blobPath ? buffer : undefined)
+    : undefined;
+  return { mimeType: asset.mimeType, filename: asset.filename, buffer, layout: chosen.layout, layouts, wideWidth };
+}
+
+// A stored figure never changes (a new upload is a new asset), so its width is read once per blob.
+const wideWidthByBlob = new Map<string, number | null>();
+async function wideLayoutWidth(blobPath: string, loaded?: Buffer): Promise<number | undefined> {
+  if (!wideWidthByBlob.has(blobPath)) {
+    if (wideWidthByBlob.size >= 2000) wideWidthByBlob.clear();
+    wideWidthByBlob.set(blobPath, svgDrawnWidth((loaded ?? (await getAsset(blobPath))).toString("utf8")));
+  }
+  return wideWidthByBlob.get(blobPath) ?? undefined;
 }
 
 export interface LocalizeSectionAssetsResult {

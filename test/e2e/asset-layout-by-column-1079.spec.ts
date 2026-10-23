@@ -10,7 +10,16 @@ import { test, expect, type Page, type Route } from "@playwright/test";
 
 const svg = (bredde: number) => `<svg xmlns="http://www.w3.org/2000/svg" width="${bredde}" height="100" viewBox="0 0 ${bredde} 100"><rect width="${bredde}" height="100" fill="#eef"/></svg>`;
 
-async function åpneSeksjonen(page: Page, figur: { layouts: string; svar: (layout: string | null) => { layout: string; bredde: number } }) {
+type Figur = {
+  layouts: string;
+  svar: (layout: string | null) => { layout: string; bredde: number };
+  /** Det tjeneren sier om bredden på det brede oppsettet (X-Asset-Wide-Width), når figuren har to. */
+  bredeBredde?: number;
+  /** En annen tegning enn `svg(bredde)` — for eksempel en som bare oppgir viewBox. */
+  kropp?: (bredde: number) => string;
+};
+
+async function åpneSeksjonen(page: Page, figur: Figur) {
   const forespørsler: Array<string | null> = [];
   await page.route("**/participant/config", (route: Route) =>
     route.fulfill({
@@ -55,8 +64,8 @@ async function åpneSeksjonen(page: Page, figur: { layouts: string; svar: (layou
     return route.fulfill({
       status: 200,
       contentType: "image/svg+xml",
-      headers: { "X-Asset-Layout": layout, "X-Asset-Layouts": figur.layouts },
-      body: svg(bredde),
+      headers: { "X-Asset-Layout": layout, "X-Asset-Layouts": figur.layouts, ...(figur.bredeBredde ? { "X-Asset-Wide-Width": String(figur.bredeBredde) } : {}) },
+      body: figur.kropp ? figur.kropp(bredde) : svg(bredde),
     });
   });
 
@@ -169,6 +178,77 @@ test.describe("#1079 — klienten velger oppsett etter spaltebredden", () => {
     // En tilbakekalt objekt-URL lar seg ikke lenger hente.
     const fortsattTilgjengelig = await page.evaluate((url) => fetch(url).then(() => true, () => false), første);
     expect(fortsattTilgjengelig).toBe(false);
+  });
+});
+
+// Produkteier 2026-10-22: figurene så overdimensjonerte ut (en flyt med tre steg fylte en spalte på
+// 1000 px, etiketter på 37 px), og korte flyter ble brutt over to linjer i «Smal»-visningen, der de
+// hadde plass. Størrelsen følger nå tegningen, og grensen for det smale oppsettet følger figuren.
+test.describe("2026-10-22 — størrelsen følger tegningen, grensen følger figuren", () => {
+  const spalte = (bilde: ReturnType<Page["locator"]>) => bilde.evaluate((el) => {
+    let e = el.parentElement;
+    while (e && e.clientWidth === 0) e = e.parentElement;
+    return e?.clientWidth ?? 0;
+  });
+  const bareViewBox = (bredde: number) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${bredde} 150"><rect width="${bredde}" height="150" fill="#eef"/></svg>`;
+  const kortFlyt: Figur = { layouts: "wide,narrow", bredeBredde: 328, svar: (bedtOm) => (bedtOm === "narrow" ? { layout: "narrow", bredde: 300 } : { layout: "wide", bredde: 328 }) };
+  const langFlyt: Figur = { layouts: "wide,narrow", bredeBredde: 848, svar: (bedtOm) => (bedtOm === "narrow" ? { layout: "narrow", bredde: 480 } : { layout: "wide", bredde: 848 }) };
+
+  test("en tegning som bare oppgir viewBox, vises 1,25 ganger tegnet størrelse — ikke over hele spalten", async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 900 });
+    const { bilde } = await åpneSeksjonen(page, { layouts: "wide", svar: () => ({ layout: "wide", bredde: 328 }), kropp: bareViewBox });
+    expect(await spalte(bilde)).toBeGreaterThan(600);
+    await expect.poll(async () => Math.round((await bilde.boundingBox())?.width ?? 0)).toBe(410);
+  });
+
+  test("en tegning som oppgir egen bredde, vises i den, og krympes til en smalere spalte", async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 900 });
+    const { bilde } = await åpneSeksjonen(page, { layouts: "wide", svar: () => ({ layout: "wide", bredde: 848 }) });
+    await expect.poll(async () => Math.round((await bilde.boundingBox())?.width ?? 0)).toBe(848);
+    await page.setViewportSize({ width: 390, height: 800 });
+    await tegnetOgRolig(page);
+    expect(Math.round((await bilde.boundingBox())?.width ?? 0)).toBe(await spalte(bilde));
+  });
+
+  test("en kort flyt i en spalte på rundt 500 px får det brede oppsettet — på én linje", async ({ page }) => {
+    await page.setViewportSize({ width: 600, height: 800 });
+    const { bilde, forespørsler } = await åpneSeksjonen(page, kortFlyt);
+    const bredde = await spalte(bilde);
+    // Under den gamle faste grensa, over den nye for denne figuren — ellers måler testen noe annet.
+    expect(bredde).toBeLessThan(640);
+    expect(bredde).toBeGreaterThanOrEqual(246);
+    await expect(bilde).toHaveAttribute("data-asset-layout", "wide");
+    expect(forespørsler).toEqual(["narrow", null]);
+  });
+
+  // Den første observasjonen fra ResizeObserver ville ellers rettet valget også — men den kommer ikke
+  // for en figur i en spalte som alt følges, og ikke i en nettleser uten ResizeObserver. Uten den er
+  // det hydreringens eget andre spørsmål som må gjøre jobben (mutasjon 2026-10-22: overlevde uten).
+  test("den korte flyten får det brede oppsettet også uten ResizeObserver", async ({ page }) => {
+    await page.addInitScript(() => { (window as unknown as { ResizeObserver?: unknown }).ResizeObserver = undefined; });
+    await page.setViewportSize({ width: 600, height: 800 });
+    const { bilde, forespørsler } = await åpneSeksjonen(page, kortFlyt);
+    await expect(bilde).toHaveAttribute("data-asset-layout", "wide");
+    expect(forespørsler).toEqual(["narrow", null]);
+  });
+
+  test("en lang flyt i samme spalte får det smale oppsettet, med én henting", async ({ page }) => {
+    await page.setViewportSize({ width: 600, height: 800 });
+    const { bilde, forespørsler } = await åpneSeksjonen(page, langFlyt);
+    await tegnetOgRolig(page);
+    await expect(bilde).toHaveAttribute("data-asset-layout", "narrow");
+    expect(forespørsler).toEqual(["narrow"]);
+  });
+
+  test("den korte flyten bytter til det smale først når spalten blir smalere enn figuren tåler", async ({ page }) => {
+    await page.setViewportSize({ width: 600, height: 800 });
+    const { bilde } = await åpneSeksjonen(page, kortFlyt);
+    await expect(bilde).toHaveAttribute("data-asset-layout", "wide");
+    await page.setViewportSize({ width: 320, height: 800 });
+    await tegnetOgRolig(page);
+    const bredde = await spalte(bilde);
+    expect(bredde).toBeLessThan(246);
+    await expect(bilde).toHaveAttribute("data-asset-layout", "narrow");
   });
 });
 

@@ -44,18 +44,21 @@ const FONT = "system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif";
 //
 // `shownAt` is the largest the layout is shown: the drawing states its own size (`width`, `height`),
 // and an image is scaled down to its column but not up past that. Without it the narrow layout would
-// fill a 600 px column — a tablet — with labels 30 px high. The wide layout states none and fills
-// its column, as it always has.
+// fill a 600 px column — a tablet — with labels 30 px high. The wide layout states it too (product
+// owner, 2026-10-22): a three-step flow filled a 1000 px column with labels 37 px high. 1.25 makes the
+// 12 px labels 15 px, about the text around them; the platform shows a drawing that states no size
+// the same way.
 const LAYOUTS = {
-  wide: { perRow: Infinity, margin: 60, spacing: 104, r: 22, rowHeight: 0, phaseHalf: 48, shownAt: null },
+  wide: { perRow: Infinity, margin: 60, spacing: 104, r: 22, rowHeight: 0, phaseHalf: 48, shownAt: 1.25 },
   narrow: { perRow: 2, margin: 66, spacing: 108, r: 24, rowHeight: 118, phaseHalf: 40, shownAt: 1.25 },
 };
 const TOP = 48;
 /** Seconds between one step lighting up and the next. */
 const GAP = 0.55;
 // How many steps one figure holds. Two things set it, and they land on the same number:
-//  · the wide layout is shown down to a column of 640 px (the platform's threshold, #1079). Eight
-//    steps make it 848 wide, and its 12 px labels are then 9 px on screen — the smallest that reads.
+//  · the platform switches to the narrow layout where the wide one's 12 px labels would be under
+//    9 px — the smallest that reads — so per figure, at 0.75 × its width (2026-10-22). Eight steps
+//    make it 848 wide: shown down to a 636 px column, the threshold #1079 set for every figure.
 //  · eight steps at GAP apart and DURATION long end after 4.75 s, inside the five the animation has.
 // A flow with more steps is two figures. That is a judgement about legibility, not a limit of the
 // platform; change it here together with the layout, not by squeezing the labels.

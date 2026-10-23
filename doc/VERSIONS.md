@@ -2,6 +2,19 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.98.2 - 2026-10-22
+
+### Figurene i riktig størrelse, og korte flyter på én linje
+
+- **En figur vises på det meste 1,25 ganger tegnet størrelse.** En tegning som bare oppga viewBox,
+  fylte hele spalten: en flyt med tre steg ble 1000 px bred, med etiketter på 37 px. Nå 410 px, med
+  etiketter på 15 px — omtrent som teksten rundt. Gjelder figurene som alt ligger i kursene.
+- **Grensa for det smale oppsettet regnes per figur:** det smale tar over der det brede oppsettets
+  etiketter ville blitt under 9 px. En flyt med tre steg står nå på én linje også i «Smal»-visningen
+  (549 px) og på telefon (296 px); en med åtte steg får to per rad som før. Tjeneren sier bredden på
+  det brede oppsettet i `X-Asset-Wide-Width`.
+- Skillet tegner det brede oppsettet med oppgitt størrelse (1,25 × tegnet), som det smale.
+
 ## 2.98.1 - 2026-10-22
 
 ### Siste seksjon sier hva som gjenstår

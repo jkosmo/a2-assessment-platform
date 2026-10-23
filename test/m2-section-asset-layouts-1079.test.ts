@@ -93,6 +93,10 @@ describe("#1079 — en figur i bredt og smalt oppsett", () => {
     expect(bredde(smal)).toBe("480");
     expect(smal.headers["x-asset-layout"]).toBe("narrow");
     expect(smal.headers["x-asset-layouts"]).toBe("wide,narrow");
+    // 2026-10-22: begge svarene sier hvor bred den BREDE tegningen er, så klienten kan regne ut
+    // grensen for akkurat denne figuren — også når den har fått den smale.
+    expect(vanlig.headers["x-asset-wide-width"]).toBe("848");
+    expect(smal.headers["x-asset-wide-width"]).toBe("848");
     // Samme herding som for den brede: det er en SVG som kan åpnes direkte.
     expect(smal.headers["content-security-policy"]).toContain("sandbox");
     expect(smal.headers["x-content-type-options"]).toBe("nosniff");
@@ -103,6 +107,17 @@ describe("#1079 — en figur i bredt og smalt oppsett", () => {
     expect(bredde(ukjent)).toBe("848");
     expect(ukjent.headers["x-asset-layout"]).toBe("wide");
 
+    await slett(sectionId);
+  });
+
+  // Bredden huskes per fil. Hentes det smale oppsettet FØRST (en telefon), er det den brede fila som
+  // må leses — ikke den smale som nettopp ble sendt (mutasjon 2026-10-22: testen over så det ikke,
+  // fordi den hentet det brede først).
+  it("det smale oppsettet hentet først: svaret sier fortsatt bredden på det brede", async () => {
+    const { sectionId, assetId } = await importerMedSmalt();
+    const smal = await hent(assetId, "?layout=narrow");
+    expect(bredde(smal)).toBe("480");
+    expect(smal.headers["x-asset-wide-width"]).toBe("848");
     await slett(sectionId);
   });
 
@@ -130,6 +145,8 @@ describe("#1079 — en figur i bredt og smalt oppsett", () => {
     expect(bredde(smal)).toBe("848");
     expect(smal.headers["x-asset-layout"]).toBe("wide");
     expect(smal.headers["x-asset-layouts"]).toBe("wide");
+    // Uten noe å bytte til er bredden ingen opplysning klienten trenger.
+    expect(smal.headers["x-asset-wide-width"]).toBeUndefined();
     await slett(sectionId);
   });
 

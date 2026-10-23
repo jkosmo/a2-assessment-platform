@@ -106,6 +106,18 @@ export function isSvgReadableAsImage(xml: string): boolean {
   return root?.local === "svg" && root.uri === "http://www.w3.org/2000/svg";
 }
 
+/**
+ * The width a figure is drawn in: the third number of the root's `viewBox`, in the units its labels
+ * are written in. Null when the root has no usable viewBox. Read from the opening tag only — the
+ * figure is not parsed again for one number.
+ */
+export function svgDrawnWidth(svg: string): number | null {
+  const root = /<svg\b[^>]*>/i.exec(svg)?.[0];
+  const viewBox = root ? /\bviewBox\s*=\s*["']([^"']*)["']/i.exec(root)?.[1] : undefined;
+  const width = viewBox ? Number(viewBox.trim().split(/[\s,]+/)[2]) : NaN;
+  return Number.isFinite(width) && width > 0 ? width : null;
+}
+
 // ---------------------------------------------------------------------------
 // SVG text localisation (#657)
 // ---------------------------------------------------------------------------

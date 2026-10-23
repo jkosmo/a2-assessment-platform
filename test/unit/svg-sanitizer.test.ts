@@ -6,7 +6,25 @@ import {
   svgHasText,
   extractSvgTexts,
   applySvgTextTranslations,
+  svgDrawnWidth,
 } from "../../src/modules/course/svgSanitizer.js";
+
+// 2026-10-22: bredden en figur er tegnet i, lest av rota. Klienten regner grensen for det smale
+// oppsettet av den.
+describe("svgDrawnWidth", () => {
+  it("leser tredje tall i rotas viewBox, også med komma og ekstra mellomrom", () => {
+    expect(svgDrawnWidth('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 328 150"><g/></svg>')).toBe(328);
+    expect(svgDrawnWidth("<?xml version=\"1.0\"?>\n<svg viewBox=' 0,0, 848.5 ,90 ' width=\"10\">")).toBe(848.5);
+  });
+  it("ser bare på rota, ikke på en viewBox lenger inne", () => {
+    expect(svgDrawnWidth('<svg width="100"><svg viewBox="0 0 500 10"/></svg>')).toBeNull();
+  });
+  it("gir null uten brukbar viewBox", () => {
+    expect(svgDrawnWidth('<svg viewBox="0 0 0 10">')).toBeNull();
+    expect(svgDrawnWidth('<svg viewBox="a b c d">')).toBeNull();
+    expect(svgDrawnWidth("ikke en svg")).toBeNull();
+  });
+});
 
 // #657: SVG is accepted for section drawings only because it is sanitised server-side. These
 // tests pin the XSS-stripping behaviour and the text extract/translate round-trip.

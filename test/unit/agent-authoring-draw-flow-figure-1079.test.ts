@@ -78,11 +78,15 @@ describe("draw-flow-figure — two layouts from one description (#1079)", () => 
   // Det smale oppsettet er tegnet for spalten en telefon gir. Uten en egen størrelse ville bildet
   // fylt en spalte på 600 px — et nettbrett — med etiketter på 30 px. Tegningen sier derfor selv
   // hvor stor den er på det meste; et bilde krympes til spalten, men blåses ikke opp forbi det.
-  it("the narrow layout states its own size, so it is never enlarged past it; the wide one fills its column", () => {
+  // 2026-10-22: det brede oppsettet også — en flyt med tre steg fylte en spalte på 1000 px med
+  // etiketter på 37 px.
+  it("both layouts state their own size (1.25 × drawn), so neither is enlarged past it", () => {
     const { wide, narrow } = drawFlowFigure(saksgang());
     const rot = (svg: string) => /<svg[^>]*>/.exec(svg)![0];
     expect(rot(narrow)).toContain(`viewBox="0 0 240 472" width="300" height="590"`);
-    expect(rot(wide)).not.toMatch(/ (width|height)=/);
+    const [, w, h, sw, sh] = /viewBox="0 0 (\d+) (\d+)" width="(\d+)" height="(\d+)"/.exec(rot(wide))!;
+    expect(Number(sw)).toBe(Math.round(Number(w) * 1.25));
+    expect(Number(sh)).toBe(Math.round(Number(h) * 1.25));
     // Størrelsen overlever lagringen — ellers gjelder den bare i forhåndsvisningen hos forfatteren.
     expect(rot(sanitizeSvg(narrow))).toMatch(/width="300"/);
     expect(rot(sanitizeSvg(narrow))).toMatch(/height="590"/);

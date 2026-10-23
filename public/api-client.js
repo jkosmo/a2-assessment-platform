@@ -197,7 +197,13 @@ export async function hydrateContentAssetImages(root, getHeadersOrFn) {
       // what a later fetch — the other layout, when the column changes width — starts from.
       img.dataset.assetSrc = src;
       await loadAssetLayout(img, wantedAssetLayout(img), getHeadersOrFn);
-      if ((img.dataset.assetLayouts ?? "").split(",").includes("narrow")) watchAssetColumn(img, getHeadersOrFn);
+      if ((img.dataset.assetLayouts ?? "").split(",").includes("narrow")) {
+        // The first answer told how wide this figure's wide layout is; with that, the other layout
+        // may fit better (a short flow in a 500 px column). Asked again only then.
+        const better = wantedAssetLayout(img);
+        if (better !== img.dataset.assetWanted) await loadAssetLayout(img, better, getHeadersOrFn);
+        watchAssetColumn(img, getHeadersOrFn);
+      }
     }),
   );
 }
@@ -220,10 +226,44 @@ function assetColumn(img) {
   return element;
 }
 
-/** Which layout fits the column the figure stands in. A page not laid out at all is wide. */
+/**
+ * How much larger than it is drawn a figure is shown, at most: its 12 px labels read as 15 px, about
+ * the size of the text around them (product owner, 2026-10-22). A drawing that only stated a viewBox
+ * filled its column, and a three-step flow in a 1000 px column had labels 37 px high.
+ */
+export const ASSET_SHOWN_AT = 1.25;
+/** The narrow layout takes over where the wide one's 12 px labels would be under 9 px on screen. */
+const ASSET_SMALLEST_SCALE = 9 / 12;
+
+/**
+ * Which layout fits the column the figure stands in. A page not laid out at all is wide.
+ *
+ * Per figure (2026-10-22), once the server has said how wide the wide layout is drawn: an eight-step
+ * flow (848) switches under 636 px, a three-step one (328) only under 246. Before that is known —
+ * the first request — the fixed ASSET_NARROW_BELOW, which is the widest figure's.
+ */
 function wantedAssetLayout(img) {
   const width = assetColumn(img)?.clientWidth ?? 0;
-  return width > 0 && width < ASSET_NARROW_BELOW ? "narrow" : "wide";
+  if (width <= 0) return "wide";
+  const wide = Number(img.dataset.assetWideWidth);
+  return width < (wide > 0 ? wide * ASSET_SMALLEST_SCALE : ASSET_NARROW_BELOW) ? "narrow" : "wide";
+}
+
+/**
+ * The largest a drawing is shown: what it states itself (`width`), or its viewBox × ASSET_SHOWN_AT.
+ * A ceiling, `max-width: min(100%, …)`, not a width: a stylesheet that makes it smaller (an icon in a
+ * table is 24 px) still decides — a width set here overrode it, and the icons became 40 px. A width
+ * that is not a number of pixels (a percentage) is the author's choice and left alone.
+ */
+function sizeSvgFigure(img, svg) {
+  const root = /<svg\b[^>]*>/i.exec(svg)?.[0] ?? "";
+  const stated = /\swidth\s*=\s*["']\s*([^"']*?)\s*["']/i.exec(root)?.[1];
+  const viewBox = /\sviewBox\s*=\s*["']([^"']*)["']/i.exec(root)?.[1];
+  const drawn = viewBox ? Number(viewBox.trim().split(/[\s,]+/)[2]) : NaN;
+  let shown = null;
+  if (stated !== undefined) shown = /^\d+(\.\d+)?(px)?$/.test(stated) ? parseFloat(stated) : null;
+  else if (drawn > 0) shown = drawn * ASSET_SHOWN_AT;
+  img.style.maxWidth = shown ? `min(100%, ${Math.round(shown)}px)` : "";
 }
 
 /** Fetches the figure in the given layout, with the viewer's credentials, and shows it. */
@@ -243,13 +283,17 @@ async function loadAssetLayout(img, layout, getHeadersOrFn) {
     const response = await fetch(url.pathname + url.search, { headers });
     if (!response.ok) return;
     const blob = await response.blob();
+    const svg = /svg/i.test(blob.type || response.headers.get("Content-Type") || "") ? await blob.text() : null;
     // The column changed width again while this was on its way: a later request owns the image now.
     if (img.dataset.assetWanted !== layout) return;
     const previous = img.src;
+    if (svg !== null) sizeSvgFigure(img, svg);
     img.src = URL.createObjectURL(blob);
     if (previous.startsWith("blob:")) URL.revokeObjectURL(previous);
     img.dataset.assetLayout = response.headers.get("X-Asset-Layout") ?? "wide";
     img.dataset.assetLayouts = response.headers.get("X-Asset-Layouts") ?? "wide";
+    const wideWidth = Number(response.headers.get("X-Asset-Wide-Width"));
+    if (wideWidth > 0) img.dataset.assetWideWidth = String(wideWidth);
   } catch {
     /* leave the broken image; non-fatal */
   }
