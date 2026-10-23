@@ -1,7 +1,7 @@
 import { EmailClient } from "@azure/communication-email";
 import type { AppealStatus } from "@prisma/client";
 import { env } from "../../config/env.js";
-import { withTimeout } from "../../clients/externalCall.js";
+import { ExternalCallTimeoutError, withTimeout } from "../../clients/externalCall.js";
 import { classifyAcsError, describeAcsFailure, nextAttemptDelayMs } from "./acsThrottle.js";
 import type { SupportedLocale } from "../../i18n/locale.js";
 import { getAppealNotificationMessage, getAssessmentResultNotificationMessage, getCourseAssignmentNotificationMessage, getModuleRevisedNotificationMessage } from "../../i18n/notificationMessages.js";
@@ -26,13 +26,22 @@ export type AppealNotificationInput = {
   resolutionNote?: string;
 };
 
-type NotificationResult = {
+export type NotificationResult = {
   delivered: boolean;
   channel: NotificationChannel;
   subject: string;
   nextStepGuidance: string;
   failureReason?: string;
+  /**
+   * #1115: the send was cut off while it was under way (our timeout), so it may have gone through.
+   * A failure that is certain (a rejection, a missing address) can be tried again; this one cannot,
+   * or the participant may get the email twice. The outbox marks it failed, visibly, and does not retry.
+   */
+  ambiguous?: boolean;
 };
+
+/** A request we stopped waiting for: it may have reached the receiver. */
+export const isCutOff = (error: unknown) => error instanceof ExternalCallTimeoutError || (error instanceof Error && error.name === "AbortError");
 
 export async function sendAppealStatusNotification(input: AppealNotificationInput): Promise<NotificationResult> {
   const resolution =
@@ -169,6 +178,7 @@ export async function sendAppealStatusNotification(input: AppealNotificationInpu
       subject: message.subject,
       nextStepGuidance: message.nextStepGuidance,
       failureReason,
+      ambiguous: isCutOff(error),
     };
   } finally {
     clearTimeout(timeout);
@@ -238,7 +248,7 @@ export async function sendViaAcs(input: {
       { channel: "acs_email", ...input.logPayload, failureReason },
       "error",
     );
-    return { delivered: false, channel: "acs_email", subject: input.subject, nextStepGuidance: input.body, failureReason };
+    return { delivered: false, channel: "acs_email", subject: input.subject, nextStepGuidance: input.body, failureReason, ambiguous: isCutOff(error) };
   }
 }
 
@@ -277,7 +287,12 @@ export type AssessmentResultNotificationInput = {
   locale: SupportedLocale;
 };
 
-export async function notifyAssessmentResult(input: AssessmentResultNotificationInput): Promise<void> {
+/**
+ * Sends the result notification and records it. #1115: returns what happened — null when the channel
+ * sends nothing (disabled, log) — so the outbox can tell a failed send from a delivered one. Before,
+ * it returned nothing, and the outbox marked every attempt delivered.
+ */
+export async function notifyAssessmentResult(input: AssessmentResultNotificationInput): Promise<NotificationResult | null> {
   const outcome = input.passFailTotal ? "pass" : "fail";
   const message = getAssessmentResultNotificationMessage(input.locale, outcome, {
     moduleTitle: input.moduleTitle,
@@ -296,11 +311,11 @@ export async function notifyAssessmentResult(input: AssessmentResultNotification
 
   const channel = env.PARTICIPANT_NOTIFICATION_CHANNEL;
 
-  if (channel === "disabled") return;
+  if (channel === "disabled") return null;
 
   if (channel === "log") {
     logOperationalEvent(operationalEvents.certification.participantNotificationSent, { channel, ...logPayload });
-    return;
+    return null;
   }
 
   let result: NotificationResult;
@@ -351,7 +366,7 @@ export async function notifyAssessmentResult(input: AssessmentResultNotification
           { channel, ...logPayload, failureReason },
           "error",
         );
-        result = { delivered: false, channel, subject: message.subject, nextStepGuidance: message.nextStepGuidance, failureReason };
+        result = { delivered: false, channel, subject: message.subject, nextStepGuidance: message.nextStepGuidance, failureReason, ambiguous: isCutOff(error) };
       } finally {
         clearTimeout(timeout);
       }
@@ -374,9 +389,11 @@ export async function notifyAssessmentResult(input: AssessmentResultNotification
       failureReason: result.failureReason ?? null,
     },
   });
+  return result;
 }
 
-export async function notifyAppealStatusTransition(input: AppealNotificationInput) {
+/** Sends the appeal notification and records it; returns what happened (#1115). */
+export async function notifyAppealStatusTransition(input: AppealNotificationInput): Promise<NotificationResult> {
   const result = await sendAppealStatusNotification(input);
 
   await recordAuditEvent({
@@ -396,6 +413,7 @@ export async function notifyAppealStatusTransition(input: AppealNotificationInpu
       failureReason: result.failureReason ?? null,
     },
   });
+  return result;
 }
 
 // #684: notify a participant that their class was assigned a course. Reuses the same channel

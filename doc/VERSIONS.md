@@ -2,6 +2,26 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.98.5 - 2026-10-23
+
+### Utboksen merker ikke lenger en feilet e-post som levert (#1115)
+
+Funnet i kompleksitetsskanningen 2026-10-21. Varselfunksjonene ga ikke svaret sitt tilbake, og
+utboksen merket hvert forsøk levert — også når ACS avviste e-posten. Et resultat- eller ankevarsel
+kunne gå tapt uten spor.
+
+- **Sikkert feilet** (avvist, manglende adresse, webhook-feil): raden prøves igjen etter utboksens
+  vanlige regler, og gir opp synlig («failed») etter siste forsøk.
+- **Avbrutt underveis** (vårt eget tidsavbrudd mot ACS eller webhook): sendingen kan ha gått gjennom,
+  så den sendes ikke igjen — raden merkes «failed» med en gang, med grunnen. Før ville den vært
+  merket levert; et nytt forsøk kunne gitt deltakeren to e-poster.
+- **Utboksens egen frist** (`OUTBOX_DELIVERY_TIMEOUT_MS`) er hevet fra 20 til 45 s, lengre enn én
+  ACS-sending (30 s), så utboksen ikke avbryter en sending som fortsatt pågår. Går fristen likevel ut
+  for et varsel til en person, merkes raden «failed» uten nytt forsøk (den forlatte sendingen kan
+  fortsatt lykkes). En kurssjekk (`course_completion_check`) er trygg å kjøre igjen og prøves på nytt
+  som før.
+- Gjelder resultatvarsel, ankevarsel og «modulen er revidert». En kanal som er slått av, er ingen feil.
+
 ## 2.98.4 - 2026-10-23
 
 ### En figur som går i løkke, avvises av plattformen (#1073)

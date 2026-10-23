@@ -181,7 +181,10 @@ const envSchema = z.object({
   // #795-followup: per-delivery wall-clock cap. A hung handler (e.g. an ACS email call with no timeout)
   // would otherwise wedge the worker's tick forever (no return). On timeout the delivery is abandoned and
   // the row is retried; idempotent handlers make a later completion of the abandoned call safe.
-  OUTBOX_DELIVERY_TIMEOUT_MS: z.coerce.number().int().positive().default(20000),
+  // #1115: longer than one ACS send (ACS_EMAIL_SEND_TIMEOUT_MS, 30 s), so the outbox does not cut off
+  // a send that is still under way — a cut-off send is not retried (it may have gone through). Shorter
+  // than the lease (OUTBOX_LEASE_DURATION_MS), so no other worker takes the row meanwhile.
+  OUTBOX_DELIVERY_TIMEOUT_MS: z.coerce.number().int().positive().default(45000),
   PARSER_WORKER_URL: z.preprocess(
     (value) => (typeof value === "string" && value.trim().length === 0 ? undefined : value),
     z.string().url().optional(),
