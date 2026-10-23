@@ -138,6 +138,35 @@ describe("Section asset upload + serve", () => {
     await deleteSectionAndCourse(sectionId, courseId);
   });
 
+  // #1073: produkteier 2026-10-22 — «animasjon er greit, men blir distraksjon hvis den går i løkke,
+  // så hard stopp». Plattformen avviser en figur som går i løkke, også når den lastes opp for hånd,
+  // og også skrevet slik at skillets kontroll ikke ser det (<STYLE>: rettes av plattformens leser).
+  it("#1073: en figur som går i løkke, avvises ved opplasting — med egen kode, og ingenting lagres", async () => {
+    const sectionId = await createSection();
+    const løkke = (style: string) => Buffer.from(
+      `<svg xmlns="http://www.w3.org/2000/svg" width="50" height="20"><${style}>.a { animation: snurr 2s linear infinite; } @keyframes snurr { to { opacity: 0.5; } }</${style}><rect class="a" width="50" height="20" fill="#eef"/></svg>`,
+      "utf8",
+    );
+    for (const style of ["style", "STYLE"]) {
+      const upload = await request(app)
+        .post(`/api/admin/content/sections/${sectionId}/assets`)
+        .set(adminHeaders)
+        .attach("file", løkke(style), { filename: "snurr.svg", contentType: "image/svg+xml" });
+      expect(upload.status, style).toBeGreaterThanOrEqual(400);
+      expect(upload.status, style).toBeLessThan(500);
+      expect(JSON.stringify(upload.body), style).toContain("asset_svg_motion_not_allowed");
+    }
+    expect(await prisma.sectionAsset.count({ where: { sectionId } })).toBe(0);
+
+    // Kontroll: en stillestående figur og en figur i flytmalen tas imot.
+    const stille = await request(app)
+      .post(`/api/admin/content/sections/${sectionId}/assets`)
+      .set(adminHeaders)
+      .attach("file", Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="50" height="20"><rect width="50" height="20" fill="#eef"/></svg>`, "utf8"), { filename: "stille.svg", contentType: "image/svg+xml" });
+    expect(stille.status).toBe(201);
+    await deleteSectionFully(sectionId);
+  });
+
   // #657: the explicit localize action generates a translated SVG variant per other locale; the
   // serve endpoint returns the variant for `?locale=`. LLM stub mode tags text as `[<locale>] …`.
   it("localises SVG text and serves the per-locale variant", async () => {

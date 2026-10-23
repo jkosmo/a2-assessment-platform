@@ -1,6 +1,7 @@
 import DOMPurify from "dompurify";
 import { JSDOM } from "jsdom";
 import { SaxesParser } from "saxes";
+import { checkFigureMotion } from "#figure-motion";
 
 /**
  * Server-side SVG sanitisation for section assets (#657 / #483/F4).
@@ -104,6 +105,25 @@ export function isSvgReadableAsImage(xml: string): boolean {
     return false;
   }
   return root?.local === "svg" && root.uri === "http://www.w3.org/2000/svg";
+}
+
+/**
+ * #1073: what in a figure would MOVE in a way the platform does not allow. Empty when it stands still
+ * or moves as the flow template does — once, done within five seconds, at rest a complete picture.
+ *
+ * Product owner, 2026-10-22: «animasjon er greit, men blir distraksjon hvis den går i løkke — hard
+ * stopp». The skill's check already holds a figure to the template, but it reads the author's TEXT,
+ * and the platform reads it with a parser that corrects spellings first (`<STYLE>`, unquoted
+ * attributes …, measured 2026-10-04). So the same check is run here on the SANITISED figure — what is
+ * stored and shown — and it then holds for every way in, a figure uploaded by hand included.
+ *
+ * The rule is the skill's own (`#figure-motion`), not restated: compared with the template, not read
+ * as CSS. Of its findings, those that are about craft rather than motion (a flow drawn still, an
+ * element hidden at rest) are the author's business and not refused here.
+ */
+const REFUSED_MOTION = new Set(["unsupported_animation_form", "too_long", "not_css_only", "stripped_by_platform", "css_escape"]);
+export function svgMotionProblems(sanitizedSvg: string): string[] {
+  return checkFigureMotion(sanitizedSvg).issues.filter((issue) => REFUSED_MOTION.has(issue.kind)).map((issue) => issue.detail);
 }
 
 /**

@@ -352,7 +352,11 @@ The markup is the template too: one `<svg>`; one `<style>`; every `<rect>` and `
 step with `class="steg sN"`; `<line>`, `<polyline>` and `<path>` are open connectors
 (`fill="none"`); `<text>` and `<tspan>` are labels and never carry `class="steg"`; `<title>` and
 `<desc>` name the figure. No `<g>`, no `<defs>`, no other shapes, no `transform`, no `style=""`
-attributes.
+attributes — except a step's icon, which `draw-flow-figure.mjs` writes in one fixed form.
+
+**The platform holds every figure to this too:** a figure that would move in any
+other way — a loop, longer than five seconds, SMIL — is refused at import and upload with
+`asset_svg_motion_not_allowed`, whichever way it comes in. A still figure is always accepted.
 
 - **Runs once, done within 5 seconds** (largest delay + duration). An image has no pause button.
 - **The still picture is the whole figure.** Before the animation, after it, and with reduced

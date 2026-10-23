@@ -2,6 +2,24 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.98.4 - 2026-10-23
+
+### En figur som går i løkke, avvises av plattformen (#1073)
+
+Produkteier: «animasjon er greit, men blir distraksjon hvis den går i løkke, så hard stopp».
+
+- Plattformen kjører skillets egen kontroll av animerte figurer på den **rensede** figuren — det som
+  lagres og vises. En figur som beveger seg på en annen måte enn flytmalen (én gang, ferdig innen
+  fem sekunder) avvises med `asset_svg_motion_not_allowed`: en løkke, for lang tid, SMIL
+  (`animateMotion`), eller CSS skrevet med omvendt skråstrek eller tegnreferanse.
+- Gjelder alle veier inn: opplasting i seksjonseditoren, import, forfatter-API-et og oppsettene, og
+  valideringen før innsending sier det samme. Skrivemåtene som slapp forbi skillets kontroll
+  (`<STYLE>`, attributter uten anførselstegn, stilblokk uten sluttag — målt 2026-10-04) stoppes, fordi
+  plattformens leser har rettet dem før kontrollen ser figuren.
+- En stillestående figur tas alltid imot. Håndverksfunn (en flyt uten animasjon, et element skjult i
+  stillbildet) er forfatterens sak og stoppes ikke av plattformen.
+- Figurer som alt er lagret, kontrolleres ikke på nytt.
+
 ## 2.98.3 - 2026-10-22
 
 ### Skillet: ikoner i flytfigurene

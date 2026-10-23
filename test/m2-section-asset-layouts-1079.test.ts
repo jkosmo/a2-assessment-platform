@@ -396,6 +396,8 @@ describe("#1079 — en figur i bredt og smalt oppsett", () => {
       it.each<[string, Record<string, unknown>, string]>([
         ["et smalt oppsett med andre etiketter", { layoutVariants: [{ layout: "narrow", contentBase64: b64(figur(480, ["Motta", "Vurder", "Arkiver"])) }] }, "asset_layout_text_mismatch"],
         ["en figur som ikke er en SVG", { contentBase64: b64("<p>ikke en figur</p>") }, "asset_svg_invalid"],
+        // #1073: en figur som går i løkke, avvises også her — forfatter-API-et er en egen vei inn.
+        ["en figur som går i løkke (#1073)", { contentBase64: b64('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 848 100"><style>.a { animation: x 1s infinite; } @keyframes x { to { opacity: 0.4; } }</style><text class="a" x="10" y="20">Motta</text></svg>') }, "asset_svg_motion_not_allowed"],
         ["en ukjent bildetype", { mimeType: "image/tiff", filename: "flyt.tiff" }, "asset_unsupported_type"],
       ])("%s: 400, og ingen seksjon, ingen versjon og ingen figur er laget", async (_navn, ekstra, kode) => {
         const før = await tell();

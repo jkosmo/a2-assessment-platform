@@ -364,6 +364,21 @@ describe("#649 agent authoring package validation", () => {
         expect.objectContaining({ code: "asset_svg_unsanitizable", path: "objects[0].payload.assets[0].contentBase64" }),
       );
     });
+
+    // #1073: valideringen sier det importen ville sagt — før pakken sendes.
+    it("rejects an SVG that loops (asset_svg_motion_not_allowed), and accepts the same figure still", async () => {
+      const figur = (stil: string) => Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10">${stil}<rect class="a" width="5" height="5" fill="#eef"/></svg>`, "utf8").toString("base64");
+      const valider = (contentBase64: string) => validateAuthoringPackage(
+        sectionPackage({ title: "S", bodyMarkdown: "![x](asset:fig-flow)", assets: [svgAsset({ contentBase64 })] }),
+        emptyLookups(),
+      );
+      const løkke = await valider(figur("<style>.a { animation: x 1s infinite; } @keyframes x { to { opacity: 0.5; } }</style>"));
+      expect(løkke.issues).toContainEqual(
+        expect.objectContaining({ code: "asset_svg_motion_not_allowed", path: "objects[0].payload.assets[0].contentBase64" }),
+      );
+      const stille = await valider(figur(""));
+      expect(stille.issues.filter((i: { code: string }) => i.code.startsWith("asset_svg"))).toEqual([]);
+    });
   });
 
   it("returns structural schema errors with paths and no plan", async () => {

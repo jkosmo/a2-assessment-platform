@@ -895,6 +895,16 @@ Tjeneren sier bredden på det brede oppsettet (`X-Asset-Wide-Width`); 640 er bar
 første svar. **Håndheves:** `wantedAssetLayout` i `public/api-client.js`, `wideLayoutWidth` i
 `assetCommands.ts`. Status: avklart.
 
+### Plattformen stopper figurer som går i løkke (#1073, 2026-10-23)
+
+En animert figur tas bare imot i flytmalens form: én gang, ferdig innen fem sekunder. Alt annet som
+beveger seg, avvises ved lagring (`asset_svg_motion_not_allowed`); stillestående figurer tas alltid imot.
+**Hvorfor:** produkteier, 2026-10-23: «animasjon er greit, men blir distraksjon hvis den går i løkke,
+så hard stopp» — vei B i #1073 (plattformen håndhever) framfor A (skillet er bare en hjelp). Kontrollen
+er skillets egen (`#figure-motion`), kjørt på den rensede figuren, så den ser det plattformen lagrer.
+**Håndheves:** `svgMotionProblems` i `svgSanitizer.ts`, kalt fra `storedSvg` i `assetCommands.ts`
+(begge lagringsveiene) og fra `agentAuthoringValidationService.ts`. Status: avklart.
+
 ### Ikon i flytfigurens sirkel, nummeret foran teksten (2026-10-22)
 
 Et steg i en flytfigur kan ha et ikon fra plattformens bibliotek; da står ikonet i sirkelen og

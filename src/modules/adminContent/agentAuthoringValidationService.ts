@@ -10,7 +10,7 @@
 import { z } from "zod";
 import { prisma } from "../../db/prisma.js";
 import { localizedTextCodec, type LocalizedText } from "../../codecs/localizedTextCodec.js";
-import { sanitizeSvg } from "../course/svgSanitizer.js";
+import { sanitizeSvg, svgMotionProblems } from "../course/svgSanitizer.js";
 import { ALLOWED_ASSET_MIME_TYPES, MAX_ASSET_BYTES, SVG_MIME_TYPE, findLayoutVariantProblem } from "../course/assetCommands.js";
 import { hasIcon } from "../course/iconLibrary.js";
 import {
@@ -274,13 +274,25 @@ function checkSectionAssets(payload: AuthoringSectionPayload, basePath: string):
           message: `Asset '${asset.sourceId}' decodes to ${buffer.byteLength} bytes (max ${MAX_ASSET_BYTES}).`,
         });
       }
-      if (asset.mimeType === SVG_MIME_TYPE && sanitizeSvg(buffer.toString("utf8")) === "") {
+      const sanitized = asset.mimeType === SVG_MIME_TYPE ? sanitizeSvg(buffer.toString("utf8")) : null;
+      if (sanitized === "") {
         issues.push({
           severity: "error",
           path: `${assetPath}.contentBase64`,
           code: "asset_svg_unsanitizable",
           message: `Asset '${asset.sourceId}' SVG is empty or invalid after sanitisation.`,
         });
+      } else if (sanitized) {
+        // #1073: the same rule the import runs, so a package is told before it is sent.
+        const motion = svgMotionProblems(sanitized);
+        if (motion.length > 0) {
+          issues.push({
+            severity: "error",
+            path: `${assetPath}.contentBase64`,
+            code: "asset_svg_motion_not_allowed",
+            message: `Asset '${asset.sourceId}' moves in a way the platform does not allow (an animation runs once, within five seconds, as the flow template): ${motion[0]}`,
+          });
+        }
       }
     }
 

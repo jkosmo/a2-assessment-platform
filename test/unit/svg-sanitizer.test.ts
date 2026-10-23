@@ -7,7 +7,53 @@ import {
   extractSvgTexts,
   applySvgTextTranslations,
   svgDrawnWidth,
+  svgMotionProblems,
 } from "../../src/modules/course/svgSanitizer.js";
+import { drawFlowFigure } from "../../skills/a2-authoring-api/scripts/draw-flow-figure.mjs";
+
+// #1073: «hard stopp» for løkker (produkteier 2026-10-22). Regelen kjøres på den RENSEDE figuren, så
+// skrivemåtene plattformens leser retter opp — og som skillets kontroll ikke så (målt 2026-10-04) —
+// stoppes her.
+describe("svgMotionProblems — ingen løkker, på det som lagres (#1073)", () => {
+  const rot = (innhold: string) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 40">${innhold}<rect class="a" width="40" height="20" fill="#eef"/></svg>`;
+  const lagret = (svg: string) => svgMotionProblems(sanitizeSvg(svg));
+  const LØKKE = ".a { animation: snurr 2s linear infinite; } @keyframes snurr { to { opacity: 0.5; } }";
+
+  it.each([
+    ["en løkke i en stilblokk", rot(`<style>${LØKKE}</style>`)],
+    ["<STYLE> med store bokstaver", rot(`<STYLE>${LOKKE_STOR()}</STYLE>`)],
+    ["<Style> med blandet skrift", rot(`<Style>${LØKKE}</Style>`)],
+    ["en løkke i et style-attributt uten anførselstegn", `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><rect style=animation:x_9s_infinite width="5" height="5"/></svg>`],
+    ["en løkke i et STYLE-attributt", `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><rect STYLE="animation: x 1s infinite" width="5" height="5"/></svg>`],
+    ["en stilblokk uten sluttag", rot(`<style>${LØKKE}`)],
+    ["SMIL som går for alltid", `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><circle r="2"><animateMotion dur="2s" repeatCount="indefinite" path="M0 0 L5 5"/></circle></svg>`],
+  ])("%s: avvises", (_navn, svg) => {
+    expect(sanitizeSvg(svg)).not.toBe("");
+    expect(lagret(svg).length).toBeGreaterThan(0);
+  });
+
+  // Malens form, men for lenge: hvert steg lyser i 4,9 s. Ikke en løkke, men den slutter ikke innen
+  // fem sekunder — og et bilde har ingen pauseknapp (WCAG 2.2.2).
+  it("en flyt i malens form som varer over fem sekunder, avvises", () => {
+    const flyt = drawFlowFigure({ name: "f", title: "T", desc: "D", phases: { p: { grunn: "#dbeef3", lys: "#5fa3b5" } }, steps: [{ label: ["En"], phase: "p" }, { label: ["To"], phase: "p" }, { label: ["Tre"], phase: "p" }] });
+    const lang = flyt.wide.replace(/animation: lys [\d.]+s/, "animation: lys 4.9s");
+    expect(lang).not.toBe(flyt.wide);
+    expect(lagret(lang).join(" ")).toContain("within 5s");
+  });
+
+  it("kontroll: en figur i flytmalen, en stillestående figur og en stillestående flyt tas imot", () => {
+    const flyt = drawFlowFigure({ name: "f", title: "T", desc: "D", phases: { p: { grunn: "#dbeef3", lys: "#5fa3b5" } }, steps: [{ label: ["En"], phase: "p" }, { label: ["To"], phase: "p" }, { label: ["Tre"], phase: "p" }] });
+    expect(lagret(flyt.wide)).toEqual([]);
+    expect(lagret(flyt.narrow)).toEqual([]);
+    expect(lagret(benignSvg)).toEqual([]);
+    // Tre bokser på rad uten animasjon: skillet ber om animasjon, men det er håndverk, ikke en løkke.
+    const stilleFlyt = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 40">${[0, 100, 200].map((x) => `<rect x="${x}" y="0" width="60" height="30" fill="#eef"/>`).join("")}<line x1="60" y1="15" x2="100" y2="15" stroke="#000"/><line x1="160" y1="15" x2="200" y2="15" stroke="#000"/></svg>`;
+    expect(lagret(stilleFlyt)).toEqual([]);
+  });
+});
+function LOKKE_STOR(): string {
+  return ".a { ANIMATION: snurr 2s linear INFINITE; } @KEYFRAMES snurr { to { opacity: 0.5; } }";
+}
 
 // 2026-10-22: bredden en figur er tegnet i, lest av rota. Klienten regner grensen for det smale
 // oppsettet av den.

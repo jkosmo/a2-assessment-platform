@@ -4,7 +4,7 @@ import { prisma } from "../../db/prisma.js";
 import { DomainRuleError, NotFoundError } from "../../errors/AppError.js";
 import { putAsset, getAsset, deleteAsset } from "./assetStorage.js";
 import { canParticipantReadSection } from "./enrollmentService.js";
-import { sanitizeSvg, svgHasText, extractSvgTexts, applySvgTextTranslations, isSvgReadableAsImage, svgDrawnWidth } from "./svgSanitizer.js";
+import { sanitizeSvg, svgHasText, extractSvgTexts, applySvgTextTranslations, isSvgReadableAsImage, svgDrawnWidth, svgMotionProblems } from "./svgSanitizer.js";
 import { localizeSvgTexts, type GenerationLocale } from "../adminContent/llmContentGenerationService.js";
 import { SUPPORTED_LOCALES, type SupportedLocale } from "../../i18n/locale.js";
 import { hasAnyRole, CONTENT_AUTHORS } from "../../auth/roleSets.js";
@@ -59,6 +59,25 @@ function avvisSvg(label: string | null): never {
   );
 }
 
+/**
+ * The SVG as it is stored: sanitised, and refused when it would move in a way the platform does not
+ * allow (#1073 — a loop, longer than five seconds, SMIL). Both ways a figure is stored go through
+ * here: the editor's upload and every import, agent package and layout variant (prepareAssetBuffer).
+ */
+function storedSvg(raw: string, label: string | null): string {
+  const sanitized = sanitizeSvg(raw);
+  if (!sanitized) avvisSvg(label);
+  const motion = svgMotionProblems(sanitized);
+  if (motion.length > 0) {
+    throw new DomainRuleError(
+      "asset_svg_motion_not_allowed",
+      `SVG${label ? ` "${label}"` : ""} moves in a way the platform does not allow: an animation runs once, is done within five seconds, and uses the flow template — ${motion[0]}`,
+      { label, problems: motion },
+    );
+  }
+  return sanitized;
+}
+
 export async function createSectionAsset(input: {
   sectionId: string;
   filename: string;
@@ -84,11 +103,7 @@ export async function createSectionAsset(input: {
   // sanitisation is rejected rather than stored.
   let storedBuffer = input.buffer;
   if (input.mimeType === SVG_MIME_TYPE) {
-    const sanitized = sanitizeSvg(input.buffer.toString("utf8"));
-    if (!sanitized) {
-      avvisSvg(null);
-    }
-    storedBuffer = Buffer.from(sanitized, "utf8");
+    storedBuffer = Buffer.from(storedSvg(input.buffer.toString("utf8"), null), "utf8");
   }
 
   const safeName = (input.filename || "file").replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 100) || "file";
@@ -603,11 +618,7 @@ function decodeAndValidateAssetBytes(input: {
     avvisStorrelse(input.label, buffer.byteLength);
   }
   if (input.mimeType === SVG_MIME_TYPE) {
-    const sanitized = sanitizeSvg(buffer.toString("utf8"));
-    if (!sanitized) {
-      avvisSvg(input.label);
-    }
-    return Buffer.from(sanitized, "utf8");
+    return Buffer.from(storedSvg(buffer.toString("utf8"), input.label), "utf8");
   }
   return buffer;
 }
