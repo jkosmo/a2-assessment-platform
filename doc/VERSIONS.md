@@ -2,6 +2,23 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.98.3 - 2026-10-22
+
+### Skillet: ikoner i flytfigurene
+
+Bare skillet. Et steg i en flytfigur kan få et ikon fra plattformens bibliotek (`icon` i
+beskrivelsen). Sirkelen viser da ikonet, og nummeret står foran teksten («1. Samle data»), så
+rekkefølgen leses også når flyten brytes over flere rader på telefon (produkteier valgte variant B
+av tre, 2026-10-22). Alle steg har ikon, eller ingen; aldri samme ikon to ganger.
+
+- Ikonene bygges inn i tegningen (et bilde kan ikke hente noe utenfra), fra samme fil som
+  plattformen bruker: `npm run icons:vendor` skriver den nå også til skillet, med lisensen (ISC).
+  Zip-en blir rundt 80 kB større.
+- Kontrollen av animerte figurer kjenner ikonet som en del av malen: én fast form, innholdet tegn
+  for tegn et ikon fra biblioteket, midt i en stegsirkel. Alle 1877 ikonene kommer uendret gjennom
+  plattformens rensing (målt), så kontrollen holder også for en figur som har vært innom plattformen.
+- Figurer som alt ligger i kurs, får ikke ikoner før de tegnes og importeres på nytt.
+
 ## 2.98.2 - 2026-10-22
 
 ### Figurene i riktig størrelse, og korte flyter på én linje

@@ -262,3 +262,90 @@ describe("draw-flow-figure — two layouts from one description (#1079)", () => 
     });
   });
 });
+
+// 2026-10-22: produkteier valgte variant B — ikonet i sirkelen, nummeret foran teksten.
+describe("draw-flow-figure — ikoner i stegene (variant B)", () => {
+  const IKONER = ["inbox", "paperclip", "search", "scale", "messages-square", "pen-line", "send", "archive"];
+  const medIkoner = () => med((d) => d.steps.forEach((s, i) => { s.icon = IKONER[i]; }));
+  const bibliotek = JSON.parse(readFileSync(new URL("../../skills/a2-authoring-api/scripts/lucide-icons.json", import.meta.url), "utf8")).icons as Record<string, string>;
+
+  it("sirkelen har ikonet fra biblioteket, og nummeret står foran første linje i teksten", () => {
+    const { wide, narrow } = drawFlowFigure(medIkoner());
+    for (const svg of [wide, narrow]) {
+      for (const navn of IKONER) expect(svg, navn).toContain(`stroke-linejoin="round">${bibliotek[navn]}</g>`);
+      expect(svg).toContain(">1. Motta</text>");
+      expect(svg).toContain(">8. Arkiver</text>");
+      // Ingen tall alene i sirkelen lenger.
+      expect(svg).not.toMatch(/font-weight="600" fill="[^"]*">\d+<\/text>/);
+    }
+  });
+
+  it("ikonet står midt i sirkelen, i sirkelens størrelse", () => {
+    const { wide } = drawFlowFigure(medIkoner());
+    const sirkel = /<circle class="steg s1[^"]*" cx="([\d.]+)" cy="([\d.]+)" r="([\d.]+)"/.exec(wide)!.slice(1).map(Number);
+    const [x, y, k] = /<g class="ikon" transform="translate\(([\d.-]+) ([\d.-]+)\) scale\(([\d.]+)\)"/.exec(wide)!.slice(1).map(Number);
+    expect(x + 12 * k).toBeCloseTo(sirkel[0]!, 1);
+    expect(y + 12 * k).toBeCloseTo(sirkel[1]!, 1);
+    expect(24 * k).toBeCloseTo(sirkel[2]!, 1);
+  });
+
+  it("består begge figurkontrollene, også etter plattformens rensing", () => {
+    const { wide, narrow } = drawFlowFigure(medIkoner());
+    for (const svg of [wide, narrow, sanitizeSvg(wide), sanitizeSvg(narrow)]) {
+      expect(checkFigureMotion(svg).issues).toEqual([]);
+      expect(checkFigureFit(svg).issues).toEqual([]);
+    }
+  });
+
+  it("teksten med nummeret er hel tekst, så oversetteren får hele linja", () => {
+    const { wide } = drawFlowFigure(medIkoner());
+    expect(extractSvgTexts(wide)).toContain("1. Motta");
+    expect(extractSvgTexts(wide)).toContain("saken");
+  });
+
+  it("uten ikoner er figuren som før: tallet i sirkelen, teksten uten nummer", () => {
+    const { wide } = drawFlowFigure(saksgang());
+    expect(wide).not.toContain('class="ikon"');
+    expect(wide).toMatch(/font-weight="600" fill="[^"]*">1<\/text>/);
+    expect(wide).toContain(">Motta</text>");
+  });
+
+  it("avviser ikon på noen steg, et ukjent navn, et arvet navn og samme ikon to ganger", () => {
+    expect(describeProblems(med((d) => { d.steps[0]!.icon = "inbox"; })).join(" ")).toContain("1 of 8 steps have an `icon`");
+    expect(describeProblems(med((d) => d.steps.forEach((s, i) => { s.icon = i === 3 ? "finnes-ikke" : IKONER[i]; }))).join(" ")).toContain('step 4: icon "finnes-ikke" is not in the platform\'s library');
+    expect(describeProblems(med((d) => d.steps.forEach((s, i) => { s.icon = i === 3 ? "constructor" : IKONER[i]; }))).join(" ")).toContain('icon "constructor" is not');
+    expect(describeProblems(med((d) => d.steps.forEach((s, i) => { s.icon = i === 5 ? "inbox" : IKONER[i]; }))).join(" ")).toContain('step 6: icon "inbox" is used twice');
+    expect(describeProblems(medIkoner())).toEqual([]);
+  });
+});
+
+// Kontrollen av animerte figurer: ikonet er én fast del av malen, ikke en åpning for hva som helst i en <g>.
+describe("figure-motion-check — ikongruppa er en del av malen (2026-10-22)", () => {
+  const IKONER = ["inbox", "paperclip", "search", "scale", "messages-square", "pen-line", "send", "archive"];
+  const figur = () => drawFlowFigure(med((d) => d.steps.forEach((s, i) => { s.icon = IKONER[i]; }))).wide;
+  const feil = (svg: string) => checkFigureMotion(svg).issues.map((i: { detail: string }) => i.detail).join(" | ");
+
+  it("et ikon som ikke er bibliotekets, avvises — også et ekte ikon med én ting lagt til", () => {
+    expect(feil(figure_replace(figur(), /(<g class="ikon"[^>]*>)<path d="[^"]*"\/>/, '$1<path d="M0 0L5 5"/>'))).toContain("not one of its icons");
+    expect(feil(figure_replace(figur(), /(<g class="ikon"[^>]*>)/, '$1<rect x="0" y="0" width="24" height="24"/>'))).toContain("not one of its icons");
+  });
+
+  it("et ikon utenfor en stegsirkel avvises", () => {
+    expect(feil(figure_replace(figur(), /translate\(([\d.]+) /, (_m, x) => `translate(${Number(x) + 30} `))).toContain("where there is none");
+  });
+
+  it("en gruppe i en annen form er fortsatt fremmed markering", () => {
+    expect(feil(figure_replace(figur(), 'class="ikon" transform', 'class="ikon" opacity="0" transform'))).toContain("found <g>");
+    expect(feil(figure_replace(figur(), 'stroke-width="2" stroke-linecap', 'stroke-width="9" stroke-linecap'))).toContain("found <g>");
+  });
+
+  it("kontroll: den uendrede figuren består", () => {
+    expect(checkFigureMotion(figur()).issues).toEqual([]);
+  });
+});
+
+function figure_replace(svg: string, from: string | RegExp, to: string | ((...a: string[]) => string)): string {
+  const out = svg.replace(from as never, to as never);
+  if (out === svg) throw new Error(`endringen traff ikke: ${String(from)}`);
+  return out;
+}

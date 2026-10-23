@@ -895,6 +895,15 @@ Tjeneren sier bredden på det brede oppsettet (`X-Asset-Wide-Width`); 640 er bar
 første svar. **Håndheves:** `wantedAssetLayout` i `public/api-client.js`, `wideLayoutWidth` i
 `assetCommands.ts`. Status: avklart.
 
+### Ikon i flytfigurens sirkel, nummeret foran teksten (2026-10-22)
+
+Et steg i en flytfigur kan ha et ikon fra plattformens bibliotek; da står ikonet i sirkelen og
+nummeret foran stegets navn («1. Samle data»). Alle steg eller ingen. **Hvorfor:** produkteier
+valgte variant B av tre (A: nummer i et lite merke på sirkelen, C: bare ikon) etter å ha sett dem
+side om side. B holder rekkefølgen lesbar når flyten brytes over rader på telefon, uten et lite
+merke som må leses. **Håndheves:** `draw-flow-figure.mjs` (tegner), `figure-motion-check.mjs`
+(ikonet er en fast del av malen, sammenlignet tegn for tegn med biblioteket). Status: avklart.
+
 ### En figur vises på det meste 1,25 ganger tegnet størrelse (2026-10-22)
 
 En tegning som oppgir egen bredde, vises i den; en som bare oppgir viewBox, vises i 1,25 × viewBox.

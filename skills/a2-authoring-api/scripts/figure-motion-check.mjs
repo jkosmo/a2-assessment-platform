@@ -150,6 +150,43 @@ function markupProblems(svg) {
   return problems;
 }
 
+// ── Icons in the steps (2026-10-22, product owner chose «icon in the circle, number before the label») ──
+//
+// An icon is one more piece of the template, compared like the rest — not read. The group has ONE
+// form, the one draw-flow-figure writes, and what is inside it must be, character for character, an
+// icon from the platform's library (lucide-icons.json beside this script; all 1877 survive the
+// platform's sanitizer unchanged, measured 2026-10-22). It must sit in the middle of a step circle.
+// Anything else in a <g> is still foreign markup: a box drawn inside a "group" is a step that never
+// lights up, the way a <polygon> was before.
+const ICON_GROUP = new RegExp(
+  `<g class="ikon" transform="translate\\((-?\\d+(?:\\.\\d+)?) (-?\\d+(?:\\.\\d+)?)\\) scale\\((\\d+(?:\\.\\d+)?)\\)" fill="none" stroke="${HEX}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">((?:<[a-z]+\\b[^<>]*/>)*)</g>`,
+  "g",
+);
+let libraryIcons = null;
+function iconMarkups() {
+  libraryIcons ??= new Set(Object.values(JSON.parse(readFileSync(new URL("./lucide-icons.json", import.meta.url), "utf8")).icons));
+  return libraryIcons;
+}
+
+/** The figure without its icon groups, and what is wrong with them. */
+function withoutIcons(svg) {
+  const problems = [];
+  const found = [...svg.matchAll(ICON_GROUP)];
+  if (found.length === 0) return { svg, problems };
+  const stripped = svg.replace(ICON_GROUP, "");
+  const centres = openTags(stripped, "circle")
+    .filter((t) => (t.attrs.class ?? "").split(/\s+/).includes("steg"))
+    .map((t) => ({ cx: num(t.attrs.cx), cy: num(t.attrs.cy) }));
+  for (const m of found) {
+    const [x, y, scale, inner] = [num(m[1]), num(m[2]), num(m[3]), m[4]];
+    if (!iconMarkups().has(inner)) problems.push("an icon in a step is drawn from the platform's library as it stands — this one is not one of its icons (draw the flow with draw-flow-figure.mjs)");
+    const cx = x + 12 * scale;
+    const cy = y + 12 * scale;
+    if (!centres.some((c) => Math.abs(c.cx - cx) < 0.5 && Math.abs(c.cy - cy) < 0.5)) problems.push(`an icon stands in the middle of a step circle — this one is centred at (${cx}, ${cy}), where there is none`);
+  }
+  return { svg: stripped, problems };
+}
+
 /**
  * Compares the figure with the template.
  * @returns {{ totalSeconds: number } | { problems: string[] }}
@@ -380,8 +417,11 @@ function looksLikeSequence(svg) {
 // ── The check ──────────────────────────────────────────────────────────────────────────────────
 
 /** @returns {{ ok: boolean, animated: boolean, sequence: boolean, totalSeconds: number | null, issues: Array<{ kind: string, detail: string }> }} */
-export function checkFigureMotion(svg) {
+export function checkFigureMotion(figure) {
   const issues = [];
+  // The icons are compared and taken out first; the rest of the figure is then the template as before.
+  const { svg, problems: iconProblems } = withoutIcons(figure);
+  for (const problem of iconProblems) issues.push({ kind: "unsupported_animation_form", detail: problem });
   const root = openTags(svg, "svg")[0]?.attrs ?? {};
   const declaredStatic = root["data-motion"] === "static";
   const sequence = looksLikeSequence(svg);

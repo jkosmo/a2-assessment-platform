@@ -72,10 +72,10 @@ Do not write a flow by hand. Describe it, and let the script draw it:
     "avslutt": { "label": "Avslutt", "grunn": "#e7e2f0", "lys": "#a99bc9", "tekst": "#6b5a94" }
   },
   "steps": [
-    { "label": ["Motta", "saken"], "phase": "forbered" },
-    { "label": ["Sjekk", "vedlegg"], "phase": "forbered" },
-    { "label": ["Skriv", "vedtaket"], "phase": "avslutt" },
-    { "label": ["Arkiver"], "phase": "avslutt" }
+    { "label": ["Motta", "saken"], "phase": "forbered", "icon": "inbox" },
+    { "label": ["Sjekk", "vedlegg"], "phase": "forbered", "icon": "paperclip" },
+    { "label": ["Skriv", "vedtaket"], "phase": "avslutt", "icon": "pen-line" },
+    { "label": ["Arkiver"], "phase": "avslutt", "icon": "archive" }
   ]
 }
 ```
@@ -98,8 +98,15 @@ figure checks on each before it writes anything.
 - **When it refuses**, the message names what is wrong — a label too long for the space between
   two steps (`labels_overlap`), a step in a phase that is not listed. Shorten the label or break
   it differently. Do not edit the drawn SVG to make it fit.
-- **A step's icon and explanation** from the source do not go in the figure. Put them in the text
-  under it, one line per step ([section-content.md](section-content.md#icons)).
+- **Icons (`icon`):** a name from the platform's library, chosen by meaning as for cards
+  ([icons.md](icons.md#how-to-choose)). The circle then shows the icon, and the number moves in
+  front of the label («1. Motta») so the order still reads when the narrow layout breaks the flow
+  over rows. Every step has one, or none does; never the same icon twice. The script builds the
+  icon into the drawing — the source's own icons are never copied in. Leave icons out when no
+  icon fits every step: a near miss misleads more than a number.
+- **A step's explanation** from the source does not go in the figure. Put it in the text under it,
+  one line per step ([section-content.md](section-content.md#icons)); when the figure has icons,
+  that text has none — one icon per step, in one place.
 - Keep the description file: it is the figure's source, and the other languages are drawn from
   copies of it.
 

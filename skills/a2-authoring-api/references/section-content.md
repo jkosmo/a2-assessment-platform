@@ -398,8 +398,11 @@ one, and the catalogue by meaning: [icons.md](icons.md).
 
 - **Cards get an icon**, first in the heading, with empty alt text: `### ![](icon:lightbulb) Idé`.
   The icon repeats the heading and says nothing more.
-- **A flow's steps, or a row of points, often carry an icon each.** They do not go in a figure.
-  Put the icon first in that step's or point's row of a table, in a first column with no name:
+- **A flow's steps, or a row of points, often carry an icon each.** In a flow drawn as a figure,
+  the icon goes in the figure's step (`icon` in its description —
+  [figure-design.md](figure-design.md#flows--drawn-by-a-script)), and the text under it has none.
+  Without a figure, put the icon first in that step's or point's row of a table, in a first column
+  with no name:
 
   ```markdown
   | | Steg | Hva du gjør |

@@ -19,8 +19,13 @@
 //   { "name": "arbeidsflyt",                       file name, [a-z0-9-]
 //     "title": "…", "desc": "…",                    accessible name and description (required)
 //     "phases": { "data": { "label": "Data", "grunn": "#d9e8dd", "lys": "#6fae87", "tekst": "#3f7a57" }, … },
-//     "steps": [ { "label": ["Klargjør", "kilder"], "phase": "data" }, … ] }
+//     "steps": [ { "label": ["Klargjør", "kilder"], "phase": "data", "icon": "folder-open" }, … ] }
 // A phase without "label" gets no line above its steps. "tekst" is the colour of the phase label.
+//
+// "icon" (2026-10-22, product owner chose variant B): a name from the platform's icon library
+// (references/icon-names.txt). Every step has one, or none does. With icons the circle shows the icon
+// and the number moves in front of the label («1. Samle»), so the order still reads when a narrow
+// layout breaks the flow over rows. The icon is built into the drawing — an image fetches nothing.
 
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -66,6 +71,16 @@ const MAX_STEPS = 8;
 
 const xml = (text) => String(text).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
+/** The platform's icon library (Lucide), the same file it serves: name → the icon's inner SVG. Read once, when an icon is used. */
+let iconLibrary = null;
+function icons() {
+  iconLibrary ??= JSON.parse(readFileSync(new URL("./lucide-icons.json", import.meta.url), "utf8")).icons;
+  return iconLibrary;
+}
+/** A Lucide icon (24 × 24, line drawing) centred on (cx, cy) at `size`, in the figure's ink. */
+const iconAt = (name, cx, cy, size) =>
+  `  <g class="ikon" transform="translate(${cx - size / 2} ${cy - size / 2}) scale(${Number((size / 24).toFixed(4))})" fill="none" stroke="${INK}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${icons()[name]}</g>`;
+
 /** What is wrong with the description, in the author's terms. Empty when it can be drawn. */
 export function describeProblems(description) {
   const problems = [];
@@ -89,6 +104,15 @@ export function describeProblems(description) {
     const lines = Array.isArray(step?.label) ? step.label : [];
     if (lines.length < 1 || lines.length > 2 || lines.some((line) => !String(line ?? "").trim())) problems.push(`step ${i + 1}: \`label\` is one or two short lines`);
     if (!Object.hasOwn(phases, step?.phase ?? "")) problems.push(`step ${i + 1}: phase "${step?.phase}" is not in \`phases\``);
+  });
+  const withIcon = steps.filter((step) => step?.icon !== undefined);
+  if (withIcon.length > 0 && withIcon.length < steps.length) problems.push(`${withIcon.length} of ${steps.length} steps have an \`icon\` — give every step one, or none`);
+  const seen = new Set();
+  steps.forEach((step, i) => {
+    if (step?.icon === undefined) return;
+    if (typeof step.icon !== "string" || !Object.hasOwn(icons(), step.icon)) problems.push(`step ${i + 1}: icon "${step.icon}" is not in the platform's library — pick a name from references/icon-names.txt`);
+    else if (seen.has(step.icon)) problems.push(`step ${i + 1}: icon "${step.icon}" is used twice — one icon per step, never the same twice in a flow`);
+    seen.add(step.icon);
   });
   const unused = Object.keys(phases).filter((name) => !steps.some((step) => step?.phase === name));
   if (unused.length > 0) problems.push(`phase(s) ${unused.map((n) => `"${n}"`).join(", ")} have no step`);
@@ -123,9 +147,13 @@ function draw(description, layoutName) {
   steps.forEach((step, i) => {
     const { cx, cy, row } = at[i];
     out.push(`  <circle class="steg s${i + 1} ${step.phase}" cx="${cx}" cy="${cy}" r="${r}"/>`);
-    out.push(`  <text x="${cx}" y="${cy + 5}" text-anchor="middle" font-size="15" font-weight="600" fill="${INK}">${i + 1}</text>`);
+    // The number in plain text, not a <tspan>: a text with a tspan in it is read as the tspan only,
+    // by the platform's translator and the language check alike — «Samle» would go untranslated.
+    if (step.icon) out.push(iconAt(step.icon, cx, cy, r));
+    else out.push(`  <text x="${cx}" y="${cy + 5}" text-anchor="middle" font-size="15" font-weight="600" fill="${INK}">${i + 1}</text>`);
     step.label.forEach((line, n) => {
-      out.push(`  <text x="${cx}" y="${cy + r + 18 + n * 15}" text-anchor="middle" font-size="12" fill="${INK}">${xml(line)}</text>`);
+      const shown = step.icon && n === 0 ? `${i + 1}. ${line}` : line;
+      out.push(`  <text x="${cx}" y="${cy + r + 18 + n * 15}" text-anchor="middle" font-size="12" fill="${INK}">${xml(shown)}</text>`);
     });
     if (i + 1 >= steps.length) return;
     const next = at[i + 1];

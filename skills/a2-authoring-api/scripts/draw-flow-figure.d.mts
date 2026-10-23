@@ -16,6 +16,8 @@ export interface FlowStep {
   label: string[];
   /** A key of `phases`. */
   phase: string;
+  /** A name from the platform's icon library. Every step has one, or none does. */
+  icon?: string;
 }
 
 export interface FlowDescription {

@@ -40,5 +40,10 @@ mkdirSync(outDir, { recursive: true });
 writeFileSync(join(outDir, "lucide-icons.json"), JSON.stringify({ name: "lucide", version: pkg.version, license: pkg.license, icons }), "utf8");
 writeFileSync(join(outDir, "LICENSE-lucide.txt"), licence, "utf8");
 writeFileSync(join(root, "skills", "a2-authoring-api", "references", "icon-names.txt"), `${names.join("\n")}\n`, "utf8");
+// 2026-10-22: skillets flyttegner bygger ikonene inn i figuren (et bilde kan ikke hente noe utenfra),
+// så skillet har samme fil som plattformen — og lisensen, som ISC krever med en kopi.
+const skillScripts = join(root, "skills", "a2-authoring-api", "scripts");
+writeFileSync(join(skillScripts, "lucide-icons.json"), JSON.stringify({ name: "lucide", version: pkg.version, license: pkg.license, icons }), "utf8");
+writeFileSync(join(skillScripts, "LICENSE-lucide.txt"), licence, "utf8");
 
 console.log(`lucide ${pkg.version} (${pkg.license}): ${names.length} ikoner skrevet til public/static/icons/ og skillets icon-names.txt`);
