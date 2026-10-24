@@ -895,6 +895,15 @@ Tjeneren sier bredden på det brede oppsettet (`X-Asset-Wide-Width`); 640 er bar
 første svar. **Håndheves:** `wantedAssetLayout` i `public/api-client.js`, `wideLayoutWidth` i
 `assetCommands.ts`. Status: avklart.
 
+### KI og «velg alle som stemmer»: kilden avgjør, høyst 50 % ved revisjon (#1077, 2026-10-24)
+
+Generering: ett riktig svar er standard; KI lager «velg alle» bare der kilden lister flere ting som alle
+stemmer, høyst omtrent hvert tredje spørsmål. Revisjon: typen beholdes, men ber forfatteren om det
+generelt, vurderer KI selv hvor mange ut fra vanskelighetsgrad — høyst 50 % av settet, uten at det må
+bes om per spørsmål. Skillet følger samme regel. **Hvorfor:** produkteier valgte at kilden avgjør
+(framfor at forfatteren velger andel på forhånd eller bare på forespørsel), og at en generell
+forespørsel holder. Prod venter til dette og skillet er klart. Status: avklart.
+
 ### Nye spørsmålstyper: rett eller galt, ingen antall, enkel normalisering (#1077, 2026-10-24)
 
 Produkteier valgte anbefalingen på alle fire spørsmål i `doc/DESIGN_1077.md`:

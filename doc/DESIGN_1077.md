@@ -87,6 +87,18 @@ gir mening for `single` og `multiple`; for `order` og `fill` vises de ikke.
 tekst med de lagrede (serialiserte) alternativene. For spørsmål lagret med språkkart blir
 distraktortallene trolig alltid 0. Sjekkes og rettes som eget punkt før `multiple`.
 
+## Leveranse 1b — KI og skillet (produkteier 2026-10-24)
+
+- **Generering:** ett riktig svar er standard. KI lager «velg alle som stemmer» bare der kilden gir
+  grunnlag — der den lister flere ting som alle stemmer — og høyst omtrent hvert tredje spørsmål.
+  Forfatteren ser typen og kan bytte med bryteren.
+- **Revisjon:** typen beholdes, med mindre forfatteren ber om det **generelt** («bruk flere spørsmål med
+  flere riktige svar», «gjør testen vanskeligere»). Da vurderer KI selv hvor mange, ut fra
+  vanskelighetsgraden, men **høyst 50 %** av spørsmålene i settet. Det trengs ikke å be om det per
+  spørsmål. Endringen vises som et forslag forfatteren godtar, som i dag.
+- **Skillet** følger samme regel som genereringen, og kontrollene (hint, oversettelse, eksport) kjenner
+  typen.
+
 ## Leveranser
 
 1. **Felles grunnlag + `multiple`.** Migrasjon (de tre feltene), typebevisst retting, deltakervisning,
