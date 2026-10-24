@@ -1014,11 +1014,15 @@ function buildGenerationQuestionTypeSection(questionCount: number): string {
 
 Every question has exactly one correct answer. Do not set "questionType".`;
   }
-  return `## Question type — one correct answer is the default
+  // Stage 2.100.0: med «ett svar er standard … ONLY … fewer or none is fine» laget modellen null
+  // «velg alle» i fem av fem kjøringer, også fra en kilde med to tydelige lister. Instruksen må si hva
+  // som skal skje NÅR kilden har lister (standardveien), ikke bare sette et tak.
+  return `## Question type — let the source decide
 
-Most questions have exactly one correct answer: leave out "questionType" and "correctAnswers".
-
-Use "questionType": "multiple" (select all that apply) ONLY where the source material itself states several things that are all true for the stem — for example the required elements of something, conditions that all apply, or steps that all belong. Never invent a list to make such a question, and never use it just for variety. At most ${max} of the ${questionCount} questions may be "multiple"; fewer or none is fine.
+The source decides the type of each question:
+- Where the source material states several things that all hold for the same question — the required elements of something, the principles or conditions that all apply, the steps that all belong — write that question as "questionType": "multiple" (select all that apply). Such a list in the source is exactly what this type is for: when the source has one or more of them, about ${max} of the ${questionCount} questions should be "multiple", never more than ${max}.
+- Every other question has exactly one correct answer: leave out "questionType" and "correctAnswers".
+- When the source has no such list, every question has one correct answer. Never invent a list to make a "multiple" question.
 
 ${MULTIPLE_QUESTION_WRITING_RULES}`;
 }

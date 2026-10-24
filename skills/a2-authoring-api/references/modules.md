@@ -55,7 +55,9 @@ One correct answer is the default. Write a question as `"questionType": "multipl
 things that all hold for the stem — the required elements of something, conditions that all apply,
 steps that all belong. Never make a list up to get one, and never use it for variety.
 
-- **How many.** In a new test, at most about one question in three. When the author asks in general
+- **How many.** In a new test where the source has such lists, about one question in three — and
+  never more; where it has none, none. A list in the source is what the type is for: do not leave it
+  as a single-answer question by habit. When the author asks in general
   for more of them ("gjør noen av spørsmålene til velg alle") or for a harder test, choose yourself
   which questions and how many, from where several options can genuinely all be right and where the
   test needs to be harder — at most half the set. When the author adjusts something else, every

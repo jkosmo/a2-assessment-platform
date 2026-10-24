@@ -69,11 +69,12 @@ beforeEach(() => {
 });
 
 describe("#1077 — generering: kilden avgjør, høyst hvert tredje", () => {
-  it("instruksen gjør ett svar til standard og setter taket til hvert tredje", () => {
+  it("instruksen lar kilden avgjøre: omtrent hvert tredje når kilden har lister, aldri flere", () => {
     const { userPrompt } = buildMcqGenerationPrompts(generationInput(10));
-    expect(userPrompt).toContain("one correct answer is the default");
-    expect(userPrompt).toContain("ONLY where the source material itself states several things that are all true");
-    expect(userPrompt).toContain("At most 3 of the 10 questions");
+    expect(userPrompt).toContain("The source decides the type of each question");
+    // Standardveien (stage 2.100.0): når kilden har lister, SKAL omtrent hvert tredje bruke typen.
+    expect(userPrompt).toContain("about 3 of the 10 questions should be \"multiple\", never more than 3");
+    expect(userPrompt).toContain("Never invent a list");
     expect(userPrompt).toContain("ALL options may be correct");
     expect(userPrompt).toContain("must not reveal or hint at how many options are correct");
   });
