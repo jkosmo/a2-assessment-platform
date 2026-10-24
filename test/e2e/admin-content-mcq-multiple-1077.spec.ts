@@ -109,6 +109,9 @@ test.describe("#1077 — «velg alle som stemmer» i editoren", () => {
       moduleExports: { "module-1": moduleWith({ stem: localizedText("What must the record state?"), options: [A, B, C, D], correctAnswer: A, rationale: localizedText("Art. 30") }) },
     });
     const saved = await captureSave(page);
+    // Stoppet FØR oversettelsen: forfatteren skal ikke vente på KI-en for et spørsmål som avvises.
+    let translated = false;
+    page.on("request", (r) => { if (r.url().includes("/api/") && r.url().includes("/localize")) translated = true; });
     await page.goto("/admin-content/module/module-1/conversation");
     await page.locator("#previewEditTitle").waitFor();
     await page.locator('[data-preview-edit-multiple="0"]').check();
@@ -117,6 +120,7 @@ test.describe("#1077 — «velg alle som stemmer» i editoren", () => {
     await page.locator("#formSaveBtn").click();
     await expect(page.getByText(/Question 1 has «More than one correct answer»/).first()).toBeVisible();
     expect(saved.payload).toBeNull();
+    expect(translated).toBe(false);
   });
 
   test("et avslag fra tjeneren viser hvilket felt det gjaldt", async ({ page }) => {

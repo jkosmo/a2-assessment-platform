@@ -2,6 +2,16 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.99.1 - 2026-10-24
+
+### «Velg alle som stemmer»: lagringen sier hva som er galt (#1077)
+
+- Et spørsmål med «Flere riktige svar» der alle (eller ingen) alternativer er avkrysset, stoppes i
+  Rediger FØR oversettelsen, med en melding som sier hvilket spørsmål. Før ble det oversatt først, og
+  så avvist med «noe i skjemaet mangler … feltene som er markert», uten noe markert felt (stage).
+- Et avslag fra tjeneren ved lagring viser feltet og regelen under den generelle setningen.
+- Bryteren «Flere riktige svar» er en liten boks på linje med teksten, ikke en fullbredde stripe.
+
 ## 2.99.0 - 2026-10-24
 
 ### «Velg alle som stemmer» i moduler (#1077, leveranse 1a)

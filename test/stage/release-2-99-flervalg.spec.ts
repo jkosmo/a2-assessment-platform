@@ -54,7 +54,7 @@ const flere = { questionType: "multiple", stem: L("What must the record state?",
 
 const tilstand: { moduleId?: string; versionId?: string; sectionId?: string } = {};
 
-test("versjonen er 2.99.0", async () => {
+test("versjonen er 2.99.1", async () => {
   const svar = await fetch(`${BASE}/version`);
   const json = await svar.json();
   noter("versjon", json.version);

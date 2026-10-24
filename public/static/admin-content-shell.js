@@ -1434,6 +1434,16 @@ let editFormSnapshot = null;
 // (previewEditConfirm), ikke lagre utkastet rått som «Lagre utkast» gjorde for genererte utkast.
 let sessionDraftFromForm = false;
 
+/**
+ * #1077: første «velg alle» uten minst ett riktig OG minst ett galt alternativ, eller -1. Tjeneren
+ * avviser slike; uten sjekken fikk forfatteren «noe i skjemaet mangler», uten noe markert felt —
+ * og først etter at oversettelsen var betalt (stage 2.99.0: alle fire avkrysset).
+ */
+function firstBadMultipleIndex(questions) {
+  return (questions ?? []).findIndex((question) => question?.questionType === "multiple"
+    && (!(question.correctAnswers?.length > 0) || question.correctAnswers.length >= (question.options?.length ?? 0)));
+}
+
 function readMcqQuestionsFromForm(currentMcqQuestions) {
   return currentMcqQuestions.map((question, questionIndex) => {
     const container = previewContent.querySelector(`[data-preview-edit-question="${questionIndex}"]`);
@@ -2209,10 +2219,8 @@ async function saveDraftBundleInBackground(options = {}) {
     document.getElementById("previewEditAddQuestion")?.focus();
     return;
   }
-  // #1077: tjeneren krever minst ett riktig og minst ett galt alternativ i et «velg alle». Uten denne
-  // sjekken fikk forfatteren bare «noe i skjemaet mangler», uten at noe felt var markert.
-  const badMultiple = isFreetextOnly ? -1 : mcqQuestions.findIndex((question) => question?.questionType === "multiple"
-    && (!(question.correctAnswers?.length > 0) || question.correctAnswers.length >= (question.options?.length ?? 0)));
+  // #1077: samme sjekk som skjemaet gjør før oversettelsen, for lagringer som ikke kommer derfra.
+  const badMultiple = isFreetextOnly ? -1 : firstBadMultipleIndex(mcqQuestions);
   if (badMultiple >= 0) {
     const message = t("shell.save.mcqMultipleNeedsBoth").replace("{n}", String(badMultiple + 1));
     logBot(() => escapeHtml(message));
@@ -3008,6 +3016,13 @@ function enterPreviewEditMode({ force = false } = {}) {
     if (incomplete) {
       showToast(t("shell.directEdit.mcqIncomplete"), "error");
       previewContent.querySelector(`[data-preview-edit-question="${newMcqQuestions.indexOf(incomplete)}"] textarea`)?.focus();
+      return;
+    }
+    // #1077: før oversettelsen — ellers venter forfatteren på KI-en for et spørsmål tjeneren avviser.
+    const badMultiple = firstBadMultipleIndex(newMcqQuestions);
+    if (badMultiple >= 0) {
+      showToast(t("shell.save.mcqMultipleNeedsBoth").replace("{n}", String(badMultiple + 1)), "error");
+      previewContent.querySelector(`input[name="previewEditCorrectAnswer${badMultiple}"]`)?.focus();
       return;
     }
 
