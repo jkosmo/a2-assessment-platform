@@ -8,11 +8,11 @@ This document tracks release versions and what each version includes.
 
 Produkteiers avgjørelser i DECISIONS («KI og «velg alle som stemmer»»).
 
-- **KI-generering:** ett riktig svar er standard. Modellen lager «velg alle» bare der kilden lister
-  flere ting som alle stemmer, høyst hvert tredje spørsmål. Lager den flere, får forfatteren en
-  advarsel; spørsmålene beholdes. Svaret normaliseres (`normalizeGeneratedQuestionType`): de riktige
-  må være alternativer ordrett og ordnes som alternativene; uten et eneste brukbart blir spørsmålet
-  et vanlig spørsmål hvis `correctAnswer` holder.
+- **KI-generering:** plattformen trekker en plan (`planMultipleQuestions`): et tilfeldig antall
+  spørsmål, 10–50 % av settet, på tilfeldige plasser, er «velg alle», hvert med et tilfeldig antall
+  riktige (ett til alle). Modellen får planen og konstruerer de spørsmålene på fakta fra kilden.
+  Følger svaret ikke planen, får modellen ett forsøk til med beskjed; deretter en advarsel til
+  forfatteren. (Første versjon, «kilden avgjør», ga null «velg alle» av tretti på stage.)
 - **KI-revisjon:** typen og alle de riktige sendes med, og stoppen fra 2.99.0 er fjernet. Typen
   beholdes, med mindre forfatteren ber om det — ved navn, eller generelt («bruk flere», «gjør testen
   vanskeligere»), da velger modellen selv. Høyst halvparten av settet (eller så mange som settet
@@ -25,7 +25,8 @@ Produkteiers avgjørelser i DECISIONS («KI og «velg alle som stemmer»»).
   riktige. I skillet: `questionType: null` avvises som i importen, og antallssjekken har én liste per
   språk uten treff på «choose to», «two-factor» og «det er vel to».
 - **Skillet:** `package-schema.md`, `modules.md` (ny del «Select all that apply»), `localization.md`,
-  `api-flow.md` og `adjust-course.md` kjenner typen. `export-validate.mjs` speiler importens regler
+  `api-flow.md` og `adjust-course.md` kjenner typen. Nytt skript `mcq-plan.mjs` trekker planen for en
+  ny test, med samme trekning som plattformen (låst av en test). `export-validate.mjs` speiler importens regler
   (låst til plattformen av en test, også listen over typer); `localization-check.mjs` krever de samme
   riktige plassene på alle språk; `mcq-cue-check.mjs` finner antall i stammen, riktige som er lengre
   enn de gale, og over halvparten «velg alle».

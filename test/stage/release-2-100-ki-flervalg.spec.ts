@@ -68,25 +68,37 @@ const generer = (sourceMaterial: string, questionCount: number) => api("/api/adm
   sourceMaterial, certificationLevel: "intermediate", locale: "nb", generationMode: "ordinary", questionCount, optionCount: 4,
 });
 
-test("generering fra en kilde med lister: høyst hvert tredje «velg alle», og hver fasit stemmer", async () => {
+// Produkteier 2026-10-24: plattformen trekker en plan per kall — 10–50 % «velg alle», tilfeldige plasser
+// og antall riktige — og modellen konstruerer spørsmålene. Planen ses ikke utenfra; det som kan måles,
+// er at antallet ligger i spennet, at hver fasit stemmer, og om tjeneren meldte avvik fra planen.
+const iSpennet = (questions: Q[]) => {
+  const n = questions.length;
+  expect(antallFlere(questions), `«velg alle» av ${n}`).toBeGreaterThanOrEqual(Math.ceil(n * 0.1));
+  expect(antallFlere(questions), `«velg alle» av ${n}`).toBeLessThanOrEqual(Math.floor(n * 0.5));
+};
+const avvik = (svar: { json: any }) => JSON.stringify(svar.json.validation?.issues ?? []).includes("differ from the plan");
+
+test("generering fra en kilde med lister: planen følges, og hver fasit stemmer", async () => {
   const svar = await generer(MED_LISTER, 6);
   expect(svar.status, svar.tekst).toBe(200);
   const questions = svar.json.questions as Q[];
   noter("med lister: typer", oppsummer(questions));
+  noter("med lister: avvik fra planen", avvik(svar));
   noter("med lister: advarsler", svar.json.validation?.issues ?? []);
   fasitenStemmer(questions);
-  // Taket er hvert tredje; over det gir tjeneren en advarsel, ikke et avslag. Advarselen skal da stå der.
-  if (antallFlere(questions) > 2) expect(JSON.stringify(svar.json.validation?.issues ?? [])).toMatch(/select all that apply/);
+  if (!avvik(svar)) iSpennet(questions);
   for (const q of questions.filter((x) => x.questionType === "multiple")) noter("med lister: «velg alle»", { stem: q.stem, options: q.options, riktige: q.correctAnswers });
 });
 
-test("generering fra en kilde uten lister: notert hvor mange «velg alle» modellen likevel lager", async () => {
+test("generering fra en kilde uten lister: planen gjelder også her — modellen må finne faktaene", async () => {
   const svar = await generer(UTEN_LISTER, 3);
   expect(svar.status, svar.tekst).toBe(200);
   const questions = svar.json.questions as Q[];
   noter("uten lister: typer", oppsummer(questions));
+  noter("uten lister: avvik fra planen", avvik(svar));
   fasitenStemmer(questions);
-  expect(antallFlere(questions), "3 spørsmål gir et tak på 1").toBeLessThanOrEqual(1);
+  if (!avvik(svar)) iSpennet(questions);
+  for (const q of questions.filter((x) => x.questionType === "multiple")) noter("uten lister: «velg alle»", { stem: q.stem, options: q.options, riktige: q.correctAnswers });
 });
 
 const SETT: Q[] = [

@@ -99,6 +99,7 @@ to this skill's folder.
 | `node scripts/draw-flow-figure.mjs <description.json> work/figures` | draws a flow from a description, in a wide and a narrow layout |
 | `node scripts/figure-fit-check.mjs <figure.svg>` and `node scripts/figure-motion-check.mjs <figure.svg>` | check that a figure's labels fit, and that an animated figure is safe |
 | `node scripts/figure-preview.mjs <figure.svg> --out work/preview.html` | makes a page where the author can see the figures |
+| `node scripts/mcq-plan.mjs <questions> [options]` | draws which questions in a new test are select-all-that-apply, and how many options in each are right ([modules.md](references/modules.md#select-all-that-apply)) |
 | `node scripts/mcq-cue-check.mjs work/package.json` | checks that no option gives the answer away |
 | `node scripts/course-state.mjs review work/course-state.json <clientRef> work/revised.md` | checks that a shortened text has lost nothing the author approved |
 | `node scripts/slide-coverage.mjs work/treatment.json work/package.json` | checks that every slide got what the approved slide list says |

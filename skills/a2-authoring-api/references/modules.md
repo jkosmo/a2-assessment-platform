@@ -50,18 +50,29 @@ pass.
 
 ## Select all that apply
 
-One correct answer is the default. Write a question as `"questionType": "multiple"`
-([package-schema.md](package-schema.md#a-module)) only where **the source itself** names several
-things that all hold for the stem — the required elements of something, conditions that all apply,
-steps that all belong. Never make a list up to get one, and never use it for variety.
+In a **new test**, some questions are `"questionType": "multiple"`
+([package-schema.md](package-schema.md#a-module)) — how many, which, and how many options in each are
+right is drawn at random, not chosen by you. Before writing a module's questions, run
 
-- **How many.** In a new test where the source has such lists, about one question in three — and
-  never more; where it has none, none. A list in the source is what the type is for: do not leave it
-  as a single-answer question by habit. When the author asks in general
-  for more of them ("gjør noen av spørsmålene til velg alle") or for a harder test, choose yourself
-  which questions and how many, from where several options can genuinely all be right and where the
-  test needs to be harder — at most half the set. When the author adjusts something else, every
-  question keeps its type.
+```
+node scripts/mcq-plan.mjs <number of questions> [options per question, default 4]
+```
+
+It prints the plan, for example «Question 4: select all that apply — 3 of 4 correct». Between 10 %
+and 50 % of the questions are planned, and each has from one to all options right. Follow it
+exactly: a fixed share or a fixed number of right options would be a pattern the learner learns.
+
+**Construct each planned question for its purpose.** Search the source for facts where several
+statements hold for the same question — the required contents of something, the principles or
+conditions that all apply, the steps or roles that all belong — and build the question so that
+exactly the planned number of options are statements the source supports. The wrong options are
+plausible statements the source contradicts or does not support. Take each planned question from a
+different part of the source. Never make up a fact to reach the number; if the source cannot carry
+the plan, say so at gate 4 and ask the author.
+
+- **When adjusting a course,** every question keeps its type unless the author asks to change it.
+  When the author asks in general for more of them ("gjør noen av spørsmålene til velg alle") or
+  for a harder test, choose yourself which questions and how many — at most half the set.
 - **Every option is a statement that is true or false on its own** under the stem. No option
   contains or depends on another.
 - **The stem does not say how many are right** — not "hvilke to", not "nevn tre". The platform tells

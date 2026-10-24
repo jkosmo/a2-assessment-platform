@@ -903,7 +903,24 @@ nettopp den vurderingen spørsmålstypen skal kreve. Kravet om minst ett galt va
 avgjørelse bak, og ga en lagringsfeil på stage. **Håndheves:** `mcqQuestionSchema` i
 `adminContentSchemas.ts` (minst ett riktig), `firstBadMultipleIndex` i Rediger. Status: avklart.
 
+### KI og «velg alle som stemmer»: plattformen trekker en tilfeldig plan (#1077, 2026-10-24)
+
+**Erstatter generering i oppføringen under.** Ved generering (plattformens KI og skillet) er et
+tilfeldig antall spørsmål, mellom 10 % og 50 % av settet, på tilfeldige plasser, «velg alle», og hvert
+av dem har et tilfeldig antall riktige — fra ett til alle. Plattformen trekker planen, og modellen
+konstruerer de spørsmålene: den leter i kilden etter fakta som bærer akkurat det antallet. Følger svaret
+ikke planen, får modellen ett forsøk til med beskjed om hva som avvek; deretter en advarsel til
+forfatteren. **Hvorfor:** «kilden avgjør» ga null «velg alle» av tretti spørsmål på stage, også fra en
+kilde med tydelige lister. Produkteier snudde det: en andel skal ha formatet, og KI-en skal finne
+faktaene. Faste plasser (produkteiers neste innspill) gir færre nye forsøk enn at modellen teller selv;
+tilfeldig antall og antall riktige (det siste innspillet) hindrer et mønster deltakeren kan lære.
+Ett riktig er tatt med i spennet, ellers kan deltakeren regne med minst to. **Håndheves:**
+`planMultipleQuestions` og `multiplePlanProblems` i `llmContentGenerationService.ts`; i skillet
+`scripts/mcq-plan.mjs` (samme trekning, låst av en test). Revisjon er uendret (under). Status: avklart.
+
 ### KI og «velg alle som stemmer»: kilden avgjør, høyst 50 % ved revisjon (#1077, 2026-10-24)
+
+⚠️ **Generering erstattet samme dag** (over). Revisjonsregelen gjelder.
 
 Generering: ett riktig svar er standard; KI lager «velg alle» bare der kilden lister flere ting som alle
 stemmer, høyst omtrent hvert tredje spørsmål. Revisjon: typen beholdes, men ber forfatteren om det

@@ -89,9 +89,11 @@ distraktortallene trolig alltid 0. Sjekkes og rettes som eget punkt før `multip
 
 ## Leveranse 1b — KI og skillet (produkteier 2026-10-24)
 
-- **Generering:** ett riktig svar er standard. KI lager «velg alle som stemmer» bare der kilden gir
-  grunnlag — der den lister flere ting som alle stemmer — og høyst omtrent hvert tredje spørsmål.
-  Forfatteren ser typen og kan bytte med bryteren.
+- **Generering (endret samme dag, se DECISIONS):** plattformen trekker en plan — et tilfeldig antall
+  spørsmål, 10–50 % av settet, på tilfeldige plasser, hvert med et tilfeldig antall riktige (ett til
+  alle) — og KI konstruerer de spørsmålene på fakta fra kilden. Følger svaret ikke planen: ett nytt
+  forsøk, så en advarsel. Forfatteren ser typen og kan bytte med bryteren. (Første versjon, «KI lager
+  det bare der kilden lister flere ting, høyst hvert tredje», ga null av tretti på stage.)
 - **Revisjon:** typen beholdes, med mindre forfatteren ber om det **generelt** («bruk flere spørsmål med
   flere riktige svar», «gjør testen vanskeligere»). Da vurderer KI selv hvor mange, ut fra
   vanskelighetsgraden, men **høyst 50 %** av spørsmålene i settet. Det trengs ikke å be om det per

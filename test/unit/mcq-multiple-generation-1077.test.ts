@@ -36,7 +36,9 @@ const {
   findAnswerKeyProblems,
   generateMcqQuestions,
   hasMeaningfulMcqRevision,
+  multiplePlanProblems,
   normalizeGeneratedQuestionType,
+  planMultipleQuestions,
   reviseMcqQuestions,
 } = await import("../../src/modules/adminContent/llmContentGenerationService.js");
 
@@ -54,13 +56,22 @@ const multiple = (n: number) => ({
   rationale: "Article 30 lists purpose and legal basis; colour and font are not required.",
 });
 
-const generationInput = (questionCount: number) => ({
+// Styrt tilfeldighet: tallene brukes i rekkefølge, så planen blir den samme hver gang.
+const sequence = (values: number[]) => {
+  let i = 0;
+  return () => values[i++ % values.length]!;
+};
+// For 3 spørsmål: ett «velg alle» (10–50 % av 3 er nøyaktig 1), stokkingen legger det på plass 2, og
+// 0,3 gir 2 riktige av 4. Samme plan som `multiple(n)` er skrevet for.
+const PLAN_Q2_TWO_CORRECT = [0, 0.9, 0, 0.3];
+const generationInput = (questionCount: number, random: () => number = sequence(PLAN_Q2_TWO_CORRECT)) => ({
   sourceMaterial: "Article 30 requires the record to state the purpose and the legal basis.",
   certificationLevel: "basic" as const,
   locale: "en-GB" as const,
   generationMode: "ordinary" as const,
   questionCount,
   optionCount: 4,
+  random,
 });
 
 beforeEach(() => {
@@ -68,36 +79,93 @@ beforeEach(() => {
   llm.prompts = [];
 });
 
-describe("#1077 — generering: kilden avgjør, høyst hvert tredje", () => {
-  it("instruksen lar kilden avgjøre: omtrent hvert tredje når kilden har lister, aldri flere", () => {
-    const { userPrompt } = buildMcqGenerationPrompts(generationInput(10));
-    expect(userPrompt).toContain("The source decides the type of each question");
-    // Standardveien (stage 2.100.0): når kilden har lister, SKAL omtrent hvert tredje bruke typen.
-    expect(userPrompt).toContain("about 3 of the 10 questions should be \"multiple\", never more than 3");
-    expect(userPrompt).toContain("Never invent a list");
-    expect(userPrompt).toContain("ALL options may be correct");
+// Produkteier 2026-10-24, tredje avgjørelse: et TILFELDIG antall spørsmål (10–50 %), på tilfeldige
+// plasser, er «velg alle», hvert med et tilfeldig antall riktige (ett til alle). Plattformen trekker
+// planen, modellen konstruerer spørsmålene. «Kilden avgjør» ga null av tretti på stage.
+describe("#1077 — generering: plattformen trekker planen, modellen følger den", () => {
+  it("planen: 10–50 % av settet, ulike plasser i stigende rekkefølge, 1 til alle riktige", () => {
+    let seed = 7;
+    const random = () => ((seed = (seed * 48271) % 2147483647) / 2147483647);
+    const counts = new Set<number>();
+    const correct = new Set<number>();
+    for (let run = 0; run < 500; run += 1) {
+      const plan = planMultipleQuestions(10, 4, random);
+      counts.add(plan.length);
+      expect(plan.length).toBeGreaterThanOrEqual(1);
+      expect(plan.length).toBeLessThanOrEqual(5);
+      expect(new Set(plan.map((e) => e.index)).size).toBe(plan.length);
+      expect(plan.map((e) => e.index)).toEqual([...plan.map((e) => e.index)].sort((a, b) => a - b));
+      for (const e of plan) {
+        expect(e.index).toBeGreaterThanOrEqual(0);
+        expect(e.index).toBeLessThan(10);
+        correct.add(e.correctCount);
+      }
+    }
+    // Hele spennet brukes — ikke et fast antall som deltakeren kan lære seg.
+    expect([...counts].sort()).toEqual([1, 2, 3, 4, 5]);
+    expect([...correct].sort()).toEqual([1, 2, 3, 4]);
+  });
+
+  it("kontroll: for få spørsmål gir ingen «velg alle»; 2 spørsmål gir ett", () => {
+    expect(planMultipleQuestions(1, 4, () => 0.5)).toEqual([]);
+    expect(planMultipleQuestions(2, 4, () => 0.5)).toHaveLength(1);
+  });
+
+  it("instruksen sier hvilke spørsmål og hvor mange riktige, og ber om fakta fra kilden", () => {
+    const { userPrompt } = buildMcqGenerationPrompts(generationInput(10), [{ index: 2, correctCount: 2 }, { index: 6, correctCount: 4 }]);
+    expect(userPrompt).toContain('- Question 3: "multiple", exactly 2 of 4 options correct.');
+    expect(userPrompt).toContain('- Question 7: "multiple", exactly 4 of 4 options correct (every option is correct).');
+    expect(userPrompt).toContain("Construct each planned question for that purpose: search the source material for facts");
     expect(userPrompt).toContain("must not reveal or hint at how many options are correct");
   });
 
-  it("kontroll: med for få spørsmål til et «velg alle» ber instruksen bare om ett svar", () => {
-    const { userPrompt } = buildMcqGenerationPrompts(generationInput(2));
+  it("kontroll: en tom plan ber bare om ett svar", () => {
+    const { userPrompt } = buildMcqGenerationPrompts(generationInput(10), []);
     expect(userPrompt).toContain('Do not set "questionType"');
-    expect(userPrompt).not.toContain("At most");
+    expect(userPrompt).not.toContain("the platform's plan");
   });
 
-  it("et «velg alle» fra modellen beholdes, med de riktige i alternativenes rekkefølge", async () => {
-    llm.replies.push({ questions: [multiple(1), single(2), single(3)] });
+  it("som planlagt: beholdes, med de riktige i alternativenes rekkefølge, uten nytt forsøk", async () => {
+    llm.replies.push({ questions: [single(1), multiple(2), single(3)] });
     const result = await generateMcqQuestions(generationInput(3));
-    expect(result.questions[0]).toMatchObject({ questionType: "multiple", correctAnswers: ["Purpose", "Legal basis"], correctAnswer: "Purpose" });
-    expect(result.questions[1]).not.toHaveProperty("questionType");
+    expect(llm.prompts[0]).toContain('- Question 2: "multiple", exactly 2 of 4 options correct.');
+    expect(result.questions[1]).toMatchObject({ questionType: "multiple", correctAnswers: ["Purpose", "Legal basis"], correctAnswer: "Purpose" });
+    expect(result.questions[0]).not.toHaveProperty("questionType");
+    expect(result.validationWarnings ?? []).toEqual([]);
+    expect(llm.prompts).toHaveLength(1);
+  });
+
+  it("ingen «velg alle» (slik stage så ut): nytt forsøk med beskjed, og andre forsøk godtas", async () => {
+    llm.replies.push({ questions: [single(1), single(2), single(3)] }, { questions: [single(1), multiple(2), single(3)] });
+    const result = await generateMcqQuestions(generationInput(3));
+    expect(llm.prompts).toHaveLength(2);
+    expect(llm.prompts[1]).toContain("Question type retry");
+    expect(llm.prompts[1]).toContain('question 2 must be "multiple" with exactly 2 correct options, but has one correct answer');
     expect(result.validationWarnings ?? []).toEqual([]);
   });
 
-  it("flere enn hvert tredje gir en advarsel til forfatteren — spørsmålene beholdes", async () => {
-    llm.replies.push({ questions: [multiple(1), multiple(2), single(3)] });
+  it("feil antall riktige: nytt forsøk", async () => {
+    llm.replies.push({ questions: [single(1), { ...multiple(2), correctAnswers: ["Purpose", "Colour", "Legal basis"] }, single(3)] }, { questions: [single(1), multiple(2), single(3)] });
+    await generateMcqQuestions(generationInput(3));
+    expect(llm.prompts[1]).toContain("question 2 must have exactly 2 correct options, not 3.");
+  });
+
+  it("et «velg alle» på en plass som skulle ha ett svar: nytt forsøk", async () => {
+    llm.replies.push({ questions: [multiple(1), multiple(2), single(3)] }, { questions: [single(1), multiple(2), single(3)] });
+    await generateMcqQuestions(generationInput(3));
+    expect(llm.prompts[1]).toContain('question 1 must have exactly one correct answer, not "multiple".');
+  });
+
+  it("bommer modellen to ganger, får forfatteren en advarsel — spørsmålene beholdes", async () => {
+    const twoMultiple = { questions: [multiple(1), multiple(2), single(3)] };
+    llm.replies.push(twoMultiple, twoMultiple);
     const result = await generateMcqQuestions(generationInput(3));
-    expect(result.questions).toHaveLength(2 + 1);
-    expect((result.validationWarnings ?? []).join(" ")).toMatch(/2 of 3 questions are «select all that apply»/);
+    expect(result.questions).toHaveLength(3);
+    expect((result.validationWarnings ?? []).join(" ")).toMatch(/differ from the plan/);
+  });
+
+  it("planlagt med ett riktig: et «velg alle» med ett riktig er riktig", () => {
+    expect(multiplePlanProblems([single(1), { ...multiple(2), correctAnswers: ["Purpose"] }] as never, [{ index: 1, correctCount: 1 }])).toEqual([]);
   });
 });
 
@@ -133,19 +201,19 @@ describe("#1077 — modellens svar til én form, og fasiter som ikke stemmer", (
 
   it("generering: en fasit som ikke stemmer, gir ett forsøk til med beskjed om hva som var galt", async () => {
     llm.replies.push(
-      { questions: [{ ...multiple(1), correctAnswers: ["Purpose", "Legal basis."] }, single(2), single(3)] },
-      { questions: [multiple(1), single(2), single(3)] },
+      { questions: [single(1), { ...multiple(2), correctAnswers: ["Purpose", "Legal basis."] }, single(3)] },
+      { questions: [single(1), multiple(2), single(3)] },
     );
     const result = await generateMcqQuestions(generationInput(3));
     expect(llm.prompts).toHaveLength(2);
     expect(llm.prompts[1]).toContain("Answer key retry");
     expect(llm.prompts[1]).toContain('correctAnswers ["Legal basis."]');
-    expect(result.questions[0]!.correctAnswers).toEqual(["Purpose", "Legal basis"]);
+    expect(result.questions[1]!.correctAnswers).toEqual(["Purpose", "Legal basis"]);
     expect(result).not.toHaveProperty("answerKeyProblems");
   });
 
   it("generering: stemmer fasiten ikke etter andre forsøk heller, avvises svaret", async () => {
-    const bad = { questions: [{ ...multiple(1), correctAnswers: ["Purpose", "Legal basis."] }, single(2), single(3)] };
+    const bad = { questions: [single(1), { ...multiple(2), correctAnswers: ["Purpose", "Legal basis."] }, single(3)] };
     llm.replies.push(bad, bad);
     await expect(generateMcqQuestions(generationInput(3))).rejects.toThrow(/answer key that does not match the options/);
   });
@@ -254,5 +322,19 @@ describe("#1077 — revisjon: typen beholdes, høyst halvparten", () => {
     expect(hasMeaningfulMcqRevision(sourceQuestions, revised, "gjør spørsmål 2 til velg alle som stemmer")).toBe(true);
     // Kontroll: uendret er fortsatt uendret.
     expect(hasMeaningfulMcqRevision(sourceQuestions, sourceQuestions, "gjør spørsmål 2 til velg alle som stemmer")).toBe(false);
+  });
+});
+
+// Skillet trekker planen med sitt eget skript (en språkmodell er en dårlig terning). Samme trekning
+// som plattformen: samme tilfeldige tall gir samme plan.
+describe("#1077 — skillets mcq-plan.mjs trekker som plattformen", () => {
+  it("samme tilfeldige tall gir samme plan, for mange settstørrelser", async () => {
+    const skill = await import("../../skills/a2-authoring-api/scripts/mcq-plan.mjs");
+    for (const [questionCount, optionCount] of [[3, 4], [6, 3], [10, 4], [15, 5], [20, 4]] as const) {
+      for (let seed = 1; seed <= 20; seed += 1) {
+        const rng = () => { let s = seed * 7919; return () => ((s = (s * 48271) % 2147483647) / 2147483647); };
+        expect(skill.planMultipleQuestions(questionCount, optionCount, rng())).toEqual(planMultipleQuestions(questionCount, optionCount, rng()));
+      }
+    }
   });
 });

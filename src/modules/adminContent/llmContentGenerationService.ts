@@ -61,6 +61,8 @@ export type McqGenerationInput = {
   // #1062: stems already in the module's question bank. The new questions must cover other
   // ground — a bank of 30 must not be 30 paraphrases of the first 10.
   avoidStems?: string[];
+  // #1077: tilfeldighetskilden for planen over «velg alle». Bare tester setter den.
+  random?: () => number;
 };
 
 export type McqDistractorMetadata = {
@@ -982,11 +984,29 @@ Return a single JSON object:
   return { systemPrompt, userPrompt };
 }
 
-// #1077 leveranse 1b (produkteier 2026-10-24): ved generering avgjør KILDEN — «velg alle» bare der
-// kilden lister flere ting som alle stemmer, høyst omtrent hvert tredje spørsmål. Ved revisjon som ber
-// om det generelt, vurderer modellen selv hvor mange, høyst halvparten av settet.
-export function maxMultipleForGeneration(questionCount: number): number {
-  return Math.floor(questionCount / 3);
+// #1077 leveranse 1b — produkteier 2026-10-24, tredje avgjørelse: et TILFELDIG antall spørsmål, mellom
+// 10 % og 50 % av settet, på tilfeldige plasser, er «velg alle», og hvert av dem har et tilfeldig antall
+// riktige (fra ett til alle). Plattformen trekker planen; modellen konstruerer spørsmålene og leter i
+// kilden etter fakta som bærer akkurat det antallet. Fast andel og plass ville blitt et mønster
+// deltakeren lærer; «kilden avgjør» (første avgjørelse) ga null av tretti på stage.
+// Ved revisjon som ber om det generelt, vurderer modellen selv hvor mange, høyst halvparten.
+export type MultiplePlanEntry = { index: number; correctCount: number };
+
+export function planMultipleQuestions(questionCount: number, optionCount: number, random: () => number = Math.random): MultiplePlanEntry[] {
+  const min = Math.ceil(questionCount * 0.1);
+  const max = Math.floor(questionCount * 0.5);
+  if (max < 1 || max < min) return [];
+  const between = (low: number, high: number) => low + Math.floor(random() * (high - low + 1));
+  const count = between(min, max);
+  const indexes = Array.from({ length: questionCount }, (_, i) => i);
+  for (let i = indexes.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(random() * (i + 1));
+    [indexes[i], indexes[j]] = [indexes[j]!, indexes[i]!];
+  }
+  return indexes
+    .slice(0, count)
+    .sort((a, b) => a - b)
+    .map((index) => ({ index, correctCount: between(1, optionCount) }));
 }
 
 export function maxMultipleForRevision(questionCount: number): number {
@@ -1007,27 +1027,29 @@ const MULTIPLE_QUESTION_WRITING_RULES = `For a "multiple" question:
 - The rationale says, for each option, why it is or is not correct.
 - distractorMetadata covers the incorrect options only (none when every option is correct).`;
 
-function buildGenerationQuestionTypeSection(questionCount: number): string {
-  const max = maxMultipleForGeneration(questionCount);
-  if (max === 0) {
+function buildGenerationQuestionTypeSection(plan: MultiplePlanEntry[], optionCount: number): string {
+  if (plan.length === 0) {
     return `## Question type
 
 Every question has exactly one correct answer. Do not set "questionType".`;
   }
-  // Stage 2.100.0: med «ett svar er standard … ONLY … fewer or none is fine» laget modellen null
-  // «velg alle» i fem av fem kjøringer, også fra en kilde med to tydelige lister. Instruksen må si hva
-  // som skal skje NÅR kilden har lister (standardveien), ikke bare sette et tak.
-  return `## Question type — let the source decide
+  const lines = plan.map((entry) => `- Question ${entry.index + 1}: "multiple", exactly ${entry.correctCount} of ${optionCount} options correct${entry.correctCount === optionCount ? " (every option is correct)" : ""}.`);
+  return `## Question type — the platform's plan for this set
 
-The source decides the type of each question:
-- Where the source material states several things that all hold for the same question — the required elements of something, the principles or conditions that all apply, the steps that all belong — write that question as "questionType": "multiple" (select all that apply). Such a list in the source is exactly what this type is for: when the source has one or more of them, about ${max} of the ${questionCount} questions should be "multiple", never more than ${max}.
-- Every other question has exactly one correct answer: leave out "questionType" and "correctAnswers".
-- When the source has no such list, every question has one correct answer. Never invent a list to make a "multiple" question.
+These questions (counting from 1, in the order you return them) must be "questionType": "multiple" (select all that apply), with exactly the number of correct options given:
+${lines.join("\n")}
+
+Every other question has exactly one correct answer: leave out "questionType" and "correctAnswers".
+
+Construct each planned question for that purpose: search the source material for facts where several statements hold for the same question — the required contents of something, the principles or conditions that all apply, the steps or roles that all belong, the consequences that all follow — and build the question so that exactly the planned number of options are statements the source supports. The incorrect options are plausible statements the source contradicts or does not support. Take each planned question from a different part of the source.
 
 ${MULTIPLE_QUESTION_WRITING_RULES}`;
 }
 
-export function buildMcqGenerationPrompts(input: McqGenerationInput): {
+export function buildMcqGenerationPrompts(
+  input: McqGenerationInput,
+  plan: MultiplePlanEntry[] = planMultipleQuestions(input.questionCount, input.optionCount),
+): {
   systemPrompt: string;
   userPrompt: string;
 } {
@@ -1125,7 +1147,7 @@ Rules:
 Each question must have exactly ${input.optionCount} answer options. The correctAnswer must be one of the options verbatim.
 Write all text in ${LOCALE_DISPLAY[input.locale]}.
 
-${buildGenerationQuestionTypeSection(input.questionCount)}
+${buildGenerationQuestionTypeSection(plan, input.optionCount)}
 
 ## Source material (hidden author background)
 
@@ -1153,7 +1175,7 @@ Return a single JSON object. For each incorrect option, include distractorMetada
       "eliminationRisk": "low"
     }
   ]
-}${maxMultipleForGeneration(input.questionCount) > 0
+}${plan.length > 0
     ? `
 
 A "multiple" question has the same fields plus "questionType": "multiple" and "correctAnswers", e.g. "questionType": "multiple", "correctAnswers": ["option 1", "option 3"], "correctAnswer": "option 1".`
@@ -1707,19 +1729,39 @@ function appendLengthBiasWarning(result: McqGenerationResult): McqGenerationResu
   return { ...result, validationWarnings: [...(result.validationWarnings ?? []), warning] };
 }
 
-// #1077: instruksen setter standarden (ett svar, «velg alle» bare der kilden lister flere); dette er
-// sikkerhetsnettet når modellen likevel lager flere enn hvert tredje. Advarsel, ikke avslag — hvert
-// spørsmål kan være godt, og forfatteren ser dem.
-function appendMultipleCapWarning(result: McqGenerationResult, questionCount: number): McqGenerationResult {
-  const count = countMultipleQuestions(result.questions);
-  const max = maxMultipleForGeneration(questionCount);
-  if (count <= max) return result;
-  const warning = `${count} of ${result.questions.length} questions are «select all that apply» — more than the ${max} the source normally supports. Review whether each one really has several correct options.`;
+// #1077 (produkteier 2026-10-24): de planlagte spørsmålene skal være «velg alle» med nøyaktig det
+// planlagte antallet riktige, og bare de. Hva som avviker, i ord modellen kan rette etter — tomt når
+// settet følger planen.
+export function multiplePlanProblems(questions: GeneratedMcqQuestion[], plan: MultiplePlanEntry[]): string[] {
+  const wanted = new Map(plan.map((entry) => [entry.index, entry.correctCount]));
+  const problems: string[] = [];
+  questions.forEach((question, index) => {
+    const correctCount = wanted.get(index);
+    const multiple = question.questionType === "multiple";
+    if (correctCount !== undefined && !multiple) {
+      problems.push(`question ${index + 1} must be "multiple" with exactly ${correctCount} correct options, but has one correct answer; construct it on facts from the source where ${correctCount === 1 ? "one statement holds and the others do not" : "several statements hold"}.`);
+    } else if (correctCount !== undefined && (question.correctAnswers?.length ?? 0) !== correctCount) {
+      problems.push(`question ${index + 1} must have exactly ${correctCount} correct options, not ${question.correctAnswers?.length ?? 0}.`);
+    } else if (correctCount === undefined && multiple) {
+      problems.push(`question ${index + 1} must have exactly one correct answer, not "multiple".`);
+    }
+  });
+  return problems;
+}
+
+// Sikkerhetsnettet etter det nye forsøket: advarsel, ikke avslag — spørsmålene kan være gode hver for
+// seg, og forfatteren kan bytte type med bryteren.
+function appendMultiplePlanWarning(result: McqGenerationResult, plan: MultiplePlanEntry[]): McqGenerationResult {
+  const problems = multiplePlanProblems(result.questions, plan);
+  if (problems.length === 0) return result;
+  const warning = `The question types differ from the plan for this set: ${problems.join(" ")} Review the types.`;
   return { ...result, validationWarnings: [...(result.validationWarnings ?? []), warning] };
 }
 
 export async function generateMcqQuestions(input: McqGenerationInput): Promise<McqGenerationResult> {
-  const { systemPrompt, userPrompt } = buildMcqGenerationPrompts(input);
+  // #1077: planen trekkes ÉN gang — instruksen og kontrollen må se den samme.
+  const plan = planMultipleQuestions(input.questionCount, input.optionCount, input.random);
+  const { systemPrompt, userPrompt } = buildMcqGenerationPrompts(input, plan);
 
   // Each question with distractorMetadata (3 verbose fields per distractor) needs ~800 tokens.
   // Floor at 4000 so single-question calls don't under-allocate.
@@ -1751,11 +1793,13 @@ export async function generateMcqQuestions(input: McqGenerationInput): Promise<M
   // alternativene (#1077, QA 2.100.0). Språket slippes gjennom med en advarsel som før; fasiten ikke —
   // et spørsmål der et sant alternativ rettes som galt, skal ikke nå forfatteren.
   const finish = ({ answerKeyProblems: _problems, ...result }: McqGenerationResult & { answerKeyProblems: AnswerKeyProblem[] }) =>
-    appendMultipleCapWarning(appendLengthBiasWarning(result), input.questionCount);
+    appendMultiplePlanWarning(appendLengthBiasWarning(result), plan);
   const first = await attempt(null);
   const sampleText = mcqSampleForLanguageCheck(first);
   const wrongLanguage = isLikelyWrongLocale(sampleText, input.locale);
-  if (!wrongLanguage && first.answerKeyProblems.length === 0) {
+  // #1077: andelen telles av plattformen, ikke overlates til modellens skjønn.
+  const shareProblems = multiplePlanProblems(first.questions, plan);
+  if (!wrongLanguage && first.answerKeyProblems.length === 0 && shareProblems.length === 0) {
     return finish(first);
   }
   const directives: string[] = [];
@@ -1768,6 +1812,10 @@ export async function generateMcqQuestions(input: McqGenerationInput): Promise<M
   if (first.answerKeyProblems.length > 0) {
     console.warn(`[#1077] generateMcqQuestions answer key mismatch: ${first.answerKeyProblems.map((p) => p.text).join("; ")}. Retrying.`);
     directives.push(answerKeyRetryDirective(first.answerKeyProblems));
+  }
+  if (shareProblems.length > 0) {
+    console.warn(`[#1077] generateMcqQuestions question-type share: ${shareProblems.join("; ")} Retrying.`);
+    directives.push(`## Question type retry\n\n${shareProblems.map((problem) => `- ${problem}`).join("\n")}`);
   }
   const second = await attempt(directives.join("\n\n"));
   if (second.answerKeyProblems.length > 0) {
