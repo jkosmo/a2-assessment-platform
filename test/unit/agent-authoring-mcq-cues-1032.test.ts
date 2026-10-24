@@ -94,6 +94,27 @@ describe("mcq-cue-check — flere riktige svar (#1077)", () => {
     expect(r.issues.map((i) => i.kind)).toContain("count_in_stem");
   });
 
+  // QA 2.100.0: 17 stammer kjørt mot regexen; disse ga falske funn, og «Fix every finding» ville fått
+  // modellen til å skrive om en stamme som var i orden.
+  it.each([
+    "Which actions would you choose to take first?",
+    "Which to prioritise when time is short?",
+    "Which two-factor methods does the policy accept?",
+    "Hvilke tre-partsavtaler må registreres?",
+    "Hvilke fire-øyne-kontroller gjelder?",
+    "Det er vel to ting å tenke på her — hva gjelder?",
+    "Hva gjør du i de to første ukene?",
+  ])("ingen count_in_stem: %s", (stem) => {
+    expect(checkMcqCues([m(stem, even, [0, 2])]).issues.map((i) => i.kind)).not.toContain("count_in_stem");
+  });
+
+  it.each(["Hvilke to av disse må med?", "Hvilke tre forhold må vurderes?", "Name two elements of the record.", "Kva for to må vere med?", "Velg de tre som gjelder.", "Hvilke 2 må med?"])(
+    "count_in_stem: %s",
+    (stem) => {
+      expect(checkMcqCues([m(stem, even, [0, 2])]).issues.map((i) => i.kind)).toContain("count_in_stem");
+    },
+  );
+
   it("de riktige er de lange → correct_are_longer", () => {
     const r = checkMcqCues([m("Hva må protokollen inneholde?", ["Formålet med behandlingen av personopplysningene", "Farge", "Behandlingsgrunnlaget etter artikkel seks i forordningen", "Font"], [0, 2])]);
     expect(r.issues.map((i) => i.kind)).toContain("correct_are_longer");

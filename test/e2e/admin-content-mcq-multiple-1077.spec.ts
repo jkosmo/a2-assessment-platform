@@ -194,6 +194,37 @@ test.describe("#1077 — «velg alle som stemmer» i editoren", () => {
     expect(question.correctAnswers).toEqual([question.options[1], question.options[3]]);
   });
 
+  // QA 2.100.0: typen i SVARET gjelder også den andre veien — et «velg alle» KI-en gjør om til ett svar,
+  // lagres som ett svar, ikke med den gamle typen.
+  test("KI-revisjon som gjør et «velg alle» om til ett svar, lagres som ett svar", async ({ page }) => {
+    await mockCommonApis(page, {
+      modules: [{ id: "module-1", title: "Records", activeVersion: { versionNo: 1 } }],
+      moduleExports: { "module-1": moduleWith({ questionType: "multiple", stem: localizedText("What must the record state?"), options: [A, B, C, D], correctAnswers: [A, C], correctAnswer: A, rationale: localizedText("Art. 30") }) },
+    });
+    await page.route("**/generate/mcq/revise", async (route: Route) => {
+      const q = route.request().postDataJSON().questions[0];
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ questions: [{ stem: q.stem, options: q.options, correctAnswer: q.options[2], rationale: "Only the legal basis now." }] }),
+      });
+    });
+    const saved = await captureSave(page);
+    await page.goto("/admin-content/module/module-1/conversation?resumeEditing=1");
+    await page.locator("#previewEditTitle").waitFor();
+    await clickEnabledButton(page, /^Request a change$|^Be om endring$/);
+    await page.locator("#dialogReviseInput").fill("Make question 1 a single-answer question");
+    await page.locator("#dialogReviseSubmit").click();
+    await expect(page.getByText(/Updated|Oppdatert|ready|klar/i).first()).toBeVisible();
+
+    await page.locator("#formSaveBtn").click();
+    await expect.poll(() => saved.payload).not.toBeNull();
+    const question = saved.payload.mcqSet?.questions?.[0];
+    expect(question?.questionType ?? "single").toBe("single");
+    expect(question?.correctAnswers).toBeUndefined();
+    expect(question?.correctAnswer).toEqual(question.options[2]);
+  });
+
   test("kontroll: tilbake til ett riktig svar beholder det første avkryssede, og lagres som vanlig spørsmål", async ({ page }) => {
     await mockCommonApis(page, {
       modules: [{ id: "module-1", title: "Records" }],

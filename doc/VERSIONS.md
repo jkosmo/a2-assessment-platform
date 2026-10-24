@@ -18,6 +18,12 @@ Produkteiers avgjørelser i DECISIONS («KI og «velg alle som stemmer»»).
   vanskeligere»), da velger modellen selv. Høyst halvparten av settet (eller så mange som settet
   alt hadde): over det får modellen ett forsøk til, og så avvises revisjonen. En ren typeendring
   regnes som en endring.
+- **QA-runde 1:** en fasit som ikke stemmer med alternativene (et riktig som ikke er et alternativ
+  ordrett) rettes ikke lenger stille — `findAnswerKeyProblems` melder den, modellen får ett forsøk
+  til, og så avvises svaret, både ved generering og revisjon. «Gjør 1b riktig også» regnes som en
+  endring. Forsøksteksten sier den faktiske grunnen. Kutt av for mange alternativer beholder alle de
+  riktige. I skillet: `questionType: null` avvises som i importen, og antallssjekken har én liste per
+  språk uten treff på «choose to», «two-factor» og «det er vel to».
 - **Skillet:** `package-schema.md`, `modules.md` (ny del «Select all that apply»), `localization.md`,
   `api-flow.md` og `adjust-course.md` kjenner typen. `export-validate.mjs` speiler importens regler
   (låst til plattformen av en test, også listen over typer); `localization-check.mjs` krever de samme

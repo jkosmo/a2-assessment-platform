@@ -32,6 +32,8 @@ warmModuleGraph(() => import("../../src/modules/adminContent/llmContentGeneratio
 
 const {
   buildMcqGenerationPrompts,
+  clampMcqOptionCount,
+  findAnswerKeyProblems,
   generateMcqQuestions,
   hasMeaningfulMcqRevision,
   normalizeGeneratedQuestionType,
@@ -98,30 +100,60 @@ describe("#1077 — generering: kilden avgjør, høyst hvert tredje", () => {
   });
 });
 
-describe("#1077 — modellens svar til én form", () => {
-  it("riktige som ikke er alternativer, fjernes; ingen igjen → ett svar, hvis det finnes", () => {
-    const q = normalizeGeneratedQuestionType(
-      { ...multiple(1), correctAnswers: ["Something else"], correctAnswer: "Purpose" },
-      0,
-      "test",
-    );
-    expect(q).not.toHaveProperty("questionType");
-    expect(q.correctAnswer).toBe("Purpose");
+describe("#1077 — modellens svar til én form, og fasiter som ikke stemmer", () => {
+  // QA 2.100.0: et riktig som ikke var et alternativ ordrett, ble fjernet STILLE — et sant alternativ
+  // ble rettet som galt uten at noen fikk vite det. Nå meldes det, og normaliseringen retter ingenting.
+  it("et riktig som ikke er et alternativ ordrett, er et funn — også når resten treffer", () => {
+    expect(findAnswerKeyProblems({ ...multiple(1), correctAnswers: ["Purpose", "Legal basis."] }, 0)).toEqual([
+      'question 1: correctAnswers ["Legal basis."] are not among the options verbatim',
+    ]);
+    expect(findAnswerKeyProblems({ ...multiple(1), correctAnswers: [] }, 2)).toEqual(['question 3: "multiple" without correctAnswers']);
+    expect(findAnswerKeyProblems({ ...single(1), correctAnswer: "Purpose limitation" }, 0)).toHaveLength(1);
+    // Kontroll: mellomrom rundt teksten er ikke et funn, og et riktig spørsmål har ingen.
+    expect(findAnswerKeyProblems({ ...multiple(1), correctAnswers: [" Purpose", "Legal basis "] }, 0)).toEqual([]);
+    expect(findAnswerKeyProblems(single(1), 0)).toEqual([]);
   });
 
-  it("et «velg alle» uten brukbare riktige og uten svar avvises", () => {
-    expect(() => normalizeGeneratedQuestionType({ ...multiple(1), correctAnswers: [] }, 0, "test")).toThrow(/no usable correct answer/);
+  it("normaliseringen former: de riktige i alternativenes rekkefølge, correctAnswer det første", () => {
+    const q = normalizeGeneratedQuestionType(multiple(1));
+    expect(q).toMatchObject({ questionType: "multiple", correctAnswers: ["Purpose", "Legal basis"], correctAnswer: "Purpose" });
   });
 
   it("«single» og annet tull fra modellen blir ett svar; correctAnswers på det kastes", () => {
-    const q = normalizeGeneratedQuestionType({ ...single(1), questionType: "single", correctAnswers: ["Colour"] }, 0, "test");
+    const q = normalizeGeneratedQuestionType({ ...single(1), questionType: "single", correctAnswers: ["Colour"] });
     expect(q).not.toHaveProperty("questionType");
     expect(q).not.toHaveProperty("correctAnswers");
   });
 
   it("alle alternativene riktige er lov", () => {
-    const q = normalizeGeneratedQuestionType({ ...multiple(1), correctAnswers: ["Font", "Purpose", "Colour", "Legal basis"] }, 0, "test");
+    const q = normalizeGeneratedQuestionType({ ...multiple(1), correctAnswers: ["Font", "Purpose", "Colour", "Legal basis"] });
     expect(q.correctAnswers).toEqual(["Purpose", "Colour", "Legal basis", "Font"]);
+  });
+
+  it("generering: en fasit som ikke stemmer, gir ett forsøk til med beskjed om hva som var galt", async () => {
+    llm.replies.push(
+      { questions: [{ ...multiple(1), correctAnswers: ["Purpose", "Legal basis."] }, single(2), single(3)] },
+      { questions: [multiple(1), single(2), single(3)] },
+    );
+    const result = await generateMcqQuestions(generationInput(3));
+    expect(llm.prompts).toHaveLength(2);
+    expect(llm.prompts[1]).toContain("Answer key retry");
+    expect(llm.prompts[1]).toContain('correctAnswers ["Legal basis."]');
+    expect(result.questions[0]!.correctAnswers).toEqual(["Purpose", "Legal basis"]);
+    expect(result).not.toHaveProperty("answerKeyProblems");
+  });
+
+  it("generering: stemmer fasiten ikke etter andre forsøk heller, avvises svaret", async () => {
+    const bad = { questions: [{ ...multiple(1), correctAnswers: ["Purpose", "Legal basis."] }, single(2), single(3)] };
+    llm.replies.push(bad, bad);
+    await expect(generateMcqQuestions(generationInput(3))).rejects.toThrow(/answer key that does not match the options/);
+  });
+
+  it("kutt av for mange alternativer beholder ALLE de riktige", () => {
+    const raw = { questions: [{ ...multiple(1), options: ["a", "b", "c", "d", "e", "f", "g"], correctAnswers: ["f", "g"], correctAnswer: "f" }] };
+    const clamped = clampMcqOptionCount(raw) as { questions: Array<{ options: string[] }> };
+    expect(clamped.questions[0]!.options).toHaveLength(6);
+    expect(clamped.questions[0]!.options).toEqual(expect.arrayContaining(["f", "g"]));
   });
 });
 
@@ -164,6 +196,55 @@ describe("#1077 — revisjon: typen beholdes, høyst halvparten", () => {
     const result = await reviseMcqQuestions(revisionInput("Use more select-all questions"));
     expect(result.questions.filter((q) => q.questionType === "multiple")).toHaveLength(5);
     expect(llm.prompts).toHaveLength(1);
+  });
+
+  // QA 2.100.0, S3: modellen skrev om alternativ c og lot fasiten peke på den gamle teksten.
+  it("målrettet endring der fasiten ikke følger med: ett forsøk til, så avvist", async () => {
+    const rewritten = source.map((q, i) => (i === 0 ? { ...q, options: ["Purpose", "Colour", "The lawful basis for processing", "Font"] } : q));
+    llm.replies.push({ questions: rewritten }, { questions: rewritten });
+    await expect(reviseMcqQuestions(revisionInput("endre 1c"))).rejects.toThrow(/answer key that does not match the options/);
+    expect(llm.prompts[1]).toContain("Answer key retry");
+    // Grunnen var fasiten, ikke at endringen manglet.
+    expect(llm.prompts[1]).not.toContain("did not apply the requested change concretely enough");
+  });
+
+  it("målrettet endring der fasiten følger med i andre forsøk, godtas", async () => {
+    const rewritten = source.map((q, i) => (i === 0 ? { ...q, options: ["Purpose", "Colour", "The lawful basis for processing", "Font"] } : q));
+    const fixed = rewritten.map((q, i) => (i === 0 ? { ...q, correctAnswers: ["Purpose", "The lawful basis for processing"] } : q));
+    llm.replies.push({ questions: rewritten }, { questions: fixed });
+    const result = await reviseMcqQuestions(revisionInput("endre 1c"));
+    expect(result.questions[0]!.correctAnswers).toEqual(["Purpose", "The lawful basis for processing"]);
+  });
+
+  it("over taket i første forsøk, innenfor i andre: godtas", async () => {
+    const six = source.map((q, i) => (i < 6 ? { ...multiple(i + 1), correctAnswer: "Purpose" } : q));
+    const five = source.map((q, i) => (i < 5 ? { ...multiple(i + 1), correctAnswer: "Purpose" } : q));
+    llm.replies.push({ questions: six }, { questions: five });
+    const result = await reviseMcqQuestions(revisionInput("Use more select-all questions"));
+    expect(result.questions.filter((q) => q.questionType === "multiple")).toHaveLength(5);
+    expect(llm.prompts[1]).toContain("your previous attempt had 6");
+  });
+
+  it("et sett forsøkeren alt har gjort til over halvparten, avvises ikke av en revisjon av språket", async () => {
+    const mostly: typeof source = Array.from({ length: 10 }, (_, i) => (i < 7 ? { ...multiple(i + 1), correctAnswer: "Purpose" } : single(i + 1)));
+    const reworded = mostly.map((q) => ({ ...q, rationale: `${q.rationale} Simpler wording for every reader.` }));
+    llm.replies.push({ questions: reworded });
+    const result = await reviseMcqQuestions({ ...revisionInput("Simplify the language"), questions: mostly as unknown as RevisableMcqQuestion[] });
+    expect(result.questions.filter((q) => q.questionType === "multiple")).toHaveLength(7);
+    expect(llm.prompts).toHaveLength(1);
+  });
+
+  it("en revisjon som ikke endrer noe i et sett med «velg alle»: nytt forsøk, så «ingen endring»", async () => {
+    llm.replies.push({ questions: source }, { questions: source });
+    await expect(reviseMcqQuestions(revisionInput("Make it better"))).rejects.toThrow(/produced no change/);
+    expect(llm.prompts).toHaveLength(2);
+  });
+
+  it("«gjør 1b riktig også» endrer bare fasiten — og er en ekte endring", () => {
+    const sourceQuestions = [{ ...multiple(1), questionType: "multiple" as const, correctAnswer: "Purpose", correctAnswers: ["Purpose", "Legal basis"] }];
+    const revised = [{ ...sourceQuestions[0]!, correctAnswers: ["Purpose", "Colour", "Legal basis"] }];
+    expect(hasMeaningfulMcqRevision(sourceQuestions, revised, "gjør 1b riktig også")).toBe(true);
+    expect(hasMeaningfulMcqRevision(sourceQuestions, sourceQuestions, "gjør 1b riktig også")).toBe(false);
   });
 
   it("«gjør spørsmål 2 til velg alle» er en ekte endring, selv om teksten står", () => {

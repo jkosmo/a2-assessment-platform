@@ -75,7 +75,13 @@ export function collectMcqSets(doc) {
 
 // #1077: a stem that names how many are correct gives the answer away — the platform tells the
 // learner to select all that apply, and nothing else.
-const COUNT_IN_STEM = /\b(?:hvilke|kva for|which|velg|vel|choose|select|name|nevn)\s+(?:de\s+|dei\s+|the\s+)?(?:to|tre|fire|fem|two|three|four|five|2|3|4|5)\b/i;
+// One list per language (QA 2.100.0): the Norwegian numeral «to» after an English word matched the
+// English infinitive («Which actions would you choose to take»). A numeral followed by a hyphen is a
+// compound («two-factor», «fire-øyne»), not a count. Nynorsk «vel» alone is also «surely», so only
+// «vel dei …» counts.
+const COUNT_IN_STEM_NB = /\b(?:hvilke|kva for|velg(?:\s+de)?|vel\s+dei|nevn)\s+(?:to|tre|fire|fem|[2-5])\b(?!-)/i;
+const COUNT_IN_STEM_EN = /\b(?:which|choose|select|name)\s+(?:the\s+)?(?:two|three|four|five|[2-5])\b(?!-)/i;
+const COUNT_IN_STEM = { test: (stem) => COUNT_IN_STEM_NB.test(stem) || COUNT_IN_STEM_EN.test(stem) };
 
 /**
  * #1077: «select all that apply». Every correct answer must be an option; the correct options must

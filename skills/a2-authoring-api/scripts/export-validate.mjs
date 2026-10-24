@@ -260,7 +260,8 @@ export function validateExportEnvelopeStructure(envelope) {
     for (const [qi, q] of (av.mcqSet?.questions ?? []).entries()) {
       const qPath = `${path}.activeVersion.mcqSet.questions[${qi}]`;
       const optionIds = (q.options ?? []).map(localizedIdentity);
-      const type = q.questionType ?? "single";
+      // Only an ABSENT type means "single"; `null` is rejected by the import (QA 2.100.0).
+      const type = q.questionType === undefined ? "single" : q.questionType;
       if (!MCQ_QUESTION_TYPES.includes(type)) {
         err(`${qPath}.questionType`, `must be one of ${MCQ_QUESTION_TYPES.join(", ")}`);
         continue;

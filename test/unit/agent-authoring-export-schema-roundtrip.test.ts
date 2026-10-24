@@ -290,6 +290,8 @@ describe("#1077 — flere riktige svar: skillets validator og det ekte skjemaet 
     ["et riktig som bare stemmer på ett språk", { questionType: "multiple", correctAnswers: [A, { ...C, nn: "Noko anna" }] }, false],
     ["samme alternativ to ganger", { questionType: "multiple", correctAnswers: [A, A] }, false],
     ["ukjent type", { questionType: "order", correctAnswer: A }, false],
+    // QA 2.100.0: bare en FRAVÆRENDE type er «single»; importen avviser null.
+    ["type null", { questionType: null, correctAnswer: A }, false],
     ["correctAnswers på et vanlig spørsmål", { correctAnswer: A, correctAnswers: [A] }, false],
     ["kontroll: vanlig spørsmål", { correctAnswer: A }, true],
   ])("%s", (_navn, question, expected) => {

@@ -250,13 +250,18 @@ export function clampMcqOptionCount(raw: unknown): unknown {
   if (!Array.isArray(obj.questions)) return raw;
   for (const entry of obj.questions) {
     if (!entry || typeof entry !== "object") continue;
-    const question = entry as { options?: unknown; correctAnswer?: unknown };
+    const question = entry as { options?: unknown; correctAnswer?: unknown; correctAnswers?: unknown };
     if (Array.isArray(question.options) && question.options.length > MCQ_MAX_OPTIONS) {
-      const correct = question.correctAnswer;
+      // #1077: for «velg alle» skal ALLE de riktige overleve kuttet, ikke bare correctAnswer.
+      const correct = [
+        ...(Array.isArray(question.correctAnswers) ? question.correctAnswers : []),
+        question.correctAnswer,
+      ].filter((answer): answer is string => typeof answer === "string" && (question.options as unknown[]).includes(answer));
       let kept = question.options.slice(0, MCQ_MAX_OPTIONS);
-      if (typeof correct === "string" && !kept.includes(correct) && question.options.includes(correct)) {
-        // Ensure the correct answer survives the trim by seating it first.
-        kept = [correct, ...question.options.filter((option) => option !== correct)].slice(0, MCQ_MAX_OPTIONS);
+      if (correct.some((answer) => !kept.includes(answer))) {
+        // Seat the correct answers first, keep the original order otherwise.
+        const seated = new Set(correct);
+        kept = [...question.options.filter((option) => seated.has(option)), ...question.options.filter((option) => !seated.has(option))].slice(0, MCQ_MAX_OPTIONS);
       }
       question.options = kept;
     }
@@ -266,37 +271,73 @@ export function clampMcqOptionCount(raw: unknown): unknown {
 
 // Coerce-then-validate an MCQ generation/revision/localization response. Throws a descriptive error
 // only when the response is still invalid after coercion.
-function parseMcqGenerationResponse(raw: unknown, context: string): { questions: GeneratedMcqQuestion[] } {
+type RawGeneratedMcqQuestion = { questionType?: unknown; options: string[]; correctAnswer?: string; correctAnswers?: string[] }
+  & Omit<GeneratedMcqQuestion, "questionType" | "correctAnswer" | "correctAnswers">;
+
+type ParsedMcqResponse = {
+  questions: GeneratedMcqQuestion[];
+  // #1077 (QA 2.100.0): fasiter som ikke stemmer med alternativene. Generering og revisjon gir
+  // modellen ett forsøk til og avviser så; de skal aldri rettes stille. Oversettelse ser bort fra
+  // dem — klienten henter svaret fra alternativets plass (localizeMcqAcrossLocales).
+  answerKeyProblems: AnswerKeyProblem[];
+};
+
+type AnswerKeyProblem = { index: number; text: string };
+
+// Coerce-then-validate an MCQ generation/revision/localization response. Throws a descriptive error
+// only when the response is still invalid after coercion.
+function parseMcqGenerationResponse(raw: unknown, context: string): ParsedMcqResponse {
   const parsed = mcqGenerationResponseCodec.safeParse(clampMcqOptionCount(raw));
   if (!parsed.success) {
     throw new Error(`${context} failed validation: ${JSON.stringify(parsed.error.issues)}`);
   }
-  return { questions: parsed.data.questions.map((question, index) => normalizeGeneratedQuestionType(question, index, context)) };
+  return {
+    questions: parsed.data.questions.map((question) => normalizeGeneratedQuestionType(question)),
+    answerKeyProblems: parsed.data.questions.flatMap((question, index) => findAnswerKeyProblems(question, index).map((text) => ({ index, text }))),
+  };
 }
 
 /**
- * #1077: modellens spørsmål til ÉN form. «multiple» beholdes bare med minst ett riktig som er et av
- * alternativene ordrett; de riktige ordnes som alternativene, og `correctAnswer` blir det første. En
- * «multiple» uten et eneste brukbart riktig faller tilbake til ett svar hvis `correctAnswer` er et
- * alternativ — ellers er spørsmålet ubrukelig, og svaret avvises som før.
+ * #1077 (QA 2.100.0): hva som er galt med fasiten i ETT spørsmål fra modellen — tomt hvis ingenting.
+ * Et «velg alle» der ett av de riktige ikke er et alternativ ordrett, er galt — også når resten
+ * treffer. Før ble det som ikke traff, fjernet stille: modellen skrev om alternativ c, lot fasiten
+ * peke på den gamle teksten, og et sant alternativ ble rettet som galt uten at noen fikk vite det.
  */
-export function normalizeGeneratedQuestionType(
-  question: { questionType?: unknown; options: string[]; correctAnswer?: string; correctAnswers?: string[] } & Omit<GeneratedMcqQuestion, "questionType" | "correctAnswer" | "correctAnswers">,
-  index: number,
-  context: string,
-): GeneratedMcqQuestion {
+export function findAnswerKeyProblems(question: RawGeneratedMcqQuestion, index: number): string[] {
+  const options = new Set(question.options.map((option) => option.trim()));
+  const label = `question ${index + 1}`;
+  if (question.questionType === "multiple") {
+    const answers = question.correctAnswers ?? [];
+    if (answers.length === 0) return [`${label}: "multiple" without correctAnswers`];
+    const missing = answers.filter((answer) => !options.has(answer.trim()));
+    return missing.length > 0 ? [`${label}: correctAnswers ${JSON.stringify(missing)} are not among the options verbatim`] : [];
+  }
+  const answer = question.correctAnswer?.trim() ?? "";
+  if (!answer) return [`${label}: no correctAnswer`];
+  return options.has(answer) ? [] : [`${label}: correctAnswer ${JSON.stringify(answer)} is not among the options verbatim`];
+}
+
+/**
+ * #1077: modellens spørsmål til ÉN form. «multiple» beholder de riktige som er alternativer, ordnet
+ * som alternativene, og `correctAnswer` blir det første. Det som ikke stemmer, meldes av
+ * `findAnswerKeyProblems` — denne funksjonen retter ingenting stille, den bare former.
+ */
+export function normalizeGeneratedQuestionType(question: RawGeneratedMcqQuestion): GeneratedMcqQuestion {
   const { questionType, correctAnswer, correctAnswers, ...rest } = question;
   if (questionType === "multiple") {
     const wanted = new Set((correctAnswers ?? []).map((answer) => answer.trim()));
     const correct = question.options.filter((option) => wanted.has(option.trim()));
-    if (correct.length > 0) {
-      return { ...rest, questionType: "multiple", correctAnswer: correct[0]!, correctAnswers: correct };
-    }
+    return { ...rest, questionType: "multiple", correctAnswer: correct[0] ?? correctAnswer ?? "", correctAnswers: correct };
   }
-  if (typeof correctAnswer !== "string" || correctAnswer.trim().length === 0) {
-    throw new Error(`${context} failed validation: question ${index + 1} has no usable correct answer.`);
-  }
-  return { ...rest, correctAnswer };
+  return { ...rest, correctAnswer: correctAnswer ?? "" };
+}
+
+function answerKeyRetryDirective(problems: AnswerKeyProblem[]): string {
+  return `## Answer key retry — your previous answer key did not match the options
+
+${problems.map((problem) => `- ${problem.text}`).join("\n")}
+
+Every correctAnswer, and every entry in correctAnswers, must be copied verbatim from that question's options. If you rewrite an option that is correct, write the new text in correctAnswers too.`;
 }
 
 const courseCopyLocalizationResponseCodec = z.object({
@@ -764,7 +805,9 @@ function hasTargetedMcqChange(
     if (sourceOption === undefined || revisedOption === undefined) {
       return false;
     }
-    return isSubstantivelyDifferentText(sourceOption, revisedOption);
+    // #1077 (QA 2.100.0): «gjør 1b riktig også» endrer fasiten, ikke teksten i 1b.
+    return mcqAnswerKeySignature(sourceQuestion) !== mcqAnswerKeySignature(revisedQuestion)
+      || isSubstantivelyDifferentText(sourceOption, revisedOption);
   }
 
   return (
@@ -1678,7 +1721,7 @@ export async function generateMcqQuestions(input: McqGenerationInput): Promise<M
   // Floor at 4000 so single-question calls don't under-allocate.
   const maxTokens = Math.max(4000, input.questionCount * input.optionCount * 200);
 
-  const attempt = async (extraDirective: string | null): Promise<McqGenerationResult> => {
+  const attempt = async (extraDirective: string | null): Promise<McqGenerationResult & { answerKeyProblems: AnswerKeyProblem[] }> => {
     const promptToUse = extraDirective ? `${userPrompt}\n\n${extraDirective}` : userPrompt;
     const raw = await callLlm(systemPrompt, promptToUse, maxTokens);
     const parsed = { data: parseMcqGenerationResponse(raw, "MCQ generation LLM response") };
@@ -1691,28 +1734,47 @@ export async function generateMcqQuestions(input: McqGenerationInput): Promise<M
         `${parsed.data.questions.length > input.questionCount ? "Truncating to requested count." : "Returning fewer than requested."}`,
       );
       if (parsed.data.questions.length > input.questionCount) {
-        return { ...parsed.data, questions: parsed.data.questions.slice(0, input.questionCount) };
+        return {
+          questions: parsed.data.questions.slice(0, input.questionCount),
+          answerKeyProblems: parsed.data.answerKeyProblems.filter((problem) => problem.index < input.questionCount),
+        };
       }
     }
     return parsed.data;
   };
 
+  // Ett nytt forsøk dekker begge feilene: feil språk (#444) og en fasit som ikke stemmer med
+  // alternativene (#1077, QA 2.100.0). Språket slippes gjennom med en advarsel som før; fasiten ikke —
+  // et spørsmål der et sant alternativ rettes som galt, skal ikke nå forfatteren.
+  const finish = ({ answerKeyProblems: _problems, ...result }: McqGenerationResult & { answerKeyProblems: AnswerKeyProblem[] }) =>
+    appendMultipleCapWarning(appendLengthBiasWarning(result), input.questionCount);
   const first = await attempt(null);
   const sampleText = mcqSampleForLanguageCheck(first);
-  if (!isLikelyWrongLocale(sampleText, input.locale)) {
-    return appendMultipleCapWarning(appendLengthBiasWarning(first), input.questionCount);
+  const wrongLanguage = isLikelyWrongLocale(sampleText, input.locale);
+  if (!wrongLanguage && first.answerKeyProblems.length === 0) {
+    return finish(first);
   }
-  console.warn(
-    `[#444] generateMcqQuestions language mismatch: expected ${input.locale}, detected ${detectDominantLanguage(sampleText)}. Retrying with stronger directive.`,
-  );
-  const retryDirective = `## Language retry — your previous attempt was in the wrong language.\n\nYour previous response used the wrong language. Re-do every stem, option, correctAnswer and rationale in ${LOCALE_DISPLAY[input.locale]}. The source material's language is irrelevant — output language is determined ONLY by this directive.`;
-  const second = await attempt(retryDirective);
+  const directives: string[] = [];
+  if (wrongLanguage) {
+    console.warn(
+      `[#444] generateMcqQuestions language mismatch: expected ${input.locale}, detected ${detectDominantLanguage(sampleText)}. Retrying with stronger directive.`,
+    );
+    directives.push(`## Language retry — your previous attempt was in the wrong language.\n\nYour previous response used the wrong language. Re-do every stem, option, correctAnswer and rationale in ${LOCALE_DISPLAY[input.locale]}. The source material's language is irrelevant — output language is determined ONLY by this directive.`);
+  }
+  if (first.answerKeyProblems.length > 0) {
+    console.warn(`[#1077] generateMcqQuestions answer key mismatch: ${first.answerKeyProblems.map((p) => p.text).join("; ")}. Retrying.`);
+    directives.push(answerKeyRetryDirective(first.answerKeyProblems));
+  }
+  const second = await attempt(directives.join("\n\n"));
+  if (second.answerKeyProblems.length > 0) {
+    throw new Error(`MCQ generation produced an answer key that does not match the options (${second.answerKeyProblems.map((p) => p.text).join("; ")}). Please try again.`);
+  }
   if (isLikelyWrongLocale(mcqSampleForLanguageCheck(second), input.locale)) {
     console.warn(
       `[#444] generateMcqQuestions language retry also produced wrong language (expected ${input.locale}). Returning result anyway — operator must verify.`,
     );
   }
-  return appendMultipleCapWarning(appendLengthBiasWarning(second), input.questionCount);
+  return finish(second);
 }
 
 function mcqSampleForLanguageCheck(result: McqGenerationResult): string {
@@ -1764,28 +1826,47 @@ export async function reviseMcqQuestions(input: McqRevisionInput): Promise<McqGe
   const hasExplicitTarget = extractMcqRevisionTargets(input.instruction).length > 0;
   const countPreserved = (revised: GeneratedMcqQuestion[]) =>
     !hasExplicitTarget || revised.length === sourceQuestions.length;
-  const isAcceptable = (revised: GeneratedMcqQuestion[]) =>
-    hasMeaningfulMcqRevision(sourceQuestions, revised, input.instruction) && countPreserved(revised) && withinMultipleCap(revised);
+  const meaningful = (revised: GeneratedMcqQuestion[]) => hasMeaningfulMcqRevision(sourceQuestions, revised, input.instruction);
+  const isAcceptable = (attempt: ParsedMcqResponse) =>
+    meaningful(attempt.questions) && countPreserved(attempt.questions) && withinMultipleCap(attempt.questions) && attempt.answerKeyProblems.length === 0;
+  const result = (attempt: ParsedMcqResponse): McqGenerationResult => ({ questions: attempt.questions });
 
   const firstAttempt = await parseRevision(userPrompt);
-  if (isAcceptable(firstAttempt.questions)) {
-    return firstAttempt;
+  if (isAcceptable(firstAttempt)) {
+    return result(firstAttempt);
   }
 
+  // QA 2.100.0: forsøksteksten sier hva som var galt — ikke «ikke konkret nok» når grunnen var taket
+  // eller fasiten. Den generelle «endre målet synlig»-regelen gjelder bare når endringen manglet.
+  const retryReasons: string[] = [];
+  if (!meaningful(firstAttempt.questions) || !countPreserved(firstAttempt.questions)) {
+    retryReasons.push(`Your previous attempt did not apply the requested change concretely enough.
+If the instruction names a specific question or option reference such as "question 3", "Q3", "3b", or "option B in question 3", you must change that exact target in a clearly visible way.
+You MUST return ALL ${sourceQuestions.length} questions — edit only the targeted one(s) and keep every other question unchanged. Do not drop, merge, or add questions.
+Return a revised question set where the requested change is concrete, visible, and materially different from the source questions.`);
+  }
+  if (!withinMultipleCap(firstAttempt.questions)) {
+    retryReasons.push(`At most ${multipleCap} questions may be "questionType": "multiple"; your previous attempt had ${countMultipleQuestions(firstAttempt.questions)}.`);
+  }
+  if (firstAttempt.answerKeyProblems.length > 0) {
+    retryReasons.push(answerKeyRetryDirective(firstAttempt.answerKeyProblems));
+  }
   const retryPrompt = `${userPrompt}
 
 ## Retry rule
 
-Your previous attempt did not apply the requested change concretely enough.
-If the instruction names a specific question or option reference such as "question 3", "Q3", "3b", or "option B in question 3", you must change that exact target in a clearly visible way.
-You MUST return ALL ${sourceQuestions.length} questions — edit only the targeted one(s) and keep every other question unchanged. Do not drop, merge, or add questions.
-Return a revised question set where the requested change is concrete, visible, and materially different from the source questions.
-At most ${multipleCap} questions may be "questionType": "multiple"; your previous attempt had ${countMultipleQuestions(firstAttempt.questions)}.`;
+${retryReasons.join("\n\n")}`;
   const secondAttempt = await parseRevision(retryPrompt);
+
+  if (secondAttempt.answerKeyProblems.length > 0) {
+    throw new Error(
+      `MCQ revision produced an answer key that does not match the options (${secondAttempt.answerKeyProblems.map((p) => p.text).join("; ")}). Please try again.`,
+    );
+  }
 
   if (!withinMultipleCap(secondAttempt.questions)) {
     throw new Error(
-      `MCQ revision made ${countMultipleQuestions(secondAttempt.questions)} questions «select all that apply»; at most ${multipleCap} are allowed. Please ask for fewer and try again.`,
+      `MCQ revision made ${countMultipleQuestions(secondAttempt.questions)} questions «select all that apply»; at most ${multipleCap} are allowed. Please try again.`,
     );
   }
 
@@ -1804,7 +1885,7 @@ At most ${multipleCap} questions may be "questionType": "multiple"; your previou
     throw new Error("MCQ revision produced no change. Please describe the change you want and try again.");
   }
 
-  return secondAttempt;
+  return result(secondAttempt);
 }
 
 export async function localizeModuleDraft(input: ModuleDraftLocalizationInput): Promise<ModuleDraftResult> {
@@ -1829,7 +1910,12 @@ export async function localizeMcqQuestions(input: McqLocalizationInput): Promise
   const { systemPrompt, userPrompt } = buildMcqLocalizationPrompts(input);
 
   const raw = await callLlm(systemPrompt, userPrompt);
-  return parseMcqGenerationResponse(raw, "MCQ localization");
+  const parsed = parseMcqGenerationResponse(raw, "MCQ localization");
+  // Fasiten i en oversettelse leses ikke — klienten henter svaret fra alternativets plass. Men et
+  // svar helt uten correctAnswer var ugyldig før #1077, og forblir det.
+  const empty = parsed.questions.findIndex((question) => !question.correctAnswer.trim());
+  if (empty >= 0) throw new Error(`MCQ localization failed validation: question ${empty + 1} has no correctAnswer.`);
+  return { questions: parsed.questions };
 }
 
 // ---------------------------------------------------------------------------
