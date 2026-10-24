@@ -231,6 +231,32 @@ describe("reporting service", () => {
     expect(row.qualityFlags).not.toContain("RARELY_CHOSEN_DISTRACTOR");
   });
 
+  // #1077: i «velg alle som stemmer» er svaret flere alternativer. Hvert valgte alternativ telles, og
+  // de riktige er posisjonene i fasiten — ikke det ene correctAnswer som også står lagret.
+  it("counts every option chosen in a «select all» question, and marks every correct one", async () => {
+    const question = {
+      id: "question-4",
+      stem: "Which apply?",
+      optionsJson: '["A","B","C","D"]',
+      correctAnswer: "A",
+      questionType: "multiple",
+      answerKeyJson: '{"correct":[0,2]}',
+      module: { id: "module-1", title: "Module One", certificationLevel: "basic" },
+    };
+    const svar = (selected: number[], isCorrect: boolean, i: number) => ({ questionId: "question-4", isCorrect, selectedAnswer: selected.map((p) => "ABCD"[p]).join(" · "), answerJson: JSON.stringify({ selected }), question, mcqAttempt: { id: `q4-${i}`, percentScore: isCorrect ? 90 : 40 } });
+    findMcqResponsesForQualityReport.mockResolvedValue([
+      svar([0, 2], true, 0), svar([0, 2], true, 1), svar([0, 1, 2], false, 2), svar([0], false, 3), svar([2, 3], false, 4),
+    ]);
+    const { getMcqQualityReport } = await import("../../src/modules/reporting/index.js");
+    const row = (await getMcqQualityReport({ moduleId: "module-1" }, "nb")).rows[0]!;
+    expect(row.distractorUsage.map((d: { option: string; pickCount: number; isCorrect: boolean }) => [d.option, d.pickCount, d.isCorrect])).toEqual([
+      ["A", 4, true],
+      ["B", 1, false],
+      ["C", 4, true],
+      ["D", 1, false],
+    ]);
+  });
+
   // #1062 leveranse 4: med en spørsmålsbank får spørsmålene ULIKT antall svar (hvert forsøk trekker et
   // utvalg). Raden per spørsmål må regne over de svarene spørsmålet faktisk fikk, og bære telleren
   // (attemptCount) så leseren ser grunnlaget — 100 % av 2 svar er ikke det samme som 100 % av 40.

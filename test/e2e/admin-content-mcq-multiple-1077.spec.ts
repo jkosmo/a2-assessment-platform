@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 import type { Route } from "@playwright/test";
 
-import { mockCommonApis, localizedText, buildMockModuleExport } from "./admin-content-helpers.js";
+import { mockCommonApis, localizedText, buildMockModuleExport, clickEnabledButton } from "./admin-content-helpers.js";
 
 // #1077: forfatteren lager og redigerer «velg alle som stemmer» i redigeringsskjemaet. Det som måles:
 // et lagret «velg alle» åpnes med bryteren på og alle de riktige avkrysset; bryteren gjør et vanlig
@@ -82,6 +82,28 @@ test.describe("#1077 — «velg alle som stemmer» i editoren", () => {
     // Fasiten er de to alternativene på plass 0 og 2 — på alle språk, ikke bare det som ble redigert.
     expect(question.correctAnswers[0]).toEqual(question.options[0]);
     expect(question.correctAnswers[1]).toEqual(question.options[2]);
+  });
+
+  // QA 2.99.0: tjenerens 422 for «velg alle» ble aldri nådd — editoren bygde spørsmålene på nytt uten
+  // typen og sendte et vanlig spørsmål til KI-en. Nå stopper editoren selv, med en forståelig melding.
+  test("KI-revisjon av et sett med «velg alle» stoppes i editoren, og ingenting sendes", async ({ page }) => {
+    await mockCommonApis(page, {
+      modules: [{ id: "module-1", title: "Records", activeVersion: { versionNo: 1 } }],
+      moduleExports: { "module-1": moduleWith({ questionType: "multiple", stem: localizedText("What must the record state?"), options: [A, B, C, D], correctAnswers: [A, C], correctAnswer: A, rationale: localizedText("Art. 30") }) },
+    });
+    let reviseCalled = false;
+    await page.route("**/generate/mcq/revise", (route: Route) => {
+      reviseCalled = true;
+      return route.fulfill({ status: 500, body: "" });
+    });
+    await page.goto("/admin-content/module/module-1/conversation?resumeEditing=1");
+    await page.locator("#previewEditTitle").waitFor();
+    await clickEnabledButton(page, /^Request a change$|^Be om endring$/);
+    await page.locator("#dialogReviseInput").fill("Make the questions harder");
+    await page.locator("#dialogReviseSubmit").click();
+
+    await expect(page.getByText(/AI revision supports questions with one correct answer only|KI-revisjon støtter foreløpig bare|KI-revisjon støttar førebels berre/).first()).toBeVisible();
+    expect(reviseCalled).toBe(false);
   });
 
   test("kontroll: tilbake til ett riktig svar beholder det første avkryssede, og lagres som vanlig spørsmål", async ({ page }) => {

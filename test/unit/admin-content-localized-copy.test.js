@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   buildLocalizedCopyValue,
+  carryMcqAnswerKey,
+  mcqCorrectPositions,
   isPartialLocalizedMap,
   parseLocalizedMap,
   selectTranslatedDraftFields,
@@ -104,5 +106,34 @@ describe("#982 — en oversettelse som ikke kom, fylles ikke med kildetekst", ()
       assessorExpectedContent: "Forventet",
       candidateTaskConstraints: "Rammer",
     });
+  });
+});
+
+// #1077: typen og fasiten bæres over når et spørsmål bygges på nytt (oversettelse, utfylling ved
+// publisering, skjemaet lest tilbake). Uten dette ble et «velg alle som stemmer» et vanlig spørsmål.
+describe("#1077 — mcqCorrectPositions og carryMcqAnswerKey", () => {
+  const A = { "en-GB": "Purpose", nb: "Formål" };
+  const B = { "en-GB": "Colour", nb: "Farge" };
+  const C = { "en-GB": "Legal basis", nb: "Behandlingsgrunnlag" };
+  const multiple = { questionType: "multiple", options: [A, B, C], correctAnswers: [C, A], correctAnswer: A };
+
+  it("posisjonene til de riktige — sortert, sammenlignet som verdier (ikke objekter)", () => {
+    expect(mcqCorrectPositions(JSON.parse(JSON.stringify(multiple)))).toEqual([0, 2]);
+    expect(mcqCorrectPositions({ options: ["x", "y"], correctAnswer: "y" })).toEqual([1]);
+    expect(mcqCorrectPositions({ options: ["x", "y"], correctAnswer: "z" })).toEqual([]);
+  });
+
+  it("et spørsmål bygget på nytt, oversatt, får typen og de riktige på de samme plassene", () => {
+    const translated = { stem: { nn: "Kva?" }, options: [{ nn: "Føremål" }, { nn: "Farge" }, { nn: "Rettsgrunnlag" }], correctAnswer: { nn: "Føremål" } };
+    expect(carryMcqAnswerKey(translated, multiple)).toMatchObject({
+      questionType: "multiple",
+      correctAnswers: [{ nn: "Føremål" }, { nn: "Rettsgrunnlag" }],
+      correctAnswer: { nn: "Føremål" },
+    });
+  });
+
+  it("kontroll: et vanlig spørsmål røres ikke", () => {
+    const target = { options: ["x", "y"], correctAnswer: "y" };
+    expect(carryMcqAnswerKey(target, { options: ["x", "y"], correctAnswer: "y" })).toBe(target);
   });
 });

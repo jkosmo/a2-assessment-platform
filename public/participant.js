@@ -995,7 +995,8 @@ function hasMeaningfulStoredDraft(draft) {
   return Boolean(
     responses &&
     typeof responses === "object" &&
-    Object.values(responses).some((value) => typeof value === "string" && value.trim().length > 0),
+    // #1077: et «velg alle» lagres som en liste med valg.
+    Object.values(responses).some((value) => (typeof value === "string" && value.trim().length > 0) || (Array.isArray(value) && value.length > 0)),
   );
 }
 

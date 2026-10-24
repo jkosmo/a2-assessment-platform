@@ -1917,6 +1917,16 @@ async function reviseMcqInBackground(instruction, onAccept) {
   const slot = logProgress("shell.revision.mcqProgress", { abortable: true });
   slot.abortBtn.addEventListener("click", () => { abort.abort(); slot.abortBtn.disabled = true; });
 
+  // #1077: KI-revisjonen kjenner bare «ett riktig svar». Spørsmålene under bygges av stamme,
+  // alternativer og ETT svar, så et «velg alle» ville kommet tilbake som et vanlig spørsmål. Stopp her,
+  // med en melding forfatteren forstår — før noe sendes (QA 2.99.0: tjenerens 422 ble aldri nådd).
+  if ((sessionDraft?.mcqQuestions ?? []).some((question) => question?.questionType === "multiple")) {
+    generationAbort = null;
+    sessionState = sessionDraft ? "draft-pending" : "module-loaded";
+    logResolveSlot(slot, () => escapeHtml(t("shell.revision.mcqMultipleUnsupported")));
+    return;
+  }
+
   const currentQuestions = (sessionDraft?.mcqQuestions ?? []).map((question) => ({
     stem: localizeValueForLocale(question.stem, contentLocale),
     options: (question.options ?? []).map((option) => localizeValueForLocale(option, contentLocale)),

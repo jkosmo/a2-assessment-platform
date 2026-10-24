@@ -54,9 +54,13 @@ export function mapMcqSetVersion(version: {
       // #1077: «multiple» går ut med typen og de riktige alternativene (`correctAnswers`), i samme form
       // som forfatteren sendte dem inn — så editoren og eksport → import får spørsmålet tilbake
       // uendret. «single» går ut som før, uten typefelt, så eldre importfiler og skillet kjenner den.
+      // `correctAnswer` går ut for begge: for «multiple» det første riktige, som lagret. Klientveier som
+      // ennå ikke kjenner typen (utfylling av språk ved publisering, oversettelse) leter etter det, og
+      // stoppet uten (QA 2.99.0). Det er ikke fasiten for «multiple» — det er `correctAnswers`.
+      const correctAnswer = decodeLocalizedText(question.correctAnswer) ?? question.correctAnswer;
       const typed = questionTypeOf(question) === "multiple"
-        ? { questionType: "multiple" as const, correctAnswers: parseAnswerKey(question.answerKeyJson, options.length).correct.map((i) => options[i]) }
-        : { correctAnswer: decodeLocalizedText(question.correctAnswer) ?? question.correctAnswer };
+        ? { questionType: "multiple" as const, correctAnswer, correctAnswers: parseAnswerKey(question.answerKeyJson, options.length).correct.map((i) => options[i]) }
+        : { correctAnswer };
       return {
         id: question.id,
         stem: decodeLocalizedText(question.stem) ?? question.stem,

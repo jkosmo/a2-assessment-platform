@@ -26,6 +26,17 @@ Alternativene lagres som språkkart; deltakeren svarer med teksten på sitt spr�
 fikk hvert feilalternativ 0 valg, og ble flagget «velges sjelden» på alle spørsmål skillet lager.
 Nå samme sammenligning som rettingen, og alternativ og spørsmålstekst vist på rapportens språk.
 
+### QA-runde 1 (før stage)
+
+- KI-revisjon av et sett med «velg alle» stoppes nå i editoren med en forståelig melding. Tjenerens 422
+  ble aldri nådd: editoren bygde spørsmålene på nytt uten typen.
+- Tjeneren sender også det første riktige som `correctAnswer` for «velg alle» (som lagret), så utfylling
+  av manglende språk ved publisering finner et kildespråk. Fasiten er fortsatt `correctAnswers`.
+- Kladdemerket teller avkryssede svar. Nye tester: telling per alternativ i kvalitetsrapporten,
+  `carryMcqAnswerKey`/`mcqCorrectPositions`, revisjonsstoppen.
+- Rotårsak: e2e-mockene ga «velg alle» et `correctAnswer` den ekte tjeneren ikke sendte — testene målte mot
+  min antakelse, ikke mot tjenerens svar. Fanget av QA-porten (ny modell leser koden), ikke av testene.
+
 ### Rotårsak: to stille typebytter funnet under arbeidet
 
 - `appendMcqQuestions` kopierer de eksisterende spørsmålene inn i en ny versjon av settet, og klientens

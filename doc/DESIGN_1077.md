@@ -37,13 +37,15 @@ heltall, og kvalitetsrapportens distraktortall (`mcqSemanticReport`).
 | `MCQQuestion.answerKeyJson` | `TEXT NULL` | typeavhengig fasit (under); null for `single` |
 | `MCQResponse.answerJson` | `TEXT NULL` | deltakerens svar for de nye typene; `selectedAnswer` beholdes som lesbar tekst |
 
-`correctAnswer` beholdes for `single`. For de nye typene skrives den som et sammendrag (de riktige
-alternativene i rekkefølge), så lesere som ikke kjenner typen ennå, viser noe forståelig i stedet for
-å feile. Den er ikke grunnlaget for retting.
+`correctAnswer` beholdes for `single`. For `multiple` lagres det FØRSTE riktige alternativet der, så
+lesere som ikke kjenner typen ennå, viser noe forståelig i stedet for å feile. Den er ikke grunnlaget
+for retting.
 
 Fasit per type:
 
-- **`multiple`:** de riktige alternativenes tekst (LocalizedText), minst ett riktig og minst ett galt.
+- **`multiple`:** posisjonene til de riktige alternativene i `optionsJson`, `{"correct":[0,2]}` — minst
+  ett riktig og minst ett galt. Posisjoner, ikke tekst: oversettelsen holder alternativene i samme
+  rekkefølge, så fasiten følger med på alle språk.
 - **`order`:** alternativene *er* den riktige rekkefølgen i `optionsJson`; ingen ekstra fasit. Stokkes
   ved levering, som i dag.
 - **`fill`:** godkjente svar per språk, `{ nb: ["tre", "3"], nn: [...], "en-GB": [...] }`. Spørsmålet har

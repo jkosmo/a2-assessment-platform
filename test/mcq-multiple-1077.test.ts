@@ -115,7 +115,8 @@ describe("#1077 — velg alle som stemmer", () => {
     expect(exported.status, JSON.stringify(exported.body)).toBe(200);
     const questions = exported.body.envelope.module.activeVersion.mcqSet.questions as Array<Record<string, unknown>>;
     expect(questions[0]).toMatchObject({ questionType: "multiple", correctAnswers: [A, C] });
-    expect(questions[0]).not.toHaveProperty("correctAnswer");
+    // Det første riktige følger med som correctAnswer, for klientveier som ennå ikke kjenner typen.
+    expect(questions[0]).toMatchObject({ correctAnswer: A });
     // Et vanlig spørsmål går ut som før, uten typefelt — eldre importfiler og skillet kjenner det.
     expect(questions[1]).not.toHaveProperty("questionType");
     expect(questions[1]).toMatchObject({ correctAnswer: single.correctAnswer });
