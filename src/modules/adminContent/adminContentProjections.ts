@@ -1,4 +1,5 @@
 import { localizedTextCodec } from "../../codecs/localizedTextCodec.js";
+import { parseAnswerKey, questionTypeOf } from "../assessment/mcqQuestionTypes.js";
 
 export function decodeLocalizedText(input: string | null | undefined) {
   return localizedTextCodec.parse(input);
@@ -33,6 +34,8 @@ export function mapMcqSetVersion(version: {
     optionsJson: string;
     correctAnswer: string;
     rationale: string | null;
+    questionType?: string | null;
+    answerKeyJson?: string | null;
     active: boolean;
     createdAt: Date;
     updatedAt: Date;
@@ -47,11 +50,18 @@ export function mapMcqSetVersion(version: {
     updatedAt: version.updatedAt,
     questions: version.questions.map((question) => {
       const parsedOptions = safeParseJson(question.optionsJson);
+      const options = Array.isArray(parsedOptions) ? parsedOptions.map((option) => decodeMcqOption(option)) : [];
+      // #1077: «multiple» går ut med typen og de riktige alternativene (`correctAnswers`), i samme form
+      // som forfatteren sendte dem inn — så editoren og eksport → import får spørsmålet tilbake
+      // uendret. «single» går ut som før, uten typefelt, så eldre importfiler og skillet kjenner den.
+      const typed = questionTypeOf(question) === "multiple"
+        ? { questionType: "multiple" as const, correctAnswers: parseAnswerKey(question.answerKeyJson, options.length).correct.map((i) => options[i]) }
+        : { correctAnswer: decodeLocalizedText(question.correctAnswer) ?? question.correctAnswer };
       return {
         id: question.id,
         stem: decodeLocalizedText(question.stem) ?? question.stem,
-        options: Array.isArray(parsedOptions) ? parsedOptions.map((option) => decodeMcqOption(option)) : [],
-        correctAnswer: decodeLocalizedText(question.correctAnswer) ?? question.correctAnswer,
+        options,
+        ...typed,
         rationale: decodeLocalizedText(question.rationale) ?? question.rationale,
         active: question.active,
         createdAt: question.createdAt,

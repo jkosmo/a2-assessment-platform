@@ -40,6 +40,7 @@ const adminContentBase = {
   "adminContent.lifecycle.status.archived": "Archived",
   "adminContent.lifecycle.newerDraft": "Newer draft",
   "adminContent.dialog.mcq.options": "Options",
+  "adminContent.dialog.mcq.multiple": "More than one correct answer (the participant selects all that apply)",
   "adminContent.dialog.mcq.rationale": "Rationale",
 
   // Privacy by Design warning (GDPR Art. 9 — special category data risk)
@@ -816,6 +817,7 @@ const nbOverrides = {
   "adminContent.lifecycle.status.archived": "Arkivert",
   "adminContent.lifecycle.newerDraft": "Nyere utkast",
   "adminContent.dialog.mcq.options": "Svaralternativer",
+  "adminContent.dialog.mcq.multiple": "Flere riktige svar (deltakeren velger alle som stemmer)",
   "adminContent.dialog.mcq.rationale": "Begrunnelse",
 
   "adminContent.privacy.warning.title": "Risiko for særlige kategorier av personopplysninger",
@@ -900,6 +902,7 @@ const nnOverrides = {
   "adminContent.lifecycle.status.archived": "Arkivert",
   "adminContent.lifecycle.newerDraft": "Nyare utkast",
   "adminContent.dialog.mcq.options": "Svaralternativ",
+  "adminContent.dialog.mcq.multiple": "Fleire rette svar (deltakaren vel alle som stemmer)",
   "adminContent.dialog.mcq.rationale": "Grunngjeving",
 
   "adminContent.privacy.warning.title": "Risiko for særlege kategoriar av personopplysningar",

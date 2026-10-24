@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { mcqQuestionTypeFields } from "./adminContentSchemas.js";
 import { localizedTextCodec } from "../../codecs/localizedTextCodec.js";
 import { submissionSchemaCodec } from "../../codecs/submissionSchemaCodec.js";
 import { assessmentPolicyCodec } from "../../codecs/assessmentPolicyCodec.js";
@@ -43,12 +44,17 @@ export function toCreateMcqSetVersionInput(data: McqSetBody, moduleId: string) {
   return {
     moduleId,
     title: localizedTextCodec.serialize(data.title),
-    questions: data.questions.map((question) => ({
-      stem: localizedTextCodec.serialize(question.stem),
-      options: question.options.map((option) => localizedTextCodec.serialize(option)),
-      correctAnswer: localizedTextCodec.serialize(question.correctAnswer),
-      rationale: question.rationale ? localizedTextCodec.serialize(question.rationale) : undefined,
-    })),
+    questions: data.questions.map((question) => {
+      const typed = mcqQuestionTypeFields(question);
+      return {
+        stem: localizedTextCodec.serialize(question.stem),
+        options: question.options.map((option) => localizedTextCodec.serialize(option)),
+        correctAnswer: localizedTextCodec.serialize(typed.correctAnswer),
+        rationale: question.rationale ? localizedTextCodec.serialize(question.rationale) : undefined,
+        questionType: typed.questionType,
+        answerKeyJson: typed.answerKeyJson,
+      };
+    }),
     active: data.active ?? true,
   };
 }

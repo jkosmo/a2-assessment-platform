@@ -12,7 +12,7 @@ import { apiFetch } from "/static/api-client.js";
 import { showToast } from "/static/toast.js";
 import { apiErrorCodeText } from "/static/api-error.js";
 import { localizeValueForLocale } from "/static/admin-content-preview.js";
-import { strictLocaleValue } from "/static/admin-content-localized-copy.js";
+import { carryMcqAnswerKey, strictLocaleValue } from "/static/admin-content-localized-copy.js";
 
 /**
  * @param {object} ctx  skallets tilstand som get/set-egenskaper og skallets funksjoner som referanser.
@@ -379,9 +379,10 @@ export function createPublishFlow(ctx) {
       patch[field] = value;
     }
     if (needsMcqFill && mergedMcq.length > 0) {
-      patch.mcqQuestions = mergedMcq.map((question) => {
+      patch.mcqQuestions = mergedMcq.map((question, index) => {
         const rationale = collapseLocaleMap(question.rationale);
-        return {
+        // #1077: spørsmålet bygges på nytt her; typen og fasiten bæres over fra det som var.
+        return carryMcqAnswerKey({
           stem: collapseLocaleMap(question.stem),
           options: question.options.map((option) => collapseLocaleMap(option)),
           correctAnswer: collapseLocaleMap(question.correctAnswer),
@@ -389,7 +390,7 @@ export function createPublishFlow(ctx) {
           // the save schema rejects it, so an otherwise successful fill would 400 at the last step
           // — taking the text translations from the same attempt down with it.
           ...(rationale === "" ? {} : { rationale }),
-        };
+        }, currentMcq[index]);
       });
     }
     commitSessionDraftPatch(patch);

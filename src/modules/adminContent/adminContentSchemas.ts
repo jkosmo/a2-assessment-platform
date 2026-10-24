@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { MCQ_QUESTION_TYPES, serializeAnswerKey, type McqQuestionType } from "../assessment/mcqQuestionTypes.js";
 import type { LocalizedText } from "../../codecs/localizedTextCodec.js";
 
 export const localizedTextObjectSchema = z.object({
@@ -165,23 +166,61 @@ export const promptTemplateBodySchema = z.object({
 // way to say "nynorsk failed, the other two are real" — so a partly successful translation had to
 // be collapsed back to the source language, discarding the locales that DID translate. The
 // publish gate then blocked on gaps the author had just paid an LLM to fill.
+// #1077: `questionType` (standard «single»). «single» har `correctAnswer`; «multiple» (velg alle som
+// stemmer) har `correctAnswers` — minst ett riktig og minst ett galt alternativ, hvert av dem et av
+// alternativene. Se doc/DESIGN_1077.md.
 const mcqQuestionSchema = z
   .object({
+    questionType: z.enum(MCQ_QUESTION_TYPES).optional(),
     stem: localizedTextMaybeUntranslatedSchema,
     options: z.array(localizedTextMaybeUntranslatedSchema).min(2),
-    correctAnswer: localizedTextMaybeUntranslatedSchema,
+    correctAnswer: localizedTextMaybeUntranslatedSchema.optional(),
+    correctAnswers: z.array(localizedTextMaybeUntranslatedSchema).optional(),
     rationale: localizedTextMaybeUntranslatedSchema.optional(),
   })
   .superRefine((question, context) => {
     const normalizedOptions = question.options.map((option) => localizedTextIdentity(option));
-    if (!normalizedOptions.includes(localizedTextIdentity(question.correctAnswer))) {
-      context.addIssue({
-        code: "custom",
-        message: "correctAnswer must be one of options.",
-        path: ["correctAnswer"],
-      });
+    if ((question.questionType ?? "single") === "single") {
+      if (question.correctAnswer === undefined || !normalizedOptions.includes(localizedTextIdentity(question.correctAnswer))) {
+        context.addIssue({ code: "custom", message: "correctAnswer must be one of options.", path: ["correctAnswer"] });
+      }
+      if (question.correctAnswers !== undefined) {
+        context.addIssue({ code: "custom", message: "correctAnswers belongs to a «multiple» question.", path: ["correctAnswers"] });
+      }
+      return;
+    }
+    const answers = question.correctAnswers ?? [];
+    const positions = answers.map((answer) => normalizedOptions.indexOf(localizedTextIdentity(answer)));
+    if (answers.length === 0 || positions.some((p) => p < 0)) {
+      context.addIssue({ code: "custom", message: "correctAnswers must be one or more of options.", path: ["correctAnswers"] });
+    } else if (new Set(positions).size !== positions.length) {
+      context.addIssue({ code: "custom", message: "correctAnswers lists the same option twice.", path: ["correctAnswers"] });
+    } else if (positions.length >= question.options.length) {
+      context.addIssue({ code: "custom", message: "A «multiple» question needs at least one option that is not correct.", path: ["correctAnswers"] });
     }
   });
+
+/**
+ * #1077: et spørsmål fra forfatterens form til feltene som lagres — ÉTT sted, kalt av hver vei inn
+ * (editoren, import, sammensatt lagring, påfylling av banken). `correctAnswer` lagres også for
+ * «multiple» (første riktige), så lesere som ikke kjenner typen ennå, viser noe forståelig; fasiten
+ * er `answerKeyJson`.
+ */
+export function mcqQuestionTypeFields(question: {
+  questionType?: McqQuestionType;
+  options: LocalizedText[];
+  correctAnswer?: LocalizedText;
+  correctAnswers?: LocalizedText[];
+}): { questionType: McqQuestionType; correctAnswer: LocalizedText; answerKeyJson: string | null } {
+  const questionType = question.questionType ?? "single";
+  if (questionType === "single") {
+    return { questionType, correctAnswer: question.correctAnswer ?? "", answerKeyJson: null };
+  }
+  const identities = question.options.map((option) => localizedTextIdentity(option));
+  const correct = (question.correctAnswers ?? []).map((answer) => identities.indexOf(localizedTextIdentity(answer)));
+  const first = Math.min(...correct);
+  return { questionType, correctAnswer: question.options[first] ?? "", answerKeyJson: serializeAnswerKey({ correct }) };
+}
 
 // #1062: påfylling av banken — bare spørsmålene.
 export const appendMcqQuestionsBodySchema = z.object({

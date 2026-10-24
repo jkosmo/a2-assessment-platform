@@ -53,8 +53,10 @@ import {
   buildLocalizedCopyValue,
   selectTranslatedDraftFields,
   applyMcqTranslation,
+  carryMcqAnswerKey,
   dropMcqQuestionLocale,
   mcqCorrectAnswerIndexes,
+  mcqCorrectPositions,
   normalizeModuleTitlePatch,
   strictLocaleValue,
 } from "/static/admin-content-localized-copy.js";
@@ -1375,6 +1377,14 @@ async function localizeMcqAcrossLocales(questions, sourceLocale) {
     correctAnswer: buildLocalizedTextMap(sourceLocale, question.correctAnswer),
     rationale: buildLocalizedTextMap(sourceLocale, question.rationale),
   }));
+  // #1077: oversetteren får ett svar per spørsmål (det første riktige); typen og alle de riktige
+  // legges på etterpå, fra posisjonene i kildespørsmålet.
+  const requestQuestions = questions.map((question) => ({
+    stem: question.stem,
+    options: question.options,
+    correctAnswer: question.correctAnswer,
+    ...(question.rationale ? { rationale: question.rationale } : {}),
+  }));
   const correctIndexes = mcqCorrectAnswerIndexes(questions);
   const failedLocales = [];
 
@@ -1388,7 +1398,7 @@ async function localizeMcqAcrossLocales(questions, sourceLocale) {
         getHeaders,
         {
           method: "POST",
-          body: JSON.stringify({ questions, sourceLocale, targetLocale }),
+          body: JSON.stringify({ questions: requestQuestions, sourceLocale, targetLocale }),
         },
       );
     } catch {
@@ -1413,7 +1423,7 @@ async function localizeMcqAcrossLocales(questions, sourceLocale) {
     applyMcqTranslation(localizedQuestions, oversatte, { targetLocale, correctIndexes });
   }
 
-  return { questions: localizedQuestions, failedLocales };
+  return { questions: localizedQuestions.map((question, index) => carryMcqAnswerKey(question, questions[index])), failedLocales };
 }
 
 // #1046 (produkteier 13.09): fanebytte er ikke navigering og spør ikke. Det som er skrevet i Rediger
@@ -1435,6 +1445,21 @@ function readMcqQuestionsFromForm(currentMcqQuestions) {
       Number.isInteger(checkedIndex) && checkedIndex >= 0 && checkedIndex < options.length
         ? checkedIndex
         : Math.max(0, options.findIndex((option) => option === question.correctAnswer));
+    // #1077: «Flere riktige svar» avkrysset → «velg alle som stemmer», med de avkryssede som fasit.
+    const multiple = container?.querySelector("[data-preview-edit-multiple]")?.checked === true;
+    if (multiple) {
+      const checked = Array.from(container?.querySelectorAll(`input[name="previewEditCorrectAnswer${questionIndex}"]:checked`) ?? [])
+        .map((input) => Number.parseInt(input.value, 10))
+        .filter((i) => Number.isInteger(i) && i >= 0 && i < options.length);
+      return {
+        questionType: "multiple",
+        stem: container?.querySelector(`#previewEditMcqStem${questionIndex}`)?.value.trim() || question.stem,
+        options,
+        correctAnswers: checked.map((i) => options[i]),
+        correctAnswer: options[checked[0] ?? 0] ?? "",
+        rationale: container?.querySelector(`#previewEditMcqRationale${questionIndex}`)?.value.trim() || question.rationale,
+      };
+    }
     return {
       stem: container?.querySelector(`#previewEditMcqStem${questionIndex}`)?.value.trim() || question.stem,
       options,
@@ -1481,12 +1506,12 @@ function resolveEditableMcqQuestions(locale) {
     ? sessionDraft.mcqQuestions
     : (bundle?.selectedConfiguration?.mcqSetVersion?.questions ?? []);
 
-  return sourceQuestions.map((question) => ({
+  return sourceQuestions.map((question) => carryMcqAnswerKey({
     stem: localizeValueForLocale(question?.stem ?? "", locale),
     options: (question?.options ?? []).map((option) => localizeValueForLocale(option, locale)),
     correctAnswer: localizeValueForLocale(question?.correctAnswer ?? "", locale),
     rationale: localizeValueForLocale(question?.rationale ?? "", locale),
-  }));
+  }, question));
 }
 
 function buildDefaultSubmissionSchema() {
@@ -2701,17 +2726,20 @@ function enterPreviewEditMode({ force = false } = {}) {
         ${currentMcqQuestions.map((question, questionIndex) => {
           const questionLabel = escapeHtml(tf("shell.preview.questionNumber", { number: questionIndex + 1 }));
           const options = Array.isArray(question.options) ? question.options : [];
-          const selectedOptionIndex = Math.max(0, options.findIndex((option) => option === question.correctAnswer));
+          // #1077: «velg alle som stemmer» har flere riktige — avkrysning i stedet for ett valg.
+          const multiple = question.questionType === "multiple";
+          const correctPositions = new Set(multiple ? mcqCorrectPositions(question) : [Math.max(0, options.findIndex((option) => option === question.correctAnswer))]);
           const optionsHtml = options
             .map((option, optionIndex) => {
               const optionLetter = String.fromCharCode(65 + optionIndex);
               return `
                 <label class="preview-edit-mcq-option">
                   <input
-                    type="radio"
+                    type="${multiple ? "checkbox" : "radio"}"
                     name="previewEditCorrectAnswer${questionIndex}"
                     value="${optionIndex}"
-                    ${optionIndex === selectedOptionIndex ? "checked" : ""}
+                    data-preview-edit-correct
+                    ${correctPositions.has(optionIndex) ? "checked" : ""}
                     aria-label="${escapeHtml(`${questionLabel} ${correctAnswerLabel} ${optionLetter}`)}"
                   />
                   <input
@@ -2746,6 +2774,10 @@ function enterPreviewEditMode({ force = false } = {}) {
                 aria-label="${questionLabel}"
               >${escapeHtml(question.stem)}</textarea>
               <div class="preview-section-label">${optionsLabel}</div>
+              <label class="preview-edit-mcq-multiple">
+                <input type="checkbox" data-preview-edit-multiple="${questionIndex}" ${multiple ? "checked" : ""} />
+                ${escapeHtml(t("adminContent.dialog.mcq.multiple"))}
+              </label>
               <div class="preview-edit-mcq-options">
                 ${optionsHtml}
               </div>
@@ -2856,6 +2888,19 @@ function enterPreviewEditMode({ force = false } = {}) {
   previewContent.querySelector("#previewEditAddQuestion")?.addEventListener("click", () => {
     rebuildWithQuestions((list) => list.push({ stem: "", options: ["", "", "", ""], correctAnswer: "", rationale: "" }));
   });
+  // #1077: «Flere riktige svar» bytter valget av fasit mellom ett (radio) og flere (avkrysning) — på
+  // stedet, så det som er skrevet i spørsmålet står. Fra flere til ett beholdes det første avkryssede.
+  for (const toggle of previewContent.querySelectorAll("[data-preview-edit-multiple]")) {
+    toggle.addEventListener("change", () => {
+      const container = toggle.closest("[data-preview-edit-question]");
+      const inputs = Array.from(container?.querySelectorAll("[data-preview-edit-correct]") ?? []);
+      const firstChecked = inputs.find((input) => input.checked) ?? inputs[0];
+      for (const input of inputs) {
+        input.type = toggle.checked ? "checkbox" : "radio";
+        if (!toggle.checked) input.checked = input === firstChecked;
+      }
+    });
+  }
   for (const btn of previewContent.querySelectorAll("[data-remove-question]")) {
     btn.addEventListener("click", () => {
       const index = Number(btn.dataset.removeQuestion);

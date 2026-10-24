@@ -1,4 +1,5 @@
 import { adminContentRepository, createAdminContentRepository } from "./adminContentRepository.js";
+import { questionTypeOf, type McqQuestionType } from "../assessment/mcqQuestionTypes.js";
 import { runInTransaction, type DbTransactionClient } from "../../db/transaction.js";
 import { recordAuditEvent } from "../../services/auditService.js";
 import { auditActions, auditEntityTypes } from "../../observability/auditEvents.js";
@@ -46,6 +47,9 @@ type CreateMcqSetVersionInput = {
     options: string[];
     correctAnswer: string;
     rationale?: string;
+    // #1077: typen og typens fasit, fra mcqQuestionTypeFields. Mangler de, er spørsmålet «single».
+    questionType?: McqQuestionType;
+    answerKeyJson?: string | null;
   }>;
 };
 
@@ -699,6 +703,8 @@ export async function createMcqSetVersion(input: CreateMcqSetVersionInput, tx?: 
         optionsJson: JSON.stringify(question.options),
         correctAnswer: question.correctAnswer,
         rationale: question.rationale,
+        questionType: question.questionType ?? "single",
+        answerKeyJson: question.answerKeyJson ?? null,
         active: true,
       })),
     });
@@ -1159,6 +1165,10 @@ export async function appendMcqQuestions(input: {
       options: JSON.parse(question.optionsJson) as string[],
       correctAnswer: question.correctAnswer,
       rationale: question.rationale ?? undefined,
+      // #1077: kopien beholder typen. Uten den ble et «velg alle som stemmer» et vanlig spørsmål
+      // første gang noen fylte på banken.
+      questionType: questionTypeOf(question),
+      answerKeyJson: question.answerKeyJson ?? null,
     }));
 
   return runInTransaction(async (tx) => {

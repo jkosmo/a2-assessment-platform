@@ -264,6 +264,7 @@ function normalizePreviewQuestions(questions) {
 
       return {
         id: typeof question.id === "string" && question.id.trim().length > 0 ? question.id : `preview-q-${index + 1}`,
+        questionType: question.questionType === "multiple" ? "multiple" : "single",
         stem,
         options,
       };
@@ -1571,9 +1572,9 @@ function collectCurrentMcqDraft() {
 
   const responses = {};
   for (const question of currentQuestions) {
-    const selected = document.querySelector(`input[name='q_${question.id}']:checked`);
+    const selected = selectedForQuestion(question);
     if (selected) {
-      responses[question.id] = selected.value;
+      responses[question.id] = selected;
     }
   }
 
@@ -2503,12 +2504,15 @@ async function renderMcqReview(submissionId) {
     item.appendChild(stem);
     const yours = document.createElement("div");
     yours.className = "mcq-review-line";
-    yours.textContent = `${t("result.mcqReview.yourAnswer")}: ${q.selectedAnswer ?? t("result.mcqReview.unanswered")}`;
+    // #1077: i «velg alle som stemmer» er svaret og fasiten flere alternativer.
+    const multiple = q.questionType === "multiple";
+    const yourText = multiple ? (q.selectedAnswers?.length ? q.selectedAnswers.join(" · ") : null) : q.selectedAnswer;
+    yours.textContent = `${t("result.mcqReview.yourAnswer")}: ${yourText ?? t("result.mcqReview.unanswered")}`;
     item.appendChild(yours);
     if (!q.isCorrect) {
       const correct = document.createElement("div");
       correct.className = "mcq-review-line mcq-review-correct";
-      correct.textContent = `${t("result.mcqReview.correctAnswer")}: ${q.correctAnswer}`;
+      correct.textContent = `${t("result.mcqReview.correctAnswer")}: ${multiple ? (q.correctAnswers ?? []).join(" · ") : q.correctAnswer}`;
       item.appendChild(correct);
     }
     if (q.rationale) {
@@ -3063,7 +3067,7 @@ submitMcqButton.addEventListener("click", async () => {
       // forsvarslinje, ikke den som skal snakke med brukeren.
       const answers = currentQuestions.map((q) => ({
         question: q,
-        selected: document.querySelector(`input[name='q_${q.id}']:checked`),
+        selected: selectedForQuestion(q),
       }));
       const missing = answers
         .map((a, index) => ({ ...a, number: index + 1 }))
@@ -3080,10 +3084,11 @@ submitMcqButton.addEventListener("click", async () => {
         );
       }
 
-      const responses = answers.map(({ question, selected }) => ({
-        questionId: question.id,
-        selectedAnswer: selected.value,
-      }));
+      const responses = answers.map(({ question, selected }) => (
+        isMultipleQuestion(question)
+          ? { questionId: question.id, selectedAnswers: selected }
+          : { questionId: question.id, selectedAnswer: selected }
+      ));
 
       const body = await apiFetch(`/api/modules/${moduleId}/mcq/submit`, headers, {
         method: "POST",
@@ -3306,6 +3311,17 @@ function markUnansweredQuestions(numbers) {
   cards[numbers[0] - 1]?.scrollIntoView({ behavior: "smooth", block: "center" });
 }
 
+// #1077: «velg alle som stemmer» (questionType «multiple») svares med avkrysning, alt annet med ett valg.
+// Antallet riktige oppgis ikke (produkteier 2026-10-24) — det ville vært et hint.
+const isMultipleQuestion = (question) => question?.questionType === "multiple";
+
+/** Det deltakeren har valgt på et spørsmål: én tekst, flere (multiple), eller ingenting. */
+function selectedForQuestion(question) {
+  const checked = [...document.querySelectorAll(`input[name='q_${question.id}']:checked`)].map((input) => input.value);
+  if (isMultipleQuestion(question)) return checked.length > 0 ? checked : null;
+  return checked[0] ?? null;
+}
+
 function renderQuestions(selectedResponses = {}) {
   mcqQuestions.innerHTML = "";
   for (const [index, question] of currentQuestions.entries()) {
@@ -3326,6 +3342,14 @@ function renderQuestions(selectedResponses = {}) {
     titleRow.appendChild(title);
     wrapper.appendChild(titleRow);
 
+    const multiple = isMultipleQuestion(question);
+    if (multiple) {
+      const hint = document.createElement("p");
+      hint.className = "mcq-question-hint small";
+      hint.textContent = t("mcq.selectAll");
+      wrapper.appendChild(hint);
+    }
+
     const optionList = document.createElement("div");
     optionList.className = "mcq-option-list";
 
@@ -3333,10 +3357,11 @@ function renderQuestions(selectedResponses = {}) {
       const label = document.createElement("label");
       label.className = "mcq-option";
       const input = document.createElement("input");
-      input.type = "radio";
+      input.type = multiple ? "checkbox" : "radio";
       input.name = `q_${question.id}`;
       input.value = option;
-      input.checked = selectedResponses[question.id] === option;
+      const saved = selectedResponses[question.id];
+      input.checked = Array.isArray(saved) ? saved.includes(option) : saved === option;
       input.addEventListener("change", () => {
         // #988: svarer deltakeren på et spørsmål som er markert som ubesvart, forsvinner markeringen
         // med én gang. Uten dette ville kortet blitt stående rødt til neste innsending, og hen ville

@@ -324,6 +324,8 @@ export function createAdminContentRepository(client: AdminContentRepositoryClien
                   optionsJson: true,
                   correctAnswer: true,
                   rationale: true,
+                  questionType: true,
+                  answerKeyJson: true,
                   active: true,
                   createdAt: true,
                   updatedAt: true,
@@ -454,6 +456,8 @@ export function createAdminContentRepository(client: AdminContentRepositoryClien
         optionsJson: string;
         correctAnswer: string;
         rationale?: string;
+        questionType: string;
+        answerKeyJson: string | null;
         active: boolean;
       }>;
     }) {

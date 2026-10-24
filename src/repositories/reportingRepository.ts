@@ -200,12 +200,15 @@ export function createReportingRepository(client: ReportingRepositoryClient = pr
           questionId: true,
           isCorrect: true,
           selectedAnswer: true,
+          answerJson: true,
           question: {
             select: {
               id: true,
               stem: true,
               optionsJson: true,
               correctAnswer: true,
+              questionType: true,
+              answerKeyJson: true,
               module: {
                 select: {
                   id: true,
