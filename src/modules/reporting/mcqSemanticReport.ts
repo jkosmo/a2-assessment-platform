@@ -1,7 +1,7 @@
 import { SubmissionStatus } from "../../db/prismaRuntime.js";
 import { isSettledSubmission } from "../submission/submissionOutcome.js";
 import type { SupportedLocale } from "../../i18n/locale.js";
-import { localizeContentText } from "../../i18n/content.js";
+import { localizeContentText, matchesLocalizedContentVariant } from "../../i18n/content.js";
 import { getAssessmentRules } from "../../config/assessmentRules.js";
 import { getReportingAnalyticsConfig } from "../../config/reportingAnalytics.js";
 import { reportingRepository } from "../../repositories/reportingRepository.js";
@@ -104,7 +104,8 @@ export async function getMcqQualityReport(filters: ReportFilters, locale: Suppor
         response.question.module.certificationLevel ??
         null,
       questionId: response.question.id,
-      questionStem: response.question.stem,
+      // 2026-10-24: lokalisert, som tittelen. Rått sto lagringsformatet (et språkkart) i rapporten.
+      questionStem: localizeContentText(locale, response.question.stem) ?? response.question.stem,
       optionsJson: response.question.optionsJson,
       correctAnswer: response.question.correctAnswer,
       selectedAnswerCounts: new Map<string, number>(),
@@ -161,10 +162,18 @@ export async function getMcqQualityReport(filters: ReportFilters, locale: Suppor
       const options: unknown[] = JSON.parse(entry.optionsJson);
       if (Array.isArray(options) && attemptCount > 0) {
         distractorUsage = options.map((opt) => {
-          const option = typeof opt === "string" ? opt : String(opt);
-          const pickCount = entry.selectedAnswerCounts.get(option) ?? 0;
+          const stored = typeof opt === "string" ? opt : String(opt);
+          // 2026-10-24: et alternativ er lagret som et språkkart ({"nb": …, "en-GB": …}), og deltakeren
+          // svarte med teksten på sitt språk. Telt som ren tekst mot det lagrede traff ingenting: hvert
+          // feilalternativ fikk 0 valg og ble flagget «velges sjelden» på alle spørsmål med tre språk.
+          // Samme sammenligning som rettingen bruker (mcqService), og alternativet vist på rapportens språk.
+          let pickCount = 0;
+          for (const [selected, count] of entry.selectedAnswerCounts) {
+            if (matchesLocalizedContentVariant(stored, selected)) pickCount += count;
+          }
+          const option = localizeContentText(locale, stored) ?? stored;
           const pickRate = round2(pickCount / attemptCount);
-          const isCorrect = option === entry.correctAnswer;
+          const isCorrect = stored === entry.correctAnswer;
           // A distractor is rarely chosen if it's not the correct answer and pick rate < threshold
           const flaggedRarelyChosen =
             !isCorrect &&
