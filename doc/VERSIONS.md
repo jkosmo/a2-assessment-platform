@@ -2,6 +2,23 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.98.6 - 2026-10-24
+
+### Kursrapporten bruker samme regel for bestått som kursbeviset (#1116)
+
+Funnet i kompleksitetsskanningen 2026-10-21. Detaljvisningen i kursrapporten (og CSV-en
+`course-learners`) avgjorde «bestått» selv, fra vedtaket på siste forsøk og med en svarteliste
+(`=== "UNDER_REVIEW"`). Etter en revisjon som gjør tidligere bestått ugyldig (#997) sto vedtaket
+fortsatt som bestått, og raden viste «Fullført» der kursbeviset og deltakerens egen visning sa
+«ta den på nytt».
+
+- **Bestått** er nå sertifiseringsstatusen, med samme spørring og filtre som kursraden over
+  (`findPassedUserIdsForModule`).
+- **Under vurdering** er et siste forsøk som ikke er avgjort (`isSettledSubmission`, en hviteliste) —
+  ikke bare `UNDER_REVIEW`. Før talte vedtaket på en sak under behandling som bestått eller strøket.
+- **Strøket** er et avgjort forsøk som er strøket.
+- En deltaker med kursbevis vises fortsatt som «Fullført» (beviset er permanent).
+
 ## 2.98.5 - 2026-10-23
 
 ### Utboksen merker ikke lenger en feilet e-post som levert (#1115)

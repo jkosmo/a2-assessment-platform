@@ -15,6 +15,7 @@ import request from "supertest";
 import { afterAll, describe, expect, it } from "vitest";
 import { app } from "../src/app.js";
 import { prisma } from "../src/db/prisma.js";
+import { getCourseLearnerReport } from "../src/modules/course/index.js";
 
 const admin = {
   "x-user-id": "admin-1",
@@ -191,6 +192,41 @@ describe("#997 — en revisjon forfatteren merker gjør tidligere bestått ugyld
       .find((m) => m.moduleId === moduleId);
     // ⚠️ Kjernen: EGEN tilstand. "NOT_STARTED" ville sagt at deltakeren aldri har vært innom.
     expect(moduleAfter?.moduleStatus).toBe("REVISED_RETAKE_REQUIRED");
+  });
+
+  // #1116: kursrapporten hadde sin egen regel — vedtaket på siste forsøk — og viste «Fullført» etter
+  // en revisjon der kursbeviset og deltakerens egen visning sa «ta den på nytt».
+  it("#1116: kursrapportens detalj teller ikke en revidert modul som bestått, og sier ikke «Fullført»", async () => {
+    const { moduleId, version2Id, userId } = await setupPassedModule();
+    const course = await prisma.course.create({
+      data: { title: L(`Kurs 1116 ${Date.now()}`), publishedAt: new Date() },
+      select: { id: true },
+    });
+    await prisma.courseItem.create({ data: { courseId: course.id, itemType: "MODULE", moduleId, sortOrder: 0 } });
+    const rad = async () => (await getCourseLearnerReport(course.id, {}, "nb")).rows.find((r) => r.participantId === userId);
+
+    const før = await rad();
+    expect(før).toMatchObject({ passedModules: 1, failedModules: 0, underReviewModules: 0, status: "COMPLETED" });
+
+    await publish(moduleId, version2Id, { supersedesEarlierPasses: true });
+
+    const etter = await rad();
+    // Vedtaket står fortsatt som bestått — det er sertifiseringsstatusen som sier at det ikke gjelder.
+    expect(etter).toMatchObject({ passedModules: 0, failedModules: 0, status: "IN_PROGRESS" });
+  });
+
+  it("#1116: et forsøk som ikke er avgjort, teller som under vurdering — ikke bare UNDER_REVIEW", async () => {
+    const { moduleId, userId } = await setupPassedModule();
+    await prisma.certificationStatus.deleteMany({ where: { userId, moduleId } });
+    await prisma.submission.updateMany({ where: { userId, moduleId }, data: { submissionStatus: "PROCESSING" } });
+    const course = await prisma.course.create({
+      data: { title: L(`Kurs 1116b ${Date.now()}`), publishedAt: new Date() },
+      select: { id: true },
+    });
+    await prisma.courseItem.create({ data: { courseId: course.id, itemType: "MODULE", moduleId, sortOrder: 0 } });
+    const row = (await getCourseLearnerReport(course.id, {}, "nb")).rows.find((r) => r.participantId === userId);
+    // Før: vedtaket (bestått) talte, så en sak under behandling sto som bestått.
+    expect(row).toMatchObject({ passedModules: 0, underReviewModules: 1, failedModules: 0 });
   });
 
   it("forfatteren kan se hvor mange som vil bli berørt før hen svarer", async () => {
