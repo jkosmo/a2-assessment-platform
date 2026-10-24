@@ -2,6 +2,39 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.99.0 - 2026-10-24
+
+### «Velg alle som stemmer» i moduler (#1077, leveranse 1a)
+
+Første av tre nye spørsmålstyper (designnotat `doc/DESIGN_1077.md`; produkteiers avgjørelser i
+DECISIONS: rett eller galt per spørsmål, antallet riktige oppgis ikke).
+
+- **Datamodell (additiv, #811):** `MCQQuestion.questionType` (standard `single`) og `answerKeyJson`
+  (posisjonene til de riktige alternativene); `MCQResponse.answerJson` (de valgte posisjonene).
+- **Retting ett sted:** `mcqQuestionTypes.ts`. Riktig når de valgte er nøyaktig de riktige; et valg som
+  ikke er et alternativ gjør svaret galt. `isCorrect`, poengsum og bestått-grense som før.
+- **Deltaker:** avkrysning og «Velg alle som stemmer.», kladd, forhåndsvisning og gjennomgang (#1061).
+- **Forfatter:** «Flere riktige svar» per spørsmål i Rediger. Typen bæres gjennom oversettelse,
+  utfylling av manglende språk ved publisering, påfylling av banken og eksport → import.
+- **Kvalitetsrapporten** teller hvert valgte alternativ i et «velg alle».
+- **Ikke ennå:** KI-generering og skillet (leveranse 1b). KI-revisjon av et «velg alle» avvises med
+  `422`, så det aldri blir gjort om til et vanlig spørsmål i det stille.
+
+### Kvalitetsrapporten for flervalg talte ikke valg på spørsmål med tre språk
+
+Alternativene lagres som språkkart; deltakeren svarer med teksten på sitt språk. Telt som ren tekst
+fikk hvert feilalternativ 0 valg, og ble flagget «velges sjelden» på alle spørsmål skillet lager.
+Nå samme sammenligning som rettingen, og alternativ og spørsmålstekst vist på rapportens språk.
+
+### Rotårsak: to stille typebytter funnet under arbeidet
+
+- `appendMcqQuestions` kopierer de eksisterende spørsmålene inn i en ny versjon av settet, og klientens
+  oversettelse og utfylling bygger spørsmålene på nytt av «stamme + alternativer + ett svar». Begge ville
+  gjort et «velg alle» om til et vanlig spørsmål ved neste lagring. Funnet ved å lete etter LESERE og
+  KOPIERERE av feltet, ikke kallere av funksjonen; begge har nå tester som blir røde uten fiksen.
+- Bryteren «Flere riktige svar» mistet fasiten når den ble slått av (en avkrysset boks gjort om til
+  radio fjerner avkrysningen fra den forrige i gruppa). Fanget av kontrollcasen i e2e-testen.
+
 ## 2.98.6 - 2026-10-24
 
 ### Kursrapporten bruker samme regel for bestått som kursbeviset (#1116)

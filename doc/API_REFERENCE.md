@@ -288,6 +288,21 @@ source language and **discard the translation that succeeded** — which is what
 about, and what #913 finished by extending the same contract to MCQ content (`mcqSet.title`,
 `questions[].stem`, `questions[].options[]`, `questions[].correctAnswer`, `questions[].rationale`).
 
+**Question types (#1077).** A question in an `mcqSet` (create, import, append, agent package) has an
+optional `questionType`: `"single"` (default) with `correctAnswer`, or `"multiple"` («select all that
+apply») with `correctAnswers` — one or more of `options`, distinct, and not all of them. Exports
+write `questionType` and `correctAnswers` for `"multiple"` only; a `"single"` question is exported as
+before. Participant endpoints:
+
+- `GET /api/modules/:moduleId/mcq/start` returns `questionType` per question (never the answer key).
+- `POST /api/modules/:moduleId/mcq/submit`: each response has `selectedAnswer` (one string) **or**
+  `selectedAnswers` (array, for `"multiple"`). A `"multiple"` answer is correct only when the chosen
+  options equal the correct ones; a choice that is not an option makes it wrong.
+- `GET /api/submissions/:id/mcq-review` adds `questionType`, and for `"multiple"` `selectedAnswers`
+  and `correctAnswers` (as option text in the reader's locale).
+- `POST /api/admin/content/generate/mcq/revise` answers `422 mcq_revision_type_not_supported` for a
+  `"multiple"` question.
+
 Two rules for clients:
 
 - **Never write a source-language copy into a locale whose translation failed.** A copy is

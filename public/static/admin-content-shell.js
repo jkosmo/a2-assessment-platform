@@ -2895,10 +2895,11 @@ function enterPreviewEditMode({ force = false } = {}) {
       const container = toggle.closest("[data-preview-edit-question]");
       const inputs = Array.from(container?.querySelectorAll("[data-preview-edit-correct]") ?? []);
       const firstChecked = inputs.find((input) => input.checked) ?? inputs[0];
-      for (const input of inputs) {
-        input.type = toggle.checked ? "checkbox" : "radio";
-        if (!toggle.checked) input.checked = input === firstChecked;
-      }
+      for (const input of inputs) input.type = toggle.checked ? "checkbox" : "radio";
+      // Fra avkrysning til radio settes valget ETTER typebyttet: en avkrysset boks som blir radio, er
+      // en avkrysset radio, og den fjerner avkrysningen fra den forrige i gruppa. Satt underveis i
+      // løkka sto ingen avkrysset til slutt.
+      if (!toggle.checked && firstChecked) firstChecked.checked = true;
     });
   }
   for (const btn of previewContent.querySelectorAll("[data-remove-question]")) {
