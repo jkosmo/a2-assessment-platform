@@ -50,7 +50,9 @@ pass.
 
 ## Select all that apply
 
-In a **new test**, some questions are `"questionType": "multiple"`
+**Whenever a test's questions are written** — a new test, or a test written again while adjusting
+a course ("lag testene på nytt", "regenerer testen", "skriv nye spørsmål") — some questions are
+`"questionType": "multiple"`
 ([package-schema.md](package-schema.md#a-module)) — how many, which, and how many options in each are
 right is drawn at random, not chosen by you. Before writing a module's questions, run
 
@@ -70,9 +72,11 @@ plausible statements the source contradicts or does not support. Take each plann
 different part of the source. Never make up a fact to reach the number; if the source cannot carry
 the plan, say so at gate 4 and ask the author.
 
-- **When adjusting a course,** every question keeps its type unless the author asks to change it.
-  When the author asks in general for more of them ("gjør noen av spørsmålene til velg alle") or
-  for a harder test, choose yourself which questions and how many — at most half the set.
+- **When adjusting questions that stay** — rewording one, fixing a rationale, changing something
+  else in the course — every question keeps its type unless the author asks to change it. When the
+  author asks in general for more of them ("gjør noen av spørsmålene til velg alle") or for a harder
+  test, choose yourself which questions and how many — at most half the set. A test that is written
+  again is not "questions that stay": it follows the plan above.
 - **Every option is a statement that is true or false on its own** under the stem. No option
   contains or depends on another.
 - **The stem does not say how many are right** — not "hvilke to", not "nevn tre". The platform tells

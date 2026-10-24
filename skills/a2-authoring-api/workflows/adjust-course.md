@@ -72,9 +72,14 @@ names them:
 When a change also touches the course's description, a module's questions or their rationale, the
 line says so — the description and the test must still agree with the sections.
 
-Every question keeps its type — one correct answer, or select all that apply — unless the author
-asks to change it. When the author asks in general for select-all questions, or for a harder test,
-choose which and how many yourself, at most half the set ([modules.md](../references/modules.md#select-all-that-apply)).
+**A test written again** — the author asks for new questions, a regenerated test, or the test made
+anew from the source — is a new test: run `node scripts/mcq-plan.mjs` and follow the plan, exactly as
+when making a course ([modules.md](../references/modules.md#select-all-that-apply)). Say on the change
+list that the test is written again and which questions are select all that apply.
+
+**Questions that stay** keep their type — one correct answer, or select all that apply — unless the
+author asks to change it. When the author asks in general for select-all questions, or for a harder
+test, choose which and how many yourself, at most half the set.
 
 Rules the list must respect:
 
