@@ -77,6 +77,9 @@ the plan, say so at gate 4 and ask the author.
   contains or depends on another.
 - **The stem does not say how many are right** — not "hvilke to", not "nevn tre". The platform tells
   the learner to select all that apply. Every option may be right.
+- **The stem is plural whatever the number** — "Hvilke av disse …", "Kva for nokre …", "Which of
+  these …" — also when one option is right. "Hvilket …", "Hvilken …" or "Which one …" says that
+  exactly one is.
 - **The right options look like the wrong ones**: the same length and detail.
 - The `rationale` says, for each option, why it is or is not right.
 

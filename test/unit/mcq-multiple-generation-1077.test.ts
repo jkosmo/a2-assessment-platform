@@ -117,6 +117,7 @@ describe("#1077 — generering: plattformen trekker planen, modellen følger den
     expect(userPrompt).toContain('- Question 7: "multiple", exactly 4 of 4 options correct (every option is correct).');
     expect(userPrompt).toContain("Construct each planned question for that purpose: search the source material for facts");
     expect(userPrompt).toContain("must not reveal or hint at how many options are correct");
+    expect(userPrompt).toContain("never in the singular");
   });
 
   it("kontroll: en tom plan ber bare om ett svar", () => {

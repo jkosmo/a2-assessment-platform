@@ -1022,6 +1022,7 @@ const MULTIPLE_QUESTION_WRITING_RULES = `For a "multiple" question:
 - "correctAnswers" lists every correct option verbatim. At least one option is correct; ALL options may be correct when that is genuinely so — the candidate is not told how many.
 - "correctAnswer" is the first item of "correctAnswers".
 - The stem must not reveal or hint at how many options are correct (no "which two", no "name the three"). The platform itself tells the candidate to select all that apply.
+- Write the stem the same way whatever the number of correct options: in the plural ("Which of these …", "Hvilke av disse …", "Kva for nokre …"), never in the singular ("Which one …", "Hvilket …", "Hvilken …", "Kva for ein …") — a singular stem tells the candidate that exactly one is correct.
 - Every option, correct or not, must be a single, independently true-or-false statement under the stem. No option may contain or depend on another ("all of the above", "both A and B" are forbidden).
 - Correct options must not stand out from incorrect ones by length, detail or tone — the option-parity rules apply to the whole set.
 - The rationale says, for each option, why it is or is not correct.

@@ -108,6 +108,14 @@ describe("mcq-cue-check — flere riktige svar (#1077)", () => {
     expect(checkMcqCues([m(stem, even, [0, 2])]).issues.map((i) => i.kind)).not.toContain("count_in_stem");
   });
 
+  // Stage 2.100.0: med ett riktig planlagt skrev modellen stammen i entall — det røper «nøyaktig ett».
+  it.each(["Hvilket av følgende krav gjelder for protokollen?", "Hvilken rolle har databehandleren?", "Kva for ein regel gjeld her?", "Which one applies here?"])(
+    "count_in_stem (entall): %s",
+    (stem) => {
+      expect(checkMcqCues([m(stem, even, [0])]).issues.map((i) => i.kind)).toContain("count_in_stem");
+    },
+  );
+
   it.each(["Hvilke to av disse må med?", "Hvilke tre forhold må vurderes?", "Name two elements of the record.", "Kva for to må vere med?", "Velg de tre som gjelder.", "Hvilke 2 må med?"])(
     "count_in_stem: %s",
     (stem) => {

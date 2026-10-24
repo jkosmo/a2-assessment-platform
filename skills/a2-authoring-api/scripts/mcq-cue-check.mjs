@@ -81,7 +81,10 @@ export function collectMcqSets(doc) {
 // «vel dei …» counts.
 const COUNT_IN_STEM_NB = /\b(?:hvilke|kva for|velg(?:\s+de)?|vel\s+dei|nevn)\s+(?:to|tre|fire|fem|[2-5])\b(?!-)/i;
 const COUNT_IN_STEM_EN = /\b(?:which|choose|select|name)\s+(?:the\s+)?(?:two|three|four|five|[2-5])\b(?!-)/i;
-const COUNT_IN_STEM = { test: (stem) => COUNT_IN_STEM_NB.test(stem) || COUNT_IN_STEM_EN.test(stem) };
+// Stage 2.100.0: with one correct option planned, the model wrote «Hvilket av følgende krav gjelder?»
+// — the singular says «exactly one». A select-all stem is plural whatever the number.
+const SINGULAR_STEM = /^\s*(?:hvilket|hvilken|kva for ein|kva for eitt|which one)\b/i;
+const COUNT_IN_STEM = { test: (stem) => COUNT_IN_STEM_NB.test(stem) || COUNT_IN_STEM_EN.test(stem) || SINGULAR_STEM.test(stem) };
 
 /**
  * #1077: «select all that apply». Every correct answer must be an option; the correct options must
