@@ -52,7 +52,7 @@ const C = L("Legal basis", "Behandlingsgrunnlag");
 const D = L("Font", "Skrifttype");
 const flere = { questionType: "multiple", stem: L("What must the record state?", "Hva må protokollen inneholde?"), options: [A, B, C, D], correctAnswers: [A, C], rationale: L("Art. 30.", "Art. 30.") };
 
-const tilstand: { moduleId?: string; versionId?: string; sectionId?: string } = {};
+const tilstand: { moduleId?: string; moduleIdAlle?: string; versionId?: string; sectionId?: string } = {};
 
 test("versjonen er 2.99.1", async () => {
   const svar = await fetch(`${BASE}/version`);
@@ -119,6 +119,44 @@ test("#1077: deltakeren får typen uten fasit; rett eller galt; gjennomgangen vi
   expect(galt.json.questions[0].isCorrect).toBe(false);
 });
 
+// 2.99.1 (produkteier): alle alternativene kan være riktige. Før avviste tjeneren det, og Rediger viste
+// bare «noe i skjemaet mangler».
+test("2.99.1: et «velg alle» der alle er riktige lagres; bare alle valgt gir riktig", async () => {
+  const modul = await api("POST", "/api/admin/content/modules", { title: L(`Stage-test 1077 alle ${Date.now()}`, `Stage-test 1077 alle ${Date.now()}`), certificationLevel: "basic" });
+  expect(modul.status, modul.tekst).toBe(201);
+  tilstand.moduleIdAlle = modul.json.module.id;
+  const sett = await api("POST", `/api/admin/content/modules/${tilstand.moduleIdAlle}/mcq-set-versions`, { title: L("Set", "Sett"), questions: [{ ...flere, correctAnswers: [A, B, C, D] }] });
+  noter("alle riktige tas imot", sett.status);
+  expect(sett.status, sett.tekst).toBe(201);
+  const versjon = await api("POST", `/api/admin/content/modules/${tilstand.moduleIdAlle}/module-versions`, {
+    assessmentMode: "MCQ_ONLY",
+    mcqSetVersionId: sett.json.mcqSetVersion.id,
+    assessmentPolicy: { passRules: { mcqMinPercent: 60 }, mcq: { reviewAfterSubmit: true } },
+  });
+  expect(versjon.status, versjon.tekst).toBe(201);
+  const publisert = await api("POST", `/api/admin/content/modules/${tilstand.moduleIdAlle}/module-versions/${versjon.json.moduleVersion.id}/publish`, {});
+  expect([200, 201]).toContain(publisert.status);
+
+  const riktigSvar = async (valg: string[]) => {
+    const innlevering = await api("POST", "/api/submissions", { moduleId: tilstand.moduleIdAlle, deliveryType: "text", responseJson: {} });
+    expect(innlevering.status, innlevering.tekst).toBe(201);
+    const submissionId = innlevering.json.submission.id as string;
+    const start = await api("GET", `/api/modules/${tilstand.moduleIdAlle}/mcq/start?submissionId=${submissionId}&locale=nb`);
+    expect(start.status, start.tekst).toBe(200);
+    const levert = await api("POST", `/api/modules/${tilstand.moduleIdAlle}/mcq/submit`, { submissionId, attemptId: start.json.attemptId, responses: [{ questionId: start.json.questions[0].id, selectedAnswers: valg }] });
+    expect(levert.status, levert.tekst).toBe(200);
+    const gjennomgang = await api("GET", `/api/submissions/${submissionId}/mcq-review?locale=nb`);
+    expect(gjennomgang.status, gjennomgang.tekst).toBe(200);
+    return gjennomgang.json.questions[0].isCorrect;
+  };
+  const alle = await riktigSvar(["Formål", "Farge", "Behandlingsgrunnlag", "Skrifttype"]);
+  noter("alle fire valgt gir riktig", alle);
+  expect(alle).toBe(true);
+  const tre = await riktigSvar(["Formål", "Farge", "Behandlingsgrunnlag"]);
+  noter("tre av fire gir galt", tre);
+  expect(tre).toBe(false);
+});
+
 test("#1073: en figur som går i løkke, avvises av den ekte rensingen — også skrevet <STYLE>", async () => {
   const seksjon = await api("POST", "/api/admin/content/sections", { title: L(`Stage-test 1073 ${Date.now()}`, `Stage-test 1073 ${Date.now()}`), bodyMarkdown: L("Test", "Test"), draft: true });
   expect(seksjon.status, seksjon.tekst).toBe(201);
@@ -167,11 +205,12 @@ test("2.98.2: en kopiert figur med to oppsett svarer med bredden på det brede",
 });
 
 test.afterAll(async () => {
-  if (tilstand.moduleId) {
+  for (const moduleId of [tilstand.moduleId, tilstand.moduleIdAlle]) {
+    if (!moduleId) continue;
     // En publisert modul med innleveringer kan ikke slettes; da arkiveres den, så den ikke står i lista.
-    const slettet = await api("DELETE", `/api/admin/content/modules/${tilstand.moduleId}`);
+    const slettet = await api("DELETE", `/api/admin/content/modules/${moduleId}`);
     noter("slett testmodul", slettet.status);
-    if (slettet.status !== 200) noter("arkiver testmodul", (await api("POST", `/api/admin/content/modules/${tilstand.moduleId}/archive`, {})).status);
+    if (slettet.status !== 200) noter("arkiver testmodul", (await api("POST", `/api/admin/content/modules/${moduleId}/archive`, {})).status);
   }
   if (tilstand.sectionId) noter("slett testseksjon", (await api("DELETE", `/api/admin/content/sections/${tilstand.sectionId}`)).status);
 });
