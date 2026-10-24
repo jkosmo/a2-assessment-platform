@@ -53,7 +53,11 @@ FAIL=0
 # run 28431321940): the prod WORKER cold-started 7s AFTER the 4th attempt (B1 worker restart
 # took ~4 min), so a healthy deploy got a red smoke gate. Web/parser come up well within budget;
 # the worker is the slow one. 6 attempts comfortably covers the observed B1 worker cold-start.
-MAX_ATTEMPTS=6
+# Widened to 12 (~13 min): twice since (stage 2026-09-18 and 2026-10-24, run 40112221530) the
+# worker reported startedAt minutes AFTER attempt 6 — 2.99.1 started 5¾ min after the gate gave
+# up — and the red stage job skipped deploy-production. A healthy endpoint exits on its first OK,
+# so the wider budget only costs time when something is actually slow.
+MAX_ATTEMPTS=12
 SLEEP_BETWEEN=45
 
 # An endpoint counts as healthy when curl returns the expected HTTP code. The deploy
