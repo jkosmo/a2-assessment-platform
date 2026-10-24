@@ -1927,22 +1927,20 @@ async function reviseMcqInBackground(instruction, onAccept) {
   const slot = logProgress("shell.revision.mcqProgress", { abortable: true });
   slot.abortBtn.addEventListener("click", () => { abort.abort(); slot.abortBtn.disabled = true; });
 
-  // #1077: KI-revisjonen kjenner bare «ett riktig svar». Spørsmålene under bygges av stamme,
-  // alternativer og ETT svar, så et «velg alle» ville kommet tilbake som et vanlig spørsmål. Stopp her,
-  // med en melding forfatteren forstår — før noe sendes (QA 2.99.0: tjenerens 422 ble aldri nådd).
-  if ((sessionDraft?.mcqQuestions ?? []).some((question) => question?.questionType === "multiple")) {
-    generationAbort = null;
-    sessionState = sessionDraft ? "draft-pending" : "module-loaded";
-    logResolveSlot(slot, () => escapeHtml(t("shell.revision.mcqMultipleUnsupported")));
-    return;
-  }
-
-  const currentQuestions = (sessionDraft?.mcqQuestions ?? []).map((question) => ({
-    stem: localizeValueForLocale(question.stem, contentLocale),
-    options: (question.options ?? []).map((option) => localizeValueForLocale(option, contentLocale)),
-    correctAnswer: localizeValueForLocale(question.correctAnswer, contentLocale),
-    rationale: localizeValueForLocale(question.rationale, contentLocale),
-  }));
+  // #1077 leveranse 1b: typen og ALLE de riktige går med til KI-en, som beholder dem med mindre
+  // forfatteren ber om annet. Svaret kommer tilbake med sin egen type (revisjonen kan endre den), og
+  // oversettelsen under bærer den fra svaret — ikke fra spørsmålet slik det var.
+  const currentQuestions = (sessionDraft?.mcqQuestions ?? []).map((question) => {
+    const options = (question.options ?? []).map((option) => localizeValueForLocale(option, contentLocale));
+    const multiple = question?.questionType === "multiple";
+    return {
+      ...(multiple ? { questionType: "multiple", correctAnswers: mcqCorrectPositions(question).map((i) => options[i]) } : {}),
+      stem: localizeValueForLocale(question.stem, contentLocale),
+      options,
+      correctAnswer: localizeValueForLocale(question.correctAnswer, contentLocale),
+      rationale: localizeValueForLocale(question.rationale, contentLocale),
+    };
+  });
   let result;
   try {
     result = await apiFetch(

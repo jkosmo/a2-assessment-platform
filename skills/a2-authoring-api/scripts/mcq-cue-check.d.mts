@@ -7,7 +7,7 @@ export declare const LONGEST_SHARE_MAX: number;
 
 export interface McqCueIssue {
   index: number | null;
-  kind: "too_few_options" | "catch_all_option" | "answer_not_an_option" | "correct_is_longest" | "position_bias" | "length_bias";
+  kind: "too_few_options" | "catch_all_option" | "answer_not_an_option" | "correct_is_longest" | "position_bias" | "length_bias" | "count_in_stem" | "correct_are_longer" | "multiple_share";
   detail: string;
 }
 

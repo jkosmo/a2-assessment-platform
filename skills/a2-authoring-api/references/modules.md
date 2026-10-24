@@ -1,7 +1,7 @@
 # Modules — task, assessment criteria, multiple-choice questions
 
 Contents: [Free-text modules](#free-text-modules) · [Multiple-choice questions](#multiple-choice-questions) ·
-[The cue check](#the-cue-check)
+[Select all that apply](#select-all-that-apply) · [The cue check](#the-cue-check)
 
 A module tests. Write it from the source, in the course's one language, at the level agreed at
 gate 3 ([course-design.md](course-design.md#level-and-scope)).
@@ -32,7 +32,8 @@ gate 3 ([course-design.md](course-design.md#level-and-scope)).
 - The stem tests **one** idea.
 - **Not answered in a section already.** A question does not repeat a section's exercise — the same
   situation or the same numbers ([section-content.md](section-content.md#choosing-the-practice)).
-- 3–4 options. Exactly one is unambiguously right. Never "alle de over".
+- 3–4 options. Exactly one is unambiguously right — unless the question is a
+  [select all that apply](#select-all-that-apply). Never "alle de over".
 - **Distractors are real misconceptions** — the wrong judgements a real learner would make.
 - A short `rationale` says why the right answer is right.
 - **At least half the questions ask for a judgement in a situation** ("En entreprenør skal grave
@@ -46,6 +47,28 @@ pass.
 - **Spread the position.** Place the right option so that, across the set, every position is used
   about equally. The platform shuffles the options for the learner, so length is the cue that
   reaches them — but a set with the answer always first is a set nobody checked.
+
+## Select all that apply
+
+One correct answer is the default. Write a question as `"questionType": "multiple"`
+([package-schema.md](package-schema.md#a-module)) only where **the source itself** names several
+things that all hold for the stem — the required elements of something, conditions that all apply,
+steps that all belong. Never make a list up to get one, and never use it for variety.
+
+- **How many.** In a new test, at most about one question in three. When the author asks in general
+  for more of them ("gjør noen av spørsmålene til velg alle") or for a harder test, choose yourself
+  which questions and how many, from where several options can genuinely all be right and where the
+  test needs to be harder — at most half the set. When the author adjusts something else, every
+  question keeps its type.
+- **Every option is a statement that is true or false on its own** under the stem. No option
+  contains or depends on another.
+- **The stem does not say how many are right** — not "hvilke to", not "nevn tre". The platform tells
+  the learner to select all that apply. Every option may be right.
+- **The right options look like the wrong ones**: the same length and detail.
+- The `rationale` says, for each option, why it is or is not right.
+
+The learner gets the question right only by choosing exactly the right options; there are no part
+marks.
 
 ## The cue check
 

@@ -70,10 +70,14 @@ export type McqDistractorMetadata = {
   wouldBeCorrectIf: string;
 };
 
+// #1077: «multiple» (velg alle som stemmer) har `correctAnswers` — de riktige alternativene ordrett, i
+// alternativenes rekkefølge — og `correctAnswer` lik det første av dem. Uten `questionType`: ett svar.
 export type GeneratedMcqQuestion = {
+  questionType?: "multiple";
   stem: string;
   options: string[];
   correctAnswer: string;
+  correctAnswers?: string[];
   rationale: string;
   distractorMetadata?: McqDistractorMetadata[];
   eliminationRisk?: "low" | "medium" | "high";
@@ -85,9 +89,11 @@ export type McqGenerationResult = {
 };
 
 export type RevisableMcqQuestion = {
+  questionType?: "single" | "multiple";
   stem: LocalizedText;
   options: LocalizedText[];
   correctAnswer: LocalizedText;
+  correctAnswers?: LocalizedText[];
   rationale?: LocalizedText;
 };
 
@@ -219,9 +225,13 @@ const mcqGenerationResponseCodec = z.object({
   questions: z
     .array(
       z.object({
+        // #1077: alt annet enn «multiple» er ett svar — også «single» eller tull fra modellen.
+        questionType: z.unknown().optional(),
         stem: z.string().min(1),
         options: z.array(z.string().min(1)).min(2).max(MCQ_MAX_OPTIONS),
-        correctAnswer: z.string().min(1),
+        // Valgfri her: for «multiple» fylles den inn fra correctAnswers (normalizeGeneratedQuestionType).
+        correctAnswer: z.string().optional(),
+        correctAnswers: z.array(z.string()).optional(),
         rationale: z.string().min(1),
         distractorMetadata: z.array(mcqDistractorMetadataCodec).optional(),
         eliminationRisk: z.enum(["low", "medium", "high"]).optional(),
@@ -256,12 +266,37 @@ export function clampMcqOptionCount(raw: unknown): unknown {
 
 // Coerce-then-validate an MCQ generation/revision/localization response. Throws a descriptive error
 // only when the response is still invalid after coercion.
-function parseMcqGenerationResponse(raw: unknown, context: string) {
+function parseMcqGenerationResponse(raw: unknown, context: string): { questions: GeneratedMcqQuestion[] } {
   const parsed = mcqGenerationResponseCodec.safeParse(clampMcqOptionCount(raw));
   if (!parsed.success) {
     throw new Error(`${context} failed validation: ${JSON.stringify(parsed.error.issues)}`);
   }
-  return parsed.data;
+  return { questions: parsed.data.questions.map((question, index) => normalizeGeneratedQuestionType(question, index, context)) };
+}
+
+/**
+ * #1077: modellens spørsmål til ÉN form. «multiple» beholdes bare med minst ett riktig som er et av
+ * alternativene ordrett; de riktige ordnes som alternativene, og `correctAnswer` blir det første. En
+ * «multiple» uten et eneste brukbart riktig faller tilbake til ett svar hvis `correctAnswer` er et
+ * alternativ — ellers er spørsmålet ubrukelig, og svaret avvises som før.
+ */
+export function normalizeGeneratedQuestionType(
+  question: { questionType?: unknown; options: string[]; correctAnswer?: string; correctAnswers?: string[] } & Omit<GeneratedMcqQuestion, "questionType" | "correctAnswer" | "correctAnswers">,
+  index: number,
+  context: string,
+): GeneratedMcqQuestion {
+  const { questionType, correctAnswer, correctAnswers, ...rest } = question;
+  if (questionType === "multiple") {
+    const wanted = new Set((correctAnswers ?? []).map((answer) => answer.trim()));
+    const correct = question.options.filter((option) => wanted.has(option.trim()));
+    if (correct.length > 0) {
+      return { ...rest, questionType: "multiple", correctAnswer: correct[0]!, correctAnswers: correct };
+    }
+  }
+  if (typeof correctAnswer !== "string" || correctAnswer.trim().length === 0) {
+    throw new Error(`${context} failed validation: question ${index + 1} has no usable correct answer.`);
+  }
+  return { ...rest, correctAnswer };
 }
 
 const courseCopyLocalizationResponseCodec = z.object({
@@ -551,7 +586,9 @@ function buildIndexedMcqPreview(questions: RevisableMcqQuestion[], locale: Gener
         `Stem: ${localizeForPrompt(question.stem, locale)}`,
         "Options:",
         optionLines,
-        `Correct answer: ${localizeForPrompt(question.correctAnswer, locale)}`,
+        question.questionType === "multiple"
+          ? `Type: multiple (select all that apply)\nCorrect answers: ${(question.correctAnswers ?? []).map((answer) => localizeForPrompt(answer, locale)).join(" | ")}`
+          : `Correct answer: ${localizeForPrompt(question.correctAnswer, locale)}`,
         `Rationale: ${localizeForPrompt(question.rationale, locale)}`,
       ].join("\n");
     })
@@ -561,12 +598,22 @@ function buildIndexedMcqPreview(questions: RevisableMcqQuestion[], locale: Gener
 function normalizeGeneratedMcqQuestions(questions: GeneratedMcqQuestion[]): string {
   return JSON.stringify(
     questions.map((question) => ({
+      answerKey: mcqAnswerKeySignature(question),
       stem: question.stem.trim(),
       options: question.options.map((option) => option.trim()),
       correctAnswer: question.correctAnswer.trim(),
       rationale: question.rationale.trim(),
     })),
   );
+}
+
+// #1077: typen og hvilke plasser som er riktige. «Gjør spørsmål 3 til velg alle» endrer bare dette —
+// og er en ekte endring, ikke en uendret revisjon.
+function mcqAnswerKeySignature(question: GeneratedMcqQuestion): string {
+  const correct = question.questionType === "multiple" ? (question.correctAnswers ?? []) : [question.correctAnswer];
+  const wanted = new Set(correct.map((answer) => answer.trim()));
+  const positions = question.options.map((option, index) => (wanted.has(option.trim()) ? index : -1)).filter((index) => index >= 0);
+  return `${question.questionType ?? "single"}:${positions.join(",")}`;
 }
 
 function normalizeMcqTextForComparison(value: string | undefined): string {
@@ -721,6 +768,7 @@ function hasTargetedMcqChange(
   }
 
   return (
+    mcqAnswerKeySignature(sourceQuestion) !== mcqAnswerKeySignature(revisedQuestion) ||
     isSubstantivelyDifferentText(sourceQuestion.stem, revisedQuestion.stem) ||
     isSubstantivelyDifferentText(sourceQuestion.correctAnswer, revisedQuestion.correctAnswer) ||
     isSubstantivelyDifferentText(sourceQuestion.rationale, revisedQuestion.rationale) ||
@@ -891,6 +939,47 @@ Return a single JSON object:
   return { systemPrompt, userPrompt };
 }
 
+// #1077 leveranse 1b (produkteier 2026-10-24): ved generering avgjør KILDEN — «velg alle» bare der
+// kilden lister flere ting som alle stemmer, høyst omtrent hvert tredje spørsmål. Ved revisjon som ber
+// om det generelt, vurderer modellen selv hvor mange, høyst halvparten av settet.
+export function maxMultipleForGeneration(questionCount: number): number {
+  return Math.floor(questionCount / 3);
+}
+
+export function maxMultipleForRevision(questionCount: number): number {
+  return Math.floor(questionCount / 2);
+}
+
+export function countMultipleQuestions(questions: Array<{ questionType?: string }>): number {
+  return questions.filter((question) => question.questionType === "multiple").length;
+}
+
+// Reglene for hvordan et «velg alle» SKRIVES, felles for generering og revisjon.
+const MULTIPLE_QUESTION_WRITING_RULES = `For a "multiple" question:
+- "correctAnswers" lists every correct option verbatim. At least one option is correct; ALL options may be correct when that is genuinely so — the candidate is not told how many.
+- "correctAnswer" is the first item of "correctAnswers".
+- The stem must not reveal or hint at how many options are correct (no "which two", no "name the three"). The platform itself tells the candidate to select all that apply.
+- Every option, correct or not, must be a single, independently true-or-false statement under the stem. No option may contain or depend on another ("all of the above", "both A and B" are forbidden).
+- Correct options must not stand out from incorrect ones by length, detail or tone — the option-parity rules apply to the whole set.
+- The rationale says, for each option, why it is or is not correct.
+- distractorMetadata covers the incorrect options only (none when every option is correct).`;
+
+function buildGenerationQuestionTypeSection(questionCount: number): string {
+  const max = maxMultipleForGeneration(questionCount);
+  if (max === 0) {
+    return `## Question type
+
+Every question has exactly one correct answer. Do not set "questionType".`;
+  }
+  return `## Question type — one correct answer is the default
+
+Most questions have exactly one correct answer: leave out "questionType" and "correctAnswers".
+
+Use "questionType": "multiple" (select all that apply) ONLY where the source material itself states several things that are all true for the stem — for example the required elements of something, conditions that all apply, or steps that all belong. Never invent a list to make such a question, and never use it just for variety. At most ${max} of the ${questionCount} questions may be "multiple"; fewer or none is fine.
+
+${MULTIPLE_QUESTION_WRITING_RULES}`;
+}
+
 export function buildMcqGenerationPrompts(input: McqGenerationInput): {
   systemPrompt: string;
   userPrompt: string;
@@ -989,6 +1078,8 @@ Rules:
 Each question must have exactly ${input.optionCount} answer options. The correctAnswer must be one of the options verbatim.
 Write all text in ${LOCALE_DISPLAY[input.locale]}.
 
+${buildGenerationQuestionTypeSection(input.questionCount)}
+
 ## Source material (hidden author background)
 
 ${input.sourceMaterial}
@@ -1015,7 +1106,11 @@ Return a single JSON object. For each incorrect option, include distractorMetada
       "eliminationRisk": "low"
     }
   ]
-}`;
+}${maxMultipleForGeneration(input.questionCount) > 0
+    ? `
+
+A "multiple" question has the same fields plus "questionType": "multiple" and "correctAnswers", e.g. "questionType": "multiple", "correctAnswers": ["option 1", "option 3"], "correctAnswer": "option 1".`
+    : ""}`;
 
   return { systemPrompt, userPrompt };
 }
@@ -1105,6 +1200,15 @@ Language: ${LOCALE_DISPLAY[input.locale]}
 Target question count: ${questionCount}
 Target option count per question: ${optionCount}
 
+## Question types
+
+A question either has one correct answer (no "questionType") or is "questionType": "multiple" — select all that apply, with "correctAnswers".
+- Keep every question's type, and keep the correct options of a "multiple" question correct, unless the instruction asks to change them.
+- Change types only when the instruction asks for it. When it names questions, change those. When it asks in general — for "select all that apply" questions (for example "make some of them select-all", "use more multiple-answer questions") or for a harder test — you may convert questions without being told which: choose yourself which and how many, from where several options can genuinely all be correct under the stem and where the set needs to be harder. Any other instruction keeps every type as it is.
+- At most ${revisionMultipleCap(input.questions, questionCount)} of the ${questionCount} questions may be "multiple" in the result.
+
+${MULTIPLE_QUESTION_WRITING_RULES}
+
 ## Current questions (indexed review view)
 
 ${indexedQuestions}
@@ -1127,11 +1231,25 @@ Return a single JSON object:
       "options": ["option 1", "option 2", "option 3"],
       "correctAnswer": "option 1",
       "rationale": "brief explanation"
+    },
+    {
+      "questionType": "multiple",
+      "stem": "question text",
+      "options": ["option 1", "option 2", "option 3"],
+      "correctAnswer": "option 1",
+      "correctAnswers": ["option 1", "option 3"],
+      "rationale": "for each option, why it is or is not correct"
     }
   ]
 }`;
 
   return { systemPrompt, userPrompt };
+}
+
+// #1077: høyst halvparten (produkteier) — men et sett forfatteren selv har gjort til mer enn det,
+// skal ikke tvinges ned av en revisjon som ikke handlet om typene.
+export function revisionMultipleCap(questions: Array<{ questionType?: string }>, questionCount: number): number {
+  return Math.max(maxMultipleForRevision(questionCount), countMultipleQuestions(questions));
 }
 
 export function buildModuleDraftLocalizationPrompts(input: ModuleDraftLocalizationInput): {
@@ -1534,10 +1652,22 @@ export function detectCorrectAnswerLengthBias(
 }
 
 function appendLengthBiasWarning(result: McqGenerationResult): McqGenerationResult {
-  const { biased, longestCorrectRatio } = detectCorrectAnswerLengthBias(result.questions);
+  // #1077: lengdesignalet gjelder «det ene riktige mot de gale». I et «velg alle» er det ikke ett.
+  const { biased, longestCorrectRatio } = detectCorrectAnswerLengthBias(result.questions.filter((q) => q.questionType !== "multiple"));
   if (!biased) return result;
   const pct = Math.round(longestCorrectRatio * 100);
   const warning = `Length cue: the correct answer is the longest option in ${pct}% of questions — review option parity so the answer isn't guessable by length (#551).`;
+  return { ...result, validationWarnings: [...(result.validationWarnings ?? []), warning] };
+}
+
+// #1077: instruksen setter standarden (ett svar, «velg alle» bare der kilden lister flere); dette er
+// sikkerhetsnettet når modellen likevel lager flere enn hvert tredje. Advarsel, ikke avslag — hvert
+// spørsmål kan være godt, og forfatteren ser dem.
+function appendMultipleCapWarning(result: McqGenerationResult, questionCount: number): McqGenerationResult {
+  const count = countMultipleQuestions(result.questions);
+  const max = maxMultipleForGeneration(questionCount);
+  if (count <= max) return result;
+  const warning = `${count} of ${result.questions.length} questions are «select all that apply» — more than the ${max} the source normally supports. Review whether each one really has several correct options.`;
   return { ...result, validationWarnings: [...(result.validationWarnings ?? []), warning] };
 }
 
@@ -1570,7 +1700,7 @@ export async function generateMcqQuestions(input: McqGenerationInput): Promise<M
   const first = await attempt(null);
   const sampleText = mcqSampleForLanguageCheck(first);
   if (!isLikelyWrongLocale(sampleText, input.locale)) {
-    return appendLengthBiasWarning(first);
+    return appendMultipleCapWarning(appendLengthBiasWarning(first), input.questionCount);
   }
   console.warn(
     `[#444] generateMcqQuestions language mismatch: expected ${input.locale}, detected ${detectDominantLanguage(sampleText)}. Retrying with stronger directive.`,
@@ -1582,7 +1712,7 @@ export async function generateMcqQuestions(input: McqGenerationInput): Promise<M
       `[#444] generateMcqQuestions language retry also produced wrong language (expected ${input.locale}). Returning result anyway — operator must verify.`,
     );
   }
-  return appendLengthBiasWarning(second);
+  return appendMultipleCapWarning(appendLengthBiasWarning(second), input.questionCount);
 }
 
 function mcqSampleForLanguageCheck(result: McqGenerationResult): string {
@@ -1615,11 +1745,18 @@ export async function reviseMcqQuestions(input: McqRevisionInput): Promise<McqGe
   };
 
   const sourceQuestions: GeneratedMcqQuestion[] = input.questions.map((question) => ({
+    ...(question.questionType === "multiple"
+      ? { questionType: "multiple" as const, correctAnswers: (question.correctAnswers ?? []).map((answer) => localizeForPrompt(answer, input.locale)) }
+      : {}),
     stem: localizeForPrompt(question.stem, input.locale),
     options: (question.options ?? []).map((option) => localizeForPrompt(option, input.locale)),
     correctAnswer: localizeForPrompt(question.correctAnswer, input.locale),
     rationale: localizeForPrompt(question.rationale, input.locale),
   }));
+  // #1077: høyst halvparten «velg alle» (eller så mange forfatteren alt hadde). Brytes grensen, får
+  // modellen ett forsøk til; brytes den igjen, avvises revisjonen — et tak produkteier har satt.
+  const multipleCap = revisionMultipleCap(input.questions, input.questionCount ?? input.questions.length);
+  const withinMultipleCap = (revised: GeneratedMcqQuestion[]) => countMultipleQuestions(revised) <= multipleCap;
   // #688: a TARGETED edit (e.g. "endre alternativ 1b") must edit one question in place and keep the
   // rest — it must NOT change the question count. The LLM sometimes collapses to just the edited
   // question (10 → 1, silent data loss). For instructions with an explicit target, require the count
@@ -1628,7 +1765,7 @@ export async function reviseMcqQuestions(input: McqRevisionInput): Promise<McqGe
   const countPreserved = (revised: GeneratedMcqQuestion[]) =>
     !hasExplicitTarget || revised.length === sourceQuestions.length;
   const isAcceptable = (revised: GeneratedMcqQuestion[]) =>
-    hasMeaningfulMcqRevision(sourceQuestions, revised, input.instruction) && countPreserved(revised);
+    hasMeaningfulMcqRevision(sourceQuestions, revised, input.instruction) && countPreserved(revised) && withinMultipleCap(revised);
 
   const firstAttempt = await parseRevision(userPrompt);
   if (isAcceptable(firstAttempt.questions)) {
@@ -1642,8 +1779,15 @@ export async function reviseMcqQuestions(input: McqRevisionInput): Promise<McqGe
 Your previous attempt did not apply the requested change concretely enough.
 If the instruction names a specific question or option reference such as "question 3", "Q3", "3b", or "option B in question 3", you must change that exact target in a clearly visible way.
 You MUST return ALL ${sourceQuestions.length} questions — edit only the targeted one(s) and keep every other question unchanged. Do not drop, merge, or add questions.
-Return a revised question set where the requested change is concrete, visible, and materially different from the source questions.`;
+Return a revised question set where the requested change is concrete, visible, and materially different from the source questions.
+At most ${multipleCap} questions may be "questionType": "multiple"; your previous attempt had ${countMultipleQuestions(firstAttempt.questions)}.`;
   const secondAttempt = await parseRevision(retryPrompt);
+
+  if (!withinMultipleCap(secondAttempt.questions)) {
+    throw new Error(
+      `MCQ revision made ${countMultipleQuestions(secondAttempt.questions)} questions «select all that apply»; at most ${multipleCap} are allowed. Please ask for fewer and try again.`,
+    );
+  }
 
   // A targeted edit that still dropped/changed the question count is wrong — reject rather than
   // silently lose questions (#688).

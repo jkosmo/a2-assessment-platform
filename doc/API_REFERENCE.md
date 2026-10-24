@@ -300,8 +300,12 @@ before. Participant endpoints:
   options equal the correct ones; a choice that is not an option makes it wrong.
 - `GET /api/submissions/:id/mcq-review` adds `questionType`, and for `"multiple"` `selectedAnswers`
   and `correctAnswers` (as option text in the reader's locale).
-- `POST /api/admin/content/generate/mcq/revise` answers `422 mcq_revision_type_not_supported` for a
-  `"multiple"` question.
+- `POST /api/admin/content/generate/mcq` and `.../generate/mcq/revise` (#1077 delivery 1b): a
+  question in the response may carry `"questionType": "multiple"` and `correctAnswers` (option text,
+  in option order); `correctAnswer` is then the first of them. Generation uses the type only where the
+  source lists several things that all hold, at most one in three questions (above that: a warning in
+  `validation.issues`). Revision keeps each question's type unless the instruction asks otherwise, and
+  never returns more than half the set as `"multiple"` (or as many as the input already had).
 
 Two rules for clients:
 

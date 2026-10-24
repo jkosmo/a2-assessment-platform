@@ -21,7 +21,7 @@ you leave untranslated, a person must later have translated on the platform, one
 | the course | `title`, `description` |
 | a section | `title`, `bodyMarkdown` |
 | a module | `title`, `description`, `taskText`, `assessorExpectedContent`, `candidateTaskConstraints`, the labels and placeholders of `submissionSchema.fields[]`, `promptTemplate.systemPrompt` and `userPromptTemplate` |
-| a multiple-choice set | `title`, and per question `stem`, every entry in `options`, `correctAnswer`, `rationale` |
+| a multiple-choice set | `title`, and per question `stem`, every entry in `options`, `correctAnswer` (or every entry in `correctAnswers`), `rationale` |
 | a figure | every label (below) |
 
 Each of these is written as `{ "nb": "…", "nn": "…", "en-GB": "…" }`. A plain string is only for
@@ -37,6 +37,8 @@ criteria exist in one language.
   harder than the original.
 - **The right answer.** `correctAnswer` equals one of the `options` in every language — the same
   option, in the same position. After translating a question, check again which option is right.
+  In a select-all-that-apply question the same holds for every entry in `correctAnswers`: the same
+  options, in the same positions, in every language.
 - **The number and order of options**, questions and criteria.
 - **Every formula, code, identifier, file name and address**, unchanged.
 - **The markdown:** the same headings, lists, tables, boxes and `![…](asset:…)` references in

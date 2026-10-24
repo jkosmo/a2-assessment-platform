@@ -1470,13 +1470,9 @@ adminContentRouter.post("/generate/mcq/revise", generateLimiter, async (request,
     return;
   }
 
-  // #1077: KI-revisjonen kjenner bare «ett riktig svar» ennå. Et «velg alle som stemmer» sendt hit
-  // ville kommet tilbake som et vanlig spørsmål — en typeendring ingen ba om. Si nei tydelig i stedet.
-  if (data.questions.some((question) => (question.questionType ?? "single") !== "single")) {
-    response.status(422).json({ error: "mcq_revision_type_not_supported", message: "AI revision supports single-answer questions only for now." });
-    return;
-  }
   try {
+    // #1077 leveranse 1b: typen og de riktige følger med inn; modellen beholder dem med mindre
+    // forfatteren ber om annet. `correctAnswer` er det første riktige for et «velg alle».
     const result = await reviseMcqQuestions({
       ...data,
       questions: data.questions.map((question) => ({ ...question, correctAnswer: mcqQuestionTypeFields(question).correctAnswer })),

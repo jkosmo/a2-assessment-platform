@@ -72,6 +72,10 @@ names them:
 When a change also touches the course's description, a module's questions or their rationale, the
 line says so — the description and the test must still agree with the sections.
 
+Every question keeps its type — one correct answer, or select all that apply — unless the author
+asks to change it. When the author asks in general for select-all questions, or for a harder test,
+choose which and how many yourself, at most half the set ([modules.md](../references/modules.md#select-all-that-apply)).
+
 Rules the list must respect:
 
 - The **title** of a section that is live, and the **title, description and level** of any

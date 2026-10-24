@@ -72,3 +72,54 @@ describe("mcq-cue-check (#1032)", () => {
     expect(collectMcqSets(env).map((s) => s.path)).toEqual(["course.items[1]"]);
   });
 });
+
+// #1077: «velg alle som stemmer» — ingen «riktig plass», men de riktige kan fortsatt røpe seg på
+// lengden, og stammen kan røpe antallet.
+describe("mcq-cue-check — flere riktige svar (#1077)", () => {
+  const m = (stem: string, options: string[], correct: number[]) => ({
+    questionType: "multiple",
+    stem: L(stem),
+    options: options.map(L),
+    correctAnswers: correct.map((i) => L(options[i]!)),
+  });
+  const even = ["Formålet med behandlingen", "Fargen på skjemaet", "Behandlingsgrunnlaget", "Skrifttypen i rapporten"];
+
+  it("like lange alternativer og en stamme uten antall → ingen funn for spørsmålet", () => {
+    const r = checkMcqCues([m("Hva må protokollen inneholde?", even, [0, 2])]);
+    expect(r.issues.filter((i) => i.index === 0)).toEqual([]);
+  });
+
+  it("en stamme som sier hvor mange → count_in_stem", () => {
+    const r = checkMcqCues([m("Hvilke to ting må protokollen inneholde?", even, [0, 2])]);
+    expect(r.issues.map((i) => i.kind)).toContain("count_in_stem");
+  });
+
+  it("de riktige er de lange → correct_are_longer", () => {
+    const r = checkMcqCues([m("Hva må protokollen inneholde?", ["Formålet med behandlingen av personopplysningene", "Farge", "Behandlingsgrunnlaget etter artikkel seks i forordningen", "Font"], [0, 2])]);
+    expect(r.issues.map((i) => i.kind)).toContain("correct_are_longer");
+  });
+
+  it("alle riktige er lov — ingenting å sammenligne med, ingen funn", () => {
+    const r = checkMcqCues([m("Hva må protokollen inneholde?", even, [0, 1, 2, 3])]);
+    expect(r.issues.filter((i) => i.index === 0)).toEqual([]);
+  });
+
+  it("et riktig som ikke er et alternativ → answer_not_an_option", () => {
+    const r = checkMcqCues([{ ...m("Hva må protokollen inneholde?", even, [0]), correctAnswers: [L("Noe annet")] }]);
+    expect(r.issues.map((i) => i.kind)).toContain("answer_not_an_option");
+  });
+
+  it("over halvparten av settet → multiple_share; halvparten er lov", () => {
+    const set = (k: number) => [
+      ...Array.from({ length: k }, () => m("Hva må protokollen inneholde?", even, [0, 2])),
+      ...balanced.slice(0, 4 - k),
+    ];
+    expect(checkMcqCues(set(3)).issues.map((i) => i.kind)).toContain("multiple_share");
+    expect(checkMcqCues(set(2)).issues.map((i) => i.kind)).not.toContain("multiple_share");
+  });
+
+  it("et «velg alle» teller ikke i plass- og lengdestatistikken", () => {
+    const r = checkMcqCues([...balanced, m("Hva må protokollen inneholde?", even, [0, 2])]);
+    expect(r.stats.measured).toBe(balanced.length);
+  });
+});

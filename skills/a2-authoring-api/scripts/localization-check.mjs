@@ -109,7 +109,10 @@ export function collectLocalizedFields(pkg) {
           path: `${ref}.activeVersion.mcqSet.questions[${qi}]`,
           stem: q.stem,
           options: q.options ?? [],
+          // #1077: «multiple» (select all that apply) has its answer key in `correctAnswers`.
+          questionType: q.questionType,
           correctAnswer: q.correctAnswer,
+          correctAnswers: q.correctAnswers,
           rationale: q.rationale,
         });
       }
@@ -476,25 +479,36 @@ export function checkLocalization(pkg, { languages = LANGUAGES, primary = "nb", 
     checkField(`${q.path}.stem`, q.stem);
     if (q.rationale !== undefined) checkField(`${q.path}.rationale`, q.rationale);
     q.options.forEach((opt, oi) => checkField(`${q.path}.options[${oi}]`, opt));
-    checkField(`${q.path}.correctAnswer`, q.correctAnswer);
+    const multiple = q.questionType === "multiple";
+    const answers = multiple ? (Array.isArray(q.correctAnswers) ? q.correctAnswers : []) : [q.correctAnswer];
+    const answerField = multiple ? "correctAnswers" : "correctAnswer";
+    if (multiple) {
+      answers.forEach((answer, ai) => checkField(`${q.path}.correctAnswers[${ai}]`, answer));
+      // A "multiple" may also carry correctAnswer (the export writes the first correct one there).
+      if (q.correctAnswer !== undefined) checkField(`${q.path}.correctAnswer`, q.correctAnswer);
+    } else {
+      checkField(`${q.path}.correctAnswer`, q.correctAnswer);
+    }
 
-    // Answer key must map to the SAME option position in every language (semantic, per-locale —
-    // not by index): find which option equals correctAnswer in each locale, compare positions.
+    // Answer key must map to the SAME option positions in every language (semantic, per-locale —
+    // not by index): find which options equal the correct answer(s) in each locale, compare.
     const indexByLocale = {};
-    let structurallyOk = true;
+    let structurallyOk = answers.length > 0;
     for (const lang of languages) {
-      const answer = localeString(q.correctAnswer, lang);
-      const idx = q.options.findIndex((opt) => localeString(opt, lang) === answer && answer.length > 0);
-      indexByLocale[lang] = idx;
-      if (idx < 0) structurallyOk = false;
+      const positions = answers.map((answer) => {
+        const text = localeString(answer, lang);
+        return q.options.findIndex((opt) => localeString(opt, lang) === text && text.length > 0);
+      });
+      indexByLocale[lang] = multiple ? positions.slice().sort((a, b) => a - b).join(",") : positions[0];
+      if (positions.some((idx) => idx < 0)) structurallyOk = false;
     }
     if (!structurallyOk) {
-      answerKeyChanges.push({ path: q.path, detail: "correctAnswer does not match any option in one or more locales", indexByLocale });
+      answerKeyChanges.push({ path: q.path, detail: `${answerField} does not match any option in one or more locales`, indexByLocale });
     } else {
       const primaryIdx = indexByLocale[primary];
       const drifted = languages.filter((lang) => indexByLocale[lang] !== primaryIdx);
       if (drifted.length > 0) {
-        answerKeyChanges.push({ path: q.path, detail: `correct option differs across locales: ${drifted.join(", ")}`, indexByLocale });
+        answerKeyChanges.push({ path: q.path, detail: `correct option${multiple ? "s differ" : " differs"} across locales: ${drifted.join(", ")}`, indexByLocale });
       }
     }
   }

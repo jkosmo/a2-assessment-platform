@@ -158,26 +158,40 @@ test.describe("#1077 — «velg alle som stemmer» i editoren", () => {
     await expect(page.locator(".save-error-issues")).toContainText("mcqSet › questions › 0 › correctAnswers: correctAnswers must be one or more of options.");
   });
 
-  // QA 2.99.0: tjenerens 422 for «velg alle» ble aldri nådd — editoren bygde spørsmålene på nytt uten
-  // typen og sendte et vanlig spørsmål til KI-en. Nå stopper editoren selv, med en forståelig melding.
-  test("KI-revisjon av et sett med «velg alle» stoppes i editoren, og ingenting sendes", async ({ page }) => {
+  // Leveranse 1b: KI-revisjonen får typen og ALLE de riktige, og typen i svaret er den som gjelder —
+  // revisjonen kan endre hvilke som er riktige. Før 1b stoppet editoren revisjonen (QA 2.99.0).
+  test("KI-revisjon sender typen og alle de riktige, og svarets fasit er den som lagres", async ({ page }) => {
     await mockCommonApis(page, {
       modules: [{ id: "module-1", title: "Records", activeVersion: { versionNo: 1 } }],
       moduleExports: { "module-1": moduleWith({ questionType: "multiple", stem: localizedText("What must the record state?"), options: [A, B, C, D], correctAnswers: [A, C], correctAnswer: A, rationale: localizedText("Art. 30") }) },
     });
-    let reviseCalled = false;
-    await page.route("**/generate/mcq/revise", (route: Route) => {
-      reviseCalled = true;
-      return route.fulfill({ status: 500, body: "" });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let sent: any = null;
+    await page.route("**/generate/mcq/revise", async (route: Route) => {
+      sent = route.request().postDataJSON();
+      const q = sent.questions[0];
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        // Modellen gjør B og D riktige i stedet for A og C.
+        body: JSON.stringify({ questions: [{ ...q, questionType: "multiple", correctAnswers: [q.options[1], q.options[3]], correctAnswer: q.options[1], rationale: "Harder now." }] }),
+      });
     });
+    const saved = await captureSave(page);
     await page.goto("/admin-content/module/module-1/conversation?resumeEditing=1");
     await page.locator("#previewEditTitle").waitFor();
     await clickEnabledButton(page, /^Request a change$|^Be om endring$/);
     await page.locator("#dialogReviseInput").fill("Make the questions harder");
     await page.locator("#dialogReviseSubmit").click();
 
-    await expect(page.getByText(/AI revision supports questions with one correct answer only|KI-revisjon støtter foreløpig bare|KI-revisjon støttar førebels berre/).first()).toBeVisible();
-    expect(reviseCalled).toBe(false);
+    await expect.poll(() => sent).not.toBeNull();
+    expect(sent.questions[0]).toMatchObject({ questionType: "multiple", correctAnswers: [A["en-GB"], C["en-GB"]] });
+
+    await page.locator("#formSaveBtn").click();
+    await expect.poll(() => saved.payload).not.toBeNull();
+    const question = saved.payload.mcqSet?.questions?.[0];
+    expect(question?.questionType).toBe("multiple");
+    expect(question.correctAnswers).toEqual([question.options[1], question.options[3]]);
   });
 
   test("kontroll: tilbake til ett riktig svar beholder det første avkryssede, og lagres som vanlig spørsmål", async ({ page }) => {

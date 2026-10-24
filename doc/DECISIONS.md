@@ -910,7 +910,11 @@ stemmer, høyst omtrent hvert tredje spørsmål. Revisjon: typen beholdes, men b
 generelt, vurderer KI selv hvor mange ut fra vanskelighetsgrad — høyst 50 % av settet, uten at det må
 bes om per spørsmål. Skillet følger samme regel. **Hvorfor:** produkteier valgte at kilden avgjør
 (framfor at forfatteren velger andel på forhånd eller bare på forespørsel), og at en generell
-forespørsel holder. Prod venter til dette og skillet er klart. Status: avklart.
+forespørsel holder. Prod venter til dette og skillet er klart. **Håndheves (2.100.0):**
+`maxMultipleForGeneration` (advarsel over hvert tredje) og `revisionMultipleCap` (avslag over
+halvparten, etter ett nytt forsøk) i `llmContentGenerationService.ts`; i skillet `multiple_share` i
+`mcq-cue-check.mjs` (over halvparten). «Gjør testen vanskeligere» regnes som en generell
+forespørsel (DESIGN_1077). Status: avklart.
 
 ### Nye spørsmålstyper: rett eller galt, ingen antall, enkel normalisering (#1077, 2026-10-24)
 

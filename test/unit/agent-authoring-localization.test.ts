@@ -443,3 +443,47 @@ describe("merkelapper oversatt bare noen steder", () => {
     expect(partlyTranslatedLabels("[GDPR](https://a) og [GDPR](https://b)", "[GDPR](https://a) og [EØS](https://b)")).toEqual([]);
   });
 });
+
+// #1077: «velg alle som stemmer» — fasiten er flere plasser, og de må være de samme på alle språk.
+describe("#1077 checkLocalization — flere riktige svar", () => {
+  const multiplePackage = () => {
+    const pkg = fullyLocalizedPackage();
+    const q = pkg.objects[0].payload.activeVersion.mcqSet.questions[0];
+    q.options.push(L("Lagringsbegrensning", "Lagringsavgrensing", "Storage limitation"));
+    q.questionType = "multiple";
+    q.correctAnswers = [q.options[0], q.options[2]];
+    delete q.correctAnswer;
+    return pkg;
+  };
+
+  it("de riktige på samme plasser på alle språk → består", () => {
+    const result = checkLocalization(multiplePackage());
+    expect(result.answerKeyChanges).toEqual([]);
+  });
+
+  it("en oversettelse som peker på et annet alternativ → stopper", () => {
+    const pkg = multiplePackage();
+    const q = pkg.objects[0].payload.activeVersion.mcqSet.questions[0];
+    // På engelsk peker det andre riktige nå på alternativ 2 (Purpose limitation), ikke 3.
+    q.correctAnswers[1] = L("Lagringsbegrensning", "Lagringsavgrensing", "Purpose limitation");
+    const result = checkLocalization(pkg);
+    expect(result.blocks).toBe(true);
+    expect(result.answerKeyChanges.some((c: { detail: string }) => /correct options differ across locales: en-GB/.test(c.detail))).toBe(true);
+  });
+
+  it("et riktig som ikke er et alternativ på ett språk → stopper", () => {
+    const pkg = multiplePackage();
+    const q = pkg.objects[0].payload.activeVersion.mcqSet.questions[0];
+    q.correctAnswers[1] = L("Lagringsbegrensning", "Noko anna", "Storage limitation");
+    const result = checkLocalization(pkg);
+    expect(result.answerKeyChanges.some((c: { detail: string }) => /correctAnswers does not match any option/.test(c.detail))).toBe(true);
+  });
+
+  it("et riktig som mangler et språk → meldt som manglende felt", () => {
+    const pkg = multiplePackage();
+    const q = pkg.objects[0].payload.activeVersion.mcqSet.questions[0];
+    q.correctAnswers[0] = { nb: "Dataminimering", nn: "Dataminimering" };
+    const result = checkLocalization(pkg);
+    expect(result.missing.some((m: { path: string }) => /correctAnswers\[0\]/.test(m.path))).toBe(true);
+  });
+});

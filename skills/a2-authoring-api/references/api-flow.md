@@ -80,6 +80,8 @@ When the author names an existing module (by id) whose question bank should grow
 - The questions are **added** to the module's current set, as a new draft version. Nothing is
   replaced and nothing is published. 1–100 questions per call, in the same form and with the same
   three languages as in a package.
+- A select-all-that-apply question is written the same way as in a package, with `questionType`
+  and `correctAnswers` ([package-schema.md](package-schema.md#a-module)).
 - **Read the bank first** — ask the author for the module's export, or for the existing
   questions — and write questions that test other points from the source. A bank of thirty must
   not be thirty variants of the first ten.

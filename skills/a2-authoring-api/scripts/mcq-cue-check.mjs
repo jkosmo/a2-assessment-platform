@@ -73,8 +73,40 @@ export function collectMcqSets(doc) {
   return sets;
 }
 
+// #1077: a stem that names how many are correct gives the answer away — the platform tells the
+// learner to select all that apply, and nothing else.
+const COUNT_IN_STEM = /\b(?:hvilke|kva for|which|velg|vel|choose|select|name|nevn)\s+(?:de\s+|dei\s+|the\s+)?(?:to|tre|fire|fem|two|three|four|five|2|3|4|5)\b/i;
+
 /**
- * @param {Array<{stem:unknown, options:unknown[], correctAnswer:unknown}>} questions one set
+ * #1077: «select all that apply». Every correct answer must be an option; the correct options must
+ * not be longer than the incorrect ones as a group; the stem must not say how many. No position
+ * statistics — there is no single correct position.
+ */
+function checkMultiple(q, i, { lang, options, stem, label, issues }) {
+  const answers = (Array.isArray(q?.correctAnswers) ? q.correctAnswers : []).map((a) => textOf(a, lang));
+  if (answers.length === 0 || answers.some((a) => !options.includes(a))) {
+    issues.push({ index: i, kind: "answer_not_an_option", detail: "a «multiple» question needs correctAnswers, each equal to an option (checked by export-validate too)" });
+    return;
+  }
+  if (COUNT_IN_STEM.test(stem)) {
+    issues.push({ index: i, kind: "count_in_stem", detail: `the stem says how many are correct — «${label}». The learner is told to select all that apply; ask the question without the number.` });
+  }
+  const correct = options.filter((o) => answers.includes(o));
+  const incorrect = options.filter((o) => !answers.includes(o));
+  if (incorrect.length === 0) return; // every option correct: nothing to compare against
+  const mean = (list) => list.reduce((s, o) => s + o.length, 0) / list.length;
+  const ratio = mean(correct) / mean(incorrect);
+  if (mean(incorrect) > 0 && ratio > LENGTH_RATIO) {
+    issues.push({
+      index: i,
+      kind: "correct_are_longer",
+      detail: `correct options average ${Math.round(mean(correct))} chars, the others ${Math.round(mean(incorrect))} (${ratio.toFixed(2)}× > ${LENGTH_RATIO}) — «${label}». Write every option equally complete.`,
+    });
+  }
+}
+
+/**
+ * @param {Array<{stem:unknown, options:unknown[], correctAnswer:unknown, questionType?:string, correctAnswers?:unknown[]}>} questions one set
  * @returns {{ ok: boolean, issues: Array<{ index: number|null, kind: string, detail: string }>, stats: object }}
  */
 export function checkMcqCues(questions, { primary } = {}) {
@@ -82,6 +114,7 @@ export function checkMcqCues(questions, { primary } = {}) {
   const positions = [];
   let longestCount = 0;
   let measured = 0;
+  let multipleCount = 0;
 
   for (const [i, q] of (questions ?? []).entries()) {
     const lang = primary ?? pickPrimary(q?.stem);
@@ -95,6 +128,11 @@ export function checkMcqCues(questions, { primary } = {}) {
     }
     for (const o of options) {
       if (CATCH_ALL.test(o)) issues.push({ index: i, kind: "catch_all_option", detail: `«${o}» — never "all/none of the above"` });
+    }
+    if (q?.questionType === "multiple") {
+      multipleCount += 1;
+      checkMultiple(q, i, { lang, options, stem, label, issues });
+      continue;
     }
     const correctIndex = options.findIndex((o) => o === answer);
     if (correctIndex < 0) {
@@ -116,6 +154,13 @@ export function checkMcqCues(questions, { primary } = {}) {
         detail: `correct option is ${answer.length} chars, distractors average ${Math.round(meanDistractor)} (${(answer.length / meanDistractor).toFixed(2)}× > ${LENGTH_RATIO}) — «${label}». Make the distractors as complete as the answer, or shorten the answer without losing precision.`,
       });
     }
+  }
+
+  // #1077: høyst halvparten av settet som «velg alle» (produkteier 2026-10-24 — også når forfatteren
+  // ber om flere). Ved nye kurs er standarden lavere, høyst omtrent hvert tredje (modules.md).
+  const total = (questions ?? []).length;
+  if (multipleCount > Math.floor(total / 2)) {
+    issues.push({ index: null, kind: "multiple_share", detail: `${multipleCount} of ${total} questions are «select all that apply» — at most ${Math.floor(total / 2)} (half the set). Keep the type for the questions where the source lists several things that all hold.` });
   }
 
   const n = positions.length;

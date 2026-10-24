@@ -2,6 +2,28 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.100.0 - 2026-10-24
+
+### «Velg alle som stemmer» med KI og i skillet (#1077, leveranse 1b)
+
+Produkteiers avgjørelser i DECISIONS («KI og «velg alle som stemmer»»).
+
+- **KI-generering:** ett riktig svar er standard. Modellen lager «velg alle» bare der kilden lister
+  flere ting som alle stemmer, høyst hvert tredje spørsmål. Lager den flere, får forfatteren en
+  advarsel; spørsmålene beholdes. Svaret normaliseres (`normalizeGeneratedQuestionType`): de riktige
+  må være alternativer ordrett og ordnes som alternativene; uten et eneste brukbart blir spørsmålet
+  et vanlig spørsmål hvis `correctAnswer` holder.
+- **KI-revisjon:** typen og alle de riktige sendes med, og stoppen fra 2.99.0 er fjernet. Typen
+  beholdes, med mindre forfatteren ber om det — ved navn, eller generelt («bruk flere», «gjør testen
+  vanskeligere»), da velger modellen selv. Høyst halvparten av settet (eller så mange som settet
+  alt hadde): over det får modellen ett forsøk til, og så avvises revisjonen. En ren typeendring
+  regnes som en endring.
+- **Skillet:** `package-schema.md`, `modules.md` (ny del «Select all that apply»), `localization.md`,
+  `api-flow.md` og `adjust-course.md` kjenner typen. `export-validate.mjs` speiler importens regler
+  (låst til plattformen av en test, også listen over typer); `localization-check.mjs` krever de samme
+  riktige plassene på alle språk; `mcq-cue-check.mjs` finner antall i stammen, riktige som er lengre
+  enn de gale, og over halvparten «velg alle».
+
 ## 2.99.1 - 2026-10-24
 
 ### «Velg alle som stemmer»: lagringen sier hva som er galt (#1077)
