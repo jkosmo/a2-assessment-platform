@@ -895,6 +895,17 @@ Tjeneren sier bredden på det brede oppsettet (`X-Asset-Wide-Width`); 640 er bar
 første svar. **Håndheves:** `wantedAssetLayout` i `public/api-client.js`, `wideLayoutWidth` i
 `assetCommands.ts`. Status: avklart.
 
+### Nye spørsmålstyper: rett eller galt, ingen antall, enkel normalisering (#1077, 2026-10-24)
+
+Produkteier valgte anbefalingen på alle fire spørsmål i `doc/DESIGN_1077.md`:
+- **Rett eller galt per spørsmål**, ikke delpoeng. Poengsum, `mcqMinPercent`, rapporter og
+  gjennomgang regner som i dag; `isCorrect` forblir boolsk.
+- **«Velg alle som stemmer» oppgir ikke antallet riktige** — antallet ville vært et hint.
+- **«Fyll inn» sammenligner med forfatterens liste over godkjente svar per språk**, med store/små
+  bokstaver og mellomrom likt, ellers eksakt. Ingen KI, ingen toleranse for skrivefeil.
+- **Rekkefølge:** velg alle som stemmer → sett i rekkefølge → fyll inn, én leveranse om gangen.
+Status: avklart.
+
 ### Plattformen stopper figurer som går i løkke (#1073, 2026-10-23)
 
 En animert figur tas bare imot i flytmalens form: én gang, ferdig innen fem sekunder. Alt annet som
