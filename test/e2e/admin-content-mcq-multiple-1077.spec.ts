@@ -103,7 +103,7 @@ test.describe("#1077 — «velg alle som stemmer» i editoren", () => {
   });
 
   // Stage 2.99.0: lagringen ga «noe i skjemaet mangler … feltene som er markert», uten noe markert felt.
-  test("alle alternativene avkrysset stoppes før lagring, med en melding som sier hvilket spørsmål", async ({ page }) => {
+  test("ingen avkrysset stoppes før oversettelsen, med en melding som sier hvilket spørsmål", async ({ page }) => {
     await mockCommonApis(page, {
       modules: [{ id: "module-1", title: "Records" }],
       moduleExports: { "module-1": moduleWith({ stem: localizedText("What must the record state?"), options: [A, B, C, D], correctAnswer: A, rationale: localizedText("Art. 30") }) },
@@ -115,12 +115,29 @@ test.describe("#1077 — «velg alle som stemmer» i editoren", () => {
     await page.goto("/admin-content/module/module-1/conversation");
     await page.locator("#previewEditTitle").waitFor();
     await page.locator('[data-preview-edit-multiple="0"]').check();
-    const correct = page.locator('input[name="previewEditCorrectAnswer0"]');
-    for (const input of await correct.all()) await input.check();
+    await page.locator('input[name="previewEditCorrectAnswer0"]').nth(0).uncheck();
     await page.locator("#formSaveBtn").click();
-    await expect(page.getByText(/Question 1 has «More than one correct answer»/).first()).toBeVisible();
+    await expect(page.getByText(/Question 1 has «More than one correct answer»: tick at least one correct option/).first()).toBeVisible();
     expect(saved.payload).toBeNull();
     expect(translated).toBe(false);
+  });
+
+  // Produkteier 2026-10-24: «alle stemmer» er et gyldig svar — antallet riktige oppgis ikke.
+  test("alle alternativene avkrysset lagres, med alle fire som riktige", async ({ page }) => {
+    await mockCommonApis(page, {
+      modules: [{ id: "module-1", title: "Records" }],
+      moduleExports: { "module-1": moduleWith({ stem: localizedText("What must the record state?"), options: [A, B, C, D], correctAnswer: A, rationale: localizedText("Art. 30") }) },
+    });
+    const saved = await captureSave(page);
+    await page.goto("/admin-content/module/module-1/conversation");
+    await page.locator("#previewEditTitle").waitFor();
+    await page.locator('[data-preview-edit-multiple="0"]').check();
+    for (const input of await page.locator('input[name="previewEditCorrectAnswer0"]').all()) await input.check();
+    await page.locator("#formSaveBtn").click();
+    await expect.poll(() => saved.payload).not.toBeNull();
+    const question = saved.payload.mcqSet?.questions?.[0];
+    expect(question?.questionType).toBe("multiple");
+    expect(question?.correctAnswers).toEqual(question.options);
   });
 
   test("et avslag fra tjeneren viser hvilket felt det gjaldt", async ({ page }) => {

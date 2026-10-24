@@ -167,8 +167,8 @@ export const promptTemplateBodySchema = z.object({
 // be collapsed back to the source language, discarding the locales that DID translate. The
 // publish gate then blocked on gaps the author had just paid an LLM to fill.
 // #1077: `questionType` (standard «single»). «single» har `correctAnswer`; «multiple» (velg alle som
-// stemmer) har `correctAnswers` — minst ett riktig og minst ett galt alternativ, hvert av dem et av
-// alternativene. Se doc/DESIGN_1077.md.
+// stemmer) har `correctAnswers` — minst ett riktig alternativ (alle kan være riktige), hvert av dem
+// et av alternativene. Se doc/DESIGN_1077.md.
 const mcqQuestionSchema = z
   .object({
     questionType: z.enum(MCQ_QUESTION_TYPES).optional(),
@@ -195,9 +195,9 @@ const mcqQuestionSchema = z
       context.addIssue({ code: "custom", message: "correctAnswers must be one or more of options.", path: ["correctAnswers"] });
     } else if (new Set(positions).size !== positions.length) {
       context.addIssue({ code: "custom", message: "correctAnswers lists the same option twice.", path: ["correctAnswers"] });
-    } else if (positions.length >= question.options.length) {
-      context.addIssue({ code: "custom", message: "A «multiple» question needs at least one option that is not correct.", path: ["correctAnswers"] });
     }
+    // Alle alternativene riktige er lov (produkteier 2026-10-24): antallet riktige oppgis ikke, så
+    // «alle stemmer» er et svar deltakeren må vurdere seg fram til.
   });
 
 /**

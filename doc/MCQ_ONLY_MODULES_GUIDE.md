@@ -103,7 +103,7 @@ A multiple-choice question is one of two types:
 
 **In the editor (Rediger):** tick **«Flere riktige svar»** on a question. The correct-answer radios
 become checkboxes; tick every correct option. A «select all» question needs at least one correct
-and at least one wrong option. Unticking it again keeps the first ticked option as the one answer.
+option; every option may be correct. Unticking it again keeps the first ticked option as the one answer.
 
 The type survives translation, adding questions to the bank, and export → import. The answer review
 after submission (#1061) shows every option the participant ticked and every correct one.

@@ -44,7 +44,7 @@ for retting.
 Fasit per type:
 
 - **`multiple`:** posisjonene til de riktige alternativene i `optionsJson`, `{"correct":[0,2]}` — minst
-  ett riktig og minst ett galt. Posisjoner, ikke tekst: oversettelsen holder alternativene i samme
+  ett riktig; alle kan være riktige (DECISIONS 2026-10-24). Posisjoner, ikke tekst: oversettelsen holder alternativene i samme
   rekkefølge, så fasiten følger med på alle språk.
 - **`order`:** alternativene *er* den riktige rekkefølgen i `optionsJson`; ingen ekstra fasit. Stokkes
   ved levering, som i dag.

@@ -1435,13 +1435,13 @@ let editFormSnapshot = null;
 let sessionDraftFromForm = false;
 
 /**
- * #1077: første «velg alle» uten minst ett riktig OG minst ett galt alternativ, eller -1. Tjeneren
- * avviser slike; uten sjekken fikk forfatteren «noe i skjemaet mangler», uten noe markert felt —
- * og først etter at oversettelsen var betalt (stage 2.99.0: alle fire avkrysset).
+ * #1077: første «velg alle» uten noe riktig alternativ, eller -1. Tjeneren avviser slike; uten
+ * sjekken fikk forfatteren «noe i skjemaet mangler», uten noe markert felt — og først etter at
+ * oversettelsen var betalt. Alle avkrysset er lov (produkteier 2026-10-24).
  */
 function firstBadMultipleIndex(questions) {
   return (questions ?? []).findIndex((question) => question?.questionType === "multiple"
-    && (!(question.correctAnswers?.length > 0) || question.correctAnswers.length >= (question.options?.length ?? 0)));
+    && !(question.correctAnswers?.length > 0));
 }
 
 function readMcqQuestionsFromForm(currentMcqQuestions) {
@@ -2222,7 +2222,7 @@ async function saveDraftBundleInBackground(options = {}) {
   // #1077: samme sjekk som skjemaet gjør før oversettelsen, for lagringer som ikke kommer derfra.
   const badMultiple = isFreetextOnly ? -1 : firstBadMultipleIndex(mcqQuestions);
   if (badMultiple >= 0) {
-    const message = t("shell.save.mcqMultipleNeedsBoth").replace("{n}", String(badMultiple + 1));
+    const message = t("shell.save.mcqMultipleNeedsCorrect").replace("{n}", String(badMultiple + 1));
     logBot(() => escapeHtml(message));
     showToast(message, "error");
     backToForm();
@@ -3021,7 +3021,7 @@ function enterPreviewEditMode({ force = false } = {}) {
     // #1077: før oversettelsen — ellers venter forfatteren på KI-en for et spørsmål tjeneren avviser.
     const badMultiple = firstBadMultipleIndex(newMcqQuestions);
     if (badMultiple >= 0) {
-      showToast(t("shell.save.mcqMultipleNeedsBoth").replace("{n}", String(badMultiple + 1)), "error");
+      showToast(t("shell.save.mcqMultipleNeedsCorrect").replace("{n}", String(badMultiple + 1)), "error");
       previewContent.querySelector(`input[name="previewEditCorrectAnswer${badMultiple}"]`)?.focus();
       return;
     }

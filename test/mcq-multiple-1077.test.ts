@@ -72,13 +72,38 @@ describe("#1077 — velg alle som stemmer", () => {
   });
 
   it.each<[string, Record<string, unknown>]>([
-    ["alle alternativene riktige (ingenting å vurdere bort)", { correctAnswers: [A, B, C, D] }],
     ["et riktig svar som ikke er et alternativ", { correctAnswers: [A, L("Something else", "Noe annet")] }],
     ["ingen riktige", { correctAnswers: [] }],
     ["samme alternativ to ganger", { correctAnswers: [A, A] }],
   ])("avvises: %s", async (_navn, extra) => {
     const { set } = await createModule([multiple(extra)]);
     expect(set.status).toBe(400);
+  });
+
+  // Produkteier 2026-10-24: antallet riktige oppgis ikke, så «alle stemmer» er et gyldig svar.
+  it("tas imot: alle alternativene riktige — og bare alle valgt gir riktig", async () => {
+    const { moduleId, set } = await createModule([multiple({ correctAnswers: [A, B, C, D] })]);
+    expect(set.status, JSON.stringify(set.body)).toBe(201);
+    const [m] = await storedQuestions(set.body.mcqSetVersion.id);
+    expect(JSON.parse(m!.answerKeyJson!)).toEqual({ correct: [0, 1, 2, 3] });
+
+    const version = await request(app).post(`/api/admin/content/modules/${moduleId}/module-versions`).set(admin).send({
+      assessmentMode: "MCQ_ONLY",
+      mcqSetVersionId: set.body.mcqSetVersion.id,
+      assessmentPolicy: { passRules: { mcqMinPercent: 60 } },
+    });
+    expect(version.status, JSON.stringify(version.body)).toBe(201);
+    const user = await prisma.user.create({ data: { externalId: `p-1077-all-${Date.now()}`, email: `p-1077-all-${Date.now()}@company.com`, name: "Deltaker alle" } });
+    const score = async (selected: string[]) => {
+      const submission = await prisma.submission.create({
+        data: { userId: user.id, moduleId, moduleVersionId: version.body.moduleVersion.id, submissionStatus: "SUBMITTED", deliveryType: "text", responseJson: "{}", submittedAt: new Date() },
+      });
+      const started = await startMcqAttempt(moduleId, submission.id, user.id, "nb");
+      const done = await submitMcqAttempt({ moduleId, submissionId: submission.id, attemptId: started.attemptId, userId: user.id, responses: [{ questionId: started.questions[0]!.id, selectedAnswers: selected }] });
+      return done.percentScore;
+    };
+    expect(await score(["Formål", "Farge", "Behandlingsgrunnlag", "Skrifttype"])).toBe(100);
+    expect(await score(["Formål", "Farge", "Behandlingsgrunnlag"])).toBe(0);
   });
 
   it("avvises: correctAnswers på et vanlig spørsmål", async () => {

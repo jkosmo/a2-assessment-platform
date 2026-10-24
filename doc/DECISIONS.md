@@ -895,6 +895,14 @@ Tjeneren sier bredden på det brede oppsettet (`X-Asset-Wide-Width`); 640 er bar
 første svar. **Håndheves:** `wantedAssetLayout` i `public/api-client.js`, `wideLayoutWidth` i
 `assetCommands.ts`. Status: avklart.
 
+### «Velg alle som stemmer»: alle alternativene kan være riktige (#1077, 2026-10-24)
+
+Et «velg alle» trenger minst ett riktig alternativ, men ikke noe galt. **Hvorfor:** produkteier —
+antallet riktige oppgis ikke, så «alle stemmer» er et svar deltakeren må tenke seg fram til; det er
+nettopp den vurderingen spørsmålstypen skal kreve. Kravet om minst ett galt var et designvalg uten
+avgjørelse bak, og ga en lagringsfeil på stage. **Håndheves:** `mcqQuestionSchema` i
+`adminContentSchemas.ts` (minst ett riktig), `firstBadMultipleIndex` i Rediger. Status: avklart.
+
 ### KI og «velg alle som stemmer»: kilden avgjør, høyst 50 % ved revisjon (#1077, 2026-10-24)
 
 Generering: ett riktig svar er standard; KI lager «velg alle» bare der kilden lister flere ting som alle

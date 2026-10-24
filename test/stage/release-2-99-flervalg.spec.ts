@@ -66,9 +66,9 @@ test("#1077: et «velg alle» lagres med typen; feil form avvises", async () => 
   expect(modul.status, modul.tekst).toBe(201);
   tilstand.moduleId = modul.json.module.id;
 
-  const alleRiktige = await api("POST", `/api/admin/content/modules/${tilstand.moduleId}/mcq-set-versions`, { title: L("Set", "Sett"), questions: [{ ...flere, correctAnswers: [A, B, C, D] }] });
-  noter("alle riktige avvises", alleRiktige.status);
-  expect(alleRiktige.status).toBe(400);
+  const ingenRiktige = await api("POST", `/api/admin/content/modules/${tilstand.moduleId}/mcq-set-versions`, { title: L("Set", "Sett"), questions: [{ ...flere, correctAnswers: [] }] });
+  noter("ingen riktige avvises", ingenRiktige.status);
+  expect(ingenRiktige.status).toBe(400);
 
   const sett = await api("POST", `/api/admin/content/modules/${tilstand.moduleId}/mcq-set-versions`, { title: L("Set", "Sett"), questions: [flere] });
   expect(sett.status, sett.tekst).toBe(201);
