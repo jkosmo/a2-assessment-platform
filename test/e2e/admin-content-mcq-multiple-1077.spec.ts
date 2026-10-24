@@ -53,6 +53,24 @@ test.describe("#1077 — «velg alle som stemmer» i editoren", () => {
     await expect(correct.nth(3)).not.toBeChecked();
   });
 
+  // Den felles regelen `input { width: 100% }` gjorde bryteren til en fullbredde stripe med teksten
+  // på linja under. Boksen skal være liten og stå på linje med teksten.
+  test("bryteren er en liten boks på linje med teksten", async ({ page }) => {
+    await mockCommonApis(page, {
+      modules: [{ id: "module-1", title: "Records" }],
+      moduleExports: { "module-1": moduleWith({ stem: localizedText("What must the record state?"), options: [A, B, C, D], correctAnswer: A, rationale: localizedText("Art. 30") }) },
+    });
+    await page.goto("/admin-content/module/module-1/conversation");
+    await page.locator("#previewEditTitle").waitFor();
+
+    const box = (await page.locator('[data-preview-edit-multiple="0"]').boundingBox())!;
+    const label = (await page.locator(".preview-edit-mcq-multiple").first().boundingBox())!;
+    expect(box.width).toBeLessThan(30);
+    // Én linje: etiketten er ikke høyere enn boksen pluss litt luft.
+    expect(label.height).toBeLessThan(box.height + 12);
+    await page.locator(".preview-edit-mcq-multiple").first().screenshot({ path: "test-results/1077-bryter.png" });
+  });
+
   test("bryteren gjør et vanlig spørsmål om til «velg alle», og lagringen sender typen og alle de riktige", async ({ page }) => {
     await mockCommonApis(page, {
       modules: [{ id: "module-1", title: "Records" }],
