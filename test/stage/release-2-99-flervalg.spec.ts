@@ -58,7 +58,7 @@ test("versjonen er 2.99.0", async () => {
   const svar = await fetch(`${BASE}/version`);
   const json = await svar.json();
   noter("versjon", json.version);
-  expect(json.version).toBe("2.99.0");
+  expect(json.version).toBe("2.99.1");
 });
 
 test("#1077: et «velg alle» lagres med typen; feil form avvises", async () => {

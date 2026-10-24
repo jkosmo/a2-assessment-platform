@@ -102,6 +102,41 @@ test.describe("#1077 — «velg alle som stemmer» i editoren", () => {
     expect(question.correctAnswers[1]).toEqual(question.options[2]);
   });
 
+  // Stage 2.99.0: lagringen ga «noe i skjemaet mangler … feltene som er markert», uten noe markert felt.
+  test("alle alternativene avkrysset stoppes før lagring, med en melding som sier hvilket spørsmål", async ({ page }) => {
+    await mockCommonApis(page, {
+      modules: [{ id: "module-1", title: "Records" }],
+      moduleExports: { "module-1": moduleWith({ stem: localizedText("What must the record state?"), options: [A, B, C, D], correctAnswer: A, rationale: localizedText("Art. 30") }) },
+    });
+    const saved = await captureSave(page);
+    await page.goto("/admin-content/module/module-1/conversation");
+    await page.locator("#previewEditTitle").waitFor();
+    await page.locator('[data-preview-edit-multiple="0"]').check();
+    const correct = page.locator('input[name="previewEditCorrectAnswer0"]');
+    for (const input of await correct.all()) await input.check();
+    await page.locator("#formSaveBtn").click();
+    await expect(page.getByText(/Question 1 has «More than one correct answer»/).first()).toBeVisible();
+    expect(saved.payload).toBeNull();
+  });
+
+  test("et avslag fra tjeneren viser hvilket felt det gjaldt", async ({ page }) => {
+    await mockCommonApis(page, {
+      modules: [{ id: "module-1", title: "Records" }],
+      moduleExports: { "module-1": moduleWith({ stem: localizedText("What must the record state?"), options: [A, B, C, D], correctAnswer: A, rationale: localizedText("Art. 30") }) },
+    });
+    await page.route("**/api/admin/content/modules/*/versions", (route: Route) => route.fulfill({
+      status: 400,
+      contentType: "application/json",
+      body: JSON.stringify({ error: "validation_error", issues: [{ code: "custom", path: ["mcqSet", "questions", 0, "correctAnswers"], message: "correctAnswers must be one or more of options." }] }),
+    }));
+    await page.goto("/admin-content/module/module-1/conversation");
+    await page.locator("#previewEditTitle").waitFor();
+    await page.locator('[data-preview-edit-multiple="0"]').check();
+    await page.locator('input[name="previewEditCorrectAnswer0"]').nth(2).check();
+    await page.locator("#formSaveBtn").click();
+    await expect(page.locator(".save-error-issues")).toContainText("mcqSet › questions › 0 › correctAnswers: correctAnswers must be one or more of options.");
+  });
+
   // QA 2.99.0: tjenerens 422 for «velg alle» ble aldri nådd — editoren bygde spørsmålene på nytt uten
   // typen og sendte et vanlig spørsmål til KI-en. Nå stopper editoren selv, med en forståelig melding.
   test("KI-revisjon av et sett med «velg alle» stoppes i editoren, og ingenting sendes", async ({ page }) => {

@@ -24,7 +24,7 @@ import {
   resolveWorkspaceNavigationItems,
 } from "/static/participant-console-state.js";
 import { showToast } from "/static/toast.js";
-import { apiErrorCodeText, describeApiError } from "/static/api-error.js";
+import { apiErrorCodeText, apiIssueLines, describeApiError } from "/static/api-error.js";
 import { renderWorkspaceNavigationWithProfile } from "./workspace-nav.js";
 import { localizeValueForLocale, buildPreviewHtml, hydratePreviewMarkdown } from "/static/admin-content-preview.js";
 import { sanitizeSectionHtml } from "/static/sanitize.js";
@@ -2209,6 +2209,17 @@ async function saveDraftBundleInBackground(options = {}) {
     document.getElementById("previewEditAddQuestion")?.focus();
     return;
   }
+  // #1077: tjeneren krever minst ett riktig og minst ett galt alternativ i et «velg alle». Uten denne
+  // sjekken fikk forfatteren bare «noe i skjemaet mangler», uten at noe felt var markert.
+  const badMultiple = isFreetextOnly ? -1 : mcqQuestions.findIndex((question) => question?.questionType === "multiple"
+    && (!(question.correctAnswers?.length > 0) || question.correctAnswers.length >= (question.options?.length ?? 0)));
+  if (badMultiple >= 0) {
+    const message = t("shell.save.mcqMultipleNeedsBoth").replace("{n}", String(badMultiple + 1));
+    logBot(() => escapeHtml(message));
+    showToast(message, "error");
+    backToForm();
+    return;
+  }
 
   const slot = logProgress("shell.save.progress");
   slot.abortBtn.remove();
@@ -2339,7 +2350,11 @@ async function saveDraftBundleInBackground(options = {}) {
     if (afterSave) afterSave();
   } catch (err) {
     const errMsg = apiErrorText(err);
-    logResolveSlot(slot, () => `${escapeHtml(t("shell.save.errorPrefix"))}${escapeHtml(errMsg)}`, [
+    const issueLines = apiIssueLines(err);
+    const issuesHtml = issueLines.length
+      ? `<div class="save-error-issues">${issueLines.map((line) => escapeHtml(line)).join("<br>")}</div>`
+      : "";
+    logResolveSlot(slot, () => `${escapeHtml(t("shell.save.errorPrefix"))}${escapeHtml(errMsg)}${issuesHtml}`, [
       { labelKey: "shell.action.retry", action: () => saveDraftBundleInBackground(options) },
     ]);
   }

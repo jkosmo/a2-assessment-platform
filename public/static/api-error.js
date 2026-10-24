@@ -137,6 +137,24 @@ export function fillErrorPlaceholders(template, details) {
 }
 
 /**
+ * Zod-avslagene som korte linjer — «mcqSet › questions › 3 › correctAnswers: …» — for flater som
+ * bare viser overskriften. «Se på feltene som er markert» hjelper ikke når ingen felt er markert;
+ * da er det linja som sier hvilket felt det gjaldt (stage 2.99.0, lagring med flere riktige svar).
+ * @param {unknown} error
+ * @param {number} [max]
+ * @returns {string[]}
+ */
+export function apiIssueLines(error, max = 3) {
+  const issues = apiErrorBody(error)?.issues;
+  if (!Array.isArray(issues)) return [];
+  return issues.slice(0, max).map((issue) => {
+    const path = Array.isArray(issue?.path) ? issue.path.join(" › ") : "";
+    const message = typeof issue?.message === "string" ? issue.message : "";
+    return path ? `${path}: ${message}` : message;
+  }).filter(Boolean);
+}
+
+/**
  * Oversetter en `apiFetch`-feil til `{ headline, detail }` på brukerens språk.
  *
  * `headline` er ALLTID lokalisert: kjent kode → kodens egen setning, ukjent kode → den generiske
