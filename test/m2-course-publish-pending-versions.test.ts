@@ -174,6 +174,11 @@ describe("2.101.0 — publiser alle nye versjoner i et kurs", () => {
     expect(res.status, JSON.stringify(res.body)).toBe(200);
     expect(res.body.publishedItems).toHaveLength(3);
     expect(await activeSectionVersion(section.sectionId)).toBe(section.v2Id);
+    // Versjonen selv er merket publisert — ellers melder eksporten den levende seksjonen som utkast
+    // (funnet av stage-testen 2.101.0).
+    const v2 = await prisma.courseSectionVersion.findUniqueOrThrow({ where: { id: section.v2Id }, select: { publishedAt: true, publishedBy: true } });
+    expect(v2.publishedAt).not.toBeNull();
+    expect(v2.publishedBy).toBe(smo.id);
     expect(await activeModuleVersion(tested.moduleId)).toBe(tested.v2Id);
     expect(await activeModuleVersion(untested.moduleId)).toBe(untested.v2Id);
     expect(await activeModuleVersion(foreign.moduleId)).toBe(foreign.v1Id);

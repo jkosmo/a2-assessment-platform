@@ -2,6 +2,16 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.101.1 - 2026-10-25
+
+### En publisert seksjonsversjon merkes publisert
+
+`publishSection` flyttet bare pekeren (`activeVersionId`); versjonen fikk aldri `publishedAt`. Deltakeren
+så seksjonen, men eksporten meldte den som upublisert (`audit.publishedAt: null`) — gjelder seksjonens
+egen «Publiser», kurskaskaden og «Publiser alle». Funnet av stage-testen for 2.101.0. Nå settes
+`publishedAt`/`publishedBy` når versjonen publiseres, med mindre den alt har en dato. Versjoner
+publisert før 2.101.1 rettes ikke bakover; de får datoen neste gang de publiseres.
+
 ## 2.101.0 - 2026-10-25
 
 ### Publiser alle nye versjoner i et kurs, med ett revisjonssvar

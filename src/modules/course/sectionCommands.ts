@@ -328,7 +328,7 @@ export async function publishSection(sectionId: string, actorId?: string) {
   const latest = await prisma.courseSectionVersion.findFirst({
     where: { sectionId },
     orderBy: { versionNo: "desc" },
-    select: { id: true, bodyMarkdown: true },
+    select: { id: true, bodyMarkdown: true, publishedAt: true },
   });
   if (!latest) {
     // #999: se forklaringen over.
@@ -351,6 +351,15 @@ export async function publishSection(sectionId: string, actorId?: string) {
     );
   }
   const updated = await runInTransaction(async (tx) => {
+    // 2.101.0: versjonen merkes publisert. Bare pekeren ble flyttet før, så eksporten meldte en
+    // levende seksjon som upublisert (`audit.publishedAt: null`) — funnet av stage-testen for
+    // «Publiser alle». Står datoen alt (publisert ved lagring, eller tidligere), beholdes den.
+    if (!latest.publishedAt) {
+      await tx.courseSectionVersion.update({
+        where: { id: latest.id },
+        data: { publishedAt: new Date(), ...(actorId ? { publishedBy: actorId } : {}) },
+      });
+    }
     const section = await tx.courseSection.update({
       where: { id: sectionId },
       data: { activeVersionId: latest.id },
