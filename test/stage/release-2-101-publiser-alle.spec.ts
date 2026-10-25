@@ -109,6 +109,9 @@ test("versjonen er 2.101.1", async () => {
 });
 
 test("API: oppdateringen legger ny versjon klar; pending-versions viser den; publish-pending publiserer", async () => {
+  // Rundt femten kall med pause mellom hvert (pace.js), mot en app som kan ha startet nettopp: 45 s holdt
+  // ikke rett etter deployen av 2.101.1 (besto på andre forsøk).
+  test.setTimeout(150_000);
   const { courseId, sectionId, fil } = await kursMedJustertFil("api");
   const svar = await api("POST", "/api/admin/content/courses/import", { payload: fil, mode: "updateExisting", targetId: courseId });
   expect(svar.status, svar.tekst.slice(0, 400)).toBe(201);
