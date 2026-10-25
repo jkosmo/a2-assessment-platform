@@ -268,7 +268,7 @@ export function checkAssets(pkg) {
         if (!ids.has(id)) problems.push({ path: ref, message: `the text${inLanguage} shows asset:${id}, and the section has no such picture` });
       }
       for (const id of ids) {
-        if (id && !shown.has(id)) problems.push({ path: ref, message: `the picture "${id}" is not shown in the text${inLanguage} — add ![…](asset:${id}) or take the picture out` });
+        if (id && !shown.has(id)) problems.push({ path: ref, message: `the picture "${id}" is not shown in the text${inLanguage} — add ![…](asset:${id}), or take the picture out if the author agreed to it` });
       }
     }
   }

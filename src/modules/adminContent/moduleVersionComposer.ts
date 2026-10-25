@@ -1,4 +1,6 @@
 import { runInTransaction, type DbTransactionClient } from "../../db/transaction.js";
+import { mcqQuestionTypeFields } from "./adminContentSchemas.js";
+import type { McqQuestionType } from "../assessment/mcqQuestionTypes.js";
 import {
   createRubricVersion,
   createPromptTemplateVersion,
@@ -185,16 +187,21 @@ export async function composeModuleVersion(input: ComposeModuleVersionInput, exi
           // translated MCQ; the tests only used plain strings and so never saw it.
           questions: input.mcqSet.questions.map((question) => {
             const q = question as {
+              questionType?: McqQuestionType;
               stem: LocalizedText;
               options: LocalizedText[];
-              correctAnswer: LocalizedText;
+              correctAnswer?: LocalizedText;
+              correctAnswers?: LocalizedText[];
               rationale?: LocalizedText;
             };
+            const typed = mcqQuestionTypeFields(q);
             return {
               stem: serializeRequired(q.stem),
               options: q.options.map((option) => serializeRequired(option)),
-              correctAnswer: serializeRequired(q.correctAnswer),
+              correctAnswer: serializeRequired(typed.correctAnswer),
               rationale: q.rationale ? serializeRequired(q.rationale) : undefined,
+              questionType: typed.questionType,
+              answerKeyJson: typed.answerKeyJson,
             };
           }),
         }, tx)

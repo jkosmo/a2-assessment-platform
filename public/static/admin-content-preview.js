@@ -67,11 +67,17 @@ function renderPreviewMcqQuestions(questions, locale, t, tf, audience = "author"
     .map((question, index) => {
       const stem = localize(question?.stem ?? "");
       const rationale = localize(question?.rationale ?? "");
-      const correctAnswer = localize(question?.correctAnswer ?? "");
       const options = localizeOptionList(question?.options, locale);
+      // #1077: i «velg alle som stemmer» er fasiten flere alternativer; alle markeres, og alle står
+      // som riktig svar. Deltakerens visning viser ingen av dem.
+      const multiple = question?.questionType === "multiple";
+      const correctAnswers = multiple
+        ? (question?.correctAnswers ?? []).map((answer) => localize(answer)).filter(Boolean)
+        : [localize(question?.correctAnswer ?? "")].filter(Boolean);
+      const correctAnswer = correctAnswers.join(" · ");
       const optionItems = options
         .map((option) => {
-          const isCorrect = !forParticipant && correctAnswer && option === correctAnswer;
+          const isCorrect = !forParticipant && correctAnswers.includes(option);
           return `<li class="preview-mcq-option${isCorrect ? " correct" : ""}">${escapeHtml(option)}</li>`;
         })
         .join("");

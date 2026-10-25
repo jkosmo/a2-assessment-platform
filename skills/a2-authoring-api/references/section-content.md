@@ -32,6 +32,11 @@ what the source gives, not to use every kind:
 think first → the text (or step by step) → check yourself or match the pairs → a case → write it
 yourself → flashcards at the end. The module that follows is what counts.
 
+**Not the module's questions.** An exercise never uses a question, a case or the numbers the module
+asks about — the learner who did it has been handed the answer. Practise the same skill in another
+situation, with other numbers. When you write or change a module, look over the exercises in the
+sections before it.
+
 Name the exercises in the outline, per section, so the author approves them with the structure
 ([course-design.md](course-design.md)).
 
@@ -393,8 +398,11 @@ one, and the catalogue by meaning: [icons.md](icons.md).
 
 - **Cards get an icon**, first in the heading, with empty alt text: `### ![](icon:lightbulb) Idé`.
   The icon repeats the heading and says nothing more.
-- **A flow's steps, or a row of points, often carry an icon each.** They do not go in a figure.
-  Put the icon first in that step's or point's row of a table, in a first column with no name:
+- **A flow's steps, or a row of points, often carry an icon each.** In a flow drawn as a figure,
+  the icon goes in the figure's step (`icon` in its description —
+  [figure-design.md](figure-design.md#flows--drawn-by-a-script)), and the text under it has none.
+  Without a figure, put the icon first in that step's or point's row of a table, in a first column
+  with no name:
 
   ```markdown
   | | Steg | Hva du gjør |
@@ -414,6 +422,9 @@ The learner reads the course, never the source. Write the point itself, not wher
   slide". The slide is yours to read; the learner has a section.
 - A figure or a picture is introduced by what it shows ("Arbeidsgangen har åtte steg"), not by its
   origin.
+- The making of the course stays behind too. The learner never reads about the export or the
+  import file, an earlier version of the course, or what they "no longer need to open". Write the
+  course as it is now, for someone who never saw it before.
 - The exception is a source the learner is meant to go to — a law, a standard, a handbook. Name it
   as a reference, with a link where there is one.
 

@@ -50,6 +50,7 @@ export function createMcqRepository(client: McqRepositoryClient = prisma) {
       mcqAttemptId: string;
       questionId: string;
       selectedAnswer: string;
+      answerJson?: string | null;
       isCorrect: boolean;
     }>) {
       return client.mCQResponse.createMany({ data });

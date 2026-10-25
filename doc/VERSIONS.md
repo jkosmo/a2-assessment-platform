@@ -2,6 +2,265 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.101.2 - 2026-10-25
+
+### «Systemet jobber» under import og samlet publisering
+
+Produkteier: «Når man importerer så jobber systemet uten at det markeres … og UI er fortsatt
+responsivt», og «Kursor bør spinne». `work-dialog.js`: mens kallet går, vises et modalt vindu med hva
+som skjer (og «Dette kan ta et par minutter. Ikke lukk siden.» for import), pekeren er en ventepeker,
+siden bak er sperret (inert), Esc lukker ikke, og nettleseren spør før siden lukkes. Brukt på
+kursimport (oppdater og nytt), modulimport og -kopi, seksjonsimport, -erstatning og -kopi, og
+«Publiser alle».
+
+## 2.101.1 - 2026-10-25
+
+### En publisert seksjonsversjon merkes publisert
+
+`publishSection` flyttet bare pekeren (`activeVersionId`); versjonen fikk aldri `publishedAt`. Deltakeren
+så seksjonen, men eksporten meldte den som upublisert (`audit.publishedAt: null`) — gjelder seksjonens
+egen «Publiser», kurskaskaden og «Publiser alle». Funnet av stage-testen for 2.101.0. Nå settes
+`publishedAt`/`publishedBy` når versjonen publiseres, med mindre den alt har en dato. Versjoner
+publisert før 2.101.1 rettes ikke bakover; de får datoen neste gang de publiseres.
+
+## 2.101.0 - 2026-10-25
+
+### Publiser alle nye versjoner i et kurs, med ett revisjonssvar
+
+Produkteier, 2026-10-25: etter «Oppdater dette kurset» (#1095) ligger hver ny versjon klar som
+utkast, og forfatteren måtte inn i hver modul for å publisere den — og svare på «Er dette en
+revisjon?» hver gang.
+
+- **`GET /courses/:id/pending-versions`** lister elementene i kurset der den nyeste versjonen ikke er
+  den levende: nye versjoner på publiserte elementer, og elementer som aldri er publisert. Med
+  publiseringsporten per element, og hvor mange som har bestått hver modul.
+- **`POST /courses/:id/publish-pending`** publiserer dem. Alt eller ingenting (som kaskaden, #734):
+  mangler ett element et språk, publiseres ingenting. Bare elementer forfatteren eier; andres listes
+  for seg. Har noen bestått en av modulene, kreves `supersedesEarlierPasses` — ett svar for alle.
+  Klienten sender versjonene den viste; et annet sett gir 409.
+- **Kurssiden:** dialogen åpnes straks etter «Oppdater dette kurset», og knappen «Publiser nye
+  versjoner (N)» står i hodet så lenge noe ligger klar. Med beståtte er det ingen nøytral «Publiser
+  alle», bare de to svarene på revisjonsspørsmålet.
+- **Kaskadens forhåndsvisning** (`publish-preview`) er uendret: levende elementer med en ny versjon
+  regnes ikke som upubliserte der.
+- Agent-tokens når ikke de nye rutene (ikke på tillatt-lista).
+
+### Revisjonsvarselet: produkteiers ordlyd, med kurset navngitt
+
+«Din tidligere bestått teller ikke lenger, og du må oppdatere for å fortsatt ha et bestått kurs for
+«…».» Kursene er de publiserte, ikke-arkiverte kursene modulen ligger i, på mottakerens språk. En
+modul uten slikt kurs får setningen uten kurs. Hendelser som lå i køen før 2.101.0, sendes uten kurs.
+
+### Oversiktene husker hvordan de sto
+
+Produkteier: «hvis man går tilbake så bør systemet huske hvilken state oversikten var i.» Moduler,
+Seksjoner, Kurs og Klasser (alle på `list-page.js`) husker søk, filter, kursfilter, avkryssing,
+sortering og rulleposisjon i fanen (`view-state.js`, sessionStorage). Et lagret valg som ikke finnes
+lenger, faller tilbake til standard. Resultater, vurderingskøen og kohortstatus har egne filtre og er
+ikke med ennå.
+
+### Deltaker: én knapp der det var to
+
+Knappen på det aktuelle steget («Gjennomfør», «Les») skjules når steget alt er åpent, og når steget
+rett før er åpent — der står «Gå til neste element», som gjør det samme.
+
+## 2.100.0 - 2026-10-24
+
+### «Velg alle som stemmer» med KI og i skillet (#1077, leveranse 1b)
+
+Produkteiers avgjørelser i DECISIONS («KI og «velg alle som stemmer»»).
+
+- **KI-generering:** plattformen trekker en plan (`planMultipleQuestions`): et tilfeldig antall
+  spørsmål, 10–50 % av settet, på tilfeldige plasser, er «velg alle», hvert med et tilfeldig antall
+  riktige (ett til alle). Modellen får planen og konstruerer de spørsmålene på fakta fra kilden.
+  Følger svaret ikke planen, får modellen ett forsøk til med beskjed; deretter en advarsel til
+  forfatteren. (Første versjon, «kilden avgjør», ga null «velg alle» av tretti på stage.)
+- **KI-revisjon:** typen og alle de riktige sendes med, og stoppen fra 2.99.0 er fjernet. Typen
+  beholdes, med mindre forfatteren ber om det — ved navn, eller generelt («bruk flere», «gjør testen
+  vanskeligere»), da velger modellen selv. Høyst halvparten av settet (eller så mange som settet
+  alt hadde): over det får modellen ett forsøk til, og så avvises revisjonen. En ren typeendring
+  regnes som en endring.
+- **QA-runde 1:** en fasit som ikke stemmer med alternativene (et riktig som ikke er et alternativ
+  ordrett) rettes ikke lenger stille — `findAnswerKeyProblems` melder den, modellen får ett forsøk
+  til, og så avvises svaret, både ved generering og revisjon. «Gjør 1b riktig også» regnes som en
+  endring. Forsøksteksten sier den faktiske grunnen. Kutt av for mange alternativer beholder alle de
+  riktige. I skillet: `questionType: null` avvises som i importen, og antallssjekken har én liste per
+  språk uten treff på «choose to», «two-factor» og «det er vel to».
+- **Skillet:** `package-schema.md`, `modules.md` (ny del «Select all that apply»), `localization.md`,
+  `api-flow.md` og `adjust-course.md` kjenner typen. Nytt skript `mcq-plan.mjs` trekker planen for en
+  ny test, med samme trekning som plattformen (låst av en test). `export-validate.mjs` speiler importens regler
+  (låst til plattformen av en test, også listen over typer); `localization-check.mjs` krever de samme
+  riktige plassene på alle språk; `mcq-cue-check.mjs` finner antall i stammen, riktige som er lengre
+  enn de gale, og over halvparten «velg alle».
+
+## 2.99.1 - 2026-10-24
+
+### «Velg alle som stemmer»: lagringen sier hva som er galt (#1077)
+
+- **Alle alternativene kan være riktige** (produkteier): kravet om minst ett galt alternativ er borte.
+  Med alle fire avkrysset ble spørsmålet oversatt og så avvist med «noe i skjemaet mangler … feltene
+  som er markert», uten noe markert felt (stage).
+- Et spørsmål med «Flere riktige svar» uten noe avkrysset stoppes i Rediger FØR oversettelsen, med en
+  melding som sier hvilket spørsmål.
+- Et avslag fra tjeneren ved lagring viser feltet og regelen under den generelle setningen.
+- Bryteren «Flere riktige svar» er en liten boks på linje med teksten, ikke en fullbredde stripe.
+
+## 2.99.0 - 2026-10-24
+
+### «Velg alle som stemmer» i moduler (#1077, leveranse 1a)
+
+Første av tre nye spørsmålstyper (designnotat `doc/DESIGN_1077.md`; produkteiers avgjørelser i
+DECISIONS: rett eller galt per spørsmål, antallet riktige oppgis ikke).
+
+- **Datamodell (additiv, #811):** `MCQQuestion.questionType` (standard `single`) og `answerKeyJson`
+  (posisjonene til de riktige alternativene); `MCQResponse.answerJson` (de valgte posisjonene).
+- **Retting ett sted:** `mcqQuestionTypes.ts`. Riktig når de valgte er nøyaktig de riktige; et valg som
+  ikke er et alternativ gjør svaret galt. `isCorrect`, poengsum og bestått-grense som før.
+- **Deltaker:** avkrysning og «Velg alle som stemmer.», kladd, forhåndsvisning og gjennomgang (#1061).
+- **Forfatter:** «Flere riktige svar» per spørsmål i Rediger. Typen bæres gjennom oversettelse,
+  utfylling av manglende språk ved publisering, påfylling av banken og eksport → import.
+- **Kvalitetsrapporten** teller hvert valgte alternativ i et «velg alle».
+- **Ikke ennå:** KI-generering og skillet (leveranse 1b). KI-revisjon av et «velg alle» avvises med
+  `422`, så det aldri blir gjort om til et vanlig spørsmål i det stille.
+
+### Kvalitetsrapporten for flervalg talte ikke valg på spørsmål med tre språk
+
+Alternativene lagres som språkkart; deltakeren svarer med teksten på sitt språk. Telt som ren tekst
+fikk hvert feilalternativ 0 valg, og ble flagget «velges sjelden» på alle spørsmål skillet lager.
+Nå samme sammenligning som rettingen, og alternativ og spørsmålstekst vist på rapportens språk.
+
+### QA-runde 1 (før stage)
+
+- KI-revisjon av et sett med «velg alle» stoppes nå i editoren med en forståelig melding. Tjenerens 422
+  ble aldri nådd: editoren bygde spørsmålene på nytt uten typen.
+- Tjeneren sender også det første riktige som `correctAnswer` for «velg alle» (som lagret), så utfylling
+  av manglende språk ved publisering finner et kildespråk. Fasiten er fortsatt `correctAnswers`.
+- Kladdemerket teller avkryssede svar. Nye tester: telling per alternativ i kvalitetsrapporten,
+  `carryMcqAnswerKey`/`mcqCorrectPositions`, revisjonsstoppen.
+- Rotårsak: e2e-mockene ga «velg alle» et `correctAnswer` den ekte tjeneren ikke sendte — testene målte mot
+  min antakelse, ikke mot tjenerens svar. Fanget av QA-porten (ny modell leser koden), ikke av testene.
+
+### Rotårsak: to stille typebytter funnet under arbeidet
+
+- `appendMcqQuestions` kopierer de eksisterende spørsmålene inn i en ny versjon av settet, og klientens
+  oversettelse og utfylling bygger spørsmålene på nytt av «stamme + alternativer + ett svar». Begge ville
+  gjort et «velg alle» om til et vanlig spørsmål ved neste lagring. Funnet ved å lete etter LESERE og
+  KOPIERERE av feltet, ikke kallere av funksjonen; begge har nå tester som blir røde uten fiksen.
+- Bryteren «Flere riktige svar» mistet fasiten når den ble slått av (en avkrysset boks gjort om til
+  radio fjerner avkrysningen fra den forrige i gruppa). Fanget av kontrollcasen i e2e-testen.
+
+## 2.98.6 - 2026-10-24
+
+### Kursrapporten bruker samme regel for bestått som kursbeviset (#1116)
+
+Funnet i kompleksitetsskanningen 2026-10-21. Detaljvisningen i kursrapporten (og CSV-en
+`course-learners`) avgjorde «bestått» selv, fra vedtaket på siste forsøk og med en svarteliste
+(`=== "UNDER_REVIEW"`). Etter en revisjon som gjør tidligere bestått ugyldig (#997) sto vedtaket
+fortsatt som bestått, og raden viste «Fullført» der kursbeviset og deltakerens egen visning sa
+«ta den på nytt».
+
+- **Bestått** er nå sertifiseringsstatusen, med samme spørring og filtre som kursraden over
+  (`findPassedUserIdsForModule`).
+- **Under vurdering** er et siste forsøk som ikke er avgjort (`isSettledSubmission`, en hviteliste) —
+  ikke bare `UNDER_REVIEW`. Før talte vedtaket på en sak under behandling som bestått eller strøket.
+- **Strøket** er et avgjort forsøk som er strøket.
+- En deltaker med kursbevis vises fortsatt som «Fullført» (beviset er permanent).
+
+## 2.98.5 - 2026-10-23
+
+### Utboksen merker ikke lenger en feilet e-post som levert (#1115)
+
+Funnet i kompleksitetsskanningen 2026-10-21. Varselfunksjonene ga ikke svaret sitt tilbake, og
+utboksen merket hvert forsøk levert — også når ACS avviste e-posten. Et resultat- eller ankevarsel
+kunne gå tapt uten spor.
+
+- **Sikkert feilet** (avvist, manglende adresse, webhook-feil): raden prøves igjen etter utboksens
+  vanlige regler, og gir opp synlig («failed») etter siste forsøk.
+- **Avbrutt underveis** (vårt eget tidsavbrudd mot ACS eller webhook): sendingen kan ha gått gjennom,
+  så den sendes ikke igjen — raden merkes «failed» med en gang, med grunnen. Før ville den vært
+  merket levert; et nytt forsøk kunne gitt deltakeren to e-poster.
+- **Utboksens egen frist** (`OUTBOX_DELIVERY_TIMEOUT_MS`) er hevet fra 20 til 45 s, lengre enn én
+  ACS-sending (30 s), så utboksen ikke avbryter en sending som fortsatt pågår. Går fristen likevel ut
+  for et varsel til en person, merkes raden «failed» uten nytt forsøk (den forlatte sendingen kan
+  fortsatt lykkes). En kurssjekk (`course_completion_check`) er trygg å kjøre igjen og prøves på nytt
+  som før.
+- Gjelder resultatvarsel, ankevarsel og «modulen er revidert». En kanal som er slått av, er ingen feil.
+
+## 2.98.4 - 2026-10-23
+
+### En figur som går i løkke, avvises av plattformen (#1073)
+
+Produkteier: «animasjon er greit, men blir distraksjon hvis den går i løkke, så hard stopp».
+
+- Plattformen kjører skillets egen kontroll av animerte figurer på den **rensede** figuren — det som
+  lagres og vises. En figur som beveger seg på en annen måte enn flytmalen (én gang, ferdig innen
+  fem sekunder) avvises med `asset_svg_motion_not_allowed`: en løkke, for lang tid, SMIL
+  (`animateMotion`), eller CSS skrevet med omvendt skråstrek eller tegnreferanse.
+- Gjelder alle veier inn: opplasting i seksjonseditoren, import, forfatter-API-et og oppsettene, og
+  valideringen før innsending sier det samme. Skrivemåtene som slapp forbi skillets kontroll
+  (`<STYLE>`, attributter uten anførselstegn, stilblokk uten sluttag — målt 2026-10-04) stoppes, fordi
+  plattformens leser har rettet dem før kontrollen ser figuren.
+- En stillestående figur tas alltid imot. Håndverksfunn (en flyt uten animasjon, et element skjult i
+  stillbildet) er forfatterens sak og stoppes ikke av plattformen.
+- Figurer som alt er lagret, kontrolleres ikke på nytt.
+
+## 2.98.3 - 2026-10-22
+
+### Skillet: ikoner i flytfigurene
+
+Bare skillet. Et steg i en flytfigur kan få et ikon fra plattformens bibliotek (`icon` i
+beskrivelsen). Sirkelen viser da ikonet, og nummeret står foran teksten («1. Samle data»), så
+rekkefølgen leses også når flyten brytes over flere rader på telefon (produkteier valgte variant B
+av tre, 2026-10-22). Alle steg har ikon, eller ingen; aldri samme ikon to ganger.
+
+- Ikonene bygges inn i tegningen (et bilde kan ikke hente noe utenfra), fra samme fil som
+  plattformen bruker: `npm run icons:vendor` skriver den nå også til skillet, med lisensen (ISC).
+  Zip-en blir rundt 80 kB større.
+- Kontrollen av animerte figurer kjenner ikonet som en del av malen: én fast form, innholdet tegn
+  for tegn et ikon fra biblioteket, midt i en stegsirkel. Alle 1877 ikonene kommer uendret gjennom
+  plattformens rensing (målt), så kontrollen holder også for en figur som har vært innom plattformen.
+- Figurer som alt ligger i kurs, får ikke ikoner før de tegnes og importeres på nytt.
+
+## 2.98.2 - 2026-10-22
+
+### Figurene i riktig størrelse, og korte flyter på én linje
+
+- **En figur vises på det meste 1,25 ganger tegnet størrelse.** En tegning som bare oppga viewBox,
+  fylte hele spalten: en flyt med tre steg ble 1000 px bred, med etiketter på 37 px. Nå 410 px, med
+  etiketter på 15 px — omtrent som teksten rundt. Gjelder figurene som alt ligger i kursene.
+- **Grensa for det smale oppsettet regnes per figur:** det smale tar over der det brede oppsettets
+  etiketter ville blitt under 9 px. En flyt med tre steg står nå på én linje også i «Smal»-visningen
+  (549 px) og på telefon (296 px); en med åtte steg får to per rad som før. Tjeneren sier bredden på
+  det brede oppsettet i `X-Asset-Wide-Width`.
+- Skillet tegner det brede oppsettet med oppgitt størrelse (1,25 × tegnet), som det smale.
+
+## 2.98.1 - 2026-10-22
+
+### Siste seksjon sier hva som gjenstår
+
+- Når siste seksjon i et kurs åpnes mens noe annet står igjen, sto det bare «Du har 1 igjen før du kan
+  avslutte kurset». Nå står det hva («Før du kan avslutte kurset, må du fullføre: Kunnskapstest. Kom
+  tilbake hit etterpå for å avslutte»), med en knapp «Gå til …» til det første som gjenstår og kan
+  åpnes. En avpublisert modul (#996) nevnes, men får ingen knapp. Fullføringsregelen er uendret.
+
+### Skillet: justering stopper to ganger; øvelser røper ikke testen; merkelapper på ett språk
+
+Lærdom fra Repetisjon Modul 3 justert med skillet 2.98.0 i Claude og i ChatGPT: Claude
+ba om godkjenning per element (som skillet sa), ChatGPT hoppet over godkjenningene og endret metode,
+fjernet skjermbilder og promptpakken, og lagde øvelser med testens tall.
+
+- **Justering av et kurs** stopper to ganger: ved endringslista og ved én samlet gjennomgang av alt
+  som er endret. Ikke godkjenning per element eller per steg; den uavhengige kontrollen og
+  produksjonen går uten å vente. Endringslista er stoppet som aldri hoppes over. En endret seksjon
+  beholder bilder, øvelser, prompter og metode med mindre linja sier noe annet; råd kurset gir, endres
+  bare som forslag med begrunnelse; en endring som berører kursbeskrivelsen eller testen, sier det.
+- **Øvelsene i seksjonene** bruker ikke spørsmål, case eller tall fra modulens test (i veiledningen
+  for seksjoner og moduler, og i den uavhengige kontrollen).
+- **Deltakeren leser ikke om forfatterarbeidet:** eksporten, importfila, en tidligere versjon av
+  kurset.
+- **Språkkontrollen** stopper en `[MERKELAPP]` som er oversatt noen steder og latt stå andre steder i
+  samme tekst (den engelske tabellen sa [SOURCE-BASED], «finn parene» under sa [KILDEBASERT]).
+
 ## 2.98.0 - 2026-10-20
 
 ### Case med følge per alternativ (#1110) og «finn parene» (#1107); skillet velger øvelse (#1108)

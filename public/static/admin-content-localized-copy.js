@@ -105,6 +105,42 @@ export function mcqCorrectAnswerIndexes(questions) {
     (question?.options ?? []).findIndex((option) => option === question?.correctAnswer));
 }
 
+/**
+ * #1077: posisjonene til de riktige alternativene — én for «single», flere for «multiple» (velg alle
+ * som stemmer). Alternativ og svar sammenlignes som verdier (tekst eller språkkart), ikke som
+ * objekter: et spørsmål som har vært gjennom JSON, har ikke de samme objektene lenger.
+ */
+export function mcqCorrectPositions(question) {
+  const options = question?.options ?? [];
+  const same = (a, b) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
+  if (question?.questionType === "multiple") {
+    return [...new Set((question.correctAnswers ?? []).map((answer) => options.findIndex((option) => same(option, answer))))]
+      .filter((i) => i >= 0)
+      .sort((a, b) => a - b);
+  }
+  const i = options.findIndex((option) => same(option, question?.correctAnswer));
+  return i >= 0 ? [i] : [];
+}
+
+/**
+ * #1077: bærer typen og fasiten over fra spørsmålet slik det var (`source`) til det samme spørsmålet
+ * bygget på nytt (`target`) — oversatt, slått sammen eller lest tilbake fra skjemaet. Flere steder
+ * bygger et spørsmål på nytt av stamme, alternativer og ett svar; uten dette ble et «velg alle som
+ * stemmer» et vanlig spørsmål ved neste lagring, uten at noen så det. Fasiten følger POSISJONENE,
+ * så den holder på alle språk av konstruksjon (alternativene står i samme rekkefølge).
+ */
+export function carryMcqAnswerKey(target, source) {
+  if (source?.questionType !== "multiple" || !target) return target;
+  const positions = mcqCorrectPositions(source);
+  const options = target.options ?? [];
+  return {
+    ...target,
+    questionType: "multiple",
+    correctAnswers: positions.map((i) => options[i]).filter((option) => option !== undefined),
+    correctAnswer: options[positions[0]] ?? target.correctAnswer,
+  };
+}
+
 /** Fjerner ett språk fra et spørsmål — stem, svar, rasjonale og alle alternativer. */
 export function dropMcqQuestionLocale(question, locale) {
   if (!question) return;

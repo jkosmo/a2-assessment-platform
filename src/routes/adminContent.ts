@@ -1,4 +1,5 @@
 import { Router, type Request } from "express";
+import { mcqQuestionTypeFields } from "../modules/adminContent/adminContentSchemas.js";
 import { z } from "zod";
 import {
   createModule,
@@ -769,12 +770,17 @@ adminContentRouter.post("/modules/:moduleId/mcq-questions", idempotency((req) =>
     const result = await appendMcqQuestions({
       moduleId: request.params.moduleId,
       actorId,
-      questions: data.questions.map((question) => ({
-        stem: localizedTextCodec.serialize(question.stem),
-        options: question.options.map((option) => localizedTextCodec.serialize(option)),
-        correctAnswer: localizedTextCodec.serialize(question.correctAnswer),
-        rationale: question.rationale ? localizedTextCodec.serialize(question.rationale) : undefined,
-      })),
+      questions: data.questions.map((question) => {
+        const typed = mcqQuestionTypeFields(question);
+        return {
+          stem: localizedTextCodec.serialize(question.stem),
+          options: question.options.map((option) => localizedTextCodec.serialize(option)),
+          correctAnswer: localizedTextCodec.serialize(typed.correctAnswer),
+          rationale: question.rationale ? localizedTextCodec.serialize(question.rationale) : undefined,
+          questionType: typed.questionType,
+          answerKeyJson: typed.answerKeyJson,
+        };
+      }),
     });
     response.status(201).json({
       moduleVersion: result.moduleVersion,
@@ -1004,7 +1010,7 @@ adminContentRouter.post("/modules/:moduleId/module-versions/:moduleVersionId/pub
       mcqQuestions: (mcqSetVersion?.questions ?? []).map((question) => ({
         stem: serialize(question.stem),
         optionsJson: JSON.stringify((question.options ?? []).map((option) => serialize(option))),
-        correctAnswer: serialize(question.correctAnswer),
+        correctAnswer: serialize(question.correctAnswer ?? null),
         rationale: serialize(question.rationale),
       })),
     });
@@ -1465,8 +1471,11 @@ adminContentRouter.post("/generate/mcq/revise", generateLimiter, async (request,
   }
 
   try {
+    // #1077 leveranse 1b: typen og de riktige følger med inn; modellen beholder dem med mindre
+    // forfatteren ber om annet. `correctAnswer` er det første riktige for et «velg alle».
     const result = await reviseMcqQuestions({
       ...data,
+      questions: data.questions.map((question) => ({ ...question, correctAnswer: mcqQuestionTypeFields(question).correctAnswer })),
       questionCount: data.questionCount ?? data.questions.length,
       optionCount: data.optionCount ?? Math.max(...data.questions.map((question) => question.options.length)),
     });

@@ -186,6 +186,10 @@ const LOCALES = ["en-GB", "nb", "nn"];
 // (`ASSET_LAYOUTS` in src/modules/course/assetCommands.ts); the skill runs without the platform's
 // code, so it is repeated here, and a repo unit test fails if the two come apart.
 export const ASSET_LAYOUTS = ["narrow"];
+// #1077: the question types. The platform owns the list (`MCQ_QUESTION_TYPES` in
+// src/modules/assessment/mcqQuestionTypes.ts); repeated here for the same reason, and held to it by a
+// repo unit test.
+export const MCQ_QUESTION_TYPES = ["single", "multiple"];
 
 function isNonEmptyLocalizedPartial(value) {
   if (typeof value === "string") return value.trim().length > 0;
@@ -249,12 +253,27 @@ export function validateExportEnvelopeStructure(envelope) {
     if (!av || typeof av !== "object") return err(`${path}.activeVersion`, "required");
     if (av.audit === undefined) err(`${path}.activeVersion.audit`, "required (use {} for draft-only)");
     validateAudit(av.audit, `${path}.activeVersion.audit`);
-    // MCQ: correctAnswer must be one of options, by localized identity (every locale).
+    // MCQ, mirroring `mcqQuestionSchema` (#1077): one correct answer ("single", the default) has
+    // `correctAnswer` equal to one of options; "multiple" (select all that apply) has `correctAnswers`
+    // — at least one, each one of options, none twice. Every option may be correct. Identity is
+    // per locale, so an answer must match its option in EVERY language.
     for (const [qi, q] of (av.mcqSet?.questions ?? []).entries()) {
-      const optionIds = new Set((q.options ?? []).map(localizedIdentity));
-      if (!optionIds.has(localizedIdentity(q.correctAnswer))) {
-        err(`${path}.activeVersion.mcqSet.questions[${qi}].correctAnswer`, "must equal one of options in every locale");
+      const qPath = `${path}.activeVersion.mcqSet.questions[${qi}]`;
+      const optionIds = (q.options ?? []).map(localizedIdentity);
+      // Only an ABSENT type means "single"; `null` is rejected by the import (QA 2.100.0).
+      const type = q.questionType === undefined ? "single" : q.questionType;
+      if (!MCQ_QUESTION_TYPES.includes(type)) {
+        err(`${qPath}.questionType`, `must be one of ${MCQ_QUESTION_TYPES.join(", ")}`);
+        continue;
       }
+      if (type === "single") {
+        if (!optionIds.includes(localizedIdentity(q.correctAnswer))) err(`${qPath}.correctAnswer`, "must equal one of options in every locale");
+        if (q.correctAnswers !== undefined) err(`${qPath}.correctAnswers`, "belongs to a \"multiple\" question");
+        continue;
+      }
+      const positions = (Array.isArray(q.correctAnswers) ? q.correctAnswers : []).map((answer) => optionIds.indexOf(localizedIdentity(answer)));
+      if (positions.length === 0 || positions.some((p) => p < 0)) err(`${qPath}.correctAnswers`, "must list one or more of options, each equal to its option in every locale");
+      else if (new Set(positions).size !== positions.length) err(`${qPath}.correctAnswers`, "lists the same option twice");
     }
   };
 

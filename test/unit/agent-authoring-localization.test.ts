@@ -10,6 +10,7 @@ import {
   extractSvgTextRuns,
   extractPreservedTokens,
   isBlindCopy,
+  partlyTranslatedLabels,
   practiceBlockShapes,
   presentLocales,
   // @ts-expect-error — .mjs skill script consumed as a library
@@ -396,5 +397,93 @@ describe("følge per alternativ i fasitmønsteret (#1110)", () => {
     const a = [":::sjekk Hva?", "- [ ] En", "  Følge.", "- [x] To", ":::"].join(NL);
     const b = [":::sjekk Hva?", "- [ ] En", "- [x] To", "  Følge.", ":::"].join(NL);
     expect(checkAnswerPatterns(a)).not.toEqual(checkAnswerPatterns(b));
+  });
+});
+
+// Repetisjon Modul 3 (2.98.0): den engelske tabellen sa [SOURCE-BASED], «finn parene» rett under sa
+// [KILDEBASERT]. En merkelapp skal være den samme overalt på ett språk.
+describe("merkelapper oversatt bare noen steder", () => {
+  const NL = String.fromCharCode(10);
+  const nb = ["| Merke | Betyr |", "|---|---|", "| [KILDEBASERT] | står i kilden |", "", ":::par", "[KILDEBASERT] = står i kilden", "[AVLEDET] = utledet", "[UKJENT] = mangler", ":::"].join(NL);
+  const nn = nb.replace("står i kilden |", "står i kjelda |").replace("står i kilden", "står i kjelda");
+  const pkg = (en: string) => ({
+    packageFormat: "a2-authoring-package/v1",
+    objects: [{ clientRef: "sec-merker", type: "section", payload: { title: L("Merker", "Merke", "Labels"), bodyMarkdown: L(nb, nn, en) } }],
+  });
+
+  it("oversatt i tabellen, latt stå i øvelsen: stopper", () => {
+    const en = nb.replace("| [KILDEBASERT] | står i kilden |", "| [SOURCE-BASED] | in the source |").replace("Merke | Betyr", "Label | Means");
+    const result = checkLocalization(pkg(en));
+    expect(result.labelDrift.map((d: { detail: string }) => d.detail).join(" ")).toContain("en-GB: [KILDEBASERT] is left 1 time(s) where nb has it 2");
+    expect(result.blocks).toBe(true);
+  });
+
+  it("nynorsk sjekkes også", () => {
+    const nnHalf = nn.replace("| [KILDEBASERT] | står i kjelda |", "| [KJELDEBASERT] | står i kjelda |");
+    const en = nb.replaceAll("[KILDEBASERT]", "[SOURCE-BASED]").replace("[AVLEDET]", "[DERIVED]").replace("[UKJENT]", "[UNKNOWN]");
+    const result = checkLocalization({ packageFormat: "a2-authoring-package/v1", objects: [{ clientRef: "sec-merker", type: "section", payload: { title: L("Merker", "Merke", "Labels"), bodyMarkdown: L(nb, nnHalf, en) } }] });
+    expect(result.labelDrift.map((d: { detail: string }) => d.detail).join(" ")).toContain("nn: [KILDEBASERT] is left 1 time(s)");
+  });
+
+  it("oversatt overalt: ingen merknad", () => {
+    const en = nb.replaceAll("[KILDEBASERT]", "[SOURCE-BASED]").replace("[AVLEDET]", "[DERIVED]").replace("[UKJENT]", "[UNKNOWN]");
+    expect(checkLocalization(pkg(en)).labelDrift).toEqual([]);
+  });
+
+  it("nynorsk oversetter én merkelapp og lar en annen stå overalt: ingen merknad", () => {
+    expect(partlyTranslatedLabels(nb, nn.replaceAll("[KILDEBASERT]", "[KJELDEBASERT]"))).toEqual([]);
+  });
+
+  it("nynorsk med samme merkelapper, én setning skrevet om: ingen merknad", () => {
+    const nnShorter = nn.replace("| [KILDEBASERT] | står i kjelda |", "| (kjelda) | står i kjelda |");
+    expect(partlyTranslatedLabels(nb, nnShorter)).toEqual([]);
+  });
+
+  it("lenketekst i store bokstaver er ikke en merkelapp", () => {
+    expect(partlyTranslatedLabels("[GDPR](https://a) og [GDPR](https://b)", "[GDPR](https://a) og [EØS](https://b)")).toEqual([]);
+  });
+});
+
+// #1077: «velg alle som stemmer» — fasiten er flere plasser, og de må være de samme på alle språk.
+describe("#1077 checkLocalization — flere riktige svar", () => {
+  const multiplePackage = () => {
+    const pkg = fullyLocalizedPackage();
+    const q = pkg.objects[0].payload.activeVersion.mcqSet.questions[0];
+    q.options.push(L("Lagringsbegrensning", "Lagringsavgrensing", "Storage limitation"));
+    q.questionType = "multiple";
+    q.correctAnswers = [q.options[0], q.options[2]];
+    delete q.correctAnswer;
+    return pkg;
+  };
+
+  it("de riktige på samme plasser på alle språk → består", () => {
+    const result = checkLocalization(multiplePackage());
+    expect(result.answerKeyChanges).toEqual([]);
+  });
+
+  it("en oversettelse som peker på et annet alternativ → stopper", () => {
+    const pkg = multiplePackage();
+    const q = pkg.objects[0].payload.activeVersion.mcqSet.questions[0];
+    // På engelsk peker det andre riktige nå på alternativ 2 (Purpose limitation), ikke 3.
+    q.correctAnswers[1] = L("Lagringsbegrensning", "Lagringsavgrensing", "Purpose limitation");
+    const result = checkLocalization(pkg);
+    expect(result.blocks).toBe(true);
+    expect(result.answerKeyChanges.some((c: { detail: string }) => /correct options differ across locales: en-GB/.test(c.detail))).toBe(true);
+  });
+
+  it("et riktig som ikke er et alternativ på ett språk → stopper", () => {
+    const pkg = multiplePackage();
+    const q = pkg.objects[0].payload.activeVersion.mcqSet.questions[0];
+    q.correctAnswers[1] = L("Lagringsbegrensning", "Noko anna", "Storage limitation");
+    const result = checkLocalization(pkg);
+    expect(result.answerKeyChanges.some((c: { detail: string }) => /correctAnswers does not match any option/.test(c.detail))).toBe(true);
+  });
+
+  it("et riktig som mangler et språk → meldt som manglende felt", () => {
+    const pkg = multiplePackage();
+    const q = pkg.objects[0].payload.activeVersion.mcqSet.questions[0];
+    q.correctAnswers[0] = { nb: "Dataminimering", nn: "Dataminimering" };
+    const result = checkLocalization(pkg);
+    expect(result.missing.some((m: { path: string }) => /correctAnswers\[0\]/.test(m.path))).toBe(true);
   });
 });

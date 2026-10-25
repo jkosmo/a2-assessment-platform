@@ -24,7 +24,7 @@ import {
   resolveWorkspaceNavigationItems,
 } from "/static/participant-console-state.js";
 import { showToast } from "/static/toast.js";
-import { apiErrorCodeText, describeApiError } from "/static/api-error.js";
+import { apiErrorCodeText, apiIssueLines, describeApiError } from "/static/api-error.js";
 import { renderWorkspaceNavigationWithProfile } from "./workspace-nav.js";
 import { localizeValueForLocale, buildPreviewHtml, hydratePreviewMarkdown } from "/static/admin-content-preview.js";
 import { sanitizeSectionHtml } from "/static/sanitize.js";
@@ -53,8 +53,10 @@ import {
   buildLocalizedCopyValue,
   selectTranslatedDraftFields,
   applyMcqTranslation,
+  carryMcqAnswerKey,
   dropMcqQuestionLocale,
   mcqCorrectAnswerIndexes,
+  mcqCorrectPositions,
   normalizeModuleTitlePatch,
   strictLocaleValue,
 } from "/static/admin-content-localized-copy.js";
@@ -1375,6 +1377,14 @@ async function localizeMcqAcrossLocales(questions, sourceLocale) {
     correctAnswer: buildLocalizedTextMap(sourceLocale, question.correctAnswer),
     rationale: buildLocalizedTextMap(sourceLocale, question.rationale),
   }));
+  // #1077: oversetteren får ett svar per spørsmål (det første riktige); typen og alle de riktige
+  // legges på etterpå, fra posisjonene i kildespørsmålet.
+  const requestQuestions = questions.map((question) => ({
+    stem: question.stem,
+    options: question.options,
+    correctAnswer: question.correctAnswer,
+    ...(question.rationale ? { rationale: question.rationale } : {}),
+  }));
   const correctIndexes = mcqCorrectAnswerIndexes(questions);
   const failedLocales = [];
 
@@ -1388,7 +1398,7 @@ async function localizeMcqAcrossLocales(questions, sourceLocale) {
         getHeaders,
         {
           method: "POST",
-          body: JSON.stringify({ questions, sourceLocale, targetLocale }),
+          body: JSON.stringify({ questions: requestQuestions, sourceLocale, targetLocale }),
         },
       );
     } catch {
@@ -1413,7 +1423,7 @@ async function localizeMcqAcrossLocales(questions, sourceLocale) {
     applyMcqTranslation(localizedQuestions, oversatte, { targetLocale, correctIndexes });
   }
 
-  return { questions: localizedQuestions, failedLocales };
+  return { questions: localizedQuestions.map((question, index) => carryMcqAnswerKey(question, questions[index])), failedLocales };
 }
 
 // #1046 (produkteier 13.09): fanebytte er ikke navigering og spør ikke. Det som er skrevet i Rediger
@@ -1423,6 +1433,16 @@ let editFormSnapshot = null;
 // Utkastet kom fra skjemaet (én språkversjon, ikke oversatt). Da skal Lagre gå veien om oversettelse
 // (previewEditConfirm), ikke lagre utkastet rått som «Lagre utkast» gjorde for genererte utkast.
 let sessionDraftFromForm = false;
+
+/**
+ * #1077: første «velg alle» uten noe riktig alternativ, eller -1. Tjeneren avviser slike; uten
+ * sjekken fikk forfatteren «noe i skjemaet mangler», uten noe markert felt — og først etter at
+ * oversettelsen var betalt. Alle avkrysset er lov (produkteier 2026-10-24).
+ */
+function firstBadMultipleIndex(questions) {
+  return (questions ?? []).findIndex((question) => question?.questionType === "multiple"
+    && !(question.correctAnswers?.length > 0));
+}
 
 function readMcqQuestionsFromForm(currentMcqQuestions) {
   return currentMcqQuestions.map((question, questionIndex) => {
@@ -1435,6 +1455,21 @@ function readMcqQuestionsFromForm(currentMcqQuestions) {
       Number.isInteger(checkedIndex) && checkedIndex >= 0 && checkedIndex < options.length
         ? checkedIndex
         : Math.max(0, options.findIndex((option) => option === question.correctAnswer));
+    // #1077: «Flere riktige svar» avkrysset → «velg alle som stemmer», med de avkryssede som fasit.
+    const multiple = container?.querySelector("[data-preview-edit-multiple]")?.checked === true;
+    if (multiple) {
+      const checked = Array.from(container?.querySelectorAll(`input[name="previewEditCorrectAnswer${questionIndex}"]:checked`) ?? [])
+        .map((input) => Number.parseInt(input.value, 10))
+        .filter((i) => Number.isInteger(i) && i >= 0 && i < options.length);
+      return {
+        questionType: "multiple",
+        stem: container?.querySelector(`#previewEditMcqStem${questionIndex}`)?.value.trim() || question.stem,
+        options,
+        correctAnswers: checked.map((i) => options[i]),
+        correctAnswer: options[checked[0] ?? 0] ?? "",
+        rationale: container?.querySelector(`#previewEditMcqRationale${questionIndex}`)?.value.trim() || question.rationale,
+      };
+    }
     return {
       stem: container?.querySelector(`#previewEditMcqStem${questionIndex}`)?.value.trim() || question.stem,
       options,
@@ -1481,12 +1516,12 @@ function resolveEditableMcqQuestions(locale) {
     ? sessionDraft.mcqQuestions
     : (bundle?.selectedConfiguration?.mcqSetVersion?.questions ?? []);
 
-  return sourceQuestions.map((question) => ({
+  return sourceQuestions.map((question) => carryMcqAnswerKey({
     stem: localizeValueForLocale(question?.stem ?? "", locale),
     options: (question?.options ?? []).map((option) => localizeValueForLocale(option, locale)),
     correctAnswer: localizeValueForLocale(question?.correctAnswer ?? "", locale),
     rationale: localizeValueForLocale(question?.rationale ?? "", locale),
-  }));
+  }, question));
 }
 
 function buildDefaultSubmissionSchema() {
@@ -1892,12 +1927,20 @@ async function reviseMcqInBackground(instruction, onAccept) {
   const slot = logProgress("shell.revision.mcqProgress", { abortable: true });
   slot.abortBtn.addEventListener("click", () => { abort.abort(); slot.abortBtn.disabled = true; });
 
-  const currentQuestions = (sessionDraft?.mcqQuestions ?? []).map((question) => ({
-    stem: localizeValueForLocale(question.stem, contentLocale),
-    options: (question.options ?? []).map((option) => localizeValueForLocale(option, contentLocale)),
-    correctAnswer: localizeValueForLocale(question.correctAnswer, contentLocale),
-    rationale: localizeValueForLocale(question.rationale, contentLocale),
-  }));
+  // #1077 leveranse 1b: typen og ALLE de riktige går med til KI-en, som beholder dem med mindre
+  // forfatteren ber om annet. Svaret kommer tilbake med sin egen type (revisjonen kan endre den), og
+  // oversettelsen under bærer den fra svaret — ikke fra spørsmålet slik det var.
+  const currentQuestions = (sessionDraft?.mcqQuestions ?? []).map((question) => {
+    const options = (question.options ?? []).map((option) => localizeValueForLocale(option, contentLocale));
+    const multiple = question?.questionType === "multiple";
+    return {
+      ...(multiple ? { questionType: "multiple", correctAnswers: mcqCorrectPositions(question).map((i) => options[i]) } : {}),
+      stem: localizeValueForLocale(question.stem, contentLocale),
+      options,
+      correctAnswer: localizeValueForLocale(question.correctAnswer, contentLocale),
+      rationale: localizeValueForLocale(question.rationale, contentLocale),
+    };
+  });
   let result;
   try {
     result = await apiFetch(
@@ -2174,6 +2217,15 @@ async function saveDraftBundleInBackground(options = {}) {
     document.getElementById("previewEditAddQuestion")?.focus();
     return;
   }
+  // #1077: samme sjekk som skjemaet gjør før oversettelsen, for lagringer som ikke kommer derfra.
+  const badMultiple = isFreetextOnly ? -1 : firstBadMultipleIndex(mcqQuestions);
+  if (badMultiple >= 0) {
+    const message = t("shell.save.mcqMultipleNeedsCorrect").replace("{n}", String(badMultiple + 1));
+    logBot(() => escapeHtml(message));
+    showToast(message, "error");
+    backToForm();
+    return;
+  }
 
   const slot = logProgress("shell.save.progress");
   slot.abortBtn.remove();
@@ -2304,7 +2356,11 @@ async function saveDraftBundleInBackground(options = {}) {
     if (afterSave) afterSave();
   } catch (err) {
     const errMsg = apiErrorText(err);
-    logResolveSlot(slot, () => `${escapeHtml(t("shell.save.errorPrefix"))}${escapeHtml(errMsg)}`, [
+    const issueLines = apiIssueLines(err);
+    const issuesHtml = issueLines.length
+      ? `<div class="save-error-issues">${issueLines.map((line) => escapeHtml(line)).join("<br>")}</div>`
+      : "";
+    logResolveSlot(slot, () => `${escapeHtml(t("shell.save.errorPrefix"))}${escapeHtml(errMsg)}${issuesHtml}`, [
       { labelKey: "shell.action.retry", action: () => saveDraftBundleInBackground(options) },
     ]);
   }
@@ -2701,17 +2757,20 @@ function enterPreviewEditMode({ force = false } = {}) {
         ${currentMcqQuestions.map((question, questionIndex) => {
           const questionLabel = escapeHtml(tf("shell.preview.questionNumber", { number: questionIndex + 1 }));
           const options = Array.isArray(question.options) ? question.options : [];
-          const selectedOptionIndex = Math.max(0, options.findIndex((option) => option === question.correctAnswer));
+          // #1077: «velg alle som stemmer» har flere riktige — avkrysning i stedet for ett valg.
+          const multiple = question.questionType === "multiple";
+          const correctPositions = new Set(multiple ? mcqCorrectPositions(question) : [Math.max(0, options.findIndex((option) => option === question.correctAnswer))]);
           const optionsHtml = options
             .map((option, optionIndex) => {
               const optionLetter = String.fromCharCode(65 + optionIndex);
               return `
                 <label class="preview-edit-mcq-option">
                   <input
-                    type="radio"
+                    type="${multiple ? "checkbox" : "radio"}"
                     name="previewEditCorrectAnswer${questionIndex}"
                     value="${optionIndex}"
-                    ${optionIndex === selectedOptionIndex ? "checked" : ""}
+                    data-preview-edit-correct
+                    ${correctPositions.has(optionIndex) ? "checked" : ""}
                     aria-label="${escapeHtml(`${questionLabel} ${correctAnswerLabel} ${optionLetter}`)}"
                   />
                   <input
@@ -2746,6 +2805,10 @@ function enterPreviewEditMode({ force = false } = {}) {
                 aria-label="${questionLabel}"
               >${escapeHtml(question.stem)}</textarea>
               <div class="preview-section-label">${optionsLabel}</div>
+              <label class="preview-edit-mcq-multiple">
+                <input type="checkbox" data-preview-edit-multiple="${questionIndex}" ${multiple ? "checked" : ""} />
+                ${escapeHtml(t("adminContent.dialog.mcq.multiple"))}
+              </label>
               <div class="preview-edit-mcq-options">
                 ${optionsHtml}
               </div>
@@ -2856,6 +2919,20 @@ function enterPreviewEditMode({ force = false } = {}) {
   previewContent.querySelector("#previewEditAddQuestion")?.addEventListener("click", () => {
     rebuildWithQuestions((list) => list.push({ stem: "", options: ["", "", "", ""], correctAnswer: "", rationale: "" }));
   });
+  // #1077: «Flere riktige svar» bytter valget av fasit mellom ett (radio) og flere (avkrysning) — på
+  // stedet, så det som er skrevet i spørsmålet står. Fra flere til ett beholdes det første avkryssede.
+  for (const toggle of previewContent.querySelectorAll("[data-preview-edit-multiple]")) {
+    toggle.addEventListener("change", () => {
+      const container = toggle.closest("[data-preview-edit-question]");
+      const inputs = Array.from(container?.querySelectorAll("[data-preview-edit-correct]") ?? []);
+      const firstChecked = inputs.find((input) => input.checked) ?? inputs[0];
+      for (const input of inputs) input.type = toggle.checked ? "checkbox" : "radio";
+      // Fra avkrysning til radio settes valget ETTER typebyttet: en avkrysset boks som blir radio, er
+      // en avkrysset radio, og den fjerner avkrysningen fra den forrige i gruppa. Satt underveis i
+      // løkka sto ingen avkrysset til slutt.
+      if (!toggle.checked && firstChecked) firstChecked.checked = true;
+    });
+  }
   for (const btn of previewContent.querySelectorAll("[data-remove-question]")) {
     btn.addEventListener("click", () => {
       const index = Number(btn.dataset.removeQuestion);
@@ -2937,6 +3014,13 @@ function enterPreviewEditMode({ force = false } = {}) {
     if (incomplete) {
       showToast(t("shell.directEdit.mcqIncomplete"), "error");
       previewContent.querySelector(`[data-preview-edit-question="${newMcqQuestions.indexOf(incomplete)}"] textarea`)?.focus();
+      return;
+    }
+    // #1077: før oversettelsen — ellers venter forfatteren på KI-en for et spørsmål tjeneren avviser.
+    const badMultiple = firstBadMultipleIndex(newMcqQuestions);
+    if (badMultiple >= 0) {
+      showToast(t("shell.save.mcqMultipleNeedsCorrect").replace("{n}", String(badMultiple + 1)), "error");
+      previewContent.querySelector(`input[name="previewEditCorrectAnswer${badMultiple}"]`)?.focus();
       return;
     }
 

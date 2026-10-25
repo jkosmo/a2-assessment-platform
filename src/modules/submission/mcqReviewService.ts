@@ -3,6 +3,7 @@ import type { SupportedLocale } from "../../i18n/locale.js";
 import { localizeContentArray, localizeContentText } from "../../i18n/content.js";
 import { mcqRepository } from "../assessment/mcqRepository.js";
 import { parseQuestionOrder, questionsForAttempt } from "../assessment/mcqDraw.js";
+import { parseAnswerKey, questionTypeOf, type McqQuestionType } from "../assessment/mcqQuestionTypes.js";
 import { submissionRepository } from "./submissionRepository.js";
 
 // #1061: gjennomgangen av flervalgsdelen — hvert spørsmål deltakeren fikk, med eget svar, riktig svar
@@ -12,10 +13,15 @@ import { submissionRepository } from "./submissionRepository.js";
 
 export type McqReviewQuestion = {
   id: string;
+  /** #1077: «single» eller «multiple». */
+  questionType: McqQuestionType;
   stem: string;
   options: string[];
   selectedAnswer: string | null;
   correctAnswer: string;
+  /** #1077, «multiple»: alternativene deltakeren valgte og de riktige, på leserens språk. */
+  selectedAnswers?: string[];
+  correctAnswers?: string[];
   isCorrect: boolean;
   rationale: string | null;
 };
@@ -51,10 +57,23 @@ export async function getOwnedMcqReview(
     questions: asked.map((question) => {
       const response = responseByQuestion.get(question.id) ?? null;
       const options = localizeContentArray(locale, JSON.parse(question.optionsJson) as unknown[]);
+      const questionType = questionTypeOf(question);
+      // #1077: for «multiple» er fasit og svar posisjoner i alternativene — vist som tekst på
+      // leserens språk, så gjennomgangen kan markere hvert alternativ (valgt / riktig).
+      const multiple = questionType === "multiple"
+        ? {
+            correctAnswers: parseAnswerKey(question.answerKeyJson, options.length).correct.map((i) => options[i]!),
+            selectedAnswers: ((response?.answerJson ? (JSON.parse(response.answerJson) as { selected?: number[] }).selected : []) ?? [])
+              .filter((i) => Number.isInteger(i) && i >= 0 && i < options.length)
+              .map((i) => options[i]!),
+          }
+        : {};
       return {
         id: question.id,
+        questionType,
         stem: localizeContentText(locale, question.stem) ?? question.stem,
         options,
+        ...multiple,
         // Svaret slik deltakeren ga det — på språket forsøket ble tatt på.
         selectedAnswer: response?.selectedAnswer ?? null,
         correctAnswer: localizeContentText(locale, question.correctAnswer) ?? question.correctAnswer,

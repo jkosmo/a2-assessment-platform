@@ -17,6 +17,7 @@ import {
 } from "/static/api-client.js";
 import { initConsentGuard } from "/static/consent-guard.js";
 import { setHidden } from "/static/dom-visibility.js";
+import { runWithWorkDialog } from "/static/work-dialog.js";
 import {
   resolveWorkspaceNavigationItems,
 } from "/static/participant-console-state.js";
@@ -563,6 +564,137 @@ function initCascadePublishDialog() {
 }
 
 // ---------------------------------------------------------------------------
+// 2.101.0: publiser alle nye versjoner i kurset
+// ---------------------------------------------------------------------------
+//
+// Produkteier, 2026-10-25: etter «Oppdater dette kurset» ligger hver ny versjon klar, og forfatteren
+// måtte inn i hver modul for å publisere den — og svare på «Er dette en revisjon?» hver gang. Her er
+// det ett spørsmål for alle, og ett revisjonssvar for alle modulene. Publiseringen er fortsatt en
+// bevisst handling (#1095): dialogen åpnes etter importen, men ingenting skjer uten et klikk.
+//
+// Serveren eier reglene (alt eller ingenting, bare egne elementer, svaret kreves når noen har
+// bestått, og den publiserer bare versjonene dialogen viste). Klienten viser dem.
+
+let pendingVersions = null; // siste svar fra /pending-versions for kurset som er åpent
+
+async function loadPendingVersions(courseId) {
+  try {
+    return await apiFetch(`/api/admin/content/courses/${encodeURIComponent(courseId)}/pending-versions`, getHeaders);
+  } catch {
+    // Knappen er en snarvei; uten svar vises den ikke, og hver modul kan publiseres for seg som før.
+    return null;
+  }
+}
+
+function pendingPublishButtons() {
+  return {
+    confirm: document.getElementById("pendingPublishConfirmBtn"),
+    keep: document.getElementById("pendingPublishKeepBtn"),
+    supersede: document.getElementById("pendingPublishSupersedeBtn"),
+    cancel: document.getElementById("pendingPublishCancelBtn"),
+  };
+}
+
+let pendingPublishTarget = null; // { courseId, versionIds }
+
+async function openPendingPublishDialog(courseId) {
+  const dialog = document.getElementById("pendingPublishDialog");
+  if (!dialog || typeof dialog.showModal !== "function") return;
+  // Alltid ferskt: det forfatteren svarer på, skal være det som står i kurset nå.
+  const pending = await loadPendingVersions(courseId);
+  if (!pending) return;
+  pendingVersions = pending;
+  const items = pending.items ?? [];
+  const notOwned = pending.notOwnedItems ?? [];
+  if (items.length === 0) return;
+
+  const blocked = !pending.publishable;
+  const asksRevision = !blocked && Number(pending.passedTotal) > 0;
+  pendingPublishTarget = { courseId, versionIds: items.map((item) => item.versionId) };
+
+  document.getElementById("pendingPublishTitle").textContent = blocked
+    ? t("adminContent.courses.pendingPublish.blockedTitle")
+    : t("adminContent.courses.pendingPublish.title");
+  document.getElementById("pendingPublishText").textContent = blocked
+    ? t("adminContent.courses.pendingPublish.blockedText")
+    : tf("adminContent.courses.pendingPublish.text", { count: items.length });
+  document.getElementById("pendingPublishList").innerHTML = renderCascadeItemList(
+    items.map((item) => ({
+      ...item,
+      // Et element som aldri er publisert, merkes «ny» — resten er en nyere versjon av noe levende.
+      title: item.isNew ? `${localizedText(item.title) || item.id} (${t("adminContent.courses.pendingPublish.newLabel")})` : item.title,
+    })),
+    { showBlockers: blocked },
+  );
+  const notOwnedEl = document.getElementById("pendingPublishNotOwned");
+  notOwnedEl.textContent = notOwned.length > 0 ? tf("adminContent.courses.pendingPublish.notOwned", { count: notOwned.length }) : "";
+  setHidden(notOwnedEl, notOwned.length === 0);
+
+  setHidden(document.getElementById("pendingPublishRevision"), !asksRevision);
+  if (asksRevision) {
+    document.getElementById("pendingPublishRevisionHeading").textContent = t("adminContent.courses.pendingPublish.revisionHeading");
+    document.getElementById("pendingPublishRevisionBody").textContent = tf("adminContent.courses.pendingPublish.revisionBody", {
+      people: pending.passedTotal,
+      modules: pending.modulesWithPasses,
+    });
+  }
+
+  const buttons = pendingPublishButtons();
+  buttons.confirm.textContent = t("adminContent.courses.pendingPublish.confirm");
+  buttons.keep.textContent = t("adminContent.courses.pendingPublish.keep");
+  buttons.supersede.textContent = tf("adminContent.courses.pendingPublish.supersede", { people: pending.passedTotal });
+  buttons.cancel.textContent = blocked ? t("adminContent.courses.pendingPublish.close") : t("adminContent.courses.pendingPublish.later");
+  // Har noen bestått, finnes det ingen nøytral «Publiser alle»: svaret er et valg, ikke en standard (#997).
+  setHidden(buttons.confirm, blocked || asksRevision);
+  setHidden(buttons.keep, !asksRevision);
+  setHidden(buttons.supersede, !asksRevision);
+  for (const button of [buttons.confirm, buttons.keep, buttons.supersede]) button.disabled = false;
+
+  if (!dialog.open) dialog.showModal();
+}
+
+async function commitPendingPublish(supersedesEarlierPasses) {
+  const target = pendingPublishTarget;
+  if (!target) return;
+  const dialog = document.getElementById("pendingPublishDialog");
+  const buttons = pendingPublishButtons();
+  for (const button of [buttons.confirm, buttons.keep, buttons.supersede]) button.disabled = true;
+  try {
+    const result = await runWithWorkDialog(t("adminContent.work.publishing"), () => apiFetch(`/api/admin/content/courses/${encodeURIComponent(target.courseId)}/publish-pending`, getHeaders, {
+      method: "POST",
+      body: JSON.stringify({
+        versionIds: target.versionIds,
+        ...(supersedesEarlierPasses === undefined ? {} : { supersedesEarlierPasses }),
+      }),
+    }));
+    pendingPublishTarget = null;
+    dialog?.close();
+    showToast(tf("adminContent.courses.pendingPublish.published", { count: result?.publishedItems?.length ?? 0 }), "success");
+    await refreshCourseView(target.courseId);
+  } catch (err) {
+    if (err?.status === 409 || err?.status === 422) {
+      // Noe er endret, eller noe stopper: vis lista slik den er nå, i stedet for en feil uten neste steg.
+      showToast(t("adminContent.courses.pendingPublish.changed"), "warning");
+      await openPendingPublishDialog(target.courseId);
+      return;
+    }
+    apiErrorToast(err);
+    for (const button of [buttons.confirm, buttons.keep, buttons.supersede]) button.disabled = false;
+  }
+}
+
+function initPendingPublishDialog() {
+  const buttons = pendingPublishButtons();
+  buttons.confirm?.addEventListener("click", () => commitPendingPublish(undefined));
+  buttons.keep?.addEventListener("click", () => commitPendingPublish(false));
+  buttons.supersede?.addEventListener("click", () => commitPendingPublish(true));
+  buttons.cancel?.addEventListener("click", () => {
+    pendingPublishTarget = null;
+    document.getElementById("pendingPublishDialog")?.close();
+  });
+}
+
+// ---------------------------------------------------------------------------
 // ── LIST VIEW ─────────────────────────────────────────────────────────────
 // ---------------------------------------------------------------------------
 
@@ -716,10 +848,11 @@ async function handleImportCoursePackageFile(event) {
     const choice = existing ? await askImportChoice(existing) : "createNew";
     if (choice === "cancel") return;
     if (choice === "updateExisting") {
-      const updated = await apiFetch("/api/admin/content/courses/import", getHeaders, {
+      // 2.101.2: en kursimport kan ta minutter — vis at det jobbes, og sperr siden imens.
+      const updated = await runWithWorkDialog(t("adminContent.work.importCourse"), () => apiFetch("/api/admin/content/courses/import", getHeaders, {
         method: "POST",
         body: JSON.stringify({ payload, mode: "updateExisting", targetId: originCourseId }),
-      });
+      }), { detail: t("adminContent.work.detail") });
       if (!updated?.courseId) throw new Error(t("courses.importNoId"));
       const s = updated.summary ?? {};
       // Oppsummeringen skal leses på kurssiden, ikke forsvinne med denne siden.
@@ -740,13 +873,14 @@ async function handleImportCoursePackageFile(event) {
         details.length > 0 ? "warning" : "success",
         details.join(" "),
       );
-      window.location.href = `/admin-content/courses/${encodeURIComponent(updated.courseId)}`;
+      // 2.101.0: kurssiden spør straks om de nye versjonene skal publiseres (samlet).
+      window.location.href = `/admin-content/courses/${encodeURIComponent(updated.courseId)}?publishPending=1`;
       return;
     }
-    const result = await apiFetch("/api/admin/content/courses/import", getHeaders, {
+    const result = await runWithWorkDialog(t("adminContent.work.importCourse"), () => apiFetch("/api/admin/content/courses/import", getHeaders, {
       method: "POST",
       body: JSON.stringify({ payload, mode: "createNew" }),
-    });
+    }), { detail: t("adminContent.work.detail") });
     if (!result?.courseId) throw new Error(t("courses.importNoId"));
     // ⚠️ #957/#996: responsen BÆRER forklaringen; her ble den kastet.
     //
@@ -827,6 +961,10 @@ function handleListTableClick(event, btn = event.target.closest("[data-action]")
   }
   if (btn.dataset.action === "export") {
     exportCoursePackage(btn.dataset.courseId, btn.dataset.courseTitle);
+    return;
+  }
+  if (btn.dataset.action === "publish-pending") {
+    openPendingPublishDialog(btn.dataset.courseId);
     return;
   }
   if (btn.dataset.action === "unpublish") {
@@ -1177,11 +1315,23 @@ async function renderDetailView(courseId) {
     moduleCount: courseModules.filter(it => it.type === "MODULE").length,
   });
 
+  pendingVersions = course ? await loadPendingVersions(courseId) : null;
+
   courseDetail = { courseId: courseId ?? null, course, localeValues, certLevel, enrollmentPolicy, discussionsEnabled, sortOrder };
   const page = getCourseFormPage();
   page.render();
   page.markClean();
   if (!courseId) document.getElementById("title-nb")?.focus();
+
+  // 2.101.0: kom forfatteren hit fra «Oppdater dette kurset», stilles spørsmålet med en gang. Flagget
+  // fjernes fra adressen, så en omlasting ikke spør på nytt.
+  const params = new URLSearchParams(window.location.search);
+  if (courseId && params.has("publishPending")) {
+    params.delete("publishPending");
+    const query = params.toString();
+    window.history.replaceState(null, "", `${window.location.pathname}${query ? `?${query}` : ""}`);
+    if ((pendingVersions?.items?.length ?? 0) > 0) await openPendingPublishDialog(courseId);
+  }
 }
 
 // Kroppen i skjemasida: kursdetaljer + innhold. Feltene beholder id-ene sine (title-nb, certLevel …).
@@ -1337,7 +1487,11 @@ function courseDetailActions() {
   const cid = escapeHtml(c.id);
   const ctitle = escapeHtml(localizedText(c.title) || c.id);
   const moduleCount = courseModules.filter(it => it.type === "MODULE").length;
+  const pendingCount = lifecycle === "archived" ? 0 : (pendingVersions?.items?.length ?? 0);
   return [
+    pendingCount > 0
+      ? `<button type="button" class="row-action-btn" data-action="publish-pending" data-course-id="${cid}">${escapeHtml(tf("adminContent.courses.pendingPublish.action", { count: pendingCount }))}</button>`
+      : "",
     `<button type="button" class="row-action-btn" data-action="export" data-course-id="${cid}" data-course-title="${ctitle}">${escapeHtml(t("ui.action.export"))}</button>`,
     lifecycle === "archived" ? ""
       : lifecycle === "published"
@@ -1929,6 +2083,7 @@ async function init() {
 
   initDeleteDialog();
   initCascadePublishDialog();
+  initPendingPublishDialog();
   initCascadeDeleteDialog();
 
   const route = detectRoute();

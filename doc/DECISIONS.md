@@ -473,6 +473,26 @@ delen av den gamle porten var reell beskyttelse, ikke vilkårlighet, og den beho
 
 **Sak:** #1001 · **Status:** avklart 2026-08-24
 
+### Nye versjoner fra en kursoppdatering publiseres samlet, med ett revisjonssvar
+
+Avgjørelsen fra 12.10 (#1095) står: importen publiserer ingenting, og det skal en bevisst handling
+til. Nytt er at handlingen er **én** for hele kurset, ikke én per modul, og at «Er dette en
+revisjon?» besvares **én gang for alle modulene**. Dialogen åpnes straks etter importen.
+
+**Hvorfor:** produkteier 2026-10-25: *«så må man manuelt inn i hver modul og publisere dette. Vi
+trenger et samlet spørsmål om å publisere alle, man må da også ta hensyn til spørsmålet om "Er dette
+en revisjon" der svar gis samlet for alle moduler i kurset.»*
+
+Valg tatt i gjennomføringen, som produkteier kan snu:
+
+- **Alt eller ingenting.** Mangler ett element et språk, publiseres ingenting — som når et kurs
+  publiseres (#734). Ellers kan en ny test stå bak den gamle seksjonen den prøver.
+- **Bare egne elementer.** Andres moduler og seksjoner i kurset (#903) publiseres av eieren; de nevnes
+  i dialogen og stopper ikke resten.
+
+**Hvor:** `publishCoursePendingVersions` i `coursePublishService.ts` · **Versjon:** 2.101.0 ·
+**Status:** avklart 2026-10-25
+
 ## Vurdering
 
 ### MCQ-beståttgrensen er 70 %, med mindre modulen sier noe annet
@@ -887,6 +907,93 @@ og et nettbrett før det regnes som endelig.
 **Håndheves:** `ASSET_NARROW_BELOW` i `public/api-client.js`. Sak #1079. Status: avklart, med måling
 på ekte enheter utestående.
 
+⚠️ **Erstattet 2026-10-22** (produkteier, «Ja»): grensa regnes nå **per figur**, med samme krav —
+det smale oppsettet tar over der det brede oppsettets 12 px etiketter ville blitt under 9 px, altså
+under 0,75 × figurens bredde. Åtte steg (848) bytter fortsatt ved 636 px; tre steg (328) først under
+246 px. Den faste grensa ga korte flyter på to linjer i «Smal»-visningen (549 px), der de hadde plass.
+Tjeneren sier bredden på det brede oppsettet (`X-Asset-Wide-Width`); 640 er bare gjetningen før
+første svar. **Håndheves:** `wantedAssetLayout` i `public/api-client.js`, `wideLayoutWidth` i
+`assetCommands.ts`. Status: avklart.
+
+### «Velg alle som stemmer»: alle alternativene kan være riktige (#1077, 2026-10-24)
+
+Et «velg alle» trenger minst ett riktig alternativ, men ikke noe galt. **Hvorfor:** produkteier —
+antallet riktige oppgis ikke, så «alle stemmer» er et svar deltakeren må tenke seg fram til; det er
+nettopp den vurderingen spørsmålstypen skal kreve. Kravet om minst ett galt var et designvalg uten
+avgjørelse bak, og ga en lagringsfeil på stage. **Håndheves:** `mcqQuestionSchema` i
+`adminContentSchemas.ts` (minst ett riktig), `firstBadMultipleIndex` i Rediger. Status: avklart.
+
+### KI og «velg alle som stemmer»: plattformen trekker en tilfeldig plan (#1077, 2026-10-24)
+
+**Erstatter generering i oppføringen under.** Ved generering (plattformens KI og skillet) er et
+tilfeldig antall spørsmål, mellom 10 % og 50 % av settet, på tilfeldige plasser, «velg alle», og hvert
+av dem har et tilfeldig antall riktige — fra ett til alle. Plattformen trekker planen, og modellen
+konstruerer de spørsmålene: den leter i kilden etter fakta som bærer akkurat det antallet. Følger svaret
+ikke planen, får modellen ett forsøk til med beskjed om hva som avvek; deretter en advarsel til
+forfatteren. **Hvorfor:** «kilden avgjør» ga null «velg alle» av tretti spørsmål på stage, også fra en
+kilde med tydelige lister. Produkteier snudde det: en andel skal ha formatet, og KI-en skal finne
+faktaene. Faste plasser (produkteiers neste innspill) gir færre nye forsøk enn at modellen teller selv;
+tilfeldig antall og antall riktige (det siste innspillet) hindrer et mønster deltakeren kan lære.
+Ett riktig er tatt med i spennet, ellers kan deltakeren regne med minst to. **Håndheves:**
+`planMultipleQuestions` og `multiplePlanProblems` i `llmContentGenerationService.ts`; i skillet
+`scripts/mcq-plan.mjs` (samme trekning, låst av en test). Revisjon er uendret (under). Status: avklart.
+
+### KI og «velg alle som stemmer»: kilden avgjør, høyst 50 % ved revisjon (#1077, 2026-10-24)
+
+⚠️ **Generering erstattet samme dag** (over). Revisjonsregelen gjelder.
+
+Generering: ett riktig svar er standard; KI lager «velg alle» bare der kilden lister flere ting som alle
+stemmer, høyst omtrent hvert tredje spørsmål. Revisjon: typen beholdes, men ber forfatteren om det
+generelt, vurderer KI selv hvor mange ut fra vanskelighetsgrad — høyst 50 % av settet, uten at det må
+bes om per spørsmål. Skillet følger samme regel. **Hvorfor:** produkteier valgte at kilden avgjør
+(framfor at forfatteren velger andel på forhånd eller bare på forespørsel), og at en generell
+forespørsel holder. Prod venter til dette og skillet er klart. **Håndheves (2.100.0):**
+`maxMultipleForGeneration` (advarsel over hvert tredje) og `revisionMultipleCap` (avslag over
+halvparten, etter ett nytt forsøk) i `llmContentGenerationService.ts`; i skillet `multiple_share` i
+`mcq-cue-check.mjs` (over halvparten). «Gjør testen vanskeligere» regnes som en generell
+forespørsel (DESIGN_1077). Status: avklart.
+
+### Nye spørsmålstyper: rett eller galt, ingen antall, enkel normalisering (#1077, 2026-10-24)
+
+Produkteier valgte anbefalingen på alle fire spørsmål i `doc/DESIGN_1077.md`:
+- **Rett eller galt per spørsmål**, ikke delpoeng. Poengsum, `mcqMinPercent`, rapporter og
+  gjennomgang regner som i dag; `isCorrect` forblir boolsk.
+- **«Velg alle som stemmer» oppgir ikke antallet riktige** — antallet ville vært et hint.
+- **«Fyll inn» sammenligner med forfatterens liste over godkjente svar per språk**, med store/små
+  bokstaver og mellomrom likt, ellers eksakt. Ingen KI, ingen toleranse for skrivefeil.
+- **Rekkefølge:** velg alle som stemmer → sett i rekkefølge → fyll inn, én leveranse om gangen.
+Status: avklart.
+
+### Plattformen stopper figurer som går i løkke (#1073, 2026-10-23)
+
+En animert figur tas bare imot i flytmalens form: én gang, ferdig innen fem sekunder. Alt annet som
+beveger seg, avvises ved lagring (`asset_svg_motion_not_allowed`); stillestående figurer tas alltid imot.
+**Hvorfor:** produkteier, 2026-10-23: «animasjon er greit, men blir distraksjon hvis den går i løkke,
+så hard stopp» — vei B i #1073 (plattformen håndhever) framfor A (skillet er bare en hjelp). Kontrollen
+er skillets egen (`#figure-motion`), kjørt på den rensede figuren, så den ser det plattformen lagrer.
+**Håndheves:** `svgMotionProblems` i `svgSanitizer.ts`, kalt fra `storedSvg` i `assetCommands.ts`
+(begge lagringsveiene) og fra `agentAuthoringValidationService.ts`. Status: avklart.
+
+### Ikon i flytfigurens sirkel, nummeret foran teksten (2026-10-22)
+
+Et steg i en flytfigur kan ha et ikon fra plattformens bibliotek; da står ikonet i sirkelen og
+nummeret foran stegets navn («1. Samle data»). Alle steg eller ingen. **Hvorfor:** produkteier
+valgte variant B av tre (A: nummer i et lite merke på sirkelen, C: bare ikon) etter å ha sett dem
+side om side. B holder rekkefølgen lesbar når flyten brytes over rader på telefon, uten et lite
+merke som må leses. **Håndheves:** `draw-flow-figure.mjs` (tegner), `figure-motion-check.mjs`
+(ikonet er en fast del av malen, sammenlignet tegn for tegn med biblioteket). Status: avklart.
+
+### En figur vises på det meste 1,25 ganger tegnet størrelse (2026-10-22)
+
+En tegning som oppgir egen bredde, vises i den; en som bare oppgir viewBox, vises i 1,25 × viewBox.
+Spalten krymper den fortsatt. Før fylte en tegning uten bredde hele spalten: en flyt med tre steg ble
+1000 px bred, med etiketter på 37 px mot brødtekstens 16. 1,25 gjør 12 px etiketter til 15 px.
+**Hvorfor:** produkteier, 2026-10-22 («figurene ser overdimensjonerte ut», godkjent forslag).
+Gjelder også figurer som alt ligger i kurs — plattformen setter størrelsen, ingen ny import trengs.
+Skillet tegner det brede oppsettet med samme størrelse fra 2.98.2. **Håndheves:** `sizeSvgFigure`
+og `ASSET_SHOWN_AT` i `public/api-client.js`; `LAYOUTS.wide.shownAt` i `draw-flow-figure.mjs`.
+Status: avklart.
+
 ### Et oppsett har de samme etikettene som den brede figuren
 
 Plattformen avviser et smalt oppsett som har en etikett den brede figuren ikke har, eller mangler en
@@ -1019,6 +1126,8 @@ Spurt samlet morgenen etter at 2.85.0 gikk til prod og 2.85.1 til stage. Svarene
 
 - **«Smal» spalte på PC gir det smale figuroppsettet** (to steg per rad), fordi spalten blir under
   640 px. Konsekvent med at «Smal» er smal, og «Bred» er ett klikk unna. Ingen særregel for PC.
+  ⚠️ Endret 2026-10-22: bare når figuren trenger det — grensa regnes per figur (se «Grensa for smalt
+  oppsett»). En kort flyt står på én linje også i «Smal».
 - **2.85.1 venter på neste samling.** Prod står på 2.85.0; vi samler mer på stage før neste prod-slipp
   (samme takt som før). Ingen kurs i prod har stegtabeller med ikoner ennå.
 - **Ikonbibliotek: Lucide, som standard for alle kurs** (ISC-lisens, rundt 1500 ikoner), servert av
@@ -1166,6 +1275,16 @@ fint ut»). Sakens punkt 3 (forfatter-HTML skal ikke kunne lage interaktive elem
 ikke fulgt: rensingen beholder data-attributter, så en forfatter kan lage en lignende knapp. Det er
 godtatt fordi det er ufarlig — skript og hendelsesattributter fjernes, og klikket endrer bare
 utseende og tekst.
+
+## Justering av et kurs stopper to ganger (2.98.1, 2026-10-21)
+
+Produkteier godkjente forslaget etter å ha justert Repetisjon Modul 3 med Claude og ChatGPT
+(2026-10-21). Når skillet justerer et kurs fra eksporten, stopper det ved endringslista og ved én
+samlet gjennomgang av endringene — ikke per element, som før. Per element ga en langsom dialog
+(Claude); ingen stopp ga endringer forfatteren ikke hadde bedt om (ChatGPT). Endringslista er
+stoppet som aldri hoppes over. Å lage et nytt kurs har fortsatt godkjenning per element (port 4).
+Håndheves i `workflows/adjust-course.md`; `produce-course.mjs --changes` fanger det som er endret
+uten å stå i lista. Status: avklart.
 
 ## Skillet velger øvelse etter kilden, uten mekanisk telling (#1108, 2026-10-20)
 

@@ -14,8 +14,10 @@ import {
   normalizeEnvelopeDates,
   validateExportEnvelopeStructure,
   isStrictDatetime,
+  MCQ_QUESTION_TYPES as SKILL_MCQ_QUESTION_TYPES,
   // @ts-expect-error — .mjs skill script consumed as a library
 } from "../../skills/a2-authoring-api/scripts/export-validate.mjs";
+import { MCQ_QUESTION_TYPES } from "../../src/modules/assessment/mcqQuestionTypes.js";
 
 // A complete authoring package covering all three assessment modes + mixed course order.
 const pkg = {
@@ -251,5 +253,56 @@ describe("#762 fallback export vs the REAL src schema", () => {
     const r = bothAgree(sectionEnvelope({ title: { nb: "Tittel", sv: "Titel" }, bodyMarkdown: { nb: "T" } }));
     expect(r.real).toBe(true);
     expect(r.bundled).toBe(true);
+  });
+});
+
+// #1077: «velg alle som stemmer» i en importfil. Skillets validator og importens skjema må gi samme
+// svar — ellers melder skillet en fil gyldig som importen avviser, eller omvendt.
+describe("#1077 — flere riktige svar: skillets validator og det ekte skjemaet er enige", () => {
+  const L = (en: string, nb: string) => ({ "en-GB": en, nb, nn: nb });
+  const A = L("Purpose", "Formål");
+  const B = L("Colour", "Farge");
+  const C = L("Legal basis", "Behandlingsgrunnlag");
+  const moduleEnvelope = (question: Record<string, unknown>) => ({
+    exportFormat: "a2-content-export/v1",
+    exportedAt: "2026-10-24T10:00:00.000Z",
+    scope: "module",
+    module: {
+      module: { title: L("Records", "Protokoll"), certificationLevel: "basic" },
+      activeVersion: {
+        audit: {},
+        assessmentMode: "MCQ_ONLY",
+        mcqSet: { title: L("Set", "Sett"), questions: [{ stem: L("Which?", "Hvilke?"), options: [A, B, C], rationale: L("Art. 30", "Art. 30"), ...question }] },
+      },
+    },
+  });
+  const bothAgree = (question: Record<string, unknown>) => {
+    const envelope = moduleEnvelope(question);
+    return { real: exportEnvelopeSchema.safeParse(envelope).success, bundled: validateExportEnvelopeStructure(envelope).valid };
+  };
+
+  it.each<[string, Record<string, unknown>, boolean]>([
+    ["to av tre riktige", { questionType: "multiple", correctAnswers: [A, C] }, true],
+    ["alle riktige (produkteier 2026-10-24)", { questionType: "multiple", correctAnswers: [A, B, C] }, true],
+    ["med correctAnswer i tillegg, slik eksporten skriver det", { questionType: "multiple", correctAnswers: [A, C], correctAnswer: A }, true],
+    ["ingen riktige", { questionType: "multiple", correctAnswers: [] }, false],
+    ["et riktig som ikke er et alternativ", { questionType: "multiple", correctAnswers: [A, L("Other", "Annet")] }, false],
+    ["et riktig som bare stemmer på ett språk", { questionType: "multiple", correctAnswers: [A, { ...C, nn: "Noko anna" }] }, false],
+    ["samme alternativ to ganger", { questionType: "multiple", correctAnswers: [A, A] }, false],
+    ["ukjent type", { questionType: "order", correctAnswer: A }, false],
+    // QA 2.100.0: bare en FRAVÆRENDE type er «single»; importen avviser null.
+    ["type null", { questionType: null, correctAnswer: A }, false],
+    ["correctAnswers på et vanlig spørsmål", { correctAnswer: A, correctAnswers: [A] }, false],
+    ["kontroll: vanlig spørsmål", { correctAnswer: A }, true],
+  ])("%s", (_navn, question, expected) => {
+    const r = bothAgree(question);
+    expect(r.real).toBe(expected);
+    expect(r.bundled).toBe(expected);
+  });
+});
+
+describe("#1077 — skillets liste over spørsmålstyper er plattformens", () => {
+  it("MCQ_QUESTION_TYPES er den samme", () => {
+    expect([...SKILL_MCQ_QUESTION_TYPES]).toEqual([...MCQ_QUESTION_TYPES]);
   });
 });

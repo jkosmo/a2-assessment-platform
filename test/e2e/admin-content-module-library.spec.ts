@@ -102,6 +102,49 @@ test.describe("admin content module library", () => {
     await expect(page.locator(".list-table")).not.toContainText("Trade unions");
   });
 
+  // 2.101.0 (produkteier 25.10): «hvis man går tilbake så bør systemet huske hvilken state oversikten
+  // var i.» Lasta på nytt med `goto`, ikke `goBack`: nettleserens bakover-hurtiglager kan vise den
+  // gamle sida urørt, og da ville testen bestått uten at noe ble husket. «Tilbake»-lenka i en modul er
+  // også en ny lasting.
+  test("the overview remembers filter and search when you come back to it", async ({ page }) => {
+    await mockCommonApis(page, {
+      libraryModules: [
+        { id: "module-1", title: "Trade unions", status: "published" },
+        { id: "module-2", title: "Old retired module", status: "archived" },
+        { id: "module-3", title: "Old but active", status: "published" },
+      ],
+    });
+
+    await page.goto(LIBRARY_PATH);
+    await page.locator('.list-filter-btn[data-filter="all"]').click();
+    await page.locator("#librarySearch").fill("old");
+    await expect(page.locator(".list-table tbody tr")).toHaveCount(2);
+
+    await page.goto("/admin-content/courses");
+    await page.goto(LIBRARY_PATH);
+
+    await expect(page.locator('.list-filter-btn[data-filter="all"]')).toHaveClass(/active/);
+    await expect(page.locator("#librarySearch")).toHaveValue("old");
+    await expect(page.locator(".list-table tbody tr")).toHaveCount(2);
+    await expect(page.locator(".list-table")).toContainText("Old retired module");
+    await expect(page.locator(".list-table")).not.toContainText("Trade unions");
+  });
+
+  test("a remembered filter that no longer exists falls back to the default", async ({ page }) => {
+    await mockCommonApis(page, {
+      libraryModules: [{ id: "module-1", title: "Trade unions", status: "published" }],
+    });
+    await page.addInitScript(() => {
+      try {
+        window.sessionStorage.setItem("a2.viewState.list.libraryTableBody", JSON.stringify({ filter: "removed-filter", sortKey: "no-such-column", search: 42 }));
+      } catch { /* blokkert lagring: testen faller på standardfilteret */ }
+    });
+    await page.goto(LIBRARY_PATH);
+    await expect(page.locator('.list-filter-btn[data-filter="active"]')).toHaveClass(/active/);
+    await expect(page.locator("#librarySearch")).toHaveValue("");
+    await expect(page.locator(".list-table")).toContainText("Trade unions");
+  });
+
   // #1046 A1 (produkteier 12.09, avgjørelse 1b): «Ny modul» åpner et tomt element — ingen dialog.
   // Modulen lages på tjeneren ved første Lagre, og adressen byttes til den ekte.
   test("Ny modul opens an empty element; the first Lagre creates the module", async ({ page }) => {

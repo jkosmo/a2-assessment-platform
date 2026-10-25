@@ -93,6 +93,10 @@ describe("#1079 — en figur i bredt og smalt oppsett", () => {
     expect(bredde(smal)).toBe("480");
     expect(smal.headers["x-asset-layout"]).toBe("narrow");
     expect(smal.headers["x-asset-layouts"]).toBe("wide,narrow");
+    // 2026-10-22: begge svarene sier hvor bred den BREDE tegningen er, så klienten kan regne ut
+    // grensen for akkurat denne figuren — også når den har fått den smale.
+    expect(vanlig.headers["x-asset-wide-width"]).toBe("848");
+    expect(smal.headers["x-asset-wide-width"]).toBe("848");
     // Samme herding som for den brede: det er en SVG som kan åpnes direkte.
     expect(smal.headers["content-security-policy"]).toContain("sandbox");
     expect(smal.headers["x-content-type-options"]).toBe("nosniff");
@@ -103,6 +107,17 @@ describe("#1079 — en figur i bredt og smalt oppsett", () => {
     expect(bredde(ukjent)).toBe("848");
     expect(ukjent.headers["x-asset-layout"]).toBe("wide");
 
+    await slett(sectionId);
+  });
+
+  // Bredden huskes per fil. Hentes det smale oppsettet FØRST (en telefon), er det den brede fila som
+  // må leses — ikke den smale som nettopp ble sendt (mutasjon 2026-10-22: testen over så det ikke,
+  // fordi den hentet det brede først).
+  it("det smale oppsettet hentet først: svaret sier fortsatt bredden på det brede", async () => {
+    const { sectionId, assetId } = await importerMedSmalt();
+    const smal = await hent(assetId, "?layout=narrow");
+    expect(bredde(smal)).toBe("480");
+    expect(smal.headers["x-asset-wide-width"]).toBe("848");
     await slett(sectionId);
   });
 
@@ -130,6 +145,8 @@ describe("#1079 — en figur i bredt og smalt oppsett", () => {
     expect(bredde(smal)).toBe("848");
     expect(smal.headers["x-asset-layout"]).toBe("wide");
     expect(smal.headers["x-asset-layouts"]).toBe("wide");
+    // Uten noe å bytte til er bredden ingen opplysning klienten trenger.
+    expect(smal.headers["x-asset-wide-width"]).toBeUndefined();
     await slett(sectionId);
   });
 
@@ -379,6 +396,8 @@ describe("#1079 — en figur i bredt og smalt oppsett", () => {
       it.each<[string, Record<string, unknown>, string]>([
         ["et smalt oppsett med andre etiketter", { layoutVariants: [{ layout: "narrow", contentBase64: b64(figur(480, ["Motta", "Vurder", "Arkiver"])) }] }, "asset_layout_text_mismatch"],
         ["en figur som ikke er en SVG", { contentBase64: b64("<p>ikke en figur</p>") }, "asset_svg_invalid"],
+        // #1073: en figur som går i løkke, avvises også her — forfatter-API-et er en egen vei inn.
+        ["en figur som går i løkke (#1073)", { contentBase64: b64('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 848 100"><style>.a { animation: x 1s infinite; } @keyframes x { to { opacity: 0.4; } }</style><text class="a" x="10" y="20">Motta</text></svg>') }, "asset_svg_motion_not_allowed"],
         ["en ukjent bildetype", { mimeType: "image/tiff", filename: "flyt.tiff" }, "asset_unsupported_type"],
       ])("%s: 400, og ingen seksjon, ingen versjon og ingen figur er laget", async (_navn, ekstra, kode) => {
         const før = await tell();

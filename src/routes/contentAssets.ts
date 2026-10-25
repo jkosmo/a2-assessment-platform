@@ -22,7 +22,7 @@ contentAssetsRouter.get("/:assetId", async (request, response, next) => {
     // the wide layout, and the two headers say what was served and what the figure has — so the
     // client can tell, from one request, whether asking again at another width is any use.
     const layoutParam = typeof request.query.layout === "string" ? request.query.layout : undefined;
-    const { mimeType, buffer, layout, layouts } = await getSectionAssetContent(request.params.assetId, localeParam, {
+    const { mimeType, buffer, layout, layouts, wideWidth } = await getSectionAssetContent(request.params.assetId, localeParam, {
       userId,
       roles: request.context?.roles ?? [],
       groupIds: request.context?.principal?.groupIds,
@@ -30,6 +30,7 @@ contentAssetsRouter.get("/:assetId", async (request, response, next) => {
     response.setHeader("Content-Type", mimeType);
     response.setHeader("X-Asset-Layout", layout);
     response.setHeader("X-Asset-Layouts", layouts.join(","));
+    if (wideWidth !== undefined) response.setHeader("X-Asset-Wide-Width", String(wideWidth));
     response.setHeader("Cache-Control", "private, max-age=3600");
     // #657: defence-in-depth for SVG. The stored bytes are already sanitised, but if a victim
     // navigates DIRECTLY to this URL the browser would render the SVG as a same-origin document.

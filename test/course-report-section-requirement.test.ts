@@ -81,7 +81,7 @@ describe("Kursrapporten krever leste seksjoner (#966)", () => {
       },
       select: { id: true },
     });
-    await prisma.assessmentDecision.create({
+    const decision = await prisma.assessmentDecision.create({
       data: {
         submissionId: submission.id,
         moduleVersionId: moduleVersion.id,
@@ -93,6 +93,12 @@ describe("Kursrapporten krever leste seksjoner (#966)", () => {
         decisionType: "AUTOMATIC",
         decisionReason: "Fikstur for #966.",
       },
+      select: { id: true },
+    });
+    // #1116: et bestått vedtak skriver alltid sertifiseringsstatusen (upsertCertificationStatusFromDecision),
+    // og det er den rapporten leser. Fiksturen hoppet over det steget.
+    await prisma.certificationStatus.create({
+      data: { userId: participant!.id, moduleId: module.id, latestDecisionId: decision.id, status: "ACTIVE", passedAt: new Date() },
     });
 
     const section = await prisma.courseSection.create({
@@ -172,6 +178,7 @@ describe("Kursrapporten krever leste seksjoner (#966)", () => {
     await prisma.courseSection.update({ where: { id: section.id }, data: { activeVersionId: null } });
     await prisma.courseSectionVersion.deleteMany({ where: { sectionId: section.id } });
     await prisma.courseSection.delete({ where: { id: section.id } });
+    await prisma.certificationStatus.deleteMany({ where: { moduleId: module.id } });
     await prisma.assessmentDecision.deleteMany({ where: { submissionId: submission.id } });
     await prisma.submission.delete({ where: { id: submission.id } });
     await prisma.module.update({ where: { id: module.id }, data: { activeVersionId: null } });

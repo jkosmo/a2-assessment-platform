@@ -1,4 +1,5 @@
 // Module + course import from a2-content-export/v1 envelopes (#433 phase 3).
+import { mcqQuestionTypeFields } from "./adminContentSchemas.js";
 //
 // Design notes:
 // - Source-environment audit attributes (publishedBy/publishedAt/versionNo) are
@@ -263,7 +264,7 @@ function moduleImportGate(payload: ModuleExportPayload) {
     mcqQuestions: (payload.activeVersion.mcqSet?.questions ?? []).map((question) => ({
       stem: serializeRequired(question.stem),
       optionsJson: JSON.stringify(question.options.map((option) => serializeRequired(option))),
-      correctAnswer: serializeRequired(question.correctAnswer),
+      correctAnswer: serializeRequired(mcqQuestionTypeFields(question).correctAnswer),
       rationale: question.rationale ? serializeRequired(question.rationale) : null,
     })),
   });
@@ -341,12 +342,17 @@ async function importModulePayload(
           moduleId,
           title: serializeRequired(payload.activeVersion.mcqSet.title),
           active: true,
-          questions: payload.activeVersion.mcqSet.questions.map((question) => ({
-            stem: serializeRequired(question.stem),
-            options: question.options.map((option) => serializeRequired(option)),
-            correctAnswer: serializeRequired(question.correctAnswer),
-            rationale: question.rationale ? serializeRequired(question.rationale) : undefined,
-          })),
+          questions: payload.activeVersion.mcqSet.questions.map((question) => {
+            const typed = mcqQuestionTypeFields(question);
+            return {
+              stem: serializeRequired(question.stem),
+              options: question.options.map((option) => serializeRequired(option)),
+              correctAnswer: serializeRequired(typed.correctAnswer),
+              rationale: question.rationale ? serializeRequired(question.rationale) : undefined,
+              questionType: typed.questionType,
+              answerKeyJson: typed.answerKeyJson,
+            };
+          }),
         }, tx);
 
   const moduleVersion = await createModuleVersion({

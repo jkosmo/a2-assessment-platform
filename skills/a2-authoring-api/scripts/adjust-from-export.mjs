@@ -278,8 +278,9 @@ export function formatConversion(result, outDir) {
   lines.push(`     course  ${result.courseRef}`);
   lines.push(`OK   ${result.files.length} file(s) under ${outDir}: package.json, course-state.json, changes.json, ${result.changes.baseline}, sections/, assets/`);
   lines.push("");
-  lines.push("NEXT agree the change list with the author (workflows/adjust-course.md, gate 2), write each change into");
-  lines.push(`     ${outDir}/changes.json, and produce with:`);
+  lines.push("NEXT gate 2: show the author the change list and wait for a yes (workflows/adjust-course.md); write it into");
+  lines.push(`     ${outDir}/changes.json. Gate 3: write the changes and show them all in one review, and wait for a yes.`);
+  lines.push("     Then produce with:");
   lines.push(`     node scripts/produce-course.mjs ${outDir}/package.json --out ${outDir}/kurs-oppdatert.json --state ${outDir}/course-state.json --changes ${outDir}/changes.json`);
   return lines.join("\n");
 }

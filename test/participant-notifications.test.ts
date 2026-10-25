@@ -162,6 +162,7 @@ describe("notifyAssessmentResult", () => {
         passFailTotal: true,
         locale: "en-GB",
       }),
-    ).resolves.toBeUndefined();
+      // #1115: «ingenting å sende» er null — utboksen merker det levert, ikke feilet.
+    ).resolves.toBeNull();
   });
 });

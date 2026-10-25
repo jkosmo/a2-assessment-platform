@@ -90,6 +90,28 @@ an answer that the LLM assesses against the rubric, and that's it.
 - On submit, the result is shown **immediately** (deterministic scoring, no waiting for LLM):
   *Automatic pass* if the MCQ score ≥ threshold, otherwise *Automatic fail*.
 
+## Question types (#1077)
+
+A multiple-choice question is one of two types:
+
+- **One correct answer** (default) — the participant picks one option (a radio button).
+- **Select all that apply** («Velg alle som stemmer») — the participant ticks every option they think
+  is right (checkboxes). The question is answered correctly only when the ticked options are
+  **exactly** the correct ones: none missing, none extra. There is no partial credit, so the score,
+  the pass threshold and the reports work as before (product owner, 2026-10-24). The participant is
+  not told how many options are correct.
+
+**In the editor (Rediger):** tick **«Flere riktige svar»** on a question. The correct-answer radios
+become checkboxes; tick every correct option. A «select all» question needs at least one correct
+option; every option may be correct. Unticking it again keeps the first ticked option as the one answer.
+
+The type survives translation, adding questions to the bank, and export → import. The answer review
+after submission (#1061) shows every option the participant ticked and every correct one.
+
+Not yet: AI generation and revision create one-correct-answer questions only — revising a «select
+all» question with AI is refused with a message, so it is never silently turned into a one-answer
+question. «Put in order» and «fill in the blank» come in later deliveries.
+
 ## Certification
 
 Course completion and certificates require the participant to **pass all modules** in the course

@@ -31,10 +31,15 @@ const mcqStartQuerySchema = z.object({
 const mcqSubmitBodySchema = z.object({
   submissionId: z.string().min(1),
   attemptId: z.string().min(1),
+  // #1077: ett valg (`selectedAnswer`) eller flere («velg alle som stemmer», `selectedAnswers`). Hvilket
+  // spørsmålet skal ha, avgjøres av typen ved rettingen; her bare at svaret har én av formene.
   responses: z.array(
     z.object({
       questionId: z.string().min(1),
-      selectedAnswer: z.string().min(1),
+      selectedAnswer: z.string().min(1).optional(),
+      selectedAnswers: z.array(z.string().min(1)).max(20).optional(),
+    }).refine((item) => (item.selectedAnswer !== undefined) !== (item.selectedAnswers !== undefined), {
+      message: "Each response has either selectedAnswer or selectedAnswers.",
     }),
   ).refine((items) => {
     const ids = items.map(i => i.questionId);

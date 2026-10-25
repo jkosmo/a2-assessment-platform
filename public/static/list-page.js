@@ -17,6 +17,9 @@
 // - Tabellen i det hvite kortet med felles overskrifter (`.list-table`, C1/C2).
 // - Radhandlinger gjennom rowActionsHtml: maks fire i raden, resten under «Mer» (D5).
 // - Søk og filtre tegner bare tabellen på nytt, så søkefeltet beholder fokus.
+// - Sida husker søk, filtre, sortering og rulleposisjon når man går tilbake til den (2.101.0,
+//   view-state.js). Det som er lagret, men ikke lenger finnes (et filtervalg, en kolonne), faller
+//   tilbake til standard.
 //
 // Det som er sidens eget — dialoger, popovere, hva en handling gjør — blir værende på sida og
 // nås gjennom `onAction`, `onClick` og `afterRender`.
@@ -24,6 +27,7 @@
 import { escapeHtml } from "./html-escape.js";
 import { rowActionsHtml, installRowMoreMenus } from "./row-actions.js";
 import { matchesLifecycleFilter } from "./content-status-badge.js";
+import { readViewState, writeViewState } from "./view-state.js";
 
 /**
  * @typedef {object} ListPageColumn
@@ -89,6 +93,35 @@ export function createListPage(config) {
   };
   const listBodyId = ids.listBody ?? `${ids.tbody}Host`;
   const locale = () => config.sort?.locale?.() ?? undefined;
+
+  // 2.101.0: det sida sto i sist, i denne fanen. Typen sjekkes her; om verdien fortsatt finnes
+  // (filtervalg, sorterbar kolonne, kurs), sjekkes når sida tegnes — da er valgene kjent.
+  const viewStateKey = `list.${ids.tbody}`;
+  const saved = readViewState(viewStateKey);
+  if (saved) {
+    if (typeof saved.filter === "string") state.filter = saved.filter;
+    if (typeof saved.search === "string") state.search = saved.search;
+    if (typeof saved.course === "string") state.course = saved.course;
+    if (config.toggle && typeof saved.toggle === "boolean") state.toggle = saved.toggle;
+    if (typeof saved.sortKey === "string") state.sortKey = saved.sortKey;
+    if (saved.sortDir === "asc" || saved.sortDir === "desc") state.sortDir = saved.sortDir;
+  }
+  let pendingScrollY = saved && Number.isFinite(saved.scrollY) ? saved.scrollY : null;
+  const rememberView = () => writeViewState(viewStateKey, {
+    filter: state.filter, search: state.search, course: state.course, toggle: state.toggle,
+    sortKey: state.sortKey, sortDir: state.sortDir, scrollY: window.scrollY,
+  });
+  // Rulleposisjonen lagres når sida forlates, ikke ved hver rulling.
+  window.addEventListener("pagehide", rememberView);
+
+  function dropStaleViewState() {
+    const filterKeys = resolve(config.filters.options).map(([key]) => key);
+    if (!filterKeys.includes(state.filter)) state.filter = config.filters.initial;
+    if (state.sortKey && !columns.some((c) => c.key === state.sortKey && c.sortValue)) {
+      state.sortKey = config.sort?.key ?? null;
+      state.sortDir = config.sort?.dir ?? "asc";
+    }
+  }
 
   installRowMoreMenus();
 
@@ -210,11 +243,13 @@ export function createListPage(config) {
     const body = document.getElementById(listBodyId);
     if (body) body.innerHTML = tableHtml(visibleItems());
     config.afterTableRender?.(visibleItems());
+    rememberView();
   }
 
   function renderAll() {
     texts = resolve(config.texts);
     columns = resolve(config.columns);
+    dropStaleViewState();
     if (state.items.length === 0 && config.emptyHtml) {
       host.innerHTML = headerHtml() + config.emptyHtml(state.items);
       config.afterRender?.(state.items);
@@ -224,6 +259,14 @@ export function createListPage(config) {
     host.innerHTML = `${headerHtml()}${toolbarHtml()}<div id="${escapeHtml(listBodyId)}">${tableHtml(visibleItems())}</div>`;
     config.afterRender?.(state.items);
     config.afterTableRender?.(visibleItems());
+    rememberView();
+    // Første gang lista er tegnet med innhold: tilbake dit man var. Nettleseren klarer det ikke selv,
+    // for lista hentes etter at sida er lastet.
+    if (pendingScrollY !== null) {
+      const y = pendingScrollY;
+      pendingScrollY = null;
+      window.scrollTo(0, y);
+    }
   }
 
   // Én lytter på verten. Den overlever at tabellen (og hele sida) tegnes på nytt.

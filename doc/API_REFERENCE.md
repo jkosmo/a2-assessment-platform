@@ -288,6 +288,26 @@ source language and **discard the translation that succeeded** — which is what
 about, and what #913 finished by extending the same contract to MCQ content (`mcqSet.title`,
 `questions[].stem`, `questions[].options[]`, `questions[].correctAnswer`, `questions[].rationale`).
 
+**Question types (#1077).** A question in an `mcqSet` (create, import, append, agent package) has an
+optional `questionType`: `"single"` (default) with `correctAnswer`, or `"multiple"` («select all that
+apply») with `correctAnswers` — one or more of `options`, distinct, and not all of them. Exports
+write `questionType` and `correctAnswers` for `"multiple"` only; a `"single"` question is exported as
+before. Participant endpoints:
+
+- `GET /api/modules/:moduleId/mcq/start` returns `questionType` per question (never the answer key).
+- `POST /api/modules/:moduleId/mcq/submit`: each response has `selectedAnswer` (one string) **or**
+  `selectedAnswers` (array, for `"multiple"`). A `"multiple"` answer is correct only when the chosen
+  options equal the correct ones; a choice that is not an option makes it wrong.
+- `GET /api/submissions/:id/mcq-review` adds `questionType`, and for `"multiple"` `selectedAnswers`
+  and `correctAnswers` (as option text in the reader's locale).
+- `POST /api/admin/content/generate/mcq` and `.../generate/mcq/revise` (#1077 delivery 1b): a
+  question in the response may carry `"questionType": "multiple"` and `correctAnswers` (option text,
+  in option order); `correctAnswer` is then the first of them. Generation follows a plan the server
+  draws per call — a random 10–50 % of the questions, in random positions, each with a random number
+  of correct options from one to all; a response that does not follow it after one retry gets a
+  warning in `validation.issues`. Revision keeps each question's type unless the instruction asks otherwise, and
+  never returns more than half the set as `"multiple"` (or as many as the input already had).
+
 Two rules for clients:
 
 - **Never write a source-language copy into a locale whose translation failed.** A copy is
@@ -557,6 +577,8 @@ have nothing to do with, not about partitioning content inside a course you asse
 | `PUT` | `/api/admin/content/courses/:courseId/items` | Set the ordered sequence — body `{ items: [{type:"MODULE",moduleId} \| {type:"SECTION",sectionId}] }`. Re-syncs CourseModule (#486). **`400` hvis noe av innholdet er arkivert** (#938); se under. |
 | `GET` | `/api/admin/content/courses/:courseId/publish-preview` | Inspect unpublished items before publishing (#734). **`403 content_ownership`** for a non-owner SMO (#943) — the preview reveals which items the owner is still holding back. Returns `{ courseId, allPublished, publishable, unpublishedItems: [{ type, id, title, publishable, blockers: [{code,message}] }] }`. Read-only; the UI calls it to drive the cascade-publish confirm dialog. |
 | `POST` | `/api/admin/content/courses/:courseId/publish` | Publish course (#734). Body `{ publishItems?: boolean }`. If the course has unpublished modules/sections: without `publishItems:true` returns `409 course_has_unpublished_items` (with the preview) so the UI can confirm; with `publishItems:true` cascade-publishes the items (items → course) — but returns `422 course_publish_blocked_by_items` (with `details.unpublishedItems`) and publishes nothing if any item is un-publishable (module fails validation / no content, archived item). Enforces I1: a published course never contains unavailable content. Response `{ course, publishedItems }`. |
+| `GET` | `/api/admin/content/courses/:courseId/pending-versions` | 2.101.0: the course's items whose newest version is not the live one — a newer version laid ready (course update, #1095) or never published. Course owner or ADMINISTRATOR. Returns `{ courseId, items: [{ type, id, title, versionId, isNew, publishable, blockers, passedCount }], notOwnedItems: [{ type, id, title }], publishable, passedTotal, modulesWithPasses }`. `items` holds only elements the caller owns; the rest are in `notOwnedItems`. |
+| `POST` | `/api/admin/content/courses/:courseId/publish-pending` | 2.101.0: publish every item in `items` above. Body `{ versionIds: string[], supersedesEarlierPasses?: boolean }`. `versionIds` must equal the current set, else **`409 pending_versions_changed`**. All or nothing: **`422 course_pending_blocked`** (with `details.items`) if any item is blocked. **`400 revision_answer_required`** when someone has passed one of the modules and `supersedesEarlierPasses` is missing — one answer for all modules (#997 semantics). The course's own publish state is untouched. Response `{ publishedItems }`. Not reachable with an agent token. |
 | `POST` | `/api/admin/content/courses/:courseId/unpublish` | Unpublish course (reversible soft take-down; no G3 lock, #705) |
 | `POST` | `/api/admin/content/courses/:courseId/archive` | Archive course. Blocked `400` if a participant is mid-course (G3 — suggests unpublish instead); auto-unpublishes (I3, #705) |
 | `POST` | `/api/admin/content/courses/:courseId/restore` | Restore an archived course (lands in Utkast, #705) |

@@ -220,6 +220,35 @@ test("an unavailable module is not a dead end, and the current step still opens 
   await expect(page.locator("#sectionReaderBody")).toContainText("Seksjonstekst");
 });
 
+// 2.101.0 (produkteier 25.10): når steget rett før er åpent, står «Gå til neste element» nederst i
+// det, og knappen på det aktuelle kortet gjør det samme. Én er nok. Står et steg lenger unna åpent,
+// er knappen eneste vei til det aktuelle steget, og blir stående. Klassen settes direkte: det som
+// måles er regelen for hva som vises, ikke hvordan en modul åpnes (det dekker modultestene).
+test("the current step's button is hidden only when it would duplicate «Gå til neste element»", async ({ page }) => {
+  await mockBase(page);
+  await openCourse(page);
+  const cta = page.locator('.course-item[data-key="ci3"] .course-step-cta');
+  await expect(cta).toBeVisible();
+
+  await page.evaluate(() => document.querySelector('.course-item[data-key="ci2"]')?.classList.add("open"));
+  await expect(cta).toBeHidden();
+
+  await page.evaluate(() => {
+    document.querySelector('.course-item[data-key="ci2"]')?.classList.remove("open");
+    document.querySelector('.course-item[data-key="ci1"]')?.classList.add("open");
+  });
+  await expect(cta).toBeVisible();
+
+  // Det aktuelle steget selv åpent, slik en modul står (uten lesemodus, som skjuler en åpen
+  // seksjons kort uansett): «Gjennomfør» over arbeidsflaten er overflødig.
+  await page.evaluate(() => {
+    document.querySelector('.course-item[data-key="ci1"]')?.classList.remove("open");
+    document.querySelector('.course-item[data-key="ci3"]')?.classList.add("open");
+  });
+  await expect(page.locator('.course-item[data-key="ci3"] .course-step--now')).toBeVisible();
+  await expect(cta).toBeHidden();
+});
+
 // #893: course titles are resolved server-side per request, so a cached CourseDetail belongs to
 // the locale it was fetched under. The cache is keyed by courseId alone — without an explicit
 // refresh the list kept the previous language until the participant pressed "Last kurs", which

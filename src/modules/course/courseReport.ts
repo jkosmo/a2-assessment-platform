@@ -6,6 +6,7 @@ import type { SupportedLocale } from "../../i18n/locale.js";
 import type { ReportFilters } from "../reporting/types.js";
 import { effectiveCourseIds } from "../reporting/scopeRules.js";
 import { computeCourseStatus } from "./courseQueries.js";
+import { isSettledSubmission } from "../submission/submissionOutcome.js";
 import { round2 } from "../reporting/csvExport.js";
 
 type CourseReportRow = {
@@ -248,6 +249,12 @@ export async function getCourseLearnerReport(
     moduleIds,
     filters,
   );
+  // #1116: hvem som har bestått hver modul, med samme spørring og filtre som kursraden.
+  const passedByModule = new Map(
+    await Promise.all(
+      moduleIds.map(async (moduleId) => [moduleId, new Set(await courseRepository.findPassedUserIdsForModule(moduleId, filters))] as const),
+    ),
+  );
 
   // #966: seksjonskravet hentes fra SAMME dør som bevisporten bruker — deltakerdøra. Den utelater
   // seksjoner deltakeren ikke kan åpne, så et krav som aldri kan oppfylles kan ikke oppstå her.
@@ -355,19 +362,24 @@ export async function getCourseLearnerReport(
     let underReviewModules = 0;
     const scores: number[] = [];
 
+    // #1116: «bestått» er sertifiseringsstatusen, samme svar som kursbeviset og kursraden over
+    // (findPassedUserIdsForModule). Før leste raden vedtaket på siste forsøk, med en svarteliste
+    // (`=== "UNDER_REVIEW"`): etter en revisjon (#997) står vedtaket fortsatt som bestått, mens
+    // statusen sier at modulen må tas på nytt — og detaljen viste «Fullført» der beviset nektet.
+    // Det som ikke er bestått, er under vurdering så lenge siste forsøk ikke er avgjort
+    // (isSettledSubmission, en hviteliste), og strøket når det er avgjort og strøket.
     for (const moduleId of moduleIds) {
       const latest = learner.latestByModule.get(moduleId);
-      if (!latest) {
-        continue;
-      }
-      const latestDecision = latest.decisions[0] ?? null;
+      const latestDecision = latest?.decisions[0] ?? null;
       if (typeof latestDecision?.totalScore === "number") {
         scores.push(latestDecision.totalScore);
       }
-      if (latest.submissionStatus === "UNDER_REVIEW") {
-        underReviewModules += 1;
-      } else if (latestDecision?.passFailTotal === true) {
+      if (passedByModule.get(moduleId)?.has(learner.participantId)) {
         passedModules += 1;
+      } else if (!latest) {
+        continue;
+      } else if (!isSettledSubmission(latest.submissionStatus)) {
+        underReviewModules += 1;
       } else if (latestDecision?.passFailTotal === false) {
         failedModules += 1;
       }

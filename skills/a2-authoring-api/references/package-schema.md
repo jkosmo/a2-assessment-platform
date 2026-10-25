@@ -193,6 +193,20 @@ A multiple-choice module has no `taskText`, `rubric` or `promptTemplate`, and ha
 `correctAnswer` is written out in full and equals one of `options` exactly — in every language.
 Write three or four options. A module with both has the free-text fields and `mcqSet`.
 
+A **select-all-that-apply** question has `"questionType": "multiple"` and `correctAnswers` instead
+of `correctAnswer`:
+
+```json
+{ "questionType": "multiple", "stem": "…", "options": ["…", "…", "…", "…"],
+  "correctAnswers": ["…", "…"], "rationale": "…" }
+```
+
+Each entry in `correctAnswers` equals one of `options` exactly, in every language, and none twice.
+At least one is correct; every option may be. The learner is told to select all that apply and gets
+the question right only by choosing exactly the correct ones. An export also writes `correctAnswer`
+on such a question (the first correct one); leave it as it is. When and how to write one:
+[modules.md](modules.md#select-all-that-apply).
+
 `certificationLevel` is `basic`, `intermediate` or `advanced`
 ([course-design.md](course-design.md#level-and-scope)). How to write tasks, criteria and
 questions: [modules.md](modules.md).

@@ -2,17 +2,18 @@ import { prisma } from "../../db/prisma.js";
 import { env } from "../../config/env.js";
 import type { DbTransactionClient } from "../../db/transaction.js";
 import { notifyAppealStatusTransition, notifyAssessmentResult, sendModuleRevisedNotification } from "../certification/index.js";
-import type { AppealNotificationInput } from "../certification/participantNotificationService.js";
+import type { AppealNotificationInput, NotificationResult } from "../certification/participantNotificationService.js";
 import { checkAndIssueCourseCompletions } from "../course/index.js";
 import type { SupportedLocale } from "../../i18n/locale.js";
 
 // #795-followup: race a delivery against a wall-clock deadline so a hung handler (e.g. an ACS email call
 // with no timeout) can't wedge the worker's tick. On timeout we reject; the caller retries the row. The
 // abandoned handler keeps running but its effect is idempotent, so a later completion is harmless.
+class OutboxDeadlineError extends Error {}
 function withDeadline<T>(work: Promise<T>, deadlineMs: number, message: string): Promise<T> {
   let timer: NodeJS.Timeout | undefined;
   const deadline = new Promise<never>((_, reject) => {
-    timer = setTimeout(() => reject(new Error(message)), deadlineMs);
+    timer = setTimeout(() => reject(new OutboxDeadlineError(message)), deadlineMs);
     timer.unref?.();
   });
   return Promise.race([work, deadline]).finally(() => {
@@ -60,6 +61,8 @@ export type ModuleRevisedNotificationPayload = {
   recipientName: string | null;
   /** Tittelen for mottakerens språk — valgt der avsenderen kjenner språket. */
   moduleTitle: string;
+  /** 2.101.0: kursene beståtten gjaldt, på mottakerens språk. Mangler i hendelser lagt i køen før 2.101.0. */
+  courseTitles?: string[];
   locale: SupportedLocale;
 };
 
@@ -133,12 +136,39 @@ export async function claimNextOutboxEvent(
   };
 }
 
+// #1115: a notification that was not delivered is a failure the outbox must see. Before, the senders
+// returned their result and the outbox ignored it: every attempt was marked delivered, and a result or
+// appeal email that ACS rejected was lost without a trace.
+//  · certain failure (rejected, missing address, webhook non-2xx) → throw; the row is tried again.
+//  · cut off while under way (our timeout) → it may have gone through. Sending again could give the
+//    participant two emails, so the row is marked failed at once — visible, not retried.
+//  · nothing to send (channel disabled or log) → delivered.
+export class OutboxGiveUpError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "OutboxGiveUpError";
+  }
+}
+function settleNotification(result: NotificationResult | null, what: string): void {
+  if (!result || result.delivered || result.failureReason === "channel_disabled") return;
+  const reason = `${what} not delivered: ${result.failureReason ?? "unknown"}`;
+  if (result.ambiguous) throw new OutboxGiveUpError(`${reason} — cut off while sending, so it may have gone through; not sent again`);
+  throw new Error(reason);
+}
+
+/** The event types that send something to a person: a re-run after a cut-off could send it twice. */
+const SENDS_TO_A_PERSON = new Set<string>([
+  OUTBOX_EVENT_TYPES.assessmentNotification,
+  OUTBOX_EVENT_TYPES.appealNotification,
+  OUTBOX_EVENT_TYPES.moduleRevisedNotification,
+]);
+
 // Deliver one event by dispatching on its type. Both handlers are idempotent (completion checks whether
 // the certificate already exists; the notification pipeline dedupes on its own audit trail).
 export async function deliverOutboxEvent(event: { type: string; payloadJson: string }): Promise<void> {
   if (event.type === OUTBOX_EVENT_TYPES.assessmentNotification) {
     const p = JSON.parse(event.payloadJson) as AssessmentNotificationPayload;
-    await notifyAssessmentResult({
+    const result = await notifyAssessmentResult({
       submissionId: p.submissionId,
       submittedAt: new Date(p.submittedAt),
       recipientEmail: p.recipientEmail,
@@ -148,6 +178,7 @@ export async function deliverOutboxEvent(event: { type: string; payloadJson: str
       passFailTotal: p.passFailTotal,
       locale: p.locale,
     });
+    settleNotification(result, "assessment result notification");
     return;
   }
   if (event.type === OUTBOX_EVENT_TYPES.courseCompletionCheck) {
@@ -157,19 +188,21 @@ export async function deliverOutboxEvent(event: { type: string; payloadJson: str
   }
   if (event.type === OUTBOX_EVENT_TYPES.appealNotification) {
     const p = JSON.parse(event.payloadJson) as AppealNotificationPayload;
-    await notifyAppealStatusTransition(p);
+    settleNotification(await notifyAppealStatusTransition(p), "appeal notification");
     return;
   }
   if (event.type === OUTBOX_EVENT_TYPES.moduleRevisedNotification) {
     const p = JSON.parse(event.payloadJson) as ModuleRevisedNotificationPayload;
-    await sendModuleRevisedNotification({
+    const result = await sendModuleRevisedNotification({
       recipientEmail: p.recipientEmail,
       recipientName: p.recipientName,
       moduleTitle: p.moduleTitle,
+      courseTitles: p.courseTitles ?? [],
       moduleId: p.moduleId,
       moduleVersionId: p.moduleVersionId,
       locale: p.locale,
     });
+    settleNotification(result, "module revised notification");
     return;
   }
   throw new Error(`Unknown outbox event type: ${event.type}`);
@@ -223,12 +256,16 @@ export async function processNextOutboxEvent(workerId: string, leaseMs: number):
     await markOutboxDelivered(claimed.id, claimed.lockedBy, claimed.lockedAt, new Date());
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown outbox delivery error";
+    // #1115: a send that may have gone through is not tried again. That is a cut-off inside the send
+    // (OutboxGiveUpError) — and our own deadline on an event that sends to a person, because the
+    // abandoned send keeps running and may still succeed.
+    const giveUp = error instanceof OutboxGiveUpError || (error instanceof OutboxDeadlineError && SENDS_TO_A_PERSON.has(claimed.type));
     await markOutboxRetryOrFailed(
       claimed.id,
       claimed.lockedBy,
       claimed.lockedAt,
       new Date(),
-      claimed.attempts + 1,
+      giveUp ? claimed.maxAttempts : claimed.attempts + 1,
       claimed.maxAttempts,
       message,
     );

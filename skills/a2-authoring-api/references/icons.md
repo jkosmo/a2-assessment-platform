@@ -31,6 +31,9 @@ stands for**, and you pick the library's icon for that meaning.
   | ![](icon:folder-open) | **Klargjør kilder** | Dokumenter, intervjuer, data og notater. |
   ```
 
+- **In a flow figure's steps**, as `icon` in the figure's description
+  ([figure-design.md](figure-design.md#flows--drawn-by-a-script)). Then the step's line in the text
+  under the figure has no icon of its own.
 - Nowhere else. An icon in running text, in a list item or in a highlighted box is noise.
 - A set of cards or steps either all have icons or none have. One icon per card or step, and the
   same icon never twice in one set.

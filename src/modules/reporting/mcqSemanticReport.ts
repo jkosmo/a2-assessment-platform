@@ -1,7 +1,8 @@
 import { SubmissionStatus } from "../../db/prismaRuntime.js";
 import { isSettledSubmission } from "../submission/submissionOutcome.js";
 import type { SupportedLocale } from "../../i18n/locale.js";
-import { localizeContentText } from "../../i18n/content.js";
+import { localizeContentText, matchesLocalizedContentVariant } from "../../i18n/content.js";
+import { parseAnswerKey, questionTypeOf } from "../assessment/mcqQuestionTypes.js";
 import { getAssessmentRules } from "../../config/assessmentRules.js";
 import { getReportingAnalyticsConfig } from "../../config/reportingAnalytics.js";
 import { reportingRepository } from "../../repositories/reportingRepository.js";
@@ -88,7 +89,11 @@ export async function getMcqQualityReport(filters: ReportFilters, locale: Suppor
     questionStem: string;
     optionsJson: string;
     correctAnswer: string;
+    questionType: string | null;
+    answerKeyJson: string | null;
     selectedAnswerCounts: Map<string, number>;
+    /** #1077, «multiple»: hvor mange som valgte hvert alternativ (posisjon i optionsJson). */
+    selectedPositionCounts: Map<number, number>;
     responses: Array<{ isCorrect: boolean; attemptScore: number | null }>;
   }>();
 
@@ -104,10 +109,14 @@ export async function getMcqQualityReport(filters: ReportFilters, locale: Suppor
         response.question.module.certificationLevel ??
         null,
       questionId: response.question.id,
-      questionStem: response.question.stem,
+      // 2026-10-24: lokalisert, som tittelen. Rått sto lagringsformatet (et språkkart) i rapporten.
+      questionStem: localizeContentText(locale, response.question.stem) ?? response.question.stem,
       optionsJson: response.question.optionsJson,
       correctAnswer: response.question.correctAnswer,
+      questionType: response.question.questionType ?? null,
+      answerKeyJson: response.question.answerKeyJson ?? null,
       selectedAnswerCounts: new Map<string, number>(),
+      selectedPositionCounts: new Map<number, number>(),
       responses: [],
     };
 
@@ -119,6 +128,13 @@ export async function getMcqQualityReport(filters: ReportFilters, locale: Suppor
       response.selectedAnswer,
       (existing.selectedAnswerCounts.get(response.selectedAnswer) ?? 0) + 1,
     );
+    // #1077: i «velg alle som stemmer» er svaret flere alternativer; hvert av dem telles.
+    const selected = response.answerJson ? (JSON.parse(response.answerJson) as { selected?: unknown }).selected : null;
+    if (Array.isArray(selected)) {
+      for (const position of selected) {
+        if (Number.isInteger(position)) existing.selectedPositionCounts.set(position as number, (existing.selectedPositionCounts.get(position as number) ?? 0) + 1);
+      }
+    }
     perQuestion.set(response.questionId, existing);
   }
 
@@ -159,12 +175,26 @@ export async function getMcqQualityReport(filters: ReportFilters, locale: Suppor
     let distractorUsage: DistractorStat[] = [];
     try {
       const options: unknown[] = JSON.parse(entry.optionsJson);
+      const multiple = questionTypeOf(entry) === "multiple";
+      const correctPositions = multiple ? new Set(parseAnswerKey(entry.answerKeyJson, Array.isArray(options) ? options.length : 0).correct) : null;
       if (Array.isArray(options) && attemptCount > 0) {
-        distractorUsage = options.map((opt) => {
-          const option = typeof opt === "string" ? opt : String(opt);
-          const pickCount = entry.selectedAnswerCounts.get(option) ?? 0;
+        distractorUsage = options.map((opt, position) => {
+          const stored = typeof opt === "string" ? opt : String(opt);
+          // 2026-10-24: et alternativ er lagret som et språkkart ({"nb": …, "en-GB": …}), og deltakeren
+          // svarte med teksten på sitt språk. Telt som ren tekst mot det lagrede traff ingenting: hvert
+          // feilalternativ fikk 0 valg og ble flagget «velges sjelden» på alle spørsmål med tre språk.
+          // Samme sammenligning som rettingen bruker (mcqService), og alternativet vist på rapportens språk.
+          let pickCount = 0;
+          if (multiple) {
+            pickCount = entry.selectedPositionCounts.get(position) ?? 0;
+          } else {
+            for (const [selected, count] of entry.selectedAnswerCounts) {
+              if (matchesLocalizedContentVariant(stored, selected)) pickCount += count;
+            }
+          }
+          const option = localizeContentText(locale, stored) ?? stored;
           const pickRate = round2(pickCount / attemptCount);
-          const isCorrect = option === entry.correctAnswer;
+          const isCorrect = correctPositions ? correctPositions.has(position) : stored === entry.correctAnswer;
           // A distractor is rarely chosen if it's not the correct answer and pick rate < threshold
           const flaggedRarelyChosen =
             !isCorrect &&

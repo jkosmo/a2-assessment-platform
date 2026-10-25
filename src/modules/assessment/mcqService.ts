@@ -5,6 +5,7 @@ import { deriveMcqPassFail, resolveMcqMinPercent } from "./mcqPassRule.js";
 import { assessmentJobRepository } from "./assessmentJobRepository.js";
 import { mcqRepository, createMcqRepository } from "./mcqRepository.js";
 import { drawQuestionIds, parseQuestionOrder, questionsForAttempt, resolveMcqDrawPolicy } from "./mcqDraw.js";
+import { gradeMcqAnswer, questionTypeOf, type McqSubmittedAnswer } from "./mcqQuestionTypes.js";
 import { enqueueAssessmentJob, processSubmissionJobNow } from "./assessmentJobService.js";
 import { runInTransaction } from "../../db/transaction.js";
 import { ConflictError } from "../../errors/AppError.js";
@@ -78,8 +79,10 @@ export async function startMcqAttempt(
     attemptId: attempt.id,
     questions: questions.map((question) => {
       const options = localizeContentArray(locale, JSON.parse(question.optionsJson) as unknown[]);
+      // #1077: typen går til deltakeren (avkrysning eller valg), fasiten gjør det ikke.
       return {
         id: question.id,
+        questionType: questionTypeOf(question),
         stem: localizeContentText(locale, question.stem) ?? question.stem,
         options: shuffleArray(options),
       };
@@ -92,7 +95,7 @@ export async function submitMcqAttempt(input: {
   submissionId: string;
   attemptId: string;
   userId: string;
-  responses: Array<{ questionId: string; selectedAnswer: string }>;
+  responses: Array<{ questionId: string } & McqSubmittedAnswer>;
 }) {
   const submission = await mcqRepository.findSubmissionForModuleMcq(input.submissionId, input.userId, input.moduleId);
   if (!submission) {
@@ -124,11 +127,8 @@ export async function submitMcqAttempt(input: {
       if (!question) {
         return null;
       }
-      return {
-        questionId: response.questionId,
-        selectedAnswer: response.selectedAnswer,
-        isCorrect: matchesLocalizedContentVariant(question.correctAnswer, response.selectedAnswer),
-      };
+      // #1077: ett sted avgjør om et svar er riktig, for hver type (mcqQuestionTypes).
+      return { questionId: response.questionId, ...gradeMcqAnswer(question, response) };
     })
     .filter((item): item is NonNullable<typeof item> => item !== null);
 
@@ -162,6 +162,7 @@ export async function submitMcqAttempt(input: {
           mcqAttemptId: attempt.id,
           questionId: item.questionId,
           selectedAnswer: item.selectedAnswer,
+          answerJson: item.answerJson,
           isCorrect: item.isCorrect,
         })),
       );

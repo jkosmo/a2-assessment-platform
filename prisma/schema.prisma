@@ -360,6 +360,11 @@ model MCQQuestion {
   optionsJson     String
   correctAnswer   String
   rationale       String?
+  // #1077: 'single' (ett riktig svar, correctAnswer er fasiten) · 'multiple' (velg alle som stemmer:
+  // answerKeyJson = {"correct":[posisjoner i optionsJson]}, correctAnswer = første riktige, for lesere
+  // som ikke kjenner typen). Se doc/DESIGN_1077.md.
+  questionType    String        @default("single")
+  answerKeyJson   String?
   active          Boolean       @default(true)
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
@@ -395,6 +400,9 @@ model MCQResponse {
   mcqAttemptId   String
   questionId     String
   selectedAnswer String
+  // #1077: deltakerens svar for typene som ikke er én tekst ('multiple': {"selected":[posisjoner]}).
+  // selectedAnswer er da de valgte alternativene som lesbar tekst.
+  answerJson     String?
   isCorrect      Boolean
   createdAt      DateTime    @default(now())
   mcqAttempt     MCQAttempt  @relation(fields: [mcqAttemptId], references: [id], onDelete: Restrict)

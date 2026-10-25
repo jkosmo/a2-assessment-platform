@@ -109,7 +109,10 @@ export function collectLocalizedFields(pkg) {
           path: `${ref}.activeVersion.mcqSet.questions[${qi}]`,
           stem: q.stem,
           options: q.options ?? [],
+          // #1077: «multiple» (select all that apply) has its answer key in `correctAnswers`.
+          questionType: q.questionType,
           correctAnswer: q.correctAnswer,
+          correctAnswers: q.correctAnswers,
           rationale: q.rationale,
         });
       }
@@ -387,8 +390,43 @@ export function practiceBlockShapes(text) {
   return readFrames(text).filter((frame) => PRACTICE_KINDS.has(frame.kind)).map((frame) => `${frame.kind}:${frame.shape}`);
 }
 
+// En merkelapp i klammer med store bokstaver ([KILDEBASERT], [MANGLER I KILDENE]) — det deltakeren skal
+// kjenne igjen fra en tabell til en øvelse og en prompt. Ikke lenketekst ([TEKST](url)).
+const LABEL = /\[[A-ZÆØÅ][A-ZÆØÅ0-9_-]{2,}(?: [A-ZÆØÅ0-9_-]+)*\](?!\()/g;
+
+function labelCounts(text) {
+  const counts = new Map();
+  for (const label of String(text ?? "").match(LABEL) ?? []) counts.set(label, (counts.get(label) ?? 0) + 1);
+  return counts;
+}
+
+/**
+ * Merkelapper fra hovedspråket som er oversatt noen steder og latt stå andre steder i en oversettelse
+ * (Repetisjon Modul 3, 2.98.0: tabellen sa [SOURCE-BASED], «finn parene» rett under sa [KILDEBASERT]).
+ * Det krever to ting: oversettelsen har merkelapper hovedspråket ikke har (de ble oversatt), og en av
+ * hovedspråkets står der færre ganger enn på hovedspråket, men ikke null. En merkelapp som står like
+ * mange ganger, eller en oversettelse uten egne merkelapper, er latt stå med vilje — et ord som er likt
+ * på nynorsk, en plassholder.
+ */
+export function partlyTranslatedLabels(reference, translated) {
+  const original = labelCounts(reference);
+  const target = labelCounts(translated);
+  if (![...target.keys()].some((label) => !original.has(label))) return [];
+  return [...original].map(([label, count]) => ({ label, count, left: target.get(label) ?? 0 }))
+    .filter(({ count, left }) => left > 0 && left < count);
+}
+
 export function checkLocalization(pkg, { languages = LANGUAGES, primary = "nb", blindCopyBlocks = true } = {}) {
   const { prose, mcqQuestions } = collectLocalizedFields(pkg);
+  const labelDrift = [];
+  for (const field of prose) {
+    for (const lang of languages) {
+      if (lang === primary || !presentLocales(field.value).includes(lang)) continue;
+      for (const { label, count, left } of partlyTranslatedLabels(localeValue(field.value, primary), localeValue(field.value, lang))) {
+        labelDrift.push({ path: field.path, detail: `${lang}: ${label} is left ${left} time(s) where ${primary} has it ${count} — translated in some places, not in others; use the same label everywhere in a language` });
+      }
+    }
+  }
   const missing = [];
   const blindCopies = [];
   const answerKeyChanges = [];
@@ -441,25 +479,36 @@ export function checkLocalization(pkg, { languages = LANGUAGES, primary = "nb", 
     checkField(`${q.path}.stem`, q.stem);
     if (q.rationale !== undefined) checkField(`${q.path}.rationale`, q.rationale);
     q.options.forEach((opt, oi) => checkField(`${q.path}.options[${oi}]`, opt));
-    checkField(`${q.path}.correctAnswer`, q.correctAnswer);
+    const multiple = q.questionType === "multiple";
+    const answers = multiple ? (Array.isArray(q.correctAnswers) ? q.correctAnswers : []) : [q.correctAnswer];
+    const answerField = multiple ? "correctAnswers" : "correctAnswer";
+    if (multiple) {
+      answers.forEach((answer, ai) => checkField(`${q.path}.correctAnswers[${ai}]`, answer));
+      // A "multiple" may also carry correctAnswer (the export writes the first correct one there).
+      if (q.correctAnswer !== undefined) checkField(`${q.path}.correctAnswer`, q.correctAnswer);
+    } else {
+      checkField(`${q.path}.correctAnswer`, q.correctAnswer);
+    }
 
-    // Answer key must map to the SAME option position in every language (semantic, per-locale —
-    // not by index): find which option equals correctAnswer in each locale, compare positions.
+    // Answer key must map to the SAME option positions in every language (semantic, per-locale —
+    // not by index): find which options equal the correct answer(s) in each locale, compare.
     const indexByLocale = {};
-    let structurallyOk = true;
+    let structurallyOk = answers.length > 0;
     for (const lang of languages) {
-      const answer = localeString(q.correctAnswer, lang);
-      const idx = q.options.findIndex((opt) => localeString(opt, lang) === answer && answer.length > 0);
-      indexByLocale[lang] = idx;
-      if (idx < 0) structurallyOk = false;
+      const positions = answers.map((answer) => {
+        const text = localeString(answer, lang);
+        return q.options.findIndex((opt) => localeString(opt, lang) === text && text.length > 0);
+      });
+      indexByLocale[lang] = multiple ? positions.slice().sort((a, b) => a - b).join(",") : positions[0];
+      if (positions.some((idx) => idx < 0)) structurallyOk = false;
     }
     if (!structurallyOk) {
-      answerKeyChanges.push({ path: q.path, detail: "correctAnswer does not match any option in one or more locales", indexByLocale });
+      answerKeyChanges.push({ path: q.path, detail: `${answerField} does not match any option in one or more locales`, indexByLocale });
     } else {
       const primaryIdx = indexByLocale[primary];
       const drifted = languages.filter((lang) => indexByLocale[lang] !== primaryIdx);
       if (drifted.length > 0) {
-        answerKeyChanges.push({ path: q.path, detail: `correct option differs across locales: ${drifted.join(", ")}`, indexByLocale });
+        answerKeyChanges.push({ path: q.path, detail: `correct option${multiple ? "s differ" : " differs"} across locales: ${drifted.join(", ")}`, indexByLocale });
       }
     }
   }
@@ -472,6 +521,7 @@ export function checkLocalization(pkg, { languages = LANGUAGES, primary = "nb", 
   if (answerKeyChanges.length > 0) reasons.push(`${answerKeyChanges.length} answer-key change(s) across languages`);
   if (blockShapeChanges.length > 0) reasons.push(`${blockShapeChanges.length} step, checklist or flashcard frame(s) with another shape in a translation (or a cards or think-first frame missing or added)`);
   if (tokenDrift.length > 0) reasons.push(`${tokenDrift.length} formula/URL/identifier(s) lost in a translation`);
+  if (labelDrift.length > 0) reasons.push(`${labelDrift.length} [LABEL](s) translated in some places and left in the primary language in others`);
   if (blindCopyBlocks && blindCopies.length > 0) reasons.push(`${blindCopies.length} field(s) are a blind copy of the primary language`);
   reasons.push(...figures.reasons);
 
@@ -484,6 +534,7 @@ export function checkLocalization(pkg, { languages = LANGUAGES, primary = "nb", 
     blockShapeChanges,
     optionCountMismatches,
     tokenDrift,
+    labelDrift,
     figures,
     blocks: reasons.length > 0,
     reasons,

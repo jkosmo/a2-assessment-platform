@@ -60,6 +60,12 @@ const EXCEPTIONS = [
       + "i setCourseItems — kjent hull, #992, og en annen sak enn tilgjengelighetsregelen.",
   },
   {
+    file: "modules/adminContent/adminContentRepository.ts",
+    reason:
+      "findLiveCourseTitlesContainingModule (2.101.0) — omvendt oppslag (modul → kurs) for kursnavnet "
+      + "i revisjonsvarselet. Leser bare kursets tittel, ikke kursets innhold.",
+  },
+  {
     file: "modules/course/enrollmentService.ts",
     reason:
       "isModuleInAccessibleCourse / canParticipantReadSection — omvendt oppslag (innhold → kurs) "
