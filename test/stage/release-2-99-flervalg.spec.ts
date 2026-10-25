@@ -54,11 +54,11 @@ const flere = { questionType: "multiple", stem: L("What must the record state?",
 
 const tilstand: { moduleId?: string; moduleIdAlle?: string; versionId?: string; sectionId?: string } = {};
 
-test("versjonen er 2.101.1", async () => {
+test("versjonen er 2.101.2", async () => {
   const svar = await fetch(`${BASE}/version`);
   const json = await svar.json();
   noter("versjon", json.version);
-  expect(json.version).toBe("2.101.1");
+  expect(json.version).toBe("2.101.2");
 });
 
 test("#1077: et «velg alle» lagres med typen; feil form avvises", async () => {

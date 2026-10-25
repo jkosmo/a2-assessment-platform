@@ -2,6 +2,17 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.101.2 - 2026-10-25
+
+### «Systemet jobber» under import og samlet publisering
+
+Produkteier: «Når man importerer så jobber systemet uten at det markeres … og UI er fortsatt
+responsivt», og «Kursor bør spinne». `work-dialog.js`: mens kallet går, vises et modalt vindu med hva
+som skjer (og «Dette kan ta et par minutter. Ikke lukk siden.» for import), pekeren er en ventepeker,
+siden bak er sperret (inert), Esc lukker ikke, og nettleseren spør før siden lukkes. Brukt på
+kursimport (oppdater og nytt), modulimport og -kopi, seksjonsimport, -erstatning og -kopi, og
+«Publiser alle».
+
 ## 2.101.1 - 2026-10-25
 
 ### En publisert seksjonsversjon merkes publisert

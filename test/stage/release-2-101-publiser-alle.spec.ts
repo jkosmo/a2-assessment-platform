@@ -102,10 +102,10 @@ async function levendeTekst(courseId: string) {
   return { publishedAt: item.section.audit.publishedAt as string | null, nb: item.section.bodyMarkdown.nb as string };
 }
 
-test("versjonen er 2.101.1", async () => {
+test("versjonen er 2.101.2", async () => {
   const json = await (await fetch(`${BASE}/version`)).json();
   noter("versjon", json.version);
-  expect(json.version).toBe("2.101.1");
+  expect(json.version).toBe("2.101.2");
 });
 
 test("API: oppdateringen legger ny versjon klar; pending-versions viser den; publish-pending publiserer", async () => {

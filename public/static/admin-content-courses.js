@@ -17,6 +17,7 @@ import {
 } from "/static/api-client.js";
 import { initConsentGuard } from "/static/consent-guard.js";
 import { setHidden } from "/static/dom-visibility.js";
+import { runWithWorkDialog } from "/static/work-dialog.js";
 import {
   resolveWorkspaceNavigationItems,
 } from "/static/participant-console-state.js";
@@ -659,13 +660,13 @@ async function commitPendingPublish(supersedesEarlierPasses) {
   const buttons = pendingPublishButtons();
   for (const button of [buttons.confirm, buttons.keep, buttons.supersede]) button.disabled = true;
   try {
-    const result = await apiFetch(`/api/admin/content/courses/${encodeURIComponent(target.courseId)}/publish-pending`, getHeaders, {
+    const result = await runWithWorkDialog(t("adminContent.work.publishing"), () => apiFetch(`/api/admin/content/courses/${encodeURIComponent(target.courseId)}/publish-pending`, getHeaders, {
       method: "POST",
       body: JSON.stringify({
         versionIds: target.versionIds,
         ...(supersedesEarlierPasses === undefined ? {} : { supersedesEarlierPasses }),
       }),
-    });
+    }));
     pendingPublishTarget = null;
     dialog?.close();
     showToast(tf("adminContent.courses.pendingPublish.published", { count: result?.publishedItems?.length ?? 0 }), "success");
@@ -847,10 +848,11 @@ async function handleImportCoursePackageFile(event) {
     const choice = existing ? await askImportChoice(existing) : "createNew";
     if (choice === "cancel") return;
     if (choice === "updateExisting") {
-      const updated = await apiFetch("/api/admin/content/courses/import", getHeaders, {
+      // 2.101.2: en kursimport kan ta minutter — vis at det jobbes, og sperr siden imens.
+      const updated = await runWithWorkDialog(t("adminContent.work.importCourse"), () => apiFetch("/api/admin/content/courses/import", getHeaders, {
         method: "POST",
         body: JSON.stringify({ payload, mode: "updateExisting", targetId: originCourseId }),
-      });
+      }), { detail: t("adminContent.work.detail") });
       if (!updated?.courseId) throw new Error(t("courses.importNoId"));
       const s = updated.summary ?? {};
       // Oppsummeringen skal leses på kurssiden, ikke forsvinne med denne siden.
@@ -875,10 +877,10 @@ async function handleImportCoursePackageFile(event) {
       window.location.href = `/admin-content/courses/${encodeURIComponent(updated.courseId)}?publishPending=1`;
       return;
     }
-    const result = await apiFetch("/api/admin/content/courses/import", getHeaders, {
+    const result = await runWithWorkDialog(t("adminContent.work.importCourse"), () => apiFetch("/api/admin/content/courses/import", getHeaders, {
       method: "POST",
       body: JSON.stringify({ payload, mode: "createNew" }),
-    });
+    }), { detail: t("adminContent.work.detail") });
     if (!result?.courseId) throw new Error(t("courses.importNoId"));
     // ⚠️ #957/#996: responsen BÆRER forklaringen; her ble den kastet.
     //

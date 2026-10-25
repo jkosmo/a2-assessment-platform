@@ -882,6 +882,34 @@ body.auth-resolving .mock-identity-card {
   content: " ...";
 }
 
+/* 2.101.2: «systemet jobber» (work-dialog.js) — import og samlet publisering. */
+.work-dialog {
+  border: 1px solid var(--color-border-soft, #ddd);
+  border-radius: 12px;
+  padding: 24px 28px;
+  max-width: min(420px, calc(100vw - 32px));
+  text-align: center;
+  background: var(--color-surface, #fff);
+  color: var(--color-text, #222);
+}
+.work-dialog::backdrop { background: rgba(0, 0, 0, 0.35); cursor: wait; }
+html.is-working, html.is-working * { cursor: wait !important; }
+.work-dialog-spinner {
+  display: inline-block;
+  width: 28px;
+  height: 28px;
+  border: 3px solid var(--color-border-soft, #ddd);
+  border-top-color: var(--color-primary, #8a5a12);
+  border-radius: 50%;
+  animation: work-dialog-spin 0.9s linear infinite;
+}
+.work-dialog-text { margin: 12px 0 0; font-weight: 600; }
+.work-dialog-detail { margin: 6px 0 0; font-size: 14px; color: var(--color-meta, #666); }
+@keyframes work-dialog-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .work-dialog-spinner { animation-duration: 2.4s; }
+}
+
 a.btn-primary,
 a.btn-secondary,
 a.btn-danger {

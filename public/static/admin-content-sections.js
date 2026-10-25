@@ -14,6 +14,7 @@ import { renderWorkspaceNavigationWithProfile } from "./workspace-nav.js";
 import { describeImportError } from "/static/import-error.js";
 import { apiErrorCode, describeApiError } from "/static/api-error.js";
 import { showToast } from "/static/toast.js";
+import { runWithWorkDialog } from "/static/work-dialog.js";
 import { lifecycleStatusBadge, lifecycleBadge, lifecycleOf } from "/static/content-status-badge.js";
 import { renderOwnerPanel } from "/static/owner-panel.js";
 import { sanitizeSectionHtml } from "/static/sanitize.js";
@@ -532,10 +533,11 @@ async function replaceSectionFromFile(input) {
       );
     }
 
-    await apiFetch("/api/admin/content/sections/import", getHeaders, {
+    // 2.101.2: vis at det jobbes, og sperr siden imens (work-dialog.js).
+    await runWithWorkDialog(t("adminContent.work.importSection"), () => apiFetch("/api/admin/content/sections/import", getHeaders, {
       method: "POST",
       body: JSON.stringify({ payload, mode: "replaceExisting", targetId: editing.id }),
-    });
+    }));
     showToast(L("replaced"));
     // Hent redigeringen på nytt, ellers står forfatteren igjen med det gamle innholdet på skjermen
     // og tror ingenting skjedde.
@@ -595,10 +597,10 @@ async function importSectionPackage(input) {
           : "Dette er en modul-pakke. Importer den fra Moduler-siden.",
       );
     }
-    const result = await apiFetch("/api/admin/content/sections/import", getHeaders, {
+    const result = await runWithWorkDialog(t("adminContent.work.importSection"), () => apiFetch("/api/admin/content/sections/import", getHeaders, {
       method: "POST",
       body: JSON.stringify({ payload, mode: "createNew" }),
-    });
+    }), { detail: t("adminContent.work.detail") });
     if (!result?.sectionId) throw new Error("Import-respons mangler sectionId.");
     showToast(L("imported"));
     goTo("editor", result.sectionId);
@@ -639,10 +641,10 @@ async function duplicateSection(sectionId, btn) {
     } else if (typeof srcTitle === "string" && srcTitle) {
       envelope.section.title = `${srcTitle} (kopi)`;
     }
-    const result = await apiFetch("/api/admin/content/sections/import", getHeaders, {
+    const result = await runWithWorkDialog(t("adminContent.work.copying"), () => apiFetch("/api/admin/content/sections/import", getHeaders, {
       method: "POST",
       body: JSON.stringify({ payload: envelope, mode: "createNew" }),
-    });
+    }));
     if (!result?.sectionId) throw new Error("Import-respons mangler sectionId.");
     showToast(L("duplicated"));
     await renderListView();

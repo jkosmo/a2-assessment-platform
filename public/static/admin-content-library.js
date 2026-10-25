@@ -24,6 +24,7 @@ import {
 import { describeImportError } from "/static/import-error.js";
 import { describeApiError } from "/static/api-error.js";
 import { showToast } from "/static/toast.js";
+import { runWithWorkDialog } from "/static/work-dialog.js";
 import { renderWorkspaceNavigationWithProfile } from "./workspace-nav.js";
 import {
   manglendeSpraak,
@@ -505,10 +506,11 @@ async function duplicateModule(moduleId, btn) {
 
     // #456: autoPublish=false så kopien lander som «Upublisert utkast» uansett
     // om kilden var publisert. Forfatter skal eksplisitt publisere etter gjennomgang.
-    const importResult = await apiFetch("/api/admin/content/modules/import", getHeaders, {
+    // 2.101.2: vis at det jobbes, og sperr siden imens (work-dialog.js).
+    const importResult = await runWithWorkDialog(t("adminContent.work.copying"), () => apiFetch("/api/admin/content/modules/import", getHeaders, {
       method: "POST",
       body: JSON.stringify({ payload: envelope, mode: "createNew", autoPublish: false }),
-    });
+    }));
     if (!importResult?.moduleId) throw new Error(t("library.importNoId"));
 
     showToast(`Full kopi av «${sourceTitle}» opprettet.`, "success");
@@ -769,10 +771,10 @@ async function init() {
       // handling forfatteren gjør etter gjennomgang, på samme måte som ved kursimport. Uten
       // autoPublish:false gikk en pakke rett live så snart kilden hadde vært publisert, før noen
       // hadde sett på den i denne installasjonen.
-      const result = await apiFetch("/api/admin/content/modules/import", getHeaders, {
+      const result = await runWithWorkDialog(t("adminContent.work.importModule"), () => apiFetch("/api/admin/content/modules/import", getHeaders, {
         method: "POST",
         body: JSON.stringify({ payload, mode: "createNew", autoPublish: false }),
-      });
+      }), { detail: t("adminContent.work.detail") });
       if (!result?.moduleId) throw new Error(t("library.importNoId"));
       showToast(t("library.imported"));
       // Land i arbeidsrommet: der er publiseringsgaten med «Oversett det som mangler» (#896).
