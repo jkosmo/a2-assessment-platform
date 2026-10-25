@@ -1,5 +1,6 @@
 import request from "supertest";
 import { describe, expect, it, vi } from "vitest";
+import { warmModuleGraph } from "./support/moduleGraphWarmup.js";
 
 // #1077 leveranse 2b gjennom den EKTE ruta — 2.106.0 viste at tester forbi ruta ikke ser den: genereringen sier hvorfor
 // det ikke ble noe «sett i riktig rekkefølge», og ruta sender det videre til editoren. Modellen byttes ut.
@@ -15,6 +16,8 @@ vi.mock("../src/modules/adminContent/llmContentGenerationService.js", async (imp
   };
 });
 
+// #994: grafen lastes på modulnivå, utenfor testenes tidsbudsjett (test/support/moduleGraphWarmup.ts).
+warmModuleGraph(() => import("../src/app.js"));
 const { app } = await import("../src/app.js");
 
 const admin = { "x-user-id": "admin-1077-gen", "x-user-email": "admin.1077.gen@company.com", "x-user-name": "Admin", "x-user-roles": "ADMINISTRATOR" };
