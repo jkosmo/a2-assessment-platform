@@ -180,13 +180,15 @@ describe("#1077 leveranse 2 — sett i riktig rekkefølge", () => {
     expect(copy!.optionsJson).toBe((await prisma.mCQQuestion.findFirstOrThrow({ where: { mcqSetVersionId: set.body.mcqSetVersion.id } })).optionsJson);
   });
 
-  it("KI-revisjon av et sett med «sett i rekkefølge» stoppes — rekkefølgen er fasiten (til leveranse 2b)", async () => {
+  // Leveranse 2b: revisjonen tar imot rekkefølgen (sperren fra 2a er borte). Hva KI gjør med den, måles i
+  // test/unit/mcq-order-generation-1077.test.ts og mot den ekte modellen i stage-testen for 2.107.0.
+  it("KI-revisjon av et sett med «sett i rekkefølge» avvises ikke lenger ved døra", async () => {
     const res = await request(app).post("/api/admin/content/generate/mcq/revise").set(admin).send({
       instruction: "Gjør spørsmålene vanskeligere",
       locale: "nb",
       questions: [{ questionType: "order", stem: "Sett i rekkefølge", options: NB, correctAnswer: NB[0], rationale: "Fordi." }],
     });
-    expect(res.status).toBe(400);
-    expect(res.body.error).toBe("mcq_revision_order_unsupported");
+    expect(res.body.error).not.toBe("mcq_revision_order_unsupported");
+    expect(res.status).not.toBe(400);
   });
 });

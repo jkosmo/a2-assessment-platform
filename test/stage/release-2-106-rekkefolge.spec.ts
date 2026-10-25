@@ -46,10 +46,10 @@ const NB = ["Motta", "Vurdere", "Avgjøre", "Arkivere"];
 const rekkefølge = { questionType: "order", stem: L("Put the steps in order.", "Sett stegene i rekkefølge."), options: STEG, rationale: L("Receive first.", "Motta først.") };
 const tilstand: { moduleId?: string; versionId?: string } = {};
 
-test("versjonen er 2.106.1", async () => {
+test("versjonen er 2.107.0", async () => {
   const json = await (await fetch(`${BASE}/version`)).json();
   noter("versjon", json.version);
-  expect(json.version).toBe("2.106.1");
+  expect(json.version).toBe("2.107.0");
 });
 
 test("lagres med typen; for få elementer avvises; eksporten har typen og rekkefølgen", async () => {
@@ -111,15 +111,45 @@ test("leveres stokket, rettes som rett eller galt, og gjennomgangen viser begge 
   expect(stokket.rad.correctOrder).toEqual(NB);
 });
 
-test("KI-revisjon av et sett med «sett i rekkefølge» stoppes med en egen kode", async () => {
+// 2.107.0 (leveranse 2b): KI mot den EKTE modellen. Kilden beskriver en fast prosedyre; KI lager høyst én
+// rekkefølge — og lager den ingen, sier den hvorfor. Revisjonen beholder typen og rekkefølgen.
+test("KI-generering: høyst én rekkefølge, med 3–6 elementer — eller en begrunnelse for at det ikke ble noen", async () => {
+  test.setTimeout(240_000);
+  const kilde = [
+    "Klagebehandling i kommunen følger fem steg i fast rekkefølge.",
+    "1. Klagen registreres i saksarkivet og klageren får kvittering.",
+    "2. Saksbehandleren vurderer om klagen kom inn innen fristen på tre uker.",
+    "3. Den som vedtaket gjelder, får uttale seg.",
+    "4. Underinstansen avgjør om vedtaket skal omgjøres.",
+    "5. Opprettholdes vedtaket, sendes saken til klageinstansen.",
+    "Klagen må være skriftlig og begrunnet. Klageren kan be om innsyn i sakens dokumenter.",
+  ].join("\n");
+  const svar = await api("POST", "/api/admin/content/generate/mcq", { sourceMaterial: kilde, certificationLevel: "basic", locale: "nb", questionCount: 5, optionCount: 4 });
+  expect(svar.status, svar.tekst.slice(0, 300)).toBe(200);
+  const rekkefølger = (svar.json.questions as Array<{ questionType?: string; options: string[] }>).filter((q) => q.questionType === "order");
+  noter("KI: rekkefølger", { antall: rekkefølger.length, elementer: rekkefølger[0]?.options, begrunnelse: svar.json.noOrderReason ?? null });
+  expect(rekkefølger.length).toBeLessThanOrEqual(1);
+  if (rekkefølger.length === 1) {
+    expect(rekkefølger[0]!.options.length).toBeGreaterThanOrEqual(3);
+    expect(rekkefølger[0]!.options.length).toBeLessThanOrEqual(6);
+  } else {
+    expect(String(svar.json.noOrderReason ?? "").trim(), "uten rekkefølge skal KI si hvorfor").not.toBe("");
+  }
+});
+
+test("KI-revisjon: en rekkefølge beholder typen og rekkefølgen når instruksen ikke handler om den", async () => {
+  test.setTimeout(240_000);
+  const enkelt = { stem: "Hvor lang er klagefristen?", options: ["Tre uker", "Én uke", "Seks uker", "Tre måneder"], correctAnswer: "Tre uker", rationale: "Fristen er tre uker." };
   const svar = await api("POST", "/api/admin/content/generate/mcq/revise", {
-    instruction: "Gjør spørsmålene vanskeligere",
+    instruction: "Gjør spørsmål 2 vanskeligere",
     locale: "nb",
-    questions: [{ questionType: "order", stem: "Sett i rekkefølge", options: NB, correctAnswer: NB[0], rationale: "Fordi." }],
+    questions: [{ questionType: "order", stem: "Sett stegene i klagebehandlingen i rekkefølge.", options: NB, correctAnswer: NB[0], rationale: "Motta først, arkivere sist." }, enkelt],
   });
-  noter("revisjon", `${svar.status} ${svar.json.error}`);
-  expect(svar.status).toBe(400);
-  expect(svar.json.error).toBe("mcq_revision_order_unsupported");
+  expect(svar.status, svar.tekst.slice(0, 300)).toBe(200);
+  const første = svar.json.questions[0];
+  noter("KI-revisjon: rekkefølgen", { type: første?.questionType, elementer: første?.options });
+  expect(første.questionType).toBe("order");
+  expect(første.options).toEqual(NB);
 });
 
 test.afterAll(async () => {

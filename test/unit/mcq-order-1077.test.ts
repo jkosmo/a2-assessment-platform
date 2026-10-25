@@ -15,6 +15,10 @@ describe("shuffleOrderItems", () => {
     expect(i).toBeGreaterThan(3);
   });
 
+  it("alle elementene like: ingen annen rekkefølge finnes, og stokkingen går ikke i ring", () => {
+    expect(shuffleOrderItems(["x", "x", "x"])).toEqual(["x", "x", "x"]);
+  });
+
   it("med ekte tilfeldighet: aldri den riktige, alltid de samme elementene", () => {
     for (let n = 0; n < 500; n++) {
       const result = shuffleOrderItems(["a", "b", "c"]);

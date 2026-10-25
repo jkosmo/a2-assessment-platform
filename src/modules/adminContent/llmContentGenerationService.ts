@@ -1,4 +1,4 @@
-import type { McqQuestionType } from "../assessment/mcqQuestionTypes.js";
+import { ORDER_MAX_ITEMS, ORDER_MIN_ITEMS, type McqQuestionType } from "../assessment/mcqQuestionTypes.js";
 import { z } from "zod";
 import { env } from "../../config/env.js";
 import { fetchAzureOpenAiWithRetry } from "../llm/azureOpenAiRetry.js";
@@ -75,8 +75,10 @@ export type McqDistractorMetadata = {
 
 // #1077: «multiple» (velg alle som stemmer) har `correctAnswers` — de riktige alternativene ordrett, i
 // alternativenes rekkefølge — og `correctAnswer` lik det første av dem. Uten `questionType`: ett svar.
+// Leveranse 2: «order» (sett i riktig rekkefølge) har elementene i riktig rekkefølge i `options` og
+// `correctAnswer` lik det første — rekkefølgen er fasiten.
 export type GeneratedMcqQuestion = {
-  questionType?: "multiple";
+  questionType?: "multiple" | "order";
   stem: string;
   options: string[];
   correctAnswer: string;
@@ -89,6 +91,11 @@ export type GeneratedMcqQuestion = {
 export type McqGenerationResult = {
   questions: GeneratedMcqQuestion[];
   validationWarnings?: string[];
+  /**
+   * #1077 leveranse 2 (produkteier 2026-10-25): KI lager «sett i riktig rekkefølge» bare der kilden har
+   * en fast rekkefølge — og sier fra når den ikke fant noen. Modellens begrunnelse, på innholdsspråket.
+   */
+  noOrderReason?: string;
 };
 
 export type RevisableMcqQuestion = {
@@ -241,6 +248,8 @@ const mcqGenerationResponseCodec = z.object({
       }),
     )
     .min(1),
+  // Leveranse 2: hvorfor det ikke ble noe «sett i riktig rekkefølge» (bare ved generering).
+  noOrderReason: z.string().optional(),
 });
 
 // #682: LLMs occasionally emit a question with MORE than the allowed options (observed in MCQ
@@ -253,7 +262,9 @@ export function clampMcqOptionCount(raw: unknown): unknown {
   if (!Array.isArray(obj.questions)) return raw;
   for (const entry of obj.questions) {
     if (!entry || typeof entry !== "object") continue;
-    const question = entry as { options?: unknown; correctAnswer?: unknown; correctAnswers?: unknown };
+    const question = entry as { questionType?: unknown; options?: unknown; correctAnswer?: unknown; correctAnswers?: unknown };
+    // Leveranse 2: en rekkefølge kuttes aldri — de siste stegene ville forsvunnet stille. Den avvises.
+    if (question.questionType === "order") continue;
     if (Array.isArray(question.options) && question.options.length > MCQ_MAX_OPTIONS) {
       // #1077: for «velg alle» skal ALLE de riktige overleve kuttet, ikke bare correctAnswer.
       const correct = [
@@ -279,6 +290,7 @@ type RawGeneratedMcqQuestion = { questionType?: unknown; options: string[]; corr
 
 type ParsedMcqResponse = {
   questions: GeneratedMcqQuestion[];
+  noOrderReason?: string;
   // #1077 (QA 2.100.0): fasiter som ikke stemmer med alternativene. Generering og revisjon gir
   // modellen ett forsøk til og avviser så; de skal aldri rettes stille. Oversettelse ser bort fra
   // dem — klienten henter svaret fra alternativets plass (localizeMcqAcrossLocales).
@@ -296,6 +308,7 @@ function parseMcqGenerationResponse(raw: unknown, context: string): ParsedMcqRes
   }
   return {
     questions: parsed.data.questions.map((question) => normalizeGeneratedQuestionType(question)),
+    ...(parsed.data.noOrderReason?.trim() ? { noOrderReason: parsed.data.noOrderReason.trim() } : {}),
     answerKeyProblems: parsed.data.questions.flatMap((question, index) => findAnswerKeyProblems(question, index).map((text) => ({ index, text }))),
   };
 }
@@ -309,6 +322,13 @@ function parseMcqGenerationResponse(raw: unknown, context: string): ParsedMcqRes
 export function findAnswerKeyProblems(question: RawGeneratedMcqQuestion, index: number): string[] {
   const options = new Set(question.options.map((option) => option.trim()));
   const label = `question ${index + 1}`;
+  // Leveranse 2: i en rekkefølge er alternativene fasiten — 3–6, ingen like.
+  if (question.questionType === "order") {
+    const items = question.options.map((option) => option.trim());
+    if (items.length < ORDER_MIN_ITEMS || items.length > ORDER_MAX_ITEMS) return [`${label}: an "order" question has ${ORDER_MIN_ITEMS}–${ORDER_MAX_ITEMS} items, not ${items.length}`];
+    if (new Set(items).size !== items.length) return [`${label}: an "order" question lists the same item twice`];
+    return [];
+  }
   if (question.questionType === "multiple") {
     const answers = question.correctAnswers ?? [];
     if (answers.length === 0) return [`${label}: "multiple" without correctAnswers`];
@@ -327,6 +347,9 @@ export function findAnswerKeyProblems(question: RawGeneratedMcqQuestion, index: 
  */
 export function normalizeGeneratedQuestionType(question: RawGeneratedMcqQuestion): GeneratedMcqQuestion {
   const { questionType, correctAnswer, correctAnswers, ...rest } = question;
+  if (questionType === "order") {
+    return { ...rest, questionType: "order", correctAnswer: question.options[0] ?? correctAnswer ?? "" };
+  }
   if (questionType === "multiple") {
     const wanted = new Set((correctAnswers ?? []).map((answer) => answer.trim()));
     const correct = question.options.filter((option) => wanted.has(option.trim()));
@@ -632,7 +655,9 @@ function buildIndexedMcqPreview(questions: RevisableMcqQuestion[], locale: Gener
         optionLines,
         question.questionType === "multiple"
           ? `Type: multiple (select all that apply)\nCorrect answers: ${(question.correctAnswers ?? []).map((answer) => localizeForPrompt(answer, locale)).join(" | ")}`
-          : `Correct answer: ${localizeForPrompt(question.correctAnswer, locale)}`,
+          : question.questionType === "order"
+            ? "Type: order (put in the right order) — the options above ARE the correct order"
+            : `Correct answer: ${localizeForPrompt(question.correctAnswer, locale)}`,
         `Rationale: ${localizeForPrompt(question.rationale, locale)}`,
       ].join("\n");
     })
@@ -1029,11 +1054,32 @@ const MULTIPLE_QUESTION_WRITING_RULES = `For a "multiple" question:
 - The rationale says, for each option, why it is or is not correct.
 - distractorMetadata covers the incorrect options only (none when every option is correct).`;
 
+// Leveranse 2 (produkteier 2026-10-25): høyst én «sett i riktig rekkefølge», og bare der kilden har en
+// fast rekkefølge. Ingen tilfeldig plan som for «velg alle» — en rekkefølge plattformen tvinger fram, blir
+// kunstig. Felles for generering og revisjon.
+export const MAX_ORDER_QUESTIONS = 1;
+const ORDER_QUESTION_WRITING_RULES = `For an "order" question ("put in the right order"):
+- "options" lists ${ORDER_MIN_ITEMS} to ${ORDER_MAX_ITEMS} items IN THE CORRECT ORDER — that order is the answer key. The platform shuffles them for the candidate. Leave out "correctAnswers"; "correctAnswer" is the first item.
+- Only where the source material states that the steps, phases or events happen in this order (a procedure, a process, a sequence in time). Never invent an order the source does not give, and never use it for items whose order is a matter of preference.
+- Each item is a short step or event, distinct from the others, and none gives away its own position ("first", "finally", "step 3").
+- The rationale explains the order.`;
+
+function buildOrderQuestionSection(): string {
+  return `## «Put in the right order»
+
+You may make AT MOST ${MAX_ORDER_QUESTIONS} question "questionType": "order", in place of a question with one correct answer — never in place of a planned "multiple" question. Make one only where the source material describes steps, phases or events in a fixed, stated order; then it is a good question to include.
+If the source has no such order, make none, and set the top-level field "noOrderReason" to one short sentence, in the output language, saying why (for example that the material describes principles, not a sequence).
+
+${ORDER_QUESTION_WRITING_RULES}`;
+}
+
 function buildGenerationQuestionTypeSection(plan: MultiplePlanEntry[], optionCount: number): string {
   if (plan.length === 0) {
     return `## Question type
 
-Every question has exactly one correct answer. Do not set "questionType".`;
+Every question has exactly one correct answer — leave out "questionType" — except for the one "order" question described below, if the source has a sequence.
+
+${buildOrderQuestionSection()}`;
   }
   const lines = plan.map((entry) => `- Question ${entry.index + 1}: "multiple", exactly ${entry.correctCount} of ${optionCount} options correct${entry.correctCount === optionCount ? " (every option is correct)" : ""}.`);
   return `## Question type — the platform's plan for this set
@@ -1041,11 +1087,13 @@ Every question has exactly one correct answer. Do not set "questionType".`;
 These questions (counting from 1, in the order you return them) must be "questionType": "multiple" (select all that apply), with exactly the number of correct options given:
 ${lines.join("\n")}
 
-Every other question has exactly one correct answer: leave out "questionType" and "correctAnswers".
+Every other question has exactly one correct answer — leave out "questionType" and "correctAnswers" — except for the one "order" question described below, if the source has a sequence.
 
 Construct each planned question for that purpose: search the source material for facts where several statements hold for the same question — the required contents of something, the principles or conditions that all apply, the steps or roles that all belong, the consequences that all follow — and build the question so that exactly the planned number of options are statements the source supports. The incorrect options are plausible statements the source contradicts or does not support. Take each planned question from a different part of the source.
 
-${MULTIPLE_QUESTION_WRITING_RULES}`;
+${MULTIPLE_QUESTION_WRITING_RULES}
+
+${buildOrderQuestionSection()}`;
 }
 
 export function buildMcqGenerationPrompts(
@@ -1181,7 +1229,10 @@ Return a single JSON object. For each incorrect option, include distractorMetada
     ? `
 
 A "multiple" question has the same fields plus "questionType": "multiple" and "correctAnswers", e.g. "questionType": "multiple", "correctAnswers": ["option 1", "option 3"], "correctAnswer": "option 1".`
-    : ""}`;
+    : ""}
+
+An "order" question has "questionType": "order", "options" with the items in the correct order, "correctAnswer" equal to the first item, a "rationale", and no "correctAnswers" or "distractorMetadata", e.g. {"questionType": "order", "stem": "Put the steps in order.", "options": ["step A", "step B", "step C"], "correctAnswer": "step A", "rationale": "why this order"}.
+When no question is "order", add the top-level field "noOrderReason", e.g. {"questions": [...], "noOrderReason": "The material describes principles, not a sequence of steps."}.`;
 
   return { systemPrompt, userPrompt };
 }
@@ -1273,12 +1324,15 @@ Target option count per question: ${optionCount}
 
 ## Question types
 
-A question either has one correct answer (no "questionType") or is "questionType": "multiple" — select all that apply, with "correctAnswers".
-- Keep every question's type, and keep the correct options of a "multiple" question correct, unless the instruction asks to change them.
+A question either has one correct answer (no "questionType"), is "questionType": "multiple" — select all that apply, with "correctAnswers" — or is "questionType": "order" — put in the right order, with the items in "options" IN THE CORRECT ORDER.
+- Keep every question's type, keep the correct options of a "multiple" question correct, and keep the items of an "order" question in the correct order, unless the instruction asks to change them. You may reword the items of an "order" question, but never reorder them unless the instruction says the order is wrong.
 - Change types only when the instruction asks for it. When it names questions, change those. When it asks in general — for "select all that apply" questions (for example "make some of them select-all", "use more multiple-answer questions") or for a harder test — you may convert questions without being told which: choose yourself which and how many, from where several options can genuinely all be correct under the stem and where the set needs to be harder. Any other instruction keeps every type as it is.
 - At most ${revisionMultipleCap(input.questions, questionCount)} of the ${questionCount} questions may be "multiple" in the result.
+- At most ${revisionOrderCap(input.questions)} question may be "order" in the result. Convert a question to "order" only when the instruction asks for it (by name, or in general), and only where its content is a sequence the material states.
 
 ${MULTIPLE_QUESTION_WRITING_RULES}
+
+${ORDER_QUESTION_WRITING_RULES}
 
 ## Current questions (indexed review view)
 
@@ -1310,6 +1364,13 @@ Return a single JSON object:
       "correctAnswer": "option 1",
       "correctAnswers": ["option 1", "option 3"],
       "rationale": "for each option, why it is or is not correct"
+    },
+    {
+      "questionType": "order",
+      "stem": "question text",
+      "options": ["first step", "second step", "third step"],
+      "correctAnswer": "first step",
+      "rationale": "why this is the order"
     }
   ]
 }`;
@@ -1321,6 +1382,11 @@ Return a single JSON object:
 // skal ikke tvinges ned av en revisjon som ikke handlet om typene.
 export function revisionMultipleCap(questions: Array<{ questionType?: string }>, questionCount: number): number {
   return Math.max(maxMultipleForRevision(questionCount), countMultipleQuestions(questions));
+}
+
+/** Leveranse 2: høyst én «sett i riktig rekkefølge» — eller så mange forfatteren alt hadde. */
+export function revisionOrderCap(questions: Array<{ questionType?: string }>): number {
+  return Math.max(MAX_ORDER_QUESTIONS, questions.filter((question) => question.questionType === "order").length);
 }
 
 export function buildModuleDraftLocalizationPrompts(input: ModuleDraftLocalizationInput): {
@@ -1737,9 +1803,13 @@ function appendLengthBiasWarning(result: McqGenerationResult): McqGenerationResu
 export function multiplePlanProblems(questions: GeneratedMcqQuestion[], plan: MultiplePlanEntry[]): string[] {
   const wanted = new Map(plan.map((entry) => [entry.index, entry.correctCount]));
   const problems: string[] = [];
+  // Leveranse 2: høyst én rekkefølge, og aldri på en planlagt «velg alle»-plass.
+  const orders = questions.filter((question) => question.questionType === "order").length;
+  if (orders > MAX_ORDER_QUESTIONS) problems.push(`at most ${MAX_ORDER_QUESTIONS} question may be "order", not ${orders}; make the others questions with one correct answer.`);
   questions.forEach((question, index) => {
     const correctCount = wanted.get(index);
     const multiple = question.questionType === "multiple";
+    if (correctCount === undefined && question.questionType === "order") return;
     if (correctCount !== undefined && !multiple) {
       problems.push(`question ${index + 1} must be "multiple" with exactly ${correctCount} correct options, but has one correct answer; construct it on facts from the source where ${correctCount === 1 ? "one statement holds and the others do not" : "several statements hold"}.`);
     } else if (correctCount !== undefined && (question.correctAnswers?.length ?? 0) !== correctCount) {
@@ -1863,7 +1933,9 @@ export async function reviseMcqQuestions(input: McqRevisionInput): Promise<McqGe
   const sourceQuestions: GeneratedMcqQuestion[] = input.questions.map((question) => ({
     ...(question.questionType === "multiple"
       ? { questionType: "multiple" as const, correctAnswers: (question.correctAnswers ?? []).map((answer) => localizeForPrompt(answer, input.locale)) }
-      : {}),
+      : question.questionType === "order"
+        ? { questionType: "order" as const }
+        : {}),
     stem: localizeForPrompt(question.stem, input.locale),
     options: (question.options ?? []).map((option) => localizeForPrompt(option, input.locale)),
     correctAnswer: localizeForPrompt(question.correctAnswer, input.locale),
@@ -1872,7 +1944,9 @@ export async function reviseMcqQuestions(input: McqRevisionInput): Promise<McqGe
   // #1077: høyst halvparten «velg alle» (eller så mange forfatteren alt hadde). Brytes grensen, får
   // modellen ett forsøk til; brytes den igjen, avvises revisjonen — et tak produkteier har satt.
   const multipleCap = revisionMultipleCap(input.questions, input.questionCount ?? input.questions.length);
-  const withinMultipleCap = (revised: GeneratedMcqQuestion[]) => countMultipleQuestions(revised) <= multipleCap;
+  const orderCap = revisionOrderCap(input.questions);
+  const countOrders = (revised: GeneratedMcqQuestion[]) => revised.filter((question) => question.questionType === "order").length;
+  const withinMultipleCap = (revised: GeneratedMcqQuestion[]) => countMultipleQuestions(revised) <= multipleCap && countOrders(revised) <= orderCap;
   // #688: a TARGETED edit (e.g. "endre alternativ 1b") must edit one question in place and keep the
   // rest — it must NOT change the question count. The LLM sometimes collapses to just the edited
   // question (10 → 1, silent data loss). For instructions with an explicit target, require the count
@@ -1900,7 +1974,7 @@ You MUST return ALL ${sourceQuestions.length} questions — edit only the target
 Return a revised question set where the requested change is concrete, visible, and materially different from the source questions.`);
   }
   if (!withinMultipleCap(firstAttempt.questions)) {
-    retryReasons.push(`At most ${multipleCap} questions may be "questionType": "multiple"; your previous attempt had ${countMultipleQuestions(firstAttempt.questions)}.`);
+    retryReasons.push(`At most ${multipleCap} questions may be "questionType": "multiple", and at most ${orderCap} "order"; your previous attempt had ${countMultipleQuestions(firstAttempt.questions)} and ${countOrders(firstAttempt.questions)}.`);
   }
   if (firstAttempt.answerKeyProblems.length > 0) {
     retryReasons.push(answerKeyRetryDirective(firstAttempt.answerKeyProblems));
@@ -1920,7 +1994,7 @@ ${retryReasons.join("\n\n")}`;
 
   if (!withinMultipleCap(secondAttempt.questions)) {
     throw new Error(
-      `MCQ revision made ${countMultipleQuestions(secondAttempt.questions)} questions «select all that apply»; at most ${multipleCap} are allowed. Please try again.`,
+      `MCQ revision made ${countMultipleQuestions(secondAttempt.questions)} questions «select all that apply» (at most ${multipleCap}) and ${countOrders(secondAttempt.questions)} «put in the right order» (at most ${orderCap}). Please try again.`,
     );
   }
 

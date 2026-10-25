@@ -1,7 +1,7 @@
 # Modules — task, assessment criteria, multiple-choice questions
 
 Contents: [Free-text modules](#free-text-modules) · [Multiple-choice questions](#multiple-choice-questions) ·
-[Select all that apply](#select-all-that-apply) · [The cue check](#the-cue-check)
+[Select all that apply](#select-all-that-apply) · [Put in the right order](#put-in-the-right-order) · [The cue check](#the-cue-check)
 
 A module tests. Write it from the source, in the course's one language, at the level agreed at
 gate 3 ([course-design.md](course-design.md#level-and-scope)).
@@ -89,6 +89,26 @@ the plan, say so at gate 4 and ask the author.
 
 The learner gets the question right only by choosing exactly the right options; there are no part
 marks.
+
+## Put in the right order
+
+A question can be `"questionType": "order"`: the learner puts 3–6 items in the right order
+([package-schema.md](package-schema.md#a-module)). There is no plan for this one.
+
+- **At most one per test, and only where the source states an order** — the steps of a procedure,
+  the phases of a process, events in time. Never make up an order the source does not give, and
+  never use it for items whose order is a matter of preference. When writing a test from a source
+  with such an order, include one; when the source has none, write none, and say so at gate 4
+  («ingen rekkefølge-spørsmål: kilden beskriver prinsipper, ikke steg»).
+- **Write the items in the right order.** That order is the answer key; the platform shuffles the
+  items for the learner, never into the right order.
+- **3–6 items**, each a short step distinct from the others. No item gives away its own position
+  ("først", "til slutt", "steg 3").
+- **When adjusting questions that stay**, an order question keeps its type and its order — reword
+  the items if asked, but never reorder them unless the author says the order is wrong.
+- The `rationale` explains the order.
+
+The learner gets it right only with the whole order right; there are no part marks.
 
 ## The cue check
 

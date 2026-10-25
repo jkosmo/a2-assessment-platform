@@ -2,6 +2,23 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.107.0 - 2026-10-25
+
+### «Sett i riktig rekkefølge» med KI og i skillet — #1077 leveranse 2b
+
+- **KI-generering:** høyst én «sett i riktig rekkefølge» per test, bare der kilden beskriver en fast
+  rekkefølge, og aldri på en plass planen har satt av til «velg alle». Lager KI ingen, sier den hvorfor,
+  og forfatteren ser det i kvitteringen etter genereringen. To rekkefølger, for få elementer eller like
+  elementer gir ett nytt forsøk, så avslag. En rekkefølge kuttes aldri.
+- **KI-revisjon:** stoppes ikke lenger (2.106.0). Modellen får vite at elementene står i riktig
+  rekkefølge og ikke skal stokkes om, med mindre instruksen sier at rekkefølgen er feil. Høyst én
+  rekkefølge — eller så mange forfatteren alt hadde.
+- **Skillet:** `modules.md` og `package-schema.md` beskriver typen; hint-kontrollen sjekker antall, like
+  elementer og høyst én per test; språkkontrollen krever ingen egen fasit for typen.
+- **Temaoverskriften i Mine kurs** er messingfarget og større enn kurstitlene (produkteier valgte
+  variant A av tre).
+- Stokkingen av en rekkefølge kan ikke lenger gå i ring om alle elementene har samme tekst.
+
 ## 2.106.1 - 2026-10-25
 
 ### «Sett i riktig rekkefølge» kunne ikke leveres

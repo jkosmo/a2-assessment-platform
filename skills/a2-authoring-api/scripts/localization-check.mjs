@@ -479,6 +479,12 @@ export function checkLocalization(pkg, { languages = LANGUAGES, primary = "nb", 
     checkField(`${q.path}.stem`, q.stem);
     if (q.rationale !== undefined) checkField(`${q.path}.rationale`, q.rationale);
     q.options.forEach((opt, oi) => checkField(`${q.path}.options[${oi}]`, opt));
+    // #1077 leveranse 2: in an «order» question the options ARE the answer key, in the same order in
+    // every language by construction — there is no separate answer to compare across locales.
+    if (q.questionType === "order") {
+      if (q.correctAnswer !== undefined) checkField(`${q.path}.correctAnswer`, q.correctAnswer);
+      continue;
+    }
     const multiple = q.questionType === "multiple";
     const answers = multiple ? (Array.isArray(q.correctAnswers) ? q.correctAnswers : []) : [q.correctAnswer];
     const answerField = multiple ? "correctAnswers" : "correctAnswer";

@@ -152,3 +152,23 @@ describe("mcq-cue-check — flere riktige svar (#1077)", () => {
     expect(r.stats.measured).toBe(balanced.length);
   });
 });
+
+// #1077 leveranse 2: «sett i riktig rekkefølge». Alternativene er fasiten og stokkes av plattformen, så
+// lengde og plassering er ingen hint. Det som kan gå galt: antallet, like elementer, og flere enn én.
+describe("#1077 leveranse 2 — «order» i hint-kontrollen", () => {
+  const order = (items: string[]) => ({ questionType: "order", stem: "Sett stegene i rekkefølge.", options: items, rationale: "Fordi." });
+  const plain = (n: number) => ({ stem: `Spørsmål ${n}?`, options: ["Alfa", "Beta", "Gamma", "Delta"], correctAnswer: ["Alfa", "Beta", "Gamma", "Delta"][n % 4], rationale: "Fordi." });
+
+  it("en rekkefølge med 3–6 ulike elementer gir ingen merknad — heller ikke om lengde eller plass", () => {
+    const r = checkMcqCues([order(["Kort", "Et langt og utfyllende steg i prosessen", "Midt"]), plain(1), plain(2), plain(3)]);
+    expect(r.issues.filter((i: { index: number | null }) => i.index === 0)).toEqual([]);
+  });
+
+  it("for få elementer, like elementer, og to rekkefølger i én test meldes", () => {
+    const kinds = (qs: unknown[]) => checkMcqCues(qs).issues.map((i: { kind: string }) => i.kind);
+    expect(kinds([order(["A", "B"])])).toContain("order_item_count");
+    expect(kinds([order(["A", "B", "C", "D", "E", "F", "G"])])).toContain("order_item_count");
+    expect(kinds([order(["A", "B", "A"])])).toContain("order_duplicate_item");
+    expect(kinds([order(["A", "B", "C"]), order(["D", "E", "F"]), plain(1)])).toContain("order_share");
+  });
+});

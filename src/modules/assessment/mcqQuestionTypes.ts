@@ -83,7 +83,9 @@ function optionPosition(options: string[], selected: string): number {
  */
 export function shuffleOrderItems<T>(items: readonly T[], random: () => number = Math.random): T[] {
   const shuffled = [...items];
-  if (shuffled.length < 2) return shuffled;
+  // Ingen annen rekkefølge finnes når alle elementene er like (lagringen avviser like elementer, men en
+  // tekst kan bli lik på ett språk) — da ville løkka gått for alltid.
+  if (shuffled.length < 2 || shuffled.every((item) => item === shuffled[0])) return shuffled;
   do {
     for (let i = shuffled.length - 1; i > 0; i--) {
       const j = Math.floor(random() * (i + 1));

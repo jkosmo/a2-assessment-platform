@@ -114,6 +114,21 @@ function checkMultiple(q, i, { lang, options, stem, label, issues }) {
   }
 }
 
+// #1077 leveranse 2: «put in the right order». The options ARE the right order and the platform
+// shuffles them, so neither position nor length is a cue. What can go wrong: too few or too many items,
+// the same item twice, a catch-all, and more than one such question in a test.
+const ORDER_MIN_ITEMS = 3;
+const ORDER_MAX_ITEMS = 6;
+const MAX_ORDER_QUESTIONS = 1;
+function checkOrder(q, i, { options, issues }) {
+  if (options.length < ORDER_MIN_ITEMS || options.length > ORDER_MAX_ITEMS) {
+    issues.push({ index: i, kind: "order_item_count", detail: `an «order» question has ${ORDER_MIN_ITEMS}–${ORDER_MAX_ITEMS} items, not ${options.length} (checked by export-validate too)` });
+  }
+  if (new Set(options).size !== options.length) {
+    issues.push({ index: i, kind: "order_duplicate_item", detail: "an «order» question lists the same item twice — the learner cannot tell which comes first" });
+  }
+}
+
 /**
  * @param {Array<{stem:unknown, options:unknown[], correctAnswer:unknown, questionType?:string, correctAnswers?:unknown[]}>} questions one set
  * @returns {{ ok: boolean, issues: Array<{ index: number|null, kind: string, detail: string }>, stats: object }}
@@ -124,6 +139,7 @@ export function checkMcqCues(questions, { primary } = {}) {
   let longestCount = 0;
   let measured = 0;
   let multipleCount = 0;
+  let orderCount = 0;
 
   for (const [i, q] of (questions ?? []).entries()) {
     const lang = primary ?? pickPrimary(q?.stem);
@@ -132,6 +148,14 @@ export function checkMcqCues(questions, { primary } = {}) {
     const stem = textOf(q?.stem, lang);
     const label = stem.length > 60 ? `${stem.slice(0, 57)}…` : stem;
 
+    if (q?.questionType === "order") {
+      orderCount += 1;
+      for (const o of options) {
+        if (CATCH_ALL.test(o)) issues.push({ index: i, kind: "catch_all_option", detail: `«${o}» — never "all/none of the above"` });
+      }
+      checkOrder(q, i, { options, issues });
+      continue;
+    }
     if (options.length < MIN_OPTIONS) {
       issues.push({ index: i, kind: "too_few_options", detail: `${options.length} options — write at least ${MIN_OPTIONS} (write 3–4)` });
     }
@@ -168,6 +192,9 @@ export function checkMcqCues(questions, { primary } = {}) {
   // #1077: høyst halvparten av settet som «velg alle» (produkteier 2026-10-24 — også når forfatteren
   // ber om flere). Ved nye kurs er standarden lavere, høyst omtrent hvert tredje (modules.md).
   const total = (questions ?? []).length;
+  if (orderCount > MAX_ORDER_QUESTIONS) {
+    issues.push({ index: null, kind: "order_share", detail: `${orderCount} questions are «put in the right order» — at most ${MAX_ORDER_QUESTIONS} per test, where the source states an order.` });
+  }
   if (multipleCount > Math.floor(total / 2)) {
     issues.push({ index: null, kind: "multiple_share", detail: `${multipleCount} of ${total} questions are «select all that apply» — at most ${Math.floor(total / 2)} (half the set). Keep the type for the questions where the source lists several things that all hold.` });
   }

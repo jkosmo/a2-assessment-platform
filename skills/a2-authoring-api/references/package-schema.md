@@ -207,6 +207,18 @@ the question right only by choosing exactly the correct ones. An export also wri
 on such a question (the first correct one); leave it as it is. When and how to write one:
 [modules.md](modules.md#select-all-that-apply).
 
+A **put-in-the-right-order** question has `"questionType": "order"`, and its `options` ARE the
+right order — there is no `correctAnswers`:
+
+```json
+{ "questionType": "order", "stem": "…", "options": ["first step", "second step", "third step"],
+  "rationale": "…" }
+```
+
+3–6 items, none twice, in the same order in every language. An export also writes `correctAnswer`
+(the first item); leave it as it is. When and how to write one:
+[modules.md](modules.md#put-in-the-right-order).
+
 `certificationLevel` is `basic`, `intermediate` or `advanced`
 ([course-design.md](course-design.md#level-and-scope)). How to write tasks, criteria and
 questions: [modules.md](modules.md).

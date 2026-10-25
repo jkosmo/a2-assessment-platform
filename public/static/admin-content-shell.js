@@ -1370,6 +1370,13 @@ async function localizeDraftAcrossLocalesWithTitle(title, taskText, assessorExpe
  * Returnerer `{ questions, failedLocales }`, samme form som søsterfunksjonene, slik at kalleren kan
  * si fra i stedet for å vise «ferdig».
  */
+/** Leveranse 2b: en linje når genereringen ikke ga noe «sett i riktig rekkefølge», med grunnen. */
+function noOrderQuestionHtml(reason, questions) {
+  if ((questions ?? []).some((question) => question?.questionType === "order")) return "";
+  const why = typeof reason === "string" && reason.trim() ? ` ${reason.trim()}` : "";
+  return `<p style="margin:8px 0 0;font-size:13px;color:var(--color-meta)" data-no-order-note>${escapeHtml(t("shell.generating.noOrderQuestion"))}${escapeHtml(why)}</p>`;
+}
+
 async function localizeMcqAcrossLocales(questions, sourceLocale) {
   const localizedQuestions = questions.map((question) => ({
     stem: buildLocalizedTextMap(sourceLocale, question.stem),
@@ -1877,7 +1884,9 @@ async function generateMcqInBackground(sourceMaterial, certLevel, locale, genera
     readyHtml: () => `<strong>${escapeHtml(tf("shell.generating.mcqReady", { count: questions.length }))}</strong>
       <p style="margin:8px 0 0;font-size:13px;color:var(--color-meta)">${escapeHtml(t("shell.generating.reviewPreviewHint"))}</p>`,
     // #1014: kvalitetsadvarslene fra #551 OG spraakene som ikke ble oversatt, i samme spor.
-    warningHtml: `${mcqWarningsHtml}${describeFailedLocales(failedLocales, locale)}`,
+    // #1077 leveranse 2b: KI lager «sett i riktig rekkefølge» bare der kilden har en rekkefølge — og
+    // sier fra når den ikke fant noen (produkteier 2026-10-25), med modellens begrunnelse.
+    warningHtml: `${mcqWarningsHtml}${noOrderQuestionHtml(result?.noOrderReason, questions)}${describeFailedLocales(failedLocales, locale)}`,
     onCommit: () => onAccept?.(questions),
   });
 }
@@ -1959,6 +1968,8 @@ async function reviseMcqInBackground(instruction, onAccept) {
     const multiple = question?.questionType === "multiple";
     return {
       ...(multiple ? { questionType: "multiple", correctAnswers: mcqCorrectPositions(question).map((i) => options[i]) } : {}),
+      // Leveranse 2b: en rekkefølge går med som type; elementene står i riktig rekkefølge i `options`.
+      ...(question?.questionType === "order" ? { questionType: "order" } : {}),
       stem: localizeValueForLocale(question.stem, contentLocale),
       options,
       correctAnswer: localizeValueForLocale(question.correctAnswer, contentLocale),

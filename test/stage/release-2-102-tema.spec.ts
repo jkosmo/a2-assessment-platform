@@ -80,10 +80,10 @@ test.afterAll(async () => {
   }
 });
 
-test("versjonen er 2.106.1", async () => {
+test("versjonen er 2.107.0", async () => {
   const json = await (await fetch(`${BASE}/version`)).json();
   noter("versjon", json.version);
-  expect(json.version).toBe("2.106.1");
+  expect(json.version).toBe("2.107.0");
 });
 
 test("Tema-siden: administrator lager et tema på bokmål, og oversetteren fyller nynorsk og engelsk", async ({ page }) => {
