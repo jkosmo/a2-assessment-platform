@@ -15,7 +15,7 @@
  *  4. Also renders a pending-deletion banner if effectiveAt is set.
  */
 
-import { apiFetch } from "/static/api-client.js";
+import { apiFetch, signOut } from "/static/api-client.js";
 import { showToast } from "/static/toast.js";
 
 // ── Built-in translations ─────────────────────────────────────────────────────
@@ -214,9 +214,8 @@ export async function initConsentGuard(getHeaders, locale) {
           removeConsentModal();
           resolve();
         },
-        () => {
-          window.location.href = "/";
-        },
+        // 2.104.0: knappen sendte bare til forsiden, og der ble man logget inn igjen med samme konto.
+        () => { void signOut(); },
       );
     });
   }

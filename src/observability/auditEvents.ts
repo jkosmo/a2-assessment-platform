@@ -554,6 +554,7 @@ export type AuditMetadataByAction = {
     createdCount: number;
     updatedCount: number;
     skippedConflictCount: number;
+    skippedAnonymizedCount: number;
     failedCount: number;
   }>;
   [auditActions.submission.created]: EventMetadata<{

@@ -1,5 +1,4 @@
 {
-  "conflictStrategy": "merge_by_email",
   "allowDepartmentOverwrite": true,
   "allowManagerOverwrite": true,
   "defaultActiveStatus": true

@@ -1414,4 +1414,18 @@ lista, og at lista står alfabetisk. Valgene som kunne vært tatt annerledes:
 - **Tema er ikke med i eksportfila.** Temaene hører til plattformen, ikke til kurset; et kurs importert
   i et annet miljø ville pekt på tema som ikke finnes der. En oppdatering fra fil lar kursets tema stå.
 - **Automatisk oversettelse fyller bare tomme felt** og bruker title-oversetteren fra #894. Et språk som
-  feiler, står tomt (#892), aldri med bokmålsteksten.
+  feiler, står tomt (#892), aldri med bokmålsteksten.
+
+## Identitet kobles aldri på e-post (#1114, 2026-10-25)
+
+Produkteier: «e-postadresser skal ikke kobles. Det er grunnleggende, og med et firma av vår størrelse er
+det på ingen måte nødvendig med gjenbruk.» Gjelder innloggingen (#386) og synkroniseringen av brukere
+(Entra og fil). En bruker med samme e-post og en annen Entra-ID er en konflikt som administrator ser,
+aldri en kobling. Det finnes ingen innstilling for det.
+
+- **Konflikten løses ikke automatisk.** Ikke ved å lage en ny bruker heller: e-posten er unik, og en ny
+  bruker med en endret adresse ville skjult at det fantes to. Administrator rydder i Entra eller ber om
+  en kobling.
+- **En pseudonymisert bruker røres ikke av synkroniseringen,** også når personen fortsatt finnes i
+  katalogen. Den telles uten navn eller e-post.
+

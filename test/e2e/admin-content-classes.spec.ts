@@ -412,3 +412,33 @@ test("#967: klasseskjermen merker tildelinger til upubliserte og arkiverte kurs"
   // Et varsel ingen ser er ikke et varsel.
   await expect(warnings.first()).toHaveCSS("color", "rgb(122, 75, 0)");
 });
+
+// #1114: e-postadresser kobles aldri (produkteier 2026-10-25). Det importen hopper over, skal
+// administrator se: hvor mange og hvorfor, og hvem — men ikke e-posten til en pseudonymisert.
+test("classes admin: importen sier hvem som ble hoppet over fordi e-posten tilhører en annen bruker", async ({ page }) => {
+  await mockBaseApis(page, ["ADMINISTRATOR"]);
+  await page.addInitScript(() => { try { localStorage.setItem("participant.locale", "nb"); } catch { /* ignore */ } });
+  await page.route("**/api/admin/content/classes", (route: Route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ classes: [] }) }),
+  );
+  await page.route("**/api/admin/sync/org/delta", (route: Route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ run: {
+        createdCount: 1, updatedCount: 2, failedCount: 0, skippedConflictCount: 1, skippedAnonymizedCount: 1,
+        conflicts: [{ externalId: "oid-9", email: "kari@a-2.no" }],
+      } }),
+    }));
+  await page.goto("/deltakere/klasser");
+  await page.locator("#importUsersFile").setInputFiles({
+    name: "entra-export.json",
+    mimeType: "application/json",
+    buffer: Buffer.from(JSON.stringify({ users: [{ externalId: "oid-9", email: "kari@a-2.no", name: "Kari" }] })),
+  });
+  const toast = page.locator(".toast").last();
+  await expect(toast).toContainText("Import fullført — 1 opprettet, 2 oppdatert.");
+  await expect(toast).toContainText("1 hoppet over: e-postadressen tilhører en annen bruker");
+  await expect(toast).toContainText("1 hoppet over: pseudonymisert.");
+  await expect(toast).toContainText("kari@a-2.no");
+});

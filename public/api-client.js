@@ -45,6 +45,39 @@ async function loadMsalScript() {
   });
 }
 
+// 2.104.0: «Logg ut» (produkteier 2026-10-25: «det er ikke noe konsistent måte å bytte» mellom to
+// kontoer). Innloggingen ligger i fanens sessionStorage, men Microsoft husker kontoen i nettleseren og
+// logget straks inn med den samme igjen. Å logge ut avslutter derfor også Microsoft-økten, og NESTE
+// innlogging spør hvilken konto — bare den, så ingen må velge konto i hver ny fane.
+const CHOOSE_ACCOUNT_KEY = "a2.auth.chooseAccount";
+
+/**
+ * Det innloggingen ber Microsoft om: kontovelgeren når brukeren nettopp logget ut, ellers ingenting
+ * ekstra. Flagget brukes én gang. Lagringen kan mangle (privat vindu); da er det en vanlig innlogging.
+ * @param {string[]} scopes
+ * @param {Pick<Storage, "getItem" | "removeItem">} [storage]
+ */
+export function loginRequestFor(scopes, storage = globalThis.localStorage) {
+  let choose = false;
+  try {
+    choose = storage?.getItem(CHOOSE_ACCOUNT_KEY) === "1";
+    if (choose) storage.removeItem(CHOOSE_ACCOUNT_KEY);
+  } catch {/* uten lagring: vanlig innlogging */}
+  return choose ? { scopes, prompt: "select_account" } : { scopes };
+}
+
+/** Logger ut av plattformen og av Microsoft-kontoen i denne nettleseren. Uten Entra (lokalt): til forsiden. */
+export async function signOut() {
+  try { globalThis.localStorage?.setItem(CHOOSE_ACCOUNT_KEY, "1"); } catch {/* se loginRequestFor */}
+  if (!msalInstance) {
+    window.location.href = "/";
+    return;
+  }
+  const account = msalInstance.getAllAccounts()[0];
+  // Tilbake til samme adresse som innloggingen bruker — den er registrert i Entra.
+  await msalInstance.logoutRedirect({ account, postLogoutRedirectUri: window.location.origin + "/admin-content" });
+}
+
 async function initMsal(entraConfig) {
   await loadMsalScript();
 
@@ -82,7 +115,7 @@ async function initMsal(entraConfig) {
   // If no account is present, save destination and trigger login
   if (msalInstance.getAllAccounts().length === 0) {
     sessionStorage.setItem("auth_intended_url", window.location.href);
-    await msalInstance.loginRedirect({ scopes: msalScopes });
+    await msalInstance.loginRedirect(loginRequestFor(msalScopes));
     // Page will redirect — execution stops here
   }
 }
@@ -92,7 +125,7 @@ export async function getAccessToken() {
 
   const accounts = msalInstance.getAllAccounts();
   if (accounts.length === 0) {
-    await msalInstance.loginRedirect({ scopes: msalScopes });
+    await msalInstance.loginRedirect(loginRequestFor(msalScopes));
     return null;
   }
 

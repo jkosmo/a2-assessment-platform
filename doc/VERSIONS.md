@@ -2,6 +2,32 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.104.0 - 2026-10-25
+
+### «Logg ut», og kontovalg ved neste innlogging
+
+Produkteier: «Hvordan får jeg logget meg ut … det er ikke noe konsistent måte å bytte» mellom to
+kontoer. Appen hadde ingen «Logg ut» utenom samtykkevinduet, og den knappen sendte bare til forsiden —
+der Microsoft logget en inn igjen med samme konto.
+
+- **Profilsiden har «Logg ut».** Den logger ut av plattformen og av Microsoft-kontoen i nettleseren.
+- **Neste innlogging spør hvilken konto.** Bare den neste: ellers spør innloggingen ikke, så ingen må
+  velge konto i hver ny fane.
+- **Samtykkevinduets «Logg ut» logger nå faktisk ut.**
+
+### Synkroniseringen av brukere kobler aldri på e-post (#1114)
+
+Produkteier: «e-postadresser skal ikke kobles. Det er grunnleggende». Synkroniseringen (Entra og
+«Importer brukere fra fil») koblet en eksisterende bruker til en ny Entra-ID fordi e-posten var lik.
+En gjenbrukt adresse ville gitt én person en annens resultater og kursbevis. Nå:
+
+- Identitet kobles bare på Entra-ID, som ved innlogging (#386). En bruker med samme e-post og en
+  annen ID røres ikke, og det lages ingen ny. Meldingen etter importen sier hvor mange og hvem.
+- En pseudonymisert bruker får ikke navn og e-post tilbake. Den telles som hoppet over, uten e-post.
+- Revisjonssporet har konfliktene og feilene med Entra-ID, ikke e-post (#806).
+- Innstillingen `conflictStrategy` er borte. Regelen er ikke et valg.
+- Ingen i prod har bedt om sletting eller pseudonymisering (produkteier), så ingen data er ryddet.
+
 ## 2.103.0 - 2026-10-25
 
 ### Animerte figurer: redusert bevegelse, avspilling når de vises, og en ny mal (#1073)
