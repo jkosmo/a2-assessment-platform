@@ -2,6 +2,18 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.102.1 - 2026-10-25
+
+### En ramme som ikke vises i kilden, stopper ikke oversettelsen med feil beskjed (#1112)
+
+Står f.eks. `:::sjekk` rett under en liste uten blank linje, tegner ikke plattformen rammen. Oversetteren
+la til linja, rammen ble tegnet i oversettelsen, og kontrollen fra #1109 avviste oversettelsen med
+beskjed om å prøve igjen — som ikke hjelper, fordi feilen ligger i kilden. Nå:
+
+- Kontrollen skiller tilfellet ut (`sourceNotDrawn` i `details`), og seksjonseditoren sier at kilden har
+  en blokk som ikke vises, hvilken, og at den trenger en blank linje over seg.
+- En **tom** oversettelse regnes som ikke oversatt og gir ikke lenger beskjed om endrede rammer.
+
 ## 2.102.0 - 2026-10-25
 
 ### Tema i «Mine kurs»
