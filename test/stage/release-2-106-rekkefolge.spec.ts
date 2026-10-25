@@ -46,10 +46,10 @@ const NB = ["Motta", "Vurdere", "Avgjøre", "Arkivere"];
 const rekkefølge = { questionType: "order", stem: L("Put the steps in order.", "Sett stegene i rekkefølge."), options: STEG, rationale: L("Receive first.", "Motta først.") };
 const tilstand: { moduleId?: string; versionId?: string } = {};
 
-test("versjonen er 2.106.0", async () => {
+test("versjonen er 2.106.1", async () => {
   const json = await (await fetch(`${BASE}/version`)).json();
   noter("versjon", json.version);
-  expect(json.version).toBe("2.106.0");
+  expect(json.version).toBe("2.106.1");
 });
 
 test("lagres med typen; for få elementer avvises; eksporten har typen og rekkefølgen", async () => {

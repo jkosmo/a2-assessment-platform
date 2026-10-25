@@ -56,6 +56,20 @@ if (!me.ok) {
   process.exit(1);
 }
 
+// Testkontoen er en ny bruker på stage, og alt utenom /api/me krever at personvernerklæringen er
+// godtatt (consentMiddleware). Kontoen er ikke en person; den godtar gjeldende versjon slik en ny
+// bruker gjør ved første innlogging — og bare når den ikke alt har gjort det.
+if (meBody?.consent && meBody.consent.accepted === false) {
+  const consentVersion = meBody.consent.currentVersion;
+  const accepted = await fetch(`${BASE}/api/me/consent`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${body.access_token}`, "content-type": "application/json" },
+    body: JSON.stringify({ consentVersion }),
+  });
+  log(accepted.ok ? `godtok personvernerklæringen (versjon ${consentVersion}) for testkontoen` : `kunne ikke godta personvernerklæringen (${accepted.status})`);
+  if (!accepted.ok) process.exit(1);
+}
+
 const expiresOn = Date.now() + Number(body.expires_in ?? 3600) * 1000;
 fs.writeFileSync(
   OUT,

@@ -2,6 +2,16 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.106.1 - 2026-10-25
+
+### «Sett i riktig rekkefølge» kunne ikke leveres
+
+Innleveringsruta godtok bare `selectedAnswer` eller `selectedAnswers`, og avviste rekkefølgen
+(`orderedAnswers`) før den nådde rettingen. Funnet av stage-testen for 2.106.0: testene i 2.106.0 gikk
+rett på tjenesten og forbi ruta. Ruta godtar nå nøyaktig én av de tre formene, og en ny test går gjennom
+de ekte rutene. Testkontoen på stage godtar personvernerklæringen ved første token
+(`npm run stage:auth:service`).
+
 ## 2.106.0 - 2026-10-25
 
 ### «Sett i riktig rekkefølge» — #1077 leveranse 2a

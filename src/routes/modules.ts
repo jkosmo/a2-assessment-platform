@@ -31,15 +31,19 @@ const mcqStartQuerySchema = z.object({
 const mcqSubmitBodySchema = z.object({
   submissionId: z.string().min(1),
   attemptId: z.string().min(1),
-  // #1077: ett valg (`selectedAnswer`) eller flere («velg alle som stemmer», `selectedAnswers`). Hvilket
-  // spørsmålet skal ha, avgjøres av typen ved rettingen; her bare at svaret har én av formene.
+  // #1077: ett valg (`selectedAnswer`), flere («velg alle som stemmer», `selectedAnswers`) eller alle i
+  // deltakerens rekkefølge («sett i riktig rekkefølge», `orderedAnswers`, leveranse 2). Hvilket
+  // spørsmålet skal ha, avgjøres av typen ved rettingen; her bare at svaret har nøyaktig én av formene.
+  // ⚠️ Leveranse 2a glemte denne ruta: tjenesten tok imot rekkefølgen, men ruta avviste den før den kom
+  // dit (funnet av stage-testen — testene gikk utenom ruta).
   responses: z.array(
     z.object({
       questionId: z.string().min(1),
       selectedAnswer: z.string().min(1).optional(),
       selectedAnswers: z.array(z.string().min(1)).max(20).optional(),
-    }).refine((item) => (item.selectedAnswer !== undefined) !== (item.selectedAnswers !== undefined), {
-      message: "Each response has either selectedAnswer or selectedAnswers.",
+      orderedAnswers: z.array(z.string().min(1)).max(20).optional(),
+    }).refine((item) => [item.selectedAnswer, item.selectedAnswers, item.orderedAnswers].filter((v) => v !== undefined).length === 1, {
+      message: "Each response has exactly one of selectedAnswer, selectedAnswers or orderedAnswers.",
     }),
   ).refine((items) => {
     const ids = items.map(i => i.questionId);

@@ -136,6 +136,33 @@ describe("#1077 leveranse 2 — sett i riktig rekkefølge", () => {
     expect(row!.distractorUsage).toEqual([]);
   });
 
+  // ⚠️ Stage-testen for 2.106.0 fant at innleveringsruta avviste `orderedAnswers` — testene over går
+  // rett på tjenesten. Denne går gjennom de ekte rutene, slik deltakerflaten gjør.
+  it("gjennom de ekte rutene: start, innlevering med orderedAnswers, og avslag på to svarformer samtidig", async () => {
+    const { moduleId, set } = await createModule([order()]);
+    const moduleVersionId = await publishVersion(moduleId, set.body.mcqSetVersion.id);
+    const externalId = `p-order-route-${Date.now()}`;
+    const user = await prisma.user.create({ data: { externalId, email: `${externalId}@company.com`, name: "Deltaker rute" } });
+    const participant = { "x-user-id": externalId, "x-user-email": `${externalId}@company.com`, "x-user-name": "Deltaker rute", "x-user-roles": "PARTICIPANT" };
+    await request(app).post("/api/me/consent").set(participant).send({ consentVersion: "1.0" });
+    const submission = await prisma.submission.create({
+      data: { userId: user.id, moduleId, moduleVersionId, submissionStatus: "SUBMITTED", deliveryType: "text", responseJson: "{}", submittedAt: new Date() },
+    });
+    const start = await request(app).get(`/api/modules/${moduleId}/mcq/start?submissionId=${submission.id}&locale=nb`).set(participant);
+    expect(start.status, JSON.stringify(start.body)).toBe(200);
+    const q = start.body.questions[0];
+    expect(q.questionType).toBe("order");
+
+    const begge = await request(app).post(`/api/modules/${moduleId}/mcq/submit`).set(participant)
+      .send({ submissionId: submission.id, attemptId: start.body.attemptId, responses: [{ questionId: q.id, orderedAnswers: NB, selectedAnswer: NB[0] }] });
+    expect(begge.status).toBe(400);
+
+    const levert = await request(app).post(`/api/modules/${moduleId}/mcq/submit`).set(participant)
+      .send({ submissionId: submission.id, attemptId: start.body.attemptId, responses: [{ questionId: q.id, orderedAnswers: NB }] });
+    expect(levert.status, JSON.stringify(levert.body)).toBe(200);
+    expect(levert.body.percentScore).toBe(100);
+  });
+
   it("eksport → import gir samme spørsmål tilbake", async () => {
     const { moduleId, set } = await createModule([order()]);
     await publishVersion(moduleId, set.body.mcqSetVersion.id);
