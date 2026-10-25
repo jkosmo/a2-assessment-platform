@@ -2,6 +2,103 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.105.0 - 2026-10-25
+
+### En egen testkonto for stage
+
+Produkteier: «en egen bruker for deg på stage, slik at du kan teste uten tillatelse», med begrenset
+tilgang. Stage-testene ventet hver gang på at produkteier logget inn (et brukertoken lever en time).
+
+- En app-registrering i Entra, «A-2 stage-testkonto», henter sitt eget token
+  (`npm run stage:auth:service`; hemmeligheten ligger i den gitignorerte `.stage-service.json`).
+- Plattformen godtar et token uten bruker bare når `DEPLOY_ENVIRONMENT` er `staging` og appen er
+  `STAGE_TEST_SERVICE_APP_ID` (`src/auth/stageTestService.ts`). I prod er ingen av dem satt. Rollen er
+  alltid fagansvarlig, uansett hva tokenet sier.
+- Stage-testene bruker det personlige tokenet når det er gyldig, ellers testkontoen.
+- De to innstillingene er satt på stage direkte, ikke i Bicep: en full infrastruktur-utrulling fjerner
+  dem, og da avvises kontoen igjen (det trygge utfallet).
+
+## 2.104.0 - 2026-10-25
+
+### «Logg ut», og kontovalg ved neste innlogging
+
+Produkteier: «Hvordan får jeg logget meg ut … det er ikke noe konsistent måte å bytte» mellom to
+kontoer. Appen hadde ingen «Logg ut» utenom samtykkevinduet, og den knappen sendte bare til forsiden —
+der Microsoft logget en inn igjen med samme konto.
+
+- **Profilsiden har «Logg ut».** Den logger ut av plattformen og av Microsoft-kontoen i nettleseren.
+- **Neste innlogging spør hvilken konto.** Bare den neste: ellers spør innloggingen ikke, så ingen må
+  velge konto i hver ny fane.
+- **Samtykkevinduets «Logg ut» logger nå faktisk ut.**
+
+### Synkroniseringen av brukere kobler aldri på e-post (#1114)
+
+Produkteier: «e-postadresser skal ikke kobles. Det er grunnleggende». Synkroniseringen (Entra og
+«Importer brukere fra fil») koblet en eksisterende bruker til en ny Entra-ID fordi e-posten var lik.
+En gjenbrukt adresse ville gitt én person en annens resultater og kursbevis. Nå:
+
+- Identitet kobles bare på Entra-ID, som ved innlogging (#386). En bruker med samme e-post og en
+  annen ID røres ikke, og det lages ingen ny. Meldingen etter importen sier hvor mange og hvem.
+- En pseudonymisert bruker får ikke navn og e-post tilbake. Den telles som hoppet over, uten e-post.
+- Revisjonssporet har konfliktene og feilene med Entra-ID, ikke e-post (#806).
+- Innstillingen `conflictStrategy` er borte. Regelen er ikke et valg.
+- Ingen i prod har bedt om sletting eller pseudonymisering (produkteier), så ingen data er ryddet.
+
+## 2.103.0 - 2026-10-25
+
+### Animerte figurer: redusert bevegelse, avspilling når de vises, og en ny mal (#1073)
+
+Det som sto igjen av #1073 (produkteier: «ta alt nå»):
+
+- **«Redusert bevegelse» gjelder også figurer.** En figur vises som `<img>`, og nettleseren tar ikke
+  leserens innstilling med inn i et bilde (målt i Chromium). Med innstillingen på viser deltakerflaten
+  nå figurens stillbilde: en regel som slår av all animasjon, lagt inn før bildet lages. Stillbildet er
+  hele figuren — det sørger figurkontrollen for.
+- **Spilles av når den kommer til syne.** En animasjon er over på fem sekunder, ofte før deltakeren
+  har kommet ned til figuren. Den spilles nå av på nytt første gang halve figuren er synlig, og igjen
+  hver gang deltakeren klikker på den.
+- **Ny mal: «sti som tegnes».** En rute, en kurve eller en pil tegnes fra start til slutt, én gang.
+  `<path class="sti" pathLength="1">` med malens stilblokk; farge, strekbredde og varighet kan
+  variere, ingenting annet. Figurkontrollen i skillet — og dermed plattformen ved opplasting — godtar
+  den på samme måte som flytmalen, og avviser en annen lengde, en løkke, en forsinkelse, en klasse på
+  feil element og en strek som er usynlig i stillbildet. `figure-design.md` har malen, og skjemaet
+  «Hvilken form» har fått en rad for den.
+- **Forfatterveiledning:** hjelpen i seksjonseditoren og `figure-design.md` sier at figurer kan
+  animeres, og hvordan plattformen viser dem.
+
+## 2.102.1 - 2026-10-25
+
+### En ramme som ikke vises i kilden, stopper ikke oversettelsen med feil beskjed (#1112)
+
+Står f.eks. `:::sjekk` rett under en liste uten blank linje, tegner ikke plattformen rammen. Oversetteren
+la til linja, rammen ble tegnet i oversettelsen, og kontrollen fra #1109 avviste oversettelsen med
+beskjed om å prøve igjen — som ikke hjelper, fordi feilen ligger i kilden. Nå:
+
+- Kontrollen skiller tilfellet ut (`sourceNotDrawn` i `details`), og seksjonseditoren sier at kilden har
+  en blokk som ikke vises, hvilken, og at den trenger en blank linje over seg.
+- En **tom** oversettelse regnes som ikke oversatt og gir ikke lenger beskjed om endrede rammer.
+
+## 2.102.0 - 2026-10-25
+
+### Tema i «Mine kurs»
+
+Produkteier: «det blir relativt mange kurs som er vanskelig å holde styr på, selv med navnestandard».
+
+- **Tema** er en ny side i innholdsforvaltningen, til venstre for Kurs. Administrator lager, endrer og
+  sletter tema; alle andre i innholdsforvaltningen ser lista uten knappene. Navnet skrives på bokmål;
+  står nynorsk eller engelsk tomt ved lagring, oversettes de med samme tjeneste som titlene (#894). Et
+  språk som ikke kom gjennom, blir stående tomt med en melding.
+- **Inne i kurset** krysses temaene av. Et kurs kan ha flere tema, eller ingen. Kursoversikten kan
+  filtreres på tema.
+- **Mine kurs** står etter tema, med et valg for alfabetisk som huskes i nettleseren. Under hvert tema
+  står de pågående kursene, så de fullførte bak «Fullført». Et kurs med flere tema står under hvert av
+  dem; kurs uten tema står sist under «Andre kurs». Har ingen av deltakerens kurs et tema, er lista som
+  før, uten valget.
+- Slettes et tema, mister kursene bare temaet. Tema er ikke med i eksportfila, og en oppdatering fra
+  fil (#1095) lar kursets tema stå.
+- **Migrasjon** `20261025140000_course_themes`: to nye tabeller, `CourseTheme` og
+  `CourseThemeAssignment`. Bare utvidelse.
+
 ## 2.101.2 - 2026-10-25
 
 ### «Systemet jobber» under import og samlet publisering

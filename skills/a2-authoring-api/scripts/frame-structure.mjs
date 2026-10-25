@@ -258,5 +258,7 @@ export function describeFrameProblem(problem) {
   const name = `:::${problem.kind}`;
   if (problem.problem === "count") return `${name}: ${problem.expected} frame(s) in the source, ${problem.actual} in the translation`;
   if (problem.problem === "drawn") return `${name}: ${problem.expected} drawn in the source, ${problem.actual} in the translation`;
+  // #1112: the source has a frame the platform does not draw (no blank line above it); fix the source.
+  if (problem.problem === "sourceNotDrawn") return `${name}: the source has a frame that is not drawn (${problem.expected} drawn, ${problem.actual} in the translation) — add a blank line above it in the source`;
   return `${name} no. ${problem.position}: ${entry?.counts ?? "shape"} differs (${problem.expected} in the source, ${problem.actual} in the translation)`;
 }

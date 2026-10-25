@@ -46,9 +46,8 @@ describe("org sync service", () => {
     logOperationalEvent.mockReset();
   });
 
-  it("creates and updates users during delta sync while recording completion summary", async () => {
+  it("creates and updates on externalId — and #1114: never links an e-mail match to a new externalId", async () => {
     getOrgSyncConfig.mockReturnValue({
-      conflictStrategy: "update_email_match",
       defaultActiveStatus: true,
       allowDepartmentOverwrite: true,
       allowManagerOverwrite: true,
@@ -116,14 +115,8 @@ describe("org sync service", () => {
       manager: "Manager A",
       activeStatus: false,
     });
-    expect(updateUserForOrgSync).toHaveBeenNthCalledWith(2, "user-2", {
-      externalId: "ext-2",
-      email: "email.match@company.com",
-      name: "Email Match User Updated",
-      department: "Product",
-      manager: "Manager C",
-      activeStatus: true,
-    });
+    // #1114: ext-2 has the e-mail of user-2, who is not ext-2. Before, user-2 was given ext-2.
+    expect(updateUserForOrgSync).toHaveBeenCalledTimes(1);
     expect(createUserForOrgSync).toHaveBeenCalledWith({
       externalId: "ext-3",
       email: "new.user@company.com",
@@ -137,10 +130,12 @@ describe("org sync service", () => {
       source: "hr-feed",
       userCount: 3,
       createdCount: 1,
-      updatedCount: 2,
-      skippedConflictCount: 0,
+      updatedCount: 1,
+      skippedConflictCount: 1,
+      skippedAnonymizedCount: 0,
       failedCount: 0,
       errors: [],
+      conflicts: [{ externalId: "ext-2", email: "email.match@company.com" }],
     });
     expect(recordAuditEvent).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -154,15 +149,15 @@ describe("org sync service", () => {
       expect.objectContaining({
         runId: "org-sync-run-1",
         createdCount: 1,
-        updatedCount: 2,
+        updatedCount: 1,
+        skippedConflictCount: 1,
       }),
       "info",
     );
   });
 
-  it("records failed conflicting records when strict conflict handling is enabled", async () => {
+  it("#1114: a known user whose new e-mail belongs to ANOTHER user is skipped, not failed — neither is touched", async () => {
     getOrgSyncConfig.mockReturnValue({
-      conflictStrategy: "fail_conflict",
       defaultActiveStatus: true,
       allowDepartmentOverwrite: true,
       allowManagerOverwrite: true,
@@ -204,45 +199,34 @@ describe("org sync service", () => {
     expect(result).toMatchObject({
       createdCount: 0,
       updatedCount: 0,
-      skippedConflictCount: 0,
-      failedCount: 1,
-      errors: [
-        {
-          externalId: "ext-1",
-          email: "conflict@company.com",
-          reason: "Email conflicts with a different external ID.",
-        },
-      ],
+      skippedConflictCount: 1,
+      failedCount: 0,
+      errors: [],
+      conflicts: [{ externalId: "ext-1", email: "conflict@company.com" }],
     });
-    expect(logOperationalEvent).toHaveBeenCalledWith(
-      "org_sync_delta_failed_record",
-      expect.objectContaining({
-        runId: "org-sync-run-1",
-        externalId: "ext-1",
-        email: "conflict@company.com",
-      }),
-      "error",
-    );
-    expect(recordAuditEvent).toHaveBeenCalledWith(
-      expect.objectContaining({
-        entityType: "org_sync",
-        entityId: "org-sync-run-1",
-        action: "org_sync_record_failed",
-      }),
-    );
-    expect(recordAuditEvent).toHaveBeenCalledWith(
-      expect.objectContaining({
-        entityType: "org_sync",
-        entityId: "org-sync-run-1",
-        action: "org_sync_completed",
-      }),
-    );
-    expect(logOperationalEvent).toHaveBeenCalledWith(
-      "org_sync_delta_completed",
-      expect.objectContaining({
-        failedCount: 1,
-      }),
-      "error",
-    );
+    // #806: the audit trail is kept for ever — the conflict is there by externalId, without the e-mail.
+    const completed = recordAuditEvent.mock.calls.map(([event]) => event).find((event) => event.action === "org_sync_completed");
+    expect(completed.metadata.conflicts).toEqual([{ externalId: "ext-1" }]);
+    expect(JSON.stringify(completed.metadata)).not.toContain("conflict@company.com");
+  });
+
+  it("#1114: a pseudonymised user is not written back — name and e-mail stay pseudonymised", async () => {
+    getOrgSyncConfig.mockReturnValue({ defaultActiveStatus: true, allowDepartmentOverwrite: true, allowManagerOverwrite: true });
+    findUserForOrgSyncByExternalId.mockResolvedValue({
+      id: "user-9", isAnonymized: true, name: "Pseudonymisert bruker", email: "x@anonymized.invalid",
+      department: null, manager: null, activeStatus: false,
+    });
+    findUserForOrgSyncByEmail.mockResolvedValue(null);
+
+    const { applyOrgDeltaSync } = await import("../../src/modules/orgSync/index.js");
+    const result = await applyOrgDeltaSync({
+      source: "hr-feed",
+      actorId: "admin-1",
+      users: [{ externalId: "ext-9", email: "kari@company.com", name: "Kari Ekte", activeStatus: true }],
+    });
+
+    expect(updateUserForOrgSync).not.toHaveBeenCalled();
+    expect(createUserForOrgSync).not.toHaveBeenCalled();
+    expect(result).toMatchObject({ updatedCount: 0, createdCount: 0, skippedAnonymizedCount: 1, skippedConflictCount: 0, conflicts: [] });
   });
 });

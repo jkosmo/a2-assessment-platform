@@ -18,7 +18,7 @@ import { createNumberFormatter, createDateTimeFormatter } from "/static/format-d
 const formatDateTime = createDateTimeFormatter(() => currentLocale, "—");
 import { localeLabels, supportedLocales, translations } from "/static/i18n/profile-translations.js";
 import { localizeCertLevel } from "/static/cert-level.js";
-import { apiFetch, buildConsoleHeaders, getConsoleConfig, fetchQueueCounts, applyNavReviewBadge } from "/static/api-client.js";
+import { apiFetch, buildConsoleHeaders, getConsoleConfig, fetchQueueCounts, applyNavReviewBadge, signOut } from "/static/api-client.js";
 import { escapeHtml } from "/static/html-escape.js";
 import {
   findMatchingPreset,
@@ -790,3 +790,6 @@ setLocale(currentLocale);
     }
   }
 })();
+
+// 2.104.0: logger ut av plattformen og Microsoft-kontoen; neste innlogging spør hvilken konto.
+document.getElementById("signOutBtn")?.addEventListener("click", () => { void signOut(); });

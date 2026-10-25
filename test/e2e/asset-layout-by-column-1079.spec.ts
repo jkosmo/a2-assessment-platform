@@ -308,9 +308,11 @@ test.describe("#1079 — forhåndsvisningen i seksjonseditoren", () => {
       if (!img || !img.dataset.assetLayout || spalte === 0) return null;
       return { vist: img.dataset.assetLayout, passer: spalte < 640 ? "narrow" : "wide" };
     });
-    await expect.poll(async () => { const s = await stand(); return s !== null && s.vist === s.passer; }).toBe(true);
-    const bredt = await stand();
-    expect(bredt?.passer).toBe("wide");
+    // Det samme oppslaget som poll-en godtok, brukes videre: et nytt oppslag kan treffe et bilde som
+    // nettopp er byttet ut og ikke har fått oppsettet ennå (feilet 1 av 3 ganger, 2026-10-25).
+    let bredt: Awaited<ReturnType<typeof stand>> = null;
+    await expect.poll(async () => { const s = await stand(); if (s !== null && s.vist === s.passer) bredt = s; return bredt !== null; }).toBe(true);
+    expect(bredt!.passer).toBe("wide");
     // Hver henting ba om det brede oppsettet.
     expect(forespørsler.length).toBeGreaterThanOrEqual(1);
     expect(new Set(forespørsler)).toEqual(new Set([null]));

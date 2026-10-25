@@ -187,6 +187,73 @@ function withoutIcons(svg) {
   return { svg: stripped, problems };
 }
 
+// ── The second template: a path that draws itself (#1073, «sti som tegnes») ──────────────────────
+//
+// A route, a curve or an arrow that is drawn from its start to its end, once. Same principle as the
+// flow: the figure IS the template, compared, not read. The trick is `pathLength="1"`: the browser
+// then measures the path as length 1, so the dash pattern and the offset are the same fixed numbers
+// for every path, and there is nothing to compute — or to get wrong — per figure.
+//
+// At rest the offset is 0: the whole path is drawn. With reduced motion the animation is off, and the
+// picture is the same complete one. Every path with class "sti" is drawn at the same time; there are
+// no delays, because a later path would then stand complete until its delay ran out and jump to
+// empty — the opposite of drawing.
+const PATH_TEMPLATE = [
+  ["the base rule `.sti { fill: none; stroke: <colour>; stroke-width: <number>; stroke-dasharray: 1; stroke-dashoffset: 0; }`",
+    `\\.sti\\{fill:none;stroke:(${HEX});stroke-width:(\\d+(?:\\.\\d+)?|\\.\\d+);stroke-dasharray:1;stroke-dashoffset:0;?\\}`],
+  ["`@keyframes tegn { 0% { stroke-dashoffset: 1; } 100% { stroke-dashoffset: 0; } }`",
+    `@keyframes tegn\\{0%\\{stroke-dashoffset:1;?\\}100%\\{stroke-dashoffset:0;?\\}\\}`],
+  ["`.sti { animation: tegn <seconds>s ease-in-out 1; }`", `\\.sti\\{animation:tegn ${TIME} ease-in-out 1;?\\}`],
+  ["`@media (prefers-reduced-motion: reduce) { .sti { animation: none; } }` as the last rule",
+    `@media\\(prefers-reduced-motion:reduce\\)\\{\\.sti\\{animation:none;?\\}\\}$`],
+];
+
+/** Does the style block begin like the path template? Then the figure is compared with that one. */
+const isPathTemplate = (svg) => styleBlocks(svg).length === 1 && squeeze(styleBlocks(svg)[0]).startsWith(".sti{");
+
+/**
+ * Compares a figure with the path template.
+ * @returns {{ totalSeconds: number } | { problems: string[] }}
+ */
+function matchPathTemplate(svg) {
+  const problems = [];
+  const tags = openTags(svg);
+  const foreign = [...new Set(tags.map((t) => t.tag).filter((tag) => !TEMPLATE_ELEMENTS.has(tag) && !REPORTED_ELSEWHERE.has(tag.toLowerCase())))];
+  if (foreign.length > 0) problems.push(`a drawn path figure is made of <path class="sti"> strokes, plain <rect>/<circle>/<line>/<polyline>/<path> shapes, <text> labels and one <style> block — found ${foreign.map((t) => `<${t}>`).join(", ")}`);
+  if (tags.filter((t) => t.tag === "svg").length !== 1) problems.push("an animated figure is one <svg>, with none nested inside it");
+  if (tags.some((t) => t.tag === "style" && t.raw.replace(/\/\s*$/, "").trim() !== "")) problems.push("the <style> element has no attributes — media=\"…\" or type=\"…\" can switch the whole block off");
+  if (tags.some((t) => t.attrs.transform !== undefined)) problems.push("an animated figure has no transform attributes — place elements with coordinates instead");
+  if (tags.some((t) => t.attrs.style !== undefined)) problems.push("an animated figure has no style=\"\" attributes — use presentation attributes (fill, stroke, …) instead");
+  if (problems.length > 0) return { problems };
+
+  const block = styleBlocks(svg)[0];
+  if (block.includes("/*")) return { problems: ["the style block of an animated figure has no comments — put them in the markup (<!-- … -->)"] };
+  let rest = squeeze(block);
+  const found = [];
+  for (const [what, source] of PATH_TEMPLATE) {
+    const m = rest.match(new RegExp(`^${source}`));
+    if (!m) return { problems: [`expected ${what}, found "${rest.slice(0, 60) || "(end of the style block)"}"`] };
+    found.push(m);
+    rest = rest.slice(m[0].length);
+  }
+  const [base, , animation] = found;
+  if (!(Number(base[2]) > 0)) problems.push("the stroke width of the drawn path is larger than 0 — otherwise nothing is drawn");
+  const duration = Number(animation[1]);
+  if (!(duration >= MIN_DURATION_SECONDS)) problems.push(`the duration must be at least ${MIN_DURATION_SECONDS}s — shorter, and the path appears without anyone seeing it drawn`);
+
+  // The drawn strokes: class exactly "sti", on a <path>, measured as length 1. With any other length
+  // the dash pattern of 1 leaves gaps in the picture at rest; without the attribute the path is drawn
+  // as one short dash. Checked both ways: every carrier is such a path, and there is at least one.
+  const carriers = tags.filter((t) => (t.attrs.class ?? "").split(/\s+/).includes("sti"));
+  if (carriers.length === 0) problems.push("a drawn path figure has at least one <path class=\"sti\" pathLength=\"1\">");
+  const notPaths = [...new Set(carriers.filter((t) => t.tag !== "path").map((t) => `<${t.tag}>`))];
+  if (notPaths.length > 0) problems.push(`class "sti" belongs on a <path> only — found it on ${notPaths.join(", ")}`);
+  if (carriers.some((t) => (t.attrs.class ?? "").trim() !== "sti")) problems.push("a drawn path has the class \"sti\" and no other class");
+  if (carriers.some((t) => t.tag === "path" && (t.attrs.pathLength ?? "").trim() !== "1")) problems.push("every <path class=\"sti\"> has pathLength=\"1\" — the template's dash numbers are measured on that length");
+  if (problems.length > 0) return { problems };
+  return { totalSeconds: duration };
+}
+
 /**
  * Compares the figure with the template.
  * @returns {{ totalSeconds: number } | { problems: string[] }}
@@ -463,10 +530,10 @@ export function checkFigureMotion(figure) {
   let animated = false;
   let totalSeconds = null;
   if (triesToAnimate) {
-    const result = matchTemplate(svg);
+    const result = isPathTemplate(svg) ? matchPathTemplate(svg) : matchTemplate(svg);
     if ("problems" in result) {
       for (const problem of result.problems) {
-        issues.push({ kind: "unsupported_animation_form", detail: `${problem} — an animated figure uses the flow template's <style> block unchanged, apart from colours, duration, delays and the number of steps (figure-design.md)` });
+        issues.push({ kind: "unsupported_animation_form", detail: `${problem} — an animated figure uses one of the two templates' <style> blocks unchanged: the flow (colours, duration, delays, number of steps) or the drawn path (colour, stroke width, duration) — figure-design.md` });
       }
     } else {
       animated = true;
@@ -488,7 +555,7 @@ export function checkFigureMotion(figure) {
           const v = value(name);
           return v !== "" && Number.isFinite(Number.parseFloat(v)) && Number.parseFloat(v) <= 0;
         };
-        if (value("display") === "none" || ["hidden", "collapse"].includes(value("visibility")) || zero("opacity") || zero("fill-opacity")) {
+        if (value("display") === "none" || ["hidden", "collapse"].includes(value("visibility")) || zero("opacity") || zero("fill-opacity") || zero("stroke-opacity")) {
           issues.push({ kind: "hidden_at_rest", detail: `${`<${tag}${raw}>`.slice(0, 60)}… is invisible in the still picture` });
         }
       }

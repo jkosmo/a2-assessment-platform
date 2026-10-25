@@ -1395,3 +1395,37 @@ oversettelsen med kilden før svaret går til forfatteren. Valgene som kunne væ
 - **Stubben (lokalt uten KI) setter merket `[nb]` på en egen linje** i stedet for foran teksten. Foran en
   tekst som begynner med en ramme, gjorde merket åpningslinja til vanlig tekst, og kontrollen ville stoppet
   hver lokale oversettelse av en slik seksjon.
+
+## Tema i «Mine kurs» (2.102.0, 2026-10-25)
+
+Produkteier valgte navnet «Tema», at et kurs kan stå under flere tema, at bare administrator endrer
+lista, og at lista står alfabetisk. Valgene som kunne vært tatt annerledes:
+
+- **Et kurs med flere tema står flere ganger i «Mine kurs».** Alternativet var ett hovedtema per kurs.
+  Det ville krevd et valg til i kurset og mer å forklare. Bare den første forekomsten har kursinnholdet;
+  et klikk på en kopi åpner den.
+- **Kurs uten tema står sist, under «Andre kurs».** Har ingen av deltakerens kurs et tema, vises verken
+  valget eller overskriften — én gruppe sier ingenting.
+- **Valget mellom tema og alfabetisk huskes i nettleseren** (localStorage), ikke på brukeren. Det følger
+  ikke med til en annen maskin. Mer var ikke bedt om, og det krever ingen ny lagring på tjeneren.
+- **«Alfabetisk» følger #1093:** et kurs med satt plassering står fortsatt først. Den samme rekkefølgen
+  gjelder innad i hvert tema.
+- **Alle som kan redigere kurset, kan velge tema for det.** Bare selve temalista er administratorens.
+- **Tema er ikke med i eksportfila.** Temaene hører til plattformen, ikke til kurset; et kurs importert
+  i et annet miljø ville pekt på tema som ikke finnes der. En oppdatering fra fil lar kursets tema stå.
+- **Automatisk oversettelse fyller bare tomme felt** og bruker title-oversetteren fra #894. Et språk som
+  feiler, står tomt (#892), aldri med bokmålsteksten.
+
+## Identitet kobles aldri på e-post (#1114, 2026-10-25)
+
+Produkteier: «e-postadresser skal ikke kobles. Det er grunnleggende, og med et firma av vår størrelse er
+det på ingen måte nødvendig med gjenbruk.» Gjelder innloggingen (#386) og synkroniseringen av brukere
+(Entra og fil). En bruker med samme e-post og en annen Entra-ID er en konflikt som administrator ser,
+aldri en kobling. Det finnes ingen innstilling for det.
+
+- **Konflikten løses ikke automatisk.** Ikke ved å lage en ny bruker heller: e-posten er unik, og en ny
+  bruker med en endret adresse ville skjult at det fantes to. Administrator rydder i Entra eller ber om
+  en kobling.
+- **En pseudonymisert bruker røres ikke av synkroniseringen,** også når personen fortsatt finnes i
+  katalogen. Den telles uten navn eller e-post.
+

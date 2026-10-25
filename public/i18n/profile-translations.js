@@ -56,6 +56,8 @@ const own = {
     "profile.field.department": "Department",
     "profile.field.role": "Role",
     "profile.field.consent": "Privacy notice accepted",
+    "profile.signOut.btn": "Sign out",
+    "profile.signOut.hint": "You are signed out of the platform and of the Microsoft account in this browser. The next time, you choose which account to sign in with.",
     "profile.field.consentVersion": "Version",
     "profile.field.notAccepted": "Not yet accepted",
 
@@ -173,6 +175,8 @@ const own = {
     "profile.field.department": "Avdeling",
     "profile.field.role": "Rolle",
     "profile.field.consent": "Personvernerklæring akseptert",
+    "profile.signOut.btn": "Logg ut",
+    "profile.signOut.hint": "Du logges ut av plattformen og av Microsoft-kontoen i denne nettleseren. Neste gang velger du hvilken konto du logger inn med.",
     "profile.field.consentVersion": "Versjon",
     "profile.field.notAccepted": "Ikke akseptert ennå",
 
@@ -286,6 +290,8 @@ const own = {
     "profile.field.department": "Avdeling",
     "profile.field.role": "Rolle",
     "profile.field.consent": "Personvernerklæring akseptert",
+    "profile.signOut.btn": "Logg ut",
+    "profile.signOut.hint": "Du blir logga ut av plattforma og av Microsoft-kontoen i denne nettlesaren. Neste gong vel du kva konto du loggar inn med.",
     "profile.field.consentVersion": "Versjon",
     "profile.field.notAccepted": "Ikkje akseptert enno",
 

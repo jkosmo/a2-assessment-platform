@@ -52,6 +52,35 @@ async function mockSectionApis(page: Page) {
 }
 
 test.describe("#1109 — en oversettelse som endret rammene, lagres ikke", () => {
+  test("#1112: er det kilden som har en ramme som ikke tegnes, sier meldingen at kilden må rettes", async ({ page }) => {
+    await mockSectionApis(page);
+    await page.route("**/api/admin/content/sections/localize", async (route: Route) => {
+      const body = route.request().postDataJSON() as { targetLocale: string };
+      if (body.targetLocale === "nn") {
+        return route.fulfill({
+          status: 422,
+          contentType: "application/json",
+          body: JSON.stringify({
+            error: "translation_structure_changed",
+            message: "The translation to nn changed the frames in the text and was not used.",
+            details: { locale: "nn", fields: [{ field: "bodyMarkdown", problems: [{ kind: "sjekk", problem: "sourceNotDrawn", expected: 0, actual: 1 }] }] },
+          }),
+        });
+      }
+      return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ title: "Sources", bodyMarkdown: "Text." }) });
+    });
+    await page.addInitScript(() => { try { localStorage.setItem("participant.locale", "nb"); } catch { /* ignore */ } });
+    await page.goto("/admin-content/sections");
+    await page.getByRole("button", { name: /Ny seksjon/ }).click();
+    await page.locator("#titleInput").fill("Kilder");
+    await page.locator("#markdownInput").fill(["- et punkt", SECTION_BODY].join(NL));
+    await page.locator("#translateBtn").click();
+
+    await expect(page.getByText(/Ikke oversatt til Norsk nynorsk: kilden har en blokk som ikke vises \(:::sjekk\)/)).toBeVisible();
+    // Ikke den generelle meldingen om at oversettelsen endret blokkene — den ber forfatteren prøve igjen.
+    await expect(page.getByText(/oversettelsen endret blokkene/)).toHaveCount(0);
+  });
+
   test("seksjonseditoren: språket som ble avvist står urørt, forfatteren får beskjed, de andre oversettes", async ({ page }) => {
     const created = await mockSectionApis(page);
     const requested: string[] = [];

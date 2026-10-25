@@ -26,6 +26,7 @@ export const PAGES = {
   "admin-platform": { nb: "Plattforminnstillinger", nn: "Plattforminnstillingar", "en-GB": "Platform settings" },
   "admin-content": { nb: "Modul", nn: "Modul", "en-GB": "Module" },
   "admin-content-library": { nb: "Moduler", nn: "Modular", "en-GB": "Modules" },
+  "admin-content-themes": { nb: "Tema", nn: "Tema", "en-GB": "Themes" },
   "admin-content-courses": { nb: "Kurs", nn: "Kurs", "en-GB": "Courses" },
   "admin-content-sections": { nb: "Seksjoner", nn: "Seksjonar", "en-GB": "Sections" },
   "admin-content-classes": { nb: "Klasser", nn: "Klassar", "en-GB": "Classes" },

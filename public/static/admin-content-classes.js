@@ -21,7 +21,7 @@ const appVersionLabel = document.getElementById("appVersion");
 
 // #705-UX(D): klasser-siden manglet i18n-oppslag, så topp-navet viste råe nøkler (nav.participant …).
 let currentLocale = resolveInitialLocale(supportedLocales);
-const { t: tNav } = createTranslator(adminContentTranslations, () => currentLocale);
+const { t: tNav, tf } = createTranslator(adminContentTranslations, () => currentLocale);
 
 // #972/#965: ni toaster og to tomtilstander viste `err.message` — som apiFetch bygger som
 // `"<status>: <hele JSON-kroppen>"`. En norsk forfatter som ikke eier klassen fikk altså
@@ -154,6 +154,21 @@ async function renderListView() {
   await getListPage().reload().catch(() => undefined);
 }
 
+// #1114: det synkroniseringen ikke gjorde, og hvorfor. En bruker med samme e-post som en annen
+// kobles aldri (produkteier 2026-10-25); administrator får vite hvem, så hen kan rydde i Entra.
+// Pseudonymiserte telles bare. Var to håndskrevne setninger på bokmål, uten det som ble hoppet over.
+function syncResultToast(run, headlineKey) {
+  const parts = [tf(headlineKey, { created: run.createdCount ?? 0, updated: run.updatedCount ?? 0 })];
+  if (run.skippedConflictCount) parts.push(tf("classes.syncSkippedConflict", { count: run.skippedConflictCount }));
+  if (run.skippedAnonymizedCount) parts.push(tf("classes.syncSkippedAnonymized", { count: run.skippedAnonymizedCount }));
+  if (run.failedCount) parts.push(tf("classes.syncFailed", { count: run.failedCount }));
+  const conflicts = Array.isArray(run.conflicts) ? run.conflicts.map((c) => c.email).filter(Boolean) : [];
+  const detail = conflicts.length > 0
+    ? tf("classes.syncConflictList", { emails: conflicts.slice(0, 10).join(", ") + (conflicts.length > 10 ? " …" : "") })
+    : undefined;
+  showToast(parts.join(" "), run.failedCount ? "error" : run.skippedConflictCount ? "warning" : "success", detail);
+}
+
 // #690: import users from the configured Entra group ("Alle i A-2 Norge") so they are searchable
 // for class membership before their first login. ADMINISTRATOR only.
 async function syncEntraUsers() {
@@ -161,8 +176,7 @@ async function syncEntraUsers() {
   if (btn) { btn.disabled = true; btn.textContent = tNav("classes.syncing"); }
   try {
     const res = await apiFetch("/api/admin/sync/org/entra", getHeaders, { method: "POST" });
-    const imported = res?.importedUsers ?? res?.run?.createdCount ?? 0;
-    showToast(`Synk fullført — ${imported} brukere importert/oppdatert.`, "success");
+    syncResultToast(res?.run ?? {}, "classes.syncDone");
   } catch (err) {
     apiErrorToast(err);
   } finally {
@@ -193,11 +207,7 @@ async function importUsersFromFile(input) {
     }
     const body = { source: typeof payload?.source === "string" && payload.source.trim() ? payload.source.trim() : "manual_file_import", users };
     const res = await apiFetch("/api/admin/sync/org/delta", getHeaders, { method: "POST", body: JSON.stringify(body) });
-    const run = res?.run ?? {};
-    const created = run.createdCount ?? 0;
-    const updated = run.updatedCount ?? 0;
-    const failed = run.failedCount ?? 0;
-    showToast(`Import fullført — ${created} opprettet, ${updated} oppdatert${failed ? `, ${failed} feilet` : ""}.`, failed ? "error" : "success");
+    syncResultToast(res?.run ?? {}, "classes.importDone");
   } catch (err) {
     apiErrorToast(err);
   } finally {

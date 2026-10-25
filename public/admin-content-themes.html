@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en-GB" data-page="admin-content-themes">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>A-2 læringsplattform – Tema</title>
+    <link rel="stylesheet" href="/static/shared.css" />
+    <link rel="stylesheet" href="/static/loading.css" />
+    <link rel="stylesheet" href="/static/toast.css" />
+    <style>
+      /* 2.102.0: tema i «Mine kurs». Sidehode, søk og tabell er den felles listesida (list-page.js + shared.css). */
+      .content-area-nav {
+        display: flex;
+        gap: 0;
+        border-bottom: 2px solid var(--color-border-soft);
+        margin-bottom: var(--space-3);
+        position: sticky;
+        top: 0;
+        z-index: 10;
+        background: var(--color-bg, #f7f8fa);
+      }
+      .content-area-nav-link {
+        padding: 10px var(--space-2);
+        font-size: 14px;
+        font-weight: 600;
+        color: var(--color-meta);
+        text-decoration: none;
+        border-bottom: 2px solid transparent;
+        margin-bottom: -2px;
+        white-space: nowrap;
+      }
+      .content-area-nav-link:hover { color: var(--color-text); }
+      .content-area-nav-link.active { color: var(--color-link-active); border-bottom-color: var(--color-blue); }
+      @media (max-width: 600px) { .content-area-nav { position: static; } }
+
+      .dialog-title { font-size: 18px; font-weight: 700; margin: 0 0 var(--space-1); }
+      .dialog-text { font-size: 14px; color: var(--color-meta); margin: 0 0 var(--space-2); }
+      .dialog-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: var(--space-2); }
+      .dialog-cancel { background: none; border: 1px solid var(--color-border-soft); border-radius: var(--radius-button); padding: 8px 16px; font-size: 14px; cursor: pointer; color: var(--color-meta); }
+      .dialog-cancel:hover { background: var(--color-row-hover); }
+      .theme-dialog-fields { display: grid; gap: var(--space-2); }
+      .theme-dialog-error { color: var(--color-error); font-size: 14px; margin: var(--space-1) 0 0; }
+    </style>
+  </head>
+  <body>
+    <a href="#main-content" class="skip-nav" data-i18n="nav.skipToContent">Skip to main content</a>
+    <main id="main-content" class="layout-container">
+      <div class="page-top-bar">
+        <nav id="workspaceNav" class="workspace-nav"></nav>
+        <div class="locale-picker">
+          <span id="appVersion" class="version-badge">…</span>
+          <label for="localeSelect" class="sr-only">Language</label>
+          <select id="localeSelect" class="locale-select-compact"></select>
+        </div>
+      </div>
+
+      <nav id="contentAreaNav" class="content-area-nav" aria-label="Innholdsadministrasjon">
+        <a href="/admin-content/themes" class="content-area-nav-link active" id="navTema" data-i18n="area.themes">Tema</a>
+        <a href="/admin-content/courses" class="content-area-nav-link" id="navKurs" data-i18n="area.courses">Kurs</a>
+        <a href="/admin-content" class="content-area-nav-link" id="navModuler" data-i18n="area.modules">Moduler</a>
+        <a href="/admin-content/sections" class="content-area-nav-link" id="navSeksjoner" data-i18n="area.sections">Seksjoner</a>
+        <a href="/admin-content/calibration" class="content-area-nav-link" id="navKalibrering" hidden data-i18n="area.quality">Vurderingskvalitet</a>
+      </nav>
+
+      <div id="pageContent">
+        <div class="page-loading">Laster…</div>
+      </div>
+    </main>
+
+    <!-- Nytt tema / endre tema. Bokmål er påkrevd; tomme felt for nynorsk og engelsk fylles inn
+         automatisk ved lagring, og forfatteren kan rette dem. -->
+    <dialog id="themeDialog" aria-labelledby="themeDialogTitle">
+      <form id="themeDialogForm" method="dialog">
+        <h2 class="dialog-title" id="themeDialogTitle"></h2>
+        <p class="dialog-text" id="themeDialogHint"></p>
+        <div class="theme-dialog-fields">
+          <div class="form-field">
+            <label for="themeName-nb" id="themeNameLabel-nb"></label>
+            <input id="themeName-nb" type="text" maxlength="80" autocomplete="off" />
+          </div>
+          <div class="form-field">
+            <label for="themeName-nn" id="themeNameLabel-nn"></label>
+            <input id="themeName-nn" type="text" maxlength="80" autocomplete="off" />
+          </div>
+          <div class="form-field">
+            <label for="themeName-en-GB" id="themeNameLabel-en-GB"></label>
+            <input id="themeName-en-GB" type="text" maxlength="80" autocomplete="off" />
+          </div>
+        </div>
+        <p class="theme-dialog-error" id="themeDialogError" role="alert" hidden></p>
+        <div class="dialog-actions">
+          <button type="submit" id="themeDialogSaveBtn" class="btn btn-primary"></button>
+          <button type="button" class="dialog-cancel" id="themeDialogCancelBtn"></button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="themeDeleteDialog" aria-labelledby="themeDeleteTitle">
+      <h2 class="dialog-title" id="themeDeleteTitle"></h2>
+      <p class="dialog-text" id="themeDeleteText"></p>
+      <div class="dialog-actions">
+        <button type="button" id="themeDeleteConfirmBtn" class="btn btn-danger"></button>
+        <button type="button" class="dialog-cancel" id="themeDeleteCancelBtn"></button>
+      </div>
+    </dialog>
+
+    <script type="module" src="/static/admin-content-themes.js"></script>
+    <script type="module" src="/static/content-area-nav-i18n.js"></script>
+    <script type="module" src="/static/page-title.js"></script>
+  </body>
+</html>

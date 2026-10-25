@@ -97,6 +97,7 @@ import {
   toCreateModuleVersionInput,
 } from "../modules/adminContent/adminContentMapper.js";
 import { adminCoursesRouter } from "./adminCourses.js";
+import { adminThemesRouter } from "./adminThemes.js";
 import { idempotency } from "../middleware/idempotency.js";
 import { adminClassesRouter } from "./adminClasses.js";
 import { adminUsersRouter } from "./adminUsers.js";
@@ -120,6 +121,8 @@ async function assertModuleOwnership(moduleId: string, actorId: string, roles: s
 }
 
 adminContentRouter.use("/courses", adminCoursesRouter);
+// 2.102.0: tema i «Mine kurs». Lista er åpen for innholdsforvaltningen; endringer er administratorens.
+adminContentRouter.use("/themes", adminThemesRouter);
 adminContentRouter.use("/classes", adminClassesRouter);
 adminContentRouter.use("/users", adminUsersRouter);
 adminContentRouter.use("/sections", adminSectionsRouter);

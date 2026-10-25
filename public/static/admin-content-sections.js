@@ -1050,6 +1050,9 @@ async function translateFromCurrent() {
   // Tjeneren forkaster dem (422 `translation_structure_changed`); teksten på det språket står urørt, og
   // de andre språkene oversettes som før.
   const structureChanged = [];
+  // #1112: språk der det er KILDEN som har en ramme som ikke tegnes (ingen blank linje over den).
+  // Å oversette på nytt hjelper ikke; forfatteren må rette kilden. Rammene samles for meldingen.
+  const sourceNotDrawn = new Map();
   try {
     for (const target of EDITOR_LOCALES.filter((l) => l !== src)) {
       let res;
@@ -1060,7 +1063,12 @@ async function translateFromCurrent() {
         });
       } catch (err) {
         if (apiErrorCode(err) !== "translation_structure_changed") throw err;
-        structureChanged.push(target);
+        const undrawn = (err?.body?.details?.fields ?? [])
+          .flatMap((field) => field?.problems ?? [])
+          .filter((problem) => problem?.problem === "sourceNotDrawn")
+          .map((problem) => `:::${problem.kind}`);
+        if (undrawn.length > 0) sourceNotDrawn.set(target, undrawn);
+        else structureChanged.push(target);
         continue;
       }
       if (res.title) editing.title[target] = res.title;
@@ -1081,8 +1089,12 @@ async function translateFromCurrent() {
         apiErrorToast(assetErr);
       }
     }
-    const translatedSome = structureChanged.length < EDITOR_LOCALES.length - 1;
-    if (structureChanged.length > 0) {
+    const translatedSome = structureChanged.length + sourceNotDrawn.size < EDITOR_LOCALES.length - 1;
+    if (sourceNotDrawn.size > 0) {
+      const locales = [...sourceNotDrawn.keys()].map((code) => localeLabels[code] ?? code).join(", ");
+      const frames = [...new Set([...sourceNotDrawn.values()].flat())].join(", ");
+      showToast(tf("sections.translateSourceFrameNotDrawn", { locales, frames }), "error");
+    } else if (structureChanged.length > 0) {
       // Ikke «Oversatt»: forfatteren skal vite at et språk står som før, og hvorfor.
       const locales = structureChanged.map((code) => localeLabels[code] ?? code).join(", ");
       showToast(tf("sections.translateStructureChanged", { locales }), "error");

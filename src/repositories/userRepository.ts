@@ -206,6 +206,8 @@ export async function findUserForOrgSyncByExternalId(externalId: string) {
     where: { externalId },
     select: {
       id: true,
+      // #1114: en pseudonymisert bruker røres ikke av synkroniseringen.
+      isAnonymized: true,
       externalId: true,
       email: true,
       name: true,

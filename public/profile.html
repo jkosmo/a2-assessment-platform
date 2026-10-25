@@ -11,6 +11,10 @@
       .profile-section { margin-top: var(--space-2); }
       .profile-section-title { font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--color-link-active); margin-bottom: var(--space-1); }
       .profile-dl { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; font-size: 14px; }
+      /* 2.104.0: «Logg ut» under kontoopplysningene; forklaringen brekker under knappen på en smal skjerm. */
+      .profile-signout { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; margin-top: var(--space-2); }
+      .profile-signout .btn { width: auto; }
+      .profile-signout p { margin: 0; flex: 1 1 240px; }
       .profile-dl dt { color: var(--color-meta); font-weight: 600; white-space: nowrap; }
       .profile-dl dd { margin: 0; color: var(--color-text); word-break: break-word; }
       .rights-grid { display: grid; gap: var(--space-1); margin-top: var(--space-1); }
@@ -82,6 +86,10 @@
             <dt data-i18n="profile.field.consent">Privacy notice accepted</dt>
             <dd id="profileConsent">—</dd>
           </dl>
+          <div class="profile-signout">
+            <button type="button" id="signOutBtn" class="btn btn-secondary" data-i18n="profile.signOut.btn">Sign out</button>
+            <p class="small" data-i18n="profile.signOut.hint">You are signed out of the platform and of the Microsoft account in this browser. The next time, you choose which account to sign in with.</p>
+          </div>
         </section>
 
         <!-- Completed modules -->

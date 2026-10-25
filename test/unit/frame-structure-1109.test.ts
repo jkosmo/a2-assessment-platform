@@ -225,6 +225,31 @@ describe("translationStructureGuard — det tjeneren faktisk tegner (#1109)", ()
   it("et felt som mangler i oversettelsen, hoppes over (det er ikke oversatt — det håndteres der det leses)", () => {
     expect(() => assertTranslationKeepsStructure("nn", [{ field: "bodyMarkdown", source: SOURCE, translated: undefined }])).not.toThrow();
   });
+
+  it("#1112: en TOM oversettelse er ikke oversatt — den gir ingen melding om endrede rammer", () => {
+    expect(() => assertTranslationKeepsStructure("nn", [{ field: "bodyMarkdown", source: SOURCE, translated: "" }])).not.toThrow();
+    expect(() => assertTranslationKeepsStructure("nn", [{ field: "bodyMarkdown", source: SOURCE, translated: "  " + NL }])).not.toThrow();
+    // Kontroll: en oversettelse med tekst, men uten rammene, avvises fortsatt.
+    expect(() => assertTranslationKeepsStructure("nn", [{ field: "bodyMarkdown", source: SOURCE, translated: "Berre tekst." }])).toThrow(TranslationStructureError);
+  });
+
+  it("#1112: kilden har en ramme som ikke tegnes, og oversettelsen tegner den — det er KILDEN som må rettes", () => {
+    // Ingen blank linje over «sjekk deg selv», rett under en liste: plattformen tegner ikke rammen.
+    const source = lines("- et punkt", check("Hvilken?", ["A", false], ["B", true]));
+    const fixed = lines("- a point", "", check("Which?", ["A", false], ["B", true]));
+    expect(translationStructureProblems(source, fixed)).toEqual([{ kind: "sjekk", problem: "sourceNotDrawn", expected: 0, actual: 1 }]);
+    // Kontroll: står rammen utegnet i begge, er de like — ingenting å melde.
+    expect(translationStructureProblems(source, lines("- a point", check("Which?", ["A", false], ["B", true])))).toEqual([]);
+    // Kontroll: kilden er riktig og oversettelsen mistet linja — fortsatt «drawn», oversettelsen er feil.
+    expect(translationStructureProblems(fixed, source)).toEqual([{ kind: "sjekk", problem: "drawn", expected: 1, actual: 0 }]);
+    let caught: unknown;
+    try {
+      assertTranslationKeepsStructure("nn", [{ field: "bodyMarkdown", source, translated: fixed }]);
+    } catch (error) {
+      caught = error;
+    }
+    expect((caught as AppError).message).toContain("add a blank line above it in the source");
+  });
 });
 
 describe("oversetterens tre funksjoner kaster når rammene endres (#1109)", () => {

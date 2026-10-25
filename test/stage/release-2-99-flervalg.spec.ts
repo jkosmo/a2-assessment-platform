@@ -54,11 +54,11 @@ const flere = { questionType: "multiple", stem: L("What must the record state?",
 
 const tilstand: { moduleId?: string; moduleIdAlle?: string; versionId?: string; sectionId?: string } = {};
 
-test("versjonen er 2.101.2", async () => {
+test("versjonen er 2.105.0", async () => {
   const svar = await fetch(`${BASE}/version`);
   const json = await svar.json();
   noter("versjon", json.version);
-  expect(json.version).toBe("2.101.2");
+  expect(json.version).toBe("2.105.0");
 });
 
 test("#1077: et «velg alle» lagres med typen; feil form avvises", async () => {
@@ -183,6 +183,9 @@ test("#1073: en figur som går i løkke, avvises av den ekte rensingen — også
 
 test("2.98.2: en kopiert figur med to oppsett svarer med bredden på det brede", async () => {
   // Bruker et ekte kurs fra prod-kopien: første seksjonsfigur som har et smalt oppsett.
+  // Opptil 40 seksjoner og figurene deres, med pause mellom hvert kall (pace.js): 45 s holdt ikke
+  // da stage hadde flere seksjoner uten smalt oppsett først (2026-10-25).
+  test.setTimeout(240_000);
   const seksjoner = await api("GET", "/api/admin/content/sections");
   test.skip(seksjoner.status !== 200, "kunne ikke liste seksjoner");
   let funnet = false;

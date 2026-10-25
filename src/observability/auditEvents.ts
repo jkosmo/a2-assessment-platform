@@ -16,6 +16,8 @@ export const auditEntityTypes = {
   certificationStatus: "certification_status",
   course: "course",
   courseSection: "course_section",
+  // 2.102.0: tema i «Mine kurs».
+  courseTheme: "course_theme",
   class: "class",
   discussionThread: "discussion_thread",
   discussionReply: "discussion_reply",
@@ -115,6 +117,12 @@ export const auditActions = {
     // #497: automatiske frist-påminnelser (frist nærmer seg / forfalt) fra bakgrunnsjobben.
     reminderSent: "course_reminder_sent",
     reminderFailed: "course_reminder_failed",
+  },
+  // 2.102.0: tema lages, endres og slettes av administrator.
+  courseTheme: {
+    created: "course_theme_created",
+    updated: "course_theme_updated",
+    deleted: "course_theme_deleted",
   },
   section: {
     created: "section_created",
@@ -389,6 +397,9 @@ export type AuditMetadataByAction = {
   [auditActions.course.archived]: EventMetadata<{ courseId: string }>;
   [auditActions.course.restored]: EventMetadata<{ courseId: string }>;
   [auditActions.course.deleted]: EventMetadata<{ courseId: string }>;
+  [auditActions.courseTheme.created]: EventMetadata<{ themeId: string }>;
+  [auditActions.courseTheme.updated]: EventMetadata<{ themeId: string }>;
+  [auditActions.courseTheme.deleted]: EventMetadata<{ themeId: string; detachedCourseCount: number }>;
   [auditActions.course.cascadeDeleted]: EventMetadata<{
     courseId: string;
     deletedModuleIds: string[];
@@ -543,6 +554,7 @@ export type AuditMetadataByAction = {
     createdCount: number;
     updatedCount: number;
     skippedConflictCount: number;
+    skippedAnonymizedCount: number;
     failedCount: number;
   }>;
   [auditActions.submission.created]: EventMetadata<{

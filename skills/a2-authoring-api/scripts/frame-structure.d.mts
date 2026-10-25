@@ -23,6 +23,8 @@ export interface Frame {
 export type FrameProblem =
   | { kind: string; problem: "count"; expected: number; actual: number }
   | { kind: string; problem: "drawn"; expected: number; actual: number }
+  // #1112: kilden har en ramme som ikke tegnes, og oversettelsen er ulik den — kilden må rettes.
+  | { kind: string; problem: "sourceNotDrawn"; expected: number; actual: number }
   | { kind: string; problem: "shape"; position: number; expected: string; actual: string };
 
 export declare const FRAME_KINDS: readonly FrameKind[];

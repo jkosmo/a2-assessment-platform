@@ -45,6 +45,39 @@ async function loadMsalScript() {
   });
 }
 
+// 2.104.0: «Logg ut» (produkteier 2026-10-25: «det er ikke noe konsistent måte å bytte» mellom to
+// kontoer). Innloggingen ligger i fanens sessionStorage, men Microsoft husker kontoen i nettleseren og
+// logget straks inn med den samme igjen. Å logge ut avslutter derfor også Microsoft-økten, og NESTE
+// innlogging spør hvilken konto — bare den, så ingen må velge konto i hver ny fane.
+const CHOOSE_ACCOUNT_KEY = "a2.auth.chooseAccount";
+
+/**
+ * Det innloggingen ber Microsoft om: kontovelgeren når brukeren nettopp logget ut, ellers ingenting
+ * ekstra. Flagget brukes én gang. Lagringen kan mangle (privat vindu); da er det en vanlig innlogging.
+ * @param {string[]} scopes
+ * @param {Pick<Storage, "getItem" | "removeItem">} [storage]
+ */
+export function loginRequestFor(scopes, storage = globalThis.localStorage) {
+  let choose = false;
+  try {
+    choose = storage?.getItem(CHOOSE_ACCOUNT_KEY) === "1";
+    if (choose) storage.removeItem(CHOOSE_ACCOUNT_KEY);
+  } catch {/* uten lagring: vanlig innlogging */}
+  return choose ? { scopes, prompt: "select_account" } : { scopes };
+}
+
+/** Logger ut av plattformen og av Microsoft-kontoen i denne nettleseren. Uten Entra (lokalt): til forsiden. */
+export async function signOut() {
+  try { globalThis.localStorage?.setItem(CHOOSE_ACCOUNT_KEY, "1"); } catch {/* se loginRequestFor */}
+  if (!msalInstance) {
+    window.location.href = "/";
+    return;
+  }
+  const account = msalInstance.getAllAccounts()[0];
+  // Tilbake til samme adresse som innloggingen bruker — den er registrert i Entra.
+  await msalInstance.logoutRedirect({ account, postLogoutRedirectUri: window.location.origin + "/admin-content" });
+}
+
 async function initMsal(entraConfig) {
   await loadMsalScript();
 
@@ -82,7 +115,7 @@ async function initMsal(entraConfig) {
   // If no account is present, save destination and trigger login
   if (msalInstance.getAllAccounts().length === 0) {
     sessionStorage.setItem("auth_intended_url", window.location.href);
-    await msalInstance.loginRedirect({ scopes: msalScopes });
+    await msalInstance.loginRedirect(loginRequestFor(msalScopes));
     // Page will redirect — execution stops here
   }
 }
@@ -92,7 +125,7 @@ export async function getAccessToken() {
 
   const accounts = msalInstance.getAllAccounts();
   if (accounts.length === 0) {
-    await msalInstance.loginRedirect({ scopes: msalScopes });
+    await msalInstance.loginRedirect(loginRequestFor(msalScopes));
     return null;
   }
 
@@ -288,7 +321,7 @@ async function loadAssetLayout(img, layout, getHeadersOrFn) {
     if (img.dataset.assetWanted !== layout) return;
     const previous = img.src;
     if (svg !== null) sizeSvgFigure(img, svg);
-    img.src = URL.createObjectURL(blob);
+    img.src = URL.createObjectURL(svg !== null && isAnimatedSvg(svg) ? animatedFigureBlob(img, svg, blob) : blob);
     if (previous.startsWith("blob:")) URL.revokeObjectURL(previous);
     img.dataset.assetLayout = response.headers.get("X-Asset-Layout") ?? "wide";
     img.dataset.assetLayouts = response.headers.get("X-Asset-Layouts") ?? "wide";
@@ -297,6 +330,81 @@ async function loadAssetLayout(img, layout, getHeadersOrFn) {
   } catch {
     /* leave the broken image; non-fatal */
   }
+}
+
+// ---------------------------------------------------------------------------
+// #1073: animated figures. A figure is shown as an <img>, and a browser does NOT apply the reader's
+// «reduce motion» setting inside an SVG shown as an image (measured in Chromium, 2026-10-03). So the
+// platform applies it: with the setting on, the figure is shown as its still picture — the same one
+// the figure rests in when its animation is over, which the check guarantees is complete.
+//
+// Without the setting, a short animation (at most five seconds) could be over before the reader has
+// scrolled down to it. So it plays again the first time it comes into view, and once more each time
+// the reader clicks it. Playing again is loading the same picture anew: a new image starts its
+// animation from the beginning.
+// ---------------------------------------------------------------------------
+
+/** An SVG that moves: the templates' keyframes, or any other — the platform refuses all but those. */
+export function isAnimatedSvg(svg) {
+  return /@keyframes/i.test(String(svg ?? ""));
+}
+
+/** The figure's still picture: every animation and transition switched off. */
+export function stillSvg(svg) {
+  return String(svg).replace(/<svg\b(?:"[^"]*"|'[^']*'|[^>"'])*>/i, (open) => (open.endsWith("/>")
+    ? open
+    : `${open}<style>*{animation:none !important;transition:none !important}</style>`));
+}
+
+function prefersReducedMotion() {
+  try {
+    return window.matchMedia?.("(prefers-reduced-motion: reduce)").matches === true;
+  } catch {
+    return false;
+  }
+}
+
+/** image → the animated picture it plays again. */
+const animatedFigures = new WeakMap();
+let animatedFigureObserver = null;
+
+/** The picture to show for an animated figure, and — when it may move — what to play it again with. */
+function animatedFigureBlob(img, svg, blob) {
+  img.dataset.assetAnimated = prefersReducedMotion() ? "still" : "moving";
+  if (img.dataset.assetAnimated === "still") {
+    animatedFigures.delete(img);
+    return new Blob([stillSvg(svg)], { type: "image/svg+xml" });
+  }
+  const known = animatedFigures.has(img);
+  animatedFigures.set(img, blob);
+  if (!known) watchAnimatedFigure(img);
+  return blob;
+}
+
+/** Plays an animated figure again from the start. */
+export function replayAnimatedFigure(img) {
+  const blob = animatedFigures.get(img);
+  if (!blob || !img.isConnected) return false;
+  const previous = img.src;
+  img.src = URL.createObjectURL(blob);
+  if (previous.startsWith("blob:")) URL.revokeObjectURL(previous);
+  return true;
+}
+
+function watchAnimatedFigure(img) {
+  img.style.cursor = "pointer";
+  img.addEventListener("click", () => replayAnimatedFigure(img));
+  if (typeof IntersectionObserver !== "function") return;
+  // A figure already in view when it loads is restarted a few milliseconds after it began — nobody
+  // sees that, so it is not told apart from one the reader scrolls down to.
+  animatedFigureObserver ??= new IntersectionObserver((entries) => {
+    for (const entry of entries) {
+      if (!entry.isIntersecting) continue;
+      animatedFigureObserver.unobserve(entry.target);
+      replayAnimatedFigure(entry.target);
+    }
+  }, { threshold: 0.5 });
+  animatedFigureObserver.observe(img);
 }
 
 // A figure with both layouts follows its column: a phone turned on its side, a window dragged

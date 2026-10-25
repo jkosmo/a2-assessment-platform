@@ -1,5 +1,5 @@
 import { Lexer } from "marked";
-import { FRAME_KINDS, compareFrames, describeFrameProblem, type FrameProblem } from "#frame-structure";
+import { FRAME_KINDS, compareFrames, describeFrameProblem, readFrames, type FrameProblem } from "#frame-structure";
 import { AppError } from "../../errors/AppError.js";
 import { renderSectionBlocks } from "../course/contentBlocks.js";
 
@@ -44,12 +44,18 @@ export function translationStructureProblems(source: string | null | undefined, 
   if (!before.includes(":::") && !after.includes(":::")) return problems;
   const drawnBefore = drawnFrameCounts(before);
   const drawnAfter = drawnFrameCounts(after);
+  const framesBefore = readFrames(before, { countHeadings: countTopLevelHeadings });
   for (const { kind } of FRAME_KINDS) {
     // Et avvik i antallet er alt meldt av formen; tegningen legger bare til det formen ikke ser.
     if (problems.some((problem) => problem.kind === kind && problem.problem === "count")) continue;
     const expected = drawnBefore.get(kind) ?? 0;
     const actual = drawnAfter.get(kind) ?? 0;
-    if (expected !== actual) problems.push({ kind, problem: "drawn", expected, actual });
+    if (expected === actual) continue;
+    // #1112: KILDEN har en ramme plattformen ikke tegner (typisk: ingen blank linje over den, rett
+    // under en liste), og oversettelsen er ulik den. Da er det kilden som må rettes — å be forfatteren
+    // «prøve igjen» hjelper ikke så lenge modellen retter formen. Eget avvik, så meldingen kan si det.
+    const sourceHasUndrawn = framesBefore.filter((frame) => frame.kind === kind).length > expected;
+    problems.push({ kind, problem: sourceHasUndrawn ? "sourceNotDrawn" : "drawn", expected, actual });
   }
   return problems;
 }
@@ -90,7 +96,9 @@ export function assertTranslationKeepsStructure(
 ): void {
   const changed: TranslationStructureFieldProblems[] = [];
   for (const { field, source, translated } of fields) {
-    if (typeof translated !== "string") continue;
+    // #1112: en TOM oversettelse er ikke oversatt — den har ikke endret rammene. Den hoppes over som et
+    // felt som mangler; ellers fikk forfatteren høre at rammene var endret.
+    if (typeof translated !== "string" || translated.trim() === "") continue;
     const problems = translationStructureProblems(source, translated);
     if (problems.length > 0) changed.push({ field, problems });
   }

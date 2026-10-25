@@ -97,7 +97,7 @@ to this skill's folder.
 |---|---|
 | `node scripts/pptx-extract.mjs <deck.pptx> work/deck` | reads a presentation: layout, text, notes, pictures and icons per slide |
 | `node scripts/draw-flow-figure.mjs <description.json> work/figures` | draws a flow from a description, in a wide and a narrow layout |
-| `node scripts/figure-fit-check.mjs <figure.svg>` and `node scripts/figure-motion-check.mjs <figure.svg>` | check that a figure's labels fit, and that an animated figure is safe |
+| `node scripts/figure-fit-check.mjs <figure.svg>` and `node scripts/figure-motion-check.mjs <figure.svg>` | check that a figure's labels fit, and that an animated figure is safe — one of the two templates in figure-design.md: the flow, or the drawn path |
 | `node scripts/figure-preview.mjs <figure.svg> --out work/preview.html` | makes a page where the author can see the figures |
 | `node scripts/mcq-plan.mjs <questions> [options]` | draws which questions in a new test are select-all-that-apply, and how many options in each are right ([modules.md](references/modules.md#select-all-that-apply)) |
 | `node scripts/mcq-cue-check.mjs work/package.json` | checks that no option gives the answer away |

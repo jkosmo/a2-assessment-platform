@@ -245,6 +245,7 @@ export type OperationalEventMetadataByName = {
     createdCount: number;
     updatedCount: number;
     skippedConflictCount: number;
+    skippedAnonymizedCount: number;
     failedCount: number;
   }>;
   [operationalEvents.process.unhandledRejection]: EventMetadata<{
