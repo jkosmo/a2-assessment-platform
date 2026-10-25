@@ -183,6 +183,9 @@ test("#1073: en figur som går i løkke, avvises av den ekte rensingen — også
 
 test("2.98.2: en kopiert figur med to oppsett svarer med bredden på det brede", async () => {
   // Bruker et ekte kurs fra prod-kopien: første seksjonsfigur som har et smalt oppsett.
+  // Opptil 40 seksjoner og figurene deres, med pause mellom hvert kall (pace.js): 45 s holdt ikke
+  // da stage hadde flere seksjoner uten smalt oppsett først (2026-10-25).
+  test.setTimeout(240_000);
   const seksjoner = await api("GET", "/api/admin/content/sections");
   test.skip(seksjoner.status !== 200, "kunne ikke liste seksjoner");
   let funnet = false;
