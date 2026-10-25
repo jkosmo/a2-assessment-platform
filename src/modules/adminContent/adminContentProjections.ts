@@ -58,9 +58,13 @@ export function mapMcqSetVersion(version: {
       // ennå ikke kjenner typen (utfylling av språk ved publisering, oversettelse) leter etter det, og
       // stoppet uten (QA 2.99.0). Det er ikke fasiten for «multiple» — det er `correctAnswers`.
       const correctAnswer = decodeLocalizedText(question.correctAnswer) ?? question.correctAnswer;
-      const typed = questionTypeOf(question) === "multiple"
+      // «order» går ut med typen og elementene i riktig rekkefølge (`options`) — det er hele fasiten.
+      const type = questionTypeOf(question);
+      const typed = type === "multiple"
         ? { questionType: "multiple" as const, correctAnswer, correctAnswers: parseAnswerKey(question.answerKeyJson, options.length).correct.map((i) => options[i]) }
-        : { correctAnswer };
+        : type === "order"
+          ? { questionType: "order" as const, correctAnswer }
+          : { correctAnswer };
       return {
         id: question.id,
         stem: decodeLocalizedText(question.stem) ?? question.stem,

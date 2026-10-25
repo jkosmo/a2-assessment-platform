@@ -130,6 +130,10 @@ export function mcqCorrectPositions(question) {
  * så den holder på alle språk av konstruksjon (alternativene står i samme rekkefølge).
  */
 export function carryMcqAnswerKey(target, source) {
+  // Leveranse 2: i «sett i rekkefølge» er rekkefølgen fasiten, og den står likt på alle språk.
+  if (source?.questionType === "order" && target) {
+    return { ...target, questionType: "order", correctAnswer: (target.options ?? [])[0] ?? target.correctAnswer };
+  }
   if (source?.questionType !== "multiple" || !target) return target;
   const positions = mcqCorrectPositions(source);
   const options = target.options ?? [];

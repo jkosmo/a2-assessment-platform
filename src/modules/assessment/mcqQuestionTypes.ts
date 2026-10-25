@@ -12,8 +12,15 @@ import { matchesLocalizedContentVariant } from "../../i18n/content.js";
  *             `optionsJson` (`answerKeyJson = {"correct":[0,2]}`). Posisjoner, ikke tekst: oversettelsen
  *             holder alternativene i samme rekkefølge på alle språk, så fasiten følger med uten å
  *             skrives om. Riktig når de valgte er nøyaktig de riktige — ingen mangler, ingen ekstra.
+ *   order     «sett i riktig rekkefølge» (leveranse 2, 2026-10-25); alternativene LAGRES i riktig
+ *             rekkefølge, og det er fasiten — `answerKeyJson` er null. Utleveres alltid stokket, og aldri
+ *             i riktig rekkefølge (`shuffleOrderItems`). Riktig når hele rekkefølgen stemmer. 3–6 elementer.
  */
-export const MCQ_QUESTION_TYPES = ["single", "multiple"] as const;
+export const MCQ_QUESTION_TYPES = ["single", "multiple", "order"] as const;
+
+/** «Sett i rekkefølge»: færre er gjetting, flere blir tungt å flytte på telefon (produkteier 2026-10-25). */
+export const ORDER_MIN_ITEMS = 3;
+export const ORDER_MAX_ITEMS = 6;
 export type McqQuestionType = (typeof MCQ_QUESTION_TYPES)[number];
 
 export function isMcqQuestionType(value: unknown): value is McqQuestionType {
@@ -46,14 +53,14 @@ export function serializeAnswerKey(key: McqAnswerKey): string {
   return JSON.stringify({ correct: [...new Set(key.correct)].sort((a, b) => a - b) });
 }
 
-/** Et svar slik deltakeren sender det: én tekst (single) eller flere (multiple). */
-export type McqSubmittedAnswer = { selectedAnswer?: string; selectedAnswers?: string[] };
+/** Et svar slik deltakeren sender det: én tekst (single), flere (multiple), eller alle i deltakerens rekkefølge (order). */
+export type McqSubmittedAnswer = { selectedAnswer?: string; selectedAnswers?: string[]; orderedAnswers?: string[] };
 
 export type McqGradedAnswer = {
   isCorrect: boolean;
   /** Lesbar tekst: det valgte alternativet, eller de valgte, skilt med « · ». */
   selectedAnswer: string;
-  /** For typene som ikke er én tekst: {"selected":[posisjoner]}. Null for single. */
+  /** For typene som ikke er én tekst: {"selected":[posisjoner]} (multiple), {"order":[posisjoner]} (order). Null for single. */
   answerJson: string | null;
 };
 
@@ -69,6 +76,23 @@ function optionPosition(options: string[], selected: string): number {
   return options.findIndex((option) => matchesLocalizedContentVariant(option, selected));
 }
 
+/**
+ * Elementene i en «sett i rekkefølge» stokket — og aldri i riktig rekkefølge, for da er fasiten det
+ * deltakeren ser. Med færre enn to elementer finnes det ingen annen rekkefølge (skjemaet krever tre).
+ * @param random  for tester; standard er Math.random
+ */
+export function shuffleOrderItems<T>(items: readonly T[], random: () => number = Math.random): T[] {
+  const shuffled = [...items];
+  if (shuffled.length < 2) return shuffled;
+  do {
+    for (let i = shuffled.length - 1; i > 0; i--) {
+      const j = Math.floor(random() * (i + 1));
+      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
+  } while (shuffled.every((item, i) => item === items[i]));
+  return shuffled;
+}
+
 export function gradeMcqAnswer(question: GradableQuestion, answer: McqSubmittedAnswer): McqGradedAnswer {
   const type = questionTypeOf(question);
   if (type === "single") {
@@ -76,8 +100,25 @@ export function gradeMcqAnswer(question: GradableQuestion, answer: McqSubmittedA
     return { isCorrect: matchesLocalizedContentVariant(question.correctAnswer, selected), selectedAnswer: selected, answerJson: null };
   }
 
-  // multiple
   const options = JSON.parse(question.optionsJson) as string[];
+
+  if (type === "order") {
+    // Posisjonen i FASITEN til hvert element, i den rekkefølgen deltakeren satte dem. Riktig når den er
+    // 0, 1, 2, … — og bare da: et element som mangler, står to ganger eller ikke er et av elementene,
+    // gjør svaret galt.
+    const texts = answer.orderedAnswers ?? [];
+    const positions = texts.map((text) => optionPosition(options, text));
+    const isCorrect = positions.length === options.length
+      && new Set(positions).size === options.length
+      && positions.every((p, i) => p === i);
+    return {
+      isCorrect,
+      selectedAnswer: texts.join(" → "),
+      answerJson: JSON.stringify({ order: positions }),
+    };
+  }
+
+  // multiple
   const key = parseAnswerKey(question.answerKeyJson, options.length);
   const texts = answer.selectedAnswers ?? [];
   const positions = texts.map((text) => optionPosition(options, text));

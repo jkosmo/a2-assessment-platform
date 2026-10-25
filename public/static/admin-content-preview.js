@@ -71,6 +71,27 @@ function renderPreviewMcqQuestions(questions, locale, t, tf, audience = "author"
       // #1077: i «velg alle som stemmer» er fasiten flere alternativer; alle markeres, og alle står
       // som riktig svar. Deltakerens visning viser ingen av dem.
       const multiple = question?.questionType === "multiple";
+      // Leveranse 2: «sett i rekkefølge» — elementene står i riktig rekkefølge for forfatteren, og
+      // baklengs for deltakerens visning (deltakeren får dem stokket, aldri i riktig rekkefølge).
+      if (question?.questionType === "order") {
+        const items = forParticipant ? [...options].reverse() : options;
+        return `
+        <article class="preview-mcq-item">
+          <div class="preview-mcq-question-header">${escapeHtml(tf("shell.preview.questionNumber", { number: index + 1 }))}</div>
+          <div class="preview-mcq-stem">${escapeHtml(stem)}</div>
+          <ol class="preview-mcq-options" type="1">
+            ${items.map((item) => `<li class="preview-mcq-option">${escapeHtml(item)}</li>`).join("")}
+          </ol>
+          ${forParticipant ? "" : `<div class="preview-mcq-meta">
+            <span class="preview-mcq-meta-label">${escapeHtml(t("shell.preview.correctAnswer"))}</span>
+            <span>${escapeHtml(t("shell.preview.orderIsAnswer"))}</span>
+          </div>`}
+          ${rationale && !forParticipant ? `<div class="preview-mcq-meta">
+            <span class="preview-mcq-meta-label">${escapeHtml(t("shell.preview.rationale"))}</span>
+            <span>${escapeHtml(rationale)}</span>
+          </div>` : ""}
+        </article>`;
+      }
       const correctAnswers = multiple
         ? (question?.correctAnswers ?? []).map((answer) => localize(answer)).filter(Boolean)
         : [localize(question?.correctAnswer ?? "")].filter(Boolean);

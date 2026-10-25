@@ -1,3 +1,4 @@
+import type { McqQuestionType } from "../assessment/mcqQuestionTypes.js";
 import { z } from "zod";
 import { env } from "../../config/env.js";
 import { fetchAzureOpenAiWithRetry } from "../llm/azureOpenAiRetry.js";
@@ -91,7 +92,7 @@ export type McqGenerationResult = {
 };
 
 export type RevisableMcqQuestion = {
-  questionType?: "single" | "multiple";
+  questionType?: McqQuestionType;
   stem: LocalizedText;
   options: LocalizedText[];
   correctAnswer: LocalizedText;

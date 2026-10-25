@@ -265,7 +265,7 @@ function normalizePreviewQuestions(questions) {
 
       return {
         id: typeof question.id === "string" && question.id.trim().length > 0 ? question.id : `preview-q-${index + 1}`,
-        questionType: question.questionType === "multiple" ? "multiple" : "single",
+        questionType: question.questionType === "multiple" || question.questionType === "order" ? question.questionType : "single",
         stem,
         options,
       };
@@ -2506,15 +2506,21 @@ async function renderMcqReview(submissionId) {
     item.appendChild(stem);
     const yours = document.createElement("div");
     yours.className = "mcq-review-line";
-    // #1077: i «velg alle som stemmer» er svaret og fasiten flere alternativer.
+    // #1077: i «velg alle som stemmer» er svaret og fasiten flere alternativer; i «sett i rekkefølge»
+    // er de en rekkefølge (leveranse 2).
     const multiple = q.questionType === "multiple";
-    const yourText = multiple ? (q.selectedAnswers?.length ? q.selectedAnswers.join(" · ") : null) : q.selectedAnswer;
-    yours.textContent = `${t("result.mcqReview.yourAnswer")}: ${yourText ?? t("result.mcqReview.unanswered")}`;
+    const order = q.questionType === "order";
+    const yourText = order
+      ? (q.selectedOrder?.length ? q.selectedOrder.join(" → ") : null)
+      : multiple ? (q.selectedAnswers?.length ? q.selectedAnswers.join(" · ") : null) : q.selectedAnswer;
+    yours.textContent = `${t(order ? "result.mcqReview.yourOrder" : "result.mcqReview.yourAnswer")}: ${yourText ?? t("result.mcqReview.unanswered")}`;
     item.appendChild(yours);
     if (!q.isCorrect) {
       const correct = document.createElement("div");
       correct.className = "mcq-review-line mcq-review-correct";
-      correct.textContent = `${t("result.mcqReview.correctAnswer")}: ${multiple ? (q.correctAnswers ?? []).join(" · ") : q.correctAnswer}`;
+      correct.textContent = order
+        ? `${t("result.mcqReview.correctOrder")}: ${(q.correctOrder ?? []).join(" → ")}`
+        : `${t("result.mcqReview.correctAnswer")}: ${multiple ? (q.correctAnswers ?? []).join(" · ") : q.correctAnswer}`;
       item.appendChild(correct);
     }
     if (q.rationale) {
@@ -3087,9 +3093,11 @@ submitMcqButton.addEventListener("click", async () => {
       }
 
       const responses = answers.map(({ question, selected }) => (
-        isMultipleQuestion(question)
-          ? { questionId: question.id, selectedAnswers: selected }
-          : { questionId: question.id, selectedAnswer: selected }
+        isOrderQuestion(question)
+          ? { questionId: question.id, orderedAnswers: selected }
+          : isMultipleQuestion(question)
+            ? { questionId: question.id, selectedAnswers: selected }
+            : { questionId: question.id, selectedAnswer: selected }
       ));
 
       const body = await apiFetch(`/api/modules/${moduleId}/mcq/submit`, headers, {
@@ -3316,12 +3324,117 @@ function markUnansweredQuestions(numbers) {
 // #1077: «velg alle som stemmer» (questionType «multiple») svares med avkrysning, alt annet med ett valg.
 // Antallet riktige oppgis ikke (produkteier 2026-10-24) — det ville vært et hint.
 const isMultipleQuestion = (question) => question?.questionType === "multiple";
+// Leveranse 2: «sett i riktig rekkefølge» (questionType «order») — elementene flyttes med «Flytt opp» /
+// «Flytt ned» (tastatur og skjermleser), og kan dras med musa. De kommer stokket fra tjeneren, aldri i
+// riktig rekkefølge, så rekkefølgen deltakeren ser, er alltid et svar.
+const isOrderQuestion = (question) => question?.questionType === "order";
 
-/** Det deltakeren har valgt på et spørsmål: én tekst, flere (multiple), eller ingenting. */
+/** Det deltakeren har valgt på et spørsmål: én tekst, flere (multiple), alle i sin rekkefølge (order), eller ingenting. */
 function selectedForQuestion(question) {
+  if (isOrderQuestion(question)) {
+    const items = [...document.querySelectorAll(`[data-order-list="${CSS.escape(question.id)}"] [data-order-item]`)].map((li) => li.dataset.orderItem);
+    return items.length > 0 ? items : null;
+  }
   const checked = [...document.querySelectorAll(`input[name='q_${question.id}']:checked`)].map((input) => input.value);
   if (isMultipleQuestion(question)) return checked.length > 0 ? checked : null;
   return checked[0] ?? null;
+}
+
+/**
+ * Leveranse 2: lista for «sett i riktig rekkefølge». Hvert element har «Flytt opp» og «Flytt ned»; på
+ * PC kan det også dras. Etter en flytting står fokus på samme knapp på det samme elementet, så en
+ * tastaturbruker kan fortsette å flytte det.
+ * @param {string[] | undefined} saved  rekkefølgen fra kladden, om noen
+ */
+function buildOrderList(question, saved) {
+  const fragment = document.createDocumentFragment();
+  const hint = document.createElement("p");
+  hint.className = "mcq-question-hint small";
+  hint.textContent = t("mcq.putInOrder");
+  fragment.appendChild(hint);
+
+  const list = document.createElement("ol");
+  list.className = "mcq-order-list";
+  list.dataset.orderList = question.id;
+  // Kladden gjelder bare hvis den har nøyaktig de samme elementene.
+  const items = Array.isArray(saved) && saved.length === question.options.length && saved.every((item) => question.options.includes(item))
+    ? saved
+    : question.options;
+
+  const announce = document.createElement("p");
+  announce.className = "sr-only";
+  announce.setAttribute("aria-live", "polite");
+
+  const changed = () => {
+    list.closest(".mcq-question-card")?.classList.remove("mcq-question-card--unanswered");
+    [...list.children].forEach((li, i) => {
+      li.querySelector(".mcq-order-position").textContent = `${i + 1}.`;
+      li.querySelector("[data-order-move='up']").disabled = i === 0;
+      li.querySelector("[data-order-move='down']").disabled = i === list.children.length - 1;
+    });
+    scheduleDraftAutosave();
+  };
+  const move = (li, direction) => {
+    const sibling = direction === "up" ? li.previousElementSibling : li.nextElementSibling;
+    if (!sibling) return;
+    if (direction === "up") list.insertBefore(li, sibling);
+    else list.insertBefore(sibling, li);
+    changed();
+    const position = [...list.children].indexOf(li) + 1;
+    announce.textContent = fillPlaceholders(t("mcq.orderMoved"), { item: li.dataset.orderItem, n: position });
+    const button = li.querySelector(`[data-order-move='${direction}']`);
+    (button && !button.disabled ? button : li.querySelector("[data-order-move]:not(:disabled)"))?.focus();
+  };
+
+  let dragged = null;
+  for (const item of items) {
+    const li = document.createElement("li");
+    li.className = "mcq-order-item";
+    li.dataset.orderItem = item;
+    li.draggable = true;
+    const position = document.createElement("span");
+    position.className = "mcq-order-position";
+    position.setAttribute("aria-hidden", "true");
+    const text = document.createElement("span");
+    text.className = "mcq-order-text";
+    text.textContent = item;
+    const buttons = document.createElement("span");
+    buttons.className = "mcq-order-buttons";
+    for (const [direction, key, symbol] of [["up", "mcq.moveUp", "↑"], ["down", "mcq.moveDown", "↓"]]) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "mcq-order-move";
+      button.dataset.orderMove = direction;
+      button.textContent = symbol;
+      button.setAttribute("aria-label", fillPlaceholders(t(key), { item }));
+      button.addEventListener("click", () => move(li, direction));
+      buttons.appendChild(button);
+    }
+    li.append(position, text, buttons);
+    li.addEventListener("dragstart", (event) => {
+      dragged = li;
+      li.classList.add("is-dragging");
+      event.dataTransfer?.setData("text/plain", item);
+    });
+    li.addEventListener("dragend", () => { li.classList.remove("is-dragging"); dragged = null; });
+    li.addEventListener("dragover", (event) => {
+      if (!dragged || dragged === li) return;
+      event.preventDefault();
+      const after = event.clientY > li.getBoundingClientRect().top + li.offsetHeight / 2;
+      list.insertBefore(dragged, after ? li.nextElementSibling : li);
+    });
+    li.addEventListener("drop", (event) => { event.preventDefault(); changed(); });
+    list.appendChild(li);
+  }
+  fragment.appendChild(list);
+  fragment.appendChild(announce);
+  // Nummer og knapper settes én gang her, uten å lagre en kladd (ingenting er endret ennå).
+  [...list.children].forEach((li, i) => {
+    li.querySelector(".mcq-order-position").textContent = `${i + 1}.`;
+    li.querySelector("[data-order-move='up']").disabled = i === 0;
+    li.querySelector("[data-order-move='down']").disabled = i === list.children.length - 1;
+  });
+  return fragment;
 }
 
 function renderQuestions(selectedResponses = {}) {
@@ -3343,6 +3456,12 @@ function renderQuestions(selectedResponses = {}) {
     title.textContent = question.stem;
     titleRow.appendChild(title);
     wrapper.appendChild(titleRow);
+
+    if (isOrderQuestion(question)) {
+      wrapper.appendChild(buildOrderList(question, selectedResponses[question.id]));
+      mcqQuestions.appendChild(wrapper);
+      continue;
+    }
 
     const multiple = isMultipleQuestion(question);
     if (multiple) {

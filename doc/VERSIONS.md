@@ -2,6 +2,30 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.106.0 - 2026-10-25
+
+### «Sett i riktig rekkefølge» — #1077 leveranse 2a
+
+Den andre nye spørsmålstypen i moduler (`questionType: "order"`). Produkteier 2026-10-25: 3–6 elementer;
+KI lager høyst én per test og bare der kilden har en rekkefølge (leveranse 2b); revisjon som for «velg alle».
+
+- **Fasit:** elementene lagres i riktig rekkefølge (`optionsJson`); ingen egen fasit.
+- **Utlevering:** alltid stokket, aldri i riktig rekkefølge — også når modulen har slått av stokking av
+  spørsmålene.
+- **Retting:** rett eller galt; riktig bare når hele rekkefølgen stemmer. Svaret lagres som
+  `{"order":[posisjoner]}` og som lesbar tekst («Motta → Vurdere → …»).
+- **Deltaker:** nummerert liste med «Flytt opp» / «Flytt ned» (44 px, tastatur og skjermleser; fokus følger
+  elementet, og ny plass leses opp), og dra-og-slipp på PC. Gjennomgangen viser «Din rekkefølge» og
+  «Riktig rekkefølge».
+- **Editor:** «Sett i riktig rekkefølge» ved siden av «Flere riktige svar» (de utelukker hverandre);
+  elementene skrives nummerert, tomme felt tas ikke med, «Legg til element» opp til 6. For få eller for
+  mange stoppes før oversettelsen.
+- Eksport/import, oversettelse og forhåndsvisning beholder typen. Kvalitetsrapporten teller ikke
+  feilalternativer for typen (det finnes ingen).
+- **KI-revisjon av et sett med «sett i rekkefølge» stoppes** (`mcq_revision_order_unsupported`) til
+  leveranse 2b — en revisjon ville stokket elementene, og rekkefølgen er fasiten.
+- Ingen migrasjon: feltene fra leveranse 1 brukes.
+
 ## 2.105.0 - 2026-10-25
 
 ### En egen testkonto for stage

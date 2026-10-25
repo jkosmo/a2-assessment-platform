@@ -183,6 +183,16 @@
       .course-group-divider::after { content: ""; flex: 1; height: 1px; background: var(--color-border-soft); }
       /* Grensen hører til lista, ikke til ett kurs — den skal vike når ett kurs får flaten alene. */
       .course-accordion--focused .course-group-divider { display: none; }
+      /* #1077 leveranse 2: «sett i riktig rekkefølge». Knappene er 44 px høye, så de kan treffes på telefon. */
+      .mcq-order-list { list-style: none; margin: var(--space-1) 0 0; padding: 0; display: grid; gap: 6px; }
+      .mcq-order-item { display: flex; align-items: center; gap: var(--space-1); padding: 4px 4px 4px 12px; border: 1px solid var(--color-module-border); border-radius: 8px; background: var(--color-surface); cursor: grab; }
+      .mcq-order-item.is-dragging { opacity: .5; }
+      .mcq-order-position { font-weight: 700; color: var(--color-meta); min-width: 1.6em; }
+      .mcq-order-text { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+      .mcq-order-buttons { display: flex; gap: 4px; flex-shrink: 0; }
+      .mcq-order-move { width: 44px; height: 44px; padding: 0; border: 1px solid var(--color-border-soft); border-radius: 8px; background: var(--color-bg); font-size: 18px; cursor: pointer; color: var(--color-text); }
+      .mcq-order-move:disabled { opacity: .35; cursor: default; }
+      .mcq-order-move:focus-visible { outline: 3px solid var(--color-focus); outline-offset: 2px; }
       /* 2.102.0: «Mine kurs» etter tema. Valget (tema / alfabetisk) står over lista; temanavnet er en
          overskrift, så en skjermleser kan hoppe mellom temaene. Begge viker når ett kurs får flaten. */
       .course-view-toggle { display: inline-flex; align-self: flex-end; justify-self: end; border: 1px solid var(--color-module-border); border-radius: 999px; background: var(--color-surface); padding: 3px; }

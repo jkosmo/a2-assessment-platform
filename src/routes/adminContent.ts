@@ -1473,6 +1473,12 @@ adminContentRouter.post("/generate/mcq/revise", generateLimiter, async (request,
     return;
   }
 
+  // #1077 leveranse 2a: KI kjenner ikke «sett i rekkefølge» ennå (leveranse 2b). En revisjon ville
+  // stokket elementene — og rekkefølgen ER fasiten. Stoppes til KI-delen er på plass.
+  if (data.questions.some((question) => question.questionType === "order")) {
+    response.status(400).json({ error: "mcq_revision_order_unsupported", message: "KI revision of «order» questions is not available yet." });
+    return;
+  }
   try {
     // #1077 leveranse 1b: typen og de riktige følger med inn; modellen beholder dem med mindre
     // forfatteren ber om annet. `correctAnswer` er det første riktige for et «velg alle».

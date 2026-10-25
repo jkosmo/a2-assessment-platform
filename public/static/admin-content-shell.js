@@ -1444,6 +1444,17 @@ function firstBadMultipleIndex(questions) {
     && !(question.correctAnswers?.length > 0));
 }
 
+/**
+ * #1077 leveranse 2: første «sett i rekkefølge» som ikke har 3–6 elementer, eller -1. Samme grense som
+ * tjeneren (ORDER_MIN_ITEMS/ORDER_MAX_ITEMS i mcqQuestionTypes.ts), sagt før oversettelsen.
+ */
+const ORDER_MIN_ITEMS = 3;
+const ORDER_MAX_ITEMS = 6;
+function firstBadOrderIndex(questions) {
+  return (questions ?? []).findIndex((question) => question?.questionType === "order"
+    && ((question.options?.length ?? 0) < ORDER_MIN_ITEMS || (question.options?.length ?? 0) > ORDER_MAX_ITEMS));
+}
+
 function readMcqQuestionsFromForm(currentMcqQuestions) {
   return currentMcqQuestions.map((question, questionIndex) => {
     const container = previewContent.querySelector(`[data-preview-edit-question="${questionIndex}"]`);
@@ -1455,6 +1466,19 @@ function readMcqQuestionsFromForm(currentMcqQuestions) {
       Number.isInteger(checkedIndex) && checkedIndex >= 0 && checkedIndex < options.length
         ? checkedIndex
         : Math.max(0, options.findIndex((option) => option === question.correctAnswer));
+    // #1077 leveranse 2: «Sett i riktig rekkefølge» → elementene slik de står, i den rekkefølgen; det er
+    // fasiten. Tomme felt er ikke elementer (skjemaet viser alltid minst tre å fylle ut).
+    const order = container?.querySelector("[data-preview-edit-order]")?.checked === true;
+    if (order) {
+      const items = optionInputs.map((input) => input.value.trim()).filter(Boolean);
+      return {
+        questionType: "order",
+        stem: container?.querySelector(`#previewEditMcqStem${questionIndex}`)?.value.trim() || question.stem,
+        options: items,
+        correctAnswer: items[0] ?? "",
+        rationale: container?.querySelector(`#previewEditMcqRationale${questionIndex}`)?.value.trim() || question.rationale,
+      };
+    }
     // #1077: «Flere riktige svar» avkrysset → «velg alle som stemmer», med de avkryssede som fasit.
     const multiple = container?.querySelector("[data-preview-edit-multiple]")?.checked === true;
     if (multiple) {
@@ -2226,6 +2250,14 @@ async function saveDraftBundleInBackground(options = {}) {
     backToForm();
     return;
   }
+  const badOrder = isFreetextOnly ? -1 : firstBadOrderIndex(mcqQuestions);
+  if (badOrder >= 0) {
+    const message = tf("shell.save.mcqOrderNeedsItems", { n: badOrder + 1, min: ORDER_MIN_ITEMS, max: ORDER_MAX_ITEMS });
+    logBot(() => escapeHtml(message));
+    showToast(message, "error");
+    backToForm();
+    return;
+  }
 
   const slot = logProgress("shell.save.progress");
   slot.abortBtn.remove();
@@ -2759,8 +2791,26 @@ function enterPreviewEditMode({ force = false } = {}) {
           const options = Array.isArray(question.options) ? question.options : [];
           // #1077: «velg alle som stemmer» har flere riktige — avkrysning i stedet for ett valg.
           const multiple = question.questionType === "multiple";
+          // Leveranse 2: «sett i rekkefølge» har ingen valg av fasit — elementene står nummerert, i
+          // riktig rekkefølge. Alltid minst tre felt å fylle ut.
+          const order = question.questionType === "order";
           const correctPositions = new Set(multiple ? mcqCorrectPositions(question) : [Math.max(0, options.findIndex((option) => option === question.correctAnswer))]);
-          const optionsHtml = options
+          const orderItems = order ? [...options, ...Array(Math.max(0, ORDER_MIN_ITEMS - options.length)).fill("")] : [];
+          const orderHtml = orderItems
+            .map((item, itemIndex) => `
+                <label class="preview-edit-mcq-option">
+                  <span class="preview-edit-order-number" aria-hidden="true">${itemIndex + 1}.</span>
+                  <input
+                    type="text"
+                    id="previewEditMcqOption${questionIndex}_${itemIndex}"
+                    class="preview-edit-input"
+                    data-preview-edit-option
+                    value="${escapeHtml(item)}"
+                    aria-label="${escapeHtml(`${questionLabel} ${tf("adminContent.dialog.mcq.orderItem", { n: itemIndex + 1 })}`)}"
+                  />
+                </label>`.trim())
+            .join("");
+          const optionsHtml = order ? orderHtml : options
             .map((option, optionIndex) => {
               const optionLetter = String.fromCharCode(65 + optionIndex);
               return `
@@ -2809,13 +2859,22 @@ function enterPreviewEditMode({ force = false } = {}) {
                 <input type="checkbox" data-preview-edit-multiple="${questionIndex}" ${multiple ? "checked" : ""} />
                 ${escapeHtml(t("adminContent.dialog.mcq.multiple"))}
               </label>
+              <label class="preview-edit-mcq-multiple">
+                <input type="checkbox" data-preview-edit-order="${questionIndex}" ${order ? "checked" : ""} />
+                ${escapeHtml(t("adminContent.dialog.mcq.order"))}
+              </label>
               <div class="preview-edit-mcq-options">
                 ${optionsHtml}
               </div>
-              <div class="preview-mcq-meta">
-                <span class="preview-mcq-meta-label">${correctAnswerLabel}</span>
-                <span class="preview-edit-mcq-help">${mcqHelp}</span>
-              </div>
+              ${order
+                ? `<div class="preview-mcq-meta">
+                    <span class="preview-edit-mcq-help">${escapeHtml(t("adminContent.help.mcqOrder"))}</span>
+                    ${orderItems.length < ORDER_MAX_ITEMS ? `<button type="button" class="row-action-btn" style="width:auto" data-add-order-item="${questionIndex}">${escapeHtml(t("adminContent.dialog.mcq.addOrderItem"))}</button>` : ""}
+                  </div>`
+                : `<div class="preview-mcq-meta">
+                    <span class="preview-mcq-meta-label">${correctAnswerLabel}</span>
+                    <span class="preview-edit-mcq-help">${mcqHelp}</span>
+                  </div>`}
               <div class="preview-section-label">${rationaleLabel}</div>
               <textarea
                 id="previewEditMcqRationale${questionIndex}"
@@ -2919,10 +2978,56 @@ function enterPreviewEditMode({ force = false } = {}) {
   previewContent.querySelector("#previewEditAddQuestion")?.addEventListener("click", () => {
     rebuildWithQuestions((list) => list.push({ stem: "", options: ["", "", "", ""], correctAnswer: "", rationale: "" }));
   });
+  // #1077 leveranse 2: «Sett i riktig rekkefølge» skifter hvordan spørsmålet skrives (nummererte
+  // elementer i stedet for valg av fasit), så skjemaet tegnes på nytt med det som er skrevet. Den og
+  // «Flere riktige svar» utelukker hverandre.
+  for (const toggle of previewContent.querySelectorAll("[data-preview-edit-order]")) {
+    toggle.addEventListener("change", () => {
+      const index = Number(toggle.dataset.previewEditOrder);
+      // Skjemaet tegnes på nytt med den nye typen; da står «Flere riktige svar» av seg selv uten kryss.
+      rebuildWithQuestions((list) => {
+        const question = list[index];
+        if (!question) return;
+        if (toggle.checked) {
+          list[index] = { ...question, questionType: "order", correctAnswers: undefined };
+        } else {
+          const options = (question.options ?? []).length >= 2 ? question.options : [...(question.options ?? []), "", ""].slice(0, 4);
+          list[index] = { stem: question.stem, options, correctAnswer: options[0] ?? "", rationale: question.rationale };
+        }
+      });
+    });
+  }
+  for (const btn of previewContent.querySelectorAll("[data-add-order-item]")) {
+    btn.addEventListener("click", () => {
+      const index = Number(btn.dataset.addOrderItem);
+      rebuildWithQuestions((list) => {
+        const question = list[index];
+        if (!question) return;
+        const items = [...(question.options ?? [])];
+        // Minst tre felt vises alltid; et nytt felt kommer etter dem.
+        while (items.length < ORDER_MIN_ITEMS) items.push("");
+        if (items.length < ORDER_MAX_ITEMS) items.push("");
+        list[index] = { ...question, options: items };
+      });
+      previewContent.querySelector(`#previewEditMcqOption${index}_${(sessionDraft?.mcqQuestions?.[index]?.options?.length ?? 1) - 1}`)?.focus();
+    });
+  }
   // #1077: «Flere riktige svar» bytter valget av fasit mellom ett (radio) og flere (avkrysning) — på
   // stedet, så det som er skrevet i spørsmålet står. Fra flere til ett beholdes det første avkryssede.
   for (const toggle of previewContent.querySelectorAll("[data-preview-edit-multiple]")) {
     toggle.addEventListener("change", () => {
+      // Leveranse 2: fra «sett i rekkefølge» til «flere riktige» tegnes skjemaet på nytt med valg av fasit.
+      const orderToggle = toggle.closest("[data-preview-edit-question]")?.querySelector("[data-preview-edit-order]");
+      if (toggle.checked && orderToggle?.checked) {
+        const index = Number(toggle.dataset.previewEditMultiple);
+        rebuildWithQuestions((list) => {
+          const question = list[index];
+          if (!question) return;
+          const options = (question.options ?? []).length >= 2 ? question.options : [...(question.options ?? []), "", ""].slice(0, 4);
+          list[index] = { stem: question.stem, questionType: "multiple", options, correctAnswers: [], correctAnswer: "", rationale: question.rationale };
+        });
+        return;
+      }
       const container = toggle.closest("[data-preview-edit-question]");
       const inputs = Array.from(container?.querySelectorAll("[data-preview-edit-correct]") ?? []);
       const firstChecked = inputs.find((input) => input.checked) ?? inputs[0];
@@ -3021,6 +3126,12 @@ function enterPreviewEditMode({ force = false } = {}) {
     if (badMultiple >= 0) {
       showToast(t("shell.save.mcqMultipleNeedsCorrect").replace("{n}", String(badMultiple + 1)), "error");
       previewContent.querySelector(`input[name="previewEditCorrectAnswer${badMultiple}"]`)?.focus();
+      return;
+    }
+    const badOrder = firstBadOrderIndex(newMcqQuestions);
+    if (badOrder >= 0) {
+      showToast(tf("shell.save.mcqOrderNeedsItems", { n: badOrder + 1, min: ORDER_MIN_ITEMS, max: ORDER_MAX_ITEMS }), "error");
+      previewContent.querySelector(`#previewEditMcqOption${badOrder}_0`)?.focus();
       return;
     }
 

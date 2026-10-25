@@ -117,3 +117,21 @@ Hver leveranse går gjennom stage og QA-porten før neste begynner.
 3. «Fyll inn»: er normaliseringen over riktig nivå (store/små bokstaver og mellomrom likt, ellers
    eksakt)?
 4. Rekkefølgen på leveransene: `multiple` → `order` → `fill`?
+
+## Leveranse 2 — «sett i riktig rekkefølge» (produkteier 2026-10-25: anbefalingen på alle tre)
+
+1. **KI lager høyst ett per test, og bare der kilden beskriver steg i en bestemt rekkefølge** (en
+   prosess, en prosedyre, et forløp). Finner KI ingen slik rekkefølge, lager den ingen og sier fra, så
+   forfatteren ser hvorfor. Ingen tilfeldig plan som for «velg alle»: en rekkefølge plattformen tvinger
+   fram, blir kunstig. Forfatteren kan alltid gjøre et spørsmål om til typen selv.
+2. **3–6 elementer.** Med to er det å gjette; med sju eller flere blir flyttingen tung på telefon.
+3. **Revisjon som for «velg alle»:** typen beholdes, med mindre forfatteren ber om det generelt.
+
+Fasit og utlevering:
+
+- Alternativene lagres i riktig rekkefølge (`optionsJson`); `answerKeyJson` er null.
+- **Utleveres alltid stokket**, også når modulen har slått av stokking (#1032) — ellers er fasiten
+  rekkefølgen deltakeren ser. Stokkingen gir aldri den riktige rekkefølgen.
+- Riktig når hele rekkefølgen stemmer; `answerJson = {"order":[posisjoner]}`, `selectedAnswer` er
+  elementene skilt med « → ».
+

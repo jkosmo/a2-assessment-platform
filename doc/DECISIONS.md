@@ -1427,5 +1427,13 @@ aldri en kobling. Det finnes ingen innstilling for det.
   bruker med en endret adresse ville skjult at det fantes to. Administrator rydder i Entra eller ber om
   en kobling.
 - **En pseudonymisert bruker røres ikke av synkroniseringen,** også når personen fortsatt finnes i
-  katalogen. Den telles uten navn eller e-post.
+  katalogen. Den telles uten navn eller e-post.
+
+### «Sett i riktig rekkefølge»: 3–6 elementer, KI bare der kilden har en rekkefølge (#1077, 2026-10-25)
+
+Produkteier valgte anbefalingen på alle tre: KI lager høyst én per test, og bare der kilden beskriver steg
+i en bestemt rekkefølge — ingen tilfeldig plan som for «velg alle», fordi en påtvunget rekkefølge blir
+kunstig. Finner KI ingen, sier den fra. 3–6 elementer (færre er gjetting, flere blir tungt på telefon).
+Revisjon beholder typen med mindre forfatteren ber om det generelt. Elementene utleveres alltid stokket og
+aldri i riktig rekkefølge. Status: avklart. Se `doc/DESIGN_1077.md`.
 

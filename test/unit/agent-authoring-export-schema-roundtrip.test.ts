@@ -289,7 +289,12 @@ describe("#1077 — flere riktige svar: skillets validator og det ekte skjemaet 
     ["et riktig som ikke er et alternativ", { questionType: "multiple", correctAnswers: [A, L("Other", "Annet")] }, false],
     ["et riktig som bare stemmer på ett språk", { questionType: "multiple", correctAnswers: [A, { ...C, nn: "Noko anna" }] }, false],
     ["samme alternativ to ganger", { questionType: "multiple", correctAnswers: [A, A] }, false],
-    ["ukjent type", { questionType: "order", correctAnswer: A }, false],
+    ["ukjent type", { questionType: "fill", correctAnswer: A }, false],
+    // #1077 leveranse 2: «sett i riktig rekkefølge» — alternativene ER rekkefølgen, 3–6, ingen like.
+    ["rekkefølge med tre elementer, slik eksporten skriver den", { questionType: "order", correctAnswer: A }, true],
+    ["rekkefølge med correctAnswers", { questionType: "order", correctAnswers: [A] }, false],
+    ["rekkefølge med to elementer", { questionType: "order", options: [A, B] }, false],
+    ["rekkefølge med samme element to ganger", { questionType: "order", options: [A, B, A] }, false],
     // QA 2.100.0: bare en FRAVÆRENDE type er «single»; importen avviser null.
     ["type null", { questionType: null, correctAnswer: A }, false],
     ["correctAnswers på et vanlig spørsmål", { correctAnswer: A, correctAnswers: [A] }, false],

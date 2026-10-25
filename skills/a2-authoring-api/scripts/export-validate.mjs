@@ -189,7 +189,10 @@ export const ASSET_LAYOUTS = ["narrow"];
 // #1077: the question types. The platform owns the list (`MCQ_QUESTION_TYPES` in
 // src/modules/assessment/mcqQuestionTypes.ts); repeated here for the same reason, and held to it by a
 // repo unit test.
-export const MCQ_QUESTION_TYPES = ["single", "multiple"];
+export const MCQ_QUESTION_TYPES = ["single", "multiple", "order"];
+// #1077 leveranse 2: «order» (put in the right order) has 3–6 items — the platform's ORDER_MIN_ITEMS/ORDER_MAX_ITEMS.
+export const ORDER_MIN_ITEMS = 3;
+export const ORDER_MAX_ITEMS = 6;
 
 function isNonEmptyLocalizedPartial(value) {
   if (typeof value === "string") return value.trim().length > 0;
@@ -268,6 +271,13 @@ export function validateExportEnvelopeStructure(envelope) {
       }
       if (type === "single") {
         if (!optionIds.includes(localizedIdentity(q.correctAnswer))) err(`${qPath}.correctAnswer`, "must equal one of options in every locale");
+        if (q.correctAnswers !== undefined) err(`${qPath}.correctAnswers`, "belongs to a \"multiple\" question");
+        continue;
+      }
+      // "order": the options ARE the right order — no answer key. 3–6 items, none twice.
+      if (type === "order") {
+        if (optionIds.length < ORDER_MIN_ITEMS || optionIds.length > ORDER_MAX_ITEMS) err(`${qPath}.options`, `an "order" question has ${ORDER_MIN_ITEMS}–${ORDER_MAX_ITEMS} items`);
+        if (new Set(optionIds).size !== optionIds.length) err(`${qPath}.options`, "an \"order\" question lists the same item twice");
         if (q.correctAnswers !== undefined) err(`${qPath}.correctAnswers`, "belongs to a \"multiple\" question");
         continue;
       }

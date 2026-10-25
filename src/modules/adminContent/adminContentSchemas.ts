@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { MCQ_QUESTION_TYPES, serializeAnswerKey, type McqQuestionType } from "../assessment/mcqQuestionTypes.js";
+import { MCQ_QUESTION_TYPES, ORDER_MAX_ITEMS, ORDER_MIN_ITEMS, serializeAnswerKey, type McqQuestionType } from "../assessment/mcqQuestionTypes.js";
 import type { LocalizedText } from "../../codecs/localizedTextCodec.js";
 
 export const localizedTextObjectSchema = z.object({
@@ -168,7 +168,8 @@ export const promptTemplateBodySchema = z.object({
 // publish gate then blocked on gaps the author had just paid an LLM to fill.
 // #1077: `questionType` (standard «single»). «single» har `correctAnswer`; «multiple» (velg alle som
 // stemmer) har `correctAnswers` — minst ett riktig alternativ (alle kan være riktige), hvert av dem
-// et av alternativene. Se doc/DESIGN_1077.md.
+// et av alternativene. «order» (sett i riktig rekkefølge) har 3–6 elementer i riktig rekkefølge og
+// ingen egen fasit — rekkefølgen ER fasiten. Se doc/DESIGN_1077.md.
 const mcqQuestionSchema = z
   .object({
     questionType: z.enum(MCQ_QUESTION_TYPES).optional(),
@@ -183,6 +184,19 @@ const mcqQuestionSchema = z
     if ((question.questionType ?? "single") === "single") {
       if (question.correctAnswer === undefined || !normalizedOptions.includes(localizedTextIdentity(question.correctAnswer))) {
         context.addIssue({ code: "custom", message: "correctAnswer must be one of options.", path: ["correctAnswer"] });
+      }
+      if (question.correctAnswers !== undefined) {
+        context.addIssue({ code: "custom", message: "correctAnswers belongs to a «multiple» question.", path: ["correctAnswers"] });
+      }
+      return;
+    }
+    if (question.questionType === "order") {
+      if (question.options.length < ORDER_MIN_ITEMS || question.options.length > ORDER_MAX_ITEMS) {
+        context.addIssue({ code: "custom", message: `An «order» question has ${ORDER_MIN_ITEMS}–${ORDER_MAX_ITEMS} items.`, path: ["options"] });
+      }
+      // To like elementer kan ikke skilles: deltakeren kan ikke vite hvilken som står først.
+      if (new Set(normalizedOptions).size !== normalizedOptions.length) {
+        context.addIssue({ code: "custom", message: "An «order» question lists the same item twice.", path: ["options"] });
       }
       if (question.correctAnswers !== undefined) {
         context.addIssue({ code: "custom", message: "correctAnswers belongs to a «multiple» question.", path: ["correctAnswers"] });
@@ -215,6 +229,11 @@ export function mcqQuestionTypeFields(question: {
   const questionType = question.questionType ?? "single";
   if (questionType === "single") {
     return { questionType, correctAnswer: question.correctAnswer ?? "", answerKeyJson: null };
+  }
+  // «order»: rekkefølgen er fasiten. Det første elementet står i `correctAnswer`, så lesere som ikke
+  // kjenner typen, viser noe forståelig — som for «multiple».
+  if (questionType === "order") {
+    return { questionType, correctAnswer: question.options[0] ?? "", answerKeyJson: null };
   }
   const identities = question.options.map((option) => localizedTextIdentity(option));
   const correct = (question.correctAnswers ?? []).map((answer) => identities.indexOf(localizedTextIdentity(answer)));

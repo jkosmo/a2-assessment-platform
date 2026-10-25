@@ -41,6 +41,12 @@ const adminContentBase = {
   "adminContent.lifecycle.newerDraft": "Newer draft",
   "adminContent.dialog.mcq.options": "Options",
   "adminContent.dialog.mcq.multiple": "More than one correct answer (the participant selects all that apply)",
+  "shell.preview.orderIsAnswer": "the order above",
+  "adminContent.dialog.mcq.order": "Put in the right order (the participant gets the items shuffled)",
+  "adminContent.dialog.mcq.orderItem": "item {n}",
+  "adminContent.dialog.mcq.addOrderItem": "Add item",
+  "adminContent.help.mcqOrder": "Write the items in the right order: 3 to 6. Empty fields are left out.",
+  "shell.save.mcqOrderNeedsItems": "Question {n} is «put in the right order» and needs {min} to {max} items.",
   "adminContent.dialog.mcq.rationale": "Rationale",
 
   // Privacy by Design warning (GDPR Art. 9 — special category data risk)
@@ -891,6 +897,12 @@ const nbOverrides = {
   "adminContent.lifecycle.newerDraft": "Nyere utkast",
   "adminContent.dialog.mcq.options": "Svaralternativer",
   "adminContent.dialog.mcq.multiple": "Flere riktige svar (deltakeren velger alle som stemmer)",
+  "shell.preview.orderIsAnswer": "rekkefølgen over",
+  "adminContent.dialog.mcq.order": "Sett i riktig rekkefølge (deltakeren får elementene stokket)",
+  "adminContent.dialog.mcq.orderItem": "element {n}",
+  "adminContent.dialog.mcq.addOrderItem": "Legg til element",
+  "adminContent.help.mcqOrder": "Skriv elementene i riktig rekkefølge: 3 til 6. Tomme felt tas ikke med.",
+  "shell.save.mcqOrderNeedsItems": "Spørsmål {n} er «sett i riktig rekkefølge» og trenger {min} til {max} elementer.",
   "adminContent.dialog.mcq.rationale": "Begrunnelse",
 
   "adminContent.privacy.warning.title": "Risiko for særlige kategorier av personopplysninger",
@@ -999,6 +1011,12 @@ const nnOverrides = {
   "adminContent.lifecycle.newerDraft": "Nyare utkast",
   "adminContent.dialog.mcq.options": "Svaralternativ",
   "adminContent.dialog.mcq.multiple": "Fleire rette svar (deltakaren vel alle som stemmer)",
+  "shell.preview.orderIsAnswer": "rekkjefølgja over",
+  "adminContent.dialog.mcq.order": "Set i rett rekkjefølgje (deltakaren får elementa stokka)",
+  "adminContent.dialog.mcq.orderItem": "element {n}",
+  "adminContent.dialog.mcq.addOrderItem": "Legg til element",
+  "adminContent.help.mcqOrder": "Skriv elementa i rett rekkjefølgje: 3 til 6. Tomme felt blir ikkje tekne med.",
+  "shell.save.mcqOrderNeedsItems": "Spørsmål {n} er «set i rett rekkjefølgje» og treng {min} til {max} element.",
   "adminContent.dialog.mcq.rationale": "Grunngjeving",
 
   "adminContent.privacy.warning.title": "Risiko for særlege kategoriar av personopplysningar",
