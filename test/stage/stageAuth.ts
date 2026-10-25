@@ -13,22 +13,35 @@ export type StageAuth = {
   roles: string[];
 };
 
-export function readAuth(): { auth: StageAuth | null; reason: string } {
-  const file = path.resolve(process.cwd(), ".stage-auth.json");
+function readAuthFile(name: string, renew: string): { auth: StageAuth | null; reason: string } {
+  const file = path.resolve(process.cwd(), name);
   if (!fs.existsSync(file)) {
-    return { auth: null, reason: "ingen .stage-auth.json — kjør `npm run stage:auth` først" };
+    return { auth: null, reason: `ingen ${name} — kjør \`${renew}\` først` };
   }
   let parsed: StageAuth;
   try {
     parsed = JSON.parse(fs.readFileSync(file, "utf8")) as StageAuth;
   } catch {
-    return { auth: null, reason: ".stage-auth.json kunne ikke leses" };
+    return { auth: null, reason: `${name} kunne ikke leses` };
   }
-  if (!parsed.accessToken) return { auth: null, reason: ".stage-auth.json mangler token" };
+  if (!parsed.accessToken) return { auth: null, reason: `${name} mangler token` };
   if (parsed.expiresOn && parsed.expiresOn < Date.now()) {
-    return { auth: null, reason: "sesjonen er utløpt — kjør `npm run stage:auth` på nytt" };
+    return { auth: null, reason: `${name} er utløpt — kjør \`${renew}\` på nytt` };
   }
   return { auth: parsed, reason: "" };
+}
+
+/**
+ * Den personlige sesjonen (`npm run stage:auth`, med brukerens roller) når den er gyldig; ellers
+ * stage-testkontoen (2.105.0, `npm run stage:auth:service` — fagansvarlig, henter seg selv uten
+ * innlogging). En test som trenger administrator, får da 403 og må hoppe over på det.
+ */
+export function readAuth(): { auth: StageAuth | null; reason: string } {
+  const personal = readAuthFile(".stage-auth.json", "npm run stage:auth");
+  if (personal.auth) return personal;
+  const service = readAuthFile(".stage-service-auth.json", "npm run stage:auth:service");
+  if (service.auth) return service;
+  return { auth: null, reason: `${personal.reason}; ${service.reason}` };
 }
 
 export function stageBaseUrl(auth: StageAuth | null): string {

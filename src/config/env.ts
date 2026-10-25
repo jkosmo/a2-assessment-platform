@@ -39,6 +39,10 @@ const envSchema = z.object({
   ENTRA_TENANT_ID: z.string().optional(),
   ENTRA_CLIENT_ID: z.string().optional(),
   ENTRA_AUDIENCE: z.string().optional(),
+  // 2.105.0: stage-testkontoen (src/auth/stageTestService.ts). Begge må være satt, og den første må
+  // være "staging"; i prod er ingen av dem satt.
+  DEPLOY_ENVIRONMENT: z.string().optional(),
+  STAGE_TEST_SERVICE_APP_ID: z.string().optional(),
   ENTRA_GROUP_ROLE_MAP_JSON: z.string().default("{}"),
   ENTRA_GROUP_ROLE_MAP_FILE: z.string().optional(),
   ENTRA_SYNC_GROUP_ROLES: z

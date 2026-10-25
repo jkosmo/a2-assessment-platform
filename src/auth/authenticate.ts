@@ -5,6 +5,7 @@ import { env } from "../config/env.js";
 import { AppError } from "../errors/AppError.js";
 import type { AuthPrincipal } from "./principal.js";
 import { getActiveRoles, syncEntraGroupRoles, upsertUserFromPrincipal } from "../repositories/userRepository.js";
+import { isAppOnlyToken, stageTestServicePrincipal } from "./stageTestService.js";
 import { AGENT_TOKEN_PREFIX, authenticateAgentToken } from "./agentAuthoringTokenService.js";
 import { resolveRequestLocale } from "../i18n/locale.js";
 import { t } from "../i18n/messages.js";
@@ -104,6 +105,10 @@ async function principalFromBearerToken(token: string): Promise<AuthPrincipal> {
 }
 
 function principalFromJwtPayload(payload: JWTPayload): AuthPrincipal {
+  // 2.105.0: et token uten bruker godtas bare fra stage-testkontoen, og bare på stage.
+  if (isAppOnlyToken(payload)) {
+    return stageTestServicePrincipal(payload, { deployEnvironment: env.DEPLOY_ENVIRONMENT, appId: env.STAGE_TEST_SERVICE_APP_ID });
+  }
   const externalId = String(payload.oid ?? payload.sub ?? "");
   const email = String(payload.preferred_username ?? payload.upn ?? payload.email ?? "");
   const name = String(payload.name ?? email);

@@ -2,6 +2,22 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.105.0 - 2026-10-25
+
+### En egen testkonto for stage
+
+Produkteier: «en egen bruker for deg på stage, slik at du kan teste uten tillatelse», med begrenset
+tilgang. Stage-testene ventet hver gang på at produkteier logget inn (et brukertoken lever en time).
+
+- En app-registrering i Entra, «A-2 stage-testkonto», henter sitt eget token
+  (`npm run stage:auth:service`; hemmeligheten ligger i den gitignorerte `.stage-service.json`).
+- Plattformen godtar et token uten bruker bare når `DEPLOY_ENVIRONMENT` er `staging` og appen er
+  `STAGE_TEST_SERVICE_APP_ID` (`src/auth/stageTestService.ts`). I prod er ingen av dem satt. Rollen er
+  alltid fagansvarlig, uansett hva tokenet sier.
+- Stage-testene bruker det personlige tokenet når det er gyldig, ellers testkontoen.
+- De to innstillingene er satt på stage direkte, ikke i Bicep: en full infrastruktur-utrulling fjerner
+  dem, og da avvises kontoen igjen (det trygge utfallet).
+
 ## 2.104.0 - 2026-10-25
 
 ### «Logg ut», og kontovalg ved neste innlogging
