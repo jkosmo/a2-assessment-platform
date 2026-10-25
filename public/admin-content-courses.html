@@ -183,6 +183,13 @@
       .dialog-actions { display: flex; gap: 8px; flex-direction: column; margin-top: var(--space-2); }
       .dialog-cancel { background: none; border: 1px solid var(--color-border-soft); border-radius: var(--radius-button); padding: 8px 16px; font-size: 14px; cursor: pointer; color: var(--color-meta); }
       .dialog-cancel:hover { background: var(--color-row-hover); }
+      /* 2.102.0: tema i «Mine kurs». Avkryssingene brekker til flere linjer på en smal skjerm. */
+      .course-theme-field { border: none; padding: 0; margin: var(--space-2) 0 0; min-width: 0; }
+      .course-theme-field legend { font-size: 14px; font-weight: 600; padding: 0; margin-bottom: 4px; }
+      .course-theme-options { display: flex; flex-wrap: wrap; gap: 8px; }
+      .course-theme-option { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 14px; border: 1px solid var(--color-border-soft); border-radius: 999px; background: var(--color-surface); font-size: 14px; font-weight: 400; cursor: pointer; }
+      .course-theme-option:has(input:checked) { border-color: var(--color-primary); background: var(--color-primary-tint); font-weight: 600; }
+      .course-theme-option input { width: 18px; height: 18px; margin: 0; accent-color: var(--color-primary); }
       .cascade-delete-heading { font-size: 13px; font-weight: 700; margin: var(--space-2) 0 4px; }
       .cascade-delete-body .cascade-publish-blocker { display: block; color: var(--color-meta); font-size: 12px; }
 
@@ -226,6 +233,7 @@
       </div>
 
       <nav id="contentAreaNav" class="content-area-nav" aria-label="Innholdsadministrasjon">
+        <a href="/admin-content/themes" class="content-area-nav-link" id="navTema" data-i18n="area.themes">Tema</a>
         <a href="/admin-content/courses" class="content-area-nav-link active" id="navKurs" data-i18n="area.courses">Kurs</a>
         <a href="/admin-content" class="content-area-nav-link" id="navModuler" data-i18n="area.modules">Moduler</a>
         <a href="/admin-content/sections" class="content-area-nav-link" id="navSeksjoner" data-i18n="area.sections">Seksjoner</a>

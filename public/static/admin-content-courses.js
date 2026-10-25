@@ -713,6 +713,7 @@ function getListPage() {
     texts: {
       title: t("courses.title"), lead: t("courses.lead"),
       searchPlaceholder: t("courses.searchPlaceholder"), searchLabel: t("courses.searchLabel"), filterGroupLabel: t("courses.filterGroupLabel"),
+      courseFilterLabel: t("courses.themeFilter.label"), courseFilterAll: t("courses.themeFilter.all"), courseFilterNone: t("courses.themeFilter.none"),
       empty: t("courses.empty"), emptyFiltered: t("courses.emptyFiltered"), loadError: t("courses.loadError"), more: t("form.more"),
     },
     headerActions: [
@@ -728,6 +729,8 @@ function getListPage() {
       return titles.some((v) => String(v ?? "").toLowerCase().includes(q)) || String(c.id ?? "").toLowerCase().includes(q);
     } },
     sort: { key: "title", dir: "asc", locale: () => currentLocale },
+    // 2.102.0: filter på tema, med samme velger som kursfilteret på Moduler og Seksjoner.
+    courseFilter: { coursesOf: (c) => (c.themes ?? []).map((theme) => ({ id: theme.id, title: theme.name })) },
     columns: [
       // #1094: plasseringen i «Mine kurs» som merke ved navnet — forfatteren slipper å åpne hvert kurs
       // for å se den. Et merke, ikke en kolonne: lista skal ikke bli bredere enn ramma (#1084).
@@ -1316,8 +1319,12 @@ async function renderDetailView(courseId) {
   });
 
   pendingVersions = course ? await loadPendingVersions(courseId) : null;
+  // 2.102.0: temaene kurset kan velge blant. Kom ikke lista, vises ikke valget — og da sendes
+  // heller ingen themeIds ved lagring, så kursets temaer ikke viskes ut av en feil.
+  const availableThemes = await loadAvailableThemes();
+  const themeIds = Array.isArray(course?.themeIds) ? course.themeIds : [];
 
-  courseDetail = { courseId: courseId ?? null, course, localeValues, certLevel, enrollmentPolicy, discussionsEnabled, sortOrder };
+  courseDetail = { courseId: courseId ?? null, course, localeValues, certLevel, enrollmentPolicy, discussionsEnabled, sortOrder, availableThemes, themeIds };
   const page = getCourseFormPage();
   page.render();
   page.markClean();
@@ -1336,7 +1343,7 @@ async function renderDetailView(courseId) {
 
 // Kroppen i skjemasida: kursdetaljer + innhold. Feltene beholder id-ene sine (title-nb, certLevel …).
 function courseDetailBodyHtml() {
-  const { courseId, localeValues, certLevel, enrollmentPolicy, discussionsEnabled, sortOrder } = courseDetail;
+  const { courseId, localeValues, certLevel, enrollmentPolicy, discussionsEnabled, sortOrder, availableThemes, themeIds } = courseDetail;
   return `<div class="detail-layout">
     <div data-form-tab="rediger">
       <div class="detail-section">
@@ -1371,6 +1378,7 @@ function courseDetailBodyHtml() {
           </select>
         </div>
 
+        ${courseThemesFieldHtml(availableThemes, themeIds)}
       </div>
 
       <div class="detail-section">
@@ -1713,8 +1721,64 @@ function bindHeaderActions() {
   });
 }
 
+// ---------------------------------------------------------------------------
+// 2.102.0: tema i «Mine kurs». Kurset står under hvert tema som er valgt her.
+// ---------------------------------------------------------------------------
+
+/** Temaene kurset kan velge blant, alfabetisk på leserens språk; null når lista ikke kom. */
+async function loadAvailableThemes() {
+  try {
+    const body = await apiFetch("/api/admin/content/themes", getHeaders);
+    const themes = (body.themes ?? []).map((theme) => ({ id: theme.id, name: localizedText(theme.name) || theme.name }));
+    return themes.sort((a, b) => a.name.localeCompare(b.name, currentLocale, { numeric: true, sensitivity: "base" }));
+  } catch {
+    return null;
+  }
+}
+
+function courseThemesSummary(names) {
+  return names.length > 0 ? tf("courses.themes.summary", { themes: names.join(", ") }) : t("courses.themes.summaryNone");
+}
+
+function courseThemesFieldHtml(availableThemes, themeIds) {
+  if (!Array.isArray(availableThemes)) return "";
+  const picked = new Set(themeIds);
+  const options = availableThemes.length > 0
+    ? `<div class="course-theme-options">${availableThemes.map((theme) => `
+        <label class="course-theme-option">
+          <input type="checkbox" name="courseTheme" value="${escapeHtml(theme.id)}"${picked.has(theme.id) ? " checked" : ""} />
+          ${escapeHtml(theme.name)}
+        </label>`).join("")}</div>`
+    : `<p class="small" style="margin:0">${escapeHtml(t("courses.themes.none"))}</p>`;
+  const names = availableThemes.filter((theme) => picked.has(theme.id)).map((theme) => theme.name);
+  return `<fieldset class="course-theme-field" id="courseThemesField">
+    <legend>${escapeHtml(t("courses.themes.title"))}</legend>
+    <p class="small" style="margin: 0 0 var(--space-1)">${escapeHtml(t("courses.themes.help"))}</p>
+    ${options}
+    <p class="small" id="courseThemesSummary" style="margin: var(--space-1) 0 0">${escapeHtml(courseThemesSummary(names))}</p>
+  </fieldset>`;
+}
+
+function bindCourseThemesField() {
+  const field = document.getElementById("courseThemesField");
+  field?.addEventListener("change", () => {
+    const names = [...field.querySelectorAll('input[name="courseTheme"]:checked')]
+      .map((input) => input.closest("label")?.textContent?.trim() ?? "");
+    const summary = document.getElementById("courseThemesSummary");
+    if (summary) summary.textContent = courseThemesSummary(names);
+  });
+}
+
+/** De valgte temaene, eller undefined når valget ikke vises (lista kom ikke) — da røres de ikke. */
+function collectCourseThemeIds() {
+  const field = document.getElementById("courseThemesField");
+  if (!field) return undefined;
+  return [...field.querySelectorAll('input[name="courseTheme"]:checked')].map((input) => input.value);
+}
+
 function initDetailEventListeners(courseId) {
   bindHeaderActions();
+  bindCourseThemesField();
 
   // Combobox
   const comboboxInput = document.getElementById("comboboxInput");
@@ -1851,6 +1915,7 @@ async function saveCourse(courseId) {
     return false;
   }
   const sortOrder = sortOrderRaw === "" ? null : Number.parseInt(sortOrderRaw, 10);
+  const themeIds = collectCourseThemeIds();
   const sourceLocale = resolveCourseLocalizationSourceLocale(collectedValues, initialDetailLocaleValues);
   const effectiveValues = sourceLocale
     ? await localizeCourseCopyAcrossLocales({
@@ -1909,6 +1974,7 @@ async function saveCourse(courseId) {
           enrollmentPolicy,
           discussionsEnabled,
           sortOrder,
+          themeIds,
         }),
       });
       savedCourseId = body.course?.id;
@@ -1924,6 +1990,7 @@ async function saveCourse(courseId) {
           enrollmentPolicy,
           discussionsEnabled,
           sortOrder,
+          themeIds,
         }),
       });
     }

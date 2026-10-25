@@ -38,6 +38,9 @@ function resolvePublicFile(requestPath) {
   if (requestPath === "/admin-content/sections") {
     return path.join(publicRoot, "admin-content-sections.html");
   }
+  if (requestPath === "/admin-content/themes") {
+    return path.join(publicRoot, "admin-content-themes.html");
+  }
   if (requestPath === "/admin-content/calibration") {
     return path.join(publicRoot, "admin-content-calibration.html");
   }

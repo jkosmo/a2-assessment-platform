@@ -188,9 +188,13 @@ export function createListPage(config) {
     const search = config.search
       ? `<input id="${escapeHtml(ids.search ?? `${ids.tbody}Search`)}" type="search" class="list-search" value="${escapeHtml(state.search)}" placeholder="${escapeHtml(texts.searchPlaceholder ?? "")}" aria-label="${escapeHtml(texts.searchLabel ?? texts.searchPlaceholder ?? "")}" />`
       : "";
-    const pills = `<div class="list-filters" role="group" aria-label="${escapeHtml(texts.filterGroupLabel)}">${resolve(config.filters.options)
-      .map(([key, label]) => `<button type="button" class="list-filter-btn${state.filter === key ? " active" : ""}" data-filter="${escapeHtml(key)}">${escapeHtml(label)}</button>`)
-      .join("")}</div>`;
+    // 2.102.0: én pille er ikke et valg. En side uten tilstander (Tema) oppgir ett filter og får ingen piller.
+    const filterOptions = resolve(config.filters.options);
+    const pills = filterOptions.length > 1
+      ? `<div class="list-filters" role="group" aria-label="${escapeHtml(texts.filterGroupLabel)}">${filterOptions
+        .map(([key, label]) => `<button type="button" class="list-filter-btn${state.filter === key ? " active" : ""}" data-filter="${escapeHtml(key)}">${escapeHtml(label)}</button>`)
+        .join("")}</div>`
+      : "";
     let course = "";
     if (config.courseFilter) {
       const opts = courseFilterOptions();

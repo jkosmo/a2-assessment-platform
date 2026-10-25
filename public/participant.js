@@ -36,6 +36,7 @@ import {
 } from "/static/outcome.js";
 import { showToast } from "/static/toast.js";
 import { setHidden } from "/static/dom-visibility.js";
+import { groupCoursesByTheme, hasAnyTheme } from "/static/course-theme-groups.js";
 import {
   buildModuleCardViewModels,
   deriveParticipantFlowGateState,
@@ -3400,6 +3401,8 @@ if (previewModeEnabled) {
 // ============================================================
 
 let participantCourses = [];
+// 2.102.0: temaene deltakeren har kurs i, alfabetisk på deltakerens språk (tjeneren sorterer).
+let participantThemes = [];
 let participantCompletions = {};   // courseId -> completion
 // #550: celebrate a course completion only when it happens during the session (e.g. the
 // participant just passed the last module / read the last section), not for already-completed
@@ -3413,6 +3416,7 @@ async function loadParticipantCourses() {
     apiFetch("/api/courses/completions", headers),
   ]);
   participantCourses = Array.isArray(coursesBody.courses) ? coursesBody.courses : [];
+  participantThemes = Array.isArray(coursesBody.themes) ? coursesBody.themes : [];
   participantCompletions = {};
   if (Array.isArray(completionsBody.completions)) {
     for (const c of completionsBody.completions) {
@@ -3475,7 +3479,9 @@ function applyCourseFocusState() {
   if (container) {
     container.classList.toggle("course-accordion--focused", focused);
     for (const item of container.querySelectorAll(".course-accordion-item")) {
-      item.classList.toggle("is-focused", focused && item.dataset.courseId === focusedCourseId);
+      // 2.102.0: et kurs med flere tema står flere ganger i lista. Bare den første forekomsten har
+      // kursinnholdet (`courseDetail_<id>`), og det er den som får flaten alene.
+      item.classList.toggle("is-focused", focused && item.dataset.courseId === focusedCourseId && !item.dataset.courseCopy);
     }
   }
   setHidden(document.getElementById("courseBackBar"), !focused);
@@ -3536,6 +3542,56 @@ window.addEventListener("popstate", (event) => {
 
 document.getElementById("courseBackBtn")?.addEventListener("click", () => unfocusCourse());
 
+// 2.102.0: pågående først, så fullførte bak en navngitt grense (#936) — i hele lista, og i hvert tema.
+function appendCourseGroup(container, ongoing, done, appendCourse) {
+  for (const course of ongoing) appendCourse(course);
+  if (done.length === 0) return;
+  // Grensen vises bare når det FINNES noe på begge sider. En «Fullført»-overskrift over hele
+  // lista til en deltaker som har fullført alt sier ingenting.
+  if (ongoing.length > 0) {
+    const divider = document.createElement("div");
+    divider.className = "course-group-divider";
+    divider.textContent = t("courses.list.completedGroup");
+    container.appendChild(divider);
+  }
+  for (const course of done) appendCourse(course);
+}
+
+// 2.102.0: valget mellom tema og alfabetisk huskes i nettleseren. Lagringen kan mangle (privat
+// vindu, blokkerte data), og da er visningen etter tema.
+const COURSE_LIST_VIEW_KEY = "a2.mineKurs.view";
+let courseListView = (() => {
+  try {
+    return window.localStorage.getItem(COURSE_LIST_VIEW_KEY) === "alphabetical" ? "alphabetical" : "theme";
+  } catch {
+    return "theme";
+  }
+})();
+
+function buildCourseViewToggle() {
+  const group = document.createElement("div");
+  group.className = "course-view-toggle";
+  group.setAttribute("role", "group");
+  group.setAttribute("aria-label", t("courses.view.label"));
+  for (const [view, key] of [["theme", "courses.view.byTheme"], ["alphabetical", "courses.view.alphabetical"]]) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "course-view-btn";
+    button.dataset.view = view;
+    button.setAttribute("aria-pressed", String(courseListView === view));
+    button.textContent = t(key);
+    button.addEventListener("click", () => {
+      if (courseListView === view) return;
+      courseListView = view;
+      try { window.localStorage.setItem(COURSE_LIST_VIEW_KEY, view); } catch {/* bekvemmelighet */}
+      renderParticipantCourseAccordion();
+      document.querySelector(`.course-view-btn[data-view="${view}"]`)?.focus();
+    });
+    group.appendChild(button);
+  }
+  return group;
+}
+
 function renderParticipantCourseAccordion() {
   const container = document.getElementById("courseAccordion");
   if (!container) return;
@@ -3555,26 +3611,33 @@ function renderParticipantCourseAccordion() {
   const isFirstRender = !courseAccordionInitialized;
 
   container.innerHTML = "";
-  // #936: fullførte kurs samles NEDERST, bak en navngitt grense. Rekkefølgen INNAD i hver gruppe er
-  // uendret — dette er en partisjonering, ikke en ny sortering, så backendens rekkefølge (og
-  // dermed all sekundærsortering) overlever.
-  const ongoing = participantCourses.filter((c) => !isCourseCompleted(c));
-  const done = participantCourses.filter((c) => isCourseCompleted(c));
-  for (const course of ongoing) {
-    container.appendChild(buildCourseAccordionItem(course));
-  }
-  if (done.length > 0) {
-    // Grensen vises bare når det FINNES noe på begge sider. En «Fullført»-overskrift over hele
-    // lista til en deltaker som har fullført alt sier ingenting.
-    if (ongoing.length > 0) {
-      const divider = document.createElement("div");
-      divider.className = "course-group-divider";
-      divider.textContent = t("courses.list.completedGroup");
-      container.appendChild(divider);
+  // 2.102.0: «Mine kurs» etter tema eller alfabetisk. Valget vises bare når minst ett kurs har et
+  // tema — uten tema ville grupperingen bare vært én gruppe, «Andre kurs».
+  const themed = hasAnyTheme(participantCourses);
+  if (themed) container.appendChild(buildCourseViewToggle());
+  const placed = new Set();
+  const appendCourse = (course) => {
+    container.appendChild(buildCourseAccordionItem(course, { copy: placed.has(course.id) }));
+    placed.add(course.id);
+  };
+  if (themed && courseListView === "theme") {
+    for (const group of groupCoursesByTheme(participantCourses, participantThemes, isCourseCompleted)) {
+      const heading = document.createElement("h2");
+      heading.className = "course-theme-heading";
+      heading.textContent = group.name ?? t("courses.theme.other");
+      container.appendChild(heading);
+      appendCourseGroup(container, group.ongoing, group.done, appendCourse);
     }
-    for (const course of done) {
-      container.appendChild(buildCourseAccordionItem(course));
-    }
+  } else {
+    // #936: fullførte kurs samles NEDERST, bak en navngitt grense. Rekkefølgen INNAD i hver gruppe er
+    // uendret — dette er en partisjonering, ikke en ny sortering, så backendens rekkefølge (og
+    // dermed all sekundærsortering) overlever.
+    appendCourseGroup(
+      container,
+      participantCourses.filter((c) => !isCourseCompleted(c)),
+      participantCourses.filter((c) => isCourseCompleted(c)),
+      appendCourse,
+    );
   }
 
   // #922: fokuset overlever re-renderen (f.eks. etter at en seksjon ble markert lest), så
@@ -3663,7 +3726,7 @@ function isCourseCompleted(course) {
   return Boolean(participantCompletions[course.id]) || course.progress?.courseStatus === "COMPLETED";
 }
 
-function buildCourseAccordionItem(course) {
+function buildCourseAccordionItem(course, options = {}) {
   const courseStatus = course.progress?.courseStatus ?? "NOT_STARTED";
   // ⚠️ MÅ være `isCourseCompleted`, ikke `courseStatus === "COMPLETED"`. De to er IKKE like: et
   // kursbevis er permanent (`courseCompletionService`: `if (existing) return`), mens `/api/courses`
@@ -3687,6 +3750,9 @@ function buildCourseAccordionItem(course) {
   const item = document.createElement("div");
   item.className = "course-accordion-item";
   item.dataset.courseId = course.id;
+  // 2.102.0: kurset står under flere tema. Kopien har ikke kursinnholdet — id-en `courseDetail_<id>`
+  // må være unik — og et klikk på den gir den første forekomsten flaten alene.
+  if (options.copy) item.dataset.courseCopy = "1";
 
   const statusText = completed
     ? t("courses.status.completed")
@@ -3695,7 +3761,9 @@ function buildCourseAccordionItem(course) {
     : t("courses.status.notStarted");
   const badgeClass = completed ? "completed" : inProgress ? "retake" : "";
 
-  const detailSlot = `<div id="courseDetail_${course.id}" class="course-detail-slot"><p class="small" style="color:var(--color-meta)">${escapeHtmlP(t("courses.loadingModules"))}</p></div>`;
+  const detailSlot = options.copy
+    ? ""
+    : `<div id="courseDetail_${course.id}" class="course-detail-slot"><p class="small" style="color:var(--color-meta)">${escapeHtmlP(t("courses.loadingModules"))}</p></div>`;
 
   if (completed) {
     // #939: ett fullført kurs = én grønn rad. Statuspillen er droppet — hakemerket og gruppegrensen
@@ -3733,7 +3801,7 @@ function buildCourseAccordionItem(course) {
       </button>
       <div class="course-accordion-body">
         <div class="course-progress-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct}" aria-label="${escapeHtmlP(stepsLabel)}" title="${escapeHtmlP(stepsLabel)}"><div class="course-progress-fill" style="width:${pct}%"></div></div>
-        <div id="courseDetail_${course.id}" class="course-detail-slot"><p class="small" style="color:var(--color-meta)">${escapeHtmlP(t("courses.loadingModules"))}</p></div>
+        ${detailSlot}
       </div>
     `;
   }

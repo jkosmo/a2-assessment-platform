@@ -24,6 +24,8 @@ import {
   publishCoursePendingVersions,
   getCourseCascadeDeletePreview,
   cascadeDeleteCourse,
+  findThemeIdsForCourse,
+  findLocalizedThemesForCourses,
 } from "../modules/course/index.js";
 import { generationLocaleSchema, importBodySchema, normalizeImportPayload, localizedTextPatchSchema, parseRequest, clientRefSchema, agentRunIdSchema } from "../modules/adminContent/adminContentSchemas.js";
 import { courseAdminLinks } from "../modules/adminContent/adminUiLinks.js";
@@ -53,6 +55,8 @@ const courseBodySchema = z.object({
   discussionsEnabled: z.boolean().optional(),
   // #1093: plassering i «Mine kurs». null = alfabetisk (det vanlige).
   sortOrder: z.number().int().min(0).max(9999).nullable().optional(),
+  // 2.102.0: kursets tema i «Mine kurs». Satt = nøyaktig disse; utelatt = urørt.
+  themeIds: z.array(z.string().min(1)).max(100).optional(),
 });
 
 const setCourseModulesBodySchema = z.object({
@@ -107,6 +111,7 @@ adminCoursesRouter.post("/", idempotency("courses.create"), async (request, resp
       enrollmentPolicy: parsed.data.enrollmentPolicy,
       discussionsEnabled: parsed.data.discussionsEnabled,
       sortOrder: parsed.data.sortOrder,
+      themeIds: parsed.data.themeIds,
       actorId: request.context?.userId,
       agent: { clientRef: parsed.data.clientRef, agentRunId: parsed.data.agentRunId },
     });
@@ -159,6 +164,8 @@ adminCoursesRouter.get("/", async (request, response, next) => {
       roles: request.context?.roles ?? [],
     });
     const locale = requestLocale(request);
+    // 2.102.0: temaene står i lista, så oversikten kan filtreres på dem.
+    const themesByCourse = await findLocalizedThemesForCourses(courses.map((c) => c.id), locale);
     const items: AdminCourseListItem[] = courses.map((c, i) => ({
       id: c.id,
       title: c.title,
@@ -173,6 +180,7 @@ adminCoursesRouter.get("/", async (request, response, next) => {
       lifecycle: deriveContentLifecycle({ archivedAt: c.archivedAt, publishedAt: c.publishedAt }),
       inProgressCount: inProgressCounts[i],
       canManage: manageable.has(c.id),
+      themes: themesByCourse.get(c.id) ?? [],
     }));
     response.json({ courses: items });
   } catch (error) {
@@ -358,6 +366,7 @@ adminCoursesRouter.get("/:courseId", async (request, response, next) => {
       enrollmentPolicy: course.enrollmentPolicy,
       discussionsEnabled: course.discussionsEnabled,
       sortOrder: course.sortOrder ?? null,
+      themeIds: await findThemeIdsForCourse(course.id),
       updatedAt: course.updatedAt.toISOString(),
       publishedAt: course.publishedAt?.toISOString() ?? null,
       archivedAt: course.archivedAt?.toISOString() ?? null,
@@ -389,6 +398,7 @@ adminCoursesRouter.put("/:courseId", requireContentOwnership("COURSE", "courseId
       enrollmentPolicy: parsed.data.enrollmentPolicy,
       discussionsEnabled: parsed.data.discussionsEnabled,
       sortOrder: parsed.data.sortOrder,
+      themeIds: parsed.data.themeIds,
     }, request.context?.userId);
     response.json({ course });
   } catch (error) {

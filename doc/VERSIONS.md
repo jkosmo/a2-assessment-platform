@@ -2,6 +2,27 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.102.0 - 2026-10-25
+
+### Tema i «Mine kurs»
+
+Produkteier: «det blir relativt mange kurs som er vanskelig å holde styr på, selv med navnestandard».
+
+- **Tema** er en ny side i innholdsforvaltningen, til venstre for Kurs. Administrator lager, endrer og
+  sletter tema; alle andre i innholdsforvaltningen ser lista uten knappene. Navnet skrives på bokmål;
+  står nynorsk eller engelsk tomt ved lagring, oversettes de med samme tjeneste som titlene (#894). Et
+  språk som ikke kom gjennom, blir stående tomt med en melding.
+- **Inne i kurset** krysses temaene av. Et kurs kan ha flere tema, eller ingen. Kursoversikten kan
+  filtreres på tema.
+- **Mine kurs** står etter tema, med et valg for alfabetisk som huskes i nettleseren. Under hvert tema
+  står de pågående kursene, så de fullførte bak «Fullført». Et kurs med flere tema står under hvert av
+  dem; kurs uten tema står sist under «Andre kurs». Har ingen av deltakerens kurs et tema, er lista som
+  før, uten valget.
+- Slettes et tema, mister kursene bare temaet. Tema er ikke med i eksportfila, og en oppdatering fra
+  fil (#1095) lar kursets tema stå.
+- **Migrasjon** `20261025140000_course_themes`: to nye tabeller, `CourseTheme` og
+  `CourseThemeAssignment`. Bare utvidelse.
+
 ## 2.101.2 - 2026-10-25
 
 ### «Systemet jobber» under import og samlet publisering

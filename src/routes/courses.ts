@@ -16,6 +16,8 @@ import {
   getUserClassIds,
   getClassAssignedCourseDueDates,
   deriveStatus,
+  findLocalizedThemesForCourses,
+  sortThemesByName,
 } from "../modules/course/index.js";
 import type { CourseListItem, CourseDetail, CourseSequenceItem } from "../modules/course/index.js";
 import { queryLatestSubmissionsForModules } from "../modules/submission/submissionRepository.js";
@@ -79,6 +81,8 @@ coursesRouter.get("/", async (request, response, next) => {
       else readSectionsByCourse.set(row.courseId, new Set([row.sectionId]));
     }
     const startedModuleIds = new Set(latestSubmissions.map((s) => s.moduleId));
+    // 2.102.0: temaene i «Mine kurs». Ett kall for alle kursene.
+    const themesByCourse = await findLocalizedThemesForCourses(courseIds, locale);
 
     const items: CourseListItem[] = courses.map((course) => {
       // #938/#945: samme filter som kursdetaljen og bevisporten — den tredje telleren.
@@ -96,6 +100,7 @@ coursesRouter.get("/", async (request, response, next) => {
         title: localizeContentText(locale, course.title) ?? course.title,
         description: localizeContentText(locale, course.description) ?? course.description,
         sortOrder: course.sortOrder ?? null,
+        themes: themesByCourse.get(course.id) ?? [],
         moduleCount: moduleIds.length,
         progress: {
           completed,
@@ -111,7 +116,10 @@ coursesRouter.get("/", async (request, response, next) => {
 
     // #1093: satt rekkefølge først, resten alfabetisk på tittelen i deltakerens språk. Klienten
     // deler lista i pågående og fullførte uten å sortere om, så dette er rekkefølgen innad i hver.
-    response.json({ courses: sortCoursesForParticipant(items, locale) });
+    // 2.102.0: temaene deltakeren har kurs i, alfabetisk på navnet i deltakerens språk. Klienten
+    // grupperer etter denne lista og legger kurs uten tema sist.
+    const themeById = new Map(items.flatMap((item) => item.themes ?? []).map((theme) => [theme.id, theme]));
+    response.json({ courses: sortCoursesForParticipant(items, locale), themes: sortThemesByName([...themeById.values()], locale) });
   } catch (error) {
     next(error);
   }

@@ -9,10 +9,10 @@ import { mockCommonApis } from "./admin-content-helpers.js";
 // lenker i menyen. Feilen ble funnet av utgivelsestesten mot stage, der brukeren er administrator.
 // Rollen er derfor satt her — uten den måler testen en meny som alltid har fått plass.
 
-async function åpne(page: Page, rute: string, bredde: number) {
+async function åpne(page: Page, rute: string, bredde: number, rolle = "ADMINISTRATOR") {
   await page.setViewportSize({ width: bredde, height: 844 });
   await mockCommonApis(page, {
-    meRoles: ["ADMINISTRATOR"],
+    meRoles: [rolle],
     libraryModules: [{ id: "m1", title: "Risikovurdering", titleLocales: ["nb", "nn", "en-GB"], status: "published", courseCount: 0, updatedAt: "2026-09-30T10:00:00Z" }] as never,
     courses: [{ id: "k1", title: "Arbeidsmiljø", description: null, certificationLevel: "basic", moduleCount: 1, updatedAt: "2026-09-30T10:00:00.000Z", publishedAt: null, archivedAt: null, modules: [] }] as never,
   });
@@ -26,7 +26,7 @@ async function åpne(page: Page, rute: string, bredde: number) {
       body: JSON.stringify({
         authMode: "mock",
         navigation: { items: [], workspaceItems: [], profileItem: null },
-        identityDefaults: { userId: "admin-1", email: "admin@example.test", name: "Admin", department: "Drift", roles: ["ADMINISTRATOR"] },
+        identityDefaults: { userId: "admin-1", email: "admin@example.test", name: "Admin", department: "Drift", roles: [rolle] },
         calibrationWorkspace: { accessRoles: ["ADMINISTRATOR"] },
       }),
     }));
@@ -81,12 +81,24 @@ test.describe("#1085 — menylinja får plass på telefon", () => {
   // med luft rundt seg. Den menyen er ikke festet øverst (bare innholdsmenyen i seksjonseditoren er
   // det, se under), så to linjer koster bare høyde. Kravet om én linje gjelder derfor innholdssidene;
   // for Klasser måles at ingen lenke stikker ut (over) og at menyen ikke blir mer enn to linjer.
+  //
+  // 2.102.0: «Tema» står først i innholdsmenyen. For administrator er den da fem lenker — Tema, Kurs,
+  // Moduler, Seksjoner, Vurderingskvalitet — rundt 314 px tekst på 358 px. Én linje ville krevd 4 px
+  // luft rundt hver lenke, for trangt å treffe med fingeren. Samme avveiing som Deltakere-menyen over:
+  // under 600 px er menyen ikke festet øverst, så to linjer koster bare høyde. For fagansvarlig, som
+  // ikke har Vurderingskvalitet, er menyen fortsatt én linje.
   for (const side of SIDER.filter((s) => s.navn !== "Klasser")) {
-    test(`${side.navn}, 390 px: lenkene får plass på én linje`, async ({ page }) => {
-      await åpne(page, side.rute, 390);
+    test(`${side.navn}, 390 px: fagansvarlig har menyen på én linje`, async ({ page }) => {
+      await åpne(page, side.rute, 390, "SUBJECT_MATTER_OWNER");
       const topper = await page.locator(".content-area-nav .content-area-nav-link:visible").evaluateAll((els) => [...new Set(els.map((el) => Math.round(el.getBoundingClientRect().top)))]);
       expect(topper, "linjer menyen står på").toHaveLength(1);
-      expect((await mål(page)).lenker).toContain(side.skalHa);
+      expect((await mål(page)).lenker).toEqual(expect.arrayContaining(["Tema", "Kurs", "Moduler", "Seksjoner"]));
+    });
+    test(`${side.navn}, 390 px: administrator har menyen på høyst to linjer, med Tema og ${side.skalHa}`, async ({ page }) => {
+      await åpne(page, side.rute, 390);
+      const topper = await page.locator(".content-area-nav .content-area-nav-link:visible").evaluateAll((els) => [...new Set(els.map((el) => Math.round(el.getBoundingClientRect().top)))]);
+      expect(topper.length, "linjer menyen står på").toBeLessThanOrEqual(2);
+      expect((await mål(page)).lenker).toEqual(expect.arrayContaining(["Tema", side.skalHa]));
     });
   }
 

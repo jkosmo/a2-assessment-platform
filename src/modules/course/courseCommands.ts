@@ -5,6 +5,7 @@ import { recordAuditEvent } from "../../services/auditService.js";
 import { auditActions, auditEntityTypes, agentAuthoringAuditMetadata, type AgentAuthoringContext } from "../../observability/auditEvents.js";
 import { assertCourseHasNoInProgressParticipants } from "./contentLifecycle.js";
 import { addContentOwner } from "../content/contentOwnershipService.js";
+import { setCourseThemes } from "./courseThemeService.js";
 
 // #938/#992: inngangsdøra til «arkivert innhold i et kurs» — ÉN gang, for alle innganger.
 //
@@ -76,6 +77,8 @@ export async function createCourse(input: {
   discussionsEnabled?: boolean;
   /** #1093: plassering i «Mine kurs»; null eller utelatt = alfabetisk. */
   sortOrder?: number | null;
+  /** 2.102.0: kursets tema i «Mine kurs». Utelatt = ingen. */
+  themeIds?: string[];
   actorId?: string;
   // AA-5 (#653): agent-orchestrated creates carry a trace in the audit metadata.
   agent?: AgentAuthoringContext;
@@ -92,6 +95,7 @@ export async function createCourse(input: {
         ...(input.sortOrder !== undefined ? { sortOrder: input.sortOrder } : {}),
       },
     });
+    if (input.themeIds && input.themeIds.length > 0) await setCourseThemes(client, created.id, input.themeIds);
     await recordAuditEvent(
       {
         entityType: auditEntityTypes.course,
@@ -123,13 +127,17 @@ export async function updateCourse(
     enrollmentPolicy?: "OPEN" | "RESTRICTED";
     discussionsEnabled?: boolean;
     sortOrder?: number | null;
+    /** 2.102.0: satt = kursets tema blir nøyaktig disse; utelatt = urørt. */
+    themeIds?: string[];
   },
   actorId?: string,
 ) {
   // #805: a course-metadata edit is a state change and must leave a trail. Record which fields changed.
   // #803: update + audit commit atomically.
   return runInTransaction(async (tx) => {
-    const course = await tx.course.update({ where: { id: courseId }, data: input });
+    const { themeIds, ...fields } = input;
+    const course = await tx.course.update({ where: { id: courseId }, data: fields });
+    if (themeIds !== undefined) await setCourseThemes(tx, courseId, themeIds);
     await recordAuditEvent(
       {
         entityType: auditEntityTypes.course,

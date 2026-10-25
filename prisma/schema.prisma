@@ -661,6 +661,31 @@ model Course {
   enrollments        CourseEnrollment[]
   groupAssignments   CourseGroupAssignment[]
   discussionThreads  DiscussionThread[]
+  // 2.102.0: tema samler kursene i «Mine kurs». Et kurs kan ha flere, eller ingen.
+  themes             CourseThemeAssignment[]
+}
+
+// 2.102.0: et tema i «Mine kurs» (produkteier 2026-10-25: «det blir relativt mange kurs som er
+// vanskelig å holde styr på»). Bare administrator lager og endrer tema; kurset velger sine inne i
+// kursredigeringen. Lista står alltid alfabetisk, så det finnes ingen rekkefølge her.
+model CourseTheme {
+  id        String                  @id @default(cuid())
+  name      String // lokalisert JSON: {"en-GB":"...","nb":"...","nn":"..."}
+  createdAt DateTime                @default(now())
+  updatedAt DateTime                @updatedAt
+  courses   CourseThemeAssignment[]
+}
+
+// Koblingen kurs ↔ tema. Slettes et tema eller et kurs, forsvinner koblingen — og ingenting annet.
+model CourseThemeAssignment {
+  courseId  String
+  themeId   String
+  createdAt DateTime    @default(now())
+  course    Course      @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  theme     CourseTheme @relation(fields: [themeId], references: [id], onDelete: Cascade)
+
+  @@id([courseId, themeId])
+  @@index([themeId])
 }
 
 model CourseCompletion {

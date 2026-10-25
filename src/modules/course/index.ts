@@ -12,6 +12,16 @@ export { createCourse, updateCourse, publishCourse, unpublishCourse, archiveCour
 export type { CourseItemInput } from "./courseCommands.js";
 export { getCoursePublishPreview, publishCourseCascade, getCoursePendingVersions, publishCoursePendingVersions } from "./coursePublishService.js";
 export { getCourseCascadeDeletePreview, cascadeDeleteCourse } from "./courseCascadeDeleteService.js";
+export {
+  listCourseThemes,
+  createCourseTheme,
+  updateCourseTheme,
+  deleteCourseTheme,
+  findThemeIdsForCourse,
+  findLocalizedThemesForCourses,
+  sortThemesByName,
+} from "./courseThemeService.js";
+export type { CourseThemeRow, LocalizedTheme } from "./courseThemeService.js";
 export type {
   CourseCascadeDeletePreview,
   CascadeDeleteEntry,

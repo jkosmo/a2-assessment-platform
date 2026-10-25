@@ -62,7 +62,7 @@ All routes use the `courses` capability: PARTICIPANT, SUBJECT_MATTER_OWNER, ADMI
 
 | Method | Route | Description |
 |---|---|---|
-| `GET` | `/api/courses` | Published courses with progress. `progress.total` counts **all elements** (modules + learning sections); `completed` = passed modules + read sections. |
+| `GET` | `/api/courses` | Published courses with progress. `progress.total` counts **all elements** (modules + learning sections); `completed` = passed modules + read sections. 2.102.0: each course has `themes: [{ id, name }]`, and the response has `themes` — every theme the participant has a course in, alphabetical in the participant's language. |
 | `GET` | `/api/courses/completions` | The user's course completions / certificates |
 | `GET` | `/api/courses/completions/:certificateId` | A single completion by certificate ID, for the printable certificate view (#550). Owner-scoped — `404` for another user's certificate. Returns `certificateId`, `courseId`, `courseTitle` (localized), `certificationLevel`, `completedAt`, `participantName`, `moduleCount`. |
 | `GET` | `/api/courses/:courseId` | Course detail. Returns `modules[]` (legacy) and `items[]` — the ordered mixed module/section sequence; SECTION items carry a `read` flag (#491/#492). **#958:** SECTION items the participant cannot open (archived, or no active version) are **omitted entirely** — `available` is therefore always `true` on sections. MODULE items are all present, each carrying **two** independent flags. **#996: `available` and `required` are not the same question, and conflating them is a dead end.** `available:false` means the participant cannot open it right now. `required:false` means the certificate gate does not ask for it. An **unpublished** module is `available:false, required:true` — temporarily down, still counted. An **archived** module is `available:false, required:false` — taken out of circulation. A client that infers the second from the first will offer "Finish course" on a course the server will not certify: the click records the read and nothing happens. See `doc/DECISIONS.md` and `FEATURE_SURFACE_MAP` §25. |
@@ -568,10 +568,14 @@ have nothing to do with, not about partitioning content inside a course you asse
 
 | Method | Route | Description |
 |---|---|---|
-| `GET` | `/api/admin/content/courses` | List courses (with module count, and `sortOrder` — the placement in «Mine kurs», null = alphabetical, #1094) |
-| `POST` | `/api/admin/content/courses` | Create a course |
+| `GET` | `/api/admin/content/courses` | List courses (with module count, and `sortOrder` — the placement in «Mine kurs», null = alphabetical, #1094; 2.102.0: `themes: [{ id, name }]`, localized and alphabetical) |
+| `POST` | `/api/admin/content/courses` | Create a course. 2.102.0: optional `themeIds: string[]` |
 | `GET` | `/api/admin/content/courses/:courseId` | Course detail (modules). **`403 content_ownership`** for a non-owner SMO (#943) |
-| `PUT` | `/api/admin/content/courses/:courseId` | Update course metadata |
+| `PUT` | `/api/admin/content/courses/:courseId` | Update course metadata. 2.102.0: `themeIds: string[]` sets exactly those themes; omitted leaves them. An unknown id is **`400 course_theme_not_found`** and nothing is saved. The detail (`GET`) returns `themeIds` |
+| `GET` | `/api/admin/content/themes` | 2.102.0: the themes for «Mine kurs», `{ themes: [{ id, name, courseCount, updatedAt }] }`; `name` is stored localized JSON. Readable by everyone in content administration |
+| `POST` | `/api/admin/content/themes` | 2.102.0: create a theme. Body `{ name: { nb, nn?, "en-GB"? } }` (Bokmål required, max 80 characters). **ADMINISTRATOR only** (`403` otherwise) |
+| `PUT` | `/api/admin/content/themes/:themeId` | 2.102.0: rename a theme, same body. **ADMINISTRATOR only**. `404 course_theme_not_found` |
+| `DELETE` | `/api/admin/content/themes/:themeId` | 2.102.0: delete a theme; the courses only lose it. Response `{ detachedCourseCount }`. **ADMINISTRATOR only** |
 | `PUT` | `/api/admin/content/courses/:courseId/modules` | Set the module list (legacy). Writes `CourseItem` MODULE-rader — det er ikke lenger en dual-write, `CourseItem` er eneste sannhetskilde (#502). Eventuelle SECTION-elementer bevares og re-indekseres etter modulene. **`400` hvis en modul er arkivert** (#992) — samme regel som `/items`; se under. |
 | `GET` | `/api/admin/content/courses/:courseId/items` | Read the ordered mixed module/section sequence (#486/B2). **`403 content_ownership`** for a non-owner SMO (#943) |
 | `PUT` | `/api/admin/content/courses/:courseId/items` | Set the ordered sequence — body `{ items: [{type:"MODULE",moduleId} \| {type:"SECTION",sectionId}] }`. Re-syncs CourseModule (#486). **`400` hvis noe av innholdet er arkivert** (#938); se under. |

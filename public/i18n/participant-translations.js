@@ -120,6 +120,7 @@ export const translations = {
     "errors.api.asset_layout_text_mismatch": "The narrow layout of the figure does not have the same labels as the wide one. Draw both from the same description.",
     "errors.api.asset_layout_not_svg": "Only an SVG figure can have a narrow layout.",
     "errors.api.course_item_archived": "One or more items are archived and cannot be added to a course. Restore them first.",
+    "errors.api.course_theme_not_found": "A theme no longer exists. Reload the page and choose again.",
     "errors.api.course_item_not_found": "One or more items no longer exist. Refresh the page and try again.",
     "errors.api.course_duplicate_item": "That item is already in the course. Each module or section can appear only once.",
     "errors.api.course_has_completions": "This course has issued certificates and cannot be deleted. Archive it instead, so the records are kept.",
@@ -523,6 +524,11 @@ export const translations = {
     "courses.certificate.view": "View certificate",
     "courses.certificate.short": "Certificate",
     "courses.list.completedGroup": "Completed",
+    // 2.102.0: tema i «Mine kurs».
+    "courses.view.label": "Show the courses",
+    "courses.view.byTheme": "By theme",
+    "courses.view.alphabetical": "Alphabetical",
+    "courses.theme.other": "Other courses",
   },
   nb: {
     "page.title": "Mine kurs",
@@ -624,6 +630,7 @@ export const translations = {
     "errors.api.asset_layout_text_mismatch": "Det smale oppsettet av figuren har ikke de samme etikettene som det brede. Tegn begge fra samme beskrivelse.",
     "errors.api.asset_layout_not_svg": "Bare en SVG-figur kan ha et smalt oppsett.",
     "errors.api.course_item_archived": "Ett eller flere elementer er arkivert og kan ikke legges i et kurs. Gjenopprett dem først.",
+    "errors.api.course_theme_not_found": "Et tema finnes ikke lenger. Last siden på nytt og velg igjen.",
     "errors.api.course_item_not_found": "Ett eller flere elementer finnes ikke lenger. Last siden på nytt og prøv igjen.",
     "errors.api.course_duplicate_item": "Elementet ligger allerede i kurset. Hver modul eller seksjon kan bare være med én gang.",
     "errors.api.course_has_completions": "Kurset har utstedte kursbevis og kan ikke slettes. Arkiver det i stedet, så beholdes registreringene.",
@@ -1021,6 +1028,11 @@ export const translations = {
     "courses.certificate.view": "Vis bevis",
     "courses.certificate.short": "Sertifikat",
     "courses.list.completedGroup": "Fullført",
+    // 2.102.0: tema i «Mine kurs».
+    "courses.view.label": "Vis kursene",
+    "courses.view.byTheme": "Etter tema",
+    "courses.view.alphabetical": "Alfabetisk",
+    "courses.theme.other": "Andre kurs",
   },
   nn: {
     "page.title": "Kursa mine",
@@ -1121,6 +1133,7 @@ export const translations = {
 "errors.api.asset_layout_text_mismatch": "Det smale oppsettet av figuren har ikkje dei same etikettane som det breie. Teikn begge frå same skildring.",
 "errors.api.asset_layout_not_svg": "Berre ein SVG-figur kan ha eit smalt oppsett.",
 "errors.api.course_item_archived": "Eitt eller fleire element er arkiverte og kan ikkje leggjast i eit kurs. Gjenopprett dei først.",
+"errors.api.course_theme_not_found": "Eit tema finst ikkje lenger. Last sida på nytt og vel igjen.",
 "errors.api.course_item_not_found": "Eitt eller fleire element finst ikkje lenger. Last sida på nytt og prøv igjen.",
 "errors.api.course_duplicate_item": "Elementet ligg allereie i kurset. Kvar modul eller seksjon kan berre vere med éin gong.",
 "errors.api.course_has_completions": "Kurset har utferda kursbevis og kan ikkje slettast. Arkiver det i staden, så blir registreringane tekne vare på.",
@@ -1518,5 +1531,10 @@ export const translations = {
     "courses.certificate.view": "Vis bevis",
     "courses.certificate.short": "Sertifikat",
     "courses.list.completedGroup": "Fullført",
+    // 2.102.0: tema i «Mine kurs».
+    "courses.view.label": "Vis kursa",
+    "courses.view.byTheme": "Etter tema",
+    "courses.view.alphabetical": "Alfabetisk",
+    "courses.theme.other": "Andre kurs",
   },
 };

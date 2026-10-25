@@ -1,3 +1,4 @@
+import type { LocalizedTheme } from "./courseThemeService.js";
 import type { ContentLifecycle } from "../content/lifecycle.js";
 
 export type CourseStatus = "NOT_STARTED" | "IN_PROGRESS" | "COMPLETED";
@@ -8,6 +9,8 @@ export interface CourseListItem {
   description: string | null;
   /** #1093: satt plassering i «Mine kurs», eller null (alfabetisk). */
   sortOrder: number | null;
+  /** 2.102.0: lokalisert og alfabetisk. Bare lista over kurs («Mine kurs») fyller den. */
+  themes?: LocalizedTheme[];
   moduleCount: number;
   progress: {
     completed: number;
@@ -82,6 +85,8 @@ export interface AdminCourseListItem {
   // #787 slice 5: may the viewer manage this course (admin, or an owner)? Drives whether the list shows
   // the edit/lifecycle actions — mirrors the ownership guard so we don't render buttons that 403.
   canManage: boolean;
+  /** 2.102.0: lokalisert og alfabetisk, for filteret i kursoversikten. */
+  themes: LocalizedTheme[];
 }
 
 export interface AdminCourseDetail {
@@ -93,6 +98,8 @@ export interface AdminCourseDetail {
   discussionsEnabled: boolean;
   /** #1093: plassering i «Mine kurs», eller null (alfabetisk). */
   sortOrder: number | null;
+  /** 2.102.0: kursets tema i «Mine kurs». */
+  themeIds: string[];
   updatedAt: string;
   publishedAt: string | null;
   archivedAt: string | null;

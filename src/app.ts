@@ -193,6 +193,11 @@ app.get("/admin-content/courses/:courseId", (_request, response) => {
   response.sendFile(path.resolve(process.cwd(), "public", "admin-content-courses.html"));
 });
 
+// 2.102.0: tema i «Mine kurs». Lista er lesbar for innholdsforvaltningen; endringer er administratorens.
+app.get("/admin-content/themes", (_request, response) => {
+  response.sendFile(path.resolve(process.cwd(), "public", "admin-content-themes.html"));
+});
+
 // Sections workspace (#476 / U1)
 app.get("/admin-content/sections", (_request, response) => {
   response.sendFile(path.resolve(process.cwd(), "public", "admin-content-sections.html"));
