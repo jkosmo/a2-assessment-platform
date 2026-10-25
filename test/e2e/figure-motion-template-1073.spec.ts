@@ -372,3 +372,41 @@ test.describe("figure-preview — målt i nettleseren", () => {
     expect(await page.locator('script[src], link[href], img:not([src^="data:"])').count()).toBe(0);
   });
 });
+
+function stimalen(): string {
+  const doc = readFileSync("skills/a2-authoring-api/references/figure-design.md", "utf8");
+  const match = doc.split("### path drawn (animated)")[1]?.match(/```svg\r?\n([\s\S]*?)```/);
+  if (!match) throw new Error("fant ikke stimalen i figure-design.md");
+  return match[1];
+}
+
+// #1073, «sti som tegnes»: kontrollen sammenligner med malen, så det er malen som må være trygg.
+test.describe("#1073 — stimalen, målt i nettleseren", () => {
+  const forskyvning = (page: Page) => page.locator("path.sti").evaluate((p) => getComputedStyle(p).strokeDashoffset);
+
+  test("streken har én animasjon, den går én gang, og den er over innen 5 sekunder", async ({ page }) => {
+    await åpne(page, stimalen());
+    const funnet = await animasjoner(page);
+    expect(funnet).toHaveLength(1);
+    expect(funnet[0]).toMatchObject({ navn: "tegn", element: "sti", runder: 1 });
+    expect(funnet[0].slutt).toBeGreaterThan(0);
+    expect(funnet[0].slutt).toBeLessThanOrEqual(5000);
+  });
+
+  test("streken tegnes fram: tom i starten, hel når animasjonen er over — og hel i stillbildet", async ({ page }) => {
+    await åpne(page, stimalen());
+    await page.evaluate(() => { for (const a of document.getAnimations()) { a.pause(); a.currentTime = 0; } });
+    expect(parseFloat(await forskyvning(page)), "i starten er hele streken skjøvet ut").toBeCloseTo(1, 2);
+    await page.evaluate(() => { for (const a of document.getAnimations()) a.finish(); });
+    expect(parseFloat(await forskyvning(page)), "når den er ferdig, er hele streken tegnet").toBeCloseTo(0, 2);
+    // Ferdig og ikke startet ser ulikt ut — ellers ville testen over bestått for en figur som aldri ble tegnet.
+    expect(await page.locator("path.sti").evaluate((p) => getComputedStyle(p).strokeDasharray)).not.toBe("none");
+  });
+
+  test("med «redusert bevegelse» beveger ingenting seg, og streken er hel", async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await åpne(page, stimalen());
+    expect(await animasjoner(page)).toEqual([]);
+    expect(parseFloat(await forskyvning(page))).toBeCloseTo(0, 2);
+  });
+});

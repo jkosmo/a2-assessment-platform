@@ -2,6 +2,28 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.103.0 - 2026-10-25
+
+### Animerte figurer: redusert bevegelse, avspilling når de vises, og en ny mal (#1073)
+
+Det som sto igjen av #1073 (produkteier: «ta alt nå»):
+
+- **«Redusert bevegelse» gjelder også figurer.** En figur vises som `<img>`, og nettleseren tar ikke
+  leserens innstilling med inn i et bilde (målt i Chromium). Med innstillingen på viser deltakerflaten
+  nå figurens stillbilde: en regel som slår av all animasjon, lagt inn før bildet lages. Stillbildet er
+  hele figuren — det sørger figurkontrollen for.
+- **Spilles av når den kommer til syne.** En animasjon er over på fem sekunder, ofte før deltakeren
+  har kommet ned til figuren. Den spilles nå av på nytt første gang halve figuren er synlig, og igjen
+  hver gang deltakeren klikker på den.
+- **Ny mal: «sti som tegnes».** En rute, en kurve eller en pil tegnes fra start til slutt, én gang.
+  `<path class="sti" pathLength="1">` med malens stilblokk; farge, strekbredde og varighet kan
+  variere, ingenting annet. Figurkontrollen i skillet — og dermed plattformen ved opplasting — godtar
+  den på samme måte som flytmalen, og avviser en annen lengde, en løkke, en forsinkelse, en klasse på
+  feil element og en strek som er usynlig i stillbildet. `figure-design.md` har malen, og skjemaet
+  «Hvilken form» har fått en rad for den.
+- **Forfatterveiledning:** hjelpen i seksjonseditoren og `figure-design.md` sier at figurer kan
+  animeres, og hvordan plattformen viser dem.
+
 ## 2.102.1 - 2026-10-25
 
 ### En ramme som ikke vises i kilden, stopper ikke oversettelsen med feil beskjed (#1112)

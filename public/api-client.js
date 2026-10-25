@@ -288,7 +288,7 @@ async function loadAssetLayout(img, layout, getHeadersOrFn) {
     if (img.dataset.assetWanted !== layout) return;
     const previous = img.src;
     if (svg !== null) sizeSvgFigure(img, svg);
-    img.src = URL.createObjectURL(blob);
+    img.src = URL.createObjectURL(svg !== null && isAnimatedSvg(svg) ? animatedFigureBlob(img, svg, blob) : blob);
     if (previous.startsWith("blob:")) URL.revokeObjectURL(previous);
     img.dataset.assetLayout = response.headers.get("X-Asset-Layout") ?? "wide";
     img.dataset.assetLayouts = response.headers.get("X-Asset-Layouts") ?? "wide";
@@ -297,6 +297,81 @@ async function loadAssetLayout(img, layout, getHeadersOrFn) {
   } catch {
     /* leave the broken image; non-fatal */
   }
+}
+
+// ---------------------------------------------------------------------------
+// #1073: animated figures. A figure is shown as an <img>, and a browser does NOT apply the reader's
+// «reduce motion» setting inside an SVG shown as an image (measured in Chromium, 2026-10-03). So the
+// platform applies it: with the setting on, the figure is shown as its still picture — the same one
+// the figure rests in when its animation is over, which the check guarantees is complete.
+//
+// Without the setting, a short animation (at most five seconds) could be over before the reader has
+// scrolled down to it. So it plays again the first time it comes into view, and once more each time
+// the reader clicks it. Playing again is loading the same picture anew: a new image starts its
+// animation from the beginning.
+// ---------------------------------------------------------------------------
+
+/** An SVG that moves: the templates' keyframes, or any other — the platform refuses all but those. */
+export function isAnimatedSvg(svg) {
+  return /@keyframes/i.test(String(svg ?? ""));
+}
+
+/** The figure's still picture: every animation and transition switched off. */
+export function stillSvg(svg) {
+  return String(svg).replace(/<svg\b(?:"[^"]*"|'[^']*'|[^>"'])*>/i, (open) => (open.endsWith("/>")
+    ? open
+    : `${open}<style>*{animation:none !important;transition:none !important}</style>`));
+}
+
+function prefersReducedMotion() {
+  try {
+    return window.matchMedia?.("(prefers-reduced-motion: reduce)").matches === true;
+  } catch {
+    return false;
+  }
+}
+
+/** image → the animated picture it plays again. */
+const animatedFigures = new WeakMap();
+let animatedFigureObserver = null;
+
+/** The picture to show for an animated figure, and — when it may move — what to play it again with. */
+function animatedFigureBlob(img, svg, blob) {
+  img.dataset.assetAnimated = prefersReducedMotion() ? "still" : "moving";
+  if (img.dataset.assetAnimated === "still") {
+    animatedFigures.delete(img);
+    return new Blob([stillSvg(svg)], { type: "image/svg+xml" });
+  }
+  const known = animatedFigures.has(img);
+  animatedFigures.set(img, blob);
+  if (!known) watchAnimatedFigure(img);
+  return blob;
+}
+
+/** Plays an animated figure again from the start. */
+export function replayAnimatedFigure(img) {
+  const blob = animatedFigures.get(img);
+  if (!blob || !img.isConnected) return false;
+  const previous = img.src;
+  img.src = URL.createObjectURL(blob);
+  if (previous.startsWith("blob:")) URL.revokeObjectURL(previous);
+  return true;
+}
+
+function watchAnimatedFigure(img) {
+  img.style.cursor = "pointer";
+  img.addEventListener("click", () => replayAnimatedFigure(img));
+  if (typeof IntersectionObserver !== "function") return;
+  // A figure already in view when it loads is restarted a few milliseconds after it began — nobody
+  // sees that, so it is not told apart from one the reader scrolls down to.
+  animatedFigureObserver ??= new IntersectionObserver((entries) => {
+    for (const entry of entries) {
+      if (!entry.isIntersecting) continue;
+      animatedFigureObserver.unobserve(entry.target);
+      replayAnimatedFigure(entry.target);
+    }
+  }, { threshold: 0.5 });
+  animatedFigureObserver.observe(img);
 }
 
 // A figure with both layouts follows its column: a phone turned on its side, a window dragged

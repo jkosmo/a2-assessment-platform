@@ -32,6 +32,7 @@ highlighted box), a prompt, a table. Those are written as text —
 | two dimensions that give four fields | **matrix** | you | no |
 | the parts of one thing | **labelled diagram** | you | no |
 | events placed in time, with dates or periods | **timeline** | you | no |
+| something moving along a way: a route, a flow of material, a line that grows, cause to effect | **path drawn** | you, from the template | yes — the path is drawn from start to end, once |
 | the steps of a step-by-step walk-through, one figure per step | **same figure, one step highlighted** | you | no |
 
 A point that fits none of these is drawn freely as a still figure, by the same rules. If the same
@@ -266,9 +267,11 @@ on purpose, so it carries `data-motion="static"`. Step 2 of three:
 
 ## The animated template
 
-You do not write these two by hand — `draw-flow-figure.mjs` does. They are printed here because
-`scripts/figure-motion-check.mjs` compares every animated figure with them: an animated figure
-**is** this template, or it is refused (`unsupported_animation_form`), also when its CSS is valid.
+There are two templates. The flow — steps that light up in turn — you do not write by hand:
+`draw-flow-figure.mjs` does. The drawn path — a route, a curve or an arrow drawn from start to end —
+you draw yourself. Both are printed here because `scripts/figure-motion-check.mjs` compares every
+animated figure with them: an animated figure **is** one of these templates, or it is refused
+(`unsupported_animation_form`), also when its CSS is valid.
 A check that lists unsafe forms always misses the next one; the template is the one form that has
 been measured on the platform.
 
@@ -338,7 +341,41 @@ above it.
 </svg>
 ```
 
+### path drawn (animated)
+
+For something that moves along a way: a route, a flow of material, a line that grows on a chart, an
+arrow from cause to effect. The path is drawn from its start to its end, once. Animate only the
+stroke that shows the movement; the rest of the figure — points, labels, axes — stands still.
+
+```svg
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 120" role="img"
+     font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif">
+  <style>
+    .sti { fill: none; stroke: #2a6f97; stroke-width: 3; stroke-dasharray: 1; stroke-dashoffset: 0; }
+    @keyframes tegn { 0% { stroke-dashoffset: 1; } 100% { stroke-dashoffset: 0; } }
+    .sti { animation: tegn 2.5s ease-in-out 1; }
+    @media (prefers-reduced-motion: reduce) { .sti { animation: none; } }
+  </style>
+  <circle cx="30" cy="90" r="8" fill="#2a6f97"/>
+  <text x="30" y="112" text-anchor="middle" font-size="12">Start</text>
+  <path class="sti" pathLength="1" d="M30 90 C 120 10, 260 10, 370 60"/>
+  <circle cx="370" cy="60" r="8" fill="#2a6f97"/>
+  <text x="370" y="85" text-anchor="middle" font-size="12">Mål</text>
+</svg>
+```
+
+- Every stroke that is drawn is a `<path class="sti" pathLength="1">`. `pathLength="1"` makes the
+  browser measure the path as length 1, so the numbers in the style block are the same for every
+  path. Leave it out, or give another length, and the path has gaps — the check refuses it.
+- Several `sti` paths are drawn **at the same time**. There are no delays: a later path would stand
+  complete until its turn and then jump to empty. To show an order of steps, use the flow.
+- May differ: the stroke colour (opaque hex), the stroke width, the duration (0.3–5 s), and
+  everything that is not a `sti` path — circles, plain lines and paths, labels — which stands still.
+  Must stay: the class `sti`, the keyframes name `tegn`, the rest of the block as printed.
+
 ### What the check holds an animated figure to
+
+The table is the flow's; the drawn path's rules stand in its own section above.
 
 | May differ | Must stay |
 |---|---|
@@ -357,6 +394,10 @@ attributes — except a step's icon, which `draw-flow-figure.mjs` writes in one 
 **The platform holds every figure to this too:** a figure that would move in any
 other way — a loop, longer than five seconds, SMIL — is refused at import and upload with
 `asset_svg_motion_not_allowed`, whichever way it comes in. A still figure is always accepted.
+
+**On the platform** an animated figure follows the reader: with «reduce motion» switched on in
+their system it shows the still picture and does not move. It plays when it comes into view — not
+while the reader is still further up the page — and the reader can click it to play it again.
 
 - **Runs once, done within 5 seconds** (largest delay + duration). An image has no pause button.
 - **The still picture is the whole figure.** Before the animation, after it, and with reduced
