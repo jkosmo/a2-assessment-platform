@@ -352,38 +352,64 @@ const courseAssignmentMessages: Record<SupportedLocale, CourseAssignmentLabels> 
 
 // #997: modulen du besto er revidert. Ett varsel per deltaker per revisjon — ikke en kalender
 // (det var maset #989 fjernet). Ingen lenker (#688).
+//
+// 2.101.0: produkteier, 2026-10-25 — «dette er ikke bra formulert». Ordlyden er produkteiers, og
+// kurset beståtten gjaldt, står i teksten. En modul uten publisert kurs gir setningen uten kurs.
 type ModuleRevisedLabels = {
   subject: string; // {module}
   body: string; // {module}
+  /** Etter `body` når modulen ligger i minst ett publisert kurs. {courses} */
+  lostPassForCourses: string;
+  /** Etter `body` når den ikke gjør det. */
+  lostPass: string;
+  /** Mellom de to siste kursnavnene: «A», «B» og «C». */
+  and: string;
   closing: string;
 };
 
 const moduleRevisedMessages: Record<SupportedLocale, ModuleRevisedLabels> = {
   "en-GB": {
     subject: "Module revised: {module}",
-    body: "Hello!\n\nThe module «{module}», which you had passed, has been revised. Your earlier pass no longer counts towards the course certificate.",
+    body: "Hello!\n\nThe module «{module}», which you had passed, has been revised.",
+    lostPassForCourses: " Your earlier pass no longer counts, and you need to take the module again to keep a passed course for {courses}.",
+    lostPass: " Your earlier pass no longer counts.",
+    and: "and",
     closing: "\n\nLog in to the platform to take the module again.",
   },
   nb: {
     subject: "Modulen er revidert: {module}",
-    body: "Hei!\n\nModulen «{module}», som du hadde bestått, er revidert. Den tidligere beståtten teller ikke lenger mot kursbeviset.",
+    body: "Hei!\n\nModulen «{module}», som du hadde bestått, er revidert.",
+    lostPassForCourses: " Din tidligere bestått teller ikke lenger, og du må oppdatere for å fortsatt ha et bestått kurs for {courses}.",
+    lostPass: " Din tidligere bestått teller ikke lenger.",
+    and: "og",
     closing: "\n\nLogg inn på plattformen for å ta modulen på nytt.",
   },
   nn: {
     subject: "Modulen er revidert: {module}",
-    body: "Hei!\n\nModulen «{module}», som du hadde bestått, er revidert. Den tidlegare beståtten tel ikkje lenger mot kursbeviset.",
+    body: "Hei!\n\nModulen «{module}», som du hadde bestått, er revidert.",
+    lostPassForCourses: " Det tidlegare beståtte ditt tel ikkje lenger, og du må oppdatere for framleis å ha eit bestått kurs for {courses}.",
+    lostPass: " Det tidlegare beståtte ditt tel ikkje lenger.",
+    and: "og",
     closing: "\n\nLogg inn på plattforma for å ta modulen på nytt.",
   },
 };
 
+function quotedList(titles: string[], and: string): string {
+  const quoted = titles.map((title) => `«${title}»`);
+  if (quoted.length <= 1) return quoted.join("");
+  return `${quoted.slice(0, -1).join(", ")} ${and} ${quoted[quoted.length - 1]}`;
+}
+
 export function getModuleRevisedNotificationMessage(
   locale: SupportedLocale,
-  context: { moduleTitle: string },
+  context: { moduleTitle: string; courseTitles?: string[] },
 ): NotificationMessage {
   const t = moduleRevisedMessages[locale];
+  const courses = (context.courseTitles ?? []).filter((title) => title.trim());
+  const lost = courses.length > 0 ? t.lostPassForCourses.replace("{courses}", quotedList(courses, t.and)) : t.lostPass;
   return {
     subject: t.subject.replace("{module}", context.moduleTitle),
-    nextStepGuidance: t.body.replace("{module}", context.moduleTitle) + t.closing,
+    nextStepGuidance: t.body.replace("{module}", context.moduleTitle) + lost + t.closing,
   };
 }
 

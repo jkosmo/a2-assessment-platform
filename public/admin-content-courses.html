@@ -261,6 +261,24 @@
       </div>
     </dialog>
 
+    <!-- 2.101.0: publish every new version in the course at once, with ONE answer to «is this a
+         revision?» for all its modules. Opens by itself after «Oppdater dette kurset». -->
+    <dialog id="pendingPublishDialog" aria-labelledby="pendingPublishTitle">
+      <h2 class="dialog-title" id="pendingPublishTitle"></h2>
+      <p class="dialog-text" id="pendingPublishText"></p>
+      <div id="pendingPublishList" class="cascade-publish-list-wrap"></div>
+      <p class="dialog-text small" id="pendingPublishNotOwned" hidden></p>
+      <div id="pendingPublishRevision" hidden>
+        <p class="dialog-text"><strong id="pendingPublishRevisionHeading"></strong><br><span id="pendingPublishRevisionBody"></span></p>
+      </div>
+      <div class="dialog-actions">
+        <button type="button" id="pendingPublishConfirmBtn" class="btn btn-primary"></button>
+        <button type="button" id="pendingPublishKeepBtn" class="btn btn-primary" hidden></button>
+        <button type="button" id="pendingPublishSupersedeBtn" class="btn btn-secondary" hidden></button>
+        <button type="button" class="dialog-cancel" id="pendingPublishCancelBtn"></button>
+      </div>
+    </dialog>
+
     <!-- #1095: a course package exported from THIS environment carries its course id. The author
          chooses: update that course (new, unpublished versions laid ready) or import as a new course. -->
     <dialog id="courseImportChoiceDialog" aria-labelledby="courseImportChoiceTitle">

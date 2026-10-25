@@ -322,6 +322,11 @@
       }
       .course-step--now:hover .course-step-cta { background: var(--color-primary-hover); border-color: var(--color-primary-hover); }
       .course-item.open .course-step--now { border-bottom-left-radius: 0; border-bottom-right-radius: 0; margin-bottom: 0; }
+      /* 2.101.0 (produkteier 25.10): knappen er overflødig når steget alt er åpent («Gjennomfør» over
+         en åpen modul), og når steget rett før er åpent — der står «Gå til neste element», som gjør
+         det samme. Kortet selv er fortsatt klikkbart. */
+      .course-item.open .course-step-cta,
+      .course-item.open + .course-item .course-step-cta { display: none; }
 
       /* Kurs-nivå diskusjon: én rolig linje til den åpnes. Ligger utenfor sporet (ingen node),
          fordi den ikke er et steg i kurset. */

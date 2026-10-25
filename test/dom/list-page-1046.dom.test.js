@@ -51,7 +51,8 @@ function lag(overrides = {}) {
 
 const navn = (host) => [...host.querySelectorAll("#tb tr td.col-name")].map((td) => td.textContent);
 
-afterEach(() => { document.body.innerHTML = ""; });
+// 2.101.0: lista husker tilstanden i fanen (view-state.js). Hver test er en ny fane.
+afterEach(() => { document.body.innerHTML = ""; window.sessionStorage.clear(); });
 
 describe("#1046 — den felles listesida", () => {
   it("hodet: tittel, forklaringslinje, sekundær til venstre og fylt hovedknapp ytterst til høyre", async () => {

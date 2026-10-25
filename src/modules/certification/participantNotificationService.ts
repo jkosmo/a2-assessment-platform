@@ -479,6 +479,8 @@ export interface ModuleRevisedNotificationInput {
   recipientName?: string | null;
   /** Tittelen valgt for mottakerens språk av kalleren — samme språk som `locale`. */
   moduleTitle: string;
+  /** Kursene beståtten gjaldt, på mottakerens språk. Tom: varselet nevner ikke noe kurs. */
+  courseTitles?: string[];
   moduleId: string;
   moduleVersionId: string;
   locale: SupportedLocale;
@@ -487,7 +489,7 @@ export interface ModuleRevisedNotificationInput {
 export async function sendModuleRevisedNotification(
   input: ModuleRevisedNotificationInput,
 ): Promise<NotificationResult> {
-  const message = getModuleRevisedNotificationMessage(input.locale, { moduleTitle: input.moduleTitle });
+  const message = getModuleRevisedNotificationMessage(input.locale, { moduleTitle: input.moduleTitle, courseTitles: input.courseTitles ?? [] });
   const payload = {
     notificationType: "module_revised",
     moduleId: input.moduleId,

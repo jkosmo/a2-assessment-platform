@@ -20,6 +20,8 @@ import {
   listCourseEnrollments,
   getCoursePublishPreview,
   publishCourseCascade,
+  getCoursePendingVersions,
+  publishCoursePendingVersions,
   getCourseCascadeDeletePreview,
   cascadeDeleteCourse,
 } from "../modules/course/index.js";
@@ -520,6 +522,46 @@ adminCoursesRouter.post("/:courseId/publish", requireContentOwnership("COURSE", 
     // Cascade requested: publish items then the course. publishCourseCascade throws a 422 AppError if
     // any item is un-publishable, and never publishes the course unless every item succeeded.
     const result = await publishCourseCascade(request.params.courseId, request.context?.userId);
+    response.json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// 2.101.0: nye versjoner som ligger klar i kurset (etter en kursoppdatering, #1095, eller lagret
+// én og én), med det revisjonsspørsmålet trenger: hvor mange som har bestått hvilke moduler. Lesingen
+// er vaktet som publiseringen den er forspillet til (#943).
+adminCoursesRouter.get("/:courseId/pending-versions", requireContentOwnership("COURSE", "courseId"), async (request, response, next) => {
+  try {
+    const pending = await getCoursePendingVersions(request.params.courseId, {
+      userId: request.context?.userId ?? "",
+      roles: request.context?.roles ?? [],
+    });
+    response.json(pending);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// 2.101.0: publiser alle. `versionIds` er versjonene forfatteren så i dialogen; et annet sett gir
+// 409. `supersedesEarlierPasses` er ETT svar for alle modulene, og kreves når noen har bestått.
+const publishPendingBodySchema = z.object({
+  versionIds: z.array(z.string().min(1)).max(1000),
+  supersedesEarlierPasses: z.boolean().optional(),
+});
+
+adminCoursesRouter.post("/:courseId/publish-pending", requireContentOwnership("COURSE", "courseId"), async (request, response, next) => {
+  const parsed = publishPendingBodySchema.safeParse(request.body ?? {});
+  if (!parsed.success) {
+    response.status(400).json({ error: "validation_error", issues: parsed.error.issues });
+    return;
+  }
+  try {
+    const result = await publishCoursePendingVersions(
+      request.params.courseId,
+      { userId: request.context?.userId ?? "", roles: request.context?.roles ?? [] },
+      parsed.data,
+    );
     response.json(result);
   } catch (error) {
     next(error);

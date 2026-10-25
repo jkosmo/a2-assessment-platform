@@ -61,6 +61,8 @@ export type ModuleRevisedNotificationPayload = {
   recipientName: string | null;
   /** Tittelen for mottakerens språk — valgt der avsenderen kjenner språket. */
   moduleTitle: string;
+  /** 2.101.0: kursene beståtten gjaldt, på mottakerens språk. Mangler i hendelser lagt i køen før 2.101.0. */
+  courseTitles?: string[];
   locale: SupportedLocale;
 };
 
@@ -195,6 +197,7 @@ export async function deliverOutboxEvent(event: { type: string; payloadJson: str
       recipientEmail: p.recipientEmail,
       recipientName: p.recipientName,
       moduleTitle: p.moduleTitle,
+      courseTitles: p.courseTitles ?? [],
       moduleId: p.moduleId,
       moduleVersionId: p.moduleVersionId,
       locale: p.locale,

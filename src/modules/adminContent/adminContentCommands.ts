@@ -998,6 +998,7 @@ export async function publishModuleVersion(
       // per mottaker under.
       const titleRow = await createAdminContentRepository(client).findModuleTitle(moduleId);
       const storedTitle = titleRow?.title ?? "";
+      const storedCourseTitles = await createAdminContentRepository(client).findLiveCourseTitlesContainingModule(moduleId);
       await certRepo.supersedeCertificationsForModule(moduleId, moduleVersionId);
 
       if (passed.length > 0) {
@@ -1013,6 +1014,8 @@ export async function publishModuleVersion(
                 recipientName: row.user.name ?? null,
                 // #970: tittelen velges for MOTTAKERENS språk, ikke forfatterens.
                 moduleTitle: localizeContentText(locale, storedTitle) ?? storedTitle,
+                // 2.101.0: produkteier vil ha kurset navngitt i varselet.
+                courseTitles: storedCourseTitles.map((title) => localizeContentText(locale, title) ?? title),
                 locale,
               },
             };

@@ -2,6 +2,47 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.101.0 - 2026-10-25
+
+### Publiser alle nye versjoner i et kurs, med ett revisjonssvar
+
+Produkteier, 2026-10-25: etter «Oppdater dette kurset» (#1095) ligger hver ny versjon klar som
+utkast, og forfatteren måtte inn i hver modul for å publisere den — og svare på «Er dette en
+revisjon?» hver gang.
+
+- **`GET /courses/:id/pending-versions`** lister elementene i kurset der den nyeste versjonen ikke er
+  den levende: nye versjoner på publiserte elementer, og elementer som aldri er publisert. Med
+  publiseringsporten per element, og hvor mange som har bestått hver modul.
+- **`POST /courses/:id/publish-pending`** publiserer dem. Alt eller ingenting (som kaskaden, #734):
+  mangler ett element et språk, publiseres ingenting. Bare elementer forfatteren eier; andres listes
+  for seg. Har noen bestått en av modulene, kreves `supersedesEarlierPasses` — ett svar for alle.
+  Klienten sender versjonene den viste; et annet sett gir 409.
+- **Kurssiden:** dialogen åpnes straks etter «Oppdater dette kurset», og knappen «Publiser nye
+  versjoner (N)» står i hodet så lenge noe ligger klar. Med beståtte er det ingen nøytral «Publiser
+  alle», bare de to svarene på revisjonsspørsmålet.
+- **Kaskadens forhåndsvisning** (`publish-preview`) er uendret: levende elementer med en ny versjon
+  regnes ikke som upubliserte der.
+- Agent-tokens når ikke de nye rutene (ikke på tillatt-lista).
+
+### Revisjonsvarselet: produkteiers ordlyd, med kurset navngitt
+
+«Din tidligere bestått teller ikke lenger, og du må oppdatere for å fortsatt ha et bestått kurs for
+«…».» Kursene er de publiserte, ikke-arkiverte kursene modulen ligger i, på mottakerens språk. En
+modul uten slikt kurs får setningen uten kurs. Hendelser som lå i køen før 2.101.0, sendes uten kurs.
+
+### Oversiktene husker hvordan de sto
+
+Produkteier: «hvis man går tilbake så bør systemet huske hvilken state oversikten var i.» Moduler,
+Seksjoner, Kurs og Klasser (alle på `list-page.js`) husker søk, filter, kursfilter, avkryssing,
+sortering og rulleposisjon i fanen (`view-state.js`, sessionStorage). Et lagret valg som ikke finnes
+lenger, faller tilbake til standard. Resultater, vurderingskøen og kohortstatus har egne filtre og er
+ikke med ennå.
+
+### Deltaker: én knapp der det var to
+
+Knappen på det aktuelle steget («Gjennomfør», «Les») skjules når steget alt er åpent, og når steget
+rett før er åpent — der står «Gå til neste element», som gjør det samme.
+
 ## 2.100.0 - 2026-10-24
 
 ### «Velg alle som stemmer» med KI og i skillet (#1077, leveranse 1b)

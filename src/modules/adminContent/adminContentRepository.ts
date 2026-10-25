@@ -159,6 +159,17 @@ export function createAdminContentRepository(client: AdminContentRepositoryClien
       });
     },
 
+    // 2.101.0: revisjonsvarselet navngir kurset beståtten gjaldt. Bare kurs deltakeren kan se
+    // (publisert, ikke arkivert); lagret tittel, lokaliseres per mottaker av kalleren.
+    async findLiveCourseTitlesContainingModule(moduleId: string): Promise<string[]> {
+      const rows = await client.courseItem.findMany({
+        where: { moduleId, course: { publishedAt: { not: null }, archivedAt: null } },
+        orderBy: { course: { createdAt: "asc" } },
+        select: { course: { select: { title: true } } },
+      });
+      return [...new Set(rows.map((row) => row.course.title))];
+    },
+
     // #896 S3b: the stored values a partial update has to merge onto. Without reading them
     // first, a patch for one locale replaces the whole localized object and deletes the others.
     findModuleDetails(moduleId: string) {

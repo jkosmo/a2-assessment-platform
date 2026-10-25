@@ -473,6 +473,26 @@ delen av den gamle porten var reell beskyttelse, ikke vilkårlighet, og den beho
 
 **Sak:** #1001 · **Status:** avklart 2026-08-24
 
+### Nye versjoner fra en kursoppdatering publiseres samlet, med ett revisjonssvar
+
+Avgjørelsen fra 12.10 (#1095) står: importen publiserer ingenting, og det skal en bevisst handling
+til. Nytt er at handlingen er **én** for hele kurset, ikke én per modul, og at «Er dette en
+revisjon?» besvares **én gang for alle modulene**. Dialogen åpnes straks etter importen.
+
+**Hvorfor:** produkteier 2026-10-25: *«så må man manuelt inn i hver modul og publisere dette. Vi
+trenger et samlet spørsmål om å publisere alle, man må da også ta hensyn til spørsmålet om "Er dette
+en revisjon" der svar gis samlet for alle moduler i kurset.»*
+
+Valg tatt i gjennomføringen, som produkteier kan snu:
+
+- **Alt eller ingenting.** Mangler ett element et språk, publiseres ingenting — som når et kurs
+  publiseres (#734). Ellers kan en ny test stå bak den gamle seksjonen den prøver.
+- **Bare egne elementer.** Andres moduler og seksjoner i kurset (#903) publiseres av eieren; de nevnes
+  i dialogen og stopper ikke resten.
+
+**Hvor:** `publishCoursePendingVersions` i `coursePublishService.ts` · **Versjon:** 2.101.0 ·
+**Status:** avklart 2026-10-25
+
 ## Vurdering
 
 ### MCQ-beståttgrensen er 70 %, med mindre modulen sier noe annet
