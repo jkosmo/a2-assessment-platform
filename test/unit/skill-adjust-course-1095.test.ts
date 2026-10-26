@@ -405,6 +405,18 @@ describe("#1095 fase B — skillets justeringsflyt", () => {
     expect(sagt.ok, sagt.checks.filter((c) => c.status === "fail").map((c) => `${c.name}: ${c.details.join(" | ")}`).join("; ")).toBe(true);
   });
 
+  // #1127: et repetisjonskurs som justeres, får ingen merknad om å starte med spørsmål — rekkefølgen er forfatterens.
+  it("et repetisjonskurs som justeres: repetisjonskontrollen kjøres ikke", async () => {
+    const work = path.join(dir, "repetisjon");
+    expect(convertExport(eksport(), { outDir: work }).ok).toBe(true);
+    const pkgFil = path.join(work, "package.json");
+    const pkg = JSON.parse(readFileSync(pkgFil, "utf8"));
+    pkg.objects.find((o: { type: string }) => o.type === "course").payload.course.title = tre("Repetisjon: møtearbeid", "Repetisjon: møtearbeid", "Revision: meeting work");
+    writeFileSync(pkgFil, JSON.stringify(pkg), "utf8");
+    const r = await produser(work, "repetisjon");
+    expect(sjekk(r, "revision").status).toBe("skipped");
+  });
+
   it("et kurs med origin uten endringsliste produseres ikke — «uendret er uendret» må kjøres", async () => {
     const work = path.join(dir, "utenliste");
     expect(convertExport(eksport(), { outDir: work }).ok).toBe(true);

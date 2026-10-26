@@ -32,6 +32,40 @@
 export const CALLOUT_MAX = 1;
 export const LIST_MAX_ITEMS = 8;
 
+// Product owner 2026-10-26: «vil ikke dette avhenge av lengden på seksjonen?» A long section may carry
+// a box per part; a short one with two boxes is the pattern the review criticised. The boxes allowed
+// are one per WORDS_PER_CALLOUT words, and never fewer than CALLOUT_MAX. Stage: the box-heavy sections
+// are short (150–400 words with 2–4 boxes); the rule lets through the six long ones (780–1340 words with
+// 2–3 boxes) — 41 of 106 sections noted, against 44 with a flat limit.
+export const WORDS_PER_CALLOUT = 400;
+
+/** The prose words of a section — code left out — for the box allowance. */
+export function proseWordCount(markdown) {
+  return (proseLines(markdown).join("\n").match(/[\p{L}\p{N}]+/gu) ?? []).length;
+}
+
+/** How many boxes a section of this length may have. */
+export function calloutsAllowed(words) {
+  return Math.max(CALLOUT_MAX, Math.floor(words / WORDS_PER_CALLOUT));
+}
+
+// #1127: a revision course starts with questions. Recognised by its title (product owner 2026-10-26:
+// «det er greit at repetisjon er angitt i tittel»); stage: all six revision courses say «Repetisjon» in
+// the title, and all six open with the material again (0–1 questions in the first section).
+const REVISION_TITLE = /(?<![\p{L}\p{N}])(?:repetisjon\w*|revision|refresher)(?![\p{L}\p{N}])/iu;
+export const REVISION_MIN_QUESTIONS = 5;
+
+/** Is this the title of a revision course, in any language of a localized title? */
+export function isRevisionTitle(title) {
+  const texts = typeof title === "string" ? [title] : title && typeof title === "object" ? Object.values(title) : [];
+  return texts.some((text) => typeof text === "string" && REVISION_TITLE.test(text));
+}
+
+/** The «sjekk deg selv» frames in a section's markdown, code left out. */
+export function checkFrameCount(markdown) {
+  return proseLines(markdown).filter((line) => /^:::\s*(?:sjekk|check)\b/i.test(line)).length;
+}
+
 /** The lines of the markdown with fenced code blocks blanked out (line numbers kept). */
 function proseLines(markdown) {
   let fence = null;

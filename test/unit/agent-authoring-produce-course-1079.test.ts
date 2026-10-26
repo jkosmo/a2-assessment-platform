@@ -74,6 +74,8 @@ describe("produce-course — eksempelkurset går gjennom alt (#1079)", () => {
       // #1126: én oppsummering per seksjon; høyst én boks — utkastet over «finn feilene» er øvelsen, ikke en boks.
       summaries: "ok",
       focus: "ok",
+
+      revision: "ok",
       languages: "ok",
       "approved text": "ok",
       slides: "ok",
@@ -352,9 +354,16 @@ describe("produce-course — seksjoner som lærer bort (#1126)", () => {
   it("to bokser i én seksjon → merknad med etikettene; fila leveres", async () => {
     const r = await kopi((p) => leggTil(p, "sec-kilder", { nb: "> **Husk:** Les notatene.\n\nTekst.\n\n> **Tips:** Start tidlig.", nn: "> **Hugs:** Les notata.\n\nTekst.\n\n> **Tips:** Start tidleg.", "en-GB": "> **Remember:** Read the notes.\n\nText.\n\n> **Tip:** Start early." })).kjør();
     expect(status(r).focus, formatProduction(r)).toBe("note");
-    expect(funn(r, "focus")).toContain(`"sec-kilder": 2 highlighted boxes («Husk», «Tips») — keep at most 1`);
+    expect(funn(r, "focus")).toMatch(/"sec-kilder": 2 highlighted boxes in \d+ words \(«Husk», «Tips»\) — at most one per 400 words/);
     expect(r.ok).toBe(true);
     expect(formatProduction(r)).toContain("Noted: focus.");
+  });
+
+  // Produkteier 2026-10-26: grensen følger lengden.
+  it("to bokser i en lang seksjon (over 800 ord) → ingen merknad om bokser", async () => {
+    const lang = "Når du skriver referatet, går du gjennom notatene ett punkt om gangen og sjekker det mot utkastet. ".repeat(50);
+    const r = await kopi((p) => leggTil(p, "sec-kilder", { nb: `> **Husk:** Les notatene.\n\n${lang}\n\n> **Tips:** Start tidlig.`, nn: "> **Hugs:** Les notata.\n\nTekst.\n\n> **Tips:** Start tidleg.", "en-GB": "> **Remember:** Read the notes.\n\nText.\n\n> **Tip:** Start early." })).kjør();
+    expect(funn(r, "focus")).not.toContain("highlighted boxes");
   });
 
   it("én boks og utkastet i en «finn feilene» er ikke to bokser — men et sitat uten oppgave under er det", async () => {
@@ -364,7 +373,7 @@ describe("produce-course — seksjoner som lærer bort (#1126)", () => {
       for (const s of ["nb", "nn", "en-GB"]) b[s] = b[s].replace(/\n:::skriv [^\n]*\n[\s\S]*?\n:::\n?/, "\nMer tekst.\n");
     }).kjør();
     expect(status(r).focus, formatProduction(r)).toBe("note");
-    expect(funn(r, "focus")).toContain(`"sec-arbeidsgang": 2 highlighted boxes («Husk», «Utkast fra KI»)`);
+    expect(funn(r, "focus")).toMatch(/"sec-arbeidsgang": 2 highlighted boxes in \d+ words \(«Husk», «Utkast fra KI»\)/);
   });
 
   it("en liste på ni punkter → merknad; åtte, eller ni par i en ramme, eller en liste i kode, er greit", async () => {
@@ -404,6 +413,27 @@ describe("produce-course — seksjoner som lærer bort (#1126)", () => {
   it("«I denne seksjonen» og «Etter denne seksjonen skal du» er ikke seksjonen som snakker", async () => {
     const r = await kopi((p) => leggTil(p, "sec-kilder", { nb: "I denne seksjonen ser du tre kilder. Etter denne seksjonen skal du kunne velge.", nn: "I denne seksjonen ser du tre kjelder.", "en-GB": "In this section you see three sources." })).kjør();
     expect(status(r).focus, funn(r, "focus")).toBe("ok");
+  });
+});
+
+// #1127: et repetisjonskurs — «Repetisjon» i tittelen — starter med spørsmål. En merknad, ikke en stopp.
+describe("produce-course — repetisjonskurs (#1127)", () => {
+  const somRepetisjon = (p: Pakke) => void (objekt(p, "kurs-motereferat").payload.course.title.nb = "Repetisjon: møtereferat med KI");
+
+  it("et repetisjonskurs som starter med lesestoff → merknad med første element; fila leveres", async () => {
+    const r = await kopi(somRepetisjon).kjør();
+    expect(status(r).revision, formatProduction(r)).toBe("note");
+    expect(funn(r, "revision")).toContain('the first element ("sec-arbeidsgang") has 0 «sjekk deg selv» question(s)');
+    expect(r.ok).toBe(true);
+  });
+
+  it("et repetisjonskurs som starter med fem spørsmål → godkjent", async () => {
+    const spm = (n: number) => `\n\n:::sjekk Spørsmål ${n}?\n- [x] Riktig\n- [ ] Galt\n:::\n`;
+    const r = await kopi((p) => {
+      somRepetisjon(p);
+      objekt(p, "sec-arbeidsgang").payload.bodyMarkdown.nb += [1, 2, 3, 4, 5].map(spm).join("");
+    }).kjør();
+    expect(status(r).revision).toBe("ok");
   });
 });
 

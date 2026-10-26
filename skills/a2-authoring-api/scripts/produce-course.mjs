@@ -19,6 +19,7 @@
 //   leftovers      no working notes, numbered section references, figures out of order (#1129)
 //   summaries      one summary per section, not «Formål» + «Nøkkelpoeng» + «Kort oppsummering» (#1126)
 //   focus          boxes, long lists, a section describing itself — a NOTE, never a stop  (#1126)
+//   revision       a «Repetisjon» course opens with questions — a NOTE                   (#1127)
 //   languages      nb, nn and en-GB complete, real translations, same answer in each
 //   approved text  nothing the author approved has gone missing        (needs --state)
 //   slides         every slide got what the slide list says           (needs --slides)
@@ -43,7 +44,7 @@ import { checkExerciseCopies } from "./exercise-copy-check.mjs";
 import { checkRubricScales } from "./rubric-check.mjs";
 import { wordsOf } from "./text-overlap.mjs";
 import { ALT_MIN_WORDS, checkAltTexts, checkFigureNumbers, checkLeftovers } from "./section-text-check.mjs";
-import { CALLOUT_MAX, callouts, longLists, selfDescription, summaryHeadings } from "./section-shape-check.mjs";
+import { REVISION_MIN_QUESTIONS, WORDS_PER_CALLOUT, callouts, calloutsAllowed, checkFrameCount, isRevisionTitle, longLists, proseWordCount, selfDescription, summaryHeadings } from "./section-shape-check.mjs";
 import { SVG_MIME, checkAssets, readCourseState, resolvePackageAssets } from "./package-assets.mjs";
 import { checkSlideCoverage, countForms, readDeck } from "./slide-coverage.mjs";
 import { synthesizeStandaloneEnvelopes } from "./synthesize-envelopes.mjs";
@@ -654,8 +655,9 @@ function checkFocus(pkg, primary) {
     const texts = sectionTexts(object);
     const main = (texts.find(([language]) => language === primary) ?? texts[0])?.[1] ?? "";
     const boxes = callouts(main);
-    if (boxes.length > CALLOUT_MAX) {
-      details.push(`"${object.clientRef}": ${boxes.length} highlighted boxes (${boxes.map((b) => `«${b}»`).join(", ")}) — keep at most ${CALLOUT_MAX}, for something with a concrete consequence; the rest is text (section-content.md#teach-not-catalogue)`);
+    const words = proseWordCount(main);
+    if (boxes.length > calloutsAllowed(words)) {
+      details.push(`"${object.clientRef}": ${boxes.length} highlighted boxes in ${words} words (${boxes.map((b) => `«${b}»`).join(", ")}) — at most one per ${WORDS_PER_CALLOUT} words, for something with a concrete consequence; the rest is text (section-content.md#teach-not-catalogue)`);
     }
     for (const list of longLists(main)) {
       details.push(`"${object.clientRef}": a list of ${list.items} points («${list.first.slice(0, 50)}» …) — give an example or a choice instead, or move the list to an appendix (section-content.md#teach-not-catalogue)`);
@@ -669,6 +671,28 @@ function checkFocus(pkg, primary) {
   return details.length === 0
     ? { name: "focus", status: "ok", summary: "no section with several boxes, a long list or a description of itself", details }
     : { name: "focus", status: "note", summary: `${details.length} finding(s): boxes, long lists or a section describing itself`, details };
+}
+
+// #1127: a revision course — «Repetisjon» in its title — opens with questions (section-shape-check.mjs).
+// A NOTE: the template is new, and the author may have a reason. Not run on a course that is not one,
+// nor when adjusting (the order is the author's).
+function checkRevisionOpening(pkg, course, { adjusting = false } = {}) {
+  const name = "revision";
+  // Not a revision course: nothing to check — «ok», not «skipped», so the report does not list it as a check left out.
+  if (!course || !isRevisionTitle(course.payload?.course?.title)) return { name, status: "ok", summary: "not a revision course (no «Repetisjon» in the title)", details: [] };
+  if (adjusting) return { name, status: "skipped", summary: "not run — adjusting a course changes only what the author asks for", details: [] };
+  const byRef = new Map((pkg.objects ?? []).map((object) => [object?.clientRef, object]));
+  const first = byRef.get(course.payload?.items?.[0]?.ref);
+  const texts = first?.type === "section" ? sectionTexts(first) : [];
+  const main = (texts[0] ?? [])[1] ?? "";
+  const questions = first?.type === "section" ? checkFrameCount(main) : 0;
+  if (questions >= REVISION_MIN_QUESTIONS) return { name, status: "ok", summary: `opens with ${questions} questions in "${first.clientRef}"`, details: [] };
+  return {
+    name,
+    status: "note",
+    summary: "a revision course that opens with the material again",
+    details: [`the first element${first ? ` ("${first.clientRef}")` : ""} has ${questions} «sjekk deg selv» question(s) — a revision course opens with ${REVISION_MIN_QUESTIONS}–6, then shorter sections (course-design.md#a-revision-course). Tell the author.`],
+  };
 }
 
 // #1122: every assessment criterion describes its scale (rubric-check.mjs).
@@ -973,6 +997,7 @@ export async function produceCourse({ packageFile, outFile, stateFile, slidesFil
   checks.push(checkLeftoversInText(scoped.pkg, scoped.course));
   checks.push(checkSummaries(scoped.pkg));
   checks.push(checkFocus(scoped.pkg, primary));
+  checks.push(checkRevisionOpening(pkg, course, { adjusting: Boolean(changesEarly?.elements) }));
   checks.push(checkLanguages(scoped.pkg, primary));
 
   let master = null;

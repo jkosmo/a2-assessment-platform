@@ -64,6 +64,9 @@ to repeat; trying to remember first, and then reading what you missed, is what m
 4. **The test at the end uses new situations** — not the opening questions, and not the sections'
    examples ([modules.md](modules.md#multiple-choice-questions)).
 
+A revision course says so in its title — «Repetisjon …» (en-GB «Revision …»). `produce-course.mjs`
+notes one whose first section has fewer than five «sjekk deg selv» questions.
+
 The platform has no test that lets a learner skip a section; everyone reads every section, which is
 one more reason to keep them short.
 

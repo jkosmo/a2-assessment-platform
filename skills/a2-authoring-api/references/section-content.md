@@ -95,7 +95,7 @@ is interesting. Cut it, or move it out; do not keep it «for completeness».
 - **Open with the point, not with what the section is for.** «Denne seksjonen viser hvordan …» is
   a note to yourself; the learner wants the situation, the rule or the problem. `produce-course.mjs`
   notes a section that describes itself.
-- **At most one box per section**, for something with a concrete consequence — what goes wrong if
+- **At most one box per 400 words** (one in a short section), for something with a concrete consequence — what goes wrong if
   the learner misses it. «Husk», «Tips», «Neste steg» and «Sertifisering» in one section mean
   nothing stands out; the rest is ordinary text. Say «du har ansvaret» once in a course at most, and
   say instead what the learner checks. `produce-course.mjs` notes a section with more than one box.
@@ -217,7 +217,7 @@ its label in bold:
   ```
 - Only what the source sets apart, or what the author asks to have stressed. Ordinary text in a
   box stresses nothing.
-- **At most one per section**, for something with a concrete consequence
+- **At most one per 400 words** (one in a short section), for something with a concrete consequence
   ([Teach, not catalogue](#teach-not-catalogue)).
 
 ## Prompt

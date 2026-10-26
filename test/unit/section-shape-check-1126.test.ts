@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { CALLOUT_MAX, LIST_MAX_ITEMS, callouts, longLists, selfDescription, summaryHeadings } from "../../skills/a2-authoring-api/scripts/section-shape-check.mjs";
+import { CALLOUT_MAX, LIST_MAX_ITEMS, callouts, calloutsAllowed, checkFrameCount, isRevisionTitle, longLists, proseWordCount, selfDescription, summaryHeadings } from "../../skills/a2-authoring-api/scripts/section-shape-check.mjs";
 
 // #1126: seksjoner som lærer bort, ikke kataloger. Målt på de 106 seksjonene i 15 kurs på stage før
 // grensene ble satt: 16 seksjoner med «Formål» + «Nøkkelpoeng» + «Kort oppsummering», 44 med mer enn
@@ -50,6 +50,40 @@ describe("#1126 bokser", () => {
 
   it("grensen er én", () => {
     expect(CALLOUT_MAX).toBe(1);
+  });
+
+  // Produkteier 2026-10-26: grensen følger lengden — én per 400 ord, aldri under én.
+  it("én boks per 400 ord: én i en kort seksjon, to fra 800 ord, tre fra 1200", () => {
+    expect(calloutsAllowed(150)).toBe(1);
+    expect(calloutsAllowed(799)).toBe(1);
+    expect(calloutsAllowed(800)).toBe(2);
+    expect(calloutsAllowed(1340)).toBe(3);
+  });
+
+  it("ordene telles i teksten, ikke i kode", () => {
+    expect(proseWordCount("En to tre.\n\n```\nfire fem seks sju\n```\n\nåtte")).toBe(4);
+  });
+});
+
+describe("#1127 repetisjonskurs", () => {
+  it.each([
+    ["Repetisjon kurs 1 – Møtearbeid", true],
+    ["Grunnleggende generativ KI: Repetisjon Modul 2 – Tilbudsarbeid", true],
+    ["Repetisjonskurs i referat", true],
+    ["Revision: meeting minutes", true],
+    ["Møtearbeid med KI", false],
+    ["Konkurranserepetisjon", false],
+  ])("«%s» → %s", (title, expected) => {
+    expect(isRevisionTitle(title)).toBe(expected);
+  });
+
+  it("et språkkart: ett språk med «Repetisjon» er nok", () => {
+    expect(isRevisionTitle({ nb: "Repetisjon: referat", "en-GB": "Minutes, again" })).toBe(true);
+    expect(isRevisionTitle(null)).toBe(false);
+  });
+
+  it("«sjekk deg selv» telles, også på engelsk, men ikke i kode", () => {
+    expect(checkFrameCount(":::sjekk A?\n- [x] a\n:::\n\n:::check B?\n- [x] b\n:::\n\n```\n:::sjekk C?\n```")).toBe(2);
   });
 });
 
