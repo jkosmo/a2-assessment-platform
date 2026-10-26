@@ -16,9 +16,10 @@ import { vent } from "./pace.js";
 const { auth, reason } = readAuth();
 const BASE = stageBaseUrl(auth);
 const FASE = process.env.MAAL_1135 ?? "";
-test.skip(!auth || !["før", "etter"].includes(FASE), `hopper over: ${reason ?? "sett MAAL_1135=før|etter"}`);
+test.skip(!auth || !["før", "etter", "etter2"].includes(FASE), `hopper over: ${reason ?? "sett MAAL_1135=før|etter|etter2"}`);
 
-const RAPPORT = path.resolve(process.cwd(), "test-results", "stage-rapport");
+// Utenfor test-results: Playwright tømmer den mappa ved hver kjøring, og «etter» trenger modulen fra «før».
+const RAPPORT = process.env.MAAL_1135_DIR ?? path.resolve(process.cwd(), ".stage-maal");
 const MODULFIL = path.join(RAPPORT, "maal-1135-modul.json");
 
 async function api(metode: string, sti: string, body?: unknown): Promise<{ status: number; json: any; tekst: string }> {
@@ -52,10 +53,18 @@ test("vurder de tre svarene", async () => {
   test.setTimeout(900_000);
   fs.mkdirSync(RAPPORT, { recursive: true });
   let moduleId: string;
+  // «etter» uten modulfil: finn modulen «før» laget, på tittelen (den nyeste, om det er flere).
+  if (!fs.existsSync(MODULFIL) && FASE === "etter" && process.env.MAAL_1135_FINN) {
+    const liste = await api("GET", "/api/admin/content/modules");
+    const moduler = (liste.json.modules ?? liste.json ?? []) as Array<{ id: string; title: unknown; createdAt?: string }>;
+    const tittel = (t: unknown) => (typeof t === "string" ? t : (t as { nb?: string })?.nb ?? "");
+    const treff = moduler.filter((m) => tittel(m.title).startsWith("Stage-test 1135 vurdering")).sort((a, b) => String(b.createdAt ?? "").localeCompare(String(a.createdAt ?? "")));
+    expect(treff.length, `fant ingen modul «Stage-test 1135 vurdering» (status ${liste.status})`).toBeGreaterThan(0);
+    fs.writeFileSync(MODULFIL, JSON.stringify({ moduleId: treff[0]!.id, funnet: treff.length }), "utf8");
+  }
   if (fs.existsSync(MODULFIL)) {
     moduleId = JSON.parse(fs.readFileSync(MODULFIL, "utf8")).moduleId;
   } else {
-    expect(FASE, "første kjøring er «før»").toBe("før");
     const modul = await api("POST", "/api/admin/content/modules", { title: tre(`Stage-test 1135 vurdering ${Date.now()}`), certificationLevel: "basic" });
     expect(modul.status, modul.tekst).toBe(201);
     moduleId = modul.json.module.id;
@@ -105,7 +114,7 @@ test("vurder de tre svarene", async () => {
   fs.writeFileSync(path.join(RAPPORT, `maal-1135-${FASE}.json`), JSON.stringify(resultater, null, 2), "utf8");
   for (const r of resultater) console.log(`MAAL ${FASE} ${r.svar}#${r.gang}: total=${r.totalScore} praktisk=${r.practical} bestått=${r.bestått}`);
 
-  if (FASE === "etter") {
+  if (FASE !== "før") {
     const arkivert = await api("POST", `/api/admin/content/modules/${moduleId}/archive`, {});
     console.log("arkiver modul", arkivert.status);
   }

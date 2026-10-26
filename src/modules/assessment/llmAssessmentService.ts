@@ -35,9 +35,8 @@ export function buildRubricCriteriaSection(criteria: AssessmentContext["rubricCr
   const lines = (criteria ?? []).map((c) => {
     const head = c.label ? `${c.id} — ${c.label}` : c.id;
     if (!c.description) return `- ${head}`;
-    const mapping = c.scaleMax
-      ? ` [described on 0–${c.scaleMax}; report on 0–4 as level × ${Number((4 / c.scaleMax).toFixed(2))}, rounded]`
-      : "";
+    // Poenget gis på kriteriets egen skala; plattformen regner om (normalizeRubricScoresToContract).
+    const mapping = c.scaleMax ? ` [score 0–${c.scaleMax}]` : "";
     return `- ${head}${mapping}: ${c.description}`;
   });
   return [
@@ -80,6 +79,29 @@ export async function evaluatePracticalWithLlm(input: AssessmentContext): Promis
   }
 
   throw new Error(`Unsupported LLM mode: ${env.LLM_MODE}`);
+}
+
+/**
+ * #1135, målt på stage 2026-10-26: bedt om å regne et 0–2-kriterium om til 0–4 i prompten, ga modellen
+ * likevel trinnet på kriteriets egen skala — et perfekt svar (2 + 2 + 2) ble 6 av 12, altså 50 %, mot
+ * 100 % før. Omregningen hører ikke hjemme hos modellen. Modellen gir poeng på kriteriets EGEN skala
+ * (kontrakten sier hvilken), og her regnes det om til 0–4, som avgjørelsen (clamp og maks = antall × 4)
+ * bygger på. Et kriterium uten egen skala står urørt.
+ */
+export function normalizeRubricScoresToContract(
+  result: LlmStructuredAssessment,
+  criteria: AssessmentContext["rubricCriteria"],
+): LlmStructuredAssessment {
+  const scales = new Map((criteria ?? []).filter((c) => c.scaleMax).map((c) => [c.id, c.scaleMax as number]));
+  if (scales.size === 0) return result;
+  const rubricScores: Record<string, number> = { ...result.rubric_scores };
+  for (const [id, scaleMax] of scales) {
+    const score = rubricScores[id];
+    if (typeof score !== "number") continue;
+    rubricScores[id] = Math.max(0, Math.min(4, Math.round((score * 4) / scaleMax)));
+  }
+  const rubricTotal = Object.values(rubricScores).reduce((sum, value) => sum + value, 0);
+  return { ...result, rubric_scores: rubricScores, rubric_total: rubricTotal };
 }
 
 export async function evaluatePracticalWithAzureOpenAi(
@@ -146,10 +168,14 @@ export async function evaluatePracticalWithAzureOpenAi(
         const parsedStructuredPayload = parseStructuredPayload(assistantContent);
         const parsedAssessment = llmResponseCodec.parse(parsedStructuredPayload);
 
-        return {
-          ...parsedAssessment,
-          red_flags: normalizeRedFlags(parsedAssessment.red_flags),
-        };
+        // #1135: poeng på kriteriets egen skala regnes om til 0–4 her, ikke av modellen.
+        return normalizeRubricScoresToContract(
+          {
+            ...parsedAssessment,
+            red_flags: normalizeRedFlags(parsedAssessment.red_flags),
+          },
+          input.rubricCriteria,
+        );
       }
     }
 
@@ -417,7 +443,10 @@ export function buildAzureOpenAiMessages(input: AssessmentContext): Array<{ role
   const examplesJson = (input.promptTemplateExamplesJson ?? "").trim();
   const responseLanguageInstruction = buildResponseLanguageInstruction(input.responseLocale ?? "en-GB");
   const criteriaIds = input.rubricCriteriaIds?.length ? input.rubricCriteriaIds : DEFAULT_CRITERIA_IDS;
-  const responseContract = buildRequiredResponseContract(criteriaIds);
+  const responseContract = buildRequiredResponseContract(
+    criteriaIds,
+    Object.fromEntries((input.rubricCriteria ?? []).filter((c) => c.scaleMax).map((c) => [c.id, c.scaleMax as number])),
+  );
 
   const submissionFieldsSection =
     input.submissionFieldLabels?.length
@@ -581,12 +610,13 @@ function describeEnumForPrompt(
 
 // Eksportert BARE for vakta i test/unit/response-contract-criteria.test.ts. Kriteriene kan finnes i
 // regelfila og likevel aldri nå modellen — det er samme stille feil som saken retter, ett lag ned.
-export function buildRequiredResponseContract(criteriaIds: string[]): string {
-  const criteriaList = criteriaIds.map((id) => `  - ${id}`).join("\n");
+export function buildRequiredResponseContract(criteriaIds: string[], scales: Record<string, number> = {}): string {
+  // #1135: a criterion with its own scale (0–2) is scored on that scale; the platform converts to 0–4.
+  const criteriaList = criteriaIds.map((id) => (scales[id] ? `  - ${id} (0..${scales[id]})` : `  - ${id}`)).join("\n");
   return `
 JSON response contract:
 - module_id: string
-- rubric_scores: object with integer values 0..4 for each rubric criterion:
+- rubric_scores: object with integer values for each rubric criterion — 0..4, or 0..N where a criterion below says (0..N):
 ${criteriaList}
 - rubric_total: integer equal to sum of rubric_scores values
 - practical_score_scaled: number 0..70

@@ -61,6 +61,20 @@ describe("llmAssessmentService azure_openai adapter", () => {
     vi.restoreAllMocks();
   });
 
+  // #1135, målt på stage: modellen ga poeng på kriteriets egen skala (0–2) — et perfekt svar ble 50 %.
+  // Omregningen til 0–4 skjer på svaret fra Azure, ikke i prompten.
+  it("#1135: poeng på kriteriets egen skala regnes om til 0–4 i svaret fra Azure", async () => {
+    global.fetch = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ ...validPayload, rubric_scores: { ...validPayload.rubric_scores, iteration_and_improvement: 2 }, rubric_total: 14 }) } }] }), { status: 200, headers: { "content-type": "application/json" } }),
+    ) as unknown as typeof fetch;
+    const result = await evaluatePracticalWithAzureOpenAi(
+      { ...baseInput, rubricCriteria: [{ id: "iteration_and_improvement", label: "Iterasjon", description: "0 = ingen; 1 = én; 2 = flere", scaleMax: 2 }] },
+      baseConfig,
+    );
+    expect(result.rubric_scores.iteration_and_improvement).toBe(4);
+    expect(result.rubric_total).toBe(16);
+  });
+
   it("maps Azure OpenAI chat completion output to validated assessment payload", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(

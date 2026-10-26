@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { parseRubricCriteriaForPrompt } from "../../src/modules/assessment/AssessmentInputFactory.js";
-import { buildAzureOpenAiMessages, buildRubricCriteriaSection } from "../../src/modules/assessment/llmAssessmentService.js";
+import { buildAzureOpenAiMessages, buildRequiredResponseContract, buildRubricCriteriaSection, normalizeRubricScoresToContract } from "../../src/modules/assessment/llmAssessmentService.js";
 
 // #1135: KI-vurdereren fikk bare kriterienes ID-er. Nå får den det kriteriet sier — etikett og
 // beskrivelse med trinnene, på deltakerens språk — og poengene skal følge trinnene.
@@ -53,7 +53,7 @@ describe("#1135 i prompten", () => {
   it("hvert kriterium med etikett, beskrivelse og omregning fra egen skala; uten beskrivelse bare ID-en", () => {
     const section = buildRubricCriteriaSection(kriterier)!;
     expect(section).toContain("score each criterion by its own description");
-    expect(section).toContain("- vedtak — Vedtakene [described on 0–2; report on 0–4 as level × 2, rounded]: 0 = mangler; 1 = blandet; 2 = først og presist");
+    expect(section).toContain("- vedtak — Vedtakene [score 0–2]: 0 = mangler; 1 = blandet; 2 = først og presist");
     expect(section).toContain("- oppfolging: 0–4: 0 = ingen; 2 = uten frist; 4 = med ansvarlig og frist");
     expect(section).toContain("- generell");
   });
@@ -63,15 +63,59 @@ describe("#1135 i prompten", () => {
     expect(buildRubricCriteriaSection(undefined)).toBeNull();
   });
 
-  it("seksjonen står i meldingen til modellen, og svarkontrakten er uendret", () => {
+  it("seksjonen står i meldingen til modellen, og står etter svarkontrakten", () => {
     const [, user] = buildAzureOpenAiMessages({
       moduleId: "m1",
       responseJson: { response: "Svar" },
       rubricCriteriaIds: ["vedtak", "oppfolging", "generell"],
       rubricCriteria: kriterier,
     } as Parameters<typeof buildAzureOpenAiMessages>[0]);
-    expect(user!.content).toContain("- vedtak — Vedtakene [described on 0–2");
-    expect(user!.content).toContain("rubric_scores: object with integer values 0..4 for each rubric criterion:");
+    expect(user!.content).toContain("- vedtak — Vedtakene [score 0–2]");
+    expect(user!.content).toContain("rubric_scores: object with integer values for each rubric criterion");
     expect(user!.content.indexOf("Rubric criteria")).toBeGreaterThan(user!.content.indexOf("rubric_scores"));
+  });
+});
+
+// #1135, målt på stage: modellen regnet ikke om selv — et perfekt 0–2-svar ble 50 %. Nå gir den poeng
+// på kriteriets egen skala, kontrakten sier hvilken, og plattformen regner om til 0–4.
+describe("#1135 omregningen til 0–4 skjer i koden", () => {
+  const svar = (rubric_scores: Record<string, number>) => ({ rubric_scores, rubric_total: Object.values(rubric_scores).reduce((a, b) => a + b, 0) }) as never;
+  const kriterier = [
+    { id: "vedtak", label: "Vedtakene", description: "0 = …; 1 = …; 2 = …", scaleMax: 2 },
+    { id: "behov", label: null, description: "0–3: …", scaleMax: 3 },
+    { id: "vanlig", label: null, description: "0–4: …", scaleMax: null },
+  ];
+
+  it("2 av 2 blir 4, 1 av 2 blir 2, 2 av 3 blir 3 (avrundet), 0–4 står urørt; totalen følger", () => {
+    const r = normalizeRubricScoresToContract(svar({ vedtak: 2, behov: 2, vanlig: 3 }), kriterier) as { rubric_scores: Record<string, number>; rubric_total: number };
+    expect(r.rubric_scores).toEqual({ vedtak: 4, behov: 3, vanlig: 3 });
+    expect(r.rubric_total).toBe(10);
+    expect((normalizeRubricScoresToContract(svar({ vedtak: 1, behov: 0, vanlig: 0 }), kriterier) as { rubric_scores: Record<string, number> }).rubric_scores.vedtak).toBe(2);
+  });
+
+  it("et poeng over kriteriets skala (modellen regnet om likevel) blir ikke mer enn 4", () => {
+    expect((normalizeRubricScoresToContract(svar({ vedtak: 4, behov: 3, vanlig: 4 }), kriterier) as { rubric_scores: Record<string, number> }).rubric_scores).toEqual({ vedtak: 4, behov: 4, vanlig: 4 });
+  });
+
+  it("uten kriterier med egen skala er svaret uendret", () => {
+    const input = svar({ a: 3 });
+    expect(normalizeRubricScoresToContract(input, [{ id: "a", label: null, description: null, scaleMax: null }])).toBe(input);
+  });
+
+  it("kontrakten oppgir kriteriets egen skala", () => {
+    const kontrakt = buildRequiredResponseContract(["vedtak", "vanlig"], { vedtak: 2 });
+    expect(kontrakt).toContain("  - vedtak (0..2)");
+    expect(kontrakt).toContain("  - vanlig\n");
+    expect(kontrakt).toContain("0..4, or 0..N where a criterion below says (0..N)");
+  });
+
+  it("prompten bygger kontrakten med skalaene fra kriteriene", () => {
+    const [, user] = buildAzureOpenAiMessages({
+      moduleId: "m1",
+      responseJson: { response: "Svar" },
+      rubricCriteriaIds: ["vedtak", "vanlig"],
+      rubricCriteria: [kriterier[0]!, kriterier[2]!],
+    } as Parameters<typeof buildAzureOpenAiMessages>[0]);
+    expect(user!.content).toContain("  - vedtak (0..2)");
   });
 });

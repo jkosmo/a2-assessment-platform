@@ -2,6 +2,22 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.114.0 - 2026-10-26
+
+### Omregningen av kriterienes skala skjer i koden — #1135, rettet etter måling på stage
+
+Målt på stage med 2.113.0: bedt om å regne et 0–2-kriterium om til 0–4 i prompten, ga modellen likevel
+poeng på kriteriets egen skala. Et perfekt svar fikk 50 i stedet for 100. Nå sier svarkontrakten
+hvert kriteriums egen skala («vedtak (0..2)»), modellen svarer på den, og plattformen regner om til 0–4
+på svaret fra Azure (`normalizeRubricScoresToContract`). Begrunnelsene fra 2.113.0, som bruker trinnene,
+beholdes.
+
+### Skillet: bokser etter lengde, og repetisjonskurs kjennes på tittelen — #1126, #1127
+
+- Grensen for uthevede bokser følger lengden: én per 400 ord, aldri under én (produkteier).
+- Et kurs med «Repetisjon»/«Revision» i tittelen får en merknad når første seksjon har færre enn fem
+  «sjekk deg selv»-spørsmål (alle seks repetisjonskursene på stage). Ikke kjørt ved justering.
+
 ## 2.113.0 - 2026-10-26
 
 ### KI-vurdereren ser kriteriene — #1135

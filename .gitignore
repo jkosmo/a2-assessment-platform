@@ -49,3 +49,4 @@ scripts/ai-qa.ps1
 # Malen `doc/ENVIRONMENTS.example.md` er committet; den utfylte kopien er ikke.
 # `test/environment-identifier-guard.test.js` nekter at verdiene sniker seg inn i sporede filer.
 doc/ENVIRONMENTS.local.md
+.stage-maal/
