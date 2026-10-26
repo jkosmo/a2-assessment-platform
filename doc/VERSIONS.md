@@ -2,6 +2,28 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.113.0 - 2026-10-26
+
+### KI-vurdereren ser kriteriene — #1135
+
+Vurdereren fikk bare kriterienes ID-er («konkrete_regler»). Etiketten og beskrivelsen med trinnene nådde
+den aldri, så poengene ble satt ut fra et navn og forventet innhold. Nå får den hvert kriterium med
+etikett og beskrivelse på deltakerens språk, og blir bedt om å sette poenget etter trinnet svaret når.
+Et kriterium på en annen skala (0–2) regnes om til kontraktens 0–4 etter en fast regel. Svarkontrakten,
+avgjørelsen og kriterier uten beskrivelse er uendret.
+
+⚠️ Poeng på levende moduler kan endre seg. Målt på stage før og etter: se #1135.
+
+### Seksjoner som lærer bort, og repetisjonskurs som starter med spørsmål — #1126, #1127
+
+- **#1126:** ny kontroll «summaries» **stopper** når en seksjon har flere oppsummeringer («Formål» +
+  «Nøkkelpoeng» + «Kort oppsummering»; 16 av 106 seksjoner på stage, alle reelle). Ny merknad «focus»
+  for mer enn én uthevet boks, lister på ni punkter eller mer, og seksjoner som beskriver seg selv
+  («Denne seksjonen viser …»). `section-content.md` har et nytt kapittel, «Teach, not catalogue», med et
+  før/etter-eksempel; produktdetaljer står i en datert boks og testes aldri.
+- **#1127:** mal for repetisjonskurs i `course-design.md`: 5–6 spørsmål først, forklaringen peker til
+  seksjonen som forklarer, kortere seksjoner etter, sluttest i nye situasjoner. Ingen kontroll ennå.
+
 ## 2.112.0 - 2026-10-26
 
 ### Bilder som er beskrevet, og ingen rester fra forfatterarbeidet — #1128, #1129

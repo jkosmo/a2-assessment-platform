@@ -79,18 +79,24 @@ test("vurder de tre svarene", async () => {
       const innlevering = await api("POST", "/api/submissions", { moduleId, deliveryType: "text", responseJson: { response: tekst } });
       expect(innlevering.status, innlevering.tekst).toBe(201);
       const id = innlevering.json.submission.id as string;
+      // Som deltakersiden: vurderingen startes i et eget steg (participant.js, /api/assessments/:id/run).
+      const kjør = await api("POST", `/api/assessments/${id}/run`, {});
+      expect([200, 201, 202], kjør.tekst).toContain(kjør.status);
       let resultat: any = null;
       for (let forsøk = 0; forsøk < 60; forsøk++) {
         await new Promise((r) => setTimeout(r, 5000));
         const r = await api("GET", `/api/submissions/${id}/result?locale=nb`);
+        if (process.env.MAAL_1135_PROBE) console.log("PROBE", r.status, JSON.stringify(r.json).slice(0, 400));
         if (r.status === 200 && r.json?.decision) { resultat = r.json; break; }
+        if (process.env.MAAL_1135_PROBE && forsøk >= 5) break;
       }
+      if (process.env.MAAL_1135_PROBE) return;
       resultater.push({
         svar: navn,
         gang: i + 1,
-        totalScore: resultat?.scoreComponents?.totalScore ?? resultat?.decision?.totalScore ?? null,
-        practical: resultat?.scoreComponents?.practicalScore ?? resultat?.scoreComponents?.practical ?? null,
-        bestått: resultat?.decision?.passFailTotal ?? null,
+        totalScore: resultat?.scoreComponents?.totalScore ?? null,
+        practical: resultat?.scoreComponents?.practicalScaledScore ?? null,
+        bestått: resultat?.decision?.passFailTotal ?? resultat?.decision?.passed ?? null,
         begrunnelser: resultat?.participantGuidance?.criterionRationales ?? null,
         rå: resultat ? undefined : "ingen avgjørelse innen 5 min",
       });
