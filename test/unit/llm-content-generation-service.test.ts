@@ -111,6 +111,8 @@ describe("llm content generation prompts", () => {
     expect(buildModuleDraftPrompts(base).userPrompt).toContain("Do not reuse a case, worked example or finished answer from the source material as the task.");
     const { userPrompt } = buildMcqGenerationPrompts({ ...base, questionCount: 4, optionCount: 4 } as Parameters<typeof buildMcqGenerationPrompts>[0]);
     expect(userPrompt).toContain("a related but different situation than the worked examples in the source material");
+    // #1134: generering har bedt om forklaring av hvert galt alternativ siden før; låst her.
+    expect(userPrompt).toContain("explanation of why the correct answer is right and why each distractor is wrong");
   });
 
   it("includes generation mode guidance in module draft prompts", () => {
@@ -432,6 +434,8 @@ describe("llm content generation prompts", () => {
     expect(userPrompt).toContain("Question 1");
     expect(userPrompt).toContain("A. A collective response");
     expect(userPrompt).toContain("Make the distractors more plausible.");
+    // #1134: forklarende tilbakemelding — også ved revisjon, som ved generering.
+    expect(userPrompt).toContain("why the correct answer is right, and why the most tempting wrong option is wrong");
   });
 
   // #245 — scenario generation decision

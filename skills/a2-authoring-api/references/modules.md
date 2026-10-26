@@ -50,7 +50,11 @@ gate 3 ([course-design.md](course-design.md#level-and-scope)).
 - 3–4 options. Exactly one is unambiguously right — unless the question is a
   [select all that apply](#select-all-that-apply). Never "alle de over".
 - **Distractors are real misconceptions** — the wrong judgements a real learner would make.
-- A short `rationale` says why the right answer is right.
+- A short `rationale` says why the right answer is right, **and why the most tempting wrong option
+  is wrong** — the learner who chose it learns what was wrong with her own reasoning, not only what
+  the answer was. The wrong option is a real misconception, so the rationale names it: «Notatene
+  viser hva som ble bestemt. Innkallingen sier bare hva som skulle skje — derfor er den ikke
+  kilden.»
 - **At least half the questions ask for a judgement in a situation** ("En entreprenør skal grave
   nær en strømførende kabel — hva kommer først?"), not for a definition.
 

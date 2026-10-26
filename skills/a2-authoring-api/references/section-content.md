@@ -3,7 +3,7 @@
 Contents: [Choosing the practice](#choosing-the-practice) · [Writing the text](#writing-the-text) · [Headings and lists](#headings-and-lists) ·
 [Table](#table) · [Callout](#callout) · [Prompt](#prompt) · [Cards](#cards) · [Think first](#think-first) ·
 [Check yourself](#check-yourself) · [A case](#a-case) · [Step by step](#step-by-step) ·
-[Write it yourself](#write-it-yourself) · [Find the errors](#find-the-errors) · [Flashcards](#flashcards) · [Match the pairs](#match-the-pairs) ·
+[Write it yourself](#write-it-yourself) · [Find the errors](#find-the-errors) · [Complete the example](#complete-the-example) · [Flashcards](#flashcards) · [Match the pairs](#match-the-pairs) ·
 [Icons](#icons) ·
 [Pictures from the source](#pictures-from-the-source) · [Figures](#figures) ·
 [A finished section](#a-finished-section)
@@ -26,12 +26,20 @@ what the source gives, not to use every kind:
 | a process in an order, each step changing something | [Step by step](#step-by-step) | a one-line-per-step list |
 | a formulation the module will assess (free text) | [Write it yourself](#write-it-yourself), in the section before the module | — |
 | a check or a rule for what good work looks like | [Find the errors](#find-the-errors) — at least one per course | a list of things to check, and nothing to check them on |
+| a procedure or a calculation in several steps, with a worked example | [Complete the example](#complete-the-example) before a whole task | a whole task straight after the worked example |
 | terms the section defines | [Flashcards](#flashcards) (4–10) or [Match the pairs](#match-the-pairs) (3–6) | both for the same terms |
 | nothing of these | no exercise — plain text with a box, a table or a figure | an exercise made up to have one |
 
 **Order in a section**, when there are two: from recognising to applying to formulating —
 think first → the text (or step by step) → check yourself or match the pairs → a case → write it
 yourself → flashcards at the end. The module that follows is what counts.
+
+**The terms before the process.** When a process, a method or an assessment uses three or more
+terms the learner meets for the first time, explain the terms briefly *before* it — a short table
+of term and meaning, or a section of its own before this one — so the learner does not learn the
+words and the process at once. Not as a definition list of everything in the course: only the
+terms the process is built of, each in one line. Flashcards at the end still repeat them; the
+first teaches the terms, the second makes them stick.
 
 **Not the example above it.** An exercise takes another situation than the example the text just
 worked through — related, not the same. A «skriv selv» whose example answer is the template five
@@ -56,6 +64,12 @@ Name the exercises in the outline, per section, so the author approves them with
 - **Keep the source's own shape.** What the source sets side by side stays side by side; what it
   sets apart stays set apart; what it numbers stays numbered. The forms below are how.
 - **Summarise long source text**; do not copy pages of it.
+- **Talk to the learner.** Write to «du» about the learner's own work — «Når du vurderer en
+  restrisiko, …», not «Restrisiko vurderes …»; «Du starter med …», not «Prosessen starter med …».
+  The source's terms stay as they are; the tone is plain and factual, not chatty. A course written
+  as a report or a textbook is read as one. `produce-course.mjs` notes a section of 200 words or
+  more that hardly says «du» (en-GB: «you»). A reference list or an appendix may stay impersonal —
+  say so to the author.
 - **Level** governs how tangled a section may be
   ([course-design.md](course-design.md#level-and-scope)). Length is the author's call.
 - **One file per section and language:** `work/sections/<clientRef>.nb.md`. The package points at
@@ -384,6 +398,43 @@ Ola sender budsjettet til revisor innen 1. november. Ikke avklart hvem som besti
   learner has looked («fristen som ble endret?», not «15. november?»).
 - **Not the module's questions** — another piece of work than any the module asks about.
 - `produce-course.mjs` notes a course without one; tell the author, and add one unless they say no.
+
+## Complete the example
+
+For a **procedure or a calculation in several steps**. A newcomer who goes straight from a worked
+example to a whole task on their own has too much to hold at once. In between, the learner gets
+an example with the first steps done and finishes the rest — then a whole task in another
+situation ([Not the example above it](#choosing-the-practice)). Three stages in the section:
+
+1. **The worked example** in the text, every step shown with why.
+2. **Complete the example:** a new case, the first steps done *in the text* (visible), then a
+   [write it yourself](#write-it-yourself) frame whose task names the steps left. The example answer
+   shows all the steps.
+3. **A whole task** — in the module, or a second «skriv selv» with nothing done.
+
+```markdown
+Post B har trippelanslaget lav 80, sannsynlig 100, høy 150 (millioner kroner). De to første
+stegene er gjort:
+
+1. **Forventet verdi:** (80 + 4 · 100 + 150) / 6 = **105**
+2. **Standardavvik:** (150 − 80) / 6 ≈ **11,7**
+
+:::skriv Fullfør beregningen: regn ut variansen for post B, og si hva den brukes til videre.
+3. **Varians:** standardavviket opphøyd i annen, (70 / 6)² ≈ **136**.
+   Variansene for postene legges sammen, så roten av summen gir standardavviket for hele prosjektet.
+
+- [ ] variansen som standardavviket i annen?
+- [ ] at variansene summeres, ikke standardavvikene?
+:::
+```
+
+- **The steps that are done stand in the text above the frame.** What is inside the frame is the
+  example answer, hidden until the learner opens it.
+- **Fade one step at a time** when the procedure is long: first only the last step is left, in a
+  later section two. Not a new example per step.
+- **Numbers and names from the source's own method**, in a case the worked example did not use.
+- Use it only for procedures and calculations. A judgement or a formulation is practised with a
+  [case](#a-case) or a [write it yourself](#write-it-yourself).
 
 ## Flashcards
 

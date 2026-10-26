@@ -66,6 +66,8 @@ describe("produce-course — eksempelkurset går gjennom alt (#1079)", () => {
       "copied answers": "ok",
       // #1122: eksempelkurset har bare flervalg — ingen kriterier å lese.
       criteria: "ok",
+      // #1133: seksjonene i eksempelet er korte nok til at de ikke måles.
+      "direct address": "ok",
       languages: "ok",
       "approved text": "ok",
       slides: "ok",
@@ -283,6 +285,32 @@ describe("produce-course — «finn feilene» (#1120)", () => {
   it("en løs seksjon eller modul uten kurs: ikke kjørt", async () => {
     const r = await kopi((p) => void (p.objects = p.objects.filter((o) => o.type !== "course"))).kjør();
     expect(status(r)["find errors"]).toBe("skipped");
+  });
+});
+
+// #1133: en seksjon i rapportstil gir en merknad, ikke en stopp — en referanseliste kan være upersonlig.
+describe("produce-course — snakk til deltakeren (#1133)", () => {
+  const rapport = "Restrisiko vurderes etter at tiltak er gjennomført. Vurderingen dokumenteres i virksomhetens system og godkjennes av ledelsen. ";
+  const samtale = "Når du vurderer restrisikoen, ser du på det som står igjen etter tiltakene. Du dokumenterer vurderingen i systemet ditt. ";
+
+  it("en lang seksjon nesten uten «du» → merknad med seksjonen og tallet; fila leveres", async () => {
+    const r = await kopi((p) => void (objekt(p, "sec-kilder").payload.bodyMarkdown.nb += `\n\n${rapport.repeat(120)}`)).kjør();
+    expect(status(r)["direct address"], formatProduction(r)).toBe("note");
+    expect(funn(r, "direct address")).toMatch(/^"sec-kilder": \d+ words, \d\.\d «du» per 1000/);
+    expect(r.ok).toBe(true);
+  });
+
+  it("like lang, men skrevet til deltakeren → ingen merknad", async () => {
+    const r = await kopi((p) => void (objekt(p, "sec-kilder").payload.bodyMarkdown.nb += `\n\n${samtale.repeat(14)}`)).kjør();
+    expect(status(r)["direct address"]).toBe("ok");
+  });
+
+  it("en kort seksjon måles ikke, og kode teller ikke som tekst", async () => {
+    const r = await kopi((p) => {
+      const b = objekt(p, "sec-kilder").payload.bodyMarkdown;
+      b.nb = `${rapport}\n\n\`\`\`prompt\n${rapport.repeat(20)}\n\`\`\`\n`;
+    }).kjør();
+    expect(status(r)["direct address"]).toBe("ok");
   });
 });
 

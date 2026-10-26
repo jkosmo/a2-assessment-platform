@@ -31,6 +31,12 @@ Objectives are the backbone: the structure and the tests follow from them.
   learner finds, in the section that teaches the check
   ([section-content.md](section-content.md#find-the-errors)). It is in the outline by default; leave
   it out only when the author says so.
+- **Terms before the process:** where a process or a method is built of several new terms, the
+  terms are explained briefly before it — in the same section or one before
+  ([section-content.md](section-content.md#choosing-the-practice)). Show it in the outline.
+- **A procedure or a calculation is learnt in three stages:** a worked example, then an example the
+  learner completes, then a whole task in another situation
+  ([section-content.md](section-content.md#complete-the-example)). Plan the three in the outline.
 - Present the outline as a table: element, order, test form (for a section: its exercise, or none),
   the objective it serves, level.
 

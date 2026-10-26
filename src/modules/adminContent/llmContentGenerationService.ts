@@ -1357,7 +1357,7 @@ Return a single JSON object:
       "stem": "question text",
       "options": ["option 1", "option 2", "option 3"],
       "correctAnswer": "option 1",
-      "rationale": "brief explanation"
+      "rationale": "why the correct answer is right, and why the most tempting wrong option is wrong"
     },
     {
       "questionType": "multiple",

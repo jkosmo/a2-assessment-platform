@@ -14,6 +14,7 @@
 //   find errors    the course has a «finn feilene» — a NOTE when not, never a stop  (#1120)
 //   copied answers no exercise is answered word for word by the text above it        (#1121)
 //   criteria       every assessment criterion describes its scale, not one line       (#1122)
+//   direct address every section talks to the learner — a NOTE when one reads as a report (#1133)
 //   languages      nb, nn and en-GB complete, real translations, same answer in each
 //   approved text  nothing the author approved has gone missing        (needs --state)
 //   slides         every slide got what the slide list says           (needs --slides)
@@ -36,6 +37,7 @@ import { LANGUAGES, checkLocalization, extractSvgTextRuns } from "./localization
 import { checkMcqCues, collectMcqSets } from "./mcq-cue-check.mjs";
 import { checkExerciseCopies } from "./exercise-copy-check.mjs";
 import { checkRubricScales } from "./rubric-check.mjs";
+import { wordsOf } from "./text-overlap.mjs";
 import { SVG_MIME, checkAssets, readCourseState, resolvePackageAssets } from "./package-assets.mjs";
 import { checkSlideCoverage, countForms, readDeck } from "./slide-coverage.mjs";
 import { synthesizeStandaloneEnvelopes } from "./synthesize-envelopes.mjs";
@@ -530,6 +532,32 @@ function checkCopiedAnswers(pkg, primary) {
   };
 }
 
+// #1133: text that talks to the learner («Når du vurderer …») teaches better than report style
+// («Restrisiko vurderes …») — Clark & Mayer, personalisation. Measured on the 106 stage sections
+// (2026-10-26): median 16.7 «du»-forms per 1000 words, and a separate group at 0–3 — 25 sections of
+// 200+ words, all written as a report or a textbook. A NOTE, not a stop: a reference list or an
+// appendix is rightly impersonal. Read in the language the course is written in; code is left out.
+const ADDRESS_WORDS = new Set(["du", "deg", "din", "ditt", "dine", "dykk", "dykkar", "you", "your", "yours", "yourself"]);
+export const ADDRESS_MIN_WORDS = 200;
+export const ADDRESS_PER_1000_MAX = 3;
+function checkDirectAddress(pkg, primary) {
+  const details = [];
+  for (const object of pkg.objects ?? []) {
+    if (object?.type !== "section") continue;
+    const body = object.payload?.bodyMarkdown;
+    const text = withoutCodeBlocks(String((body && typeof body === "object" ? body[primary] ?? Object.values(body)[0] : body) ?? ""));
+    const words = wordsOf(text);
+    if (words.length < ADDRESS_MIN_WORDS) continue;
+    const perThousand = (1000 * words.filter((word) => ADDRESS_WORDS.has(word)).length) / words.length;
+    if (perThousand <= ADDRESS_PER_1000_MAX) {
+      details.push(`"${object.clientRef}": ${words.length} words, ${perThousand.toFixed(1)} «du» per 1000 — written as a report. Talk to the learner about their work: «Når du vurderer …», not «… vurderes» (section-content.md#writing-the-text).`);
+    }
+  }
+  return details.length === 0
+    ? { name: "direct address", status: "ok", summary: "every section talks to the learner", details }
+    : { name: "direct address", status: "note", summary: `${details.length} section(s) written as a report`, details };
+}
+
 // #1122: every assessment criterion describes its scale (rubric-check.mjs).
 function checkCriteria(pkg, primary) {
   const details = [];
@@ -827,6 +855,7 @@ export async function produceCourse({ packageFile, outFile, stateFile, slidesFil
   checks.push(checkFindTheErrors(pkg, course, { adjusting: Boolean(changesEarly?.elements) }));
   checks.push(checkCopiedAnswers(scoped.pkg, primary));
   checks.push(checkCriteria(scoped.pkg, primary));
+  checks.push(checkDirectAddress(scoped.pkg, primary));
   checks.push(checkLanguages(scoped.pkg, primary));
 
   let master = null;

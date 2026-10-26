@@ -2,6 +2,25 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.111.0 - 2026-10-26
+
+### Fire grep fra Clark & Mayer — #1131, #1132, #1133, #1134
+
+Fra analysen av *e-Learning and the Science of Instruction*: det boka gir som skillet ikke dekket.
+
+- **#1131 «Fullfør eksempelet»** (gjennomgåtte eksempler og nedtrapping): en prosedyre eller en
+  beregning læres i tre steg — gjennomgått eksempel, et eksempel deltakeren fullfører, en hel oppgave i
+  en ny situasjon. Ny form i `section-content.md` med et fullt regneeksempel; i oppskriften i
+  `course-design.md`.
+- **#1132 Begrepene før prosessen** (forhåndstrening): bygger en prosess på tre eller flere nye
+  begreper, forklares de kort først. Kort til repetisjon står fortsatt sist.
+- **#1133 Snakk til deltakeren** (personalisering): regel om «du» i stedet for rapportstil, og en ny
+  **merknad** i `produce-course.mjs` («direct address») for en seksjon på 200+ ord med høyst 3 «du» per
+  1000 ord. Målt på stage: median 16,7; 25 av 106 seksjoner i en egen gruppe på 0–3.
+- **#1134 Forklarende tilbakemelding:** begrunnelsen i flervalg sier også hvorfor det mest fristende gale
+  svaret er galt — i `modules.md` og i plattformens KI-instruks ved revisjon (genereringen ba om det fra
+  før; nå låst med en test).
+
 ## 2.110.0 - 2026-10-26
 
 Samler #1121 og #1122.
