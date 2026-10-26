@@ -33,6 +33,13 @@ what the source gives, not to use every kind:
 think first → the text (or step by step) → check yourself or match the pairs → a case → write it
 yourself → flashcards at the end. The module that follows is what counts.
 
+**Not the example above it.** An exercise takes another situation than the example the text just
+worked through — related, not the same. A «skriv selv» whose example answer is the template five
+lines up, or «finn parene» that repeats the table right above, is copying, not practice: the learner
+who copies does as well as the one who understood. One running case is good for the examples; the
+exercise stands beside it, with other names, numbers or circumstances. `produce-course.mjs` fails on
+an answer key that stands word for word in the text above it.
+
 **Not the module's questions.** An exercise never uses a question, a case or the numbers the module
 asks about — the learner who did it has been handed the answer. Practise the same skill in another
 situation, with other numbers. When you write or change a module, look over the exercises in the

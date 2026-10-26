@@ -2,6 +2,42 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.110.0 - 2026-10-26
+
+Samler #1121 og #1122.
+
+### Vurderingskriterier som beskriver hvert trinn — #1122
+
+Én linje for hele skalaen («0–4: Reglene er konkrete …») lar vurdereren — og KI-vurdereren — gjette hva
+som skiller 1 fra 3, og tilbakemeldingen blir vag. Målt på stage: 55 av 74 kriterier hadde det.
+
+- **Én kontroll** i skillets `rubric-check.mjs`, lest av plattformen (`#rubric-check`): hvert kriterium
+  beskriver laveste trinn, høyeste og minst ett imellom («0 = …; 2 = …; 4 = …»). Skalaen er `maxScore`
+  når den finnes, ellers «a–b» i teksten.
+- **Skillet stopper** (ny kontroll «criteria» i `produce-course.mjs`); `modules.md` viser formen og
+  sier at hvert kriterium skal gjelde noe oppgaveteksten ber om.
+- **Plattformen varsler** etter lagring, kurs- og modulimport, ny rubrikkversjon og når plattformen
+  lager kriterier selv. **Plattformens KI** ber nå om hvert trinn, og om at kriteriet gjelder noe
+  oppgaven faktisk ber om.
+- **Eksempelsvar per fritekstoppgave** venter på #1124, som avgjør hvor det lagres og vises.
+
+### Øvelser og tester i en ny situasjon — #1121
+
+En øvelse som besvares av teksten rett over, er en kopiøvelse: den som kopierer, får like mye ut av
+den som den som forstår.
+
+- **Skillet stopper** en øvelse der fasiten står ordrett i teksten over den (ny kontroll «copied
+  answers» i `produce-course.mjs`, i `exercise-copy-check.mjs`): «skriv selv» der halvparten av
+  eksempelsvaret står i ordrekker på 6 i teksten over; «finn parene» der forklaringene i snitt gjør det
+  med ordrekker på 4; «sjekk deg selv» der riktig svar gjentar teksten og de gale ikke gjør det.
+  Målt mot de 15 kursene på stage: 5 treff av 27 øvelser, alle reelle.
+- **Felles telling med #1119:** `text-overlap.mjs` brukes både av denne kontrollen og av flervalgets
+  ekko-regel.
+- **Skillets veiledning:** øvelser tar en annen situasjon enn eksempelet før dem (`section-content.md`);
+  fritekstoppgaver ber ikke om det seksjonene alt har vist ferdig (`modules.md`).
+- **Plattformens KI** får samme regel i instruksen for oppgavetekst og flervalg: en beslektet, men annen
+  situasjon enn eksemplene i kilden, og riktig svar med egne ord.
+
 ## 2.109.0 - 2026-10-26
 
 ### «Finn feilene» som fast øvelse i skillet — #1120

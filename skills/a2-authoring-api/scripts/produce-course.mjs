@@ -12,6 +12,8 @@
 //   figures        every figure, layout and language variant: labels fit, animation is safe
 //   questions      no option gives the answer away
 //   find errors    the course has a «finn feilene» — a NOTE when not, never a stop  (#1120)
+//   copied answers no exercise is answered word for word by the text above it        (#1121)
+//   criteria       every assessment criterion describes its scale, not one line       (#1122)
 //   languages      nb, nn and en-GB complete, real translations, same answer in each
 //   approved text  nothing the author approved has gone missing        (needs --state)
 //   slides         every slide got what the slide list says           (needs --slides)
@@ -32,6 +34,8 @@ import { checkFigureFit } from "./figure-fit-check.mjs";
 import { checkFigureMotion } from "./figure-motion-check.mjs";
 import { LANGUAGES, checkLocalization, extractSvgTextRuns } from "./localization-check.mjs";
 import { checkMcqCues, collectMcqSets } from "./mcq-cue-check.mjs";
+import { checkExerciseCopies } from "./exercise-copy-check.mjs";
+import { checkRubricScales } from "./rubric-check.mjs";
 import { SVG_MIME, checkAssets, readCourseState, resolvePackageAssets } from "./package-assets.mjs";
 import { checkSlideCoverage, countForms, readDeck } from "./slide-coverage.mjs";
 import { synthesizeStandaloneEnvelopes } from "./synthesize-envelopes.mjs";
@@ -506,6 +510,45 @@ function checkFindTheErrors(pkg, course, { adjusting = false } = {}) {
   };
 }
 
+// #1121: an exercise whose answer key stands word for word in the text right above it
+// (exercise-copy-check.mjs). Read in the language the course is written in.
+function checkCopiedAnswers(pkg, primary) {
+  const details = [];
+  let sections = 0;
+  for (const object of pkg.objects ?? []) {
+    if (object?.type !== "section") continue;
+    sections += 1;
+    const body = object.payload?.bodyMarkdown;
+    const text = body && typeof body === "object" ? body[primary] ?? Object.values(body)[0] : body;
+    for (const finding of checkExerciseCopies(text)) details.push(`"${object.clientRef}" line ${finding.line}: ${finding.detail}`);
+  }
+  return {
+    name: "copied answers",
+    status: details.length === 0 ? "ok" : "fail",
+    summary: details.length === 0 ? `${sections} section(s) read: no exercise answered by the text above it` : `${details.length} exercise(s) answered by the text above them`,
+    details,
+  };
+}
+
+// #1122: every assessment criterion describes its scale (rubric-check.mjs).
+function checkCriteria(pkg, primary) {
+  const details = [];
+  let criteria = 0;
+  for (const object of pkg.objects ?? []) {
+    if (object?.type !== "module") continue;
+    const rubric = object.payload?.activeVersion?.rubric?.criteria;
+    if (!rubric || typeof rubric !== "object") continue;
+    criteria += Object.keys(rubric).length;
+    for (const finding of checkRubricScales(rubric, { primary })) details.push(`"${object.clientRef}": ${finding.detail}`);
+  }
+  return {
+    name: "criteria",
+    status: details.length === 0 ? "ok" : "fail",
+    summary: details.length === 0 ? `${criteria} criteria, each with its scale described` : `${details.length} of ${criteria} criteria with one line for the scale`,
+    details,
+  };
+}
+
 function checkLanguages(pkg, primary) {
   const result = checkLocalization(pkg, { primary });
   const details = [...result.reasons];
@@ -782,6 +825,8 @@ export async function produceCourse({ packageFile, outFile, stateFile, slidesFil
   }
   checks.push(checkQuestions(pkg, primary, course, changesEarly?.elements ? { onlyRefs: new Set(scoped.pkg.objects.map((o) => o.clientRef)), baselineCounts } : {}));
   checks.push(checkFindTheErrors(pkg, course, { adjusting: Boolean(changesEarly?.elements) }));
+  checks.push(checkCopiedAnswers(scoped.pkg, primary));
+  checks.push(checkCriteria(scoped.pkg, primary));
   checks.push(checkLanguages(scoped.pkg, primary));
 
   let master = null;

@@ -35,6 +35,7 @@
 
 import { readFileSync } from "node:fs";
 import { localeValue } from "./localization-check.mjs";
+import { nGrams, sharesRun, wordsOf } from "./text-overlap.mjs";
 
 export const LENGTH_RATIO = 1.25;
 export const MIN_OPTIONS = 3;
@@ -62,17 +63,6 @@ export const ECHO_MIN_WORDS = 8;
 // which a scenario uses for the document in it («gjemmer det viktigste langt nede i teksten»).
 const STEM_ABOUT_COURSE = /(?<![\p{L}\p{N}])(?:kurset|kursets|seksjonen|modulen|leksjonen)(?![\p{L}\p{N}])|\b(?:the|this) (?:course|section|module|lesson)\b/iu;
 
-const wordsOf = (text) => String(text ?? "").replace(/!\[[^\]]*\]\([^)]*\)/g, " ").toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? [];
-const nGrams = (words, n) => {
-  const grams = new Set();
-  for (let i = 0; i + n <= words.length; i++) grams.add(words.slice(i, i + n).join(" "));
-  return grams;
-};
-const sharesRun = (text, grams, n) => {
-  const words = wordsOf(text);
-  for (let i = 0; i + n <= words.length; i++) if (grams.has(words.slice(i, i + n).join(" "))) return true;
-  return false;
-};
 
 const CATCH_ALL = /\b(alle|ingen|all|none)\b.*\b(ovenfor|over|above|nevnte|of the above|av disse)\b/i;
 

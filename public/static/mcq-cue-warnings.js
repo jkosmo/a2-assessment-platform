@@ -16,12 +16,27 @@ export function describeCueWarnings(warnings, t, tf) {
     .filter(Boolean);
 }
 
-/** Kursimport: én linje per test med funn, «Tittel: …». */
-export function describePackageCueWarnings(sets, t, tf, titleOf) {
+/**
+ * #1122: kriterier med én linje for hele skalaen (src/modules/adminContent/rubricWarnings.ts).
+ * Et varsel er `{ code, criterion }`; teksten heter `rubricCheck.<code>`.
+ */
+export function describeRubricWarnings(warnings, t, tf) {
+  if (!Array.isArray(warnings)) return [];
+  return warnings
+    .map((w) => {
+      const key = `rubricCheck.${w?.code}`;
+      if (t(key) === key) return "";
+      return tf(key, { criterion: w.criterion ?? "" });
+    })
+    .filter(Boolean);
+}
+
+/** Kursimport: én linje per test med funn, «Tittel: …». `describe` velger hvilken kontroll. */
+export function describePackageCueWarnings(sets, t, tf, titleOf, describe = describeCueWarnings) {
   if (!Array.isArray(sets)) return [];
   return sets
     .map((set) => {
-      const lines = describeCueWarnings(set?.warnings, t, tf);
+      const lines = describe(set?.warnings, t, tf);
       if (lines.length === 0) return "";
       const title = titleOf(set?.title);
       return title ? `${title}: ${lines.join(" ")}` : lines.join(" ");

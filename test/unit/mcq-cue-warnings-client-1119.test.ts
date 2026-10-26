@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { PLATFORM_CUE_KINDS, mcqCueWarnings } from "../../src/modules/adminContent/mcqCueWarnings.js";
 // @ts-expect-error — klientmodul uten typer
-import { describeCueWarnings, describePackageCueWarnings } from "../../public/static/mcq-cue-warnings.js";
+import { describeCueWarnings, describePackageCueWarnings, describeRubricWarnings } from "../../public/static/mcq-cue-warnings.js";
 // @ts-expect-error — klientmodul uten typer
 import { translations } from "../../public/i18n/admin-content-translations.js";
 // @ts-expect-error — klientmodul uten typer
@@ -13,6 +13,11 @@ import { createTranslator } from "../../public/static/i18n-locale.js";
 describe("#1119 varseltekstene", () => {
   it.each(["nb", "nn", "en-GB"])("%s har tekst for hver regel plattformen viser", (locale) => {
     for (const kind of PLATFORM_CUE_KINDS) expect(translations[locale][`mcqCue.${kind}`], kind).toBeTruthy();
+  });
+
+  it.each(["nb", "nn", "en-GB"])("%s har tekstene for kriteriekontrollen (#1122)", (locale) => {
+    for (const key of ["rubricCheck.scale_not_described", "rubricCheck.heading", "rubricCheck.importedCourse"]) expect(translations[locale][key], key).toBeTruthy();
+    expect(translations.nn["rubricCheck.scale_not_described"]).not.toBe(translations.nb["rubricCheck.scale_not_described"]);
   });
 
   it("nb og nn er oversatt, ikke den engelske teksten", () => {
@@ -36,6 +41,13 @@ describe("#1119 varseltekstene", () => {
     expect(lines).toHaveLength(2);
     expect(lines[0]).toMatch(/^Spørsmål 2 spør hva kurset sier/);
     expect(lines[1]).toMatch(/^5 gale alternativer/);
+  });
+
+  it("#1122: kriterievarselet nevner kriteriet; i kursimporten med modulens tittel", () => {
+    expect(describeRubricWarnings([{ code: "scale_not_described", criterion: "Funn" }], t, tf)).toEqual(["Kriteriet «Funn» har én linje for hele skalaen. Beskriv hva som gir laveste poeng, høyeste, og et trinn imellom."]);
+    const lines = describePackageCueWarnings([{ title: { nb: "Innlevering" }, warnings: [{ code: "scale_not_described", criterion: "Funn" }] }], t, tf, (title: { nb: string }) => title.nb, describeRubricWarnings);
+    expect(lines[0]).toMatch(/^Innlevering: Kriteriet «Funn»/);
+    expect(describeRubricWarnings([{ code: "ukjent", criterion: "Funn" }], t, tf)).toEqual([]);
   });
 
   it("kursimport: én linje per test, med tittelen", () => {

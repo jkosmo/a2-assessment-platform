@@ -49,6 +49,19 @@ test("lagring med funn: lagret, og kvitteringen er et varsel med funnene", async
   await expect(page.locator(".toast--warning .toast__detail").last()).toContainText("Spørsmål 1 spør hva kurset sier");
 });
 
+// #1122: kriterier uten beskrevet skala i samme kvittering — alene, eller etter hint-funnene.
+test("lagring med kriteriefunn: varselet nevner kriteriet", async ({ page }) => {
+  await mockCommonApis(page, { modules: [{ id: "module-1", title: "Cases", activeVersion: { versionNo: 1 } }], moduleExports: { "module-1": moduleExport } });
+  await page.route("**/api/admin/content/modules/*/versions", (route: Route) => route.fulfill({ status: 201, contentType: "application/json", body: JSON.stringify({ moduleVersion: { id: "module-1-version-2", versionNo: 2 }, cueWarnings: [{ code: "stem_about_course", question: 1 }], rubricWarnings: [{ code: "scale_not_described", criterion: "Funn" }] }) }));
+  await nb(page);
+  await page.goto("/admin-content/module/module-1/conversation");
+  await page.locator("#previewEditMcqStem0").fill("Hva anbefaler kurset?");
+  await page.locator("#formSaveBtn").click();
+  const detalj = page.locator(".toast--warning .toast__detail").last();
+  await expect(detalj).toContainText("Spørsmål 1 spør hva kurset sier");
+  await expect(detalj).toContainText("Noen kriterier beskriver ikke skalaen: Kriteriet «Funn» har én linje for hele skalaen.");
+});
+
 test("lagring uten funn: en vanlig kvittering", async ({ page }) => {
   await save(page, [], "Hva gjør du først?");
   // Kvitteringen fra lagringsloggen og fra lagringen har samme tekst, og toast.js viser den én gang.
@@ -84,6 +97,18 @@ test.describe("import", () => {
     await expect(page.locator(".toast--warning .toast__detail")).toContainText("1 tester har spørsmål som kan besvares uten å kunne stoffet. Kunnskapstest: 4 gale alternativer");
   });
 
+  test("kursimport med kriteriefunn (#1122): detaljen nevner modulen og kriteriet", async ({ page }) => {
+    await page.route("**/api/admin/content/courses/import", (route: Route) => route.fulfill({
+      status: 201,
+      contentType: "application/json",
+      body: JSON.stringify({ courseId: "course-1", moduleIds: ["module-1"], heldBackByTranslationGate: false, cueWarnings: [], rubricWarnings: [{ title: { nb: "Innlevering" }, warnings: [{ code: "scale_not_described", criterion: "Funn" }] }] }),
+    }));
+    await page.goto("/admin-content/courses");
+    await page.setInputFiles("#importCoursePackageFile", { name: "kurs.json", mimeType: "application/json", buffer: Buffer.from(JSON.stringify(kurspakke)) });
+    await expect(page).toHaveURL(/\/admin-content\/courses\/course-1$/);
+    await expect(page.locator(".toast--warning .toast__detail")).toContainText("1 moduler har kriterier som ikke beskriver skalaen. Innlevering: Kriteriet «Funn»");
+  });
+
   test("kursimport uten funn: en vanlig kvittering, uten detalj", async ({ page }) => {
     await page.route("**/api/admin/content/courses/import", (route: Route) => route.fulfill({ status: 201, contentType: "application/json", body: JSON.stringify({ courseId: "course-1", moduleIds: [], heldBackByTranslationGate: false, cueWarnings: [] }) }));
     await page.goto("/admin-content/courses");
@@ -94,12 +119,13 @@ test.describe("import", () => {
   });
 
   test("modulimport: kvitteringen og funnene vises på modulsiden importen går til", async ({ page }) => {
-    await page.route("**/api/admin/content/modules/import", (route: Route) => route.fulfill({ status: 201, contentType: "application/json", body: JSON.stringify({ moduleId: "module-1", cueWarnings: [{ code: "stem_about_course", question: 2 }] }) }));
+    await page.route("**/api/admin/content/modules/import", (route: Route) => route.fulfill({ status: 201, contentType: "application/json", body: JSON.stringify({ moduleId: "module-1", cueWarnings: [{ code: "stem_about_course", question: 2 }], rubricWarnings: [{ code: "scale_not_described", criterion: "Funn" }] }) }));
     await page.goto("/admin-content");
     await expect(page.locator(".list-table")).toBeVisible();
     const modulpakke = { exportFormat: "a2-content-export/v1", exportedAt: "2026-10-26T08:00:00.000Z", scope: "module", module: { module: { title: { nb: "M" } } } };
     await page.setInputFiles("#importModulePackageFile", { name: "modul.json", mimeType: "application/json", buffer: Buffer.from(JSON.stringify(modulpakke)) });
     await expect(page).toHaveURL(/\/admin-content\/module\/module-1\/conversation$/);
     await expect(page.locator(".toast--warning .toast__detail")).toContainText("Spørsmål 2 spør hva kurset sier");
+    await expect(page.locator(".toast--warning .toast__detail")).toContainText("Noen kriterier beskriver ikke skalaen: Kriteriet «Funn»");
   });
 });

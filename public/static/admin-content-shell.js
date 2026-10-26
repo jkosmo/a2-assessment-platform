@@ -24,7 +24,7 @@ import {
   resolveWorkspaceNavigationItems,
 } from "/static/participant-console-state.js";
 import { flushQueuedToast, showToast } from "/static/toast.js";
-import { describeCueWarnings } from "/static/mcq-cue-warnings.js";
+import { describeCueWarnings, describeRubricWarnings } from "/static/mcq-cue-warnings.js";
 import { apiErrorCodeText, apiIssueLines, describeApiError } from "/static/api-error.js";
 import { renderWorkspaceNavigationWithProfile } from "./workspace-nav.js";
 import { localizeValueForLocale, buildPreviewHtml, hydratePreviewMarkdown } from "/static/admin-content-preview.js";
@@ -257,10 +257,23 @@ function logResolveSlot(slot, htmlFn, choices = []) {
 }
 
 // #1119: lagringen lyktes. Har testen spørsmål der svaret kan røpe seg, sier toasten det — varsel, ikke stopp.
-function announceSaved(composed) {
+// #1122: det samme for kriterier — fra lagringen selv, eller fra KI-rubrikken laget rett før (`ensure`).
+function announceSaved(composed, generatedRubricWarnings = []) {
   const cue = describeCueWarnings(composed?.cueWarnings, t, tf);
-  if (cue.length > 0) showToast(`${t("shell.save.success")} ${t("mcqCue.heading")}`, "warning", cue.join(" "));
-  else showToast(t("shell.save.success"), "success");
+  const rubric = describeRubricWarnings([...(composed?.rubricWarnings ?? []), ...(generatedRubricWarnings ?? [])], t, tf);
+  // Overskriften står i selve meldingen: toast.js viser ikke samme tekst to ganger, og lagringsloggen
+  // har alt vist «lagret» alene.
+  const parts = [
+    ...(cue.length > 0 ? [{ heading: t("mcqCue.heading"), lines: cue }] : []),
+    ...(rubric.length > 0 ? [{ heading: t("rubricCheck.heading"), lines: rubric }] : []),
+  ];
+  if (parts.length === 0) {
+    showToast(t("shell.save.success"), "success");
+    return;
+  }
+  const [first, ...rest] = parts;
+  const detail = [first.lines.join(" "), ...rest.map((part) => `${part.heading} ${part.lines.join(" ")}`)].join(" ");
+  showToast(`${t("shell.save.success")} ${first.heading}`, "warning", detail);
 }
 
 // Identity / headers
@@ -2401,7 +2414,7 @@ async function saveDraftBundleInBackground(options = {}) {
     previewDraft = null;
     await loadModule(moduleId);
     logResolveSlot(slot, () => `<strong>${escapeHtml(t("shell.save.success"))}</strong>`);
-    announceSaved(composed);
+    announceSaved(composed, rubricBody?.rubricWarnings);
     announceStatus(t("shell.save.success"));
     // #928: kriteriene fulgte ikke med (de ble gjenbrukt), og teksten er vesentlig endret. Valgte
     // forfatteren kriterier i samme lagring, er spørsmålet besvart alt.

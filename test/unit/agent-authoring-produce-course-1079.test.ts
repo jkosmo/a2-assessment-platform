@@ -62,6 +62,10 @@ describe("produce-course — eksempelkurset går gjennom alt (#1079)", () => {
       questions: "ok",
       // #1120: eksempelkurset har en «finn feilene» i «sec-arbeidsgang».
       "find errors": "ok",
+      // #1121: ingen øvelse besvares av teksten rett over.
+      "copied answers": "ok",
+      // #1122: eksempelkurset har bare flervalg — ingen kriterier å lese.
+      criteria: "ok",
       languages: "ok",
       "approved text": "ok",
       slides: "ok",
@@ -358,6 +362,14 @@ describe("produce-course — hver kontroll stopper leveransen (#1079)", () => {
       q.options[i] = setning;
       q.correctAnswer = setning;
     }, "questions", "answer_echoes_text"],
+    // #1121: «finn feilene»-øvelsens eksempelsvar byttet ut med utkastet rett over — en kopiøvelse.
+    ["et eksempelsvar som står ordrett i teksten over (#1121)", (p) => {
+      const b = objekt(p, "sec-arbeidsgang").payload.bodyMarkdown;
+      b.nb = b.nb.replace("1. **Fristen er feil:**", "Ola sender budsjettet til revisor innen 15. november. Kari bestiller lokale. Til stede: Kari, Ola, Siri og Per.\n\n1. **Fristen er feil:**");
+      b.nb = b.nb.replace(/\n1\. \*\*Fristen[\s\S]*?(?=\n\n- \[ \])/, "\n");
+    }, "copied answers", `"sec-arbeidsgang" line`],
+    // #1122: et kriterium med én linje for hele skalaen.
+    ["et vurderingskriterium uten beskrevne trinn (#1122)", (p) => void (objekt(p, "mod-referat").payload.activeVersion.rubric = { criteria: { struktur: "0–4: Referatet har god struktur." }, scalingRule: { practical_weight: 100, max_total: 4 } }), "criteria", "«struktur» has one line for 0–4"],
     ["prompten forfatteren godkjente er kortet bort", (p) => { const b = objekt(p, "sec-kilder").payload.bodyMarkdown; b.nb = b.nb.replace("Bruk bare det som står i notatene under. Skriv «uklart» der notatene ikke sier noe.", "Bruk notatene."); }, "approved text", "templates — «Bruk bare det som står i notatene under."],
     ["et kort lysarklista lovet, er borte", (p) => { const b = objekt(p, "sec-kilder").payload.bodyMarkdown; for (const s of ["nb", "nn", "en-GB"]) b[s] = b[s].replaceAll("### ", "**"); }, "slides", "slide 3: was to become cards"],
   ])("%s", async (_navn, endre, kontroll, ventet) => {

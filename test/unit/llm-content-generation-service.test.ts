@@ -105,6 +105,14 @@ describe("llm content generation prompts", () => {
     expect(userPrompt).not.toContain("based on the source material below.");
   });
 
+  // #1121: oppgaven og spørsmålene bruker en annen situasjon enn eksemplene i kilden.
+  it("asks for another situation than the source's examples, in the task and in the questions", () => {
+    const base = { sourceMaterial: "Notes.", certificationLevel: "intermediate" as const, locale: "en-GB" as const, generationMode: "ordinary" as const };
+    expect(buildModuleDraftPrompts(base).userPrompt).toContain("Do not reuse a case, worked example or finished answer from the source material as the task.");
+    const { userPrompt } = buildMcqGenerationPrompts({ ...base, questionCount: 4, optionCount: 4 } as Parameters<typeof buildMcqGenerationPrompts>[0]);
+    expect(userPrompt).toContain("a related but different situation than the worked examples in the source material");
+  });
+
   it("includes generation mode guidance in module draft prompts", () => {
     const { userPrompt } = buildModuleDraftPrompts({
       sourceMaterial: "Internal policy notes about safe handling of customer data.",

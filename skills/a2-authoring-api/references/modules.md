@@ -10,10 +10,25 @@ gate 3 ([course-design.md](course-design.md#level-and-scope)).
 
 - **Task text:** a concrete situation tied to the source that gives the learner something to do or
   decide. Not "Drøft X".
-- **Assessment criteria (rubric):** each one named, tied to an objective, with a described scale,
-  for example `"identifisering": "0–4: identifiserer korrekt grunnlag og avgrenser mot
-  alternativene"`. Every criterion is something an assessor can observe in an answer; no lone
-  "kvalitet".
+- **Not what the sections already did.** The task takes another situation than the cases and
+  examples the sections worked through — and does not ask for the one thing a section showed
+  finished (the prompt it gave, the order it rewrote). A learner who can copy from the sections is
+  not assessed on understanding them.
+- **Assessment criteria (rubric):** each one named, tied to an objective, with **each step of its
+  scale described** — at least the lowest, the highest and one between:
+
+  ```json
+  "kontroll": "0–2: 0 = ingen kontroll; 1 = sier generelt at resultatet må sjekkes; 2 = sier at notatet må kontrolleres mot kildene, og hvordan"
+  ```
+
+  One line for the whole scale («0–4: Reglene er konkrete og relevante») leaves the assessor to
+  guess what separates 1 from 3, and the feedback goes vague. Every step is something an assessor
+  can observe in an answer; no lone "kvalitet". `produce-course.mjs` fails on a criterion without
+  its steps.
+- **Every criterion assesses something the task text asks for.** A learner who answers what was
+  asked must not lose points for what was not asked. If a criterion needs the learner to do
+  something, the task says so; if the task cannot say it, drop the criterion. Read the criteria and
+  the task side by side before gate 4.
 - **Expected content:** what a strong answer contains. It guides the automatic assessment.
 - **A warm-up in the section before it — never in the task text.** A free-text module gets a «skriv selv» frame (one of that section's
   one or two exercises — [section-content.md](section-content.md#choosing-the-practice)) in the

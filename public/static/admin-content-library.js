@@ -22,7 +22,7 @@ import {
   resolveWorkspaceNavigationItems,
 } from "/static/participant-console-state.js";
 import { describeImportError } from "/static/import-error.js";
-import { describeCueWarnings } from "/static/mcq-cue-warnings.js";
+import { describeCueWarnings, describeRubricWarnings } from "/static/mcq-cue-warnings.js";
 import { describeApiError } from "/static/api-error.js";
 import { queueToast, showToast } from "/static/toast.js";
 import { runWithWorkDialog } from "/static/work-dialog.js";
@@ -778,9 +778,14 @@ async function init() {
       }), { detail: t("adminContent.work.detail") });
       if (!result?.moduleId) throw new Error(t("library.importNoId"));
       // #1119: i kø, ikke vist — siden byttes i neste linje, og en vist melding forsvant med den.
-      // Spørsmål der svaret kan røpe seg følger med.
+      // Spørsmål der svaret kan røpe seg, og kriterier uten beskrevet skala (#1122), følger med.
       const cue = describeCueWarnings(result.cueWarnings, t, tf);
-      queueToast(t("library.imported"), cue.length > 0 ? "warning" : "info", cue.length > 0 ? `${t("mcqCue.heading")} ${cue.join(" ")}` : "");
+      const rubric = describeRubricWarnings(result.rubricWarnings, t, tf);
+      const detail = [
+        cue.length > 0 ? `${t("mcqCue.heading")} ${cue.join(" ")}` : "",
+        rubric.length > 0 ? `${t("rubricCheck.heading")} ${rubric.join(" ")}` : "",
+      ].filter(Boolean).join(" ");
+      queueToast(t("library.imported"), detail ? "warning" : "info", detail);
       // Land i arbeidsrommet: der er publiseringsgaten med «Oversett det som mangler» (#896).
       window.location.href = `/admin-content/module/${encodeURIComponent(result.moduleId)}/conversation`;
     } catch (error) {

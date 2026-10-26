@@ -166,7 +166,7 @@ three):
       "taskText": "Beskriv hvilket behandlingsgrunnlag som gjelder når …",
       "assessorExpectedContent": "Kandidaten identifiserer artikkel 6(1)(b) og begrunner …",
       "rubric": {
-        "criteria": { "identifisering": "0–4: …", "begrunnelse": "0–4: …" },
+        "criteria": { "identifisering": "0–4: 0 = …; 2 = …; 4 = …", "begrunnelse": "0–4: 0 = …; 2 = …; 4 = …" },
         "scalingRule": { "practical_weight": 100, "max_total": 8 }
       },
       "promptTemplate": {

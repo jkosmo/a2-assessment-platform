@@ -876,6 +876,10 @@ const adminContentBase = {
   "mcqCue.catch_all_option": "Question {question} has an «all/none of the above» option.",
   "mcqCue.heading": "Some questions can be answered without knowing the material:",
   "mcqCue.importedCourse": "{count} tests have questions that can be answered without knowing the material.",
+  // #1122: criteria with one line for the whole scale.
+  "rubricCheck.scale_not_described": "The criterion «{criterion}» has one line for the whole scale. Describe what earns the lowest score, the highest, and a step in between.",
+  "rubricCheck.heading": "Some criteria do not describe their scale:",
+  "rubricCheck.importedCourse": "{count} modules have criteria that do not describe their scale.",
 };
 const nbOverrides = {
   "nav.profile": "Profil",
@@ -1851,6 +1855,9 @@ const adminContentLateOverrides = {
     "mcqCue.catch_all_option": "Spørsmål {question} har et «alle/ingen av de ovenfor»-alternativ.",
     "mcqCue.heading": "Noen spørsmål kan besvares uten å kunne stoffet:",
     "mcqCue.importedCourse": "{count} tester har spørsmål som kan besvares uten å kunne stoffet.",
+    "rubricCheck.scale_not_described": "Kriteriet «{criterion}» har én linje for hele skalaen. Beskriv hva som gir laveste poeng, høyeste, og et trinn imellom.",
+    "rubricCheck.heading": "Noen kriterier beskriver ikke skalaen:",
+    "rubricCheck.importedCourse": "{count} moduler har kriterier som ikke beskriver skalaen.",
   },
   nn: {
     // #896 S3c-etterslep \u2014 sj\u00e5 merknaden i nb-blokka over.
@@ -2591,6 +2598,9 @@ const adminContentLateOverrides = {
     "mcqCue.catch_all_option": "Spørsmål {question} har eit «alle/ingen av dei ovanfor»-alternativ.",
     "mcqCue.heading": "Nokre spørsmål kan svarast på utan å kunne stoffet:",
     "mcqCue.importedCourse": "{count} testar har spørsmål som kan svarast på utan å kunne stoffet.",
+    "rubricCheck.scale_not_described": "Kriteriet «{criterion}» har éi linje for heile skalaen. Skildre kva som gir lågaste poeng, høgaste, og eit trinn imellom.",
+    "rubricCheck.heading": "Nokre kriterium skildrar ikkje skalaen:",
+    "rubricCheck.importedCourse": "{count} modular har kriterium som ikkje skildrar skalaen.",
   },
 };
 

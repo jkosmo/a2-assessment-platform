@@ -962,6 +962,7 @@ ${renderBlueprintSection(input.blueprint)}
 - Do not mention "source material", "the text above", "the material", "the document", "the attachment", or equivalent wording.
 - Do not tell the candidate to read, review, use, cite, or refer to any unseen material.
 - Any facts, context, terminology, or scenario details needed by the candidate must be embedded directly in the generated task itself.
+- Do not reuse a case, worked example or finished answer from the source material as the task. Use a related but different situation — other names, numbers or circumstances — so the candidate cannot answer by recalling the example (#1121).
 - Use the certification level as the primary difficulty control.
 - ${MODULE_DRAFT_LEVEL_GUIDELINES[input.certificationLevel]}
 - ${GENERATION_MODE_GUIDELINES[input.generationMode].moduleDraft}
@@ -1165,6 +1166,7 @@ Generation mode: ${input.generationMode}
 - Do not mention "source material", "text above", "document", "attachment", or any unseen reference material.
 - Do not write stems, options, or rationales that assume the candidate can inspect the hidden source material.
 - If background facts are needed, incorporate them directly into the question stem.
+- Set situational questions in a related but different situation than the worked examples in the source material, and write the correct option in your own words — not a sentence copied from the source. A candidate must not pass by recognising wording (#1119, #1121).
 
 ## Mandatory distractor quality — applies to every question
 
@@ -1567,6 +1569,8 @@ ${blueprintSection}## Authoring rules
 
 - Produce 3-6 criteria. Each must name a specific dimension the task actually tests (e.g. "Trade-off between privacy and audit obligation", not "Quality of reasoning").
 - Each \`description\` must reference concrete content from the task or assessor expectations so a human assessor can apply it without guessing.
+- Each \`description\` describes the scale step by step, at least the lowest, the middle and the highest score, each as something an assessor can observe in an answer: "0 = …; 2 = …; 4 = …". One line for the whole scale is not enough (#1122).
+- Each criterion assesses something the task text explicitly asks the candidate to do. A candidate who answers what was asked must not lose points for something the task did not ask for.
 - \`maxScore\` per criterion must be exactly 4, matching the assessor scale (0-4 per criterion). Produce 3-6 criteria.
 - \`id\` is short snake_case (e.g. "scenario_application", "priority_reasoning"). Stable across runs.
 - \`candidateVisible: true\` means the criterion text is appropriate to show the candidate before they submit. Set false only for criteria that would leak the expected answer.
@@ -1581,7 +1585,7 @@ Return a single JSON object:
     {
       "id": "snake_case_id",
       "label": "Short label in ${LOCALE_DISPLAY[input.locale]}",
-      "description": "1-2 sentences that name what the assessor checks for, grounded in the task.",
+      "description": "What the assessor checks for, grounded in the task, then each step: 0 = …; 2 = …; 4 = ….",
       "maxScore": 4,
       "candidateVisible": boolean
     }

@@ -43,6 +43,7 @@ import { generateLimiter } from "../middleware/rateLimiting.js";
 import { respondWithAppError } from "./helpers/respondWithAppError.js";
 import { requestLocale } from "../i18n/requestLocale.js";
 import { packageCueWarnings } from "../modules/adminContent/mcqCueWarnings.js";
+import { packageRubricWarnings } from "../modules/adminContent/rubricWarnings.js";
 
 const adminCoursesRouter = Router();
 
@@ -262,6 +263,8 @@ adminCoursesRouter.post("/import", async (request, response, next) => {
       ...(result.summary ? { summary: result.summary } : {}),
       // #1119: tester der svaret kan røpe seg — varsel, ikke stopp. Regnet på fila, med seksjonene før hver test.
       cueWarnings: packageCueWarnings(data.payload),
+      // #1122: kriterier med én linje for hele skalaen, per modul.
+      rubricWarnings: packageRubricWarnings(data.payload),
       links: courseAdminLinks(result.courseId),
       ...(data.clientRef !== undefined ? { clientRef: data.clientRef } : {}),
     });

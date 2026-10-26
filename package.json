@@ -1,13 +1,14 @@
 {
   "name": "a2-assessment-platform",
-  "version": "2.109.0",
+  "version": "2.110.0",
   "private": true,
   "description": "Internal assessment platform backend bootstrap (M0 foundation).",
   "type": "module",
   "imports": {
     "#frame-structure": "./skills/a2-authoring-api/scripts/frame-structure.mjs",
     "#figure-motion": "./skills/a2-authoring-api/scripts/figure-motion-check.mjs",
-    "#mcq-cue": "./skills/a2-authoring-api/scripts/mcq-cue-check.mjs"
+    "#mcq-cue": "./skills/a2-authoring-api/scripts/mcq-cue-check.mjs",
+    "#rubric-check": "./skills/a2-authoring-api/scripts/rubric-check.mjs"
   },
   "scripts": {
     "dev": "npm run postgres:setup && dotenv -e .env.postgres.local -- tsx watch src/index.ts",

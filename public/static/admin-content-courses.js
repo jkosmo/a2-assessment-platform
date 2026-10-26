@@ -22,7 +22,7 @@ import {
   resolveWorkspaceNavigationItems,
 } from "/static/participant-console-state.js";
 import { describeImportError } from "/static/import-error.js";
-import { describePackageCueWarnings } from "/static/mcq-cue-warnings.js";
+import { describePackageCueWarnings, describeRubricWarnings } from "/static/mcq-cue-warnings.js";
 import { apiErrorCodeText, describeApiError } from "/static/api-error.js";
 import { flushQueuedToast, queueToast, showToast } from "/static/toast.js";
 import {
@@ -917,10 +917,15 @@ async function handleImportCoursePackageFile(event) {
 }
 
 // #1119: «3 tester har spørsmål som … — Tittel: Spørsmål 2 … Tittel: …», eller "" når ingen har funn.
+// #1122: og moduler med kriterier som ikke beskriver skalaen, i samme detalj.
 function importCueDetail(result) {
-  const lines = describePackageCueWarnings(result?.cueWarnings, t, tf, (title) => (typeof title === "string" ? title : pickLocalizedText(title, currentLocale)));
-  if (lines.length === 0) return "";
-  return `${tf("mcqCue.importedCourse", { count: lines.length })} ${lines.join(" ")}`;
+  const titleOf = (title) => (typeof title === "string" ? title : pickLocalizedText(title, currentLocale));
+  const cue = describePackageCueWarnings(result?.cueWarnings, t, tf, titleOf);
+  const rubric = describePackageCueWarnings(result?.rubricWarnings, t, tf, titleOf, describeRubricWarnings);
+  return [
+    cue.length > 0 ? `${tf("mcqCue.importedCourse", { count: cue.length })} ${cue.join(" ")}` : "",
+    rubric.length > 0 ? `${tf("rubricCheck.importedCourse", { count: rubric.length })} ${rubric.join(" ")}` : "",
+  ].filter(Boolean).join(" ");
 }
 
 // #1095: finnes kurset fila peker på, i dette miljøet — og får forfatteren se det? 404 og 403 er

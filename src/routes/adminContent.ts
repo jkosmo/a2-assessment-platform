@@ -84,6 +84,7 @@ import {
 } from "../modules/adminContent/llmContentGenerationService.js";
 import { validateMcqDistractors, validateScenarioDraft } from "../modules/adminContent/contentValidationService.js";
 import { mcqCueWarnings, packageCueWarnings } from "../modules/adminContent/mcqCueWarnings.js";
+import { packageRubricWarnings, rubricWarnings } from "../modules/adminContent/rubricWarnings.js";
 import { localizedTextCodec } from "../codecs/localizedTextCodec.js";
 import { isExtractionJobOwner, rememberExtractionJobOwner } from "../modules/adminContent/extractionJobOwners.js";
 import { findCoursesContainingModule, inUseMessage } from "../modules/course/contentLifecycle.js";
@@ -516,6 +517,7 @@ adminContentRouter.post("/modules/import", idempotency("modules.import"), async 
       heldBackByTranslationGate: result.heldBackByTranslationGate,
       // #1119: spørsmål der svaret kan røpe seg — varsel, ikke stopp.
       cueWarnings: packageCueWarnings(data.payload).flatMap((set) => set.warnings),
+      rubricWarnings: packageRubricWarnings(data.payload).flatMap((entry) => entry.warnings),
       links: moduleAdminLinks(result.moduleId),
       ...(data.clientRef !== undefined ? { clientRef: data.clientRef } : {}),
     });
@@ -598,7 +600,8 @@ adminContentRouter.post("/modules/:moduleId/rubric-versions", async (request, re
       scalingRule: data.scalingRule,
       active: data.active ?? true,
     });
-    response.status(201).json({ rubricVersion });
+    // #1122: kriterier med én linje for hele skalaen — varsel, ikke stopp.
+    response.status(201).json({ rubricVersion, rubricWarnings: rubricWarnings(data.criteria) });
   } catch (error) {
     response.status(400).json({ error: "create_rubric_version_failed", message: "Could not create rubric version." });
   }
@@ -639,7 +642,8 @@ adminContentRouter.post("/modules/:moduleId/rubric-versions/ensure", generateLim
       blueprint: normalizeAssessmentBlueprint(data.blueprint),
       force: data.force,
     });
-    response.status(result.reused ? 200 : 201).json(result);
+    // #1122: en gjenbrukt rubrikk er alt vurdert; en ny (fra KI eller standardrubrikken) får varselet.
+    response.status(result.reused ? 200 : 201).json({ ...result, rubricWarnings: result.reused ? [] : rubricWarnings(result.criteria) });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
     response.status(500).json({ error: "ensure_rubric_failed", message });
@@ -854,7 +858,7 @@ adminContentRouter.post("/modules/:moduleId/versions", idempotency((req) => `mod
       assessmentPolicy: data.assessmentPolicy,
     });
     // #1119: lagring i redigeringsverktøyet — varsel om spørsmål der svaret kan røpe seg, ikke stopp.
-    response.status(201).json({ ...result, cueWarnings: mcqCueWarnings(data.mcqSet?.questions) });
+    response.status(201).json({ ...result, cueWarnings: mcqCueWarnings(data.mcqSet?.questions), rubricWarnings: rubricWarnings(data.rubric?.criteria) });
   } catch (err) {
     if (err instanceof AppError) {
       respondWithAppError(response, err);
@@ -1351,7 +1355,7 @@ adminContentRouter.post("/generate/rubric", generateLimiter, async (request, res
       ...data,
       blueprint: normalizeAssessmentBlueprint(data.blueprint),
     });
-    response.json({ rubric });
+    response.json({ rubric, rubricWarnings: rubricWarnings(rubric.criteria) });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
     response.status(500).json({ error: "generation_failed", message });
