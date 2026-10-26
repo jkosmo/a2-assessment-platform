@@ -68,6 +68,7 @@ vi.mock("../../src/utils/hash.js", () => ({ sha256 }));
 function buildInputContext(overrides = {}) {
   return {
     rubricCriteriaIds: ["crit_a", "crit_b"],
+    rubricCriteria: [],
     rubricMaxTotal: 8,
     submissionFieldLabels: ["Field A"],
     assessmentPolicy: null,
@@ -211,13 +212,16 @@ describe("AssessmentEvaluator — runLlmEvaluationPipeline", () => {
       .mockResolvedValueOnce({ id: "eval-secondary" });
 
     const { runLlmEvaluationPipeline } = await import("../../src/modules/assessment/AssessmentEvaluator.js");
+    // #1135: kriterieteksten følger med i begge rundene.
+    const rubricCriteria = [{ id: "crit_a", label: "Vedtakene", description: "0 = …; 1 = …; 2 = …", scaleMax: 2 }];
     const result = await runLlmEvaluationPipeline({
       ...BASE_CTX,
-      inputContext: buildInputContext(),
+      inputContext: { ...buildInputContext(), rubricCriteria },
     });
 
     expect(evaluatePracticalWithLlm).toHaveBeenCalledTimes(2);
-    expect(evaluatePracticalWithLlm).toHaveBeenNthCalledWith(2, expect.objectContaining({ assessmentPass: "secondary" }));
+    expect(evaluatePracticalWithLlm).toHaveBeenNthCalledWith(1, expect.objectContaining({ assessmentPass: "primary", rubricCriteria }));
+    expect(evaluatePracticalWithLlm).toHaveBeenNthCalledWith(2, expect.objectContaining({ assessmentPass: "secondary", rubricCriteria }));
     expect(result.finalLlmResult).toBe(secondaryResult);
   });
 

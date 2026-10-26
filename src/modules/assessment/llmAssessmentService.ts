@@ -18,8 +18,33 @@ type AssessmentContext = {
   promptTemplateUserTemplate?: string;
   promptTemplateExamplesJson?: string;
   rubricCriteriaIds?: string[];
+  /** #1135: what each criterion means. Without it the model saw only the IDs. */
+  rubricCriteria?: Array<{ id: string; label: string | null; description: string | null; scaleMax: number | null }>;
   submissionFieldLabels?: string[];
 };
+
+/**
+ * #1135: the criteria as the author wrote them, so each score follows the criterion's own steps.
+ * A criterion described on another scale (0–2) is scored on the contract's 0–4 by a fixed mapping
+ * stated in the prompt, so the decision's clamp and max (criteria × 4) stay as they are. A criterion
+ * with nothing to say (only an ID or a weight) is listed by its ID, as before.
+ */
+export function buildRubricCriteriaSection(criteria: AssessmentContext["rubricCriteria"]): string | null {
+  const described = (criteria ?? []).filter((c) => c.label || c.description);
+  if (described.length === 0) return null;
+  const lines = (criteria ?? []).map((c) => {
+    const head = c.label ? `${c.id} — ${c.label}` : c.id;
+    if (!c.description) return `- ${head}`;
+    const mapping = c.scaleMax
+      ? ` [described on 0–${c.scaleMax}; report on 0–4 as level × ${Number((4 / c.scaleMax).toFixed(2))}, rounded]`
+      : "";
+    return `- ${head}${mapping}: ${c.description}`;
+  });
+  return [
+    "Rubric criteria (score each criterion by its own description; where the description names the steps, the score is the step the submission reaches — not your own idea of the criterion):",
+    ...lines,
+  ].join("\n");
+}
 
 type AzureOpenAiRuntimeConfig = {
   endpoint: string;
@@ -381,7 +406,8 @@ function resolveTokenParameterSequence(
   return ["max_completion_tokens", "max_tokens"];
 }
 
-function buildAzureOpenAiMessages(input: AssessmentContext): Array<{ role: "system" | "user"; content: string }> {
+// Eksportert for testen av at kriteriene når prompten (#1135).
+export function buildAzureOpenAiMessages(input: AssessmentContext): Array<{ role: "system" | "user"; content: string }> {
   const systemPrompt = (input.promptTemplateSystem ?? "").trim() || DEFAULT_SYSTEM_PROMPT;
   const userPromptTemplate = (input.promptTemplateUserTemplate ?? "").trim();
   const passContext =
@@ -403,6 +429,7 @@ function buildAzureOpenAiMessages(input: AssessmentContext): Array<{ role: "syst
     passContext,
     responseLanguageInstruction,
     responseContract,
+    buildRubricCriteriaSection(input.rubricCriteria),
     input.moduleTaskText ? `Participant assignment context:\n${input.moduleTaskText}` : null,
     input.moduleGuidanceText ? `Assessor expected content (hidden from candidate — grading support only):\n${input.moduleGuidanceText}` : null,
     "Scoring constraint: evaluate the submission strictly against the Participant assignment context above. Use the Assessor expected content only as grading support — do not penalise the candidate for missing a point unless the visible Participant assignment context reasonably implies that point is expected at this certification level. Do not import requirements, criteria, or expectations from your own domain knowledge. improvement_advice must only suggest ways to better address what the task actually asks for.",
