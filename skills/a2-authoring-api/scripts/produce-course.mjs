@@ -11,6 +11,7 @@
 //   pictures       every `file` is attached; text and pictures agree; sizes the platform takes
 //   figures        every figure, layout and language variant: labels fit, animation is safe
 //   questions      no option gives the answer away
+//   find errors    the course has a «finn feilene» — a NOTE when not, never a stop  (#1120)
 //   languages      nb, nn and en-GB complete, real translations, same answer in each
 //   approved text  nothing the author approved has gone missing        (needs --state)
 //   slides         every slide got what the slide list says           (needs --slides)
@@ -481,6 +482,30 @@ function checkQuestions(pkg, primary, course, { onlyRefs = null, baselineCounts 
   return { name: "questions", status: details.length === 0 ? "ok" : "fail", summary: `${questions} question(s) in ${sets.length} set(s)`, details };
 }
 
+// #1120: every course has at least one «finn feilene» — a piece of work with planted errors the
+// learner finds (section-content.md#find-the-errors). A NOTE, not a failure: the author may say no.
+// Recognised by the task line of a `:::skriv` frame, in any of the three languages. Not run on a loose
+// section or module, nor when adjusting a course — that changes only what the author asks for.
+const FIND_THE_ERRORS = /^:::\s*(?:skriv|write)\s+(?:finn|find)\b[^\n]*\b(?:feil\w*|errors?|mistakes?)\b/im;
+function checkFindTheErrors(pkg, course, { adjusting = false } = {}) {
+  const name = "find errors";
+  if (!course) return { name, status: "skipped", summary: "not run — no course object", details: [] };
+  if (adjusting) return { name, status: "skipped", summary: "not run — adjusting a course changes only what the author asks for", details: [] };
+  const found = (pkg.objects ?? []).filter((object) => {
+    if (object?.type !== "section") return false;
+    const body = object.payload?.bodyMarkdown;
+    const texts = body && typeof body === "object" ? Object.values(body) : [body];
+    return texts.some((text) => FIND_THE_ERRORS.test(withoutCodeBlocks(String(text ?? ""))));
+  });
+  if (found.length > 0) return { name, status: "ok", summary: `in ${found.map((o) => `"${o.clientRef}"`).join(", ")}`, details: [] };
+  return {
+    name,
+    status: "note",
+    summary: "the course has no «finn feilene»",
+    details: ["tell the author, and add one in the section that teaches the check unless they say no (section-content.md#find-the-errors)"],
+  };
+}
+
 function checkLanguages(pkg, primary) {
   const result = checkLocalization(pkg, { primary });
   const details = [...result.reasons];
@@ -756,6 +781,7 @@ export async function produceCourse({ packageFile, outFile, stateFile, slidesFil
     baselineCounts = new Map((pkg.objects ?? []).filter((o) => o?.type === "module" && o.origin?.moduleId && byModuleId.has(o.origin.moduleId)).map((o) => [o.clientRef, byModuleId.get(o.origin.moduleId)]));
   }
   checks.push(checkQuestions(pkg, primary, course, changesEarly?.elements ? { onlyRefs: new Set(scoped.pkg.objects.map((o) => o.clientRef)), baselineCounts } : {}));
+  checks.push(checkFindTheErrors(pkg, course, { adjusting: Boolean(changesEarly?.elements) }));
   checks.push(checkLanguages(scoped.pkg, primary));
 
   let master = null;
@@ -860,7 +886,7 @@ export async function produceCourse({ packageFile, outFile, stateFile, slidesFil
 
 /** The report: one line per check, the findings under it, and what to hand over. */
 export function formatProduction(result) {
-  const mark = { ok: "OK  ", fail: "FAIL", skipped: "--  " };
+  const mark = { ok: "OK  ", fail: "FAIL", skipped: "--  ", note: "NOTE" };
   const out = [];
   for (const check of result.checks) {
     out.push(`${mark[check.status]} ${check.name.padEnd(14)} ${check.summary}`);
@@ -871,6 +897,8 @@ export function formatProduction(result) {
     for (const entry of result.files) out.push(`DELIVER ${entry.file}  —  the author imports it at ${entry.importAt}`);
     const notRun = result.checks.filter((check) => check.status === "skipped").map((check) => check.name);
     if (notRun.length > 0) out.push(`Not run: ${notRun.join(", ")}. Name them as not run when you report.`);
+    const noted = result.checks.filter((check) => check.status === "note").map((check) => check.name);
+    if (noted.length > 0) out.push(`Noted: ${noted.join(", ")}. The file may be delivered; tell the author what is noted.`);
   } else {
     const failed = result.checks.filter((check) => check.status === "fail").map((check) => check.name);
     out.push(`DO NOT DELIVER — failed: ${failed.join(", ")}. Fix what is listed and run again.`);

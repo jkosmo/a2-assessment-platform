@@ -3,7 +3,7 @@
 Contents: [Choosing the practice](#choosing-the-practice) · [Writing the text](#writing-the-text) · [Headings and lists](#headings-and-lists) ·
 [Table](#table) · [Callout](#callout) · [Prompt](#prompt) · [Cards](#cards) · [Think first](#think-first) ·
 [Check yourself](#check-yourself) · [A case](#a-case) · [Step by step](#step-by-step) ·
-[Write it yourself](#write-it-yourself) · [Flashcards](#flashcards) · [Match the pairs](#match-the-pairs) ·
+[Write it yourself](#write-it-yourself) · [Find the errors](#find-the-errors) · [Flashcards](#flashcards) · [Match the pairs](#match-the-pairs) ·
 [Icons](#icons) ·
 [Pictures from the source](#pictures-from-the-source) · [Figures](#figures) ·
 [A finished section](#a-finished-section)
@@ -25,6 +25,7 @@ what the source gives, not to use every kind:
 | a routine applied in a situation from the work | [A case](#a-case) | a quiz of separate facts |
 | a process in an order, each step changing something | [Step by step](#step-by-step) | a one-line-per-step list |
 | a formulation the module will assess (free text) | [Write it yourself](#write-it-yourself), in the section before the module | — |
+| a check or a rule for what good work looks like | [Find the errors](#find-the-errors) — at least one per course | a list of things to check, and nothing to check them on |
 | terms the section defines | [Flashcards](#flashcards) (4–10) or [Match the pairs](#match-the-pairs) (3–6) | both for the same terms |
 | nothing of these | no exercise — plain text with a box, a table or a figure | an exercise made up to have one |
 
@@ -330,6 +331,52 @@ Sekretariatet oppdaterer møteplanen og sender ny innkalling innen 25. oktober.
 - In the other languages the marker word stays `:::skriv` and every `- [ ]` line stays; translate the
   task, the example answer and the points. `produce-course.mjs` fails on a frame without an example
   answer.
+
+## Find the errors
+
+**Every course has at least one.** Knowing that you should check a draft is not the same as
+spotting the wrong date, the invented name or the guess presented as fact. The learner gets a short
+piece of work with errors planted in it — a draft from AI, a note, a calculation, a plan — and
+finds them. It is a [write it yourself](#write-it-yourself) frame whose task starts «Finn feilene»
+(nn «Finn feila», en-GB «Find the errors»), with the piece of work in a quote right above it:
+
+```markdown
+Notatene fra styremøtet sier: *Til stede: Kari, Ola, Siri. Vedtak: budsjettet godkjent.
+Ola sender budsjettet til revisor innen 1. november. Ikke avklart hvem som bestiller lokale.*
+
+> **Utkast fra KI:**
+> - **Vedtak:** Budsjettet ble godkjent.
+> - **Oppfølging:** Ola sender budsjettet til revisor innen 15. november. Kari bestiller lokale.
+> - **Til stede:** Kari, Ola, Siri og Per.
+
+:::skriv Finn feilene i utkastet før det sendes. Skriv hva som er feil, og hvordan du fant det.
+1. **Fristen er feil:** notatene sier 1. november, ikke 15. Du finner det når du sjekker frister mot notatene.
+2. **Kari er gitt en oppgave hun ikke har fått:** notatene sier at det ikke er avklart. Utkastet skulle sagt «uklart».
+3. **Per var ikke til stede:** han står ikke i notatene. Du finner det når du sjekker navn.
+
+- [ ] fristen som ble endret?
+- [ ] oppgaven ingen har fått?
+- [ ] navnet som ikke var med?
+:::
+```
+
+- **Where:** in the section that teaches the check — right after the rule or routine it practises.
+  Name it in the outline like any exercise ([course-design.md](course-design.md#structure)).
+- **The piece of work is from the course's own field**, as short as the errors allow: a few lines
+  of minutes, a scoring, a paragraph of a report, a prompt. When the material to check against
+  matters (the notes, the figures), give it above the piece of work.
+- **In a quote with a label**, its lines as a list (`> - …`) — lines in a quote without a list run
+  together into one. A table may stand instead, for a scoring or a calculation.
+- **Three to five errors, of different kinds** — a wrong number or date, something added that the
+  material does not say, an assumption stated as fact, a step left out. Each is an error a
+  professional actually overlooks, not a typo or a joke; the rest of the piece is right.
+- **Every error breaks a rule the source gives.** The piece of work is built for the exercise; the
+  rules it breaks are the source's. The example answer names each error and the check from the
+  course that catches it.
+- **The checklist has one point per error**, phrased so it does not give the error away before the
+  learner has looked («fristen som ble endret?», not «15. november?»).
+- **Not the module's questions** — another piece of work than any the module asks about.
+- `produce-course.mjs` notes a course without one; tell the author, and add one unless they say no.
 
 ## Flashcards
 

@@ -27,6 +27,10 @@ Objectives are the backbone: the structure and the tests follow from them.
   source gives ([section-content.md](section-content.md#choosing-the-practice)). Name them in the
   outline, per section, so the author approves them with the structure. None of it counts; the
   modules test.
+- **At least one «finn feilene» per course** — a short piece of work with planted errors the
+  learner finds, in the section that teaches the check
+  ([section-content.md](section-content.md#find-the-errors)). It is in the outline by default; leave
+  it out only when the author says so.
 - Present the outline as a table: element, order, test form (for a section: its exercise, or none),
   the objective it serves, level.
 

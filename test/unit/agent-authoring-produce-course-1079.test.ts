@@ -60,6 +60,8 @@ describe("produce-course — eksempelkurset går gjennom alt (#1079)", () => {
       figures: "ok",
       "learner text": "ok",
       questions: "ok",
+      // #1120: eksempelkurset har en «finn feilene» i «sec-arbeidsgang».
+      "find errors": "ok",
       languages: "ok",
       "approved text": "ok",
       slides: "ok",
@@ -236,6 +238,47 @@ describe("produce-course — kontrollen «learner text» stopper ikke vanlig fag
     });
     const r = await k.kjør();
     expect(tekst(r), tekst(r).details.join("; ")).toMatchObject({ status: "ok" });
+  });
+});
+
+// #1120: «finn feilene» er standardveien, men forfatteren kan si nei — derfor en merknad, ikke en stopp.
+describe("produce-course — «finn feilene» (#1120)", () => {
+  const utenOppgave = (p: Pakke) => {
+    const b = objekt(p, "sec-arbeidsgang").payload.bodyMarkdown;
+    for (const s of ["nb", "nn", "en-GB"]) b[s] = b[s].slice(0, b[s].search(/\n\n(?:Notatene|Notata|The notes)/));
+  };
+
+  it("et kurs uten oppgaven får en merknad — fila leveres, og rapporten ber om å si det til forfatteren", async () => {
+    const r = await kopi(utenOppgave).kjør();
+    expect(status(r)["find errors"], formatProduction(r)).toBe("note");
+    expect(r.ok).toBe(true);
+    expect(formatProduction(r)).toContain("NOTE find errors");
+    expect(formatProduction(r)).toContain("Noted: find errors. The file may be delivered; tell the author what is noted.");
+  });
+
+  it.each([
+    ["nynorsk", "nn", ":::skriv Finn feila i planen."],
+    ["engelsk", "en-GB", ":::skriv Find the mistakes in the plan."],
+  ])("oppgaven kjennes igjen på %s også", async (_navn, språk, linje) => {
+    const r = await kopi((p) => {
+      utenOppgave(p);
+      objekt(p, "sec-kilder").payload.bodyMarkdown[språk] += `\n\n${linje}\nSvar.\n:::\n`;
+    }).kjør();
+    expect(status(r)["find errors"]).toBe("ok");
+  });
+
+  it("«finn» uten «feil» i oppgaven, eller en oppgave i en kodeblokk, teller ikke", async () => {
+    const r = await kopi((p) => {
+      utenOppgave(p);
+      const b = objekt(p, "sec-kilder").payload.bodyMarkdown;
+      b.nb += "\n\n:::skriv Finn tre saker som skal med i referatet.\nSvar.\n:::\n\n```\n:::skriv Finn feilene\n```\n";
+    }).kjør();
+    expect(status(r)["find errors"]).toBe("note");
+  });
+
+  it("en løs seksjon eller modul uten kurs: ikke kjørt", async () => {
+    const r = await kopi((p) => void (p.objects = p.objects.filter((o) => o.type !== "course"))).kjør();
+    expect(status(r)["find errors"]).toBe("skipped");
   });
 });
 

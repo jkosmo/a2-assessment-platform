@@ -177,6 +177,8 @@ describe("#1095 fase B — skillets justeringsflyt", () => {
     // Den gamle delen — delvis tittel, ren streng, to like filnavn — er også ordrett, og stoppet ikke språkkontrollen.
     expect(comparable(items[2].section)).toEqual(comparable(baseline[2]!.section));
     expect(sjekk(produced, "languages").status).toBe("ok");
+    // #1120: en justering endrer bare det forfatteren ber om — ingen merknad om «finn feilene».
+    expect(sjekk(produced, "find errors").status).toBe("skipped");
     // Ingen publiseringshistorikk i fila: plattformen publiserer ingenting.
     expect(items[0].section.audit).toEqual({});
     expect(items[1].module.activeVersion.audit).toEqual({});

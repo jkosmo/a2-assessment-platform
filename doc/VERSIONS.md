@@ -2,6 +2,22 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.109.0 - 2026-10-26
+
+### «Finn feilene» som fast øvelse i skillet — #1120
+
+Alle fire gjennomgangene av kursene fant det samme: kursene sier «kontroller resultatet», men ingen
+lar deltakeren finne feilene i et resultat. Nå er det standardveien i skillet:
+
+- **`section-content.md`** beskriver øvelsen med et fullt eksempel: et kort arbeidsprodukt fra kursets
+  eget fagfelt med 3–5 plantede feil av ulike slag, i en «skriv selv»-ramme. Eksempelsvaret sier hver
+  feil og hvilken kontroll fra kurset som fanger den. **`course-design.md`** setter den i kursoppskriften.
+- **`produce-course.mjs`** har en ny kontroll, «find errors»: et kurs uten øvelsen får en **merknad**,
+  ikke en stopp — fila leveres, og skillet sier det til forfatteren. Ikke kjørt når et kurs justeres.
+- **Eksempelkurset** har fått øvelsen i seksjonen «Fra møte til referat», på alle tre språk.
+
+Ingen endring på plattformen.
+
 ## 2.108.0 - 2026-10-26
 
 ### Flervalg som kan løses uten å kunne stoffet — #1119
