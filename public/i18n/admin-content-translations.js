@@ -880,6 +880,10 @@ const adminContentBase = {
   "rubricCheck.scale_not_described": "The criterion «{criterion}» has one line for the whole scale. Describe what earns the lowest score, the highest, and a step in between.",
   "rubricCheck.heading": "Some criteria do not describe their scale:",
   "rubricCheck.importedCourse": "{count} modules have criteria that do not describe their scale.",
+  // #1128: a picture whose alt text is only a title.
+  "altCheck.alt_is_title": "The picture «{alt}» has a title as its description. Say what it shows, in a sentence — a screen reader reads nothing else.",
+  "altCheck.heading": "Some pictures are not described:",
+  "altCheck.importedCourse": "{count} sections have pictures that are not described.",
 };
 const nbOverrides = {
   "nav.profile": "Profil",
@@ -1858,6 +1862,9 @@ const adminContentLateOverrides = {
     "rubricCheck.scale_not_described": "Kriteriet «{criterion}» har én linje for hele skalaen. Beskriv hva som gir laveste poeng, høyeste, og et trinn imellom.",
     "rubricCheck.heading": "Noen kriterier beskriver ikke skalaen:",
     "rubricCheck.importedCourse": "{count} moduler har kriterier som ikke beskriver skalaen.",
+    "altCheck.alt_is_title": "Bildet «{alt}» har en tittel som beskrivelse. Si hva det viser, i en setning — en skjermleser leser ikke noe annet.",
+    "altCheck.heading": "Noen bilder er ikke beskrevet:",
+    "altCheck.importedCourse": "{count} seksjoner har bilder som ikke er beskrevet.",
   },
   nn: {
     // #896 S3c-etterslep \u2014 sj\u00e5 merknaden i nb-blokka over.
@@ -2601,6 +2608,9 @@ const adminContentLateOverrides = {
     "rubricCheck.scale_not_described": "Kriteriet «{criterion}» har éi linje for heile skalaen. Skildre kva som gir lågaste poeng, høgaste, og eit trinn imellom.",
     "rubricCheck.heading": "Nokre kriterium skildrar ikkje skalaen:",
     "rubricCheck.importedCourse": "{count} modular har kriterium som ikkje skildrar skalaen.",
+    "altCheck.alt_is_title": "Biletet «{alt}» har ein tittel som skildring. Sei kva det viser, i ei setning — ein skjermlesar les ikkje noko anna.",
+    "altCheck.heading": "Nokre bilete er ikkje skildra:",
+    "altCheck.importedCourse": "{count} seksjonar har bilete som ikkje er skildra.",
   },
 };
 

@@ -44,6 +44,7 @@ import { respondWithAppError } from "./helpers/respondWithAppError.js";
 import { requestLocale } from "../i18n/requestLocale.js";
 import { packageCueWarnings } from "../modules/adminContent/mcqCueWarnings.js";
 import { packageRubricWarnings } from "../modules/adminContent/rubricWarnings.js";
+import { packageAltTextWarnings } from "../modules/adminContent/altTextWarnings.js";
 
 const adminCoursesRouter = Router();
 
@@ -265,6 +266,8 @@ adminCoursesRouter.post("/import", async (request, response, next) => {
       cueWarnings: packageCueWarnings(data.payload),
       // #1122: kriterier med én linje for hele skalaen, per modul.
       rubricWarnings: packageRubricWarnings(data.payload),
+      // #1128: seksjoner der et bilde har en tittel som alt-tekst.
+      altWarnings: packageAltTextWarnings(data.payload),
       links: courseAdminLinks(result.courseId),
       ...(data.clientRef !== undefined ? { clientRef: data.clientRef } : {}),
     });

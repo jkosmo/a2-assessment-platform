@@ -2,6 +2,23 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.112.0 - 2026-10-26
+
+### Bilder som er beskrevet, og ingen rester fra forfatterarbeidet — #1128, #1129
+
+Én kontrollfil, `section-text-check.mjs`, for skillet og plattformen (`#section-text-check`). Målt på de
+15 kursene på stage før reglene ble satt.
+
+- **#1128 Alt-tekst:** et bilde (`asset:`) med under 6 ord i alt-teksten har en tittel, ikke en
+  beskrivelse. På stage gjaldt det 40 av 121 bilder, nesten alle bare en tittel («Enhetstest»). Skillet
+  **stopper** (kontrollen «alt text», alle språk). Plattformen **varsler** når en seksjon lagres eller
+  opprettes, og ved kursimport. Ikoner er unntatt.
+- **#1129 Rester:** skillet **stopper** (kontrollen «leftovers») på arbeidsnotater («[Avklaring: …]»,
+  «før kurset publiseres», «godkjent læringsseksjon», «godkjente moduler» — 8 på stage), en seksjon
+  omtalt med nummer («Seksjon 3b», som ikke fantes), og figurer nummerert i feil rekkefølge
+  (6 → 8 → … → 7). Kodeblokker leses ikke. Moduler med nummer kontrolleres ikke: mappe- og
+  prosjektnavn som «Modul 5 Work» ville gitt falske treff.
+
 ## 2.111.0 - 2026-10-26
 
 ### Fire grep fra Clark & Mayer — #1131, #1132, #1133, #1134

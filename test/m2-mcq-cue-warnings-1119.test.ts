@@ -182,3 +182,34 @@ describe("#1122 varsel om kriterier som ikke beskriver skalaen", () => {
     expect(svar.body.rubricWarnings).toEqual([{ code: "scale_not_described", criterion: "relevance" }]);
   });
 });
+
+// #1128: bilder med en tittel som alt-tekst — varsel ved lagring av en seksjon og ved kursimport.
+describe("#1128 varsel om alt-tekst som bare er en tittel", () => {
+  const svak = tre("Slik ser testen ut.\n\n![Enhetstest](asset:finnes-ikke)");
+  const god = tre("Slik ser testen ut.\n\n![En enhetstest som sjekker én funksjon isolert fra resten](asset:finnes-ikke)");
+
+  it("ny seksjon og lagring av innhold: lagres, og svaret bærer funnet; en beskrivelse gir ingen", async () => {
+    const ny = await request(app).post("/api/admin/content/sections").set(admin).send({ title: tre(`Alt-tekst ${stempel}`), bodyMarkdown: svak });
+    expect(ny.status, JSON.stringify(ny.body).slice(0, 300)).toBe(201);
+    expect(ny.body.altWarnings).toEqual([{ code: "alt_is_title", alt: "Enhetstest" }]);
+    const lagret = await request(app).put(`/api/admin/content/sections/${ny.body.section.id}/content`).set(admin).send({ bodyMarkdown: god });
+    expect(lagret.status, JSON.stringify(lagret.body).slice(0, 300)).toBe(200);
+    expect(lagret.body.altWarnings).toEqual([]);
+    const igjen = await request(app).put(`/api/admin/content/sections/${ny.body.section.id}/content`).set(admin).send({ bodyMarkdown: svak });
+    expect(igjen.body.altWarnings).toEqual([{ code: "alt_is_title", alt: "Enhetstest" }]);
+  });
+
+  it("kursimport: seksjonen med funnet meldes med tittel", async () => {
+    const s = await post("/api/admin/content/sections", { title: tre(`Alt-seksjon ${stempel}`), bodyMarkdown: tre("Tekst uten bilde.") });
+    await post(`/api/admin/content/sections/${s.section.id}/publish`, {});
+    const kurs = await post("/api/admin/content/courses", { title: tre(`Altkurs ${stempel}`) });
+    const plass = await request(app).put(`/api/admin/content/courses/${kurs.course.id}/items`).set(admin).send({ items: [{ type: "SECTION", sectionId: s.section.id }] });
+    expect(plass.status).toBe(204);
+    const ut = await request(app).get(`/api/admin/content/courses/${kurs.course.id}/export-package`).set(admin);
+    const fil = ut.body.envelope ?? ut.body;
+    fil.course.course.items[0].section.bodyMarkdown = tre("Slik ser testen ut.\n\n![Enhetstest](https://example.com/bilde.png)\n\n![Enhetstest](asset:finnes-ikke)");
+    const svar = await request(app).post("/api/admin/content/courses/import").set(admin).send({ payload: fil, mode: "createNew" });
+    expect(svar.status, JSON.stringify(svar.body).slice(0, 300)).toBe(201);
+    expect(svar.body.altWarnings).toEqual([{ title: expect.objectContaining({ nb: `Alt-seksjon ${stempel}` }), warnings: [{ code: "alt_is_title", alt: "Enhetstest" }] }]);
+  });
+});

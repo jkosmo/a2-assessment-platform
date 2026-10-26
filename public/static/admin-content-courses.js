@@ -22,7 +22,7 @@ import {
   resolveWorkspaceNavigationItems,
 } from "/static/participant-console-state.js";
 import { describeImportError } from "/static/import-error.js";
-import { describePackageCueWarnings, describeRubricWarnings } from "/static/mcq-cue-warnings.js";
+import { describeAltWarnings, describePackageCueWarnings, describeRubricWarnings } from "/static/mcq-cue-warnings.js";
 import { apiErrorCodeText, describeApiError } from "/static/api-error.js";
 import { flushQueuedToast, queueToast, showToast } from "/static/toast.js";
 import {
@@ -918,13 +918,16 @@ async function handleImportCoursePackageFile(event) {
 
 // #1119: «3 tester har spørsmål som … — Tittel: Spørsmål 2 … Tittel: …», eller "" når ingen har funn.
 // #1122: og moduler med kriterier som ikke beskriver skalaen, i samme detalj.
+// #1128: og seksjoner med bilder som bare har en tittel som alt-tekst.
 function importCueDetail(result) {
   const titleOf = (title) => (typeof title === "string" ? title : pickLocalizedText(title, currentLocale));
   const cue = describePackageCueWarnings(result?.cueWarnings, t, tf, titleOf);
   const rubric = describePackageCueWarnings(result?.rubricWarnings, t, tf, titleOf, describeRubricWarnings);
+  const alt = describePackageCueWarnings(result?.altWarnings, t, tf, titleOf, describeAltWarnings);
   return [
     cue.length > 0 ? `${tf("mcqCue.importedCourse", { count: cue.length })} ${cue.join(" ")}` : "",
     rubric.length > 0 ? `${tf("rubricCheck.importedCourse", { count: rubric.length })} ${rubric.join(" ")}` : "",
+    alt.length > 0 ? `${tf("altCheck.importedCourse", { count: alt.length })} ${alt.join(" ")}` : "",
   ].filter(Boolean).join(" ");
 }
 

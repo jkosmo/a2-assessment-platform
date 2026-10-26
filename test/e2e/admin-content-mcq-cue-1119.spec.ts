@@ -109,6 +109,18 @@ test.describe("import", () => {
     await expect(page.locator(".toast--warning .toast__detail")).toContainText("1 moduler har kriterier som ikke beskriver skalaen. Innlevering: Kriteriet «Funn»");
   });
 
+  test("kursimport med bilder uten beskrivelse (#1128): detaljen nevner seksjonen og bildet", async ({ page }) => {
+    await page.route("**/api/admin/content/courses/import", (route: Route) => route.fulfill({
+      status: 201,
+      contentType: "application/json",
+      body: JSON.stringify({ courseId: "course-1", moduleIds: [], heldBackByTranslationGate: false, cueWarnings: [], rubricWarnings: [], altWarnings: [{ title: { nb: "Enhetstesting" }, warnings: [{ code: "alt_is_title", alt: "Enhetstest" }] }] }),
+    }));
+    await page.goto("/admin-content/courses");
+    await page.setInputFiles("#importCoursePackageFile", { name: "kurs.json", mimeType: "application/json", buffer: Buffer.from(JSON.stringify(kurspakke)) });
+    await expect(page).toHaveURL(/\/admin-content\/courses\/course-1$/);
+    await expect(page.locator(".toast--warning .toast__detail")).toContainText("1 seksjoner har bilder som ikke er beskrevet. Enhetstesting: Bildet «Enhetstest»");
+  });
+
   test("kursimport uten funn: en vanlig kvittering, uten detalj", async ({ page }) => {
     await page.route("**/api/admin/content/courses/import", (route: Route) => route.fulfill({ status: 201, contentType: "application/json", body: JSON.stringify({ courseId: "course-1", moduleIds: [], heldBackByTranslationGate: false, cueWarnings: [] }) }));
     await page.goto("/admin-content/courses");

@@ -58,7 +58,13 @@ Name the exercises in the outline, per section, so the author approves them with
 
 ## Writing the text
 
-- **Write from the source.** Keep to what it supports; mark a gap `[Avklaring: …]`.
+- **Write from the source.** Keep to what it supports; mark a gap `[Avklaring: …]` — and resolve
+  every one with the author before production. The learner must not read the author's notes:
+  `produce-course.mjs` fails on `[Avklaring`, «før kurset publiseres», «godkjent læringsseksjon»
+  and the like.
+- **Refer to another section by its title**, not its number («se *Fra møte til referat*», not «se
+  seksjon 3»): the learner sees titles, and a number breaks when the order changes. Number figures
+  only if the numbers run 1, 2, 3 in the order the figures stand — or leave the numbers out.
 - **Write it out.** Slides and notes hint; a learner reading alone needs the sentence. Say in full
   what a bullet point only names, using the speaker notes and any summary.
 - **Keep the source's own shape.** What the source sets side by side stays side by side; what it
@@ -553,7 +559,9 @@ Språket i utkastet velger du på innstillingssiden, i feltet som er markert med
 ```
 
 - The **alt text** says what the picture shows and what is marked in it, for a reader who cannot
-  see it.
+  see it — a sentence, not a title: «Agentløkken: et mål går inn, LLM vurderer neste steg og
+  velger verktøy …», not «Agentløkken». `produce-course.mjs` fails on an alt text of fewer than six
+  words, in any language; the platform warns about the same when a section is saved or imported.
 - A **sentence before** the picture says what to look at.
 - The entry in `assets[]` points at the file: `{ "sourceId": "img-innstillinger", "file":
   "deck/images/slide-10-1.png" }`. Keep the file name the reader gave it; the slide list names

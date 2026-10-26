@@ -15,6 +15,8 @@
 //   copied answers no exercise is answered word for word by the text above it        (#1121)
 //   criteria       every assessment criterion describes its scale, not one line       (#1122)
 //   direct address every section talks to the learner — a NOTE when one reads as a report (#1133)
+//   alt text       every picture is described in 6+ words, not titled                 (#1128)
+//   leftovers      no working notes, numbered section references, figures out of order (#1129)
 //   languages      nb, nn and en-GB complete, real translations, same answer in each
 //   approved text  nothing the author approved has gone missing        (needs --state)
 //   slides         every slide got what the slide list says           (needs --slides)
@@ -38,6 +40,7 @@ import { checkMcqCues, collectMcqSets } from "./mcq-cue-check.mjs";
 import { checkExerciseCopies } from "./exercise-copy-check.mjs";
 import { checkRubricScales } from "./rubric-check.mjs";
 import { wordsOf } from "./text-overlap.mjs";
+import { ALT_MIN_WORDS, checkAltTexts, checkFigureNumbers, checkLeftovers } from "./section-text-check.mjs";
 import { SVG_MIME, checkAssets, readCourseState, resolvePackageAssets } from "./package-assets.mjs";
 import { checkSlideCoverage, countForms, readDeck } from "./slide-coverage.mjs";
 import { synthesizeStandaloneEnvelopes } from "./synthesize-envelopes.mjs";
@@ -558,6 +561,54 @@ function checkDirectAddress(pkg, primary) {
     : { name: "direct address", status: "note", summary: `${details.length} section(s) written as a report`, details };
 }
 
+// #1128: a picture's alt text describes it, in every language (section-text-check.mjs).
+function checkAltText(pkg) {
+  const details = [];
+  let pictures = 0;
+  for (const object of pkg.objects ?? []) {
+    if (object?.type !== "section") continue;
+    const body = object.payload?.bodyMarkdown;
+    const languages = body && typeof body === "object" ? Object.entries(body) : [["", body]];
+    for (const [language, markdown] of languages) {
+      pictures += (String(markdown ?? "").match(/!\[[^\]]*\]\(asset:/g) ?? []).length;
+      for (const finding of checkAltTexts(markdown)) {
+        details.push(`"${object.clientRef}"${language ? ` (${language})` : ""}: «${finding.alt}» is a title, not a description (${finding.words} words). Say what the picture shows and what it means for the learner, in ${ALT_MIN_WORDS} words or more — «Agentløkken: et mål går inn, LLM vurderer neste steg og velger verktøy …».`);
+      }
+    }
+  }
+  return { name: "alt text", status: details.length === 0 ? "ok" : "fail", summary: `${pictures} picture(s) in the text, each described`, details };
+}
+
+// #1129: working notes, sections referred to by number, and figures numbered out of order
+// (section-text-check.mjs). Figures are counted across the course, in its order.
+function checkLeftoversInText(pkg, course) {
+  const details = [];
+  const sections = (pkg.objects ?? []).filter((object) => object?.type === "section");
+  const order = (course?.payload?.items ?? []).map((item) => item?.ref);
+  sections.sort((a, b) => (order.indexOf(a.clientRef) + 1 || Infinity) - (order.indexOf(b.clientRef) + 1 || Infinity));
+  const byLanguage = new Map();
+  for (const object of sections) {
+    const body = object.payload?.bodyMarkdown;
+    const languages = body && typeof body === "object" ? Object.entries(body) : [["", body]];
+    for (const [language, markdown] of languages) {
+      for (const finding of checkLeftovers(markdown)) {
+        const where = `"${object.clientRef}"${language ? ` (${language})` : ""}`;
+        details.push(finding.kind === "note"
+          ? `${where}: a working note for the author — «${finding.text}». Resolve it with the author, or leave the point out.`
+          : `${where}: «${finding.text}» — refer to a section by its title; the learner sees titles, and a number breaks when the order changes.`);
+      }
+      if (!byLanguage.has(language)) byLanguage.set(language, []);
+      byLanguage.get(language).push(markdown);
+    }
+  }
+  for (const [language, markdowns] of byLanguage) {
+    for (const finding of checkFigureNumbers(markdowns)) {
+      details.push(`figures${language ? ` (${language})` : ""} are numbered ${finding.order.join(", ")} — number ${finding.expected} is ${finding.actual}. Number them in the order they stand, or drop the numbers.`);
+    }
+  }
+  return { name: "leftovers", status: details.length === 0 ? "ok" : "fail", summary: details.length === 0 ? "no working notes, numbered section references or figure numbers out of order" : `${details.length} leftover(s) from the authoring`, details };
+}
+
 // #1122: every assessment criterion describes its scale (rubric-check.mjs).
 function checkCriteria(pkg, primary) {
   const details = [];
@@ -856,6 +907,8 @@ export async function produceCourse({ packageFile, outFile, stateFile, slidesFil
   checks.push(checkCopiedAnswers(scoped.pkg, primary));
   checks.push(checkCriteria(scoped.pkg, primary));
   checks.push(checkDirectAddress(scoped.pkg, primary));
+  checks.push(checkAltText(scoped.pkg));
+  checks.push(checkLeftoversInText(scoped.pkg, scoped.course));
   checks.push(checkLanguages(scoped.pkg, primary));
 
   let master = null;

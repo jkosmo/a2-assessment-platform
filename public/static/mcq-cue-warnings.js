@@ -31,6 +31,21 @@ export function describeRubricWarnings(warnings, t, tf) {
     .filter(Boolean);
 }
 
+/**
+ * #1128: bilder der alt-teksten bare er en tittel (src/modules/adminContent/altTextWarnings.ts).
+ * Et varsel er `{ code, alt }`; teksten heter `altCheck.<code>`.
+ */
+export function describeAltWarnings(warnings, t, tf) {
+  if (!Array.isArray(warnings)) return [];
+  return warnings
+    .map((w) => {
+      const key = `altCheck.${w?.code}`;
+      if (t(key) === key) return "";
+      return tf(key, { alt: w.alt ?? "" });
+    })
+    .filter(Boolean);
+}
+
 /** Kursimport: én linje per test med funn, «Tittel: …». `describe` velger hvilken kontroll. */
 export function describePackageCueWarnings(sets, t, tf, titleOf, describe = describeCueWarnings) {
   if (!Array.isArray(sets)) return [];

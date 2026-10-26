@@ -68,6 +68,9 @@ describe("produce-course — eksempelkurset går gjennom alt (#1079)", () => {
       criteria: "ok",
       // #1133: seksjonene i eksempelet er korte nok til at de ikke måles.
       "direct address": "ok",
+      // #1128, #1129: bildene er beskrevet, og ingen rester fra forfatterarbeidet.
+      "alt text": "ok",
+      leftovers: "ok",
       languages: "ok",
       "approved text": "ok",
       slides: "ok",
@@ -398,6 +401,15 @@ describe("produce-course — hver kontroll stopper leveransen (#1079)", () => {
     }, "copied answers", `"sec-arbeidsgang" line`],
     // #1122: et kriterium med én linje for hele skalaen.
     ["et vurderingskriterium uten beskrevne trinn (#1122)", (p) => void (objekt(p, "mod-referat").payload.activeVersion.rubric = { criteria: { struktur: "0–4: Referatet har god struktur." }, scalingRule: { practical_weight: 100, max_total: 4 } }), "criteria", "«struktur» has one line for 0–4"],
+    // #1128: alt-tekst som bare er en tittel — også når det bare gjelder ett språk.
+    ["en alt-tekst som bare er en tittel, på nynorsk (#1128)", (p) => { const b = objekt(p, "sec-kilder").payload.bodyMarkdown; b.nn = b.nn.replace(/!\[[^\]]*\]\(asset:img-innstillinger\)/, "![Innstillingar](asset:img-innstillinger)"); }, "alt text", `"sec-kilder" (nn): «Innstillingar» is a title`],
+    // #1129: rester fra forfatterarbeidet.
+    ["et arbeidsnotat igjen i teksten (#1129)", (p) => void (objekt(p, "sec-kilder").payload.bodyMarkdown.nb += "\n\n[Avklaring: sjekk tallene før kurset publiseres.]\n"), "leftovers", "a working note for the author"],
+    ["en seksjon omtalt med nummer (#1129)", (p) => void (objekt(p, "sec-kilder").payload.bodyMarkdown.nb += "\n\nDette behandles i seksjon 3.\n"), "leftovers", "refer to a section by its title"],
+    ["figurer nummerert i feil rekkefølge (#1129)", (p) => {
+      objekt(p, "sec-arbeidsgang").payload.bodyMarkdown.nb += "\n\n*Figur 2. Arbeidsgangen.*\n";
+      objekt(p, "sec-kilder").payload.bodyMarkdown.nb += "\n\n*Figur 1. Innstillingene.*\n";
+    }, "leftovers", "figures (nb) are numbered 2, 1"],
     ["prompten forfatteren godkjente er kortet bort", (p) => { const b = objekt(p, "sec-kilder").payload.bodyMarkdown; b.nb = b.nb.replace("Bruk bare det som står i notatene under. Skriv «uklart» der notatene ikke sier noe.", "Bruk notatene."); }, "approved text", "templates — «Bruk bare det som står i notatene under."],
     ["et kort lysarklista lovet, er borte", (p) => { const b = objekt(p, "sec-kilder").payload.bodyMarkdown; for (const s of ["nb", "nn", "en-GB"]) b[s] = b[s].replaceAll("### ", "**"); }, "slides", "slide 3: was to become cards"],
   ])("%s", async (_navn, endre, kontroll, ventet) => {

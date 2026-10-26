@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { PLATFORM_CUE_KINDS, mcqCueWarnings } from "../../src/modules/adminContent/mcqCueWarnings.js";
 // @ts-expect-error — klientmodul uten typer
-import { describeCueWarnings, describePackageCueWarnings, describeRubricWarnings } from "../../public/static/mcq-cue-warnings.js";
+import { describeAltWarnings, describeCueWarnings, describePackageCueWarnings, describeRubricWarnings } from "../../public/static/mcq-cue-warnings.js";
 // @ts-expect-error — klientmodul uten typer
 import { translations } from "../../public/i18n/admin-content-translations.js";
 // @ts-expect-error — klientmodul uten typer
@@ -16,7 +16,8 @@ describe("#1119 varseltekstene", () => {
   });
 
   it.each(["nb", "nn", "en-GB"])("%s har tekstene for kriteriekontrollen (#1122)", (locale) => {
-    for (const key of ["rubricCheck.scale_not_described", "rubricCheck.heading", "rubricCheck.importedCourse"]) expect(translations[locale][key], key).toBeTruthy();
+    for (const key of ["rubricCheck.scale_not_described", "rubricCheck.heading", "rubricCheck.importedCourse", "altCheck.alt_is_title", "altCheck.heading", "altCheck.importedCourse"]) expect(translations[locale][key], key).toBeTruthy();
+    expect(translations.nn["altCheck.alt_is_title"]).not.toBe(translations.nb["altCheck.alt_is_title"]);
     expect(translations.nn["rubricCheck.scale_not_described"]).not.toBe(translations.nb["rubricCheck.scale_not_described"]);
   });
 
@@ -48,6 +49,8 @@ describe("#1119 varseltekstene", () => {
     const lines = describePackageCueWarnings([{ title: { nb: "Innlevering" }, warnings: [{ code: "scale_not_described", criterion: "Funn" }] }], t, tf, (title: { nb: string }) => title.nb, describeRubricWarnings);
     expect(lines[0]).toMatch(/^Innlevering: Kriteriet «Funn»/);
     expect(describeRubricWarnings([{ code: "ukjent", criterion: "Funn" }], t, tf)).toEqual([]);
+    // #1128
+    expect(describeAltWarnings([{ code: "alt_is_title", alt: "Enhetstest" }, { code: "ukjent", alt: "x" }], t, tf)).toEqual(["Bildet «Enhetstest» har en tittel som beskrivelse. Si hva det viser, i en setning — en skjermleser leser ikke noe annet."]);
   });
 
   it("kursimport: én linje per test, med tittelen", () => {

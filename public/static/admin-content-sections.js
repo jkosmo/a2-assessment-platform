@@ -14,6 +14,7 @@ import { renderWorkspaceNavigationWithProfile } from "./workspace-nav.js";
 import { describeImportError } from "/static/import-error.js";
 import { apiErrorCode, describeApiError } from "/static/api-error.js";
 import { showToast } from "/static/toast.js";
+import { describeAltWarnings } from "/static/mcq-cue-warnings.js";
 import { runWithWorkDialog } from "/static/work-dialog.js";
 import { lifecycleStatusBadge, lifecycleBadge, lifecycleOf } from "/static/content-status-badge.js";
 import { renderOwnerPanel } from "/static/owner-panel.js";
@@ -971,6 +972,8 @@ async function persistSection({ silent } = {}) {
   }
   try {
     let heldBack = null;
+    // #1128: bilder med en tittel som alt-tekst — lagret likevel, men kvitteringen sier det.
+    let altWarnings = [];
     if (!editing.id) {
       const data = await apiFetch("/api/admin/content/sections", getHeaders, {
         method: "POST",
@@ -981,6 +984,7 @@ async function persistSection({ silent } = {}) {
       editing.hasUnpublishedChanges = Boolean(data.section.hasUnpublishedChanges);
       editing.archivedAt = data.section.archivedAt ?? null;
       heldBack = data.translationGate?.heldBack ? data.translationGate.issues : null;
+      altWarnings = data.altWarnings ?? [];
       history.replaceState({}, "", `/admin-content/sections?id=${encodeURIComponent(editing.id)}`);
       // Første lagring lager seksjonen: hodet får eierpanel, Eksporter osv. — tegn sida på nytt.
       getFormPage().render();
@@ -997,6 +1001,7 @@ async function persistSection({ silent } = {}) {
       editing.activeVersionId = contentRes.section?.activeVersionId ?? null;
       editing.hasUnpublishedChanges = Boolean(contentRes.section?.hasUnpublishedChanges);
       heldBack = contentRes.translationGate?.heldBack ? contentRes.translationGate.issues : null;
+      altWarnings = contentRes.altWarnings ?? [];
     }
     // #705: hold status-merkelappen + Publiser/Avpubliser-knappen i editoren i synk etter lagring.
     refreshSectionLifecycleUI();
@@ -1009,7 +1014,10 @@ async function persistSection({ silent } = {}) {
       return true;
     }
     if (!silent) {
-      showToast(L("saved"));
+      const alt = describeAltWarnings(altWarnings, t, tf);
+      // Overskriften i selve meldingen: toast.js viser ikke samme tekst to ganger.
+      if (alt.length > 0) showToast(`${L("saved")} ${t("altCheck.heading")}`, "warning", alt.join(" "));
+      else showToast(L("saved"));
       if (status) status.textContent = L("saved");
     }
     return true;

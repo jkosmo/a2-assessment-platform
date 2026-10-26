@@ -43,6 +43,7 @@ import { generateLimiter } from "../middleware/rateLimiting.js";
 import { idempotency } from "../middleware/idempotency.js";
 import { respondWithAppError } from "./helpers/respondWithAppError.js";
 import { localesPresent } from "../i18n/content.js";
+import { altTextWarnings } from "../modules/adminContent/altTextWarnings.js";
 
 const adminSectionsRouter = Router();
 
@@ -192,6 +193,7 @@ adminSectionsRouter.post("/", idempotency("sections.create"), async (request, re
         links: sectionAdminLinks(section.id),
         assetMap,
         ...translationGatePayload(section),
+        altWarnings: altTextWarnings(parsed.data.bodyMarkdown),
         ...(parsed.data.clientRef !== undefined ? { clientRef: parsed.data.clientRef } : {}),
       });
       return;
@@ -208,6 +210,8 @@ adminSectionsRouter.post("/", idempotency("sections.create"), async (request, re
       section: toDetail(section),
       links: sectionAdminLinks(section.id),
       ...translationGatePayload(section),
+      // #1128: bilder med en tittel som alt-tekst — varsel, ikke stopp.
+      altWarnings: altTextWarnings(parsed.data.bodyMarkdown),
       ...(parsed.data.clientRef !== undefined ? { clientRef: parsed.data.clientRef } : {}),
     });
   } catch (error) {
@@ -501,7 +505,7 @@ adminSectionsRouter.put("/:sectionId/content", requireContentOwnership("SECTION"
     );
     // #916: the save always succeeds — but when the gate held it back, the new version was stored
     // WITHOUT being activated, and the client has to say so instead of showing a plain "Lagret".
-    response.json({ section: toDetail(section), ...translationGatePayload(section) });
+    response.json({ section: toDetail(section), ...translationGatePayload(section), altWarnings: altTextWarnings(parsed.data.bodyMarkdown) });
   } catch (error) {
     next(error);
   }

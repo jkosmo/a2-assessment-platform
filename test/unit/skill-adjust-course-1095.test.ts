@@ -39,9 +39,9 @@ function eksport() {
             section: {
               title: tre("Innledning", "Innleiing", "Introduction"),
               bodyMarkdown: tre(
-                "Et møte trenger et mål.\n\n![Agenda](asset:bilde-agenda)\n\nSkriv målet øverst.",
-                "Eit møte treng eit mål.\n\n![Agenda](asset:bilde-agenda)\n\nSkriv målet øvst.",
-                "A meeting needs a goal.\n\n![Agenda](asset:bilde-agenda)\n\nWrite the goal at the top.",
+                "Et møte trenger et mål.\n\n![Agendaen med målet for møtet skrevet øverst](asset:bilde-agenda)\n\nSkriv målet øverst.",
+                "Eit møte treng eit mål.\n\n![Agendaen med målet for møtet skrive øvst](asset:bilde-agenda)\n\nSkriv målet øvst.",
+                "A meeting needs a goal.\n\n![The agenda with the goal of the meeting at the top](asset:bilde-agenda)\n\nWrite the goal at the top.",
               ),
               audit: { publishedAt: "2026-10-01T10:00:00.000Z", publishedBy: null, publishedByEmail: null, sourceVersionNo: 3 },
               assets: [{ sourceId: "bilde-agenda", filename: "Skjermbilde_2026-10-01.PNG", mimeType: "image/png", sizeBytes: Buffer.from(PNG, "base64").length, contentBase64: PNG }],
