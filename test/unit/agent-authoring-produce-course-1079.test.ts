@@ -71,6 +71,9 @@ describe("produce-course — eksempelkurset går gjennom alt (#1079)", () => {
       // #1128, #1129: bildene er beskrevet, og ingen rester fra forfatterarbeidet.
       "alt text": "ok",
       leftovers: "ok",
+      // #1126: én oppsummering per seksjon; høyst én boks — utkastet over «finn feilene» er øvelsen, ikke en boks.
+      summaries: "ok",
+      focus: "ok",
       languages: "ok",
       "approved text": "ok",
       slides: "ok",
@@ -317,6 +320,93 @@ describe("produce-course — snakk til deltakeren (#1133)", () => {
   });
 });
 
+// #1126: seksjoner som lærer bort, ikke kataloger. Flere oppsummeringer i én seksjon er alltid feil og
+// rettes ved å beholde én — en stopp. Bokser, lange lister og en seksjon som beskriver seg selv kan
+// forfatteren ha grunn til å beholde — en merknad.
+describe("produce-course — seksjoner som lærer bort (#1126)", () => {
+  const leggTil = (p: Pakke, ref: string, tekst: { nb: string; nn: string; "en-GB": string }) => {
+    const b = objekt(p, ref).payload.bodyMarkdown;
+    for (const s of ["nb", "nn", "en-GB"] as const) b[s] += `\n\n${tekst[s]}\n`;
+  };
+
+  it.each([
+    ["nynorsk", "nn", "## Føremål\n\nDu lærer å velje kjelde.\n\n## Samandrag\n\nBruk notata."],
+    ["engelsk", "en-GB", "## Purpose\n\nYou learn to choose a source.\n\n## Key points\n\n- The notes are the source."],
+    ["bokmål, med ikon, nummer og kolon", "nb", "## 1. **Nøkkelpoeng:**\n\n- Notatene er kilden.\n\n### ![](icon:list-collapse) Det viktigste fra denne seksjonen\n\nBruk notatene."],
+  ])("to oppsummeringer på %s stopper også", async (_navn, språk, tekst) => {
+    const r = await kopi((p) => void (objekt(p, "sec-kilder").payload.bodyMarkdown[språk] += `\n\n${tekst}\n`)).kjør();
+    expect(status(r).summaries, formatProduction(r)).toBe("fail");
+    expect(funn(r, "summaries")).toMatch(new RegExp(`^"sec-kilder" \\(${språk}\\): 2 summaries`));
+  });
+
+  it("samme feil på alle tre språk er én linje som nevner språkene", async () => {
+    const r = await kopi((p) => leggTil(p, "sec-kilder", { nb: "## Formål\n\nA.\n\n## Oppsummering\n\nB.", nn: "## Føremål\n\nA.\n\n## Oppsummering\n\nB.", "en-GB": "## Purpose\n\nA.\n\n## Summary\n\nB." })).kjør();
+    expect(r.checks.find((c) => c.name === "summaries")!.details).toEqual([expect.stringMatching(/^"sec-kilder" \(nb, nn, en-GB\): 2 summaries — «Formål», «Oppsummering»/)]);
+  });
+
+  it("én oppsummering, og en overskrift som bare begynner med «Formål», er greit", async () => {
+    const r = await kopi((p) => leggTil(p, "sec-kilder", { nb: "## Formål og målgruppe\n\nStandarden er for små virksomheter.\n\n## Sammendrag og utforsking av et dokument\n\nA.\n\n## Oppsummering\n\nB.", nn: "## Formål og målgruppe\n\nA.\n\n## Oppsummering\n\nB.", "en-GB": "## Purpose and audience\n\nA.\n\n## Summary\n\nB." })).kjør();
+    expect(status(r).summaries, funn(r, "summaries")).toBe("ok");
+  });
+
+  it("to bokser i én seksjon → merknad med etikettene; fila leveres", async () => {
+    const r = await kopi((p) => leggTil(p, "sec-kilder", { nb: "> **Husk:** Les notatene.\n\nTekst.\n\n> **Tips:** Start tidlig.", nn: "> **Hugs:** Les notata.\n\nTekst.\n\n> **Tips:** Start tidleg.", "en-GB": "> **Remember:** Read the notes.\n\nText.\n\n> **Tip:** Start early." })).kjør();
+    expect(status(r).focus, formatProduction(r)).toBe("note");
+    expect(funn(r, "focus")).toContain(`"sec-kilder": 2 highlighted boxes («Husk», «Tips») — keep at most 1`);
+    expect(r.ok).toBe(true);
+    expect(formatProduction(r)).toContain("Noted: focus.");
+  });
+
+  it("én boks og utkastet i en «finn feilene» er ikke to bokser — men et sitat uten oppgave under er det", async () => {
+    // sec-arbeidsgang har allerede «Husk» og utkastet over «finn feilene» (eksempelet over er grønt).
+    const r = await kopi((p) => {
+      const b = objekt(p, "sec-arbeidsgang").payload.bodyMarkdown;
+      for (const s of ["nb", "nn", "en-GB"]) b[s] = b[s].replace(/\n:::skriv [^\n]*\n[\s\S]*?\n:::\n?/, "\nMer tekst.\n");
+    }).kjør();
+    expect(status(r).focus, formatProduction(r)).toBe("note");
+    expect(funn(r, "focus")).toContain(`"sec-arbeidsgang": 2 highlighted boxes («Husk», «Utkast fra KI»)`);
+  });
+
+  it("en liste på ni punkter → merknad; åtte, eller ni par i en ramme, eller en liste i kode, er greit", async () => {
+    const punkter = (n: number, x: string) => Array.from({ length: n }, (_, i) => `- ${x} ${i + 1}`).join("\n");
+    const ni = await kopi((p) => leggTil(p, "sec-kilder", { nb: punkter(9, "punkt"), nn: punkter(9, "punkt"), "en-GB": punkter(9, "point") })).kjør();
+    expect(status(ni).focus, formatProduction(ni)).toBe("note");
+    expect(funn(ni, "focus")).toContain(`"sec-kilder": a list of 9 points («punkt 1» …)`);
+    expect(ni.ok).toBe(true);
+
+    const par = Array.from({ length: 9 }, (_, i) => `- Begrep ${i + 1} = Forklaring ${i + 1}`).join("\n");
+    const greit = await kopi((p) => leggTil(p, "sec-kilder", {
+      nb: `${punkter(8, "punkt")}\n\nTekst.\n\n1. steg\n2. steg\n\n${punkter(7, "punkt")}\n\n:::par Koble\n${par}\n:::\n\n\`\`\`\n${punkter(12, "kode")}\n\`\`\``,
+      nn: `${punkter(8, "punkt")}\n\n:::par Kople\n${par}\n:::`,
+      "en-GB": `${punkter(8, "point")}\n\n:::par Match\n${par}\n:::`,
+    })).kjør();
+    expect(status(greit).focus, funn(greit, "focus")).toBe("ok");
+  });
+
+  it("en liste med blanke linjer og innrykk mellom punktene er fortsatt én liste", async () => {
+    const løs = Array.from({ length: 9 }, (_, i) => `${i + 1}. Steg ${i + 1}\n   med en forklaring`).join("\n\n");
+    const r = await kopi((p) => void (objekt(p, "sec-kilder").payload.bodyMarkdown.nb += `\n\n${løs}\n`)).kjør();
+    expect(funn(r, "focus")).toContain("a list of 9 points («Steg 1» …)");
+  });
+
+  it.each([
+    ["bokmål", "nb", "Denne seksjonen viser hvordan du velger kilde.", "«Denne seksjonen viser hvordan du velger kilde"],
+    ["bokmål, «svarer på»", "nb", "Denne seksjonen svarer på spørsmål som ofte kommer opp.", "«Denne seksjonen svarer på spørsmål som ofte kommer opp"],
+    ["nynorsk", "nn", "Denne seksjonen forklarar korleis du vel kjelde.", "«Denne seksjonen forklarar korleis du vel kjelde"],
+    ["engelsk", "en-GB", "This section explains how to choose a source.", "«This section explains how to choose a source"],
+  ])("en seksjon som beskriver seg selv på %s → merknad", async (_navn, språk, setning, ventet) => {
+    const r = await kopi((p) => void (objekt(p, "sec-kilder").payload.bodyMarkdown[språk] = `${setning}\n\n${objekt(p, "sec-kilder").payload.bodyMarkdown[språk]}`)).kjør();
+    expect(status(r).focus, formatProduction(r)).toBe("note");
+    expect(funn(r, "focus")).toContain(`"sec-kilder" (${språk}): ${ventet}`);
+    expect(r.ok).toBe(true);
+  });
+
+  it("«I denne seksjonen» og «Etter denne seksjonen skal du» er ikke seksjonen som snakker", async () => {
+    const r = await kopi((p) => leggTil(p, "sec-kilder", { nb: "I denne seksjonen ser du tre kilder. Etter denne seksjonen skal du kunne velge.", nn: "I denne seksjonen ser du tre kjelder.", "en-GB": "In this section you see three sources." })).kjør();
+    expect(status(r).focus, funn(r, "focus")).toBe("ok");
+  });
+});
+
 describe("produce-course — hver kontroll stopper leveransen (#1079)", () => {
   it.each<[string, (pkg: Pakke, mappe: string) => void, string, string]>([
     ["en seksjon som ikke er plassert i kurset", (p) => void objekt(p, "kurs-motereferat").payload.items.splice(1, 1), "package", `"sec-kilder" is in the package and not in the course`],
@@ -410,6 +500,8 @@ describe("produce-course — hver kontroll stopper leveransen (#1079)", () => {
       objekt(p, "sec-arbeidsgang").payload.bodyMarkdown.nb += "\n\n*Figur 2. Arbeidsgangen.*\n";
       objekt(p, "sec-kilder").payload.bodyMarkdown.nb += "\n\n*Figur 1. Innstillingene.*\n";
     }, "leftovers", "figures (nb) are numbered 2, 1"],
+    // #1126: «Formål», «Nøkkelpoeng» og «Kort oppsummering» i samme seksjon (16 seksjoner på stage).
+    ["tre oppsummeringer i én seksjon (#1126)", (p) => void (objekt(p, "sec-kilder").payload.bodyMarkdown.nb = `## Formål\n\nDu lærer å velge kilde.\n\n${objekt(p, "sec-kilder").payload.bodyMarkdown.nb}\n\n## Nøkkelpoeng\n\n- Notatene er kilden.\n\n## Kort oppsummering\n\nBruk notatene.\n`), "summaries", `"sec-kilder" (nb): 3 summaries — «Formål», «Nøkkelpoeng», «Kort oppsummering». Keep one`],
     ["prompten forfatteren godkjente er kortet bort", (p) => { const b = objekt(p, "sec-kilder").payload.bodyMarkdown; b.nb = b.nb.replace("Bruk bare det som står i notatene under. Skriv «uklart» der notatene ikke sier noe.", "Bruk notatene."); }, "approved text", "templates — «Bruk bare det som står i notatene under."],
     ["et kort lysarklista lovet, er borte", (p) => { const b = objekt(p, "sec-kilder").payload.bodyMarkdown; for (const s of ["nb", "nn", "en-GB"]) b[s] = b[s].replaceAll("### ", "**"); }, "slides", "slide 3: was to become cards"],
   ])("%s", async (_navn, endre, kontroll, ventet) => {

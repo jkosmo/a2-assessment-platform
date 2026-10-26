@@ -57,6 +57,11 @@ gate 3 ([course-design.md](course-design.md#level-and-scope)).
   kilden.»
 - **At least half the questions ask for a judgement in a situation** ("En entreprenør skal grave
   nær en strømførende kabel — hva kommer først?"), not for a definition.
+- **Never a product detail.** A price, a licence plan, a file or usage limit, a menu path or a date
+  changes with the product, and the right answer goes stale: two versions of one course already
+  give different right answers to «Hva er riktig om bruksgrensene for …?». Ask what the learner does
+  with the tool — when to use it, what to check afterwards. The details stand in the section's dated
+  box ([section-content.md](section-content.md#teach-not-catalogue)).
 
 **The right answer must not give itself away.** A learner who picks "the longest option" must not
 pass.

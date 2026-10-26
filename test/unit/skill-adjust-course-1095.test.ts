@@ -305,6 +305,33 @@ describe("#1095 fase B — skillets justeringsflyt", () => {
     expect(sjekk(sagt, "changes").summary).toContain("3 unchanged");
   });
 
+  // #1126: en uendret seksjon med «Formål», «Nøkkelpoeng» og «Kort oppsummering» er kurset slik det står —
+  // justeringen stopper ikke på den. Først når forfatteren ber om å endre seksjonen, gjelder regelen.
+  it("tre oppsummeringer i en uendret seksjon stopper ikke en justering; i en endret seksjon gjør de det (#1126)", async () => {
+    const work = path.join(dir, "oppsummeringer");
+    const tre3 = eksport();
+    const seksjon = tre3.course.course.items[0]!.section as unknown as { bodyMarkdown: { nb: string; nn: string; "en-GB": string } };
+    seksjon.bodyMarkdown = tre(
+      `## Formål\n\nA.\n\n${seksjon.bodyMarkdown.nb}\n\n## Nøkkelpoeng\n\n- B.\n\n## Kort oppsummering\n\nC.`,
+      `## Føremål\n\nA.\n\n${seksjon.bodyMarkdown.nn}\n\n## Nøkkelpoeng\n\n- B.\n\n## Kort oppsummering\n\nC.`,
+      `## Purpose\n\nA.\n\n${seksjon.bodyMarkdown["en-GB"]}\n\n## Key points\n\n- B.\n\n## Brief summary\n\nC.`,
+    );
+    expect(convertExport(tre3, { outDir: work }).ok).toBe(true);
+    const uendret = await produser(work, "uendret");
+    expect(uendret.ok, uendret.checks.filter((c) => c.status === "fail").map((c) => `${c.name}: ${c.details.join(" | ")}`).join("; ")).toBe(true);
+    expect(sjekk(uendret, "summaries").status).toBe("ok");
+
+    const nbFil = path.join(work, "sections/sec-01-innledning.nb.md");
+    writeFileSync(nbFil, readFileSync(nbFil, "utf8").replace("Skriv målet øverst.", "Skriv målet øverst, med én setning."), "utf8");
+    const changesFil = path.join(work, "changes.json");
+    const changes = JSON.parse(readFileSync(changesFil, "utf8"));
+    changes.elements["sec-01-innledning"] = "changed";
+    writeFileSync(changesFil, JSON.stringify(changes), "utf8");
+    const endret = await produser(work, "endret");
+    expect(sjekk(endret, "summaries").status).toBe("fail");
+    expect(sjekk(endret, "summaries").details.join(" ")).toContain('"sec-01-innledning" (nb, nn, en-GB): 3 summaries');
+  });
+
   it("nytt element uten origin listes som «new»; et fjernet element listes som «removed»; et glemt element stopper", async () => {
     const work = path.join(dir, "nytt");
     expect(convertExport(eksport(), { outDir: work }).ok).toBe(true);

@@ -1,6 +1,7 @@
 # Section content — text, boxes, prompts, cards, pictures
 
-Contents: [Choosing the practice](#choosing-the-practice) · [Writing the text](#writing-the-text) · [Headings and lists](#headings-and-lists) ·
+Contents: [Choosing the practice](#choosing-the-practice) · [Writing the text](#writing-the-text) ·
+[Teach, not catalogue](#teach-not-catalogue) · [Headings and lists](#headings-and-lists) ·
 [Table](#table) · [Callout](#callout) · [Prompt](#prompt) · [Cards](#cards) · [Think first](#think-first) ·
 [Check yourself](#check-yourself) · [A case](#a-case) · [Step by step](#step-by-step) ·
 [Write it yourself](#write-it-yourself) · [Find the errors](#find-the-errors) · [Complete the example](#complete-the-example) · [Flashcards](#flashcards) · [Match the pairs](#match-the-pairs) ·
@@ -81,6 +82,96 @@ Name the exercises in the outline, per section, so the author approves them with
 - **One file per section and language:** `work/sections/<clientRef>.nb.md`. The package points at
   the files ([package-schema.md](package-schema.md#a-section)); do not type markdown into JSON.
 
+## Teach, not catalogue
+
+A section teaches what its objective needs. What only repeats, lists or stresses everything makes
+the learner skip — and material the objective does not need makes the learning worse, also when it
+is interesting. Cut it, or move it out; do not keep it «for completeness».
+
+- **One summary, at the end.** Not «Formål» first, «Nøkkelpoeng» in the middle and «Kort
+  oppsummering» last — that is the same thing three times. Best as a question with the answer
+  hidden ([think first](#think-first)): the learner recalls before reading. `produce-course.mjs`
+  fails on a section with more than one summary heading.
+- **Open with the point, not with what the section is for.** «Denne seksjonen viser hvordan …» is
+  a note to yourself; the learner wants the situation, the rule or the problem. `produce-course.mjs`
+  notes a section that describes itself.
+- **At most one box per section**, for something with a concrete consequence — what goes wrong if
+  the learner misses it. «Husk», «Tips», «Neste steg» and «Sertifisering» in one section mean
+  nothing stands out; the rest is ordinary text. Say «du har ansvaret» once in a course at most, and
+  say instead what the learner checks. `produce-course.mjs` notes a section with more than one box.
+  From a presentation, a strip is still kept as the slide list says; propose at gate 3 which strips
+  become ordinary text.
+- **No catalogues in the reading.** Thirty feature cards, seventeen template prompts or a prompt
+  pack of a thousand lines are a reference, not teaching. Keep the few the objective needs, and turn
+  the rest into a choice — «Hvilken funksjon ville du brukt her, og hva sjekker du etterpå?», as a
+  [check yourself](#check-yourself) or a [case](#a-case). The full list goes in an appendix: a
+  section of its own at the end of the course, titled «Vedlegg: …», that no module tests. Plan it in
+  the outline at gate 3.
+- **A list of nine points or more is a catalogue too.** Give one example worked through, or a
+  decision («hvilke tre av disse gjelder i prosjektet ditt?»), or a [table](#table) when the points
+  share properties. A table of contents or the course's objectives may stay a list.
+  `produce-course.mjs` notes a list of nine points or more.
+- **Product details are dated, and never tested.** Prices, licence plans, file and usage limits,
+  menu paths and dates change with the product: two versions of one course on the platform already
+  give different right answers to the same question about a tool's usage limits. Put them in one
+  box per tool, labelled with the month — `> **Gjelder per oktober 2026:** …` (nn «Gjeld per», en-GB
+  «Current as of») — which does not count as the section's box. The module tests what the learner
+  does with the tool, never the number or the menu path ([modules.md](modules.md#multiple-choice-questions)).
+
+**Before** — three summaries, three boxes, a catalogue:
+
+```markdown
+## Formål
+
+Denne seksjonen viser hvordan Copilot hjelper deg i Excel.
+
+:::kort
+### Lag formler
+…
+### Finn mønstre
+…
+(ti kort til, ett per funksjon)
+:::
+
+> **Hovedpoenget:** Beskriv hva du vil gjøre.
+
+> **Husk:** Copilot kan ta feil.
+
+> **Tips:** Prøv flere formuleringer.
+
+## Nøkkelpoeng
+- Copilot lager formler, finner mønstre og lager diagrammer.
+
+## Kort oppsummering
+Copilot hjelper deg i Excel.
+```
+
+**After** — a situation, one box with a consequence, a choice instead of the catalogue, the product
+detail dated, one summary as a question:
+
+```markdown
+Du har salgstallene per måned i en arbeidsbok og vil vite hvilke måneder som skiller seg ut.
+Beskriv hva du vil vite, ikke hvilken formel du trenger: «Hvilke måneder ligger mer enn 20 % over
+snittet?»
+
+> **Viktig:** Copilot endrer arbeidsboka direkte, og alle med tilgang ser endringen med en gang.
+> Jobb på en kopi av en arbeidsbok andre bruker.
+
+:::sjekk Du vil vise utviklingen over året for ledergruppen. Hva ber du Copilot om?
+- [ ] En formel som summerer kolonnen
+- [x] Et linjediagram over månedene, med en setning om hva det viser
+- [ ] En pivottabell over alle radene
+
+Ledergruppen trenger utviklingen, ikke summen. Sjekk etterpå at diagrammet bruker alle månedene.
+:::
+
+> **Gjelder per oktober 2026:** Endringene Copilot gjør, lagres automatisk og kan rulles tilbake.
+
+:::tenk Hva sjekker du før du deler en arbeidsbok Copilot har endret?
+At tallene stemmer med kilden, og at ingen celler er endret uten at du ba om det.
+:::
+```
+
 ## Headings and lists
 
 - The section's name is its `title`. Do not repeat it as a heading in the body.
@@ -126,6 +217,8 @@ its label in bold:
   ```
 - Only what the source sets apart, or what the author asks to have stressed. Ordinary text in a
   box stresses nothing.
+- **At most one per section**, for something with a concrete consequence
+  ([Teach, not catalogue](#teach-not-catalogue)).
 
 ## Prompt
 

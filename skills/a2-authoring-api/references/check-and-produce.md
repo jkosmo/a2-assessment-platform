@@ -85,6 +85,7 @@ DELIVER work/kurs-motereferat.json  —  the author imports it at Innholdsforval
 | **figures** | a label does not fit, or an animated figure is not the template — in the figure, a layout or a language variant | [figure-design.md](figure-design.md#measure-and-look) |
 | **learner text** | a sentence points at the source ("som vist på lysark 4"); a frame (`:::kort`, `:::tenk`, `:::sjekk`, `:::steg`, `:::skriv`, `:::repetisjon`, `:::par`) is not closed, has text right above it, or is opened inside another; a `:::sjekk` question without two options or exactly one `- [x]`; a `:::steg` or `:::repetisjon` with fewer than two headings, a flashcard without a back, a `:::skriv` without an example answer; a `:::par` with a line that is not a pair, fewer than three pairs, or a repeated term or explanation | [section-content.md](section-content.md#the-source-stays-behind-the-text), frames: [section-content.md](section-content.md#think-first) |
 | **questions** | an option gives the answer away; a module has fewer questions than the sections it follows (and fewer than three) | [modules.md](modules.md#multiple-choice-questions) |
+| **summaries** | a section has more than one summary heading («Formål», «Nøkkelpoeng», «Kort oppsummering») — keep one | [section-content.md](section-content.md#teach-not-catalogue) |
 | **languages** | a language is missing, a text was copied instead of translated, the right answer differs between languages, a step, card, checklist point, pair or feedback line was lost, a formula or address was lost, a `[LABEL]` is translated in some places and left in others | [localization.md](localization.md) |
 | **approved text** | something the author approved is gone | [content-preservation.md](content-preservation.md) |
 | **slides** | a slide did not get what the slide list says; a picture has no kind, a prompt screenshot was kept as a picture, a click screenshot was left out without a reason; a slide with text became only a picture | [from-presentation.md](../workflows/from-presentation.md) |
@@ -93,6 +94,15 @@ DELIVER work/kurs-motereferat.json  —  the author imports it at Innholdsforval
 
 A line that starts with `--` was **not run**. Without `--state`, nobody has checked that the
 approved text is all there: say so in your report, in those words.
+
+A line that starts with `NOTE` does not stop the delivery. Tell the author what it found, and change
+it if they agree:
+
+| Check | A `NOTE` means | Read |
+|---|---|---|
+| **find errors** | the course has no «finn feilene» | [section-content.md](section-content.md#find-the-errors) |
+| **direct address** | a long section hardly says «du» — it reads as a report | [section-content.md](section-content.md#writing-the-text) |
+| **focus** | a section has more than one box, a list of nine points or more, or describes itself («Denne seksjonen viser …») | [section-content.md](section-content.md#teach-not-catalogue) |
 
 ## Delivering
 

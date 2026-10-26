@@ -17,6 +17,8 @@
 //   direct address every section talks to the learner — a NOTE when one reads as a report (#1133)
 //   alt text       every picture is described in 6+ words, not titled                 (#1128)
 //   leftovers      no working notes, numbered section references, figures out of order (#1129)
+//   summaries      one summary per section, not «Formål» + «Nøkkelpoeng» + «Kort oppsummering» (#1126)
+//   focus          boxes, long lists, a section describing itself — a NOTE, never a stop  (#1126)
 //   languages      nb, nn and en-GB complete, real translations, same answer in each
 //   approved text  nothing the author approved has gone missing        (needs --state)
 //   slides         every slide got what the slide list says           (needs --slides)
@@ -41,6 +43,7 @@ import { checkExerciseCopies } from "./exercise-copy-check.mjs";
 import { checkRubricScales } from "./rubric-check.mjs";
 import { wordsOf } from "./text-overlap.mjs";
 import { ALT_MIN_WORDS, checkAltTexts, checkFigureNumbers, checkLeftovers } from "./section-text-check.mjs";
+import { CALLOUT_MAX, callouts, longLists, selfDescription, summaryHeadings } from "./section-shape-check.mjs";
 import { SVG_MIME, checkAssets, readCourseState, resolvePackageAssets } from "./package-assets.mjs";
 import { checkSlideCoverage, countForms, readDeck } from "./slide-coverage.mjs";
 import { synthesizeStandaloneEnvelopes } from "./synthesize-envelopes.mjs";
@@ -609,6 +612,65 @@ function checkLeftoversInText(pkg, course) {
   return { name: "leftovers", status: details.length === 0 ? "ok" : "fail", summary: details.length === 0 ? "no working notes, numbered section references or figure numbers out of order" : `${details.length} leftover(s) from the authoring`, details };
 }
 
+/** A section's text per language: [[language, markdown]], or [["", markdown]] for a plain string. */
+function sectionTexts(object) {
+  const body = object.payload?.bodyMarkdown;
+  return body && typeof body === "object" ? Object.entries(body).map(([language, text]) => [language, String(text ?? "")]) : [["", String(body ?? "")]];
+}
+
+// #1126: one summary per section (section-shape-check.mjs). «Formål», «Nøkkelpoeng» and «Kort
+// oppsummering» in one section say the same thing three times — 16 of the 106 stage sections, all
+// real. A STOP: it is always wrong, and the fix is to keep one. Read in every language.
+function checkSummaries(pkg) {
+  const details = [];
+  let sections = 0;
+  for (const object of pkg.objects ?? []) {
+    if (object?.type !== "section") continue;
+    sections += 1;
+    const hits = sectionTexts(object).map(([language, text]) => [language, summaryHeadings(text)]).filter(([, found]) => found.length > 1);
+    if (hits.length === 0) continue;
+    const [, first] = hits[0];
+    const languages = hits.map(([language]) => language).filter(Boolean);
+    details.push(`"${object.clientRef}"${languages.length ? ` (${languages.join(", ")})` : ""}: ${first.length} summaries — ${first.map((h) => `«${h}»`).join(", ")}. Keep one, at the end, best as a question with the answer hidden; open with the point, not with what the section is for (section-content.md#teach-not-catalogue)`);
+  }
+  return {
+    name: "summaries",
+    status: details.length === 0 ? "ok" : "fail",
+    summary: details.length === 0 ? `${sections} section(s), none with more than one summary` : `${details.length} section(s) with more than one summary`,
+    details,
+  };
+}
+
+// #1126: what makes a section a catalogue rather than teaching (section-shape-check.mjs) — more than
+// one highlighted box (44 of 106 stage sections), a list of nine points or more (17 lists in 10
+// sections), a section that describes itself («Denne seksjonen viser …», 23 sections). A NOTE, not a
+// stop: the source may set a box apart, a table of contents may stay a list, and the author decides.
+// Boxes and lists are read in the course's language (the languages check holds the shape); the
+// self-description in every language.
+function checkFocus(pkg, primary) {
+  const details = [];
+  for (const object of pkg.objects ?? []) {
+    if (object?.type !== "section") continue;
+    const texts = sectionTexts(object);
+    const main = (texts.find(([language]) => language === primary) ?? texts[0])?.[1] ?? "";
+    const boxes = callouts(main);
+    if (boxes.length > CALLOUT_MAX) {
+      details.push(`"${object.clientRef}": ${boxes.length} highlighted boxes (${boxes.map((b) => `«${b}»`).join(", ")}) — keep at most ${CALLOUT_MAX}, for something with a concrete consequence; the rest is text (section-content.md#teach-not-catalogue)`);
+    }
+    for (const list of longLists(main)) {
+      details.push(`"${object.clientRef}": a list of ${list.items} points («${list.first.slice(0, 50)}» …) — give an example or a choice instead, or move the list to an appendix (section-content.md#teach-not-catalogue)`);
+    }
+    const described = texts.map(([language, text]) => [language, selfDescription(text)]).filter(([, found]) => found);
+    if (described.length > 0) {
+      const languages = described.map(([language]) => language).filter(Boolean);
+      details.push(`"${object.clientRef}"${languages.length ? ` (${languages.join(", ")})` : ""}: «${described[0][1]} …» describes the section instead of teaching — open with the point or the situation, to the learner (section-content.md#teach-not-catalogue)`);
+    }
+  }
+  return details.length === 0
+    ? { name: "focus", status: "ok", summary: "no section with several boxes, a long list or a description of itself", details }
+    : { name: "focus", status: "note", summary: `${details.length} finding(s): boxes, long lists or a section describing itself`, details };
+}
+
 // #1122: every assessment criterion describes its scale (rubric-check.mjs).
 function checkCriteria(pkg, primary) {
   const details = [];
@@ -909,6 +971,8 @@ export async function produceCourse({ packageFile, outFile, stateFile, slidesFil
   checks.push(checkDirectAddress(scoped.pkg, primary));
   checks.push(checkAltText(scoped.pkg));
   checks.push(checkLeftoversInText(scoped.pkg, scoped.course));
+  checks.push(checkSummaries(scoped.pkg));
+  checks.push(checkFocus(scoped.pkg, primary));
   checks.push(checkLanguages(scoped.pkg, primary));
 
   let master = null;

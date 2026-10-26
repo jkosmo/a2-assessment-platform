@@ -30,7 +30,8 @@ the course's language. How: [course-design.md](../references/course-design.md#le
 
 Propose the outline as a table: sections and modules in order, the test form of each module, which
 objective each one serves, and the level. How:
-[course-design.md](../references/course-design.md#structure).
+[course-design.md](../references/course-design.md#structure). A course that repeats one the learners
+have taken starts with questions ([a revision course](../references/course-design.md#a-revision-course)).
 
 Say in the same table what each section will **show**, not only what it will say:
 
