@@ -22,8 +22,9 @@ import {
   resolveWorkspaceNavigationItems,
 } from "/static/participant-console-state.js";
 import { describeImportError } from "/static/import-error.js";
+import { describeCueWarnings } from "/static/mcq-cue-warnings.js";
 import { describeApiError } from "/static/api-error.js";
-import { showToast } from "/static/toast.js";
+import { queueToast, showToast } from "/static/toast.js";
 import { runWithWorkDialog } from "/static/work-dialog.js";
 import { renderWorkspaceNavigationWithProfile } from "./workspace-nav.js";
 import {
@@ -776,7 +777,10 @@ async function init() {
         body: JSON.stringify({ payload, mode: "createNew", autoPublish: false }),
       }), { detail: t("adminContent.work.detail") });
       if (!result?.moduleId) throw new Error(t("library.importNoId"));
-      showToast(t("library.imported"));
+      // #1119: i kø, ikke vist — siden byttes i neste linje, og en vist melding forsvant med den.
+      // Spørsmål der svaret kan røpe seg følger med.
+      const cue = describeCueWarnings(result.cueWarnings, t, tf);
+      queueToast(t("library.imported"), cue.length > 0 ? "warning" : "info", cue.length > 0 ? `${t("mcqCue.heading")} ${cue.join(" ")}` : "");
       // Land i arbeidsrommet: der er publiseringsgaten med «Oversett det som mangler» (#896).
       window.location.href = `/admin-content/module/${encodeURIComponent(result.moduleId)}/conversation`;
     } catch (error) {

@@ -83,6 +83,7 @@ import {
   localizeTitle,
 } from "../modules/adminContent/llmContentGenerationService.js";
 import { validateMcqDistractors, validateScenarioDraft } from "../modules/adminContent/contentValidationService.js";
+import { mcqCueWarnings, packageCueWarnings } from "../modules/adminContent/mcqCueWarnings.js";
 import { localizedTextCodec } from "../codecs/localizedTextCodec.js";
 import { isExtractionJobOwner, rememberExtractionJobOwner } from "../modules/adminContent/extractionJobOwners.js";
 import { findCoursesContainingModule, inUseMessage } from "../modules/course/contentLifecycle.js";
@@ -513,6 +514,8 @@ adminContentRouter.post("/modules/import", idempotency("modules.import"), async 
       // #995: kalleren (forfatter eller agent) skal vite at modulen ble holdt tilbake som utkast —
       // ellers tror den pakken gikk live. Kursimport har hatt dette siden #957.
       heldBackByTranslationGate: result.heldBackByTranslationGate,
+      // #1119: spørsmål der svaret kan røpe seg — varsel, ikke stopp.
+      cueWarnings: packageCueWarnings(data.payload).flatMap((set) => set.warnings),
       links: moduleAdminLinks(result.moduleId),
       ...(data.clientRef !== undefined ? { clientRef: data.clientRef } : {}),
     });
@@ -850,7 +853,8 @@ adminContentRouter.post("/modules/:moduleId/versions", idempotency((req) => `mod
       submissionSchema: data.submissionSchema,
       assessmentPolicy: data.assessmentPolicy,
     });
-    response.status(201).json(result);
+    // #1119: lagring i redigeringsverktøyet — varsel om spørsmål der svaret kan røpe seg, ikke stopp.
+    response.status(201).json({ ...result, cueWarnings: mcqCueWarnings(data.mcqSet?.questions) });
   } catch (err) {
     if (err instanceof AppError) {
       respondWithAppError(response, err);
@@ -1461,6 +1465,8 @@ adminContentRouter.post("/generate/mcq", generateLimiter, async (request, respon
         // #551: include the deterministic length-cue warning alongside distractor-quality issues.
         issues: [...validation.issues, ...(result.validationWarnings ?? [])],
       },
+      // #1119: samme kontroll som skillet og importen. Lengden for hele settet meldes alt av #551.
+      cueWarnings: mcqCueWarnings(result.questions, { omit: ["length_bias"] }),
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";

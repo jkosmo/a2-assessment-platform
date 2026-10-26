@@ -2,13 +2,32 @@
 export declare const LENGTH_RATIO: number;
 export declare const MIN_OPTIONS: number;
 export declare const MIN_SET_FOR_DISTRIBUTION: number;
-export declare const POSITION_SHARE_MAX: number;
 export declare const LONGEST_SHARE_MAX: number;
+export declare const ABSOLUTE_WORDS: ReadonlySet<string>;
+export declare const ABSOLUTE_MIN_WRONG: number;
+export declare const ABSOLUTE_RATIO: number;
+export declare const ECHO_MIN_WORDS: number;
 
 export interface McqCueIssue {
   index: number | null;
-  kind: "too_few_options" | "catch_all_option" | "answer_not_an_option" | "correct_is_longest" | "position_bias" | "length_bias" | "count_in_stem" | "correct_are_longer" | "multiple_share";
+  kind:
+    | "too_few_options"
+    | "catch_all_option"
+    | "answer_not_an_option"
+    | "correct_is_longest"
+    | "length_bias"
+    | "count_in_stem"
+    | "correct_are_longer"
+    | "multiple_share"
+    | "order_item_count"
+    | "order_duplicate_item"
+    | "order_share"
+    | "stem_about_course"
+    | "answer_echoes_text"
+    | "absolute_words";
   detail: string;
+  /** absolute_words: how many wrong options hold such a word. */
+  count?: number;
 }
 
 export interface McqCueStats {
@@ -18,5 +37,8 @@ export interface McqCueStats {
   correctLongestShare: number;
 }
 
-export declare function collectMcqSets(doc: unknown): Array<{ path: string; questions: unknown[] }>;
-export declare function checkMcqCues(questions: unknown[], options?: { primary?: string }): { ok: boolean; issues: McqCueIssue[]; stats: McqCueStats };
+export declare function collectMcqSets(doc: unknown): Array<{ path: string; title?: unknown; questions: unknown[]; reading?: unknown[] }>;
+export declare function checkMcqCues(
+  questions: unknown[],
+  options?: { primary?: string; reading?: unknown[] },
+): { ok: boolean; issues: McqCueIssue[]; stats: McqCueStats };

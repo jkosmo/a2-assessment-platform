@@ -448,7 +448,7 @@ function checkQuestions(pkg, primary, course, { onlyRefs = null, baselineCounts 
   const sets = collectMcqSets(pkg).filter((set) => inScope(set.clientRef ?? String(set.path).replace(/^objects\[([^\]]+)\].*$/, "$1")));
   let questions = 0;
   for (const set of sets) {
-    const result = checkMcqCues(set.questions, { primary });
+    const result = checkMcqCues(set.questions, { primary, reading: set.reading });
     questions += result.stats.questions;
     for (const issue of result.issues) {
       details.push(`${set.path} ${issue.index == null ? "the set" : `question ${issue.index + 1}`}: ${issue.kind} — ${issue.detail}`);

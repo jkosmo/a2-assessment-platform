@@ -305,6 +305,16 @@ describe("produce-course — hver kontroll stopper leveransen (#1079)", () => {
     ["nynorsk tekst som har mistet tabellen", (p) => { const b = objekt(p, "sec-kilder").payload.bodyMarkdown; b.nn = b.nn.replace("|---|---|---|", ""); }, "languages", "sec-kilder: nn has 0 table(s), nb has 1"],
     ["engelsk tekst der prompt-boksen ble vanlig tekst", (p) => { const b = objekt(p, "sec-kilder").payload.bodyMarkdown; b["en-GB"] = b["en-GB"].replaceAll("```", ""); }, "languages", "sec-kilder: en-GB has 0 prompt box(es), nb has 1"],
     ["riktig svar som er mye lengre enn de andre", (p) => { for (const q of objekt(p, "mod-referat").payload.activeVersion.mcqSet.questions) { const i = q.options.findIndex((o: { nb: string }) => o.nb === q.correctAnswer.nb); q.options[i] = { nb: `${q.correctAnswer.nb}, og dette er en lang hale som bare det riktige svaret har fått med seg`, nn: `${q.correctAnswer.nn}, og dette er ein lang hale som berre det rette svaret har fått med seg`, "en-GB": `${q.correctAnswer["en-GB"]}, and this is a long tail that only the right answer was given` }; q.correctAnswer = q.options[i]; } }, "questions", "correct_is_longest"],
+    // #1119: lesestoffet før testen følger med inn i kontrollen — uten det kan ekko-regelen ikke slå til.
+    ["riktig svar som gjentar seksjonen ordrett (#1119)", (p) => {
+      const setning = { nb: "Referatet skal alltid sendes til alle deltakerne innen to arbeidsdager etter møtet", nn: "Referatet skal alltid sendast til alle deltakarane innan to arbeidsdagar etter møtet", "en-GB": "The minutes must always be sent to every participant within two working days of the meeting" };
+      const b = objekt(p, "sec-kilder").payload.bodyMarkdown;
+      for (const s of ["nb", "nn", "en-GB"] as const) b[s] += `\n\n${setning[s]}.\n`;
+      const q = objekt(p, "mod-referat").payload.activeVersion.mcqSet.questions[0];
+      const i = q.options.findIndex((o: { nb: string }) => o.nb === q.correctAnswer.nb);
+      q.options[i] = setning;
+      q.correctAnswer = setning;
+    }, "questions", "answer_echoes_text"],
     ["prompten forfatteren godkjente er kortet bort", (p) => { const b = objekt(p, "sec-kilder").payload.bodyMarkdown; b.nb = b.nb.replace("Bruk bare det som står i notatene under. Skriv «uklart» der notatene ikke sier noe.", "Bruk notatene."); }, "approved text", "templates — «Bruk bare det som står i notatene under."],
     ["et kort lysarklista lovet, er borte", (p) => { const b = objekt(p, "sec-kilder").payload.bodyMarkdown; for (const s of ["nb", "nn", "en-GB"]) b[s] = b[s].replaceAll("### ", "**"); }, "slides", "slide 3: was to become cards"],
   ])("%s", async (_navn, endre, kontroll, ventet) => {

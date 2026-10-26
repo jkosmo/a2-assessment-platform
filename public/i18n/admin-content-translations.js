@@ -865,6 +865,17 @@ const adminContentBase = {
   "ui.rename.label": "New name in {locale}",
   "ui.rename.hint": "Enter saves · Escape cancels",
   "ui.rename.saved": "Name saved.",
+  // #1119: the skill's cue check, shown as warnings (public/static/mcq-cue-warnings.js).
+  "mcqCue.absolute_words": "{count} wrong options say «never», «always», «only» or «automatically», and the right ones hardly ever do — they can be ruled out without knowing the material.",
+  "mcqCue.stem_about_course": "Question {question} asks what the course says. Ask what to do in a situation instead.",
+  "mcqCue.answer_echoes_text": "Question {question}: the right option repeats the section word for word. Put it in other words.",
+  "mcqCue.correct_is_longest": "Question {question}: the right option is clearly longer than the others.",
+  "mcqCue.correct_are_longer": "Question {question}: the right options are clearly longer than the wrong ones.",
+  "mcqCue.length_bias": "The right option is the longest in most questions — picking the longest one passes the test.",
+  "mcqCue.count_in_stem": "Question {question} says how many options are right.",
+  "mcqCue.catch_all_option": "Question {question} has an «all/none of the above» option.",
+  "mcqCue.heading": "Some questions can be answered without knowing the material:",
+  "mcqCue.importedCourse": "{count} tests have questions that can be answered without knowing the material.",
 };
 const nbOverrides = {
   "nav.profile": "Profil",
@@ -1830,6 +1841,16 @@ const adminContentLateOverrides = {
     "ui.rename.label": "Nytt navn på {locale}",
     "ui.rename.hint": "Enter lagrer · Escape avbryter",
     "ui.rename.saved": "Navnet er lagret.",
+    "mcqCue.absolute_words": "{count} gale alternativer sier «aldri», «alltid», «kun» eller «automatisk», og de riktige gjør det nesten aldri — de kan velges bort uten å kunne stoffet.",
+    "mcqCue.stem_about_course": "Spørsmål {question} spør hva kurset sier. Spør heller hva man skal gjøre i en situasjon.",
+    "mcqCue.answer_echoes_text": "Spørsmål {question}: det riktige alternativet gjentar seksjonen ord for ord. Si det med andre ord.",
+    "mcqCue.correct_is_longest": "Spørsmål {question}: det riktige alternativet er tydelig lengre enn de andre.",
+    "mcqCue.correct_are_longer": "Spørsmål {question}: de riktige alternativene er tydelig lengre enn de gale.",
+    "mcqCue.length_bias": "Det riktige alternativet er det lengste i de fleste spørsmålene — den som velger det lengste, består.",
+    "mcqCue.count_in_stem": "Spørsmål {question} sier hvor mange alternativer som er riktige.",
+    "mcqCue.catch_all_option": "Spørsmål {question} har et «alle/ingen av de ovenfor»-alternativ.",
+    "mcqCue.heading": "Noen spørsmål kan besvares uten å kunne stoffet:",
+    "mcqCue.importedCourse": "{count} tester har spørsmål som kan besvares uten å kunne stoffet.",
   },
   nn: {
     // #896 S3c-etterslep \u2014 sj\u00e5 merknaden i nb-blokka over.
@@ -2560,6 +2581,16 @@ const adminContentLateOverrides = {
     "ui.rename.label": "Nytt namn på {locale}",
     "ui.rename.hint": "Enter lagrar · Escape avbryt",
     "ui.rename.saved": "Namnet er lagra.",
+    "mcqCue.absolute_words": "{count} gale alternativ seier «aldri», «alltid», «kun» eller «automatisk», og dei rette gjer det nesten aldri — dei kan veljast bort utan å kunne stoffet.",
+    "mcqCue.stem_about_course": "Spørsmål {question} spør kva kurset seier. Spør heller kva ein skal gjere i ein situasjon.",
+    "mcqCue.answer_echoes_text": "Spørsmål {question}: det rette alternativet gjentek seksjonen ord for ord. Sei det med andre ord.",
+    "mcqCue.correct_is_longest": "Spørsmål {question}: det rette alternativet er tydeleg lengre enn dei andre.",
+    "mcqCue.correct_are_longer": "Spørsmål {question}: dei rette alternativa er tydeleg lengre enn dei gale.",
+    "mcqCue.length_bias": "Det rette alternativet er det lengste i dei fleste spørsmåla — den som vel det lengste, består.",
+    "mcqCue.count_in_stem": "Spørsmål {question} seier kor mange alternativ som er rette.",
+    "mcqCue.catch_all_option": "Spørsmål {question} har eit «alle/ingen av dei ovanfor»-alternativ.",
+    "mcqCue.heading": "Nokre spørsmål kan svarast på utan å kunne stoffet:",
+    "mcqCue.importedCourse": "{count} testar har spørsmål som kan svarast på utan å kunne stoffet.",
   },
 };
 

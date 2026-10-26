@@ -42,6 +42,7 @@ import { countCourseInProgressParticipants } from "../modules/course/contentLife
 import { generateLimiter } from "../middleware/rateLimiting.js";
 import { respondWithAppError } from "./helpers/respondWithAppError.js";
 import { requestLocale } from "../i18n/requestLocale.js";
+import { packageCueWarnings } from "../modules/adminContent/mcqCueWarnings.js";
 
 const adminCoursesRouter = Router();
 
@@ -259,6 +260,8 @@ adminCoursesRouter.post("/import", async (request, response, next) => {
       // Kommentaren i `contentImportService.ts` lovet at det ble rapportert. Nå gjør det det.
       heldBackByTranslationGate: result.heldBackByTranslationGate,
       ...(result.summary ? { summary: result.summary } : {}),
+      // #1119: tester der svaret kan røpe seg — varsel, ikke stopp. Regnet på fila, med seksjonene før hver test.
+      cueWarnings: packageCueWarnings(data.payload),
       links: courseAdminLinks(result.courseId),
       ...(data.clientRef !== undefined ? { clientRef: data.clientRef } : {}),
     });

@@ -2,6 +2,26 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.108.0 - 2026-10-26
+
+### Flervalg som kan løses uten å kunne stoffet — #1119
+
+Én kontroll i skillets `mcq-cue-check.mjs`, lest av plattformen (`#mcq-cue`). **Skillet stopper**,
+plattformen **varsler**. Tre nye regler, hver målt mot de 15 kursene på stage før grensen ble satt:
+
+- **Absolutte ord bare blant de gale** («aldri», «alltid», «kun», «automatisk», «uansett» …): minst tre
+  gale med ordet i testen, og dobbelt så vanlig blant de gale som blant de riktige. 10 av 38 tester.
+- **Stammen spør hva kurset sier** («Hva anbefaler kurset?»): 11 spørsmål. «Ifølge NVE» er et spørsmål
+  om kilden og telles ikke.
+- **Riktig svar gjentar seksjonen ordrett** (8 ord på rad), når intet galt alternativ deler halvparten så
+  mange: 17 spørsmål. Bare der seksjonene før testen er med (skillet, kursimport).
+- **Plasseringen av riktig svar** er bare informasjon — plattformen stokker alternativene.
+- «Velg alle» der alle er riktige er fortsatt lov (produkteier 2026-10-24, bekreftet 2026-10-26).
+
+**På plattformen** ser forfatteren varselet etter KI-generering, etter lagring i redigeringsverktøyet,
+og etter kurs- og modulimport. Varslene sto før som «[object Object]» når distraktorsjekken (#371) fant
+noe, og meldingen etter modulimport forsvant med sidebyttet — begge er rettet.
+
 ## 2.107.0 - 2026-10-25
 
 ### «Sett i riktig rekkefølge» med KI og i skillet — #1077 leveranse 2b

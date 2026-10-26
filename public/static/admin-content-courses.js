@@ -22,6 +22,7 @@ import {
   resolveWorkspaceNavigationItems,
 } from "/static/participant-console-state.js";
 import { describeImportError } from "/static/import-error.js";
+import { describePackageCueWarnings } from "/static/mcq-cue-warnings.js";
 import { apiErrorCodeText, describeApiError } from "/static/api-error.js";
 import { flushQueuedToast, queueToast, showToast } from "/static/toast.js";
 import {
@@ -866,6 +867,7 @@ async function handleImportCoursePackageFile(event) {
         unplaced > 0 ? tf("adminContent.courses.updatedUnplaced", { count: unplaced }) : "",
         replaced > 0 ? tf("adminContent.courses.updatedReplacedUnowned", { count: replaced }) : "",
         notPublishable > 0 ? tf("adminContent.courses.updatedKeptNotPublishable", { count: notPublishable }) : "",
+        importCueDetail(updated),
       ].filter(Boolean);
       queueToast(
         tf("adminContent.courses.updated", {
@@ -896,10 +898,12 @@ async function handleImportCoursePackageFile(event) {
     // beskjed om systemets tilstand, ikke hjelp.
     const count = result.moduleIds?.length ?? 0;
     // #1095: samme for disse — de ble vist og navigert bort fra i samme øyeblikk.
+    // #1119: tester der svaret kan røpe seg følger med i samme melding — det er bare plass til én.
+    const cueDetail = importCueDetail(result);
     if (result.heldBackByTranslationGate) {
-      queueToast(tf("adminContent.courses.importedHeldBack", { count }), "warning");
+      queueToast(tf("adminContent.courses.importedHeldBack", { count }), "warning", cueDetail);
     } else {
-      queueToast(tf("adminContent.courses.imported", { count }), "success");
+      queueToast(tf("adminContent.courses.imported", { count }), cueDetail ? "warning" : "success", cueDetail);
     }
     window.location.href = `/admin-content/courses/${encodeURIComponent(result.courseId)}`;
   } catch (error) {
@@ -910,6 +914,13 @@ async function handleImportCoursePackageFile(event) {
   } finally {
     target.value = "";
   }
+}
+
+// #1119: «3 tester har spørsmål som … — Tittel: Spørsmål 2 … Tittel: …», eller "" når ingen har funn.
+function importCueDetail(result) {
+  const lines = describePackageCueWarnings(result?.cueWarnings, t, tf, (title) => (typeof title === "string" ? title : pickLocalizedText(title, currentLocale)));
+  if (lines.length === 0) return "";
+  return `${tf("mcqCue.importedCourse", { count: lines.length })} ${lines.join(" ")}`;
 }
 
 // #1095: finnes kurset fila peker på, i dette miljøet — og får forfatteren se det? 404 og 403 er

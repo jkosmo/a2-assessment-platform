@@ -31,13 +31,16 @@ describe("mcq-cue-check (#1032)", () => {
     const r = checkMcqCues(stageLike);
     expect(r.ok).toBe(false);
     const kinds = r.issues.map((i) => i.kind);
-    expect(kinds).toContain("position_bias");
     expect(kinds).toContain("length_bias");
     expect(kinds.filter((k) => k === "correct_is_longest").length).toBeGreaterThanOrEqual(4);
     expect(r.stats.correctPositionShare["0"]).toBe(1);
     expect(r.stats.correctLongestShare).toBe(1);
-    const pos = r.issues.find((i) => i.kind === "position_bias")!;
-    expect(pos.detail).toMatch(/5 of 5 correct answers sit in position 1/);
+  });
+
+  it("#1119: position is stats only — the platform shuffles the options, so it is never a finding", () => {
+    const r = checkMcqCues(balanced.map((x) => ({ ...x, options: [x.correctAnswer, ...x.options.filter((o) => o.nb !== x.correctAnswer.nb)] })));
+    expect(r.stats.correctPositionShare["0"]).toBe(1);
+    expect(r.issues, JSON.stringify(r.issues)).toEqual([]);
   });
 
   it("passes a set with balanced lengths and rotated positions", () => {
@@ -56,8 +59,8 @@ describe("mcq-cue-check (#1032)", () => {
   });
 
   it("set-level rules need at least four questions, so a two-question set is judged per question only", () => {
-    const r = checkMcqCues(balanced.slice(0, 2).map((x) => ({ ...x, correctAnswer: x.options[0] })));
-    expect(r.issues.map((i) => i.kind)).not.toContain("position_bias");
+    const r = checkMcqCues(stageLike.slice(0, 2));
+    expect(r.issues.map((i) => i.kind)).not.toContain("length_bias");
   });
 
   it("catch-all options and too few options are named", () => {
@@ -128,7 +131,7 @@ describe("mcq-cue-check — flere riktige svar (#1077)", () => {
     expect(r.issues.map((i) => i.kind)).toContain("correct_are_longer");
   });
 
-  it("alle riktige er lov — ingenting å sammenligne med, ingen funn", () => {
+  it("alle riktige er lov — ingenting å sammenligne med, ingen funn (beholdt i #1119)", () => {
     const r = checkMcqCues([m("Hva må protokollen inneholde?", even, [0, 1, 2, 3])]);
     expect(r.issues.filter((i) => i.index === 0)).toEqual([]);
   });

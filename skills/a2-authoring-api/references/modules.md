@@ -44,9 +44,16 @@ pass.
 
 - **Same shape, same length.** Write every option as a complete, specific statement about as long
   as the right one. If the right option needs a qualifier, the wrong ones get qualifiers too.
-- **Spread the position.** Place the right option so that, across the set, every position is used
-  about equally. The platform shuffles the options for the learner, so length is the cue that
-  reaches them — but a set with the answer always first is a set nobody checked.
+- **No absolute words that only the wrong options have.** "aldri", "alltid", "kun", "automatisk",
+  "uansett" make an option easy to rule out. A wrong option is what a sensible person would
+  believe: "Leser gjennom før det sendes, men bare stikkprøver tallene", not "Lar KI sende det
+  automatisk".
+- **Ask about the work, not about the course.** Not "Hva anbefaler kurset …?" but "Hva gjør du …?"
+  or "Hva bør prosjektlederen …?" The learner meets the situation, not the course.
+- **The right option in your own words.** A right option that repeats a sentence from the section
+  is found by recognition. Say it the way it would come up in the work.
+
+The platform shuffles the options for the learner, so their position does not matter.
 
 ## Select all that apply
 
@@ -118,10 +125,14 @@ Run it before a module's questions are shown at gate 4, and again before product
 node scripts/mcq-cue-check.mjs work/package.json
 ```
 
-It measures the length of the right option against the others per question, and the spread of
-position and length across the set. A line that starts with `OK` has passed; the numbers after it
-are for your information. Fix every finding on a `FAIL` line. A clean report does not say the
-questions are good; it removes the mechanical cues so the author's reading is about the content.
+It measures the length of the right option against the others, absolute words that only the wrong
+options have, stems that ask what the course says, and right options that repeat the sections word
+for word. A line that starts with `OK` has passed; the numbers after it are for your information.
+**Fix every finding on a `FAIL` line before the author sees the questions** — `produce-course.mjs`
+writes no import file while one remains. A clean report does not say the questions are good; it
+removes the mechanical cues so the author's reading is about the content.
+
+The platform runs the same check on every test and shows the findings to the author as warnings.
 
 To add questions to a module that already exists on the platform, read its question bank first and
 write questions that test other points ([api-flow.md](api-flow.md)).

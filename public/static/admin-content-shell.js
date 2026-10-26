@@ -23,7 +23,8 @@ import {
   resolveRoleSwitchState,
   resolveWorkspaceNavigationItems,
 } from "/static/participant-console-state.js";
-import { showToast } from "/static/toast.js";
+import { flushQueuedToast, showToast } from "/static/toast.js";
+import { describeCueWarnings } from "/static/mcq-cue-warnings.js";
 import { apiErrorCodeText, apiIssueLines, describeApiError } from "/static/api-error.js";
 import { renderWorkspaceNavigationWithProfile } from "./workspace-nav.js";
 import { localizeValueForLocale, buildPreviewHtml, hydratePreviewMarkdown } from "/static/admin-content-preview.js";
@@ -253,6 +254,13 @@ function logResolveSlot(slot, htmlFn, choices = []) {
   announceStatus(text);
   if (slot?.entry?.quiet) return;
   showToast(text, /feil|error|failed|avvist|refus|kunne ikke|could not|mislyktes/i.test(text) ? "error" : "info");
+}
+
+// #1119: lagringen lyktes. Har testen spørsmål der svaret kan røpe seg, sier toasten det — varsel, ikke stopp.
+function announceSaved(composed) {
+  const cue = describeCueWarnings(composed?.cueWarnings, t, tf);
+  if (cue.length > 0) showToast(`${t("shell.save.success")} ${t("mcqCue.heading")}`, "warning", cue.join(" "));
+  else showToast(t("shell.save.success"), "success");
 }
 
 // Identity / headers
@@ -1871,9 +1879,14 @@ async function generateMcqInBackground(sourceMaterial, certLevel, locale, genera
   const questions = result?.questions ?? [];
   const { questions: localizedQuestions, failedLocales } = await localizeMcqAcrossLocales(questions, locale);
   // #551: surface MCQ quality warnings (incl. the length-cue check) so the author can review.
-  const mcqWarnings = Array.isArray(result?.validation?.issues) ? result.validation.issues : [];
+  // #1119: lista blander tekster (#551) og objekter fra distraktorsjekken — objektene ble «[object Object]».
+  // Hint-kontrollen fra skillet kommer i tillegg, som tekst på forfatterens språk.
+  const mcqWarnings = [
+    ...(Array.isArray(result?.validation?.issues) ? result.validation.issues : []).map((w) => (typeof w === "string" ? w : w?.message ?? "")),
+    ...describeCueWarnings(result?.cueWarnings, t, tf),
+  ].filter(Boolean);
   const mcqWarningsHtml = mcqWarnings.length > 0
-    ? `<p style="margin:8px 0 0;font-size:13px;color:var(--color-warning,#b45309)">⚠ ${mcqWarnings.map(escapeHtml).join("<br>")}</p>`
+    ? `<p style="margin:8px 0 0;font-size:13px;color:var(--color-warning,#b45309)">⚠ ${mcqWarnings.map((w) => escapeHtml(w)).join("<br>")}</p>`
     : "";
   commitOrProposeGenerated({
     patch: { mcqQuestions: append ? [...existing, ...localizedQuestions] : localizedQuestions },
@@ -2300,7 +2313,7 @@ async function saveDraftBundleInBackground(options = {}) {
       previewDraft = null;
       await loadModule(moduleId);
       logResolveSlot(slot, () => `<strong>${escapeHtml(t("shell.save.success"))}</strong>`);
-      showToast(t("shell.save.success"), "success");
+      announceSaved(composed);
       announceStatus(t("shell.save.success"));
       if (afterSave) afterSave();
       return;
@@ -2388,7 +2401,7 @@ async function saveDraftBundleInBackground(options = {}) {
     previewDraft = null;
     await loadModule(moduleId);
     logResolveSlot(slot, () => `<strong>${escapeHtml(t("shell.save.success"))}</strong>`);
-    showToast(t("shell.save.success"), "success");
+    announceSaved(composed);
     announceStatus(t("shell.save.success"));
     // #928: kriteriene fulgte ikke med (de ble gjenbrukt), og teksten er vesentlig endret. Valgte
     // forfatteren kriterier i samme lagring, er spørsmålet besvart alt.
@@ -4828,6 +4841,8 @@ async function loadConsoleConfig() {
 async function initShell() {
   populateUiLocaleSelect();
   translatePageStaticText();
+  // #1119: en melding lagt i kø av siden som navigerte hit (modulimporten) — som kurssiden (#1095).
+  flushQueuedToast();
   createModuleFormPage();
   applyTabState(activeTab);
   renderPreview();
