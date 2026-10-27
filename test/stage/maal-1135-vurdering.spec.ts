@@ -16,7 +16,7 @@ import { vent } from "./pace.js";
 const { auth, reason } = readAuth();
 const BASE = stageBaseUrl(auth);
 const FASE = process.env.MAAL_1135 ?? "";
-test.skip(!auth || !["før", "etter", "etter2", "etter3", "temp0", "etter4"].includes(FASE), `hopper over: ${reason ?? "sett MAAL_1135=før|etter|etter2"}`);
+test.skip(!auth || !["før", "etter", "etter2", "etter3", "temp0", "etter4", "etter5", "etter6"].includes(FASE), `hopper over: ${reason ?? "sett MAAL_1135=før|etter|etter2"}`);
 
 // Utenfor test-results: Playwright tømmer den mappa ved hver kjøring, og «etter» trenger modulen fra «før».
 const RAPPORT = process.env.MAAL_1135_DIR ?? path.resolve(process.cwd(), ".stage-maal");

@@ -19,6 +19,9 @@ export const llmResponseSchema = z.object({
   practical_score_scaled: z.number().min(0).max(70),
   pass_fail_practical: z.boolean(),
   criterion_rationales: z.record(z.string()),
+  // #1135: trinnteksten modellen valgte per kriterium; plattformen setter poenget fra den. Løst typet:
+  // et felt som bare hjelper, skal ikke kunne felle hele vurderingen.
+  criterion_steps: z.record(z.unknown()).optional(),
   improvement_advice: z.array(z.string()).max(10),
   red_flags: z.array(
     z.object({

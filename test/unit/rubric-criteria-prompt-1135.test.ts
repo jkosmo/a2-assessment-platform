@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { buildAssessmentInputContext, parseRubricCriteriaForPrompt } from "../../src/modules/assessment/AssessmentInputFactory.js";
-import { buildAzureOpenAiMessages, buildRequiredResponseContract, buildRubricCriteriaSection, normalizeRubricScoresToContract } from "../../src/modules/assessment/llmAssessmentService.js";
+import { buildAzureOpenAiMessages, buildRequiredResponseContract, buildRubricCriteriaSection, normalizeRubricScoresToContract, scoresFromChosenSteps } from "../../src/modules/assessment/llmAssessmentService.js";
+import { llmResponseCodec } from "../../src/codecs/llmResponseCodec.js";
 
 // #1135: KI-vurdereren fikk bare kriterienes ID-er. Nå får den det kriteriet sier — etikett og
 // beskrivelse med trinnene, på deltakerens språk — og poengene skal følge trinnene.
@@ -13,27 +14,33 @@ describe("#1135 kriteriene slik vurdereren leser dem", () => {
       kontroll: { label: tre("Kontroll mot notatene", "Kontroll mot notata", "Check against the notes"), description: tre("0 = feil står igjen; 1 = noen rettet; 2 = alt stemmer", "0 = feil står att; 1 = nokre retta; 2 = alt stemmer", "0 = errors remain; 1 = some fixed; 2 = all correct"), maxScore: 2 },
     });
     expect(parseRubricCriteriaForPrompt(json, "nn")).toEqual([
-      { id: "kontroll", label: "Kontroll mot notata", description: "0 = feil står att; 1 = nokre retta; 2 = alt stemmer", scaleMax: 2 },
+      {
+        id: "kontroll",
+        label: "Kontroll mot notata",
+        description: "0 = feil står att; 1 = nokre retta; 2 = alt stemmer",
+        scaleMax: 2,
+        steps: [{ step: 0, text: "feil står att" }, { step: 1, text: "nokre retta" }, { step: 2, text: "alt stemmer" }],
+      },
     ]);
     expect(parseRubricCriteriaForPrompt(json, "en-GB")[0]).toMatchObject({ label: "Check against the notes", description: "0 = errors remain; 1 = some fixed; 2 = all correct" });
   });
 
   it("strengform («0–4: …»): beskrivelsen er strengen; en 0–4-skala trenger ingen omregning", () => {
     expect(parseRubricCriteriaForPrompt(JSON.stringify({ vurdering: "0–4: 0 = ingen; 2 = delvis; 4 = full" }), "nb")).toEqual([
-      { id: "vurdering", label: null, description: "0–4: 0 = ingen; 2 = delvis; 4 = full", scaleMax: null },
+      { id: "vurdering", label: null, description: "0–4: 0 = ingen; 2 = delvis; 4 = full", scaleMax: null, steps: [{ step: 0, text: "ingen" }, { step: 2, text: "delvis" }, { step: 4, text: "full" }] },
     ]);
   });
 
   it("strengform som språkkart, og en 0–3-skala", () => {
     const [k] = parseRubricCriteriaForPrompt(JSON.stringify({ behov: tre("Behov, 0–3 poeng. 0: … 3: …", "Behov, 0–3 poeng. 0: … 3: …", "Needs, 0–3 points. 0: … 3: …") }), "en-GB");
-    expect(k).toEqual({ id: "behov", label: null, description: "Needs, 0–3 points. 0: … 3: …", scaleMax: 3 });
+    expect(k).toMatchObject({ id: "behov", label: null, description: "Needs, 0–3 points. 0: … 3: …", scaleMax: 3 });
   });
 
   it("bare en vekt (standardrubrikken), og en liste med id (fra KI)", () => {
     expect(parseRubricCriteriaForPrompt(JSON.stringify({ task_comprehension: { weight: 0.2 } }), "nb")).toEqual([
-      { id: "task_comprehension", label: null, description: null, scaleMax: null },
+      { id: "task_comprehension", label: null, description: null, scaleMax: null, steps: [] },
     ]);
-    expect(parseRubricCriteriaForPrompt(JSON.stringify([{ id: "scenario", label: "Bruk av scenarioet", description: "0 = …; 2 = …; 4 = …", maxScore: 4 }]), "nb")).toEqual([
+    expect(parseRubricCriteriaForPrompt(JSON.stringify([{ id: "scenario", label: "Bruk av scenarioet", description: "0 = …; 2 = …; 4 = …", maxScore: 4 }]), "nb")).toMatchObject([
       { id: "scenario", label: "Bruk av scenarioet", description: "0 = …; 2 = …; 4 = …", scaleMax: null },
     ]);
   });
@@ -125,6 +132,71 @@ describe("#1135 omregningen til 0–4 skjer i koden", () => {
       rubricCriteria: [kriterier[0]!, kriterier[2]!],
     } as Parameters<typeof buildAzureOpenAiMessages>[0]);
     expect(user!.content).toContain("  - vedtak (0..2)");
+  });
+});
+
+// #1135, målt mot stage-modellen: midt på skalaen beskrev begrunnelsen trinn 1 og poenget ble 0.
+// Modellen velger nå trinnets tekst, og poenget er trinnet teksten tilhører.
+describe("#1135 trinnet modellen valgte setter poenget", () => {
+  const steps = [
+    { step: 0, text: "vedtakene mangler eller er feil" },
+    { step: 1, text: "vedtakene står der, men blandet med diskusjonen" },
+    { step: 2, text: "vedtakene står først, presist og hver for seg" },
+  ];
+  const kriterier = [
+    { id: "vedtak", label: "Vedtakene", description: "0 = …; 1 = …; 2 = …", scaleMax: 2, steps },
+    { id: "vanlig", label: null, description: null, scaleMax: null, steps: [] },
+  ];
+  const svar = (rubric_scores: Record<string, number>, criterion_steps?: Record<string, unknown>) =>
+    ({ rubric_scores, rubric_total: Object.values(rubric_scores).reduce((a, b) => a + b, 0), criterion_steps }) as never;
+  const poeng = (r: unknown) => (r as { rubric_scores: Record<string, number>; rubric_total: number });
+
+  it("teksten til trinn 1 gir 1, også når tallet sa 0 — og totalen følger", () => {
+    const r = poeng(scoresFromChosenSteps(svar({ vedtak: 0, vanlig: 3 }, { vedtak: "vedtakene står der, men blandet med diskusjonen" }), kriterier));
+    expect(r.rubric_scores).toEqual({ vedtak: 1, vanlig: 3 });
+    expect(r.rubric_total).toBe(4);
+  });
+
+  it("store bokstaver, tallet foran og avsluttende punktum er samme trinn", () => {
+    expect(poeng(scoresFromChosenSteps(svar({ vedtak: 0 }, { vedtak: "2 = Vedtakene står først, presist og hver for seg." }), kriterier)).rubric_scores.vedtak).toBe(2);
+    // Korte trinn kan bare kjennes igjen helt likt — tallet foran må vekk først.
+    const korte = [{ id: "iterasjon", label: null, description: "0 = ingen; 1 = én; 2 = flere", scaleMax: 2, steps: [{ step: 0, text: "ingen" }, { step: 1, text: "én" }, { step: 2, text: "flere" }] }];
+    expect(poeng(scoresFromChosenSteps(svar({ iterasjon: 0 }, { iterasjon: "1 = én" }), korte)).rubric_scores.iterasjon).toBe(1);
+  });
+
+  it("litt mer eller litt mindre tekst enn trinnet gir trinnet, når bare ett passer", () => {
+    expect(poeng(scoresFromChosenSteps(svar({ vedtak: 0 }, { vedtak: "står der, men blandet med diskusjonen" }), kriterier)).rubric_scores.vedtak).toBe(1);
+  });
+
+  it("en tekst som ikke er et trinn, eller som passer på flere, lar modellens tall stå", () => {
+    expect(poeng(scoresFromChosenSteps(svar({ vedtak: 1 }, { vedtak: "noe helt annet" }), kriterier)).rubric_scores.vedtak).toBe(1);
+    expect(poeng(scoresFromChosenSteps(svar({ vedtak: 1 }, { vedtak: "vedtakene" }), kriterier)).rubric_scores.vedtak).toBe(1);
+  });
+
+  it("uten valgte trinn, eller med noe annet enn tekst, er svaret uendret", () => {
+    const uten = svar({ vedtak: 1 });
+    expect(scoresFromChosenSteps(uten, kriterier)).toBe(uten);
+    const liste = svar({ vedtak: 1 }, { vedtak: ["vedtakene mangler eller er feil"] });
+    expect(scoresFromChosenSteps(liste, kriterier)).toBe(liste);
+  });
+
+  it("kontrakten ber om rationale og trinn FØR poengene, og bare for kriterier med trinn", () => {
+    const [, user] = buildAzureOpenAiMessages({
+      moduleId: "m1",
+      responseJson: { response: "Svar" },
+      rubricCriteriaIds: ["vedtak", "vanlig"],
+      rubricCriteria: kriterier,
+    } as Parameters<typeof buildAzureOpenAiMessages>[0]);
+    const tekst = user!.content;
+    expect(tekst).toContain("- criterion_steps: object with, for each of vedtak, the text of the step");
+    expect(tekst.indexOf("- criterion_rationales")).toBeLessThan(tekst.indexOf("- criterion_steps"));
+    expect(tekst.indexOf("- criterion_steps")).toBeLessThan(tekst.indexOf("- rubric_scores"));
+    expect(buildRequiredResponseContract(["vanlig"])).not.toContain("criterion_steps");
+  });
+
+  it("et trinnfelt i feil form feller ikke vurderingen", () => {
+    const gyldig = { module_id: "m", rubric_scores: { vedtak: 1 }, rubric_total: 1, practical_score_scaled: 10, pass_fail_practical: false, criterion_rationales: { vedtak: "x" }, improvement_advice: [], red_flags: [], manual_review_recommended: false, confidence_note: "" };
+    expect(() => llmResponseCodec.parse({ ...gyldig, criterion_steps: { vedtak: ["en", "liste"] } })).not.toThrow();
   });
 });
 

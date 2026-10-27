@@ -152,8 +152,8 @@ describe("AssessmentInputFactory", () => {
       expect(context.rubricCriteriaIds).toEqual(["criterion_a", "criterion_b"]);
       // #1135: det kriteriene sier, til vurdereren — her bare skalaen «0-4».
       expect(context.rubricCriteria).toEqual([
-        { id: "criterion_a", label: null, description: "0-4", scaleMax: null },
-        { id: "criterion_b", label: null, description: "0-4", scaleMax: null },
+        { id: "criterion_a", label: null, description: "0-4", scaleMax: null, steps: [] },
+        { id: "criterion_b", label: null, description: "0-4", scaleMax: null, steps: [] },
       ]);
       // #578: rubricMaxTotal is derived from the criteria count × 4 (2 × 4 = 8), NOT the stored
       // scalingRule.max_total (20). The recompute clamps each criterion to [0,4], so this is the true max.

@@ -75,6 +75,23 @@ describe("llmAssessmentService azure_openai adapter", () => {
     expect(result.rubric_total).toBe(16);
   });
 
+  // #1135, målt mot stage-modellen: begrunnelsen beskrev trinn 1, poenget ble 0. Trinnteksten modellen
+  // valgte setter poenget før omregningen: «én» er trinn 1 av 2, altså 2 av 4 — ikke 0.
+  it("#1135: trinnet modellen valgte setter poenget, så regnes det om til 0–4", async () => {
+    global.fetch = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ ...validPayload, rubric_scores: { ...validPayload.rubric_scores, iteration_and_improvement: 0 }, rubric_total: 12, criterion_steps: { iteration_and_improvement: "én" } }) } }] }), { status: 200, headers: { "content-type": "application/json" } }),
+    ) as unknown as typeof fetch;
+    const result = await evaluatePracticalWithAzureOpenAi(
+      {
+        ...baseInput,
+        rubricCriteria: [{ id: "iteration_and_improvement", label: "Iterasjon", description: "0 = ingen; 1 = én; 2 = flere", scaleMax: 2, steps: [{ step: 0, text: "ingen" }, { step: 1, text: "én" }, { step: 2, text: "flere" }] }],
+      },
+      baseConfig,
+    );
+    expect(result.rubric_scores.iteration_and_improvement).toBe(2);
+    expect(result.rubric_total).toBe(14);
+  });
+
   it("maps Azure OpenAI chat completion output to validated assessment payload", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(

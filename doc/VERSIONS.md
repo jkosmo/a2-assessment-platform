@@ -2,6 +2,23 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.118.0 - 2026-10-27
+
+### Vurdereren velger trinnets tekst, plattformen setter poenget — #1135
+
+Målt mot stage-modellen ved temperatur 0: på et svar midt på skalaen skrev modellen en begrunnelse som
+ordrett beskrev trinn 1 («vedtaket er med, men blandet med diskusjonen») og ga 0. Det skjedde også med
+gpt-4.1-mini, og en uvesentlig endring i meldingen (modul-ID-en) vippet det mellom 0 og 33.
+
+Svarkontrakten ber nå om begrunnelsen og trinnets tekst (`criterion_steps`) FØR poengene, og
+plattformen setter poenget fra trinnet teksten tilhører. Gjenkjennes ikke teksten, eller passer den på
+flere trinn, står modellens tall. Lokalt, fem forsøk hver: vedtak og oppfølging på riktig trinn i alle
+ti (halvt svar trinn 1, sterkt svar trinn 2). Kontroll varierer fortsatt mellom trinn 1 og 2 — det
+sterke svaret legger til «tas opp på neste møte», som notatene ikke sier.
+
+Stage-workeren hadde ikke `AZURE_OPENAI_ASSESSMENT_TEMPERATURE`; fritekstvurderingen kjører der. Satt
+til 0 der også 2026-10-27.
+
 ## 2.117.0 - 2026-10-27
 
 ### Vurdereren får malen på deltakerens språk — #1135

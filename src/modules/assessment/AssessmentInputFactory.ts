@@ -2,7 +2,7 @@ import { preprocessSensitiveDataForLlm, type SensitiveDataPreprocessResult } fro
 import { pickLocalizedValue } from "../../i18n/content.js";
 import { localizeContentText } from "../../i18n/content.js";
 import type { SupportedLocale } from "../../i18n/locale.js";
-import { describedSteps } from "#rubric-check";
+import { describedSteps, stepTexts } from "#rubric-check";
 import { assessmentPolicyCodec, type ModuleAssessmentPolicy } from "../../codecs/assessmentPolicyCodec.js";
 
 // Each rubric criterion is scored on a 0–4 scale (decisionService clamps every score to [0,4]).
@@ -134,6 +134,8 @@ export type RubricCriterionForPrompt = {
   description: string | null;
   /** Kriteriets egen skala, når den er en annen enn 0–4 (for eksempel 0–2). */
   scaleMax: number | null;
+  /** Trinnene slik beskrivelsen nevner dem («1 = står der, men blandet …»); tom når den ikke gjør det. */
+  steps?: Array<{ step: number; text: string }>;
 };
 
 function localizedField(value: unknown, locale: SupportedLocale): string | null {
@@ -171,9 +173,10 @@ export function parseRubricCriteriaForPrompt(criteriaJson: string, locale: Suppo
     const isObject = isCriterionObject(criterion);
     const label = isObject ? localizedField((criterion as { label?: unknown }).label, locale) : null;
     const description = isObject ? localizedField((criterion as { description?: unknown }).description, locale) : localizedField(criterion, locale);
-    const steps = describedSteps(isObject ? { ...(criterion as object), description } : description);
+    const forStep = isObject ? { ...(criterion as object), description } : description;
+    const steps = describedSteps(forStep);
     const scaleMax = steps.max !== null && steps.max !== RUBRIC_MAX_SCORE_PER_CRITERION && steps.min === 0 ? steps.max : null;
-    return { id, label, description, scaleMax };
+    return { id, label, description, scaleMax, steps: stepTexts(forStep, undefined, { defaultMax: RUBRIC_MAX_SCORE_PER_CRITERION }).steps };
   });
 }
 

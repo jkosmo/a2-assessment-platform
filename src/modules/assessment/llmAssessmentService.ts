@@ -19,7 +19,7 @@ type AssessmentContext = {
   promptTemplateExamplesJson?: string;
   rubricCriteriaIds?: string[];
   /** #1135: what each criterion means. Without it the model saw only the IDs. */
-  rubricCriteria?: Array<{ id: string; label: string | null; description: string | null; scaleMax: number | null }>;
+  rubricCriteria?: Array<{ id: string; label: string | null; description: string | null; scaleMax: number | null; steps?: Array<{ step: number; text: string }> }>;
   submissionFieldLabels?: string[];
 };
 
@@ -110,6 +110,57 @@ export function normalizeRubricScoresToContract(
   return { ...result, rubric_scores: rubricScores, rubric_total: rubricTotal };
 }
 
+/**
+ * #1135, målt mot stage-modellen 2026-10-27: på et svar midt på skalaen skrev modellen en begrunnelse
+ * som ordrett beskrev trinn 1 («står der, men blandet med diskusjonen») og ga 0. Det skjedde med begge
+ * modellene, ved temperatur 0, og en uvesentlig endring i meldingen vippet det mellom 0 og 33.
+ *
+ * Derfor velger modellen trinnets TEKST (`criterion_steps`), og poenget er det trinnet teksten tilhører.
+ * Gjenkjennes ikke teksten — eller passer den på flere trinn — står modellens eget tall.
+ */
+export function scoresFromChosenSteps(
+  result: LlmStructuredAssessment,
+  criteria: AssessmentContext["rubricCriteria"],
+): LlmStructuredAssessment {
+  const chosen = result.criterion_steps;
+  if (!chosen) return result;
+  const rubricScores: Record<string, number> = { ...result.rubric_scores };
+  let changed = false;
+  for (const criterion of criteria ?? []) {
+    const quoted = chosen[criterion.id];
+    if (typeof quoted !== "string" || !criterion.steps?.length) continue;
+    const step = matchStep(quoted, criterion.steps);
+    if (step !== null && rubricScores[criterion.id] !== step) {
+      rubricScores[criterion.id] = step;
+      changed = true;
+    }
+  }
+  if (!changed) return result;
+  const rubricTotal = Object.values(rubricScores).reduce((sum, value) => sum + value, 0);
+  return { ...result, rubric_scores: rubricScores, rubric_total: rubricTotal };
+}
+
+const comparable = (text: string) =>
+  text
+    .toLowerCase()
+    .replace(/^\s*\d+\s*[=:.)–-]\s*/, "")
+    .replace(/[«»"'“”.;:,!?()]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+function matchStep(quoted: string, steps: Array<{ step: number; text: string }>): number | null {
+  const wanted = comparable(quoted);
+  if (!wanted) return null;
+  const exact = steps.filter((s) => comparable(s.text) === wanted);
+  if (exact.length === 1) return exact[0]!.step;
+  // Modellen kan ta med litt mer eller litt mindre enn trinnet; ett trinn som rommer det, eller som det rommer.
+  const partial = steps.filter((s) => {
+    const own = comparable(s.text);
+    return own.length >= 8 && wanted.length >= 8 && (own.includes(wanted) || wanted.includes(own));
+  });
+  return partial.length === 1 ? partial[0]!.step : null;
+}
+
 export async function evaluatePracticalWithAzureOpenAi(
   input: AssessmentContext,
   config: AzureOpenAiRuntimeConfig,
@@ -174,12 +225,16 @@ export async function evaluatePracticalWithAzureOpenAi(
         const parsedStructuredPayload = parseStructuredPayload(assistantContent);
         const parsedAssessment = llmResponseCodec.parse(parsedStructuredPayload);
 
-        // #1135: poeng på kriteriets egen skala regnes om til 0–4 her, ikke av modellen.
+        // #1135: trinnet modellen valgte setter poenget; så regnes kriteriets egen skala om til 0–4 her,
+        // ikke av modellen.
         return normalizeRubricScoresToContract(
-          {
-            ...parsedAssessment,
-            red_flags: normalizeRedFlags(parsedAssessment.red_flags),
-          },
+          scoresFromChosenSteps(
+            {
+              ...parsedAssessment,
+              red_flags: normalizeRedFlags(parsedAssessment.red_flags),
+            },
+            input.rubricCriteria,
+          ),
           input.rubricCriteria,
         );
       }
@@ -453,6 +508,7 @@ export function buildAzureOpenAiMessages(input: AssessmentContext): Array<{ role
   const responseContract = buildRequiredResponseContract(
     criteriaIds,
     Object.fromEntries((input.rubricCriteria ?? []).filter((c) => c.scaleMax).map((c) => [c.id, c.scaleMax as number])),
+    (input.rubricCriteria ?? []).filter((c) => (c.steps?.length ?? 0) >= 2).map((c) => c.id),
   );
 
   const submissionFieldsSection =
@@ -617,18 +673,27 @@ function describeEnumForPrompt(
 
 // Eksportert BARE for vakta i test/unit/response-contract-criteria.test.ts. Kriteriene kan finnes i
 // regelfila og likevel aldri nå modellen — det er samme stille feil som saken retter, ett lag ned.
-export function buildRequiredResponseContract(criteriaIds: string[], scales: Record<string, number> = {}): string {
+export function buildRequiredResponseContract(
+  criteriaIds: string[],
+  scales: Record<string, number> = {},
+  steppedIds: string[] = [],
+): string {
   // #1135: a criterion with its own scale (0–2) is scored on that scale; the platform converts to 0–4.
   const criteriaList = criteriaIds.map((id) => (scales[id] ? `  - ${id} (0..${scales[id]})` : `  - ${id}`)).join("\n");
+  // #1135: rationale and chosen step come BEFORE the score — the model decides on the step's text first,
+  // and the platform takes the score from the step it chose (scoresFromChosenSteps).
+  const stepsLine = steppedIds.length
+    ? `\n- criterion_steps: object with, for each of ${steppedIds.join(", ")}, the text of the step whose description fits the submission, copied exactly from the criterion below (without the number). The score is that step's number.`
+    : "";
   return `
-JSON response contract:
+JSON response contract (fields in this order):
 - module_id: string
+- criterion_rationales: object with one concise string rationale per rubric criterion key (same keys as rubric_scores)${stepsLine}
 - rubric_scores: object with integer values for each rubric criterion — 0..4, or 0..N where a criterion below says (0..N):
 ${criteriaList}
 - rubric_total: integer equal to sum of rubric_scores values
 - practical_score_scaled: number 0..70
 - pass_fail_practical: boolean
-- criterion_rationales: object with one concise string rationale per rubric criterion key (same keys as rubric_scores)
 - improvement_advice: array of up to 10 concise strings
 - red_flags: array of objects with fields: code (string), severity (string), description (string)
 - Use red_flags only when the stated criteria below are clearly met. If uncertain, do not flag. Return an empty array if no flag applies.
