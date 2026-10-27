@@ -58,6 +58,14 @@ describe("#1135 i prompten", () => {
     expect(section).toContain("- generell");
   });
 
+  // Målt på stage: uten disse linjene trakk modellen et fullgodt svar for ting trinnet ikke nevner.
+  it("ber om toppnivået når trinnet er oppfylt, og ingen trekk for det trinnet ikke nevner", () => {
+    const section = buildRubricCriteriaSection(kriterier)!;
+    expect(section).toContain("Give the highest step when the submission does what that step describes.");
+    expect(section).toContain("Do not deduct for anything the step does not name");
+    expect(section).toContain("give the higher one only if it meets everything the higher step names");
+  });
+
   it("ingen kriterier med noe å si → ingen seksjon (som før)", () => {
     expect(buildRubricCriteriaSection([{ id: "a", label: null, description: null, scaleMax: null }])).toBeNull();
     expect(buildRubricCriteriaSection(undefined)).toBeNull();

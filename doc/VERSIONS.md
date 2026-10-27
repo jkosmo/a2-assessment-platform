@@ -2,6 +2,17 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.116.0 - 2026-10-27
+
+### Vurdereren trekker bare for det trinnet nevner — #1135
+
+Målt på stage med 2.114.0, fem forsøk: et fullgodt referat fikk 83, 67, 83, 67 og 100 — trukket for ting
+trinnet ikke nevner («bare ett oppfølgingspunkt», «ikke som egen liste») og for ting som ikke stemte
+(«står ikke først» om et vedtak som sto først). Instruksen sier nå at toppnivået gis når svaret gjør det
+trinnet beskriver; at det ikke trekkes for oppsett, listeform, antall punkter eller ordlyd trinnet ikke
+nevner; at mellom to trinn gis det høyeste bare når alt det nevner er oppfylt; og at begrunnelsen viser
+til hva svaret gjorde.
+
 ## 2.115.0 - 2026-10-27
 
 ### Deltakeren ser kriteriene før levering og poengene etter — #1124 del 1

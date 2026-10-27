@@ -40,7 +40,13 @@ export function buildRubricCriteriaSection(criteria: AssessmentContext["rubricCr
     return `- ${head}${mapping}: ${c.description}`;
   });
   return [
-    "Rubric criteria (score each criterion by its own description; where the description names the steps, the score is the step the submission reaches — not your own idea of the criterion):",
+    // #1135, målt på stage 2026-10-27: med bare den første setningen trakk modellen et fullgodt svar for
+    // ting trinnet ikke nevner («bare ett oppfølgingspunkt», «ikke som egen liste») — og for ting som
+    // ikke stemte («står ikke først» om et vedtak som sto først). Snitt 80 for et svar som skulle hatt 100.
+    "Rubric criteria (score each criterion by its own description; where the description names the steps, the score is the step the submission reaches — not your own idea of the criterion):\n" +
+      "- Give the highest step when the submission does what that step describes. Do not deduct for anything the step does not name — layout, list form, the number of points, or wording — and do not require more than the task text asks for.\n" +
+      "- When the submission sits between two steps, give the higher one only if it meets everything the higher step names; otherwise the lower.\n" +
+      "- Each rationale names what the submission did that places it on that step, quoting or paraphrasing the submission; a deduction names what the step requires that is missing.",
     ...lines,
   ].join("\n");
 }
