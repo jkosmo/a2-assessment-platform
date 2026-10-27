@@ -2698,6 +2698,14 @@ function renderResultSummary(body) {
   );
   if (scoreList) {
     const scoreCard = createSummaryCard(t("result.criteria.title"));
+    // Poengene er KI-ens. Har en vurderer overstyrt vedtaket, sier merknaden det — ellers kan
+    // «2 av 2» ved siden av «Ikke bestått» se ut som en feil.
+    if (body.participantGuidance?.finalDecisionByAssessor === true) {
+      const note = document.createElement("p");
+      note.className = "criterion-score-note";
+      note.textContent = t("result.criteria.byAssessorNote");
+      scoreCard.appendChild(note);
+    }
     scoreCard.appendChild(scoreList);
     resultSummary.appendChild(scoreCard);
   }

@@ -110,7 +110,11 @@ describe("#1124 kriteriene og poengene, gjennom rutene", () => {
           rubric_total: 8,
           practical_score_scaled: 50,
           pass_fail_practical: true,
-          criterion_rationales: { vedtak: "Vedtakene står, men blandet med diskusjonen." },
+          criterion_rationales: {
+            vedtak: "Vedtakene står, men blandet med diskusjonen.",
+            // Begrunnelsen for det skjulte kriteriet røper det samme som etiketten — den skal ikke ut.
+            hemmelig_1124: "SKJULT-1124: nevnte ikke artikkel 6-1.",
+          },
           improvement_advice: [],
           red_flags: [],
           manual_review_recommended: false,
@@ -123,6 +127,7 @@ describe("#1124 kriteriene og poengene, gjennom rutene", () => {
   afterAll(async () => {
     await prisma.module.update({ where: { id: moduleId }, data: { activeVersionId: null } });
     await prisma.lLMEvaluation.deleteMany({ where: { moduleVersionId: versionId } });
+    await prisma.assessmentDecision.deleteMany({ where: { moduleVersionId: versionId } });
     await prisma.submission.deleteMany({ where: { moduleId } });
     await prisma.moduleVersion.deleteMany({ where: { moduleId } });
     await prisma.rubricVersion.deleteMany({ where: { moduleId } });
@@ -196,9 +201,35 @@ describe("#1124 kriteriene og poengene, gjennom rutene", () => {
       { id: "struktur", label: "Struktur", score: 4, maxScore: 4, topStep: null },
       { id: "task_comprehension", label: null, score: 0, maxScore: 4, topStep: null },
     ]);
+    // Begrunnelsen for det skjulte kriteriet er filtrert bort på serveren.
+    expect(res.body.participantGuidance.criterionRationales).toEqual({ vedtak: "Vedtakene står, men blandet med diskusjonen." });
+    // Ingen vurderer har overstyrt: ingen merknad.
+    expect(res.body.participantGuidance.finalDecisionByAssessor).toBe(false);
     const sent = JSON.stringify(res.body);
     expect(sent).not.toContain("FASIT-1124");
     expect(sent).not.toContain("SKJULT-1124");
+    expect(sent).not.toContain("hemmelig_1124");
+  });
+
+  it("GET /api/submissions/:id/result — en vurderer overstyrte: poengene står, med flagget for merknaden", async () => {
+    await prisma.assessmentDecision.create({
+      data: {
+        submissionId,
+        moduleVersionId: versionId,
+        rubricVersionId: rubricId,
+        mcqScaledScore: 0,
+        practicalScaledScore: 50,
+        totalScore: 50,
+        redFlagsJson: "[]",
+        passFailTotal: false,
+        decisionType: "MANUAL_OVERRIDE",
+        decisionReason: "Vurdereren satte strøket.",
+      },
+    });
+    const res = await request(app).get(`/api/submissions/${submissionId}/result`).set(participant).set("x-locale", "nb");
+    expect(res.status).toBe(200);
+    expect(res.body.participantGuidance.finalDecisionByAssessor).toBe(true);
+    expect(res.body.participantGuidance.criterionScores).toHaveLength(3);
   });
 
   it("en annens innlevering: 404", async () => {

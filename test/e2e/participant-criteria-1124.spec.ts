@@ -214,6 +214,32 @@ test.describe("#1124 — etter vurdering: poeng per kriterium", () => {
     await expect(page.locator("#resultSummary .summary-list li", { hasText: "Vedtaket om budsjettet" })).toHaveCount(0);
   });
 
+  test("en vurderer overstyrte: merknaden står over kortene; ellers står den ikke", async ({ page }) => {
+    await mockBase(page, essayModule(CRITERIA), {
+      ...RESULT,
+      decision: { passFailTotal: false, decisionType: "MANUAL_OVERRIDE" },
+      participantGuidance: { ...RESULT.participantGuidance, finalDecisionByAssessor: true },
+    });
+    await openModule(page);
+    await submitAndShowResult(page);
+    const note = page.locator("#resultSummary .criterion-score-note");
+    await expect(note).toHaveText("Poengene er KI-ens; den endelige avgjørelsen er tatt av en vurderer.");
+    // Over kortene, i samme kort som dem.
+    const order = await page.locator("#resultSummary .criterion-score-note + .criterion-score-list").count();
+    expect(order).toBe(1);
+  });
+
+  test("ingen overstyring: ingen merknad", async ({ page }) => {
+    await mockBase(page, essayModule(CRITERIA), {
+      ...RESULT,
+      participantGuidance: { ...RESULT.participantGuidance, finalDecisionByAssessor: false },
+    });
+    await openModule(page);
+    await submitAndShowResult(page);
+    await expect(page.locator("#resultSummary .criterion-score").first()).toBeVisible();
+    await expect(page.locator("#resultSummary .criterion-score-note")).toHaveCount(0);
+  });
+
   test("en eldre server uten criterionScores: begrunnelsene som før", async ({ page }) => {
     const { criterionScores: _drop, ...guidance } = RESULT.participantGuidance;
     await mockBase(page, essayModule(CRITERIA), { ...RESULT, participantGuidance: guidance });

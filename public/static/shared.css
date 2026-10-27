@@ -795,6 +795,7 @@ body.auth-resolving .mock-identity-card {
 .criteria-item-intro { margin: 0; font-size: 14px; line-height: 1.5; }
 .criteria-steps { margin: 0; padding-left: 18px; display: grid; gap: 2px; font-size: 14px; line-height: 1.5; }
 .criterion-score-list { display: grid; gap: 10px; }
+.criterion-score-note { margin: 0; font-size: 14px; line-height: 1.5; color: var(--color-meta); }
 .criterion-score { display: grid; gap: 6px; padding: 12px 14px; border: 1px solid var(--color-module-summary-border); border-radius: var(--radius-card); background: var(--color-surface); }
 .criterion-score.is-short { border-color: var(--color-link-hover-border); background: var(--color-module-summary-bg); }
 .criterion-score-value { flex-shrink: 0; font-weight: 650; white-space: nowrap; }

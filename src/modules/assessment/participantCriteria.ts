@@ -76,6 +76,24 @@ function readVisibleCriteria(criteriaJson: string, locale: SupportedLocale): Rea
 }
 
 /**
+ * #1124 (produkteier 2026-10-27): begrunnelsen for et skjult kriterium vises heller ikke etter
+ * vurderingen. Den sier hva kriteriet så etter, og deltakeren kan levere på nytt — så den røper det
+ * samme som etiketten. Begrunnelser for ID-er som ikke står i rubrikken (en eldre vurdering, eller en
+ * ID modellen fant på), er ikke skjulte kriterier og står som før.
+ */
+export function withoutHiddenRationales(
+  rationales: Record<string, string> | null | undefined,
+  criteriaJson: string | null | undefined,
+): Record<string, string> | null {
+  if (!rationales) return null;
+  if (!criteriaJson) return rationales;
+  const hidden = new Set(
+    parseRubricCriteriaEntries(criteriaJson).filter(([, raw]) => !isCandidateVisible(raw)).map(([id]) => id),
+  );
+  return Object.fromEntries(Object.entries(rationales).filter(([id]) => !hidden.has(id)));
+}
+
+/**
  * Før levering: «Slik vurderes svaret ditt». Et kriterium uten noe å vise (bare en ID eller en vekt,
  * som standardrubrikken) er ikke med — en liste med «Task comprehension, 0–4 poeng» og ingenting mer
  * sier deltakeren ingenting om hva som gir poeng.

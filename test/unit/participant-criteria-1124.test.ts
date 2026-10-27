@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { stepTexts } from "#rubric-check";
 import { buildCriterionScores, buildParticipantCriteria } from "../../src/modules/assessment/participantCriteria.js";
-import { toSubmissionResultView } from "../../src/modules/submission/submissionReadModels.js";
+import { toSubmissionResultView, type OwnedSubmission } from "../../src/modules/submission/submissionReadModels.js";
 
 // #1124: deltakeren ser kriteriene med trinnene før levering, og poengene per kriterium etter.
 // Reglene prøves her; at rutene faktisk sender feltene, prøves gjennom supertest i
@@ -189,6 +189,37 @@ describe("#1124 resultatvisningen bærer poengene", () => {
     const view = await getOwnedSubmissionResultView("s1", "u1", "nb");
     expect(queryRubricCriteriaJson).toHaveBeenCalledWith("r1");
     expect(view?.participantGuidance.criterionScores[0]).toMatchObject({ label: "Vedtakene", score: 1, maxScore: 2 });
+  });
+
+  it("begrunnelsen for et skjult kriterium sendes ikke — heller ikke etter vurderingen", () => {
+    const withHidden = {
+      ...submission,
+      llmEvaluations: [{
+        ...submission.llmEvaluations[0],
+        responseJson: JSON.stringify({
+          ...JSON.parse(submission.llmEvaluations[0].responseJson),
+          criterion_rationales: { vedtak: "Blandet.", hemmelig: "SKJULT: nevnte ikke artikkel 6-1.", ukjent_id: "Står." },
+        }),
+      }],
+    };
+    const view = toSubmissionResultView(withHidden, { criteriaJson: CRITERIA, locale: "nb" });
+    expect(view.participantGuidance.criterionRationales).toEqual({ vedtak: "Blandet.", ukjent_id: "Står." });
+    expect(JSON.stringify(view)).not.toContain("SKJULT");
+    expect(JSON.stringify(view)).not.toContain("hemmelig");
+    // Uten rubrikk (MCQ, eller en eldre rad) er det ingenting å filtrere mot.
+    expect(toSubmissionResultView(withHidden).participantGuidance.criterionRationales).toHaveProperty("hemmelig");
+  });
+
+  it("finalDecisionByAssessor: sann når et menneske overstyrte vedtaket eller avgjorde en anke", () => {
+    const decided = (decisionType: string) => ({
+      ...submission,
+      decisions: [{ id: "d1", decisionType, decisionReason: "x", mcqScaledScore: 0, practicalScaledScore: 50, totalScore: 50 }],
+    });
+    const flag = (s: OwnedSubmission) => toSubmissionResultView(s, { criteriaJson: CRITERIA, locale: "nb" }).participantGuidance.finalDecisionByAssessor;
+    expect(flag(decided("MANUAL_OVERRIDE"))).toBe(true);
+    expect(flag(decided("APPEAL_RESOLUTION"))).toBe(true);
+    expect(flag(decided("AUTOMATIC"))).toBe(false);
+    expect(flag(submission)).toBe(false);
   });
 
   it("uten vurdering: tom liste", () => {

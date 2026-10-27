@@ -959,7 +959,8 @@ function renderPreview() {
       // #896 S1: the Forhaandsvisning tab claims to show what the participant meets, so it
       // must not leak the assessor expectation, the MCQ answer key and rationale, or criteria
       // marked candidateVisible:false. Rediger keeps showing all of it - that is the author's
-      // working view.
+      // working view. #1124: a criterion WITHOUT the flag is visible, as for the participant
+      // (`isCandidateVisible` in admin-content-preview.js mirrors the server rule).
       audience: forParticipant ? "participant" : "author",
       versionChain: versionChainParts.join(" · "),
       badgeClass: hasDraft ? "draft" : isLive ? "live" : isDraft ? "draft" : "shell",

@@ -1,7 +1,7 @@
 import { llmResponseCodec } from "../../codecs/llmResponseCodec.js";
 import { localizeContentText } from "../../i18n/content.js";
 import { normalizeLocale, type SupportedLocale } from "../../i18n/locale.js";
-import { buildCriterionScores } from "../assessment/participantCriteria.js";
+import { buildCriterionScores, withoutHiddenRationales } from "../assessment/participantCriteria.js";
 import { parseDecisionReasonParams } from "../assessment/decisionReason.js";
 import { resolveMcqMinPercent, resolveTotalMin, withDerivedMcqPassFail } from "../assessment/mcqPassRule.js";
 import { deriveConfidenceLevel } from "../assessment/assessmentDecisionSignals.js";
@@ -46,6 +46,8 @@ export type OwnedSubmission = {
     // #950: null når et menneske skrev grunnen selv, eller når raden er eldre enn feltet.
     decisionReasonCode?: string | null;
     decisionReasonParams?: string | null;
+    // #1124: AUTOMATIC, MANUAL_OVERRIDE eller APPEAL_RESOLUTION — de to siste er et menneskes avgjørelse.
+    decisionType?: string | null;
     mcqScaledScore: number;
     practicalScaledScore: number;
     totalScore: number;
@@ -188,12 +190,17 @@ export function toSubmissionResultView(
       // fritteksten over — se `deriveConfidenceLevel`.
       confidenceLevel: llmStructured ? deriveConfidenceLevel(llmStructured) : null,
       improvementAdvice: llmStructured?.improvement_advice ?? [],
-      criterionRationales: llmStructured?.criterion_rationales ?? null,
+      // #1124: uten begrunnelsene for skjulte kriterier — filtrert her, så klienten ikke kan vise dem.
+      criterionRationales: withoutHiddenRationales(llmStructured?.criterion_rationales, criteria.criteriaJson),
       // #1124: «1 av 2» per kriterium, på kriteriets EGEN skala, og hva toppnivået krever der
       // deltakeren ikke fikk fullt. Bare kriterier deltakeren får se — se `buildCriterionScores`.
       criterionScores: llmStructured
         ? buildCriterionScores(criteria.criteriaJson, llmStructured.rubric_scores, criteria.locale)
         : [],
+      // #1124 (produkteier 2026-10-27): poengene per kriterium er KI-ens. Når en vurderer har overstyrt
+      // vedtaket (manuell vurdering eller anke), står de fortsatt — men med en merknad, så «2 av 2»
+      // overalt ved siden av «Ikke bestått» ikke ser ut som en feil.
+      finalDecisionByAssessor: decision?.decisionType === "MANUAL_OVERRIDE" || decision?.decisionType === "APPEAL_RESOLUTION",
       decisionMetadata: llmStructured
         ? {
             evidenceSufficiency: llmStructured.evidence_sufficiency ?? null,
