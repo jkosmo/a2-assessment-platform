@@ -1329,6 +1329,8 @@ async function renderDetailView(courseId) {
   const enrollmentPolicy = course?.enrollmentPolicy ?? "OPEN";
   // #495/T-QA-4: default på for nye kurs og når feltet mangler (eldre detaljer).
   const discussionsEnabled = course?.discussionsEnabled !== false;
+  // 2.119.0: e-post til kursets eiere om nye spørsmål; på når feltet mangler.
+  const discussionOwnerNotifications = course?.discussionOwnerNotifications !== false;
   // #1093: plassering i «Mine kurs»; tomt = alfabetisk.
   const sortOrder = Number.isInteger(course?.sortOrder) ? String(course.sortOrder) : "";
   const pageTitle = course ? (localizedText(course.title) || t("ui.kind.course")) : t("courses.newCourse");
@@ -1343,7 +1345,7 @@ async function renderDetailView(courseId) {
   const availableThemes = await loadAvailableThemes();
   const themeIds = Array.isArray(course?.themeIds) ? course.themeIds : [];
 
-  courseDetail = { courseId: courseId ?? null, course, localeValues, certLevel, enrollmentPolicy, discussionsEnabled, sortOrder, availableThemes, themeIds };
+  courseDetail = { courseId: courseId ?? null, course, localeValues, certLevel, enrollmentPolicy, discussionsEnabled, discussionOwnerNotifications, sortOrder, availableThemes, themeIds };
   const page = getCourseFormPage();
   page.render();
   page.markClean();
@@ -1362,7 +1364,7 @@ async function renderDetailView(courseId) {
 
 // Kroppen i skjemasida: kursdetaljer + innhold. Feltene beholder id-ene sine (title-nb, certLevel …).
 function courseDetailBodyHtml() {
-  const { courseId, localeValues, certLevel, enrollmentPolicy, discussionsEnabled, sortOrder, availableThemes, themeIds } = courseDetail;
+  const { courseId, localeValues, certLevel, enrollmentPolicy, discussionsEnabled, discussionOwnerNotifications, sortOrder, availableThemes, themeIds } = courseDetail;
   return `<div class="detail-layout">
     <div data-form-tab="rediger">
       <div class="detail-section">
@@ -1442,8 +1444,13 @@ function courseDetailBodyHtml() {
         <div class="form-field" style="margin-top: var(--space-2)">
           <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
             <input type="checkbox" id="discussionsEnabled"${discussionsEnabled ? " checked" : ""} />
-            Diskusjon på dette kurset (deltakere kan stille spørsmål og diskutere)
+            ${escapeHtml(t("courses.discussionsEnabled"))}
           </label>
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-top:6px;">
+            <input type="checkbox" id="discussionOwnerNotifications"${discussionOwnerNotifications ? " checked" : ""} />
+            ${escapeHtml(t("courses.discussionOwnerNotifications"))}
+          </label>
+          <p class="small" style="margin: 4px 0 0">${escapeHtml(t("courses.discussionOwnerNotificationsHelp"))}</p>
         </div>
         ${courseId ? "" : `<p class="small" style="margin:var(--space-2) 0 0">${escapeHtml(t("courses.saveFirstOwners"))}</p>`}
       </div>
@@ -1917,6 +1924,7 @@ async function saveCourse(courseId) {
   const certLevel = document.getElementById("certLevel")?.value ?? "";
   const enrollmentPolicy = document.getElementById("enrollmentPolicy")?.value === "RESTRICTED" ? "RESTRICTED" : "OPEN";
   const discussionsEnabled = document.getElementById("discussionsEnabled")?.checked !== false;
+  const discussionOwnerNotifications = document.getElementById("discussionOwnerNotifications")?.checked !== false;
   // #1093: tomt felt sendes som null (alfabetisk); et tall sendes som tall.
   // #1094: et tallfelt gir tom verdi for «1-» (validity.badInput), og «1e2» ble tolket som 1 — begge
   // lagret stille noe annet enn forfatteren skrev. Bare et helt tall 0–9999, ellers melding og stopp.
@@ -1992,6 +2000,7 @@ async function saveCourse(courseId) {
           certificationLevel: certLevel || undefined,
           enrollmentPolicy,
           discussionsEnabled,
+          discussionOwnerNotifications,
           sortOrder,
           themeIds,
         }),
@@ -2008,6 +2017,7 @@ async function saveCourse(courseId) {
           certificationLevel: certLevel || undefined,
           enrollmentPolicy,
           discussionsEnabled,
+          discussionOwnerNotifications,
           sortOrder,
           themeIds,
         }),

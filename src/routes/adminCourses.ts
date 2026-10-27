@@ -56,6 +56,8 @@ const courseBodySchema = z.object({
   enrollmentPolicy: z.enum(["OPEN", "RESTRICTED"]).optional(),
   // #495/T-QA-4: kurs-master av/på for diskusjon (default true i datamodellen).
   discussionsEnabled: z.boolean().optional(),
+  // 2.119.0: e-post til kursets eiere om nye spørsmål i diskusjonen (default true i datamodellen).
+  discussionOwnerNotifications: z.boolean().optional(),
   // #1093: plassering i «Mine kurs». null = alfabetisk (det vanlige).
   sortOrder: z.number().int().min(0).max(9999).nullable().optional(),
   // 2.102.0: kursets tema i «Mine kurs». Satt = nøyaktig disse; utelatt = urørt.
@@ -113,6 +115,7 @@ adminCoursesRouter.post("/", idempotency("courses.create"), async (request, resp
       certificationLevel: parsed.data.certificationLevel ? localizedTextCodec.serialize(parsed.data.certificationLevel) : null,
       enrollmentPolicy: parsed.data.enrollmentPolicy,
       discussionsEnabled: parsed.data.discussionsEnabled,
+      discussionOwnerNotifications: parsed.data.discussionOwnerNotifications,
       sortOrder: parsed.data.sortOrder,
       themeIds: parsed.data.themeIds,
       actorId: request.context?.userId,
@@ -374,6 +377,7 @@ adminCoursesRouter.get("/:courseId", async (request, response, next) => {
       certificationLevel: course.certificationLevel,
       enrollmentPolicy: course.enrollmentPolicy,
       discussionsEnabled: course.discussionsEnabled,
+      discussionOwnerNotifications: course.discussionOwnerNotifications,
       sortOrder: course.sortOrder ?? null,
       themeIds: await findThemeIdsForCourse(course.id),
       updatedAt: course.updatedAt.toISOString(),
@@ -406,6 +410,7 @@ adminCoursesRouter.put("/:courseId", requireContentOwnership("COURSE", "courseId
       certificationLevel: parsed.data.certificationLevel ? localizedTextCodec.serialize(parsed.data.certificationLevel) : undefined,
       enrollmentPolicy: parsed.data.enrollmentPolicy,
       discussionsEnabled: parsed.data.discussionsEnabled,
+      discussionOwnerNotifications: parsed.data.discussionOwnerNotifications,
       sortOrder: parsed.data.sortOrder,
       themeIds: parsed.data.themeIds,
     }, request.context?.userId);

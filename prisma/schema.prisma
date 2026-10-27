@@ -648,6 +648,9 @@ model Course {
   // kurs får diskusjon på når feature lander (besluttet 2026-06-27). Effektiv regel for et
   // item: Course.discussionsEnabled && CourseItem.discussionsEnabled.
   discussionsEnabled Boolean                 @default(true)
+  // 2.119.0: e-post til kursets eiere når en deltaker stiller et nytt spørsmål. Kursets eiere slår
+  // den av og på; den gjelder alle eierne. Svar går fortsatt bare til trådens abonnenter.
+  discussionOwnerNotifications Boolean       @default(true)
   // #1093: valgfri plassering i «Mine kurs». Satt: først, stigende. Tomt (det vanlige): alfabetisk
   // på tittelen i deltakerens språk. Regelen bor i courseOrdering.ts.
   sortOrder          Int?

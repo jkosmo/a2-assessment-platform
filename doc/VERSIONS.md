@@ -2,6 +2,24 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.119.0 - 2026-10-27
+
+### Nye spørsmål i diskusjonen varsler kursets eiere, og eierne kan slå det av
+
+Et nytt spørsmål ga e-post til ALLE fagansvarlige på plattformen, fordi kurs ikke hadde eiere da
+varslingen ble laget (#495). Nå går den til kursets eiere (`ContentOwner`). Har kurset ingen eier som kan
+nås, går den til administratorene, så spørsmålet ikke blir liggende uten at noen vet om det. Er
+spørsmålsstilleren selv eneste eier, går den ingen steder.
+
+Ny kursinnstilling `discussionOwnerNotifications` (på som standard) under «Innstillinger» i kursskjemaet.
+Den gjelder alle eierne av kurset. Svar varsles som før bare til dem som følger tråden. Migrasjonen er
+bare utvidelse: én kolonne med standardverdi. Teksten for «Diskusjon på dette kurset» er flyttet inn i
+oversettelsene.
+
+Merk: på stage gikk spørsmålsvarselet før til ingen, fordi stage ikke henter roller fra Entra. Eierne
+står i kurseierskapet, ikke i rollene, så nå får eierne på stage e-post. Administrator-reserven finner
+fortsatt ingen der.
+
 ## 2.118.0 - 2026-10-27
 
 ### Vurdereren velger trinnets tekst, plattformen setter poenget — #1135

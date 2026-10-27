@@ -12,15 +12,52 @@ import { recipientLocale } from "../../i18n/recipientLocale.js";
 import { isReachableParticipant } from "../user/participantReach.js";
 
 /**
- * Diskusjon — minimal varsling (#495/T-QA-5). Nytt SPØRSMÅL → kursets SMO-er; nytt SVAR →
+ * Diskusjon — minimal varsling (#495/T-QA-5). Nytt SPØRSMÅL → kursets eiere; nytt SVAR →
  * trådens abonnenter (auto-abonnement skjer ved opprett/svar i discussionService). Gjenbruker
- * ACS-kanalen via participantNotificationService. Preferanse-/digest-styring eies av #497 — holdt
- * bevisst minimalt her. Alle feil svelges av kalleren: varsling skal aldri velte selve handlingen.
+ * ACS-kanalen via participantNotificationService. Alle feil svelges av kalleren: varsling skal aldri
+ * velte selve handlingen.
  *
- * Merknad: `Course` har ingen eier-kobling, så «kursets SMO» = alle aktive brukere med rollen
- * SUBJECT_MATTER_OWNER. #970: språket er MOTTAKERENS («sist sett», `recipientLocale`) — før sto det
- * «ingen per-bruker locale finnes ennå → nb» her, og alle fikk bokmål.
+ * #970: språket er MOTTAKERENS («sist sett», `recipientLocale`).
  */
+
+const recipientSelect = { id: true, email: true, name: true, preferredLocale: true, activeStatus: true, isAnonymized: true } as const;
+
+/**
+ * 2.119.0: hvem som får e-post om et nytt spørsmål. Før gikk den til ALLE fagansvarlige på plattformen,
+ * fordi kurs ikke hadde eiere da varslingen ble laget. Nå: kursets eiere (`ContentOwner`), og bare når
+ * eierne ikke har slått det av på kurset.
+ *
+ * Har kurset ingen eier som kan nås (alle har sluttet, eller kurset ble laget av systemet), går varselet
+ * til administratorene — ellers blir spørsmålet liggende uten at noen vet om det. Er spørsmålsstilleren
+ * selv eneste eier, er det ingen å varsle, og da skal det heller ikke gå til administratorene.
+ */
+export async function findQuestionRecipients(courseId: string, authorId: string, now = new Date()) {
+  const course = await prisma.course.findUnique({ where: { id: courseId }, select: { title: true, discussionOwnerNotifications: true } });
+  if (!course || !course.discussionOwnerNotifications) return { course, recipients: [] };
+
+  const ownerRows = await prisma.contentOwner.findMany({
+    where: { contentType: "COURSE", contentId: courseId },
+    select: { user: { select: recipientSelect } },
+  });
+  let reachable = ownerRows.map((row) => row.user).filter((user) => isReachableParticipant(user));
+  if (reachable.length === 0) {
+    reachable = await prisma.user.findMany({
+      where: {
+        activeStatus: true,
+        isAnonymized: false,
+        roleAssignments: {
+          some: {
+            appRole: AppRole.ADMINISTRATOR,
+            validFrom: { lte: now },
+            OR: [{ validTo: null }, { validTo: { gte: now } }],
+          },
+        },
+      },
+      select: recipientSelect,
+    });
+  }
+  return { course, recipients: reachable.filter((user) => user.id !== authorId) };
+}
 
 export async function notifyNewQuestion(input: {
   courseId: string;
@@ -28,38 +65,20 @@ export async function notifyNewQuestion(input: {
   threadTitle: string;
   authorId: string;
 }): Promise<void> {
-  const now = new Date();
-  const [smos, course] = await Promise.all([
-    prisma.user.findMany({
-      where: {
-        activeStatus: true,
-        isAnonymized: false,
-        id: { not: input.authorId },
-        roleAssignments: {
-          some: {
-            appRole: AppRole.SUBJECT_MATTER_OWNER,
-            validFrom: { lte: now },
-            OR: [{ validTo: null }, { validTo: { gte: now } }],
-          },
-        },
-      },
-      select: { id: true, email: true, name: true, preferredLocale: true },
-    }),
-    prisma.course.findUnique({ where: { id: input.courseId }, select: { title: true } }),
-  ]);
-  if (smos.length === 0) return;
+  const { course, recipients } = await findQuestionRecipients(input.courseId, input.authorId);
+  if (recipients.length === 0) return;
 
   let delivered = 0;
   let channel = "unknown";
-  for (const smo of smos) {
-    const locale = recipientLocale(smo);
+  for (const recipient of recipients) {
+    const locale = recipientLocale(recipient);
     const message = getDiscussionQuestionNotificationMessage(locale, {
       courseTitle: localizeContentText(locale, course?.title ?? "") ?? course?.title ?? "",
       threadTitle: input.threadTitle,
     });
     const result = await sendDiscussionNotification({
-      recipientEmail: smo.email,
-      recipientName: smo.name,
+      recipientEmail: recipient.email,
+      recipientName: recipient.name,
       subject: message.subject,
       body: message.nextStepGuidance,
       notificationType: "discussion_question_created",
@@ -79,7 +98,7 @@ export async function notifyNewQuestion(input: {
     metadata: {
       channel,
       notificationType: "discussion_question_created",
-      recipientCount: smos.length,
+      recipientCount: recipients.length,
       delivered,
     },
   });

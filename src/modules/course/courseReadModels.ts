@@ -96,6 +96,8 @@ export interface AdminCourseDetail {
   certificationLevel: string | null;
   enrollmentPolicy: string;
   discussionsEnabled: boolean;
+  /** 2.119.0: e-post til kursets eiere om nye spørsmål. */
+  discussionOwnerNotifications: boolean;
   /** #1093: plassering i «Mine kurs», eller null (alfabetisk). */
   sortOrder: number | null;
   /** 2.102.0: kursets tema i «Mine kurs». */

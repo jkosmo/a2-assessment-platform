@@ -75,6 +75,7 @@ export async function createCourse(input: {
   certificationLevel?: string | null;
   enrollmentPolicy?: "OPEN" | "RESTRICTED";
   discussionsEnabled?: boolean;
+  discussionOwnerNotifications?: boolean;
   /** #1093: plassering i «Mine kurs»; null eller utelatt = alfabetisk. */
   sortOrder?: number | null;
   /** 2.102.0: kursets tema i «Mine kurs». Utelatt = ingen. */
@@ -92,6 +93,7 @@ export async function createCourse(input: {
         certificationLevel: input.certificationLevel ?? null,
         ...(input.enrollmentPolicy ? { enrollmentPolicy: input.enrollmentPolicy } : {}),
         ...(input.discussionsEnabled !== undefined ? { discussionsEnabled: input.discussionsEnabled } : {}),
+        ...(input.discussionOwnerNotifications !== undefined ? { discussionOwnerNotifications: input.discussionOwnerNotifications } : {}),
         ...(input.sortOrder !== undefined ? { sortOrder: input.sortOrder } : {}),
       },
     });
@@ -126,6 +128,7 @@ export async function updateCourse(
     certificationLevel?: string | null;
     enrollmentPolicy?: "OPEN" | "RESTRICTED";
     discussionsEnabled?: boolean;
+    discussionOwnerNotifications?: boolean;
     sortOrder?: number | null;
     /** 2.102.0: satt = kursets tema blir nøyaktig disse; utelatt = urørt. */
     themeIds?: string[];
