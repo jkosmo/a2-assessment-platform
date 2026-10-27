@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseRubricCriteriaForPrompt } from "../../src/modules/assessment/AssessmentInputFactory.js";
+import { buildAssessmentInputContext, parseRubricCriteriaForPrompt } from "../../src/modules/assessment/AssessmentInputFactory.js";
 import { buildAzureOpenAiMessages, buildRequiredResponseContract, buildRubricCriteriaSection, normalizeRubricScoresToContract } from "../../src/modules/assessment/llmAssessmentService.js";
 
 // #1135: KI-vurdereren fikk bare kriterienes ID-er. Nå får den det kriteriet sier — etikett og
@@ -125,5 +125,43 @@ describe("#1135 omregningen til 0–4 skjer i koden", () => {
       rubricCriteria: [kriterier[0]!, kriterier[2]!],
     } as Parameters<typeof buildAzureOpenAiMessages>[0]);
     expect(user!.content).toContain("  - vedtak (0..2)");
+  });
+});
+
+// #1135, målt mot stage-modellen: malene ble sendt som hele språkkartet, og vedtaket fikk «ikke
+// plassert først» i halvparten av forsøkene. Med malen på deltakerens språk: fullt hver gang.
+describe("#1135 malene på deltakerens språk", () => {
+  const rad = (systemPrompt: string, userPromptTemplate: string, examplesJson = "[]") => ({
+    moduleId: "m1",
+    responseJson: JSON.stringify({ response: "Svar" }),
+    moduleVersion: {
+      taskText: "Oppgave",
+      assessmentPolicyJson: null,
+      rubricVersion: { criteriaJson: JSON.stringify({ vedtak: { weight: 1 } }), scalingRuleJson: "{}" },
+      promptTemplateVersion: { systemPrompt, userPromptTemplate, examplesJson },
+    },
+  });
+  const kart = (nb: string, nn: string, en: string) => JSON.stringify({ "en-GB": en, nb, nn });
+
+  it("et språkkart gir teksten på deltakerens språk, ikke kartet", () => {
+    const ctx = buildAssessmentInputContext(rad(kart("Du er sensor.", "Du er sensor (nn).", "You are an assessor."), kart("Vurder.", "Vurder (nn).", "Assess.")), "nn");
+    expect(ctx.promptTemplateSystem).toBe("Du er sensor (nn).");
+    expect(ctx.promptTemplateUserTemplate).toBe("Vurder (nn).");
+    const [system, user] = buildAzureOpenAiMessages({ moduleId: "m1", responseJson: {}, promptTemplateSystem: ctx.promptTemplateSystem, promptTemplateUserTemplate: ctx.promptTemplateUserTemplate } as Parameters<typeof buildAzureOpenAiMessages>[0]);
+    expect(system!.content).toBe("Du er sensor (nn).");
+    expect(user!.content).not.toContain("en-GB");
+  });
+
+  it("vanlig tekst står urørt", () => {
+    const ctx = buildAssessmentInputContext(rad("Du er sensor.", "Vurder."), "nb");
+    expect(ctx.promptTemplateSystem).toBe("Du er sensor.");
+    expect(ctx.promptTemplateUserTemplate).toBe("Vurder.");
+  });
+
+  it("en tom eksempelliste gir ingen eksempellinje; en med innhold står der", () => {
+    const melding = (examplesJson: string) => buildAzureOpenAiMessages({ moduleId: "m1", responseJson: {}, promptTemplateExamplesJson: examplesJson } as Parameters<typeof buildAzureOpenAiMessages>[0])[1]!.content;
+    expect(melding("[]")).not.toContain("Prompt examples context");
+    expect(melding(" [ ] ")).not.toContain("Prompt examples context");
+    expect(melding('[{"svar":"x"}]')).toContain('Prompt examples context (JSON):\n[{"svar":"x"}]');
   });
 });

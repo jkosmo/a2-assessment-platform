@@ -2,6 +2,19 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.117.0 - 2026-10-27
+
+### Vurdereren får malen på deltakerens språk — #1135
+
+Systemprompten og brukermalen lagres som språkkart (`{"en-GB": …, "nb": …, "nn": …}`), men ble sendt
+til vurdereren som hele kartet. Med samme modell og temperatur 0 fikk et fullgodt referat «vedtaket er
+ikke plassert først» (2 av 4) i halvparten av forsøkene, om et vedtak som sto først. Malen slås nå opp
+på deltakerens språk, og linja «Prompt examples context» utelates når listen er tom. Lokalt mot
+stage-modellen, fem forsøk: vedtaket fullt hver gang; totalen 100, 100, 100, 83, 100.
+
+Stage: `AZURE_OPENAI_ASSESSMENT_TEMPERATURE=0` (satt 2026-10-27). Med temperatur 1 varierte totalen
+for det samme svaret mellom 67 og 100.
+
 ## 2.116.0 - 2026-10-27
 
 ### Vurdereren trekker bare for det trinnet nevner — #1135

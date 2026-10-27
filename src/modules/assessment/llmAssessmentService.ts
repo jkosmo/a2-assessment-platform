@@ -446,7 +446,8 @@ export function buildAzureOpenAiMessages(input: AssessmentContext): Array<{ role
     input.assessmentPass === "secondary"
       ? "This is a secondary, independent assessment pass."
       : "This is the primary assessment pass.";
-  const examplesJson = (input.promptTemplateExamplesJson ?? "").trim();
+  // #1135: en tom liste («[]») er ingen eksempler — linja ga bare støy i meldingen.
+  const examplesJson = (input.promptTemplateExamplesJson ?? "").trim().replace(/^\[\s*\]$/, "");
   const responseLanguageInstruction = buildResponseLanguageInstruction(input.responseLocale ?? "en-GB");
   const criteriaIds = input.rubricCriteriaIds?.length ? input.rubricCriteriaIds : DEFAULT_CRITERIA_IDS;
   const responseContract = buildRequiredResponseContract(

@@ -110,8 +110,10 @@ export function buildAssessmentInputContext(
     sensitiveDataPreprocess,
     moduleTaskText,
     moduleGuidanceText,
-    promptTemplateSystem: promptTemplateVersion.systemPrompt,
-    promptTemplateUserTemplate: promptTemplateVersion.userPromptTemplate,
+    // #1135: malene lagres som språkkart ({"en-GB": …, "nb": …}); uten oppslag fikk vurdereren hele
+    // kartet som tekst, og poengene ble ustabile (vedtak «ikke plassert først» når det sto først).
+    promptTemplateSystem: localizeContentText(submissionLocale, promptTemplateVersion.systemPrompt) ?? promptTemplateVersion.systemPrompt,
+    promptTemplateUserTemplate: localizeContentText(submissionLocale, promptTemplateVersion.userPromptTemplate) ?? promptTemplateVersion.userPromptTemplate,
     promptTemplateExamplesJson: promptTemplateVersion.examplesJson,
   };
 }

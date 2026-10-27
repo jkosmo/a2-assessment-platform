@@ -16,7 +16,7 @@ import { vent } from "./pace.js";
 const { auth, reason } = readAuth();
 const BASE = stageBaseUrl(auth);
 const FASE = process.env.MAAL_1135 ?? "";
-test.skip(!auth || !["før", "etter", "etter2"].includes(FASE), `hopper over: ${reason ?? "sett MAAL_1135=før|etter|etter2"}`);
+test.skip(!auth || !["før", "etter", "etter2", "etter3", "temp0", "etter4"].includes(FASE), `hopper over: ${reason ?? "sett MAAL_1135=før|etter|etter2"}`);
 
 // Utenfor test-results: Playwright tømmer den mappa ved hver kjøring, og «etter» trenger modulen fra «før».
 const RAPPORT = process.env.MAAL_1135_DIR ?? path.resolve(process.cwd(), ".stage-maal");
@@ -50,7 +50,7 @@ const SVAR: Record<string, string> = {
 const GANGER = Number(process.env.MAAL_1135_GANGER ?? 2);
 
 test("vurder de tre svarene", async () => {
-  test.setTimeout(900_000);
+  test.setTimeout(2_700_000);
   fs.mkdirSync(RAPPORT, { recursive: true });
   let moduleId: string;
   // «etter» uten modulfil: finn modulen «før» laget, på tittelen (den nyeste, om det er flere).
@@ -114,6 +114,9 @@ test("vurder de tre svarene", async () => {
         begrunnelser: resultat?.participantGuidance?.criterionRationales ?? null,
         rå: resultat ? undefined : "ingen avgjørelse innen 5 min",
       });
+      // Skrevet etter hvert svar: en kjøring som stopper underveis, mister ikke det som er målt.
+      fs.writeFileSync(path.join(RAPPORT, `maal-1135-${FASE}.json`), JSON.stringify(resultater, null, 2), "utf8");
+      console.log(`MAAL ${FASE} ${navn}#${i + 1}: total=${resultater.at(-1)!.totalScore}`);
     }
   }
   fs.writeFileSync(path.join(RAPPORT, `maal-1135-${FASE}.json`), JSON.stringify(resultater, null, 2), "utf8");
