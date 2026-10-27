@@ -22,6 +22,8 @@
 //   revision       a «Repetisjon» course opens with questions — a NOTE                   (#1127)
 //   languages      nb, nn and en-GB complete, real translations, same answer in each
 //   approved text  nothing the author approved has gone missing        (needs --state)
+//   objectives     every question and task linked to an objective and to a section before the
+//                  test; an objective no question tests is a NOTE       (needs --state, #1125)
 //   slides         every slide got what the slide list says           (needs --slides)
 //   changes        unchanged is unchanged: every element the change list calls "unchanged" is
 //                  word for word as in the export it came from; "changed" differs; "new" has no
@@ -45,6 +47,7 @@ import { checkRubricScales } from "./rubric-check.mjs";
 import { wordsOf } from "./text-overlap.mjs";
 import { ALT_MIN_WORDS, checkAltTexts, checkFigureNumbers, checkLeftovers } from "./section-text-check.mjs";
 import { REVISION_MIN_QUESTIONS, WORDS_PER_CALLOUT, callouts, calloutsAllowed, checkFrameCount, isRevisionTitle, longLists, proseWordCount, selfDescription, summaryHeadings } from "./section-shape-check.mjs";
+import { checkObjectiveMap } from "./objective-map-check.mjs";
 import { SVG_MIME, checkAssets, readCourseState, resolvePackageAssets } from "./package-assets.mjs";
 import { checkSlideCoverage, countForms, readDeck } from "./slide-coverage.mjs";
 import { synthesizeStandaloneEnvelopes } from "./synthesize-envelopes.mjs";
@@ -775,6 +778,50 @@ function checkApprovedText(master, pkg) {
   };
 }
 
+// #1125: every question and free-text task points at an objective and at a section before the test
+// (objective-map-check.mjs). The links live in the course state; the questions are read from the
+// package as written, in the course's language. Adjusting a course: only the changed and new tests are
+// read, and a course whose state has no objectives — the platform keeps none — gets a NOTE, not a
+// stop: adding objectives to a course on the platform is the author's call, not part of a change.
+function checkObjectives(master, pkg, course, primary, { onlyRefs = null } = {}) {
+  const name = "objectives";
+  if (!course) return { name, status: "skipped", summary: "not run — no course object", details: [] };
+  const byRef = new Map((pkg.objects ?? []).map((object) => [object?.clientRef, object]));
+  const order = (course.payload?.items ?? []).map((item) => ({ ref: item?.ref, type: byRef.get(item?.ref)?.type }));
+  const pick = (value) => (value && typeof value === "object" ? value[primary] ?? Object.values(value)[0] : value);
+  const modules = order
+    .filter((item) => item.type === "module" && (!onlyRefs || onlyRefs.has(item.ref)))
+    .map((item) => {
+      const version = byRef.get(item.ref).payload?.activeVersion ?? {};
+      const task = String(pick(version.taskText) ?? "").trim();
+      return {
+        ref: item.ref,
+        questions: (version.mcqSet?.questions ?? []).map((question) => String(pick(question?.stem) ?? "")),
+        hasTask: version.assessmentMode !== "MCQ_ONLY" && task.length > 0,
+      };
+    });
+  if (onlyRefs && modules.length === 0) return { name, status: "ok", summary: "no changed or new test", details: [] };
+  if (onlyRefs && !(Array.isArray(master.learningObjectives) && master.learningObjectives.length > 0)) {
+    return {
+      name,
+      status: "note",
+      summary: "the course has no learning objectives in the state — the changed and new tests are not linked",
+      details: [`${modules.map((m) => `"${m.ref}"`).join(", ")}: ask the author whether the course should get objectives; if so, link each question (course-design.md#learning-objectives)`],
+    };
+  }
+  const result = checkObjectiveMap(master, { order, modules, partial: Boolean(onlyRefs) });
+  const fails = result.findings.filter((f) => f.severity === "fail");
+  const lines = (findings) => findings.map((f) => `${f.ref ? `"${f.ref}": ` : ""}${f.detail}`);
+  if (fails.length > 0) return { name, status: "fail", summary: `${fails.length} link(s) missing or wrong`, details: lines(result.findings) };
+  const notes = result.findings.filter((f) => f.severity === "note");
+  return {
+    name,
+    status: notes.length > 0 ? "note" : "ok",
+    summary: `${result.linked} question(s) and task(s) linked to ${result.objectives} objective(s)${notes.length > 0 ? `; ${notes.length} objective(s) not tested` : ""}`,
+    details: lines(notes),
+  };
+}
+
 // #1095: the change list against the baseline export. Comparable form: what the platform's update
 // looks at, without `audit` (publish history), without `sortOrder`, keys in a fixed order.
 function comparable(value) {
@@ -1009,8 +1056,10 @@ export async function produceCourse({ packageFile, outFile, stateFile, slidesFil
       problems.push(`cannot read the course state ${stateFile}: ${error instanceof Error ? error.message : String(error)}`);
     }
     checks.push(master ? checkApprovedText(master, pkg) : { name: "approved text", status: "fail", summary: "not read", details: problems });
+    checks.push(master ? checkObjectives(master, pkg, course, primary, changesEarly?.elements ? { onlyRefs: new Set(scoped.pkg.objects.map((o) => o.clientRef)) } : {}) : { name: "objectives", status: "fail", summary: "not read", details: problems });
   } else {
     checks.push({ name: "approved text", status: "skipped", summary: "NOT RUN — no --state file. Say so in the report", details: [] });
+    checks.push({ name: "objectives", status: "skipped", summary: "NOT RUN — no --state file: the links between questions, objectives and sections are not checked. Say so in the report", details: [] });
   }
 
   if (slidesFile) {

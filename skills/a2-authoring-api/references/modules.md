@@ -44,7 +44,10 @@ gate 3 ([course-design.md](course-design.md#level-and-scope)).
   one question per section it follows, and at least three in all. Few whole tests, not many thin
   ones: a four-question quiz after six sections leaves four of them untested. `produce-course.mjs`
   counts this.
-- The stem tests **one** idea.
+- The stem tests **one** idea — one objective, taught in a section before the test. Link each
+  question to both in the course state
+  ([course-design.md](course-design.md#linking-questions-to-objectives)); a question you cannot link
+  is the wrong question.
 - **Not answered in a section already.** A question does not repeat a section's exercise — the same
   situation or the same numbers ([section-content.md](section-content.md#choosing-the-practice)).
 - 3–4 options. Exactly one is unambiguously right — unless the question is a

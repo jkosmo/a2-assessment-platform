@@ -48,6 +48,8 @@ One file, `work/course-state.json`, separate from the chat:
 | `content` | for a module and the course: the **full text as last approved**, written out — the task, the criteria, every question with its options. Never a summary |
 | `mandatory` | the exact strings that must survive: `examples`, `formulas`, `templates` (prompts, forms, attachments), `tasks`, `assessmentCriteria`. `terms` and any other list you add are tracked too |
 | `figures` | per approved figure: `{ "sourceId": "fig-…", "labels": ["…", "…"] }` — every piece of label text, as it stands in the primary language |
+| `learningObjectives` | at the top of the file: the objectives approved at gate 2, each `{ "id": "mal-1", "text": "…" }` |
+| `questions` | for a module: each question (as written) and the free-text task, with the objective it tests and the section that teaches it ([course-design.md](course-design.md#linking-questions-to-objectives)) |
 | `deliberatelyRemoved` | strings the author has agreed to drop — only possible for `terms` and your own lists; a mandatory item cannot be removed, only moved to an attachment |
 
 A whole state file: [examples/course-from-slides/course-state.json](../examples/course-from-slides/course-state.json).

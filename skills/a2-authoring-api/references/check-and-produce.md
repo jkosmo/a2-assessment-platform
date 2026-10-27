@@ -72,6 +72,7 @@ OK   learner text   2 section(s) read for the learner's voice and card frames
 OK   questions      4 question(s) in 1 set(s)
 OK   languages      nb, nn, en-GB — written in nb
 OK   approved text  20 item(s) in place, 0 moved to an attachment, 0 removed with the author's consent
+OK   objectives     4 question(s) and task(s) linked to 2 objective(s)
 OK   slides         7 row(s) in the slide list
 OK   import file    1 file(s) written, read back and validated
 
@@ -88,12 +89,14 @@ DELIVER work/kurs-motereferat.json  —  the author imports it at Innholdsforval
 | **summaries** | a section has more than one summary heading («Formål», «Nøkkelpoeng», «Kort oppsummering») — keep one | [section-content.md](section-content.md#teach-not-catalogue) |
 | **languages** | a language is missing, a text was copied instead of translated, the right answer differs between languages, a step, card, checklist point, pair or feedback line was lost, a formula or address was lost, a `[LABEL]` is translated in some places and left in others | [localization.md](localization.md) |
 | **approved text** | something the author approved is gone | [content-preservation.md](content-preservation.md) |
+| **objectives** | a question or the free-text task is not linked to an objective and a section; a link names an objective or a section that is not in the course, or a section that comes after the test; a link names a question the module no longer has | [course-design.md](course-design.md#linking-questions-to-objectives) |
 | **slides** | a slide did not get what the slide list says; a picture has no kind, a prompt screenshot was kept as a picture, a click screenshot was left out without a reason; a slide with text became only a picture | [from-presentation.md](../workflows/from-presentation.md) |
 | **changes** | (adjusting a course) an element listed `unchanged` differs from the export — text, title or a picture — or the course's own title, description or level differs while `course` is `unchanged`, or the elements stand in another order while `order` is `unchanged`; one listed `changed` is word for word the same; a `new` element carries an `origin`; a removed element is still in the package, or an element of the export is gone without being listed `removed`; an element is not in the list at all | [adjust-course.md](../workflows/adjust-course.md) |
 | **import file** | the written file did not pass when read back | the line under it names the field |
 
 A line that starts with `--` was **not run**. Without `--state`, nobody has checked that the
-approved text is all there: say so in your report, in those words.
+approved text is all there, nor that the questions are linked to the objectives: say so in your
+report, in those words.
 
 A line that starts with `NOTE` does not stop the delivery. Tell the author what it found, and change
 it if they agree:
@@ -103,6 +106,7 @@ it if they agree:
 | **find errors** | the course has no «finn feilene» | [section-content.md](section-content.md#find-the-errors) |
 | **direct address** | a long section hardly says «du» — it reads as a report | [section-content.md](section-content.md#writing-the-text) |
 | **focus** | a section has more than one box, a list of nine points or more, or describes itself («Denne seksjonen viser …») | [section-content.md](section-content.md#teach-not-catalogue) |
+| **objectives** | an objective no question or task tests; when adjusting a course whose state has no objectives, the changed tests are not linked — ask the author whether the course should get objectives | [course-design.md](course-design.md#linking-questions-to-objectives) |
 
 ## Delivering
 

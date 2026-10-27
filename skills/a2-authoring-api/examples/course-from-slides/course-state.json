@@ -1,5 +1,15 @@
 {
   "primaryLanguage": "nb",
+  "learningObjectives": [
+    {
+      "id": "mal-1",
+      "text": "Etter dette kan deltakeren følge de fire stegene fra møte til ferdig referat"
+    },
+    {
+      "id": "mal-2",
+      "text": "Etter dette kan deltakeren velge kilder og be KI om et utkast"
+    }
+  ],
   "order": [
     "sec-arbeidsgang",
     "sec-kilder",
@@ -97,6 +107,28 @@
       "content": "Du har fått et utkast fra KI og skal sende referatet om ti minutter. Hva gjør du først?\nMøtet fulgte en fast plan, og du rakk ikke å notere. Hvilken kilde gir rekkefølgen i referatet?\nNotatene dine sier ingenting om hvem som skal følge opp en sak. Hva skal stå i utkastet?\nHva kommer først i formen prompten ber om?",
       "learningObjectives": [
         "Begge læringsmålene"
+      ],
+      "questions": [
+        {
+          "question": "Du har fått et utkast fra KI og skal sende referatet om ti minutter. Hva gjør du først?",
+          "objective": "mal-1",
+          "section": "sec-arbeidsgang"
+        },
+        {
+          "question": "Møtet fulgte en fast plan, og du rakk ikke å notere. Hvilken kilde gir rekkefølgen i referatet?",
+          "objective": "mal-2",
+          "section": "sec-kilder"
+        },
+        {
+          "question": "Notatene dine sier ingenting om hvem som skal følge opp en sak. Hva skal stå i utkastet?",
+          "objective": "mal-2",
+          "section": "sec-kilder"
+        },
+        {
+          "question": "Hva kommer først i formen prompten ber om?",
+          "objective": "mal-2",
+          "section": "sec-kilder"
+        }
       ],
       "mandatory": {
         "examples": [],

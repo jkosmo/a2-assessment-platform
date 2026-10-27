@@ -49,6 +49,14 @@ function kopi(endre?: (pkg: Pakke, mappe: string) => void) {
 const objekt = (pkg: Pakke, ref: string) => pkg.objects.find((o) => o.clientRef === ref)!;
 const status = (r: Awaited<ReturnType<typeof produceCourse>>) => Object.fromEntries(r.checks.map((c) => [c.name, c.status]));
 const funn = (r: Awaited<ReturnType<typeof produceCourse>>, navn: string) => r.checks.find((c) => c.name === navn)!.details.join(" | ");
+/** #1125: endrer kurstilstanden i kopien — koblingene mellom spørsmål, læringsmål og seksjoner bor der. */
+function tilstand(mappe: string, endre: (s: any) => void) {
+  const fil = join(mappe, "course-state.json");
+  const s = JSON.parse(readFileSync(fil, "utf8"));
+  endre(s);
+  writeFileSync(fil, JSON.stringify(s), "utf8");
+}
+const koblinger = (s: any) => s.elements.find((e: { clientRef: string }) => e.clientRef === "mod-referat").questions as Array<Record<string, unknown>>;
 
 describe("produce-course — eksempelkurset går gjennom alt (#1079)", () => {
   it("alle kontrollene er kjørt og grønne, og fila som leveres er den som ble lest tilbake", async () => {
@@ -78,6 +86,8 @@ describe("produce-course — eksempelkurset går gjennom alt (#1079)", () => {
       revision: "ok",
       languages: "ok",
       "approved text": "ok",
+      // #1125: hvert spørsmål er koblet til et læringsmål og en seksjon foran testen, og begge målene testes.
+      objectives: "ok",
       slides: "ok",
       // #1095: bare et kurs justert fra plattformens eksport har en endringsliste.
       changes: "skipped",
@@ -437,6 +447,44 @@ describe("produce-course — repetisjonskurs (#1127)", () => {
   });
 });
 
+describe("produce-course — spørsmål koblet til læringsmål og seksjon (#1125)", () => {
+  it("et læringsmål ingen spørsmål tester → merknad med målet; fila leveres", async () => {
+    const k = kopi();
+    tilstand(k.mappe, (s) => void s.learningObjectives.push({ id: "mal-3", text: "Etter dette kan deltakeren dele referatet med de rette" }));
+    const r = await k.kjør();
+    expect(status(r).objectives, formatProduction(r)).toBe("note");
+    expect(funn(r, "objectives")).toContain(`objective "mal-3" («Etter dette kan deltakeren dele referatet med de rette») is tested by no question or task`);
+    expect(r.ok).toBe(true);
+  });
+
+  it("spørsmålet gjenfinnes med andre mellomrom og store bokstaver; oppgaven kobles med «task» og kan teste flere mål", async () => {
+    const k = kopi((p) => {
+      const v = objekt(p, "mod-referat").payload.activeVersion;
+      v.assessmentMode = "FREETEXT_PLUS_MCQ";
+      v.taskText = { nb: "Skriv et referat fra notatene.", nn: "Skriv eit referat frå notata.", "en-GB": "Write minutes from the notes." };
+    });
+    tilstand(k.mappe, (s) => {
+      koblinger(s)[0]!.question = "  du har fått et utkast fra KI og skal sende referatet\nom ti minutter. Hva gjør du først? ";
+      koblinger(s).push({ task: true, objective: ["mal-1", "mal-2"], section: ["sec-arbeidsgang", "sec-kilder"] });
+    });
+    const r = await k.kjør();
+    expect(status(r).objectives, funn(r, "objectives")).toBe("ok");
+    expect(r.checks.find((c) => c.name === "objectives")!.summary).toBe("5 question(s) and task(s) linked to 2 objective(s)");
+  });
+
+  it("en oppgavetekst i en ren flervalgsmodul er ingen oppgave å koble", async () => {
+    const r = await kopi((p) => void (objekt(p, "mod-referat").payload.activeVersion.taskText = { nb: "Svar på spørsmålene.", nn: "Svar på spørsmåla.", "en-GB": "Answer the questions." })).kjør();
+    expect(status(r).objectives, funn(r, "objectives")).toBe("ok");
+  });
+
+  it("en løs modul uten kurs: ikke kjørt", async () => {
+    const r = await kopi((p) => {
+      p.objects = p.objects.filter((o) => o.type === "module");
+    }).kjør({ slidesFile: undefined });
+    expect(status(r).objectives).toBe("skipped");
+  });
+});
+
 describe("produce-course — hver kontroll stopper leveransen (#1079)", () => {
   it.each<[string, (pkg: Pakke, mappe: string) => void, string, string]>([
     ["en seksjon som ikke er plassert i kurset", (p) => void objekt(p, "kurs-motereferat").payload.items.splice(1, 1), "package", `"sec-kilder" is in the package and not in the course`],
@@ -532,6 +580,18 @@ describe("produce-course — hver kontroll stopper leveransen (#1079)", () => {
     }, "leftovers", "figures (nb) are numbered 2, 1"],
     // #1126: «Formål», «Nøkkelpoeng» og «Kort oppsummering» i samme seksjon (16 seksjoner på stage).
     ["tre oppsummeringer i én seksjon (#1126)", (p) => void (objekt(p, "sec-kilder").payload.bodyMarkdown.nb = `## Formål\n\nDu lærer å velge kilde.\n\n${objekt(p, "sec-kilder").payload.bodyMarkdown.nb}\n\n## Nøkkelpoeng\n\n- Notatene er kilden.\n\n## Kort oppsummering\n\nBruk notatene.\n`), "summaries", `"sec-kilder" (nb): 3 summaries — «Formål», «Nøkkelpoeng», «Kort oppsummering». Keep one`],
+    // #1125: koblingene mellom spørsmål, læringsmål og seksjoner — kurstilstanden er forfatterens godkjente plan.
+    ["et spørsmål uten kobling til læringsmål og seksjon (#1125)", (_p, m) => tilstand(m, (s) => void koblinger(s).splice(1, 1)), "objectives", "question 2 («Møtet fulgte en fast plan, og du rakk ikke å notere. Hvil…») is not linked"],
+    ["en kobling til et læringsmål kurset ikke har (#1125)", (_p, m) => tilstand(m, (s) => void (koblinger(s)[0]!.objective = "mal-9")), "objectives", `points at objective "mal-9", which is not among the course's learningObjectives (mal-1, mal-2)`],
+    ["en kobling uten læringsmål (#1125)", (_p, m) => tilstand(m, (s) => void delete koblinger(s)[0]!.objective), "objectives", "no objective — name the one it tests"],
+    ["en kobling uten seksjon (#1125)", (_p, m) => tilstand(m, (s) => void delete koblinger(s)[0]!.section), "objectives", "no section — name the section that teaches what it asks"],
+    ["en kobling til noe som ikke er en seksjon (#1125)", (_p, m) => tilstand(m, (s) => void (koblinger(s)[0]!.section = "mod-referat")), "objectives", `points at "mod-referat", which is not a section in the course`],
+    ["et spørsmål om noe en seksjon ETTER testen lærer bort (#1125)", (p) => { const items = objekt(p, "kurs-motereferat").payload.items; items.push(items.splice(1, 1)[0]); }, "objectives", `is taught in "sec-kilder", which comes after the test`],
+    ["en kobling til et spørsmål modulen ikke har lenger (#1125)", (_p, m) => tilstand(m, (s) => void koblinger(s).push({ question: "Hvem skriver referatet?", objective: "mal-1", section: "sec-arbeidsgang" })), "objectives", "the course state links «Hvem skriver referatet?», which is not a question in the module"],
+    ["en fritekstoppgave uten kobling (#1125)", (p) => { const v = objekt(p, "mod-referat").payload.activeVersion; v.assessmentMode = "FREETEXT_PLUS_MCQ"; v.taskText = { nb: "Skriv et referat fra notatene.", nn: "Skriv eit referat frå notata.", "en-GB": "Write minutes from the notes." }; }, "objectives", "the free-text task is not linked"],
+    ["en kurstilstand uten læringsmål (#1125)", (_p, m) => tilstand(m, (s) => void delete s.learningObjectives), "objectives", "the course state has no learningObjectives"],
+    ["et læringsmål uten id (#1125)", (_p, m) => tilstand(m, (s) => void delete s.learningObjectives[1].id), "objectives", `learningObjectives[1] needs an "id" and a "text"`],
+    ["samme id på to læringsmål (#1125)", (_p, m) => tilstand(m, (s) => void (s.learningObjectives[1].id = "mal-1")), "objectives", `the id "mal-1" is used twice`],
     ["prompten forfatteren godkjente er kortet bort", (p) => { const b = objekt(p, "sec-kilder").payload.bodyMarkdown; b.nb = b.nb.replace("Bruk bare det som står i notatene under. Skriv «uklart» der notatene ikke sier noe.", "Bruk notatene."); }, "approved text", "templates — «Bruk bare det som står i notatene under."],
     ["et kort lysarklista lovet, er borte", (p) => { const b = objekt(p, "sec-kilder").payload.bodyMarkdown; for (const s of ["nb", "nn", "en-GB"]) b[s] = b[s].replaceAll("### ", "**"); }, "slides", "slide 3: was to become cards"],
   ])("%s", async (_navn, endre, kontroll, ventet) => {
@@ -647,7 +707,9 @@ describe("produce-course — det som ikke ble kjørt, sies (#1079)", () => {
     expect(status(r)["approved text"]).toBe("skipped");
     const rapport = formatProduction(r);
     expect(rapport).toContain("--   approved text  NOT RUN — no --state file. Say so in the report");
-    expect(rapport).toContain("Not run: approved text, changes. Name them as not run when you report.");
+    expect(status(r).objectives).toBe("skipped");
+    expect(rapport).toContain("--   objectives     NOT RUN — no --state file: the links between questions, objectives and sections are not checked. Say so in the report");
+    expect(rapport).toContain("Not run: approved text, objectives, changes. Name them as not run when you report.");
     expect(rapport).toContain(`DELIVER ${k.ut}  —  the author imports it at Innholdsforvaltning → Kurs → «Importer kurs»`);
   });
 

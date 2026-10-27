@@ -1,7 +1,7 @@
 # Course design — objectives, structure, test form, level
 
 Contents: [Learning objectives](#learning-objectives) · [Structure](#structure) ·
-[A revision course](#a-revision-course) · [Test form](#test-form) · [Level and scope](#level-and-scope)
+[Linking questions to objectives](#linking-questions-to-objectives) · [A revision course](#a-revision-course) · [Test form](#test-form) · [Level and scope](#level-and-scope)
 
 ## Learning objectives
 
@@ -13,6 +13,9 @@ Objectives are the backbone: the structure and the tests follow from them.
   there are more than six.
 - An objective the source cannot support is flagged `[Avklaring: …]`, not given invented support.
 - Confirm the course's language here (default: the language of the source).
+- Once approved, write them to the course state with an id each — `"learningObjectives": [{ "id":
+  "mal-1", "text": "Etter dette kan deltakeren …" }]` — so the questions can point at them
+  ([below](#linking-questions-to-objectives)).
 
 ## Structure
 
@@ -43,7 +46,40 @@ Objectives are the backbone: the structure and the tests follow from them.
   learner completes, then a whole task in another situation
   ([section-content.md](section-content.md#complete-the-example)). Plan the three in the outline.
 - Present the outline as a table: element, order, test form (for a section: its exercise, or none),
-  the objective it serves, level.
+  the objective it serves, level. Under it, a second table: each objective, the section that teaches
+  it, and the questions (or the task) that test it — planned, not yet written:
+
+  | Objective | Taught in | Tested by |
+  |---|---|---|
+  | mal-1 følge de fire stegene | «Fra møte til referat» | spørsmål 1 |
+  | mal-2 velge kilder og be KI om et utkast | «Hva du gir KI» | spørsmål 2–4 |
+
+## Linking questions to objectives
+
+What a test asks is what the learner takes to be important. Each question and each free-text task
+is therefore tied to **one objective** it tests and to **the section that teaches it** — a section
+that comes **before** the test. Every objective is tested at least once.
+
+Record the link in the course state, in the module's element, when the questions are written at
+gate 4 — the question as it stands, in the course's language:
+
+```json
+"questions": [
+  { "question": "Møtet fulgte en fast plan, og du rakk ikke å notere. Hvilken kilde gir rekkefølgen i referatet?", "objective": "mal-2", "section": "sec-kilder" },
+  { "task": true, "objective": ["mal-1", "mal-2"], "section": ["sec-arbeidsgang", "sec-kilder"] }
+]
+```
+
+A free-text task may test several objectives and draw on several sections; a question tests one.
+Check the links before the author approves the module:
+`node scripts/objective-map-check.mjs work/course-state.json`. `produce-course.mjs` reads them again
+against the questions as written: a question or task without a link, a link to an objective or a
+section that is not in the course, or a section after the test stops production; an objective no
+question tests is a note — tell the author, and add a question unless they say it is taught and
+not tested.
+
+When the link is hard to write, the question is the problem: a question that tests no objective,
+or one only a later section answers, is replaced — not linked to the nearest thing.
 
 ## A revision course
 

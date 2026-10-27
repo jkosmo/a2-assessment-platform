@@ -417,6 +417,44 @@ describe("#1095 fase B — skillets justeringsflyt", () => {
     expect(sjekk(r, "revision").status).toBe("skipped");
   });
 
+  // #1125: plattformen lagrer ingen læringsmål, så et kurs som justeres har ingen i tilstanden. Å gi kurset
+  // læringsmål er forfatterens valg, ikke en del av endringen: merknad. Har tilstanden mål, kobles de
+  // endrede testene som i et nytt kurs — de uendrede leses ikke.
+  it("koblingen til læringsmål: uendret test leses ikke; endret test uten mål i tilstanden gir merknad, med mål stopper en ukoblet test (#1125)", async () => {
+    const work = path.join(dir, "laeringsmal");
+    expect(convertExport(eksport(), { outDir: work }).ok).toBe(true);
+    const uendret = await produser(work, "uendret");
+    expect(sjekk(uendret, "objectives")).toMatchObject({ status: "ok", summary: "no changed or new test" });
+
+    const pkgFil = path.join(work, "package.json");
+    const pkg = JSON.parse(readFileSync(pkgFil, "utf8"));
+    const modul = pkg.objects.find((o: { clientRef: string }) => o.clientRef === "mod-02-test-moter");
+    modul.payload.activeVersion.mcqSet.questions[0].rationale = tre("Målet styrer møtet — alltid.", "Målet styrer møtet — alltid.", "The goal steers the meeting — always.");
+    writeFileSync(pkgFil, JSON.stringify(pkg), "utf8");
+    const changesFil = path.join(work, "changes.json");
+    const changes = JSON.parse(readFileSync(changesFil, "utf8"));
+    changes.elements["mod-02-test-moter"] = "changed";
+    writeFileSync(changesFil, JSON.stringify(changes), "utf8");
+    const utenMal = await produser(work, "utenmal");
+    expect(sjekk(utenMal, "objectives").status).toBe("note");
+    expect(sjekk(utenMal, "objectives").details.join(" ")).toContain('"mod-02-test-moter": ask the author whether the course should get objectives');
+    expect(utenMal.ok, utenMal.checks.filter((c) => c.status === "fail").map((c) => `${c.name}: ${c.details.join(" | ")}`).join("; ")).toBe(true);
+
+    const tilstandFil = path.join(work, "course-state.json");
+    const tilstand = JSON.parse(readFileSync(tilstandFil, "utf8"));
+    // Et mål ingen test dekker: ingen merknad ved justering — de uendrede testene er ikke koblet, så tellingen ville lyve.
+    tilstand.learningObjectives = [{ id: "mal-1", text: "Etter dette kan deltakeren sette et mål for møtet" }, { id: "mal-2", text: "Etter dette kan deltakeren eie referatet" }];
+    writeFileSync(tilstandFil, JSON.stringify(tilstand), "utf8");
+    const ukoblet = await produser(work, "ukoblet");
+    expect(sjekk(ukoblet, "objectives").status).toBe("fail");
+    expect(sjekk(ukoblet, "objectives").details.join(" ")).toContain('"mod-02-test-moter": question 1 («Hva trenger et møte?») is not linked');
+
+    tilstand.elements.find((e: { clientRef: string }) => e.clientRef === "mod-02-test-moter").questions = ["Hva trenger et møte?", "Hvor står målet?", "Hvem eier referatet?"].map((question) => ({ question, objective: "mal-1", section: "sec-01-innledning" }));
+    writeFileSync(tilstandFil, JSON.stringify(tilstand), "utf8");
+    const koblet = await produser(work, "koblet");
+    expect(sjekk(koblet, "objectives")).toMatchObject({ status: "ok", details: [] });
+  });
+
   it("et kurs med origin uten endringsliste produseres ikke — «uendret er uendret» må kjøres", async () => {
     const work = path.join(dir, "utenliste");
     expect(convertExport(eksport(), { outDir: work }).ok).toBe(true);

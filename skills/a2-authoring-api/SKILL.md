@@ -102,6 +102,7 @@ to this skill's folder.
 | `node scripts/mcq-plan.mjs <questions> [options]` | draws which questions in a new test are select-all-that-apply, and how many options in each are right ([modules.md](references/modules.md#select-all-that-apply)) |
 | `node scripts/mcq-cue-check.mjs work/package.json` | checks that no option gives the answer away |
 | `node scripts/course-state.mjs review work/course-state.json <clientRef> work/revised.md` | checks that a shortened text has lost nothing the author approved |
+| `node scripts/objective-map-check.mjs work/course-state.json` | checks that every question and task is linked to an objective and to a section before its test, and names an objective no question tests ([course-design.md](references/course-design.md#linking-questions-to-objectives)) |
 | `node scripts/slide-coverage.mjs work/treatment.json work/package.json` | checks that every slide got what the approved slide list says |
 | `node scripts/produce-course.mjs work/package.json --out <file> --state work/course-state.json` | gate 6: attaches the pictures, runs every check, and writes the validated import file |
 | `node scripts/adjust-from-export.mjs <export.json> work` | turns the platform's export of a course into the working set for adjusting it: package, course state (everything approved), change list, baseline |
