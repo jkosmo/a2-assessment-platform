@@ -8,6 +8,7 @@ import {
 } from "../modules/submission/index.js";
 import { createSubmissionAppeal } from "../modules/appeal/index.js";
 import { getOwnedMcqReview } from "../modules/submission/mcqReviewService.js";
+import { toOwnedSubmissionView } from "../modules/submission/submissionReadModels.js";
 import { isModuleInAccessibleCourse } from "../modules/course/index.js";
 import { env } from "../config/env.js";
 import { hasAnyRole, CONTENT_AUTHORS } from "../auth/roleSets.js";
@@ -147,7 +148,9 @@ submissionsRouter.get("/:submissionId", async (request, response) => {
     return;
   }
 
-  response.json({ submission });
+  // #1136: deltakerens visning, ikke raden — raden bar fasiten (moduleVersion.assessorExpectedContent)
+  // og de rå KI-vurderingene.
+  response.json({ submission: toOwnedSubmissionView(submission) });
 });
 
 submissionsRouter.get("/:submissionId/result", async (request, response) => {

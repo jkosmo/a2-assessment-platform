@@ -694,6 +694,9 @@ test.describe("admin content browser coverage", () => {
     expect(labels, "the added criterion never reached the save").toContain("Structure");
     expect(labels, "the removed criterion came back").not.toContain("Clarity");
     expect(labels).toContain("Depth");
+    // #1124 (produkteier 2026-10-27): et nytt kriterium er synlig for deltakeren som standard.
+    const added = Object.values(savedBody.rubric.criteria).find((c: any) => (typeof c.label === "string" ? c.label : c.label?.["en-GB"]) === "Structure") as any;
+    expect(added.candidateVisible, "a new criterion was saved hidden from the participant").toBe(true);
   });
 
   // Stage-tilbakemelding 2026-08-18: the special-category warning belongs where the assignment is

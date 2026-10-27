@@ -138,6 +138,47 @@ export function toSubmissionHistoryResponseView(submissions: SubmissionHistoryIt
   };
 }
 
+/**
+ * #1136: deltakerens visning av sin egen innlevering (`GET /api/submissions/:id`). Ruta sendte hele
+ * raden med `moduleVersion` — også `assessorExpectedContent` (fasiten for vurdereren) — og de rå
+ * KI-vurderingene, avgjørelsene og flervalgsforsøkene. Samme klasse som #387 i modulruta.
+ *
+ * Bare deltakerens eget: hva og når hen leverte, status, og siste klage. Vurderingen leses fra
+ * `/result`, flervalget fra `/mcq-review` — de rutene har sine egne regler for hva som vises.
+ * Feltene er en hvitliste: et nytt felt på raden kommer ikke med av seg selv.
+ */
+export function toOwnedSubmissionView(submission: {
+  id: string;
+  moduleId: string;
+  moduleVersionId: string;
+  locale: string;
+  deliveryType: string;
+  responseJson: string;
+  attachmentUri: string | null;
+  submittedAt: Date;
+  submissionStatus: string;
+  appeals?: Array<{ id: string; appealStatus: string; createdAt: Date; resolvedAt: Date | null }>;
+}) {
+  let response: unknown = {};
+  try {
+    response = JSON.parse(submission.responseJson);
+  } catch {
+    response = {};
+  }
+  return {
+    id: submission.id,
+    moduleId: submission.moduleId,
+    moduleVersionId: submission.moduleVersionId,
+    locale: submission.locale,
+    deliveryType: submission.deliveryType,
+    response,
+    attachmentUri: submission.attachmentUri,
+    submittedAt: submission.submittedAt,
+    submissionStatus: submission.submissionStatus,
+    latestAppeal: submission.appeals?.[0] ?? null,
+  };
+}
+
 export function toSubmissionResultView(
   submission: OwnedSubmission,
   // #1124: rubrikken innleveringen ble vurdert mot, for poengene per kriterium. Uten den: ingen poeng.

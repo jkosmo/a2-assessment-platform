@@ -92,6 +92,14 @@ describe("buildEditorStateFromCriteriaRecord", () => {
     expect(rad.locale).toBe("nb");
   });
 
+  // #1124, produkteier 2026-10-27: et kriterium uten «synlig for deltakeren» (alle skillet lager) er
+  // synlig — som deltakervisningen og forhåndsvisningen. Før leste redigereren det som skjult, og en
+  // lagring skrev false.
+  it("et kriterium uten synlighetsflagg er synlig; bare false (eller noe annet enn true) skjuler", () => {
+    const rader = buildEditorStateFromCriteriaRecord({ a: { label: "A" }, b: { label: "B", candidateVisible: true }, c: { label: "C", candidateVisible: false }, d: { label: "D", candidateVisible: null } }, "nb");
+    expect(rader.map((r) => r.candidateVisible)).toEqual([true, true, false, false]);
+  });
+
   it("utleder poeng fra vekt for gamle kriterier uten maxScore", () => {
     const [rad] = buildEditorStateFromCriteriaRecord({ k: { weight: 0.7 } }, "nb");
     expect(rad.maxScore).toBe(7);

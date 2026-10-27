@@ -47,7 +47,7 @@ const SVAR: Record<string, string> = {
   halvt: "Vi snakket om budsjettet og ble enige om å godkjenne det. Ola sender budsjettet til revisor. Kari bestiller lokale. Til stede: Kari, Ola, Siri og Per.",
   svakt: "Møtet gikk greit. Vi diskuterte flere saker og skal følge opp senere.",
 };
-const GANGER = 2;
+const GANGER = Number(process.env.MAAL_1135_GANGER ?? 2);
 
 test("vurder de tre svarene", async () => {
   test.setTimeout(900_000);
@@ -89,7 +89,12 @@ test("vurder de tre svarene", async () => {
       expect(innlevering.status, innlevering.tekst).toBe(201);
       const id = innlevering.json.submission.id as string;
       // Som deltakersiden: vurderingen startes i et eget steg (participant.js, /api/assessments/:id/run).
-      const kjør = await api("POST", `/api/assessments/${id}/run`, {});
+      // Ruta har en fartsgrense (assessmentRunLimiter): ved 429 ventes det så lenge svaret sier.
+      let kjør = await api("POST", `/api/assessments/${id}/run`, {});
+      for (let forsøk = 0; kjør.status === 429 && forsøk < 5; forsøk++) {
+        await new Promise((r) => setTimeout(r, ((kjør.json?.details?.retryAfterSeconds ?? 30) + 2) * 1000));
+        kjør = await api("POST", `/api/assessments/${id}/run`, {});
+      }
       expect([200, 201, 202], kjør.tekst).toContain(kjør.status);
       let resultat: any = null;
       for (let forsøk = 0; forsøk < 60; forsøk++) {

@@ -137,7 +137,7 @@ export function createCriteriaTools(ctx) {
           // of the two would vanish at save time without a word.
           // A counter that only ever goes up cannot collide.
           id: freshCriterionId(next), label: "", description: "", maxScore: 5,
-          candidateVisible: false, storedLabel: null, storedDescription: null, locale: ctx.contentLocale,
+          candidateVisible: true, storedLabel: null, storedDescription: null, locale: ctx.contentLocale,
         });
         setState(next);
         rerender();

@@ -2,6 +2,35 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.115.0 - 2026-10-27
+
+### Deltakeren ser kriteriene før levering og poengene etter — #1124 del 1
+
+- **Før levering:** «Slik vurderes svaret ditt» under oppgaven, med hvert synlige kriterium, skalaen og
+  trinnene. Et kriterium uten `candidateVisible` er synlig; bare eksplisitt skjult skjules (produkteier).
+- **Etter vurdering:** poeng per kriterium på kriteriets egen skala («1 av 2»), begrunnelsen, og hva som
+  kreves for toppnivået der deltakeren ikke fikk fullt. Begrunnelsen for et skjult kriterium sendes ikke.
+  Har en vurderer tatt den endelige avgjørelsen, står det en merknad: «Poengene er KI-ens; den endelige
+  avgjørelsen er tatt av en vurderer.»
+- **Forhåndsvisningen og kriterieredigereren** følger samme regel. Før skjulte redigereren kriterier fra
+  skillet, og en lagring skrev `candidateVisible: false`. Et nytt kriterium er synlig som standard.
+- **Lekkasje rettet:** `GET /api/modules` sendte `activeVersion.assessorExpectedContent` (fasiten) til
+  deltakerne, ett nivå under feltet #387 skjulte.
+
+### Sikkerhet: GET /api/submissions/:id gir deltakeren ikke fasiten — #1136
+
+Ruta sendte hele innleveringsraden med `moduleVersion` (også `assessorExpectedContent`) og de rå
+KI-vurderingene, avgjørelsene og flervalgsforsøkene. Nå sendes en hvitliste med deltakerens eget: hva og
+når hen leverte, status og siste klage (`toOwnedSubmissionView`). Ingen klient brukte ruta, så ingen
+visning endres. Test gjennom ruta.
+
+### Spørsmål koblet til læringsmål — #1125
+
+Hvert spørsmål og hver fritekstoppgave kobles i skillets kurstilstand til et læringsmål og en seksjon før
+testen (`objective-map-check.mjs`, kontrollen «objectives»). Manglende eller feil kobling, eller en
+seksjon etter testen, **stopper**. Et mål uten spørsmål er en **merknad**; ved justering av et kurs uten
+mål også en merknad (produkteier). Koblingen lagres ikke på plattformen nå.
+
 ## 2.114.0 - 2026-10-26
 
 ### Omregningen av kriterienes skala skjer i koden — #1135, rettet etter måling på stage
