@@ -33,9 +33,12 @@ export function criterionText(criterion, primary) {
   return textOf(criterion, primary);
 }
 
-/** The scale («0–4» → {min:0,max:4}, or from `maxScore`) and which steps the text describes. */
-export function describedSteps(criterion, primary) {
-  const text = criterionText(criterion, primary);
+// A step: the number, not part of another number or a range, followed by «=», «:», «)» or «poeng:».
+function stepMarker(step) {
+  return new RegExp(`(?<![\\d–-])${step}\\s*(?:=|:|\\)|poeng\\s*:|p\\s*:)`, "g");
+}
+
+function scaleOf(criterion, text) {
   const maxScore = criterion && typeof criterion === "object" && Number.isInteger(criterion.maxScore) ? criterion.maxScore : null;
   // `maxScore` is the scale when it is given; then «a–b» is read only where it repeats that scale —
   // «artikkel 6-1» in a description is not one.
@@ -43,13 +46,63 @@ export function describedSteps(criterion, primary) {
   const range = found && (maxScore === null || (Number(found[1]) === 0 && Number(found[2]) === maxScore)) ? found : null;
   const min = range ? Number(range[1]) : 0;
   const max = range ? Number(range[2]) : maxScore;
+  return { min, max, range };
+}
+
+/** The scale («0–4» → {min:0,max:4}, or from `maxScore`) and which steps the text describes. */
+export function describedSteps(criterion, primary) {
+  const text = criterionText(criterion, primary);
+  const { min, max, range } = scaleOf(criterion, text);
   if (max === null || max <= min) return { min, max, described: [] };
   const rest = range ? text.slice(0, range.index) + " " + text.slice(range.index + range[0].length) : text;
   const described = [];
   for (let step = min; step <= max; step++) {
-    if (new RegExp(`(?<![\\d–-])${step}\\s*(?:=|:|\\)|poeng\\s*:|p\\s*:)`).test(rest)) described.push(step);
+    if (stepMarker(step).test(rest)) described.push(step);
   }
   return { min, max, described };
+}
+
+// Ends of a piece of text: separators and the punctuation between steps («; », «. », «— »).
+function tidy(value) {
+  return value.replace(/\s+/g, " ").replace(/^[\s,;:.=–—-]+|[\s,;:.–—-]+$/g, "");
+}
+
+/**
+ * #1124: the steps in the criterion's own words, for the participant — read with the SAME syntax as
+ * `describedSteps`, so what the check calls «described» is what the participant sees.
+ *
+ * `{ min, max, intro, steps: [{ step, text }] }`: `intro` is what the text says before the first step,
+ * without the scale («Behov, 0–3 poeng.» → «Behov»). A text with no scale is read on `defaultMax`
+ * (the platform scores 0–4) — «0 = …; 2 = …; 4 = …» describes steps whether or not it names the range.
+ * Steps are found in order: step k is looked for after step k−1, so a number inside a step's text is
+ * not taken for an earlier step.
+ */
+export function stepTexts(criterion, primary, { defaultMax = null } = {}) {
+  const text = criterionText(criterion, primary);
+  const scale = scaleOf(criterion, text);
+  const { min, range } = scale;
+  const max = scale.max ?? defaultMax;
+  const introOf = (prefix) =>
+    tidy(range && range.index < prefix.length
+      ? prefix.slice(0, range.index) + " " + prefix.slice(range.index + range[0].length).replace(/^\s*(?:poeng|points?|p)?\s*[.:]?/i, "")
+      : prefix);
+  if (max === null || max <= min) return { min, max, intro: introOf(text) || null, steps: [] };
+  // The range is blanked, not cut, so the positions below are positions in `text`.
+  const masked = range ? text.slice(0, range.index) + " ".repeat(range[0].length) + text.slice(range.index + range[0].length) : text;
+  const marks = [];
+  let from = 0;
+  for (let step = min; step <= max; step++) {
+    const marker = stepMarker(step);
+    marker.lastIndex = from;
+    const found = marker.exec(masked);
+    if (!found) continue;
+    marks.push({ step, start: found.index, end: found.index + found[0].length });
+    from = found.index + found[0].length;
+  }
+  const steps = marks
+    .map((mark, i) => ({ step: mark.step, text: tidy(text.slice(mark.end, marks[i + 1]?.start ?? text.length)) }))
+    .filter((s) => s.text);
+  return { min, max, intro: introOf(marks.length ? text.slice(0, marks[0].start) : text) || null, steps };
 }
 
 /** The bottom, the top, and — on a scale with a middle — at least one step between. */

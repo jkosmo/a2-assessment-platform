@@ -157,7 +157,7 @@ submissionsRouter.get("/:submissionId/result", async (request, response) => {
     return;
   }
 
-  const result = await getOwnedSubmissionResultView(request.params.submissionId, userId);
+  const result = await getOwnedSubmissionResultView(request.params.submissionId, userId, requestLocale(request));
   if (!result) {
     response.status(404).json({ error: "not_found", message: "Submission not found." });
     return;

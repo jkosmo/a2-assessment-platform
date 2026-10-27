@@ -776,6 +776,31 @@ body.auth-resolving .mock-identity-card {
 .mcq-review-correct { color: #1f7a4d; font-weight: 600; }
 .mcq-review-rationale { font-size: 13px; margin-top: 4px; line-height: 1.5; }
 
+/* #1124: kriteriene for deltakeren. Før levering: et sammenleggbart panel under oppgaveteksten.
+   Etter vurdering: ett kort per kriterium med «1 av 2». Overskriften (`summary`) er minst 44 px høy —
+   den er det eneste deltakeren trykker på her. */
+.criteria-panel { border: 1px solid var(--color-module-border); border-radius: var(--radius-card); background: var(--color-module-summary-bg); }
+.criteria-panel-summary { display: flex; align-items: center; gap: 10px; min-height: 44px; box-sizing: border-box; padding: 10px 14px; font-weight: 650; cursor: pointer; color: var(--color-text); list-style: none; }
+/* `display: flex` tar bort nettleserens trekant; pila her sier at panelet kan foldes. */
+.criteria-panel-summary::-webkit-details-marker { display: none; }
+.criteria-panel-summary::after { content: ""; flex-shrink: 0; margin-left: auto; width: 8px; height: 8px; border-right: 2px solid currentColor; border-bottom: 2px solid currentColor; transform: rotate(45deg); }
+.criteria-panel[open] > .criteria-panel-summary::after { transform: rotate(-135deg); }
+.criteria-panel-summary:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 2px; }
+.criteria-panel-body { display: grid; gap: 14px; padding: 0 14px 14px; }
+.criteria-panel-lead { margin: 0; font-size: 14px; line-height: 1.5; color: var(--color-meta); }
+.criteria-item { display: grid; gap: 6px; }
+.criteria-item-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.criteria-item-label { font-weight: 650; overflow-wrap: anywhere; }
+.criteria-item-scale { flex-shrink: 0; font-size: 13px; color: var(--color-meta); white-space: nowrap; }
+.criteria-item-intro { margin: 0; font-size: 14px; line-height: 1.5; }
+.criteria-steps { margin: 0; padding-left: 18px; display: grid; gap: 2px; font-size: 14px; line-height: 1.5; }
+.criterion-score-list { display: grid; gap: 10px; }
+.criterion-score { display: grid; gap: 6px; padding: 12px 14px; border: 1px solid var(--color-module-summary-border); border-radius: var(--radius-card); background: var(--color-surface); }
+.criterion-score.is-short { border-color: var(--color-link-hover-border); background: var(--color-module-summary-bg); }
+.criterion-score-value { flex-shrink: 0; font-weight: 650; white-space: nowrap; }
+.criterion-score-rationale { margin: 0; font-size: 14px; line-height: 1.5; }
+.criterion-score-top { margin: 0; font-size: 13px; line-height: 1.5; color: var(--color-meta); }
+
 .summary-list {
   margin: 0;
   padding-left: calc(var(--space-2) + 4px);

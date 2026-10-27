@@ -6,6 +6,7 @@ import { localizeContentText } from "../../i18n/content.js";
 import { renderModuleTextMarkdown } from "../course/sectionContent.js";
 import { assessmentPolicyCodec } from "../../codecs/assessmentPolicyCodec.js";
 import { submissionSchemaCodec } from "../../codecs/submissionSchemaCodec.js";
+import { buildParticipantCriteria } from "../assessment/participantCriteria.js";
 import {
   queryModules,
   queryModuleById,
@@ -65,6 +66,28 @@ function briefFields(
   };
 }
 
+/**
+ * #1124: modulversjonen slik den sendes, og kriteriene deltakeren ser før levering.
+ *
+ * ⚠️ `...module` sprer `activeVersion` slik den kom fra databasen. Den har alltid hatt med
+ * `assessorExpectedContent` — toppfeltet ble holdt unna deltakeren (#387), men den samme teksten lå
+ * urørt ett nivå ned, i `activeVersion.assessorExpectedContent`. Nå tas den ut her for deltakeren, og
+ * den rå `rubricVersion` (med skjulte kriterier) tas ut for alle: det eneste som sendes av
+ * kriteriene, er `assessmentCriteria`, bygget av `buildParticipantCriteria`.
+ */
+function versionFields<V extends { assessorExpectedContent?: unknown; rubricVersion?: { criteriaJson: string } | null }>(
+  activeVersion: V | null,
+  locale: SupportedLocale,
+  participantFacing: boolean,
+) {
+  if (!activeVersion) return { activeVersion, assessmentCriteria: [] };
+  const { rubricVersion, assessorExpectedContent, ...rest } = activeVersion;
+  return {
+    activeVersion: participantFacing ? rest : { ...rest, assessorExpectedContent },
+    assessmentCriteria: buildParticipantCriteria(rubricVersion?.criteriaJson, locale),
+  };
+}
+
 export async function listModules(
   roles: AppRoleType[],
   userId?: string,
@@ -79,6 +102,7 @@ export async function listModules(
   if (!userId) {
     return modules.map((module) => ({
       ...module,
+      ...versionFields(module.activeVersion, locale, participantFacing),
       title: localizeContentText(locale, module.title) ?? module.title,
       description: localizeContentText(locale, module.description),
       ...briefFields(module.activeVersion, locale),
@@ -119,6 +143,7 @@ export async function listModules(
     const latest = latestByModule.get(module.id);
     return {
       ...module,
+      ...versionFields(module.activeVersion, locale, participantFacing),
       title: localizeContentText(locale, module.title) ?? module.title,
       description: localizeContentText(locale, module.description),
       ...briefFields(module.activeVersion, locale),
@@ -203,6 +228,7 @@ export async function getModuleById(
 
   return {
     ...module,
+    ...versionFields(module.activeVersion, locale, participantFacing),
     title: localizeContentText(locale, module.title) ?? module.title,
     description: localizeContentText(locale, module.description),
     ...briefFields(module.activeVersion, locale),

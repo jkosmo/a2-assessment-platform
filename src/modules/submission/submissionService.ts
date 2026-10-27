@@ -1,7 +1,7 @@
 import { SubmissionStatus } from "../../db/prismaRuntime.js";
 import { ConflictError } from "../../errors/AppError.js";
 import type { SupportedLocale } from "../../i18n/locale.js";
-import { submissionRepository, createSubmissionRepository, getModuleWithActiveVersion } from "./submissionRepository.js";
+import { submissionRepository, createSubmissionRepository, getModuleWithActiveVersion, queryRubricCriteriaJson } from "./submissionRepository.js";
 import { runInTransaction } from "../../db/transaction.js";
 import { recordAuditEvent } from "../../services/auditService.js";
 import { logOperationalEvent } from "../../observability/operationalLog.js";
@@ -143,8 +143,11 @@ export async function getOwnedSubmissionHistoryView(input: {
   return toSubmissionHistoryResponseView(submissions, input.locale);
 }
 
-export async function getOwnedSubmissionResultView(submissionId: string, userId: string) {
+export async function getOwnedSubmissionResultView(submissionId: string, userId: string, locale: SupportedLocale = "en-GB") {
   const submission = await getOwnedSubmission(submissionId, userId);
+  if (!submission) return null;
 
-  return submission ? toSubmissionResultView(submission) : null;
+  // #1124: poengene per kriterium trenger kriteriene (etikett, egen skala, toppnivåets trinn).
+  const criteriaJson = await queryRubricCriteriaJson(submission.moduleVersion?.rubricVersionId);
+  return toSubmissionResultView(submission, { criteriaJson, locale });
 }

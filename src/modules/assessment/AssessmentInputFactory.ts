@@ -144,20 +144,29 @@ function localizedField(value: unknown, locale: SupportedLocale): string | null 
   return null;
 }
 
-export function parseRubricCriteriaForPrompt(criteriaJson: string, locale: SupportedLocale): RubricCriterionForPrompt[] {
+/** Kriteriene som [id, rått kriterium], i lagret rekkefølge — listeform (med `id`) eller objektform. */
+export function parseRubricCriteriaEntries(criteriaJson: string): Array<[string, unknown]> {
   let parsed: unknown;
   try {
     parsed = JSON.parse(criteriaJson);
   } catch {
     return [];
   }
-  const entries: Array<[string, unknown]> = Array.isArray(parsed)
+  return Array.isArray(parsed)
     ? parsed.filter((c) => typeof (c as { id?: unknown })?.id === "string").map((c) => [(c as { id: string }).id, c])
     : parsed && typeof parsed === "object"
       ? Object.entries(parsed as Record<string, unknown>)
       : [];
-  return entries.map(([id, criterion]) => {
-    const isObject = criterion !== null && typeof criterion === "object" && !isLocalizedMap(criterion);
+}
+
+/** Et kriterium som objekt (ikke en streng, og ikke bare et språkkart over en streng). */
+export function isCriterionObject(criterion: unknown): criterion is Record<string, unknown> {
+  return criterion !== null && typeof criterion === "object" && !isLocalizedMap(criterion);
+}
+
+export function parseRubricCriteriaForPrompt(criteriaJson: string, locale: SupportedLocale): RubricCriterionForPrompt[] {
+  return parseRubricCriteriaEntries(criteriaJson).map(([id, criterion]) => {
+    const isObject = isCriterionObject(criterion);
     const label = isObject ? localizedField((criterion as { label?: unknown }).label, locale) : null;
     const description = isObject ? localizedField((criterion as { description?: unknown }).description, locale) : localizedField(criterion, locale);
     const steps = describedSteps(isObject ? { ...(criterion as object), description } : description);

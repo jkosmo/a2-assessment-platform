@@ -1,6 +1,7 @@
 import { llmResponseCodec } from "../../codecs/llmResponseCodec.js";
 import { localizeContentText } from "../../i18n/content.js";
-import { normalizeLocale } from "../../i18n/locale.js";
+import { normalizeLocale, type SupportedLocale } from "../../i18n/locale.js";
+import { buildCriterionScores } from "../assessment/participantCriteria.js";
 import { parseDecisionReasonParams } from "../assessment/decisionReason.js";
 import { resolveMcqMinPercent, resolveTotalMin, withDerivedMcqPassFail } from "../assessment/mcqPassRule.js";
 import { deriveConfidenceLevel } from "../assessment/assessmentDecisionSignals.js";
@@ -74,6 +75,7 @@ export type OwnedSubmission = {
   moduleVersion?: {
     assessmentMode?: string | null;
     assessmentPolicyJson?: string | null;
+    rubricVersionId?: string | null;
   } | null;
 };
 
@@ -134,7 +136,11 @@ export function toSubmissionHistoryResponseView(submissions: SubmissionHistoryIt
   };
 }
 
-export function toSubmissionResultView(submission: OwnedSubmission) {
+export function toSubmissionResultView(
+  submission: OwnedSubmission,
+  // #1124: rubrikken innleveringen ble vurdert mot, for poengene per kriterium. Uten den: ingen poeng.
+  criteria: { criteriaJson: string | null; locale: SupportedLocale } = { criteriaJson: null, locale: "en-GB" },
+) {
   const decision = submission.decisions[0] ?? null;
   const latestAppeal = submission.appeals[0] ?? null;
   const llmEvaluation = submission.llmEvaluations[0] ?? null;
@@ -183,6 +189,11 @@ export function toSubmissionResultView(submission: OwnedSubmission) {
       confidenceLevel: llmStructured ? deriveConfidenceLevel(llmStructured) : null,
       improvementAdvice: llmStructured?.improvement_advice ?? [],
       criterionRationales: llmStructured?.criterion_rationales ?? null,
+      // #1124: «1 av 2» per kriterium, på kriteriets EGEN skala, og hva toppnivået krever der
+      // deltakeren ikke fikk fullt. Bare kriterier deltakeren får se — se `buildCriterionScores`.
+      criterionScores: llmStructured
+        ? buildCriterionScores(criteria.criteriaJson, llmStructured.rubric_scores, criteria.locale)
+        : [],
       decisionMetadata: llmStructured
         ? {
             evidenceSufficiency: llmStructured.evidence_sufficiency ?? null,

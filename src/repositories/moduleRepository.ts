@@ -22,6 +22,9 @@ export const moduleSummarySelect = {
       rubricVersionId: true,
       promptTemplateVersionId: true,
       mcqSetVersionId: true,
+      // #1124: kriteriene deltakeren skal se før levering. Råteksten (med skjulte kriterier) forlater
+      // aldri tjenesten — moduleService bygger `assessmentCriteria` av den og fjerner feltet.
+      rubricVersion: { select: { criteriaJson: true } },
     },
   },
 } satisfies Prisma.ModuleSelect;

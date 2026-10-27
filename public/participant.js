@@ -36,6 +36,7 @@ import {
 } from "/static/outcome.js";
 import { showToast } from "/static/toast.js";
 import { setHidden } from "/static/dom-visibility.js";
+import { buildCriteriaPanel, buildCriterionScoreList } from "/static/assessment-criteria.js";
 import { groupCoursesByTheme, hasAnyTheme } from "/static/course-theme-groups.js";
 import {
   buildModuleCardViewModels,
@@ -77,6 +78,7 @@ const selectedModuleBrief = document.getElementById("selectedModuleBrief");
 const selectedModuleTaskText = document.getElementById("selectedModuleTaskText");
 const selectedModuleCandidateConstraintsSection = document.getElementById("selectedModuleCandidateConstraintsSection");
 const selectedModuleCandidateTaskConstraints = document.getElementById("selectedModuleCandidateTaskConstraints");
+const selectedModuleCriteria = document.getElementById("selectedModuleCriteria");
 const submissionIdLabel = document.getElementById("submissionId");
 const attemptIdLabel = document.getElementById("attemptId");
 // #940: flytkrommet rundt resultatet. Se `applyResultChrome`.
@@ -755,6 +757,13 @@ function renderSelectedModuleSummary() {
   // MCQ-only module (taskText == null) doesn't show an empty OPPGAVE/VEILEDNING brief (#525 follow-up).
   if (selectedModuleCandidateConstraintsSection) {
     setHidden(selectedModuleCandidateConstraintsSection, !constraints);
+  }
+  // #1124: «Slik vurderes svaret ditt» — kriteriene med trinnene, under oppgaveteksten. Serveren har
+  // allerede holdt tilbake skjulte kriterier; ingen kriterier å vise gir ingen panel.
+  if (selectedModuleCriteria) {
+    const panel = buildCriteriaPanel(document, selectedModule?.assessmentCriteria, { t, labelFor: localizeCriterionName });
+    selectedModuleCriteria.replaceChildren(...(panel ? [panel] : []));
+    setHidden(selectedModuleCriteria, !panel);
   }
   setHidden(selectedModuleBrief, !(selectedModule && selectedModule.taskText));
   renderSubmissionFields(getSubmissionFields(selectedModule));
@@ -2678,7 +2687,21 @@ function renderResultSummary(body) {
   }
 
   const rationales = body.participantGuidance?.criterionRationales ?? {};
-  const rationaleEntries = Object.entries(rationales);
+  // #1124: poengene per kriterium — «1 av 2» på kriteriets egen skala, begrunnelsen, og hva
+  // toppnivået krever der deltakeren ikke fikk fullt. Begrunnelser for kriterier serveren ikke sendte
+  // poeng for (skjulte, eller en eldre server), står i lista under som før.
+  const { list: scoreList, covered } = buildCriterionScoreList(
+    document,
+    body.participantGuidance?.criterionScores,
+    rationales,
+    { t, labelFor: localizeCriterionName },
+  );
+  if (scoreList) {
+    const scoreCard = createSummaryCard(t("result.criteria.title"));
+    scoreCard.appendChild(scoreList);
+    resultSummary.appendChild(scoreCard);
+  }
+  const rationaleEntries = Object.entries(rationales).filter(([criterion]) => !covered.has(criterion));
   if (rationaleEntries.length > 0) {
     const rationaleCard = createSummaryCard(t("result.rationales"));
     const rationaleList = document.createElement("ul");

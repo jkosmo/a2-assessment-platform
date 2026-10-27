@@ -117,6 +117,20 @@ export function createSubmissionRepository(client: SubmissionRepositoryClient = 
 
 export const submissionRepository = createSubmissionRepository();
 
+/**
+ * #1124: kriteriene innleveringen ble vurdert mot — rubrikken på innleveringens modulversjon, ikke den
+ * aktive. Hentes for seg i stedet for å legges inn i `findOwnedSubmission`: den spørringen sendes rå
+ * til klienten av `GET /api/submissions/:id`, og råteksten har med skjulte kriterier.
+ */
+export async function queryRubricCriteriaJson(rubricVersionId: string | null | undefined) {
+  if (!rubricVersionId) return null;
+  const rubric = await prisma.rubricVersion.findUnique({
+    where: { id: rubricVersionId },
+    select: { criteriaJson: true },
+  });
+  return rubric?.criteriaJson ?? null;
+}
+
 export async function queryLatestSubmissionsForModules(userId: string, moduleIds: string[]) {
   return prisma.submission.findMany({
     where: { userId, moduleId: { in: moduleIds } },
