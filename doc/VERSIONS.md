@@ -2,6 +2,21 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.120.0 - 2026-10-29
+
+### En deltaker havner ikke lenger på forfattersiden
+
+En deltaker åpnet deltakerlenka fra Teams på mobil og endte på /admin-content/courses med «Du har ikke
+tilgang til denne handlingen», uten vei videre. Innloggingen kommer alltid tilbake til /admin-content
+(adressen registrert i Entra), og siden sender brukeren videre til adressen som ble lagret før
+innloggingen. Den lå i øktlageret, som var borte i Teams-nettleseren.
+
+- Forfattersidene sender den som ikke har noen annen rolle enn deltaker, rett til «Mine kurs». Sperren
+  står på siden og dekker dermed alle veier inn: innlogging, utlogging, fornyet innlogging og en tilsendt
+  lenke. En ansattrolle beholder siden, og feiler oppslaget, skjer ingenting.
+- En fornyet innlogging midt i økta lagret ikke adressen brukeren var på; nå gjør den det, så både
+  deltakere og fagansvarlige kommer tilbake dit de var.
+
 ## 2.119.0 - 2026-10-27
 
 ### Nye spørsmål i diskusjonen varsler kursets eiere, og eierne kan slå det av
