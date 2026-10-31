@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { MCQ_QUESTION_TYPES, ORDER_MAX_ITEMS, ORDER_MIN_ITEMS, serializeAnswerKey, type McqQuestionType } from "../assessment/mcqQuestionTypes.js";
+import { FILL_BLANK_RE, FILL_MAX_ANSWERS, MCQ_QUESTION_TYPES, ORDER_MAX_ITEMS, ORDER_MIN_ITEMS, serializeAnswerKey, type McqQuestionType } from "../assessment/mcqQuestionTypes.js";
 import type { LocalizedText } from "../../codecs/localizedTextCodec.js";
 
 export const localizedTextObjectSchema = z.object({
@@ -174,13 +174,34 @@ const mcqQuestionSchema = z
   .object({
     questionType: z.enum(MCQ_QUESTION_TYPES).optional(),
     stem: localizedTextMaybeUntranslatedSchema,
-    options: z.array(localizedTextMaybeUntranslatedSchema).min(2),
+    // Minst to — unntatt «fill», der alternativene er de godkjente svarene, og ett er nok (under).
+    options: z.array(localizedTextMaybeUntranslatedSchema).min(1),
     correctAnswer: localizedTextMaybeUntranslatedSchema.optional(),
     correctAnswers: z.array(localizedTextMaybeUntranslatedSchema).optional(),
     rationale: localizedTextMaybeUntranslatedSchema.optional(),
   })
   .superRefine((question, context) => {
     const normalizedOptions = question.options.map((option) => localizedTextIdentity(option));
+    if (question.questionType === "fill") {
+      // «Fyll inn»: alternativene er de godkjente svarene; stammen har nøyaktig én lukke på hvert språk.
+      if (question.options.length > FILL_MAX_ANSWERS) {
+        context.addIssue({ code: "custom", message: `A «fill» question has 1–${FILL_MAX_ANSWERS} accepted answers.`, path: ["options"] });
+      }
+      if (new Set(normalizedOptions).size !== normalizedOptions.length) {
+        context.addIssue({ code: "custom", message: "A «fill» question lists the same accepted answer twice.", path: ["options"] });
+      }
+      const stems = typeof question.stem === "string" ? [question.stem] : Object.values(question.stem ?? {});
+      if (stems.some((stem) => typeof stem === "string" && (stem.match(FILL_BLANK_RE) ?? []).length !== 1)) {
+        context.addIssue({ code: "custom", message: "A «fill» question has exactly one blank (___) in its stem, in every language.", path: ["stem"] });
+      }
+      if (question.correctAnswers !== undefined) {
+        context.addIssue({ code: "custom", message: "correctAnswers belongs to a «multiple» question.", path: ["correctAnswers"] });
+      }
+      return;
+    }
+    if (question.options.length < 2) {
+      context.addIssue({ code: "custom", message: "A question has at least two options.", path: ["options"] });
+    }
     if ((question.questionType ?? "single") === "single") {
       if (question.correctAnswer === undefined || !normalizedOptions.includes(localizedTextIdentity(question.correctAnswer))) {
         context.addIssue({ code: "custom", message: "correctAnswer must be one of options.", path: ["correctAnswer"] });
@@ -233,6 +254,10 @@ export function mcqQuestionTypeFields(question: {
   // «order»: rekkefølgen er fasiten. Det første elementet står i `correctAnswer`, så lesere som ikke
   // kjenner typen, viser noe forståelig — som for «multiple».
   if (questionType === "order") {
+    return { questionType, correctAnswer: question.options[0] ?? "", answerKeyJson: null };
+  }
+  // «fill»: alternativene er de godkjente svarene; det første står i `correctAnswer`, som for «order».
+  if (questionType === "fill") {
     return { questionType, correctAnswer: question.options[0] ?? "", answerKeyJson: null };
   }
   const identities = question.options.map((option) => localizedTextIdentity(option));
@@ -570,7 +595,8 @@ export const moduleDraftLocalizationBodySchema = z.object({
 
 export const generatedMcqQuestionBodySchema = z.object({
   stem: z.string().trim().min(1),
-  options: z.array(z.string().trim().min(1)).min(2).max(6),
+  // Minst ett: en «fyll inn» kan ha ett godkjent svar (alternativene ER de godkjente svarene).
+  options: z.array(z.string().trim().min(1)).min(1).max(6),
   correctAnswer: z.string().trim().min(1),
   // #896 S4: optional, matching the SAVE schema (`mcqSetVersionBodySchema`). It was required here
   // only, so a question saved without a rationale — perfectly legal — could not be sent for

@@ -206,6 +206,8 @@ export function checkMcqCues(questions, { primary, reading } = {}) {
     if (STEM_ABOUT_COURSE.test(stem)) {
       issues.push({ index: i, kind: "stem_about_course", detail: `the stem asks what the course says — «${label}». That tests memory of the text; ask what the learner should do or conclude in a situation.` });
     }
+    // #1077 leveranse 3: i «fill» skriver deltakeren selv — ingen alternativer å lese hint i.
+    if (q?.questionType === "fill") continue;
     if (q?.questionType !== "order") {
       const rightOnes = q?.questionType === "multiple" ? (Array.isArray(q?.correctAnswers) ? q.correctAnswers : []).map((a) => textOf(a, lang)) : [answer];
       for (const o of options) {

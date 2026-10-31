@@ -135,3 +135,26 @@ Fasit og utlevering:
 - Riktig når hele rekkefølgen stemmer; `answerJson = {"order":[posisjoner]}`, `selectedAnswer` er
   elementene skilt med « → ».
 
+
+## Leveranse 3 — «fyll inn ordet som mangler» (produkteier 2026-10-31)
+
+Avgjørelser:
+
+1. **Godkjente svar som liste**, uten KI. Store og små bokstaver, mellomrom og tegnsetting på slutten
+   teller ikke, **og ett feil tegn godtas i svar på sju tegn eller mer** («samtyke» for «samtykke»). I
+   kortere svar er ett tegn et annet ord («tro» er ikke «tre»).
+2. **Én lukke** (`___`) per spørsmål, på hvert språk.
+3. **Rett eller galt**, som de andre typene.
+
+Lagring (avvik fra forslaget over): de godkjente svarene lagres som **alternativene** (`optionsJson`),
+hvert med sine språk, ikke som en egen liste per språk i `answerKeyJson`. Da virker oversettelsen,
+publiseringskontrollen, eksport/import, spørsmålsbanken og skillets språkkontroll uendret. Prisen er at
+hvert språk har like mange godkjente svar — «tre» og «3» blir «three» og «3». Svaret godtas på et
+hvilket som helst av spørsmålets språk.
+
+- `answerKeyJson` er null; `correctAnswer` er det første godkjente svaret, for lesere som ikke kjenner typen.
+- **Alternativene sendes aldri til deltakeren** (`mcq/start` gir `options: []`) — de er fasiten.
+- Svaret sendes som `textAnswer`; `answerJson = {"text": …}`, `selectedAnswer` er det som ble skrevet.
+- Gjennomgangen (#1061) viser `acceptedAnswers`; kvalitetsrapporten teller ingen feilalternativer.
+- KI: revisjon og oversettelse **bevarer** typen og lukka. KI **lager** ikke typen ennå — det er
+  leveranse 3b, som for «sett i rekkefølge» (2b).

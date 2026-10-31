@@ -482,7 +482,8 @@ export function checkLocalization(pkg, { languages = LANGUAGES, primary = "nb", 
     q.options.forEach((opt, oi) => checkField(`${q.path}.options[${oi}]`, opt));
     // #1077 leveranse 2: in an «order» question the options ARE the answer key, in the same order in
     // every language by construction — there is no separate answer to compare across locales.
-    if (q.questionType === "order") {
+    // Leveranse 3: in «fill» the options are the accepted answers — likewise no separate answer to compare.
+    if (q.questionType === "order" || q.questionType === "fill") {
       if (q.correctAnswer !== undefined) checkField(`${q.path}.correctAnswer`, q.correctAnswer);
       continue;
     }

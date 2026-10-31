@@ -86,7 +86,8 @@ export async function startMcqAttempt(
         id: question.id,
         questionType,
         stem: localizeContentText(locale, question.stem) ?? question.stem,
-        options: questionType === "order" ? shuffleOrderItems(options) : shuffleArray(options),
+        // «fill»: alternativene er de godkjente svarene — fasiten — og går aldri ut. Deltakeren skriver selv.
+        options: questionType === "fill" ? [] : questionType === "order" ? shuffleOrderItems(options) : shuffleArray(options),
       };
     }),
   };

@@ -308,6 +308,20 @@ before. Participant endpoints:
   warning in `validation.issues`. Revision keeps each question's type unless the instruction asks otherwise, and
   never returns more than half the set as `"multiple"` (or as many as the input already had).
 
+**Fill in the missing word (#1077 delivery 3).** `"questionType": "fill"`: the stem has exactly one
+blank (`___`) in every language, and `options` are the **accepted answers** (1–6, none twice) — there
+is no `correctAnswers`; `correctAnswer` is the first answer. Participant endpoints:
+
+- `GET /api/modules/:moduleId/mcq/start` returns `options: []` for a `"fill"` question — the accepted
+  answers are the answer key and never leave the server before submission.
+- `POST /api/modules/:moduleId/mcq/submit`: the response is `textAnswer` (what the participant wrote;
+  empty is allowed and wrong). Correct when it equals an accepted answer in any of the question's
+  languages, ignoring case, spaces and punctuation at the end, or is one character from an accepted
+  answer of 7+ characters.
+- `GET /api/submissions/:id/mcq-review` returns `acceptedAnswers` (in the reader's locale) and
+  `options: []` for `"fill"`; `selectedAnswer` is what was written.
+- Revision and localization keep the type and the blank; generation does not make `"fill"` questions yet.
+
 **Example answer (#1124 del 2).** A free-text module version has an optional `modelAnswer`
 (LocalizedText): a strong answer to the task, shown to the participant after assessment when the
 version's `assessmentPolicy.practical.modelAnswerAfterAssessment` is `true` (off by default).

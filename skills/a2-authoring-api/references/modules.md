@@ -1,7 +1,7 @@
 # Modules — task, assessment criteria, multiple-choice questions
 
-Contents: [Free-text modules](#free-text-modules) · [Multiple-choice questions](#multiple-choice-questions) ·
-[Select all that apply](#select-all-that-apply) · [Put in the right order](#put-in-the-right-order) · [The cue check](#the-cue-check)
+Contents: [Free-text modules](#free-text-modules) · [Example answer](#example-answer) · [Multiple-choice questions](#multiple-choice-questions) ·
+[Select all that apply](#select-all-that-apply) · [Put in the right order](#put-in-the-right-order) · [Fill in the missing word](#fill-in-the-missing-word) · [The cue check](#the-cue-check)
 
 A module tests. Write it from the source, in the course's one language, at the level agreed at
 gate 3 ([course-design.md](course-design.md#level-and-scope)).
@@ -164,6 +164,22 @@ A question can be `"questionType": "order"`: the learner puts 3–6 items in the
 - The `rationale` explains the order.
 
 The learner gets it right only with the whole order right; there are no part marks.
+
+## Fill in the missing word
+
+A question can be `"questionType": "fill"`: the stem has one blank (`___`), and the learner writes the
+missing word ([package-schema.md](package-schema.md#a-module)).
+
+- **Only for a word the learner should be able to recall** — a term, a number, a deadline the
+  sections teach («Fristen for å klage er ___ uker»). Not for a judgement: that is a question with
+  options. At most one or two per test.
+- **One blank, in every language**, where the missing word belongs in that language.
+- **`options` are the accepted answers** — the spellings of the same answer («tre», «3»), 1–6. Not
+  alternatives to choose between: the learner never sees them. Upper and lower case, spaces and a
+  full stop at the end do not count, and one wrong letter is accepted in an answer of 7+ letters.
+- **The stem gives enough to know which word** — one answer, not «a word that fits».
+- **When adjusting questions that stay**, a fill question keeps its type and its blank.
+- The `rationale` says why that is the word.
 
 ## The cue check
 

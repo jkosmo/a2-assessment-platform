@@ -222,6 +222,18 @@ right order — there is no `correctAnswers`:
 (the first item); leave it as it is. When and how to write one:
 [modules.md](modules.md#put-in-the-right-order).
 
+A **fill-in-the-missing-word** question has `"questionType": "fill"`, one blank (`___`) in the stem,
+and its `options` ARE the accepted answers — the learner never sees them:
+
+```json
+{ "questionType": "fill", "stem": "Fristen for å klage er ___ uker.", "options": ["tre", "3"],
+  "rationale": "…" }
+```
+
+1–6 accepted answers, none twice, one blank in every language. An export also writes `correctAnswer`
+(the first answer); leave it as it is. When and how to write one:
+[modules.md](modules.md#fill-in-the-missing-word).
+
 `certificationLevel` is `basic`, `intermediate` or `advanced`
 ([course-design.md](course-design.md#level-and-scope)). How to write tasks, criteria and
 questions: [modules.md](modules.md).

@@ -25,6 +25,8 @@ export type McqReviewQuestion = {
   /** «order»: elementene i riktig rekkefølge, og slik deltakeren satte dem (på leserens språk). */
   correctOrder?: string[];
   selectedOrder?: string[];
+  /** «fill»: de godkjente svarene på leserens språk (alternativene ER de godkjente svarene). */
+  acceptedAnswers?: string[];
   isCorrect: boolean;
   rationale: string | null;
 };
@@ -84,8 +86,10 @@ export async function getOwnedMcqReview(
         id: question.id,
         questionType,
         ...order,
+        // «fill»: alternativene er de godkjente svarene — vist som det, ikke som valg deltakeren hadde.
+        ...(questionType === "fill" ? { acceptedAnswers: options } : {}),
         stem: localizeContentText(locale, question.stem) ?? question.stem,
-        options,
+        options: questionType === "fill" ? [] : options,
         ...multiple,
         // Svaret slik deltakeren ga det — på språket forsøket ble tatt på.
         selectedAnswer: response?.selectedAnswer ?? null,

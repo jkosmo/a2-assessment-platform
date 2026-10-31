@@ -267,7 +267,7 @@ function normalizePreviewQuestions(questions) {
 
       return {
         id: typeof question.id === "string" && question.id.trim().length > 0 ? question.id : `preview-q-${index + 1}`,
-        questionType: question.questionType === "multiple" || question.questionType === "order" ? question.questionType : "single",
+        questionType: ["multiple", "order", "fill"].includes(question.questionType) ? question.questionType : "single",
         stem,
         options,
       };
@@ -2519,6 +2519,8 @@ async function renderMcqReview(submissionId) {
     // er de en rekkefølge (leveranse 2).
     const multiple = q.questionType === "multiple";
     const order = q.questionType === "order";
+    // Leveranse 3: «fyll inn» — det deltakeren skrev, og de godkjente svarene.
+    const fill = q.questionType === "fill";
     const yourText = order
       ? (q.selectedOrder?.length ? q.selectedOrder.join(" → ") : null)
       : multiple ? (q.selectedAnswers?.length ? q.selectedAnswers.join(" · ") : null) : q.selectedAnswer;
@@ -2529,7 +2531,9 @@ async function renderMcqReview(submissionId) {
       correct.className = "mcq-review-line mcq-review-correct";
       correct.textContent = order
         ? `${t("result.mcqReview.correctOrder")}: ${(q.correctOrder ?? []).join(" → ")}`
-        : `${t("result.mcqReview.correctAnswer")}: ${multiple ? (q.correctAnswers ?? []).join(" · ") : q.correctAnswer}`;
+        : fill
+          ? `${t("result.mcqReview.acceptedAnswers")}: ${(q.acceptedAnswers ?? []).join(" · ")}`
+          : `${t("result.mcqReview.correctAnswer")}: ${multiple ? (q.correctAnswers ?? []).join(" · ") : q.correctAnswer}`;
       item.appendChild(correct);
     }
     if (q.rationale) {
@@ -3192,11 +3196,13 @@ submitMcqButton.addEventListener("click", async () => {
       }
 
       const responses = answers.map(({ question, selected }) => (
-        isOrderQuestion(question)
-          ? { questionId: question.id, orderedAnswers: selected }
-          : isMultipleQuestion(question)
-            ? { questionId: question.id, selectedAnswers: selected }
-            : { questionId: question.id, selectedAnswer: selected }
+        isFillQuestion(question)
+          ? { questionId: question.id, textAnswer: selected }
+          : isOrderQuestion(question)
+            ? { questionId: question.id, orderedAnswers: selected }
+            : isMultipleQuestion(question)
+              ? { questionId: question.id, selectedAnswers: selected }
+              : { questionId: question.id, selectedAnswer: selected }
       ));
 
       const body = await apiFetch(`/api/modules/${moduleId}/mcq/submit`, headers, {
@@ -3427,9 +3433,16 @@ const isMultipleQuestion = (question) => question?.questionType === "multiple";
 // «Flytt ned» (tastatur og skjermleser), og kan dras med musa. De kommer stokket fra tjeneren, aldri i
 // riktig rekkefølge, så rekkefølgen deltakeren ser, er alltid et svar.
 const isOrderQuestion = (question) => question?.questionType === "order";
+// Leveranse 3: «fyll inn ordet som mangler» (questionType «fill») — deltakeren skriver selv; tjeneren
+// sender aldri alternativene, for de er de godkjente svarene.
+const isFillQuestion = (question) => question?.questionType === "fill";
 
-/** Det deltakeren har valgt på et spørsmål: én tekst, flere (multiple), alle i sin rekkefølge (order), eller ingenting. */
+/** Det deltakeren har valgt på et spørsmål: én tekst, flere (multiple), alle i sin rekkefølge (order), det hun skrev (fill), eller ingenting. */
 function selectedForQuestion(question) {
+  if (isFillQuestion(question)) {
+    const value = document.querySelector(`[data-fill-input="${CSS.escape(question.id)}"]`)?.value.trim() ?? "";
+    return value || null;
+  }
   if (isOrderQuestion(question)) {
     const items = [...document.querySelectorAll(`[data-order-list="${CSS.escape(question.id)}"] [data-order-item]`)].map((li) => li.dataset.orderItem);
     return items.length > 0 ? items : null;
@@ -3558,6 +3571,35 @@ function renderQuestions(selectedResponses = {}) {
 
     if (isOrderQuestion(question)) {
       wrapper.appendChild(buildOrderList(question, selectedResponses[question.id]));
+      mcqQuestions.appendChild(wrapper);
+      continue;
+    }
+
+    // Leveranse 3: «fyll inn» — ett tekstfelt for lukka i spørsmålet. Feltet har spørsmålet som
+    // beskrivelse, så en skjermleser leser setningen med lukka før den ber om svaret.
+    if (isFillQuestion(question)) {
+      const label = document.createElement("label");
+      label.className = "mcq-fill";
+      const caption = document.createElement("span");
+      caption.className = "mcq-fill-label small";
+      caption.textContent = t("mcq.fillLabel");
+      const input = document.createElement("input");
+      input.type = "text";
+      input.className = "mcq-fill-input";
+      input.dataset.fillInput = question.id;
+      input.autocomplete = "off";
+      input.spellcheck = false;
+      input.maxLength = 200;
+      title.id = `mcqStem_${question.id}`;
+      input.setAttribute("aria-describedby", title.id);
+      const saved = selectedResponses[question.id];
+      if (typeof saved === "string") input.value = saved;
+      input.addEventListener("input", () => {
+        input.closest(".mcq-question-card")?.classList.remove("mcq-question-card--unanswered");
+        scheduleDraftAutosave();
+      });
+      label.append(caption, input);
+      wrapper.appendChild(label);
       mcqQuestions.appendChild(wrapper);
       continue;
     }

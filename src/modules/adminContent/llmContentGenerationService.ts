@@ -1,4 +1,4 @@
-import { ORDER_MAX_ITEMS, ORDER_MIN_ITEMS, type McqQuestionType } from "../assessment/mcqQuestionTypes.js";
+import { FILL_BLANK_RE, FILL_MAX_ANSWERS, ORDER_MAX_ITEMS, ORDER_MIN_ITEMS, type McqQuestionType } from "../assessment/mcqQuestionTypes.js";
 import { z } from "zod";
 import { env } from "../../config/env.js";
 import { fetchAzureOpenAiWithRetry } from "../llm/azureOpenAiRetry.js";
@@ -80,7 +80,7 @@ export type McqDistractorMetadata = {
 // Leveranse 2: «order» (sett i riktig rekkefølge) har elementene i riktig rekkefølge i `options` og
 // `correctAnswer` lik det første — rekkefølgen er fasiten.
 export type GeneratedMcqQuestion = {
-  questionType?: "multiple" | "order";
+  questionType?: "multiple" | "order" | "fill";
   stem: string;
   options: string[];
   correctAnswer: string;
@@ -242,7 +242,8 @@ const mcqGenerationResponseCodec = z.object({
         // #1077: alt annet enn «multiple» er ett svar — også «single» eller tull fra modellen.
         questionType: z.unknown().optional(),
         stem: z.string().min(1),
-        options: z.array(z.string().min(1)).min(2).max(MCQ_MAX_OPTIONS),
+        // Minst to — unntatt «fill», der alternativene er de godkjente svarene (sjekkes i parseMcqGenerationResponse).
+        options: z.array(z.string().min(1)).min(1).max(MCQ_MAX_OPTIONS),
         // Valgfri her: for «multiple» fylles den inn fra correctAnswers (normalizeGeneratedQuestionType).
         correctAnswer: z.string().optional(),
         correctAnswers: z.array(z.string()).optional(),
@@ -268,7 +269,7 @@ export function clampMcqOptionCount(raw: unknown): unknown {
     if (!entry || typeof entry !== "object") continue;
     const question = entry as { questionType?: unknown; options?: unknown; correctAnswer?: unknown; correctAnswers?: unknown };
     // Leveranse 2: en rekkefølge kuttes aldri — de siste stegene ville forsvunnet stille. Den avvises.
-    if (question.questionType === "order") continue;
+    if (question.questionType === "order" || question.questionType === "fill") continue;
     if (Array.isArray(question.options) && question.options.length > MCQ_MAX_OPTIONS) {
       // #1077: for «velg alle» skal ALLE de riktige overleve kuttet, ikke bare correctAnswer.
       const correct = [
@@ -310,6 +311,9 @@ function parseMcqGenerationResponse(raw: unknown, context: string): ParsedMcqRes
   if (!parsed.success) {
     throw new Error(`${context} failed validation: ${JSON.stringify(parsed.error.issues)}`);
   }
+  // Minst to alternativer, som skjemaet krevde før «fill» kom (der ett godkjent svar er nok).
+  const tooFew = parsed.data.questions.findIndex((question) => question.questionType !== "fill" && question.options.length < 2);
+  if (tooFew >= 0) throw new Error(`${context} failed validation: question ${tooFew + 1} has fewer than two options.`);
   return {
     questions: parsed.data.questions.map((question) => normalizeGeneratedQuestionType(question)),
     ...(parsed.data.noOrderReason?.trim() ? { noOrderReason: parsed.data.noOrderReason.trim() } : {}),
@@ -333,6 +337,14 @@ export function findAnswerKeyProblems(question: RawGeneratedMcqQuestion, index: 
     if (new Set(items).size !== items.length) return [`${label}: an "order" question lists the same item twice`];
     return [];
   }
+  // Leveranse 3: i «fyll inn» er alternativene de godkjente svarene; stammen har nøyaktig én lukke.
+  if (question.questionType === "fill") {
+    const answers = question.options.map((option) => option.trim());
+    if (answers.length > FILL_MAX_ANSWERS) return [`${label}: a "fill" question has 1–${FILL_MAX_ANSWERS} accepted answers, not ${answers.length}`];
+    if (new Set(answers).size !== answers.length) return [`${label}: a "fill" question lists the same accepted answer twice`];
+    if ((question.stem.match(FILL_BLANK_RE) ?? []).length !== 1) return [`${label}: a "fill" question has exactly one blank (___) in its stem`];
+    return [];
+  }
   if (question.questionType === "multiple") {
     const answers = question.correctAnswers ?? [];
     if (answers.length === 0) return [`${label}: "multiple" without correctAnswers`];
@@ -353,6 +365,9 @@ export function normalizeGeneratedQuestionType(question: RawGeneratedMcqQuestion
   const { questionType, correctAnswer, correctAnswers, ...rest } = question;
   if (questionType === "order") {
     return { ...rest, questionType: "order", correctAnswer: question.options[0] ?? correctAnswer ?? "" };
+  }
+  if (questionType === "fill") {
+    return { ...rest, questionType: "fill", correctAnswer: question.options[0] ?? correctAnswer ?? "" };
   }
   if (questionType === "multiple") {
     const wanted = new Set((correctAnswers ?? []).map((answer) => answer.trim()));
@@ -661,7 +676,9 @@ function buildIndexedMcqPreview(questions: RevisableMcqQuestion[], locale: Gener
           ? `Type: multiple (select all that apply)\nCorrect answers: ${(question.correctAnswers ?? []).map((answer) => localizeForPrompt(answer, locale)).join(" | ")}`
           : question.questionType === "order"
             ? "Type: order (put in the right order) — the options above ARE the correct order"
-            : `Correct answer: ${localizeForPrompt(question.correctAnswer, locale)}`,
+            : question.questionType === "fill"
+              ? "Type: fill (fill in the missing word) — the stem has one blank (___); the options above ARE the accepted answers"
+              : `Correct answer: ${localizeForPrompt(question.correctAnswer, locale)}`,
         `Rationale: ${localizeForPrompt(question.rationale, locale)}`,
       ].join("\n");
     })
@@ -1330,8 +1347,9 @@ Target option count per question: ${optionCount}
 
 ## Question types
 
-A question either has one correct answer (no "questionType"), is "questionType": "multiple" — select all that apply, with "correctAnswers" — or is "questionType": "order" — put in the right order, with the items in "options" IN THE CORRECT ORDER.
+A question either has one correct answer (no "questionType"), is "questionType": "multiple" — select all that apply, with "correctAnswers" — or is "questionType": "order" — put in the right order, with the items in "options" IN THE CORRECT ORDER — or is "questionType": "fill" — fill in the missing word: the stem has exactly one blank (___), and "options" are the accepted answers for it (spellings of the same answer, such as "three" and "3"), with "correctAnswer" equal to the first.
 - Keep every question's type, keep the correct options of a "multiple" question correct, and keep the items of an "order" question in the correct order, unless the instruction asks to change them. You may reword the items of an "order" question, but never reorder them unless the instruction says the order is wrong.
+- Keep a "fill" question a "fill" question with exactly one blank (___) in its stem, and its accepted answers in "options". Never turn another question into "fill".
 - Change types only when the instruction asks for it. When it names questions, change those. When it asks in general — for "select all that apply" questions (for example "make some of them select-all", "use more multiple-answer questions") or for a harder test — you may convert questions without being told which: choose yourself which and how many, from where several options can genuinely all be correct under the stem and where the set needs to be harder. Any other instruction keeps every type as it is.
 - At most ${revisionMultipleCap(input.questions, questionCount)} of the ${questionCount} questions may be "multiple" in the result.
 - At most ${revisionOrderCap(input.questions)} question may be "order" in the result. Convert a question to "order" only when the instruction asks for it (by name, or in general), and only where its content is a sequence the material states.
@@ -1468,6 +1486,11 @@ export function buildMcqLocalizationPrompts(input: McqLocalizationInput): {
     "You are a professional translator for a certification platform. Translate the provided MCQ set faithfully and return strict JSON only - no markdown, no commentary.";
 
   const serializedQuestions = JSON.stringify(input.questions, null, 2);
+  // #1077 leveranse 3: en «fyll inn» har én lukke i stammen, og alternativene er de godkjente svarene.
+  const hasBlank = input.questions.some((question) => (question.stem.match(FILL_BLANK_RE) ?? []).length > 0);
+  const blankRule = hasBlank
+    ? "\n- A stem with a blank (___) is a fill-in question: keep exactly one blank (___) in the translated stem, where the missing word belongs in the target language. Its options are the accepted answers for the blank — translate each so it fits the blank; keep numbers and symbols as they are."
+    : "";
   const userPrompt = `Translate the following multiple-choice questions from ${LOCALE_DISPLAY[input.sourceLocale]} to ${LOCALE_DISPLAY[input.targetLocale]}.
 
 ${buildLanguageEnforcementDirective(input.targetLocale)}
@@ -1479,7 +1502,7 @@ ${buildLanguageEnforcementDirective(input.targetLocale)}
 - Keep each question self-contained.
 - correctAnswer must match one of the translated options verbatim.
 - Translate rationale as well.
-- Do not add or remove questions or options.
+- Do not add or remove questions or options.${blankRule}
 
 ## Source questions
 

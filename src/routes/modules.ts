@@ -42,8 +42,11 @@ const mcqSubmitBodySchema = z.object({
       selectedAnswer: z.string().min(1).optional(),
       selectedAnswers: z.array(z.string().min(1)).max(20).optional(),
       orderedAnswers: z.array(z.string().min(1)).max(20).optional(),
-    }).refine((item) => [item.selectedAnswer, item.selectedAnswers, item.orderedAnswers].filter((v) => v !== undefined).length === 1, {
-      message: "Each response has exactly one of selectedAnswer, selectedAnswers or orderedAnswers.",
+      // Leveranse 3: det deltakeren skrev i lukka («fyll inn»). Tomt er lov — et ubesvart spørsmål er galt,
+      // ikke en ugyldig innlevering.
+      textAnswer: z.string().max(200).optional(),
+    }).refine((item) => [item.selectedAnswer, item.selectedAnswers, item.orderedAnswers, item.textAnswer].filter((v) => v !== undefined).length === 1, {
+      message: "Each response has exactly one of selectedAnswer, selectedAnswers, orderedAnswers or textAnswer.",
     }),
   ).refine((items) => {
     const ids = items.map(i => i.questionId);

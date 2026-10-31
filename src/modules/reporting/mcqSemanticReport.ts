@@ -173,9 +173,10 @@ export async function getMcqQualityReport(filters: ReportFilters, locale: Suppor
     }
 
     let distractorUsage: DistractorStat[] = [];
-    // #1077: i en «sett i rekkefølge» er alle elementene med i hvert svar — det finnes ingen
-    // feilalternativer å telle. Vanskegrad og diskriminering (fra isCorrect) gjelder som for de andre.
-    if (questionTypeOf(entry) !== "order") try {
+    // #1077: i en «sett i rekkefølge» er alle elementene med i hvert svar, og i en «fyll inn» skriver
+    // deltakeren selv — ingen av dem har feilalternativer å telle. Vanskegrad og diskriminering (fra
+    // isCorrect) gjelder som for de andre.
+    if (questionTypeOf(entry) !== "order" && questionTypeOf(entry) !== "fill") try {
       const options: unknown[] = JSON.parse(entry.optionsJson);
       const multiple = questionTypeOf(entry) === "multiple";
       const correctPositions = multiple ? new Set(parseAnswerKey(entry.answerKeyJson, Array.isArray(options) ? options.length : 0).correct) : null;

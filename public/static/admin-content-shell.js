@@ -1484,6 +1484,22 @@ function firstBadOrderIndex(questions) {
     && ((question.options?.length ?? 0) < ORDER_MIN_ITEMS || (question.options?.length ?? 0) > ORDER_MAX_ITEMS));
 }
 
+/**
+ * #1077 leveranse 3: første «fyll inn» som ikke har nøyaktig én lukke (___) i stammen, eller 1–6
+ * godkjente svar, eller -1. Samme regel som tjeneren (FILL_BLANK_RE/FILL_MAX_ANSWERS), sagt før
+ * oversettelsen. Stammen sjekkes på hvert språk den har.
+ */
+const FILL_MAX_ANSWERS = 6;
+function firstBadFillIndex(questions) {
+  return (questions ?? []).findIndex((question) => {
+    if (question?.questionType !== "fill") return false;
+    const answers = (question.options ?? []).filter((option) => String(localizeValueForLocale(option, contentLocale) ?? "").trim());
+    const stems = typeof question.stem === "string" ? [question.stem] : Object.values(question.stem ?? {});
+    const blanksOk = stems.every((stem) => typeof stem !== "string" || (stem.match(/_{3,}/g) ?? []).length === 1);
+    return answers.length < 1 || answers.length > FILL_MAX_ANSWERS || !blanksOk;
+  });
+}
+
 function readMcqQuestionsFromForm(currentMcqQuestions) {
   return currentMcqQuestions.map((question, questionIndex) => {
     const container = previewContent.querySelector(`[data-preview-edit-question="${questionIndex}"]`);
@@ -1497,6 +1513,18 @@ function readMcqQuestionsFromForm(currentMcqQuestions) {
         : Math.max(0, options.findIndex((option) => option === question.correctAnswer));
     // #1077 leveranse 2: «Sett i riktig rekkefølge» → elementene slik de står, i den rekkefølgen; det er
     // fasiten. Tomme felt er ikke elementer (skjemaet viser alltid minst tre å fylle ut).
+    // Leveranse 3: «Fyll inn» → feltene er de godkjente svarene; det første står i `correctAnswer`.
+    const fill = container?.querySelector("[data-preview-edit-fill]")?.checked === true;
+    if (fill) {
+      const answers = optionInputs.map((input) => input.value.trim()).filter(Boolean);
+      return {
+        questionType: "fill",
+        stem: container?.querySelector(`#previewEditMcqStem${questionIndex}`)?.value.trim() || question.stem,
+        options: answers,
+        correctAnswer: answers[0] ?? "",
+        rationale: container?.querySelector(`#previewEditMcqRationale${questionIndex}`)?.value.trim() || question.rationale,
+      };
+    }
     const order = container?.querySelector("[data-preview-edit-order]")?.checked === true;
     if (order) {
       const items = optionInputs.map((input) => input.value.trim()).filter(Boolean);
@@ -1997,6 +2025,8 @@ async function reviseMcqInBackground(instruction, onAccept) {
       ...(multiple ? { questionType: "multiple", correctAnswers: mcqCorrectPositions(question).map((i) => options[i]) } : {}),
       // Leveranse 2b: en rekkefølge går med som type; elementene står i riktig rekkefølge i `options`.
       ...(question?.questionType === "order" ? { questionType: "order" } : {}),
+      // Leveranse 3: en «fyll inn» går med som type; `options` er de godkjente svarene.
+      ...(question?.questionType === "fill" ? { questionType: "fill" } : {}),
       stem: localizeValueForLocale(question.stem, contentLocale),
       options,
       correctAnswer: localizeValueForLocale(question.correctAnswer, contentLocale),
@@ -2291,6 +2321,14 @@ async function saveDraftBundleInBackground(options = {}) {
   const badOrder = isFreetextOnly ? -1 : firstBadOrderIndex(mcqQuestions);
   if (badOrder >= 0) {
     const message = tf("shell.save.mcqOrderNeedsItems", { n: badOrder + 1, min: ORDER_MIN_ITEMS, max: ORDER_MAX_ITEMS });
+    logBot(() => escapeHtml(message));
+    showToast(message, "error");
+    backToForm();
+    return;
+  }
+  const badFill = isFreetextOnly ? -1 : firstBadFillIndex(mcqQuestions);
+  if (badFill >= 0) {
+    const message = tf("shell.save.mcqFillNeedsBlank", { n: badFill + 1, max: FILL_MAX_ANSWERS });
     logBot(() => escapeHtml(message));
     showToast(message, "error");
     backToForm();
@@ -2837,8 +2875,24 @@ function enterPreviewEditMode({ force = false } = {}) {
           // Leveranse 2: «sett i rekkefølge» har ingen valg av fasit — elementene står nummerert, i
           // riktig rekkefølge. Alltid minst tre felt å fylle ut.
           const order = question.questionType === "order";
+          // Leveranse 3: «fyll inn» — feltene er de godkjente svarene for lukka i spørsmålet. Minst ett.
+          const fill = question.questionType === "fill";
           const correctPositions = new Set(multiple ? mcqCorrectPositions(question) : [Math.max(0, options.findIndex((option) => option === question.correctAnswer))]);
           const orderItems = order ? [...options, ...Array(Math.max(0, ORDER_MIN_ITEMS - options.length)).fill("")] : [];
+          const fillAnswers = fill ? (options.length > 0 ? options : [""]) : [];
+          const fillHtml = fillAnswers
+            .map((answer, answerIndex) => `
+                <label class="preview-edit-mcq-option">
+                  <input
+                    type="text"
+                    id="previewEditMcqOption${questionIndex}_${answerIndex}"
+                    class="preview-edit-input"
+                    data-preview-edit-option
+                    value="${escapeHtml(answer)}"
+                    aria-label="${escapeHtml(`${questionLabel} ${tf("adminContent.dialog.mcq.fillAnswer", { n: answerIndex + 1 })}`)}"
+                  />
+                </label>`.trim())
+            .join("");
           const orderHtml = orderItems
             .map((item, itemIndex) => `
                 <label class="preview-edit-mcq-option">
@@ -2853,7 +2907,7 @@ function enterPreviewEditMode({ force = false } = {}) {
                   />
                 </label>`.trim())
             .join("");
-          const optionsHtml = order ? orderHtml : options
+          const optionsHtml = fill ? fillHtml : order ? orderHtml : options
             .map((option, optionIndex) => {
               const optionLetter = String.fromCharCode(65 + optionIndex);
               return `
@@ -2906,10 +2960,19 @@ function enterPreviewEditMode({ force = false } = {}) {
                 <input type="checkbox" data-preview-edit-order="${questionIndex}" ${order ? "checked" : ""} />
                 ${escapeHtml(t("adminContent.dialog.mcq.order"))}
               </label>
+              <label class="preview-edit-mcq-multiple">
+                <input type="checkbox" data-preview-edit-fill="${questionIndex}" ${fill ? "checked" : ""} />
+                ${escapeHtml(t("adminContent.dialog.mcq.fill"))}
+              </label>
               <div class="preview-edit-mcq-options">
                 ${optionsHtml}
               </div>
-              ${order
+              ${fill
+                ? `<div class="preview-mcq-meta">
+                    <span class="preview-edit-mcq-help">${escapeHtml(t("adminContent.help.mcqFill"))}</span>
+                    ${fillAnswers.length < FILL_MAX_ANSWERS ? `<button type="button" class="row-action-btn" style="width:auto" data-add-fill-answer="${questionIndex}">${escapeHtml(t("adminContent.dialog.mcq.addFillAnswer"))}</button>` : ""}
+                  </div>`
+                : order
                 ? `<div class="preview-mcq-meta">
                     <span class="preview-edit-mcq-help">${escapeHtml(t("adminContent.help.mcqOrder"))}</span>
                     ${orderItems.length < ORDER_MAX_ITEMS ? `<button type="button" class="row-action-btn" style="width:auto" data-add-order-item="${questionIndex}">${escapeHtml(t("adminContent.dialog.mcq.addOrderItem"))}</button>` : ""}
@@ -3040,6 +3103,39 @@ function enterPreviewEditMode({ force = false } = {}) {
       });
     });
   }
+  // #1077 leveranse 3: «Fyll inn» skifter hvordan spørsmålet skrives (godkjente svar i stedet for
+  // alternativer med fasit), så skjemaet tegnes på nytt — som for «Sett i riktig rekkefølge». De tre
+  // typene utelukker hverandre: skjemaet tegnes fra typen, så de andre boksene står uten kryss.
+  for (const toggle of previewContent.querySelectorAll("[data-preview-edit-fill]")) {
+    toggle.addEventListener("change", () => {
+      const index = Number(toggle.dataset.previewEditFill);
+      rebuildWithQuestions((list) => {
+        const question = list[index];
+        if (!question) return;
+        if (toggle.checked) {
+          // Det som er skrevet, blir de første godkjente svarene — tomme felt er ikke svar.
+          const answers = (question.options ?? []).filter((option) => String(localizeValueForLocale(option, contentLocale) ?? "").trim());
+          list[index] = { stem: question.stem, questionType: "fill", options: answers.slice(0, FILL_MAX_ANSWERS), correctAnswer: answers[0] ?? "", rationale: question.rationale };
+        } else {
+          const options = (question.options ?? []).length >= 2 ? question.options : [...(question.options ?? []), "", ""].slice(0, 4);
+          list[index] = { stem: question.stem, options, correctAnswer: options[0] ?? "", rationale: question.rationale };
+        }
+      });
+    });
+  }
+  for (const btn of previewContent.querySelectorAll("[data-add-fill-answer]")) {
+    btn.addEventListener("click", () => {
+      const index = Number(btn.dataset.addFillAnswer);
+      rebuildWithQuestions((list) => {
+        const question = list[index];
+        if (!question) return;
+        const answers = (question.options ?? []).length > 0 ? [...question.options] : [""];
+        if (answers.length < FILL_MAX_ANSWERS) answers.push("");
+        list[index] = { ...question, options: answers };
+      });
+      previewContent.querySelector(`#previewEditMcqOption${index}_${(sessionDraft?.mcqQuestions?.[index]?.options?.length ?? 1) - 1}`)?.focus();
+    });
+  }
   for (const btn of previewContent.querySelectorAll("[data-add-order-item]")) {
     btn.addEventListener("click", () => {
       const index = Number(btn.dataset.addOrderItem);
@@ -3061,7 +3157,8 @@ function enterPreviewEditMode({ force = false } = {}) {
     toggle.addEventListener("change", () => {
       // Leveranse 2: fra «sett i rekkefølge» til «flere riktige» tegnes skjemaet på nytt med valg av fasit.
       const orderToggle = toggle.closest("[data-preview-edit-question]")?.querySelector("[data-preview-edit-order]");
-      if (toggle.checked && orderToggle?.checked) {
+      const fillToggle = toggle.closest("[data-preview-edit-question]")?.querySelector("[data-preview-edit-fill]");
+      if (toggle.checked && (orderToggle?.checked || fillToggle?.checked)) {
         const index = Number(toggle.dataset.previewEditMultiple);
         rebuildWithQuestions((list) => {
           const question = list[index];
@@ -3175,6 +3272,12 @@ function enterPreviewEditMode({ force = false } = {}) {
     if (badOrder >= 0) {
       showToast(tf("shell.save.mcqOrderNeedsItems", { n: badOrder + 1, min: ORDER_MIN_ITEMS, max: ORDER_MAX_ITEMS }), "error");
       previewContent.querySelector(`#previewEditMcqOption${badOrder}_0`)?.focus();
+      return;
+    }
+    const badFill = firstBadFillIndex(newMcqQuestions);
+    if (badFill >= 0) {
+      showToast(tf("shell.save.mcqFillNeedsBlank", { n: badFill + 1, max: FILL_MAX_ANSWERS }), "error");
+      previewContent.querySelector(`#previewEditMcqStem${badFill}`)?.focus();
       return;
     }
 

@@ -73,6 +73,24 @@ function renderPreviewMcqQuestions(questions, locale, t, tf, audience = "author"
       const multiple = question?.questionType === "multiple";
       // Leveranse 2: «sett i rekkefølge» — elementene står i riktig rekkefølge for forfatteren, og
       // baklengs for deltakerens visning (deltakeren får dem stokket, aldri i riktig rekkefølge).
+      // Leveranse 3: «fyll inn» — spørsmålet med lukka og et tekstfelt for deltakeren; forfatteren ser
+      // i tillegg de godkjente svarene. Deltakerens visning viser dem aldri.
+      if (question?.questionType === "fill") {
+        return `
+        <article class="preview-mcq-item">
+          <div class="preview-mcq-question-header">${escapeHtml(tf("shell.preview.questionNumber", { number: index + 1 }))}</div>
+          <div class="preview-mcq-stem">${escapeHtml(stem)}</div>
+          <input type="text" class="preview-mcq-fill" disabled aria-label="${escapeHtml(t("shell.preview.fillField"))}" />
+          ${forParticipant ? "" : `<div class="preview-mcq-meta">
+            <span class="preview-mcq-meta-label">${escapeHtml(t("shell.preview.acceptedAnswers"))}</span>
+            <span>${escapeHtml(options.join(" · "))}</span>
+          </div>`}
+          ${rationale && !forParticipant ? `<div class="preview-mcq-meta">
+            <span class="preview-mcq-meta-label">${escapeHtml(t("shell.preview.rationale"))}</span>
+            <span>${escapeHtml(rationale)}</span>
+          </div>` : ""}
+        </article>`;
+      }
       if (question?.questionType === "order") {
         const items = forParticipant ? [...options].reverse() : options;
         return `

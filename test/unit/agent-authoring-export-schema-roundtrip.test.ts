@@ -289,12 +289,18 @@ describe("#1077 — flere riktige svar: skillets validator og det ekte skjemaet 
     ["et riktig som ikke er et alternativ", { questionType: "multiple", correctAnswers: [A, L("Other", "Annet")] }, false],
     ["et riktig som bare stemmer på ett språk", { questionType: "multiple", correctAnswers: [A, { ...C, nn: "Noko anna" }] }, false],
     ["samme alternativ to ganger", { questionType: "multiple", correctAnswers: [A, A] }, false],
-    ["ukjent type", { questionType: "fill", correctAnswer: A }, false],
+    ["ukjent type", { questionType: "essay", correctAnswer: A }, false],
     // #1077 leveranse 2: «sett i riktig rekkefølge» — alternativene ER rekkefølgen, 3–6, ingen like.
     ["rekkefølge med tre elementer, slik eksporten skriver den", { questionType: "order", correctAnswer: A }, true],
     ["rekkefølge med correctAnswers", { questionType: "order", correctAnswers: [A] }, false],
     ["rekkefølge med to elementer", { questionType: "order", options: [A, B] }, false],
     ["rekkefølge med samme element to ganger", { questionType: "order", options: [A, B, A] }, false],
+    // #1077 leveranse 3: «fyll inn» — alternativene ER de godkjente svarene, 1–6; én lukke på hvert språk.
+    ["fyll inn med ett godkjent svar, slik eksporten skriver den", { questionType: "fill", stem: L("The deadline is ___ weeks.", "Fristen er ___ uker."), options: [A], correctAnswer: A }, true],
+    ["fyll inn uten lukke", { questionType: "fill", options: [A], correctAnswer: A }, false],
+    ["fyll inn med lukke bare på bokmål", { questionType: "fill", stem: L("The deadline is three weeks.", "Fristen er ___ uker."), options: [A] }, false],
+    ["fyll inn med samme svar to ganger", { questionType: "fill", stem: L("___", "___"), options: [A, A] }, false],
+    ["fyll inn med correctAnswers", { questionType: "fill", stem: L("___", "___"), options: [A], correctAnswers: [A] }, false],
     // QA 2.100.0: bare en FRAVÆRENDE type er «single»; importen avviser null.
     ["type null", { questionType: null, correctAnswer: A }, false],
     ["correctAnswers på et vanlig spørsmål", { correctAnswer: A, correctAnswers: [A] }, false],

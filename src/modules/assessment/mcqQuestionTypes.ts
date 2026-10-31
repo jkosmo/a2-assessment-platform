@@ -1,4 +1,4 @@
-import { matchesLocalizedContentVariant } from "../../i18n/content.js";
+import { matchesLocalizedContentVariant, resolveContentVariants } from "../../i18n/content.js";
 
 /**
  * #1077: spørsmålstypene, og hvordan et svar på hver rettes. ÉN modul, fordi «er dette svaret
@@ -15,8 +15,20 @@ import { matchesLocalizedContentVariant } from "../../i18n/content.js";
  *   order     «sett i riktig rekkefølge» (leveranse 2, 2026-10-25); alternativene LAGRES i riktig
  *             rekkefølge, og det er fasiten — `answerKeyJson` er null. Utleveres alltid stokket, og aldri
  *             i riktig rekkefølge (`shuffleOrderItems`). Riktig når hele rekkefølgen stemmer. 3–6 elementer.
+ *   fill      «fyll inn ordet som mangler» (leveranse 3, 2026-10-31); stammen har ÉN lukke (`___`), og
+ *             alternativene er de GODKJENTE SVARENE (hvert med sine språk) — `answerKeyJson` er null.
+ *             Alternativene utleveres derfor aldri til deltakeren: de er fasiten. Riktig når svaret,
+ *             normalisert, er et av de godkjente på et av språkene, eller ett tegn unna et godkjent svar
+ *             på mer enn seks bokstaver (produkteier 2026-10-31). Ingen KI.
  */
-export const MCQ_QUESTION_TYPES = ["single", "multiple", "order"] as const;
+export const MCQ_QUESTION_TYPES = ["single", "multiple", "order", "fill"] as const;
+
+/** «Fyll inn»: lukka i stammen — tre eller flere understreker. Nøyaktig én per språk. */
+export const FILL_BLANK_RE = /_{3,}/g;
+/** Godkjente svar per spørsmål: ett er nok, flere dekker skrivemåter («tre», «3»). */
+export const FILL_MAX_ANSWERS = 6;
+/** Ett tegn feil godtas bare i svar lengre enn dette — i korte ord er ett tegn et annet ord. */
+export const FILL_TYPO_MIN_LENGTH = 7;
 
 /** «Sett i rekkefølge»: færre er gjetting, flere blir tungt å flytte på telefon (produkteier 2026-10-25). */
 export const ORDER_MIN_ITEMS = 3;
@@ -53,8 +65,37 @@ export function serializeAnswerKey(key: McqAnswerKey): string {
   return JSON.stringify({ correct: [...new Set(key.correct)].sort((a, b) => a - b) });
 }
 
-/** Et svar slik deltakeren sender det: én tekst (single), flere (multiple), eller alle i deltakerens rekkefølge (order). */
-export type McqSubmittedAnswer = { selectedAnswer?: string; selectedAnswers?: string[]; orderedAnswers?: string[] };
+/** Et svar slik deltakeren sender det: én tekst (single), flere (multiple), alle i deltakerens rekkefølge (order), eller det hun skrev (fill). */
+export type McqSubmittedAnswer = { selectedAnswer?: string; selectedAnswers?: string[]; orderedAnswers?: string[]; textAnswer?: string };
+
+/**
+ * «Fyll inn»: svaret og et godkjent svar sammenlignes slik — store og små bokstaver, mellomrom og
+ * tegnsetting på slutten teller ikke («Tre uker.» = «tre uker»). Ingenting annet tolkes.
+ */
+export function normalizeFillAnswer(text: string): string {
+  return text.normalize("NFC").trim().replace(/\s+/g, " ").replace(/[.,;:!?]+$/u, "").trim().toLocaleLowerCase();
+}
+
+/** Er `a` og `b` høyst ett tegn fra hverandre (ett tegn byttet, lagt til eller borte)? */
+export function withinOneEdit(a: string, b: string): boolean {
+  if (a === b) return true;
+  if (Math.abs(a.length - b.length) > 1) return false;
+  const [short, long] = a.length <= b.length ? [a, b] : [b, a];
+  let i = 0;
+  while (i < short.length && short[i] === long[i]) i += 1;
+  // Like lange: resten etter forskjellen må være lik (ett byttet). Ulik lengde: lik etter ett hoppet over.
+  return short.length === long.length ? short.slice(i + 1) === long.slice(i + 1) : short.slice(i) === long.slice(i + 1);
+}
+
+/** Er det deltakeren skrev, et godkjent svar? `answers` er de lagrede alternativene (språkkart eller tekst). */
+export function isAcceptedFillAnswer(answers: string[], written: string): boolean {
+  const given = normalizeFillAnswer(written);
+  if (!given) return false;
+  return answers.some((stored) => resolveContentVariants(stored).some((variant) => {
+    const accepted = normalizeFillAnswer(variant);
+    return accepted === given || (accepted.length >= FILL_TYPO_MIN_LENGTH && withinOneEdit(accepted, given));
+  }));
+}
 
 export type McqGradedAnswer = {
   isCorrect: boolean;
@@ -103,6 +144,16 @@ export function gradeMcqAnswer(question: GradableQuestion, answer: McqSubmittedA
   }
 
   const options = JSON.parse(question.optionsJson) as string[];
+
+  if (type === "fill") {
+    // Alternativene er de godkjente svarene. Svaret lagres som skrevet — det er det deltakeren ser igjen.
+    const written = answer.textAnswer ?? "";
+    return {
+      isCorrect: isAcceptedFillAnswer(options, written),
+      selectedAnswer: written.trim(),
+      answerJson: JSON.stringify({ text: written.trim() }),
+    };
+  }
 
   if (type === "order") {
     // Posisjonen i FASITEN til hvert element, i den rekkefølgen deltakeren satte dem. Riktig når den er

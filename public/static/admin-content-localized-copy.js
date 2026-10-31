@@ -134,6 +134,10 @@ export function carryMcqAnswerKey(target, source) {
   if (source?.questionType === "order" && target) {
     return { ...target, questionType: "order", correctAnswer: (target.options ?? [])[0] ?? target.correctAnswer };
   }
+  // Leveranse 3: i «fyll inn» er alternativene de godkjente svarene; det første står i `correctAnswer`.
+  if (source?.questionType === "fill" && target) {
+    return { ...target, questionType: "fill", correctAnswer: (target.options ?? [])[0] ?? target.correctAnswer };
+  }
   if (source?.questionType !== "multiple" || !target) return target;
   const positions = mcqCorrectPositions(source);
   const options = target.options ?? [];

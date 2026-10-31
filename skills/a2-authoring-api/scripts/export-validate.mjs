@@ -189,10 +189,14 @@ export const ASSET_LAYOUTS = ["narrow"];
 // #1077: the question types. The platform owns the list (`MCQ_QUESTION_TYPES` in
 // src/modules/assessment/mcqQuestionTypes.ts); repeated here for the same reason, and held to it by a
 // repo unit test.
-export const MCQ_QUESTION_TYPES = ["single", "multiple", "order"];
+export const MCQ_QUESTION_TYPES = ["single", "multiple", "order", "fill"];
 // #1077 leveranse 2: «order» (put in the right order) has 3–6 items — the platform's ORDER_MIN_ITEMS/ORDER_MAX_ITEMS.
 export const ORDER_MIN_ITEMS = 3;
 export const ORDER_MAX_ITEMS = 6;
+// #1077 leveranse 3: «fill» (fill in the missing word) has 1–6 accepted answers in `options` and one
+// blank (___) in the stem, in every language — the platform's FILL_MAX_ANSWERS/FILL_BLANK_RE.
+export const FILL_MAX_ANSWERS = 6;
+const FILL_BLANK = /_{3,}/g;
 
 function isNonEmptyLocalizedPartial(value) {
   if (typeof value === "string") return value.trim().length > 0;
@@ -271,6 +275,15 @@ export function validateExportEnvelopeStructure(envelope) {
       }
       if (type === "single") {
         if (!optionIds.includes(localizedIdentity(q.correctAnswer))) err(`${qPath}.correctAnswer`, "must equal one of options in every locale");
+        if (q.correctAnswers !== undefined) err(`${qPath}.correctAnswers`, "belongs to a \"multiple\" question");
+        continue;
+      }
+      // "fill": the options ARE the accepted answers — no answer key. 1–6, none twice; one blank in the stem.
+      if (type === "fill") {
+        if (optionIds.length < 1 || optionIds.length > FILL_MAX_ANSWERS) err(`${qPath}.options`, `a "fill" question has 1–${FILL_MAX_ANSWERS} accepted answers`);
+        if (new Set(optionIds).size !== optionIds.length) err(`${qPath}.options`, "a \"fill\" question lists the same accepted answer twice");
+        const stems = typeof q.stem === "string" ? [q.stem] : Object.values(q.stem ?? {});
+        if (stems.some((stem) => typeof stem === "string" && (stem.match(FILL_BLANK) ?? []).length !== 1)) err(`${qPath}.stem`, "a \"fill\" question has exactly one blank (___) in its stem, in every language");
         if (q.correctAnswers !== undefined) err(`${qPath}.correctAnswers`, "belongs to a \"multiple\" question");
         continue;
       }

@@ -136,4 +136,12 @@ describe("#1077 — mcqCorrectPositions og carryMcqAnswerKey", () => {
     const target = { options: ["x", "y"], correctAnswer: "y" };
     expect(carryMcqAnswerKey(target, { options: ["x", "y"], correctAnswer: "y" })).toBe(target);
   });
+
+  // #1077 leveranse 3: et «fyll inn» bygget på nytt etter oversettelsen er fortsatt et «fyll inn» — uten
+  // dette ble det et vanlig spørsmål med de godkjente svarene som valg, ved neste lagring.
+  it("et «fyll inn» beholder typen, og det første godkjente svaret står i correctAnswer", () => {
+    const fill = { questionType: "fill", stem: { nb: "Fristen er ___ uker." }, options: [{ nb: "tre" }, "3"], correctAnswer: { nb: "tre" } };
+    const translated = { stem: { nn: "Fristen er ___ veker." }, options: [{ nn: "tre" }, "3"], correctAnswer: "3" };
+    expect(carryMcqAnswerKey(translated, fill)).toEqual({ ...translated, questionType: "fill", correctAnswer: { nn: "tre" } });
+  });
 });

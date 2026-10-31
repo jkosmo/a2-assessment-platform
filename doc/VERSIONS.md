@@ -2,6 +2,24 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.123.0 - 2026-10-31
+
+### «Fyll inn ordet som mangler» i modultestene — #1077 leveranse 3
+
+En ny spørsmålstype: stammen har én lukke (`___`), og deltakeren skriver ordet som mangler. Forfatteren
+krysser av «Fyll inn ordet som mangler» på spørsmålet og skriver de godkjente svarene (1–6, for flere
+skrivemåter som «tre» og «3»).
+
+- **Retting uten KI** (produkteier 2026-10-31): store og små bokstaver, mellomrom og tegnsetting på
+  slutten teller ikke, og ett feil tegn godtas i svar på sju tegn eller mer. Rett eller galt, som de
+  andre typene; svaret godtas på et hvilket som helst av spørsmålets språk.
+- **De godkjente svarene er fasiten** og sendes aldri til deltakeren før innlevering (`options: []`).
+  Gjennomgangen etter levering viser dem, når modulen har slått den på.
+- De godkjente svarene lagres som spørsmålets alternativer, så oversettelse, publiseringskontroll,
+  eksport/import og spørsmålsbanken virker som før (doc/DESIGN_1077.md, leveranse 3).
+- KI-revisjon og oversettelse beholder typen og lukka; KI lager ikke typen ennå (leveranse 3b).
+- Skillet kjenner typen (`package-schema.md`, `modules.md#fill-in-the-missing-word`, eksportkontrollen).
+
 ## 2.122.0 - 2026-10-31
 
 ### Eksempelsvar etter fritekstvurderingen — #1124 del 2
