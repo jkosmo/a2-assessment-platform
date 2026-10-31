@@ -457,7 +457,7 @@ Sekretariatet oppdaterer møteplanen og sender ny innkalling innen 25. oktober.
 **Every course has at least one.** Knowing that you should check a draft is not the same as
 spotting the wrong date, the invented name or the guess presented as fact. The learner gets a short
 piece of work with errors planted in it — a draft from AI, a note, a calculation, a plan — and
-finds them. It is a `:::feil` frame (en-GB `:::errors`): the task on the opening line, then the piece
+finds them. It is a `:::feil` frame, in every language: the task on the opening line, then the piece
 of work **one sentence per line** — `- [ ]` for a sentence that is right, `- [x]` for one with an error,
 and under each error, indented two spaces, what is wrong and the check from the course that catches it.
 The learner taps the sentences she thinks are wrong and presses «Sjekk»; she then sees which errors she

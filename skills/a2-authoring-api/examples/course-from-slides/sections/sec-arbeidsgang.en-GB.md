@@ -12,7 +12,7 @@ Good minutes are made in four steps. Two come before you ask the AI for help, tw
 The notes from the board meeting say: *Present: Kari, Ola, Siri. Decision: budget approved. Ola sends
 the budget to the auditor by 1 November. Not settled who books the venue.*
 
-:::errors Find the errors in the AI draft before it is sent.
+:::feil Find the errors in the AI draft before it is sent.
 - [ ] Present: Kari, Ola and Siri.
 - [ ] Decision: The budget was approved.
 - [x] Ola sends the budget to the auditor by 15 November.

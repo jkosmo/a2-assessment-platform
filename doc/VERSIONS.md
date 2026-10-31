@@ -2,6 +2,15 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.125.1 - 2026-10-31
+
+### Skillet: `:::feil` på alle språk — #1123
+
+Funnet da skillet ble kjørt uten tilsyn med Codex (OpenAI-modellen) på et testkurs: `section-content.md` sa
+«en-GB `:::errors`», mens `localization.md` sier at markørordet står uendret på alle språk, som for de andre
+rammene. Nå sier begge `:::feil`, og eksempelkurset bruker `:::feil` også på engelsk. Plattformen leser
+fortsatt begge ordene. Bare skillet er endret.
+
 ## 2.125.0 - 2026-10-31
 
 ### KI lager «fyll inn ordet som mangler» — #1077 leveranse 3b
