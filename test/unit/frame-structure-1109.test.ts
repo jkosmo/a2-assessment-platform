@@ -66,7 +66,7 @@ describe("frame-structure.mjs — formen på hver rammetype (#1109)", () => {
   });
 
   it("tabellen har én oppføring per rammetype, og hver har ord, åpning og tegnemerke", () => {
-    expect(FRAME_KINDS.map((entry) => entry.kind)).toEqual(["tenk", "sjekk", "kort", "steg", "skriv", "repetisjon", "par"]);
+    expect(FRAME_KINDS.map((entry) => entry.kind)).toEqual(["tenk", "sjekk", "kort", "steg", "skriv", "repetisjon", "par", "feil"]);
     for (const entry of FRAME_KINDS) {
       expect(entry.words.length).toBeGreaterThanOrEqual(2);
       expect(["text", "optional", "none"]).toContain(entry.opener);
@@ -362,6 +362,17 @@ describe("frame-structure.mjs — følger og par (#1110, #1107)", () => {
   });
 });
 
+// #1123: «finn feilene» — en feil som flytter seg, eller en forklaring som forsvinner, i en oversettelse.
+describe("finn feilene", () => {
+  const errors = (...rows: string[]) => lines(":::feil Finn feilene", ...rows, ":::");
+  it("formen er feilene og forklaringene; en flyttet feil eller tapt forklaring er et avvik", () => {
+    const source = errors("- [ ] A.", "- [x] B.", "  Fordi.", "- [ ] C.");
+    expect(frameSignature(source)).toEqual(["feil:01f0"]);
+    expect(compareFrames(source, errors("- [ ] A2.", "- [x] B2.", "  Fordi2.", "- [ ] C2."))).toEqual([]);
+    expect(compareFrames(source, errors("- [x] A2.", "  Fordi2.", "- [ ] B2.", "- [ ] C2."))).toEqual([{ kind: "feil", problem: "shape", position: 1, expected: "01f0", actual: "1f00" }]);
+    expect(compareFrames(source, errors("- [ ] A2.", "- [x] B2.", "- [ ] C2."))).toEqual([{ kind: "feil", problem: "shape", position: 1, expected: "01f0", actual: "010" }]);
+  });
+});
 // ⚠️ Vakt mot at tabellen og tegneren glir fra hverandre (QA-porten, 2.98.0: markørordene stod fem steder).
 // Hver rammetype i tabellen, skrevet på minste gyldige måte med hvert markørord, skal tegnes av plattformen
 // med klassen tabellen sier — og tabellen skal lese den som én ramme.
@@ -374,6 +385,7 @@ describe("FRAME_KINDS stemmer med plattformens tegner", () => {
     skriv: (w) => lines(`:::${w} Oppgave`, "Svaret.", ":::"),
     repetisjon: (w) => lines(`:::${w}`, "### En", "a", "### To", "b", ":::"),
     par: (w) => lines(`:::${w}`, "- A = a", "- B = b", "- C = c", ":::"),
+    feil: (w) => lines(`:::${w} Oppgave`, "- [ ] A.", "- [x] B.", "- [ ] C.", ":::"),
   };
   it("hver type og hvert markørord tegnes med tabellens klasse, og leses som én ramme", () => {
     for (const entry of FRAME_KINDS) {

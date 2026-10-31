@@ -1799,7 +1799,7 @@ dialog::backdrop {
 /* Steg for steg (#1075), skriv selv (#1076) og repetisjonskort (#1078): samme ramme og merkelapp som
    «sjekk deg selv». Uten skript står stegene som en nummerert liste og kortene som en definisjonsliste;
    content-blocks.js setter data-ready="true" når blokken er gjort interaktiv. */
-.content-steps, .content-write, .content-flash, .content-pairs {
+.content-steps, .content-write, .content-flash, .content-pairs, .content-errors {
   margin: 0 0 12px;
   padding: 10px 12px 12px;
   min-width: 0;
@@ -1808,18 +1808,18 @@ dialog::backdrop {
   border-radius: 8px;
   background: #fff;
 }
-.content-steps-head, .content-write-head, .content-flash-head, .content-pairs-head { margin: 0 0 10px; display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
-.content-steps-label, .content-write-label, .content-flash-label, .content-pairs-label {
+.content-steps-head, .content-write-head, .content-flash-head, .content-pairs-head, .content-errors-head { margin: 0 0 10px; display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
+.content-steps-label, .content-write-label, .content-flash-label, .content-pairs-label, .content-errors-label {
   font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.02em;
   text-transform: uppercase;
   color: var(--color-primary);
 }
-.content-steps-title, .content-write-task, .content-flash-title, .content-pairs-title { flex: 1 1 16rem; min-width: 0; font-weight: 600; color: var(--color-text); }
+.content-steps-title, .content-write-task, .content-flash-title, .content-pairs-title, .content-errors-task { flex: 1 1 16rem; min-width: 0; font-weight: 600; color: var(--color-text); }
 /* Knappene i blokkene. To klasser: sidene har egne regler for button (full bredde, høyde). Skriptet
    skjuler ingenting med [hidden]: det tegner bare det som skal vises (cascade-fella i CLAUDE.md). */
-.content-steps .content-block-btn, .content-write .content-write-show, .content-flash .content-block-btn {
+.content-steps .content-block-btn, .content-write .content-write-show, .content-flash .content-block-btn, .content-errors .content-errors-check, .content-errors .content-errors-reset {
   width: auto;
   min-height: 0;
   margin: 0;
@@ -1945,6 +1945,45 @@ dialog::backdrop {
 .content-flash-done { display: grid; justify-items: center; gap: 8px; padding: 10px 0; text-align: center; }
 .content-flash-done-title { margin: 0; font-size: 17px; font-weight: 700; }
 .content-flash-score { margin: 0; }
+
+/* #1123 «Finn feilene»: setningene som knapper i full bredde (min. 44 px). Markert = aria-pressed; etter
+   «Sjekk» bærer knappen is-found / is-missed / is-false, og forklaringen står rett under. Skriptet skjuler
+   knappene og tilbakemeldingen med setHidden (cascade-fella i CLAUDE.md). */
+.content-errors-hint { margin: 0 0 10px; font-size: 14px; color: var(--color-meta); }
+.content-errors-list { display: grid; gap: 8px; margin: 0 0 12px; padding: 0; list-style: none; }
+.content-errors-row { display: grid; gap: 6px; min-width: 0; }
+.content-errors .content-errors-item {
+  display: block;
+  width: 100%;
+  min-height: 44px;
+  box-sizing: border-box;
+  margin: 0;
+  padding: 10px 12px;
+  text-align: left;
+  font: inherit;
+  line-height: 1.5;
+  color: var(--color-text);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border-soft);
+  border-radius: 8px;
+  cursor: pointer;
+}
+.content-errors .content-errors-item[aria-pressed="true"] { background: var(--color-primary-tint); border: 2px solid var(--color-primary); padding: 9px 11px; }
+.content-errors .content-errors-item[aria-disabled="true"] { cursor: default; }
+.content-errors .content-errors-item:focus-visible { outline: 3px solid var(--color-focus); outline-offset: 2px; }
+.content-errors .content-errors-item.is-found { border-color: var(--color-success); }
+.content-errors .content-errors-item.is-missed { border: 2px dashed var(--color-warning); padding: 9px 11px; }
+.content-errors-feedback { padding: 8px 12px; border-radius: 8px; font-size: 14px; line-height: 1.5; border: 1px solid var(--color-border-soft); background: var(--color-surface); }
+.content-errors-feedback[data-kind="found"] { background: #edf5ef; border-color: #b7dcc0; }
+.content-errors-feedback[data-kind="missed"] { background: #fbf3e2; border-color: #e3c98f; }
+.content-errors-verdict { margin: 0; font-weight: 650; }
+.content-errors-feedback[data-kind="found"] .content-errors-verdict { color: var(--color-success); }
+.content-errors-feedback[data-kind="missed"] .content-errors-verdict { color: var(--color-warning); }
+.content-errors-feedback[data-kind="false"] .content-errors-verdict { color: var(--color-meta); font-weight: 600; }
+.content-errors-explain { margin: 4px 0 0; }
+.content-errors-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.content-errors-status { margin: 8px 0 0; font-weight: 650; }
+.content-errors-status:empty { display: none; }
 
 /* Finn parene (#1107). Uten skript står parene som en liste; når spillet er bygget, står lista igjen bare
    for skjermlesere. To kolonner også på telefon — teksten brekker i knappene. */

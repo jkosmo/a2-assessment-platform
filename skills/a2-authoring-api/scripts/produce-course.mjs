@@ -501,9 +501,10 @@ function checkQuestions(pkg, primary, course, { onlyRefs = null, baselineCounts 
 
 // #1120: every course has at least one «finn feilene» — a piece of work with planted errors the
 // learner finds (section-content.md#find-the-errors). A NOTE, not a failure: the author may say no.
-// Recognised by the task line of a `:::skriv` frame, in any of the three languages. Not run on a loose
-// section or module, nor when adjusting a course — that changes only what the author asks for.
-const FIND_THE_ERRORS = /^:::\s*(?:skriv|write)\s+(?:finn|find)\b[^\n]*\b(?:feil\w*|errors?|mistakes?)\b/im;
+// Recognised by a `:::feil` frame (#1123), or — as courses made before it have it — by the task line of a
+// `:::skriv` frame, in any of the three languages. Not run on a loose section or module, nor when adjusting
+// a course — that changes only what the author asks for.
+const FIND_THE_ERRORS = /^:::\s*(?:(?:feil|errors)\b|(?:skriv|write)\s+(?:finn|find)\b[^\n]*\b(?:feil\w*|errors?|mistakes?)\b)/im;
 function checkFindTheErrors(pkg, course, { adjusting = false } = {}) {
   const name = "find errors";
   if (!course) return { name, status: "skipped", summary: "not run — no course object", details: [] };

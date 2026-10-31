@@ -2,6 +2,35 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.124.0 - 2026-10-31
+
+### «Finn feilene» i seksjoner — #1123
+
+En ny byggekloss i seksjonstekst: et utkast (et referat fra KI, et notat, en plan) der deltakeren trykker
+på setningene hun mener er feil, og så på «Sjekk». Hun ser hvilke feil hun fant, hvilke hun overså, og
+under hver feil forfatterens forklaring — hva som er feil og kontrollen som fanger det. En setning som
+stemmer, men ble markert, får «Denne stemmer». «Prøv igjen» nullstiller. Prototype godkjent 2026-10-31.
+
+```markdown
+:::feil Finn feilene i KI-utkastet før det sendes.
+- [ ] Vedtak: Budsjettet ble godkjent.
+- [x] Ola sender budsjettet til revisor innen 15. november.
+  Notatene sier 1. november. Kontroll: sjekk hver frist mot notatene.
+- [ ] Til stede: Kari, Ola og Siri.
+:::
+```
+
+- **Avgjort av produkteier 2026-10-31:** hele setninger (ikke fritt tekstutvalg — det virker med tastatur,
+  skjermleser og på telefon), bare i seksjoner (øving uten poeng; fasiten står i siden), og ingen
+  begrunnelse å skrive.
+- Tegnes bare når rammen er en blokk: minst tre setninger, minst én feil og én som stemmer, ingen andre
+  linjer. Ellers står teksten som den er. I en moduls oppgavetekst tegnes den ikke.
+- Oversettelsen holder feilen i samme setning på alle språk (`frame-structure.mjs`, formen «01f0»), og
+  KI-oversetteren har en egen regel for rammen.
+- Skillet bruker rammen for «finn feilene» (`section-content.md#find-the-errors`); `produce-course.mjs`
+  kjenner den igjen, og den gamle formen med `:::skriv Finn feilene` godtas fortsatt.
+- Hjelpen i redigeringsverktøyet beskriver rammen på tre språk.
+
 ## 2.123.0 - 2026-10-31
 
 ### «Fyll inn ordet som mangler» i modultestene — #1077 leveranse 3

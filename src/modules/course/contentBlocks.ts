@@ -20,6 +20,7 @@ import { Lexer, Marked, type TokenizerAndRendererExtension, type Tokens } from "
  *   :::skriv Oppgave … :::   eksempelsvaret, så en sjekkliste `- [ ]`  → skriv selv (#1076)
  *   :::repetisjon … :::      en ramme rundt underoverskrifter          → repetisjonskort (#1078)
  *   :::par … :::             linjer `- Begrep = Forklaring`            → finn parene (#1107)
+ *   :::feil Oppgave … :::    setninger `- [ ]`/`- [x]`, forklaring under → finn feilene (#1123)
  *   ### ![](asset:x) Tittel  et bilde først i en kortoverskrift        → ikon
  *
  * Alt gjøres mens markdown blir til HTML (marked), som tekst. Ingen DOM bygges: plattformens
@@ -110,6 +111,47 @@ const FLASH_LABELS: Record<string, {
     againMany: "Practise the {n} again", againOne: "Practise that one again", restart: "Start again", practice: "Practise with the cards",
   },
 };
+
+// #1123 «Finn feilene». Statusen og tilbakemeldingen per setning settes av content-blocks.js fra data-attributtene.
+const ERRORS_LABELS: Record<string, {
+  label: string; hint: string; check: string; again: string; status: string; found: string; missed: string; falseAlarm: string;
+}> = {
+  nb: {
+    label: "Finn feilene", hint: "Trykk på setningene du mener er feil, og så på «Sjekk».", check: "Sjekk", again: "Prøv igjen",
+    status: "Du fant {found} av {total} feil.", found: "Du fant denne.", missed: "Denne gikk deg hus forbi.", falseAlarm: "Denne stemmer.",
+  },
+  nn: {
+    label: "Finn feila", hint: "Trykk på setningane du meiner er feil, og så på «Sjekk».", check: "Sjekk", again: "Prøv igjen",
+    status: "Du fann {found} av {total} feil.", found: "Du fann denne.", missed: "Denne gjekk deg hus forbi.", falseAlarm: "Denne stemmer.",
+  },
+  "en-GB": {
+    label: "Find the errors", hint: "Tap the sentences you think are wrong, then «Check».", check: "Check", again: "Try again",
+    status: "You found {found} of {total} errors.", found: "You found this one.", missed: "You missed this one.", falseAlarm: "This one is right.",
+  },
+};
+
+/**
+ * #1123: setningene i en «finn feilene»-ramme — `- [ ] setning` (stemmer) og `- [x] setning` (feil), hver med
+ * valgfri forklaring på innrykkede linjer under (som følgen i «sjekk deg selv», #1110). `null` når rammen ikke
+ * er en blokk: minst tre setninger, minst én feil og minst én som stemmer, og ingen andre linjer.
+ */
+export function splitErrorSentences(inner: string): Array<{ error: boolean; text: string; feedback: string[] }> | null {
+  const sentences: Array<{ error: boolean; text: string; feedback: string[] }> = [];
+  for (const line of inner.split(/\r?\n/)) {
+    if (line.trim() === "") continue;
+    const sentence = CHECK_OPTION.exec(line);
+    if (sentence) {
+      sentences.push({ error: sentence[1]!.toLowerCase() === "x", text: sentence[2]!.trim(), feedback: [] });
+      continue;
+    }
+    const feedback = sentences.length > 0 ? CHECK_FEEDBACK.exec(line) : null;
+    if (!feedback) return null;
+    sentences[sentences.length - 1]!.feedback.push(feedback[1]!);
+  }
+  const errors = sentences.filter((s) => s.error).length;
+  if (sentences.length < 3 || errors === 0 || errors === sentences.length) return null;
+  return sentences;
+}
 
 // #1107 «Finn parene». Statusen og tilbakemeldingen settes av content-blocks.js fra data-attributtene.
 const PAIRS_LABELS: Record<string, {
@@ -256,6 +298,13 @@ interface CheckToken extends Tokens.Generic {
   tokens: Tokens.Generic[];
 }
 
+interface ErrorsToken extends Tokens.Generic {
+  type: "contentErrors";
+  raw: string;
+  task: Tokens.Generic[];
+  sentences: Array<{ error: boolean; tokens: Tokens.Generic[]; feedback: Tokens.Generic[] | null }>;
+}
+
 interface PairsToken extends Tokens.Generic {
   type: "contentPairs";
   raw: string;
@@ -333,7 +382,7 @@ export type ContentBlockVariant = "section" | "moduleText";
 
 /** Utvidelsene som bare hører hjemme i seksjoner. */
 // «Finn parene» (#1107) er en øvelse på linje med de tre: samme avgjørelse (produkteier 2026-10-20).
-const SECTION_ONLY_EXTENSIONS = new Set(["contentSteps", "contentWrite", "contentFlash", "contentPairs"]);
+const SECTION_ONLY_EXTENSIONS = new Set(["contentSteps", "contentWrite", "contentFlash", "contentPairs", "contentErrors"]);
 
 /** `locale` er alt siktet av renderSectionBlocks: et av språkene i COPY_LABELS, eller ingen. */
 function createSectionMarked(locale: string | undefined, variant: ContentBlockVariant): Marked {
@@ -344,6 +393,7 @@ function createSectionMarked(locale: string | undefined, variant: ContentBlockVa
   const write = WRITE_LABELS[locale ?? "nb"]!;
   const flash = FLASH_LABELS[locale ?? "nb"]!;
   const pairsLabels = PAIRS_LABELS[locale ?? "nb"]!;
+  const errorsLabels = ERRORS_LABELS[locale ?? "nb"]!;
 
   const allowed = (extension: { name: string }) => variant === "section" || !SECTION_ONLY_EXTENSIONS.has(extension.name);
 
@@ -699,6 +749,72 @@ function createSectionMarked(locale: string | undefined, variant: ContentBlockVa
             `<p class="content-pairs-head"><span class="content-pairs-label">${escapeHtml(pairsLabels.label)}</span>` +
             (title ? `<span class="content-pairs-title">${title}</span>` : "") +
             `</p><ul class="content-pairs-list">${items}</ul></div>\n`
+          );
+        },
+      },
+      {
+        // #1123: «Finn feilene» — et utkast der deltakeren trykker på setningene hun mener er feil, og så får
+        // vite hvilke hun fant, hvilke hun overså, og forklaringen (kontrollen som fanger feilen).
+        //   :::feil Finn de tre feilene i referatet
+        //   - [ ] Styremøte 24. oktober. Til stede: Kari, Ola og Siri.
+        //   - [x] Ola sender budsjettet til revisor innen 15. november.
+        //     Fristen i notatene er 1. november. Kontroll: sammenlign hver frist med notatene.
+        //   :::
+        // Bare i seksjoner, og uten poeng (produkteier 2026-10-31): fasiten står i siden. Hele setninger,
+        // ikke fritt tekstutvalg — det virker med tastatur, skjermleser og på telefon. Uten skript står
+        // setningene som en liste. «errors» er samme blokk på engelsk.
+        name: "contentErrors",
+        level: "block",
+        start(src: string) {
+          return src.match(/^:::[ \t]*(?:feil|errors)(?=[ \t\r\n]|$)/im)?.index;
+        },
+        tokenizer(src: string) {
+          const match = /^:::[ \t]*(?:feil|errors)(?:[ \t]+([^\r\n]*?))?[ \t]*\r?\n([\s\S]*?)\r?\n:::[ \t]*(?=\r?\n|$)/i.exec(src);
+          if (!match) return undefined;
+          const sentences = splitErrorSentences(match[2]!);
+          if (!sentences) return undefined;
+          const token: ErrorsToken = { type: "contentErrors", raw: match[0], task: [], sentences: [] };
+          if (match[1]) this.lexer.inlineTokens(match[1], token.task as Tokens.Generic[] as never);
+          for (const sentence of sentences) {
+            const tokens: Tokens.Generic[] = [];
+            this.lexer.inlineTokens(sentence.text, tokens as never);
+            let feedback: Tokens.Generic[] | null = null;
+            if (sentence.feedback.length > 0) {
+              feedback = [];
+              this.lexer.inlineTokens(sentence.feedback.join(" "), feedback as never);
+            }
+            token.sentences.push({ error: sentence.error, tokens, feedback });
+          }
+          return token;
+        },
+        renderer(token) {
+          const t = token as ErrorsToken;
+          const task = this.parser.parseInline(t.task as never);
+          const rows = t.sentences
+            .map((sentence) =>
+              `<li class="content-errors-row">` +
+              `<button type="button" class="content-errors-item" data-errors-item data-error="${sentence.error ? "true" : "false"}" aria-pressed="false">` +
+              `${this.parser.parseInline(sentence.tokens as never)}</button>` +
+              `<div class="content-errors-feedback" data-errors-feedback hidden><p class="content-errors-verdict"></p>` +
+              (sentence.feedback ? `<p class="content-errors-explain">${this.parser.parseInline(sentence.feedback as never)}</p>` : "") +
+              `</div></li>`,
+            )
+            .join("");
+          const data = [
+            ["status", errorsLabels.status], ["found", errorsLabels.found], ["missed", errorsLabels.missed], ["false", errorsLabels.falseAlarm],
+          ]
+            .map(([key, value]) => ` data-${key}="${escapeHtml(value!)}"`)
+            .join("");
+          const name = textOf(task);
+          return (
+            `<div class="content-errors" data-content-errors role="group" aria-label="${escapeHtml(name ? `${errorsLabels.label}: ${name}` : errorsLabels.label)}"${data}>` +
+            `<p class="content-errors-head"><span class="content-errors-label">${escapeHtml(errorsLabels.label)}</span>` +
+            (task ? `<span class="content-errors-task">${task}</span>` : "") +
+            `</p><p class="content-errors-hint">${escapeHtml(errorsLabels.hint)}</p>` +
+            `<ol class="content-errors-list">${rows}</ol>` +
+            `<div class="content-errors-actions"><button type="button" class="content-errors-check" data-errors-check>${escapeHtml(errorsLabels.check)}</button>` +
+            `<button type="button" class="content-errors-reset" data-errors-reset hidden>${escapeHtml(errorsLabels.again)}</button></div>` +
+            `<p class="content-errors-status" role="status" aria-live="polite"></p></div>\n`
           );
         },
       },

@@ -75,7 +75,7 @@ write the body: [section-content.md](section-content.md).
 
 The question stands on the `:::tenk` line; the answer below it; `:::` closes it. Never inside a
 `:::kort` frame. When to use it: [section-content.md](section-content.md#think-first). The other
-frames — `:::sjekk`, `:::steg`, `:::skriv`, `:::repetisjon`, `:::par` — are written the same way, each line of
+frames — `:::sjekk`, `:::steg`, `:::skriv`, `:::repetisjon`, `:::par`, `:::feil` — are written the same way, each line of
 the frame on its own `\n`, with a blank line (`\n\n`) above the opening line.
 
 **Keep the text in files**, one per language, and point at them with `bodyFiles` instead of

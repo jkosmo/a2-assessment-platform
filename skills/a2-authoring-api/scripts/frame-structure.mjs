@@ -125,6 +125,28 @@ function pairsShape(inner) {
   return String(pairs.length);
 }
 
+/**
+ * #1123: fasiten i «finn feilene» — "01f1" = den andre og fjerde setningen er feil, og den andre har en
+ * forklaring. `null` = ikke tegnet (samme regel som splitErrorSentences i contentBlocks.ts: hver linje som
+ * ikke er tom, er en setning eller en forklaring; minst tre setninger, minst én feil og minst én som stemmer).
+ * En feil som flyttet seg eller mistet forklaringen i en oversettelse, gir en annen form.
+ */
+function errorsShape(inner) {
+  let pattern = "";
+  for (const line of inner.split("\n")) {
+    if (line.trim() === "") continue;
+    const sentence = CHECK_OPTION.exec(line);
+    if (sentence) pattern += sentence[1].toLowerCase() === "x" ? "1" : "0";
+    else if (pattern !== "" && CHECK_FEEDBACK.test(line)) {
+      if (!pattern.endsWith("f")) pattern += "f";
+    } else return null;
+  }
+  const sentences = pattern.replace(/f/g, "");
+  const errors = sentences.replace(/0/g, "").length;
+  if (sentences.length < 3 || errors === 0 || errors === sentences.length) return null;
+  return pattern;
+}
+
 /** Antall punkter i sjekklista i «skriv selv». `null` = ikke tegnet (eksempelsvaret er tomt). */
 function writeShape(inner) {
   const lines = inner.split("\n");
@@ -158,6 +180,7 @@ export const FRAME_KINDS = Object.freeze([
   { kind: "skriv", words: ["skriv", "write"], opener: "text", drawnAs: 'class="content-write"', counts: "checklist points (- [ ] at the end)", shape: writeShape },
   { kind: "repetisjon", words: ["repetisjon", "flashcards"], opener: "optional", drawnAs: 'class="content-flash"', counts: "cards (headings)", shape: itemsShape },
   { kind: "par", words: ["par", "pairs"], opener: "optional", drawnAs: 'class="content-pairs"', counts: "pairs (- term = explanation)", shape: pairsShape },
+  { kind: "feil", words: ["feil", "errors"], opener: "optional", drawnAs: 'class="content-errors"', counts: "the wrong sentences (- [x]) among the sentences", shape: errorsShape },
 ]);
 
 /** Åpningslinja, innholdet og lukkelinja for én rammetype — samme uttrykk som tokenizeren i contentBlocks.ts. */

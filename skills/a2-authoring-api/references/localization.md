@@ -44,10 +44,11 @@ criteria exist in one language.
 - **The markdown:** the same headings, lists, tables, boxes and `![…](asset:…)` references in
   every language. Alt texts are translated; the `asset:` reference is not.
 - **The frames:** the marker word on the opening line stays as it is (`:::kort`, `:::tenk`,
-  `:::sjekk`, `:::steg`, `:::skriv`, `:::repetisjon`, `:::par`); the text after it is translated. The
+  `:::sjekk`, `:::steg`, `:::skriv`, `:::repetisjon`, `:::par`, `:::feil`); the text after it is translated. The
   same number of steps and cards (`###` headings) in a `:::steg` or `:::repetisjon`, the `- [x]` on the
   same option in a `:::sjekk` — and each feedback line still indented under its option —, every `- [ ]`
-  point of a `:::skriv` checklist, and every `- term = explanation` line of a `:::par`.
+  point of a `:::skriv` checklist, every `- term = explanation` line of a `:::par`, and the `- [x]` on the
+  same sentence of a `:::feil` — with its explanation still indented under it.
 - **A prompt** is translated, so that the learner can use it in their language. Names of menus
   and buttons in a product stay as the product shows them.
 

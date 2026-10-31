@@ -285,6 +285,9 @@ describe("produce-course — «finn feilene» (#1120)", () => {
   it.each([
     ["nynorsk", "nn", ":::skriv Finn feila i planen."],
     ["engelsk", "en-GB", ":::skriv Find the mistakes in the plan."],
+    // #1123: den egne rammen for «finn feilene» — med eller uten oppgave på åpningslinja.
+    ["bokmål, :::feil-rammen", "nb", ":::feil Finn feilene i planen."],
+    ["engelsk, :::errors-rammen", "en-GB", ":::errors"],
   ])("oppgaven kjennes igjen på %s også", async (_navn, språk, linje) => {
     const r = await kopi((p) => {
       utenOppgave(p);

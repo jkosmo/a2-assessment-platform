@@ -457,44 +457,48 @@ Sekretariatet oppdaterer møteplanen og sender ny innkalling innen 25. oktober.
 **Every course has at least one.** Knowing that you should check a draft is not the same as
 spotting the wrong date, the invented name or the guess presented as fact. The learner gets a short
 piece of work with errors planted in it — a draft from AI, a note, a calculation, a plan — and
-finds them. It is a [write it yourself](#write-it-yourself) frame whose task starts «Finn feilene»
-(nn «Finn feila», en-GB «Find the errors»), with the piece of work in a quote right above it:
+finds them. It is a `:::feil` frame (en-GB `:::errors`): the task on the opening line, then the piece
+of work **one sentence per line** — `- [ ]` for a sentence that is right, `- [x]` for one with an error,
+and under each error, indented two spaces, what is wrong and the check from the course that catches it.
+The learner taps the sentences she thinks are wrong and presses «Sjekk»; she then sees which errors she
+found, which she missed, and the explanation under each. The material to check against stays right above
+the frame:
 
 ```markdown
 Notatene fra styremøtet sier: *Til stede: Kari, Ola, Siri. Vedtak: budsjettet godkjent.
 Ola sender budsjettet til revisor innen 1. november. Ikke avklart hvem som bestiller lokale.*
 
-> **Utkast fra KI:**
-> - **Vedtak:** Budsjettet ble godkjent.
-> - **Oppfølging:** Ola sender budsjettet til revisor innen 15. november. Kari bestiller lokale.
-> - **Til stede:** Kari, Ola, Siri og Per.
-
-:::skriv Finn feilene i utkastet før det sendes. Skriv hva som er feil, og hvordan du fant det.
-1. **Fristen er feil:** notatene sier 1. november, ikke 15. Du finner det når du sjekker frister mot notatene.
-2. **Kari er gitt en oppgave hun ikke har fått:** notatene sier at det ikke er avklart. Utkastet skulle sagt «uklart».
-3. **Per var ikke til stede:** han står ikke i notatene. Du finner det når du sjekker navn.
-
-- [ ] fristen som ble endret?
-- [ ] oppgaven ingen har fått?
-- [ ] navnet som ikke var med?
+:::feil Finn feilene i KI-utkastet før det sendes.
+- [ ] Vedtak: Budsjettet ble godkjent.
+- [x] Ola sender budsjettet til revisor innen 15. november.
+  Notatene sier 1. november. Du finner det når du sjekker hver frist mot notatene.
+- [x] Kari bestiller lokale.
+  Notatene sier at det ikke er avklart. Utkastet skulle sagt «uklart».
+- [ ] Til stede: Kari, Ola og Siri.
+- [x] Per ble valgt som ny kasserer.
+  Det står ikke i notatene. KI fyller inn det som høres rimelig ut — sjekk hvert navn.
 :::
 ```
+
+The frame is drawn only when it has at least three sentences, at least one with an error and at least
+one that is right, and no other lines. Practice, not a test: it gives no points, and it is drawn in
+sections only.
 
 - **Where:** in the section that teaches the check — right after the rule or routine it practises.
   Name it in the outline like any exercise ([course-design.md](course-design.md#structure)).
 - **The piece of work is from the course's own field**, as short as the errors allow: a few lines
   of minutes, a scoring, a paragraph of a report, a prompt. When the material to check against
-  matters (the notes, the figures), give it above the piece of work.
-- **In a quote with a label**, its lines as a list (`> - …`) — lines in a quote without a list run
-  together into one. A table may stand instead, for a scoring or a calculation.
+  matters (the notes, the figures), give it above the frame.
+- **One sentence per line, each a whole statement** the learner can judge on its own. An error sits
+  in one sentence, not across two. Five to eight sentences.
 - **Three to five errors, of different kinds** — a wrong number or date, something added that the
   material does not say, an assumption stated as fact, a step left out. Each is an error a
   professional actually overlooks, not a typo or a joke; the rest of the piece is right.
 - **Every error breaks a rule the source gives.** The piece of work is built for the exercise; the
-  rules it breaks are the source's. The example answer names each error and the check from the
-  course that catches it.
-- **The checklist has one point per error**, phrased so it does not give the error away before the
-  learner has looked («fristen som ble endret?», not «15. november?»).
+  rules it breaks are the source's. The explanation under each error says what is wrong **and** the
+  check from the course that catches it.
+- **The same sentences are wrong in every language**, with an explanation under each — the platform
+  stops a translation where an error moved or lost its explanation.
 - **Not the module's questions** — another piece of work than any the module asks about.
 - `produce-course.mjs` notes a course without one; tell the author, and add one unless they say no.
 

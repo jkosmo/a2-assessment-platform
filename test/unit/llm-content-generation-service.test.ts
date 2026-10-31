@@ -690,7 +690,7 @@ describe("section localization prompts (#514)", () => {
     });
     // Regelen om markørordene er én linje; ordene må stå i DEN, ikke bare et annet sted i prompten.
     const markerRule = userPrompt.split("\n").find((line) => line.startsWith("- Keep block markers exactly as written")) ?? "";
-    for (const marker of [":::kort", ":::tenk", ":::sjekk", ":::steg", ":::steps", ":::skriv", ":::write", ":::repetisjon", ":::flashcards", ":::par", ":::pairs"]) {
+    for (const marker of [":::kort", ":::tenk", ":::sjekk", ":::steg", ":::steps", ":::skriv", ":::write", ":::repetisjon", ":::flashcards", ":::par", ":::pairs", ":::feil", ":::errors"]) {
       expect(markerRule, marker).toContain(`\`${marker}\``);
     }
     expect(userPrompt).toMatch(/In a `:::skriv` \/ `:::write` block, the lines at the end that start with `- \[ \]` are the learner's checklist\. Keep that start EXACTLY and keep every line/);
@@ -698,6 +698,8 @@ describe("section localization prompts (#514)", () => {
     // #1110 og #1107
     expect(userPrompt).toContain("An indented line right under an option is that option's feedback: keep it indented right under the same option, and translate its text.");
     expect(userPrompt).toContain("In a `:::par` / `:::pairs` block, every line is `- term = explanation`. Keep the `- ` and the ` = ` exactly and keep every line; translate the term and the explanation.");
+    // #1123: feilen står i samme setning på alle språk.
+    expect(userPrompt).toContain("In a `:::feil` / `:::errors` block, each sentence line starts with `- [ ]` (right) or `- [x]` (contains an error). Keep that start EXACTLY on the same sentence and keep every line");
   });
 
   it("omits a field that was not provided", () => {
