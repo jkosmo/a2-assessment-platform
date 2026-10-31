@@ -1466,6 +1466,8 @@ adminContentRouter.post("/generate/mcq", generateLimiter, async (request, respon
       questions: result.questions,
       // #1077 leveranse 2: hvorfor KI ikke laget noe «sett i riktig rekkefølge» — klienten sier det.
       ...(result.noOrderReason ? { noOrderReason: result.noOrderReason } : {}),
+      // Leveranse 3b: det samme for «fyll inn ordet som mangler».
+      ...(result.noFillReason ? { noFillReason: result.noFillReason } : {}),
       validation: {
         valid: validation.valid,
         // #551: include the deterministic length-cue warning alongside distractor-quality issues.

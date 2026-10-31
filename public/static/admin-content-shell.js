@@ -1392,11 +1392,15 @@ async function localizeDraftAcrossLocalesWithTitle(title, taskText, assessorExpe
  * Returnerer `{ questions, failedLocales }`, samme form som søsterfunksjonene, slik at kalleren kan
  * si fra i stedet for å vise «ferdig».
  */
-/** Leveranse 2b: en linje når genereringen ikke ga noe «sett i riktig rekkefølge», med grunnen. */
-function noOrderQuestionHtml(reason, questions) {
-  if ((questions ?? []).some((question) => question?.questionType === "order")) return "";
+/**
+ * Leveranse 2b og 3b: en linje når genereringen ikke ga noe «sett i riktig rekkefølge» eller «fyll inn
+ * ordet som mangler», med grunnen modellen ga.
+ */
+function noQuestionOfTypeHtml(questionType, reason, questions) {
+  if ((questions ?? []).some((question) => question?.questionType === questionType)) return "";
   const why = typeof reason === "string" && reason.trim() ? ` ${reason.trim()}` : "";
-  return `<p style="margin:8px 0 0;font-size:13px;color:var(--color-meta)" data-no-order-note>${escapeHtml(t("shell.generating.noOrderQuestion"))}${escapeHtml(why)}</p>`;
+  const key = questionType === "order" ? "shell.generating.noOrderQuestion" : "shell.generating.noFillQuestion";
+  return `<p style="margin:8px 0 0;font-size:13px;color:var(--color-meta)" data-no-${questionType}-note>${escapeHtml(t(key))}${escapeHtml(why)}</p>`;
 }
 
 async function localizeMcqAcrossLocales(questions, sourceLocale) {
@@ -1941,7 +1945,8 @@ async function generateMcqInBackground(sourceMaterial, certLevel, locale, genera
     // #1014: kvalitetsadvarslene fra #551 OG spraakene som ikke ble oversatt, i samme spor.
     // #1077 leveranse 2b: KI lager «sett i riktig rekkefølge» bare der kilden har en rekkefølge — og
     // sier fra når den ikke fant noen (produkteier 2026-10-25), med modellens begrunnelse.
-    warningHtml: `${mcqWarningsHtml}${noOrderQuestionHtml(result?.noOrderReason, questions)}${describeFailedLocales(failedLocales, locale)}`,
+    // Leveranse 3b: det samme for «fyll inn ordet som mangler» (produkteier 2026-10-31).
+    warningHtml: `${mcqWarningsHtml}${noQuestionOfTypeHtml("order", result?.noOrderReason, questions)}${noQuestionOfTypeHtml("fill", result?.noFillReason, questions)}${describeFailedLocales(failedLocales, locale)}`,
     onCommit: () => onAccept?.(questions),
   });
 }

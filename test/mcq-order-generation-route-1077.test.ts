@@ -2,8 +2,8 @@ import request from "supertest";
 import { describe, expect, it, vi } from "vitest";
 import { warmModuleGraph } from "./support/moduleGraphWarmup.js";
 
-// #1077 leveranse 2b gjennom den EKTE ruta — 2.106.0 viste at tester forbi ruta ikke ser den: genereringen sier hvorfor
-// det ikke ble noe «sett i riktig rekkefølge», og ruta sender det videre til editoren. Modellen byttes ut.
+// #1077 leveranse 2b og 3b gjennom den EKTE ruta — 2.106.0 viste at tester forbi ruta ikke ser den: genereringen sier hvorfor
+// det ikke ble noe «sett i riktig rekkefølge» eller «fyll inn», og ruta sender det videre til editoren. Modellen byttes ut.
 
 vi.mock("../src/modules/adminContent/llmContentGenerationService.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../src/modules/adminContent/llmContentGenerationService.js")>();
@@ -12,6 +12,7 @@ vi.mock("../src/modules/adminContent/llmContentGenerationService.js", async (imp
     generateMcqQuestions: vi.fn(async () => ({
       questions: [{ stem: "Hva gjelder?", options: ["A", "B"], correctAnswer: "A", rationale: "Fordi." }],
       noOrderReason: "Kilden beskriver prinsipper, ikke steg.",
+      noFillReason: "Kilden har vurderinger, ikke begreper eller tall.",
     })),
   };
 });
@@ -33,6 +34,8 @@ describe("#1077 leveranse 2b — generering gjennom ruta", () => {
     });
     expect(res.status, JSON.stringify(res.body)).toBe(200);
     expect(res.body.noOrderReason).toBe("Kilden beskriver prinsipper, ikke steg.");
+    // Leveranse 3b: det samme for «fyll inn ordet som mangler».
+    expect(res.body.noFillReason).toBe("Kilden har vurderinger, ikke begreper eller tall.");
     expect(res.body.questions).toHaveLength(1);
   });
 });

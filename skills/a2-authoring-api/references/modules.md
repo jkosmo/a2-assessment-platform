@@ -172,11 +172,14 @@ missing word ([package-schema.md](package-schema.md#a-module)).
 
 - **Only for a word the learner should be able to recall** — a term, a number, a deadline the
   sections teach («Fristen for å klage er ___ uker»). Not for a judgement: that is a question with
-  options. At most one or two per test.
+  options. **At most one per test**, as the platform's own generation makes it, and none when the
+  sections teach no such word.
 - **One blank, in every language**, where the missing word belongs in that language.
-- **`options` are the accepted answers** — the spellings of the same answer («tre», «3»), 1–6. Not
-  alternatives to choose between: the learner never sees them. Upper and lower case, spaces and a
-  full stop at the end do not count, and one wrong letter is accepted in an answer of 7+ letters.
+- **`options` are the accepted answers** — every common way to write the same answer: the number in
+  words and in digits («tre», «3»), an abbreviation and the full name; 1–6. Never a word with another
+  meaning. Not alternatives to choose between: the learner never sees them. Upper and lower case,
+  spaces and punctuation at the end do not count, and one wrong letter is accepted in an answer of 7+
+  letters — do not list such spellings.
 - **The stem gives enough to know which word** — one answer, not «a word that fits».
 - **When adjusting questions that stay**, a fill question keeps its type and its blank.
 - The `rationale` says why that is the word.

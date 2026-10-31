@@ -98,6 +98,8 @@ export type McqGenerationResult = {
    * en fast rekkefølge — og sier fra når den ikke fant noen. Modellens begrunnelse, på innholdsspråket.
    */
   noOrderReason?: string;
+  /** #1077 leveranse 3b (produkteier 2026-10-31): det samme for «fyll inn ordet som mangler». */
+  noFillReason?: string;
 };
 
 export type RevisableMcqQuestion = {
@@ -255,6 +257,8 @@ const mcqGenerationResponseCodec = z.object({
     .min(1),
   // Leveranse 2: hvorfor det ikke ble noe «sett i riktig rekkefølge» (bare ved generering).
   noOrderReason: z.string().optional(),
+  // Leveranse 3b: hvorfor det ikke ble noe «fyll inn ordet som mangler».
+  noFillReason: z.string().optional(),
 });
 
 // #682: LLMs occasionally emit a question with MORE than the allowed options (observed in MCQ
@@ -296,6 +300,7 @@ type RawGeneratedMcqQuestion = { questionType?: unknown; options: string[]; corr
 type ParsedMcqResponse = {
   questions: GeneratedMcqQuestion[];
   noOrderReason?: string;
+  noFillReason?: string;
   // #1077 (QA 2.100.0): fasiter som ikke stemmer med alternativene. Generering og revisjon gir
   // modellen ett forsøk til og avviser så; de skal aldri rettes stille. Oversettelse ser bort fra
   // dem — klienten henter svaret fra alternativets plass (localizeMcqAcrossLocales).
@@ -317,6 +322,7 @@ function parseMcqGenerationResponse(raw: unknown, context: string): ParsedMcqRes
   return {
     questions: parsed.data.questions.map((question) => normalizeGeneratedQuestionType(question)),
     ...(parsed.data.noOrderReason?.trim() ? { noOrderReason: parsed.data.noOrderReason.trim() } : {}),
+    ...(parsed.data.noFillReason?.trim() ? { noFillReason: parsed.data.noFillReason.trim() } : {}),
     answerKeyProblems: parsed.data.questions.flatMap((question, index) => findAnswerKeyProblems(question, index).map((text) => ({ index, text }))),
   };
 }
@@ -1095,13 +1101,35 @@ If the source has no such order, make none, and set the top-level field "noOrder
 ${ORDER_QUESTION_WRITING_RULES}`;
 }
 
+// Leveranse 3b (produkteier 2026-10-31): høyst én «fyll inn ordet som mangler», og bare der kilden har et
+// entydig ord — et begrep, et tall, en frist, et navn. KI skriver alle vanlige skrivemåter av det samme
+// svaret som godkjente svar, aldri et annet ord med annen mening. Felles for generering og revisjon.
+export const MAX_FILL_QUESTIONS = 1;
+const FILL_QUESTION_WRITING_RULES = `For a "fill" question ("fill in the missing word"):
+- The stem is one statement from the source material with exactly one blank written as three underscores (___) where a single key word or number stands: a defined term, a number, a deadline, a name. The candidate types what is missing; there are no options to choose from.
+- Only where the source material states that word plainly, and only one word or short expression can fill the blank under the stem. Never blank out a word that a synonym or another true word could also fill, a common word ("the", "must", "not"), or a whole clause.
+- "options" are the accepted answers: every common way to write that same answer — the number in words and in digits ("three", "3"), an abbreviation and the full name — 1 to ${FILL_MAX_ANSWERS} of them, none twice. Never a word with another meaning. "correctAnswer" is the first of them; leave out "correctAnswers" and "distractorMetadata".
+- The platform accepts any letter case, surrounding spaces and trailing punctuation, and one wrong letter in an answer of seven letters or more; do not list such spelling variants.
+- The rationale says where the source states the answer.`;
+
+function buildFillQuestionSection(): string {
+  return `## «Fill in the missing word»
+
+You may make AT MOST ${MAX_FILL_QUESTIONS} question "questionType": "fill", in place of a question with one correct answer — never in place of a planned "multiple" question, and never as the "order" question. Make one only where the source material states a key term, number, deadline or name that only one word can be under the stem; then it is a good question to include.
+If the source has no such word, make none, and set the top-level field "noFillReason" to one short sentence, in the output language, saying why (for example that the key points are judgements, not terms or figures).
+
+${FILL_QUESTION_WRITING_RULES}`;
+}
+
 function buildGenerationQuestionTypeSection(plan: MultiplePlanEntry[], optionCount: number): string {
   if (plan.length === 0) {
     return `## Question type
 
-Every question has exactly one correct answer — leave out "questionType" — except for the one "order" question described below, if the source has a sequence.
+Every question has exactly one correct answer — leave out "questionType" — except for the one "order" question and the one "fill" question described below, if the source has a sequence and a key word.
 
-${buildOrderQuestionSection()}`;
+${buildOrderQuestionSection()}
+
+${buildFillQuestionSection()}`;
   }
   const lines = plan.map((entry) => `- Question ${entry.index + 1}: "multiple", exactly ${entry.correctCount} of ${optionCount} options correct${entry.correctCount === optionCount ? " (every option is correct)" : ""}.`);
   return `## Question type — the platform's plan for this set
@@ -1109,13 +1137,15 @@ ${buildOrderQuestionSection()}`;
 These questions (counting from 1, in the order you return them) must be "questionType": "multiple" (select all that apply), with exactly the number of correct options given:
 ${lines.join("\n")}
 
-Every other question has exactly one correct answer — leave out "questionType" and "correctAnswers" — except for the one "order" question described below, if the source has a sequence.
+Every other question has exactly one correct answer — leave out "questionType" and "correctAnswers" — except for the one "order" question and the one "fill" question described below, if the source has a sequence and a key word.
 
 Construct each planned question for that purpose: search the source material for facts where several statements hold for the same question — the required contents of something, the principles or conditions that all apply, the steps or roles that all belong, the consequences that all follow — and build the question so that exactly the planned number of options are statements the source supports. The incorrect options are plausible statements the source contradicts or does not support. Take each planned question from a different part of the source.
 
 ${MULTIPLE_QUESTION_WRITING_RULES}
 
-${buildOrderQuestionSection()}`;
+${buildOrderQuestionSection()}
+
+${buildFillQuestionSection()}`;
 }
 
 export function buildMcqGenerationPrompts(
@@ -1217,7 +1247,7 @@ Rules:
 - Review each set of ${input.optionCount} options before finalising: if any single option stands out in length or detail, rewrite it.
 - The correct answer must NOT have clearly more professional wording, more specific qualifiers, or a more "textbook" tone than the distractors.
 
-Each question must have exactly ${input.optionCount} answer options. The correctAnswer must be one of the options verbatim.
+Each question must have exactly ${input.optionCount} answer options — except an "order" question, which has its items, and a "fill" question, which has its accepted answers. The correctAnswer must be one of the options verbatim.
 Write all text in ${LOCALE_DISPLAY[input.locale]}.
 
 ${buildGenerationQuestionTypeSection(plan, input.optionCount)}
@@ -1255,7 +1285,10 @@ A "multiple" question has the same fields plus "questionType": "multiple" and "c
     : ""}
 
 An "order" question has "questionType": "order", "options" with the items in the correct order, "correctAnswer" equal to the first item, a "rationale", and no "correctAnswers" or "distractorMetadata", e.g. {"questionType": "order", "stem": "Put the steps in order.", "options": ["step A", "step B", "step C"], "correctAnswer": "step A", "rationale": "why this order"}.
-When no question is "order", add the top-level field "noOrderReason", e.g. {"questions": [...], "noOrderReason": "The material describes principles, not a sequence of steps."}.`;
+When no question is "order", add the top-level field "noOrderReason", e.g. {"questions": [...], "noOrderReason": "The material describes principles, not a sequence of steps."}.
+
+A "fill" question has "questionType": "fill", a "stem" with exactly one blank (___), "options" with the accepted answers, "correctAnswer" equal to the first of them, a "rationale", and no "correctAnswers" or "distractorMetadata", e.g. {"questionType": "fill", "stem": "The deadline for an appeal is ___ weeks.", "options": ["three", "3"], "correctAnswer": "three", "rationale": "where the source states it"}.
+When no question is "fill", add the top-level field "noFillReason", e.g. {"questions": [...], "noFillReason": "The key points are judgements, not terms or figures."}.`;
 
   return { systemPrompt, userPrompt };
 }
@@ -1349,14 +1382,17 @@ Target option count per question: ${optionCount}
 
 A question either has one correct answer (no "questionType"), is "questionType": "multiple" — select all that apply, with "correctAnswers" — or is "questionType": "order" — put in the right order, with the items in "options" IN THE CORRECT ORDER — or is "questionType": "fill" — fill in the missing word: the stem has exactly one blank (___), and "options" are the accepted answers for it (spellings of the same answer, such as "three" and "3"), with "correctAnswer" equal to the first.
 - Keep every question's type, keep the correct options of a "multiple" question correct, and keep the items of an "order" question in the correct order, unless the instruction asks to change them. You may reword the items of an "order" question, but never reorder them unless the instruction says the order is wrong.
-- Keep a "fill" question a "fill" question with exactly one blank (___) in its stem, and its accepted answers in "options". Never turn another question into "fill".
+- Keep a "fill" question a "fill" question with exactly one blank (___) in its stem, and its accepted answers in "options", unless the instruction asks to change it.
 - Change types only when the instruction asks for it. When it names questions, change those. When it asks in general — for "select all that apply" questions (for example "make some of them select-all", "use more multiple-answer questions") or for a harder test — you may convert questions without being told which: choose yourself which and how many, from where several options can genuinely all be correct under the stem and where the set needs to be harder. Any other instruction keeps every type as it is.
 - At most ${revisionMultipleCap(input.questions, questionCount)} of the ${questionCount} questions may be "multiple" in the result.
 - At most ${revisionOrderCap(input.questions)} question may be "order" in the result. Convert a question to "order" only when the instruction asks for it (by name, or in general), and only where its content is a sequence the material states.
+- At most ${revisionFillCap(input.questions)} question may be "fill" in the result. Convert a question to "fill" only when the instruction asks for it (by name, or in general), and only where its answer is a key term, number, deadline or name that only one word can be under the stem.
 
 ${MULTIPLE_QUESTION_WRITING_RULES}
 
 ${ORDER_QUESTION_WRITING_RULES}
+
+${FILL_QUESTION_WRITING_RULES}
 
 ## Current questions (indexed review view)
 
@@ -1395,6 +1431,13 @@ Return a single JSON object:
       "options": ["first step", "second step", "third step"],
       "correctAnswer": "first step",
       "rationale": "why this is the order"
+    },
+    {
+      "questionType": "fill",
+      "stem": "a statement with one ___ in it",
+      "options": ["accepted answer", "another spelling of it"],
+      "correctAnswer": "accepted answer",
+      "rationale": "where the source states it"
     }
   ]
 }`;
@@ -1411,6 +1454,11 @@ export function revisionMultipleCap(questions: Array<{ questionType?: string }>,
 /** Leveranse 2: høyst én «sett i riktig rekkefølge» — eller så mange forfatteren alt hadde. */
 export function revisionOrderCap(questions: Array<{ questionType?: string }>): number {
   return Math.max(MAX_ORDER_QUESTIONS, questions.filter((question) => question.questionType === "order").length);
+}
+
+/** Leveranse 3b: høyst én «fyll inn» — eller så mange forfatteren alt hadde. */
+export function revisionFillCap(questions: Array<{ questionType?: string }>): number {
+  return Math.max(MAX_FILL_QUESTIONS, questions.filter((question) => question.questionType === "fill").length);
 }
 
 export function buildModuleDraftLocalizationPrompts(input: ModuleDraftLocalizationInput): {
@@ -1831,8 +1879,9 @@ export function detectCorrectAnswerLengthBias(
 }
 
 function appendLengthBiasWarning(result: McqGenerationResult): McqGenerationResult {
-  // #1077: lengdesignalet gjelder «det ene riktige mot de gale». I et «velg alle» er det ikke ett.
-  const { biased, longestCorrectRatio } = detectCorrectAnswerLengthBias(result.questions.filter((q) => q.questionType !== "multiple"));
+  // #1077: lengdesignalet gjelder «det ene riktige mot de gale». I et «velg alle» er det ikke ett, og i
+  // «sett i rekkefølge» og «fyll inn» er alternativene ikke gale svar (elementene, de godkjente svarene).
+  const { biased, longestCorrectRatio } = detectCorrectAnswerLengthBias(result.questions.filter((q) => q.questionType === undefined));
   if (!biased) return result;
   const pct = Math.round(longestCorrectRatio * 100);
   const warning = `Length cue: the correct answer is the longest option in ${pct}% of questions — review option parity so the answer isn't guessable by length (#551).`;
@@ -1848,6 +1897,9 @@ export function multiplePlanProblems(questions: GeneratedMcqQuestion[], plan: Mu
   // Leveranse 2: høyst én rekkefølge, og aldri på en planlagt «velg alle»-plass.
   const orders = questions.filter((question) => question.questionType === "order").length;
   if (orders > MAX_ORDER_QUESTIONS) problems.push(`at most ${MAX_ORDER_QUESTIONS} question may be "order", not ${orders}; make the others questions with one correct answer.`);
+  // Leveranse 3b: høyst én «fyll inn», og heller ikke den på en planlagt «velg alle»-plass.
+  const fills = questions.filter((question) => question.questionType === "fill").length;
+  if (fills > MAX_FILL_QUESTIONS) problems.push(`at most ${MAX_FILL_QUESTIONS} question may be "fill", not ${fills}; make the others questions with one correct answer.`);
   questions.forEach((question, index) => {
     const correctCount = wanted.get(index);
     const multiple = question.questionType === "multiple";
@@ -1895,6 +1947,8 @@ export async function generateMcqQuestions(input: McqGenerationInput): Promise<M
       );
       if (parsed.data.questions.length > input.questionCount) {
         return {
+          // Begrunnelsene for at det ikke ble rekkefølge eller «fyll inn» følger med også når settet kuttes.
+          ...parsed.data,
           questions: parsed.data.questions.slice(0, input.questionCount),
           answerKeyProblems: parsed.data.answerKeyProblems.filter((problem) => problem.index < input.questionCount),
         };
@@ -1975,8 +2029,8 @@ export async function reviseMcqQuestions(input: McqRevisionInput): Promise<McqGe
   const sourceQuestions: GeneratedMcqQuestion[] = input.questions.map((question) => ({
     ...(question.questionType === "multiple"
       ? { questionType: "multiple" as const, correctAnswers: (question.correctAnswers ?? []).map((answer) => localizeForPrompt(answer, input.locale)) }
-      : question.questionType === "order"
-        ? { questionType: "order" as const }
+      : question.questionType === "order" || question.questionType === "fill"
+        ? { questionType: question.questionType }
         : {}),
     stem: localizeForPrompt(question.stem, input.locale),
     options: (question.options ?? []).map((option) => localizeForPrompt(option, input.locale)),
@@ -1987,8 +2041,11 @@ export async function reviseMcqQuestions(input: McqRevisionInput): Promise<McqGe
   // modellen ett forsøk til; brytes den igjen, avvises revisjonen — et tak produkteier har satt.
   const multipleCap = revisionMultipleCap(input.questions, input.questionCount ?? input.questions.length);
   const orderCap = revisionOrderCap(input.questions);
+  const fillCap = revisionFillCap(input.questions);
   const countOrders = (revised: GeneratedMcqQuestion[]) => revised.filter((question) => question.questionType === "order").length;
-  const withinMultipleCap = (revised: GeneratedMcqQuestion[]) => countMultipleQuestions(revised) <= multipleCap && countOrders(revised) <= orderCap;
+  const countFills = (revised: GeneratedMcqQuestion[]) => revised.filter((question) => question.questionType === "fill").length;
+  const withinMultipleCap = (revised: GeneratedMcqQuestion[]) =>
+    countMultipleQuestions(revised) <= multipleCap && countOrders(revised) <= orderCap && countFills(revised) <= fillCap;
   // #688: a TARGETED edit (e.g. "endre alternativ 1b") must edit one question in place and keep the
   // rest — it must NOT change the question count. The LLM sometimes collapses to just the edited
   // question (10 → 1, silent data loss). For instructions with an explicit target, require the count
@@ -2016,7 +2073,7 @@ You MUST return ALL ${sourceQuestions.length} questions — edit only the target
 Return a revised question set where the requested change is concrete, visible, and materially different from the source questions.`);
   }
   if (!withinMultipleCap(firstAttempt.questions)) {
-    retryReasons.push(`At most ${multipleCap} questions may be "questionType": "multiple", and at most ${orderCap} "order"; your previous attempt had ${countMultipleQuestions(firstAttempt.questions)} and ${countOrders(firstAttempt.questions)}.`);
+    retryReasons.push(`At most ${multipleCap} questions may be "questionType": "multiple", at most ${orderCap} "order" and at most ${fillCap} "fill"; your previous attempt had ${countMultipleQuestions(firstAttempt.questions)}, ${countOrders(firstAttempt.questions)} and ${countFills(firstAttempt.questions)}.`);
   }
   if (firstAttempt.answerKeyProblems.length > 0) {
     retryReasons.push(answerKeyRetryDirective(firstAttempt.answerKeyProblems));
@@ -2036,7 +2093,7 @@ ${retryReasons.join("\n\n")}`;
 
   if (!withinMultipleCap(secondAttempt.questions)) {
     throw new Error(
-      `MCQ revision made ${countMultipleQuestions(secondAttempt.questions)} questions «select all that apply» (at most ${multipleCap}) and ${countOrders(secondAttempt.questions)} «put in the right order» (at most ${orderCap}). Please try again.`,
+      `MCQ revision made ${countMultipleQuestions(secondAttempt.questions)} questions «select all that apply» (at most ${multipleCap}), ${countOrders(secondAttempt.questions)} «put in the right order» (at most ${orderCap}) and ${countFills(secondAttempt.questions)} «fill in the missing word» (at most ${fillCap}). Please try again.`,
     );
   }
 

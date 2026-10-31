@@ -158,3 +158,17 @@ hvilket som helst av spørsmålets språk.
 - Gjennomgangen (#1061) viser `acceptedAnswers`; kvalitetsrapporten teller ingen feilalternativer.
 - KI: revisjon og oversettelse **bevarer** typen og lukka. KI **lager** ikke typen ennå — det er
   leveranse 3b, som for «sett i rekkefølge» (2b).
+
+## Leveranse 3b — KI lager «fyll inn» (produkteier 2026-10-31: anbefalingen på begge)
+
+1. **Høyst ett per test, og bare der kilden har et entydig ord** — et begrep, et tall, en frist, et navn
+   som bare ett ord kan fylle under stammen. Finner KI ingen, lager den ingen og sier fra
+   (`noFillReason`), som for rekkefølge. Aldri på en planlagt «velg alle»-plass.
+2. **De godkjente svarene er alle vanlige skrivemåter av det samme svaret** — tallord og siffer, forkortelse
+   og fullt navn; aldri et annet ord med annen mening. Skrivefeil og store/små bokstaver lister KI ikke:
+   rettingen tar dem.
+3. **Revisjon som for rekkefølge:** typen beholdes; KI gjør om et spørsmål til «fyll inn» bare når
+   forfatteren ber om det (ved navn eller generelt), høyst ett — eller så mange forfatteren alt hadde.
+
+Lengdesignalet (#551) regnes nå bare på spørsmål med ett riktig svar: i «fyll inn» og «sett i rekkefølge»
+er alternativene ikke gale svar, og «three» mot «3» ville talt som et signal.

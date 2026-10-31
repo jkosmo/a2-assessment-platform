@@ -2,6 +2,24 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.125.0 - 2026-10-31
+
+### KI lager «fyll inn ordet som mangler» — #1077 leveranse 3b
+
+Når KI genererer en test, lager den nå høyst ett «fyll inn»-spørsmål, og bare der kilden har et entydig
+ord: et begrep, et tall, en frist eller et navn. De godkjente svarene er alle vanlige skrivemåter av det
+samme svaret («tre», «3»). Finner KI ikke noe slikt, lager den ingen og sier fra med grunnen, som for
+«sett i riktig rekkefølge».
+
+- **Avgjort av produkteier 2026-10-31:** høyst ett, der kilden har det; alle vanlige skrivemåter.
+- Revisjon: typen beholdes; KI gjør om et spørsmål til «fyll inn» bare når forfatteren ber om det, høyst
+  ett (eller så mange forfatteren alt hadde). Et svar over taket får ett nytt forsøk, så avslag.
+- Lengdesignalet (#551) regnes bare på spørsmål med ett riktig svar — de godkjente svarene og elementene
+  i en rekkefølge er ikke gale alternativer.
+- Begrunnelsene for at det ikke ble rekkefølge eller «fyll inn» følger med også når modellen ga ett
+  spørsmål for mye og settet ble kuttet.
+- Skillet: høyst ett «fyll inn» per test, med alle vanlige skrivemåter (`modules.md`).
+
 ## 2.124.1 - 2026-10-31
 
 ### Skillet: `produce-course.mjs` stoppet et kurs med `:::feil` — #1123
