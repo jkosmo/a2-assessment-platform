@@ -11,6 +11,13 @@ Funnet da skillet ble kjørt uten tilsyn med Codex (OpenAI-modellen) på et test
 rammene. Nå sier begge `:::feil`, og eksempelkurset bruker `:::feil` også på engelsk. Plattformen leser
 fortsatt begge ordene. Bare skillet er endret.
 
+To uklarheter fra samme kjøring er også rettet:
+
+- Kurstilstanden (`content-preservation.md`): elementene er seksjonene og modulene; kursobjektet selv står
+  ikke i `order` eller `elements`. Før sa tabellen at kurset også hadde `content`, mens kontrollen krever
+  at hvert godkjente element står i `order` — og stoppet produksjonen.
+- `modules.md`: «sett i rekkefølge» og «fyll inn» tar en plass planen ikke har gitt til «velg alle».
+
 ## 2.125.0 - 2026-10-31
 
 ### KI lager «fyll inn ordet som mangler» — #1077 leveranse 3b

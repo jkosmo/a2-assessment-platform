@@ -154,7 +154,8 @@ A question can be `"questionType": "order"`: the learner puts 3–6 items in the
   the phases of a process, events in time. Never make up an order the source does not give, and
   never use it for items whose order is a matter of preference. When writing a test from a source
   with such an order, include one; when the source has none, write none, and say so at gate 4
-  («ingen rekkefølge-spørsmål: kilden beskriver prinsipper, ikke steg»).
+  («ingen rekkefølge-spørsmål: kilden beskriver prinsipper, ikke steg»). It takes a place the plan
+  has not given to «select all that apply», within the number of questions the test has.
 - **Write the items in the right order.** That order is the answer key; the platform shuffles the
   items for the learner, never into the right order.
 - **3–6 items**, each a short step distinct from the others. No item gives away its own position
@@ -173,7 +174,8 @@ missing word ([package-schema.md](package-schema.md#a-module)).
 - **Only for a word the learner should be able to recall** — a term, a number, a deadline the
   sections teach («Fristen for å klage er ___ uker»). Not for a judgement: that is a question with
   options. **At most one per test**, as the platform's own generation makes it, and none when the
-  sections teach no such word.
+  sections teach no such word. Like «put in the right order», it takes a place the plan has not
+  given to «select all that apply».
 - **One blank, in every language**, where the missing word belongs in that language.
 - **`options` are the accepted answers** — every common way to write the same answer: the number in
   words and in digits («tre», «3»), an abbreviation and the full name; 1–6. Never a word with another
