@@ -100,6 +100,7 @@ coursesRouter.get("/", async (request, response, next) => {
         title: localizeContentText(locale, course.title) ?? course.title,
         description: localizeContentText(locale, course.description) ?? course.description,
         sortOrder: course.sortOrder ?? null,
+        slug: course.slug ?? null,
         themes: themesByCourse.get(course.id) ?? [],
         moduleCount: moduleIds.length,
         progress: {
@@ -378,6 +379,7 @@ coursesRouter.get("/:courseId", async (request, response, next) => {
       description: localizeContentText(locale, course.description) ?? course.description,
       certificationLevel: localizeContentText(locale, course.certificationLevel) ?? course.certificationLevel,
       sortOrder: course.sortOrder ?? null,
+      slug: course.slug ?? null,
       publishedAt: course.publishedAt.toISOString(),
       discussionsEnabled: course.discussionsEnabled,
       moduleCount: moduleIds.length,

@@ -2,6 +2,21 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.121.0 - 2026-10-31
+
+### Lenke til kurs: /kurs/<kursnavn>
+
+Et kurs kan deles med en lesbar lenke, f.eks. `/kurs/kurs-7-hva-er-egentlig-en-ki-agent`. Lenka sender
+videre til «Mine kurs», som åpner kurset. Har mottakeren ikke tilgang, eller finnes ikke kurset, viser
+«Mine kurs» én melding: «Kurset finnes ikke, eller du har ikke tilgang til det.» Den røper ikke om et
+lukket kurs finnes. Den gamle lenka med `?courseId=` gir nå samme melding; før ble den stille ignorert.
+
+- Navnet (`Course.slug`) lages fra bokmålstittelen første gang kurset publiseres, og endres aldri
+  etterpå: en utsendt lenke virker også etter et navnebytte. Før publisering kan tittelen byttes fritt.
+  Like navn får et nummer (`-2`).
+- Migrasjonen gir kurs som allerede er publisert, sitt navn. Upubliserte kurs får det ved publisering.
+- «Kopier lenke» står på et åpent kurs i «Mine kurs», og under «Innstillinger» i kursskjemaet.
+
 ## 2.120.0 - 2026-10-29
 
 ### En deltaker havner ikke lenger på forfattersiden

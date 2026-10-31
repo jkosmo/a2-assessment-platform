@@ -6,6 +6,7 @@ import { auditActions, auditEntityTypes, agentAuthoringAuditMetadata, type Agent
 import { assertCourseHasNoInProgressParticipants } from "./contentLifecycle.js";
 import { addContentOwner } from "../content/contentOwnershipService.js";
 import { setCourseThemes } from "./courseThemeService.js";
+import { assignCourseSlugIfMissing } from "./courseSlug.js";
 
 // #938/#992: inngangsdøra til «arkivert innhold i et kurs» — ÉN gang, for alle innganger.
 //
@@ -198,10 +199,13 @@ export async function publishCourse(courseId: string, actorId?: string, tx?: DbT
 
   // #803: publish + audit commit atomically.
   const run = async (client: DbTransactionClient) => {
-    const updated = await client.course.update({
+    await client.course.update({
       where: { id: courseId },
       data: { publishedAt: new Date() },
     });
+    // 2.121.0: delingslenka settes første gang kurset publiseres, og står fast etterpå.
+    await assignCourseSlugIfMissing(client, courseId);
+    const updated = await client.course.findUniqueOrThrow({ where: { id: courseId } });
     await recordAuditEvent(
       {
         entityType: auditEntityTypes.course,

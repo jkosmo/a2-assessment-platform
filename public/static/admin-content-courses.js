@@ -1452,10 +1452,41 @@ function courseDetailBodyHtml() {
           </label>
           <p class="small" style="margin: 4px 0 0">${escapeHtml(t("courses.discussionOwnerNotificationsHelp"))}</p>
         </div>
+        <div class="form-field" style="margin-top: var(--space-2)">
+          <label for="courseShareLink">${escapeHtml(t("courses.shareLink"))}</label>
+          ${courseShareLinkHtml(courseDetail.course?.slug)}
+        </div>
         ${courseId ? "" : `<p class="small" style="margin:var(--space-2) 0 0">${escapeHtml(t("courses.saveFirstOwners"))}</p>`}
       </div>
     </div>
     </div>`;
+}
+
+// 2.121.0: delingslenka til kurset. Den settes første gang kurset publiseres og endres ikke etterpå,
+// så før det finnes det ingen lenke å vise — bare hvorfor.
+function courseShareLink(slug) {
+  return `${window.location.origin}/kurs/${slug}`;
+}
+
+function courseShareLinkHtml(slug) {
+  if (!slug) return `<p class="small" id="courseShareLink" style="margin: 4px 0 0">${escapeHtml(t("courses.shareLinkPending"))}</p>`;
+  return `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <input type="text" id="courseShareLink" readonly value="${escapeHtml(courseShareLink(slug))}" style="flex:1;min-width:16rem" />
+      <button type="button" class="btn-secondary" id="courseShareLinkCopy" style="width:auto">${escapeHtml(t("courses.shareLinkCopy"))}</button>
+    </div>
+    <p class="small" style="margin: 4px 0 0">${escapeHtml(t("courses.shareLinkHelp"))}</p>`;
+}
+
+async function copyCourseShareLink() {
+  const input = document.getElementById("courseShareLink");
+  if (!(input instanceof HTMLInputElement)) return;
+  try {
+    await navigator.clipboard.writeText(input.value);
+    showToast(t("courses.shareLinkCopied"), "success");
+  } catch {
+    // Uten tilgang til utklippstavla: marker lenka, så den kan kopieres for hånd.
+    input.select();
+  }
 }
 
 function bindCourseDetail() {
@@ -1740,6 +1771,11 @@ function bindHeaderActions() {
   if (headerActionsBound) return;
   headerActionsBound = true;
   pageContent.addEventListener("click", (e) => {
+    // 2.121.0: delingslenka står i skjemaet, som tegnes om — derfor her, delegert, og ikke på knappen.
+    if (e.target.closest("#courseShareLinkCopy")) {
+      copyCourseShareLink();
+      return;
+    }
     const btn = e.target.closest(".form-page-actions [data-action]");
     if (!btn) return;
     if (!getCourseFormPage().confirmLeave()) return;

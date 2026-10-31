@@ -378,6 +378,7 @@ adminCoursesRouter.get("/:courseId", async (request, response, next) => {
       enrollmentPolicy: course.enrollmentPolicy,
       discussionsEnabled: course.discussionsEnabled,
       discussionOwnerNotifications: course.discussionOwnerNotifications,
+      slug: course.slug ?? null,
       sortOrder: course.sortOrder ?? null,
       themeIds: await findThemeIdsForCourse(course.id),
       updatedAt: course.updatedAt.toISOString(),

@@ -134,6 +134,13 @@ app.get("/participant", (_request, response) => {
   response.sendFile(path.resolve(process.cwd(), "public", "participant.html"));
 });
 
+// 2.121.0: delingslenka til et kurs. Siden avgjør selv hva mottakeren får se: «Mine kurs» kjenner bare
+// kursene brukeren har tilgang til, og viser en melding når lenka ikke peker på et av dem. Ingen
+// tilgangssjekk her — da ville lenka svart ulikt for kurs som finnes og ikke finnes.
+app.get("/kurs/:slug", (request, response) => {
+  response.redirect(302, `/participant?kurs=${encodeURIComponent(request.params.slug)}`);
+});
+
 app.get("/participant/completed", (_request, response) => {
   response.sendFile(path.resolve(process.cwd(), "public", "participant-completed.html"));
 });

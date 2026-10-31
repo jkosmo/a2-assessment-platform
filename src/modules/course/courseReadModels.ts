@@ -9,6 +9,8 @@ export interface CourseListItem {
   description: string | null;
   /** #1093: satt plassering i «Mine kurs», eller null (alfabetisk). */
   sortOrder: number | null;
+  /** 2.121.0: kursets navn i delingslenka (/kurs/<slug>). Settes ved første publisering. */
+  slug: string | null;
   /** 2.102.0: lokalisert og alfabetisk. Bare lista over kurs («Mine kurs») fyller den. */
   themes?: LocalizedTheme[];
   moduleCount: number;
@@ -98,6 +100,8 @@ export interface AdminCourseDetail {
   discussionsEnabled: boolean;
   /** 2.119.0: e-post til kursets eiere om nye spørsmål. */
   discussionOwnerNotifications: boolean;
+  /** 2.121.0: delingslenkas navn; null til kurset er publisert første gang. */
+  slug: string | null;
   /** #1093: plassering i «Mine kurs», eller null (alfabetisk). */
   sortOrder: number | null;
   /** 2.102.0: kursets tema i «Mine kurs». */

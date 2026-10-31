@@ -151,6 +151,9 @@
       .course-back-bar { display: flex; align-items: center; margin-bottom: var(--space-1); }
       .course-back-btn { display: inline-flex; align-items: center; gap: 6px; background: none; border: none; padding: 4px 0; font-size: 14px; font-weight: 600; color: var(--color-link-active); cursor: pointer; }
       .course-back-btn:hover { text-decoration: underline; }
+      /* 2.121.0: delingslenka står til høyre i samme linje, som en lenke — den er ikke det man skal gjøre. */
+      .course-copy-link-btn { margin-left: auto; width: auto; min-height: 0; background: none; border: none; padding: 4px 0; font-size: 13px; color: var(--color-link-active); text-decoration: underline; cursor: pointer; }
+      .course-link-notice { margin: 0 0 var(--space-2); padding: 4px 0 4px var(--space-1); border-left: 3px solid var(--color-warning); color: var(--color-warning); font-size: 14px; }
       /* #936/#939: et fullført kurs er ÉN grønn rad. Framdriftslinja er droppet — en linje som
          alltid er 100 % full bærer null informasjon, og den brukte den kraftigste visuelle
          ressursen i lista på å gjenta «Fullført» som allerede står to andre steder.
@@ -541,8 +544,12 @@
       <!-- #922: veien tilbake til kurslista står øverst til venstre, der man leter etter den.
            Skjult som standard via inline display:none så den ikke blinker inn ved første maling;
            setHidden() tar den fram (klassen eier flex-oppsettet). -->
+      <!-- 2.121.0: en delingslenke (/kurs/<navn>) eller ?courseId= som ikke peker på et kurs deltakeren
+           har tilgang til. Én melding for begge: den røper ikke om et lukket kurs finnes. -->
+      <p id="courseLinkNotice" class="course-link-notice" role="alert" style="display:none" data-i18n="courses.link.unavailable">This course does not exist, or you do not have access to it.</p>
       <div id="courseBackBar" class="course-back-bar" style="display:none">
         <button type="button" id="courseBackBtn" class="course-back-btn" data-i18n="courses.backToList">All courses</button>
+        <button type="button" id="courseCopyLinkBtn" class="course-copy-link-btn" style="display:none" data-i18n="courses.link.copy">Copy link</button>
       </div>
       <div id="courseAccordion" class="course-accordion"></div>
     </section>

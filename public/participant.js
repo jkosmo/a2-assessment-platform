@@ -3635,6 +3635,11 @@ function applyCourseFocusState() {
     }
   }
   setHidden(document.getElementById("courseBackBar"), !focused);
+  // 2.121.0: «Kopier lenke» når kurset har en delingslenke. Et åpent kurs fjerner meldingen om en lenke
+  // som ikke førte noe sted — deltakeren har gått videre.
+  const focusedCourse = focused ? participantCourses.find((c) => c.id === focusedCourseId) : null;
+  setHidden(document.getElementById("courseCopyLinkBtn"), !focusedCourse?.slug);
+  if (focused) setHidden(document.getElementById("courseLinkNotice"), true);
 }
 
 // Nettleserens tilbakeknapp skal føre samme sted som tilbake-lenka (#922). Begge retninger legger
@@ -3756,6 +3761,8 @@ function renderParticipantCourseAccordion() {
     // Uten kurs finnes det ikke noe kurs å stå inne i — tilbake-linja skal ikke bli stående igjen.
     focusedCourseId = null;
     applyCourseFocusState();
+    // 2.121.0: en delingslenke til en som ikke har noen kurs, skal også få meldingen.
+    resolveCourseLink();
     return;
   }
   const isFirstRender = !courseAccordionInitialized;
@@ -3825,14 +3832,61 @@ function renderParticipantCourseAccordion() {
 
   // Deep link: ?courseId=xxx opens that course — only on the FIRST render, so a later re-render (e.g. after
   // marking a section read) doesn't re-toggle it and fight the open-state preservation above.
-  const linkedCourseId = new URLSearchParams(window.location.search).get("courseId");
-  if (isFirstRender && linkedCourseId && container.querySelector(`[data-course-id="${linkedCourseId}"]`)) {
-    // Dyplenka ER allerede «kurset alene»-tilstanden, så den skal ikke legge en ekstra
-    // historikkoppføring: nettleserens tilbakeknapp skal føre ut av siden, ikke til en liste
-    // deltakeren aldri sto i.
-    focusCourse(linkedCourseId, { pushHistory: false });
+  if (isFirstRender) resolveCourseLink();
+}
+
+// Lenka i adressen leses én gang per sidelasting; senere omtegninger (lest seksjon, språkbytte) skal
+// verken åpne kurset på nytt eller vise meldingen igjen.
+let courseLinkResolved = false;
+
+// 2.121.0: dyplenka — ?courseId=<id>, eller ?kurs=<navn> fra delingslenka /kurs/<navn>. «Mine kurs»
+// inneholder bare kursene deltakeren har tilgang til, så det er den lista som avgjør: et treff åpner
+// kurset, og alt annet gir ÉN melding, som ikke røper om et lukket kurs finnes. Før ble en lenke til et
+// kurs uten tilgang bare stille ignorert, og mottakeren sto i kurslista uten å vite hvorfor.
+function resolveCourseLink() {
+  if (courseLinkResolved) return;
+  courseLinkResolved = true;
+  const params = new URLSearchParams(window.location.search);
+  const slug = params.get("kurs");
+  const linkedCourseId = params.get("courseId");
+  if (!slug && !linkedCourseId) return;
+  const course = slug
+    ? participantCourses.find((c) => c.slug === slug)
+    : participantCourses.find((c) => c.id === linkedCourseId);
+  if (!course) {
+    setHidden(document.getElementById("courseLinkNotice"), false);
+    return;
+  }
+  if (slug) {
+    // Adressen skrives om til den vanlige, så tilbake/fram og en oppfriskning oppfører seg som for
+    // ethvert åpent kurs (popstate leser ?courseId=).
+    try {
+      const url = new URL(window.location.href);
+      url.searchParams.delete("kurs");
+      url.searchParams.set("courseId", course.id);
+      window.history.replaceState({ participantCourseId: course.id }, "", `${url.pathname}${url.search}${url.hash}`);
+    } catch {/* historikk er en bekvemmelighet */}
+  }
+  // Dyplenka ER allerede «kurset alene»-tilstanden, så den skal ikke legge en ekstra
+  // historikkoppføring: nettleserens tilbakeknapp skal føre ut av siden, ikke til en liste
+  // deltakeren aldri sto i.
+  focusCourse(course.id, { pushHistory: false });
+}
+
+async function copyCourseLink() {
+  const course = participantCourses.find((c) => c.id === focusedCourseId);
+  if (!course?.slug) return;
+  const link = `${window.location.origin}/kurs/${course.slug}`;
+  try {
+    await navigator.clipboard.writeText(link);
+    showToast(t("courses.link.copied"), "success");
+  } catch {
+    // Uten tilgang til utklippstavla (eldre nettleser, Teams-nettleseren): vis lenka, så den kan kopieres.
+    showToast(link, "info");
   }
 }
+
+document.getElementById("courseCopyLinkBtn")?.addEventListener("click", () => { copyCourseLink(); });
 
 // #714: vis fremdrift per type («Moduler x/y · Seksjoner x/y») i stedet for den misvisende
 // «x/total moduler» (total teller med seksjoner). Faller tilbake til x/total hvis backend mangler

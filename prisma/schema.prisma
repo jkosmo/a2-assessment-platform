@@ -651,6 +651,10 @@ model Course {
   // 2.119.0: e-post til kursets eiere når en deltaker stiller et nytt spørsmål. Kursets eiere slår
   // den av og på; den gjelder alle eierne. Svar går fortsatt bare til trådens abonnenter.
   discussionOwnerNotifications Boolean       @default(true)
+  // 2.121.0: kursets navn i delingslenka (/kurs/<slug>). Settes første gang kurset publiseres, fra
+  // tittelen på bokmål, og endres aldri etterpå — en utsendt lenke skal virke også etter et navnebytte.
+  // Null før første publisering: forfatteren kan bytte tittel fritt til da.
+  slug                         String?       @unique
   // #1093: valgfri plassering i «Mine kurs». Satt: først, stigende. Tomt (det vanlige): alfabetisk
   // på tittelen i deltakerens språk. Regelen bor i courseOrdering.ts.
   sortOrder          Int?
