@@ -40,6 +40,7 @@ import path from "node:path";
 import { auditExport, checkGate6Readiness } from "./course-state.mjs";
 import { buildFallbackEnvelope, describeChecks, roundTripFallbackExport } from "./export-validate.mjs";
 import { checkFigureFit } from "./figure-fit-check.mjs";
+import { FRAME_KINDS } from "./frame-structure.mjs";
 import { checkFigureMotion } from "./figure-motion-check.mjs";
 import { LANGUAGES, checkLocalization, extractSvgTextRuns } from "./localization-check.mjs";
 import { checkMcqCues, collectMcqSets } from "./mcq-cue-check.mjs";
@@ -231,19 +232,20 @@ function withoutCodeBlocks(text) {
 }
 
 // The platform's own reading of a frame's opening line (`:::kort`, `::: Kort`, `:::cards` — blanks and
-// case do not matter), so what is counted here agrees with what the reader will show. The words and
-// their English twins are the platform's (src/modules/course/contentBlocks.ts).
-const FRAME_OPENER = /^:::[ \t]*(kort|cards|tenk|think|sjekk|check|steg|steps|skriv|write|repetisjon|flashcards|par|pairs)\b/i;
-/** Cards take nothing after the word; think, check and write need their question or task there; steps, flashcards and pairs may have a title. */
+// case do not matter), so what is counted here agrees with what the reader will show. The words, their
+// English twins and what stands after them come from the shared table (FRAME_KINDS) — a new frame added
+// there is known here too (#1123: `:::feil` was missing from a list of its own here).
+const FRAME_BY_WORD = new Map(FRAME_KINDS.flatMap((entry) => entry.words.map((word) => [word, entry])));
+const FRAME_OPENER = new RegExp(`^:::[ \\t]*(${[...FRAME_BY_WORD.keys()].join("|")})\\b`, "i");
+/** Cards take nothing after the word; think, check and write need their question or task there; the others may have a title. */
 function isFrameOpener(word, line) {
   const kind = word.toLowerCase();
-  if (kind === "kort" || kind === "cards") return /^:::[ \t]*(?:kort|cards)[ \t]*$/i.test(line);
-  if (["steg", "steps", "repetisjon", "flashcards", "par", "pairs"].includes(kind)) return new RegExp(`^:::[ \\t]*${kind}(?:[ \\t].*)?$`, "i").test(line);
-  return new RegExp(`^:::[ \\t]*${kind}[ \\t]+\\S`, "i").test(line);
+  const after = { none: "[ \\t]*$", optional: "(?:[ \\t].*)?$", text: "[ \\t]+\\S" }[FRAME_BY_WORD.get(kind).opener];
+  return new RegExp(`^:::[ \\t]*${kind}${after}`, "i").test(line);
 }
 
 /** The frames that are drawn only in a section, never in a module's text (2.96.1). */
-const SECTION_ONLY_FRAME = /^:::[ \t]*(steg|steps|skriv|write|repetisjon|flashcards|par|pairs)\b/i;
+const SECTION_ONLY_FRAME = new RegExp(`^:::[ \\t]*(${FRAME_KINDS.filter((entry) => entry.sectionOnly).flatMap((entry) => entry.words).join("|")})\\b`, "i");
 /** A module's text fields the learner reads. */
 const MODULE_TEXT_FIELDS = ["taskText", "candidateTaskConstraints"];
 
@@ -397,8 +399,33 @@ function pairsProblems(kind, lines) {
   return [];
 }
 
+/**
+ * #1123: a «feil» frame is a block only when every line is a sentence (`- [ ]` right, `- [x]` an error) or
+ * an explanation indented under one, with at least three sentences, at least one error and at least one
+ * that is right — the rule of splitErrorSentences in src/modules/course/contentBlocks.ts.
+ */
+function errorsProblems(kind, lines) {
+  const sentences = [];
+  for (const line of lines) {
+    if (line.trim() === "") continue;
+    const sentence = /^[ \t]*[-*][ \t]+\[([ xX])\][ \t]+\S/.exec(line);
+    if (sentence) sentences.push(sentence[1].toLowerCase() === "x");
+    else if (!(sentences.length > 0 && /^(?: {2,}|\t)[ \t]*\S/.test(line))) {
+      return [`a :::${kind} frame has a line that is neither a sentence (\`- [ ]\` / \`- [x]\`) nor an explanation indented under one: «${line.trim()}» — the learner sees the markers as text`];
+    }
+  }
+  const errors = sentences.filter(Boolean).length;
+  if (sentences.length < 3) return [`a :::${kind} frame needs at least three sentences (it has ${sentences.length}) — the learner sees the markers as text`];
+  if (errors === 0 || errors === sentences.length) {
+    return [`a :::${kind} frame needs at least one sentence with an error (\`- [x]\`) and at least one that is right (\`- [ ]\`) — it has ${errors} of ${sentences.length}; the learner sees the markers as text`];
+  }
+  return [];
+}
+
 /** The frames with a shape the platform requires, and the check for each. */
 const FRAME_SHAPE_CHECKS = {
+  feil: errorsProblems,
+  errors: errorsProblems,
   par: pairsProblems,
   pairs: pairsProblems,
   sjekk: checkProblems,

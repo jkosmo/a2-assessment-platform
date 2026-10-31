@@ -382,11 +382,15 @@ describe("produce-course — seksjoner som lærer bort (#1126)", () => {
   });
 
   it("én boks og utkastet i en «finn feilene» er ikke to bokser — men et sitat uten oppgave under er det", async () => {
-    // sec-arbeidsgang har allerede «Husk» og utkastet over «finn feilene» (eksempelet over er grønt).
-    const r = await kopi((p) => {
+    // sec-arbeidsgang har «Husk»; her byttes `:::feil`-rammen ut med utkastet i et sitat — med den gamle
+    // «finn feilene»-oppgaven under, og uten.
+    const utkast = (under: string) => kopi((p) => {
       const b = objekt(p, "sec-arbeidsgang").payload.bodyMarkdown;
-      for (const s of ["nb", "nn", "en-GB"]) b[s] = b[s].replace(/\n:::skriv [^\n]*\n[\s\S]*?\n:::\n?/, "\nMer tekst.\n");
+      for (const s of ["nb", "nn", "en-GB"]) b[s] = b[s].replace(/\n:::(?:feil|errors) [^\n]*\n[\s\S]*?\n:::\n?/, `\n> **Utkast fra KI:**\n> - Ola sender budsjettet innen 15. november.\n\n${under}\n`);
     }).kjør();
+    const medOppgave = await utkast(":::skriv Finn feilene i utkastet.\nFristen er feil.\n:::");
+    expect(status(medOppgave).focus, formatProduction(medOppgave)).toBe("ok");
+    const r = await utkast("Mer tekst.");
     expect(status(r).focus, formatProduction(r)).toBe("note");
     expect(funn(r, "focus")).toMatch(/"sec-arbeidsgang": 2 highlighted boxes in \d+ words \(«Husk», «Utkast fra KI»\)/);
   });
@@ -536,6 +540,14 @@ describe("produce-course — hver kontroll stopper leveransen (#1079)", () => {
     ["en «finn parene» med samme forklaring to ganger (#1107)", (p) => void (objekt(p, "sec-kilder").payload.bodyMarkdown.nb += "\n\n:::par\n- A = samme\n- B = Samme\n- C = c\n:::\n"), "learner text", "a :::par frame repeats a term or an explanation"],
     ["en «finn parene» rett under et avsnitt (#1107)", (p) => void (objekt(p, "sec-kilder").payload.bodyMarkdown.nb += "\n\nKoble:\n:::par\n- A = a\n- B = b\n- C = c\n:::\n"), "learner text", "a :::par line has text right above it"],
     ["en «finn parene» i modulens oppgavetekst (#1107)", (p) => { const v = objekt(p, "mod-referat").payload.activeVersion; v.taskText = { nb: "Oppgave.\n\n:::par\n- A = a\n- B = b\n- C = c\n:::", nn: "Oppgåve.", "en-GB": "Task." }; }, "learner text", '"mod-referat" taskText (nb): a :::par frame works only in a section'],
+    // Kort tar ingenting etter ordet (FRAME_KINDS: opener "none") — med en tittel tegner ikke plattformen rammen.
+    ["en kortramme med tittel på åpningslinja er ingen ramme, og ::: lukker ingenting", (p) => void (objekt(p, "sec-kilder").payload.bodyMarkdown.nb += "\n\n:::kort Tre kilder\n### A\nen\n### B\nto\n:::\n"), "learner text", "a ::: closes a frame that was never opened"],
+    // #1123: «finn feilene» har samme regel som plattformen (splitErrorSentences); eksempelkurset er en riktig en.
+    ["en «finn feilene» med bare to setninger (#1123)", (p) => void (objekt(p, "sec-kilder").payload.bodyMarkdown.nb += "\n\n:::feil Finn feilen.\n- [ ] Riktig.\n- [x] Feil.\n  Fordi.\n:::\n"), "learner text", "a :::feil frame needs at least three sentences (it has 2)"],
+    ["en «finn feilene» uten en eneste feil (#1123)", (p) => void (objekt(p, "sec-kilder").payload.bodyMarkdown.nb += "\n\n:::errors\n- [ ] A.\n- [ ] B.\n- [ ] C.\n:::\n"), "learner text", "a :::errors frame needs at least one sentence with an error (`- [x]`) and at least one that is right (`- [ ]`) — it has 0 of 3"],
+    ["en «finn feilene» der alt er feil (#1123)", (p) => void (objekt(p, "sec-kilder").payload.bodyMarkdown.nb += "\n\n:::feil\n- [x] A.\n- [x] B.\n- [x] C.\n:::\n"), "learner text", "it has 3 of 3"],
+    ["en «finn feilene» med en løs linje (#1123)", (p) => void (objekt(p, "sec-kilder").payload.bodyMarkdown.nb += "\n\n:::feil\n- [ ] A.\n- [x] B.\n- [ ] C.\nEn setning.\n:::\n"), "learner text", "a :::feil frame has a line that is neither a sentence (`- [ ]` / `- [x]`) nor an explanation indented under one: «En setning.»"],
+    ["en «finn feilene» i modulens oppgavetekst (#1123)", (p) => { const v = objekt(p, "mod-referat").payload.activeVersion; v.taskText = { nb: "Oppgave.\n\n:::feil\n- [ ] A.\n- [x] B.\n- [ ] C.\n:::", nn: "Oppgåve.", "en-GB": "Task." }; }, "learner text", '"mod-referat" taskText (nb): a :::feil frame works only in a section'],
     ["et par som forsvant i den nynorske oversettelsen (#1107)", (p) => { const b = objekt(p, "sec-kilder").payload.bodyMarkdown; const par = (x: string) => `\n\n:::par\n- A = ${x}1\n- B = ${x}2\n- C = ${x}3\n:::\n`; b.nb += par("a"); b.nn += "\n\n:::par\n- A = n1\n- B = n2\n:::\n"; b["en-GB"] += par("e"); }, "languages", "in: nn (nb has par:3)"],
     ["en følge som forsvant i den engelske oversettelsen (#1110)", (p) => { const b = objekt(p, "sec-kilder").payload.bodyMarkdown; b.nb += "\n\n:::sjekk Hva gjør du?\n- [ ] Avslår\n  For mye.\n- [x] Sladder\n:::\n"; b.nn += "\n\n:::sjekk Kva gjer du?\n- [ ] Avslår\n  For mykje.\n- [x] Sladdar\n:::\n"; b["en-GB"] += "\n\n:::sjekk What do you do?\n- [ ] Refuse\n- [x] Redact\n:::\n"; }, "languages", "a feedback line under another option, or a question is missing, in: en-GB"],
     // 2.96.1 (produkteier 2026-10-20): øvelsene tegnes bare i seksjoner, ikke i modulens tekst.
@@ -566,11 +578,10 @@ describe("produce-course — hver kontroll stopper leveransen (#1079)", () => {
       q.options[i] = setning;
       q.correctAnswer = setning;
     }, "questions", "answer_echoes_text"],
-    // #1121: «finn feilene»-øvelsens eksempelsvar byttet ut med utkastet rett over — en kopiøvelse.
+    // #1121: en «skriv selv» hvis eksempelsvar står ordrett i teksten rett over — en kopiøvelse.
     ["et eksempelsvar som står ordrett i teksten over (#1121)", (p) => {
-      const b = objekt(p, "sec-arbeidsgang").payload.bodyMarkdown;
-      b.nb = b.nb.replace("1. **Fristen er feil:**", "Ola sender budsjettet til revisor innen 15. november. Kari bestiller lokale. Til stede: Kari, Ola, Siri og Per.\n\n1. **Fristen er feil:**");
-      b.nb = b.nb.replace(/\n1\. \*\*Fristen[\s\S]*?(?=\n\n- \[ \])/, "\n");
+      const svar = "Ola sender budsjettet til revisor innen 1. november, og ingen har ennå fått ansvaret for å bestille lokale.";
+      objekt(p, "sec-arbeidsgang").payload.bodyMarkdown.nb += `\n${svar}\n\n:::skriv Skriv oppfølgingen fra møtet.\n${svar}\n:::\n`;
     }, "copied answers", `"sec-arbeidsgang" line`],
     // #1122: et kriterium med én linje for hele skalaen.
     ["et vurderingskriterium uten beskrevne trinn (#1122)", (p) => void (objekt(p, "mod-referat").payload.activeVersion.rubric = { criteria: { struktur: "0–4: Referatet har god struktur." }, scalingRule: { practical_weight: 100, max_total: 4 } }), "criteria", "«struktur» has one line for 0–4"],

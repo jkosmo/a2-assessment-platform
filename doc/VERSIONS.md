@@ -2,6 +2,22 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.124.1 - 2026-10-31
+
+### Skillet: `produce-course.mjs` stoppet et kurs med `:::feil` — #1123
+
+Kontrollen «learner text» hadde sin egen liste over rammetyper og kjente ikke `:::feil`; den lukkende `:::`
+ble lest som «a ::: closes a frame that was never opened», og produksjonen stoppet kurset. Funnet da
+eksempelkurset ble skrevet om til den nye rammen.
+
+- Åpningslinjene, hva som står etter ordet og hvilke rammer som bare tegnes i seksjoner, leses nå av den
+  delte tabellen (`FRAME_KINDS` i `frame-structure.mjs`, nytt felt `sectionOnly`). En ny ramme der er kjent
+  her også.
+- `:::feil` kontrolleres som plattformen tegner den: minst tre setninger, minst én feil og én som stemmer,
+  ingen løse linjer — og den stoppes i modulens oppgavetekst.
+- Eksempelkurset (`sec-arbeidsgang`) bruker `:::feil`/`:::errors` i stedet for `:::skriv Finn feilene …`.
+- Ingen endring i appen utover tabellfeltet; versjonen følger skillet (`SKILL_VERSION`).
+
 ## 2.124.0 - 2026-10-31
 
 ### «Finn feilene» i seksjoner — #1123
