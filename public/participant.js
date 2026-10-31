@@ -3638,7 +3638,13 @@ function applyCourseFocusState() {
   // 2.121.0: «Kopier lenke» når kurset har en delingslenke. Et åpent kurs fjerner meldingen om en lenke
   // som ikke førte noe sted — deltakeren har gått videre.
   const focusedCourse = focused ? participantCourses.find((c) => c.id === focusedCourseId) : null;
-  setHidden(document.getElementById("courseCopyLinkBtn"), !focusedCourse?.slug);
+  const copyLinkBtn = document.getElementById("courseCopyLinkBtn");
+  if (copyLinkBtn) {
+    // Knappen er bare et ikon: navnet skjermlesere og verktøytipset leser, settes her, på språket som gjelder nå.
+    copyLinkBtn.setAttribute("aria-label", t("courses.link.copy"));
+    copyLinkBtn.title = t("courses.link.copy");
+  }
+  setHidden(copyLinkBtn, !focusedCourse?.slug);
   if (focused) setHidden(document.getElementById("courseLinkNotice"), true);
 }
 

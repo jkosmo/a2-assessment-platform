@@ -117,7 +117,11 @@ test("«Kopier lenke» på et åpent kurs kopierer /kurs/<navn>; kurs uten lenke
   await page.locator('.course-accordion-item[data-course-id="c1"] .course-accordion-header').click();
   const copy = page.locator("#courseCopyLinkBtn");
   await expect(copy).toBeVisible();
-  await expect(copy).toHaveText("Kopier lenke");
+  // Et deleikon, ikke tekst: navnet bæres av aria-label og title, på deltakerens språk.
+  await expect(page.getByRole("button", { name: "Kopier lenke" })).toBeVisible();
+  await expect(copy).toHaveAttribute("title", "Kopier lenke");
+  await expect(copy).toHaveText("");
+  await expect(copy.locator("svg")).toBeVisible();
   await copy.click();
   await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(`${new URL(baseURL ?? page.url()).origin}/kurs/kurs-en`);
 
@@ -125,4 +129,22 @@ test("«Kopier lenke» på et åpent kurs kopierer /kurs/<navn>; kurs uten lenke
   await page.locator('.course-accordion-item[data-course-id="c2"] .course-accordion-header').click();
   await expect(page.locator("#courseBackBar")).toBeVisible();
   await expect(copy).toBeHidden();
+});
+
+test("på smal skjerm står deleikonet på linja med «Alle kurs», uten å brytes", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 800 });
+  await mockBase(page, COURSES);
+  await page.goto("/participant?kurs=kurs-en");
+  const back = await page.locator("#courseBackBtn").boundingBox();
+  const copy = await page.locator("#courseCopyLinkBtn").boundingBox();
+  expect(back && copy).toBeTruthy();
+  if (!back || !copy) return;
+  // Samme linje: midtpunktene ligger innenfor noen få piksler av hverandre.
+  expect(Math.abs((back.y + back.height / 2) - (copy.y + copy.height / 2))).toBeLessThan(6);
+  // Et ikon, ikke en tekst som bryter: smalt og lavt.
+  expect(copy.width).toBeLessThan(44);
+  expect(copy.height).toBeLessThan(44);
+  if (process.env.SKJERMBILDE_DIR) {
+    await page.screenshot({ path: `${process.env.SKJERMBILDE_DIR}/deleikon-390.png`, clip: { x: 0, y: Math.max(0, back.y - 20), width: 390, height: 140 } });
+  }
 });

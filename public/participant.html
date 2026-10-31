@@ -151,8 +151,11 @@
       .course-back-bar { display: flex; align-items: center; margin-bottom: var(--space-1); }
       .course-back-btn { display: inline-flex; align-items: center; gap: 6px; background: none; border: none; padding: 4px 0; font-size: 14px; font-weight: 600; color: var(--color-link-active); cursor: pointer; }
       .course-back-btn:hover { text-decoration: underline; }
-      /* 2.121.0: delingslenka står til høyre i samme linje, som en lenke — den er ikke det man skal gjøre. */
-      .course-copy-link-btn { margin-left: auto; width: auto; min-height: 0; background: none; border: none; padding: 4px 0; font-size: 13px; color: var(--color-link-active); text-decoration: underline; cursor: pointer; }
+      /* 2.121.0: delingslenka står til høyre i samme linje, som et ikon — den er ikke det man skal gjøre, og
+         tekst brøt over to linjer på smal skjerm. */
+      .course-copy-link-btn { margin-left: auto; width: auto; min-height: 0; display: inline-flex; align-items: center; justify-content: center; padding: 6px; background: none; border: none; border-radius: var(--radius-button); color: var(--color-link-active); cursor: pointer; }
+      .course-copy-link-btn:hover { background: var(--color-primary-tint); }
+      .course-copy-link-btn:focus-visible { outline: 3px solid var(--color-focus); outline-offset: 1px; }
       .course-link-notice { margin: 0 0 var(--space-2); padding: 4px 0 4px var(--space-1); border-left: 3px solid var(--color-warning); color: var(--color-warning); font-size: 14px; }
       /* #936/#939: et fullført kurs er ÉN grønn rad. Framdriftslinja er droppet — en linje som
          alltid er 100 % full bærer null informasjon, og den brukte den kraftigste visuelle
@@ -549,7 +552,9 @@
       <p id="courseLinkNotice" class="course-link-notice" role="alert" style="display:none" data-i18n="courses.link.unavailable">This course does not exist, or you do not have access to it.</p>
       <div id="courseBackBar" class="course-back-bar" style="display:none">
         <button type="button" id="courseBackBtn" class="course-back-btn" data-i18n="courses.backToList">All courses</button>
-        <button type="button" id="courseCopyLinkBtn" class="course-copy-link-btn" style="display:none" data-i18n="courses.link.copy">Copy link</button>
+        <!-- Deleikonet (Lucide «share-2», som plattformens ikonbibliotek). Navnet settes fra skriptet
+             (aria-label og title), siden oversettelsene her bare fyller tekstinnhold. -->
+        <button type="button" id="courseCopyLinkBtn" class="course-copy-link-btn" style="display:none" aria-label="Copy link" title="Copy link"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" x2="15.42" y1="13.51" y2="17.49"/><line x1="15.41" x2="8.59" y1="6.51" y2="10.49"/></svg></button>
       </div>
       <div id="courseAccordion" class="course-accordion"></div>
     </section>

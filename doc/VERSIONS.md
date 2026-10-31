@@ -2,6 +2,14 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.121.1 - 2026-10-31
+
+### «Kopier lenke» i «Mine kurs» er et deleikon
+
+Teksten «Kopier lenke» brøt over to linjer på smal skjerm. Knappen er nå deleikonet fra plattformens
+ikonbibliotek (Lucide «share-2»), på samme linje som «← Alle kurs». Navnet («Kopier lenke») bæres av
+`aria-label` og `title`, på deltakerens språk.
+
 ## 2.121.0 - 2026-10-31
 
 ### Lenke til kurs: /kurs/<kursnavn>
