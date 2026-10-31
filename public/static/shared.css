@@ -776,6 +776,26 @@ body.auth-resolving .mock-identity-card {
 .mcq-review-correct { color: #1f7a4d; font-weight: 600; }
 .mcq-review-rationale { font-size: 13px; margin-top: 4px; line-height: 1.5; }
 
+/* #1124 del 2: eksempelsvaret ved siden av deltakerens eget svar. Mobil: eksempelsvaret først, eget
+   svar sammenfoldet under (order). Bred skjerm: side om side, eget svar til venstre. Teksten er ren tekst
+   med linjeskift (pre-wrap), så avsnitt og lister i svaret står som de ble skrevet. */
+.model-answer-compare { display: flex; flex-direction: column; gap: 12px; margin-top: 8px; }
+.model-answer-example { order: -1; border: 1px solid var(--color-module-border); border-radius: var(--radius-card); background: var(--color-surface); overflow: hidden; }
+.model-answer-own { border: 1px solid var(--color-border-soft); border-radius: var(--radius-card); background: var(--color-surface); }
+.model-answer-head { padding: 10px 14px; background: var(--color-module-summary-bg); font-weight: 650; font-size: 14px; }
+.model-answer-own > summary { display: flex; align-items: center; min-height: 44px; box-sizing: border-box; padding: 10px 14px; font-weight: 650; font-size: 14px; cursor: pointer; background: var(--color-module-summary-bg); }
+.model-answer-own > summary:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 2px; }
+/* `display: flex` tar bort nettleserens trekant; pila sier at eget svar kan foldes ut (som kriteriepanelet). */
+.model-answer-own > summary::-webkit-details-marker { display: none; }
+.model-answer-own > summary::after { content: ""; flex-shrink: 0; margin-left: auto; width: 8px; height: 8px; border-right: 2px solid currentColor; border-bottom: 2px solid currentColor; transform: rotate(45deg); }
+.model-answer-own[open] > summary::after { transform: rotate(-135deg); }
+.model-answer-text { padding: 12px 14px; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.55; }
+.model-answer-note { padding: 8px 14px; border-top: 1px solid var(--color-table-border); font-size: 13px; color: var(--color-meta); }
+@media (min-width: 900px) {
+  .model-answer-compare { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; }
+  .model-answer-example { order: 0; }
+}
+
 /* #1124: kriteriene for deltakeren. Før levering: et sammenleggbart panel under oppgaveteksten.
    Etter vurdering: ett kort per kriterium med «1 av 2». Overskriften (`summary`) er minst 44 px høy —
    den er det eneste deltakeren trykker på her. */

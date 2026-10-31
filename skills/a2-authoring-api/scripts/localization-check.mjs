@@ -96,6 +96,7 @@ export function collectLocalizedFields(pkg) {
       const av = p.activeVersion ?? {};
       push(`${ref}.activeVersion.taskText`, av.taskText);
       push(`${ref}.activeVersion.assessorExpectedContent`, av.assessorExpectedContent);
+      push(`${ref}.activeVersion.modelAnswer`, av.modelAnswer);
       push(`${ref}.activeVersion.candidateTaskConstraints`, av.candidateTaskConstraints);
       push(`${ref}.activeVersion.promptTemplate.systemPrompt`, av.promptTemplate?.systemPrompt);
       push(`${ref}.activeVersion.promptTemplate.userPromptTemplate`, av.promptTemplate?.userPromptTemplate);

@@ -102,6 +102,7 @@ export const authoringModulePayloadSchema = z
         // single-language draft comes back `valid:false` with an empty plan.
         taskText: localizedTextMaybeUntranslatedSchema.nullable().optional(),
         assessorExpectedContent: localizedTextMaybeUntranslatedSchema.nullable().optional(),
+        modelAnswer: localizedTextMaybeUntranslatedSchema.nullable().optional(),
         candidateTaskConstraints: localizedTextMaybeUntranslatedSchema.nullable().optional(),
         assessmentBlueprint: z.string().nullable().optional(),
         submissionSchema: submissionSchemaBodySchema.nullable().optional(),

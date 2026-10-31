@@ -17,6 +17,7 @@ const createMcqSetVersion = vi.fn();
 const createModuleVersion = vi.fn();
 const findModuleDetails = vi.fn();
 const updateModuleDetails = vi.fn();
+const findLatestModelAnswer = vi.fn();
 
 // The transaction client the composer must thread through every write.
 const TX = { __tx: "the-one-transaction" };
@@ -37,6 +38,7 @@ vi.mock("../../src/modules/adminContent/adminContentRepository.js", () => ({
   createAdminContentRepository: () => ({
     findModuleDetails: (...args: unknown[]) => findModuleDetails(...args),
     updateModuleDetails: (...args: unknown[]) => updateModuleDetails(...args),
+    findLatestModelAnswer: (...args: unknown[]) => findLatestModelAnswer(...args),
   }),
 }));
 

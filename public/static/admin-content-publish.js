@@ -38,7 +38,7 @@ export function createPublishFlow(ctx) {
 
   // The text fields the gate covers. Must stay in step with the server's field set — the two lists
   // disagreeing means the author is offered a fix for a gap that is not the one blocking them.
-  const TRANSLATION_GATE_FIELDS = ["title", "description", "taskText", "assessorExpectedContent", "candidateTaskConstraints"];
+  const TRANSLATION_GATE_FIELDS = ["title", "description", "taskText", "assessorExpectedContent", "candidateTaskConstraints", "modelAnswer"];
 
   // The stored value as a locale map holding only the locales that really have text. A plain string
   // is recorded under `sourceLocale` — it has to land somewhere, and the author's working language
@@ -151,6 +151,8 @@ export function createPublishFlow(ctx) {
       taskText: ctx.sessionDraft?.taskText ?? moduleVersion?.taskText ?? "",
       assessorExpectedContent: ctx.sessionDraft?.assessorExpectedContent ?? moduleVersion?.assessorExpectedContent ?? "",
       candidateTaskConstraints: ctx.sessionDraft?.candidateTaskConstraints ?? moduleVersion?.candidateTaskConstraints ?? "",
+      // #1124 del 2: eksempelsvaret er med i publiseringskontrollen og oversettes som de andre feltene.
+      modelAnswer: ctx.sessionDraft?.modelAnswer ?? moduleVersion?.modelAnswer ?? "",
     };
     const currentMcq = ctx.sessionDraft?.mcqQuestions?.length
       ? ctx.sessionDraft.mcqQuestions
@@ -214,6 +216,9 @@ export function createPublishFlow(ctx) {
       taskText: sourceTextForLocale(current.taskText, sourceLocale),
       assessorExpectedContent: sourceTextForLocale(current.assessorExpectedContent, sourceLocale),
       candidateTaskConstraints: sourceTextForLocale(current.candidateTaskConstraints, sourceLocale),
+      ...(sourceTextForLocale(current.modelAnswer, sourceLocale).trim()
+        ? { modelAnswer: sourceTextForLocale(current.modelAnswer, sourceLocale) }
+        : {}),
     };
 
     // The module-draft localizer translates the scenario, answer key and constraints together, which
@@ -224,9 +229,9 @@ export function createPublishFlow(ctx) {
     // Fields the localizer actually returns. `description` is NOT among them — asking for it would
     // never be delivered, so a description-only gap could never be filled and the automatic
     // republish would hit the same 422 forever.
-    const DRAFT_LOCALIZER_FIELDS = ["title", "taskText", "assessorExpectedContent", "candidateTaskConstraints"];
+    const DRAFT_LOCALIZER_FIELDS = ["title", "taskText", "assessorExpectedContent", "candidateTaskConstraints", "modelAnswer"];
     // The per-field localizer has two slots: `title` for short text, `bodyMarkdown` for long.
-    const LONG_TEXT_FIELDS = new Set(["taskText", "assessorExpectedContent", "candidateTaskConstraints"]);
+    const LONG_TEXT_FIELDS = new Set(["taskText", "assessorExpectedContent", "candidateTaskConstraints", "modelAnswer"]);
 
     // MCQ questions are participant-facing content too, and for an MCQ-only module they ARE the
     // assessment. Same rule as the text fields: start from what exists, fill only the empty slots.

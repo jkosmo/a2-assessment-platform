@@ -146,6 +146,7 @@ at the file**:
 | `rubric` | required | required | not allowed |
 | `promptTemplate` | required | required | not allowed |
 | `mcqSet` | required | not allowed | required |
+| `modelAnswer` (an example answer — [modules.md](modules.md#example-answer)) | required by `produce-course.mjs` | required by `produce-course.mjs` | not allowed |
 | `assessorExpectedContent`, `candidateTaskConstraints`, `submissionSchema`, `assessmentPolicy`, `assessmentBlueprint` | optional | optional | optional |
 
 A free-text module (texts shown in one language here to keep the example short — write all
@@ -165,6 +166,8 @@ three):
       "assessmentMode": "FREETEXT_ONLY",
       "taskText": "Beskriv hvilket behandlingsgrunnlag som gjelder når …",
       "assessorExpectedContent": "Kandidaten identifiserer artikkel 6(1)(b) og begrunner …",
+      "modelAnswer": "Behandlingsgrunnlaget er avtale, artikkel 6(1)(b): kunden har bestilt …",
+      "assessmentPolicy": { "practical": { "modelAnswerAfterAssessment": true } },
       "rubric": {
         "criteria": { "identifisering": "0–4: 0 = …; 2 = …; 4 = …", "begrunnelse": "0–4: 0 = …; 2 = …; 4 = …" },
         "scalingRule": { "practical_weight": 100, "max_total": 8 }

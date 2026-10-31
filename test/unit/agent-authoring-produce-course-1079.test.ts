@@ -74,6 +74,8 @@ describe("produce-course — eksempelkurset går gjennom alt (#1079)", () => {
       "copied answers": "ok",
       // #1122: eksempelkurset har bare flervalg — ingen kriterier å lese.
       criteria: "ok",
+      // #1124 del 2: ingen fritekstmodul — ingen eksempelsvar å kreve.
+      "example answers": "ok",
       // #1133: seksjonene i eksempelet er korte nok til at de ikke måles.
       "direct address": "ok",
       // #1128, #1129: bildene er beskrevet, og ingen rester fra forfatterarbeidet.
@@ -588,6 +590,8 @@ describe("produce-course — hver kontroll stopper leveransen (#1079)", () => {
     ["en kobling til noe som ikke er en seksjon (#1125)", (_p, m) => tilstand(m, (s) => void (koblinger(s)[0]!.section = "mod-referat")), "objectives", `points at "mod-referat", which is not a section in the course`],
     ["et spørsmål om noe en seksjon ETTER testen lærer bort (#1125)", (p) => { const items = objekt(p, "kurs-motereferat").payload.items; items.push(items.splice(1, 1)[0]); }, "objectives", `is taught in "sec-kilder", which comes after the test`],
     ["en kobling til et spørsmål modulen ikke har lenger (#1125)", (_p, m) => tilstand(m, (s) => void koblinger(s).push({ question: "Hvem skriver referatet?", objective: "mal-1", section: "sec-arbeidsgang" })), "objectives", "the course state links «Hvem skriver referatet?», which is not a question in the module"],
+    // #1124 del 2: en fritekstmodul uten eksempelsvar stopper et nytt kurs.
+    ["en fritekstmodul uten eksempelsvar (#1124)", (p) => { const v = objekt(p, "mod-referat").payload.activeVersion; v.assessmentMode = "FREETEXT_PLUS_MCQ"; v.taskText = { nb: "Skriv et referat fra notatene.", nn: "Skriv eit referat frå notata.", "en-GB": "Write minutes from the notes." }; }, "example answers", '"mod-referat": write `modelAnswer`'],
     ["en fritekstoppgave uten kobling (#1125)", (p) => { const v = objekt(p, "mod-referat").payload.activeVersion; v.assessmentMode = "FREETEXT_PLUS_MCQ"; v.taskText = { nb: "Skriv et referat fra notatene.", nn: "Skriv eit referat frå notata.", "en-GB": "Write minutes from the notes." }; }, "objectives", "the free-text task is not linked"],
     ["en kurstilstand uten læringsmål (#1125)", (_p, m) => tilstand(m, (s) => void delete s.learningObjectives), "objectives", "the course state has no learningObjectives"],
     ["et læringsmål uten id (#1125)", (_p, m) => tilstand(m, (s) => void delete s.learningObjectives[1].id), "objectives", `learningObjectives[1] needs an "id" and a "text"`],

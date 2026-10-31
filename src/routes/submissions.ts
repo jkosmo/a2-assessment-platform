@@ -8,6 +8,7 @@ import {
 } from "../modules/submission/index.js";
 import { createSubmissionAppeal } from "../modules/appeal/index.js";
 import { getOwnedMcqReview } from "../modules/submission/mcqReviewService.js";
+import { getOwnedModelAnswer } from "../modules/submission/modelAnswerService.js";
 import { toOwnedSubmissionView } from "../modules/submission/submissionReadModels.js";
 import { isModuleInAccessibleCourse } from "../modules/course/index.js";
 import { env } from "../config/env.js";
@@ -182,6 +183,23 @@ submissionsRouter.get("/:submissionId/mcq-review", async (request, response) => 
     return;
   }
   response.json(review);
+});
+
+// #1124 del 2: eksempelsvaret etter fritekstvurderingen — dets ene dør. Tomt (modelAnswer: null) når
+// modulversjonen ikke har slått det på eller vurderingen ikke er ferdig; 404 når innleveringen ikke er
+// deltakerens egen.
+submissionsRouter.get("/:submissionId/model-answer", async (request, response) => {
+  const userId = request.context?.userId;
+  if (!userId) {
+    response.status(401).json({ error: "unauthorized" });
+    return;
+  }
+  const view = await getOwnedModelAnswer(request.params.submissionId, userId, requestLocale(request));
+  if (!view) {
+    response.status(404).json({ error: "not_found", message: "Submission not found." });
+    return;
+  }
+  response.json(view);
 });
 
 export { submissionsRouter };

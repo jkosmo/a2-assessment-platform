@@ -2,6 +2,25 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.122.0 - 2026-10-31
+
+### Eksempelsvar etter fritekstvurderingen — #1124 del 2
+
+Deltakeren kan se et sterkt eksempelsvar ved siden av sitt eget svar og tilbakemeldingen per kriterium,
+etter at svaret er vurdert. På mobil står det etter kriteriene, med eget svar sammenfoldet; på bred
+skjerm står de to svarene side om side over kriteriene (prototypen godkjent 2026-10-26).
+
+- **Nytt felt `ModuleVersion.modelAnswer`** (språkkart). Redigeres under «Innstillinger» i modulen, på
+  språket som redigeres. Følger eksport og import, oversettes ved publisering som de andre feltene, og er
+  med i publiseringskontrollens oversettelsessjekk. En lagring som ikke nevner feltet, beholder det fra
+  forrige versjon — en fane åpnet før utrullingen skal ikke slette det; `null` tømmer det.
+- **Av som standard**, per modul (`assessmentPolicy.practical.modelAnswerAfterAssessment`): i en prøve
+  kan den neste som tar testen, få eksempelsvaret fra den forrige. Slås på for øving og repetisjon.
+- **Én dør ut:** `GET /api/submissions/:id/model-answer`, bare for deltakerens egen innlevering, bare
+  når valget er på og det finnes en avgjørelse. Ingen andre deltakersvar har feltet (prøvd i testen).
+- **Skillet** skriver et eksempelsvar til hver fritekstmodul (`modules.md#example-answer`);
+  `produce-course.mjs` stopper et nytt kurs uten, og gir en merknad ved justering.
+
 ## 2.121.1 - 2026-10-31
 
 ### «Kopier lenke» i «Mine kurs» er et deleikon

@@ -322,6 +322,21 @@ describe("llm content generation prompts", () => {
     expect(userPrompt).toContain("to British English");
     expect(userPrompt).toContain('If taskText starts with "Scenario:", preserve that label in the target language.');
     expect(userPrompt).toContain('"taskText": "translated task text in British English"');
+    // #1124 del 2: uten eksempelsvar spørres det ikke etter et.
+    expect(userPrompt).not.toContain("modelAnswer");
+  });
+
+  it("#1124 del 2: eksempelsvaret oversettes sammen med resten når modulen har et", () => {
+    const { userPrompt } = buildModuleDraftLocalizationPrompts({
+      taskText: "Skriv referatet.",
+      assessorExpectedContent: "Vedtaket står først.",
+      modelAnswer: "Vedtak: budsjettet ble godkjent.",
+      sourceLocale: "nb",
+      targetLocale: "nn",
+    });
+    expect(userPrompt).toContain("modelAnswer (a strong example answer, shown to the candidate after assessment):\nVedtak: budsjettet ble godkjent.");
+    expect(userPrompt).toMatch(/"modelAnswer": "translated example answer in [^"]+"/);
+    expect(userPrompt).toContain("- modelAnswer is a complete example answer");
   });
 
   it("builds MCQ localization prompts that preserve option structure", () => {

@@ -36,6 +36,8 @@ export type ModuleDraftResult = {
   taskText: string;
   assessorExpectedContent: string;
   candidateTaskConstraints: string;
+  /** #1124 del 2: bare i en oversettelse, og bare når kilden hadde et eksempelsvar. */
+  modelAnswer?: string;
   title?: string;
   includesScenario: boolean;
 };
@@ -119,6 +121,7 @@ export type ModuleDraftLocalizationInput = {
   taskText: string;
   assessorExpectedContent: string;
   candidateTaskConstraints?: string;
+  modelAnswer?: string;
   title?: string;
   sourceLocale: GenerationLocale;
   targetLocale: GenerationLocale;
@@ -216,6 +219,7 @@ const moduleDraftResponseCodec = z.object({
   taskText: z.string().min(1),
   assessorExpectedContent: z.string().min(1),
   candidateTaskConstraints: z.string().default(""),
+  modelAnswer: z.string().optional(),
   title: z.string().min(1).optional(),
   includesScenario: z.boolean().default(false),
 });
@@ -1410,6 +1414,17 @@ export function buildModuleDraftLocalizationPrompts(input: ModuleDraftLocalizati
     ? `\n  "title": "translated title in ${LOCALE_DISPLAY[input.targetLocale]}",`
     : "";
 
+  // #1124 del 2: eksempelsvaret vises deltakeren etter vurderingen — oversettes bare når det finnes.
+  const modelAnswerSection = input.modelAnswer
+    ? `\nmodelAnswer (a strong example answer, shown to the candidate after assessment):\n${input.modelAnswer}\n`
+    : "";
+  const modelAnswerRule = input.modelAnswer
+    ? "\n- modelAnswer is a complete example answer — translate it in full, keep its structure (headings, lists, line breaks) and every fact in it."
+    : "";
+  const modelAnswerReturnField = input.modelAnswer
+    ? `\n  "modelAnswer": "translated example answer in ${LOCALE_DISPLAY[input.targetLocale]}",`
+    : "";
+
   const userPrompt = `Translate the following certification module draft from ${LOCALE_DISPLAY[input.sourceLocale]} to ${LOCALE_DISPLAY[input.targetLocale]}.
 
 ${buildLanguageEnforcementDirective(input.targetLocale)}
@@ -1420,7 +1435,7 @@ ${buildLanguageEnforcementDirective(input.targetLocale)}
 - Keep taskText fully self-contained for candidates.
 - If taskText starts with "Scenario:", preserve that label in the target language.
 - candidateTaskConstraints is visible to the candidate — translate faithfully and keep it brief (1–3 sentences).
-- assessorExpectedContent is hidden assessor-only content — translate faithfully and preserve all scoring details.
+- assessorExpectedContent is hidden assessor-only content — translate faithfully and preserve all scoring details.${modelAnswerRule}
 - Do not add or remove assessment requirements.
 - Do not summarise.
 
@@ -1431,14 +1446,14 @@ ${input.taskText}
 ${candidateConstraintsSection}
 assessorExpectedContent (hidden assessor notes):
 ${input.assessorExpectedContent}
-
+${modelAnswerSection}
 ## Return format
 
 Return a single JSON object:
 {${titleReturnField}
   "taskText": "translated task text in ${LOCALE_DISPLAY[input.targetLocale]}",
   "candidateTaskConstraints": "translated 1–3 sentence visible candidate guidance in ${LOCALE_DISPLAY[input.targetLocale]}",
-  "assessorExpectedContent": "translated hidden assessor scoring support in ${LOCALE_DISPLAY[input.targetLocale]}",
+  "assessorExpectedContent": "translated hidden assessor scoring support in ${LOCALE_DISPLAY[input.targetLocale]}",${modelAnswerReturnField}
   "includesScenario": true or false
 }`;
 
@@ -2034,7 +2049,13 @@ export async function localizeModuleDraft(input: ModuleDraftLocalizationInput): 
     { field: "taskText", source: input.taskText, translated: parsed.data.taskText },
     { field: "candidateTaskConstraints", source: input.candidateTaskConstraints, translated: parsed.data.candidateTaskConstraints },
     { field: "assessorExpectedContent", source: input.assessorExpectedContent, translated: parsed.data.assessorExpectedContent },
+    { field: "modelAnswer", source: input.modelAnswer, translated: parsed.data.modelAnswer },
   ]);
+  // #1124 del 2: ba vi om et eksempelsvar, må det komme tilbake — ellers står språket med et tomt felt
+  // som publiseringskontrollen stopper, uten at forfatteren ser hvorfor.
+  if (input.modelAnswer && !parsed.data.modelAnswer?.trim()) {
+    throw new Error("Module draft localization returned no modelAnswer although the source has one. Please try again.");
+  }
   return parsed.data;
 }
 

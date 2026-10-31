@@ -87,6 +87,7 @@ const TRANSLATION_FIELD_LABELS: Record<string, string> = {
   description: "beskrivelse",
   taskText: "oppgavetekst",
   assessorExpectedContent: "fasit",
+  modelAnswer: "eksempelsvar",
   candidateTaskConstraints: "rammer for kandidaten",
   // #916: the section gate's second field. A section's body IS the section.
   bodyMarkdown: "innhold",
@@ -123,6 +124,7 @@ async function evaluateModule(moduleId: string): Promise<ModuleEvaluation> {
           id: true,
           taskText: true,
           assessorExpectedContent: true,
+          modelAnswer: true,
           candidateTaskConstraints: true,
           assessmentBlueprint: true,
           mcqSetVersionId: true,
@@ -206,6 +208,7 @@ async function evaluateModule(moduleId: string): Promise<ModuleEvaluation> {
       taskText: latest.taskText,
       candidateTaskConstraints: latest.candidateTaskConstraints,
       assessorExpectedContent: latest.assessorExpectedContent,
+      modelAnswer: latest.modelAnswer,
       assessmentBlueprint: latest.assessmentBlueprint,
     },
     mcqQuestions,

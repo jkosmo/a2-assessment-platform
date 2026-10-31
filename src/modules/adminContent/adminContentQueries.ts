@@ -111,6 +111,7 @@ export async function getModuleContentBundle(moduleId: string) {
     versionNo: version.versionNo,
     taskText: decodeLocalizedText(version.taskText) ?? version.taskText,
     assessorExpectedContent: decodeLocalizedText(version.assessorExpectedContent) ?? version.assessorExpectedContent,
+    modelAnswer: version.modelAnswer ? (decodeLocalizedText(version.modelAnswer) ?? version.modelAnswer) : undefined,
     candidateTaskConstraints: version.candidateTaskConstraints
       ? (decodeLocalizedText(version.candidateTaskConstraints) ?? version.candidateTaskConstraints)
       : undefined,
@@ -486,6 +487,7 @@ export async function buildModuleExportEnvelope(
         assessmentMode: moduleVersion.assessmentMode as never,
         taskText: (moduleVersion.taskText ?? null) as never,
         assessorExpectedContent: (moduleVersion.assessorExpectedContent ?? null) as never,
+        modelAnswer: (moduleVersion.modelAnswer ?? null) as never,
         candidateTaskConstraints: (moduleVersion.candidateTaskConstraints ?? null) as never,
         assessmentBlueprint: null,
         submissionSchema: (moduleVersion.submissionSchema ?? null) as never,

@@ -35,6 +35,7 @@
           "assessmentMode": "FREETEXT_ONLY",
           "taskText": "En kunde ber om å få slettet sine data, men avtalen løper fortsatt i 6 måneder. Beskriv hvilket behandlingsgrunnlag som gjelder for videre lagring, og hvordan du ville svart kunden.",
           "assessorExpectedContent": "Identifiserer GDPR artikkel 6(1)(b) (avtale) som grunnlag for videre behandling i avtaleperioden, skiller mellom sletteplikt og lagringsplikt, og formulerer et korrekt og forståelig svar til kunden.",
+          "modelAnswer": "Behandlingsgrunnlaget er avtale, GDPR artikkel 6(1)(b): kunden har en løpende avtale, og vi trenger opplysningene for å levere den de neste seks månedene. Sletteretten gjelder ikke så lenge grunnlaget består. Jeg svarer kunden at opplysningene slettes når avtalen er avsluttet, og forklarer hvorfor vi må beholde dem til da.",
           "rubric": {
             "criteria": {
               "identifisering": "0-4: Identifiserer korrekt behandlingsgrunnlag (art. 6(1)(b)) og avgrenser mot samtykke.",

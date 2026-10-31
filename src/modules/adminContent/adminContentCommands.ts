@@ -59,6 +59,8 @@ type CreateModuleVersionInput = {
   assessmentMode?: AssessmentMode;
   taskText?: string | null;
   assessorExpectedContent?: string;
+  /** #1124 del 2: eksempelsvaret (språkkart). */
+  modelAnswer?: string | null;
   candidateTaskConstraints?: string;
   assessmentBlueprint?: string;
   rubricVersionId?: string | null;
@@ -762,6 +764,7 @@ export async function createModuleVersion(input: CreateModuleVersionInput, tx?: 
       assessmentMode: input.assessmentMode,
       taskText: isMcqOnly ? null : input.taskText,
       assessorExpectedContent: input.assessorExpectedContent,
+      modelAnswer: isMcqOnly ? null : input.modelAnswer,
       candidateTaskConstraints: input.candidateTaskConstraints,
       assessmentBlueprint: input.assessmentBlueprint,
       rubricVersionId: isMcqOnly ? null : input.rubricVersionId,
@@ -1113,6 +1116,7 @@ export async function restoreModuleVersion(input: {
       assessmentMode: sourceVersion.assessmentMode,
       taskText: sourceVersion.taskText,
       assessorExpectedContent: sourceVersion.assessorExpectedContent ?? undefined,
+      modelAnswer: sourceVersion.modelAnswer ?? undefined,
       candidateTaskConstraints: sourceVersion.candidateTaskConstraints ?? undefined,
       assessmentBlueprint: sourceVersion.assessmentBlueprint ?? undefined,
       rubricVersionId: sourceVersion.rubricVersionId,
@@ -1191,6 +1195,7 @@ export async function appendMcqQuestions(input: {
       assessmentMode: sourceVersion.assessmentMode,
       taskText: sourceVersion.taskText,
       assessorExpectedContent: sourceVersion.assessorExpectedContent ?? undefined,
+      modelAnswer: sourceVersion.modelAnswer ?? undefined,
       candidateTaskConstraints: sourceVersion.candidateTaskConstraints ?? undefined,
       assessmentBlueprint: sourceVersion.assessmentBlueprint ?? undefined,
       rubricVersionId: sourceVersion.rubricVersionId,
@@ -1277,6 +1282,7 @@ export async function publishModuleVersionWithThresholds(input: PublishThreshold
       assessmentMode: sourceVersion.assessmentMode,
       taskText: sourceVersion.taskText,
       assessorExpectedContent: sourceVersion.assessorExpectedContent ?? undefined,
+      modelAnswer: sourceVersion.modelAnswer ?? undefined,
       candidateTaskConstraints: sourceVersion.candidateTaskConstraints ?? undefined,
       assessmentBlueprint: sourceVersion.assessmentBlueprint ?? undefined,
       rubricVersionId: sourceVersion.rubricVersionId,

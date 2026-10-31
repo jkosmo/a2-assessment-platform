@@ -179,6 +179,16 @@ export function createAdminContentRepository(client: AdminContentRepositoryClien
       });
     },
 
+    /** #1124 del 2: eksempelsvaret i modulens nyeste versjon — det en lagring uten feltet skal beholde. */
+    async findLatestModelAnswer(moduleId: string) {
+      const latest = await client.moduleVersion.findFirst({
+        where: { moduleId },
+        orderBy: { versionNo: "desc" },
+        select: { modelAnswer: true },
+      });
+      return latest?.modelAnswer ?? null;
+    },
+
     async countModuleCourses(moduleId: string) {
       return client.courseItem.count({ where: { moduleId } });
     },
@@ -278,6 +288,7 @@ export function createAdminContentRepository(client: AdminContentRepositoryClien
               versionNo: true,
               taskText: true,
               assessorExpectedContent: true,
+              modelAnswer: true,
               candidateTaskConstraints: true,
               assessmentBlueprint: true,
               submissionSchemaJson: true,
@@ -554,6 +565,7 @@ export function createAdminContentRepository(client: AdminContentRepositoryClien
       // taskText / rubricVersionId / promptTemplateVersionId are null for MCQ_ONLY modules (#525).
       taskText?: string | null;
       assessorExpectedContent?: string | null;
+      modelAnswer?: string | null;
       candidateTaskConstraints?: string | null;
       assessmentBlueprint?: string | null;
       rubricVersionId?: string | null;
@@ -571,6 +583,7 @@ export function createAdminContentRepository(client: AdminContentRepositoryClien
           versionNo: true,
           taskText: true,
           assessorExpectedContent: true,
+          modelAnswer: true,
           candidateTaskConstraints: true,
           assessmentBlueprint: true,
           submissionSchemaJson: true,
@@ -619,6 +632,7 @@ export function createAdminContentRepository(client: AdminContentRepositoryClien
           versionNo: true,
           taskText: true,
           assessorExpectedContent: true,
+          modelAnswer: true,
           candidateTaskConstraints: true,
           assessmentBlueprint: true,
           rubricVersionId: true,

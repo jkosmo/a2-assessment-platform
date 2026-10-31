@@ -846,6 +846,7 @@ adminContentRouter.post("/modules/:moduleId/versions", idempotency((req) => `mod
       assessmentMode: data.assessmentMode,
       taskText: data.taskText,
       assessorExpectedContent: data.assessorExpectedContent,
+      modelAnswer: data.modelAnswer,
       candidateTaskConstraints: data.candidateTaskConstraints,
       assessmentBlueprint: data.assessmentBlueprint,
       rubric: data.rubric,
@@ -1016,6 +1017,7 @@ adminContentRouter.post("/modules/:moduleId/module-versions/:moduleVersionId/pub
         taskText: serialize(moduleVersionData.taskText),
         candidateTaskConstraints: serialize(moduleVersionData.candidateTaskConstraints),
         assessorExpectedContent: serialize(moduleVersionData.assessorExpectedContent),
+        modelAnswer: serialize(moduleVersionData.modelAnswer),
         assessmentBlueprint: typeof rawBlueprint === "string" ? rawBlueprint : null,
       },
       mcqQuestions: (mcqSetVersion?.questions ?? []).map((question) => ({

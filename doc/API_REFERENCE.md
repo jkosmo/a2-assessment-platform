@@ -308,6 +308,20 @@ before. Participant endpoints:
   warning in `validation.issues`. Revision keeps each question's type unless the instruction asks otherwise, and
   never returns more than half the set as `"multiple"` (or as many as the input already had).
 
+**Example answer (#1124 del 2).** A free-text module version has an optional `modelAnswer`
+(LocalizedText): a strong answer to the task, shown to the participant after assessment when the
+version's `assessmentPolicy.practical.modelAnswerAfterAssessment` is `true` (off by default).
+
+- `POST /api/admin/content/modules/:moduleId/versions` takes `modelAnswer`. **Omitted keeps the
+  previous version's value** (a client that does not know the field must not erase it); `null` clears
+  it. It is exported and imported with the module, translated by `generate/module-draft/localize`
+  when sent, and part of the publish gate's translation check.
+- `GET /api/submissions/:id/model-answer` → `{ enabled, modelAnswer, ownAnswer }`. The only way the
+  example answer reaches a participant: `modelAnswer` is the text in the reader's locale when the
+  policy is on **and** the submission has a decision, else `null`; `ownAnswer` is the submitted text,
+  field by field. 404 when the submission is not the caller's. No other participant endpoint carries
+  the field.
+
 Two rules for clients:
 
 - **Never write a source-language copy into a locale whose translation failed.** A copy is

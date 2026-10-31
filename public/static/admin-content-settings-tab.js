@@ -310,6 +310,19 @@ export function createSettingsTab(ctx) {
         "mcqReview",
       );
     }
+    // #1124 del 2: eksempelsvaret etter fritekstvurderingen. Teksten står på språket som redigeres;
+    // visningen er av som standard, av samme grunn som flervalgsgjennomgangen over.
+    if (mode !== "MCQ_ONLY") {
+      row(
+        "shell.settings.modelAnswer",
+        `<textarea id="settingsModelAnswer" class="settings-input settings-input--wide" rows="6"
+           placeholder="${escapeHtml(t("shell.settings.modelAnswerPlaceholder"))}">${escapeHtml(settingsValue(version?.modelAnswer) ?? "")}</textarea>
+         <label class="settings-check"><input id="settingsModelAnswerShow" type="checkbox"${policy?.practical?.modelAnswerAfterAssessment === true ? " checked" : ""} />
+          ${escapeHtml(t("shell.settings.modelAnswerShowLabel"))}</label>`,
+        false,
+        "modelAnswer",
+      );
+    }
 
     // The rest of the pass rules — the overall pass mark is the field most likely to be adjusted
     // after a calibration round, so it must be editable here («ett sted å gjøre hver ting»).
@@ -533,7 +546,7 @@ export function createSettingsTab(ctx) {
     // Rendered by renderSettingsPanel itself, so always present when the tab is open.
     panel: [
       "settingsModuleType", "settingsCertLevel", "settingsValidFrom", "settingsValidTo",
-      "settingsMcqMinPercent", "settingsMcqPerAttempt", "settingsMcqShuffle", "settingsMcqReview", "settingsTotalMin", "settingsPracticalMin",
+      "settingsMcqMinPercent", "settingsMcqPerAttempt", "settingsMcqShuffle", "settingsMcqReview", "settingsModelAnswer", "settingsModelAnswerShow", "settingsTotalMin", "settingsPracticalMin",
       "settingsBorderlineMin", "settingsBorderlineMax", "settingsPracticalWeight",
     ],
     // Inside collapsible sections: absent from the DOM until the author expands them.
@@ -1216,10 +1229,43 @@ export function createSettingsTab(ctx) {
     if (isFreetextOnly) { delete mcqUse.questionsPerAttempt; delete mcqUse.shuffleQuestions; delete mcqUse.reviewAfterSubmit; }
     const mcqChanged = JSON.stringify(mcqUse) !== JSON.stringify(existingPolicy?.mcq ?? {});
 
-    const policy = existingPolicy || Object.keys(passRules).length > 0 || Object.keys(mcqUse).length > 0
-      ? { ...(existingPolicy ?? {}), passRules, ...(Object.keys(mcqUse).length > 0 ? { mcq: mcqUse } : {}) }
+    // #1124 del 2: «vis eksempelsvaret» lagres bare når det er PÅ — av er standarden og trenger ingen verdi.
+    const practicalUse = { ...(existingPolicy?.practical ?? {}) };
+    const modelAnswerShowInput = document.getElementById("settingsModelAnswerShow");
+    if (modelAnswerShowInput) {
+      if (modelAnswerShowInput.checked) practicalUse.modelAnswerAfterAssessment = true;
+      else delete practicalUse.modelAnswerAfterAssessment;
+    }
+    if (isMcqOnly) delete practicalUse.modelAnswerAfterAssessment;
+    const practicalChanged = JSON.stringify(practicalUse) !== JSON.stringify(existingPolicy?.practical ?? {});
+
+    // Selve eksempelsvaret: på språket som redigeres, flettet inn i de andre språkene. Sendes bare når
+    // det er endret — utelatt beholder tjeneren det fra forrige versjon; tomt i alle språk er `null`.
+    const modelAnswerInput = document.getElementById("settingsModelAnswer");
+    let modelAnswerPayload;
+    if (modelAnswerInput && !isMcqOnly) {
+      const stored = version?.modelAnswer ?? null;
+      const before = String(localizeValueForLocale(stored, ctx.contentLocale) ?? "").trim();
+      const after = modelAnswerInput.value.trim();
+      if (after !== before) {
+        const map = stored && typeof stored === "object"
+          ? { ...stored }
+          : (typeof stored === "string" && stored.trim() ? { [ctx.contentLocale]: stored } : {});
+        if (after) map[ctx.contentLocale] = after; else delete map[ctx.contentLocale];
+        modelAnswerPayload = Object.values(map).some((value) => String(value ?? "").trim()) ? map : null;
+      }
+    }
+
+    const policy = existingPolicy || Object.keys(passRules).length > 0 || Object.keys(mcqUse).length > 0 || Object.keys(practicalUse).length > 0
+      ? {
+          ...(existingPolicy ?? {}),
+          passRules,
+          ...(Object.keys(mcqUse).length > 0 ? { mcq: mcqUse } : {}),
+          ...(Object.keys(practicalUse).length > 0 ? { practical: practicalUse } : {}),
+        }
       : null;
     if (policy && Object.keys(mcqUse).length === 0) delete policy.mcq;
+    if (policy && Object.keys(practicalUse).length === 0) delete policy.practical;
 
     // Module-level fields. Sent only when the author actually changed them, so a mode switch
     // does not rewrite a description or a date the panel merely displayed.
@@ -1281,7 +1327,7 @@ export function createSettingsTab(ctx) {
     // The whole pass-rule object, not just the MCQ threshold. Adding the other three rules to the
     // payload without adding them here meant editing the overall pass mark hit "no changes" and
     // nothing was written — the field existed and did nothing.
-    const policyChanged = JSON.stringify(passRules) !== JSON.stringify(existingPolicy?.passRules ?? {}) || mcqChanged;
+    const policyChanged = JSON.stringify(passRules) !== JSON.stringify(existingPolicy?.passRules ?? {}) || mcqChanged || practicalChanged;
     // #896 S3c: criteria edited here ride along as an INLINE rubric, exactly as the direct-edit save
     // does. Referencing `rubricVersionId` would carry the old criteria forward and quietly discard
     // what the author just typed.
@@ -1381,7 +1427,7 @@ export function createSettingsTab(ctx) {
 
     if (
       mode === currentMode && !thresholdChanged && !criteriaRecord && !promptPayload
-      && !submissionSchemaPayload && !weightChanged && !policyChanged && Object.keys(moduleFields).length === 0
+      && !submissionSchemaPayload && !weightChanged && !policyChanged && modelAnswerPayload === undefined && Object.keys(moduleFields).length === 0
     ) {
       showToast(t("shell.settings.noChanges"), "info");
       reenableSettingsSave();
@@ -1398,6 +1444,7 @@ export function createSettingsTab(ctx) {
         assessorExpectedContent:
           dropBlankLocales(latestTaskVersion?.assessorExpectedContent) ?? latestTaskVersion?.assessorExpectedContent,
         candidateTaskConstraints: dropBlankLocales(latestTaskVersion?.candidateTaskConstraints),
+        ...(modelAnswerPayload !== undefined ? { modelAnswer: modelAnswerPayload } : {}),
         // Inline rubric when the author edited criteria here, otherwise keep referencing the
         // existing one. Sending both would be ambiguous; sending only the id would drop the edit.
         // A rubric is written when the criteria OR the practical weight changed — both live on the

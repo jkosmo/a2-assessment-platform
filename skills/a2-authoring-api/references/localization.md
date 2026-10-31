@@ -20,7 +20,7 @@ you leave untranslated, a person must later have translated on the platform, one
 |---|---|
 | the course | `title`, `description` |
 | a section | `title`, `bodyMarkdown` |
-| a module | `title`, `description`, `taskText`, `assessorExpectedContent`, `candidateTaskConstraints`, the labels and placeholders of `submissionSchema.fields[]`, `promptTemplate.systemPrompt` and `userPromptTemplate` |
+| a module | `title`, `description`, `taskText`, `assessorExpectedContent`, `modelAnswer`, `candidateTaskConstraints`, the labels and placeholders of `submissionSchema.fields[]`, `promptTemplate.systemPrompt` and `userPromptTemplate` |
 | a multiple-choice set | `title`, and per question `stem`, every entry in `options`, `correctAnswer` (or every entry in `correctAnswers`), `rationale` |
 | a figure | every label (below) |
 

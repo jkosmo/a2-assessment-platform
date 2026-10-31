@@ -2397,6 +2397,11 @@ async function saveDraftBundleInBackground(options = {}) {
         taskText: dropBlankLocales(taskText) ?? taskText,
         assessorExpectedContent: dropBlankLocales(assessorExpectedContent) ?? assessorExpectedContent,
         candidateTaskConstraints: dropBlankLocales(candidateTaskConstraints),
+        // #1124 del 2: eksempelsvaret redigeres i Innstillinger; her bare når en oversettelse ved
+        // publisering har lagt det i utkastet. Utelatt beholder tjeneren det fra forrige versjon.
+        ...(sessionDraft?.modelAnswer !== undefined
+          ? { modelAnswer: dropBlankLocales(sessionDraft.modelAnswer) ?? sessionDraft.modelAnswer }
+          : {}),
         assessmentBlueprint: assessmentBlueprint || undefined,
         // Explicit criteria ride along; a rubric from ensure-rubric is referenced by id.
         ...(inlineRubric ? { rubric: inlineRubric } : { rubricVersionId: rubricBody?.rubricVersion?.id }),

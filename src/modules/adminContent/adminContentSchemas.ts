@@ -289,6 +289,12 @@ export const assessmentPolicyBodySchema = z.object({
       reviewAfterSubmit: z.boolean().optional(),
     })
     .optional(),
+  // #1124 del 2: eksempelsvaret etter vurderingen. Se assessmentPolicyCodec.
+  practical: z
+    .object({
+      modelAnswerAfterAssessment: z.boolean().optional(),
+    })
+    .optional(),
   passRules: z
     .object({
       // #547: optional — MCQ-only policies set only mcqMinPercent; decisionService defaults
@@ -317,6 +323,8 @@ export const moduleVersionBodySchema = z
     // afterwards, so they must be able to arrive partially translated.
     taskText: localizedTextMaybeUntranslatedSchema.optional(),
     assessorExpectedContent: localizedTextMaybeUntranslatedSchema.optional(),
+    // #1124 del 2: eksempelsvaret, vist deltakeren etter vurderingen når modulen slår det på.
+    modelAnswer: localizedTextMaybeUntranslatedSchema.nullable().optional(),
     candidateTaskConstraints: localizedTextMaybeUntranslatedSchema.optional(),
     assessmentBlueprint: z.string().trim().optional(),
     rubricVersionId: z.string().min(1).optional(),
@@ -368,6 +376,8 @@ export const composeModuleVersionBodySchema = z.object({
   assessmentMode: assessmentModeSchema.optional(),
   taskText: localizedTextMaybeUntranslatedSchema.optional(),
   assessorExpectedContent: localizedTextMaybeUntranslatedSchema.optional(),
+  // #1124 del 2: eksempelsvaret, vist deltakeren etter vurderingen når modulen slår det på.
+  modelAnswer: localizedTextMaybeUntranslatedSchema.nullable().optional(),
   candidateTaskConstraints: localizedTextMaybeUntranslatedSchema.optional(),
   assessmentBlueprint: z.string().trim().optional(),
   rubric: rubricBodySchema.omit({ active: true }).optional(),
@@ -551,6 +561,8 @@ export const moduleDraftLocalizationBodySchema = z.object({
   taskText: z.string().trim().min(1),
   assessorExpectedContent: z.string().trim().min(1),
   candidateTaskConstraints: z.string().trim().optional(),
+  // #1124 del 2: eksempelsvaret oversettes sammen med resten når modulen har et.
+  modelAnswer: z.string().trim().optional(),
   title: z.string().trim().min(1).optional(),
   sourceLocale: generationLocaleSchema,
   targetLocale: generationLocaleSchema,
@@ -623,6 +635,7 @@ export const moduleExportPayloadSchema = z.object({
     // - the envelope emits what is stored, and import would reject its own export.
     taskText: localizedTextMaybeUntranslatedSchema.nullable().optional(),
     assessorExpectedContent: localizedTextMaybeUntranslatedSchema.nullable().optional(),
+    modelAnswer: localizedTextMaybeUntranslatedSchema.nullable().optional(),
     candidateTaskConstraints: localizedTextMaybeUntranslatedSchema.nullable().optional(),
     assessmentBlueprint: z.string().nullable().optional(),
     submissionSchema: submissionSchemaBodySchema.nullable().optional(),

@@ -279,6 +279,10 @@ model ModuleVersion {
   taskText                 String?
   assessorExpectedContent  String?
   candidateTaskConstraints String?
+  // #1124 del 2: et sterkt eksempelsvar på fritekstoppgaven (språkkart). Vises deltakeren bare ETTER
+  // vurderingen, og bare når modulen slår det på (`assessmentPolicy.practical.modelAnswerAfterAssessment`),
+  // gjennom én egen rute. Deltakerens moduloppslag henter det aldri.
+  modelAnswer              String?
   assessmentBlueprint      String?
   rubricVersionId          String?
   promptTemplateVersionId  String?

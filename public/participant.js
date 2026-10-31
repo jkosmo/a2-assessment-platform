@@ -2545,6 +2545,71 @@ async function renderMcqReview(submissionId) {
   resultSummary.appendChild(card);
 }
 
+// #1124 del 2: eksempelsvaret etter fritekstvurderingen — eget kall, egen dør, som flervalgsgjennomgangen.
+// Tjeneren svarer `modelAnswer: null` når modulen ikke har slått det på eller vurderingen ikke er ferdig.
+//
+// Nærhet (Clark & Mayer): eksempelsvaret står VED SIDEN AV deltakerens eget svar, ikke på en egen side.
+// På mobil kommer det etter tilbakemeldingen per kriterium, og eget svar kan foldes ut; på bred skjerm
+// står de to side om side, over kriteriene (prototypen godkjent 2026-10-26).
+let modelAnswerHost = null;
+const MODEL_ANSWER_WIDE = "(min-width: 900px)";
+
+async function renderModelAnswer(submissionId) {
+  if (!submissionId) return;
+  let view;
+  try {
+    view = await apiFetch(`/api/submissions/${submissionId}/model-answer`, headers);
+  } catch {
+    return; // Et tillegg til resultatet; feiler det, står resultatet.
+  }
+  if (modelAnswerHost?.isConnected) modelAnswerHost.remove();
+  modelAnswerHost = null;
+  if (!view?.enabled || typeof view.modelAnswer !== "string" || !view.modelAnswer.trim()) return;
+
+  const wide = window.matchMedia?.(MODEL_ANSWER_WIDE)?.matches ?? false;
+  const card = createSummaryCard(t(wide ? "result.modelAnswer.titleWide" : "result.modelAnswer.title"));
+  card.classList.add("model-answer-card");
+  const compare = document.createElement("div");
+  compare.className = "model-answer-compare";
+
+  const example = document.createElement("div");
+  example.className = "model-answer-example";
+  const exampleHead = document.createElement("div");
+  exampleHead.className = "model-answer-head";
+  exampleHead.textContent = t("result.modelAnswer.example");
+  const exampleBody = document.createElement("div");
+  exampleBody.className = "model-answer-text";
+  exampleBody.textContent = view.modelAnswer;
+  const exampleNote = document.createElement("div");
+  exampleNote.className = "model-answer-note";
+  exampleNote.textContent = t("result.modelAnswer.note");
+  example.append(exampleHead, exampleBody, exampleNote);
+
+  const own = Array.isArray(view.ownAnswer) ? view.ownAnswer.filter((text) => typeof text === "string" && text.trim()) : [];
+  if (own.length > 0) {
+    // Eget svar foldes ut på mobil, og står åpent ved siden av eksempelsvaret på bred skjerm.
+    const yours = document.createElement("details");
+    yours.className = "model-answer-own";
+    if (wide) yours.open = true;
+    const summary = document.createElement("summary");
+    summary.textContent = t("result.modelAnswer.yours");
+    const ownBody = document.createElement("div");
+    ownBody.className = "model-answer-text";
+    ownBody.textContent = own.join("\n\n");
+    yours.append(summary, ownBody);
+    compare.append(yours, example);
+  } else {
+    compare.append(example);
+  }
+  card.appendChild(compare);
+
+  const criteriaCard = resultSummary.querySelector('[data-card="criteria"]');
+  if (wide && criteriaCard) resultSummary.insertBefore(card, criteriaCard);
+  else if (criteriaCard) criteriaCard.after(card);
+  else resultSummary.appendChild(card);
+  modelAnswerHost = card;
+}
+
 function createSummaryCard(title) {
   const card = document.createElement("section");
   card.className = "summary-card";
@@ -2698,6 +2763,7 @@ function renderResultSummary(body) {
   );
   if (scoreList) {
     const scoreCard = createSummaryCard(t("result.criteria.title"));
+    scoreCard.dataset.card = "criteria";
     // Poengene er KI-ens. Har en vurderer overstyrt vedtaket, sier merknaden det — ellers kan
     // «2 av 2» ved siden av «Ikke bestått» se ut som en feil.
     if (body.participantGuidance?.finalDecisionByAssessor === true) {
@@ -2728,6 +2794,8 @@ function renderResultSummary(body) {
   // #1061: gjennomgangen av flervalgsdelen — eget kall, egen dør for fasiten. Tjeneren svarer tomt
   // når modulen ikke har slått den på; da vises ingenting.
   if (body.scoreComponents?.mcqPercentScore != null) void renderMcqReview(body.submissionId);
+  // #1124 del 2: eksempelsvaret — bare der det finnes en fritekstdel.
+  if (body.scoreComponents?.practicalScaledScore != null || scoreList) void renderModelAnswer(body.submissionId);
 
   // #549: celebrate an automatic/confirmed pass — confetti + a clear "passed" banner, shown once
   // per result (the result view re-renders on each poll). De-emphasising retry is handled in

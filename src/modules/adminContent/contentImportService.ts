@@ -257,6 +257,9 @@ function moduleImportGate(payload: ModuleExportPayload) {
       assessorExpectedContent: (payload.activeVersion.assessorExpectedContent
         ? serializeLocalized(payload.activeVersion.assessorExpectedContent)
         : null) ?? null,
+      modelAnswer: (payload.activeVersion.modelAnswer
+        ? serializeLocalized(payload.activeVersion.modelAnswer)
+        : null) ?? null,
       assessmentBlueprint: payload.activeVersion.assessmentBlueprint
         ? JSON.stringify(payload.activeVersion.assessmentBlueprint)
         : null,
@@ -362,6 +365,7 @@ async function importModulePayload(
       ? undefined
       : serializeRequired(payload.activeVersion.taskText),
     assessorExpectedContent: serializeLocalized(payload.activeVersion.assessorExpectedContent),
+    modelAnswer: isMcqOnly ? undefined : serializeLocalized(payload.activeVersion.modelAnswer),
     candidateTaskConstraints: serializeLocalized(payload.activeVersion.candidateTaskConstraints),
     assessmentBlueprint: payload.activeVersion.assessmentBlueprint ?? undefined,
     rubricVersionId: rubric?.id,

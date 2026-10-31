@@ -30,6 +30,27 @@ gate 3 ([course-design.md](course-design.md#level-and-scope)).
   something, the task says so; if the task cannot say it, drop the criterion. Read the criteria and
   the task side by side before gate 4.
 - **Expected content:** what a strong answer contains. It guides the automatic assessment.
+- **An example answer** (`modelAnswer`) for every free-text module — see [below](#example-answer).
+
+## Example answer
+
+`activeVersion.modelAnswer` is a strong answer to the task, **written as a learner would write it**
+— not notes about one. After the answer is assessed, the platform can show it next to the learner's
+own answer and the feedback per criterion, so she sees what a strong answer looks like in the same
+situation. The expected content stays hidden; the example answer is the one the learner may see.
+
+- **Top of every criterion.** Read it against each criterion's steps: it reaches the top step of
+  every one, and nothing in it is outside what the task asks.
+- **One of several good answers, not the only one.** Plausible length for the scope, the learner's
+  own voice (no «Kandidaten bør …»), the facts of the task's situation — not a template.
+- **Not a copy of an exercise.** The «skriv selv» before the module has its own example answer for a
+  smaller situation; this one answers the module's task.
+- **All three languages**, like the task. Plain text: paragraphs and simple lists, line breaks kept.
+- The platform shows it only when the module turns it on (`assessmentPolicy.practical.
+  modelAnswerAfterAssessment: true`). **Off by default** — in a test the next learner could get it from
+  the previous one. Turn it on for practice and revision modules, and ask the author for tests.
+
+`produce-course.mjs` fails on a free-text module without one (a NOTE when adjusting a course).
 - **A warm-up in the section before it — never in the task text.** A free-text module gets a «skriv selv» frame (one of that section's
   one or two exercises — [section-content.md](section-content.md#choosing-the-practice)) in the
   section it follows: the same kind of situation, smaller, with an example answer from the source

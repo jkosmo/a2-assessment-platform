@@ -14,6 +14,7 @@
 //   find errors    the course has a «finn feilene» — a NOTE when not, never a stop  (#1120)
 //   copied answers no exercise is answered word for word by the text above it        (#1121)
 //   criteria       every assessment criterion describes its scale, not one line       (#1122)
+//   example answers every free-text module has a strong example answer — a NOTE when adjusting (#1124)
 //   direct address every section talks to the learner — a NOTE when one reads as a report (#1133)
 //   alt text       every picture is described in 6+ words, not titled                 (#1128)
 //   leftovers      no working notes, numbered section references, figures out of order (#1129)
@@ -717,6 +718,26 @@ function checkCriteria(pkg, primary) {
   };
 }
 
+// #1124 del 2: every free-text module has a strong example answer (`activeVersion.modelAnswer`) — the
+// platform shows it next to the learner's own answer after assessment, when the module turns it on
+// (modules.md#example-answer). A stop for a new course; a NOTE when adjusting one, which changes only
+// what the author asks for.
+function checkModelAnswers(pkg, primary, { adjusting = false } = {}) {
+  const name = "example answers";
+  const freetext = (pkg.objects ?? []).filter((object) =>
+    object?.type === "module" && object.payload?.activeVersion?.assessmentMode !== "MCQ_ONLY" && object.payload?.activeVersion?.taskText);
+  if (freetext.length === 0) return { name, status: "ok", summary: "no free-text module — nothing to check", details: [] };
+  const textOf = (value) => (value && typeof value === "object" ? value[primary] ?? Object.values(value)[0] : value);
+  const missing = freetext.filter((object) => !String(textOf(object.payload.activeVersion.modelAnswer) ?? "").trim());
+  if (missing.length === 0) return { name, status: "ok", summary: `${freetext.length} free-text module(s), each with an example answer`, details: [] };
+  return {
+    name,
+    status: adjusting ? "note" : "fail",
+    summary: `${missing.length} of ${freetext.length} free-text module(s) without an example answer`,
+    details: missing.map((object) => `"${object.clientRef}": write \`modelAnswer\` — a strong answer to the task, at the top of every criterion (modules.md#example-answer)`),
+  };
+}
+
 function checkLanguages(pkg, primary) {
   const result = checkLocalization(pkg, { primary });
   const details = [...result.reasons];
@@ -1039,6 +1060,7 @@ export async function produceCourse({ packageFile, outFile, stateFile, slidesFil
   checks.push(checkFindTheErrors(pkg, course, { adjusting: Boolean(changesEarly?.elements) }));
   checks.push(checkCopiedAnswers(scoped.pkg, primary));
   checks.push(checkCriteria(scoped.pkg, primary));
+  checks.push(checkModelAnswers(scoped.pkg, primary, { adjusting: Boolean(changesEarly?.elements) }));
   checks.push(checkDirectAddress(scoped.pkg, primary));
   checks.push(checkAltText(scoped.pkg));
   checks.push(checkLeftoversInText(scoped.pkg, scoped.course));

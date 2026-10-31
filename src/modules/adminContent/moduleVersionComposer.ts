@@ -49,6 +49,9 @@ export interface ComposeModuleVersionInput {
   assessmentMode?: "FREETEXT_PLUS_MCQ" | "MCQ_ONLY" | "FREETEXT_ONLY";
   taskText?: LocalizedText;
   assessorExpectedContent?: LocalizedText;
+  /** #1124 del 2: eksempelsvaret, vist deltakeren etter vurderingen når modulen slår det på. Utelatt =
+   *  som forrige versjon (en eldre fane kjenner ikke feltet og skal ikke slette det); `null` = tøm det. */
+  modelAnswer?: LocalizedText | null;
   candidateTaskConstraints?: LocalizedText;
   assessmentBlueprint?: string;
   /** Creates a new RubricVersion. Omit to reuse the module's active rubric. */
@@ -207,11 +210,20 @@ export async function composeModuleVersion(input: ComposeModuleVersionInput, exi
         }, tx)
       : null;
 
+    // #1124 del 2: utelatt = som forrige versjon. `null` (tøm) går gjennom `serialize`, som gir ingen
+    // verdi — den nye versjonen lagres da uten eksempelsvar.
+    const modelAnswer = isMcqOnly
+      ? undefined
+      : input.modelAnswer !== undefined
+        ? serialize(input.modelAnswer ?? undefined)
+        : (await createAdminContentRepository(tx).findLatestModelAnswer(input.moduleId)) ?? undefined;
+
     const moduleVersion = await createModuleVersion({
       moduleId: input.moduleId,
       assessmentMode: input.assessmentMode,
       taskText: isMcqOnly ? undefined : serialize(input.taskText),
       assessorExpectedContent: isMcqOnly ? undefined : serialize(input.assessorExpectedContent),
+      modelAnswer,
       candidateTaskConstraints: isMcqOnly ? undefined : serialize(input.candidateTaskConstraints),
       assessmentBlueprint: input.assessmentBlueprint,
       // A freshly created component wins over an id the caller passed for the same slot.
