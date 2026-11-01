@@ -57,7 +57,10 @@ Hver bruker har sin egen maskot. Den bor øverst i «Mine kurs».
   rors **akterut til høyre**, så baugen peker mot venstre — og A-en blir dermed speilvendt i forhold til
   logoen. A trenger vind (erfaringspoeng); 2 bærer humøret. Sulten = stille vær, slakt seil, 2 henger over
   rorkulten. **Vekst vises bare med størrelse** — samme båt, større. Fargene er portalens, pluss logoens
-  skifer på skrog og 2. Karakterarket står i skissen; beskrivelser til bildegenerering i
+  skifer på skrog og 2. Seilet er like stort i alle humør; formen forteller (bukt, flatt, faller inn med
+  rynker, henger i folder med bommen sigende). Ingen vimpel (medvind); vindstriper bak ved mett humør viser
+  at båten går fremover. **Karakterark v2 er låst som førsteutkast** (produkteier 2026-11-01); endelig
+  uttrykk krever illustrasjonsarbeid, og vi går videre med resten av utformingen. Karakterarket står i skissen; beskrivelser til bildegenerering i
   `doc/design/MASKOT_BESKRIVELSER.md`.
 - **Navn:** åpent. Brukeren kan gi sin egen båt et navn, som båteiere gjør.
 
