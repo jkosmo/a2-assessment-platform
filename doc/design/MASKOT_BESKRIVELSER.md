@@ -95,12 +95,15 @@ retninger bygger videre på det som er godt i de to: seilet som vind og fremdrif
 
 ### 3 · Seilet A og rorsmann 2 — de to slått sammen
 
-Justert av produkteier: 2-tallet sitter til rors, fordi A er seilet.
+Justert av produkteier: 2-tallet sitter til rors, fordi A er seilet — og til **høyre**, som i logoen der
+«2» står til høyre for A-ens rette strek. Baugen peker mot venstre.
 
-> Mascots "Seilet A og rorsmann 2": a small, chubby sailboat with a slate-blue hull. Its single white sail
-> is the sail-shaped letter A from the logo, and the sail has a calm, wise face — that is A. At the stern
-> sits a small, round, slate-blue helmsman shaped like the number 2, wearing a dark skipper's cap and
-> holding a brass tiller that steers the rudder. The 2 is very expressive and always reacts to the weather;
+> Mascots "Seilet A og rorsmann 2": a small, chubby sailboat seen from the side, bow pointing LEFT, stern on
+> the RIGHT, slate-blue hull. Its single white sail is the sail-shaped letter A from the logo, curved edge
+> toward the bow (left), straight edge along the mast — exactly as in the logo — and the sail has a calm,
+> wise face — that is A. At the stern on the RIGHT, to the right of the mast, as the "2" sits to the right
+> of the A in the logo, sits a small, round, slate-blue helmsman shaped like the number 2, wearing a dark
+> skipper's cap and holding a brass tiller that steers the rudder at the right end of the boat. The 2 is very expressive and always reacts to the weather;
 > A only needs wind. When the boat is fed, wind fills the sail and the 2 steers proudly; when hungry, the
 > sail hangs slack and the 2 slumps over the tiller.
 
