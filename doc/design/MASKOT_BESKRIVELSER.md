@@ -106,7 +106,7 @@ blir dermed speilvendt i forhold til logoen. Vekst vises bare med størrelse.
 > crossbar is a sail batten. No jib, no other sails. The sail has a calm, wise face — that is A. At the stern
 > on the RIGHT sits a small, round, slate-blue helmsman shaped like the number 2, wearing a dark skipper's
 > cap and holding a brass tiller that steers the rudder at the right end of the boat. Wind comes from
-> behind, so the brass pennant at the masthead points forward (left). The 2 is very expressive and always reacts to the weather;
+> behind. No pennant, no flag. The 2 is very expressive and always reacts to the weather;
 > A only needs wind. When the boat is fed, wind fills the sail and the 2 steers proudly; when hungry, the
 > sail hangs slack and the 2 slumps over the tiller.
 
