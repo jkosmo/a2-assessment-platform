@@ -51,12 +51,14 @@ Hver bruker har sin egen maskot. Den bor øverst i «Mine kurs».
 - **Tonen:** skyld og humor, aldri skam. «Jeg har begynt å spise på kontorplanten.» «Jeg vet du har
   det travelt. Jeg har det også travelt. Med å sulte.» Maskoten vet aldri noe om timeføring,
   prosjekter eller kalender — den kjenner bare kursene.
-- **Valgt retning (produkteier 2026-11-01): «Seilet A og rorsmann 2»** — en liten skute bygd på
-  A-2-logoen. Seil-A-en er seilet (buet forkant mot baugen til venstre, rett akterkant langs masta, som
-  i logoen), og lille 2 sitter akterut til høyre, som «2» i logoen, og styrer med rorkulten. A trenger
-  vind (erfaringspoeng); 2 bærer humøret. Sulten = stille vær, slakt seil, 2 henger over rorkulten.
-  Vekststadier: jolle → skute → skonnert. Karakterarket står i skissen; beskrivelser til
-  bildegenerering i `doc/design/MASKOT_BESKRIVELSER.md`.
+- **Valgt retning (produkteier 2026-11-01): «Storseilet A og rorsmann 2»** — en liten båt bygd på
+  A-2-logoen, med **ett storseil og ingen andre seil**. Storseilet står akter for masta: forliket (den
+  rette kanten) langs masta, akterliket (den buede) bakover, bommen langs underliket. Lille 2 sitter til
+  rors **akterut til høyre**, så baugen peker mot venstre — og A-en blir dermed speilvendt i forhold til
+  logoen. A trenger vind (erfaringspoeng); 2 bærer humøret. Sulten = stille vær, slakt seil, 2 henger over
+  rorkulten. **Vekst vises bare med størrelse** — samme båt, større. Fargene er portalens, pluss logoens
+  skifer på skrog og 2. Karakterarket står i skissen; beskrivelser til bildegenerering i
+  `doc/design/MASKOT_BESKRIVELSER.md`.
 - **Navn:** åpent. Brukeren kan gi sin egen båt et navn, som båteiere gjør.
 
 ### 3. Felles mål — hele firmaet forer én stor maskot
