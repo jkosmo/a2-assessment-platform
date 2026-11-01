@@ -18,6 +18,7 @@ import {
 import { initConsentGuard } from "/static/consent-guard.js";
 import { setHidden } from "/static/dom-visibility.js";
 import { runWithWorkDialog } from "/static/work-dialog.js";
+import { runWithBusyButton } from "/static/busy-button.js";
 import {
   resolveWorkspaceNavigationItems,
 } from "/static/participant-console-state.js";
@@ -702,6 +703,15 @@ function initPendingPublishDialog() {
 // #1046: lista er den felles listesida (list-page.js). Her ligger bare oppskriften for kurs.
 let listPage = null;
 
+/** Temaene kursene i lista har, én gang hver, alfabetisk på leserens språk. */
+function courseThemesInList(courses) {
+  const seen = new Map();
+  for (const course of courses) {
+    for (const theme of course.themes ?? []) if (theme?.id && !seen.has(theme.id)) seen.set(theme.id, { id: theme.id, name: theme.name ?? theme.id });
+  }
+  return [...seen.values()].sort((a, b) => a.name.localeCompare(b.name, currentLocale, { numeric: true, sensitivity: "base" }));
+}
+
 function courseRowModel(course) {
   return deriveCourseListRows([course], { localizeTitle: localizedText, formatDate })[0];
 }
@@ -732,11 +742,24 @@ function getListPage() {
     sort: { key: "title", dir: "asc", locale: () => currentLocale },
     // 2.102.0: filter på tema, med samme velger som kursfilteret på Moduler og Seksjoner.
     courseFilter: { coursesOf: (c) => (c.themes ?? []).map((theme) => ({ id: theme.id, title: theme.name })) },
+    // 2.126.0: etter tema eller alfabetisk, som «Mine kurs» (produkteier 2026-11-01). Temaene står
+    // alfabetisk på leserens språk; kurs uten tema samles sist.
+    grouping: {
+      groups: () => courseThemesInList(listPage?.items ?? []),
+      groupsOf: (c) => c.themes ?? [],
+      texts: () => ({
+        label: t("courses.view.label"), byGroup: t("courses.view.byTheme"), alphabetical: t("courses.view.alphabetical"),
+        other: t("courses.view.noTheme"),
+        count: (n) => (n === 1 ? t("courses.view.countOne") : tf("courses.view.countMany", { n })),
+      }),
+    },
     columns: [
       // #1094: plasseringen i «Mine kurs» som merke ved navnet — forfatteren slipper å åpne hvert kurs
       // for å se den. Et merke, ikke en kolonne: lista skal ikke bli bredere enn ramma (#1084).
-      { key: "title", label: t("ui.name"), className: "col-title", sortValue: (c) => courseRowModel(c).title, render: (c) => escapeHtml(courseRowModel(c).title)
-        + (Number.isInteger(c.sortOrder) ? ` <span class="status-chip course-placement-chip" title="${escapeHtml(t("courses.sortOrder"))}">${escapeHtml(tf("courses.list.placement", { n: c.sortOrder }))}</span>` : "") },
+      { key: "title", label: t("ui.name"), className: "col-title", sortValue: (c) => courseRowModel(c).title, render: (c, { view }) => escapeHtml(courseRowModel(c).title)
+        + (Number.isInteger(c.sortOrder) ? ` <span class="status-chip course-placement-chip" title="${escapeHtml(t("courses.sortOrder"))}">${escapeHtml(tf("courses.list.placement", { n: c.sortOrder }))}</span>` : "")
+        // Alfabetisk står temaene under navnet; etter tema sier overskriften det.
+        + (view === "alphabetical" && (c.themes ?? []).length > 0 ? `<span class="list-group-themes">${escapeHtml(c.themes.map((theme) => theme.name).join(" · "))}</span>` : "") },
       { key: "status", label: t("ui.status"), className: "col-status", render: (c) => lifecycleBadge(c, t) },
       { key: "level", label: t("ui.certLevel"), className: "col-level", render: (c) => certBadge(c.certificationLevel) },
       { key: "moduleCount", label: t("courses.col.moduleCount"), className: "col-module-count", sortValue: (c) => c.moduleCount ?? 0, render: (c) => String(c.moduleCount ?? 0) },
@@ -807,7 +830,23 @@ async function renderListView() {
 
 // #433 phase 4b — course export download. Calls /export-package and saves the
 // versioned envelope as a JSON file the destination environment can import.
-async function exportCoursePackage(courseId, courseTitle) {
+// Pakka bygges på tjeneren og tar noen sekunder for et stort kurs; knappen viser at den jobber
+// (produkteier 2026-11-01: «det går 2–3 sekunder før noe skjer»).
+// Etter tema står et kurs med flere tema én gang per tema, med hver sin knapp. Låsen gjelder kurset,
+// ikke knappen: alle kursets eksportknapper er opptatt til fila er lastet ned.
+const exportingCourses = new Set();
+function exportCoursePackage(courseId, courseTitle, btn) {
+  if (exportingCourses.has(courseId)) return Promise.resolve();
+  exportingCourses.add(courseId);
+  const siblings = [...document.querySelectorAll(`[data-action="export"][data-course-id="${CSS.escape(courseId)}"]`)].filter((b) => b !== btn);
+  for (const b of siblings) { b.disabled = true; b.setAttribute("aria-busy", "true"); }
+  return runWithBusyButton(btn, () => downloadCoursePackage(courseId, courseTitle)).finally(() => {
+    exportingCourses.delete(courseId);
+    for (const b of siblings) { b.disabled = false; b.removeAttribute("aria-busy"); }
+  });
+}
+
+async function downloadCoursePackage(courseId, courseTitle) {
   try {
     const body = await apiFetch(`/api/admin/content/courses/${encodeURIComponent(courseId)}/export-package`, getHeaders);
     const envelope = body?.envelope ?? null;
@@ -823,7 +862,7 @@ async function exportCoursePackage(courseId, courseTitle) {
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
-    showToast(`Kurs «${courseTitle}» er eksportert.`);
+    showToast(tf("courses.exported", { title: courseTitle }));
   } catch (error) {
     const described = describeApiError(error, t);
     showToast(tf("adminContent.courses.exportFailed", { reason: described.headline }), "error", described.detail);
@@ -982,7 +1021,7 @@ function handleListTableClick(event, btn = event.target.closest("[data-action]")
     return;
   }
   if (btn.dataset.action === "export") {
-    exportCoursePackage(btn.dataset.courseId, btn.dataset.courseTitle);
+    exportCoursePackage(btn.dataset.courseId, btn.dataset.courseTitle, btn);
     return;
   }
   if (btn.dataset.action === "publish-pending") {

@@ -25,6 +25,7 @@ import { describeImportError } from "/static/import-error.js";
 import { describeCueWarnings, describeRubricWarnings } from "/static/mcq-cue-warnings.js";
 import { describeApiError } from "/static/api-error.js";
 import { queueToast, showToast } from "/static/toast.js";
+import { runWithBusyButton } from "/static/busy-button.js";
 import { runWithWorkDialog } from "/static/work-dialog.js";
 import { renderWorkspaceNavigationWithProfile } from "./workspace-nav.js";
 import {
@@ -398,8 +399,11 @@ async function deleteModuleFromRow(moduleId, moduleTitle, btn) {
 // and downloads the envelope as JSON. Mirrors the course-list "Eksporter"
 // behavior so authors have a consistent surface for both module + course
 // portability without having to enter the advanced editor.
-async function exportModulePackage(moduleId, moduleTitle, btn) {
-  btn.disabled = true;
+function exportModulePackage(moduleId, moduleTitle, btn) {
+  return runWithBusyButton(btn, () => downloadModulePackage(moduleId, moduleTitle));
+}
+
+async function downloadModulePackage(moduleId, moduleTitle) {
   try {
     const body = await apiFetch(`/api/admin/content/modules/${encodeURIComponent(moduleId)}/export-package`, getHeaders);
     const envelope = body?.envelope ?? null;
@@ -415,12 +419,10 @@ async function exportModulePackage(moduleId, moduleTitle, btn) {
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
-    showToast(`Modul «${moduleTitle}» er eksportert.`);
+    showToast(tf("library.exported", { title: moduleTitle }));
   } catch (err) {
     const msg = apiErrorText(err);
     showToast(tf("adminContent.library.exportFailed", { reason: msg }), "error");
-  } finally {
-    btn.disabled = false;
   }
 }
 

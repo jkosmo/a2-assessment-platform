@@ -217,7 +217,9 @@ export function createFormPage(config) {
     // Lenker som forlater sida (toppmeny, nivå to, tilbake): spør først når noe er ulagret.
     document.addEventListener("click", (event) => {
       const a = event.target instanceof Element ? event.target.closest("a[href]") : null;
-      if (!a || a.target === "_blank" || a.getAttribute("href")?.startsWith("#")) return;
+      // 2.126.0: en nedlastingslenke forlater ikke sida. Eksporten laster ned med en slik lenke, og
+      // forfatteren med ulagrede endringer fikk spørsmålet to ganger — avbrøt hen det andre, kom ingen fil.
+      if (!a || a.target === "_blank" || a.hasAttribute("download") || a.getAttribute("href")?.startsWith("#")) return;
       if (!confirmLeave()) { event.preventDefault(); event.stopPropagation(); }
     }, true);
   }

@@ -90,7 +90,12 @@ export function sanitizeWorkspaceNavigationItems(value) {
       )
       : [];
 
-    items.push({ id, path, labelKey, requiredRoles });
+    // 2.126.0: områdets andre adresser, så punktet er markert på alle sidene i området.
+    const areaPaths = Array.isArray(item.areaPaths)
+      ? item.areaPaths.filter((p) => typeof p === "string" && p.startsWith("/")).map((p) => p.trim())
+      : [];
+
+    items.push({ id, path, labelKey, requiredRoles, ...(areaPaths.length > 0 ? { areaPaths } : {}) });
     uniqueIds.add(id);
   }
 
@@ -114,6 +119,18 @@ function normalizePath(pathValue) {
   }
 
   return withoutQuery;
+}
+
+// 2.126.0 (produkteier 2026-11-01: «det bør uansett være tydelig hvor man er»): toppmenyen markerte
+// bare punktet når adressen var NØYAKTIG lenkas. Innholdsforvaltning lenker til /admin-content/courses,
+// så Moduler, Tema, Seksjoner og et åpent kurs viste ingen markering; det samme gjaldt Fullførte,
+// Manuell behandling og Resultater. Et punkt er nå markert på lenka, på sidene under den, og på
+// adressene området oppgir i `areaPaths`.
+function isInArea(normalizedPath, paths) {
+  return paths.some((p) => {
+    const area = normalizePath(p);
+    return Boolean(area) && (normalizedPath === area || normalizedPath.startsWith(`${area}/`));
+  });
 }
 
 export function resolveWorkspaceNavigationItems(navigationItems, rolesValue, currentPath, fallbackItems = []) {
@@ -140,7 +157,7 @@ export function resolveWorkspaceNavigationItems(navigationItems, rolesValue, cur
     return {
       ...item,
       visible,
-      active: normalizePath(item.path) === normalizedPath,
+      active: isInArea(normalizedPath, [item.path, ...(item.areaPaths ?? [])]),
     };
   });
 }
@@ -251,6 +268,35 @@ export function upsertModuleDraft(moduleDrafts, moduleId, draftData, nowMs = Dat
     .slice(0, Math.max(1, Number(maxModules) || 30));
 
   return Object.fromEntries(ordered);
+}
+
+/** Vurderingen er ferdig nok til at resultatet kan vises (også mens en sensor ser på den). */
+export function isAssessmentResultReady(status) {
+  const normalized = typeof status === "string" ? status.toUpperCase() : "";
+  return normalized === "COMPLETED" || normalized === "UNDER_REVIEW" || normalized === "SCORED";
+}
+
+/**
+ * 2.126.0 (produkteier 2026-11-01): «Man bør ha mulighet for å kunne senere anke på et resultat, det
+ * bør ikke være en beslutning man må ta der og da.» Før ble modulen nullstilt hver gang den ble åpnet:
+ * forrige resultat ble ikke lastet, anke-knappen kom aldri, og en flervalgsmodul startet et nytt forsøk
+ * med en gang. Den eneste veien til en senere anke var «Fullførte»-siden.
+ *
+ * Nå vises siste resultat når modulen åpnes — UNNTATT når deltakeren har begynt på et nytt forsøk:
+ * en kladd med innhold som ikke er det leverte svaret. En kladd lagret mens et svar var levert, bærer
+ * id-en til det svaret (`submittedAs`); er den lik siste innlevering, er kladden bare restene av den.
+ * En kladd uten merket (lagret før 2.126.0) regnes som et nytt forsøk — som før.
+ *
+ * @returns {string | null} innleveringen hvis resultat skal vises
+ */
+export function earlierResultToShow(participantStatus, draft, draftIsMeaningful) {
+  const submissionId = participantStatus?.latestSubmissionId;
+  // REJECTED er et endelig utfall (SETTLED_STATUSES i /static/outcome.js), selv om ingen kodesti skriver
+  // den i dag — et avvist svar skal heller ikke gi et nytt forsøk av seg selv.
+  const status = typeof participantStatus?.latestStatus === "string" ? participantStatus.latestStatus.toUpperCase() : "";
+  if (typeof submissionId !== "string" || !submissionId || !(isAssessmentResultReady(status) || status === "REJECTED")) return null;
+  if (draftIsMeaningful && draft?.submittedAs !== submissionId) return null;
+  return submissionId;
 }
 
 export function deriveParticipantFlowGateState(flowState, options = {}) {

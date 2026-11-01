@@ -77,8 +77,8 @@ URLs; only Klasser moved (from `/admin-content/classes`).
 
 | Route | Workspace |
 |---|---|
-| `/participant` | «Mine kurs» → **Pågående**-fane: deltakerens kurs + innleveringsflyt (#767) |
-| `/participant/completed` | «Mine kurs» → **Fullførte**-fane: kursbevis + fullførte moduler (#767) |
+| `/participant` | «Mine kurs»: deltakerens kurs, kursbevis og innleveringsflyt; siste resultat og anke i modulen (#767, 2.126.0) |
+| `/participant/completed` | 301 → `/participant` (2.126.0: «Fullførte» fjernet; kursbevis står på kurskortet, anke i modulen) |
 | `/certificate?id=<certificateId>` | Printable course certificate view (#550) |
 | `/deltakere/klasser` | Classes (cohorts) admin — list, create, members, course assignment (#645/CL-3; moved here in #765) |
 | `/deltakere/status` | Teacher/SMO cohort-status dashboard — enrollment status counts per course (#498) |

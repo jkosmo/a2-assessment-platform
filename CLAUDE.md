@@ -343,7 +343,7 @@ the fix landed in the one code path in the screenshot, while sibling paths produ
 1. **Enumerate every entry point and every surface before coding.** A behaviour usually appears in
    more than one place. Module creation has **two** entries (the library "create module" dialog
    `#348` → conversation regen, AND the conversation idle "new module"); a course certificate shows
-   in **three** places (result banner, `/participant/completed`, `/profile`). **First check
+   in **three** places (the course card in «Mine kurs», `/profile`, the printable `/certificate`). **First check
    `doc/FEATURE_SURFACE_MAP.md`** — it catalogues the known distributed behaviours with every
    surface + guard test. If the behaviour is there, change all listed surfaces in the same PR; if
    not, `grep` the feature name / i18n label across **all** pages, fix them together, and **add the

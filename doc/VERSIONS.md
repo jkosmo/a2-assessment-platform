@@ -2,6 +2,76 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.126.0 - 2026-11-01
+
+Produkteier 2026-11-01: «Kurslisten under Innholdsforvaltning bør tilpasses til å være mer lik den som er
+under "Mine kurs" … det bør uansett være tydelig hvor man er.» Skissen ble godkjent før noe ble bygget.
+
+### Kurslista i innholdsforvaltningen: etter tema eller alfabetisk
+
+Samme valg som i «Mine kurs», til høyre i filterraden. Etter tema er det én tabell med en overskrift per
+tema og antall kurs, så kolonnene står likt i alle gruppene. Reglene er de samme som i «Mine kurs»: et kurs
+med flere tema står under hvert av dem, kurs uten tema står sist («Kurs uten tema»), og et tema uten treff
+vises ikke. Sortering på en kolonne gjelder innad i hvert tema. Alfabetisk står temaene med liten skrift
+under kursnavnet. Valget huskes i nettleseren, og vises ikke når ingen kurs har tema.
+
+Grupperingen ligger i den felles listesida (`list-page.js`, `grouping`), så Moduler og Seksjoner kan få den
+uten en kopi. Stilen for valget er flyttet fra `participant.html` til `shared.css` — én regel for begge.
+
+### Toppmenyen markerer området du står i
+
+Menyen markerte bare punktet når adressen var nøyaktig lenkas. Innholdsforvaltning lenker til
+`/admin-content/courses`, så på Moduler, Tema, Seksjoner, Vurderingskvalitet og inne i et kurs var ingenting
+markert — det samme gjaldt Manuell behandling og Resultater under Deltakere. Et punkt er nå markert på
+lenka, sidene under den og adressene området oppgir (`areaPaths`). Testen leser sidene appen serverer fra
+`src/app.ts` og krever nøyaktig ett markert punkt på hver side med toppmeny, så en ny side uten område blir
+rød der.
+
+### Senere anke: modulen viser siste resultat når den åpnes
+
+Produkteier: «Man bør ha mulighet for å kunne senere anke på et resultat, det bør ikke være en beslutning
+man må ta der og da. Men å anke på en modul eller kurs man har bestått gir ingen mening.»
+
+Før ble modulen nullstilt hver gang den ble åpnet: forrige resultat ble ikke lastet, anke-knappen kom
+aldri, og en flervalgsmodul startet et nytt forsøk med en gang — også rett etter et stryk. Den eneste veien
+til en senere anke var «Fullførte»-siden.
+
+Nå vises siste resultat slik det så ut rett etter vurderingen: det leverte svaret (skrivebeskyttet),
+resultatet, «Prøv igjen», og anke-knappen ved et avgjort stryk. Bestått gir ingen anke og ingen ny konfetti.
+Unntaket er når deltakeren har begynt på et nytt forsøk (en kladd med innhold som ikke er det leverte
+svaret); da vises kladden som før. En kladd lagret mens et svar var levert, merkes med innleveringen, så
+restene av det leverte svaret ikke forveksles med et nytt forsøk. Kladder fra før 2.126.0 har ikke merket
+og regnes som et nytt forsøk — som før. Kladdene lever i 4 timer.
+
+### «Fullførte» er fjernet
+
+Fanen viste kursbevis — som «Mine kurs» allerede viser på det fullførte kurset — og modulresultater med
+anke, som nå ligger i modulen. «Pågående» var dessuten feil navn på en liste som også har de fullførte
+kursene. `/participant/completed` videresender til `/participant` (301), fordi adressen står i bokmerker.
+`/api/modules/completed` blir stående: profilsiden bruker den.
+
+### Eksport viser at den jobber
+
+Eksport av kurs, modul og seksjon bygger pakka på tjeneren, og et stort kurs tar 2–3 sekunder. Knappen ga
+ingen tegn til at noe skjedde (kurs), eller ble bare låst (modul og seksjon). Nå bruker alle tre den felles
+opptatt-knappen (`runWithBusyButton`), og et nytt klikk mens den jobber starter ingen ny eksport. Et kurs som
+står under flere tema, har én knapp per tema; låsen gjelder kurset. Meldingen «… er eksportert» sto på bokmål
+uansett språk; nå følger den språket.
+
+Med ulagrede endringer i skjemaet fikk forfatteren spørsmålet «forlate sida?» **to** ganger ved eksport: den
+usynlige nedlastingslenka eksporten klikker på, ble tatt for en lenke som forlater sida. Avbrøt hen det andre
+spørsmålet, kom ingen fil. Vakta i `form-page.js` lar nå nedlastingslenker passere. Funnet fordi en test ble
+rød bare under full last — den andre dialogen kolliderte med at testen lukket sida.
+
+### Etter QA-porten (to runder)
+
+- Mens forrige resultat hentes, er «Opprett innlevering» låst, og kladden lagres ikke — ellers kunne et nytt
+  forsøk startes, eller et bytte av modul slette merket så resultatet forsvant.
+- Flervalgsgjennomgangen og eksempelsvaret hentes i bakgrunnen; bytter deltakeren modul før de kommer, vises
+  de ikke under feil modul.
+- Har modulen fått nytt svarskjema siden svaret ble levert, står svaret i det første feltet.
+- En avvist innlevering (`REJECTED`) regnes som et resultat, som i resten av utfallsreglene.
+
 ## 2.125.1 - 2026-10-31
 
 ### Skillet: `:::feil` på alle språk — #1123

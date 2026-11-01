@@ -65,9 +65,6 @@ function resolvePublicFile(requestPath) {
   if (requestPath === "/participant") {
     return path.join(publicRoot, "participant.html");
   }
-  if (requestPath === "/participant/completed") {
-    return path.join(publicRoot, "participant-completed.html");
-  }
   if (requestPath === "/certificate") {
     return path.join(publicRoot, "certificate.html");
   }

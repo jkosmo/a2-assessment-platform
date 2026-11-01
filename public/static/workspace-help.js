@@ -182,7 +182,6 @@ function resolveHelpContext(location) {
   const path = location.pathname ?? "";
   const query = new URLSearchParams(location.search ?? "");
 
-  if (path === "/participant/completed") return "participant-completed";
   if (path === "/participant") return "participant";
   if (path === "/review") return "review";
   if (path === "/calibration") return "calibration";

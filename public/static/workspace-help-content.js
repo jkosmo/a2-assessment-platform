@@ -147,6 +147,7 @@ const workspaceContent = {
           items: [
             "For written modules, only the assignment text is shown to you. Assessment guidance stays with the evaluators.",
             "Once a submission is created, your answer is kept visible in read mode.",
+            "You do not have to appeal at once. Open the module again later: your latest result is shown, and a failed one can be appealed from there.",
           ],
         },
       ],
@@ -164,6 +165,7 @@ const workspaceContent = {
           items: [
             "For skriftlige moduler ser du bare oppgaveteksten. Vurderingsveiledningen er skjult for deltaker.",
             "Når innleveringen er opprettet, vises svaret ditt videre i lesemodus.",
+            "Du trenger ikke anke med en gang. Åpner du modulen igjen senere, vises siste resultat, og et stryk kan ankes derfra.",
           ],
         },
       ],
@@ -181,71 +183,7 @@ const workspaceContent = {
           items: [
             "For skriftlege modular ser du berre oppgåveteksten. Vurderingsrettleiinga er skjult for deltakar.",
             "Når innleveringa er oppretta, blir svaret ditt vidare vist i lesemodus.",
-          ],
-        },
-      ],
-    },
-  },
-  "participant-completed": {
-    title: {
-      "en-GB": "Completed modules and courses",
-      nb: "Fullførte moduler og kurs",
-      nn: "Fullførte modular og kurs",
-    },
-    summary: {
-      "en-GB": "Use this page to review what you have completed, see course certificates, and submit appeals on finished results.",
-      nb: "Bruk denne siden til å se hva du har fullført, finne kursbevis og sende anke på ferdige resultater.",
-      nn: "Bruk denne sida til å sjå kva du har fullført, finne kursbevis og sende klage på ferdige resultat.",
-    },
-    sections: {
-      "en-GB": [
-        {
-          title: "What to do here",
-          items: [
-            "Load completed modules to see latest status, score, and appeal state.",
-            "Use the appeal area when you need a new review of a finished result.",
-            "Certificates for completed courses are listed lower on the page.",
-          ],
-        },
-        {
-          title: "Good to know",
-          items: [
-            "This page is for finished items. New submissions start in Participant.",
-            "The latest course certificate details are also shown in Profile.",
-          ],
-        },
-      ],
-      nb: [
-        {
-          title: "Dette gjør du her",
-          items: [
-            "Last inn fullførte moduler for å se siste status, skår og ankestatus.",
-            "Bruk ankeområdet når du trenger ny vurdering av et ferdig resultat.",
-            "Kursbevis for fullførte kurs vises lenger ned på siden.",
-          ],
-        },
-        {
-          title: "Greit å vite",
-          items: [
-            "Denne siden er for ferdige saker. Nye innleveringer starter i Deltaker.",
-            "Siste opplysninger om kursbevis vises også i Profil.",
-          ],
-        },
-      ],
-      nn: [
-        {
-          title: "Dette gjer du her",
-          items: [
-            "Last inn fullførte modular for å sjå siste status, skår og klagestatus.",
-            "Bruk klageområdet når du treng ny vurdering av eit ferdig resultat.",
-            "Kursbevis for fullførte kurs blir viste lenger nede på sida.",
-          ],
-        },
-        {
-          title: "Greitt å vite",
-          items: [
-            "Denne sida er for ferdige saker. Nye innleveringar startar i Deltakar.",
-            "Siste opplysningar om kursbevis blir også viste i Profil.",
+            "Du treng ikkje klage med ein gong. Opnar du modulen att seinare, blir siste resultat vist, og eit stryk kan du klage på derifrå.",
           ],
         },
       ],

@@ -42,7 +42,6 @@ export default defineConfig({
       "test/admin-content-translations.test.js",
       "test/participant-translations.test.js",
       "test/calibration-translations.test.js",
-      "test/participant-completed-translations.test.js",
       "test/workspace-html-fallbacks.test.js",
       "test/workspace-help-contracts.test.js",
       "test/workspace-validation-accessibility.test.js",

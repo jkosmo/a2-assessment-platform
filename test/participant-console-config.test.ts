@@ -138,12 +138,12 @@ describe("participant console runtime config", () => {
     expect(response.headers.location).toBe("/admin-content/calibration");
   });
 
-  it("serves dedicated participant completed-modules page", async () => {
+  // 2.126.0: «Fullførte» er fjernet. Adressen står i bokmerker, så den videresender til «Mine kurs».
+  it("redirects the retired completed page to My courses", async () => {
     const response = await request(app).get("/participant/completed");
 
-    expect(response.status).toBe(200);
-    expect(response.text).toContain("participant-completed.js");
-    expect(response.text).toContain('id="courseCertSection"');
+    expect(response.status).toBe(301);
+    expect(response.headers.location).toBe("/participant");
   });
 
   it("serves profile page with completed courses section", async () => {
@@ -240,7 +240,6 @@ describe("participant console runtime config", () => {
   it("serves shared stylesheet and links it from all workspace pages", async () => {
     const workspacePages = [
       "/participant",
-      "/participant/completed",
       "/review",
       // #896 S3c: /admin-content/module/:id/advanced was in this loop as "the full editor that
       // retains the mock-identity panel". The page is deleted and the route is a 301, so every
@@ -305,12 +304,6 @@ describe("participant console runtime config", () => {
         expect(response.text).toContain('id="outputStatus"');
         expect(response.text).toContain('id="previewModeBanner"');
         expect(response.text).not.toContain('id="historySection"'); // #767: removed (overlapped with Fullførte)
-      }
-
-      if (pagePath === "/participant/completed") {
-        expect(response.text).toContain('id="outputStatus"');
-        expect(response.text).not.toContain('id="flowProgress"');
-        expect(response.text).toContain('id="courseCertSection"');
       }
 
     }
@@ -423,12 +416,6 @@ describe("participant console runtime config", () => {
     // The composed save (#906) — one call, one transaction. It replaced the five-call sequence,
     // and a regression to separate calls is exactly what this file is positioned to catch.
     expect(adminContentShellResponse.text).toContain("commitOrProposeGenerated");
-
-    const participantCompletedJsResponse = await request(app).get("/static/participant-completed.js");
-    expect(participantCompletedJsResponse.status).toBe(200);
-    expect(participantCompletedJsResponse.text).toContain('/api/courses/completions');
-    expect(participantCompletedJsResponse.text).toContain('courseCertList');
-    expect(participantCompletedJsResponse.text).toContain('renderCourseCertificates');
 
     const profileJsResponse = await request(app).get("/static/profile.js");
     expect(profileJsResponse.status).toBe(200);

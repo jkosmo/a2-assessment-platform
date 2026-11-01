@@ -99,24 +99,6 @@ const FLATER: Flate[] = [
     ekstra: [{ mønster: "**/api/modules/completed**", svar: { modules: [] } }],
   },
   {
-    navn: "fullførte moduler",
-    rute: "/participant/completed",
-    roller: [],
-    beholder: "#courseCertList",
-    tekst: { nb: "Viderekommen", "en-GB": "Advanced" },
-    data: [{
-      mønster: "**/api/courses/completions**",
-      svar: (locale) => ({
-        completions: [{
-          courseId: "c-1", certificateId: "cert-1", completedAt: "2026-08-01T10:00:00.000Z",
-          courseTitle: locale === "nb" ? "Endringsledelse" : "Change management",
-          certificationLevel: locale === "nb" ? "Viderekommen" : "Advanced",
-        }],
-      }),
-    }],
-    ekstra: [{ mønster: "**/api/modules/completed**", svar: { modules: [] } }],
-  },
-  {
     navn: "resultatsiden",
     rute: "/results",
     roller: ["REPORT_READER"],

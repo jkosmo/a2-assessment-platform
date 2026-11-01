@@ -276,7 +276,8 @@ Enkeltmodul X  →
 
 ### Kursbevis
 
-Vises automatisk i `/participant/completed` etter at siste modul er bestått.
+Vises automatisk på kurskortet i «Mine kurs» (og i Profil) etter at siste modul er bestått. Fram til
+2.126.0 sto det også på `/participant/completed`, som er fjernet.
 Ingen ny navigasjonsflate — deltakeren oppdager det naturlig.
 
 ---

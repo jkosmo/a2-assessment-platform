@@ -28,7 +28,6 @@ async function mock(page: Page, locale: string) {
 
 const SIDER: Array<[string, Record<string, string>]> = [
   ["/participant", { nb: "Mine kurs", nn: "Kursa mine", "en-GB": "My courses" }],
-  ["/participant/completed", { nb: "Fullførte moduler", nn: "Fullførte modular", "en-GB": "Completed modules" }],
   ["/profile", { nb: "Profil", nn: "Profil", "en-GB": "Profile" }],
   ["/review", { nb: "Manuell behandling", nn: "Manuell handsaming", "en-GB": "Manual review" }],
   ["/results", { nb: "Resultater", nn: "Resultat", "en-GB": "Results" }],

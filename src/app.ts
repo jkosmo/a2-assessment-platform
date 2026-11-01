@@ -141,8 +141,11 @@ app.get("/kurs/:slug", (request, response) => {
   response.redirect(302, `/participant?kurs=${encodeURIComponent(request.params.slug)}`);
 });
 
+// 2.126.0: «Fullførte» er fjernet (produkteier 2026-11-01). «Mine kurs» viser de fullførte kursene
+// med kursbeviset, og en modul viser siste resultat — med anke ved stryk — når den åpnes. Adressen
+// svarer fortsatt, som en permanent videresending, fordi den står i bokmerker.
 app.get("/participant/completed", (_request, response) => {
-  response.sendFile(path.resolve(process.cwd(), "public", "participant-completed.html"));
+  response.redirect(301, "/participant");
 });
 
 // #550: printable course certificate view (reads ?id=<certificateId>).

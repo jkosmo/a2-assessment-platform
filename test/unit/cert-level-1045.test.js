@@ -113,7 +113,7 @@ describe("#1045 — de tre eldre nøkkelfamiliene er enige med basen", () => {
 
   it("⚠️ ingen flate bygger sitt eget oppslag lenger", () => {
     // Fire flater hadde hver sin. Er én tilbake, er vi på vei mot fire igjen.
-    const filer = ["../../public/profile.js", "../../public/participant.js", "../../public/participant-completed.js", "../../public/certificate.js"];
+    const filer = ["../../public/profile.js", "../../public/participant.js", "../../public/certificate.js"];
     const avvik = [];
     for (const f of filer) {
       const kilde = les(f);

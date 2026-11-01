@@ -771,7 +771,7 @@ These URLs are not role-gated by Express itself; access is enforced by the authe
 | URL | Primary capability roles |
 |---|---|
 | `/participant` | PARTICIPANT, ADMINISTRATOR, REVIEWER |
-| `/participant/completed` | PARTICIPANT, ADMINISTRATOR, REVIEWER |
+| `/participant/completed` | 301 → `/participant` (2.126.0; siden er fjernet) |
 | `/review` | REVIEWER, APPEAL_HANDLER, ADMINISTRATOR |
 | `/calibration` | Runtime-configurable via `calibrationWorkspace.accessRoles` (default SUBJECT_MATTER_OWNER, ADMINISTRATOR) |
 | `/admin-content` | SUBJECT_MATTER_OWNER, ADMINISTRATOR |

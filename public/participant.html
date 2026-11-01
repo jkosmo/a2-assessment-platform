@@ -201,10 +201,8 @@
       .mcq-order-move:focus-visible { outline: 3px solid var(--color-focus); outline-offset: 2px; }
       /* 2.102.0: «Mine kurs» etter tema. Valget (tema / alfabetisk) står over lista; temanavnet er en
          overskrift, så en skjermleser kan hoppe mellom temaene. Begge viker når ett kurs får flaten. */
-      .course-view-toggle { display: inline-flex; align-self: flex-end; justify-self: end; border: 1px solid var(--color-module-border); border-radius: 999px; background: var(--color-surface); padding: 3px; }
-      .course-view-btn { border: none; border-radius: 999px; padding: 0 16px; min-height: 36px; font-size: 13px; font-weight: 600; cursor: pointer; background: transparent; color: var(--color-meta); width: auto; }
-      .course-view-btn[aria-pressed="true"] { background: var(--color-primary); color: #ffffff; }
-      .course-view-btn:focus-visible { outline: 3px solid var(--color-focus); outline-offset: 2px; }
+      /* 2.126.0: selve valget er felles med kurslista i innholdsforvaltningen (shared.css). Her står bare plasseringen. */
+      .course-view-toggle { align-self: flex-end; justify-self: end; }
       /* Produkteier 2026-10-25 valgte variant A av tre («less is more»): messingfarge og litt større,
          ingen linje. Svart i 17 px lignet kurstitlene og skilte ikke temaene fra hverandre. */
       .course-theme-heading { margin: var(--space-2) 0 0; font-size: 19px; color: var(--color-link-active); }
@@ -502,11 +500,6 @@
         <select id="localeSelect" class="locale-select-compact"></select>
       </div>
     </div>
-    <!-- #767: «Mine kurs»-området deler denne undernavigasjonen (Pågående | Fullførte). -->
-    <nav id="mineKursSubnav" class="content-area-nav" aria-label="Mine kurs">
-      <a href="/participant" class="content-area-nav-link" id="subnavPagaende" data-i18n="mineKurs.ongoing">Ongoing</a>
-      <a href="/participant/completed" class="content-area-nav-link" id="subnavFullforte" data-i18n="mineKurs.completed">Completed</a>
-    </nav>
     <h1 data-i18n="page.title">My courses</h1>
     <p class="small" data-i18n="page.subtitle">Track your progress across your courses.</p>
     <section id="previewModeBanner" class="card hidden">
@@ -685,7 +678,6 @@
     <script src="/static/i18n/participant-translations.js" type="module"></script>
     <script src="/static/participant.js" type="module"></script>
     <script src="/static/content-blocks.js" type="module"></script>
-    <script src="/static/mine-kurs-subnav.js" type="module"></script>
     <script src="/static/workspace-help.js" type="module"></script>
       <script type="module" src="/static/page-title.js"></script>
   </body>

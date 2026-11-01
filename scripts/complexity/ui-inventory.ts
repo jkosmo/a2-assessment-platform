@@ -27,7 +27,6 @@ const les = (rel: string) => readFileSync(join(ROOT, rel), "utf8");
 // Skjermene, med filen som bærer oppførselen.
 const SKJERMER: Array<{ navn: string; fil: string; html: string }> = [
   { navn: "Deltaker: Mine kurs", fil: "public/participant.js", html: "public/participant.html" },
-  { navn: "Deltaker: Fullførte", fil: "public/participant-completed.js", html: "public/participant-completed.html" },
   { navn: "Deltaker: Profil", fil: "public/profile.js", html: "public/profile.html" },
   { navn: "Kursbevis", fil: "public/certificate.js", html: "public/certificate.html" },
   { navn: "Sensor: køer", fil: "public/review.js", html: "public/review.html" },

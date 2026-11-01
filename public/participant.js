@@ -41,6 +41,8 @@ import { groupCoursesByTheme, hasAnyTheme } from "/static/course-theme-groups.js
 import {
   buildModuleCardViewModels,
   deriveParticipantFlowGateState,
+  earlierResultToShow,
+  isAssessmentResultReady,
   findMatchingPreset,
   parseDraftEnvelope,
   pruneExpiredModuleDrafts,
@@ -1182,6 +1184,8 @@ function activateParticipantModule(moduleId, options = {}) {
 
   const previousModuleId = selectedModuleId;
   const savedDraft = persistCurrentModuleDraft(false);
+  // En lås satt mens forrige moduls resultat ble hentet, gjelder ikke denne modulen.
+  releaseEarlierResultLock();
   selectedModuleId = moduleId;
   resetFlowStateForModuleContext();
   renderModules();
@@ -1196,7 +1200,16 @@ function activateParticipantModule(moduleId, options = {}) {
   // #978: ⚠️ dette er det ENE stedet som med vilje ser bort fra statusen. En bestått-men-under-
   // vurdering modul skal ikke autostarte et nytt forsøk. Se begrunnelsen i /static/outcome.js.
   const alreadyPassed = hasPassingDecision(nextModule.participantStatus?.latestDecision?.passFailTotal);
-  if (moduleIsMcqOnly(nextModule) && !alreadyPassed && !previewModeEnabled && !flowState.hasSubmission && !createSubmissionButton.disabled) {
+  // 2.126.0: har deltakeren et resultat, vises det — med anke-knappen ved stryk — i stedet for at et nytt
+  // forsøk starter av seg selv. «Prøv igjen» står ved resultatet.
+  const earlierSubmissionId = previewModeEnabled ? null : earlierResultToShow(
+    nextModule.participantStatus,
+    readModuleDraftMap()[nextModule.id],
+    hasMeaningfulStoredDraft(readModuleDraftMap()[nextModule.id]),
+  );
+  if (earlierSubmissionId) {
+    showEarlierResult(nextModule.id, earlierSubmissionId).catch((error) => logApiError(error));
+  } else if (moduleIsMcqOnly(nextModule) && !alreadyPassed && !previewModeEnabled && !flowState.hasSubmission && !createSubmissionButton.disabled) {
     createSubmissionButton.click();
   }
 
@@ -1248,6 +1261,76 @@ async function openCourseModule(courseId, moduleId) {
   if (courseDetailCache[courseId]) {
     renderCourseDetailModules(courseId, courseDetailCache[courseId]);
   }
+}
+
+/** 2.126.0: hold modulens siste innlevering oppdatert i denne økta (statusen hentes bare ved sidelasting). */
+function noteLatestSubmission(moduleId, patch) {
+  const module = loadedModules.find((m) => m?.id === moduleId);
+  if (!module) return;
+  module.participantStatus = { ...(module.participantStatus ?? {}), ...patch };
+}
+
+// 2.126.0: modulen slik den sto rett etter vurderingen — det leverte svaret (skrivebeskyttet), resultatet,
+// og anke-knappen ved et avgjort stryk. Bestått gir ingen konfetti her: den hører til øyeblikket det skjer.
+//
+// Mens resultatet hentes, er «Opprett innlevering» låst: et klikk der ville startet et nytt forsøk som
+// resultatet så la seg over (QA-porten 2026-11-01). Låsen gjelder bare modulen den ble satt for.
+let earlierResultLoading = null;
+
+function releaseEarlierResultLock() {
+  if (!earlierResultLoading) return;
+  earlierResultLoading = null;
+  createSubmissionButton.dataset.busy = "";
+}
+
+async function showEarlierResult(moduleId, submissionId) {
+  earlierResultLoading = moduleId;
+  createSubmissionButton.dataset.busy = "true";
+  createSubmissionButton.disabled = true;
+  try {
+    await loadEarlierResult(moduleId, submissionId);
+  } finally {
+    if (earlierResultLoading === moduleId) {
+      releaseEarlierResultLock();
+      updateCreateSubmissionAvailability();
+      renderFlowGating();
+    }
+  }
+}
+
+async function loadEarlierResult(moduleId, submissionId) {
+  const [resultBody, submissionBody] = await Promise.all([
+    apiFetch(`/api/submissions/${encodeURIComponent(submissionId)}/result`, headers),
+    apiFetch(`/api/submissions/${encodeURIComponent(submissionId)}`, headers).catch(() => null),
+  ]);
+  // Deltakeren kan ha gått videre til en annen modul mens svaret var på vei.
+  if (selectedModuleId !== moduleId) return;
+  const response = submissionBody?.submission?.response;
+  if (response && typeof response === "object") {
+    let placed = false;
+    for (const field of currentSubmissionFields) {
+      const element = submissionFieldsContainer.querySelector(`[data-field-id="${field.id}"]`);
+      if (element && typeof response[field.id] === "string") {
+        element.value = response[field.id];
+        placed = true;
+      }
+    }
+    // Har modulen fått nytt svarskjema siden svaret ble levert, finnes ingen av feltene lenger. Da står
+    // svaret i det første feltet, del for del — heller det enn et tomt felt ved siden av resultatet.
+    const first = currentSubmissionFields[0] && submissionFieldsContainer.querySelector(`[data-field-id="${currentSubmissionFields[0].id}"]`);
+    const parts = Object.values(response).filter((value) => typeof value === "string" && value.trim());
+    if (!placed && first && parts.length > 0) first.value = parts.join("\n\n");
+  }
+  submissionIdLabel.textContent = submissionId;
+  celebrationShown = true;
+  flowState = {
+    ...flowState,
+    hasSubmission: true,
+    hasMcqSubmission: !selectedModuleIsFreetextOnly(),
+    resultStatus: typeof resultBody?.status === "string" ? resultBody.status : null,
+  };
+  renderResultSummary(resultBody);
+  renderFlowGating();
 }
 
 function resetFlowStateForModuleContext() {
@@ -1422,11 +1505,6 @@ function stopAutoAssessmentLoop(clearDetail = true) {
     setAssessmentProgressDetail();
     renderAssessmentProgress();
   }
-}
-
-function isAssessmentResultReady(status) {
-  const normalized = typeof status === "string" ? status.toUpperCase() : "";
-  return normalized === "COMPLETED" || normalized === "UNDER_REVIEW" || normalized === "SCORED";
 }
 
 async function startAutomaticAssessmentFlow(submissionId) {
@@ -1614,6 +1692,12 @@ function persistCurrentModuleDraft(showStatus = false) {
   if (!selectedModule) {
     return { saved: false, meaningful: false, title: "" };
   }
+  // 2.126.0: mens forrige resultat hentes, står det leverte svaret ennå ikke i feltene, og kladden som
+  // ligger lagret er den riktige. Å lagre nå ville erstattet den med en uten merket — og resultatet
+  // ville forsvunnet neste gang modulen ble åpnet (QA-porten 2026-11-01).
+  if (earlierResultLoading === selectedModule.id) {
+    return { saved: false, meaningful: false, title: selectedModule.title };
+  }
 
   const data = {};
   for (const field of currentSubmissionFields) {
@@ -1621,6 +1705,10 @@ function persistCurrentModuleDraft(showStatus = false) {
     data[field.id] = element?.value ?? "";
   }
   data.mcq = collectCurrentMcqDraft();
+  // 2.126.0: en kladd lagret mens et svar er levert, er restene av det svaret — ikke et nytt forsøk.
+  // Merket lar modulen vise resultatet igjen neste gang den åpnes (earlierResultToShow).
+  const submittedAs = submissionIdLabel.textContent;
+  if (flowState.hasSubmission && submittedAs && submittedAs !== "-") data.submittedAs = submittedAs;
 
   const settings = getDraftSettings();
   const existing = readModuleDraftMap();
@@ -2478,12 +2566,15 @@ function renderNextSteps(body, adviceItems) {
 let mcqReviewHost = null;
 async function renderMcqReview(submissionId) {
   if (!submissionId) return;
+  // 2.126.0: deltakeren kan ha byttet modul mens svaret var på vei — da hører det ikke hjemme her.
+  const shownFor = submissionIdLabel.textContent;
   let review;
   try {
     review = await apiFetch(`/api/submissions/${submissionId}/mcq-review`, headers);
   } catch {
     return; // Gjennomgangen er et tillegg til resultatet; feiler den, står resultatet.
   }
+  if (submissionIdLabel.textContent !== shownFor) return;
   if (!review?.enabled || !Array.isArray(review.questions) || review.questions.length === 0) return;
   // Resultatet tegnes på nytt ved hver polling — ett kort, byttet ut, ikke stablet.
   if (mcqReviewHost?.isConnected) mcqReviewHost.remove();
@@ -2560,12 +2651,15 @@ const MODEL_ANSWER_WIDE = "(min-width: 900px)";
 
 async function renderModelAnswer(submissionId) {
   if (!submissionId) return;
+  // 2.126.0: deltakeren kan ha byttet modul mens svaret var på vei — da hører det ikke hjemme her.
+  const shownFor = submissionIdLabel.textContent;
   let view;
   try {
     view = await apiFetch(`/api/submissions/${submissionId}/model-answer`, headers);
   } catch {
     return; // Et tillegg til resultatet; feiler det, står resultatet.
   }
+  if (submissionIdLabel.textContent !== shownFor) return;
   if (modelAnswerHost?.isConnected) modelAnswerHost.remove();
   modelAnswerHost = null;
   if (!view?.enabled || typeof view.modelAnswer !== "string" || !view.modelAnswer.trim()) return;
@@ -2741,6 +2835,16 @@ function renderResultSummary(body) {
 
   // Track the outcome so renderFlowGating can de-emphasise the retry button once passed.
   flowState.resultPassFail = body?.decision?.passFailTotal ?? null;
+  // 2.126.0: modulens status ble hentet ved sidelasting. Uten dette ville et resultat fra denne økta
+  // ikke vises igjen når deltakeren går tilbake til modulen (earlierResultToShow leser statusen).
+  const shownSubmissionId = submissionIdLabel.textContent;
+  if (shownSubmissionId && shownSubmissionId !== "-") {
+    noteLatestSubmission(selectedModuleId, {
+      latestSubmissionId: shownSubmissionId,
+      latestStatus: typeof body.status === "string" ? body.status : null,
+      latestDecision: body.decision ?? null,
+    });
+  }
 
   clearSummaryContainer(resultSummary);
   resultSummary.appendChild(buildResultCard(body));
@@ -3092,6 +3196,7 @@ createSubmissionButton.addEventListener("click", async () => {
         }),
       });
       submissionIdLabel.textContent = body.submission.id;
+      noteLatestSubmission(moduleId, { latestSubmissionId: body.submission.id, latestStatus: body.submission.submissionStatus ?? "SUBMITTED", latestDecision: null });
       stopAutoAssessmentLoop(true);
       latestAppeal = null;
       assessmentProgressKey = "assessment.progress.idle";

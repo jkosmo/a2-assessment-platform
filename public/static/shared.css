@@ -1415,6 +1415,26 @@ dialog::backdrop {
   background: var(--color-surface); color: var(--color-text); max-width: 260px;
 }
 .list-course-select:focus { outline: 2px solid var(--color-blue); outline-offset: 1px; border-color: transparent; }
+/* 2.126.0: valget «etter tema / alfabetisk» står ytterst til høyre i filterraden, og gruppenavnet er en
+   overskrift i tabellen — samme messingfarge som temaoverskriftene i «Mine kurs». */
+.course-view-toggle { display: inline-flex; border: 1px solid var(--color-module-border); border-radius: 999px; background: var(--color-surface); padding: 3px; }
+.course-view-btn { border: none; border-radius: 999px; padding: 0 16px; min-height: 36px; font-size: 13px; font-weight: 600; cursor: pointer; background: transparent; color: var(--color-meta); width: auto; }
+.course-view-btn[aria-pressed="true"] { background: var(--color-primary); color: #ffffff; }
+.course-view-btn:focus-visible { outline: 3px solid var(--color-focus); outline-offset: 2px; }
+.list-view-toggle { margin-left: auto; }
+.list-table tr.list-group-row th {
+  padding: 18px 12px 8px; text-transform: none; letter-spacing: 0; font-size: 13px; font-weight: 400;
+  background: var(--color-bg); border-bottom: 1px solid var(--color-table-border);
+}
+.list-table tr.list-group-row:hover th { background: var(--color-bg); }
+.list-group-heading { display: inline; margin: 0; font-size: 17px; font-weight: 700; color: var(--color-link-active); }
+.list-group-count { margin-left: 8px; color: var(--color-meta); }
+.list-group-themes { display: block; margin-top: 2px; font-size: 12px; font-weight: 400; color: var(--color-meta); }
+@media (max-width: 600px) {
+  .list-table tr.list-group-row { border: none; padding: 0; margin: var(--space-2) 0 var(--space-1); }
+  .list-table tr.list-group-row th { display: block; padding: 0; background: none; border: none; }
+  .list-view-toggle { margin-left: 0; }
+}
 .list-table th.sortable { cursor: pointer; user-select: none; }
 .list-table th.sortable:hover { color: var(--color-link-active); }
 /* Ikke inline-block: da kan linja brekke foran pila, og den blir stående alene under overskriften (#1084). */

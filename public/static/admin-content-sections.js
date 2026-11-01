@@ -14,6 +14,7 @@ import { renderWorkspaceNavigationWithProfile } from "./workspace-nav.js";
 import { describeImportError } from "/static/import-error.js";
 import { apiErrorCode, describeApiError } from "/static/api-error.js";
 import { showToast } from "/static/toast.js";
+import { runWithBusyButton } from "/static/busy-button.js";
 import { describeAltWarnings } from "/static/mcq-cue-warnings.js";
 import { runWithWorkDialog } from "/static/work-dialog.js";
 import { lifecycleStatusBadge, lifecycleBadge, lifecycleOf } from "/static/content-status-badge.js";
@@ -417,8 +418,11 @@ async function sectionLifecycle(sectionId, action, toastKey) {
 
 // #916: per-row export — download the a2-content-export/v1 envelope as JSON. Same shape and file
 // convention as the module/course exporters so all three behave alike for the author.
-async function exportSectionPackage(sectionId, btn) {
-  if (btn) btn.disabled = true;
+function exportSectionPackage(sectionId, btn) {
+  return runWithBusyButton(btn, () => downloadSectionPackage(sectionId));
+}
+
+async function downloadSectionPackage(sectionId) {
   try {
     const body = await apiFetch(`/api/admin/content/sections/${encodeURIComponent(sectionId)}/export-package`, getHeaders);
     const envelope = body?.envelope ?? null;
@@ -437,8 +441,6 @@ async function exportSectionPackage(sectionId, btn) {
     showToast(L("exported"));
   } catch (err) {
     apiErrorToast(err);
-  } finally {
-    if (btn) btn.disabled = false;
   }
 }
 

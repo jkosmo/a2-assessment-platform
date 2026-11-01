@@ -36,7 +36,7 @@ import { readViewState, writeViewState } from "./view-state.js";
  * @property {string} [srLabel]        skjermlesertekst når label er tom
  * @property {string} [className]      klasse på th og td (col-name, col-status, …)
  * @property {string} [title]          title-attributt på th
- * @property {(item: any) => string} render  ferdig HTML for cellen
+ * @property {(item: any, ctx: { view: "group"|"alphabetical" }) => string} render  ferdig HTML for cellen
  * @property {(item: any) => string|number|null} [sortValue]  gjør kolonnen sorterbar
  */
 
@@ -70,6 +70,21 @@ import { readViewState, writeViewState } from "./view-state.js";
  *   ved filter- og sorteringsklikk. Her hører en hodeknapp hvis tekst avhenger av hva som er synlig
  *   («Oversett det som mangler (N)»), for `afterRender` kjører ikke på et filterklikk (#894).
  * @property {(items: any[]) => string} [emptyHtml]  egen tom-tilstand når det ikke finnes noen elementer i det hele tatt
+ * @property {ListPageGrouping} [grouping]  valget «etter gruppe» / «alfabetisk» over lista (2.126.0)
+ */
+
+/**
+ * 2.126.0 (produkteier 2026-11-01): kurslista i innholdsforvaltningen vises etter tema eller
+ * alfabetisk, som «Mine kurs». Samme regler som der (course-theme-groups.js): gruppene i den
+ * rekkefølgen sida gir dem, et element med flere grupper står under hver av dem, elementer uten
+ * gruppe samles sist, en gruppe uten elementer vises ikke. Innad i en gruppe gjelder sorteringen.
+ * Valget vises bare når minst ett element har en gruppe.
+ *
+ * @typedef {object} ListPageGrouping
+ * @property {() => Array<{ id: string, name: string }>} groups      i rekkefølgen de skal stå
+ * @property {(item: any) => Array<{ id: string }>} groupsOf
+ * @property {() => { label: string, byGroup: string, alphabetical: string, other: string,
+ *   count: (n: number) => string }} texts
  */
 
 // Tekster, hodeknapper, filtervalg og kolonner kan gis som funksjoner, så en side med språkvelger
@@ -107,6 +122,11 @@ export function createListPage(config) {
     if (saved.sortDir === "asc" || saved.sortDir === "desc") state.sortDir = saved.sortDir;
   }
   let pendingScrollY = saved && Number.isFinite(saved.scrollY) ? saved.scrollY : null;
+  // Visningen huskes i nettleseren, ikke bare i fanen, som valget i «Mine kurs». Lagringen kan mangle
+  // (privat vindu); da står lista etter gruppe.
+  const viewKey = `list.${ids.tbody}.view`;
+  state.view = "group";
+  try { if (window.localStorage.getItem(viewKey) === "alphabetical") state.view = "alphabetical"; } catch { /* bekvemmelighet */ }
   const rememberView = () => writeViewState(viewStateKey, {
     filter: state.filter, search: state.search, course: state.course, toggle: state.toggle,
     sortKey: state.sortKey, sortDir: state.sortDir, scrollY: window.scrollY,
@@ -210,7 +230,35 @@ export function createListPage(config) {
     const toggle = config.toggle
       ? `<label class="list-toggle" for="${escapeHtml(config.toggle.id)}"><input type="checkbox" id="${escapeHtml(config.toggle.id)}"${state.toggle ? " checked" : ""} />${escapeHtml(config.toggle.label())}</label>`
       : "";
-    return `${search}<div class="list-filters-row">${pills}${course}${toggle}</div>`;
+    return `${search}<div class="list-filters-row">${pills}${course}${toggle}${viewToggleHtml()}</div>`;
+  }
+
+  /** Om valget gir mening: minst ett element har en gruppe. Ellers ville lista bare vært «uten gruppe». */
+  function groupingOffered() {
+    return Boolean(config.grouping) && state.items.some((item) => config.grouping.groupsOf(item).length > 0);
+  }
+
+  function grouped() {
+    return groupingOffered() && state.view === "group";
+  }
+
+  function viewToggleHtml() {
+    if (!groupingOffered()) return "";
+    const gt = config.grouping.texts();
+    const btn = (view, label) => `<button type="button" class="course-view-btn" data-list-view="${view}" aria-pressed="${state.view === view}">${escapeHtml(label)}</button>`;
+    return `<div class="course-view-toggle list-view-toggle" role="group" aria-label="${escapeHtml(gt.label)}">${btn("group", gt.byGroup)}${btn("alphabetical", gt.alphabetical)}</div>`;
+  }
+
+  /** @returns {Array<{ name: string, items: any[] }>} */
+  function groupsFor(visible) {
+    const groups = new Map();
+    for (const group of config.grouping.groups()) groups.set(group.id, { name: group.name, items: [] });
+    const other = { name: config.grouping.texts().other, items: [] };
+    for (const item of visible) {
+      const own = config.grouping.groupsOf(item).map((g) => groups.get(g.id)).filter(Boolean);
+      for (const group of own.length > 0 ? own : [other]) group.items.push(item);
+    }
+    return [...groups.values(), other].filter((group) => group.items.length > 0);
   }
 
   function tableHtml(visible) {
@@ -232,12 +280,18 @@ export function createListPage(config) {
       const data = sortable ? ` data-sort-key="${escapeHtml(col.key)}"` : "";
       return `<th scope="col"${cls ? ` class="${cls}"` : ""}${aria}${title}${data}>${label}${indicator}</th>`;
     }).join("");
-    const rows = visible.map((item) => {
+    const view = grouped() ? "group" : "alphabetical";
+    const rowHtml = (item) => {
       // #1080: kortvisningen på telefon skjuler tabellhodet og leser kolonnenavnet fra cellen.
-      const tds = columns.map((col) => `<td${col.className ? ` class="${col.className}"` : ""} data-label="${escapeHtml(col.label || col.srLabel || "")}">${col.render(item)}</td>`).join("");
+      const tds = columns.map((col) => `<td${col.className ? ` class="${col.className}"` : ""} data-label="${escapeHtml(col.label || col.srLabel || "")}">${col.render(item, { view })}</td>`).join("");
       const actions = rowActionsHtml(config.actions(item), { moreLabel: texts.more ?? "Mer" });
       return `<tr data-row-id="${escapeHtml(config.rowId(item))}"${config.rowAttrs ? ` ${config.rowAttrs(item)}` : ""}>${tds}<td class="col-actions"><div class="row-actions">${actions}</div></td></tr>`;
-    }).join("");
+    };
+    // Gruppenavnet er en overskrift i tabellen (h2 under sidas h1), så en skjermleser kan hoppe mellom
+    // gruppene som i «Mine kurs». Én tabell, så kolonnene står likt i alle gruppene.
+    const rows = view === "group"
+      ? groupsFor(visible).map((group) => `<tr class="list-group-row"><th colspan="${columns.length + 1}"><h2 class="list-group-heading">${escapeHtml(group.name)}</h2> <span class="list-group-count">${escapeHtml(config.grouping.texts().count(group.items.length))}</span></th></tr>${group.items.map(rowHtml).join("")}`).join("")
+      : visible.map(rowHtml).join("");
     return `<div class="list-table-wrap"><table class="list-table" aria-label="${escapeHtml(texts.title)}">
       <thead><tr>${ths}<th scope="col" class="col-actions"><span class="sr-only">Handlinger</span></th></tr></thead>
       <tbody id="${escapeHtml(ids.tbody)}">${rows}</tbody></table></div>`;
@@ -281,6 +335,16 @@ export function createListPage(config) {
     if (pill && host.contains(pill)) {
       state.filter = pill.dataset.filter;
       for (const b of host.querySelectorAll(".list-filters [data-filter]")) b.classList.toggle("active", b === pill);
+      renderTable();
+      return;
+    }
+    const viewBtn = target.closest("[data-list-view]");
+    if (viewBtn && host.contains(viewBtn)) {
+      const view = viewBtn.dataset.listView;
+      if (view === state.view) return;
+      state.view = view;
+      try { window.localStorage.setItem(viewKey, view); } catch { /* bekvemmelighet */ }
+      for (const b of host.querySelectorAll("[data-list-view]")) b.setAttribute("aria-pressed", String(b === viewBtn));
       renderTable();
       return;
     }

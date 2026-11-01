@@ -47,7 +47,6 @@ const FLATER = [
   // er tom med rette når kurset/filteret ikke har rader. Nøkkeltallslinja tegnes alltid.
   { navn: "resultatsiden", rute: "/results", beholder: "#resultsKpi", innhold: "#resultsKpi" },
   { navn: "profilen", rute: "/profile", beholder: "#coursesBody", innhold: "#coursesBody" },
-  { navn: "fullførte moduler", rute: "/participant/completed", beholder: "#courseCertList", innhold: "#courseCertList" },
   // ⚠️ `beholder` er `body` her fordi flaten ikke har én samlende node å vente på. Men `innhold`
   // MÅ være smalere: `body` inneholder grensesnittets egne etiketter, som oversettes uansett om
   // serverens innhold følger med. En påstand mot `body` ville vært grønn av rammen alene — altså

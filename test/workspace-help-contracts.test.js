@@ -14,7 +14,6 @@ function readFile(relativePath) {
 
 const pagesWithHelp = [
   "public/participant.html",
-  "public/participant-completed.html",
   "public/profile.html",
   "public/review.html",
   "public/results.html",

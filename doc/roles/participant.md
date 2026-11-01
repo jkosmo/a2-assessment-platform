@@ -4,9 +4,11 @@ Deltakere er de ansatte som leverer besvarelser og tar vurderinger på plattform
 
 ## Hva deltakere har tilgang til
 
-- `/participant` — oversikt over moduler, aktive besvarelser og sertifiseringsstatus
-- `/participant/completed` — fullførte moduler, historikk og kursbevis
-- `/profile` — egen profil og samtykkestatusAPI:
+- `/participant` — «Mine kurs»: kursene, fremdriften og kursbevisene (fullførte kurs står nederst i
+  hvert tema). Siste resultat og anke ligger i modulen.
+- `/profile` — egen profil, fullførte moduler og kurs, og samtykkestatus
+
+API:
 - `GET /api/modules` — liste over tilgjengelige moduler
 - `GET /api/submissions` — egne besvarelser
 - `POST /api/submissions` — levere ny besvarelse
@@ -54,7 +56,8 @@ Fargen på merket viser status, ikke type: grønt betyr fullført for begge.
 
 ### 2. Forstå resultater
 
-Etter at vurderingen er fullført, vises resultatet i `/participant/completed`.
+Etter at vurderingen er fullført, vises resultatet i modulen. Åpner du modulen igjen senere, står siste
+resultat der, med svaret du leverte. Har du begynt på et nytt forsøk, ser du det i stedet.
 
 | Status | Betydning |
 |---|---|
@@ -73,13 +76,15 @@ står uten beskjed.
 
 ### 3. Klage på en beslutning
 
-Du kan anke dersom resultatet er «Ikke bestått» og du mener vurderingen er feil.
+Du kan anke dersom resultatet er «Ikke bestått» og du mener vurderingen er feil. Du trenger ikke gjøre
+det med en gang — anken kan sendes senere. Et bestått resultat kan ikke ankes.
 
-1. Gå til `/participant/completed`
-2. Finn modulen du vil anke
-3. Klikk **Anke resultat**
-4. Skriv en begrunnelse for klagen
-5. Klikk **Send inn anke**
+1. Gå til `/participant` og åpne kurset
+2. Åpne modulen du vil anke — siste resultat vises
+3. Skriv en begrunnelse for klagen
+4. Klikk **Send inn anke**
+
+Anken gjelder siste resultat. Tar du et nytt forsøk, er det det nye resultatet som kan ankes.
 
 Klagebehandler varsles og behandler klagen. Du mottar e-post eller varsel om utfallet.
 
@@ -91,7 +96,7 @@ Kurs grupperer flere moduler. Kursbevis utstedes automatisk når alle moduler i 
 
 1. Gå til `/participant` — «Mine kurs»-seksjonen viser kursfremdrift
 2. Klikk på et kurs for å se hvilke moduler som inngår og hvilke du har bestått
-3. Gå til `/participant/completed` for å se utstedte kursbevis med bevis-ID og dato
+3. Et fullført kurs står nederst i sitt tema, med lenke til kursbeviset. Beviset finnes også i Profil.
 
 ## Vanlige spørsmål
 

@@ -5,8 +5,8 @@
 > deltakerkonsollet — en flate som er skjult av `PARTICIPANT_COURSE_ONLY` (standard `true`) og som
 > produkteier har besluttet å fjerne: deltakeren når moduler gjennom «Mine kurs».
 >
-> `GET /api/modules` returnerer nå alle moduler. `GET /api/modules/completed` og
-> `/participant/completed` er uendret og fortsatt i bruk.
+> `GET /api/modules` returnerer nå alle moduler. `GET /api/modules/completed` er uendret og brukes av
+> Profil. **2.126.0:** `/participant/completed` er fjernet (301 → `/participant`).
 >
 > Beskrivelsen under er bevart som historikk for hvorfor mekanismen fantes.
 

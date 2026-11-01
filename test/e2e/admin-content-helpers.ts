@@ -38,6 +38,8 @@ type MockCourse = {
   description?: Record<string, string> | string | null;
   /** #1093: plassering i «Mine kurs»; null/utelatt = alfabetisk. */
   sortOrder?: number | null;
+  /** 2.102.0: temaene kurset står under, med navnet på leserens språk. */
+  themes?: Array<{ id: string; name: string }>;
   modules?: Array<{
     moduleId: string;
     sortOrder: number;

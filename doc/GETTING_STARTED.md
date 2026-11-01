@@ -169,10 +169,10 @@ Flow:
 5. View result
 6. Optionally file an appeal once status is `COMPLETED`
 
-Completed modules history:
+Completed modules and certificates (the old `/participant/completed` page was retired in 2.126.0):
 
 ```text
-http://localhost:3000/participant/completed
+http://localhost:3000/profile
 ```
 
 ### Reviewer (`REVIEWER` / `ADMINISTRATOR` role)

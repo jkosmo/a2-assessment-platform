@@ -567,6 +567,28 @@ på innleveringen. Sperren ligger der den skal.
 
 **Sak:** #978, #1002 · **Status:** avklart 2026-08-24
 
+### Anken kan vente — men bare på et stryk, og den hører til modulen
+
+Deltakeren skal kunne anke et resultat senere, ikke bare i øyeblikket det kommer. Anke på noe man har
+bestått gir ingen mening, så den hører ikke hjemme ved de fullførte kursene.
+
+**Hvorfor:** produkteier 2026-11-01: *«Man bør ha mulighet for å kunne senere anke på et resultat, det
+bør ikke være en beslutning man må ta der og da. Men å anke på en modul eller kurs man har bestått gir
+ingen mening, så å vise det under fullført er feil sted.»*
+
+**Håndheves:** en modul som åpnes, viser siste resultat og anke-knappen ved et avgjort stryk
+(`earlierResultToShow` i `participant-console-state.js`, `showEarlierResult` i `participant.js`).
+Anken gjelder siste innlevering: tar deltakeren et nytt forsøk, er det det nye resultatet som kan ankes.
+Ingen frist — serveren har ingen, og produkteier har ikke bedt om en. Siden «Fullførte», som var den
+eneste veien til en senere anke, er fjernet.
+
+En modul som er tatt ut av sirkulasjon — avpublisert, arkivert eller fjernet fra kurset — kan ikke
+åpnes, og et stryk på den kan derfor ikke ankes fra appen. Det er ønsket, ikke et hull: produkteier
+2026-11-01, *«Hvorfor i all verden skal man anke et kurs eller en modul som er tatt ut av
+sirkulasjon?»*
+
+**Sak:** — (2.126.0) · **Status:** avklart 2026-11-01
+
 ---
 
 ## Forfattere kan lese alt kursinnhold — juks er den enkeltes eget ansvar

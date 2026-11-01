@@ -6,7 +6,7 @@ import { translations as participantTranslations } from "./participant-translati
 // fra før, så nøklene var der — profilen sto bare utenfor, og viste serverens engelske `message`
 // med hardkodede reserver som «Error» der den ikke hadde noe.
 //
-// Egne nøkler vinner over de arvede, som i `participant-completed-translations.js`.
+// Egne nøkler vinner over de arvede.
 
 export const supportedLocales = ["en-GB", "nb", "nn"];
 

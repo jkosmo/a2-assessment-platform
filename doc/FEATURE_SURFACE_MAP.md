@@ -99,14 +99,13 @@ directions — bare string stays bare, locale object passes through).
 
 ## 6. Course certificate display — multiple places (#550 / #580)
 
-A completed-course certificate surfaces in **four** views. All of them fetch
+A completed-course certificate surfaces in **three** views (four until 2.126.0 retired `/participant/completed`). All of them fetch
 `GET /api/courses/completions` and turn a completion into a link to the printable view — a
-change to issuance, fetch-wiring, or rendering must be verified on all four:
+change to issuance, fetch-wiring, or rendering must be verified on all three:
 
 | Surface | File | How completions load |
 |---------|------|----------------------|
-| Result banner in the course accordion | `public/participant.js` (`participantCompletions`, ~L2784) | `/api/courses` + `/api/courses/completions` together on render (`Promise.all`) |
-| `/participant/completed` → "Mine kursbevis" | `public/participant-completed.js` (`loadCourseCertificates`) | auto-loaded on page open after console config (#580) — **was previously button-only** |
+| Result banner and certificate link on the course card in «Mine kurs» | `public/participant.js` (`participantCompletions`, `course-certificate-link`) | `/api/courses` + `/api/courses/completions` together on render (`Promise.all`) |
 | `/profile` → "Fullførte kurs" | `public/profile.js` | on profile render |
 | Printable `/certificate?id=…` | `public/certificate.js` | fetches `/api/courses/completions/:id` |
 
@@ -116,13 +115,13 @@ read**, for any course with ≥1 element — including **module-less reading cou
 event-driven issuance. See `src/modules/course/courseCompletionService.ts`.
 
 **Guards (all run locally with no DB — static-server + mocked routes):**
-`test/e2e/participant-certificate.spec.ts`, `test/e2e/participant-completed-certificates.spec.ts`,
+`test/e2e/participant-certificate.spec.ts`,
 `test/e2e/profile-certificate-link.spec.ts`, `test/e2e/participant-course-banner.spec.ts` (#630 —
 result-banner surface), plus server-side `test/m2-course-completions.test.ts` (issuance + reconcile,
-incl. module-less). All four surfaces now have guards.
+incl. module-less). All three surfaces have guards.
 
 **Pre-deploy gate:** run the journey locally before deploying any cert change —
-`npx playwright test --config playwright.admin-content.config.ts test/e2e/participant-certificate.spec.ts test/e2e/participant-completed-certificates.spec.ts test/e2e/profile-certificate-link.spec.ts` (~9s, no Docker/Postgres).
+`npx playwright test --config playwright.admin-content.config.ts test/e2e/participant-certificate.spec.ts test/e2e/profile-certificate-link.spec.ts test/e2e/participant-course-banner.spec.ts` (~10s, no Docker/Postgres).
 
 ## 6b. Participant course view — opening an item inline (#865)
 
@@ -1166,14 +1165,13 @@ sted, i `decisionService`, fordi tolv lesere ellers ville tolket den hver for se
 | Fil | Inngang | Merknad |
 |---|---|---|
 | `participant.js` | `deriveOutcome`, `isSettledPass`, `isAppealableFail`, `hasPassingDecision` | resultatbanner, kortstyling, feiring, anke, autostart |
-| `participant-completed.js` | `deriveOutcome`, `isAppealableFail` | ⚠️ se konfigurasjonsmerknaden |
 | `profile.js` | `deriveOutcome` | ⚠️ se konfigurasjonsmerknaden |
 | `review.js` | `rawPassFailState`, `decisionHistoryOutcome` | to formattere, én regel — unntatt historikkraden for et AUTOMATISK vedtak i en åpen sak, som leser status og sier «til vurdering» (#1034, `static/decision-history.js`) |
 | `static/admin-content-calibration.js` | `rawPassFailState` | status i egen kolonne |
 
 ⚠️ **Konfigurasjonsmerknad.** `/api/modules/completed` filtrerer på `completedSubmissionStatuses`
-(`config/module-completion.json`), i dag `["COMPLETED"]` alene. `profile.js` og
-`participant-completed.js` kan derfor ikke motta en uavklart rad med dagens oppsett — konverteringen
+(`config/module-completion.json`), i dag `["COMPLETED"]` alene. `profile.js`
+(og før 2.126.0 `participant-completed.js`) kan derfor ikke motta en uavklart rad med dagens oppsett — konverteringen
 er riktig, men uvirksom til nøkkelen utvides. Den ekte feilen på de flatene er at raden **forsvinner**
 når en anke setter innleveringen tilbake til `UNDER_REVIEW`: #1002.
 

@@ -16,7 +16,6 @@ export const BRAND = { nb: "A-2 læringsplattform", nn: "A-2 læringsplattform",
 
 export const PAGES = {
   participant: { nb: "Mine kurs", nn: "Kursa mine", "en-GB": "My courses" },
-  "participant-completed": { nb: "Fullførte moduler", nn: "Fullførte modular", "en-GB": "Completed modules" },
   certificate: { nb: "Kursbevis", nn: "Kursbevis", "en-GB": "Course certificate" },
   profile: { nb: "Profil", nn: "Profil", "en-GB": "Profile" },
   review: { nb: "Manuell behandling", nn: "Manuell handsaming", "en-GB": "Manual review" },
