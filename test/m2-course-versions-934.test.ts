@@ -1,3 +1,5 @@
+import request from "supertest";
+import { app } from "../src/app.js";
 import { prisma } from "../src/db/prisma.js";
 import { reconcileCourseCompletionsForUser } from "../src/modules/course/index.js";
 import { deriveStatus } from "../src/modules/course/enrollmentService.js";
@@ -31,34 +33,79 @@ describe("#934 kursbevis per hovedversjon", () => {
     expect(await completions(participant.id, course.id)).toEqual([{ versionMajor: 1, versionMinor: 0 }]);
   });
 
-  // Skive 1 lar den gamle nøkkelen (bruker, kurs) stå (utvid først, trekk sammen etterpå — QA-porten
-  // 2026-11-01). Da kan databasen bare ha ett bevis per kurs, og ingen leser kan møte to. Dette er
-  // sperren, målt: selv et kurs på hovedversjon 2 får ikke et andre bevis, og det første står urørt.
-  it("så lenge den gamle nøkkelen står, finnes høyst ett bevis per kurs — og det første står urørt", async () => {
-    const { participant, course } = await courseWithOnePassedModule("sperre");
+  // Skive 2 (2.128.0): den gamle nøkkelen er fjernet, og leserne skiller versjonene.
+  it("en ny hovedversjon gir et nytt bevis når kravet er oppfylt; det gamle står urørt, og det skjer bare én gang", async () => {
+    const { participant, course } = await courseWithOnePassedModule("hoved");
     await reconcileCourseCompletionsForUser(participant.id);
     const første = await prisma.courseCompletion.findFirstOrThrow({ where: { userId: participant.id, courseId: course.id } });
 
     await prisma.course.update({ where: { id: course.id }, data: { versionMajor: 2, versionMinor: 3 } });
     await reconcileCourseCompletionsForUser(participant.id);
+    await reconcileCourseCompletionsForUser(participant.id);
 
-    expect(await completions(participant.id, course.id)).toEqual([{ versionMajor: 1, versionMinor: 0 }]);
+    expect(await completions(participant.id, course.id)).toEqual([
+      { versionMajor: 1, versionMinor: 0 },
+      { versionMajor: 2, versionMinor: 3 },
+    ]);
     const gamle = await prisma.courseCompletion.findUniqueOrThrow({ where: { id: første.id } });
     expect(gamle.certificateId).toBe(første.certificateId);
+    expect(gamle.completedAt.toISOString()).toBe(første.completedAt.toISOString());
   });
 
-  // Skive 2 fjerner den gamle nøkkelen sammen med at leserne lærer å skille versjonene. Da skal dette gjelde:
-  it.todo("skive 2: en ny hovedversjon gir et nytt bevis når kravet er oppfylt; det gamle står, og det skjer bare én gang");
-
-  // QA-porten 2026-11-01: en innsetting av et andre bevis avvises også av den GAMLE nøkkelen, så den testen
-  // ble grønn uten den nye. Her måles indeksene selv: den nye må finnes og være unik på nøyaktig de tre
-  // kolonnene — ellers kan skive 2, som fjerner den gamle, gi flere bevis for samme hovedversjon.
-  it("databasen har den nye unike nøkkelen (bruker, kurs, hovedversjon) — og den gamle står ennå", async () => {
+  it("databasen har den unike nøkkelen (bruker, kurs, hovedversjon) — og den gamle (bruker, kurs) er borte", async () => {
     const indekser = await prisma.$queryRaw<Array<{ indexname: string; indexdef: string }>>`
       SELECT indexname, indexdef FROM pg_indexes WHERE tablename = 'CourseCompletion' AND indexdef LIKE 'CREATE UNIQUE%'`;
     const def = (navn: string) => indekser.find((i) => i.indexname === navn)?.indexdef ?? "";
     expect(def("CourseCompletion_userId_courseId_versionMajor_key")).toMatch(/\("userId", "courseId", "versionMajor"\)$/);
-    expect(def("CourseCompletion_userId_courseId_key")).toMatch(/\("userId", "courseId"\)$/);
+    expect(indekser.map((i) => i.indexname)).not.toContain("CourseCompletion_userId_courseId_key");
+  });
+
+  it("«Mine kurs» og kursbeviset sier hvilken versjon beviset gjelder, og om det er kursets nåværende", async () => {
+    const { participant, course, headers } = await courseWithOnePassedModule("api");
+    await reconcileCourseCompletionsForUser(participant.id);
+    // Versjon 2 har en ny modul deltakeren ikke har tatt: hen har bare bevis for versjon 1.
+    const ny = await createPublishedModule(`934 api ny modul ${Date.now()}`);
+    await prisma.courseItem.create({ data: { courseId: course.id, itemType: "MODULE", moduleId: ny.module.id, sortOrder: 2 } });
+    await prisma.course.update({ where: { id: course.id }, data: { versionMajor: 2, versionMinor: 0 } });
+
+    const liste = await request(app).get("/api/courses/completions").set(headers);
+    expect(liste.status).toBe(200);
+    const forKurset = liste.body.completions.filter((c: { courseId: string }) => c.courseId === course.id);
+    expect(forKurset).toEqual([expect.objectContaining({ versionMajor: 1, versionMinor: 0, current: false })]);
+
+    const ett = await request(app).get(`/api/courses/completions/${forKurset[0].certificateId}`).set(headers);
+    expect(ett.status).toBe(200);
+    expect(ett.body).toMatchObject({ versionMajor: 1, versionMinor: 0, current: false });
+  });
+
+  it("kursrapporten teller bevis for nåværende hovedversjon, og en med bare eldre bevis står som «må ta ny versjon»", async () => {
+    const { participant, course } = await courseWithOnePassedModule("rapport");
+    await reconcileCourseCompletionsForUser(participant.id);
+    const ny = await createPublishedModule(`934 rapport ny modul ${Date.now()}`);
+    await prisma.courseItem.create({ data: { courseId: course.id, itemType: "MODULE", moduleId: ny.module.id, sortOrder: 2 } });
+    await prisma.course.update({ where: { id: course.id }, data: { versionMajor: 2, versionMinor: 0 } });
+    const admin = { "x-user-id": `v934-admin-${Date.now()}`, "x-user-email": `v934.admin.${Date.now()}@x.test`, "x-user-name": "Admin", "x-user-roles": "ADMINISTRATOR", "x-locale": "nb" };
+
+    const sammendrag = await request(app).get("/api/reports/courses").query({ selectedCourseId: course.id }).set(admin);
+    expect(sammendrag.status).toBe(200);
+    const rad = sammendrag.body.rows.find((r: { courseId: string }) => r.courseId === course.id);
+    expect(rad).toMatchObject({ completedParticipants: 0 });
+    expect(rad.enrolledParticipants).toBeGreaterThanOrEqual(1);
+
+    const detaljer = await request(app).get("/api/reports/courses/details").query({ selectedCourseId: course.id }).set(admin);
+    expect(detaljer.status).toBe(200);
+    const deltaker = detaljer.body.rows.find((r: { participantId: string }) => r.participantId === participant.id);
+    expect(deltaker).toMatchObject({ status: "NEEDS_NEW_VERSION", earlierCertificateVersion: 1, certificateId: null, completedAt: null });
+    expect(detaljer.body.totals).toMatchObject({ completed: 0, needsNewVersion: 1 });
+
+    // Tar hen det nye, får hen bevis for versjon 2 — og står som fullført, telt én gang.
+    await createPassedCertification(participant.id, ny);
+    await reconcileCourseCompletionsForUser(participant.id);
+    const etterpå = await request(app).get("/api/reports/courses/details").query({ selectedCourseId: course.id }).set(admin);
+    const igjen = etterpå.body.rows.find((r: { participantId: string }) => r.participantId === participant.id);
+    expect(igjen).toMatchObject({ status: "COMPLETED", earlierCertificateVersion: null });
+    const sammendrag2 = await request(app).get("/api/reports/courses").query({ selectedCourseId: course.id }).set(admin);
+    expect(sammendrag2.body.rows.find((r: { courseId: string }) => r.courseId === course.id)).toMatchObject({ completedParticipants: 1 });
   });
 
   it("en oppfylt frist står som oppfylt etter en ny hovedversjon (produkteier 2026-11-01)", async () => {
@@ -100,7 +147,16 @@ async function courseWithOnePassedModule(tag: string) {
     select: { id: true },
   });
   await createPassedCertification(participant.id, modul);
-  return { participant, course };
+  // Deltakerens egne hoder, for rutene (samme person som raden over: koblet på externalId).
+  const headers = {
+    "x-user-id": `v934-${suffix}`,
+    "x-user-email": `v934.${suffix}@company.com`,
+    "x-user-name": "Versjonstest",
+    "x-user-department": "Learning",
+    "x-user-roles": "PARTICIPANT",
+    "x-locale": "nb",
+  };
+  return { participant, course, headers };
 }
 
 async function createPublishedModule(title: string) {

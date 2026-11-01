@@ -1279,6 +1279,11 @@ Produkteier, på to spørsmål etter QA-rundene på fase A:
 
 ## «Aktivitet» under Deltakere (#1099): rapportleser ser aktiviteten for alle (2026-10-15)
 
+**Endret 2026-11-01 (2.128.0): bare administrator.** Produkteier: fanen «er viktig informasjon for å følge
+innføringen av verktøyet og må bestå, men begrens den til admin». Arbeidsgiverroller ser resultat, ikke
+innsats (se `doc/design/GAMIFISERING_DESIGN.md`). Rapportleser ser fortsatt Resultater og Status. Teksten
+under beskriver beslutningen slik den var 2026-10-15.
+
 Produkteier, på spørsmålet om rapportleser skal se «sist sett» og «det siste hen har gjort» for
 alle ansatte: «Dette er et internt kompetanseverktøy, vi bruker persondata i henhold til intensjon.»
 

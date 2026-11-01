@@ -258,11 +258,25 @@ test("fanen vises for administrator og rapportleser, ikke for fagansvarlig", asy
   await expect(page.locator("#subnavActivity")).toHaveCount(0);
 });
 
-test("rapportleser ser fanen på Resultater", async ({ page }) => {
+// 2.128.0 (produkteier 2026-11-01): «Aktivitet» bare for administrator. Rapportleser ser fortsatt
+// Resultater og Status, men ikke fanen som viser innsats per person.
+test("rapportleser ser ikke fanen på Resultater — bare administrator gjør det", async ({ page }) => {
   await mockBase(page, ["REPORT_READER"]);
   await page.route("**/api/**", (route: Route) => route.fulfill({ status: 200, contentType: "application/json", body: "{}" }));
   await page.route("**/api/me", (route: Route) =>
     route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ user: { roles: ["REPORT_READER"] }, consent: { accepted: true, currentVersion: "1.0" } }) }),
+  );
+  await page.goto("/results");
+  await expect(page.locator("#deltakereSubnav")).toHaveAttribute("data-roles-resolved", "true");
+  await expect(page.locator("#subnavResults")).toBeVisible();
+  await expect(page.locator("#subnavActivity")).toHaveCount(0);
+});
+
+test("administrator ser fanen på Resultater", async ({ page }) => {
+  await mockBase(page, ["ADMINISTRATOR"]);
+  await page.route("**/api/**", (route: Route) => route.fulfill({ status: 200, contentType: "application/json", body: "{}" }));
+  await page.route("**/api/me", (route: Route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ user: { roles: ["ADMINISTRATOR"] }, consent: { accepted: true, currentVersion: "1.0" } }) }),
   );
   await page.goto("/results");
   await expect(page.locator("#deltakereSubnav")).toHaveAttribute("data-roles-resolved", "true");

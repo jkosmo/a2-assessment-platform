@@ -448,7 +448,7 @@ export function createCourseRepository(client: CourseRepositoryClient = prisma) 
         where: { userId },
         include: {
           course: {
-            select: { id: true, title: true, certificationLevel: true },
+            select: { id: true, title: true, certificationLevel: true, versionMajor: true },
           },
         },
         orderBy: { completedAt: "desc" },
@@ -461,7 +461,7 @@ export function createCourseRepository(client: CourseRepositoryClient = prisma) 
       return client.courseCompletion.findUnique({
         where: { certificateId },
         include: {
-          course: { select: { id: true, title: true, certificationLevel: true } },
+          course: { select: { id: true, title: true, certificationLevel: true, versionMajor: true } },
           user: { select: { id: true, name: true } },
         },
       });
@@ -576,6 +576,8 @@ export function createCourseRepository(client: CourseRepositoryClient = prisma) 
           userId: true,
           completedAt: true,
           certificateId: true,
+          // #934: rapporten skiller bevis for kursets nåværende hovedversjon fra eldre.
+          versionMajor: true,
           user: {
             select: {
               id: true,

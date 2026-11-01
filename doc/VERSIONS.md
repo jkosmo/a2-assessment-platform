@@ -2,6 +2,34 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.128.0 - 2026-11-01
+
+### Kursversjoner, skive 2 av 5: alt som leser kursbevis skiller versjonene — #934
+
+Fortsatt kan ingen lage hovedversjon 2 (det er skive 3), så i dag ser ingen forskjell. Når den kommer:
+
+- **Mine kurs:** bare et bevis for kursets nåværende hovedversjon gjør kurset fullført. Har deltakeren
+  bare et eldre bevis, står kurset blant de pågående med merket «Ny versjon», en kort forklaring og
+  lenke til det gamle beviset («Kursbevis, versjon N»).
+- **Kursbeviset** viser versjonen fra versjon 2. **Profilen** setter «(versjon N)» bak kursnavnet, så to
+  bevis for samme kurs ikke ser like ut. Versjon 1 er alle bevis fra før kurs fikk versjoner, og får
+  ingen tilføyelse.
+- **Resultater → kurs:** «fullført» teller bare bevis for nåværende hovedversjon. En deltaker med bare
+  et eldre bevis står som «Må ta ny versjon» til hen har fullført det nye.
+- API-et (`/api/courses/completions`) gir `versionMajor`, `versionMinor` og `current` per bevis.
+- Den gamle unike nøkkelen (bruker, kurs) er fjernet. Databasen kan nå ha ett bevis per hovedversjon.
+
+Uendret med vilje: en frist står som oppfylt av et bevis for hvilken som helst versjon (skive 1), og
+innhold i et bevis kan aldri slettes, uansett versjon. Vakta som hindrer arkivering av et kurs med
+deltakere midt i en gjennomføring, teller også bevis for hvilken som helst versjon. Ellers ville alle
+som tok versjon 1, låse kurset med en gang versjon 2 kom.
+
+### «Aktivitet» under Deltakere er bare for administrator — #1099
+
+Produkteier 2026-11-01: fanen er viktig for å følge innføringen av verktøyet, men skal begrenses til
+administrator. Rapportleser ser fortsatt Resultater og Status, men ikke Aktivitet (fanen er borte, og
+API-et svarer 403).
+
 ## 2.127.0 - 2026-11-01
 
 ### Kursversjoner, skive 1 av 5: et kursbevis gjelder sin hovedversjon — #934

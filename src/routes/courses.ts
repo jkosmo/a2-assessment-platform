@@ -187,6 +187,11 @@ coursesRouter.get("/completions", async (request, response, next) => {
       // #1027: sertifiseringsnivået sendes lokalisert, som tittelen på linja over. Det sto som
       // rå JSON, og hver klient tolket det selv — samme mønster #1022 rettet for modultittelen.
       certificationLevel: localizeContentText(locale, cc.course.certificationLevel) ?? cc.course.certificationLevel,
+      // #934: et kursbevis gjelder sin hovedversjon. `current` sier om det er kursets nåværende — bare da
+      // regnes kurset som fullført. Et eldre bevis står og vises, men kurset er ikke fullført i den nye.
+      versionMajor: cc.versionMajor,
+      versionMinor: cc.versionMinor,
+      current: cc.versionMajor === cc.course.versionMajor,
     }));
     response.json({ completions: items });
   } catch (error) {
@@ -230,6 +235,10 @@ coursesRouter.get("/completions/:certificateId", async (request, response, next)
       completedAt: completion.completedAt.toISOString(),
       participantName: completion.user.name,
       moduleCount,
+      // #934: versjonen beviset ble utstedt for, og om den fortsatt er kursets nåværende hovedversjon.
+      versionMajor: completion.versionMajor,
+      versionMinor: completion.versionMinor,
+      current: completion.versionMajor === completion.course.versionMajor,
       // #580: URL of the platform-wide diploma background, or null when none is configured.
       // Served unauthenticated (branding image) so <img>/CSS background can load it without headers.
       certificateBackgroundUrl: (await hasCertificateBackground()) ? "/certificate-background" : null,

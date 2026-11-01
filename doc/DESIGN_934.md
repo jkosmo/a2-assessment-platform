@@ -1,6 +1,6 @@
 # #934 — hovedversjon og mindre versjon for kurs og moduler
 
-Status: **avklart med produkteier** 2026-11-01 (skissen godkjent). Skive 1 bygget i 2.127.0; skive 2–5 gjenstår.
+Status: **avklart med produkteier** 2026-11-01 (skissen godkjent). Skive 1 bygget i 2.127.0, skive 2 i 2.128.0; skive 3–5 gjenstår.
 Skisse: https://claude.ai/artifact/AyQpYXMQSDHW8WL8YPe34n
 
 ## Hva produkteier har bestemt (2026-11-01)
@@ -140,20 +140,20 @@ Kolonnene `versionMajor`/`versionMinor` på `Course` og `CourseCompletion` (stan
 `CourseVersion` (seksjonsregelen) kommer i skive 3, sammen med det første som kan lage en ny
 hovedversjon: øyeblikksbildet tas av det som gjaldt *før* endringen, i samme transaksjon.
 
-### Lesere av kursbevis — hva hver av dem skal bety (arbeidsliste for skive 2)
+### Lesere av kursbevis — hva hver av dem skal bety (skive 2, gjort i 2.128.0)
 
 Så lenge alle kurs er 1.x, svarer de likt. Når hovedversjon 2 finnes, må hver leser bety én av to ting:
 
 | Leser | Skal bety | Merknad |
 |---|---|---|
-| `routes/courses.ts:181` (`/api/courses/completions`) → `isCourseCompleted()` i deltakerflaten | bevis for **nåværende** hovedversjon | lista har flere rader per kurs; kartet i `participant.js` må velge riktig |
-| `courseReport.ts` (fullført-tall og deltakerrader) | **nåværende**, og «må ta ny versjon» som egen kategori | |
+| `routes/courses.ts:181` (`/api/courses/completions`) → `isCourseCompleted()` i deltakerflaten | bevis for **nåværende** hovedversjon | lista har flere rader per kurs; kartet i `participant.js` velger riktig; eldre bevis gir «Ny versjon» (skive 2) |
+| `courseReport.ts` (fullført-tall og deltakerrader) | **nåværende**, og «må ta ny versjon» som egen kategori | gjort i skive 2 |
 | `enrollmentService.deriveStatus` | **hvilken som helst** — fristen står som oppfylt | gjort i skive 1 |
 | `contentLifecycle.ts:124/186` (innhold i et bevis kan ikke slettes) | **hvilken som helst** | uendret |
-| `contentLifecycle.ts:237` (påbegynt, ikke fullført) | må vurderes | |
+| `contentLifecycle.ts:237` (påbegynt, ikke fullført) | **hvilken som helst** | lesinger og innleveringer har ingen versjon; med «nåværende» ville alle som tok versjon 1 stå som påbegynt og låse arkivering |
 | `courseCommands.ts`/`courseCascadeDeleteService.ts` (kurs med bevis kan ikke slettes) | **hvilken som helst** | uendret |
 | `activityReport.ts` (fullføringer over tid) | **hver utstedelse** er en hendelse | uendret |
-| Profilsiden og kursbeviset | alle bevis, med versjon | |
+| Profilsiden og kursbeviset | alle bevis, med versjon | gjort i skive 2 (versjon vises fra 2) |
 
 ## Det som må holdes rett (fra DECISIONS)
 

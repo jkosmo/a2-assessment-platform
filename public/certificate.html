@@ -76,6 +76,11 @@
           <div class="cert-sublabel" id="certLevelWrap">
             <span data-i18n="certificate.certLevel">Certification level</span>: <span id="certLevel"></span>
           </div>
+          <!-- #934: kursets hovedversjon beviset gjelder. Vises fra versjon 2; versjon 1 er alle bevis utstedt før
+               kurs fikk versjoner, og en linje som sier «Versjon 1» på hvert eksisterende bevis ville bare vært støy. -->
+          <div class="cert-sublabel" id="certVersionWrap" hidden>
+            <span data-i18n="certificate.version">Version</span> <span id="certVersion"></span>
+          </div>
           <hr class="cert-rule" />
           <!-- #580: only edge items in the bottom band — the center is kept clear for the
                diploma seal/logo baked into the platform background image. -->

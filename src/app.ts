@@ -249,7 +249,7 @@ app.get("/deltakere/status", (_request, response) => {
 });
 
 // #1099: samlet aktivitet over tid og hvem som er aktive — en fane under «Deltakere». Dataene er
-// rollestyrt i /api/reports/activity (administrator og rapportleser).
+// rollestyrt i /api/reports/activity (bare administrator, 2.128.0).
 app.get("/deltakere/aktivitet", (_request, response) => {
   response.sendFile(path.resolve(process.cwd(), "public", "participant-activity.html"));
 });

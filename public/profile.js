@@ -292,6 +292,11 @@ function renderCourses(body) {
 
     const titleTd = document.createElement("td");
     titleTd.textContent = showValue(course.courseTitle ?? course.courseId);
+    // #934: et kursbevis gjelder sin hovedversjon. Fra versjon 2 står versjonen ved navnet, så to bevis for
+    // samme kurs ikke ser like ut (versjon 1 er alle bevis fra før kurs fikk versjoner).
+    if (Number.isInteger(course.versionMajor) && course.versionMajor > 1) {
+      titleTd.textContent += t("profile.courses.versionSuffix").replace("{n}", String(course.versionMajor));
+    }
     row.appendChild(titleTd);
 
     const dateTd = document.createElement("td");

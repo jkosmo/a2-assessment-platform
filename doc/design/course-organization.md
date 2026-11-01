@@ -146,7 +146,9 @@ await checkAndIssueCourseCompletions({ userId, moduleId }, tx);
 1. Finn alle publiserte kurs som inneholder `moduleId` (via `CourseModule`)
 2. For hvert kurs: hent alle `moduleId`-er med `sortOrder`
 3. Sjekk om bruker har `CertificationStatus.status = 'PASSED'` for samtlige moduler
-4. Hvis ja og `CourseCompletion` ikke finnes → opprett (idempotent via `@@unique([userId, courseId])`)
+4. Hvis ja og det ikke finnes et `CourseCompletion` for kursets **nåværende hovedversjon** → opprett, stemplet med
+   versjonen (idempotent via `@@unique([userId, courseId, versionMajor])`). #934 (2.128.0): et bevis for en eldre
+   hovedversjon stopper ikke utstedelsen — det gamle står, og et nytt utstedes for den nye. Se `doc/DESIGN_934.md`.
 
 **Feilhåndtering:** Trigger bør ikke blokkere beslutning ved feil.
 Vurder `.catch()`-guard utenfor transaksjonen hvis streng isolering ønskes.

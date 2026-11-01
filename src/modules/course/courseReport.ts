@@ -32,7 +32,9 @@ type CourseLearnerRow = {
   participantDepartment: string | null;
   courseId: string;
   courseTitle: string;
-  status: "NOT_STARTED" | "IN_PROGRESS" | "COMPLETED";
+  // #934: NEEDS_NEW_VERSION = har kursbevis for en eldre hovedversjon, men ikke for den nåværende. Ikke
+  // stryk, ikke «ikke startet» — en egen kategori (produkteier 2026-11-01).
+  status: "NOT_STARTED" | "IN_PROGRESS" | "COMPLETED" | "NEEDS_NEW_VERSION";
   passedModules: number;
   failedModules: number;
   underReviewModules: number;
@@ -44,6 +46,8 @@ type CourseLearnerRow = {
   latestActivityAt: string | null;
   completedAt: string | null;
   certificateId: string | null;
+  /** #934: hovedversjonen til deltakerens nyeste eldre bevis, når hen ikke har bevis for den nåværende. */
+  earlierCertificateVersion: number | null;
 };
 
 // #969: «hvem er med i dette kurset» besvares ETT sted — `resolveCourseAudience` (#498), det samme
@@ -150,7 +154,11 @@ export async function getCourseReport(
         filters,
       );
       const enrolled = participantIds.size;
-      const completed = completions.length;
+      // #934: fullført = har bevis for kursets NÅVÆRENDE hovedversjon, telt én gang per person. Et bevis
+      // for en eldre hovedversjon står, men kurset er ikke fullført i den nye (produkteier 2026-11-01).
+      // Før 2.128.0 var beviset unikt per (bruker, kurs), og radantallet var antall personer; det er det
+      // ikke lenger.
+      const completed = new Set(completions.filter((c) => c.versionMajor === course.versionMajor).map((c) => c.userId)).size;
 
       // ⚠️ #969/#996: modulraden hadde nøyaktig samme feil som kursraden, én etasje ned — telleren
       // var sertifiseringer i vinduet, nevneren innleveringer i vinduet, og de to målte ULIKE
@@ -209,6 +217,7 @@ export async function getCourseLearnerReport(
     learners: number;
     completed: number;
     inProgress: number;
+    needsNewVersion: number;
   };
 }> {
   // #1058: utenfor kallerens kurs → samme svar som for et kurs som ikke finnes.
@@ -223,6 +232,7 @@ export async function getCourseLearnerReport(
         learners: 0,
         completed: 0,
         inProgress: 0,
+        needsNewVersion: 0,
       },
     };
   }
@@ -289,6 +299,8 @@ export async function getCourseLearnerReport(
     participantEmail: string;
     participantDepartment: string | null;
     completion: (typeof completions)[number] | null;
+    // #934: nyeste bevis for en ELDRE hovedversjon, når det ikke finnes et for den nåværende.
+    earlier?: (typeof completions)[number] | null;
     latestActivityAt: Date | null;
     latestByModule: Map<string, (typeof submissions)[number]>;
   }>();
@@ -328,7 +340,13 @@ export async function getCourseLearnerReport(
       latestActivityAt: null,
       latestByModule: new Map<string, (typeof submissions)[number]>(),
     };
-    current.completion = completion;
+    // #934: bare et bevis for kursets nåværende hovedversjon gjør deltakeren fullført. Et eldre bevis
+    // huskes for seg — det nyeste av dem — så raden kan si «må ta ny versjon» og hvilken hen har.
+    if (completion.versionMajor === course.versionMajor) {
+      current.completion = completion;
+    } else if (!current.earlier || completion.versionMajor > current.earlier.versionMajor) {
+      current.earlier = completion;
+    }
     if (!current.latestActivityAt || completion.completedAt > current.latestActivityAt) {
       current.latestActivityAt = completion.completedAt;
     }
@@ -395,15 +413,20 @@ export async function getCourseLearnerReport(
     // #966: kravet er moduler OG seksjoner, samme regnestykke som bevisporten og kurslista.
     // `hasStarted` teller nå også lesing: en deltaker som bare har lest, men ikke levert, er i gang
     // — ikke «ikke startet».
-    const hasStarted = learner.latestByModule.size > 0 || readSections > 0 || Boolean(learner.completion);
+    const hasStarted = learner.latestByModule.size > 0 || readSections > 0 || Boolean(learner.completion) || Boolean(learner.earlier);
     const completedModules = learner.completion ? moduleIds.length : passedModules;
-    const status = learner.completion
+    const computed = computeCourseStatus(
+      passedModules + readSections,
+      moduleIds.length + requiredSectionIds.length,
+      hasStarted,
+    );
+    // #934: et bevis for en eldre hovedversjon gir «må ta ny versjon» — med mindre kravet i den nåværende
+    // faktisk er oppfylt (beviset er da bare ikke utstedt ennå).
+    const status: CourseLearnerRow["status"] = learner.completion
       ? "COMPLETED"
-      : computeCourseStatus(
-          passedModules + readSections,
-          moduleIds.length + requiredSectionIds.length,
-          hasStarted,
-        );
+      : learner.earlier && computed !== "COMPLETED"
+        ? "NEEDS_NEW_VERSION"
+        : computed;
 
     return {
       participantId: learner.participantId,
@@ -426,6 +449,7 @@ export async function getCourseLearnerReport(
       latestActivityAt: latestActivityAt?.toISOString() ?? null,
       completedAt: learner.completion?.completedAt.toISOString() ?? null,
       certificateId: learner.completion?.certificateId ?? null,
+      earlierCertificateVersion: learner.completion ? null : (learner.earlier?.versionMajor ?? null),
     };
   });
 
@@ -436,6 +460,7 @@ export async function getCourseLearnerReport(
       learners: rows.length,
       completed: rows.filter((row) => row.status === "COMPLETED").length,
       inProgress: rows.filter((row) => row.status === "IN_PROGRESS").length,
+      needsNewVersion: rows.filter((row) => row.status === "NEEDS_NEW_VERSION").length,
     },
   };
 }

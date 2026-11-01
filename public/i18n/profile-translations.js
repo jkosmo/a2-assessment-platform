@@ -78,6 +78,7 @@ const own = {
     "profile.courses.table.level": "Level",
     "profile.courses.table.certificateId": "Certificate ID",
     "profile.courses.view": "View certificate",
+    "profile.courses.versionSuffix": " (version {n})",
 
     // GDPR rights
     "profile.section.rights": "Your rights",
@@ -196,6 +197,7 @@ const own = {
     "profile.courses.table.level": "Nivå",
     "profile.courses.table.certificateId": "Bevis-ID",
     "profile.courses.view": "Vis bevis",
+    "profile.courses.versionSuffix": " (versjon {n})",
 
     "profile.section.rights": "Dine rettigheter",
     "profile.rights.view": "Se mine data",
@@ -311,6 +313,7 @@ const own = {
     "profile.courses.table.level": "Nivå",
     "profile.courses.table.certificateId": "Bevis-ID",
     "profile.courses.view": "Vis bevis",
+    "profile.courses.versionSuffix": " (versjon {n})",
 
     "profile.section.rights": "Rettane dine",
     "profile.rights.view": "Sjå dataa mine",

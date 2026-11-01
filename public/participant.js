@@ -3768,7 +3768,9 @@ if (previewModeEnabled) {
 let participantCourses = [];
 // 2.102.0: temaene deltakeren har kurs i, alfabetisk på deltakerens språk (tjeneren sorterer).
 let participantThemes = [];
-let participantCompletions = {};   // courseId -> completion
+let participantCompletions = {};   // courseId -> completion for the course's CURRENT major version
+// #934: courseId -> newest completion for an EARLIER major version, when there is none for the current.
+let participantEarlierCompletions = {};
 // #550: celebrate a course completion only when it happens during the session (e.g. the
 // participant just passed the last module / read the last section), not for already-completed
 // courses on first load.
@@ -3783,9 +3785,16 @@ async function loadParticipantCourses() {
   participantCourses = Array.isArray(coursesBody.courses) ? coursesBody.courses : [];
   participantThemes = Array.isArray(coursesBody.themes) ? coursesBody.themes : [];
   participantCompletions = {};
+  participantEarlierCompletions = {};
   if (Array.isArray(completionsBody.completions)) {
     for (const c of completionsBody.completions) {
-      participantCompletions[c.courseId] = c;
+      // #934: et kursbevis gjelder sin hovedversjon. Bare et bevis for kursets NÅVÆRENDE gjør kurset
+      // fullført; et eldre står for seg (det nyeste av dem) og vises som «Kursbevis, versjon N».
+      // `current` mangler fra eldre tjenere — da er beviset det eneste, og det gjelder.
+      if (c.current !== false) participantCompletions[c.courseId] = c;
+      else if (!participantEarlierCompletions[c.courseId] || c.versionMajor > participantEarlierCompletions[c.courseId].versionMajor) {
+        participantEarlierCompletions[c.courseId] = c;
+      }
     }
   }
   // Reloading the course list rebuilds the accordion with fresh "loading…" detail containers;
@@ -4215,16 +4224,27 @@ function buildCourseAccordionItem(course, options = {}) {
       <div class="course-accordion-body">${detailSlot}</div>
     `;
   } else {
+    // #934: kurset har fått en ny hovedversjon siden deltakeren fullførte. Det gamle beviset står og
+    // vises; kurset er ikke fullført i den nye (produkteier 2026-11-01).
+    const earlier = participantEarlierCompletions[course.id];
+    const earlierHtml = earlier
+      ? `<p class="course-new-version-note small">${escapeHtmlP(t("courses.newVersion.hint"))}
+          <a class="course-certificate-link course-certificate-link--earlier" href="/certificate?id=${encodeURIComponent(earlier.certificateId)}" target="_blank" rel="noopener">${escapeHtmlP(fillPlaceholders(t("courses.certificate.earlier"), { n: earlier.versionMajor }))} · ${escapeHtmlP(t("courses.certificate.view"))}</a></p>`
+      : "";
+    const badgeHtml = earlier
+      ? `<span class="module-status-badge course-new-version-badge" style="font-size:11px;padding:2px 8px;flex-shrink:0">${escapeHtmlP(t("courses.newVersion"))}</span>`
+      : `<span class="module-status-badge ${badgeClass}" style="font-size:11px;padding:2px 8px;flex-shrink:0">${escapeHtmlP(statusText)}</span>`;
     item.innerHTML = `
       <button type="button" class="course-accordion-header">
         <span>
           <span class="course-accordion-title">${escapeHtmlP(localizePreviewText(course.title))}</span>
           <span class="course-accordion-progress">${escapeHtmlP(formatCourseProgressLabel(course.progress))}</span>
         </span>
-        <span class="module-status-badge ${badgeClass}" style="font-size:11px;padding:2px 8px;flex-shrink:0">${escapeHtmlP(statusText)}</span>
+        ${badgeHtml}
         <span class="course-accordion-chevron" aria-hidden="true">&#8250;</span>
       </button>
       <div class="course-accordion-body">
+        ${earlierHtml}
         <div class="course-progress-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct}" aria-label="${escapeHtmlP(stepsLabel)}" title="${escapeHtmlP(stepsLabel)}"><div class="course-progress-fill" style="width:${pct}%"></div></div>
         ${detailSlot}
       </div>

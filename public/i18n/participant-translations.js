@@ -542,6 +542,9 @@ export const translations = {
     "courses.module.unavailable": "Module is not available in the participant workspace.",
     "courses.certificate.earned": "Certificate issued",
     "courses.certificate.view": "View certificate",
+    "courses.certificate.earlier": "Certificate, version {n}",
+    "courses.newVersion": "New version",
+    "courses.newVersion.hint": "The course has new content. Your certificate still applies to the version you took. Complete what is new to get a certificate for this one.",
     "courses.certificate.short": "Certificate",
     "courses.list.completedGroup": "Completed",
     // 2.102.0: tema i «Mine kurs».
@@ -1066,6 +1069,9 @@ export const translations = {
     "courses.module.unavailable": "Modulen er ikke tilgjengelig i deltakerflaten.",
     "courses.certificate.earned": "Sertifikat utstedt",
     "courses.certificate.view": "Vis bevis",
+    "courses.certificate.earlier": "Kursbevis, versjon {n}",
+    "courses.newVersion": "Ny versjon",
+    "courses.newVersion.hint": "Kurset har fått nytt innhold. Kursbeviset ditt gjelder fortsatt for versjonen du tok. Fullfør det nye for å få kursbevis for denne.",
     "courses.certificate.short": "Sertifikat",
     "courses.list.completedGroup": "Fullført",
     // 2.102.0: tema i «Mine kurs».
@@ -1589,6 +1595,9 @@ export const translations = {
     "courses.module.unavailable": "Modulen er ikkje tilgjengeleg i deltakarflata.",
     "courses.certificate.earned": "Sertifikat utstedt",
     "courses.certificate.view": "Vis bevis",
+    "courses.certificate.earlier": "Kursbevis, versjon {n}",
+    "courses.newVersion": "Ny versjon",
+    "courses.newVersion.hint": "Kurset har fått nytt innhald. Kursbeviset ditt gjeld framleis for versjonen du tok. Fullfør det nye for å få kursbevis for denne.",
     "courses.certificate.short": "Sertifikat",
     "courses.list.completedGroup": "Fullført",
     // 2.102.0: tema i «Mine kurs».

@@ -63,8 +63,8 @@ All routes use the `courses` capability: PARTICIPANT, SUBJECT_MATTER_OWNER, ADMI
 | Method | Route | Description |
 |---|---|---|
 | `GET` | `/api/courses` | Published courses with progress. `progress.total` counts **all elements** (modules + learning sections); `completed` = passed modules + read sections. 2.102.0: each course has `themes: [{ id, name }]`, and the response has `themes` — every theme the participant has a course in, alphabetical in the participant's language. |
-| `GET` | `/api/courses/completions` | The user's course completions / certificates |
-| `GET` | `/api/courses/completions/:certificateId` | A single completion by certificate ID, for the printable certificate view (#550). Owner-scoped — `404` for another user's certificate. Returns `certificateId`, `courseId`, `courseTitle` (localized), `certificationLevel`, `completedAt`, `participantName`, `moduleCount`. |
+| `GET` | `/api/courses/completions` | The user's course completions / certificates. **#934 (2.128.0):** a certificate applies to its major version, so a course can have one per major version. Each item carries `versionMajor`, `versionMinor` and `current` (`true` when the certificate is for the course's current major version). Only a `current` certificate makes the course completed; an older one is shown as «Certificate, version N». |
+| `GET` | `/api/courses/completions/:certificateId` | A single completion by certificate ID, for the printable certificate view (#550). Owner-scoped — `404` for another user's certificate. Returns `certificateId`, `courseId`, `courseTitle` (localized), `certificationLevel`, `completedAt`, `participantName`, `moduleCount`, and (#934, 2.128.0) `versionMajor`, `versionMinor`, `current`. The certificate view shows the version from major version 2. |
 | `GET` | `/api/courses/:courseId` | Course detail. Returns `modules[]` (legacy) and `items[]` — the ordered mixed module/section sequence; SECTION items carry a `read` flag (#491/#492). **#958:** SECTION items the participant cannot open (archived, or no active version) are **omitted entirely** — `available` is therefore always `true` on sections. MODULE items are all present, each carrying **two** independent flags. **#996: `available` and `required` are not the same question, and conflating them is a dead end.** `available:false` means the participant cannot open it right now. `required:false` means the certificate gate does not ask for it. An **unpublished** module is `available:false, required:true` — temporarily down, still counted. An **archived** module is `available:false, required:false` — taken out of circulation. A client that infers the second from the first will offer "Finish course" on a course the server will not certify: the click records the read and nothing happens. See `doc/DECISIONS.md` and `FEATURE_SURFACE_MAP` §25. |
 | `GET` | `/api/courses/:courseId/sections/:sectionId` | Sanitised HTML + title of a learning section in the participant's locale. Validates the section belongs to the published course (#491). |
 | `POST` | `/api/courses/:courseId/sections/:sectionId/read` | Mark a section as read (idempotent). `204` on success (#492). |
@@ -203,8 +203,8 @@ calendar dates.
 
 | Method | Route | Roles |
 |---|---|---|
-| `GET` | `/api/reports/activity?period=4\|12\|all&grain=day\|week&department=…` | ADMINISTRATOR, REPORT_READER |
-| `GET` | `/api/reports/activity/users/:userId/recent` | ADMINISTRATOR, REPORT_READER |
+| `GET` | `/api/reports/activity?period=4\|12\|all&grain=day\|week&department=…` | ADMINISTRATOR (report readers get 403 from 2.128.0) |
+| `GET` | `/api/reports/activity/users/:userId/recent` | ADMINISTRATOR (report readers get 403 from 2.128.0) |
 
 `GET /activity` returns `{ generatedAt, period, grain, department, range, departments, population,
 kpis, buckets, people }`. `/recent` returns the latest events with titles in the reader's locale, and

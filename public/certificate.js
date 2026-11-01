@@ -76,6 +76,10 @@ function renderCertificate(data) {
   const nivå = data.certificationLevel ? localizeCertLevel(data.certificationLevel) : "";
   document.getElementById("certLevel").textContent = nivå;
   document.getElementById("certLevelWrap").hidden = !nivå;
+  // #934: et kursbevis gjelder sin hovedversjon. Vises fra versjon 2 (se certificate.html).
+  const versjon = Number.isInteger(data.versionMajor) && data.versionMajor > 1 ? String(data.versionMajor) : "";
+  document.getElementById("certVersion").textContent = versjon;
+  document.getElementById("certVersionWrap").hidden = !versjon;
   const modulesWrap = document.getElementById("certModulesWrap");
   if (typeof data.moduleCount === "number" && data.moduleCount > 0) {
     document.getElementById("certModules").textContent = String(data.moduleCount);
