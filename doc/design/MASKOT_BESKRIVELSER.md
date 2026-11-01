@@ -93,13 +93,16 @@ Beskrivelsene er på engelsk, fordi bildemodellene følger engelsk mer presist.
 Produkteier valgte å gå videre med **2 · Skuta** og **3 · A og 2**. De andre er lagt bort. Seks nye
 retninger bygger videre på det som er godt i de to: seilet som vind og fremdrift, og bokstavene som figurer.
 
-### 3 · Kaptein A og matros 2 — de to slått sammen
+### 3 · Seilet A og rorsmann 2 — de to slått sammen
 
-> Mascots "Kaptein A og matros 2": a small, chubby sailboat with a slate-blue hull. Its single white sail is
-> the sail-shaped letter A from the logo, and the sail has a calm, wise face — that is Captain A. On deck
-> stands a small, round, slate-blue sailor shaped like the number 2, wearing a tiny white sailor cap; the 2
-> is very expressive and always reacts to the weather. When the boat is fed, wind fills the sail; when
-> hungry, the sail hangs slack and the 2 panics.
+Justert av produkteier: 2-tallet sitter til rors, fordi A er seilet.
+
+> Mascots "Seilet A og rorsmann 2": a small, chubby sailboat with a slate-blue hull. Its single white sail
+> is the sail-shaped letter A from the logo, and the sail has a calm, wise face — that is A. At the stern
+> sits a small, round, slate-blue helmsman shaped like the number 2, wearing a dark skipper's cap and
+> holding a brass tiller that steers the rudder. The 2 is very expressive and always reacts to the weather;
+> A only needs wind. When the boat is fed, wind fills the sail and the 2 steers proudly; when hungry, the
+> sail hangs slack and the 2 slumps over the tiller.
 
 ### 4 · Vikingskuta
 
