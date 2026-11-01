@@ -28,6 +28,10 @@ const USER_ID = "user-1";
 // Minimal Prisma-lignende klient som faktisk tolker de filtrene porten bruker.
 function createFakeClient(certifications: CertRow[]) {
   const created: Array<{ userId: string; courseId: string }> = [];
+  // #934: hva tjenesten faktisk spør etter og skriver. Kurset er 3.2 her, så en vei som glemte versjonen
+  // (`undefined`, eller standard 1) synes — ekte Prisma ville avvist `undefined` i den sammensatte nøkkelen.
+  const lookups: unknown[] = [];
+  const versions: Array<{ versionMajor: unknown; versionMinor: unknown }> = [];
 
   const client = {
     course: {
@@ -36,6 +40,8 @@ function createFakeClient(certifications: CertRow[]) {
           id: COURSE_ID,
           publishedAt: new Date("2026-01-01T00:00:00.000Z"),
           archivedAt: null,
+          versionMajor: 3,
+          versionMinor: 2,
           items: [{ moduleId: MODULE_ID }],
         },
       ],
@@ -59,15 +65,19 @@ function createFakeClient(certifications: CertRow[]) {
       findMany: async () => [],
     },
     courseCompletion: {
-      findUnique: async () => null,
-      create: async ({ data }: { data: { userId: string; courseId: string } }) => {
+      findUnique: async ({ where }: { where: unknown }) => {
+        lookups.push(where);
+        return null;
+      },
+      create: async ({ data }: { data: { userId: string; courseId: string; versionMajor: unknown; versionMinor: unknown } }) => {
         created.push({ userId: data.userId, courseId: data.courseId });
+        versions.push({ versionMajor: data.versionMajor, versionMinor: data.versionMinor });
         return { ...data, certificateId: "certificate-1" };
       },
     },
   };
 
-  return { client, created };
+  return { client, created, lookups, versions };
 }
 
 async function issueCompletionsFor(status: string | null) {
@@ -114,6 +124,17 @@ describe("kursbevisporten er uendret av at resertifisering fjernes (#989)", () =
 
     expect(created).toEqual([]);
     expect(recordAuditEvent).not.toHaveBeenCalled();
+  });
+
+  // #934: beviset slås opp og utstedes for kursets NÅVÆRENDE versjon (her 3.2) — ikke `undefined`, og
+  // ikke standardverdien 1.
+  it("#934: slår opp beviset for kursets hovedversjon og stempler det nye med versjonen", async () => {
+    const { client, lookups, versions } = createFakeClient([{ userId: USER_ID, moduleId: MODULE_ID, status: "ACTIVE" }]);
+    const { checkAndIssueCourseCompletions } = await import("../../src/modules/course/courseCompletionService.js");
+    await checkAndIssueCourseCompletions({ userId: USER_ID, moduleId: MODULE_ID }, client as never);
+
+    expect(lookups).toEqual([{ userId_courseId_versionMajor: { userId: USER_ID, courseId: COURSE_ID, versionMajor: 3 } }]);
+    expect(versions).toEqual([{ versionMajor: 3, versionMinor: 2 }]);
   });
 
   it("utsteder IKKE kursbevis når modulen mangler sertifiseringsrad", async () => {

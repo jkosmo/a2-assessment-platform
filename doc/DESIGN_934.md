@@ -1,6 +1,6 @@
 # #934 — hovedversjon og mindre versjon for kurs og moduler
 
-Status: **avklart med produkteier** 2026-11-01 (skissen godkjent). Ikke bygget.
+Status: **avklart med produkteier** 2026-11-01 (skissen godkjent). Skive 1 bygget i 2.127.0; skive 2–5 gjenstår.
 Skisse: https://claude.ai/artifact/AyQpYXMQSDHW8WL8YPe34n
 
 ## Hva produkteier har bestemt (2026-11-01)
@@ -122,13 +122,38 @@ Alle avgjort 2026-11-01:
 ## Rekkefølge (skiver)
 
 1. Datamodell + migrasjon (additiv), versjon på kurs og bevis, utstedelse per hovedversjon. Ingen ny
-   flate. Alle eksisterende blir 1.0.
-2. Forfatterdialogen for kurs (lagre endring, publiser nye versjoner) + versjon i lister.
-3. Deltakerflaten: «Ny versjon», bevis med versjon, rapportkategori «må ta ny versjon».
+   flate. Alle eksisterende blir 1.0. Den gamle unike nøkkelen (bruker, kurs) står.
+2. Leserne skiller versjonene (tabellen under), og den gamle nøkkelen fjernes — i samme utrulling
+   (QA-porten 2026-11-01: utvid først, trekk sammen etterpå, og ingen leser skal kunne møte to bevis
+   før den kan skille dem). Deltakerflaten: bevis med versjon, rapportkategori «må ta ny versjon».
+3. Forfatterdialogen for kurs (lagre endring, publiser nye versjoner) + versjon i lister, og
+   `CourseVersion` for seksjonsregelen. Først her kan hovedversjon 2 lages.
 4. E-post.
 5. Moduler: avkrysningen #997 → hoved/mindre, og kursenes hovedversjon fra modulens.
 
 Hver skive kan rulles ut alene. Skive 1 endrer ingenting synlig for noen.
+
+### Skive 1 — bygget (2.127.0)
+
+Kolonnene `versionMajor`/`versionMinor` på `Course` og `CourseCompletion` (standard 1.0), unik nøkkel
+`(userId, courseId, versionMajor)` ved siden av den gamle `(userId, courseId)`, og utstedelsen spør etter bevis for kursets nåværende hovedversjon.
+`CourseVersion` (seksjonsregelen) kommer i skive 3, sammen med det første som kan lage en ny
+hovedversjon: øyeblikksbildet tas av det som gjaldt *før* endringen, i samme transaksjon.
+
+### Lesere av kursbevis — hva hver av dem skal bety (arbeidsliste for skive 2)
+
+Så lenge alle kurs er 1.x, svarer de likt. Når hovedversjon 2 finnes, må hver leser bety én av to ting:
+
+| Leser | Skal bety | Merknad |
+|---|---|---|
+| `routes/courses.ts:181` (`/api/courses/completions`) → `isCourseCompleted()` i deltakerflaten | bevis for **nåværende** hovedversjon | lista har flere rader per kurs; kartet i `participant.js` må velge riktig |
+| `courseReport.ts` (fullført-tall og deltakerrader) | **nåværende**, og «må ta ny versjon» som egen kategori | |
+| `enrollmentService.deriveStatus` | **hvilken som helst** — fristen står som oppfylt | gjort i skive 1 |
+| `contentLifecycle.ts:124/186` (innhold i et bevis kan ikke slettes) | **hvilken som helst** | uendret |
+| `contentLifecycle.ts:237` (påbegynt, ikke fullført) | må vurderes | |
+| `courseCommands.ts`/`courseCascadeDeleteService.ts` (kurs med bevis kan ikke slettes) | **hvilken som helst** | uendret |
+| `activityReport.ts` (fullføringer over tid) | **hver utstedelse** er en hendelse | uendret |
+| Profilsiden og kursbeviset | alle bevis, med versjon | |
 
 ## Det som må holdes rett (fra DECISIONS)
 

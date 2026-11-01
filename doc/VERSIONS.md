@@ -2,6 +2,28 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.127.0 - 2026-11-01
+
+### Kursversjoner, skive 1 av 5: et kursbevis gjelder sin hovedversjon — #934
+
+Produkteier 2026-11-01: kurs får hovedversjon og mindre versjon (3.0 → 3.1 mindre, 3.x → 4.0 hoved), og
+innholdsansvarlig velger ved publisering. Et kursbevis gjelder sin hovedversjon; en ny hovedversjon gir
+mulighet for et nytt bevis, og det gamle står. Hele designet: `doc/DESIGN_934.md`.
+
+Denne skiven er bare grunnmuren, og **ingen ser noen forskjell**:
+
+- `Course` og `CourseCompletion` har fått `versionMajor`/`versionMinor`. Alle eksisterende kurs og bevis
+  er 1.0.
+- Ny unik nøkkel (bruker, kurs, hovedversjon). Den gamle (bruker, kurs) står til skive 2, så databasen
+  fortsatt bare kan ha ett bevis per kurs til leserne kan skille versjonene (QA-porten: utvid først).
+- Utstedelsen spør etter bevis for kursets **nåværende** hovedversjon og stempler det nye beviset med
+  versjonen.
+- En tildelt frist regnes som oppfylt av et bevis for hvilken som helst hovedversjon (produkteier: en
+  oppfylt frist står som oppfylt).
+
+Migreringen er additiv og trygg under rullering: en gammel container som skriver et bevis, får
+hovedversjon 1 og samme regel som før. Ingen flate kan lage hovedversjon 2 ennå — det er skive 3.
+
 ## 2.126.0 - 2026-11-01
 
 Produkteier 2026-11-01: «Kurslisten under Innholdsforvaltning bør tilpasses til å være mer lik den som er

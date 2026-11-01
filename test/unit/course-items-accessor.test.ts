@@ -290,14 +290,20 @@ describe("#958 bevisporten og deltakersekvensen får radene fra samme dør", () 
     const client = createClient(items, {
       course: {
         findMany: async () => [
-          { id: COURSE_ID, publishedAt: new Date("2026-01-01"), archivedAt: null, items: [] },
+          // #934: versjonen er påkrevd i utstedelsen; uten den sto `undefined` i oppslaget og testen ble grønn.
+          { id: COURSE_ID, publishedAt: new Date("2026-01-01"), archivedAt: null, versionMajor: 1, versionMinor: 0, items: [] },
         ],
       },
       certificationStatus: { count: async () => 0 },
       courseSectionRead: { findMany: async () => reads.map((sectionId) => ({ sectionId })) },
       courseCompletion: {
-        findUnique: async () => null,
-        create: async ({ data }: { data: { courseId: string } }) => {
+        findUnique: async ({ where }: { where: { userId_courseId_versionMajor?: { versionMajor?: unknown } } }) => {
+          // #934: oppslaget skal bære kursets hovedversjon; ekte Prisma avviser `undefined` her.
+          expect(where.userId_courseId_versionMajor?.versionMajor).toBe(1);
+          return null;
+        },
+        create: async ({ data }: { data: { courseId: string; versionMajor?: unknown } }) => {
+          expect(data.versionMajor).toBe(1);
           created.push({ courseId: data.courseId });
           return { ...data, certificateId: "cert-1" };
         },

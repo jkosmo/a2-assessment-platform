@@ -234,8 +234,11 @@ async function hasUserStartedCourse(userId: string, courseId: string): Promise<b
 }
 
 export async function deriveStatus(userId: string, courseId: string, dueAt: Date | null, now: Date): Promise<EnrollmentStatus> {
-  const completion = await prisma.courseCompletion.findUnique({
-    where: { userId_courseId: { userId, courseId } },
+  // #934: bevis for HVILKEN SOM HELST hovedversjon oppfyller tildelingen. Produkteier 2026-11-01: en frist
+  // som er oppfylt, står som oppfylt; en ny hovedversjon er frivillig til noen setter en ny frist, og gir
+  // ingen påminnelser.
+  const completion = await prisma.courseCompletion.findFirst({
+    where: { userId, courseId },
     select: { id: true },
   });
   const hasStarted = completion ? true : await hasUserStartedCourse(userId, courseId);

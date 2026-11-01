@@ -96,9 +96,11 @@ export function createCourseRepository(client: CourseRepositoryClient = prisma) 
       });
     },
 
-    findCourseCompletion(userId: string, courseId: string) {
+    // #934: et kursbevis gjelder sin hovedversjon. «Har deltakeren bevis?» spørres derfor alltid for
+    // én hovedversjon — kursets nåværende, når det er utstedelsen som spør.
+    findCourseCompletion(userId: string, courseId: string, versionMajor: number) {
       return client.courseCompletion.findUnique({
-        where: { userId_courseId: { userId, courseId } },
+        where: { userId_courseId_versionMajor: { userId, courseId, versionMajor } },
       });
     },
 
@@ -108,11 +110,12 @@ export function createCourseRepository(client: CourseRepositoryClient = prisma) 
     createCourseCompletion(
       userId: string,
       courseId: string,
+      version: { major: number; minor: number },
       moduleSnapshotJson: string,
       sectionSnapshotJson?: string,
     ) {
       return client.courseCompletion.create({
-        data: { userId, courseId, moduleSnapshotJson, sectionSnapshotJson },
+        data: { userId, courseId, versionMajor: version.major, versionMinor: version.minor, moduleSnapshotJson, sectionSnapshotJson },
       });
     },
 

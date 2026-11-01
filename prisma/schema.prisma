@@ -662,6 +662,11 @@ model Course {
   // #1093: valgfri plassering i «Mine kurs». Satt: først, stigende. Tomt (det vanlige): alfabetisk
   // på tittelen i deltakerens språk. Regelen bor i courseOrdering.ts.
   sortOrder          Int?
+  // #934: hovedversjon og mindre versjon (3.0 → 3.1 mindre, 3.x → 4.0 hoved). Innholdsansvarlig velger
+  // ved publisering. Et kursbevis gjelder sin hovedversjon; mindre versjon har ingen konsekvens for
+  // utstedte bevis. Eksisterende kurs er 1.0. Se doc/DESIGN_934.md.
+  versionMajor       Int                     @default(1)
+  versionMinor       Int                     @default(0)
   publishedAt        DateTime?
   archivedAt         DateTime?
   createdAt          DateTime                @default(now())
@@ -714,9 +719,17 @@ model CourseCompletion {
   // seksjoner». Å bakfylle med `[]` ville påstått at gamle kurs var seksjonsfrie.
   // Additivt felt — expand/contract-trygt, gamle containere leser det aldri.
   sectionSnapshotJson String?
+  // #934: versjonen av kurset beviset ble utstedt for. Beviset gjelder hovedversjonen — én per
+  // hovedversjon per deltaker. Eksisterende bevis er 1.0, som kursene de ble utstedt for.
+  versionMajor        Int      @default(1)
+  versionMinor        Int      @default(0)
   user                User     @relation(fields: [userId], references: [id], onDelete: Restrict)
   course              Course   @relation(fields: [courseId], references: [id], onDelete: Restrict)
 
+  @@unique([userId, courseId, versionMajor])
+  // #934: den gamle nøkkelen står i 2.127.0 (utvid først, trekk sammen etterpå). Så lenge den står,
+  // kan databasen bare ha ett bevis per kurs — og ingen leser kan se to. Den fjernes i skive 2, i
+  // samme utrulling som leserne lærer å skille versjonene, og før noen flate kan lage hovedversjon 2.
   @@unique([userId, courseId])
   @@index([courseId, completedAt])
 }

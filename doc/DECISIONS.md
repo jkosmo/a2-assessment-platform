@@ -42,6 +42,14 @@ bestått kurset.»
 **Håndheves:** `courseCompletionService.ts` — `if (existing) return`.
 **Sak:** #933/#934 · **Dato:** 2026-08-20 · **Status:** avklart
 
+**Presisert 2026-11-01 (#934, `doc/DESIGN_934.md`):** kurs har nå hovedversjon og mindre versjon, og
+innholdsansvarlig velger ved publisering. Et kursbevis er fortsatt permanent, men gjelder **sin
+hovedversjon**. En mindre versjon har ingen konsekvens for utstedte bevis. En ny hovedversjon gir
+mulighet for et nytt bevis; det gamle står og er gyldig for sin versjon, men kurset regnes ikke som
+fullført i den nye før det nye er tatt. «Har deltakeren bevis?» betyr derfor «for kursets nåværende
+hovedversjon» der det handler om fullført — `if (existing) return` spør etter den. En oppfylt frist
+står likevel som oppfylt.
+
 ⚠️ Konsekvens som er lett å snuble i: `courseStatus` kan falle tilbake til `IN_PROGRESS` for en
 deltaker som *har* bevis, fordi `/api/courses` teller det nye innholdet inn i `total`. Derfor må
 «er kurset fullført» leses som **bevis ELLER status**, aldri status alene (`isCourseCompleted()` i

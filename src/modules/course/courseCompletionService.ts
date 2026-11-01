@@ -26,6 +26,10 @@ async function evaluateCourseCompletion(
     modules: { moduleId: string; module: { archivedAt: Date | null } | null }[];
     publishedAt?: Date | null;
     archivedAt?: Date | null;
+    // #934: PÅKREVD, som `module.archivedAt` over. Beviset utstedes for kursets nåværende versjon; en
+    // vei inn som glemte den, skal ikke kompilere — ellers ville et nytt bevis stille fått versjon 1.
+    versionMajor: number;
+    versionMinor: number;
   },
   tx?: CompletionTxClient,
 ): Promise<void> {
@@ -85,7 +89,9 @@ async function evaluateCourseCompletion(
     if (!allSectionsRead) return;
   }
 
-  const existing = await repo.findCourseCompletion(userId, course.id);
+  // #934: ett bevis per hovedversjon. Har deltakeren bevis for en eldre hovedversjon, står det —
+  // og et nytt utstedes for denne når kravet er oppfylt (produkteier 2026-11-01).
+  const existing = await repo.findCourseCompletion(userId, course.id, course.versionMajor);
   if (existing) return;
 
   // #933: begge halvdelene av regelen lagres nå. `requiredSectionIds` er nettopp «seksjonene kurset
@@ -93,6 +99,7 @@ async function evaluateCourseCompletion(
   const completion = await repo.createCourseCompletion(
     userId,
     course.id,
+    { major: course.versionMajor, minor: course.versionMinor },
     JSON.stringify(moduleIds),
     JSON.stringify(requiredSectionIds),
   );
