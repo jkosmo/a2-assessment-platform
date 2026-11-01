@@ -88,6 +88,52 @@ Beskrivelsene er på engelsk, fordi bildemodellene følger engelsk mer presist.
 > personality, with a white sail-shaped A as a highlight shape on its body. Big expressive eyes, tiny
 > mouth, pink cheeks. Its shape stretches tall when happy and slumps flat into a puddle when hungry.
 
+## Runde 2 (2026-11-01)
+
+Produkteier valgte å gå videre med **2 · Skuta** og **3 · A og 2**. De andre er lagt bort. Seks nye
+retninger bygger videre på det som er godt i de to: seilet som vind og fremdrift, og bokstavene som figurer.
+
+### 3 · Kaptein A og matros 2 — de to slått sammen
+
+> Mascots "Kaptein A og matros 2": a small, chubby sailboat with a slate-blue hull. Its single white sail is
+> the sail-shaped letter A from the logo, and the sail has a calm, wise face — that is Captain A. On deck
+> stands a small, round, slate-blue sailor shaped like the number 2, wearing a tiny white sailor cap; the 2
+> is very expressive and always reacts to the weather. When the boat is fed, wind fills the sail; when
+> hungry, the sail hangs slack and the 2 panics.
+
+### 4 · Vikingskuta
+
+> Mascot "Vikingskuta": a small, round Viking longship with a slate-blue hull and a curled dragon-head prow
+> drawn in a friendly, cute way. Its single white sail is the sail-shaped letter A from the logo. Round
+> brass shields along the side — one shield for each finished course. A face on the hull: two round eyes,
+> a small mouth. Two short oars. Proud and a bit silly.
+
+### 5 · Seilbrettet
+
+> Mascot "Seilbrettet": a small, round, slate-blue character shaped like the number 2, standing on a brass
+> windsurf board and holding a white sail shaped exactly like the sail-shaped letter A from the logo.
+> Sporty, energetic, big eyes. When it is fed it surfs fast with spray; when hungry the sail drops and the 2
+> is about to fall into the water.
+
+### 6 · Lille 2 og matskåla
+
+> Mascots "Lille 2 og matskåla": a tall, calm character shaped like the white sail-shaped letter A from the
+> logo, holding a brass leash. At its feet sits a small, round, slate-blue pet shaped like the number 2 —
+> big eyes, very emotional, wagging. Next to the 2 is a small food bowl. The 2 is the one you feed.
+
+### 7 · Bokstavsamlingen
+
+> Mascots "Bokstavsamlingen": a gang of friendly letter characters. In front, the white sail-shaped letter A
+> from the logo and a small, round, slate-blue number 2, both with faces. Behind them, new letter friends
+> join one by one, each a different colour, with dotted outlines for letters not yet unlocked. Playful,
+> like a collection you want to complete.
+
+### 8 · Regattaen
+
+> Mascot "Regattaen": many small sailboats racing toward an island with a cake on it. Each boat has a white
+> sail shaped like the sail-shaped letter A from the logo. One boat in front is slate-blue with a face — that
+> is yours; the other boats are plain light grey with no faces and no names. Cheerful, sunny, small waves.
+
 ## Når en retning er valgt
 
 Lim inn den valgte beskrivelsen ordrett og be om (a) vekststadier: «as an egg-like baby, a young one, and
