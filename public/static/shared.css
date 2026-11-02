@@ -1500,6 +1500,10 @@ dialog::backdrop {
    sier «du har ulagrede endringer», ikke «her er en knapp». Slett beholder sin røde RAMME; det er
    en annen ting. */
 .form-page-actions .row-actions { align-items: center; }
+/* 2.130.0: på 360 px fløt handlingsraden 13 px ut over kanten (bokmål). Raden får krympe og bryte —
+   målt i test/e2e/admin-content-course-form-phone.spec.ts. */
+.form-page-actions { min-width: 0; max-width: 100%; }
+.form-page-actions .row-actions { flex-wrap: wrap; }
 .btn-save, .btn-cancel { font-weight: 700; }
 .btn-save:not(:disabled) { background: #e6f4ea; border-color: #9fcfad; color: #14603a; }
 .btn-save:not(:disabled):hover { background: #d7ecdd; border-color: #6fb586; }

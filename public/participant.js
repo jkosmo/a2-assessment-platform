@@ -16,6 +16,7 @@ import { createNumberFormatter, createDateTimeFormatter } from "/static/format-d
 const formatDateTime = createDateTimeFormatter(() => currentLocale);
 const formatNumber = createNumberFormatter(() => currentLocale);
 import { escapeHtml as escapeHtmlP } from "/static/html-escape.js";
+import { renderCourseProgress, launchCourseBoatCelebration } from "/static/course-progress-boat.js";
 import { sanitizeSectionHtml } from "/static/sanitize.js";
 import { certLevelKey, localizeCertLevel } from "/static/cert-level.js";
 import { setSectionLocked } from "/static/section-lock.js";
@@ -4057,6 +4058,11 @@ function renderParticipantCourseAccordion() {
     // nøyaktig klagen #929 kom fra. Handlingen fortjener et synlig resultat.
     const moved = container.querySelector(`.course-accordion-item[data-course-id="${newlyCompletedId}"]`);
     moved?.scrollIntoView({ behavior: "smooth", block: "center" });
+    // #1137: båten kommer i mål på den grønne linja, feirer og glir ut. Med redusert bevegelse vises den
+    // ikke — linja er bare grønn.
+    launchCourseBoatCelebration(moved?.querySelector(".course-progress"), {
+      reducedMotion: Boolean(window.matchMedia?.("(prefers-reduced-motion: reduce)").matches),
+    });
   }
   courseAccordionInitialized = true;
 
@@ -4180,6 +4186,15 @@ function buildCourseAccordionItem(course, options = {}) {
   const pct = totalCount > 0 ? Math.round((passedCount / totalCount) * 100) : 0;
   const stepsLabel = fillPlaceholders(t("courses.progress.steps"), { done: passedCount, total: totalCount });
   const completion = participantCompletions[course.id];
+  // #1137: seilbåten. Fullført = hel grønn linje uten båt (produkteier 2026-11-02 — opphever #939s
+  // «ingen linje»); ikke påbegynt = tom linje; bare kurs i gang har båt.
+  const progressPct = completed ? 100 : pct;
+  const progressHtml = renderCourseProgress({
+    completed,
+    stepsDone: passedCount,
+    pct,
+    barAttrs: `role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${progressPct}" aria-label="${escapeHtmlP(stepsLabel)}" title="${escapeHtmlP(stepsLabel)}"`,
+  });
 
   const item = document.createElement("div");
   item.className = "course-accordion-item";
@@ -4221,6 +4236,7 @@ function buildCourseAccordionItem(course, options = {}) {
         ${completion ? `<a class="course-certificate-link" href="/certificate?id=${encodeURIComponent(completion.certificateId)}" target="_blank" rel="noopener">${escapeHtmlP(t("courses.certificate.short"))} · ${escapeHtmlP(t("courses.certificate.view"))}</a>` : ""}
         <span class="course-accordion-chevron" aria-hidden="true">&#8250;</span>
       </div>
+      ${progressHtml}
       <div class="course-accordion-body">${detailSlot}</div>
     `;
   } else {
@@ -4245,7 +4261,7 @@ function buildCourseAccordionItem(course, options = {}) {
       </button>
       <div class="course-accordion-body">
         ${earlierHtml}
-        <div class="course-progress-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct}" aria-label="${escapeHtmlP(stepsLabel)}" title="${escapeHtmlP(stepsLabel)}"><div class="course-progress-fill" style="width:${pct}%"></div></div>
+        ${progressHtml}
         ${detailSlot}
       </div>
     `;

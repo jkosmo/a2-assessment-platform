@@ -2,6 +2,40 @@
 
 This document tracks release versions and what each version includes.
 
+## 2.130.0 - 2026-11-02
+
+Første synlige del av gamifiseringen (`doc/design/GAMIFISERING_DESIGN.md`). Alt bestemt av produkteier
+2026-11-01/02.
+
+### Seilbåten på fremdriftslinja i «Mine kurs» — #1137
+
+- **Kurs i gang:** båten står på linja, som fylles fra **høyre mot venstre**. Båten seiler mot
+  venstre fordi 2-tallet styrer fra høyre, som i logoen, og det fylte er kjølvannet bak den.
+  - Under 30 %: flatt seil og én fartsstripe.
+  - Fra 30 %: fullt seil og tre fartsstriper.
+  - Båten dukker opp ved første steg, også når prosenten er rundet ned til 0.
+- **Ikke påbegynt:** tom linje, ingen båt.
+- **Fullført:** raden får en **hel grønn linje, uten båt**. Det opphever #939s «ingen linje».
+- **Når kurset fullføres i økta:** båten kommer i mål til venstre, feirer med konfetti, og glir så ut
+  og blekner. Med redusert bevegelse vises den ikke, og linja blir bare grønn.
+- **Skjermleser:** linja er den samme progressbar som før (verdi og etikett), og båten er skjult.
+- **Figuren:** lukket trekantseil med én tynn tverrstrek (A-en) og hodet til 2-tallet ved roret, i
+  portalens farger (`public/static/course-progress-boat.js`). En rad med båt er om lag 28 px høyere
+  (godtatt).
+
+### Favicon
+
+Merket fra gamifiseringen er nå ikonet i nettleserfanen og for hjemskjermen på iPhone og iPad. Før
+viste fanen nettleserens standardikon. Det er lagt inn på alle 15 sidene: SVG, PNG i 16 og 32 px, og
+180 px for hjemskjerm. En test feiler hvis en side mangler det.
+
+### Rettet på telefon (360 px)
+
+- **«Mine kurs»:** et langt kursnavn i ett ord («Informasjonssikkerhetsopplæring») dyttet statusmerket
+  ut av kortet, og la seg over «Sertifikat · Vis bevis» i fullført-raden. Navnet bryter nå.
+- **Kursskjemaet:** handlingsraden øverst fløt 13 px ut over kanten på bokmål. Den bryter nå over to
+  linjer. Endringen ligger i den felles skjemasida, så den gjelder alle skjemasider.
+
 ## 2.129.0 - 2026-11-02
 
 ### Kursversjoner, skive 3 av 5: forfatteren velger mindre versjon eller hovedversjon — #934

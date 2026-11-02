@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+<style>.ring{fill:none;stroke:none}@media (prefers-color-scheme: dark){.ring{stroke:#63604F}}</style>
+<circle cx="16" cy="16" r="16" fill="#221F19"/>
+<circle class="ring" cx="16" cy="16" r="15.5" stroke-width="1"/>
+<g transform="translate(-2 0)"><defs><clipPath id="seil"><path d="M12 4 Q24 8 21 20 L12 20 Z"/></clipPath></defs>
+<rect x="10" y="4" width="2" height="18" fill="#A87A22"/>
+<path d="M12 4 Q24 8 21 20 L12 20 Z" fill="#FFFDFA"/>
+<rect x="11" y="14" width="14" height="2" fill="#221F19" clip-path="url(#seil)"/>
+<path d="M5 22 L30 22 Q28.5 27.5 17 27.5 Q8 27.5 5 22 Z" fill="#A87A22"/>
+<circle cx="27" cy="19" r="3" fill="#FFFDFA"/></g>
+</svg>

@@ -1,7 +1,11 @@
 # Gamifisering — design (utkast til produkteier)
 
-Status: **utkast**, 2026-11-01. Ikke bygget. Bygger på `doc/research/GAMIFISERING_RESEARCH.md` og
-produkteiers svar samme dag. Skisse: se artefakten som følger designet.
+Status: **under bygging**. Første del, seilbåten på fremdriftslinja (#1137), og favicon ble bygget i
+2.130.0. Bygger på `doc/research/GAMIFISERING_RESEARCH.md` og produkteiers svar 2026-11-01 og -02.
+Skisse og karakterark: https://claude.ai/artifact/RhwPj7ANVfwobpmHtsucBZ (privat; deles fra siden).
+
+Saker: #1137 seilbåten som fremdriftslinje · #1138 «Min statistikk» på profilen · #1139 ukentlig e-post
+med avmelding · #1140 skillet kan oppdatere publiserte kurs via API.
 
 ## Målet
 
@@ -18,6 +22,39 @@ konkurranse med fakturering. Vi bruker virkemidlene som virker: en maskot som sa
 - **Poengtavler venter.**
 - **Ekstra poeng for å stille spørsmål og svare i diskusjonene.**
 - **«Aktivitet»-fanen (#1099)** beholdes for å følge innføringen, men bare for administrator.
+
+### Bestemt 2026-11-01/02: maskoten, fremdriftslinja og e-posten
+
+- **Maskoten er seilbåten «Skuta»**, bygd på A-2-logoen. **Seilet er A-en:** en lukket trekant med én
+  tynn, heltrukket tverrstrek (en spile i duken) om lag 60 % ned — ingen utsparing nederst, og streken
+  skal aldri se ut som en bom nummer to. Ett seil, akter for masta; ingen forseil og ingen vimpel.
+  2-tallet sitter til rors akterut til høyre, så baugen peker mot venstre. Ansiktet sitter over
+  tverrstreken og krysser aldri en strek.
+- **Bare portalens farger.** Messing på skroget er godtatt; logoens skifergrå er valgt bort
+  («kjedelig»).
+- **Størrelser:** hele båten fra 48 px; under det **merket** (rund mørk plate, hvitt seil med
+  tverrstrek, messingskrog, hodet til 2-tallet som en liten sirkel inne i båten, tett bak seilet).
+  Humøret må kunne leses fra 32 px; i 24 og 16 px skal merket bare kjennes igjen. Merket er også
+  **favicon** (2.130.0, `public/static/favicon*.png|svg`, på alle sider).
+- **Konfetti er animert**, og står stille som noen få lyse prikker når brukeren har slått av
+  bevegelse.
+- **Fremdriftslinja i «Mine kurs» (#1137, bygget i 2.130.0):** linja fylles fra **høyre mot venstre**
+  — båten seiler mot venstre fordi 2-tallet styrer fra høyre, og det fylte er kjølvannet. Bare kurs
+  **i gang** har båt (fra første steg). Ikke påbegynt: tom linje. Fullført: **hel grønn linje uten
+  båt**. Under 30 % flatt seil og én fartsstripe, fra 30 % fullt seil og tre. Når kurset fullføres i
+  økta, kommer båten i mål, feirer og glir ut; med redusert bevegelse vises den ikke.
+- **Humørregelen** (profilen #1138, e-posten #1139, senere maskoten): aktivitet denne uka = mett,
+  forrige uke = sulten, for to uker siden = sur, tre uker eller mer = dramatisk. Har brukeren meldt
+  seg av e-posten, **ligger båten for anker** på profilen, uansett aktivitet.
+- **Ukentlig e-post (#1139):** sendes **bare når noe er utestående** (kurs i gang, tildelt og ikke
+  påbegynt, eller frist innen to uker), **mandag kl. 07:00**. **Siste linje forklarer hvordan man
+  melder seg av** (Profil → bryteren, med samme navn som på profilen), siden lenker ikke er lov.
+  Første utsending går **bare til produkteier**, styrt av en liste over tillatte mottakere. Avsender
+  er inntil videre portalens Azure-adresse; `noreply.learning@a-2.no` venter på DNS hos
+  driftsleverandøren (se #1139).
+- **Bilder til e-post og feiring** lages med bildemotoren via Codex; ledetekstene (figur, regler og
+  fem scener) ligger i skisseprosjektet som `MASKOT_PROMPTPAKKE.md`. Bildene er stemningsbilder —
+  maskoten i portalen er SVG.
 
 ## Fem byggeklosser
 
@@ -51,17 +88,13 @@ Hver bruker har sin egen maskot. Den bor øverst i «Mine kurs».
 - **Tonen:** skyld og humor, aldri skam. «Jeg har begynt å spise på kontorplanten.» «Jeg vet du har
   det travelt. Jeg har det også travelt. Med å sulte.» Maskoten vet aldri noe om timeføring,
   prosjekter eller kalender — den kjenner bare kursene.
-- **Valgt retning (produkteier 2026-11-01): «Storseilet A og rorsmann 2»** — en liten båt bygd på
-  A-2-logoen, med **ett storseil og ingen andre seil**. Storseilet står akter for masta: forliket (den
-  rette kanten) langs masta, akterliket (den buede) bakover, bommen langs underliket. Lille 2 sitter til
-  rors **akterut til høyre**, så baugen peker mot venstre — og A-en blir dermed speilvendt i forhold til
-  logoen. A trenger vind (erfaringspoeng); 2 bærer humøret. Sulten = stille vær, slakt seil, 2 henger over
-  rorkulten. **Vekst vises bare med størrelse** — samme båt, større. Fargene er portalens, pluss logoens
-  skifer på skrog og 2. Seilet er like stort i alle humør; formen forteller (bukt, flatt, faller inn med
-  rynker, henger i folder med bommen sigende). Ingen vimpel (medvind); vindstriper bak ved mett humør viser
-  at båten går fremover. **Karakterark v2 er låst som førsteutkast** (produkteier 2026-11-01); endelig
-  uttrykk krever illustrasjonsarbeid, og vi går videre med resten av utformingen. Karakterarket står i skissen; beskrivelser til bildegenerering i
-  `doc/design/MASKOT_BESKRIVELSER.md`.
+- **Valgt (produkteier 2026-11-01): seilbåten «Skuta» — storseilet A og rorsmann 2**, bygd på
+  A-2-logoen. Se «Bestemt 2026-11-01/02» over for seilet, fargene og størrelsene. A trenger vind
+  (erfaringspoeng); 2 bærer humøret. Sulten = stille vær; 2 henger over rorpinnen. **Vekst vises bare
+  med størrelse** — samme båt, større. Seilet er like stort i alle humør; formen forteller (bukt,
+  flatt, to store bitt i kanten, henger i folder med bommen sigende). Fartsstriper bak båten viser at
+  den går fremover. Karakterarket (utkast 2.2) står i skissen; beskrivelser til bildegenerering i
+  `doc/design/MASKOT_BESKRIVELSER.md` og ledetekstpakken (se over).
 - **Navn:** åpent. Brukeren kan gi sin egen båt et navn, som båteiere gjør.
 
 ### 3. Felles mål — hele firmaet forer én stor maskot
@@ -93,12 +126,15 @@ På som standard, kan slås av på profilen. Ingen lenker. Innhold:
 4. Rekka di, og om den er i fare denne uka.
 5. Felles mål: «Vi er på 72 % — 1 150 XP til desserten.»
 
-Er det ingenting å si (ingen kurs i gang, ingen frister, rekka trygg), sendes kortversjonen.
+Er det ingenting utestående, **sendes ingen e-post** (produkteier 2026-11-02; kortversjonen er
+droppet). Siste linje forklarer alltid hvordan man melder seg av. Punkt 4 og 5 kommer når rekker og
+felles mål finnes. Spesifisert i #1139.
 
 ### Profilsiden: min statistikk
 
-Bare for brukeren selv. Per uke, de siste 12 ukene: XP, seksjoner lest, moduler bestått, kurs fullført,
-anslått lesetid. Nivå, maskot, rekke, skjold og merker.
+Bare for brukeren selv. Per uke, de siste 12 ukene (tomme uker vises): seksjoner lest, moduler
+bestått, kurs fullført, anslått lesetid — og XP når XP finnes. Båten øverst i humøret fra humørregelen,
+for anker når e-posten er slått av. Nivå, rekke, skjold og merker kommer med XP. Spesifisert i #1138.
 
 ### Merker (få, og morsomme)
 
@@ -115,7 +151,7 @@ ikke står på lista i forkant.
 
 ## Åpne spørsmål til produkteier
 
-1. **Maskoten:** hvilket dyr eller vesen, og hvilket navn? (Forslag i skissen.)
+1. **Navnet:** brukeren kan gi sin egen båt et navn; skal båten ha et fast navn i portalen («Skuta»)?
 2. **Felles mål:** hele firmaet, eller per avdeling/klasse? (Per avdeling gir litt konkurranse mellom
    lag — uten å rangere personer.)
 3. **Poengtallene:** er tabellen over riktig vektet?
@@ -123,10 +159,13 @@ ikke står på lista i forkant.
 
 ## Rekkefølge (skiver)
 
-1. XP-hendelser (lagring, regler, tilbakefyll fra historikken) + «min statistikk» på profilen.
+0. **Gjort i 2.130.0:** seilbåten på fremdriftslinja (#1137) og favicon.
+1. «Min statistikk» på profilen uten XP (#1138), og ukentlig e-post (#1139) — begge bygger på data
+   som finnes. Deretter XP-hendelser (lagring, regler, tilbakefyll fra historikken), som gir
+   statistikken en XP-kolonne.
 2. Maskoten i «Mine kurs»: metthet, humør, vekst, ferie.
 3. Felles mål og firmaets maskot; administrator setter mål og belønning.
-4. Ukentlig e-post fra maskoten (på som standard, kan slås av).
+4. (Ukentlig e-post er flyttet fram til skive 1, se #1139.)
 5. Rekker, skjold og merker.
 6. Diskusjonspoeng (spørsmål, svar, «noen svarte»).
 

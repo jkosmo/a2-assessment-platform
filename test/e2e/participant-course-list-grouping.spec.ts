@@ -120,7 +120,7 @@ test("#936: grensen vises ikke når alt er fullført — da skiller den ingentin
   await expect(page.locator(".course-group-divider")).toHaveCount(0);
 });
 
-test("#939: et fullført kurs er én grønn rad — uten framdriftslinje, med sertifikatlenke", async ({ page }) => {
+test("#939 + #1137: et fullført kurs er én grønn rad — med hel grønn linje uten båt, og sertifikatlenke", async ({ page }) => {
   await mockBase(page);
   await page.route("**/api/courses", (route: Route) =>
     route.fulfill({
@@ -142,12 +142,14 @@ test("#939: et fullført kurs er én grønn rad — uten framdriftslinje, med se
   const doneItem = page.locator('.course-accordion-item[data-course-id="done1"]');
   await expect(doneItem).toHaveClass(/course-accordion-item--done/);
 
-  // Kjernen i #939: framdriftslinja er BORTE for det fullførte kurset — en linje som alltid er
-  // 100 % full bærer null informasjon.
-  await expect(doneItem.locator(".course-progress-bar")).toHaveCount(0);
-  // ...men den står fortsatt på det pågående. Kontrollcase: uten dette ville «fjern linja overalt»
-  // bestått.
+  // #939 tok bort linja på fullførte kurs. #1137 (produkteier 2026-11-02) ga den tilbake som én hel
+  // GRØNN linje, uten båt — «kun grønn linje etter at man er ferdig». Raden er fortsatt én rad.
+  await expect(doneItem.locator(".course-progress-bar")).toHaveCount(1);
+  await expect(doneItem.locator(".course-progress-fill")).toHaveClass(/completed/);
+  await expect(doneItem.locator(".course-boat")).toHaveCount(0);
+  // Det pågående har linja med sin vanlige farge. Kontrollcase: uten dette ville «grønn overalt» bestått.
   await expect(page.locator('.course-accordion-item[data-course-id="open1"] .course-progress-bar')).toHaveCount(1);
+  await expect(page.locator('.course-accordion-item[data-course-id="open1"] .course-progress-fill')).not.toHaveClass(/completed/);
 
   // Hakemerket står SAMMEN med fargen: grønt alene kan ikke bære «fullført».
   await expect(doneItem.locator(".course-done-tick")).toHaveCount(1);
@@ -221,7 +223,10 @@ test("#939 funn A: bevis + status IN_PROGRESS er FULLFØRT — kurset som vokste
   // «Fullført» og rendres som pågående, uten sertifikatlenke i det hele tatt.
   await expect(grown).toHaveClass(/course-accordion-item--done/);
   await expect(grown.locator(".course-certificate-link")).toHaveAttribute("href", "/certificate?id=cert-grown");
-  await expect(grown.locator(".course-progress-bar")).toHaveCount(0);
+  // #1137: fullført-raden har hel grønn linje og ingen båt — også når status sier IN_PROGRESS (5 av 6 steg).
+  await expect(grown.locator(".course-progress-fill")).toHaveClass(/completed/);
+  await expect(grown.locator(".course-progress-bar")).toHaveAttribute("aria-valuenow", "100");
+  await expect(grown.locator(".course-boat")).toHaveCount(0);
 });
 
 test("#939 funn B: en fullført rad er ÉN rad — ingen tom stripe under", async ({ page }) => {
